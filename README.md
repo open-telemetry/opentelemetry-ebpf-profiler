@@ -1,46 +1,35 @@
 # Introduction
 
-This repository contains the profiling host agent, extracted from the
-Elastic Universal Profiling private repository.
+This repository implements a whole-system, cross-language profiler for Linux via
+eBPF. The repository serves as a staging space in the process of donating the
+agent to OpenTelementry.
 
-The profiling host agent gathers trace counts and pushes them to the reporter
-subsystem. It loads an eBPF program, and its related maps, from an ELF file then
-monitors those maps for new traces and trace count updates.
+## Core features and strengths
 
-# TODO
-
-See open [issues](https://github.com/elastic/otel-profiling-agent/issues).
-
-# Legal
-
-## Licensing Information
-
-This project is licensed under the Apache License 2.0 (Apache-2.0).
-[Apache License 2.0](LICENSE)
-
-The eBPF source code is licensed under the GPL 2.0 license.
-[GPL 2.0](support/ebpf/LICENSE)
-
-## Licenses of dependencies
-
-To display a summary of the dependencies' licenses:
-```sh
-make legal
-```
-
-Details can be found in the generated `deps.profiling-agent.csv` file.
-
-At the time of writing this, the summary is
-```
-  Count License
-     52 Apache-2.0
-     17 BSD-3-Clause
-     17 MIT
-      3 BSD-2-Clause
-      1 ISC
-```
-
-# The Profiling Agent
+- Implements the [experimental OTel profiling
+  signal](https://github.com/open-telemetry/opentelemetry-proto/pull/534)
+- Very low CPU and memory overhead (1% CPU and 250MB memory are our upper limits
+  in testing and the agent typically manages to stay way below that)
+- Support for native C/C++ executables without the need for DWARF debug
+  information (by leveraging `.eh_frame` data as described in
+  [US11604718B1](https://patents.google.com/patent/US11604718B1/en?inventor=thomas+dullien&oq=thomas+dullien))
+- Support profiling of system libraries **without frame pointers** and **without
+  debug symbols on the host**.
+- Support for mixed stacktraces between runtimes - stacktraces go from Kernel
+  space through unmodified system libraries all the way into high-level
+  languages.
+- Support for native code (C/C++, Rust, Zig, Go, etc. without debug symbols on
+  host)
+- Support for a broad set of HLLs (Hotspot JVM, Python, Ruby, PHP, Node.JS, V8,
+  Perl), .NET is in preparation.
+- 100% non-intrusive: there's no need to load agents or libraries into the
+  processes that are being profiled.
+- No need for any reconfiguration, instrumentation or restarts of HLL
+  interpreters and VMs: the agent supports unwinding each of the supported
+  languages in the default configuration.
+- ARM64 support for all unwinders except NodeJS.
+- Support for native `inline frames`, which provide insights into compiler
+  optimizations and offer a higher precision of function call chains.
 
 ## Building
 
@@ -501,4 +490,33 @@ probabilistic profiling is either enabled or disabled. The default value is 1 mi
 The following example shows how to configure the profiling agent with a threshold of 50 and an interval of 2 minutes and 30 seconds:
 ```bash
 sudo ./otel-profiling-agent -probabilistic-threshold=50 -probabilistic-interval=2m30s
+```
+
+# Legal
+
+## Licensing Information
+
+This project is licensed under the Apache License 2.0 (Apache-2.0).
+[Apache License 2.0](LICENSE)
+
+The eBPF source code is licensed under the GPL 2.0 license.
+[GPL 2.0](support/ebpf/LICENSE)
+
+## Licenses of dependencies
+
+To display a summary of the dependencies' licenses:
+```sh
+make legal
+```
+
+Details can be found in the generated `deps.profiling-agent.csv` file.
+
+At the time of writing this, the summary is
+```
+  Count License
+     52 Apache-2.0
+     17 BSD-3-Clause
+     17 MIT
+      3 BSD-2-Clause
+      1 ISC
 ```
