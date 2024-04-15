@@ -1,0 +1,61 @@
+{
+  "coredump-ref": "9ab16c3f657ae5d69b0ba37256d9fec367c2da02973be36b6b9bfed743253feb",
+  "threads": [
+    {
+      "lwp": 155034,
+      "frames": [
+        "hello.345+0x90db0",
+        "hello.345+0x90d2b",
+        "hello.345+0x90c73",
+        "hello.345+0x90c2b",
+        "hello.345+0x90b3b",
+        "hello.345+0x90afb",
+        "hello.345+0x90e2b",
+        "hello.345+0x43533",
+        "hello.345+0x6c513"
+      ]
+    },
+    {
+      "lwp": 155058,
+      "frames": [
+        "hello.345+0x6d324",
+        "hello.345+0x4eec7",
+        "hello.345+0x46237",
+        "hello.345+0x46187",
+        "hello.345+0x69f5f"
+      ]
+    },
+    {
+      "lwp": 155059,
+      "frames": [
+        "hello.345+0x6d9bc",
+        "hello.345+0x3d6fb",
+        "hello.345+0x1993f",
+        "hello.345+0x47b13",
+        "hello.345+0x4938b",
+        "hello.345+0x4a3a7",
+        "hello.345+0x4a8ff",
+        "hello.345+0x69fd3"
+      ]
+    },
+    {
+      "lwp": 155060,
+      "frames": [
+        "hello.345+0x6d9bc",
+        "hello.345+0x3d6fb",
+        "hello.345+0x1993f",
+        "hello.345+0x47b13",
+        "hello.345+0x4938b",
+        "hello.345+0x4a3a7",
+        "hello.345+0x4a8ff",
+        "hello.345+0x69fd3"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "ff1d01d8c89db3cbadbd6c17b3c2dce526002e157ea60ec674876b35afc8910e",
+      "local-path": "/media/psf/devel/prodfiler/utils/coredump/testsources/go/hello.345"
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "coredump-ref": "6505deb8d72f6a1751c36d092d62f785289b03854ffe1638522b657d6504106e",
+  "threads": [
+    {
+      "lwp": 156629,
+      "frames": [
+        "hello.3345+0x90a90",
+        "hello.3345+0x90e0b",
+        "hello.3345+0x90d4b",
+        "hello.3345+0x90c93",
+        "hello.3345+0x90c43",
+        "hello.3345+0x90b3b",
+        "hello.3345+0x90afb",
+        "hello.3345+0x90e4b",
+        "hello.3345+0x43533",
+        "hello.3345+0x6c513"
+      ]
+    },
+    {
+      "lwp": 156634,
+      "frames": [
+        "hello.3345+0x6d324",
+        "hello.3345+0x4eec7",
+        "hello.3345+0x46237",
+        "hello.3345+0x46187",
+        "hello.3345+0x69f5f"
+      ]
+    },
+    {
+      "lwp": 156635,
+      "frames": [
+        "hello.3345+0x6d9bc",
+        "hello.3345+0x3d6fb",
+        "hello.3345+0x1993f",
+        "hello.3345+0x47b13",
+        "hello.3345+0x485db",
+        "hello.3345+0x4a363",
+        "hello.3345+0x4a8ff",
+        "hello.3345+0x69fd3"
+      ]
+    },
+    {
+      "lwp": 156636,
+      "frames": [
+        "hello.3345+0x6d9bc",
+        "hello.3345+0x3d6fb",
+        "hello.3345+0x1993f",
+        "hello.3345+0x47b13",
+        "hello.3345+0x4938b",
+        "hello.3345+0x4a3a7",
+        "hello.3345+0x4a8ff",
+        "hello.3345+0x69fd3"
+      ]
+    },
+    {
+      "lwp": 156637,
+      "frames": [
+        "hello.3345+0x6d9bc",
+        "hello.3345+0x3d6fb",
+        "hello.3345+0x1993f",
+        "hello.3345+0x47b13",
+        "hello.3345+0x4938b",
+        "hello.3345+0x4a3a7",
+        "hello.3345+0x4a8ff",
+        "hello.3345+0x69fd3"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "bb87b9bba238372aad8a65bacbf088583cf7a580daa23abfed2467a19307c707",
+      "local-path": "/media/psf/devel/prodfiler/utils/coredump/testsources/go/hello.3345"
+    }
+  ]
+}

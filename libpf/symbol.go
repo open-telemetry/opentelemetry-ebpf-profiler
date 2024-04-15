@@ -1,0 +1,112 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Apache License 2.0.
+ * See the file "LICENSE" for details.
+ */
+
+package libpf
+
+import (
+	"fmt"
+	"sort"
+)
+
+// SymbolValue represents the value associated with a symbol, e.g. either an
+// offset or an absolute address
+type SymbolValue uint64
+
+// SymbolName represents the name of a symbol
+type SymbolName string
+
+// SymbolValueInvalid is the value returned by SymbolMap functions when symbol was not found.
+const SymbolValueInvalid = SymbolValue(0)
+
+// SymbolNameUnknown is the value returned by SymbolMap functions when address has no symbol info.
+const SymbolNameUnknown = ""
+
+// SymbolFinder implements a way to find symbol data
+type SymbolFinder interface {
+	LookupSymbol(symbolName SymbolName) (*Symbol, error)
+
+	LookupSymbolAddress(symbolName SymbolName) (SymbolValue, error)
+}
+
+// Symbol represents the name of a symbol
+type Symbol struct {
+	Name    SymbolName
+	Address SymbolValue
+	Size    int
+}
+
+var _ SymbolFinder = &SymbolMap{}
+
+// SymbolMap represents collections of symbols that can be resolved or reverse mapped
+type SymbolMap struct {
+	nameToSymbol    map[SymbolName]*Symbol
+	addressToSymbol []Symbol
+}
+
+// Add a symbol to the map
+func (symmap *SymbolMap) Add(s Symbol) {
+	symmap.addressToSymbol = append(symmap.addressToSymbol, s)
+}
+
+// Finalize symbol map by sorting and constructing the nameToSymbol table after
+// all symbols are inserted via Add() calls
+func (symmap *SymbolMap) Finalize() {
+	sort.Slice(symmap.addressToSymbol,
+		func(i, j int) bool {
+			return symmap.addressToSymbol[i].Address > symmap.addressToSymbol[j].Address
+		})
+	symmap.nameToSymbol = make(map[SymbolName]*Symbol, len(symmap.addressToSymbol))
+	for i, s := range symmap.addressToSymbol {
+		symmap.nameToSymbol[s.Name] = &symmap.addressToSymbol[i]
+	}
+}
+
+// LookupSymbol obtains symbol information. Returns nil and an error if not found.
+func (symmap *SymbolMap) LookupSymbol(symbolName SymbolName) (*Symbol, error) {
+	if sym, ok := symmap.nameToSymbol[symbolName]; ok {
+		return sym, nil
+	}
+	return nil, fmt.Errorf("symbol %v not present in map", symbolName)
+}
+
+// LookupSymbolAddress returns the address of a symbol.
+// Returns SymbolValueInvalid and error if not found.
+func (symmap *SymbolMap) LookupSymbolAddress(symbolName SymbolName) (SymbolValue, error) {
+	if sym, ok := symmap.nameToSymbol[symbolName]; ok {
+		return sym.Address, nil
+	}
+	return SymbolValueInvalid, fmt.Errorf("symbol %v not present in map", symbolName)
+}
+
+// LookupByAddress translates the address to a symbolic information. Return empty string and
+// absolute address if it did not match any symbol.
+func (symmap *SymbolMap) LookupByAddress(val SymbolValue) (SymbolName, Address, bool) {
+	i := sort.Search(len(symmap.addressToSymbol),
+		func(i int) bool {
+			return val >= symmap.addressToSymbol[i].Address
+		})
+	if i < len(symmap.addressToSymbol) &&
+		(symmap.addressToSymbol[i].Size == 0 ||
+			val < symmap.addressToSymbol[i].Address+
+				SymbolValue(symmap.addressToSymbol[i].Size)) {
+		return symmap.addressToSymbol[i].Name,
+			Address(val - symmap.addressToSymbol[i].Address),
+			true
+	}
+	return SymbolNameUnknown, Address(val), false
+}
+
+// ScanAllNames calls the provided callback with all the symbol names in the map.
+func (symmap *SymbolMap) ScanAllNames(cb func(SymbolName)) {
+	for _, f := range symmap.nameToSymbol {
+		cb(f.Name)
+	}
+}
+
+// Len returns the number of elements in the map.
+func (symmap *SymbolMap) Len() int {
+	return len(symmap.addressToSymbol)
+}

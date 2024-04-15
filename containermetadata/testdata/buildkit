@@ -1,0 +1,13 @@
+12:hugetlb:/docker/buildkit/vy53ljgivqn5q9axwrx1mf40l
+11:blkio:/docker/buildkit/vy53ljgivqn5q9axwrx1mf40l
+10:perf_event:/docker/buildkit/vy53ljgivqn5q9axwrx1mf40l
+9:devices:/docker/buildkit/vy53ljgivqn5q9axwrx1mf40l
+8:cpu,cpuacct:/docker/buildkit/vy53ljgivqn5q9axwrx1mf40l
+7:pids:/docker/buildkit/vy53ljgivqn5q9axwrx1mf40l
+6:cpuset:/docker/buildkit/vy53ljgivqn5q9axwrx1mf40l
+5:misc:/
+4:freezer:/docker/buildkit/vy53ljgivqn5q9axwrx1mf40l
+3:memory:/docker/buildkit/vy53ljgivqn5q9axwrx1mf40l
+2:net_cls,net_prio:/docker/buildkit/vy53ljgivqn5q9axwrx1mf40l
+1:name=systemd:/docker/buildkit/vy53ljgivqn5q9axwrx1mf40l
+0::/docker/buildkit/vy53ljgivqn5q9axwrx1mf40l

@@ -1,0 +1,619 @@
+[
+  {
+    "name": "agent:version",
+    "field": "profiling.agent.version",
+    "type": "string"
+  },
+  {
+    "name": "agent:revision",
+    "field": "profiling.agent.revision",
+    "type": "string"
+  },
+  {
+    "name": "agent:build_timestamp",
+    "field": "profiling.agent.build_timestamp",
+    "type": "uint32"
+  },
+  {
+    "name": "agent:start_time",
+    "obsolete": true
+  },
+  {
+    "name": "agent:start_time_milli",
+    "field": "profiling.agent.start_time",
+    "type": "int"
+  },
+  {
+    "name": "agent:config_bpf_log_level",
+    "field": "profiling.agent.config.bpf_log_level",
+    "type": "uint32"
+  },
+  {
+    "name": "agent:config_bpf_log_size",
+    "field": "profiling.agent.config.bpf_log_size",
+    "type": "int"
+  },
+  {
+    "name": "agent:config_cache_directory",
+    "field": "profiling.agent.config.cache_directory",
+    "type": "string"
+  },
+  {
+    "name": "agent:config_ca_address",
+    "field": "profiling.agent.config.ca_address",
+    "type": "string"
+  },
+  {
+    "name": "agent:config_file",
+    "field": "profiling.agent.config.file",
+    "type": "string"
+  },
+  {
+    "name": "agent:config_tags",
+    "field": "profiling.agent.config.tags",
+    "type": "string"
+  },
+  {
+    "name": "agent:config_disable_tls",
+    "field": "profiling.agent.config.disable_tls",
+    "type": "bool"
+  },
+  {
+    "name": "agent:config_no_kernel_version_check",
+    "field": "profiling.agent.config.no_kernel_version_check",
+    "type": "bool"
+  },
+  {
+    "name": "agent:config_upload_symbols",
+    "field": "profiling.agent.config.upload_symbols",
+    "type": "bool"
+  },
+  {
+    "name": "agent:config_tracers",
+    "field": "profiling.agent.config.tracers",
+    "type": "string"
+  },
+  {
+    "name": "agent:config_known_traces_entries",
+    "field": "profiling.agent.config.known_traces_entries",
+    "type": "uint32"
+  },
+  {
+    "name": "agent:config_map_scale_factor",
+    "field": "profiling.agent.config.map_scale_factor",
+    "type": "uint8"
+  },
+  {
+    "name": "agent:config_max_elements_per_interval",
+    "field": "profiling.agent.config.max_elements_per_interval",
+    "type": "uint32"
+  },
+  {
+    "name": "agent:config_verbose",
+    "field": "profiling.agent.config.verbose",
+    "type": "bool"
+  },
+  {
+    "name": "agent:config_probabilistic_interval",
+    "field": "profiling.agent.config.probabilistic_interval",
+    "type": "duration"
+  },
+  {
+    "name": "agent:config_probabilistic_threshold",
+    "field": "profiling.agent.config.probabilistic_threshold",
+    "type": "uint8"
+  },
+  {
+    "name": "agent:config_present_cpu_cores",
+    "field": "profiling.agent.config.present_cpu_cores",
+    "type": "uint16"
+  },
+  {
+    "name": "host:ip",
+    "field": "profiling.host.ip",
+    "type": "string"
+  },
+  {
+    "name": "host:tags",
+    "field": "profiling.host.tags",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:hostname",
+    "field": "profiling.host.name",
+    "type": "string"
+  },
+  {
+    "name": "host:machine",
+    "field": "profiling.host.machine",
+    "type": "string"
+  },
+  {
+    "name": "host:kernel_version",
+    "field": "profiling.host.kernel_version",
+    "type": "string"
+  },
+  {
+    "name": "host:kernel_proc_version",
+    "field": "profiling.host.kernel_proc_version",
+    "type": "string"
+  },
+  {
+    "name": "host:sysctl/kernel.bpf_stats_enabled",
+    "field": "profiling.host.sysctl.kernel.bpf_stats_enabled",
+    "type": "uint32"
+  },
+  {
+    "name": "host:sysctl/kernel.unprivileged_bpf_disabled",
+    "field": "profiling.host.sysctl.kernel.unprivileged_bpf_disabled",
+    "type": "uint32"
+  },
+  {
+    "name": "host:sysctl/net.core.bpf_jit_enable",
+    "field": "profiling.host.sysctl.net.core.bpf_jit_enable",
+    "type": "uint32"
+  },
+  {
+    "name": "host:sysctl/net.core.bpf_jit_enable",
+    "field": "profiling.host.sysctl.net.core.bpf_jit_enable",
+    "type": "uint32"
+  },
+  {
+    "name": "instance:public-ipv4s",
+    "field": "profiling.instance.public_ipv4s",
+    "type": "array",
+    "separator": ","
+  },
+  {
+    "name": "instance:private-ipv4s",
+    "field": "profiling.instance.private_ipv4s",
+    "type": "array",
+    "separator": ","
+  },
+  {
+    "name": "instance:public-ipv6s",
+    "field": "profiling.instance.public_ipv6s",
+    "type": "array",
+    "separator": ","
+  },
+  {
+    "name": "instance:private-ipv6s",
+    "field": "profiling.instance.private_ipv6s",
+    "type": "array",
+    "separator": ","
+  },
+  {
+    "name": "host:cpu/cpus",
+    "field": "profiling.host.cpu.cpus.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/cpus/socketIDs",
+    "field": "profiling.host.cpu.cpus.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/threads-per-core",
+    "field": "profiling.host.cpu.threads_per_core.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/threads-per-core/socketIDs",
+    "field": "profiling.host.cpu.threads_per_core.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/cores-per-socket",
+    "field": "profiling.host.cpu.cores_per_socket.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/cores-per-socket/socketIDs",
+    "field": "profiling.host.cpu.cores_per_socket.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/vendor",
+    "field": "profiling.host.cpu.vendor.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/vendor/socketIDs",
+    "field": "profiling.host.cpu.vendor.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/model",
+    "field": "profiling.host.cpu.model.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/model/socketIDs",
+    "field": "profiling.host.cpu.model.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/model-name",
+    "field": "profiling.host.cpu.model_name.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/model-name/socketIDs",
+    "field": "profiling.host.cpu.model_name.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/online",
+    "field": "profiling.host.cpu.online.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/online/socketIDs",
+    "field": "profiling.host.cpu.online.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/stepping",
+    "field": "profiling.host.cpu.stepping.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/stepping/socketIDs",
+    "field": "profiling.host.cpu.stepping.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/flags",
+    "field": "profiling.host.cpu.flags.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/flags/socketIDs",
+    "field": "profiling.host.cpu.flags.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/bugs",
+    "field": "profiling.host.cpu.bugs.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/bugs/socketIDs",
+    "field": "profiling.host.cpu.bugs.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/cache/L1i-kbytes",
+    "field": "profiling.host.cpu.cache.L1i_kbytes.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/cache/L1i-kbytes/socketIDs",
+    "field": "profiling.host.cpu.cache.L1i_kbytes.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/cache/L1d-kbytes",
+    "field": "profiling.host.cpu.cache.L1d_kbytes.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/cache/L1d-kbytes/socketIDs",
+    "field": "profiling.host.cpu.cache.L1d_kbytes.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/cache/L2-kbytes",
+    "field": "profiling.host.cpu.cache.L2_kbytes.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/cache/L2-kbytes/socketIDs",
+    "field": "profiling.host.cpu.cache.L2_kbytes.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/cache/L3-kbytes",
+    "field": "profiling.host.cpu.cache.L3_kbytes.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/cache/L3-kbytes/socketIDs",
+    "field": "profiling.host.cpu.cache.L3_kbytes.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/clock/max-mhz",
+    "field": "profiling.host.cpu.clock.max_mhz.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/clock/max-mhz/socketIDs",
+    "field": "profiling.host.cpu.clock.max_mhz.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/clock/min-mhz",
+    "field": "profiling.host.cpu.clock.min_mhz.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/clock/min-mhz/socketIDs",
+    "field": "profiling.host.cpu.clock.min_mhz.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/clock/scaling-cur-freq-mhz",
+    "field": "profiling.host.cpu.clock.scaling_cur_freq_mhz.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/clock/scaling-cur-freq-mhz/socketIDs",
+    "field": "profiling.host.cpu.clock.scaling_cur_freq_mhz.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/clock/scaling-driver",
+    "field": "profiling.host.cpu.clock.scaling_driver.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/clock/scaling-driver/socketIDs",
+    "field": "profiling.host.cpu.clock.scaling_driver.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/clock/scaling-governor",
+    "field": "profiling.host.cpu.clock.scaling_governor.value",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "host:cpu/clock/scaling-governor/socketIDs",
+    "field": "profiling.host.cpu.clock.scaling_governor.sockets",
+    "type": "array",
+    "separator": ";"
+  },
+  {
+    "name": "ec2:ami-id",
+    "field": "ec2.ami_id",
+    "type": "string"
+  },
+  {
+    "name": "ec2:ami-manifest-path",
+    "field": "ec2.ami_manifest_path",
+    "type": "string"
+  },
+  {
+    "name": "ec2:ancestor-ami-ids",
+    "field": "ec2.ancestor_ami_ids",
+    "type": "string"
+  },
+  {
+    "name": "ec2:hostname",
+    "field": "ec2.hostname",
+    "type": "string"
+  },
+  {
+    "name": "ec2:instance-id",
+    "field": "ec2.instance_id",
+    "type": "string"
+  },
+  {
+    "name": "ec2:instance-type",
+    "field": "ec2.instance_type",
+    "type": "string"
+  },
+  {
+    "name": "ec2:instance-life-cycle",
+    "field": "ec2.instance_life_cycle",
+    "type": "string"
+  },
+  {
+    "name": "ec2:local-hostname",
+    "field": "ec2.local_hostname",
+    "type": "string"
+  },
+  {
+    "name": "ec2:local-ipv4",
+    "field": "ec2.local_ipv4",
+    "type": "string"
+  },
+  {
+    "name": "ec2:kernel-id",
+    "field": "ec2.kernel_id",
+    "type": "string"
+  },
+  {
+    "name": "ec2:mac",
+    "field": "ec2.mac",
+    "type": "string"
+  },
+  {
+    "name": "ec2:profile",
+    "field": "ec2.profile",
+    "type": "string"
+  },
+  {
+    "name": "ec2:public-hostname",
+    "field": "ec2.public_hostname",
+    "type": "string"
+  },
+  {
+    "name": "ec2:public-ipv4",
+    "field": "ec2.public_ipv4",
+    "type": "string"
+  },
+  {
+    "name": "ec2:product-codes",
+    "field": "ec2.product_codes",
+    "type": "string"
+  },
+  {
+    "name": "ec2:security-groups",
+    "field": "ec2.security_groups",
+    "type": "string"
+  },
+  {
+    "name": "ec2:placement/availability-zone",
+    "field": "ec2.placement.availability_zone",
+    "type": "string"
+  },
+  {
+    "name": "ec2:placement/availability-zone-id",
+    "field": "ec2.placement.availability_zone_id",
+    "type": "string"
+  },
+  {
+    "name": "ec2:placement/region",
+    "field": "ec2.placement.region",
+    "type": "string"
+  },
+  {
+    "name": "azure:compute/sku",
+    "field": "azure.compute.sku",
+    "type": "string"
+  },
+  {
+    "name": "azure:compute/name",
+    "field": "azure.compute.name",
+    "type": "string"
+  },
+  {
+    "name": "azure:compute/zone",
+    "field": "azure.compute.zone",
+    "type": "string"
+  },
+  {
+    "name": "azure:compute/vmid",
+    "field": "azure.compute.vmid",
+    "type": "string"
+  },
+  {
+    "name": "azure:compute/tags",
+    "field": "azure.compute.tags",
+    "type": "string"
+  },
+  {
+    "name": "azure:compute/offer",
+    "field": "azure.compute.offer",
+    "type": "string"
+  },
+  {
+    "name": "azure:compute/vmsize",
+    "field": "azure.compute.vmsize",
+    "type": "string"
+  },
+    {
+    "name": "azure:compute/ostype",
+    "field": "azure.compute.ostype",
+    "type": "string"
+  },
+  {
+    "name": "azure:compute/version",
+    "field": "azure.compute.version",
+    "type": "string"
+  },
+  {
+    "name": "azure:compute/location",
+    "field": "azure.compute.location",
+    "type": "string"
+  },
+  {
+    "name": "azure:compute/publisher",
+    "field": "azure.compute.publisher",
+    "type": "string"
+  },
+  {
+    "name": "azure:compute/environment",
+    "field": "azure.compute.environment",
+    "type": "string"
+  },
+  {
+    "name": "azure:compute/subscriptionid",
+    "field": "azure.compute.subscriptionid",
+    "type": "string"
+  },
+  {
+    "name": "gce:instance/id",
+    "field": "gce.instance.id",
+    "type": "string"
+  },
+  {
+    "name": "gce:instance/cpu-platform",
+    "field": "gce.instance.cpu_platform",
+    "type": "string"
+  },
+  {
+    "name": "gce:instance/description",
+    "field": "gce.instance.description",
+    "type": "string"
+  },
+  {
+    "name": "gce:instance/hostname",
+    "field": "gce.instance.hostname",
+    "type": "string"
+  },
+  {
+    "name": "gce:instance/image",
+    "field": "gce.instance.image",
+    "type": "string"
+  },
+  {
+    "name": "gce:instance/machine-type",
+    "field": "gce.instance.machine_type",
+    "type": "string"
+  },
+  {
+    "name": "gce:instance/name",
+    "field": "gce.instance.name",
+    "type": "string"
+  },
+  {
+    "name": "gce:instance/tags",
+    "field": "gce.instance.tags",
+    "type": "string"
+  },
+  {
+    "name": "gce:instance/zone",
+    "field": "gce.instance.zone",
+    "type": "string"
+  }
+]

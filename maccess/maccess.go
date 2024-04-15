@@ -1,0 +1,14 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Apache License 2.0.
+ * See the file "LICENSE" for details.
+ */
+
+// Package maccess provides functionality to check if a certain bug in
+// copy_from_user_nofault is patched.
+//
+// There were issues with the Linux kernel function copy_from_user_nofault that
+// caused systems to freeze. These issues were fixed with the following patch:
+// nolint:lll
+// https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=d319f344561de23e810515d109c7278919bff7b0
+package maccess
