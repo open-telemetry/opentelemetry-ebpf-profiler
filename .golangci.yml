@@ -1,0 +1,150 @@
+service:
+  golangci-lint-version: 1.54.x
+
+run:
+  skip-dirs:
+    - artifacts
+    - build-targets
+    - design
+    - docker-images
+    - docs
+    - etc
+    - experiments
+    - infrastructure
+    - legal
+    - libpf-rs
+    - mocks
+    - pf-code-indexing-service/cibackend/gomock_*
+    - pf-debug-metadata-service/dmsbackend/gomock_*
+    - pf-host-agent/support/ci-kernels
+    - pf-storage-backend/storagebackend/gomock_*
+    - scratch
+    - systemtests/benchmarks/_outdata
+    - target
+    - virt-tests
+    - vm-images
+
+linters:
+  enable-all: true
+  disable:
+    # Disabled because of
+    #   - too many non-sensical warnings
+    #   - not relevant for us
+    #   - false positives
+    # 
+    # "might be worth fixing" means we should investigate/fix in the mid term
+    - containedctx # might be worth fixing
+    - contextcheck # might be worth fixing
+    - cyclop
+    - depguard
+    - dupword
+    - durationcheck # might be worth fixing
+    - errname # might be worth fixing
+    - errorlint # might be worth fixing
+    - exhaustive
+    - exhaustivestruct
+    - exhaustruct
+    - forcetypeassert # might be worth fixing
+    - funlen
+    - gci # might be worth fixing
+    - gochecknoglobals
+    - gochecknoinits
+    - gocognit
+    - gocyclo
+    - godot
+    - godox # complains about TODO etc
+    - goerr113
+    - gofumpt
+    - goimports # might be worth fixing
+    - golint # might be worth fixing
+    - gomnd
+    - gomoddirectives
+    - ifshort
+    - interfacebloat
+    - ireturn
+    - maintidx
+    - makezero
+    - nestif
+    - nilerr # might be worth fixing
+    - nilnil
+    - nlreturn
+    - noctx # might be worth fixing
+    - nolintlint
+    - nonamedreturns
+    - nosnakecase
+    - paralleltest
+    - scopelint # might be worth fixing
+    - sqlclosecheck # might be worth fixing
+    - tagalign
+    - tagliatelle
+    - testableexamples # might be worth fixing
+    - testpackage
+    - tparallel # might be worth fixing
+    - thelper
+    - varnamelen
+    - wastedassign
+    - wsl
+    - wrapcheck
+    - forbidigo
+    # the following linters are deprecated
+    - exhaustivestruct
+    - scopelint
+    - nosnakecase
+    - interfacer
+    - maligned
+    - ifshort
+    - structcheck # might be worth fixing
+    - deadcode
+    - golint
+    - varcheck
+
+linters-settings:
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport # https://github.com/go-critic/go-critic/issues/845
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
+      - wrapperFunc
+      - sloppyTestFuncName
+      - sloppyReassign
+      - uncheckedInlineErr # Experimental rule with high false positive rate.
+
+      # Broken with Go 1.18 feature (https://github.com/golangci/golangci-lint/issues/2649):
+      - hugeParam
+      - rangeValCopy
+      - typeDefFirst
+      - paramTypeCombine
+  gocyclo:
+    min-complexity: 15
+  govet:
+    enable-all: true
+    check-shadowing: true
+    disable:
+      - fieldalignment
+    settings:
+      printf: # analyzer name, run `go tool vet help` to see all analyzers
+        funcs: # run `go tool vet help printf` to see available settings for `printf` analyzer
+          - debug,debugf,debugln
+          - error,errorf,errorln
+          - fatal,fatalf,fataln
+          - info,infof,infoln
+          - log,logf,logln
+          - warn,warnf,warnln
+          - print,printf,println,sprint,sprintf,sprintln,fprint,fprintf,fprintln
+  lll:
+    line-length: 100
+    tab-width: 4
+  maligned:
+    suggest-new: true
+  misspell:
+    locale: US

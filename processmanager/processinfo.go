@@ -1,0 +1,633 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Apache License 2.0.
+ * See the file "LICENSE" for details.
+ */
+
+package processmanager
+
+// This file is the only place that should access pidToProcessInfo.
+// The map is used to synchronize state between eBPF maps and process
+// manager. The access needs to stay here so the interaction between
+// these two components can be audited to be consistent.
+
+// The public functions in this file are restricted to be used from the
+// HA/tracer and utils/coredump modules only.
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path"
+	"syscall"
+	"time"
+
+	"golang.org/x/sys/unix"
+
+	"github.com/elastic/otel-profiling-agent/host"
+	"github.com/elastic/otel-profiling-agent/interpreter"
+	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/elastic/otel-profiling-agent/libpf/memorydebug"
+	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
+	"github.com/elastic/otel-profiling-agent/libpf/process"
+	"github.com/elastic/otel-profiling-agent/lpm"
+	"github.com/elastic/otel-profiling-agent/proc"
+	eim "github.com/elastic/otel-profiling-agent/processmanager/execinfomanager"
+	"github.com/elastic/otel-profiling-agent/tpbase"
+
+	log "github.com/sirupsen/logrus"
+)
+
+// assignTSDInfo updates the TSDInfo for the Interpreters on given PID.
+// Caller must hold pm.mu write lock.
+func (pm *ProcessManager) assignTSDInfo(pid libpf.PID, tsdInfo *tpbase.TSDInfo) {
+	if tsdInfo == nil {
+		return
+	}
+
+	info, ok := pm.pidToProcessInfo[pid]
+	if !ok {
+		// This is guaranteed not to happen since assignTSDInfo is always called after
+		// pm.updatePidInformation - but to avoid a possible panic we just return here.
+		return
+	} else if info.tsdInfo != nil {
+		return
+	}
+
+	info.tsdInfo = tsdInfo
+
+	// Update the tsdInfo to interpreters that are already attached
+	for _, instance := range pm.interpreters[pid] {
+		if err := instance.UpdateTSDInfo(pm.ebpf, pid, *tsdInfo); err != nil {
+			log.Errorf("Failed to update PID %v TSDInfo: %v",
+				pid, err)
+		}
+	}
+}
+
+// getTSDInfo retrieves the TSDInfo of given PID
+// Caller must hold pm.mu read lock.
+func (pm *ProcessManager) getTSDInfo(pid libpf.PID) *tpbase.TSDInfo {
+	if info, ok := pm.pidToProcessInfo[pid]; ok {
+		return info.tsdInfo
+	}
+	return nil
+}
+
+// updatePidInformation updates pidToProcessInfo with the new information about
+// vaddr, offset, fileID and length for the given pid. If we don't know about the pid yet, it also
+// allocates the embedded map. If the mapping for pid at vaddr with requestedLength and fileID
+// already exists, it returns true. Otherwise false or an error.
+//
+// Caller must hold pm.mu write lock.
+func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool, error) {
+	info, ok := pm.pidToProcessInfo[pid]
+	if !ok {
+		// We don't have information for this pid, so we first need to
+		// allocate the embedded map for this process.
+		info = &processInfo{
+			mappings: make(map[libpf.Address]Mapping),
+			tsdInfo:  nil,
+		}
+		pm.pidToProcessInfo[pid] = info
+
+		// Insert a dummy page into the eBPF map pid_page_to_mapping_info that provides the eBPF
+		// a quick way to check if we know something about this particular process.
+		if err := pm.ebpf.UpdatePidPageMappingInfo(pid, dummyPrefix, 0, 0); err != nil {
+			return false, fmt.Errorf(
+				"failed to update pid_page_to_mapping_info dummy entry for PID %d: %v",
+				pid, err)
+		}
+		pm.pidPageToMappingInfoSize++
+	} else if mf, ok := info.mappings[m.Vaddr]; ok {
+		if *m == mf {
+			// We try to update our information about a particular mapping we already know about.
+			return true, nil
+		}
+	}
+
+	info.mappings[m.Vaddr] = *m
+
+	prefixes, err := lpm.CalculatePrefixList(uint64(m.Vaddr), uint64(m.Vaddr)+m.Length)
+	if err != nil {
+		return false, fmt.Errorf("failed to create LPM entries for PID %d: %v", pid, err)
+	}
+	numUpdates := uint64(0)
+	for _, prefix := range prefixes {
+		if err = pm.ebpf.UpdatePidPageMappingInfo(pid, prefix, uint64(m.FileID),
+			m.Bias); err != nil {
+			err = fmt.Errorf(
+				"failed to update pid_page_to_mapping_info (pid: %d, page: 0x%x/%d): %v",
+				pid, prefix.Key, prefix.Length, err)
+			break
+		}
+		numUpdates++
+	}
+
+	pm.pidPageToMappingInfoSize += numUpdates
+
+	return false, err
+}
+
+// deletePIDAddress removes the mapping at addr from pid from the internal structure of the
+// process manager instance as well as from the eBPF maps.
+// Caller must hold pm.mu write lock.
+func (pm *ProcessManager) deletePIDAddress(pid libpf.PID, addr libpf.Address) error {
+	info, ok := pm.pidToProcessInfo[pid]
+	if !ok {
+		return fmt.Errorf("unknown PID %d: %w", pid, errUnknownPID)
+	}
+
+	mapping, ok := info.mappings[addr]
+	if !ok {
+		return fmt.Errorf("unknown memory mapping for PID %d at 0x%x: %w",
+			pid, addr, errUnknownMapping)
+	}
+
+	prefixes, err := lpm.CalculatePrefixList(uint64(addr), uint64(addr)+mapping.Length)
+	if err != nil {
+		return fmt.Errorf("failed to create LPM entries for PID %d: %v", pid, err)
+	}
+
+	deleted, err := pm.ebpf.DeletePidPageMappingInfo(pid, prefixes)
+	if err != nil {
+		log.Errorf("Failed to delete mappings for PID %d: %v", pid, err)
+	}
+
+	pm.pidPageToMappingInfoSize -= uint64(deleted)
+	delete(info.mappings, addr)
+
+	return pm.eim.RemoveOrDecRef(mapping.FileID)
+}
+
+// assignInterpreter will update the interpreters maps with given interpreter.Instance.
+func (pm *ProcessManager) assignInterpreter(pid libpf.PID, key libpf.OnDiskFileIdentifier,
+	instance interpreter.Instance) {
+	if _, ok := pm.interpreters[pid]; !ok {
+		// This is the very first interpreter entry for this process.
+		// So we need to initialize the structure first.
+		pm.interpreters[pid] = make(map[libpf.OnDiskFileIdentifier]interpreter.Instance)
+	}
+	pm.interpreters[pid][key] = instance
+}
+
+// handleNewInterpreter is called to process new executable memory mappings. It uses the
+// process manager to attach to the process/memory mapping if it is discovered that the
+// memory mapping corresponds with an interpreter.
+//
+// It is important to note that this function may spawn a new goroutine in order to retry
+// attaching to the interpreter, if the first attach attempt fails. In this case, `nil` will still
+// be returned and thus a `nil` return value does not mean the attach was successful. It means
+// that the attach was successful OR a retry is underway.
+//
+// The caller is responsible to hold the ProcessManager lock to avoid race conditions.
+func (pm *ProcessManager) handleNewInterpreter(pr process.Process, m *Mapping,
+	ei *eim.ExecutableInfo) error {
+	// The same interpreter can be found multiple times under various different
+	// circumstances. Check if this is already handled.
+	pid := pr.PID()
+	key := m.GetOnDiskFileIdentifier()
+	if _, ok := pm.interpreters[pid]; ok {
+		if _, ok := pm.interpreters[pid][key]; ok {
+			return nil
+		}
+	}
+	// Slow path: Interpreter detection or attachment needed
+	instance, err := ei.Data.Attach(pm.ebpf, pid, libpf.Address(m.Bias), pr.GetRemoteMemory())
+	if err != nil {
+		return fmt.Errorf("failed to attach to %v in PID %v: %w",
+			ei.Data, pid, err)
+	}
+
+	log.Debugf("Attached to %v interpreter in PID %v", ei.Data, pid)
+	pm.assignInterpreter(pid, key, instance)
+
+	if tsdInfo := pm.getTSDInfo(pid); tsdInfo != nil {
+		err = instance.UpdateTSDInfo(pm.ebpf, pid, *tsdInfo)
+		if err != nil {
+			log.Errorf("Failed to update PID %v TSDInfo: %v", pid, err)
+		}
+	}
+
+	return nil
+}
+
+// handleNewMapping processes new file backed mappings
+func (pm *ProcessManager) handleNewMapping(pr process.Process, m *Mapping,
+	elfRef *pfelf.Reference) error {
+	// Resolve executable info first
+	ei, err := pm.eim.AddOrIncRef(m.FileID, elfRef)
+	if err != nil {
+		return err
+	}
+
+	pid := pr.PID()
+
+	// We intentionally don't take the lock immediately when entering this function and instead
+	// rely on EIM's internal locking for the `AddOrIncRef` call. The reasoning here is that
+	// the `AddOrIncRef` call can take a while, and we don't want to block the whole PM for that.
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	// Update the eBPF maps with information about this mapping.
+	_, err = pm.updatePidInformation(pid, m)
+	if err != nil {
+		return err
+	}
+
+	pm.assignTSDInfo(pid, ei.TSDInfo)
+
+	if ei.Data != nil {
+		return pm.handleNewInterpreter(pr, m, &ei)
+	}
+
+	return nil
+}
+
+func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mapping,
+	elfRef *pfelf.Reference) elfInfo {
+	var lastModified int64
+
+	mappingFile := pr.GetMappingFile(mapping)
+	if mappingFile != "" {
+		var st unix.Stat_t
+		if err := unix.Stat(mappingFile, &st); err != nil {
+			return elfInfo{err: err}
+		}
+		lastModified = st.Mtim.Nano()
+	}
+
+	key := mapping.GetOnDiskFileIdentifier()
+
+	if info, ok := pm.elfInfoCache.Get(key); ok && info.lastModified == lastModified {
+		// Cached data ok
+		pm.elfInfoCacheHit.Add(1)
+		return info
+	}
+
+	// Slow path, calculate all the data and update cache
+	pm.elfInfoCacheMiss.Add(1)
+
+	info := elfInfo{
+		lastModified: lastModified,
+	}
+
+	var fileID libpf.FileID
+	ef, err := elfRef.GetELF()
+	if err == nil {
+		fileID, err = pr.CalculateMappingFileID(mapping)
+	}
+	if err != nil {
+		info.err = err
+		// It is possible that the process has exited, and the mapping
+		// file cannot be opened. Do not cache these errors.
+		if !errors.Is(err, os.ErrNotExist) {
+			// Cache the other errors: not an ELF, ELF corrupt, etc.
+			// to reduce opening it again and again.
+			pm.elfInfoCache.Add(key, info)
+		}
+		return info
+	}
+
+	hostFileID := host.CalculateKernelFileID(fileID)
+	info.fileID = hostFileID
+	info.addressMapper = ef.GetAddressMapper()
+	if mapping.IsVDSO() {
+		info.err = pm.insertSynthStackDeltas(hostFileID, ef)
+	}
+	// Do not cache the entry if synthetic stack delta loading failed,
+	// so next encounter of the VDSO will retry loading them.
+	if info.err == nil {
+		pm.elfInfoCache.Add(key, info)
+	}
+	pm.FileIDMapper.Set(hostFileID, fileID)
+
+	baseName := path.Base(mapping.Path)
+	if baseName == "/" {
+		// There are circumstances where there is no filename.
+		// E.g. kernel module 'bpfilter_umh' before Linux 5.9-rc1 uses
+		// fork_usermode_blob() and launches process with a blob without
+		// filename mapped in as the executable.
+		baseName = "<anonymous-blob>"
+	}
+
+	buildID, _ := ef.GetBuildID()
+	pm.reporter.ExecutableMetadata(context.TODO(), fileID, baseName, buildID)
+
+	return info
+}
+
+// processNewExecMapping is the logic to add a new process.Mapping to processmanager.
+func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *process.Mapping) {
+	// Filter uninteresting mappings
+	if mapping.Inode == 0 && !mapping.IsVDSO() {
+		return
+	}
+
+	// Create a Reference so we don't need to open the ELF multiple times
+	elfRef := pfelf.NewReference(mapping.Path, pr)
+	defer elfRef.Close()
+
+	info := pm.getELFInfo(pr, mapping, elfRef)
+	if info.err != nil {
+		// Unable to get the information. Most likely cause is that the
+		// process has exited already and the mapping file is unavailable
+		// or it is not an ELF file. Ignore these errors silently.
+		if !errors.Is(info.err, os.ErrNotExist) && !errors.Is(info.err, pfelf.ErrNotELF) {
+			log.Debugf("Failed to get ELF info for PID %d file %v: %v",
+				pr.PID(), mapping.Path, info.err)
+		}
+		return
+	}
+
+	// Get the virtual addresses for this mapping
+	elfSpaceVA, ok := info.addressMapper.FileOffsetToVirtualAddress(mapping.FileOffset)
+	if !ok {
+		log.Debugf("Failed to map file offset of PID %d, file %s, offset %d",
+			pr.PID(), mapping.Path, mapping.FileOffset)
+		return
+	}
+
+	if err := pm.handleNewMapping(pr,
+		&Mapping{
+			FileID:     info.fileID,
+			Vaddr:      libpf.Address(mapping.Vaddr),
+			Bias:       mapping.Vaddr - elfSpaceVA,
+			Length:     mapping.Length,
+			Device:     mapping.Device,
+			Inode:      mapping.Inode,
+			FileOffset: mapping.FileOffset,
+		}, elfRef); err != nil {
+		log.Errorf("Failed to handle mapping for PID %d, file %s: %v",
+			pr.PID(), mapping.Path, err)
+	}
+}
+
+// processRemovedMappings removes listed memory mappings and loaded interpreters from
+// the internal structures and eBPF maps.
+func (pm *ProcessManager) processRemovedMappings(pid libpf.PID, mappings []libpf.Address,
+	interpretersValid libpf.Set[libpf.OnDiskFileIdentifier]) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	for _, addr := range mappings {
+		if err := pm.deletePIDAddress(pid, addr); err != nil {
+			log.Debugf("Failed to handle native unmapping of 0x%x in PID %d: %v",
+				addr, pid, err)
+		}
+	}
+
+	if !pm.interpreterTracerEnabled {
+		return
+	}
+
+	if _, ok := pm.interpreters[pid]; !ok {
+		log.Debugf("ProcessManager doesn't know about PID %d", pid)
+		return
+	}
+
+	for key, instance := range pm.interpreters[pid] {
+		if _, ok := interpretersValid[key]; ok {
+			continue
+		}
+		if err := instance.Detach(pm.ebpf, pid); err != nil {
+			log.Errorf("Failed to unload interpreter for PID %d: %v",
+				pid, err)
+		}
+		delete(pm.interpreters[pid], key)
+	}
+
+	if len(pm.interpreters[pid]) == 0 {
+		// There are no longer any mapped interpreters in the process, therefore we can
+		// remove the entry.
+		delete(pm.interpreters, pid)
+	}
+}
+
+// synchronizeMappings synchronizes executable mappings for the given PID.
+// This method will be called when a PID is first encountered or when the eBPF
+// code encounters an address in an executable mapping that HA has no information
+// on. Therefore, executable mapping synchronization takes place lazily on-demand,
+// and map/unmap operations are not precisely tracked (reduce processing load).
+// This means that at any point, we may have cached stale (or miss) executable
+// mappings. The expectation is that stale mappings will disappear and new
+// mappings cached at the next synchronization triggered by process exit or
+// unknown address encountered.
+//
+// TODO: Periodic synchronization of mappings for every tracked PID.
+func (pm *ProcessManager) synchronizeMappings(pr process.Process,
+	mappings []process.Mapping) bool {
+	newProcess := true
+	pid := pr.PID()
+	mpAdd := make(map[libpf.Address]*process.Mapping, len(mappings))
+	mpRemove := make([]libpf.Address, 0)
+
+	interpretersValid := make(libpf.Set[libpf.OnDiskFileIdentifier])
+	for idx := range mappings {
+		m := &mappings[idx]
+		if !m.IsExecutable() || m.IsAnonymous() {
+			continue
+		}
+		mpAdd[libpf.Address(m.Vaddr)] = m
+		key := m.GetOnDiskFileIdentifier()
+		interpretersValid[key] = libpf.Void{}
+	}
+
+	// Generate the list of added and removed mappings.
+	pm.mu.RLock()
+	if info, ok := pm.pidToProcessInfo[pid]; ok {
+		// Iterate over cached executable mappings, if any, and collect mappings
+		// that have changed so that they are later batch-removed.
+		for addr, existingMapping := range info.mappings {
+			if newMapping, ok := mpAdd[addr]; ok {
+				// Check the relevant fields to see if it's still the same
+				if newMapping.Device == existingMapping.Device &&
+					newMapping.Inode == existingMapping.Inode &&
+					newMapping.FileOffset == existingMapping.FileOffset &&
+					newMapping.Length == existingMapping.Length {
+					// Mapping hasn't changed, remove from the new set
+					delete(mpAdd, addr)
+					continue
+				}
+			}
+			// Mapping has changed
+			mpRemove = append(mpRemove, addr)
+		}
+		newProcess = false
+	}
+	pm.mu.RUnlock()
+
+	// First, remove mappings that have changed
+	pm.processRemovedMappings(pid, mpRemove, interpretersValid)
+
+	// Add the new ELF mappings
+	for _, mapping := range mpAdd {
+		// Output memory usage in debug builds.
+		memorydebug.DebugLogMemoryUsage()
+		pm.processNewExecMapping(pr, mapping)
+	}
+
+	// Update interpreter plugins about the changed mappings
+	if pm.interpreterTracerEnabled {
+		pm.mu.Lock()
+		for _, instance := range pm.interpreters[pid] {
+			err := instance.SynchronizeMappings(pm.ebpf, pm.reporter, pr, mappings)
+			if err != nil {
+				if alive, _ := proc.IsPIDLive(pid); alive {
+					log.Errorf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
+				} else {
+					log.Debugf("Failed to handle new anonymous mapping for PID %d: process exited",
+						pid)
+				}
+			}
+		}
+		pm.mu.Unlock()
+	}
+
+	if len(mpAdd) > 0 || len(mpRemove) > 0 {
+		log.Debugf("Added %v mappings, removed %v mappings for PID: %v",
+			len(mpAdd), len(mpRemove), pid)
+	}
+	return newProcess
+}
+
+// ProcessPIDExit informs the ProcessManager that a process exited and no longer will be scheduled
+// for processing. It also schedules immediate symbolization if the exited PID needs it. exitKTime
+// is stored for later processing in SymbolizationComplete when all traces have been collected.
+// There can be a race condition if we can not clean up the references for this process
+// fast enough and this particular pid is reused again by the system.
+// NOTE: Exported only for tracer/.
+func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) bool {
+	log.Debugf("- PID: %v", pid)
+	defer pm.ebpf.RemoveReportedPID(pid)
+
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	symbolize := false
+	exitKTime := libpf.GetKTime()
+	if pm.interpreterTracerEnabled {
+		if len(pm.interpreters[pid]) > 0 {
+			pm.exitEvents[pid] = exitKTime
+			symbolize = true
+		}
+	}
+
+	info, ok := pm.pidToProcessInfo[pid]
+	if !ok {
+		log.Debugf("Skip process exit handling for unknown PID %d", pid)
+		return symbolize
+	}
+
+	// Delete all entries we have for this particular PID from pid_page_to_mapping_info.
+	deleted, err := pm.ebpf.DeletePidPageMappingInfo(pid, []lpm.Prefix{dummyPrefix})
+	if err != nil {
+		log.Errorf("Failed to delete dummy prefix for PID %d: %v",
+			pid, err)
+	}
+	pm.pidPageToMappingInfoSize -= uint64(deleted)
+
+	for address := range info.mappings {
+		if err := pm.deletePIDAddress(pid, address); err != nil {
+			log.Errorf("Failed to delete address 0x%x for PID %d: %v",
+				address, pid, err)
+		}
+	}
+	delete(pm.pidToProcessInfo, pid)
+
+	return symbolize
+}
+
+func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
+	pid := pr.PID()
+	log.Debugf("= PID: %v", pid)
+
+	pm.mappingStats.numProcAttempts.Add(1)
+	start := time.Now()
+	mappings, err := pr.GetMappings()
+	elapsed := time.Since(start)
+
+	if err != nil {
+		if os.IsPermission(err) {
+			// Ignore the synchronization completely in case of permission
+			// error. This implies the process is still alive, but we cannot
+			// inspect it. Exiting here keeps the PID in the eBPF maps so
+			// we avoid a notification flood to resynchronize.
+			pm.mappingStats.errProcPerm.Add(1)
+			return
+		}
+
+		// All other errors imply that the process has exited.
+		// Clean up, and notify eBPF.
+		pm.ProcessPIDExit(pid)
+		if os.IsNotExist(err) {
+			// Since listing /proc and opening files in there later is inherently racy,
+			// we expect to lose the race sometimes and thus expect to hit os.IsNotExist.
+			pm.mappingStats.errProcNotExist.Add(1)
+		} else if e, ok := err.(*os.PathError); ok && e.Err == syscall.ESRCH {
+			// If the process exits while reading its /proc/$PID/maps, the kernel will
+			// return ESRCH. Handle it as if the process did not exists.
+			pm.mappingStats.errProcESRCH.Add(1)
+		}
+		return
+	}
+	if len(mappings) == 0 {
+		// Valid process without any (executable) mappings. All cases are
+		// handled as process exit. Possible causes and reasoning:
+		// 1. It is a kernel worker process. The eBPF does not send events from these,
+		//    but we can see kernel threads here during startup when tracer walks
+		//    /proc and tries to synchronize all PIDs it sees.
+		//    The PID should not exist anywhere, but we can still double check and
+		//    make sure the PID is not tracked.
+		// 2. It is a normal process executing, but we just sampled it when the kernel
+		//    execve() is rebuilding the mappings and nothing is currently mapped.
+		//    In this case we can handle it as process exit because everything about
+		//    the process is changing: all mappings, comm, etc. If execve fails, we
+		//    reaped it early. If execve succeeds, we will get new synchronization
+		//    request soon, and handle it as a new process event.
+		pm.ProcessPIDExit(pid)
+		return
+	}
+
+	libpf.AtomicUpdateMaxUint32(&pm.mappingStats.maxProcParseUsec, uint32(elapsed.Microseconds()))
+	pm.mappingStats.totalProcParseUsec.Add(uint32(elapsed.Microseconds()))
+
+	if pm.synchronizeMappings(pr, mappings) {
+		log.Debugf("+ PID: %v", pid)
+		// TODO: Fine-grained reported_pids handling (evaluate per-PID mapping
+		// synchronization based on per-PID state such as time since last
+		// synchronization). Currently we only remove a PID from reported_pids
+		// if it's a new process and on process exit. This limits
+		// the frequency of PID mapping synchronizations to PID lifetime in
+		// reported_pids (which is dictated by REPORTED_PIDS_TIMEOUT in eBPF).
+
+		// We're immediately removing a new PID from reported_pids, to cover
+		// corner cases where processes load on startup in quick-succession
+		// additional code (e.g. plugins, Asterisk).
+		// Also see: Unified PID Events design doc
+		pm.ebpf.RemoveReportedPID(pid)
+	}
+}
+
+// CleanupPIDs executes a periodic synchronization of pidToProcessInfo table with system processes.
+// NOTE: Exported only for tracer/.
+func (pm *ProcessManager) CleanupPIDs() {
+	deadPids := make([]libpf.PID, 0, 16)
+
+	pm.mu.RLock()
+	for pid := range pm.pidToProcessInfo {
+		if live, _ := proc.IsPIDLive(pid); !live {
+			deadPids = append(deadPids, pid)
+		}
+	}
+	pm.mu.RUnlock()
+
+	for _, pid := range deadPids {
+		pm.ProcessPIDExit(pid)
+	}
+
+	if len(deadPids) > 0 {
+		log.Debugf("Cleaned up %d dead PIDs", len(deadPids))
+	}
+}

@@ -1,0 +1,166 @@
+{
+  "coredump-ref": "cc5cd2ce10d88f6ebdf19434e2b8a8d0882feab078ed0c04c679b24859c740d1",
+  "threads": [
+    {
+      "lwp": 243879,
+      "frames": [
+        "symbhack+0x575ee4",
+        "symbhack+0x5708b3",
+        "symbhack+0x570343",
+        "symbhack+0x825ed7",
+        "symbhack+0x826507",
+        "symbhack+0x822fc7",
+        "symbhack+0xf8fb27",
+        "symbhack+0xf8f2eb",
+        "symbhack+0xf8e6e3",
+        "symbhack+0x447677",
+        "symbhack+0x477ac3"
+      ]
+    },
+    {
+      "lwp": 243876,
+      "frames": [
+        "symbhack+0x478fcc",
+        "symbhack+0x44132b",
+        "symbhack+0x416daf",
+        "symbhack+0x44a1df",
+        "symbhack+0x44b7df",
+        "symbhack+0x44c31b",
+        "symbhack+0x44daaf",
+        "symbhack+0x44dfcb",
+        "symbhack+0x475453"
+      ]
+    },
+    {
+      "lwp": 243878,
+      "frames": [
+        "symbhack+0x478914",
+        "symbhack+0x451f07",
+        "symbhack+0x44a0e7",
+        "symbhack+0x44a03b",
+        "symbhack+0x4753df"
+      ]
+    },
+    {
+      "lwp": 243880,
+      "frames": [
+        "symbhack+0x47915c",
+        "symbhack+0x4410c7",
+        "symbhack+0x44c9d7",
+        "symbhack+0x44daaf",
+        "symbhack+0x44dfcb",
+        "symbhack+0x475453"
+      ]
+    },
+    {
+      "lwp": 243881,
+      "frames": [
+        "symbhack+0x478fcc",
+        "symbhack+0x44132b",
+        "symbhack+0x416daf",
+        "symbhack+0x44a1df",
+        "symbhack+0x44b7df",
+        "symbhack+0x44c31b",
+        "symbhack+0x44daaf",
+        "symbhack+0x44dfcb",
+        "symbhack+0x475453"
+      ]
+    },
+    {
+      "lwp": 243882,
+      "frames": [
+        "symbhack+0x478fcc",
+        "symbhack+0x44132b",
+        "symbhack+0x416daf",
+        "symbhack+0x44b6e7",
+        "symbhack+0x44a0e7",
+        "symbhack+0x44a03b",
+        "symbhack+0x4753df"
+      ]
+    },
+    {
+      "lwp": 243883,
+      "frames": [
+        "symbhack+0x478fcc",
+        "symbhack+0x44132b",
+        "symbhack+0x416daf",
+        "symbhack+0x44a1df",
+        "symbhack+0x44b7df",
+        "symbhack+0x44c31b",
+        "symbhack+0x44daaf",
+        "symbhack+0x44dfcb",
+        "symbhack+0x475453"
+      ]
+    },
+    {
+      "lwp": 243884,
+      "frames": [
+        "symbhack+0x478fcc",
+        "symbhack+0x44132b",
+        "symbhack+0x416daf",
+        "symbhack+0x44a1df",
+        "symbhack+0x44b7df",
+        "symbhack+0x44c31b",
+        "symbhack+0x44daaf",
+        "symbhack+0x44dfcb",
+        "symbhack+0x475453"
+      ]
+    },
+    {
+      "lwp": 243885,
+      "frames": [
+        "symbhack+0x478fcc",
+        "symbhack+0x44132b",
+        "symbhack+0x416daf",
+        "symbhack+0x44a1df",
+        "symbhack+0x44b7df",
+        "symbhack+0x44c31b",
+        "symbhack+0x44daaf",
+        "symbhack+0x44dfcb",
+        "symbhack+0x475453"
+      ]
+    },
+    {
+      "lwp": 243886,
+      "frames": [
+        "symbhack+0x478fcc",
+        "symbhack+0x44132b",
+        "symbhack+0x416daf",
+        "symbhack+0x44a1df",
+        "symbhack+0x44b7df",
+        "symbhack+0x44c31b",
+        "symbhack+0x44daaf",
+        "symbhack+0x44dfcb",
+        "symbhack+0x475453"
+      ]
+    },
+    {
+      "lwp": 243887,
+      "frames": [
+        "symbhack+0x478fcc",
+        "symbhack+0x44132b",
+        "symbhack+0x416daf",
+        "symbhack+0x44a1df",
+        "symbhack+0x44b7df",
+        "symbhack+0x44c31b",
+        "symbhack+0x44daaf",
+        "symbhack+0x44dfcb",
+        "symbhack+0x475453"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "d2d4a688141a686667220fa84ec8b4c9c4ec805c00c9a1f03ce0b8a45fa6c2e6",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "8a15b787643d08b76e8ab7b7f67d614282af6cf310c9cf20af8ede95a668c621",
+      "local-path": "/media/psf/devel/prodfiler/utils/symbhack/symbhack"
+    },
+    {
+      "ref": "acf9cd2b988c12b0e9ba02cb457b5fc81ffab1b4683ac166edbced3333fe5482",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    }
+  ]
+}

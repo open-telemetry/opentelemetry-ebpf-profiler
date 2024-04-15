@@ -1,0 +1,5 @@
+0000000000000000 A fixed_percpu_data
+0000000000000000 A __per_cpu_start
+0000000000000000 A cpu_debug_store
+0000000000000000 A irq_stack_backing_store
+0000000000000000 A cpu_tss_rw

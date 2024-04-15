@@ -1,0 +1,13 @@
+0000000000000000 A fixed_percpu_data
+0000000000000000 A __per_cpu_start
+0000000000001000 A cpu_debug_store
+0000000000002000 A irq_stack_backing_store
+0000000000006000 A cpu_tss_rw
+ffffffffc0346f40 t hidraw_connect	[hid]
+ffffffffc0340470 t hidinput_find_field	[hid]
+ffffffffc033d150 t hid_parse_report	[hid]
+ffffffffc033f9a0 t hid_open_report	[hid]
+ffffffffc03459b0 t hid_quirks_init	[hid]
+ffffffffc0345720 t hid_ignore	[hid]
+ffffffffc033e550 t hid_add_device	[hid]
+ffffffffc0346e20 t hidraw_report_event	[hid]
