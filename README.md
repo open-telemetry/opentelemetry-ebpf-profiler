@@ -33,6 +33,13 @@ agent to OpenTelementry.
 
 ## Building
 
+> [!NOTE] 
+> 
+> If you simply wish to take the agent for a spin with minimal effort, you can
+> also immediately jump to the ["Visualizing data locally"
+> section](#visualizing-data-locally), launch devfiler and follow the download
+> links for binaries within its "Add data" dialogue.
+
 The agent can be built without affecting your environment by using the provided
 `make` targets. You need to have `docker` installed, though.
 Builds on amd64 and arm64 architectures are supported.
