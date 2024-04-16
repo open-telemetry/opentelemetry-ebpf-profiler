@@ -196,11 +196,11 @@ We have two major representations for our stack traces.
 
 The raw trace format produced by our BPF unwinders:
 
-https://github.com/elastic/otel-profiling-agent/blob/385bcd5273fae22cdc2cf74bacae6a54fe6ce153/host/host.go#L54-L60
+https://github.com/elastic/otel-profiling-agent/blob/0945fe6/host/host.go#L60-L66
 
 The final format produced after additional processing in user-land:
 
-https://github.com/elastic/otel-profiling-agent/blob/385bcd5273fae22cdc2cf74bacae6a54fe6ce153/libpf/libpf.go#L452-L457
+https://github.com/elastic/otel-profiling-agent/blob/0945fe6/libpf/libpf.go#L458-L463
 
 The two might look rather similar at first glance, but there are some important differences:
 
@@ -253,7 +253,7 @@ Since converting and enriching BPF-format traces is not a cheap operation, the
 trace handler is also responsible for keeping a cache (mapping) of trace hashes:
 from 64bit BPF hash to the user-space 128bit hash.
 
-[`ConvertTrace`]: https://github.com/elastic/otel-profiling-agent/blob/385bcd5273fae22cdc2cf74bacae6a54fe6ce153/processmanager/manager.go#L205
+[`ConvertTrace`]: https://github.com/elastic/otel-profiling-agent/blob/0945fe6/processmanager/manager.go#L208
 
 #### Reporter
 
@@ -384,9 +384,9 @@ If any frame in the trace requires symbolization in user-mode, we additionally
 send a BPF event to request an expedited read from user-land. For all other
 traces user-land will simply read and then clear this map on a timer.
 
-[`native_tracer_entry`]: https://github.com/elastic/otel-profiling-agent/blob/385bcd5273fae22cdc2cf74bacae6a54fe6ce153/support/ebpf/native_stack_trace.ebpf.c#L875
-[`PerCPURecord`]: https://github.com/elastic/otel-profiling-agent/blob/385bcd5273fae22cdc2cf74bacae6a54fe6ce153/support/ebpf/types.h#L576
-[`unwind_stop`]: https://github.com/elastic/otel-profiling-agent/blob/385bcd5273fae22cdc2cf74bacae6a54fe6ce153/support/ebpf/interpreter_dispatcher.ebpf.c#L125
+[`native_tracer_entry`]: https://github.com/elastic/otel-profiling-agent/blob/0945fe6/support/ebpf/native_stack_trace.ebpf.c#L875
+[`PerCPURecord`]: https://github.com/elastic/otel-profiling-agent/blob/0945fe6/support/ebpf/types.h#L576
+[`unwind_stop`]: https://github.com/elastic/otel-profiling-agent/blob/0945fe6/support/ebpf/interpreter_dispatcher.ebpf.c#L125c#L125
 
 #### PID events
 
