@@ -23,7 +23,7 @@ RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
 
 RUN                                                                                \
   PB_URL="https://github.com/protocolbuffers/protobuf/releases/download/v24.4/";   \
-  PB_FILE="protoc-24.4-linux-x86_64.zip";                                      \
+  PB_FILE="protoc-24.4-linux-$(uname -m | sed 's/aarch64/aarch_64/').zip";         \
   INSTALL_DIR="/usr/local";                                                        \
                                                                                    \
   curl -LO "$PB_URL/$PB_FILE"                                                      \
