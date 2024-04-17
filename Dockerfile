@@ -6,7 +6,7 @@ ARG arch=amd64
 
 RUN apt-get update -y && apt-get dist-upgrade -y && apt-get install -y \
     curl wget cmake dwz lsb-release software-properties-common gnupg git clang llvm \
-    golang linux-headers-$arch unzip
+    golang unzip
 
 RUN git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git && \
     cd zydis && mkdir build && cd build && \
@@ -33,6 +33,6 @@ RUN                                                                             
     && find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;                    \
     && rm "$PB_FILE"
 
-RUN echo "export PATH=\"\$PATH:\$(go env GOPATH)/bin\"\nexport KERNEL_HEADERS=\"/lib/modules/$(ls /lib/modules)\"" >> ~/.bashrc
+RUN echo "export PATH=\"\$PATH:\$(go env GOPATH)/bin\"" >> ~/.bashrc
 
 ENTRYPOINT ["/bin/bash", "-l", "-c"]
