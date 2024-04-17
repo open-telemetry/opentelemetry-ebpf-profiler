@@ -386,7 +386,7 @@ traces user-land will simply read and then clear this map on a timer.
 
 [`native_tracer_entry`]: https://github.com/elastic/otel-profiling-agent/blob/0945fe6/support/ebpf/native_stack_trace.ebpf.c#L875
 [`PerCPURecord`]: https://github.com/elastic/otel-profiling-agent/blob/0945fe6/support/ebpf/types.h#L576
-[`unwind_stop`]: https://github.com/elastic/otel-profiling-agent/blob/0945fe6/support/ebpf/interpreter_dispatcher.ebpf.c#L125c#L125
+[`unwind_stop`]: https://github.com/elastic/otel-profiling-agent/blob/0945fe6/support/ebpf/interpreter_dispatcher.ebpf.c#L125
 
 #### PID events
 
