@@ -8,13 +8,7 @@
 //
 // See the host agent interpreterv8.go for more references.
 
-#undef asm_volatile_goto
-#define asm_volatile_goto(x...) asm volatile("invalid use of asm_volatile_goto")
-
 #include "bpfdefs.h"
-#include <linux/sched.h>
-#include <linux/version.h>
-
 #include "tracemgmt.h"
 #include "types.h"
 #include "v8_tracer.h"

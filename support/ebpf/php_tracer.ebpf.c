@@ -1,8 +1,5 @@
 // This file contains the code and map definitions for the PHP tracer
 
-#undef asm_volatile_goto
-#define asm_volatile_goto(x...) asm volatile("invalid use of asm_volatile_goto")
-
 #include "bpfdefs.h"
 #include "tracemgmt.h"
 #include "types.h"
