@@ -2,35 +2,17 @@
 #define OPTI_BPFDEFS_H
 
 #include "bpf_map.h"
-#include "inttypes.h"
+#include "kernel.h"
 
 #if defined(TESTING_COREDUMP)
-
   // utils/coredump uses CGO to build the eBPF code. Provide here the glue to
   // dispatch the BPF API to helpers implemented in ebpfhelpers.go.
-  #include <linux/bpf.h>    // BPF_* defines
-  #include <unistd.h>       // pid_t
-  #include <stdint.h>       // uintptr_t
+
   #define SEC(NAME)
 
   #define printt(fmt, ...) bpf_log(fmt, ##__VA_ARGS__)
   #define DEBUG_PRINT(fmt, ...) bpf_log(fmt, ##__VA_ARGS__)
   #define OPTI_DEBUG
-
-  // The following works with clang and gcc.
-  // Checked with
-  //    clang -dM -E -x c /dev/null | grep ENDI
-  //      gcc -dM -E -x c /dev/null | grep ENDI
-  #if defined __BYTE_ORDER__ && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-  #include <byteswap.h>
-  #define __constant_cpu_to_be32(x) __bswap_32(x)
-  #define __constant_cpu_to_be64(x) __bswap_64(x)
-  #elif defined __BYTE_ORDER__ && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-  #define __constant_cpu_to_be32(x) (x)
-  #define __constant_cpu_to_be64(x) (x)
-  #else
-  #error "Unknown endianness"
-  #endif
 
   // The members of the userspace 'struct pt_regs' are named
   // slightly different than the members of the kernel space structure.
@@ -39,62 +21,6 @@
   //     #include "linux/bpf.h"
   // Instead we copy the kernel space 'struct pt_regs' here and
   // define 'struct bpf_perf_event_data' manually.
-
-  // defined in arch/x86/include/asm/ptrace.h
-
-  #if defined(__x86_64)
-  struct pt_regs {
-      unsigned long r15;
-      unsigned long r14;
-      unsigned long r13;
-      unsigned long r12;
-      unsigned long bp;
-      unsigned long bx;
-      unsigned long r11;
-      unsigned long r10;
-      unsigned long r9;
-      unsigned long r8;
-      unsigned long ax;
-      unsigned long cx;
-      unsigned long dx;
-      unsigned long si;
-      unsigned long di;
-      unsigned long orig_ax;
-      unsigned long ip;
-      unsigned long cs;
-      unsigned long flags;
-      unsigned long sp;
-      unsigned long ss;
-  };
-
-  #define reg_pc ip
-
-  #elif defined(__aarch64__)
-
-  struct pt_regs {
-      u64 regs[31];
-      u64 sp;
-      u64 pc;
-      u64 pstate;
-      u64 orig_x0;
-      s32 syscallno;
-      u32 unused2;
-      u64 sdei_ttbr1;
-      u64 pmr_save;
-      u64 stackframe[2];
-      u64 lockdep_hardirqs;
-      u64 exit_rcu;
-  };
-
-  #define reg_pc pc
-
-  #else
-  #error "Unsupported architecture"
-  #endif
-
-  struct bpf_perf_event_data {
-      struct pt_regs regs;
-  };
 
   // BPF helpers. Mostly stubs to dispatch the call to Go code with the context ID.
   int bpf_tail_call(void *ctx, bpf_map_def *map, int index);
@@ -136,13 +62,6 @@
 #else // TESTING_COREDUMP
 
 // Native eBPF build
-
-#include <linux/kconfig.h> // atomic64_t
-// Linux 5.4 introduces asm_inline which clang cannot deal with. Disable it.
-#undef CONFIG_CC_HAS_ASM_INLINE
-#include <uapi/linux/bpf_perf_event.h>
-
-#include <linux/bpf.h>
 
 // definitions of bpf helper functions we need, as found in
 // https://elixir.bootlin.com/linux/v4.11/source/samples/bpf/bpf_helpers.h

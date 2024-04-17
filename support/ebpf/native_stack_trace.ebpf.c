@@ -1,24 +1,4 @@
-#undef asm_volatile_goto
-#define asm_volatile_goto(x...) asm volatile("invalid use of asm_volatile_goto")
-
 #include "bpfdefs.h"
-
-#ifdef TESTING_COREDUMP
-// defined in include/uapi/linux/perf_event.h
-#define PERF_MAX_STACK_DEPTH 127
-
-#ifndef THREAD_SIZE
-  // taken from the kernel sources
-  #define THREAD_SIZE 16384
-#endif
-
-#else
-  #include <linux/sched.h>
-  #include <uapi/linux/bpf_perf_event.h>
-  #include <uapi/linux/ptrace.h>
-  #include <uapi/linux/perf_event.h>
-#endif
-
 #include "frametypes.h"
 #include "types.h"
 #include "tracemgmt.h"

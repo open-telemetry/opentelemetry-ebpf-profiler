@@ -3,9 +3,7 @@
 #ifndef OPTI_TYPES_H
 #define OPTI_TYPES_H
 
-#include <asm/types.h>
-#include <stdbool.h>
-#include "inttypes.h"
+#include "kernel.h"
 #include "errors.h"
 
 // ID values used as index to maps/metrics array.
