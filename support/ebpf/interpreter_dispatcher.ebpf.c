@@ -2,9 +2,6 @@
 // the tracers, as well as a dispatcher program that can be attached to a
 // perf event and will call the appropriate tracer for a given process
 
-#undef asm_volatile_goto
-#define asm_volatile_goto(x...) asm volatile("invalid use of asm_volatile_goto")
-
 #include "bpfdefs.h"
 #include "types.h"
 #include "tracemgmt.h"

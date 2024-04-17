@@ -8,7 +8,6 @@
 package support
 
 /*
-#include <linux/perf_event.h>
 #include "./ebpf/types.h"
 #include "./ebpf/frametypes.h"
 */
