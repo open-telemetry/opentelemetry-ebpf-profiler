@@ -1,5 +1,4 @@
 SHELL:=/usr/bin/env bash
-KERNEL_HEADERS ?= /lib/modules/$(shell uname -r)
 
 CLANG=clang
 LINK=llvm-link
@@ -31,9 +30,10 @@ else
 TARGET_FLAGS = -target x86_64-linux-gnu
 endif
 
-FLAGS=-D__KERNEL__ \
-	-D__BPF_TRACING__ \
-	$(TARGET_FLAGS) \
+FLAGS=$(TARGET_FLAGS) \
+	-nostdinc \
+	-nostdlib \
+	-ffreestanding \
 	-O2 -emit-llvm -c $< \
 	-Wall -Wextra -Werror \
 	-Wno-address-of-packed-member \
@@ -41,14 +41,7 @@ FLAGS=-D__KERNEL__ \
 	-Wno-unused-parameter \
 	-Wno-sign-compare \
 	-fno-stack-protector \
-	-fno-jump-tables \
-	-isystem $(KERNEL_HEADERS)/source/arch/$(TARGET_ARCH)/include \
-	-isystem $(KERNEL_HEADERS)/source/arch/$(TARGET_ARCH)/include/generated \
-	-isystem $(KERNEL_HEADERS)/build/include \
-	-isystem $(KERNEL_HEADERS)/build/include/uapi \
-	-isystem $(KERNEL_HEADERS)/build/arch/$(TARGET_ARCH)/include \
-	-isystem $(KERNEL_HEADERS)/build/arch/$(TARGET_ARCH)/include/generated \
-	-isystem $(KERNEL_HEADERS)/source/include
+	-fno-jump-tables
 
 SRCS := $(wildcard *.ebpf.c)
 OBJS := $(SRCS:.c=.o)

@@ -4,9 +4,6 @@
 // https://hg.openjdk.java.net/jdk-updates/jdk14u/file/default/src/java.base/solaris/native/libjvm_db/libjvm_db.c
 // See also the host agent interpreterjvm.go for more references.
 
-#undef asm_volatile_goto
-#define asm_volatile_goto(x...) asm volatile("invalid use of asm_volatile_goto")
-
 #include "bpfdefs.h"
 #include "tracemgmt.h"
 #include "types.h"
@@ -115,6 +112,7 @@ u64 calc_line(u8 subtype, u32 pc_or_bci, u32 ptr_check) {
   return ((u64)subtype << 60) | ((u64)pc_or_bci << 32) | (u64)ptr_check;
 }
 
+#ifdef __x86_64__
 // hotspot_addr_in_codecache checks if given address belongs to the JVM JIT code cache
 __attribute__((always_inline)) inline static
 bool hotspot_addr_in_codecache(u32 pid, u64 addr) {
@@ -135,6 +133,7 @@ bool hotspot_addr_in_codecache(u32 pid, u64 addr) {
   decode_bias_and_unwind_program(val->bias_and_unwind_program, &bias, &program);
   return program == PROG_UNWIND_HOTSPOT;
 }
+#endif
 
 // hotspot_find_codeblob maps a given PC to the CodeBlob* that describes the
 // JIT information regarding the method (or stub) this PC belongs to. This uses
