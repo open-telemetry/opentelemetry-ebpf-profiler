@@ -58,7 +58,7 @@ docker-image:
 	docker build -t profiling-agent --build-arg arch=$(NATIVE_ARCH) -f Dockerfile .
 
 agent:
-	docker run -v "$$PWD":/agent -it --user $(shell id -u):$(shell id -g) profiling-agent make
+	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent make
 
 legal:
 	@go install go.elastic.co/go-licence-detector@latest
