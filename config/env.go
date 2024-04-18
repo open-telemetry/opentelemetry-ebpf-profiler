@@ -442,7 +442,7 @@ func getEnvironmentAndMachineID() (EnvironmentType, uint64, error) {
 	if env == envUnspec {
 		var err error
 		// the environment check getNonCloudEnvironmentAndMachineID is not part of
-		// environmentTests, as it is our last resort in identifiying the environment.
+		// environmentTests, as it is our last resort in identifying the environment.
 		machineID, env, err = getNonCloudEnvironmentAndMachineID()
 		if env == envUnspec || err != nil {
 			return envUnspec, 0, fmt.Errorf(
