@@ -1,6 +1,8 @@
 *.o
 *.pb.go
-.idea
+.cache
+/.idea
+/go
 otel-profiling-agent
 tracer.ebpf
 tracer.ebpf.arm64
