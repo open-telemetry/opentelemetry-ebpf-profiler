@@ -1,3 +1,12 @@
+> [!NOTE] 
+> 
+> Please be aware that we currently won't accept 3rd party PRs because this repository
+> is potentially temporary. We are waiting for the decision of the OpenTelemetry technical
+> commitee on the donation of this repository.
+>
+> In case ithe donation gets accepted, this repository will move to the [GitHub open-telemetry organization](https://github.com/open-telemetry),
+> which requires signing a different CLA.
+
 # Introduction
 
 This repository implements a whole-system, cross-language profiler for Linux via
