@@ -457,7 +457,7 @@ func setEnvironment(env EnvironmentType) {
 	environment = env
 }
 
-// GenerateHostID generates and sets the unique hostID
+// GenerateNewHostIDIfNecessary generates and sets the unique hostID
 func GenerateNewHostIDIfNecessary() error {
 	var err error
 

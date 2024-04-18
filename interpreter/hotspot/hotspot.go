@@ -301,7 +301,7 @@ func demangleJavaTypeSignature(signature string, sb io.StringWriter) string {
 	return ""
 }
 
-// demangleJavaSignature demangles a JavaTypeSignature
+// demangleJavaMethod demangles a JavaTypeSignature
 func demangleJavaMethod(klass, method, signature string) string {
 	var sb strings.Builder
 

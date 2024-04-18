@@ -693,7 +693,7 @@ func isSMI(val uint64) bool {
 	return val&SmiTagMask == SmiTag
 }
 
-// decideSMI extracts the integer value from a SMI. Returns zero for bad tag.
+// decodeSMI extracts the integer value from a SMI. Returns zero for bad tag.
 func decodeSMI(val uint64) uint32 {
 	if !isSMI(val) {
 		return 0
@@ -1295,7 +1295,7 @@ func (i *v8Instance) getCode(taggedPtr libpf.Address, cookie uint32) (*v8Code, e
 	return i.readCode(taggedPtr, cookie, nil)
 }
 
-// getCodeFromJSFunction reads and caches needed V8 Code object data from a JSFunction pointer.
+// getCodeFromJSFunc reads and caches needed V8 Code object data from a JSFunction pointer.
 func (i *v8Instance) getCodeFromJSFunc(taggedPtr libpf.Address, cookie uint32) (*v8Code, error) {
 	if code, ok := i.addrToCode.Get(taggedPtr); ok {
 		if code.cookie == cookie {
