@@ -11,7 +11,7 @@ NATIVE_ARCH:=$(shell uname -m)
 
 ifeq ($(NATIVE_ARCH),x86_64)
 NATIVE_ARCH:=x86
-else ifeq ($(NATIVE_ARCH),aarch64)
+else ifneq (,$(filter $(NATIVE_ARCH),aarch64 arm64))
 NATIVE_ARCH:=arm64
 else
 $(error Unsupported architecture: $(NATIVE_ARCH))
