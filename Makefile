@@ -6,10 +6,11 @@ all: generate ebpf binary
 
 # Removes the go build cache and binaries in the current project
 clean:
-	go clean -cache -i
-	$(MAKE) -C support/ebpf clean
-	rm -f build-targets/*.{deb,rpm}
-	rm -f support/*.test
+	@go clean -cache -i
+	@$(MAKE) -s -C support/ebpf clean
+	@rm -f support/*.test
+	@chmod -Rf u+w go/ || true
+	@rm -rf go .cache
 
 generate: protobuf
 	go install github.com/florianl/bluebox@v0.0.1
@@ -57,7 +58,7 @@ docker-image:
 	docker build -t profiling-agent --build-arg arch=$(NATIVE_ARCH) -f Dockerfile .
 
 agent:
-	docker run -v "$$PWD":/agent -it profiling-agent make
+	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent make
 
 legal:
 	@go install go.elastic.co/go-licence-detector@latest
