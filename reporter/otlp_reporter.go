@@ -458,7 +458,6 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 	// funcMap is a temporary helper that will build the Function array
 	// in profile and make sure information is deduplicated.
 	funcMap := make(map[funcInfo]uint64)
-	funcMap[funcInfo{name: "", fileName: ""}] = 0
 
 	numSamples := len(samplesCpy)
 	profile = &pprofextended.Profile{
@@ -563,7 +562,11 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 						// HasInlinedFrames - Optional element we do not use.
 					})
 				}
-				loc.MappingIndex = locationMappingIndex
+
+				// Indexes used in locations are 1-indexed, 0 is the zero-value
+				// and therefore "reserved" for unset, so 1 has to be added to
+				// the returned index.
+				loc.MappingIndex = locationMappingIndex + 1
 			case libpf.KernelFrame:
 				// Reconstruct frameID
 				frameID := libpf.NewFrameID(trace.files[i], trace.linenos[i])
@@ -571,7 +574,10 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 				line := &pprofextended.Line{}
 
 				if tmpFunctionIndex, exists := frameIDtoFunction[frameID]; exists {
-					line.FunctionIndex = tmpFunctionIndex
+					// Indexes used in lines are 1-indexed, 0 is the zero-value
+					// and therefore "reserved" for unset, so 1 has to be added
+					// to the returned index.
+					line.FunctionIndex = tmpFunctionIndex + 1
 				} else {
 					symbol, exists := r.fallbackSymbols.Get(frameID)
 					if !exists {
@@ -579,14 +585,21 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 						// reported yet.
 						symbol = "UNKNOWN"
 					}
+
+					// Indexes used in lines are 1-indexed, 0 is the zero-value
+					// and therefore "reserved" for unset, so 1 has to be added
+					// to the returned index.
 					line.FunctionIndex = createFunctionEntry(funcMap,
-						symbol, "vmlinux")
+						symbol, "vmlinux") + 1
 				}
 				loc.Line = append(loc.Line, line)
 
-				// To be compliant with the protocol generate a dummy mapping entry.
+				// To be compliant with the protocol generate a dummy mapping
+				// entry. Indexes used in locations are 1-indexed, 0 is the
+				// zero-value and therefore "reserved" for unset, so 1 has to
+				// be added to the returned index.
 				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping, stringMap,
-					profile, trace.files[i])
+					profile, trace.files[i]) + 1
 			case libpf.AbortFrame:
 				// Next step: Figure out how the OTLP protocol
 				// could handle artificial frames, like AbortFrame,
@@ -598,32 +611,46 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 
 				fileIDInfo, exists := r.frames.Get(trace.files[i])
 				if !exists {
-					// At this point, we do not have enough information for the frame.
-					// Therefore, we report a dummy entry and use the interpreter as filename.
+
+					// At this point, we do not have enough information for the
+					// frame. Therefore, we report a dummy entry and use the
+					// interpreter as filename. Indexes used in lines are
+					// 1-indexed, 0 is the zero-value and therefore "reserved"
+					// for unset, so 1 has to be added to the returned index.
 					line.FunctionIndex = createFunctionEntry(funcMap,
-						"UNREPORTED", frameKind.String())
+						"UNREPORTED", frameKind.String()) + 1
 				} else {
 					si, exists := fileIDInfo[trace.linenos[i]]
 					if !exists {
-						// At this point, we do not have enough information for the frame.
-						// Therefore, we report a dummy entry and use the interpreter as filename.
-						// To differentiate this case with the case where no information about
-						// the file ID is available at all, we use a different name for reported
-						// function.
+						// At this point, we do not have enough information for
+						// the frame. Therefore, we report a dummy entry and
+						// use the interpreter as filename. To differentiate
+						// this case with the case where no information about
+						// the file ID is available at all, we use a different
+						// name for reported function. Indexes used in lines
+						// are 1-indexed, 0 is the zero-value and therefore
+						// "reserved" for unset, so 1 has to be added to the
+						// returned index.
 						line.FunctionIndex = createFunctionEntry(funcMap,
-							"UNRESOLVED", frameKind.String())
+							"UNRESOLVED", frameKind.String()) + 1
 					} else {
 						line.Line = int64(si.lineNumber)
 
+						// Indexes used in lines are 1-indexed, 0 is the
+						// zero-value and therefore "reserved" for unset, so 1
+						// has to be added to the returned index.
 						line.FunctionIndex = createFunctionEntry(funcMap,
-							si.functionName, si.filePath)
+							si.functionName, si.filePath) + 1
 					}
 				}
 				loc.Line = append(loc.Line, line)
 
-				// To be compliant with the protocol generate a dummy mapping entry.
+				// To be compliant with the protocol generate a dummy mapping
+				// entry. Indexes used in locations are 1-indexed, 0 is the
+				// zero-value and therefore "reserved" for unset, so 1 has to
+				// be added to the returned index.
 				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping, stringMap,
-					profile, trace.files[i])
+					profile, trace.files[i]) + 1
 			}
 			profile.Location = append(profile.Location, loc)
 		}
