@@ -464,6 +464,15 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 	profile = &pprofextended.Profile{
 		// SampleType - Next step: Figure out the correct SampleType.
 		Sample: make([]*pprofextended.Sample, 0, numSamples),
+		SampleType: []*pprofextended.ValueType{{
+			Type: int64(getStringMapIndex(stringMap, "samples")),
+			Unit: int64(getStringMapIndex(stringMap, "count")),
+		}},
+		PeriodType: &pprofextended.ValueType{
+			Type: int64(getStringMapIndex(stringMap, "cpu")),
+			Unit: int64(getStringMapIndex(stringMap, "nanoseconds")),
+		},
+		Period: 1e9 / int64(config.SamplesPerSecond()),
 		// LocationIndices - Optional element we do not use.
 		// AttributeTable - Optional element we do not use.
 		// AttributeUnits - Optional element we do not use.
@@ -472,8 +481,6 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 		// KeepFrames - Optional element we do not use.
 		// TimeNanos - Optional element we do not use.
 		// DurationNanos - Optional element we do not use.
-		// PeriodType - Optional element we do not use.
-		// Period - Optional element we do not use.
 		// Comment - Optional element we do not use.
 		// DefaultSampleType - Optional element we do not use.
 	}
@@ -621,6 +628,7 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 			profile.Location = append(profile.Location, loc)
 		}
 
+		sample.Value = []int64{int64(sampleInfo.count)}
 		sample.Label = getTraceLabels(stringMap, trace)
 		sample.LocationsLength = uint64(len(trace.frameTypes))
 		locationIndex += sample.LocationsLength
@@ -655,6 +663,11 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 		profile.LocationIndices[i] = i
 	}
 
+	// start and end ts are in milliseconds but we need nanoseconds.
+	startNanos := time.Unix(int64(startTS), 0).UnixNano()
+	endNanos := time.Unix(int64(endTS), 0).UnixNano()
+	profile.DurationNanos = endNanos - startNanos
+	profile.TimeNanos = startNanos
 	return profile, startTS, endTS
 }
 
