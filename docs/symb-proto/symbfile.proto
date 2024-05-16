@@ -145,7 +145,7 @@ message RangeV1 {
   uint32 callLine = 5;
 
   // The file that issued the call to the inline function. 0 if `depth` is 0 or
-  // or the call file is equal to the file of the parent record record (`depth - 1`).
+  // the call file is equal to the file of the parent record record (`depth - 1`).
   oneof callFile {
     string callFileStr = 6;
     uint32 callFileRef = 11;

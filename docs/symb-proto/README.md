@@ -14,11 +14,11 @@ symbfiles with an executable (e.g. via a file hash) is left to other components.
 We currently use two different symbol information representations:
 
 - **Range based records ([`RangeV1`])**\
-  These map an address range to symbol information and a `depth` integer that
+  These map an ELF virtual address range to symbol information and a `depth` integer that
   determines the depth within an inline chain. Inline chains are flattened into
   multiple overlapping range records. To determine the inline trace for any
   given address, the user would sweep though the whole symbfile and collect all
-  ranges that contain the desired address and then ordering the resulting range
+  ranges that contain the desired address and then order the resulting range
   records by their `depth` field. This presents the ground truth for symbol
   information. 
 - **Return pad records ([`ReturnPadV1`])**\
@@ -44,9 +44,9 @@ of the [protobuf definition][symbfile-proto].
 
 Symbfiles are uploaded via a REST API. The `symbtool push-symbols` command
 extracts and uploads at least two symbol files ("ranges" and "returnpads") to
-the symbolization service via HTTP(S). The "ranges" files that contains non-leaf
+the symbolization service via HTTP(S). The "ranges" files that contain non-leaf
 frame symbol information are uploaded via `/api/symbols-ranges`. The "return
-pads" files that contains leaf frame symbol information are uploaded via
+pads" files that contain leaf frame symbol information are uploaded via
 `/api/symbols-returnpads`. Symbfiles may be split and uploaded in multiple
 chunks (in separate HTTP requests) for improved load balancing in the presence
 of muliple symbolizer services.
@@ -79,7 +79,7 @@ like this
 ```
 
 In the failure case, the HTTP status code is 4xx or 5xx. The response body
-explains the failure in greater detail, like for example:
+explains the failure in greater detail, for example:
 
 ```json
 {
@@ -93,6 +93,6 @@ explains the failure in greater detail, like for example:
 }
 ```
 
-`uuid` allows logically connecting user reports and logs. So error reports from
-the user side that contain the UUID allows finding the logs needed for
+`uuid` allows logically connecting user reports and logs: error reports from
+the user that contain the UUID allow finding the logs needed for
 investigation and debugging.
