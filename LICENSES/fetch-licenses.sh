@@ -4,6 +4,10 @@
 # to be installed in the the PATH.
 #
 # The script also requires bash, xml2, jq, git, curl, awk, grep to be installed.
+#
+# In case you messages like "Github created=null, stars=null, forks=null, license=null":
+#  - This is not relevant for the operation (determining licenses and downloading them).
+#  - This is due to the Github API default rate limiter - please increase your personal rate limit.
 
 function cleanup {
   rm  -rf tmp
