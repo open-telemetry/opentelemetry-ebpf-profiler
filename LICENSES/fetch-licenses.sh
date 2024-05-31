@@ -66,7 +66,7 @@ for dir_versioned in $dirs; do
   fi
 
   if [ "$file" == "null" ]; then
-    echo "  No file found, check manually" 
+    echo "  No file found, check manually"
     check_manually="$check_manually $repo"
     continue
    fi
