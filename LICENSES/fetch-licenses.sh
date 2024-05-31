@@ -56,8 +56,8 @@ for dir_versioned in $dirs; do
   fi
 
   json=$(./license-detector $repo -f json)
-  license=$(echo $json | jq -r '.[0].matches[0].license')
-  file=$(echo $json | jq -r '.[0].matches[0].file')
+  read -r license file < \
+       <(jq -r '"\(.[0].matches[0].license) \(.[0].matches[0].file)"' <<< "$json")
 
   if [ "$license" == "null" ]; then
     echo "  No license found, check manually"
