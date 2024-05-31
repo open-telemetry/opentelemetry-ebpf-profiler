@@ -1,7 +1,9 @@
 #!/bin/bash -u
 #
 # Requires license-detector from https://github.com/go-enry/go-license-detector/releases/tag/v4.3.0 
-# to be installed in the current directory.
+# to be installed in the the PATH.
+#
+# The script also requires bash, xml2, jq, git, curl, awk, grep to be installed.
 
 function cleanup {
   rm  -rf tmp
@@ -55,7 +57,7 @@ for dir_versioned in $dirs; do
     continue
   fi
 
-  json=$(./license-detector $repo -f json)
+  json=$(license-detector $repo -f json)
   read -r license file < \
        <(jq -r '"\(.[0].matches[0].license) \(.[0].matches[0].file)"' <<< "$json")
 
