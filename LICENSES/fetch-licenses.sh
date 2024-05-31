@@ -39,10 +39,8 @@ for dir_versioned in $dirs; do
 
   if [ -z "${repo%%https://github.com/*}" ]; then
     json=$(curl -sL "https://api.github.com/repos/$(echo $repo | cut -d'/' -f4-)" -H 'Accept: application/vnd.github.preview')
-    stars=$(echo $json | jq -r '.stargazers_count')
-    forks=$(echo $json | jq -r '.forks')
-    license=$(echo $json | jq -r '.license.spdx_id')
-    created=$(echo $json | jq -r '.created_at')
+    read -r stars forks license created < \
+         <(jq -r '"\(.stargazers_count) \(.forks) \(.license.spdx_id) \(.created_at)"' <<< "$json")
     echo "  Github created=$created, stars=$stars, forks=$forks, license=$license"
 
     # Avoid the heavy-weight license-detector if possible
