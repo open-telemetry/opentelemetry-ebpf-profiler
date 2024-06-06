@@ -780,6 +780,56 @@ int unwind_native(struct pt_regs *ctx) {
       break;
     }
 
+    // subtract one from the return address
+    // so it points to within the call instruction,
+    // rather than to the following instruction.
+    //
+    // This has to be done in the unwinder,
+    // rather than in the user-mode program, because otherwise we won't be able to
+    // find the unwind info for functions that end on a call instruction.
+    //
+    // How is it possible for functions to end on a call instruction? Compilers
+    // might not bother emitting a function epilogue for functions that provably never
+    // terminate. For example:
+    //
+    // int
+    // __attribute__((noinline))
+    // dospin()
+    // {
+    // 	while (1)
+    // 		;
+    // }
+    // 
+    // int main()
+    // {
+    // 	dospin();
+    // }
+    //
+    // GCC (on aarch64, at -O3), knowing that `main` never terminates,
+    // emits the following code for `main`:
+    //
+    // 0000000000410080 <main>:
+    //  410080:       a9bf7bfd        stp     x29, x30, [sp, #-16]!
+    //  410084:       910003fd        mov     x29, sp
+    //  410088:       9400005a        bl      4101f0 <dospin>
+    //
+    // (several `nop` instructions follow, but no function prologue)
+    //
+    // and the following .eh_frame data:
+    // 000000cc 0000000000000014 000000d0 FDE cie=00000000 pc=0000000000410080..000000000041008c
+    //    LOC           CFA      x29   ra    
+    // 0000000000410080 sp+0     u     u     
+    // 0000000000410084 sp+16    c-16  c-8
+    //
+    // Note that there is no .eh_frame data for 0x41008c and onwards
+    // (the `pc` interval reported by objdump -WF above is half-open).
+    //
+    // Thus after the `bl` instruction at 0x410088, the return address,
+    // 0x41008c, points at invalid unwind info, whereas subtracting 1
+    // gets the unwind info for the `bl` instruction, as required.    
+    if (record->state.pc)
+      --record->state.pc;
+
     // Continue unwinding
     DEBUG_PRINT(" pc: %llx sp: %llx fp: %llx", record->state.pc, record->state.sp, record->state.fp);
     error = get_next_unwinder_after_native_frame(record, &unwinder);

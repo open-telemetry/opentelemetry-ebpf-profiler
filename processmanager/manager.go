@@ -236,34 +236,12 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 			// a frame in which the RIP is after a call instruction (it hides the top
 			// frames that leads to the unwinder itself).
 			//
-			// For leaf user mode frames (without kernel frames) the RIP from
-			// our unwinder is good as is, and must not be altered because the
-			// previous instruction address is unknown -- we might have just
-			// executed a jump or a call that got us to the address found in
-			// these frames.
-			//
-			// For other user mode frames we are at the next instruction after a
-			// call. And often the next instruction is already part of the next
-			// source code line's debug info areas. So we need to fixup the non-top
-			// frames so that we get source code lines pointing to the call instruction.
-			// We would ideally wish to subtract the size of the instruction from
-			// the return address we retrieved - but the size of calls can vary
-			// (indirect calls etc.). If, on the other hand, we subtract 1 from
-			// the address, we ensure that we fall into the range of addresses
-			// associated with that function call in the debug information.
-			//
-			// The unwinder will produce stack traces like the following:
-			//
-			// Frame 0:
-			// bla %reg           <- address of frame 0
-			// retq
-			//
-			// Frame 1:
-			// call <function>
-			// add %rax, %rbx     <- address of frame 1 == return address of frame 0
+			// For user mode frames (without kernel frames) the RIP from
+			// our unwinder is good as is, and must not be altered. The unwinder
+			// already handles subtracting one for non-leaf frames.
 
 			relativeRIP := frame.Lineno
-			if i > 0 || frame.Type.IsInterpType(libpf.Kernel) {
+			if frame.Type.IsInterpType(libpf.Kernel) {
 				relativeRIP--
 			}
 			fileID, ok := pm.FileIDMapper.Get(frame.File)
