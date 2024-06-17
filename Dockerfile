@@ -6,7 +6,7 @@ ARG arch=amd64
 
 RUN apt-get update -y && apt-get dist-upgrade -y && apt-get install -y \
     curl wget cmake dwz lsb-release software-properties-common gnupg git clang llvm \
-    golang unzip
+    golang unzip jq
 
 RUN git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git && \
     cd zydis && mkdir build && cd build && \
