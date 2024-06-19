@@ -44,7 +44,7 @@ FLAGS=$(TARGET_FLAGS) \
 	-fno-stack-protector
 
 SRCS := $(wildcard *.ebpf.c)
-OBJS := $(SRCS:.c=.o)
+OBJS := $(SRCS:.c=.$(TARGET_ARCH).o)
 
 .DEFAULT_GOAL := all
 
@@ -70,7 +70,7 @@ errors.h: ../../tools/errors-codegen/errors.json
 
 %.ebpf.c: errors.h ;
 
-%.ebpf.o: %.ebpf.c
+%.ebpf.$(TARGET_ARCH).o: %.ebpf.c
 	$(CLANG) $(FLAGS) -o $@
 
 $(TRACER_NAME): $(OBJS)
