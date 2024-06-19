@@ -33,7 +33,6 @@ func GetPACMask() uint64 {
 	// register set and then dispose of that process. Because using `ptrace`
 	// without a good reason is probably not exactly something that cloud
 	// customers would love us for, this function uses a different approach.
-	// Extended reasoning for this approach can be found at [2].
 	//
 	// The alternative approach generates random 64 bit values with the lower 32
 	// bits randomized, asking the CPU to "sign" them with PAC bits. From the
@@ -52,7 +51,6 @@ func GetPACMask() uint64 {
 	// rounding to `1.0`.
 	//
 	// [1]: https://www.kernel.org/doc/html/latest/arm64/pointer-authentication.html
-	// [2]: https://github.com/elastic/otel-profiling-agent/pull/2000#discussion_r767745539
 
 	var mask uint64
 	for i := 0; i < 64; i++ {

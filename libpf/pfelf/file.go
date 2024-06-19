@@ -37,7 +37,7 @@ import (
 
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/libpf/readatbuf"
-	"github.com/elastic/otel-profiling-agent/libpf/remotememory"
+	"github.com/elastic/otel-profiling-agent/remotememory"
 )
 
 const (
@@ -486,6 +486,95 @@ func (f *File) GetBuildID() (string, error) {
 	return getBuildIDFromNotes(data)
 }
 
+// TLSDescriptors returns a map of all TLS descriptor symbol -> address
+// mappings in the executable.
+func (f *File) TLSDescriptors() (map[string]libpf.Address, error) {
+	var err error
+	if err = f.LoadSections(); err != nil {
+		return nil, err
+	}
+
+	descs := make(map[string]libpf.Address)
+	for i := range f.Sections {
+		section := &f.Sections[i]
+		// NOTE: SHT_REL is not relevant for the archs that we care about
+		if section.Type == elf.SHT_RELA { // nolint:misspell
+			if err = f.insertTLSDescriptorsForSection(descs, section); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return descs, nil
+}
+
+func (f *File) insertTLSDescriptorsForSection(descs map[string]libpf.Address,
+	relaSection *Section) error {
+	if relaSection.Link > uint32(len(f.Sections)) {
+		return errors.New("rela section link is out-of-bounds") // nolint:misspell
+	}
+	if relaSection.Link == 0 {
+		return errors.New("rela section link is empty") // nolint:misspell
+	}
+	if relaSection.Size > maxBytesLargeSection {
+		return fmt.Errorf("relocation section too big (%d bytes)", relaSection.Size)
+	}
+	if relaSection.Size%uint64(unsafe.Sizeof(elf.Rela64{})) != 0 {
+		return errors.New("relocation section size isn't multiple of rela64 struct")
+	}
+
+	symtabSection := &f.Sections[relaSection.Link]
+	if symtabSection.Link > uint32(len(f.Sections)) {
+		return errors.New("symtab link is out-of-bounds")
+	}
+	if symtabSection.Size%uint64(unsafe.Sizeof(elf.Sym64{})) != 0 {
+		return errors.New("symbol section size isn't multiple of sym64 struct")
+	}
+
+	strtabSection := &f.Sections[symtabSection.Link]
+	if strtabSection.Size > maxBytesLargeSection {
+		return fmt.Errorf("string table too big (%d bytes)", strtabSection.Size)
+	}
+
+	strtabData, err := strtabSection.Data(uint(strtabSection.Size))
+	if err != nil {
+		return fmt.Errorf("failed to read string table: %w", err)
+	}
+
+	relaData, err := relaSection.Data(uint(relaSection.Size))
+	if err != nil {
+		return fmt.Errorf("failed to read relocation section: %w", err)
+	}
+
+	relaSz := int(unsafe.Sizeof(elf.Rela64{}))
+	for i := 0; i < len(relaData); i += relaSz {
+		rela := (*elf.Rela64)(unsafe.Pointer(&relaData[i])) // nolint:misspell
+
+		ty := rela.Info & 0xffff
+		if !(f.Machine == elf.EM_AARCH64 && elf.R_AARCH64(ty) == elf.R_AARCH64_TLSDESC) &&
+			!(f.Machine == elf.EM_X86_64 && elf.R_X86_64(ty) == elf.R_X86_64_TLSDESC) {
+			continue
+		}
+
+		sym := elf.Sym64{}
+		symSz := int64(unsafe.Sizeof(sym))
+		symNo := int64(rela.Info >> 32)
+		n, err := symtabSection.ReadAt(libpf.SliceFrom(&sym), symNo*symSz)
+		if err != nil || n != int(symSz) {
+			return fmt.Errorf("failed to read relocation symbol: %w", err)
+		}
+
+		symStr, ok := getString(strtabData, int(sym.Name))
+		if !ok {
+			return errors.New("failed to get relocation name string")
+		}
+
+		descs[symStr] = libpf.Address(rela.Off)
+	}
+
+	return nil
+}
+
 // GetDebugLink reads and parses the .gnu_debuglink section.
 // If the link does not exist then ErrNoDebugLink is returned.
 func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
@@ -612,7 +701,7 @@ func (ph *Prog) DataReader(maxSize uint) (io.Reader, error) {
 // Data loads the whole section header referenced data, and returns it as a slice.
 func (sh *Section) Data(maxSize uint) ([]byte, error) {
 	if sh.Flags&elf.SHF_COMPRESSED != 0 {
-		return nil, fmt.Errorf("compressed sections not supported")
+		return nil, errors.New("compressed sections not supported")
 	}
 	if sh.FileSize > uint64(maxSize) {
 		return nil, fmt.Errorf("section size %d is too large", sh.FileSize)
@@ -684,7 +773,7 @@ func calcSysvHash(s libpf.SymbolName) uint32 {
 
 // LookupSymbol searches for a given symbol in the ELF
 func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
-	if f.gnuHash.addr != 0 {
+	if f.gnuHash.addr != 0 { //nolint: gocritic
 		// Standard DT_GNU_HASH lookup code follows. Please check the DT_GNU_HASH
 		// blog link (on top of this file) for details how this works.
 		hdr := &f.gnuHash.header

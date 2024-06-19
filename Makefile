@@ -12,7 +12,7 @@ clean:
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache
 
-generate: protobuf
+generate:
 	go install github.com/florianl/bluebox@v0.0.1
 	go generate ./...
 
@@ -31,7 +31,7 @@ test: generate ebpf test-deps
 	go test ./...
 
 TESTDATA_DIRS:= \
-	libpf/nativeunwind/elfunwindinfo/testdata \
+	nativeunwind/elfunwindinfo/testdata \
 	libpf/pfelf/testdata \
 	reporter/testdata
 
@@ -39,9 +39,6 @@ test-deps:
 	$(foreach testdata_dir, $(TESTDATA_DIRS), \
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
-
-protobuf:
-	cd proto && ./buildpb.sh
 
 # Detect native architecture.
 UNAME_NATIVE_ARCH:=$(shell uname -m)

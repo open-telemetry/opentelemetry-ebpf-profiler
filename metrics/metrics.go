@@ -4,12 +4,10 @@
  * See the file "LICENSE" for details.
  */
 
-// Package metrics contains the code for receiving and reporting host metrics.
 package metrics
 
 import (
 	"sync"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -82,7 +80,7 @@ func report() {
 // This ensures that the buffered metrics from the previous timestamp are sent
 // with the correctly assigned TSMetric.Timestamp.
 func AddSlice(newMetrics []Metric) {
-	now := libpf.UnixTime32(time.Now().Unix())
+	now := libpf.UnixTime32(libpf.NowAsUInt32())
 
 	mutex.Lock()
 	defer mutex.Unlock()

@@ -1,8 +1,8 @@
-SHELL:=/usr/bin/env bash
+SHELL ?= bash
 
-CLANG=clang
-LINK=llvm-link
-LLC=llc
+CLANG ?= clang-16
+LINK ?= llvm-link-16
+LLC ?= llc-16
 
 DEBUG_FLAGS = -DOPTI_DEBUG -g
 
@@ -11,7 +11,7 @@ NATIVE_ARCH:=$(shell uname -m)
 
 ifeq ($(NATIVE_ARCH),x86_64)
 NATIVE_ARCH:=x86
-else ifneq (,$(filter $(NATIVE_ARCH),aarch64 arm64))
+else ifeq ($(NATIVE_ARCH),aarch64)
 NATIVE_ARCH:=arm64
 else
 $(error Unsupported architecture: $(NATIVE_ARCH))
@@ -31,8 +31,9 @@ TARGET_FLAGS = -target x86_64-linux-gnu
 endif
 
 FLAGS=$(TARGET_FLAGS) \
-	-nostdinc \
+	-fno-jump-tables \
 	-nostdlib \
+	-nostdinc \
 	-ffreestanding \
 	-O2 -emit-llvm -c $< \
 	-Wall -Wextra -Werror \
@@ -40,8 +41,7 @@ FLAGS=$(TARGET_FLAGS) \
 	-Wno-unused-label \
 	-Wno-unused-parameter \
 	-Wno-sign-compare \
-	-fno-stack-protector \
-	-fno-jump-tables
+	-fno-stack-protector
 
 SRCS := $(wildcard *.ebpf.c)
 OBJS := $(SRCS:.c=.o)
@@ -65,6 +65,9 @@ debug-x86:
 debug-arm64:
 	$(MAKE) target_arch=arm64 debug
 
+errors.h: ../../tools/errors-codegen/errors.json
+	go run ../../tools/errors-codegen/main.go bpf $@
+
 %.ebpf.c: errors.h ;
 
 %.ebpf.o: %.ebpf.c
@@ -81,4 +84,4 @@ bloatcheck: $(TRACER_NAME)
 	python3 bloat-o-meter $(TRACER_NAME).baseline $(TRACER_NAME)
 
 clean:
-	rm -f *.o $(TRACER_NAME) $(TRACER_NAME).*
+	rm -f *.o

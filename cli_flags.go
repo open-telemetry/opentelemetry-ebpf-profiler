@@ -10,15 +10,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
-	"strings"
 	"time"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/peterbourgon/ff/v3"
+	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/config"
-	"github.com/elastic/otel-profiling-agent/debug/log"
 	"github.com/elastic/otel-profiling-agent/hostmetadata/host"
 	"github.com/elastic/otel-profiling-agent/tracer"
 )
@@ -55,7 +52,7 @@ var (
 	configFileHelp = "Path to the profiling agent configuration file."
 	projectIDHelp  = "The project ID to split profiling data into logical groups. " +
 		"Its value should be larger than 0 and smaller than 4096."
-	cacheDirectoryHelp = "The directory where profiling agent can store cached data."
+	cacheDirectoryHelp = "The directory where the profiling agent can store cached data."
 	secretTokenHelp    = "The secret token associated with the project id."
 	tagsHelp           = fmt.Sprintf("User-specified tags separated by ';'. "+
 		"Each tag should match '%v'.", host.ValidTagRegex)
@@ -117,7 +114,7 @@ func parseArgs() error {
 	fs.IntVar(&argBpfVerifierLogSize, "bpf-log-size", cebpf.DefaultVerifierLogSize,
 		bpfVerifierLogSizeHelp)
 
-	fs.StringVar(&argCacheDirectory, "cache-directory", config.CacheDirectory(),
+	fs.StringVar(&argCacheDirectory, "cache-directory", "/var/cache/otel/profiling-agent",
 		cacheDirectoryHelp)
 	fs.StringVar(&argCollAgentAddr, "collection-agent", "",
 		collAgentAddrHelp)
@@ -165,72 +162,6 @@ func parseArgs() error {
 	)
 
 	return err
-}
-
-// parseTracers parses a string that specifies one or more eBPF tracers to enable.
-// Valid inputs are 'all', 'native', 'python', 'php', or any comma-delimited combination of these.
-// The return value is a boolean lookup table that represents the input strings.
-// E.g. to check if the Python tracer was requested: `if result[config.PythonTracer]...`.
-func parseTracers(tracers string) ([]bool, error) {
-	fields := strings.Split(tracers, ",")
-	if len(fields) == 0 {
-		return nil, fmt.Errorf("invalid tracer specification '%s'", tracers)
-	}
-
-	result := make([]bool, config.MaxTracers)
-	tracerNameToType := map[string]config.TracerType{
-		"v8":      config.V8Tracer,
-		"php":     config.PHPTracer,
-		"perl":    config.PerlTracer,
-		"ruby":    config.RubyTracer,
-		"python":  config.PythonTracer,
-		"hotspot": config.HotspotTracer,
-	}
-
-	// Parse and validate tracers string
-	for _, name := range fields {
-		name = strings.ToLower(name)
-
-		//nolint:goconst
-		if runtime.GOARCH == "arm64" && name == "v8" {
-			return nil, fmt.Errorf("the V8 tracer is currently not supported on ARM64")
-		}
-
-		if tracerType, ok := tracerNameToType[name]; ok {
-			result[tracerType] = true
-			continue
-		}
-
-		if name == "all" {
-			for i := range result {
-				result[i] = true
-			}
-			result[config.V8Tracer] = runtime.GOARCH != "arm64" //nolint:goconst
-			continue
-		}
-		if name == "native" {
-			log.Warn("Enabling the `native` tracer explicitly is deprecated (it's now always-on)")
-			continue
-		}
-
-		if name != "" {
-			return nil, fmt.Errorf("unknown tracer: %s", name)
-		}
-	}
-
-	tracersEnabled := make([]string, 0, config.MaxTracers)
-	for _, tracerType := range config.AllTracers() {
-		if result[tracerType] {
-			tracersEnabled = append(tracersEnabled, tracerType.GetString())
-		}
-	}
-
-	if len(tracersEnabled) > 0 {
-		log.Debugf("Tracer string: %v", tracers)
-		log.Infof("Interpreter tracers: %v", strings.Join(tracersEnabled, ","))
-	}
-
-	return result, nil
 }
 
 func dumpArgs() {

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMapID(t *testing.T) {
@@ -34,16 +35,12 @@ func TestMapID(t *testing.T) {
 		expectedShift := expectedShift
 		t.Run(fmt.Sprintf("deltas %d", numStackDeltas), func(t *testing.T) {
 			shift, err := getMapID(numStackDeltas)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			assert.Equal(t, expectedShift, shift,
 				fmt.Sprintf("wrong map name for %d deltas", numStackDeltas))
 		})
 	}
 
 	_, err := getMapID(1 << 22)
-	if err == nil {
-		t.Fatalf("expected an error")
-	}
+	require.Error(t, err)
 }

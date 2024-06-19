@@ -13,18 +13,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReadCPUInfo(t *testing.T) {
 	info, err := readCPUInfo()
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	assertions := map[string]func(t *testing.T){
 		"NotEmptyOnAnyCPU": func(t *testing.T) { assert.NotEmpty(t, info) },
-		"BugsAreListed": func(t *testing.T) {
-			assert.Contains(t, info[key(keyCPUBugs)], 0)
-			assert.NotEmpty(t, info[key(keyCPUBugs)][0])
-		},
 		"FlagsAreSorted": func(t *testing.T) {
 			assert.Contains(t, info[key(keyCPUFlags)], 0)
 			assert.True(t,
@@ -47,10 +44,10 @@ func TestReadCPUInfo(t *testing.T) {
 		"CachesIsANumber": func(t *testing.T) {
 			assert.Contains(t, info[key(keyCPUCacheL1i)], 0)
 			_, err := strconv.Atoi(info[key(keyCPUCacheL1i)][0])
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			assert.Contains(t, info[key(keyCPUCacheL3)], 0)
 			_, err = strconv.Atoi(info[key(keyCPUCacheL3)][0])
-			assert.Nil(t, err)
+			require.NoError(t, err)
 		},
 		"NumCPUs": func(t *testing.T) {
 			assert.Contains(t, info[key(keyCPUNumCPUs)], 0)
@@ -61,17 +58,15 @@ func TestReadCPUInfo(t *testing.T) {
 			cps := info[key(keyCPUCoresPerSocket)][0]
 			assert.NotEmpty(t, cps)
 			i, err := strconv.Atoi(cps)
-			if err != nil {
-				t.Fatalf("%v must be a string representing a number", cps)
-			}
-			assert.True(t, i > 0)
+			require.NoErrorf(t, err, "%v must be parseable as a number", cps)
+			assert.Greater(t, i, 0)
 		},
 		"OnlineCPUs": func(t *testing.T) {
 			assert.Contains(t, info[key(keyCPUOnline)], 0)
 			onlines := info[key(keyCPUOnline)][0]
 			assert.NotEmpty(t, onlines)
 			ints, err := readCPURange(onlines)
-			assert.Nil(t, err)
+			require.NoError(t, err)
 			assert.NotEmpty(t, t, ints)
 		},
 	}

@@ -7,6 +7,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -14,7 +15,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 const (
@@ -23,6 +24,11 @@ const (
 
 // Config is the structure to pass the configuration into host-agent.
 type Config struct {
+	// TODO: the three variables below are currently not actually initialized yet
+	Version        string
+	Revision       string
+	BuildTimestamp string
+
 	EnvironmentType        string
 	MachineID              string
 	SecretToken            string
@@ -41,7 +47,6 @@ type Config struct {
 	SamplesPerSecond       uint16
 	PresentCPUCores        uint16
 	DisableTLS             bool
-	UploadSymbols          bool
 	NoKernelVersionCheck   bool
 	TraceCacheIntervals    uint8
 	Verbose                bool
@@ -61,6 +66,10 @@ type Config struct {
 // To avoid passing them as argument to every function, they are declared
 // on package scope.
 var (
+	version        string
+	revision       string
+	buildTimestamp string
+
 	// hostID represents project wide unique id to identify the host.
 	hostID uint64
 	// projectID is read from the provided configuration file and sent to the collection agent
@@ -86,8 +95,6 @@ var (
 	disableTLS bool
 	// noKernelVersionCheck indicates if kernel version checking for eBPF support is disabled
 	noKernelVersionCheck bool
-	// uploadSymbols indicates whether automatic uploading of symbols is enabled
-	uploadSymbols bool
 	// bpfVerifierLogLevel holds the defined log level of the eBPF verifier.
 	// Currently there are three different log levels applied by the kernel verifier:
 	// 0 - no logging
@@ -143,14 +150,14 @@ var configurationSet = false
 func SetConfiguration(conf *Config) error {
 	var err error
 
+	version = conf.Version
+	revision = conf.Revision
+	buildTimestamp = conf.BuildTimestamp
+
 	projectID = conf.ProjectID
 
-	if projectID == 0 || projectID > 4095 {
-		return fmt.Errorf("invalid project id %d (need > 0 and < 4096)", projectID)
-	}
-
 	if conf.SecretToken == "" {
-		return fmt.Errorf("missing SecretToken")
+		return errors.New("missing SecretToken")
 	}
 	secretToken = conf.SecretToken
 
@@ -179,7 +186,7 @@ func SetConfiguration(conf *Config) error {
 			return fmt.Errorf("invalid machine ID '%s': %s", conf.MachineID, err)
 		}
 		if machineID == 0 {
-			return fmt.Errorf(
+			return errors.New(
 				"the machine ID must be specified with the environment (and non-zero)")
 		}
 		log.Debugf("User provided environment (%s) and machine ID (0x%x)", environment,
@@ -187,7 +194,7 @@ func SetConfiguration(conf *Config) error {
 		setEnvironment(environment)
 		hostID = machineID
 	} else if conf.MachineID != "" {
-		return fmt.Errorf("you can only specify the machine ID if you also provide the environment")
+		return errors.New("you can only specify the machine ID if you also provide the environment")
 	}
 
 	cacheDirectory = conf.CacheDirectory
@@ -202,7 +209,6 @@ func SetConfiguration(conf *Config) error {
 	configurationFile = conf.ConfigurationFile
 	disableTLS = conf.DisableTLS
 	noKernelVersionCheck = conf.NoKernelVersionCheck
-	uploadSymbols = conf.UploadSymbols
 	tracers = conf.Tracers
 	startTime = conf.StartTime
 	mapScaleFactor = conf.MapScaleFactor
@@ -222,6 +228,21 @@ func SetConfiguration(conf *Config) error {
 
 	configurationSet = true
 	return nil
+}
+
+// Version returns the version of the agent.
+func Version() string {
+	return version
+}
+
+// Revision returns the revision of the agent.
+func Revision() string {
+	return revision
+}
+
+// BuildTimestamp returns the build timestamp of the agent.
+func BuildTimestamp() string {
+	return buildTimestamp
 }
 
 // SamplesPerSecond returns the configured samples per second.
@@ -244,14 +265,13 @@ func MaxElementsPerInterval() uint32 {
 // non-optimal map sizing (reduced cache_hit:cache_miss ratio and increased processing overhead).
 // Simply increasing traceCacheIntervals is problematic when maxElementsPerInterval is large
 // (e.g. too many CPU cores present) as we end up using too much memory. A minimum size is
-// therefore used here. Also see:
-// https://github.com/elastic/otel-profiling-agent/pull/2120#issuecomment-1043024813
+// therefore used here.
 func TraceCacheEntries() uint32 {
 	size := maxElementsPerInterval * uint32(traceCacheIntervals)
 	if size < traceCacheMinSize {
 		size = traceCacheMinSize
 	}
-	return libpf.NextPowerOfTwo(size)
+	return util.NextPowerOfTwo(size)
 }
 
 // Verbose indicates if the agent is running with verbose enabled.
@@ -290,7 +310,15 @@ func SecretToken() string {
 }
 
 // CacheDirectory returns the cacheDirectory.
+// It has a default value of /var/cache/otel/profiling-agent, but this can be changed via
+// the configuration file.
 func CacheDirectory() string {
+	// Even though the cache directory has a default value, we don't want the config being
+	// used unless a configuration file has been read.
+	if !configurationSet {
+		log.Fatal("Cannot access CacheDirectory. Configuration has not been read")
+	}
+
 	return cacheDirectory
 }
 
@@ -309,7 +337,7 @@ func CollectionAgentAddr() string {
 	return collectionAgentAddr
 }
 
-// Path to profiling agent's configuration file
+// Path to the profiling agent's configuration file
 func ConfigurationFile() string {
 	return configurationFile
 }
@@ -322,11 +350,6 @@ func DisableTLS() bool {
 // Indicates if kernel version checking for eBPF support is disabled
 func NoKernelVersionCheck() bool {
 	return noKernelVersionCheck
-}
-
-// Indicates whether automatic uploading of symbols is enabled
-func UploadSymbols() bool {
-	return uploadSymbols
 }
 
 // User-specified tracers to enable

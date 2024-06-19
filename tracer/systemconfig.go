@@ -6,49 +6,269 @@
 
 package tracer
 
-// #include "../support/ebpf/types.h"
-import "C"
-
 import (
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"os"
+	"runtime"
+	"strings"
 	"unsafe"
 
 	"github.com/elastic/otel-profiling-agent/config"
+	"github.com/elastic/otel-profiling-agent/rlimit"
 
 	cebpf "github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/btf"
+	"github.com/cilium/ebpf/link"
+	log "github.com/sirupsen/logrus"
+
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/pacmask"
-	log "github.com/sirupsen/logrus"
 )
 
-func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kernelSymbols *libpf.SymbolMap, includeTracers []bool) error {
-	pacMask := pacmask.GetPACMask()
+// #include "../support/ebpf/types.h"
+import "C"
 
-	if pacMask != uint64(0) {
+// memberByName resolves btf Member from a Struct with given name
+func memberByName(t *btf.Struct, field string) (*btf.Member, error) {
+	for i, m := range t.Members {
+		if m.Name == field {
+			return &t.Members[i], nil
+		}
+	}
+	return nil, fmt.Errorf("member '%s' not found", field)
+}
+
+// calculateFieldOffset calculates the offset for given fieldSpec which
+// can refer to field within nested structs.
+func calculateFieldOffset(t btf.Type, fieldSpec string) (uint, error) {
+	offset := uint(0)
+	for _, field := range strings.Split(fieldSpec, ".") {
+		st, ok := t.(*btf.Struct)
+		if !ok {
+			return 0, fmt.Errorf("field '%s' is not a struct", field)
+		}
+
+		member, err := memberByName(st, field)
+		if err != nil {
+			return 0, err
+		}
+		offset += uint(member.Offset.Bytes())
+		t = member.Type
+	}
+	return offset, nil
+}
+
+// getTSDBaseFieldSpec returns the architecture specific name of the `task_struct`
+// member that contains base address for thread specific data.
+func getTSDBaseFieldSpec() string {
+	// nolint:goconst
+	switch runtime.GOARCH {
+	case "amd64":
+		return "thread.fsbase"
+	case "arm64":
+		return "thread.uw.tp_value"
+	default:
+		panic("not supported")
+	}
+}
+
+// parseBTF resolves the SystemConfig data from kernel BTF
+func parseBTF(syscfg *C.SystemConfig) error {
+	fh, err := os.Open("/sys/kernel/btf/vmlinux")
+	if err != nil {
+		return err
+	}
+	defer fh.Close()
+
+	spec, err := btf.LoadSplitSpecFromReader(fh, nil)
+	if err != nil {
+		return err
+	}
+
+	var taskStruct *btf.Struct
+	err = spec.TypeByName("task_struct", &taskStruct)
+	if err != nil {
+		return err
+	}
+
+	stackOffset, err := calculateFieldOffset(taskStruct, "stack")
+	if err != nil {
+		return err
+	}
+	syscfg.task_stack_offset = C.u32(stackOffset)
+
+	tpbaseOffset, err := calculateFieldOffset(taskStruct, getTSDBaseFieldSpec())
+	if err != nil {
+		return err
+	}
+	syscfg.tpbase_offset = C.u64(tpbaseOffset)
+
+	return nil
+}
+
+// executeSystemAnalysisBpfCode will execute given analysis program with the address argument.
+func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*cebpf.Map,
+	address libpf.SymbolValue) (code []byte, addr uint64, err error) {
+	systemAnalysis := maps["system_analysis"]
+
+	key0 := uint32(0)
+	data := C.SystemAnalysis{
+		pid:     C.uint(os.Getpid()),
+		address: C.u64(address),
+	}
+
+	if err = systemAnalysis.Update(unsafe.Pointer(&key0), unsafe.Pointer(&data),
+		cebpf.UpdateAny); err != nil {
+		return nil, 0, fmt.Errorf("failed to write system_analysis 0x%x: %v",
+			address, err)
+	}
+
+	restoreRlimit, err := rlimit.MaximizeMemlock()
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to adjust rlimit: %v", err)
+	}
+	defer restoreRlimit()
+
+	// Load a BPF program to load the function code in systemAnalysis.
+	// It attaches to raw tracepoint of entering syscall and triggers
+	// when running in our PID context.
+	prog, err := cebpf.NewProgram(progSpec)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to load read_kernel_function_or_task_struct: %v", err)
+	}
+	defer prog.Close()
+
+	var progLink link.Link
+	switch prog.Type() {
+	case cebpf.RawTracepoint:
+		progLink, err = link.AttachRawTracepoint(link.RawTracepointOptions{
+			Name:    "sys_enter",
+			Program: prog})
+	case cebpf.TracePoint:
+		progLink, err = link.Tracepoint("syscalls", "sys_enter_bpf", prog, nil)
+	default:
+		err = fmt.Errorf("invalid system analysis program type '%v'", prog.Type())
+	}
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to configure tracepoint: %v", err)
+	}
+	err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data))
+	progLink.Close()
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get analysis data: %v", err)
+	}
+
+	// nolint:gocritic
+	return C.GoBytes(unsafe.Pointer(&data.code[0]), C.int(len(data.code))),
+		uint64(data.address), nil
+}
+
+// loadKernelCode will request the ebpf code to read the first X bytes from given address.
+func loadKernelCode(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
+	address libpf.SymbolValue) ([]byte, error) {
+	code, _, err := executeSystemAnalysisBpfCode(coll.Programs["read_kernel_memory"], maps, address)
+	return code, err
+}
+
+// readTaskStruct will request the ebpf code to read bytes from the given offset from
+// the current task_struct.
+func readTaskStruct(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
+	address libpf.SymbolValue) (code []byte, addr uint64, err error) {
+	return executeSystemAnalysisBpfCode(coll.Programs["read_task_struct"], maps, address)
+}
+
+// determineStackPtregs determines the offset of `struct pt_regs` within the entry stack
+// when the `stack` field offset within `task_struct` is already known.
+func determineStackPtregs(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
+	syscfg *C.SystemConfig) error {
+	data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(syscfg.task_stack_offset))
+	if err != nil {
+		return err
+	}
+	stackBase := binary.LittleEndian.Uint64(data)
+	syscfg.stack_ptregs_offset = C.u32(ptregs - stackBase)
+	return nil
+}
+
+// determineStackLayout scans `task_struct` for offset of the `stack` field, and using
+// its value determines the offset of `struct pt_regs` within the entry stack.
+func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
+	syscfg *C.SystemConfig) error {
+	const maxTaskStructSize = 8 * 1024
+	const maxStackSize = 64 * 1024
+
+	pageSizeMinusOne := uint64(os.Getpagesize() - 1)
+
+	for offs := 0; offs < maxTaskStructSize; {
+		data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(offs))
+		if err != nil {
+			return err
+		}
+
+		for i := 0; i < len(data); i += 8 {
+			stackBase := binary.LittleEndian.Uint64(data[i:])
+			// Stack base should be page aligned
+			if stackBase&pageSizeMinusOne != 0 {
+				continue
+			}
+			if ptregs > stackBase && ptregs < stackBase+maxStackSize {
+				syscfg.task_stack_offset = C.u32(offs + i)
+				syscfg.stack_ptregs_offset = C.u32(ptregs - stackBase)
+				return nil
+			}
+		}
+		offs += len(data)
+	}
+	return errors.New("unable to find task stack offset")
+}
+
+func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
+	kernelSymbols *libpf.SymbolMap, includeTracers config.IncludedTracers,
+	filterErrorFrames bool) error {
+	pacMask := pacmask.GetPACMask()
+	if pacMask != 0 {
 		log.Infof("Determined PAC mask to be 0x%016X", pacMask)
 	} else {
 		log.Debug("PAC is not enabled on the system.")
 	}
+	syscfg := C.SystemConfig{
+		inverse_pac_mask:       ^C.u64(pacMask),
+		drop_error_only_traces: C.bool(filterErrorFrames),
+	}
 
-	// In eBPF, we need the mask to AND off the PAC bits, so we invert it.
-	invPacMask := ^pacMask
+	if err := parseBTF(&syscfg); err != nil {
+		log.Infof("Using binary analysis (BTF not available: %s)", err)
 
-	var tpbaseOffset uint64
-	if includeTracers[config.PerlTracer] || includeTracers[config.PythonTracer] {
-		var err error
-		tpbaseOffset, err = loadTPBaseOffset(coll, maps, kernelSymbols)
-		if err != nil {
+		if err = determineStackLayout(coll, maps, &syscfg); err != nil {
+			return err
+		}
+
+		if includeTracers.Has(config.PerlTracer) || includeTracers.Has(config.PythonTracer) {
+			var tpbaseOffset uint64
+			tpbaseOffset, err = loadTPBaseOffset(coll, maps, kernelSymbols)
+			if err != nil {
+				return err
+			}
+			syscfg.tpbase_offset = C.u64(tpbaseOffset)
+		}
+	} else {
+		// Sadly BTF does not currently include THREAD_SIZE which is needed
+		// to calculate the offset of struct pt_regs in the entry stack.
+		// The value also depends of some kernel configurations, so lets
+		// analyze it dynamically for now.
+		if err = determineStackPtregs(coll, maps, &syscfg); err != nil {
 			return err
 		}
 	}
 
-	cfg := C.SystemConfig{
-		inverse_pac_mask:       C.u64(invPacMask),
-		tpbase_offset:          C.u64(tpbaseOffset),
-		drop_error_only_traces: C.bool(true),
-	}
+	log.Infof("Found offsets: task stack %#x, pt_regs %#x, tpbase %#x",
+		syscfg.task_stack_offset,
+		syscfg.stack_ptregs_offset,
+		syscfg.tpbase_offset)
 
 	key0 := uint32(0)
-	return maps["system_config"].Update(unsafe.Pointer(&key0), unsafe.Pointer(&cfg),
+	return maps["system_config"].Update(unsafe.Pointer(&key0), unsafe.Pointer(&syscfg),
 		cebpf.UpdateAny)
 }

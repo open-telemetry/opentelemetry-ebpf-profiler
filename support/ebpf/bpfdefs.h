@@ -7,29 +7,24 @@
 #if defined(TESTING_COREDUMP)
   // utils/coredump uses CGO to build the eBPF code. Provide here the glue to
   // dispatch the BPF API to helpers implemented in ebpfhelpers.go.
-
   #define SEC(NAME)
 
   #define printt(fmt, ...) bpf_log(fmt, ##__VA_ARGS__)
   #define DEBUG_PRINT(fmt, ...) bpf_log(fmt, ##__VA_ARGS__)
   #define OPTI_DEBUG
 
-  // The members of the userspace 'struct pt_regs' are named
-  // slightly different than the members of the kernel space structure.
-  // So we don't include
-  //     #include <linux/bpf_perf_event.h>
-  //     #include "linux/bpf.h"
-  // Instead we copy the kernel space 'struct pt_regs' here and
-  // define 'struct bpf_perf_event_data' manually.
-
   // BPF helpers. Mostly stubs to dispatch the call to Go code with the context ID.
   int bpf_tail_call(void *ctx, bpf_map_def *map, int index);
   unsigned long long bpf_ktime_get_ns(void);
   int bpf_get_current_comm(void *, int);
 
-  static inline int bpf_probe_read(void *buf, u32 sz, const void *ptr) {
-    int __bpf_probe_read(u64, void *, u32, const void *);
-    return __bpf_probe_read(__cgo_ctx->id, buf, sz, ptr);
+  static inline long bpf_probe_read_user(void *buf, u32 sz, const void *ptr) {
+    long __bpf_probe_read_user(u64, void *, u32, const void *);
+    return __bpf_probe_read_user(__cgo_ctx->id, buf, sz, ptr);
+  }
+
+  static inline long bpf_probe_read_kernel(void *buf, u32 sz, const void *ptr) {
+    return -1;
   }
 
   static inline u64 bpf_get_current_pid_tgid(void) {
@@ -93,6 +88,11 @@ __attribute__ ((format (printf, 1, 3)))
 static int (*bpf_trace_printk)(const char *fmt, int fmt_size, ...) =
     (void *)BPF_FUNC_trace_printk;
 
+static long (*bpf_probe_read_user)(void *dst, int size, const void *unsafe_ptr) =
+    (void *)BPF_FUNC_probe_read_user;
+static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr) =
+    (void *)BPF_FUNC_probe_read_kernel;
+
 // The sizeof in bpf_trace_printk() must include \0, else no output
 // is generated. The \n is not needed on 5.8+ kernels, but definitely on
 // 5.4 kernels.
@@ -144,7 +144,5 @@ static int (*bpf_trace_printk)(const char *fmt, int fmt_size, ...) =
   _Pragma("GCC diagnostic pop")
 
 #endif // !TESTING_COREDUMP
-
-#define ATOMIC_ADD(ptr, n) __sync_fetch_and_add(ptr, n)
 
 #endif // OPTI_BPFDEFS_H

@@ -12,30 +12,28 @@ import (
 	"testing"
 
 	cebpf "github.com/cilium/ebpf"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/rlimit"
+
 	"github.com/elastic/otel-profiling-agent/lpm"
+	"github.com/elastic/otel-profiling-agent/rlimit"
 	"github.com/elastic/otel-profiling-agent/support"
+	"github.com/elastic/otel-profiling-agent/util"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func loadTracers(t *testing.T) *ebpfMapsImpl {
 	t.Helper()
 
 	coll, err := support.LoadCollectionSpec()
-	if err != nil {
-		t.Fatalf("Failed to load specification for tracers: %v", err)
-	}
+	require.NoError(t, err)
 
 	restoreRlimit, err := rlimit.MaximizeMemlock()
-	if err != nil {
-		t.Fatalf("failed to adjust rlimit: %v", err)
-	}
+	require.NoError(t, err)
 	defer restoreRlimit()
 
 	pidPageToMappingInfo, err := cebpf.NewMap(coll.Maps["pid_page_to_mapping_info"])
-	if err != nil {
-		t.Fatalf("failed to load 'pid_page_to_mapping_info': %v", err)
-	}
+	require.NoError(t, err)
 
 	return &ebpfMapsImpl{
 		pidPageToMappingInfo: pidPageToMappingInfo,
@@ -44,7 +42,7 @@ func loadTracers(t *testing.T) *ebpfMapsImpl {
 
 func TestLPM(t *testing.T) {
 	tests := map[string]struct {
-		pid      libpf.PID
+		pid      util.PID
 		page     uint64
 		pageBits uint32
 		rip      uint64
@@ -65,29 +63,28 @@ func TestLPM(t *testing.T) {
 				Key:    test.page,
 				Length: test.pageBits,
 			}
-			if err := impl.UpdatePidPageMappingInfo(test.pid, prefix, test.fileID, test.bias); err != nil {
-				t.Fatalf("failed to insert value into eBPF map: %v", err)
+			err := impl.UpdatePidPageMappingInfo(test.pid, prefix, test.fileID, test.bias)
+			require.NoError(t, err)
+
+			fileID, bias, err := impl.LookupPidPageInformation(uint32(test.pid), test.rip)
+			if assert.NoError(t, err) {
+				assert.Equal(t, test.fileID, uint64(fileID))
+				assert.Equal(t, test.bias, bias)
 			}
-			if fileID, bias, err := impl.LookupPidPageInformation(uint32(test.pid), test.rip); err != nil {
-				t.Errorf("failed to lookup element: %v", err)
-			} else {
-				if uint64(fileID) != test.fileID {
-					t.Fatalf("expected fileID 0x%x but got 0x%x", test.fileID, fileID)
-				}
-				if bias != test.bias {
-					t.Fatalf("expected bias 0x%x but got 0x%x", test.bias, bias)
-				}
-			}
-			if _, err := impl.DeletePidPageMappingInfo(test.pid, []lpm.Prefix{prefix}); err != nil {
-				t.Fatalf("failed to delete value from eBPF map: %v", err)
-			}
+
+			_, err = impl.DeletePidPageMappingInfo(test.pid, []lpm.Prefix{prefix})
+			require.NoError(t, err)
 		})
 	}
 }
 
 func TestBatchOperations(t *testing.T) {
 	for _, mapType := range []cebpf.MapType{cebpf.Hash, cebpf.Array, cebpf.LPMTrie} {
-		ok := probeBatchOperations(mapType)
-		t.Logf("Batch operations are supported for %s: %v", mapType, ok)
+		t.Run(mapType.String(), func(t *testing.T) {
+			err := probeBatchOperations(mapType)
+			if err != nil {
+				require.ErrorIs(t, err, cebpf.ErrNotSupported)
+			}
+		})
 	}
 }

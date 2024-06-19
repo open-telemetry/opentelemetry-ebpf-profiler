@@ -7,70 +7,98 @@
 package ec2
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"path"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/elastic/otel-profiling-agent/hostmetadata/instance"
 	log "github.com/sirupsen/logrus"
+
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	ec2imds "github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
+
+	ec2service "github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+
+	"github.com/elastic/otel-profiling-agent/hostmetadata/instance"
 )
 
 // ec2MetadataIface is an interface for the EC2 metadata service.
 // Its purpose is to allow faking the implementation in unit tests.
 type ec2MetadataIface interface {
-	GetMetadata(string) (string, error)
-	GetInstanceIdentityDocument() (ec2metadata.EC2InstanceIdentityDocument, error)
+	FetchMetadata(string) (string, error)
+	FetchInstanceIdentityDocument() (ec2imds.InstanceIdentityDocument, error)
 }
 
 type ec2Iface interface {
-	DescribeTags(*ec2.DescribeTagsInput) (*ec2.DescribeTagsOutput, error)
+	DescribeTags(context.Context, *ec2service.DescribeTagsInput,
+		...func(*ec2service.Options)) (*ec2service.DescribeTagsOutput, error)
 }
 
 // ec2MetadataClient can be nil if it cannot be built.
-var ec2MetadataClient = buildMetadataClient()
+var ec2MetadataClient, _ = buildMetadataClient()
 
 // ec2Client is lazily initialized inside addTags()
 var ec2Client ec2Iface
 
 const ec2Prefix = "ec2:"
 
-func buildMetadataClient() ec2MetadataIface {
-	se := session.Must(session.NewSession())
-	// Retries make things slow needlessly. Since the metadata service runs on the same network
-	// link, no need to worry about an unreliable network.
-	// We collect metadata often enough for errors to be tolerable.
-	return ec2metadata.New(se, aws.NewConfig().WithMaxRetries(0))
+type ec2MetadataWrapper struct {
+	*ec2imds.Client
 }
 
-func buildClient(region string) ec2Iface {
-	se := session.Must(session.NewSession())
-	return ec2.New(se, aws.NewConfig().WithMaxRetries(0).WithRegion(region))
-}
-
-// awsErrorMessage rewrites a 404 AWS error message to reduce verbosity.
-// If the error is not a 404, the full error string is returned.
-func awsErrorMessage(err error) string {
-	if awsErr, ok := err.(awserr.RequestFailure); ok {
-		if awsErr.StatusCode() == 404 {
-			return "not found"
-		}
+func (c *ec2MetadataWrapper) FetchMetadata(input string) (string, error) {
+	metadataOutput, err := c.GetMetadata(context.Background(),
+		&ec2imds.GetMetadataInput{
+			Path: input,
+		})
+	if err != nil {
+		return "", err
 	}
-	return err.Error()
+	valueBytes, err := io.ReadAll(metadataOutput.Content)
+	if err != nil {
+		return "", err
+	}
+	return string(valueBytes), nil
+}
+
+func (c *ec2MetadataWrapper) FetchInstanceIdentityDocument() (
+	ec2imds.InstanceIdentityDocument, error) {
+	doc, err := c.GetInstanceIdentityDocument(context.Background(), nil)
+	if err != nil {
+		return ec2imds.InstanceIdentityDocument{}, err
+	}
+	return doc.InstanceIdentityDocument, nil
+}
+
+func buildMetadataClient() (ec2MetadataIface, error) {
+	cfg, err := awsconfig.LoadDefaultConfig(context.Background())
+	if err != nil {
+		log.Errorf("Failed to create default config for AWS: %v", err)
+		return nil, err
+	}
+
+	return &ec2MetadataWrapper{ec2imds.NewFromConfig(cfg)}, nil
+}
+
+func buildClient() (ec2Iface, error) {
+	cfg, err := awsconfig.LoadDefaultConfig(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	return ec2service.NewFromConfig(cfg), nil
 }
 
 func getMetadataForKeys(prefix string, suffix []string, result map[string]string) {
 	for i := range suffix {
 		keyPath := path.Join(prefix, suffix[i])
-		value, err := ec2MetadataClient.GetMetadata(keyPath)
+		value, err := ec2MetadataClient.FetchMetadata(keyPath)
 
 		// This is normal, as some keys do not exist
 		if err != nil {
-			log.Debugf("Unable to get metadata key: %s: %s", keyPath, awsErrorMessage(err))
+			log.Debugf("Unable to get metadata key: %s: %v", keyPath, err)
 			continue
 		}
 		result[ec2Prefix+keyPath] = value
@@ -79,35 +107,40 @@ func getMetadataForKeys(prefix string, suffix []string, result map[string]string
 
 // list returns the list of keys at the given instance metadata service path.
 func list(urlPath string) ([]string, error) {
-	value, err := ec2MetadataClient.GetMetadata(urlPath)
+	value, err := ec2MetadataClient.FetchMetadata(urlPath)
 
 	if err != nil {
-		return nil, fmt.Errorf("unable to list %v: %s", urlPath, awsErrorMessage(err))
+		return nil, fmt.Errorf("unable to list %v: %s", urlPath, err)
 	}
 
 	return instance.Enumerate(value), nil
+}
+
+func stringPtr(v string) *string {
+	return &v
 }
 
 // addTags retrieves and adds EC2 instance tags into the provided map.
 // Tags are added separately, prefixed with 'ec2:tags/{key}' for each tag key.
 // In order for this operation to succeed, the instance needs to have an
 // IAM role assigned, with a policy that grants ec2:DescribeTags.
-func addTags(region, instanceID string, result map[string]string) {
+func addTags(instanceID string, result map[string]string) {
 	if ec2Client == nil {
-		ec2Client = buildClient(region)
-		if ec2Client == nil {
+		var err error
+		ec2Client, err = buildClient()
+		if err != nil {
 			log.Warnf("EC2 client couldn't be created, skipping tag collection")
 			return
 		}
 	}
 
-	descTagsOut, err := ec2Client.DescribeTags(
-		&ec2.DescribeTagsInput{
-			Filters: []*ec2.Filter{
+	descTagsOut, err := ec2Client.DescribeTags(context.Background(),
+		&ec2service.DescribeTagsInput{
+			Filters: []ec2types.Filter{
 				{
-					Name: aws.String("resource-id"),
-					Values: []*string{
-						aws.String(instanceID),
+					Name: stringPtr("resource-id"),
+					Values: []string{
+						instanceID,
 					},
 				},
 			},
@@ -136,16 +169,16 @@ func AddMetadata(result map[string]string) {
 		return
 	}
 
-	var region string
 	var instanceID string
 
-	if idDoc, err := ec2MetadataClient.GetInstanceIdentityDocument(); err == nil {
-		region = idDoc.Region
+	if idDoc, err := ec2MetadataClient.FetchInstanceIdentityDocument(); err == nil {
 		instanceID = idDoc.InstanceID
 	} else {
 		log.Warnf("EC2 metadata could not be collected: %v", err)
 		return
 	}
+
+	result[instance.KeyCloudProvider] = "aws"
 
 	getMetadataForKeys("", []string{
 		"ami-id",
@@ -171,6 +204,9 @@ func AddMetadata(result map[string]string) {
 		"availability-zone-id",
 		"region",
 	}, result)
+
+	addCloudRegion(result)
+	addHostType(result)
 
 	macs, err := list("network/interfaces/macs/")
 	if err != nil {
@@ -213,7 +249,7 @@ func AddMetadata(result map[string]string) {
 				strings.ReplaceAll(ips, "\n", ","))
 		}
 
-		assocsPath := fmt.Sprintf("%sipv4-associations/", macPath)
+		assocsPath := macPath + "ipv4-associations/"
 		assocs, err := list(assocsPath)
 		if err != nil {
 			// Nothing to worry about: there might not be any associations
@@ -225,5 +261,17 @@ func AddMetadata(result map[string]string) {
 	}
 
 	instance.AddToResult(ipAddrs, result)
-	addTags(region, instanceID, result)
+	addTags(instanceID, result)
+}
+
+func addCloudRegion(result map[string]string) {
+	if region, ok := result[ec2Prefix+"placement/region"]; ok {
+		result[instance.KeyCloudRegion] = region
+	}
+}
+
+func addHostType(result map[string]string) {
+	if instanceType, ok := result[ec2Prefix+"instance-type"]; ok {
+		result[instance.KeyHostType] = instanceType
+	}
 }

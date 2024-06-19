@@ -27,10 +27,9 @@ int tracepoint__sched_process_exit(void *ctx) {
     goto exit;
   }
 
-  if (report_pid(ctx, pid, false)) {
+  if (report_pid(ctx, pid, RATELIMIT_ACTION_RESET)) {
     increment_metric(metricID_NumProcExit);
   }
-
 exit:
   return 0;
 }

@@ -49,15 +49,15 @@ ErrorCode process_python_frame(PerCPURecord *record, const PyProcInfo *pyinfo,
   PythonUnwindScratchSpace *pss = &record->pythonUnwindScratch;
 
   // Make verifier happy for PyFrameObject offsets
-  if (pyinfo->PyFrameObject_f_code     > sizeof(pss->frame) - sizeof(void*) ||
-      pyinfo->PyFrameObject_f_back     > sizeof(pss->frame) - sizeof(void*) ||
-      pyinfo->PyFrameObject_f_lasti    > sizeof(pss->frame) - sizeof(int) ||
-      pyinfo->PyFrameObject_f_is_entry > sizeof(pss->frame) - sizeof(bool)) {
+  if (pyinfo->PyFrameObject_f_code       > sizeof(pss->frame) - sizeof(void*) ||
+      pyinfo->PyFrameObject_f_back       > sizeof(pss->frame) - sizeof(void*) ||
+      pyinfo->PyFrameObject_f_lasti      > sizeof(pss->frame) - sizeof(u64) ||
+      pyinfo->PyFrameObject_entry_member > sizeof(pss->frame) - sizeof(u8)) {
     return ERR_UNREACHABLE;
   }
 
   // Read PyFrameObject
-  if (bpf_probe_read(pss->frame, sizeof(pss->frame), py_frameobject)) {
+  if (bpf_probe_read_user(pss->frame, sizeof(pss->frame), py_frameobject)) {
     DEBUG_PRINT(
         "Failed to read PyFrameObject 0x%lx",
         (unsigned long) py_frameobject);
@@ -82,14 +82,27 @@ ErrorCode process_python_frame(PerCPURecord *record, const PyProcInfo *pyinfo,
   // try to construct one below by hashing together a few fields. These fields are
   // selected in the *hope* that no collisions occur between code objects.
 
-  int py_f_lasti = *(int*)(&pss->frame[pyinfo->PyFrameObject_f_lasti]);
+  int py_f_lasti = 0;
   if (pyinfo->version >= 0x030b) {
     // With Python 3.11 the element f_lasti not only got renamed but also its
-    // type changed from int to uint16.
-    py_f_lasti &= 0xffff;
-    if (*(bool*)(&pss->frame[pyinfo->PyFrameObject_f_is_entry])) {
+    // type changed from int to a _Py_CODEUNIT* and needs to be translated to lastI.
+    // It is a direct pointer to the bytecode, so calculate the byte code index.
+    // sizeof(_Py_CODEUNIT) == 2.
+    // https://github.com/python/cpython/commit/ef6a482b0285870c45f39c9b17ed827362b334ae
+    u64 prev_instr = *(u64*)(&pss->frame[pyinfo->PyFrameObject_f_lasti]);
+    s64 instr_diff = (s64)prev_instr - (s64)py_codeobject - pyinfo->PyCodeObject_sizeof;
+    if (instr_diff < -2 || instr_diff > 0x10000000)
+      instr_diff = -2;
+    py_f_lasti = (int)instr_diff >> 1;
+
+    // Python 3.11+ the frame object has some field that can be used to determine
+    // if this is the last frame in the interpreter loop. This generalized test
+    // works on 3.11 and 3.12 though the actual struct members are different.
+    if (*(u8*)(&pss->frame[pyinfo->PyFrameObject_entry_member]) == pyinfo->PyFrameObject_entry_val) {
       *continue_with_next = true;
     }
+  } else {
+    py_f_lasti = *(int*)(&pss->frame[pyinfo->PyFrameObject_f_lasti]);
   }
 
   if (!py_codeobject) {
@@ -110,7 +123,7 @@ ErrorCode process_python_frame(PerCPURecord *record, const PyProcInfo *pyinfo,
   }
 
   // Read PyCodeObject
-  if (bpf_probe_read(pss->code, sizeof(pss->code), py_codeobject)) {
+  if (bpf_probe_read_user(pss->code, sizeof(pss->code), py_codeobject)) {
     DEBUG_PRINT(
         "Failed to read PyCodeObject at 0x%lx",
         (unsigned long) (py_codeobject));
@@ -181,7 +194,7 @@ static inline __attribute__((__always_inline__))
 ErrorCode get_PyThreadState(const PyProcInfo *pyinfo, void *tsd_base, void *autoTLSkeyAddr,
                             void **thread_state) {
   int key;
-  if (bpf_probe_read(&key, sizeof(key), autoTLSkeyAddr)) {
+  if (bpf_probe_read_user(&key, sizeof(key), autoTLSkeyAddr)) {
     DEBUG_PRINT("Failed to read autoTLSkey from 0x%lx", (unsigned long) autoTLSkeyAddr);
     increment_metric(metricID_UnwindPythonErrBadAutoTlsKeyAddr);
     return ERR_PYTHON_BAD_AUTO_TLS_KEY_ADDR;
@@ -196,9 +209,9 @@ ErrorCode get_PyThreadState(const PyProcInfo *pyinfo, void *tsd_base, void *auto
 }
 
 static inline __attribute__((__always_inline__))
-ErrorCode get_PyFrame(struct pt_regs *ctx, const PyProcInfo *pyinfo, void **frame) {
+ErrorCode get_PyFrame(const PyProcInfo *pyinfo, void **frame) {
   void *tsd_base;
-  if (tsd_get_base(ctx, &tsd_base)) {
+  if (tsd_get_base(&tsd_base)) {
     DEBUG_PRINT("Failed to get TSD base address");
     increment_metric(metricID_UnwindPythonErrReadTsdBase);
     return ERR_PYTHON_READ_TSD_BASE;
@@ -227,8 +240,8 @@ ErrorCode get_PyFrame(struct pt_regs *ctx, const PyProcInfo *pyinfo, void **fram
 
     // Get PyThreadState.cframe
     void *cframe_ptr;
-    if (bpf_probe_read(&cframe_ptr, sizeof(void *),
-            py_tsd_thread_state + pyinfo->PyThreadState_frame)) {
+    if (bpf_probe_read_user(&cframe_ptr, sizeof(void *),
+                            py_tsd_thread_state + pyinfo->PyThreadState_frame)) {
       DEBUG_PRINT(
           "Failed to read PyThreadState.cframe at 0x%lx",
           (unsigned long) (py_tsd_thread_state + pyinfo->PyThreadState_frame));
@@ -237,8 +250,8 @@ ErrorCode get_PyFrame(struct pt_regs *ctx, const PyProcInfo *pyinfo, void **fram
     }
 
     // Get _PyCFrame.current_frame
-    if (bpf_probe_read(frame, sizeof(void *),
-            cframe_ptr + pyinfo->PyCFrame_current_frame)) {
+    if (bpf_probe_read_user(frame, sizeof(void *),
+                            cframe_ptr + pyinfo->PyCFrame_current_frame)) {
       DEBUG_PRINT(
           "Failed to read _PyCFrame.current_frame at 0x%lx",
           (unsigned long) (cframe_ptr + pyinfo->PyCFrame_current_frame));
@@ -247,8 +260,8 @@ ErrorCode get_PyFrame(struct pt_regs *ctx, const PyProcInfo *pyinfo, void **fram
     }
   } else {
     // Get PyThreadState.frame
-    if (bpf_probe_read(frame, sizeof(void *),
-            py_tsd_thread_state + pyinfo->PyThreadState_frame)) {
+    if (bpf_probe_read_user(frame, sizeof(void *),
+                            py_tsd_thread_state + pyinfo->PyThreadState_frame)) {
       DEBUG_PRINT(
           "Failed to read PyThreadState.frame at 0x%lx",
           (unsigned long) (py_tsd_thread_state + pyinfo->PyThreadState_frame));
@@ -287,7 +300,7 @@ int unwind_python(struct pt_regs *ctx) {
   DEBUG_PRINT("Building Python stack for 0x%x", pyinfo->version);
   if (!record->pythonUnwindState.py_frame) {
     increment_metric(metricID_UnwindPythonAttempts);
-    error = get_PyFrame(ctx, pyinfo, &record->pythonUnwindState.py_frame);
+    error = get_PyFrame(pyinfo, &record->pythonUnwindState.py_frame);
     if (error) {
       goto exit;
     }

@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/elastic/otel-profiling-agent/containermetadata"
 	"golang.org/x/sys/unix"
 
 	"github.com/elastic/otel-profiling-agent/host"
@@ -32,8 +33,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/libpf/memorydebug"
-	"github.com/elastic/otel-profiling-agent/libpf/vc"
+	"github.com/elastic/otel-profiling-agent/memorydebug"
 )
 
 // Short copyright / license text for eBPF code
@@ -58,6 +58,8 @@ https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html
 type exitCode int
 
 const (
+	version string = "0.1.0"
+
 	exitSuccess exitCode = 0
 	exitFailure exitCode = 1
 
@@ -74,7 +76,14 @@ func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
 		return fmt.Errorf("failed to start map monitors: %v", err)
 	}
 
-	return tracehandler.Start(ctx, rep, trc, traceCh, times)
+	containerMetadataHandler, err := containermetadata.GetHandler(ctx, times.MonitorInterval())
+	if err != nil {
+		return fmt.Errorf("failed to create container metadata handler: %v", err)
+	}
+
+	_, err = tracehandler.Start(ctx, containerMetadataHandler, rep,
+		trc.TraceProcessor(), traceCh, times)
+	return err
 }
 
 func main() {
@@ -84,12 +93,12 @@ func main() {
 func mainWithExitCode() exitCode {
 	err := parseArgs()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failure to parse arguments: %s", err)
+		log.Errorf("Failure to parse arguments: %s", err)
 		return exitParseError
 	}
 
 	if argMapScaleFactor > 8 {
-		fmt.Fprintf(os.Stderr, "eBPF map scaling factor %d exceeds limit (max: %d)\n",
+		log.Errorf("eBPF map scaling factor %d exceeds limit (max: %d)",
 			argMapScaleFactor, maxArgMapScaleFactor)
 		return exitParseError
 	}
@@ -100,12 +109,12 @@ func mainWithExitCode() exitCode {
 	}
 
 	if argVersion {
-		fmt.Printf("%s\n", vc.Version())
+		fmt.Printf("%s\n", version)
 		return exitSuccess
 	}
 
 	if argBpfVerifierLogLevel > 2 {
-		fmt.Fprintf(os.Stderr, "invalid eBPF verifier log level: %d", argBpfVerifierLogLevel)
+		log.Errorf("Invalid eBPF verifier log level: %d", argBpfVerifierLogLevel)
 		return exitParseError
 	}
 
@@ -116,13 +125,13 @@ func mainWithExitCode() exitCode {
 
 	// Sanity check for probabilistic profiling arguments
 	if argProbabilisticInterval < 1*time.Minute || argProbabilisticInterval > 5*time.Minute {
-		fmt.Fprintf(os.Stderr, "Invalid argument for probabilistic-interval: use "+
+		log.Error("Invalid argument for probabilistic-interval: use " +
 			"a duration between 1 and 5 minutes")
 		return exitParseError
 	}
 	if argProbabilisticThreshold < 1 ||
 		argProbabilisticThreshold > tracer.ProbabilisticThresholdMax {
-		fmt.Fprintf(os.Stderr, "Invalid argument for probabilistic-threshold. Value "+
+		log.Errorf("Invalid argument for probabilistic-threshold. Value "+
 			"should be between 1 and %d", tracer.ProbabilisticThresholdMax)
 		return exitParseError
 	}
@@ -134,8 +143,7 @@ func mainWithExitCode() exitCode {
 	}
 
 	startTime := time.Now()
-	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
-		vc.Version(), vc.Revision(), vc.BuildTimestamp())
+	log.Infof("Starting OTEL profiling agent")
 
 	// Enable dumping of full heaps if the size of the allocated Golang heap
 	// exceeds 150m, and start dumping memory profiles when the heap exceeds
@@ -146,8 +154,7 @@ func mainWithExitCode() exitCode {
 		var major, minor, patch uint32
 		major, minor, patch, err = tracer.GetCurrentKernelVersion()
 		if err != nil {
-			msg := fmt.Sprintf("Failed to get kernel version: %v", err)
-			log.Error(msg)
+			log.Errorf("Failed to get kernel version: %v", err)
 			return exitFailure
 		}
 
@@ -160,28 +167,24 @@ func mainWithExitCode() exitCode {
 			// https://github.com/torvalds/linux/commit/6ae08ae3dea2cfa03dd3665a3c8475c2d429ef47
 			minMajor, minMinor = 5, 5
 		default:
-			msg := fmt.Sprintf("unsupported architecture: %s", runtime.GOARCH)
-			log.Error(msg)
+			log.Errorf("unsupported architecture: %s", runtime.GOARCH)
 			return exitFailure
 		}
 
 		if major < minMajor || (major == minMajor && minor < minMinor) {
-			msg := fmt.Sprintf("Host Agent requires kernel version "+
+			log.Errorf("Host Agent requires kernel version "+
 				"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
-			log.Error(msg)
 			return exitFailure
 		}
 	}
 
 	if err = tracer.ProbeBPFSyscall(); err != nil {
-		msg := fmt.Sprintf("Failed to probe eBPF syscall: %v", err)
-		log.Error(msg)
+		log.Errorf(fmt.Sprintf("Failed to probe eBPF syscall: %v", err))
 		return exitFailure
 	}
 
 	if err = tracer.ProbeTracepoint(); err != nil {
-		msg := fmt.Sprintf("Failed to probe tracepoint: %v", err)
-		log.Error(msg)
+		log.Errorf("Failed to probe tracepoint: %v", err)
 		return exitFailure
 	}
 
@@ -191,8 +194,7 @@ func mainWithExitCode() exitCode {
 	var presentCores uint16
 	presentCores, err = hostmeta.PresentCPUCores()
 	if err != nil {
-		msg := fmt.Sprintf("Failed to read CPU file: %v", err)
-		log.Error(msg)
+		log.Errorf("Failed to read CPU file: %v", err)
 		return exitFailure
 	}
 
@@ -200,8 +202,7 @@ func mainWithExitCode() exitCode {
 	// sent to the backend with certain RPCs.
 	hostMetadataMap := make(map[string]string)
 	if err = hostmeta.AddMetadata(argCollAgentAddr, hostMetadataMap); err != nil {
-		msg := fmt.Sprintf("Unable to get host metadata for config: %v", err)
-		log.Error(msg)
+		log.Errorf("Unable to get host metadata for config: %v", err)
 	}
 
 	// Metadata retrieval may fail, in which case, we initialize all values
@@ -229,7 +230,6 @@ func mainWithExitCode() exitCode {
 		Verbose:                argVerboseMode,
 		DisableTLS:             argDisableTLS,
 		NoKernelVersionCheck:   argNoKernelVersionCheck,
-		UploadSymbols:          false,
 		BpfVerifierLogLevel:    argBpfVerifierLogLevel,
 		BpfVerifierLogSize:     argBpfVerifierLogSize,
 		MonitorInterval:        argMonitorInterval,
@@ -248,16 +248,17 @@ func mainWithExitCode() exitCode {
 		ProbabilisticThreshold: argProbabilisticThreshold,
 	}
 	if err = config.SetConfiguration(&conf); err != nil {
-		msg := fmt.Sprintf("Failed to set configuration: %s", err)
-		log.Error(msg)
+		log.Errorf("Failed to set configuration: %s", err)
 		return exitFailure
 	}
+	// Start periodic synchronization of monotonic clock
+	config.StartMonotonicSync(mainCtx)
 	log.Debugf("Done setting configuration")
 
 	times := config.GetTimes()
 
 	log.Debugf("Determining tracers to include")
-	includeTracers, err := parseTracers(argTracers)
+	includeTracers, err := config.ParseTracers(argTracers)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to parse the included tracers: %s", err)
 		log.Error(msg)
@@ -292,10 +293,10 @@ func mainWithExitCode() exitCode {
 	// Network operations to CA start here
 	var rep reporter.Reporter
 	// Connect to the collection agent
-	rep, err = reporter.StartOTLP(mainCtx, &reporter.Config{
+	rep, err = reporter.Start(mainCtx, &reporter.Config{
 		CollAgentAddr:           argCollAgentAddr,
 		MaxRPCMsgSize:           33554432, // 32 MiB
-		ExecMetadataMaxQueue:    1024,
+		ExecMetadataMaxQueue:    2048,
 		CountsForTracesMaxQueue: tracesQSize,
 		MetricsMaxQueue:         1024,
 		FramesForTracesMaxQueue: tracesQSize,
@@ -343,7 +344,7 @@ func mainWithExitCode() exitCode {
 
 	now := time.Now()
 	// Initial scan of /proc filesystem to list currently-active PIDs and have them processed.
-	if err := trc.StartPIDEventProcessor(mainCtx); err != nil {
+	if err = trc.StartPIDEventProcessor(mainCtx); err != nil {
 		log.Errorf("Failed to list processes from /proc: %v", err)
 	}
 	metrics.Add(metrics.IDProcPIDStartupMs, metrics.MetricValue(time.Since(now).Milliseconds()))

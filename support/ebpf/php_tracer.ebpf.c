@@ -25,15 +25,6 @@ bpf_map_def SEC("maps") php_procs = {
   .max_entries = 1024,
 };
 
-
-// Map from PHP JIT process IDs to the address range of the `dasmBuf` for that process
-bpf_map_def SEC("maps") php_jit_procs = {
-  .type = BPF_MAP_TYPE_HASH,
-  .key_size = sizeof(pid_t),
-  .value_size = sizeof(PHPJITProcInfo),
-  .max_entries = 1024,
-};
-
 // Record a PHP frame
 static inline __attribute__((__always_inline__))
 ErrorCode push_php(Trace *trace, u64 file, u64 line, bool is_jitted) {
@@ -47,28 +38,15 @@ ErrorCode push_unknown_php(Trace *trace) {
   return _push(trace, UNKNOWN_FILE, FUNC_TYPE_UNKNOWN, FRAME_MARKER_PHP);
 }
 
-// Returns true if `func` is inside the JIT buffer and false otherwise.
 static inline __attribute__((__always_inline__))
-bool is_jit_function(u64 func, PHPJITProcInfo* jitinfo) {
-  // Check if there is JIT introspection data available.
-  if (!jitinfo) { return false; }
-
-  // To avoid verifier complains like "pointer arithmetic on PTR_TO_MAP_VALUE_OR_NULL prohibited" 
-  // on older kernels, we use temporary variables here.
-  bool start = (func >= jitinfo->start);
-  bool end = (func < jitinfo->end);
-
-  return start && end;
-}
-
-static inline __attribute__((__always_inline__))
-int process_php_frame(PerCPURecord *record, PHPProcInfo *phpinfo, PHPJITProcInfo* jitinfo,
+int process_php_frame(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted,
   const void *execute_data, u32 *type_info) {
   Trace *trace = &record->trace;
 
   // Get current_execute_data->func
   void *zend_function;
-  if (bpf_probe_read(&zend_function, sizeof(void *), execute_data + phpinfo->zend_execute_data_function)) {
+  if (bpf_probe_read_user(&zend_function, sizeof(void *),
+                          execute_data + phpinfo->zend_execute_data_function)) {
     DEBUG_PRINT("Failed to read current_execute_data->func (0x%lx)",
         (unsigned long) (execute_data + phpinfo->zend_execute_data_function));
     return metricID_UnwindPHPErrBadZendExecuteData;
@@ -85,7 +63,7 @@ int process_php_frame(PerCPURecord *record, PHPProcInfo *phpinfo, PHPJITProcInfo
 
   // Get zend_function->type
   u8 func_type;
-  if (bpf_probe_read(&func_type, sizeof(func_type), zend_function + phpinfo->zend_function_type)) {
+  if (bpf_probe_read_user(&func_type, sizeof(func_type), zend_function + phpinfo->zend_function_type)) {
     DEBUG_PRINT("Failed to read execute_data->func->type (0x%lx)",
         (unsigned long) zend_function);
     return metricID_UnwindPHPErrBadZendFunction;
@@ -95,14 +73,14 @@ int process_php_frame(PerCPURecord *record, PHPProcInfo *phpinfo, PHPJITProcInfo
   if (func_type == ZEND_USER_FUNCTION || func_type == ZEND_EVAL_CODE) {
     // Get execute_data->opline
     void *zend_op;
-    if (bpf_probe_read(&zend_op, sizeof(void *), execute_data + phpinfo->zend_execute_data_opline)) {
+    if (bpf_probe_read_user(&zend_op, sizeof(void *), execute_data + phpinfo->zend_execute_data_opline)) {
       DEBUG_PRINT("Failed to read execute_data->opline (0x%lx)",
           (unsigned long) (execute_data + phpinfo->zend_execute_data_opline));
       return metricID_UnwindPHPErrBadZendExecuteData;
     }
 
     // Get opline->lineno
-    if (bpf_probe_read(&lineno, sizeof(u32), zend_op + phpinfo->zend_op_lineno)) {
+    if (bpf_probe_read_user(&lineno, sizeof(u32), zend_op + phpinfo->zend_op_lineno)) {
       DEBUG_PRINT("Failed to read executor_globals->opline->lineno (0x%lx)",
           (unsigned long) (zend_op + phpinfo->zend_op_lineno));
       return metricID_UnwindPHPErrBadZendOpline;
@@ -110,7 +88,8 @@ int process_php_frame(PerCPURecord *record, PHPProcInfo *phpinfo, PHPJITProcInfo
 
     // Get execute_data->This.type_info. This reads into the `type_info` argument
     // so we can re-use it in walk_php_stack
-    if(bpf_probe_read(type_info, sizeof(u32), execute_data + phpinfo->zend_execute_data_this_type_info)) {
+    if (bpf_probe_read_user(type_info, sizeof(u32),
+                            execute_data + phpinfo->zend_execute_data_this_type_info)) {
       DEBUG_PRINT("Failed to read execute_data->This.type_info (0x%lx)",
                   (unsigned long) execute_data);
       return metricID_UnwindPHPErrBadZendExecuteData;
@@ -122,8 +101,7 @@ int process_php_frame(PerCPURecord *record, PHPProcInfo *phpinfo, PHPJITProcInfo
   u64 lineno_and_type_info = ((u64)*type_info) << 32 | lineno;
   
   DEBUG_PRINT("Pushing PHP 0x%lx %u", (unsigned long) zend_function, lineno);
-  if (push_php(trace, (u64) zend_function, lineno_and_type_info,
-    is_jit_function(record->state.pc, jitinfo)) != ERR_OK) {
+  if (push_php(trace, (u64) zend_function, lineno_and_type_info, is_jitted) != ERR_OK) {
     DEBUG_PRINT("failed to push php frame");
     return -1;
   }
@@ -132,7 +110,7 @@ int process_php_frame(PerCPURecord *record, PHPProcInfo *phpinfo, PHPJITProcInfo
 }
 
 static inline __attribute__((__always_inline__))
-int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, PHPJITProcInfo* jitinfo) {
+int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted) {
   const void *execute_data = record->phpUnwindState.zend_execute_data;
   bool mixed_traces = get_next_unwinder_after_interpreter(record) != PROG_UNWIND_STOP;
 
@@ -146,7 +124,7 @@ int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, PHPJITProcInfo* j
   u32 type_info = 0;
 #pragma unroll
   for (u32 i = 0; i < FRAMES_PER_WALK_PHP_STACK; ++i) {
-    int metric = process_php_frame(record, phpinfo, jitinfo, execute_data, &type_info);
+    int metric = process_php_frame(record, phpinfo, is_jitted, execute_data, &type_info);
     if (metric >= 0) {
       increment_metric(metric);
     }
@@ -155,8 +133,8 @@ int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, PHPJITProcInfo* j
     }
     
     // Get current_execute_data->prev_execute_data
-    if (bpf_probe_read(&execute_data, sizeof(void *),
-            execute_data + phpinfo->zend_execute_data_prev_execute_data)) {
+    if (bpf_probe_read_user(&execute_data, sizeof(void *),
+                            execute_data + phpinfo->zend_execute_data_prev_execute_data)) {
       DEBUG_PRINT("Failed to read current_execute_data->prev_execute_data (0x%lx)",
                   (unsigned long) execute_data);
       increment_metric(metricID_UnwindPHPErrBadZendExecuteData);
@@ -182,8 +160,9 @@ int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, PHPJITProcInfo* j
       //    get the next unwinder instead. 
       // This is only necessary when it's the last function because walking the PHP
       // stack is enough for the other functions. 
-      if (is_jit_function(record->state.pc, jitinfo)) {
+      if (is_jitted) {
         record->state.pc = phpinfo->jit_return_address;
+        record->state.return_address = false;
         if (resolve_unwind_mapping(record, &unwinder) != ERR_OK) {
           unwinder = PROG_UNWIND_STOP;
         }
@@ -217,12 +196,18 @@ int unwind_php(struct pt_regs *ctx) {
     goto exit;
   }
 
+  // The section id and bias are zeroes if matched via JIT page mapping.
+  // Otherwise its the native code interpreter range match and these are
+  // set to the native code's values.
+  bool is_jitted = record->state.text_section_id == 0 &&
+    record->state.text_section_bias == 0;
+
   increment_metric(metricID_UnwindPHPAttempts);
 
   if (!record->phpUnwindState.zend_execute_data) {
     // Get executor_globals.current_execute_data
-    if (bpf_probe_read(&record->phpUnwindState.zend_execute_data, sizeof(void *),
-                       (void*) phpinfo->current_execute_data)) {
+    if (bpf_probe_read_user(&record->phpUnwindState.zend_execute_data, sizeof(void *),
+                            (void*) phpinfo->current_execute_data)) {
       DEBUG_PRINT("Failed to read executor_globals.current_execute data (0x%lx)",
           (unsigned long) phpinfo->current_execute_data);
       increment_metric(metricID_UnwindPHPErrBadCurrentExecuteData);
@@ -230,12 +215,6 @@ int unwind_php(struct pt_regs *ctx) {
     }
   }
 
-  // Check whether the PHP process has an enabled JIT
-  PHPJITProcInfo *jitinfo = bpf_map_lookup_elem(&php_jit_procs, &pid);
-  if(!jitinfo) {
-    DEBUG_PRINT("No PHP JIT introspection data");
-  }
-  
 #if defined(__aarch64__)
   // On ARM we need to adjust the stack pointer if we entered from JIT code
   // This is only a problem on ARM where the SP/FP are used for unwinding.
@@ -246,7 +225,7 @@ int unwind_php(struct pt_regs *ctx) {
   // Given that there's no guarantess that anything pushed to the stack is useful we
   // simply ignore it. There may be a return address in some modes, but this is hard to detect
   // consistently.
-  if (is_jit_function(record->state.pc, jitinfo)) {
+  if (is_jitted) {
       record->state.sp = record->state.fp;
   }
 #endif
@@ -254,7 +233,7 @@ int unwind_php(struct pt_regs *ctx) {
   DEBUG_PRINT("Building PHP stack (execute_data = 0x%lx)", (unsigned long) record->phpUnwindState.zend_execute_data);
 
   // Unwind one call stack or unrolled length, and continue
-  unwinder = walk_php_stack(record, phpinfo, jitinfo);
+  unwinder = walk_php_stack(record, phpinfo, is_jitted);
 
 exit:
   tail_call(ctx, unwinder);

@@ -12,6 +12,7 @@ import (
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 // LoaderInfo contains information about an ELF that is passed to
@@ -22,11 +23,11 @@ type LoaderInfo struct {
 	// elfRef provides a cached access to the ELF file.
 	elfRef *pfelf.Reference
 	// gaps represents holes in the stack deltas of the executable.
-	gaps []libpf.Range
+	gaps []util.Range
 }
 
 // NewLoaderInfo returns a populated LoaderInfo struct.
-func NewLoaderInfo(fileID host.FileID, elfRef *pfelf.Reference, gaps []libpf.Range) *LoaderInfo {
+func NewLoaderInfo(fileID host.FileID, elfRef *pfelf.Reference, gaps []util.Range) *LoaderInfo {
 	return &LoaderInfo{
 		fileID: fileID,
 		elfRef: elfRef,
@@ -40,7 +41,7 @@ func (i *LoaderInfo) GetELF() (*pfelf.File, error) {
 }
 
 // GetSymbolAsRanges returns the normalized virtual address ranges for the named symbol
-func (i *LoaderInfo) GetSymbolAsRanges(symbol libpf.SymbolName) ([]libpf.Range, error) {
+func (i *LoaderInfo) GetSymbolAsRanges(symbol libpf.SymbolName) ([]util.Range, error) {
 	ef, err := i.GetELF()
 	if err != nil {
 		return nil, err
@@ -50,7 +51,7 @@ func (i *LoaderInfo) GetSymbolAsRanges(symbol libpf.SymbolName) ([]libpf.Range, 
 		return nil, fmt.Errorf("symbol '%v' not found: %w", symbol, err)
 	}
 	start := uint64(sym.Address)
-	return []libpf.Range{{
+	return []util.Range{{
 		Start: start,
 		End:   start + uint64(sym.Size)},
 	}, nil
@@ -67,6 +68,6 @@ func (i *LoaderInfo) FileName() string {
 }
 
 // Gaps returns the gaps for the executable of this LoaderInfo.
-func (i *LoaderInfo) Gaps() []libpf.Range {
+func (i *LoaderInfo) Gaps() []util.Range {
 	return i.gaps
 }

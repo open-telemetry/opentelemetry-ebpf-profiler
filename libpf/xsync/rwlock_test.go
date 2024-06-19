@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/elastic/otel-profiling-agent/libpf/xsync"
-	assert "github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 type SharedResourceMutable struct {

@@ -13,8 +13,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// fifoRingBuffer implements a first-in-first-out ring buffer that is safe for concurrent access.
-type fifoRingBuffer[T any] struct {
+// FifoRingBuffer implements a first-in-first-out ring buffer that is safe for concurrent access.
+type FifoRingBuffer[T any] struct { // nolint:gocritic
 	sync.Mutex
 
 	// data holds the actual data.
@@ -44,7 +44,7 @@ type fifoRingBuffer[T any] struct {
 	overwriteCount uint32
 }
 
-func (q *fifoRingBuffer[T]) initFifo(size uint32, name string) error {
+func (q *FifoRingBuffer[T]) InitFifo(size uint32, name string) error {
 	if size == 0 {
 		return fmt.Errorf("unsupported size of fifo: %d", size)
 	}
@@ -62,16 +62,16 @@ func (q *fifoRingBuffer[T]) initFifo(size uint32, name string) error {
 
 // zeroFifo re-initializes the ring buffer and clears the data array, making previously
 // stored elements available for GC.
-func (q *fifoRingBuffer[T]) zeroFifo() {
-	if err := q.initFifo(q.size, q.name); err != nil {
+func (q *FifoRingBuffer[T]) zeroFifo() {
+	if err := q.InitFifo(q.size, q.name); err != nil {
 		// Should never happen
 		panic(err)
 	}
 }
 
-// append adds element v to the fifoRingBuffer. it overwrites existing elements if there is no
+// Append adds element v to the FifoRingBuffer. it overwrites existing elements if there is no
 // space left.
-func (q *fifoRingBuffer[T]) append(v T) {
+func (q *FifoRingBuffer[T]) Append(v T) {
 	q.Lock()
 	defer q.Unlock()
 
@@ -94,8 +94,8 @@ func (q *fifoRingBuffer[T]) append(v T) {
 	}
 }
 
-// readAll returns all elements from the fifoRingBuffer.
-func (q *fifoRingBuffer[T]) readAll() []T {
+// ReadAll returns all elements from the FifoRingBuffer.
+func (q *FifoRingBuffer[T]) ReadAll() []T {
 	q.Lock()
 	defer q.Unlock()
 
@@ -115,7 +115,7 @@ func (q *fifoRingBuffer[T]) readAll() []T {
 	return data
 }
 
-func (q *fifoRingBuffer[T]) getOverwriteCount() uint32 {
+func (q *FifoRingBuffer[T]) GetOverwriteCount() uint32 {
 	q.Lock()
 	defer q.Unlock()
 

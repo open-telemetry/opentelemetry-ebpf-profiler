@@ -1435,6 +1435,7 @@
     "id": 201
   },
   {
+    "obsolete": true,
     "description": "Number of cache hits in the stack delta provider",
     "type": "counter",
     "name": "StackDeltaProviderCacheHit",
@@ -1442,6 +1443,7 @@
     "id": 202
   },
   {
+    "obsolete": true,
     "description": "Number of cache misses in the stack delta provider",
     "type": "counter",
     "name": "StackDeltaProviderCacheMiss",
@@ -1823,5 +1825,110 @@
     "name": "UnwindHotspotErrLrUnwindingMidTrace",
     "field": "bpf.hotspot.errors.lr_unwinding_mid_trace",
     "id": 256
+  },
+  {
+    "description": "Number of failures to get TSD base for APM correlation",
+    "type": "counter",
+    "name": "UnwindApmIntErrReadTsdBase",
+    "field": "bpf.apmint.errors.read_tsd_base",
+    "id": 257
+  },
+  {
+    "description": "Number of failures read the APM correlation pointer",
+    "type": "counter",
+    "name": "UnwindApmIntErrReadCorrBufPtr",
+    "field": "bpf.apmint.errors.read_corr_buf_ptr",
+    "id": 258
+  },
+  {
+    "description": "Number of failures read the APM correlation buffer",
+    "type": "counter",
+    "name": "UnwindApmIntErrReadCorrBuf",
+    "field": "bpf.apmint.errors.read_corr_buf",
+    "id": 259
+  },
+  {
+    "description": "Number of successful reads of APM correlation info",
+    "type": "counter",
+    "name": "UnwindApmIntReadSuccesses",
+    "field": "bpf.apmint.read.successes",
+    "id": 260
+  },
+  {
+    "description": "Number of attempted dotnet unwinds",
+    "type": "counter",
+    "name": "UnwindDotnetAttempts",
+    "field": "bpf.dotnet.attempts",
+    "id": 261
+  },
+  {
+    "description": "Number of unwound dotnet frames",
+    "type": "counter",
+    "name": "UnwindDotnetFrames",
+    "field": "bpf.dotnet.frames",
+    "id": 262
+  },
+  {
+    "description": "Number of times we didn't find an entry for this process in the dotnet process info array",
+    "type": "counter",
+    "name": "UnwindDotnetErrNoProcInfo",
+    "field": "bpf.dotnet.errors.no_proc_info",
+    "id": 263
+  },
+  {
+    "description": "Number of failures to read dotnet frame pointer data",
+    "type": "counter",
+    "name": "UnwindDotnetErrBadFP",
+    "field": "bpf.dotnet.errors.bad_fp",
+    "id": 264
+  },
+  {
+    "description": "Number of failures to read dotnet CodeHeader",
+    "type": "counter",
+    "name": "UnwindDotnetErrCodeHeader",
+    "field": "bpf.dotnet.errors.code_header",
+    "id": 265
+  },
+  {
+    "description": "Number of failures to unwind dotnet frame due to large code size",
+    "type": "counter",
+    "name": "UnwindDotnetErrCodeTooLarge",
+    "field": "bpf.dotnet.errors.code_too_large",
+    "id": 266
+  },
+  {
+    "description": "Number of successfully symbolized dotnet frames",
+    "type": "counter",
+    "name": "DotnetSymbolizationSuccesses",
+    "field": "agent.dotnet.symbolization.successes",
+    "id": 267
+  },
+  {
+    "description": "Number of dotnet frames that failed symbolization",
+    "type": "counter",
+    "name": "DotnetSymbolizationFailures",
+    "field": "agent.dotnet.symbolization.failures",
+    "id": 268
+  },
+  {
+    "description": "Number of cache hits for dotnet AddrToMethod",
+    "type": "counter",
+    "name": "DotnetAddrToMethodHit",
+    "field": "agent.dotnet.addr_to_method.hits",
+    "id": 269
+  },
+  {
+    "description": "Number of cache misses for dotnet AddrToMethod",
+    "type": "counter",
+    "name": "DotnetAddrToMethodMiss",
+    "field": "agent.dotnet.addr_to_method.misses",
+    "id": 270
+  },
+  {
+    "description": "Number of times the stack delta provider succeeded to extract stack deltas",
+    "type": "counter",
+    "name": "StackDeltaProviderSuccess",
+    "field": "agent.stack_delta_extraction.success",
+    "id": 271
   }
 ]
