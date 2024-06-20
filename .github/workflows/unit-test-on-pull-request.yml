@@ -40,20 +40,6 @@ jobs:
         cache-dependency-path: |
           go.sum
       id: go
-    - name: Install gRPC dependencies
-      env:
-        PB_URL: "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/"
-        PB_FILE: "protoc-24.4-linux-x86_64.zip"
-        INSTALL_DIR: "/usr/local"
-      run: |
-        go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
-        go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
-        curl -LO "$PB_URL/$PB_FILE"
-        sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
-        sudo chmod +xr "$INSTALL_DIR/bin/protoc"
-        sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
-        sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
-        rm "$PB_FILE"
     - name: Check out
       uses: actions/checkout@v4
     - name: Linter
@@ -95,20 +81,6 @@ jobs:
         cache-dependency-path: |
           go.sum
       id: go
-    - name: Install gRPC dependencies
-      env:
-        PB_URL: "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/"
-        PB_FILE: "protoc-24.4-linux-x86_64.zip"
-        INSTALL_DIR: "/usr/local"
-      run: |
-        go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
-        go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
-        curl -LO "$PB_URL/$PB_FILE"
-        sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
-        sudo chmod +xr "$INSTALL_DIR/bin/protoc"
-        sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
-        sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
-        rm "$PB_FILE"
     - name: Check out
       uses: actions/checkout@v4
     - name: Build
