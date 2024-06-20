@@ -1,4 +1,5 @@
-.PHONY: all all-common binary clean ebpf generate test test-deps protobuf docker-image agent legal
+.PHONY: all all-common binary clean ebpf generate test test-deps protobuf docker-image agent legal \
+	integration-test-binaries
 
 SHELL:=/usr/bin/env bash
 
@@ -38,6 +39,16 @@ TESTDATA_DIRS:= \
 test-deps:
 	$(foreach testdata_dir, $(TESTDATA_DIRS), \
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
+	)
+
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
+
+integration-test-binaries: generate ebpf
+	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
+		(go test -ldflags='-extldflags=-static' -trimpath -c \
+			-tags osusergo,netgo,static_build,integration \
+			-o ./support/$(subst /,_,$(test_name)).test \
+			./$(test_name)) || exit ; \
 	)
 
 # Detect native architecture.
