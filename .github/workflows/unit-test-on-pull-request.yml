@@ -1,4 +1,4 @@
-name: otel-profiling-agent
+name: CI
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: true
       max-parallel: 2
@@ -90,3 +90,66 @@ jobs:
     - name: Tests
       run: |
         make test
+
+  build-integration-test-binaries:
+    name: Build integration test binaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get install -y llvm clang-16 dwz cmake curl unzip
+      - name: Install Zydis
+        shell: bash
+        run: |
+          cd /tmp
+          git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git
+          cd zydis
+          rm -rf build
+          mkdir build
+          cd build
+          cmake -DZYDIS_BUILD_EXAMPLES=OFF ..
+          make -j$(nproc)
+          sudo make install
+          cd zycore
+          sudo make install
+      - name: Prepare integration test binaries for qemu tests
+        run: |
+          make integration-test-binaries
+      - name: Upload integration test binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-binaries
+          path: support/*.test
+
+  integration-tests:
+    name: Integration tests (kernel v${{ matrix.kernel-version }})
+    runs-on: ubuntu-24.04
+    needs: build-integration-test-binaries
+    strategy:
+      matrix:
+        kernel-version: [ "4.19.114", "5.4.31", "5.10.79", "5.15.133", "6.1.55" ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+      - name: Install dependencies
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install qemu-system-x86
+          go install github.com/florianl/bluebox@v0.0.1
+          sudo mv ~/go/bin/bluebox /usr/local/bin/.
+      - name: Fetch integration test binaries
+        uses: actions/download-artifact@v4
+        with: { name: integration-test-binaries }
+      - name: Fetch precompiled kernels
+        run: |
+          install -d ci-kernels
+          wget -O- https://github.com/elastic/profiler-ci-kernels/archive/a07f0eaa48ac4edbd117df728d4bc35bbb11a5fc.tar.gz \
+            | tar xzv -C ci-kernels --strip-components=2 --wildcards '*/pre-built/*'
+      - name: Test on kernel ${{ matrix.kernel-version }}
+        run: |
+          chmod a+rx *.test
+          support/run-tests.sh ${{ matrix.kernel-version }}
