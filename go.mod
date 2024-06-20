@@ -1,6 +1,6 @@
 module github.com/elastic/otel-profiling-agent
 
-go 1.22.4
+go 1.22.2
 
 require (
 	cloud.google.com/go/compute/metadata v0.3.0
