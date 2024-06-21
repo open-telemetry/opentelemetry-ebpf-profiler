@@ -15,175 +15,30 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"os"
 	"regexp"
 	"strings"
 
-	"github.com/minio/sha256-simd"
-
 	"github.com/elastic/otel-profiling-agent/libpf"
 )
 
-// ELF files start with  \x7F followed by 'ELF' - \x7f\x45\x4c\x46
-var elfHeader = []byte{
-	0x7F, 0x45, 0x4C, 0x46,
-}
-
-// IsELFReader checks if the first four bytes of the provided ReadSeeker match the ELF magic bytes,
-// and returns true if so, or false otherwise.
-//
-// *** WARNING ***
-// ANY CHANGE IN BEHAVIOR CAN EASILY BREAK OUR INFRASTRUCTURE, POSSIBLY MAKING THE ENTIRETY
-// OF THE DEBUG INDEX OR FRAME METADATA WORTHLESS (BREAKING BACKWARDS COMPATIBILITY).
-func IsELFReader(reader io.ReadSeeker) (bool, error) {
-	fileHeader := make([]byte, 4)
-	nbytes, err := reader.Read(fileHeader)
-
-	// restore file position
-	if _, err2 := reader.Seek(-int64(nbytes), io.SeekCurrent); err2 != nil {
-		return false, fmt.Errorf("failed to rewind: %s", err2)
-	}
-
-	if err != nil {
-		if err == io.EOF {
-			return false, nil
+// SafeOpenELF opens the given ELF file in a safely way in that
+// it recovers from panics inside elf.Open().
+// Under cirumstances we see fatal errors from inside the runtime, which
+// are not recoverable, e.g. "fatal error: runtime: out of memory".
+func SafeOpenELF(name string) (elfFile *elf.File, err error) {
+	defer func() {
+		// debug/elf has issues with malformed ELF files
+		if r := recover(); r != nil {
+			if elfFile != nil {
+				elfFile.Close()
+				elfFile = nil
+			}
+			err = fmt.Errorf("failed to open ELF file (recovered from panic): %s", name)
 		}
-		return false, fmt.Errorf("failed to read ELF header: %s", err)
-	}
-
-	if bytes.Equal(elfHeader, fileHeader) {
-		return true, nil
-	}
-
-	return false, nil
-}
-
-// IsELF checks if the first four bytes of the provided file match the ELF magic bytes
-// and returns true if so, or false otherwise.
-func IsELF(filePath string) (bool, error) {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return false, fmt.Errorf("failed to open %s: %s", filePath, err)
-	}
-	defer f.Close()
-
-	isELF, err := IsELFReader(f)
-	if err != nil {
-		return false, fmt.Errorf("failed to read %s: %s", filePath, err)
-	}
-
-	return isELF, nil
-}
-
-// fileHashReader hashes the contents of the reader in order to generate a system-independent
-// identifier.
-// ELF files are partially hashed to save CPU cycles: only the first 4K and last 4K of the files
-// are used for the hash, as they likely contain the program and section headers, respectively.
-//
-// *** WARNING ***
-// ANY CHANGE IN BEHAVIOR CAN EASILY BREAK OUR INFRASTRUCTURE, POSSIBLY MAKING THE ENTIRETY
-// OF THE DEBUG INDEX OR FRAME METADATA WORTHLESS (BREAKING BACKWARDS COMPATIBILITY).
-func fileHashReader(reader io.ReadSeeker) ([]byte, error) {
-	isELF, err := IsELFReader(reader)
-	if err != nil {
-		return nil, err
-	}
-	h := sha256.New()
-
-	if isELF {
-		// Hash algorithm: SHA256 of the following:
-		// 1) 4 KiB header: should cover the program headers, and usually the GNU Build ID (if
-		//    present) plus other sections.
-		// 2) 4 KiB trailer: in practice, should cover the ELF section headers, as well as the
-		//    contents of the debug link and other sections.
-		// 3) File length (8 bytes, big-endian). Just for paranoia: ELF files can be appended to
-		//    without restrictions, so it feels a bit too easy to produce valid ELF files that would
-		//    produce identical hashes using only 1) and 2).
-
-		// 1) Hash header
-		_, err = io.Copy(h, io.LimitReader(reader, 4096))
-		if err != nil {
-			return nil, fmt.Errorf("failed to hash file header: %v", err)
-		}
-
-		var size int64
-		size, err = reader.Seek(0, io.SeekEnd)
-		if err != nil {
-			return nil, fmt.Errorf("failed to seek end of file: %v", err)
-		}
-
-		// 2) Hash trailer
-		// This will double-hash some data if the file is < 8192 bytes large. Better keep
-		// it simple since the logic is customer-facing.
-		tailBytes := min(size, 4096)
-		_, err = reader.Seek(-tailBytes, io.SeekEnd)
-		if err != nil {
-			return nil, fmt.Errorf("failed to seek file trailer: %v", err)
-		}
-
-		_, err = io.Copy(h, reader)
-		if err != nil {
-			return nil, fmt.Errorf("failed to hash file trailer: %v", err)
-		}
-
-		// 3) Hash length
-		lengthArray := make([]byte, 8)
-		binary.BigEndian.PutUint64(lengthArray, uint64(size))
-		_, err = io.Copy(h, bytes.NewReader(lengthArray))
-		if err != nil {
-			return nil, fmt.Errorf("failed to hash file length: %v", err)
-		}
-	} else {
-		// hash complete file
-		_, err = io.Copy(h, reader)
-		if err != nil {
-			return nil, fmt.Errorf("failed to hash file: %v", err)
-		}
-	}
-
-	return h.Sum(nil), nil
-}
-
-func FileHash(fileName string) ([]byte, error) {
-	f, err := os.Open(fileName)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	return fileHashReader(f)
-}
-
-// CalculateIDFromReader calculates a 128-bit executable ID of the contents of a reader.
-// For kernel files (modules & kernel image), use CalculateKernelFileID instead.
-func CalculateIDFromReader(reader io.ReadSeeker) (libpf.FileID, error) {
-	hash, err := fileHashReader(reader)
-	if err != nil {
-		return libpf.FileID{}, err
-	}
-	return libpf.FileIDFromBytes(hash[0:16])
-}
-
-// CalculateID calculates a 128-bit executable ID of the contents of a file.
-// For kernel files (modules & kernel image), use CalculateKernelFileID instead.
-func CalculateID(fileName string) (libpf.FileID, error) {
-	hash, err := FileHash(fileName)
-	if err != nil {
-		return libpf.FileID{}, err
-	}
-	return libpf.FileIDFromBytes(hash[0:16])
-}
-
-// CalculateIDString provides a string representation of the hash of a given file.
-func CalculateIDString(fileName string) (string, error) {
-	hash, err := FileHash(fileName)
-	if err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf("%x", hash), nil
+	}()
+	return elf.Open(name)
 }
 
 // HasDWARFData returns true if the provided ELF file contains actionable DWARF debugging
@@ -238,7 +93,7 @@ var ErrNoDebugLink = errors.New("no debug link")
 func ParseDebugLink(data []byte) (linkName string, crc32 int32, err error) {
 	strEnd := bytes.IndexByte(data, 0)
 	if strEnd < 0 {
-		return "", 0, fmt.Errorf("malformed debug link, not zero terminated")
+		return "", 0, errors.New("malformed debug link, not zero terminated")
 	}
 	linkName = strings.ToValidUTF8(string(data[:strEnd]), "")
 
@@ -280,6 +135,41 @@ func GetDebugLink(elfFile *elf.File) (linkName string, crc32 int32, err error) {
 	return ParseDebugLink(sectionData)
 }
 
+// GetDebugAltLink returns the contents of the `.gnu_debugaltlink` section (path and build
+// ID). If no link is present, ErrNoDebugLink is returned.
+func GetDebugAltLink(elfFile *elf.File) (fileName, buildID string, err error) {
+	// The .gnu_debugaltlink section is not always present
+	sectionData, err := getSectionData(elfFile, ".gnu_debugaltlink")
+	if err != nil {
+		return "", "", ErrNoDebugLink
+	}
+
+	// The whole .gnu_debugaltlink section consists of:
+	// 1) path to target (variable-length string)
+	// 2) null character separator (1 byte)
+	// 3) build ID (usually 20 bytes, but can vary)
+	//
+	// First, find the position of the null character:
+	nullCharIdx := bytes.IndexByte(sectionData, 0)
+	if nullCharIdx == -1 {
+		return "", "", nil
+	}
+
+	// The path consists of all the characters before the first null character
+	path := strings.ToValidUTF8(string(sectionData[:nullCharIdx]), "")
+
+	// Check that we can read a build ID: there should be at least 1 byte after the null character.
+	if nullCharIdx+1 == len(sectionData) {
+		return "", "", errors.New("malformed .gnu_debugaltlink section (missing build ID)")
+	}
+
+	// The build ID consists of all the bytes after the first null character
+	buildIDBytes := sectionData[nullCharIdx+1:]
+	buildID = hex.EncodeToString(buildIDBytes)
+
+	return path, buildID, nil
+}
+
 var ErrNoBuildID = errors.New("no build ID")
 var ubuntuKernelSignature = regexp.MustCompile(` \(Ubuntu[^)]*\)\n$`)
 
@@ -299,13 +189,13 @@ func GetKernelVersionBytes(elfFile *elf.File) ([]byte, error) {
 
 	startIdx := bytes.Index(sectionData, procVersionContents)
 	if startIdx < 0 {
-		return nil, fmt.Errorf("unable to find Linux version")
+		return nil, errors.New("unable to find Linux version")
 	}
 	// Skip the null character
 	startIdx++
 	endIdx := bytes.IndexByte(sectionData[startIdx:], 0x0)
 	if endIdx < 0 {
-		return nil, fmt.Errorf("unable to find Linux version (can't find end of string)")
+		return nil, errors.New("unable to find Linux version (can't find end of string)")
 	}
 
 	versionBytes := sectionData[startIdx : startIdx+endIdx]
@@ -397,7 +287,7 @@ func getNoteHexString(sectionBytes []byte, name string, noteType uint32) (
 		return "", false, nil
 	}
 	if idx < 4 { // there needs to be room for descsz
-		return "", false, fmt.Errorf("could not read note data size")
+		return "", false, errors.New("could not read note data size")
 	}
 
 	idxDataStart := idx + len(noteHeader)
@@ -416,6 +306,32 @@ func getNoteHexString(sectionBytes []byte, name string, noteType uint32) (
 	return hex.EncodeToString(sectionBytes[idxDataStart:idxDataEnd]), true, nil
 }
 
+// GetLinuxBuildSalt extracts the linux kernel build salt from the provided ELF path.
+// It is read from the .notes ELF section.
+// It should be present in both kernel modules and the kernel image of most distro-vended kernel
+// packages, and should be identical across all the files: kernel modules will have the same salt
+// as their corresponding vmlinux image if they were built at the same time.
+// This can be used to identify the kernel image corresponding to a module.
+// See https://lkml.org/lkml/2018/7/3/1156
+func GetLinuxBuildSalt(filePath string) (salt string, found bool, err error) {
+	elfFile, err := SafeOpenELF(filePath)
+	if err != nil {
+		return "", false, fmt.Errorf("could not open %s: %w", filePath, err)
+	}
+	defer elfFile.Close()
+
+	sectionData, err := getSectionData(elfFile, ".note.Linux")
+	if err != nil {
+		sectionData, err = getSectionData(elfFile, ".notes")
+		if err != nil {
+			return "", false, nil
+		}
+	}
+
+	// 0x100 is defined as LINUX_ELFNOTE_BUILD_SALT in include/linux/build-salt.h
+	return getNoteHexString(sectionData, "Linux", 0x100)
+}
+
 func symbolMapFromELFSymbols(syms []elf.Symbol) *libpf.SymbolMap {
 	symmap := &libpf.SymbolMap{}
 	for _, sym := range syms {
@@ -429,6 +345,16 @@ func symbolMapFromELFSymbols(syms []elf.Symbol) *libpf.SymbolMap {
 	return symmap
 }
 
+// GetSymbols gets the symbols of elf.File and returns them as libpf.SymbolMap for
+// fast lookup by address and name.
+func GetSymbols(elfFile *elf.File) (*libpf.SymbolMap, error) {
+	syms, err := elfFile.Symbols()
+	if err != nil {
+		return nil, err
+	}
+	return symbolMapFromELFSymbols(syms), nil
+}
+
 // GetDynamicSymbols gets the dynamic symbols of elf.File and returns them as libpf.SymbolMap for
 // fast lookup by address and name.
 func GetDynamicSymbols(elfFile *elf.File) (*libpf.SymbolMap, error) {
@@ -439,27 +365,41 @@ func GetDynamicSymbols(elfFile *elf.File) (*libpf.SymbolMap, error) {
 	return symbolMapFromELFSymbols(syms), nil
 }
 
-// CalculateKernelFileID returns the FileID of a kernel image or module, which consists of a hash of
-// its GNU BuildID in hex string form.
-// The hashing step is to ensure that the FileID remains an opaque concept to the end user.
-func CalculateKernelFileID(buildID string) (fileID libpf.FileID) {
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(buildID))
-	// Cannot fail, ignore error.
-	fileID, _ = libpf.FileIDFromBytes(h.Sum(nil))
-	return fileID
+// IsKernelModule returns true if the provided ELF file looks like a kernel module (an ELF with a
+// .modinfo and .gnu.linkonce.this_module sections).
+func IsKernelModule(file *elf.File) (bool, error) {
+	sectionFound, err := HasSection(file, ".modinfo")
+	if err != nil {
+		return false, err
+	}
+
+	if !sectionFound {
+		return false, nil
+	}
+
+	return HasSection(file, ".gnu.linkonce.this_module")
 }
 
-// KernelFileIDToggleDebug returns the FileID of a kernel debug file (image or module) based on the
-// FileID of its non-debug counterpart. This function is its own inverse, so it can be used for the
-// opposite operation.
-// This provides 2 properties:
-//   - FileIDs must be different between kernel files and their debug files.
-//   - A kernel FileID (debug and non-debug) must only depend on its GNU BuildID (see KernelFileID),
-//     and can always be computed in the Host Agent or during indexing without external information.
-func KernelFileIDToggleDebug(kernelFileID libpf.FileID) (fileID libpf.FileID) {
-	// Reverse high and low.
-	return libpf.NewFileID(kernelFileID.Lo(), kernelFileID.Hi())
+// IsKernelImage returns true if the provided ELF file looks like a kernel image (an ELF with a
+// __modver section).
+func IsKernelImage(file *elf.File) (bool, error) {
+	return HasSection(file, "__modver")
+}
+
+// IsKernelFile returns true if the provided ELF file looks like a kernel file (either a kernel
+// image or a kernel module).
+func IsKernelFile(file *elf.File) (bool, error) {
+	isModule, err := IsKernelImage(file)
+	if err != nil {
+		return false, err
+	}
+
+	isImage, err := IsKernelModule(file)
+	if err != nil {
+		return false, err
+	}
+
+	return isModule || isImage, nil
 }
 
 // IsGoBinary returns true if the provided file is a Go binary (= an ELF file with

@@ -5,8 +5,8 @@ WORKDIR /agent
 ARG arch=amd64
 
 RUN apt-get update -y && apt-get dist-upgrade -y && apt-get install -y \
-    curl wget cmake dwz lsb-release software-properties-common gnupg git clang llvm \
-    golang unzip jq
+    curl wget cmake dwz lsb-release software-properties-common gnupg git clang-16 llvm \
+    golang unzip jq && apt-get clean autoclean && apt-get autoremove --yes
 
 RUN git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git && \
     cd zydis && mkdir build && cd build && \
@@ -14,7 +14,7 @@ RUN git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific
     cd zycore && make install && \
     cd ../../.. && rm -rf zydis
 
-RUN wget -qO- https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.54.2
+RUN wget -qO- https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.56.2
 
 
 # gRPC dependencies

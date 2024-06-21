@@ -422,7 +422,4 @@ enum {
 // defined in include/uapi/linux/perf_event.h
 #define PERF_MAX_STACK_DEPTH 127
 
-// taken from the kernel sources
-#define THREAD_SIZE 16384
-
 #endif // OPTI_KERNEL_H

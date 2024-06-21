@@ -1,3 +1,6 @@
+//go:build !integration
+// +build !integration
+
 /*
  * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
  * or more contributor license agreements. Licensed under the Apache License 2.0.
@@ -9,7 +12,8 @@ package lpm
 import (
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetRightmostSetBit(t *testing.T) {
@@ -28,10 +32,7 @@ func TestGetRightmostSetBit(t *testing.T) {
 		test := test
 		t.Run(name, func(t *testing.T) {
 			output := getRightmostSetBit(test.input)
-			if output != test.expected {
-				t.Fatalf("Expected %d (0b%b) but got %d (0b%b)",
-					test.expected, test.expected, output, output)
-			}
+			assert.Equal(t, test.expected, output)
 		})
 	}
 }
@@ -63,19 +64,12 @@ func TestCalculatePrefixList(t *testing.T) {
 		test := test
 		t.Run(name, func(t *testing.T) {
 			prefixes, err := CalculatePrefixList(test.start, test.end)
-			if err != nil {
-				if test.err {
-					// We received and expected an error. So we can return here.
-					return
-				}
-				t.Fatalf("Unexpected error: %v", err)
-			}
 			if test.err {
-				t.Fatalf("Expected an error but got none")
+				require.Error(t, err)
+				return
 			}
-			if diff := cmp.Diff(test.expect, prefixes); diff != "" {
-				t.Fatalf("CalculatePrefixList() mismatching prefixes (-want +got):\n%s", diff)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, test.expect, prefixes)
 		})
 	}
 }

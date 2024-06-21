@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/libpf"
@@ -45,9 +46,7 @@ func TestAddMetadata(t *testing.T) {
 		CacheDirectory: ".",
 		SecretToken:    "secret",
 		ValidatedTags:  validatedTags})
-	if err != nil {
-		t.Fatalf("failed to set temporary config: %s", err)
-	}
+	require.NoError(t, err)
 
 	// This tests checks that common metadata keys are populated
 	metadataMap := make(map[string]string)
@@ -56,64 +55,36 @@ func TestAddMetadata(t *testing.T) {
 	// the returned map, which ensures test coverage.
 	_ = AddMetadata("localhost:12345", metadataMap)
 	expectedHostname, err := os.Hostname()
-	if err != nil {
-		t.Fatal(err)
-	}
-	actualHostname, found := metadataMap[KeyHostname]
-	if !found {
-		t.Fatalf("no hostname found")
-	}
-	if actualHostname != expectedHostname {
-		t.Fatalf("wrong hostname, expected %v, got %v", expectedHostname, actualHostname)
-	}
+	require.NoError(t, err)
 
-	tags, found := metadataMap[keyTags]
-	if !found {
-		t.Fatalf("no tags found")
+	if actualHostname, found := metadataMap[KeyHostname]; assert.True(t, found) {
+		assert.Equal(t, expectedHostname, actualHostname)
 	}
-
-	if tags != validatedTags {
-		t.Fatalf("added tags '%s' != validated tags '%s'", tags, validatedTags)
+	if tags, found := metadataMap[keyTags]; assert.True(t, found) {
+		assert.Equal(t, validatedTags, tags)
 	}
-
-	ip, found := metadataMap[KeyIPAddress]
-	if !found {
-		t.Fatalf("no IP address")
+	if ip, found := metadataMap[KeyIPAddress]; assert.True(t, found) {
+		parsedIP := net.ParseIP(ip)
+		assert.NotNil(t, parsedIP)
 	}
-
-	parsedIP := net.ParseIP(ip)
-	if parsedIP == nil {
-		t.Fatalf("got a nil IP address")
+	if procVersion, found := metadataMap[KeyKernelProcVersion]; assert.True(t, found) {
+		expectedProcVersion, err := os.ReadFile("/proc/version")
+		if assert.NoError(t, err) {
+			assert.Equal(t, sanitizeString(expectedProcVersion), procVersion)
+		}
 	}
-
-	procVersion, found := metadataMap[KeyKernelProcVersion]
-	if !found {
-		t.Fatalf("no kernel_proc_version")
-	}
-
-	expectedProcVersion, err := os.ReadFile("/proc/version")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if procVersion != sanitizeString(expectedProcVersion) {
-		t.Fatalf("wrong kernel_proc_version, expected %v, got %v", procVersion, expectedProcVersion)
-	}
-
-	_, found = metadataMap[KeyKernelVersion]
-	if !found {
-		t.Fatalf("no kernel version")
-	}
+	_, found := metadataMap[KeyKernelVersion]
+	assert.True(t, found)
 
 	// The below test for bpf_jit_enable may not be reproducible in all environments, as we may not
 	// be able to read the value depending on the capabilities/privileges/network namespace of the
 	// test process.
 	jitEnabled, found := metadataMap["host:sysctl/net.core.bpf_jit_enable"]
-
 	if found {
 		switch jitEnabled {
 		case "0", "1", "2":
 		default:
-			t.Fatalf("unexpected value for sysctl: %v", jitEnabled)
+			assert.Fail(t, "unexpected value for sysctl: %v", jitEnabled)
 		}
 	}
 
@@ -125,7 +96,7 @@ func TestAddMetadata(t *testing.T) {
 	cacheSockets, ok := metadataMap[keySocketID(cacheKey)]
 	assert.True(t, ok)
 	assert.NotEmpty(t, cacheSockets)
-	assert.True(t, cacheSockets[0] == '0',
+	assert.Equal(t, "0", cacheSockets[0:1],
 		"expected '0' at start of '%v'", cacheSockets)
 	sids := strings.Split(cacheSockets, ",")
 	socketIDs := libpf.MapSlice(sids, func(a string) int {

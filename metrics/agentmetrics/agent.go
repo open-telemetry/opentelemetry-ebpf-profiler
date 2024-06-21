@@ -12,10 +12,9 @@ import (
 	"runtime"
 	"time"
 
-	"golang.org/x/sys/unix"
-
-	"github.com/elastic/otel-profiling-agent/libpf/periodiccaller"
 	"github.com/elastic/otel-profiling-agent/metrics"
+	"github.com/elastic/otel-profiling-agent/periodiccaller"
+	"golang.org/x/sys/unix"
 
 	log "github.com/sirupsen/logrus"
 )

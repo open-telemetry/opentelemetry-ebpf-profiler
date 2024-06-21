@@ -7,13 +7,13 @@
 package agent
 
 import (
-	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/elastic/otel-profiling-agent/config"
-	"github.com/elastic/otel-profiling-agent/libpf/vc"
 )
 
+// TODO: Change to semconv / ECS
 // Agent metadata keys
 const (
 	// Build metadata
@@ -34,7 +34,6 @@ const (
 	keyAgentConfigTags                   = "agent:config_tags"
 	keyAgentConfigDisableTLS             = "agent:config_disable_tls"
 	keyAgentConfigNoKernelVersionCheck   = "agent:config_no_kernel_version_check"
-	keyAgentConfigUploadSymbols          = "agent:config_upload_symbols"
 	keyAgentConfigTracers                = "agent:config_tracers"
 	keyAgentConfigKnownTracesEntries     = "agent:config_known_traces_entries"
 	keyAgentConfigMapScaleFactor         = "agent:config_map_scale_factor"
@@ -48,34 +47,34 @@ const (
 
 // AddMetadata adds agent metadata to the result map.
 func AddMetadata(result map[string]string) {
-	result[keyAgentVersion] = vc.Version()
-	result[keyAgentRevision] = vc.Revision()
+	result[keyAgentVersion] = config.Version()
+	result[keyAgentRevision] = config.Revision()
+	result[keyAgentBuildTimestamp] = config.BuildTimestamp()
 
-	result[keyAgentBuildTimestamp] = vc.BuildTimestamp()
-	result[keyAgentStartTimeMilli] = fmt.Sprintf("%d", config.StartTime().UnixMilli())
+	result[keyAgentStartTimeMilli] = strconv.FormatInt(config.StartTime().UnixMilli(), 10)
 
 	bpfLogLevel, bpfLogSize := config.BpfVerifierLogSetting()
-	result[keyAgentConfigBpfLoglevel] = fmt.Sprintf("%d", bpfLogLevel)
-	result[keyAgentConfigBpfLogSize] = fmt.Sprintf("%d", bpfLogSize)
+	result[keyAgentConfigBpfLoglevel] = strconv.FormatUint(uint64(bpfLogLevel), 10)
+	result[keyAgentConfigBpfLogSize] = strconv.Itoa(bpfLogSize)
 
 	result[keyAgentConfigCacheDirectory] = config.CacheDirectory()
 	result[keyAgentConfigCollectionAgentAddr] = config.CollectionAgentAddr()
 	result[keyAgentConfigurationFile] = config.ConfigurationFile()
-	result[keyAgentConfigDisableTLS] = fmt.Sprintf("%v", config.DisableTLS())
-	result[keyAgentConfigNoKernelVersionCheck] = fmt.Sprintf("%v", config.NoKernelVersionCheck())
-	result[keyAgentConfigUploadSymbols] = fmt.Sprintf("%v", config.UploadSymbols())
+	result[keyAgentConfigDisableTLS] = strconv.FormatBool(config.DisableTLS())
+	result[keyAgentConfigNoKernelVersionCheck] = strconv.FormatBool(config.NoKernelVersionCheck())
 	result[keyAgentConfigTags] = config.Tags()
 	result[keyAgentConfigTracers] = config.Tracers()
-	result[keyAgentConfigKnownTracesEntries] = fmt.Sprintf("%d", config.TraceCacheEntries())
-	result[keyAgentConfigMapScaleFactor] = fmt.Sprintf("%d", config.MapScaleFactor())
+	result[keyAgentConfigKnownTracesEntries] =
+		strconv.FormatUint(uint64(config.TraceCacheEntries()), 10)
+	result[keyAgentConfigMapScaleFactor] = strconv.FormatUint(uint64(config.MapScaleFactor()), 10)
 	result[keyAgentConfigMaxElementsPerInterval] =
-		fmt.Sprintf("%d", config.MaxElementsPerInterval())
-	result[keyAgentConfigVerbose] = fmt.Sprintf("%v", config.Verbose())
+		strconv.FormatUint(uint64(config.MaxElementsPerInterval()), 10)
+	result[keyAgentConfigVerbose] = strconv.FormatBool(config.Verbose())
 	result[keyAgentConfigProbabilisticInterval] =
 		config.GetTimes().ProbabilisticInterval().String()
 	result[keyAgentConfigProbabilisticThreshold] =
-		fmt.Sprintf("%d", config.ProbabilisticThreshold())
+		strconv.FormatUint(uint64(config.ProbabilisticThreshold()), 10)
 	result[keyAgentConfigPresentCPUCores] =
-		fmt.Sprintf("%d", config.PresentCPUCores())
+		strconv.FormatUint(uint64(config.PresentCPUCores()), 10)
 	result[keyAgentEnvHTTPSProxy] = os.Getenv("HTTPS_PROXY")
 }

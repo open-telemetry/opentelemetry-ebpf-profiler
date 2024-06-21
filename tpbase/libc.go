@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"regexp"
 
-	ah "github.com/elastic/otel-profiling-agent/libpf/armhelpers"
+	ah "github.com/elastic/otel-profiling-agent/armhelpers"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/libpf/stringutil"
+	"github.com/elastic/otel-profiling-agent/stringutil"
 
 	aa "golang.org/x/arch/arm64/arm64asm"
 )

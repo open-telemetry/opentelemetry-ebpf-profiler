@@ -11,6 +11,8 @@
 #define UNWIND_OPCODE_BASE_FP   0x03
 // Expression with base value being the Link Register (ARM64)
 #define UNWIND_OPCODE_BASE_LR	0x04
+// Expression with base value being a Generic Register
+#define UNWIND_OPCODE_BASE_REG	0x05
 // An opcode flag to indicate that the value should be dereferenced
 #define UNWIND_OPCODEF_DEREF    0x80
 
@@ -32,5 +34,9 @@
 // The argument after dereference is multiplied by this to allow some range.
 // This assumes register size offsets are used.
 #define UNWIND_DEREF_MULTIPLIER 8
+
+// For the UNWIND_OPCODE_BASE_REG, the bitmask reserved for the register
+// number. Remaining bits are the offset.
+#define UNWIND_REG_MASK         15
 
 #endif

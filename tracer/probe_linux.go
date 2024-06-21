@@ -11,17 +11,18 @@ package tracer
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/elastic/otel-profiling-agent/rlimit"
+	"github.com/elastic/otel-profiling-agent/util"
 
 	"golang.org/x/sys/unix"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/rlimit"
-
 	log "github.com/sirupsen/logrus"
 )
 
@@ -29,7 +30,7 @@ import (
 func ProbeBPFSyscall() error {
 	_, _, errNo := unix.Syscall(unix.SYS_BPF, uintptr(unix.BPF_PROG_TYPE_UNSPEC), uintptr(0), 0)
 	if errNo == unix.ENOSYS {
-		return fmt.Errorf("eBPF syscall is not available on your system")
+		return errors.New("eBPF syscall is not available on your system")
 	}
 	return nil
 }
@@ -40,7 +41,7 @@ func getTracepointID(tracepoint string) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to read tracepoint ID for %s: %v", tracepoint, err)
 	}
-	tid := libpf.DecToUint64(strings.TrimSpace(string(id)))
+	tid := util.DecToUint64(strings.TrimSpace(string(id)))
 	return tid, nil
 }
 
@@ -71,7 +72,7 @@ func ProbeTracepoint() error {
 	if err != nil {
 		return err
 	}
-	kernelVersion := libpf.VersionUint(major, minor, patch)
+	kernelVersion := util.VersionUint(major, minor, patch)
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to increase rlimit: %v", err)

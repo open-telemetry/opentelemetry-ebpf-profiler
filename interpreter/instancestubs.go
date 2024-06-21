@@ -9,10 +9,11 @@ package interpreter
 import (
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/process"
 	"github.com/elastic/otel-profiling-agent/metrics"
+	"github.com/elastic/otel-profiling-agent/process"
 	"github.com/elastic/otel-profiling-agent/reporter"
 	"github.com/elastic/otel-profiling-agent/tpbase"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 // InstanceStubs provides empty implementations of Instance hooks that are
@@ -25,7 +26,7 @@ func (is *InstanceStubs) SynchronizeMappings(EbpfHandler, reporter.SymbolReporte
 	return nil
 }
 
-func (is *InstanceStubs) UpdateTSDInfo(EbpfHandler, libpf.PID, tpbase.TSDInfo) error {
+func (is *InstanceStubs) UpdateTSDInfo(EbpfHandler, util.PID, tpbase.TSDInfo) error {
 	return nil
 }
 

@@ -68,9 +68,9 @@ func retrieveExecuteExJumpLabelAddressWrapper(code []byte, addrBase libpf.Symbol
 		fmt.Errorf("failed to decode execute_ex: %s", phpDecodeErrorToString(err))
 }
 
-// RetrieveJITBufferPtrWrapper. This function reads the code blob and returns a pointer
+// retrieveJITBufferPtrWrapper. This function reads the code blob and returns a pointer
 // to the JIT buffer used by PHP (called "dasm_buf" in the PHP source).
-func RetrieveJITBufferPtrWrapper(code []byte, addrBase libpf.SymbolValue) (
+func retrieveJITBufferPtrWrapper(code []byte, addrBase libpf.SymbolValue) (
 	dasmBuf libpf.SymbolValue, dasmSize libpf.SymbolValue, err error) {
 	var bufferAddress, sizeAddress uint
 	err2 := int(C.retrieveJITBufferPtr((*C.uint8_t)(unsafe.Pointer(&code[0])),

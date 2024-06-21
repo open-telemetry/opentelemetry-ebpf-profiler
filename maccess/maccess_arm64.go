@@ -11,7 +11,7 @@ package maccess
 import (
 	"fmt"
 
-	ah "github.com/elastic/otel-profiling-agent/libpf/armhelpers"
+	ah "github.com/elastic/otel-profiling-agent/armhelpers"
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
 
@@ -51,7 +51,7 @@ func CopyFromUserNoFaultIsPatched(codeblob []byte, _ uint64, _ uint64) (bool, er
 	// [2] https://github.com/torvalds/linux/blob/1c41041124bd14dd6610da256a3da4e5b74ce6b1/include/asm-generic/access_ok.h#L40
 
 	// In the set of expected assembly instructions, one argument register is used by all instructions.
-	var trackedReg int = -1
+	var trackedReg = -1
 	// Statemachine to keep track of the previously encountered and expected instructions.
 	var expectedInstructionTracker = stepNone
 

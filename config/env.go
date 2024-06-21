@@ -7,8 +7,10 @@
 package config
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -20,16 +22,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/elastic/otel-profiling-agent/pfnamespaces"
+	"github.com/elastic/otel-profiling-agent/util"
+
 	"github.com/jsimonetti/rtnetlink"
 	"golang.org/x/sys/unix"
 
 	gcp "cloud.google.com/go/compute/metadata"
-	awsec2 "github.com/aws/aws-sdk-go/aws/ec2metadata"
-	awssession "github.com/aws/aws-sdk-go/aws/session"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	ec2imds "github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/pfnamespaces"
 )
 
 // EnvironmentType indicates the environment, the agent is running on.
@@ -134,11 +138,12 @@ func checkCGroups() (EnvironmentType, error) {
 		return envUnspec, fmt.Errorf("failed to read /proc/1/cgroup: %s", err)
 	}
 
-	if strings.Contains(data, "docker") {
+	switch {
+	case strings.Contains(data, "docker"):
 		return envDocker, nil
-	} else if strings.Contains(data, "lxc") {
+	case strings.Contains(data, "lxc"):
 		return envLXC, nil
-	} else if strings.Contains(data, "kvm") {
+	case strings.Contains(data, "kvm"):
 		return envKVM, nil
 	}
 
@@ -167,7 +172,7 @@ func getInterfaceIndexFromIP(conn *rtnetlink.Conn, ip net.IP) (index int, err er
 		return -1, fmt.Errorf("failed to get route: %s", err)
 	}
 	if len(msgs) == 0 {
-		return -1, fmt.Errorf("empty routing table")
+		return -1, errors.New("empty routing table")
 	}
 
 	return int(msgs[0].Attributes.OutIface), nil
@@ -187,13 +192,13 @@ func getMACFromRouting(destination string) (mac uint64, err error) {
 		return 0, fmt.Errorf("failed to look up IP: %s", err)
 	}
 	if len(addrs) == 0 {
-		return 0, fmt.Errorf("failed to look up IP: no address")
+		return 0, errors.New("failed to look up IP: no address")
 	}
 
 	// Dial a connection to the rtnetlink socket
 	conn, err := rtnetlink.Dial(nil)
 	if err != nil {
-		return 0, fmt.Errorf("failed to connect to netlink layer")
+		return 0, errors.New("failed to connect to netlink layer")
 	}
 	defer conn.Close()
 
@@ -224,7 +229,7 @@ func getMACFromRouting(destination string) (mac uint64, err error) {
 		return hwAddrToUint64(hwAddr), nil
 	}
 
-	return 0, fmt.Errorf("failed to retrieve MAC from routing interface")
+	return 0, errors.New("failed to retrieve MAC from routing interface")
 }
 
 // getMACFromSystem returns a MAC address by iterating over all system
@@ -270,7 +275,7 @@ func getMACFromSystem() (mac uint64, err error) {
 		return macs[0], nil
 	}
 
-	return 0, fmt.Errorf("failed to find a MAC")
+	return 0, errors.New("failed to find a MAC")
 }
 
 // getNonCloudEnvironmentAndMachineID tries to detect if the agent is running in a
@@ -330,7 +335,7 @@ func getNonCloudEnvironmentAndMachineID() (uint64, EnvironmentType, error) {
 
 // idFromString generates a number, that will be part of the hostID, from a given string.
 func idFromString(s string) uint64 {
-	return libpf.HashString(s)
+	return util.HashString(s)
 }
 
 // gcpInfo collects information about the GCP environment
@@ -345,11 +350,17 @@ func gcpInfo() (uint64, EnvironmentType, error) {
 
 // awsInfo collects information about the AWS environment
 func awsInfo() (uint64, EnvironmentType, error) {
-	svc := awsec2.New(awssession.Must(awssession.NewSession()))
-	document, err := svc.GetInstanceIdentityDocument()
+	cfg, err := awsconfig.LoadDefaultConfig(context.Background())
 	if err != nil {
-		return 0, envAWS, fmt.Errorf("failed to get aws metadata: %w", err)
+		return 0, envAWS, fmt.Errorf("failed to prepare aws configuration: %v", err)
 	}
+
+	client := ec2imds.NewFromConfig(cfg)
+	document, err := client.GetInstanceIdentityDocument(context.Background(), nil)
+	if err != nil {
+		return 0, envAWS, fmt.Errorf("failed to fetch instance document: %v", err)
+	}
+
 	return idFromString(document.InstanceID), envAWS, nil
 }
 

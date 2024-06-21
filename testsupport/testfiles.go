@@ -8,6 +8,7 @@ package testsupport
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 )
@@ -15,11 +16,11 @@ import (
 func writeExecutable(exeContents string) (string, error) {
 	buffer, err := base64.StdEncoding.DecodeString(exeContents)
 	if err != nil {
-		return "", fmt.Errorf("failed to base64-decode the embedded executable?")
+		return "", errors.New("failed to base64-decode the embedded executable?")
 	}
 	exeFile, err := os.CreateTemp("", "proc_test_tmp_exe_*")
 	if err != nil {
-		return "", fmt.Errorf("failed to open tempfile")
+		return "", errors.New("failed to open tempfile")
 	}
 
 	b, err := exeFile.Write(buffer)

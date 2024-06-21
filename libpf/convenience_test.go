@@ -8,15 +8,11 @@ package libpf
 
 import (
 	"testing"
-)
 
-func TestMin(t *testing.T) {
-	a := 3
-	b := 2
-	if c := min(a, b); c != b {
-		t.Fatalf("Failed to return expected minimum.")
-	}
-}
+	"github.com/elastic/otel-profiling-agent/util"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestHexTo(t *testing.T) {
 	tests := map[string]struct {
@@ -31,9 +27,7 @@ func TestHexTo(t *testing.T) {
 		name := name
 		testcase := testcase
 		t.Run(name, func(t *testing.T) {
-			if result := HexToUint64(name); result != testcase.result {
-				t.Fatalf("Unexpected return. Expected %d, got %d", testcase.result, result)
-			}
+			assert.Equal(t, testcase.result, util.HexToUint64(name))
 		})
 	}
 }
@@ -51,9 +45,7 @@ func TestDecTo(t *testing.T) {
 		name := name
 		testcase := testcase
 		t.Run(name, func(t *testing.T) {
-			if result := DecToUint64(name); result != testcase.result {
-				t.Fatalf("Unexpected return. Expected %d, got %d", testcase.result, result)
-			}
+			assert.Equal(t, testcase.result, util.DecToUint64(name))
 		})
 	}
 }
@@ -83,9 +75,7 @@ func TestIsValidString(t *testing.T) {
 		name := name
 		testcase := testcase
 		t.Run(name, func(t *testing.T) {
-			if testcase.expected != IsValidString(string(testcase.input)) {
-				t.Fatalf("Expected return %v for '%v'", testcase.expected, testcase.input)
-			}
+			assert.Equal(t, testcase.expected, util.IsValidString(string(testcase.input)))
 		})
 	}
 }

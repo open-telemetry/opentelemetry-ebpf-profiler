@@ -7,32 +7,33 @@
 package basehash
 
 import (
-	"errors"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFromBytes(t *testing.T) {
 	_, err := New128FromBytes(nil)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	b := []byte{}
 	_, err = New128FromBytes(b)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	b = []byte{1}
 	_, err = New128FromBytes(b)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	b = []byte{0, 1, 2, 3, 4, 5, 6, 7}
 	_, err = New128FromBytes(b)
-	assert.Error(t, err)
+	require.Error(t, err)
 
 	b = []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
 	hash, err := New128FromBytes(b)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, New128(0x01020304050607, 0x08090A0B0C0D0E0F), hash)
 }
 
@@ -75,28 +76,41 @@ func TestIsZero(t *testing.T) {
 }
 
 func TestBytes(t *testing.T) {
-	hash := New128(0, 0)
-	assert.Equal(t, hash.Bytes(), []byte{
-		0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0})
+	testCases := []struct {
+		name     string
+		hash     Hash128
+		expected []byte
+	}{
+		{
+			name:     "Zero hash",
+			hash:     New128(0, 0),
+			expected: make([]byte, 16),
+		},
+		{
+			name:     "Non-zero hash",
+			hash:     New128(0xDEC0DE, 0xC0FFEE),
+			expected: []byte{0, 0, 0, 0, 0, 0xDE, 0xC0, 0xDE, 0, 0, 0, 0, 0, 0xC0, 0xFF, 0xEE},
+		},
+		{
+			name:     "Non-zero low bits",
+			hash:     New128(0, 0xC0FFEE),
+			expected: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xC0, 0xFF, 0xEE},
+		},
+		{
+			name: "Max uint64",
+			hash: New128(math.MaxUint64, math.MaxUint64),
+			expected: []byte{
+				0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+				0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+			},
+		},
+	}
 
-	hash = New128(0xDEC0DE, 0xC0FFEE)
-	assert.Equal(t, hash.Bytes(), []byte{
-		0, 0, 0, 0, 0, 0xDE, 0xC0, 0xDE,
-		0, 0, 0, 0, 0, 0xC0, 0xFF, 0xEE})
-
-	hash = New128(0, 0xC0FFEE)
-	assert.Equal(t, hash.Bytes(), []byte{
-		0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0xC0, 0xFF, 0xEE})
-
-	maxUint64 := ^uint64(0)
-	hash = New128(maxUint64, maxUint64)
-	assert.Equal(t, hash.Bytes(), []byte{
-		0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF})
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, tc.hash.Bytes())
+		})
+	}
 }
 
 func TestPutBytes16(t *testing.T) {
@@ -104,11 +118,14 @@ func TestPutBytes16(t *testing.T) {
 	hash := New128(0x0011223344556677, 0x8899AABBCCDDEEFF)
 	hash.PutBytes16(&b)
 
-	assert.Equal(t, hash.Bytes(), []byte{
+	expected := []byte{
 		0x00, 0x11, 0x22, 0x33,
 		0x44, 0x55, 0x66, 0x77,
 		0x88, 0x99, 0xAA, 0xBB,
-		0xCC, 0xDD, 0xEE, 0xFF})
+		0xCC, 0xDD, 0xEE, 0xFF,
+	}
+
+	assert.Equal(t, expected, hash.Bytes())
 }
 
 func TestHash128Format(t *testing.T) {
@@ -136,9 +153,7 @@ func TestHash128Format(t *testing.T) {
 		test := test
 		t.Run(name, func(t *testing.T) {
 			output := fmt.Sprintf(test.formater, h)
-			if output != test.expected {
-				t.Fatalf("Expected '%s' but got '%s'", test.expected, output)
-			}
+			assert.Equal(t, test.expected, output)
 		})
 	}
 }
@@ -167,13 +182,8 @@ func TestNew128FromString(t *testing.T) {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
 			got, err := New128FromString(tc.stringRepresentation)
-			if !errors.Is(err, tc.err) {
-				t.Fatalf("Expected '%v' but got '%v'", tc.err, err)
-			}
-			if !got.Equal(tc.expected) {
-				t.Fatalf("Expected %v from '%s' but got %v", tc.expected,
-					tc.stringRepresentation, got)
-			}
+			require.ErrorIs(t, err, tc.err)
+			assert.Equal(t, tc.expected, got)
 		})
 	}
 }

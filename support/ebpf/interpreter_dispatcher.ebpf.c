@@ -5,6 +5,7 @@
 #include "bpfdefs.h"
 #include "types.h"
 #include "tracemgmt.h"
+#include "tsd.h"
 
 // Begin shared maps
 
@@ -49,12 +50,11 @@ bpf_map_def SEC("maps") report_events = {
 // reported_pids is a map that holds PIDs recently reported to user space.
 //
 // We use this map to avoid sending multiple notifications for the same PID to user space.
-// As key, we use the PID and as value the timestamp of the moment we write into
-// this map. When sizing this map, we are thinking about the maximum number of unique PIDs
-// that could be stored, without immediately being removed, that we would like to support.
-// PIDs are either left to expire from the LRU or manually overwritten through a timeout
-// check via REPORTED_PIDS_TIMEOUT. Note that timeout checks are done lazily on map access,
-// in report_pid, so this map may at any time contain multiple expired PIDs.
+// As key, we use the PID and value is a rate limit token (see pid_event_ratelimit()).
+// When sizing this map, we are thinking about the maximum number of unique PIDs that could
+// be stored, without immediately being removed, that we would like to support. PIDs are
+// either left to expire from the LRU or updated based on the rate limit token. Note that
+// timeout checks are done lazily on access, so this map may contain multiple expired PIDs.
 bpf_map_def SEC("maps") reported_pids = {
   .type = BPF_MAP_TYPE_LRU_HASH,
   .key_size = sizeof(u32),
@@ -118,6 +118,60 @@ bpf_map_def SEC("maps") trace_events = {
 
 // End shared maps
 
+bpf_map_def SEC("maps") apm_int_procs = {
+  .type = BPF_MAP_TYPE_HASH,
+  .key_size = sizeof(pid_t),
+  .value_size = sizeof(ApmIntProcInfo),
+  .max_entries = 128,
+};
+
+static inline __attribute__((__always_inline__))
+void maybe_add_apm_info(Trace *trace) {
+  u32 pid = trace->pid; // verifier needs this to be on stack on 4.15 kernel
+  ApmIntProcInfo *proc = bpf_map_lookup_elem(&apm_int_procs, &pid);
+  if (!proc) {
+    return;
+  }
+
+  DEBUG_PRINT("Trace is within a process with APM integration enabled");
+
+  u64 tsd_base;
+  if (tsd_get_base((void **)&tsd_base) != 0) {
+    increment_metric(metricID_UnwindApmIntErrReadTsdBase);
+    DEBUG_PRINT("Failed to get TSD base for APM integration");
+    return;
+  }
+
+  DEBUG_PRINT("APM corr ptr should be at 0x%llx", tsd_base + proc->tls_offset);
+
+  void *apm_corr_buf_ptr;
+  if (bpf_probe_read_user(&apm_corr_buf_ptr, sizeof(apm_corr_buf_ptr),
+                          (void *)(tsd_base + proc->tls_offset))) {
+    increment_metric(metricID_UnwindApmIntErrReadCorrBufPtr);
+    DEBUG_PRINT("Failed to read APM correlation buffer pointer");
+    return;
+  }
+
+  ApmCorrelationBuf corr_buf;
+  if (bpf_probe_read_user(&corr_buf, sizeof(corr_buf), apm_corr_buf_ptr)) {
+    increment_metric(metricID_UnwindApmIntErrReadCorrBuf);
+    DEBUG_PRINT("Failed to read APM correlation buffer");
+    return;
+  }
+
+  if (corr_buf.trace_present && corr_buf.valid) {
+    trace->apm_trace_id.as_int.hi = corr_buf.trace_id.as_int.hi;
+    trace->apm_trace_id.as_int.lo = corr_buf.trace_id.as_int.lo;
+    trace->apm_transaction_id.as_int = corr_buf.transaction_id.as_int;
+  }
+
+  increment_metric(metricID_UnwindApmIntReadSuccesses);
+
+  // WARN: we print this as little endian
+  DEBUG_PRINT("APM transaction ID: %016llX, flags: 0x%02X",
+              trace->apm_transaction_id.as_int, corr_buf.trace_flags);
+}
+
 SEC("perf_event/unwind_stop")
 int unwind_stop(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
@@ -125,6 +179,8 @@ int unwind_stop(struct pt_regs *ctx) {
     return -1;
   Trace *trace = &record->trace;
   UnwindState *state = &record->state;
+
+  maybe_add_apm_info(trace);
 
   // If the stack is otherwise empty, push an error for that: we should
   // never encounter empty stacks for successful unwinding.
@@ -146,7 +202,7 @@ int unwind_stop(struct pt_regs *ctx) {
     // No Error
     break;
   case metricID_UnwindNativeErrWrongTextSection:;
-    if (report_pid(ctx, trace->pid, true)) {
+    if (report_pid(ctx, trace->pid, record->ratelimitAction)) {
       increment_metric(metricID_NumUnknownPC);
     }
     // Fallthrough to report the error

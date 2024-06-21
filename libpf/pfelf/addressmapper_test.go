@@ -12,6 +12,7 @@ import (
 
 	"github.com/elastic/otel-profiling-agent/testsupport"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func assertFileToVA(t *testing.T, mapper AddressMapper, fileAddress, virtualAddress uint64) {
@@ -22,11 +23,11 @@ func assertFileToVA(t *testing.T, mapper AddressMapper, fileAddress, virtualAddr
 
 func TestAddressMapper(t *testing.T) {
 	debugExePath, err := testsupport.WriteTestExecutable2()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer os.Remove(debugExePath)
 
 	ef, err := Open(debugExePath)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	mapper := ef.GetAddressMapper()
 	assertFileToVA(t, mapper, 0x1000, 0x401000)

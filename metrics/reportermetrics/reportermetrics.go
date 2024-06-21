@@ -11,9 +11,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/elastic/otel-profiling-agent/periodiccaller"
 	"github.com/elastic/otel-profiling-agent/reporter"
 
-	"github.com/elastic/otel-profiling-agent/libpf/periodiccaller"
 	"github.com/elastic/otel-profiling-agent/metrics"
 )
 

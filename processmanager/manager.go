@@ -14,20 +14,24 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
+	"github.com/elastic/otel-profiling-agent/config"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/interpreter"
+	"github.com/elastic/otel-profiling-agent/interpreter/apmint"
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/nativeunwind"
-	sdtypes "github.com/elastic/otel-profiling-agent/libpf/nativeunwind/stackdeltatypes"
-	"github.com/elastic/otel-profiling-agent/libpf/periodiccaller"
-	"github.com/elastic/otel-profiling-agent/libpf/traceutil"
 	"github.com/elastic/otel-profiling-agent/lpm"
 	"github.com/elastic/otel-profiling-agent/metrics"
+	"github.com/elastic/otel-profiling-agent/nativeunwind"
+	sdtypes "github.com/elastic/otel-profiling-agent/nativeunwind/stackdeltatypes"
+	"github.com/elastic/otel-profiling-agent/periodiccaller"
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
 	eim "github.com/elastic/otel-profiling-agent/processmanager/execinfomanager"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/elastic/otel-profiling-agent/tracehandler"
+	"github.com/elastic/otel-profiling-agent/traceutil"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 const (
@@ -58,10 +62,11 @@ var (
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
-// Four external interfaces are used to access the processes and related resources: ebpf,
-// fileIDMapper, opener and reportFrameMetadata. Specify 'nil' for these interfaces to use
-// the default implementation.
-func New(ctx context.Context, includeTracers []bool, monitorInterval time.Duration,
+//
+// Three external interfaces are used to access the processes and related resources: ebpf,
+// fileIDMapper and symbolReporter. Specify nil for fileIDMapper to use the default
+// implementation.
+func New(ctx context.Context, includeTracers config.IncludedTracers, monitorInterval time.Duration,
 	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, symbolReporter reporter.SymbolReporter,
 	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool) (*ProcessManager, error) {
 	if fileIDMapper == nil {
@@ -72,23 +77,26 @@ func New(ctx context.Context, includeTracers []bool, monitorInterval time.Durati
 		}
 	}
 
-	elfInfoCache, err := lru.New[libpf.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,
-		libpf.OnDiskFileIdentifier.Hash32)
+	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,
+		util.OnDiskFileIdentifier.Hash32)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create elfInfoCache: %v", err)
 	}
 	elfInfoCache.SetLifetime(elfInfoCacheTTL)
 
-	em := eim.NewExecutableInfoManager(sdp, ebpf, includeTracers)
+	em, err := eim.NewExecutableInfoManager(sdp, ebpf, includeTracers)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
+	}
 
-	interpreters := make(map[libpf.PID]map[libpf.OnDiskFileIdentifier]interpreter.Instance)
+	interpreters := make(map[util.PID]map[util.OnDiskFileIdentifier]interpreter.Instance)
 
 	pm := &ProcessManager{
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
 		eim:                      em,
 		interpreters:             interpreters,
-		exitEvents:               make(map[libpf.PID]libpf.KTime),
-		pidToProcessInfo:         make(map[libpf.PID]*processInfo),
+		exitEvents:               make(map[util.PID]util.KTime),
+		pidToProcessInfo:         make(map[util.PID]*processInfo),
 		ebpf:                     ebpf,
 		FileIDMapper:             fileIDMapper,
 		elfInfoCache:             elfInfoCache,
@@ -186,7 +194,7 @@ func (pm *ProcessManager) symbolizeFrame(frame int, trace *host.Trace,
 	defer pm.mu.Unlock()
 
 	if len(pm.interpreters[trace.PID]) == 0 {
-		return fmt.Errorf("interpreter process gone")
+		return errors.New("interpreter process gone")
 	}
 
 	for _, instance := range pm.interpreters[trace.PID] {
@@ -263,7 +271,7 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 			// add %rax, %rbx     <- address of frame 1 == return address of frame 0
 
 			relativeRIP := frame.Lineno
-			if i > 0 || frame.Type.IsInterpType(libpf.Kernel) {
+			if frame.ReturnAddress {
 				relativeRIP--
 			}
 			fileID, ok := pm.FileIDMapper.Get(frame.File)
@@ -292,11 +300,32 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 	return newTrace
 }
 
-func (pm *ProcessManager) SymbolizationComplete(traceCaptureKTime libpf.KTime) {
+func (pm *ProcessManager) MaybeNotifyAPMAgent(
+	rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16) string {
+	pidInterp, ok := pm.interpreters[rawTrace.PID]
+	if !ok {
+		return ""
+	}
+
+	var serviceName string
+	for _, mapping := range pidInterp {
+		if apm, ok := mapping.(*apmint.Instance); ok {
+			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, umTraceHash, count)
+
+			// It's pretty unusual for there to be more than one APM agent in a
+			// single process, but in case there is, just pick the last one.
+			serviceName = apm.APMServiceName()
+		}
+	}
+
+	return serviceName
+}
+
+func (pm *ProcessManager) SymbolizationComplete(traceCaptureKTime util.KTime) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	nowKTime := libpf.GetKTime()
+	nowKTime := util.GetKTime()
 
 	for pid, pidExitKTime := range pm.exitEvents {
 		if pidExitKTime > traceCaptureKTime {
@@ -314,6 +343,9 @@ func (pm *ProcessManager) SymbolizationComplete(traceCaptureKTime libpf.KTime) {
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
 }
+
+// Compile time check to make sure we satisfy the interface.
+var _ tracehandler.TraceProcessor = (*ProcessManager)(nil)
 
 // AddSynthIntervalData adds synthetic stack deltas to the manager. This is useful for cases where
 // populating the information via the stack delta provider isn't viable, for example because the

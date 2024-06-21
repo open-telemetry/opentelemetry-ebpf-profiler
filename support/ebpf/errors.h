@@ -16,7 +16,7 @@ typedef enum ErrorCode {
   // The trace stack was empty after unwinding completed
   ERR_EMPTY_STACK = 3,
 
-  // Failed to lookup entry in the per-CPU frame list
+  // Deprecated: Failed to lookup entry in the per-CPU frame list
   ERR_LOOKUP_PER_CPU_FRAME_LIST = 4,
 
   // Maximum number of tail calls was reached
@@ -139,6 +139,9 @@ typedef enum ErrorCode {
   // Native: Code is running in ARM 32-bit compat mode.
   ERR_NATIVE_AARCH64_32BIT_COMPAT_MODE = 4016,
 
+  // Native: Code is running in x86_64 32-bit compat mode.
+  ERR_NATIVE_X64_32BIT_COMPAT_MODE = 4017,
+
   // V8: Encountered a bad frame pointer during V8 unwinding
   ERR_V8_BAD_FP = 5000,
 
@@ -146,7 +149,19 @@ typedef enum ErrorCode {
   ERR_V8_BAD_JS_FUNC = 5001,
 
   // V8: No entry for this process exists in the V8 process info array
-  ERR_V8_NO_PROC_INFO = 5002
+  ERR_V8_NO_PROC_INFO = 5002,
+
+  // Dotnet: No entry for this process exists in the dotnet process info array
+  ERR_DOTNET_NO_PROC_INFO = 6000,
+
+  // Dotnet: Encountered a bad frame pointer during dotnet unwinding
+  ERR_DOTNET_BAD_FP = 6001,
+
+  // Dotnet: Failed to find or read CodeHeader
+  ERR_DOTNET_CODE_HEADER = 6002,
+
+  // Dotnet: Code object was too large to unwind in eBPF
+  ERR_DOTNET_CODE_TOO_LARGE = 6003
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H
