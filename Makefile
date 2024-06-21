@@ -1,7 +1,18 @@
 .PHONY: all all-common binary clean ebpf generate test test-deps protobuf docker-image agent legal \
 	integration-test-binaries
 
-SHELL:=/usr/bin/env bash
+SHELL := /usr/bin/env bash
+
+BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
+COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
+
+VERSION ?= v0.0.0
+BUILD_TIMESTAMP ?= $(shell date +%s)
+REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
+
+VC_LDFLAGS := -X github.com/elastic/otel-profiling-agent/vc.version=$(VERSION) \
+	-X github.com/elastic/otel-profiling-agent/vc.revision=$(REVISION) \
+	-X github.com/elastic/otel-profiling-agent/vc.buildTimestamp=$(BUILD_TIMESTAMP)
 
 all: generate ebpf binary
 
@@ -18,7 +29,7 @@ generate:
 	go generate ./...
 
 binary:
-	go build -buildvcs=false -ldflags="-extldflags=-static" -tags osusergo,netgo
+	go build -buildvcs=false -ldflags="$(VC_LDFLAGS) -extldflags=-static" -tags osusergo,netgo
 
 ebpf:
 	$(MAKE) -j$(shell nproc) -C support/ebpf
@@ -66,7 +77,8 @@ docker-image:
 	docker build -t profiling-agent --build-arg arch=$(NATIVE_ARCH) -f Dockerfile .
 
 agent:
-	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent make
+	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
+		make VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)
 
 legal:
 	@go install go.elastic.co/go-licence-detector@latest

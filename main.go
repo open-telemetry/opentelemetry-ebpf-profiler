@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/elastic/otel-profiling-agent/containermetadata"
+	"github.com/elastic/otel-profiling-agent/vc"
 	"golang.org/x/sys/unix"
 
 	"github.com/elastic/otel-profiling-agent/host"
@@ -58,8 +59,6 @@ https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html
 type exitCode int
 
 const (
-	version string = "0.1.0"
-
 	exitSuccess exitCode = 0
 	exitFailure exitCode = 1
 
@@ -109,7 +108,7 @@ func mainWithExitCode() exitCode {
 	}
 
 	if argVersion {
-		fmt.Printf("%s\n", version)
+		fmt.Printf("%s\n", vc.Version())
 		return exitSuccess
 	}
 
@@ -143,7 +142,8 @@ func mainWithExitCode() exitCode {
 	}
 
 	startTime := time.Now()
-	log.Infof("Starting OTEL profiling agent")
+	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
+		vc.Version(), vc.Revision(), vc.BuildTimestamp())
 
 	// Enable dumping of full heaps if the size of the allocated Golang heap
 	// exceeds 150m, and start dumping memory profiles when the heap exceeds
@@ -219,6 +219,9 @@ func mainWithExitCode() exitCode {
 
 	log.Debugf("Reading the configuration")
 	conf := config.Config{
+		Version:                vc.Version(),
+		Revision:               vc.Revision(),
+		BuildTimestamp:         vc.BuildTimestamp(),
 		ProjectID:              uint32(argProjectID),
 		CacheDirectory:         argCacheDirectory,
 		EnvironmentType:        argEnvironmentType,
