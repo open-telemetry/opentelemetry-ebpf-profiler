@@ -9,6 +9,8 @@ package python
 import (
 	"regexp"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestFrozenNameToFileName(t *testing.T) {
@@ -72,9 +74,8 @@ func TestPythonRegexs(t *testing.T) {
 
 	for regex, strings := range shouldMatch {
 		for _, s := range strings {
-			if !regex.MatchString(s) {
-				t.Fatalf("regex %s should match %s", regex.String(), s)
-			}
+			assert.Truef(t, regex.MatchString(s),
+				"%s should match: %v", regex.String(), s)
 		}
 	}
 
@@ -89,9 +90,8 @@ func TestPythonRegexs(t *testing.T) {
 
 	for regex, strings := range shouldNotMatch {
 		for _, s := range strings {
-			if regex.MatchString(s) {
-				t.Fatalf("regex %s should not match %s", regex.String(), s)
-			}
+			assert.Falsef(t, regex.MatchString(s),
+				"%v should not match: %v", regex.String(), s)
 		}
 	}
 }

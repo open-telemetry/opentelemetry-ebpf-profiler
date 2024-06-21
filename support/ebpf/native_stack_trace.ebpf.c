@@ -4,6 +4,14 @@
 #include "tracemgmt.h"
 #include "stackdeltatypes.h"
 
+#ifndef __USER32_CS
+  // defined in arch/x86/include/asm/segment.h
+  #define GDT_ENTRY_DEFAULT_USER32_CS  4
+  #define GDT_ENTRY_DEFAULT_USER_DS    5
+  #define __USER32_CS                 (GDT_ENTRY_DEFAULT_USER32_CS*8 + 3)
+  #define __USER_DS                   (GDT_ENTRY_DEFAULT_USER_DS*8 + 3)
+#endif
+
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given fileID.
 #define STACK_DELTA_BUCKET(X)                                                            \
@@ -78,21 +86,10 @@ bpf_map_def SEC("maps") kernel_stackmap = {
   .max_entries = 16*1024,
 };
 
-#if defined(__aarch64__)
-// This contains the cached value of the pt_regs size structure as established by the
-// get_arm64_ptregs_size function
-struct bpf_map_def SEC("maps") ptregs_size = {
-  .type = BPF_MAP_TYPE_ARRAY,
-  .key_size = sizeof(u32),
-  .value_size = sizeof(u64),
-  .max_entries = 1,
-};
-#endif
-
 // Record a native frame
 static inline __attribute__((__always_inline__))
-ErrorCode push_native(Trace *trace, u64 file, u64 line) {
-  return _push(trace, file, line, FRAME_MARKER_NATIVE);
+ErrorCode push_native(Trace *trace, u64 file, u64 line, bool return_address) {
+  return _push_with_return_address(trace, file, line, FRAME_MARKER_NATIVE, return_address);
 }
 
 #ifdef __aarch64__
@@ -309,6 +306,28 @@ u64 unwind_register_address(UnwindState *state, u64 cfa, u8 opcode, s32 param) {
 
     return state->lr;
 #endif
+#if defined(__x86_64__)
+  case UNWIND_OPCODE_BASE_REG:
+    val = (param & ~UNWIND_REG_MASK) >> 1;
+    DEBUG_PRINT("unwind: r%d+%lu", param & UNWIND_REG_MASK, val);
+    switch (param & UNWIND_REG_MASK) {
+    case 0: // rax
+      addr = state->rax;
+      break;
+    case 9: // r9
+      addr = state->r9;
+      break;
+    case 11: // r11
+      addr = state->r11;
+      break;
+    case 15: // r15
+      addr = state->r15;
+      break;
+    default:
+      return 0;
+    }
+    return addr + val;
+#endif
   default:
     return 0;
   }
@@ -344,7 +363,7 @@ u64 unwind_register_address(UnwindState *state, u64 cfa, u8 opcode, s32 param) {
   }
 
   // Dereference, and add the postDereference adder.
-  if (bpf_probe_read(&val, sizeof(val), (void*) addr)) {
+  if (bpf_probe_read_user(&val, sizeof(val), (void*) addr)) {
     DEBUG_PRINT("unwind failed to dereference address 0x%lx", addr);
     return 0;
   }
@@ -399,13 +418,19 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bo
       // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/sigframe.h?h=v6.4#n59
       // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/uapi/asm/sigcontext.h?h=v6.4#n238
       // offsetof(struct rt_sigframe, uc.uc_mcontext) = 40
-      if (bpf_probe_read(&rt_regs, sizeof(rt_regs), (void*)(state->sp + 40))) {
+      if (bpf_probe_read_user(&rt_regs, sizeof(rt_regs), (void*)(state->sp + 40))) {
         goto err_native_pc_read;
       }
+      state->rax = rt_regs[13];
+      state->r9 = rt_regs[1];
+      state->r11 = rt_regs[3];
       state->r13 = rt_regs[5];
+      state->r15 = rt_regs[7];
       state->fp = rt_regs[10];
       state->sp = rt_regs[15];
       state->pc = rt_regs[16];
+      state->return_address = false;
+      DEBUG_PRINT("signal frame");
       goto frame_ok;
     case UNWIND_COMMAND_STOP:
       *stop = true;
@@ -435,19 +460,20 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bo
     u64 fpa = unwind_register_address(state, cfa, info->fpOpcode, info->fpParam);
 
     if (fpa) {
-      bpf_probe_read(&state->fp, sizeof(state->fp), (void*)fpa);
+      bpf_probe_read_user(&state->fp, sizeof(state->fp), (void*)fpa);
     } else if (info->opcode == UNWIND_OPCODE_BASE_FP) {
       // FP used for recovery, but no new FP value received, clear FP
       state->fp = 0;
     }
   }
 
-  if (!cfa || bpf_probe_read(&state->pc, sizeof(state->pc), (void*)(cfa - 8))) {
+  if (!cfa || bpf_probe_read_user(&state->pc, sizeof(state->pc), (void*)(cfa - 8))) {
   err_native_pc_read:
     increment_metric(metricID_UnwindNativeErrPCRead);
     return ERR_NATIVE_PC_READ;
   }
   state->sp = cfa;
+  state->return_address = true;
 frame_ok:
   increment_metric(metricID_UnwindNativeFrames);
   return ERR_OK;
@@ -479,7 +505,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
       //   offsetof(struct rt_sigframe, uc)       128 +
       //   offsetof(struct ucontext, uc_mcontext) 176 +
       //   offsetof(struct sigcontext, regs[0])   8
-      if (bpf_probe_read(&rt_regs, sizeof(rt_regs), (void*)(state->sp + 312))) {
+      if (bpf_probe_read_user(&rt_regs, sizeof(rt_regs), (void*)(state->sp + 312))) {
         goto err_native_pc_read;
       }
       state->pc = normalize_pac_ptr(rt_regs[32]);
@@ -487,7 +513,8 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
       state->fp = rt_regs[29];
       state->lr = normalize_pac_ptr(rt_regs[30]);
       state->r22 = rt_regs[22];
-      state->lr_valid = true;
+      state->return_address = false;
+      DEBUG_PRINT("signal frame");
       goto frame_ok;
     case UNWIND_COMMAND_STOP:
       *stop = true;
@@ -523,7 +550,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
     if (info->fpOpcode == UNWIND_OPCODE_BASE_LR) {
       // Allow LR unwinding only if it's known to be valid: either because
       // it's the topmost user-mode frame, or recovered by signal trampoline.
-      if (!state->lr_valid) {
+      if (state->return_address) {
         increment_metric(metricID_UnwindNativeErrLrUnwindingMidTrace);
         return ERR_NATIVE_LR_UNWINDING_MID_TRACE;
       }
@@ -534,7 +561,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
       DEBUG_PRINT("RA: %016llX", (u64)ra);
 
       // read the value of RA from stack
-      if (bpf_probe_read(&state->pc, sizeof(state->pc), (void*)ra)) {
+      if (bpf_probe_read_user(&state->pc, sizeof(state->pc), (void*)ra)) {
         // error reading memory, mark RA as invalid
         ra = 0;
       }
@@ -563,12 +590,12 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
     // we can assume the presence of frame pointers
     if (info->fpOpcode != UNWIND_OPCODE_BASE_LR) {
       // FP precedes the RA on the stack (Aarch64 ABI requirement)
-      bpf_probe_read(&state->fp, sizeof(state->fp), (void*)(ra - 8));
+      bpf_probe_read_user(&state->fp, sizeof(state->fp), (void*)(ra - 8));
     }
   }
 
   state->sp = cfa;
-  state->lr_valid = false;
+  state->return_address = true;
 frame_ok:
   increment_metric(metricID_UnwindNativeFrames);
   return ERR_OK;
@@ -578,172 +605,149 @@ frame_ok:
 #endif
 
 // Initialize state from pt_regs
-static inline void copy_state_regs(UnwindState *state, struct pt_regs *regs)
+static inline ErrorCode copy_state_regs(UnwindState *state,
+                                        struct pt_regs *regs,
+                                        bool interrupted_kernelmode)
 {
 #if defined(__x86_64__)
+  // Check if the process is running in 32-bit mode on the x86_64 system.
+  // This check follows the Linux kernel implementation of user_64bit_mode() in
+  // arch/x86/include/asm/ptrace.h.
+  if (regs->cs == __USER32_CS) {
+    return ERR_NATIVE_X64_32BIT_COMPAT_MODE;
+  }
   state->pc = regs->ip;
   state->sp = regs->sp;
   state->fp = regs->bp;
+  state->rax = regs->ax;
+  state->r9 = regs->r9;
+  state->r11 = regs->r11;
   state->r13 = regs->r13;
+  state->r15 = regs->r15;
+
+  // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
+  // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/include/asm/syscall.h#L31-L39
+  // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/entry/entry_64.S#L847
+  state->return_address = interrupted_kernelmode && regs->orig_ax != -1;
 #elif defined(__aarch64__)
+  // For backwards compatability aarch64 can run 32-bit code.
+  // Check if the process is running in this 32-bit compat mod.
+  if (regs->pstate & PSR_MODE32_BIT) {
+    return ERR_NATIVE_AARCH64_32BIT_COMPAT_MODE;
+  }
   state->pc = normalize_pac_ptr(regs->pc);
   state->sp = regs->sp;
   state->fp = regs->regs[29];
   state->lr = normalize_pac_ptr(regs->regs[30]);
   state->r22 = regs->regs[22];
-  state->lr_valid = true;
-#endif
-}
 
-#if defined(__aarch64__)
-// on ARM64, the size of pt_regs structure is not constant across kernel
-// versions as in x86-64 platform (!)
-// get_arm64_ptregs_size tries to find out the size of this structure with the
-// help of a simple heuristic, this size is needed for locating user process
-// registers on kernel stack
-static inline u64 get_arm64_ptregs_size(u64 stack_top) {
-  // this var should be static, but verifier complains, in the meantime
-  // just leave it here
-  u32 key0 = 0;
-  u64 pc, sp;
-
-  u64 *paddr = bpf_map_lookup_elem(&ptregs_size, &key0);
-  if (!paddr) {
-    DEBUG_PRINT("Failed to look up ptregs_size map");
-    return -1;
-  }
-
-  // read current (possibly cached) value of pt_regs structure size
-  u64 arm64_ptregs_size = *paddr;
-
-  // if the size of pt_regs has been already established, just return it
-  if (arm64_ptregs_size) return arm64_ptregs_size;
-
-  // assume default pt_regs structure size as for kernel 4.19.120
-  arm64_ptregs_size = sizeof(struct pt_regs);
-
-  // the candidate addr where pt_regs structure may start
-  u64 ptregs_candidate_addr = stack_top - arm64_ptregs_size;
-
-  struct pt_regs *regs = (struct pt_regs*)ptregs_candidate_addr;
-
-  // read the value of pc and sp registers
-  if (bpf_probe_read(&pc, sizeof(pc), &regs->pc) ||
-      bpf_probe_read(&sp, sizeof(sp), &regs->sp)) {
-      goto exit;
-  }
-
-  // if pc and sp are kernel pointers, we may assume correct candidate
-  // addr of pt_regs structure (as seen 4.19.120 and 5.4.38 kernels)
-  if (is_kernel_address(pc) && is_kernel_address(sp)) {
-     DEBUG_PRINT("default pt_regs struct size");
-     goto exit;
-  }
-
-  // this is likely pt_regs structure as present in kernel 5.10.0-7
-  // with two extra fields in pt_regs:
-  //    u64 lockdep_hardirqs;
-  //    u64 exit_rcu;
-  // Adjust arm64_ptregs_size for that
-  DEBUG_PRINT("adjusted pt_regs struct size");
-  arm64_ptregs_size += 2*sizeof(u64);
-
-exit:
-  // update the map (cache the value)
-  if (!bpf_map_update_elem(&ptregs_size, &key0, &arm64_ptregs_size, BPF_ANY)) {
-    DEBUG_PRINT("Failed to update ptregs_size map");
-  }
-
-  return arm64_ptregs_size;
-}
+  // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
+  // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/arm64/include/asm/ptrace.h#L118
+  // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/arm64/include/asm/ptrace.h#L206-L209
+  state->return_address = interrupted_kernelmode && regs->syscallno != -1;
 #endif
 
-// Convert kernel stack pointer to pt_regs pointers at the top-of-stack.
-static inline void *get_kernel_stack_ptregs(u64 addr)
-{
+  return ERR_OK;
+}
+
+#ifndef TESTING_COREDUMP
+
+// Read the task's entry stack pt_regs. This has identical functionality
+// to bpf_task_pt_regs which is emulated to support older kernels.
+// Once kernel requirement is increased to 5.15 this can be replaced with
+// the bpf_task_pt_regs() helper.
+static inline
+long get_task_pt_regs(struct task_struct *task, SystemConfig* syscfg) {
+  u64 stack_ptr = (u64)task + syscfg->task_stack_offset;
+  long stack_base;
+  if (bpf_probe_read_kernel(&stack_base, sizeof(stack_base), (void*) stack_ptr)) {
+    return 0;
+  }
+  return stack_base + syscfg->stack_ptregs_offset;
+}
+
+// Determine whether the given pt_regs are from user-mode register context.
+// This needs to detect also invalid pt_regs in case we its kernel thread stack
+// without valid user mode pt_regs so is_kernel_address(pc) is not enough.
+static inline
+bool ptregs_is_usermode(struct pt_regs *regs) {
 #if defined(__x86_64__)
-  // Fortunately on x86_64 IRQ_STACK_SIZE = THREAD_SIZE. Both depend on
-  // CONFIG_KASAN, but that can be assumed off on all production systems.
-  // The thread kernel stack should be aligned at least to THREAD_SIZE so the
-  // below calculation should yield correct end of stack.
-  u64 stack_end = (addr | (THREAD_SIZE - 1)) + 1;
-  return (void*)(stack_end - sizeof(struct pt_regs));
+  // On x86_64 the user mode SS should always be __USER_DS.
+  if (regs->ss != __USER_DS) {
+    return false;
+  }
+  return true;
 #elif defined(__aarch64__)
-  u64 stack_end = (addr | (THREAD_SIZE - 1)) + 1;
-
-  u64 ptregs_size = get_arm64_ptregs_size(stack_end);
-
-  return (void*)(stack_end - ptregs_size);
+  // Check if the processor state is in the EL0t what linux uses for usermode.
+  if ((regs->pstate & PSR_MODE_MASK) != PSR_MODE_EL0t) {
+    return false;
+  }
+  return true;
+#else
+#error add support for new architecture
 #endif
 }
 
-// Extract the usermode pt_regs for given context.
+// Extract the usermode pt_regs for current task. Use context given pt_regs
+// if it is usermode regs, or resolve it via struct task_struct.
 //
 // State registers are not touched (get_pristine_per_cpu_record already reset it)
-// if something fails. has_usermode_regs receives a boolean indicating whether a
-// user-mode register context was found: not every thread that we interrupt will
-// actually have a user-mode context (e.g. kernel worker threads won't).
+// if something fails. has_usermode_regs is set to true if a user-mode register
+// context was found: not every thread that we interrupt will actually have
+// a user-mode context (e.g. kernel worker threads won't).
 static inline ErrorCode get_usermode_regs(struct pt_regs *ctx,
                                           UnwindState *state,
                                           bool *has_usermode_regs) {
-  if (is_kernel_address(ctx->sp)) {
-    // We are in kernel mode stack. There are several different kind kernel
-    // stacks. See get_stack_info() in arch/x86/kernel/dumpstack_64.c
-    // 1) Exception stack. We don't expect to see these.
-    // 2) IRQ stack. Used for hard and softirqs. We can see them in softirq
-    //    context. Top-of-stack contains pointer to previous stack (always kernel).
-    //    Size on x86_64 is IRQ_STACK_SIZE.
-    // 3) Entry stack. This used for kernel code when application does syscall.
-    //    Top-of-stack contains user mode pt_regs. Size is THREAD_SIZE.
-    //
-    // We expect to be on Entry stack, or inside one level IRQ stack which was
-    // triggered by executing softirq work on hardirq stack.
-    //
-    // To optimize code, we always read full pt_regs from the top of kernel stack.
-    // The last word of pt_regs is 'ss' which can be used to distinguish if we
-    // are on IRQ stack (it's actually the link pointer to previous stack) or
-    // entry stack (real SS) depending on if looks like real descriptor.
+  ErrorCode error;
+
+  if (!ptregs_is_usermode(ctx)) {
+    u32 key = 0;
+    SystemConfig* syscfg = bpf_map_lookup_elem(&system_config, &key);
+    if (!syscfg) {
+      // Unreachable: array maps are always fully initialized.
+      return ERR_UNREACHABLE;
+    }
+
+    // Use the current task's entry pt_regs
+    struct task_struct *task = (struct task_struct *) bpf_get_current_task();
+    long ptregs_addr = get_task_pt_regs(task, syscfg);
+
     struct pt_regs regs;
-    if (bpf_probe_read(&regs, sizeof(regs), get_kernel_stack_ptregs(ctx->sp))) {
+    if (!ptregs_addr || bpf_probe_read_kernel(&regs, sizeof(regs), (void*) ptregs_addr)) {
       increment_metric(metricID_UnwindNativeErrReadKernelModeRegs);
       return ERR_NATIVE_READ_KERNELMODE_REGS;
     }
-#if defined(__x86_64__)
-    if (is_kernel_address(regs.ss)) {
-      // ss looks like kernel address. It must be the IRQ stack's link to previous
-      // kernel stack. In our case it should be the kernel Entry stack.
-      DEBUG_PRINT("Chasing IRQ stack link, ss=0x%lx", regs.ss);
-      if (bpf_probe_read(&regs, sizeof(regs), get_kernel_stack_ptregs(regs.ss))) {
-        increment_metric(metricID_UnwindNativeErrChaseIrqStackLink);
-        return ERR_NATIVE_CHASE_IRQ_STACK_LINK;
-      }
-    }
-    // On x86_64 the user mode SS is practically always 0x2B. But this allows
-    // for some flexibility. Expect RPL (requested privilege level) to be
-    // user mode (3), and to be under max GDT value of 16.
-    if ((regs.ss & 3) != 3 || regs.ss >= 16*8) {
-      DEBUG_PRINT("No user mode stack, ss=0x%lx", regs.ss);
-      *has_usermode_regs = false;
+
+    if (!ptregs_is_usermode(&regs)) {
+      // No usermode registers context found.
       return ERR_OK;
     }
-    DEBUG_PRINT("Kernel mode regs (ss=0x%lx)", regs.ss);
-#elif defined(__aarch64__)
-    // For backwards compatability aarch64 can run 32-bit code. Check if the process
-    // is running in this 32-bit compat mod.
-    if ((regs.pstate & (PSR_MODE32_BIT | PSR_MODE_MASK)) == (PSR_MODE32_BIT | PSR_MODE_EL0t)) {
-      return ERR_NATIVE_AARCH64_32BIT_COMPAT_MODE;
-    }
-#endif
-    copy_state_regs(state, &regs);
+    error = copy_state_regs(state, &regs, true);
   } else {
     // User mode code interrupted, registers are available via the ebpf context.
-    copy_state_regs(state, ctx);
+    error = copy_state_regs(state, ctx, false);
   }
-
-  DEBUG_PRINT("Read regs: pc: %llx sp: %llx fp: %llx", state->pc, state->sp, state->fp);
-  *has_usermode_regs = true;
-  return ERR_OK;
+  if (error == ERR_OK) {
+    DEBUG_PRINT("Read regs: pc: %llx sp: %llx fp: %llx", state->pc, state->sp, state->fp);
+    *has_usermode_regs = true;
+  }
+  return error;
 }
+
+#else // TESTING_COREDUMP
+
+static inline ErrorCode get_usermode_regs(struct pt_regs *ctx,
+                                          UnwindState *state,
+                                          bool *has_usermode_regs) {
+  // Coredumps provide always usermode pt_regs directly.
+  ErrorCode error = copy_state_regs(state, ctx, false);
+  if (error == ERR_OK) {
+    *has_usermode_regs = true;
+  }
+  return error;
+}
+
+#endif
 
 SEC("perf_event/unwind_native")
 int unwind_native(struct pt_regs *ctx) {
@@ -767,7 +771,8 @@ int unwind_native(struct pt_regs *ctx) {
     DEBUG_PRINT("Pushing %llx %llx to position %u on stack",
                 record->state.text_section_id, record->state.text_section_offset,
                 trace->stack_len);
-    error = push_native(trace, record->state.text_section_id, record->state.text_section_offset);
+    error = push_native(trace, record->state.text_section_id, record->state.text_section_offset,
+        record->state.return_address);
     if (error) {
       DEBUG_PRINT("failed to push native frame");
       break;
@@ -806,6 +811,8 @@ int collect_trace(struct pt_regs *ctx) {
     return 0;
   }
 
+  u64 ktime = bpf_ktime_get_ns();
+
   DEBUG_PRINT("==== do_perf_event ====");
 
   // The trace is reused on each call to this function so we have to reset the
@@ -818,7 +825,7 @@ int collect_trace(struct pt_regs *ctx) {
 
   Trace *trace = &record->trace;
   trace->pid = pid;
-  trace->ktime = bpf_ktime_get_ns();
+  trace->ktime = ktime;
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);
   }
@@ -829,15 +836,14 @@ int collect_trace(struct pt_regs *ctx) {
 
   // Recursive unwind frames
   int unwinder = PROG_UNWIND_STOP;
-  bool has_usermode_regs;
+  bool has_usermode_regs = false;
   ErrorCode error = get_usermode_regs(ctx, &record->state, &has_usermode_regs);
-
   if (error || !has_usermode_regs) {
     goto exit;
   }
 
   if (!pid_information_exists(ctx, pid)) {
-    if (report_pid(ctx, pid, true)) {
+    if (report_pid(ctx, pid, RATELIMIT_ACTION_DEFAULT)) {
       increment_metric(metricID_NumProcNew);
     }
     return 0;

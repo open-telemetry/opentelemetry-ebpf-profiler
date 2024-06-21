@@ -26,6 +26,7 @@ const (
 	FrameMarkerRuby     = C.FRAME_MARKER_RUBY
 	FrameMarkerPerl     = C.FRAME_MARKER_PERL
 	FrameMarkerV8       = C.FRAME_MARKER_V8
+	FrameMarkerDotnet   = C.FRAME_MARKER_DOTNET
 	FrameMarkerAbort    = C.FRAME_MARKER_ABORT
 )
 
@@ -38,6 +39,7 @@ const (
 	ProgUnwindRuby    = C.PROG_UNWIND_RUBY
 	ProgUnwindPerl    = C.PROG_UNWIND_PERL
 	ProgUnwindV8      = C.PROG_UNWIND_V8
+	ProgUnwindDotnet  = C.PROG_UNWIND_DOTNET
 )
 
 const (
@@ -80,12 +82,6 @@ func DecodeBiasAndUnwindProgram(biasAndUnwindProgram uint64) (bias uint64, unwin
 	unwindProgram = uint8(biasAndUnwindProgram >> 56)
 	return bias, unwindProgram
 }
-
-const (
-	// CodedumpBytes holds the number of bytes of code to extract to userspace via codedump helper.
-	// Needed for fsbase offset calculations.
-	CodedumpBytes = C.CODEDUMP_BYTES
-)
 
 const (
 	// StackDeltaBucket[Smallest|Largest] define the boundaries of the bucket sizes of the various

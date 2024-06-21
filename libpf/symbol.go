@@ -99,10 +99,10 @@ func (symmap *SymbolMap) LookupByAddress(val SymbolValue) (SymbolName, Address, 
 	return SymbolNameUnknown, Address(val), false
 }
 
-// ScanAllNames calls the provided callback with all the symbol names in the map.
-func (symmap *SymbolMap) ScanAllNames(cb func(SymbolName)) {
+// VisitAll calls the provided callback with all the symbols in the map.
+func (symmap *SymbolMap) VisitAll(cb func(Symbol)) {
 	for _, f := range symmap.nameToSymbol {
-		cb(f.Name)
+		cb(*f)
 	}
 }
 

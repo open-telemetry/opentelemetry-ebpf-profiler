@@ -8,6 +8,7 @@ package ruby
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"math/bits"
@@ -20,17 +21,19 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/elastic/go-freelru"
+
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/interpreter"
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/freelru"
 	"github.com/elastic/otel-profiling-agent/libpf/hash"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/libpf/remotememory"
-	"github.com/elastic/otel-profiling-agent/libpf/successfailurecounter"
 	"github.com/elastic/otel-profiling-agent/metrics"
+	"github.com/elastic/otel-profiling-agent/remotememory"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/elastic/otel-profiling-agent/successfailurecounter"
 	"github.com/elastic/otel-profiling-agent/support"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 // #include "../../support/ebpf/types.h"
@@ -175,7 +178,11 @@ type rubyData struct {
 	}
 }
 
-func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
+func rubyVersion(major, minor, release uint32) uint32 {
+	return major*0x10000 + minor*0x100 + release
+}
+
+func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid util.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	cdata := C.RubyProcInfo{
 		version: C.u32(r.version),
@@ -282,7 +289,7 @@ type rubyInstance struct {
 	maxSize atomic.Uint32
 }
 
-func (r *rubyInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+func (r *rubyInstance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
 	return ebpf.DeleteProcData(libpf.Ruby, pid)
 }
 
@@ -423,7 +430,7 @@ func (r *rubyInstance) getObsoleteRubyLineNo(iseqBody libpf.Address,
 	ptr := r.rm.Ptr(iseqBody + libpf.Address(vms.iseq_constant_body.insn_info_body))
 	syncPoolData := r.memPool.Get().(*[]byte)
 	if syncPoolData == nil {
-		return 0, fmt.Errorf("failed to get memory from sync pool")
+		return 0, errors.New("failed to get memory from sync pool")
 	}
 	if uint32(len(*syncPoolData)) < size*sizeOfEntry {
 		// make sure the data we want to write into blob fits in
@@ -519,16 +526,18 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 
 	// For our better understanding and future improvement we track the maximum value we get for
 	// size and report it.
-	libpf.AtomicUpdateMaxUint32(&r.maxSize, size)
+	util.AtomicUpdateMaxUint32(&r.maxSize, size)
 
 	// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/iseq.c#L1678
 	if size == 0 {
-		return 0, fmt.Errorf("failed to read size")
-	} else if size == 1 {
+		return 0, errors.New("failed to read size")
+	}
+	if size == 1 {
 		offsetBody := vms.iseq_constant_body.insn_info_body
 		lineNo := binary.LittleEndian.Uint32(blob[offsetBody : offsetBody+4])
 		return lineNo, nil
-	} else if size > rubyInsnInfoSizeLimit {
+	}
+	if size > rubyInsnInfoSizeLimit {
 		// When reading the value for size we don't have a way to validate this returned
 		// value. To make sure we don't accept any arbitrary number we set here a limit of
 		// 1MB.
@@ -563,7 +572,7 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 
 	if succIndexTable == 0 {
 		// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/iseq.c#L1686
-		return 0, fmt.Errorf("failed to get table with line information")
+		return 0, errors.New("failed to get table with line information")
 	}
 
 	// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/iseq.c#L3500-L3517
@@ -574,7 +583,7 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 		immPart := r.rm.Uint64(libpf.Address(succIndexTable) +
 			libpf.Address(i*int(vms.size_of_value)))
 		if immPart == 0 {
-			return 0, fmt.Errorf("failed to read immPart")
+			return 0, errors.New("failed to read immPart")
 		}
 		tableIndex = immBlockRankGet(immPart, uint32(j))
 	} else {
@@ -585,7 +594,7 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 		rank := r.rm.Uint32(libpf.Address(succIndexTable) +
 			libpf.Address(vms.succ_index_table_struct.succ_part) + blockOffset)
 		if rank == 0 {
-			return 0, fmt.Errorf("failed to read rank")
+			return 0, errors.New("failed to read rank")
 		}
 
 		blockBitIndex := uint32((pos - uint64(vms.size_of_immediate_table)) % 512)
@@ -596,7 +605,7 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 			libpf.Address(vms.succ_index_table_struct.succ_part+
 				vms.succ_index_table_struct.small_block_ranks))
 		if smallBlockRanks == 0 {
-			return 0, fmt.Errorf("failed to read smallBlockRanks")
+			return 0, errors.New("failed to read smallBlockRanks")
 		}
 
 		smallBlockPopcount := smallBlockRankGet(smallBlockRanks, smallBlockIndex)
@@ -605,7 +614,7 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 			libpf.Address(vms.succ_index_table_struct.succ_part+
 				vms.succ_index_table_struct.block_bits) + smallBlockOffset)
 		if blockBits == 0 {
-			return 0, fmt.Errorf("failed to read blockBits")
+			return 0, errors.New("failed to read blockBits")
 		}
 		popCnt := rubyPopcount64((blockBits << (63 - blockBitIndex%64)))
 
@@ -616,13 +625,13 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 	offsetBody := vms.iseq_constant_body.insn_info_body
 	lineNoAddr := binary.LittleEndian.Uint64(blob[offsetBody : offsetBody+8])
 	if lineNoAddr == 0 {
-		return 0, fmt.Errorf("failed to read lineNoAddr")
+		return 0, errors.New("failed to read lineNoAddr")
 	}
 
 	lineNo := r.rm.Uint32(libpf.Address(lineNoAddr) +
 		libpf.Address(tableIndex*uint32(vms.iseq_insn_info_entry.size_of_iseq_insn_info_entry)))
 	if lineNo == 0 {
-		return 0, fmt.Errorf("failed to read lineNo")
+		return 0, errors.New("failed to read lineNo")
 	}
 	return lineNo, nil
 }
@@ -669,7 +678,7 @@ func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	if err != nil {
 		return err
 	}
-	if !libpf.IsValidString(sourceFileName) {
+	if !util.IsValidString(sourceFileName) {
 		log.Debugf("Extracted invalid Ruby source file name at 0x%x '%v'",
 			iseqBody, []byte(sourceFileName))
 		return fmt.Errorf("extracted invalid Ruby source file name from address 0x%x",
@@ -682,7 +691,7 @@ func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	if err != nil {
 		return err
 	}
-	if !libpf.IsValidString(functionName) {
+	if !util.IsValidString(functionName) {
 		log.Debugf("Extracted invalid Ruby method name at 0x%x '%v'",
 			iseqBody, []byte(functionName))
 		return fmt.Errorf("extracted invalid Ruby method name from address 0x%x",
@@ -716,7 +725,7 @@ func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	// particular line. So we report 0 for this to our backend.
 	symbolReporter.FrameMetadata(
 		fileID,
-		libpf.AddressOrLineno(lineNo), libpf.SourceLineno(lineNo), 0,
+		libpf.AddressOrLineno(lineNo), util.SourceLineno(lineNo), 0,
 		functionName, sourceFileName)
 
 	log.Debugf("[%d] [%x] %v+%v at %v:%v", len(trace.FrameTypes),
@@ -729,8 +738,8 @@ func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 }
 
 func (r *rubyInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
-	rubyIseqBodyPCStats := r.iseqBodyPCToFunction.GetAndResetStatistics()
-	addrToStringStats := r.addrToString.GetAndResetStatistics()
+	rubyIseqBodyPCStats := r.iseqBodyPCToFunction.ResetMetrics()
+	addrToStringStats := r.addrToString.ResetMetrics()
 
 	return []metrics.Metric{
 		{
@@ -743,35 +752,35 @@ func (r *rubyInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 		},
 		{
 			ID:    metrics.IDRubyIseqBodyPCHit,
-			Value: metrics.MetricValue(rubyIseqBodyPCStats.Hit),
+			Value: metrics.MetricValue(rubyIseqBodyPCStats.Hits),
 		},
 		{
 			ID:    metrics.IDRubyIseqBodyPCMiss,
-			Value: metrics.MetricValue(rubyIseqBodyPCStats.Miss),
+			Value: metrics.MetricValue(rubyIseqBodyPCStats.Misses),
 		},
 		{
 			ID:    metrics.IDRubyIseqBodyPCAdd,
-			Value: metrics.MetricValue(rubyIseqBodyPCStats.Added),
+			Value: metrics.MetricValue(rubyIseqBodyPCStats.Inserts),
 		},
 		{
 			ID:    metrics.IDRubyIseqBodyPCDel,
-			Value: metrics.MetricValue(rubyIseqBodyPCStats.Deleted),
+			Value: metrics.MetricValue(rubyIseqBodyPCStats.Removals),
 		},
 		{
 			ID:    metrics.IDRubyAddrToStringHit,
-			Value: metrics.MetricValue(addrToStringStats.Hit),
+			Value: metrics.MetricValue(addrToStringStats.Hits),
 		},
 		{
 			ID:    metrics.IDRubyAddrToStringMiss,
-			Value: metrics.MetricValue(addrToStringStats.Miss),
+			Value: metrics.MetricValue(addrToStringStats.Misses),
 		},
 		{
 			ID:    metrics.IDRubyAddrToStringAdd,
-			Value: metrics.MetricValue(addrToStringStats.Added),
+			Value: metrics.MetricValue(addrToStringStats.Inserts),
 		},
 		{
 			ID:    metrics.IDRubyAddrToStringDel,
-			Value: metrics.MetricValue(addrToStringStats.Deleted),
+			Value: metrics.MetricValue(addrToStringStats.Removals),
 		},
 		{
 			ID:    metrics.IDRubyMaxSize,
@@ -800,7 +809,7 @@ func determineRubyVersion(ef *pfelf.File) (uint32, error) {
 	minor, _ := strconv.Atoi(matches[2])
 	release, _ := strconv.Atoi(matches[3])
 
-	return uint32(major*0x10000 + minor*0x100 + release), nil
+	return rubyVersion(uint32(major), uint32(minor), uint32(release)), nil
 }
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
@@ -824,7 +833,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// Reason for maximum supported version 3.2.x:
 	// - this is currently the newest stable version
 
-	const minVer, maxVer = 0x20500, 0x30300
+	minVer, maxVer := rubyVersion(2, 5, 0), rubyVersion(3, 3, 0)
 	if version < minVer || version >= maxVer {
 		return nil, fmt.Errorf("unsupported Ruby %d.%d.%d (need >= %d.%d.%d and <= %d.%d.%d)",
 			(version>>16)&0xff, (version>>8)&0xff, version&0xff,
@@ -840,7 +849,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// [0] https://github.com/ruby/ruby/commit/837fd5e494731d7d44786f29e7d6e8c27029806f
 	// [1] https://github.com/ruby/ruby/commit/79df14c04b452411b9d17e26a398e491bca1a811
 	currentCtxSymbol := libpf.SymbolName("ruby_single_main_ractor")
-	if version < 0x30000 {
+	if version < rubyVersion(3, 0, 0) {
 		currentCtxSymbol = "ruby_current_execution_context_ptr"
 	}
 	currentCtxPtr, err := ef.LookupSymbolAddress(currentCtxSymbol)
@@ -852,7 +861,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// ruby_run_node  which is the main executor function since Ruby v1.9.0
 	// https://github.com/ruby/ruby/blob/587e6800086764a1b7c959976acef33e230dccc2/main.c#L47
 	symbolName := libpf.SymbolName("rb_vm_exec")
-	if version < 0x20600 {
+	if version < rubyVersion(2, 6, 0) {
 		symbolName = libpf.SymbolName("ruby_exec_node")
 	}
 	interpRanges, err := info.GetSymbolAsRanges(symbolName)
@@ -877,51 +886,52 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.control_frame_struct.pc = 0
 	vms.control_frame_struct.iseq = 16
 	vms.control_frame_struct.ep = 32
-	if version < 0x20600 {
+	switch {
+	case version < rubyVersion(2, 6, 0):
 		vms.control_frame_struct.size_of_control_frame_struct = 48
-	} else if version < 0x30100 {
+	case version < rubyVersion(3, 1, 0):
 		// With Ruby 2.6 the field bp was added to rb_control_frame_t
 		// https://github.com/ruby/ruby/commit/ed935aa5be0e5e6b8d53c3e7d76a9ce395dfa18b
 		vms.control_frame_struct.size_of_control_frame_struct = 56
-	} else {
+	default:
 		// 3.1 adds new jit_return field at the end.
 		// https://github.com/ruby/ruby/commit/9d8cc01b758f9385bd4c806f3daff9719e07faa0
 		vms.control_frame_struct.size_of_control_frame_struct = 64
 	}
-
 	vms.iseq_struct.body = 16
 
 	vms.iseq_constant_body.iseq_type = 0
 	vms.iseq_constant_body.size = 4
 	vms.iseq_constant_body.encoded = 8
 	vms.iseq_constant_body.location = 64
-	if version < 0x20600 {
+	switch {
+	case version < rubyVersion(2, 6, 0):
 		vms.iseq_constant_body.insn_info_body = 112
 		vms.iseq_constant_body.insn_info_size = 200
 		vms.iseq_constant_body.succ_index_table = 144
 		vms.iseq_constant_body.size_of_iseq_constant_body = 288
-	} else if version < 0x30200 {
+	case version < rubyVersion(3, 2, 0):
 		vms.iseq_constant_body.insn_info_body = 120
 		vms.iseq_constant_body.insn_info_size = 136
 		vms.iseq_constant_body.succ_index_table = 144
 		vms.iseq_constant_body.size_of_iseq_constant_body = 312
-	} else {
+	default:
 		vms.iseq_constant_body.insn_info_body = 112
 		vms.iseq_constant_body.insn_info_size = 128
 		vms.iseq_constant_body.succ_index_table = 136
 		vms.iseq_constant_body.size_of_iseq_constant_body = 320
 	}
-
 	vms.iseq_location_struct.pathobj = 0
 	vms.iseq_location_struct.base_label = 8
 
-	if version < 0x20600 {
+	switch {
+	case version < rubyVersion(2, 6, 0):
 		vms.iseq_insn_info_entry.position = 0
 		vms.iseq_insn_info_entry.size_of_position = 4
 		vms.iseq_insn_info_entry.line_no = 4
 		vms.iseq_insn_info_entry.size_of_line_no = 4
 		vms.iseq_insn_info_entry.size_of_iseq_insn_info_entry = 12
-	} else if version < 0x30100 {
+	case version < rubyVersion(3, 1, 0):
 		// The position field was removed from this struct with
 		// https://github.com/ruby/ruby/commit/295838e6eb1d063c64f7cde5bbbd13c7768908fd
 		vms.iseq_insn_info_entry.position = 0
@@ -929,7 +939,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.iseq_insn_info_entry.line_no = 0
 		vms.iseq_insn_info_entry.size_of_line_no = 4
 		vms.iseq_insn_info_entry.size_of_iseq_insn_info_entry = 8
-	} else {
+	default:
 		// https://github.com/ruby/ruby/commit/0a36cab1b53646062026c3181117fad73802baf4
 		vms.iseq_insn_info_entry.position = 0
 		vms.iseq_insn_info_entry.size_of_position = 0
@@ -937,8 +947,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.iseq_insn_info_entry.size_of_line_no = 4
 		vms.iseq_insn_info_entry.size_of_iseq_insn_info_entry = 12
 	}
-
-	if version < 0x30200 {
+	if version < rubyVersion(3, 2, 0) {
 		vms.rstring_struct.as_ary = 16
 	} else {
 		vms.rstring_struct.as_ary = 24
@@ -956,7 +965,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	vms.size_of_value = 8
 
-	if version >= 0x30000 {
+	if version >= rubyVersion(3, 0, 0) {
 		if runtime.GOARCH == "amd64" {
 			vms.rb_ractor_struct.running_ec = 0x208
 		} else {

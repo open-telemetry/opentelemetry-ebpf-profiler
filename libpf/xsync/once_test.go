@@ -14,8 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/elastic/otel-profiling-agent/libpf/xsync"
-	assert "github.com/stretchr/testify/require"
 )
 
 func TestOnceLock(t *testing.T) {

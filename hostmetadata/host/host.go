@@ -8,6 +8,7 @@ package host
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -19,25 +20,27 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/elastic/otel-profiling-agent/pfnamespaces"
+
 	"github.com/jsimonetti/rtnetlink"
 	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/gocapability/capability"
-	"go.uber.org/multierr"
 	"golang.org/x/sys/unix"
 
 	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/pfnamespaces"
 )
 
 // Host metadata keys
 // Changing these values is a customer-visible change.
 const (
-	KeyKernelProcVersion = "host:kernel_proc_version"
-	KeyKernelVersion     = "host:kernel_version"
-	KeyHostname          = "host:hostname"
-	KeyMachine           = "host:machine"
-	KeyIPAddress         = "host:ip"
+	// TODO: Change to semconv / ECS names
+	KeyKernelProcVersion  = "host:kernel_proc_version"
+	KeyKernelVersion      = "host:kernel_version"
+	KeyHostname           = "host:hostname"
+	KeyArchitecture       = "host:arch"
+	KeyArchitectureCompat = "host:machine"
+	KeyIPAddress          = "host:ip"
 
 	// Prefix for all the sysctl keys
 	keyPrefixSysctl = "host:sysctl/"
@@ -148,7 +151,7 @@ func AddMetadata(caEndpoint string, result map[string]string) error {
 		for _, sysctl := range sysctls {
 			sysctlValue, err2 := getSysctl(sysctl)
 			if err2 != nil {
-				errResult = multierr.Combine(errResult, err2)
+				errResult = errors.Join(errResult, err2)
 				continue
 			}
 			sysctlKey := keyPrefixSysctl + sysctl
@@ -159,7 +162,7 @@ func AddMetadata(caEndpoint string, result map[string]string) error {
 		var ip net.IP
 		ip, err = getSourceIPAddress(host)
 		if err != nil {
-			errResult = multierr.Combine(errResult, err)
+			errResult = errors.Join(errResult, err)
 		} else {
 			result[KeyIPAddress] = ip.String()
 		}
@@ -167,11 +170,26 @@ func AddMetadata(caEndpoint string, result map[string]string) error {
 		// Get uname-related metadata: hostname and kernel version
 		uname := &unix.Utsname{}
 		if err = unix.Uname(uname); err != nil {
-			errResult = multierr.Combine(errResult, fmt.Errorf("error calling uname: %v", err))
+			errResult = errors.Join(errResult, fmt.Errorf("error calling uname: %v", err))
 		} else {
 			result[KeyKernelVersion] = sanitizeString(uname.Release[:])
 			result[KeyHostname] = sanitizeString(uname.Nodename[:])
-			result[KeyMachine] = sanitizeString(uname.Machine[:])
+
+			machine := sanitizeString(uname.Machine[:])
+
+			// Keep sending the old field for compatibility between old collectors and new agents.
+			result[KeyArchitectureCompat] = machine
+
+			// Convert to OTEL semantic conventions.
+			// Machine values other than x86_64, aarch64 are not converted.
+			switch machine {
+			case "x86_64":
+				result[KeyArchitecture] = "amd64"
+			case "aarch64":
+				result[KeyArchitecture] = "arm64"
+			default:
+				result[KeyArchitecture] = machine
+			}
 		}
 	}()
 
@@ -251,7 +269,7 @@ func addressFamily(ip net.IP) (uint8, error) {
 func getSourceIPAddress(domain string) (net.IP, error) {
 	conn, err := rtnetlink.Dial(nil)
 	if err != nil {
-		return nil, fmt.Errorf("unable to open netlink connection")
+		return nil, errors.New("unable to open netlink connection")
 	}
 	defer conn.Close()
 
@@ -325,11 +343,11 @@ func getSourceIPAddress(domain string) (net.IP, error) {
 func hasCapSysAdmin() (bool, error) {
 	caps, err := capability.NewPid2(0) // 0 == current process
 	if err != nil {
-		return false, fmt.Errorf("unable to get process capabilities")
+		return false, errors.New("unable to get process capabilities")
 	}
 	err = caps.Load()
 	if err != nil {
-		return false, fmt.Errorf("unable to load process capabilities")
+		return false, errors.New("unable to load process capabilities")
 	}
 	return caps.Get(capability.EFFECTIVE, capability.CAP_SYS_ADMIN), nil
 }

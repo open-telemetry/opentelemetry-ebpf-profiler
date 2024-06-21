@@ -11,8 +11,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-
-	"github.com/elastic/otel-profiling-agent/libpf/rlimit"
+	"github.com/elastic/otel-profiling-agent/rlimit"
 )
 
 // attachToTracepoint attaches an eBPF program of type tracepoint to a tracepoint in the kernel

@@ -16,11 +16,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/elastic/otel-profiling-agent/libpf/stringutil"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
 	"github.com/elastic/otel-profiling-agent/libpf"
-	log "github.com/sirupsen/logrus"
+	"github.com/elastic/otel-profiling-agent/stringutil"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 const defaultMountPoint = "/proc"
@@ -72,7 +73,7 @@ func GetKallsyms(kallsymsPath string) (*libpf.SymbolMap, error) {
 	symmap.Finalize()
 
 	if noSymbols {
-		return nil, fmt.Errorf(
+		return nil, errors.New(
 			"all addresses from kallsyms are zero - check process permissions")
 	}
 
@@ -134,9 +135,9 @@ func GetKernelModules(modulesPath string,
 	return &symmap, nil
 }
 
-// ListPIDs from the proc filesystem mount point and return a list of libpf.PID to be processed
-func ListPIDs() ([]libpf.PID, error) {
-	pids := make([]libpf.PID, 0)
+// ListPIDs from the proc filesystem mount point and return a list of util.PID to be processed
+func ListPIDs() ([]util.PID, error) {
+	pids := make([]util.PID, 0)
 	files, err := os.ReadDir(defaultMountPoint)
 	if err != nil {
 		return nil, err
@@ -150,7 +151,7 @@ func ListPIDs() ([]libpf.PID, error) {
 		if err != nil {
 			continue
 		}
-		pids = append(pids, libpf.PID(pid))
+		pids = append(pids, util.PID(pid))
 	}
 	return pids, nil
 }
@@ -158,7 +159,7 @@ func ListPIDs() ([]libpf.PID, error) {
 // IsPIDLive checks if a PID belongs to a live process. It will never produce a false negative but
 // may produce a false positive (e.g. due to permissions) in which case an error will also be
 // returned.
-func IsPIDLive(pid libpf.PID) (bool, error) {
+func IsPIDLive(pid util.PID) (bool, error) {
 	// A kill syscall with a 0 signal is documented to still do the check
 	// whether the process exists: https://linux.die.net/man/2/kill
 	err := unix.Kill(int(pid), 0)

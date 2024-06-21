@@ -39,7 +39,6 @@ linters:
     - depguard
     - dupword
     - durationcheck # might be worth fixing
-    - errname # might be worth fixing
     - errorlint # might be worth fixing
     - exhaustive
     - exhaustivestruct
@@ -50,16 +49,16 @@ linters:
     - gochecknoglobals
     - gochecknoinits
     - gocognit
+    - goconst
     - gocyclo
     - godot
     - godox # complains about TODO etc
     - goerr113
     - gofumpt
-    - goimports # might be worth fixing
-    - golint # might be worth fixing
     - gomnd
     - gomoddirectives
     - ifshort
+    - inamedparam
     - interfacebloat
     - ireturn
     - maintidx
@@ -73,6 +72,7 @@ linters:
     - nonamedreturns
     - nosnakecase
     - paralleltest
+    - protogetter
     - scopelint # might be worth fixing
     - sqlclosecheck # might be worth fixing
     - tagalign
@@ -115,7 +115,6 @@ linters-settings:
       - octalLiteral
       - whyNoLint
       - wrapperFunc
-      - sloppyTestFuncName
       - sloppyReassign
       - uncheckedInlineErr # Experimental rule with high false positive rate.
 

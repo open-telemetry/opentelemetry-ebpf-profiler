@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"reflect"
 	"testing"
 	"time"
 	"unsafe"
@@ -23,23 +22,28 @@ import (
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/interpreter"
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/nativeunwind"
-	sdtypes "github.com/elastic/otel-profiling-agent/libpf/nativeunwind/stackdeltatypes"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/libpf/process"
-	"github.com/elastic/otel-profiling-agent/libpf/remotememory"
-	"github.com/elastic/otel-profiling-agent/libpf/traceutil"
 	"github.com/elastic/otel-profiling-agent/lpm"
 	"github.com/elastic/otel-profiling-agent/metrics"
+	"github.com/elastic/otel-profiling-agent/nativeunwind"
+	sdtypes "github.com/elastic/otel-profiling-agent/nativeunwind/stackdeltatypes"
+	"github.com/elastic/otel-profiling-agent/process"
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
+	"github.com/elastic/otel-profiling-agent/remotememory"
+	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/elastic/otel-profiling-agent/traceutil"
+	"github.com/elastic/otel-profiling-agent/util"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // dummyProcess implements pfelf.Process for testing purposes
 type dummyProcess struct {
-	pid libpf.PID
+	pid util.PID
 }
 
-func (d *dummyProcess) PID() libpf.PID {
+func (d *dummyProcess) PID() util.PID {
 	return d.pid
 }
 
@@ -59,12 +63,12 @@ func (d *dummyProcess) GetRemoteMemory() remotememory.RemoteMemory {
 	return remotememory.RemoteMemory{}
 }
 
-func (d *dummyProcess) GetMappingFile(_ *process.Mapping) string {
-	return ""
+func (d *dummyProcess) GetMappingFileLastModified(_ *process.Mapping) int64 {
+	return 0
 }
 
 func (d *dummyProcess) CalculateMappingFileID(m *process.Mapping) (libpf.FileID, error) {
-	return pfelf.CalculateID(m.Path)
+	return libpf.FileIDFromExecutableFile(m.Path)
 }
 
 func (d *dummyProcess) OpenMappingFile(m *process.Mapping) (process.ReadAtCloser, error) {
@@ -79,7 +83,7 @@ func (d *dummyProcess) Close() error {
 	return nil
 }
 
-func newTestProcess(pid libpf.PID) process.Process {
+func newTestProcess(pid util.PID) process.Process {
 	return &dummyProcess{pid: pid}
 }
 
@@ -124,18 +128,15 @@ func generateDummyFiles(t *testing.T, num int) []string {
 	for i := 0; i < num; i++ {
 		name := fmt.Sprintf("dummy%d", i)
 		tmpfile, err := os.CreateTemp("", "*"+name)
-		if err != nil {
-			t.Fatalf("Failed to create dummy file %s: %v", name, err)
-		}
+		require.NoError(t, err)
+
 		// The generated fileID is based on the content of the file.
 		// So we write the pseudo random name to the file as content.
 		content := []byte(tmpfile.Name())
-		if _, err := tmpfile.Write(content); err != nil {
-			t.Fatalf("Failed to write dummy content to file: %v", err)
-		}
-		if err := tmpfile.Close(); err != nil {
-			t.Fatalf("Failed to close temporary file: %v", err)
-		}
+		_, err = tmpfile.Write(content)
+		require.NoError(t, err)
+		tmpfile.Close()
+		require.NoError(t, err)
 		files = append(files, tmpfile.Name())
 	}
 	return files
@@ -145,7 +146,7 @@ func generateDummyFiles(t *testing.T, num int) []string {
 // for the tests.
 type mappingArgs struct {
 	// pid represents the simulated process ID.
-	pid libpf.PID
+	pid util.PID
 	// vaddr represents the simulated start of the mapped memory.
 	vaddr uint64
 	// bias is the load bias to simulate and verify.
@@ -172,29 +173,31 @@ type ebpfMapsMockup struct {
 
 var _ interpreter.EbpfHandler = &ebpfMapsMockup{}
 
-func (mockup *ebpfMapsMockup) RemoveReportedPID(libpf.PID) {
+func (mockup *ebpfMapsMockup) RemoveReportedPID(util.PID) {
 }
 
-func (mockup *ebpfMapsMockup) UpdateInterpreterOffsets(uint16, host.FileID, []libpf.Range) error {
+func (mockup *ebpfMapsMockup) UpdateInterpreterOffsets(uint16, host.FileID,
+	[]util.Range) error {
 	return nil
 }
 
-func (mockup *ebpfMapsMockup) UpdateProcData(libpf.InterpType, libpf.PID, unsafe.Pointer) error {
+func (mockup *ebpfMapsMockup) UpdateProcData(libpf.InterpreterType, util.PID,
+	unsafe.Pointer) error {
 	mockup.updateProcCount++
 	return nil
 }
 
-func (mockup *ebpfMapsMockup) DeleteProcData(libpf.InterpType, libpf.PID) error {
+func (mockup *ebpfMapsMockup) DeleteProcData(libpf.InterpreterType, util.PID) error {
 	mockup.deleteProcCount++
 	return nil
 }
 
-func (mockup *ebpfMapsMockup) UpdatePidInterpreterMapping(libpf.PID,
+func (mockup *ebpfMapsMockup) UpdatePidInterpreterMapping(util.PID,
 	lpm.Prefix, uint8, host.FileID, uint64) error {
 	return nil
 }
 
-func (mockup *ebpfMapsMockup) DeletePidInterpreterMapping(libpf.PID, lpm.Prefix) error {
+func (mockup *ebpfMapsMockup) DeletePidInterpreterMapping(util.PID, lpm.Prefix) error {
 	return nil
 }
 
@@ -223,7 +226,7 @@ func (mockup *ebpfMapsMockup) DeleteStackDeltaPage(host.FileID, uint64) error {
 	return nil
 }
 
-func (mockup *ebpfMapsMockup) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Prefix,
+func (mockup *ebpfMapsMockup) UpdatePidPageMappingInfo(pid util.PID, prefix lpm.Prefix,
 	fileID uint64, bias uint64) error {
 	if prefix.Key == 0 && fileID == 0 && bias == 0 {
 		// If all provided values are 0 the hook was called to create
@@ -241,7 +244,7 @@ func (mockup *ebpfMapsMockup) setExpectedBias(expected uint64) {
 	mockup.expectedBias = expected
 }
 
-func (mockup *ebpfMapsMockup) DeletePidPageMappingInfo(_ libpf.PID, prefixes []lpm.Prefix) (int,
+func (mockup *ebpfMapsMockup) DeletePidPageMappingInfo(_ util.PID, prefixes []lpm.Prefix) (int,
 	error) {
 	mockup.deletePidPageMappingCount += uint8(len(prefixes))
 	return len(prefixes), nil
@@ -251,9 +254,23 @@ func (mockup *ebpfMapsMockup) CollectMetrics() []metrics.Metric     { return []m
 func (mockup *ebpfMapsMockup) SupportsGenericBatchOperations() bool { return false }
 func (mockup *ebpfMapsMockup) SupportsLPMTrieBatchOperations() bool { return false }
 
+type symbolReporterMockup struct{}
+
+func (s *symbolReporterMockup) ReportFallbackSymbol(_ libpf.FrameID, _ string) {}
+
+func (s *symbolReporterMockup) ExecutableMetadata(_ context.Context, _ libpf.FileID, _, _ string) {
+}
+
+func (s *symbolReporterMockup) FrameMetadata(_ libpf.FileID, _ libpf.AddressOrLineno,
+	_ util.SourceLineno, _ uint32, _, _ string) {
+}
+
+var _ reporter.SymbolReporter = (*symbolReporterMockup)(nil)
+
 func TestInterpreterConvertTrace(t *testing.T) {
 	partialNativeFrameFileID := uint64(0xabcdbeef)
 	nativeFrameLineno := libpf.AddressOrLineno(0x1234)
+
 	pythonAndNativeTrace := &host.Trace{
 		Frames: []host.Frame{{
 			// This represents a native frame
@@ -287,31 +304,29 @@ func TestInterpreterConvertTrace(t *testing.T) {
 				mapper.Set(testcase.trace.Frames[i].File, testcase.expect.Files[i])
 			}
 
-			interpreters := make([]bool, config.MaxTracers)
+			// For this test do not include interpreters.
+			noIinterpreters, _ := config.ParseTracers("")
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
 			// To test ConvertTrace we do not require all parts of processmanager.
 			manager, err := New(ctx,
-				interpreters,
+				noIinterpreters,
 				1*time.Second,
 				nil,
 				nil,
-				nil,
+				&symbolReporterMockup{},
 				nil,
 				true)
-			if err != nil {
-				t.Fatalf("Failed to initialize new process manager: %v", err)
-			}
+			require.NoError(t, err)
 
 			newTrace := manager.ConvertTrace(testcase.trace)
 
 			testcase.expect.Hash = traceutil.HashTrace(testcase.expect)
-			if (!reflect.DeepEqual(testcase.expect.Linenos, newTrace.Linenos) ||
-				!reflect.DeepEqual(testcase.expect.Files, newTrace.Files)) &&
-				testcase.expect.Hash == newTrace.Hash {
-				t.Fatalf("Trace %v does not match expected trace %v", newTrace, testcase.expect)
+			if testcase.expect.Hash == newTrace.Hash {
+				assert.Equal(t, testcase.expect.Linenos, newTrace.Linenos)
+				assert.Equal(t, testcase.expect.Files, newTrace.Files)
 			}
 		})
 	}
@@ -332,6 +347,7 @@ func getExpectedTrace(origTrace *host.Trace, linenos []libpf.AddressOrLineno) *l
 			newTrace.Linenos = append(newTrace.Linenos, frame.Lineno)
 		}
 	}
+
 	if linenos != nil {
 		newTrace.Linenos = linenos
 	}
@@ -366,17 +382,14 @@ func TestNewMapping(t *testing.T) {
 	}
 
 	cacheDir, err := os.MkdirTemp("", "*_cacheDir")
-	if err != nil {
-		t.Fatalf("Failed to create cache directory: %v", err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(cacheDir)
 
-	if err = config.SetConfiguration(&config.Config{
+	err = config.SetConfiguration(&config.Config{
 		ProjectID:      42,
 		CacheDirectory: cacheDir,
-		SecretToken:    "secret"}); err != nil {
-		t.Fatalf("failed to set temporary config: %s", err)
-	}
+		SecretToken:    "secret"})
+	require.NoError(t, err)
 
 	for name, testcase := range tests {
 		testcase := testcase
@@ -385,9 +398,10 @@ func TestNewMapping(t *testing.T) {
 			// so we replace the stack delta provider.
 			dummyProvider := dummyStackDeltaProvider{}
 			ebpfMockup := &ebpfMapsMockup{}
+			symRepMockup := &symbolReporterMockup{}
 
 			// For this test do not include interpreters.
-			noInterpreters := make([]bool, config.MaxTracers)
+			noInterpreters, _ := config.ParseTracers("")
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -397,12 +411,10 @@ func TestNewMapping(t *testing.T) {
 				1*time.Second,
 				ebpfMockup,
 				NewMapFileIDMapper(),
-				nil,
+				symRepMockup,
 				&dummyProvider,
 				true)
-			if err != nil {
-				t.Fatalf("Failed to initialize new process manager: %v", err)
-			}
+			require.NoError(t, err)
 
 			// Replace the internal hooks for the tests. These hooks catch the
 			// updates of the eBPF maps and let us compare the results.
@@ -445,16 +457,10 @@ func TestNewMapping(t *testing.T) {
 						Length: 0x10,
 					}, elfRef)
 				elfRef.Close()
-				if err != nil {
-					t.Fatalf("Failed to add new mapping: %v", err)
-				}
+				require.NoError(t, err)
 			}
 
-			if len(ebpfMockup.stackDeltaMemory) != testcase.expectedStackDeltas {
-				t.Fatalf("Expected %d entries in big_stack_deltas but got %d",
-					testcase.expectedStackDeltas,
-					len(ebpfMockup.stackDeltaMemory))
-			}
+			assert.Len(t, ebpfMockup.stackDeltaMemory, testcase.expectedStackDeltas)
 		})
 	}
 }
@@ -464,7 +470,7 @@ func populateManager(t *testing.T, pm *ProcessManager) {
 	t.Helper()
 
 	data := []struct {
-		pid libpf.PID
+		pid util.PID
 
 		mapping Mapping
 	}{
@@ -534,16 +540,15 @@ func populateManager(t *testing.T, pm *ProcessManager) {
 		mockup.setExpectedBias(c.mapping.Bias)
 		pr := newTestProcess(c.pid)
 		elfRef := pfelf.NewReference("", pr)
-		if err := pm.handleNewMapping(pr, &c.mapping, elfRef); err != nil {
-			t.Fatalf("Failed to populate manager with process: %v", err)
-		}
+		err := pm.handleNewMapping(pr, &c.mapping, elfRef)
+		require.NoError(t, err)
 	}
 }
 
 func TestProcExit(t *testing.T) {
 	tests := map[string]struct {
 		// pid represents the ID of a process.
-		pid libpf.PID
+		pid util.PID
 		// deletePidPageMappingCount reflects the number of times
 		// the deletePidPageMappingHook to update the eBPF map was called.
 		deletePidPageMappingCount uint8
@@ -584,9 +589,10 @@ func TestProcExit(t *testing.T) {
 			// so we replace the stack delta provider.
 			dummyProvider := dummyStackDeltaProvider{}
 			ebpfMockup := &ebpfMapsMockup{}
+			repMockup := &symbolReporterMockup{}
 
 			// For this test do not include interpreters.
-			noInterpreters := make([]bool, config.MaxTracers)
+			noInterpreters, _ := config.ParseTracers("")
 
 			ctx, cancel := context.WithCancel(context.Background())
 
@@ -595,12 +601,10 @@ func TestProcExit(t *testing.T) {
 				1*time.Second,
 				ebpfMockup,
 				NewMapFileIDMapper(),
-				nil,
+				repMockup,
 				&dummyProvider,
 				true)
-			if err != nil {
-				t.Fatalf("Failed to initialize new process manager: %v", err)
-			}
+			require.NoError(t, err)
 			defer cancel()
 
 			// Replace the internal hooks for the tests. These hooks catch the
@@ -614,23 +618,12 @@ func TestProcExit(t *testing.T) {
 			populateManager(t, manager)
 
 			_ = manager.ProcessPIDExit(testcase.pid)
-			if testcase.deletePidPageMappingCount != ebpfMockup.deletePidPageMappingCount {
-				t.Fatalf("Calls of deletePidPageMappingHook. Expected: %d\tGot: %d",
-					testcase.deletePidPageMappingCount,
-					ebpfMockup.deletePidPageMappingCount)
-			}
-
-			if testcase.deleteStackDeltaRangesCount != ebpfMockup.deleteStackDeltaPage {
-				t.Fatalf("Calls of DeleteStackDeltaPage. Expected: %d\tGot: %d",
-					testcase.deleteStackDeltaRangesCount,
-					ebpfMockup.deleteStackDeltaPage)
-			}
-
-			if testcase.deleteStackDeltaRangesCount != ebpfMockup.deleteStackDeltaRangesCount {
-				t.Fatalf("Calls of deleteStackDeltaRangesCountHook. Expected: %d\tGot: %d",
-					testcase.deleteStackDeltaRangesCount,
-					ebpfMockup.deleteStackDeltaRangesCount)
-			}
+			assert.Equal(t, testcase.deletePidPageMappingCount,
+				ebpfMockup.deletePidPageMappingCount)
+			assert.Equal(t, testcase.deleteStackDeltaRangesCount,
+				ebpfMockup.deleteStackDeltaPage)
+			assert.Equal(t, testcase.deleteStackDeltaRangesCount,
+				ebpfMockup.deleteStackDeltaRangesCount)
 		})
 	}
 }

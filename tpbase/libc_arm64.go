@@ -8,7 +8,7 @@
 
 package tpbase
 
-func ExtractTSDInfoX64_64(code []byte) (TSDInfo, error) {
+func ExtractTSDInfoX64_64(_ []byte) (TSDInfo, error) {
 	return TSDInfo{}, errArchNotImplemented
 }
 

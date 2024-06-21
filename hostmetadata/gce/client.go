@@ -6,7 +6,11 @@
 
 package gce
 
-import gcemetadata "cloud.google.com/go/compute/metadata"
+import (
+	"context"
+
+	gcemetadata "cloud.google.com/go/compute/metadata"
+)
 
 // gceMetadataClient is a type that implements the gceMetadataIface.
 // Its purpose is to allow unit-testing of the metadata collection logic.
@@ -22,7 +26,7 @@ type gceMetadataIface interface {
 
 // Get forwards to gcemetadata.Get
 func (*gceMetadataClient) Get(p string) (string, error) {
-	return gcemetadata.Get(p)
+	return gcemetadata.GetWithContext(context.Background(), p)
 }
 
 // InstanceTags forwards to gcemetadata.InstanceTags

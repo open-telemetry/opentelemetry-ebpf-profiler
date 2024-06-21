@@ -12,8 +12,8 @@ import (
 	"fmt"
 
 	"github.com/elastic/otel-profiling-agent/host"
-	sdtypes "github.com/elastic/otel-profiling-agent/libpf/nativeunwind/stackdeltatypes"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
+	sdtypes "github.com/elastic/otel-profiling-agent/nativeunwind/stackdeltatypes"
 )
 
 // createVDSOSyntheticRecord creates a generated stack-delta record spanning the entire vDSO binary,
@@ -31,8 +31,11 @@ func createVDSOSyntheticRecord(ef *pfelf.File) sdtypes.IntervalData {
 	deltas = append(deltas, sdtypes.StackDelta{Address: 0, Info: useLR})
 	if sym, err := ef.LookupSymbol("__kernel_rt_sigreturn"); err == nil {
 		addr := uint64(sym.Address)
-		deltas = append(deltas, sdtypes.StackDelta{Address: addr, Info: sdtypes.UnwindInfoSignal})
-		deltas = append(deltas, sdtypes.StackDelta{Address: addr + uint64(sym.Size), Info: useLR})
+		deltas = append(
+			deltas,
+			sdtypes.StackDelta{Address: addr, Info: sdtypes.UnwindInfoSignal},
+			sdtypes.StackDelta{Address: addr + uint64(sym.Size), Info: useLR},
+		)
 	}
 	return sdtypes.IntervalData{Deltas: deltas}
 }

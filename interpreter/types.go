@@ -12,12 +12,13 @@ import (
 
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/process"
-	"github.com/elastic/otel-profiling-agent/libpf/remotememory"
 	"github.com/elastic/otel-profiling-agent/lpm"
 	"github.com/elastic/otel-profiling-agent/metrics"
+	"github.com/elastic/otel-profiling-agent/process"
+	"github.com/elastic/otel-profiling-agent/remotememory"
 	"github.com/elastic/otel-profiling-agent/reporter"
 	"github.com/elastic/otel-profiling-agent/tpbase"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 const (
@@ -84,28 +85,25 @@ var (
 // need to hard code different well known offsets in the xxData. It allows then to still
 // share the Data and Instance code between these versions.
 
-// Symbolizer is the interface to call back for frame symbolization information
-type Symbolizer = reporter.SymbolReporter
-
 // EbpfHandler provides the functionality for interpreters to interact with eBPF maps.
 type EbpfHandler interface {
 	// UpdateInterpreterOffsets adds the given offsetRanges to the eBPF map interpreter_offsets.
 	UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID host.FileID,
-		offsetRanges []libpf.Range) error
+		offsetRanges []util.Range) error
 
 	// UpdateProcData adds the given interpreter data to the named eBPF map.
-	UpdateProcData(typ libpf.InterpType, pid libpf.PID, data unsafe.Pointer) error
+	UpdateProcData(typ libpf.InterpreterType, pid util.PID, data unsafe.Pointer) error
 
 	// DeleteProcData removes any data from the named eBPF map.
-	DeleteProcData(typ libpf.InterpType, pid libpf.PID) error
+	DeleteProcData(typ libpf.InterpreterType, pid util.PID) error
 
 	// UpdatePidInterpreterMapping updates the eBPF map pid_page_to_mapping_info
 	// to call given interpreter unwinder.
-	UpdatePidInterpreterMapping(libpf.PID, lpm.Prefix, uint8, host.FileID, uint64) error
+	UpdatePidInterpreterMapping(util.PID, lpm.Prefix, uint8, host.FileID, uint64) error
 
 	// DeletePidInterpreterMapping removes the element specified by pid, prefix
 	// rom the eBPF map pid_page_to_mapping_info.
-	DeletePidInterpreterMapping(libpf.PID, lpm.Prefix) error
+	DeletePidInterpreterMapping(util.PID, lpm.Prefix) error
 }
 
 // Loader is a function to detect and load data from given interpreter ELF file.
@@ -123,7 +121,7 @@ type Loader func(ebpf EbpfHandler, info *LoaderInfo) (Data, error)
 type Data interface {
 	// Attach checks if the given dso is supported, and loads the information
 	// of it to the ebpf maps.
-	Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory) (
+	Attach(ebpf EbpfHandler, pid util.PID, bias libpf.Address, rm remotememory.RemoteMemory) (
 		Instance, error)
 }
 
@@ -131,7 +129,7 @@ type Data interface {
 type Instance interface {
 	// Detach removes any information from the ebpf maps. The pid is given as argument so
 	// simple interpreters can use the global Data also as the Instance implementation.
-	Detach(ebpf EbpfHandler, pid libpf.PID) error
+	Detach(ebpf EbpfHandler, pid util.PID) error
 
 	// SynchronizeMappings is called when the processmanager has reread process memory
 	// mappings. Interpreters not needing to process these events can simply ignore them
@@ -141,11 +139,11 @@ type Instance interface {
 
 	// UpdateTSDInfo is called when the process C-library Thread Specific Data related
 	// introspection data has been updated.
-	UpdateTSDInfo(ebpf EbpfHandler, pid libpf.PID, info tpbase.TSDInfo) error
+	UpdateTSDInfo(ebpf EbpfHandler, pid util.PID, info tpbase.TSDInfo) error
 
 	// Symbolize requests symbolization of the given frame, and dispatches this symbolization
-	// to the collection agent using Symbolizer interface. The frame's contents (frame type,
-	// file ID and line number) are appended to trace.
+	// to the collection agent. The frame's contents (frame type, file ID and line number)
+	// are appended to newTrace.
 	Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame,
 		trace *libpf.Trace) error
 

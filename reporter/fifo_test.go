@@ -9,8 +9,8 @@ package reporter
 import (
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFifo(t *testing.T) {
@@ -26,10 +26,9 @@ func TestFifo(t *testing.T) {
 	var retIntegersShared []int
 	retIntegersShared = append(retIntegersShared, 8, 9, 10, 11, 12)
 
-	sharedFifo := &fifoRingBuffer[int]{}
-	if err := sharedFifo.initFifo(5, t.Name()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	sharedFifo := &FifoRingBuffer[int]{}
+	err := sharedFifo.InitFifo(5, t.Name())
+	require.NoError(t, err)
 
 	// nolint:lll
 	tests := map[string]struct {
@@ -75,7 +74,7 @@ func TestFifo(t *testing.T) {
 	for name, testcase := range tests {
 		name := name
 		testcase := testcase
-		var fifo *fifoRingBuffer[int]
+		var fifo *FifoRingBuffer[int]
 
 		t.Run(name, func(t *testing.T) {
 			if testcase.parallel {
@@ -85,57 +84,38 @@ func TestFifo(t *testing.T) {
 			if testcase.sharedFifo {
 				fifo = sharedFifo
 			} else {
-				fifo = &fifoRingBuffer[int]{}
-				if err := fifo.initFifo(testcase.size, t.Name()); err != nil {
-					if testcase.err {
-						// We expected an error and received it.
-						// So we can continue.
-						return
-					}
-					t.Fatalf("unexpected error: %v", err)
+				fifo = &FifoRingBuffer[int]{}
+				err := fifo.InitFifo(testcase.size, t.Name())
+				if testcase.err {
+					require.Error(t, err)
+					return
 				}
+				require.NoError(t, err)
 			}
 
-			empty := fifo.readAll()
-			if len(empty) != 0 {
-				t.Fatalf("Nothing was added to fifo but fifo returned %d elements", len(empty))
-			}
+			empty := fifo.ReadAll()
+			require.Empty(t, empty)
 
 			for _, v := range testcase.data {
-				fifo.append(v)
+				fifo.Append(v)
 			}
 
-			data := fifo.readAll()
+			data := fifo.ReadAll()
 			for i := uint32(0); i < fifo.size; i++ {
-				if fifo.data[i] != 0 {
-					t.Errorf("fifo not empty after readAll(), idx: %d", i)
-				}
+				assert.Equalf(t, 0, fifo.data[i], "fifo not empty after ReadAll(), idx: %d", i)
 			}
-
-			if diff := cmp.Diff(testcase.returned, data); diff != "" {
-				t.Errorf("returned data (%d) mismatch (-want +got):\n%s", len(data), diff)
-			}
-
-			overwriteCount := fifo.getOverwriteCount()
-			if overwriteCount != testcase.overwriteCount {
-				t.Fatalf("expected an overwrite count %d but got %d", testcase.overwriteCount,
-					overwriteCount)
-			}
-			overwriteCount = fifo.getOverwriteCount()
-			if overwriteCount != 0 {
-				t.Fatalf(
-					"after retrieving the overwriteCount, it should be reset to 0 but got %d",
-					overwriteCount)
-			}
+			assert.Equal(t, testcase.returned, data)
+			assert.Equal(t, testcase.overwriteCount, fifo.GetOverwriteCount(), "overwrite count")
+			assert.Zero(t, fifo.GetOverwriteCount(), "overwrite count not reset")
 		})
 	}
 }
 
 func TestFifo_isWritableWhenZeroed(t *testing.T) {
-	fifo := &fifoRingBuffer[int]{}
-	assert.Nil(t, fifo.initFifo(1, t.Name()))
+	fifo := &FifoRingBuffer[int]{}
+	require.NoError(t, fifo.InitFifo(1, t.Name()))
 	fifo.zeroFifo()
 	assert.NotPanics(t, func() {
-		fifo.append(123)
+		fifo.Append(123)
 	})
 }

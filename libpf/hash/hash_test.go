@@ -9,6 +9,8 @@ package hash
 import (
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestUint64(t *testing.T) {
@@ -28,9 +30,7 @@ func TestUint64(t *testing.T) {
 		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			result := Uint64(testcase.input)
-			if result != testcase.expect {
-				t.Fatalf("Unexpected hash. Expected %d, got %d", testcase.expect, result)
-			}
+			assert.Equal(t, testcase.expect, result)
 		})
 	}
 }
@@ -51,9 +51,7 @@ func TestUint32(t *testing.T) {
 		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			result := Uint32(testcase.input)
-			if result != testcase.expect {
-				t.Fatalf("Unexpected hash. Expected %d, got %d", testcase.expect, result)
-			}
+			assert.Equal(t, testcase.expect, result)
 		})
 	}
 }

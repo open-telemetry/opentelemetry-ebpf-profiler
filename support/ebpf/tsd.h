@@ -9,7 +9,7 @@ int tsd_read(const TSDInfo *tsi, const void *tsd_base, int key, void **out) {
   const void *tsd_addr = tsd_base + tsi->offset;
   if (tsi->indirect) {
     // Read the memory pointer that contains the per-TSD key data
-    if (bpf_probe_read(&tsd_addr, sizeof(tsd_addr), tsd_addr)) {
+    if (bpf_probe_read_user(&tsd_addr, sizeof(tsd_addr), tsd_addr)) {
       goto err;
     }
   }
@@ -17,7 +17,7 @@ int tsd_read(const TSDInfo *tsi, const void *tsd_base, int key, void **out) {
   tsd_addr += key * tsi->multiplier;
 
   DEBUG_PRINT("readTSD key %d from address 0x%lx", key, (unsigned long) tsd_addr);
-  if (bpf_probe_read(out, sizeof(*out), tsd_addr)) {
+  if (bpf_probe_read_user(out, sizeof(*out), tsd_addr)) {
     goto err;
   }
   return 0;
@@ -30,7 +30,7 @@ err:
 
 // tsd_get_base looks up the base address for TSD variables (TPBASE).
 static inline __attribute__((__always_inline__))
-int tsd_get_base(struct pt_regs *ctx, void **tsd_base) {
+int tsd_get_base(void **tsd_base) {
 #ifdef TESTING_COREDUMP
   *tsd_base = (void *) __cgo_ctx->tp_base;
   return 0;
@@ -50,7 +50,7 @@ int tsd_get_base(struct pt_regs *ctx, void **tsd_base) {
   // syscfg->tpbase_offset is populated with the offset of `fsbase` or equivalent field
   // relative to a `task_struct`, so we use that instead.
   void *tpbase_ptr = ((char *)task) + syscfg->tpbase_offset;
-  if (bpf_probe_read(tsd_base, sizeof(void *), tpbase_ptr)) {
+  if (bpf_probe_read_kernel(tsd_base, sizeof(void *), tpbase_ptr)) {
     DEBUG_PRINT("Failed to read tpbase value");
     increment_metric(metricID_UnwindErrBadTPBaseAddr);
     return -1;

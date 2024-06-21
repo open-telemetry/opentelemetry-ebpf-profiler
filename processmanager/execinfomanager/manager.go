@@ -10,28 +10,33 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
+
+	"github.com/elastic/otel-profiling-agent/libpf"
+	log "github.com/sirupsen/logrus"
+
+	lru "github.com/elastic/go-freelru"
 
 	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/interpreter"
+	"github.com/elastic/otel-profiling-agent/interpreter/apmint"
+	"github.com/elastic/otel-profiling-agent/interpreter/dotnet"
 	"github.com/elastic/otel-profiling-agent/interpreter/hotspot"
 	"github.com/elastic/otel-profiling-agent/interpreter/nodev8"
 	"github.com/elastic/otel-profiling-agent/interpreter/perl"
 	"github.com/elastic/otel-profiling-agent/interpreter/php"
-	"github.com/elastic/otel-profiling-agent/interpreter/php/phpjit"
 	"github.com/elastic/otel-profiling-agent/interpreter/python"
 	"github.com/elastic/otel-profiling-agent/interpreter/ruby"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/nativeunwind"
-	sdtypes "github.com/elastic/otel-profiling-agent/libpf/nativeunwind/stackdeltatypes"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
 	"github.com/elastic/otel-profiling-agent/libpf/xsync"
 	"github.com/elastic/otel-profiling-agent/metrics"
+	"github.com/elastic/otel-profiling-agent/nativeunwind"
+	sdtypes "github.com/elastic/otel-profiling-agent/nativeunwind/stackdeltatypes"
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
 	"github.com/elastic/otel-profiling-agent/support"
 	"github.com/elastic/otel-profiling-agent/tpbase"
-	log "github.com/sirupsen/logrus"
-	"go.uber.org/multierr"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 const (
@@ -39,6 +44,19 @@ const (
 	// recorded. Currently reflects the V8 binary blob size, in which
 	// the gap size is >= 512kB.
 	minimumMemoizableGapSize = 512 * 1024
+
+	// deferredFileIDSize defines the maximum size of the deferredFileIDs LRU
+	// cache that contains file IDs for which stack delta extraction is deferred
+	// to avoid busy loops.
+	deferredFileIDSize = 8192
+	// TTL of entries in the deferredFileIDs LRU cache.
+	deferredFileIDTimeout = 90 * time.Second
+)
+
+var (
+	// ErrDeferredFileID indicates that handling of stack deltas for a file ID failed
+	// and should only be tried again at a later point.
+	ErrDeferredFileID = errors.New("deferred FileID")
 )
 
 // ExecutableInfo stores information about an executable (ELF file).
@@ -74,34 +92,50 @@ type ExecutableInfoManager struct {
 
 	// state bundles up all mutable state of the manager.
 	state xsync.RWMutex[executableInfoManagerState]
+
+	// deferredFileIDs caches file IDs for which stack delta extraction failed and
+	// retrying extraction of stack deltas should be deferred for some time.
+	deferredFileIDs *lru.SyncedLRU[host.FileID, libpf.Void]
 }
 
 // NewExecutableInfoManager creates a new instance of the executable info manager.
 func NewExecutableInfoManager(
 	sdp nativeunwind.StackDeltaProvider,
 	ebpf pmebpf.EbpfHandler,
-	includeTracers []bool,
-) *ExecutableInfoManager {
+	includeTracers config.IncludedTracers,
+) (*ExecutableInfoManager, error) {
 	// Initialize interpreter loaders.
 	interpreterLoaders := make([]interpreter.Loader, 0)
-	if includeTracers[config.PerlTracer] {
+	if includeTracers.Has(config.PerlTracer) {
 		interpreterLoaders = append(interpreterLoaders, perl.Loader)
 	}
-	if includeTracers[config.PythonTracer] {
+	if includeTracers.Has(config.PythonTracer) {
 		interpreterLoaders = append(interpreterLoaders, python.Loader)
 	}
-	if includeTracers[config.PHPTracer] {
-		interpreterLoaders = append(interpreterLoaders, php.Loader, phpjit.Loader)
+	if includeTracers.Has(config.PHPTracer) {
+		interpreterLoaders = append(interpreterLoaders, php.Loader, php.OpcacheLoader)
 	}
-	if includeTracers[config.HotspotTracer] {
+	if includeTracers.Has(config.HotspotTracer) {
 		interpreterLoaders = append(interpreterLoaders, hotspot.Loader)
 	}
-	if includeTracers[config.RubyTracer] {
+	if includeTracers.Has(config.RubyTracer) {
 		interpreterLoaders = append(interpreterLoaders, ruby.Loader)
 	}
-	if includeTracers[config.V8Tracer] {
+	if includeTracers.Has(config.V8Tracer) {
 		interpreterLoaders = append(interpreterLoaders, nodev8.Loader)
 	}
+	if includeTracers.Has(config.DotnetTracer) {
+		interpreterLoaders = append(interpreterLoaders, dotnet.Loader)
+	}
+
+	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
+
+	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
+		func(id host.FileID) uint32 { return uint32(id) })
+	if err != nil {
+		return nil, err
+	}
+	deferredFileIDs.SetLifetime(deferredFileIDTimeout)
 
 	return &ExecutableInfoManager{
 		sdp: sdp,
@@ -111,7 +145,8 @@ func NewExecutableInfoManager(
 			unwindInfoIndex:    map[sdtypes.UnwindInfo]uint16{},
 			ebpf:               ebpf,
 		}),
-	}
+		deferredFileIDs: deferredFileIDs,
+	}, nil
 }
 
 // AddOrIncRef either adds information about an executable to the internal cache (when first
@@ -121,11 +156,14 @@ func NewExecutableInfoManager(
 // of getters and more complicated locking semantics.
 func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	elfRef *pfelf.Reference) (ExecutableInfo, error) {
+	if _, exists := mgr.deferredFileIDs.Get(fileID); exists {
+		return ExecutableInfo{}, ErrDeferredFileID
+	}
 	var (
 		intervalData sdtypes.IntervalData
 		tsdInfo      *tpbase.TSDInfo
 		ref          mapRef
-		gaps         []libpf.Range
+		gaps         []util.Range
 		err          error
 	)
 
@@ -143,6 +181,9 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	mgr.state.WUnlock(&state)
 
 	if err = mgr.sdp.GetIntervalStructuresForFile(fileID, elfRef, &intervalData); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			mgr.deferredFileIDs.Add(fileID, libpf.Void{})
+		}
 		return ExecutableInfo{}, fmt.Errorf("failed to extract interval data: %w", err)
 	}
 
@@ -165,6 +206,7 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// Load the data into BPF maps.
 	ref, gaps, err = state.loadDeltas(fileID, intervalData.Deltas)
 	if err != nil {
+		mgr.deferredFileIDs.Add(fileID, libpf.Void{})
 		return ExecutableInfo{}, fmt.Errorf("failed to load deltas: %w", err)
 	}
 
@@ -195,7 +237,7 @@ func (mgr *ExecutableInfoManager) AddSynthIntervalData(
 	defer mgr.state.WUnlock(&state)
 
 	if _, exists := state.executables[fileID]; exists {
-		return fmt.Errorf("AddSynthIntervalData: mapping already exists")
+		return errors.New("AddSynthIntervalData: mapping already exists")
 	}
 
 	ref, _, err := state.loadDeltas(fileID, data.Deltas)
@@ -233,7 +275,7 @@ func (mgr *ExecutableInfoManager) RemoveOrDecRef(fileID host.FileID) error {
 		delete(state.executables, fileID)
 	case 0:
 		// This should be unreachable.
-		return fmt.Errorf("state corruption in ExecutableInfoManager: encountered 0 RC")
+		return errors.New("state corruption in ExecutableInfoManager: encountered 0 RC")
 	default:
 		info.rc--
 	}
@@ -260,10 +302,8 @@ func (mgr *ExecutableInfoManager) UpdateMetricSummary(summary metrics.Summary) {
 	mgr.state.RUnlock(&state)
 
 	deltaProviderStatistics := mgr.sdp.GetAndResetStatistics()
-	summary[metrics.IDStackDeltaProviderCacheHit] =
-		metrics.MetricValue(deltaProviderStatistics.Hit)
-	summary[metrics.IDStackDeltaProviderCacheMiss] =
-		metrics.MetricValue(deltaProviderStatistics.Miss)
+	summary[metrics.IDStackDeltaProviderSuccess] =
+		metrics.MetricValue(deltaProviderStatistics.Success)
 	summary[metrics.IDStackDeltaProviderExtractionError] =
 		metrics.MetricValue(deltaProviderStatistics.ExtractionErrors)
 }
@@ -329,11 +369,11 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 func (state *executableInfoManagerState) loadDeltas(
 	fileID host.FileID,
 	deltas []sdtypes.StackDelta,
-) (ref mapRef, gaps []libpf.Range, err error) {
+) (ref mapRef, gaps []util.Range, err error) {
 	numDeltas := len(deltas)
 	if numDeltas == 0 {
 		// If no deltas are extracted, cache the result but don't reserve memory in BPF maps.
-		return mapRef{MapID: 0}, []libpf.Range{}, nil
+		return mapRef{MapID: 0}, []util.Range{}, nil
 	}
 
 	firstPage := deltas[0].Address >> support.StackDeltaPageBits
@@ -359,7 +399,7 @@ func (state *executableInfoManagerState) loadDeltas(
 				nextDeltaAddr-delta.Address >= minimumMemoizableGapSize {
 				// Remember large gaps so ProcessManager plugins can
 				// later use them to find precompiled blobs without deltas.
-				gaps = append(gaps, libpf.Range{
+				gaps = append(gaps, util.Range{
 					Start: delta.Address,
 					End:   nextDeltaAddr})
 			}
@@ -464,15 +504,13 @@ func (state *executableInfoManagerState) unloadDeltas(
 	var err error
 	for i := uint64(0); i < uint64(ref.NumPages); i++ {
 		pageAddr := ref.StartPage + i<<support.StackDeltaPageBits
-		multierr.AppendInto(&err, state.ebpf.DeleteStackDeltaPage(fileID, pageAddr))
+		err = errors.Join(err, state.ebpf.DeleteStackDeltaPage(fileID, pageAddr))
 	}
 
 	state.numStackDeltaMapPages -= uint64(ref.NumPages)
 
 	// Now remove the actual stack delta data after all references are removed.
-	multierr.AppendInto(&err, state.ebpf.DeleteExeIDToStackDeltas(fileID, ref.MapID))
-
-	return err
+	return errors.Join(err, state.ebpf.DeleteExeIDToStackDeltas(fileID, ref.MapID))
 }
 
 // entry is the type used in the EIM executable map.

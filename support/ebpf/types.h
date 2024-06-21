@@ -271,6 +271,36 @@ enum {
   // number of times an unwind_info_array index was invalid
   metricID_UnwindNativeErrBadUnwindInfoIndex,
 
+  // number of failures to get TSD base for APM correlation
+  metricID_UnwindApmIntErrReadTsdBase,
+
+  // number of failures read the APM correlation pointer
+  metricID_UnwindApmIntErrReadCorrBufPtr,
+
+  // number of failures read the APM correlation buffer
+  metricID_UnwindApmIntErrReadCorrBuf,
+
+  // number of successful reads of APM correlation info
+  metricID_UnwindApmIntReadSuccesses,
+
+  // number of attempted Dotnet unwinds
+  metricID_UnwindDotnetAttempts,
+
+  // number of unwound Dotnet frames
+  metricID_UnwindDotnetFrames,
+
+  // number of times no entry for a process exists in the Dotnet process info array
+  metricID_UnwindDotnetErrNoProcInfo,
+
+  // number of failures to read Dotnet frame pointer data
+  metricID_UnwindDotnetErrBadFP,
+
+  // number of failures to read Dotnet CodeHeader object
+  metricID_UnwindDotnetErrCodeHeader,
+
+  // number of failures to unwind code object due to its large size
+  metricID_UnwindDotnetErrCodeTooLarge,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -297,6 +327,7 @@ typedef enum TracePrograms {
   PROG_UNWIND_PHP,
   PROG_UNWIND_RUBY,
   PROG_UNWIND_V8,
+  PROG_UNWIND_DOTNET,
   NUM_TRACER_PROGS,
 } TracePrograms;
 
@@ -327,10 +358,12 @@ typedef struct Frame {
   u64 addr_or_line;
   // Indicates the type of the frame (Python, PHP, native etc.).
   u8 kind;
+  // Indicates that the address is a return address.
+  u8 return_address;
   // Explicit padding bytes that the compiler would have inserted anyway.
   // Here to make it clear to readers that there are spare bytes that could
   // be put to work without extra cost in case an interpreter needs it.
-  u8 pad[7];
+  u8 pad[6];
 } Frame;
 
 _Static_assert(sizeof(Frame) == 3 * 8, "frame padding not working as expected");
@@ -341,6 +374,11 @@ typedef struct TSDInfo {
   u8 multiplier;
   u8 indirect;
 } TSDInfo;
+
+// DotnetProcInfo is a container for the data needed to build stack trace for a dotnet process.
+typedef struct DotnetProcInfo {
+  u32 version;
+} DotnetProcInfo;
 
 // PerlProcInfo is a container for the data needed to build a stack trace for a Perl process.
 typedef struct PerlProcInfo {
@@ -363,9 +401,11 @@ typedef struct PyProcInfo {
   // The Python object member offsets
   u8 PyThreadState_frame;
   u8 PyCFrame_current_frame;
-  u8 PyFrameObject_f_back, PyFrameObject_f_code, PyFrameObject_f_lasti, PyFrameObject_f_is_entry;
+  u8 PyFrameObject_f_back, PyFrameObject_f_code, PyFrameObject_f_lasti;
+  u8 PyFrameObject_entry_member, PyFrameObject_entry_val;
   u8 PyCodeObject_co_argcount, PyCodeObject_co_kwonlyargcount;
   u8 PyCodeObject_co_flags, PyCodeObject_co_firstlineno;
+  u8 PyCodeObject_sizeof;
 } PyProcInfo;
 
 // PHPProcInfo is a container for the data needed to build a stack trace for a PHP process.
@@ -377,12 +417,6 @@ typedef struct PHPProcInfo {
   u8 zend_execute_data_function, zend_execute_data_opline, zend_execute_data_prev_execute_data;
   u8 zend_execute_data_this_type_info, zend_function_type, zend_op_lineno;
 } PHPProcInfo;
-
-// PHPJITProcInfo is a container for the data needed to detect if a PC corresponds to a PHP
-// JIT program. This is used to adjust the return address.
-typedef struct PHPJITProcInfo {
-  u64 start, end;
-} PHPJITProcInfo;
 
 // HotspotProcInfo is a container for the data needed to build a stack trace
 // for a Java Hotspot VM process.
@@ -446,6 +480,38 @@ typedef struct V8ProcInfo {
 // COMM_LEN defines the maximum length we will receive for the comm of a task.
 #define COMM_LEN 16
 
+// 128-bit APM trace ID.
+typedef union ApmTraceID {
+  u8 raw[16];
+  struct {
+    u64 lo;
+    u64 hi;
+  } as_int;
+} ApmTraceID;
+
+_Static_assert(sizeof(ApmTraceID) == 16, "unexpected trace ID size");
+
+// 64-bit APM transaction / span ID.
+typedef union ApmSpanID {
+  u8 raw[8];
+  u64 as_int;
+} ApmSpanID;
+
+_Static_assert(sizeof(ApmSpanID) == 8, "unexpected trace ID size");
+
+// Defines the format of the APM correlation TLS buffer.
+//
+// Specification: https://github.com/elastic/apm/blob/bd5fa9c1/specs/agents/universal-profiling-integration.md#thread-local-storage-layout
+typedef struct __attribute__((packed)) ApmCorrelationBuf {
+  u16 layout_minor_ver;
+  u8 valid;
+  u8 trace_present;
+  u8 trace_flags;
+  ApmTraceID trace_id;
+  ApmSpanID span_id;
+  ApmSpanID transaction_id;
+} ApmCorrelationBuf;
+
 // Container for a stack trace
 typedef struct Trace {
   // The process ID
@@ -454,6 +520,10 @@ typedef struct Trace {
   u64 ktime;
   // The current COMM of the thread of this Trace.
   char comm[COMM_LEN];
+  // APM transaction ID or all-zero if not present.
+  ApmSpanID apm_transaction_id;
+  // APM trace ID or all-zero if not present.
+  ApmTraceID apm_trace_id;
   // The kernel stack ID.
   s32 kernel_stack_id;
   // The number of frames in the stack.
@@ -476,13 +546,11 @@ typedef struct UnwindState {
   u64 fp;
 
 #if defined(__x86_64__)
-  // Current register value for r13
-  u64 r13;
+  // Current register values for named registers
+  u64 rax, r9, r11, r13, r15;
 #elif defined(__aarch64__)
-  // Current register value for lr
-  u64 lr;
-  // Current register value for r22
-  u64 r22;
+  // Current register values for named registers
+  u64 lr, r22;
 #endif
 
   // The executable ID/hash associated with PC
@@ -497,10 +565,10 @@ typedef struct UnwindState {
   // If unwinding was aborted due to an error, this contains the reason why.
   ErrorCode unwind_error;
 
-#if defined(__aarch64__)
-  // If unwinding on LR register can be used (top frame or after signal handler)
-  bool lr_valid;
-#endif
+  // Set if the PC is a return address. That is, it points to the next instruction
+  // after a CALL instruction, and requires to be adjusted during symbolization.
+  // On aarch64, this additionally means that LR register can not be used.
+  bool return_address;
 } UnwindState;
 
 // Container for unwinding state needed by the Perl unwinder. Keeping track of
@@ -537,6 +605,16 @@ typedef struct RubyUnwindState {
   // Pointer to the last control frame struct in the Ruby VM stack we want to handle.
   void *last_stack_frame;
 } RubyUnwindState;
+
+// Container for additional scratch space needed by the HotSpot unwinder.
+typedef struct DotnetUnwindScratchSpace {
+  // Buffer to read nibble map to locate code start. One map entry allows seeking backwards
+  // 32*8 = 256 bytes of code. This defines the maximum size for a JITted function we
+  // can reconize: 256 bytes/element * 128 elements = 32kB function size.
+  u32 map[128];
+  // Extra space to read to map fixed amount of bytes, but to dynamic offset.
+  u32 extra[128];
+} DotnetUnwindScratchSpace;
 
 // Container for additional scratch space needed by the HotSpot unwinder.
 typedef struct HotspotUnwindScratchSpace {
@@ -585,6 +663,8 @@ typedef struct PerCPURecord {
   // The current Ruby unwinder state.
   RubyUnwindState rubyUnwindState;
   union {
+    // Scratch space for the Dotnet unwinder.
+    DotnetUnwindScratchSpace dotnetUnwindScratch;
     // Scratch space for the HotSpot unwinder.
     HotspotUnwindScratchSpace hotspotUnwindScratch;
     // Scratch space for the V8 unwinder
@@ -597,6 +677,9 @@ typedef struct PerCPURecord {
 
   // tailCalls tracks the number of calls to bpf_tail_call().
   u8 tailCalls;
+
+  // ratelimitAction determines the PID event rate limiting mode
+  u8 ratelimitAction;
 } PerCPURecord;
 
 // UnwindInfo contains the unwind information needed to unwind one frame
@@ -662,9 +745,12 @@ typedef struct OffsetRange {
   u16 program_index;  // The interpreter-specific program index to call.
 } OffsetRange;
 
-// Number of bytes of code to extract to userspace via codedump helper.
-// Needed for tpbase offset calculations.
-#define CODEDUMP_BYTES 128
+// SystemAnalysis is the structure in system_analysis map
+typedef struct SystemAnalysis {
+  u64 address;
+  u32 pid;
+  u8 code[128];
+} SystemAnalysis;
 
 // Event is the header for all events sent through the report_events
 // perf event output channel (event_send_trigger).
@@ -674,11 +760,6 @@ typedef struct Event {
 
 // Event types that notifications are sent for through event_send_trigger.
 #define EVENT_TYPE_GENERIC_PID 1
-
-// Maximum time in nanoseconds that a PID is allowed to stay in
-// maps/reported_pids before being replaced/overwritten.
-// Default is 30 seconds.
-#define REPORTED_PIDS_TIMEOUT 30000000000ULL
 
 // PIDPage represents the key of the eBPF map pid_page_to_mapping_info.
 typedef struct PIDPage {
@@ -749,6 +830,12 @@ typedef struct SystemConfig {
   // populated by the host agent based on kernel code analysis.
   u64 tpbase_offset;
 
+  // The offset of stack base within `task_struct`.
+  u32 task_stack_offset;
+
+  // The offset of struct pt_regs within the kernel entry stack.
+  u32 stack_ptregs_offset;
+
   // Enables the temporary hack that drops pure errors frames in unwind_stop.
   bool drop_error_only_traces;
 } SystemConfig;
@@ -758,5 +845,9 @@ typedef struct SystemConfig {
 #define PSR_MODE32_BIT 0x00000010
 #define PSR_MODE_MASK  0x0000000f
 #define PSR_MODE_EL0t  0x00000000
+
+typedef struct ApmIntProcInfo {
+  u64 tls_offset;
+} ApmIntProcInfo;
 
 #endif

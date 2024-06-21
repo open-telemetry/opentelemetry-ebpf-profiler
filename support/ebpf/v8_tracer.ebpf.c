@@ -32,10 +32,11 @@ bpf_map_def SEC("maps") v8_procs = {
 
 // Record a V8 frame
 static inline __attribute__((__always_inline__))
-ErrorCode push_v8(Trace *trace, unsigned long pointer_and_type, unsigned long delta_or_marker) {
+ErrorCode push_v8(Trace *trace, unsigned long pointer_and_type, unsigned long delta_or_marker,
+    bool return_address) {
   DEBUG_PRINT("Pushing v8 frame delta_or_marker=%lx, pointer_and_type=%lx",
     delta_or_marker, pointer_and_type);
-  return _push(trace, pointer_and_type, delta_or_marker, FRAME_MARKER_V8);
+  return _push_with_return_address(trace, pointer_and_type, delta_or_marker, FRAME_MARKER_V8, return_address);
 }
 
 // Verify a V8 tagged pointer
@@ -51,7 +52,7 @@ uintptr_t v8_verify_pointer(uintptr_t maybe_pointer) {
 static inline __attribute__((__always_inline__))
 uintptr_t v8_read_object_ptr(uintptr_t addr) {
   uintptr_t maybe_pointer;
-  if (bpf_probe_read(&maybe_pointer, sizeof(maybe_pointer), (void*)addr)) {
+  if (bpf_probe_read_user(&maybe_pointer, sizeof(maybe_pointer), (void*)addr)) {
     return 0;
   }
   return v8_verify_pointer(maybe_pointer);
@@ -77,7 +78,7 @@ u16 v8_read_object_type(V8ProcInfo *vi, uintptr_t addr) {
   }
   uintptr_t map = v8_read_object_ptr(addr + vi->off_HeapObject_map);
   u16 type;
-  if (!map || bpf_probe_read(&type, sizeof(type), (void*)(map + vi->off_Map_instancetype))) {
+  if (!map || bpf_probe_read_user(&type, sizeof(type), (void*)(map + vi->off_Map_instancetype))) {
     return 0;
   }
   return type;
@@ -100,7 +101,7 @@ ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
   }
 
   // Read FP pointer data
-  if (bpf_probe_read(scratch->fp_ctx, V8_FP_CONTEXT_SIZE, (void*)(fp - V8_FP_CONTEXT_SIZE))) {
+  if (bpf_probe_read_user(scratch->fp_ctx, V8_FP_CONTEXT_SIZE, (void*)(fp - V8_FP_CONTEXT_SIZE))) {
     DEBUG_PRINT("v8:  -> failed to read frame pointer context");
     increment_metric(metricID_UnwindV8ErrBadFP);
     return ERR_V8_BAD_FP;
@@ -177,7 +178,7 @@ ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
   }
 
   // Read the Code blob type and size
-  if (bpf_probe_read(scratch->code, sizeof(scratch->code), (void*) code)) {
+  if (bpf_probe_read_user(scratch->code, sizeof(scratch->code), (void*) code)) {
     increment_metric(metricID_UnwindV8ErrBadCode);
     goto frame_done;
   }
@@ -212,7 +213,7 @@ ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
 
     if (top && trace->stack_len == 0) {
       unsigned long stk[3];
-      if (bpf_probe_read(stk, sizeof(stk), (void*)(sp - sizeof(stk)))) {
+      if (bpf_probe_read_user(stk, sizeof(stk), (void*)(sp - sizeof(stk)))) {
         DEBUG_PRINT("v8:  --> bad stack pointer");
         increment_metric(metricID_UnwindV8ErrBadFP);
         return ERR_V8_BAD_FP;
@@ -256,19 +257,21 @@ ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
 
 frame_done:
   // Unwind with frame pointer
-  if (bpf_probe_read(regs, sizeof(regs), (void*)fp)) {
+  if (bpf_probe_read_user(regs, sizeof(regs), (void*)fp)) {
     DEBUG_PRINT("v8:  --> bad frame pointer");
     increment_metric(metricID_UnwindV8ErrBadFP);
     return ERR_V8_BAD_FP;
   }
-  state->sp = fp + sizeof(regs);
-  state->fp = regs[0];
-  state->pc = regs[1];
 
-  ErrorCode error = push_v8(trace, pointer_and_type, delta_or_marker);
+  ErrorCode error = push_v8(trace, pointer_and_type, delta_or_marker, state->return_address);
   if (error) {
     return error;
   }
+
+  state->sp = fp + sizeof(regs);
+  state->fp = regs[0];
+  state->pc = regs[1];
+  state->return_address = true;
 
   DEBUG_PRINT("v8: pc: %lx, sp: %lx, fp: %lx",
               (unsigned long) state->pc, (unsigned long) state->sp,

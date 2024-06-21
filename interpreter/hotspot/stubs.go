@@ -13,12 +13,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/elastic/otel-profiling-agent/debug/log"
+	"github.com/elastic/otel-profiling-agent/armhelpers"
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/armhelpers"
-	"github.com/elastic/otel-profiling-agent/libpf/remotememory"
+	"github.com/elastic/otel-profiling-agent/remotememory"
 	"github.com/elastic/otel-profiling-agent/support"
 	aa "golang.org/x/arch/arm64/arm64asm"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // nextAligned aligns a pointer up, to the next multiple of align.

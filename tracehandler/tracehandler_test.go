@@ -4,17 +4,21 @@
  * See the file "LICENSE" for details.
  */
 
-package tracehandler
+package tracehandler_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
-	"github.com/elastic/go-freelru"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/elastic/otel-profiling-agent/containermetadata"
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/elastic/otel-profiling-agent/tracehandler"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 type fakeTimes struct {
@@ -26,12 +30,13 @@ func defaultTimes() *fakeTimes {
 }
 
 func (ft *fakeTimes) MonitorInterval() time.Duration { return ft.monitorInterval }
+func (ft *fakeTimes) BootTimeUnixNano() int64        { return 0 }
 
 // fakeTraceProcessor implements a fake TraceProcessor used only within the test scope.
 type fakeTraceProcessor struct{}
 
 // Compile time check to make sure fakeTraceProcessor satisfies the interfaces.
-var _ TraceProcessor = (*fakeTraceProcessor)(nil)
+var _ tracehandler.TraceProcessor = (*fakeTraceProcessor)(nil)
 
 func (f *fakeTraceProcessor) ConvertTrace(trace *host.Trace) *libpf.Trace {
 	var newTrace libpf.Trace
@@ -39,15 +44,16 @@ func (f *fakeTraceProcessor) ConvertTrace(trace *host.Trace) *libpf.Trace {
 	return &newTrace
 }
 
-func (f *fakeTraceProcessor) SymbolizationComplete(libpf.KTime) {
+func (f *fakeTraceProcessor) SymbolizationComplete(util.KTime) {}
+
+func (f *fakeTraceProcessor) MaybeNotifyAPMAgent(*host.Trace, libpf.TraceHash, uint16) string {
+	return ""
 }
 
 // arguments holds the inputs to test the appropriate functions.
 type arguments struct {
 	// trace holds the arguments for the function HandleTrace().
 	trace *host.Trace
-	// delay specifies a time delay after input has been processed
-	delay time.Duration
 }
 
 // reportedCount / reportedTrace hold the information reported from traceHandler
@@ -73,12 +79,25 @@ func (m *mockReporter) ReportFramesForTrace(trace *libpf.Trace) {
 }
 
 func (m *mockReporter) ReportCountForTrace(traceHash libpf.TraceHash,
-	_ libpf.UnixTime32, count uint16, _, _, _ string) {
+	_ libpf.UnixTime64, count uint16, _, _, _, _ string) {
 	m.reportedCounts = append(m.reportedCounts, reportedCount{
 		traceHash: traceHash,
 		count:     count,
 	})
 	m.t.Logf("reportCountForTrace: 0x%x count: %d", traceHash, count)
+}
+
+func (m *mockReporter) SupportsReportTraceEvent() bool { return false }
+
+func (m *mockReporter) ReportTraceEvent(_ *libpf.Trace,
+	_ libpf.UnixTime64, _, _, _, _ string) {
+}
+
+type mockContainerMetadataHandler struct{}
+
+func (m mockContainerMetadataHandler) GetContainerMetadata(util.PID) (
+	containermetadata.ContainerMetadata, error) {
+	return containermetadata.ContainerMetadata{}, nil
 }
 
 func TestTraceHandler(t *testing.T) {
@@ -121,45 +140,26 @@ func TestTraceHandler(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := &mockReporter{t: t}
 
-			bpfTraceCache, err := freelru.New[host.TraceHash, libpf.TraceHash](
-				1024, func(k host.TraceHash) uint32 { return uint32(k) })
-			require.Nil(t, err)
-			require.NotNil(t, t, bpfTraceCache)
-
-			umTraceCache, err := freelru.New[libpf.TraceHash, libpf.Void](
-				1024, libpf.TraceHash.Hash32)
-			require.Nil(t, err)
-			require.NotNil(t, t, umTraceCache)
-
-			tuh := &traceHandler{
-				traceProcessor: &fakeTraceProcessor{},
-				bpfTraceCache:  bpfTraceCache,
-				umTraceCache:   umTraceCache,
-				reporter:       r,
-				times:          defaultTimes(),
-			}
+			traceChan := make(chan *host.Trace)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			exitNotify, err := tracehandler.Start(ctx, &mockContainerMetadataHandler{}, r,
+				&fakeTraceProcessor{}, traceChan, defaultTimes())
+			require.NoError(t, err)
 
 			for _, input := range test.input {
-				tuh.HandleTrace(input.trace)
-				time.Sleep(input.delay)
+				traceChan <- input.trace
 			}
 
-			if len(r.reportedCounts) != len(test.expectedCounts) {
-				t.Fatalf("Expected %d reported counts but got %d",
-					len(test.expectedCounts), len(r.reportedCounts))
-			}
-			if len(r.reportedTraces) != len(test.expectedTraces) {
-				t.Fatalf("Expected %d reported traces but got %d",
-					len(test.expectedTraces), len(r.reportedTraces))
-			}
+			cancel()
+			<-exitNotify
 
-			for idx, trace := range test.expectedTraces {
-				// Expected and reported traces order should match.
-				if r.reportedTraces[idx] != trace {
-					t.Fatalf("Expected trace 0x%x, got 0x%x",
-						trace.traceHash, r.reportedTraces[idx].traceHash)
-				}
-			}
+			assert.Equal(t, len(test.expectedCounts), len(r.reportedCounts))
+			assert.Equal(t, len(test.expectedTraces), len(r.reportedTraces))
+
+			// Expected and reported traces order should match.
+			assert.Equal(t, test.expectedTraces, r.reportedTraces)
+
 			for _, expCount := range test.expectedCounts {
 				// Expected and reported count order doesn't necessarily match.
 				found := false
@@ -169,10 +169,8 @@ func TestTraceHandler(t *testing.T) {
 						break
 					}
 				}
-				if !found {
-					t.Fatalf("Expected count %d for trace 0x%x not found",
-						expCount.count, expCount.traceHash)
-				}
+				assert.True(t, found, "Expected count %d for trace 0x%x not found",
+					expCount.count, expCount.traceHash)
 			}
 		})
 	}

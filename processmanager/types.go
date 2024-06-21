@@ -21,6 +21,7 @@ import (
 	eim "github.com/elastic/otel-profiling-agent/processmanager/execinfomanager"
 	"github.com/elastic/otel-profiling-agent/reporter"
 	"github.com/elastic/otel-profiling-agent/tpbase"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 // elfInfo contains cached data from an executable needed for processing mappings.
@@ -49,14 +50,14 @@ type ProcessManager struct {
 	// process exits, and various other situations needing interpreter specific attention.
 	// The key of the first map is a process ID, while the key of the second map is
 	// the unique on-disk identifier of the interpreter DSO.
-	interpreters map[libpf.PID]map[libpf.OnDiskFileIdentifier]interpreter.Instance
+	interpreters map[util.PID]map[util.OnDiskFileIdentifier]interpreter.Instance
 
 	// pidToProcessInfo keeps track of the executable memory mappings in addressSpace
 	// for each pid.
-	pidToProcessInfo map[libpf.PID]*processInfo
+	pidToProcessInfo map[util.PID]*processInfo
 
 	// exitEvents records the pid exit time and is a list of pending exit events to be handled.
-	exitEvents map[libpf.PID]libpf.KTime
+	exitEvents map[util.PID]util.KTime
 
 	// ebpf contains the interface to manipulate ebpf maps
 	ebpf pmebpf.EbpfHandler
@@ -84,7 +85,7 @@ type ProcessManager struct {
 
 	// elfInfoCache provides a cache to quickly retrieve the ELF info and fileID for a particular
 	// executable. It caches results based on iNode number and device ID. Locked LRU.
-	elfInfoCache *lru.LRU[libpf.OnDiskFileIdentifier, elfInfo]
+	elfInfoCache *lru.LRU[util.OnDiskFileIdentifier, elfInfo]
 
 	// reporter is the interface to report symbolization information
 	reporter reporter.SymbolReporter
@@ -130,8 +131,8 @@ type Mapping struct {
 }
 
 // GetOnDiskFileIdentifier returns the OnDiskFileIdentifier for the mapping
-func (m *Mapping) GetOnDiskFileIdentifier() libpf.OnDiskFileIdentifier {
-	return libpf.OnDiskFileIdentifier{
+func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
+	return util.OnDiskFileIdentifier{
 		DeviceID: m.Device,
 		InodeNum: m.Inode,
 	}

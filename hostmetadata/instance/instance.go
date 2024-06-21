@@ -21,6 +21,10 @@ const (
 
 	KeyPublicIPV6s  = "public-ipv6s"
 	KeyPrivateIPV6s = "private-ipv6s"
+
+	KeyCloudProvider = "cloud:provider"
+	KeyCloudRegion   = "cloud:region"
+	KeyHostType      = "host:type"
 )
 
 func AddToResult(metadata map[string][]string, result map[string]string) {

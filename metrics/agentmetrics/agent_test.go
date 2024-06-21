@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTimeDelta(t *testing.T) {
@@ -53,9 +55,7 @@ func TestTimeDelta(t *testing.T) {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
 			delta := timeDelta(tc.now, tc.prev)
-			if delta != tc.delta {
-				t.Fatalf("Expected %d Got %d", tc.delta, delta)
-			}
+			assert.Equal(t, tc.delta, delta)
 		})
 	}
 }

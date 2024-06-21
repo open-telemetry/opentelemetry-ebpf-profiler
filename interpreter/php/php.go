@@ -8,48 +8,32 @@ package php
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
-	"hash/fnv"
 	"regexp"
 	"strconv"
-	"sync/atomic"
 	"unsafe"
 
-	"github.com/elastic/otel-profiling-agent/host"
+	log "github.com/sirupsen/logrus"
+
+	"github.com/elastic/go-freelru"
+
 	"github.com/elastic/otel-profiling-agent/interpreter"
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/freelru"
-	npsr "github.com/elastic/otel-profiling-agent/libpf/nopanicslicereader"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/libpf/remotememory"
-	"github.com/elastic/otel-profiling-agent/libpf/successfailurecounter"
-	"github.com/elastic/otel-profiling-agent/metrics"
-	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/elastic/otel-profiling-agent/remotememory"
 	"github.com/elastic/otel-profiling-agent/support"
-
-	log "github.com/sirupsen/logrus"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 // #include "../../support/ebpf/types.h"
 import "C"
-
-// zend_function.type definitions from PHP sources
-// nolint:golint,stylecheck,revive
-const (
-	ZEND_USER_FUNCTION = (1 << 1)
-	ZEND_EVAL_CODE     = (1 << 2)
-)
 
 // nolint:golint,stylecheck,revive
 const (
 	// This is used to check if the VM mode is the default one
 	// From https://github.com/php/php-src/blob/PHP-8.0/Zend/zend_vm_opcodes.h#L29
 	ZEND_VM_KIND_HYBRID = (1 << 2)
-
-	// This is used to check if the symbolized frame belongs to
-	// top-level code.
-	// From https://github.com/php/php-src/blob/PHP-8.0/Zend/zend_compile.h#L542
-	ZEND_CALL_TOP_CODE = (1<<17 | 1<<16)
 )
 
 const (
@@ -72,11 +56,15 @@ var (
 	versionMatch = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)`)
 
 	// compiler check to make sure the needed interfaces are satisfied
-	_ interpreter.Data     = &php7Data{}
-	_ interpreter.Instance = &php7Instance{}
+	_ interpreter.Data     = &phpData{}
+	_ interpreter.Instance = &phpInstance{}
 )
 
-type php7Data struct {
+func phpVersion(major, minor, release uint) uint {
+	return major*0x10000 + minor*0x100 + release
+}
+
+type phpData struct {
 	version uint
 
 	// egAddr is the `executor_globals` symbol value which is needed by the eBPF
@@ -119,214 +107,12 @@ type php7Data struct {
 	}
 }
 
-type php7Instance struct {
-	interpreter.InstanceStubs
-
-	// PHP symbolization metrics
-	successCount atomic.Uint64
-	failCount    atomic.Uint64
-	// Failure count for finding the return address in execute_ex
-	vmRTCount atomic.Uint64
-
-	d  *php7Data
-	rm remotememory.RemoteMemory
-
-	// addrToFunction maps a PHP Function object to a phpFunction which caches
-	// the needed data from it.
-	addrToFunction *freelru.LRU[libpf.Address, *phpFunction]
-}
-
-// phpFunction contains the information we cache for a corresponding
-// PHP interpreter's zend_function structure.
-type phpFunction struct {
-	// name is the extracted name
-	name string
-
-	// sourceFileName is the extracted filename field
-	sourceFileName string
-
-	// fileID is the synthesized methodID
-	fileID libpf.FileID
-
-	// lineStart is the first source code line for this function
-	lineStart uint32
-
-	// lineSeen is a set of line numbers we have already seen and symbolized
-	lineSeen libpf.Set[libpf.AddressOrLineno]
-}
-
-func (i *php7Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	return ebpf.DeleteProcData(libpf.PHP, pid)
-}
-
-func (i *php7Instance) GetAndResetMetrics() ([]metrics.Metric, error) {
-	addrToFuncStats := i.addrToFunction.GetAndResetStatistics()
-
-	return []metrics.Metric{
-		{
-			ID:    metrics.IDPHPSymbolizationSuccess,
-			Value: metrics.MetricValue(i.successCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDPHPSymbolizationFailure,
-			Value: metrics.MetricValue(i.failCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDPHPAddrToFuncHit,
-			Value: metrics.MetricValue(addrToFuncStats.Hit),
-		},
-		{
-			ID:    metrics.IDPHPAddrToFuncMiss,
-			Value: metrics.MetricValue(addrToFuncStats.Miss),
-		},
-		{
-			ID:    metrics.IDPHPAddrToFuncAdd,
-			Value: metrics.MetricValue(addrToFuncStats.Added),
-		},
-		{
-			ID:    metrics.IDPHPAddrToFuncDel,
-			Value: metrics.MetricValue(addrToFuncStats.Deleted),
-		},
-		{
-			ID:    metrics.IDPHPFailedToFindReturnAddress,
-			Value: metrics.MetricValue(i.vmRTCount.Swap(0)),
-		},
-	}, nil
-}
-
-func (i *php7Instance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunction, error) {
-	if addr == 0 {
-		return nil, fmt.Errorf("failed to read code object: null pointer")
-	}
-	if value, ok := i.addrToFunction.Get(addr); ok {
-		return value, nil
-	}
-
-	vms := &i.d.vmStructs
-	fobj := make([]byte, vms.zend_function.Sizeof)
-	if err := i.rm.Read(addr, fobj); err != nil {
-		return nil, fmt.Errorf("failed to read function object: %v", err)
-	}
-
-	// Parse the zend_function structure
-	ftype := npsr.Uint8(fobj, vms.zend_function.common_type)
-	fname := i.rm.String(npsr.Ptr(fobj, vms.zend_function.common_funcname) + vms.zend_string.val)
-
-	if fname != "" && !libpf.IsValidString(fname) {
-		log.Debugf("Extracted invalid PHP function name at 0x%x '%v'", addr, []byte(fname))
-		fname = ""
-	}
-
-	if fname == "" {
-		// If we're at the top-most scope then we can display that information.
-		if typeInfo&ZEND_CALL_TOP_CODE > 0 {
-			fname = interpreter.TopLevelFunctionName
-		} else {
-			fname = unknownFunctionName
-		}
-	}
-
-	sourceFileName := ""
-	lineStart := uint32(0)
-	var lineBytes []byte
-	switch ftype {
-	case ZEND_USER_FUNCTION, ZEND_EVAL_CODE:
-		sourceAddr := npsr.Ptr(fobj, vms.zend_function.op_array_filename)
-		sourceFileName = i.rm.String(sourceAddr + vms.zend_string.val)
-		if !libpf.IsValidString(sourceFileName) {
-			log.Debugf("Extracted invalid PHP source file name at 0x%x '%v'",
-				addr, []byte(sourceFileName))
-			sourceFileName = ""
-		}
-
-		if ftype == ZEND_EVAL_CODE {
-			fname = evalCodeFunctionName
-			// To avoid duplication we get rid of the filename
-			// It'll look something like "eval'd code", so no
-			// information is lost here.
-			sourceFileName = ""
-		}
-
-		lineStart = npsr.Uint32(fobj, vms.zend_function.op_array_linestart)
-		// nolint:lll
-		lineBytes = fobj[vms.zend_function.op_array_linestart : vms.zend_function.op_array_linestart+8]
-	}
-
-	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(sourceFileName))
-	_, _ = h.Write([]byte(fname))
-	_, _ = h.Write(lineBytes)
-	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create a file ID: %v", err)
-	}
-
-	pf := &phpFunction{
-		name:           fname,
-		sourceFileName: sourceFileName,
-		fileID:         fileID,
-		lineStart:      lineStart,
-		lineSeen:       make(libpf.Set[libpf.AddressOrLineno]),
-	}
-	i.addrToFunction.Add(addr, pf)
-	return pf, nil
-}
-
-func (i *php7Instance) Symbolize(symbolReporter reporter.SymbolReporter,
-	frame *host.Frame, trace *libpf.Trace) error {
-	// With Symbolize() in opcacheInstance there is a dedicated function to symbolize JITTed
-	// PHP frames. But as we also attach php7Instance to PHP processes with JITTed frames, we
-	// use this function to symbolize all PHP frames, as the process to do so is the same.
-	if !frame.Type.IsInterpType(libpf.PHP) &&
-		!frame.Type.IsInterpType(libpf.PHPJIT) {
-		return interpreter.ErrMismatchInterpreterType
-	}
-
-	sfCounter := successfailurecounter.New(&i.successCount, &i.failCount)
-	defer sfCounter.DefaultToFailure()
-
-	funcPtr := libpf.Address(frame.File)
-	// We pack type info and the line number into linenos
-	typeInfo := uint32(frame.Lineno >> 32)
-	line := frame.Lineno & 0xffffffff
-
-	f, err := i.getFunction(funcPtr, typeInfo)
-	if err != nil {
-		return fmt.Errorf("failed to get php function %x: %v", funcPtr, err)
-	}
-
-	trace.AppendFrame(libpf.PHPFrame, f.fileID, line)
-
-	if _, ok := f.lineSeen[line]; ok {
-		return nil
-	}
-
-	funcOff := uint32(0)
-	if f.lineStart != 0 && libpf.AddressOrLineno(f.lineStart) <= line {
-		funcOff = uint32(line) - f.lineStart
-	}
-	symbolReporter.FrameMetadata(
-		f.fileID, line, libpf.SourceLineno(line), funcOff,
-		f.name, f.sourceFileName)
-
-	f.lineSeen[line] = libpf.Void{}
-
-	log.Debugf("[%d] [%x] %v+%v at %v:%v",
-		len(trace.FrameTypes),
-		f.fileID, f.name, funcOff,
-		f.sourceFileName, line)
-
-	sfCounter.ReportSuccess()
-	return nil
-}
-
-func (d *php7Data) String() string {
+func (d *phpData) String() string {
 	ver := d.version
 	return fmt.Sprintf("PHP %d.%d.%d", (ver>>16)&0xff, (ver>>8)&0xff, ver&0xff)
 }
 
-func (d *php7Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
+func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid util.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	addrToFunction, err :=
 		freelru.New[libpf.Address, *phpFunction](interpreter.LruFunctionCacheSize,
@@ -351,7 +137,7 @@ func (d *php7Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		return nil, err
 	}
 
-	instance := &php7Instance{
+	instance := &phpInstance{
 		d:              d,
 		rm:             rm,
 		addrToFunction: addrToFunction,
@@ -360,30 +146,30 @@ func (d *php7Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	// If we failed to find the return address we need to increment
 	// the value here. This happens once per interpreter instance,
 	// but tracking it will help debugging later.
-	if d.rtAddr == 0 && d.version >= 0x080000 {
+	if d.rtAddr == 0 && d.version >= phpVersion(8, 0, 0) {
 		instance.vmRTCount.Store(1)
 	}
 
 	return instance, nil
 }
 
-func VersionExtract(rodata string) (uint, error) {
+func versionExtract(rodata string) (uint, error) {
 	matches := versionMatch.FindStringSubmatch(rodata)
 	if matches == nil {
-		return 0, fmt.Errorf("no valid PHP version string found")
+		return 0, errors.New("no valid PHP version string found")
 	}
 
 	major, _ := strconv.Atoi(matches[1])
 	minor, _ := strconv.Atoi(matches[2])
 	release, _ := strconv.Atoi(matches[3])
-	return uint(major*0x10000 + minor*0x100 + release), nil
+	return phpVersion(uint(major), uint(minor), uint(release)), nil
 }
 
 func determinePHPVersion(ef *pfelf.File) (uint, error) {
 	// There is no ideal way to get the PHP version. This just searches
 	// for a known string with the version number from .rodata.
 	if ef.ROData == nil {
-		return 0, fmt.Errorf("no RO data")
+		return 0, errors.New("no RO data")
 	}
 
 	needle := []byte("X-Powered-By: PHP/")
@@ -402,14 +188,14 @@ func determinePHPVersion(ef *pfelf.File) (uint, error) {
 		if zeroIdx < 0 {
 			continue
 		}
-		version, err := VersionExtract(string(rodata[idx : idx+zeroIdx]))
+		version, err := versionExtract(string(rodata[idx : idx+zeroIdx]))
 		if err != nil {
 			continue
 		}
 		return version, nil
 	}
 
-	return 0, fmt.Errorf("no segment contained X-Powered-By")
+	return 0, errors.New("no segment contained X-Powered-By")
 }
 
 func recoverExecuteExJumpLabelAddress(ef *pfelf.File) (libpf.SymbolValue, error) {
@@ -488,9 +274,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, err
 	}
 
-	// Only tested on PHP7.3-PHP8.1. Other similar versions probably only require
+	// Only tested on PHP7.3-PHP8.3. Other similar versions probably only require
 	// tweaking the offsets.
-	const minVer, maxVer = 0x070300, 0x080300
+	var minVer, maxVer = phpVersion(7, 3, 0), phpVersion(8, 4, 0)
 	if version < minVer || version >= maxVer {
 		return nil, fmt.Errorf("PHP version %d.%d.%d (need >= %d.%d and < %d.%d)",
 			(version>>16)&0xff, (version>>8)&0xff, version&0xff,
@@ -517,7 +303,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// Note that if there is an error in the block below then unwinding will produce
 	// incomplete stack unwindings if the JIT compiler is used.
 	rtAddr := libpf.SymbolValueInvalid
-	if version >= 0x080000 {
+	if version >= phpVersion(8, 0, 0) {
 		var vmKind uint
 		vmKind, err = determineVMKind(ef)
 		if err != nil {
@@ -532,7 +318,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			}
 		}
 	}
-	pid := &php7Data{
+	pid := &phpData{
 		version: version,
 		egAddr:  libpf.Address(egAddr),
 		rtAddr:  libpf.Address(rtAddr),
@@ -559,13 +345,17 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.zend_function.Sizeof = 168
 	vms.zend_string.val = 24
 	vms.zend_op.lineno = 24
-	if version >= 0x080200 {
-		vms.zend_function.op_array_filename = 152
-		vms.zend_function.op_array_linestart = 160
-	} else if version >= 0x080000 {
+	switch {
+	case version >= phpVersion(8, 3, 0):
 		vms.zend_function.op_array_filename = 144
 		vms.zend_function.op_array_linestart = 152
-	} else if version >= 0x070400 {
+	case version >= phpVersion(8, 2, 0):
+		vms.zend_function.op_array_filename = 152
+		vms.zend_function.op_array_linestart = 160
+	case version >= phpVersion(8, 0, 0):
+		vms.zend_function.op_array_filename = 144
+		vms.zend_function.op_array_linestart = 152
+	case version >= phpVersion(7, 4, 0):
 		vms.zend_function.op_array_filename = 136
 		vms.zend_function.op_array_linestart = 144
 	}

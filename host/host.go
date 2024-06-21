@@ -12,7 +12,7 @@ import (
 	"fmt"
 
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 // TraceHash is used for unique identifiers for traces, and is required to be 64-bits
@@ -37,30 +37,24 @@ func (fid FileID) StringNoQuotes() string {
 	return fmt.Sprintf("%016x%016x", uint64(fid), uint64(fid))
 }
 
-// CalculateKernelFileID calculates an ID for a kernel image or module given its libpf.FileID.
-func CalculateKernelFileID(id libpf.FileID) FileID {
+// FileIDFromLibpf truncates a libpf.FileID to be a host.FileID.
+func FileIDFromLibpf(id libpf.FileID) FileID {
 	return FileID(id.Hi())
 }
 
-// CalculateID calculates a 64-bit executable ID of the contents of a file.
-func CalculateID(fileName string) (FileID, error) {
-	hash, err := pfelf.FileHash(fileName)
-	if err != nil {
-		return FileID(0), err
-	}
-	return FileIDFromBytes(hash[0:8])
-}
-
 type Frame struct {
-	File   FileID
-	Lineno libpf.AddressOrLineno
-	Type   libpf.FrameType
+	File          FileID
+	Lineno        libpf.AddressOrLineno
+	Type          libpf.FrameType
+	ReturnAddress bool
 }
 
 type Trace struct {
-	Comm   string
-	Frames []Frame
-	Hash   TraceHash
-	KTime  libpf.KTime
-	PID    libpf.PID
+	Comm             string
+	Frames           []Frame
+	Hash             TraceHash
+	KTime            util.KTime
+	PID              util.PID
+	APMTraceID       libpf.APMTraceID
+	APMTransactionID libpf.APMTransactionID
 }

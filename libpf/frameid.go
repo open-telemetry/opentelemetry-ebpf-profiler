@@ -33,7 +33,7 @@ func NewFrameID(fileID FileID, addressOrLineno AddressOrLineno) FrameID {
 	}
 }
 
-// NewFrameIDFromString creates a new FrameID from its JSON string representation.
+// NewFrameIDFromString creates a new FrameID from its base64 string representation.
 func NewFrameIDFromString(frameEncoded string) (FrameID, error) {
 	var frameID FrameID
 

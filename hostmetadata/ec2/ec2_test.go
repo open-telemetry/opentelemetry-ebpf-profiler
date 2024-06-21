@@ -7,13 +7,15 @@
 package ec2
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/google/go-cmp/cmp"
+	ec2imds "github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
+	ec2service "github.com/aws/aws-sdk-go-v2/service/ec2"
+	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type fakeEC2Metadata struct {
@@ -21,10 +23,10 @@ type fakeEC2Metadata struct {
 }
 
 type fakeEC2Tags struct {
-	tags []*ec2.TagDescription
+	tags []ec2types.TagDescription
 }
 
-func (e *fakeEC2Metadata) GetMetadata(path string) (string, error) {
+func (e *fakeEC2Metadata) FetchMetadata(path string) (string, error) {
 	value, found := e.metadata[path]
 	if !found {
 		return "", fmt.Errorf("%s not found", path)
@@ -33,14 +35,14 @@ func (e *fakeEC2Metadata) GetMetadata(path string) (string, error) {
 	return value, nil
 }
 
-func (e *fakeEC2Metadata) GetInstanceIdentityDocument() (ec2metadata.EC2InstanceIdentityDocument,
-	error) {
-	return ec2metadata.EC2InstanceIdentityDocument{}, nil
+func (e *fakeEC2Metadata) FetchInstanceIdentityDocument() (
+	ec2imds.InstanceIdentityDocument, error) {
+	return ec2imds.InstanceIdentityDocument{}, nil
 }
 
-func (e *fakeEC2Tags) DescribeTags(_ *ec2.DescribeTagsInput,
-) (*ec2.DescribeTagsOutput, error) {
-	return &ec2.DescribeTagsOutput{Tags: e.tags}, nil
+func (e *fakeEC2Tags) DescribeTags(context.Context, *ec2service.DescribeTagsInput,
+	...func(*ec2service.Options)) (*ec2service.DescribeTagsOutput, error) {
+	return &ec2service.DescribeTagsOutput{Tags: e.tags}, nil
 }
 
 func TestAddMetadata(t *testing.T) {
@@ -79,14 +81,14 @@ func TestAddMetadata(t *testing.T) {
 	}
 
 	ec2Client = &fakeEC2Tags{
-		tags: []*ec2.TagDescription{
+		tags: []ec2types.TagDescription{
 			{
-				Key:   aws.String("foo"),
-				Value: aws.String("bar"),
+				Key:   stringPtr("foo"),
+				Value: stringPtr("bar"),
 			},
 			{
-				Key:   aws.String("baz"),
-				Value: aws.String("value1-value2"),
+				Key:   stringPtr("baz"),
+				Value: stringPtr("value1-value2"),
 			},
 		},
 	}
@@ -95,6 +97,9 @@ func TestAddMetadata(t *testing.T) {
 	AddMetadata(result)
 
 	expected := map[string]string{
+		"cloud:provider":          "aws",
+		"cloud:region":            "us-east-2",
+		"host:type":               "m5.large",
 		"ec2:ami-id":              "ami-1234",
 		"ec2:ami-manifest-path":   "(unknown)",
 		"ec2:ancestor-ami-ids":    "ami-2345",
@@ -129,7 +134,5 @@ func TestAddMetadata(t *testing.T) {
 		"instance:public-ipv4s":  "9.9.9.9,8.8.8.8,4.3.2.1",
 	}
 
-	if diff := cmp.Diff(expected, result); diff != "" {
-		t.Fatalf("Metadata mismatch (-want +got):\n%s", diff)
-	}
+	assert.Equal(t, expected, result)
 }

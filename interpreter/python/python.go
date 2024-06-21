@@ -7,9 +7,12 @@
 package python
 
 import (
+	"bytes"
 	"debug/elf"
+	"errors"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -19,18 +22,20 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/elastic/go-freelru"
+
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/interpreter"
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/freelru"
-	npsr "github.com/elastic/otel-profiling-agent/libpf/nopanicslicereader"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/libpf/remotememory"
-	"github.com/elastic/otel-profiling-agent/libpf/successfailurecounter"
 	"github.com/elastic/otel-profiling-agent/metrics"
+	npsr "github.com/elastic/otel-profiling-agent/nopanicslicereader"
+	"github.com/elastic/otel-profiling-agent/remotememory"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/elastic/otel-profiling-agent/successfailurecounter"
 	"github.com/elastic/otel-profiling-agent/support"
 	"github.com/elastic/otel-profiling-agent/tpbase"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 // #include <stdlib.h>
@@ -43,6 +48,11 @@ var (
 	pythonRegex    = regexp.MustCompile(`^(?:.*/)?python(\d)\.(\d+)(d|m|dm)?$`)
 	libpythonRegex = regexp.MustCompile(`^(?:.*/)?libpython(\d)\.(\d+)[^/]*`)
 )
+
+// pythonVer builds a version number from readable numbers
+func pythonVer(major, minor int) uint16 {
+	return uint16(major)*0x100 + uint16(minor)
+}
 
 // nolint:lll
 type pythonData struct {
@@ -94,10 +104,11 @@ type pythonData struct {
 			Frame uint `name:"frame"`
 		}
 		PyFrameObject struct {
-			Back    uint `name:"f_back"`
-			Code    uint `name:"f_code"`
-			LastI   uint `name:"f_lasti"`
-			IsEntry uint `name:"f_is_entry"`
+			Back        uint `name:"f_back"`
+			Code        uint `name:"f_code"`
+			LastI       uint `name:"f_lasti"`
+			EntryMember uint // field depends on python version
+			EntryVal    uint // value depends on python version
 		}
 		// https://github.com/python/cpython/blob/deaf509e8fc6e0363bd6f26d52ad42f976ec42f2/Include/cpython/pystate.h#L38
 		PyCFrame struct {
@@ -112,7 +123,7 @@ func (d *pythonData) String() string {
 	return fmt.Sprintf("Python %d.%d", d.version>>8, d.version&0xff)
 }
 
-func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
+func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ util.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	addrToCodeObject, err :=
 		freelru.New[libpf.Address, *pythonCodeObject](interpreter.LruFunctionCacheSize,
@@ -128,10 +139,10 @@ func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.A
 		addrToCodeObject: addrToCodeObject,
 	}
 
-	switch d.version {
-	case 0x030b:
+	switch {
+	case d.version >= pythonVer(3, 11):
 		i.getFuncOffset = walkLocationTable
-	case 0x030a:
+	case d.version == pythonVer(3, 10):
 		i.getFuncOffset = walkLineTable
 	default:
 		i.getFuncOffset = mapByteCodeIndexToLine
@@ -176,53 +187,48 @@ type pythonCodeObject struct {
 	bciSeen libpf.Set[uint32]
 }
 
-// readSignedVarint returns a variable length encoded signed integer from a location table entry.
-func readSignedVarint(lt []byte) int {
-	uval := readVarint(lt)
-	if (uval & 1) != 0 {
-		return int(uval>>1) * -1
-	}
-	return int(uval >> 1)
-}
-
 // readVarint returns a variable length encoded unsigned integer from a location table entry.
-func readVarint(lt []byte) uint {
-	lenLT := len(lt)
-	i := 0
-	nextVal := lt[i]
-	i++
-	val := uint(nextVal & 63)
-	shift := 0
-	for (nextVal & 64) != 0 {
-		if i >= lenLT {
+func readVarint(r io.ByteReader) uint32 {
+	val := uint32(0)
+	b := byte(0x40)
+	for shift := 0; b&0x40 != 0; shift += 6 {
+		var err error
+		b, err = r.ReadByte()
+		if err != nil || b&0x80 != 0 {
 			return 0
 		}
-		nextVal = lt[i]
-		i++
-		shift += 6
-		val |= uint(nextVal&63) << shift
+		val |= uint32(b&0x3f) << shift
 	}
 	return val
+}
+
+// readSignedVarint returns a variable length encoded signed integer from a location table entry.
+func readSignedVarint(r io.ByteReader) int32 {
+	uval := readVarint(r)
+	if uval&1 != 0 {
+		return -int32(uval >> 1)
+	}
+	return int32(uval >> 1)
 }
 
 // walkLocationTable implements the algorithm to read entries from the location table.
 // This was introduced in Python 3.11.
 // nolint:lll
 // https://github.com/python/cpython/blob/deaf509e8fc6e0363bd6f26d52ad42f976ec42f2/Objects/locations.md
-func walkLocationTable(m *pythonCodeObject, addrq uint32) uint32 {
-	if addrq == 0 {
-		return 0
-	}
-	lineTable := m.lineTable
-	lenLineTable := len(lineTable)
-	var i, steps int
-	var firstByte, code uint8
-	var line int
-	for i = 0; i < lenLineTable; {
-		// firstByte encodes initial information about the table entry and how to handle it.
-		firstByte = lineTable[i]
+func walkLocationTable(m *pythonCodeObject, bci uint32) uint32 {
+	r := bytes.NewReader(m.lineTable)
+	curI := uint32(0)
+	line := int32(0)
+	for curI <= bci {
+		firstByte, err := r.ReadByte()
+		if err != nil || firstByte&0x80 == 0 {
+			log.Debugf("first byte: sync lost (%x) or error: %v",
+				firstByte, err)
+			return 0
+		}
 
-		code = (firstByte >> 3) & 15
+		code := (firstByte >> 3) & 15
+		curI += uint32(firstByte&7) + 1
 
 		// Handle the 16 possible different codes known as _PyCodeLocationInfoKind.
 		// nolint:lll
@@ -230,48 +236,33 @@ func walkLocationTable(m *pythonCodeObject, addrq uint32) uint32 {
 		switch code {
 		case 0, 1, 2, 3, 4, 5, 6, 7, 8, 9:
 			// PY_CODE_LOCATION_INFO_SHORT does not hold line information.
-			steps = 1
+			_, _ = r.ReadByte()
 		case 10, 11, 12:
-			// PY_CODE_LOCATION_INFO_ONE_LINE embeds the line information in the code.
-			steps = 2
-			line += int(code - 10)
+			// PY_CODE_LOCATION_INFO_ONE_LINE embeds the line information in the code
+			// follows two bytes containing new columns.
+			line += int32(code - 10)
+			_, _ = r.ReadByte()
+			_, _ = r.ReadByte()
 		case 13:
 			// PY_CODE_LOCATION_INFO_NO_COLUMNS
-			steps = 1
-			if i+1 >= lenLineTable {
-				return 0
-			}
-			diff := readSignedVarint(lineTable[i+1:])
-			line += diff
+			line += readSignedVarint(r)
 		case 14:
 			// PY_CODE_LOCATION_INFO_LONG
-			steps = 4
-			if i+1 >= lenLineTable {
-				return 0
-			}
-			diff := readSignedVarint(lineTable[i+1:])
-			line += diff
+			line += readSignedVarint(r)
+			_ = readVarint(r)
+			_ = readVarint(r)
+			_ = readVarint(r)
 		case 15:
 			// PY_CODE_LOCATION_INFO_NONE does not hold line information
-			steps = 0
+			line = -1
 		default:
 			log.Debugf("Unexpected PyCodeLocationInfoKind %d", code)
 			return 0
 		}
-
-		// Calculate position of the next table entry.
-		// One is added for the firstByte of the current entry and steps represents its
-		// variable length.
-		i += steps + 1
-
-		if line >= int(addrq) {
-			return uint32(line)
-		}
 	}
 	if line < 0 {
-		return 0
+		line = 0
 	}
-
 	return uint32(line)
 }
 
@@ -329,7 +320,7 @@ func mapByteCodeIndexToLine(m *pythonCodeObject, bci uint32) uint32 {
 	return lineno
 }
 
-func (m *pythonCodeObject) symbolize(symbolizer interpreter.Symbolizer, bci uint32,
+func (m *pythonCodeObject) symbolize(symbolReporter reporter.SymbolReporter, bci uint32,
 	getFuncOffset getFuncOffsetFunc, trace *libpf.Trace) error {
 	trace.AppendFrame(libpf.PythonFrame, m.fileID, libpf.AddressOrLineno(bci))
 
@@ -338,11 +329,11 @@ func (m *pythonCodeObject) symbolize(symbolizer interpreter.Symbolizer, bci uint
 		return nil
 	}
 
-	var lineNo libpf.SourceLineno
+	var lineNo util.SourceLineno
 	functionOffset := getFuncOffset(m, bci)
-	lineNo = libpf.SourceLineno(m.firstLineNo + functionOffset)
+	lineNo = util.SourceLineno(m.firstLineNo + functionOffset)
 
-	symbolizer.FrameMetadata(m.fileID,
+	symbolReporter.FrameMetadata(m.fileID,
 		libpf.AddressOrLineno(bci), lineNo, functionOffset,
 		m.name, m.sourceFileName)
 
@@ -351,10 +342,10 @@ func (m *pythonCodeObject) symbolize(symbolizer interpreter.Symbolizer, bci uint
 	// Until the reporting API gets a way to notify failures, just assume it worked.
 	m.bciSeen[bci] = libpf.Void{}
 
-	log.Debugf("[%d] [%x] %v+%v at %v:%v", len(trace.FrameTypes),
+	log.Debugf("[%d] [%x] %v+%v at %v:%v (bci %d)", len(trace.FrameTypes),
 		m.fileID,
 		m.name, functionOffset,
-		m.sourceFileName, lineNo)
+		m.sourceFileName, lineNo, bci)
 
 	return nil
 }
@@ -388,7 +379,7 @@ type pythonInstance struct {
 var _ interpreter.Instance = &pythonInstance{}
 
 func (p *pythonInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
-	addrToCodeObjectStats := p.addrToCodeObject.GetAndResetStatistics()
+	addrToCodeObjectStats := p.addrToCodeObject.ResetMetrics()
 
 	return []metrics.Metric{
 		{
@@ -401,24 +392,24 @@ func (p *pythonInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 		},
 		{
 			ID:    metrics.IDPythonAddrToCodeObjectHit,
-			Value: metrics.MetricValue(addrToCodeObjectStats.Hit),
+			Value: metrics.MetricValue(addrToCodeObjectStats.Hits),
 		},
 		{
 			ID:    metrics.IDPythonAddrToCodeObjectMiss,
-			Value: metrics.MetricValue(addrToCodeObjectStats.Miss),
+			Value: metrics.MetricValue(addrToCodeObjectStats.Misses),
 		},
 		{
 			ID:    metrics.IDPythonAddrToCodeObjectAdd,
-			Value: metrics.MetricValue(addrToCodeObjectStats.Added),
+			Value: metrics.MetricValue(addrToCodeObjectStats.Inserts),
 		},
 		{
 			ID:    metrics.IDPythonAddrToCodeObjectDel,
-			Value: metrics.MetricValue(addrToCodeObjectStats.Deleted),
+			Value: metrics.MetricValue(addrToCodeObjectStats.Removals),
 		},
 	}, nil
 }
 
-func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
+func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid util.PID,
 	tsdInfo tpbase.TSDInfo) error {
 	d := p.d
 	vm := &d.vmStructs
@@ -437,11 +428,13 @@ func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.P
 		PyFrameObject_f_back:           C.u8(vm.PyFrameObject.Back),
 		PyFrameObject_f_code:           C.u8(vm.PyFrameObject.Code),
 		PyFrameObject_f_lasti:          C.u8(vm.PyFrameObject.LastI),
-		PyFrameObject_f_is_entry:       C.u8(vm.PyFrameObject.IsEntry),
+		PyFrameObject_entry_member:     C.u8(vm.PyFrameObject.EntryMember),
+		PyFrameObject_entry_val:        C.u8(vm.PyFrameObject.EntryVal),
 		PyCodeObject_co_argcount:       C.u8(vm.PyCodeObject.ArgCount),
 		PyCodeObject_co_kwonlyargcount: C.u8(vm.PyCodeObject.KwOnlyArgCount),
 		PyCodeObject_co_flags:          C.u8(vm.PyCodeObject.Flags),
 		PyCodeObject_co_firstlineno:    C.u8(vm.PyCodeObject.FirstLineno),
+		PyCodeObject_sizeof:            C.u8(vm.PyCodeObject.Sizeof),
 	}
 
 	err := ebpf.UpdateProcData(libpf.Python, pid, unsafe.Pointer(&cdata))
@@ -453,7 +446,7 @@ func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.P
 	return err
 }
 
-func (p *pythonInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+func (p *pythonInstance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
 	if !p.procInfoInserted {
 		return nil
 	}
@@ -499,7 +492,7 @@ func frozenNameToFileName(sourceFileName string) (string, error) {
 func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	ebpfChecksum uint32) (*pythonCodeObject, error) {
 	if addr == 0 {
-		return nil, fmt.Errorf("failed to read code object: null pointer")
+		return nil, errors.New("failed to read code object: null pointer")
 	}
 	if value, ok := p.addrToCodeObject.Get(addr); ok {
 		m := value
@@ -522,7 +515,7 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	data := libpf.Address(vms.PyASCIIObject.Data)
 
 	var lineInfoPtr libpf.Address
-	if p.d.version < 0x030a {
+	if p.d.version < pythonVer(3, 10) {
 		lineInfoPtr = npsr.Ptr(cobj, vms.PyCodeObject.Lnotab)
 	} else {
 		lineInfoPtr = npsr.Ptr(cobj, vms.PyCodeObject.Linetable)
@@ -535,7 +528,7 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	if name == "" {
 		name = p.rm.String(data + npsr.Ptr(cobj, vms.PyCodeObject.Name))
 	}
-	if !libpf.IsValidString(name) {
+	if !util.IsValidString(name) {
 		log.Debugf("Extracted invalid Python method/function name at 0x%x '%v'",
 			addr, []byte(name))
 		return nil, fmt.Errorf("extracted invalid Python method/function name from address 0x%x",
@@ -550,7 +543,7 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	if err != nil {
 		sourceFileName = sourcePath
 	}
-	if !libpf.IsValidString(sourceFileName) {
+	if !util.IsValidString(sourceFileName) {
 		log.Debugf("Extracted invalid Python source file name at 0x%x '%v'",
 			addr, []byte(sourceFileName))
 		return nil, fmt.Errorf("extracted invalid Python source file name from address 0x%x",
@@ -565,7 +558,7 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	}
 
 	lineTableSize := p.rm.Uint64(lineInfoPtr + libpf.Address(vms.PyVarObject.ObSize))
-	if lineTableSize >= 0x10000 || (p.d.version < 0x30b && lineTableSize&1 != 0) {
+	if lineTableSize >= 0x10000 || (p.d.version < pythonVer(3, 11) && lineTableSize&1 != 0) {
 		return nil, fmt.Errorf("invalid line table size (%v)", lineTableSize)
 	}
 	lineTable := make([]byte, lineTableSize)
@@ -748,9 +741,10 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	var pyruntimeAddr, autoTLSKey libpf.SymbolValue
 	major, _ := strconv.Atoi(matches[1])
 	minor, _ := strconv.Atoi(matches[2])
-	version := uint16(major*0x100 + minor)
+	version := pythonVer(major, minor)
 
-	const minVer, maxVer = 0x306, 0x30b
+	minVer := pythonVer(3, 6)
+	maxVer := pythonVer(3, 12)
 	if version < minVer || version > maxVer {
 		return nil, fmt.Errorf("unsupported Python %d.%d (need >= %d.%d and <= %d.%d)",
 			major, minor,
@@ -758,7 +752,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			(maxVer>>8)&0xff, maxVer&0xff)
 	}
 
-	if version >= 0x307 {
+	if version >= pythonVer(3, 7) {
 		if pyruntimeAddr, err = ef.LookupSymbolAddress("_PyRuntime"); err != nil {
 			return nil, fmt.Errorf("_PyRuntime not defined: %v", err)
 		}
@@ -767,9 +761,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// Calls first: PyThread_tss_get(autoTSSKey)
 	autoTLSKey = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState", 0)
 	if autoTLSKey == libpf.SymbolValueInvalid {
-		return nil, fmt.Errorf("unable to resolve autoTLSKey")
+		return nil, errors.New("unable to resolve autoTLSKey")
 	}
-	if version >= 0x307 && autoTLSKey%8 == 0 {
+	if version >= pythonVer(3, 7) && autoTLSKey%8 == 0 {
 		// On Python 3.7+, the call is to PyThread_tss_get, but can get optimized to
 		// call directly pthread_getspecific. So we might be finding the address
 		// for "Py_tss_t" or "pthread_key_t" depending on call target.
@@ -790,9 +784,6 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
 	// 3cebf938727 v3.6  2016-09-05 _PyEval_EvalFrameDefault(PyFrameObject*,int)
 	// 49fd7fa4431 v3.0  2006-04-21 PyEval_EvalFrameEx(PyFrameObject*,int)
-	//
-	// Try the two known symbols, and fall back to .text section in case the symbol
-	// was not exported for some strange reason.
 	interpRanges, err := info.GetSymbolAsRanges("_PyEval_EvalFrameDefault")
 	if err != nil {
 		if interpRanges, err = info.GetSymbolAsRanges("PyEval_EvalFrameEx"); err != nil {
@@ -817,21 +808,32 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.PyVarObject.ObSize = 16
 	vms.PyThreadState.Frame = 24
 
-	if version >= 0x30b {
+	switch version {
+	case pythonVer(3, 11):
 		// Starting with 3.11 we no longer can extract needed information from
 		// PyFrameObject. In addition PyFrameObject was replaced with _PyInterpreterFrame.
 		// The following offsets come from _PyInterpreterFrame but we continue to use
 		// PyFrameObject as the structure name, since the struct elements serve the same
 		// function as before.
 		vms.PyFrameObject.Code = 32
-		vms.PyFrameObject.LastI = 56 // f_lasti got renamed to prev_instr
-		vms.PyFrameObject.Back = 48  // f_back got renamed to previous
-		vms.PyFrameObject.IsEntry = 68
-
+		vms.PyFrameObject.LastI = 56       // _Py_CODEUNIT *prev_instr
+		vms.PyFrameObject.Back = 48        // struct _PyInterpreterFrame *previous
+		vms.PyFrameObject.EntryMember = 68 // bool is_entry
+		vms.PyFrameObject.EntryVal = 1     // true, from stdbool.h
 		// frame got removed in PyThreadState but we can use cframe instead.
 		vms.PyThreadState.Frame = 56
-
 		vms.PyCFrame.CurrentFrame = 8
+	case pythonVer(3, 12):
+		// Entry frame detection changed due to the shim frame
+		// https://github.com/python/cpython/commit/1e197e63e21f77b102ff2601a549dda4b6439455
+		vms.PyFrameObject.Code = 0
+		vms.PyFrameObject.LastI = 56       // _Py_CODEUNIT *prev_instr
+		vms.PyFrameObject.Back = 8         // struct _PyInterpreterFrame *previous
+		vms.PyFrameObject.EntryMember = 70 // char owner
+		vms.PyFrameObject.EntryVal = 3     // enum _frameowner, FRAME_OWNED_BY_CSTACK
+		vms.PyThreadState.Frame = 56
+		vms.PyCFrame.CurrentFrame = 0
+		vms.PyASCIIObject.Data = 40
 	}
 
 	// Read the introspection data from objects types that have it

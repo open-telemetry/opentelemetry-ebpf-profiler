@@ -102,8 +102,8 @@ bpf_map_def SEC("maps") hotspot_procs = {
 
 // Record a HotSpot frame
 static inline __attribute__((__always_inline__))
-ErrorCode push_hotspot(Trace *trace, u64 file, u64 line) {
-  return _push(trace, file, line, FRAME_MARKER_HOTSPOT);
+ErrorCode push_hotspot(Trace *trace, u64 file, u64 line, bool return_address) {
+  return _push_with_return_address(trace, file, line, FRAME_MARKER_HOTSPOT, return_address);
 }
 
 // calc_line merges the three values to be encoded in a frame 'line'
@@ -161,7 +161,7 @@ u64 hotspot_find_codeblob(const UnwindState *state, const HotspotProcInfo *ji)
 
 #pragma unroll
   for (int i = 0; i < HOTSPOT_SEGMAP_ITERATIONS; i++) {
-    if (bpf_probe_read(&tag, sizeof(tag), (void*)(segmap_start + segment))) {
+    if (bpf_probe_read_user(&tag, sizeof(tag), (void*)(segmap_start + segment))) {
        return 0;
     }
     DEBUG_PRINT("jvm:    segment %lu, tag %u", segment, (unsigned) tag);
@@ -235,7 +235,7 @@ ErrorCode hotspot_handle_interpreter(UnwindState *state,Trace *trace,
 #define BCP_REGISTER  r22
 #endif
   u64 regs[FP_OFFS+2];
-  if (bpf_probe_read(regs, sizeof(regs), (void *) (ui->fp - sizeof(u64[FP_OFFS])))) {
+  if (bpf_probe_read_user(regs, sizeof(regs), (void *) (ui->fp - sizeof(u64[FP_OFFS])))) {
     DEBUG_PRINT("jvm: failed to read interpreter frame");
     goto error;
   }
@@ -266,7 +266,7 @@ ErrorCode hotspot_handle_interpreter(UnwindState *state,Trace *trace,
   // be offset of the byte code. Mainly to reduce the amount needed for this data from 64-bits
   // to 16-bits as the bytecode size is limited by JVM to 0xFFFE.
   u64 cmethod;
-  if (bpf_probe_read(&cmethod, sizeof(cmethod), (void *) (method + ji->method_constmethod))) {
+  if (bpf_probe_read_user(&cmethod, sizeof(cmethod), (void *) (method + ji->method_constmethod))) {
     DEBUG_PRINT("jvm: failed to read interpreter cmethod");
     goto error;
   }
@@ -323,7 +323,7 @@ void breadcrumb_fixup(HotspotUnwindInfo *ui) {
   // https://github.com/openjdk/jdk/blob/jdk-17%2B35/src/hotspot/cpu/aarch64/aarch64.ad#L3731
 
   u64 lookback;
-  bpf_probe_read(&lookback, sizeof(lookback), (void*)(ui->pc - sizeof(lookback)));
+  bpf_probe_read_user(&lookback, sizeof(lookback), (void*)(ui->pc - sizeof(lookback)));
   if (lookback == 0xd63f0100a9bf27ffULL /* stp; blr */) {
     ui->sp += 0x10;
   }
@@ -460,7 +460,7 @@ bool hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui,
   u8 find_offset = 0;
   u32 window[EPI_LOOKBACK];
   u64 needle = ldp | (add << 32);
-  bpf_probe_read(window, sizeof(window), (void*)(ui->pc - sizeof(window) + INSN_LEN));
+  bpf_probe_read_user(window, sizeof(window), (void*)(ui->pc - sizeof(window) + INSN_LEN));
 
 #pragma unroll
   for (; find_offset < EPI_LOOKBACK - 1; ++find_offset) {
@@ -530,7 +530,7 @@ ErrorCode hotspot_handle_nmethod(const CodeBlobInfo *cbi, Trace *trace,
     // Similar fixup is strategy for external unwinding is in:
     // https://hg.openjdk.java.net/jdk-updates/jdk14u/file/default/src/java.base/solaris/native/libjvm_db/libjvm_db.c#l1059
     u64 orig;
-    if (bpf_probe_read(&orig, sizeof(orig), (void *) (ui->sp + cbi->orig_pc_offset)) ||
+    if (bpf_probe_read_user(&orig, sizeof(orig), (void *) (ui->sp + cbi->orig_pc_offset)) ||
         orig < cbi->code_start || orig >= cbi->code_end) {
       // Just keep using the deoptimization point PC. It usually unwinds ok, and symbolizes
       // to the correct function. Potentially inlined scopes, and source line number is lost.
@@ -591,7 +591,7 @@ ErrorCode hotspot_handle_nmethod(const CodeBlobInfo *cbi, Trace *trace,
   // mapping area. Additional checking could be done to search for CodeBlob and to verify that
   // the value is actually inside the code area and that the CodeBlob is in valid state.
   u64 stack[HOTSPOT_RA_SEARCH_SLOTS];
-  bpf_probe_read(stack, sizeof(stack), (void*)(ui->sp - sizeof(u64)));
+  bpf_probe_read_user(stack, sizeof(stack), (void*)(ui->sp - sizeof(u64)));
   for (int i = 0; i < HOTSPOT_RA_SEARCH_SLOTS; i++, ui->sp += sizeof(u64)) {
     DEBUG_PRINT("jvm:    -> %u pc candidate 0x%lx", i, (unsigned long)stack[i]);
     if (hotspot_addr_in_codecache(trace->pid, stack[i])) {
@@ -660,7 +660,7 @@ ErrorCode hotspot_execute_unwind_action(CodeBlobInfo *cbi, HotspotUnwindAction a
       return ERR_UNREACHABLE;
 #if defined(__aarch64__)
     case UA_UNWIND_AARCH64_LR:
-      if (!state->lr_valid) {
+      if (state->return_address) {
         increment_metric(metricID_UnwindHotspotErrLrUnwindingMidTrace);
         return ERR_HOTSPOT_LR_UNWINDING_MID_TRACE;
       }
@@ -682,7 +682,7 @@ ErrorCode hotspot_execute_unwind_action(CodeBlobInfo *cbi, HotspotUnwindAction a
       // fallthrough
     case UA_UNWIND_REGS: {
       u64 frame[2];
-      bpf_probe_read(frame, sizeof(frame), (void *) (ui->sp - sizeof(frame)));
+      bpf_probe_read_user(frame, sizeof(frame), (void *) (ui->sp - sizeof(frame)));
       ui->pc = frame[1];
       if (cbi->frame_size >= sizeof(frame)) {
         DEBUG_PRINT("jvm:  -> recover fp");
@@ -692,7 +692,7 @@ ErrorCode hotspot_execute_unwind_action(CodeBlobInfo *cbi, HotspotUnwindAction a
     case UA_UNWIND_COMPLETE: {
     unwind_complete:;
       u64 line = calc_line(ui->line.subtype, ui->line.pc_delta_or_bci, ui->line.ptr_check);
-      ErrorCode error = push_hotspot(trace, ui->file, line);
+      ErrorCode error = push_hotspot(trace, ui->file, line, state->return_address);
       if (error) {
         return error;
       }
@@ -702,9 +702,7 @@ ErrorCode hotspot_execute_unwind_action(CodeBlobInfo *cbi, HotspotUnwindAction a
       state->pc = ui->pc;
       state->sp = ui->sp;
       state->fp = ui->fp;
-#if defined(__aarch64__)
-      state->lr_valid = false;
-#endif
+      state->return_address = true;
       increment_metric(metricID_UnwindHotspotFrames);
     }
   }
@@ -730,7 +728,7 @@ ErrorCode hotspot_read_codeblob(const UnwindState *state, const HotspotProcInfo 
   // the exact CodeBlob/CompiledMethod/nmethod size. The CodeBlob is allocated in the JIT area,
   // preceding the actual JIT code and data for the function. It is thus exceedingly unlikely for
   // us to accidentally read into a guard / unallocated page despite the over-read.
-  if (bpf_probe_read(scratch->codeblob, sizeof(scratch->codeblob), (void*)cbi->address)) {
+  if (bpf_probe_read_user(scratch->codeblob, sizeof(scratch->codeblob), (void*)cbi->address)) {
     goto read_error_exit;
   }
 
@@ -753,7 +751,7 @@ ErrorCode hotspot_read_codeblob(const UnwindState *state, const HotspotProcInfo 
 
   // `frame_type` is actually the first 4 characters of the CodeBlob type name.
   u64 code_name_addr = *(u64*)(scratch->codeblob + ji->codeblob_name);
-  if (bpf_probe_read(&cbi->frame_type, sizeof(cbi->frame_type), (void*)code_name_addr)) {
+  if (bpf_probe_read_user(&cbi->frame_type, sizeof(cbi->frame_type), (void*)code_name_addr)) {
     goto read_error_exit;
   }
 

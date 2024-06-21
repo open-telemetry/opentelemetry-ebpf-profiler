@@ -11,7 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // nolint:lll
@@ -126,6 +127,9 @@ const fakeAzureAnswer = `{
 }`
 
 var expectedResult = map[string]string{
+	"cloud:provider":               "azure",
+	"cloud:region":                 "westeurope",
+	"host:type":                    "Standard_DS1_v2",
 	"azure:compute/environment":    "AzurePublicCloud",
 	"azure:compute/location":       "westeurope",
 	"azure:compute/name":           "bar-test",
@@ -156,13 +160,9 @@ func TestPopulateResult(t *testing.T) {
 
 	azure := strings.NewReader(fakeAzureAnswer)
 
-	if err := json.NewDecoder(azure).Decode(&imds); err != nil {
-		t.Fatalf("Failed to parse Azure metadata: %v", err)
-	}
+	err := json.NewDecoder(azure).Decode(&imds)
+	require.NoError(t, err)
 
 	populateResult(result, &imds)
-
-	if diff := cmp.Diff(expectedResult, result); diff != "" {
-		t.Fatalf("Metadata mismatch (-want +got):\n%s", diff)
-	}
+	assert.Equal(t, expectedResult, result)
 }
