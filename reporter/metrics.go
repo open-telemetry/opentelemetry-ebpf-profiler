@@ -16,7 +16,7 @@ import (
 	"github.com/elastic/otel-profiling-agent/libpf/xsync"
 )
 
-type statsHandlerImpl struct {
+type StatsHandlerImpl struct {
 	// Total number of uncompressed bytes in/out
 	numRPCBytesOut atomic.Int64
 	numRPCBytesIn  atomic.Int64
@@ -35,16 +35,16 @@ type statsHandlerImpl struct {
 }
 
 // Make sure that the handler implements stats.Handler.
-var _ stats.Handler = (*statsHandlerImpl)(nil)
+var _ stats.Handler = (*StatsHandlerImpl)(nil)
 
 // keyRPCTagInfo is the context key for our state.
 //
 // This is in a global to avoid having to allocate a new string on every call.
 var keyRPCTagInfo = "RPCTagInfo"
 
-// newStatsHandler creates a new statistics handler.
-func newStatsHandler() *statsHandlerImpl {
-	return &statsHandlerImpl{
+// NewStatsHandler creates a new statistics handler.
+func NewStatsHandler() *StatsHandlerImpl {
+	return &StatsHandlerImpl{
 		rpcBytesOut:  xsync.NewRWMutex(map[string]uint64{}),
 		rpcBytesIn:   xsync.NewRWMutex(map[string]uint64{}),
 		wireBytesOut: xsync.NewRWMutex(map[string]uint64{}),
@@ -53,17 +53,17 @@ func newStatsHandler() *statsHandlerImpl {
 }
 
 // TagRPC implements the stats.Handler interface.
-func (sh *statsHandlerImpl) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {
+func (sh *StatsHandlerImpl) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {
 	return context.WithValue(ctx, &keyRPCTagInfo, info)
 }
 
 // TagConn implements the stats.Handler interface.
-func (sh *statsHandlerImpl) TagConn(ctx context.Context, _ *stats.ConnTagInfo) context.Context {
+func (sh *StatsHandlerImpl) TagConn(ctx context.Context, _ *stats.ConnTagInfo) context.Context {
 	return ctx
 }
 
 // HandleConn implements the stats.Handler interface.
-func (sh *statsHandlerImpl) HandleConn(context.Context, stats.ConnStats) {
+func (sh *StatsHandlerImpl) HandleConn(context.Context, stats.ConnStats) {
 }
 
 func rpcMethodFromContext(ctx context.Context) (string, error) {
@@ -75,7 +75,7 @@ func rpcMethodFromContext(ctx context.Context) (string, error) {
 }
 
 // HandleRPC implements the stats.Handler interface.
-func (sh *statsHandlerImpl) HandleRPC(ctx context.Context, s stats.RPCStats) {
+func (sh *StatsHandlerImpl) HandleRPC(ctx context.Context, s stats.RPCStats) {
 	var wireBytesIn, wireBytesOut, rpcBytesIn, rpcBytesOut int64
 
 	switch s := s.(type) {
@@ -120,24 +120,24 @@ func (sh *statsHandlerImpl) HandleRPC(ctx context.Context, s stats.RPCStats) {
 	}
 }
 
-func (sh *statsHandlerImpl) getWireBytesOut() int64 {
+func (sh *StatsHandlerImpl) GetWireBytesOut() int64 {
 	return sh.numWireBytesOut.Swap(0)
 }
 
-func (sh *statsHandlerImpl) getWireBytesIn() int64 {
+func (sh *StatsHandlerImpl) GetWireBytesIn() int64 {
 	return sh.numWireBytesIn.Swap(0)
 }
 
-func (sh *statsHandlerImpl) getRPCBytesOut() int64 {
+func (sh *StatsHandlerImpl) GetRPCBytesOut() int64 {
 	return sh.numRPCBytesOut.Swap(0)
 }
 
-func (sh *statsHandlerImpl) getRPCBytesIn() int64 {
+func (sh *StatsHandlerImpl) GetRPCBytesIn() int64 {
 	return sh.numRPCBytesIn.Swap(0)
 }
 
 // nolint:unused
-func (sh *statsHandlerImpl) getMethodRPCBytesOut() map[string]uint64 {
+func (sh *StatsHandlerImpl) getMethodRPCBytesOut() map[string]uint64 {
 	rpcOut := sh.rpcBytesOut.RLock()
 	defer sh.rpcBytesOut.RUnlock(&rpcOut)
 	res := make(map[string]uint64, len(*rpcOut))
@@ -148,7 +148,7 @@ func (sh *statsHandlerImpl) getMethodRPCBytesOut() map[string]uint64 {
 }
 
 // nolint:unused
-func (sh *statsHandlerImpl) getMethodRPCBytesIn() map[string]uint64 {
+func (sh *StatsHandlerImpl) getMethodRPCBytesIn() map[string]uint64 {
 	rpcIn := sh.rpcBytesIn.RLock()
 	defer sh.rpcBytesIn.RUnlock(&rpcIn)
 	res := make(map[string]uint64, len(*rpcIn))
@@ -159,7 +159,7 @@ func (sh *statsHandlerImpl) getMethodRPCBytesIn() map[string]uint64 {
 }
 
 // nolint:unused
-func (sh *statsHandlerImpl) getMethodWireBytesOut() map[string]uint64 {
+func (sh *StatsHandlerImpl) getMethodWireBytesOut() map[string]uint64 {
 	wireOut := sh.wireBytesOut.RLock()
 	defer sh.wireBytesOut.RUnlock(&wireOut)
 	res := make(map[string]uint64, len(*wireOut))
@@ -170,7 +170,7 @@ func (sh *statsHandlerImpl) getMethodWireBytesOut() map[string]uint64 {
 }
 
 // nolint:unused
-func (sh *statsHandlerImpl) getMethodWireBytesIn() map[string]uint64 {
+func (sh *StatsHandlerImpl) getMethodWireBytesIn() map[string]uint64 {
 	wireIn := sh.wireBytesIn.RLock()
 	defer sh.wireBytesIn.RUnlock(&wireIn)
 	res := make(map[string]uint64, len(*wireIn))
@@ -193,20 +193,4 @@ type Metrics struct {
 	RPCBytesInCount               int64
 	WireBytesOutCount             int64
 	WireBytesInCount              int64
-}
-
-func (r *GRPCReporter) GetMetrics() Metrics {
-	return Metrics{
-		CountsForTracesOverwriteCount: r.countsForTracesQueue.getOverwriteCount(),
-		ExeMetadataOverwriteCount:     r.execMetadataQueue.getOverwriteCount(),
-		FrameMetadataOverwriteCount:   r.frameMetadataQueue.getOverwriteCount(),
-		FramesForTracesOverwriteCount: r.framesForTracesQueue.getOverwriteCount(),
-		HostMetadataOverwriteCount:    r.hostMetadataQueue.getOverwriteCount(),
-		MetricsOverwriteCount:         r.metricsQueue.getOverwriteCount(),
-		FallbackSymbolsOverwriteCount: r.fallbackSymbolsQueue.getOverwriteCount(),
-		RPCBytesOutCount:              r.rpcStats.getRPCBytesOut(),
-		RPCBytesInCount:               r.rpcStats.getRPCBytesIn(),
-		WireBytesOutCount:             r.rpcStats.getWireBytesOut(),
-		WireBytesInCount:              r.rpcStats.getWireBytesIn(),
-	}
 }

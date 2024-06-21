@@ -8,10 +8,6 @@
 
 package tpbase
 
-func x86GetAnalyzers() []Analyzer {
-	return nil
-}
-
 func GetAnalyzers() []Analyzer {
 	return arm64GetAnalyzers()
 }

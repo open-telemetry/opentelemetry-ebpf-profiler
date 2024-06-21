@@ -12,7 +12,7 @@ import (
 	"fmt"
 
 	"github.com/elastic/otel-profiling-agent/libpf"
-	ah "github.com/elastic/otel-profiling-agent/libpf/armhelpers"
+	ah "github.com/elastic/otel-profiling-agent/armhelpers"
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
 
@@ -98,9 +98,9 @@ func retrieveExecuteExJumpLabelAddressWrapper(
 	return libpf.SymbolValueInvalid, fmt.Errorf("did not find a BR in the given code blob")
 }
 
-// RetrieveJITBufferPtrWrapper reads the code blob and returns a pointer to the JIT buffer used by
+// retrieveJITBufferPtrWrapper reads the code blob and returns a pointer to the JIT buffer used by
 // PHP (called "dasm_buf" in the PHP source).
-func RetrieveJITBufferPtrWrapper(code []byte, addrBase libpf.SymbolValue) (
+func retrieveJITBufferPtrWrapper(code []byte, addrBase libpf.SymbolValue) (
 	dasmBuf libpf.SymbolValue, dasmSize libpf.SymbolValue, err error) {
 	// The code for recovering the JIT buffer is a little bit more involved on ARM than on x86.
 	//

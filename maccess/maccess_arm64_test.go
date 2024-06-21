@@ -8,7 +8,11 @@
 
 package maccess
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 // nolint:lll
 var codeblobs = map[string]struct {
@@ -109,11 +113,8 @@ func TestGetJumpInCopyFromUserNoFault(t *testing.T) {
 		test := test
 		t.Run(name, func(t *testing.T) {
 			isPatched, err := CopyFromUserNoFaultIsPatched(test.code, 0, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if isPatched != test.isPatched {
-				t.Fatalf("Expected %v but got %v", test.isPatched, isPatched)
+			if assert.NoError(t, err) {
+				assert.Equal(t, test.isPatched, isPatched)
 			}
 		})
 	}

@@ -21,132 +21,6 @@ void increment_metric(u32 metricID) {
   }
 }
 
-// Return the per-cpu record.
-// As each per-cpu array only has 1 entry, we hard-code 0 as the key.
-// The return value of get_per_cpu_record() can never be NULL and return value checks only exist
-// to pass the verifier. If the implementation of get_per_cpu_record() is changed so that NULL can
-// be returned, also add an error metric.
-static inline PerCPURecord *get_per_cpu_record(void)
-{
-  int key0 = 0;
-  return bpf_map_lookup_elem(&per_cpu_records, &key0);
-}
-
-// Return the per-cpu record initialized with pristine values for state variables.
-// The return value of get_pristine_per_cpu_record() can never be NULL and return value checks
-// only exist to pass the verifier. If the implementation of get_pristine_per_cpu_record() is changed
-// so that NULL can be returned, also add an error metric.
-static inline PerCPURecord *get_pristine_per_cpu_record()
-{
-  PerCPURecord *record = get_per_cpu_record();
-  if (!record)
-    return record;
-
-  record->state.pc = 0;
-  record->state.sp = 0;
-  record->state.fp = 0;
-#if defined(__x86_64__)
-  record->state.r13 = 0;
-#elif defined(__aarch64__)
-  record->state.lr = 0;
-  record->state.r22 = 0;
-  record->state.lr_valid = false;
-#endif
-  record->state.error_metric = -1;
-  record->state.unwind_error = ERR_OK;
-  record->perlUnwindState.stackinfo = 0;
-  record->perlUnwindState.cop = 0;
-  record->pythonUnwindState.py_frame = 0;
-  record->phpUnwindState.zend_execute_data = 0;
-  record->rubyUnwindState.stack_ptr = 0;
-  record->rubyUnwindState.last_stack_frame = 0;
-  record->unwindersDone = 0;
-  record->tailCalls = 0;
-
-  Trace *trace = &record->trace;
-  trace->kernel_stack_id = -1;
-  trace->stack_len = 0;
-  trace->pid = 0;
-
-  // TODO: memset trace to all-zero here?
-
-  return record;
-}
-
-// unwinder_is_done checks if a given unwinder program is done for the trace
-// extraction round.
-static inline __attribute__((__always_inline__))
-bool unwinder_is_done(const PerCPURecord *record, int unwinder) {
-  return (record->unwindersDone & (1U << unwinder)) != 0;
-}
-
-// unwinder_mark_done will mask out a given unwinder program so that it will
-// not be called again for the same trace. Used when interpreter unwinder has
-// extracted all interpreter frames it can extract.
-static inline __attribute__((__always_inline__))
-void unwinder_mark_done(PerCPURecord *record, int unwinder) {
-  record->unwindersDone |= 1U << unwinder;
-}
-
-// Push the file ID, line number and frame type into FrameList with a user-defined
-// maximum stack size.
-//
-// NOTE: The line argument is used for a lot of different purposes, depending on
-//       the frame type. For example error frames use it to store the error number,
-//       and hotspot puts a subtype and BCI indices, amongst other things (see
-//       calc_line). This should probably be renamed to something like "frame type
-//       specific data".
-static inline __attribute__((__always_inline__))
-ErrorCode _push_with_max_frames(Trace *trace, u64 file, u64 line, u8 frame_type, u32 max_frames) {
-  if (trace->stack_len >= max_frames) {
-    DEBUG_PRINT("unable to push frame: stack is full");
-    increment_metric(metricID_UnwindErrStackLengthExceeded);
-    return ERR_STACK_LENGTH_EXCEEDED;
-  }
-
-#ifdef TESTING_COREDUMP
-  // utils/coredump uses CGO to build the eBPF code. This dispatches
-  // the frame information directly to helper implemented in ebpfhelpers.go.
-  int __push_frame(u64, u64, u64, u8);
-  trace->stack_len++;
-  return __push_frame(__cgo_ctx->id, file, line, frame_type);
-#else
-  trace->frames[trace->stack_len++] = (Frame) {
-      .file_id = file,
-      .addr_or_line = line,
-      .kind = frame_type,
-  };
-
-  return ERR_OK;
-#endif
-}
-
-// Push the file ID, line number and frame type into FrameList
-static inline __attribute__((__always_inline__))
-ErrorCode _push(Trace *trace, u64 file, u64 line, u8 frame_type) {
-  return _push_with_max_frames(trace, file, line, frame_type, MAX_NON_ERROR_FRAME_UNWINDS);
-}
-
-// Push a critical error frame.
-static inline __attribute__((__always_inline__))
-ErrorCode push_error(Trace *trace, ErrorCode error) {
-  return _push_with_max_frames(trace, 0, error, FRAME_MARKER_ABORT, MAX_FRAME_UNWINDS);
-}
-
-// Send a trace to user-land via the `trace_events` perf event buffer.
-static inline __attribute__((__always_inline__))
-void send_trace(void *ctx, Trace *trace) {
-  const u64 num_empty_frames = (MAX_FRAME_UNWINDS - trace->stack_len);
-  const u64 send_size = sizeof(Trace) - sizeof(Frame) * num_empty_frames;
-
-  if (send_size > sizeof(Trace)) {
-    return; // unreachable
-  }
-
-  extern bpf_map_def trace_events;
-  bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, trace, send_size);
-}
-
 // Send immediate notifications for event triggers to Go.
 // Notifications for GENERIC_PID and TRACES_FOR_SYMBOLIZATION will be
 // automatically inhibited until HA resets the type.
@@ -154,7 +28,7 @@ static inline void event_send_trigger(struct pt_regs *ctx, u32 event_type) {
   int inhibit_key = event_type;
   bool inhibit_value = true;
 
-  // GENERIC_PID is global notifications that trigger eBPF map iteration+processing in Go.
+  // GENERIC_PID is a global notification that triggers eBPF map iteration+processing in Go.
   // To avoid redundant notifications while userspace processing for them is already taking
   // place, we allow latch-like inhibition, where eBPF sets it and Go has to manually reset
   // it, before new notifications are triggered.
@@ -197,41 +71,96 @@ bool pid_information_exists(void *ctx, int pid) {
   return bpf_map_lookup_elem(&pid_page_to_mapping_info, &key) != NULL;
 }
 
+// Reset the ratelimit cache
+#define RATELIMIT_ACTION_RESET   0
+// Use default timer
+#define RATELIMIT_ACTION_DEFAULT 1
+// Set PID to fast timer mode
+#define RATELIMIT_ACTION_FAST    2
+
+// pid_event_ratelimit determines if the PID event should be inhibited or not
+// based on rate limiting rules.
+static inline __attribute__((__always_inline__))
+bool pid_event_ratelimit(u32 pid, int ratelimit_action) {
+  const u8 default_max_attempts = 8; // 25 seconds
+  const u8 fast_max_attempts = 4; // 1.6 seconds
+  const u8 fast_timer_flag = 0x10;
+  u64 *token_ptr = bpf_map_lookup_elem(&reported_pids, &pid);
+  u64 ts = bpf_ktime_get_ns();
+  u8 attempt = 0;
+  u8 fast_timer = (ratelimit_action == RATELIMIT_ACTION_FAST) ? fast_timer_flag : 0;
+
+  if (ratelimit_action == RATELIMIT_ACTION_RESET) {
+    return false;
+  }
+
+  if (token_ptr) {
+    u64 token = *token_ptr;
+    u64 diff_ts = ts - (token & ~0x1fULL);
+    attempt = token & 0xf;
+    fast_timer |= token & fast_timer_flag;
+    // Calculate the limit window size. 100ms << attempt.
+    u64 limit_window_ts = (100*1000000ULL) << attempt;
+
+    if (diff_ts < limit_window_ts) {
+      // Minimum event interval.
+      DEBUG_PRINT("PID %d event limited: too fast", pid);
+      return true;
+    }
+    if (diff_ts < limit_window_ts + (5000*1000000ULL)) {
+      // PID event within 5 seconds, increase limit window size if possible
+      if (attempt < (fast_timer ? fast_max_attempts : default_max_attempts)) {
+        attempt++;
+      }
+    } else {
+      // Silence for at least 5 seconds. Reset back to zero.
+      attempt = 0;
+    }
+  }
+
+  // Create new token:
+  // 59 bits - the high bits of timestamp of last event
+  //  1 bit  - set if the PID should be in fast timer mode
+  //  4 bits - number of bursts left at event time
+  DEBUG_PRINT("PID %d event send, attempt=%d", pid, attempt);
+  u64 token = (ts & ~0x1fULL) | fast_timer | attempt;
+
+  // Update the map entry. Technically this is not SMP safe, but doing
+  // an atomic update would require EBPF atomics. At worst we send an
+  // extra sync event and the likelyhood for this race is very low, so
+  // we can live with this.
+  int err = bpf_map_update_elem(&reported_pids, &pid, &token, BPF_ANY);
+  if (err != 0) {
+    // Should never happen
+    DEBUG_PRINT("Failed to report PID %d: %d", pid, err);
+    increment_metric(metricID_ReportedPIDsErr);
+    return true;
+  }
+
+  return false;
+}
+
 // report_pid informs userspace about a PID that needs to be processed.
 // If inhibit is true, PID will first be checked against maps/reported_pids
 // and reporting aborted if PID has been recently reported.
 // Returns true if the PID was successfully reported to user space.
 static inline __attribute__((__always_inline__))
-bool report_pid(void *ctx, int pid, bool inhibit) {
+bool report_pid(void *ctx, int pid, int ratelimit_action) {
   u32 key = (u32) pid;
-  int errNo;
 
-  if (inhibit) {
-    u64 *ts_old = bpf_map_lookup_elem(&reported_pids, &key);
-    u64 ts = bpf_ktime_get_ns();
-    if (ts_old && (ts - *ts_old) < REPORTED_PIDS_TIMEOUT) {
-      DEBUG_PRINT("PID %d was recently reported. User space will not be notified", pid);
-      return false;
-    }
-
-    errNo = bpf_map_update_elem(&reported_pids, &key, &ts, BPF_ANY);
-    if (errNo != 0) {
-      // Should never happen
-      DEBUG_PRINT("Failed to report PID %d: %d", pid, errNo);
-      increment_metric(metricID_ReportedPIDsErr);
-      return false;
-    }
+  if (pid_event_ratelimit(pid, ratelimit_action)) {
+    return false;
   }
 
   bool value = true;
-  errNo = bpf_map_update_elem(&pid_events, &key, &value, BPF_ANY);
+  int errNo = bpf_map_update_elem(&pid_events, &key, &value, BPF_ANY);
   if (errNo != 0) {
     DEBUG_PRINT("Failed to update pid_events with PID %d: %d", pid, errNo);
     increment_metric(metricID_PIDEventsErr);
-    if (inhibit) {
-      bpf_map_delete_elem(&reported_pids, &key);
-    }
     return false;
+  }
+  if (ratelimit_action == RATELIMIT_ACTION_RESET || errNo != 0) {
+    bpf_map_delete_elem(&reported_pids, &key);
   }
 
   // Notify userspace that there is a PID waiting to be processed.
@@ -240,6 +169,140 @@ bool report_pid(void *ctx, int pid, bool inhibit) {
   // and we can simply return success.
   event_send_trigger(ctx, EVENT_TYPE_GENERIC_PID);
   return true;
+}
+
+// Return the per-cpu record.
+// As each per-cpu array only has 1 entry, we hard-code 0 as the key.
+// The return value of get_per_cpu_record() can never be NULL and return value checks only exist
+// to pass the verifier. If the implementation of get_per_cpu_record() is changed so that NULL can
+// be returned, also add an error metric.
+static inline PerCPURecord *get_per_cpu_record(void)
+{
+  int key0 = 0;
+  return bpf_map_lookup_elem(&per_cpu_records, &key0);
+}
+
+// Return the per-cpu record initialized with pristine values for state variables.
+// The return value of get_pristine_per_cpu_record() can never be NULL and return value checks
+// only exist to pass the verifier. If the implementation of get_pristine_per_cpu_record() is changed
+// so that NULL can be returned, also add an error metric.
+static inline PerCPURecord *get_pristine_per_cpu_record()
+{
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record)
+    return record;
+
+  record->state.pc = 0;
+  record->state.sp = 0;
+  record->state.fp = 0;
+#if defined(__x86_64__)
+  record->state.r13 = 0;
+#elif defined(__aarch64__)
+  record->state.lr = 0;
+  record->state.r22 = 0;
+#endif
+  record->state.return_address = false;
+  record->state.error_metric = -1;
+  record->state.unwind_error = ERR_OK;
+  record->perlUnwindState.stackinfo = 0;
+  record->perlUnwindState.cop = 0;
+  record->pythonUnwindState.py_frame = 0;
+  record->phpUnwindState.zend_execute_data = 0;
+  record->rubyUnwindState.stack_ptr = 0;
+  record->rubyUnwindState.last_stack_frame = 0;
+  record->unwindersDone = 0;
+  record->tailCalls = 0;
+  record->ratelimitAction = RATELIMIT_ACTION_DEFAULT;
+
+  Trace *trace = &record->trace;
+  trace->kernel_stack_id = -1;
+  trace->stack_len = 0;
+  trace->pid = 0;
+  trace->apm_trace_id.as_int.hi = 0;
+  trace->apm_trace_id.as_int.lo = 0;
+  trace->apm_transaction_id.as_int = 0;
+
+  return record;
+}
+
+// unwinder_is_done checks if a given unwinder program is done for the trace
+// extraction round.
+static inline __attribute__((__always_inline__))
+bool unwinder_is_done(const PerCPURecord *record, int unwinder) {
+  return (record->unwindersDone & (1U << unwinder)) != 0;
+}
+
+// unwinder_mark_done will mask out a given unwinder program so that it will
+// not be called again for the same trace. Used when interpreter unwinder has
+// extracted all interpreter frames it can extract.
+static inline __attribute__((__always_inline__))
+void unwinder_mark_done(PerCPURecord *record, int unwinder) {
+  record->unwindersDone |= 1U << unwinder;
+}
+
+// Push the file ID, line number and frame type into FrameList with a user-defined
+// maximum stack size.
+//
+// NOTE: The line argument is used for a lot of different purposes, depending on
+//       the frame type. For example error frames use it to store the error number,
+//       and hotspot puts a subtype and BCI indices, amongst other things (see
+//       calc_line). This should probably be renamed to something like "frame type
+//       specific data".
+static inline __attribute__((__always_inline__))
+ErrorCode _push_with_max_frames(Trace *trace, u64 file, u64 line, u8 frame_type, u8 return_address, u32 max_frames) {
+  if (trace->stack_len >= max_frames) {
+    DEBUG_PRINT("unable to push frame: stack is full");
+    increment_metric(metricID_UnwindErrStackLengthExceeded);
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+
+#ifdef TESTING_COREDUMP
+  // utils/coredump uses CGO to build the eBPF code. This dispatches
+  // the frame information directly to helper implemented in ebpfhelpers.go.
+  int __push_frame(u64, u64, u64, u8, u8);
+  trace->stack_len++;
+  return __push_frame(__cgo_ctx->id, file, line, frame_type, return_address);
+#else
+  trace->frames[trace->stack_len++] = (Frame) {
+      .file_id = file,
+      .addr_or_line = line,
+      .kind = frame_type,
+      .return_address = return_address,
+  };
+
+  return ERR_OK;
+#endif
+}
+
+// Push the file ID, line number and frame type into FrameList
+static inline __attribute__((__always_inline__))
+ErrorCode _push_with_return_address(Trace *trace, u64 file, u64 line, u8 frame_type, bool return_address) {
+  return _push_with_max_frames(trace, file, line, frame_type, return_address, MAX_NON_ERROR_FRAME_UNWINDS);
+}
+
+// Push the file ID, line number and frame type into FrameList
+static inline __attribute__((__always_inline__))
+ErrorCode _push(Trace *trace, u64 file, u64 line, u8 frame_type) {
+  return _push_with_max_frames(trace, file, line, frame_type, 0, MAX_NON_ERROR_FRAME_UNWINDS);
+}
+
+// Push a critical error frame.
+static inline __attribute__((__always_inline__))
+ErrorCode push_error(Trace *trace, ErrorCode error) {
+  return _push_with_max_frames(trace, 0, error, FRAME_MARKER_ABORT, 0, MAX_FRAME_UNWINDS);
+}
+
+// Send a trace to user-land via the `trace_events` perf event buffer.
+static inline __attribute__((__always_inline__))
+void send_trace(void *ctx, Trace *trace) {
+  const u64 num_empty_frames = (MAX_FRAME_UNWINDS - trace->stack_len);
+  const u64 send_size = sizeof(Trace) - sizeof(Frame) * num_empty_frames;
+
+  if (send_size > sizeof(Trace)) {
+    return; // unreachable
+  }
+
+  bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, trace, send_size);
 }
 
 // is_kernel_address checks if the given address looks like virtual address to kernel memory.

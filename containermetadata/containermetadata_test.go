@@ -8,6 +8,7 @@ package containermetadata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -23,15 +24,24 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/elastic/otel-profiling-agent/util"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestExtractContainerIDFromFile(t *testing.T) {
+	containerIDCache, err := lru.NewSynced[util.PID, containerIDEntry](
+		containerIDCacheSize, util.PID.Hash32)
+	require.NoError(t, err)
+
 	tests := []struct {
 		name           string
 		cgroupname     string
 		expContainerID string
-		pid            libpf.PID
+		pid            util.PID
 		expEnv         containerEnvironment
+		customHandler  *handler
 	}{
 		{
 			name:           "dockerv1",
@@ -123,15 +133,22 @@ func TestExtractContainerIDFromFile(t *testing.T) {
 			expContainerID: "vy53ljgivqn5q9axwrx1mf40l",
 			expEnv:         envDockerBuildkit,
 		},
+		{
+			name:           "minikube",
+			cgroupname:     "testdata/cgroupv2minikube-docker",
+			expContainerID: "90b200f66e7a7c6d3ee264d905001c37b7dd9d08e2d35aa669c2a8b092fe1a64",
+			expEnv:         envDocker,
+			customHandler: &handler{
+				containerIDCache: containerIDCache,
+
+				// In minikube environment k8 client is not available
+				dockerClient:     &client.Client{},
+				containerdClient: &containerd.Client{},
+			},
+		},
 	}
 
-	containerIDCache, err := lru.NewSynced[libpf.OnDiskFileIdentifier, containerIDEntry](
-		containerIDCacheSize, libpf.OnDiskFileIdentifier.Hash32)
-	if err != nil {
-		t.Fatalf("failed to provide cache: %v", err)
-	}
-
-	h := &Handler{
+	defaultHandler := &handler{
 		containerIDCache: containerIDCache,
 
 		// Use dummy clients to trigger the regex match in the test.
@@ -143,19 +160,14 @@ func TestExtractContainerIDFromFile(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			h := defaultHandler
+			if test.customHandler != nil {
+				h = test.customHandler
+			}
 			containerID, env, err := h.extractContainerIDFromFile(test.cgroupname)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if test.expContainerID != containerID {
-				t.Fatalf("expected containerID %v but found %v",
-					test.expContainerID, containerID)
-			}
-
-			if test.expEnv != env {
-				t.Fatalf("expected container technology %v but got %v",
-					test.expEnv, env)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, test.expContainerID, containerID)
+			assert.Equal(t, test.expEnv, env)
 		})
 	}
 }
@@ -165,7 +177,7 @@ func TestGetKubernetesPodMetadata(t *testing.T) {
 	tests := []struct {
 		name             string
 		clientset        kubernetes.Interface
-		pid              libpf.PID
+		pid              util.PID
 		expContainerID   string
 		expContainerName string
 		expPodName       string
@@ -250,7 +262,7 @@ func TestGetKubernetesPodMetadata(t *testing.T) {
 			}),
 			pid:            1,
 			expContainerID: "ed89697807a981b82f6245ac3a13be232c1e13435d52bc3f53060d61babe1997",
-			err: fmt.Errorf("failed to get kubernetes pod metadata, failed to " +
+			err: errors.New("failed to get kubernetes pod metadata, failed to " +
 				"find matching kubernetes pod/container metadata for containerID, " +
 				"ed89697807a981b82f6245ac3a13be232c1e13435d52bc3f53060d61babe1997"),
 		},
@@ -261,60 +273,40 @@ func TestGetKubernetesPodMetadata(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			containerMetadataCache, err := lru.NewSynced[string, ContainerMetadata](
 				containerMetadataCacheSize, hashString)
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 
-			containerIDCache, err := lru.NewSynced[libpf.OnDiskFileIdentifier, containerIDEntry](
-				containerIDCacheSize, libpf.OnDiskFileIdentifier.Hash32)
-			if err != nil {
-				t.Fatalf("failed to provide cache: %v", err)
-			}
+			containerIDCache, err := lru.NewSynced[util.PID, containerIDEntry](
+				containerIDCacheSize, util.PID.Hash32)
+			require.NoError(t, err)
 
-			instance := &Handler{
+			instance := &handler{
 				containerMetadataCache: containerMetadataCache,
 				kubeClientSet:          test.clientset,
 				dockerClient:           nil,
 				containerIDCache:       containerIDCache,
 			}
+			instance.deferredPID, err = lru.NewSynced[util.PID, libpf.Void](1024,
+				func(u util.PID) uint32 { return uint32(u) })
+			require.NoError(t, err)
 
 			cgroup = "testdata/cgroupv%dkubernetes"
 			meta, err := instance.GetContainerMetadata(test.pid)
-			if err != nil {
-				if meta != (ContainerMetadata{}) {
-					t.Fatal("GetContainerMetadata errored but returned non-default object")
-				}
-				if test.err == nil {
-					t.Fatal(err)
-				}
+			if test.err != nil {
+				require.Error(t, err)
+				assert.Equal(t, ContainerMetadata{}, meta)
+			} else {
+				require.NoError(t, err)
 			}
-
-			if meta.ContainerName != test.expContainerName {
-				t.Fatalf("expected container name %v but got %v",
-					test.expContainerName, meta.ContainerName)
-			}
-			if meta.PodName != test.expPodName {
-				t.Fatalf("expected pod name %v but got %v", test.expPodName, meta.PodName)
-			}
+			assert.Equal(t, test.expContainerName, meta.ContainerName)
+			assert.Equal(t, test.expPodName, meta.PodName)
 
 			if test.err == nil {
 				// check the item has been added correctly to the container metadata cache
 				value, ok := instance.containerMetadataCache.Get(test.expContainerID)
-				if !ok {
-					t.Fatal("container metadata should be in the container metadata cache")
-				}
-				if value.containerID != test.expContainerID {
-					t.Fatalf("expected container name %v but got %v",
-						test.expContainerID, value.containerID)
-				}
-				if value.ContainerName != test.expContainerName {
-					t.Fatalf("expected container name %v but got %v",
-						test.expContainerName, value.ContainerName)
-				}
-				if value.PodName != test.expPodName {
-					t.Fatalf("expected pod name %v but got %v", test.expPodName,
-						value.PodName)
-				}
+				assert.True(t, ok, "container metadata should be in the container metadata cache")
+				assert.Equal(t, test.expContainerID, value.containerID)
+				assert.Equal(t, test.expContainerName, value.ContainerName)
+				assert.Equal(t, test.expPodName, value.PodName)
 			}
 		})
 	}
@@ -325,22 +317,22 @@ func BenchmarkGetKubernetesPodMetadata(b *testing.B) {
 		clientset := fake.NewSimpleClientset()
 		containerMetadataCache, err := lru.NewSynced[string, ContainerMetadata](
 			containerMetadataCacheSize, hashString)
-		if err != nil {
-			b.Fatal(err)
-		}
+		require.NoError(b, err)
 
-		containerIDCache, err := lru.NewSynced[libpf.OnDiskFileIdentifier, containerIDEntry](
-			containerIDCacheSize, libpf.OnDiskFileIdentifier.Hash32)
-		if err != nil {
-			b.Fatalf("failed to provide cache: %v", err)
-		}
+		containerIDCache, err := lru.NewSynced[util.PID, containerIDEntry](
+			containerIDCacheSize, util.PID.Hash32)
+		require.NoError(b, err)
 
-		instance := &Handler{
+		instance := &handler{
 			containerMetadataCache: containerMetadataCache,
 			kubeClientSet:          clientset,
 			dockerClient:           nil,
 			containerIDCache:       containerIDCache,
 		}
+		instance.deferredPID, err = lru.NewSynced[util.PID, libpf.Void](1024,
+			func(u util.PID) uint32 { return uint32(u) })
+		require.NoError(b, err)
+
 		for j := 100; j < 700; j++ {
 			testPod := fmt.Sprintf("testpod-abc%d", j)
 
@@ -369,37 +361,27 @@ func BenchmarkGetKubernetesPodMetadata(b *testing.B) {
 			}
 
 			file, err := os.CreateTemp("", "test_containermetadata_cgroup*")
-			if err != nil {
-				b.Fatal(err)
-			}
+			require.NoError(b, err)
 			defer os.Remove(file.Name()) // nolint: gocritic
 
 			_, err = fmt.Fprintf(file,
 				"0::/kubepods/besteffort/poda9c80282-3f6b-4d5b-84d5-a137a6668011/"+
 					"%dd89697807a981b82f6245ac3a13be232c1e13435d52bc3f53060d61babe19", j)
-			if err != nil {
-				b.Fatal(err)
-			}
+			require.NoError(b, err)
 
 			cgroup = "/tmp/test_containermetadata_cgroup%d"
 			opts := v1.CreateOptions{}
 			clientsetPod, err := clientset.CoreV1().Pods("default").Create(
 				context.Background(), pod, opts)
-			if err != nil {
-				b.Fatal(err)
-			}
+			require.NoError(b, err)
 			instance.putCache(clientsetPod)
 
 			split := strings.Split(file.Name(), "test_containermetadata_cgroup")
 			pid, err := strconv.Atoi(split[1])
-			if err != nil {
-				b.Fatal(err)
-			}
+			require.NoError(b, err)
 
-			_, err = instance.GetContainerMetadata(libpf.PID(pid))
-			if err != nil {
-				b.Fatal(err)
-			}
+			_, err = instance.GetContainerMetadata(util.PID(pid))
+			require.NoError(b, err)
 		}
 	}
 }

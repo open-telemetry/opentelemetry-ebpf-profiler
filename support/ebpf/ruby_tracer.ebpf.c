@@ -75,13 +75,15 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
     // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L846
     size_t stack_size;
 
-    if (bpf_probe_read(&stack_ptr_current, sizeof(stack_ptr_current), (void *)(current_ctx_addr + rubyinfo->vm_stack))) {
+    if (bpf_probe_read_user(&stack_ptr_current, sizeof(stack_ptr_current),
+                            (void *)(current_ctx_addr + rubyinfo->vm_stack))) {
       DEBUG_PRINT("ruby: failed to read current stack pointer");
       increment_metric(metricID_UnwindRubyErrReadStackPtr);
       return ERR_RUBY_READ_STACK_PTR;
     }
 
-    if (bpf_probe_read(&stack_size, sizeof(stack_size), (void *)(current_ctx_addr + rubyinfo->vm_stack_size))) {
+    if (bpf_probe_read_user(&stack_size, sizeof(stack_size),
+                            (void *)(current_ctx_addr + rubyinfo->vm_stack_size))) {
       DEBUG_PRINT("ruby: failed to get stack size");
       increment_metric(metricID_UnwindRubyErrReadStackSize);
       return ERR_RUBY_READ_STACK_SIZE;
@@ -93,7 +95,7 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
     last_stack_frame = stack_ptr_current + (rubyinfo->size_of_value * stack_size) -
       (2 * rubyinfo->size_of_control_frame_struct);
 
-    if (bpf_probe_read(&stack_ptr, sizeof(stack_ptr), (void *)(current_ctx_addr + rubyinfo->cfp))) {
+    if (bpf_probe_read_user(&stack_ptr, sizeof(stack_ptr), (void *)(current_ctx_addr + rubyinfo->cfp))) {
       DEBUG_PRINT("ruby: failed to get cfp");
       increment_metric(metricID_UnwindRubyErrReadCfp);
       return ERR_RUBY_READ_CFP;
@@ -119,8 +121,8 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
     pc = 0;
     iseq_addr = NULL;
 
-    bpf_probe_read(&iseq_addr, sizeof(iseq_addr), (void *)(stack_ptr + rubyinfo->iseq));
-    bpf_probe_read(&pc, sizeof(pc), (void *)(stack_ptr + rubyinfo->pc));
+    bpf_probe_read_user(&iseq_addr, sizeof(iseq_addr), (void *)(stack_ptr + rubyinfo->iseq));
+    bpf_probe_read_user(&pc, sizeof(pc), (void *)(stack_ptr + rubyinfo->pc));
     // If iseq or pc is 0, then this frame represents a registered hook.
     // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm.c#L1960
     if (pc == 0 || iseq_addr == NULL) {
@@ -138,7 +140,7 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
       }
 
       u64 ep = 0;
-      if (bpf_probe_read(&ep, sizeof(ep), (void *)(stack_ptr + rubyinfo->ep))) {
+      if (bpf_probe_read_user(&ep, sizeof(ep), (void *)(stack_ptr + rubyinfo->ep))) {
         DEBUG_PRINT("ruby: failed to get ep");
         increment_metric(metricID_UnwindRubyErrReadEp);
         return ERR_RUBY_READ_EP;
@@ -155,19 +157,20 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
       goto save_state;
     }
 
-    if (bpf_probe_read(&iseq_body, sizeof(iseq_body), (void *)(iseq_addr + rubyinfo->body))) {
+    if (bpf_probe_read_user(&iseq_body, sizeof(iseq_body), (void *)(iseq_addr + rubyinfo->body))) {
       DEBUG_PRINT("ruby: failed to get iseq body");
       increment_metric(metricID_UnwindRubyErrReadIseqBody);
       return ERR_RUBY_READ_ISEQ_BODY;
     }
 
-    if (bpf_probe_read(&iseq_encoded, sizeof(iseq_encoded), (void *)(iseq_body + rubyinfo->iseq_encoded))) {
+    if (bpf_probe_read_user(&iseq_encoded, sizeof(iseq_encoded),
+                            (void *)(iseq_body + rubyinfo->iseq_encoded))) {
       DEBUG_PRINT("ruby: failed to get iseq encoded");
       increment_metric(metricID_UnwindRubyErrReadIseqEncoded);
       return ERR_RUBY_READ_ISEQ_ENCODED;
     }
 
-    if (bpf_probe_read(&iseq_size, sizeof(iseq_size), (void *)(iseq_body + rubyinfo->iseq_size))) {
+    if (bpf_probe_read_user(&iseq_size, sizeof(iseq_size), (void *)(iseq_body + rubyinfo->iseq_size))) {
       DEBUG_PRINT("ruby: failed to get iseq size");
       increment_metric(metricID_UnwindRubyErrReadIseqSize);
       return ERR_RUBY_READ_ISEQ_SIZE;
@@ -243,18 +246,18 @@ int unwind_ruby(struct pt_regs *ctx) {
     // the offset to running_ec.
 
     void *single_main_ractor = NULL;
-    if (bpf_probe_read(&single_main_ractor, sizeof(single_main_ractor),
-         (void *)rubyinfo->current_ctx_ptr)) {
+    if (bpf_probe_read_user(&single_main_ractor, sizeof(single_main_ractor),
+                            (void *)rubyinfo->current_ctx_ptr)) {
       goto exit;
     }
 
-    if (bpf_probe_read(&current_ctx_addr, sizeof(current_ctx_addr),
-         (void *)(single_main_ractor + rubyinfo->running_ec))) {
+    if (bpf_probe_read_user(&current_ctx_addr, sizeof(current_ctx_addr),
+                            (void *)(single_main_ractor + rubyinfo->running_ec))) {
       goto exit;
     }
   } else {
-    if (bpf_probe_read(&current_ctx_addr, sizeof(current_ctx_addr),
-         (void *)rubyinfo->current_ctx_ptr)) {
+    if (bpf_probe_read_user(&current_ctx_addr, sizeof(current_ctx_addr),
+                            (void *)rubyinfo->current_ctx_ptr)) {
       goto exit;
     }
   }

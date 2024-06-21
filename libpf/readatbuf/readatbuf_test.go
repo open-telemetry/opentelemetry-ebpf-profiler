@@ -12,16 +12,14 @@ import (
 
 	"github.com/elastic/otel-profiling-agent/libpf/readatbuf"
 	"github.com/elastic/otel-profiling-agent/testsupport"
+	"github.com/stretchr/testify/require"
 )
 
 func testVariant(t *testing.T, fileSize, granularity, cacheSize uint) {
 	file := testsupport.GenerateTestInputFile(255, fileSize)
 	rawReader := bytes.NewReader(file)
 	cachingReader, err := readatbuf.New(rawReader, granularity, cacheSize)
-	if err != nil {
-		t.Fatalf("failed to create caching reader: %v", err)
-	}
-
+	require.NoError(t, err)
 	testsupport.ValidateReadAtWrapperTransparency(t, 10000, file, cachingReader)
 }
 

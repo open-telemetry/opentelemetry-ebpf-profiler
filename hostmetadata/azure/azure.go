@@ -15,8 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elastic/otel-profiling-agent/hostmetadata/instance"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/elastic/otel-profiling-agent/hostmetadata/instance"
 )
 
 const azurePrefix = "azure:"
@@ -132,6 +133,8 @@ func AddMetadata(result map[string]string) {
 // populateResult converts the given answer from Azure in imds into
 // our internal representation in result.
 func populateResult(result map[string]string, imds *IMDS) {
+	result[instance.KeyCloudProvider] = "azure"
+
 	v := reflect.ValueOf(imds.Compute)
 	t := reflect.TypeOf(imds.Compute)
 	for i := 0; i < v.NumField(); i++ {
@@ -143,6 +146,9 @@ func populateResult(result map[string]string, imds *IMDS) {
 		}
 		result[azurePrefix+"compute/"+strings.ToLower(fieldName)] = fieldValue
 	}
+
+	addCloudRegion(result)
+	addHostType(result)
 
 	// Used to temporarily hold synthetic metadata
 	ipAddrs := map[string][]string{
@@ -205,4 +211,18 @@ func populateResult(result map[string]string, imds *IMDS) {
 	}
 
 	instance.AddToResult(ipAddrs, result)
+}
+
+func addCloudRegion(result map[string]string) {
+	// example: "azure.compute.location": "eastus2"
+	if region, ok := result[azurePrefix+"compute/location"]; ok {
+		result[instance.KeyCloudRegion] = region
+	}
+}
+
+func addHostType(result map[string]string) {
+	// example: "azure.compute.vmsize": "Standard_D2s_v3"
+	if hostType, ok := result[azurePrefix+"compute/vmsize"]; ok {
+		result[instance.KeyHostType] = hostType
+	}
 }

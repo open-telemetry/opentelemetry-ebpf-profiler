@@ -11,7 +11,7 @@ package maccess
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
+	"errors"
 )
 
 // CopyFromUserNoFaultIsPatched tries to find a relative jump instruction in codeblob
@@ -19,7 +19,7 @@ import (
 func CopyFromUserNoFaultIsPatched(codeblob []byte,
 	faultyFuncAddr uint64, newCheckFuncAddr uint64) (bool, error) {
 	if len(codeblob) == 0 {
-		return false, fmt.Errorf("empty code blob")
+		return false, errors.New("empty code blob")
 	}
 
 	for i := 0; i < len(codeblob); {

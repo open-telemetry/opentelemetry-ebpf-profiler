@@ -9,6 +9,7 @@
 package readatbuf
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -50,10 +51,10 @@ func HashUInt(v uint) uint32 {
 // to cache.
 func New(inner io.ReaderAt, pageSize, cacheSize uint) (reader *Reader, err error) {
 	if pageSize == 0 {
-		return nil, fmt.Errorf("pageSize cannot be zero")
+		return nil, errors.New("pageSize cannot be zero")
 	}
 	if cacheSize == 0 {
-		return nil, fmt.Errorf("cacheSize cannot be zero")
+		return nil, errors.New("cacheSize cannot be zero")
 	}
 
 	reader = &Reader{
@@ -170,7 +171,7 @@ func (reader *Reader) getOrReadPage(pageIdx uint) (data []byte, eof bool, err er
 	}
 
 	if !eof && uint(n) < reader.pageSize {
-		return nil, false, fmt.Errorf("failed to read whole page")
+		return nil, false, errors.New("failed to read whole page")
 	}
 
 	reader.cache.Add(pageIdx, page{data: buffer, eof: eof})

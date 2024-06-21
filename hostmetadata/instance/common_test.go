@@ -7,68 +7,45 @@
 package instance
 
 import (
-	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestEnumerate(t *testing.T) {
 	r := Enumerate("")
-	if !reflect.DeepEqual([]string{}, r) {
-		t.Fatalf("unexpected result: %#v", r)
-	}
+	assert.Equal(t, []string{}, r)
 
 	r = Enumerate("\n")
-	if !reflect.DeepEqual([]string{}, r) {
-		t.Fatalf("unexpected result: %#v", r)
-	}
+	assert.Equal(t, []string{}, r)
 
 	r = Enumerate("\n\n")
-	if !reflect.DeepEqual([]string{}, r) {
-		t.Fatalf("unexpected result: %#v", r)
-	}
+	assert.Equal(t, []string{}, r)
 
 	r = Enumerate("\nhello\n")
-	if !reflect.DeepEqual([]string{"hello"}, r) {
-		t.Fatalf("unexpected result: %#v", r)
-	}
+	assert.Equal(t, []string{"hello"}, r)
 
 	r = Enumerate("\nhello/\n")
-	if !reflect.DeepEqual([]string{"hello"}, r) {
-		t.Fatalf("unexpected result: %#v", r)
-	}
+	assert.Equal(t, []string{"hello"}, r)
 
 	r = Enumerate("hi\nhello/\n")
-	if !reflect.DeepEqual([]string{"hi", "hello"}, r) {
-		t.Fatalf("unexpected result: %#v", r)
-	}
+	assert.Equal(t, []string{"hi", "hello"}, r)
 
 	r = Enumerate("hi\nhello/\n\nbye")
-	if !reflect.DeepEqual([]string{"hi", "hello", "bye"}, r) {
-		t.Fatalf("unexpected result: %#v", r)
-	}
+	assert.Equal(t, []string{"hi", "hello", "bye"}, r)
 
 	r = Enumerate("\nbye")
-	if !reflect.DeepEqual([]string{"bye"}, r) {
-		t.Fatalf("unexpected result: %#v", r)
-	}
+	assert.Equal(t, []string{"bye"}, r)
 
 	r = Enumerate("hello/\n")
-	if !reflect.DeepEqual([]string{"hello"}, r) {
-		t.Fatalf("unexpected result: %#v", r)
-	}
+	assert.Equal(t, []string{"hello"}, r)
 
 	r = Enumerate("hello/")
-	if !reflect.DeepEqual([]string{"hello"}, r) {
-		t.Fatalf("unexpected result: %#v", r)
-	}
+	assert.Equal(t, []string{"hello"}, r)
 
 	r = Enumerate("\nhello/ \n")
-	if !reflect.DeepEqual([]string{"hello"}, r) {
-		t.Fatalf("unexpected result: %#v", r)
-	}
+	assert.Equal(t, []string{"hello"}, r)
 
 	r = Enumerate("hi\n \nbye")
-	if !reflect.DeepEqual([]string{"hi", "bye"}, r) {
-		t.Fatalf("unexpected result: %#v", r)
-	}
+	assert.Equal(t, []string{"hi", "bye"}, r)
 }

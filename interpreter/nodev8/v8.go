@@ -155,6 +155,7 @@ package nodev8
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -167,20 +168,21 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/elastic/go-freelru"
+
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/interpreter"
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/freelru"
-	npsr "github.com/elastic/otel-profiling-agent/libpf/nopanicslicereader"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/libpf/process"
-	"github.com/elastic/otel-profiling-agent/libpf/remotememory"
-	"github.com/elastic/otel-profiling-agent/libpf/successfailurecounter"
 	"github.com/elastic/otel-profiling-agent/lpm"
 	"github.com/elastic/otel-profiling-agent/metrics"
+	npsr "github.com/elastic/otel-profiling-agent/nopanicslicereader"
+	"github.com/elastic/otel-profiling-agent/process"
+	"github.com/elastic/otel-profiling-agent/remotememory"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/elastic/otel-profiling-agent/successfailurecounter"
 	"github.com/elastic/otel-profiling-agent/support"
-	"go.uber.org/multierr"
+	"github.com/elastic/otel-profiling-agent/util"
 )
 
 // #include "../../support/ebpf/types.h"
@@ -455,7 +457,7 @@ type v8Data struct {
 	}
 
 	// snapshotRange is the LOAD segment area where V8 Snapshot code blob is
-	snapshotRange libpf.Range
+	snapshotRange util.Range
 
 	// version contains the V8 version
 	version uint32
@@ -523,17 +525,17 @@ type v8SFI struct {
 	bytecode              []byte
 	funcName              string
 	funcID                libpf.FileID
-	funcStartLine         libpf.SourceLineno
+	funcStartLine         util.SourceLineno
 	funcStartPos          int
 	funcEndPos            int
 	bytecodeLength        uint32
 }
 
-func (i *v8Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+func (i *v8Instance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
 	err := ebpf.DeleteProcData(libpf.V8, pid)
 	for prefix := range i.prefixes {
 		if err2 := ebpf.DeletePidInterpreterMapping(pid, prefix); err2 != nil {
-			err = multierr.Append(err,
+			err = errors.Join(err,
 				fmt.Errorf("failed to remove page 0x%x/%d: %v",
 					prefix.Key, prefix.Length, err2))
 		}
@@ -602,10 +604,10 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 }
 
 func (i *v8Instance) GetAndResetMetrics() ([]metrics.Metric, error) {
-	addrToStringStats := i.addrToString.GetAndResetStatistics()
-	addrToSFIStats := i.addrToSFI.GetAndResetStatistics()
-	addrToCodeStats := i.addrToCode.GetAndResetStatistics()
-	addrToSourceStats := i.addrToSource.GetAndResetStatistics()
+	addrToStringStats := i.addrToString.ResetMetrics()
+	addrToSFIStats := i.addrToSFI.ResetMetrics()
+	addrToCodeStats := i.addrToCode.ResetMetrics()
+	addrToSourceStats := i.addrToSource.ResetMetrics()
 
 	return []metrics.Metric{
 		{
@@ -618,67 +620,67 @@ func (i *v8Instance) GetAndResetMetrics() ([]metrics.Metric, error) {
 		},
 		{
 			ID:    metrics.IDV8AddrToStringHit,
-			Value: metrics.MetricValue(addrToStringStats.Hit),
+			Value: metrics.MetricValue(addrToStringStats.Hits),
 		},
 		{
 			ID:    metrics.IDV8AddrToStringMiss,
-			Value: metrics.MetricValue(addrToStringStats.Miss),
+			Value: metrics.MetricValue(addrToStringStats.Misses),
 		},
 		{
 			ID:    metrics.IDV8AddrToStringAdd,
-			Value: metrics.MetricValue(addrToStringStats.Added),
+			Value: metrics.MetricValue(addrToStringStats.Inserts),
 		},
 		{
 			ID:    metrics.IDV8AddrToStringDel,
-			Value: metrics.MetricValue(addrToStringStats.Deleted),
+			Value: metrics.MetricValue(addrToStringStats.Removals),
 		},
 		{
 			ID:    metrics.IDV8AddrToSFIHit,
-			Value: metrics.MetricValue(addrToSFIStats.Hit),
+			Value: metrics.MetricValue(addrToSFIStats.Hits),
 		},
 		{
 			ID:    metrics.IDV8AddrToSFIMiss,
-			Value: metrics.MetricValue(addrToSFIStats.Miss),
+			Value: metrics.MetricValue(addrToSFIStats.Misses),
 		},
 		{
 			ID:    metrics.IDV8AddrToSFIAdd,
-			Value: metrics.MetricValue(addrToSFIStats.Added),
+			Value: metrics.MetricValue(addrToSFIStats.Inserts),
 		},
 		{
 			ID:    metrics.IDV8AddrToSFIDel,
-			Value: metrics.MetricValue(addrToSFIStats.Deleted),
+			Value: metrics.MetricValue(addrToSFIStats.Removals),
 		},
 		{
 			ID:    metrics.IDV8AddrToFuncHit,
-			Value: metrics.MetricValue(addrToCodeStats.Hit),
+			Value: metrics.MetricValue(addrToCodeStats.Hits),
 		},
 		{
 			ID:    metrics.IDV8AddrToFuncMiss,
-			Value: metrics.MetricValue(addrToCodeStats.Miss),
+			Value: metrics.MetricValue(addrToCodeStats.Misses),
 		},
 		{
 			ID:    metrics.IDV8AddrToFuncAdd,
-			Value: metrics.MetricValue(addrToCodeStats.Added),
+			Value: metrics.MetricValue(addrToCodeStats.Inserts),
 		},
 		{
 			ID:    metrics.IDV8AddrToFuncDel,
-			Value: metrics.MetricValue(addrToCodeStats.Deleted),
+			Value: metrics.MetricValue(addrToCodeStats.Removals),
 		},
 		{
 			ID:    metrics.IDV8AddrToSourceHit,
-			Value: metrics.MetricValue(addrToSourceStats.Hit),
+			Value: metrics.MetricValue(addrToSourceStats.Hits),
 		},
 		{
 			ID:    metrics.IDV8AddrToSourceMiss,
-			Value: metrics.MetricValue(addrToSourceStats.Miss),
+			Value: metrics.MetricValue(addrToSourceStats.Misses),
 		},
 		{
 			ID:    metrics.IDV8AddrToSourceAdd,
-			Value: metrics.MetricValue(addrToSourceStats.Added),
+			Value: metrics.MetricValue(addrToSourceStats.Inserts),
 		},
 		{
 			ID:    metrics.IDV8AddrToSourceDel,
-			Value: metrics.MetricValue(addrToSourceStats.Deleted),
+			Value: metrics.MetricValue(addrToSourceStats.Removals),
 		},
 	}, nil
 }
@@ -707,13 +709,13 @@ func isHeapObject(val libpf.Address) bool {
 }
 
 // calculateAndSymbolizeStubID calculates the hash for a given string, and symbolizes it.
-func (i *v8Instance) calculateAndSymbolizeStubID(symbolizer interpreter.Symbolizer,
+func (i *v8Instance) calculateAndSymbolizeStubID(symbolReporter reporter.SymbolReporter,
 	name string) libpf.AddressOrLineno {
 	h := fnv.New128a()
 	_, _ = h.Write([]byte(name))
 	nameHash := h.Sum(nil)
 	stubID := libpf.AddressOrLineno(npsr.Uint64(nameHash, 0))
-	symbolizer.FrameMetadata(v8StubsFileID, stubID, 0, 0, name, "")
+	symbolReporter.FrameMetadata(v8StubsFileID, stubID, 0, 0, name, "")
 
 	return stubID
 }
@@ -724,7 +726,7 @@ func insertFrame(trace *libpf.Trace, fileID libpf.FileID, line libpf.AddressOrLi
 }
 
 // symbolizeMarkerFrame symbolizes and adds to trace a V8 stub frame
-func (i *v8Instance) symbolizeMarkerFrame(symbolizer interpreter.Symbolizer, marker uint64,
+func (i *v8Instance) symbolizeMarkerFrame(symbolReporter reporter.SymbolReporter, marker uint64,
 	trace *libpf.Trace) error {
 	if marker >= MaxFrameType {
 		return fmt.Errorf("v8 tracer returned invalid marker: %d", marker)
@@ -741,7 +743,7 @@ func (i *v8Instance) symbolizeMarkerFrame(symbolizer interpreter.Symbolizer, mar
 				break
 			}
 		}
-		stubID = i.calculateAndSymbolizeStubID(symbolizer, name)
+		stubID = i.calculateAndSymbolizeStubID(symbolReporter, name)
 		i.d.frametypeToID[marker] = stubID
 
 		log.Debugf("[%d] V8 marker %v is %s, stubID %x", len(trace.FrameTypes),
@@ -856,7 +858,7 @@ func (i *v8Instance) extractString(ptr libpf.Address, tag uint16, cb func(string
 				}
 			}
 		case vms.Fixed.TwoByteStringTag:
-			return fmt.Errorf("two byte string not supported")
+			return errors.New("two byte string not supported")
 		default:
 			return fmt.Errorf("unsupported encoding: %#x", tag)
 		}
@@ -901,7 +903,7 @@ func (i *v8Instance) getString(ptr libpf.Address, tag uint16) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if str != "" && !libpf.IsValidString(str) {
+	if str != "" && !util.IsValidString(str) {
 		return "", fmt.Errorf("invalid string at 0x%x", ptr)
 	}
 
@@ -1188,7 +1190,7 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 	// Baseline Code does not have deoptimization data
 	if codeKind == vms.CodeKind.Baseline {
 		if sfi == nil {
-			return nil, fmt.Errorf("baseline function without SFI")
+			return nil, errors.New("baseline function without SFI")
 		}
 
 		log.Debugf("Baseline Code %#x read: posSize: %v, cookie: %x",
@@ -1431,7 +1433,7 @@ func decodePosition(table []byte, delta uint64) sourcePosition {
 
 // mapPositionToLine maps a file position (byte offset) to a line number. This is
 // done against a table containing a offsets where each line ends.
-func mapPositionToLine(lineEnds []uint32, pos int32) libpf.SourceLineno {
+func mapPositionToLine(lineEnds []uint32, pos int32) util.SourceLineno {
 	if len(lineEnds) == 0 || pos < 0 {
 		return 0
 	}
@@ -1439,11 +1441,11 @@ func mapPositionToLine(lineEnds []uint32, pos int32) libpf.SourceLineno {
 	index := sort.Search(len(lineEnds), func(ndx int) bool {
 		return lineEnds[ndx] >= uint32(pos)
 	})
-	return libpf.SourceLineno(index + 1)
+	return util.SourceLineno(index + 1)
 }
 
 // scriptOffsetToLine maps a sourcePosition to a line number in the corresponding source
-func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) libpf.SourceLineno {
+func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) util.SourceLineno {
 	scriptOffset := position.scriptOffset()
 	// The scriptOffset is offset by one, to make kNoSourcePosition zero.
 	// nolint:lll
@@ -1455,14 +1457,14 @@ func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) libpf.SourceLineno
 }
 
 // symbolize symbolizes the raw frame data
-func (i *v8Instance) symbolize(symbolizer interpreter.Symbolizer, sfi *v8SFI,
-	pos libpf.AddressOrLineno, lineNo libpf.SourceLineno) {
+func (i *v8Instance) symbolize(symbolReporter reporter.SymbolReporter, sfi *v8SFI,
+	pos libpf.AddressOrLineno, lineNo util.SourceLineno) {
 	funcOffset := uint32(0)
 	if lineNo > sfi.funcStartLine {
 		funcOffset = uint32(lineNo - sfi.funcStartLine)
 	}
 
-	symbolizer.FrameMetadata(
+	symbolReporter.FrameMetadata(
 		sfi.funcID, pos, lineNo, funcOffset,
 		sfi.funcName, sfi.source.fileName)
 
@@ -1473,7 +1475,7 @@ func (i *v8Instance) symbolize(symbolizer interpreter.Symbolizer, sfi *v8SFI,
 }
 
 // generateNativeFrame and conditionally symbolizes a native frame.
-func (i *v8Instance) generateNativeFrame(symbolizer interpreter.Symbolizer,
+func (i *v8Instance) generateNativeFrame(symbolReporter reporter.SymbolReporter,
 	sourcePos sourcePosition, sfi *v8SFI, seen bool,
 	trace *libpf.Trace) {
 	if sourcePos.isExternal() {
@@ -1481,7 +1483,7 @@ func (i *v8Instance) generateNativeFrame(symbolizer interpreter.Symbolizer,
 		// Just generate a place holder stub frame for external reference.
 		if i.d.externalStubID == 0 {
 			i.d.externalStubID = i.calculateAndSymbolizeStubID(
-				symbolizer, "<external-file>")
+				symbolReporter, "<external-file>")
 		}
 		insertFrame(trace, v8StubsFileID, i.d.externalStubID)
 		return
@@ -1491,25 +1493,25 @@ func (i *v8Instance) generateNativeFrame(symbolizer interpreter.Symbolizer,
 	addressOrLineno := libpf.AddressOrLineno(lineNo) + nativeCodeBaseAddress
 	insertFrame(trace, sfi.funcID, addressOrLineno)
 	if !seen {
-		i.symbolize(symbolizer, sfi, addressOrLineno, lineNo)
+		i.symbolize(symbolReporter, sfi, addressOrLineno, lineNo)
 	}
 }
 
 // symbolizeBytecode symbolizes and records to a trace a Bytecode based frame.
-func (i *v8Instance) symbolizeBytecode(symbolizer interpreter.Symbolizer, sfi *v8SFI,
+func (i *v8Instance) symbolizeBytecode(symbolReporter reporter.SymbolReporter, sfi *v8SFI,
 	delta uint64, trace *libpf.Trace) error {
 	insertFrame(trace, sfi.funcID, libpf.AddressOrLineno(delta))
 	if _, ok := sfi.bytecodeDeltaSeen[uint32(delta)]; !ok {
 		sourcePos := decodePosition(sfi.bytecodePositionTable, delta)
 		lineNo := sfi.scriptOffsetToLine(sourcePos)
-		i.symbolize(symbolizer, sfi, libpf.AddressOrLineno(delta), lineNo)
+		i.symbolize(symbolReporter, sfi, libpf.AddressOrLineno(delta), lineNo)
 		sfi.bytecodeDeltaSeen[uint32(delta)] = libpf.Void{}
 	}
 	return nil
 }
 
 // symbolizeSFI symbolizes and records to a trace a SharedFunctionInfo based frame.
-func (i *v8Instance) symbolizeSFI(symbolizer interpreter.Symbolizer, pointer libpf.Address,
+func (i *v8Instance) symbolizeSFI(symbolReporter reporter.SymbolReporter, pointer libpf.Address,
 	delta uint64, trace *libpf.Trace) error {
 	vms := &i.d.vmStructs
 	sfi, err := i.getSFI(pointer)
@@ -1529,7 +1531,7 @@ func (i *v8Instance) symbolizeSFI(symbolizer interpreter.Symbolizer, pointer lib
 		// Invalid value
 		bytecodeDelta = nativeCodeBaseAddress - 1
 	}
-	return i.symbolizeBytecode(symbolizer, sfi, uint64(bytecodeDelta), trace)
+	return i.symbolizeBytecode(symbolReporter, sfi, uint64(bytecodeDelta), trace)
 }
 
 // getBytecodeLength decodes the length at the start of bytecode array
@@ -1619,7 +1621,7 @@ func (i *v8Instance) mapBaselineCodeOffsetToBytecode(code *v8Code, pcDelta uint3
 }
 
 // symbolizeBaselineCode symbolizes and records to a trace a Baseline Code based frame.
-func (i *v8Instance) symbolizeBaselineCode(symbolizer interpreter.Symbolizer, code *v8Code,
+func (i *v8Instance) symbolizeBaselineCode(symbolReporter reporter.SymbolReporter, code *v8Code,
 	delta uint32, trace *libpf.Trace) error {
 	if bytecodeDelta, ok := code.codeDeltaToPosition[delta]; ok {
 		// We've seen this frame before, so just insert the frame
@@ -1630,12 +1632,12 @@ func (i *v8Instance) symbolizeBaselineCode(symbolizer interpreter.Symbolizer, co
 	// Decode bytecode delta, memoize it, and symbolize frame
 	bytecodeDelta := i.mapBaselineCodeOffsetToBytecode(code, delta)
 	code.codeDeltaToPosition[delta] = sourcePosition(bytecodeDelta)
-	return i.symbolizeBytecode(symbolizer, code.sfi, uint64(bytecodeDelta), trace)
+	return i.symbolizeBytecode(symbolReporter, code.sfi, uint64(bytecodeDelta), trace)
 }
 
 // symbolizeCode symbolizes and records to a trace a Code based frame.
-func (i *v8Instance) symbolizeCode(symbolizer interpreter.Symbolizer, code *v8Code, delta uint64,
-	trace *libpf.Trace) error {
+func (i *v8Instance) symbolizeCode(symbolReporter reporter.SymbolReporter, code *v8Code,
+	delta uint64, trace *libpf.Trace) error {
 	var err error
 	sfi := code.sfi
 	delta &= C.V8_LINE_DELTA_MASK
@@ -1647,7 +1649,7 @@ func (i *v8Instance) symbolizeCode(symbolizer interpreter.Symbolizer, code *v8Co
 	}
 
 	if code.isBaseline {
-		return i.symbolizeBaselineCode(symbolizer, code, uint32(delta), trace)
+		return i.symbolizeBaselineCode(symbolReporter, code, uint32(delta), trace)
 	}
 
 	// Memoize the delta to position mapping to improve speed. We can't just
@@ -1680,7 +1682,7 @@ func (i *v8Instance) symbolizeCode(symbolizer interpreter.Symbolizer, code *v8Co
 				return fmt.Errorf("failed to get inlined SFI: %w", err)
 			}
 		}
-		i.generateNativeFrame(symbolizer, sourcePos, inlinedSFI, deltaSeen, trace)
+		i.generateNativeFrame(symbolReporter, sourcePos, inlinedSFI, deltaSeen, trace)
 
 		sourcePos = sourcePosition(npsr.Uint64(code.inliningPositions, itemOff))
 		if sourcePos.inliningID() > inliningID {
@@ -1690,7 +1692,7 @@ func (i *v8Instance) symbolizeCode(symbolizer interpreter.Symbolizer, code *v8Co
 				sourcePos.inliningID(), inliningID)
 		}
 	}
-	i.generateNativeFrame(symbolizer, sourcePos, sfi, deltaSeen, trace)
+	i.generateNativeFrame(symbolReporter, sourcePos, sfi, deltaSeen, trace)
 
 	return nil
 }
@@ -1756,7 +1758,7 @@ func mapFramePointerOffset(relBytes uint8) C.u8 {
 	return C.u8(slotOffset)
 }
 
-func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
+func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid util.PID, _ libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	vms := &d.vmStructs
 	data := C.V8ProcInfo{
@@ -2120,7 +2122,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.Fixed.HeapObjectTagMask != HeapObjectTagMask ||
 		vms.Fixed.SmiTag != SmiTag || vms.Fixed.SmiTagMask != SmiTagMask ||
 		vms.Fixed.SmiShiftSize != SmiValueShift-SmiTagShift {
-		return nil, fmt.Errorf("incompatible tagging scheme")
+		return nil, errors.New("incompatible tagging scheme")
 	}
 
 	if mapFramePointerOffset(vms.FramePointer.Context) >= C.V8_FP_CONTEXT_SIZE ||
@@ -2133,7 +2135,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	if d.snapshotRange.Start != 0 {
 		if err = ebpf.UpdateInterpreterOffsets(support.ProgUnwindV8, info.FileID(),
-			[]libpf.Range{d.snapshotRange}); err != nil {
+			[]util.Range{d.snapshotRange}); err != nil {
 			return nil, err
 		}
 	}

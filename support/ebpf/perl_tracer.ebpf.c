@@ -89,7 +89,7 @@ static inline __attribute__((__always_inline__))
 void *resolve_cv_egv(const PerlProcInfo *perlinfo, const void *cv) {
   // First check the CV's type
   u32 cv_flags;
-  if (bpf_probe_read(&cv_flags, sizeof(cv_flags), cv + perlinfo->sv_flags)) {
+  if (bpf_probe_read_user(&cv_flags, sizeof(cv_flags), cv + perlinfo->sv_flags)) {
     goto err;
   }
 
@@ -100,12 +100,12 @@ void *resolve_cv_egv(const PerlProcInfo *perlinfo, const void *cv) {
 
   // Follow the any pointer for the XPVCV body
   void *xpvcv;
-  if (bpf_probe_read(&xpvcv, sizeof(xpvcv), cv + perlinfo->sv_any)) {
+  if (bpf_probe_read_user(&xpvcv, sizeof(xpvcv), cv + perlinfo->sv_any)) {
     goto err;
   }
 
   u32 xcv_flags;
-  if (bpf_probe_read(&xcv_flags, sizeof(xcv_flags), xpvcv + perlinfo->xcv_flags)) {
+  if (bpf_probe_read_user(&xcv_flags, sizeof(xcv_flags), xpvcv + perlinfo->xcv_flags)) {
     goto err;
   }
 
@@ -120,7 +120,7 @@ void *resolve_cv_egv(const PerlProcInfo *perlinfo, const void *cv) {
   // At this point we have CV with GV (symbol). This is expected of all seen CVs
   // inside the Context Stack.
   void *gv;
-  if (bpf_probe_read(&gv, sizeof(gv), xpvcv + perlinfo->xcv_gv) ||
+  if (bpf_probe_read_user(&gv, sizeof(gv), xpvcv + perlinfo->xcv_gv) ||
       !gv) {
     goto err;
   }
@@ -129,7 +129,7 @@ void *resolve_cv_egv(const PerlProcInfo *perlinfo, const void *cv) {
 
   // Make sure we read GV with a GP
   u32 gv_flags;
-  if (bpf_probe_read(&gv_flags, sizeof(gv_flags), gv + perlinfo->sv_flags)) {
+  if (bpf_probe_read_user(&gv_flags, sizeof(gv_flags), gv + perlinfo->sv_flags)) {
     goto err;
   }
 
@@ -142,13 +142,13 @@ void *resolve_cv_egv(const PerlProcInfo *perlinfo, const void *cv) {
 
   // Follow GP pointer
   void *gp;
-  if (bpf_probe_read(&gp, sizeof(gp), gv + perlinfo->svu_gp)) {
+  if (bpf_probe_read_user(&gp, sizeof(gp), gv + perlinfo->svu_gp)) {
     goto err;
   }
 
   // Read the Effective GV (EGV) from the GP to be reported for HA
   void *egv;
-  if (bpf_probe_read(&egv, sizeof(egv), gp + perlinfo->gp_egv)) {
+  if (bpf_probe_read_user(&egv, sizeof(egv), gp + perlinfo->gp_egv)) {
     goto err;
   }
 
@@ -159,7 +159,7 @@ void *resolve_cv_egv(const PerlProcInfo *perlinfo, const void *cv) {
   return gv;
 
 err:
-  DEBUG_PRINT("Bad bpf_probe_read() in resolve_cv_egv");
+  DEBUG_PRINT("Bad bpf_probe_read_user() in resolve_cv_egv");
   increment_metric(metricID_UnwindPerlResolveEGV);
   return 0;
 }
@@ -173,7 +173,7 @@ int process_perl_frame(PerCPURecord *record, const PerlProcInfo *perlinfo, const
   // context entries. Others are non-functions, or helper entries.
   // https://github.com/Perl/perl5/blob/v5.32.0/pp_ctl.c#L1432-L1462
   u8 type;
-  if (bpf_probe_read(&type, sizeof(type), cx + perlinfo->context_type)) {
+  if (bpf_probe_read_user(&type, sizeof(type), cx + perlinfo->context_type)) {
     goto err;
   }
 
@@ -205,7 +205,7 @@ int process_perl_frame(PerCPURecord *record, const PerlProcInfo *perlinfo, const
       // return to the next native frame:
       //   https://github.com/Perl/perl5/blob/v5.32.0/run.c#L41
       u64 retop;
-      if (bpf_probe_read(&retop, sizeof(retop), cx + perlinfo->context_blk_sub_retop)) {
+      if (bpf_probe_read_user(&retop, sizeof(retop), cx + perlinfo->context_blk_sub_retop)) {
         goto err;
       }
       if (retop == 0) {
@@ -215,7 +215,7 @@ int process_perl_frame(PerCPURecord *record, const PerlProcInfo *perlinfo, const
 
     // Extract the functions Code Value for symbolization
     void *cv;
-    if (bpf_probe_read(&cv, sizeof(cv), cx + perlinfo->context_blk_sub_cv)) {
+    if (bpf_probe_read_user(&cv, sizeof(cv), cx + perlinfo->context_blk_sub_cv)) {
       goto err;
     }
 
@@ -236,9 +236,9 @@ int process_perl_frame(PerCPURecord *record, const PerlProcInfo *perlinfo, const
   // Record the first valid COP from block contexts to determine current
   // line number inside the sub/format block.
   if (!record->perlUnwindState.cop) {
-    if (bpf_probe_read(&record->perlUnwindState.cop,
-                       sizeof(record->perlUnwindState.cop),
-                       cx + perlinfo->context_blk_oldcop)) {
+    if (bpf_probe_read_user(&record->perlUnwindState.cop,
+                            sizeof(record->perlUnwindState.cop),
+                            cx + perlinfo->context_blk_oldcop)) {
       goto err;
     }
     DEBUG_PRINT("COP from context stack 0x%lx", (unsigned long)record->perlUnwindState.cop);
@@ -264,8 +264,8 @@ void prepare_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo) {
   s32 cxix;
   void *cxstack;
 
-  if (bpf_probe_read(&cxstack, sizeof(cxstack), si + perlinfo->si_cxstack) ||
-      bpf_probe_read(&cxix, sizeof(cxix), si + perlinfo->si_cxix)) {
+  if (bpf_probe_read_user(&cxstack, sizeof(cxstack), si + perlinfo->si_cxstack) ||
+      bpf_probe_read_user(&cxix, sizeof(cxix), si + perlinfo->si_cxix)) {
     DEBUG_PRINT("Failed to read stackinfo at 0x%lx", (unsigned long)si);
     unwinder_mark_done(record, PROG_UNWIND_PERL);
     increment_metric(metricID_UnwindPerlReadStackInfo);
@@ -331,9 +331,9 @@ int walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo) {
     // the context stack. Potential stackinfos below are not part of the real
     // Perl call stack.
     s32 type = 0;
-    if (bpf_probe_read(&type, sizeof(type), si + perlinfo->si_type) ||
+    if (bpf_probe_read_user(&type, sizeof(type), si + perlinfo->si_type) ||
         type == PERLSI_MAIN ||
-        bpf_probe_read(&si, sizeof(si), si + perlinfo->si_next) ||
+        bpf_probe_read_user(&si, sizeof(si), si + perlinfo->si_next) ||
         si == NULL) {
       // Stop walking stacks if main stack is finished, or something went wrong.
       DEBUG_PRINT("Perl stackinfos done");
@@ -383,13 +383,13 @@ int unwind_perl(struct pt_regs *ctx) {
     void *interpreter;
     if (perlinfo->stateInTSD) {
       void *tsd_base;
-      if (tsd_get_base(ctx, &tsd_base)) {
+      if (tsd_get_base(&tsd_base)) {
         DEBUG_PRINT("Failed to get TSD base address");
         goto err_tsd;
       }
 
       int tsd_key;
-      if (bpf_probe_read(&tsd_key, sizeof(tsd_key), (void*)perlinfo->stateAddr)) {
+      if (bpf_probe_read_user(&tsd_key, sizeof(tsd_key), (void*)perlinfo->stateAddr)) {
         DEBUG_PRINT("Failed to read tsdKey from 0x%lx", (unsigned long)perlinfo->stateAddr);
         goto err_tsd;
       }
@@ -406,10 +406,10 @@ int unwind_perl(struct pt_regs *ctx) {
     }
     DEBUG_PRINT("PerlInterpreter 0x%lx", (unsigned long)interpreter);
 
-    if (bpf_probe_read(&record->perlUnwindState.stackinfo, sizeof(record->perlUnwindState.stackinfo),
-                       (void*)interpreter + perlinfo->interpreter_curstackinfo) ||
-        bpf_probe_read(&record->perlUnwindState.cop, sizeof(record->perlUnwindState.cop),
-                       (void*)interpreter + perlinfo->interpreter_curcop)) {
+    if (bpf_probe_read_user(&record->perlUnwindState.stackinfo, sizeof(record->perlUnwindState.stackinfo),
+                            (void*)interpreter + perlinfo->interpreter_curstackinfo) ||
+        bpf_probe_read_user(&record->perlUnwindState.cop, sizeof(record->perlUnwindState.cop),
+                            (void*)interpreter + perlinfo->interpreter_curcop)) {
       DEBUG_PRINT("Failed to read interpreter state");
       increment_metric(metricID_UnwindPerlReadStackInfo);
       goto exit;

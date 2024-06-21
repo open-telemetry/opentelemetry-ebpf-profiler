@@ -18,8 +18,8 @@ import (
 	"github.com/cilium/ebpf/perf"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/libpf/process"
 	"github.com/elastic/otel-profiling-agent/metrics"
+	"github.com/elastic/otel-profiling-agent/process"
 	"github.com/elastic/otel-profiling-agent/support"
 )
 
