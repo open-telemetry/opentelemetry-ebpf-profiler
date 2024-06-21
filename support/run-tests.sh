@@ -22,12 +22,11 @@ if [[ -z "${kernel_version}" ]]; then
   exit 1
 fi
 
-readonly kernel="linux-${kernel_version}.bz"
 readonly output="$(mktemp -d --suffix=-output)"
 readonly kern_dir="${KERN_DIR:-ci-kernels}"
 
-test -e "${kern_dir}/${kernel}" || {
-  echo "Failed to find kernel image ${kern_dir}/${kernel}."
+test -e "${kern_dir}/${kernel_version}/vmlinuz" || {
+  echo "Failed to find kernel image ${kern_dir}/${kernel_version}/vmlinuz."
   exit 1
 }
 
@@ -56,7 +55,7 @@ $sudo qemu-system-x86_64 ${additionalQemuArgs} \
 	-serial file:"${output}/test.log" \
 	-no-user-config \
 	-m 4G \
-	-kernel "${kern_dir}/${kernel}" \
+	-kernel "${kern_dir}/${kernel_version}/vmlinuz" \
 	-initrd "${output}/initramfs.cpio"
 
 # Dump the output of the VM run.

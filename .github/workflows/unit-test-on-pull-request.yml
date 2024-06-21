@@ -129,7 +129,7 @@ jobs:
     needs: build-integration-test-binaries
     strategy:
       matrix:
-        kernel-version: [ "4.19.114", "5.4.31", "5.10.79", "5.15.133", "6.1.55" ]
+        kernel-version: [ "4.19.314", "5.4.276", "5.10.217", "5.15.159", "6.1.91", "6.6.31", "6.8.10", "6.9.1" ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -147,8 +147,8 @@ jobs:
       - name: Fetch precompiled kernels
         run: |
           install -d ci-kernels
-          wget -O- https://github.com/elastic/profiler-ci-kernels/archive/a07f0eaa48ac4edbd117df728d4bc35bbb11a5fc.tar.gz \
-            | tar xzv -C ci-kernels --strip-components=2 --wildcards '*/pre-built/*'
+          echo "FROM ghcr.io/cilium/ci-kernels:${{ matrix.kernel-version }}" | docker buildx build --quiet --pull --output="ci-kernels" -
+          mv ci-kernels/boot/ ci-kernels/${{ matrix.kernel-version }}/
       - name: Test on kernel ${{ matrix.kernel-version }}
         run: |
           chmod a+rx *.test
