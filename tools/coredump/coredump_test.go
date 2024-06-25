@@ -14,7 +14,8 @@ package main
 //	require.NoError(t, err)
 //	require.NotEmpty(t, cases)
 //
-//	store := initModuleStore()
+//	store, err := initModuleStore()
+//	require.NoError(t, err)
 //
 //	for _, filename := range cases {
 //		filename := filename
