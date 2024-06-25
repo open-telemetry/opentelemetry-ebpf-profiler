@@ -12,19 +12,19 @@ import "strings"
 
 const (
 	// Prefix for synthetic instance metadata (used by azure, gce and ec2)
-	instancePrefix = "instance:"
+	instancePrefix = "instance."
 
-	KeyPublicIPV4s  = "public-ipv4s"
-	KeyPrivateIPV4s = "private-ipv4s"
+	KeyPublicIPV4s  = "public_ipv4s"
+	KeyPrivateIPV4s = "private_ipv4s"
 
 	// Only Azure supports IPV6
 
-	KeyPublicIPV6s  = "public-ipv6s"
-	KeyPrivateIPV6s = "private-ipv6s"
+	KeyPublicIPV6s  = "public_ipv6s"
+	KeyPrivateIPV6s = "private_ipv6s"
 
-	KeyCloudProvider = "cloud:provider"
-	KeyCloudRegion   = "cloud:region"
-	KeyHostType      = "host:type"
+	KeyCloudProvider = "cloud.provider"
+	KeyCloudRegion   = "cloud.region"
+	KeyHostType      = "host.type"
 )
 
 func AddToResult(metadata map[string][]string, result map[string]string) {
