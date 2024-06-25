@@ -7,20 +7,23 @@
 package modulestore
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 // getS3ObjectList gets all matching objects in an S3 bucket.
-func getS3ObjectList(client *s3.S3, bucket, prefix string, itemLimit int) ([]*s3.Object, error) {
-	var objects []*s3.Object
+func getS3ObjectList(client *s3.Client, bucket, prefix string,
+	itemLimit int) ([]s3types.Object, error) {
+	var objects []s3types.Object
 	var contToken *string
-	var batchSize int64 = s3ResultsPerPage
+	var batchSize int32 = s3ResultsPerPage
 
 	for {
-		resp, err := client.ListObjectsV2(&s3.ListObjectsV2Input{
+		resp, err := client.ListObjectsV2(context.TODO(), &s3.ListObjectsV2Input{
 			Bucket:            &bucket,
 			Prefix:            &prefix,
 			MaxKeys:           &batchSize,
@@ -33,7 +36,7 @@ func getS3ObjectList(client *s3.S3, bucket, prefix string, itemLimit int) ([]*s3
 
 		objects = append(objects, resp.Contents...)
 
-		if int64(len(resp.Contents)) != batchSize {
+		if int32(len(resp.Contents)) != batchSize {
 			break
 		}
 		if len(resp.Contents) > itemLimit {
