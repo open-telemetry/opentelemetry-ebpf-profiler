@@ -16,9 +16,9 @@ import (
 	"flag"
 	"os"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+
 	"github.com/elastic/otel-profiling-agent/tools/coredump/modulestore"
 	"github.com/peterbourgon/ff/v3/ffcli"
 	log "github.com/sirupsen/logrus"
@@ -31,7 +31,10 @@ func main() {
 	log.SetReportCaller(false)
 	log.SetFormatter(&log.TextFormatter{})
 
-	store := initModuleStore()
+	store, err := initModuleStore()
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
 
 	root := ffcli.Command{
 		Name:       "coredump",
@@ -58,9 +61,12 @@ func main() {
 	}
 }
 
-func initModuleStore() *modulestore.Store {
-	cfg := aws.NewConfig().WithRegion("eu-central-1")
-	sess := session.Must(session.NewSession(cfg))
-	s3Client := s3.New(sess)
-	return modulestore.New(s3Client, moduleStoreS3Bucket, "modulecache")
+func initModuleStore() (*modulestore.Store, error) {
+	cfg, err := awsconfig.LoadDefaultConfig(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	s3Client := s3.NewFromConfig(cfg)
+	ms := modulestore.New(s3Client, moduleStoreS3Bucket, "modulecache")
+	return ms, nil
 }

@@ -10,6 +10,7 @@
 package modulestore
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -19,10 +20,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	s3manager "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
@@ -54,14 +55,14 @@ const (
 // It is safe to create multiple `Store` instances for the same local directory and remote bucket
 // at the same time, also when created within multiple different applications.
 type Store struct {
-	s3client       *s3.S3
+	s3client       *s3.Client
 	bucket         string
 	localCachePath string
 }
 
 // New creates a new module storage. The modules present in the local cache are inspected and a
 // full index of the modules in the remote S3 bucket is retrieved and cached as well.
-func New(s3client *s3.S3, s3Bucket, localCachePath string) *Store {
+func New(s3client *s3.Client, s3Bucket, localCachePath string) *Store {
 	return &Store{
 		s3client:       s3client,
 		bucket:         s3Bucket,
@@ -187,14 +188,17 @@ func (store *Store) UploadModule(id ID) error {
 		return fmt.Errorf("failed to open local file: %w", err)
 	}
 
-	_, err = store.s3client.PutObject(&s3.PutObjectInput{
-		Bucket:             aws.String(store.bucket),
-		Key:                aws.String(makeS3Key(id)),
-		Body:               file,
-		ContentType:        aws.String("application/octet-stream"),
-		ContentDisposition: aws.String("attachment"),
-	})
+	moduleKey := makeS3Key(id)
+	contentType := "application/octet-stream"
+	contentDisposition := "attachment"
 
+	_, err = store.s3client.PutObject(context.TODO(), &s3.PutObjectInput{
+		Bucket:             &store.bucket,
+		Key:                &moduleKey,
+		Body:               file,
+		ContentType:        &contentType,
+		ContentDisposition: &contentDisposition,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
@@ -221,11 +225,11 @@ func (store *Store) RemoveLocalModule(id ID) error {
 
 // RemoveRemoteModule removes a module from the remote storage. No-op if not present.
 func (store *Store) RemoveRemoteModule(id ID) error {
-	_, err := store.s3client.DeleteObject(&s3.DeleteObjectInput{
+	moduleKey := makeS3Key(id)
+	_, err := store.s3client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
 		Bucket: &store.bucket,
-		Key:    aws.String(makeS3Key(id)),
+		Key:    &moduleKey,
 	})
-
 	if err != nil {
 		if isErrNoSuchKey(err) {
 			return nil
@@ -308,9 +312,10 @@ func (store *Store) UnpackModule(id ID, out io.Writer) error {
 
 // IsPresentRemotely checks whether a module is present in the remote data-store.
 func (store *Store) IsPresentRemotely(id ID) (bool, error) {
-	_, err := store.s3client.HeadObject(&s3.HeadObjectInput{
+	moduleKey := makeS3Key(id)
+	_, err := store.s3client.HeadObject(context.TODO(), &s3.HeadObjectInput{
 		Bucket: &store.bucket,
-		Key:    aws.String(makeS3Key(id)),
+		Key:    &moduleKey,
 	})
 
 	if err != nil {
@@ -419,13 +424,14 @@ func (store *Store) ensurePresentLocally(id ID) (string, error) {
 	}
 	defer file.Close()
 
+	moduleKey := makeS3Key(id)
 	req := &s3.GetObjectInput{
-		Bucket: aws.String(store.bucket),
-		Key:    aws.String(makeS3Key(id)),
+		Bucket: &store.bucket,
+		Key:    &moduleKey,
 	}
 
-	downloader := s3manager.NewDownloaderWithClient(store.s3client)
-	_, err = downloader.Download(file, req)
+	downloader := s3manager.NewDownloader(store.s3client)
+	_, err = downloader.Download(context.TODO(), file, req)
 	if err != nil {
 		if isErrNoSuchKey(err) {
 			return "", errors.New("module doesn't exist in remote storage")
@@ -499,6 +505,8 @@ func isErrNoSuchKey(err error) bool {
 	// bucket should rarely happen in practice.
 	//
 	// For forward compatibility (in case this ever gets fixed), we also check for `NoSuchKey`.
-	var e awserr.Error
-	return errors.As(err, &e) && (e.Code() == "NoSuchKey" || e.Code() == "NotFound")
+
+	var noSuchKey *s3types.NoSuchKey
+	var notFound *s3types.NotFound
+	return errors.As(err, &noSuchKey) || errors.As(err, &notFound)
 }
