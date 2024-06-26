@@ -9,10 +9,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
 	"time"
+
+	//nolint:gosec
+	_ "net/http/pprof"
 
 	"github.com/elastic/otel-profiling-agent/containermetadata"
 	"github.com/elastic/otel-profiling-agent/vc"
@@ -119,6 +123,15 @@ func mainWithExitCode() exitCode {
 	mainCtx, mainCancel := signal.NotifyContext(context.Background(),
 		unix.SIGINT, unix.SIGTERM, unix.SIGABRT)
 	defer mainCancel()
+
+	if argPprofAddr != "" {
+		go func() {
+			//nolint:gosec
+			if err = http.ListenAndServe(argPprofAddr, nil); err != nil {
+				log.Errorf("Serving pprof on %s failed: %s", argPprofAddr, err)
+			}
+		}()
+	}
 
 	// Sanity check for probabilistic profiling arguments
 	if argProbabilisticInterval < 1*time.Minute || argProbabilisticInterval > 5*time.Minute {
