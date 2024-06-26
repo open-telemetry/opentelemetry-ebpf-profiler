@@ -33,8 +33,6 @@ import (
 	"github.com/elastic/otel-profiling-agent/tracer"
 
 	log "github.com/sirupsen/logrus"
-
-	"github.com/elastic/otel-profiling-agent/memorydebug"
 )
 
 // Short copyright / license text for eBPF code
@@ -144,11 +142,6 @@ func mainWithExitCode() exitCode {
 	startTime := time.Now()
 	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
 		vc.Version(), vc.Revision(), vc.BuildTimestamp())
-
-	// Enable dumping of full heaps if the size of the allocated Golang heap
-	// exceeds 150m, and start dumping memory profiles when the heap exceeds
-	// 250m (only in debug builds, go build -tags debug).
-	memorydebug.Init(1024*1024*250, 1024*1024*150)
 
 	if !argNoKernelVersionCheck {
 		var major, minor, patch uint32
