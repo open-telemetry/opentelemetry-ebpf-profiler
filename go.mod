@@ -11,7 +11,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cilium/ebpf v0.15.0
 	github.com/containerd/containerd v1.7.18
-	github.com/docker/docker v27.0.0+incompatible
+	github.com/docker/docker v27.0.1+incompatible
 	github.com/elastic/go-freelru v0.13.0
 	github.com/elastic/go-perf v0.0.0-20191212140718-9c656876f595
 	github.com/google/uuid v1.6.0
