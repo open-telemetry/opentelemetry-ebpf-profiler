@@ -59,11 +59,11 @@ func TestPFELFSections(t *testing.T) {
 	require.NoError(t, err)
 	defer elfFile.Close()
 
-	// The fixed-address test executable has a section named `.coffee_section` at address 0xC0FFEE
+	// The fixed-address test executable has a section named `.coffee_section` at address 0xC0FFEE0
 	sh := elfFile.Section(".coffee_section")
 	if assert.NotNil(t, sh) {
 		assert.Equal(t, ".coffee_section", sh.Name)
-		assert.Equal(t, uint64(0xC0FFEE), sh.Addr)
+		assert.Equal(t, uint64(0xC0FFEE0), sh.Addr)
 
 		// Try to find a section that does not exist
 		sh = elfFile.Section(".tea_section")
