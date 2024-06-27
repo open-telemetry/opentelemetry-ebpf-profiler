@@ -70,6 +70,7 @@ var (
 		tracer.ProbabilisticThresholdMax-1, tracer.ProbabilisticThresholdMax-1)
 	probabilisticIntervalHelp = "Time interval for which probabilistic profiling will be " +
 		"enabled or disabled."
+	pprofHelp = "Listening address (e.g. localhost:6060) to serve pprof information."
 )
 
 // Variables for command line arguments
@@ -92,6 +93,7 @@ var (
 	argMapScaleFactor         uint
 	argProbabilisticThreshold uint
 	argProbabilisticInterval  time.Duration
+	argPprofAddr              string
 
 	// "internal" flag variables.
 	// Flag variables that are configured in "internal" builds will have to be assigned
@@ -130,6 +132,8 @@ func parseArgs() error {
 	fs.BoolVar(&argNoKernelVersionCheck, "no-kernel-version-check", false, noKernelVersionCheckHelp)
 
 	fs.UintVar(&argProjectID, "project-id", 1, projectIDHelp)
+
+	fs.StringVar(&argPprofAddr, "pprof", "", pprofHelp)
 
 	// Using a default value here to simplify OTEL review process.
 	fs.StringVar(&argSecretToken, "secret-token", "abc123", secretTokenHelp)
