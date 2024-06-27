@@ -6,7 +6,7 @@
 
 //go:build amd64
 
-#include <Zydis/Zydis.h>
+#include "../zydis/Zydis.h"
 #include "libc_decode_amd64.h"
 
 //#define DEBUG
@@ -42,6 +42,7 @@ static int32_t reg2ndx(ZydisRegister reg)
 
 uint32_t decode_pthread_getspecific(const uint8_t* code, size_t codesz) {
   ZydisDecoder decoder;
+  ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
   ZydisDecodedInstruction instr;
   regInfo regs[18] = {};
   int32_t destNdx = -1, srcNdx, indexNdx;
@@ -49,9 +50,11 @@ uint32_t decode_pthread_getspecific(const uint8_t* code, size_t codesz) {
   // RDI = first argument = key index
   regs[reg2ndx(ZYDIS_REGISTER_RDI)] = (regInfo) { .state = TSDIndex, .multiplier = 1 };
 
-  ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_ADDRESS_WIDTH_64);
+  ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
 
-  for (ZyanUSize offs = 0; ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, code + offs, codesz - offs, &instr)); offs += instr.length) {
+  for (ZyanUSize offs = 0
+    ; ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder, code + offs, codesz - offs, &instr, operands))
+    ; offs += instr.length) {
 #ifdef DEBUG
     if (destNdx >= 0 && destNdx < 32) {
       fprintf(stderr, "r%02d state=%d, offs=%#x, mult=%d\n",
@@ -59,15 +62,15 @@ uint32_t decode_pthread_getspecific(const uint8_t* code, size_t codesz) {
     }
 #endif
     destNdx = -1;
-    if (instr.operands[0].type != ZYDIS_OPERAND_TYPE_REGISTER) {
+    if (operands[0].type != ZYDIS_OPERAND_TYPE_REGISTER) {
       continue;
     }
 
-    destNdx = reg2ndx(instr.operands[0].reg.value);
+    destNdx = reg2ndx(operands[0].reg.value);
     switch (instr.mnemonic) {
     case ZYDIS_MNEMONIC_SHL:
-      regs[destNdx].offset <<= instr.operands[1].imm.value.u;
-      regs[destNdx].multiplier <<= instr.operands[1].imm.value.u;
+      regs[destNdx].offset <<= operands[1].imm.value.u;
+      regs[destNdx].multiplier <<= operands[1].imm.value.u;
       continue;
 
     case ZYDIS_MNEMONIC_ADD:
@@ -76,8 +79,8 @@ uint32_t decode_pthread_getspecific(const uint8_t* code, size_t codesz) {
         regs[destNdx].state = TSDElementBase;
         continue;
       }
-      if (instr.operands[1].type == ZYDIS_OPERAND_TYPE_REGISTER) {
-        srcNdx = reg2ndx(instr.operands[1].reg.value);
+      if (operands[1].type == ZYDIS_OPERAND_TYPE_REGISTER) {
+        srcNdx = reg2ndx(operands[1].reg.value);
         if ((regs[destNdx].state == TSDBase && regs[srcNdx].state == TSDIndex) ||
             (regs[destNdx].state == TSDIndex && regs[srcNdx].state == TSDBase)) {
           regs[destNdx].offset += regs[srcNdx].offset;
@@ -87,30 +90,30 @@ uint32_t decode_pthread_getspecific(const uint8_t* code, size_t codesz) {
           regs[destNdx].state = TSDElementBase;
           continue;
         }
-      } else if (instr.operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
-        regs[destNdx].offset += instr.operands[1].imm.value.u;
+      } else if (operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
+        regs[destNdx].offset += operands[1].imm.value.u;
         continue;
       }
       break;
 
     case ZYDIS_MNEMONIC_LEA:
-      srcNdx = reg2ndx(instr.operands[1].mem.base);
+      srcNdx = reg2ndx(operands[1].mem.base);
       if (regs[srcNdx].state == TSDIndex) {
-        if (instr.operands[1].mem.index == ZYDIS_REGISTER_NONE) {
+        if (operands[1].mem.index == ZYDIS_REGISTER_NONE) {
           regs[destNdx] = (regInfo) {
             .state      = TSDIndex,
-            .offset     = regs[srcNdx].offset + instr.operands[1].mem.disp.value,
+            .offset     = regs[srcNdx].offset + operands[1].mem.disp.value,
             .multiplier = regs[srcNdx].multiplier,
           };
           continue;
         }
       } else if (regs[srcNdx].state == TSDBase) {
-        indexNdx = reg2ndx(instr.operands[1].mem.index);
+        indexNdx = reg2ndx(operands[1].mem.index);
         if (regs[indexNdx].state == TSDIndex) {
           regs[destNdx] = (regInfo) {
             .state      = TSDElementBase,
-            .offset     = regs[srcNdx].offset + regs[indexNdx].offset + instr.operands[1].mem.disp.value,
-            .multiplier = regs[indexNdx].multiplier * (instr.operands[1].mem.scale ?: 1),
+            .offset     = regs[srcNdx].offset + regs[indexNdx].offset + operands[1].mem.disp.value,
+            .multiplier = regs[indexNdx].multiplier * (operands[1].mem.scale ?: 1),
           };
           continue;
         }
@@ -122,19 +125,19 @@ uint32_t decode_pthread_getspecific(const uint8_t* code, size_t codesz) {
         regs[destNdx] = (regInfo) { .state = TSDBase };
         continue;
       }
-      if (instr.operands[1].type == ZYDIS_OPERAND_TYPE_REGISTER) {
-        srcNdx = reg2ndx(instr.operands[1].reg.value);
+      if (operands[1].type == ZYDIS_OPERAND_TYPE_REGISTER) {
+        srcNdx = reg2ndx(operands[1].reg.value);
         regs[destNdx] = regs[srcNdx];
         continue;
       }
-      if (instr.operands[1].type == ZYDIS_OPERAND_TYPE_MEMORY) {
-        srcNdx = reg2ndx(instr.operands[1].mem.base);
-        indexNdx = reg2ndx(instr.operands[1].mem.index);
+      if (operands[1].type == ZYDIS_OPERAND_TYPE_MEMORY) {
+        srcNdx = reg2ndx(operands[1].mem.base);
+        indexNdx = reg2ndx(operands[1].mem.index);
         if (regs[srcNdx].state == TSDBase) {
-          if (instr.operands[1].mem.index == ZYDIS_REGISTER_NONE) {
+          if (operands[1].mem.index == ZYDIS_REGISTER_NONE) {
             regs[destNdx] = (regInfo) {
               .state    = TSDBase,
-              .offset   = instr.operands[1].mem.disp.value,
+              .offset   = operands[1].mem.disp.value,
               .indirect = 1,
             };
             continue;
@@ -143,16 +146,16 @@ uint32_t decode_pthread_getspecific(const uint8_t* code, size_t codesz) {
               .state      = TSDValue,
               .offset     = regs[srcNdx].offset,
               .indirect   = regs[srcNdx].indirect,
-              .multiplier = instr.operands[1].mem.scale,
+              .multiplier = operands[1].mem.scale,
             };
             continue;
           }
         } else if (regs[srcNdx].state == TSDElementBase) {
           regs[destNdx] = (regInfo) {
             .state      = TSDValue,
-            .offset     = regs[srcNdx].offset + instr.operands[1].mem.disp.value,
+            .offset     = regs[srcNdx].offset + operands[1].mem.disp.value,
             .indirect   = regs[srcNdx].indirect,
-            .multiplier = regs[srcNdx].multiplier * (instr.operands[1].mem.scale ?: 1),
+            .multiplier = regs[srcNdx].multiplier * (operands[1].mem.scale ?: 1),
           };
           continue;
         }
