@@ -300,7 +300,11 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	}
 
 	buildID, _ := ef.GetBuildID()
-	pm.reporter.ExecutableMetadata(context.TODO(), fileID, baseName, buildID)
+	mapping2 := *mapping // copy to avoid races if callee saves the closure
+	open := func() (process.ReadAtCloser, error) {
+		return pr.OpenMappingFile(&mapping2)
+	}
+	pm.reporter.ExecutableMetadata(context.TODO(), fileID, baseName, buildID, libpf.Native, open)
 
 	return info
 }

@@ -17,6 +17,7 @@ import (
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
+	"github.com/elastic/otel-profiling-agent/reporter"
 
 	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/libpf"
@@ -65,7 +66,7 @@ func newSymbolizationCache() *symbolizationCache {
 }
 
 func (c *symbolizationCache) ExecutableMetadata(_ context.Context, fileID libpf.FileID,
-	fileName, _ string) {
+	fileName, _ string, _ libpf.InterpreterType, _ reporter.ExecutableOpener) {
 	c.files[fileID] = fileName
 }
 
