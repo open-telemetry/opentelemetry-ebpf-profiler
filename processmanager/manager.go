@@ -259,7 +259,7 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 			// Locate mapping info for the frame.
 			var mappingStart, mappingEnd libpf.Address
 			var fileOffset uint64
-			if frame.Type.Interpreter() != libpf.Kernel {
+			if frame.Type.Interpreter() == libpf.Native {
 				if mapping, ok := pm.findMappingForTrace(trace.PID, frame.File, frame.Lineno); ok {
 					mappingStart = mapping.Vaddr - libpf.Address(mapping.Bias)
 					mappingEnd = mappingStart + libpf.Address(mapping.Length)
