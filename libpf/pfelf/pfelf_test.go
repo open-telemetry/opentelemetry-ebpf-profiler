@@ -117,11 +117,11 @@ func TestGetSectionAddress(t *testing.T) {
 	elfFile := getELF("testdata/fixed-address", t)
 	defer elfFile.Close()
 
-	// The fixed-address test executable has a section named `.coffee_section` at address 0xC0FFEE
+	// The fixed-address test executable has a section named `.coffee_section` at address 0xC0FFEE0
 	address, found, err := pfelf.GetSectionAddress(elfFile, ".coffee_section")
 	require.NoError(t, err)
 	assert.True(t, found, "unable to find .coffee_section")
-	assert.Equal(t, uint64(0xC0FFEE), address)
+	assert.Equal(t, uint64(0xC0FFEE0), address)
 
 	// Try to find a section that does not exist
 	_, found, err = pfelf.GetSectionAddress(elfFile, ".tea_section")
