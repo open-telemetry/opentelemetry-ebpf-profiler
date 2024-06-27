@@ -292,7 +292,7 @@ func mainWithExitCode() exitCode {
 	// TODO: Maybe abort execution if (some) metadata can not be collected
 	hostMetadataMap = metadataCollector.GetHostMetadata()
 
-	if bpfJITEnabled, found := hostMetadataMap["host:sysctl/net.core.bpf_jit_enable"]; found {
+	if bpfJITEnabled, found := hostMetadataMap["host.sysctl.net.core.bpf_jit_enable"]; found {
 		if bpfJITEnabled == "0" {
 			log.Warnf("The BPF JIT is disabled (net.core.bpf_jit_enable = 0). " +
 				"Enable it to reduce CPU overhead.")

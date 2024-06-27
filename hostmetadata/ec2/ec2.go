@@ -42,7 +42,7 @@ var ec2MetadataClient, _ = buildMetadataClient()
 // ec2Client is lazily initialized inside addTags()
 var ec2Client ec2Iface
 
-const ec2Prefix = "ec2:"
+const ec2Prefix = "ec2."
 
 type ec2MetadataWrapper struct {
 	*ec2imds.Client
@@ -101,7 +101,7 @@ func getMetadataForKeys(prefix string, suffix []string, result map[string]string
 			log.Debugf("Unable to get metadata key: %s: %v", keyPath, err)
 			continue
 		}
-		result[ec2Prefix+keyPath] = value
+		result[ec2Prefix+toFieldName(keyPath)] = value
 	}
 }
 
@@ -153,7 +153,7 @@ func addTags(instanceID string, result map[string]string) {
 
 	// EC2 tags have no character restrictions, therefore we store each key:value separately
 	for _, tag := range descTagsOut.Tags {
-		result[fmt.Sprintf("%stags/%s", ec2Prefix, *tag.Key)] = *tag.Value
+		result[fmt.Sprintf("%stags.%s", ec2Prefix, toFieldName(*tag.Key))] = *tag.Value
 	}
 }
 
@@ -239,12 +239,12 @@ func AddMetadata(result map[string]string) {
 			"vpc-ipv4-cidr-blocks",
 		}, result)
 
-		if ips, ok := result[ec2Prefix+macPath+"public-ipv4s"]; ok {
+		if ips, ok := result[ec2Prefix+toFieldName(macPath)+"public_ipv4s"]; ok {
 			ipAddrs[instance.KeyPublicIPV4s] = append(ipAddrs[instance.KeyPublicIPV4s],
 				strings.ReplaceAll(ips, "\n", ","))
 		}
 
-		if ips, ok := result[ec2Prefix+macPath+"local-ipv4s"]; ok {
+		if ips, ok := result[ec2Prefix+toFieldName(macPath)+"local_ipv4s"]; ok {
 			ipAddrs[instance.KeyPrivateIPV4s] = append(ipAddrs[instance.KeyPrivateIPV4s],
 				strings.ReplaceAll(ips, "\n", ","))
 		}
@@ -265,13 +265,19 @@ func AddMetadata(result map[string]string) {
 }
 
 func addCloudRegion(result map[string]string) {
-	if region, ok := result[ec2Prefix+"placement/region"]; ok {
+	if region, ok := result[ec2Prefix+"placement.region"]; ok {
 		result[instance.KeyCloudRegion] = region
 	}
 }
 
 func addHostType(result map[string]string) {
-	if instanceType, ok := result[ec2Prefix+"instance-type"]; ok {
+	if instanceType, ok := result[ec2Prefix+"instance_type"]; ok {
 		result[instance.KeyHostType] = instanceType
 	}
+}
+
+func toFieldName(s string) string {
+	return strings.ReplaceAll(
+		strings.ReplaceAll(s, "-", "_"),
+		"/", ".")
 }
