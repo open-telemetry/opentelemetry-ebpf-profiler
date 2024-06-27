@@ -20,7 +20,6 @@ import (
 	"github.com/elastic/otel-profiling-agent/containermetadata"
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/memorydebug"
 	"github.com/elastic/otel-profiling-agent/reporter"
 	"github.com/elastic/otel-profiling-agent/util"
 )
@@ -208,8 +207,6 @@ func Start(ctx context.Context, containerMetadataHandler containermetadata.Handl
 			case <-ctx.Done():
 				return
 			}
-			// Output memory usage in debug builds.
-			memorydebug.DebugLogMemoryUsage()
 		}
 	}()
 
