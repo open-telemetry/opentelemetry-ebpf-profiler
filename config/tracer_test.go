@@ -7,6 +7,7 @@
 package config
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -45,7 +46,11 @@ func TestParseTracers(t *testing.T) {
 
 			if tt.expectedTracers == nil {
 				for tracer := range maxTracers {
-					require.True(t, include.Has(tracer))
+					if availableOnArch(tracer) {
+						require.True(t, include.Has(tracer))
+					} else {
+						require.False(t, include.Has(tracer))
+					}
 				}
 				return
 			}
@@ -55,6 +60,11 @@ func TestParseTracers(t *testing.T) {
 					continue
 				}
 				for tracer := range maxTracers {
+					if !availableOnArch(tracer) {
+						require.False(t, include.Has(tracer))
+						continue
+					}
+
 					if tracer.String() == name {
 						require.True(t, include.Has(tracer))
 					} else if !inListOfTracers(tt.expectedTracers, tracer) {
@@ -71,6 +81,17 @@ func TestParseTracers(t *testing.T) {
 			_, err := ParseTracers(in)
 			require.Error(t, err)
 		})
+	}
+}
+
+func availableOnArch(tracer tracerType) bool {
+	switch runtime.GOARCH {
+	case "amd64":
+		return true
+	case "arm64":
+		return tracer != V8Tracer && tracer != DotnetTracer
+	default:
+		panic("unsupported architecture")
 	}
 }
 
