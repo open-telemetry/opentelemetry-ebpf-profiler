@@ -387,7 +387,7 @@ func mkProfileID() []byte {
 func (r *OTLPReporter) getResource() *resource.Resource {
 	keys := r.hostmetadata.Keys()
 
-	attributes := make([]*common.KeyValue, 0, len(keys))
+	attributes := make([]*common.KeyValue, 0, len(keys)+6)
 
 	addAttr := func(k attribute.Key, v string) {
 		attributes = append(attributes, &common.KeyValue{

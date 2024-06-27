@@ -65,28 +65,28 @@ func TestAddMetadata(t *testing.T) {
 	AddMetadata(result)
 
 	expectedResult := map[string]string{
-		"cloud:provider":                               "gcp",
-		"cloud:region":                                 "us-east1",
-		"host:type":                                    "test-n2-custom-4-10240",
-		"gce:instance/id":                              "1234",
-		"gce:instance/cpu-platform":                    "Intel Cascade Lake",
-		"gce:instance/machine-type":                    "projects/123456/machineTypes/test-n2-custom-4-10240",
-		"gce:instance/name":                            "gke-mirror-cluster-api",
-		"gce:instance/description":                     "test description",
-		"gce:instance/network-interfaces/0/ip":         "1.1.1.1",
-		"gce:instance/network-interfaces/0/network":    "networks/default",
-		"gce:instance/network-interfaces/0/subnetmask": "255.255.240.0",
-		"gce:instance/network-interfaces/1/gateway":    "22.22.22.22",
-		"gce:instance/network-interfaces/2/access-configs/0/external-ip": "7.7.7.7",
-		"gce:instance/network-interfaces/2/access-configs/1/external-ip": "8.8.8.8",
-		"gce:instance/network-interfaces/2/access-configs/2/external-ip": "9.9.9.9",
-		"gce:instance/network-interfaces/2/mac":                          "3:3:3",
-		"gce:instance/hostname":                                          "barbaz",
-		"gce:instance/zone":                                              "projects/123456/zones/us-east1-c",
-		"gce:instance/image":                                             "gke-node-images/global",
-		"gce:instance/tags":                                              "foo;bar;baz",
-		"instance:private-ipv4s":                                         "1.1.1.1",
-		"instance:public-ipv4s":                                          "7.7.7.7,8.8.8.8,9.9.9.9",
+		"cloud.provider":                               "gcp",
+		"cloud.region":                                 "us-east1",
+		"host.type":                                    "test-n2-custom-4-10240",
+		"gce.instance.id":                              "1234",
+		"gce.instance.cpu_platform":                    "Intel Cascade Lake",
+		"gce.instance.machine_type":                    "projects/123456/machineTypes/test-n2-custom-4-10240",
+		"gce.instance.name":                            "gke-mirror-cluster-api",
+		"gce.instance.description":                     "test description",
+		"gce.instance.network_interfaces.0.ip":         "1.1.1.1",
+		"gce.instance.network_interfaces.0.network":    "networks/default",
+		"gce.instance.network_interfaces.0.subnetmask": "255.255.240.0",
+		"gce.instance.network_interfaces.1.gateway":    "22.22.22.22",
+		"gce.instance.network_interfaces.2.access_configs.0.external_ip": "7.7.7.7",
+		"gce.instance.network_interfaces.2.access_configs.1.external_ip": "8.8.8.8",
+		"gce.instance.network_interfaces.2.access_configs.2.external_ip": "9.9.9.9",
+		"gce.instance.network_interfaces.2.mac":                          "3:3:3",
+		"gce.instance.hostname":                                          "barbaz",
+		"gce.instance.zone":                                              "projects/123456/zones/us-east1-c",
+		"gce.instance.image":                                             "gke-node-images/global",
+		"gce.instance.tags":                                              "foo;bar;baz",
+		"instance.private_ipv4s":                                         "1.1.1.1",
+		"instance.public_ipv4s":                                          "7.7.7.7,8.8.8.8,9.9.9.9",
 	}
 
 	assert.Equal(t, expectedResult, result)
@@ -138,11 +138,11 @@ func TestAddCloudRegion(t *testing.T) {
 	for _, test := range tests {
 		result := make(map[string]string)
 
-		result[gcePrefix+"instance/zone"] = test.value
+		result[gcePrefix+"instance.zone"] = test.value
 		addCloudRegion(result)
 
 		expectedResult := map[string]string{
-			gcePrefix + "instance/zone": test.value,
+			gcePrefix + "instance.zone": test.value,
 		}
 		if test.expected != "" {
 			expectedResult[instance.KeyCloudRegion] = test.expected
@@ -182,11 +182,11 @@ func TestAddHostType(t *testing.T) {
 	for _, test := range tests {
 		result := make(map[string]string)
 
-		result[gcePrefix+"instance/machine-type"] = test.value
+		result[gcePrefix+"instance.machine_type"] = test.value
 		addHostType(result)
 
 		expectedResult := map[string]string{
-			gcePrefix + "instance/machine-type": test.value,
+			gcePrefix + "instance.machine_type": test.value,
 		}
 		if test.expected != "" {
 			expectedResult[instance.KeyHostType] = test.expected

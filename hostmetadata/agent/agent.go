@@ -17,32 +17,32 @@ import (
 // Agent metadata keys
 const (
 	// Build metadata
-	keyAgentVersion        = "agent:version"
-	keyAgentRevision       = "agent:revision"
-	keyAgentBuildTimestamp = "agent:build_timestamp"
-	keyAgentStartTimeMilli = "agent:start_time_milli"
+	keyAgentVersion        = "profiling.agent.version"
+	keyAgentRevision       = "profiling.agent.revision"
+	keyAgentBuildTimestamp = "profiling.agent.build_timestamp"
+	keyAgentStartTimeMilli = "profiling.agent.start_time"
 
 	// Environment metadata
-	keyAgentEnvHTTPSProxy = "agent:env_https_proxy"
+	// TODO: Remove this key
+	keyAgentEnvHTTPSProxy = "profiling.agent.env_https_proxy"
 
 	// Configuration metadata
-	keyAgentConfigBpfLoglevel            = "agent:config_bpf_log_level"
-	keyAgentConfigBpfLogSize             = "agent:config_bpf_log_size"
-	keyAgentConfigCacheDirectory         = "agent:config_cache_directory"
-	keyAgentConfigCollectionAgentAddr    = "agent:config_ca_address"
-	keyAgentConfigurationFile            = "agent:config_file"
-	keyAgentConfigTags                   = "agent:config_tags"
-	keyAgentConfigDisableTLS             = "agent:config_disable_tls"
-	keyAgentConfigNoKernelVersionCheck   = "agent:config_no_kernel_version_check"
-	keyAgentConfigTracers                = "agent:config_tracers"
-	keyAgentConfigKnownTracesEntries     = "agent:config_known_traces_entries"
-	keyAgentConfigMapScaleFactor         = "agent:config_map_scale_factor"
-	keyAgentConfigMaxElementsPerInterval = "agent:config_max_elements_per_interval"
-	keyAgentConfigVerbose                = "agent:config_verbose"
-	keyAgentConfigProbabilisticInterval  = "agent:config_probabilistic_interval"
-	keyAgentConfigProbabilisticThreshold = "agent:config_probabilistic_threshold"
-	// nolint:gosec
-	keyAgentConfigPresentCPUCores = "agent:config_present_cpu_cores"
+	keyAgentConfigBpfLoglevel            = "profiling.agent.config.bpf_log_level"
+	keyAgentConfigBpfLogSize             = "profiling.agent.config.bpf_log_size"
+	keyAgentConfigCacheDirectory         = "profiling.agent.config.cache_directory"
+	keyAgentConfigCollectionAgentAddr    = "profiling.agent.config.ca_address"
+	keyAgentConfigurationFile            = "profiling.agent.config.file"
+	keyAgentConfigTags                   = "profiling.agent.config.tags"
+	keyAgentConfigDisableTLS             = "profiling.agent.config.disable_tls"
+	keyAgentConfigNoKernelVersionCheck   = "profiling.agent.config.no_kernel_version_check"
+	keyAgentConfigTracers                = "profiling.agent.config.tracers"
+	keyAgentConfigKnownTracesEntries     = "profiling.agent.config.known_traces_entries"
+	keyAgentConfigMapScaleFactor         = "profiling.agent.config.map_scale_factor"
+	keyAgentConfigMaxElementsPerInterval = "profiling.agent.config.max_elements_per_interval"
+	keyAgentConfigVerbose                = "profiling.agent.config.verbose"
+	keyAgentConfigProbabilisticInterval  = "profiling.agent.config.probabilistic_interval"
+	keyAgentConfigProbabilisticThreshold = "profiling.agent.config.probabilistic_threshold"
+	keyAgentConfigPresentCPUCores        = "profiling.agent.config.present_cpu_cores"
 )
 
 // AddMetadata adds agent metadata to the result map.
