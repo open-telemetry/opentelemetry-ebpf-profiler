@@ -7,6 +7,8 @@
 package config
 
 import (
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -45,21 +47,21 @@ func TestParseTracers(t *testing.T) {
 
 			if tt.expectedTracers == nil {
 				for tracer := range maxTracers {
-					require.True(t, include.Has(tracer))
+					if availableOnArch(tracer) {
+						require.True(t, include.Has(tracer))
+					} else {
+						require.False(t, include.Has(tracer))
+					}
 				}
 				return
 			}
 
-			for _, name := range strings.Split(in, ",") {
-				if name == "" || name == "native" {
-					continue
-				}
-				for tracer := range maxTracers {
-					if tracer.String() == name {
-						require.True(t, include.Has(tracer))
-					} else if !inListOfTracers(tt.expectedTracers, tracer) {
-						require.False(t, include.Has(tracer))
-					}
+			expected := strings.Split(in, ",")
+			for tracer := range maxTracers {
+				if slices.Contains(expected, tracer.String()) && availableOnArch(tracer) {
+					require.True(t, include.Has(tracer))
+				} else {
+					require.False(t, include.Has(tracer))
 				}
 			}
 		})
@@ -74,11 +76,13 @@ func TestParseTracers(t *testing.T) {
 	}
 }
 
-func inListOfTracers(tracers []tracerType, tracer tracerType) bool {
-	for _, t := range tracers {
-		if t == tracer {
-			return true
-		}
+func availableOnArch(tracer tracerType) bool {
+	switch runtime.GOARCH {
+	case "amd64":
+		return true
+	case "arm64":
+		return tracer != V8Tracer && tracer != DotnetTracer
+	default:
+		panic("unsupported architecture")
 	}
-	return false
 }
