@@ -19,7 +19,7 @@ type Trace struct {
 	Hash               TraceHash
 }
 
-// AppendFrame appends a frame to the columnar frame array.
+// AppendFrame appends a frame to the columnar frame array without mapping information.
 func (trace *Trace) AppendFrame(ty FrameType, file FileID, addrOrLine AddressOrLineno) {
 	trace.AppendFrameFull(ty, file, addrOrLine, 0, 0, 0)
 }
