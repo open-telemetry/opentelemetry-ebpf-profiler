@@ -17,7 +17,7 @@ import (
 	"github.com/elastic/otel-profiling-agent/hostmetadata/instance"
 )
 
-const gcePrefix = "gce:"
+const gcePrefix = "gce."
 
 var gceClient gceMetadataIface = &gceMetadataClient{}
 
@@ -40,7 +40,7 @@ func getMetadataForKeys(prefix string, suffix []string, result map[string]string
 			log.Debugf("Unable to get metadata key %s: %v", keyPath, err)
 			continue
 		}
-		result[gcePrefix+keyPath] = value
+		result[gcePrefix+toFieldName(keyPath)] = value
 	}
 }
 
@@ -78,7 +78,7 @@ func AddMetadata(result map[string]string) {
 	} else if len(tags) > 0 {
 		// GCE tags can only contain lowercase letters, numbers, and hyphens,
 		// therefore ';' is safe to use as a separator.
-		result[gcePrefix+"instance/tags"] = strings.Join(tags, ";")
+		result[gcePrefix+"instance.tags"] = strings.Join(tags, ";")
 	}
 
 	ifaces, err := list("instance/network-interfaces/")
@@ -104,7 +104,7 @@ func AddMetadata(result map[string]string) {
 			"subnetmask",
 		}, result)
 
-		if ip, ok := result[gcePrefix+interfacePath+"ip"]; ok {
+		if ip, ok := result[gcePrefix+toFieldName(interfacePath)+"ip"]; ok {
 			ipAddrs[instance.KeyPrivateIPV4s] = append(ipAddrs[instance.KeyPrivateIPV4s], ip)
 		}
 
@@ -120,7 +120,7 @@ func AddMetadata(result map[string]string) {
 			accessConfigPath := path.Join(interfacePath, "access-configs", accessConfig)
 
 			getMetadataForKeys(accessConfigPath, []string{"external-ip"}, result)
-			if ip, ok := result[gcePrefix+accessConfigPath+"/external-ip"]; ok {
+			if ip, ok := result[gcePrefix+toFieldName(accessConfigPath)+".external_ip"]; ok {
 				ipAddrs[instance.KeyPublicIPV4s] = append(ipAddrs[instance.KeyPublicIPV4s], ip)
 			}
 		}
@@ -132,7 +132,7 @@ func AddMetadata(result map[string]string) {
 var regionMatcher = regexp.MustCompile(`^projects/[^/]+/zones/(([^-]+)$|([^-]+)-([^-]+))`)
 
 func addCloudRegion(result map[string]string) {
-	matches := regionMatcher.FindStringSubmatch(result[gcePrefix+"instance/zone"])
+	matches := regionMatcher.FindStringSubmatch(result[gcePrefix+"instance.zone"])
 	if len(matches) >= 2 {
 		result[instance.KeyCloudRegion] = matches[1]
 	}
@@ -141,8 +141,14 @@ func addCloudRegion(result map[string]string) {
 var hostTypeMatcher = regexp.MustCompile(`^projects/[^/]+/machineTypes/(.+)$`)
 
 func addHostType(result map[string]string) {
-	matches := hostTypeMatcher.FindStringSubmatch(result[gcePrefix+"instance/machine-type"])
+	matches := hostTypeMatcher.FindStringSubmatch(result[gcePrefix+"instance.machine_type"])
 	if len(matches) >= 2 {
 		result[instance.KeyHostType] = matches[1]
 	}
+}
+
+func toFieldName(s string) string {
+	return strings.ReplaceAll(
+		strings.ReplaceAll(s, "-", "_"),
+		"/", ".")
 }

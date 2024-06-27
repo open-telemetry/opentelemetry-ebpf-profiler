@@ -35,17 +35,17 @@ import (
 // Changing these values is a customer-visible change.
 const (
 	// TODO: Change to semconv / ECS names
-	KeyKernelProcVersion  = "host:kernel_proc_version"
-	KeyKernelVersion      = "host:kernel_version"
-	KeyHostname           = "host:hostname"
-	KeyArchitecture       = "host:arch"
-	KeyArchitectureCompat = "host:machine"
-	KeyIPAddress          = "host:ip"
+	KeyKernelVersion      = "profiling.host.kernel_version"
+	KeyKernelProcVersion  = "profiling.host.kernel_proc_version"
+	KeyHostname           = "profiling.host.name"
+	KeyArchitecture       = "host.arch"
+	KeyArchitectureCompat = "profiling.host.machine"
+	KeyIPAddress          = "profiling.host.ip"
 
 	// Prefix for all the sysctl keys
-	keyPrefixSysctl = "host:sysctl/"
+	keyPrefixSysctl = "profiling.host.sysctl."
 
-	keyTags = "host:tags"
+	keyTags = "profiling.host.tags"
 )
 
 // Various sysctls we are interested in.
@@ -154,8 +154,7 @@ func AddMetadata(caEndpoint string, result map[string]string) error {
 				errResult = errors.Join(errResult, err2)
 				continue
 			}
-			sysctlKey := keyPrefixSysctl + sysctl
-			result[sysctlKey] = sanitizeString(sysctlValue)
+			result[keyPrefixSysctl+sysctl] = sanitizeString(sysctlValue)
 		}
 
 		// Get IP address
