@@ -1,4 +1,4 @@
-name: otel-profiling-agent
+name: CI
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 jobs:
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: true
       max-parallel: 2
@@ -40,20 +40,6 @@ jobs:
         cache-dependency-path: |
           go.sum
       id: go
-    - name: Install gRPC dependencies
-      env:
-        PB_URL: "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/"
-        PB_FILE: "protoc-24.4-linux-x86_64.zip"
-        INSTALL_DIR: "/usr/local"
-      run: |
-        go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
-        go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
-        curl -LO "$PB_URL/$PB_FILE"
-        sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
-        sudo chmod +xr "$INSTALL_DIR/bin/protoc"
-        sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
-        sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
-        rm "$PB_FILE"
     - name: Check out
       uses: actions/checkout@v4
     - name: Linter
@@ -95,20 +81,6 @@ jobs:
         cache-dependency-path: |
           go.sum
       id: go
-    - name: Install gRPC dependencies
-      env:
-        PB_URL: "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/"
-        PB_FILE: "protoc-24.4-linux-x86_64.zip"
-        INSTALL_DIR: "/usr/local"
-      run: |
-        go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
-        go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
-        curl -LO "$PB_URL/$PB_FILE"
-        sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
-        sudo chmod +xr "$INSTALL_DIR/bin/protoc"
-        sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
-        sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
-        rm "$PB_FILE"
     - name: Check out
       uses: actions/checkout@v4
     - name: Build
@@ -118,3 +90,66 @@ jobs:
     - name: Tests
       run: |
         make test
+
+  build-integration-test-binaries:
+    name: Build integration test binaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get install -y llvm clang-16 dwz cmake curl unzip
+      - name: Install Zydis
+        shell: bash
+        run: |
+          cd /tmp
+          git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git
+          cd zydis
+          rm -rf build
+          mkdir build
+          cd build
+          cmake -DZYDIS_BUILD_EXAMPLES=OFF ..
+          make -j$(nproc)
+          sudo make install
+          cd zycore
+          sudo make install
+      - name: Prepare integration test binaries for qemu tests
+        run: |
+          make integration-test-binaries
+      - name: Upload integration test binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-binaries
+          path: support/*.test
+
+  integration-tests:
+    name: Integration tests (kernel v${{ matrix.kernel-version }})
+    runs-on: ubuntu-24.04
+    needs: build-integration-test-binaries
+    strategy:
+      matrix:
+        kernel-version: [ "4.19.314", "5.4.276", "5.10.217", "5.15.159", "6.1.91", "6.6.31", "6.8.10", "6.9.1" ]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+      - name: Install dependencies
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install qemu-system-x86
+          go install github.com/florianl/bluebox@v0.0.1
+          sudo mv ~/go/bin/bluebox /usr/local/bin/.
+      - name: Fetch integration test binaries
+        uses: actions/download-artifact@v4
+        with: { name: integration-test-binaries }
+      - name: Fetch precompiled kernels
+        run: |
+          install -d ci-kernels
+          echo "FROM ghcr.io/cilium/ci-kernels:${{ matrix.kernel-version }}" | docker buildx build --quiet --pull --output="ci-kernels" -
+          mv ci-kernels/boot/ ci-kernels/${{ matrix.kernel-version }}/
+      - name: Test on kernel ${{ matrix.kernel-version }}
+        run: |
+          chmod a+rx *.test
+          support/run-tests.sh ${{ matrix.kernel-version }}
