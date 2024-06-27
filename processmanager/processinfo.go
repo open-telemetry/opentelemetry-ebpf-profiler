@@ -30,7 +30,6 @@ import (
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
 	"github.com/elastic/otel-profiling-agent/lpm"
-	"github.com/elastic/otel-profiling-agent/memorydebug"
 	"github.com/elastic/otel-profiling-agent/proc"
 	"github.com/elastic/otel-profiling-agent/process"
 	eim "github.com/elastic/otel-profiling-agent/processmanager/execinfomanager"
@@ -455,8 +454,6 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 
 	// Add the new ELF mappings
 	for _, mapping := range mpAdd {
-		// Output memory usage in debug builds.
-		memorydebug.DebugLogMemoryUsage()
 		pm.processNewExecMapping(pr, mapping)
 	}
 

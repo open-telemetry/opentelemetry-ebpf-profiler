@@ -9,10 +9,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
 	"time"
+
+	//nolint:gosec
+	_ "net/http/pprof"
 
 	"github.com/elastic/otel-profiling-agent/containermetadata"
 	"github.com/elastic/otel-profiling-agent/vc"
@@ -33,8 +37,6 @@ import (
 	"github.com/elastic/otel-profiling-agent/tracer"
 
 	log "github.com/sirupsen/logrus"
-
-	"github.com/elastic/otel-profiling-agent/memorydebug"
 )
 
 // Short copyright / license text for eBPF code
@@ -122,6 +124,15 @@ func mainWithExitCode() exitCode {
 		unix.SIGINT, unix.SIGTERM, unix.SIGABRT)
 	defer mainCancel()
 
+	if argPprofAddr != "" {
+		go func() {
+			//nolint:gosec
+			if err = http.ListenAndServe(argPprofAddr, nil); err != nil {
+				log.Errorf("Serving pprof on %s failed: %s", argPprofAddr, err)
+			}
+		}()
+	}
+
 	// Sanity check for probabilistic profiling arguments
 	if argProbabilisticInterval < 1*time.Minute || argProbabilisticInterval > 5*time.Minute {
 		log.Error("Invalid argument for probabilistic-interval: use " +
@@ -144,11 +155,6 @@ func mainWithExitCode() exitCode {
 	startTime := time.Now()
 	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
 		vc.Version(), vc.Revision(), vc.BuildTimestamp())
-
-	// Enable dumping of full heaps if the size of the allocated Golang heap
-	// exceeds 150m, and start dumping memory profiles when the heap exceeds
-	// 250m (only in debug builds, go build -tags debug).
-	memorydebug.Init(1024*1024*250, 1024*1024*150)
 
 	if !argNoKernelVersionCheck {
 		var major, minor, patch uint32
