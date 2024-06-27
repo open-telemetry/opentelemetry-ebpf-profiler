@@ -261,7 +261,7 @@ func getContainerMetadataCache(ctx context.Context, instance *handler) (
 
 	podsPerNode, err := getPodsPerNode(ctx, instance)
 	if err != nil {
-		log.Infof("Failed to get pods per node: %v", err)
+		log.Infof("Failed to size cache based on pods per node: %v", err)
 	} else {
 		cacheSize *= podsPerNode
 	}
