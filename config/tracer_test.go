@@ -8,6 +8,7 @@ package config
 
 import (
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -55,21 +56,12 @@ func TestParseTracers(t *testing.T) {
 				return
 			}
 
-			for _, name := range strings.Split(in, ",") {
-				if name == "" || name == "native" {
-					continue
-				}
-				for tracer := range maxTracers {
-					if !availableOnArch(tracer) {
-						require.False(t, include.Has(tracer))
-						continue
-					}
-
-					if tracer.String() == name {
-						require.True(t, include.Has(tracer))
-					} else if !inListOfTracers(tt.expectedTracers, tracer) {
-						require.False(t, include.Has(tracer))
-					}
+			expected := strings.Split(in, ",")
+			for tracer := range maxTracers {
+				if slices.Contains(expected, tracer.String()) && availableOnArch(tracer) {
+					require.True(t, include.Has(tracer))
+				} else {
+					require.False(t, include.Has(tracer))
 				}
 			}
 		})
@@ -93,13 +85,4 @@ func availableOnArch(tracer tracerType) bool {
 	default:
 		panic("unsupported architecture")
 	}
-}
-
-func inListOfTracers(tracers []tracerType, tracer tracerType) bool {
-	for _, t := range tracers {
-		if t == tracer {
-			return true
-		}
-	}
-	return false
 }
