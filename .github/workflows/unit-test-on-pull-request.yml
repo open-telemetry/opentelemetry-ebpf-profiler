@@ -16,23 +16,15 @@ jobs:
       matrix:
         go: ["stable"]
     steps:
-    - name: Install dependencies
-      run: sudo apt-get install -y llvm clang dwz cmake curl unzip
-    - name: Set up Go ${{matrix.go}}
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{matrix.go}}
-        check-latest: true
-        cache-dependency-path: |
-          go.sum
-      id: go
-    - name: Check out
-      uses: actions/checkout@v4
-    - name: Linter
-      run: |
-        go version
-        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.56.2
-        make lint
+      - name: Clone code
+        uses: actions/checkout@v4
+      - name: Set up environment
+        uses: ./.github/workflows/env
+      - name: Linter
+        run: |
+          go version
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.56.2
+          make lint
 
   test:
     name: Test
@@ -43,63 +35,27 @@ jobs:
       matrix:
         go: ["stable"]
     steps:
-    - name: Install dependencies
-      run: sudo apt-get install -y llvm clang-16 dwz cmake curl unzip
-    - name: Install Zydis
-      shell: bash
-      run: |
-        cd /tmp
-        git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git
-        cd zydis
-        rm -rf build
-        mkdir build
-        cd build
-        cmake -DZYDIS_BUILD_EXAMPLES=OFF ..
-        make -j$(nproc)
-        sudo make install
-        cd zycore
-        sudo make install
-    - name: Set up Go ${{matrix.go}}
-      uses: actions/setup-go@v5
-      with:
-        go-version: ${{matrix.go}}
-        check-latest: true
-        cache-dependency-path: |
-          go.sum
-      id: go
-    - name: Check out
-      uses: actions/checkout@v4
-    - name: Build
-      run: |
-        echo $PATH
-        make test
-    - name: Tests
-      run: |
-        make test
+      - name: Clone code
+        uses: actions/checkout@v4
+      - name: Set up environment
+        uses: ./.github/workflows/env
+      - name: Build
+        run: |
+          echo $PATH
+          make test
+      - name: Tests
+        run: |
+          make test
 
   build-integration-test-binaries:
     name: Build integration test binaries
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Checkout code
+      - name: Clone code
         uses: actions/checkout@v4
-      - name: Install dependencies
-        run: sudo apt-get install -y llvm clang-16 dwz cmake curl unzip
-      - name: Install Zydis
-        shell: bash
-        run: |
-          cd /tmp
-          git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git
-          cd zydis
-          rm -rf build
-          mkdir build
-          cd build
-          cmake -DZYDIS_BUILD_EXAMPLES=OFF ..
-          make -j$(nproc)
-          sudo make install
-          cd zycore
-          sudo make install
+      - name: Set up environment
+        uses: ./.github/workflows/env
       - name: Prepare integration test binaries for qemu tests
         run: |
           make integration-test-binaries
@@ -115,15 +71,22 @@ jobs:
     needs: build-integration-test-binaries
     strategy:
       matrix:
-        kernel-version: [ "4.19.314", "5.4.276", "5.10.217", "5.15.159", "6.1.91", "6.6.31", "6.8.10", "6.9.1" ]
+        kernel-version:
+          - "4.19.314"
+          - "5.4.276"
+          - "5.10.217"
+          - "5.15.159"
+          - "6.1.91"
+          - "6.6.31"
+          - "6.8.10"
+          - "6.9.1"
     steps:
-      - name: Checkout code
+      - name: Clone code
         uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Set up environment
+        uses: ./.github/workflows/env
       - name: Install dependencies
         run: |
-          sudo apt-get -y update
           sudo apt-get -y install qemu-system-x86
           go install github.com/florianl/bluebox@v0.0.1
           sudo mv ~/go/bin/bluebox /usr/local/bin/.
@@ -133,7 +96,8 @@ jobs:
       - name: Fetch precompiled kernels
         run: |
           install -d ci-kernels
-          echo "FROM ghcr.io/cilium/ci-kernels:${{ matrix.kernel-version }}" | docker buildx build --quiet --pull --output="ci-kernels" -
+          echo "FROM ghcr.io/cilium/ci-kernels:${{ matrix.kernel-version }}" \
+            | docker buildx build --quiet --pull --output="ci-kernels" -
           mv ci-kernels/boot/ ci-kernels/${{ matrix.kernel-version }}/
       - name: Test on kernel ${{ matrix.kernel-version }}
         run: |
