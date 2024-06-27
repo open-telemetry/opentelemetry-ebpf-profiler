@@ -680,6 +680,10 @@ func getSampleAttributes(profile *profiles.Profile, i traceFramesCounts) []uint6
 	indices := make([]uint64, 0, 4)
 
 	addAttr := func(k attribute.Key, v string) {
+		if v == "" {
+			return
+		}
+
 		indices = append(indices, uint64(len(profile.AttributeTable)))
 		profile.AttributeTable = append(profile.AttributeTable, &common.KeyValue{
 			Key:   string(k),
