@@ -89,7 +89,7 @@ We created a desktop application called "devfiler" that allows visualizing the
 profiling agent's output locally, making it very convenient for development use. 
 devfiler spins up a local server that listens on `0.0.0.0:11000`.
 
-![Screenshot of devfiler UI](./docs/devfiler.png)
+![Screenshot of devfiler UI](./doc/devfiler.png)
 
 To run it, simply download and unpack the archive from the following URL:
 
@@ -205,11 +205,11 @@ We have two major representations for our stack traces.
 
 The raw trace format produced by our BPF unwinders:
 
-https://github.com/elastic/otel-profiling-agent/blob/385bcd5273fae22cdc2cf74bacae6a54fe6ce153/host/host.go#L54-L60
+https://github.com/elastic/otel-profiling-agent/blob/0945fe628da5c4854d55dd95e5dc4b4cf46a3c76/host/host.go#L60-L66
 
 The final format produced after additional processing in user-land:
 
-https://github.com/elastic/otel-profiling-agent/blob/385bcd5273fae22cdc2cf74bacae6a54fe6ce153/libpf/libpf.go#L452-L457
+https://github.com/elastic/otel-profiling-agent/blob/0945fe628da5c4854d55dd95e5dc4b4cf46a3c76/libpf/libpf.go#L458-L463
 
 The two might look rather similar at first glance, but there are some important differences:
 
@@ -321,7 +321,7 @@ enabled. Even with CGo the `.eh_frame` section will only contain information for
 a small subset of functions that are either written in C/C++ or part of the CGo
 runtime. For Go executables we extract the stack delta information from the
 Go-specific section called `.gopclntab`. In-depth documentation on the format is
-available in [a separate document](docs/gopclntab.md)).
+available in [a separate document](doc/gopclntab.md)).
 
 ### BPF components
 
@@ -439,14 +439,14 @@ it won't fill the whole width of the documentation page. Also make sure that
 
 </details>
 
-![bpf-trace-diagram](docs/bpf-trace.drawio.svg)
+![bpf-trace-diagram](doc/bpf-trace.drawio.svg)
 
 Our backend collector expects to receive trace information in a normalized and
 enriched format. This diagram below is relatively close to the data-structures
 that are actually sent over the network, minus the batching and domain-specific
 deduplication that we apply prior to sending it out.
 
-![net-trace-diagram](docs/network-trace.drawio.svg)
+![net-trace-diagram](doc/network-trace.drawio.svg)
 
 The diagram below provides a detailed overview on how the various components of
 the host agent interact to transform raw traces into the network format. It
@@ -454,7 +454,7 @@ is focused around our data structures and how data flows through them. Dotted
 lines represent indirect interaction with data structures, solid ones correspond
 to code flow. "UM" is short for "user mode".
 
-![trace-pipe-diagram](docs/trace-pipe.drawio.svg)
+![trace-pipe-diagram](doc/trace-pipe.drawio.svg)
 
 ### Testing strategy
 
