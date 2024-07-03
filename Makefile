@@ -67,8 +67,6 @@ ebpf:
 
 GOLANGCI_LINT_VERSION = "v1.59.1"
 lint: generate
-	# We don't want to build the tracers here, so we stub them for linting
-	touch support/ebpf/tracer.ebpf.x86
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --build-tags integration,linux --timeout 10m
 
