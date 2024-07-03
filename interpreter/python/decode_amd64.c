@@ -6,7 +6,7 @@
 
 //go:build amd64
 
-#include <Zydis/Zydis.h>
+#include "../../zydis/Zydis.h"
 #include "decode_amd64.h"
 
 #include <stdio.h>
@@ -24,7 +24,7 @@
 uint64_t decode_stub_argument(const uint8_t* code, size_t codesz, uint8_t argument_no,
     uint64_t rip_base, uint64_t memory_base) {
   ZydisDecoder decoder;
-  ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_ADDRESS_WIDTH_64);
+  ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
 
   // Argument number to x86_64 calling convention register mapping.
   ZydisRegister target_register64, target_register32;
@@ -47,9 +47,10 @@ uint64_t decode_stub_argument(const uint8_t* code, size_t codesz, uint8_t argume
 
   // Iterate instructions
   ZydisDecodedInstruction instr;
+  ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
   ZyanUSize instruction_offset = 0;
-  while (ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, code + instruction_offset,
-            codesz - instruction_offset, &instr))) {
+  while (ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder, code + instruction_offset,
+            codesz - instruction_offset, &instr, operands))) {
     instruction_offset += instr.length;
     if (instr.mnemonic == ZYDIS_MNEMONIC_CALL ||
         instr.mnemonic == ZYDIS_MNEMONIC_JMP) {
@@ -58,24 +59,24 @@ uint64_t decode_stub_argument(const uint8_t* code, size_t codesz, uint8_t argume
     }
     if (!(instr.mnemonic == ZYDIS_MNEMONIC_LEA ||
           instr.mnemonic == ZYDIS_MNEMONIC_MOV) ||
-        instr.operands[0].type != ZYDIS_OPERAND_TYPE_REGISTER ||
-        (instr.operands[0].reg.value != target_register64 &&
-         instr.operands[0].reg.value != target_register32)) {
+        operands[0].type != ZYDIS_OPERAND_TYPE_REGISTER ||
+        (operands[0].reg.value != target_register64 &&
+         operands[0].reg.value != target_register32)) {
       // Only "LEA/MOV target_reg, ..." meaningful
       continue;
     }
-    if (instr.operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
+    if (operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE) {
       // MOV target_reg, immediate
-      return instr.operands[1].imm.value.u;
+      return operands[1].imm.value.u;
     }
-    if (instr.operands[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
-        instr.operands[1].mem.disp.has_displacement) {
-      if (instr.operands[1].mem.base == ZYDIS_REGISTER_RIP) {
+    if (operands[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+        operands[1].mem.disp.has_displacement) {
+      if (operands[1].mem.base == ZYDIS_REGISTER_RIP) {
         // MOV/LEA target_reg, [RIP + XXXX]
-        return rip_base + instruction_offset + instr.operands[1].mem.disp.value;
+        return rip_base + instruction_offset + operands[1].mem.disp.value;
       } else if (memory_base) {
         // MOV/LEA target_reg, [REG + XXXX]
-        return memory_base + instr.operands[1].mem.disp.value;
+        return memory_base + operands[1].mem.disp.value;
       }
       continue;
     }

@@ -5,7 +5,7 @@
  */
 
 //go:build amd64
-#include <Zydis/Zydis.h>
+#include "../../zydis/Zydis.h"
 #include "decode_amd64.h"
 
 
@@ -16,16 +16,17 @@ int retrieveJITBufferPtr(const uint8_t * const code, const size_t codesize,
                          const uint64_t rip_base, uint64_t * const buffer_ptr,
                          uint64_t * const size_ptr) {
   ZydisDecoder decoder;
-  ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_ADDRESS_WIDTH_64);
+  ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
   ZydisDecodedInstruction instr;
+  ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
   ZyanUSize instruction_offset = 0;
 
   // These are to check that we've written to both pointers.
   int written_to_buffer_ptr = 0;
   int written_to_size_ptr = 0;
   
-  while(ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, code + instruction_offset,
-                                              codesize - instruction_offset, &instr))) {
+  while(ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder, code + instruction_offset,
+                                            codesize - instruction_offset, &instr, operands))) {
     instruction_offset += instr.length;    
     if(instr.mnemonic == ZYDIS_MNEMONIC_CALL || instr.mnemonic == ZYDIS_MNEMONIC_JMP) {
       // We should have returned by now, so return. 
@@ -35,22 +36,22 @@ int retrieveJITBufferPtr(const uint8_t * const code, const size_t codesize,
     
     // We only care about writing into rdi or rsi
     if(instr.mnemonic != ZYDIS_MNEMONIC_MOV
-       || instr.operands[0].type != ZYDIS_OPERAND_TYPE_REGISTER
-       || !(instr.operands[0].reg.value == ZYDIS_REGISTER_RDI ||
-            instr.operands[0].reg.value == ZYDIS_REGISTER_RSI)) {
+       || operands[0].type != ZYDIS_OPERAND_TYPE_REGISTER
+       || !(operands[0].reg.value == ZYDIS_REGISTER_RDI ||
+            operands[0].reg.value == ZYDIS_REGISTER_RSI)) {
       continue;
     }
 
-    if(instr.operands[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
-       instr.operands[1].mem.disp.has_displacement &&
-       instr.operands[1].mem.base == ZYDIS_REGISTER_RIP &&
-       instr.operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER) {
+    if(operands[1].type == ZYDIS_OPERAND_TYPE_MEMORY &&
+       operands[1].mem.disp.has_displacement &&
+       operands[1].mem.base == ZYDIS_REGISTER_RIP &&
+       operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER) {
       
-      if(instr.operands[0].reg.value == ZYDIS_REGISTER_RDI) {
-          *buffer_ptr = rip_base + instruction_offset + instr.operands[1].mem.disp.value;
+      if(operands[0].reg.value == ZYDIS_REGISTER_RDI) {
+          *buffer_ptr = rip_base + instruction_offset + operands[1].mem.disp.value;
           written_to_buffer_ptr = 1;
-      } else if (instr.operands[0].reg.value == ZYDIS_REGISTER_RSI) {
-          *size_ptr = rip_base + instruction_offset + instr.operands[1].mem.disp.value;
+      } else if (operands[0].reg.value == ZYDIS_REGISTER_RSI) {
+          *size_ptr = rip_base + instruction_offset + operands[1].mem.disp.value;
           written_to_size_ptr = 1;
       }
     }
@@ -71,14 +72,14 @@ int retrieveExecuteExJumpLabelAddress(const uint8_t * const code, const size_t c
   // The raison d'etre for this function is described in the php8 unwinding doc,
   // in particular in the "disassembling execute_ex" section.
   ZydisDecoder decoder;
-  ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_ADDRESS_WIDTH_64);
+  ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
   // Note: since we're recovering a theoretical return address we need to read "one ahead"
   // so that we can return properly
   ZydisDecodedInstruction instr;
   ZyanUSize instruction_offset = 0;
 
-  while(ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, code + instruction_offset,
-                                              codesize - instruction_offset, &instr))) {
+  while(ZYAN_SUCCESS(ZydisDecoderDecodeInstruction(&decoder, NULL, code + instruction_offset,
+                                                   codesize - instruction_offset, &instr))) {
     instruction_offset += instr.length;
     if(instr.mnemonic == ZYDIS_MNEMONIC_RET) {
       // Unexpected early return indicating end of the function
@@ -89,8 +90,8 @@ int retrieveExecuteExJumpLabelAddress(const uint8_t * const code, const size_t c
     // If the instruction is a jmp then we've found the right address.
     if(instr.mnemonic == ZYDIS_MNEMONIC_JMP) {
       // Read the next address.
-      if(ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, code + instruction_offset,
-                                               codesize - instruction_offset, &instr))) {
+      if(ZYAN_SUCCESS(ZydisDecoderDecodeInstruction(&decoder, NULL, code + instruction_offset,
+                                                    codesize - instruction_offset, &instr))) {
         *out = instruction_offset + rip_base;
         return NO_ERROR;
       } else {
@@ -113,11 +114,12 @@ int retrieveExecuteExJumpLabelAddress(const uint8_t * const code, const size_t c
 int retrieveZendVMKind(const uint8_t * const code, const size_t codesize,
                        uint64_t * const out) {
   ZydisDecoder decoder;
-  ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_ADDRESS_WIDTH_64);
+  ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
   ZydisDecodedInstruction instr;
+  ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
   ZyanUSize instruction_offset = 0;
-  while(ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, code + instruction_offset,
-                                              codesize - instruction_offset, &instr))) {
+  while(ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder, code + instruction_offset,
+                                            codesize - instruction_offset, &instr, operands))) {
     instruction_offset += instr.length;
     if(instr.mnemonic == ZYDIS_MNEMONIC_RET) {
       // Unexpected early return indicating end of the function
@@ -131,11 +133,11 @@ int retrieveZendVMKind(const uint8_t * const code, const size_t codesize,
     // destination register as both
     // EAX and RAX to account for possible changes in codegen.
     if(instr.mnemonic == ZYDIS_MNEMONIC_MOV &&
-       instr.operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE &&
-       instr.operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
-       ZydisRegisterGetLargestEnclosing(ZYDIS_MACHINE_MODE_LONG_64, instr.operands[0].reg.value) ==
+       operands[1].type == ZYDIS_OPERAND_TYPE_IMMEDIATE &&
+       operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+       ZydisRegisterGetLargestEnclosing(ZYDIS_MACHINE_MODE_LONG_64, operands[0].reg.value) ==
        ZYDIS_REGISTER_RAX) {
-      *out = instr.operands[1].imm.value.u;
+      *out = operands[1].imm.value.u;
       return NO_ERROR;
     }
   }
