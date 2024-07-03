@@ -16,7 +16,7 @@ import (
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/lpm"
 	"github.com/elastic/otel-profiling-agent/remotememory"
-	
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
