@@ -52,8 +52,7 @@ type ProcessManager struct {
 	// the unique on-disk identifier of the interpreter DSO.
 	interpreters map[util.PID]map[util.OnDiskFileIdentifier]interpreter.Instance
 
-	// pidToProcessInfo keeps track of the executable memory mappings in addressSpace
-	// for each pid.
+	// pidToProcessInfo keeps track of the executable memory mappings.
 	pidToProcessInfo map[util.PID]*processInfo
 
 	// exitEvents records the pid exit time and is a list of pending exit events to be handled.
@@ -138,15 +137,38 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 	}
 }
 
-// addressSpace represents the address space of a process. It maps the known start addresses
-// of executable mappings to the corresponding mappedFile information.
-type addressSpace map[libpf.Address]Mapping
-
 // processInfo contains information about the executable mappings
 // and Thread Specific Data of a process.
 type processInfo struct {
-	// executable mappings
-	mappings addressSpace
+	// executable mappings keyed by start address.
+	mappings map[libpf.Address]*Mapping
+	// executable mappings keyed by host file ID.
+	mappingsByFileID map[host.FileID]map[libpf.Address]*Mapping
 	// C-library Thread Specific Data information
 	tsdInfo *tpbase.TSDInfo
+}
+
+// addMapping adds a mapping to the internal indices.
+func (pi *processInfo) addMapping(m Mapping) {
+	p := &m
+	pi.mappings[m.Vaddr] = p
+
+	inner := pi.mappingsByFileID[m.FileID]
+	if inner == nil {
+		inner = make(map[libpf.Address]*Mapping, 1)
+		pi.mappingsByFileID[m.FileID] = inner
+	}
+	inner[m.Vaddr] = p
+}
+
+// removeMapping removes a mapping from the internal indices.
+func (pi *processInfo) removeMapping(m *Mapping) {
+	delete(pi.mappings, m.Vaddr)
+
+	if inner, ok := pi.mappingsByFileID[m.FileID]; ok {
+		delete(inner, m.Vaddr)
+		if len(inner) != 0 {
+			delete(pi.mappingsByFileID, m.FileID)
+		}
+	}
 }
