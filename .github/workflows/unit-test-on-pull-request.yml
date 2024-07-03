@@ -18,20 +18,6 @@ jobs:
     steps:
     - name: Install dependencies
       run: sudo apt-get install -y llvm clang dwz cmake curl unzip
-    - name: Install Zydis
-      shell: bash
-      run: |
-        cd /tmp
-        git clone --depth 1 --branch v3.1.0 --recursive https://github.com/zyantific/zydis.git
-        cd zydis
-        rm -rf build
-        mkdir build
-        cd build
-        cmake -DZYDIS_BUILD_EXAMPLES=OFF ..
-        make -j$(nproc)
-        sudo make install
-        cd zycore
-        sudo make install
     - name: Set up Go ${{matrix.go}}
       uses: actions/setup-go@v5
       with:

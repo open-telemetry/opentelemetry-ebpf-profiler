@@ -13,10 +13,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"unsafe"
+
+	_ "github.com/elastic/otel-profiling-agent/zydis" // links Zydis
 )
 
 // #cgo CFLAGS: -g -Wall
-// #cgo LDFLAGS: -lZydis
 // #include <stdlib.h>
 // #include "fsbase_decode_amd64.h"
 import "C"

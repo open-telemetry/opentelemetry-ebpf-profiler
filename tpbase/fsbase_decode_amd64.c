@@ -6,7 +6,7 @@
 
 //go:build amd64
 
-#include <Zydis/Zydis.h>
+#include "../zydis/Zydis.h"
 #include "fsbase_decode_amd64.h"
 
 
@@ -31,16 +31,18 @@
 // => we can then subtract 2*sizeof(unsigned long) to find the fsbase offset.
 uint32_t decode_fsbase_aout_dump_debugregs(const uint8_t* code, size_t codesz) {
   ZydisDecoder decoder;
-  ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_ADDRESS_WIDTH_64);
+  ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
 
   ZydisDecodedInstruction instr;
+  ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
   ZydisRegister target_register = ZYDIS_REGISTER_NONE;
 
   ZyanUSize instruction_offset = 0;
 
   // 1) Find the first `mov` with a `gs` base. By inspection of the C code, we assume it loads the address of the
   //    current `task_struct`.
-  while (ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, code + instruction_offset, codesz - instruction_offset, &instr))) {
+  while (ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder, code + instruction_offset,
+      codesz - instruction_offset, &instr, operands))) {
     instruction_offset += instr.length;
 
     if (! (instr.attributes & ZYDIS_ATTRIB_HAS_SEGMENT_GS)) {
@@ -49,11 +51,11 @@ uint32_t decode_fsbase_aout_dump_debugregs(const uint8_t* code, size_t codesz) {
     if (instr.mnemonic != ZYDIS_MNEMONIC_MOV) {
       continue;
     }
-    if (instr.operands[0].type != ZYDIS_OPERAND_TYPE_REGISTER) {
+    if (operands[0].type != ZYDIS_OPERAND_TYPE_REGISTER) {
       continue;
     }
     // This instruction loads the address of the current task_struct into `target_register`.
-    target_register = instr.operands[0].reg.value;
+    target_register = operands[0].reg.value;
     break;
   }
 
@@ -68,47 +70,48 @@ uint32_t decode_fsbase_aout_dump_debugregs(const uint8_t* code, size_t codesz) {
   //    the result of a LEA that uses `target_register` as base.
   //    We assume that `mov` computes the address of `task_struct.thread.ptrace_bps` based on the `task_struct` address
   //    we expect to have loaded in 1).
-  while (ZYAN_SUCCESS(ZydisDecoderDecodeBuffer(&decoder, code + instruction_offset, codesz - instruction_offset, &instr))) {
+  while (ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder, code + instruction_offset,
+      codesz - instruction_offset, &instr, operands))) {
     instruction_offset += instr.length;
 
     // Some compilers will emit LEA+MOV instead of MOV.
     // In this case, we need to add offsets from both.
     if (instr.mnemonic == ZYDIS_MNEMONIC_LEA) {
-      if (instr.operands[1].type != ZYDIS_OPERAND_TYPE_MEMORY) {
+      if (operands[1].type != ZYDIS_OPERAND_TYPE_MEMORY) {
         continue;
       }
-      if (instr.operands[1].mem.base != target_register) {
+      if (operands[1].mem.base != target_register) {
         continue;
       }
       if (lea_offset != 0) {
         // We already found a matching LEA. A second one means we went too far.
         return 0;
       }
-      if (! instr.operands[1].mem.disp.has_displacement) {
+      if (! operands[1].mem.disp.has_displacement) {
         return 0;
       }
-      if (instr.operands[0].type != ZYDIS_OPERAND_TYPE_REGISTER) {
+      if (operands[0].type != ZYDIS_OPERAND_TYPE_REGISTER) {
         return 0;
       }
       // Update target register to be this LEA's target
-      target_register = instr.operands[0].reg.value;
+      target_register = operands[0].reg.value;
 
-      lea_offset = instr.operands[1].mem.disp.value;
+      lea_offset = operands[1].mem.disp.value;
       continue;
     }
 
     if (instr.mnemonic == ZYDIS_MNEMONIC_MOV) {
-      if (instr.operands[1].type != ZYDIS_OPERAND_TYPE_MEMORY) {
+      if (operands[1].type != ZYDIS_OPERAND_TYPE_MEMORY) {
         continue;
       }
-      if (instr.operands[1].mem.base != target_register) {
+      if (operands[1].mem.base != target_register) {
         continue;
       }
-      if (! instr.operands[1].mem.disp.has_displacement) {
+      if (! operands[1].mem.disp.has_displacement) {
         return 0;
       }
       // The displacement is the offset of ptrace_bps in task_struct, minus any offset from a previous LEA instruction.
-      mov_offset = instr.operands[1].mem.disp.value;
+      mov_offset = operands[1].mem.disp.value;
       break;
     }
   }
