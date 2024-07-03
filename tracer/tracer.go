@@ -661,9 +661,13 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 		t.processManager.FileIDMapper.Set(hostFileID, fileID)
 
 		trace.Frames[i] = host.Frame{
-			File:          hostFileID,
-			Lineno:        libpf.AddressOrLineno(addr),
-			Type:          libpf.KernelFrame,
+			File:   hostFileID,
+			Lineno: libpf.AddressOrLineno(addr),
+			Type:   libpf.KernelFrame,
+
+			// For all kernel frames, the kernel unwinder will always produce a
+			// frame in which the RIP is after a call instruction (it hides the
+			// top frames that leads to the unwinder itself).
 			ReturnAddress: true,
 		}
 

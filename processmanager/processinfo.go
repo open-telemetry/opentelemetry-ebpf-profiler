@@ -85,8 +85,9 @@ func (pm *ProcessManager) updatePidInformation(pid util.PID, m *Mapping) (bool, 
 		// We don't have information for this pid, so we first need to
 		// allocate the embedded map for this process.
 		info = &processInfo{
-			mappings: make(map[libpf.Address]Mapping),
-			tsdInfo:  nil,
+			mappings:         make(map[libpf.Address]*Mapping),
+			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
+			tsdInfo:          nil,
 		}
 		pm.pidToProcessInfo[pid] = info
 
@@ -99,13 +100,13 @@ func (pm *ProcessManager) updatePidInformation(pid util.PID, m *Mapping) (bool, 
 		}
 		pm.pidPageToMappingInfoSize++
 	} else if mf, ok := info.mappings[m.Vaddr]; ok {
-		if *m == mf {
+		if *m == *mf {
 			// We try to update our information about a particular mapping we already know about.
 			return true, nil
 		}
 	}
 
-	info.mappings[m.Vaddr] = *m
+	info.addMapping(*m)
 
 	prefixes, err := lpm.CalculatePrefixList(uint64(m.Vaddr), uint64(m.Vaddr)+m.Length)
 	if err != nil {
@@ -154,7 +155,7 @@ func (pm *ProcessManager) deletePIDAddress(pid util.PID, addr libpf.Address) err
 	}
 
 	pm.pidPageToMappingInfoSize -= uint64(deleted)
-	delete(info.mappings, addr)
+	info.removeMapping(mapping)
 
 	return pm.eim.RemoveOrDecRef(mapping.FileID)
 }
