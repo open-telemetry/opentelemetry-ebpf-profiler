@@ -62,8 +62,6 @@ ebpf:
 	$(MAKE) -j$(shell nproc) -C support/ebpf
 
 lint: generate
-	# We don't want to build the tracers here, so we stub them for linting
-	touch support/ebpf/tracer.ebpf.x86
 	golangci-lint run --timeout 10m
 
 test: generate ebpf test-deps
