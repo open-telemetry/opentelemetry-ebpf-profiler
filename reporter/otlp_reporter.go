@@ -58,14 +58,17 @@ type funcInfo struct {
 
 // traceFramesCounts holds known information about a trace.
 type traceFramesCounts struct {
-	files          []libpf.FileID
-	linenos        []libpf.AddressOrLineno
-	frameTypes     []libpf.FrameType
-	comm           string
-	podName        string
-	containerName  string
-	apmServiceName string
-	timestamps     []uint64 // in nanoseconds
+	files              []libpf.FileID
+	linenos            []libpf.AddressOrLineno
+	frameTypes         []libpf.FrameType
+	mappingStarts      []libpf.Address
+	mappingEnds        []libpf.Address
+	mappingFileOffsets []uint64
+	comm               string
+	podName            string
+	containerName      string
+	apmServiceName     string
+	timestamps         []uint64 // in nanoseconds
 }
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
@@ -131,14 +134,17 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 	}
 
 	(*traceEvents)[trace.Hash] = traceFramesCounts{
-		files:          trace.Files,
-		linenos:        trace.Linenos,
-		frameTypes:     trace.FrameTypes,
-		comm:           comm,
-		podName:        podName,
-		containerName:  containerName,
-		apmServiceName: apmServiceName,
-		timestamps:     []uint64{uint64(timestamp)},
+		files:              trace.Files,
+		linenos:            trace.Linenos,
+		frameTypes:         trace.FrameTypes,
+		mappingStarts:      trace.MappingStart,
+		mappingEnds:        trace.MappingEnd,
+		mappingFileOffsets: trace.MappingFileOffsets,
+		comm:               comm,
+		podName:            podName,
+		containerName:      containerName,
+		apmServiceName:     apmServiceName,
+		timestamps:         []uint64{uint64(timestamp)},
 	}
 }
 
@@ -522,10 +528,10 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS uint64, 
 
 					profile.Mapping = append(profile.Mapping, &profiles.Mapping{
 						// Id - Optional element we do not use.
-						// MemoryStart - Optional element we do not use.
-						// MemoryLImit - Optional element we do not use.
-						FileOffset: uint64(traceInfo.linenos[i]),
-						Filename:   int64(getStringMapIndex(stringMap, fileName)),
+						MemoryStart: uint64(traceInfo.mappingStarts[i]),
+						MemoryLimit: uint64(traceInfo.mappingEnds[i]),
+						FileOffset:  traceInfo.mappingFileOffsets[i],
+						Filename:    int64(getStringMapIndex(stringMap, fileName)),
 						BuildId: int64(getStringMapIndex(stringMap,
 							traceInfo.files[i].StringNoQuotes())),
 						BuildIdKind: *profiles.BuildIdKind_BUILD_ID_BINARY_HASH.Enum(),
