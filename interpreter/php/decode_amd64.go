@@ -13,10 +13,10 @@ import (
 	"unsafe"
 
 	"github.com/elastic/otel-profiling-agent/libpf"
+	_ "github.com/elastic/otel-profiling-agent/zydis" // links Zydis
 )
 
 // #cgo CFLAGS: -g -Wall
-// #cgo LDFLAGS: -lZydis
 // #include "decode_amd64.h"
 // #include "../../support/ebpf/types.h"
 import "C"
