@@ -19,6 +19,7 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/elastic/otel-profiling-agent/containermetadata"
+	"github.com/elastic/otel-profiling-agent/env"
 	"github.com/elastic/otel-profiling-agent/vc"
 	"golang.org/x/sys/unix"
 
@@ -146,6 +147,11 @@ func mainWithExitCode() exitCode {
 		return exitParseError
 	}
 
+	if argEnvironmentType == "" && argMachineID != "" {
+		log.Error("You can only specify the machine ID if you also provide the environment")
+		return exitParseError
+	}
+
 	if argVerboseMode {
 		log.SetLevel(log.DebugLevel)
 		// Dump the arguments in debug mode.
@@ -155,6 +161,12 @@ func mainWithExitCode() exitCode {
 	startTime := time.Now()
 	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
 		vc.Version(), vc.Revision(), vc.BuildTimestamp())
+
+	environment, err := env.NewEnvironment(argEnvironmentType, argMachineID)
+	if err != nil {
+		log.Errorf("Failed to create environment: %v", err)
+		return exitFailure
+	}
 
 	if !argNoKernelVersionCheck {
 		var major, minor, patch uint32
@@ -230,8 +242,7 @@ func mainWithExitCode() exitCode {
 		BuildTimestamp:         vc.BuildTimestamp(),
 		ProjectID:              uint32(argProjectID),
 		CacheDirectory:         argCacheDirectory,
-		EnvironmentType:        argEnvironmentType,
-		MachineID:              argMachineID,
+		HostID:                 environment.HostID(),
 		SecretToken:            argSecretToken,
 		Tags:                   argTags,
 		ValidatedTags:          validatedTags,
@@ -260,6 +271,7 @@ func mainWithExitCode() exitCode {
 		log.Errorf("Failed to set configuration: %s", err)
 		return exitFailure
 	}
+
 	// Start periodic synchronization of monotonic clock
 	config.StartMonotonicSync(mainCtx)
 	log.Debugf("Done setting configuration")
@@ -274,12 +286,6 @@ func mainWithExitCode() exitCode {
 		return exitFailure
 	}
 
-	if err = config.GenerateNewHostIDIfNecessary(); err != nil {
-		msg := fmt.Sprintf("Failed to generate new host ID: %s", err)
-		log.Error(msg)
-		return exitFailure
-	}
-
 	log.Infof("Assigned ProjectID: %d HostID: %d", config.ProjectID(), config.HostID())
 
 	// Scale the queues that report traces or information related to traces
@@ -287,7 +293,7 @@ func mainWithExitCode() exitCode {
 	tracesQSize := max(1024,
 		uint32(runtime.NumCPU()*int(argReporterInterval.Seconds()*2)*argSamplesPerSecond))
 
-	metadataCollector := hostmetadata.NewCollector(argCollAgentAddr)
+	metadataCollector := hostmetadata.NewCollector(argCollAgentAddr, environment)
 
 	// TODO: Maybe abort execution if (some) metadata can not be collected
 	hostMetadataMap = metadataCollector.GetHostMetadata()
