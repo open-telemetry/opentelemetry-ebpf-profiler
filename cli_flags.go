@@ -81,106 +81,113 @@ var (
 	sendErrorFramesHelp  = "Send error frames (devfiler only, breaks Kibana)"
 )
 
-// Variables for command line arguments
-var (
-	argEnablePProf            bool
-	argSaveCPUProfile         bool
-	argNoKernelVersionCheck   bool
-	argCollAgentAddr          string
-	argCopyright              bool
-	argVersion                bool
-	argTracers                string
-	argVerboseMode            bool
-	argProjectID              uint
-	argCacheDirectory         string
-	argConfigFile             string
-	argSecretToken            string
-	argDisableTLS             bool
-	argTags                   string
-	argBpfVerifierLogLevel    uint
-	argBpfVerifierLogSize     int
-	argMapScaleFactor         uint
-	argProbabilisticThreshold uint
-	argProbabilisticInterval  time.Duration
-	argPprofAddr              string
-	argEnvironmentType        string
-	argMachineID              string
-	argMonitorInterval        time.Duration
-	argReporterInterval       time.Duration
-	argSamplesPerSecond       int
-	argSendErrorFrames        bool
-)
+type arguments struct {
+	bpfVerifierLogLevel    uint
+	bpfVerifierLogSize     int
+	cacheDirectory         string
+	collAgentAddr          string
+	configFile             string
+	copyright              bool
+	disableTLS             bool
+	enablePProf            bool
+	environmentType        string
+	machineID              string
+	mapScaleFactor         uint
+	monitorInterval        time.Duration
+	noKernelVersionCheck   bool
+	pprofAddr              string
+	probabilisticInterval  time.Duration
+	probabilisticThreshold uint
+	projectID              uint
+	reporterInterval       time.Duration
+	samplesPerSecond       int
+	saveCPUProfile         bool
+	secretToken            string
+	sendErrorFrames        bool
+	tags                   string
+	tracers                string
+	verboseMode            bool
+	version                bool
+
+	fs *flag.FlagSet
+}
 
 // Package-scope variable, so that conditionally compiled other components can refer
 // to the same flagset.
-var fs = flag.NewFlagSet("otel-profiling-agent", flag.ExitOnError)
 
-func parseArgs() error {
+func parseArgs() (*arguments, error) {
+	var args arguments
+
+	fs := flag.NewFlagSet("otel-profiling-agent", flag.ExitOnError)
+
 	// Please keep the parameters ordered alphabetically in the source-code.
-	fs.UintVar(&argBpfVerifierLogLevel, "bpf-log-level", 0, bpfVerifierLogLevelHelp)
-	fs.IntVar(&argBpfVerifierLogSize, "bpf-log-size", cebpf.DefaultVerifierLogSize,
+	fs.UintVar(&args.bpfVerifierLogLevel, "bpf-log-level", 0, bpfVerifierLogLevelHelp)
+	fs.IntVar(&args.bpfVerifierLogSize, "bpf-log-size", cebpf.DefaultVerifierLogSize,
 		bpfVerifierLogSizeHelp)
 
-	fs.StringVar(&argCacheDirectory, "cache-directory", "/var/cache/otel/profiling-agent",
+	fs.StringVar(&args.cacheDirectory, "cache-directory", "/var/cache/otel/profiling-agent",
 		cacheDirectoryHelp)
-	fs.StringVar(&argCollAgentAddr, "collection-agent", "", collAgentAddrHelp)
-	fs.StringVar(&argConfigFile, "config", "/etc/otel/profiling-agent/agent.conf",
+	fs.StringVar(&args.collAgentAddr, "collection-agent", "", collAgentAddrHelp)
+	fs.StringVar(&args.configFile, "config", "/etc/otel/profiling-agent/agent.conf",
 		configFileHelp)
-	fs.BoolVar(&argCopyright, "copyright", false, copyrightHelp)
+	fs.BoolVar(&args.copyright, "copyright", false, copyrightHelp)
 
-	fs.BoolVar(&argDisableTLS, "disable-tls", false, disableTLSHelp)
+	fs.BoolVar(&args.disableTLS, "disable-tls", false, disableTLSHelp)
 
-	fs.BoolVar(&argEnablePProf, "enable-pprof", false, enablePProfHelp)
+	fs.BoolVar(&args.enablePProf, "enable-pprof", false, enablePProfHelp)
 
-	fs.StringVar(&argEnvironmentType, "environment-type", defaultArgEnvironmentType,
+	fs.StringVar(&args.environmentType, "environment-type", defaultArgEnvironmentType,
 		environmentTypeHelp)
 
-	fs.StringVar(&argMachineID, "machine-id", defaultArgMachineID, machineIDHelp)
+	fs.StringVar(&args.machineID, "machine-id", defaultArgMachineID, machineIDHelp)
 
-	fs.UintVar(&argMapScaleFactor, "map-scale-factor",
+	fs.UintVar(&args.mapScaleFactor, "map-scale-factor",
 		defaultArgMapScaleFactor, mapScaleFactorHelp)
 
-	fs.DurationVar(&argMonitorInterval, "monitor-interval", defaultArgMonitorInterval,
+	fs.DurationVar(&args.monitorInterval, "monitor-interval", defaultArgMonitorInterval,
 		monitorIntervalHelp)
 
-	fs.BoolVar(&argNoKernelVersionCheck, "no-kernel-version-check", false, noKernelVersionCheckHelp)
+	fs.BoolVar(&args.noKernelVersionCheck, "no-kernel-version-check", false,
+		noKernelVersionCheckHelp)
 
-	fs.UintVar(&argProjectID, "project-id", 1, projectIDHelp)
+	fs.UintVar(&args.projectID, "project-id", 1, projectIDHelp)
 
-	fs.StringVar(&argPprofAddr, "pprof", "", pprofHelp)
+	fs.StringVar(&args.pprofAddr, "pprof", "", pprofHelp)
 
-	fs.DurationVar(&argProbabilisticInterval, "probabilistic-interval",
+	fs.DurationVar(&args.probabilisticInterval, "probabilistic-interval",
 		defaultProbabilisticInterval, probabilisticIntervalHelp)
-	fs.UintVar(&argProbabilisticThreshold, "probabilistic-threshold",
+	fs.UintVar(&args.probabilisticThreshold, "probabilistic-threshold",
 		defaultProbabilisticThreshold, probabilisticThresholdHelp)
 
-	fs.DurationVar(&argReporterInterval, "reporter-interval", defaultArgReporterInterval,
+	fs.DurationVar(&args.reporterInterval, "reporter-interval", defaultArgReporterInterval,
 		reporterIntervalHelp)
 
-	fs.IntVar(&argSamplesPerSecond, "samples-per-second", defaultArgSamplesPerSecond,
+	fs.IntVar(&args.samplesPerSecond, "samples-per-second", defaultArgSamplesPerSecond,
 		samplesPerSecondHelp)
 
-	fs.BoolVar(&argSaveCPUProfile, "save-cpuprofile", false, saveCPUProfileHelp)
+	fs.BoolVar(&args.saveCPUProfile, "save-cpuprofile", false, saveCPUProfileHelp)
 
 	// Using a default value here to simplify OTEL review process.
-	fs.StringVar(&argSecretToken, "secret-token", "abc123", secretTokenHelp)
+	fs.StringVar(&args.secretToken, "secret-token", "abc123", secretTokenHelp)
 
-	fs.BoolVar(&argSendErrorFrames, "send-error-frames", defaultArgSendErrorFrames,
+	fs.BoolVar(&args.sendErrorFrames, "send-error-frames", defaultArgSendErrorFrames,
 		sendErrorFramesHelp)
 
-	fs.StringVar(&argTags, "tags", "", tagsHelp)
-	fs.StringVar(&argTracers, "t", "all", "Shorthand for -tracers.")
-	fs.StringVar(&argTracers, "tracers", "all", tracersHelp)
+	fs.StringVar(&args.tags, "tags", "", tagsHelp)
+	fs.StringVar(&args.tracers, "t", "all", "Shorthand for -tracers.")
+	fs.StringVar(&args.tracers, "tracers", "all", tracersHelp)
 
-	fs.BoolVar(&argVerboseMode, "v", false, "Shorthand for -verbose.")
-	fs.BoolVar(&argVerboseMode, "verbose", false, verboseModeHelp)
-	fs.BoolVar(&argVersion, "version", false, versionHelp)
+	fs.BoolVar(&args.verboseMode, "v", false, "Shorthand for -verbose.")
+	fs.BoolVar(&args.verboseMode, "verbose", false, verboseModeHelp)
+	fs.BoolVar(&args.version, "version", false, versionHelp)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()
 	}
 
-	err := ff.Parse(fs, os.Args[1:],
+	args.fs = fs
+
+	return &args, ff.Parse(fs, os.Args[1:],
 		ff.WithEnvVarPrefix("OTEL_PROFILING_AGENT"),
 		ff.WithConfigFileFlag("config"),
 		ff.WithConfigFileParser(ff.PlainParser),
@@ -189,13 +196,11 @@ func parseArgs() error {
 		ff.WithIgnoreUndefined(true),
 		ff.WithAllowMissingConfigFile(true),
 	)
-
-	return err
 }
 
-func dumpArgs() {
+func (args *arguments) dump() {
 	log.Debug("Config:")
-	fs.VisitAll(func(f *flag.Flag) {
+	args.fs.VisitAll(func(f *flag.Flag) {
 		log.Debug(fmt.Sprintf("%s: %v", f.Name, f.Value))
 	})
 }
