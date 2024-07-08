@@ -95,14 +95,7 @@ func main() {
 func mainWithExitCode() exitCode {
 	args, err := parseArgs()
 	if err != nil {
-		log.Errorf("Failure to parse arguments: %s", err)
-		return exitParseError
-	}
-
-	if args.mapScaleFactor > 8 {
-		log.Errorf("eBPF map scaling factor %d exceeds limit (max: %d)",
-			args.mapScaleFactor, maxArgMapScaleFactor)
-		return exitParseError
+		return parseError("Failure to parse arguments: %v", err)
 	}
 
 	if args.copyright {
@@ -115,9 +108,14 @@ func mainWithExitCode() exitCode {
 		return exitSuccess
 	}
 
-	if args.bpfVerifierLogLevel > 2 {
-		log.Errorf("Invalid eBPF verifier log level: %d", args.bpfVerifierLogLevel)
-		return exitParseError
+	if args.verboseMode {
+		log.SetLevel(log.DebugLevel)
+		// Dump the arguments in debug mode.
+		args.dump()
+	}
+
+	if code := sanityCheck(args); code != exitSuccess {
+		return code
 	}
 
 	// Context to drive main goroutine and the Tracer monitors.
@@ -134,30 +132,6 @@ func mainWithExitCode() exitCode {
 		}()
 	}
 
-	// Sanity check for probabilistic profiling arguments
-	if args.probabilisticInterval < 1*time.Minute || args.probabilisticInterval > 5*time.Minute {
-		log.Error("Invalid argument for probabilistic-interval: use " +
-			"a duration between 1 and 5 minutes")
-		return exitParseError
-	}
-	if args.probabilisticThreshold < 1 ||
-		args.probabilisticThreshold > tracer.ProbabilisticThresholdMax {
-		log.Errorf("Invalid argument for probabilistic-threshold. Value "+
-			"should be between 1 and %d", tracer.ProbabilisticThresholdMax)
-		return exitParseError
-	}
-
-	if args.environmentType == "" && args.machineID != "" {
-		log.Error("You can only specify the machine ID if you also provide the environment")
-		return exitParseError
-	}
-
-	if args.verboseMode {
-		log.SetLevel(log.DebugLevel)
-		// Dump the arguments in debug mode.
-		args.dump()
-	}
-
 	startTime := time.Now()
 	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
 		vc.Version(), vc.Revision(), vc.BuildTimestamp())
@@ -168,42 +142,12 @@ func mainWithExitCode() exitCode {
 		return exitFailure
 	}
 
-	if !args.noKernelVersionCheck {
-		var major, minor, patch uint32
-		major, minor, patch, err = tracer.GetCurrentKernelVersion()
-		if err != nil {
-			log.Errorf("Failed to get kernel version: %v", err)
-			return exitFailure
-		}
-
-		var minMajor, minMinor uint32
-		switch runtime.GOARCH {
-		case "amd64":
-			minMajor, minMinor = 4, 15
-		case "arm64":
-			// Older ARM64 kernel versions have broken bpf_probe_read.
-			// https://github.com/torvalds/linux/commit/6ae08ae3dea2cfa03dd3665a3c8475c2d429ef47
-			minMajor, minMinor = 5, 5
-		default:
-			log.Errorf("unsupported architecture: %s", runtime.GOARCH)
-			return exitFailure
-		}
-
-		if major < minMajor || (major == minMajor && minor < minMinor) {
-			log.Errorf("Host Agent requires kernel version "+
-				"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
-			return exitFailure
-		}
-	}
-
 	if err = tracer.ProbeBPFSyscall(); err != nil {
-		log.Errorf(fmt.Sprintf("Failed to probe eBPF syscall: %v", err))
-		return exitFailure
+		return failure(fmt.Sprintf("Failed to probe eBPF syscall: %v", err))
 	}
 
 	if err = tracer.ProbeTracepoint(); err != nil {
-		log.Errorf("Failed to probe tracepoint: %v", err)
-		return exitFailure
+		return failure("Failed to probe tracepoint: %v", err)
 	}
 
 	validatedTags := hostmeta.ValidateTags(args.tags)
@@ -212,8 +156,7 @@ func mainWithExitCode() exitCode {
 	var presentCores uint16
 	presentCores, err = hostmeta.PresentCPUCores()
 	if err != nil {
-		log.Errorf("Failed to read CPU file: %v", err)
-		return exitFailure
+		return failure("Failed to read CPU file: %v", err)
 	}
 
 	// Retrieve host metadata that will be stored with the HA config, and
@@ -267,8 +210,7 @@ func mainWithExitCode() exitCode {
 		ProbabilisticThreshold: args.probabilisticThreshold,
 	}
 	if err = config.SetConfiguration(&conf); err != nil {
-		log.Errorf("Failed to set configuration: %s", err)
-		return exitFailure
+		return failure("Failed to set configuration: %v", err)
 	}
 
 	// Start periodic synchronization of monotonic clock
@@ -280,9 +222,7 @@ func mainWithExitCode() exitCode {
 	log.Debugf("Determining tracers to include")
 	includeTracers, err := config.ParseTracers(args.tracers)
 	if err != nil {
-		msg := fmt.Sprintf("Failed to parse the included tracers: %s", err)
-		log.Error(msg)
-		return exitFailure
+		return failure("Failed to parse the included tracers: %s", err)
 	}
 
 	log.Infof("Assigned ProjectID: %d HostID: %d", config.ProjectID(), config.HostID())
@@ -322,9 +262,7 @@ func mainWithExitCode() exitCode {
 		Times:                   times,
 	})
 	if err != nil {
-		msg := fmt.Sprintf("Failed to start reporting: %v", err)
-		log.Error(msg)
-		return exitFailure
+		return failure("Failed to start reporting: %v", err)
 	}
 
 	metrics.SetReporter(rep)
@@ -337,10 +275,7 @@ func mainWithExitCode() exitCode {
 	// Start agent specific metric retrieval and report them every second.
 	agentMetricCancel, agentErr := agentmetrics.Start(mainCtx, 1*time.Second)
 	if agentErr != nil {
-		msg := fmt.Sprintf("Error starting the agent specific "+
-			"metric collection: %s", agentErr)
-		log.Error(msg)
-		return exitFailure
+		return failure("Error starting the agent specific metric collection: %v", agentErr)
 	}
 	defer agentMetricCancel()
 	// Start reporter metric reporting with 60 second intervals.
@@ -349,9 +284,7 @@ func mainWithExitCode() exitCode {
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(mainCtx, rep, times, includeTracers, !args.sendErrorFrames)
 	if err != nil {
-		msg := fmt.Sprintf("Failed to load eBPF tracer: %s", err)
-		log.Error(msg)
-		return exitFailure
+		return failure("Failed to load eBPF tracer: %v", err)
 	}
 	log.Printf("eBPF tracer loaded")
 	defer trc.Close()
@@ -366,9 +299,7 @@ func mainWithExitCode() exitCode {
 
 	// Attach our tracer to the perf event
 	if err := trc.AttachTracer(args.samplesPerSecond); err != nil {
-		msg := fmt.Sprintf("Failed to attach to perf event: %v", err)
-		log.Error(msg)
-		return exitFailure
+		return failure("Failed to attach to perf event: %v", err)
 	}
 	log.Info("Attached tracer program")
 
@@ -378,16 +309,12 @@ func mainWithExitCode() exitCode {
 		log.Printf("Enabled probabilistic profiling")
 	} else {
 		if err := trc.EnableProfiling(); err != nil {
-			msg := fmt.Sprintf("Failed to enable perf events: %v", err)
-			log.Error(msg)
-			return exitFailure
+			return failure("Failed to enable perf events: %v", err)
 		}
 	}
 
 	if err := trc.AttachSchedMonitor(); err != nil {
-		msg := fmt.Sprintf("Failed to attach scheduler monitor: %v", err)
-		log.Error(msg)
-		return exitFailure
+		return failure("Failed to attach scheduler monitor: %v", err)
 	}
 
 	// This log line is used in our system tests to verify if that the agent has started. So if you
@@ -395,9 +322,7 @@ func mainWithExitCode() exitCode {
 	log.Printf("Attached sched monitor")
 
 	if err := startTraceHandling(mainCtx, rep, times, trc); err != nil {
-		msg := fmt.Sprintf("Failed to start trace handling: %v", err)
-		log.Error(msg)
-		return exitFailure
+		return failure("Failed to start trace handling: %v", err)
 	}
 
 	// Block waiting for a signal to indicate the program should terminate
@@ -408,4 +333,66 @@ func mainWithExitCode() exitCode {
 
 	log.Info("Exiting ...")
 	return exitSuccess
+}
+
+func sanityCheck(args *arguments) exitCode {
+	if args.environmentType == "" && args.machineID != "" {
+		return parseError("You can only specify the machine ID if you also provide the environment")
+	}
+
+	if args.mapScaleFactor > 8 {
+		return parseError("eBPF map scaling factor %d exceeds limit (max: %d)",
+			args.mapScaleFactor, maxArgMapScaleFactor)
+	}
+
+	if args.bpfVerifierLogLevel > 2 {
+		return parseError("Invalid eBPF verifier log level: %d", args.bpfVerifierLogLevel)
+	}
+
+	if args.probabilisticInterval < 1*time.Minute || args.probabilisticInterval > 5*time.Minute {
+		return parseError("Invalid argument for probabilistic-interval: use " +
+			"a duration between 1 and 5 minutes")
+	}
+
+	if args.probabilisticThreshold < 1 ||
+		args.probabilisticThreshold > tracer.ProbabilisticThresholdMax {
+		return parseError("Invalid argument for probabilistic-threshold. Value "+
+			"should be between 1 and %d", tracer.ProbabilisticThresholdMax)
+	}
+
+	if !args.noKernelVersionCheck {
+		major, minor, patch, err := tracer.GetCurrentKernelVersion()
+		if err != nil {
+			return failure("Failed to get kernel version: %v", err)
+		}
+
+		var minMajor, minMinor uint32
+		switch runtime.GOARCH {
+		case "amd64":
+			minMajor, minMinor = 4, 15
+		case "arm64":
+			// Older ARM64 kernel versions have broken bpf_probe_read.
+			// https://github.com/torvalds/linux/commit/6ae08ae3dea2cfa03dd3665a3c8475c2d429ef47
+			minMajor, minMinor = 5, 5
+		default:
+			return failure("Unsupported architecture: %s", runtime.GOARCH)
+		}
+
+		if major < minMajor || (major == minMajor && minor < minMinor) {
+			return failure("Host Agent requires kernel version "+
+				"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
+		}
+	}
+
+	return exitSuccess
+}
+
+func parseError(msg string, args ...interface{}) exitCode {
+	log.Errorf(msg, args...)
+	return exitParseError
+}
+
+func failure(msg string, args ...interface{}) exitCode {
+	log.Errorf(msg, args...)
+	return exitFailure
 }
