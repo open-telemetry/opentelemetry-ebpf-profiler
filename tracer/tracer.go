@@ -169,7 +169,7 @@ func processKernelModulesMetadata(ctx context.Context,
 		}
 
 		result[nameStr] = fileID
-		rep.ExecutableMetadata(ctx, fileID, nameStr, buildID)
+		rep.ExecutableMetadata(ctx, fileID, nameStr, buildID, libpf.Kernel, nil)
 	})
 
 	return result, nil

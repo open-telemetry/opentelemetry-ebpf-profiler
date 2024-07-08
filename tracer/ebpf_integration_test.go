@@ -19,10 +19,11 @@ import (
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/host"
 	hostmeta "github.com/elastic/otel-profiling-agent/hostmetadata/host"
+	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/elastic/otel-profiling-agent/reporter"
 	"github.com/elastic/otel-profiling-agent/rlimit"
 	"github.com/elastic/otel-profiling-agent/support"
 	"github.com/elastic/otel-profiling-agent/util"
@@ -97,8 +98,10 @@ func (f mockIntervals) PIDCleanupInterval() time.Duration { return 1 * time.Seco
 
 type mockReporter struct{}
 
-func (f mockReporter) ExecutableMetadata(_ context.Context, _ libpf.FileID, _, _ string) {}
-func (f mockReporter) ReportFallbackSymbol(_ libpf.FrameID, _ string)                    {}
+func (f mockReporter) ExecutableMetadata(_ context.Context, _ libpf.FileID, _, _ string,
+	_ libpf.InterpreterType, _ reporter.ExecutableOpener) {
+}
+func (f mockReporter) ReportFallbackSymbol(_ libpf.FrameID, _ string) {}
 func (f mockReporter) FrameMetadata(_ libpf.FileID, _ libpf.AddressOrLineno, _ util.SourceLineno,
 	_ uint32, _, _ string) {
 }

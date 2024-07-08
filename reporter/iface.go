@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/elastic/otel-profiling-agent/process"
 	"github.com/elastic/otel-profiling-agent/util"
 )
 
@@ -48,13 +49,21 @@ type TraceReporter interface {
 	SupportsReportTraceEvent() bool
 }
 
+type ExecutableOpener = func() (process.ReadAtCloser, error)
+
 type SymbolReporter interface {
 	// ReportFallbackSymbol enqueues a fallback symbol for reporting, for a given frame.
 	ReportFallbackSymbol(frameID libpf.FrameID, symbol string)
 
 	// ExecutableMetadata accepts a fileID with the corresponding filename
 	// and caches this information before a periodic reporting to the backend.
-	ExecutableMetadata(ctx context.Context, fileID libpf.FileID, fileName, buildID string)
+	//
+	// The `open` argument can be used to open the executable for reading. Interpreters
+	// that don't support this may pass a `nil` function pointer. Implementations that
+	// wish to upload executables should NOT block this function to do so and instead just
+	// open the file and then enqueue the upload in the background.
+	ExecutableMetadata(ctx context.Context, fileID libpf.FileID, fileName, buildID string,
+		interp libpf.InterpreterType, open ExecutableOpener)
 
 	// FrameMetadata accepts metadata associated with a frame and caches this information before
 	// a periodic reporting to the backend.
