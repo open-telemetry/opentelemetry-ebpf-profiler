@@ -18,12 +18,10 @@ func TestSetConfiguration(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg := Config{
-		ProjectID:       42,
-		CacheDirectory:  cwd,
-		EnvironmentType: "aws",
-		MachineID:       "0xfeeddeadbeefbeef",
-		SecretToken:     "secret",
-		ValidatedTags:   "",
+		ProjectID:      42,
+		CacheDirectory: cwd,
+		SecretToken:    "secret",
+		ValidatedTags:  "",
 	}
 
 	// Test setting environment to "aws".
@@ -31,23 +29,7 @@ func TestSetConfiguration(t *testing.T) {
 	require.NoError(t, err)
 
 	cfg2 := cfg
-	cfg2.EnvironmentType = "bla"
+	cfg2.SecretToken = ""
 	err = SetConfiguration(&cfg2)
-	require.Error(t, err)
-
-	cfg3 := cfg
-	cfg3.MachineID = ""
-	err = SetConfiguration(&cfg3)
-	require.Error(t, err)
-
-	cfg4 := cfg
-	cfg4.EnvironmentType = ""
-	err = SetConfiguration(&cfg4)
-	require.Error(t, err)
-
-	cfg5 := cfg
-	cfg5.EnvironmentType = "aws"
-	cfg5.SecretToken = ""
-	err = SetConfiguration(&cfg5)
 	require.Error(t, err)
 }
