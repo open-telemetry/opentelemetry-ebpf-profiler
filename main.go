@@ -93,30 +93,30 @@ func main() {
 }
 
 func mainWithExitCode() exitCode {
-	err := parseArgs()
+	args, err := parseArgs()
 	if err != nil {
 		log.Errorf("Failure to parse arguments: %s", err)
 		return exitParseError
 	}
 
-	if argMapScaleFactor > 8 {
+	if args.mapScaleFactor > 8 {
 		log.Errorf("eBPF map scaling factor %d exceeds limit (max: %d)",
-			argMapScaleFactor, maxArgMapScaleFactor)
+			args.mapScaleFactor, maxArgMapScaleFactor)
 		return exitParseError
 	}
 
-	if argCopyright {
+	if args.copyright {
 		fmt.Print(copyright)
 		return exitSuccess
 	}
 
-	if argVersion {
+	if args.version {
 		fmt.Printf("%s\n", vc.Version())
 		return exitSuccess
 	}
 
-	if argBpfVerifierLogLevel > 2 {
-		log.Errorf("Invalid eBPF verifier log level: %d", argBpfVerifierLogLevel)
+	if args.bpfVerifierLogLevel > 2 {
+		log.Errorf("Invalid eBPF verifier log level: %d", args.bpfVerifierLogLevel)
 		return exitParseError
 	}
 
@@ -125,50 +125,50 @@ func mainWithExitCode() exitCode {
 		unix.SIGINT, unix.SIGTERM, unix.SIGABRT)
 	defer mainCancel()
 
-	if argPprofAddr != "" {
+	if args.pprofAddr != "" {
 		go func() {
 			//nolint:gosec
-			if err = http.ListenAndServe(argPprofAddr, nil); err != nil {
-				log.Errorf("Serving pprof on %s failed: %s", argPprofAddr, err)
+			if err = http.ListenAndServe(args.pprofAddr, nil); err != nil {
+				log.Errorf("Serving pprof on %s failed: %s", args.pprofAddr, err)
 			}
 		}()
 	}
 
 	// Sanity check for probabilistic profiling arguments
-	if argProbabilisticInterval < 1*time.Minute || argProbabilisticInterval > 5*time.Minute {
+	if args.probabilisticInterval < 1*time.Minute || args.probabilisticInterval > 5*time.Minute {
 		log.Error("Invalid argument for probabilistic-interval: use " +
 			"a duration between 1 and 5 minutes")
 		return exitParseError
 	}
-	if argProbabilisticThreshold < 1 ||
-		argProbabilisticThreshold > tracer.ProbabilisticThresholdMax {
+	if args.probabilisticThreshold < 1 ||
+		args.probabilisticThreshold > tracer.ProbabilisticThresholdMax {
 		log.Errorf("Invalid argument for probabilistic-threshold. Value "+
 			"should be between 1 and %d", tracer.ProbabilisticThresholdMax)
 		return exitParseError
 	}
 
-	if argEnvironmentType == "" && argMachineID != "" {
+	if args.environmentType == "" && args.machineID != "" {
 		log.Error("You can only specify the machine ID if you also provide the environment")
 		return exitParseError
 	}
 
-	if argVerboseMode {
+	if args.verboseMode {
 		log.SetLevel(log.DebugLevel)
 		// Dump the arguments in debug mode.
-		dumpArgs()
+		args.dump()
 	}
 
 	startTime := time.Now()
 	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
 		vc.Version(), vc.Revision(), vc.BuildTimestamp())
 
-	environment, err := env.NewEnvironment(argEnvironmentType, argMachineID)
+	environment, err := env.NewEnvironment(args.environmentType, args.machineID)
 	if err != nil {
 		log.Errorf("Failed to create environment: %v", err)
 		return exitFailure
 	}
 
-	if !argNoKernelVersionCheck {
+	if !args.noKernelVersionCheck {
 		var major, minor, patch uint32
 		major, minor, patch, err = tracer.GetCurrentKernelVersion()
 		if err != nil {
@@ -206,7 +206,7 @@ func mainWithExitCode() exitCode {
 		return exitFailure
 	}
 
-	validatedTags := hostmeta.ValidateTags(argTags)
+	validatedTags := hostmeta.ValidateTags(args.tags)
 	log.Debugf("Validated tags: %s", validatedTags)
 
 	var presentCores uint16
@@ -219,7 +219,7 @@ func mainWithExitCode() exitCode {
 	// Retrieve host metadata that will be stored with the HA config, and
 	// sent to the backend with certain RPCs.
 	hostMetadataMap := make(map[string]string)
-	if err = hostmeta.AddMetadata(argCollAgentAddr, hostMetadataMap); err != nil {
+	if err = hostmeta.AddMetadata(args.collAgentAddr, hostMetadataMap); err != nil {
 		log.Errorf("Unable to get host metadata for config: %v", err)
 	}
 
@@ -240,32 +240,31 @@ func mainWithExitCode() exitCode {
 		Version:                vc.Version(),
 		Revision:               vc.Revision(),
 		BuildTimestamp:         vc.BuildTimestamp(),
-		ProjectID:              uint32(argProjectID),
-		CacheDirectory:         argCacheDirectory,
-		HostID:                 environment.HostID(),
-		SecretToken:            argSecretToken,
-		Tags:                   argTags,
+		ProjectID:              uint32(args.projectID),
+		CacheDirectory:         args.cacheDirectory,
+		SecretToken:            args.secretToken,
+		Tags:                   args.tags,
 		ValidatedTags:          validatedTags,
-		Tracers:                argTracers,
-		Verbose:                argVerboseMode,
-		DisableTLS:             argDisableTLS,
-		NoKernelVersionCheck:   argNoKernelVersionCheck,
-		BpfVerifierLogLevel:    argBpfVerifierLogLevel,
-		BpfVerifierLogSize:     argBpfVerifierLogSize,
-		MonitorInterval:        argMonitorInterval,
-		ReportInterval:         argReporterInterval,
-		SamplesPerSecond:       uint16(argSamplesPerSecond),
-		CollectionAgentAddr:    argCollAgentAddr,
-		ConfigurationFile:      argConfigFile,
+		Tracers:                args.tracers,
+		Verbose:                args.verboseMode,
+		DisableTLS:             args.disableTLS,
+		NoKernelVersionCheck:   args.noKernelVersionCheck,
+		BpfVerifierLogLevel:    args.bpfVerifierLogLevel,
+		BpfVerifierLogSize:     args.bpfVerifierLogSize,
+		MonitorInterval:        args.monitorInterval,
+		ReportInterval:         args.reporterInterval,
+		SamplesPerSecond:       uint16(args.samplesPerSecond),
+		CollectionAgentAddr:    args.collAgentAddr,
+		ConfigurationFile:      args.configFile,
 		PresentCPUCores:        presentCores,
 		TraceCacheIntervals:    6,
-		MapScaleFactor:         uint8(argMapScaleFactor),
+		MapScaleFactor:         uint8(args.mapScaleFactor),
 		StartTime:              startTime,
 		IPAddress:              hostMetadataMap[hostmeta.KeyIPAddress],
 		Hostname:               hostMetadataMap[hostmeta.KeyHostname],
 		KernelVersion:          hostMetadataMap[hostmeta.KeyKernelVersion],
-		ProbabilisticInterval:  argProbabilisticInterval,
-		ProbabilisticThreshold: argProbabilisticThreshold,
+		ProbabilisticInterval:  args.probabilisticInterval,
+		ProbabilisticThreshold: args.probabilisticThreshold,
 	}
 	if err = config.SetConfiguration(&conf); err != nil {
 		log.Errorf("Failed to set configuration: %s", err)
@@ -279,7 +278,7 @@ func mainWithExitCode() exitCode {
 	times := config.GetTimes()
 
 	log.Debugf("Determining tracers to include")
-	includeTracers, err := config.ParseTracers(argTracers)
+	includeTracers, err := config.ParseTracers(args.tracers)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to parse the included tracers: %s", err)
 		log.Error(msg)
@@ -291,9 +290,9 @@ func mainWithExitCode() exitCode {
 	// Scale the queues that report traces or information related to traces
 	// with the number of CPUs, the reporting interval and the sample frequencies.
 	tracesQSize := max(1024,
-		uint32(runtime.NumCPU()*int(argReporterInterval.Seconds()*2)*argSamplesPerSecond))
+		uint32(runtime.NumCPU()*int(args.reporterInterval.Seconds()*2)*args.samplesPerSecond))
 
-	metadataCollector := hostmetadata.NewCollector(argCollAgentAddr, environment)
+	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr, environment)
 
 	// TODO: Maybe abort execution if (some) metadata can not be collected
 	hostMetadataMap = metadataCollector.GetHostMetadata()
@@ -309,7 +308,7 @@ func mainWithExitCode() exitCode {
 	var rep reporter.Reporter
 	// Connect to the collection agent
 	rep, err = reporter.Start(mainCtx, &reporter.Config{
-		CollAgentAddr:           argCollAgentAddr,
+		CollAgentAddr:           args.collAgentAddr,
 		MaxRPCMsgSize:           33554432, // 32 MiB
 		ExecMetadataMaxQueue:    2048,
 		CountsForTracesMaxQueue: tracesQSize,
@@ -318,7 +317,7 @@ func mainWithExitCode() exitCode {
 		FrameMetadataMaxQueue:   tracesQSize,
 		HostMetadataMaxQueue:    2,
 		FallbackSymbolsMaxQueue: 1024,
-		DisableTLS:              argDisableTLS,
+		DisableTLS:              args.disableTLS,
 		MaxGRPCRetries:          5,
 		Times:                   times,
 	})
@@ -348,7 +347,7 @@ func mainWithExitCode() exitCode {
 	defer reportermetrics.Start(mainCtx, rep, 60*time.Second)()
 
 	// Load the eBPF code and map definitions
-	trc, err := tracer.NewTracer(mainCtx, rep, times, includeTracers, !argSendErrorFrames)
+	trc, err := tracer.NewTracer(mainCtx, rep, times, includeTracers, !args.sendErrorFrames)
 	if err != nil {
 		msg := fmt.Sprintf("Failed to load eBPF tracer: %s", err)
 		log.Error(msg)
@@ -366,16 +365,16 @@ func mainWithExitCode() exitCode {
 	log.Debug("Completed initial PID listing")
 
 	// Attach our tracer to the perf event
-	if err := trc.AttachTracer(argSamplesPerSecond); err != nil {
+	if err := trc.AttachTracer(args.samplesPerSecond); err != nil {
 		msg := fmt.Sprintf("Failed to attach to perf event: %v", err)
 		log.Error(msg)
 		return exitFailure
 	}
 	log.Info("Attached tracer program")
 
-	if argProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
+	if args.probabilisticThreshold < tracer.ProbabilisticThresholdMax {
 		trc.StartProbabilisticProfiling(mainCtx,
-			argProbabilisticInterval, argProbabilisticThreshold)
+			args.probabilisticInterval, args.probabilisticThreshold)
 		log.Printf("Enabled probabilistic profiling")
 	} else {
 		if err := trc.EnableProfiling(); err != nil {
