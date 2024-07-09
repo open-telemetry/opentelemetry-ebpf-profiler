@@ -1,5 +1,7 @@
 .PHONY: clean all
 
+CC ?= cc
+
 ARCH=$(shell uname -m)
 LIB_NAME=elastic-jvmti-linux-$(ARCH).so
 
@@ -12,10 +14,10 @@ endif
 all: fake-apm-agent $(LIB_NAME)
 
 $(LIB_NAME): fake-apm-agent-lib.c
-	cc $< -g -shared -fPIC -mtls-dialect=$(TLS_DIALECT) -ftls-model=global-dynamic -o $@
+	$(CC) $< -g -shared -fPIC -mtls-dialect=$(TLS_DIALECT) -ftls-model=global-dynamic -o $@
 
 fake-apm-agent: fake-apm-agent.c
-	cc $< -g -DLIB_NAME='"$(LIB_NAME)"' -o $@
+	$(CC) $< -g -DLIB_NAME='"$(LIB_NAME)"' -o $@
 
 clean:
 	rm elastic-jvmti-linux-$(ARCH).so
