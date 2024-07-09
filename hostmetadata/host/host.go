@@ -390,6 +390,11 @@ func getSysctl(sysctl string) ([]byte, error) {
 // Each tag must match ValidTagRegex with ';' used as a separator.
 // Tags that can't be validated are dropped.
 func SetTags(tags string) {
+	if tags == "" {
+		validatedTags = ""
+		return
+	}
+
 	splitTags := strings.Split(tags, ";")
 	validTags := make([]string, 0, len(splitTags))
 
