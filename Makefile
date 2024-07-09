@@ -57,7 +57,6 @@ clean:
 	@rm -rf go .cache
 
 generate:
-	go install github.com/florianl/bluebox@v0.0.1
 	go generate ./...
 
 binary:
