@@ -22,14 +22,14 @@ import (
 
 const (
 	// Default values for CLI flags
-	defaultArgSamplesPerSecond       = 20
-	defaultArgReporterInterval       = 5.0 * time.Second
-	defaultArgMonitorInterval        = 5.0 * time.Second
-	defaultArgPrivateMachineID       = ""
-	defaultArgPrivateEnvironmentType = ""
-	defaultProbabilisticThreshold    = tracer.ProbabilisticThresholdMax
-	defaultProbabilisticInterval     = 1 * time.Minute
-	defaultArgSendErrorFrames        = false
+	defaultArgSamplesPerSecond    = 20
+	defaultArgReporterInterval    = 5.0 * time.Second
+	defaultArgMonitorInterval     = 5.0 * time.Second
+	defaultArgMachineID           = ""
+	defaultArgEnvironmentType     = ""
+	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
+	defaultProbabilisticInterval  = 1 * time.Minute
+	defaultArgSendErrorFrames     = false
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -70,12 +70,21 @@ var (
 		tracer.ProbabilisticThresholdMax-1, tracer.ProbabilisticThresholdMax-1)
 	probabilisticIntervalHelp = "Time interval for which probabilistic profiling will be " +
 		"enabled or disabled."
-	pprofHelp = "Listening address (e.g. localhost:6060) to serve pprof information."
+	pprofHelp            = "Listening address (e.g. localhost:6060) to serve pprof information."
+	samplesPerSecondHelp = "Set the frequency (in Hz) of stack trace sampling."
+	reporterIntervalHelp = "Set the reporter's interval in seconds."
+	monitorIntervalHelp  = "Set the monitor interval in seconds."
+	environmentTypeHelp  = "The type of environment."
+	machineIDHelp        = "The machine ID."
+	enablePProfHelp      = "Enables PProf profiling"
+	saveCPUProfileHelp   = "Save CPU pprof profile to `cpu.pprof`"
+	sendErrorFramesHelp  = "Send error frames (devfiler only, breaks Kibana)"
 )
 
 // Variables for command line arguments
 var (
-	// Customer-visible flag variables.
+	argEnablePProf            bool
+	argSaveCPUProfile         bool
 	argNoKernelVersionCheck   bool
 	argCollAgentAddr          string
 	argCopyright              bool
@@ -94,16 +103,12 @@ var (
 	argProbabilisticThreshold uint
 	argProbabilisticInterval  time.Duration
 	argPprofAddr              string
-
-	// "internal" flag variables.
-	// Flag variables that are configured in "internal" builds will have to be assigned
-	// a default value here, for their consumption in customer-facing builds.
-	argEnvironmentType  = defaultArgPrivateEnvironmentType
-	argMachineID        = defaultArgPrivateMachineID
-	argMonitorInterval  = defaultArgMonitorInterval
-	argReporterInterval = defaultArgReporterInterval
-	argSamplesPerSecond = defaultArgSamplesPerSecond
-	argSendErrorFrames  = defaultArgSendErrorFrames
+	argEnvironmentType        string
+	argMachineID              string
+	argMonitorInterval        time.Duration
+	argReporterInterval       time.Duration
+	argSamplesPerSecond       int
+	argSendErrorFrames        bool
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -118,16 +123,25 @@ func parseArgs() error {
 
 	fs.StringVar(&argCacheDirectory, "cache-directory", "/var/cache/otel/profiling-agent",
 		cacheDirectoryHelp)
-	fs.StringVar(&argCollAgentAddr, "collection-agent", "",
-		collAgentAddrHelp)
+	fs.StringVar(&argCollAgentAddr, "collection-agent", "", collAgentAddrHelp)
 	fs.StringVar(&argConfigFile, "config", "/etc/otel/profiling-agent/agent.conf",
 		configFileHelp)
 	fs.BoolVar(&argCopyright, "copyright", false, copyrightHelp)
 
 	fs.BoolVar(&argDisableTLS, "disable-tls", false, disableTLSHelp)
 
+	fs.BoolVar(&argEnablePProf, "enable-pprof", false, enablePProfHelp)
+
+	fs.StringVar(&argEnvironmentType, "environment-type", defaultArgEnvironmentType,
+		environmentTypeHelp)
+
+	fs.StringVar(&argMachineID, "machine-id", defaultArgMachineID, machineIDHelp)
+
 	fs.UintVar(&argMapScaleFactor, "map-scale-factor",
 		defaultArgMapScaleFactor, mapScaleFactorHelp)
+
+	fs.DurationVar(&argMonitorInterval, "monitor-interval", defaultArgMonitorInterval,
+		monitorIntervalHelp)
 
 	fs.BoolVar(&argNoKernelVersionCheck, "no-kernel-version-check", false, noKernelVersionCheckHelp)
 
@@ -135,8 +149,24 @@ func parseArgs() error {
 
 	fs.StringVar(&argPprofAddr, "pprof", "", pprofHelp)
 
+	fs.DurationVar(&argProbabilisticInterval, "probabilistic-interval",
+		defaultProbabilisticInterval, probabilisticIntervalHelp)
+	fs.UintVar(&argProbabilisticThreshold, "probabilistic-threshold",
+		defaultProbabilisticThreshold, probabilisticThresholdHelp)
+
+	fs.DurationVar(&argReporterInterval, "reporter-interval", defaultArgReporterInterval,
+		reporterIntervalHelp)
+
+	fs.IntVar(&argSamplesPerSecond, "samples-per-second", defaultArgSamplesPerSecond,
+		samplesPerSecondHelp)
+
+	fs.BoolVar(&argSaveCPUProfile, "save-cpuprofile", false, saveCPUProfileHelp)
+
 	// Using a default value here to simplify OTEL review process.
 	fs.StringVar(&argSecretToken, "secret-token", "abc123", secretTokenHelp)
+
+	fs.BoolVar(&argSendErrorFrames, "send-error-frames", defaultArgSendErrorFrames,
+		sendErrorFramesHelp)
 
 	fs.StringVar(&argTags, "tags", "", tagsHelp)
 	fs.StringVar(&argTracers, "t", "all", "Shorthand for -tracers.")
@@ -145,11 +175,6 @@ func parseArgs() error {
 	fs.BoolVar(&argVerboseMode, "v", false, "Shorthand for -verbose.")
 	fs.BoolVar(&argVerboseMode, "verbose", false, verboseModeHelp)
 	fs.BoolVar(&argVersion, "version", false, versionHelp)
-
-	fs.UintVar(&argProbabilisticThreshold, "probabilistic-threshold",
-		defaultProbabilisticThreshold, probabilisticThresholdHelp)
-	fs.DurationVar(&argProbabilisticInterval, "probabilistic-interval",
-		defaultProbabilisticInterval, probabilisticIntervalHelp)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()
