@@ -10,13 +10,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/elastic/otel-profiling-agent/env"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/hostmetadata/agent"
-	"github.com/elastic/otel-profiling-agent/hostmetadata/azure"
-	"github.com/elastic/otel-profiling-agent/hostmetadata/ec2"
-	"github.com/elastic/otel-profiling-agent/hostmetadata/gce"
 	"github.com/elastic/otel-profiling-agent/hostmetadata/host"
 	"github.com/elastic/otel-profiling-agent/reporter"
 )
@@ -31,10 +28,13 @@ type Collector struct {
 
 	// customData is a map of custom key/value pairs that can be added to the host metadata.
 	customData map[string]string
+
+	// env is the environment object that provides information about the runtime environment.
+	env *env.Environment
 }
 
 // NewCollector returns a new Collector for the specified collection agent endpoint.
-func NewCollector(caEndpoint string) *Collector {
+func NewCollector(caEndpoint string, environment *env.Environment) *Collector {
 	return &Collector{
 		caEndpoint: caEndpoint,
 		customData: make(map[string]string),
@@ -44,6 +44,7 @@ func NewCollector(caEndpoint string) *Collector {
 		// 23021 is 6h23m41s - picked randomly, so we don't do the collection at the same
 		// time every day.
 		collectionInterval: 23021 * time.Second,
+		env:                environment,
 	}
 }
 
@@ -62,17 +63,7 @@ func (c *Collector) GetHostMetadata() map[string]string {
 		log.Errorf("Unable to get host metadata: %v", err)
 	}
 
-	// Here we can gather more metadata, which may be dependent on the cloud provider, container
-	// technology, container orchestration stack, etc.
-	switch {
-	case config.RunsOnGCP():
-		gce.AddMetadata(result)
-	case config.RunsOnAWS():
-		ec2.AddMetadata(result)
-	case config.RunsOnAzure():
-		azure.AddMetadata(result)
-	default:
-	}
+	c.env.AddMetadata(result)
 
 	for k, v := range c.customData {
 		result[k] = v

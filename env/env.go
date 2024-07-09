@@ -4,7 +4,7 @@
  * See the file "LICENSE" for details.
  */
 
-package config
+package env
 
 import (
 	"context"
@@ -18,10 +18,14 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/elastic/otel-profiling-agent/hostmetadata/azure"
+	"github.com/elastic/otel-profiling-agent/hostmetadata/ec2"
+	"github.com/elastic/otel-profiling-agent/hostmetadata/gce"
 	"github.com/elastic/otel-profiling-agent/pfnamespaces"
 	"github.com/elastic/otel-profiling-agent/util"
 
@@ -35,6 +39,20 @@ import (
 
 	"github.com/elastic/otel-profiling-agent/libpf"
 )
+
+type Environment struct {
+	// environment indicates the cloud/virtualization environment in which the agent is running. It
+	// can be set in the configuration file, or it will be automatically determined. It is used in
+	// the computation of the host ID. If it is specified in the configuration file then the machine
+	// ID must also be specified.
+	envType EnvironmentType
+
+	// machineID specifies a unique identifier for the host on which the agent is running. It can be
+	// set in the configuration file, or it will be automatically determined. It is used in the
+	// computation of the host ID. If it is specified in the configuration file then the environment
+	// must also be specified.
+	machineID uint64
+}
 
 // EnvironmentType indicates the environment, the agent is running on.
 type EnvironmentType uint8
@@ -50,18 +68,6 @@ const (
 	envAzure
 	envAWS
 )
-
-// environment indicates the cloud/virtualization environment in which the agent is running. It
-// can be set in the configuration file, or it will be automatically determined. It is used in
-// the computation of the host ID. If it is specified in the configuration file then the machine
-// ID must also be specified.
-var environment = envUnspec
-
-// machineID specifies a unique identifier for the host on which the agent is running. It can be
-// set in the configuration file, or it will be automatically determined. It is used in the
-// computation of the host ID. If it is specified in the configuration file then the environment
-// must also be specified.
-var machineID uint64
 
 func (e EnvironmentType) String() string {
 	switch e {
@@ -87,21 +93,6 @@ func (e EnvironmentType) String() string {
 	}
 }
 
-// RunsOnGCP returns true if host agent runs on GCP.
-func RunsOnGCP() bool {
-	return environment == envGCP
-}
-
-// RunsOnAzure returns true if host agent runs on Azure.
-func RunsOnAzure() bool {
-	return environment == envAzure
-}
-
-// RunsOnAWS returns true if host agent runs on AWS.
-func RunsOnAWS() bool {
-	return environment == envAWS
-}
-
 var strToEnv = map[string]EnvironmentType{
 	"hardware": envHardware,
 	"lxc":      envLXC,
@@ -112,8 +103,69 @@ var strToEnv = map[string]EnvironmentType{
 	"aws":      envAWS,
 }
 
-// environmentTypeFromString converts a string to an environment specifier. The matching is case
-// insensitive.
+func NewEnvironment(envName string, machine string) (*Environment, error) {
+	var envType EnvironmentType
+	var machineID uint64
+	var err error
+
+	if envName != "" {
+		// The environment type (aws/gcp/bare metal) is overridden vs. the default auto-detect.
+		envType, err = environmentTypeFromString(envName)
+		if err != nil {
+			return nil, fmt.Errorf("invalid envType '%s': %s", envName, err)
+		}
+
+		// If the envType is overridden, the machine ID also needs to be overridden.
+		machineID, err = strconv.ParseUint(machine, 0, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid machine ID '%s': %s", machine, err)
+		}
+		if machineID == 0 {
+			return nil, errors.New(
+				"the machine ID must be specified with the envType (and non-zero)")
+		}
+
+		log.Debugf("User provided envType (%s) and machine ID (0x%x)", envType,
+			machineID)
+	} else {
+		log.Info("Automatically determining environment and machine ID ...")
+		envType, machineID, err = getEnvironmentAndMachineID()
+		if err != nil {
+			return nil, err
+		}
+		log.Infof("Environment: %s, machine ID: 0x%x", envType, machineID)
+	}
+
+	return &Environment{
+		envType:   envType,
+		machineID: machineID,
+	}, nil
+}
+
+// HostID returns the unique host identifier.
+func (e *Environment) HostID() uint64 {
+	// Parts of the hostID:
+	// 0xf000000000000000 - environment identifier
+	// 0x0fffffffffffffff - machine id
+	return (uint64(e.envType&0xf) << 60) | (e.machineID & 0x0fffffffffffffff)
+}
+
+func (e *Environment) AddMetadata(result map[string]string) {
+	// Here we can gather more metadata, which may be dependent on the cloud provider, container
+	// technology, container orchestration stack, etc.
+	switch e.envType {
+	case envGCP:
+		gce.AddMetadata(result)
+	case envAzure:
+		ec2.AddMetadata(result)
+	case envAWS:
+		azure.AddMetadata(result)
+	default:
+	}
+}
+
+// environmentTypeFromString converts a string to an environment specifier.
+// The matching is case-insensitive.
 func environmentTypeFromString(envStr string) (EnvironmentType, error) {
 	if env, ok := strToEnv[strings.ToLower(envStr)]; ok {
 		return env, nil
@@ -429,6 +481,8 @@ type environmentTester func() (uint64, EnvironmentType, error)
 
 func getEnvironmentAndMachineID() (EnvironmentType, uint64, error) {
 	var env EnvironmentType
+	var machineID uint64
+
 	// environmentTests is a list of functions, that can be used to check the environment.
 	// The order of the list matters. So gcpInfo will be called first, followed by
 	// awsInfo and azureInfo.
@@ -462,42 +516,4 @@ func getEnvironmentAndMachineID() (EnvironmentType, uint64, error) {
 	}
 
 	return env, machineID, nil
-}
-
-func setEnvironment(env EnvironmentType) {
-	environment = env
-}
-
-// GenerateHostID generates and sets the unique hostID
-func GenerateNewHostIDIfNecessary() error {
-	var err error
-
-	if hostID != 0 {
-		log.Info("HostID is already set, returning without doing anything.")
-		return nil
-	}
-
-	if environment == envUnspec {
-		log.Info("Automatically determining environment and machine ID ...")
-		environment, machineID, err = getEnvironmentAndMachineID()
-		if err != nil {
-			return err
-		}
-		log.Infof("Environment: %s, machine ID: 0x%x", environment, machineID)
-	} else {
-		log.Infof("Using provided environment (%s) and machine ID (0x%x)", environment,
-			machineID)
-	}
-
-	// set the package wide available variable
-	// hostID is declared in config.go
-
-	// Parts of the hostID:
-	// 0xf000000000000000 - environment identifier
-	// 0x0fffffffffffffff - machine id
-
-	hostID |= (uint64(environment&0xf) << 60)
-	hostID |= (machineID & 0x0fffffffffffffff)
-
-	return nil
 }

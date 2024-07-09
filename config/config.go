@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -29,8 +28,6 @@ type Config struct {
 	Revision       string
 	BuildTimestamp string
 
-	EnvironmentType        string
-	MachineID              string
 	SecretToken            string
 	Tags                   string
 	ValidatedTags          string
@@ -38,6 +35,7 @@ type Config struct {
 	ConfigurationFile      string
 	Tracers                string
 	CacheDirectory         string
+	HostID                 uint64
 	BpfVerifierLogSize     int
 	BpfVerifierLogLevel    uint
 	MonitorInterval        time.Duration
@@ -148,13 +146,12 @@ var cacheDirectory = "/var/cache/otel/profiling-agent"
 var configurationSet = false
 
 func SetConfiguration(conf *Config) error {
-	var err error
-
 	version = conf.Version
 	revision = conf.Revision
 	buildTimestamp = conf.BuildTimestamp
 
 	projectID = conf.ProjectID
+	hostID = conf.HostID
 
 	if conf.SecretToken == "" {
 		return errors.New("missing SecretToken")
@@ -170,32 +167,6 @@ func SetConfiguration(conf *Config) error {
 
 	bpfVerifierLogLevel = uint32(conf.BpfVerifierLogLevel)
 	bpfVerifierLogSize = conf.BpfVerifierLogSize
-
-	// The environment type (aws/gcp/bare metal) is overridden vs. the default auto-detect.
-	// WARN: Environment type and machineID are internal flag arguments and not exposed
-	// in customer-facing builds.
-	if conf.EnvironmentType != "" {
-		var environment EnvironmentType
-		if environment, err = environmentTypeFromString(conf.EnvironmentType); err != nil {
-			return fmt.Errorf("invalid environment '%s': %s", conf.EnvironmentType, err)
-		}
-
-		// If the environment is overridden, the machine ID also needs to be overridden.
-		machineID, err := strconv.ParseUint(conf.MachineID, 0, 64)
-		if err != nil {
-			return fmt.Errorf("invalid machine ID '%s': %s", conf.MachineID, err)
-		}
-		if machineID == 0 {
-			return errors.New(
-				"the machine ID must be specified with the environment (and non-zero)")
-		}
-		log.Debugf("User provided environment (%s) and machine ID (0x%x)", environment,
-			machineID)
-		setEnvironment(environment)
-		hostID = machineID
-	} else if conf.MachineID != "" {
-		return errors.New("you can only specify the machine ID if you also provide the environment")
-	}
 
 	cacheDirectory = conf.CacheDirectory
 	if _, err := os.Stat(cacheDirectory); os.IsNotExist(err) {
