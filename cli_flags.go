@@ -55,7 +55,7 @@ var (
 	cacheDirectoryHelp = "The directory where the profiling agent can store cached data."
 	secretTokenHelp    = "The secret token associated with the project id."
 	tagsHelp           = fmt.Sprintf("User-specified tags separated by ';'. "+
-		"Each tag should match '%v'.", host.ValidTagRegex)
+		"Each tag should match '%v'.", host.ValidTagRegex())
 	disableTLSHelp          = "Disable encryption for data in transit."
 	bpfVerifierLogLevelHelp = "Log level of the eBPF verifier output (0,1,2). Default is 0."
 	bpfVerifierLogSizeHelp  = "Size in bytes that will be allocated for the eBPF " +

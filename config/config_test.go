@@ -21,7 +21,6 @@ func TestSetConfiguration(t *testing.T) {
 		ProjectID:      42,
 		CacheDirectory: cwd,
 		SecretToken:    "secret",
-		ValidatedTags:  "",
 	}
 
 	// Test setting environment to "aws".

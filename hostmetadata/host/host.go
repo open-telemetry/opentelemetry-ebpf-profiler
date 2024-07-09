@@ -27,7 +27,6 @@ import (
 	"github.com/syndtr/gocapability/capability"
 	"golang.org/x/sys/unix"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/libpf"
 )
 
@@ -56,7 +55,10 @@ var sysctls = []string{
 	"kernel.unprivileged_bpf_disabled",
 }
 
-var ValidTagRegex = regexp.MustCompile(`^[a-zA-Z0-9-:._]+$`)
+var (
+	validTagRegex = regexp.MustCompile(`^[a-zA-Z0-9-:._]+$`)
+	validatedTags string
+)
 
 // AddMetadata adds host metadata to the result map, that is common across all environments.
 // The IP address and hostname (part of the returned metadata) are evaluated in the context of
@@ -71,7 +73,6 @@ func AddMetadata(caEndpoint string, result map[string]string) error {
 		host = caEndpoint
 	}
 
-	validatedTags := config.ValidatedTags()
 	if validatedTags != "" {
 		result[keyTags] = validatedTags
 	}
@@ -199,6 +200,11 @@ func AddMetadata(caEndpoint string, result map[string]string) error {
 	}
 
 	return nil
+}
+
+// ValidTagRegex returns the regular expression used to validate user-specified tags.
+func ValidTagRegex() *regexp.Regexp {
+	return validTagRegex
 }
 
 const keySuffixCPUSocketID = "socketIDs"
@@ -380,32 +386,24 @@ func getSysctl(sysctl string) ([]byte, error) {
 	return contents, nil
 }
 
-// ValidateTags parses and validates user-specified tags.
+// SetTags parses and validates user-specified tags and sets them for use in host metadata.
 // Each tag must match ValidTagRegex with ';' used as a separator.
 // Tags that can't be validated are dropped.
-// The empty string is returned if no tags can be validated.
-func ValidateTags(tags string) string {
-	if tags == "" {
-		return ""
-	}
-
+func SetTags(tags string) {
 	splitTags := strings.Split(tags, ";")
-	validatedTags := make([]string, 0, len(splitTags))
+	validTags := make([]string, 0, len(splitTags))
 
 	for _, tag := range splitTags {
-		if !ValidTagRegex.MatchString(tag) {
+		if !validTagRegex.MatchString(tag) {
 			log.Warnf("Rejected user-specified tag '%s' since it doesn't match regexp '%v'",
-				tag, ValidTagRegex)
+				tag, validTagRegex)
 		} else {
-			validatedTags = append(validatedTags, tag)
+			validTags = append(validTags, tag)
 		}
 	}
 
-	if len(validatedTags) > 0 {
-		return strings.Join(validatedTags, ";")
-	}
-
-	return ""
+	validatedTags = strings.Join(validTags, ";")
+	log.Debugf("Validated tags: %s", validatedTags)
 }
 
 // tryEnterRootNamespaces tries to enter PID 1's UTS and network namespaces.
