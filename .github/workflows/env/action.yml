@@ -5,11 +5,34 @@ runs:
   steps:
     - name: Install dependencies
       shell: bash
-      run: sudo apt-get install -y llvm clang dwz cmake curl unzip
-    - name: Set up Go ${{matrix.go}}
+      run: |
+        # Ubuntu has ARM64 packages in an entirely different repo, so we can't just
+        # `dpkg --add-architecture arm64` here: we have to add a custom sources.list first.
+        sudo tee /etc/apt/sources.list.d/ubuntu.sources <<EOF > /dev/null
+        Types: deb
+        URIs: http://azure.archive.ubuntu.com/ubuntu/
+        Suites: noble noble-updates noble-backports
+        Components: main universe restricted multiverse
+        Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+        Architectures: amd64
+
+        Types: deb
+        URIs: http://azure.ports.ubuntu.com/ubuntu-ports/
+        Suites: noble noble-updates noble-backports
+        Components: main universe restricted multiverse
+        Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+        Architectures: arm64
+        EOF
+        
+        sudo dpkg --add-architecture arm64
+        sudo apt-get update -y
+        
+        sudo apt-get install -y llvm clang dwz curl unzip gcc-aarch64-linux-gnu \
+          libc6-arm64-cross qemu-user-binfmt libc6:arm64
+    - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: ${{matrix.go}}
+        go-version: stable
         check-latest: true
         cache-dependency-path: go.sum
       id: go
