@@ -2,11 +2,18 @@ FROM debian:testing
 
 WORKDIR /agent
 
-ARG arch=amd64
-
-RUN apt-get update -y && apt-get dist-upgrade -y && apt-get install -y \
+# cross_debian_arch: amd64 or arm64
+# cross_pkg_arch: x86-64 or aarch64
+RUN cross_debian_arch=$(uname -m | sed 's/x86_64/arm64/' | sed 's/aarch64/amd64/'); \
+    cross_pkg_arch=$(uname -m | sed 's/x86_64/aarch64/' | sed 's/aarch64/x86-64/'); \
+    dpkg --add-architecture "${cross_debian_arch}" && \
+    apt-get update -y && \
+    apt-get dist-upgrade -y && \
+    apt-get install -y \
     curl wget cmake dwz lsb-release software-properties-common gnupg git clang-16 llvm \
-    golang unzip jq && apt-get clean autoclean && apt-get autoremove --yes
+    golang unzip jq libc6:${cross_debian_arch} gcc-${cross_pkg_arch}-linux-gnu && \
+    apt-get clean autoclean && \
+    apt-get autoremove --yes
 
 RUN wget -qO- https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.56.2
 

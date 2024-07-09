@@ -3,6 +3,34 @@
 
 SHELL := /usr/bin/env bash
 
+# Detect native architecture and translate to GOARCH.
+NATIVE_ARCH := $(shell uname -m)
+ifeq ($(NATIVE_ARCH),x86_64)
+NATIVE_ARCH := amd64
+else ifneq (,$(filter $(NATIVE_ARCH),aarch64 arm64))
+NATIVE_ARCH := arm64
+else
+$(error Unsupported architecture: $(NATIVE_ARCH))
+endif
+
+# Valid values are: amd64, arm64.
+TARGET_ARCH ?= $(NATIVE_ARCH)
+
+ifeq ($(NATIVE_ARCH),$(TARGET_ARCH))
+ARCH_PREFIX :=
+else ifeq ($(TARGET_ARCH),arm64)
+ARCH_PREFIX := aarch64-linux-gnu-
+else ifeq ($(TARGET_ARCH),amd64)
+ARCH_PREFIX := x86_64-linux-gnu-
+else
+$(error Unsupported architecture: $(TARGET_ARCH))
+endif
+
+export CGO_ENABLED = 1
+export GOARCH = $(TARGET_ARCH)
+export CC = $(ARCH_PREFIX)gcc
+export OBJCOPY = $(ARCH_PREFIX)objcopy
+
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
 COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
 
@@ -62,23 +90,13 @@ integration-test-binaries: generate ebpf
 			./$(test_name)) || exit ; \
 	)
 
-# Detect native architecture.
-UNAME_NATIVE_ARCH:=$(shell uname -m)
-
-ifeq ($(UNAME_NATIVE_ARCH),x86_64)
-NATIVE_ARCH:=amd64
-else ifneq (,$(filter $(UNAME_NATIVE_ARCH),aarch64 arm64))
-NATIVE_ARCH:=arm64
-else
-$(error Unsupported architecture: $(UNAME_NATIVE_ARCH))
-endif
-
 docker-image:
-	docker build -t profiling-agent --build-arg arch=$(NATIVE_ARCH) -f Dockerfile .
+	docker build -t profiling-agent -f Dockerfile .
 
 agent:
 	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
-		make VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)
+		make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) \
+		BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)
 
 legal:
 	@go install go.elastic.co/go-licence-detector@latest

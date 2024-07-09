@@ -1,7 +1,7 @@
 .PHONY: all
 
-CC=gcc
-CFLAGS=-Wl,--build-id
+CC ?= cc
+CFLAGS = -Wl,--build-id
 
 all: test
 
