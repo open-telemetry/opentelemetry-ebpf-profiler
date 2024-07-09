@@ -184,6 +184,7 @@ func mainWithExitCode() exitCode {
 		Revision:               vc.Revision(),
 		BuildTimestamp:         vc.BuildTimestamp(),
 		ProjectID:              uint32(args.projectID),
+		HostID:                 environment.HostID(),
 		CacheDirectory:         args.cacheDirectory,
 		SecretToken:            args.secretToken,
 		Tags:                   args.tags,
