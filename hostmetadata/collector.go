@@ -10,7 +10,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/elastic/otel-profiling-agent/env"
+	"github.com/elastic/otel-profiling-agent/platform"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/elastic/otel-profiling-agent/hostmetadata/agent"
@@ -30,11 +30,11 @@ type Collector struct {
 	customData map[string]string
 
 	// env is the environment object that provides information about the runtime environment.
-	env *env.Environment
+	env *platform.Environment
 }
 
 // NewCollector returns a new Collector for the specified collection agent endpoint.
-func NewCollector(caEndpoint string, environment *env.Environment) *Collector {
+func NewCollector(caEndpoint string, environment *platform.Environment) *Collector {
 	return &Collector{
 		caEndpoint: caEndpoint,
 		customData: make(map[string]string),
