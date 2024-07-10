@@ -150,8 +150,7 @@ func mainWithExitCode() exitCode {
 		return failure("Failed to probe tracepoint: %v", err)
 	}
 
-	validatedTags := hostmeta.ValidateTags(args.tags)
-	log.Debugf("Validated tags: %s", validatedTags)
+	hostmeta.SetTags(args.tags)
 
 	var presentCores uint16
 	presentCores, err = hostmeta.PresentCPUCores()
@@ -184,10 +183,10 @@ func mainWithExitCode() exitCode {
 		Revision:               vc.Revision(),
 		BuildTimestamp:         vc.BuildTimestamp(),
 		ProjectID:              uint32(args.projectID),
+		HostID:                 environment.HostID(),
 		CacheDirectory:         args.cacheDirectory,
 		SecretToken:            args.secretToken,
 		Tags:                   args.tags,
-		ValidatedTags:          validatedTags,
 		Tracers:                args.tracers,
 		Verbose:                args.verboseMode,
 		DisableTLS:             args.disableTLS,
