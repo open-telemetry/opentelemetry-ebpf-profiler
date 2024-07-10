@@ -35,6 +35,9 @@ const (
 // errUnexpectedType is used internally to detect inconsistent FDE/CIE types
 var errUnexpectedType = errors.New("unexpected FDE/CIE type")
 
+// errEmptyEntry is used internally to report FDEs/CIEs of length 0.
+var errEmptyEntry = errors.New("FDE/CIE empty")
+
 // ehframeHooks interface provides hooks for filtering and debugging eh_frame parsing
 type ehframeHooks interface {
 	// fdeHook is called for each FDE. Returns false if the FDE should be filtered out.
@@ -724,6 +727,9 @@ func (r *reader) parseHDR(expectCIE bool) (hlen, ciePos uint64, err error) {
 	var idPos, cieMarker uint64
 	pos := r.pos
 	hlen = uint64(r.u32())
+	if hlen == 0 {
+		return 4, 0, errEmptyEntry
+	}
 	if hlen < 0xfffffff0 { //nolint:gocritic
 		// Normal 32-bit dwarf
 		hlen += 4
@@ -1196,7 +1202,7 @@ func (ee *elfExtractor) walkBinSearchTable(parsedFile *pfelf.File, ehFrameHdrSec
 
 		fr := ehFrameSec.reader(fdeAddr-ehFrameSec.vaddr, false)
 		_, err = ee.parseFDE(&fr, parsedFile, ipStart, cieCache, true)
-		if err != nil {
+		if err != nil && !errors.Is(err, errEmptyEntry) {
 			return fmt.Errorf("failed to parse FDE: %v", err)
 		}
 	}
@@ -1218,7 +1224,7 @@ func (ee *elfExtractor) walkFDEs(ef *pfelf.File, ehFrameSec *elfRegion, debugFra
 	for f := uintptr(0); f < uintptr(len(ehFrameSec.data)); f += entryLen {
 		fr := ehFrameSec.reader(f, debugFrame)
 		entryLen, err = ee.parseFDE(&fr, ef, 0, cieCache, false)
-		if err != nil && !errors.Is(err, errUnexpectedType) {
+		if err != nil && !errors.Is(err, errUnexpectedType) && !errors.Is(err, errEmptyEntry) {
 			return fmt.Errorf("failed to parse FDE %#x: %v", f, err)
 		}
 		if entryLen == 0 {
