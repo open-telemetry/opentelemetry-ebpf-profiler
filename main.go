@@ -19,7 +19,7 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/elastic/otel-profiling-agent/containermetadata"
-	"github.com/elastic/otel-profiling-agent/env"
+	"github.com/elastic/otel-profiling-agent/platform"
 	"github.com/elastic/otel-profiling-agent/vc"
 	"golang.org/x/sys/unix"
 
@@ -136,7 +136,7 @@ func mainWithExitCode() exitCode {
 	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
 		vc.Version(), vc.Revision(), vc.BuildTimestamp())
 
-	environment, err := env.NewEnvironment(args.environmentType, args.machineID)
+	environment, err := platform.NewEnvironment(args.environmentType, args.machineID)
 	if err != nil {
 		log.Errorf("Failed to create environment: %v", err)
 		return exitFailure

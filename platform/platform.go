@@ -4,7 +4,7 @@
  * See the file "LICENSE" for details.
  */
 
-package env
+package platform
 
 import (
 	"context"
