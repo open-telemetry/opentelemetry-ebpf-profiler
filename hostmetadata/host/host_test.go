@@ -22,20 +22,20 @@ import (
 )
 
 const (
-	tags          = "foo;bar;this-tag-should-be-dropped-!;baz;1.2.3.4;key:value;a_b_c"
-	validatedTags = "foo;bar;baz;1.2.3.4;key:value;a_b_c"
+	tags      = "foo;bar;this-tag-should-be-dropped-!;baz;1.2.3.4;key:value;a_b_c"
+	validTags = "foo;bar;baz;1.2.3.4;key:value;a_b_c"
 )
 
-func TestValidateTags(t *testing.T) {
+func TestSetTags(t *testing.T) {
 	tests := map[string]string{
-		tags: validatedTags,
+		tags: validTags,
 		"":   "",
 	}
 
 	for testTags, testValidatedTags := range tests {
-		vTags := ValidateTags(testTags)
-		if vTags != testValidatedTags {
-			t.Errorf("validated tags %s != %s", vTags, testValidatedTags)
+		SetTags(testTags)
+		if validatedTags != testValidatedTags {
+			t.Errorf("validated tags %s != %s", validatedTags, testValidatedTags)
 		}
 	}
 }
@@ -45,11 +45,12 @@ func TestAddMetadata(t *testing.T) {
 		ProjectID:      42,
 		CacheDirectory: ".",
 		SecretToken:    "secret",
-		ValidatedTags:  validatedTags})
+	})
 	require.NoError(t, err)
 
 	// This tests checks that common metadata keys are populated
 	metadataMap := make(map[string]string)
+	SetTags(validTags)
 
 	// Ignore errors because collection may fail in unit tests. However, we check the contents of
 	// the returned map, which ensures test coverage.
