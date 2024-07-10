@@ -30,7 +30,6 @@ type Config struct {
 
 	SecretToken            string
 	Tags                   string
-	ValidatedTags          string
 	CollectionAgentAddr    string
 	ConfigurationFile      string
 	Tracers                string
@@ -78,8 +77,6 @@ var (
 	secretToken string
 	// tags contains user-specified tags as passed-in by the user
 	tags string
-	// validatedTags contains user-specified tags that have passed validation
-	validatedTags string
 	// collectionAgentAddr contains the collection agent address in host:port format
 	collectionAgentAddr string
 	// configurationFile contains the path to the profiling agent's configuration file
@@ -159,7 +156,6 @@ func SetConfiguration(conf *Config) error {
 	secretToken = conf.SecretToken
 
 	tags = conf.Tags
-	validatedTags = conf.ValidatedTags
 	verbose = conf.Verbose
 	samplesPerSecond = conf.SamplesPerSecond
 	probabilisticThreshold = conf.ProbabilisticThreshold
@@ -296,11 +292,6 @@ func CacheDirectory() string {
 // User-specified tags as passed-in by the user
 func Tags() string {
 	return tags
-}
-
-// User-specified tags that have passed validation
-func ValidatedTags() string {
-	return validatedTags
 }
 
 // Collection agent address in host:port format
