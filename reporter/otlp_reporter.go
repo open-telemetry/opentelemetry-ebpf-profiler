@@ -697,10 +697,18 @@ func getSampleAttributes(profile *profiles.Profile, i traceFramesCounts) []uint6
 		})
 	}
 
-	addAttr(semconv.K8SPodNameKey, i.podName)
-	addAttr(semconv.ContainerNameKey, i.containerName)
-	addAttr(semconv.ThreadNameKey, i.comm)
-	addAttr(semconv.ServiceNameKey, i.apmServiceName)
+	if i.podName != "" {
+		addAttr(semconv.K8SPodNameKey, i.podName)
+	}
+	if i.containerName != "" {
+		addAttr(semconv.ContainerNameKey, i.containerName)
+	}
+	if i.comm != "" {
+		addAttr(semconv.ThreadNameKey, i.comm)
+	}
+	if i.apmServiceName != "" {
+		addAttr(semconv.ServiceNameKey, i.apmServiceName)
+	}
 
 	return indices
 }
