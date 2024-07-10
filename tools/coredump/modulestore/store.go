@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path"
 	"strings"
@@ -64,19 +63,8 @@ type Store struct {
 // New creates a new module storage. The modules present in the local cache are inspected and a
 // full index of the modules in the remote S3 bucket is retrieved and cached as well.
 func New(s3client *s3.Client, s3Bucket, localCachePath string) (*Store, error) {
-	fi, err := os.Stat(localCachePath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			if err = os.Mkdir(localCachePath, 0750); err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, err
-		}
-	} else {
-		if !fi.IsDir() {
-			return nil, fmt.Errorf("%s is not a directory", localCachePath)
-		}
+	if err := os.MkdirAll(localCachePath, 0750); err != nil {
+		return nil, err
 	}
 	return &Store{
 		s3client:       s3client,
