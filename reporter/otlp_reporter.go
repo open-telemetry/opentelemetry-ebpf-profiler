@@ -615,7 +615,6 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS uint64, 
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
 		locationIndex += sample.LocationsLength
 
-		profile.SampleType = append(profile.SampleType, setOnCPUValueType(stringMap))
 		profile.Sample = append(profile.Sample, sample)
 	}
 	log.Debugf("Reporting OTLP profile with %d samples", len(profile.Sample))
@@ -733,14 +732,6 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
 		})
 	}
 	return locationMappingIndex
-}
-
-// setOnCPUValueType returns the default Profile.Sample_Type for on CPU profiling.
-func setOnCPUValueType(stringMap map[string]uint32) *profiles.ValueType {
-	return &profiles.ValueType{
-		Type: int64(getStringMapIndex(stringMap, "on_cpu")),
-		Unit: int64(getStringMapIndex(stringMap, "count")),
-	}
 }
 
 // dedupSlice returns a sorted slice of unique values along with their count.
