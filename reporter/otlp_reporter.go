@@ -116,6 +116,9 @@ type OTLPReporter struct {
 
 	// pkgGRPCOperationTimeout sets the time limit for GRPC requests.
 	pkgGRPCOperationTimeout time.Duration
+
+	// samplesPerSecond is the number of samples per second.
+	samplesPerSecond uint32
 }
 
 // hashString is a helper function for LRUs that use string as a key.
@@ -260,19 +263,19 @@ func (r *OTLPReporter) GetMetrics() Metrics {
 
 // Start sets up and manages the reporting connection to a OTLP backend.
 func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
-	cacheSize := config.TraceCacheEntries()
-	fallbackSymbols, err := lru.NewSynced[libpf.FrameID, string](cacheSize, libpf.FrameID.Hash32)
+	fallbackSymbols, err := lru.NewSynced[libpf.FrameID, string](cfg.CacheSize,
+		libpf.FrameID.Hash32)
 	if err != nil {
 		return nil, err
 	}
 
-	executables, err := lru.NewSynced[libpf.FileID, execInfo](cacheSize, libpf.FileID.Hash32)
+	executables, err := lru.NewSynced[libpf.FileID, execInfo](cfg.CacheSize, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err
 	}
 
 	frames, err := lru.NewSynced[libpf.FileID,
-		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](cacheSize, libpf.FileID.Hash32)
+		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](cfg.CacheSize, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +292,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		name:                    cfg.Name,
 		version:                 cfg.Version,
 		stopSignal:              make(chan libpf.Void),
-		pkgGRPCOperationTimeout: cfg.Times.GRPCOperationTimeout(),
+		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
 		client:                  nil,
 		rpcStats:                NewStatsHandler(),
 		fallbackSymbols:         fallbackSymbols,
@@ -314,7 +317,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 	r.client = otlpcollector.NewProfilesServiceClient(otlpGrpcConn)
 
 	go func() {
-		tick := time.NewTicker(cfg.Times.ReportInterval())
+		tick := time.NewTicker(cfg.ReportInterval)
 		defer tick.Stop()
 		for {
 			select {
@@ -326,7 +329,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 				if err := r.reportOTLPProfile(ctx); err != nil {
 					log.Errorf("Request failed: %v", err)
 				}
-				tick.Reset(libpf.AddJitter(cfg.Times.ReportInterval(), 0.2))
+				tick.Reset(libpf.AddJitter(cfg.ReportInterval, 0.2))
 			}
 		}
 	}()
@@ -468,7 +471,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS uint64, 
 			Type: int64(getStringMapIndex(stringMap, "cpu")),
 			Unit: int64(getStringMapIndex(stringMap, "nanoseconds")),
 		},
-		Period: 1e9 / int64(config.SamplesPerSecond()),
+		Period: 1e9 / int64(r.samplesPerSecond),
 		// LocationIndices - Optional element we do not use.
 		// AttributeTable - Optional element we do not use.
 		// AttributeUnits - Optional element we do not use.
@@ -740,7 +743,7 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
 func waitGrpcEndpoint(ctx context.Context, cfg *Config,
 	statsHandler *StatsHandlerImpl) (*grpc.ClientConn, error) {
 	// Sleep with a fixed backoff time added of +/- 20% jitter
-	tick := time.NewTicker(libpf.AddJitter(cfg.Times.GRPCStartupBackoffTime(), 0.2))
+	tick := time.NewTicker(libpf.AddJitter(cfg.GRPCStartupBackoffTime, 0.2))
 	defer tick.Stop()
 
 	var retries uint32
@@ -793,7 +796,7 @@ func setupGrpcConnection(parent context.Context, cfg *Config,
 			})))
 	}
 
-	ctx, cancel := context.WithTimeout(parent, cfg.Times.GRPCConnectionTimeout())
+	ctx, cancel := context.WithTimeout(parent, cfg.GRPCConnectionTimeout)
 	defer cancel()
 	//nolint:staticcheck
 	return grpc.DialContext(ctx, cfg.CollAgentAddr, opts...)

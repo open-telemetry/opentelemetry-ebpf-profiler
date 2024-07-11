@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	agentmeta "github.com/elastic/otel-profiling-agent/hostmetadata/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -42,11 +43,13 @@ func TestSetTags(t *testing.T) {
 
 func TestAddMetadata(t *testing.T) {
 	err := config.SetConfiguration(&config.Config{
-		ProjectID:      42,
-		CacheDirectory: ".",
-		SecretToken:    "secret",
+		ProjectID: 42,
 	})
 	require.NoError(t, err)
+
+	agentmeta.SetAgentData(&agentmeta.Config{
+		CollectionAgentAddr: "localhost:12345",
+	})
 
 	// This tests checks that common metadata keys are populated
 	metadataMap := make(map[string]string)
@@ -54,7 +57,7 @@ func TestAddMetadata(t *testing.T) {
 
 	// Ignore errors because collection may fail in unit tests. However, we check the contents of
 	// the returned map, which ensures test coverage.
-	_ = AddMetadata("localhost:12345", metadataMap)
+	_ = AddMetadata(metadataMap)
 	expectedHostname, err := os.Hostname()
 	require.NoError(t, err)
 

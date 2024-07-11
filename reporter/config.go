@@ -6,7 +6,11 @@
 
 package reporter
 
-import "google.golang.org/grpc"
+import (
+	"time"
+
+	"google.golang.org/grpc"
+)
 
 type Config struct {
 	// Name defines the name of the agent.
@@ -44,10 +48,18 @@ type Config struct {
 	FallbackSymbolsMaxQueue uint32
 	// Disable secure communication with Collection Agent.
 	DisableTLS bool
+	// CacheSize defines the size of the reporter caches.
+	CacheSize uint32
+	// samplesPerSecond defines the number of samples per second.
+	SamplesPerSecond int
+
 	// Number of connection attempts to the collector after which we give up retrying.
 	MaxGRPCRetries uint32
 
-	Times Times
+	GRPCOperationTimeout   time.Duration
+	GRPCStartupBackoffTime time.Duration
+	GRPCConnectionTimeout  time.Duration
+	ReportInterval         time.Duration
 
 	// gRPCInterceptor is the client gRPC interceptor, e.g., for sending gRPC metadata.
 	GRPCClientInterceptor grpc.UnaryClientInterceptor

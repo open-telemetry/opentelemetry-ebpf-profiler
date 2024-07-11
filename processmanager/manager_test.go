@@ -387,9 +387,8 @@ func TestNewMapping(t *testing.T) {
 	defer os.RemoveAll(cacheDir)
 
 	err = config.SetConfiguration(&config.Config{
-		ProjectID:      42,
-		CacheDirectory: cacheDir,
-		SecretToken:    "secret"})
+		ProjectID: 42,
+	})
 	require.NoError(t, err)
 
 	for name, testcase := range tests {

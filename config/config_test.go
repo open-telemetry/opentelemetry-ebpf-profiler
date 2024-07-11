@@ -7,28 +7,17 @@
 package config
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestSetConfiguration(t *testing.T) {
-	cwd, err := os.Getwd()
-	require.NoError(t, err)
-
 	cfg := Config{
-		ProjectID:      42,
-		CacheDirectory: cwd,
-		SecretToken:    "secret",
+		ProjectID: 42,
 	}
 
 	// Test setting environment to "aws".
-	err = SetConfiguration(&cfg)
+	err := SetConfiguration(&cfg)
 	require.NoError(t, err)
-
-	cfg2 := cfg
-	cfg2.SecretToken = ""
-	err = SetConfiguration(&cfg2)
-	require.Error(t, err)
 }

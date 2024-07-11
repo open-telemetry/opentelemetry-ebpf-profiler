@@ -14,9 +14,9 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
+	"github.com/elastic/otel-profiling-agent/times"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/containermetadata"
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
@@ -29,7 +29,7 @@ import (
 const metadataWarnInhibDuration = 1 * time.Minute
 
 // Compile time check to make sure config.Times satisfies the interfaces.
-var _ Times = (*config.Times)(nil)
+var _ Times = (*times.Times)(nil)
 
 // Times is a subset of config.IntervalsAndTimers.
 type Times interface {
@@ -93,10 +93,8 @@ type traceHandler struct {
 
 // newTraceHandler creates a new traceHandler
 func newTraceHandler(containerMetadataHandler containermetadata.Handler,
-	rep reporter.TraceReporter, traceProcessor TraceProcessor, times Times) (
+	rep reporter.TraceReporter, traceProcessor TraceProcessor, intervals Times, cacheSize uint32) (
 	*traceHandler, error) {
-	cacheSize := config.TraceCacheEntries()
-
 	bpfTraceCache, err := lru.New[host.TraceHash, libpf.TraceHash](
 		cacheSize, func(k host.TraceHash) uint32 { return uint32(k) })
 	if err != nil {
@@ -120,7 +118,7 @@ func newTraceHandler(containerMetadataHandler containermetadata.Handler,
 		bpfTraceCache:            bpfTraceCache,
 		umTraceCache:             umTraceCache,
 		reporter:                 rep,
-		times:                    times,
+		times:                    intervals,
 		containerMetadataHandler: containerMetadataHandler,
 		metadataWarnInhib:        metadataWarnInhib,
 	}
@@ -182,9 +180,10 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 // to exit after a cancellation through the context.
 func Start(ctx context.Context, containerMetadataHandler containermetadata.Handler,
 	rep reporter.TraceReporter, traceProcessor TraceProcessor,
-	traceInChan <-chan *host.Trace, times Times,
+	traceInChan <-chan *host.Trace, intervals Times, cacheSize uint32,
 ) (workerExited <-chan libpf.Void, err error) {
-	handler, err := newTraceHandler(containerMetadataHandler, rep, traceProcessor, times)
+	handler, err :=
+		newTraceHandler(containerMetadataHandler, rep, traceProcessor, intervals, cacheSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create traceHandler: %v", err)
 	}
@@ -194,7 +193,7 @@ func Start(ctx context.Context, containerMetadataHandler containermetadata.Handl
 	go func() {
 		defer close(exitChan)
 
-		metricsTicker := time.NewTicker(times.MonitorInterval())
+		metricsTicker := time.NewTicker(intervals.MonitorInterval())
 		defer metricsTicker.Stop()
 
 		// Poll the output channels
