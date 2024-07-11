@@ -12,11 +12,10 @@ import (
 
 // Config is the structure to pass the configuration into host-agent.
 type Config struct {
-	HostID               uint64
-	BpfVerifierLogSize   int
-	BpfVerifierLogLevel  uint
-	ProjectID            uint32
-	NoKernelVersionCheck bool
+	HostID              uint64
+	BpfVerifierLogSize  int
+	BpfVerifierLogLevel uint
+	ProjectID           uint32
 
 	// Bits of hostmetadata that we save in config so that they can be
 	// conveniently accessed globally in the agent.
@@ -35,8 +34,6 @@ var (
 	// along with traces to identify the project that they belong to.
 	projectID uint32
 
-	// noKernelVersionCheck indicates if kernel version checking for eBPF support is disabled
-	noKernelVersionCheck bool
 	// bpfVerifierLogLevel holds the defined log level of the eBPF verifier.
 	// Currently there are three different log levels applied by the kernel verifier:
 	// 0 - no logging
@@ -70,8 +67,6 @@ func SetConfiguration(conf *Config) error {
 	bpfVerifierLogLevel = uint32(conf.BpfVerifierLogLevel)
 	bpfVerifierLogSize = conf.BpfVerifierLogSize
 
-	noKernelVersionCheck = conf.NoKernelVersionCheck
-
 	ipAddress = conf.IPAddress
 	hostname = conf.Hostname
 	kernelVersion = conf.KernelVersion
@@ -100,11 +95,6 @@ func ProjectID() uint32 {
 		log.Fatal("Cannot access ProjectID. Configuration has not been read")
 	}
 	return projectID
-}
-
-// Indicates if kernel version checking for eBPF support is disabled
-func NoKernelVersionCheck() bool {
-	return noKernelVersionCheck
 }
 
 // IP address of the interface through which the agent traffic is routed

@@ -126,7 +126,8 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 
 	enabledTracers, _ := config.ParseTracers("")
 	enabledTracers.Enable(config.PythonTracer)
-	tracer, err := NewTracer(ctx, &mockReporter{}, &mockIntervals{}, enabledTracers, false, 20, 0)
+	tracer, err := NewTracer(ctx, &mockReporter{}, &mockIntervals{}, enabledTracers, false, 20, 0,
+		true)
 	require.NoError(t, err)
 
 	traceChan := make(chan *host.Trace, 16)

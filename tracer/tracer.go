@@ -235,7 +235,7 @@ func calcFallbackModuleID(moduleSym libpf.Symbol, kernelSymbols *libpf.SymbolMap
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
 func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Intervals,
 	includeTracers config.IncludedTracers, filterErrorFrames bool,
-	samplesPerSecond, mapScaleFactor int) (*Tracer, error) {
+	samplesPerSecond, mapScaleFactor int, kernelVersionCheck bool) (*Tracer, error) {
 	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
@@ -243,7 +243,7 @@ func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Inter
 
 	// Based on includeTracers we decide later which are loaded into the kernel.
 	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(includeTracers, kernelSymbols,
-		filterErrorFrames, mapScaleFactor)
+		filterErrorFrames, mapScaleFactor, kernelVersionCheck)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
@@ -348,7 +348,8 @@ func buildStackDeltaTemplates(coll *cebpf.CollectionSpec) error {
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
 // by the embedded elf file and loads these into the kernel.
 func initializeMapsAndPrograms(includeTracers config.IncludedTracers,
-	kernelSymbols *libpf.SymbolMap, filterErrorFrames bool, mapScaleFactor int) (
+	kernelSymbols *libpf.SymbolMap, filterErrorFrames bool, mapScaleFactor int,
+	kernelVersionCheck bool) (
 	ebpfMaps map[string]*cebpf.Map, ebpfProgs map[string]*cebpf.Program, err error) {
 	// Loading specifications about eBPF programs and maps from the embedded elf file
 	// does not load them into the kernel.
@@ -383,7 +384,7 @@ func initializeMapsAndPrograms(includeTracers config.IncludedTracers,
 		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
 
-	if !config.NoKernelVersionCheck() {
+	if kernelVersionCheck {
 		var major, minor, patch uint32
 		major, minor, patch, err = GetCurrentKernelVersion()
 		if err != nil {
