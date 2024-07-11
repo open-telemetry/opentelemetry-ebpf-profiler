@@ -214,7 +214,6 @@ func mainWithExitCode() exitCode {
 
 	log.Debugf("Reading the configuration")
 	conf := config.Config{
-		HostID:        environment.HostID(),
 		IPAddress:     hostMetadataMap[hostmeta.KeyIPAddress],
 		Hostname:      hostMetadataMap[hostmeta.KeyHostname],
 		KernelVersion: hostMetadataMap[hostmeta.KeyKernelVersion],
@@ -233,7 +232,7 @@ func mainWithExitCode() exitCode {
 		return failure("Failed to parse the included tracers: %s", err)
 	}
 
-	log.Infof("Assigned ProjectID: %d HostID: %d", args.projectID, config.HostID())
+	log.Infof("Assigned ProjectID: %d HostID: %d", args.projectID, environment.HostID())
 
 	// Scale the queues that report traces or information related to traces
 	// with the number of CPUs, the reporting interval and the sample frequencies.
@@ -274,6 +273,7 @@ func mainWithExitCode() exitCode {
 		CacheSize:               traceHandlerCacheSize,
 		SamplesPerSecond:        args.samplesPerSecond,
 		ProjectID:               strconv.Itoa(int(args.projectID)),
+		HostID:                  environment.HostID(),
 	})
 	if err != nil {
 		return failure("Failed to start reporting: %v", err)

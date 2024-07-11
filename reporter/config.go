@@ -54,6 +54,8 @@ type Config struct {
 	SamplesPerSecond int
 	// ProjectID is the project ID to be sent to the collection agent.
 	ProjectID string
+	// HostID is the host ID to be sent to the collection agent.
+	HostID uint64
 
 	// Number of connection attempts to the collector after which we give up retrying.
 	MaxGRPCRetries uint32

@@ -122,6 +122,9 @@ type OTLPReporter struct {
 
 	// projectID is the project ID set by the user.
 	projectID string
+
+	// hostID is the unique identifier of the host.
+	hostID string
 }
 
 // hashString is a helper function for LRUs that use string as a key.
@@ -295,6 +298,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		name:                    cfg.Name,
 		version:                 cfg.Version,
 		projectID:               cfg.ProjectID,
+		hostID:                  strconv.FormatUint(cfg.HostID, 10),
 		stopSignal:              make(chan libpf.Void),
 		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
 		client:                  nil,
@@ -433,7 +437,7 @@ func (r *OTLPReporter) getResource() *resource.Resource {
 	// That makes our hostmetadata attributes incompatible with OTEL collectors.
 	// TODO: Make a final decision about project id.
 	addAttr("profiling.project.id", r.projectID)
-	addAttr(semconv.HostIDKey, strconv.FormatUint(config.HostID(), 10))
+	addAttr(semconv.HostIDKey, r.hostID)
 	addAttr(semconv.HostIPKey, config.IPAddress())
 	addAttr(semconv.HostNameKey, config.Hostname())
 	addAttr(semconv.ServiceVersionKey, r.version)

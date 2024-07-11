@@ -6,14 +6,8 @@
 
 package config
 
-import (
-	log "github.com/sirupsen/logrus"
-)
-
 // Config is the structure to pass the configuration into host-agent.
 type Config struct {
-	HostID uint64
-
 	// Bits of hostmetadata that we save in config so that they can be
 	// conveniently accessed globally in the agent.
 	IPAddress     string
@@ -25,9 +19,6 @@ type Config struct {
 // To avoid passing them as argument to every function, they are declared
 // on package scope.
 var (
-	// hostID represents project wide unique id to identify the host.
-	hostID uint64
-
 	// ipAddress holds the IP address of the interface through which the agent traffic is routed
 	ipAddress string
 
@@ -39,22 +30,11 @@ var (
 )
 
 func SetConfiguration(conf *Config) error {
-	hostID = conf.HostID
-
 	ipAddress = conf.IPAddress
 	hostname = conf.Hostname
 	kernelVersion = conf.KernelVersion
 
 	return nil
-}
-
-// HostID returns the hostID of the running agent. The host ID is calculated by calling
-// GenerateNewHostIDIfNecessary().
-func HostID() uint64 {
-	if hostID == 0 {
-		log.Fatalf("HostID is not set")
-	}
-	return hostID
 }
 
 // IP address of the interface through which the agent traffic is routed
