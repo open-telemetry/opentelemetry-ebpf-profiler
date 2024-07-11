@@ -15,7 +15,6 @@ type Config struct {
 	HostID              uint64
 	BpfVerifierLogSize  int
 	BpfVerifierLogLevel uint
-	ProjectID           uint32
 
 	// Bits of hostmetadata that we save in config so that they can be
 	// conveniently accessed globally in the agent.
@@ -30,9 +29,6 @@ type Config struct {
 var (
 	// hostID represents project wide unique id to identify the host.
 	hostID uint64
-	// projectID is read from the provided configuration file and sent to the collection agent
-	// along with traces to identify the project that they belong to.
-	projectID uint32
 
 	// bpfVerifierLogLevel holds the defined log level of the eBPF verifier.
 	// Currently there are three different log levels applied by the kernel verifier:
@@ -56,12 +52,7 @@ var (
 	kernelVersion string
 )
 
-// configurationSet signals that SetConfiguration() has been successfully called and
-// the variables it sets can be read.
-var configurationSet = false
-
 func SetConfiguration(conf *Config) error {
-	projectID = conf.ProjectID
 	hostID = conf.HostID
 
 	bpfVerifierLogLevel = uint32(conf.BpfVerifierLogLevel)
@@ -71,7 +62,6 @@ func SetConfiguration(conf *Config) error {
 	hostname = conf.Hostname
 	kernelVersion = conf.KernelVersion
 
-	configurationSet = true
 	return nil
 }
 
@@ -87,14 +77,6 @@ func HostID() uint64 {
 		log.Fatalf("HostID is not set")
 	}
 	return hostID
-}
-
-// ProjectID returns the projectID
-func ProjectID() uint32 {
-	if !configurationSet {
-		log.Fatal("Cannot access ProjectID. Configuration has not been read")
-	}
-	return projectID
 }
 
 // IP address of the interface through which the agent traffic is routed

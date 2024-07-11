@@ -42,9 +42,7 @@ func TestSetTags(t *testing.T) {
 }
 
 func TestAddMetadata(t *testing.T) {
-	err := config.SetConfiguration(&config.Config{
-		ProjectID: 42,
-	})
+	err := config.SetConfiguration(&config.Config{})
 	require.NoError(t, err)
 
 	agentmeta.SetAgentData(&agentmeta.Config{

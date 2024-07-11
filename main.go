@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"time"
 
 	//nolint:gosec
@@ -213,7 +214,6 @@ func mainWithExitCode() exitCode {
 
 	log.Debugf("Reading the configuration")
 	conf := config.Config{
-		ProjectID:           uint32(args.projectID),
 		HostID:              environment.HostID(),
 		BpfVerifierLogLevel: args.bpfVerifierLogLevel,
 		BpfVerifierLogSize:  args.bpfVerifierLogSize,
@@ -235,7 +235,7 @@ func mainWithExitCode() exitCode {
 		return failure("Failed to parse the included tracers: %s", err)
 	}
 
-	log.Infof("Assigned ProjectID: %d HostID: %d", config.ProjectID(), config.HostID())
+	log.Infof("Assigned ProjectID: %d HostID: %d", args.projectID, config.HostID())
 
 	// Scale the queues that report traces or information related to traces
 	// with the number of CPUs, the reporting interval and the sample frequencies.
@@ -275,6 +275,7 @@ func mainWithExitCode() exitCode {
 		ReportInterval:          intervals.ReportInterval(),
 		CacheSize:               traceHandlerCacheSize,
 		SamplesPerSecond:        args.samplesPerSecond,
+		ProjectID:               strconv.Itoa(int(args.projectID)),
 	})
 	if err != nil {
 		return failure("Failed to start reporting: %v", err)

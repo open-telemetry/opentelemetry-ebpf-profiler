@@ -52,6 +52,8 @@ type Config struct {
 	CacheSize uint32
 	// samplesPerSecond defines the number of samples per second.
 	SamplesPerSecond int
+	// ProjectID is the project ID to be sent to the collection agent.
+	ProjectID string
 
 	// Number of connection attempts to the collector after which we give up retrying.
 	MaxGRPCRetries uint32

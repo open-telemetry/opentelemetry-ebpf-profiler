@@ -13,9 +13,7 @@ import (
 )
 
 func TestSetConfiguration(t *testing.T) {
-	cfg := Config{
-		ProjectID: 42,
-	}
+	cfg := Config{}
 
 	// Test setting environment to "aws".
 	err := SetConfiguration(&cfg)
