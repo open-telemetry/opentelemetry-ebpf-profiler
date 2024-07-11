@@ -10,9 +10,8 @@ package config
 type Config struct {
 	// Bits of hostmetadata that we save in config so that they can be
 	// conveniently accessed globally in the agent.
-	IPAddress     string
-	Hostname      string
-	KernelVersion string
+	IPAddress string
+	Hostname  string
 }
 
 // Profiling specific variables which are set once at startup of the agent.
@@ -24,15 +23,11 @@ var (
 
 	// hostname hosts the hostname of the machine that is running the agent
 	hostname string
-
-	// kernelVersion holds the kernel release (uname -r) of the machine that is running the agent
-	kernelVersion string
 )
 
 func SetConfiguration(conf *Config) error {
 	ipAddress = conf.IPAddress
 	hostname = conf.Hostname
-	kernelVersion = conf.KernelVersion
 
 	return nil
 }
@@ -45,9 +40,4 @@ func IPAddress() string {
 // Hostname of the machine that is running the agent
 func Hostname() string {
 	return hostname
-}
-
-// Kernel release (uname -r) of the machine that is running the agent
-func KernelVersion() string {
-	return kernelVersion
 }

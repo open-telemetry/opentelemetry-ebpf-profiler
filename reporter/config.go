@@ -56,6 +56,8 @@ type Config struct {
 	ProjectID string
 	// HostID is the host ID to be sent to the collection agent.
 	HostID uint64
+	// KernelVersion is the kernel version of the host.
+	KernelVersion string
 
 	// Number of connection attempts to the collector after which we give up retrying.
 	MaxGRPCRetries uint32

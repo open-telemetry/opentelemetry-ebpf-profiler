@@ -125,6 +125,9 @@ type OTLPReporter struct {
 
 	// hostID is the unique identifier of the host.
 	hostID string
+
+	// kernelVersion is the version of the kernel.
+	kernelVersion string
 }
 
 // hashString is a helper function for LRUs that use string as a key.
@@ -298,6 +301,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		name:                    cfg.Name,
 		version:                 cfg.Version,
 		projectID:               cfg.ProjectID,
+		kernelVersion:           cfg.KernelVersion,
 		hostID:                  strconv.FormatUint(cfg.HostID, 10),
 		stopSignal:              make(chan libpf.Void),
 		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
@@ -441,7 +445,7 @@ func (r *OTLPReporter) getResource() *resource.Resource {
 	addAttr(semconv.HostIPKey, config.IPAddress())
 	addAttr(semconv.HostNameKey, config.Hostname())
 	addAttr(semconv.ServiceVersionKey, r.version)
-	addAttr("os.kernel", config.KernelVersion())
+	addAttr("os.kernel", r.kernelVersion)
 
 	return &resource.Resource{
 		Attributes: attributes,
