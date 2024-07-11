@@ -214,12 +214,10 @@ func mainWithExitCode() exitCode {
 
 	log.Debugf("Reading the configuration")
 	conf := config.Config{
-		HostID:              environment.HostID(),
-		BpfVerifierLogLevel: args.bpfVerifierLogLevel,
-		BpfVerifierLogSize:  args.bpfVerifierLogSize,
-		IPAddress:           hostMetadataMap[hostmeta.KeyIPAddress],
-		Hostname:            hostMetadataMap[hostmeta.KeyHostname],
-		KernelVersion:       hostMetadataMap[hostmeta.KeyKernelVersion],
+		HostID:        environment.HostID(),
+		IPAddress:     hostMetadataMap[hostmeta.KeyIPAddress],
+		Hostname:      hostMetadataMap[hostmeta.KeyHostname],
+		KernelVersion: hostMetadataMap[hostmeta.KeyKernelVersion],
 	}
 	if err = config.SetConfiguration(&conf); err != nil {
 		return failure("Failed to set configuration: %v", err)
@@ -299,7 +297,8 @@ func mainWithExitCode() exitCode {
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(mainCtx, rep, intervals, includeTracers, !args.sendErrorFrames,
-		args.samplesPerSecond, int(args.mapScaleFactor), !args.noKernelVersionCheck)
+		args.samplesPerSecond, int(args.mapScaleFactor), !args.noKernelVersionCheck,
+		uint32(args.bpfVerifierLogLevel), args.bpfVerifierLogSize)
 	if err != nil {
 		return failure("Failed to load eBPF tracer: %v", err)
 	}
