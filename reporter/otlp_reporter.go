@@ -484,14 +484,12 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS uint64, 
 		sample.StacktraceIdIndex = getStringMapIndex(stringMap,
 			traceHash.Base64())
 
-		timestamps, values := dedupSlice(traceInfo.timestamps)
-		// dedupTimestamps returns a sorted list of timestamps, so
-		// startTs and endTs can be used directly.
-		startTS = timestamps[0]
-		endTS = timestamps[len(timestamps)-1]
+		slices.Sort(traceInfo.timestamps)
+		startTS = traceInfo.timestamps[0]
+		endTS = traceInfo.timestamps[len(traceInfo.timestamps)-1]
 
-		sample.TimestampsUnixNano = timestamps
-		sample.Value = values
+		sample.TimestampsUnixNano = traceInfo.timestamps
+		sample.Value = []int64{1}
 
 		// Walk every frame of the trace.
 		for i := range traceInfo.frameTypes {
@@ -724,30 +722,6 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
 		})
 	}
 	return locationMappingIndex
-}
-
-// dedupSlice returns a sorted slice of unique values along with their count.
-// If a value appears only a single time in values, its count will be 1,
-// otherwise, count will be increased with every appearance of the same value.
-// NOTE: This function may modify the input slice or return it as-is.
-func dedupSlice(values []uint64) (out []uint64, count []int64) {
-	if len(values) == 1 {
-		return values, []int64{1}
-	}
-
-	out = make([]uint64, 0, len(values))
-	count = make([]int64, 0, len(values))
-	slices.Sort(values)
-
-	for i := 0; i < len(values); i++ {
-		if i > 0 && values[i-1] == values[i] {
-			count[len(count)-1]++
-			continue
-		}
-		out = append(out, values[i])
-		count = append(count, 1)
-	}
-	return out, count
 }
 
 // waitGrpcEndpoint waits until the gRPC connection is established.
