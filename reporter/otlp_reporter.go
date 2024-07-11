@@ -16,7 +16,6 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/libpf/xsync"
 	"github.com/elastic/otel-profiling-agent/util"
@@ -131,6 +130,9 @@ type OTLPReporter struct {
 
 	// hostName is the name of the host.
 	hostName string
+
+	// ipAddress is the IP address of the host.
+	ipAddress string
 }
 
 // hashString is a helper function for LRUs that use string as a key.
@@ -306,6 +308,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		projectID:               cfg.ProjectID,
 		kernelVersion:           cfg.KernelVersion,
 		hostName:                cfg.HostName,
+		ipAddress:               cfg.IPAddress,
 		hostID:                  strconv.FormatUint(cfg.HostID, 10),
 		stopSignal:              make(chan libpf.Void),
 		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
@@ -446,7 +449,7 @@ func (r *OTLPReporter) getResource() *resource.Resource {
 	// TODO: Make a final decision about project id.
 	addAttr("profiling.project.id", r.projectID)
 	addAttr(semconv.HostIDKey, r.hostID)
-	addAttr(semconv.HostIPKey, config.IPAddress())
+	addAttr(semconv.HostIPKey, r.ipAddress)
 	addAttr(semconv.HostNameKey, r.hostName)
 	addAttr(semconv.ServiceVersionKey, r.version)
 	addAttr("os.kernel", r.kernelVersion)

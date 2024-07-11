@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/libpf"
 )
 
@@ -42,9 +41,6 @@ func TestSetTags(t *testing.T) {
 }
 
 func TestAddMetadata(t *testing.T) {
-	err := config.SetConfiguration(&config.Config{})
-	require.NoError(t, err)
-
 	agentmeta.SetAgentData(&agentmeta.Config{
 		CollectionAgentAddr: "localhost:12345",
 	})

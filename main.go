@@ -200,27 +200,6 @@ func mainWithExitCode() exitCode {
 		log.Errorf("Unable to get host metadata for config: %v", err)
 	}
 
-	// Metadata retrieval may fail, in which case, we initialize all values
-	// to the empty string.
-	for _, hostMetadataKey := range []string{
-		hostmeta.KeyIPAddress,
-		hostmeta.KeyHostname,
-		hostmeta.KeyKernelVersion,
-	} {
-		if _, ok := hostMetadataMap[hostMetadataKey]; !ok {
-			hostMetadataMap[hostMetadataKey] = ""
-		}
-	}
-
-	log.Debugf("Reading the configuration")
-	conf := config.Config{
-		IPAddress: hostMetadataMap[hostmeta.KeyIPAddress],
-	}
-	if err = config.SetConfiguration(&conf); err != nil {
-		return failure("Failed to set configuration: %v", err)
-	}
-	log.Debugf("Done setting configuration")
-
 	intervals := times.New(mainCtx,
 		args.monitorInterval, args.reporterInterval, args.probabilisticInterval)
 
@@ -274,6 +253,7 @@ func mainWithExitCode() exitCode {
 		HostID:                  environment.HostID(),
 		KernelVersion:           hostMetadataMap[hostmeta.KeyKernelVersion],
 		HostName:                hostMetadataMap[hostmeta.KeyHostname],
+		IPAddress:               hostMetadataMap[hostmeta.KeyIPAddress],
 	})
 	if err != nil {
 		return failure("Failed to start reporting: %v", err)
