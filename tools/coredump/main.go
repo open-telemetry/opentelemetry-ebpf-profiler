@@ -67,6 +67,5 @@ func initModuleStore() (*modulestore.Store, error) {
 		return nil, err
 	}
 	s3Client := s3.NewFromConfig(cfg)
-	ms := modulestore.New(s3Client, moduleStoreS3Bucket, "modulecache")
-	return ms, nil
+	return modulestore.New(s3Client, moduleStoreS3Bucket, "modulecache")
 }

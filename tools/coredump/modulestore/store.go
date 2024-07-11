@@ -62,12 +62,15 @@ type Store struct {
 
 // New creates a new module storage. The modules present in the local cache are inspected and a
 // full index of the modules in the remote S3 bucket is retrieved and cached as well.
-func New(s3client *s3.Client, s3Bucket, localCachePath string) *Store {
+func New(s3client *s3.Client, s3Bucket, localCachePath string) (*Store, error) {
+	if err := os.MkdirAll(localCachePath, 0750); err != nil {
+		return nil, err
+	}
 	return &Store{
 		s3client:       s3client,
 		bucket:         s3Bucket,
 		localCachePath: localCachePath,
-	}
+	}, nil
 }
 
 // InsertModuleLocally places a file into the local cache, returning an ID to refer it by in the
