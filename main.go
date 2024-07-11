@@ -215,7 +215,6 @@ func mainWithExitCode() exitCode {
 	log.Debugf("Reading the configuration")
 	conf := config.Config{
 		IPAddress: hostMetadataMap[hostmeta.KeyIPAddress],
-		Hostname:  hostMetadataMap[hostmeta.KeyHostname],
 	}
 	if err = config.SetConfiguration(&conf); err != nil {
 		return failure("Failed to set configuration: %v", err)
@@ -274,6 +273,7 @@ func mainWithExitCode() exitCode {
 		ProjectID:               strconv.Itoa(int(args.projectID)),
 		HostID:                  environment.HostID(),
 		KernelVersion:           hostMetadataMap[hostmeta.KeyKernelVersion],
+		HostName:                hostMetadataMap[hostmeta.KeyHostname],
 	})
 	if err != nil {
 		return failure("Failed to start reporting: %v", err)

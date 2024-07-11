@@ -58,6 +58,8 @@ type Config struct {
 	HostID uint64
 	// KernelVersion is the kernel version of the host.
 	KernelVersion string
+	// HostName is the name of the host.
+	HostName string
 
 	// Number of connection attempts to the collector after which we give up retrying.
 	MaxGRPCRetries uint32
