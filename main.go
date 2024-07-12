@@ -206,7 +206,7 @@ func mainWithExitCode() exitCode {
 	log.Debugf("Determining tracers to include")
 	includeTracers, err := config.ParseTracers(args.tracers)
 	if err != nil {
-		return failure("Failed to parse the included tracers: %s", err)
+		return failure("Failed to parse the included tracers: %v", err)
 	}
 
 	log.Infof("Assigned ProjectID: %d HostID: %d", args.projectID, environment.HostID())
@@ -261,12 +261,13 @@ func mainWithExitCode() exitCode {
 
 	metrics.SetReporter(rep)
 
-	// Now that we've sent the first host metadata update, start a goroutine to keep sending updates
-	// regularly. This is required so pf-web-service only needs to query metadata for bounded
-	// periods of time.
+	// Set the initial host metadata.
+	rep.ReportHostMetadata(hostMetadataMap)
+
+	// Now that set the initial host metadata, start a goroutine to keep sending updates regularly.
 	metadataCollector.StartMetadataCollection(mainCtx, rep)
 
-	// Start agent specific metric retrieval and report them every second.
+	// Start agent-specific metric retrieval and report them every second.
 	agentMetricCancel, agentErr := agentmetrics.Start(mainCtx, 1*time.Second)
 	if agentErr != nil {
 		return failure("Error starting the agent specific metric collection: %v", agentErr)
