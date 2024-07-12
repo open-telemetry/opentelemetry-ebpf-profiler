@@ -19,7 +19,6 @@ import (
 	"github.com/cilium/ebpf/link"
 	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/reporter"
@@ -120,15 +119,10 @@ func generateMaxLengthTrace() host.Trace {
 func TestTraceTransmissionAndParsing(t *testing.T) {
 	ctx := context.Background()
 
-	err := config.SetConfiguration(&config.Config{
-		ProjectID: 42,
-	})
-	require.NoError(t, err)
-
 	enabledTracers, _ := tracertypes.ParseTracers("")
 	enabledTracers.Enable(tracertypes.PythonTracer)
 	tracer, err := NewTracer(ctx, &mockReporter{}, &mockIntervals{}, enabledTracers, false, 20, 0,
-		true)
+		true, 0, cebpf.DefaultVerifierLogSize)
 	require.NoError(t, err)
 
 	traceChan := make(chan *host.Trace, 16)
