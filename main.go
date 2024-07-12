@@ -211,11 +211,6 @@ func mainWithExitCode() exitCode {
 
 	log.Infof("Assigned ProjectID: %d HostID: %d", args.projectID, environment.HostID())
 
-	// Scale the queues that report traces or information related to traces
-	// with the number of CPUs, the reporting interval and the sample frequencies.
-	tracesQSize := max(1024,
-		uint32(runtime.NumCPU()*int(args.reporterInterval.Seconds()*2)*args.samplesPerSecond))
-
 	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr, environment)
 
 	// TODO: Maybe abort execution if (some) metadata can not be collected
@@ -232,28 +227,21 @@ func mainWithExitCode() exitCode {
 	var rep reporter.Reporter
 	// Connect to the collection agent
 	rep, err = reporter.Start(mainCtx, &reporter.Config{
-		CollAgentAddr:           args.collAgentAddr,
-		MaxRPCMsgSize:           33554432, // 32 MiB
-		ExecMetadataMaxQueue:    2048,
-		CountsForTracesMaxQueue: tracesQSize,
-		MetricsMaxQueue:         1024,
-		FramesForTracesMaxQueue: tracesQSize,
-		FrameMetadataMaxQueue:   tracesQSize,
-		HostMetadataMaxQueue:    2,
-		FallbackSymbolsMaxQueue: 1024,
-		DisableTLS:              args.disableTLS,
-		MaxGRPCRetries:          5,
-		GRPCOperationTimeout:    intervals.GRPCOperationTimeout(),
-		GRPCStartupBackoffTime:  intervals.GRPCStartupBackoffTime(),
-		GRPCConnectionTimeout:   intervals.GRPCConnectionTimeout(),
-		ReportInterval:          intervals.ReportInterval(),
-		CacheSize:               traceHandlerCacheSize,
-		SamplesPerSecond:        args.samplesPerSecond,
-		ProjectID:               strconv.Itoa(int(args.projectID)),
-		HostID:                  environment.HostID(),
-		KernelVersion:           hostMetadataMap[hostmeta.KeyKernelVersion],
-		HostName:                hostMetadataMap[hostmeta.KeyHostname],
-		IPAddress:               hostMetadataMap[hostmeta.KeyIPAddress],
+		CollAgentAddr:          args.collAgentAddr,
+		MaxRPCMsgSize:          33554432, // 32 MiB
+		DisableTLS:             args.disableTLS,
+		MaxGRPCRetries:         5,
+		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
+		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
+		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
+		ReportInterval:         intervals.ReportInterval(),
+		CacheSize:              traceHandlerCacheSize,
+		SamplesPerSecond:       args.samplesPerSecond,
+		ProjectID:              strconv.Itoa(int(args.projectID)),
+		HostID:                 environment.HostID(),
+		KernelVersion:          hostMetadataMap[hostmeta.KeyKernelVersion],
+		HostName:               hostMetadataMap[hostmeta.KeyHostname],
+		IPAddress:              hostMetadataMap[hostmeta.KeyIPAddress],
 	})
 	if err != nil {
 		return failure("Failed to start reporting: %v", err)

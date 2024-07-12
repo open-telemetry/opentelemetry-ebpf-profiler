@@ -25,27 +25,6 @@ type Config struct {
 	// MaxRPCMsgSize defines the maximum size of a gRPC message.
 	MaxRPCMsgSize int
 
-	// ExecMetadataMaxQueue defines the maximum size for the queue which holds
-	// data of type collectionagent.ExecutableMetadata.
-	ExecMetadataMaxQueue uint32
-	// CountsForTracesMaxQueue defines the maximum size for the queue which holds
-	// data of type libpf.TraceAndCounts.
-	CountsForTracesMaxQueue uint32
-	// MetricsMaxQueue defines the maximum size for the queue which holds
-	// data of type collectionagent.Metric.
-	MetricsMaxQueue uint32
-	// FramesForTracesMaxQueue defines the maximum size for the queue which holds
-	// data of type libpf.Trace.
-	FramesForTracesMaxQueue uint32
-	// FrameMetadataMaxQueue defines the maximum size for the queue which holds
-	// data of type collectionagent.FrameMetadata.
-	FrameMetadataMaxQueue uint32
-	// HostMetadataMaxQueue defines the maximum size for the queue which holds
-	// data of type collectionagent.HostMetadata.
-	HostMetadataMaxQueue uint32
-	// FallbackSymbolsMaxQueue defines the maximum size for the queue which holds
-	// data of type collectionagent.FallbackSymbol.
-	FallbackSymbolsMaxQueue uint32
 	// Disable secure communication with Collection Agent.
 	DisableTLS bool
 	// CacheSize defines the size of the reporter caches.
