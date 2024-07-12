@@ -131,6 +131,37 @@ type Tracer struct {
 
 	// samplesPerSecond holds the configured number of samples per second.
 	samplesPerSecond int
+
+	// probabilisticInterval is the time interval for which probabilistic profiling will be enabled.
+	probabilisticInterval time.Duration
+
+	// probabilisticThreshold holds the threshold for probabilistic profiling.
+	probabilisticThreshold uint
+}
+
+type Config struct {
+	// Reporter allows swapping out the reporter implementation.
+	Reporter reporter.SymbolReporter
+	// Intervals provides access to globally configured timers and counters.
+	Intervals Intervals
+	// IncludeTracers holds information about which tracers are enabled.
+	IncludeTracers types.IncludedTracers
+	// SamplesPerSecond holds the number of samples per second.
+	SamplesPerSecond int
+	// MapScaleFactor is the scaling factor for eBPF map sizes.
+	MapScaleFactor int
+	// FilterErrorFrames indicates whether error frames should be filtered.
+	FilterErrorFrames bool
+	// KernelVersionCheck indicates whether the kernel version should be checked.
+	KernelVersionCheck bool
+	// BPFVerifierLogLevel is the log level of the eBPF verifier output.
+	BPFVerifierLogLevel uint32
+	// BPFVerifierLogSize is the size in bytes that will be allocated for the eBPF verifier output.
+	BPFVerifierLogSize int
+	// ProbabilisticInterval is the time interval for which probabilistic profiling will be enabled.
+	ProbabilisticInterval time.Duration
+	// ProbabilisticThreshold is the threshold for probabilistic profiling.
+	ProbabilisticThreshold uint
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -233,19 +264,16 @@ func calcFallbackModuleID(moduleSym libpf.Symbol, kernelSymbols *libpf.SymbolMap
 }
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
-func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Intervals,
-	includeTracers types.IncludedTracers, filterErrorFrames bool,
-	samplesPerSecond, mapScaleFactor int, kernelVersionCheck bool, bpfVerifierLogLevel uint32,
-	bpfVerifierLogSize int) (*Tracer, error) {
+func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
 
 	// Based on includeTracers we decide later which are loaded into the kernel.
-	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(includeTracers, kernelSymbols,
-		filterErrorFrames, mapScaleFactor, kernelVersionCheck, bpfVerifierLogLevel,
-		bpfVerifierLogSize)
+	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(cfg.IncludeTracers, kernelSymbols,
+		cfg.FilterErrorFrames, cfg.MapScaleFactor, cfg.KernelVersionCheck, cfg.BPFVerifierLogLevel,
+		cfg.BPFVerifierLogSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
@@ -257,8 +285,9 @@ func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Inter
 
 	hasBatchOperations := ebpfHandler.SupportsGenericBatchOperations()
 
-	processManager, err := pm.New(ctx, includeTracers, intervals.MonitorInterval(), ebpfHandler,
-		nil, rep, elfunwindinfo.NewStackDeltaProvider(), filterErrorFrames)
+	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
+		ebpfHandler, nil, cfg.Reporter, elfunwindinfo.NewStackDeltaProvider(),
+		cfg.FilterErrorFrames)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
@@ -276,7 +305,8 @@ func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Inter
 		return nil, fmt.Errorf("unable to instantiate transmitted fallback symbols cache: %v", err)
 	}
 
-	moduleFileIDs, err := processKernelModulesMetadata(ctx, rep, kernelModules, kernelSymbols)
+	moduleFileIDs, err := processKernelModulesMetadata(ctx,
+		cfg.Reporter, kernelModules, kernelSymbols)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract kernel modules metadata: %v", err)
 	}
@@ -293,12 +323,14 @@ func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Inter
 		ebpfMaps:                   ebpfMaps,
 		ebpfProgs:                  ebpfProgs,
 		hooks:                      make(map[hookPoint]link.Link),
-		intervals:                  intervals,
+		intervals:                  cfg.Intervals,
 		hasBatchOperations:         hasBatchOperations,
 		perfEntrypoints:            xsync.NewRWMutex(perfEventList),
 		moduleFileIDs:              moduleFileIDs,
-		reporter:                   rep,
-		samplesPerSecond:           samplesPerSecond,
+		reporter:                   cfg.Reporter,
+		samplesPerSecond:           cfg.SamplesPerSecond,
+		probabilisticInterval:      cfg.ProbabilisticInterval,
+		probabilisticThreshold:     cfg.ProbabilisticThreshold,
 	}, nil
 }
 
@@ -1059,14 +1091,14 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.T
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
 // entry point is always the native tracer. The native tracer will determine when to invoke the
 // interpreter tracers based on address range information.
-func (t *Tracer) AttachTracer(sampleFreq int) error {
+func (t *Tracer) AttachTracer() error {
 	tracerProg, ok := t.ebpfProgs["native_tracer_entry"]
 	if !ok {
 		return errors.New("entry program is not available")
 	}
 
 	perfAttribute := new(perf.Attr)
-	perfAttribute.SetSampleFreq(uint64(sampleFreq))
+	perfAttribute.SetSampleFreq(uint64(t.samplesPerSecond))
 	if err := perf.CPUClock.Configure(perfAttribute); err != nil {
 		return fmt.Errorf("failed to configure software perf event: %v", err)
 	}
@@ -1150,18 +1182,17 @@ func (t *Tracer) probabilisticProfile(interval time.Duration, threshold uint) {
 }
 
 // StartProbabilisticProfiling periodically runs probabilistic profiling.
-func (t *Tracer) StartProbabilisticProfiling(ctx context.Context,
-	interval time.Duration, threshold uint) {
+func (t *Tracer) StartProbabilisticProfiling(ctx context.Context) {
 	metrics.Add(metrics.IDProbProfilingInterval,
-		metrics.MetricValue(interval.Seconds()))
+		metrics.MetricValue(t.probabilisticInterval.Seconds()))
 
 	// Run a single iteration of probabilistic profiling to avoid needing
 	// to wait for the first interval to pass with periodiccaller.Start()
 	// before getting called.
-	t.probabilisticProfile(interval, threshold)
+	t.probabilisticProfile(t.probabilisticInterval, t.probabilisticThreshold)
 
-	periodiccaller.Start(ctx, interval, func() {
-		t.probabilisticProfile(interval, threshold)
+	periodiccaller.Start(ctx, t.probabilisticInterval, func() {
+		t.probabilisticProfile(t.probabilisticInterval, t.probabilisticThreshold)
 	})
 }
 

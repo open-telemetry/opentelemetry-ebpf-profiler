@@ -277,9 +277,19 @@ func mainWithExitCode() exitCode {
 	defer reportermetrics.Start(mainCtx, rep, 60*time.Second)()
 
 	// Load the eBPF code and map definitions
-	trc, err := tracer.NewTracer(mainCtx, rep, intervals, includeTracers, !args.sendErrorFrames,
-		args.samplesPerSecond, int(args.mapScaleFactor), !args.noKernelVersionCheck,
-		uint32(args.bpfVerifierLogLevel), args.bpfVerifierLogSize)
+	trc, err := tracer.NewTracer(mainCtx, &tracer.Config{
+		Reporter:               rep,
+		Intervals:              intervals,
+		IncludeTracers:         includeTracers,
+		FilterErrorFrames:      !args.sendErrorFrames,
+		SamplesPerSecond:       args.samplesPerSecond,
+		MapScaleFactor:         int(args.mapScaleFactor),
+		KernelVersionCheck:     !args.noKernelVersionCheck,
+		BPFVerifierLogLevel:    uint32(args.bpfVerifierLogLevel),
+		BPFVerifierLogSize:     args.bpfVerifierLogSize,
+		ProbabilisticInterval:  args.probabilisticInterval,
+		ProbabilisticThreshold: args.probabilisticThreshold,
+	})
 	if err != nil {
 		return failure("Failed to load eBPF tracer: %v", err)
 	}
@@ -295,14 +305,13 @@ func mainWithExitCode() exitCode {
 	log.Debug("Completed initial PID listing")
 
 	// Attach our tracer to the perf event
-	if err := trc.AttachTracer(args.samplesPerSecond); err != nil {
+	if err := trc.AttachTracer(); err != nil {
 		return failure("Failed to attach to perf event: %v", err)
 	}
 	log.Info("Attached tracer program")
 
 	if args.probabilisticThreshold < tracer.ProbabilisticThresholdMax {
-		trc.StartProbabilisticProfiling(mainCtx,
-			args.probabilisticInterval, args.probabilisticThreshold)
+		trc.StartProbabilisticProfiling(mainCtx)
 		log.Printf("Enabled probabilistic profiling")
 	} else {
 		if err := trc.EnableProfiling(); err != nil {
