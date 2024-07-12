@@ -117,7 +117,7 @@ type OTLPReporter struct {
 	pkgGRPCOperationTimeout time.Duration
 
 	// samplesPerSecond is the number of samples per second.
-	samplesPerSecond uint32
+	samplesPerSecond int
 
 	// projectID is the project ID set by the user.
 	projectID string
@@ -309,6 +309,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		kernelVersion:           cfg.KernelVersion,
 		hostName:                cfg.HostName,
 		ipAddress:               cfg.IPAddress,
+		samplesPerSecond:        cfg.SamplesPerSecond,
 		hostID:                  strconv.FormatUint(cfg.HostID, 10),
 		stopSignal:              make(chan libpf.Void),
 		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,

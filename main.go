@@ -377,6 +377,10 @@ func sanityCheck(args *arguments) exitCode {
 		return parseError("You can only specify the machine ID if you also provide the environment")
 	}
 
+	if args.samplesPerSecond < 1 {
+		return parseError("Invalid sampling frequency: %d", args.samplesPerSecond)
+	}
+
 	if args.mapScaleFactor > 8 {
 		return parseError("eBPF map scaling factor %d exceeds limit (max: %d)",
 			args.mapScaleFactor, maxArgMapScaleFactor)
