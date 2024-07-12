@@ -23,6 +23,7 @@ import (
 	agentmeta "github.com/elastic/otel-profiling-agent/hostmetadata/agent"
 	"github.com/elastic/otel-profiling-agent/platform"
 	"github.com/elastic/otel-profiling-agent/times"
+	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
 	"github.com/elastic/otel-profiling-agent/util"
 	"github.com/elastic/otel-profiling-agent/vc"
 	"golang.org/x/sys/unix"
@@ -34,7 +35,6 @@ import (
 	"github.com/elastic/otel-profiling-agent/hostmetadata"
 	"github.com/elastic/otel-profiling-agent/metrics/reportermetrics"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/metrics"
 	"github.com/elastic/otel-profiling-agent/metrics/agentmetrics"
 	"github.com/elastic/otel-profiling-agent/reporter"
@@ -204,7 +204,7 @@ func mainWithExitCode() exitCode {
 		args.monitorInterval, args.reporterInterval, args.probabilisticInterval)
 
 	log.Debugf("Determining tracers to include")
-	includeTracers, err := config.ParseTracers(args.tracers)
+	includeTracers, err := tracertypes.ParseTracers(args.tracers)
 	if err != nil {
 		return failure("Failed to parse the included tracers: %v", err)
 	}

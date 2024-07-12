@@ -17,6 +17,7 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
 
 	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/host"
@@ -124,8 +125,8 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	enabledTracers, _ := config.ParseTracers("")
-	enabledTracers.Enable(config.PythonTracer)
+	enabledTracers, _ := tracertypes.ParseTracers("")
+	enabledTracers.Enable(tracertypes.PythonTracer)
 	tracer, err := NewTracer(ctx, &mockReporter{}, &mockIntervals{}, enabledTracers, false, 20, 0,
 		true)
 	require.NoError(t, err)

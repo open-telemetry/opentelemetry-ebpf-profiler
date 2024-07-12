@@ -4,7 +4,7 @@
  * See the file "LICENSE" for details.
  */
 
-package config
+package types
 
 import (
 	"runtime"

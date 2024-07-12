@@ -26,10 +26,10 @@ import (
 	lru "github.com/elastic/go-freelru"
 	"github.com/elastic/go-perf"
 	"github.com/elastic/otel-profiling-agent/times"
+	"github.com/elastic/otel-profiling-agent/tracer/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/host"
 	hostcpu "github.com/elastic/otel-profiling-agent/hostmetadata/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
@@ -234,7 +234,7 @@ func calcFallbackModuleID(moduleSym libpf.Symbol, kernelSymbols *libpf.SymbolMap
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
 func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Intervals,
-	includeTracers config.IncludedTracers, filterErrorFrames bool,
+	includeTracers types.IncludedTracers, filterErrorFrames bool,
 	samplesPerSecond, mapScaleFactor int, kernelVersionCheck bool, bpfVerifierLogLevel uint32,
 	bpfVerifierLogSize int) (*Tracer, error) {
 	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
@@ -349,7 +349,7 @@ func buildStackDeltaTemplates(coll *cebpf.CollectionSpec) error {
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
 // by the embedded elf file and loads these into the kernel.
-func initializeMapsAndPrograms(includeTracers config.IncludedTracers,
+func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
 	kernelSymbols *libpf.SymbolMap, filterErrorFrames bool, mapScaleFactor int,
 	kernelVersionCheck bool, bpfVerifierLogLevel uint32, bpfVerifierLogSize int) (
 	ebpfMaps map[string]*cebpf.Map, ebpfProgs map[string]*cebpf.Program, err error) {
@@ -481,7 +481,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, ebpfMaps map[string]*cebpf.Map,
 
 // loadUnwinders just satisfies the proof of concept and loads all eBPF programs
 func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
-	tailcallMap *cebpf.Map, includeTracers config.IncludedTracers, bpfVerifierLogLevel uint32,
+	tailcallMap *cebpf.Map, includeTracers types.IncludedTracers, bpfVerifierLogLevel uint32,
 	bpfVerifierLogSize int) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
@@ -519,37 +519,37 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 		{
 			progID: uint32(support.ProgUnwindHotspot),
 			name:   "unwind_hotspot",
-			enable: includeTracers.Has(config.HotspotTracer),
+			enable: includeTracers.Has(types.HotspotTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindPerl),
 			name:   "unwind_perl",
-			enable: includeTracers.Has(config.PerlTracer),
+			enable: includeTracers.Has(types.PerlTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindPHP),
 			name:   "unwind_php",
-			enable: includeTracers.Has(config.PHPTracer),
+			enable: includeTracers.Has(types.PHPTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindPython),
 			name:   "unwind_python",
-			enable: includeTracers.Has(config.PythonTracer),
+			enable: includeTracers.Has(types.PythonTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindRuby),
 			name:   "unwind_ruby",
-			enable: includeTracers.Has(config.RubyTracer),
+			enable: includeTracers.Has(types.RubyTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindV8),
 			name:   "unwind_v8",
-			enable: includeTracers.Has(config.V8Tracer),
+			enable: includeTracers.Has(types.V8Tracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindDotnet),
 			name:   "unwind_dotnet",
-			enable: includeTracers.Has(config.DotnetTracer),
+			enable: includeTracers.Has(types.DotnetTracer),
 		},
 		{
 			name:             "tracepoint__sched_process_exit",
