@@ -204,7 +204,7 @@ func mainWithExitCode() exitCode {
 		args.monitorInterval, args.reporterInterval, args.probabilisticInterval)
 
 	log.Debugf("Determining tracers to include")
-	includeTracers, err := tracertypes.ParseTracers(args.tracers)
+	includeTracers, err := tracertypes.Parse(args.tracers)
 	if err != nil {
 		return failure("Failed to parse the included tracers: %v", err)
 	}

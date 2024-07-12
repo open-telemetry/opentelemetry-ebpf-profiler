@@ -109,11 +109,11 @@ func (t *IncludedTracers) enableByName(name string) bool {
 	return ok
 }
 
-// ParseTracers parses a string that specifies one or more eBPF tracers to enable.
+// Parse parses a string that specifies one or more eBPF tracers to enable.
 // Valid inputs are 'all', or any comma-delimited combination of names listed in tracerTypeToName.
 // The return value holds the information whether a tracer has been set or not.
-// E.g. to check if the Python tracer was requested: `if result.Has(config.PythonTracer)...`.
-func ParseTracers(tracers string) (IncludedTracers, error) {
+// E.g. to check if the Python tracer was requested: `if result.Has(tracertypes.PythonTracer)...`.
+func Parse(tracers string) (IncludedTracers, error) {
 	var result IncludedTracers
 
 	// Parse and validate tracers string.

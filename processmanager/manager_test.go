@@ -306,7 +306,7 @@ func TestInterpreterConvertTrace(t *testing.T) {
 			}
 
 			// For this test do not include interpreters.
-			noIinterpreters, _ := tracertypes.ParseTracers("")
+			noIinterpreters, _ := tracertypes.Parse("")
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -396,7 +396,7 @@ func TestNewMapping(t *testing.T) {
 			symRepMockup := &symbolReporterMockup{}
 
 			// For this test do not include interpreters.
-			noInterpreters, _ := tracertypes.ParseTracers("")
+			noInterpreters, _ := tracertypes.Parse("")
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -587,7 +587,7 @@ func TestProcExit(t *testing.T) {
 			repMockup := &symbolReporterMockup{}
 
 			// For this test do not include interpreters.
-			noInterpreters, _ := tracertypes.ParseTracers("")
+			noInterpreters, _ := tracertypes.Parse("")
 
 			ctx, cancel := context.WithCancel(context.Background())
 

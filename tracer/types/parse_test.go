@@ -42,7 +42,7 @@ func TestParseTracers(t *testing.T) {
 	for _, tt := range tracersTestsOK {
 		in := tt.in
 		t.Run(tt.in, func(t *testing.T) {
-			include, err := ParseTracers(in)
+			include, err := Parse(in)
 			require.NoError(t, err)
 
 			if tt.expectedTracers == nil {
@@ -70,7 +70,7 @@ func TestParseTracers(t *testing.T) {
 	for _, tt := range tracersTestsFail {
 		in := tt.in
 		t.Run(tt.in, func(t *testing.T) {
-			_, err := ParseTracers(in)
+			_, err := Parse(in)
 			require.Error(t, err)
 		})
 	}

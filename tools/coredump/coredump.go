@@ -198,7 +198,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	symCache := newSymbolizationCache()
 
 	// Instantiate managers and enable all tracers by default
-	includeTracers, _ := tracertypes.ParseTracers("all")
+	includeTracers, _ := tracertypes.Parse("all")
 
 	manager, err := pm.New(todo, includeTracers, monitorInterval, &coredumpEbpfMaps,
 		pm.NewMapFileIDMapper(), symCache, elfunwindinfo.NewStackDeltaProvider(), false)

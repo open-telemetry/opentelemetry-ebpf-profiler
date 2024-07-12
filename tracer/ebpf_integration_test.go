@@ -119,7 +119,7 @@ func generateMaxLengthTrace() host.Trace {
 func TestTraceTransmissionAndParsing(t *testing.T) {
 	ctx := context.Background()
 
-	enabledTracers, _ := tracertypes.ParseTracers("")
+	enabledTracers, _ := tracertypes.Parse("")
 	enabledTracers.Enable(tracertypes.PythonTracer)
 	tracer, err := NewTracer(ctx, &mockReporter{}, &mockIntervals{}, enabledTracers, false, 20, 0,
 		true, 0, cebpf.DefaultVerifierLogSize)
