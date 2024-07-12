@@ -228,8 +228,8 @@ func mainWithExitCode() exitCode {
 	// Connect to the collection agent
 	rep, err = reporter.Start(mainCtx, &reporter.Config{
 		CollAgentAddr:          args.collAgentAddr,
-		MaxRPCMsgSize:          33554432, // 32 MiB
 		DisableTLS:             args.disableTLS,
+		MaxRPCMsgSize:          32 << 20, // 32 MiB
 		MaxGRPCRetries:         5,
 		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
 		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
