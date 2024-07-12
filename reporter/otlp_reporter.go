@@ -56,6 +56,17 @@ type funcInfo struct {
 	fileName string
 }
 
+// traceAndMetaKey is the deduplication key for samples. This **must always**
+// contain all trace fields that aren't already part of the trace hash to ensure
+// that we don't accidentally merge traces with different fields.
+type traceAndMetaKey struct {
+	hash           libpf.TraceHash
+	comm           string
+	podName        string
+	containerName  string
+	apmServiceName string
+}
+
 // traceFramesCounts holds known information about a trace.
 type traceFramesCounts struct {
 	files              []libpf.FileID
@@ -64,10 +75,6 @@ type traceFramesCounts struct {
 	mappingStarts      []libpf.Address
 	mappingEnds        []libpf.Address
 	mappingFileOffsets []uint64
-	comm               string
-	podName            string
-	containerName      string
-	apmServiceName     string
 	timestamps         []uint64 // in nanoseconds
 }
 
@@ -105,7 +112,7 @@ type OTLPReporter struct {
 	frames *lru.SyncedLRU[libpf.FileID, *xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[libpf.TraceHash]traceFramesCounts]
+	traceEvents xsync.RWMutex[map[traceAndMetaKey]traceFramesCounts]
 
 	// pkgGRPCOperationTimeout sets the time limit for GRPC requests.
 	pkgGRPCOperationTimeout time.Duration
@@ -127,23 +134,27 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 
-	if tr, exists := (*traceEvents)[trace.Hash]; exists {
+	key := traceAndMetaKey{
+		hash:           trace.Hash,
+		comm:           comm,
+		podName:        podName,
+		containerName:  containerName,
+		apmServiceName: apmServiceName,
+	}
+
+	if tr, exists := (*traceEvents)[key]; exists {
 		tr.timestamps = append(tr.timestamps, uint64(timestamp))
-		(*traceEvents)[trace.Hash] = tr
+		(*traceEvents)[key] = tr
 		return
 	}
 
-	(*traceEvents)[trace.Hash] = traceFramesCounts{
+	(*traceEvents)[key] = traceFramesCounts{
 		files:              trace.Files,
 		linenos:            trace.Linenos,
 		frameTypes:         trace.FrameTypes,
 		mappingStarts:      trace.MappingStart,
 		mappingEnds:        trace.MappingEnd,
 		mappingFileOffsets: trace.MappingFileOffsets,
-		comm:               comm,
-		podName:            podName,
-		containerName:      containerName,
-		apmServiceName:     apmServiceName,
 		timestamps:         []uint64{uint64(timestamp)},
 	}
 }
@@ -285,7 +296,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		executables:             executables,
 		frames:                  frames,
 		hostmetadata:            hostmetadata,
-		traceEvents:             xsync.NewRWMutex(map[libpf.TraceHash]traceFramesCounts{}),
+		traceEvents:             xsync.NewRWMutex(map[traceAndMetaKey]traceFramesCounts{}),
 	}
 
 	// Create a child context for reporting features
@@ -478,12 +489,12 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS uint64, 
 	fileIDtoMapping := make(map[libpf.FileID]uint64)
 	frameIDtoFunction := make(map[libpf.FrameID]uint64)
 
-	for traceHash, traceInfo := range samples {
+	for traceKey, traceInfo := range samples {
 		sample := &profiles.Sample{}
 		sample.LocationsStartIndex = locationIndex
 
 		sample.StacktraceIdIndex = getStringMapIndex(stringMap,
-			traceHash.Base64())
+			traceKey.hash.Base64())
 
 		slices.Sort(traceInfo.timestamps)
 		startTS = traceInfo.timestamps[0]
@@ -610,7 +621,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS uint64, 
 			profile.Location = append(profile.Location, loc)
 		}
 
-		sample.Attributes = getSampleAttributes(profile, traceInfo)
+		sample.Attributes = getSampleAttributes(profile, traceKey)
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
 		locationIndex += sample.LocationsLength
 
@@ -680,7 +691,7 @@ func createFunctionEntry(funcMap map[funcInfo]uint64,
 }
 
 // getSampleAttributes builds a sample-specific list of attributes.
-func getSampleAttributes(profile *profiles.Profile, i traceFramesCounts) []uint64 {
+func getSampleAttributes(profile *profiles.Profile, k traceAndMetaKey) []uint64 {
 	indices := make([]uint64, 0, 4)
 
 	addAttr := func(k attribute.Key, v string) {
@@ -695,10 +706,10 @@ func getSampleAttributes(profile *profiles.Profile, i traceFramesCounts) []uint6
 		})
 	}
 
-	addAttr(semconv.K8SPodNameKey, i.podName)
-	addAttr(semconv.ContainerNameKey, i.containerName)
-	addAttr(semconv.ThreadNameKey, i.comm)
-	addAttr(semconv.ServiceNameKey, i.apmServiceName)
+	addAttr(semconv.K8SPodNameKey, k.podName)
+	addAttr(semconv.ContainerNameKey, k.containerName)
+	addAttr(semconv.ThreadNameKey, k.comm)
+	addAttr(semconv.ServiceNameKey, k.apmServiceName)
 
 	return indices
 }
