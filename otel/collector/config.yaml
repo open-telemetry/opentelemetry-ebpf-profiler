@@ -1,0 +1,32 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+  otelreceiver: # this line represents the ID of your receiver
+    project-id: 123
+    collection-agent: 127.0.0.1:11000
+    verbose: true
+    disable-tls: true
+    secret-token: abc123
+
+processors:
+  batch:
+
+exporters:
+  debug:
+    verbosity: detailed
+#  otlp/jaeger:
+#    endpoint: localhost:14317
+#    tls:
+#      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [ otlp, otelreceiver ]
+      processors: [ batch ]
+      exporters: [ debug ]
+  telemetry:
+    logs:
+      level: debug
