@@ -33,8 +33,7 @@ require (
 	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8
 	golang.org/x/sync v0.7.0
 	golang.org/x/sys v0.21.0
-	google.golang.org/grpc v1.64.0
-	google.golang.org/protobuf v1.34.1
+	google.golang.org/grpc v1.64.1
 	k8s.io/api v0.30.2
 	k8s.io/apimachinery v0.30.2
 	k8s.io/client-go v0.30.2
@@ -116,14 +115,15 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.45.0 // indirect
 	go.opentelemetry.io/otel/metric v1.27.0 // indirect
 	go.opentelemetry.io/otel/trace v1.27.0 // indirect
-	golang.org/x/net v0.23.0 // indirect
+	golang.org/x/net v0.26.0 // indirect
 	golang.org/x/oauth2 v0.20.0 // indirect
-	golang.org/x/term v0.18.0 // indirect
-	golang.org/x/text v0.15.0 // indirect
+	golang.org/x/term v0.21.0 // indirect
+	golang.org/x/text v0.16.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/genproto v0.0.0-20230920204549-e6e6cdab5c13 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240513163218-0867130af1f8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240513163218-0867130af1f8 // indirect
+	google.golang.org/protobuf v1.34.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
