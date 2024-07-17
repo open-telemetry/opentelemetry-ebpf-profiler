@@ -7,10 +7,8 @@
 package agent
 
 import (
-	"os"
 	"strconv"
-
-	"github.com/elastic/otel-profiling-agent/config"
+	"time"
 )
 
 // TODO: Change to semconv / ECS
@@ -45,36 +43,70 @@ const (
 	keyAgentConfigPresentCPUCores        = "profiling.agent.config.present_cpu_cores"
 )
 
+// Config is the structure to pass agent-related host metadata.
+type Config struct {
+	Version                string
+	Revision               string
+	BuildTimestamp         string
+	Tags                   string
+	CollectionAgentAddr    string
+	ConfigurationFile      string
+	Tracers                string
+	CacheDirectory         string
+	EnvHTTPSProxy          string
+	BpfVerifierLogSize     int
+	BpfVerifierLogLevel    uint
+	PresentCPUCores        uint16
+	DisableTLS             bool
+	NoKernelVersionCheck   bool
+	Verbose                bool
+	MapScaleFactor         uint
+	StartTime              time.Time
+	ProbabilisticInterval  time.Duration
+	ProbabilisticThreshold uint
+	TraceCacheEntries      uint32
+	MaxElementsPerInterval uint32
+}
+
+var meta = make(map[string]string)
+
+// SetAgentData sets the agent metadata.
+// It is called once at startup of the agent, since the data is static.
+func SetAgentData(c *Config) {
+	meta[keyAgentVersion] = c.Version
+	meta[keyAgentRevision] = c.Revision
+	meta[keyAgentBuildTimestamp] = c.BuildTimestamp
+	meta[keyAgentStartTimeMilli] = strconv.FormatInt(c.StartTime.UnixMilli(), 10)
+	meta[keyAgentConfigBpfLoglevel] = strconv.FormatUint(uint64(c.BpfVerifierLogLevel), 10)
+	meta[keyAgentConfigBpfLogSize] = strconv.Itoa(c.BpfVerifierLogSize)
+	meta[keyAgentConfigCacheDirectory] = c.CacheDirectory
+	meta[keyAgentConfigCollectionAgentAddr] = c.CollectionAgentAddr
+	meta[keyAgentConfigurationFile] = c.ConfigurationFile
+	meta[keyAgentConfigDisableTLS] = strconv.FormatBool(c.DisableTLS)
+	meta[keyAgentConfigVerbose] = strconv.FormatBool(c.Verbose)
+	meta[keyAgentConfigNoKernelVersionCheck] = strconv.FormatBool(c.NoKernelVersionCheck)
+	meta[keyAgentConfigTags] = c.Tags
+	meta[keyAgentConfigTracers] = c.Tracers
+	meta[keyAgentConfigProbabilisticInterval] = c.ProbabilisticInterval.String()
+	meta[keyAgentConfigProbabilisticThreshold] =
+		strconv.FormatUint(uint64(c.ProbabilisticThreshold), 10)
+	meta[keyAgentConfigPresentCPUCores] =
+		strconv.FormatUint(uint64(c.PresentCPUCores), 10)
+	meta[keyAgentConfigMapScaleFactor] = strconv.FormatUint(uint64(c.MapScaleFactor), 10)
+	meta[keyAgentConfigKnownTracesEntries] =
+		strconv.FormatUint(uint64(c.TraceCacheEntries), 10)
+	meta[keyAgentConfigMaxElementsPerInterval] =
+		strconv.FormatUint(uint64(c.MaxElementsPerInterval), 10)
+	meta[keyAgentEnvHTTPSProxy] = c.EnvHTTPSProxy
+}
+
+func GetCollectionAgentAddr() string {
+	return meta[keyAgentConfigCollectionAgentAddr]
+}
+
 // AddMetadata adds agent metadata to the result map.
 func AddMetadata(result map[string]string) {
-	result[keyAgentVersion] = config.Version()
-	result[keyAgentRevision] = config.Revision()
-	result[keyAgentBuildTimestamp] = config.BuildTimestamp()
-
-	result[keyAgentStartTimeMilli] = strconv.FormatInt(config.StartTime().UnixMilli(), 10)
-
-	bpfLogLevel, bpfLogSize := config.BpfVerifierLogSetting()
-	result[keyAgentConfigBpfLoglevel] = strconv.FormatUint(uint64(bpfLogLevel), 10)
-	result[keyAgentConfigBpfLogSize] = strconv.Itoa(bpfLogSize)
-
-	result[keyAgentConfigCacheDirectory] = config.CacheDirectory()
-	result[keyAgentConfigCollectionAgentAddr] = config.CollectionAgentAddr()
-	result[keyAgentConfigurationFile] = config.ConfigurationFile()
-	result[keyAgentConfigDisableTLS] = strconv.FormatBool(config.DisableTLS())
-	result[keyAgentConfigNoKernelVersionCheck] = strconv.FormatBool(config.NoKernelVersionCheck())
-	result[keyAgentConfigTags] = config.Tags()
-	result[keyAgentConfigTracers] = config.Tracers()
-	result[keyAgentConfigKnownTracesEntries] =
-		strconv.FormatUint(uint64(config.TraceCacheEntries()), 10)
-	result[keyAgentConfigMapScaleFactor] = strconv.FormatUint(uint64(config.MapScaleFactor()), 10)
-	result[keyAgentConfigMaxElementsPerInterval] =
-		strconv.FormatUint(uint64(config.MaxElementsPerInterval()), 10)
-	result[keyAgentConfigVerbose] = strconv.FormatBool(config.Verbose())
-	result[keyAgentConfigProbabilisticInterval] =
-		config.GetTimes().ProbabilisticInterval().String()
-	result[keyAgentConfigProbabilisticThreshold] =
-		strconv.FormatUint(uint64(config.ProbabilisticThreshold()), 10)
-	result[keyAgentConfigPresentCPUCores] =
-		strconv.FormatUint(uint64(config.PresentCPUCores()), 10)
-	result[keyAgentEnvHTTPSProxy] = os.Getenv("HTTPS_PROXY")
+	for k, v := range meta {
+		result[k] = v
+	}
 }

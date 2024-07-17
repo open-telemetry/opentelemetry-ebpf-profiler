@@ -15,8 +15,8 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/rlimit"
+	"github.com/elastic/otel-profiling-agent/tracer/types"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
@@ -225,7 +225,7 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 }
 
 func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kernelSymbols *libpf.SymbolMap, includeTracers config.IncludedTracers,
+	kernelSymbols *libpf.SymbolMap, includeTracers types.IncludedTracers,
 	filterErrorFrames bool) error {
 	pacMask := pacmask.GetPACMask()
 	if pacMask != 0 {
@@ -245,7 +245,7 @@ func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 			return err
 		}
 
-		if includeTracers.Has(config.PerlTracer) || includeTracers.Has(config.PythonTracer) {
+		if includeTracers.Has(types.PerlTracer) || includeTracers.Has(types.PythonTracer) {
 			var tpbaseOffset uint64
 			tpbaseOffset, err = loadTPBaseOffset(coll, maps, kernelSymbols)
 			if err != nil {

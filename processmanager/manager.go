@@ -14,7 +14,7 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
-	"github.com/elastic/otel-profiling-agent/config"
+	"github.com/elastic/otel-profiling-agent/tracer/types"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/elastic/otel-profiling-agent/host"
@@ -66,7 +66,7 @@ var (
 // Three external interfaces are used to access the processes and related resources: ebpf,
 // fileIDMapper and symbolReporter. Specify nil for fileIDMapper to use the default
 // implementation.
-func New(ctx context.Context, includeTracers config.IncludedTracers, monitorInterval time.Duration,
+func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
 	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, symbolReporter reporter.SymbolReporter,
 	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool) (*ProcessManager, error) {
 	if fileIDMapper == nil {

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/elastic/otel-profiling-agent/hostmetadata/agent"
 	"github.com/elastic/otel-profiling-agent/pfnamespaces"
 
 	"github.com/jsimonetti/rtnetlink"
@@ -65,7 +66,8 @@ var (
 // PID 1's namespaces, in order to make the information agnostic to any container solutions.
 // This may not be the best thing to do in some scenarios, but still seems to be the most sensible
 // default.
-func AddMetadata(caEndpoint string, result map[string]string) error {
+func AddMetadata(result map[string]string) error {
+	caEndpoint := agent.GetCollectionAgentAddr()
 	// Extract the host part of the endpoint
 	// Remove the port from the endpoint in case it is present
 	host, _, err := net.SplitHostPort(caEndpoint)

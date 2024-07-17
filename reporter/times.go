@@ -9,11 +9,11 @@ package reporter
 import (
 	"time"
 
-	"github.com/elastic/otel-profiling-agent/config"
+	"github.com/elastic/otel-profiling-agent/times"
 )
 
 // Compile time check to make sure config.Times satisfies the interfaces.
-var _ Times = (*config.Times)(nil)
+var _ Times = (*times.Times)(nil)
 
 // Times is a subset of config.IntervalsAndTimers.
 type Times interface {

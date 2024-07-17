@@ -18,7 +18,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/interpreter"
 	"github.com/elastic/otel-profiling-agent/libpf"
@@ -31,6 +30,7 @@ import (
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
 	"github.com/elastic/otel-profiling-agent/remotememory"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
 	"github.com/elastic/otel-profiling-agent/traceutil"
 	"github.com/elastic/otel-profiling-agent/util"
 
@@ -306,7 +306,7 @@ func TestInterpreterConvertTrace(t *testing.T) {
 			}
 
 			// For this test do not include interpreters.
-			noIinterpreters, _ := config.ParseTracers("")
+			noIinterpreters, _ := tracertypes.Parse("")
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -386,12 +386,6 @@ func TestNewMapping(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(cacheDir)
 
-	err = config.SetConfiguration(&config.Config{
-		ProjectID:      42,
-		CacheDirectory: cacheDir,
-		SecretToken:    "secret"})
-	require.NoError(t, err)
-
 	for name, testcase := range tests {
 		testcase := testcase
 		t.Run(name, func(t *testing.T) {
@@ -402,7 +396,7 @@ func TestNewMapping(t *testing.T) {
 			symRepMockup := &symbolReporterMockup{}
 
 			// For this test do not include interpreters.
-			noInterpreters, _ := config.ParseTracers("")
+			noInterpreters, _ := tracertypes.Parse("")
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -593,7 +587,7 @@ func TestProcExit(t *testing.T) {
 			repMockup := &symbolReporterMockup{}
 
 			// For this test do not include interpreters.
-			noInterpreters, _ := config.ParseTracers("")
+			noInterpreters, _ := tracertypes.Parse("")
 
 			ctx, cancel := context.WithCancel(context.Background())
 

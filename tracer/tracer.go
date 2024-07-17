@@ -25,10 +25,11 @@ import (
 	"github.com/cilium/ebpf/link"
 	lru "github.com/elastic/go-freelru"
 	"github.com/elastic/go-perf"
+	"github.com/elastic/otel-profiling-agent/times"
+	"github.com/elastic/otel-profiling-agent/tracer/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/host"
 	hostcpu "github.com/elastic/otel-profiling-agent/hostmetadata/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
@@ -54,7 +55,7 @@ import (
 import "C"
 
 // Compile time check to make sure config.Times satisfies the interfaces.
-var _ Intervals = (*config.Times)(nil)
+var _ Intervals = (*times.Times)(nil)
 
 const (
 	// ProbabilisticThresholdMax defines the upper bound of the probabilistic profiling
@@ -127,6 +128,40 @@ type Tracer struct {
 
 	// reporter allows swapping out the reporter implementation.
 	reporter reporter.SymbolReporter
+
+	// samplesPerSecond holds the configured number of samples per second.
+	samplesPerSecond int
+
+	// probabilisticInterval is the time interval for which probabilistic profiling will be enabled.
+	probabilisticInterval time.Duration
+
+	// probabilisticThreshold holds the threshold for probabilistic profiling.
+	probabilisticThreshold uint
+}
+
+type Config struct {
+	// Reporter allows swapping out the reporter implementation.
+	Reporter reporter.SymbolReporter
+	// Intervals provides access to globally configured timers and counters.
+	Intervals Intervals
+	// IncludeTracers holds information about which tracers are enabled.
+	IncludeTracers types.IncludedTracers
+	// SamplesPerSecond holds the number of samples per second.
+	SamplesPerSecond int
+	// MapScaleFactor is the scaling factor for eBPF map sizes.
+	MapScaleFactor int
+	// FilterErrorFrames indicates whether error frames should be filtered.
+	FilterErrorFrames bool
+	// KernelVersionCheck indicates whether the kernel version should be checked.
+	KernelVersionCheck bool
+	// BPFVerifierLogLevel is the log level of the eBPF verifier output.
+	BPFVerifierLogLevel uint32
+	// BPFVerifierLogSize is the size in bytes that will be allocated for the eBPF verifier output.
+	BPFVerifierLogSize int
+	// ProbabilisticInterval is the time interval for which probabilistic profiling will be enabled.
+	ProbabilisticInterval time.Duration
+	// ProbabilisticThreshold is the threshold for probabilistic profiling.
+	ProbabilisticThreshold uint
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -229,16 +264,16 @@ func calcFallbackModuleID(moduleSym libpf.Symbol, kernelSymbols *libpf.SymbolMap
 }
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
-func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Intervals,
-	includeTracers config.IncludedTracers, filterErrorFrames bool) (*Tracer, error) {
+func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
 
 	// Based on includeTracers we decide later which are loaded into the kernel.
-	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(includeTracers, kernelSymbols,
-		filterErrorFrames)
+	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(cfg.IncludeTracers, kernelSymbols,
+		cfg.FilterErrorFrames, cfg.MapScaleFactor, cfg.KernelVersionCheck, cfg.BPFVerifierLogLevel,
+		cfg.BPFVerifierLogSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
@@ -250,8 +285,9 @@ func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Inter
 
 	hasBatchOperations := ebpfHandler.SupportsGenericBatchOperations()
 
-	processManager, err := pm.New(ctx, includeTracers, intervals.MonitorInterval(), ebpfHandler,
-		nil, rep, elfunwindinfo.NewStackDeltaProvider(), filterErrorFrames)
+	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
+		ebpfHandler, nil, cfg.Reporter, elfunwindinfo.NewStackDeltaProvider(),
+		cfg.FilterErrorFrames)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
@@ -269,7 +305,8 @@ func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Inter
 		return nil, fmt.Errorf("unable to instantiate transmitted fallback symbols cache: %v", err)
 	}
 
-	moduleFileIDs, err := processKernelModulesMetadata(ctx, rep, kernelModules, kernelSymbols)
+	moduleFileIDs, err := processKernelModulesMetadata(ctx,
+		cfg.Reporter, kernelModules, kernelSymbols)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract kernel modules metadata: %v", err)
 	}
@@ -286,11 +323,14 @@ func NewTracer(ctx context.Context, rep reporter.SymbolReporter, intervals Inter
 		ebpfMaps:                   ebpfMaps,
 		ebpfProgs:                  ebpfProgs,
 		hooks:                      make(map[hookPoint]link.Link),
-		intervals:                  intervals,
+		intervals:                  cfg.Intervals,
 		hasBatchOperations:         hasBatchOperations,
 		perfEntrypoints:            xsync.NewRWMutex(perfEventList),
 		moduleFileIDs:              moduleFileIDs,
-		reporter:                   rep,
+		reporter:                   cfg.Reporter,
+		samplesPerSecond:           cfg.SamplesPerSecond,
+		probabilisticInterval:      cfg.ProbabilisticInterval,
+		probabilisticThreshold:     cfg.ProbabilisticThreshold,
 	}, nil
 }
 
@@ -341,9 +381,10 @@ func buildStackDeltaTemplates(coll *cebpf.CollectionSpec) error {
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
 // by the embedded elf file and loads these into the kernel.
-func initializeMapsAndPrograms(includeTracers config.IncludedTracers,
-	kernelSymbols *libpf.SymbolMap, filterErrorFrames bool) (ebpfMaps map[string]*cebpf.Map,
-	ebpfProgs map[string]*cebpf.Program, err error) {
+func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
+	kernelSymbols *libpf.SymbolMap, filterErrorFrames bool, mapScaleFactor int,
+	kernelVersionCheck bool, bpfVerifierLogLevel uint32, bpfVerifierLogSize int) (
+	ebpfMaps map[string]*cebpf.Map, ebpfProgs map[string]*cebpf.Program, err error) {
 	// Loading specifications about eBPF programs and maps from the embedded elf file
 	// does not load them into the kernel.
 	// A collection specification holds the information about eBPF programs and maps.
@@ -366,7 +407,7 @@ func initializeMapsAndPrograms(includeTracers config.IncludedTracers,
 	// Load all maps into the kernel that are used later on in eBPF programs. So we can rewrite
 	// in the next step the placesholders in the eBPF programs with the file descriptors of the
 	// loaded maps in the kernel.
-	if err = loadAllMaps(coll, ebpfMaps); err != nil {
+	if err = loadAllMaps(coll, ebpfMaps, mapScaleFactor); err != nil {
 		return nil, nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
@@ -377,7 +418,7 @@ func initializeMapsAndPrograms(includeTracers config.IncludedTracers,
 		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
 
-	if !config.NoKernelVersionCheck() {
+	if kernelVersionCheck {
 		var major, minor, patch uint32
 		major, minor, patch, err = GetCurrentKernelVersion()
 		if err != nil {
@@ -393,7 +434,8 @@ func initializeMapsAndPrograms(includeTracers config.IncludedTracers,
 		}
 	}
 
-	if err = loadUnwinders(coll, ebpfProgs, ebpfMaps["progs"], includeTracers); err != nil {
+	if err = loadUnwinders(coll, ebpfProgs, ebpfMaps["progs"], includeTracers, bpfVerifierLogLevel,
+		bpfVerifierLogSize); err != nil {
 		return nil, nil, fmt.Errorf("failed to load eBPF programs: %v", err)
 	}
 
@@ -423,7 +465,8 @@ func removeTemporaryMaps(ebpfMaps map[string]*cebpf.Map) error {
 }
 
 // loadAllMaps loads all eBPF maps that are used in our eBPF programs.
-func loadAllMaps(coll *cebpf.CollectionSpec, ebpfMaps map[string]*cebpf.Map) error {
+func loadAllMaps(coll *cebpf.CollectionSpec, ebpfMaps map[string]*cebpf.Map,
+	mapScaleFactor int) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
@@ -444,13 +487,13 @@ func loadAllMaps(coll *cebpf.CollectionSpec, ebpfMaps map[string]*cebpf.Map) err
 	)
 
 	adaption["pid_page_to_mapping_info"] =
-		1 << uint32(pidPageMappingInfoSize+config.MapScaleFactor())
+		1 << uint32(pidPageMappingInfoSize+mapScaleFactor)
 	adaption["stack_delta_page_to_info"] =
-		1 << uint32(stackDeltaPageToInfoSize+config.MapScaleFactor())
+		1 << uint32(stackDeltaPageToInfoSize+mapScaleFactor)
 
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
 		mapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)
-		adaption[mapName] = 1 << uint32(exeIDToStackDeltasSize+config.MapScaleFactor())
+		adaption[mapName] = 1 << uint32(exeIDToStackDeltasSize+mapScaleFactor)
 	}
 
 	for mapName, mapSpec := range coll.Maps {
@@ -470,7 +513,8 @@ func loadAllMaps(coll *cebpf.CollectionSpec, ebpfMaps map[string]*cebpf.Map) err
 
 // loadUnwinders just satisfies the proof of concept and loads all eBPF programs
 func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
-	tailcallMap *cebpf.Map, includeTracers config.IncludedTracers) error {
+	tailcallMap *cebpf.Map, includeTracers types.IncludedTracers, bpfVerifierLogLevel uint32,
+	bpfVerifierLogSize int) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
@@ -488,10 +532,9 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 		noTailCallTarget bool
 	}
 
-	logLevel, logSize := config.BpfVerifierLogSetting()
 	programOptions := cebpf.ProgramOptions{
-		LogLevel: cebpf.LogLevel(logLevel),
-		LogSize:  logSize,
+		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
+		LogSize:  bpfVerifierLogSize,
 	}
 
 	for _, unwindProg := range []prog{
@@ -508,37 +551,37 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 		{
 			progID: uint32(support.ProgUnwindHotspot),
 			name:   "unwind_hotspot",
-			enable: includeTracers.Has(config.HotspotTracer),
+			enable: includeTracers.Has(types.HotspotTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindPerl),
 			name:   "unwind_perl",
-			enable: includeTracers.Has(config.PerlTracer),
+			enable: includeTracers.Has(types.PerlTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindPHP),
 			name:   "unwind_php",
-			enable: includeTracers.Has(config.PHPTracer),
+			enable: includeTracers.Has(types.PHPTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindPython),
 			name:   "unwind_python",
-			enable: includeTracers.Has(config.PythonTracer),
+			enable: includeTracers.Has(types.PythonTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindRuby),
 			name:   "unwind_ruby",
-			enable: includeTracers.Has(config.RubyTracer),
+			enable: includeTracers.Has(types.RubyTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindV8),
 			name:   "unwind_v8",
-			enable: includeTracers.Has(config.V8Tracer),
+			enable: includeTracers.Has(types.V8Tracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindDotnet),
 			name:   "unwind_dotnet",
-			enable: includeTracers.Has(config.DotnetTracer),
+			enable: includeTracers.Has(types.DotnetTracer),
 		},
 		{
 			name:             "tracepoint__sched_process_exit",
@@ -907,7 +950,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.T
 	eventMetricCollector := t.startEventMonitor(ctx)
 
 	startPollingPerfEventMonitor(ctx, t.ebpfMaps["trace_events"], t.intervals.TracePollInterval(),
-		int(config.SamplesPerSecond())*int(unsafe.Sizeof(C.Trace{})), func(rawTrace []byte) {
+		t.samplesPerSecond*int(unsafe.Sizeof(C.Trace{})), func(rawTrace []byte) {
 			traceOutChan <- t.loadBpfTrace(rawTrace)
 		})
 
@@ -1048,14 +1091,14 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.T
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
 // entry point is always the native tracer. The native tracer will determine when to invoke the
 // interpreter tracers based on address range information.
-func (t *Tracer) AttachTracer(sampleFreq int) error {
+func (t *Tracer) AttachTracer() error {
 	tracerProg, ok := t.ebpfProgs["native_tracer_entry"]
 	if !ok {
 		return errors.New("entry program is not available")
 	}
 
 	perfAttribute := new(perf.Attr)
-	perfAttribute.SetSampleFreq(uint64(sampleFreq))
+	perfAttribute.SetSampleFreq(uint64(t.samplesPerSecond))
 	if err := perf.CPUClock.Configure(perfAttribute); err != nil {
 		return fmt.Errorf("failed to configure software perf event: %v", err)
 	}
@@ -1139,18 +1182,17 @@ func (t *Tracer) probabilisticProfile(interval time.Duration, threshold uint) {
 }
 
 // StartProbabilisticProfiling periodically runs probabilistic profiling.
-func (t *Tracer) StartProbabilisticProfiling(ctx context.Context,
-	interval time.Duration, threshold uint) {
+func (t *Tracer) StartProbabilisticProfiling(ctx context.Context) {
 	metrics.Add(metrics.IDProbProfilingInterval,
-		metrics.MetricValue(interval.Seconds()))
+		metrics.MetricValue(t.probabilisticInterval.Seconds()))
 
 	// Run a single iteration of probabilistic profiling to avoid needing
 	// to wait for the first interval to pass with periodiccaller.Start()
 	// before getting called.
-	t.probabilisticProfile(interval, threshold)
+	t.probabilisticProfile(t.probabilisticInterval, t.probabilisticThreshold)
 
-	periodiccaller.Start(ctx, interval, func() {
-		t.probabilisticProfile(interval, threshold)
+	periodiccaller.Start(ctx, t.probabilisticInterval, func() {
+		t.probabilisticProfile(t.probabilisticInterval, t.probabilisticThreshold)
 	})
 }
 
