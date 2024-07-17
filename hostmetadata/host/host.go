@@ -411,6 +411,11 @@ func SetTags(tags string) {
 	log.Debugf("Validated tags: %s", validatedTags)
 }
 
+// ValidatedTags returns validated tags that were previously set via SetTags().
+func ValidatedTags() string {
+	return validatedTags
+}
+
 // tryEnterRootNamespaces tries to enter PID 1's UTS and network namespaces.
 // It returns the file descriptor associated to each, or -1 if the namespace cannot be entered.
 func tryEnterRootNamespaces() (utsFD, netFD int) {
