@@ -10,7 +10,6 @@ package tracer
 
 import (
 	"context"
-	"os"
 	"runtime"
 	"sync"
 	"testing"
@@ -18,10 +17,9 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/host"
-	hostmeta "github.com/elastic/otel-profiling-agent/hostmetadata/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/reporter"
 	"github.com/elastic/otel-profiling-agent/rlimit"
@@ -121,25 +119,21 @@ func generateMaxLengthTrace() host.Trace {
 func TestTraceTransmissionAndParsing(t *testing.T) {
 	ctx := context.Background()
 
-	dir, err := os.MkdirTemp("", "tracer-integration-test-cache")
-	require.NoError(t, err)
-
-	var presentCores uint16
-	presentCores, err = hostmeta.PresentCPUCores()
-	require.NoError(t, err)
-
-	err = config.SetConfiguration(&config.Config{
-		ProjectID:        42,
-		CacheDirectory:   dir,
-		SecretToken:      "secret",
-		PresentCPUCores:  presentCores,
-		SamplesPerSecond: 20,
+	enabledTracers, _ := tracertypes.Parse("")
+	enabledTracers.Enable(tracertypes.PythonTracer)
+	tracer, err := NewTracer(ctx, &Config{
+		Reporter:               &mockReporter{},
+		Intervals:              &mockIntervals{},
+		IncludeTracers:         enabledTracers,
+		FilterErrorFrames:      false,
+		SamplesPerSecond:       20,
+		MapScaleFactor:         0,
+		KernelVersionCheck:     true,
+		BPFVerifierLogLevel:    0,
+		BPFVerifierLogSize:     cebpf.DefaultVerifierLogSize,
+		ProbabilisticInterval:  100,
+		ProbabilisticThreshold: 100,
 	})
-	require.NoError(t, err)
-
-	enabledTracers, _ := config.ParseTracers("")
-	enabledTracers.Enable(config.PythonTracer)
-	tracer, err := NewTracer(ctx, &mockReporter{}, &mockIntervals{}, enabledTracers, false)
 	require.NoError(t, err)
 
 	traceChan := make(chan *host.Trace, 16)

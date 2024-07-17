@@ -4,7 +4,7 @@
  * See the file "LICENSE" for details.
  */
 
-package config
+package times
 
 import (
 	"context"
@@ -28,8 +28,9 @@ const (
 	// (bpf_ktime_get_ns) that does not count system suspend time.
 	// In userspace, we try to detect system suspend events by diffing
 	// with values retrieved from a monotonic clock that does count
-	// system suspend time. If the delta exceeds the following threshold
-	// (10s), we add it to the monotonic 'delta' that we keep track of.
+	// the system suspend time.
+	// If the delta exceeds the following threshold (10s), we add it to the
+	// monotonic 'delta' that we keep track of.
 	monotonicThresholdNs = 10 * 1e9
 
 	// GRPCAuthErrorDelay defines the delay before triggering a global process exit after a
@@ -42,23 +43,13 @@ const (
 	// GRPCStartupBackoffTimeout defines the time between failed gRPC requests during startup
 	// phase.
 	GRPCStartupBackoffTimeout = 1 * time.Minute
-)
 
-var (
-	monotonicDeltaNs      atomic.Int64
 	monotonicSyncInterval = 1 * time.Minute
 )
 
-var times = Times{
-	reportMetricsInterval:     1 * time.Minute,
-	grpcAuthErrorDelay:        GRPCAuthErrorDelay,
-	grpcConnectionTimeout:     GRPCConnectionTimeout,
-	grpcOperationTimeout:      GRPCOperationTimeout,
-	grpcStartupBackoffTimeout: GRPCStartupBackoffTimeout,
-	pidCleanupInterval:        5 * time.Minute,
-	tracePollInterval:         250 * time.Millisecond,
-	bootTimeUnixNano:          getBootTimeUnixNano(),
-}
+var (
+	monotonicDeltaNs atomic.Int64
+)
 
 // Compile time check for interface adherence
 var _ IntervalsAndTimers = (*Times)(nil)
@@ -79,7 +70,7 @@ type Times struct {
 	bootTimeUnixNano          int64
 }
 
-// IntervalsAndTimers is a meta interface that exists purely to document its functionality.
+// IntervalsAndTimers is a meta-interface that exists purely to document its functionality.
 type IntervalsAndTimers interface {
 	// MonitorInterval defines the interval for PID event monitoring and metric collection.
 	MonitorInterval() time.Duration
@@ -101,7 +92,7 @@ type IntervalsAndTimers interface {
 	// gRPC auth error.
 	GRPCAuthErrorDelay() time.Duration
 	// PIDCleanupInterval defines the interval at which monitored PIDs are checked for
-	// liveness and no longer alive PIDs are cleaned up.
+	// liveness, and no longer living PIDs are cleaned up.
 	PIDCleanupInterval() time.Duration
 	// ProbabilisticInterval defines the interval for which probabilistic profiling will
 	// be enabled or disabled.
@@ -136,12 +127,25 @@ func (t *Times) BootTimeUnixNano() int64 {
 	return t.bootTimeUnixNano + monotonicDeltaNs.Load()
 }
 
-// GetTimes provides access to all timers and intervals.
-func GetTimes() *Times {
-	if !configurationSet {
-		log.Fatal("Cannot get Times. Configuration has not been read")
+// New returns a new Times instance.
+func New(ctx context.Context, reportInterval, monitorInterval,
+	probabilisticInterval time.Duration) *Times {
+	// Start periodic synchronization of the monotonic clock
+	StartMonotonicSync(ctx)
+
+	return &Times{
+		reportMetricsInterval:     1 * time.Minute,
+		grpcAuthErrorDelay:        GRPCAuthErrorDelay,
+		grpcConnectionTimeout:     GRPCConnectionTimeout,
+		grpcOperationTimeout:      GRPCOperationTimeout,
+		grpcStartupBackoffTimeout: GRPCStartupBackoffTimeout,
+		pidCleanupInterval:        5 * time.Minute,
+		tracePollInterval:         250 * time.Millisecond,
+		reportInterval:            reportInterval,
+		monitorInterval:           monitorInterval,
+		probabilisticInterval:     probabilisticInterval,
+		bootTimeUnixNano:          getBootTimeUnixNano(),
 	}
-	return &times
 }
 
 // StartMonotonicSync starts a goroutine that periodically calculates a delta
@@ -204,7 +208,7 @@ func getBootTimeUnixNano() int64 {
 
 	for i := range samples {
 		// To avoid noise from scheduling / other delays, we perform a
-		// series of measurements and pick the one with lowest delta.
+		// series of measurements and pick the one with the lowest delta.
 		samples[i].t1 = time.Now()
 		samples[i].ktime = int64(util.GetKTime())
 		samples[i].t2 = time.Now()

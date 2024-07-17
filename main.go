@@ -13,13 +13,18 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"time"
 
 	//nolint:gosec
 	_ "net/http/pprof"
 
 	"github.com/elastic/otel-profiling-agent/containermetadata"
+	agentmeta "github.com/elastic/otel-profiling-agent/hostmetadata/agent"
 	"github.com/elastic/otel-profiling-agent/platform"
+	"github.com/elastic/otel-profiling-agent/times"
+	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
+	"github.com/elastic/otel-profiling-agent/util"
 	"github.com/elastic/otel-profiling-agent/vc"
 	"golang.org/x/sys/unix"
 
@@ -30,7 +35,6 @@ import (
 	"github.com/elastic/otel-profiling-agent/hostmetadata"
 	"github.com/elastic/otel-profiling-agent/metrics/reportermetrics"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/metrics"
 	"github.com/elastic/otel-profiling-agent/metrics/agentmetrics"
 	"github.com/elastic/otel-profiling-agent/reporter"
@@ -70,7 +74,7 @@ const (
 )
 
 func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
-	times *config.Times, trc *tracer.Tracer) error {
+	intervals *times.Times, trc *tracer.Tracer, cacheSize uint32) error {
 	// Spawn monitors for the various result maps
 	traceCh := make(chan *host.Trace)
 
@@ -78,13 +82,13 @@ func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
 		return fmt.Errorf("failed to start map monitors: %v", err)
 	}
 
-	containerMetadataHandler, err := containermetadata.GetHandler(ctx, times.MonitorInterval())
+	containerMetadataHandler, err := containermetadata.GetHandler(ctx, intervals.MonitorInterval())
 	if err != nil {
 		return fmt.Errorf("failed to create container metadata handler: %v", err)
 	}
 
 	_, err = tracehandler.Start(ctx, containerMetadataHandler, rep,
-		trc.TraceProcessor(), traceCh, times)
+		trc.TraceProcessor(), traceCh, intervals, cacheSize)
 	return err
 }
 
@@ -116,6 +120,10 @@ func mainWithExitCode() exitCode {
 
 	if code := sanityCheck(args); code != exitSuccess {
 		return code
+	}
+
+	if err = mkCacheDirectory(args.cacheDirectory); err != nil {
+		failure("%v", err)
 	}
 
 	// Context to drive main goroutine and the Tracer monitors.
@@ -150,42 +158,23 @@ func mainWithExitCode() exitCode {
 		return failure("Failed to probe tracepoint: %v", err)
 	}
 
-	hostmeta.SetTags(args.tags)
-
 	var presentCores uint16
 	presentCores, err = hostmeta.PresentCPUCores()
 	if err != nil {
 		return failure("Failed to read CPU file: %v", err)
 	}
 
-	// Retrieve host metadata that will be stored with the HA config, and
-	// sent to the backend with certain RPCs.
-	hostMetadataMap := make(map[string]string)
-	if err = hostmeta.AddMetadata(args.collAgentAddr, hostMetadataMap); err != nil {
-		log.Errorf("Unable to get host metadata for config: %v", err)
-	}
+	traceHandlerCacheSize :=
+		traceCacheSize(args.monitorInterval, args.samplesPerSecond, presentCores)
 
-	// Metadata retrieval may fail, in which case, we initialize all values
-	// to the empty string.
-	for _, hostMetadataKey := range []string{
-		hostmeta.KeyIPAddress,
-		hostmeta.KeyHostname,
-		hostmeta.KeyKernelVersion,
-	} {
-		if _, ok := hostMetadataMap[hostMetadataKey]; !ok {
-			hostMetadataMap[hostMetadataKey] = ""
-		}
-	}
-
-	log.Debugf("Reading the configuration")
-	conf := config.Config{
+	agentmeta.SetAgentData(&agentmeta.Config{
 		Version:                vc.Version(),
 		Revision:               vc.Revision(),
 		BuildTimestamp:         vc.BuildTimestamp(),
-		ProjectID:              uint32(args.projectID),
-		HostID:                 environment.HostID(),
+		StartTime:              startTime,
 		CacheDirectory:         args.cacheDirectory,
-		SecretToken:            args.secretToken,
+		CollectionAgentAddr:    args.collAgentAddr,
+		ConfigurationFile:      args.configFile,
 		Tags:                   args.tags,
 		Tracers:                args.tracers,
 		Verbose:                args.verboseMode,
@@ -193,43 +182,34 @@ func mainWithExitCode() exitCode {
 		NoKernelVersionCheck:   args.noKernelVersionCheck,
 		BpfVerifierLogLevel:    args.bpfVerifierLogLevel,
 		BpfVerifierLogSize:     args.bpfVerifierLogSize,
-		MonitorInterval:        args.monitorInterval,
-		ReportInterval:         args.reporterInterval,
-		SamplesPerSecond:       uint16(args.samplesPerSecond),
-		CollectionAgentAddr:    args.collAgentAddr,
-		ConfigurationFile:      args.configFile,
-		PresentCPUCores:        presentCores,
-		TraceCacheIntervals:    6,
-		MapScaleFactor:         uint8(args.mapScaleFactor),
-		StartTime:              startTime,
-		IPAddress:              hostMetadataMap[hostmeta.KeyIPAddress],
-		Hostname:               hostMetadataMap[hostmeta.KeyHostname],
-		KernelVersion:          hostMetadataMap[hostmeta.KeyKernelVersion],
+		MapScaleFactor:         args.mapScaleFactor,
 		ProbabilisticInterval:  args.probabilisticInterval,
 		ProbabilisticThreshold: args.probabilisticThreshold,
-	}
-	if err = config.SetConfiguration(&conf); err != nil {
-		return failure("Failed to set configuration: %v", err)
+		PresentCPUCores:        presentCores,
+		TraceCacheEntries:      traceHandlerCacheSize,
+		MaxElementsPerInterval: maxElementsPerInterval(args.monitorInterval, args.samplesPerSecond,
+			presentCores),
+		EnvHTTPSProxy: os.Getenv("HTTPS_PROXY"),
+	})
+	hostmeta.SetTags(args.tags)
+
+	// Retrieve host metadata that will be stored with the HA config, and
+	// sent to the backend with certain RPCs.
+	hostMetadataMap := make(map[string]string)
+	if err = hostmeta.AddMetadata(hostMetadataMap); err != nil {
+		log.Errorf("Unable to get host metadata for config: %v", err)
 	}
 
-	// Start periodic synchronization of monotonic clock
-	config.StartMonotonicSync(mainCtx)
-	log.Debugf("Done setting configuration")
-
-	times := config.GetTimes()
+	intervals := times.New(mainCtx,
+		args.monitorInterval, args.reporterInterval, args.probabilisticInterval)
 
 	log.Debugf("Determining tracers to include")
-	includeTracers, err := config.ParseTracers(args.tracers)
+	includeTracers, err := tracertypes.Parse(args.tracers)
 	if err != nil {
-		return failure("Failed to parse the included tracers: %s", err)
+		return failure("Failed to parse the included tracers: %v", err)
 	}
 
-	log.Infof("Assigned ProjectID: %d HostID: %d", config.ProjectID(), config.HostID())
-
-	// Scale the queues that report traces or information related to traces
-	// with the number of CPUs, the reporting interval and the sample frequencies.
-	tracesQSize := max(1024,
-		uint32(runtime.NumCPU()*int(args.reporterInterval.Seconds()*2)*args.samplesPerSecond))
+	log.Infof("Assigned ProjectID: %d HostID: %d", args.projectID, environment.HostID())
 
 	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr, environment)
 
@@ -247,18 +227,21 @@ func mainWithExitCode() exitCode {
 	var rep reporter.Reporter
 	// Connect to the collection agent
 	rep, err = reporter.Start(mainCtx, &reporter.Config{
-		CollAgentAddr:           args.collAgentAddr,
-		MaxRPCMsgSize:           33554432, // 32 MiB
-		ExecMetadataMaxQueue:    2048,
-		CountsForTracesMaxQueue: tracesQSize,
-		MetricsMaxQueue:         1024,
-		FramesForTracesMaxQueue: tracesQSize,
-		FrameMetadataMaxQueue:   tracesQSize,
-		HostMetadataMaxQueue:    2,
-		FallbackSymbolsMaxQueue: 1024,
-		DisableTLS:              args.disableTLS,
-		MaxGRPCRetries:          5,
-		Times:                   times,
+		CollAgentAddr:          args.collAgentAddr,
+		DisableTLS:             args.disableTLS,
+		MaxRPCMsgSize:          32 << 20, // 32 MiB
+		MaxGRPCRetries:         5,
+		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
+		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
+		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
+		ReportInterval:         intervals.ReportInterval(),
+		CacheSize:              traceHandlerCacheSize,
+		SamplesPerSecond:       args.samplesPerSecond,
+		ProjectID:              strconv.Itoa(int(args.projectID)),
+		HostID:                 environment.HostID(),
+		KernelVersion:          hostMetadataMap[hostmeta.KeyKernelVersion],
+		HostName:               hostMetadataMap[hostmeta.KeyHostname],
+		IPAddress:              hostMetadataMap[hostmeta.KeyIPAddress],
 	})
 	if err != nil {
 		return failure("Failed to start reporting: %v", err)
@@ -266,12 +249,13 @@ func mainWithExitCode() exitCode {
 
 	metrics.SetReporter(rep)
 
-	// Now that we've sent the first host metadata update, start a goroutine to keep sending updates
-	// regularly. This is required so pf-web-service only needs to query metadata for bounded
-	// periods of time.
+	// Set the initial host metadata.
+	rep.ReportHostMetadata(hostMetadataMap)
+
+	// Now that set the initial host metadata, start a goroutine to keep sending updates regularly.
 	metadataCollector.StartMetadataCollection(mainCtx, rep)
 
-	// Start agent specific metric retrieval and report them every second.
+	// Start agent-specific metric retrieval and report them every second.
 	agentMetricCancel, agentErr := agentmetrics.Start(mainCtx, 1*time.Second)
 	if agentErr != nil {
 		return failure("Error starting the agent specific metric collection: %v", agentErr)
@@ -281,7 +265,19 @@ func mainWithExitCode() exitCode {
 	defer reportermetrics.Start(mainCtx, rep, 60*time.Second)()
 
 	// Load the eBPF code and map definitions
-	trc, err := tracer.NewTracer(mainCtx, rep, times, includeTracers, !args.sendErrorFrames)
+	trc, err := tracer.NewTracer(mainCtx, &tracer.Config{
+		Reporter:               rep,
+		Intervals:              intervals,
+		IncludeTracers:         includeTracers,
+		FilterErrorFrames:      !args.sendErrorFrames,
+		SamplesPerSecond:       args.samplesPerSecond,
+		MapScaleFactor:         int(args.mapScaleFactor),
+		KernelVersionCheck:     !args.noKernelVersionCheck,
+		BPFVerifierLogLevel:    uint32(args.bpfVerifierLogLevel),
+		BPFVerifierLogSize:     args.bpfVerifierLogSize,
+		ProbabilisticInterval:  args.probabilisticInterval,
+		ProbabilisticThreshold: args.probabilisticThreshold,
+	})
 	if err != nil {
 		return failure("Failed to load eBPF tracer: %v", err)
 	}
@@ -289,7 +285,7 @@ func mainWithExitCode() exitCode {
 	defer trc.Close()
 
 	now := time.Now()
-	// Initial scan of /proc filesystem to list currently-active PIDs and have them processed.
+	// Initial scan of /proc filesystem to list currently active PIDs and have them processed.
 	if err = trc.StartPIDEventProcessor(mainCtx); err != nil {
 		log.Errorf("Failed to list processes from /proc: %v", err)
 	}
@@ -297,14 +293,13 @@ func mainWithExitCode() exitCode {
 	log.Debug("Completed initial PID listing")
 
 	// Attach our tracer to the perf event
-	if err := trc.AttachTracer(args.samplesPerSecond); err != nil {
+	if err := trc.AttachTracer(); err != nil {
 		return failure("Failed to attach to perf event: %v", err)
 	}
 	log.Info("Attached tracer program")
 
 	if args.probabilisticThreshold < tracer.ProbabilisticThresholdMax {
-		trc.StartProbabilisticProfiling(mainCtx,
-			args.probabilisticInterval, args.probabilisticThreshold)
+		trc.StartProbabilisticProfiling(mainCtx)
 		log.Printf("Enabled probabilistic profiling")
 	} else {
 		if err := trc.EnableProfiling(); err != nil {
@@ -320,7 +315,7 @@ func mainWithExitCode() exitCode {
 	// change this log line update also the system test.
 	log.Printf("Attached sched monitor")
 
-	if err := startTraceHandling(mainCtx, rep, times, trc); err != nil {
+	if err := startTraceHandling(mainCtx, rep, intervals, trc, traceHandlerCacheSize); err != nil {
 		return failure("Failed to start trace handling: %v", err)
 	}
 
@@ -334,9 +329,54 @@ func mainWithExitCode() exitCode {
 	return exitSuccess
 }
 
+// traceCacheSize defines the maximum number of elements for the caches in tracehandler.
+//
+// The caches in tracehandler have a size-"processing overhead" trade-off: Every cache miss will
+// trigger additional processing for that trace in userspace (Go). For most maps, we use
+// maxElementsPerInterval as a base sizing factor. For the tracehandler caches, we also multiply
+// with traceCacheIntervals. For typical/small values of maxElementsPerInterval, this can lead to
+// non-optimal map sizing (reduced cache_hit:cache_miss ratio and increased processing overhead).
+// Simply increasing traceCacheIntervals is problematic when maxElementsPerInterval is large
+// (e.g. too many CPU cores present) as we end up using too much memory. A minimum size is
+// therefore used here.
+func traceCacheSize(monitorInterval time.Duration, samplesPerSecond int,
+	presentCPUCores uint16) uint32 {
+	const (
+		traceCacheIntervals = 6
+		traceCacheMinSize   = 65536
+	)
+
+	maxElements := maxElementsPerInterval(monitorInterval, samplesPerSecond, presentCPUCores)
+
+	size := maxElements * uint32(traceCacheIntervals)
+	if size < traceCacheMinSize {
+		size = traceCacheMinSize
+	}
+	return util.NextPowerOfTwo(size)
+}
+
+func maxElementsPerInterval(monitorInterval time.Duration, samplesPerSecond int,
+	presentCPUCores uint16) uint32 {
+	return uint32(uint16(samplesPerSecond) * uint16(monitorInterval.Seconds()) * presentCPUCores)
+}
+
+func mkCacheDirectory(dir string) error {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		log.Debugf("Creating cache directory '%s'", dir)
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+			return fmt.Errorf("failed to create cache directory (%s): %v", dir, err)
+		}
+	}
+	return nil
+}
+
 func sanityCheck(args *arguments) exitCode {
 	if args.environmentType == "" && args.machineID != "" {
 		return parseError("You can only specify the machine ID if you also provide the environment")
+	}
+
+	if args.samplesPerSecond < 1 {
+		return parseError("Invalid sampling frequency: %d", args.samplesPerSecond)
 	}
 
 	if args.mapScaleFactor > 8 {

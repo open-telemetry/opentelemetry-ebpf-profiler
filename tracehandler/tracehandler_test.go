@@ -144,7 +144,7 @@ func TestTraceHandler(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			exitNotify, err := tracehandler.Start(ctx, &mockContainerMetadataHandler{}, r,
-				&fakeTraceProcessor{}, traceChan, defaultTimes())
+				&fakeTraceProcessor{}, traceChan, defaultTimes(), 128)
 			require.NoError(t, err)
 
 			for _, input := range test.input {

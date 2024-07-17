@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/elastic/otel-profiling-agent/tracer/types"
 	log "github.com/sirupsen/logrus"
 
 	lru "github.com/elastic/go-freelru"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/interpreter"
 	"github.com/elastic/otel-profiling-agent/interpreter/apmint"
@@ -102,29 +102,29 @@ type ExecutableInfoManager struct {
 func NewExecutableInfoManager(
 	sdp nativeunwind.StackDeltaProvider,
 	ebpf pmebpf.EbpfHandler,
-	includeTracers config.IncludedTracers,
+	includeTracers types.IncludedTracers,
 ) (*ExecutableInfoManager, error) {
 	// Initialize interpreter loaders.
 	interpreterLoaders := make([]interpreter.Loader, 0)
-	if includeTracers.Has(config.PerlTracer) {
+	if includeTracers.Has(types.PerlTracer) {
 		interpreterLoaders = append(interpreterLoaders, perl.Loader)
 	}
-	if includeTracers.Has(config.PythonTracer) {
+	if includeTracers.Has(types.PythonTracer) {
 		interpreterLoaders = append(interpreterLoaders, python.Loader)
 	}
-	if includeTracers.Has(config.PHPTracer) {
+	if includeTracers.Has(types.PHPTracer) {
 		interpreterLoaders = append(interpreterLoaders, php.Loader, php.OpcacheLoader)
 	}
-	if includeTracers.Has(config.HotspotTracer) {
+	if includeTracers.Has(types.HotspotTracer) {
 		interpreterLoaders = append(interpreterLoaders, hotspot.Loader)
 	}
-	if includeTracers.Has(config.RubyTracer) {
+	if includeTracers.Has(types.RubyTracer) {
 		interpreterLoaders = append(interpreterLoaders, ruby.Loader)
 	}
-	if includeTracers.Has(config.V8Tracer) {
+	if includeTracers.Has(types.V8Tracer) {
 		interpreterLoaders = append(interpreterLoaders, nodev8.Loader)
 	}
-	if includeTracers.Has(config.DotnetTracer) {
+	if includeTracers.Has(types.DotnetTracer) {
 		interpreterLoaders = append(interpreterLoaders, dotnet.Loader)
 	}
 

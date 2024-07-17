@@ -18,8 +18,8 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
 
-	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/libpf/xsync"
 	"github.com/elastic/otel-profiling-agent/nativeunwind/elfunwindinfo"
@@ -198,7 +198,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	symCache := newSymbolizationCache()
 
 	// Instantiate managers and enable all tracers by default
-	includeTracers, _ := config.ParseTracers("all")
+	includeTracers, _ := tracertypes.Parse("all")
 
 	manager, err := pm.New(todo, includeTracers, monitorInterval, &coredumpEbpfMaps,
 		pm.NewMapFileIDMapper(), symCache, elfunwindinfo.NewStackDeltaProvider(), false)

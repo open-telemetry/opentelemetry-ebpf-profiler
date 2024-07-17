@@ -59,7 +59,7 @@ func (c *Collector) GetHostMetadata() map[string]string {
 
 	agent.AddMetadata(result)
 
-	if err := host.AddMetadata(c.caEndpoint, result); err != nil {
+	if err := host.AddMetadata(result); err != nil {
 		log.Errorf("Unable to get host metadata: %v", err)
 	}
 
