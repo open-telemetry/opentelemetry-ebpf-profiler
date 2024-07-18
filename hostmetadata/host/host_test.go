@@ -14,7 +14,6 @@ import (
 	"strings"
 	"testing"
 
-	agentmeta "github.com/elastic/otel-profiling-agent/hostmetadata/agent"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -41,10 +40,6 @@ func TestSetTags(t *testing.T) {
 }
 
 func TestAddMetadata(t *testing.T) {
-	agentmeta.SetAgentData(&agentmeta.Config{
-		CollectionAgentAddr: "localhost:12345",
-	})
-
 	// This tests checks that common metadata keys are populated
 	metadataMap := make(map[string]string)
 	SetTags(validTags)

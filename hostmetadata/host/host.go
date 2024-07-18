@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"regexp"
 	"runtime"
@@ -20,10 +19,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/elastic/otel-profiling-agent/hostmetadata/agent"
 	"github.com/elastic/otel-profiling-agent/pfnamespaces"
 
-	"github.com/jsimonetti/rtnetlink"
 	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/gocapability/capability"
 	"golang.org/x/sys/unix"
@@ -67,14 +64,6 @@ var (
 // This may not be the best thing to do in some scenarios, but still seems to be the most sensible
 // default.
 func AddMetadata(result map[string]string) error {
-	caEndpoint := agent.GetCollectionAgentAddr()
-	// Extract the host part of the endpoint
-	// Remove the port from the endpoint in case it is present
-	host, _, err := net.SplitHostPort(caEndpoint)
-	if err != nil {
-		host = caEndpoint
-	}
-
 	if validatedTags != "" {
 		result[keyTags] = validatedTags
 	}
@@ -158,15 +147,6 @@ func AddMetadata(result map[string]string) error {
 				continue
 			}
 			result[keyPrefixSysctl+sysctl] = sanitizeString(sysctlValue)
-		}
-
-		// Get IP address
-		var ip net.IP
-		ip, err = getSourceIPAddress(host)
-		if err != nil {
-			errResult = errors.Join(errResult, err)
-		} else {
-			result[KeyIPAddress] = ip.String()
 		}
 
 		// Get uname-related metadata: hostname and kernel version
@@ -259,92 +239,6 @@ func dedupCPUInfo(result map[string]string, info cpuInfo) {
 func sanitizeString(str []byte) string {
 	// Trim byte array from 0x00 bytes
 	return string(bytes.Trim(str, "\x00"))
-}
-
-func addressFamily(ip net.IP) (uint8, error) {
-	if ip.To4() != nil {
-		return unix.AF_INET, nil
-	}
-	if len(ip) == net.IPv6len {
-		return unix.AF_INET6, nil
-	}
-	return 0, fmt.Errorf("invalid IP address: %v", ip)
-}
-
-// getSourceIPAddress returns the source IP address for the traffic destined to the specified
-// domain.
-func getSourceIPAddress(domain string) (net.IP, error) {
-	conn, err := rtnetlink.Dial(nil)
-	if err != nil {
-		return nil, errors.New("unable to open netlink connection")
-	}
-	defer conn.Close()
-
-	dstIPs, err := net.LookupIP(domain)
-	if err != nil {
-		return nil, fmt.Errorf("unable to resolve %s: %v", domain, err)
-	}
-	if len(dstIPs) == 0 {
-		return nil, fmt.Errorf("unable to resolve %s: no IP address", domain)
-	}
-
-	var srcIP net.IP
-	var lastError error
-	found := false
-
-	// We might get multiple IP addresses, check all of them as some may not be routable (like an
-	// IPv6 address on an IPv4 network).
-	for _, ip := range dstIPs {
-		addressFamily, err := addressFamily(ip)
-		if err != nil {
-			return nil, fmt.Errorf("unable to get address family for %s: %v", ip.String(), err)
-		}
-
-		req := &rtnetlink.RouteMessage{
-			Family: addressFamily,
-			Table:  unix.RT_TABLE_MAIN,
-			Attributes: rtnetlink.RouteAttributes{
-				Dst: ip,
-			},
-		}
-
-		routes, err := conn.Route.Get(req)
-		if err != nil {
-			lastError = fmt.Errorf("unable to get route to %s (%s): %v", domain, ip.String(), err)
-			continue
-		}
-
-		if len(routes) == 0 {
-			continue
-		}
-		if len(routes) > 1 {
-			// More than 1 route!
-			// This doesn't look like this should ever happen (even in the presence of overlapping
-			// routes with same metric, this will return a single route).
-			// May be a leaky abstraction/artifact from the way the netlink API works?
-			// Regardless, this seems ok to ignore, but log just in case.
-			log.Warnf("Found multiple (%d) routes to %v; first 2 routes: %#v and %#v",
-				len(routes), domain, routes[0], routes[1])
-		}
-
-		// Sanity-check the result, in case the source address is left uninitialized
-		if len(routes[0].Attributes.Src) == 0 {
-			lastError = fmt.Errorf(
-				"unable to get route to %s (%s): no source IP address", domain, ip.String())
-			continue
-		}
-
-		srcIP = routes[0].Attributes.Src
-		found = true
-		break
-	}
-
-	if !found {
-		return nil, fmt.Errorf("no route found to %s: %v", domain, lastError)
-	}
-
-	log.Debugf("Traffic to %v is routed from %v", domain, srcIP.String())
-	return srcIP, nil
 }
 
 func hasCapSysAdmin() (bool, error) {

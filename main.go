@@ -19,7 +19,6 @@ import (
 	//nolint:gosec
 	_ "net/http/pprof"
 
-	agentmeta "github.com/elastic/otel-profiling-agent/hostmetadata/agent"
 	"github.com/elastic/otel-profiling-agent/times"
 	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
 	"github.com/elastic/otel-profiling-agent/util"
@@ -131,7 +130,6 @@ func mainWithExitCode() exitCode {
 		}()
 	}
 
-	startTime := time.Now()
 	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
 		vc.Version(), vc.Revision(), vc.BuildTimestamp())
 
@@ -152,30 +150,6 @@ func mainWithExitCode() exitCode {
 	traceHandlerCacheSize :=
 		traceCacheSize(args.monitorInterval, args.samplesPerSecond, presentCores)
 
-	agentmeta.SetAgentData(&agentmeta.Config{
-		Version:                vc.Version(),
-		Revision:               vc.Revision(),
-		BuildTimestamp:         vc.BuildTimestamp(),
-		StartTime:              startTime,
-		CacheDirectory:         args.cacheDirectory,
-		CollectionAgentAddr:    args.collAgentAddr,
-		ConfigurationFile:      args.configFile,
-		Tags:                   args.tags,
-		Tracers:                args.tracers,
-		Verbose:                args.verboseMode,
-		DisableTLS:             args.disableTLS,
-		NoKernelVersionCheck:   args.noKernelVersionCheck,
-		BpfVerifierLogLevel:    args.bpfVerifierLogLevel,
-		BpfVerifierLogSize:     args.bpfVerifierLogSize,
-		MapScaleFactor:         args.mapScaleFactor,
-		ProbabilisticInterval:  args.probabilisticInterval,
-		ProbabilisticThreshold: args.probabilisticThreshold,
-		PresentCPUCores:        presentCores,
-		TraceCacheEntries:      traceHandlerCacheSize,
-		MaxElementsPerInterval: maxElementsPerInterval(args.monitorInterval, args.samplesPerSecond,
-			presentCores),
-		EnvHTTPSProxy: os.Getenv("HTTPS_PROXY"),
-	})
 	hostmeta.SetTags(args.tags)
 
 	// Retrieve host metadata that will be stored with the HA config, and
