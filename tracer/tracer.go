@@ -28,10 +28,11 @@ import (
 	"github.com/elastic/otel-profiling-agent/times"
 	"github.com/elastic/otel-profiling-agent/tracer/types"
 	log "github.com/sirupsen/logrus"
+	"github.com/tklauser/numcpus"
 	"github.com/zeebo/xxh3"
+	"golang.org/x/sys/unix"
 
 	"github.com/elastic/otel-profiling-agent/host"
-	hostcpu "github.com/elastic/otel-profiling-agent/hostmetadata/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
 	"github.com/elastic/otel-profiling-agent/libpf/xsync"
@@ -1103,16 +1104,20 @@ func (t *Tracer) AttachTracer() error {
 		return fmt.Errorf("failed to configure software perf event: %v", err)
 	}
 
-	onlineCPUIDs, err := hostcpu.ParseCPUCoreIDs(hostcpu.CPUOnlinePath)
+	possibleCPUs, err := numcpus.GetPossible()
 	if err != nil {
-		return fmt.Errorf("failed to get online CPUs: %v", err)
+		return fmt.Errorf("failed to get possible CPUs: %v", err)
 	}
 
 	events := t.perfEntrypoints.WLock()
 	defer t.perfEntrypoints.WUnlock(&events)
-	for _, id := range onlineCPUIDs {
+	for id := 0; id < possibleCPUs; id++ {
 		perfEvent, err := perf.Open(perfAttribute, perf.AllThreads, id, nil)
 		if err != nil {
+			if errors.Is(err, unix.ENODEV) {
+				// The requested CPU is currently offline, skip it.
+				continue
+			}
 			return fmt.Errorf("failed to attach to perf event on CPU %d: %v", id, err)
 		}
 		if err := perfEvent.SetBPF(uint32(tracerProg.FD())); err != nil {

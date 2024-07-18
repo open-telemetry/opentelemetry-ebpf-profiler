@@ -16,7 +16,6 @@ import (
 	"github.com/peterbourgon/ff/v3"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/hostmetadata/host"
 	"github.com/elastic/otel-profiling-agent/tracer"
 )
 
@@ -52,10 +51,8 @@ var (
 	configFileHelp = "Path to the profiling agent configuration file."
 	projectIDHelp  = "The project ID to split profiling data into logical groups. " +
 		"Its value should be larger than 0 and smaller than 4096."
-	cacheDirectoryHelp = "The directory where the profiling agent can store cached data."
-	secretTokenHelp    = "The secret token associated with the project id."
-	tagsHelp           = fmt.Sprintf("User-specified tags separated by ';'. "+
-		"Each tag should match '%v'.", host.ValidTagRegex())
+	cacheDirectoryHelp      = "The directory where the profiling agent can store cached data."
+	secretTokenHelp         = "The secret token associated with the project id."
 	disableTLSHelp          = "Disable encryption for data in transit."
 	bpfVerifierLogLevelHelp = "Log level of the eBPF verifier output (0,1,2). Default is 0."
 	bpfVerifierLogSizeHelp  = "Size in bytes that will be allocated for the eBPF " +
@@ -104,7 +101,6 @@ type arguments struct {
 	saveCPUProfile         bool
 	secretToken            string
 	sendErrorFrames        bool
-	tags                   string
 	tracers                string
 	verboseMode            bool
 	version                bool
@@ -173,7 +169,6 @@ func parseArgs() (*arguments, error) {
 	fs.BoolVar(&args.sendErrorFrames, "send-error-frames", defaultArgSendErrorFrames,
 		sendErrorFramesHelp)
 
-	fs.StringVar(&args.tags, "tags", "", tagsHelp)
 	fs.StringVar(&args.tracers, "t", "all", "Shorthand for -tracers.")
 	fs.StringVar(&args.tracers, "tracers", "all", tracersHelp)
 

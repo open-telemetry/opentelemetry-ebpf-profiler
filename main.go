@@ -23,10 +23,10 @@ import (
 	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
 	"github.com/elastic/otel-profiling-agent/util"
 	"github.com/elastic/otel-profiling-agent/vc"
+	"github.com/tklauser/numcpus"
 	"golang.org/x/sys/unix"
 
 	"github.com/elastic/otel-profiling-agent/host"
-	hostmeta "github.com/elastic/otel-profiling-agent/hostmetadata/host"
 	"github.com/elastic/otel-profiling-agent/tracehandler"
 
 	"github.com/elastic/otel-profiling-agent/hostmetadata"
@@ -141,23 +141,13 @@ func mainWithExitCode() exitCode {
 		return failure("Failed to probe tracepoint: %v", err)
 	}
 
-	var presentCores uint16
-	presentCores, err = hostmeta.PresentCPUCores()
+	presentCores, err := numcpus.GetOnline()
 	if err != nil {
 		return failure("Failed to read CPU file: %v", err)
 	}
 
 	traceHandlerCacheSize :=
-		traceCacheSize(args.monitorInterval, args.samplesPerSecond, presentCores)
-
-	hostmeta.SetTags(args.tags)
-
-	// Retrieve host metadata that will be stored with the HA config, and
-	// sent to the backend with certain RPCs.
-	hostMetadataMap := make(map[string]string)
-	if err = hostmeta.AddMetadata(hostMetadataMap); err != nil {
-		log.Errorf("Unable to get host metadata for config: %v", err)
-	}
+		traceCacheSize(args.monitorInterval, args.samplesPerSecond, uint16(presentCores))
 
 	intervals := times.New(mainCtx,
 		args.monitorInterval, args.reporterInterval, args.probabilisticInterval)
@@ -172,14 +162,15 @@ func mainWithExitCode() exitCode {
 
 	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr)
 
-	// TODO: Maybe abort execution if (some) metadata can not be collected
-	hostMetadataMap = metadataCollector.GetHostMetadata()
-
-	if bpfJITEnabled, found := hostMetadataMap["host.sysctl.net.core.bpf_jit_enable"]; found {
-		if bpfJITEnabled == "0" {
-			log.Warnf("The BPF JIT is disabled (net.core.bpf_jit_enable = 0). " +
-				"Enable it to reduce CPU overhead.")
-		}
+	hostname, _ := os.Hostname()
+	kernelVersion, err := getKernelVersion()
+	if err != nil {
+		return failure("Failed to get Linux kernel version: %v", err)
+	}
+	sourceIP, err := getSourceIPAddress(args.collAgentAddr)
+	if err != nil {
+		return failure("Failed to get source IP to %s: %v",
+			args.collAgentAddr, err)
 	}
 
 	// Network operations to CA start here
@@ -197,18 +188,15 @@ func mainWithExitCode() exitCode {
 		CacheSize:              traceHandlerCacheSize,
 		SamplesPerSecond:       args.samplesPerSecond,
 		ProjectID:              strconv.Itoa(int(args.projectID)),
-		KernelVersion:          hostMetadataMap[hostmeta.KeyKernelVersion],
-		HostName:               hostMetadataMap[hostmeta.KeyHostname],
-		IPAddress:              hostMetadataMap[hostmeta.KeyIPAddress],
+		KernelVersion:          kernelVersion,
+		HostName:               hostname,
+		IPAddress:              sourceIP.String(),
 	})
 	if err != nil {
 		return failure("Failed to start reporting: %v", err)
 	}
 
 	metrics.SetReporter(rep)
-
-	// Set the initial host metadata.
-	rep.ReportHostMetadata(hostMetadataMap)
 
 	// Now that set the initial host metadata, start a goroutine to keep sending updates regularly.
 	metadataCollector.StartMetadataCollection(mainCtx, rep)

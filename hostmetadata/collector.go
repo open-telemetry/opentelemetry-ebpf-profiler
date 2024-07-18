@@ -10,9 +10,6 @@ import (
 	"context"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
-	"github.com/elastic/otel-profiling-agent/hostmetadata/host"
 	"github.com/elastic/otel-profiling-agent/reporter"
 )
 
@@ -50,10 +47,6 @@ func (c *Collector) AddCustomData(key, value string) {
 // GetHostMetadata returns a map that contains all host metadata key/value pairs.
 func (c *Collector) GetHostMetadata() map[string]string {
 	result := make(map[string]string)
-
-	if err := host.AddMetadata(result); err != nil {
-		log.Errorf("Unable to get host metadata: %v", err)
-	}
 
 	for k, v := range c.customData {
 		result[k] = v
