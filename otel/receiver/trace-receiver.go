@@ -13,6 +13,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer"
 	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.uber.org/zap"
@@ -32,6 +33,14 @@ var (
 
 // Start starts the receiver.
 func (otelRcvr *otelReceiver) Start(ctx context.Context, host component.Host) error {
+	cfg := otelRcvr.config
+
+	if cfg.Verbose {
+		// logrus is used in the agent code, so we need to set the log level here.
+		// todo: make the logger configurable
+		logrus.SetLevel(logrus.DebugLevel)
+	}
+
 	log := otelRcvr.logger.Sugar()
 
 	otelRcvr.host = host
@@ -40,7 +49,13 @@ func (otelRcvr *otelReceiver) Start(ctx context.Context, host component.Host) er
 	}
 	ctx, otelRcvr.cancel = context.WithCancel(ctx)
 
-	cfg := otelRcvr.config
+	if err := tracer.ProbeBPFSyscall(); err != nil {
+		return fmt.Errorf("failed to probe eBPF syscall: %v", err)
+	}
+
+	if err := tracer.ProbeTracepoint(); err != nil {
+		return fmt.Errorf("failed to probe tracepoint: %v", err)
+	}
 
 	log.Debug("Determining tracers to include")
 	includeTracers, err := tracertypes.Parse(cfg.Tracers)
@@ -150,6 +165,8 @@ func (otelRcvr *otelReceiver) Start(ctx context.Context, host component.Host) er
 	// This log line is used in our system tests to verify if that the agent has started.
 	// So if you change this log line, update also the system test.
 	log.Info("Attached sched monitor")
+	log.Infof("cfg: %+v", cfg)
+	log.Info("intervals: ", intervals)
 
 	if err := startTraceHandling(ctx, rep, intervals, trc, traceHandlerCacheSize); err != nil {
 		return fmt.Errorf("failed to start trace handling: %v", err)

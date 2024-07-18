@@ -32,7 +32,6 @@ type Config struct {
 	MonitorInterval        time.Duration `mapstructure:"monitor-interval"`
 	SamplesPerSecond       int           `mapstructure:"samples-per-second"`
 	SendErrorFrames        bool          `mapstructure:"send-error-frames"`
-	OTLPReporter           bool          `mapstructure:"otlp-reporter"`
 
 	// Written in createDefaultConfig()
 	PresentCPUCores int
