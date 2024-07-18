@@ -161,17 +161,22 @@ func mainWithExitCode() exitCode {
 	log.Infof("Assigned ProjectID: %d", args.projectID)
 
 	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr)
+	metadataCollector.AddCustomData("os.type", "linux")
 
 	hostname, _ := os.Hostname()
+	metadataCollector.AddCustomData("host.name", hostname)
 	kernelVersion, err := getKernelVersion()
 	if err != nil {
 		return failure("Failed to get Linux kernel version: %v", err)
 	}
+	// OTel semantic introduced in https://github.com/open-telemetry/semantic-conventions/issues/66
+	metadataCollector.AddCustomData("os.kernel.release", kernelVersion)
 	sourceIP, err := getSourceIPAddress(args.collAgentAddr)
 	if err != nil {
 		return failure("Failed to get source IP to %s: %v",
 			args.collAgentAddr, err)
 	}
+	metadataCollector.AddCustomData("host.ip", sourceIP.String())
 
 	// Network operations to CA start here
 	var rep reporter.Reporter
