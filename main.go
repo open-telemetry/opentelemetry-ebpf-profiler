@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"time"
 
 	//nolint:gosec
@@ -112,10 +111,6 @@ func mainWithExitCode() exitCode {
 		return code
 	}
 
-	if err = mkCacheDirectory(args.cacheDirectory); err != nil {
-		failure("%v", err)
-	}
-
 	// Context to drive main goroutine and the Tracer monitors.
 	mainCtx, mainCancel := signal.NotifyContext(context.Background(),
 		unix.SIGINT, unix.SIGTERM, unix.SIGABRT)
@@ -158,8 +153,6 @@ func mainWithExitCode() exitCode {
 		return failure("Failed to parse the included tracers: %v", err)
 	}
 
-	log.Infof("Assigned ProjectID: %d", args.projectID)
-
 	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr)
 	metadataCollector.AddCustomData("os.type", "linux")
 
@@ -192,7 +185,6 @@ func mainWithExitCode() exitCode {
 		ReportInterval:         intervals.ReportInterval(),
 		CacheSize:              traceHandlerCacheSize,
 		SamplesPerSecond:       args.samplesPerSecond,
-		ProjectID:              strconv.Itoa(int(args.projectID)),
 		KernelVersion:          kernelVersion,
 		HostName:               hostname,
 		IPAddress:              sourceIP.String(),
@@ -302,21 +294,7 @@ func maxElementsPerInterval(monitorInterval time.Duration, samplesPerSecond int,
 	return uint32(uint16(samplesPerSecond) * uint16(monitorInterval.Seconds()) * presentCPUCores)
 }
 
-func mkCacheDirectory(dir string) error {
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		log.Debugf("Creating cache directory '%s'", dir)
-		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-			return fmt.Errorf("failed to create cache directory (%s): %v", dir, err)
-		}
-	}
-	return nil
-}
-
 func sanityCheck(args *arguments) exitCode {
-	if args.environmentType == "" && args.machineID != "" {
-		return parseError("You can only specify the machine ID if you also provide the environment")
-	}
-
 	if args.samplesPerSecond < 1 {
 		return parseError("Invalid sampling frequency: %d", args.samplesPerSecond)
 	}

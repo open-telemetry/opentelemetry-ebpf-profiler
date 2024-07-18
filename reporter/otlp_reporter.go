@@ -302,7 +302,6 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 	r := &OTLPReporter{
 		name:                    cfg.Name,
 		version:                 cfg.Version,
-		projectID:               cfg.ProjectID,
 		kernelVersion:           cfg.KernelVersion,
 		hostName:                cfg.HostName,
 		ipAddress:               cfg.IPAddress,
