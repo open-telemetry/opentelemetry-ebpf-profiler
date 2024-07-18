@@ -19,7 +19,6 @@ import (
 	//nolint:gosec
 	_ "net/http/pprof"
 
-	"github.com/elastic/otel-profiling-agent/containermetadata"
 	agentmeta "github.com/elastic/otel-profiling-agent/hostmetadata/agent"
 	"github.com/elastic/otel-profiling-agent/times"
 	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
@@ -81,13 +80,8 @@ func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
 		return fmt.Errorf("failed to start map monitors: %v", err)
 	}
 
-	containerMetadataHandler, err := containermetadata.GetHandler(ctx, intervals.MonitorInterval())
-	if err != nil {
-		return fmt.Errorf("failed to create container metadata handler: %v", err)
-	}
-
-	_, err = tracehandler.Start(ctx, containerMetadataHandler, rep,
-		trc.TraceProcessor(), traceCh, intervals, cacheSize)
+	_, err := tracehandler.Start(ctx, rep, trc.TraceProcessor(),
+		traceCh, intervals, cacheSize)
 	return err
 }
 
