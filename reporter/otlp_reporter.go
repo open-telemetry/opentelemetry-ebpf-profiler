@@ -146,16 +146,13 @@ func (r *OTLPReporter) SupportsReportTraceEvent() bool { return true }
 
 // ReportTraceEvent enqueues reported trace events for the OTLP reporter.
 func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
-	timestamp libpf.UnixTime64, comm, podName,
-	containerName, apmServiceName string) {
+	timestamp libpf.UnixTime64, comm, apmServiceName string, _ util.PID) {
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 
 	key := traceAndMetaKey{
 		hash:           trace.Hash,
 		comm:           comm,
-		podName:        podName,
-		containerName:  containerName,
 		apmServiceName: apmServiceName,
 	}
 
