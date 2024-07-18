@@ -31,7 +31,6 @@ import (
 	"github.com/elastic/otel-profiling-agent/tracehandler"
 
 	"github.com/elastic/otel-profiling-agent/hostmetadata"
-	"github.com/elastic/otel-profiling-agent/metrics/reportermetrics"
 
 	"github.com/elastic/otel-profiling-agent/metrics"
 	"github.com/elastic/otel-profiling-agent/reporter"
@@ -239,9 +238,6 @@ func mainWithExitCode() exitCode {
 
 	// Now that set the initial host metadata, start a goroutine to keep sending updates regularly.
 	metadataCollector.StartMetadataCollection(mainCtx, rep)
-
-	// Start reporter metric reporting with 60 second intervals.
-	defer reportermetrics.Start(mainCtx, rep, 60*time.Second)()
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(mainCtx, &tracer.Config{
