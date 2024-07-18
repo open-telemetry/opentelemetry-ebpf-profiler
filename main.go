@@ -34,7 +34,6 @@ import (
 	"github.com/elastic/otel-profiling-agent/metrics/reportermetrics"
 
 	"github.com/elastic/otel-profiling-agent/metrics"
-	"github.com/elastic/otel-profiling-agent/metrics/agentmetrics"
 	"github.com/elastic/otel-profiling-agent/reporter"
 
 	"github.com/elastic/otel-profiling-agent/tracer"
@@ -241,12 +240,6 @@ func mainWithExitCode() exitCode {
 	// Now that set the initial host metadata, start a goroutine to keep sending updates regularly.
 	metadataCollector.StartMetadataCollection(mainCtx, rep)
 
-	// Start agent-specific metric retrieval and report them every second.
-	agentMetricCancel, agentErr := agentmetrics.Start(mainCtx, 1*time.Second)
-	if agentErr != nil {
-		return failure("Error starting the agent specific metric collection: %v", agentErr)
-	}
-	defer agentMetricCancel()
 	// Start reporter metric reporting with 60 second intervals.
 	defer reportermetrics.Start(mainCtx, rep, 60*time.Second)()
 
