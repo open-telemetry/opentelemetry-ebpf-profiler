@@ -10,7 +10,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/elastic/otel-profiling-agent/platform"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/elastic/otel-profiling-agent/hostmetadata/agent"
@@ -28,13 +27,10 @@ type Collector struct {
 
 	// customData is a map of custom key/value pairs that can be added to the host metadata.
 	customData map[string]string
-
-	// env is the environment object that provides information about the runtime environment.
-	env *platform.Environment
 }
 
 // NewCollector returns a new Collector for the specified collection agent endpoint.
-func NewCollector(caEndpoint string, environment *platform.Environment) *Collector {
+func NewCollector(caEndpoint string) *Collector {
 	return &Collector{
 		caEndpoint: caEndpoint,
 		customData: make(map[string]string),
@@ -44,7 +40,6 @@ func NewCollector(caEndpoint string, environment *platform.Environment) *Collect
 		// 23021 is 6h23m41s - picked randomly, so we don't do the collection at the same
 		// time every day.
 		collectionInterval: 23021 * time.Second,
-		env:                environment,
 	}
 }
 
@@ -62,8 +57,6 @@ func (c *Collector) GetHostMetadata() map[string]string {
 	if err := host.AddMetadata(result); err != nil {
 		log.Errorf("Unable to get host metadata: %v", err)
 	}
-
-	c.env.AddMetadata(result)
 
 	for k, v := range c.customData {
 		result[k] = v

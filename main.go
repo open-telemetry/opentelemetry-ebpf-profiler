@@ -21,7 +21,6 @@ import (
 
 	"github.com/elastic/otel-profiling-agent/containermetadata"
 	agentmeta "github.com/elastic/otel-profiling-agent/hostmetadata/agent"
-	"github.com/elastic/otel-profiling-agent/platform"
 	"github.com/elastic/otel-profiling-agent/times"
 	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
 	"github.com/elastic/otel-profiling-agent/util"
@@ -144,12 +143,6 @@ func mainWithExitCode() exitCode {
 	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
 		vc.Version(), vc.Revision(), vc.BuildTimestamp())
 
-	environment, err := platform.NewEnvironment(args.environmentType, args.machineID)
-	if err != nil {
-		log.Errorf("Failed to create environment: %v", err)
-		return exitFailure
-	}
-
 	if err = tracer.ProbeBPFSyscall(); err != nil {
 		return failure(fmt.Sprintf("Failed to probe eBPF syscall: %v", err))
 	}
@@ -209,9 +202,9 @@ func mainWithExitCode() exitCode {
 		return failure("Failed to parse the included tracers: %v", err)
 	}
 
-	log.Infof("Assigned ProjectID: %d HostID: %d", args.projectID, environment.HostID())
+	log.Infof("Assigned ProjectID: %d", args.projectID)
 
-	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr, environment)
+	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr)
 
 	// TODO: Maybe abort execution if (some) metadata can not be collected
 	hostMetadataMap = metadataCollector.GetHostMetadata()
@@ -238,7 +231,6 @@ func mainWithExitCode() exitCode {
 		CacheSize:              traceHandlerCacheSize,
 		SamplesPerSecond:       args.samplesPerSecond,
 		ProjectID:              strconv.Itoa(int(args.projectID)),
-		HostID:                 environment.HostID(),
 		KernelVersion:          hostMetadataMap[hostmeta.KeyKernelVersion],
 		HostName:               hostMetadataMap[hostmeta.KeyHostname],
 		IPAddress:              hostMetadataMap[hostmeta.KeyIPAddress],
