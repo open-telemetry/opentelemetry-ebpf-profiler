@@ -226,7 +226,7 @@ const (
 
 var (
 	// regex for the interpreter executable
-	v8Regex = regexp.MustCompile(`^(?:.*/)?node$`)
+	v8Regex = regexp.MustCompile(`^(?:.*/)?node(\d+)?$`)
 
 	// The FileID used for V8 stub frames
 	v8StubsFileID = libpf.NewFileID(0x578b, 0x1d)
