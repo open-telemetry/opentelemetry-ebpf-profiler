@@ -493,9 +493,9 @@ type v8Instance struct {
 	addrToType   *freelru.LRU[libpf.Address, uint16]
 
 	// mappings is indexed by the Mapping to its generation
-	mappings map[process.Mapping]uint32
+	mappings map[process.Mapping]*uint32
 	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
-	prefixes map[lpm.Prefix]uint32
+	prefixes map[lpm.Prefix]*uint32
 	// mappingGeneration is the current generation (so old entries can be pruned)
 	mappingGeneration uint32
 }
@@ -557,11 +557,15 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			continue
 		}
 
-		_, exists := i.mappings[*m]
-		i.mappings[*m] = i.mappingGeneration
-		if exists {
+		if _, exists := i.mappings[*m]; exists {
+			*i.mappings[*m] = i.mappingGeneration
 			continue
 		}
+
+		// Generate a new uint32 pointer which is shared for mapping and the prefixes it owns
+		// so updating the mapping above will reflect to prefixes also.
+		mappingGeneration := i.mappingGeneration
+		i.mappings[*m] = &mappingGeneration
 
 		// Just assume all anonymous and executable mappings are V8 for now
 		log.Debugf("Enabling V8 for %#x/%#x", m.Vaddr, m.Length)
@@ -572,28 +576,28 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		}
 
 		for _, prefix := range prefixes {
-			if _, exists := i.prefixes[prefix]; exists {
-				i.prefixes[prefix] = i.mappingGeneration
-				continue
+			_, exists := i.prefixes[prefix]
+			if !exists {
+				err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindV8, 0, 0)
+				if err != nil {
+					return err
+				}
 			}
-			err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindV8, 0, 0)
-			if err != nil {
-				return err
-			}
-			i.prefixes[prefix] = i.mappingGeneration
+			i.prefixes[prefix] = &mappingGeneration
 		}
 	}
 
 	// Remove prefixes not seen
-	for prefix, generation := range i.prefixes {
-		if generation == i.mappingGeneration {
+	for prefix, generationPtr := range i.prefixes {
+		if *generationPtr == i.mappingGeneration {
 			continue
 		}
+		log.Debugf("Delete V8 prefix %#v", prefix)
 		_ = ebpf.DeletePidInterpreterMapping(pid, prefix)
 		delete(i.prefixes, prefix)
 	}
-	for m, generation := range i.mappings {
-		if generation == i.mappingGeneration {
+	for m, generationPtr := range i.mappings {
+		if *generationPtr == i.mappingGeneration {
 			continue
 		}
 		log.Debugf("Disabling V8 for %#x/%#x", m.Vaddr, m.Length)
@@ -1819,8 +1823,8 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid util.PID, _ libpf.Addr
 	return &v8Instance{
 		d:            d,
 		rm:           rm,
-		mappings:     make(map[process.Mapping]uint32),
-		prefixes:     make(map[lpm.Prefix]uint32),
+		mappings:     make(map[process.Mapping]*uint32),
+		prefixes:     make(map[lpm.Prefix]*uint32),
 		addrToString: addrToString,
 		addrToCode:   addrToCode,
 		addrToSFI:    addrToSFI,
