@@ -1,5 +1,5 @@
-> [!NOTE] 
-> 
+> [!NOTE]
+>
 > Please be aware that we currently won't merge 3rd party PRs because this repository
 > is temporary. We are waiting for the decision of the OpenTelemetry technical
 > commitee on the donation of this repository.
@@ -42,8 +42,8 @@ agent to OpenTelementry.
 
 ## Building
 
-> [!NOTE] 
-> 
+> [!NOTE]
+>
 > If you simply wish to take the agent for a spin with minimal effort, you can
 > also immediately jump to the ["Visualizing data locally"
 > section](#visualizing-data-locally), launch devfiler and follow the download
@@ -60,7 +60,11 @@ make docker-image
 
 Then, you can build the agent:
 ```sh
+# Build for architecture of current machine:
 make agent
+
+# OR, cross-compile an agent for another architecture:
+make agent TARGET_ARCH=arm64 # accepted: amd64, arm64
 ```
 
 The resulting binary will be in the current directory as `otel-profiling-agent`.
@@ -86,7 +90,7 @@ captured traces to the backend.
 ## Visualizing data locally
 
 We created a desktop application called "devfiler" that allows visualizing the
-profiling agent's output locally, making it very convenient for development use. 
+profiling agent's output locally, making it very convenient for development use.
 devfiler spins up a local server that listens on `0.0.0.0:11000`.
 
 ![Screenshot of devfiler UI](./doc/devfiler.png)
@@ -104,7 +108,7 @@ The archive contains a build for each of the following platforms:
 - Linux AppImage (x86_64)
 - Linux AppImage (aarch64)
 
-> [!NOTE] 
+> [!NOTE]
 > devfiler is currently in an experimental preview stage.
 
 ### macOS

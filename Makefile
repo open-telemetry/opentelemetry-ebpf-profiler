@@ -3,6 +3,35 @@
 
 SHELL := /usr/bin/env bash
 
+# Detect native architecture and translate to GOARCH.
+NATIVE_ARCH := $(shell uname -m)
+ifeq ($(NATIVE_ARCH),x86_64)
+NATIVE_ARCH := amd64
+else ifneq (,$(filter $(NATIVE_ARCH),aarch64 arm64))
+NATIVE_ARCH := arm64
+else
+$(error Unsupported architecture: $(NATIVE_ARCH))
+endif
+
+# Valid values are: amd64, arm64.
+TARGET_ARCH ?= $(NATIVE_ARCH)
+
+ifeq ($(NATIVE_ARCH),$(TARGET_ARCH))
+ARCH_PREFIX :=
+else ifeq ($(TARGET_ARCH),arm64)
+ARCH_PREFIX := aarch64-linux-gnu-
+else ifeq ($(TARGET_ARCH),amd64)
+ARCH_PREFIX := x86_64-linux-gnu-
+else
+$(error Unsupported architecture: $(TARGET_ARCH))
+endif
+
+export TARGET_ARCH
+export CGO_ENABLED = 1
+export GOARCH = $(TARGET_ARCH)
+export CC = $(ARCH_PREFIX)gcc
+export OBJCOPY = $(ARCH_PREFIX)objcopy
+
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
 COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
 
@@ -10,9 +39,12 @@ VERSION ?= v0.0.0
 BUILD_TIMESTAMP ?= $(shell date +%s)
 REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
 
-VC_LDFLAGS := -X github.com/elastic/otel-profiling-agent/vc.version=$(VERSION) \
+LDFLAGS := -X github.com/elastic/otel-profiling-agent/vc.version=$(VERSION) \
 	-X github.com/elastic/otel-profiling-agent/vc.revision=$(REVISION) \
-	-X github.com/elastic/otel-profiling-agent/vc.buildTimestamp=$(BUILD_TIMESTAMP)
+	-X github.com/elastic/otel-profiling-agent/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
+	-extldflags=-static
+
+GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)" -tags osusergo,netgo
 
 all: generate ebpf binary
 
@@ -25,11 +57,10 @@ clean:
 	@rm -rf go .cache
 
 generate:
-	go install github.com/florianl/bluebox@v0.0.1
 	go generate ./...
 
 binary:
-	go build -buildvcs=false -ldflags="$(VC_LDFLAGS) -extldflags=-static" -tags osusergo,netgo
+	go build $(GO_FLAGS)
 
 ebpf:
 	$(MAKE) -j$(shell nproc) -C support/ebpf
@@ -40,7 +71,7 @@ lint: generate
 	golangci-lint run --timeout 10m
 
 test: generate ebpf test-deps
-	go test ./...
+	go test $(GO_FLAGS) ./...
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
@@ -62,23 +93,12 @@ integration-test-binaries: generate ebpf
 			./$(test_name)) || exit ; \
 	)
 
-# Detect native architecture.
-UNAME_NATIVE_ARCH:=$(shell uname -m)
-
-ifeq ($(UNAME_NATIVE_ARCH),x86_64)
-NATIVE_ARCH:=amd64
-else ifneq (,$(filter $(UNAME_NATIVE_ARCH),aarch64 arm64))
-NATIVE_ARCH:=arm64
-else
-$(error Unsupported architecture: $(UNAME_NATIVE_ARCH))
-endif
-
 docker-image:
-	docker build -t profiling-agent --build-arg arch=$(NATIVE_ARCH) -f Dockerfile .
+	docker build -t profiling-agent -f Dockerfile .
 
 agent:
 	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
-		make VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)
+	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
 
 legal:
 	@go install go.elastic.co/go-licence-detector@latest
