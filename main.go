@@ -156,20 +156,35 @@ func mainWithExitCode() exitCode {
 	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr)
 	metadataCollector.AddCustomData("os.type", "linux")
 
-	hostname, _ := os.Hostname()
-	metadataCollector.AddCustomData("host.name", hostname)
 	kernelVersion, err := getKernelVersion()
 	if err != nil {
 		return failure("Failed to get Linux kernel version: %v", err)
 	}
 	// OTel semantic introduced in https://github.com/open-telemetry/semantic-conventions/issues/66
 	metadataCollector.AddCustomData("os.kernel.release", kernelVersion)
-	sourceIP, err := getSourceIPAddress(args.collAgentAddr)
-	if err != nil {
-		return failure("Failed to get source IP to %s: %v",
-			args.collAgentAddr, err)
+
+	// hostname and sourceIP will be populated from the root namespace.
+	var hostname, sourceIP string
+
+	if err = runInRootNS(func() error {
+		var hostnameErr error
+		hostname, hostnameErr = os.Hostname()
+		if hostnameErr != nil {
+			return fmt.Errorf("failed to get hostname: %v", hostnameErr)
+		}
+
+		srcIP, ipErr := getSourceIPAddress(args.collAgentAddr)
+		if ipErr != nil {
+			return fmt.Errorf("failed to get source IP: %v", ipErr)
+		}
+		sourceIP = srcIP.String()
+		return nil
+	}); err != nil {
+		return failure("Failed to get information in root namespace: %v", err)
 	}
-	metadataCollector.AddCustomData("host.ip", sourceIP.String())
+
+	metadataCollector.AddCustomData("host.name", hostname)
+	metadataCollector.AddCustomData("host.ip", sourceIP)
 
 	// Network operations to CA start here
 	var rep reporter.Reporter
@@ -187,7 +202,7 @@ func mainWithExitCode() exitCode {
 		SamplesPerSecond:       args.samplesPerSecond,
 		KernelVersion:          kernelVersion,
 		HostName:               hostname,
-		IPAddress:              sourceIP.String(),
+		IPAddress:              sourceIP,
 	})
 	if err != nil {
 		return failure("Failed to start reporting: %v", err)
