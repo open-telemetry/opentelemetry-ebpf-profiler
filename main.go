@@ -13,30 +13,24 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"time"
 
 	//nolint:gosec
 	_ "net/http/pprof"
 
-	"github.com/elastic/otel-profiling-agent/containermetadata"
-	agentmeta "github.com/elastic/otel-profiling-agent/hostmetadata/agent"
-	"github.com/elastic/otel-profiling-agent/platform"
 	"github.com/elastic/otel-profiling-agent/times"
 	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
 	"github.com/elastic/otel-profiling-agent/util"
 	"github.com/elastic/otel-profiling-agent/vc"
+	"github.com/tklauser/numcpus"
 	"golang.org/x/sys/unix"
 
 	"github.com/elastic/otel-profiling-agent/host"
-	hostmeta "github.com/elastic/otel-profiling-agent/hostmetadata/host"
 	"github.com/elastic/otel-profiling-agent/tracehandler"
 
 	"github.com/elastic/otel-profiling-agent/hostmetadata"
-	"github.com/elastic/otel-profiling-agent/metrics/reportermetrics"
 
 	"github.com/elastic/otel-profiling-agent/metrics"
-	"github.com/elastic/otel-profiling-agent/metrics/agentmetrics"
 	"github.com/elastic/otel-profiling-agent/reporter"
 
 	"github.com/elastic/otel-profiling-agent/tracer"
@@ -82,13 +76,8 @@ func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
 		return fmt.Errorf("failed to start map monitors: %v", err)
 	}
 
-	containerMetadataHandler, err := containermetadata.GetHandler(ctx, intervals.MonitorInterval())
-	if err != nil {
-		return fmt.Errorf("failed to create container metadata handler: %v", err)
-	}
-
-	_, err = tracehandler.Start(ctx, containerMetadataHandler, rep,
-		trc.TraceProcessor(), traceCh, intervals, cacheSize)
+	_, err := tracehandler.Start(ctx, rep, trc.TraceProcessor(),
+		traceCh, intervals, cacheSize)
 	return err
 }
 
@@ -122,10 +111,6 @@ func mainWithExitCode() exitCode {
 		return code
 	}
 
-	if err = mkCacheDirectory(args.cacheDirectory); err != nil {
-		failure("%v", err)
-	}
-
 	// Context to drive main goroutine and the Tracer monitors.
 	mainCtx, mainCancel := signal.NotifyContext(context.Background(),
 		unix.SIGINT, unix.SIGTERM, unix.SIGABRT)
@@ -140,15 +125,8 @@ func mainWithExitCode() exitCode {
 		}()
 	}
 
-	startTime := time.Now()
 	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
 		vc.Version(), vc.Revision(), vc.BuildTimestamp())
-
-	environment, err := platform.NewEnvironment(args.environmentType, args.machineID)
-	if err != nil {
-		log.Errorf("Failed to create environment: %v", err)
-		return exitFailure
-	}
 
 	if err = tracer.ProbeBPFSyscall(); err != nil {
 		return failure(fmt.Sprintf("Failed to probe eBPF syscall: %v", err))
@@ -158,47 +136,13 @@ func mainWithExitCode() exitCode {
 		return failure("Failed to probe tracepoint: %v", err)
 	}
 
-	var presentCores uint16
-	presentCores, err = hostmeta.PresentCPUCores()
+	presentCores, err := numcpus.GetPresent()
 	if err != nil {
 		return failure("Failed to read CPU file: %v", err)
 	}
 
 	traceHandlerCacheSize :=
-		traceCacheSize(args.monitorInterval, args.samplesPerSecond, presentCores)
-
-	agentmeta.SetAgentData(&agentmeta.Config{
-		Version:                vc.Version(),
-		Revision:               vc.Revision(),
-		BuildTimestamp:         vc.BuildTimestamp(),
-		StartTime:              startTime,
-		CacheDirectory:         args.cacheDirectory,
-		CollectionAgentAddr:    args.collAgentAddr,
-		ConfigurationFile:      args.configFile,
-		Tags:                   args.tags,
-		Tracers:                args.tracers,
-		Verbose:                args.verboseMode,
-		DisableTLS:             args.disableTLS,
-		NoKernelVersionCheck:   args.noKernelVersionCheck,
-		BpfVerifierLogLevel:    args.bpfVerifierLogLevel,
-		BpfVerifierLogSize:     args.bpfVerifierLogSize,
-		MapScaleFactor:         args.mapScaleFactor,
-		ProbabilisticInterval:  args.probabilisticInterval,
-		ProbabilisticThreshold: args.probabilisticThreshold,
-		PresentCPUCores:        presentCores,
-		TraceCacheEntries:      traceHandlerCacheSize,
-		MaxElementsPerInterval: maxElementsPerInterval(args.monitorInterval, args.samplesPerSecond,
-			presentCores),
-		EnvHTTPSProxy: os.Getenv("HTTPS_PROXY"),
-	})
-	hostmeta.SetTags(args.tags)
-
-	// Retrieve host metadata that will be stored with the HA config, and
-	// sent to the backend with certain RPCs.
-	hostMetadataMap := make(map[string]string)
-	if err = hostmeta.AddMetadata(hostMetadataMap); err != nil {
-		log.Errorf("Unable to get host metadata for config: %v", err)
-	}
+		traceCacheSize(args.monitorInterval, args.samplesPerSecond, uint16(presentCores))
 
 	intervals := times.New(mainCtx,
 		args.monitorInterval, args.reporterInterval, args.probabilisticInterval)
@@ -209,19 +153,38 @@ func mainWithExitCode() exitCode {
 		return failure("Failed to parse the included tracers: %v", err)
 	}
 
-	log.Infof("Assigned ProjectID: %d HostID: %d", args.projectID, environment.HostID())
+	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr)
+	metadataCollector.AddCustomData("os.type", "linux")
 
-	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr, environment)
-
-	// TODO: Maybe abort execution if (some) metadata can not be collected
-	hostMetadataMap = metadataCollector.GetHostMetadata()
-
-	if bpfJITEnabled, found := hostMetadataMap["host.sysctl.net.core.bpf_jit_enable"]; found {
-		if bpfJITEnabled == "0" {
-			log.Warnf("The BPF JIT is disabled (net.core.bpf_jit_enable = 0). " +
-				"Enable it to reduce CPU overhead.")
-		}
+	kernelVersion, err := getKernelVersion()
+	if err != nil {
+		return failure("Failed to get Linux kernel version: %v", err)
 	}
+	// OTel semantic introduced in https://github.com/open-telemetry/semantic-conventions/issues/66
+	metadataCollector.AddCustomData("os.kernel.release", kernelVersion)
+
+	// hostname and sourceIP will be populated from the root namespace.
+	var hostname, sourceIP string
+
+	if err = runInRootNS(func() error {
+		var hostnameErr error
+		hostname, hostnameErr = os.Hostname()
+		if hostnameErr != nil {
+			return fmt.Errorf("failed to get hostname: %v", hostnameErr)
+		}
+
+		srcIP, ipErr := getSourceIPAddress(args.collAgentAddr)
+		if ipErr != nil {
+			return fmt.Errorf("failed to get source IP: %v", ipErr)
+		}
+		sourceIP = srcIP.String()
+		return nil
+	}); err != nil {
+		log.Warnf("Failed to fetch metadata information in the root namespace: %v", err)
+	}
+
+	metadataCollector.AddCustomData("host.name", hostname)
+	metadataCollector.AddCustomData("host.ip", sourceIP)
 
 	// Network operations to CA start here
 	var rep reporter.Reporter
@@ -237,11 +200,9 @@ func mainWithExitCode() exitCode {
 		ReportInterval:         intervals.ReportInterval(),
 		CacheSize:              traceHandlerCacheSize,
 		SamplesPerSecond:       args.samplesPerSecond,
-		ProjectID:              strconv.Itoa(int(args.projectID)),
-		HostID:                 environment.HostID(),
-		KernelVersion:          hostMetadataMap[hostmeta.KeyKernelVersion],
-		HostName:               hostMetadataMap[hostmeta.KeyHostname],
-		IPAddress:              hostMetadataMap[hostmeta.KeyIPAddress],
+		KernelVersion:          kernelVersion,
+		HostName:               hostname,
+		IPAddress:              sourceIP,
 	})
 	if err != nil {
 		return failure("Failed to start reporting: %v", err)
@@ -249,20 +210,8 @@ func mainWithExitCode() exitCode {
 
 	metrics.SetReporter(rep)
 
-	// Set the initial host metadata.
-	rep.ReportHostMetadata(hostMetadataMap)
-
 	// Now that set the initial host metadata, start a goroutine to keep sending updates regularly.
 	metadataCollector.StartMetadataCollection(mainCtx, rep)
-
-	// Start agent-specific metric retrieval and report them every second.
-	agentMetricCancel, agentErr := agentmetrics.Start(mainCtx, 1*time.Second)
-	if agentErr != nil {
-		return failure("Error starting the agent specific metric collection: %v", agentErr)
-	}
-	defer agentMetricCancel()
-	// Start reporter metric reporting with 60 second intervals.
-	defer reportermetrics.Start(mainCtx, rep, 60*time.Second)()
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(mainCtx, &tracer.Config{
@@ -360,21 +309,7 @@ func maxElementsPerInterval(monitorInterval time.Duration, samplesPerSecond int,
 	return uint32(uint16(samplesPerSecond) * uint16(monitorInterval.Seconds()) * presentCPUCores)
 }
 
-func mkCacheDirectory(dir string) error {
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		log.Debugf("Creating cache directory '%s'", dir)
-		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-			return fmt.Errorf("failed to create cache directory (%s): %v", dir, err)
-		}
-	}
-	return nil
-}
-
 func sanityCheck(args *arguments) exitCode {
-	if args.environmentType == "" && args.machineID != "" {
-		return parseError("You can only specify the machine ID if you also provide the environment")
-	}
-
 	if args.samplesPerSecond < 1 {
 		return parseError("Invalid sampling frequency: %d", args.samplesPerSecond)
 	}

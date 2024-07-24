@@ -17,7 +17,6 @@ import (
 	"github.com/elastic/otel-profiling-agent/times"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/containermetadata"
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/reporter"
@@ -81,9 +80,6 @@ type traceHandler struct {
 	// reporter instance to use to send out traces.
 	reporter reporter.TraceReporter
 
-	// containerMetadataHandler retrieves the metadata associated with the pod or container.
-	containerMetadataHandler containermetadata.Handler
-
 	// metadataWarnInhib tracks inhibitions for warnings printed about failure to
 	// update container metadata (rate-limiting).
 	metadataWarnInhib *lru.LRU[util.PID, libpf.Void]
@@ -92,9 +88,8 @@ type traceHandler struct {
 }
 
 // newTraceHandler creates a new traceHandler
-func newTraceHandler(containerMetadataHandler containermetadata.Handler,
-	rep reporter.TraceReporter, traceProcessor TraceProcessor, intervals Times, cacheSize uint32) (
-	*traceHandler, error) {
+func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
+	intervals Times, cacheSize uint32) (*traceHandler, error) {
 	bpfTraceCache, err := lru.New[host.TraceHash, libpf.TraceHash](
 		cacheSize, func(k host.TraceHash) uint32 { return uint32(k) })
 	if err != nil {
@@ -114,13 +109,12 @@ func newTraceHandler(containerMetadataHandler containermetadata.Handler,
 	metadataWarnInhib.SetLifetime(metadataWarnInhibDuration)
 
 	t := &traceHandler{
-		traceProcessor:           traceProcessor,
-		bpfTraceCache:            bpfTraceCache,
-		umTraceCache:             umTraceCache,
-		reporter:                 rep,
-		times:                    intervals,
-		containerMetadataHandler: containerMetadataHandler,
-		metadataWarnInhib:        metadataWarnInhib,
+		traceProcessor:    traceProcessor,
+		bpfTraceCache:     bpfTraceCache,
+		umTraceCache:      umTraceCache,
+		reporter:          rep,
+		times:             intervals,
+		metadataWarnInhib: metadataWarnInhib,
 	}
 
 	return t, nil
@@ -130,11 +124,6 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	defer m.traceProcessor.SymbolizationComplete(bpfTrace.KTime)
 	timestamp := libpf.UnixTime64(m.times.BootTimeUnixNano() + int64(bpfTrace.KTime))
 
-	meta, err := m.containerMetadataHandler.GetContainerMetadata(bpfTrace.PID)
-	if err != nil {
-		log.Warnf("Failed to determine container info for trace: %v", err)
-	}
-
 	if !m.reporter.SupportsReportTraceEvent() {
 		// Fast path: if the trace is already known remotely, we just send a counter update.
 		postConvHash, traceKnown := m.bpfTraceCache.Get(bpfTrace.Hash)
@@ -142,7 +131,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 			m.bpfTraceCacheHit++
 			svcName := m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, postConvHash, 1)
 			m.reporter.ReportCountForTrace(postConvHash, timestamp, 1,
-				bpfTrace.Comm, meta.PodName, meta.ContainerName, svcName)
+				bpfTrace.Comm, "", "", svcName)
 			return
 		}
 		m.bpfTraceCacheMiss++
@@ -156,11 +145,11 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	svcName := m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
 	if m.reporter.SupportsReportTraceEvent() {
 		m.reporter.ReportTraceEvent(umTrace, timestamp,
-			bpfTrace.Comm, meta.PodName, meta.ContainerName, svcName)
+			bpfTrace.Comm, svcName, bpfTrace.PID)
 		return
 	}
 	m.reporter.ReportCountForTrace(umTrace.Hash, timestamp, 1,
-		bpfTrace.Comm, meta.PodName, meta.ContainerName, svcName)
+		bpfTrace.Comm, "", "", svcName)
 
 	// Trace already known to collector by UM hash?
 	if _, known := m.umTraceCache.Get(umTrace.Hash); known {
@@ -178,12 +167,11 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 // the given channel. Updates are sent periodically to the collection agent.
 // The returned channel allows the caller to wait for the background worker
 // to exit after a cancellation through the context.
-func Start(ctx context.Context, containerMetadataHandler containermetadata.Handler,
-	rep reporter.TraceReporter, traceProcessor TraceProcessor,
+func Start(ctx context.Context, rep reporter.TraceReporter, traceProcessor TraceProcessor,
 	traceInChan <-chan *host.Trace, intervals Times, cacheSize uint32,
 ) (workerExited <-chan libpf.Void, err error) {
 	handler, err :=
-		newTraceHandler(containerMetadataHandler, rep, traceProcessor, intervals, cacheSize)
+		newTraceHandler(rep, traceProcessor, intervals, cacheSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create traceHandler: %v", err)
 	}

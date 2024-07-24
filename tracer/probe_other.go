@@ -23,3 +23,9 @@ func ProbeBPFSyscall() error {
 func ProbeTracepoint() error {
 	return fmt.Errorf("tracepoints are not available on your system %s", runtime.GOOS)
 }
+
+// GetCurrentKernelVersion returns an error for OS other than linux.
+func GetCurrentKernelVersion() (_, _, _ uint32, err error) {
+	return 0, 0, 0, fmt.Errorf("kernel version detection is not supported on %s",
+		runtime.GOOS)
+}

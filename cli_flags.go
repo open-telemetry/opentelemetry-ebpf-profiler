@@ -16,7 +16,6 @@ import (
 	"github.com/peterbourgon/ff/v3"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/hostmetadata/host"
 	"github.com/elastic/otel-profiling-agent/tracer"
 )
 
@@ -25,8 +24,6 @@ const (
 	defaultArgSamplesPerSecond    = 20
 	defaultArgReporterInterval    = 5.0 * time.Second
 	defaultArgMonitorInterval     = 5.0 * time.Second
-	defaultArgMachineID           = ""
-	defaultArgEnvironmentType     = ""
 	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
 	defaultProbabilisticInterval  = 1 * time.Minute
 	defaultArgSendErrorFrames     = false
@@ -49,13 +46,7 @@ var (
 		"Every increase by 1 doubles the map size. Increase if you see eBPF map size errors. "+
 		"Default is %d corresponding to 4GB of executable address space, max is %d.",
 		defaultArgMapScaleFactor, maxArgMapScaleFactor)
-	configFileHelp = "Path to the profiling agent configuration file."
-	projectIDHelp  = "The project ID to split profiling data into logical groups. " +
-		"Its value should be larger than 0 and smaller than 4096."
-	cacheDirectoryHelp = "The directory where the profiling agent can store cached data."
-	secretTokenHelp    = "The secret token associated with the project id."
-	tagsHelp           = fmt.Sprintf("User-specified tags separated by ';'. "+
-		"Each tag should match '%v'.", host.ValidTagRegex())
+	secretTokenHelp         = "The secret token associated with the project id."
 	disableTLSHelp          = "Disable encryption for data in transit."
 	bpfVerifierLogLevelHelp = "Log level of the eBPF verifier output (0,1,2). Default is 0."
 	bpfVerifierLogSizeHelp  = "Size in bytes that will be allocated for the eBPF " +
@@ -74,37 +65,25 @@ var (
 	samplesPerSecondHelp = "Set the frequency (in Hz) of stack trace sampling."
 	reporterIntervalHelp = "Set the reporter's interval in seconds."
 	monitorIntervalHelp  = "Set the monitor interval in seconds."
-	environmentTypeHelp  = "The type of environment."
-	machineIDHelp        = "The machine ID."
-	enablePProfHelp      = "Enables PProf profiling"
-	saveCPUProfileHelp   = "Save CPU pprof profile to `cpu.pprof`"
 	sendErrorFramesHelp  = "Send error frames (devfiler only, breaks Kibana)"
 )
 
 type arguments struct {
 	bpfVerifierLogLevel    uint
 	bpfVerifierLogSize     int
-	cacheDirectory         string
 	collAgentAddr          string
-	configFile             string
 	copyright              bool
 	disableTLS             bool
-	enablePProf            bool
-	environmentType        string
-	machineID              string
 	mapScaleFactor         uint
 	monitorInterval        time.Duration
 	noKernelVersionCheck   bool
 	pprofAddr              string
 	probabilisticInterval  time.Duration
 	probabilisticThreshold uint
-	projectID              uint
 	reporterInterval       time.Duration
 	samplesPerSecond       int
-	saveCPUProfile         bool
 	secretToken            string
 	sendErrorFrames        bool
-	tags                   string
 	tracers                string
 	verboseMode            bool
 	version                bool
@@ -125,21 +104,10 @@ func parseArgs() (*arguments, error) {
 	fs.IntVar(&args.bpfVerifierLogSize, "bpf-log-size", cebpf.DefaultVerifierLogSize,
 		bpfVerifierLogSizeHelp)
 
-	fs.StringVar(&args.cacheDirectory, "cache-directory", "/var/cache/otel/profiling-agent",
-		cacheDirectoryHelp)
 	fs.StringVar(&args.collAgentAddr, "collection-agent", "", collAgentAddrHelp)
-	fs.StringVar(&args.configFile, "config", "/etc/otel/profiling-agent/agent.conf",
-		configFileHelp)
 	fs.BoolVar(&args.copyright, "copyright", false, copyrightHelp)
 
 	fs.BoolVar(&args.disableTLS, "disable-tls", false, disableTLSHelp)
-
-	fs.BoolVar(&args.enablePProf, "enable-pprof", false, enablePProfHelp)
-
-	fs.StringVar(&args.environmentType, "environment-type", defaultArgEnvironmentType,
-		environmentTypeHelp)
-
-	fs.StringVar(&args.machineID, "machine-id", defaultArgMachineID, machineIDHelp)
 
 	fs.UintVar(&args.mapScaleFactor, "map-scale-factor",
 		defaultArgMapScaleFactor, mapScaleFactorHelp)
@@ -149,8 +117,6 @@ func parseArgs() (*arguments, error) {
 
 	fs.BoolVar(&args.noKernelVersionCheck, "no-kernel-version-check", false,
 		noKernelVersionCheckHelp)
-
-	fs.UintVar(&args.projectID, "project-id", 1, projectIDHelp)
 
 	fs.StringVar(&args.pprofAddr, "pprof", "", pprofHelp)
 
@@ -165,15 +131,12 @@ func parseArgs() (*arguments, error) {
 	fs.IntVar(&args.samplesPerSecond, "samples-per-second", defaultArgSamplesPerSecond,
 		samplesPerSecondHelp)
 
-	fs.BoolVar(&args.saveCPUProfile, "save-cpuprofile", false, saveCPUProfileHelp)
-
 	// Using a default value here to simplify OTEL review process.
 	fs.StringVar(&args.secretToken, "secret-token", "abc123", secretTokenHelp)
 
 	fs.BoolVar(&args.sendErrorFrames, "send-error-frames", defaultArgSendErrorFrames,
 		sendErrorFramesHelp)
 
-	fs.StringVar(&args.tags, "tags", "", tagsHelp)
 	fs.StringVar(&args.tracers, "t", "all", "Shorthand for -tracers.")
 	fs.StringVar(&args.tracers, "tracers", "all", tracersHelp)
 

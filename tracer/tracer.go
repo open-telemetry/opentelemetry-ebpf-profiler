@@ -31,7 +31,6 @@ import (
 	"github.com/zeebo/xxh3"
 
 	"github.com/elastic/otel-profiling-agent/host"
-	hostcpu "github.com/elastic/otel-profiling-agent/hostmetadata/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
 	"github.com/elastic/otel-profiling-agent/libpf/xsync"
@@ -1103,7 +1102,7 @@ func (t *Tracer) AttachTracer() error {
 		return fmt.Errorf("failed to configure software perf event: %v", err)
 	}
 
-	onlineCPUIDs, err := hostcpu.ParseCPUCoreIDs(hostcpu.CPUOnlinePath)
+	onlineCPUIDs, err := getOnlineCPUIDs()
 	if err != nil {
 		return fmt.Errorf("failed to get online CPUs: %v", err)
 	}
