@@ -6,6 +6,13 @@
 
 package tracer
 
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
 // hasProbeReadBug returns true if the given Linux kernel version is affected by
 // a bug that can lead to system freezes.
 func hasProbeReadBug(major, minor, patch uint32) bool {
@@ -41,4 +48,42 @@ func hasProbeReadBug(major, minor, patch uint32) bool {
 	}
 	// Other Linux kernel versions, like 4.x, are not affected by this bug.
 	return false
+}
+
+// getOnlineCPUIDs reads online CPUs from /sys/devices/system/cpu/online and reports
+// the core IDs as a list of integers.
+func getOnlineCPUIDs() ([]int, error) {
+	cpuPath := "/sys/devices/system/cpu/online"
+	buf, err := os.ReadFile(cpuPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not read %s: %v", cpuPath, err)
+	}
+	return readCPURange(string(buf))
+}
+
+// Since the format of online CPUs can contain comma-separated, ranges or a single value
+// we need to try and parse it in all its different forms.
+// Reference: https://www.kernel.org/doc/Documentation/admin-guide/cputopology.rst
+func readCPURange(cpuRangeStr string) ([]int, error) {
+	var cpus []int
+	cpuRangeStr = strings.Trim(cpuRangeStr, "\n ")
+	for _, cpuRange := range strings.Split(cpuRangeStr, ",") {
+		rangeOp := strings.SplitN(cpuRange, "-", 2)
+		first, err := strconv.ParseUint(rangeOp[0], 10, 32)
+		if err != nil {
+			return nil, err
+		}
+		if len(rangeOp) == 1 {
+			cpus = append(cpus, int(first))
+			continue
+		}
+		last, err := strconv.ParseUint(rangeOp[1], 10, 32)
+		if err != nil {
+			return nil, err
+		}
+		for n := first; n <= last; n++ {
+			cpus = append(cpus, int(n))
+		}
+	}
+	return cpus, nil
 }

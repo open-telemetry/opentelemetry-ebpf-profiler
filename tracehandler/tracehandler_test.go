@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/elastic/otel-profiling-agent/containermetadata"
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/tracehandler"
@@ -90,14 +89,7 @@ func (m *mockReporter) ReportCountForTrace(traceHash libpf.TraceHash,
 func (m *mockReporter) SupportsReportTraceEvent() bool { return false }
 
 func (m *mockReporter) ReportTraceEvent(_ *libpf.Trace,
-	_ libpf.UnixTime64, _, _, _, _ string) {
-}
-
-type mockContainerMetadataHandler struct{}
-
-func (m mockContainerMetadataHandler) GetContainerMetadata(util.PID) (
-	containermetadata.ContainerMetadata, error) {
-	return containermetadata.ContainerMetadata{}, nil
+	_ libpf.UnixTime64, _, _ string, _ util.PID) {
 }
 
 func TestTraceHandler(t *testing.T) {
@@ -143,8 +135,8 @@ func TestTraceHandler(t *testing.T) {
 			traceChan := make(chan *host.Trace)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			exitNotify, err := tracehandler.Start(ctx, &mockContainerMetadataHandler{}, r,
-				&fakeTraceProcessor{}, traceChan, defaultTimes(), 128)
+			exitNotify, err := tracehandler.Start(ctx, r, &fakeTraceProcessor{},
+				traceChan, defaultTimes(), 128)
 			require.NoError(t, err)
 
 			for _, input := range test.input {

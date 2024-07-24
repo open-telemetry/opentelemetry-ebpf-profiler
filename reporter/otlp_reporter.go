@@ -7,10 +7,14 @@
 package reporter
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"fmt"
 	"maps"
+	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"time"
@@ -30,6 +34,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+)
+
+var (
+	cgroupv2PathPattern = regexp.MustCompile(`0:.*?:(.*)`)
 )
 
 // Assert that we implement the full Reporter interface.
@@ -59,11 +67,12 @@ type funcInfo struct {
 // contain all trace fields that aren't already part of the trace hash to ensure
 // that we don't accidentally merge traces with different fields.
 type traceAndMetaKey struct {
-	hash           libpf.TraceHash
+	hash libpf.TraceHash
+	// comm and apmServiceName are provided by the eBPF programs
 	comm           string
-	podName        string
-	containerName  string
 	apmServiceName string
+	// containerID is annotated based on PID information
+	containerID string
 }
 
 // traceFramesCounts holds known information about a trace.
@@ -107,6 +116,9 @@ type OTLPReporter struct {
 	// executables stores metadata for executables.
 	executables *lru.SyncedLRU[libpf.FileID, execInfo]
 
+	// cgroupv2ID caches PID to container ID information for cgroupv2 containers.
+	cgroupv2ID *lru.SyncedLRU[util.PID, string]
+
 	// frames maps frame information to its source location.
 	frames *lru.SyncedLRU[libpf.FileID, *xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]]
 
@@ -146,17 +158,21 @@ func (r *OTLPReporter) SupportsReportTraceEvent() bool { return true }
 
 // ReportTraceEvent enqueues reported trace events for the OTLP reporter.
 func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
-	timestamp libpf.UnixTime64, comm, podName,
-	containerName, apmServiceName string) {
+	timestamp libpf.UnixTime64, comm, apmServiceName string, pid util.PID) {
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
+
+	containerID, err := r.lookupCgroupv2(pid)
+	if err != nil {
+		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
+			pid, err)
+	}
 
 	key := traceAndMetaKey{
 		hash:           trace.Hash,
 		comm:           comm,
-		podName:        podName,
-		containerName:  containerName,
 		apmServiceName: apmServiceName,
+		containerID:    containerID,
 	}
 
 	if tr, exists := (*traceEvents)[key]; exists {
@@ -294,6 +310,14 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		return nil, err
 	}
 
+	cgroupv2ID, err := lru.NewSynced[util.PID, string](cfg.CacheSize,
+		func(pid util.PID) uint32 { return uint32(pid) })
+	if err != nil {
+		return nil, err
+	}
+	// Set a lifetime to reduce risk of invalid data in case of PID reuse.
+	cgroupv2ID.SetLifetime(90 * time.Second)
+
 	// Next step: Dynamically configure the size of this LRU.
 	// Currently, we use the length of the JSON array in
 	// hostmetadata/hostmetadata.json.
@@ -305,7 +329,6 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 	r := &OTLPReporter{
 		name:                    cfg.Name,
 		version:                 cfg.Version,
-		projectID:               cfg.ProjectID,
 		kernelVersion:           cfg.KernelVersion,
 		hostName:                cfg.HostName,
 		ipAddress:               cfg.IPAddress,
@@ -320,6 +343,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		frames:                  frames,
 		hostmetadata:            hostmetadata,
 		traceEvents:             xsync.NewRWMutex(map[traceAndMetaKey]traceFramesCounts{}),
+		cgroupv2ID:              cgroupv2ID,
 	}
 
 	// Create a child context for reporting features
@@ -729,8 +753,7 @@ func getSampleAttributes(profile *profiles.Profile, k traceAndMetaKey) []uint64 
 		})
 	}
 
-	addAttr(semconv.K8SPodNameKey, k.podName)
-	addAttr(semconv.ContainerNameKey, k.containerName)
+	addAttr(semconv.ContainerIDKey, k.containerID)
 	addAttr(semconv.ThreadNameKey, k.comm)
 	addAttr(semconv.ServiceNameKey, k.apmServiceName)
 
@@ -820,4 +843,45 @@ func setupGrpcConnection(parent context.Context, cfg *Config,
 	defer cancel()
 	//nolint:staticcheck
 	return grpc.DialContext(ctx, cfg.CollAgentAddr, opts...)
+}
+
+// lookupCgroupv2 returns the cgroupv2 ID for pid.
+func (r *OTLPReporter) lookupCgroupv2(pid util.PID) (string, error) {
+	id, ok := r.cgroupv2ID.Get(pid)
+	if ok {
+		return id, nil
+	}
+
+	// Slow path
+	f, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	var genericCgroupv2 string
+	scanner := bufio.NewScanner(f)
+	buf := make([]byte, 512)
+	// Providing a predefined buffer overrides the internal buffer that Scanner uses (4096 bytes).
+	// We can do that and also set a maximum allocation size on the following call.
+	// With a maximum of 4096 characters path in the kernel, 8192 should be fine here. We don't
+	// expect lines in /proc/<PID>/cgroup to be longer than that.
+	scanner.Buffer(buf, 8192)
+	var pathParts []string
+	for scanner.Scan() {
+		line := scanner.Text()
+		pathParts = cgroupv2PathPattern.FindStringSubmatch(line)
+		if pathParts == nil {
+			log.Debugf("Could not extract cgroupv2 path from line: %s", line)
+			continue
+		}
+		genericCgroupv2 = pathParts[1]
+		break
+	}
+
+	// Cache the cgroupv2 information.
+	// To avoid busy lookups, also empty cgroupv2 information is cached.
+	r.cgroupv2ID.Add(pid, genericCgroupv2)
+
+	return genericCgroupv2, nil
 }
