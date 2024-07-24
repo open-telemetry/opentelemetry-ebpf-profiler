@@ -180,7 +180,7 @@ func mainWithExitCode() exitCode {
 		sourceIP = srcIP.String()
 		return nil
 	}); err != nil {
-		return failure("Failed to get information in root namespace: %v", err)
+		log.Warnf("Failed to fetch metadata information in the root namespace: %v", err)
 	}
 
 	metadataCollector.AddCustomData("host.name", hostname)
