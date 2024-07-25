@@ -54,7 +54,7 @@ type TraceProcessor interface {
 	// It gets the timestamp of when the Traces (if any) were captured. The timestamp
 	// is in essence an indicator that all Traces until that time have been now processed,
 	// and any events up to this time can be processed.
-	SymbolizationComplete(traceCaptureKTime util.KTime)
+	SymbolizationComplete(traceCaptureKTime times.KTime)
 }
 
 // traceHandler provides functions for handling new traces and trace count updates

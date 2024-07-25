@@ -22,7 +22,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -55,7 +55,7 @@ func __push_frame(id, file, line C.u64, frameType, returnAddress C.uchar) C.int 
 
 //export bpf_ktime_get_ns
 func bpf_ktime_get_ns() C.ulonglong {
-	return C.ulonglong(util.GetKTime())
+	return C.ulonglong(times.GetKTime())
 }
 
 //export bpf_get_current_comm

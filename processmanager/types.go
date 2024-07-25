@@ -20,6 +20,7 @@ import (
 	pmebpf "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager/ebpf"
 	eim "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager/execinfomanager"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tpbase"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
@@ -56,7 +57,7 @@ type ProcessManager struct {
 	pidToProcessInfo map[util.PID]*processInfo
 
 	// exitEvents records the pid exit time and is a list of pending exit events to be handled.
-	exitEvents map[util.PID]util.KTime
+	exitEvents map[util.PID]times.KTime
 
 	// ebpf contains the interface to manipulate ebpf maps
 	ebpf pmebpf.EbpfHandler

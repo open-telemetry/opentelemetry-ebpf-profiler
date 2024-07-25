@@ -33,6 +33,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/proc"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
 	eim "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager/execinfomanager"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tpbase"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
@@ -500,7 +501,7 @@ func (pm *ProcessManager) ProcessPIDExit(pid util.PID) bool {
 	defer pm.mu.Unlock()
 
 	symbolize := false
-	exitKTime := util.GetKTime()
+	exitKTime := times.GetKTime()
 	if pm.interpreterTracerEnabled {
 		if len(pm.interpreters[pid]) > 0 {
 			pm.exitEvents[pid] = exitKTime

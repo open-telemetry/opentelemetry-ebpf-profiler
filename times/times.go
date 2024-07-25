@@ -18,7 +18,6 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/periodiccaller"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 const (
@@ -98,7 +97,7 @@ type IntervalsAndTimers interface {
 	// be enabled or disabled.
 	ProbabilisticInterval() time.Duration
 	// BootTimeUnixNano defines the system boot time in nanoseconds since the epoch. This value
-	// can be used to convert monotonic time (e.g. util.GetKTime) to Unix time, by adding it
+	// can be used to convert monotonic time (e.g. GetKTime) to Unix time, by adding it
 	// as a delta.
 	BootTimeUnixNano() int64
 }
@@ -182,7 +181,7 @@ func getDelta(compensationValue int64) int64 {
 	var ts unix.Timespec
 
 	// Does not include suspend time
-	kt := int64(util.GetKTime())
+	kt := int64(GetKTime())
 	// Does include suspend time
 	if err := unix.ClockGettime(unix.CLOCK_BOOTTIME, &ts); err != nil {
 		// This should never happen in our target environments.
@@ -210,7 +209,7 @@ func getBootTimeUnixNano() int64 {
 		// To avoid noise from scheduling / other delays, we perform a
 		// series of measurements and pick the one with the lowest delta.
 		samples[i].t1 = time.Now()
-		samples[i].ktime = int64(util.GetKTime())
+		samples[i].ktime = int64(GetKTime())
 		samples[i].t2 = time.Now()
 	}
 

@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
@@ -53,7 +54,7 @@ type Trace struct {
 	Comm             string
 	Frames           []Frame
 	Hash             TraceHash
-	KTime            util.KTime
+	KTime            times.KTime
 	PID              util.PID
 	TID              util.PID
 	APMTraceID       libpf.APMTraceID

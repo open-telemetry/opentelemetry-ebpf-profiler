@@ -4,7 +4,7 @@
  * See the file "LICENSE" for details.
  */
 
-package util
+package times
 
 import (
 	_ "unsafe" // required to use //go:linkname for runtime.nanotime

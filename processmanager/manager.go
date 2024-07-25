@@ -29,6 +29,7 @@ import (
 	pmebpf "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager/ebpf"
 	eim "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager/execinfomanager"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracehandler"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/traceutil"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
@@ -95,7 +96,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
 		eim:                      em,
 		interpreters:             interpreters,
-		exitEvents:               make(map[util.PID]util.KTime),
+		exitEvents:               make(map[util.PID]times.KTime),
 		pidToProcessInfo:         make(map[util.PID]*processInfo),
 		ebpf:                     ebpf,
 		FileIDMapper:             fileIDMapper,
@@ -343,11 +344,11 @@ func (pm *ProcessManager) MaybeNotifyAPMAgent(
 	return serviceName
 }
 
-func (pm *ProcessManager) SymbolizationComplete(traceCaptureKTime util.KTime) {
+func (pm *ProcessManager) SymbolizationComplete(traceCaptureKTime times.KTime) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	nowKTime := util.GetKTime()
+	nowKTime := times.GetKTime()
 
 	for pid, pidExitKTime := range pm.exitEvents {
 		if pidExitKTime > traceCaptureKTime {
