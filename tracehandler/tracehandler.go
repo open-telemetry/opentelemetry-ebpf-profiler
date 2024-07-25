@@ -33,7 +33,6 @@ var _ Times = (*times.Times)(nil)
 // Times is a subset of config.IntervalsAndTimers.
 type Times interface {
 	MonitorInterval() time.Duration
-	BootTimeUnixNano() int64
 }
 
 // TraceProcessor is an interface used by traceHandler to convert traces
@@ -122,7 +121,7 @@ func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 
 func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	defer m.traceProcessor.SymbolizationComplete(bpfTrace.KTime)
-	timestamp := libpf.UnixTime64(m.times.BootTimeUnixNano() + int64(bpfTrace.KTime))
+	timestamp := libpf.UnixTime64(bpfTrace.KTime.UnixNano())
 
 	meta := &reporter.TraceEventMeta{
 		Timestamp:      timestamp,

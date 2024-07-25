@@ -8,14 +8,10 @@ package times
 
 import (
 	"context"
-	"math"
 	"runtime"
 	"sort"
 	"sync/atomic"
 	"time"
-
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/periodiccaller"
 )
@@ -23,14 +19,8 @@ import (
 const (
 	// Number of timing samples to use when retrieving system boot time.
 	sampleSize = 5
-	// In the kernel, we retrieve timestamps from a monotonic clock
-	// (bpf_ktime_get_ns) that does not count system suspend time.
-	// In userspace, we try to detect system suspend events by diffing
-	// with values retrieved from a monotonic clock that does count
-	// the system suspend time.
-	// If the delta exceeds the following threshold (10s), we add it to the
-	// monotonic 'delta' that we keep track of.
-	monotonicThresholdNs = 10 * 1e9
+	// How often to attempt a sync with the realtime clock.
+	realtimeSyncInterval = 20 * time.Minute
 
 	// GRPCAuthErrorDelay defines the delay before triggering a global process exit after a
 	// gRPC auth error.
@@ -42,16 +32,16 @@ const (
 	// GRPCStartupBackoffTimeout defines the time between failed gRPC requests during startup
 	// phase.
 	GRPCStartupBackoffTimeout = 1 * time.Minute
-
-	monotonicSyncInterval = 1 * time.Minute
-)
-
-var (
-	monotonicDeltaNs atomic.Int64
 )
 
 // Compile time check for interface adherence
 var _ IntervalsAndTimers = (*Times)(nil)
+
+var (
+	// Monotonic-to-unixtime delta that can be added to a monotonic (CLOCK_MONOTONIC)
+	// timestamp to convert it to time-since-epoch.
+	bootTimeUnixNano atomic.Int64
+)
 
 // Times hold all the intervals and timeouts that are used across the host agent in a central place
 // and comes with Getters to read them.
@@ -66,7 +56,6 @@ type Times struct {
 	grpcAuthErrorDelay        time.Duration
 	pidCleanupInterval        time.Duration
 	probabilisticInterval     time.Duration
-	bootTimeUnixNano          int64
 }
 
 // IntervalsAndTimers is a meta-interface that exists purely to document its functionality.
@@ -96,10 +85,6 @@ type IntervalsAndTimers interface {
 	// ProbabilisticInterval defines the interval for which probabilistic profiling will
 	// be enabled or disabled.
 	ProbabilisticInterval() time.Duration
-	// BootTimeUnixNano defines the system boot time in nanoseconds since the epoch. This value
-	// can be used to convert monotonic time (e.g. GetKTime) to Unix time, by adding it
-	// as a delta.
-	BootTimeUnixNano() int64
 }
 
 func (t *Times) MonitorInterval() time.Duration { return t.monitorInterval }
@@ -122,16 +107,19 @@ func (t *Times) PIDCleanupInterval() time.Duration { return t.pidCleanupInterval
 
 func (t *Times) ProbabilisticInterval() time.Duration { return t.probabilisticInterval }
 
-func (t *Times) BootTimeUnixNano() int64 {
-	return t.bootTimeUnixNano + monotonicDeltaNs.Load()
+// StartRealtimeSync starts a goroutine that periodically calculates a delta
+// between the monotonic clock (CLOCK_MONOTONIC, rebased to unixtime) with the
+// realtime clock. This delta can be introduced by system suspend events and/or
+// non-slewing system clock changes. For more information, see clock_gettime(2).
+func StartRealtimeSync(ctx context.Context) {
+	bootTimeUnixNano.Store(getBootTimeUnixNano())
+	periodiccaller.Start(ctx, realtimeSyncInterval, func() {
+		bootTimeUnixNano.Store(getBootTimeUnixNano())
+	})
 }
 
 // New returns a new Times instance.
-func New(ctx context.Context, reportInterval, monitorInterval,
-	probabilisticInterval time.Duration) *Times {
-	// Start periodic synchronization of the monotonic clock
-	StartMonotonicSync(ctx)
-
+func New(reportInterval, monitorInterval, probabilisticInterval time.Duration) *Times {
 	return &Times{
 		reportMetricsInterval:     1 * time.Minute,
 		grpcAuthErrorDelay:        GRPCAuthErrorDelay,
@@ -143,54 +131,7 @@ func New(ctx context.Context, reportInterval, monitorInterval,
 		reportInterval:            reportInterval,
 		monitorInterval:           monitorInterval,
 		probabilisticInterval:     probabilisticInterval,
-		bootTimeUnixNano:          getBootTimeUnixNano(),
 	}
-}
-
-// StartMonotonicSync starts a goroutine that periodically calculates a delta
-// between the two monotonic clocks (CLOCK_MONOTONIC and CLOCK_BOOTTIME). This
-// delta can be introduced by system suspend events. For more information, see
-// clock_gettime(2).
-func StartMonotonicSync(ctx context.Context) {
-	initialDelta := getDelta(0)
-	log.Debugf("Initial monotonic clock delta: %v", initialDelta)
-
-	periodiccaller.Start(ctx, monotonicSyncInterval, func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-
-		minDelta := int64(math.MaxInt64)
-		for i := 0; i < sampleSize; i++ {
-			d := getDelta(initialDelta)
-			if d < 0 {
-				d = -d
-			}
-			// We're interested in the minimum absolute delta between the two clocks
-			if d < minDelta {
-				minDelta = d
-			}
-		}
-
-		if minDelta >= monotonicThresholdNs {
-			monotonicDeltaNs.Add(minDelta)
-		}
-	})
-}
-
-func getDelta(compensationValue int64) int64 {
-	var ts unix.Timespec
-
-	// Does not include suspend time
-	kt := int64(GetKTime())
-	// Does include suspend time
-	if err := unix.ClockGettime(unix.CLOCK_BOOTTIME, &ts); err != nil {
-		// This should never happen in our target environments.
-		return 0
-	}
-
-	delta := (kt + monotonicDeltaNs.Load()) - ts.Nano() - compensationValue
-
-	return delta
 }
 
 // getBootTimeUnixNano returns system boot time in nanoseconds since the

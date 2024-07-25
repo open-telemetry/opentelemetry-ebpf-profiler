@@ -7,6 +7,7 @@
 package times
 
 import (
+	"time"
 	_ "unsafe" // required to use //go:linkname for runtime.nanotime
 )
 
@@ -21,3 +22,13 @@ type KTime int64
 //go:noescape
 //go:linkname GetKTime runtime.nanotime
 func GetKTime() KTime
+
+// Time converts the kernel timestamp into a Go time object.
+func (t KTime) Time() time.Time {
+	return time.Unix(0, t.UnixNano())
+}
+
+// UnixNano converts the kernel timestamp to nanoseconds since the epoch.
+func (t KTime) UnixNano() int64 {
+	return int64(t) + bootTimeUnixNano.Load()
+}

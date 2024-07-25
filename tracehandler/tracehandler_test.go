@@ -30,7 +30,6 @@ func defaultTimes() *fakeTimes {
 }
 
 func (ft *fakeTimes) MonitorInterval() time.Duration { return ft.monitorInterval }
-func (ft *fakeTimes) BootTimeUnixNano() int64        { return 0 }
 
 // fakeTraceProcessor implements a fake TraceProcessor used only within the test scope.
 type fakeTraceProcessor struct{}
