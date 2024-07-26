@@ -12,7 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"testing"
 	"time"
@@ -94,15 +94,11 @@ type dummyStackDeltaProvider struct{}
 // GetIntervalStructuresForFile fills in the expected data structure with semi random data.
 func (d *dummyStackDeltaProvider) GetIntervalStructuresForFile(_ host.FileID,
 	_ *pfelf.Reference, result *sdtypes.IntervalData) error {
-	// nolint:gosec
-	r := rand.New(rand.NewSource(42))
+	r := rand.New(rand.NewPCG(42, 42))
 	addr := 0x10
-	// nolint:gosec
-	for i := 0; i < r.Intn(42); i++ {
-		// nolint:gosec
-		addr += r.Intn(42 * 42)
-		// nolint:gosec
-		data := int32(8 * r.Intn(42))
+	for i := 0; i < r.IntN(42); i++ {
+		addr += r.IntN(42 * 42)
+		data := int32(8 * r.IntN(42))
 		result.Deltas.Add(sdtypes.StackDelta{
 			Address: uint64(addr),
 			Info:    sdtypes.UnwindInfo{Opcode: sdtypes.UnwindOpcodeBaseSP, Param: data},
@@ -373,13 +369,13 @@ func TestNewMapping(t *testing.T) {
 			{pid: 2, vaddr: 0x40000, bias: 0x2000},
 			{pid: 3, vaddr: 0x60000, bias: 0x3000},
 			{pid: 4, vaddr: 0x40000, bias: 0x4000}},
-			expectedStackDeltas: 28},
+			expectedStackDeltas: 36},
 		"duplicate load": {newMapping: []mappingArgs{
 			{pid: 123, vaddr: 0x0F000, bias: 0x1000},
 			{pid: 456, vaddr: 0x50000, bias: 0x4000},
 			{pid: 789, vaddr: 0x40000, bias: 0}},
 			duplicate:           true,
-			expectedStackDeltas: 21},
+			expectedStackDeltas: 27},
 	}
 
 	cacheDir, err := os.MkdirTemp("", "*_cacheDir")
