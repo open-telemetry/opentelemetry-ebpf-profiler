@@ -129,18 +129,22 @@ func getSourceIPAddress(domain string) (net.IP, error) {
 // the specified domain.
 func getHostnameAndSourceIP(domain string) (hostname, sourceIP string, err error) {
 	err = runInRootNS(func() error {
-		var hostnameErr error
-		hostname, hostnameErr = os.Hostname()
-		if hostnameErr != nil {
-			return fmt.Errorf("failed to get hostname: %v", hostnameErr)
+		var joinedErr error
+
+		if name, hostnameErr := os.Hostname(); hostnameErr == nil {
+			hostname = name
+		} else {
+			joinedErr = fmt.Errorf("failed to get hostname: %v", hostnameErr)
 		}
 
-		srcIP, ipErr := getSourceIPAddress(domain)
-		if ipErr != nil {
-			return fmt.Errorf("failed to get source IP: %v", ipErr)
+		if srcIP, ipErr := getSourceIPAddress(domain); ipErr == nil {
+			sourceIP = srcIP.String()
+		} else {
+			joinedErr = errors.Join(joinedErr,
+				fmt.Errorf("failed to get source IP: %v", ipErr))
 		}
-		sourceIP = srcIP.String()
-		return nil
+
+		return joinedErr
 	})
 
 	return hostname, sourceIP, err
