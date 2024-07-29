@@ -197,7 +197,7 @@ func (r *OTLPReporter) ReportFramesForTrace(_ *libpf.Trace) {}
 
 // ReportCountForTrace is a NOP for OTLPReporter.
 func (r *OTLPReporter) ReportCountForTrace(_ libpf.TraceHash, _ libpf.UnixTime64,
-	_ uint16, _, _, _, _ string) {
+	_ uint16, _, _ string, _ util.PID) {
 }
 
 // ReportFallbackSymbol enqueues a fallback symbol for reporting, for a given frame.
