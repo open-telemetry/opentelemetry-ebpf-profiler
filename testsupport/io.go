@@ -9,7 +9,7 @@ package testsupport
 import (
 	"bytes"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"testing"
 )
 
@@ -20,7 +20,7 @@ func ValidateReadAtWrapperTransparency(
 	bufferSize := uint64(len(reference))
 
 	// Samples random slices to validate within the file.
-	r := rand.New(rand.NewSource(0)) // nolint:gosec
+	r := rand.New(rand.NewPCG(0, 0))
 	for i := uint(0); i < iterations; i++ {
 		// Intentionally allow slices that over-read the file to test this case.
 		length := r.Uint64() % bufferSize

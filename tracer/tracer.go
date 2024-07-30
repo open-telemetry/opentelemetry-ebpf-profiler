@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
-	"math/rand"
+	"math/rand/v2"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -1145,7 +1145,7 @@ func (t *Tracer) probabilisticProfile(interval time.Duration, threshold uint) {
 	enableSampling := false
 	var probProfilingStatus = probProfilingDisable
 
-	if rand.Intn(ProbabilisticThresholdMax) < int(threshold) {
+	if rand.UintN(ProbabilisticThresholdMax) < threshold {
 		enableSampling = true
 		probProfilingStatus = probProfilingEnable
 		log.Debugf("Start sampling for next interval (%v)", interval)
