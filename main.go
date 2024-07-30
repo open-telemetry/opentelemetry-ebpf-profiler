@@ -164,25 +164,10 @@ func mainWithExitCode() exitCode {
 	metadataCollector.AddCustomData("os.kernel.release", kernelVersion)
 
 	// hostname and sourceIP will be populated from the root namespace.
-	var hostname, sourceIP string
-
-	if err = runInRootNS(func() error {
-		var hostnameErr error
-		hostname, hostnameErr = os.Hostname()
-		if hostnameErr != nil {
-			return fmt.Errorf("failed to get hostname: %v", hostnameErr)
-		}
-
-		srcIP, ipErr := getSourceIPAddress(args.collAgentAddr)
-		if ipErr != nil {
-			return fmt.Errorf("failed to get source IP: %v", ipErr)
-		}
-		sourceIP = srcIP.String()
-		return nil
-	}); err != nil {
+	hostname, sourceIP, err := getHostnameAndSourceIP(args.collAgentAddr)
+	if err != nil {
 		log.Warnf("Failed to fetch metadata information in the root namespace: %v", err)
 	}
-
 	metadataCollector.AddCustomData("host.name", hostname)
 	metadataCollector.AddCustomData("host.ip", sourceIP)
 

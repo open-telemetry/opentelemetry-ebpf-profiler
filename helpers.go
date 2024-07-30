@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"runtime"
 	"sync"
 	"syscall"
@@ -122,6 +123,31 @@ func getSourceIPAddress(domain string) (net.IP, error) {
 
 	log.Debugf("Traffic to %v is routed from %v", domain, srcIP.String())
 	return srcIP, nil
+}
+
+// getHostnameAndSourceIP returns the hostname and source IP address for the traffic destined to
+// the specified domain.
+func getHostnameAndSourceIP(domain string) (hostname, sourceIP string, err error) {
+	err = runInRootNS(func() error {
+		var joinedErr error
+
+		if name, hostnameErr := os.Hostname(); hostnameErr == nil {
+			hostname = name
+		} else {
+			joinedErr = fmt.Errorf("failed to get hostname: %v", hostnameErr)
+		}
+
+		if srcIP, ipErr := getSourceIPAddress(domain); ipErr == nil {
+			sourceIP = srcIP.String()
+		} else {
+			joinedErr = errors.Join(joinedErr,
+				fmt.Errorf("failed to get source IP: %v", ipErr))
+		}
+
+		return joinedErr
+	})
+
+	return hostname, sourceIP, err
 }
 
 // runInRootNS executes fetcher in the root namespace.
