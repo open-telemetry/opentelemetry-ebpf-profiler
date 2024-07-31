@@ -60,6 +60,7 @@ func AddJitter(baseDuration time.Duration, jitter float64) time.Duration {
 		log.Errorf("Jitter (%f) out of range [0..1].", jitter)
 		return baseDuration
 	}
+	//nolint:gosec
 	return time.Duration((1 + jitter - 2*jitter*rand.Float64()) * float64(baseDuration))
 }
 
