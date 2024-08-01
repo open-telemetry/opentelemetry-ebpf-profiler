@@ -200,6 +200,7 @@ static inline PerCPURecord *get_pristine_per_cpu_record()
 #elif defined(__aarch64__)
   record->state.lr = 0;
   record->state.r22 = 0;
+  record->state.r28 = 0;
 #endif
   record->state.return_address = false;
   record->state.error_metric = -1;

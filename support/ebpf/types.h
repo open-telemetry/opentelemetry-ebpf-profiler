@@ -301,6 +301,12 @@ enum {
   // number of failures to unwind code object due to its large size
   metricID_UnwindDotnetErrCodeTooLarge,
 
+  // number of attempts to read Go custom labels
+  metricID_UnwindGoCustomLabelsAttempts,
+
+  // number of failures to read Go custom labels
+  metricID_UnwindGoCustomLabelsFailures,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -524,6 +530,8 @@ typedef struct Trace {
   ApmSpanID apm_transaction_id;
   // APM trace ID or all-zero if not present.
   ApmTraceID apm_trace_id;
+  // custom labels hash or zero if not present
+  u64 custom_labels_hash;
   // The kernel stack ID.
   s32 kernel_stack_id;
   // The number of frames in the stack.
@@ -550,7 +558,7 @@ typedef struct UnwindState {
   u64 rax, r9, r11, r13, r15;
 #elif defined(__aarch64__)
   // Current register values for named registers
-  u64 lr, r22;
+  u64 lr, r22, r28;
 #endif
 
   // The executable ID/hash associated with PC
@@ -849,5 +857,41 @@ typedef struct SystemConfig {
 typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
+
+typedef struct GoCustomLabelsOffsets {
+  u32 m_offset;
+  u32 curg;
+  u32 labels;
+  u32 hmap_count;
+  u32 hmap_log2_bucket_count;
+  u32 hmap_buckets;
+} GoCustomLabelsOffsets;
+
+// These must be divisible by 8
+#define CUSTOM_LABEL_MAX_KEY_LEN 64
+#define CUSTOM_LABEL_MAX_VAL_LEN 64
+
+typedef struct CustomLabel {
+    unsigned key_len;
+    unsigned val_len;
+    // If we use unaligned `unsigned char` instead of `u64`
+    // buffers, the hash function becomes too complex to verify.
+    union {
+      u64 key_u64[CUSTOM_LABEL_MAX_KEY_LEN / 8];
+      unsigned char key_bytes[CUSTOM_LABEL_MAX_KEY_LEN];
+    } key;
+    union {
+      u64 val_u64[CUSTOM_LABEL_MAX_VAL_LEN / 8];
+      unsigned char val_bytes[CUSTOM_LABEL_MAX_VAL_LEN];
+    } val;
+} CustomLabel;
+
+#define MAX_CUSTOM_LABELS 16
+
+typedef struct CustomLabelsArray {
+    int len;
+    struct CustomLabel labels[MAX_CUSTOM_LABELS];
+} CustomLabelsArray;
+
 
 #endif
