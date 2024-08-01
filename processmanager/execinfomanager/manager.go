@@ -22,6 +22,7 @@ import (
 	"github.com/elastic/otel-profiling-agent/interpreter"
 	"github.com/elastic/otel-profiling-agent/interpreter/apmint"
 	"github.com/elastic/otel-profiling-agent/interpreter/dotnet"
+	"github.com/elastic/otel-profiling-agent/interpreter/golang"
 	"github.com/elastic/otel-profiling-agent/interpreter/hotspot"
 	"github.com/elastic/otel-profiling-agent/interpreter/nodev8"
 	"github.com/elastic/otel-profiling-agent/interpreter/perl"
@@ -103,6 +104,7 @@ func NewExecutableInfoManager(
 	sdp nativeunwind.StackDeltaProvider,
 	ebpf pmebpf.EbpfHandler,
 	includeTracers types.IncludedTracers,
+	collectCustomLabels bool,
 ) (*ExecutableInfoManager, error) {
 	// Initialize interpreter loaders.
 	interpreterLoaders := make([]interpreter.Loader, 0)
@@ -129,6 +131,9 @@ func NewExecutableInfoManager(
 	}
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
+	if collectCustomLabels {
+		interpreterLoaders = append(interpreterLoaders, golang.Loader)
+	}
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
 		func(id host.FileID) uint32 { return uint32(id) })

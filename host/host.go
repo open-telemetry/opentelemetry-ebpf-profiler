@@ -57,4 +57,5 @@ type Trace struct {
 	PID              util.PID
 	APMTraceID       libpf.APMTraceID
 	APMTransactionID libpf.APMTransactionID
+	CustomLabels     map[string]string
 }
