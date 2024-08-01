@@ -52,7 +52,7 @@ func GetCurrentKernelVersion() (major, minor, patch uint32, err error) {
 	if err := unix.Uname(&uname); err != nil {
 		return 0, 0, 0, fmt.Errorf("could not get Kernel Version: %v", err)
 	}
-	fmt.Fscanf(bytes.NewReader(uname.Release[:]), "%d.%d.%d", &major, &minor, &patch)
+	_, _ = fmt.Fscanf(bytes.NewReader(uname.Release[:]), "%d.%d.%d", &major, &minor, &patch)
 	return major, minor, patch, nil
 }
 
