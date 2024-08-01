@@ -20,7 +20,7 @@ func ValidateReadAtWrapperTransparency(
 	bufferSize := uint64(len(reference))
 
 	// Samples random slices to validate within the file.
-	r := rand.New(rand.NewPCG(0, 0))
+	r := rand.New(rand.NewPCG(0, 0)) //nolint:gosec
 	for i := uint(0); i < iterations; i++ {
 		// Intentionally allow slices that over-read the file to test this case.
 		length := r.Uint64() % bufferSize

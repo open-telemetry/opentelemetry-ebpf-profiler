@@ -636,20 +636,16 @@ func (f *File) CRC32() (int32, error) {
 func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 	// First load as much as possible from the disk
 	if uint64(off) < ph.Filesz {
-		max := len(p)
-		if int64(max) > int64(ph.Filesz)-off {
-			max = int(int64(ph.Filesz) - off)
-		}
-
-		n, err = ph.elfReader.ReadAt(p[0:max], int64(ph.Off)+off)
+		end := int(min(int64(len(p)), int64(ph.Filesz)-off))
+		n, err = ph.elfReader.ReadAt(p[0:end], int64(ph.Off)+off)
 		if n == 0 && errors.Is(err, syscall.EFAULT) {
 			// Read zeroes from sparse file holes
-			for i := range p[0:max] {
+			for i := range p[0:end] {
 				p[i] = 0
 			}
-			n = max
+			n = end
 		}
-		if n != max || err != nil {
+		if n != end || err != nil {
 			return n, err
 		}
 		off += int64(n)
@@ -658,14 +654,11 @@ func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 	// The gap between Filesz and Memsz is allocated by dynamic loader as
 	// anonymous pages, and zero initialized. Read zeroes from this area.
 	if n < len(p) && uint64(off) < ph.Memsz {
-		max := len(p) - n
-		if int64(max) > int64(ph.Memsz)-off {
-			max = int(int64(ph.Memsz) - off)
-		}
-		for i := range p[n : n+max] {
+		end := int(min(int64(len(p)-n), int64(ph.Memsz)-off))
+		for i := range p[n : n+end] {
 			p[i] = 0
 		}
-		n += max
+		n += end
 	}
 
 	if n != len(p) {

@@ -133,37 +133,37 @@ func (h Hash128) Bytes() []byte {
 func (h Hash128) Format(s fmt.State, ch rune) {
 	if s.Flag('#') {
 		if ch == 'x' || ch == 'v' {
-			s.Write([]byte("0x"))
-			s.Write([]byte(uint64ToLowerHex(h.hi)))
+			_, _ = s.Write([]byte("0x"))
+			_, _ = s.Write([]byte(uint64ToLowerHex(h.hi)))
 			buf := make([]byte, 16)
 			putUint64AsLowerHex(h.lo, buf)
-			s.Write(buf)
+			_, _ = s.Write(buf)
 			return
 		}
 
 		if ch == 'X' {
-			s.Write([]byte("0x"))
-			s.Write([]byte(uint64ToUpperHex(h.hi)))
+			_, _ = s.Write([]byte("0x"))
+			_, _ = s.Write([]byte(uint64ToUpperHex(h.hi)))
 			buf := make([]byte, 16)
 			putUint64AsUpperHex(h.lo, buf)
-			s.Write(buf)
+			_, _ = s.Write(buf)
 			return
 		}
 	}
 
 	if ch == 'x' {
-		s.Write([]byte(uint64ToLowerHex(h.hi)))
+		_, _ = s.Write([]byte(uint64ToLowerHex(h.hi)))
 		buf := make([]byte, 16)
 		putUint64AsLowerHex(h.lo, buf)
-		s.Write(buf)
+		_, _ = s.Write(buf)
 		return
 	}
 
 	if ch == 'X' {
-		s.Write([]byte(uint64ToUpperHex(h.hi)))
+		_, _ = s.Write([]byte(uint64ToUpperHex(h.hi)))
 		buf := make([]byte, 16)
 		putUint64AsUpperHex(h.lo, buf)
-		s.Write(buf)
+		_, _ = s.Write(buf)
 		return
 	}
 
