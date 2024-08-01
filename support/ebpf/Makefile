@@ -21,12 +21,13 @@ TARGET_ARCH ?= $(NATIVE_ARCH)
 TRACER_NAME ?= tracer.ebpf.$(TARGET_ARCH)
 
 ifeq ($(TARGET_ARCH),arm64)
-TARGET_FLAGS = -target aarch64-linux-gnu
+TARGET_FLAGS = -D__aarch64__ -D__aarch64
 else
-TARGET_FLAGS = -target x86_64-linux-gnu
+TARGET_FLAGS = -D__x86_64__ -D__x86_64
 endif
 
 FLAGS=$(TARGET_FLAGS) \
+	-target bpf \
 	-fno-jump-tables \
 	-nostdlib \
 	-nostdinc \
