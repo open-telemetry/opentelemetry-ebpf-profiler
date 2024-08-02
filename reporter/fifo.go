@@ -14,7 +14,7 @@ import (
 )
 
 // FifoRingBuffer implements a first-in-first-out ring buffer that is safe for concurrent access.
-type FifoRingBuffer[T any] struct { // nolint:gocritic
+type FifoRingBuffer[T any] struct { //nolint:gocritic
 	sync.Mutex
 
 	// data holds the actual data.

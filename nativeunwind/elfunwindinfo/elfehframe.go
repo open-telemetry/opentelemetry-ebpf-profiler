@@ -389,7 +389,8 @@ const (
 // sigretCodeMap contains the per-machine trampoline to call rt_sigreturn syscall.
 // This is needed to detect signal trampoline functions as the .eh_frame often
 // does not contain the proper unwind info due to various reasons.
-// nolint:lll
+//
+//nolint:lll
 var sigretCodeMap = map[elf.Machine][]byte{
 	elf.EM_AARCH64: {
 		// https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/arm64/kernel/vdso/sigreturn.S?h=v6.4#n71
@@ -724,7 +725,7 @@ func (r *reader) parseHDR(expectCIE bool) (hlen, ciePos uint64, err error) {
 	var idPos, cieMarker uint64
 	pos := r.pos
 	hlen = uint64(r.u32())
-	if hlen < 0xfffffff0 { //nolint:gocritic
+	if hlen < 0xfffffff0 {
 		// Normal 32-bit dwarf
 		hlen += 4
 		idPos = uint64(r.pos)

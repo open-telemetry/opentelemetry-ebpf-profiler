@@ -387,9 +387,10 @@ func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ util.PID, bias libpf.A
 // searching for references to the string `Klass_vtable_start_offset`. In all JVM
 // versions >= 9.0, this corresponds to the first entry in the VM structs:
 //
-// nolint:lll
 // https://github.com/openjdk/jdk/blob/jdk-9%2B181/hotspot/src/share/vm/jvmci/vmStructs_jvmci.cpp#L48
 // https://github.com/openjdk/jdk/blob/jdk-22%2B10/src/hotspot/share/jvmci/vmStructs_jvmci.cpp#L49
+//
+//nolint:lll
 func locateJvmciVMStructs(ef *pfelf.File) (libpf.Address, error) {
 	const maxDataReadSize = 1 * 1024 * 1024   // seen in practice: 192 KiB
 	const maxRodataReadSize = 4 * 1024 * 1024 // seen in practice: 753 KiB
@@ -522,7 +523,7 @@ func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address
 		return vmd, nil
 	}
 
-	if vms.ConstantPool.SourceFileNameIndex != ^uint(0) { //nolint: gocritic
+	if vms.ConstantPool.SourceFileNameIndex != ^uint(0) {
 		// JDK15: Use ConstantPool.SourceFileNameIndex
 		vms.InstanceKlass.SourceFileNameIndex = 0
 		vms.InstanceKlass.SourceFileName = 0

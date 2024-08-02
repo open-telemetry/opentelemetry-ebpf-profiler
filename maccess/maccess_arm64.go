@@ -29,7 +29,7 @@ const (
 // for x86 and returns always TRUE [1] on other architectures like arm64. So the compiler
 // optimizes this function as the result of the function is known at compile time.
 //
-// nolint:lll
+//nolint:lll
 // [0] https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=d319f344561de23e810515d109c7278919bff7b0
 // [1] https://github.com/torvalds/linux/blob/8bc9e6515183935fa0cccaf67455c439afe4982b/include/asm-generic/tlb.h#L26
 func CopyFromUserNoFaultIsPatched(codeblob []byte, _ uint64, _ uint64) (bool, error) {
@@ -45,7 +45,7 @@ func CopyFromUserNoFaultIsPatched(codeblob []byte, _ uint64, _ uint64) (bool, er
 	// B HI, .+0x14
 	// SUB X2, X2, X19
 	//
-	// nolint:lll
+	//nolint:lll
 	// [0] https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=d319f344561de23e810515d109c7278919bff7b0
 	// [1] https://github.com/torvalds/linux/blob/1c41041124bd14dd6610da256a3da4e5b74ce6b1/include/asm-generic/access_ok.h#L20-L41
 	// [2] https://github.com/torvalds/linux/blob/1c41041124bd14dd6610da256a3da4e5b74ce6b1/include/asm-generic/access_ok.h#L40

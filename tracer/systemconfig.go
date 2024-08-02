@@ -63,7 +63,7 @@ func calculateFieldOffset(t btf.Type, fieldSpec string) (uint, error) {
 // getTSDBaseFieldSpec returns the architecture specific name of the `task_struct`
 // member that contains base address for thread specific data.
 func getTSDBaseFieldSpec() string {
-	// nolint:goconst
+	//nolint:goconst
 	switch runtime.GOARCH {
 	case "amd64":
 		return "thread.fsbase"
@@ -160,7 +160,7 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 		return nil, 0, fmt.Errorf("failed to get analysis data: %v", err)
 	}
 
-	// nolint:gocritic
+	//nolint:gocritic
 	return C.GoBytes(unsafe.Pointer(&data.code[0]), C.int(len(data.code))),
 		uint64(data.address), nil
 }

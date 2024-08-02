@@ -459,7 +459,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		// With the change of the type of the first field of _func in Go 1.18, this
 		// value is now hard coded.
 		//
-		// nolint:lll
+		//nolint:lll
 		// See https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L376-L382
 		fieldSize = uintptr(4)
 		mapSize = fieldSize * 2
@@ -487,7 +487,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	// Iterate the golang PC to function lookup table (sorted by PC)
 	for i := uint64(0); i < hdr.numFuncs; i++ {
 		if IsGo118orNewer(hdr.magic) {
-			// nolint:lll
+			//nolint:lll
 			// See: https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L401-L413
 			*fmap = pclntabFuncMap{}
 			funcIdx := uintptr(i) * 2 * fieldSize
@@ -563,7 +563,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	// Filter out .gopclntab info from other sources
 	var start, end uintptr
 	if IsGo118orNewer(hdr.magic) {
-		// nolint:lll
+		//nolint:lll
 		// https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L440-L450
 		start = uintptr(*(*uint32)(unsafe.Pointer(&functab[0])))
 		start += textStart

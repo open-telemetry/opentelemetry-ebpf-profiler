@@ -28,7 +28,7 @@ type perlData struct {
 	// vmStructs reflects the Perl internal class names and the offsets of named field
 	// The struct names are based on the Perl C "struct name", the alternate typedef seen
 	// mostly in code is in parenthesis.
-	// nolint:golint,stylecheck,revive
+	//nolint:golint,stylecheck,revive
 	vmStructs struct {
 		// interpreter struct (PerlInterpreter) is defined in intrpvar.h via macro trickery
 		// https://github.com/Perl/perl5/blob/v5.32.0/intrpvar.h

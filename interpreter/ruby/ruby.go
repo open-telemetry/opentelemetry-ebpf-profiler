@@ -51,7 +51,7 @@ const (
 	rubyInsnInfoSizeLimit = 1 * 1024 * 1024
 )
 
-// nolint:lll
+//nolint:lll
 const (
 	// RUBY_T_STRING
 	// https://github.com/ruby/ruby/blob/c149708018135595b2c19c5f74baf9475674f394/include/ruby/internal/value_type.h#L117
@@ -89,7 +89,7 @@ var (
 	_ interpreter.Instance = &rubyInstance{}
 )
 
-// nolint:lll
+//nolint:lll
 type rubyData struct {
 	// currentCtxPtr is the `ruby_current_execution_context_ptr` symbol value which is needed by the
 	// eBPF program to build ruby backtraces.
@@ -100,7 +100,7 @@ type rubyData struct {
 	version uint32
 
 	// vmStructs reflects the Ruby internal names and offsets of named fields.
-	// nolint:golint,stylecheck,revive
+	//nolint:golint,stylecheck,revive
 	vmStructs struct {
 		// rb_execution_context_struct
 		// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L843
@@ -551,7 +551,7 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 	// size of the current instruction sequence. If the calculated size of the instruction sequence
 	// is greater than the value in iseq_encoded we don't report this pc to user space.
 	//
-	// nolint:lll
+	//nolint:lll
 	// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_backtrace.c#L47-L48
 	pos := (pc - iseqEncoded) / uint64(vms.size_of_value)
 	if pos != 0 {

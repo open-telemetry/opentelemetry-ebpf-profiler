@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// nolint:testifylint
+//nolint:testifylint
 func TestLibpfEBPFFrameMarkerEquality(t *testing.T) {
 	assert.Equal(t, int(libpf.NativeFrame), support.FrameMarkerNative)
 	assert.Equal(t, int(libpf.PythonFrame), support.FrameMarkerPython)

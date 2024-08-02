@@ -30,7 +30,7 @@ func TestFifo(t *testing.T) {
 	err := sharedFifo.InitFifo(5, t.Name())
 	require.NoError(t, err)
 
-	// nolint:lll
+	//nolint:lll
 	tests := map[string]struct {
 		// size defines the size of the fifo.
 		size uint32

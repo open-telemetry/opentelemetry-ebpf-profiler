@@ -6,7 +6,7 @@
 
 package php
 
-// nolint:lll
+//nolint:lll
 // PHP8+ JIT compiler unwinder.
 // This file contains the code necessary for unwinding PHP code that has been JIT compiled.
 //

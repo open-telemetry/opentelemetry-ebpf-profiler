@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// nolint:lll
+//nolint:lll
 var codeblobs = map[string]struct {
 	code      []byte
 	isPatched bool

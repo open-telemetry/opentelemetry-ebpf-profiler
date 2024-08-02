@@ -9,7 +9,7 @@ package dotnet
 // Microsoft .Net Unwinder support code
 
 // The Microsoft dotnet is formally specified in ECMA-335. For the main references see:
-// nolint:lll
+//nolint:lll
 // sources  https://github.com/dotnet/runtime/
 // ECMA-335 https://www.ecma-international.org/wp-content/uploads/ECMA-335_6th_edition_june_2012.pdf
 // R2RFMT   https://github.com/dotnet/runtime/blob/v8.0.0/docs/design/coreclr/botr/readytorun-format.md

@@ -54,7 +54,7 @@ func pythonVer(major, minor int) uint16 {
 	return uint16(major)*0x100 + uint16(minor)
 }
 
-// nolint:lll
+//nolint:lll
 type pythonData struct {
 	version uint16
 
@@ -213,8 +213,9 @@ func readSignedVarint(r io.ByteReader) int32 {
 
 // walkLocationTable implements the algorithm to read entries from the location table.
 // This was introduced in Python 3.11.
-// nolint:lll
 // https://github.com/python/cpython/blob/deaf509e8fc6e0363bd6f26d52ad42f976ec42f2/Objects/locations.md
+//
+//nolint:lll
 func walkLocationTable(m *pythonCodeObject, bci uint32) uint32 {
 	r := bytes.NewReader(m.lineTable)
 	curI := uint32(0)
@@ -231,7 +232,7 @@ func walkLocationTable(m *pythonCodeObject, bci uint32) uint32 {
 		curI += uint32(firstByte&7) + 1
 
 		// Handle the 16 possible different codes known as _PyCodeLocationInfoKind.
-		// nolint:lll
+		//nolint:lll
 		// https://github.com/python/cpython/blob/deaf509e8fc6e0363bd6f26d52ad42f976ec42f2/Include/cpython/code.h#L219
 		switch code {
 		case 0, 1, 2, 3, 4, 5, 6, 7, 8, 9:
@@ -778,7 +779,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	// The Python main interpreter loop history in CPython git is:
 	//
-	// nolint:lll
+	//nolint:lll
 	// deaf509e8fc v3.11 2022-11-15 _PyEval_EvalFrameDefault(PyThreadState*,_PyInterpreterFrame*,int)
 	// bc2cdfc8157 v3.10 2022-11-15 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
 	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)

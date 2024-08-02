@@ -32,7 +32,7 @@ var pageSizeMinusOne = uint64(os.Getpagesize()) - 1
 // ELF virtual address where it would be mapped by default.
 func (am *AddressMapper) FileOffsetToVirtualAddress(fileOffset uint64) (uint64, bool) {
 	for _, p := range am.phdrs {
-		// nolint:lll
+		//nolint:lll
 		// fileOffset may not correspond to any file offset present in the ELF program headers.
 		// Indeed, mmap alignment constraints may have forced the ELF loader to start a segment
 		// mapping before the actual start of the ELF LOAD segment. Because of this, we must
