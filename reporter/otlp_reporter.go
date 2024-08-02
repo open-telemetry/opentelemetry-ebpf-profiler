@@ -485,7 +485,7 @@ func (r *OTLPReporter) getResource() *resource.Resource {
 }
 
 // getProfile returns an OTLP profile containing all collected samples up to this moment.
-func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS uint64, endTS uint64) {
+func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS uint64) {
 	traceEvents := r.traceEvents.WLock()
 	samples := maps.Clone(*traceEvents)
 	for key := range *traceEvents {

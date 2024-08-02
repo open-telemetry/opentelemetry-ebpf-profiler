@@ -40,7 +40,7 @@ func __bpf_log(buf unsafe.Pointer, sz C.int) {
 }
 
 //export __push_frame
-func __push_frame(id, file, line C.u64, frameType C.uchar, returnAddress C.uchar) C.int {
+func __push_frame(id, file, line C.u64, frameType, returnAddress C.uchar) C.int {
 	ctx := ebpfContextMap[id]
 
 	ctx.trace.Frames = append(ctx.trace.Frames, host.Frame{

@@ -110,7 +110,6 @@ linters-settings:
       - hugeParam
       - rangeValCopy
       - typeDefFirst
-      - paramTypeCombine
   gocyclo:
     min-complexity: 15
   govet:
