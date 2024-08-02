@@ -104,7 +104,6 @@ linters-settings:
       - ifElseChain
       - octalLiteral
       - whyNoLint
-      - wrapperFunc
       - sloppyReassign
       - uncheckedInlineErr # Experimental rule with high false positive rate.
 
