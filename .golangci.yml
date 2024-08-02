@@ -109,7 +109,6 @@ linters-settings:
       # Broken with Go 1.18 feature (https://github.com/golangci/golangci-lint/issues/2649):
       - hugeParam
       - rangeValCopy
-      - typeDefFirst
   gocyclo:
     min-complexity: 15
   govet:
