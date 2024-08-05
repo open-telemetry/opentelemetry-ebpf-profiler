@@ -123,7 +123,7 @@ type OTLPReporter struct {
 	frames *lru.SyncedLRU[libpf.FileID, *xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[traceAndMetaKey]traceFramesCounts]
+	traceEvents xsync.RWMutex[map[traceAndMetaKey]*traceFramesCounts]
 
 	// pkgGRPCOperationTimeout sets the time limit for GRPC requests.
 	pkgGRPCOperationTimeout time.Duration
@@ -181,7 +181,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 		return
 	}
 
-	(*traceEvents)[key] = traceFramesCounts{
+	(*traceEvents)[key] = &traceFramesCounts{
 		files:              trace.Files,
 		linenos:            trace.Linenos,
 		frameTypes:         trace.FrameTypes,
@@ -342,7 +342,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		executables:             executables,
 		frames:                  frames,
 		hostmetadata:            hostmetadata,
-		traceEvents:             xsync.NewRWMutex(map[traceAndMetaKey]traceFramesCounts{}),
+		traceEvents:             xsync.NewRWMutex(map[traceAndMetaKey]*traceFramesCounts{}),
 		cgroupv2ID:              cgroupv2ID,
 	}
 
