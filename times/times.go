@@ -19,9 +19,6 @@ import (
 const (
 	// Number of timing samples to use when retrieving system boot time.
 	sampleSize = 5
-	// How often to attempt a sync with the realtime clock.
-	realtimeSyncInterval = 20 * time.Minute
-
 	// GRPCAuthErrorDelay defines the delay before triggering a global process exit after a
 	// gRPC auth error.
 	GRPCAuthErrorDelay = 10 * time.Minute
@@ -107,15 +104,17 @@ func (t *Times) PIDCleanupInterval() time.Duration { return t.pidCleanupInterval
 
 func (t *Times) ProbabilisticInterval() time.Duration { return t.probabilisticInterval }
 
-// StartRealtimeSync starts a goroutine that periodically calculates a delta
-// between the monotonic clock (CLOCK_MONOTONIC, rebased to unixtime) with the
-// realtime clock. This delta can be introduced by system suspend events and/or
-// non-slewing system clock changes. For more information, see clock_gettime(2).
-func StartRealtimeSync(ctx context.Context) {
+// StartRealtimeSync calculates a delta between the monotonic clock
+// (CLOCK_MONOTONIC, rebased to unixtime) and the realtime clock. If syncInterval is
+// greater than zero, it also starts a goroutine to perform that calculation periodically.
+func StartRealtimeSync(ctx context.Context, syncInterval time.Duration) {
 	bootTimeUnixNano.Store(getBootTimeUnixNano())
-	periodiccaller.Start(ctx, realtimeSyncInterval, func() {
-		bootTimeUnixNano.Store(getBootTimeUnixNano())
-	})
+
+	if syncInterval > 0 {
+		periodiccaller.Start(ctx, syncInterval, func() {
+			bootTimeUnixNano.Store(getBootTimeUnixNano())
+		})
+	}
 }
 
 // New returns a new Times instance.

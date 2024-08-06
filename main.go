@@ -148,7 +148,7 @@ func mainWithExitCode() exitCode {
 		args.reporterInterval, args.probabilisticInterval)
 
 	// Start periodic synchronization with the realtime clock
-	times.StartRealtimeSync(mainCtx)
+	times.StartRealtimeSync(mainCtx, args.clockSyncInterval)
 
 	log.Debugf("Determining tracers to include")
 	includeTracers, err := tracertypes.Parse(args.tracers)

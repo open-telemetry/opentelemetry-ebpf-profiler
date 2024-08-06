@@ -24,6 +24,7 @@ const (
 	defaultArgSamplesPerSecond    = 20
 	defaultArgReporterInterval    = 5.0 * time.Second
 	defaultArgMonitorInterval     = 5.0 * time.Second
+	defaultClockSyncInterval      = 3 * time.Minute
 	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
 	defaultProbabilisticInterval  = 1 * time.Minute
 	defaultArgSendErrorFrames     = false
@@ -61,11 +62,14 @@ var (
 		tracer.ProbabilisticThresholdMax-1, tracer.ProbabilisticThresholdMax-1)
 	probabilisticIntervalHelp = "Time interval for which probabilistic profiling will be " +
 		"enabled or disabled."
-	pprofHelp            = "Listening address (e.g. localhost:6060) to serve pprof information."
-	samplesPerSecondHelp = "Set the frequency (in Hz) of stack trace sampling."
-	reporterIntervalHelp = "Set the reporter's interval in seconds."
-	monitorIntervalHelp  = "Set the monitor interval in seconds."
-	sendErrorFramesHelp  = "Send error frames (devfiler only, breaks Kibana)"
+	pprofHelp             = "Listening address (e.g. localhost:6060) to serve pprof information."
+	samplesPerSecondHelp  = "Set the frequency (in Hz) of stack trace sampling."
+	reporterIntervalHelp  = "Set the reporter's interval in seconds."
+	monitorIntervalHelp   = "Set the monitor interval in seconds."
+	clockSyncIntervalHelp = "Set the sync interval with the realtime clock. " +
+		"If zero, monotonic-realtime clock sync will be performed once, " +
+		"on agent startup, but not periodically."
+	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
 )
 
 type arguments struct {
@@ -76,6 +80,7 @@ type arguments struct {
 	disableTLS             bool
 	mapScaleFactor         uint
 	monitorInterval        time.Duration
+	clockSyncInterval      time.Duration
 	noKernelVersionCheck   bool
 	pprofAddr              string
 	probabilisticInterval  time.Duration
@@ -114,6 +119,9 @@ func parseArgs() (*arguments, error) {
 
 	fs.DurationVar(&args.monitorInterval, "monitor-interval", defaultArgMonitorInterval,
 		monitorIntervalHelp)
+
+	fs.DurationVar(&args.clockSyncInterval, "clock-sync-interval", defaultClockSyncInterval,
+		clockSyncIntervalHelp)
 
 	fs.BoolVar(&args.noKernelVersionCheck, "no-kernel-version-check", false,
 		noKernelVersionCheckHelp)
