@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Test the current package under a different kernel.
-# Requires qemu-system-x86_64 and bluebox to be installed.
+# Requires qemu-system-$QEMU_ARCH and bluebox to be installed.
 
 set -eu
 set -o pipefail
 
+qemu_arch="${QEMU_ARCH:-x86_64}"
 color_green=$'\033[32m'
 color_red=$'\033[31m'
 color_default=$'\033[39m'
@@ -40,17 +41,31 @@ done < <(find . -name '*.test' -print0)
 
 additionalQemuArgs=""
 
-supportKVM=$(grep -c -E 'vmx|svm' /proc/cpuinfo || echo "0")
-if [ "$supportKVM" -ne 0 ]; then
+supportKVM=$(grep -E 'vmx|svm' /proc/cpuinfo || true)
+if [ ! "$supportKVM" ] && [ "$qemu_arch" = "$(uname -m)" ]; then
   additionalQemuArgs="-enable-kvm"
+fi
+
+case "$qemu_arch" in
+    x86_64)
+        additionalQemuArgs+=" -append console=ttyS0"
+        bb_args+=(-a amd64)
+        ;;
+    aarch64)
+        additionalQemuArgs+=" -machine virt -cpu max"
+        bb_args+=(-a arm64)
+        ;;
+esac
+
+if [ "$qemu_arch" = "aarch64" ]; then
+    additionalQemuArgs+=" -machine virt -cpu max"
 fi
 
 bluebox "${bb_args[@]}" || (echo "failed to generate initramfs"; exit 1)
 
 echo Testing on "${kernel_version}"
-$sudo qemu-system-x86_64 ${additionalQemuArgs} \
+$sudo qemu-system-${qemu_arch} ${additionalQemuArgs} \
 	-nographic \
-	-append "console=ttyS0" \
 	-monitor none \
 	-serial file:"${output}/test.log" \
 	-no-user-config \
