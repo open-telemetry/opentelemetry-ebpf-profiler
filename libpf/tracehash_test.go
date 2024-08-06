@@ -18,7 +18,7 @@ func TestTraceHashSprintf(t *testing.T) {
 	origHash := NewTraceHash(0x0001C03F8D6B8520, 0xEDEAEEA9460BEEBB)
 
 	marshaled := fmt.Sprintf("%d", origHash)
-	// nolint:goconst
+	//nolint:goconst
 	expected := "{492854164817184 17143777342331285179}"
 	assert.Equal(t, expected, marshaled)
 
@@ -27,7 +27,7 @@ func TestTraceHashSprintf(t *testing.T) {
 	assert.Equal(t, expected, marshaled)
 
 	marshaled = fmt.Sprintf("%v", origHash)
-	// nolint:goconst
+	//nolint:goconst
 	expected = "{492854164817184 17143777342331285179}"
 	assert.Equal(t, expected, marshaled)
 

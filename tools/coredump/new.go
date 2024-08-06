@@ -186,14 +186,14 @@ func dumpCore(pid uint64) (string, error) {
 		return "", fmt.Errorf("failed to read coredump filter: %w", err)
 	}
 	// Adjust coredump filter mask.
-	// nolint:gosec
+	//nolint:gosec
 	err = os.WriteFile(coredumpFilterPath, []byte("0x3f"), 0o644)
 	if err != nil {
 		return "", fmt.Errorf("failed to write coredump filter: %w", err)
 	}
 	// Restore coredump filter mask upon leaving the function.
 	defer func() {
-		// nolint:gosec
+		//nolint:gosec
 		err2 := os.WriteFile(coredumpFilterPath, prevMask, 0o644)
 		if err2 != nil {
 			log.Warnf("Failed to restore previous coredump filter: %v", err2)
@@ -201,7 +201,7 @@ func dumpCore(pid uint64) (string, error) {
 	}()
 
 	// `gcore` only accepts a path-prefix, not an exact path.
-	// nolint:gosec
+	//nolint:gosec
 	err = exec.Command("gcore", "-o", gcorePathPrefix, strconv.FormatUint(pid, 10)).Run()
 	if err != nil {
 		return "", fmt.Errorf("gcore failed: %w", err)

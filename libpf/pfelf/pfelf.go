@@ -279,7 +279,7 @@ func getNoteHexString(sectionBytes []byte, name string, noteType uint32) (
 	noteTypeBytes := make([]byte, 4)
 
 	binary.LittleEndian.PutUint32(noteTypeBytes, noteType)
-	noteHeader := append(noteTypeBytes, nameBytes...) // nolint:gocritic
+	noteHeader := append(noteTypeBytes, nameBytes...) //nolint:gocritic
 
 	// Try to find the note in the section
 	idx := bytes.Index(sectionBytes, noteHeader)

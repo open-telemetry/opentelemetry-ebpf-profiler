@@ -412,7 +412,7 @@ func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
 
 	// Replace the place holders for map access in the eBPF programs with
 	// the file descriptors of the loaded maps.
-	// nolint:staticcheck
+	//nolint:staticcheck
 	if err = coll.RewriteMaps(ebpfMaps); err != nil {
 		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
@@ -970,7 +970,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.T
 
 	// translateIDs is a translation table for eBPF IDs into Metric IDs.
 	// Index is the ebpfID, value is the corresponding metricID.
-	// nolint:lll
+	//nolint:lll
 	translateIDs := []metrics.MetricID{
 		C.metricID_UnwindCallInterpreter:                      metrics.IDUnwindCallInterpreter,
 		C.metricID_UnwindErrZeroPC:                            metrics.IDUnwindErrZeroPC,

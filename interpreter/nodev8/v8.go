@@ -239,7 +239,7 @@ var (
 	_ interpreter.Instance = &v8Instance{}
 )
 
-// nolint:lll
+//nolint:lll
 type v8Data struct {
 	// vmStructs reflects the V8 internal class names and the offsets of named fields.
 	// The V8 name is in the tag 'name' if it differs from our Go name.
@@ -938,7 +938,7 @@ func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name string,
 	// data can be in the array before function name and line numbers. The exact
 	// number varies V8 version to version. Counting the actual slot number
 	// would require tracking lot of V8 bitfields that have changed a lot, see:
-	// nolint:lll
+	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/scope-info.tq#50
 	const numSlots = 16
 	const slotSize = pointerSize
@@ -1098,7 +1098,7 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 	}
 
 	// Function data
-	// nolint:lll
+	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/shared-function-info.cc#76
 	fdAddr, fdType, _ := i.readObjectPtr(addr + libpf.Address(vms.SharedFunctionInfo.FunctionData))
 	switch fdType {
@@ -1351,9 +1351,10 @@ func decodeUVLQ(r io.ByteReader) (uint64, error) {
 }
 
 // decodeVLQ reads and decodes one signed Variable Length Quantity
-// nolint:lll
 // https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/base/vlq.h#110
 // https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/codegen/source-position-table.cc#90
+//
+//nolint:lll
 func decodeVLQ(r io.ByteReader) (int64, error) {
 	decoded, err := decodeUVLQ(r)
 	if err != nil {
@@ -1363,7 +1364,6 @@ func decodeVLQ(r io.ByteReader) (int64, error) {
 	return int64((decoded >> 1) ^ -(decoded & 1)), nil
 }
 
-// nolint:lll
 // https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/codegen/source-position.h#145
 //
 // sourcePositition a native V8 datatype defined as a bitfield with following bits:
@@ -1376,6 +1376,8 @@ func decodeVLQ(r io.ByteReader) (int64, error) {
 //	  script_offset   30 bits
 //	}
 //	inlining_id       16 bits
+//
+//nolint:lll
 type sourcePosition uint64
 
 func (pos sourcePosition) isExternal() bool {
@@ -1402,7 +1404,7 @@ func decodePosition(table []byte, delta uint64) sourcePosition {
 	// delta from previous entry.
 
 	r := bytes.NewReader(table)
-	// nolint:lll
+	//nolint:lll
 	// Initialize implicit base values:
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/codegen/source-position-table.h#26
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/common/globals.h#480
@@ -1452,7 +1454,7 @@ func mapPositionToLine(lineEnds []uint32, pos int32) util.SourceLineno {
 func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) util.SourceLineno {
 	scriptOffset := position.scriptOffset()
 	// The scriptOffset is offset by one, to make kNoSourcePosition zero.
-	// nolint:lll
+	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/codegen/source-position.h#93
 	if scriptOffset == 0 {
 		return sfi.funcStartLine
@@ -1524,7 +1526,7 @@ func (i *v8Instance) symbolizeSFI(symbolReporter reporter.SymbolReporter, pointe
 	}
 
 	// Adjust the bytecode pointer as needed
-	// nolint:lll
+	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/execution/frames.cc#1793
 	bytecodeDelta := int64(delta & C.V8_LINE_DELTA_MASK)
 	bytecodeDelta -= int64(vms.BytecodeArray.Data) - HeapObjectTag
@@ -1541,7 +1543,7 @@ func (i *v8Instance) symbolizeSFI(symbolReporter reporter.SymbolReporter, pointe
 // getBytecodeLength decodes the length at the start of bytecode array
 func (d *v8Data) readBytecodeLength(r *bytes.Reader) int {
 	// Bytecode has one optional scaling prefix opcode, followed with the meaningful opcode.
-	// nolint:lll
+	//nolint:lll
 	// The list of these opcodes is at:
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/interpreter/bytecodes.h#46
 	opcode, err := r.ReadByte()
@@ -1550,7 +1552,7 @@ func (d *v8Data) readBytecodeLength(r *bytes.Reader) int {
 	}
 
 	// The scaling opcodes have not changed since V8 6.8.141. So hard code them here.
-	// nolint:lll
+	//nolint:lll
 	// Map scaling opcodes to their offset in the decoding table:
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/interpreter/bytecodes.h#612
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/interpreter/bytecodes.h#892
@@ -1572,7 +1574,7 @@ func (d *v8Data) readBytecodeLength(r *bytes.Reader) int {
 	}
 
 	// Get the length from kBytecodeSizes
-	// nolint:lll
+	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/interpreter/bytecodes.h#893
 	if opcode <= 0x03 && opcode > d.bytecodeCount {
 		// Invalid opcode
@@ -1594,7 +1596,7 @@ func (i *v8Instance) mapBaselineCodeOffsetToBytecode(code *v8Code, pcDelta uint3
 		return 0
 	}
 
-	// nolint:lll
+	//nolint:lll
 	// The algorithm to do the mapping:
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/baseline/bytecode-offset-iterator.h#45
 	// The baseline position table is a series of unsigned VLQs:
@@ -1905,7 +1907,7 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 		vms.FramePointer.BytecodeOffset = vms.FramePointer.BytecodeArray - pointerSize
 	}
 	if vms.Fixed.FirstJSFunctionType == 0 {
-		// nolint:lll
+		//nolint:lll
 		// The V8 InstaceTypes tags are defined at:
 		//   https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/instance-type.h#124
 		// which in turn is generated from the data at:
@@ -1917,12 +1919,12 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 		switch {
 		case d.version >= v8Ver(9, 6, 138):
 			// Class constructor special case
-			// nolint:lll
+			//nolint:lll
 			// https://chromium.googlesource.com/v8/v8.git/+/1cd7a5822374a49ab6767185e69119d0d3076840
 			numJSFuncTypes = 15
 		case d.version >= v8Ver(9, 0, 14):
 			// Several constructor special cases added
-			// nolint:lll
+			//nolint:lll
 			// https://chromium.googlesource.com/v8/v8.git/+/624030e975cb4384f877b65070b4e650a6acb1ef
 			numJSFuncTypes = 14
 		}

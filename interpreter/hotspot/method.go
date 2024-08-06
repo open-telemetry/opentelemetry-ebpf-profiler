@@ -19,7 +19,8 @@ import (
 )
 
 // Constants for the JVM internals that have never changed
-// nolint:golint,stylecheck,revive
+//
+//nolint:golint,stylecheck,revive
 const ConstMethod_has_linenumber_table = 0x0001
 
 // hotspotMethod contains symbolization information for one Java method. It caches
@@ -94,7 +95,7 @@ type hotspotJITInfo struct {
 // for each inlined method for given RIP.
 func (ji *hotspotJITInfo) symbolize(symbolReporter reporter.SymbolReporter, ripDelta int32,
 	ii *hotspotInstance, trace *libpf.Trace) error {
-	// nolint:lll
+	//nolint:lll
 	// Unfortunately the data structures read here are not well documented in the JVM
 	// source, but for reference implementation you can look:
 	// https://hg.openjdk.java.net/jdk-updates/jdk14u/file/default/src/java.base/solaris/native/libjvm_db/libjvm_db.c

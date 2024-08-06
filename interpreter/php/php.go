@@ -29,7 +29,7 @@ import (
 // #include "../../support/ebpf/types.h"
 import "C"
 
-// nolint:golint,stylecheck,revive
+//nolint:golint,stylecheck,revive
 const (
 	// This is used to check if the VM mode is the default one
 	// From https://github.com/php/php-src/blob/PHP-8.0/Zend/zend_vm_opcodes.h#L29
@@ -78,7 +78,7 @@ type phpData struct {
 	rtAddr libpf.Address
 
 	// vmStructs reflects the PHP internal class names and the offsets of named field
-	// nolint:golint,stylecheck,revive
+	//nolint:golint,stylecheck,revive
 	vmStructs struct {
 		// https://github.com/php/php-src/blob/PHP-7.4/Zend/zend_globals.h#L135
 		zend_executor_globals struct {

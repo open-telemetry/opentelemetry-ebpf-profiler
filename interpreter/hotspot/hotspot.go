@@ -8,7 +8,7 @@ package hotspot
 
 // Java HotSpot Unwinder support code (works also with Scala using HotSpot)
 
-// nolint:lll
+//nolint:lll
 // The code here and in hotspot_tracer.ebpf.c is based on the Java Serviceability Agent (SA) code,
 // and the Java DTrace helper code (libjvm_db). Additional insight is taken from
 // https://github.com/jvm-profiling-tools/async-profiler/ unwinding parts, as well as various other

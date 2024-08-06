@@ -164,7 +164,7 @@ func TestHash128StringNoQuotes(t *testing.T) {
 }
 
 func TestNew128FromString(t *testing.T) {
-	tests := map[string]struct { //nolint
+	tests := map[string]struct {
 		stringRepresentation string
 		expected             Hash128
 		err                  error

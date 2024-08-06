@@ -20,7 +20,7 @@ func TestFileIDSprintf(t *testing.T) {
 	require.NoError(t, err)
 
 	marshaled := fmt.Sprintf("%d", origID)
-	// nolint:goconst
+	//nolint:goconst
 	expected := "{6921411395851452416 17491761894677412754}"
 	assert.Equal(t, expected, marshaled)
 

@@ -136,7 +136,7 @@ func (sh *StatsHandlerImpl) GetRPCBytesIn() int64 {
 	return sh.numRPCBytesIn.Swap(0)
 }
 
-// nolint:unused
+//nolint:unused
 func (sh *StatsHandlerImpl) getMethodRPCBytesOut() map[string]uint64 {
 	rpcOut := sh.rpcBytesOut.RLock()
 	defer sh.rpcBytesOut.RUnlock(&rpcOut)
@@ -147,7 +147,7 @@ func (sh *StatsHandlerImpl) getMethodRPCBytesOut() map[string]uint64 {
 	return res
 }
 
-// nolint:unused
+//nolint:unused
 func (sh *StatsHandlerImpl) getMethodRPCBytesIn() map[string]uint64 {
 	rpcIn := sh.rpcBytesIn.RLock()
 	defer sh.rpcBytesIn.RUnlock(&rpcIn)
@@ -158,7 +158,7 @@ func (sh *StatsHandlerImpl) getMethodRPCBytesIn() map[string]uint64 {
 	return res
 }
 
-// nolint:unused
+//nolint:unused
 func (sh *StatsHandlerImpl) getMethodWireBytesOut() map[string]uint64 {
 	wireOut := sh.wireBytesOut.RLock()
 	defer sh.wireBytesOut.RUnlock(&wireOut)
@@ -169,7 +169,7 @@ func (sh *StatsHandlerImpl) getMethodWireBytesOut() map[string]uint64 {
 	return res
 }
 
-// nolint:unused
+//nolint:unused
 func (sh *StatsHandlerImpl) getMethodWireBytesIn() map[string]uint64 {
 	wireIn := sh.wireBytesIn.RLock()
 	defer sh.wireBytesIn.RUnlock(&wireIn)

@@ -498,7 +498,7 @@ func (f *File) TLSDescriptors() (map[string]libpf.Address, error) {
 	for i := range f.Sections {
 		section := &f.Sections[i]
 		// NOTE: SHT_REL is not relevant for the archs that we care about
-		if section.Type == elf.SHT_RELA { // nolint:misspell
+		if section.Type == elf.SHT_RELA {
 			if err = f.insertTLSDescriptorsForSection(descs, section); err != nil {
 				return nil, err
 			}
@@ -511,10 +511,10 @@ func (f *File) TLSDescriptors() (map[string]libpf.Address, error) {
 func (f *File) insertTLSDescriptorsForSection(descs map[string]libpf.Address,
 	relaSection *Section) error {
 	if relaSection.Link > uint32(len(f.Sections)) {
-		return errors.New("rela section link is out-of-bounds") // nolint:misspell
+		return errors.New("rela section link is out-of-bounds")
 	}
 	if relaSection.Link == 0 {
-		return errors.New("rela section link is empty") // nolint:misspell
+		return errors.New("rela section link is empty")
 	}
 	if relaSection.Size > maxBytesLargeSection {
 		return fmt.Errorf("relocation section too big (%d bytes)", relaSection.Size)
@@ -548,7 +548,7 @@ func (f *File) insertTLSDescriptorsForSection(descs map[string]libpf.Address,
 
 	relaSz := int(unsafe.Sizeof(elf.Rela64{}))
 	for i := 0; i < len(relaData); i += relaSz {
-		rela := (*elf.Rela64)(unsafe.Pointer(&relaData[i])) // nolint:misspell
+		rela := (*elf.Rela64)(unsafe.Pointer(&relaData[i]))
 
 		ty := rela.Info & 0xffff
 		if !(f.Machine == elf.EM_AARCH64 && elf.R_AARCH64(ty) == elf.R_AARCH64_TLSDESC) &&
@@ -766,7 +766,7 @@ func calcSysvHash(s libpf.SymbolName) uint32 {
 
 // LookupSymbol searches for a given symbol in the ELF
 func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
-	if f.gnuHash.addr != 0 { //nolint: gocritic
+	if f.gnuHash.addr != 0 {
 		// Standard DT_GNU_HASH lookup code follows. Please check the DT_GNU_HASH
 		// blog link (on top of this file) for details how this works.
 		hdr := &f.gnuHash.header

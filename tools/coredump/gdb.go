@@ -151,7 +151,6 @@ func (cmd *gdbCmd) exec(context.Context, []string) (err error) {
 		gdbBin = "gdb"
 	}
 
-	//nolint:gosec
 	gdb := exec.Command(gdbBin,
 		path.Join(sysroot, executable),
 		"-c", path.Join(sysroot, "core"),

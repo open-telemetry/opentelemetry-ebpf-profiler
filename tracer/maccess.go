@@ -36,7 +36,7 @@ func checkForMaccessPatch(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 	newCheckFunc, err := kernelSymbols.LookupSymbol(
 		libpf.SymbolName("nmi_uaccess_okay"))
 	if err != nil {
-		// nolint:goconst
+		//nolint:goconst
 		if runtime.GOARCH == "arm64" {
 			// On arm64 this symbol might not be available and we do not use
 			// the symbol address in the arm64 case to check for the patch.

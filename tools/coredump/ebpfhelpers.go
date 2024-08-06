@@ -34,15 +34,13 @@ import (
 */
 import "C"
 
-//nolint:gocritic
 //export __bpf_log
 func __bpf_log(buf unsafe.Pointer, sz C.int) {
 	log.Info(string(sliceBuffer(buf, sz)))
 }
 
-//nolint:gocritic
 //export __push_frame
-func __push_frame(id, file, line C.u64, frameType C.uchar, returnAddress C.uchar) C.int {
+func __push_frame(id, file, line C.u64, frameType, returnAddress C.uchar) C.int {
 	ctx := ebpfContextMap[id]
 
 	ctx.trace.Frames = append(ctx.trace.Frames, host.Frame{
@@ -55,20 +53,17 @@ func __push_frame(id, file, line C.u64, frameType C.uchar, returnAddress C.uchar
 	return C.ERR_OK
 }
 
-//nolint:gocritic
 //export bpf_ktime_get_ns
 func bpf_ktime_get_ns() C.ulonglong {
 	return C.ulonglong(util.GetKTime())
 }
 
-//nolint:gocritic
 //export bpf_get_current_comm
 func bpf_get_current_comm(buf unsafe.Pointer, sz C.int) C.int {
 	copy(sliceBuffer(buf, sz), "comm")
 	return 0
 }
 
-//nolint:gocritic
 //export __bpf_probe_read_user
 func __bpf_probe_read_user(id C.u64, buf unsafe.Pointer, sz C.int, ptr unsafe.Pointer) C.long {
 	ctx := ebpfContextMap[id]
@@ -85,7 +80,6 @@ var stackDeltaInnerMap = &C.bpf_map_def{
 	key_size: 8,
 }
 
-//nolint:gocritic
 //export __bpf_map_lookup_elem
 func __bpf_map_lookup_elem(id C.u64, mapdef *C.bpf_map_def, keyptr unsafe.Pointer) unsafe.Pointer {
 	ctx := ebpfContextMap[id]

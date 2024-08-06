@@ -89,6 +89,6 @@ func (i InterpreterType) String() string {
 	if result, ok := interpreterTypeToString[i]; ok {
 		return result
 	}
-	// nolint:goconst
+	//nolint:goconst
 	return "<invalid>"
 }

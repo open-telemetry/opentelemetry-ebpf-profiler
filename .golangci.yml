@@ -68,7 +68,6 @@ linters:
     - nilnil
     - nlreturn
     - noctx # might be worth fixing
-    - nolintlint
     - nonamedreturns
     - paralleltest
     - protogetter
@@ -103,17 +102,9 @@ linters-settings:
     disabled-checks:
       - dupImport # https://github.com/go-critic/go-critic/issues/845
       - ifElseChain
-      - octalLiteral
       - whyNoLint
-      - wrapperFunc
       - sloppyReassign
       - uncheckedInlineErr # Experimental rule with high false positive rate.
-
-      # Broken with Go 1.18 feature (https://github.com/golangci/golangci-lint/issues/2649):
-      - hugeParam
-      - rangeValCopy
-      - typeDefFirst
-      - paramTypeCombine
   gocyclo:
     min-complexity: 15
   govet:

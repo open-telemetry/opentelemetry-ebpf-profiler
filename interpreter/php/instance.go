@@ -27,7 +27,7 @@ import (
 	"github.com/elastic/otel-profiling-agent/util"
 )
 
-// nolint:golint,stylecheck,revive
+//nolint:golint,stylecheck,revive
 const (
 	// zend_function.type definitions from PHP sources
 	ZEND_USER_FUNCTION = (1 << 1)
@@ -168,7 +168,7 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 		}
 
 		lineStart = npsr.Uint32(fobj, vms.zend_function.op_array_linestart)
-		// nolint:lll
+		//nolint:lll
 		lineBytes = fobj[vms.zend_function.op_array_linestart : vms.zend_function.op_array_linestart+8]
 	}
 
