@@ -11,8 +11,8 @@ package php
 import (
 	"fmt"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	ah "github.com/open-telemetry/opentelemetry-ebpf-profiler/armhelpers"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
 

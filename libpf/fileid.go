@@ -17,8 +17,8 @@ import (
 	"math"
 	"os"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/basehash"
 	sha256 "github.com/minio/sha256-simd"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/basehash"
 )
 
 // FileID is used for unique identifiers for files
