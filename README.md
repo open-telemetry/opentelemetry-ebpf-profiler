@@ -1,17 +1,7 @@
-> [!NOTE]
->
-> Please be aware that we currently won't merge 3rd party PRs because this repository
-> is temporary. We are waiting for the decision of the OpenTelemetry technical
-> commitee on the donation of this repository.
->
-> In case the donation gets accepted, this repository will move to the [GitHub open-telemetry organization](https://github.com/open-telemetry),
-> which requires signing a different CLA. At that point we will start working on reviewing and merging 3rd party PRs.
-
 # Introduction
 
 This repository implements a whole-system, cross-language profiler for Linux via
-eBPF. The repository serves as a staging space in the process of donating the
-agent to OpenTelementry.
+eBPF.
 
 ## Core features and strengths
 
