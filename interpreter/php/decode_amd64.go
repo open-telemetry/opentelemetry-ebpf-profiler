@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	_ "github.com/elastic/otel-profiling-agent/zydis" // links Zydis
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	_ "github.com/open-telemetry/opentelemetry-ebpf-profiler/zydis" // links Zydis
 )
 
 // #cgo CFLAGS: -g -Wall

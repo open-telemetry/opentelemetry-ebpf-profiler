@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/process"
-	"github.com/elastic/otel-profiling-agent/tools/coredump/modulestore"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/modulestore"
 
 	log "github.com/sirupsen/logrus"
 )

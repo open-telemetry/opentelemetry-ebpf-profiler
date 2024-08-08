@@ -15,8 +15,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/elastic/otel-profiling-agent/remotememory"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 type ptraceProcess struct {

@@ -10,8 +10,8 @@ import (
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/host"
-	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 )
 
 type lruFileIDMapper struct {

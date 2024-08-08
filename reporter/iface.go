@@ -10,9 +10,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/process"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // Reporter is the top-level interface implemented by a full reporter.

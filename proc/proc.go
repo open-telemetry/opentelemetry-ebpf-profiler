@@ -19,9 +19,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/stringutil"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/stringutil"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 const defaultMountPoint = "/proc"

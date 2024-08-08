@@ -6,7 +6,7 @@
 
 package libpf
 
-import "github.com/elastic/otel-profiling-agent/support"
+import "github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
 
 // InterpreterType variables can hold one of the interpreter type values defined below.
 type InterpreterType int

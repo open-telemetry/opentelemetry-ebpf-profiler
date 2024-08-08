@@ -19,14 +19,14 @@ import (
 
 	"github.com/elastic/go-freelru"
 
-	"github.com/elastic/otel-profiling-agent/interpreter"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/libpf/xsync"
-	"github.com/elastic/otel-profiling-agent/lpm"
-	npsr "github.com/elastic/otel-profiling-agent/nopanicslicereader"
-	"github.com/elastic/otel-profiling-agent/remotememory"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/lpm"
+	npsr "github.com/open-telemetry/opentelemetry-ebpf-profiler/nopanicslicereader"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // hotspotIntrospectionTable contains the resolved ELF symbols for an introspection table

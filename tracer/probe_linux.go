@@ -16,8 +16,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/elastic/otel-profiling-agent/rlimit"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 
 	"golang.org/x/sys/unix"
 

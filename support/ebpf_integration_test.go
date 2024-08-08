@@ -13,7 +13,7 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	"github.com/elastic/otel-profiling-agent/rlimit"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
 
 	"github.com/stretchr/testify/require"
 )

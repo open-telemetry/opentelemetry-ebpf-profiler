@@ -10,7 +10,7 @@ import (
 	"hash/fnv"
 	"strconv"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 )
 
 // HashTrace calculates the hash of a trace and returns it.

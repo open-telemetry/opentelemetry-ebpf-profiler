@@ -12,12 +12,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/elastic/otel-profiling-agent/testsupport"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/testsupport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
 )
 
 var (

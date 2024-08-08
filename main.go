@@ -18,22 +18,22 @@ import (
 	//nolint:gosec
 	_ "net/http/pprof"
 
-	"github.com/elastic/otel-profiling-agent/times"
-	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
-	"github.com/elastic/otel-profiling-agent/util"
-	"github.com/elastic/otel-profiling-agent/vc"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
+	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/vc"
 	"github.com/tklauser/numcpus"
 	"golang.org/x/sys/unix"
 
-	"github.com/elastic/otel-profiling-agent/host"
-	"github.com/elastic/otel-profiling-agent/tracehandler"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracehandler"
 
-	"github.com/elastic/otel-profiling-agent/hostmetadata"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/hostmetadata"
 
-	"github.com/elastic/otel-profiling-agent/metrics"
-	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
 
-	"github.com/elastic/otel-profiling-agent/tracer"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer"
 
 	log "github.com/sirupsen/logrus"
 )

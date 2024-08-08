@@ -9,7 +9,7 @@ package python
 import (
 	"testing"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/stretchr/testify/assert"
 )
 

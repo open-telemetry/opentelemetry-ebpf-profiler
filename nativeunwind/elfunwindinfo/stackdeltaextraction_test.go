@@ -11,7 +11,7 @@ import (
 	"os"
 	"testing"
 
-	sdtypes "github.com/elastic/otel-profiling-agent/nativeunwind/stackdeltatypes"
+	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
 
 	"github.com/stretchr/testify/require"
 )

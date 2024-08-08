@@ -17,7 +17,7 @@ import (
 	"math"
 	"os"
 
-	"github.com/elastic/otel-profiling-agent/libpf/basehash"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/basehash"
 	sha256 "github.com/minio/sha256-simd"
 )
 

@@ -16,7 +16,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/elastic/otel-profiling-agent/libpf/xsync"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
 )
 
 func TestOnceLock(t *testing.T) {

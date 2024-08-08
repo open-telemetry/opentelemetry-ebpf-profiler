@@ -10,7 +10,7 @@ import (
 	"encoding"
 	"encoding/base64"
 
-	"github.com/elastic/otel-profiling-agent/libpf/basehash"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/basehash"
 )
 
 // TraceHash represents the unique hash of a trace

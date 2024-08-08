@@ -6,7 +6,7 @@
 
 package libpf
 
-import "github.com/elastic/otel-profiling-agent/libpf/hash"
+import "github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/hash"
 
 // Address represents an address, or offset within a process
 type Address uintptr

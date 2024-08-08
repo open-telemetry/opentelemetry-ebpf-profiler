@@ -14,7 +14,7 @@ import (
 	"debug/elf"
 	"fmt"
 
-	sdtypes "github.com/elastic/otel-profiling-agent/nativeunwind/stackdeltatypes"
+	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
 )
 
 //nolint:deadcode,varcheck

@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/elastic/otel-profiling-agent/tools/coredump/modulestore"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/modulestore"
 )
 
 // CoredumpTestCase is the data structure generated from the core dump.

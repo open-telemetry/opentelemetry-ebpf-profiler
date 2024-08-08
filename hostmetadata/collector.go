@@ -10,7 +10,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
 )
 
 // Collector implements host metadata collection and reporting

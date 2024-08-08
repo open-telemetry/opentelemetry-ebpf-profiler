@@ -13,9 +13,9 @@ import (
 	"testing"
 
 	"github.com/elastic/go-freelru"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/lpm"
-	"github.com/elastic/otel-profiling-agent/remotememory"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/lpm"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

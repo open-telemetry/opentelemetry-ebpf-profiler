@@ -19,7 +19,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/elastic/otel-profiling-agent/tools/coredump/modulestore"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/modulestore"
 	"github.com/peterbourgon/ff/v3/ffcli"
 	log "github.com/sirupsen/logrus"
 )

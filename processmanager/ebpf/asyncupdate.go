@@ -12,7 +12,7 @@ import (
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
-	"github.com/elastic/otel-profiling-agent/host"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
 	log "github.com/sirupsen/logrus"
 )
 

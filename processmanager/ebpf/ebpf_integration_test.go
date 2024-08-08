@@ -13,10 +13,10 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 
-	"github.com/elastic/otel-profiling-agent/lpm"
-	"github.com/elastic/otel-profiling-agent/rlimit"
-	"github.com/elastic/otel-profiling-agent/support"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/lpm"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

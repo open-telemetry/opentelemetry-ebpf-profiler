@@ -11,8 +11,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // TraceHash is used for unique identifiers for traces, and is required to be 64-bits

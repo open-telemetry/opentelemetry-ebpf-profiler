@@ -10,8 +10,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/elastic/otel-profiling-agent/libpf/readatbuf"
-	"github.com/elastic/otel-profiling-agent/testsupport"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/readatbuf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/testsupport"
 	"github.com/stretchr/testify/require"
 )
 

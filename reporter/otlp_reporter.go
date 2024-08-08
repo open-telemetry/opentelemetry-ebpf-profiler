@@ -20,9 +20,9 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/xsync"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
 	"go.opentelemetry.io/otel/attribute"

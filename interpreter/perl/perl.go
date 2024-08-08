@@ -52,7 +52,7 @@ import (
 	"debug/elf"
 	"regexp"
 
-	"github.com/elastic/otel-profiling-agent/interpreter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
 )
 
 //nolint:golint,stylecheck,revive

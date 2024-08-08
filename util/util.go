@@ -15,7 +15,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/libpf/hash"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/hash"
 )
 
 // PID represent Unix Process ID (pid_t)
