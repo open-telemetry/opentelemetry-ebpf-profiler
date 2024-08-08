@@ -1,4 +1,4 @@
-module github.com/elastic/otel-profiling-agent
+module github.com/open-telemetry/opentelemetry-ebpf-profiler
 
 go 1.22.2
 
