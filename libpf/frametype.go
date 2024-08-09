@@ -9,7 +9,7 @@ package libpf
 import (
 	"fmt"
 
-	"github.com/elastic/otel-profiling-agent/support"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
 )
 
 // FrameType defines the type of frame. This usually corresponds to the interpreter type that

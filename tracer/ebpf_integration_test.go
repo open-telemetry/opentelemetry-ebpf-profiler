@@ -17,14 +17,14 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
+	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
 
-	"github.com/elastic/otel-profiling-agent/host"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/reporter"
-	"github.com/elastic/otel-profiling-agent/rlimit"
-	"github.com/elastic/otel-profiling-agent/support"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

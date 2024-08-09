@@ -35,9 +35,9 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/readatbuf"
-	"github.com/elastic/otel-profiling-agent/remotememory"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/readatbuf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
 )
 
 const (

@@ -19,10 +19,10 @@ import (
 	"github.com/peterbourgon/ff/v3/ffcli"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/process"
-	"github.com/elastic/otel-profiling-agent/tools/coredump/modulestore"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/modulestore"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 type analyzeCmd struct {

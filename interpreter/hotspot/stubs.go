@@ -13,10 +13,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/elastic/otel-profiling-agent/armhelpers"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/remotememory"
-	"github.com/elastic/otel-profiling-agent/support"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/armhelpers"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
 	aa "golang.org/x/arch/arm64/arm64asm"
 
 	log "github.com/sirupsen/logrus"

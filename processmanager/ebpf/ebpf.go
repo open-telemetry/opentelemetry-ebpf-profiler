@@ -19,15 +19,15 @@ import (
 	"golang.org/x/exp/constraints"
 	"golang.org/x/sys/unix"
 
-	"github.com/elastic/otel-profiling-agent/host"
-	"github.com/elastic/otel-profiling-agent/interpreter"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/lpm"
-	"github.com/elastic/otel-profiling-agent/metrics"
-	sdtypes "github.com/elastic/otel-profiling-agent/nativeunwind/stackdeltatypes"
-	"github.com/elastic/otel-profiling-agent/rlimit"
-	"github.com/elastic/otel-profiling-agent/support"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/lpm"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
+	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 /*

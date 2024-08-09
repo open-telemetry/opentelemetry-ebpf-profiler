@@ -12,10 +12,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	npsr "github.com/elastic/otel-profiling-agent/nopanicslicereader"
-	"github.com/elastic/otel-profiling-agent/reporter"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	npsr "github.com/open-telemetry/opentelemetry-ebpf-profiler/nopanicslicereader"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // Constants for the JVM internals that have never changed

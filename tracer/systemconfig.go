@@ -15,16 +15,16 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/elastic/otel-profiling-agent/rlimit"
-	"github.com/elastic/otel-profiling-agent/tracer/types"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/pacmask"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/pacmask"
 )
 
 // #include "../support/ebpf/types.h"

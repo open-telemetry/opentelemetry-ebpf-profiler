@@ -12,16 +12,16 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 
-	"github.com/elastic/otel-profiling-agent/host"
-	"github.com/elastic/otel-profiling-agent/interpreter"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/metrics"
-	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
-	eim "github.com/elastic/otel-profiling-agent/processmanager/execinfomanager"
-	"github.com/elastic/otel-profiling-agent/reporter"
-	"github.com/elastic/otel-profiling-agent/tpbase"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
+	pmebpf "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager/ebpf"
+	eim "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager/execinfomanager"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tpbase"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // elfInfo contains cached data from an executable needed for processing mappings.

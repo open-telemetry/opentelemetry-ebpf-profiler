@@ -9,8 +9,8 @@ package traceutil
 import (
 	"testing"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/support"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
 
 	"github.com/stretchr/testify/assert"
 )

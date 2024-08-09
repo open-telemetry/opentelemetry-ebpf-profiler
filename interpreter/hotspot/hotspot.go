@@ -113,8 +113,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/interpreter"
-	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 )
 
 var (

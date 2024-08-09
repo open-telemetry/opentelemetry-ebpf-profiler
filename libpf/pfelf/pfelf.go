@@ -20,7 +20,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 )
 
 // SafeOpenELF opens the given ELF file in a safely way in that

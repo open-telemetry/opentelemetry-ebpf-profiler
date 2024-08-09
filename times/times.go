@@ -17,8 +17,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
-	"github.com/elastic/otel-profiling-agent/periodiccaller"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/periodiccaller"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 const (

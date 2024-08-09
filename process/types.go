@@ -13,10 +13,10 @@ import (
 	"io"
 	"strings"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/remotememory"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // vdsoPathName is the path to use for VDSO mappings

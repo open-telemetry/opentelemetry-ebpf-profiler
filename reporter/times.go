@@ -9,7 +9,7 @@ package reporter
 import (
 	"time"
 
-	"github.com/elastic/otel-profiling-agent/times"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 )
 
 // Compile time check to make sure config.Times satisfies the interfaces.

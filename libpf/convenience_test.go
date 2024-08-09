@@ -9,7 +9,7 @@ package libpf
 import (
 	"testing"
 
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 
 	"github.com/stretchr/testify/assert"
 )

@@ -15,10 +15,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/nativeunwind/elfunwindinfo"
-	sdtypes "github.com/elastic/otel-profiling-agent/nativeunwind/stackdeltatypes"
-	"github.com/elastic/otel-profiling-agent/support"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/elfunwindinfo"
+	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
 )
 
 var (

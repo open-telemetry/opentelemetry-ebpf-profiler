@@ -11,8 +11,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/elastic/otel-profiling-agent/testsupport"
-	zstpak "github.com/elastic/otel-profiling-agent/tools/zstpak/lib"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/testsupport"
+	zstpak "github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/zstpak/lib"
 	"github.com/stretchr/testify/require"
 )
 

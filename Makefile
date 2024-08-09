@@ -39,9 +39,9 @@ VERSION ?= v0.0.0
 BUILD_TIMESTAMP ?= $(shell date +%s)
 REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
 
-LDFLAGS := -X github.com/elastic/otel-profiling-agent/vc.version=$(VERSION) \
-	-X github.com/elastic/otel-profiling-agent/vc.revision=$(REVISION) \
-	-X github.com/elastic/otel-profiling-agent/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
+LDFLAGS := -X github.com//open-telemetry/opentelemetry-ebpf-profiler/vc.version=$(VERSION) \
+	-X github.com/open-telemetry/opentelemetry-ebpf-profiler/vc.revision=$(REVISION) \
+	-X github.com/open-telemetry/opentelemetry-ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
 	-extldflags=-static
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)" -tags osusergo,netgo

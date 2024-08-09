@@ -12,7 +12,7 @@ import (
 	"errors"
 	"unsafe"
 
-	_ "github.com/elastic/otel-profiling-agent/zydis" // links Zydis
+	_ "github.com/open-telemetry/opentelemetry-ebpf-profiler/zydis" // links Zydis
 )
 
 // #cgo CFLAGS: -g -Wall

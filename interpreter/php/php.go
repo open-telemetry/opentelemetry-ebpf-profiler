@@ -18,12 +18,12 @@ import (
 
 	"github.com/elastic/go-freelru"
 
-	"github.com/elastic/otel-profiling-agent/interpreter"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/remotememory"
-	"github.com/elastic/otel-profiling-agent/support"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // #include "../../support/ebpf/types.h"

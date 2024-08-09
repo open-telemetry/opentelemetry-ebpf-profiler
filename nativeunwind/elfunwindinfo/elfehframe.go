@@ -17,9 +17,9 @@ import (
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/libpf/hash"
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	sdtypes "github.com/elastic/otel-profiling-agent/nativeunwind/stackdeltatypes"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/hash"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
+	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
 )
 
 const (

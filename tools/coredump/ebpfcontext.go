@@ -9,9 +9,9 @@ package main
 import (
 	"unsafe"
 
-	"github.com/elastic/otel-profiling-agent/host"
-	"github.com/elastic/otel-profiling-agent/process"
-	"github.com/elastic/otel-profiling-agent/remotememory"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
 )
 
 /*

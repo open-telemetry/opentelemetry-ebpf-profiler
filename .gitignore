@@ -3,6 +3,6 @@
 .cache
 /.idea
 /go
-otel-profiling-agent
+opentelemetry-ebpf-profiler
 ci-kernels
 

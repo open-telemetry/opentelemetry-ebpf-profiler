@@ -11,9 +11,9 @@ package processmanager
 import (
 	"fmt"
 
-	"github.com/elastic/otel-profiling-agent/host"
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	sdtypes "github.com/elastic/otel-profiling-agent/nativeunwind/stackdeltatypes"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
+	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
 )
 
 // createVDSOSyntheticRecord creates a generated stack-delta record spanning the entire vDSO binary,

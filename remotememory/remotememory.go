@@ -17,8 +17,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // RemoteMemory implements a set of convenience functions to access the remote memory

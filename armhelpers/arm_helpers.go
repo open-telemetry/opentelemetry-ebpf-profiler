@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/elastic/otel-profiling-agent/stringutil"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/stringutil"
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
 

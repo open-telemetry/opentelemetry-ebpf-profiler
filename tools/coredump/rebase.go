@@ -15,7 +15,7 @@ import (
 
 	"github.com/peterbourgon/ff/v3/ffcli"
 
-	"github.com/elastic/otel-profiling-agent/tools/coredump/modulestore"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/modulestore"
 )
 
 type rebaseCmd struct {

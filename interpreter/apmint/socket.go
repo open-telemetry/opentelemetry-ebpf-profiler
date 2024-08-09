@@ -21,10 +21,10 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/xsync"
-	"github.com/elastic/otel-profiling-agent/stringutil"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/stringutil"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // sendSocket is the shared, unbound socket that we use for communication with

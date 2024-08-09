@@ -14,13 +14,13 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
-	"github.com/elastic/otel-profiling-agent/times"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/host"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/reporter"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // metadataWarnInhibDuration defines the minimum duration between warnings printed

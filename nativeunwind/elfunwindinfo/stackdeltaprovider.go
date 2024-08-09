@@ -12,10 +12,10 @@ import (
 	"os"
 	"sync/atomic"
 
-	"github.com/elastic/otel-profiling-agent/host"
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/nativeunwind"
-	sdtypes "github.com/elastic/otel-profiling-agent/nativeunwind/stackdeltatypes"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind"
+	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
 )
 
 // ELFStackDeltaProvider extracts stack deltas from ELF executables available

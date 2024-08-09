@@ -17,16 +17,16 @@ import (
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
-	"github.com/elastic/otel-profiling-agent/reporter"
-	tracertypes "github.com/elastic/otel-profiling-agent/tracer/types"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
 
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/xsync"
-	"github.com/elastic/otel-profiling-agent/nativeunwind/elfunwindinfo"
-	"github.com/elastic/otel-profiling-agent/process"
-	pm "github.com/elastic/otel-profiling-agent/processmanager"
-	"github.com/elastic/otel-profiling-agent/support"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/elfunwindinfo"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
+	pm "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // #include <stdlib.h>

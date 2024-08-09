@@ -11,9 +11,9 @@ import (
 	"fmt"
 	"regexp"
 
-	ah "github.com/elastic/otel-profiling-agent/armhelpers"
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/stringutil"
+	ah "github.com/open-telemetry/opentelemetry-ebpf-profiler/armhelpers"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/stringutil"
 
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
