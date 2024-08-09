@@ -744,8 +744,8 @@ func createFunctionEntry(funcMap map[funcInfo]uint64,
 
 // getSampleAttributes builds a sample-specific list of attributes.
 func getSampleAttributes(profile *profiles.Profile,
-	k traceAndMetaKey, attributeMap map[string]uint64) []uint64 {
-	indices := make([]uint64, 0, 4)
+	traceKey traceAndMetaKey, attributeMap map[string]uint64) []uint64 {
+	indices := make([]uint64, 0, 3)
 
 	addAttr := func(k attribute.Key, v string) {
 		if v == "" {
@@ -765,9 +765,9 @@ func getSampleAttributes(profile *profiles.Profile,
 		attributeMap[attributeCompositeKey] = newIndex
 	}
 
-	addAttr(semconv.ContainerIDKey, k.containerID)
-	addAttr(semconv.ThreadNameKey, k.comm)
-	addAttr(semconv.ServiceNameKey, k.apmServiceName)
+	addAttr(semconv.ContainerIDKey, traceKey.containerID)
+	addAttr(semconv.ThreadNameKey, traceKey.comm)
+	addAttr(semconv.ServiceNameKey, traceKey.apmServiceName)
 
 	return indices
 }
