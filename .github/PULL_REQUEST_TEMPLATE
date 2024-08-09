@@ -1,8 +1,0 @@
-Thank you for considering a contribution!
-
-Please be aware that we currently won't merge 3rd party PRs because this repository
-is temporary. We are waiting for the decision of the OpenTelemetry technical
-commitee on the donation of this repository.
-
-In case the donation gets accepted, this repository will move to the [GitHub open-telemetry organization](https://github.com/open-telemetry),
-which requires signing a different CLA. At that point we will start working on reviewing and merging 3rd party PRs.
