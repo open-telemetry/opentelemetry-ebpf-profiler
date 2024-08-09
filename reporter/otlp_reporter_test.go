@@ -1,24 +1,24 @@
 package reporter
 
 import (
+	"testing"
+
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/stretchr/testify/require"
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1experimental"
-	"testing"
 )
 
 func TestGetSampleAttributes(t *testing.T) {
-
 	tests := map[string]struct {
-		profile                profiles.Profile
+		profile                *profiles.Profile
 		k                      []traceAndMetaKey
 		attributeMap           map[string]uint64
 		expectedIndices        [][]uint64
 		expectedAttributeTable []*common.KeyValue
 	}{
 		"empty": {
-			profile: profiles.Profile{},
+			profile: &profiles.Profile{},
 			k: []traceAndMetaKey{
 				{
 					hash:           libpf.TraceHash{},
@@ -32,7 +32,7 @@ func TestGetSampleAttributes(t *testing.T) {
 			expectedAttributeTable: nil,
 		},
 		"duplicate": {
-			profile: profiles.Profile{},
+			profile: &profiles.Profile{},
 			k: []traceAndMetaKey{
 				{
 					hash:           libpf.TraceHash{},
@@ -51,21 +51,27 @@ func TestGetSampleAttributes(t *testing.T) {
 			expectedIndices: [][]uint64{{0, 1, 2}, {0, 1, 2}},
 			expectedAttributeTable: []*common.KeyValue{
 				{
-					Key:   "container.id",
-					Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "containerID1"}},
+					Key: "container.id",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "containerID1"},
+					},
 				},
 				{
-					Key:   "thread.name",
-					Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "comm1"}},
+					Key: "thread.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "comm1"},
+					},
 				},
 				{
-					Key:   "service.name",
-					Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "apmServiceName1"}},
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "apmServiceName1"},
+					},
 				},
 			},
 		},
 		"different": {
-			profile: profiles.Profile{},
+			profile: &profiles.Profile{},
 			k: []traceAndMetaKey{
 				{
 					hash:           libpf.TraceHash{},
@@ -84,28 +90,40 @@ func TestGetSampleAttributes(t *testing.T) {
 			expectedIndices: [][]uint64{{0, 1, 2}, {3, 4, 5}},
 			expectedAttributeTable: []*common.KeyValue{
 				{
-					Key:   "container.id",
-					Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "containerID1"}},
+					Key: "container.id",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "containerID1"},
+					},
 				},
 				{
-					Key:   "thread.name",
-					Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "comm1"}},
+					Key: "thread.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "comm1"},
+					},
 				},
 				{
-					Key:   "service.name",
-					Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "apmServiceName1"}},
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "apmServiceName1"},
+					},
 				},
 				{
-					Key:   "container.id",
-					Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "containerID2"}},
+					Key: "container.id",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "containerID2"},
+					},
 				},
 				{
-					Key:   "thread.name",
-					Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "comm2"}},
+					Key: "thread.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "comm2"},
+					},
 				},
 				{
-					Key:   "service.name",
-					Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: "apmServiceName2"}},
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "apmServiceName2"},
+					},
 				},
 			},
 		},
@@ -117,7 +135,7 @@ func TestGetSampleAttributes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			indices := make([][]uint64, 0)
 			for _, k := range tc.k {
-				indices = append(indices, getSampleAttributes(&tc.profile, k, &tc.attributeMap))
+				indices = append(indices, getSampleAttributes(tc.profile, k, tc.attributeMap))
 			}
 			require.Equal(t, tc.expectedIndices, indices)
 			require.Equal(t, tc.expectedAttributeTable, tc.profile.AttributeTable)

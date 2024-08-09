@@ -673,7 +673,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 			profile.Location = append(profile.Location, loc)
 		}
 
-		sample.Attributes = getSampleAttributes(profile, traceKey, &attributeMap)
+		sample.Attributes = getSampleAttributes(profile, traceKey, attributeMap)
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
 		locationIndex += sample.LocationsLength
 
@@ -743,7 +743,8 @@ func createFunctionEntry(funcMap map[funcInfo]uint64,
 }
 
 // getSampleAttributes builds a sample-specific list of attributes.
-func getSampleAttributes(profile *profiles.Profile, k traceAndMetaKey, attributeMap *map[string]uint64) []uint64 {
+func getSampleAttributes(profile *profiles.Profile,
+	k traceAndMetaKey, attributeMap map[string]uint64) []uint64 {
 	indices := make([]uint64, 0, 4)
 
 	addAttr := func(k attribute.Key, v string) {
@@ -751,7 +752,7 @@ func getSampleAttributes(profile *profiles.Profile, k traceAndMetaKey, attribute
 			return
 		}
 		attributeCompositeKey := string(k) + "_" + v
-		if attributeIndex, exists := (*attributeMap)[attributeCompositeKey]; exists {
+		if attributeIndex, exists := attributeMap[attributeCompositeKey]; exists {
 			indices = append(indices, attributeIndex)
 			return
 		}
@@ -761,7 +762,7 @@ func getSampleAttributes(profile *profiles.Profile, k traceAndMetaKey, attribute
 			Key:   string(k),
 			Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: v}},
 		})
-		(*attributeMap)[attributeCompositeKey] = newIndex
+		attributeMap[attributeCompositeKey] = newIndex
 	}
 
 	addAttr(semconv.ContainerIDKey, k.containerID)
