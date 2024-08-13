@@ -503,6 +503,11 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 	funcMap := make(map[funcInfo]uint64)
 	funcMap[funcInfo{name: "", fileName: ""}] = 0
 
+	// attributeMap is a temporary helper that maps attribute values to
+	// their respective indices.
+	// This is to ensure that AttributeTable does not contain duplicates.
+	attributeMap := make(map[string]uint64)
+
 	numSamples := len(samples)
 	profile = &profiles.Profile{
 		// SampleType - Next step: Figure out the correct SampleType.
@@ -668,7 +673,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 			profile.Location = append(profile.Location, loc)
 		}
 
-		sample.Attributes = getSampleAttributes(profile, traceKey)
+		sample.Attributes = getSampleAttributes(profile, traceKey, attributeMap)
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
 		locationIndex += sample.LocationsLength
 
@@ -738,24 +743,31 @@ func createFunctionEntry(funcMap map[funcInfo]uint64,
 }
 
 // getSampleAttributes builds a sample-specific list of attributes.
-func getSampleAttributes(profile *profiles.Profile, k traceAndMetaKey) []uint64 {
-	indices := make([]uint64, 0, 4)
+func getSampleAttributes(profile *profiles.Profile,
+	traceKey traceAndMetaKey, attributeMap map[string]uint64) []uint64 {
+	indices := make([]uint64, 0, 3)
 
 	addAttr := func(k attribute.Key, v string) {
 		if v == "" {
 			return
 		}
-
-		indices = append(indices, uint64(len(profile.AttributeTable)))
+		attributeCompositeKey := string(k) + "_" + v
+		if attributeIndex, exists := attributeMap[attributeCompositeKey]; exists {
+			indices = append(indices, attributeIndex)
+			return
+		}
+		newIndex := uint64(len(profile.AttributeTable))
+		indices = append(indices, newIndex)
 		profile.AttributeTable = append(profile.AttributeTable, &common.KeyValue{
 			Key:   string(k),
 			Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: v}},
 		})
+		attributeMap[attributeCompositeKey] = newIndex
 	}
 
-	addAttr(semconv.ContainerIDKey, k.containerID)
-	addAttr(semconv.ThreadNameKey, k.comm)
-	addAttr(semconv.ServiceNameKey, k.apmServiceName)
+	addAttr(semconv.ContainerIDKey, traceKey.containerID)
+	addAttr(semconv.ThreadNameKey, traceKey.comm)
+	addAttr(semconv.ServiceNameKey, traceKey.apmServiceName)
 
 	return indices
 }
