@@ -206,7 +206,7 @@ func (sp *systemProcess) GetMappingFileLastModified(m *Mapping) int64 {
 	filename := sp.getMappingFile(m)
 	if filename != "" {
 		var st unix.Stat_t
-		if err := unix.Stat(filename, &st); err != nil {
+		if err := unix.Stat(filename, &st); err == nil {
 			return st.Mtim.Nano()
 		}
 	}
