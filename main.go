@@ -10,32 +10,26 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof" //nolint:gosec
 	"os"
 	"os/signal"
 	"runtime"
 	"time"
 
-	//nolint:gosec
-	_ "net/http/pprof"
-
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
-	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/vc"
+	log "github.com/sirupsen/logrus"
 	"github.com/tklauser/numcpus"
 	"golang.org/x/sys/unix"
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracehandler"
-
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/hostmetadata"
-
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
-
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracehandler"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer"
-
-	log "github.com/sirupsen/logrus"
+	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/vc"
 )
 
 // Short copyright / license text for eBPF code
@@ -191,9 +185,17 @@ func mainWithExitCode() exitCode {
 		KernelVersion:          kernelVersion,
 		HostName:               hostname,
 		IPAddress:              sourceIP,
+		DisableJitter:          args.benchDataDir == "",
 	})
 	if err != nil {
 		return failure("Failed to start reporting: %v", err)
+	}
+
+	if args.benchDataDir != "" {
+		rep, err = reporter.NewBenchmarkReporter(args.benchDataDir, rep)
+		if err != nil {
+			return failure("Failed to create benchmark reporter: %v", err)
+		}
 	}
 
 	metrics.SetReporter(rep)

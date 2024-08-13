@@ -25,6 +25,8 @@ type Config struct {
 	// MaxRPCMsgSize defines the maximum size of a gRPC message.
 	MaxRPCMsgSize int
 
+	// DisableJitter disables the jitter in the report interval.
+	DisableJitter bool
 	// Disable secure communication with Collection Agent.
 	DisableTLS bool
 	// CacheSize defines the size of the reporter caches.

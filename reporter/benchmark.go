@@ -1,0 +1,204 @@
+package reporter
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+)
+
+// compile time check for interface implementation
+var _ Reporter = (*BenchmarkReporter)(nil)
+
+type BenchmarkReporter struct {
+	benchDataDir string
+	rep          Reporter
+	uid          int
+	gid          int
+}
+
+func (r *BenchmarkReporter) ReportFramesForTrace(trace *libpf.Trace) {
+	r.store("FramesForTrace", trace)
+	r.rep.ReportFramesForTrace(trace)
+}
+
+type countForTrace struct {
+	TraceHash libpf.TraceHash
+	Meta      *TraceEventMeta
+	Count     uint16
+}
+
+func (r *BenchmarkReporter) ReportCountForTrace(traceHash libpf.TraceHash,
+	count uint16, meta *TraceEventMeta) {
+	r.store("CountForTrace", &countForTrace{
+		TraceHash: traceHash,
+		Meta:      meta,
+		Count:     count,
+	})
+	r.rep.ReportCountForTrace(traceHash, count, meta)
+}
+
+func (r *BenchmarkReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta) {
+	r.store("TraceEvent", &traceEvent{
+		Trace: trace,
+		Meta:  meta,
+	})
+	r.rep.ReportTraceEvent(trace, meta)
+}
+
+func (r *BenchmarkReporter) SupportsReportTraceEvent() bool {
+	return r.rep.SupportsReportTraceEvent()
+}
+
+type fallbackSymbol struct {
+	FrameID libpf.FrameID
+	Symbol  string
+}
+
+func (r *BenchmarkReporter) ReportFallbackSymbol(frameID libpf.FrameID, symbol string) {
+	r.store("FallbackSymbol", &fallbackSymbol{
+		FrameID: frameID,
+		Symbol:  symbol,
+	})
+	r.rep.ReportFallbackSymbol(frameID, symbol)
+}
+
+func (r *BenchmarkReporter) ExecutableMetadata(ctx context.Context, fileID libpf.FileID,
+	fileName, buildID string, interp libpf.InterpreterType, open ExecutableOpener) {
+	r.rep.ExecutableMetadata(ctx, fileID, fileName, buildID, interp, open)
+}
+
+type frameMetadata struct {
+	FileID         libpf.FileID
+	AddressOrLine  libpf.AddressOrLineno
+	LineNumber     util.SourceLineno
+	FunctionOffset uint32
+	FunctionName   string
+	FilePath       string
+}
+
+func (r *BenchmarkReporter) FrameMetadata(fileID libpf.FileID, addressOrLine libpf.AddressOrLineno,
+	lineNumber util.SourceLineno, functionOffset uint32, functionName, filePath string) {
+	r.store("FrameMetadata", &frameMetadata{
+		FileID:         fileID,
+		AddressOrLine:  addressOrLine,
+		LineNumber:     lineNumber,
+		FunctionOffset: functionOffset,
+		FunctionName:   functionName,
+		FilePath:       filePath,
+	})
+	r.rep.FrameMetadata(fileID, addressOrLine, lineNumber, functionOffset, functionName, filePath)
+}
+
+func (r *BenchmarkReporter) ReportHostMetadata(metadata map[string]string) {
+	r.rep.ReportHostMetadata(metadata)
+}
+
+func (r *BenchmarkReporter) ReportHostMetadataBlocking(ctx context.Context,
+	metadataMap map[string]string, maxRetries int, waitRetry time.Duration) error {
+	return r.rep.ReportHostMetadataBlocking(ctx, metadataMap, maxRetries, waitRetry)
+}
+
+type metrics struct {
+	Timestamp uint32
+	IDs       []uint32
+	Values    []int64
+}
+
+func (r *BenchmarkReporter) ReportMetrics(timestamp uint32, ids []uint32, values []int64) {
+	r.store("Metrics", &metrics{
+		Timestamp: timestamp,
+		IDs:       ids,
+		Values:    values,
+	})
+	r.rep.ReportMetrics(timestamp, ids, values)
+}
+
+func (r *BenchmarkReporter) Stop() {
+	r.rep.Stop()
+}
+
+func (r *BenchmarkReporter) GetMetrics() Metrics {
+	return r.rep.GetMetrics()
+}
+
+func NewBenchmarkReporter(benchDataDir string, rep Reporter) (*BenchmarkReporter, error) {
+	r := &BenchmarkReporter{
+		benchDataDir: benchDataDir,
+		rep:          rep,
+	}
+
+	if uid := os.Getenv("SUDO_UID"); uid != "" {
+		r.uid, _ = strconv.Atoi(uid)
+	}
+	if gid := os.Getenv("SUDO_GID"); gid != "" {
+		r.gid, _ = strconv.Atoi(gid)
+	}
+
+	if err := os.MkdirAll(benchDataDir, 0o755); err != nil {
+		return nil, err
+	}
+
+	if r.uid != 0 || r.gid != 0 {
+		r.changeDirOwner(benchDataDir)
+	}
+
+	// Just for storing the initial timestamp.
+	r.store("Start", libpf.Void{})
+
+	return r, nil
+}
+
+type traceEvent struct {
+	Trace *libpf.Trace
+	Meta  *TraceEventMeta
+}
+
+var counter atomic.Uint64
+
+// store stores data as JSON.
+func (r *BenchmarkReporter) store(name string, data any) {
+	ts := time.Now().UnixNano()
+	id := counter.Add(1)
+	fileName := fmt.Sprintf("%d_%06x_%s.json", ts, id, name)
+	pathName := path.Join(r.benchDataDir, fileName)
+
+	// encode data to JSON
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		panic(err)
+	}
+
+	//nolint:gosec
+	if err = os.WriteFile(pathName, bytes, 0o644); err != nil {
+		panic(err)
+	}
+
+	r.changeOwner(pathName)
+}
+
+func (r *BenchmarkReporter) changeOwner(pathName string) {
+	if err := os.Chown(pathName, r.uid, r.gid); err != nil {
+		log.Errorf("Failed to change ownership of %s to %d:%d: %v",
+			pathName, r.uid, r.gid, err)
+	}
+}
+
+func (r *BenchmarkReporter) changeDirOwner(dirName string) {
+	dirs := strings.Split(dirName, "/")
+	for i := 1; i <= len(dirs); i++ {
+		dir := filepath.Join(dirs[:i]...)
+		r.changeOwner(dir)
+	}
+}

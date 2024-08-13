@@ -20,9 +20,6 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
 	"go.opentelemetry.io/otel/attribute"
@@ -34,6 +31,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 var (
@@ -356,6 +357,10 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 	r.client = otlpcollector.NewProfilesServiceClient(otlpGrpcConn)
 
 	go func() {
+		jitter := 0.2
+		if cfg.DisableJitter {
+			jitter = 0
+		}
 		tick := time.NewTicker(cfg.ReportInterval)
 		defer tick.Stop()
 		for {
@@ -368,7 +373,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 				if err := r.reportOTLPProfile(ctx); err != nil {
 					log.Errorf("Request failed: %v", err)
 				}
-				tick.Reset(libpf.AddJitter(cfg.ReportInterval, 0.2))
+				tick.Reset(libpf.AddJitter(cfg.ReportInterval, jitter))
 			}
 		}
 	}()

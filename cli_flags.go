@@ -28,6 +28,7 @@ const (
 	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
 	defaultProbabilisticInterval  = 1 * time.Minute
 	defaultArgSendErrorFrames     = false
+	defaultArgBenchDataDir        = ""
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -69,9 +70,11 @@ var (
 		"If zero, monotonic-realtime clock sync will be performed once, " +
 		"on agent startup, but not periodically."
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
+	benchDataDirHelp    = "Directory to store data for benchmarking."
 )
 
 type arguments struct {
+	benchDataDir           string
 	bpfVerifierLogLevel    uint
 	bpfVerifierLogSize     int
 	collAgentAddr          string
@@ -146,6 +149,9 @@ func parseArgs() (*arguments, error) {
 	fs.BoolVar(&args.verboseMode, "v", false, "Shorthand for -verbose.")
 	fs.BoolVar(&args.verboseMode, "verbose", false, verboseModeHelp)
 	fs.BoolVar(&args.version, "version", false, versionHelp)
+
+	fs.StringVar(&args.benchDataDir, "bench-data-dir", defaultArgBenchDataDir,
+		benchDataDirHelp)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()
