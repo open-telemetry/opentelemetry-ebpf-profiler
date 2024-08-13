@@ -13,7 +13,7 @@ Invoking the design document process can be beneficial if
 - you are proposing a major addition and want to make sure that it will
   actually be accepted upstream the way that you plan to implement it without
   writing the code first (and thus risking need for major reworks later).
-- your proposed changes require a signficant amount of context to understand
+- your proposed changes require a significant amount of context to understand
   for reviewers. A short design document can help to clarify the current state
   and the state that you'd like to move towards in these cases.
 - you'd like to incrementally apply reworks over the course of multiple

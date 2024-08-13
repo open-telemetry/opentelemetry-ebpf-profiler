@@ -661,7 +661,7 @@ identifiers.
 
 BPF is currently using a hand-rolled, custom hashing scheme. The scheme was
 chosen primarily for simplicity and is likely neither the fastest, nor the most
-collision resistent function imaginable. We already have XXH3 as a dependency
+collision resistant function imaginable. We already have XXH3 as a dependency
 anyway, so I suggest that we just use that. It's very fast and provides a pretty
 reasonable output distribution.
 
