@@ -515,7 +515,11 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
 // Container for a stack trace
 typedef struct Trace {
   // The process ID
+  // NOTE: Confusingly, this is what Linux calls "tgid"
   u32 pid;
+  // The thread ID
+  // NOTE: Confusingly, this is what Linux calls "pid".
+  u32 tid;
   // Monotonic kernel time in nanosecond precision.
   u64 ktime;
   // The current COMM of the thread of this Trace.

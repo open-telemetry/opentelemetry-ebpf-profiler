@@ -36,13 +36,13 @@ type TraceReporter interface {
 	// ReportCountForTrace accepts a hash of a trace with a corresponding count and
 	// caches this information before a periodic reporting to the backend.
 	ReportCountForTrace(traceHash libpf.TraceHash, timestamp libpf.UnixTime64,
-		count uint16, comm, apmServiceName string, pid util.PID)
+		count uint16, comm, apmServiceName string, pid, tid util.PID)
 
 	// ReportTraceEvent accepts a trace event (trace metadata with frames and counts)
 	// and caches it for reporting to the backend. It returns true if the event was
 	// enqueued for reporting, and false if the event was ignored.
 	ReportTraceEvent(trace *libpf.Trace, timestamp libpf.UnixTime64,
-		comm, apmServiceName string, pid util.PID)
+		comm, apmServiceName string, pid, tid util.PID)
 
 	// SupportsReportTraceEvent returns true if the reporter supports reporting trace events
 	// via ReportTraceEvent().
