@@ -30,6 +30,7 @@ const (
 	defaultArgSendErrorFrames     = false
 	defaultArgBenchDataDir        = ""
 	defaultArgBenchProtoDir       = ""
+	defaultArgBenchReplay         = false
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -73,11 +74,13 @@ var (
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
 	benchDataDirHelp    = "Directory to store data for benchmarking."
 	benchProtoDirHelp   = "Directory to store raw protobuf wire messages."
+	benchReplayHelp     = "Replay data from -bench-data-dir directory."
 )
 
 type arguments struct {
 	benchDataDir           string
 	benchProtoDir          string
+	benchReplay            bool
 	bpfVerifierLogLevel    uint
 	bpfVerifierLogSize     int
 	collAgentAddr          string
@@ -157,6 +160,8 @@ func parseArgs() (*arguments, error) {
 		benchDataDirHelp)
 	fs.StringVar(&args.benchProtoDir, "bench-proto-dir", defaultArgBenchProtoDir,
 		benchProtoDirHelp)
+	fs.BoolVar(&args.benchReplay, "bench-replay", defaultArgBenchReplay,
+		benchReplayHelp)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()

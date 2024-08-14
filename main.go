@@ -191,6 +191,12 @@ func mainWithExitCode() exitCode {
 	}
 
 	if args.benchDataDir != "" {
+		if args.benchReplay {
+			if err = reporter.Replay(mainCtx, args.benchDataDir, rep); err != nil {
+				return failure("Failed to replay benchmark data: %v", err)
+			}
+			return exitSuccess
+		}
 		rep, err = reporter.NewBenchmarkReporter(args.benchDataDir, rep)
 		if err != nil {
 			return failure("Failed to create benchmark reporter: %v", err)
@@ -345,6 +351,10 @@ func sanityCheck(args *arguments) exitCode {
 			return failure("Host Agent requires kernel version "+
 				"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
 		}
+	}
+
+	if args.benchReplay && args.benchDataDir == "" {
+		return failure("Replay requested but no data directory specified")
 	}
 
 	return exitSuccess
