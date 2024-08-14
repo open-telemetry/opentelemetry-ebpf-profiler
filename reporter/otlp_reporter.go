@@ -157,26 +157,25 @@ func hashString(s string) uint32 {
 func (r *OTLPReporter) SupportsReportTraceEvent() bool { return true }
 
 // ReportTraceEvent enqueues reported trace events for the OTLP reporter.
-func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
-	timestamp libpf.UnixTime64, comm, apmServiceName string, pid, _ util.PID) {
+func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta) {
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 
-	containerID, err := r.lookupCgroupv2(pid)
+	containerID, err := r.lookupCgroupv2(meta.PID)
 	if err != nil {
 		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
-			pid, err)
+			meta.PID, err)
 	}
 
 	key := traceAndMetaKey{
 		hash:           trace.Hash,
-		comm:           comm,
-		apmServiceName: apmServiceName,
+		comm:           meta.Comm,
+		apmServiceName: meta.APMServiceName,
 		containerID:    containerID,
 	}
 
 	if tr, exists := (*traceEvents)[key]; exists {
-		tr.timestamps = append(tr.timestamps, uint64(timestamp))
+		tr.timestamps = append(tr.timestamps, uint64(meta.Timestamp))
 		(*traceEvents)[key] = tr
 		return
 	}
@@ -188,7 +187,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 		mappingStarts:      trace.MappingStart,
 		mappingEnds:        trace.MappingEnd,
 		mappingFileOffsets: trace.MappingFileOffsets,
-		timestamps:         []uint64{uint64(timestamp)},
+		timestamps:         []uint64{uint64(meta.Timestamp)},
 	}
 }
 
@@ -196,8 +195,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
 func (r *OTLPReporter) ReportFramesForTrace(_ *libpf.Trace) {}
 
 // ReportCountForTrace is a NOP for OTLPReporter.
-func (r *OTLPReporter) ReportCountForTrace(_ libpf.TraceHash, _ libpf.UnixTime64,
-	_ uint16, _, _ string, _, _ util.PID) {
+func (r *OTLPReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *TraceEventMeta) {
 }
 
 // ReportFallbackSymbol enqueues a fallback symbol for reporting, for a given frame.
