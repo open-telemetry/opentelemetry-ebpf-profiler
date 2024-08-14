@@ -124,14 +124,21 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	defer m.traceProcessor.SymbolizationComplete(bpfTrace.KTime)
 	timestamp := libpf.UnixTime64(m.times.BootTimeUnixNano() + int64(bpfTrace.KTime))
 
+	meta := &reporter.TraceEventMeta{
+		Timestamp:      timestamp,
+		Comm:           bpfTrace.Comm,
+		PID:            bpfTrace.PID,
+		TID:            bpfTrace.TID,
+		APMServiceName: "", // filled in below
+	}
+
 	if !m.reporter.SupportsReportTraceEvent() {
 		// Fast path: if the trace is already known remotely, we just send a counter update.
 		postConvHash, traceKnown := m.bpfTraceCache.Get(bpfTrace.Hash)
 		if traceKnown {
 			m.bpfTraceCacheHit++
-			svcName := m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, postConvHash, 1)
-			m.reporter.ReportCountForTrace(postConvHash, timestamp, 1,
-				bpfTrace.Comm, svcName, bpfTrace.PID, bpfTrace.TID)
+			meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, postConvHash, 1)
+			m.reporter.ReportCountForTrace(postConvHash, 1, meta)
 			return
 		}
 		m.bpfTraceCacheMiss++
@@ -142,14 +149,12 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	log.Debugf("Trace hash remap 0x%x -> 0x%x", bpfTrace.Hash, umTrace.Hash)
 	m.bpfTraceCache.Add(bpfTrace.Hash, umTrace.Hash)
 
-	svcName := m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
+	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
 	if m.reporter.SupportsReportTraceEvent() {
-		m.reporter.ReportTraceEvent(umTrace, timestamp,
-			bpfTrace.Comm, svcName, bpfTrace.PID, bpfTrace.TID)
+		m.reporter.ReportTraceEvent(umTrace, meta)
 		return
 	}
-	m.reporter.ReportCountForTrace(umTrace.Hash, timestamp, 1,
-		bpfTrace.Comm, svcName, bpfTrace.PID, bpfTrace.TID)
+	m.reporter.ReportCountForTrace(umTrace.Hash, 1, meta)
 
 	// Trace already known to collector by UM hash?
 	if _, known := m.umTraceCache.Get(umTrace.Hash); known {
