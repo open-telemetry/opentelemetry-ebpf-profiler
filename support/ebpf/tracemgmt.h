@@ -218,6 +218,8 @@ static inline PerCPURecord *get_pristine_per_cpu_record()
   trace->kernel_stack_id = -1;
   trace->stack_len = 0;
   trace->pid = 0;
+  trace->tid = 0;
+
   trace->apm_trace_id.as_int.hi = 0;
   trace->apm_trace_id.as_int.lo = 0;
   trace->apm_transaction_id.as_int = 0;

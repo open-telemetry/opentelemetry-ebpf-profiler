@@ -805,7 +805,8 @@ static inline
 int collect_trace(struct pt_regs *ctx) {
   // Get the PID and TGID register.
   u64 id = bpf_get_current_pid_tgid();
-  u64 pid = id >> 32;
+  u32 pid = id >> 32;
+  u32 tid = id & 0xFFFFFFFF;
 
   if (pid == 0) {
     return 0;
@@ -825,6 +826,7 @@ int collect_trace(struct pt_regs *ctx) {
 
   Trace *trace = &record->trace;
   trace->pid = pid;
+  trace->tid = tid;
   trace->ktime = ktime;
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);

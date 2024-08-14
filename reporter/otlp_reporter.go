@@ -158,7 +158,7 @@ func (r *OTLPReporter) SupportsReportTraceEvent() bool { return true }
 
 // ReportTraceEvent enqueues reported trace events for the OTLP reporter.
 func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace,
-	timestamp libpf.UnixTime64, comm, apmServiceName string, pid util.PID) {
+	timestamp libpf.UnixTime64, comm, apmServiceName string, pid, _ util.PID) {
 	traceEvents := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEvents)
 
@@ -197,7 +197,7 @@ func (r *OTLPReporter) ReportFramesForTrace(_ *libpf.Trace) {}
 
 // ReportCountForTrace is a NOP for OTLPReporter.
 func (r *OTLPReporter) ReportCountForTrace(_ libpf.TraceHash, _ libpf.UnixTime64,
-	_ uint16, _, _ string, _ util.PID) {
+	_ uint16, _, _ string, _, _ util.PID) {
 }
 
 // ReportFallbackSymbol enqueues a fallback symbol for reporting, for a given frame.
