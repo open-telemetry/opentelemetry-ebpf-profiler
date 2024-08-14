@@ -13,6 +13,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
@@ -138,26 +140,30 @@ func NewBenchmarkReporter(benchDataDir string, rep Reporter) (*BenchmarkReporter
 		benchDataDir: benchDataDir,
 		rep:          rep,
 	}
-
-	if uid := os.Getenv("SUDO_UID"); uid != "" {
-		r.uid, _ = strconv.Atoi(uid)
-	}
-	if gid := os.Getenv("SUDO_GID"); gid != "" {
-		r.gid, _ = strconv.Atoi(gid)
-	}
+	r.uid, r.gid = originUser()
 
 	if err := os.MkdirAll(benchDataDir, 0o755); err != nil {
 		return nil, err
 	}
 
 	if r.uid != 0 || r.gid != 0 {
-		r.changeDirOwner(benchDataDir)
+		changeDirOwner(benchDataDir, r.uid, r.gid)
 	}
 
 	// Just for storing the initial timestamp.
 	r.store("Start", libpf.Void{})
 
 	return r, nil
+}
+
+func originUser() (uid, gid int) {
+	if uidStr := os.Getenv("SUDO_UID"); uidStr != "" {
+		uid, _ = strconv.Atoi(uidStr)
+	}
+	if gidStr := os.Getenv("SUDO_GID"); gidStr != "" {
+		gid, _ = strconv.Atoi(gidStr)
+	}
+	return
 }
 
 type traceEvent struct {
@@ -185,20 +191,65 @@ func (r *BenchmarkReporter) store(name string, data any) {
 		panic(err)
 	}
 
-	r.changeOwner(pathName)
+	changeOwner(pathName, r.uid, r.gid)
 }
 
-func (r *BenchmarkReporter) changeOwner(pathName string) {
-	if err := os.Chown(pathName, r.uid, r.gid); err != nil {
+func changeOwner(pathName string, uid, gid int) {
+	if err := os.Chown(pathName, uid, gid); err != nil {
 		log.Errorf("Failed to change ownership of %s to %d:%d: %v",
-			pathName, r.uid, r.gid, err)
+			pathName, uid, gid, err)
 	}
 }
 
-func (r *BenchmarkReporter) changeDirOwner(dirName string) {
+func changeDirOwner(dirName string, uid, gid int) {
 	dirs := strings.Split(dirName, "/")
 	for i := 1; i <= len(dirs); i++ {
 		dir := filepath.Join(dirs[:i]...)
-		r.changeOwner(dir)
+		changeOwner(dir, uid, gid)
 	}
+}
+
+func GRPCInterceptor(benchProtoDir string) grpc.UnaryClientInterceptor {
+	if benchProtoDir != "" {
+		if err := os.MkdirAll(benchProtoDir, 0o755); err != nil {
+			log.Errorf("Failed to create directory for storing protobuf messages: %v", err)
+			return nil
+		}
+
+		uid, gid := originUser()
+
+		if uid != 0 || gid != 0 {
+			changeDirOwner(benchProtoDir, uid, gid)
+		}
+
+		// return interceptor to write the uncompressed protobuf messages to disk.
+		return func(ctx context.Context, method string, req, reply any,
+			cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+			storeProtobuf(benchProtoDir, req, uid, gid)
+			return invoker(ctx, method, req, reply, cc, opts...)
+		}
+	}
+
+	return nil
+}
+
+var protoMsgID atomic.Uint64
+
+func storeProtobuf(msgDir string, msg any, uid, gid int) {
+	protoMsgID.Add(1)
+
+	// Get the wire format of the request message.
+	msgBytes, err := proto.Marshal(msg.(proto.Message))
+	if err != nil {
+		log.Errorf("failed to marshal request: %v", err)
+		return
+	}
+
+	filePath := fmt.Sprintf("%s/%05X.proto", msgDir, protoMsgID.Load())
+	if err = os.WriteFile(filePath, msgBytes, 0o600); err != nil {
+		log.Errorf("failed to write request: %v", err)
+		return
+	}
+
+	changeOwner(filePath, uid, gid)
 }

@@ -168,10 +168,8 @@ func mainWithExitCode() exitCode {
 	metadataCollector.AddCustomData("host.name", hostname)
 	metadataCollector.AddCustomData("host.ip", sourceIP)
 
-	// Network operations to CA start here
-	var rep reporter.Reporter
-	// Connect to the collection agent
-	rep, err = reporter.Start(mainCtx, &reporter.Config{
+	// Network operations to the collector start here.
+	rep, err := reporter.Start(mainCtx, &reporter.Config{
 		CollAgentAddr:          args.collAgentAddr,
 		DisableTLS:             args.disableTLS,
 		MaxRPCMsgSize:          32 << 20, // 32 MiB
@@ -179,6 +177,7 @@ func mainWithExitCode() exitCode {
 		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
 		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
 		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
+		GRPCClientInterceptor:  reporter.GRPCInterceptor(args.benchProtoDir),
 		ReportInterval:         intervals.ReportInterval(),
 		CacheSize:              traceHandlerCacheSize,
 		SamplesPerSecond:       args.samplesPerSecond,

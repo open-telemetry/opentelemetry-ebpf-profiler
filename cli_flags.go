@@ -29,6 +29,7 @@ const (
 	defaultProbabilisticInterval  = 1 * time.Minute
 	defaultArgSendErrorFrames     = false
 	defaultArgBenchDataDir        = ""
+	defaultArgBenchProtoDir       = ""
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -71,10 +72,12 @@ var (
 		"on agent startup, but not periodically."
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
 	benchDataDirHelp    = "Directory to store data for benchmarking."
+	benchProtoDirHelp   = "Directory to store raw protobuf wire messages."
 )
 
 type arguments struct {
 	benchDataDir           string
+	benchProtoDir          string
 	bpfVerifierLogLevel    uint
 	bpfVerifierLogSize     int
 	collAgentAddr          string
@@ -152,6 +155,8 @@ func parseArgs() (*arguments, error) {
 
 	fs.StringVar(&args.benchDataDir, "bench-data-dir", defaultArgBenchDataDir,
 		benchDataDirHelp)
+	fs.StringVar(&args.benchProtoDir, "bench-proto-dir", defaultArgBenchProtoDir,
+		benchProtoDirHelp)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()
