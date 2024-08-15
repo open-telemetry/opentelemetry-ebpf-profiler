@@ -16,8 +16,8 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracehandler"
 )
 
