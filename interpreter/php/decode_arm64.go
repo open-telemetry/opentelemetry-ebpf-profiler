@@ -9,6 +9,7 @@
 package php
 
 import (
+	"errors"
 	"fmt"
 
 	ah "github.com/open-telemetry/opentelemetry-ebpf-profiler/armhelpers"
@@ -53,7 +54,7 @@ func retrieveZendVMKindWrapper(code []byte) (uint, error) {
 	}
 
 	// If we haven't already returned then clearly we're in an error state.
-	return 0, fmt.Errorf("did not find a mov into w0 in the given code blob")
+	return 0, errors.New("did not find a mov into w0 in the given code blob")
 }
 
 // retrieveExecuteExJumpLabelAddressWrapper. This function reads the code blob and returns
@@ -95,7 +96,7 @@ func retrieveExecuteExJumpLabelAddressWrapper(
 			return libpf.SymbolValue(offs+4) + addrBase, nil
 		}
 	}
-	return libpf.SymbolValueInvalid, fmt.Errorf("did not find a BR in the given code blob")
+	return libpf.SymbolValueInvalid, errors.New("did not find a BR in the given code blob")
 }
 
 // retrieveJITBufferPtrWrapper reads the code blob and returns a pointer to the JIT buffer used by
@@ -197,6 +198,5 @@ func retrieveJITBufferPtrWrapper(code []byte, addrBase libpf.SymbolValue) (
 	}
 
 	return libpf.SymbolValueInvalid, libpf.SymbolValueInvalid,
-		fmt.Errorf("did not find a BL instruction in" +
-			"the given code blob")
+		errors.New("did not find a BL instruction in the given code blob")
 }

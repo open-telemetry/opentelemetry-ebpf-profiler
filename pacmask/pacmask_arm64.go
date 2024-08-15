@@ -57,8 +57,8 @@ func GetPACMask() uint64 {
 		// The stack pointer on aarch64 needs to be aligned to 8 bytes at all
 		// times. The `<< 3` ensures that this is always the case for our fake
 		// pointers that will temporarily be placed as a fake stack pointer.
-		probe := uint64(rand.Uint32() << 3)
-		modifier := rand.Uint64()
+		probe := uint64(rand.Uint32() << 3) //nolint:gosec
+		modifier := rand.Uint64()           //nolint:gosec
 		probeWithPAC := PACIA(probe, modifier)
 		mask |= probeWithPAC & ^uint64(0xFFFF_FFFF)
 	}

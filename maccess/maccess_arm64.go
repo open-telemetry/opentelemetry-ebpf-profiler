@@ -9,7 +9,7 @@
 package maccess
 
 import (
-	"fmt"
+	"errors"
 
 	ah "github.com/open-telemetry/opentelemetry-ebpf-profiler/armhelpers"
 	aa "golang.org/x/arch/arm64/arm64asm"
@@ -29,12 +29,13 @@ const (
 // for x86 and returns always TRUE [1] on other architectures like arm64. So the compiler
 // optimizes this function as the result of the function is known at compile time.
 //
-//nolint:lll
 // [0] https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=d319f344561de23e810515d109c7278919bff7b0
 // [1] https://github.com/torvalds/linux/blob/8bc9e6515183935fa0cccaf67455c439afe4982b/include/asm-generic/tlb.h#L26
-func CopyFromUserNoFaultIsPatched(codeblob []byte, _ uint64, _ uint64) (bool, error) {
+//
+//nolint:lll
+func CopyFromUserNoFaultIsPatched(codeblob []byte, _, _ uint64) (bool, error) {
 	if len(codeblob) == 0 {
-		return false, fmt.Errorf("empty code blob")
+		return false, errors.New("empty code blob")
 	}
 
 	// With the patch [0] of copy_from_user_nofault, access_ok() got replaced with __access_ok() [1].
@@ -45,7 +46,6 @@ func CopyFromUserNoFaultIsPatched(codeblob []byte, _ uint64, _ uint64) (bool, er
 	// B HI, .+0x14
 	// SUB X2, X2, X19
 	//
-	//nolint:lll
 	// [0] https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=d319f344561de23e810515d109c7278919bff7b0
 	// [1] https://github.com/torvalds/linux/blob/1c41041124bd14dd6610da256a3da4e5b74ce6b1/include/asm-generic/access_ok.h#L20-L41
 	// [2] https://github.com/torvalds/linux/blob/1c41041124bd14dd6610da256a3da4e5b74ce6b1/include/asm-generic/access_ok.h#L40
