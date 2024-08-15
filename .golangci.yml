@@ -1,5 +1,5 @@
 service:
-  golangci-lint-version: 1.59.x
+  golangci-lint-version: 1.60.x
 
 issues:
   exclude-dirs:
@@ -31,7 +31,7 @@ linters:
     #   - too many non-sensical warnings
     #   - not relevant for us
     #   - false positives
-    # 
+    #
     # "might be worth fixing" means we should investigate/fix in the mid term
     - containedctx # might be worth fixing
     - contextcheck # might be worth fixing
