@@ -83,6 +83,8 @@ static int (*bpf_perf_event_output)(void *ctx, void *map, unsigned long long fla
     (void *)BPF_FUNC_perf_event_output;
 static int (*bpf_get_stackid)(void *ctx, void *map, u64 flags) =
     (void *)BPF_FUNC_get_stackid;
+static unsigned long long (*bpf_get_prandom_u32)(void) =
+	(void *) BPF_FUNC_get_prandom_u32;
 
 __attribute__ ((format (printf, 1, 3)))
 static int (*bpf_trace_printk)(const char *fmt, int fmt_size, ...) =

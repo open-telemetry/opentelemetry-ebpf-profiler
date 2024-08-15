@@ -30,6 +30,7 @@ type Config struct {
 	Tracers                string
 	VerboseMode            bool
 	Version                bool
+	OffCPUThreshold        uint
 
 	Reporter reporter.Reporter
 

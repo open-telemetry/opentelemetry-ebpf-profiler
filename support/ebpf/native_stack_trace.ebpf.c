@@ -4,14 +4,6 @@
 #include "tracemgmt.h"
 #include "stackdeltatypes.h"
 
-#ifndef __USER32_CS
-  // defined in arch/x86/include/asm/segment.h
-  #define GDT_ENTRY_DEFAULT_USER32_CS  4
-  #define GDT_ENTRY_DEFAULT_USER_DS    5
-  #define __USER32_CS                 (GDT_ENTRY_DEFAULT_USER32_CS*8 + 3)
-  #define __USER_DS                   (GDT_ENTRY_DEFAULT_USER_DS*8 + 3)
-#endif
-
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given fileID.
 #define STACK_DELTA_BUCKET(X)                                                            \
@@ -603,156 +595,6 @@ frame_ok:
   #error unsupported architecture
 #endif
 
-// Initialize state from pt_regs
-static inline ErrorCode copy_state_regs(UnwindState *state,
-                                        struct pt_regs *regs,
-                                        bool interrupted_kernelmode)
-{
-#if defined(__x86_64__)
-  // Check if the process is running in 32-bit mode on the x86_64 system.
-  // This check follows the Linux kernel implementation of user_64bit_mode() in
-  // arch/x86/include/asm/ptrace.h.
-  if (regs->cs == __USER32_CS) {
-    return ERR_NATIVE_X64_32BIT_COMPAT_MODE;
-  }
-  state->pc = regs->ip;
-  state->sp = regs->sp;
-  state->fp = regs->bp;
-  state->rax = regs->ax;
-  state->r9 = regs->r9;
-  state->r11 = regs->r11;
-  state->r13 = regs->r13;
-  state->r15 = regs->r15;
-
-  // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
-  // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/include/asm/syscall.h#L31-L39
-  // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/entry/entry_64.S#L847
-  state->return_address = interrupted_kernelmode && regs->orig_ax != -1;
-#elif defined(__aarch64__)
-  // For backwards compatibility aarch64 can run 32-bit code.
-  // Check if the process is running in this 32-bit compat mod.
-  if (regs->pstate & PSR_MODE32_BIT) {
-    return ERR_NATIVE_AARCH64_32BIT_COMPAT_MODE;
-  }
-  state->pc = normalize_pac_ptr(regs->pc);
-  state->sp = regs->sp;
-  state->fp = regs->regs[29];
-  state->lr = normalize_pac_ptr(regs->regs[30]);
-  state->r22 = regs->regs[22];
-
-  // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
-  // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/arm64/include/asm/ptrace.h#L118
-  // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/arm64/include/asm/ptrace.h#L206-L209
-  //
-  // Note: We do not use `unwinder_mark_nonleaf_frame` here,
-  // because the frame is a leaf frame from the perspective of the user stack,
-  // regardless of whether we are in a syscall.
-  state->return_address = interrupted_kernelmode && regs->syscallno != -1;
-  state->lr_invalid = false;
-#endif
-
-  return ERR_OK;
-}
-
-#ifndef TESTING_COREDUMP
-
-// Read the task's entry stack pt_regs. This has identical functionality
-// to bpf_task_pt_regs which is emulated to support older kernels.
-// Once kernel requirement is increased to 5.15 this can be replaced with
-// the bpf_task_pt_regs() helper.
-static inline
-long get_task_pt_regs(struct task_struct *task, SystemConfig* syscfg) {
-  u64 stack_ptr = (u64)task + syscfg->task_stack_offset;
-  long stack_base;
-  if (bpf_probe_read_kernel(&stack_base, sizeof(stack_base), (void*) stack_ptr)) {
-    return 0;
-  }
-  return stack_base + syscfg->stack_ptregs_offset;
-}
-
-// Determine whether the given pt_regs are from user-mode register context.
-// This needs to detect also invalid pt_regs in case we its kernel thread stack
-// without valid user mode pt_regs so is_kernel_address(pc) is not enough.
-static inline
-bool ptregs_is_usermode(struct pt_regs *regs) {
-#if defined(__x86_64__)
-  // On x86_64 the user mode SS should always be __USER_DS.
-  if (regs->ss != __USER_DS) {
-    return false;
-  }
-  return true;
-#elif defined(__aarch64__)
-  // Check if the processor state is in the EL0t what linux uses for usermode.
-  if ((regs->pstate & PSR_MODE_MASK) != PSR_MODE_EL0t) {
-    return false;
-  }
-  return true;
-#else
-#error add support for new architecture
-#endif
-}
-
-// Extract the usermode pt_regs for current task. Use context given pt_regs
-// if it is usermode regs, or resolve it via struct task_struct.
-//
-// State registers are not touched (get_pristine_per_cpu_record already reset it)
-// if something fails. has_usermode_regs is set to true if a user-mode register
-// context was found: not every thread that we interrupt will actually have
-// a user-mode context (e.g. kernel worker threads won't).
-static inline ErrorCode get_usermode_regs(struct pt_regs *ctx,
-                                          UnwindState *state,
-                                          bool *has_usermode_regs) {
-  ErrorCode error;
-
-  if (!ptregs_is_usermode(ctx)) {
-    u32 key = 0;
-    SystemConfig* syscfg = bpf_map_lookup_elem(&system_config, &key);
-    if (!syscfg) {
-      // Unreachable: array maps are always fully initialized.
-      return ERR_UNREACHABLE;
-    }
-
-    // Use the current task's entry pt_regs
-    struct task_struct *task = (struct task_struct *) bpf_get_current_task();
-    long ptregs_addr = get_task_pt_regs(task, syscfg);
-
-    struct pt_regs regs;
-    if (!ptregs_addr || bpf_probe_read_kernel(&regs, sizeof(regs), (void*) ptregs_addr)) {
-      increment_metric(metricID_UnwindNativeErrReadKernelModeRegs);
-      return ERR_NATIVE_READ_KERNELMODE_REGS;
-    }
-
-    if (!ptregs_is_usermode(&regs)) {
-      // No usermode registers context found.
-      return ERR_OK;
-    }
-    error = copy_state_regs(state, &regs, true);
-  } else {
-    // User mode code interrupted, registers are available via the ebpf context.
-    error = copy_state_regs(state, ctx, false);
-  }
-  if (error == ERR_OK) {
-    DEBUG_PRINT("Read regs: pc: %llx sp: %llx fp: %llx", state->pc, state->sp, state->fp);
-    *has_usermode_regs = true;
-  }
-  return error;
-}
-
-#else // TESTING_COREDUMP
-
-static inline ErrorCode get_usermode_regs(struct pt_regs *ctx,
-                                          UnwindState *state,
-                                          bool *has_usermode_regs) {
-  // Coredumps provide always usermode pt_regs directly.
-  ErrorCode error = copy_state_regs(state, ctx, false);
-  if (error == ERR_OK) {
-    *has_usermode_regs = true;
-  }
-  return error;
-}
-
-#endif
-
 SEC("perf_event/unwind_native")
 int unwind_native(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
@@ -805,65 +647,11 @@ int unwind_native(struct pt_regs *ctx) {
   return -1;
 }
 
-static inline
-int collect_trace(struct pt_regs *ctx) {
+SEC("perf_event/native_tracer_entry")
+int native_tracer_entry(struct bpf_perf_event_data *ctx) {
   // Get the PID and TGID register.
   u64 id = bpf_get_current_pid_tgid();
   u32 pid = id >> 32;
   u32 tid = id & 0xFFFFFFFF;
-
-  if (pid == 0) {
-    return 0;
-  }
-
-  u64 ktime = bpf_ktime_get_ns();
-
-  DEBUG_PRINT("==== do_perf_event ====");
-
-  // The trace is reused on each call to this function so we have to reset the
-  // variables used to maintain state.
-  DEBUG_PRINT("Resetting CPU record");
-  PerCPURecord *record = get_pristine_per_cpu_record();
-  if (!record) {
-    return -1;
-  }
-
-  Trace *trace = &record->trace;
-  trace->pid = pid;
-  trace->tid = tid;
-  trace->ktime = ktime;
-  if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
-    increment_metric(metricID_ErrBPFCurrentComm);
-  }
-
-  // Get the kernel mode stack trace first
-  trace->kernel_stack_id = bpf_get_stackid(ctx, &kernel_stackmap, BPF_F_REUSE_STACKID);
-  DEBUG_PRINT("kernel stack id = %d", trace->kernel_stack_id);
-
-  // Recursive unwind frames
-  int unwinder = PROG_UNWIND_STOP;
-  bool has_usermode_regs = false;
-  ErrorCode error = get_usermode_regs(ctx, &record->state, &has_usermode_regs);
-  if (error || !has_usermode_regs) {
-    goto exit;
-  }
-
-  if (!pid_information_exists(ctx, pid)) {
-    if (report_pid(ctx, pid, RATELIMIT_ACTION_DEFAULT)) {
-      increment_metric(metricID_NumProcNew);
-    }
-    return 0;
-  }
-  error = get_next_unwinder_after_native_frame(record, &unwinder);
-
-exit:
-  record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
-  DEBUG_PRINT("bpf_tail call failed for %d in native_tracer_entry", unwinder);
-  return -1;
-}
-
-SEC("perf_event/native_tracer_entry")
-int native_tracer_entry(struct bpf_perf_event_data *ctx) {
-  return collect_trace((struct pt_regs*) &ctx->regs);
+  return collect_trace((struct pt_regs*) &ctx->regs, TRACE_SAMPLING, pid, tid, 0);
 }

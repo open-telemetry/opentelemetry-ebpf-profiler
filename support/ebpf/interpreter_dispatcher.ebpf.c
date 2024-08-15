@@ -25,8 +25,8 @@ bpf_map_def SEC("maps") metrics = {
   .max_entries = metricID_Max,
 };
 
-// progs maps from a program ID to an eBPF program
-bpf_map_def SEC("maps") progs = {
+// perf_progs maps from a program ID to a perf eBPF program
+bpf_map_def SEC("maps") perf_progs = {
   .type = BPF_MAP_TYPE_PROG_ARRAY,
   .key_size = sizeof(u32),
   .value_size = sizeof(u32),

@@ -24,6 +24,7 @@ const (
 	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
 	defaultProbabilisticInterval  = 1 * time.Minute
 	defaultArgSendErrorFrames     = false
+	defaultOffCPUThreshold        = tracer.OffCPUThresholdMax
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -61,6 +62,11 @@ var (
 		"If zero, monotonic-realtime clock sync will be performed once, " +
 		"on agent startup, but not periodically."
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
+	offCPUThresholdHelp = fmt.Sprintf("If set to a value between 1 and %d will enable "+
+		"off cpu profiling: Every time an off-cpu entry point is hit, a random number between "+
+		"0 and %d is chosen. If the given threshold is greater than this random number, the off "+
+		"cpu trace is collected and reported.",
+		tracer.OffCPUThresholdMax-1, tracer.OffCPUThresholdMax-1)
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -113,6 +119,9 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.VerboseMode, "v", false, "Shorthand for -verbose.")
 	fs.BoolVar(&args.VerboseMode, "verbose", false, verboseModeHelp)
 	fs.BoolVar(&args.Version, "version", false, versionHelp)
+
+	fs.UintVar(&args.OffCPUThreshold, "off-cpu-threshold",
+		defaultOffCPUThreshold, offCPUThresholdHelp)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()
