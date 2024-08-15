@@ -21,7 +21,7 @@ jobs:
       - name: Linter
         run: |
           go version
-          make lint
+          make lint TARGET_ARCH=${{ matrix.target_arch }}
 
   test:
     name: Test (${{ matrix.target_arch }})

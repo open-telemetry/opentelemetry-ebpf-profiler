@@ -129,7 +129,7 @@ func mainWithExitCode() exitCode {
 		vc.Version(), vc.Revision(), vc.BuildTimestamp())
 
 	if err = tracer.ProbeBPFSyscall(); err != nil {
-		return failure(fmt.Sprintf("Failed to probe eBPF syscall: %v", err))
+		return failure("Failed to probe eBPF syscall: %v", err)
 	}
 
 	if err = tracer.ProbeTracepoint(); err != nil {

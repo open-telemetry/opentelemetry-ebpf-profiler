@@ -59,6 +59,7 @@ func isSelfOrRuntime(t *testing.T, stack *[32]uintptr, self string) bool {
 			if !strings.HasPrefix(funcName, "runtime.") &&
 				!strings.HasPrefix(funcName, "runtime/") &&
 				!strings.HasPrefix(funcName, "testing.") &&
+				!strings.HasPrefix(funcName, "internal/runtime") &&
 				funcName != "main.main" {
 				isRuntimeOnly = false
 			}

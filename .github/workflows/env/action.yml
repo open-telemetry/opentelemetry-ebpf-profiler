@@ -23,16 +23,16 @@ runs:
         Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
         Architectures: arm64
         EOF
-        
+
         sudo dpkg --add-architecture arm64
         sudo apt-get update -y
-        
+
         sudo apt-get install -y llvm clang dwz curl unzip gcc-aarch64-linux-gnu \
           libc6-arm64-cross qemu-user-binfmt libc6:arm64
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: stable
+        go-version: "1.23"
         check-latest: true
         cache-dependency-path: go.sum
       id: go
