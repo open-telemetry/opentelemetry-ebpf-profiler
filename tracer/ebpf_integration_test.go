@@ -56,7 +56,7 @@ func runKernelFrameProbe(t *testing.T, tracer *Tracer) {
 	require.NoError(t, err)
 	defer restoreRlimit()
 
-	prog, err := cebpf.NewProgram(coll.Programs["tracepoint__sched_switch"])
+	prog, err := cebpf.NewProgram(coll.Programs["tracepoint_integration__sched_switch"])
 	require.NoError(t, err)
 	defer prog.Close()
 

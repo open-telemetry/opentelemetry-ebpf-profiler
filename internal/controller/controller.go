@@ -106,6 +106,13 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 	log.Info("Attached tracer program")
 
+	if c.config.OffCPUThreshold < tracer.OffCPUThresholdMax {
+		if err := trc.StartOffCPUProfiling(); err != nil {
+			return fmt.Errorf("failed to start off-cpu profiling: %v", err)
+		}
+		log.Printf("Enabled off-cpu profiling")
+	}
+
 	if c.config.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
 		trc.StartProbabilisticProfiling(ctx)
 		log.Printf("Enabled probabilistic profiling")

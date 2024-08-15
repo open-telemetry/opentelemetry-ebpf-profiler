@@ -33,7 +33,8 @@ type Config struct {
 	// HostName is the name of the host.
 	HostName string
 	// IPAddress is the IP address of the host that sends data to CollAgentAddr.
-	IPAddress string
+	IPAddress       string
+	OffCPUThreshold uint
 
 	Reporter reporter.Reporter
 

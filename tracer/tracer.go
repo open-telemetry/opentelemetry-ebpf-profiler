@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
 	log "github.com/sirupsen/logrus"
@@ -62,6 +63,12 @@ const (
 const (
 	probProfilingEnable  = 1
 	probProfilingDisable = -1
+)
+
+const (
+	// OffCpuThresholdMax defines the upper bound for the off-cpu profiling
+	// threshold.
+	OffCPUThresholdMax = support.OffCPUThresholdMax
 )
 
 // Intervals is a subset of config.IntervalsAndTimers.
@@ -153,11 +160,25 @@ type Config struct {
 	ProbabilisticInterval time.Duration
 	// ProbabilisticThreshold is the threshold for probabilistic profiling.
 	ProbabilisticThreshold uint
+	// OffCPUThreshold is the user defined threshold for off-cpu profiling.
+	OffCPUThreshold uint32
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
 type hookPoint struct {
 	group, name string
+}
+
+// progLoaderHelper supports the loading process of eBPF programs.
+type progLoaderHelper struct {
+	// enable tells whether a prog shall be loaded.
+	enable bool
+	// name of the eBPF program
+	name string
+	// progID defines the ID for the eBPF program that is used as key in the tailcallMap.
+	progID uint32
+	// noTailCallTarget indicates if this eBPF program should be added to the tailcallMap.
+	noTailCallTarget bool
 }
 
 // processKernelModulesMetadata computes the FileID of kernel files and reports executable metadata
@@ -267,9 +288,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	}
 
 	// Based on includeTracers we decide later which are loaded into the kernel.
-	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(cfg.IncludeTracers, kernelSymbols,
-		cfg.FilterErrorFrames, cfg.MapScaleFactor, cfg.KernelVersionCheck, cfg.DebugTracer,
-		cfg.BPFVerifierLogLevel)
+	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(kernelSymbols, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
@@ -369,9 +388,7 @@ func buildStackDeltaTemplates(coll *cebpf.CollectionSpec) error {
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
 // by the embedded elf file and loads these into the kernel.
-func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
-	kernelSymbols *libpf.SymbolMap, filterErrorFrames bool, mapScaleFactor int,
-	kernelVersionCheck bool, debugTracer bool, bpfVerifierLogLevel uint32) (
+func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 	ebpfMaps map[string]*cebpf.Map, ebpfProgs map[string]*cebpf.Program, err error) {
 	// Loading specifications about eBPF programs and maps from the embedded elf file
 	// does not load them into the kernel.
@@ -379,7 +396,7 @@ func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
 	// References to eBPF maps in the eBPF programs are just placeholders that need to be
 	// replaced by the actual loaded maps later on with RewriteMaps before loading the
 	// programs into the kernel.
-	coll, err := support.LoadCollectionSpec(debugTracer)
+	coll, err := support.LoadCollectionSpec(cfg.DebugTracer)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load specification for tracers: %v", err)
 	}
@@ -395,7 +412,7 @@ func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
 	// Load all maps into the kernel that are used later on in eBPF programs. So we can rewrite
 	// in the next step the placesholders in the eBPF programs with the file descriptors of the
 	// loaded maps in the kernel.
-	if err = loadAllMaps(coll, ebpfMaps, mapScaleFactor); err != nil {
+	if err = loadAllMaps(coll, ebpfMaps, cfg.MapScaleFactor); err != nil {
 		return nil, nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
@@ -406,7 +423,7 @@ func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
 		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
 
-	if kernelVersionCheck {
+	if cfg.KernelVersionCheck {
 		var major, minor, patch uint32
 		major, minor, patch, err = GetCurrentKernelVersion()
 		if err != nil {
@@ -426,13 +443,68 @@ func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
 		}
 	}
 
-	if err = loadUnwinders(coll, ebpfProgs, ebpfMaps["progs"], includeTracers,
-		bpfVerifierLogLevel); err != nil {
-		return nil, nil, fmt.Errorf("failed to load eBPF programs: %v", err)
+	tailCallProgs := []progLoaderHelper{
+		{
+			progID: uint32(support.ProgUnwindStop),
+			name:   "unwind_stop",
+			enable: true,
+		},
+		{
+			progID: uint32(support.ProgUnwindNative),
+			name:   "unwind_native",
+			enable: true,
+		},
+		{
+			progID: uint32(support.ProgUnwindHotspot),
+			name:   "unwind_hotspot",
+			enable: cfg.IncludeTracers.Has(types.HotspotTracer),
+		},
+		{
+			progID: uint32(support.ProgUnwindPerl),
+			name:   "unwind_perl",
+			enable: cfg.IncludeTracers.Has(types.PerlTracer),
+		},
+		{
+			progID: uint32(support.ProgUnwindPHP),
+			name:   "unwind_php",
+			enable: cfg.IncludeTracers.Has(types.PHPTracer),
+		},
+		{
+			progID: uint32(support.ProgUnwindPython),
+			name:   "unwind_python",
+			enable: cfg.IncludeTracers.Has(types.PythonTracer),
+		},
+		{
+			progID: uint32(support.ProgUnwindRuby),
+			name:   "unwind_ruby",
+			enable: cfg.IncludeTracers.Has(types.RubyTracer),
+		},
+		{
+			progID: uint32(support.ProgUnwindV8),
+			name:   "unwind_v8",
+			enable: cfg.IncludeTracers.Has(types.V8Tracer),
+		},
+		{
+			progID: uint32(support.ProgUnwindDotnet),
+			name:   "unwind_dotnet",
+			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
+		},
 	}
 
-	if err = loadSystemConfig(coll, ebpfMaps, kernelSymbols, includeTracers,
-		filterErrorFrames); err != nil {
+	if err = loadPerfUnwinders(coll, ebpfProgs, ebpfMaps["perf_progs"], tailCallProgs,
+		cfg.BPFVerifierLogLevel); err != nil {
+		return nil, nil, fmt.Errorf("failed to load perf eBPF programs: %v", err)
+	}
+
+	if cfg.OffCPUThreshold < OffCPUThresholdMax {
+		if err = loadKProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
+			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
+			return nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
+		}
+	}
+
+	if err = loadSystemConfig(coll, ebpfMaps, kernelSymbols, cfg.IncludeTracers,
+		cfg.OffCPUThreshold, cfg.FilterErrorFrames); err != nil {
 		return nil, nil, fmt.Errorf("failed to load system config: %v", err)
 	}
 
@@ -503,126 +575,169 @@ func loadAllMaps(coll *cebpf.CollectionSpec, ebpfMaps map[string]*cebpf.Map,
 	return nil
 }
 
-// loadUnwinders just satisfies the proof of concept and loads all eBPF programs
-func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
-	tailcallMap *cebpf.Map, includeTracers types.IncludedTracers,
+// loadPerfUnwinders just satisfies the proof of concept and loads all eBPF programs
+func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
+	tailcallMap *cebpf.Map, tailCallProgs []progLoaderHelper,
 	bpfVerifierLogLevel uint32) error {
+	programOptions := cebpf.ProgramOptions{
+		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
+	}
+
+	progs := make([]progLoaderHelper, len(tailCallProgs)+2)
+	copy(progs, tailCallProgs)
+	progs = append(progs,
+		progLoaderHelper{
+			name:             "tracepoint__sched_process_exit",
+			noTailCallTarget: true,
+			enable:           true,
+		},
+		progLoaderHelper{
+			name:             "native_tracer_entry",
+			noTailCallTarget: true,
+			enable:           true,
+		})
+
+	for _, unwindProg := range progs {
+		if !unwindProg.enable {
+			continue
+		}
+
+		progSpec, ok := coll.Programs[unwindProg.name]
+		if !ok {
+			return fmt.Errorf("program %s does not exist", unwindProg.name)
+		}
+
+		if err := loadProgram(ebpfProgs, tailcallMap, unwindProg.progID, progSpec,
+			programOptions, unwindProg.noTailCallTarget); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// progArrayReferences returns a list of instructions which load a specified tail
+// call FD.
+func progArrayReferences(perfTailCallMapFD int, insns asm.Instructions) []int {
+	insNos := []int{}
+	for i := range insns {
+		ins := &insns[i]
+		if asm.OpCode(ins.OpCode.Class()) != asm.OpCode(asm.LdClass) {
+			continue
+		}
+		m := ins.Map()
+		if m == nil {
+			continue
+		}
+		if perfTailCallMapFD == m.FD() {
+			insNos = append(insNos, i)
+		}
+	}
+	return insNos
+}
+
+// loadKProbeUnwinders reuses large parts of loadPerfUnwinders. By default all eBPF programs
+// are written as perf event eBPF programs. loadKProbeUnwinders dynamically rewrites the
+// specification of these programs to krpobe eBPF programs and adjusts tail call maps.
+func loadKProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
+	tailcallMap *cebpf.Map, tailCallProgs []progLoaderHelper,
+	bpfVerifierLogLevel uint32, perfTailCallMapFD int) error {
+	programOptions := cebpf.ProgramOptions{
+		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
+	}
+
+	progs := make([]progLoaderHelper, len(tailCallProgs)+2)
+	copy(progs, tailCallProgs)
+	progs = append(progs,
+		progLoaderHelper{
+			name:             "finish_task_switch",
+			noTailCallTarget: true,
+			enable:           true,
+		},
+		progLoaderHelper{
+			name:             "tracepoint__sched_switch",
+			noTailCallTarget: true,
+			enable:           true,
+		},
+	)
+
+	for _, unwindProg := range progs {
+		if !unwindProg.enable {
+			continue
+		}
+
+		progSpec, ok := coll.Programs[unwindProg.name]
+		if !ok {
+			return fmt.Errorf("program %s does not exist", unwindProg.name)
+		}
+
+		// Replace the prog array for the tail calls.
+		insns := progArrayReferences(perfTailCallMapFD, progSpec.Instructions)
+		for _, ins := range insns {
+			if err := progSpec.Instructions[ins].AssociateMap(tailcallMap); err != nil {
+				return fmt.Errorf("failed to rewrite map ptr: %v", err)
+			}
+		}
+
+		// All the tail call targets are perf event programs. To be able to tail call them
+		// from a kprobe, adjust their specification.
+		if !unwindProg.noTailCallTarget {
+			// Adjust program type
+			progSpec.Type = cebpf.Kprobe
+
+			// Adjust program name for easier debugging
+			progSpec.Name = "kp_" + progSpec.Name
+		}
+		if err := loadProgram(ebpfProgs, tailcallMap, unwindProg.progID, progSpec,
+			programOptions, unwindProg.noTailCallTarget); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// loadProgram loads an eBPF program from progSpec and populates the related maps.
+func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
+	progID uint32, progSpec *cebpf.ProgramSpec, programOptions cebpf.ProgramOptions,
+	noTailCallTarget bool) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
 	}
 	defer restoreRlimit()
 
-	type prog struct {
-		// enable tells whether a prog shall be loaded.
-		enable bool
-		// name of the eBPF program
-		name string
-		// progID defines the ID for the eBPF program that is used as key in the tailcallMap.
-		progID uint32
-		// noTailCallTarget indicates if this eBPF program should be added to the tailcallMap.
-		noTailCallTarget bool
-	}
-
-	programOptions := cebpf.ProgramOptions{
-		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
-	}
-
-	for _, unwindProg := range []prog{
-		{
-			progID: uint32(support.ProgUnwindStop),
-			name:   "unwind_stop",
-			enable: true,
-		},
-		{
-			progID: uint32(support.ProgUnwindNative),
-			name:   "unwind_native",
-			enable: true,
-		},
-		{
-			progID: uint32(support.ProgUnwindHotspot),
-			name:   "unwind_hotspot",
-			enable: includeTracers.Has(types.HotspotTracer),
-		},
-		{
-			progID: uint32(support.ProgUnwindPerl),
-			name:   "unwind_perl",
-			enable: includeTracers.Has(types.PerlTracer),
-		},
-		{
-			progID: uint32(support.ProgUnwindPHP),
-			name:   "unwind_php",
-			enable: includeTracers.Has(types.PHPTracer),
-		},
-		{
-			progID: uint32(support.ProgUnwindPython),
-			name:   "unwind_python",
-			enable: includeTracers.Has(types.PythonTracer),
-		},
-		{
-			progID: uint32(support.ProgUnwindRuby),
-			name:   "unwind_ruby",
-			enable: includeTracers.Has(types.RubyTracer),
-		},
-		{
-			progID: uint32(support.ProgUnwindV8),
-			name:   "unwind_v8",
-			enable: includeTracers.Has(types.V8Tracer),
-		},
-		{
-			progID: uint32(support.ProgUnwindDotnet),
-			name:   "unwind_dotnet",
-			enable: includeTracers.Has(types.DotnetTracer),
-		},
-		{
-			name:             "tracepoint__sched_process_exit",
-			noTailCallTarget: true,
-			enable:           true,
-		},
-		{
-			name:             "native_tracer_entry",
-			noTailCallTarget: true,
-			enable:           true,
-		},
-	} {
-		if !unwindProg.enable {
-			continue
-		}
-
-		// Load the eBPF program into the kernel. If no error is returned,
-		// the eBPF program can be used/called/triggered from now on.
-		unwinder, err := cebpf.NewProgramWithOptions(coll.Programs[unwindProg.name],
-			programOptions)
-		if err != nil {
-			// These errors tend to have hundreds of lines (or more),
-			// so we print each line individually.
-			if ve, ok := err.(*cebpf.VerifierError); ok {
-				for _, line := range ve.Log {
-					log.Error(line)
-				}
-			} else {
-				scanner := bufio.NewScanner(strings.NewReader(err.Error()))
-				for scanner.Scan() {
-					log.Error(scanner.Text())
-				}
+	// Load the eBPF program into the kernel. If no error is returned,
+	// the eBPF program can be used/called/triggered from now on.
+	unwinder, err := cebpf.NewProgramWithOptions(progSpec, programOptions)
+	if err != nil {
+		// These errors tend to have hundreds of lines (or more),
+		// so we print each line individually.
+		if ve, ok := err.(*cebpf.VerifierError); ok {
+			for _, line := range ve.Log {
+				log.Error(line)
 			}
-			return fmt.Errorf("failed to load %s", unwindProg.name)
+		} else {
+			scanner := bufio.NewScanner(strings.NewReader(err.Error()))
+			for scanner.Scan() {
+				log.Error(scanner.Text())
+			}
 		}
-
-		ebpfProgs[unwindProg.name] = unwinder
-		fd := uint32(unwinder.FD())
-		if unwindProg.noTailCallTarget {
-			continue
-		}
-		if err := tailcallMap.Update(unsafe.Pointer(&unwindProg.progID), unsafe.Pointer(&fd),
-			cebpf.UpdateAny); err != nil {
-			// Every eBPF program that is loaded within loadUnwinders can be the
-			// destination of a tail call of another eBPF program. If we can not update
-			// the eBPF map that manages these destinations our unwinding will fail.
-			return fmt.Errorf("failed to update tailcall map: %v", err)
-		}
+		return fmt.Errorf("failed to load %s", progSpec.Name)
 	}
+	ebpfProgs[progSpec.Name] = unwinder
 
+	if noTailCallTarget {
+		return nil
+	}
+	fd := uint32(unwinder.FD())
+	if err := tailcallMap.Update(unsafe.Pointer(&progID), unsafe.Pointer(&fd),
+		cebpf.UpdateAny); err != nil {
+		// Every eBPF program that is loaded within loadUnwinders can be the
+		// destination of a tail call of another eBPF program. If we can not update
+		// the eBPF map that manages these destinations our unwinding will fail.
+		return fmt.Errorf("failed to update tailcall map: %v", err)
+	}
 	return nil
 }
 
@@ -1160,6 +1275,34 @@ func (t *Tracer) StartProbabilisticProfiling(ctx context.Context) {
 	periodiccaller.Start(ctx, t.probabilisticInterval, func() {
 		t.probabilisticProfile(t.probabilisticInterval, t.probabilisticThreshold)
 	})
+}
+
+// StartOffCPUProfiling starts off-cpu profiling by attaching the programs to the hooks.
+func (t *Tracer) StartOffCPUProfiling() error {
+	// Attach the second hook for off-cpu profiling first.
+	kprobeProg, ok := t.ebpfProgs["finish_task_switch"]
+	if !ok {
+		return errors.New("off-cpu program finish_task_switch is not available")
+	}
+
+	kprobeLink, err := link.Kprobe("finish_task_switch.isra.0", kprobeProg, nil)
+	if err != nil {
+		return err
+	}
+	t.hooks[hookPoint{group: "kprobe", name: "finish_task_switch"}] = kprobeLink
+
+	// Attach the first hook that enables off-cpu profiling.
+	tpProg, ok := t.ebpfProgs["tracepoint__sched_switch"]
+	if !ok {
+		return errors.New("tracepoint__sched_switch is not available")
+	}
+	tpLink, err := link.Tracepoint("sched", "sched_switch", tpProg, nil)
+	if err != nil {
+		return nil
+	}
+	t.hooks[hookPoint{group: "sched", name: "sched_switch"}] = tpLink
+
+	return nil
 }
 
 // TraceProcessor gets the trace processor.

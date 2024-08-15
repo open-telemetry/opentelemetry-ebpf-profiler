@@ -331,6 +331,17 @@ typedef enum TracePrograms {
   NUM_TRACER_PROGS,
 } TracePrograms;
 
+// TraceOrigin describes the source of the trace. This enables
+// origin specific handling of traces in user space.
+typedef enum TraceOrigin {
+  TRACE_UNKNOWN,
+  TRACE_SAMPLING,
+  TRACE_OFF_CPU,
+} TraceOrigin;
+
+// OFF_CPU_THRESHOLD_MAX defines the maximum threshold.
+#define OFF_CPU_THRESHOLD_MAX 1000
+
 // MAX_FRAME_UNWINDS defines the maximum number of frames per
 // Trace we can unwind and respect the limit of eBPF instructions,
 // limit of tail calls and limit of stack size per eBPF program.
@@ -532,6 +543,14 @@ typedef struct Trace {
   s32 kernel_stack_id;
   // The number of frames in the stack.
   u32 stack_len;
+
+  // origin indicates the source of the trace.
+  TraceOrigin origin;
+
+  // Time in nanosecond for off-cpu profiling,
+  // for how long the trace was off cpu.
+  u64 offtime;
+
   // The frames of the stack trace.
   Frame frames[MAX_FRAME_UNWINDS];
 
@@ -850,6 +869,9 @@ typedef struct SystemConfig {
 
   // The offset of struct pt_regs within the kernel entry stack.
   u32 stack_ptregs_offset;
+
+  // User defined threshold for off-cpu profiling.
+  u32 off_cpu_threshold;
 
   // Enables the temporary hack that drops pure errors frames in unwind_stop.
   bool drop_error_only_traces;
