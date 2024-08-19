@@ -46,7 +46,6 @@ var (
 		"Every increase by 1 doubles the map size. Increase if you see eBPF map size errors. "+
 		"Default is %d corresponding to 4GB of executable address space, max is %d.",
 		defaultArgMapScaleFactor, maxArgMapScaleFactor)
-	secretTokenHelp         = "The secret token associated with the project id."
 	disableTLSHelp          = "Disable encryption for data in transit."
 	bpfVerifierLogLevelHelp = "Log level of the eBPF verifier output (0,1,2). Default is 0."
 	bpfVerifierLogSizeHelp  = "Size in bytes that will be allocated for the eBPF " +
@@ -82,7 +81,6 @@ type arguments struct {
 	probabilisticThreshold uint
 	reporterInterval       time.Duration
 	samplesPerSecond       int
-	secretToken            string
 	sendErrorFrames        bool
 	tracers                string
 	verboseMode            bool
@@ -130,9 +128,6 @@ func parseArgs() (*arguments, error) {
 
 	fs.IntVar(&args.samplesPerSecond, "samples-per-second", defaultArgSamplesPerSecond,
 		samplesPerSecondHelp)
-
-	// Using a default value here to simplify OTEL review process.
-	fs.StringVar(&args.secretToken, "secret-token", "abc123", secretTokenHelp)
 
 	fs.BoolVar(&args.sendErrorFrames, "send-error-frames", defaultArgSendErrorFrames,
 		sendErrorFramesHelp)
