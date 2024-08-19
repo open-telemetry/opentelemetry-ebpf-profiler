@@ -20,6 +20,7 @@ import (
 	"github.com/tklauser/numcpus"
 	"golang.org/x/sys/unix"
 
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/bench/benchreporter"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/hostmetadata"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
@@ -177,7 +178,7 @@ func mainWithExitCode() exitCode {
 		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
 		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
 		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
-		GRPCClientInterceptor:  reporter.GRPCInterceptor(args.benchProtoDir),
+		GRPCClientInterceptor:  benchreporter.GRPCInterceptor(args.benchProtoDir),
 		ReportInterval:         intervals.ReportInterval(),
 		CacheSize:              traceHandlerCacheSize,
 		SamplesPerSecond:       args.samplesPerSecond,
@@ -192,12 +193,12 @@ func mainWithExitCode() exitCode {
 
 	if args.benchDataDir != "" {
 		if args.benchReplay {
-			if err = reporter.Replay(mainCtx, args.benchDataDir, rep); err != nil {
+			if err = benchreporter.Replay(mainCtx, args.benchDataDir, rep); err != nil {
 				return failure("Failed to replay benchmark data: %v", err)
 			}
 			return exitSuccess
 		}
-		rep, err = reporter.NewBenchmarkReporter(args.benchDataDir, rep)
+		rep, err = benchreporter.NewBenchmarkReporter(args.benchDataDir, rep)
 		if err != nil {
 			return failure("Failed to create benchmark reporter: %v", err)
 		}

@@ -1,4 +1,4 @@
-package reporter
+package benchreporter
 
 import (
 	"context"
@@ -17,15 +17,16 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // compile time check for interface implementation
-var _ Reporter = (*BenchmarkReporter)(nil)
+var _ reporter.Reporter = (*BenchmarkReporter)(nil)
 
 type BenchmarkReporter struct {
 	benchDataDir string
-	rep          Reporter
+	rep          reporter.Reporter
 	uid          int
 	gid          int
 }
@@ -37,12 +38,12 @@ func (r *BenchmarkReporter) ReportFramesForTrace(trace *libpf.Trace) {
 
 type countForTrace struct {
 	TraceHash libpf.TraceHash
-	Meta      *TraceEventMeta
+	Meta      *reporter.TraceEventMeta
 	Count     uint16
 }
 
 func (r *BenchmarkReporter) ReportCountForTrace(traceHash libpf.TraceHash,
-	count uint16, meta *TraceEventMeta) {
+	count uint16, meta *reporter.TraceEventMeta) {
 	r.store("CountForTrace", &countForTrace{
 		TraceHash: traceHash,
 		Meta:      meta,
@@ -51,7 +52,7 @@ func (r *BenchmarkReporter) ReportCountForTrace(traceHash libpf.TraceHash,
 	r.rep.ReportCountForTrace(traceHash, count, meta)
 }
 
-func (r *BenchmarkReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta) {
+func (r *BenchmarkReporter) ReportTraceEvent(trace *libpf.Trace, meta *reporter.TraceEventMeta) {
 	r.store("TraceEvent", &traceEvent{
 		Trace: trace,
 		Meta:  meta,
@@ -77,7 +78,7 @@ func (r *BenchmarkReporter) ReportFallbackSymbol(frameID libpf.FrameID, symbol s
 }
 
 func (r *BenchmarkReporter) ExecutableMetadata(ctx context.Context, fileID libpf.FileID,
-	fileName, buildID string, interp libpf.InterpreterType, open ExecutableOpener) {
+	fileName, buildID string, interp libpf.InterpreterType, open reporter.ExecutableOpener) {
 	r.rep.ExecutableMetadata(ctx, fileID, fileName, buildID, interp, open)
 }
 
@@ -131,11 +132,11 @@ func (r *BenchmarkReporter) Stop() {
 	r.rep.Stop()
 }
 
-func (r *BenchmarkReporter) GetMetrics() Metrics {
+func (r *BenchmarkReporter) GetMetrics() reporter.Metrics {
 	return r.rep.GetMetrics()
 }
 
-func NewBenchmarkReporter(benchDataDir string, rep Reporter) (*BenchmarkReporter, error) {
+func NewBenchmarkReporter(benchDataDir string, rep reporter.Reporter) (*BenchmarkReporter, error) {
 	r := &BenchmarkReporter{
 		benchDataDir: benchDataDir,
 		rep:          rep,
@@ -168,7 +169,7 @@ func originUser() (uid, gid int) {
 
 type traceEvent struct {
 	Trace *libpf.Trace
-	Meta  *TraceEventMeta
+	Meta  *reporter.TraceEventMeta
 }
 
 var counter atomic.Uint64

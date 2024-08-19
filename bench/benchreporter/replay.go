@@ -1,4 +1,4 @@
-package reporter
+package benchreporter
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
 )
 
 type fileInfo struct {
@@ -24,7 +25,7 @@ type fileInfo struct {
 
 // Replay replays the stored data from benchDataDir.
 // The argument r is the reporter that will receive the replayed data.
-func Replay(ctx context.Context, benchDataDir string, rep Reporter) error {
+func Replay(ctx context.Context, benchDataDir string, rep reporter.Reporter) error {
 	files, err := os.ReadDir(benchDataDir)
 	if err != nil {
 		return fmt.Errorf("failed to read directory %s: %v", benchDataDir, err)
