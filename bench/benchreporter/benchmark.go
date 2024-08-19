@@ -52,6 +52,11 @@ func (r *BenchmarkReporter) ReportCountForTrace(traceHash libpf.TraceHash,
 	r.rep.ReportCountForTrace(traceHash, count, meta)
 }
 
+type traceEvent struct {
+	Trace *libpf.Trace
+	Meta  *reporter.TraceEventMeta
+}
+
 func (r *BenchmarkReporter) ReportTraceEvent(trace *libpf.Trace, meta *reporter.TraceEventMeta) {
 	r.store("TraceEvent", &traceEvent{
 		Trace: trace,
@@ -77,8 +82,21 @@ func (r *BenchmarkReporter) ReportFallbackSymbol(frameID libpf.FrameID, symbol s
 	r.rep.ReportFallbackSymbol(frameID, symbol)
 }
 
+type executableMetadata struct {
+	FileID   libpf.FileID
+	FileName string
+	BuildID  string
+	Interp   libpf.InterpreterType
+}
+
 func (r *BenchmarkReporter) ExecutableMetadata(ctx context.Context, fileID libpf.FileID,
 	fileName, buildID string, interp libpf.InterpreterType, open reporter.ExecutableOpener) {
+	r.store("ExecutableMetadata", &executableMetadata{
+		FileID:   fileID,
+		FileName: fileName,
+		BuildID:  buildID,
+		Interp:   interp,
+	})
 	r.rep.ExecutableMetadata(ctx, fileID, fileName, buildID, interp, open)
 }
 
@@ -104,7 +122,14 @@ func (r *BenchmarkReporter) FrameMetadata(fileID libpf.FileID, addressOrLine lib
 	r.rep.FrameMetadata(fileID, addressOrLine, lineNumber, functionOffset, functionName, filePath)
 }
 
+type hostMetadata struct {
+	Metadata map[string]string
+}
+
 func (r *BenchmarkReporter) ReportHostMetadata(metadata map[string]string) {
+	r.store("HostMetadata", &hostMetadata{
+		Metadata: metadata,
+	})
 	r.rep.ReportHostMetadata(metadata)
 }
 
@@ -165,11 +190,6 @@ func originUser() (uid, gid int) {
 		gid, _ = strconv.Atoi(gidStr)
 	}
 	return
-}
-
-type traceEvent struct {
-	Trace *libpf.Trace
-	Meta  *reporter.TraceEventMeta
 }
 
 var counter atomic.Uint64

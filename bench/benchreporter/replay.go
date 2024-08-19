@@ -99,11 +99,22 @@ func Replay(ctx context.Context, benchDataDir string, rep reporter.Reporter) err
 			if err = dataFromFileInfo(benchDataDir, fi, &v); err == nil {
 				rep.ReportFallbackSymbol(v.FrameID, v.Symbol)
 			}
+		case "ExectableMetadata":
+			var v executableMetadata
+			if err = dataFromFileInfo(benchDataDir, fi, &v); err == nil {
+				rep.ExecutableMetadata(context.Background(), v.FileID, v.FileName, v.BuildID,
+					v.Interp, nil)
+			}
 		case "FrameMetadata":
 			var v frameMetadata
 			if err = dataFromFileInfo(benchDataDir, fi, &v); err == nil {
 				rep.FrameMetadata(v.FileID, v.AddressOrLine, v.LineNumber, v.FunctionOffset,
 					v.FunctionName, v.FilePath)
+			}
+		case "HostMetadata":
+			var v hostMetadata
+			if err = dataFromFileInfo(benchDataDir, fi, &v); err == nil {
+				rep.ReportHostMetadata(v.Metadata)
 			}
 		case "Metrics":
 			var v metrics
