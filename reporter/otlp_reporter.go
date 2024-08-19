@@ -131,9 +131,6 @@ type OTLPReporter struct {
 	// samplesPerSecond is the number of samples per second.
 	samplesPerSecond int
 
-	// projectID is the project ID set by the user.
-	projectID string
-
 	// hostID is the unique identifier of the host.
 	hostID string
 
@@ -469,8 +466,6 @@ func (r *OTLPReporter) getResource() *resource.Resource {
 	// Add event specific attributes.
 	// These attributes are also included in the host metadata, but with different names/keys.
 	// That makes our hostmetadata attributes incompatible with OTEL collectors.
-	// TODO: Make a final decision about project id.
-	addAttr("profiling.project.id", r.projectID)
 	addAttr(semconv.HostIDKey, r.hostID)
 	addAttr(semconv.HostIPKey, r.ipAddress)
 	addAttr(semconv.HostNameKey, r.hostName)
