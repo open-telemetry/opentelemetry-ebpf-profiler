@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -25,7 +24,8 @@ import (
 var _ reporter.Reporter = (*BenchmarkReporter)(nil)
 
 type BenchmarkReporter struct {
-	benchDataDir string
+	saveInputsTo string
+	f            *os.File
 	rep          reporter.Reporter
 	uid          int
 	gid          int
@@ -70,14 +70,16 @@ func (r *BenchmarkReporter) SupportsReportTraceEvent() bool {
 }
 
 type fallbackSymbol struct {
-	FrameID libpf.FrameID
-	Symbol  string
+	FileID        libpf.FileID
+	AddressOrLine libpf.AddressOrLineno
+	Symbol        string
 }
 
 func (r *BenchmarkReporter) ReportFallbackSymbol(frameID libpf.FrameID, symbol string) {
 	r.store("FallbackSymbol", &fallbackSymbol{
-		FrameID: frameID,
-		Symbol:  symbol,
+		FileID:        frameID.FileID(),
+		AddressOrLine: frameID.AddressOrLine(),
+		Symbol:        symbol,
 	})
 	r.rep.ReportFallbackSymbol(frameID, symbol)
 }
@@ -155,29 +157,30 @@ func (r *BenchmarkReporter) ReportMetrics(timestamp uint32, ids []uint32, values
 
 func (r *BenchmarkReporter) Stop() {
 	r.rep.Stop()
+	_ = r.f.Close()
 }
 
 func (r *BenchmarkReporter) GetMetrics() reporter.Metrics {
 	return r.rep.GetMetrics()
 }
 
-func NewBenchmarkReporter(benchDataDir string, rep reporter.Reporter) (*BenchmarkReporter, error) {
+func NewBenchmarkReporter(saveInputsTo string, rep reporter.Reporter) (*BenchmarkReporter, error) {
 	r := &BenchmarkReporter{
-		benchDataDir: benchDataDir,
+		saveInputsTo: saveInputsTo,
 		rep:          rep,
 	}
 	r.uid, r.gid = originUser()
 
-	if err := os.MkdirAll(benchDataDir, 0o755); err != nil {
-		return nil, err
+	var err error
+	if r.f, err = os.OpenFile(saveInputsTo,
+		os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644); err != nil {
+		return nil, fmt.Errorf("failed to open file %s: %v", saveInputsTo, err)
 	}
 
-	if r.uid != 0 || r.gid != 0 {
-		changeDirOwner(benchDataDir, r.uid, r.gid)
+	if err = r.f.Chown(r.uid, r.gid); err != nil {
+		return nil, fmt.Errorf("failed to change ownership of %s to %d:%d: %v",
+			saveInputsTo, r.uid, r.gid, err)
 	}
-
-	// Just for storing the initial timestamp.
-	r.store("Start", libpf.Void{})
 
 	return r, nil
 }
@@ -192,27 +195,40 @@ func originUser() (uid, gid int) {
 	return
 }
 
-var counter atomic.Uint64
+type metaInfo struct {
+	TS   int64  `json:"ts"`
+	Name string `json:"name"`
+}
 
-// store stores data as JSON.
+// store appends data as NDJSON to the output file.
 func (r *BenchmarkReporter) store(name string, data any) {
-	ts := time.Now().UnixNano()
-	id := counter.Add(1)
-	fileName := fmt.Sprintf("%d_%06x_%s.json", ts, id, name)
-	pathName := path.Join(r.benchDataDir, fileName)
+	meta := metaInfo{
+		TS:   time.Now().UnixNano(),
+		Name: name,
+	}
 
-	// encode data to JSON
-	bytes, err := json.Marshal(data)
+	// encode meta data to JSON
+	bytes, err := json.Marshal(meta)
 	if err != nil {
 		panic(err)
 	}
-
-	//nolint:gosec
-	if err = os.WriteFile(pathName, bytes, 0o644); err != nil {
+	if err = appendToFile(r.f, bytes); err != nil {
 		panic(err)
 	}
 
-	changeOwner(pathName, r.uid, r.gid)
+	// encode reporter input to JSON
+	bytes, err = json.Marshal(data)
+	if err != nil {
+		panic(err)
+	}
+	if err = appendToFile(r.f, bytes); err != nil {
+		panic(err)
+	}
+}
+
+func appendToFile(f *os.File, bytes []byte) error {
+	_, err := f.Write(append(bytes, '\n'))
+	return err
 }
 
 func changeOwner(pathName string, uid, gid int) {
@@ -230,9 +246,9 @@ func changeDirOwner(dirName string, uid, gid int) {
 	}
 }
 
-func GRPCInterceptor(benchProtoDir string) grpc.UnaryClientInterceptor {
-	if benchProtoDir != "" {
-		if err := os.MkdirAll(benchProtoDir, 0o755); err != nil {
+func GRPCInterceptor(saveDir string) grpc.UnaryClientInterceptor {
+	if saveDir != "" {
+		if err := os.MkdirAll(saveDir, 0o755); err != nil {
 			log.Errorf("Failed to create directory for storing protobuf messages: %v", err)
 			return nil
 		}
@@ -240,13 +256,13 @@ func GRPCInterceptor(benchProtoDir string) grpc.UnaryClientInterceptor {
 		uid, gid := originUser()
 
 		if uid != 0 || gid != 0 {
-			changeDirOwner(benchProtoDir, uid, gid)
+			changeDirOwner(saveDir, uid, gid)
 		}
 
 		// return interceptor to write the uncompressed protobuf messages to disk.
 		return func(ctx context.Context, method string, req, reply any,
 			cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-			storeProtobuf(benchProtoDir, req, uid, gid)
+			storeProtobuf(saveDir, req, uid, gid)
 			return invoker(ctx, method, req, reply, cc, opts...)
 		}
 	}

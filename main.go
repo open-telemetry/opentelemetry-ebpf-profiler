@@ -178,30 +178,31 @@ func mainWithExitCode() exitCode {
 		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
 		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
 		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
-		GRPCClientInterceptor:  benchreporter.GRPCInterceptor(args.benchProtoDir),
+		GRPCClientInterceptor:  benchreporter.GRPCInterceptor(args.reporterSaveOutputsTo),
 		ReportInterval:         intervals.ReportInterval(),
 		CacheSize:              traceHandlerCacheSize,
 		SamplesPerSecond:       args.samplesPerSecond,
 		KernelVersion:          kernelVersion,
 		HostName:               hostname,
 		IPAddress:              sourceIP,
-		DisableJitter:          args.benchDataDir == "",
+		DisableJitter:          args.reporterRecordInputsTo == "",
 	})
 	if err != nil {
 		return failure("Failed to start reporting: %v", err)
 	}
 
-	if args.benchDataDir != "" {
-		if args.benchReplay {
-			if err = benchreporter.Replay(mainCtx, args.benchDataDir, rep); err != nil {
-				return failure("Failed to replay benchmark data: %v", err)
-			}
-			return exitSuccess
-		}
-		rep, err = benchreporter.NewBenchmarkReporter(args.benchDataDir, rep)
+	if args.reporterRecordInputsTo != "" {
+		rep, err = benchreporter.NewBenchmarkReporter(args.reporterRecordInputsTo, rep)
 		if err != nil {
 			return failure("Failed to create benchmark reporter: %v", err)
 		}
+	}
+
+	if args.reporterReplayInputsFrom != "" {
+		if err = benchreporter.Replay(mainCtx, args.reporterReplayInputsFrom, rep); err != nil {
+			return failure("Failed to replay benchmark data: %v", err)
+		}
+		return exitSuccess
 	}
 
 	metrics.SetReporter(rep)
@@ -352,10 +353,6 @@ func sanityCheck(args *arguments) exitCode {
 			return failure("Host Agent requires kernel version "+
 				"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
 		}
-	}
-
-	if args.benchReplay && args.benchDataDir == "" {
-		return failure("Replay requested but no data directory specified")
 	}
 
 	return exitSuccess

@@ -40,28 +40,38 @@ func NowAsUInt32() uint32 {
 // UnixTime64 represents nanoseconds or (reduced precision) seconds since epoch.
 type UnixTime64 uint64
 
-func (t UnixTime64) MarshalJSON() ([]byte, error) {
-	if t > math.MaxUint32 {
+func (t *UnixTime64) MarshalJSON() ([]byte, error) {
+	if *t > math.MaxUint32 {
 		// Nanoseconds, ES does not support 'epoch_nanoseconds' so
 		// we have to pass it a value formatted as 'strict_date_optional_time_nanos'.
 		out := []byte(fmt.Sprintf("%q",
-			time.Unix(0, int64(t)).UTC().Format(time.RFC3339Nano)))
+			time.Unix(0, int64(*t)).UTC().Format(time.RFC3339Nano)))
 		return out, nil
 	}
 
 	// Reduced precision seconds-since-the-epoch, ES 'epoch_second' formatter will match these.
-	out := []byte(fmt.Sprintf("%d", t))
+	out := []byte(fmt.Sprintf("%d", *t))
 	return out, nil
 }
 
-// Unix returns the value as seconds since epoch.
-func (t UnixTime64) Unix() int64 {
-	if t > math.MaxUint32 {
-		// Nanoseconds, convert to seconds-since-the-epoch
-		return time.Unix(0, int64(t)).Unix()
+func (t *UnixTime64) UnmarshalJSON(data []byte) error {
+	var ts time.Time
+	if err := ts.UnmarshalJSON(data); err != nil {
+		return err
 	}
 
-	return int64(t)
+	*t = UnixTime64(ts.UnixNano())
+	return nil
+}
+
+// Unix returns the value as seconds since epoch.
+func (t *UnixTime64) Unix() int64 {
+	if *t > math.MaxUint32 {
+		// Nanoseconds, convert to seconds-since-the-epoch
+		return time.Unix(0, int64(*t)).Unix()
+	}
+
+	return int64(*t)
 }
 
 // Compile-time interface checks
