@@ -33,7 +33,7 @@ func mainWithError() error {
 		return err
 	}
 
-	summary, err := benchmark(args.benchProtoDir)
+	summary, err := benchmark(args.inputDir)
 	if err != nil {
 		return fmt.Errorf("benchmark failed: %v", err)
 	}
@@ -54,11 +54,11 @@ func mainWithError() error {
 	return nil
 }
 
-func benchmark(benchProtoDir string) (*benchSummary, error) {
+func benchmark(inputDir string) (*benchSummary, error) {
 	// scan directory for files
-	files, err := os.ReadDir(benchProtoDir)
+	files, err := os.ReadDir(inputDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read directory %s: %v", benchProtoDir, err)
+		return nil, fmt.Errorf("failed to read directory %s: %v", inputDir, err)
 	}
 
 	summary := &benchSummary{
@@ -73,14 +73,14 @@ func benchmark(benchProtoDir string) (*benchSummary, error) {
 	var buf = bytes.NewBuffer(make([]byte, 0, maxSize))
 
 	// Warm-up
-	_, _ = compressFiles(noneCompressor{name: "none"}, files, benchProtoDir, buf)
+	_, _ = compressFiles(noneCompressor{name: "none"}, files, inputDir, buf)
 
 	baseUsage := int64(0)
 	for _, c := range compressors {
 		var compressed int64
 
 		cpuUsage := getCPUUsage(func() {
-			compressed, err = compressFiles(c, files, benchProtoDir, buf)
+			compressed, err = compressFiles(c, files, inputDir, buf)
 		})
 
 		if err != nil {

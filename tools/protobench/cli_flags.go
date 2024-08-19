@@ -16,25 +16,25 @@ import (
 )
 
 const (
-	defaultArgBenchProtoDir = ""
-	defaultArgOutputFile    = ""
+	defaultArgInputDir   = ""
+	defaultArgOutputFile = ""
 )
 
 // Help strings for command line arguments
 var (
-	benchProtoDirHelp = "Directory to store raw protobuf wire messages."
-	outputFileHelp    = "Output file to store the benchmark results (*.csv or *.png)."
+	inputDirHelp   = "Directory to read and compress files from."
+	outputFileHelp = "Output file to store the benchmark results (*.csv or *.png)."
 )
 
 type arguments struct {
-	benchProtoDir string
-	outputFile    string
+	inputDir   string
+	outputFile string
 
 	fs *flag.FlagSet
 }
 
 func (args *arguments) SanityCheck() error {
-	if args.benchProtoDir == "" {
+	if args.inputDir == "" {
 		return errors.New("no protobuf message directory specified")
 	}
 
@@ -57,11 +57,8 @@ func parseArgs() (*arguments, error) {
 
 	fs := flag.NewFlagSet("protobench", flag.ExitOnError)
 
-	fs.StringVar(&args.benchProtoDir, "bench-proto-dir", defaultArgBenchProtoDir,
-		benchProtoDirHelp)
-
-	fs.StringVar(&args.outputFile, "output-file", defaultArgOutputFile,
-		outputFileHelp)
+	fs.StringVar(&args.inputDir, "input-dir", defaultArgInputDir, inputDirHelp)
+	fs.StringVar(&args.outputFile, "output-file", defaultArgOutputFile, outputFileHelp)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()

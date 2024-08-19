@@ -1,16 +1,16 @@
 The idea is to record the wire messages of the profiling agent and see how well they compress using different
 compressors and what the CPU impact is.
 
-To record the wire messages, you need to run the profiling agent with the `-bench-proto-dir` flag.
+To record the wire messages, you need to run the profiling agent with the `-reporter-save-outputs-to` flag.
 This will write the wire messages into the given directory. The directory will be created if it does not exist.
 
 You can then use the `protobench` tool to compress the wire messages and see how well they compress and how much
 CPU time it takes to compress them.
 
 To run the profiling agent, first have a receiving endpoint, e.g. `devfiler` listening on localhost:11000.
-Then run the profiling agent with the `-bench-proto-dir` flag:
+Then run the profiling agent with the `-reporter-save-outputs-to` flag:
 ```shell
-sudo ./opentelemetry-ebpf-profiler -bench-proto-dir=/tmp/protobuf -collection-agent=127.0.0.1:11000 -disable-tls
+sudo ./opentelemetry-ebpf-profiler -reporter-save-outputs-to=/tmp/protobuf -collection-agent=127.0.0.1:11000 -disable-tls
 ```
 The wire messages are written to `protobuf/`, one file per message.
 
