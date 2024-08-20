@@ -87,7 +87,7 @@ int process_php_frame(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted
     }
 
     // Get execute_data->This.type_info. This reads into the `type_info` argument
-    // so we can re-use it in walk_php_stack
+    // so we can reuse it in walk_php_stack
     if (bpf_probe_read_user(type_info, sizeof(u32),
                             execute_data + phpinfo->zend_execute_data_this_type_info)) {
       DEBUG_PRINT("Failed to read execute_data->This.type_info (0x%lx)",

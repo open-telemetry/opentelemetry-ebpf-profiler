@@ -398,7 +398,7 @@ struct runtime_inlinedCall {
 
 This section provides some examples on what structures need to be traversed to
 locate various function information. This omits details like relative offsets
-that depend on data from the header or moduledata to keep complexity managable.
+that depend on data from the header or moduledata to keep complexity manageable.
 
 ### Locating `runtime._func` for a PC
 

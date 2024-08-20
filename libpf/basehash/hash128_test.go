@@ -136,23 +136,23 @@ func TestHash128Format(t *testing.T) {
 		0xCC, 0xDD, 0xEE, 0xFF})
 
 	tests := map[string]struct {
-		formater string
-		expected string
+		formatter string
+		expected  string
 	}{
-		"v":  {formater: "%v", expected: "{4822678189205111 9843086184167632639}"},
-		"d":  {formater: "%d", expected: "{4822678189205111 9843086184167632639}"},
-		"x":  {formater: "%x", expected: "112233445566778899aabbccddeeff"},
-		"X":  {formater: "%X", expected: "112233445566778899AABBCCDDEEFF"},
-		"#v": {formater: "%#v", expected: "0x112233445566778899aabbccddeeff"},
-		"#x": {formater: "%#x", expected: "0x112233445566778899aabbccddeeff"},
-		"#X": {formater: "%#X", expected: "0x112233445566778899AABBCCDDEEFF"},
+		"v":  {formatter: "%v", expected: "{4822678189205111 9843086184167632639}"},
+		"d":  {formatter: "%d", expected: "{4822678189205111 9843086184167632639}"},
+		"x":  {formatter: "%x", expected: "112233445566778899aabbccddeeff"},
+		"X":  {formatter: "%X", expected: "112233445566778899AABBCCDDEEFF"},
+		"#v": {formatter: "%#v", expected: "0x112233445566778899aabbccddeeff"},
+		"#x": {formatter: "%#x", expected: "0x112233445566778899aabbccddeeff"},
+		"#X": {formatter: "%#X", expected: "0x112233445566778899AABBCCDDEEFF"},
 	}
 
 	for name, test := range tests {
 		name := name
 		test := test
 		t.Run(name, func(t *testing.T) {
-			output := fmt.Sprintf(test.formater, h)
+			output := fmt.Sprintf(test.formatter, h)
 			assert.Equal(t, test.expected, output)
 		})
 	}

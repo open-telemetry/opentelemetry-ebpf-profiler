@@ -50,7 +50,7 @@ package dotnet
 //     with its metadata maps. insert this into ebpf pid_page mappings.
 //  2. just use standard frame pointer unwinding in ebpf, and also locate the JIT function
 //     code header to get access to debug data and method descriptors
-//  3. in the host agent, the debug data and method descriptors are resolved and mappped to
+//  3. in the host agent, the debug data and method descriptors are resolved and mapped to
 //     PE (.dll) FileID, Method index, and the IL code offset (JIT code), or the PE FileID
 //     and Relative Virtual Address (RVA) (Ready to Run code)
 //  4. symbolizer can then map the above data to source code file and line
@@ -128,7 +128,7 @@ var (
 	// regex for the core language runtime
 	dotnetRegex = regexp.MustCompile(`/(\d+)\.(\d+).(\d+)/libcoreclr.so$`)
 
-	// The FileID used for Dotnet stub frames. Same FileID as in other interpeters.
+	// The FileID used for Dotnet stub frames. Same FileID as in other interpreters.
 	stubsFileID = libpf.NewFileID(0x578b, 0x1d)
 
 	// compiler check to make sure the needed interfaces are satisfied
