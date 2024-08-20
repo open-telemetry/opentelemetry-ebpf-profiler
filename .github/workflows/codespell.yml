@@ -8,6 +8,8 @@ jobs:
   codespell:
     runs-on: ubuntu-latest
     steps:
+      - name: Install codespell
+        run: sudo apt-get install codespell
       - name: Checkout Repo
         uses: actions/checkout@v4
       - name: Codespell
