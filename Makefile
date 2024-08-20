@@ -131,7 +131,7 @@ PIP := $(PYTOOLS)/pip
 WORKDIR := /workdir
 
 # The python image to use for the virtual environment.
-PYTHONIMAGE := python:3.11.3-slim-bullseye
+PYTHONIMAGE := python:3.12.5-slim-bookworm
 
 # Run the python image with the current directory mounted.
 DOCKERPY := docker run --rm -v "$(CURDIR):$(WORKDIR)" -w $(WORKDIR) $(PYTHONIMAGE)
