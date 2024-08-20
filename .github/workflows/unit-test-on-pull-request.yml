@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Set up environment
         uses: ./.github/workflows/env
-      - name: Getting linter version
+      - name: Get linter version
         id: linter-version
         run: (echo -n "version="; make linter-version) >> "$GITHUB_OUTPUT"
       - name: golangci-lint
