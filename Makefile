@@ -1,5 +1,5 @@
 .PHONY: all all-common binary clean ebpf generate test test-deps protobuf docker-image agent legal \
-	integration-test-binaries
+	integration-test-binaries lint linter-version
 
 SHELL := /usr/bin/env bash
 
@@ -68,7 +68,10 @@ ebpf:
 GOLANGCI_LINT_VERSION = "v1.60.1"
 lint: generate
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --build-tags integration,linux --timeout 10m
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
+
+linter-version:
+	@echo $(GOLANGCI_LINT_VERSION)
 
 test: generate ebpf test-deps
 	go test $(GO_FLAGS) ./...
