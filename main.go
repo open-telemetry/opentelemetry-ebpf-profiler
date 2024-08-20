@@ -144,8 +144,11 @@ func mainWithExitCode() exitCode {
 	traceHandlerCacheSize :=
 		traceCacheSize(args.monitorInterval, args.samplesPerSecond, uint16(presentCores))
 
-	intervals := times.New(mainCtx,
-		args.monitorInterval, args.reporterInterval, args.probabilisticInterval)
+	intervals := times.New(args.monitorInterval,
+		args.reporterInterval, args.probabilisticInterval)
+
+	// Start periodic synchronization with the realtime clock
+	times.StartRealtimeSync(mainCtx, args.clockSyncInterval)
 
 	log.Debugf("Determining tracers to include")
 	includeTracers, err := tracertypes.Parse(args.tracers)

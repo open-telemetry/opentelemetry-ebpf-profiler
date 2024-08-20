@@ -17,8 +17,8 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracehandler"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 type fakeTimes struct {
@@ -30,7 +30,6 @@ func defaultTimes() *fakeTimes {
 }
 
 func (ft *fakeTimes) MonitorInterval() time.Duration { return ft.monitorInterval }
-func (ft *fakeTimes) BootTimeUnixNano() int64        { return 0 }
 
 // fakeTraceProcessor implements a fake TraceProcessor used only within the test scope.
 type fakeTraceProcessor struct{}
@@ -44,7 +43,7 @@ func (f *fakeTraceProcessor) ConvertTrace(trace *host.Trace) *libpf.Trace {
 	return &newTrace
 }
 
-func (f *fakeTraceProcessor) SymbolizationComplete(util.KTime) {}
+func (f *fakeTraceProcessor) SymbolizationComplete(times.KTime) {}
 
 func (f *fakeTraceProcessor) MaybeNotifyAPMAgent(*host.Trace, libpf.TraceHash, uint16) string {
 	return ""

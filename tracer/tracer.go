@@ -900,7 +900,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.apm_transaction_id)),
 		PID:              util.PID(ptr.pid),
 		TID:              util.PID(ptr.tid),
-		KTime:            util.KTime(ptr.ktime),
+		KTime:            times.KTime(ptr.ktime),
 	}
 
 	// Trace fields included in the hash:
