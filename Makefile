@@ -1,5 +1,5 @@
 .PHONY: all all-common binary clean ebpf generate test test-deps protobuf docker-image agent legal \
-	integration-test-binaries linter-version
+	integration-test-binaries lint linter-version
 
 SHELL := /usr/bin/env bash
 
