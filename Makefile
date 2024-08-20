@@ -68,7 +68,7 @@ ebpf:
 GOLANGCI_LINT_VERSION = "v1.60.1"
 lint: generate
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --build-tags integration,linux --timeout 10m
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
 
 test: generate ebpf test-deps
 	go test $(GO_FLAGS) ./...

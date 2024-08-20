@@ -1,6 +1,12 @@
 service:
   golangci-lint-version: 1.60.x
 
+run:
+  timeout: 10m
+  build-tags:
+    - integration
+    - linux
+
 issues:
   exclude-dirs:
     - artifacts
