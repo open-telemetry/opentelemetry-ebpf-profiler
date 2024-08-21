@@ -15,7 +15,6 @@ package processmanager
 // HA/tracer and utils/coredump modules only.
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -306,7 +305,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	open := func() (process.ReadAtCloser, error) {
 		return pr.OpenMappingFile(&mapping2)
 	}
-	pm.reporter.ExecutableMetadata(context.TODO(), fileID, baseName, buildID, libpf.Native, open)
+	pm.reporter.ExecutableMetadata(fileID, baseName, buildID, libpf.Native, open)
 
 	return info
 }

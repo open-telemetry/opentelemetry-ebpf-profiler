@@ -7,7 +7,6 @@
 package dotnet
 
 import (
-	"context"
 	"fmt"
 	"hash/fnv"
 	"os"
@@ -19,6 +18,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/elastic/go-freelru"
+
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
@@ -634,7 +634,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			open := func() (process.ReadAtCloser, error) {
 				return os.Open(m.Path)
 			}
-			symbolReporter.ExecutableMetadata(context.TODO(), info.fileID, path.Base(m.Path),
+			symbolReporter.ExecutableMetadata(info.fileID, path.Base(m.Path),
 				info.guid, libpf.Dotnet, open)
 			info.reported = true
 		}

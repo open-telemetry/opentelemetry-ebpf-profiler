@@ -25,8 +25,6 @@ import (
 	"github.com/cilium/ebpf/link"
 	lru "github.com/elastic/go-freelru"
 	"github.com/elastic/go-perf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
 	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
 
@@ -43,7 +41,9 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracehandler"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
@@ -170,8 +170,7 @@ type hookPoint struct {
 
 // processKernelModulesMetadata computes the FileID of kernel files and reports executable metadata
 // for all kernel modules and the vmlinux image.
-func processKernelModulesMetadata(ctx context.Context,
-	rep reporter.SymbolReporter, kernelModules *libpf.SymbolMap,
+func processKernelModulesMetadata(rep reporter.SymbolReporter, kernelModules *libpf.SymbolMap,
 	kernelSymbols *libpf.SymbolMap) (map[string]libpf.FileID, error) {
 	result := make(map[string]libpf.FileID, kernelModules.Len())
 	kernelModules.VisitAll(func(moduleSym libpf.Symbol) {
@@ -203,7 +202,7 @@ func processKernelModulesMetadata(ctx context.Context,
 		}
 
 		result[nameStr] = fileID
-		rep.ExecutableMetadata(ctx, fileID, nameStr, buildID, libpf.Kernel, nil)
+		rep.ExecutableMetadata(fileID, nameStr, buildID, libpf.Kernel, nil)
 	})
 
 	return result, nil
@@ -304,8 +303,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("unable to instantiate transmitted fallback symbols cache: %v", err)
 	}
 
-	moduleFileIDs, err := processKernelModulesMetadata(ctx,
-		cfg.Reporter, kernelModules, kernelSymbols)
+	moduleFileIDs, err := processKernelModulesMetadata(cfg.Reporter, kernelModules, kernelSymbols)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract kernel modules metadata: %v", err)
 	}
