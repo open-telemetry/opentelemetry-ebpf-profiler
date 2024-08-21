@@ -1,6 +1,6 @@
 # Contributing to opentelemetry-ebpf-profiler
 
-The Go special interest group (SIG) meets regularly. See the
+The Profiling special interest group (SIG) meets regularly. See the
 OpenTelemetry
 [community](https://github.com/open-telemetry/community)
 repo for information on this and other SIGs.
