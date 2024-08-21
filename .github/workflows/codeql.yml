@@ -17,11 +17,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.23.0"
-          cache: false
+      - name: Set up environment
+        uses: ./.github/workflows/env
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
