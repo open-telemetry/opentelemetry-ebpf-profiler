@@ -5,6 +5,8 @@ OpenTelemetry
 [community](https://github.com/open-telemetry/community)
 repo for information on this and other SIGs.
 
+## Community
+
 See the [public meeting
 notes](https://docs.google.com/document/d/19UqPPPlGE83N37MhS93uRlxsP1_wGxQ33Qv6CDHaEp0/edit#heading=h.4rdgawyis2hd)
 for a summary description of past meetings.
