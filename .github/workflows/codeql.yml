@@ -1,0 +1,39 @@
+name: "CodeQL"
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: "21 6 * * 1"
+
+jobs:
+  analyze:
+    name: Analyze Go (${{ matrix.target_arch }})
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target_arch: [amd64, arm64]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up environment
+        uses: ./.github/workflows/env
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+
+      - name: Build Artifact
+        run: |
+          make TARGET_ARCH=${{ matrix.target_arch }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+            category: "/language:Go"
+        timeout-minutes: 10

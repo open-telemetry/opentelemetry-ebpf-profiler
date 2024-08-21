@@ -114,7 +114,7 @@ func CopyFromUserNoFaultIsPatched(codeblob []byte, _, _ uint64) (bool, error) {
 					//   0 otherwise
 					// - C
 					//   1 if CMP results in carry condition, like unsigned overflow
-					//   0 otherweise
+					//   0 otherwise
 					expectedInstructionTracker ^= stepB
 					continue
 				}
