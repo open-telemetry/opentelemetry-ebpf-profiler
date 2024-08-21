@@ -15,7 +15,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/consumer"
+	"go.opentelemetry.io/collector/consumer/consumerprofiles"
 	"go.uber.org/zap"
 )
 
@@ -23,7 +23,7 @@ type otelReceiver struct {
 	host         component.Host
 	cancel       context.CancelFunc
 	logger       *zap.Logger
-	nextConsumer consumer.Traces
+	nextConsumer consumerprofiles.Profiles
 	config       *Config
 }
 
