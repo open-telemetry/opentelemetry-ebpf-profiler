@@ -10,9 +10,12 @@ on:
 
 jobs:
   analyze:
-    name: Analyze Go
-    runs-on: ubuntu-24.04
+    name: Analyze Go (${{ matrix.target_arch }})
     if: ${{ github.actor != 'dependabot[bot]' }}
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target_arch: [amd64, arm64]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,7 +30,7 @@ jobs:
 
       - name: Build Artifact
         run: |
-          make
+          make TARGET_ARCH=${{ matrix.target_arch }}
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
