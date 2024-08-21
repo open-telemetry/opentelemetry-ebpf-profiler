@@ -16,7 +16,7 @@ type Config struct {
 	// Name defines the name of the agent.
 	Name string
 
-	// Version defines the vesion of the agent.
+	// Version defines the version of the agent.
 	Version string
 
 	// CollAgentAddr defines the destination of the backend connection.

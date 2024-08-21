@@ -25,7 +25,7 @@ import (
 
 // SafeOpenELF opens the given ELF file in a safely way in that
 // it recovers from panics inside elf.Open().
-// Under cirumstances we see fatal errors from inside the runtime, which
+// Under circumstances we see fatal errors from inside the runtime, which
 // are not recoverable, e.g. "fatal error: runtime: out of memory".
 func SafeOpenELF(name string) (elfFile *elf.File, err error) {
 	defer func() {

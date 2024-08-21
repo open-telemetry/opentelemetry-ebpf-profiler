@@ -95,7 +95,7 @@ func (m *dotnetMethod) mapPCOffsetToILOffset(pcOffset uint32, findCall bool) uin
 			lastCallILOffset = ilOffset
 		}
 
-		// NOTE: _DEBUG builds could have a 0xA nibble to indentify row change.
+		// NOTE: _DEBUG builds could have a 0xA nibble to identify row change.
 		log.Debugf(" %3d, native %3d -> IL %#03x, sourceFlags %#x",
 			i, nativeOffset, ilOffset, sourceFlags)
 	}
@@ -116,7 +116,7 @@ func (m *dotnetMethod) dumpBounds() {
 		nativeOffset += nr.Uint32()
 		ilOffset := uint32(int32(nr.Uint32()) + mappingTypeMaxValue)
 		sourceFlags := nr.Uint32()
-		// NOTE: _DEBUG builds could have a 0xA nibble to indentify row change.
+		// NOTE: _DEBUG builds could have a 0xA nibble to identify row change.
 
 		log.Debugf(" %3d, native %3d -> IL %#03x, sourceFlags %#x",
 			i, nativeOffset, ilOffset, sourceFlags)

@@ -19,7 +19,7 @@ const notifyWaiter = (id) => {
     setTimeout(() => {
       console.log(`Order for customer at table #${id} processed....`);
       resolve({ customerId: id, customerOrder: "Pizza" });
-      // reject(new Error("Error occured with waiter"));
+      // reject(new Error("Error occurred with waiter"));
     }, 1);
   });
 }

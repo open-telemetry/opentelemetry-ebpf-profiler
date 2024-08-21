@@ -87,7 +87,7 @@ func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
 	for i := 0; i < len(stubs); i++ {
 		cur := &stubs[i]
 
-		// Some stubs re-use the code from another stub. Skip elements until
+		// Some stubs reuse the code from another stub. Skip elements until
 		// we detected the next stub that doesn't occupy the same address.
 		for i < len(stubs) {
 			if i != len(stubs)-1 {

@@ -55,7 +55,7 @@ func isSelfOrRuntime(t *testing.T, stack *[32]uintptr, self string) bool {
 			if funcName == self {
 				return true
 			}
-			// Go runtime specifc filters
+			// Go runtime specific filters
 			if !strings.HasPrefix(funcName, "runtime.") &&
 				!strings.HasPrefix(funcName, "runtime/") &&
 				!strings.HasPrefix(funcName, "testing.") &&

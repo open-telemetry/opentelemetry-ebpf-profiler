@@ -1,5 +1,5 @@
 .PHONY: all all-common binary clean ebpf generate test test-deps protobuf docker-image agent legal \
-	integration-test-binaries lint linter-version
+	integration-test-binaries codespell lint linter-version
 
 SHELL := /usr/bin/env bash
 
@@ -114,3 +114,7 @@ legal:
 	@echo "Dependencies license summary (from deps.profiling-agent.csv):"
 	@echo "  Count License"
 	@tail -n '+2' deps.profiling-agent.csv | cut -d',' -f5 | sort | uniq -c | sort -k1rn
+
+
+codespell: 
+	@codespell
