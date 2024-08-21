@@ -64,8 +64,7 @@ func Replay(ctx context.Context, replayInputsFrom string, rep reporter.Reporter)
 		case "ExecutableMetadata":
 			var v executableMetadata
 			if err = decodeTo(decoder, &v); err == nil {
-				rep.ExecutableMetadata(context.Background(), v.FileID, v.FileName, v.BuildID,
-					v.Interp, nil)
+				rep.ExecutableMetadata(v.FileID, v.FileName, v.BuildID, v.Interp, nil)
 			}
 		case "FrameMetadata":
 			var v frameMetadata

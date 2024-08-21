@@ -91,7 +91,7 @@ type executableMetadata struct {
 	Interp   libpf.InterpreterType
 }
 
-func (r *BenchmarkReporter) ExecutableMetadata(ctx context.Context, fileID libpf.FileID,
+func (r *BenchmarkReporter) ExecutableMetadata(fileID libpf.FileID,
 	fileName, buildID string, interp libpf.InterpreterType, open reporter.ExecutableOpener) {
 	r.store("ExecutableMetadata", &executableMetadata{
 		FileID:   fileID,
@@ -99,7 +99,7 @@ func (r *BenchmarkReporter) ExecutableMetadata(ctx context.Context, fileID libpf
 		BuildID:  buildID,
 		Interp:   interp,
 	})
-	r.rep.ExecutableMetadata(ctx, fileID, fileName, buildID, interp, open)
+	r.rep.ExecutableMetadata(fileID, fileName, buildID, interp, open)
 }
 
 type frameMetadata struct {
