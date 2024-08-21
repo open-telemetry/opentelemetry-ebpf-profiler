@@ -9,6 +9,13 @@ See the [public meeting
 notes](https://docs.google.com/document/d/19UqPPPlGE83N37MhS93uRlxsP1_wGxQ33Qv6CDHaEp0/edit#heading=h.4rdgawyis2hd)
 for a summary description of past meetings.
 
+See the [calendar
+group](https://groups.google.com/a/opentelemetry.io/g/calendar-profiling) to
+get invited to meetings.
+
+See the [#otel-profiles](https://cloud-native.slack.com/archives/C03J794L0BV)
+slack channel for discussions and questions.
+
 ## Development
 
 You can view and edit the source code by cloning this repository:
