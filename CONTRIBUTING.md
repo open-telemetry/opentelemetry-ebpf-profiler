@@ -88,7 +88,6 @@ A PR is considered **ready to merge** when:
 	* PRs introducing changes that have already been discussed and consensus
 		reached only need one qualified approval. The discussion and resolution
 		needs to be linked to the PR.
-	* Trivial changes[^2] only need one qualified approval.
 
 * All feedback has been addressed.
 	* All PR comments and suggestions are resolved.
@@ -114,8 +113,6 @@ A PR is considered **ready to merge** when:
 
 * It has been open for review for at least one working day. This gives people
 	reasonable time to review.
-	* Trivial changes[^2] do not have to wait for one day and may be merged with
-		a single [Maintainer]'s approval.
 
 * All required GitHub workflows have succeeded.
 * Urgent fix can take exception as long as it has been actively communicated
@@ -125,8 +122,6 @@ Any [Maintainer] can merge the PR once the above criteria have been met.
 
 [^1]: A qualified approval is a GitHub Pull Request review with "Approve"
 	status from an OpenTelemetry Profiler [Approver] or [Maintainer].
-[^2]: Trivial changes include: typo corrections, cosmetic non-substantive
-	changes, documentation corrections or updates, dependency updates, etc.
 
 ## Approvers and Maintainers
 
