@@ -37,7 +37,7 @@ repo:
 git clone https://github.com/open-telemetry/opentelemetry-ebpf-profiler
 ```
 
-This would put the project in the `opentelemetry-go` directory in
+This will put the project in `opentelemetry-ebpf-profiler` in
 current working directory.
 
 Enter the newly created directory and add your fork as a new remote:
