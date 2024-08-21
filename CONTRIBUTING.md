@@ -14,7 +14,7 @@ for a summary description of past meetings.
 You can view and edit the source code by cloning this repository:
 
 ```sh
-git clone https://github.com/open-telemetry/opentelemetry-ebpf-profiler.git
+git clone https://github.com/open-telemetry/opentelemetry-ebpf-profiler
 ```
 
 Run `make test` to run the tests instead of `go test`.
