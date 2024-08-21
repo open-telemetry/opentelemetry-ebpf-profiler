@@ -19,9 +19,6 @@ git clone https://github.com/open-telemetry/opentelemetry-ebpf-profiler
 
 Run `make test` to run the tests instead of `go test`.
 
-Additionally, there is a `codespell` target that checks for common
-typos in the code. It is not run by default, but you can run it
-manually with `make codespell`.
 
 ## Pull Requests
 
