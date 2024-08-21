@@ -5,6 +5,3 @@
 /go
 opentelemetry-ebpf-profiler
 ci-kernels
-
-# Installed by `make codespell`
-venv/
