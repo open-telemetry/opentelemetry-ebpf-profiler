@@ -133,7 +133,7 @@ Any [Maintainer] can merge the PR once the above criteria have been met.
 
 ### Maintainers
 
-- [Dmitry Filimonov](https://github.com/petethepig), Pyroscope/Grafana-
+- [Dmitry Filimonov](https://github.com/petethepig), Pyroscope/Grafana
 - [Felix Geisendörfer](https://github.com/felixge), Datadog
 - [Joel Höner ](https://github.com/athre0z), Elastic
 - [Timo Teräs](https://github.com/fabled)
