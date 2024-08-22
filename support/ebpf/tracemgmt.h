@@ -127,7 +127,7 @@ bool pid_event_ratelimit(u32 pid, int ratelimit_action) {
 
   // Update the map entry. Technically this is not SMP safe, but doing
   // an atomic update would require EBPF atomics. At worst we send an
-  // extra sync event and the likelyhood for this race is very low, so
+  // extra sync event and the likelihood for this race is very low, so
   // we can live with this.
   int err = bpf_map_update_elem(&reported_pids, &pid, &token, BPF_ANY);
   if (err != 0) {
@@ -314,7 +314,7 @@ static bool is_kernel_address(u64 addr) {
 
 // resolve_unwind_mapping decodes the current PC's mapping and prepares unwinding information.
 // The state text_section_id and text_section_offset are updated accordingly. The unwinding program
-// index that should be used is writen to the given `unwinder` pointer.
+// index that should be used is written to the given `unwinder` pointer.
 static ErrorCode resolve_unwind_mapping(PerCPURecord *record, int* unwinder) {
   UnwindState *state = &record->state;
   pid_t pid = record->trace.pid;

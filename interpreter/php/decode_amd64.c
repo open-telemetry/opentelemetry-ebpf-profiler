@@ -69,7 +69,7 @@ int retrieveJITBufferPtr(const uint8_t * const code, const size_t codesize,
 // which allows us to recover accurate PC data for JIT code
 int retrieveExecuteExJumpLabelAddress(const uint8_t * const code, const size_t codesize,
                                       const uint64_t rip_base, uint64_t * const out) {
-  // The raison d'etre for this function is described in the php8 unwinding doc,
+  // The purpose of this function is described in the php8 unwinding doc,
   // in particular in the "disassembling execute_ex" section.
   ZydisDecoder decoder;
   ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);

@@ -630,7 +630,7 @@ static inline ErrorCode copy_state_regs(UnwindState *state,
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/entry/entry_64.S#L847
   state->return_address = interrupted_kernelmode && regs->orig_ax != -1;
 #elif defined(__aarch64__)
-  // For backwards compatability aarch64 can run 32-bit code.
+  // For backwards compatibility aarch64 can run 32-bit code.
   // Check if the process is running in this 32-bit compat mod.
   if (regs->pstate & PSR_MODE32_BIT) {
     return ERR_NATIVE_AARCH64_32BIT_COMPAT_MODE;

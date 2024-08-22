@@ -165,7 +165,7 @@ type StreamHeader struct {
 	Size   uint32
 }
 
-// table* variables are ECMA-335 II.22 defined Metdata table numbers
+// table* variables are ECMA-335 II.22 defined Metadata table numbers
 const (
 	tableModule                 = 0x00
 	tableTypeRef                = 0x01

@@ -49,7 +49,7 @@ frame symbol information are uploaded via `/api/symbols-ranges`. The "return
 pads" files that contain leaf frame symbol information are uploaded via
 `/api/symbols-returnpads`. Symbfiles may be split and uploaded in multiple
 chunks (in separate HTTP requests) for improved load balancing in the presence
-of muliple symbolizer services.
+of multiple symbolizer services.
 
 ### File metadata (request)
 
