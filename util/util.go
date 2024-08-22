@@ -62,6 +62,7 @@ func IsValidString(s string) bool {
 
 // NextPowerOfTwo returns the next highest power of 2 for a given value v or v,
 // if v is a power of 2.
+// Be aware that this function will return 0 for 0 (you may expect a return value of 1).
 func NextPowerOfTwo(v uint32) uint32 {
 	v--
 	v |= v >> 1
