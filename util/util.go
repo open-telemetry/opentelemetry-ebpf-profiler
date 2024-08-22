@@ -7,7 +7,6 @@
 package util
 
 import (
-	"hash/fnv"
 	"strconv"
 	"sync/atomic"
 	"unicode"
@@ -23,16 +22,6 @@ type PID int32
 
 func (p PID) Hash32() uint32 {
 	return uint32(p)
-}
-
-// HashString turns a string into a 64-bit hash.
-func HashString(s string) uint64 {
-	h := fnv.New64a()
-	if _, err := h.Write([]byte(s)); err != nil {
-		logrus.Fatalf("Failed to write '%v' to hash: %v", s, err)
-	}
-
-	return h.Sum64()
 }
 
 // HexToUint64 is a convenience function to extract a hex string to a uint64 and
