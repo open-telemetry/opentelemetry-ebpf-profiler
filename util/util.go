@@ -7,6 +7,7 @@
 package util
 
 import (
+	"math/bits"
 	"strconv"
 	"sync/atomic"
 	"unicode"
@@ -60,17 +61,12 @@ func IsValidString(s string) bool {
 	return true
 }
 
-// NextPowerOfTwo returns the next highest power of 2 for a given value v or v,
-// if v is a power of 2.
-// Be aware that this function will return 0 for 0 (you may expect a return value of 1).
+// NextPowerOfTwo returns input value if it's a power of two,
+// otherwise it returns the next power of two.
 func NextPowerOfTwo(v uint32) uint32 {
-	v--
-	v |= v >> 1
-	v |= v >> 2
-	v |= v >> 4
-	v |= v >> 8
-	v |= v >> 16
-	v++
+	if bits.OnesCount32(v) != 1 {
+		return 1 << bits.Len32(v)
+	}
 	return v
 }
 

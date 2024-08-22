@@ -12,8 +12,7 @@ func TestNextPowerOfTwo(t *testing.T) {
 		input uint32
 		want  uint32
 	}{
-		// The input of 0 is skipped, as the result of 0 is questionable.
-		// {name: "zero", input: 0, want: 1},
+		{name: "zero", input: 0, want: 1},
 		{name: "one", input: 1, want: 1},
 		{name: "two", input: 2, want: 2},
 		{name: "three", input: 3, want: 4},
