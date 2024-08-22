@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type otelReceiver struct {
+type controller struct {
 	host         component.Host
 	cancel       context.CancelFunc
 	logger       *zap.Logger
@@ -32,8 +32,8 @@ var (
 )
 
 // Start starts the receiver.
-func (otelRcvr *otelReceiver) Start(ctx context.Context, host component.Host) error {
-	cfg := otelRcvr.config
+func (c *controller) Start(ctx context.Context, host component.Host) error {
+	cfg := c.config
 
 	if cfg.Verbose {
 		// logrus is used in the agent code, so we need to set the log level here.
@@ -41,13 +41,13 @@ func (otelRcvr *otelReceiver) Start(ctx context.Context, host component.Host) er
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 
-	log := otelRcvr.logger.Sugar()
+	log := c.logger.Sugar()
 
-	otelRcvr.host = host
+	c.host = host
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ctx, otelRcvr.cancel = context.WithCancel(ctx)
+	ctx, c.cancel = context.WithCancel(ctx)
 
 	if err := tracer.ProbeBPFSyscall(); err != nil {
 		return fmt.Errorf("failed to probe eBPF syscall: %v", err)
@@ -186,9 +186,9 @@ func (otelRcvr *otelReceiver) Start(ctx context.Context, host component.Host) er
 }
 
 // Shutdown stops the receiver.
-func (otelRcvr *otelReceiver) Shutdown(_ context.Context) error {
+func (c *controller) Shutdown(_ context.Context) error {
 	agentShutdown()
-	otelRcvr.cancel()
+	c.cancel()
 	return nil
 }
 
