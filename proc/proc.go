@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -147,7 +148,7 @@ func ListPIDs() ([]libpf.PID, error) {
 			continue
 		}
 		pid, err := strconv.ParseUint(f.Name(), 10, 32)
-		if err != nil {
+		if err != nil || pid > math.MaxUint32 {
 			continue
 		}
 		pids = append(pids, libpf.PID(pid))
