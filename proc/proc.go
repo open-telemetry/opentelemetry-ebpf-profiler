@@ -21,7 +21,6 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/stringutil"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 const defaultMountPoint = "/proc"
@@ -136,8 +135,8 @@ func GetKernelModules(modulesPath string,
 }
 
 // ListPIDs from the proc filesystem mount point and return a list of util.PID to be processed
-func ListPIDs() ([]util.PID, error) {
-	pids := make([]util.PID, 0)
+func ListPIDs() ([]libpf.PID, error) {
+	pids := make([]libpf.PID, 0)
 	files, err := os.ReadDir(defaultMountPoint)
 	if err != nil {
 		return nil, err
@@ -151,7 +150,7 @@ func ListPIDs() ([]util.PID, error) {
 		if err != nil {
 			continue
 		}
-		pids = append(pids, util.PID(pid))
+		pids = append(pids, libpf.PID(pid))
 	}
 	return pids, nil
 }
@@ -159,7 +158,7 @@ func ListPIDs() ([]util.PID, error) {
 // IsPIDLive checks if a PID belongs to a live process. It will never produce a false negative but
 // may produce a false positive (e.g. due to permissions) in which case an error will also be
 // returned.
-func IsPIDLive(pid util.PID) (bool, error) {
+func IsPIDLive(pid libpf.PID) (bool, error) {
 	// A kill syscall with a 0 signal is documented to still do the check
 	// whether the process exists: https://linux.die.net/man/2/kill
 	err := unix.Kill(int(pid), 0)

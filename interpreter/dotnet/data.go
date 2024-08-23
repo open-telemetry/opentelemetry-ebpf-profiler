@@ -13,10 +13,10 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/elastic/go-freelru"
+
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // #include "../../support/ebpf/types.h"
@@ -32,7 +32,7 @@ type dotnetData struct {
 
 	// method to walk range sections
 	walkRangeSectionsMethod func(i *dotnetInstance, ebpf interpreter.EbpfHandler,
-		pid util.PID) error
+		pid libpf.PID) error
 
 	vmStructs struct {
 		// https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/debug/ee/dactable.cpp#L81
@@ -137,7 +137,7 @@ func (d *dotnetData) String() string {
 	return fmt.Sprintf("dotnet %d.%d.%d", (ver>>24)&0xff, (ver>>16)&0xff, ver&0xffff)
 }
 
-func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid util.PID, bias libpf.Address,
+func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	log.Debugf("Attach PID %d, bias %x", pid, bias)
 

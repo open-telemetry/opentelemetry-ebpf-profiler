@@ -52,7 +52,7 @@ type EbpfHandler interface {
 	interpreter.EbpfHandler
 
 	// RemoveReportedPID removes a PID from the reported_pids eBPF map.
-	RemoveReportedPID(pid util.PID)
+	RemoveReportedPID(pid libpf.PID)
 
 	// UpdateUnwindInfo writes UnwindInfo to given unwind info array index
 	UpdateUnwindInfo(index uint16, info sdtypes.UnwindInfo) error
@@ -77,11 +77,11 @@ type EbpfHandler interface {
 	// UpdatePidPageMappingInfo defines a function that updates the eBPF map
 	// pid_page_to_mapping_info with the given pidAndPage and fileIDAndOffset encoded values
 	// as key/value pair.
-	UpdatePidPageMappingInfo(pid util.PID, prefix lpm.Prefix, fileID, bias uint64) error
+	UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Prefix, fileID, bias uint64) error
 
 	// DeletePidPageMappingInfo removes the elements specified by prefixes from eBPF map
 	// pid_page_to_mapping_info and returns the number of elements removed.
-	DeletePidPageMappingInfo(pid util.PID, prefixes []lpm.Prefix) (int, error)
+	DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm.Prefix) (int, error)
 
 	// CollectMetrics returns gathered errors for changes to eBPF maps.
 	CollectMetrics() []metrics.Metric
@@ -303,7 +303,7 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 }
 
 // UpdateProcData adds the given PID specific data to the specified interpreter data eBPF map.
-func (impl *ebpfMapsImpl) UpdateProcData(typ libpf.InterpreterType, pid util.PID,
+func (impl *ebpfMapsImpl) UpdateProcData(typ libpf.InterpreterType, pid libpf.PID,
 	data unsafe.Pointer) error {
 	log.Debugf("Loading symbol addresses into eBPF map for PID %d type %d",
 		pid, typ)
@@ -320,7 +320,7 @@ func (impl *ebpfMapsImpl) UpdateProcData(typ libpf.InterpreterType, pid util.PID
 }
 
 // DeleteProcData removes the given PID specific data of the specified interpreter data eBPF map.
-func (impl *ebpfMapsImpl) DeleteProcData(typ libpf.InterpreterType, pid util.PID) error {
+func (impl *ebpfMapsImpl) DeleteProcData(typ libpf.InterpreterType, pid libpf.PID) error {
 	log.Debugf("Removing symbol addresses from eBPF map for PID %d type %d",
 		pid, typ)
 	ebpfMap, err := impl.getInterpreterTypeMap(typ)
@@ -337,7 +337,7 @@ func (impl *ebpfMapsImpl) DeleteProcData(typ libpf.InterpreterType, pid util.PID
 
 // UpdatePidInterpreterMapping updates the eBPF map pidPageToMappingInfo with the
 // data required to call the correct interpreter unwinder for that memory region.
-func (impl *ebpfMapsImpl) UpdatePidInterpreterMapping(pid util.PID, prefix lpm.Prefix,
+func (impl *ebpfMapsImpl) UpdatePidInterpreterMapping(pid libpf.PID, prefix lpm.Prefix,
 	interpreterProgram uint8, fileID host.FileID, bias uint64) error {
 	// pidPageToMappingInfo is a LPM trie and expects the pid and page
 	// to be in big endian format.
@@ -367,7 +367,7 @@ func (impl *ebpfMapsImpl) UpdatePidInterpreterMapping(pid util.PID, prefix lpm.P
 // mapping size from the eBPF map pidPageToMappingInfo. It is normally used when an
 // interpreter process dies or a region that formerly required interpreter-based unwinding is no
 // longer needed.
-func (impl *ebpfMapsImpl) DeletePidInterpreterMapping(pid util.PID, prefix lpm.Prefix) error {
+func (impl *ebpfMapsImpl) DeletePidInterpreterMapping(pid libpf.PID, prefix lpm.Prefix) error {
 	// pidPageToMappingInfo is a LPM trie and expects the pid and page
 	// to be in big endian format.
 	bePid := bits.ReverseBytes32(uint32(pid))
@@ -419,7 +419,7 @@ var poolPIDPage = sync.Pool{
 }
 
 // getPIDPage initializes a C.PIDPage instance.
-func getPIDPage(pid util.PID, prefix lpm.Prefix) C.PIDPage {
+func getPIDPage(pid libpf.PID, prefix lpm.Prefix) C.PIDPage {
 	// pid_page_to_mapping_info is an LPM trie and expects the pid and page
 	// to be in big endian format.
 	return C.PIDPage{
@@ -431,7 +431,7 @@ func getPIDPage(pid util.PID, prefix lpm.Prefix) C.PIDPage {
 
 // getPIDPagePooled returns a heap-allocated and initialized C.PIDPage instance.
 // After usage, put the instance back into the pool with poolPIDPage.Put().
-func getPIDPagePooled(pid util.PID, prefix lpm.Prefix) *C.PIDPage {
+func getPIDPagePooled(pid libpf.PID, prefix lpm.Prefix) *C.PIDPage {
 	cPIDPage := poolPIDPage.Get().(*C.PIDPage)
 	*cPIDPage = getPIDPage(pid, prefix)
 	return cPIDPage
@@ -543,7 +543,7 @@ func (impl *ebpfMapsImpl) getOuterMap(mapID uint16) *cebpf.Map {
 
 // RemoveReportedPID removes a PID from the reported_pids eBPF map. The kernel component will
 // place a PID in this map before it reports it to Go for further processing.
-func (impl *ebpfMapsImpl) RemoveReportedPID(pid util.PID) {
+func (impl *ebpfMapsImpl) RemoveReportedPID(pid libpf.PID) {
 	key := uint32(pid)
 	_ = impl.reportedPIDs.Delete(unsafe.Pointer(&key))
 }
@@ -727,7 +727,7 @@ func (impl *ebpfMapsImpl) DeleteStackDeltaPage(fileID host.FileID, page uint64) 
 // the fileID of the text section that is mapped at this virtual address, and the offset into the
 // text section that this page can be found at on disk.
 // If the key/value pair already exists it will return an error.
-func (impl *ebpfMapsImpl) UpdatePidPageMappingInfo(pid util.PID, prefix lpm.Prefix,
+func (impl *ebpfMapsImpl) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Prefix,
 	fileID, bias uint64) error {
 	biasAndUnwindProgram, err := support.EncodeBiasAndUnwindProgram(bias, support.ProgUnwindNative)
 	if err != nil {
@@ -747,7 +747,7 @@ func (impl *ebpfMapsImpl) UpdatePidPageMappingInfo(pid util.PID, prefix lpm.Pref
 
 // DeletePidPageMappingInfo removes the elements specified by prefixes from eBPF map
 // pid_page_to_mapping_info and returns the number of elements removed.
-func (impl *ebpfMapsImpl) DeletePidPageMappingInfo(pid util.PID, prefixes []lpm.Prefix) (int,
+func (impl *ebpfMapsImpl) DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm.Prefix) (int,
 	error) {
 	if impl.hasLPMTrieBatchOperations {
 		return impl.DeletePidPageMappingInfoBatch(pid, prefixes)
@@ -755,7 +755,7 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfo(pid util.PID, prefixes []lpm.
 	return impl.DeletePidPageMappingInfoSingle(pid, prefixes)
 }
 
-func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid util.PID, prefixes []lpm.Prefix) (int,
+func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid libpf.PID, prefixes []lpm.Prefix) (int,
 	error) {
 	var cKey = &C.PIDPage{}
 	var deleted int
@@ -772,7 +772,7 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid util.PID, prefixes 
 	return deleted, combinedErrors
 }
 
-func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid util.PID, prefixes []lpm.Prefix) (int,
+func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid libpf.PID, prefixes []lpm.Prefix) (int,
 	error) {
 	// Prepare all keys based on the given prefixes.
 	cKeys := make([]C.PIDPage, 0, len(prefixes))

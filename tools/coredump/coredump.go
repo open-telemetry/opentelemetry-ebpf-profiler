@@ -139,7 +139,7 @@ func (c *symbolizationCache) symbolize(ty libpf.FrameType, fileID libpf.FileID,
 }
 
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
-	lwpFilter libpf.Set[util.PID]) ([]ThreadInfo, error) {
+	lwpFilter libpf.Set[libpf.PID]) ([]ThreadInfo, error) {
 	todo, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -211,7 +211,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	info := make([]ThreadInfo, 0, len(threadInfo))
 	for _, thread := range threadInfo {
 		if len(lwpFilter) > 0 {
-			if _, exists := lwpFilter[util.PID(thread.LWP)]; !exists {
+			if _, exists := lwpFilter[libpf.PID(thread.LWP)]; !exists {
 				continue
 			}
 		}

@@ -23,7 +23,6 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 const (
@@ -39,7 +38,7 @@ type CoredumpProcess struct {
 	files map[string]*CoredumpFile
 
 	// pid the original PID of the coredump
-	pid util.PID
+	pid libpf.PID
 
 	// machineData contains the parsed machine data
 	machineData MachineData
@@ -252,7 +251,7 @@ func (cd *CoredumpProcess) MainExecutable() string {
 }
 
 // PID implements the Process interface
-func (cd *CoredumpProcess) PID() util.PID {
+func (cd *CoredumpProcess) PID() libpf.PID {
 	return cd.pid
 }
 
@@ -449,7 +448,7 @@ type PrpsInfo64 struct {
 func (cd *CoredumpProcess) parseProcessInfo(desc []byte) error {
 	if len(desc) == int(unsafe.Sizeof(PrpsInfo64{})) {
 		info := (*PrpsInfo64)(unsafe.Pointer(&desc[0]))
-		cd.pid = util.PID(info.PID)
+		cd.pid = libpf.PID(info.PID)
 		return nil
 	}
 	return fmt.Errorf("unsupported NT_PRPSINFO size: %d", len(desc))

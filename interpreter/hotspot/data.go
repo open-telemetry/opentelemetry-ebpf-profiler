@@ -26,7 +26,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/lpm"
 	npsr "github.com/open-telemetry/opentelemetry-ebpf-profiler/nopanicslicereader"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // hotspotIntrospectionTable contains the resolved ELF symbols for an introspection table
@@ -338,7 +337,7 @@ func (d *hotspotData) String() string {
 // Attach loads to the ebpf program the needed pointers and sizes to unwind given hotspot process.
 // As the hotspot unwinder depends on the native unwinder, a part of the cleanup is done by the
 // process manager and not the corresponding Detach() function of hotspot objects.
-func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ util.PID, bias libpf.Address,
+func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (ii interpreter.Instance, err error) {
 	// Each function has four symbols: source filename, class name,
 	// method name and signature. However, most of them are shared across

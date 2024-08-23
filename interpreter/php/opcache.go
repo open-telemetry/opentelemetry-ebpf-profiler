@@ -174,7 +174,7 @@ type opcacheInstance struct {
 	prefixes []lpm.Prefix
 }
 
-func (i *opcacheInstance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (i *opcacheInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	// Here we just remove the entries relating to the mappings for the
 	// JIT's memory
 	var err error
@@ -240,7 +240,7 @@ func (d *opcacheData) String() string {
 	return fmt.Sprintf("Opcache %d.%d.%d", (ver>>16)&0xff, (ver>>8)&0xff, ver&0xff)
 }
 
-func (d *opcacheData) Attach(_ interpreter.EbpfHandler, _ util.PID, bias libpf.Address,
+func (d *opcacheData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	return &opcacheInstance{
 		d:    d,

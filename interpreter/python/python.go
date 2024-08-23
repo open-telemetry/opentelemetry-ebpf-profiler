@@ -123,7 +123,7 @@ func (d *pythonData) String() string {
 	return fmt.Sprintf("Python %d.%d", d.version>>8, d.version&0xff)
 }
 
-func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ util.PID, bias libpf.Address,
+func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	addrToCodeObject, err :=
 		freelru.New[libpf.Address, *pythonCodeObject](interpreter.LruFunctionCacheSize,
@@ -410,7 +410,7 @@ func (p *pythonInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
-func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid util.PID,
+func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	tsdInfo tpbase.TSDInfo) error {
 	d := p.d
 	vm := &d.vmStructs
@@ -447,7 +447,7 @@ func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid util.PI
 	return err
 }
 
-func (p *pythonInstance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (p *pythonInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	if !p.procInfoInserted {
 		return nil
 	}

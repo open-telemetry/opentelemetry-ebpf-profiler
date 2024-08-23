@@ -18,7 +18,6 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // RemoteMemory implements a set of convenience functions to access the remote memory
@@ -129,7 +128,7 @@ func (rm RemoteMemory) StringPtr(addr libpf.Address) string {
 // ProcessVirtualMemory implements RemoteMemory by using process_vm_readv syscalls
 // to read the remote memory.
 type ProcessVirtualMemory struct {
-	pid util.PID
+	pid libpf.PID
 }
 
 func (vm ProcessVirtualMemory) ReadAt(p []byte, off int64) (int, error) {
@@ -150,6 +149,6 @@ func (vm ProcessVirtualMemory) ReadAt(p []byte, off int64) (int, error) {
 }
 
 // NewRemoteMemory returns ProcessVirtualMemory implementation of RemoteMemory.
-func NewProcessVirtualMemory(pid util.PID) RemoteMemory {
+func NewProcessVirtualMemory(pid libpf.PID) RemoteMemory {
 	return RemoteMemory{ReaderAt: ProcessVirtualMemory{pid}}
 }

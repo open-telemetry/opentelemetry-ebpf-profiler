@@ -24,7 +24,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/stringutil"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // sendSocket is the shared, unbound socket that we use for communication with
@@ -40,7 +39,7 @@ type apmAgentSocket struct {
 // openAPMAgentSocket opens the APM unix socket in the given PID's root filesystem.
 //
 // This method never blocks.
-func openAPMAgentSocket(pid util.PID, socketPath string) (*apmAgentSocket, error) {
+func openAPMAgentSocket(pid libpf.PID, socketPath string) (*apmAgentSocket, error) {
 	// Ensure that the socket path can't escape our root.
 	socketPath = filepath.Clean(socketPath)
 	for _, segment := range strings.Split(socketPath, "/") {
@@ -123,7 +122,7 @@ func (m *traceCorrMsg) Serialize() []byte {
 }
 
 // readProcessOwner reads the effective UID and GID of the target process.
-func readProcessOwner(pid util.PID) (euid, egid uint32, err error) {
+func readProcessOwner(pid libpf.PID) (euid, egid uint32, err error) {
 	statusFd, err := os.Open(fmt.Sprintf("/proc/%d/status", pid))
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to open process status: %v", err)

@@ -18,13 +18,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/hash"
 )
 
-// PID represent Unix Process ID (pid_t)
-type PID int32
-
-func (p PID) Hash32() uint32 {
-	return uint32(p)
-}
-
 // HexToUint64 is a convenience function to extract a hex string to a uint64 and
 // not worry about errors. Essentially a "mustConvertHexToUint64".
 func HexToUint64(str string) uint64 {

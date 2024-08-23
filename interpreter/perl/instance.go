@@ -84,7 +84,7 @@ func hashCOPKey(k copKey) uint32 {
 	return uint32(h ^ xxhash.Sum64String(k.funcName))
 }
 
-func (i *perlInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid util.PID,
+func (i *perlInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	tsdInfo tpbase.TSDInfo) error {
 	d := i.d
 	stateInTSD := C.u8(0)
@@ -134,7 +134,7 @@ func (i *perlInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid util.PID,
 	return nil
 }
 
-func (i *perlInstance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (i *perlInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	if !i.procInfoInserted {
 		return nil
 	}
