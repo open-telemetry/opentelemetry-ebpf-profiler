@@ -64,10 +64,10 @@ func IsValidString(s string) bool {
 // NextPowerOfTwo returns input value if it's a power of two,
 // otherwise it returns the next power of two.
 func NextPowerOfTwo(v uint32) uint32 {
-	if bits.OnesCount32(v) != 1 {
-		return 1 << bits.Len32(v)
+	if v == 0 {
+		return 1
 	}
-	return v
+	return 1 << bits.Len32(v-1)
 }
 
 // AtomicUpdateMaxUint32 updates the value in store using atomic memory primitives. newValue will
