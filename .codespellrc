@@ -5,6 +5,6 @@ check-filenames =
 check-hidden =
 ignore-words = .codespellignore
 interactive = 1
-skip = .git,AUTHORS.md,go.mod,go.sum,LICENSES,zydis
+skip = .git,AUTHORS.md,go.mod,go.sum,LICENSES,zydis,input-text.lua,lj_bc.h
 uri-ignore-words-list = *
 write =

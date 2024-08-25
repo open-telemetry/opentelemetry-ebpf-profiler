@@ -37,7 +37,8 @@ func __bpf_log(buf unsafe.Pointer, sz C.int) {
 }
 
 //export __push_frame
-func __push_frame(id, file, line C.u64, frameType, returnAddress C.uchar) C.int {
+func __push_frame(id, file, line C.u64, frameType, returnAddress C.uchar,
+	lj_pc_callee C.u32, lj_pc_caller C.u32) C.int {
 	ctx := ebpfContextMap[id]
 
 	ctx.trace.Frames = append(ctx.trace.Frames, host.Frame{
@@ -45,6 +46,8 @@ func __push_frame(id, file, line C.u64, frameType, returnAddress C.uchar) C.int 
 		Lineno:        libpf.AddressOrLineno(line),
 		Type:          libpf.FrameType(frameType),
 		ReturnAddress: returnAddress != 0,
+		LJCalleePC:    uint32(lj_pc_callee),
+		LJCallerPC:    uint32(lj_pc_caller),
 	})
 
 	return C.ERR_OK
@@ -95,7 +98,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef *C.bpf_map_def, keyptr unsafe.Pointe
 	case &C.per_cpu_records:
 		return ctx.perCPURecord
 	case &C.interpreter_offsets, &C.dotnet_procs, &C.perl_procs, &C.php_procs, &C.py_procs,
-		&C.hotspot_procs, &C.ruby_procs, &C.v8_procs:
+		&C.hotspot_procs, &C.ruby_procs, &C.v8_procs, &C.luajit_procs:
 		var key any
 		switch mapdef.key_size {
 		case 8:

@@ -587,6 +587,11 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 			noTailCallTarget: true,
 			enable:           true,
 		},
+		{
+			progID: uint32(support.ProgUnwindLuaJIT),
+			name:   "unwind_luajit",
+			enable: includeTracers.Has(types.LuaJITTracer),
+		},
 	} {
 		if !unwindProg.enable {
 			continue
@@ -1046,6 +1051,8 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.T
 		C.metricID_UnwindDotnetErrBadFP:                       metrics.IDUnwindDotnetErrBadFP,
 		C.metricID_UnwindDotnetErrCodeHeader:                  metrics.IDUnwindDotnetErrCodeHeader,
 		C.metricID_UnwindDotnetErrCodeTooLarge:                metrics.IDUnwindDotnetErrCodeTooLarge,
+		C.metricID_UnwindLuaJITAttempts:                       metrics.IDUnwindLuaJITAttempts,
+		C.metricID_UnwindLuaJITErrNoProcInfo:                  metrics.IDUnwindLuaJITErrNoProcInfo,
 	}
 
 	// previousMetricValue stores the previously retrieved metric values to

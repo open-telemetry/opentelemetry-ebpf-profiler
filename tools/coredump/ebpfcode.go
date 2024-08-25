@@ -55,6 +55,7 @@ int bpf_log(const char *fmt, ...)
 #include "../../support/ebpf/ruby_tracer.ebpf.c"
 #include "../../support/ebpf/v8_tracer.ebpf.c"
 #include "../../support/ebpf/system_config.ebpf.c"
+#include "../../support/ebpf/luajit_tracer.ebpf.c"
 
 int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx)
 {
@@ -117,6 +118,9 @@ int bpf_tail_call(void *ctx, bpf_map_def *map, int index)
 		break;
 	case PROG_UNWIND_DOTNET:
 		rc = unwind_dotnet(ctx);
+		break;
+	case PROG_UNWIND_LUAJIT:
+		rc = unwind_luajit(ctx);
 		break;
 	default:
 		return -1;

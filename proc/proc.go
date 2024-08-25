@@ -114,7 +114,8 @@ func GetKernelModules(modulesPath string,
 
 	var scanner = bufio.NewScanner(file)
 	for scanner.Scan() {
-		var size, refcount, address uint64
+		var size, address uint64
+		var refcount int64
 		var name, dependencies, state string
 
 		line := scanner.Text()

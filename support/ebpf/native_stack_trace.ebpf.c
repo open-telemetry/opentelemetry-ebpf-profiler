@@ -514,6 +514,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
       state->sp = rt_regs[31];
       state->fp = rt_regs[29];
       state->lr = normalize_pac_ptr(rt_regs[30]);
+      state->r7 = rt_regs[7];
       state->r22 = rt_regs[22];
       state->r28 = rt_regs[28];
       state->return_address = false;
@@ -627,6 +628,7 @@ static inline ErrorCode copy_state_regs(UnwindState *state,
   state->r9 = regs->r9;
   state->r11 = regs->r11;
   state->r13 = regs->r13;
+  state->r14 = regs->r14;
   state->r15 = regs->r15;
 
   // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
@@ -643,6 +645,7 @@ static inline ErrorCode copy_state_regs(UnwindState *state,
   state->sp = regs->sp;
   state->fp = regs->regs[29];
   state->lr = normalize_pac_ptr(regs->regs[30]);
+  state->r7 = regs->regs[7];
   state->r22 = regs->regs[22];
   state->r28 = regs->regs[28];
 

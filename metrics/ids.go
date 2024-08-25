@@ -689,6 +689,12 @@ const (
 	// Number of times the stack delta provider succeeded to extract stack deltas
 	IDStackDeltaProviderSuccess = 271
 
+	// Number of attempted LuaJIT unwinds
+	IDUnwindLuaJITAttempts = 272
+
+	// Number of times we didn't find an entry for this process in the LuaJIT process info array
+	IDUnwindLuaJITErrNoProcInfo = 273
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 272
+	IDMax = 274
 )

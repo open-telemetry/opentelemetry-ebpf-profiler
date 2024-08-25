@@ -100,8 +100,6 @@ func (f mockReporter) ExecutableKnown(_ libpf.FileID) bool {
 func (f mockReporter) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
 }
 
-func (f mockReporter) ReportFallbackSymbol(_ libpf.FrameID, _ string) {}
-
 func (f mockReporter) FrameKnown(_ libpf.FrameID) bool {
 	return true
 }

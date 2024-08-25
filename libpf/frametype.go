@@ -51,6 +51,8 @@ const (
 	DotnetFrame FrameType = support.FrameMarkerDotnet
 	// AbortFrame identifies frames that report that further unwinding was aborted due to an error.
 	AbortFrame FrameType = support.FrameMarkerAbort
+	// LuaJITFrame identifies the LuaJIT interpreter frames.
+	LuaJITFrame FrameType = support.FrameMarkerLuaJIT
 )
 
 const (

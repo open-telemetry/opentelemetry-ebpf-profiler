@@ -1937,5 +1937,19 @@
     "name": "StackDeltaProviderSuccess",
     "field": "agent.stack_delta_extraction.success",
     "id": 271
+  },
+  {
+    "description": "Number of attempted LuaJIT unwinds",
+    "type": "counter",
+    "name": "UnwindLuaJITAttempts",
+    "field": "bpf.luajit.attempts",
+    "id": 272
+  },
+  {
+    "description": "Number of times we didn't find an entry for this process in the LuaJIT process info array",
+    "type": "counter",
+    "name": "UnwindLuaJITErrNoProcInfo",
+    "field": "bpf.luajit.errors.no_proc_info",
+    "id": 273
   }
 ]

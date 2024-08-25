@@ -12,6 +12,7 @@
 //    tracer/tracer.go/(StartMapMonitors).
 //  - The ebpf userland test code metricID stringification table in:
 //    support/ebpf/tests/tostring.c
+//  - metrics.json?
 enum {
   // number of calls to interpreter unwinding in get_next_interpreter()
   metricID_UnwindCallInterpreter = 0,
@@ -328,6 +329,18 @@ enum {
   // total number of successes adding native custom labels
   metricID_UnwindNativeCustomLabelsAddSuccesses,
   
+  // number of attempts to unwind LuaJIT
+  metricID_UnwindLuaJITAttempts,
+
+  // number of failures to read LuaJIT proc info
+  metricID_UnwindLuaJITErrNoProcInfo,
+
+  // number of failures to read LuaJIT context pointer
+  metricID_UnwindLuaJITErrNoContext,
+
+  // number of failures in context pointer validity check
+  metricID_UnwindLuaJITErrLMismatch,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -355,6 +368,7 @@ typedef enum TracePrograms {
   PROG_UNWIND_RUBY,
   PROG_UNWIND_V8,
   PROG_UNWIND_DOTNET,
+  PROG_UNWIND_LUAJIT,
   NUM_TRACER_PROGS,
 } TracePrograms;
 
@@ -387,10 +401,15 @@ typedef struct Frame {
   u8 kind;
   // Indicates that the address is a return address.
   u8 return_address;
-  // Explicit padding bytes that the compiler would have inserted anyway.
-  // Here to make it clear to readers that there are spare bytes that could
-  // be put to work without extra cost in case an interpreter needs it.
-  u8 pad[6];
+  // LuaJIT stores bytecode pointers in file_id and addr_or_line, but 
+  // in order to symbolize we also need the offset into the bytecode array
+  // 24 bits allows for 16M instructions, in theory we should support 26 bits 
+  // but 16M should be good enough.
+  // https://github.com/openresty/luajit2/blob/7952882d/src/lj_def.h#L66
+  u8 callee_pc_hi;
+  u8 caller_pc_hi;
+  u16 callee_pc_lo;
+  u16 caller_pc_lo;
 } Frame;
 
 _Static_assert(sizeof(Frame) == 3 * 8, "frame padding not working as expected");
@@ -504,6 +523,12 @@ typedef struct V8ProcInfo {
   u8 codekind_shift, codekind_mask, codekind_baseline;
 } V8ProcInfo;
 
+typedef struct LuaJITProcInfo {
+  u16 g2dispatch;
+  u16 cur_L_offset;
+  u16 cframe_size_jit;
+} LuaJITProcInfo;
+
 // COMM_LEN defines the maximum length we will receive for the comm of a task.
 #define COMM_LEN 16
 
@@ -595,10 +620,10 @@ typedef struct UnwindState {
 
 #if defined(__x86_64__)
   // Current register values for named registers
-  u64 rax, r9, r11, r13, r15;
+  u64 rax, r9, r11, r13, r14, r15;
 #elif defined(__aarch64__)
   // Current register values for named registers
-  u64 lr, r22, r28;
+  u64 lr, r7, r22, r28;
 #endif
 
   // The executable ID/hash associated with PC
@@ -665,6 +690,56 @@ typedef struct RubyUnwindState {
   void *last_stack_frame;
 } RubyUnwindState;
 
+typedef u64 TValue;
+
+// This layout hasn't changed over LuaJIT versions.
+typedef struct LJState {
+  u64 glref;
+  void *dummy3;
+  TValue *base;     /* Base of currently executing function. */
+  TValue *top;		  /* First free slot in the stack. */
+  TValue *maxstack;	/* Last free slot in the stack. */
+  TValue *stack;	  /* Stack base. */
+  void* openupval;	/* List of open upvalues in the stack. */
+  void* env;		/* Thread environment (table of globals). */
+  void *cframe;		/* End of C stack frame chain. */
+} LJState;
+
+// These two are always adjacent, cur_L offset comes from HA.
+typedef struct LJGlobalPart {
+  void *cur_L;
+  TValue* jit_base;
+} LJGlobalPart;
+
+// Part of a function we need access to, skips first 8 bytes.  Again
+// this layout (from GCfuncL type) hasn't changed in the history of openresty.
+typedef struct LJFuncPart {
+  u8 marked;
+  u8 gct;
+  u8 ffid;
+  u8 nupvalues;
+  u32 dummy;
+  void *env;
+  void *gclist;
+  void *pc; // BCIns* to end of GCproto (i.e. startpc)
+} LJFuncPart;
+
+typedef struct LJScratchSpace {
+  LJState L;
+  LJGlobalPart G;
+  LJFuncPart f;
+  void *G_to_report;
+  u32 *prev_proto;
+  u32 prev_pc;
+} LJScratchSpace;
+
+typedef struct LJUnwindState {
+  TValue* frame;
+  TValue* prevframe;
+  void* L_ptr;
+  bool is_jit;
+} LJUnwindState;
+
 // Container for additional scratch space needed by the HotSpot unwinder.
 typedef struct DotnetUnwindScratchSpace {
   // Buffer to read nibble map to locate code start. One map entry allows seeking backwards
@@ -721,6 +796,8 @@ typedef struct PerCPURecord {
   PHPUnwindState phpUnwindState;
   // The current Ruby unwinder state.
   RubyUnwindState rubyUnwindState;
+  // The current LuaJIT unwinder state.
+  LJUnwindState luajitUnwindState;
   union {
     // Scratch space for the Dotnet unwinder.
     DotnetUnwindScratchSpace dotnetUnwindScratch;
@@ -730,6 +807,8 @@ typedef struct PerCPURecord {
     V8UnwindScratchSpace v8UnwindScratch;
     // Scratch space for the Python unwinder
     PythonUnwindScratchSpace pythonUnwindScratch;
+    // Scratch space for the LuaJIT unwinder
+    LJScratchSpace luajitUnwindScratch;
   };
   // Mask to indicate which unwinders are complete
   u32 unwindersDone;
@@ -949,4 +1028,6 @@ typedef struct CustomLabelsArray {
 } CustomLabelsArray;
 
 
-#endif
+
+
+#endif // OPTI_TYPES_H

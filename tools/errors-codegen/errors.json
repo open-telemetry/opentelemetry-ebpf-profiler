@@ -264,5 +264,31 @@
     "id": 6003,
     "name": "dotnet_code_too_large",
     "description": "Dotnet: Code object was too large to unwind in eBPF"
+  },
+  {
+    "id": 7000,
+    "name": "luajit_no_proc_info",
+    "description": "LuaJIT: No entry for this process exists in the LuaJIT process info array"
+  },
+  {
+    "id": 7001,
+    "name": "luajit_read_lua_context",
+    "description": "LuaJIT: Unable to read the Lua context"
+  },
+
+  {
+    "id": 7002,
+    "name": "luajit_frame_read",
+    "description": "LuaJIT: Unable to read the Lua frame"
+  },
+  {
+    "id": 7003,
+    "name": "luajit_l_mismatch",
+    "description": "LuaJIT: context pointer validity check failed"
+  },
+  {
+    "id": 7004,
+    "name": "luajit_invalid_pc",
+    "description": "LuaJIT: PC exceeds 24 bits"
   }
 ]

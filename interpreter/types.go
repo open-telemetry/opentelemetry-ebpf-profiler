@@ -99,7 +99,7 @@ type EbpfHandler interface {
 	UpdatePidInterpreterMapping(libpf.PID, lpm.Prefix, uint8, host.FileID, uint64) error
 
 	// DeletePidInterpreterMapping removes the element specified by pid, prefix
-	// rom the eBPF map pid_page_to_mapping_info.
+	// from the eBPF map pid_page_to_mapping_info.
 	DeletePidInterpreterMapping(libpf.PID, lpm.Prefix) error
 }
 
