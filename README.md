@@ -511,22 +511,3 @@ This project is licensed under the Apache License 2.0 (Apache-2.0).
 
 The eBPF source code is licensed under the GPL 2.0 license.
 [GPL 2.0](support/ebpf/LICENSE)
-
-## Licenses of dependencies
-
-To display a summary of the dependencies' licenses:
-```sh
-make legal
-```
-
-Details can be found in the generated `deps.profiling-agent.csv` file.
-
-At the time of writing this, the summary is
-```
-  Count License
-     52 Apache-2.0
-     17 BSD-3-Clause
-     17 MIT
-      3 BSD-2-Clause
-      1 ISC
-```

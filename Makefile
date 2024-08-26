@@ -1,4 +1,4 @@
-.PHONY: all all-common binary clean ebpf generate test test-deps protobuf docker-image agent legal \
+.PHONY: all all-common binary clean ebpf generate test test-deps protobuf docker-image agent \
 	integration-test-binaries codespell lint linter-version
 
 SHELL := /usr/bin/env bash
@@ -102,19 +102,6 @@ docker-image:
 agent:
 	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
 	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
-
-legal:
-	@go install go.elastic.co/go-licence-detector@latest
-	@go list -m -json $(sort $(shell go list -deps -tags=linux -f "{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}" .)) | go-licence-detector \
-	  -includeIndirect \
-	  -rules legal/rules.json \
-	  -depsTemplate=legal/templates/deps.csv.tmpl \
-	  -depsOut=deps.profiling-agent.csv
-	@./legal/append-non-go-info.sh legal/non-go-dependencies.json deps.profiling-agent.csv
-	@echo "Dependencies license summary (from deps.profiling-agent.csv):"
-	@echo "  Count License"
-	@tail -n '+2' deps.profiling-agent.csv | cut -d',' -f5 | sort | uniq -c | sort -k1rn
-
 
 codespell: 
 	@codespell
