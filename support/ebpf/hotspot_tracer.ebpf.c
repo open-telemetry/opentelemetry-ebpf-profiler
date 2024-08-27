@@ -441,10 +441,18 @@ found_ret:
     return true;
   }
   // Current instructions: 'testl %eax, (%r10)' + 'ret'
-  // (needed for the safe point polling epilogue)
+  // seen in the safe point polling, see:
+  // https://hg.openjdk.org/jdk-updates/jdk14u/file/default/src/hotspot/cpu/x86/c1_LIRAssembler_x86.cpp#l558
   if (code[CODE_CUR] == 0x41 && code[CODE_CUR+1] == 0x85 && code[CODE_CUR+2] == 0x02 &&
       code[CODE_CUR+3] == 0xc3) {
     DEBUG_PRINT("jvm:  -> epilogue on safepoint check'");
+    goto pc_only;
+  }
+  // Current instruction: 'jne ...' + 'ret'
+  // seen in native wrappers, see:
+  // https://hg.openjdk.org/jdk-updates/jdk14u/file/default/src/hotspot/cpu/x86/sharedRuntime_x86_64.cpp#l2744
+  if (code[CODE_CUR] == 0x0f && code[CODE_CUR+1] == 0x85 && code[CODE_CUR+6] == 0xc3) {
+    DEBUG_PRINT("jvm:  -> epilogue on native wrapper exception check'");
     goto pc_only;
   }
   // Previous instruction was 'leave' or 'pop rbp'
