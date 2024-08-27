@@ -40,10 +40,10 @@ import (
 
 // dummyProcess implements pfelf.Process for testing purposes
 type dummyProcess struct {
-	pid util.PID
+	pid libpf.PID
 }
 
-func (d *dummyProcess) PID() util.PID {
+func (d *dummyProcess) PID() libpf.PID {
 	return d.pid
 }
 
@@ -83,7 +83,7 @@ func (d *dummyProcess) Close() error {
 	return nil
 }
 
-func newTestProcess(pid util.PID) process.Process {
+func newTestProcess(pid libpf.PID) process.Process {
 	return &dummyProcess{pid: pid}
 }
 
@@ -142,7 +142,7 @@ func generateDummyFiles(t *testing.T, num int) []string {
 // for the tests.
 type mappingArgs struct {
 	// pid represents the simulated process ID.
-	pid util.PID
+	pid libpf.PID
 	// vaddr represents the simulated start of the mapped memory.
 	vaddr uint64
 	// bias is the load bias to simulate and verify.
@@ -169,7 +169,7 @@ type ebpfMapsMockup struct {
 
 var _ interpreter.EbpfHandler = &ebpfMapsMockup{}
 
-func (mockup *ebpfMapsMockup) RemoveReportedPID(util.PID) {
+func (mockup *ebpfMapsMockup) RemoveReportedPID(libpf.PID) {
 }
 
 func (mockup *ebpfMapsMockup) UpdateInterpreterOffsets(uint16, host.FileID,
@@ -177,23 +177,23 @@ func (mockup *ebpfMapsMockup) UpdateInterpreterOffsets(uint16, host.FileID,
 	return nil
 }
 
-func (mockup *ebpfMapsMockup) UpdateProcData(libpf.InterpreterType, util.PID,
+func (mockup *ebpfMapsMockup) UpdateProcData(libpf.InterpreterType, libpf.PID,
 	unsafe.Pointer) error {
 	mockup.updateProcCount++
 	return nil
 }
 
-func (mockup *ebpfMapsMockup) DeleteProcData(libpf.InterpreterType, util.PID) error {
+func (mockup *ebpfMapsMockup) DeleteProcData(libpf.InterpreterType, libpf.PID) error {
 	mockup.deleteProcCount++
 	return nil
 }
 
-func (mockup *ebpfMapsMockup) UpdatePidInterpreterMapping(util.PID,
+func (mockup *ebpfMapsMockup) UpdatePidInterpreterMapping(libpf.PID,
 	lpm.Prefix, uint8, host.FileID, uint64) error {
 	return nil
 }
 
-func (mockup *ebpfMapsMockup) DeletePidInterpreterMapping(util.PID, lpm.Prefix) error {
+func (mockup *ebpfMapsMockup) DeletePidInterpreterMapping(libpf.PID, lpm.Prefix) error {
 	return nil
 }
 
@@ -222,7 +222,7 @@ func (mockup *ebpfMapsMockup) DeleteStackDeltaPage(host.FileID, uint64) error {
 	return nil
 }
 
-func (mockup *ebpfMapsMockup) UpdatePidPageMappingInfo(pid util.PID, prefix lpm.Prefix,
+func (mockup *ebpfMapsMockup) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Prefix,
 	fileID uint64, bias uint64) error {
 	if prefix.Key == 0 && fileID == 0 && bias == 0 {
 		// If all provided values are 0 the hook was called to create
@@ -240,7 +240,7 @@ func (mockup *ebpfMapsMockup) setExpectedBias(expected uint64) {
 	mockup.expectedBias = expected
 }
 
-func (mockup *ebpfMapsMockup) DeletePidPageMappingInfo(_ util.PID, prefixes []lpm.Prefix) (int,
+func (mockup *ebpfMapsMockup) DeletePidPageMappingInfo(_ libpf.PID, prefixes []lpm.Prefix) (int,
 	error) {
 	mockup.deletePidPageMappingCount += uint8(len(prefixes))
 	return len(prefixes), nil
@@ -461,7 +461,7 @@ func populateManager(t *testing.T, pm *ProcessManager) {
 	t.Helper()
 
 	data := []struct {
-		pid util.PID
+		pid libpf.PID
 
 		mapping Mapping
 	}{
@@ -539,7 +539,7 @@ func populateManager(t *testing.T, pm *ProcessManager) {
 func TestProcExit(t *testing.T) {
 	tests := map[string]struct {
 		// pid represents the ID of a process.
-		pid util.PID
+		pid libpf.PID
 		// deletePidPageMappingCount reflects the number of times
 		// the deletePidPageMappingHook to update the eBPF map was called.
 		deletePidPageMappingCount uint8

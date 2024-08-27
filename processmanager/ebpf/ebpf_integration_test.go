@@ -13,13 +13,13 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/lpm"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func loadTracers(t *testing.T) *ebpfMapsImpl {
@@ -42,7 +42,7 @@ func loadTracers(t *testing.T) *ebpfMapsImpl {
 
 func TestLPM(t *testing.T) {
 	tests := map[string]struct {
-		pid      util.PID
+		pid      libpf.PID
 		page     uint64
 		pageBits uint32
 		rip      uint64

@@ -18,7 +18,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // #include "../../support/ebpf/types.h"
@@ -128,7 +127,7 @@ func (d *perlData) String() string {
 	return fmt.Sprintf("Perl %d.%d.%d", (ver>>16)&0xff, (ver>>8)&0xff, ver&0xff)
 }
 
-func (d *perlData) Attach(_ interpreter.EbpfHandler, _ util.PID, bias libpf.Address,
+func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	addrToHEK, err := freelru.New[libpf.Address, string](interpreter.LruFunctionCacheSize,
 		libpf.Address.Hash32)

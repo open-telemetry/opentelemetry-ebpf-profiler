@@ -14,11 +14,10 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 )
 
 func RemoteMemTests(t *testing.T, rm RemoteMemory) {
@@ -42,5 +41,5 @@ func RemoteMemTests(t *testing.T, rm RemoteMemory) {
 }
 
 func TestProcessVirtualMemory(t *testing.T) {
-	RemoteMemTests(t, NewProcessVirtualMemory(util.PID(os.Getpid())))
+	RemoteMemTests(t, NewProcessVirtualMemory(libpf.PID(os.Getpid())))
 }

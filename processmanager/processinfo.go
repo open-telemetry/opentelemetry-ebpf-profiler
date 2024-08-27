@@ -39,7 +39,7 @@ import (
 
 // assignTSDInfo updates the TSDInfo for the Interpreters on given PID.
 // Caller must hold pm.mu write lock.
-func (pm *ProcessManager) assignTSDInfo(pid util.PID, tsdInfo *tpbase.TSDInfo) {
+func (pm *ProcessManager) assignTSDInfo(pid libpf.PID, tsdInfo *tpbase.TSDInfo) {
 	if tsdInfo == nil {
 		return
 	}
@@ -66,7 +66,7 @@ func (pm *ProcessManager) assignTSDInfo(pid util.PID, tsdInfo *tpbase.TSDInfo) {
 
 // getTSDInfo retrieves the TSDInfo of given PID
 // Caller must hold pm.mu read lock.
-func (pm *ProcessManager) getTSDInfo(pid util.PID) *tpbase.TSDInfo {
+func (pm *ProcessManager) getTSDInfo(pid libpf.PID) *tpbase.TSDInfo {
 	if info, ok := pm.pidToProcessInfo[pid]; ok {
 		return info.tsdInfo
 	}
@@ -79,7 +79,7 @@ func (pm *ProcessManager) getTSDInfo(pid util.PID) *tpbase.TSDInfo {
 // already exists, it returns true. Otherwise false or an error.
 //
 // Caller must hold pm.mu write lock.
-func (pm *ProcessManager) updatePidInformation(pid util.PID, m *Mapping) (bool, error) {
+func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool, error) {
 	info, ok := pm.pidToProcessInfo[pid]
 	if !ok {
 		// We don't have information for this pid, so we first need to
@@ -132,7 +132,7 @@ func (pm *ProcessManager) updatePidInformation(pid util.PID, m *Mapping) (bool, 
 // deletePIDAddress removes the mapping at addr from pid from the internal structure of the
 // process manager instance as well as from the eBPF maps.
 // Caller must hold pm.mu write lock.
-func (pm *ProcessManager) deletePIDAddress(pid util.PID, addr libpf.Address) error {
+func (pm *ProcessManager) deletePIDAddress(pid libpf.PID, addr libpf.Address) error {
 	info, ok := pm.pidToProcessInfo[pid]
 	if !ok {
 		return fmt.Errorf("unknown PID %d: %w", pid, errUnknownPID)
@@ -161,7 +161,7 @@ func (pm *ProcessManager) deletePIDAddress(pid util.PID, addr libpf.Address) err
 }
 
 // assignInterpreter will update the interpreters maps with given interpreter.Instance.
-func (pm *ProcessManager) assignInterpreter(pid util.PID, key util.OnDiskFileIdentifier,
+func (pm *ProcessManager) assignInterpreter(pid libpf.PID, key util.OnDiskFileIdentifier,
 	instance interpreter.Instance) {
 	if _, ok := pm.interpreters[pid]; !ok {
 		// This is the very first interpreter entry for this process.
@@ -362,7 +362,7 @@ func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *pro
 
 // processRemovedMappings removes listed memory mappings and loaded interpreters from
 // the internal structures and eBPF maps.
-func (pm *ProcessManager) processRemovedMappings(pid util.PID, mappings []libpf.Address,
+func (pm *ProcessManager) processRemovedMappings(pid libpf.PID, mappings []libpf.Address,
 	interpretersValid libpf.Set[util.OnDiskFileIdentifier]) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
@@ -492,7 +492,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 // There can be a race condition if we can not clean up the references for this process
 // fast enough and this particular pid is reused again by the system.
 // NOTE: Exported only for tracer.
-func (pm *ProcessManager) ProcessPIDExit(pid util.PID) bool {
+func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) bool {
 	log.Debugf("- PID: %v", pid)
 	defer pm.ebpf.RemoveReportedPID(pid)
 
@@ -607,7 +607,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 // CleanupPIDs executes a periodic synchronization of pidToProcessInfo table with system processes.
 // NOTE: Exported only for tracer.
 func (pm *ProcessManager) CleanupPIDs() {
-	deadPids := make([]util.PID, 0, 16)
+	deadPids := make([]libpf.PID, 0, 16)
 
 	pm.mu.RLock()
 	for pid := range pm.pidToProcessInfo {

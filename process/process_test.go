@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 )
 
 //nolint:lll
@@ -101,7 +101,7 @@ func TestParseMappings(t *testing.T) {
 }
 
 func TestNewPIDOfSelf(t *testing.T) {
-	pr := New(util.PID(os.Getpid()))
+	pr := New(libpf.PID(os.Getpid()))
 	assert.NotNil(t, pr)
 
 	mappings, err := pr.GetMappings()

@@ -531,7 +531,7 @@ type v8SFI struct {
 	bytecodeLength        uint32
 }
 
-func (i *v8Instance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (i *v8Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	err := ebpf.DeleteProcData(libpf.V8, pid)
 	for prefix := range i.prefixes {
 		if err2 := ebpf.DeletePidInterpreterMapping(pid, prefix); err2 != nil {
@@ -1764,7 +1764,7 @@ func mapFramePointerOffset(relBytes uint8) C.u8 {
 	return C.u8(slotOffset)
 }
 
-func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid util.PID, _ libpf.Address,
+func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	vms := &d.vmStructs
 	data := C.V8ProcInfo{

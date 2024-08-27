@@ -17,14 +17,13 @@ import (
 	"regexp"
 	"unsafe"
 
+	log "github.com/sirupsen/logrus"
+
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
-
-	log "github.com/sirupsen/logrus"
 )
 
 // #include <stdlib.h>
@@ -108,7 +107,7 @@ type data struct {
 
 var _ interpreter.Data = &data{}
 
-func (d data) Attach(ebpf interpreter.EbpfHandler, pid util.PID,
+func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	procStorage, err := readProcStorage(rm, bias+d.procStorageElfVA)
 	if err != nil {
@@ -146,13 +145,13 @@ type Instance struct {
 var _ interpreter.Instance = &Instance{}
 
 // Detach implements the interpreter.Instance interface.
-func (i *Instance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (i *Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	return ebpf.DeleteProcData(libpf.APMInt, pid)
 }
 
 // NotifyAPMAgent sends out collected traces to the connected APM agent.
 func (i *Instance) NotifyAPMAgent(
-	pid util.PID, rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16) {
+	pid libpf.PID, rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16) {
 	if rawTrace.APMTransactionID == libpf.InvalidAPMSpanID || i.socket == nil {
 		return
 	}
