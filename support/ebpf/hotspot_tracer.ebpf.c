@@ -409,7 +409,6 @@ bool hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui,
   // On X86, use a heuristic to catch the likely spots of the epilogue.
 #define CODE_CUR 1
   u8 code[14];
-  int i;
 
   if (bpf_probe_read_user(code, sizeof(code), (void*)(ui->pc-CODE_CUR))) {
     return false;
@@ -425,7 +424,7 @@ bool hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui,
   // NOTE: This can find false positives because x86 is variable length
   // instruction set.
 #pragma unroll
-  for (i = CODE_CUR+1; i < sizeof(code); i++) {
+  for (int i = CODE_CUR+1; i < sizeof(code); i++) {
     if (code[i] == 0xc3) {
       goto found_ret;
     }
