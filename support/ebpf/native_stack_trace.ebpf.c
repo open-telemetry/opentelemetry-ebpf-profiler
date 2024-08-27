@@ -159,21 +159,21 @@ void *get_stack_delta_map(int mapID) {
 }
 
 // Get the stack offset of the given instruction.
-static ErrorCode get_stack_delta(u64 text_section_id, u64 text_section_offset,
+static ErrorCode get_stack_delta(UnwindState *state,
                                  int* addrDiff, u32* unwindInfo) {
-  u64 exe_id = text_section_id;
+  u64 exe_id = state->text_section_id;
 
   // Look up the stack delta page information for this address.
   StackDeltaPageKey key = { };
-  key.fileID = text_section_id;
-  key.page = text_section_offset & ~STACK_DELTA_PAGE_MASK;
+  key.fileID = state->text_section_id;
+  key.page = state->text_section_offset & ~STACK_DELTA_PAGE_MASK;
   DEBUG_PRINT("Look up stack delta for %lx:%lx",
-    (unsigned long)text_section_id, (unsigned long)text_section_offset);
+    (unsigned long)state->text_section_id, (unsigned long)state->text_section_offset);
   StackDeltaPageInfo *info = bpf_map_lookup_elem(&stack_delta_page_to_info, &key);
   if (!info) {
     DEBUG_PRINT("Failure to look up stack delta page fileID %lx, page %lx",
                 (unsigned long)key.fileID, (unsigned long)key.page);
-    increment_metric(metricID_UnwindNativeErrLookupTextSection);
+    state->error_metric = metricID_UnwindNativeErrLookupTextSection;
     return ERR_NATIVE_LOOKUP_TEXT_SECTION;
   }
 
@@ -181,7 +181,7 @@ static ErrorCode get_stack_delta(u64 text_section_id, u64 text_section_offset,
   if (!outer_map) {
     DEBUG_PRINT("Failure to look up outer map for text section %lx in mapID %d",
                 (unsigned long) exe_id, (int) info->mapID);
-    increment_metric(metricID_UnwindNativeErrLookupStackDeltaOuterMap);
+    state->error_metric = metricID_UnwindNativeErrLookupStackDeltaOuterMap;
     return ERR_NATIVE_LOOKUP_STACK_DELTA_OUTER_MAP;
   }
 
@@ -189,13 +189,13 @@ static ErrorCode get_stack_delta(u64 text_section_id, u64 text_section_offset,
   if (!inner_map) {
     DEBUG_PRINT("Failure to look up inner map for text section %lx",
                 (unsigned long) exe_id);
-    increment_metric(metricID_UnwindNativeErrLookupStackDeltaInnerMap);
+    state->error_metric = metricID_UnwindNativeErrLookupStackDeltaInnerMap;
     return ERR_NATIVE_LOOKUP_STACK_DELTA_INNER_MAP;
   }
 
   // Preinitialize the idx for the index to use for page without any deltas.
   u32 idx = info->firstDelta;
-  u16 page_offset = text_section_offset & STACK_DELTA_PAGE_MASK;
+  u16 page_offset = state->text_section_offset & STACK_DELTA_PAGE_MASK;
   if (info->numDeltas) {
     // Page has deltas, so find the correct one to use using binary search.
     u32 lo = info->firstDelta;
@@ -215,7 +215,7 @@ static ErrorCode get_stack_delta(u64 text_section_id, u64 text_section_offset,
     }
     if (i >= 16 || hi == 0) {
       DEBUG_PRINT("Failed bsearch in 16 steps. Corrupt data?");
-      increment_metric(metricID_UnwindNativeErrLookupIterations);
+      state->error_metric = metricID_UnwindNativeErrLookupIterations;
       return ERR_NATIVE_EXCEEDED_DELTA_LOOKUP_ITERATIONS;
     }
     // After bsearch, 'hi' points to the first entry greater than the requested.
@@ -230,7 +230,7 @@ static ErrorCode get_stack_delta(u64 text_section_id, u64 text_section_offset,
 
   StackDelta *delta = bpf_map_lookup_elem(inner_map, &idx);
   if (!delta) {
-    increment_metric(metricID_UnwindNativeErrLookupRange);
+    state->error_metric = metricID_UnwindNativeErrLookupRange;
     return ERR_NATIVE_LOOKUP_RANGE;
   }
 
@@ -250,7 +250,7 @@ static ErrorCode get_stack_delta(u64 text_section_id, u64 text_section_offset,
   *unwindInfo = delta->unwindInfo;
 
   if (delta->unwindInfo == STACK_DELTA_INVALID) {
-    increment_metric(metricID_UnwindNativeErrStackDeltaInvalid);
+    state->error_metric = metricID_UnwindNativeErrStackDeltaInvalid;
     return ERR_NATIVE_STACK_DELTA_INVALID;
   }
   if (delta->unwindInfo == STACK_DELTA_STOP) {
@@ -397,8 +397,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bo
 
   // The relevant executable is compiled with frame pointer omission, so
   // stack deltas need to be retrieved from the relevant map.
-  ErrorCode error = get_stack_delta(state->text_section_id, state->text_section_offset,
-                                    &addrDiff, &unwindInfo);
+  ErrorCode error = get_stack_delta(state, &addrDiff, &unwindInfo);
   if (error) {
     return error;
   }
@@ -489,8 +488,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
 
   // The relevant executable is compiled with frame pointer omission, so
   // stack deltas need to be retrieved from the relevant map.
-  ErrorCode error = get_stack_delta(state->text_section_id, state->text_section_offset,
-                                    &addrDiff, &unwindInfo);
+  ErrorCode error = get_stack_delta(state, &addrDiff, &unwindInfo);
   if (error) {
     return error;
   }
