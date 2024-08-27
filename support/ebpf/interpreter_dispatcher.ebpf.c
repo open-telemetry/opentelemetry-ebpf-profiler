@@ -9,6 +9,7 @@
 #include "types.h"
 #include "tracemgmt.h"
 #include "tsd.h"
+#include "util.h"
 
 // Begin shared maps
 
@@ -135,6 +136,13 @@ bpf_map_def SEC("maps") go_procs = {
   .max_entries = 128,
 };
 
+bpf_map_def SEC("maps") cl_procs = {
+  .type = BPF_MAP_TYPE_HASH,
+  .key_size = sizeof(pid_t),
+  .value_size = sizeof(NativeCustomLabelsProcInfo),
+  .max_entries = 128,
+};
+
 static inline __attribute__((__always_inline__))
 void *get_m_ptr(struct GoCustomLabelsOffsets *offs, UnwindState *state) {
     long res;
@@ -227,7 +235,8 @@ bpf_map_def SEC("maps") custom_labels = {
 // curg is nil, then g is either a system stack (called g0) or a signal handler
 // g (gsignal). Neither one will ever have label.
 static inline __attribute__((__always_inline__))
-bool get_custom_labels(struct pt_regs *ctx, UnwindState *state, GoCustomLabelsOffsets *offs, CustomLabelsArray *out) {
+bool get_go_custom_labels(struct pt_regs *ctx, UnwindState *state, void *offsets, CustomLabelsArray *out) {
+    GoCustomLabelsOffsets *offs = offsets;
     bpf_large_memzero((void *)out, sizeof(*out));
     long res;
     size_t m_ptr_addr = (size_t)get_m_ptr(offs, state);
@@ -357,6 +366,38 @@ bool get_custom_labels(struct pt_regs *ctx, UnwindState *state, GoCustomLabelsOf
     return true;
 }
 
+typedef bool (*label_getter)(struct pt_regs *ctx, UnwindState *state, void *data, CustomLabelsArray *out);
+
+static inline __attribute__((__always_inline__))
+bool get_and_add_custom_labels(struct pt_regs *ctx, Trace *trace, UnwindState *state, label_getter getter, void *data) {
+  u32 map_id = 0;
+  CustomLabelsArray *lbls = bpf_map_lookup_elem(&custom_labels_storage, &map_id);
+  bool success = false;
+  if (lbls) {
+    bool success = getter(ctx, state, data, lbls);
+    if (success) {
+      DEBUG_PRINT("got %d custom labels", lbls->len);
+      u64 hash;
+      success = hash_custom_labels(lbls, 0, &hash);
+      if (success) {
+        int err = bpf_map_update_elem(&custom_labels, &hash, lbls, BPF_ANY);
+        if (err) {
+          DEBUG_PRINT("failed to update custom labels with error %d\n", err);
+        }
+        else {
+          trace->custom_labels_hash = hash;
+          success = true;
+          DEBUG_PRINT("successfully computed hash 0x%llx for custom labels", hash);
+        }
+      } else
+        DEBUG_PRINT("failed to compute hash for custom labels");
+    } else
+      DEBUG_PRINT("failed to get custom labels");
+  } else
+    DEBUG_PRINT("failed to get custom labels storage");
+  return success;
+}
+
 static inline __attribute__((__always_inline__))
 void maybe_add_go_custom_labels(struct pt_regs *ctx, Trace *trace, UnwindState *state) {
   u32 pid = trace->pid;
@@ -367,34 +408,93 @@ void maybe_add_go_custom_labels(struct pt_regs *ctx, Trace *trace, UnwindState *
   }
   DEBUG_PRINT("Trace is within a process with Go custom labels enabled");
   increment_metric(metricID_UnwindGoCustomLabelsAttempts);
-  u32 map_id = 0;
-  CustomLabelsArray *lbls = bpf_map_lookup_elem(&custom_labels_storage, &map_id);
-  bool success = false;
-  if (lbls) {
-    bool success = get_custom_labels(ctx, state, offsets, lbls);
-    if (success) {
-      DEBUG_PRINT("got %d custom labels", lbls->len);
-      u64 hash;
-      success = hash_custom_labels(lbls, 0, &hash);
-      if (success) {
-        int err = bpf_map_update_elem(&custom_labels, &hash, lbls, BPF_ANY);
-        if (err) {
-          DEBUG_PRINT("failed to update go custom labels with error %d\n", err);
-        }
-        else {
-          trace->custom_labels_hash = hash;
-          success = true;
-          DEBUG_PRINT("successfully computed hash 0x%llx for Go custom labels", hash);
-        }
-      } else
-        DEBUG_PRINT("failed to compute hash for go custom labels");
-    } else
-      DEBUG_PRINT("failed to get custom labels");
-  } else
-    DEBUG_PRINT("failed to get custom labels storage");
+  bool success = get_and_add_custom_labels(ctx, trace, state, get_go_custom_labels, offsets);
+
   if (!success)
     increment_metric(metricID_UnwindGoCustomLabelsFailures);
 }
+
+static inline __attribute__((__always_inline__))
+bool get_native_custom_labels(struct pt_regs *ctx, UnwindState *state, void *data, CustomLabelsArray *out) {
+  NativeCustomLabelsProcInfo *proc = data;
+
+  u64 tsd_base;
+  if (tsd_get_base((void **)&tsd_base) != 0) {
+    increment_metric(metricID_UnwindNativeCustomLabelsErrReadTsdBase);
+    DEBUG_PRINT("Failed to get TSD base for native custom labels");
+    return false;
+  }
+
+  u64 offset = tsd_base + proc->tls_offset;
+  DEBUG_PRINT("native custom labels data at 0x%llx", offset);
+
+  NativeCustomLabelsThreadLocalData tls;
+  int err;
+  if ((err = bpf_probe_read_user(&tls, sizeof(tls), (void *)(offset)))) {
+    increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+    DEBUG_PRINT("Failed to read custom labels data: %d", err);
+    return false;
+  }
+
+  DEBUG_PRINT("Native custom labels count: %lu", tls.count);
+
+  int remaining = MIN(tls.count, MAX_CUSTOM_LABELS);
+  int i = 0;
+  int ct = 0;
+
+  while (remaining) {
+    if (i >= MAX_CUSTOM_LABELS)
+      break;
+    NativeCustomLabel *lbl_ptr = tls.storage + i;
+    ++i;
+    NativeCustomLabel lbl;
+    if ((err = bpf_probe_read_user(&lbl, sizeof(lbl), (void *)(lbl_ptr)))) {
+      increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+      DEBUG_PRINT("Failed to read label storage struct: %d", err);
+      return false;
+    }
+    if (!lbl.key.buf)
+      continue;
+    CustomLabel *out_lbl = &out->labels[ct];
+    unsigned key_len = MIN(lbl.key.len, CUSTOM_LABEL_MAX_KEY_LEN);
+    out_lbl->key_len = key_len;
+    if ((err = bpf_probe_read_user(out_lbl->key.key_bytes, key_len, (void *)lbl.key.buf))) {
+      increment_metric(metricID_UnwindNativeCustomLabelsErrReadKey);
+      DEBUG_PRINT("Failed to read label key: %d", err);
+      return false;
+    }
+    unsigned val_len = MIN(lbl.value.len, CUSTOM_LABEL_MAX_VAL_LEN);
+    out_lbl->val_len = val_len;
+    if ((err = bpf_probe_read_user(out_lbl->val.val_bytes, val_len, (void *)lbl.value.buf))) {
+      increment_metric(metricID_UnwindNativeCustomLabelsErrReadValue);
+      DEBUG_PRINT("Failed to read label value: %d", err);
+      return false;
+    }
+    ++ct;
+    --remaining;
+  }
+  out->len = ct;
+  increment_metric(metricID_UnwindNativeCustomLabelsReadSuccesses);
+  return true;
+}
+
+static inline __attribute__((__always_inline__))
+void maybe_add_native_custom_labels(struct pt_regs *ctx, Trace *trace, UnwindState *state) {
+  u32 pid = trace->pid;
+  NativeCustomLabelsProcInfo *proc = bpf_map_lookup_elem(&cl_procs, &pid);
+  if (!proc) {
+    DEBUG_PRINT("%d does not support native custom labels", pid);
+    return;
+  }
+  DEBUG_PRINT("Trace is within a process with native custom labels enabled");
+  bool success = get_and_add_custom_labels(ctx, trace, state, get_native_custom_labels, proc);
+  if (success)
+    increment_metric(metricID_UnwindNativeCustomLabelsAddSuccesses);
+  else
+    increment_metric(metricID_UnwindNativeCustomLabelsAddErrors);
+}
+
+
 
 static inline __attribute__((__always_inline__))
 void maybe_add_apm_info(Trace *trace) {
@@ -452,6 +552,7 @@ int unwind_stop(struct pt_regs *ctx) {
   UnwindState *state = &record->state;
 
   maybe_add_apm_info(trace);
+  maybe_add_native_custom_labels(ctx, trace, state);
   maybe_add_go_custom_labels(ctx, trace, state);
 
   // If the stack is otherwise empty, push an error for that: we should

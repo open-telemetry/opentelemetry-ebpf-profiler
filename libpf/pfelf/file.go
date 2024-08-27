@@ -419,6 +419,19 @@ func (f *File) Section(name string) *Section {
 	return nil
 }
 
+// Tbss gets the thread-local uninitialized data section
+func (f *File) Tbss() (*Section, error) {
+	if err := f.LoadSections(); err != nil {
+		return nil, err
+	}
+	for _, sec := range f.Sections {
+		if sec.Type == elf.SHT_NOBITS && sec.Flags&elf.SHF_TLS != 0 {
+			return &sec, nil
+		}
+	}
+	return nil, errors.New("no thread-local uninitialized data section (tbss)")
+}
+
 // ReadVirtualMemory reads bytes from given virtual address
 func (f *File) ReadVirtualMemory(p []byte, addr int64) (int, error) {
 	if len(p) == 0 {

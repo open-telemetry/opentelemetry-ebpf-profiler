@@ -274,10 +274,10 @@ enum {
   // number of failures to get TSD base for APM correlation
   metricID_UnwindApmIntErrReadTsdBase,
 
-  // number of failures read the APM correlation pointer
+  // number of failures to read the APM correlation pointer
   metricID_UnwindApmIntErrReadCorrBufPtr,
 
-  // number of failures read the APM correlation buffer
+  // number of failures to read the APM correlation buffer
   metricID_UnwindApmIntErrReadCorrBuf,
 
   // number of successful reads of APM correlation info
@@ -307,6 +307,27 @@ enum {
   // number of failures to read Go custom labels
   metricID_UnwindGoCustomLabelsFailures,
 
+  // number of failures to get TSD base for native custom labels
+  metricID_UnwindNativeCustomLabelsErrReadTsdBase,
+
+  // number of failures to read native custom labels thread-local object
+  metricID_UnwindNativeCustomLabelsErrReadData,
+
+  // number of failures to read native custom labels key buffer
+  metricID_UnwindNativeCustomLabelsErrReadKey,
+
+  // number of failures to read native custom labels value buffer
+  metricID_UnwindNativeCustomLabelsErrReadValue,
+
+  // number of successful reads of native custom labels
+  metricID_UnwindNativeCustomLabelsReadSuccesses,
+
+  // total number of failures to add native custom labels
+  metricID_UnwindNativeCustomLabelsAddErrors,
+
+  // total number of successes adding native custom labels
+  metricID_UnwindNativeCustomLabelsAddSuccesses,
+  
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -517,6 +538,21 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
   ApmSpanID span_id;
   ApmSpanID transaction_id;
 } ApmCorrelationBuf;
+
+typedef struct NativeCustomLabelsString {
+  size_t len;
+  const unsigned char *buf;
+} NativeCustomLabelsString;
+
+typedef struct NativeCustomLabel {
+  NativeCustomLabelsString key;
+  NativeCustomLabelsString value;
+} NativeCustomLabel;
+
+typedef struct NativeCustomLabelsThreadLocalData {
+  NativeCustomLabel *storage;
+  size_t count;
+} NativeCustomLabelsThreadLocalData;
 
 // Container for a stack trace
 typedef struct Trace {
@@ -872,6 +908,10 @@ typedef struct SystemConfig {
 typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
+
+typedef struct NativeCustomLabelsProcInfo {
+  u64 tls_offset;
+} NativeCustomLabelsProcInfo;
 
 typedef struct GoCustomLabelsOffsets {
   u32 m_offset;
