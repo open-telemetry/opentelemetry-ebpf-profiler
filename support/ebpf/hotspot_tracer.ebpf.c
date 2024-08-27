@@ -408,7 +408,7 @@ bool hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui,
                              HotspotUnwindAction *action) {
   // On X86, use a heuristic to catch the likely spots of the epilogue.
 #define CODE_CUR 1
-  u8 code[12];
+  u8 code[14];
   int i;
 
   if (bpf_probe_read_user(code, sizeof(code), (void*)(ui->pc-CODE_CUR))) {
@@ -417,6 +417,7 @@ bool hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui,
 
   // Current instruction is 'ret'
   if (code[CODE_CUR] == 0xc3) {
+    DEBUG_PRINT("jvm:  -> epilogue on 'ret'");
     goto pc_only;
   }
 
@@ -435,11 +436,13 @@ bool hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui,
 found_ret:
    // Current instruction is 'pop rbp'
   if (code[CODE_CUR] == 0x5d) {
+    DEBUG_PRINT("jvm:  -> epilogue on 'pop rbp'");
     *action = UA_UNWIND_FP_PC;
     return true;
   }
   // Previous instruction was 'leave' or 'pop rbp'
   if (code[CODE_CUR-1] == 0x5d || code[CODE_CUR-1] == 0xc9) {
+    DEBUG_PRINT("jvm:  -> epilogue after leave'");
   pc_only:
     *action = UA_UNWIND_PC_ONLY;
     return true;
