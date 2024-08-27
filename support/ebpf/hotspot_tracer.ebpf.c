@@ -443,7 +443,7 @@ found_ret:
   // Current instructions: 'testl %eax, (%r10)' + 'ret'
   // (needed for the safe point polling epilogue)
   if (code[CODE_CUR] == 0x41 && code[CODE_CUR+1] == 0x85 && code[CODE_CUR+2] == 0x02 &&
-      code[CODE_CUR] == 0xc3) {
+      code[CODE_CUR+3] == 0xc3) {
     DEBUG_PRINT("jvm:  -> epilogue on safepoint check'");
     goto pc_only;
   }
