@@ -440,14 +440,22 @@ found_ret:
     *action = UA_UNWIND_FP_PC;
     return true;
   }
+  // Current instructions: 'testl %eax, (%r10)' + 'ret'
+  // (needed for the safe point polling epilogue)
+  if (code[CODE_CUR] == 0x41 && code[CODE_CUR+1] == 0x85 && code[CODE_CUR+2] == 0x02 &&
+      code[CODE_CUR] == 0xc3) {
+    DEBUG_PRINT("jvm:  -> epilogue on safepoint check'");
+    goto pc_only;
+  }
   // Previous instruction was 'leave' or 'pop rbp'
   if (code[CODE_CUR-1] == 0x5d || code[CODE_CUR-1] == 0xc9) {
     DEBUG_PRINT("jvm:  -> epilogue after leave'");
-  pc_only:
-    *action = UA_UNWIND_PC_ONLY;
-    return true;
+    goto pc_only;
   }
   return false;
+pc_only:
+  *action = UA_UNWIND_PC_ONLY;
+  return true;
 }
 #elif defined(__aarch64__)
 __attribute__((always_inline)) inline static
