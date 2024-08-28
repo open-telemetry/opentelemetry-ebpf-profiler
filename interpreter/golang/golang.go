@@ -7,10 +7,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/elastic/otel-profiling-agent/interpreter"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/remotememory"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
 )
 
 // #include <stdlib.h>
@@ -23,7 +22,7 @@ type data struct {
 	interpreter.InstanceStubs
 }
 
-func (d data) Attach(ebpf interpreter.EbpfHandler, pid util.PID,
+func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
 
 	if err := ebpf.UpdateProcData(libpf.Go, pid, unsafe.Pointer(&d.offsets)); err != nil {
@@ -33,7 +32,7 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid util.PID,
 	return &d, nil
 }
 
-func (d data) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (d data) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	return ebpf.DeleteProcData(libpf.Go, pid)
 }
 

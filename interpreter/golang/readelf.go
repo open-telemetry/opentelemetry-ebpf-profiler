@@ -7,7 +7,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
 )
 
 func getVersionSection(f *pfelf.File) io.ReaderAt {
