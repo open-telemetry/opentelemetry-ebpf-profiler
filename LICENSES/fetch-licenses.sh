@@ -56,11 +56,6 @@ for dir_versioned in $dirs; do
     fi
   fi
 
-  if [ "$license" == "Apache-2.0" ]; then
-    echo "  Apache-2.0 --> no copy required"
-    continue
-  fi
-
   json=$(license-detector $repo -f json)
   read -r license file < \
        <(jq -r '"\(.[0].matches[0].license) \(.[0].matches[0].file)"' <<< "$json")
@@ -75,6 +70,11 @@ for dir_versioned in $dirs; do
     echo "  No file found, check manually"
     check_manually="$check_manually $repo"
     continue
+   fi
+
+   if [ "$license" == "Apache-2.0" ]; then
+     echo "  Apache-2.0 --> no copy required"
+     continue
    fi
 
   echo "  license=$license, file=$file"
