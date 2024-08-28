@@ -51,6 +51,8 @@ var (
 	bpfVerifierLogLevelHelp = "Log level of the eBPF verifier output (0,1,2). Default is 0."
 	bpfVerifierLogSizeHelp  = "Size in bytes that will be allocated for the eBPF " +
 		"verifier output. Only takes effect if bpf-log-level > 0."
+	bpfPrintFullErrorHelp = "Whether to print very long BPF error messages in " +
+		"non-truncated form."
 	versionHelp                = "Show version."
 	probabilisticThresholdHelp = fmt.Sprintf("If set to a value between 1 and %d will enable "+
 		"probabilistic profiling: "+
@@ -73,6 +75,7 @@ var (
 
 type arguments struct {
 	bpfVerifierLogLevel    uint
+	bpfPrintFullError      bool
 	bpfVerifierLogSize     int
 	collAgentAddr          string
 	copyright              bool
@@ -106,6 +109,8 @@ func parseArgs() (*arguments, error) {
 	fs.UintVar(&args.bpfVerifierLogLevel, "bpf-log-level", 0, bpfVerifierLogLevelHelp)
 	fs.IntVar(&args.bpfVerifierLogSize, "bpf-log-size", cebpf.DefaultVerifierLogSize,
 		bpfVerifierLogSizeHelp)
+	fs.BoolVar(&args.bpfPrintFullError, "bpf-print-full-error", false,
+		bpfPrintFullErrorHelp)
 
 	fs.StringVar(&args.collAgentAddr, "collection-agent", "", collAgentAddrHelp)
 	fs.BoolVar(&args.copyright, "copyright", false, copyrightHelp)
