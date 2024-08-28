@@ -104,7 +104,8 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	abiVersion := rm.Uint32(abiVersionPtr)
 
 	if abiVersion != 0 {
-		return nil, fmt.Errorf("Unsupported custom labels ABI version: %d (only 0 is supported)", abiVersion)
+		return nil, fmt.Errorf("unsupported custom labels ABI version: %d"+
+			" (only 0 is supported)", abiVersion)
 	}
 
 	var tlsOffset uint64
@@ -127,4 +128,3 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 func (i *instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	return ebpf.DeleteProcData(libpf.CustomLabels, pid)
 }
-

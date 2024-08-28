@@ -130,8 +130,7 @@ func NewExecutableInfoManager(
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
 	if collectCustomLabels {
-		interpreterLoaders = append(interpreterLoaders, golang.Loader)
-		interpreterLoaders = append(interpreterLoaders, customlabels.Loader)
+		interpreterLoaders = append(interpreterLoaders, golang.Loader, customlabels.Loader)
 	}
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
