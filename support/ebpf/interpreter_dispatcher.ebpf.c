@@ -3,6 +3,9 @@
 // perf event and will call the appropriate tracer for a given process
 
 #include "bpfdefs.h"
+#include "hash.h"
+#include "opaquify.h"
+#include "kernel.h"
 #include "types.h"
 #include "tracemgmt.h"
 #include "tsd.h"
@@ -125,6 +128,274 @@ bpf_map_def SEC("maps") apm_int_procs = {
   .max_entries = 128,
 };
 
+bpf_map_def SEC("maps") go_procs = {
+  .type = BPF_MAP_TYPE_HASH,
+  .key_size = sizeof(pid_t),
+  .value_size = sizeof(GoCustomLabelsOffsets),
+  .max_entries = 128,
+};
+
+static inline __attribute__((__always_inline__))
+void *get_m_ptr(struct GoCustomLabelsOffsets *offs, UnwindState *state) {
+    long res;
+
+    size_t g_addr;
+#if defined(__x86_64__)
+  u64 g_addr_offset = 0xfffffffffffffff8;
+  void *tls_base = NULL;
+  res = tsd_get_base(&tls_base);
+  if (res < 0) {
+    DEBUG_PRINT("Failed to get tsd base; can't read m_ptr");
+    return NULL;
+  }
+
+  res = bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((u64)tls_base + g_addr_offset));
+    if (res < 0) {
+        DEBUG_PRINT("Failed to read g_addr");
+        return NULL;
+    }
+#elif defined(__aarch64__)
+    g_addr = state->r28;
+#endif
+
+
+    DEBUG_PRINT("reading m_ptr_addr at 0x%lx + 0x%x", g_addr, offs->m_offset);
+    void *m_ptr_addr;
+    res = bpf_probe_read_user(&m_ptr_addr, sizeof(void *), (void *)(g_addr + offs->m_offset));
+    if (res < 0) {
+        DEBUG_PRINT("Failed m_ptr_addr");
+        return NULL;
+    }
+
+    return m_ptr_addr;
+}
+
+#define MAX_BUCKETS 8
+
+// see https://gcc.gnu.org/onlinedocs/cpp/Stringizing.html#Stringizing
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+
+struct GoString {
+    char *str;
+    s64 len;
+};
+
+struct GoSlice {
+    void *array;
+    s64 len;
+    s64 cap;
+};
+
+struct MapBucket {
+    char tophash[8];
+    struct GoString keys[8];
+    struct GoString values[8];
+    void *overflow;
+};
+
+bpf_map_def SEC("maps") golang_mapbucket_storage = {
+  .type = BPF_MAP_TYPE_PERCPU_ARRAY,
+  .key_size = sizeof(u32),
+  .value_size = sizeof(struct MapBucket),
+  .max_entries = 1,
+};
+
+bpf_map_def SEC("maps") custom_labels_storage = {
+  .type = BPF_MAP_TYPE_PERCPU_ARRAY,
+  .key_size = sizeof(u32),
+  .value_size = sizeof(CustomLabelsArray),
+  .max_entries = 1,
+};
+
+#define MAX_CUSTOM_LABELS_ENTRIES 1000
+
+bpf_map_def SEC("maps") custom_labels = {
+  .type = BPF_MAP_TYPE_HASH,
+  .key_size = sizeof(u64),
+  .value_size = sizeof(CustomLabelsArray),
+  .max_entries = MAX_CUSTOM_LABELS_ENTRIES,
+};
+
+
+// Go processes store the current goroutine in thread local store. From there
+// this reads the g (aka goroutine) struct, then the m (the actual operating
+// system thread) of that goroutine, and finally curg (current goroutine). This
+// chain is necessary because getg().m.curg points to the current user g
+// assigned to the thread (curg == getg() when not on the system stack). curg
+// may be nil if there is no user g, such as when running in the scheduler. If
+// curg is nil, then g is either a system stack (called g0) or a signal handler
+// g (gsignal). Neither one will ever have label.
+static inline __attribute__((__always_inline__))
+bool get_custom_labels(struct pt_regs *ctx, UnwindState *state, GoCustomLabelsOffsets *offs, CustomLabelsArray *out) {
+    bpf_large_memzero((void *)out, sizeof(*out));
+    long res;
+    size_t m_ptr_addr = (size_t)get_m_ptr(offs, state);
+    if (!m_ptr_addr) {
+        return false;
+    }
+
+    size_t curg_ptr_addr;
+    res = bpf_probe_read_user(&curg_ptr_addr, sizeof(void *), (void *)(m_ptr_addr + offs->curg));
+    if (res < 0) {
+        return false;
+    }
+
+    void *labels_map_ptr_ptr;
+    res = bpf_probe_read_user(&labels_map_ptr_ptr, sizeof(void *), (void *)(curg_ptr_addr + offs->labels));
+    if (res < 0) {
+        return false;
+    }
+
+    void *labels_map_ptr;
+    res = bpf_probe_read(&labels_map_ptr, sizeof(labels_map_ptr), labels_map_ptr_ptr);
+    if (res < 0) {
+        return false;
+    }
+
+    u64 labels_count = 0;
+    res = bpf_probe_read(&labels_count, sizeof(labels_count), labels_map_ptr + offs->hmap_count);
+    if (res < 0) {
+        return false;
+    }
+    if (labels_count == 0) {
+        return false;
+    }
+
+    unsigned char log_2_bucket_count;
+    res = bpf_probe_read(&log_2_bucket_count, sizeof(log_2_bucket_count), labels_map_ptr + offs->hmap_log2_bucket_count);
+    if (res < 0) {
+        return false;
+    }
+    u64 bucket_count = 1 << log_2_bucket_count;
+    void *label_buckets;
+    res = bpf_probe_read(&label_buckets, sizeof(label_buckets), labels_map_ptr + offs->hmap_buckets);
+    if (res < 0) {
+        return false;
+    }
+
+    u32 map_id = 0;
+    // This needs to be allocated in a per-cpu map, because it's too large and
+    // can't be allocated on the stack (which is limited to 512 bytes in bpf).
+    struct MapBucket *map_value = bpf_map_lookup_elem(&golang_mapbucket_storage, &map_id);
+    if (!map_value) {
+        return false;
+    }
+
+    u64 len = 0;
+    for (u64 j = 0; j < MAX_BUCKETS; j++) {
+        if (j >= bucket_count) {
+            break;
+        }
+        res = bpf_probe_read(map_value, sizeof(struct MapBucket), label_buckets + (j * sizeof(struct MapBucket)));
+        if (res < 0) {
+            continue;
+        }
+        for (int i = 0; i < 8; ++i) {
+            len = opaquify64(len, bucket_count);
+            if (!(len < MAX_CUSTOM_LABELS))
+                return true;
+            if (map_value->tophash[i] == 0)
+                continue;
+            u64 key_len = map_value->keys[i].len;
+            u64 val_len = map_value->values[i].len;
+            CustomLabel *lbl = &out->labels[len];
+            lbl->key_len = key_len;
+            lbl->val_len = val_len;
+            if (key_len > CUSTOM_LABEL_MAX_KEY_LEN) {
+                DEBUG_PRINT("failed to read custom label: key too long");
+                continue;
+            }
+            res = bpf_probe_read(lbl->key.key_bytes, key_len, map_value->keys[i].str);
+            if (res) {
+                DEBUG_PRINT("failed to read key for custom label: %ld", res);
+                continue;
+            }
+            if (val_len > CUSTOM_LABEL_MAX_VAL_LEN) {
+                DEBUG_PRINT("failed to read custom label: value too long");
+                continue;
+            }
+            // The following assembly statement is equivalent to:
+            // if (val_len > CUSTOM_LABEL_MAX_VAL_LEN)
+            //     res = bpf_probe_read(lbl->val, val_len, map_value->values[i].str);
+            // else
+            //     res = -1;
+            //
+            // We need to write this in assembly because the verifier doesn't understand
+            // that val_len has already been bounds-checked above, apparently
+            // because clang has spilled it to the stack rather than
+            // keeping it in a register.
+          
+            // clang-format off          
+            asm volatile(
+                // Note: this branch is never taken, but we
+                // need it to appease the verifier.
+                "if %2 > " STR(CUSTOM_LABEL_MAX_VAL_LEN) " goto 2f\n"
+                "r1 = %1\n"
+                "r2 = %2\n"
+                "r3 = %3\n"
+                "call 4\n"
+                "%0 = r0\n"
+                "goto 1f\n"
+                "2: %0 = -1\n"
+                "1:\n"
+                : "=r"(res)
+                : "r"(lbl->val.val_bytes), "r"(val_len), "r"(map_value->values[i].str)
+                  // all r0-r5 are clobbered since we make a function call.
+                : "r0", "r1", "r2", "r3", "r4", "r5", "memory"
+            );
+            // clang-format on
+            if (res) {
+                DEBUG_PRINT("failed to read value for custom label: %ld", res);
+                continue;
+            }
+            ++len;
+        }
+    }
+
+    out->len = len;
+    return true;
+}
+
+static inline __attribute__((__always_inline__))
+void maybe_add_go_custom_labels(struct pt_regs *ctx, Trace *trace, UnwindState *state) {
+  u32 pid = trace->pid;
+  GoCustomLabelsOffsets *offsets = bpf_map_lookup_elem(&go_procs, &pid);
+  if (!offsets) {
+    DEBUG_PRINT("no offsets, %d not recognized as a go binary", pid);
+    return;
+  }
+  DEBUG_PRINT("Trace is within a process with Go custom labels enabled");
+  increment_metric(metricID_UnwindGoCustomLabelsAttempts);
+  u32 map_id = 0;
+  CustomLabelsArray *lbls = bpf_map_lookup_elem(&custom_labels_storage, &map_id);
+  bool success = false;
+  if (lbls) {
+    bool success = get_custom_labels(ctx, state, offsets, lbls);
+    if (success) {
+      DEBUG_PRINT("got %d custom labels", lbls->len);
+      u64 hash;
+      success = hash_custom_labels(lbls, 0, &hash);
+      if (success) {
+        int err = bpf_map_update_elem(&custom_labels, &hash, lbls, BPF_ANY);
+        if (err) {
+          DEBUG_PRINT("failed to update go custom labels with error %d\n", err);
+        }
+        else {
+          trace->custom_labels_hash = hash;
+          success = true;
+          DEBUG_PRINT("successfully computed hash 0x%llx for Go custom labels", hash);
+        }
+      } else
+        DEBUG_PRINT("failed to compute hash for go custom labels");
+    } else
+      DEBUG_PRINT("failed to get custom labels");
+  } else
+    DEBUG_PRINT("failed to get custom labels storage");
+  if (!success)
+    increment_metric(metricID_UnwindGoCustomLabelsFailures);
+}
+
 static inline __attribute__((__always_inline__))
 void maybe_add_apm_info(Trace *trace) {
   u32 pid = trace->pid; // verifier needs this to be on stack on 4.15 kernel
@@ -181,6 +452,7 @@ int unwind_stop(struct pt_regs *ctx) {
   UnwindState *state = &record->state;
 
   maybe_add_apm_info(trace);
+  maybe_add_go_custom_labels(ctx, trace, state);
 
   // If the stack is otherwise empty, push an error for that: we should
   // never encounter empty stacks for successful unwinding.

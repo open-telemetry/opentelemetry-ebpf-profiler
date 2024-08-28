@@ -55,4 +55,5 @@ type Trace struct {
 	TID              libpf.PID
 	APMTraceID       libpf.APMTraceID
 	APMTransactionID libpf.APMTransactionID
+	CustomLabels     map[string]string
 }

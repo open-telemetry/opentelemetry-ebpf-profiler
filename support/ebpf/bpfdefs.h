@@ -18,6 +18,10 @@
   unsigned long long bpf_ktime_get_ns(void);
   int bpf_get_current_comm(void *, int);
 
+  static inline long bpf_probe_read(void *dst, int size, const void *unsafe_ptr) {
+    return -1;
+  }
+
   static inline long bpf_probe_read_user(void *buf, u32 sz, const void *ptr) {
     long __bpf_probe_read_user(u64, void *, u32, const void *);
     return __bpf_probe_read_user(__cgo_ctx->id, buf, sz, ptr);
@@ -51,6 +55,11 @@
   }
 
   static inline int bpf_get_stackid(void *ctx, bpf_map_def *map, u64 flags) {
+    return -1;
+  }
+
+  struct bpf_perf_event_data;
+  static long bpf_perf_prog_read_value(struct pt_regs *ctx, struct bpf_perf_event_value *buf, u32 buf_size) {
     return -1;
   }
 
@@ -92,6 +101,9 @@ static long (*bpf_probe_read_user)(void *dst, int size, const void *unsafe_ptr) 
     (void *)BPF_FUNC_probe_read_user;
 static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr) =
     (void *)BPF_FUNC_probe_read_kernel;
+struct bpf_perf_event_data;
+static long (*bpf_perf_prog_read_value)(struct pt_regs *ctx, struct bpf_perf_event_value *buf, u32 buf_size) =
+    (void *)BPF_FUNC_perf_prog_read_value;
 
 // The sizeof in bpf_trace_printk() must include \0, else no output
 // is generated. The \n is not needed on 5.8+ kernels, but definitely on
@@ -144,5 +156,15 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
   _Pragma("GCC diagnostic pop")
 
 #endif // !TESTING_COREDUMP
+
+// HACK: On failure, bpf_perf_prog_read_value() zeroes the buffer. We ensure that this always
+// fail with a compile time assert that ensures that the struct size is different to the size
+// of the expected structure.
+#define bpf_large_memzero(_d, _l)                                                                                        \
+    ({                                                                                                                   \
+        _Static_assert(_l != sizeof(struct bpf_perf_event_value), "stack size must be different to the valid argument"); \
+        bpf_perf_prog_read_value(ctx, _d, _l);                                                                           \
+    })
+
 
 #endif // OPTI_BPFDEFS_H

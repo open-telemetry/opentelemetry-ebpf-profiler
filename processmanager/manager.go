@@ -67,7 +67,8 @@ var (
 // implementation.
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
 	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, symbolReporter reporter.SymbolReporter,
-	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool) (*ProcessManager, error) {
+	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool,
+	collectCustomLabels bool) (*ProcessManager, error) {
 	if fileIDMapper == nil {
 		var err error
 		fileIDMapper, err = newFileIDMapper(lruFileIDCacheSize)
@@ -83,7 +84,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 	}
 	elfInfoCache.SetLifetime(elfInfoCacheTTL)
 
-	em, err := eim.NewExecutableInfoManager(sdp, ebpf, includeTracers)
+	em, err := eim.NewExecutableInfoManager(sdp, ebpf, includeTracers, collectCustomLabels)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
@@ -216,9 +217,10 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 	traceLen := len(trace.Frames)
 
 	newTrace = &libpf.Trace{
-		Files:      make([]libpf.FileID, 0, traceLen),
-		Linenos:    make([]libpf.AddressOrLineno, 0, traceLen),
-		FrameTypes: make([]libpf.FrameType, 0, traceLen),
+		Files:        make([]libpf.FileID, 0, traceLen),
+		Linenos:      make([]libpf.AddressOrLineno, 0, traceLen),
+		FrameTypes:   make([]libpf.FrameType, 0, traceLen),
+		CustomLabels: trace.CustomLabels,
 	}
 
 	for i := 0; i < traceLen; i++ {

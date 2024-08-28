@@ -153,6 +153,9 @@ type Config struct {
 	ProbabilisticInterval time.Duration
 	// ProbabilisticThreshold is the threshold for probabilistic profiling.
 	ProbabilisticThreshold uint
+	// CollectCustomLabels determines whether to collect custom labels in
+	// languages that support them.
+	CollectCustomLabels bool
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -283,7 +286,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
 		ebpfHandler, nil, cfg.Reporter, elfunwindinfo.NewStackDeltaProvider(),
-		cfg.FilterErrorFrames)
+		cfg.FilterErrorFrames, cfg.CollectCustomLabels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
@@ -884,6 +887,24 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 			log.Errorf("Failed to get kernel stack frames for 0x%x: %v", trace.Hash, err)
 		} else {
 			userFrameOffs = int(kstackLen)
+		}
+	}
+
+	if ptr.custom_labels_hash != 0 {
+		var lbls C.CustomLabelsArray
+
+		if err := t.ebpfMaps["custom_labels"].Lookup(
+			unsafe.Pointer(&ptr.custom_labels_hash), unsafe.Pointer(&lbls),
+		); err != nil {
+			log.Warnf("Failed to read custom labels: %v", err)
+		}
+
+		trace.CustomLabels = make(map[string]string, int(lbls.len))
+		for i := 0; i < int(lbls.len); i++ {
+			lbl := lbls.labels[i]
+			key := string(lbl.key[0:(lbl.key_len)])
+			val := string(lbl.val[0:(lbl.val_len)])
+			trace.CustomLabels[key] = val
 		}
 	}
 

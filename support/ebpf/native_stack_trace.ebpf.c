@@ -515,6 +515,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
       state->fp = rt_regs[29];
       state->lr = normalize_pac_ptr(rt_regs[30]);
       state->r22 = rt_regs[22];
+      state->r28 = rt_regs[28];
       state->return_address = false;
       state->lr_invalid = false;
       DEBUG_PRINT("signal frame");
@@ -643,6 +644,7 @@ static inline ErrorCode copy_state_regs(UnwindState *state,
   state->fp = regs->regs[29];
   state->lr = normalize_pac_ptr(regs->regs[30]);
   state->r22 = regs->regs[22];
+  state->r28 = regs->regs[28];
 
   // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/arm64/include/asm/ptrace.h#L118
