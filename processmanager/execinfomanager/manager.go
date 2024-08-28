@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/customlabelsn"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/customlabels"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/golang"	
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"

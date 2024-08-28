@@ -10,11 +10,10 @@ import (
 	"regexp"
 	"unsafe"
 
-	"github.com/elastic/otel-profiling-agent/interpreter"
-	"github.com/elastic/otel-profiling-agent/libpf"
-	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
-	"github.com/elastic/otel-profiling-agent/remotememory"
-	"github.com/elastic/otel-profiling-agent/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
 )
 
 const (
@@ -98,7 +97,7 @@ type instance struct {
 	interpreter.InstanceStubs
 }
 
-func (d data) Attach(ebpf interpreter.EbpfHandler, pid util.PID,
+func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 
 	abiVersionPtr := rm.Ptr(bias + d.abiVersionElfVA)
@@ -125,6 +124,7 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid util.PID,
 	return &instance{}, nil
 }
 
-func (i *instance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (i *instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	return ebpf.DeleteProcData(libpf.CustomLabels, pid)
 }
+
