@@ -518,14 +518,3 @@ To display a summary of the dependencies' licenses:
 ```sh
 make legal
 ```
-
-Details can be found in the generated `deps.profiling-agent.csv` file.
-
-At the time of writing (23/08/2024 15:50 UTC), the summary is
-```
-  Count License
-     10 BSD-3-Clause
-      9 Apache-2.0
-      9 MIT
-      1 BSD-2-Clause
-```
