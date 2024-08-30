@@ -615,8 +615,8 @@ typedef struct DotnetUnwindScratchSpace {
   // Buffer to read nibble map to locate code start. One map entry allows seeking backwards
   // 32*8 = 256 bytes of code. This defines the maximum size for a JITted function we
   // can recognize: 256 bytes/element * 128 elements = 32kB function size.
-  // Multiplied by two for extra space to read to map fixed amount of bytes,
-  // but to dynamic offset.
+  // Multiplied by two for extra space to read to this array a fixed amount of bytes
+  // to a dynamic offset.
   u32 map[2*128];
 } DotnetUnwindScratchSpace;
 
