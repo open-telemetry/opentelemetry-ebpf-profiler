@@ -53,7 +53,7 @@ ErrorCode dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 p
   //   text_section_id   = pHp->pHdrMap (pointer to the nibble map)
   const UnwindState *state = &record->state;
   DotnetUnwindScratchSpace *scratch = &record->dotnetUnwindScratch;
-  const int map_elements = sizeof(scratch->map)/sizeof(scratch->map[0]);
+  const int map_elements = sizeof(scratch->map)/sizeof(scratch->map[0])/2;
   u64 pc_base = state->text_section_bias;
   u64 pc_delta = pc - pc_base;
   u64 map_start = state->text_section_id;
@@ -71,7 +71,8 @@ ErrorCode dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 p
     // We can read full scratch buffer, adjust map_start so that last entry read corresponds pc_delta
     map_start += pc_delta/DOTNET_CODE_BYTES_PER_ENTRY*sizeof(u32) - sizeof(scratch->map) + sizeof(u32);
   }
-  if (bpf_probe_read_user(&scratch->map[offs], sizeof(scratch->map), (void*) map_start)) {
+  offs %= map_elements;
+  if (bpf_probe_read_user(&scratch->map[offs], sizeof(scratch->map)/2, (void*) map_start)) {
     goto bad_code_header;
   }
 
