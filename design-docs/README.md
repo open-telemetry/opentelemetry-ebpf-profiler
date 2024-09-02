@@ -50,7 +50,7 @@ what you want to do in order to clarify whether a document is needed or not!
     tracks updates when you push fixup commits later.
 - Rename the directory according to the PR ID that was allocated, e.g. if the
   allocated PR ID is 1234 then `00000-my-doc-title` becomes
-  `00000-my-doc-title`
+  `01234-my-doc-title`
 - Once you're happy with the state of the document:
     - Mark the PR as ready for review and tag at least 2 maintainers for review
     - Additional people who should be aware of the document but whose review
