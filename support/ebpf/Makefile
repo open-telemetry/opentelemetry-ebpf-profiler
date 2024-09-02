@@ -2,6 +2,7 @@ SHELL ?= bash
 BPF_CLANG ?= clang-16
 BPF_LINK ?= llvm-link-16
 LLC ?= llc-16
+BPF_STRIP ?= llvm-strip-16
 
 DEBUG_FLAGS = -DOPTI_DEBUG -g
 
@@ -19,6 +20,7 @@ endif
 TARGET_ARCH ?= $(NATIVE_ARCH)
 
 TRACER_NAME ?= tracer.ebpf.$(TARGET_ARCH)
+DEBUG_TRACER_NAME ?= tracer.debug.ebpf.$(TARGET_ARCH)
 
 ifeq ($(TARGET_ARCH),arm64)
 TARGET_FLAGS = -target aarch64-linux-gnu
@@ -44,16 +46,22 @@ OBJS := $(SRCS:.c=.$(TARGET_ARCH).o)
 
 .DEFAULT_GOAL := all
 
-all: $(TRACER_NAME)
+all: clean
+	$(MAKE) build
+	$(MAKE) clean
+	$(MAKE) TRACER_NAME=$(DEBUG_TRACER_NAME) debug
+	$(BPF_STRIP) -g $(DEBUG_TRACER_NAME)
+
+build: $(TRACER_NAME)
 
 debug: TARGET_FLAGS+=$(DEBUG_FLAGS)
-debug: all
+debug: build
 
 amd64:
-	$(MAKE) TARGET_ARCH=amd64 all
+	$(MAKE) TARGET_ARCH=amd64 build
 
 arm64:
-	$(MAKE) TARGET_ARCH=arm64 all
+	$(MAKE) TARGET_ARCH=arm64 build
 
 debug-amd64:
 	$(MAKE) TARGET_ARCH=amd64 debug

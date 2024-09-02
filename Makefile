@@ -44,7 +44,7 @@ LDFLAGS := -X github.com//open-telemetry/opentelemetry-ebpf-profiler/vc.version=
 	-X github.com/open-telemetry/opentelemetry-ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
 	-extldflags=-static
 
-GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)" -tags osusergo,netgo
+GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)" -tags osusergo,netgo,debugtracer
 
 all: generate ebpf binary
 
@@ -91,7 +91,7 @@ TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
 integration-test-binaries: generate ebpf
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
-			-tags osusergo,netgo,static_build,integration \
+			-tags osusergo,netgo,static_build,debugtracer,integration \
 			-o ./support/$(subst /,_,$(test_name)).test \
 			./$(test_name)) || exit ; \
 	)

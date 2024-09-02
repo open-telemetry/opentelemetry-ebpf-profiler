@@ -210,6 +210,7 @@ func mainWithExitCode() exitCode {
 		SamplesPerSecond:       args.samplesPerSecond,
 		MapScaleFactor:         int(args.mapScaleFactor),
 		KernelVersionCheck:     !args.noKernelVersionCheck,
+		VerboseMode:            args.verboseMode,
 		BPFVerifierLogLevel:    uint32(args.bpfVerifierLogLevel),
 		BPFVerifierLogSize:     args.bpfVerifierLogSize,
 		ProbabilisticInterval:  args.probabilisticInterval,
@@ -331,7 +332,14 @@ func sanityCheck(args *arguments) exitCode {
 		var minMajor, minMinor uint32
 		switch runtime.GOARCH {
 		case "amd64":
-			minMajor, minMinor = 4, 19
+			if args.verboseMode {
+				log.Infof("The debug version of the tracer significantly increases the number " +
+					"of BPF instructions, and at least kernel version 5.2 is required to " +
+					"ensure that BPF verifier is happy")
+				minMajor, minMinor = 5, 2
+			} else {
+				minMajor, minMinor = 4, 19
+			}
 		case "arm64":
 			// Older ARM64 kernel versions have broken bpf_probe_read.
 			// https://github.com/torvalds/linux/commit/6ae08ae3dea2cfa03dd3665a3c8475c2d429ef47

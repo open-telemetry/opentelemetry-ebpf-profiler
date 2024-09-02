@@ -1,4 +1,4 @@
-//go:build dummy
+//go:build amd64 && debugtracer
 
 /*
  * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
@@ -8,7 +8,9 @@
 
 package support
 
-// support_dummy.go satisfies build requirements where the eBPF tracers file does
-// not exist.
+import (
+	_ "embed"
+)
 
-var tracerData []byte
+//go:embed ebpf/tracer.debug.ebpf.amd64
+var debugTracerData []byte
