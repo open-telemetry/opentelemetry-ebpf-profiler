@@ -7,6 +7,22 @@ on:
     branches: ["**"]
 
 jobs:
+  legal:
+    name: Check licenses of dependencies
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Clone code
+        uses: actions/checkout@v4
+      - name: Set up environment
+        uses: ./.github/workflows/env
+      - name: Check for changes in licenses of dependencies
+        run: |
+          make legal
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "run \"make legal\"."
+            exit 1
+          fi
+
   lint:
     name: Lint (${{ matrix.target_arch }})
     runs-on: ubuntu-24.04
