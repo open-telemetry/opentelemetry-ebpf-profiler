@@ -600,10 +600,17 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 		unwinder, err := cebpf.NewProgramWithOptions(coll.Programs[unwindProg.name],
 			programOptions)
 		if err != nil {
-			// These errors tend to have hundreds of lines, so we print each line individually.
-			scanner := bufio.NewScanner(strings.NewReader(err.Error()))
-			for scanner.Scan() {
-				log.Error(scanner.Text())
+			// These errors tend to have hundreds of lines (or more),
+			// so we print each line individually.
+			if ve, ok := err.(*cebpf.VerifierError); ok {
+				for _, line := range ve.Log {
+					log.Error(line)
+				}
+			} else {
+				scanner := bufio.NewScanner(strings.NewReader(err.Error()))
+				for scanner.Scan() {
+					log.Error(scanner.Text())
+				}
 			}
 			return fmt.Errorf("failed to load %s", unwindProg.name)
 		}
