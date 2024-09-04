@@ -104,17 +104,9 @@ agent:
 	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
 
 legal:
-	@go install go.elastic.co/go-licence-detector@latest
-	@go list -m -json $(sort $(shell go list -deps -tags=linux -f "{{with .Module}}{{if not .Main}}{{.Path}}{{end}}{{end}}" .)) | go-licence-detector \
-	  -includeIndirect \
-	  -rules legal/rules.json \
-	  -depsTemplate=legal/templates/deps.csv.tmpl \
-	  -depsOut=deps.profiling-agent.csv
-	@./legal/append-non-go-info.sh legal/non-go-dependencies.json deps.profiling-agent.csv
-	@echo "Dependencies license summary (from deps.profiling-agent.csv):"
-	@echo "  Count License"
-	@tail -n '+2' deps.profiling-agent.csv | cut -d',' -f5 | sort | uniq -c | sort -k1rn
-
+	@go install github.com/google/go-licenses@latest
+	@go-licenses save --force . --save_path=LICENSES
+	@./legal/add-non-go.sh legal/non-go-dependencies.json LICENSES
 
 codespell: 
 	@codespell
