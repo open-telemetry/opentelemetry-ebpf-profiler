@@ -181,6 +181,13 @@ of aggregation techniques.
 As the architecture of the stack unwinding routines in the OTel Profiling Agent are focused on a
 sampling approach, the proposed options follow this idea.
 
+## Limitations
+
+Both proposed options focus on events of the Linux kernel scheduler. Resulting data therefore is
+limited to events triggered by the Linux kernel scheduler. Scheduling events of language specific
+and language internal schedulers, like the Go runtime scheduler, are not covered by the proposed
+general approach.
+
 # Author's preference
 
 My preference is Option B, as it provides latency information additional to off-CPU stack traces,
