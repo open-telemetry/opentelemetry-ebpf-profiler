@@ -302,7 +302,8 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	open := func() (process.ReadAtCloser, error) {
 		return pr.OpenMappingFile(&mapping2)
 	}
-	pm.reporter.ExecutableMetadata(fileID, baseName, gnuBuildID, ef.DebuglinkFileName(elfRef.FileName(), elfRef), libpf.Native, open)
+	pm.reporter.ExecutableMetadata(fileID, baseName, gnuBuildID,
+		ef.DebuglinkFileName(elfRef.FileName(), elfRef), libpf.Native, open)
 
 	return info
 }
