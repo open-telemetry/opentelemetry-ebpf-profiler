@@ -197,7 +197,7 @@ func processKernelModulesMetadata(rep reporter.SymbolReporter, kernelModules *li
 		}
 
 		result[nameStr] = fileID
-		rep.ExecutableMetadata(fileID, nameStr, buildID, libpf.Kernel, nil)
+		rep.ExecutableMetadata(fileID, nameStr, buildID, "", libpf.Kernel, nil)
 	})
 
 	return result, nil

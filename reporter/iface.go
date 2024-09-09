@@ -63,7 +63,7 @@ type SymbolReporter interface {
 	// that don't support this may pass a `nil` function pointer. Implementations that
 	// wish to upload executables should NOT block this function to do so and instead just
 	// open the file and then enqueue the upload in the background.
-	ExecutableMetadata(fileID libpf.FileID, fileName, gnuBuildID string,
+	ExecutableMetadata(fileID libpf.FileID, fileName, gnuBuildID, debuglinkFileName string,
 		interp libpf.InterpreterType, open ExecutableOpener)
 
 	// FrameMetadata accepts metadata associated with a frame and caches this information before
