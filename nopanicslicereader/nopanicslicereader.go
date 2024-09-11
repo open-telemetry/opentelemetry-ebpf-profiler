@@ -57,6 +57,12 @@ func Ptr(b []byte, offs uint) libpf.Address {
 	return libpf.Address(Uint64(b, offs))
 }
 
+// PtrDiff16 reads one 16-bit unsigned integer from given byte slice offset
+// and returns it as an address
+func PtrDiff16(b []byte, offs uint) libpf.Address {
+	return libpf.Address(Uint16(b, offs))
+}
+
 // PtrDiff32 reads one 32-bit unsigned integer from given byte slice offset
 // and returns it as an address
 func PtrDiff32(b []byte, offs uint) libpf.Address {

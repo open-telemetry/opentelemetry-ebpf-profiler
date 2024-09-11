@@ -280,13 +280,13 @@ func (d *hotspotInstance) getMethod(addr libpf.Address, _ uint32) (*hotspotMetho
 	cpoolAddr := npsr.Ptr(constMethod, vms.ConstMethod.Constants)
 	cpool := make([]byte, vms.ConstantPool.Sizeof)
 	if err := d.rm.Read(cpoolAddr, cpool); err != nil {
-		return nil, fmt.Errorf("invalid CostantPool ptr: %v", err)
+		return nil, fmt.Errorf("invalid ConstantPool ptr: %v", err)
 	}
 
 	instanceKlassAddr := npsr.Ptr(cpool, vms.ConstantPool.PoolHolder)
 	instanceKlass := make([]byte, vms.InstanceKlass.Sizeof)
 	if err := d.rm.Read(instanceKlassAddr, instanceKlass); err != nil {
-		return nil, fmt.Errorf("invalid ConstantPool ptr: %v", err)
+		return nil, fmt.Errorf("invalid PoolHolder ptr: %v", err)
 	}
 
 	var sourceFileName string
@@ -414,6 +414,90 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address,
 			return jit, nil
 		}
 	}
+
+	vmd := d.d.Get()
+	if vmd.version > 0x17000000 {
+		return d.getJITInfoPostJDK23(vmd, addr, addrCheck)
+	} else {
+		return d.getJITInfoPreJDK23(vmd, addr, addrCheck)
+	}
+}
+
+func (d *hotspotInstance) getJITInfoPostJDK23(vmd *hotspotVMData, addr libpf.Address,
+	addrCheck uint32) (*hotspotJITInfo, error) {
+	vms := &vmd.vmStructs
+
+	// TODO: describe new layout like for older SDKs
+
+	nmethod := make([]byte, vms.Nmethod.Sizeof)
+	if err := d.rm.Read(addr, nmethod); err != nil {
+		return nil, fmt.Errorf("invalid nmethod ptr: %v", err)
+	}
+
+	// Since the Java VM might decide recompile or free the JITted nmethods
+	// we use the nmethod._compile_id (global running number to identify JIT
+	// method) to uniquely identify that we are using the right data here
+	// vs. when the pointer was captured by eBPF.
+	compileID := npsr.Uint32(nmethod, vms.Nmethod.CompileID)
+	if compileID != addrCheck {
+		return nil, errors.New("JIT info evicted since eBPF snapshot")
+	}
+
+	// Finally read the associated debug information for this method
+	metadataOff := npsr.PtrDiff16(nmethod, vms.Nmethod.MetadataOffset)
+	codeBlobSize := npsr.Uint32(nmethod, vms.CodeBlob.Size)
+	scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
+	scopesOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
+	immutableDataSize := npsr.Uint32(nmethod, vms.Nmethod.ImmutableDataSize)
+
+	if scopesPcsOff > scopesOff || scopesOff > libpf.Address(immutableDataSize) {
+		return nil, fmt.Errorf("unexpected immutable data layout: %v, %v, %v",
+			scopesOff, scopesPcsOff, immutableDataSize)
+	}
+	if immutableDataSize >= 4*1024*1024 {
+		return nil, fmt.Errorf("unreasonably large immutable data region: %d bytes",
+			immutableDataSize)
+	}
+
+	method, err := d.getMethod(npsr.Ptr(nmethod, vms.CompiledMethod.Method), 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get JIT Method: %v", err)
+	}
+
+	// Actually the metadata only spans to `_jvmci_data_offset`, but that field isn't exposed
+	// through VMstructs, and the codeblob size is the next boundary after that.
+	metadataSize := libpf.Address(codeBlobSize) - metadataOff
+	if metadataOff > 4*1024*1024 {
+		return nil, fmt.Errorf("unreasonably large nmethod metadata: %v",
+			metadataSize)
+	}
+
+	metadata := make([]byte, metadataSize)
+	if err := d.rm.Read(addr+metadataOff, metadata); err != nil {
+		return nil, fmt.Errorf("invalid nmethod metadata ptr: %v", err)
+	}
+
+	immutableData := make([]byte, immutableDataSize)
+	if err := d.rm.Read(addr, immutableData); err != nil {
+		return nil, fmt.Errorf("invalid _immutable_data ptr: %v", err)
+	}
+
+	jit := &hotspotJITInfo{
+		compileID: compileID,
+		method:    method,
+		metadata:  metadata,
+		scopesPcs: immutableData[scopesPcsOff:scopesOff],
+		// This should end at `_speculations_offset`, but this field isn't in VMstructs.
+		// Specualtins are the last region, so we simply include the remaining data region here.
+		scopesData: immutableData[scopesOff:],
+	}
+
+	d.addrToJITInfo.Add(addr, jit)
+	return jit, nil
+}
+
+func (d *hotspotInstance) getJITInfoPreJDK23(vmd *hotspotVMData, addr libpf.Address,
+	addrCheck uint32) (*hotspotJITInfo, error) {
 	vms := &d.d.Get().vmStructs
 
 	// Each JIT-ted function is contained in a "class nmethod"

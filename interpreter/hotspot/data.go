@@ -96,9 +96,10 @@ type hotspotVMData struct {
 			Name                uint `name:"_name"`
 			FrameCompleteOffset uint `name:"_frame_complete_offset"`
 			FrameSize           uint `name:"_frame_size"`
-			// JDK -8: offset, JDK 9+: pointers
+			// JDK -8: offset, JDK 9+: pointers, JDK 23+: offset
 			CodeBegin uint `name:"_code_begin,_code_offset"`
 			CodeEnd   uint `name:"_code_end,_data_offset"`
+			Size      uint `name:"_size"` // Only needed for JDK23+
 		}
 		CodeCache struct {
 			Heap      libpf.Address `name:"_heap"`
@@ -112,6 +113,7 @@ type hotspotVMData struct {
 			Memory          uint `name:"_memory"`
 			Segmap          uint `name:"_segmap"`
 		}
+		// NOTE: CompiledMethod was merged into nmethod for JDK23+
 		CompiledMethod struct { // .Sizeof >200
 			Sizeof            uint
 			DeoptHandlerBegin uint `name:"_deopt_handler_begin"`
@@ -165,11 +167,14 @@ type hotspotVMData struct {
 			CompileID          uint `name:"_compile_id"`
 			MetadataOffset     uint `name:"_metadata_offset,_oops_offset"`
 			ScopesPcsOffset    uint `name:"_scopes_pcs_offset"`
-			DependenciesOffset uint `name:"_dependencies_offset"`
+			DependenciesOffset uint `name:"_dependencies_offset"` // JDK -22 only
+			ImmutableData      uint `name:"_immutable_data"`      // JDK 23+ only
+			ImmutableDataSize  uint `name:"_immutable_data_size"` // JDK 23+ only
 			OrigPcOffset       uint `name:"_orig_pc_offset"`
 			DeoptimizeOffset   uint `name:"_deoptimize_offset"`
 			Method             uint `name:"_method"`
-			ScopesDataOffset   uint `name:"_scopes_data_offset"` // JDK -8 only
+			ScopesDataOffset   uint `name:"_scopes_data_offset"`   // JDK -8, 23+ only
+			DeoptHandlerOffset uint `name:"_deopt_handler_offset"` // JDK 23+ only
 		} `name:"nmethod"`
 		OopDesc struct {
 			Sizeof uint
@@ -551,9 +556,15 @@ func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address
 	} else {
 		// Reset the compatibility symbols not needed
 		vms.CodeCache.Heap = 0
-		vms.Nmethod.Method = 0
 		vms.Nmethod.DeoptimizeOffset = 0
-		vms.Nmethod.ScopesDataOffset = 0
+
+		// Only zero if not found: we need it again in JDK23+.
+		if vms.Nmethod.ScopesDataOffset == ^uint(0) {
+			vms.Nmethod.ScopesDataOffset = 0
+		}
+		if vms.Nmethod.Method == ^uint(0) {
+			vms.Nmethod.Method = 0
+		}
 	}
 
 	// JDK12+: Use Symbol.Length_and_refcount for Symbol.Length
@@ -578,6 +589,27 @@ func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address
 	// https://github.com/openjdk/jdk20u/commit/8d3399bf5f354931b0c62d2ed8095e554be71680
 	if vmd.version >= 0x1400000f {
 		vmd.unsigned5X = 1
+	}
+
+	// JDK23+14+: `CompiledMethod` was merged into `nmethod`
+	// https://github.com/openjdk/jdk/commit/83eba863fec5ee7e30c4f9b11122ad1deed3d2ec
+	if vmd.version >= 0x1700000e {
+		vms.CompiledMethod.Sizeof = vms.Nmethod.Sizeof
+		vms.CompiledMethod.Method = vms.Nmethod.Method
+		vms.CompiledMethod.DeoptHandlerBegin = vms.Nmethod.DeoptHandlerOffset
+		vms.CompiledMethod.ScopesDataBegin = 0
+	} else {
+		vms.Nmethod.DeoptHandlerOffset = 0
+	}
+
+	// JDK23+21+: nmethod metadata layout changed completely
+	// https://github.com/openjdk/jdk/commit/bdcc2400db63e604d76f9b5bd3c876271743f69f
+	if vmd.version >= 0x17000015 {
+		vms.Nmethod.DependenciesOffset = 0
+	} else {
+		vms.Nmethod.ImmutableData = 0
+		vms.Nmethod.ImmutableDataSize = 0
+		vms.CodeBlob.Size = 0
 	}
 
 	// Check that all symbols got loaded from JVM introspection data

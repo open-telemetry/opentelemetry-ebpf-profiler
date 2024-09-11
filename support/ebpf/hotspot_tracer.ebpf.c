@@ -814,10 +814,16 @@ ErrorCode hotspot_read_codeblob(const UnwindState *state, const HotspotProcInfo 
     goto read_error_exit;
   }
 
-  if (ji->jvm_version <= 8) {
-    // JDK7/8: Code start and end are actually uint32 offsets from the code blob start
+  // JDK7/8 and 23+: code start and end are actually uint32 offsets from the code blob start
+  if (ji->jvm_version <= 8 || ji->jvm_version >= 23) {
     cbi->code_start = cbi->address + (cbi->code_start & 0xffffffff);
     cbi->code_end = cbi->address + (cbi->code_end & 0xffffffff);
+  }
+
+  // JDK23+20+: frame_comp is uint16_t now.
+  // https://github.com/openjdk/jdk/commit/b704e91241b0
+  if (ji->jvm_version >= 23) {
+      cbi->frame_comp &= 0xffff;
   }
 
   DEBUG_PRINT("jvm:  -> code %lx-%lx",
