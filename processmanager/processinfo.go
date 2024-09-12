@@ -300,12 +300,12 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		baseName = "<anonymous-blob>"
 	}
 
-	buildID, _ := ef.GetBuildID()
+	gnuBuildID, _ := ef.GetBuildID()
 	mapping2 := *mapping // copy to avoid races if callee saves the closure
 	open := func() (process.ReadAtCloser, error) {
 		return pr.OpenMappingFile(&mapping2)
 	}
-	pm.reporter.ExecutableMetadata(fileID, baseName, buildID, libpf.Native, open)
+	pm.reporter.ExecutableMetadata(fileID, baseName, gnuBuildID, libpf.Native, open)
 
 	return info
 }
