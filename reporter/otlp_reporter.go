@@ -438,7 +438,7 @@ func mkProfileID() []byte {
 	profileID := make([]byte, 16)
 	_, err := rand.Read(profileID)
 	if err != nil {
-		return []byte("otel-profiling-agent")
+		return []byte("opentelemetry-ebpf-profiler")
 	}
 	return profileID
 }
