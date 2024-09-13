@@ -65,3 +65,8 @@ func TestMetrics(t *testing.T) {
 		assert.Fail(t, "timeout - no metrics received in time")
 	}
 }
+
+func TestGetDefinitions(t *testing.T) {
+	_, err := GetDefinitions()
+	assert.NoError(t, err)
+}

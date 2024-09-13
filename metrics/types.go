@@ -24,3 +24,20 @@ type Metric struct {
 // Summary helps summarizing metrics of the same ID from different sources before
 // processing it further.
 type Summary map[MetricID]MetricValue
+
+type MetricDefinition struct {
+	ID          MetricID   `json:"id"`
+	Type        MetricType `json:"type"`
+	Description string     `json:"description"`
+	Name        string     `json:"name"`
+	Field       string     `json:"field"`
+	Unit        string     `json:"unit"`
+	Obsolete    bool       `json:"obsolete"`
+}
+
+type MetricType string
+
+const (
+	MetricTypeGauge   MetricType = "gauge"
+	MetricTypeCounter MetricType = "counter"
+)
