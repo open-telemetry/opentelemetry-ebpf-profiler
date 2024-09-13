@@ -7,6 +7,9 @@
 package metrics
 
 import (
+	"bytes"
+	_ "embed"
+	"encoding/json"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -31,6 +34,9 @@ var (
 
 	// mutex serializes the concurrent calls to AddSlice()
 	mutex sync.RWMutex
+
+	//go:embed metrics.json
+	metricsJSON []byte
 )
 
 // reporterImpl allows swapping out the global metrics reporter.
@@ -151,3 +157,17 @@ func Add(id MetricID, value MetricValue) {
 // If these assumptions change, we can address that by regularly calling AddSlice() with
 // an empty slice. Code can be found in commit 1d01d1ff841891010afaf8d64d4c21a05f19d168
 // and earlier.
+
+// GetDefinitions returns the metric definitions from the embedded metrics.json file.
+func GetDefinitions() ([]MetricDefinition, error) {
+	var definitions []MetricDefinition
+
+	dec := json.NewDecoder(bytes.NewReader(metricsJSON))
+	dec.DisallowUnknownFields()
+
+	err := dec.Decode(&definitions)
+	if err != nil {
+		return nil, err
+	}
+	return definitions, nil
+}
