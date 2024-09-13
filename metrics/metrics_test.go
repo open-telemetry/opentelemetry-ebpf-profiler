@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type fakeReporter struct {
@@ -67,6 +68,7 @@ func TestMetrics(t *testing.T) {
 }
 
 func TestGetDefinitions(t *testing.T) {
-	_, err := GetDefinitions()
-	assert.NoError(t, err)
+	defs, err := GetDefinitions()
+	require.NoError(t, err)
+	assert.Greater(t, len(defs), 1)
 }
