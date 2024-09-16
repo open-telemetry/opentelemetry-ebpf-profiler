@@ -172,9 +172,9 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		containerID:    containerID,
 	}
 
-	if event, exists := (*traceEventsMap)[key]; exists {
-		event.timestamps = append(event.timestamps, uint64(meta.Timestamp))
-		(*traceEventsMap)[key] = event
+	if events, exists := (*traceEventsMap)[key]; exists {
+		events.timestamps = append(events.timestamps, uint64(meta.Timestamp))
+		(*traceEventsMap)[key] = events
 		return
 	}
 
