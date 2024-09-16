@@ -51,13 +51,13 @@ type ProcessManager struct {
 	// process exits, and various other situations needing interpreter specific attention.
 	// The key of the first map is a process ID, while the key of the second map is
 	// the unique on-disk identifier of the interpreter DSO.
-	interpreters map[util.PID]map[util.OnDiskFileIdentifier]interpreter.Instance
+	interpreters map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance
 
 	// pidToProcessInfo keeps track of the executable memory mappings.
-	pidToProcessInfo map[util.PID]*processInfo
+	pidToProcessInfo map[libpf.PID]*processInfo
 
 	// exitEvents records the pid exit time and is a list of pending exit events to be handled.
-	exitEvents map[util.PID]times.KTime
+	exitEvents map[libpf.PID]times.KTime
 
 	// ebpf contains the interface to manipulate ebpf maps
 	ebpf pmebpf.EbpfHandler

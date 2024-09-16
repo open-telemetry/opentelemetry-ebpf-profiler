@@ -13,7 +13,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tpbase"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // InstanceStubs provides empty implementations of Instance hooks that are
@@ -26,7 +25,7 @@ func (is *InstanceStubs) SynchronizeMappings(EbpfHandler, reporter.SymbolReporte
 	return nil
 }
 
-func (is *InstanceStubs) UpdateTSDInfo(EbpfHandler, util.PID, tpbase.TSDInfo) error {
+func (is *InstanceStubs) UpdateTSDInfo(EbpfHandler, libpf.PID, tpbase.TSDInfo) error {
 	return nil
 }
 

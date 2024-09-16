@@ -28,7 +28,7 @@ import (
 // systemProcess provides an implementation of the Process interface for a
 // process that is currently running on this machine.
 type systemProcess struct {
-	pid util.PID
+	pid libpf.PID
 
 	remoteMemory remotememory.RemoteMemory
 
@@ -38,14 +38,14 @@ type systemProcess struct {
 var _ Process = &systemProcess{}
 
 // New returns an object with Process interface accessing it
-func New(pid util.PID) Process {
+func New(pid libpf.PID) Process {
 	return &systemProcess{
 		pid:          pid,
 		remoteMemory: remotememory.NewProcessVirtualMemory(pid),
 	}
 }
 
-func (sp *systemProcess) PID() util.PID {
+func (sp *systemProcess) PID() libpf.PID {
 	return sp.pid
 }
 

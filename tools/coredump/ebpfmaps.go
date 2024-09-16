@@ -38,7 +38,7 @@ type ebpfMapsCoredump struct {
 
 var _ interpreter.EbpfHandler = &ebpfMapsCoredump{}
 
-func (emc *ebpfMapsCoredump) RemoveReportedPID(util.PID) {
+func (emc *ebpfMapsCoredump) RemoveReportedPID(libpf.PID) {
 }
 
 func (emc *ebpfMapsCoredump) CollectMetrics() []metrics.Metric {
@@ -57,7 +57,7 @@ func (emc *ebpfMapsCoredump) UpdateInterpreterOffsets(ebpfProgIndex uint16,
 	return nil
 }
 
-func (emc *ebpfMapsCoredump) UpdateProcData(t libpf.InterpreterType, pid util.PID,
+func (emc *ebpfMapsCoredump) UpdateProcData(t libpf.InterpreterType, pid libpf.PID,
 	ptr unsafe.Pointer) error {
 	switch t {
 	case libpf.Dotnet:
@@ -78,7 +78,7 @@ func (emc *ebpfMapsCoredump) UpdateProcData(t libpf.InterpreterType, pid util.PI
 	return nil
 }
 
-func (emc *ebpfMapsCoredump) DeleteProcData(t libpf.InterpreterType, pid util.PID) error {
+func (emc *ebpfMapsCoredump) DeleteProcData(t libpf.InterpreterType, pid libpf.PID) error {
 	switch t {
 	case libpf.Dotnet:
 		emc.ctx.delMap(&C.dotnet_procs, C.u32(pid))
@@ -98,7 +98,7 @@ func (emc *ebpfMapsCoredump) DeleteProcData(t libpf.InterpreterType, pid util.PI
 	return nil
 }
 
-func (emc *ebpfMapsCoredump) UpdatePidInterpreterMapping(pid util.PID,
+func (emc *ebpfMapsCoredump) UpdatePidInterpreterMapping(pid libpf.PID,
 	prefix lpm.Prefix, interpreterProgram uint8, fileID host.FileID, bias uint64) error {
 	ctx := emc.ctx
 	// pid_page_to_mapping_info is a LPM trie and expects the pid and page
@@ -127,7 +127,7 @@ func (emc *ebpfMapsCoredump) UpdatePidInterpreterMapping(pid util.PID,
 	return nil
 }
 
-func (emc *ebpfMapsCoredump) DeletePidInterpreterMapping(pid util.PID,
+func (emc *ebpfMapsCoredump) DeletePidInterpreterMapping(pid libpf.PID,
 	prefix lpm.Prefix) error {
 	ctx := emc.ctx
 	// pid_page_to_mapping_info is a LPM trie and expects the pid and page
@@ -235,13 +235,13 @@ func (emc *ebpfMapsCoredump) DeleteStackDeltaPage(fileID host.FileID, page uint6
 	return nil
 }
 
-func (emc *ebpfMapsCoredump) UpdatePidPageMappingInfo(pid util.PID, prefix lpm.Prefix,
+func (emc *ebpfMapsCoredump) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Prefix,
 	fileID, bias uint64) error {
 	return emc.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindNative,
 		host.FileID(fileID), bias)
 }
 
-func (emc *ebpfMapsCoredump) DeletePidPageMappingInfo(pid util.PID, prefixes []lpm.Prefix) (int,
+func (emc *ebpfMapsCoredump) DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm.Prefix) (int,
 	error) {
 	var deleted int
 	for _, prefix := range prefixes {

@@ -118,7 +118,7 @@ type OTLPReporter struct {
 	executables *lru.SyncedLRU[libpf.FileID, execInfo]
 
 	// cgroupv2ID caches PID to container ID information for cgroupv2 containers.
-	cgroupv2ID *lru.SyncedLRU[util.PID, string]
+	cgroupv2ID *lru.SyncedLRU[libpf.PID, string]
 
 	// frames maps frame information to its source location.
 	frames *lru.SyncedLRU[libpf.FileID, *xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]]
@@ -306,8 +306,8 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		return nil, err
 	}
 
-	cgroupv2ID, err := lru.NewSynced[util.PID, string](cfg.CacheSize,
-		func(pid util.PID) uint32 { return uint32(pid) })
+	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CacheSize,
+		func(pid libpf.PID) uint32 { return uint32(pid) })
 	if err != nil {
 		return nil, err
 	}
@@ -852,7 +852,7 @@ func setupGrpcConnection(parent context.Context, cfg *Config,
 }
 
 // lookupCgroupv2 returns the cgroupv2 ID for pid.
-func (r *OTLPReporter) lookupCgroupv2(pid util.PID) (string, error) {
+func (r *OTLPReporter) lookupCgroupv2(pid libpf.PID) (string, error) {
 	id, ok := r.cgroupv2ID.Get(pid)
 	if ok {
 		return id, nil

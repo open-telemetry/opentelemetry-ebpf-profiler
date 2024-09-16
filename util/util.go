@@ -7,7 +7,7 @@
 package util
 
 import (
-	"hash/fnv"
+	"math/bits"
 	"strconv"
 	"sync/atomic"
 	"unicode"
@@ -17,23 +17,6 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/hash"
 )
-
-// PID represent Unix Process ID (pid_t)
-type PID int32
-
-func (p PID) Hash32() uint32 {
-	return uint32(p)
-}
-
-// HashString turns a string into a 64-bit hash.
-func HashString(s string) uint64 {
-	h := fnv.New64a()
-	if _, err := h.Write([]byte(s)); err != nil {
-		logrus.Fatalf("Failed to write '%v' to hash: %v", s, err)
-	}
-
-	return h.Sum64()
-}
 
 // HexToUint64 is a convenience function to extract a hex string to a uint64 and
 // not worry about errors. Essentially a "mustConvertHexToUint64".
@@ -71,17 +54,13 @@ func IsValidString(s string) bool {
 	return true
 }
 
-// NextPowerOfTwo returns the next highest power of 2 for a given value v or v,
-// if v is a power of 2.
+// NextPowerOfTwo returns input value if it's a power of two,
+// otherwise it returns the next power of two.
 func NextPowerOfTwo(v uint32) uint32 {
-	v--
-	v |= v >> 1
-	v |= v >> 2
-	v |= v >> 4
-	v |= v >> 8
-	v |= v >> 16
-	v++
-	return v
+	if v == 0 {
+		return 1
+	}
+	return 1 << bits.Len32(v-1)
 }
 
 // AtomicUpdateMaxUint32 updates the value in store using atomic memory primitives. newValue will

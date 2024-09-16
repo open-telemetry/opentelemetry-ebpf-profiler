@@ -13,7 +13,6 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // TraceHash is used for unique identifiers for traces, and is required to be 64-bits
@@ -55,8 +54,8 @@ type Trace struct {
 	Frames           []Frame
 	Hash             TraceHash
 	KTime            times.KTime
-	PID              util.PID
-	TID              util.PID
+	PID              libpf.PID
+	TID              libpf.PID
 	APMTraceID       libpf.APMTraceID
 	APMTransactionID libpf.APMTransactionID
 }

@@ -75,7 +75,7 @@ type phpInstance struct {
 	addrToFunction *freelru.LRU[libpf.Address, *phpFunction]
 }
 
-func (i *phpInstance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (i *phpInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	return ebpf.DeleteProcData(libpf.PHP, pid)
 }
 

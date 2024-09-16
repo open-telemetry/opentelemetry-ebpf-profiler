@@ -323,7 +323,9 @@ void breadcrumb_fixup(HotspotUnwindInfo *ui) {
   // https://github.com/openjdk/jdk/blob/jdk-17%2B35/src/hotspot/cpu/aarch64/aarch64.ad#L3731
 
   u64 lookback;
-  bpf_probe_read_user(&lookback, sizeof(lookback), (void*)(ui->pc - sizeof(lookback)));
+  if (bpf_probe_read_user(&lookback, sizeof(lookback), (void*)(ui->pc - sizeof(lookback)))) {
+    return;
+  }
   if (lookback == 0xd63f0100a9bf27ffULL /* stp; blr */) {
     ui->sp += 0x10;
   }
@@ -404,8 +406,63 @@ ErrorCode hotspot_handle_prologue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui
 __attribute__((always_inline)) inline static
 bool hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui,
                              HotspotUnwindAction *action) {
-  // On X86, epilogue handling is currently not implemented.
+  // On X86, use a heuristic to catch the likely spots of the epilogue.
+#define CODE_CUR 1
+  u8 code[14];
+
+  if (bpf_probe_read_user(code, sizeof(code), (void*)(ui->pc-CODE_CUR))) {
+    return false;
+  }
+
+  // Current instruction is 'ret'
+  if (code[CODE_CUR] == 0xc3) {
+    DEBUG_PRINT("jvm:  -> epilogue on 'ret'");
+    goto pc_only;
+  }
+
+  // Is 'ret' instruction *possible* in the next 'code' bytes?
+  // NOTE: This can find false positives because x86 is variable length
+  // instruction set.
+#pragma unroll
+  for (int i = CODE_CUR+1; i < sizeof(code); i++) {
+    if (code[i] == 0xc3) {
+      goto found_ret;
+    }
+  }
+  // 'ret' not found, not an epilogue
   return false;
+
+found_ret:
+   // Current instruction is 'pop rbp'
+  if (code[CODE_CUR] == 0x5d) {
+    DEBUG_PRINT("jvm:  -> epilogue on 'pop rbp'");
+    *action = UA_UNWIND_FP_PC;
+    return true;
+  }
+  // Current instructions: 'testl %eax, (%r10)' + 'ret'
+  // seen in the safe point polling, see:
+  // https://hg.openjdk.org/jdk-updates/jdk14u/file/default/src/hotspot/cpu/x86/c1_LIRAssembler_x86.cpp#l558
+  if (code[CODE_CUR] == 0x41 && code[CODE_CUR+1] == 0x85 && code[CODE_CUR+2] == 0x02 &&
+      code[CODE_CUR+3] == 0xc3) {
+    DEBUG_PRINT("jvm:  -> epilogue on safepoint check'");
+    goto pc_only;
+  }
+  // Current instruction: 'jne ...' + 'ret'
+  // seen in native wrappers, see:
+  // https://hg.openjdk.org/jdk-updates/jdk14u/file/default/src/hotspot/cpu/x86/sharedRuntime_x86_64.cpp#l2744
+  if (code[CODE_CUR] == 0x0f && code[CODE_CUR+1] == 0x85 && code[CODE_CUR+6] == 0xc3) {
+    DEBUG_PRINT("jvm:  -> epilogue on native wrapper exception check'");
+    goto pc_only;
+  }
+  // Previous instruction was 'leave' or 'pop rbp'
+  if (code[CODE_CUR-1] == 0x5d || code[CODE_CUR-1] == 0xc9) {
+    DEBUG_PRINT("jvm:  -> epilogue after leave'");
+    goto pc_only;
+  }
+  return false;
+pc_only:
+  *action = UA_UNWIND_PC_ONLY;
+  return true;
 }
 #elif defined(__aarch64__)
 __attribute__((always_inline)) inline static
@@ -460,7 +517,9 @@ bool hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui,
   u8 find_offset = 0;
   u32 window[EPI_LOOKBACK];
   u64 needle = ldp | (add << 32);
-  bpf_probe_read_user(window, sizeof(window), (void*)(ui->pc - sizeof(window) + INSN_LEN));
+  if (bpf_probe_read_user(window, sizeof(window), (void*)(ui->pc - sizeof(window) + INSN_LEN))) {
+    return false;
+  }
 
 #pragma unroll
   for (; find_offset < EPI_LOOKBACK - 1; ++find_offset) {
@@ -507,7 +566,7 @@ pattern_found:;
 __attribute__((always_inline)) inline static
 ErrorCode hotspot_handle_nmethod(const CodeBlobInfo *cbi, Trace *trace,
                                  HotspotUnwindInfo *ui, HotspotProcInfo *ji,
-                                 HotspotUnwindAction *action) {
+                                 HotspotUnwindAction *action, bool topmost) {
   // setup frame subtype, and get the native method _compile_id as pointer cookie
   // as it is unique to the compilation result
 
@@ -549,7 +608,7 @@ ErrorCode hotspot_handle_nmethod(const CodeBlobInfo *cbi, Trace *trace,
   }
 
   // Attempt prologue unwinding.
-  if (hotspot_handle_epilogue(cbi, ui, action)) {
+  if (topmost && hotspot_handle_epilogue(cbi, ui, action)) {
     return ERR_OK;
   }
 
@@ -569,8 +628,8 @@ ErrorCode hotspot_handle_nmethod(const CodeBlobInfo *cbi, Trace *trace,
     *action = UA_UNWIND_FRAME_POINTER;
     return ERR_OK;
   }
-  // The real JVM has the same limitation. async-profiler has some heuristic examples for this.
 
+  // The real JVM has the same limitation. async-profiler has some heuristic examples for this.
   breadcrumb_fixup(ui);
 
   // Assume complete frame without frame pointer, use the CodeBlob frame_size.
@@ -775,7 +834,7 @@ read_error_exit:
 }
 
 // hotspot_unwind_one_frame fully unwinds one HotSpot frame
-static ErrorCode hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo *ji) {
+static ErrorCode hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo *ji, bool maybe_topmost) {
   UnwindState *state = &record->state;
   Trace *trace = &record->trace;
   HotspotUnwindInfo ui;
@@ -802,7 +861,8 @@ static ErrorCode hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo 
   switch (cbi.frame_type) {
   case FRAMETYPE_nmethod: // JIT-compiled method
   case FRAMETYPE_native_nmethod: // stub to call C-implemented java method
-    err = hotspot_handle_nmethod(&cbi, trace, &ui, ji, &action);
+    err = hotspot_handle_nmethod(&cbi, trace, &ui, ji, &action,
+      maybe_topmost && !state->return_address);
     break;
   case FRAMETYPE_Interpreter: // main Interpreter program running byte code
     err = hotspot_handle_interpreter(state, trace, &ui, ji, &action);
@@ -845,7 +905,7 @@ int unwind_hotspot(struct pt_regs *ctx) {
 #pragma unroll
   for (int i = 0; i < HOTSPOT_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
-    error = hotspot_unwind_one_frame(record, ji);
+    error = hotspot_unwind_one_frame(record, ji, i == 0);
     if (error) {
       break;
     }

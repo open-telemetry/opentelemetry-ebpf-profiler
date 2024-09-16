@@ -22,7 +22,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/modulestore"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 type analyzeCmd struct {
@@ -72,7 +71,7 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 		return errors.New("please specify either `-core`, `-case` or `-pid`")
 	}
 
-	lwpFilter := libpf.Set[util.PID]{}
+	lwpFilter := libpf.Set[libpf.PID]{}
 	if cmd.lwpFilter != "" {
 		for _, lwp := range strings.Split(cmd.lwpFilter, ",") {
 			var parsed int64
@@ -80,7 +79,7 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 			if err != nil {
 				return fmt.Errorf("failed to parse LWP: %v", err)
 			}
-			lwpFilter[util.PID(parsed)] = libpf.Void{}
+			lwpFilter[libpf.PID(parsed)] = libpf.Void{}
 		}
 	}
 
@@ -91,7 +90,7 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 	var proc process.Process
 	switch {
 	case cmd.pid != 0:
-		proc, err = process.NewPtrace(util.PID(cmd.pid))
+		proc, err = process.NewPtrace(libpf.PID(cmd.pid))
 		if err != nil {
 			return fmt.Errorf("failed to open pid `%d`: %w", cmd.pid, err)
 		}

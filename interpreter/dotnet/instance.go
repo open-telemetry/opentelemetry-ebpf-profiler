@@ -190,7 +190,7 @@ func (i *dotnetInstance) calculateAndSymbolizeStubID(symbolReporter reporter.Sym
 }
 
 // addRange inserts a known memory mapping along with the needed data of it to ebpf maps
-func (i *dotnetInstance) addRange(ebpf interpreter.EbpfHandler, pid util.PID,
+func (i *dotnetInstance) addRange(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	lowAddress, highAddress, mapBase libpf.Address, stubTypeOrHdrMap uint64) {
 	// Inform the unwinder about this range
 	prefixes, err := lpm.CalculatePrefixList(uint64(lowAddress), uint64(highAddress))
@@ -221,7 +221,7 @@ func (i *dotnetInstance) addRange(ebpf interpreter.EbpfHandler, pid util.PID,
 }
 
 // walkRangeList processes stub ranges from a RangeList
-func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid util.PID,
+func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	headPtr libpf.Address, codeType uint) {
 	// This hardcodes the layout of RangeList, Range and RangeListBlock from
 	// https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/inc/utilcode.h#L3556-L3579
@@ -259,7 +259,7 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid util.PI
 }
 
 // addRangeSection processes a RangeSection structure and calls addRange as needed
-func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid util.PID,
+func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	rangeSection []byte) error {
 	// Extract interesting fields
 	vms := &i.d.vmStructs
@@ -324,7 +324,7 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid util.
 }
 
 // walkRangeSectionList adds all RangeSections in a list (dotnet6 and dotnet7)
-func (i *dotnetInstance) walkRangeSectionList(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (i *dotnetInstance) walkRangeSectionList(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	vms := &i.d.vmStructs
 	rangeSection := make([]byte, vms.RangeSection.SizeOf)
 	// walk the RangeSection list
@@ -343,7 +343,7 @@ func (i *dotnetInstance) walkRangeSectionList(ebpf interpreter.EbpfHandler, pid 
 
 // walkRangeSectionMapFragments walks a RangeSectionMap::RangeSectionFragment list and processes
 // the RangeSections from it.
-func (i *dotnetInstance) walkRangeSectionMapFragments(ebpf interpreter.EbpfHandler, pid util.PID,
+func (i *dotnetInstance) walkRangeSectionMapFragments(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	fragmentPtr libpf.Address) error {
 	// https://github.com/dotnet/runtime/blob/v8.0.4/src/coreclr/vm/codeman.h#L974
 	vms := &i.d.vmStructs
@@ -372,7 +372,7 @@ func (i *dotnetInstance) walkRangeSectionMapFragments(ebpf interpreter.EbpfHandl
 }
 
 // walkRangeSectionMapLevel walks recursively a level index of a RangeSectionMap.
-func (i *dotnetInstance) walkRangeSectionMapLevel(ebpf interpreter.EbpfHandler, pid util.PID,
+func (i *dotnetInstance) walkRangeSectionMapLevel(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	levelMapPtr libpf.Address, level uint) error {
 	// https://github.com/dotnet/runtime/blob/v8.0.4/src/coreclr/vm/codeman.h#L999-L1002
 	const maxLevel = 5
@@ -402,7 +402,7 @@ func (i *dotnetInstance) walkRangeSectionMapLevel(ebpf interpreter.EbpfHandler, 
 }
 
 // walkRangeSectionMap processes a dotnet8 RangeSectionMap to enumerate all RangeSections
-func (i *dotnetInstance) walkRangeSectionMap(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (i *dotnetInstance) walkRangeSectionMap(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	i.rangeSectionSeen = make(map[libpf.Address]libpf.Void)
 	err := i.walkRangeSectionMapLevel(ebpf, pid, i.codeRangeListPtr, 1)
 	i.rangeSectionSeen = nil
@@ -537,7 +537,7 @@ func (i *dotnetInstance) getMethod(codeHeaderPtr libpf.Address) (*dotnetMethod, 
 	return method, nil
 }
 
-func (i *dotnetInstance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (i *dotnetInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	return ebpf.DeleteProcData(libpf.Dotnet, pid)
 }
 

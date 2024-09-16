@@ -14,8 +14,9 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
@@ -90,14 +91,14 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
 
-	interpreters := make(map[util.PID]map[util.OnDiskFileIdentifier]interpreter.Instance)
+	interpreters := make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance)
 
 	pm := &ProcessManager{
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
 		eim:                      em,
 		interpreters:             interpreters,
-		exitEvents:               make(map[util.PID]times.KTime),
-		pidToProcessInfo:         make(map[util.PID]*processInfo),
+		exitEvents:               make(map[libpf.PID]times.KTime),
+		pidToProcessInfo:         make(map[libpf.PID]*processInfo),
 		ebpf:                     ebpf,
 		FileIDMapper:             fileIDMapper,
 		elfInfoCache:             elfInfoCache,
@@ -297,7 +298,7 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 }
 
 // findMappingForTrace locates the mapping for a given host trace.
-func (pm *ProcessManager) findMappingForTrace(pid util.PID, fid host.FileID,
+func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
 	addr libpf.AddressOrLineno) (m Mapping, found bool) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()

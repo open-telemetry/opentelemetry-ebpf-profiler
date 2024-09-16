@@ -182,7 +182,7 @@ func rubyVersion(major, minor, release uint32) uint32 {
 	return major*0x10000 + minor*0x100 + release
 }
 
-func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid util.PID, bias libpf.Address,
+func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	cdata := C.RubyProcInfo{
 		version: C.u32(r.version),
@@ -289,7 +289,7 @@ type rubyInstance struct {
 	maxSize atomic.Uint32
 }
 
-func (r *rubyInstance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (r *rubyInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	return ebpf.DeleteProcData(libpf.Ruby, pid)
 }
 

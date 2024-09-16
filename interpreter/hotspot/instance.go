@@ -498,7 +498,7 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address,
 }
 
 // Detach removes all information regarding a given process from the eBPF maps.
-func (d *hotspotInstance) Detach(ebpf interpreter.EbpfHandler, pid util.PID) error {
+func (d *hotspotInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	var err error
 	if d.mainMappingsInserted {
 		err = ebpf.DeleteProcData(libpf.HotSpot, pid)
@@ -599,7 +599,7 @@ func (d *hotspotInstance) gatherHeapInfo(vmd *hotspotVMData) (*heapInfo, error) 
 
 // addJitArea inserts an entry into the PID<->interpreter BPF map.
 func (d *hotspotInstance) addJitArea(ebpf interpreter.EbpfHandler,
-	pid util.PID, area jitArea) error {
+	pid libpf.PID, area jitArea) error {
 	prefixes, err := lpm.CalculatePrefixList(uint64(area.start), uint64(area.end))
 	if err != nil {
 		return fmt.Errorf("LPM prefix calculation error for %x-%x", area.start, area.end)
@@ -632,7 +632,7 @@ func (d *hotspotInstance) addJitArea(ebpf interpreter.EbpfHandler,
 // allows the BPF code to start unwinding even if some more detailed information
 // about e.g. stub routines is not yet available.
 func (d *hotspotInstance) populateMainMappings(vmd *hotspotVMData,
-	ebpf interpreter.EbpfHandler, pid util.PID) error {
+	ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	if d.mainMappingsInserted {
 		// Already populated: nothing to do here.
 		return nil
@@ -704,7 +704,7 @@ func (d *hotspotInstance) populateMainMappings(vmd *hotspotVMData,
 // stubs map and, if necessary on the architecture, inserts unwinding instructions
 // for them in the PID mappings BPF map.
 func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
-	ebpf interpreter.EbpfHandler, pid util.PID) {
+	ebpf interpreter.EbpfHandler, pid libpf.PID) {
 	for _, stub := range findStubBounds(vmd, d.bias, d.rm) {
 		if _, exists := d.stubs[stub.start]; exists {
 			continue

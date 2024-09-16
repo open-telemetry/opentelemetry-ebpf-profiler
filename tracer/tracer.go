@@ -115,7 +115,7 @@ type Tracer struct {
 	// pidEvents notifies the tracer of new PID events.
 	// It needs to be buffered to avoid locking the writers and stacking up resources when we
 	// read new PIDs at startup or notified via eBPF.
-	pidEvents chan util.PID
+	pidEvents chan libpf.PID
 
 	// intervals provides access to globally configured timers and counters.
 	intervals Intervals
@@ -316,7 +316,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		kernelModules:              kernelModules,
 		transmittedFallbackSymbols: transmittedFallbackSymbols,
 		triggerPIDProcessing:       make(chan bool, 1),
-		pidEvents:                  make(chan util.PID, pidEventBufferSize),
+		pidEvents:                  make(chan libpf.PID, pidEventBufferSize),
 		ebpfMaps:                   ebpfMaps,
 		ebpfProgs:                  ebpfProgs,
 		hooks:                      make(map[hookPoint]link.Link),
@@ -600,10 +600,17 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 		unwinder, err := cebpf.NewProgramWithOptions(coll.Programs[unwindProg.name],
 			programOptions)
 		if err != nil {
-			// These errors tend to have hundreds of lines, so we print each line individually.
-			scanner := bufio.NewScanner(strings.NewReader(err.Error()))
-			for scanner.Scan() {
-				log.Error(scanner.Text())
+			// These errors tend to have hundreds of lines (or more),
+			// so we print each line individually.
+			if ve, ok := err.(*cebpf.VerifierError); ok {
+				for _, line := range ve.Log {
+					log.Error(line)
+				}
+			} else {
+				scanner := bufio.NewScanner(strings.NewReader(err.Error()))
+				for scanner.Scan() {
+					log.Error(scanner.Text())
+				}
 			}
 			return fmt.Errorf("failed to load %s", unwindProg.name)
 		}
@@ -896,8 +903,8 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 		Comm:             C.GoString((*C.char)(unsafe.Pointer(&ptr.comm))),
 		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.apm_trace_id)),
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.apm_transaction_id)),
-		PID:              util.PID(ptr.pid),
-		TID:              util.PID(ptr.tid),
+		PID:              libpf.PID(ptr.pid),
+		TID:              libpf.PID(ptr.tid),
 		KTime:            times.KTime(ptr.ktime),
 	}
 
@@ -960,7 +967,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.T
 
 			for _, ev := range pidEvents {
 				log.Debugf("=> PID: %v", ev)
-				t.pidEvents <- util.PID(ev)
+				t.pidEvents <- libpf.PID(ev)
 			}
 
 			// Keep the underlying array alive to avoid GC pressure

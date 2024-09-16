@@ -98,7 +98,7 @@ type ReadAtCloser interface {
 // GetRemoteMemory object are safe for concurrent use.
 type Process interface {
 	// PID returns the process identifier
-	PID() util.PID
+	PID() libpf.PID
 
 	// GetMachineData reads machine specific data from the target process
 	GetMachineData() MachineData

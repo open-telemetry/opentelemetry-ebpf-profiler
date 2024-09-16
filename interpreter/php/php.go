@@ -23,7 +23,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // #include "../../support/ebpf/types.h"
@@ -112,7 +111,7 @@ func (d *phpData) String() string {
 	return fmt.Sprintf("PHP %d.%d.%d", (ver>>16)&0xff, (ver>>8)&0xff, ver&0xff)
 }
 
-func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid util.PID, bias libpf.Address,
+func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	addrToFunction, err :=
 		freelru.New[libpf.Address, *phpFunction](interpreter.LruFunctionCacheSize,

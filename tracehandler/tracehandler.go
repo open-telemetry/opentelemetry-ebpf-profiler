@@ -14,13 +14,13 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // metadataWarnInhibDuration defines the minimum duration between warnings printed
@@ -81,7 +81,7 @@ type traceHandler struct {
 
 	// metadataWarnInhib tracks inhibitions for warnings printed about failure to
 	// update container metadata (rate-limiting).
-	metadataWarnInhib *lru.LRU[util.PID, libpf.Void]
+	metadataWarnInhib *lru.LRU[libpf.PID, libpf.Void]
 
 	times Times
 }
@@ -101,7 +101,7 @@ func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 		return nil, err
 	}
 
-	metadataWarnInhib, err := lru.New[util.PID, libpf.Void](64, util.PID.Hash32)
+	metadataWarnInhib, err := lru.New[libpf.PID, libpf.Void](64, libpf.PID.Hash32)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create metadata warning inhibitor LRU: %v", err)
 	}
