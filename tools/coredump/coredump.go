@@ -26,7 +26,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
 	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // #include <stdlib.h>
@@ -45,7 +44,7 @@ type symbolKey struct {
 }
 
 type symbolData struct {
-	lineNumber     util.SourceLineno
+	lineNumber     libpf.SourceLineno
 	functionOffset uint32
 	functionName   string
 	fileName       string
@@ -71,7 +70,7 @@ func (c *symbolizationCache) ExecutableMetadata(fileID libpf.FileID,
 }
 
 func (c *symbolizationCache) FrameMetadata(fileID libpf.FileID,
-	addressOrLine libpf.AddressOrLineno, lineNumber util.SourceLineno,
+	addressOrLine libpf.AddressOrLineno, lineNumber libpf.SourceLineno,
 	functionOffset uint32, functionName, filePath string) {
 	key := symbolKey{fileID, addressOrLine}
 	data := symbolData{lineNumber,

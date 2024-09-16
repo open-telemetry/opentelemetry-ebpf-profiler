@@ -15,7 +15,6 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	npsr "github.com/open-telemetry/opentelemetry-ebpf-profiler/nopanicslicereader"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // Constants for the JVM internals that have never changed
@@ -54,7 +53,7 @@ func (m *hotspotMethod) symbolize(symbolReporter reporter.SymbolReporter, bci in
 	dec := ii.d.newUnsigned5Decoder(bytes.NewReader(m.lineTable))
 	lineNo := dec.mapByteCodeIndexToLine(bci)
 	functionOffset := uint32(0)
-	if lineNo > util.SourceLineno(m.startLineNo) {
+	if lineNo > libpf.SourceLineno(m.startLineNo) {
 		functionOffset = uint32(lineNo) - uint32(m.startLineNo)
 	}
 
