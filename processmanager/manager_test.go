@@ -259,7 +259,7 @@ func (s *symbolReporterMockup) ExecutableMetadata(_ libpf.FileID, _, _ string,
 }
 
 func (s *symbolReporterMockup) FrameMetadata(_ libpf.FileID, _ libpf.AddressOrLineno,
-	_ util.SourceLineno, _ uint32, _, _ string) {
+	_ libpf.SourceLineno, _ uint32, _, _ string) {
 }
 
 var _ reporter.SymbolReporter = (*symbolReporterMockup)(nil)

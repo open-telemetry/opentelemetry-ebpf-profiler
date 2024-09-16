@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"math"
 	"time"
-
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // UnixTime32 is another type to represent seconds since epoch.
@@ -84,7 +82,7 @@ type TraceAndCounts struct {
 type FrameMetadata struct {
 	FileID         FileID
 	AddressOrLine  AddressOrLineno
-	LineNumber     util.SourceLineno
+	LineNumber     SourceLineno
 	FunctionOffset uint32
 	FunctionName   string
 	Filename       string
@@ -99,3 +97,8 @@ type FrameMetadata struct {
 //	that only the keys are significant, but the space saving is marginal and the syntax more
 //	cumbersome, so we generally avoid it.
 type Void struct{}
+
+// SourceLineno represents a line number within a source file. It is intended to be used for the
+// source line numbers associated with offsets in native code, or for source line numbers in
+// interpreted code.
+type SourceLineno uint64

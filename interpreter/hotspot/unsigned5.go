@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 )
 
 // unsigned5Decoder is a decoder for UNSIGNED5 based byte streams.
@@ -91,19 +91,19 @@ func (d *unsigned5Decoder) decodeLineTableEntry(bci, line *uint32) error {
 
 // mapByteCodeIndexToLine decodes a line table to map a given Byte Code Index (BCI)
 // to a line number
-func (d *unsigned5Decoder) mapByteCodeIndexToLine(bci int32) util.SourceLineno {
+func (d *unsigned5Decoder) mapByteCodeIndexToLine(bci int32) libpf.SourceLineno {
 	// The line numbers array is a short array of 2-tuples [start_pc, line_number].
 	// Not necessarily sorted. Encoded as delta-encoded numbers.
 	var curBci, curLine, bestBci, bestLine uint32
 
 	for d.decodeLineTableEntry(&curBci, &curLine) == nil {
 		if curBci == uint32(bci) {
-			return util.SourceLineno(curLine)
+			return libpf.SourceLineno(curLine)
 		}
 		if curBci >= bestBci && curBci < uint32(bci) {
 			bestBci = curBci
 			bestLine = curLine
 		}
 	}
-	return util.SourceLineno(bestLine)
+	return libpf.SourceLineno(bestLine)
 }

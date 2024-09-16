@@ -330,9 +330,9 @@ func (m *pythonCodeObject) symbolize(symbolReporter reporter.SymbolReporter, bci
 		return nil
 	}
 
-	var lineNo util.SourceLineno
+	var lineNo libpf.SourceLineno
 	functionOffset := getFuncOffset(m, bci)
-	lineNo = util.SourceLineno(m.firstLineNo + functionOffset)
+	lineNo = libpf.SourceLineno(m.firstLineNo + functionOffset)
 
 	symbolReporter.FrameMetadata(m.fileID,
 		libpf.AddressOrLineno(bci), lineNo, functionOffset,

@@ -525,7 +525,7 @@ type v8SFI struct {
 	bytecode              []byte
 	funcName              string
 	funcID                libpf.FileID
-	funcStartLine         util.SourceLineno
+	funcStartLine         libpf.SourceLineno
 	funcStartPos          int
 	funcEndPos            int
 	bytecodeLength        uint32
@@ -1439,7 +1439,7 @@ func decodePosition(table []byte, delta uint64) sourcePosition {
 
 // mapPositionToLine maps a file position (byte offset) to a line number. This is
 // done against a table containing a offsets where each line ends.
-func mapPositionToLine(lineEnds []uint32, pos int32) util.SourceLineno {
+func mapPositionToLine(lineEnds []uint32, pos int32) libpf.SourceLineno {
 	if len(lineEnds) == 0 || pos < 0 {
 		return 0
 	}
@@ -1447,11 +1447,11 @@ func mapPositionToLine(lineEnds []uint32, pos int32) util.SourceLineno {
 	index := sort.Search(len(lineEnds), func(ndx int) bool {
 		return lineEnds[ndx] >= uint32(pos)
 	})
-	return util.SourceLineno(index + 1)
+	return libpf.SourceLineno(index + 1)
 }
 
 // scriptOffsetToLine maps a sourcePosition to a line number in the corresponding source
-func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) util.SourceLineno {
+func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) libpf.SourceLineno {
 	scriptOffset := position.scriptOffset()
 	// The scriptOffset is offset by one, to make kNoSourcePosition zero.
 	//nolint:lll
@@ -1464,7 +1464,7 @@ func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) util.SourceLineno 
 
 // symbolize symbolizes the raw frame data
 func (i *v8Instance) symbolize(symbolReporter reporter.SymbolReporter, sfi *v8SFI,
-	pos libpf.AddressOrLineno, lineNo util.SourceLineno) {
+	pos libpf.AddressOrLineno, lineNo libpf.SourceLineno) {
 	funcOffset := uint32(0)
 	if lineNo > sfi.funcStartLine {
 		funcOffset = uint32(lineNo - sfi.funcStartLine)

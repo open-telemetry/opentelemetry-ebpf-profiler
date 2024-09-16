@@ -463,7 +463,7 @@ func (i *perlInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 
 	if !seen {
 		symbolReporter.FrameMetadata(
-			cop.fileID, lineno, util.SourceLineno(lineno), 0,
+			cop.fileID, lineno, libpf.SourceLineno(lineno), 0,
 			functionName, cop.sourceFileName)
 
 		log.Debugf("[%d] [%x] %v at %v:%v",

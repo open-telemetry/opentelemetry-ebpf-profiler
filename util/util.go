@@ -94,11 +94,6 @@ type Range struct {
 	End   uint64
 }
 
-// SourceLineno represents a line number within a source file. It is intended to be used for the
-// source line numbers associated with offsets in native code, or for source line numbers in
-// interpreted code.
-type SourceLineno uint64
-
 // OnDiskFileIdentifier can be used as unique identifier for a file.
 // It is a structure to identify a particular file on disk by
 // deviceID and inode number.

@@ -34,7 +34,6 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 var (
@@ -52,7 +51,7 @@ type execInfo struct {
 
 // sourceInfo allows mapping a frame to its source origin.
 type sourceInfo struct {
-	lineNumber     util.SourceLineno
+	lineNumber     libpf.SourceLineno
 	functionOffset uint32
 	functionName   string
 	filePath       string
@@ -216,7 +215,7 @@ func (r *OTLPReporter) ExecutableMetadata(fileID libpf.FileID, fileName,
 
 // FrameMetadata accepts metadata associated with a frame and caches this information.
 func (r *OTLPReporter) FrameMetadata(fileID libpf.FileID, addressOrLine libpf.AddressOrLineno,
-	lineNumber util.SourceLineno, functionOffset uint32, functionName, filePath string) {
+	lineNumber libpf.SourceLineno, functionOffset uint32, functionName, filePath string) {
 	if frameMapLock, exists := r.frames.Get(fileID); exists {
 		frameMap := frameMapLock.WLock()
 		defer frameMapLock.WUnlock(&frameMap)
