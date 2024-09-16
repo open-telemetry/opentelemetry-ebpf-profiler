@@ -39,8 +39,8 @@ import (
 var copyright = `Copyright The OpenTelemetry Authors.
 
 For the eBPF code loaded by Universal Profiling Agent into the kernel,
-the following license applies (GPLv2 only). You can obtain a copy of the GPLv2 code at 
-https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/support/ebpf.
+the following license applies (GPLv2 only). You can obtain a copy of the GPLv2 code at:
+https://github.com/open-telemetry/opentelemetry-ebpf-profiler/tree/main/support/ebpf
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 only,
