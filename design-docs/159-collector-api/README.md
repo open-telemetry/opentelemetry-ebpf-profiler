@@ -30,7 +30,7 @@ build their own distribution of the collector to use as an ebpf agent.
 
 ### Scope
 
-This document describe what the API will look like.
+This document describes what the API will look like.
 
 Like any other receiver (see the
 [filelogreceiver](https://pkg.go.dev/github.com/open-telemetry/opentelemetry-collector-contrib/receiver/filelogreceiver)
