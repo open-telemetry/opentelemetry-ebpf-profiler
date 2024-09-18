@@ -88,7 +88,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 			// beginning is.
 			//
 			// The image is just .tdata followed by .tbss,
-            // but we also have to respect the alignment.
+			// but we also have to respect the alignment.
 			tbss, err := ef.Tbss()
 			if err != nil {
 				return nil, err
