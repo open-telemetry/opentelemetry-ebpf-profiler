@@ -31,7 +31,7 @@ type data struct {
 
 var _ interpreter.Data = &data{}
 
-func roundUp(multiple uint64, value uint64) uint64 {
+func roundUp(multiple, value uint64) uint64 {
 	if multiple == 0 {
 		return value
 	}
@@ -87,7 +87,8 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 			// of the image. So we need to find the size of the image in order to know where the
 			// beginning is.
 			//
-			// The image is just .tdata followed by .tbss, but we also have to respect the alignment.
+			// The image is just .tdata followed by .tbss,
+            // but we also have to respect the alignment.
 			tbss, err := ef.Tbss()
 			if err != nil {
 				return nil, err
