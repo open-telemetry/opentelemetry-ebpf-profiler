@@ -31,6 +31,13 @@ type data struct {
 
 var _ interpreter.Data = &data{}
 
+func roundUp(multiple uint64, value uint64) uint64 {
+	if multiple == 0 {
+		return value
+	}
+	return (value + multiple - 1) / multiple * multiple
+}
+
 func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	ef, err := info.GetELF()
 	if err != nil {
@@ -75,11 +82,28 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		if ef.Machine == elf.EM_AARCH64 {
 			tlsAddr = libpf.Address(tlsSym.Address + 16)
 		} else if ef.Machine == elf.EM_X86_64 {
+			// Symbol addresses are relative to the start of the
+			// thread-local storage image, but the thread pointer points to the _end_
+			// of the image. So we need to find the size of the image in order to know where the
+			// beginning is.
+			//
+			// The image is just .tdata followed by .tbss, but we also have to respect the alignment.
 			tbss, err := ef.Tbss()
 			if err != nil {
 				return nil, err
 			}
-			tlsAddr = libpf.Address(int64(tlsSym.Address) - int64(tbss.Size))
+			tdata, err := ef.Tdata()
+			var tdataSize uint64
+			if err != nil {
+				// No Tdata is ok, it's the same as size 0
+				if err != pfelf.ErrNoTdata {
+					return nil, err
+				}
+			} else {
+				tdataSize = tdata.Size
+			}
+			imageSize := roundUp(tbss.Addralign, tdataSize) + tbss.Size
+			tlsAddr = libpf.Address(int64(tlsSym.Address) - int64(imageSize))
 		} else {
 			return nil, fmt.Errorf("unrecognized machine: %s", ef.Machine.String())
 		}

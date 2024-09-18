@@ -54,6 +54,12 @@ var ErrSymbolNotFound = errors.New("symbol not found")
 // ErrNotELF is returned when the file is not an ELF
 var ErrNotELF = errors.New("not an ELF file")
 
+// ErrNoTbss is returned when the tbss section cannot be found
+var ErrNoTbss = errors.New("no thread-local uninitialized data section (tbss)")
+
+// ErrNoTdata is returned when the tdata section cannot be found
+var ErrNoTdata = errors.New("no thread-local initialized data section (tdata)")
+
 // File represents an open ELF file
 type File struct {
 	// closer is called internally when resources for this File are to be released
@@ -429,7 +435,20 @@ func (f *File) Tbss() (*Section, error) {
 			return &sec, nil
 		}
 	}
-	return nil, errors.New("no thread-local uninitialized data section (tbss)")
+	return nil, ErrNoTbss
+}
+
+// Tdata gets the thread-local initialized data section
+func (f *File) Tdata() (*Section, error) {
+	if err := f.LoadSections(); err != nil {
+		return nil, err
+	}
+	for _, sec := range f.Sections {
+		if sec.Type == elf.SHT_PROGBITS && sec.Flags&elf.SHF_TLS != 0 {
+			return &sec, nil
+		}
+	}
+	return nil, ErrNoTdata
 }
 
 // ReadVirtualMemory reads bytes from given virtual address
