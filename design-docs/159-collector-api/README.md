@@ -61,7 +61,7 @@ func main() {
 ```
 
 The intent behind making the factory part of the root of the repository is to
-make it clear to folks that the factory is the root of the agent running as a
+clarify that the factory is the root of the agent running as a
 collector receiver.
 
 ## Alternatives
