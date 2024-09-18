@@ -25,8 +25,7 @@ This design document aims to describe the public API we will be exposing.
 
 ## Success Criteria
 
-Folks need to be able to use a clear and consise public API when they wish to
-build their own distribution of the collector to use as an ebpf agent.
+We define a clear and concise public API for building custom distributions of the collector with ebpf profiling enabled.
 
 ### Scope
 
