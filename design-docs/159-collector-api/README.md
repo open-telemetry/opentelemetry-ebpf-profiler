@@ -66,7 +66,7 @@ collector receiver.
 
 ## Alternatives
 
-We could also move have the receiver in a sub-package:
+Having the receiver in a sub-package:
 
 ```golang
 package main
