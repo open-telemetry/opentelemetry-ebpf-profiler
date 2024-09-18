@@ -356,6 +356,10 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 	r.client = otlpcollector.NewProfilesServiceClient(otlpGrpcConn)
 
 	go func() {
+		jitter := 0.2
+		if cfg.DisableJitter {
+			jitter = 0
+		}
 		tick := time.NewTicker(cfg.ReportInterval)
 		defer tick.Stop()
 		for {
@@ -368,7 +372,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 				if err := r.reportOTLPProfile(ctx); err != nil {
 					log.Errorf("Request failed: %v", err)
 				}
-				tick.Reset(libpf.AddJitter(cfg.ReportInterval, 0.2))
+				tick.Reset(libpf.AddJitter(cfg.ReportInterval, jitter))
 			}
 		}
 	}()

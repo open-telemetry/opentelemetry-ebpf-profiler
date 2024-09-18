@@ -10,32 +10,27 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof" //nolint:gosec
 	"os"
 	"os/signal"
 	"runtime"
 	"time"
 
-	//nolint:gosec
-	_ "net/http/pprof"
-
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
-	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/vc"
+	log "github.com/sirupsen/logrus"
 	"github.com/tklauser/numcpus"
 	"golang.org/x/sys/unix"
 
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/bench/benchreporter"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracehandler"
-
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/hostmetadata"
-
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
-
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracehandler"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer"
-
-	log "github.com/sirupsen/logrus"
+	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/vc"
 )
 
 // Short copyright / license text for eBPF code
@@ -174,10 +169,8 @@ func mainWithExitCode() exitCode {
 	metadataCollector.AddCustomData("host.name", hostname)
 	metadataCollector.AddCustomData("host.ip", sourceIP)
 
-	// Network operations to CA start here
-	var rep reporter.Reporter
-	// Connect to the collection agent
-	rep, err = reporter.Start(mainCtx, &reporter.Config{
+	// Network operations to the collector start here.
+	rep, err := reporter.Start(mainCtx, &reporter.Config{
 		CollAgentAddr:          args.collAgentAddr,
 		DisableTLS:             args.disableTLS,
 		MaxRPCMsgSize:          32 << 20, // 32 MiB
@@ -185,15 +178,31 @@ func mainWithExitCode() exitCode {
 		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
 		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
 		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
+		GRPCClientInterceptor:  benchreporter.GRPCInterceptor(args.reporterSaveOutputsTo),
 		ReportInterval:         intervals.ReportInterval(),
 		CacheSize:              traceHandlerCacheSize,
 		SamplesPerSecond:       args.samplesPerSecond,
 		KernelVersion:          kernelVersion,
 		HostName:               hostname,
 		IPAddress:              sourceIP,
+		DisableJitter:          args.reporterRecordInputsTo == "",
 	})
 	if err != nil {
 		return failure("Failed to start reporting: %v", err)
+	}
+
+	if args.reporterRecordInputsTo != "" {
+		rep, err = benchreporter.NewBenchmarkReporter(args.reporterRecordInputsTo, rep)
+		if err != nil {
+			return failure("Failed to create benchmark reporter: %v", err)
+		}
+	}
+
+	if args.reporterReplayInputsFrom != "" {
+		if err = benchreporter.Replay(mainCtx, args.reporterReplayInputsFrom, rep); err != nil {
+			return failure("Failed to replay benchmark data: %v", err)
+		}
+		return exitSuccess
 	}
 
 	metrics.SetReporter(rep)

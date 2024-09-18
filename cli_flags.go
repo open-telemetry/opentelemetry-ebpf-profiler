@@ -21,13 +21,16 @@ import (
 
 const (
 	// Default values for CLI flags
-	defaultArgSamplesPerSecond    = 20
-	defaultArgReporterInterval    = 5.0 * time.Second
-	defaultArgMonitorInterval     = 5.0 * time.Second
-	defaultClockSyncInterval      = 3 * time.Minute
-	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
-	defaultProbabilisticInterval  = 1 * time.Minute
-	defaultArgSendErrorFrames     = false
+	defaultArgSamplesPerSecond         = 20
+	defaultArgReporterInterval         = 5.0 * time.Second
+	defaultArgMonitorInterval          = 5.0 * time.Second
+	defaultClockSyncInterval           = 3 * time.Minute
+	defaultProbabilisticThreshold      = tracer.ProbabilisticThresholdMax
+	defaultProbabilisticInterval       = 1 * time.Minute
+	defaultArgSendErrorFrames          = false
+	defaultArgReporterRecordsInputsTo  = ""
+	defaultArgReporterReplayInputsFrom = ""
+	defaultArgReporterSaveOutputsTo    = ""
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -61,35 +64,42 @@ var (
 		tracer.ProbabilisticThresholdMax-1, tracer.ProbabilisticThresholdMax-1)
 	probabilisticIntervalHelp = "Time interval for which probabilistic profiling will be " +
 		"enabled or disabled."
-	pprofHelp             = "Listening address (e.g. localhost:6060) to serve pprof information."
+	pprofHelp = "Listening address (e.g. localhost:6060) to serve" +
+		" pprof information."
 	samplesPerSecondHelp  = "Set the frequency (in Hz) of stack trace sampling."
 	reporterIntervalHelp  = "Set the reporter's interval in seconds."
 	monitorIntervalHelp   = "Set the monitor interval in seconds."
 	clockSyncIntervalHelp = "Set the sync interval with the realtime clock. " +
 		"If zero, monotonic-realtime clock sync will be performed once, " +
 		"on agent startup, but not periodically."
-	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
+	sendErrorFramesHelp          = "Send error frames (devfiler only, breaks Kibana)"
+	reporterRecordInputsToHelp   = "Record reporter input to given NDJSON file."
+	reporterReplayInputsFromHelp = "Replay reporter input from given NDJSON file."
+	reporterSaveOutputsToHelp    = "Directory to store raw protobuf wire messages."
 )
 
 type arguments struct {
-	bpfVerifierLogLevel    uint
-	bpfVerifierLogSize     int
-	collAgentAddr          string
-	copyright              bool
-	disableTLS             bool
-	mapScaleFactor         uint
-	monitorInterval        time.Duration
-	clockSyncInterval      time.Duration
-	noKernelVersionCheck   bool
-	pprofAddr              string
-	probabilisticInterval  time.Duration
-	probabilisticThreshold uint
-	reporterInterval       time.Duration
-	samplesPerSecond       int
-	sendErrorFrames        bool
-	tracers                string
-	verboseMode            bool
-	version                bool
+	reporterRecordInputsTo   string
+	reporterSaveOutputsTo    string
+	reporterReplayInputsFrom string
+	bpfVerifierLogLevel      uint
+	bpfVerifierLogSize       int
+	collAgentAddr            string
+	copyright                bool
+	disableTLS               bool
+	mapScaleFactor           uint
+	monitorInterval          time.Duration
+	clockSyncInterval        time.Duration
+	noKernelVersionCheck     bool
+	pprofAddr                string
+	probabilisticInterval    time.Duration
+	probabilisticThreshold   uint
+	reporterInterval         time.Duration
+	samplesPerSecond         int
+	sendErrorFrames          bool
+	tracers                  string
+	verboseMode              bool
+	version                  bool
 
 	fs *flag.FlagSet
 }
@@ -146,6 +156,13 @@ func parseArgs() (*arguments, error) {
 	fs.BoolVar(&args.verboseMode, "v", false, "Shorthand for -verbose.")
 	fs.BoolVar(&args.verboseMode, "verbose", false, verboseModeHelp)
 	fs.BoolVar(&args.version, "version", false, versionHelp)
+
+	fs.StringVar(&args.reporterRecordInputsTo, "reporter-record-inputs-to",
+		defaultArgReporterRecordsInputsTo, reporterRecordInputsToHelp)
+	fs.StringVar(&args.reporterReplayInputsFrom, "reporter-replay-inputs-from",
+		defaultArgReporterReplayInputsFrom, reporterReplayInputsFromHelp)
+	fs.StringVar(&args.reporterSaveOutputsTo, "reporter-save-outputs-to",
+		defaultArgReporterSaveOutputsTo, reporterSaveOutputsToHelp)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()

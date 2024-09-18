@@ -77,6 +77,14 @@ func TestUnixTime64_MarshalJSON(t *testing.T) {
 			b, err := test.time.MarshalJSON()
 			require.NoError(t, err)
 			assert.Equal(t, test.want, b)
+
+			// Unmarshal the value and check it is the same
+			if test.want[0] == '"' {
+				var u UnixTime64
+				err = u.UnmarshalJSON(b)
+				require.NoError(t, err)
+				assert.Equal(t, test.time, u)
+			}
 		})
 	}
 }
