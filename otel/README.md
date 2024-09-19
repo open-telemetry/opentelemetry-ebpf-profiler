@@ -5,7 +5,7 @@ Technically, the receiver and collector code can both live in separate repositor
 
 To get the `ocb` tool (OTEL collector builder, amend version):
 ```
-curl --proto '=https' --tlsv1.2 -fL -o ocb https://github.com/open-telemetry/opentelemetry-collector/releases/download/cmd%2Fbuilder%2Fv0.106.0/ocb_0.106.0_linux_amd64
+curl --proto '=https' --tlsv1.2 -fL -o ocb https://github.com/open-telemetry/opentelemetry-collector/releases/download/cmd%2Fbuilder%2Fv0.107.0/ocb_0.107.0_linux_amd64
 chmod a+x ocb
 ```
 
