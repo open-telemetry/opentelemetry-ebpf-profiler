@@ -153,8 +153,8 @@ type Config struct {
 	FilterErrorFrames bool
 	// KernelVersionCheck indicates whether the kernel version should be checked.
 	KernelVersionCheck bool
-	// VerboseMode indicates whether to load the debug version of tracer.
-	VerboseMode bool
+	// DebugTracer indicates whether to load the debug version of eBPF tracers.
+	DebugTracer bool
 	// BPFVerifierLogLevel is the log level of the eBPF verifier output.
 	BPFVerifierLogLevel uint32
 	// BPFVerifierLogSize is the size in bytes that will be allocated for the eBPF verifier output.
@@ -272,7 +272,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 
 	// Based on includeTracers we decide later which are loaded into the kernel.
 	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(cfg.IncludeTracers, kernelSymbols,
-		cfg.FilterErrorFrames, cfg.MapScaleFactor, cfg.KernelVersionCheck, cfg.VerboseMode,
+		cfg.FilterErrorFrames, cfg.MapScaleFactor, cfg.KernelVersionCheck, cfg.DebugTracer,
 		cfg.BPFVerifierLogLevel, cfg.BPFVerifierLogSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)

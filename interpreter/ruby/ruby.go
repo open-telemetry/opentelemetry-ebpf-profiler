@@ -725,7 +725,7 @@ func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	// particular line. So we report 0 for this to our backend.
 	symbolReporter.FrameMetadata(
 		fileID,
-		libpf.AddressOrLineno(lineNo), util.SourceLineno(lineNo), 0,
+		libpf.AddressOrLineno(lineNo), libpf.SourceLineno(lineNo), 0,
 		functionName, sourceFileName)
 
 	log.Debugf("[%d] [%x] %v+%v at %v:%v", len(trace.FrameTypes),

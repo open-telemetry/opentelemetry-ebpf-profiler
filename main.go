@@ -210,7 +210,7 @@ func mainWithExitCode() exitCode {
 		SamplesPerSecond:       args.samplesPerSecond,
 		MapScaleFactor:         int(args.mapScaleFactor),
 		KernelVersionCheck:     !args.noKernelVersionCheck,
-		VerboseMode:            args.verboseMode,
+		DebugTracer:            args.verboseMode,
 		BPFVerifierLogLevel:    uint32(args.bpfVerifierLogLevel),
 		BPFVerifierLogSize:     args.bpfVerifierLogSize,
 		ProbabilisticInterval:  args.probabilisticInterval,
@@ -333,9 +333,6 @@ func sanityCheck(args *arguments) exitCode {
 		switch runtime.GOARCH {
 		case "amd64":
 			if args.verboseMode {
-				log.Infof("The debug version of the tracer significantly increases the number " +
-					"of BPF instructions, and at least kernel version 5.2 is required to " +
-					"ensure that BPF verifier is happy")
 				minMajor, minMinor = 5, 2
 			} else {
 				minMajor, minMinor = 4, 19

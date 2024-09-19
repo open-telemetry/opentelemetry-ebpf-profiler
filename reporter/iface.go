@@ -12,7 +12,6 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 // Reporter is the top-level interface implemented by a full reporter.
@@ -73,7 +72,7 @@ type SymbolReporter interface {
 	// FrameMetadata accepts metadata associated with a frame and caches this information before
 	// a periodic reporting to the backend.
 	FrameMetadata(fileID libpf.FileID, addressOrLine libpf.AddressOrLineno,
-		lineNumber util.SourceLineno, functionOffset uint32, functionName, filePath string)
+		lineNumber libpf.SourceLineno, functionOffset uint32, functionName, filePath string)
 }
 
 type HostMetadataReporter interface {

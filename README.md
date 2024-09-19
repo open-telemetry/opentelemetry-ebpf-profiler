@@ -59,6 +59,15 @@ make agent TARGET_ARCH=arm64 # accepted: amd64, arm64
 
 The resulting binary will be in the current directory as `otel-profiling-agent`.
 
+If you are a developer and want to obtain more detailed debugging information, please use the following command to build the agent:
+```sh
+# Build debug version agent for architecture of current machine:
+make debug-agent
+
+# OR, cross-compile an debug version agent for another architecture:
+make debug-agent TARGET_ARCH=arm64 # accepted: amd64, arm64
+```
+
 Alternatively, you can build without Docker. Please see the `Dockerfile` for required dependencies.
 
 After installing the dependencies, just run `make` to build.

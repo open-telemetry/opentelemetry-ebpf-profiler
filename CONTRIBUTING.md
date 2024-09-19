@@ -129,15 +129,15 @@ Any [Maintainer] can merge the PR once the above criteria have been met.
 
 ### Approvers
 
-- [Christos Kalkanis](https://github.com/christos68k), Elastic
 - [Florian Lehner](https://github.com/florianl), Elastic
+- [Joel Höner](https://github.com/athre0z)
 - [Tim Rühsen](https://github.com/rockdaboot), Elastic
 
 ### Maintainers
 
+- [Christos Kalkanis](https://github.com/christos68k), Elastic
 - [Dmitry Filimonov](https://github.com/petethepig), Pyroscope/Grafana
 - [Felix Geisendörfer](https://github.com/felixge), Datadog
-- [Joel Höner](https://github.com/athre0z), Elastic
 - [Timo Teräs](https://github.com/fabled)
 
 ### Become an Approver or a Maintainer

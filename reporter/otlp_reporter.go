@@ -34,7 +34,6 @@ import (
 
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
 var (
@@ -52,7 +51,7 @@ type execInfo struct {
 
 // sourceInfo allows mapping a frame to its source origin.
 type sourceInfo struct {
-	lineNumber     util.SourceLineno
+	lineNumber     libpf.SourceLineno
 	functionOffset uint32
 	functionName   string
 	filePath       string
@@ -76,8 +75,8 @@ type traceAndMetaKey struct {
 	containerID string
 }
 
-// traceFramesCounts holds known information about a trace.
-type traceFramesCounts struct {
+// traceEvents holds known information about a trace.
+type traceEvents struct {
 	files              []libpf.FileID
 	linenos            []libpf.AddressOrLineno
 	frameTypes         []libpf.FrameType
@@ -124,7 +123,7 @@ type OTLPReporter struct {
 	frames *lru.SyncedLRU[libpf.FileID, *xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[traceAndMetaKey]*traceFramesCounts]
+	traceEvents xsync.RWMutex[map[traceAndMetaKey]*traceEvents]
 
 	// pkgGRPCOperationTimeout sets the time limit for GRPC requests.
 	pkgGRPCOperationTimeout time.Duration
@@ -156,8 +155,8 @@ func (r *OTLPReporter) SupportsReportTraceEvent() bool { return true }
 
 // ReportTraceEvent enqueues reported trace events for the OTLP reporter.
 func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta) {
-	traceEvents := r.traceEvents.WLock()
-	defer r.traceEvents.WUnlock(&traceEvents)
+	traceEventsMap := r.traceEvents.WLock()
+	defer r.traceEvents.WUnlock(&traceEventsMap)
 
 	containerID, err := r.lookupCgroupv2(meta.PID)
 	if err != nil {
@@ -172,13 +171,13 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		containerID:    containerID,
 	}
 
-	if tr, exists := (*traceEvents)[key]; exists {
-		tr.timestamps = append(tr.timestamps, uint64(meta.Timestamp))
-		(*traceEvents)[key] = tr
+	if events, exists := (*traceEventsMap)[key]; exists {
+		events.timestamps = append(events.timestamps, uint64(meta.Timestamp))
+		(*traceEventsMap)[key] = events
 		return
 	}
 
-	(*traceEvents)[key] = &traceFramesCounts{
+	(*traceEventsMap)[key] = &traceEvents{
 		files:              trace.Files,
 		linenos:            trace.Linenos,
 		frameTypes:         trace.FrameTypes,
@@ -216,7 +215,7 @@ func (r *OTLPReporter) ExecutableMetadata(fileID libpf.FileID, fileName,
 
 // FrameMetadata accepts metadata associated with a frame and caches this information.
 func (r *OTLPReporter) FrameMetadata(fileID libpf.FileID, addressOrLine libpf.AddressOrLineno,
-	lineNumber util.SourceLineno, functionOffset uint32, functionName, filePath string) {
+	lineNumber libpf.SourceLineno, functionOffset uint32, functionName, filePath string) {
 	if frameMapLock, exists := r.frames.Get(fileID); exists {
 		frameMap := frameMapLock.WLock()
 		defer frameMapLock.WUnlock(&frameMap)
@@ -338,7 +337,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		executables:             executables,
 		frames:                  frames,
 		hostmetadata:            hostmetadata,
-		traceEvents:             xsync.NewRWMutex(map[traceAndMetaKey]*traceFramesCounts{}),
+		traceEvents:             xsync.NewRWMutex(map[traceAndMetaKey]*traceEvents{}),
 		cgroupv2ID:              cgroupv2ID,
 	}
 

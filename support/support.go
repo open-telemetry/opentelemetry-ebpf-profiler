@@ -18,11 +18,11 @@ import (
 // We expect tracerData to hold all possible eBPF maps and programs.
 func LoadCollectionSpec(debugTracer bool) (*cebpf.CollectionSpec, error) {
 	if debugTracer {
-		if len(debugTracerData) == 0 {
-			log.Warnf("debugTracerData is empty, use tracerData instead")
-			return cebpf.LoadCollectionSpecFromReader(bytes.NewReader(tracerData))
+		if len(debugTracerData) > 0 {
+			log.Warnf("Using debug eBPF tracers")
+			return cebpf.LoadCollectionSpecFromReader(bytes.NewReader(debugTracerData))
 		}
-		return cebpf.LoadCollectionSpecFromReader(bytes.NewReader(debugTracerData))
+		log.Warnf("Debug eBPF tracers not found, using release tracers instead")
 	}
 	return cebpf.LoadCollectionSpecFromReader(bytes.NewReader(tracerData))
 }

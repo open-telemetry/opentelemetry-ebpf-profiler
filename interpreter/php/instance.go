@@ -227,7 +227,7 @@ func (i *phpInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 		funcOff = uint32(line) - f.lineStart
 	}
 	symbolReporter.FrameMetadata(
-		f.fileID, line, util.SourceLineno(line), funcOff,
+		f.fileID, line, libpf.SourceLineno(line), funcOff,
 		f.name, f.sourceFileName)
 
 	f.lineSeen[line] = libpf.Void{}
