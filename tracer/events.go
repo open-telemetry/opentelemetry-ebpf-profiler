@@ -162,15 +162,18 @@ func startPollingPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 				break PollLoop
 			}
 
+			log.Debug("Polling perf event buffer")
 			// Eagerly read events until the buffer is exhausted.
 			for {
 				if err = eventReader.ReadInto(&data); err != nil {
 					if !errors.Is(err, os.ErrDeadlineExceeded) {
 						readErrorCount.Add(1)
 					}
+					log.Debugf(" ... %v", err)
 
 					break
 				}
+				log.Debugf(" ... %v", data)
 				if data.LostSamples != 0 {
 					lostEventsCount.Add(data.LostSamples)
 					continue

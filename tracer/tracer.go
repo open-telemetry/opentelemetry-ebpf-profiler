@@ -951,6 +951,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.Trace) error {
 	eventMetricCollector := t.startEventMonitor(ctx)
 
+	log.Debugf("trace_poll_interval: %v", t.intervals.TracePollInterval())
 	startPollingPerfEventMonitor(ctx, t.ebpfMaps["trace_events"], t.intervals.TracePollInterval(),
 		t.samplesPerSecond*int(unsafe.Sizeof(C.Trace{})), func(rawTrace []byte) {
 			traceOutChan <- t.loadBpfTrace(rawTrace)
