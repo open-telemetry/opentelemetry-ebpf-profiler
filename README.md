@@ -57,7 +57,7 @@ make agent
 make agent TARGET_ARCH=arm64 # accepted: amd64, arm64
 ```
 
-The resulting binary will be in the current directory as `otel-profiling-agent`.
+The resulting binary will be in the current directory as `opentelemetry-ebpf-profiler`.
 
 Alternatively, you can build without Docker. Please see the `Dockerfile` for required dependencies.
 
@@ -68,7 +68,7 @@ After installing the dependencies, just run `make` to build.
 You can start the agent with the following command:
 
 ```sh
-sudo ./otel-profiling-agent -collection-agent=127.0.0.1:11000 -disable-tls
+sudo ./opentelemetry-ebpf-profiler -collection-agent=127.0.0.1:11000 -disable-tls
 ```
 
 The agent comes with a functional but work-in-progress / evolving implementation
@@ -199,11 +199,11 @@ We have two major representations for our stack traces.
 
 The raw trace format produced by our BPF unwinders:
 
-https://github.com/elastic/otel-profiling-agent/blob/0945fe628da5c4854d55dd95e5dc4b4cf46a3c76/host/host.go#L60-L66
+https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/0945fe628da5c4854d55dd95e5dc4b4cf46a3c76/host/host.go#L60-L66
 
 The final format produced after additional processing in user-land:
 
-https://github.com/elastic/otel-profiling-agent/blob/0945fe628da5c4854d55dd95e5dc4b4cf46a3c76/libpf/libpf.go#L458-L463
+https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/0945fe628da5c4854d55dd95e5dc4b4cf46a3c76/libpf/libpf.go#L458-L463
 
 The two might look rather similar at first glance, but there are some important differences:
 
@@ -256,7 +256,7 @@ Since converting and enriching BPF-format traces is not a cheap operation, the
 trace handler is also responsible for keeping a cache (mapping) of trace hashes:
 from 64bit BPF hash to the user-space 128bit hash.
 
-[`ConvertTrace`]: https://github.com/elastic/otel-profiling-agent/blob/385bcd5273fae22cdc2cf74bacae6a54fe6ce153/processmanager/manager.go#L205
+[`ConvertTrace`]: https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/0945fe628da5c4854d55dd95e5dc4b4cf46a3c76/processmanager/manager.go#L208
 
 #### Reporter
 
@@ -322,7 +322,7 @@ available in [a separate document](doc/gopclntab.md)).
 The BPF portion of the host agent implements the actual stack unwinding. It uses
 the eBPF virtual machine to execute our code directly in the Linux kernel. The
 components are implemented in BPF C and live in the
-[`otel-profiling-agent/support/ebpf`](./support/ebpf) directory.
+[`opentelemetry-ebpf-profiler/support/ebpf`](./support/ebpf) directory.
 
 #### Limitations
 
@@ -387,9 +387,9 @@ If any frame in the trace requires symbolization in user-mode, we additionally
 send a BPF event to request an expedited read from user-land. For all other
 traces user-land will simply read and then clear this map on a timer.
 
-[`native_tracer_entry`]: https://github.com/elastic/otel-profiling-agent/blob/385bcd5273fae22cdc2cf74bacae6a54fe6ce153/support/ebpf/native_stack_trace.ebpf.c#L875
-[`PerCPURecord`]: https://github.com/elastic/otel-profiling-agent/blob/385bcd5273fae22cdc2cf74bacae6a54fe6ce153/support/ebpf/types.h#L576
-[`unwind_stop`]: https://github.com/elastic/otel-profiling-agent/blob/385bcd5273fae22cdc2cf74bacae6a54fe6ce153/support/ebpf/interpreter_dispatcher.ebpf.c#L125
+[`native_tracer_entry`]: https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/0945fe628da5c4854d55dd95e5dc4b4cf46a3c76/support/ebpf/native_stack_trace.ebpf.c#L875
+[`PerCPURecord`]: https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/0945fe628da5c4854d55dd95e5dc4b4cf46a3c76/support/ebpf/types.h#L576
+[`unwind_stop`]: https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/0945fe628da5c4854d55dd95e5dc4b4cf46a3c76/support/ebpf/interpreter_dispatcher.ebpf.c#L125
 
 #### PID events
 
@@ -499,7 +499,7 @@ probabilistic profiling is either enabled or disabled. The default value is 1 mi
 
 The following example shows how to configure the profiling agent with a threshold of 50 and an interval of 2 minutes and 30 seconds:
 ```bash
-sudo ./otel-profiling-agent -probabilistic-threshold=50 -probabilistic-interval=2m30s
+sudo ./opentelemetry-ebpf-profiler -probabilistic-threshold=50 -probabilistic-interval=2m30s
 ```
 
 # Legal
