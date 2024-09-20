@@ -128,7 +128,6 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		MapScaleFactor:         0,
 		KernelVersionCheck:     true,
 		BPFVerifierLogLevel:    0,
-		BPFVerifierLogSize:     cebpf.DefaultVerifierLogSize,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
 	})
