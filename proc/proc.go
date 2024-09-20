@@ -106,6 +106,9 @@ func GetKernelModules(modulesPath string,
 		Size:    int(etext.Address - stext.Address),
 	})
 
+	atLeastOneValidAddress := false
+	count := 0
+
 	var scanner = bufio.NewScanner(file)
 	for scanner.Scan() {
 		var size, refcount, address uint64
@@ -113,16 +116,17 @@ func GetKernelModules(modulesPath string,
 
 		line := scanner.Text()
 
+		count++
+
 		nFields, _ := fmt.Sscanf(line, "%s %d %d %s %s 0x%x",
 			&name, &size, &refcount, &dependencies, &state, &address)
 		if nFields < 6 {
 			return nil, fmt.Errorf("unexpected line in modules: '%s'", line)
 		}
 		if address == 0 {
-			return nil, fmt.Errorf(
-				"addresses from modules is zero - "+
-					"check process permissions: '%s'", line)
+			continue
 		}
+		atLeastOneValidAddress = true
 
 		symmap.Add(libpf.Symbol{
 			Name:    libpf.SymbolName(name),
@@ -130,6 +134,11 @@ func GetKernelModules(modulesPath string,
 			Size:    int(size),
 		})
 	}
+
+	if count > 0 && !atLeastOneValidAddress {
+		return nil, errors.New("addresses from all modules is zero - check process permissions")
+	}
+
 	symmap.Finalize()
 
 	return &symmap, nil
