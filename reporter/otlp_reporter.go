@@ -45,8 +45,8 @@ var _ Reporter = (*OTLPReporter)(nil)
 
 // execInfo enriches an executable with additional metadata.
 type execInfo struct {
-	fileName string
-	buildID  string
+	fileName   string
+	gnuBuildID string
 }
 
 // sourceInfo allows mapping a frame to its source origin.
@@ -84,6 +84,12 @@ type traceEvents struct {
 	mappingEnds        []libpf.Address
 	mappingFileOffsets []uint64
 	timestamps         []uint64 // in nanoseconds
+}
+
+// attrKeyValue is a helper to populate Profile.attribute_table.
+type attrKeyValue struct {
+	key   string
+	value string
 }
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
@@ -206,10 +212,10 @@ func (r *OTLPReporter) ReportFallbackSymbol(frameID libpf.FrameID, symbol string
 // ExecutableMetadata accepts a fileID with the corresponding filename
 // and caches this information.
 func (r *OTLPReporter) ExecutableMetadata(fileID libpf.FileID, fileName,
-	buildID string, _ libpf.InterpreterType, _ ExecutableOpener) {
+	gnuBuildID string, _ libpf.InterpreterType, _ ExecutableOpener) {
 	r.executables.Add(fileID, execInfo{
-		fileName: fileName,
-		buildID:  buildID,
+		fileName:   fileName,
+		gnuBuildID: gnuBuildID,
 	})
 }
 
@@ -514,16 +520,10 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 			Unit: int64(getStringMapIndex(stringMap, "nanoseconds")),
 		},
 		Period: 1e9 / int64(r.samplesPerSecond),
-		// LocationIndices - Optional element we do not use.
-		// AttributeTable - Optional element we do not use.
 		// AttributeUnits - Optional element we do not use.
 		// LinkTable - Optional element we do not use.
 		// DropFrames - Optional element we do not use.
 		// KeepFrames - Optional element we do not use.
-		// TimeNanos - Optional element we do not use.
-		// DurationNanos - Optional element we do not use.
-		// PeriodType - Optional element we do not use.
-		// Period - Optional element we do not use.
 		// Comment - Optional element we do not use.
 		// DefaultSampleType - Optional element we do not use.
 	}
@@ -581,16 +581,22 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 						fileName = execInfo.fileName
 					}
 
+					mappingAttributes := addProfileAttributes(profile, []attrKeyValue{
+						// Once SemConv and its Go package is released with the new
+						// semantic convention for build_id, replace these hard coded
+						// strings.
+						{key: "process.executable.build_id.gnu", value: execInfo.gnuBuildID},
+						{key: "process.executable.build_id.profiling",
+							value: traceInfo.files[i].StringNoQuotes()},
+					}, attributeMap)
+
 					profile.Mapping = append(profile.Mapping, &profiles.Mapping{
 						// Id - Optional element we do not use.
 						MemoryStart: uint64(traceInfo.mappingStarts[i]),
 						MemoryLimit: uint64(traceInfo.mappingEnds[i]),
 						FileOffset:  traceInfo.mappingFileOffsets[i],
 						Filename:    int64(getStringMapIndex(stringMap, fileName)),
-						BuildId: int64(getStringMapIndex(stringMap,
-							traceInfo.files[i].StringNoQuotes())),
-						BuildIdKind: *profiles.BuildIdKind_BUILD_ID_BINARY_HASH.Enum(),
-						// Attributes - Optional element we do not use.
+						Attributes:  mappingAttributes,
 						// HasFunctions - Optional element we do not use.
 						// HasFilenames - Optional element we do not use.
 						// HasLineNumbers - Optional element we do not use.
@@ -666,7 +672,11 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 			profile.Location = append(profile.Location, loc)
 		}
 
-		sample.Attributes = getSampleAttributes(profile, traceKey, attributeMap)
+		sample.Attributes = addProfileAttributes(profile, []attrKeyValue{
+			{key: string(semconv.ContainerIDKey), value: traceKey.containerID},
+			{key: string(semconv.ThreadNameKey), value: traceKey.comm},
+			{key: string(semconv.ServiceNameKey), value: traceKey.apmServiceName},
+		}, attributeMap)
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
 		locationIndex += sample.LocationsLength
 
@@ -735,16 +745,17 @@ func createFunctionEntry(funcMap map[funcInfo]uint64,
 	return idx
 }
 
-// getSampleAttributes builds a sample-specific list of attributes.
-func getSampleAttributes(profile *profiles.Profile,
-	traceKey traceAndMetaKey, attributeMap map[string]uint64) []uint64 {
-	indices := make([]uint64, 0, 3)
+// addProfileAttributes adds attributes to Profile.attribute_table and returns
+// the indices to these attributes.
+func addProfileAttributes(profile *profiles.Profile,
+	attributes []attrKeyValue, attributeMap map[string]uint64) []uint64 {
+	indices := make([]uint64, 0, len(attributes))
 
-	addAttr := func(k attribute.Key, v string) {
-		if v == "" {
+	addAttr := func(attr attrKeyValue) {
+		if attr.value == "" {
 			return
 		}
-		attributeCompositeKey := string(k) + "_" + v
+		attributeCompositeKey := attr.key + "_" + attr.value
 		if attributeIndex, exists := attributeMap[attributeCompositeKey]; exists {
 			indices = append(indices, attributeIndex)
 			return
@@ -752,15 +763,15 @@ func getSampleAttributes(profile *profiles.Profile,
 		newIndex := uint64(len(profile.AttributeTable))
 		indices = append(indices, newIndex)
 		profile.AttributeTable = append(profile.AttributeTable, &common.KeyValue{
-			Key:   string(k),
-			Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: v}},
+			Key:   attr.key,
+			Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: attr.value}},
 		})
 		attributeMap[attributeCompositeKey] = newIndex
 	}
 
-	addAttr(semconv.ContainerIDKey, traceKey.containerID)
-	addAttr(semconv.ThreadNameKey, traceKey.comm)
-	addAttr(semconv.ServiceNameKey, traceKey.apmServiceName)
+	for i := range attributes {
+		addAttr(attributes[i])
+	}
 
 	return indices
 }
