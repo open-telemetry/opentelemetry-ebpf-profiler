@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+
 	//nolint:gosec
 	_ "net/http/pprof"
 	"os"
