@@ -98,6 +98,18 @@ The archive contains a build for each of the following platforms:
 - Linux AppImage (x86_64)
 - Linux AppImage (aarch64)
 
+> [!IMPORTANT]
+> 
+> The macOS application isn't properly signed with an Apple developer certificate: macOS will
+> complain about the application being corrupted on start. To work around that, simply run the following
+> command after downloading the archive:
+>
+> ```
+> xattr -d com.apple.quarantine ~/Downloads/devfiler.app.zip
+> ```
+>
+> If you did this correctly, the application should run just fine after unpacking the ZIP.
+
 > [!NOTE]
 > devfiler is currently in an experimental preview stage.
 
