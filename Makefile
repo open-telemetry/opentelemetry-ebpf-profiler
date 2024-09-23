@@ -46,6 +46,19 @@ LDFLAGS := -X github.com//open-telemetry/opentelemetry-ebpf-profiler/vc.version=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)" -tags osusergo,netgo
 
+# Internal tools
+TOOLS_MOD_DIR := ./internal/tools
+TOOLS = $(CURDIR)/.tools
+
+$(TOOLS):
+	@mkdir -p $@
+$(TOOLS)/%: $(TOOLS_MOD_DIR)/go.mod | $(TOOLS)
+	cd $(TOOLS_MOD_DIR) && \
+	go build -o $@ $(PACKAGE)
+
+PORTO = $(TOOLS)/porto
+$(TOOLS)/porto: PACKAGE=github.com/jcchavezs/porto/cmd/porto
+
 all: generate ebpf binary
 
 # Removes the go build cache and binaries in the current project
@@ -66,12 +79,20 @@ ebpf:
 	$(MAKE) -j$(shell nproc) -C support/ebpf
 
 GOLANGCI_LINT_VERSION = "v1.60.1"
-lint: generate
+lint: generate vanity-import-check
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
 
 linter-version:
 	@echo $(GOLANGCI_LINT_VERSION)
+
+.PHONY: vanity-import-check
+vanity-import-check: $(PORTO)
+	@$(PORTO) --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
+
+.PHONY: vanity-import-fix
+vanity-import-fix: $(PORTO)
+	@$(PORTO) --include-internal -w .
 
 test: generate ebpf test-deps
 	go test $(GO_FLAGS) ./...
@@ -108,5 +129,5 @@ legal:
 	@go-licenses save --force . --save_path=LICENSES
 	@./legal/add-non-go.sh legal/non-go-dependencies.json LICENSES
 
-codespell: 
+codespell:
 	@codespell
