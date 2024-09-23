@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // unsigned5Decoder is a decoder for UNSIGNED5 based byte streams.

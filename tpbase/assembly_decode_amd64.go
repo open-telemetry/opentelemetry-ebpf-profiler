@@ -11,7 +11,7 @@ import (
 	"errors"
 	"unsafe"
 
-	_ "github.com/open-telemetry/opentelemetry-ebpf-profiler/zydis" // links Zydis
+	_ "go.opentelemetry.io/ebpf-profiler/zydis" // links Zydis
 )
 
 // #cgo CFLAGS: -g -Wall

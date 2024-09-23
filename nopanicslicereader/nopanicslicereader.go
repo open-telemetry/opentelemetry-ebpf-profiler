@@ -9,7 +9,7 @@ package nopanicslicereader // import "go.opentelemetry.io/ebpf-profiler/nopanics
 import (
 	"encoding/binary"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // Uint8 reads one 8-bit unsigned integer from given byte slice offset

@@ -8,7 +8,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // Start starts a timer that calls <callback> every <interval> until the <ctx> is canceled.

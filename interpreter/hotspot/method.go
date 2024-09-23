@@ -9,9 +9,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	npsr "github.com/open-telemetry/opentelemetry-ebpf-profiler/nopanicslicereader"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 // Constants for the JVM internals that have never changed

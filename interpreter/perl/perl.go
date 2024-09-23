@@ -49,7 +49,7 @@ import (
 	"debug/elf"
 	"regexp"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/interpreter"
 )
 
 //nolint:golint,stylecheck,revive

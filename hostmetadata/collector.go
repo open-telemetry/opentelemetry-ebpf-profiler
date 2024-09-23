@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 // Collector implements host metadata collection and reporting

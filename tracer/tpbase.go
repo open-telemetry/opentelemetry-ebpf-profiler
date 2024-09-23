@@ -11,8 +11,8 @@ import (
 	cebpf "github.com/cilium/ebpf"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tpbase"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/tpbase"
 )
 
 // This file contains code to extract the offset of the thread pointer base variable in

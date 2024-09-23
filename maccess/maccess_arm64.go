@@ -8,7 +8,7 @@ package maccess // import "go.opentelemetry.io/ebpf-profiler/maccess"
 import (
 	"errors"
 
-	ah "github.com/open-telemetry/opentelemetry-ebpf-profiler/armhelpers"
+	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
 

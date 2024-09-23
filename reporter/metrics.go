@@ -10,7 +10,7 @@ import (
 
 	"google.golang.org/grpc/stats"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
+	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 )
 
 type StatsHandlerImpl struct {

@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"regexp"
 
-	ah "github.com/open-telemetry/opentelemetry-ebpf-profiler/armhelpers"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/stringutil"
+	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/stringutil"
 
 	aa "golang.org/x/arch/arm64/arm64asm"
 )

@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	zstpak "github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/zstpak/lib"
+	zstpak "go.opentelemetry.io/ebpf-profiler/tools/zstpak/lib"
 )
 
 func tryMain() error {

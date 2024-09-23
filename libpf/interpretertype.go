@@ -3,7 +3,7 @@
 
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
-import "github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
+import "go.opentelemetry.io/ebpf-profiler/support"
 
 // InterpreterType variables can hold one of the interpreter type values defined below.
 type InterpreterType int

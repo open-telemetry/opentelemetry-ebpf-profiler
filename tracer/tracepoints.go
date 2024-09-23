@@ -8,7 +8,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
+	"go.opentelemetry.io/ebpf-profiler/rlimit"
 )
 
 // attachToTracepoint attaches an eBPF program of type tracepoint to a tracepoint in the kernel

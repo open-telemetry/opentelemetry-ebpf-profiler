@@ -9,8 +9,8 @@ import (
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/host"
 )
 
 // asyncMapUpdaterPool is a pool of goroutines for doing non-blocking updates

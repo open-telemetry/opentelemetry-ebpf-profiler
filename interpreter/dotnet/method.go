@@ -10,7 +10,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	npsr "github.com/open-telemetry/opentelemetry-ebpf-profiler/nopanicslicereader"
+	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 )
 
 type dotnetMethod struct {

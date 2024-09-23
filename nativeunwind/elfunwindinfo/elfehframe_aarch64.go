@@ -11,7 +11,7 @@ import (
 	"debug/elf"
 	"fmt"
 
-	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
+	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 )
 
 //nolint:deadcode,varcheck

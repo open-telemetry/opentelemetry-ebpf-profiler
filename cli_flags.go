@@ -13,7 +13,7 @@ import (
 	"github.com/peterbourgon/ff/v3"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer"
+	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
 const (

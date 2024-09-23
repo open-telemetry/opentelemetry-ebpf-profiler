@@ -7,9 +7,9 @@ import (
 	"runtime"
 
 	cebpf "github.com/cilium/ebpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/maccess"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/maccess"
 )
 
 // checkForMmaccessPatch validates if a Linux kernel function is patched by

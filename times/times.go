@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/periodiccaller"
+	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 )
 
 const (

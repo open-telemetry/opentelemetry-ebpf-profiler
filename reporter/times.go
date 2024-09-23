@@ -6,7 +6,7 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 import (
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
+	"go.opentelemetry.io/ebpf-profiler/times"
 )
 
 // Compile time check to make sure config.Times satisfies the interfaces.

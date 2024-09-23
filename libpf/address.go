@@ -3,7 +3,7 @@
 
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
-import "github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/hash"
+import "go.opentelemetry.io/ebpf-profiler/libpf/hash"
 
 // Address represents an address, or offset within a process
 type Address uintptr
