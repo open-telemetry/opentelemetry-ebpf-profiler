@@ -5,7 +5,7 @@
 
 // For NT_FILE coredump mappings: https://www.gabriel.urdhr.fr/2015/05/29/core-file/
 
-package process
+package process // import "go.opentelemetry.io/ebpf-profiler/process"
 
 import (
 	"bytes"

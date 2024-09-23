@@ -5,7 +5,7 @@
 // libraries, establishes socket connections with them and notifies them about
 // the stack traces that we collected for their process. This allows the APM
 // agent to associate stack traces with APM traces / transactions / spans.
-package apmint
+package apmint // import "go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 
 import (
 	"encoding/hex"

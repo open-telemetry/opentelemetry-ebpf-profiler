@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package host implements types and methods specific to interacting with eBPF maps.
-package host
+package host // import "go.opentelemetry.io/ebpf-profiler/host"
 
 import (
 	"encoding/binary"

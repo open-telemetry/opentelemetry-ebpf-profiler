@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // This package contains a series of helper functions that are useful for ARM disassembly.
-package armhelpers
+package armhelpers // import "go.opentelemetry.io/ebpf-profiler/armhelpers"
 
 import (
 	"fmt"

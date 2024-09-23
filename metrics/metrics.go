@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package metrics
+package metrics // import "go.opentelemetry.io/ebpf-profiler/metrics"
 
 import (
 	"bytes"

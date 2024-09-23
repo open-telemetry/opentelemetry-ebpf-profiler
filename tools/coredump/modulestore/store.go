@@ -4,7 +4,7 @@
 // The modulestore package implements `Store`, a storage for large binary files (modules).
 // For more information, please refer to the documentation on the `Store` type.
 
-package modulestore
+package modulestore // import "go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 
 import (
 	"context"

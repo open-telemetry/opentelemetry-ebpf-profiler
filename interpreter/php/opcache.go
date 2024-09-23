@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package php
+package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 
 //nolint:lll
 // PHP8+ JIT compiler unwinder.

@@ -4,7 +4,7 @@
 // nopanicslicereader provides little convenience utilities to read "native" endian
 // values from a slice at given offset. Zeroes are returned on out of bounds access
 // instead of panic.
-package nopanicslicereader
+package nopanicslicereader // import "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 
 import (
 	"encoding/binary"

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package process
+package process // import "go.opentelemetry.io/ebpf-profiler/process"
 
 import (
 	"bufio"

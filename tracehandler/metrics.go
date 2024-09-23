@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package tracehandler
+package tracehandler // import "go.opentelemetry.io/ebpf-profiler/tracehandler"
 
 import "github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
 

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package execinfomanager
+package execinfomanager // import "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 
 import (
 	"errors"

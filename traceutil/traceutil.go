@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package traceutil
+package traceutil // import "go.opentelemetry.io/ebpf-profiler/traceutil"
 
 import (
 	"hash/fnv"

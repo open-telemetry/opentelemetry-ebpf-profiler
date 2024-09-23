@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package periodiccaller allows periodic calls of functions.
-package periodiccaller
+package periodiccaller // import "go.opentelemetry.io/ebpf-profiler/periodiccaller"
 
 import (
 	"context"

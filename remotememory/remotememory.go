@@ -4,7 +4,7 @@
 // remotememory provides access to memory space of a process. The ReaderAt
 // interface is used for the basic access, and various convenience functions are
 // provided to help reading specific data types.
-package remotememory
+package remotememory // import "go.opentelemetry.io/ebpf-profiler/remotememory"
 
 import (
 	"bytes"

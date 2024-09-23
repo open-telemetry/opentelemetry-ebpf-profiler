@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package processmanager manages the loading and unloading of information related to processes.
-package processmanager
+package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
 	"context"

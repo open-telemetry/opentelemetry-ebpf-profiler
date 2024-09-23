@@ -3,7 +3,7 @@
 
 // Package tracehandler converts raw BPF traces into the enriched user-mode
 // format and then forwards them to the reporter.
-package tracehandler
+package tracehandler // import "go.opentelemetry.io/ebpf-profiler/tracehandler"
 
 import (
 	"context"

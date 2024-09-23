@@ -3,7 +3,7 @@
 
 // readatbuf providers wrappers adding caching to types that implement the `ReaderAt` interface.
 
-package readatbuf
+package readatbuf // import "go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 
 import (
 	"errors"

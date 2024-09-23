@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package apmint
+package apmint // import "go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 
 import (
 	"bufio"

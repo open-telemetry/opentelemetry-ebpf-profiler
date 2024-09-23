@@ -3,7 +3,7 @@
 
 // This file defines the interface to access a Process state.
 
-package process
+package process // import "go.opentelemetry.io/ebpf-profiler/process"
 
 import (
 	"debug/elf"

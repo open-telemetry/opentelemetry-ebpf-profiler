@@ -3,7 +3,7 @@
 
 // Package proc provides functionality for retrieving kallsyms, modules and
 // executable mappings via /proc.
-package proc
+package proc // import "go.opentelemetry.io/ebpf-profiler/proc"
 
 import (
 	"bufio"

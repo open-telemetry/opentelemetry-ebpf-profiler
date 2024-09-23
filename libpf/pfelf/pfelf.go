@@ -3,7 +3,7 @@
 
 // package pfelf implements functions for processing of ELF files and extracting data from
 // them. This file provides convenience functions for golang debug/elf standard library.
-package pfelf
+package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 import (
 	"bytes"

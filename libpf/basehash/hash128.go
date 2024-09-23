@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package basehash
+package basehash // import "go.opentelemetry.io/ebpf-profiler/libpf/basehash"
 
 import (
 	"encoding"

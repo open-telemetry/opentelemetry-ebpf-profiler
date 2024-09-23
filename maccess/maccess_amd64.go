@@ -3,7 +3,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package maccess
+package maccess // import "go.opentelemetry.io/ebpf-profiler/maccess"
 
 import (
 	"bytes"
