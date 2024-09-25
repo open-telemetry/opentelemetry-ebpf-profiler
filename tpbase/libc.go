@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strings"
 
 	ah "github.com/open-telemetry/opentelemetry-ebpf-profiler/armhelpers"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
