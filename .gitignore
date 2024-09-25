@@ -1,7 +1,6 @@
 *.o
 *.pb.go
 .cache
-.tools
 /.idea
 /go
 opentelemetry-ebpf-profiler
