@@ -330,9 +330,9 @@ func ExtractTSDInfoARM64(code []byte) (TSDInfo, error) {
 						indirect:   regs[srcReg].indirect,
 					}
 				} else if regs[srcReg].status == TSDConstant && regs[srcReg2].status == TSDIndex {
-					regs[destReg] = regState {
-						status: TSDIndex,
-						offset: regs[srcReg].offset + regs[srcReg2].offset << shift,
+					regs[destReg] = regState{
+						status:     TSDIndex,
+						offset:     regs[srcReg].offset + regs[srcReg2].offset<<shift,
 						multiplier: regs[srcReg2].multiplier << shift,
 					}
 				} else {
