@@ -52,12 +52,12 @@ type TraceReporter interface {
 
 type ExecutableOpener = func() (process.ReadAtCloser, error)
 type ExecutableMetadataArgs struct {
-	FileID libpf.FileID
-	FileName string
-	GnuBuildID string
+	FileID            libpf.FileID
+	FileName          string
+	GnuBuildID        string
 	DebuglinkFileName string
-	Interp libpf.InterpreterType
-	Open ExecutableOpener
+	Interp            libpf.InterpreterType
+	Open              ExecutableOpener
 }
 
 type SymbolReporter interface {

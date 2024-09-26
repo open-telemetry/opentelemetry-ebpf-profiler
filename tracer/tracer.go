@@ -198,11 +198,11 @@ func processKernelModulesMetadata(rep reporter.SymbolReporter, kernelModules *li
 
 		result[nameStr] = fileID
 		rep.ExecutableMetadata(reporter.ExecutableMetadataArgs{
-			FileID: fileID,
-			FileName: nameStr,
-			GnuBuildID: buildID,
+			FileID:            fileID,
+			FileName:          nameStr,
+			GnuBuildID:        buildID,
 			DebuglinkFileName: "",
-			Interp: libpf.Kernel,			
+			Interp:            libpf.Kernel,
 		})
 	})
 
