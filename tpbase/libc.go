@@ -170,7 +170,6 @@ func ExtractTSDInfoARM64(code []byte) (TSDInfo, error) {
 		resetReg = destReg
 		switch inst.Op {
 		case aa.MOV:
-			var setImm bool
 			switch val := inst.Args[1].(type) {
 			case aa.Imm64:
 				regs[destReg] = regState{
@@ -178,16 +177,13 @@ func ExtractTSDInfoARM64(code []byte) (TSDInfo, error) {
 					offset:     int(val.Imm),
 					multiplier: 1,
 				}
-				setImm = true
 			case aa.Imm:
 				regs[destReg] = regState{
 					status:     TSDConstant,
 					offset:     int(val.Imm),
 					multiplier: 1,
 				}
-				setImm = true
-			}
-			if !setImm {
+			default:
 				// Track register moves
 				srcReg, ok := ah.Xreg2num(inst.Args[1])
 				if !ok {
