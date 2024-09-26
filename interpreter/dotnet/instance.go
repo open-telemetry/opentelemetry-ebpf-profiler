@@ -638,7 +638,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 					GnuBuildID:        info.guid,
 					DebuglinkFileName: "",
 					Interp:            libpf.Dotnet,
-					Open: open,
+					Open:              open,
 				},
 			)
 			info.reported = true
