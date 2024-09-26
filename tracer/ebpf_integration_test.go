@@ -91,7 +91,7 @@ func (f mockIntervals) PIDCleanupInterval() time.Duration { return 1 * time.Seco
 
 type mockReporter struct{}
 
-func (f mockReporter) ExecutableMetadata(args reporter.ExecutableMetadataArgs) {
+func (f mockReporter) ExecutableMetadata(args *reporter.ExecutableMetadataArgs) {
 }
 
 func (f mockReporter) ReportFallbackSymbol(_ libpf.FrameID, _ string) {}

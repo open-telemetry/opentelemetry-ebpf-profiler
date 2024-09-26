@@ -208,7 +208,7 @@ func (r *OTLPReporter) ReportFallbackSymbol(frameID libpf.FrameID, symbol string
 
 // ExecutableMetadata accepts a fileID with the corresponding filename
 // and caches this information.
-func (r *OTLPReporter) ExecutableMetadata(args ExecutableMetadataArgs) {
+func (r *OTLPReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 	r.executables.Add(args.FileID, execInfo{
 		fileName:   args.FileName,
 		gnuBuildID: args.GnuBuildID,

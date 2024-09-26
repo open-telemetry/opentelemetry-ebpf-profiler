@@ -61,7 +61,7 @@ func newSymbolizationCache() *symbolizationCache {
 	}
 }
 
-func (c *symbolizationCache) ExecutableMetadata(args reporter.ExecutableMetadataArgs) {
+func (c *symbolizationCache) ExecutableMetadata(args *reporter.ExecutableMetadataArgs) {
 	c.files[args.FileID] = args.FileName
 }
 

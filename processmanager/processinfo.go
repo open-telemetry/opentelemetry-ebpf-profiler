@@ -303,7 +303,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	open := func() (process.ReadAtCloser, error) {
 		return pr.OpenMappingFile(&mapping2)
 	}
-	pm.reporter.ExecutableMetadata(reporter.ExecutableMetadataArgs{
+	pm.reporter.ExecutableMetadata(&reporter.ExecutableMetadataArgs{
 		FileID:            fileID,
 		FileName:          baseName,
 		GnuBuildID:        gnuBuildID,

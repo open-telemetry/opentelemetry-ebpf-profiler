@@ -632,13 +632,13 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 				return os.Open(m.Path)
 			}
 			symbolReporter.ExecutableMetadata(
-				reporter.ExecutableMetadataArgs{
+				&reporter.ExecutableMetadataArgs{
 					FileID:            info.fileID,
 					FileName:          path.Base(m.Path),
 					GnuBuildID:        info.guid,
 					DebuglinkFileName: "",
 					Interp:            libpf.Dotnet,
-					Open:              open,
+					Open: open,
 				},
 			)
 			info.reported = true
