@@ -494,8 +494,11 @@ func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string
 	if f.debuglinkChecked {
 		return f.debuglinkPath
 	}
-	f.OpenDebugLink(elfFilePath, elfOpener)
-	return f.debuglinkPath
+	file, path := f.OpenDebugLink(elfFilePath, elfOpener)
+	if file != nil {
+		file.Close()
+	}
+	return path
 }
 
 // TLSDescriptors returns a map of all TLS descriptor symbol -> address
