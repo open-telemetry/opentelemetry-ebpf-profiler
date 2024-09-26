@@ -51,20 +51,27 @@ type TraceReporter interface {
 }
 
 type ExecutableOpener = func() (process.ReadAtCloser, error)
+type ExecutableMetadataArgs struct {
+	FileID libpf.FileID
+	FileName string
+	GnuBuildID string
+	DebuglinkFileName string
+	Interp libpf.InterpreterType
+	Open ExecutableOpener
+}
 
 type SymbolReporter interface {
 	// ReportFallbackSymbol enqueues a fallback symbol for reporting, for a given frame.
 	ReportFallbackSymbol(frameID libpf.FrameID, symbol string)
 
-	// ExecutableMetadata accepts a fileID with the corresponding filename
+	// ExecutableMetadata accepts a FileID with the corresponding filename
 	// and caches this information before a periodic reporting to the backend.
 	//
-	// The `open` argument can be used to open the executable for reading. Interpreters
+	// The `Open` argument can be used to open the executable for reading. Interpreters
 	// that don't support this may pass a `nil` function pointer. Implementations that
 	// wish to upload executables should NOT block this function to do so and instead just
 	// open the file and then enqueue the upload in the background.
-	ExecutableMetadata(fileID libpf.FileID, fileName, gnuBuildID, debuglinkFileName string,
-		interp libpf.InterpreterType, open ExecutableOpener)
+	ExecutableMetadata(args ExecutableMetadataArgs)
 
 	// FrameMetadata accepts metadata associated with a frame and caches this information before
 	// a periodic reporting to the backend.

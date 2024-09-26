@@ -61,9 +61,8 @@ func newSymbolizationCache() *symbolizationCache {
 	}
 }
 
-func (c *symbolizationCache) ExecutableMetadata(fileID libpf.FileID,
-	fileName, _, _ string, _ libpf.InterpreterType, _ reporter.ExecutableOpener) {
-	c.files[fileID] = fileName
+func (c *symbolizationCache) ExecutableMetadata(args reporter.ExecutableMetadataArgs) {
+	c.files[args.FileID] = args.FileName
 }
 
 func (c *symbolizationCache) FrameMetadata(fileID libpf.FileID,
