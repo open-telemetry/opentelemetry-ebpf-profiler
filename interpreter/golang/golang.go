@@ -3,6 +3,7 @@ package golang
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
@@ -15,6 +16,8 @@ import (
 // #include <stdlib.h>
 // #include "../../support/ebpf/types.h"
 import "C"
+
+var goMajorMinorRegex = regexp.MustCompile(`^go\d+\.\d+`)
 
 type data struct {
 	goVersion string
@@ -37,6 +40,13 @@ func (d data) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 }
 
 func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+	// Note: So far we have observed that offsets are always the same for any
+	// go1.mm.yy with fixed mm and any value of yy. That is; the major and minor
+	// version determine the offsets, while the patch version has no effect.
+	//
+	// If this should change in some future Go patch release, we'll need to change
+	// this function.
+
 	file, err := info.GetELF()
 	if err != nil {
 		return nil, err
@@ -50,10 +60,25 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, err
 	}
 	log.Debugf("file %s detected as go version %s", info.FileName(), goVersion)
+	majorMinor := goMajorMinorRegex.FindString(goVersion)
+	if majorMinor == "" {
+		return nil, fmt.Errorf("failed to parse go version %s into goM.mm", goVersion)
+	}
 
-	offsets, ok := allOffsets[goVersion]
+	offsets, ok := allOffsets[majorMinor]
 	if !ok {
-		return nil, fmt.Errorf("no offsets found for go version %s", goVersion)
+		// Info instead of warn: this is often going to be fine,
+		// as the offsets tend not to change every release cycle.
+		//
+		// TODO: Reword the message if we upstream this,
+		// since it mentions `parca-agent` by name.
+		log.Infof("version %s unknown; using offsets for latest known Go version %s."+
+			"If Go traceID integration and other custom labels support is buggy,"+
+			" try upgrading parca-agent to the latest version.", goVersion, defaultVersion)
+		return data{
+			goVersion: goVersion,
+			offsets:   allOffsets[defaultVersion],
+		}, nil
 	}
 
 	return data{
