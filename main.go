@@ -7,20 +7,21 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+
+	//nolint:gosec
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
 	"time"
 
-	//nolint:gosec
-	_ "net/http/pprof"
-
 	"github.com/tklauser/numcpus"
+	"golang.org/x/sys/unix"
+
 	"go.opentelemetry.io/ebpf-profiler/times"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/util"
 	"go.opentelemetry.io/ebpf-profiler/vc"
-	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/tracehandler"
@@ -208,7 +209,6 @@ func mainWithExitCode() exitCode {
 		MapScaleFactor:         int(args.mapScaleFactor),
 		KernelVersionCheck:     !args.noKernelVersionCheck,
 		BPFVerifierLogLevel:    uint32(args.bpfVerifierLogLevel),
-		BPFVerifierLogSize:     args.bpfVerifierLogSize,
 		ProbabilisticInterval:  args.probabilisticInterval,
 		ProbabilisticThreshold: args.probabilisticThreshold,
 	})

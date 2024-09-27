@@ -9,7 +9,6 @@ import (
 	"os"
 	"time"
 
-	cebpf "github.com/cilium/ebpf"
 	"github.com/peterbourgon/ff/v3"
 	log "github.com/sirupsen/logrus"
 
@@ -44,10 +43,8 @@ var (
 		"Every increase by 1 doubles the map size. Increase if you see eBPF map size errors. "+
 		"Default is %d corresponding to 4GB of executable address space, max is %d.",
 		defaultArgMapScaleFactor, maxArgMapScaleFactor)
-	disableTLSHelp          = "Disable encryption for data in transit."
-	bpfVerifierLogLevelHelp = "Log level of the eBPF verifier output (0,1,2). Default is 0."
-	bpfVerifierLogSizeHelp  = "Size in bytes that will be allocated for the eBPF " +
-		"verifier output. Only takes effect if bpf-log-level > 0."
+	disableTLSHelp             = "Disable encryption for data in transit."
+	bpfVerifierLogLevelHelp    = "Log level of the eBPF verifier output (0,1,2). Default is 0."
 	versionHelp                = "Show version."
 	probabilisticThresholdHelp = fmt.Sprintf("If set to a value between 1 and %d will enable "+
 		"probabilistic profiling: "+
@@ -70,7 +67,6 @@ var (
 
 type arguments struct {
 	bpfVerifierLogLevel    uint
-	bpfVerifierLogSize     int
 	collAgentAddr          string
 	copyright              bool
 	disableTLS             bool
@@ -101,8 +97,6 @@ func parseArgs() (*arguments, error) {
 
 	// Please keep the parameters ordered alphabetically in the source-code.
 	fs.UintVar(&args.bpfVerifierLogLevel, "bpf-log-level", 0, bpfVerifierLogLevelHelp)
-	fs.IntVar(&args.bpfVerifierLogSize, "bpf-log-size", cebpf.DefaultVerifierLogSize,
-		bpfVerifierLogSizeHelp)
 
 	fs.StringVar(&args.collAgentAddr, "collection-agent", "", collAgentAddrHelp)
 	fs.BoolVar(&args.copyright, "copyright", false, copyrightHelp)

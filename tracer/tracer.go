@@ -152,8 +152,6 @@ type Config struct {
 	KernelVersionCheck bool
 	// BPFVerifierLogLevel is the log level of the eBPF verifier output.
 	BPFVerifierLogLevel uint32
-	// BPFVerifierLogSize is the size in bytes that will be allocated for the eBPF verifier output.
-	BPFVerifierLogSize int
 	// ProbabilisticInterval is the time interval for which probabilistic profiling will be enabled.
 	ProbabilisticInterval time.Duration
 	// ProbabilisticThreshold is the threshold for probabilistic profiling.
@@ -267,8 +265,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 
 	// Based on includeTracers we decide later which are loaded into the kernel.
 	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(cfg.IncludeTracers, kernelSymbols,
-		cfg.FilterErrorFrames, cfg.MapScaleFactor, cfg.KernelVersionCheck, cfg.BPFVerifierLogLevel,
-		cfg.BPFVerifierLogSize)
+		cfg.FilterErrorFrames, cfg.MapScaleFactor, cfg.KernelVersionCheck, cfg.BPFVerifierLogLevel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
@@ -377,7 +374,7 @@ func buildStackDeltaTemplates(coll *cebpf.CollectionSpec) error {
 // by the embedded elf file and loads these into the kernel.
 func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
 	kernelSymbols *libpf.SymbolMap, filterErrorFrames bool, mapScaleFactor int,
-	kernelVersionCheck bool, bpfVerifierLogLevel uint32, bpfVerifierLogSize int) (
+	kernelVersionCheck bool, bpfVerifierLogLevel uint32) (
 	ebpfMaps map[string]*cebpf.Map, ebpfProgs map[string]*cebpf.Program, err error) {
 	// Loading specifications about eBPF programs and maps from the embedded elf file
 	// does not load them into the kernel.
@@ -428,8 +425,8 @@ func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
 		}
 	}
 
-	if err = loadUnwinders(coll, ebpfProgs, ebpfMaps["progs"], includeTracers, bpfVerifierLogLevel,
-		bpfVerifierLogSize); err != nil {
+	if err = loadUnwinders(coll, ebpfProgs, ebpfMaps["progs"], includeTracers,
+		bpfVerifierLogLevel); err != nil {
 		return nil, nil, fmt.Errorf("failed to load eBPF programs: %v", err)
 	}
 
@@ -507,8 +504,8 @@ func loadAllMaps(coll *cebpf.CollectionSpec, ebpfMaps map[string]*cebpf.Map,
 
 // loadUnwinders just satisfies the proof of concept and loads all eBPF programs
 func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
-	tailcallMap *cebpf.Map, includeTracers types.IncludedTracers, bpfVerifierLogLevel uint32,
-	bpfVerifierLogSize int) error {
+	tailcallMap *cebpf.Map, includeTracers types.IncludedTracers,
+	bpfVerifierLogLevel uint32) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
@@ -528,7 +525,6 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 
 	programOptions := cebpf.ProgramOptions{
 		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
-		LogSize:  bpfVerifierLogSize,
 	}
 
 	for _, unwindProg := range []prog{
