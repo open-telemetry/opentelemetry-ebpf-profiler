@@ -113,6 +113,12 @@ type File struct {
 	Type    elf.Type
 	Machine elf.Machine
 	Entry   uint64
+
+	// Path to the debuglink exe,
+	// or empty if none exists
+	debuglinkPath string
+	// Whether we have checked for a debuglink
+	debuglinkChecked bool
 }
 
 var _ libpf.SymbolFinder = &File{}
@@ -483,6 +489,18 @@ func (f *File) GetBuildID() (string, error) {
 	return getBuildIDFromNotes(data)
 }
 
+// DebuglinkFileName returns the debug file linked by .gnu_debuglink if any
+func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string {
+	if f.debuglinkChecked {
+		return f.debuglinkPath
+	}
+	file, path := f.OpenDebugLink(elfFilePath, elfOpener)
+	if file != nil {
+		file.Close()
+	}
+	return path
+}
+
 // TLSDescriptors returns a map of all TLS descriptor symbol -> address
 // mappings in the executable.
 func (f *File) TLSDescriptors() (map[string]libpf.Address, error) {
@@ -590,6 +608,7 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 // OpenDebugLink tries to locate and open the corresponding debug ELF for this DSO.
 func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
 	debugELF *File, debugFile string) {
+	f.debuglinkChecked = true
 	// Get the debug link
 	linkName, linkCRC32, err := f.GetDebugLink()
 	if err != nil {
@@ -605,15 +624,12 @@ func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
 		if err != nil {
 			continue
 		}
-		if debugELF.Section(".debug_frame") == nil {
-			debugELF.Close()
-			continue
-		}
 		fileCRC32, err := debugELF.CRC32()
 		if err != nil || fileCRC32 != linkCRC32 {
 			debugELF.Close()
 			continue
 		}
+		f.debuglinkPath = debugFile
 		return debugELF, debugFile
 	}
 	return
