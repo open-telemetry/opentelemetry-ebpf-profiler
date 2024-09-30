@@ -29,6 +29,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/proc"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -302,8 +303,14 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	open := func() (process.ReadAtCloser, error) {
 		return pr.OpenMappingFile(&mapping2)
 	}
-	pm.reporter.ExecutableMetadata(fileID, baseName, gnuBuildID, libpf.Native, open)
-
+	pm.reporter.ExecutableMetadata(&reporter.ExecutableMetadataArgs{
+		FileID:            fileID,
+		FileName:          baseName,
+		GnuBuildID:        gnuBuildID,
+		DebuglinkFileName: ef.DebuglinkFileName(elfRef.FileName(), elfRef),
+		Interp:            libpf.Native,
+		Open:              open,
+	})
 	return info
 }
 

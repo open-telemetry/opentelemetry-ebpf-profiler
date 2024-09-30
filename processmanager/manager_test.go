@@ -251,8 +251,7 @@ type symbolReporterMockup struct{}
 
 func (s *symbolReporterMockup) ReportFallbackSymbol(_ libpf.FrameID, _ string) {}
 
-func (s *symbolReporterMockup) ExecutableMetadata(_ libpf.FileID, _, _ string,
-	_ libpf.InterpreterType, _ reporter.ExecutableOpener) {
+func (s *symbolReporterMockup) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
 }
 
 func (s *symbolReporterMockup) FrameMetadata(_ libpf.FileID, _ libpf.AddressOrLineno,
