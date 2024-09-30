@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package tracer contains functionality for populating tracers.
-package tracer
+package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"bufio"
@@ -25,23 +25,23 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/elfunwindinfo"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/periodiccaller"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/proc"
-	pm "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager"
-	pmebpf "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager/ebpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracehandler"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
+	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
+	"go.opentelemetry.io/ebpf-profiler/proc"
+	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
+	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/rlimit"
+	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/times"
+	"go.opentelemetry.io/ebpf-profiler/tracehandler"
+	"go.opentelemetry.io/ebpf-profiler/tracer/types"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 /*

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package libpf
+package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 // Set is a convenience alias for a map with a `Void` key.
 type Set[T comparable] map[T]Void

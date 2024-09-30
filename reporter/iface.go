@@ -1,14 +1,14 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package reporter
+package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/process"
 )
 
 // Reporter is the top-level interface implemented by a full reporter.

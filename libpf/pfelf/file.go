@@ -17,7 +17,7 @@
 //   - DT_GNU_HASH symbol index:  https://flapenguin.me/elf-dt-gnu-hash
 //   - NT_FILE coredump mappings: https://www.gabriel.urdhr.fr/2015/05/29/core-file/
 
-package pfelf
+package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 import (
 	"bytes"
@@ -32,9 +32,9 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/readatbuf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
+	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
 const (

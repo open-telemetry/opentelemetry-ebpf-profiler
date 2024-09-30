@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package types
+package types // import "go.opentelemetry.io/ebpf-profiler/tracer/types"
 
 import (
 	"fmt"

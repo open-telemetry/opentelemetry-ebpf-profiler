@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 func RemoteMemTests(t *testing.T, rm RemoteMemory) {

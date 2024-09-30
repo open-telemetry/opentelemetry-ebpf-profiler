@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
+	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 
 	"github.com/stretchr/testify/require"
 )

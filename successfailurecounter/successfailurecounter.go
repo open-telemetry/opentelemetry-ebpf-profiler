@@ -5,7 +5,7 @@
 //
 // This package is **not** thread safe. Multiple increments to the same SuccessFailureCounter from
 // different threads can result in incorrect counter results.
-package successfailurecounter
+package successfailurecounter // import "go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 
 import (
 	"sync/atomic"

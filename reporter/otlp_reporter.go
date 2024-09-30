@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package reporter
+package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"bufio"
@@ -29,8 +29,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 )
 
 var (

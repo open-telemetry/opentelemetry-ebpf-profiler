@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package processmanager
+package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 // This file is the only place that should access pidToProcessInfo.
 // The map is used to synchronize state between eBPF maps and process
@@ -21,18 +21,18 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/lpm"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/proc"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
-	eim "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager/execinfomanager"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tpbase"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/lpm"
+	"go.opentelemetry.io/ebpf-profiler/proc"
+	"go.opentelemetry.io/ebpf-profiler/process"
+	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/times"
+	"go.opentelemetry.io/ebpf-profiler/tpbase"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // assignTSDInfo updates the TSDInfo for the Interpreters on given PID.

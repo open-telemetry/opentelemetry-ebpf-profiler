@@ -9,4 +9,4 @@
 // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=d319f344561de23e810515d109c7278919bff7b0
 //
 //nolint:lll
-package maccess
+package maccess // import "go.opentelemetry.io/ebpf-profiler/maccess"

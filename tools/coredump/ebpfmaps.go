@@ -8,15 +8,15 @@ import (
 	"math/bits"
 	"unsafe"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/lpm"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
-	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
-	pmebpf "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager/ebpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/lpm"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
+	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 /*

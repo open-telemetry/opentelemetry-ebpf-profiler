@@ -1,9 +1,9 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package libpf
+package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
-import "github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/hash"
+import "go.opentelemetry.io/ebpf-profiler/libpf/hash"
 
 // Address represents an address, or offset within a process
 type Address uintptr
