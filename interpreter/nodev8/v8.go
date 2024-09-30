@@ -467,9 +467,6 @@ type v8Data struct {
 
 	// frametypeToID caches frametype's to a hash used as its identifier
 	frametypeToID [MaxFrameType]libpf.AddressOrLineno
-
-	// externStubID caches the hash of stub frame to indicate external file
-	externalStubID libpf.AddressOrLineno
 }
 
 type v8Instance struct {
@@ -709,21 +706,12 @@ func isHeapObject(val libpf.Address) bool {
 	return val&HeapObjectTagMask == HeapObjectTag
 }
 
-// calculateAndSymbolizeStubID calculates the hash for a given string, and symbolizes it.
-func (i *v8Instance) calculateAndSymbolizeStubID(symbolReporter reporter.SymbolReporter,
-	name string) libpf.AddressOrLineno {
+// calculateStubID calculates the hash for a given string
+func calculateStubID(name string) libpf.AddressOrLineno {
 	h := fnv.New128a()
 	_, _ = h.Write([]byte(name))
 	nameHash := h.Sum(nil)
-	stubID := libpf.AddressOrLineno(npsr.Uint64(nameHash, 0))
-	symbolReporter.FrameMetadata(v8StubsFileID, stubID, 0, 0, name, "")
-
-	return stubID
-}
-
-// insertFrame inserts a V8 frame to libpf.Trace
-func insertFrame(trace *libpf.Trace, fileID libpf.FileID, line libpf.AddressOrLineno) {
-	trace.AppendFrame(libpf.V8Frame, fileID, line)
+	return libpf.AddressOrLineno(npsr.Uint64(nameHash, 0))
 }
 
 // symbolizeMarkerFrame symbolizes and adds to trace a V8 stub frame
@@ -734,7 +722,8 @@ func (i *v8Instance) symbolizeMarkerFrame(symbolReporter reporter.SymbolReporter
 	}
 
 	stubID := i.d.frametypeToID[marker]
-	if stubID == 0 {
+	frameID := libpf.NewFrameID(v8StubsFileID, stubID)
+	if stubID == 0 || !symbolReporter.FrameKnown(frameID) {
 		name := "V8::UnknownFrame"
 		frameTypesType := reflect.TypeOf(&i.d.vmStructs.FrameType).Elem()
 		frameTypesValue := reflect.ValueOf(&i.d.vmStructs.FrameType).Elem()
@@ -744,14 +733,12 @@ func (i *v8Instance) symbolizeMarkerFrame(symbolReporter reporter.SymbolReporter
 				break
 			}
 		}
-		stubID = i.calculateAndSymbolizeStubID(symbolReporter, name)
+		stubID = calculateStubID(name)
+		frameID = libpf.NewFrameID(v8StubsFileID, stubID)
 		i.d.frametypeToID[marker] = stubID
-
-		log.Debugf("[%d] V8 marker %v is %s, stubID %x", len(trace.FrameTypes),
-			marker, name, stubID)
+		symbolReporter.FrameMetadata(frameID, 0, 0, name, "")
 	}
-
-	insertFrame(trace, v8StubsFileID, stubID)
+	trace.AppendFrameID(libpf.V8Frame, frameID)
 	return nil
 }
 
@@ -1460,57 +1447,46 @@ func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) libpf.SourceLineno
 }
 
 // symbolize symbolizes the raw frame data
-func (i *v8Instance) symbolize(symbolReporter reporter.SymbolReporter, sfi *v8SFI,
-	pos libpf.AddressOrLineno, lineNo libpf.SourceLineno) {
+func (i *v8Instance) symbolize(symbolReporter reporter.SymbolReporter, frameID libpf.FrameID,
+	sfi *v8SFI, lineNo libpf.SourceLineno) {
 	funcOffset := uint32(0)
 	if lineNo > sfi.funcStartLine {
 		funcOffset = uint32(lineNo - sfi.funcStartLine)
 	}
-
-	symbolReporter.FrameMetadata(
-		sfi.funcID, pos, lineNo, funcOffset,
-		sfi.funcName, sfi.source.fileName)
-
-	log.Debugf("[%x] %v+%v at %v:%v",
-		sfi.funcID,
-		sfi.funcName, funcOffset,
-		sfi.source.fileName, lineNo)
+	symbolReporter.FrameMetadata(frameID, lineNo, funcOffset, sfi.funcName, sfi.source.fileName)
 }
+
+const externalFunctionTag = "<external-file>"
+
+var externalStubID = calculateStubID(externalFunctionTag)
 
 // generateNativeFrame and conditionally symbolizes a native frame.
 func (i *v8Instance) generateNativeFrame(symbolReporter reporter.SymbolReporter,
-	sourcePos sourcePosition, sfi *v8SFI, seen bool,
-	trace *libpf.Trace) {
+	sourcePos sourcePosition, sfi *v8SFI, trace *libpf.Trace) {
 	if sourcePos.isExternal() {
-		// It is not easily possible to extract the external file's name.
-		// Just generate a place holder stub frame for external reference.
-		if i.d.externalStubID == 0 {
-			i.d.externalStubID = i.calculateAndSymbolizeStubID(
-				symbolReporter, "<external-file>")
-		}
-		insertFrame(trace, v8StubsFileID, i.d.externalStubID)
+		frameID := libpf.NewFrameID(v8StubsFileID, externalStubID)
+		trace.AppendFrameID(libpf.V8Frame, frameID)
+		symbolReporter.FrameMetadata(frameID, 0, 0, externalFunctionTag, "")
 		return
 	}
 
 	lineNo := sfi.scriptOffsetToLine(sourcePos)
 	addressOrLineno := libpf.AddressOrLineno(lineNo) + nativeCodeBaseAddress
-	insertFrame(trace, sfi.funcID, addressOrLineno)
-	if !seen {
-		i.symbolize(symbolReporter, sfi, addressOrLineno, lineNo)
-	}
+	frameID := libpf.NewFrameID(sfi.funcID, addressOrLineno)
+	trace.AppendFrameID(libpf.V8Frame, frameID)
+	i.symbolize(symbolReporter, frameID, sfi, lineNo)
 }
 
-// symbolizeBytecode symbolizes and records to a trace a Bytecode based frame.
-func (i *v8Instance) symbolizeBytecode(symbolReporter reporter.SymbolReporter, sfi *v8SFI,
-	delta uint64, trace *libpf.Trace) error {
-	insertFrame(trace, sfi.funcID, libpf.AddressOrLineno(delta))
-	if _, ok := sfi.bytecodeDeltaSeen[uint32(delta)]; !ok {
+// insertAndSymbolizeBytecodeFrame symbolizes and records to a trace a Bytecode based frame.
+func (i *v8Instance) insertAndSymbolizeBytecodeFrame(symbolReporter reporter.SymbolReporter,
+	sfi *v8SFI, delta uint64, trace *libpf.Trace) {
+	frameID := libpf.NewFrameID(sfi.funcID, libpf.AddressOrLineno(delta))
+	trace.AppendFrameID(libpf.V8Frame, frameID)
+	if !symbolReporter.FrameKnown(frameID) {
 		sourcePos := decodePosition(sfi.bytecodePositionTable, delta)
 		lineNo := sfi.scriptOffsetToLine(sourcePos)
-		i.symbolize(symbolReporter, sfi, libpf.AddressOrLineno(delta), lineNo)
-		sfi.bytecodeDeltaSeen[uint32(delta)] = libpf.Void{}
+		i.symbolize(symbolReporter, frameID, sfi, lineNo)
 	}
-	return nil
 }
 
 // symbolizeSFI symbolizes and records to a trace a SharedFunctionInfo based frame.
@@ -1534,7 +1510,8 @@ func (i *v8Instance) symbolizeSFI(symbolReporter reporter.SymbolReporter, pointe
 		// Invalid value
 		bytecodeDelta = nativeCodeBaseAddress - 1
 	}
-	return i.symbolizeBytecode(symbolReporter, sfi, uint64(bytecodeDelta), trace)
+	i.insertAndSymbolizeBytecodeFrame(symbolReporter, sfi, uint64(bytecodeDelta), trace)
+	return nil
 }
 
 // getBytecodeLength decodes the length at the start of bytecode array
@@ -1625,17 +1602,14 @@ func (i *v8Instance) mapBaselineCodeOffsetToBytecode(code *v8Code, pcDelta uint3
 
 // symbolizeBaselineCode symbolizes and records to a trace a Baseline Code based frame.
 func (i *v8Instance) symbolizeBaselineCode(symbolReporter reporter.SymbolReporter, code *v8Code,
-	delta uint32, trace *libpf.Trace) error {
-	if bytecodeDelta, ok := code.codeDeltaToPosition[delta]; ok {
-		// We've seen this frame before, so just insert the frame
-		insertFrame(trace, code.sfi.funcID, libpf.AddressOrLineno(bytecodeDelta))
-		return nil
+	delta uint32, trace *libpf.Trace) {
+	bytecodeDelta, ok := code.codeDeltaToPosition[delta]
+	if !ok {
+		// Decode bytecode delta and memoize it
+		bytecodeDelta = sourcePosition(i.mapBaselineCodeOffsetToBytecode(code, delta))
+		code.codeDeltaToPosition[delta] = bytecodeDelta
 	}
-
-	// Decode bytecode delta, memoize it, and symbolize frame
-	bytecodeDelta := i.mapBaselineCodeOffsetToBytecode(code, delta)
-	code.codeDeltaToPosition[delta] = sourcePosition(bytecodeDelta)
-	return i.symbolizeBytecode(symbolReporter, code.sfi, uint64(bytecodeDelta), trace)
+	i.insertAndSymbolizeBytecodeFrame(symbolReporter, code.sfi, uint64(bytecodeDelta), trace)
 }
 
 // symbolizeCode symbolizes and records to a trace a Code based frame.
@@ -1652,12 +1626,12 @@ func (i *v8Instance) symbolizeCode(symbolReporter reporter.SymbolReporter, code 
 	}
 
 	if code.isBaseline {
-		return i.symbolizeBaselineCode(symbolReporter, code, uint32(delta), trace)
+		i.symbolizeBaselineCode(symbolReporter, code, uint32(delta), trace)
+		return nil
 	}
 
 	// Memoize the delta to position mapping to improve speed. We can't just
 	// fully skip inlining handling as it may expand this frame to multiple ones.
-	// However, we can skip symbolization of all frames if this delta was seen.
 	sourcePos, deltaSeen := code.codeDeltaToPosition[uint32(delta)]
 	if !deltaSeen {
 		sourcePos = decodePosition(code.codePositionTable, delta)
@@ -1685,7 +1659,7 @@ func (i *v8Instance) symbolizeCode(symbolReporter reporter.SymbolReporter, code 
 				return fmt.Errorf("failed to get inlined SFI: %w", err)
 			}
 		}
-		i.generateNativeFrame(symbolReporter, sourcePos, inlinedSFI, deltaSeen, trace)
+		i.generateNativeFrame(symbolReporter, sourcePos, inlinedSFI, trace)
 
 		sourcePos = sourcePosition(npsr.Uint64(code.inliningPositions, itemOff))
 		if sourcePos.inliningID() > inliningID {
@@ -1695,7 +1669,7 @@ func (i *v8Instance) symbolizeCode(symbolReporter reporter.SymbolReporter, code 
 				sourcePos.inliningID(), inliningID)
 		}
 	}
-	i.generateNativeFrame(symbolReporter, sourcePos, sfi, deltaSeen, trace)
+	i.generateNativeFrame(symbolReporter, sourcePos, sfi, trace)
 
 	return nil
 }

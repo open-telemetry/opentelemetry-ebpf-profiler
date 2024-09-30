@@ -87,10 +87,16 @@ type SymbolReporter interface {
 	// open the file and then enqueue the upload in the background.
 	ExecutableMetadata(args *ExecutableMetadataArgs)
 
+	// FrameKnown may be used to query the reporter if the FrameID is known. This is mainly
+	// used to see if the data is already cached and extra work to resolve the metadata
+	// should not be done. If the reporter returns false, the interpreter plugins will
+	// resolve the frame metadata and submit it to the reporter via a FrameMetdata call.
+	FrameKnown(frameID libpf.FrameID) bool
+
 	// FrameMetadata accepts metadata associated with a frame and caches this information before
 	// a periodic reporting to the backend.
-	FrameMetadata(fileID libpf.FileID, addressOrLine libpf.AddressOrLineno,
-		lineNumber libpf.SourceLineno, functionOffset uint32, functionName, filePath string)
+	FrameMetadata(frameID libpf.FrameID, lineNumber libpf.SourceLineno,
+		functionOffset uint32, functionName, filePath string)
 }
 
 type HostMetadataReporter interface {

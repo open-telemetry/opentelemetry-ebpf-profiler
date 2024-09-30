@@ -658,7 +658,8 @@ func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 		pc:   uint64(pc),
 	}
 
-	if iseq, ok := r.iseqBodyPCToFunction.Get(key); ok {
+	if iseq, ok := r.iseqBodyPCToFunction.Get(key); ok &&
+		symbolReporter.FrameKnown(libpf.NewFrameID(iseq.fileID, iseq.line)) {
 		trace.AppendFrame(libpf.RubyFrame, iseq.fileID, iseq.line)
 		sfCounter.ReportSuccess()
 		return nil
@@ -716,20 +717,12 @@ func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	}
 	r.iseqBodyPCToFunction.Add(key, iseq)
 
-	trace.AppendFrame(libpf.RubyFrame, fileID, libpf.AddressOrLineno(lineNo))
-
 	// Ruby doesn't provide the information about the function offset for the
 	// particular line. So we report 0 for this to our backend.
-	symbolReporter.FrameMetadata(
-		fileID,
-		libpf.AddressOrLineno(lineNo), libpf.SourceLineno(lineNo), 0,
+	frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
+	trace.AppendFrameID(libpf.RubyFrame, frameID)
+	symbolReporter.FrameMetadata(frameID, libpf.SourceLineno(lineNo), 0,
 		functionName, sourceFileName)
-
-	log.Debugf("[%d] [%x] %v+%v at %v:%v", len(trace.FrameTypes),
-		iseq.fileID,
-		functionName, 0,
-		sourceFileName, lineNo)
-
 	sfCounter.ReportSuccess()
 	return nil
 }

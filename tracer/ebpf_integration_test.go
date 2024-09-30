@@ -95,9 +95,12 @@ func (f mockReporter) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
 }
 
 func (f mockReporter) ReportFallbackSymbol(_ libpf.FrameID, _ string) {}
-func (f mockReporter) FrameMetadata(_ libpf.FileID, _ libpf.AddressOrLineno, _ libpf.SourceLineno,
-	_ uint32, _, _ string) {
+
+func (f mockReporter) FrameKnown(_ libpf.FrameID) bool {
+	return true
 }
+
+func (f mockReporter) FrameMetadata(_ libpf.FrameID, _ libpf.SourceLineno, _ uint32, _, _ string) {}
 
 func generateMaxLengthTrace() host.Trace {
 	var trace host.Trace

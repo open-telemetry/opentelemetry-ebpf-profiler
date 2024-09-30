@@ -35,11 +35,6 @@ func sliceBuffer(buf unsafe.Pointer, sz C.int) []byte {
 	return unsafe.Slice((*byte)(buf), int(sz))
 }
 
-type symbolKey struct {
-	fileID        libpf.FileID
-	addressOrLine libpf.AddressOrLineno
-}
-
 type symbolData struct {
 	lineNumber     libpf.SourceLineno
 	functionOffset uint32
@@ -51,13 +46,13 @@ type symbolData struct {
 // callbacks to be used for trace stringification.
 type symbolizationCache struct {
 	files   map[libpf.FileID]string
-	symbols map[symbolKey]symbolData
+	symbols map[libpf.FrameID]symbolData
 }
 
 func newSymbolizationCache() *symbolizationCache {
 	return &symbolizationCache{
 		files:   make(map[libpf.FileID]string),
-		symbols: make(map[symbolKey]symbolData),
+		symbols: make(map[libpf.FrameID]symbolData),
 	}
 }
 
@@ -65,13 +60,14 @@ func (c *symbolizationCache) ExecutableMetadata(args *reporter.ExecutableMetadat
 	c.files[args.FileID] = args.FileName
 }
 
-func (c *symbolizationCache) FrameMetadata(fileID libpf.FileID,
-	addressOrLine libpf.AddressOrLineno, lineNumber libpf.SourceLineno,
+func (c *symbolizationCache) FrameKnown(frameID libpf.FrameID) bool {
+	_, exists := c.symbols[frameID]
+	return exists
+}
+
+func (c *symbolizationCache) FrameMetadata(frameID libpf.FrameID, lineNumber libpf.SourceLineno,
 	functionOffset uint32, functionName, filePath string) {
-	key := symbolKey{fileID, addressOrLine}
-	data := symbolData{lineNumber,
-		functionOffset, functionName, filePath}
-	c.symbols[key] = data
+	c.symbols[frameID] = symbolData{lineNumber, functionOffset, functionName, filePath}
 }
 
 func (c *symbolizationCache) ReportFallbackSymbol(libpf.FrameID, string) {}
@@ -120,7 +116,7 @@ func (c *symbolizationCache) symbolize(ty libpf.FrameType, fileID libpf.FileID,
 		return fmt.Sprintf("<error %s>", errName), nil
 	}
 
-	if data, ok := c.symbols[symbolKey{fileID, lineNumber}]; ok {
+	if data, ok := c.symbols[libpf.NewFrameID(fileID, lineNumber)]; ok {
 		return fmt.Sprintf("%s+%d in %s:%d",
 			data.functionName, data.functionOffset,
 			data.fileName, data.lineNumber), nil

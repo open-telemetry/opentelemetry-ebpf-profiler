@@ -215,9 +215,27 @@ func (r *OTLPReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 	})
 }
 
+// FrameKnown determines if the metadata of Frame specified by frameID is required.
+func (r *OTLPReporter) FrameKnown(frameID libpf.FrameID) bool {
+	known := false
+	if frameMapLock, exists := r.frames.Get(frameID.FileID()); exists {
+		frameMap := frameMapLock.RLock()
+		defer frameMapLock.RUnlock(&frameMap)
+		_, known = (*frameMap)[frameID.AddressOrLine()]
+	}
+	return known
+}
+
 // FrameMetadata accepts metadata associated with a frame and caches this information.
-func (r *OTLPReporter) FrameMetadata(fileID libpf.FileID, addressOrLine libpf.AddressOrLineno,
-	lineNumber libpf.SourceLineno, functionOffset uint32, functionName, filePath string) {
+func (r *OTLPReporter) FrameMetadata(frameID libpf.FrameID, lineNumber libpf.SourceLineno,
+	functionOffset uint32, functionName, filePath string) {
+	fileID := frameID.FileID()
+	addressOrLine := frameID.AddressOrLine()
+
+	log.Debugf("FrameMetadata [%x] %v+%v at %v:%v",
+		fileID, functionName, functionOffset,
+		filePath, lineNumber)
+
 	if frameMapLock, exists := r.frames.Get(fileID); exists {
 		frameMap := frameMapLock.WLock()
 		defer frameMapLock.WUnlock(&frameMap)
