@@ -3,7 +3,7 @@
 
 // Package hash provides the same hash primitives as used by the eBPF.
 // This file should be kept in sync with the eBPF tracemgmt.h.
-package hash
+package hash // import "go.opentelemetry.io/ebpf-profiler/libpf/hash"
 
 // Uint32 computes a hash of a 32-bit uint using the finalizer function for Murmur.
 // 32-bit via https://en.wikipedia.org/wiki/MurmurHash#Algorithm

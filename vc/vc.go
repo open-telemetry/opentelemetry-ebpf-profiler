@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package vc provides buildtime information.
-package vc
+package vc // import "go.opentelemetry.io/ebpf-profiler/vc"
 
 var (
 	// The following variables are going to be set at link time using ldflags

@@ -1,4 +1,4 @@
-package libpf
+package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 // PID represent Unix Process ID (pid_t)
 type PID uint32

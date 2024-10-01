@@ -3,7 +3,7 @@
 
 // package pfelf implements functions for processing of ELF files and extracting data from
 // them. This file provides a cacheable file offset to virtual address mapping.
-package pfelf
+package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 import (
 	"debug/elf"

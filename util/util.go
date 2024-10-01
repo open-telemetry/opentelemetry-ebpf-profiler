@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package util
+package util // import "go.opentelemetry.io/ebpf-profiler/util"
 
 import (
 	"math/bits"
@@ -12,7 +12,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/hash"
+	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 )
 
 // HexToUint64 is a convenience function to extract a hex string to a uint64 and

@@ -1,14 +1,14 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package reporter
+package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/process"
 )
 
 // Reporter is the top-level interface implemented by a full reporter.
@@ -50,21 +50,42 @@ type TraceReporter interface {
 	SupportsReportTraceEvent() bool
 }
 
+// ExecutableOpener is a function that attempts to open an executable.
 type ExecutableOpener = func() (process.ReadAtCloser, error)
+
+// ExecutableMetadataArgs collects metadata about a discovered
+// executable, for reporting to a SymbolReporter via the ExecutableMetadata function.
+type ExecutableMetadataArgs struct {
+	// FileID is a unique identifier of the executable.
+	FileID libpf.FileID
+	// FileName is the base filename of the executable.
+	FileName string
+	// GnuBuildID is the GNU build ID from .note.gnu.build-id, if any.
+	GnuBuildID string
+	// DebuglinkFileName is the path to the matching debug file
+	// from the .gnu.debuglink, if any. The caller should
+	// verify that the file in question matches the GnuBuildID of this executable..
+	DebuglinkFileName string
+	// Interp is the discovered interpreter type of this executable, if any.
+	Interp libpf.InterpreterType
+	// Open is a function that can be used to open the executable for reading,
+	// or nil for interpreters that don't support this.
+	Open ExecutableOpener
+}
 
 type SymbolReporter interface {
 	// ReportFallbackSymbol enqueues a fallback symbol for reporting, for a given frame.
 	ReportFallbackSymbol(frameID libpf.FrameID, symbol string)
 
-	// ExecutableMetadata accepts a fileID with the corresponding filename
-	// and caches this information before a periodic reporting to the backend.
+	// ExecutableMetadata accepts a FileID with the corresponding filename
+	// and takes some action with it (for example, it might cache it for
+	// periodic reporting to a backend).
 	//
-	// The `open` argument can be used to open the executable for reading. Interpreters
+	// The `Open` argument can be used to open the executable for reading. Interpreters
 	// that don't support this may pass a `nil` function pointer. Implementations that
 	// wish to upload executables should NOT block this function to do so and instead just
 	// open the file and then enqueue the upload in the background.
-	ExecutableMetadata(fileID libpf.FileID, fileName, gnuBuildID string,
-		interp libpf.InterpreterType, open ExecutableOpener)
+	ExecutableMetadata(args *ExecutableMetadataArgs)
 
 	// FrameMetadata accepts metadata associated with a frame and caches this information before
 	// a periodic reporting to the backend.

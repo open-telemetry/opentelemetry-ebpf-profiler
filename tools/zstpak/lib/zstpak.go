@@ -19,7 +19,7 @@
 // Using relative offsets and variable size ints in the footer could shave off a few more bytes,
 // but was omitted for simplicity.
 
-package zstpak
+package zstpak // import "go.opentelemetry.io/ebpf-profiler/tools/zstpak/lib"
 
 import (
 	"bytes"

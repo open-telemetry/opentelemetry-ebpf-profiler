@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package modulestore
+package modulestore // import "go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 
 import (
 	"crypto/sha256"

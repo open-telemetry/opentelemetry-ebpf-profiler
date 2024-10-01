@@ -4,7 +4,7 @@
 // package pfelf implements functions for processing of ELF files and extracting data from
 // them. This file implements Reference which opens and caches a File on demand.
 
-package pfelf
+package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 // Reference is a reference to an ELF file which is loaded and cached on demand.
 type Reference struct {

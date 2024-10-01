@@ -12,8 +12,8 @@ import (
 	"github.com/cilium/ebpf"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/rlimit"
 
 	"github.com/stretchr/testify/require"
 )

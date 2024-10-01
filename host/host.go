@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package host implements types and methods specific to interacting with eBPF maps.
-package host
+package host // import "go.opentelemetry.io/ebpf-profiler/host"
 
 import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/times"
 )
 
 // TraceHash is used for unique identifiers for traces, and is required to be 64-bits

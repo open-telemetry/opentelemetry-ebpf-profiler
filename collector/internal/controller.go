@@ -14,13 +14,13 @@ import (
 	"go.opentelemetry.io/collector/consumer/consumerprofiles"
 	"go.uber.org/zap"
 
-	hostinfo "github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracehandler"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer"
-	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	hostinfo "go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/times"
+	"go.opentelemetry.io/ebpf-profiler/tracehandler"
+	"go.opentelemetry.io/ebpf-profiler/tracer"
+	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 var (

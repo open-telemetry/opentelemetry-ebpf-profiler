@@ -4,7 +4,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package tracer
+package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"bytes"
@@ -13,8 +13,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"go.opentelemetry.io/ebpf-profiler/rlimit"
+	"go.opentelemetry.io/ebpf-profiler/util"
 
 	"golang.org/x/sys/unix"
 

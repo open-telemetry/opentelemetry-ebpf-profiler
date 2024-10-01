@@ -8,9 +8,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/testsupport"
-	zstpak "github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/zstpak/lib"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/ebpf-profiler/testsupport"
+	zstpak "go.opentelemetry.io/ebpf-profiler/tools/zstpak/lib"
 )
 
 func generateInputFile(seqLen uint8, outputSize uint64) []byte {

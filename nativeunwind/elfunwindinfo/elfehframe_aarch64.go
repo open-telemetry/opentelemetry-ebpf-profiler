@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package elfunwindinfo
+package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 
 // ARM64 specific code for handling DWARF / stack delta extraction.
 // The filename ends with `_aarch64` instead of `_arm64`, so that the code
@@ -11,7 +11,7 @@ import (
 	"debug/elf"
 	"fmt"
 
-	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
+	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 )
 
 //nolint:deadcode,varcheck

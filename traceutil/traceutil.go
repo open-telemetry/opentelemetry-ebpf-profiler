@@ -1,13 +1,13 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package traceutil
+package traceutil // import "go.opentelemetry.io/ebpf-profiler/traceutil"
 
 import (
 	"hash/fnv"
 	"strconv"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // HashTrace calculates the hash of a trace and returns it.

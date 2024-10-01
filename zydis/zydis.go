@@ -1,4 +1,4 @@
 // Package zydis simply builds and links the Zydis library via CGo.
-package zydis
+package zydis // import "go.opentelemetry.io/ebpf-profiler/zydis"
 
 import "C"

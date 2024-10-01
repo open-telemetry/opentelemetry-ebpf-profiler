@@ -12,7 +12,7 @@ import (
 	"github.com/tklauser/numcpus"
 	"go.opentelemetry.io/collector/component"
 
-	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
+	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 const (

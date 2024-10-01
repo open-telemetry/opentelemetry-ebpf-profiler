@@ -4,7 +4,7 @@
 // package pfelf implements functions for processing of ELF files and extracting data from
 // them. This file implements an interface to open ELF files from arbitrary location with name.
 
-package pfelf
+package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 // ELFOpener is the interface to open ELF files from arbitrary location with given filename.
 //

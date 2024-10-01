@@ -13,7 +13,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/modulestore"
+	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 )
 
 type uploadCmd struct {

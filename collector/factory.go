@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/receiverprofiles"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/collector/internal"
+	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 )
 
 var (

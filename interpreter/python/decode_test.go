@@ -6,8 +6,8 @@ package python
 import (
 	"testing"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 func TestAnalyzeArm64Stubs(t *testing.T) {
