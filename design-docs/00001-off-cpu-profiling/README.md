@@ -28,7 +28,7 @@ To address this, the OTel Profiling Agent should extend its capabilities to incl
 profiling. By combining on-CPU and off-CPU profiling, the OTel Profiling Agent can provide a more
 comprehensive understanding of application and system performance. This enables identifying
 bottlenecks and optimization for resource utilization, which leads to reduced energy consumption
-and a smaller environmental footprints.
+and a smaller environmental footprint.
 
 # Scope
 
@@ -99,7 +99,7 @@ but should not inform the user space component, if the process is not known yet.
 
 ## Option A
 
-Attach stack unwinding functionallity to the tracepoint `tracepoint:sched:sched_switch`. This
+Attach stack unwinding functionality to the tracepoint `tracepoint:sched:sched_switch`. This
 tracepoint is called everytime the Linux kernel scheduler takes resources from a task before
 assigning these resources to another task.
 
@@ -191,7 +191,7 @@ general approach.
 # Author's preference
 
 My preference is Option B, as it provides latency information additional to off-CPU stack traces,
-which is crutual for latency analysis.
+which is crucial for latency analysis.
 
 Option B might be a bit more complex, as it utilizes two additional hooks along with an additional
 eBPF map for them to communicate, compared to Option A with a single hook on
