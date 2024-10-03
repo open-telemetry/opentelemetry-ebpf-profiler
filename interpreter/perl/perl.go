@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package perl
+package perl // import "go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 
 // Perl interpreter unwinder
 
@@ -49,7 +49,7 @@ import (
 	"debug/elf"
 	"regexp"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/interpreter"
 )
 
 //nolint:golint,stylecheck,revive

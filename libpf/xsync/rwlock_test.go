@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 )
 
 type SharedResourceMutable struct {

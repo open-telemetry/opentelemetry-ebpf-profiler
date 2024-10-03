@@ -3,4 +3,4 @@
 
 // Package xsync provides thin wrappers around locking primitives in an effort towards better
 // documenting the relationship between locks and the data they protect.
-package xsync
+package xsync // import "go.opentelemetry.io/ebpf-profiler/libpf/xsync"

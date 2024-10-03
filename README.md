@@ -91,12 +91,25 @@ https://upload.elastic.co/d/87e7697991940ec37f0c6e39ac38d213f65e8dc1ef9dbedff6aa
 
 Authentication token: `c74dfc4db2212015`
 
+
 The archive contains a build for each of the following platforms:
 
 - macOS (Intel)
 - macOS (Apple Silicon)
 - Linux AppImage (x86_64)
 - Linux AppImage (aarch64)
+
+> [!IMPORTANT]
+> 
+> The macOS application isn't properly signed with an Apple developer certificate: macOS will
+> complain about the application being corrupted on start. To work around that, simply run the following
+> command after downloading the archive:
+>
+> ```
+> xattr -d com.apple.quarantine ~/Downloads/devfiler.app.zip
+> ```
+>
+> If you did this correctly, the application should run just fine after unpacking the ZIP.
 
 > [!NOTE]
 > devfiler is currently in an experimental preview stage.

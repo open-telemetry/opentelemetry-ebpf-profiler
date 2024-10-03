@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // support maps the definitions from headers in the C world into a nice go way
-package support
+package support // import "go.opentelemetry.io/ebpf-profiler/support"
 
 /*
 #include "./ebpf/types.h"

@@ -1,14 +1,14 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package processmanager
+package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 type lruFileIDMapper struct {

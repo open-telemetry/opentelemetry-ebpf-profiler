@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package reporter
+package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"bufio"
@@ -29,8 +29,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 )
 
 var (
@@ -208,11 +208,10 @@ func (r *OTLPReporter) ReportFallbackSymbol(frameID libpf.FrameID, symbol string
 
 // ExecutableMetadata accepts a fileID with the corresponding filename
 // and caches this information.
-func (r *OTLPReporter) ExecutableMetadata(fileID libpf.FileID, fileName,
-	gnuBuildID string, _ libpf.InterpreterType, _ ExecutableOpener) {
-	r.executables.Add(fileID, execInfo{
-		fileName:   fileName,
-		gnuBuildID: gnuBuildID,
+func (r *OTLPReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
+	r.executables.Add(args.FileID, execInfo{
+		fileName:   args.FileName,
+		gnuBuildID: args.GnuBuildID,
 	})
 }
 

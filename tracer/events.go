@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package tracer
+package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"context"
@@ -15,9 +15,9 @@ import (
 	"github.com/cilium/ebpf/perf"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 /*

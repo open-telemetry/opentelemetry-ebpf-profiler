@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ebpf
+package ebpf // import "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 
 // StackDeltaEBPF represents stack deltas preprocessed by the ProcessManager which are
 // then loaded to the eBPF map. This is Go equivalent of 'struct StackDelta' in eBPF types.h.
