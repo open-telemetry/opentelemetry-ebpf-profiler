@@ -706,7 +706,7 @@ func isHeapObject(val libpf.Address) bool {
 	return val&HeapObjectTagMask == HeapObjectTag
 }
 
-// calculateStubID calculates the hash for a given string
+// calculateStubID calculates the hash for a given string.
 func calculateStubID(name string) libpf.AddressOrLineno {
 	h := fnv.New128a()
 	_, _ = h.Write([]byte(name))

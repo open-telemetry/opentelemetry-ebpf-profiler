@@ -215,7 +215,8 @@ func (r *OTLPReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 	})
 }
 
-// FrameKnown determines if the metadata of Frame specified by frameID is required.
+// FrameKnown return true if the metadata of the Frame specified by frameID is
+// cached in the reporter.
 func (r *OTLPReporter) FrameKnown(frameID libpf.FrameID) bool {
 	known := false
 	if frameMapLock, exists := r.frames.Get(frameID.FileID()); exists {

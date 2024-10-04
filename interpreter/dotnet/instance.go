@@ -756,9 +756,10 @@ func (i *dotnetInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 		if err != nil {
 			return err
 		}
-		// The Line ID is the Relative Virtual Address (RVA) within into the PE file
-		// where PC is executing. On non-leaf frames it points to the return address.
-		// The instruction after the CALL machine opcode.
+		// The Line ID is the Relative Virtual Address (RVA) within the PE file where
+		// PC is executing:
+		// - on non-leaf frames, it is the return address
+		// - on leaf frames, it is the address after the CALL machine opcode
 		lineID := libpf.AddressOrLineno(pcOffset)
 		frameID := libpf.NewFrameID(module.fileID, lineID)
 		trace.AppendFrameID(libpf.DotnetFrame, frameID)
