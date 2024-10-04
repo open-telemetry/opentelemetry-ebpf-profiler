@@ -10,7 +10,7 @@
 ## Problem
 
 As we move forward with the OpenTelemetry Collector being able to handle
-profiles, we also want the ebpf agent to be able to run as a collector
+profiles, we also want the profiling agent to be able to run as a collector
 receiver.
 See [PR #87](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/87)
 
