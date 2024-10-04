@@ -84,4 +84,4 @@ package specifically, and avoid having the collector components as dependencies
 of the main agent.
 
 Since the vision is that the agent should always run as a collector receiver,
-splitting things into multiple Go modules is probably unnecessary though.
+splitting things into multiple Go modules is probably unnecessary.
