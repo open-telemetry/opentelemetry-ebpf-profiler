@@ -175,7 +175,10 @@ func (i *dotnetInstance) insertAndSymbolizeStubFrame(symbolReporter reporter.Sym
 
 	frameID := libpf.NewFrameID(stubsFileID, lineID)
 	trace.AppendFrameID(libpf.DotnetFrame, frameID)
-	symbolReporter.FrameMetadata(frameID, 0, 0, name, "")
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:      frameID,
+		FunctionName: name,
+	})
 }
 
 // addRange inserts a known memory mapping along with the needed data of it to ebpf maps
@@ -765,7 +768,11 @@ func (i *dotnetInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 		trace.AppendFrameID(libpf.DotnetFrame, frameID)
 		if !symbolReporter.FrameKnown(frameID) {
 			methodName := module.resolveR2RMethodName(pcOffset)
-			symbolReporter.FrameMetadata(frameID, 0, 0, methodName, module.simpleName)
+			symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+				FrameID:      frameID,
+				FunctionName: methodName,
+				SourceFile:   module.simpleName,
+			})
 		}
 	case codeJIT:
 		// JITted frame in anonymous mapping
@@ -791,8 +798,12 @@ func (i *dotnetInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 			trace.AppendFrameID(libpf.DotnetFrame, frameID)
 			if !symbolReporter.FrameKnown(frameID) {
 				methodName := method.module.resolveMethodName(method.index)
-				symbolReporter.FrameMetadata(frameID, 0, ilOffset,
-					methodName, method.module.simpleName)
+				symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+					FrameID:        frameID,
+					SourceFile:     method.module.simpleName,
+					FunctionName:   methodName,
+					FunctionOffset: ilOffset,
+				})
 			}
 		}
 	default:

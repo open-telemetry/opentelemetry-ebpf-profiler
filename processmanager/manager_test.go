@@ -258,8 +258,7 @@ func (s *symbolReporterMockup) FrameKnown(_ libpf.FrameID) bool {
 	return true
 }
 
-func (s *symbolReporterMockup) FrameMetadata(_ libpf.FrameID, _ libpf.SourceLineno, _ uint32,
-	_, _ string) {
+func (s *symbolReporterMockup) FrameMetadata(_ *reporter.FrameMetadataArgs) {
 }
 
 var _ reporter.SymbolReporter = (*symbolReporterMockup)(nil)

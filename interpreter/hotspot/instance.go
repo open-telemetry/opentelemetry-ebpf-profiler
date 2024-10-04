@@ -256,7 +256,10 @@ func (d *hotspotInstance) getStubNameID(symbolReporter reporter.SymbolReporter, 
 	_, _ = h.Write([]byte(stubName))
 	nameHash := h.Sum(nil)
 	stubID := libpf.AddressOrLineno(npsr.Uint64(nameHash, 0))
-	symbolReporter.FrameMetadata(libpf.NewFrameID(hotspotStubsFileID, stubID), 0, 0, stubName, "")
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:      libpf.NewFrameID(hotspotStubsFileID, stubID),
+		FunctionName: stubName,
+	})
 	d.addrToStubNameID.Add(addr, stubID)
 
 	return stubID, nil

@@ -721,8 +721,12 @@ func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	// particular line. So we report 0 for this to our backend.
 	frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
 	trace.AppendFrameID(libpf.RubyFrame, frameID)
-	symbolReporter.FrameMetadata(frameID, libpf.SourceLineno(lineNo), 0,
-		functionName, sourceFileName)
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:      frameID,
+		FunctionName: functionName,
+		SourceFile:   sourceFileName,
+		SourceLine:   libpf.SourceLineno(lineNo),
+	})
 	sfCounter.ReportSuccess()
 	return nil
 }

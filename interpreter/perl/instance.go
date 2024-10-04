@@ -458,8 +458,12 @@ func (i *perlInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	// send the symbolization information.
 	frameID := libpf.NewFrameID(cop.fileID, cop.line)
 	trace.AppendFrameID(libpf.PerlFrame, frameID)
-	symbolReporter.FrameMetadata(frameID, libpf.SourceLineno(cop.line), 0,
-		functionName, cop.sourceFileName)
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:      frameID,
+		FunctionName: functionName,
+		SourceFile:   cop.sourceFileName,
+		SourceLine:   libpf.SourceLineno(cop.line),
+	})
 	sfCounter.ReportSuccess()
 	return nil
 }

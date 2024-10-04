@@ -48,8 +48,13 @@ func (m *hotspotMethod) symbolize(symbolReporter reporter.SymbolReporter, bci ui
 		if lineNo > uint32(m.startLineNo) {
 			functionOffset = lineNo - uint32(m.startLineNo)
 		}
-		symbolReporter.FrameMetadata(frameID, libpf.SourceLineno(lineNo), functionOffset,
-			m.methodName, m.sourceFileName)
+		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+			FrameID:        frameID,
+			FunctionName:   m.methodName,
+			SourceFile:     m.sourceFileName,
+			SourceLine:     libpf.SourceLineno(lineNo),
+			FunctionOffset: functionOffset,
+		})
 	}
 }
 

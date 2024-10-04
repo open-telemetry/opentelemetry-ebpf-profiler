@@ -35,24 +35,17 @@ func sliceBuffer(buf unsafe.Pointer, sz C.int) []byte {
 	return unsafe.Slice((*byte)(buf), int(sz))
 }
 
-type symbolData struct {
-	lineNumber     libpf.SourceLineno
-	functionOffset uint32
-	functionName   string
-	fileName       string
-}
-
 // symbolizationCache collects and caches the interpreter manager's symbolization
 // callbacks to be used for trace stringification.
 type symbolizationCache struct {
 	files   map[libpf.FileID]string
-	symbols map[libpf.FrameID]symbolData
+	symbols map[libpf.FrameID]*reporter.FrameMetadataArgs
 }
 
 func newSymbolizationCache() *symbolizationCache {
 	return &symbolizationCache{
 		files:   make(map[libpf.FileID]string),
-		symbols: make(map[libpf.FrameID]symbolData),
+		symbols: make(map[libpf.FrameID]*reporter.FrameMetadataArgs),
 	}
 }
 
@@ -65,9 +58,8 @@ func (c *symbolizationCache) FrameKnown(frameID libpf.FrameID) bool {
 	return exists
 }
 
-func (c *symbolizationCache) FrameMetadata(frameID libpf.FrameID, lineNumber libpf.SourceLineno,
-	functionOffset uint32, functionName, filePath string) {
-	c.symbols[frameID] = symbolData{lineNumber, functionOffset, functionName, filePath}
+func (c *symbolizationCache) FrameMetadata(args *reporter.FrameMetadataArgs) {
+	c.symbols[args.FrameID] = args
 }
 
 func (c *symbolizationCache) ReportFallbackSymbol(libpf.FrameID, string) {}
@@ -118,8 +110,8 @@ func (c *symbolizationCache) symbolize(ty libpf.FrameType, fileID libpf.FileID,
 
 	if data, ok := c.symbols[libpf.NewFrameID(fileID, lineNumber)]; ok {
 		return fmt.Sprintf("%s+%d in %s:%d",
-			data.functionName, data.functionOffset,
-			data.fileName, data.lineNumber), nil
+			data.FunctionName, data.FunctionOffset,
+			data.SourceFile, data.SourceLine), nil
 	}
 
 	sourceFile, ok := c.files[fileID]

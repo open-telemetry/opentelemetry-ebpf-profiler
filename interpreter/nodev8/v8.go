@@ -736,7 +736,10 @@ func (i *v8Instance) symbolizeMarkerFrame(symbolReporter reporter.SymbolReporter
 		stubID = calculateStubID(name)
 		frameID = libpf.NewFrameID(v8StubsFileID, stubID)
 		i.d.frametypeToID[marker] = stubID
-		symbolReporter.FrameMetadata(frameID, 0, 0, name, "")
+		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+			FrameID:      frameID,
+			FunctionName: name,
+		})
 	}
 	trace.AppendFrameID(libpf.V8Frame, frameID)
 	return nil
@@ -1453,7 +1456,13 @@ func (i *v8Instance) symbolize(symbolReporter reporter.SymbolReporter, frameID l
 	if lineNo > sfi.funcStartLine {
 		funcOffset = uint32(lineNo - sfi.funcStartLine)
 	}
-	symbolReporter.FrameMetadata(frameID, lineNo, funcOffset, sfi.funcName, sfi.source.fileName)
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:        frameID,
+		FunctionName:   sfi.funcName,
+		SourceFile:     sfi.source.fileName,
+		SourceLine:     lineNo,
+		FunctionOffset: funcOffset,
+	})
 }
 
 const externalFunctionTag = "<external-file>"
@@ -1466,7 +1475,10 @@ func (i *v8Instance) generateNativeFrame(symbolReporter reporter.SymbolReporter,
 	if sourcePos.isExternal() {
 		frameID := libpf.NewFrameID(v8StubsFileID, externalStubID)
 		trace.AppendFrameID(libpf.V8Frame, frameID)
-		symbolReporter.FrameMetadata(frameID, 0, 0, externalFunctionTag, "")
+		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+			FrameID:      frameID,
+			FunctionName: externalFunctionTag,
+		})
 		return
 	}
 

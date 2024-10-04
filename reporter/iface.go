@@ -73,6 +73,21 @@ type ExecutableMetadataArgs struct {
 	Open ExecutableOpener
 }
 
+// FrameMetadataArgs collects metadata about a single frame in a trace, for
+// reporting it to a SymbolReporter via the FrameMetadata method.
+type FrameMetadataArgs struct {
+	// FrameID is a unique identifier for the frame.
+	FrameID libpf.FrameID
+	// FunctionName is the name of the function for the frame.
+	FunctionName string
+	// SourceFile is the source code file name for the frame.
+	SourceFile string
+	// SourceLine is the source code level line number of this frame.
+	SourceLine libpf.SourceLineno
+	// FunctionOffset is the line offset from function start line for the frame.
+	FunctionOffset uint32
+}
+
 type SymbolReporter interface {
 	// ReportFallbackSymbol enqueues a fallback symbol for reporting, for a given frame.
 	ReportFallbackSymbol(frameID libpf.FrameID, symbol string)
@@ -96,8 +111,7 @@ type SymbolReporter interface {
 
 	// FrameMetadata accepts metadata associated with a frame and caches this information before
 	// a periodic reporting to the backend.
-	FrameMetadata(frameID libpf.FrameID, lineNumber libpf.SourceLineno,
-		functionOffset uint32, functionName, filePath string)
+	FrameMetadata(frameMetadata *FrameMetadataArgs)
 }
 
 type HostMetadataReporter interface {

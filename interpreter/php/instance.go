@@ -215,8 +215,13 @@ func (i *phpInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	}
 	frameID := libpf.NewFrameID(f.fileID, line)
 	trace.AppendFrameID(libpf.PHPFrame, frameID)
-	symbolReporter.FrameMetadata(frameID, libpf.SourceLineno(line), funcOff,
-		f.name, f.sourceFileName)
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:        frameID,
+		FunctionName:   f.name,
+		SourceFile:     f.sourceFileName,
+		SourceLine:     libpf.SourceLineno(line),
+		FunctionOffset: funcOff,
+	})
 
 	sfCounter.ReportSuccess()
 	return nil

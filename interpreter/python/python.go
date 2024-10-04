@@ -321,8 +321,13 @@ func (m *pythonCodeObject) symbolize(symbolReporter reporter.SymbolReporter, bci
 	if !symbolReporter.FrameKnown(frameID) {
 		functionOffset := getFuncOffset(m, bci)
 		lineNo := libpf.SourceLineno(m.firstLineNo + functionOffset)
-		symbolReporter.FrameMetadata(frameID, lineNo, functionOffset,
-			m.name, m.sourceFileName)
+		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+			FrameID:        frameID,
+			FunctionName:   m.name,
+			SourceFile:     m.sourceFileName,
+			SourceLine:     lineNo,
+			FunctionOffset: functionOffset,
+		})
 	}
 }
 
