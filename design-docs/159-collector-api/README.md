@@ -17,9 +17,8 @@ See [PR #87](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/
 We also intend to provide a collector distribution that will bundle the agent,
 which most folks will want to use.
 
-Some specific use cases may want to build their own distributions though. In
-which case they will have to be able to rely on a stable public API allowing
-them to build a receiver to use in their distribution.
+To support use cases where a custom built distribution is needed, we must provide
+a stable public API that allows for a receiver to be built and integrated in a distribution.
 
 This design document aims to describe the public API we will be exposing.
 
