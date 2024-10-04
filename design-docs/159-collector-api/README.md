@@ -14,7 +14,7 @@ profiles, we also want the ebpf agent to be able to run as a collector
 receiver.
 See [PR #87](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/87)
 
-We also intend to provide a collector distribution that will provide the agent,
+We also intend to provide a collector distribution that will bundle the agent,
 which most folks will want to use.
 
 Some specific use cases may want to build their own distributions though. In
