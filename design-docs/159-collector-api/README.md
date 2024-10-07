@@ -42,29 +42,8 @@ the API should be located.
 
 ## Proposed Solutions
 
-We will expose the `NewFactory` method as part of the **root** package within
+We will expose the `NewFactory` method as part of a `collector` package within
 the ebpf repository, meaning importing and using it will be as follows:
-
-```golang
-package main
-
-import (
-	agent "github.com/open-telemetry/opentelemetry-ebpf-profiler"
-)
-
-func main() {
-	factory := agent.NewFactory()
-	// Use the factory
-}
-```
-
-The intent behind making the factory part of the root of the repository is to
-clarify that the factory is the root of the agent running as a
-collector receiver.
-
-## Alternatives
-
-Having the receiver in a sub-package:
 
 ```golang
 package main
@@ -79,9 +58,29 @@ func main() {
 }
 ```
 
-This would have the advantage of allowing us to provide a `go.mod` for this
-package specifically, and avoid having the collector components as dependencies
-of the main agent.
+The intent behind making the factory behind a subpackage as opposed to the root
+package of the repository is to provide a better separation of concerns between
+packages.
 
-Since the vision is that the agent should always run as a collector receiver,
-splitting things into multiple Go modules is probably unnecessary.
+This subpackage would not be its own module. Since the vision is that the agent
+should always run as a collector receiver, doing so is probably unnecessary.
+
+## Alternatives
+
+Having the receiver in the root package:
+
+```golang
+package main
+
+import (
+	agent "github.com/open-telemetry/opentelemetry-ebpf-profiler"
+)
+
+func main() {
+	factory := agent.NewFactory()
+	// Use the factory
+}
+```
+
+This approach would have the advantage of clarifying that the factory is the
+root of the agent running as a collector receiver.
