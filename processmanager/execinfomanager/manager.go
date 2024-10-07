@@ -1,10 +1,7 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
-package execinfomanager
+package execinfomanager // import "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 
 import (
 	"errors"
@@ -12,31 +9,31 @@ import (
 	"os"
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 
 	lru "github.com/elastic/go-freelru"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter/apmint"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter/dotnet"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter/hotspot"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter/nodev8"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter/perl"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter/php"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter/python"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter/ruby"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/xsync"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind"
-	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
-	pmebpf "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager/ebpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tpbase"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/python"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
+	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/tpbase"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 const (

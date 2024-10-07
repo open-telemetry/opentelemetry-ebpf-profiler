@@ -1,8 +1,5 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 package readatbuf_test
 
@@ -10,9 +7,9 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/readatbuf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/testsupport"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
+	"go.opentelemetry.io/ebpf-profiler/testsupport"
 )
 
 func testVariant(t *testing.T, fileSize, granularity, cacheSize uint) {

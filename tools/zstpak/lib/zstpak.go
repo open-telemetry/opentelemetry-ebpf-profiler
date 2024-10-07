@@ -1,8 +1,5 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 // zstpak implements reading and writing for an efficiently seekable compressed file format. The
 // efficient random access is achieved by compressing the data in small chunks and keeping an index
@@ -22,7 +19,7 @@
 // Using relative offsets and variable size ints in the footer could shave off a few more bytes,
 // but was omitted for simplicity.
 
-package zstpak
+package zstpak // import "go.opentelemetry.io/ebpf-profiler/tools/zstpak/lib"
 
 import (
 	"bytes"

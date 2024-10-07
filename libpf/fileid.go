@@ -1,10 +1,7 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
-package libpf
+package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
 	"bytes"
@@ -18,7 +15,7 @@ import (
 	"os"
 
 	sha256 "github.com/minio/sha256-simd"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/basehash"
+	"go.opentelemetry.io/ebpf-profiler/libpf/basehash"
 )
 
 // FileID is used for unique identifiers for files

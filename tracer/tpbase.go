@@ -1,10 +1,7 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
-package tracer
+package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"encoding/hex"
@@ -14,8 +11,8 @@ import (
 	cebpf "github.com/cilium/ebpf"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tpbase"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/tpbase"
 )
 
 // This file contains code to extract the offset of the thread pointer base variable in

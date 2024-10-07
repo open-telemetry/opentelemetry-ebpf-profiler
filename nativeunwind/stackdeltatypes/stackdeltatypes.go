@@ -1,13 +1,10 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 // Package stackdeltatypes provides types used to represent stack delta information as constructed
 // by `nativeunwind.GetIntervalStructures` This information is a post-processed form of the
 // stack delta information that is used in all relevant packages.
-package stackdeltatypes
+package stackdeltatypes // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 
 // #include "../../support/ebpf/stackdeltatypes.h"
 import "C"

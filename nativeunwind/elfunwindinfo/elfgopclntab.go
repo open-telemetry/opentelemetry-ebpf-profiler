@@ -1,14 +1,11 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 // This implements Go 1.2+ .pclntab symbol parsing as defined
 // in http://golang.org/s/go12symtab. The Golang runtime implementation of
 // this is in go/src/runtime/symtab.go, but unfortunately it is not exported.
 
-package elfunwindinfo
+package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 
 import (
 	"bytes"
@@ -16,9 +13,9 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
-	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 )
 
 // Go runtime functions for which we should not attempt to unwind further

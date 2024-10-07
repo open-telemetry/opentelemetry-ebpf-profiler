@@ -1,16 +1,13 @@
 //go:build !arm64
 
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
-package processmanager
+package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
 // insertSynthStackDeltas adds synthetic stack-deltas to the given SDMM. On non-ARM64, this is

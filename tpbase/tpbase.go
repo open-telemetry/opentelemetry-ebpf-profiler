@@ -1,8 +1,5 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 // tpbase implements disassembly analysis functions to extract needed data for
 // the Thread Pointer Base value handling. Code to analyze several Linux Kernel
@@ -10,7 +7,7 @@
 // relative to the 'struct task_struct'. This is needed to support Thread Local
 // Storage access in eBPF.
 
-package tpbase
+package tpbase // import "go.opentelemetry.io/ebpf-profiler/tpbase"
 
 type Analyzer struct {
 	// FunctionName is the kernel function which can be analyzed

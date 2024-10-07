@@ -1,16 +1,13 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
-package hotspot
+package hotspot // import "go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 
 import (
 	"fmt"
 	"io"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // unsigned5Decoder is a decoder for UNSIGNED5 based byte streams.

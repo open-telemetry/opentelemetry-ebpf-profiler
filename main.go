@@ -1,8 +1,5 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 package main
 
@@ -10,40 +7,41 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+
+	//nolint:gosec
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
 	"time"
 
-	//nolint:gosec
-	_ "net/http/pprof"
-
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
-	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/vc"
 	"github.com/tklauser/numcpus"
 	"golang.org/x/sys/unix"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracehandler"
+	"go.opentelemetry.io/ebpf-profiler/times"
+	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
+	"go.opentelemetry.io/ebpf-profiler/util"
+	"go.opentelemetry.io/ebpf-profiler/vc"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/hostmetadata"
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/hostmetadata"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+
+	"go.opentelemetry.io/ebpf-profiler/tracer"
 
 	log "github.com/sirupsen/logrus"
 )
 
 // Short copyright / license text for eBPF code
-var copyright = `Copyright (C) 2019-2024 Elasticsearch B.V.
+var copyright = `Copyright The OpenTelemetry Authors.
 
 For the eBPF code loaded by Universal Profiling Agent into the kernel,
-the following license applies (GPLv2 only). To request a copy of the
-GPLv2 code, email us at profiling-feedback@elastic.co.
+the following license applies (GPLv2 only). You can obtain a copy of the GPLv2 code at:
+https://go.opentelemetry.io/ebpf-profiler/tree/main/support/ebpf
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License version 2 only,
@@ -211,7 +209,6 @@ func mainWithExitCode() exitCode {
 		MapScaleFactor:         int(args.mapScaleFactor),
 		KernelVersionCheck:     !args.noKernelVersionCheck,
 		BPFVerifierLogLevel:    uint32(args.bpfVerifierLogLevel),
-		BPFVerifierLogSize:     args.bpfVerifierLogSize,
 		ProbabilisticInterval:  args.probabilisticInterval,
 		ProbabilisticThreshold: args.probabilisticThreshold,
 	})

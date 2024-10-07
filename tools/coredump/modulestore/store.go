@@ -1,13 +1,10 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 // The modulestore package implements `Store`, a storage for large binary files (modules).
 // For more information, please refer to the documentation on the `Store` type.
 
-package modulestore
+package modulestore // import "go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 
 import (
 	"context"
@@ -27,9 +24,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/readatbuf"
-	zstpak "github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/zstpak/lib"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
+	zstpak "go.opentelemetry.io/ebpf-profiler/tools/zstpak/lib"
 )
 
 const (

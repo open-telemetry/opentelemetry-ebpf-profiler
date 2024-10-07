@@ -1,18 +1,15 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 // nopanicslicereader provides little convenience utilities to read "native" endian
 // values from a slice at given offset. Zeroes are returned on out of bounds access
 // instead of panic.
-package nopanicslicereader
+package nopanicslicereader // import "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 
 import (
 	"encoding/binary"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // Uint8 reads one 8-bit unsigned integer from given byte slice offset

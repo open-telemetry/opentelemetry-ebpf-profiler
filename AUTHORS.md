@@ -1,6 +1,6 @@
 ## Open-Source contributors
 
-For contributors statistics that occurred after the profiling agent was open sourced, please refer to [the GitHub statistics](https://github.com/elastic/otel-profiling-agent/pulse).
+For contributors statistics that occurred after the profiling agent was open sourced, please refer to [the GitHub statistics](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/graphs/contributors).
 
 ## Pre-OSS Optimyze/Elastic contributors
 

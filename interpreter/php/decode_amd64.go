@@ -1,19 +1,16 @@
 //go:build amd64
 
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
-package php
+package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 
 import (
 	"fmt"
 	"unsafe"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	_ "github.com/open-telemetry/opentelemetry-ebpf-profiler/zydis" // links Zydis
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	_ "go.opentelemetry.io/ebpf-profiler/zydis" // links Zydis
 )
 
 // #cgo CFLAGS: -g -Wall
