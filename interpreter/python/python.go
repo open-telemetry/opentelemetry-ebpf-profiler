@@ -178,10 +178,6 @@ type pythonCodeObject struct {
 	// used as the global ID of the PyCodeObject. It is stored as the FileID
 	// part of the Frame in the DB.
 	fileID libpf.FileID
-
-	// bciSeen is a set of "lastI" or byte code index (bci) values we have
-	// already symbolized and sent to the collection agent
-	bciSeen libpf.Set[uint32]
 }
 
 // readVarint returns a variable length encoded unsigned integer from a location table entry.
@@ -319,33 +315,20 @@ func mapByteCodeIndexToLine(m *pythonCodeObject, bci uint32) uint32 {
 }
 
 func (m *pythonCodeObject) symbolize(symbolReporter reporter.SymbolReporter, bci uint32,
-	getFuncOffset getFuncOffsetFunc, trace *libpf.Trace) error {
-	trace.AppendFrame(libpf.PythonFrame, m.fileID, libpf.AddressOrLineno(bci))
-
-	// Check if this is already symbolized
-	if _, ok := m.bciSeen[bci]; ok {
-		return nil
+	getFuncOffset getFuncOffsetFunc, trace *libpf.Trace) {
+	frameID := libpf.NewFrameID(m.fileID, libpf.AddressOrLineno(bci))
+	trace.AppendFrameID(libpf.PythonFrame, frameID)
+	if !symbolReporter.FrameKnown(frameID) {
+		functionOffset := getFuncOffset(m, bci)
+		lineNo := libpf.SourceLineno(m.firstLineNo + functionOffset)
+		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+			FrameID:        frameID,
+			FunctionName:   m.name,
+			SourceFile:     m.sourceFileName,
+			SourceLine:     lineNo,
+			FunctionOffset: functionOffset,
+		})
 	}
-
-	var lineNo libpf.SourceLineno
-	functionOffset := getFuncOffset(m, bci)
-	lineNo = libpf.SourceLineno(m.firstLineNo + functionOffset)
-
-	symbolReporter.FrameMetadata(m.fileID,
-		libpf.AddressOrLineno(bci), lineNo, functionOffset,
-		m.name, m.sourceFileName)
-
-	// FIXME: The above FrameMetadata might fail, but we have no idea of it
-	// due to the requests being queued and send attempts being done asynchronously.
-	// Until the reporting API gets a way to notify failures, just assume it worked.
-	m.bciSeen[bci] = libpf.Void{}
-
-	log.Debugf("[%d] [%x] %v+%v at %v:%v (bci %d)", len(trace.FrameTypes),
-		m.fileID,
-		m.name, functionOffset,
-		m.sourceFileName, lineNo, bci)
-
-	return nil
 }
 
 // getFuncOffsetFunc provides functionality to return a function offset from a PyCodeObject
@@ -586,7 +569,6 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 		lineTable:      lineTable,
 		ebpfChecksum:   ebpfChecksum,
 		fileID:         fileID,
-		bciSeen:        make(libpf.Set[uint32]),
 	}
 	p.addrToCodeObject.Add(addr, pco)
 	return pco, nil
@@ -611,13 +593,7 @@ func (p *pythonInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	if err != nil {
 		return fmt.Errorf("failed to get python object %x: %v", objectID, err)
 	}
-
-	err = method.symbolize(symbolReporter, lastI, p.getFuncOffset, trace)
-	if err != nil {
-		return fmt.Errorf("failed to symbolize python object %x, lastI %v: %v",
-			objectID, lastI, err)
-	}
-
+	method.symbolize(symbolReporter, lastI, p.getFuncOffset, trace)
 	sfCounter.ReportSuccess()
 	return nil
 }

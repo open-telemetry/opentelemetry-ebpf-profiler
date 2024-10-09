@@ -144,11 +144,6 @@ func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias li
 		return nil, err
 	}
 
-	symbolizedLRU, err := freelru.New[symbolizedKey, libpf.Void](1024, symbolizedKey.Hash32)
-	if err != nil {
-		return nil, err
-	}
-
 	procInfo := C.DotnetProcInfo{
 		version: C.uint(d.version),
 	}
@@ -163,7 +158,6 @@ func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias li
 		ranges:         make(map[libpf.Address]dotnetRangeSection),
 		moduleToPEInfo: make(map[libpf.Address]*peInfo),
 		addrToMethod:   addrToMethod,
-		symbolizedLRU:  symbolizedLRU,
 	}, nil
 }
 

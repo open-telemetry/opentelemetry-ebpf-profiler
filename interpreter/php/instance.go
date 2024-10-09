@@ -50,9 +50,6 @@ type phpFunction struct {
 
 	// lineStart is the first source code line for this function
 	lineStart uint32
-
-	// lineSeen is a set of line numbers we have already seen and symbolized
-	lineSeen libpf.Set[libpf.AddressOrLineno]
 }
 
 type phpInstance struct {
@@ -184,7 +181,6 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 		sourceFileName: sourceFileName,
 		fileID:         fileID,
 		lineStart:      lineStart,
-		lineSeen:       make(libpf.Set[libpf.AddressOrLineno]),
 	}
 	i.addrToFunction.Add(addr, pf)
 	return pf, nil
@@ -213,26 +209,19 @@ func (i *phpInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 		return fmt.Errorf("failed to get php function %x: %v", funcPtr, err)
 	}
 
-	trace.AppendFrame(libpf.PHPFrame, f.fileID, line)
-
-	if _, ok := f.lineSeen[line]; ok {
-		return nil
-	}
-
 	funcOff := uint32(0)
 	if f.lineStart != 0 && libpf.AddressOrLineno(f.lineStart) <= line {
 		funcOff = uint32(line) - f.lineStart
 	}
-	symbolReporter.FrameMetadata(
-		f.fileID, line, libpf.SourceLineno(line), funcOff,
-		f.name, f.sourceFileName)
-
-	f.lineSeen[line] = libpf.Void{}
-
-	log.Debugf("[%d] [%x] %v+%v at %v:%v",
-		len(trace.FrameTypes),
-		f.fileID, f.name, funcOff,
-		f.sourceFileName, line)
+	frameID := libpf.NewFrameID(f.fileID, line)
+	trace.AppendFrameID(libpf.PHPFrame, frameID)
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:        frameID,
+		FunctionName:   f.name,
+		SourceFile:     f.sourceFileName,
+		SourceLine:     libpf.SourceLineno(line),
+		FunctionOffset: funcOff,
+	})
 
 	sfCounter.ReportSuccess()
 	return nil

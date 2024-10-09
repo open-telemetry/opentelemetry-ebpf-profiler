@@ -21,6 +21,11 @@ func (trace *Trace) AppendFrame(ty FrameType, file FileID, addrOrLine AddressOrL
 	trace.AppendFrameFull(ty, file, addrOrLine, 0, 0, 0)
 }
 
+// AppendFrameID appends a frame to the columnar frame array without mapping information.
+func (trace *Trace) AppendFrameID(ty FrameType, frameID FrameID) {
+	trace.AppendFrameFull(ty, frameID.FileID(), frameID.AddressOrLine(), 0, 0, 0)
+}
+
 // AppendFrameFull appends a frame with mapping info to the columnar frame array.
 func (trace *Trace) AppendFrameFull(ty FrameType, file FileID, addrOrLine AddressOrLineno,
 	mappingStart Address, mappingEnd Address, mappingFileOffset uint64) {

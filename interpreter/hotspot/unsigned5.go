@@ -6,8 +6,6 @@ package hotspot // import "go.opentelemetry.io/ebpf-profiler/interpreter/hotspot
 import (
 	"fmt"
 	"io"
-
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // unsigned5Decoder is a decoder for UNSIGNED5 based byte streams.
@@ -88,19 +86,19 @@ func (d *unsigned5Decoder) decodeLineTableEntry(bci, line *uint32) error {
 
 // mapByteCodeIndexToLine decodes a line table to map a given Byte Code Index (BCI)
 // to a line number
-func (d *unsigned5Decoder) mapByteCodeIndexToLine(bci int32) libpf.SourceLineno {
+func (d *unsigned5Decoder) mapByteCodeIndexToLine(bci uint32) uint32 {
 	// The line numbers array is a short array of 2-tuples [start_pc, line_number].
 	// Not necessarily sorted. Encoded as delta-encoded numbers.
 	var curBci, curLine, bestBci, bestLine uint32
 
 	for d.decodeLineTableEntry(&curBci, &curLine) == nil {
-		if curBci == uint32(bci) {
-			return libpf.SourceLineno(curLine)
+		if curBci == bci {
+			return curLine
 		}
-		if curBci >= bestBci && curBci < uint32(bci) {
+		if curBci >= bestBci && curBci < bci {
 			bestBci = curBci
 			bestLine = curLine
 		}
 	}
-	return libpf.SourceLineno(bestLine)
+	return bestLine
 }
