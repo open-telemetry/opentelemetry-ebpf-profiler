@@ -218,6 +218,7 @@ static inline PerCPURecord *get_pristine_per_cpu_record()
 
   Trace *trace = &record->trace;
   trace->kernel_stack_id = -1;
+  trace->custom_labels_hash = 0;
   trace->stack_len = 0;
   trace->pid = 0;
   trace->tid = 0;
