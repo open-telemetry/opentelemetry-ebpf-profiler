@@ -26,7 +26,9 @@ func checkForMaccessPatch(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 
 	code, err := loadKernelCode(coll, maps, faultyFunc.Address)
 	if err != nil {
-		log.Warnf("Failed to load code for %s: %v", faultyFunc.Name, err)
+		log.Warnf("Failed to load code for %s: %v.\n"+
+			"Syscall tracepoints are not working on this system, so whether the kernel is patched could not be determined. "+
+			"Either use a kernel configured with syscall tracepoints, or upgrade to kernel version 6.4 or higher.", faultyFunc.Name, err)
 		return false
 	}
 
