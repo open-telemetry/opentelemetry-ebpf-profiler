@@ -31,37 +31,36 @@ eBPF.
   optimizations and offer a higher precision of function call chains.
 
 ## Building
+## Quick Start
+If you'd like to quickly test the agent, you can skip to the ["Visualizing data locally"](https://github.com/open-telemetry/opentelemetry-ebpf-profiler?tab=readme-ov-file#visualizing-data-locally) section and launch devfiler. From there, follow the download links for prebuilt agent binaries.
 
-> [!NOTE]
->
-> If you simply wish to take the agent for a spin with minimal effort, you can
-> also immediately jump to the ["Visualizing data locally"
-> section](#visualizing-data-locally), launch devfiler and follow the download
-> links for agent binaries within its "Add data" dialogue.
+## Platform Requirements
+The agent can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
 
-The agent can be built without affecting your environment by using the provided
-`make` targets. You need to have `docker` installed, though.
-Builds on amd64 and arm64 architectures are supported.
+ For **Linux**, the following steps apply:
+  1. Build the Docker image containing the build environment:
+     ```sh
+     make docker-image
+     ```
+  2. Build the agent for your current machine's architecture:
+     ```sh
+     make agent
+     ```
+  3. To cross-complie for a different architecture (e.g. arm64):
+     ```sh
+     make agent TARGET_ARCH=arm64
+     ```
+The resulting binary will be named <opentelemetry-ebpf-profiler> in the current directory.
 
-The first step is to build the Docker image that contains the build environment:
+## Other OSes
+Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run the agent. Ensure the appropriate architecture is specified if using cross-compilation. Use the same make targets as above after the Linux environment is configured in the VM.
+
+## Alternative Build (Without Docker)
+You can build the agent without Docker by directly installing the dependencies listed in the Dockerfile. Once dependencies are set up, simply run:
 ```sh
-make docker-image
+make
 ```
-
-Then, you can build the agent:
-```sh
-# Build for architecture of current machine:
-make agent
-
-# OR, cross-compile an agent for another architecture:
-make agent TARGET_ARCH=arm64 # accepted: amd64, arm64
-```
-
-The resulting binary will be in the current directory as `opentelemetry-ebpf-profiler`.
-
-Alternatively, you can build without Docker. Please see the `Dockerfile` for required dependencies.
-
-After installing the dependencies, just run `make` to build.
+This will build the profiler natively on your machine.
 
 ## Running
 
