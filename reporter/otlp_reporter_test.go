@@ -3,8 +3,9 @@ package reporter
 import (
 	"testing"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1experimental"
 )
@@ -135,7 +136,11 @@ func TestGetSampleAttributes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			indices := make([][]uint64, 0)
 			for _, k := range tc.k {
-				indices = append(indices, getSampleAttributes(tc.profile, k, tc.attributeMap))
+				indices = append(indices, addProfileAttributes(tc.profile, []attrKeyValue{
+					{key: string(semconv.ContainerIDKey), value: k.containerID},
+					{key: string(semconv.ThreadNameKey), value: k.comm},
+					{key: string(semconv.ServiceNameKey), value: k.apmServiceName},
+				}, tc.attributeMap))
 			}
 			require.Equal(t, tc.expectedIndices, indices)
 			require.Equal(t, tc.expectedAttributeTable, tc.profile.AttributeTable)

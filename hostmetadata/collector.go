@@ -1,16 +1,13 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
-package hostmetadata
+package hostmetadata // import "go.opentelemetry.io/ebpf-profiler/hostmetadata"
 
 import (
 	"context"
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 // Collector implements host metadata collection and reporting

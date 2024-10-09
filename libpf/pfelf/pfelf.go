@@ -1,12 +1,9 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 // package pfelf implements functions for processing of ELF files and extracting data from
 // them. This file provides convenience functions for golang debug/elf standard library.
-package pfelf
+package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 import (
 	"bytes"
@@ -20,7 +17,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // SafeOpenELF opens the given ELF file in a safely way in that

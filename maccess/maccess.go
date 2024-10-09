@@ -1,8 +1,5 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 // Package maccess provides functionality to check if a certain bug in
 // copy_from_user_nofault is patched.
@@ -12,4 +9,4 @@
 // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=d319f344561de23e810515d109c7278919bff7b0
 //
 //nolint:lll
-package maccess
+package maccess // import "go.opentelemetry.io/ebpf-profiler/maccess"

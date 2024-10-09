@@ -1,11 +1,8 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 // support maps the definitions from headers in the C world into a nice go way
-package support
+package support // import "go.opentelemetry.io/ebpf-profiler/support"
 
 /*
 #include "./ebpf/types.h"

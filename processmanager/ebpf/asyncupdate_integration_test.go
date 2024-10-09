@@ -1,10 +1,7 @@
 //go:build integration && linux
 
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 package ebpf
 
@@ -15,8 +12,8 @@ import (
 	"github.com/cilium/ebpf"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/rlimit"
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/rlimit"
 
 	"github.com/stretchr/testify/require"
 )

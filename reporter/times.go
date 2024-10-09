@@ -1,15 +1,12 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
-package reporter
+package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"time"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/times"
+	"go.opentelemetry.io/ebpf-profiler/times"
 )
 
 // Compile time check to make sure config.Times satisfies the interfaces.

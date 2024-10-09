@@ -73,12 +73,22 @@ ebpf:
 	$(MAKE) -j$(shell nproc) $(EBPF_FLAGS) -C support/ebpf
 
 GOLANGCI_LINT_VERSION = "v1.60.1"
-lint: generate
+lint: generate vanity-import-check
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
 
 linter-version:
 	@echo $(GOLANGCI_LINT_VERSION)
+
+.PHONY: vanity-import-check
+vanity-import-check:
+	@go install github.com/jcchavezs/porto/cmd/porto@latest
+	@porto --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
+
+.PHONY: vanity-import-fix
+vanity-import-fix: $(PORTO)
+	@go install github.com/jcchavezs/porto/cmd/porto@latest
+	@porto --include-internal -w .
 
 test: generate ebpf test-deps
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
@@ -119,5 +129,5 @@ legal:
 	@go-licenses save --force . --save_path=LICENSES
 	@./legal/add-non-go.sh legal/non-go-dependencies.json LICENSES
 
-codespell: 
+codespell:
 	@codespell

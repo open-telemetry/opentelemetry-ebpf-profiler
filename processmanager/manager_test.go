@@ -1,8 +1,5 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 package processmanager
 
@@ -18,21 +15,21 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/host"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/interpreter"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/lpm"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/metrics"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind"
-	sdtypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/stackdeltatypes"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
-	pmebpf "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager/ebpf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/remotememory"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
-	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/traceutil"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/lpm"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
+	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/process"
+	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
+	"go.opentelemetry.io/ebpf-profiler/traceutil"
+	"go.opentelemetry.io/ebpf-profiler/util"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -254,8 +251,7 @@ type symbolReporterMockup struct{}
 
 func (s *symbolReporterMockup) ReportFallbackSymbol(_ libpf.FrameID, _ string) {}
 
-func (s *symbolReporterMockup) ExecutableMetadata(_ libpf.FileID, _, _ string,
-	_ libpf.InterpreterType, _ reporter.ExecutableOpener) {
+func (s *symbolReporterMockup) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
 }
 
 func (s *symbolReporterMockup) FrameMetadata(_ libpf.FileID, _ libpf.AddressOrLineno,

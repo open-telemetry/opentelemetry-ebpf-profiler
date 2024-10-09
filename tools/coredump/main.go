@@ -1,8 +1,5 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 // coredump provides a tool for extracting stack traces from coredumps.
 // It also includes a test suite to unit test profiling agent components against
@@ -19,9 +16,9 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/modulestore"
 	"github.com/peterbourgon/ff/v3/ffcli"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 )
 
 // moduleStoreS3Bucket defines the S3 bucket used for the module store.

@@ -1,8 +1,5 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 // Implements a command-line utility for compressing and decompressing zstpak files.
 
@@ -14,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	zstpak "github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/zstpak/lib"
+	zstpak "go.opentelemetry.io/ebpf-profiler/tools/zstpak/lib"
 )
 
 func tryMain() error {

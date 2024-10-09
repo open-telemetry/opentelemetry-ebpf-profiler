@@ -1,19 +1,16 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
-package tpbase
+package tpbase // import "go.opentelemetry.io/ebpf-profiler/tpbase"
 
 import (
 	"errors"
 	"fmt"
 	"regexp"
 
-	ah "github.com/open-telemetry/opentelemetry-ebpf-profiler/armhelpers"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/stringutil"
+	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/stringutil"
 
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
@@ -126,6 +123,7 @@ const (
 	TSDElementBase
 	TSDIndex
 	TSDValue
+	TSDConstant
 )
 
 type regState struct {
@@ -172,12 +170,27 @@ func ExtractTSDInfoARM64(code []byte) (TSDInfo, error) {
 		resetReg = destReg
 		switch inst.Op {
 		case aa.MOV:
-			// Track register moves
-			srcReg, ok := ah.Xreg2num(inst.Args[1])
-			if !ok {
-				continue
+			switch val := inst.Args[1].(type) {
+			case aa.Imm64:
+				regs[destReg] = regState{
+					status:     TSDConstant,
+					offset:     int(val.Imm),
+					multiplier: 1,
+				}
+			case aa.Imm:
+				regs[destReg] = regState{
+					status:     TSDConstant,
+					offset:     int(val.Imm),
+					multiplier: 1,
+				}
+			default:
+				// Track register moves
+				srcReg, ok := ah.Xreg2num(inst.Args[1])
+				if !ok {
+					continue
+				}
+				regs[destReg] = regs[srcReg]
 			}
-			regs[destReg] = regs[srcReg]
 		case aa.MRS:
 			// MRS X1, S3_3_C13_C0_2
 			if inst.Args[1].String() == "S3_3_C13_C0_2" {
@@ -291,7 +304,10 @@ func ExtractTSDInfoARM64(code []byte) (TSDInfo, error) {
 					regStr = fields[0]
 					n, err := fmt.Sscanf(fields[1], " LSL #%v", &shift)
 					if n != 1 || err != nil {
-						continue
+						n, err := fmt.Sscanf(fields[1], " UXTW #%v", &shift)
+						if n != 1 || err != nil {
+							continue
+						}
 					}
 				}
 				reg, ok := ah.DecodeRegister(regStr)
@@ -308,6 +324,12 @@ func ExtractTSDInfoARM64(code []byte) (TSDInfo, error) {
 						offset:     regs[srcReg].offset + regs[srcReg2].offset<<shift,
 						multiplier: regs[srcReg2].multiplier << shift,
 						indirect:   regs[srcReg].indirect,
+					}
+				} else if regs[srcReg].status == TSDConstant && regs[srcReg2].status == TSDIndex {
+					regs[destReg] = regState{
+						status:     TSDIndex,
+						offset:     regs[srcReg].offset + regs[srcReg2].offset<<shift,
+						multiplier: regs[srcReg2].multiplier << shift,
 					}
 				} else {
 					continue

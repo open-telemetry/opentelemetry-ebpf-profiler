@@ -1,12 +1,9 @@
-/*
- * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
- * or more contributor license agreements. Licensed under the Apache License 2.0.
- * See the file "LICENSE" for details.
- */
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 // Package hash provides the same hash primitives as used by the eBPF.
 // This file should be kept in sync with the eBPF tracemgmt.h.
-package hash
+package hash // import "go.opentelemetry.io/ebpf-profiler/libpf/hash"
 
 // Uint32 computes a hash of a 32-bit uint using the finalizer function for Murmur.
 // 32-bit via https://en.wikipedia.org/wiki/MurmurHash#Algorithm

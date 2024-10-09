@@ -210,7 +210,7 @@ the process that triggered it. You'll have to prepare your environment in the
 same manner as described in the ["Option 1"][opt1] section.
 
 [opt1]: #option-1-using-coredump-new
-[macro]: https://github.com/elastic/otel-profiling-agent/blob/319d980b2406f40e68e850f429c38e28aed69e36/support/ebpf/bpfdefs.h#L116
+[macro]: https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/319d980b2406f40e68e850f429c38e28aed69e36/support/ebpf/bpfdefs.h#L116
 
 ## Extracting coredumps or modules
 
