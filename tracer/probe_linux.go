@@ -10,17 +10,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
-	"strings"
-
-	"go.opentelemetry.io/ebpf-profiler/rlimit"
-	"go.opentelemetry.io/ebpf-profiler/util"
 
 	"golang.org/x/sys/unix"
-
-	cebpf "github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/asm"
-	log "github.com/sirupsen/logrus"
 )
 
 // ProbeBPFSyscall checks if the syscall EBPF is available on the system.
