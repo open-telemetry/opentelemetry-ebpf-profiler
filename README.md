@@ -52,8 +52,8 @@ The agent can be built with the provided make targets. Docker is required for co
      ```
 The resulting binary will be named <opentelemetry-ebpf-profiler> in the current directory.
 
-## macOS
-Since the profiler is Linux-only, macOS users need to set up a Linux VM to build and run the agent. Ensure the appropriate architecture is specified if using cross-compilation. Use the same make targets as above after the Linux environment is configured in the VM.
+## Other OSes
+Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run the agent. Ensure the appropriate architecture is specified if using cross-compilation. Use the same make targets as above after the Linux environment is configured in the VM.
 
 ## Alternative Build (Without Docker)
 You can build the agent without Docker by directly installing the dependencies listed in the Dockerfile. Once dependencies are set up, simply run:
