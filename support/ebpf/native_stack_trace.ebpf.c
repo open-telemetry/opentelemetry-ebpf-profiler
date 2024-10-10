@@ -747,7 +747,11 @@ static inline ErrorCode get_usermode_regs(struct pt_regs *ctx,
 
 #endif
 
+#ifdef EXTERNAL_TRIGGER
+SEC("kprobe/unwind_native")
+#else
 SEC("perf_event/unwind_native")
+#endif
 int unwind_native(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -857,7 +861,11 @@ exit:
   return -1;
 }
 
+#ifdef EXTERNAL_TRIGGER
+SEC("kprobe/native_tracer_entry")
+#else
 SEC("perf_event/native_tracer_entry")
+#endif
 int native_tracer_entry(struct bpf_perf_event_data *ctx) {
   return collect_trace((struct pt_regs*) &ctx->regs);
 }

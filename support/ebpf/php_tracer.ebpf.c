@@ -181,8 +181,11 @@ int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted) {
   record->phpUnwindState.zend_execute_data = execute_data;
   return unwinder;
 }
-
+#ifdef EXTERNAL_TRIGGER
+SEC("kprobe/unwind_php")
+#else
 SEC("perf_event/unwind_php")
+#endif
 int unwind_php(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)

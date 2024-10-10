@@ -216,7 +216,11 @@ save_state:
   return ERR_OK;
 }
 
+#ifdef EXTERNAL_TRIGGER
+SEC("kprobe/unwind_ruby")
+#else
 SEC("perf_event/unwind_ruby")
+#endif
 int unwind_ruby(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)

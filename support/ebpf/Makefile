@@ -5,6 +5,13 @@ LLC ?= llc-16
 
 DEBUG_FLAGS = -DOPTI_DEBUG -g
 
+# Check if EXTERNAL flag is set
+ifdef EXTERNAL
+    EXTERNAL_FLAG = -DEXTERNAL_TRIGGER
+else
+    EXTERNAL_FLAG =
+endif
+
 # Detect native architecture and translate to GOARCH.
 NATIVE_ARCH := $(shell uname -m)
 ifeq ($(NATIVE_ARCH),x86_64)
@@ -37,7 +44,8 @@ FLAGS=$(TARGET_FLAGS) \
 	-Wno-unused-label \
 	-Wno-unused-parameter \
 	-Wno-sign-compare \
-	-fno-stack-protector
+	-fno-stack-protector \
+	$(EXTERNAL_FLAG)
 
 SRCS := $(wildcard *.ebpf.c)
 OBJS := $(SRCS:.c=.$(TARGET_ARCH).o)

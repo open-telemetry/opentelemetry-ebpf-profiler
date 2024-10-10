@@ -356,7 +356,11 @@ int walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo) {
 // unwind_perl is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // Perl stack frames to the trace object for the current CPU.
+#ifdef EXTERNAL_TRIGGER
+SEC("kprobe/unwind_perl")
+#else
 SEC("perf_event/unwind_perl")
+#endif
 int unwind_perl(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {

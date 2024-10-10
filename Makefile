@@ -32,6 +32,14 @@ export GOARCH = $(TARGET_ARCH)
 export CC = $(ARCH_PREFIX)gcc
 export OBJCOPY = $(ARCH_PREFIX)objcopy
 
+# Add EXTERNAL flag support
+ifdef EXTERNAL
+    export EXTERNAL
+    GO_TAGS := osusergo,netgo,external_trigger
+else
+    GO_TAGS := osusergo,netgo
+endif
+
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
 COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
 
@@ -44,7 +52,7 @@ LDFLAGS := -X github.com//open-telemetry/opentelemetry-ebpf-profiler/vc.version=
 	-X github.com/open-telemetry/opentelemetry-ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
 	-extldflags=-static
 
-GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)" -tags osusergo,netgo
+GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)" -tags $(GO_TAGS)
 
 all: generate ebpf binary
 
@@ -63,7 +71,7 @@ binary:
 	go build $(GO_FLAGS)
 
 ebpf:
-	$(MAKE) -j$(shell nproc) -C support/ebpf
+	$(MAKE) -j$(shell nproc) -C support/ebpf $(if $(EXTERNAL),EXTERNAL=1,)
 
 GOLANGCI_LINT_VERSION = "v1.60.1"
 lint: generate vanity-import-check
@@ -111,7 +119,7 @@ docker-image:
 
 agent:
 	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
-	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
+	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP) $(if $(EXTERNAL),EXTERNAL=1)"
 
 legal:
 	@go install github.com/google/go-licenses@latest

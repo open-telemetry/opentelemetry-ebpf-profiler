@@ -244,7 +244,11 @@ push_frame:
 // unwind_dotnet is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // dotnet stack frames to the trace object for the current CPU.
+#ifdef EXTERNAL_TRIGGER
+SEC("kprobe/unwind_dotnet")
+#else
 SEC("perf_event/unwind_dotnet")
+#endif
 int unwind_dotnet(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {

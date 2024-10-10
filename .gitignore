@@ -5,3 +5,4 @@
 /go
 opentelemetry-ebpf-profiler
 ci-kernels
+ebpf-profiler

@@ -884,7 +884,11 @@ static ErrorCode hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo 
 // unwind_hotspot is the entry point for tracing when invoked from the native tracer
 // and it recursive unwinds all HotSpot frames and then jumps back to unwind further
 // native frames that follow.
+#ifdef EXTERNAL_TRIGGER
+SEC("kprobe/unwind_hotspot")
+#else
 SEC("perf_event/unwind_hotspot")
+#endif
 int unwind_hotspot(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
