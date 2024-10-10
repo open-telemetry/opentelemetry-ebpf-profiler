@@ -57,7 +57,7 @@ jobs:
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Tests
-        run: make test TARGET_ARCH=${{ matrix.target_arch }}
+        run: make -j$(nproc) test TARGET_ARCH=${{ matrix.target_arch }}
 
   build-integration-test-binaries:
     name: Build integration test binaries (${{ matrix.target_arch }})
@@ -72,7 +72,7 @@ jobs:
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Prepare integration test binaries for qemu tests
-        run: make integration-test-binaries TARGET_ARCH=${{ matrix.target_arch }}
+        run: make -j$(nproc) integration-test-binaries TARGET_ARCH=${{ matrix.target_arch }}
       - name: Upload integration test binaries
         uses: actions/upload-artifact@v4
         with:
