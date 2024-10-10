@@ -71,7 +71,7 @@ binary:
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 ebpf:
-	$(MAKE) -j$(shell nproc) $(EBPF_FLAGS) -C support/ebpf
+	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
 GOLANGCI_LINT_VERSION = "v1.60.1"
 lint: generate vanity-import-check
