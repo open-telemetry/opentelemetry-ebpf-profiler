@@ -57,7 +57,7 @@ jobs:
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Tests
-        run: make -j$(nproc) test TARGET_ARCH=${{ matrix.target_arch }}
+        run: make test TARGET_ARCH=${{ matrix.target_arch }}
 
   build-integration-test-binaries:
     name: Build integration test binaries (${{ matrix.target_arch }})
