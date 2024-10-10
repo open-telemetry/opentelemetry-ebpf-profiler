@@ -46,6 +46,7 @@ The agent can be built with the provided make targets. Docker is required for co
      ```sh
      make agent
      ```
+     Or `make debug-agent` for debug build.
   3. To cross-complie for a different architecture (e.g. arm64):
      ```sh
      make agent TARGET_ARCH=arm64

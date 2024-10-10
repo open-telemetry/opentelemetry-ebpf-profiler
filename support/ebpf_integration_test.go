@@ -26,7 +26,7 @@ func TestEbpf(t *testing.T) {
 	defer restoreRlimit()
 
 	var coll *cebpf.CollectionSpec
-	coll, err = LoadCollectionSpec()
+	coll, err = LoadCollectionSpec(false)
 	require.NoError(t, err)
 
 	tracepointProbe, err := cebpf.NewProgram(coll.Programs["tracepoint__sys_enter_read"])
