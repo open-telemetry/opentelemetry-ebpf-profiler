@@ -1,4 +1,4 @@
-.PHONY: all all-common binary clean ebpf generate test test-deps protobuf docker-image agent legal \
+.PHONY: all all-common clean ebpf generate test test-deps protobuf docker-image agent legal \
 	integration-test-binaries codespell lint linter-version debug debug-agent
 
 SHELL := /usr/bin/env bash
