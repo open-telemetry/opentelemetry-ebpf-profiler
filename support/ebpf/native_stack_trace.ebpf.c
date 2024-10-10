@@ -863,7 +863,5 @@ BPF_PROBE(native_tracer_entry)
 // int native_tracer_entry(REAL_struct pt_regs *ctx)
 int native_tracer_entry(struct bpf_perf_event_data *ctx)
 {
-  // struct pt_regs *regs = GET_REGS(ctx);
-  // return collect_trace(regs);
   return collect_trace((struct pt_regs*) &ctx->regs);
 }
