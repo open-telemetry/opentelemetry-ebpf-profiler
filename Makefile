@@ -61,7 +61,7 @@ generate:
 	go generate ./...
 
 ebpf:
-	$(MAKE) -j$(shell nproc) -C support/ebpf
+	$(MAKE) -C support/ebpf
 
 GOLANGCI_LINT_VERSION = "v1.60.1"
 lint: generate vanity-import-check
