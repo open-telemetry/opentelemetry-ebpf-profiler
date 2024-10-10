@@ -15,7 +15,6 @@ import (
 	"github.com/cilium/ebpf/perf"
 	log "github.com/sirupsen/logrus"
 
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -55,11 +54,6 @@ func (t *Tracer) processPIDEvents(ctx context.Context) {
 			return
 		}
 	}
-}
-
-// Expose pidEvents channel to allow external components to send PIDs to the Tracer.
-func (t *Tracer) PIDEvents() chan libpf.PID {
-	return t.pidEvents
 }
 
 // handleGenericPID triggers immediate processing of eBPF-reported PIDs.
