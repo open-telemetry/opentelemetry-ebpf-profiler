@@ -218,7 +218,7 @@ save_state:
 }
 
 BPF_PROBE(unwind_ruby)
-int unwind_ruby(BPF_CONTEXT)
+int unwind_ruby(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)

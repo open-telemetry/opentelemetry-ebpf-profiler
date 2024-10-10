@@ -278,7 +278,7 @@ ErrorCode get_PyFrame(const PyProcInfo *pyinfo, void **frame) {
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // Python stack frames to the trace object for the current CPU.
 BPF_PROBE(unwind_python)
-int unwind_python(BPF_CONTEXT)
+int unwind_python(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)

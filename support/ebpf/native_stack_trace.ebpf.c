@@ -749,7 +749,7 @@ static inline ErrorCode get_usermode_regs(struct pt_regs *ctx,
 #endif
 
 BPF_PROBE(unwind_native)
-int unwind_native(BPF_CONTEXT)
+int unwind_native(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -860,8 +860,10 @@ exit:
 }
 
 BPF_PROBE(native_tracer_entry)
-int native_tracer_entry(BPF_CONTEXT)
+// int native_tracer_entry(REAL_struct pt_regs *ctx)
+int native_tracer_entry(struct bpf_perf_event_data *ctx)
 {
-  struct pt_regs *regs = GET_REGS(ctx);
-  return collect_trace(regs);
+  // struct pt_regs *regs = GET_REGS(ctx);
+  // return collect_trace(regs);
+  return collect_trace((struct pt_regs*) &ctx->regs);
 }

@@ -886,7 +886,7 @@ static ErrorCode hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo 
 // and it recursive unwinds all HotSpot frames and then jumps back to unwind further
 // native frames that follow.
 BPF_PROBE(unwind_hotspot)
-int unwind_hotspot(BPF_CONTEXT)
+int unwind_hotspot(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)

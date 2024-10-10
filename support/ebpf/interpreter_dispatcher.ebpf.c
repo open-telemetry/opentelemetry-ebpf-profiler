@@ -174,7 +174,7 @@ void maybe_add_apm_info(Trace *trace) {
 }
 
 BPF_PROBE(unwind_stop)
-int unwind_stop(BPF_CONTEXT)
+int unwind_stop(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)

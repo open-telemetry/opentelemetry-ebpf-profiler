@@ -246,7 +246,7 @@ push_frame:
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // dotnet stack frames to the trace object for the current CPU.
 BPF_PROBE(unwind_dotnet)
-int unwind_dotnet(BPF_CONTEXT)
+int unwind_dotnet(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {

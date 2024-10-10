@@ -286,7 +286,7 @@ frame_done:
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // V8 stack frames to the trace object for the current CPU.
 BPF_PROBE(unwind_v8)
-int unwind_v8(BPF_CONTEXT)
+int unwind_v8(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
