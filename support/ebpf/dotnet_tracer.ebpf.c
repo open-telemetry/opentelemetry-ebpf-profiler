@@ -8,6 +8,7 @@
 #include "bpfdefs.h"
 #include "tracemgmt.h"
 #include "types.h"
+#include "helpers.h"
 
 // The number of dotnet frames to unwind per frame-unwinding eBPF program.
 #define DOTNET_FRAMES_PER_PROGRAM   5
@@ -244,12 +245,9 @@ push_frame:
 // unwind_dotnet is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // dotnet stack frames to the trace object for the current CPU.
-#ifdef EXTERNAL_TRIGGER
-SEC("kprobe/unwind_dotnet")
-#else
-SEC("perf_event/unwind_dotnet")
-#endif
-int unwind_dotnet(struct pt_regs *ctx) {
+BPF_PROBE(unwind_dotnet)
+int unwind_dotnet(BPF_CONTEXT)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
     return -1;

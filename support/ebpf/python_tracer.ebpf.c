@@ -5,6 +5,7 @@
 #include "types.h"
 #include "tsd.h"
 #include "errors.h"
+#include "helpers.h"
 
 // The number of Python frames to unwind per frame-unwinding eBPF program. If
 // we start running out of instructions in the walk_python_stack program, one
@@ -276,12 +277,9 @@ ErrorCode get_PyFrame(const PyProcInfo *pyinfo, void **frame) {
 // unwind_python is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // Python stack frames to the trace object for the current CPU.
-#ifdef EXTERNAL_TRIGGER
-SEC("kprobe/unwind_python")
-#else
-SEC("perf_event/unwind_python")
-#endif
-int unwind_python(struct pt_regs *ctx) {
+BPF_PROBE(unwind_python)
+int unwind_python(BPF_CONTEXT)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;

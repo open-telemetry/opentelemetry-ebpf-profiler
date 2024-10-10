@@ -6,6 +6,7 @@
 #include "types.h"
 #include "tracemgmt.h"
 #include "tsd.h"
+#include "helpers.h"
 
 // Begin shared maps
 
@@ -172,8 +173,9 @@ void maybe_add_apm_info(Trace *trace) {
               trace->apm_transaction_id.as_int, corr_buf.trace_flags);
 }
 
-SEC("perf_event/unwind_stop")
-int unwind_stop(struct pt_regs *ctx) {
+BPF_PROBE(unwind_stop)
+int unwind_stop(BPF_CONTEXT)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;
