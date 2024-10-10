@@ -46,6 +46,8 @@ LDFLAGS := -X github.com//open-telemetry/opentelemetry-ebpf-profiler/vc.version=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)" -tags osusergo,netgo
 
+MAKEFLAGS += -j$(shell nproc)
+
 all: generate ebpf
 	go build $(GO_FLAGS)
 
