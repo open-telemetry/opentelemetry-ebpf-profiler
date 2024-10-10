@@ -1,4 +1,4 @@
-.PHONY: all all-common binary clean ebpf generate test test-deps protobuf docker-image agent legal \
+.PHONY: all all-common clean ebpf generate test test-deps protobuf docker-image agent legal \
 	integration-test-binaries codespell lint linter-version
 
 SHELL := /usr/bin/env bash
@@ -46,7 +46,10 @@ LDFLAGS := -X github.com//open-telemetry/opentelemetry-ebpf-profiler/vc.version=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)" -tags osusergo,netgo
 
-all: generate ebpf binary
+MAKEFLAGS += -j$(shell nproc)
+
+all: generate ebpf
+	go build $(GO_FLAGS)
 
 # Removes the go build cache and binaries in the current project
 clean:
@@ -59,11 +62,8 @@ clean:
 generate:
 	go generate ./...
 
-binary:
-	go build $(GO_FLAGS)
-
 ebpf:
-	$(MAKE) -j$(shell nproc) -C support/ebpf
+	$(MAKE) -C support/ebpf
 
 GOLANGCI_LINT_VERSION = "v1.60.1"
 lint: generate vanity-import-check
