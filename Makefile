@@ -49,7 +49,8 @@ EBPF_FLAGS :=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 
-all: generate ebpf binary
+all: generate ebpf
+	go build $(GO_FLAGS)
 
 debug: GO_TAGS := $(GO_TAGS),debugtracer
 debug: EBPF_FLAGS += debug
