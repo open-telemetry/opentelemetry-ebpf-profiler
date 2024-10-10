@@ -49,6 +49,8 @@ EBPF_FLAGS :=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 
+MAKEFLAGS += -j$(shell nproc)
+
 all: generate ebpf
 	go build $(GO_FLAGS)
 
