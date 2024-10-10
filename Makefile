@@ -46,7 +46,8 @@ LDFLAGS := -X github.com//open-telemetry/opentelemetry-ebpf-profiler/vc.version=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)" -tags osusergo,netgo
 
-all: generate ebpf binary
+all: generate ebpf
+	go build $(GO_FLAGS)
 
 # Removes the go build cache and binaries in the current project
 clean:
@@ -58,9 +59,6 @@ clean:
 
 generate:
 	go generate ./...
-
-binary:
-	go build $(GO_FLAGS)
 
 ebpf:
 	$(MAKE) -j$(shell nproc) -C support/ebpf
