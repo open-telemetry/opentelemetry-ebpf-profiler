@@ -113,9 +113,6 @@ type OTLPReporter struct {
 	// hostmetadata stores metadata that is sent out with every request.
 	hostmetadata *lru.SyncedLRU[string, string]
 
-	// fallbackSymbols keeps track of FrameID to their symbol.
-	fallbackSymbols *lru.SyncedLRU[libpf.FrameID, string]
-
 	// executables stores metadata for executables.
 	executables *lru.SyncedLRU[libpf.FileID, execInfo]
 
@@ -198,14 +195,6 @@ func (r *OTLPReporter) ReportFramesForTrace(_ *libpf.Trace) {}
 func (r *OTLPReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *TraceEventMeta) {
 }
 
-// ReportFallbackSymbol enqueues a fallback symbol for reporting, for a given frame.
-func (r *OTLPReporter) ReportFallbackSymbol(frameID libpf.FrameID, symbol string) {
-	if _, exists := r.fallbackSymbols.Peek(frameID); exists {
-		return
-	}
-	r.fallbackSymbols.Add(frameID, symbol)
-}
-
 // ExecutableMetadata accepts a fileID with the corresponding filename
 // and caches this information.
 func (r *OTLPReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
@@ -241,18 +230,28 @@ func (r *OTLPReporter) FrameMetadata(args *FrameMetadataArgs) {
 		defer frameMapLock.WUnlock(&frameMap)
 
 		sourceFile := args.SourceFile
-		if sourceFile == "" {
-			// The new SourceFile may be empty, and we don't want to overwrite
-			// an existing filePath with it.
+		sourceLine := args.SourceLine
+		functionOffset := args.FunctionOffset
+		if sourceFile == "" || sourceLine == 0 || functionOffset == 0 {
+			// Some of the new metadata fields may be unset, and we don't want to overwrite
+			// existing data with it.
 			if s, exists := (*frameMap)[addressOrLine]; exists {
-				sourceFile = s.filePath
+				if sourceFile == "" {
+					sourceFile = s.filePath
+				}
+				if sourceLine == 0 {
+					sourceLine = s.lineNumber
+				}
+				if functionOffset == 0 {
+					functionOffset = s.functionOffset
+				}
 			}
 		}
 
 		(*frameMap)[addressOrLine] = sourceInfo{
-			lineNumber:     args.SourceLine,
+			lineNumber:     sourceLine,
 			filePath:       sourceFile,
-			functionOffset: args.FunctionOffset,
+			functionOffset: functionOffset,
 			functionName:   args.FunctionName,
 		}
 		return
@@ -308,12 +307,6 @@ func (r *OTLPReporter) GetMetrics() Metrics {
 
 // Start sets up and manages the reporting connection to a OTLP backend.
 func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
-	fallbackSymbols, err := lru.NewSynced[libpf.FrameID, string](cfg.CacheSize,
-		libpf.FrameID.Hash32)
-	if err != nil {
-		return nil, err
-	}
-
 	executables, err := lru.NewSynced[libpf.FileID, execInfo](cfg.CacheSize, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err
@@ -353,7 +346,6 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
 		client:                  nil,
 		rpcStats:                NewStatsHandler(),
-		fallbackSymbols:         fallbackSymbols,
 		executables:             executables,
 		frames:                  frames,
 		hostmetadata:            hostmetadata,
@@ -501,9 +493,7 @@ func (r *OTLPReporter) getResource() *resource.Resource {
 func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS uint64) {
 	traceEvents := r.traceEvents.WLock()
 	samples := maps.Clone(*traceEvents)
-	for key := range *traceEvents {
-		delete(*traceEvents, key)
-	}
+	clear(*traceEvents)
 	r.traceEvents.WUnlock(&traceEvents)
 
 	// stringMap is a temporary helper that will build the StringTable.
@@ -546,7 +536,6 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 
 	// Temporary lookup to reference existing Mappings.
 	fileIDtoMapping := make(map[libpf.FileID]uint64)
-	frameIDtoFunction := make(map[libpf.FrameID]uint64)
 
 	for traceKey, traceInfo := range samples {
 		sample := &profiles.Sample{}
@@ -618,31 +607,6 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 					})
 				}
 				loc.MappingIndex = locationMappingIndex
-			case libpf.KernelFrame:
-				// Reconstruct frameID
-				frameID := libpf.NewFrameID(traceInfo.files[i], traceInfo.linenos[i])
-				// Store Kernel frame information as a Line message:
-				line := &profiles.Line{}
-
-				if tmpFunctionIndex, exists := frameIDtoFunction[frameID]; exists {
-					line.FunctionIndex = tmpFunctionIndex
-				} else {
-					symbol, exists := r.fallbackSymbols.Get(frameID)
-					if !exists {
-						// TODO: choose a proper default value if the kernel symbol was not
-						// reported yet.
-						symbol = "UNKNOWN"
-					}
-
-					// Indicates "no source filename" for kernel frames.
-					line.FunctionIndex = createFunctionEntry(funcMap,
-						symbol, "")
-				}
-				loc.Line = append(loc.Line, line)
-
-				// To be compliant with the protocol, generate a placeholder mapping entry.
-				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping, stringMap,
-					profile, traceInfo.files[i])
 			case libpf.AbortFrame:
 				// Next step: Figure out how the OTLP protocol
 				// could handle artificial frames, like AbortFrame,
@@ -660,8 +624,12 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 						"UNREPORTED", frameKind.String())
 				} else {
 					fileIDInfo := fileIDInfoLock.RLock()
-					si, exists := (*fileIDInfo)[traceInfo.linenos[i]]
-					if !exists {
+					if si, exists := (*fileIDInfo)[traceInfo.linenos[i]]; exists {
+						line.Line = int64(si.lineNumber)
+
+						line.FunctionIndex = createFunctionEntry(funcMap,
+							si.functionName, si.filePath)
+					} else {
 						// At this point, we do not have enough information for the frame.
 						// Therefore, we report a dummy entry and use the interpreter as filename.
 						// To differentiate this case from the case where no information about
@@ -669,11 +637,6 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 						// function.
 						line.FunctionIndex = createFunctionEntry(funcMap,
 							"UNRESOLVED", frameKind.String())
-					} else {
-						line.Line = int64(si.lineNumber)
-
-						line.FunctionIndex = createFunctionEntry(funcMap,
-							si.functionName, si.filePath)
 					}
 					fileIDInfoLock.RUnlock(&fileIDInfo)
 				}
