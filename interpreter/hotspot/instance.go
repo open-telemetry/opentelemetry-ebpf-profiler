@@ -235,7 +235,7 @@ func (d *hotspotInstance) getPoolSymbol(addr libpf.Address, ndx uint16) string {
 }
 
 // getStubNameID read the stub name from the code blob at given address and generates a ID.
-func (d *hotspotInstance) getStubNameID(symbolReporter reporter.SymbolReporter, ripOrBci int32,
+func (d *hotspotInstance) getStubNameID(symbolReporter reporter.SymbolReporter, ripOrBci uint32,
 	addr libpf.Address, _ uint32) (libpf.AddressOrLineno, error) {
 	if value, ok := d.addrToStubNameID.Get(addr); ok {
 		return value, nil
@@ -256,10 +256,12 @@ func (d *hotspotInstance) getStubNameID(symbolReporter reporter.SymbolReporter, 
 	_, _ = h.Write([]byte(stubName))
 	nameHash := h.Sum(nil)
 	stubID := libpf.AddressOrLineno(npsr.Uint64(nameHash, 0))
-
-	symbolReporter.FrameMetadata(hotspotStubsFileID, stubID, 0, 0, stubName, "")
-
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:      libpf.NewFrameID(hotspotStubsFileID, stubID),
+		FunctionName: stubName,
+	})
 	d.addrToStubNameID.Add(addr, stubID)
+
 	return stubID, nil
 }
 
@@ -399,7 +401,6 @@ func (d *hotspotInstance) getMethod(addr libpf.Address, _ uint32) (*hotspotMetho
 		bytecodeSize:   bytecodeSize,
 		lineTable:      lineTable,
 		startLineNo:    uint16(startLine),
-		bciSeen:        make(libpf.Set[uint16]),
 	}
 	d.addrToMethod.Add(addr, sym)
 	return sym, nil
@@ -785,7 +786,7 @@ func (d *hotspotInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	// Extract the HotSpot frame bitfields from the file and line variables
 	ptr := libpf.Address(frame.File)
 	subtype := uint32(frame.Lineno>>60) & 0xf
-	ripOrBci := int32(frame.Lineno>>32) & 0x0fffffff
+	ripOrBci := uint32(frame.Lineno>>32) & 0x0fffffff
 	ptrCheck := uint32(frame.Lineno)
 
 	var err error
@@ -804,15 +805,15 @@ func (d *hotspotInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	case C.FRAME_HOTSPOT_INTERPRETER:
 		method, err1 := d.getMethod(ptr, ptrCheck)
 		if err1 != nil {
-			return err
+			return err1
 		}
-		err = method.symbolize(symbolReporter, ripOrBci, d, trace)
+		method.symbolize(symbolReporter, ripOrBci, d, trace)
 	case C.FRAME_HOTSPOT_NATIVE:
 		jitinfo, err1 := d.getJITInfo(ptr, ptrCheck)
 		if err1 != nil {
 			return err1
 		}
-		err = jitinfo.symbolize(symbolReporter, ripOrBci, d, trace)
+		err = jitinfo.symbolize(symbolReporter, int32(ripOrBci), d, trace)
 	default:
 		return fmt.Errorf("hotspot frame subtype %v is not supported", subtype)
 	}

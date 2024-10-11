@@ -121,15 +121,6 @@ type dotnetRangeSection struct {
 	prefixes []lpm.Prefix
 }
 
-type symbolizedKey struct {
-	fileID libpf.FileID
-	lineID libpf.AddressOrLineno
-}
-
-func (key symbolizedKey) Hash32() uint32 {
-	return key.fileID.Hash32() + uint32(key.lineID)
-}
-
 type dotnetInstance struct {
 	interpreter.InstanceStubs
 
@@ -167,23 +158,27 @@ type dotnetInstance struct {
 	moduleToPEInfo map[libpf.Address]*peInfo
 
 	addrToMethod *freelru.LRU[libpf.Address, *dotnetMethod]
-
-	symbolizedLRU *freelru.LRU[symbolizedKey, libpf.Void]
 }
 
 // calculateAndSymbolizeStubID calculates a stub LineID, and symbolizes it if needed
-func (i *dotnetInstance) calculateAndSymbolizeStubID(symbolReporter reporter.SymbolReporter,
-	codeType uint) {
-	if i.codeTypeMethodIDs[codeType] != 0 {
-		return
-	}
+func (i *dotnetInstance) insertAndSymbolizeStubFrame(symbolReporter reporter.SymbolReporter,
+	trace *libpf.Trace, codeType uint) {
 	name := "[stub: " + codeName[codeType] + "]"
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(name))
-	nameHash := h.Sum(nil)
-	lineID := libpf.AddressOrLineno(npsr.Uint64(nameHash, 0))
-	i.codeTypeMethodIDs[codeType] = lineID
-	symbolReporter.FrameMetadata(stubsFileID, lineID, 0, 0, name, "")
+	lineID := i.codeTypeMethodIDs[codeType]
+	if lineID == 0 {
+		h := fnv.New128a()
+		_, _ = h.Write([]byte(name))
+		nameHash := h.Sum(nil)
+		lineID = libpf.AddressOrLineno(npsr.Uint64(nameHash, 0))
+		i.codeTypeMethodIDs[codeType] = lineID
+	}
+
+	frameID := libpf.NewFrameID(stubsFileID, lineID)
+	trace.AppendFrameID(libpf.DotnetFrame, frameID)
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:      frameID,
+		FunctionName: name,
+	})
 }
 
 // addRange inserts a known memory mapping along with the needed data of it to ebpf maps
@@ -764,19 +759,21 @@ func (i *dotnetInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 		if err != nil {
 			return err
 		}
-		fileID := module.fileID
+		// The Line ID is the Relative Virtual Address (RVA) within the PE file where
+		// PC is executing:
+		// - on non-leaf frames, it is the return address
+		// - on leaf frames, it is the address after the CALL machine opcode
 		lineID := libpf.AddressOrLineno(pcOffset)
-
-		if _, ok := i.symbolizedLRU.Get(symbolizedKey{fileID, lineID}); !ok {
+		frameID := libpf.NewFrameID(module.fileID, lineID)
+		trace.AppendFrameID(libpf.DotnetFrame, frameID)
+		if !symbolReporter.FrameKnown(frameID) {
 			methodName := module.resolveR2RMethodName(pcOffset)
-			symbolReporter.FrameMetadata(fileID, lineID, 0, 0,
-				methodName, module.simpleName)
-			i.symbolizedLRU.Add(symbolizedKey{fileID, lineID}, libpf.Void{})
+			symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+				FrameID:      frameID,
+				FunctionName: methodName,
+				SourceFile:   module.simpleName,
+			})
 		}
-		// The Line ID is the Relative Virtual Address (RVA) within into the PE file
-		// where PC is executing. On non-leaf frames it points to the return address.
-		// The instructionafter the CALL machine opcode.
-		trace.AppendFrame(libpf.DotnetFrame, fileID, lineID)
 	case codeJIT:
 		// JITted frame in anonymous mapping
 		method, err := i.getMethod(codeHeaderPtr)
@@ -795,21 +792,23 @@ func (i *dotnetInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 			libpf.AddressOrLineno(ilOffset)
 
 		if method.index == 0 || method.classification == mcDynamic {
-			i.calculateAndSymbolizeStubID(symbolReporter, codeDynamic)
-			trace.AppendFrame(libpf.DotnetFrame, stubsFileID, i.codeTypeMethodIDs[codeDynamic])
+			i.insertAndSymbolizeStubFrame(symbolReporter, trace, codeDynamic)
 		} else {
-			if _, ok := i.symbolizedLRU.Get(symbolizedKey{fileID, lineID}); !ok {
+			frameID := libpf.NewFrameID(fileID, lineID)
+			trace.AppendFrameID(libpf.DotnetFrame, frameID)
+			if !symbolReporter.FrameKnown(frameID) {
 				methodName := method.module.resolveMethodName(method.index)
-				symbolReporter.FrameMetadata(fileID, lineID, 0, ilOffset,
-					methodName, method.module.simpleName)
-				i.symbolizedLRU.Add(symbolizedKey{fileID, lineID}, libpf.Void{})
+				symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+					FrameID:        frameID,
+					SourceFile:     method.module.simpleName,
+					FunctionName:   methodName,
+					FunctionOffset: ilOffset,
+				})
 			}
-			trace.AppendFrame(libpf.DotnetFrame, fileID, lineID)
 		}
 	default:
 		// Stub code
-		i.calculateAndSymbolizeStubID(symbolReporter, frameType)
-		trace.AppendFrame(libpf.DotnetFrame, stubsFileID, i.codeTypeMethodIDs[frameType])
+		i.insertAndSymbolizeStubFrame(symbolReporter, trace, frameType)
 	}
 
 	sfCounter.ReportSuccess()
