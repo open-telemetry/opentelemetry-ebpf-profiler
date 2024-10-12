@@ -407,178 +407,161 @@ func (d *hotspotInstance) getMethod(addr libpf.Address, _ uint32) (*hotspotMetho
 }
 
 // getJITInfo reads and returns the interesting data from "class nmethod" at given address
-func (d *hotspotInstance) getJITInfo(addr libpf.Address,
-	addrCheck uint32) (*hotspotJITInfo, error) {
+func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
+	*hotspotJITInfo, error) {
+	// Each JIT-ted function is contained in a "class nmethod" (derived from CodeBlob,
+	// and CompiledMethod [JDK22 and earlier]).
+	//
+	// see: src/hotspot/share/code/compiledMethod.hpp
+	//      src/hotspot/share/code/nmethod.hpp
+	//
+	// scopes_data is a list of descriptors that lists the method and
+	//   it's Byte Code Index (BCI) activations for the scope
+	// scopes_pcs is a look up table to map RIP to scope_data
+	// metadata is the array that maps scope_data method indices to "class Method"
+
 	if jit, ok := d.addrToJITInfo.Get(addr); ok {
 		if jit.compileID == addrCheck {
 			return jit, nil
 		}
 	}
-
 	vmd := d.d.Get()
+	vms := &vmd.vmStructs
+	nmethod := make([]byte, vms.Nmethod.Sizeof)
+	if err := d.rm.Read(addr, nmethod); err != nil {
+		return nil, fmt.Errorf("invalid nmethod ptr: %v", err)
+	}
+
+	// Since the Java VM might decide recompile or free the JITted nmethods
+	// we use the nmethod._compile_id (global running number to identify JIT
+	// method) to uniquely identify that we are using the right data here
+	// vs. when the pointer was captured by eBPF.
+	compileID := npsr.Uint32(nmethod, vms.Nmethod.CompileID)
+	if compileID != addrCheck {
+		return nil, errors.New("JIT info evicted since eBPF snapshot")
+	}
+
+	method, err := d.getMethod(npsr.Ptr(nmethod, vms.CompiledMethod.Method), 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get JIT Method: %v", err)
+	}
+
+	// Finally read the associated debug information for this method
+	var jit *hotspotJITInfo
 	if vmd.version < 0x17000000 {
-		return d.getJITInfoPreJDK23(vmd, addr, addrCheck)
-	}
-	return d.getJITInfoPostJDK23(vmd, addr, addrCheck)
-}
+		// JDK22 and earlier
+		//
+		// Layout of important bits in such 'class nmethod' pointer is:
+		// [class CodeBlob fields]
+		// [class CompiledMethod fields]
+		// [class nmethod fields]
+		// ...
+		// [JIT_code]		@ this + CodeBlob._code_start
+		// ...
+		// [metadata]		@ this + nmethod._metadata_offset	\ these three
+		// [scopes_data]	@ CompiledMethod._scopes_data_begin	| arrays we need
+		// [scopes_pcs]		@ this + nmethod._scopes_pcs_offset	/ for inlining info
+		// [dependencies]	@ this + nmethod._dependencies_offset
+		// ...
+		var scopesDataOff libpf.Address
+		metadataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.MetadataOffset)
+		if vms.CompiledMethod.ScopesDataBegin != 0 {
+			scopesDataOff = npsr.Ptr(nmethod, vms.CompiledMethod.ScopesDataBegin) - addr
+		} else {
+			scopesDataOff = npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
+		}
+		scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
+		depsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.DependenciesOffset)
 
-func (d *hotspotInstance) getJITInfoPostJDK23(vmd *hotspotVMData, addr libpf.Address,
-	addrCheck uint32) (*hotspotJITInfo, error) {
-	vms := &vmd.vmStructs
+		if metadataOff > scopesDataOff || scopesDataOff > scopesPcsOff || scopesPcsOff > depsOff {
+			return nil, fmt.Errorf("unexpected nmethod layout: %v <= %v <= %v <= %v",
+				metadataOff, scopesDataOff, scopesPcsOff, depsOff)
+		}
 
-	// TODO: describe new layout like for older SDKs
+		scopesData := make([]byte, depsOff-metadataOff)
+		if err := d.rm.Read(addr+metadataOff, scopesData); err != nil {
+			return nil, fmt.Errorf("invalid nmethod metadata: %v", err)
+		}
 
-	nmethod := make([]byte, vms.Nmethod.Sizeof)
-	if err := d.rm.Read(addr, nmethod); err != nil {
-		return nil, fmt.Errorf("invalid nmethod ptr: %v", err)
-	}
+		// Buffer is read starting from metadataOff, so adjust accordingly
+		scopesDataOff -= metadataOff
+		scopesPcsOff -= metadataOff
 
-	// Since the Java VM might decide recompile or free the JITted nmethods
-	// we use the nmethod._compile_id (global running number to identify JIT
-	// method) to uniquely identify that we are using the right data here
-	// vs. when the pointer was captured by eBPF.
-	compileID := npsr.Uint32(nmethod, vms.Nmethod.CompileID)
-	if compileID != addrCheck {
-		return nil, errors.New("JIT info evicted since eBPF snapshot")
-	}
-
-	// Finally read the associated debug information for this method
-	metadataOff := npsr.PtrDiff32(nmethod, vms.CodeBlob.CodeEnd) +
-		npsr.PtrDiff16(nmethod, vms.Nmethod.MetadataOffset)
-	codeBlobSize := npsr.Uint32(nmethod, vms.CodeBlob.Size)
-	scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
-	scopesDataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
-	immutableDataPtr := npsr.Ptr(nmethod, vms.Nmethod.ImmutableData)
-	immutableDataSize := npsr.Uint32(nmethod, vms.Nmethod.ImmutableDataSize)
-	if immutableDataSize >= 4*1024*1024 {
-		return nil, fmt.Errorf("unreasonably large immutable data region: %d bytes",
-			immutableDataSize)
-	}
-	if scopesPcsOff > scopesDataOff || scopesDataOff > libpf.Address(immutableDataSize) {
-		return nil, fmt.Errorf("unexpected immutable data layout: %v, %v, %v",
-			scopesDataOff, scopesPcsOff, immutableDataSize)
-	}
-
-	method, err := d.getMethod(npsr.Ptr(nmethod, vms.CompiledMethod.Method), 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get JIT Method: %v", err)
-	}
-
-	// Actually the metadata only spans to `_jvmci_data_offset`, but that field isn't exposed
-	// through VMstructs, and the codeblob size is the next boundary after that.
-	metadataSize := libpf.Address(codeBlobSize) - metadataOff
-	if metadataOff > 4*1024*1024 {
-		return nil, fmt.Errorf("unreasonably large nmethod metadata: %v",
-			metadataSize)
-	}
-
-	metadata := make([]byte, metadataSize)
-	if err := d.rm.Read(addr+metadataOff, metadata); err != nil {
-		return nil, fmt.Errorf("invalid nmethod metadata ptr: %v", err)
-	}
-
-	// Since the beginning of immutable data is not needed, adjust to not read it
-	immutableDataPtr += scopesPcsOff
-	immutableDataSize -= uint32(scopesPcsOff)
-	scopesDataOff -= scopesPcsOff
-	scopesPcsOff = 0
-
-	immutableData := make([]byte, immutableDataSize)
-	if err := d.rm.Read(immutableDataPtr, immutableData); err != nil {
-		return nil, fmt.Errorf("invalid immutable_data ptr: %v", err)
-	}
-
-	jit := &hotspotJITInfo{
-		compileID: compileID,
-		method:    method,
-		metadata:  metadata,
-		scopesPcs: immutableData[scopesPcsOff:scopesDataOff],
-		// This should end at `_speculations_offset`, but this field isn't in VMstructs.
-		// Specualtins are the last region, so we simply include the remaining data region here.
-		scopesData: immutableData[scopesDataOff:],
-	}
-
-	d.addrToJITInfo.Add(addr, jit)
-	return jit, nil
-}
-
-func (d *hotspotInstance) getJITInfoPreJDK23(vmd *hotspotVMData, addr libpf.Address,
-	addrCheck uint32) (*hotspotJITInfo, error) {
-	vms := &vmd.vmStructs
-
-	// Each JIT-ted function is contained in a "class nmethod"
-	// (derived from CompiledMethod and CodeBlob).
-	//
-	// Layout of important bits in such 'class nmethod' pointer is:
-	//	[class CodeBlob fields]
-	//	[class CompiledMethod fields]
-	//	[class nmethod fields]
-	//	...
-	//	[JIT_code]	@ this + CodeBlob._code_start
-	//	...
-	//	[metadata]	@ this + nmethod._metadata_offset	\ these three
-	//	[scopes_data]	@ CompiledMethod._scopes_data_begin	| arrays we need
-	//	[scopes_pcs]	@ this + nmethod._scopes_pcs_offset	/ for inlining info
-	//	[dependencies]	@ this + nmethod._dependencies_offset
-	//	...
-	//
-	// see: src/hotspot/share/code/compiledMethod.hpp
-	//      src/hotspot/share/code/nmethod.hpp
-	//
-	// The scopes_pcs is a look up table to map RIP to scope_data. scopes_data
-	// is a list of descriptors that lists the method and it's Byte Code Index (BCI)
-	// activations for the scope. Finally the metadata is the array that
-	// maps scope_data method indices to real "class Method*".
-	nmethod := make([]byte, vms.Nmethod.Sizeof)
-	if err := d.rm.Read(addr, nmethod); err != nil {
-		return nil, fmt.Errorf("invalid nmethod ptr: %v", err)
-	}
-
-	// Since the Java VM might decide recompile or free the JITted nmethods
-	// we use the nmethod._compile_id (global running number to identify JIT
-	// method) to uniquely identify that we are using the right data here
-	// vs. when the pointer was captured by eBPF.
-	compileID := npsr.Uint32(nmethod, vms.Nmethod.CompileID)
-	if compileID != addrCheck {
-		return nil, errors.New("JIT info evicted since eBPF snapshot")
-	}
-
-	// Finally read the associated debug information for this method
-	var scopesOff libpf.Address
-	metadataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.MetadataOffset)
-	if vms.CompiledMethod.ScopesDataBegin != 0 {
-		scopesOff = npsr.Ptr(nmethod, vms.CompiledMethod.ScopesDataBegin) - addr
+		jit = &hotspotJITInfo{
+			compileID:  compileID,
+			method:     method,
+			metadata:   scopesData[:scopesDataOff],
+			scopesData: scopesData[scopesDataOff:scopesPcsOff],
+			scopesPcs:  scopesData[scopesPcsOff:],
+		}
 	} else {
-		scopesOff = npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
-	}
-	scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
-	depsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.DependenciesOffset)
+		// JDK23 and later
+		//
+		// Each JIT-ted function is contained in a "class nmethod" (derived from CodeBlob).
+		//
+		// Layout of important bits in such 'class nmethod' pointer is:
+		// [class CodeBlob fields]
+		// [class nmethod fields]
+		//   address		_immutable_data
+		// ...
+		// [JIT_code]		@ this + CodeBlob._code_start
+		// ...
+		// [metadata]		@ this + CodeBlob._code_end + nmethod._metadata_offset
+		//
+		// [scopes_data]	@ _immutable_data + nmethod._scopes_data_begin	\ arrays we need
+		// [scopes_pcs]		@ _immutable_data + nmethod._scopes_pcs_offset	/ for inlining info
+		// [speculations]	@ _immutable_data + nmethod._speculations_offset
+		// [end]		@ _immutable_Data + nmethod._immutable_data_size
+		// ...
+		// speculations presence depends on JDK build, and is not used. Instead the scopes
+		// end is determined from immutable data size.
+		metadataOff := npsr.PtrDiff32(nmethod, vms.CodeBlob.CodeEnd) +
+			npsr.PtrDiff16(nmethod, vms.Nmethod.MetadataOffset)
+		codeBlobSize := npsr.Uint32(nmethod, vms.CodeBlob.Size)
+		scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
+		scopesDataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
+		immutableDataPtr := npsr.Ptr(nmethod, vms.Nmethod.ImmutableData)
+		immutableDataSize := npsr.Uint32(nmethod, vms.Nmethod.ImmutableDataSize)
+		if immutableDataSize >= 4*1024*1024 {
+			return nil, fmt.Errorf("unreasonably large immutable data region: %d bytes",
+				immutableDataSize)
+		}
+		if scopesPcsOff > scopesDataOff || scopesDataOff > libpf.Address(immutableDataSize) {
+			return nil, fmt.Errorf("unexpected immutable data layout: %v, %v, %v",
+				scopesDataOff, scopesPcsOff, immutableDataSize)
+		}
 
-	if metadataOff > scopesOff || scopesOff > scopesPcsOff || scopesPcsOff > depsOff {
-		return nil, fmt.Errorf("unexpected nmethod layout: %v <= %v <= %v <= %v",
-			metadataOff, scopesOff, scopesPcsOff, depsOff)
-	}
+		// Actually the metadata only spans to `_jvmci_data_offset`, but that field isn't exposed
+		// through VMstructs, and the codeblob size is the next boundary after that.
+		metadataSize := libpf.Address(codeBlobSize) - metadataOff
+		if metadataOff > 4*1024*1024 {
+			return nil, fmt.Errorf("unreasonably large nmethod metadata: %v",
+				metadataSize)
+		}
 
-	method, err := d.getMethod(npsr.Ptr(nmethod, vms.CompiledMethod.Method), 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get JIT Method: %v", err)
-	}
+		metadata := make([]byte, metadataSize)
+		if err := d.rm.Read(addr+metadataOff, metadata); err != nil {
+			return nil, fmt.Errorf("invalid nmethod metadata ptr: %v", err)
+		}
 
-	buf := make([]byte, depsOff-metadataOff)
-	if err := d.rm.Read(addr+metadataOff, buf); err != nil {
-		return nil, fmt.Errorf("invalid nmethod metadata: %v", err)
-	}
+		// Since the beginning of immutable data is not needed, adjust to not read it
+		immutableDataPtr += scopesPcsOff
+		immutableDataSize -= uint32(scopesPcsOff)
+		scopesDataOff -= scopesPcsOff
+		scopesPcsOff = 0
 
-	// Buffer is read starting from metadataOff, so adjust accordingly
-	scopesOff -= metadataOff
-	scopesPcsOff -= metadataOff
+		immutableData := make([]byte, immutableDataSize)
+		if err := d.rm.Read(immutableDataPtr, immutableData); err != nil {
+			return nil, fmt.Errorf("invalid immutable_data ptr: %v", err)
+		}
 
-	jit := &hotspotJITInfo{
-		compileID:  compileID,
-		method:     method,
-		metadata:   buf[0:scopesOff],
-		scopesData: buf[scopesOff:scopesPcsOff],
-		scopesPcs:  buf[scopesPcsOff:],
+		jit = &hotspotJITInfo{
+			compileID:  compileID,
+			method:     method,
+			metadata:   metadata,
+			scopesPcs:  immutableData[scopesPcsOff:scopesDataOff],
+			scopesData: immutableData[scopesDataOff:],
+		}
 	}
 
 	d.addrToJITInfo.Add(addr, jit)
