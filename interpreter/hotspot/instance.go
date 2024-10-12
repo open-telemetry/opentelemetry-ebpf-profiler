@@ -441,7 +441,7 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		return nil, errors.New("JIT info evicted since eBPF snapshot")
 	}
 
-	method, err := d.getMethod(npsr.Ptr(nmethod, vms.CompiledMethod.Method), 0)
+	method, err := d.getMethod(npsr.Ptr(nmethod, vms.Nmethod.Method), 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get JIT Method: %v", err)
 	}
@@ -465,10 +465,10 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		// ...
 		var scopesDataOff libpf.Address
 		metadataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.MetadataOffset)
-		if vms.CompiledMethod.ScopesDataBegin != 0 {
-			scopesDataOff = npsr.Ptr(nmethod, vms.CompiledMethod.ScopesDataBegin) - addr
-		} else {
+		if vmd.nmethodUsesOffsets != 0 {
 			scopesDataOff = npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
+		} else {
+			scopesDataOff = npsr.Ptr(nmethod, vms.Nmethod.ScopesDataOffset) - addr
 		}
 		scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
 		depsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.DependenciesOffset)
@@ -738,19 +738,20 @@ func (d *hotspotInstance) populateMainMappings(vmd *hotspotVMData,
 	// Set up the main eBPF info structure.
 	vms := &vmd.vmStructs
 	procInfo := C.HotspotProcInfo{
-		compiledmethod_deopt_handler: C.u16(vms.CompiledMethod.DeoptHandlerBegin),
-		nmethod_compileid:            C.u16(vms.Nmethod.CompileID),
-		nmethod_orig_pc_offset:       C.u16(vms.Nmethod.OrigPcOffset),
-		codeblob_name:                C.u8(vms.CodeBlob.Name),
-		codeblob_codestart:           C.u8(vms.CodeBlob.CodeBegin),
-		codeblob_codeend:             C.u8(vms.CodeBlob.CodeEnd),
-		codeblob_framecomplete:       C.u8(vms.CodeBlob.FrameCompleteOffset),
-		codeblob_framesize:           C.u8(vms.CodeBlob.FrameSize),
-		cmethod_size:                 C.u8(vms.ConstMethod.Sizeof),
-		heapblock_size:               C.u8(vms.HeapBlock.Sizeof),
-		method_constmethod:           C.u8(vms.Method.ConstMethod),
-		jvm_version:                  C.u8(vmd.version >> 24),
-		segment_shift:                C.u8(heap.segmentShift),
+		nmethod_deopt_offset:   C.u16(vms.Nmethod.DeoptimizeOffset),
+		nmethod_compileid:      C.u16(vms.Nmethod.CompileID),
+		nmethod_orig_pc_offset: C.u16(vms.Nmethod.OrigPcOffset),
+		codeblob_name:          C.u8(vms.CodeBlob.Name),
+		codeblob_codestart:     C.u8(vms.CodeBlob.CodeBegin),
+		codeblob_codeend:       C.u8(vms.CodeBlob.CodeEnd),
+		codeblob_framecomplete: C.u8(vms.CodeBlob.FrameCompleteOffset),
+		codeblob_framesize:     C.u8(vms.CodeBlob.FrameSize),
+		cmethod_size:           C.u8(vms.ConstMethod.Sizeof),
+		heapblock_size:         C.u8(vms.HeapBlock.Sizeof),
+		method_constmethod:     C.u8(vms.Method.ConstMethod),
+		jvm_version:            C.u8(vmd.version >> 24),
+		segment_shift:          C.u8(heap.segmentShift),
+		nmethod_uses_offsets:   C.u8(vmd.nmethodUsesOffsets),
 	}
 
 	if vms.CodeCache.LowBound == 0 {
