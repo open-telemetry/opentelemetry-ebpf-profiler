@@ -416,11 +416,10 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address,
 	}
 
 	vmd := d.d.Get()
-	if vmd.version > 0x17000000 {
-		return d.getJITInfoPostJDK23(vmd, addr, addrCheck)
-	} else {
+	if vmd.version < 0x17000000 {
 		return d.getJITInfoPreJDK23(vmd, addr, addrCheck)
 	}
+	return d.getJITInfoPostJDK23(vmd, addr, addrCheck)
 }
 
 func (d *hotspotInstance) getJITInfoPostJDK23(vmd *hotspotVMData, addr libpf.Address,
@@ -444,19 +443,20 @@ func (d *hotspotInstance) getJITInfoPostJDK23(vmd *hotspotVMData, addr libpf.Add
 	}
 
 	// Finally read the associated debug information for this method
-	metadataOff := npsr.PtrDiff16(nmethod, vms.Nmethod.MetadataOffset)
+	metadataOff := npsr.PtrDiff32(nmethod, vms.CodeBlob.CodeEnd) +
+		npsr.PtrDiff16(nmethod, vms.Nmethod.MetadataOffset)
 	codeBlobSize := npsr.Uint32(nmethod, vms.CodeBlob.Size)
 	scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
-	scopesOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
+	scopesDataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
+	immutableDataPtr := npsr.Ptr(nmethod, vms.Nmethod.ImmutableData)
 	immutableDataSize := npsr.Uint32(nmethod, vms.Nmethod.ImmutableDataSize)
-
-	if scopesPcsOff > scopesOff || scopesOff > libpf.Address(immutableDataSize) {
-		return nil, fmt.Errorf("unexpected immutable data layout: %v, %v, %v",
-			scopesOff, scopesPcsOff, immutableDataSize)
-	}
 	if immutableDataSize >= 4*1024*1024 {
 		return nil, fmt.Errorf("unreasonably large immutable data region: %d bytes",
 			immutableDataSize)
+	}
+	if scopesPcsOff > scopesDataOff || scopesDataOff > libpf.Address(immutableDataSize) {
+		return nil, fmt.Errorf("unexpected immutable data layout: %v, %v, %v",
+			scopesDataOff, scopesPcsOff, immutableDataSize)
 	}
 
 	method, err := d.getMethod(npsr.Ptr(nmethod, vms.CompiledMethod.Method), 0)
@@ -477,19 +477,25 @@ func (d *hotspotInstance) getJITInfoPostJDK23(vmd *hotspotVMData, addr libpf.Add
 		return nil, fmt.Errorf("invalid nmethod metadata ptr: %v", err)
 	}
 
+	// Since the beginning of immutable data is not needed, adjust to not read it
+	immutableDataPtr += scopesPcsOff
+	immutableDataSize -= uint32(scopesPcsOff)
+	scopesDataOff -= scopesPcsOff
+	scopesPcsOff = 0
+
 	immutableData := make([]byte, immutableDataSize)
-	if err := d.rm.Read(addr, immutableData); err != nil {
-		return nil, fmt.Errorf("invalid _immutable_data ptr: %v", err)
+	if err := d.rm.Read(immutableDataPtr, immutableData); err != nil {
+		return nil, fmt.Errorf("invalid immutable_data ptr: %v", err)
 	}
 
 	jit := &hotspotJITInfo{
 		compileID: compileID,
 		method:    method,
 		metadata:  metadata,
-		scopesPcs: immutableData[scopesPcsOff:scopesOff],
+		scopesPcs: immutableData[scopesPcsOff:scopesDataOff],
 		// This should end at `_speculations_offset`, but this field isn't in VMstructs.
 		// Specualtins are the last region, so we simply include the remaining data region here.
-		scopesData: immutableData[scopesOff:],
+		scopesData: immutableData[scopesDataOff:],
 	}
 
 	d.addrToJITInfo.Add(addr, jit)
@@ -498,7 +504,7 @@ func (d *hotspotInstance) getJITInfoPostJDK23(vmd *hotspotVMData, addr libpf.Add
 
 func (d *hotspotInstance) getJITInfoPreJDK23(vmd *hotspotVMData, addr libpf.Address,
 	addrCheck uint32) (*hotspotJITInfo, error) {
-	vms := &d.d.Get().vmStructs
+	vms := &vmd.vmStructs
 
 	// Each JIT-ted function is contained in a "class nmethod"
 	// (derived from CompiledMethod and CodeBlob).
