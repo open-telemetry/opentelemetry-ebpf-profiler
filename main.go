@@ -227,7 +227,10 @@ func mainWithExitCode() exitCode {
 	log.Debug("Completed initial PID listing")
 
 	if args.externallyManaged {
-		go trc.CreateSocket()
+		_, err := trc.GetNativeTracerEntry()
+		if err != nil {
+			return failure("Failed to get native tracer entry: %v", err)
+		}
 	} else {
 		// Attach our tracer to the perf event
 		if err := trc.AttachTracer(); err != nil {

@@ -12,8 +12,6 @@ import (
 	"hash/fnv"
 	"math"
 	"math/rand/v2"
-	"net"
-	"os"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -26,7 +24,6 @@ import (
 	"github.com/elastic/go-perf"
 	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
-	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -1209,35 +1206,13 @@ func (t *Tracer) TraceProcessor() tracehandler.TraceProcessor {
 	return t.processManager
 }
 
-// CreateSocket creates a Unix domain socket and sends the file descriptor of the eBPF program.
+// GetNativeTracerEntry returns the file descriptor of the native tracer entry program.
 // This allows the client to use the fd to trigger the eBPF program using tail calls.
-func (t *Tracer) CreateSocket() error {
+func (t *Tracer) GetNativeTracerEntry() (int, error) {
 	tracerProg, ok := t.ebpfProgs["native_tracer_entry"]
 	if !ok {
-		return fmt.Errorf("entry program is not available")
+		return 0, fmt.Errorf("entry program is not available")
 	}
-	os.Remove(socketPath)
-	addr, err := net.ResolveUnixAddr("unix", socketPath)
-	if err != nil {
-		return err
-	}
-	listener, err := net.ListenUnix("unix", addr)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(socketPath)
-	log.Infof("Listening on %s", socketPath)
-	for {
-		conn, err := listener.AcceptUnix()
-		if err != nil {
-			return err
-		}
-		defer conn.Close()
-		fd := tracerProg.FD()
-		rights := unix.UnixRights(fd)
-		if _, _, err := conn.WriteMsgUnix(nil, rights, nil); err != nil {
-			return err
-		}
-		log.Infof("Sent fd %d to client", fd)
-	}
+
+	return tracerProg.FD(), nil
 }
