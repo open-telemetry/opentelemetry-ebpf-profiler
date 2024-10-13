@@ -636,6 +636,7 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 func (t *Tracer) populatePIDs(ctx context.Context) error {
 	// Inform the process manager and our backend about the new mappings.
 	pids, err := proc.ListPIDs()
+	fmt.Println("Afek pidss", pids)
 	if err != nil {
 		return fmt.Errorf("failure reading PID list from /proc: %v", err)
 	}
