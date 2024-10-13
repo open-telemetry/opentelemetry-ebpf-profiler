@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -119,7 +118,8 @@ func parseMappings(mapsFile io.Reader, pid libpf.PID) ([]Mapping, error) {
 				continue
 			}
 		} else {
-			path = "/proc/" + strconv.Itoa(int(pid)) + "/root/" + trimMappingPath(path)
+			// path = "/proc/" + strconv.Itoa(int(pid)) + "/root/" + trimMappingPath(path)
+			path = trimMappingPath(path)
 			path = strings.Clone(path)
 		}
 
