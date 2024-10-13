@@ -6,6 +6,7 @@ package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync/atomic"
 	"time"
@@ -72,6 +73,7 @@ func (t *Tracer) handleGenericPID() {
 // C structure in the received data is transformed to a Go structure and the event
 // handler is invoked.
 func (t *Tracer) triggerPidEvent(data []byte) {
+	fmt.Println("Trigger PID event")
 	event := (*C.Event)(unsafe.Pointer(&data[0]))
 	if event.event_type == support.EventTypeGenericPID {
 		t.handleGenericPID()
@@ -92,7 +94,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 	if err != nil {
 		log.Fatalf("Failed to setup perf reporting via %s: %v", perfEventMap, err)
 	}
-
+	fmt.Println("Start perf event monitor")
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
 	go func() {
 		var data perf.Record
@@ -200,7 +202,8 @@ func (t *Tracer) startEventMonitor(ctx context.Context) func() []metrics.Metric 
 	if !ok {
 		log.Fatalf("Map report_events is not available")
 	}
-
+	fmt.Println("Start event monitor")
+	fmt.Println("Event map: ", eventMap)
 	getPerfErrorCounts := startPerfEventMonitor(ctx, eventMap, t.triggerPidEvent, os.Getpagesize())
 	return func() []metrics.Metric {
 		lost, noData, readError := getPerfErrorCounts()
