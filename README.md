@@ -61,6 +61,10 @@ You can build the agent without Docker by directly installing the dependencies l
 ```sh
 make
 ```
+or
+```sh
+make debug
+```
 This will build the profiler natively on your machine.
 
 ## Running

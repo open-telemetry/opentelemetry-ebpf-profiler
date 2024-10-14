@@ -1,5 +1,5 @@
-.PHONY: all all-common binary clean ebpf generate test test-deps protobuf docker-image agent legal \
-	integration-test-binaries codespell lint linter-version debug debug-agent
+.PHONY: all all-common clean ebpf generate test test-deps protobuf docker-image agent legal \
+	integration-test-binaries codespell lint linter-version debug debug-agent ebpf-profiler
 
 SHELL := /usr/bin/env bash
 
@@ -49,7 +49,9 @@ EBPF_FLAGS :=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 
-all: generate ebpf binary
+MAKEFLAGS += -j$(shell nproc)
+
+all: ebpf-profiler
 
 debug: GO_TAGS := $(GO_TAGS),debugtracer
 debug: EBPF_FLAGS += debug
@@ -66,11 +68,11 @@ clean:
 generate:
 	go generate ./...
 
-binary:
-	go build $(GO_FLAGS) -tags $(GO_TAGS)
-
 ebpf:
-	$(MAKE) -j$(shell nproc) $(EBPF_FLAGS) -C support/ebpf
+	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
+
+ebpf-profiler: generate ebpf
+	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 GOLANGCI_LINT_VERSION = "v1.60.1"
 lint: generate vanity-import-check
