@@ -86,7 +86,6 @@ type traceHandler struct {
 // newTraceHandler creates a new traceHandler
 func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 	intervals Times, cacheSize uint32) (*traceHandler, error) {
-	fmt.Println("Creating new trace handler")
 	bpfTraceCache, err := lru.New[host.TraceHash, libpf.TraceHash](
 		cacheSize, func(k host.TraceHash) uint32 { return uint32(k) })
 	if err != nil {
@@ -118,7 +117,6 @@ func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 }
 
 func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
-	fmt.Println("Handling trace")
 	defer m.traceProcessor.SymbolizationComplete(bpfTrace.KTime)
 	timestamp := libpf.UnixTime64(bpfTrace.KTime.UnixNano())
 
@@ -180,8 +178,6 @@ func Start(ctx context.Context, rep reporter.TraceReporter, traceProcessor Trace
 	}
 
 	exitChan := make(chan libpf.Void)
-
-	fmt.Println("Starting trace handler")
 
 	go func() {
 		defer close(exitChan)
