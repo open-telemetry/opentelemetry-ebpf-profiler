@@ -230,28 +230,18 @@ func (r *OTLPReporter) FrameMetadata(args *FrameMetadataArgs) {
 		defer frameMapLock.WUnlock(&frameMap)
 
 		sourceFile := args.SourceFile
-		sourceLine := args.SourceLine
-		functionOffset := args.FunctionOffset
-		if sourceFile == "" || sourceLine == 0 || functionOffset == 0 {
-			// Some of the new metadata fields may be unset, and we don't want to overwrite
-			// existing data with it.
+		if sourceFile == "" {
+			// The new SourceFile may be empty, and we don't want to overwrite
+			// an existing filePath with it.
 			if s, exists := (*frameMap)[addressOrLine]; exists {
-				if sourceFile == "" {
-					sourceFile = s.filePath
-				}
-				if sourceLine == 0 {
-					sourceLine = s.lineNumber
-				}
-				if functionOffset == 0 {
-					functionOffset = s.functionOffset
-				}
+				sourceFile = s.filePath
 			}
 		}
 
 		(*frameMap)[addressOrLine] = sourceInfo{
-			lineNumber:     sourceLine,
+			lineNumber:     args.SourceLine,
 			filePath:       sourceFile,
-			functionOffset: functionOffset,
+			functionOffset: args.FunctionOffset,
 			functionName:   args.FunctionName,
 		}
 		return
