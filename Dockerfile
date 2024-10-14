@@ -15,7 +15,7 @@ RUN cross_debian_arch=$(uname -m | sed -e 's/aarch64/amd64/'  -e 's/x86_64/arm64
 
 COPY go.mod /tmp/go.mod
 # Extract Go version from go.mod
-RUN GO_VERSION=$(grep -oP 'go \K[0-9]+\.[0-9]+\.[0-9]+' /tmp/go.mod) && \
+RUN GO_VERSION=$(grep -oPm1 '^go \K([[:digit:].]+)' /tmp/go.mod) && \
     wget -qO- https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz | tar -C /usr/local -xz
 # Set Go environment variables
 ENV GOPATH="/agent/go"
