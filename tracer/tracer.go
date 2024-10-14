@@ -674,7 +674,6 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 	var kernelSymbolCacheHit, kernelSymbolCacheMiss uint64
 
 	for i := uint32(0); i < kstackLen; i++ {
-		var fileID libpf.FileID
 		// Translate the kernel address into something that can be
 		// later symbolized. The address is made relative to
 		// matching module's ELF .text section:
@@ -683,16 +682,12 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 		//    LOAD segments. the address is relative to the .text section
 		mod, addr, _ := t.kernelModules.LookupByAddress(
 			libpf.SymbolValue(kstackVal[i]))
-		symbol, offs, foundSymbol := t.kernelSymbols.LookupByAddress(
-			libpf.SymbolValue(kstackVal[i]))
 
 		fileID, foundFileID := t.moduleFileIDs[string(mod)]
 
 		if !foundFileID {
 			fileID = libpf.UnknownKernelFileID
 		}
-
-		log.Debugf(" kstack[%d] = %v+%x (%v+%x)", i, string(mod), addr, symbol, offs)
 
 		hostFileID := host.FileIDFromLibpf(fileID)
 		t.processManager.FileIDMapper.Set(hostFileID, fileID)
@@ -708,21 +703,29 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 			ReturnAddress: true,
 		}
 
+		if !foundFileID {
+			kernelSymbolCacheMiss++
+			continue
+		}
+
 		// Kernel frame PCs need to be adjusted by -1. This duplicates logic done in the trace
 		// converter. This should be fixed with PF-1042.
-		if foundSymbol && foundFileID {
-			frameID := libpf.NewFrameID(fileID, trace.Frames[i].Lineno-1)
-			if t.reporter.FrameKnown(frameID) {
-				kernelSymbolCacheHit++
-			} else {
-				t.reporter.FrameMetadata(&reporter.FrameMetadataArgs{
-					FrameID:      frameID,
-					FunctionName: string(symbol),
-				})
-				kernelSymbolCacheMiss++
-			}
+		frameID := libpf.NewFrameID(fileID, trace.Frames[i].Lineno-1)
+		if t.reporter.FrameKnown(frameID) {
+			kernelSymbolCacheHit++
+			continue
+		}
+		kernelSymbolCacheMiss++
+
+		if symbol, _, foundSymbol := t.kernelSymbols.LookupByAddress(
+			libpf.SymbolValue(kstackVal[i])); foundSymbol {
+			t.reporter.FrameMetadata(&reporter.FrameMetadataArgs{
+				FrameID:      frameID,
+				FunctionName: string(symbol),
+			})
 		}
 	}
+
 	t.fallbackSymbolMiss.Add(kernelSymbolCacheMiss)
 	t.fallbackSymbolHit.Add(kernelSymbolCacheHit)
 
