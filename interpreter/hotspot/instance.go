@@ -420,6 +420,8 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 	// scopes_pcs is a look up table to map RIP to scope_data
 	// metadata is the array that maps scope_data method indices to "class Method"
 
+	const maxMetadataSize = 4 * 1024 * 1024
+
 	if jit, ok := d.addrToJITInfo.Get(addr); ok {
 		if jit.compileID == addrCheck {
 			return jit, nil
@@ -473,6 +475,10 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
 		depsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.DependenciesOffset)
 
+		if depsOff >= maxMetadataSize {
+			return nil, fmt.Errorf("unreasonably large metadata data region: %d bytes",
+				depsOff)
+		}
 		if metadataOff > scopesDataOff || scopesDataOff > scopesPcsOff || scopesPcsOff > depsOff {
 			return nil, fmt.Errorf("unexpected nmethod layout: %v <= %v <= %v <= %v",
 				metadataOff, scopesDataOff, scopesPcsOff, depsOff)
@@ -522,7 +528,7 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		scopesDataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
 		immutableDataPtr := npsr.Ptr(nmethod, vms.Nmethod.ImmutableData)
 		immutableDataSize := npsr.Uint32(nmethod, vms.Nmethod.ImmutableDataSize)
-		if immutableDataSize >= 4*1024*1024 {
+		if immutableDataSize >= maxMetadataSize {
 			return nil, fmt.Errorf("unreasonably large immutable data region: %d bytes",
 				immutableDataSize)
 		}
@@ -534,7 +540,7 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		// Actually the metadata only spans to `_jvmci_data_offset`, but that field isn't exposed
 		// through VMstructs, and the codeblob size is the next boundary after that.
 		metadataSize := libpf.Address(codeBlobSize) - metadataOff
-		if metadataOff > 4*1024*1024 {
+		if metadataOff >= maxMetadataSize {
 			return nil, fmt.Errorf("unreasonably large nmethod metadata: %v",
 				metadataSize)
 		}
