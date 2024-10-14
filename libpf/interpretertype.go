@@ -71,7 +71,7 @@ var stringToInterpreterType = make(map[string]InterpreterType, len(interpreterTy
 
 func init() {
 	for k, v := range interpreterTypeToString {
-		if k == PHPJIT {
+		if k == PHPJIT || k == APMInt {
 			continue
 		}
 		stringToInterpreterType[v] = k
