@@ -704,7 +704,6 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 		}
 
 		if !foundFileID {
-			kernelSymbolCacheMiss++
 			continue
 		}
 
