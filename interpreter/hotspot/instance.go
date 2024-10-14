@@ -280,13 +280,13 @@ func (d *hotspotInstance) getMethod(addr libpf.Address, _ uint32) (*hotspotMetho
 	cpoolAddr := npsr.Ptr(constMethod, vms.ConstMethod.Constants)
 	cpool := make([]byte, vms.ConstantPool.Sizeof)
 	if err := d.rm.Read(cpoolAddr, cpool); err != nil {
-		return nil, fmt.Errorf("invalid CostantPool ptr: %v", err)
+		return nil, fmt.Errorf("invalid ConstantPool ptr: %v", err)
 	}
 
 	instanceKlassAddr := npsr.Ptr(cpool, vms.ConstantPool.PoolHolder)
 	instanceKlass := make([]byte, vms.InstanceKlass.Sizeof)
 	if err := d.rm.Read(instanceKlassAddr, instanceKlass); err != nil {
-		return nil, fmt.Errorf("invalid ConstantPool ptr: %v", err)
+		return nil, fmt.Errorf("invalid PoolHolder ptr: %v", err)
 	}
 
 	var sourceFileName string
@@ -407,38 +407,28 @@ func (d *hotspotInstance) getMethod(addr libpf.Address, _ uint32) (*hotspotMetho
 }
 
 // getJITInfo reads and returns the interesting data from "class nmethod" at given address
-func (d *hotspotInstance) getJITInfo(addr libpf.Address,
-	addrCheck uint32) (*hotspotJITInfo, error) {
+func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
+	*hotspotJITInfo, error) {
+	// Each JIT-ted function is contained in a "class nmethod" (derived from CodeBlob,
+	// and CompiledMethod [JDK22 and earlier]).
+	//
+	// see: src/hotspot/share/code/compiledMethod.hpp
+	//      src/hotspot/share/code/nmethod.hpp
+	//
+	// scopes_data is a list of descriptors that lists the method and
+	//   it's Byte Code Index (BCI) activations for the scope
+	// scopes_pcs is a look up table to map RIP to scope_data
+	// metadata is the array that maps scope_data method indices to "class Method"
+
+	const maxMetadataSize = 4 * 1024 * 1024
+
 	if jit, ok := d.addrToJITInfo.Get(addr); ok {
 		if jit.compileID == addrCheck {
 			return jit, nil
 		}
 	}
-	vms := &d.d.Get().vmStructs
-
-	// Each JIT-ted function is contained in a "class nmethod"
-	// (derived from CompiledMethod and CodeBlob).
-	//
-	// Layout of important bits in such 'class nmethod' pointer is:
-	//	[class CodeBlob fields]
-	//	[class CompiledMethod fields]
-	//	[class nmethod fields]
-	//	...
-	//	[JIT_code]	@ this + CodeBlob._code_start
-	//	...
-	//	[metadata]	@ this + nmethod._metadata_offset	\ these three
-	//	[scopes_data]	@ CompiledMethod._scopes_data_begin	| arrays we need
-	//	[scopes_pcs]	@ this + nmethod._scopes_pcs_offset	/ for inlining info
-	//	[dependencies]	@ this + nmethod._dependencies_offset
-	//	...
-	//
-	// see: src/hotspot/share/code/compiledMethod.hpp
-	//      src/hotspot/share/code/nmethod.hpp
-	//
-	// The scopes_pcs is a look up table to map RIP to scope_data. scopes_data
-	// is a list of descriptors that lists the method and it's Byte Code Index (BCI)
-	// activations for the scope. Finally the metadata is the array that
-	// maps scope_data method indices to real "class Method*".
+	vmd := d.d.Get()
+	vms := &vmd.vmStructs
 	nmethod := make([]byte, vms.Nmethod.Sizeof)
 	if err := d.rm.Read(addr, nmethod); err != nil {
 		return nil, fmt.Errorf("invalid nmethod ptr: %v", err)
@@ -453,42 +443,131 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address,
 		return nil, errors.New("JIT info evicted since eBPF snapshot")
 	}
 
-	// Finally read the associated debug information for this method
-	var scopesOff libpf.Address
-	metadataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.MetadataOffset)
-	if vms.CompiledMethod.ScopesDataBegin != 0 {
-		scopesOff = npsr.Ptr(nmethod, vms.CompiledMethod.ScopesDataBegin) - addr
-	} else {
-		scopesOff = npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
-	}
-	scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
-	depsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.DependenciesOffset)
-
-	if metadataOff > scopesOff || scopesOff > scopesPcsOff || scopesPcsOff > depsOff {
-		return nil, fmt.Errorf("unexpected nmethod layout: %v <= %v <= %v <= %v",
-			metadataOff, scopesOff, scopesPcsOff, depsOff)
-	}
-
-	method, err := d.getMethod(npsr.Ptr(nmethod, vms.CompiledMethod.Method), 0)
+	method, err := d.getMethod(npsr.Ptr(nmethod, vms.Nmethod.Method), 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get JIT Method: %v", err)
 	}
 
-	buf := make([]byte, depsOff-metadataOff)
-	if err := d.rm.Read(addr+metadataOff, buf); err != nil {
-		return nil, fmt.Errorf("invalid nmethod metadata: %v", err)
-	}
+	// Finally read the associated debug information for this method
+	var jit *hotspotJITInfo
+	if vmd.version < 0x17000000 {
+		// JDK22 and earlier
+		//
+		// Layout of important bits in such 'class nmethod' pointer is:
+		// [class CodeBlob fields]
+		// [class CompiledMethod fields]
+		// [class nmethod fields]
+		// ...
+		// [JIT_code]		@ this + CodeBlob._code_start
+		// ...
+		// [metadata]		@ this + nmethod._metadata_offset	\ these three
+		// [scopes_data]	@ CompiledMethod._scopes_data_begin	| arrays we need
+		// [scopes_pcs]		@ this + nmethod._scopes_pcs_offset	/ for inlining info
+		// [dependencies]	@ this + nmethod._dependencies_offset
+		// ...
+		var scopesDataOff libpf.Address
+		metadataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.MetadataOffset)
+		if vmd.nmethodUsesOffsets != 0 {
+			scopesDataOff = npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
+		} else {
+			scopesDataOff = npsr.Ptr(nmethod, vms.Nmethod.ScopesDataOffset) - addr
+		}
+		scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
+		depsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.DependenciesOffset)
 
-	// Buffer is read starting from metadataOff, so adjust accordingly
-	scopesOff -= metadataOff
-	scopesPcsOff -= metadataOff
+		if depsOff >= maxMetadataSize {
+			return nil, fmt.Errorf("unreasonably large metadata data region: %d bytes",
+				depsOff)
+		}
+		if metadataOff > scopesDataOff || scopesDataOff > scopesPcsOff || scopesPcsOff > depsOff {
+			return nil, fmt.Errorf("unexpected nmethod layout: %v <= %v <= %v <= %v",
+				metadataOff, scopesDataOff, scopesPcsOff, depsOff)
+		}
 
-	jit := &hotspotJITInfo{
-		compileID:  compileID,
-		method:     method,
-		metadata:   buf[0:scopesOff],
-		scopesData: buf[scopesOff:scopesPcsOff],
-		scopesPcs:  buf[scopesPcsOff:],
+		scopesData := make([]byte, depsOff-metadataOff)
+		if err := d.rm.Read(addr+metadataOff, scopesData); err != nil {
+			return nil, fmt.Errorf("invalid nmethod metadata: %v", err)
+		}
+
+		// Buffer is read starting from metadataOff, so adjust accordingly
+		scopesDataOff -= metadataOff
+		scopesPcsOff -= metadataOff
+
+		jit = &hotspotJITInfo{
+			compileID:  compileID,
+			method:     method,
+			metadata:   scopesData[:scopesDataOff],
+			scopesData: scopesData[scopesDataOff:scopesPcsOff],
+			scopesPcs:  scopesData[scopesPcsOff:],
+		}
+	} else {
+		// JDK23 and later
+		//
+		// Each JIT-ted function is contained in a "class nmethod" (derived from CodeBlob).
+		//
+		// Layout of important bits in such 'class nmethod' pointer is:
+		// [class CodeBlob fields]
+		// [class nmethod fields]
+		//   address		_immutable_data
+		// ...
+		// [JIT_code]		@ this + CodeBlob._code_start
+		// ...
+		// [metadata]		@ this + CodeBlob._code_end + nmethod._metadata_offset
+		//
+		// [scopes_data]	@ _immutable_data + nmethod._scopes_data_begin	\ arrays we need
+		// [scopes_pcs]		@ _immutable_data + nmethod._scopes_pcs_offset	/ for inlining info
+		// [speculations]	@ _immutable_data + nmethod._speculations_offset
+		// [end]		@ _immutable_Data + nmethod._immutable_data_size
+		// ...
+		// speculations presence depends on JDK build, and is not used. Instead the scopes
+		// end is determined from immutable data size.
+		metadataOff := npsr.PtrDiff32(nmethod, vms.CodeBlob.CodeEnd) +
+			npsr.PtrDiff16(nmethod, vms.Nmethod.MetadataOffset)
+		codeBlobSize := npsr.Uint32(nmethod, vms.CodeBlob.Size)
+		scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
+		scopesDataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
+		immutableDataPtr := npsr.Ptr(nmethod, vms.Nmethod.ImmutableData)
+		immutableDataSize := npsr.Uint32(nmethod, vms.Nmethod.ImmutableDataSize)
+		if immutableDataSize >= maxMetadataSize {
+			return nil, fmt.Errorf("unreasonably large immutable data region: %d bytes",
+				immutableDataSize)
+		}
+		if scopesPcsOff > scopesDataOff || scopesDataOff > libpf.Address(immutableDataSize) {
+			return nil, fmt.Errorf("unexpected immutable data layout: %v, %v, %v",
+				scopesDataOff, scopesPcsOff, immutableDataSize)
+		}
+
+		// Actually the metadata only spans to `_jvmci_data_offset`, but that field isn't exposed
+		// through VMstructs, and the codeblob size is the next boundary after that.
+		metadataSize := libpf.Address(codeBlobSize) - metadataOff
+		if metadataOff >= maxMetadataSize {
+			return nil, fmt.Errorf("unreasonably large nmethod metadata: %v",
+				metadataSize)
+		}
+
+		metadata := make([]byte, metadataSize)
+		if err := d.rm.Read(addr+metadataOff, metadata); err != nil {
+			return nil, fmt.Errorf("invalid nmethod metadata ptr: %v", err)
+		}
+
+		// Since the beginning of immutable data is not needed, adjust to not read it
+		immutableDataPtr += scopesPcsOff
+		immutableDataSize -= uint32(scopesPcsOff)
+		scopesDataOff -= scopesPcsOff
+		scopesPcsOff = 0
+
+		immutableData := make([]byte, immutableDataSize)
+		if err := d.rm.Read(immutableDataPtr, immutableData); err != nil {
+			return nil, fmt.Errorf("invalid immutable_data ptr: %v", err)
+		}
+
+		jit = &hotspotJITInfo{
+			compileID:  compileID,
+			method:     method,
+			metadata:   metadata,
+			scopesPcs:  immutableData[scopesPcsOff:scopesDataOff],
+			scopesData: immutableData[scopesDataOff:],
+		}
 	}
 
 	d.addrToJITInfo.Add(addr, jit)
@@ -665,19 +744,20 @@ func (d *hotspotInstance) populateMainMappings(vmd *hotspotVMData,
 	// Set up the main eBPF info structure.
 	vms := &vmd.vmStructs
 	procInfo := C.HotspotProcInfo{
-		compiledmethod_deopt_handler: C.u16(vms.CompiledMethod.DeoptHandlerBegin),
-		nmethod_compileid:            C.u16(vms.Nmethod.CompileID),
-		nmethod_orig_pc_offset:       C.u16(vms.Nmethod.OrigPcOffset),
-		codeblob_name:                C.u8(vms.CodeBlob.Name),
-		codeblob_codestart:           C.u8(vms.CodeBlob.CodeBegin),
-		codeblob_codeend:             C.u8(vms.CodeBlob.CodeEnd),
-		codeblob_framecomplete:       C.u8(vms.CodeBlob.FrameCompleteOffset),
-		codeblob_framesize:           C.u8(vms.CodeBlob.FrameSize),
-		cmethod_size:                 C.u8(vms.ConstMethod.Sizeof),
-		heapblock_size:               C.u8(vms.HeapBlock.Sizeof),
-		method_constmethod:           C.u8(vms.Method.ConstMethod),
-		jvm_version:                  C.u8(vmd.version >> 24),
-		segment_shift:                C.u8(heap.segmentShift),
+		nmethod_deopt_offset:   C.u16(vms.Nmethod.DeoptimizeOffset),
+		nmethod_compileid:      C.u16(vms.Nmethod.CompileID),
+		nmethod_orig_pc_offset: C.u16(vms.Nmethod.OrigPcOffset),
+		codeblob_name:          C.u8(vms.CodeBlob.Name),
+		codeblob_codestart:     C.u8(vms.CodeBlob.CodeBegin),
+		codeblob_codeend:       C.u8(vms.CodeBlob.CodeEnd),
+		codeblob_framecomplete: C.u8(vms.CodeBlob.FrameCompleteOffset),
+		codeblob_framesize:     C.u8(vms.CodeBlob.FrameSize),
+		cmethod_size:           C.u8(vms.ConstMethod.Sizeof),
+		heapblock_size:         C.u8(vms.HeapBlock.Sizeof),
+		method_constmethod:     C.u8(vms.Method.ConstMethod),
+		jvm_version:            C.u8(vmd.version >> 24),
+		segment_shift:          C.u8(heap.segmentShift),
+		nmethod_uses_offsets:   C.u8(vmd.nmethodUsesOffsets),
 	}
 
 	if vms.CodeCache.LowBound == 0 {
