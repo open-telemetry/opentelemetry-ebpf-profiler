@@ -19,6 +19,7 @@ package main
 #include <stdarg.h>
 #include <setjmp.h>
 #include "../../support/ebpf/types.h"
+#include "../../support/ebpf/opaquify.h"
 
 struct cgo_ctx {
 	jmp_buf jmpbuf;

@@ -324,6 +324,13 @@ bool get_go_custom_labels(struct pt_regs *ctx, UnwindState *state, void *offsets
                 DEBUG_PRINT("failed to read custom label: value too long");
                 continue;
             }
+
+#ifdef TESTING_COREDUMP
+            if (val_len > CUSTOM_LABEL_MAX_VAL_LEN)
+                res = bpf_probe_read(lbl->val.val_bytes, val_len, map_value->values[i].str);
+            else
+                res = -1;
+#else 
             // The following assembly statement is equivalent to:
             // if (val_len > CUSTOM_LABEL_MAX_VAL_LEN)
             //     res = bpf_probe_read(lbl->val, val_len, map_value->values[i].str);
@@ -353,6 +360,7 @@ bool get_go_custom_labels(struct pt_regs *ctx, UnwindState *state, void *offsets
                   // all r0-r5 are clobbered since we make a function call.
                 : "r0", "r1", "r2", "r3", "r4", "r5", "memory"
             );
+#endif
             // clang-format on
             if (res) {
                 DEBUG_PRINT("failed to read value for custom label: %ld", res);

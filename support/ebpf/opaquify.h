@@ -1,6 +1,7 @@
 #ifndef OPTI_OPAQUIFY_H
 #define OPTI_OPAQUIFY_H
 
+#ifndef TESTING_COREDUMP
 #include "bpfdefs.h"
 // Hack to thwart the verifier's detection of variable bounds.
 //
@@ -54,6 +55,12 @@ u64 opaquify64(u64 val, u64 seed) {
     );
     return val;
 }
+#else
+static inline __attribute__((__always_inline__))
+u64 opaquify64(u64 val, u64 seed) {
+    return val;
+}
+#endif
 
 
 #endif
