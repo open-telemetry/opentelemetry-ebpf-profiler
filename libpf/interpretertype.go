@@ -54,22 +54,26 @@ func (i InterpreterType) Frame() FrameType {
 var interpreterTypeToString = map[InterpreterType]string{
 	UnknownInterp: "unknown",
 	PHP:           "php",
-	PHPJIT:        "phpjit",
-	Python:        "cpython",
-	Native:        "native",
-	Kernel:        "kernel",
-	HotSpot:       "jvm",
-	Ruby:          "ruby",
-	Perl:          "perl",
-	V8:            "v8js",
-	Dotnet:        "dotnet",
-	APMInt:        "apm-integration",
+	// OTel SemConv does not differentiate between jitted code and interpreted code.
+	PHPJIT:  "php",
+	Python:  "cpython",
+	Native:  "native",
+	Kernel:  "kernel",
+	HotSpot: "jvm",
+	Ruby:    "ruby",
+	Perl:    "perl",
+	V8:      "v8js",
+	Dotnet:  "dotnet",
+	APMInt:  "apm-integration",
 }
 
 var stringToInterpreterType = make(map[string]InterpreterType, len(interpreterTypeToString))
 
 func init() {
 	for k, v := range interpreterTypeToString {
+		if k == PHPJIT {
+			continue
+		}
 		stringToInterpreterType[v] = k
 	}
 }

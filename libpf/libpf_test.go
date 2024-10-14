@@ -35,7 +35,7 @@ func TestTraceType(t *testing.T) {
 			ty:     NativeFrame.Error(),
 			isErr:  true,
 			interp: Native,
-			str:    "native-error",
+			str:    "native",
 		},
 	}
 
