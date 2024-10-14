@@ -71,6 +71,10 @@ type hotspotVMData struct {
 	// unsigned5X is the number of exclusion bytes used in UNSIGNED5 encoding
 	unsigned5X uint8
 
+	// nmethodUsesOffsets is set if the nmethod code start/end and deoptimize handler
+	// are offsets (instead of pointers)
+	nmethodUsesOffsets uint8
+
 	// vmStructs reflects the HotSpot introspection data we want to extract
 	// from the runtime. It is filled using golang reflection (the struct and
 	// field names are used to find the data from the JVM). Thus the structs
@@ -80,6 +84,7 @@ type hotspotVMData struct {
 	// C++ class  and thus the expected value of .Sizeof member. This is mainly to
 	// indicate the classes for which uint8 is not enough to hold the offset values
 	// for the eBPF code.
+	//nolint:lll
 	vmStructs struct {
 		AbstractVMVersion struct {
 			Release         libpf.Address `name:"_s_vm_release"`
@@ -96,9 +101,10 @@ type hotspotVMData struct {
 			Name                uint `name:"_name"`
 			FrameCompleteOffset uint `name:"_frame_complete_offset"`
 			FrameSize           uint `name:"_frame_size"`
-			// JDK -8: offset, JDK 9+: pointers
+			// JDK -8: offset, JDK 9+: pointers, JDK 23+: offset
 			CodeBegin uint `name:"_code_begin,_code_offset"`
 			CodeEnd   uint `name:"_code_end,_data_offset"`
+			Size      uint `name:"_size"` // Only needed for JDK23+
 		}
 		CodeCache struct {
 			Heap      libpf.Address `name:"_heap"`
@@ -111,12 +117,6 @@ type hotspotVMData struct {
 			Log2SegmentSize uint `name:"_log2_segment_size"`
 			Memory          uint `name:"_memory"`
 			Segmap          uint `name:"_segmap"`
-		}
-		CompiledMethod struct { // .Sizeof >200
-			Sizeof            uint
-			DeoptHandlerBegin uint `name:"_deopt_handler_begin"`
-			Method            uint `name:"_method"`
-			ScopesDataBegin   uint `name:"_scopes_data_begin"`
 		}
 		ConstantPool struct {
 			Sizeof              uint
@@ -165,12 +165,14 @@ type hotspotVMData struct {
 			CompileID          uint `name:"_compile_id"`
 			MetadataOffset     uint `name:"_metadata_offset,_oops_offset"`
 			ScopesPcsOffset    uint `name:"_scopes_pcs_offset"`
-			DependenciesOffset uint `name:"_dependencies_offset"`
+			DependenciesOffset uint `name:"_dependencies_offset"` // JDK -22 only
+			ImmutableData      uint `name:"_immutable_data"`      // JDK 23+ only
+			ImmutableDataSize  uint `name:"_immutable_data_size"` // JDK 23+ only
 			OrigPcOffset       uint `name:"_orig_pc_offset"`
-			DeoptimizeOffset   uint `name:"_deoptimize_offset"`
+			DeoptimizeOffset   uint `name:"_deoptimize_offset,_deopt_handler_offset,_deopt_handler_begin"`
 			Method             uint `name:"_method"`
-			ScopesDataOffset   uint `name:"_scopes_data_offset"` // JDK -8 only
-		} `name:"nmethod"`
+			ScopesDataOffset   uint `name:"_scopes_data_offset,_scopes_data_begin"`
+		} `name:"nmethod,CompiledMethod"`
 		OopDesc struct {
 			Sizeof uint
 		} `name:"oopDesc"`
@@ -540,20 +542,14 @@ func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address
 
 	// JDK-8: Only single CodeCache Heap, some CodeBlob and Nmethod changes
 	if vms.CodeCache.Heap != ^libpf.Address(0) {
-		// Validate values that can be missing, fixup CompiledMethod offsets
+		// Validate values that can be missing
 		vms.CodeCache.Heaps = 0
 		vms.CodeCache.HighBound = 0
 		vms.CodeCache.LowBound = 0
-		vms.CompiledMethod.Sizeof = vms.Nmethod.Sizeof
-		vms.CompiledMethod.DeoptHandlerBegin = vms.Nmethod.DeoptimizeOffset
-		vms.CompiledMethod.Method = vms.Nmethod.Method
-		vms.CompiledMethod.ScopesDataBegin = 0
+		vmd.nmethodUsesOffsets = 1
 	} else {
 		// Reset the compatibility symbols not needed
 		vms.CodeCache.Heap = 0
-		vms.Nmethod.Method = 0
-		vms.Nmethod.DeoptimizeOffset = 0
-		vms.Nmethod.ScopesDataOffset = 0
 	}
 
 	// JDK12+: Use Symbol.Length_and_refcount for Symbol.Length
@@ -578,6 +574,16 @@ func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address
 	// https://github.com/openjdk/jdk20u/commit/8d3399bf5f354931b0c62d2ed8095e554be71680
 	if vmd.version >= 0x1400000f {
 		vmd.unsigned5X = 1
+	}
+
+	// JDK23+21+: nmethod metadata layout changed completely
+	// https://github.com/openjdk/jdk/commit/bdcc2400db63e604d76f9b5bd3c876271743f69f
+	if vms.Nmethod.ImmutableData != ^uint(0) {
+		vms.Nmethod.DependenciesOffset = 0
+		vmd.nmethodUsesOffsets = 1
+	} else if vms.Nmethod.DependenciesOffset != ^uint(0) {
+		vms.Nmethod.ImmutableData = 0
+		vms.Nmethod.ImmutableDataSize = 0
 	}
 
 	// Check that all symbols got loaded from JVM introspection data

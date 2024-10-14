@@ -44,7 +44,7 @@ func forceContextSwitch() {
 // runKernelFrameProbe executes a perf event on the sched/sched_switch tracepoint
 // that sends a selection of hand-crafted, predictable traces.
 func runKernelFrameProbe(t *testing.T, tracer *Tracer) {
-	coll, err := support.LoadCollectionSpec()
+	coll, err := support.LoadCollectionSpec(false)
 	require.NoError(t, err)
 
 	err = coll.RewriteMaps(tracer.ebpfMaps) //nolint:staticcheck
@@ -95,9 +95,12 @@ func (f mockReporter) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
 }
 
 func (f mockReporter) ReportFallbackSymbol(_ libpf.FrameID, _ string) {}
-func (f mockReporter) FrameMetadata(_ libpf.FileID, _ libpf.AddressOrLineno, _ libpf.SourceLineno,
-	_ uint32, _, _ string) {
+
+func (f mockReporter) FrameKnown(_ libpf.FrameID) bool {
+	return true
 }
+
+func (f mockReporter) FrameMetadata(_ *reporter.FrameMetadataArgs) {}
 
 func generateMaxLengthTrace() host.Trace {
 	var trace host.Trace
