@@ -805,7 +805,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.PyFrameObject.Code = 0
 		vms.PyFrameObject.LastI = 56       // _Py_CODEUNIT *prev_instr
 		vms.PyFrameObject.Back = 8         // struct _PyInterpreterFrame *previous
-		vms.PyFrameObject.EntryMember = 70 // struct _PyInterpreterFrame owner
+		vms.PyFrameObject.EntryMember = 70 // char owner
 		vms.PyFrameObject.EntryVal = 3     // enum _frameowner, FRAME_OWNED_BY_CSTACK
 		vms.PyThreadState.Frame = 56
 		vms.PyCFrame.CurrentFrame = 0
@@ -814,7 +814,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.PyFrameObject.Code = 0
 		vms.PyFrameObject.LastI = 56       // _Py_CODEUNIT *prev_instr
 		vms.PyFrameObject.Back = 8         // struct _PyInterpreterFrame *previous
-		vms.PyFrameObject.EntryMember = 70 // struct _PyInterpreterFrame owner
+		vms.PyFrameObject.EntryMember = 70 // char owner
 		vms.PyFrameObject.EntryVal = 3     // enum _frameowner, FRAME_OWNED_BY_CSTACK
 		vms.PyThreadState.Frame = 72
 		vms.PyCFrame.CurrentFrame = 8
