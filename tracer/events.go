@@ -35,15 +35,9 @@ const (
 )
 
 // StartPIDEventProcessor spawns a goroutine to process PID events.
-func (t *Tracer) StartPIDEventProcessor(ctx context.Context, continuous bool) error {
+func (t *Tracer) StartPIDEventProcessor(ctx context.Context) error {
 	go t.processPIDEvents(ctx)
-
-	if !continuous {
-		return t.populatePIDs(ctx, continuous)
-	}
-	go t.populatePIDs(ctx, continuous)
-	
-	return nil
+	return t.populatePIDs(ctx)
 }
 
 // Process the PID events that are incoming in the Tracer channel.

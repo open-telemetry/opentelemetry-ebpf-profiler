@@ -12,7 +12,6 @@ import (
 	"hash/fnv"
 	"math"
 	"math/rand/v2"
-	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -633,80 +632,30 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 	return nil
 }
 
-func (t *Tracer) populatePIDs(ctx context.Context, continuous bool) error {
-	seenPIDs := make(map[libpf.PID]struct{})
-
-	for {
-		pids, err := proc.ListPIDs()
-		if err != nil {
-			return fmt.Errorf("failure reading PID list from /proc: %w", err)
-		}
-
-		if err := t.processPIDs(ctx, pids, seenPIDs); err != nil {
-			return err
-		}
-
-		if !continuous {
-			break
-		}
-
-		t.cleanupPIDs(pids, seenPIDs)
-
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(50 * time.Millisecond):
-			// Wait before reading the next batch of PIDs
-		}
+// List PIDs in /proc and send them in the Tracer channel for reading.
+func (t *Tracer) populatePIDs(ctx context.Context) error {
+	// Inform the process manager and our backend about the new mappings.
+	pids, err := proc.ListPIDs()
+	if err != nil {
+		return fmt.Errorf("failure reading PID list from /proc: %v", err)
 	}
-
-	return nil
-}
-
-func (t *Tracer) processPIDs(ctx context.Context, pids []libpf.PID, seenPIDs map[libpf.PID]struct{}) error {
 	for _, pid := range pids {
-		if _, ok := seenPIDs[pid]; ok {
-			continue
-		}
-		seenPIDs[pid] = struct{}{}
-
-		select {
-		case <-ctx.Done():
-			return nil
-		case t.pidEvents <- pid:
-			// PID sent successfully
-		default:
-			// If channel is full, wait and retry
-			if err := t.waitAndSendPID(ctx, pid); err != nil {
-				return err
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case t.pidEvents <- pid:
+				goto next_pid
+			default:
+				// Workaround to implement a non blocking send to a channel.
+				// To avoid a busy loop on this non blocking channel send operation
+				// time.Sleep() is used.
+				time.Sleep(50 * time.Millisecond)
 			}
 		}
+	next_pid:
 	}
 	return nil
-}
-
-func (t *Tracer) waitAndSendPID(ctx context.Context, pid libpf.PID) error {
-	ticker := time.NewTicker(50 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case t.pidEvents <- pid:
-			return nil
-		case <-ticker.C:
-			// Continue trying
-		}
-	}
-}
-
-func (t *Tracer) cleanupPIDs(currentPIDs []libpf.PID, seenPIDs map[libpf.PID]struct{}) {
-	for pid := range seenPIDs {
-		if !slices.Contains(currentPIDs, pid) {
-			delete(seenPIDs, pid)
-		}
-	}
 }
 
 // insertKernelFrames fetches the kernel stack frames for a particular kstackID and populates

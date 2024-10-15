@@ -220,7 +220,7 @@ func mainWithExitCode() exitCode {
 
 	now := time.Now()
 	// Initial scan of /proc filesystem to list currently active PIDs and have them processed.
-	if err = trc.StartPIDEventProcessor(mainCtx, args.externallyManaged); err != nil {
+	if err = trc.StartPIDEventProcessor(mainCtx); err != nil {
 		log.Errorf("Failed to list processes from /proc: %v", err)
 	}
 	metrics.Add(metrics.IDProcPIDStartupMs, metrics.MetricValue(time.Since(now).Milliseconds()))
