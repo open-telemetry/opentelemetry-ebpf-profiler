@@ -3,6 +3,6 @@
 .cache
 /.idea
 /go
-opentelemetry-ebpf-profiler
+ebpf-profiler
 ci-kernels
 ebpf-profiler

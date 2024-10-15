@@ -425,14 +425,14 @@ typedef struct HotspotProcInfo {
   u64 codecache_start, codecache_end;
 
   // Offsets of large structures, sizeof it is near or over 256 bytes.
-  u16 compiledmethod_deopt_handler, nmethod_compileid, nmethod_orig_pc_offset;
+  u16 nmethod_deopt_offset, nmethod_compileid, nmethod_orig_pc_offset;
 
   // Offsets and other data fitting in a uchar
   u8 codeblob_name;
   u8 codeblob_codestart, codeblob_codeend;
   u8 codeblob_framecomplete, codeblob_framesize;
   u8 heapblock_size, method_constmethod, cmethod_size;
-  u8 jvm_version, segment_shift;
+  u8 jvm_version, segment_shift, nmethod_uses_offsets;
 } HotspotProcInfo;
 
 // RubyProcInfo is a container for the data needed to build a stack trace for a Ruby process.

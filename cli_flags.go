@@ -95,7 +95,7 @@ type arguments struct {
 func parseArgs() (*arguments, error) {
 	var args arguments
 
-	fs := flag.NewFlagSet("opentelemetry-ebpf-profiler", flag.ExitOnError)
+	fs := flag.NewFlagSet("ebpf-profiler", flag.ExitOnError)
 
 	// Please keep the parameters ordered alphabetically in the source-code.
 	fs.UintVar(&args.bpfVerifierLogLevel, "bpf-log-level", 0, bpfVerifierLogLevelHelp)

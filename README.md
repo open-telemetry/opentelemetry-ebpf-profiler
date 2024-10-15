@@ -46,11 +46,12 @@ The agent can be built with the provided make targets. Docker is required for co
      ```sh
      make agent
      ```
+     Or `make debug-agent` for debug build.
   3. To cross-complie for a different architecture (e.g. arm64):
      ```sh
      make agent TARGET_ARCH=arm64
      ```
-The resulting binary will be named <opentelemetry-ebpf-profiler> in the current directory.
+The resulting binary will be named <ebpf-profiler> in the current directory.
 
 ## Other OSes
 Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run the agent. Ensure the appropriate architecture is specified if using cross-compilation. Use the same make targets as above after the Linux environment is configured in the VM.
@@ -60,6 +61,10 @@ You can build the agent without Docker by directly installing the dependencies l
 ```sh
 make
 ```
+or
+```sh
+make debug
+```
 This will build the profiler natively on your machine.
 
 ## Running
@@ -67,7 +72,7 @@ This will build the profiler natively on your machine.
 You can start the agent with the following command:
 
 ```sh
-sudo ./opentelemetry-ebpf-profiler -collection-agent=127.0.0.1:11000 -disable-tls
+sudo ./ebpf-profiler -collection-agent=127.0.0.1:11000 -disable-tls
 ```
 
 The agent comes with a functional but work-in-progress / evolving implementation
@@ -510,7 +515,7 @@ probabilistic profiling is either enabled or disabled. The default value is 1 mi
 
 The following example shows how to configure the profiling agent with a threshold of 50 and an interval of 2 minutes and 30 seconds:
 ```bash
-sudo ./opentelemetry-ebpf-profiler -probabilistic-threshold=50 -probabilistic-interval=2m30s
+sudo ./ebpf-profiler -probabilistic-threshold=50 -probabilistic-interval=2m30s
 ```
 
 # Legal

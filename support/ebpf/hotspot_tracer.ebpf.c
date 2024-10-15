@@ -18,8 +18,8 @@ typedef struct CodeBlobInfo {
   u64 code_start;
   // Value of the `CodeBlob::_code_end` field.
   u64 code_end;
-  // Value of the `CompiledMethod::deopt_handler` field.
-  // Only contains valid data if the CodeBlob is of `nmethod` or `CompiledMethod` type.
+  // Value of the `nmethod::deopt_handler` field.
+  // Only contains valid data if the CodeBlob is of `nmethod` type.
   u64 deopt_handler;
   // Determines the frame type. First 4 bytes of the string pointed to by `CodeBlob::_name`.
   u32 frame_type;
@@ -575,8 +575,8 @@ ErrorCode hotspot_handle_nmethod(const CodeBlobInfo *cbi, Trace *trace,
   ui->line.ptr_check = cbi->compile_id;
 
   u64 deopt_handler = cbi->deopt_handler;
-  if (ji->jvm_version <= 8) {
-    // JDK7/8: Deoptimization handler is an uint32 offset from the code blob start
+  if (ji->nmethod_uses_offsets) {
+    // JDK7/8/23+: Deoptimization handler is an uint32 offset from the code blob start
     deopt_handler = cbi->address + (deopt_handler & 0xffffffff);
   }
   if (ui->pc == deopt_handler) {
@@ -794,9 +794,9 @@ ErrorCode hotspot_read_codeblob(const UnwindState *state, const HotspotProcInfo 
 
   // Make the verifier happy. No bound checks required for the remaining offsets: they are u8, and
   // the verifier is aware that their maximum value is smaller than our `codeblob` buffer.
-  if (ji->compiledmethod_deopt_handler + sizeof(u64) > sizeof(scratch->codeblob) ||
-      ji->nmethod_compileid            + sizeof(u32) > sizeof(scratch->codeblob) ||
-      ji->nmethod_orig_pc_offset       + sizeof(u64) > sizeof(scratch->codeblob)) {
+  if (ji->nmethod_deopt_offset   + sizeof(u64) > sizeof(scratch->codeblob) ||
+      ji->nmethod_compileid      + sizeof(u32) > sizeof(scratch->codeblob) ||
+      ji->nmethod_orig_pc_offset + sizeof(u64) > sizeof(scratch->codeblob)) {
     return ERR_UNREACHABLE;
   }
 
@@ -807,7 +807,7 @@ ErrorCode hotspot_read_codeblob(const UnwindState *state, const HotspotProcInfo 
   cbi->frame_comp     = *(u32*)(scratch->codeblob + ji->codeblob_framecomplete);
   cbi->compile_id     = *(u32*)(scratch->codeblob + ji->nmethod_compileid);
   cbi->orig_pc_offset = *(u32*)(scratch->codeblob + ji->nmethod_orig_pc_offset);
-  cbi->deopt_handler  = *(u64*)(scratch->codeblob + ji->compiledmethod_deopt_handler);
+  cbi->deopt_handler  = *(u64*)(scratch->codeblob + ji->nmethod_deopt_offset);
 
   // `frame_type` is actually the first 4 characters of the CodeBlob type name.
   u64 code_name_addr = *(u64*)(scratch->codeblob + ji->codeblob_name);
@@ -815,10 +815,16 @@ ErrorCode hotspot_read_codeblob(const UnwindState *state, const HotspotProcInfo 
     goto read_error_exit;
   }
 
-  if (ji->jvm_version <= 8) {
-    // JDK7/8: Code start and end are actually uint32 offsets from the code blob start
+  // JDK7/8 and 23+: code start and end are actually uint32 offsets from the code blob start
+  if (ji->nmethod_uses_offsets) {
     cbi->code_start = cbi->address + (cbi->code_start & 0xffffffff);
     cbi->code_end = cbi->address + (cbi->code_end & 0xffffffff);
+  }
+
+  // JDK23+20+: frame_comp is uint16_t now.
+  // https://github.com/openjdk/jdk/commit/b704e91241b0
+  if (ji->jvm_version >= 23) {
+      cbi->frame_comp &= 0xffff;
   }
 
   DEBUG_PRINT("jvm:  -> code %lx-%lx",
