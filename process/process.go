@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -63,7 +62,7 @@ func trimMappingPath(path string) string {
 	return path
 }
 
-func parseMappings(mapsFile io.Reader, pid libpf.PID) ([]Mapping, error) {
+func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 	mappings := make([]Mapping, 0)
 	scanner := bufio.NewScanner(mapsFile)
 	buf := make([]byte, 512)
@@ -119,8 +118,7 @@ func parseMappings(mapsFile io.Reader, pid libpf.PID) ([]Mapping, error) {
 				continue
 			}
 		} else {
-			// This is needed to support running the profiler from whithin a container.
-			path = "/proc/" + strconv.Itoa(int(pid)) + "/root/" + trimMappingPath(path)
+			path = trimMappingPath(path)
 			path = strings.Clone(path)
 		}
 
@@ -150,7 +148,7 @@ func (sp *systemProcess) GetMappings() ([]Mapping, error) {
 	}
 	defer mapsFile.Close()
 
-	mappings, err := parseMappings(mapsFile, sp.pid)
+	mappings, err := parseMappings(mapsFile)
 	if err == nil {
 		fileToMapping := make(map[string]*Mapping)
 		for idx := range mappings {
