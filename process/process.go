@@ -62,7 +62,7 @@ func trimMappingPath(path string) string {
 	return path
 }
 
-func parseMappings(mapsFile io.Reader, pid libpf.PID) ([]Mapping, error) {
+func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 	mappings := make([]Mapping, 0)
 	scanner := bufio.NewScanner(mapsFile)
 	buf := make([]byte, 512)
@@ -148,7 +148,7 @@ func (sp *systemProcess) GetMappings() ([]Mapping, error) {
 	}
 	defer mapsFile.Close()
 
-	mappings, err := parseMappings(mapsFile, sp.pid)
+	mappings, err := parseMappings(mapsFile)
 	if err == nil {
 		fileToMapping := make(map[string]*Mapping)
 		for idx := range mappings {
