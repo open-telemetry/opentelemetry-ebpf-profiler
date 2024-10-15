@@ -57,7 +57,6 @@ const (
 	// ProbabilisticThresholdMax defines the upper bound of the probabilistic profiling
 	// threshold.
 	ProbabilisticThresholdMax = 100
-	socketPath                = "/tmp/ebpf-profiler-native-tracer-entry.sock"
 )
 
 // Constants that define the status of probabilistic profiling.
