@@ -25,7 +25,7 @@ var testMappings = `55fe82710000-55fe8273c000 r--p 00000000 fd:01 1068432       
 7f63c8ebf000-7f63c8fef000 r-xp 0001c000 1fd:01 1075944                   /tmp/usr_lib_x86_64-linux-gnu_libopensc.so.6.0.0`
 
 func TestParseMappings(t *testing.T) {
-	mappings, err := parseMappings(strings.NewReader(testMappings))
+	mappings, err := parseMappings(strings.NewReader(testMappings), 1)
 	require.NoError(t, err)
 	assert.NotNil(t, mappings)
 
@@ -37,7 +37,7 @@ func TestParseMappings(t *testing.T) {
 			Inode:      1068432,
 			Length:     0x2c000,
 			FileOffset: 0,
-			Path:       "/tmp/usr_bin_seahorse",
+			Path:       "/proc/1/root//tmp/usr_bin_seahorse",
 		},
 		{
 			Vaddr:      0x55fe8273c000,
@@ -46,7 +46,7 @@ func TestParseMappings(t *testing.T) {
 			Inode:      1068432,
 			Length:     0x82000,
 			FileOffset: 0x2c000,
-			Path:       "/tmp/usr_bin_seahorse",
+			Path:       "/proc/1/root//tmp/usr_bin_seahorse",
 		},
 		{
 			Vaddr:      0x55fe827be000,
@@ -55,7 +55,7 @@ func TestParseMappings(t *testing.T) {
 			Inode:      1068432,
 			Length:     0x78000,
 			FileOffset: 0xae000,
-			Path:       "/tmp/usr_bin_seahorse",
+			Path:       "/proc/1/root//tmp/usr_bin_seahorse",
 		},
 		{
 			Vaddr:      0x55fe82836000,
@@ -64,7 +64,7 @@ func TestParseMappings(t *testing.T) {
 			Inode:      1068432,
 			Length:     0x7000,
 			FileOffset: 0x125000,
-			Path:       "/tmp/usr_bin_seahorse",
+			Path:       "/proc/1/root//tmp/usr_bin_seahorse",
 		},
 		{
 			Vaddr:      0x55fe8283d000,
@@ -73,7 +73,7 @@ func TestParseMappings(t *testing.T) {
 			Inode:      1068432,
 			Length:     0x1000,
 			FileOffset: 0x12c000,
-			Path:       "/tmp/usr_bin_seahorse",
+			Path:       "/proc/1/root//tmp/usr_bin_seahorse",
 		},
 		{
 			Vaddr:      0x7f63c8c3e000,
@@ -82,7 +82,7 @@ func TestParseMappings(t *testing.T) {
 			Inode:      1048922,
 			Length:     0x1A2000,
 			FileOffset: 544768,
-			Path:       "/tmp/usr_lib_x86_64-linux-gnu_libcrypto.so.1.1",
+			Path:       "/proc/1/root//tmp/usr_lib_x86_64-linux-gnu_libcrypto.so.1.1",
 		},
 		{
 			Vaddr:      0x7f63c8ebf000,
@@ -91,7 +91,7 @@ func TestParseMappings(t *testing.T) {
 			Inode:      1075944,
 			Length:     0x130000,
 			FileOffset: 114688,
-			Path:       "/tmp/usr_lib_x86_64-linux-gnu_libopensc.so.6.0.0",
+			Path:       "/proc/1/root//tmp/usr_lib_x86_64-linux-gnu_libopensc.so.6.0.0",
 		},
 	}
 	assert.Equal(t, expected, mappings)

@@ -32,6 +32,7 @@
 #include "tracemgmt.h"
 #include "types.h"
 #include "tsd.h"
+#include "helpers.h"
 
 // The number of Perl frames to unwind per frame-unwinding eBPF program.
 #define PERL_FRAMES_PER_PROGRAM 12
@@ -356,8 +357,9 @@ int walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo) {
 // unwind_perl is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // Perl stack frames to the trace object for the current CPU.
-SEC("perf_event/unwind_perl")
-int unwind_perl(struct pt_regs *ctx) {
+BPF_PROBE(unwind_perl)
+int unwind_perl(struct pt_regs *ctx)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
     return -1;

@@ -3,6 +3,7 @@
 #include "bpfdefs.h"
 #include "tracemgmt.h"
 #include "types.h"
+#include "helpers.h"
 
 // The number of PHP frames to unwind per frame-unwinding eBPF program. If
 // we start running out of instructions in the walk_php_stack program, one
@@ -182,8 +183,9 @@ int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted) {
   return unwinder;
 }
 
-SEC("perf_event/unwind_php")
-int unwind_php(struct pt_regs *ctx) {
+BPF_PROBE(unwind_php)
+int unwind_php(struct pt_regs *ctx)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;
