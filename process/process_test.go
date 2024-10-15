@@ -25,7 +25,7 @@ var testMappings = `55fe82710000-55fe8273c000 r--p 00000000 fd:01 1068432       
 7f63c8ebf000-7f63c8fef000 r-xp 0001c000 1fd:01 1075944                   /tmp/usr_lib_x86_64-linux-gnu_libopensc.so.6.0.0`
 
 func TestParseMappings(t *testing.T) {
-	mappings, err := parseMappings(strings.NewReader(testMappings), 1)
+	mappings, err := parseMappings(strings.NewReader(testMappings))
 	require.NoError(t, err)
 	assert.NotNil(t, mappings)
 
