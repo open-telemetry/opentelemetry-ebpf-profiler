@@ -288,7 +288,6 @@ func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 	}
 
 	if version >= perlVersion(5, 35, 0) {
-		vms.xpvhv_aux.xhv_name_count = 0x3c
 		vms.xpvhv_with_aux.xpvhv_aux = 0x20
 	}
 
