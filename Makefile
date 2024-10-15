@@ -129,7 +129,7 @@ docker-image:
 
 agent:
 	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
-	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP) $(if $(EXTERNAL),EXTERNAL=1)"
+	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP) $(if $(EXTERNAL),EXTERNAL=external)"
 
 debug-agent:
 	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
