@@ -77,7 +77,8 @@ generate:
 	go generate ./...
 
 ebpf:
-	$(MAKE) $(EBPF_FLAGS) -j$(shell nproc) -C support/ebpf $(if $(EXTERNAL),EXTERNAL=1,)
+	$(MAKE) $(EBPF_FLAGS) -j$(shell nproc) -C support/ebpf EXTERNAL=external
+	$(MAKE) $(EBPF_FLAGS) -j$(shell nproc) -C support/ebpf
 
 ebpf-profiler: generate ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)

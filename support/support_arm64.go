@@ -1,9 +1,10 @@
-//go:build arm64 && !dummy
+//go:build arm64 && !dummy && !external_trigger
+// +build arm64,!dummy,!external_trigger
 
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package support // import "go.opentelemetry.io/ebpf-profiler/support"
+package support
 
 import (
 	_ "embed"

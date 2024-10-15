@@ -28,7 +28,11 @@ TARGET_ARCH ?= $(NATIVE_ARCH)
 # Valid values: release, debug
 BUILD_TYPE ?= release
 
-TRACER_NAME ?= tracer.ebpf.$(BUILD_TYPE).$(TARGET_ARCH)
+ifdef EXTERNAL
+	TRACER_NAME ?= tracer.ebpf.$(BUILD_TYPE).$(EXTERNAL).$(TARGET_ARCH)
+else
+	TRACER_NAME ?= tracer.ebpf.$(BUILD_TYPE).$(TARGET_ARCH)
+endif
 
 ifeq ($(TARGET_ARCH),arm64)
 TARGET_FLAGS = -target aarch64-linux-gnu
@@ -55,7 +59,11 @@ FLAGS=$(TARGET_FLAGS) \
 	$(EXTERNAL_FLAG)
 
 SRCS := $(wildcard *.ebpf.c)
-OBJS := $(SRCS:.c=.$(BUILD_TYPE).$(TARGET_ARCH).o)
+ifdef EXTERNAL
+	OBJS := $(SRCS:.c=.$(BUILD_TYPE).$(EXTERNAL).$(TARGET_ARCH).o)
+else
+	OBJS := $(SRCS:.c=.$(BUILD_TYPE).$(TARGET_ARCH).o)
+endif
 
 .DEFAULT_GOAL := all
 
@@ -81,8 +89,13 @@ errors.h: ../../tools/errors-codegen/errors.json
 
 %.ebpf.c: errors.h ;
 
+ifdef EXTERNAL
+%.ebpf.$(BUILD_TYPE).$(EXTERNAL).$(TARGET_ARCH).o: %.ebpf.c
+	$(BPF_CLANG) $(FLAGS) -o $@
+else
 %.ebpf.$(BUILD_TYPE).$(TARGET_ARCH).o: %.ebpf.c
 	$(BPF_CLANG) $(FLAGS) -o $@
+endif
 
 $(TRACER_NAME): $(OBJS)
 	$(BPF_LINK) $^ -o - | $(LLC) -march=bpf -mcpu=v2 -filetype=obj -o $@
