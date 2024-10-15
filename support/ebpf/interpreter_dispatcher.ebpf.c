@@ -194,6 +194,7 @@ int unwind_stop(struct pt_regs *ctx) {
 
   // If unwinding was aborted due to a critical error, push an error frame.
   if (state->unwind_error) {
+    DEBUG_PRINT("Aborting further unwinding due to error code %d", state->unwind_error);
     push_error(&record->trace, state->unwind_error);
   }
 

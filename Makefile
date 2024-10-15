@@ -1,5 +1,5 @@
-.PHONY: all all-common binary clean ebpf generate test test-deps protobuf docker-image agent legal \
-	integration-test-binaries codespell lint linter-version
+.PHONY: all all-common clean ebpf generate test test-deps protobuf docker-image agent legal \
+	integration-test-binaries codespell lint linter-version debug debug-agent ebpf-profiler
 
 SHELL := /usr/bin/env bash
 
@@ -39,14 +39,23 @@ VERSION ?= v0.0.0
 BUILD_TIMESTAMP ?= $(shell date +%s)
 REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
 
-LDFLAGS := -X github.com//open-telemetry/opentelemetry-ebpf-profiler/vc.version=$(VERSION) \
-	-X github.com/open-telemetry/opentelemetry-ebpf-profiler/vc.revision=$(REVISION) \
-	-X github.com/open-telemetry/opentelemetry-ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
+LDFLAGS := -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
+	-X go.opentelemetry.io/ebpf-profiler/vc.revision=$(REVISION) \
+	-X go.opentelemetry.io/ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
 	-extldflags=-static
 
-GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)" -tags osusergo,netgo
+GO_TAGS := osusergo,netgo
+EBPF_FLAGS := 
 
-all: generate ebpf binary
+GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
+
+MAKEFLAGS += -j$(shell nproc)
+
+all: ebpf-profiler
+
+debug: GO_TAGS := $(GO_TAGS),debugtracer
+debug: EBPF_FLAGS += debug
+debug: all
 
 # Removes the go build cache and binaries in the current project
 clean:
@@ -59,11 +68,11 @@ clean:
 generate:
 	go generate ./...
 
-binary:
-	go build $(GO_FLAGS)
-
 ebpf:
-	$(MAKE) -j$(shell nproc) -C support/ebpf
+	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
+
+ebpf-profiler: generate ebpf
+	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 GOLANGCI_LINT_VERSION = "v1.60.1"
 lint: generate vanity-import-check
@@ -84,7 +93,7 @@ vanity-import-fix: $(PORTO)
 	@porto --include-internal -w .
 
 test: generate ebpf test-deps
-	go test $(GO_FLAGS) ./...
+	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
@@ -101,7 +110,7 @@ TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
 integration-test-binaries: generate ebpf
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
-			-tags osusergo,netgo,static_build,integration \
+			-tags $(GO_TAGS),static_build,integration \
 			-o ./support/$(subst /,_,$(test_name)).test \
 			./$(test_name)) || exit ; \
 	)
@@ -112,6 +121,10 @@ docker-image:
 agent:
 	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
 	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
+
+debug-agent:
+	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
+	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP) debug"
 
 legal:
 	@go install github.com/google/go-licenses@latest

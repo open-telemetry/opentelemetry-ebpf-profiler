@@ -254,8 +254,11 @@ func (s *symbolReporterMockup) ReportFallbackSymbol(_ libpf.FrameID, _ string) {
 func (s *symbolReporterMockup) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
 }
 
-func (s *symbolReporterMockup) FrameMetadata(_ libpf.FileID, _ libpf.AddressOrLineno,
-	_ libpf.SourceLineno, _ uint32, _, _ string) {
+func (s *symbolReporterMockup) FrameKnown(_ libpf.FrameID) bool {
+	return true
+}
+
+func (s *symbolReporterMockup) FrameMetadata(_ *reporter.FrameMetadataArgs) {
 }
 
 var _ reporter.SymbolReporter = (*symbolReporterMockup)(nil)

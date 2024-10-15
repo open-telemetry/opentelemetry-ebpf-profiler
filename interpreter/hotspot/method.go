@@ -7,8 +7,6 @@ import (
 	"bytes"
 	"fmt"
 
-	log "github.com/sirupsen/logrus"
-
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -29,46 +27,35 @@ type hotspotMethod struct {
 	bytecodeSize   uint16
 	startLineNo    uint16
 	lineTable      []byte
-	bciSeen        libpf.Set[uint16]
 }
 
 // Symbolize generates symbolization information for given hotspot method and
 // a Byte Code Index (BCI)
-func (m *hotspotMethod) symbolize(symbolReporter reporter.SymbolReporter, bci int32,
-	ii *hotspotInstance, trace *libpf.Trace) error {
+func (m *hotspotMethod) symbolize(symbolReporter reporter.SymbolReporter, bci uint32,
+	ii *hotspotInstance, trace *libpf.Trace) {
 	// Make sure the BCI is within the method range
-	if bci < 0 || bci >= int32(m.bytecodeSize) {
+	if bci >= uint32(m.bytecodeSize) {
 		bci = 0
 	}
-	trace.AppendFrame(libpf.HotSpotFrame, m.objectID, libpf.AddressOrLineno(bci))
 
-	// Check if this is already symbolized
-	if _, ok := m.bciSeen[uint16(bci)]; ok {
-		return nil
+	// Check if this is already known
+	frameID := libpf.NewFrameID(m.objectID, libpf.AddressOrLineno(bci))
+	trace.AppendFrameID(libpf.HotSpotFrame, frameID)
+	if !symbolReporter.FrameKnown(frameID) {
+		dec := ii.d.newUnsigned5Decoder(bytes.NewReader(m.lineTable))
+		lineNo := dec.mapByteCodeIndexToLine(bci)
+		functionOffset := uint32(0)
+		if lineNo > uint32(m.startLineNo) {
+			functionOffset = lineNo - uint32(m.startLineNo)
+		}
+		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+			FrameID:        frameID,
+			FunctionName:   m.methodName,
+			SourceFile:     m.sourceFileName,
+			SourceLine:     libpf.SourceLineno(lineNo),
+			FunctionOffset: functionOffset,
+		})
 	}
-
-	dec := ii.d.newUnsigned5Decoder(bytes.NewReader(m.lineTable))
-	lineNo := dec.mapByteCodeIndexToLine(bci)
-	functionOffset := uint32(0)
-	if lineNo > libpf.SourceLineno(m.startLineNo) {
-		functionOffset = uint32(lineNo) - uint32(m.startLineNo)
-	}
-
-	symbolReporter.FrameMetadata(m.objectID,
-		libpf.AddressOrLineno(bci), lineNo, functionOffset,
-		m.methodName, m.sourceFileName)
-
-	// FIXME: The above FrameMetadata call might fail, but we have no idea of it
-	// due to the requests being queued and send attempts being done asynchronously.
-	// Until the reporting API gets a way to notify failures, just assume it worked.
-	m.bciSeen[uint16(bci)] = libpf.Void{}
-
-	log.Debugf("[%d] [%x] %v+%v at %v:%v", len(trace.FrameTypes),
-		m.objectID,
-		m.methodName, functionOffset,
-		m.sourceFileName, lineNo)
-
-	return nil
 }
 
 // hotspotJITInfo contains symbolization and debug information for one JIT compiled
@@ -125,7 +112,8 @@ func (ji *hotspotJITInfo) symbolize(symbolReporter reporter.SymbolReporter, ripD
 		// It is possible that there is no debug info, or no scope information,
 		// for the given RIP. In this case we can provide the method name
 		// from the metadata.
-		return ji.method.symbolize(symbolReporter, 0, ii, trace)
+		ji.method.symbolize(symbolReporter, 0, ii, trace)
+		return nil
 	}
 
 	// Found scope data. Expand the inlined scope information from it.
@@ -167,10 +155,7 @@ func (ji *hotspotJITInfo) symbolize(symbolReporter reporter.SymbolReporter, ripD
 			if err != nil {
 				return err
 			}
-			err = method.symbolize(symbolReporter, int32(byteCodeIndex), ii, trace)
-			if err != nil {
-				return err
-			}
+			method.symbolize(symbolReporter, byteCodeIndex, ii, trace)
 		}
 	}
 	return nil

@@ -8,10 +8,19 @@ RUN cross_debian_arch=$(uname -m | sed -e 's/aarch64/amd64/'  -e 's/x86_64/arm64
     cross_pkg_arch=$(uname -m | sed -e 's/aarch64/x86-64/' -e 's/x86_64/aarch64/'); \
     apt-get update -y && \
     apt-get dist-upgrade -y && \
-    apt-get install -y wget make git clang-16 golang unzip \
+    apt-get install -y wget make git clang-16 unzip libc6-dev g++ gcc pkgconf \
         gcc-${cross_pkg_arch}-linux-gnu libc6-${cross_debian_arch}-cross && \
     apt-get clean autoclean && \
     apt-get autoremove --yes
+
+COPY go.mod /tmp/go.mod
+# Extract Go version from go.mod
+RUN GO_VERSION=$(grep -oPm1 '^go \K([[:digit:].]+)' /tmp/go.mod) && \
+    wget -qO- https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz | tar -C /usr/local -xz
+# Set Go environment variables
+ENV GOPATH="/agent/go"
+ENV GOCACHE="/agent/.cache"
+ENV PATH="/usr/local/go/bin:$PATH"
 
 RUN wget -qO- https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
     | sh -s -- -b $(go env GOPATH)/bin v1.56.2
@@ -32,12 +41,7 @@ RUN                                                                             
     && find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;                    \
     && rm "$PB_FILE"
 
-# The docker image is built as root - make binaries available to user.
-RUN mv /root/go/bin/* /usr/local/bin/
-
-ENV GOPATH=/agent/go
-ENV GOCACHE=/agent/.cache
-
-RUN echo "export PATH=\"\$PATH:\$(go env GOPATH)/bin\"" >> ~/.bashrc
+# Append to /etc/profile for login shells
+RUN echo 'export PATH="/usr/local/go/bin:$PATH"' >> /etc/profile
 
 ENTRYPOINT ["/bin/bash", "-l", "-c"]
