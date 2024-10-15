@@ -753,8 +753,6 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// The Python main interpreter loop history in CPython git is:
 	//
 	//nolint:lll
-	// 47ad32d158e v3.13 2024-10-10 _PyEval_EvalFrameDefault(PyThreadState*,_PyInterpreterFrame*,int)
-	// 01daccff3c2 v3.12 2024-10-10 _PyEval_EvalFrameDefault(PyThreadState*,_PyInterpreterFrame*,int)
 	// deaf509e8fc v3.11 2022-11-15 _PyEval_EvalFrameDefault(PyThreadState*,_PyInterpreterFrame*,int)
 	// bc2cdfc8157 v3.10 2022-11-15 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
 	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
