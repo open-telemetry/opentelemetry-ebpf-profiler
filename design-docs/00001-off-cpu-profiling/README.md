@@ -194,7 +194,7 @@ My preference is Option B, as it provides latency information additional to off-
 which is crucial for latency analysis.
 
 Option B might be a bit more complex, as it utilizes two additional hooks along with an additional
-eBPF map for them to communicate, compared to Option A with a single hook on
+eBPF map for keeping state across two hooks, compared to Option A with a single hook on
 `tracepoint:sched:sched_switch`. The additional hook on `kprobe:finish_task_switch` for Option B
 might also introduce some latency, as kprobes are less performant than tracepoints. But the latency
 information along with the off-CPU stack trace justify these drawbacks from my point of view.
