@@ -140,7 +140,7 @@ task was seen before. If the task was seen before in the tracepoint, calculate t
 off CPU and unwind the stack. Only the second step should tail call into further stack unwinding
 routines, similar to [`perf_event/native_tracer_entry`](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/dd0c20701b191975d6c13408c92d7fed637119da/support/ebpf/native_stack_trace.ebpf.c#L860C6-L860C36).
 To communicate tasks between the two hooks a `BPF_MAP_TYPE_LRU_HASH` eBPF map should be used with
-with the return of `bpf_get_current_pid_tgid()` as key and the timestamp in nanoseconds as value.
+the return of `bpf_get_current_pid_tgid()` as key and the timestamp in nanoseconds as value.
 
 ### Concept
 The following [bpftrace](https://github.com/bpftrace/bpftrace) script showcases Option B:
