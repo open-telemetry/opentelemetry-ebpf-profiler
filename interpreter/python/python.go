@@ -718,7 +718,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	version := pythonVer(major, minor)
 
 	minVer := pythonVer(3, 6)
-	maxVer := pythonVer(3, 12)
+	maxVer := pythonVer(3, 13)
 	if version < minVer || version > maxVer {
 		return nil, fmt.Errorf("unsupported Python %d.%d (need >= %d.%d and <= %d.%d)",
 			major, minor,
@@ -753,8 +753,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// The Python main interpreter loop history in CPython git is:
 	//
 	//nolint:lll
-	// deaf509e8fc v3.11 2022-11-15 _PyEval_EvalFrameDefault(PyThreadState*,_PyInterpreterFrame*,int)
-	// bc2cdfc8157 v3.10 2022-11-15 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
+	// 87af12bff33 v3.11 2022-02-15 _PyEval_EvalFrameDefault(PyThreadState*,_PyInterpreterFrame*,int)
+	// ae0a2b75625 v3.10 2021-06-25 _PyEval_EvalFrameDefault(PyThreadState*,_interpreter_frame*,int)
 	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
 	// 3cebf938727 v3.6  2016-09-05 _PyEval_EvalFrameDefault(PyFrameObject*,int)
 	// 49fd7fa4431 v3.0  2006-04-21 PyEval_EvalFrameEx(PyFrameObject*,int)
@@ -807,6 +807,15 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.PyFrameObject.EntryVal = 3     // enum _frameowner, FRAME_OWNED_BY_CSTACK
 		vms.PyThreadState.Frame = 56
 		vms.PyCFrame.CurrentFrame = 0
+		vms.PyASCIIObject.Data = 40
+	case pythonVer(3, 13):
+		vms.PyFrameObject.Code = 0
+		vms.PyFrameObject.LastI = 56       // _Py_CODEUNIT *prev_instr
+		vms.PyFrameObject.Back = 8         // struct _PyInterpreterFrame *previous
+		vms.PyFrameObject.EntryMember = 70 // char owner
+		vms.PyFrameObject.EntryVal = 3     // enum _frameowner, FRAME_OWNED_BY_CSTACK
+		vms.PyThreadState.Frame = 72
+		vms.PyCFrame.CurrentFrame = 8
 		vms.PyASCIIObject.Data = 40
 	}
 
