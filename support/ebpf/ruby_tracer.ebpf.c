@@ -3,6 +3,7 @@
 #include "bpfdefs.h"
 #include "tracemgmt.h"
 #include "types.h"
+#include "helpers.h"
 
 // Map from Ruby process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
@@ -216,8 +217,9 @@ save_state:
   return ERR_OK;
 }
 
-SEC("perf_event/unwind_ruby")
-int unwind_ruby(struct pt_regs *ctx) {
+BPF_PROBE(unwind_ruby)
+int unwind_ruby(struct pt_regs *ctx)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;

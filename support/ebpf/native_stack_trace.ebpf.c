@@ -3,6 +3,7 @@
 #include "types.h"
 #include "tracemgmt.h"
 #include "stackdeltatypes.h"
+#include "helpers.h"
 
 #ifndef __USER32_CS
   // defined in arch/x86/include/asm/segment.h
@@ -747,8 +748,9 @@ static inline ErrorCode get_usermode_regs(struct pt_regs *ctx,
 
 #endif
 
-SEC("perf_event/unwind_native")
-int unwind_native(struct pt_regs *ctx) {
+BPF_PROBE(unwind_native)
+int unwind_native(struct pt_regs *ctx)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;
@@ -857,7 +859,8 @@ exit:
   return -1;
 }
 
-SEC("perf_event/native_tracer_entry")
-int native_tracer_entry(struct bpf_perf_event_data *ctx) {
+BPF_PROBE(native_tracer_entry)
+int native_tracer_entry(struct bpf_perf_event_data *ctx)
+{
   return collect_trace((struct pt_regs*) &ctx->regs);
 }

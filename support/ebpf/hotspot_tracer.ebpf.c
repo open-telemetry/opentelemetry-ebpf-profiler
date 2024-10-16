@@ -8,6 +8,7 @@
 #include "tracemgmt.h"
 #include "types.h"
 #include "errors.h"
+#include "helpers.h"
 
 // Information extracted from a JDK `CodeBlob` instance.
 typedef struct CodeBlobInfo {
@@ -890,8 +891,9 @@ static ErrorCode hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo 
 // unwind_hotspot is the entry point for tracing when invoked from the native tracer
 // and it recursive unwinds all HotSpot frames and then jumps back to unwind further
 // native frames that follow.
-SEC("perf_event/unwind_hotspot")
-int unwind_hotspot(struct pt_regs *ctx) {
+BPF_PROBE(unwind_hotspot)
+int unwind_hotspot(struct pt_regs *ctx)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;
