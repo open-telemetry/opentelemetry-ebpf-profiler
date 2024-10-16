@@ -15,15 +15,22 @@ else
 $(error Unsupported architecture: $(NATIVE_ARCH))
 endif
 
-# Valid values are: amd64, arm64.
+# Valid values: amd64, arm64.
 TARGET_ARCH ?= $(NATIVE_ARCH)
 
-TRACER_NAME ?= tracer.ebpf.$(TARGET_ARCH)
+# Valid values: release, debug
+BUILD_TYPE ?= release
+
+TRACER_NAME ?= tracer.ebpf.$(BUILD_TYPE).$(TARGET_ARCH)
 
 ifeq ($(TARGET_ARCH),arm64)
 TARGET_FLAGS = -target aarch64-linux-gnu
 else
 TARGET_FLAGS = -target x86_64-linux-gnu
+endif
+
+ifeq ($(BUILD_TYPE),debug)
+	TARGET_FLAGS+=$(DEBUG_FLAGS)
 endif
 
 FLAGS=$(TARGET_FLAGS) \
@@ -40,33 +47,33 @@ FLAGS=$(TARGET_FLAGS) \
 	-fno-stack-protector
 
 SRCS := $(wildcard *.ebpf.c)
-OBJS := $(SRCS:.c=.$(TARGET_ARCH).o)
+OBJS := $(SRCS:.c=.$(BUILD_TYPE).$(TARGET_ARCH).o)
 
 .DEFAULT_GOAL := all
 
 all: $(TRACER_NAME)
 
-debug: TARGET_FLAGS+=$(DEBUG_FLAGS)
-debug: all
+debug:
+	$(MAKE) BUILD_TYPE=debug
 
 amd64:
-	$(MAKE) TARGET_ARCH=amd64 all
+	$(MAKE) TARGET_ARCH=amd64
 
 arm64:
-	$(MAKE) TARGET_ARCH=arm64 all
+	$(MAKE) TARGET_ARCH=arm64
 
 debug-amd64:
-	$(MAKE) TARGET_ARCH=amd64 debug
+	$(MAKE) BUILD_TYPE=debug TARGET_ARCH=amd64
 
 debug-arm64:
-	$(MAKE) TARGET_ARCH=arm64 debug
+	$(MAKE) BUILD_TYPE=debug TARGET_ARCH=arm64
 
 errors.h: ../../tools/errors-codegen/errors.json
 	go run ../../tools/errors-codegen/main.go bpf $@
 
 %.ebpf.c: errors.h ;
 
-%.ebpf.$(TARGET_ARCH).o: %.ebpf.c
+%.ebpf.$(BUILD_TYPE).$(TARGET_ARCH).o: %.ebpf.c
 	$(BPF_CLANG) $(FLAGS) -o $@
 
 $(TRACER_NAME): $(OBJS)

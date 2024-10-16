@@ -282,13 +282,12 @@ func (i *perlInstance) getHVName(hvAddr libpf.Address) (string, error) {
 	}
 
 	xpvhvAddr := npsr.Ptr(hv, vms.sv.sv_any)
-	end := i.rm.Uint64(xpvhvAddr + libpf.Address(vms.xpvhv.xhv_max))
-
 	xpvhvAux := make([]byte, vms.xpvhv_aux.sizeof)
 	if i.d.version < perlVersion(5, 35, 0) {
 		// The aux structure is at the end of the array. Calculate its address.
 		arrayAddr := npsr.Ptr(hv, vms.sv.svu_hash)
-		xpvhvAuxAddr := arrayAddr + libpf.Address((end+1)*8)
+		end := i.rm.Uint64(xpvhvAddr + libpf.Address(vms.xpvhv.xhv_max))
+		xpvhvAuxAddr := arrayAddr + libpf.Address((end+1)*uint64(vms.xpvhv_aux.pointer_size))
 		if err := i.rm.Read(xpvhvAuxAddr, xpvhvAux); err != nil {
 			return "", err
 		}
@@ -363,21 +362,21 @@ func (i *perlInstance) getGV(gvAddr libpf.Address, nameOnly bool) (string, error
 	return gvName, nil
 }
 
-// getCOP reads and caches a Control OP from remote interpreter. On success, the COP
-// and a bool if it was cached, is returned. On error, the error.
-func (i *perlInstance) getCOP(copAddr libpf.Address, funcName string) (*perlCOP, bool, error) {
+// getCOP reads and caches a Control OP from remote interpreter.
+// On success, the COP is returned. On error, the error.
+func (i *perlInstance) getCOP(copAddr libpf.Address, funcName string) (*perlCOP, error) {
 	key := copKey{
 		copAddr:  copAddr,
 		funcName: funcName,
 	}
 	if value, ok := i.addrToCOP.Get(key); ok {
-		return value, true, nil
+		return value, nil
 	}
 
 	vms := &i.d.vmStructs
 	cop := make([]byte, vms.cop.sizeof)
 	if err := i.rm.Read(copAddr, cop); err != nil {
-		return nil, false, err
+		return nil, err
 	}
 
 	sourceFileName := interpreter.UnknownSourceFile
@@ -394,13 +393,13 @@ func (i *perlInstance) getCOP(copAddr libpf.Address, funcName string) (*perlCOP,
 			err = fmt.Errorf("sourcefile gv length too small (%d)", len(sourceFileName))
 		}
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		sourceFileName = sourceFileName[2:]
 	}
 	if !util.IsValidString(sourceFileName) {
 		log.Debugf("Extracted invalid source file name '%v'", []byte(sourceFileName))
-		return nil, false, errors.New("extracted invalid source file name")
+		return nil, errors.New("extracted invalid source file name")
 	}
 
 	line := npsr.Uint32(cop, vms.cop.cop_line)
@@ -415,7 +414,7 @@ func (i *perlInstance) getCOP(copAddr libpf.Address, funcName string) (*perlCOP,
 	_, _ = h.Write([]byte(funcName))
 	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to create a file ID: %v", err)
+		return nil, fmt.Errorf("failed to create a file ID: %v", err)
 	}
 
 	c := &perlCOP{
@@ -424,7 +423,7 @@ func (i *perlInstance) getCOP(copAddr libpf.Address, funcName string) (*perlCOP,
 		line:           libpf.AddressOrLineno(line),
 	}
 	i.addrToCOP.Add(key, c)
-	return c, false, nil
+	return c, nil
 }
 
 func (i *perlInstance) Symbolize(symbolReporter reporter.SymbolReporter,
@@ -449,26 +448,21 @@ func (i *perlInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 		functionName = interpreter.TopLevelFunctionName
 	}
 	copAddr := libpf.Address(frame.Lineno)
-	cop, seen, err := i.getCOP(copAddr, functionName)
+	cop, err := i.getCOP(copAddr, functionName)
 	if err != nil {
 		return fmt.Errorf("failed to get Perl COP %x: %v", copAddr, err)
 	}
 
-	lineno := cop.line
-
-	trace.AppendFrame(libpf.PerlFrame, cop.fileID, lineno)
-
-	if !seen {
-		symbolReporter.FrameMetadata(
-			cop.fileID, lineno, libpf.SourceLineno(lineno), 0,
-			functionName, cop.sourceFileName)
-
-		log.Debugf("[%d] [%x] %v at %v:%v",
-			len(trace.FrameTypes),
-			cop.fileID, functionName,
-			cop.sourceFileName, lineno)
-	}
-
+	// Since the COP contains all the data without extra work, just always
+	// send the symbolization information.
+	frameID := libpf.NewFrameID(cop.fileID, cop.line)
+	trace.AppendFrameID(libpf.PerlFrame, frameID)
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:      frameID,
+		FunctionName: functionName,
+		SourceFile:   cop.sourceFileName,
+		SourceLine:   libpf.SourceLineno(cop.line),
+	})
 	sfCounter.ReportSuccess()
 	return nil
 }

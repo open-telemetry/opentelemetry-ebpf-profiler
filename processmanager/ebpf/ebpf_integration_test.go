@@ -22,7 +22,7 @@ import (
 func loadTracers(t *testing.T) *ebpfMapsImpl {
 	t.Helper()
 
-	coll, err := support.LoadCollectionSpec()
+	coll, err := support.LoadCollectionSpec(false)
 	require.NoError(t, err)
 
 	restoreRlimit, err := rlimit.MaximizeMemlock()
