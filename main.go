@@ -130,10 +130,6 @@ func mainWithExitCode() exitCode {
 		return failure("Failed to probe eBPF syscall: %v", err)
 	}
 
-	if err = tracer.ProbeTracepoint(); err != nil {
-		return failure("Failed to probe tracepoint: %v", err)
-	}
-
 	presentCores, err := numcpus.GetPresent()
 	if err != nil {
 		return failure("Failed to read CPU file: %v", err)
