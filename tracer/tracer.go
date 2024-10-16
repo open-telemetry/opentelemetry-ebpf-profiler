@@ -20,7 +20,6 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
-	lru "github.com/elastic/go-freelru"
 	"github.com/elastic/go-perf"
 	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
@@ -99,10 +98,6 @@ type Tracer struct {
 	// that is required to unwind processes in the kernel. This includes maintaining the
 	// associated eBPF maps.
 	processManager *pm.ProcessManager
-
-	// transmittedFallbackSymbols keeps track of the already-transmitted fallback symbols.
-	// It is not thread-safe: concurrent accesses must be synchronized.
-	transmittedFallbackSymbols *lru.LRU[libpf.FrameID, libpf.Void]
 
 	// triggerPIDProcessing is used as manual trigger channel to request immediate
 	// processing of pending PIDs. This is requested on notifications from eBPF code
@@ -300,12 +295,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to read kernel modules: %v", err)
 	}
 
-	transmittedFallbackSymbols, err :=
-		lru.New[libpf.FrameID, libpf.Void](fallbackSymbolsCacheSize, libpf.FrameID.Hash32)
-	if err != nil {
-		return nil, fmt.Errorf("unable to instantiate transmitted fallback symbols cache: %v", err)
-	}
-
 	moduleFileIDs, err := processKernelModulesMetadata(cfg.Reporter, kernelModules, kernelSymbols)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract kernel modules metadata: %v", err)
@@ -314,23 +303,22 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	perfEventList := []*perf.Event{}
 
 	return &Tracer{
-		processManager:             processManager,
-		kernelSymbols:              kernelSymbols,
-		kernelModules:              kernelModules,
-		transmittedFallbackSymbols: transmittedFallbackSymbols,
-		triggerPIDProcessing:       make(chan bool, 1),
-		pidEvents:                  make(chan libpf.PID, pidEventBufferSize),
-		ebpfMaps:                   ebpfMaps,
-		ebpfProgs:                  ebpfProgs,
-		hooks:                      make(map[hookPoint]link.Link),
-		intervals:                  cfg.Intervals,
-		hasBatchOperations:         hasBatchOperations,
-		perfEntrypoints:            xsync.NewRWMutex(perfEventList),
-		moduleFileIDs:              moduleFileIDs,
-		reporter:                   cfg.Reporter,
-		samplesPerSecond:           cfg.SamplesPerSecond,
-		probabilisticInterval:      cfg.ProbabilisticInterval,
-		probabilisticThreshold:     cfg.ProbabilisticThreshold,
+		processManager:         processManager,
+		kernelSymbols:          kernelSymbols,
+		kernelModules:          kernelModules,
+		triggerPIDProcessing:   make(chan bool, 1),
+		pidEvents:              make(chan libpf.PID, pidEventBufferSize),
+		ebpfMaps:               ebpfMaps,
+		ebpfProgs:              ebpfProgs,
+		hooks:                  make(map[hookPoint]link.Link),
+		intervals:              cfg.Intervals,
+		hasBatchOperations:     hasBatchOperations,
+		perfEntrypoints:        xsync.NewRWMutex(perfEventList),
+		moduleFileIDs:          moduleFileIDs,
+		reporter:               cfg.Reporter,
+		samplesPerSecond:       cfg.SamplesPerSecond,
+		probabilisticInterval:  cfg.ProbabilisticInterval,
+		probabilisticThreshold: cfg.ProbabilisticThreshold,
 	}, nil
 }
 
@@ -686,7 +674,6 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 	var kernelSymbolCacheHit, kernelSymbolCacheMiss uint64
 
 	for i := uint32(0); i < kstackLen; i++ {
-		var fileID libpf.FileID
 		// Translate the kernel address into something that can be
 		// later symbolized. The address is made relative to
 		// matching module's ELF .text section:
@@ -695,16 +682,12 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 		//    LOAD segments. the address is relative to the .text section
 		mod, addr, _ := t.kernelModules.LookupByAddress(
 			libpf.SymbolValue(kstackVal[i]))
-		symbol, offs, foundSymbol := t.kernelSymbols.LookupByAddress(
-			libpf.SymbolValue(kstackVal[i]))
 
 		fileID, foundFileID := t.moduleFileIDs[string(mod)]
 
 		if !foundFileID {
 			fileID = libpf.UnknownKernelFileID
 		}
-
-		log.Debugf(" kstack[%d] = %v+%x (%v+%x)", i, string(mod), addr, symbol, offs)
 
 		hostFileID := host.FileIDFromLibpf(fileID)
 		t.processManager.FileIDMapper.Set(hostFileID, fileID)
@@ -720,38 +703,32 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 			ReturnAddress: true,
 		}
 
+		if !foundFileID {
+			continue
+		}
+
 		// Kernel frame PCs need to be adjusted by -1. This duplicates logic done in the trace
 		// converter. This should be fixed with PF-1042.
-		if foundSymbol && foundFileID {
-			t.reportFallbackKernelSymbol(fileID, symbol, trace.Frames[i].Lineno-1,
-				&kernelSymbolCacheHit, &kernelSymbolCacheMiss)
+		frameID := libpf.NewFrameID(fileID, trace.Frames[i].Lineno-1)
+		if t.reporter.FrameKnown(frameID) {
+			kernelSymbolCacheHit++
+			continue
+		}
+		kernelSymbolCacheMiss++
+
+		if symbol, _, foundSymbol := t.kernelSymbols.LookupByAddress(
+			libpf.SymbolValue(kstackVal[i])); foundSymbol {
+			t.reporter.FrameMetadata(&reporter.FrameMetadataArgs{
+				FrameID:      frameID,
+				FunctionName: string(symbol),
+			})
 		}
 	}
+
 	t.fallbackSymbolMiss.Add(kernelSymbolCacheMiss)
 	t.fallbackSymbolHit.Add(kernelSymbolCacheHit)
 
 	return kstackLen, nil
-}
-
-// reportFallbackKernelSymbol reports fallback symbols for kernel frames, after checking if the
-// symbols were previously sent.
-func (t *Tracer) reportFallbackKernelSymbol(
-	fileID libpf.FileID, symbolName libpf.SymbolName, frameAddress libpf.AddressOrLineno,
-	kernelSymbolCacheHit, kernelSymbolCacheMiss *uint64) {
-	frameID := libpf.NewFrameID(fileID, frameAddress)
-
-	// Only report it if it's not in our LRU list of transmitted symbols.
-	if !t.transmittedFallbackSymbols.Contains(frameID) {
-		t.reporter.ReportFallbackSymbol(frameID, string(symbolName))
-
-		// There is no guarantee that the above report will be successfully delivered, but this
-		// should be sufficient for the time being. Other machines may succeed, and it's no big deal
-		// if we can't deliver 100% of symbols.
-		t.transmittedFallbackSymbols.Add(frameID, libpf.Void{})
-		(*kernelSymbolCacheMiss)++
-		return
-	}
-	(*kernelSymbolCacheHit)++
 }
 
 // enableEvent removes the entry of given eventType from the inhibitEvents map

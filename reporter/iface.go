@@ -89,9 +89,6 @@ type FrameMetadataArgs struct {
 }
 
 type SymbolReporter interface {
-	// ReportFallbackSymbol enqueues a fallback symbol for reporting, for a given frame.
-	ReportFallbackSymbol(frameID libpf.FrameID, symbol string)
-
 	// ExecutableMetadata accepts a FileID with the corresponding filename
 	// and takes some action with it (for example, it might cache it for
 	// periodic reporting to a backend).
