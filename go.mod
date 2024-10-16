@@ -9,7 +9,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cilium/ebpf v0.16.0
 	github.com/elastic/go-freelru v0.13.0
-	github.com/elastic/go-perf v0.0.0-20191212140718-9c656876f595
+	github.com/elastic/go-perf v0.0.0-20241016160959-1342461adb4a
 	github.com/google/uuid v1.6.0
 	github.com/jsimonetti/rtnetlink v1.4.2
 	github.com/klauspost/compress v1.17.9
@@ -24,7 +24,7 @@ require (
 	golang.org/x/arch v0.10.0
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
 	golang.org/x/sync v0.8.0
-	golang.org/x/sys v0.25.0
+	golang.org/x/sys v0.26.0
 	google.golang.org/grpc v1.66.2
 )
 
