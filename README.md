@@ -91,9 +91,10 @@ devfiler spins up a local server that listens on `0.0.0.0:11000`.
 
 To run it, simply download and unpack the archive from the following URL:
 
-https://upload.elastic.co/d/a3033fd2b515144b1c566961495302dac4da3223e59832f7755e18ac7fd94a19
+https://upload.elastic.co/d/87e7697991940ec37f0c6e39ac38d213f65e8dc1ef9dbedff6aab9cba0adfaba
 
-Authentication token: `786a077d31b02bda`
+Authentication token: `c74dfc4db2212015`
+
 
 The archive contains a build for each of the following platforms:
 

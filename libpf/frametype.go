@@ -4,8 +4,6 @@
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
-	"fmt"
-
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
@@ -98,9 +96,6 @@ func (ty FrameType) String() string {
 		return abortFrameName
 	default:
 		interp := ty.Interpreter()
-		if ty.IsError() {
-			return fmt.Sprintf("%s-error", interp)
-		}
 		return interp.String()
 	}
 }
