@@ -43,6 +43,12 @@ type SymbolMap struct {
 	addressToSymbol []Symbol
 }
 
+func NewSymbolMap(initialSize int) *SymbolMap {
+	return &SymbolMap{
+		addressToSymbol: make([]Symbol, 0, initialSize),
+	}
+}
+
 // Add a symbol to the map
 func (symmap *SymbolMap) Add(s Symbol) {
 	symmap.addressToSymbol = append(symmap.addressToSymbol, s)
@@ -51,10 +57,16 @@ func (symmap *SymbolMap) Add(s Symbol) {
 // Finalize symbol map by sorting and constructing the nameToSymbol table after
 // all symbols are inserted via Add() calls
 func (symmap *SymbolMap) Finalize() {
+	// Adjust the overcommitted capacity
+	a := make([]Symbol, len(symmap.addressToSymbol))
+	copy(a, symmap.addressToSymbol)
+	symmap.addressToSymbol = a
+
 	sort.Slice(symmap.addressToSymbol,
 		func(i, j int) bool {
 			return symmap.addressToSymbol[i].Address > symmap.addressToSymbol[j].Address
 		})
+
 	symmap.nameToSymbol = make(map[SymbolName]*Symbol, len(symmap.addressToSymbol))
 	for i, s := range symmap.addressToSymbol {
 		symmap.nameToSymbol[s.Name] = &symmap.addressToSymbol[i]
