@@ -43,9 +43,9 @@ type SymbolMap struct {
 	addressToSymbol []Symbol
 }
 
-func NewSymbolMap(initialSize int) *SymbolMap {
+func NewSymbolMap(capacity int) *SymbolMap {
 	return &SymbolMap{
-		addressToSymbol: make([]Symbol, 0, initialSize),
+		addressToSymbol: make([]Symbol, 0, capacity),
 	}
 }
 
