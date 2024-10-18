@@ -28,6 +28,7 @@ func GetKallsyms(kallsymsPath string) (*libpf.SymbolMap, error) {
 	var address uint64
 	var symbol string
 
+	// As an example, the Debian 6.10.11 kernel has ~180k text symbols.
 	symmap := libpf.NewSymbolMap(200 * 1024)
 	noSymbols := true
 
