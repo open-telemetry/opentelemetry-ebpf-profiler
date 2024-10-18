@@ -53,6 +53,10 @@ func GetKallsyms(kallsymsPath string) (*libpf.SymbolMap, error) {
 			return nil, fmt.Errorf("unexpected line in kallsyms: '%s'", line)
 		}
 
+		if fields[2] == "_stext" || fields[2] == "_etext" {
+			log.Info("for debugging: " + line)
+		}
+
 		// Skip non-text symbols, see 'man nm'
 		if strings.IndexByte("TtVvWwA", fields[1][0]) == -1 {
 			continue
