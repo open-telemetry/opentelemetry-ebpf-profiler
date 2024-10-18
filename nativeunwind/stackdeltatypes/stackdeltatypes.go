@@ -71,6 +71,12 @@ var UnwindInfoFramePointer = UnwindInfo{
 	FPParam:  -16,
 }
 
+// UnwindInfoLR contains the description to unwind arm function without frame (Link Register only)
+var UnwindInfoLR = UnwindInfo{
+	Opcode:   UnwindOpcodeBaseSP,
+	FPOpcode: UnwindOpcodeBaseLR,
+}
+
 // StackDelta defines the start address for the delta interval, along with
 // the unwind information.
 type StackDelta struct {

@@ -280,7 +280,12 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	info.fileID = hostFileID
 	info.addressMapper = ef.GetAddressMapper()
 	if mapping.IsVDSO() {
-		info.err = pm.insertSynthStackDeltas(hostFileID, ef)
+		intervals := createVDSOSyntheticRecord(ef)
+		if intervals.Deltas != nil {
+			if err := pm.AddSynthIntervalData(hostFileID, intervals); err != nil {
+				info.err = fmt.Errorf("failed to add synthetic deltas: %w", err)
+			}
+		}
 	}
 	// Do not cache the entry if synthetic stack delta loading failed,
 	// so next encounter of the VDSO will retry loading them.
