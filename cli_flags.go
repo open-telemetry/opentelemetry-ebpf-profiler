@@ -35,11 +35,12 @@ const (
 var (
 	noKernelVersionCheckHelp = "Disable checking kernel version for eBPF support. " +
 		"Use at your own risk, to run the agent on older kernels with backported eBPF features."
-	copyrightHelp      = "Show copyright and short license text."
-	collAgentAddrHelp  = "The collection agent address in the format of host:port."
-	verboseModeHelp    = "Enable verbose logging and debugging capabilities."
-	tracersHelp        = "Comma-separated list of interpreter tracers to include."
-	mapScaleFactorHelp = fmt.Sprintf("Scaling factor for eBPF map sizes. "+
+	copyrightHelp         = "Show copyright and short license text."
+	collAgentAddrHelp     = "The collection agent address in the format of host:port."
+	verboseModeHelp       = "Enable verbose logging and debugging capabilities."
+	tracersHelp           = "Comma-separated list of interpreter tracers to include."
+	externallyManagedHelp = "Agent is externally managed."
+	mapScaleFactorHelp    = fmt.Sprintf("Scaling factor for eBPF map sizes. "+
 		"Every increase by 1 doubles the map size. Increase if you see eBPF map size errors. "+
 		"Default is %d corresponding to 4GB of executable address space, max is %d.",
 		defaultArgMapScaleFactor, maxArgMapScaleFactor)
@@ -81,6 +82,7 @@ type arguments struct {
 	samplesPerSecond       int
 	sendErrorFrames        bool
 	tracers                string
+	externallyManaged      bool
 	verboseMode            bool
 	version                bool
 
@@ -133,6 +135,8 @@ func parseArgs() (*arguments, error) {
 
 	fs.StringVar(&args.tracers, "t", "all", "Shorthand for -tracers.")
 	fs.StringVar(&args.tracers, "tracers", "all", tracersHelp)
+
+	fs.BoolVar(&args.externallyManaged, "externally-managed", false, externallyManagedHelp)
 
 	fs.BoolVar(&args.verboseMode, "v", false, "Shorthand for -verbose.")
 	fs.BoolVar(&args.verboseMode, "verbose", false, verboseModeHelp)
