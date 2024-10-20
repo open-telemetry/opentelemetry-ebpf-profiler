@@ -539,7 +539,6 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 		{name: "native_tracer_entry_perf", noTailCallTarget: true, enable: true},
 	}
 
-	// Use the new function
 	err = loadEBPFPrograms(unwinders, coll, ebpfProgs, perfTailcallMap, programOptions)
 	if err != nil {
 		return err
@@ -558,7 +557,6 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 		{name: "native_tracer_entry_kprobe", noTailCallTarget: true, enable: true},
 	}
 
-	// Use the new function
 	err = loadEBPFPrograms(unwinders, coll, ebpfProgs, kprobeTailcallMap, programOptions)
 	if err != nil {
 		return err
