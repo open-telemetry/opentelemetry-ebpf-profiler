@@ -84,30 +84,6 @@ ErrorCode push_native(Trace *trace, u64 file, u64 line, bool return_address) {
   return _push_with_return_address(trace, file, line, FRAME_MARKER_NATIVE, return_address);
 }
 
-#ifdef __aarch64__
-// Strips the PAC tag from a pointer.
-//
-// While all pointers can contain PAC tags, we only apply this function to code pointers, because
-// that's where normalization is required to make the stack delta lookups work. Note that if that
-// should ever change, we'd need a different mask for the data pointers, because it might diverge
-// from the mask for code pointers.
-static inline u64 normalize_pac_ptr(u64 ptr) {
-  // Retrieve PAC mask from the system config.
-  u32 key = 0;
-  SystemConfig* syscfg = bpf_map_lookup_elem(&system_config, &key);
-  if (!syscfg) {
-    // Unreachable: array maps are always fully initialized.
-    return ptr;
-  }
-
-  // Mask off PAC bits. Since we're always applying this to usermode pointers that should have all
-  // the high bits set to 0, we don't need to consider the case of having to fill up the resulting
-  // hole with 1s (like we'd have to for kernel ptrs).
-  ptr &= syscfg->inverse_pac_mask;
-  return ptr;
-}
-#endif
-
 // A single step for the bsearch into the big_stack_deltas array. This is really a textbook bsearch
 // step, built in a way to update the value of *lo and *hi. This function will be called repeatedly
 // (since we cannot do loops). The return value signals whether the bsearch came to an end / found

@@ -475,6 +475,30 @@ void tail_call(void *ctx, int next) {
   #define __USER_DS                   (GDT_ENTRY_DEFAULT_USER_DS*8 + 3)
 #endif
 
+#ifdef __aarch64__
+// Strips the PAC tag from a pointer.
+//
+// While all pointers can contain PAC tags, we only apply this function to code pointers, because
+// that's where normalization is required to make the stack delta lookups work. Note that if that
+// should ever change, we'd need a different mask for the data pointers, because it might diverge
+// from the mask for code pointers.
+static inline u64 normalize_pac_ptr(u64 ptr) {
+  // Retrieve PAC mask from the system config.
+  u32 key = 0;
+  SystemConfig* syscfg = bpf_map_lookup_elem(&system_config, &key);
+  if (!syscfg) {
+    // Unreachable: array maps are always fully initialized.
+    return ptr;
+  }
+
+  // Mask off PAC bits. Since we're always applying this to usermode pointers that should have all
+  // the high bits set to 0, we don't need to consider the case of having to fill up the resulting
+  // hole with 1s (like we'd have to for kernel ptrs).
+  ptr &= syscfg->inverse_pac_mask;
+  return ptr;
+}
+#endif
+
 // Initialize state from pt_regs
 static inline ErrorCode copy_state_regs(UnwindState *state,
                                         struct pt_regs *regs,
