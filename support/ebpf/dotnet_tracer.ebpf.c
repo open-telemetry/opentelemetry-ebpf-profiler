@@ -245,8 +245,7 @@ push_frame:
 // unwind_dotnet is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // dotnet stack frames to the trace object for the current CPU.
-BPF_PROBE(unwind_dotnet)
-int unwind_dotnet(struct pt_regs *ctx)
+static inline int unwind_dotnet(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
@@ -291,3 +290,5 @@ exit:
   DEBUG_PRINT("dotnet: tail call for next frame unwinder (%d) failed", unwinder);
   return -1;
 }
+
+DEFINE_DUAL_PROGRAM(unwind_dotnet, unwind_dotnet, unwind_dotnet);

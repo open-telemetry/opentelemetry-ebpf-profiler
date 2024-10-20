@@ -183,8 +183,7 @@ int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted) {
   return unwinder;
 }
 
-BPF_PROBE(unwind_php)
-int unwind_php(struct pt_regs *ctx)
+static inline int unwind_php(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -241,3 +240,5 @@ exit:
   tail_call(ctx, unwinder);
   return -1;
 }
+
+DEFINE_DUAL_PROGRAM(unwind_php, unwind_php, unwind_php)

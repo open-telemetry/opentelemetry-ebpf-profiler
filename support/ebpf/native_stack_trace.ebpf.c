@@ -748,8 +748,7 @@ static inline ErrorCode get_usermode_regs(struct pt_regs *ctx,
 
 #endif
 
-BPF_PROBE(unwind_native)
-int unwind_native(struct pt_regs *ctx)
+static inline int unwind_native(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -800,6 +799,8 @@ int unwind_native(struct pt_regs *ctx)
   DEBUG_PRINT("bpf_tail call failed for %d in unwind_native", unwinder);
   return -1;
 }
+
+DEFINE_DUAL_PROGRAM(unwind_native, unwind_native, unwind_native);
 
 static inline
 int collect_trace(struct pt_regs *ctx) {
@@ -859,8 +860,14 @@ exit:
   return -1;
 }
 
-BPF_PROBE(native_tracer_entry)
-int native_tracer_entry(struct bpf_perf_event_data *ctx)
+SEC("perf_event/native_tracer_entry")
+int native_tracer_entry_perf(struct bpf_perf_event_data *ctx)
 {
   return collect_trace((struct pt_regs*) &ctx->regs);
+}
+
+SEC("kprobe/native_tracer_entry")
+int native_tracer_entry_kprobe(struct pt_regs *ctx)
+{
+  return collect_trace(ctx);
 }

@@ -173,8 +173,7 @@ void maybe_add_apm_info(Trace *trace) {
               trace->apm_transaction_id.as_int, corr_buf.trace_flags);
 }
 
-BPF_PROBE(unwind_stop)
-int unwind_stop(struct pt_regs *ctx)
+static inline int unwind_stop(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -240,6 +239,8 @@ int unwind_stop(struct pt_regs *ctx)
 
   return 0;
 }
+
+DEFINE_DUAL_PROGRAM(unwind_stop, unwind_stop, unwind_stop);
 
 char _license[] SEC("license") = "GPL";
 // this number will be interpreted by the elf loader

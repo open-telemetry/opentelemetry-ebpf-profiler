@@ -217,8 +217,7 @@ save_state:
   return ERR_OK;
 }
 
-BPF_PROBE(unwind_ruby)
-int unwind_ruby(struct pt_regs *ctx)
+static inline int unwind_ruby(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -275,3 +274,5 @@ exit:
   tail_call(ctx, unwinder);
   return -1;
 }
+
+DEFINE_DUAL_PROGRAM(unwind_ruby, unwind_ruby, unwind_ruby);
