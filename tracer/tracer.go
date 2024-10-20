@@ -536,7 +536,7 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 		{progID: uint32(support.ProgUnwindV8), name: "unwind_v8_perf", enable: includeTracers.Has(types.V8Tracer)},
 		{progID: uint32(support.ProgUnwindDotnet), name: "unwind_dotnet_perf", enable: includeTracers.Has(types.DotnetTracer)},
 		{name: "tracepoint__sched_process_exit", noTailCallTarget: true, enable: true},
-		{name: "native_tracer_entry", noTailCallTarget: true, enable: true},
+		{name: "native_tracer_entry_perf", noTailCallTarget: true, enable: true},
 	}
 
 	// Use the new function
@@ -555,8 +555,7 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 		{progID: uint32(support.ProgUnwindRuby), name: "unwind_ruby_kprobe", enable: includeTracers.Has(types.RubyTracer)},
 		{progID: uint32(support.ProgUnwindV8), name: "unwind_v8_kprobe", enable: includeTracers.Has(types.V8Tracer)},
 		{progID: uint32(support.ProgUnwindDotnet), name: "unwind_dotnet_kprobe", enable: includeTracers.Has(types.DotnetTracer)},
-		{name: "tracepoint__sched_process_exit", noTailCallTarget: true, enable: true},
-		{name: "native_tracer_entry", noTailCallTarget: true, enable: true},
+		{name: "native_tracer_entry_kprobe", noTailCallTarget: true, enable: true},
 	}
 
 	// Use the new function
@@ -1059,7 +1058,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.T
 // entry point is always the native tracer. The native tracer will determine when to invoke the
 // interpreter tracers based on address range information.
 func (t *Tracer) AttachTracer() error {
-	tracerProg, ok := t.ebpfProgs["native_tracer_entry"]
+	tracerProg, ok := t.ebpfProgs["native_tracer_entry_perf"]
 	if !ok {
 		return errors.New("entry program is not available")
 	}
@@ -1082,11 +1081,14 @@ func (t *Tracer) AttachTracer() error {
 		if err != nil {
 			return fmt.Errorf("failed to attach to perf event on CPU %d: %v", id, err)
 		}
+
 		if err := perfEvent.SetBPF(uint32(tracerProg.FD())); err != nil {
 			return fmt.Errorf("failed to attach eBPF program to perf event: %v", err)
 		}
+
 		*events = append(*events, perfEvent)
 	}
+
 	return nil
 }
 
