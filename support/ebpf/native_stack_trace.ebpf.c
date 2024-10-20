@@ -748,7 +748,8 @@ static inline ErrorCode get_usermode_regs(struct pt_regs *ctx,
 
 #endif
 
-static inline int unwind_native(struct pt_regs *ctx)
+static inline __attribute__((__always_inline__))
+int unwind_native(struct pt_regs *ctx, bpf_map_def *prog_map)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -795,15 +796,15 @@ static inline int unwind_native(struct pt_regs *ctx)
   // Tail call needed for recursion, switching to interpreter unwinder, or reporting
   // trace due to end-of-trace or error. The unwinder program index is set accordingly.
   record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
+  tail_call(ctx, unwinder, prog_map);
   DEBUG_PRINT("bpf_tail call failed for %d in unwind_native", unwinder);
   return -1;
 }
 
-DEFINE_DUAL_PROGRAM(unwind_native, unwind_native, unwind_native);
+DEFINE_DUAL_PROGRAM(unwind_native, unwind_native);
 
-static inline
-int collect_trace(struct pt_regs *ctx) {
+static inline __attribute__((__always_inline__))
+int collect_trace(struct pt_regs *ctx, bpf_map_def *prog_map) {
   // Get the PID and TGID register.
   u64 id = bpf_get_current_pid_tgid();
   u32 pid = id >> 32;
@@ -855,7 +856,7 @@ int collect_trace(struct pt_regs *ctx) {
 
 exit:
   record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
+  tail_call(ctx, unwinder, prog_map);
   DEBUG_PRINT("bpf_tail call failed for %d in native_tracer_entry", unwinder);
   return -1;
 }
@@ -863,11 +864,11 @@ exit:
 SEC("perf_event/native_tracer_entry")
 int native_tracer_entry_perf(struct bpf_perf_event_data *ctx)
 {
-  return collect_trace((struct pt_regs*) &ctx->regs);
+  return collect_trace((struct pt_regs*) &ctx->regs, &perf_progs);
 }
 
 SEC("kprobe/native_tracer_entry")
 int native_tracer_entry_kprobe(struct pt_regs *ctx)
 {
-  return collect_trace(ctx);
+  return collect_trace(ctx, &kprobe_progs);
 }

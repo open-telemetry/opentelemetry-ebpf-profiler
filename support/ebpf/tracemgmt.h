@@ -423,10 +423,10 @@ int get_next_unwinder_after_interpreter(const PerCPURecord *record) {
 // tail_call is a wrapper around bpf_tail_call() and ensures that the number of tail calls is not
 // reached while unwinding the stack.
 static inline __attribute__((__always_inline__))
-void tail_call(void *ctx, int next) {
+void tail_call(void *ctx, int next, bpf_map_def *progMap) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
-    bpf_tail_call(ctx, &progs, PROG_UNWIND_STOP);
+    bpf_tail_call(ctx, progMap, PROG_UNWIND_STOP);
     // In theory bpf_tail_call() should never return. But due to instruction reordering by the
     // compiler we have to place return here to bribe the verifier to accept this.
     return;
@@ -444,7 +444,7 @@ void tail_call(void *ctx, int next) {
   }
   record->tailCalls += 1 ;
 
-  bpf_tail_call(ctx, &progs, next);
+  bpf_tail_call(ctx, progMap, next);
 }
 
 #endif

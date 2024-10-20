@@ -26,8 +26,16 @@ bpf_map_def SEC("maps") metrics = {
   .max_entries = metricID_Max,
 };
 
-// progs maps from a program ID to an eBPF program
-bpf_map_def SEC("maps") progs = {
+// perf progs maps from a program ID to an eBPF program
+bpf_map_def SEC("maps") perf_progs = {
+  .type = BPF_MAP_TYPE_PROG_ARRAY,
+  .key_size = sizeof(u32),
+  .value_size = sizeof(u32),
+  .max_entries = NUM_TRACER_PROGS,
+};
+
+// kprobe progs maps from a program ID to an eBPF program
+bpf_map_def SEC("maps") kprobe_progs = {
   .type = BPF_MAP_TYPE_PROG_ARRAY,
   .key_size = sizeof(u32),
   .value_size = sizeof(u32),
@@ -172,8 +180,8 @@ void maybe_add_apm_info(Trace *trace) {
   DEBUG_PRINT("APM transaction ID: %016llX, flags: 0x%02X",
               trace->apm_transaction_id.as_int, corr_buf.trace_flags);
 }
-
-static inline int unwind_stop(struct pt_regs *ctx)
+static inline __attribute__((__always_inline__))
+int unwind_stop(struct pt_regs *ctx, bpf_map_def *prog_map)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -240,7 +248,7 @@ static inline int unwind_stop(struct pt_regs *ctx)
   return 0;
 }
 
-DEFINE_DUAL_PROGRAM(unwind_stop, unwind_stop, unwind_stop);
+DEFINE_DUAL_PROGRAM(unwind_stop, unwind_stop);
 
 char _license[] SEC("license") = "GPL";
 // this number will be interpreted by the elf loader

@@ -216,8 +216,8 @@ save_state:
 
   return ERR_OK;
 }
-
-static inline int unwind_ruby(struct pt_regs *ctx)
+static inline __attribute__((__always_inline__))
+int unwind_ruby(struct pt_regs *ctx, bpf_map_def *prog_map)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -271,8 +271,8 @@ static inline int unwind_ruby(struct pt_regs *ctx)
 
 exit:
   record->state.unwind_error = error;
-  tail_call(ctx, unwinder);
+  tail_call(ctx, unwinder, prog_map);
   return -1;
 }
 
-DEFINE_DUAL_PROGRAM(unwind_ruby, unwind_ruby, unwind_ruby);
+DEFINE_DUAL_PROGRAM(unwind_ruby, unwind_ruby);

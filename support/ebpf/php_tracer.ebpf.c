@@ -183,7 +183,8 @@ int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted) {
   return unwinder;
 }
 
-static inline int unwind_php(struct pt_regs *ctx)
+static inline __attribute__((__always_inline__))
+int unwind_php(struct pt_regs *ctx, bpf_map_def *prog_map)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -237,8 +238,8 @@ static inline int unwind_php(struct pt_regs *ctx)
   unwinder = walk_php_stack(record, phpinfo, is_jitted);
 
 exit:
-  tail_call(ctx, unwinder);
+  tail_call(ctx, unwinder, prog_map);
   return -1;
 }
 
-DEFINE_DUAL_PROGRAM(unwind_php, unwind_php, unwind_php)
+DEFINE_DUAL_PROGRAM(unwind_php, unwind_php)
