@@ -227,25 +227,18 @@ func mainWithExitCode() exitCode {
 	metrics.Add(metrics.IDProcPIDStartupMs, metrics.MetricValue(time.Since(now).Milliseconds()))
 	log.Debug("Completed initial PID listing")
 
-	if args.externallyManaged {
-		_, err := trc.GetNativeTracerEntry()
-		if err != nil {
-			return failure("Failed to get native tracer entry: %v", err)
-		}
-	} else {
-		// Attach our tracer to the perf event
-		if err := trc.AttachTracer(); err != nil {
-			return failure("Failed to attach to perf event: %v", err)
-		}
-		log.Info("Attached tracer program")
+	// Attach our tracer to the perf event
+	if err := trc.AttachTracer(); err != nil {
+		return failure("Failed to attach to perf event: %v", err)
+	}
+	log.Info("Attached tracer program")
 
-		if args.probabilisticThreshold < tracer.ProbabilisticThresholdMax {
-			trc.StartProbabilisticProfiling(mainCtx)
-			log.Printf("Enabled probabilistic profiling")
-		} else {
-			if err := trc.EnableProfiling(); err != nil {
-				return failure("Failed to enable perf events: %v", err)
-			}
+	if args.probabilisticThreshold < tracer.ProbabilisticThresholdMax {
+		trc.StartProbabilisticProfiling(mainCtx)
+		log.Printf("Enabled probabilistic profiling")
+	} else {
+		if err := trc.EnableProfiling(); err != nil {
+			return failure("Failed to enable perf events: %v", err)
 		}
 	}
 

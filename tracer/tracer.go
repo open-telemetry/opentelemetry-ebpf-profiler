@@ -1171,7 +1171,7 @@ func (t *Tracer) TraceProcessor() tracehandler.TraceProcessor {
 // GetNativeTracerEntry returns the file descriptor of the native tracer entry program.
 // This allows the client to use the fd to trigger the eBPF program using tail calls.
 func (t *Tracer) GetNativeTracerEntry() (int, error) {
-	tracerProg, ok := t.ebpfProgs["native_tracer_entry"]
+	tracerProg, ok := t.ebpfProgs["native_tracer_entry_kprobe"]
 	if !ok {
 		return 0, fmt.Errorf("entry program is not available")
 	}
