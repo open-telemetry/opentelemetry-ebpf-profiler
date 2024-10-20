@@ -3,6 +3,7 @@
 .cache
 /.idea
 /go
+.vscode
 ebpf-profiler
 ci-kernels
 ebpf-profiler
