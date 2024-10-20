@@ -82,7 +82,6 @@ type arguments struct {
 	samplesPerSecond       int
 	sendErrorFrames        bool
 	tracers                string
-	externallyManaged      bool
 	verboseMode            bool
 	version                bool
 
@@ -135,8 +134,6 @@ func parseArgs() (*arguments, error) {
 
 	fs.StringVar(&args.tracers, "t", "all", "Shorthand for -tracers.")
 	fs.StringVar(&args.tracers, "tracers", "all", tracersHelp)
-
-	fs.BoolVar(&args.externallyManaged, "externally-managed", false, externallyManagedHelp)
 
 	fs.BoolVar(&args.verboseMode, "v", false, "Shorthand for -verbose.")
 	fs.BoolVar(&args.verboseMode, "verbose", false, verboseModeHelp)
