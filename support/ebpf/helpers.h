@@ -4,10 +4,17 @@
 #define OPTI_HELPERS_H
 
 // Macros for BPF program type and context handling.
-#ifdef EXTERNAL_TRIGGER
-#define BPF_PROBE(name) SEC("kprobe/"#name)
-#else
-#define BPF_PROBE(name) SEC("perf_event/"#name)
-#endif
+#define DEFINE_DUAL_PROGRAM(name, func)                    \
+SEC("perf_event/" #name)                                         \
+int name##_perf(struct pt_regs *ctx)                         \
+{                                                                        \
+    return func(ctx, &perf_progs);                            \
+}                                                                        \
+                                                                         \
+SEC("kprobe/" #name)                                             \
+int name##_kprobe(struct pt_regs *ctx)                                   \
+{                                                                        \
+    return func(ctx, &kprobe_progs);                                                    \
+}
 
 #endif // OPTI_HELPERS_H

@@ -357,8 +357,8 @@ int walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo) {
 // unwind_perl is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // Perl stack frames to the trace object for the current CPU.
-BPF_PROBE(unwind_perl)
-int unwind_perl(struct pt_regs *ctx)
+static inline __attribute__((__always_inline__))
+int unwind_perl(struct pt_regs *ctx, bpf_map_def *prog_map)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
@@ -425,6 +425,8 @@ int unwind_perl(struct pt_regs *ctx)
   unwinder = walk_perl_stack(record, perlinfo);
 
 exit:
-  tail_call(ctx, unwinder);
+  tail_call(ctx, unwinder, prog_map);
   return -1;
 }
+
+DEFINE_DUAL_PROGRAM(unwind_perl, unwind_perl);
