@@ -1,5 +1,4 @@
-//go:build amd64 && !dummy && !external_trigger
-// +build amd64,!dummy,!external_trigger
+//go:build amd64 && !dummy
 
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0

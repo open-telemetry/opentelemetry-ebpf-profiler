@@ -5,13 +5,6 @@ LLC ?= llc-16
 
 DEBUG_FLAGS = -DOPTI_DEBUG -g
 
-# Check if EXTERNAL flag is set
-ifdef EXTERNAL
-    EXTERNAL_FLAG = -DEXTERNAL_TRIGGER
-else
-    EXTERNAL_FLAG =
-endif
-
 # Detect native architecture and translate to GOARCH.
 NATIVE_ARCH := $(shell uname -m)
 ifeq ($(NATIVE_ARCH),x86_64)
@@ -28,11 +21,7 @@ TARGET_ARCH ?= $(NATIVE_ARCH)
 # Valid values: release, debug
 BUILD_TYPE ?= release
 
-ifdef EXTERNAL
-	TRACER_NAME ?= tracer.ebpf.$(BUILD_TYPE).$(EXTERNAL).$(TARGET_ARCH)
-else
-	TRACER_NAME ?= tracer.ebpf.$(BUILD_TYPE).$(TARGET_ARCH)
-endif
+TRACER_NAME ?= tracer.ebpf.$(BUILD_TYPE).$(TARGET_ARCH)
 
 ifeq ($(TARGET_ARCH),arm64)
 TARGET_FLAGS = -target aarch64-linux-gnu
@@ -55,15 +44,10 @@ FLAGS=$(TARGET_FLAGS) \
 	-Wno-unused-label \
 	-Wno-unused-parameter \
 	-Wno-sign-compare \
-	-fno-stack-protector \
-	$(EXTERNAL_FLAG)
+	-fno-stack-protector
 
 SRCS := $(wildcard *.ebpf.c)
-ifdef EXTERNAL
-	OBJS := $(SRCS:.c=.$(BUILD_TYPE).$(EXTERNAL).$(TARGET_ARCH).o)
-else
-	OBJS := $(SRCS:.c=.$(BUILD_TYPE).$(TARGET_ARCH).o)
-endif
+OBJS := $(SRCS:.c=.$(BUILD_TYPE).$(TARGET_ARCH).o)
 
 .DEFAULT_GOAL := all
 
@@ -89,13 +73,8 @@ errors.h: ../../tools/errors-codegen/errors.json
 
 %.ebpf.c: errors.h ;
 
-ifdef EXTERNAL
-%.ebpf.$(BUILD_TYPE).$(EXTERNAL).$(TARGET_ARCH).o: %.ebpf.c
-	$(BPF_CLANG) $(FLAGS) -o $@
-else
 %.ebpf.$(BUILD_TYPE).$(TARGET_ARCH).o: %.ebpf.c
 	$(BPF_CLANG) $(FLAGS) -o $@
-endif
 
 $(TRACER_NAME): $(OBJS)
 	$(BPF_LINK) $^ -o - | $(LLC) -march=bpf -mcpu=v2 -filetype=obj -o $@
