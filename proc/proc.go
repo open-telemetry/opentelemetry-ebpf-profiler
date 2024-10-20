@@ -28,7 +28,8 @@ func GetKallsyms(kallsymsPath string) (*libpf.SymbolMap, error) {
 	var address uint64
 	var symbol string
 
-	symmap := libpf.SymbolMap{}
+	// As an example, the Debian 6.10.11 kernel has ~180k text symbols.
+	symmap := libpf.NewSymbolMap(200 * 1024)
 	noSymbols := true
 
 	file, err := os.Open(kallsymsPath)
@@ -50,6 +51,12 @@ func GetKallsyms(kallsymsPath string) (*libpf.SymbolMap, error) {
 
 		if nFields < 3 {
 			return nil, fmt.Errorf("unexpected line in kallsyms: '%s'", line)
+		}
+
+		// Skip non-text symbols, see 'man nm'.
+		// Special case for 'etext', which can be of type `D` (data) in some kernels.
+		if strings.IndexByte("TtVvWwA", fields[1][0]) == -1 && fields[2] != "_etext" {
+			continue
 		}
 
 		if address, err = strconv.ParseUint(fields[0], 16, 64); err != nil {
@@ -74,7 +81,7 @@ func GetKallsyms(kallsymsPath string) (*libpf.SymbolMap, error) {
 			"all addresses from kallsyms are zero - check process permissions")
 	}
 
-	return &symmap, nil
+	return symmap, nil
 }
 
 // GetKernelModules returns SymbolMap for kernel modules from /proc/modules.

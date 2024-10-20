@@ -282,13 +282,12 @@ func (i *perlInstance) getHVName(hvAddr libpf.Address) (string, error) {
 	}
 
 	xpvhvAddr := npsr.Ptr(hv, vms.sv.sv_any)
-	end := i.rm.Uint64(xpvhvAddr + libpf.Address(vms.xpvhv.xhv_max))
-
 	xpvhvAux := make([]byte, vms.xpvhv_aux.sizeof)
 	if i.d.version < perlVersion(5, 35, 0) {
 		// The aux structure is at the end of the array. Calculate its address.
 		arrayAddr := npsr.Ptr(hv, vms.sv.svu_hash)
-		xpvhvAuxAddr := arrayAddr + libpf.Address((end+1)*8)
+		end := i.rm.Uint64(xpvhvAddr + libpf.Address(vms.xpvhv.xhv_max))
+		xpvhvAuxAddr := arrayAddr + libpf.Address((end+1)*uint64(vms.xpvhv_aux.pointer_size))
 		if err := i.rm.Read(xpvhvAuxAddr, xpvhvAux); err != nil {
 			return "", err
 		}
