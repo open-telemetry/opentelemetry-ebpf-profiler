@@ -14,18 +14,18 @@ import (
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 )
 
-// createVDSOSyntheticRecordNone returns no synthesic deltas when the kernel vdso
+// createVDSOSyntheticRecordNone returns no synthesic deltas when the kernel vDSO
 // is known to have valid unwind information.
 func createVDSOSyntheticRecordNone(_ *pfelf.File) sdtypes.IntervalData {
 	return sdtypes.IntervalData{}
 }
 
-// createVDSOSyntheticRecordArm64 creates a generated stack-delta records for arm64 vdso.
+// createVDSOSyntheticRecordArm64 creates generated stack-delta records for ARM64 vDSO.
 // ARM64 kernel vDSO does not have proper `.eh_frame` section, so we synthesize it here.
 // This assumes LR based unwinding for most of the vDSO. Additionally the following
 // synthesization is done:
-//   - if matching frame push/pop is found within a dynamic symbol, a frame pointer based
-//     unwinding rule is added for that region
+//   - if matching STP/LDP is found within a dynamic symbol, an unwind rule with
+//     is created and the frame size is extracted
 //   - the sigreturn helper is detected and signal unwind info is associated for it
 func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 	deltas := sdtypes.StackDeltaArray{}
@@ -73,8 +73,11 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 				if !ok {
 					continue
 				}
-				frameStart = offs + 4
-				frameSize = -int(imm)
+				imm = -imm
+				if imm < 1024 {
+					frameStart = offs + 4
+					frameSize = int(imm)
+				}
 			case aa.LDP:
 				if reg, ok := ah.Xreg2num(inst.Args[0]); !ok || reg != 29 {
 					continue

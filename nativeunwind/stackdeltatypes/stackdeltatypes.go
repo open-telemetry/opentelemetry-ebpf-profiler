@@ -71,7 +71,7 @@ var UnwindInfoFramePointerX64 = UnwindInfo{
 	FPParam:  -16,
 }
 
-// UnwindInfoLR contains the description to unwind arm function without frame (Link Register only)
+// UnwindInfoLR contains the description to unwind ARM64 function without a frame (LR only)
 var UnwindInfoLR = UnwindInfo{
 	Opcode:   UnwindOpcodeBaseSP,
 	FPOpcode: UnwindOpcodeBaseLR,
