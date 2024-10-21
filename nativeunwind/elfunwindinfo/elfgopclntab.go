@@ -593,7 +593,7 @@ func parseX86pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc, data
 		// Use stack frame-pointer delta
 		deltas.Add(sdtypes.StackDelta{
 			Address: fun.startPc,
-			Info:    sdtypes.UnwindInfoFramePointer,
+			Info:    sdtypes.UnwindInfoFramePointerX64,
 		})
 		return nil
 	case fun.pcspOff != 0:

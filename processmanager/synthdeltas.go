@@ -4,9 +4,11 @@
 package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
-	"encoding/binary"
 	"sort"
 
+	aa "golang.org/x/arch/arm64/arm64asm"
+
+	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
@@ -49,23 +51,53 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 		if _, err = ef.ReadVirtualMemory(code, int64(sym.Address)); err != nil {
 			return
 		}
+
 		var frameStart uint64
+		var frameSize int
 		for offs := uint64(0); offs < uint64(sym.Size); offs += 4 {
-			switch binary.LittleEndian.Uint32(code[offs:]) {
-			case 0xa9bf7bfd: // stp x29, x30, [sp, #-16]!
-				frameStart = offs + 4
-			case 0xa8c17bfd: // ldp x29, x30, [sp], #16
-				if frameStart != 0 {
-					deltas = append(
-						deltas,
-						sdtypes.StackDelta{
-							Address: addr + frameStart,
-							Info:    sdtypes.UnwindInfoFramePointer},
-						sdtypes.StackDelta{
-							Address: addr + offs + 4,
-							Info:    sdtypes.UnwindInfoLR},
-					)
+			inst, err := aa.Decode(code[offs:])
+			if err != nil {
+				continue
+			}
+			switch inst.Op {
+			case aa.RET:
+				return
+			case aa.STP:
+				if reg, ok := ah.Xreg2num(inst.Args[0]); !ok || reg != 29 {
+					continue
 				}
+				if reg, ok := ah.Xreg2num(inst.Args[1]); !ok || reg != 30 {
+					continue
+				}
+				imm, ok := ah.DecodeImmediate(inst.Args[2])
+				if !ok {
+					continue
+				}
+				frameStart = offs + 4
+				frameSize = -int(imm)
+			case aa.LDP:
+				if reg, ok := ah.Xreg2num(inst.Args[0]); !ok || reg != 29 {
+					continue
+				}
+				if reg, ok := ah.Xreg2num(inst.Args[1]); !ok || reg != 30 {
+					continue
+				}
+				if frameStart == 0 {
+					return
+				}
+				deltas = append(
+					deltas,
+					sdtypes.StackDelta{
+						Address: addr + frameStart,
+						Info: sdtypes.UnwindInfo{
+							Opcode:   sdtypes.UnwindOpcodeBaseFP,
+							Param:    int32(frameSize),
+							FPOpcode: sdtypes.UnwindOpcodeBaseFP,
+							FPParam:  8,
+						},
+					},
+					sdtypes.StackDelta{Address: addr + offs + 4, Info: sdtypes.UnwindInfoLR},
+				)
 				frameStart = 0
 			}
 		}
