@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/peterbourgon/ff/v3"
-	log "github.com/sirupsen/logrus"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -27,8 +27,6 @@ const (
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
-	// 1TB of executable address space
-	maxArgMapScaleFactor = 8
 )
 
 // Help strings for command line arguments
@@ -42,7 +40,7 @@ var (
 	mapScaleFactorHelp = fmt.Sprintf("Scaling factor for eBPF map sizes. "+
 		"Every increase by 1 doubles the map size. Increase if you see eBPF map size errors. "+
 		"Default is %d corresponding to 4GB of executable address space, max is %d.",
-		defaultArgMapScaleFactor, maxArgMapScaleFactor)
+		defaultArgMapScaleFactor, controller.MaxArgMapScaleFactor)
 	disableTLSHelp             = "Disable encryption for data in transit."
 	bpfVerifierLogLevelHelp    = "Log level of the eBPF verifier output (0,1,2). Default is 0."
 	versionHelp                = "Show version."
@@ -65,84 +63,62 @@ var (
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
 )
 
-type arguments struct {
-	bpfVerifierLogLevel    uint
-	collAgentAddr          string
-	copyright              bool
-	disableTLS             bool
-	mapScaleFactor         uint
-	monitorInterval        time.Duration
-	clockSyncInterval      time.Duration
-	noKernelVersionCheck   bool
-	pprofAddr              string
-	probabilisticInterval  time.Duration
-	probabilisticThreshold uint
-	reporterInterval       time.Duration
-	samplesPerSecond       int
-	sendErrorFrames        bool
-	tracers                string
-	verboseMode            bool
-	version                bool
-
-	fs *flag.FlagSet
-}
-
 // Package-scope variable, so that conditionally compiled other components can refer
 // to the same flagset.
 
-func parseArgs() (*arguments, error) {
-	var args arguments
+func parseArgs() (*controller.Config, error) {
+	var args controller.Config
 
 	fs := flag.NewFlagSet("ebpf-profiler", flag.ExitOnError)
 
 	// Please keep the parameters ordered alphabetically in the source-code.
-	fs.UintVar(&args.bpfVerifierLogLevel, "bpf-log-level", 0, bpfVerifierLogLevelHelp)
+	fs.UintVar(&args.BpfVerifierLogLevel, "bpf-log-level", 0, bpfVerifierLogLevelHelp)
 
-	fs.StringVar(&args.collAgentAddr, "collection-agent", "", collAgentAddrHelp)
-	fs.BoolVar(&args.copyright, "copyright", false, copyrightHelp)
+	fs.StringVar(&args.CollAgentAddr, "collection-agent", "", collAgentAddrHelp)
+	fs.BoolVar(&args.Copyright, "copyright", false, copyrightHelp)
 
-	fs.BoolVar(&args.disableTLS, "disable-tls", false, disableTLSHelp)
+	fs.BoolVar(&args.DisableTLS, "disable-tls", false, disableTLSHelp)
 
-	fs.UintVar(&args.mapScaleFactor, "map-scale-factor",
+	fs.UintVar(&args.MapScaleFactor, "map-scale-factor",
 		defaultArgMapScaleFactor, mapScaleFactorHelp)
 
-	fs.DurationVar(&args.monitorInterval, "monitor-interval", defaultArgMonitorInterval,
+	fs.DurationVar(&args.MonitorInterval, "monitor-interval", defaultArgMonitorInterval,
 		monitorIntervalHelp)
 
-	fs.DurationVar(&args.clockSyncInterval, "clock-sync-interval", defaultClockSyncInterval,
+	fs.DurationVar(&args.ClockSyncInterval, "clock-sync-interval", defaultClockSyncInterval,
 		clockSyncIntervalHelp)
 
-	fs.BoolVar(&args.noKernelVersionCheck, "no-kernel-version-check", false,
+	fs.BoolVar(&args.NoKernelVersionCheck, "no-kernel-version-check", false,
 		noKernelVersionCheckHelp)
 
-	fs.StringVar(&args.pprofAddr, "pprof", "", pprofHelp)
+	fs.StringVar(&args.PprofAddr, "pprof", "", pprofHelp)
 
-	fs.DurationVar(&args.probabilisticInterval, "probabilistic-interval",
+	fs.DurationVar(&args.ProbabilisticInterval, "probabilistic-interval",
 		defaultProbabilisticInterval, probabilisticIntervalHelp)
-	fs.UintVar(&args.probabilisticThreshold, "probabilistic-threshold",
+	fs.UintVar(&args.ProbabilisticThreshold, "probabilistic-threshold",
 		defaultProbabilisticThreshold, probabilisticThresholdHelp)
 
-	fs.DurationVar(&args.reporterInterval, "reporter-interval", defaultArgReporterInterval,
+	fs.DurationVar(&args.ReporterInterval, "reporter-interval", defaultArgReporterInterval,
 		reporterIntervalHelp)
 
-	fs.IntVar(&args.samplesPerSecond, "samples-per-second", defaultArgSamplesPerSecond,
+	fs.IntVar(&args.SamplesPerSecond, "samples-per-second", defaultArgSamplesPerSecond,
 		samplesPerSecondHelp)
 
-	fs.BoolVar(&args.sendErrorFrames, "send-error-frames", defaultArgSendErrorFrames,
+	fs.BoolVar(&args.SendErrorFrames, "send-error-frames", defaultArgSendErrorFrames,
 		sendErrorFramesHelp)
 
-	fs.StringVar(&args.tracers, "t", "all", "Shorthand for -tracers.")
-	fs.StringVar(&args.tracers, "tracers", "all", tracersHelp)
+	fs.StringVar(&args.Tracers, "t", "all", "Shorthand for -tracers.")
+	fs.StringVar(&args.Tracers, "tracers", "all", tracersHelp)
 
-	fs.BoolVar(&args.verboseMode, "v", false, "Shorthand for -verbose.")
-	fs.BoolVar(&args.verboseMode, "verbose", false, verboseModeHelp)
-	fs.BoolVar(&args.version, "version", false, versionHelp)
+	fs.BoolVar(&args.VerboseMode, "v", false, "Shorthand for -verbose.")
+	fs.BoolVar(&args.VerboseMode, "verbose", false, verboseModeHelp)
+	fs.BoolVar(&args.Version, "version", false, versionHelp)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()
 	}
 
-	args.fs = fs
+	args.Fs = fs
 
 	return &args, ff.Parse(fs, os.Args[1:],
 		ff.WithEnvVarPrefix("OTEL_PROFILING_AGENT"),
@@ -153,11 +129,4 @@ func parseArgs() (*arguments, error) {
 		ff.WithIgnoreUndefined(true),
 		ff.WithAllowMissingConfigFile(true),
 	)
-}
-
-func (args *arguments) dump() {
-	log.Debug("Config:")
-	args.fs.VisitAll(func(f *flag.Flag) {
-		log.Debug(fmt.Sprintf("%s: %v", f.Name, f.Value))
-	})
 }
