@@ -870,5 +870,10 @@ int native_tracer_entry_perf(struct bpf_perf_event_data *ctx)
 SEC("kprobe/native_tracer_entry")
 int native_tracer_entry_kprobe(struct pt_regs *ctx)
 {
+  u64 pid = bpf_get_current_pid_tgid() >> 32; 
+  if (pid == 0) {
+    return 0;
+  }
+  DEBUG_PRINT("hello from native_tracer_entry PID %llu\n", pid); 
   return collect_trace(ctx, &kprobe_progs);
 }
