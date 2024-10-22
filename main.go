@@ -18,6 +18,7 @@ import (
 	"github.com/tklauser/numcpus"
 	"golang.org/x/sys/unix"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/helpers"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -157,7 +158,7 @@ func mainWithExitCode() exitCode {
 	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr)
 	metadataCollector.AddCustomData("os.type", "linux")
 
-	kernelVersion, err := getKernelVersion()
+	kernelVersion, err := helpers.GetKernelVersion()
 	if err != nil {
 		return failure("Failed to get Linux kernel version: %v", err)
 	}
@@ -165,7 +166,7 @@ func mainWithExitCode() exitCode {
 	metadataCollector.AddCustomData("os.kernel.release", kernelVersion)
 
 	// hostname and sourceIP will be populated from the root namespace.
-	hostname, sourceIP, err := getHostnameAndSourceIP(args.collAgentAddr)
+	hostname, sourceIP, err := helpers.GetHostnameAndSourceIP(args.collAgentAddr)
 	if err != nil {
 		log.Warnf("Failed to fetch metadata information in the root namespace: %v", err)
 	}
