@@ -543,13 +543,15 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 
 		// Walk every frame of the trace.
 		for i := range traceInfo.frameTypes {
+			frameAttributes := addProfileAttributes(profile, []attrKeyValue{
+				{key: "profile.frame.type", value: traceInfo.frameTypes[i].String()},
+			}, attributeMap)
+
 			loc := &profiles.Location{
 				// Id - Optional element we do not use.
-				TypeIndex: getStringMapIndex(stringMap,
-					traceInfo.frameTypes[i].String()),
 				Address: uint64(traceInfo.linenos[i]),
 				// IsFolded - Optional element we do not use.
-				// Attributes - Optional element we do not use.
+				Attributes: frameAttributes,
 			}
 
 			switch frameKind := traceInfo.frameTypes[i]; frameKind {
