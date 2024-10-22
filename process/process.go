@@ -109,7 +109,7 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 		if inode == 0 {
 			if path == "[vdso]" {
 				// Map to something filename looking with synthesized inode
-				path = vdsoPathName
+				path = VdsoPathName
 				device = 0
 				inode = vdsoInode
 			} else if path != "" {
