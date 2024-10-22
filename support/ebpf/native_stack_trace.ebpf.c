@@ -874,6 +874,6 @@ int native_tracer_entry_kprobe(struct pt_regs *ctx)
   if (pid == 0) {
     return 0;
   }
-  DEBUG_PRINT("hello from native_tracer_entry PID %llu\n", pid); 
+  bpf_trace_printk("hello from native_tracer_entry PID %llu\n", sizeof("hello from native_tracer_entry PID %llu\n"), pid);
   return collect_trace(ctx, &kprobe_progs);
 }
