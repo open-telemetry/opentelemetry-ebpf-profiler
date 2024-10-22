@@ -33,6 +33,7 @@ static inline void event_send_trigger(struct pt_regs *ctx, u32 event_type) {
   // place, we allow latch-like inhibition, where eBPF sets it and Go has to manually reset
   // it, before new notifications are triggered.
   if (event_type != EVENT_TYPE_GENERIC_PID) {
+    DEBUG_PRINT("Maaaaaaaaaa")
     return;
   }
 
@@ -49,7 +50,7 @@ static inline void event_send_trigger(struct pt_regs *ctx, u32 event_type) {
     // no action
     break;
   }
-
+  DEBUG_PRINT("Sucessssss");
   Event event = {.event_type = event_type};
   int ret = bpf_perf_event_output(ctx, &report_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
   if (ret < 0) {
@@ -148,7 +149,9 @@ static inline __attribute__((__always_inline__))
 bool report_pid(void *ctx, int pid, int ratelimit_action) {
   u32 key = (u32) pid;
 
+
   if (pid_event_ratelimit(pid, ratelimit_action)) {
+    DEBUG_PRINT("pid_event_ratelimit");
     return false;
   }
 
