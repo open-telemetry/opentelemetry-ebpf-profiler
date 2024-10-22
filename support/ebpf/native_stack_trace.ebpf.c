@@ -847,11 +847,14 @@ int collect_trace(struct pt_regs *ctx, bpf_map_def *prog_map) {
   }
 
   if (!pid_information_exists(ctx, pid)) {
+    DEBUG_PRINT("New process %d", pid);
     if (report_pid(ctx, pid, RATELIMIT_ACTION_DEFAULT)) {
       increment_metric(metricID_NumProcNew);
     }
     return 0;
   }
+
+  DEBUG_PRINT("==== unwind_native ====");
   error = get_next_unwinder_after_native_frame(record, &unwinder);
 
 exit:
