@@ -1,7 +1,6 @@
 package controller // import "go.opentelemetry.io/ebpf-profiler/internal/controller"
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"runtime"
@@ -53,34 +52,33 @@ func (cfg *Config) Dump() {
 // if invalid values were provided.
 func (cfg *Config) Validate() error {
 	if cfg.SamplesPerSecond < 1 {
-		return parseError(fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond))
+		return parseError("invalid sampling frequency: %d", cfg.SamplesPerSecond)
 	}
 
 	if cfg.MapScaleFactor > 8 {
 		return parseError(
-			fmt.Errorf("eBPF map scaling factor %d exceeds limit (max: %d)",
-				cfg.MapScaleFactor, MaxArgMapScaleFactor),
+			"eBPF map scaling factor %d exceeds limit (max: %d)",
+			cfg.MapScaleFactor, MaxArgMapScaleFactor,
 		)
 	}
 
 	if cfg.BpfVerifierLogLevel > 2 {
-		return parseError(
-			fmt.Errorf("invalid eBPF verifier log level: %d", cfg.BpfVerifierLogLevel),
-		)
+		return parseError("invalid eBPF verifier log level: %d", cfg.BpfVerifierLogLevel)
 	}
 
 	if cfg.ProbabilisticInterval < 1*time.Minute || cfg.ProbabilisticInterval > 5*time.Minute {
 		return parseError(
-			errors.New("invalid argument for probabilistic-interval: use " +
-				"a duration between 1 and 5 minutes"),
+			"invalid argument for probabilistic-interval: use " +
+				"a duration between 1 and 5 minutes",
 		)
 	}
 
 	if cfg.ProbabilisticThreshold < 1 ||
 		cfg.ProbabilisticThreshold > tracer.ProbabilisticThresholdMax {
 		return parseError(
-			fmt.Errorf("invalid argument for probabilistic-threshold. Value "+
-				"should be between 1 and %d", tracer.ProbabilisticThresholdMax),
+			"invalid argument for probabilistic-threshold. Value "+
+				"should be between 1 and %d",
+			tracer.ProbabilisticThresholdMax,
 		)
 	}
 
@@ -115,9 +113,9 @@ func (cfg *Config) Validate() error {
 	return nil
 }
 
-func parseError(err error) error {
+func parseError(format string, a ...any) error {
 	return ErrorWithExitCode{
-		error: err,
+		error: fmt.Errorf(format, a...),
 		code:  exitParseError,
 	}
 }
