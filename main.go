@@ -17,7 +17,6 @@ import (
 	"github.com/tklauser/numcpus"
 	"golang.org/x/sys/unix"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -108,10 +107,6 @@ func mainWithExitCode() exitCode {
 
 	if err = cfg.Validate(); err != nil {
 		log.Error(err)
-		if err, ok := err.(controller.ErrorWithExitCode); ok {
-			return exitCode(err.Code())
-		}
-
 		return exitFailure
 	}
 
