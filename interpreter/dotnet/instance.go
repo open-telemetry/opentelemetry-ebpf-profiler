@@ -622,7 +622,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			info.fileID, m.Path,
 			info.simpleName, info.guid)
 
-		if !info.reported {
+		if !symbolReporter.ExecutableKnown(info.fileID) {
 			open := func() (process.ReadAtCloser, error) {
 				return os.Open(m.Path)
 			}
@@ -636,7 +636,6 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 					Open:              open,
 				},
 			)
-			info.reported = true
 		}
 
 		dotnetMappings = append(dotnetMappings, dotnetMapping{
