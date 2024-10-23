@@ -86,7 +86,8 @@ func main() {
 func mainWithExitCode() exitCode {
 	cfg, err := parseArgs()
 	if err != nil {
-		return parseError("Failure to parse arguments: %v", err)
+		log.Errorf("Failure to parse arguments: %v", err)
+		return exitParseError
 	}
 
 	if cfg.Copyright {
@@ -298,11 +299,6 @@ func traceCacheSize(monitorInterval time.Duration, samplesPerSecond int,
 func maxElementsPerInterval(monitorInterval time.Duration, samplesPerSecond int,
 	presentCPUCores uint16) uint32 {
 	return uint32(uint16(samplesPerSecond) * uint16(monitorInterval.Seconds()) * presentCPUCores)
-}
-
-func parseError(msg string, args ...interface{}) exitCode {
-	log.Errorf(msg, args...)
-	return exitParseError
 }
 
 func failure(msg string, args ...interface{}) exitCode {
