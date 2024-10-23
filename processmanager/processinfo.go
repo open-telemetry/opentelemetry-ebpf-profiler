@@ -289,6 +289,10 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	}
 	pm.FileIDMapper.Set(hostFileID, fileID)
 
+	if pm.reporter.ExecutableKnown(fileID) {
+		return info
+	}
+
 	baseName := path.Base(mapping.Path)
 	if baseName == "/" {
 		// There are circumstances where there is no filename.
