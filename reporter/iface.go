@@ -89,6 +89,13 @@ type FrameMetadataArgs struct {
 }
 
 type SymbolReporter interface {
+	// ExecutableKnown may be used to query the reporter if the FileID is known.
+	// The callers of ExecutableMetadata can optionally use this method to determine if the data
+	// is already cached and avoid extra work resolving the metadata. If the reporter returns false,
+	// the caller will resolve the executable metadata and submit it to the reporter
+	// via a subsequent ExecutableMetadata call.
+	ExecutableKnown(fileID libpf.FileID) bool
+
 	// ExecutableMetadata accepts a FileID with the corresponding filename
 	// and takes some action with it (for example, it might cache it for
 	// periodic reporting to a backend).
@@ -102,8 +109,8 @@ type SymbolReporter interface {
 	// FrameKnown may be used to query the reporter if the FrameID is known. The interpreter
 	// modules can optionally use this method to determine if the data is already cached
 	// and avoid extra work resolving the metadata. If the reporter returns false,
-	// the intepreter plugin will resolve the frame metadata and submit it to the reporter
-	// via a subsequent FrameMetdata call.
+	// the interpreter plugin will resolve the frame metadata and submit it to the reporter
+	// via a subsequent FrameMetadata call.
 	FrameKnown(frameID libpf.FrameID) bool
 
 	// FrameMetadata accepts metadata associated with a frame and caches this information before
