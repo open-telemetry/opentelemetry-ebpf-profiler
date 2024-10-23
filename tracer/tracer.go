@@ -625,17 +625,13 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 // List PIDs in /proc and send them in the Tracer channel for reading.
 func (t *Tracer) populatePIDs(ctx context.Context) error {
 	// Inform the process manager and our backend about the new mappings.
-	pids, err := proc.ListPIDs()
-	if err != nil {
-		return fmt.Errorf("failure reading PID list from /proc: %v", err)
-	}
-	for _, pid := range pids {
+	err := proc.ListPIDs(func(pid libpf.PID) error {
 		for {
 			select {
 			case <-ctx.Done():
 				return nil
 			case t.pidEvents <- pid:
-				goto next_pid
+				return nil
 			default:
 				// Workaround to implement a non blocking send to a channel.
 				// To avoid a busy loop on this non blocking channel send operation
@@ -643,7 +639,9 @@ func (t *Tracer) populatePIDs(ctx context.Context) error {
 				time.Sleep(50 * time.Millisecond)
 			}
 		}
-	next_pid:
+	})
+	if err != nil {
+		return fmt.Errorf("failure reading PID list from /proc: %v", err)
 	}
 	return nil
 }

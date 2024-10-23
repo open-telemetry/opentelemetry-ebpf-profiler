@@ -149,24 +149,25 @@ func GetKernelModules(modulesPath string,
 }
 
 // ListPIDs from the proc filesystem mount point and return a list of util.PID to be processed
-func ListPIDs() ([]libpf.PID, error) {
-	pids := make([]libpf.PID, 0)
-	files, err := os.ReadDir(defaultMountPoint)
+func ListPIDs(callback func(pid libpf.PID) error) error {
+	dir, err := os.Open(defaultMountPoint)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	for _, f := range files {
-		// Make sure this is a PID file entry
-		if !f.IsDir() {
-			continue
-		}
-		pid, err := strconv.ParseUint(f.Name(), 10, 32)
+	filenames, err := dir.Readdirnames(-1)
+	if err != nil {
+		return err
+	}
+	for _, filename := range filenames {
+		pid, err := strconv.ParseUint(filename, 10, 32)
 		if err != nil || pid > math.MaxUint32 {
 			continue
 		}
-		pids = append(pids, libpf.PID(pid))
+		if err := callback(libpf.PID(pid)); err != nil {
+			return err
+		}
 	}
-	return pids, nil
+	return nil
 }
 
 // IsPIDLive checks if a PID belongs to a live process. It will never produce a false negative but
