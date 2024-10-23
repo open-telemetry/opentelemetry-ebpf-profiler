@@ -53,42 +53,35 @@ func (cfg *Config) Dump() {
 // if invalid values were provided.
 func (cfg *Config) Validate() error {
 	if cfg.SamplesPerSecond < 1 {
-		return ErrorWithExitCode{
-			error: fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond),
-			code:  exitParseError,
-		}
+		return parseError(fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond))
 	}
 
 	if cfg.MapScaleFactor > 8 {
-		return ErrorWithExitCode{
-			error: fmt.Errorf("eBPF map scaling factor %d exceeds limit (max: %d)",
+		return parseError(
+			fmt.Errorf("eBPF map scaling factor %d exceeds limit (max: %d)",
 				cfg.MapScaleFactor, MaxArgMapScaleFactor),
-			code: exitParseError,
-		}
+		)
 	}
 
 	if cfg.BpfVerifierLogLevel > 2 {
-		return ErrorWithExitCode{
-			error: fmt.Errorf("invalid eBPF verifier log level: %d", cfg.BpfVerifierLogLevel),
-			code:  exitParseError,
-		}
+		return parseError(
+			fmt.Errorf("invalid eBPF verifier log level: %d", cfg.BpfVerifierLogLevel),
+		)
 	}
 
 	if cfg.ProbabilisticInterval < 1*time.Minute || cfg.ProbabilisticInterval > 5*time.Minute {
-		return ErrorWithExitCode{
-			error: errors.New("invalid argument for probabilistic-interval: use " +
+		return parseError(
+			errors.New("invalid argument for probabilistic-interval: use " +
 				"a duration between 1 and 5 minutes"),
-			code: exitParseError,
-		}
+		)
 	}
 
 	if cfg.ProbabilisticThreshold < 1 ||
 		cfg.ProbabilisticThreshold > tracer.ProbabilisticThresholdMax {
-		return ErrorWithExitCode{
-			error: fmt.Errorf("invalid argument for probabilistic-threshold. Value "+
+		return parseError(
+			fmt.Errorf("invalid argument for probabilistic-threshold. Value "+
 				"should be between 1 and %d", tracer.ProbabilisticThresholdMax),
-			code: exitParseError,
-		}
+		)
 	}
 
 	if !cfg.NoKernelVersionCheck {
@@ -120,4 +113,11 @@ func (cfg *Config) Validate() error {
 	}
 
 	return nil
+}
+
+func parseError(err error) error {
+	return ErrorWithExitCode{
+		error: err,
+		code:  exitParseError,
+	}
 }
