@@ -149,7 +149,7 @@ func GetKernelModules(modulesPath string,
 }
 
 // ProcessPIDs iterates the /proc filesystem and calls callback for each PID found
-func ProcessPIDs(callback func(pid libpf.PID) error) error {
+func ProcessPIDs(processPID func(pid libpf.PID)) error {
 	dir, err := os.Open(defaultMountPoint)
 	if err != nil {
 		return err
@@ -166,9 +166,7 @@ func ProcessPIDs(callback func(pid libpf.PID) error) error {
 		if err != nil || pid > math.MaxUint32 {
 			continue
 		}
-		if err := callback(libpf.PID(pid)); err != nil {
-			return err
-		}
+		processPID(libpf.PID(pid))
 	}
 	return nil
 }
