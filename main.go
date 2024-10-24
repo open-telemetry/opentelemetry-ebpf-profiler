@@ -102,7 +102,7 @@ func mainWithExitCode() exitCode {
 	ctlr := controller.New(cfg)
 	err = ctlr.Start(ctx)
 	if err != nil {
-		return failure("Failed to start controller: %v", err)
+		return failure("Failed to start agent controller: %v", err)
 	}
 	defer ctlr.Shutdown()
 
