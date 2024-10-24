@@ -625,7 +625,7 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 // List PIDs in /proc and send them in the Tracer channel for reading.
 func (t *Tracer) populatePIDs(ctx context.Context) error {
 	// Inform the process manager and our backend about the new mappings.
-	err := proc.ListPIDs(func(pid libpf.PID) error {
+	err := proc.ProcessPIDs(func(pid libpf.PID) error {
 		for {
 			select {
 			case <-ctx.Done():
