@@ -172,15 +172,14 @@ func (c *Controller) Start(ctx context.Context) error {
 
 // Shutdown stops the controller
 func (c *Controller) Shutdown() {
-	log.Info("Stop processing ...")	
+	log.Info("Stop processing ...")
 	if c.reporter != nil {
 		c.reporter.Stop()
 	}
-	
+
 	if c.tracer != nil {
 		c.tracer.Close()
 	}
-
 }
 
 func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
