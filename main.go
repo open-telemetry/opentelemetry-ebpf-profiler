@@ -12,7 +12,6 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
-	"runtime"
 	"time"
 
 	"github.com/tklauser/numcpus"
@@ -84,29 +83,31 @@ func main() {
 }
 
 func mainWithExitCode() exitCode {
-	args, err := parseArgs()
+	cfg, err := parseArgs()
 	if err != nil {
-		return parseError("Failure to parse arguments: %v", err)
+		log.Errorf("Failure to parse arguments: %v", err)
+		return exitParseError
 	}
 
-	if args.copyright {
+	if cfg.Copyright {
 		fmt.Print(copyright)
 		return exitSuccess
 	}
 
-	if args.version {
+	if cfg.Version {
 		fmt.Printf("%s\n", vc.Version())
 		return exitSuccess
 	}
 
-	if args.verboseMode {
+	if cfg.VerboseMode {
 		log.SetLevel(log.DebugLevel)
 		// Dump the arguments in debug mode.
-		args.dump()
+		cfg.Dump()
 	}
 
-	if code := sanityCheck(args); code != exitSuccess {
-		return code
+	if err = cfg.Validate(); err != nil {
+		log.Error(err)
+		return exitFailure
 	}
 
 	// Context to drive main goroutine and the Tracer monitors.
@@ -114,11 +115,11 @@ func mainWithExitCode() exitCode {
 		unix.SIGINT, unix.SIGTERM, unix.SIGABRT)
 	defer mainCancel()
 
-	if args.pprofAddr != "" {
+	if cfg.PprofAddr != "" {
 		go func() {
 			//nolint:gosec
-			if err = http.ListenAndServe(args.pprofAddr, nil); err != nil {
-				log.Errorf("Serving pprof on %s failed: %s", args.pprofAddr, err)
+			if err = http.ListenAndServe(cfg.PprofAddr, nil); err != nil {
+				log.Errorf("Serving pprof on %s failed: %s", cfg.PprofAddr, err)
 			}
 		}()
 	}
@@ -140,21 +141,21 @@ func mainWithExitCode() exitCode {
 	}
 
 	traceHandlerCacheSize :=
-		traceCacheSize(args.monitorInterval, args.samplesPerSecond, uint16(presentCores))
+		traceCacheSize(cfg.MonitorInterval, cfg.SamplesPerSecond, uint16(presentCores))
 
-	intervals := times.New(args.monitorInterval,
-		args.reporterInterval, args.probabilisticInterval)
+	intervals := times.New(cfg.MonitorInterval,
+		cfg.ReporterInterval, cfg.ProbabilisticInterval)
 
 	// Start periodic synchronization with the realtime clock
-	times.StartRealtimeSync(mainCtx, args.clockSyncInterval)
+	times.StartRealtimeSync(mainCtx, cfg.ClockSyncInterval)
 
 	log.Debugf("Determining tracers to include")
-	includeTracers, err := tracertypes.Parse(args.tracers)
+	includeTracers, err := tracertypes.Parse(cfg.Tracers)
 	if err != nil {
 		return failure("Failed to parse the included tracers: %v", err)
 	}
 
-	metadataCollector := hostmetadata.NewCollector(args.collAgentAddr)
+	metadataCollector := hostmetadata.NewCollector(cfg.CollAgentAddr)
 	metadataCollector.AddCustomData("os.type", "linux")
 
 	kernelVersion, err := getKernelVersion()
@@ -165,7 +166,7 @@ func mainWithExitCode() exitCode {
 	metadataCollector.AddCustomData("os.kernel.release", kernelVersion)
 
 	// hostname and sourceIP will be populated from the root namespace.
-	hostname, sourceIP, err := getHostnameAndSourceIP(args.collAgentAddr)
+	hostname, sourceIP, err := getHostnameAndSourceIP(cfg.CollAgentAddr)
 	if err != nil {
 		log.Warnf("Failed to fetch metadata information in the root namespace: %v", err)
 	}
@@ -176,8 +177,8 @@ func mainWithExitCode() exitCode {
 	var rep reporter.Reporter
 	// Connect to the collection agent
 	rep, err = reporter.Start(mainCtx, &reporter.Config{
-		CollAgentAddr:          args.collAgentAddr,
-		DisableTLS:             args.disableTLS,
+		CollAgentAddr:          cfg.CollAgentAddr,
+		DisableTLS:             cfg.DisableTLS,
 		MaxRPCMsgSize:          32 << 20, // 32 MiB
 		MaxGRPCRetries:         5,
 		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
@@ -185,7 +186,7 @@ func mainWithExitCode() exitCode {
 		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
 		ReportInterval:         intervals.ReportInterval(),
 		CacheSize:              traceHandlerCacheSize,
-		SamplesPerSecond:       args.samplesPerSecond,
+		SamplesPerSecond:       cfg.SamplesPerSecond,
 		KernelVersion:          kernelVersion,
 		HostName:               hostname,
 		IPAddress:              sourceIP,
@@ -204,14 +205,14 @@ func mainWithExitCode() exitCode {
 		Reporter:               rep,
 		Intervals:              intervals,
 		IncludeTracers:         includeTracers,
-		FilterErrorFrames:      !args.sendErrorFrames,
-		SamplesPerSecond:       args.samplesPerSecond,
-		MapScaleFactor:         int(args.mapScaleFactor),
-		KernelVersionCheck:     !args.noKernelVersionCheck,
-		DebugTracer:            args.verboseMode,
-		BPFVerifierLogLevel:    uint32(args.bpfVerifierLogLevel),
-		ProbabilisticInterval:  args.probabilisticInterval,
-		ProbabilisticThreshold: args.probabilisticThreshold,
+		FilterErrorFrames:      !cfg.SendErrorFrames,
+		SamplesPerSecond:       cfg.SamplesPerSecond,
+		MapScaleFactor:         int(cfg.MapScaleFactor),
+		KernelVersionCheck:     !cfg.NoKernelVersionCheck,
+		DebugTracer:            cfg.VerboseMode,
+		BPFVerifierLogLevel:    uint32(cfg.BpfVerifierLogLevel),
+		ProbabilisticInterval:  cfg.ProbabilisticInterval,
+		ProbabilisticThreshold: cfg.ProbabilisticThreshold,
 	})
 	if err != nil {
 		return failure("Failed to load eBPF tracer: %v", err)
@@ -233,7 +234,7 @@ func mainWithExitCode() exitCode {
 	}
 	log.Info("Attached tracer program")
 
-	if args.probabilisticThreshold < tracer.ProbabilisticThresholdMax {
+	if cfg.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
 		trc.StartProbabilisticProfiling(mainCtx)
 		log.Printf("Enabled probabilistic profiling")
 	} else {
@@ -293,67 +294,6 @@ func traceCacheSize(monitorInterval time.Duration, samplesPerSecond int,
 func maxElementsPerInterval(monitorInterval time.Duration, samplesPerSecond int,
 	presentCPUCores uint16) uint32 {
 	return uint32(uint16(samplesPerSecond) * uint16(monitorInterval.Seconds()) * presentCPUCores)
-}
-
-func sanityCheck(args *arguments) exitCode {
-	if args.samplesPerSecond < 1 {
-		return parseError("Invalid sampling frequency: %d", args.samplesPerSecond)
-	}
-
-	if args.mapScaleFactor > 8 {
-		return parseError("eBPF map scaling factor %d exceeds limit (max: %d)",
-			args.mapScaleFactor, maxArgMapScaleFactor)
-	}
-
-	if args.bpfVerifierLogLevel > 2 {
-		return parseError("Invalid eBPF verifier log level: %d", args.bpfVerifierLogLevel)
-	}
-
-	if args.probabilisticInterval < 1*time.Minute || args.probabilisticInterval > 5*time.Minute {
-		return parseError("Invalid argument for probabilistic-interval: use " +
-			"a duration between 1 and 5 minutes")
-	}
-
-	if args.probabilisticThreshold < 1 ||
-		args.probabilisticThreshold > tracer.ProbabilisticThresholdMax {
-		return parseError("Invalid argument for probabilistic-threshold. Value "+
-			"should be between 1 and %d", tracer.ProbabilisticThresholdMax)
-	}
-
-	if !args.noKernelVersionCheck {
-		major, minor, patch, err := tracer.GetCurrentKernelVersion()
-		if err != nil {
-			return failure("Failed to get kernel version: %v", err)
-		}
-
-		var minMajor, minMinor uint32
-		switch runtime.GOARCH {
-		case "amd64":
-			if args.verboseMode {
-				minMajor, minMinor = 5, 2
-			} else {
-				minMajor, minMinor = 4, 19
-			}
-		case "arm64":
-			// Older ARM64 kernel versions have broken bpf_probe_read.
-			// https://github.com/torvalds/linux/commit/6ae08ae3dea2cfa03dd3665a3c8475c2d429ef47
-			minMajor, minMinor = 5, 5
-		default:
-			return failure("Unsupported architecture: %s", runtime.GOARCH)
-		}
-
-		if major < minMajor || (major == minMajor && minor < minMinor) {
-			return failure("Host Agent requires kernel version "+
-				"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
-		}
-	}
-
-	return exitSuccess
-}
-
-func parseError(msg string, args ...interface{}) exitCode {
-	log.Errorf(msg, args...)
-	return exitParseError
 }
 
 func failure(msg string, args ...interface{}) exitCode {
