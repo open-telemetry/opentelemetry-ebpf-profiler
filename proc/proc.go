@@ -156,7 +156,10 @@ func ProcessPIDs(callback func(pid libpf.PID) error) error {
 	}
 	filenames, err := dir.Readdirnames(-1)
 	if err != nil {
-		return err
+		if len(filenames) == 0 {
+			return err
+		}
+		log.Warnf("Failed to read %s, continuing with partial result: %v", defaultMountPoint, err)
 	}
 	for _, filename := range filenames {
 		pid, err := strconv.ParseUint(filename, 10, 32)
