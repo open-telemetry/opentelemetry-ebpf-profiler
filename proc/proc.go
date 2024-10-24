@@ -148,7 +148,7 @@ func GetKernelModules(modulesPath string,
 	return &symmap, nil
 }
 
-// ListPIDs from the proc filesystem mount point and return a list of util.PID to be processed
+// ProcessPIDs iterates the /proc filesystem and calls callback for each PID found
 func ListPIDs(callback func(pid libpf.PID) error) error {
 	dir, err := os.Open(defaultMountPoint)
 	if err != nil {
