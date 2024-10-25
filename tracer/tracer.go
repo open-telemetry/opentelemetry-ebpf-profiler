@@ -266,10 +266,20 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
 
+	// Loading specifications about eBPF programs and maps from the embedded elf file
+	// does not load them into the kernel.
+	// A collection specification holds the information about eBPF programs and maps.
+	// References to eBPF maps in the eBPF programs are just placeholders that need to be
+	// replaced by the actual loaded maps later on with RewriteMaps before loading the
+	// programs into the kernel.
+	coll, err := support.LoadCollectionSpec(cfg.DebugTracer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load specification for tracers: %v", err)
+	}
+
 	// Based on includeTracers we decide later which are loaded into the kernel.
-	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(cfg.IncludeTracers, kernelSymbols,
-		cfg.FilterErrorFrames, cfg.MapScaleFactor, cfg.KernelVersionCheck, cfg.DebugTracer,
-		cfg.BPFVerifierLogLevel)
+	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(coll, cfg.IncludeTracers, kernelSymbols,
+		cfg.FilterErrorFrames, cfg.MapScaleFactor, cfg.KernelVersionCheck, cfg.BPFVerifierLogLevel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
@@ -369,20 +379,10 @@ func buildStackDeltaTemplates(coll *cebpf.CollectionSpec) error {
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
 // by the embedded elf file and loads these into the kernel.
-func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
+func initializeMapsAndPrograms(coll *cebpf.CollectionSpec, includeTracers types.IncludedTracers,
 	kernelSymbols *libpf.SymbolMap, filterErrorFrames bool, mapScaleFactor int,
-	kernelVersionCheck bool, debugTracer bool, bpfVerifierLogLevel uint32) (
+	kernelVersionCheck bool, bpfVerifierLogLevel uint32) (
 	ebpfMaps map[string]*cebpf.Map, ebpfProgs map[string]*cebpf.Program, err error) {
-	// Loading specifications about eBPF programs and maps from the embedded elf file
-	// does not load them into the kernel.
-	// A collection specification holds the information about eBPF programs and maps.
-	// References to eBPF maps in the eBPF programs are just placeholders that need to be
-	// replaced by the actual loaded maps later on with RewriteMaps before loading the
-	// programs into the kernel.
-	coll, err := support.LoadCollectionSpec(debugTracer)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load specification for tracers: %v", err)
-	}
 
 	err = buildStackDeltaTemplates(coll)
 	if err != nil {

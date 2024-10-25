@@ -156,3 +156,11 @@ func Parse(tracers string) (IncludedTracers, error) {
 
 	return result, nil
 }
+
+// AllTracers is a shortcut that returns an element with all
+// tracers enabled.
+func AllTracers() IncludedTracers {
+	var result IncludedTracers
+	result.enableAll()
+	return result
+}

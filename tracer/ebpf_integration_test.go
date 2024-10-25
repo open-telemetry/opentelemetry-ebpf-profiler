@@ -14,6 +14,7 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -247,4 +248,12 @@ Loop:
 			validateTrace(t, numKernelFrames, &testcase.userSpaceTrace, trace)
 		})
 	}
+}
+
+func TestAllTracers(t *testing.T) {
+	coll, err := support.LoadCollectionSpec(false)
+	require.NoError(t, err)
+
+	_, _, err = initializeMapsAndPrograms(coll, tracertypes.AllTracers(), nil, false, 1, false, 0)
+	require.NoError(t, err)
 }
