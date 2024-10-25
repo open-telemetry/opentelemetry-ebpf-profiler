@@ -624,7 +624,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 
 		if !symbolReporter.ExecutableKnown(info.fileID) {
 			open := func() (process.ReadAtCloser, error) {
-				return os.Open(m.Path)
+				return pr.OpenMappingFile(m)
 			}
 			symbolReporter.ExecutableMetadata(
 				&reporter.ExecutableMetadataArgs{
