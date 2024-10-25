@@ -96,6 +96,13 @@ func (r *CollectorReporter) Start() {
 	}()
 }
 
+// ExecutableKnown returns true if the metadata of the Executable specified by fileID is
+// cached in the reporter.
+func (r *CollectorReporter) ExecutableKnown(fileID libpf.FileID) bool {
+	_, known := r.executables.Get(fileID)
+	return known
+}
+
 // ExecutableMetadata accepts a fileID with the corresponding filename
 // and caches this information.
 func (r *CollectorReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
