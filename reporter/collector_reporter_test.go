@@ -15,21 +15,27 @@ import (
 func TestCollectorReporterReportTraceEvent(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
-		nextFn consumerprofiles.ConsumeProfilesFunc
 		trace  *libpf.Trace
 		meta   *TraceEventMeta
+		nextFn consumerprofiles.ConsumeProfilesFunc
 	}{
 		{
-			name: "with no next consumer",
+			name:  "with no next consumer",
+			trace: &libpf.Trace{},
+			meta:  &TraceEventMeta{},
 		},
 		{
-			name: "with a next consumer that succeeds",
+			name:  "with a next consumer that succeeds",
+			trace: &libpf.Trace{},
+			meta:  &TraceEventMeta{},
 			nextFn: func(_ context.Context, _ pprofile.Profiles) error {
 				return nil
 			},
 		},
 		{
-			name: "with a next consumer that returns an error",
+			name:  "with a next consumer that returns an error",
+			trace: &libpf.Trace{},
+			meta:  &TraceEventMeta{},
 			nextFn: func(_ context.Context, _ pprofile.Profiles) error {
 				return errors.New("next consumer failed")
 			},
@@ -44,7 +50,10 @@ func TestCollectorReporterReportTraceEvent(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			r := NewCollector(next)
+			r, err := NewCollector(&Config{
+				CacheSize: 1,
+			}, next)
+			require.NoError(t, err)
 			r.ReportTraceEvent(tt.trace, tt.meta)
 		})
 	}
