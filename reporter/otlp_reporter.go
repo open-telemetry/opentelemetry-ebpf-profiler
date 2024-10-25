@@ -195,6 +195,13 @@ func (r *OTLPReporter) ReportFramesForTrace(_ *libpf.Trace) {}
 func (r *OTLPReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *TraceEventMeta) {
 }
 
+// ExecutableKnown returns true if the metadata of the Executable specified by fileID is
+// cached in the reporter.
+func (r *OTLPReporter) ExecutableKnown(fileID libpf.FileID) bool {
+	_, known := r.executables.Get(fileID)
+	return known
+}
+
 // ExecutableMetadata accepts a fileID with the corresponding filename
 // and caches this information.
 func (r *OTLPReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
@@ -204,7 +211,7 @@ func (r *OTLPReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 	})
 }
 
-// FrameKnown return true if the metadata of the Frame specified by frameID is
+// FrameKnown returns true if the metadata of the Frame specified by frameID is
 // cached in the reporter.
 func (r *OTLPReporter) FrameKnown(frameID libpf.FrameID) bool {
 	known := false

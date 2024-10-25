@@ -91,6 +91,10 @@ func (f mockIntervals) PIDCleanupInterval() time.Duration { return 1 * time.Seco
 
 type mockReporter struct{}
 
+func (f mockReporter) ExecutableKnown(_ libpf.FileID) bool {
+	return true
+}
+
 func (f mockReporter) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
 }
 
