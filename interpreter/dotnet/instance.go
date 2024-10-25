@@ -6,7 +6,6 @@ package dotnet // import "go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 import (
 	"fmt"
 	"hash/fnv"
-	"os"
 	"path"
 	"slices"
 	"strings"
