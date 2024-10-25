@@ -30,10 +30,15 @@ type Controller struct {
 // New creates a new controller
 // The controller can set global configurations (such as the eBPF syscalls) on
 // setup. So there should only ever be one running.
-func New(cfg *Config) *Controller {
-	return &Controller{
+func New(cfg *Config, opts ...Option) *Controller {
+	c := &Controller{
 		config: cfg,
 	}
+	for _, opt := range opts {
+		c = opt.applyOption(c)
+	}
+
+	return c
 }
 
 // Start starts the controller
@@ -84,37 +89,19 @@ func (c *Controller) Start(ctx context.Context) error {
 	metadataCollector.AddCustomData("host.name", hostname)
 	metadataCollector.AddCustomData("host.ip", sourceIP)
 
-	// Network operations to CA start here
-	var rep reporter.Reporter
-	// Connect to the collection agent
-	rep, err = reporter.Start(ctx, &reporter.Config{
-		CollAgentAddr:          c.config.CollAgentAddr,
-		DisableTLS:             c.config.DisableTLS,
-		MaxRPCMsgSize:          32 << 20, // 32 MiB
-		MaxGRPCRetries:         5,
-		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
-		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
-		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
-		ReportInterval:         intervals.ReportInterval(),
-		CacheSize:              traceHandlerCacheSize,
-		SamplesPerSecond:       c.config.SamplesPerSecond,
-		KernelVersion:          kernelVersion,
-		HostName:               hostname,
-		IPAddress:              sourceIP,
-	})
+	err = c.startReporter(ctx, intervals, traceHandlerCacheSize, kernelVersion, hostname, sourceIP)
 	if err != nil {
 		return fmt.Errorf("failed to start reporting: %w", err)
 	}
-	c.reporter = rep
 
-	metrics.SetReporter(rep)
+	metrics.SetReporter(c.reporter)
 
 	// Now that set the initial host metadata, start a goroutine to keep sending updates regularly.
-	metadataCollector.StartMetadataCollection(ctx, rep)
+	metadataCollector.StartMetadataCollection(ctx, c.reporter)
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
-		Reporter:               rep,
+		Reporter:               c.reporter,
 		Intervals:              intervals,
 		IncludeTracers:         includeTracers,
 		FilterErrorFrames:      !c.config.SendErrorFrames,
@@ -163,7 +150,8 @@ func (c *Controller) Start(ctx context.Context) error {
 	// change this log line update also the system test.
 	log.Printf("Attached sched monitor")
 
-	if err := startTraceHandling(ctx, rep, intervals, trc, traceHandlerCacheSize); err != nil {
+	if err := startTraceHandling(ctx, c.reporter, intervals, trc,
+		traceHandlerCacheSize); err != nil {
 		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
