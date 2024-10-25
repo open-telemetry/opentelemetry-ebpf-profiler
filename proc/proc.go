@@ -9,7 +9,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -146,27 +145,6 @@ func GetKernelModules(modulesPath string,
 	symmap.Finalize()
 
 	return &symmap, nil
-}
-
-// ProcessPIDs iterates the /proc filesystem and calls processPID for each PID found.
-func ProcessPIDs(processPID func(pid libpf.PID)) (bool, error) {
-	dir, err := os.Open(defaultMountPoint)
-	if err != nil {
-		return false, err
-	}
-	filenames, err := dir.Readdirnames(-1)
-	if err != nil {
-		err = fmt.Errorf("failed reading PIDs from %s, continuing with partial result: %v",
-			defaultMountPoint, err)
-	}
-	for _, filename := range filenames {
-		pid, parseErr := strconv.ParseUint(filename, 10, 32)
-		if parseErr != nil || pid > math.MaxUint32 {
-			continue
-		}
-		processPID(libpf.PID(pid))
-	}
-	return len(filenames) != 0, err
 }
 
 // IsPIDLive checks if a PID belongs to a live process. It will never produce a false negative but

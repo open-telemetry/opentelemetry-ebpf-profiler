@@ -622,34 +622,6 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 	return nil
 }
 
-// List PIDs in /proc and send them in the Tracer channel for reading.
-func (t *Tracer) populatePIDs(ctx context.Context) error {
-	// Inform the process manager and our backend about the new mappings.
-	partial, err := proc.ProcessPIDs(func(pid libpf.PID) {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case t.pidEvents <- pid:
-				return
-			default:
-				// Workaround to implement a non blocking send to a channel.
-				// To avoid a busy loop on this non blocking channel send operation
-				// time.Sleep() is used.
-				time.Sleep(50 * time.Millisecond)
-			}
-		}
-	})
-	if err != nil {
-		if !partial {
-			return err
-		}
-		log.Warnf("%v", err)
-		// Don't return here, continue with the partial result.
-	}
-	return nil
-}
-
 // insertKernelFrames fetches the kernel stack frames for a particular kstackID and populates
 // the trace with these kernel frames. It also allocates the memory for the frames of the trace.
 // It returns the number of kernel frames for kstackID or an error.
