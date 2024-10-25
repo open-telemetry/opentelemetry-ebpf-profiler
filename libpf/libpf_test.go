@@ -29,13 +29,13 @@ func TestTraceType(t *testing.T) {
 			ty:     PythonFrame,
 			isErr:  false,
 			interp: Python,
-			str:    "python",
+			str:    "cpython",
 		},
 		{
 			ty:     NativeFrame.Error(),
 			isErr:  true,
 			interp: Native,
-			str:    "native-error",
+			str:    "native",
 		},
 	}
 
