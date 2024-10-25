@@ -6,15 +6,17 @@ package internal // import "go.opentelemetry.io/ebpf-profiler/collector/internal
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/tklauser/numcpus"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumerprofiles"
 	"go.uber.org/zap"
 
 	hostinfo "go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/internal/helpers"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracehandler"
@@ -32,11 +34,11 @@ type Controller struct {
 	cancel       context.CancelFunc
 	logger       *zap.Logger
 	nextConsumer consumerprofiles.Profiles
-	config       *Config
+	config       *controller.Config
 }
 
 func NewController(logger *zap.Logger, nextConsumer consumerprofiles.Profiles,
-	cfg *Config) *Controller {
+	cfg *controller.Config) *Controller {
 	return &Controller{
 		logger:       logger,
 		nextConsumer: nextConsumer,
@@ -48,7 +50,7 @@ func NewController(logger *zap.Logger, nextConsumer consumerprofiles.Profiles,
 func (c *Controller) Start(ctx context.Context, host component.Host) error {
 	cfg := c.config
 
-	if cfg.Verbose {
+	if cfg.VerboseMode {
 		// logrus is used in the agent code, so we need to set the log level here.
 		// todo: make the logger configurable
 		logrus.SetLevel(logrus.DebugLevel)
@@ -76,41 +78,31 @@ func (c *Controller) Start(ctx context.Context, host component.Host) error {
 		return fmt.Errorf("failed to parse the included tracers: %v", err)
 	}
 
-	kernelVersion, err := getKernelVersion()
+	kernelVersion, err := helpers.GetKernelVersion()
 	if err != nil {
 		return fmt.Errorf("failed to get Linux kernel version: %v", err)
 	}
 
 	intervals := times.New(cfg.MonitorInterval, cfg.ReporterInterval, cfg.ProbabilisticInterval)
 
+	presentCores, err := numcpus.GetPresent()
+	if err != nil {
+		return fmt.Errorf("failed to read CPU file: %w", err)
+	}
+
 	traceHandlerCacheSize :=
-		traceCacheSize(cfg.MonitorInterval, cfg.SamplesPerSecond, cfg.PresentCPUCores)
+		traceCacheSize(cfg.MonitorInterval, cfg.SamplesPerSecond, presentCores)
 
-	log.Debugf("Collection agent: %s", cfg.CollectionAgent)
+	log.Debugf("Collection agent: %s", cfg.CollAgentAddr)
 
-	// hostname and sourceIP will be populated from the root namespace.
-	var hostname, sourceIP string
-
-	if err = runInRootNS(func() error {
-		var hostnameErr error
-		hostname, hostnameErr = os.Hostname()
-		if hostnameErr != nil {
-			return fmt.Errorf("failed to get hostname: %v", hostnameErr)
-		}
-
-		srcIP, ipErr := getSourceIPAddress(cfg.CollectionAgent)
-		if ipErr != nil {
-			return fmt.Errorf("failed to get source IP: %v", ipErr)
-		}
-		sourceIP = srcIP.String()
-		return nil
-	}); err != nil {
+	hostname, sourceIP, err := helpers.GetHostnameAndSourceIP(c.config.CollAgentAddr)
+	if err != nil {
 		log.Warnf("Failed to fetch metadata information in the root namespace: %v", err)
 	}
 
 	// Connect to the collection agent and start reporting.
 	rep, err := reporter.Start(ctx, &reporter.Config{
-		CollAgentAddr:          cfg.CollectionAgent,
+		CollAgentAddr:          cfg.CollAgentAddr,
 		DisableTLS:             cfg.DisableTLS,
 		MaxRPCMsgSize:          32 << 20, // 32 MiB
 		MaxGRPCRetries:         5,
@@ -120,7 +112,6 @@ func (c *Controller) Start(ctx context.Context, host component.Host) error {
 		ReportInterval:         intervals.ReportInterval(),
 		CacheSize:              traceHandlerCacheSize,
 		SamplesPerSecond:       cfg.SamplesPerSecond,
-		HostID:                 cfg.HostID,
 		KernelVersion:          kernelVersion,
 		HostName:               hostname,
 		IPAddress:              sourceIP,

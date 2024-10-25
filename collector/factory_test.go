@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 )
 
 func TestNewFactory(t *testing.T) {
@@ -28,7 +27,7 @@ func TestCreateProfilesReceiver(t *testing.T) {
 	}{
 		{
 			name:   "Default config",
-			config: internal.CreateDefaultConfig(),
+			config: defaultConfig(),
 		},
 		{
 			name:      "Nil config",

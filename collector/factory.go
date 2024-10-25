@@ -6,6 +6,7 @@ package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 import (
 	"context"
 	"errors"
+	"time"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumerprofiles"
@@ -13,6 +14,7 @@ import (
 	"go.opentelemetry.io/collector/receiver/receiverprofiles"
 
 	"go.opentelemetry.io/ebpf-profiler/collector/internal"
+	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 )
 
 var (
@@ -25,7 +27,7 @@ var (
 func NewFactory() receiver.Factory {
 	return receiver.NewFactory(
 		typeStr,
-		internal.CreateDefaultConfig,
+		defaultConfig,
 		receiverprofiles.WithProfiles(createProfilesReceiver, component.StabilityLevelAlpha))
 }
 
@@ -35,11 +37,24 @@ func createProfilesReceiver(
 	baseCfg component.Config,
 	nextConsumer consumerprofiles.Profiles) (receiverprofiles.Profiles, error) {
 	logger := params.Logger
-	cfg, ok := baseCfg.(*internal.Config)
+	cfg, ok := baseCfg.(*controller.Config)
 	if !ok {
 		return nil, errInvalidConfig
 	}
 
 	rcvr := internal.NewController(logger, nextConsumer, cfg)
 	return rcvr, nil
+}
+
+// todo: export default values (currently in main.go)
+func defaultConfig() component.Config {
+	return &controller.Config{
+		ReporterInterval:       5 * time.Second,
+		MonitorInterval:        5 * time.Second,
+		SamplesPerSecond:       20,
+		ProbabilisticInterval:  1 * time.Minute,
+		ProbabilisticThreshold: 100,
+		CollAgentAddr:          "127.0.0.1:11000",
+		Tracers:                "all",
+	}
 }
