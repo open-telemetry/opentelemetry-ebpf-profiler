@@ -14,7 +14,13 @@ import (
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 )
 
-// createVDSOSyntheticRecordNone returns no synthesic deltas when the kernel vDSO
+// regFP is the arm64 frame-pointer register (x29) number
+const regFP = 29
+
+// regLR is the arm64 link register (x30) number
+const regLR = 30
+
+// createVDSOSyntheticRecordNone returns no synthetic deltas when the kernel vDSO
 // is known to have valid unwind information.
 func createVDSOSyntheticRecordNone(_ *pfelf.File) sdtypes.IntervalData {
 	return sdtypes.IntervalData{}
@@ -23,7 +29,7 @@ func createVDSOSyntheticRecordNone(_ *pfelf.File) sdtypes.IntervalData {
 // createVDSOSyntheticRecordArm64 creates generated stack-delta records for ARM64 vDSO.
 // ARM64 kernel vDSO does not have proper `.eh_frame` section, so we synthesize it here.
 // This assumes LR based unwinding for most of the vDSO. Additionally the following
-// synthesization is done:
+// synthetization is done:
 //   - if matching STP/LDP is found within a dynamic symbol, an unwind rule with
 //     is created and the frame size is extracted
 //   - the sigreturn helper is detected and signal unwind info is associated for it
@@ -63,10 +69,10 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 			case aa.RET:
 				return
 			case aa.STP:
-				if reg, ok := ah.Xreg2num(inst.Args[0]); !ok || reg != 29 {
+				if reg, ok := ah.Xreg2num(inst.Args[0]); !ok || reg != regFP {
 					continue
 				}
-				if reg, ok := ah.Xreg2num(inst.Args[1]); !ok || reg != 30 {
+				if reg, ok := ah.Xreg2num(inst.Args[1]); !ok || reg != regLR {
 					continue
 				}
 				imm, ok := ah.DecodeImmediate(inst.Args[2])
@@ -79,10 +85,10 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 					frameSize = int(imm)
 				}
 			case aa.LDP:
-				if reg, ok := ah.Xreg2num(inst.Args[0]); !ok || reg != 29 {
+				if reg, ok := ah.Xreg2num(inst.Args[0]); !ok || reg != regFP {
 					continue
 				}
-				if reg, ok := ah.Xreg2num(inst.Args[1]); !ok || reg != 30 {
+				if reg, ok := ah.Xreg2num(inst.Args[1]); !ok || reg != regLR {
 					continue
 				}
 				if frameStart == 0 {
