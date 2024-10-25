@@ -41,6 +41,7 @@ type trackedCoredump struct {
 
 	prefix string
 	seen   libpf.Set[string]
+	warn   libpf.Set[string]
 }
 
 func newTrackedCoredump(corePath, filePrefix string) (*trackedCoredump, error) {
@@ -53,6 +54,7 @@ func newTrackedCoredump(corePath, filePrefix string) (*trackedCoredump, error) {
 		CoredumpProcess: core,
 		prefix:          filePrefix,
 		seen:            libpf.Set[string]{},
+		warn:            libpf.Set[string]{},
 	}, nil
 }
 
@@ -60,28 +62,47 @@ func (tc *trackedCoredump) GetMappingFileLastModified(_ *process.Mapping) int64 
 	return 0
 }
 
-func (tc *trackedCoredump) CalculateMappingFileID(m *process.Mapping) (libpf.FileID, error) {
-	fid, err := libpf.FileIDFromExecutableFile(tc.prefix + m.Path)
-	if err == nil {
-		tc.seen[m.Path] = libpf.Void{}
+func (tc *trackedCoredump) warnMissing(fileName string) {
+	if _, seen := tc.warn[fileName]; !seen {
+		log.Infof("Module `%s` was not found for bundling", fileName)
+		tc.warn[fileName] = libpf.Void{}
 	}
-	return fid, err
+}
+
+func (tc *trackedCoredump) CalculateMappingFileID(m *process.Mapping) (libpf.FileID, error) {
+	if !m.IsVDSO() && !m.IsAnonymous() {
+		fid, err := libpf.FileIDFromExecutableFile(tc.prefix + m.Path)
+		if err == nil {
+			tc.seen[m.Path] = libpf.Void{}
+			return fid, nil
+		}
+		tc.warnMissing(m.Path)
+	}
+	return tc.CoredumpProcess.CalculateMappingFileID(m)
 }
 
 func (tc *trackedCoredump) OpenMappingFile(m *process.Mapping) (process.ReadAtCloser, error) {
-	rac, err := os.Open(tc.prefix + m.Path)
-	if err == nil {
-		tc.seen[m.Path] = libpf.Void{}
+	if !m.IsVDSO() && !m.IsAnonymous() {
+		rac, err := os.Open(tc.prefix + m.Path)
+		if err == nil {
+			tc.seen[m.Path] = libpf.Void{}
+			return rac, nil
+		}
+		tc.warnMissing(m.Path)
 	}
-	return rac, err
+	return tc.CoredumpProcess.OpenMappingFile(m)
 }
 
 func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
-	f, err := pfelf.Open(tc.prefix + fileName)
-	if err == nil {
-		tc.seen[fileName] = libpf.Void{}
+	if fileName != process.VdsoPathName {
+		f, err := pfelf.Open(tc.prefix + fileName)
+		if err == nil {
+			tc.seen[fileName] = libpf.Void{}
+			return f, err
+		}
+		tc.warnMissing(fileName)
 	}
-	return f, err
+	return tc.CoredumpProcess.OpenELF(fileName)
 }
 
 func newNewCmd(store *modulestore.Store) *ffcli.Command {

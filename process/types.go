@@ -16,8 +16,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-// vdsoPathName is the path to use for VDSO mappings
-const vdsoPathName = "linux-vdso.1.so"
+// VdsoPathName is the path to use for VDSO mappings
+const VdsoPathName = "linux-vdso.1.so"
 
 // vdsoInode is the synthesized inode number for VDSO mappings
 const vdsoInode = 50
@@ -53,7 +53,7 @@ func (m *Mapping) IsMemFD() bool {
 }
 
 func (m *Mapping) IsVDSO() bool {
-	return m.Path == vdsoPathName
+	return m.Path == VdsoPathName
 }
 
 func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {

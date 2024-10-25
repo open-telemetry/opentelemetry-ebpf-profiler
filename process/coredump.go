@@ -408,7 +408,7 @@ func (cd *CoredumpProcess) parseAuxVector(desc []byte, vaddrToMappings map[uint6
 
 			vm := &cd.mappings[m.mappingIndex]
 			vm.Inode = vdsoInode
-			vm.Path = vdsoPathName
+			vm.Path = VdsoPathName
 
 			cf := cd.getFile(vm.Path)
 			cm := CoredumpMapping{
