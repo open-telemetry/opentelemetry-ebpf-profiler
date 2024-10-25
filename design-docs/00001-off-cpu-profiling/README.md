@@ -94,8 +94,9 @@ the system by profiling every scheduling event. All proposed options mitigate th
 The OTel Profiling Agent is using a technique that can be described as "lazy loading". Every time
 the eBPF program of the OTel Profiling Agent [encounters a PID that is unknown](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/dd0c20701b191975d6c13408c92d7fed637119da/support/ebpf/native_stack_trace.ebpf.c#L845-L846),
 it informs the user space component about this new process. The entry hook for off-CPU profiling
-will also have to do this check, as information needs to be available to be able to unwind the stack,
-but should not inform the user space component, if the process is not known yet.
+will also have to do this check, and inform the user space component, using the existing mechanism
+and inhibition strategy. If performance issues in this existing mechanism are noticed, the inhibition
+algorithm should be revisited and updated.
 
 ## Option A
 
