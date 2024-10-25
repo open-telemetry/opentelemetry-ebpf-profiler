@@ -252,13 +252,10 @@ Loop:
 }
 
 func TestAllTracers(t *testing.T) {
-	coll, err := support.LoadCollectionSpec(false)
-	require.NoError(t, err)
-
 	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
 	require.NoError(t, err)
 
-	_, _, err = initializeMapsAndPrograms(coll, tracertypes.AllTracers(), kernelSymbols,
-		false, 1, false, 0)
+	_, _, err = initializeMapsAndPrograms(tracertypes.AllTracers(), kernelSymbols,
+		false, 1, false, false, 0)
 	require.NoError(t, err)
 }
