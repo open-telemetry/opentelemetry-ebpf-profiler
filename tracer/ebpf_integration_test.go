@@ -20,6 +20,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/proc"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -254,6 +255,10 @@ func TestAllTracers(t *testing.T) {
 	coll, err := support.LoadCollectionSpec(false)
 	require.NoError(t, err)
 
-	_, _, err = initializeMapsAndPrograms(coll, tracertypes.AllTracers(), nil, false, 1, false, 0)
+	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
+	require.NoError(t, err)
+
+	_, _, err = initializeMapsAndPrograms(coll, tracertypes.AllTracers(), kernelSymbols,
+		false, 1, false, 0)
 	require.NoError(t, err)
 }
