@@ -63,13 +63,13 @@ ErrorCode dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 p
   pc_delta &= ~(DOTNET_CODE_ALIGN-1);
 
   // Read the nibble map data
-  int offs = 0;
-  if (pc_delta < (map_elements-2)*DOTNET_CODE_BYTES_PER_ENTRY) {
-    // Read from map_start so that end of scratch->map corresponds to pc_delta
-    offs = map_elements - pc_delta/DOTNET_CODE_BYTES_PER_ENTRY - 1;
-  } else {
+
+  // Calculate read to offset based on map_start so that end of scratch->map corresponds to pc_delta
+  long offs = (long)map_elements - pc_delta/DOTNET_CODE_BYTES_PER_ENTRY - 1;
+  if (offs < 0) {
     // We can read full scratch buffer, adjust map_start so that last entry read corresponds pc_delta
     map_start += pc_delta/DOTNET_CODE_BYTES_PER_ENTRY*sizeof(u32) - sizeof(scratch->map) + sizeof(u32);
+    offs = 0;
   }
   offs %= map_elements;
   if (bpf_probe_read_user(&scratch->map[offs], sizeof(scratch->map)/2, (void*) map_start)) {
