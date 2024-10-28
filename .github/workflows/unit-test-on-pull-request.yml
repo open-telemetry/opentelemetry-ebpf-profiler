@@ -56,6 +56,14 @@ jobs:
         uses: actions/checkout@v4
       - name: Set up environment
         uses: ./.github/workflows/env
+      - name: Cache coredump modules
+        uses: actions/cache@v4
+        with:
+          path: tools/coredump/modulecache
+          key: coredumps-${{ matrix.target_arch }}-${{ hashFiles('tools/coredump/testdata/${{ matrix.target_arch }}/*.json') }}
+          restore-keys: |
+            coredumps-${{ matrix.target_arch }}
+            coredumps-
       - name: Tests
         run: make test TARGET_ARCH=${{ matrix.target_arch }}
 
