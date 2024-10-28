@@ -42,6 +42,7 @@ func New(cfg *Config, opts ...Option) *Controller {
 }
 
 // Start starts the controller
+// The controller should only be started once.
 func (c *Controller) Start(ctx context.Context) error {
 	if err := tracer.ProbeBPFSyscall(); err != nil {
 		return fmt.Errorf("failed to probe eBPF syscall: %w", err)
