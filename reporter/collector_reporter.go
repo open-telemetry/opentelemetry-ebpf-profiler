@@ -467,9 +467,6 @@ func getDummyPdataMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
 
 		mapping := profile.Mapping().AppendEmpty()
 		mapping.SetFilename(int64(getStringMapIndex(stringMap, "")))
-		mapping.SetBuildID(int64(getStringMapIndex(stringMap,
-			fileID.StringNoQuotes())))
-		mapping.SetBuildIDKind(1)
 	}
 	return locationMappingIndex
 }
