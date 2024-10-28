@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/collector/consumer/consumerprofiles"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
+	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -247,6 +248,11 @@ func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 	funcMap := make(map[funcInfo]uint64)
 	funcMap[funcInfo{name: "", fileName: ""}] = 0
 
+	// attributeMap is a temporary helper that maps attribute values to
+	// their respective indices.
+	// This is to ensure that AttributeTable does not contain duplicates.
+	attributeMap := make(map[string]uint64)
+
 	st := profile.SampleType().AppendEmpty()
 	st.SetType(int64(getStringMapIndex(stringMap, "samples")))
 	st.SetUnit(int64(getStringMapIndex(stringMap, "count")))
@@ -277,10 +283,13 @@ func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 
 		// Walk every frame of the trace.
 		for i := range traceInfo.frameTypes {
-			profile.AttributeTable().PutStr("profile.frame.type", traceInfo.frameTypes[i].String())
+			frameAttributes := addPdataProfileAttributes(profile, []attrKeyValue{
+				{key: "profile.frame.type", value: traceInfo.frameTypes[i].String()},
+			}, attributeMap)
 
 			loc := profile.Location().AppendEmpty()
 			loc.SetAddress(uint64(traceInfo.linenos[i]))
+			loc.Attributes().FromRaw(frameAttributes)
 
 			switch frameKind := traceInfo.frameTypes[i]; frameKind {
 			case libpf.NativeFrame:
@@ -304,20 +313,21 @@ func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 						fileName = ei.fileName
 					}
 
-					profile.AttributeTable().PutStr(
-						"process.executable.build_id.gnu",
-						ei.gnuBuildID,
-					)
-					profile.AttributeTable().PutStr(
-						"process.executable.build_id.profiling",
-						traceInfo.files[i].StringNoQuotes(),
-					)
+					mappingAttributes := addPdataProfileAttributes(profile, []attrKeyValue{
+						// Once SemConv and its Go package is released with the new
+						// semantic convention for build_id, replace these hard coded
+						// strings.
+						{key: "process.executable.build_id.gnu", value: ei.gnuBuildID},
+						{key: "process.executable.build_id.profiling",
+							value: traceInfo.files[i].StringNoQuotes()},
+					}, attributeMap)
 
 					mapping := profile.Mapping().AppendEmpty()
 					mapping.SetMemoryStart(uint64(traceInfo.mappingStarts[i]))
 					mapping.SetMemoryLimit(uint64(traceInfo.mappingEnds[i]))
 					mapping.SetFileOffset(traceInfo.mappingFileOffsets[i])
 					mapping.SetFilename(int64(getStringMapIndex(stringMap, fileName)))
+					mapping.Attributes().FromRaw(mappingAttributes)
 				}
 				loc.SetMappingIndex(locationMappingIndex)
 			case libpf.AbortFrame:
@@ -355,6 +365,13 @@ func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 				}
 			}
 		}
+
+		sampleAttrs := addPdataProfileAttributes(profile, []attrKeyValue{
+			{key: string(semconv.ContainerIDKey), value: traceKey.containerID},
+			{key: string(semconv.ThreadNameKey), value: traceKey.comm},
+			{key: string(semconv.ServiceNameKey), value: traceKey.apmServiceName},
+		}, attributeMap)
+		sample.Attributes().FromRaw(sampleAttrs)
 
 		sample.SetLocationsLength(uint64(len(traceInfo.frameTypes)))
 		locationIndex += sample.LocationsLength()
@@ -398,4 +415,32 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	pc.SetEndTime(endTS)
 
 	return r.nextConsumer.ConsumeProfiles(ctx, profiles)
+}
+
+// addPdataProfileAttributes adds attributes to Profile.attribute_table and returns
+// the indices to these attributes.
+func addPdataProfileAttributes(profile pprofile.Profile,
+	attributes []attrKeyValue, attributeMap map[string]uint64) []uint64 {
+	indices := make([]uint64, 0, len(attributes))
+
+	addAttr := func(attr attrKeyValue) {
+		if attr.value == "" {
+			return
+		}
+		attributeCompositeKey := attr.key + "_" + attr.value
+		if attributeIndex, exists := attributeMap[attributeCompositeKey]; exists {
+			indices = append(indices, attributeIndex)
+			return
+		}
+		newIndex := uint64(profile.AttributeTable().Len())
+		indices = append(indices, newIndex)
+		profile.AttributeTable().PutStr(attr.key, attr.value)
+		attributeMap[attributeCompositeKey] = newIndex
+	}
+
+	for i := range attributes {
+		addAttr(attributes[i])
+	}
+
+	return indices
 }
