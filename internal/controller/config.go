@@ -8,6 +8,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -29,6 +30,8 @@ type Config struct {
 	Tracers                string
 	VerboseMode            bool
 	Version                bool
+
+	Reporter reporter.Reporter
 
 	Fs *flag.FlagSet
 }

@@ -18,6 +18,13 @@ type Reporter interface {
 	HostMetadataReporter
 	MetricsReporter
 
+	// Start starts the reporter in the background.
+	//
+	// If the reporter needs to perform a long-running starting operation then it
+	// is recommended that Start() returns quickly and the long-running operation
+	// is performed in the background.
+	Start(context.Context) error
+
 	// Stop triggers a graceful shutdown of the reporter.
 	Stop()
 	// GetMetrics returns the reporter internal metrics.

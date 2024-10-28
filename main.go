@@ -16,6 +16,8 @@ import (
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/vc"
 
 	log "github.com/sirupsen/logrus"
@@ -95,6 +97,26 @@ func mainWithExitCode() exitCode {
 			}
 		}()
 	}
+
+	intervals := times.New(cfg.MonitorInterval,
+		cfg.ReporterInterval, cfg.ProbabilisticInterval)
+
+	rep, err := reporter.NewOTLP(&reporter.Config{
+		CollAgentAddr:          cfg.CollAgentAddr,
+		DisableTLS:             cfg.DisableTLS,
+		MaxRPCMsgSize:          32 << 20, // 32 MiB
+		MaxGRPCRetries:         5,
+		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
+		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
+		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
+		ReportInterval:         intervals.ReportInterval(),
+		SamplesPerSecond:       cfg.SamplesPerSecond,
+	})
+	if err != nil {
+		log.Error(err)
+		return exitFailure
+	}
+	cfg.Reporter = rep
 
 	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
 		vc.Version(), vc.Revision(), vc.BuildTimestamp())

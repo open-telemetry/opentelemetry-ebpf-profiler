@@ -30,12 +30,10 @@ type Controller struct {
 // New creates a new controller
 // The controller can set global configurations (such as the eBPF syscalls) on
 // setup. So there should only ever be one running.
-func New(cfg *Config, opts ...Option) *Controller {
+func New(cfg *Config) *Controller {
 	c := &Controller{
-		config: cfg,
-	}
-	for _, opt := range opts {
-		c = opt.applyOption(c)
+		config:   cfg,
+		reporter: cfg.Reporter,
 	}
 
 	return c
@@ -90,27 +88,9 @@ func (c *Controller) Start(ctx context.Context) error {
 	metadataCollector.AddCustomData("host.name", hostname)
 	metadataCollector.AddCustomData("host.ip", sourceIP)
 
-	if c.reporter == nil {
-		var rep reporter.Reporter
-		rep, err = reporter.Start(ctx, &reporter.Config{
-			CollAgentAddr:          c.config.CollAgentAddr,
-			DisableTLS:             c.config.DisableTLS,
-			MaxRPCMsgSize:          32 << 20, // 32 MiB
-			MaxGRPCRetries:         5,
-			GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
-			GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
-			GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
-			ReportInterval:         intervals.ReportInterval(),
-			CacheSize:              traceHandlerCacheSize,
-			SamplesPerSecond:       c.config.SamplesPerSecond,
-			KernelVersion:          kernelVersion,
-			HostName:               hostname,
-			IPAddress:              sourceIP,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to start reporting: %w", err)
-		}
-		c.reporter = rep
+	err = c.reporter.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start reporter: %w", err)
 	}
 
 	metrics.SetReporter(c.reporter)
