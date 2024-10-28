@@ -9,7 +9,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -146,27 +145,6 @@ func GetKernelModules(modulesPath string,
 	symmap.Finalize()
 
 	return &symmap, nil
-}
-
-// ListPIDs from the proc filesystem mount point and return a list of util.PID to be processed
-func ListPIDs() ([]libpf.PID, error) {
-	pids := make([]libpf.PID, 0)
-	files, err := os.ReadDir(defaultMountPoint)
-	if err != nil {
-		return nil, err
-	}
-	for _, f := range files {
-		// Make sure this is a PID file entry
-		if !f.IsDir() {
-			continue
-		}
-		pid, err := strconv.ParseUint(f.Name(), 10, 32)
-		if err != nil || pid > math.MaxUint32 {
-			continue
-		}
-		pids = append(pids, libpf.PID(pid))
-	}
-	return pids, nil
 }
 
 // IsPIDLive checks if a PID belongs to a live process. It will never produce a false negative but

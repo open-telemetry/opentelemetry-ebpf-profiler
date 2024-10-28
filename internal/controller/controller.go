@@ -133,10 +133,9 @@ func (c *Controller) Start(ctx context.Context) error {
 	log.Printf("eBPF tracer loaded")
 
 	now := time.Now()
-	// Initial scan of /proc filesystem to list currently active PIDs and have them processed.
-	if err = trc.StartPIDEventProcessor(ctx); err != nil {
-		log.Errorf("failed to list processes from /proc: %v", err)
-	}
+
+	trc.StartPIDEventProcessor(ctx)
+
 	metrics.Add(metrics.IDProcPIDStartupMs, metrics.MetricValue(time.Since(now).Milliseconds()))
 	log.Debug("Completed initial PID listing")
 
