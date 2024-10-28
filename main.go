@@ -101,6 +101,12 @@ func mainWithExitCode() exitCode {
 	intervals := times.New(cfg.MonitorInterval,
 		cfg.ReporterInterval, cfg.ProbabilisticInterval)
 
+	tcs, err := controller.TraceCacheSize(cfg.MonitorInterval, cfg.SamplesPerSecond)
+	if err != nil {
+		log.Error(err)
+		return exitFailure
+	}
+
 	rep, err := reporter.NewOTLP(&reporter.Config{
 		CollAgentAddr:          cfg.CollAgentAddr,
 		DisableTLS:             cfg.DisableTLS,
@@ -110,7 +116,11 @@ func mainWithExitCode() exitCode {
 		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
 		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
 		ReportInterval:         intervals.ReportInterval(),
+		CacheSize:              tcs,
 		SamplesPerSecond:       cfg.SamplesPerSecond,
+		KernelVersion:          "",
+		HostName:               "",
+		IPAddress:              "",
 	})
 	if err != nil {
 		log.Error(err)
