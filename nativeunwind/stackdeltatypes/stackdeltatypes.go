@@ -63,12 +63,18 @@ var UnwindInfoStop = UnwindInfo{Opcode: UnwindOpcodeCommand, Param: UnwindComman
 // UnwindInfoSignal is the stack delta info indicating signal return frame.
 var UnwindInfoSignal = UnwindInfo{Opcode: UnwindOpcodeCommand, Param: UnwindCommandSignal}
 
-// UnwindInfoFramePointer contains the description to unwind a frame with valid frame pointer.
-var UnwindInfoFramePointer = UnwindInfo{
+// UnwindInfoFramePointerX64 contains the description to unwind a x86-64 frame pointer frame.
+var UnwindInfoFramePointerX64 = UnwindInfo{
 	Opcode:   UnwindOpcodeBaseFP,
 	Param:    16,
 	FPOpcode: UnwindOpcodeBaseCFA,
 	FPParam:  -16,
+}
+
+// UnwindInfoLR contains the description to unwind ARM64 function without a frame (LR only)
+var UnwindInfoLR = UnwindInfo{
+	Opcode:   UnwindOpcodeBaseSP,
+	FPOpcode: UnwindOpcodeBaseLR,
 }
 
 // StackDelta defines the start address for the delta interval, along with
