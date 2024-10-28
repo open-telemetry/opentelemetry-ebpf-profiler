@@ -12,7 +12,6 @@ import (
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/consumer/consumerprofiles"
-	otlpprofiles "go.opentelemetry.io/collector/pdata/internal/data/protogen/profiles/v1experimental"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
@@ -470,7 +469,7 @@ func getDummyPdataMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
 		mapping.SetFilename(int64(getStringMapIndex(stringMap, "")))
 		mapping.SetBuildID(int64(getStringMapIndex(stringMap,
 			fileID.StringNoQuotes())))
-		mapping.SetBuildIDKind(otlpprofiles.BuildIdKind_BUILD_ID_BINARY_HASH)
+		mapping.SetBuildIDKind(1)
 	}
 	return locationMappingIndex
 }
