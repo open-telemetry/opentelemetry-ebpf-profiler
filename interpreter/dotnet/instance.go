@@ -6,7 +6,6 @@ package dotnet // import "go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 import (
 	"fmt"
 	"hash/fnv"
-	"os"
 	"path"
 	"slices"
 	"strings"
@@ -622,9 +621,9 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			info.fileID, m.Path,
 			info.simpleName, info.guid)
 
-		if !info.reported {
+		if !symbolReporter.ExecutableKnown(info.fileID) {
 			open := func() (process.ReadAtCloser, error) {
-				return os.Open(m.Path)
+				return pr.OpenMappingFile(m)
 			}
 			symbolReporter.ExecutableMetadata(
 				&reporter.ExecutableMetadataArgs{
@@ -636,7 +635,6 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 					Open:              open,
 				},
 			)
-			info.reported = true
 		}
 
 		dotnetMappings = append(dotnetMappings, dotnetMapping{

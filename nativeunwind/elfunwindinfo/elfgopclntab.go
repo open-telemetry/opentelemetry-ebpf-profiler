@@ -593,7 +593,7 @@ func parseX86pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc, data
 		// Use stack frame-pointer delta
 		deltas.Add(sdtypes.StackDelta{
 			Address: fun.startPc,
-			Info:    sdtypes.UnwindInfoFramePointer,
+			Info:    sdtypes.UnwindInfoFramePointerX64,
 		})
 		return nil
 	case fun.pcspOff != 0:
@@ -650,12 +650,7 @@ func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc,
 		var info sdtypes.UnwindInfo
 		if p.val == 0 {
 			// Return instruction, function prologue or leaf function body: unwind via LR.
-			info = sdtypes.UnwindInfo{
-				Opcode:   sdtypes.UnwindOpcodeBaseSP,
-				Param:    0,
-				FPOpcode: sdtypes.UnwindOpcodeBaseLR,
-				FPParam:  0,
-			}
+			info = sdtypes.UnwindInfoLR
 		} else {
 			// Regular basic block in the function body: unwind via SP.
 			info = sdtypes.UnwindInfo{

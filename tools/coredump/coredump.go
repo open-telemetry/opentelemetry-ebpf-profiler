@@ -49,6 +49,11 @@ func newSymbolizationCache() *symbolizationCache {
 	}
 }
 
+func (c *symbolizationCache) ExecutableKnown(fileID libpf.FileID) bool {
+	_, exists := c.files[fileID]
+	return exists
+}
+
 func (c *symbolizationCache) ExecutableMetadata(args *reporter.ExecutableMetadataArgs) {
 	c.files[args.FileID] = args.FileName
 }
