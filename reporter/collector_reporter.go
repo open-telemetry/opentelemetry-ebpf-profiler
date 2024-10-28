@@ -12,6 +12,7 @@ import (
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/consumer/consumerprofiles"
+	otlpprofiles "go.opentelemetry.io/collector/pdata/internal/data/protogen/profiles/v1experimental"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
@@ -363,6 +364,10 @@ func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 					}
 					fileIDInfoLock.RUnlock(&fileIDInfo)
 				}
+
+				// To be compliant with the protocol, generate a dummy mapping entry.
+				loc.SetMappingIndex(getDummyPdataMappingIndex(fileIDtoMapping, stringMap,
+					profile, traceInfo.files[i]))
 			}
 		}
 
@@ -378,6 +383,7 @@ func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 	}
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())
 
+	// Populate the deduplicated functions into profile.
 	for v := range funcMap {
 		f := profile.Function().AppendEmpty()
 		f.SetName(int64(getStringMapIndex(stringMap, v.name)))
@@ -443,4 +449,25 @@ func addPdataProfileAttributes(profile pprofile.Profile,
 	}
 
 	return indices
+}
+
+// getDummyPdataMappingIndex inserts or looks up an entry for interpreted FileIDs.
+func getDummyPdataMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
+	stringMap map[string]uint32, profile pprofile.Profile,
+	fileID libpf.FileID) uint64 {
+	var locationMappingIndex uint64
+	if tmpMappingIndex, exists := fileIDtoMapping[fileID]; exists {
+		locationMappingIndex = tmpMappingIndex
+	} else {
+		idx := uint64(len(fileIDtoMapping))
+		fileIDtoMapping[fileID] = idx
+		locationMappingIndex = idx
+
+		mapping := profile.Mapping().AppendEmpty()
+		mapping.SetFilename(int64(getStringMapIndex(stringMap, "")))
+		mapping.SetBuildID(int64(getStringMapIndex(stringMap,
+			fileID.StringNoQuotes())))
+		mapping.SetBuildIDKind(otlpprofiles.BuildIdKind_BUILD_ID_BINARY_HASH)
+	}
+	return locationMappingIndex
 }
