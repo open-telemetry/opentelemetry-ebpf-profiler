@@ -5,8 +5,8 @@ Off-CPU Profiling
 
 - **Author(s)**: Florian Lehner
 - **Start Date**: 2024-06-01
-- **Goal End Date**: to be defined
-- **Primary Reviewers**: to be defined
+- **Goal End Date**: 2024-10-31
+- **Primary Reviewers**: https://github.com/orgs/open-telemetry/teams/ebpf-profiler-maintainers
 
 # Abstract
 
@@ -205,7 +205,8 @@ Mitigating these risks with the [described approaches](#risks) is essential.
 
 # Decision
 
-to be defined
+In https://github.com/open-telemetry/opentelemetry-ebpf-profiler/pull/144 it was agreed to go
+forward with Option B.
 
 [^1]: Inspired by `Systems Performance` by Brendan Gregg, Figure 1.3 `Disk I/O latency example`.
 [^2]: The scheduler does not know about the concept of processes and process groups and treats
