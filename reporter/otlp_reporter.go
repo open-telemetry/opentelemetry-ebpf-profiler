@@ -81,6 +81,7 @@ type traceEvents struct {
 	mappingEnds        []libpf.Address
 	mappingFileOffsets []uint64
 	timestamps         []uint64 // in nanoseconds
+	pid                uint64
 }
 
 // attrKeyValue is a helper to populate Profile.attribute_table.
@@ -185,6 +186,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		mappingEnds:        trace.MappingEnd,
 		mappingFileOffsets: trace.MappingFileOffsets,
 		timestamps:         []uint64{uint64(meta.Timestamp)},
+		pid:                uint64(meta.PID),
 	}
 }
 
@@ -652,6 +654,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 			{key: string(semconv.ContainerIDKey), value: traceKey.containerID},
 			{key: string(semconv.ThreadNameKey), value: traceKey.comm},
 			{key: string(semconv.ServiceNameKey), value: traceKey.apmServiceName},
+			{key: string(semconv.ProcessPIDKey), value: strconv.FormatUint(traceInfo.pid, 10)},
 		}, attributeMap)
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
 		locationIndex += sample.LocationsLength
