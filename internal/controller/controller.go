@@ -89,9 +89,27 @@ func (c *Controller) Start(ctx context.Context) error {
 	metadataCollector.AddCustomData("host.name", hostname)
 	metadataCollector.AddCustomData("host.ip", sourceIP)
 
-	err = c.startReporter(ctx, intervals, traceHandlerCacheSize, kernelVersion, hostname, sourceIP)
-	if err != nil {
-		return fmt.Errorf("failed to start reporting: %w", err)
+	if c.reporter == nil {
+		var rep reporter.Reporter
+		rep, err = reporter.Start(ctx, &reporter.Config{
+			CollAgentAddr:          c.config.CollAgentAddr,
+			DisableTLS:             c.config.DisableTLS,
+			MaxRPCMsgSize:          32 << 20, // 32 MiB
+			MaxGRPCRetries:         5,
+			GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
+			GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
+			GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
+			ReportInterval:         intervals.ReportInterval(),
+			CacheSize:              traceHandlerCacheSize,
+			SamplesPerSecond:       c.config.SamplesPerSecond,
+			KernelVersion:          kernelVersion,
+			HostName:               hostname,
+			IPAddress:              sourceIP,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to start reporting: %w", err)
+		}
+		c.reporter = rep
 	}
 
 	metrics.SetReporter(c.reporter)
