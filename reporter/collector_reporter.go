@@ -390,6 +390,9 @@ func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 		f.SetFilename(int64(getStringMapIndex(stringMap, v.fileName)))
 	}
 
+	// When ranging over stringMap, the order will be according to the
+	// hash value of the key. To get the correct order for profile.StringTable,
+	// put the values in stringMap, in the correct array order.
 	for v := range stringMap {
 		profile.StringTable().Append(v)
 	}
