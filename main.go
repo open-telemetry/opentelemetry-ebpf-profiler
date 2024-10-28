@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/internal/helpers"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/vc"
@@ -107,6 +108,19 @@ func mainWithExitCode() exitCode {
 		return exitFailure
 	}
 
+	kernelVersion, err := helpers.GetKernelVersion()
+	if err != nil {
+		log.Error(err)
+		return exitFailure
+	}
+
+	// hostname and sourceIP will be populated from the root namespace.
+	hostname, sourceIP, err := helpers.GetHostnameAndSourceIP(cfg.CollAgentAddr)
+	if err != nil {
+		log.Error(err)
+		return exitFailure
+	}
+
 	rep, err := reporter.NewOTLP(&reporter.Config{
 		CollAgentAddr:          cfg.CollAgentAddr,
 		DisableTLS:             cfg.DisableTLS,
@@ -118,9 +132,9 @@ func mainWithExitCode() exitCode {
 		ReportInterval:         intervals.ReportInterval(),
 		CacheSize:              tcs,
 		SamplesPerSecond:       cfg.SamplesPerSecond,
-		KernelVersion:          "",
-		HostName:               "",
-		IPAddress:              "",
+		KernelVersion:          kernelVersion,
+		HostName:               hostname,
+		IPAddress:              sourceIP,
 	})
 	if err != nil {
 		log.Error(err)
