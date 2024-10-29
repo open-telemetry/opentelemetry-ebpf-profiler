@@ -24,12 +24,12 @@ type Config struct {
 
 	// Disable secure communication with Collection Agent.
 	DisableTLS bool
-	// ExecutablesCacheSize defines the size of the executables cache.
-	ExecutablesCacheSize uint32
-	// FramesCacheSize defines the size of the frames cache.
-	FramesCacheSize uint32
-	// CgroupCacheSize defines the size of the cgroup cache.
-	CGroupCacheSize uint32
+	// ExecutablesCacheElements defines item capacity of the executables cache.
+	ExecutablesCacheElements uint32
+	// FramesCacheElements defines the item capacity of the frames cache.
+	FramesCacheElements uint32
+	// CGroupCacheElements defines the item capacity of the cgroup cache.
+	CGroupCacheElements uint32
 	// samplesPerSecond defines the number of samples per second.
 	SamplesPerSecond int
 	// HostID is the host ID to be sent to the collection agent.

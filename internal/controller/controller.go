@@ -21,8 +21,7 @@ import (
 )
 
 const (
-	KiB = 1024
-	MiB = 1024 * KiB
+	MiB = 1 << 20
 )
 
 // Controller is an instance that runs, manages and stops the agent.
@@ -93,22 +92,22 @@ func (c *Controller) Start(ctx context.Context) error {
 	var rep reporter.Reporter
 	// Connect to the collection agent
 	rep, err = reporter.Start(ctx, &reporter.Config{
-		CollAgentAddr:          c.config.CollAgentAddr,
-		DisableTLS:             c.config.DisableTLS,
-		MaxRPCMsgSize:          32 * MiB,
-		MaxGRPCRetries:         5,
-		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
-		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
-		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
-		ReportInterval:         intervals.ReportInterval(),
-		ExecutablesCacheSize:   4 * KiB,
-		// Next step: Calculate FramesCacheSize from numCores and samplingRate.
-		FramesCacheSize:  64 * KiB,
-		CGroupCacheSize:  1 * KiB,
-		SamplesPerSecond: c.config.SamplesPerSecond,
-		KernelVersion:    kernelVersion,
-		HostName:         hostname,
-		IPAddress:        sourceIP,
+		CollAgentAddr:            c.config.CollAgentAddr,
+		DisableTLS:               c.config.DisableTLS,
+		MaxRPCMsgSize:            32 * MiB,
+		MaxGRPCRetries:           5,
+		GRPCOperationTimeout:     intervals.GRPCOperationTimeout(),
+		GRPCStartupBackoffTime:   intervals.GRPCStartupBackoffTime(),
+		GRPCConnectionTimeout:    intervals.GRPCConnectionTimeout(),
+		ReportInterval:           intervals.ReportInterval(),
+		ExecutablesCacheElements: 4096,
+		// Next step: Calculate FramesCacheElements from numCores and samplingRate.
+		FramesCacheElements: 65536,
+		CGroupCacheElements: 1024,
+		SamplesPerSecond:    c.config.SamplesPerSecond,
+		KernelVersion:       kernelVersion,
+		HostName:            hostname,
+		IPAddress:           sourceIP,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start reporting: %w", err)
