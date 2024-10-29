@@ -7,7 +7,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/open-telemetry/opentelemetry-ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
 func getVersionSection(f *pfelf.File) io.ReaderAt {
