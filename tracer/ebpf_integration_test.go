@@ -261,7 +261,7 @@ func TestAllTracers(t *testing.T) {
 		FilterErrorFrames:   false,
 		KernelVersionCheck:  false,
 		DebugTracer:         false,
-		BPFVerifierLogLevel: 1,
+		BPFVerifierLogLevel: 0,
 	})
 	require.NoError(t, err)
 }
