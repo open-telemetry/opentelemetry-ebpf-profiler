@@ -255,7 +255,13 @@ func TestAllTracers(t *testing.T) {
 	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
 	require.NoError(t, err)
 
-	_, _, err = initializeMapsAndPrograms(tracertypes.AllTracers(), kernelSymbols,
-		false, 1, false, false, 0)
+	_, _, err = initializeMapsAndPrograms(kernelSymbols, &Config{
+		IncludeTracers:      tracertypes.AllTracers(),
+		MapScaleFactor:      1,
+		FilterErrorFrames:   false,
+		KernelVersionCheck:  false,
+		DebugTracer:         false,
+		BPFVerifierLogLevel: 1,
+	})
 	require.NoError(t, err)
 }
