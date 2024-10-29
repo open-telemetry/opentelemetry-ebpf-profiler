@@ -70,6 +70,7 @@ type traceAndMetaKey struct {
 	apmServiceName string
 	// containerID is annotated based on PID information
 	containerID string
+	pid         string
 }
 
 // traceEvents holds known information about a trace.
@@ -81,7 +82,6 @@ type traceEvents struct {
 	mappingEnds        []libpf.Address
 	mappingFileOffsets []uint64
 	timestamps         []uint64 // in nanoseconds
-	pid                uint64
 }
 
 // attrKeyValue is a helper to populate Profile.attribute_table.
@@ -170,6 +170,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		comm:           meta.Comm,
 		apmServiceName: meta.APMServiceName,
 		containerID:    containerID,
+		pid:            strconv.FormatUint(uint64(meta.PID), 10),
 	}
 
 	if events, exists := (*traceEventsMap)[key]; exists {
@@ -186,7 +187,6 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		mappingEnds:        trace.MappingEnd,
 		mappingFileOffsets: trace.MappingFileOffsets,
 		timestamps:         []uint64{uint64(meta.Timestamp)},
-		pid:                uint64(meta.PID),
 	}
 }
 
@@ -654,7 +654,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 			{key: string(semconv.ContainerIDKey), value: traceKey.containerID},
 			{key: string(semconv.ThreadNameKey), value: traceKey.comm},
 			{key: string(semconv.ServiceNameKey), value: traceKey.apmServiceName},
-			{key: string(semconv.ProcessPIDKey), value: strconv.FormatUint(traceInfo.pid, 10)},
+			{key: string(semconv.ProcessPIDKey), value: traceKey.pid},
 		}, attributeMap)
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
 		locationIndex += sample.LocationsLength
