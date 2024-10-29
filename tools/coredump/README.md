@@ -108,11 +108,18 @@ with existing test cases.
 In this variant we essentially make the kernel think that the target application
 crashed, causing the kernel to save a coredump for us.
 
-#### Setting the coredump filter
+#### Setting the coredump filter (optional)
 
 Coredumps normally contain only the anonymous and modified pages to save disk
-space. For our test cases, we want a full process memory dump that also contains
-the pages mapped into the process from the ELF files.
+space. This is sufficient if the mapped in ELF files are available to the
+`coredump` utility to be bundled. This is the case if you run
+`./coredump new -core core` on the same machine where the core was generated,
+or if you supply `-sysroot` as a prefix to find the correct files.
+
+If the above is not possible, the testing infrastructure has limited support
+to allow reading the ELF file data directly from the coredump. In this case
+a full process memory dump that also contains the pages mapped into the process
+from the ELF files is needed.
 
 To get a full process memory dump one has to set the [`coredump_filter`][filter]
 in advance by running:
