@@ -304,18 +304,22 @@ func (r *OTLPReporter) GetMetrics() Metrics {
 
 // Start sets up and manages the reporting connection to a OTLP backend.
 func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
-	executables, err := lru.NewSynced[libpf.FileID, execInfo](cfg.CacheSize, libpf.FileID.Hash32)
+	executables, err :=
+		lru.NewSynced[libpf.FileID, execInfo](cfg.ExecutablesCacheSize, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err
 	}
+	executables.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
 
 	frames, err := lru.NewSynced[libpf.FileID,
-		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](cfg.CacheSize, libpf.FileID.Hash32)
+		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](
+		cfg.FramesCacheSize, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err
 	}
+	frames.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
 
-	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CacheSize,
+	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheSize,
 		func(pid libpf.PID) uint32 { return uint32(pid) })
 	if err != nil {
 		return nil, err

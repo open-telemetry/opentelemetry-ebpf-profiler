@@ -20,6 +20,11 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
+const (
+	KiB = 1024
+	MiB = 1024 * KiB
+)
+
 // Controller is an instance that runs, manages and stops the agent.
 type Controller struct {
 	config   *Config
@@ -90,17 +95,20 @@ func (c *Controller) Start(ctx context.Context) error {
 	rep, err = reporter.Start(ctx, &reporter.Config{
 		CollAgentAddr:          c.config.CollAgentAddr,
 		DisableTLS:             c.config.DisableTLS,
-		MaxRPCMsgSize:          32 << 20, // 32 MiB
+		MaxRPCMsgSize:          32 * MiB,
 		MaxGRPCRetries:         5,
 		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
 		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
 		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
 		ReportInterval:         intervals.ReportInterval(),
-		CacheSize:              traceHandlerCacheSize,
-		SamplesPerSecond:       c.config.SamplesPerSecond,
-		KernelVersion:          kernelVersion,
-		HostName:               hostname,
-		IPAddress:              sourceIP,
+		ExecutablesCacheSize:   4 * KiB,
+		// Next step: Calculate FramesCacheSize from numCores and samplingRate.
+		FramesCacheSize:  64 * KiB,
+		CGroupCacheSize:  1 * KiB,
+		SamplesPerSecond: c.config.SamplesPerSecond,
+		KernelVersion:    kernelVersion,
+		HostName:         hostname,
+		IPAddress:        sourceIP,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start reporting: %w", err)
