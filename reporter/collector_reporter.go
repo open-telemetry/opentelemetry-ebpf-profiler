@@ -76,6 +76,8 @@ func NewCollector(cfg *Config, nextConsumer consumerprofiles.Profiles) (*Collect
 		frames:       frames,
 		hostmetadata: hostmetadata,
 		traceEvents:  xsync.NewRWMutex(map[traceAndMetaKey]*traceEvents{}),
+
+		samplesPerSecond: cfg.SamplesPerSecond,
 	}, nil
 }
 
@@ -230,7 +232,8 @@ func (r *CollectorReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEven
 	}
 }
 
-// getProfile returns an OTLP profile containing all collected samples up to this moment.
+// getProfile sets the data an OTLP profile with all collected samples up to
+// this moment.
 func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 	endTS pcommon.Timestamp) {
 	traceEvents := r.traceEvents.WLock()
@@ -392,7 +395,12 @@ func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 	// When ranging over stringMap, the order will be according to the
 	// hash value of the key. To get the correct order for profile.StringTable,
 	// put the values in stringMap, in the correct array order.
-	for v := range stringMap {
+	stringTable := make([]string, len(stringMap))
+	for v, idx := range stringMap {
+		stringTable[idx] = v
+	}
+
+	for _, v := range stringTable {
 		profile.StringTable().Append(v)
 	}
 
@@ -421,6 +429,11 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	startTS, endTS := r.setProfile(pc.Profile())
 	pc.SetStartTime(startTS)
 	pc.SetEndTime(endTS)
+
+	if pc.Profile().Sample().Len() == 0 {
+		log.Debugf("Skip sending of profile to collector with no samples")
+		return nil
+	}
 
 	return r.nextConsumer.ConsumeProfiles(ctx, profiles)
 }
