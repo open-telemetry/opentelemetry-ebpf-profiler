@@ -179,15 +179,8 @@ func (sh *StatsHandlerImpl) getMethodWireBytesIn() map[string]uint64 {
 
 // Metrics holds the metric counters for the reporter package.
 type Metrics struct {
-	CountsForTracesOverwriteCount uint32
-	ExeMetadataOverwriteCount     uint32
-	FrameMetadataOverwriteCount   uint32
-	FramesForTracesOverwriteCount uint32
-	HostMetadataOverwriteCount    uint32
-	MetricsOverwriteCount         uint32
-	FallbackSymbolsOverwriteCount uint32
-	RPCBytesOutCount              int64
-	RPCBytesInCount               int64
-	WireBytesOutCount             int64
-	WireBytesInCount              int64
+	RPCBytesOutCount  int64
+	RPCBytesInCount   int64
+	WireBytesOutCount int64
+	WireBytesInCount  int64
 }

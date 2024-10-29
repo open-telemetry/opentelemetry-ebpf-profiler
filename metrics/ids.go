@@ -134,27 +134,6 @@ const (
 	// Number of times that PC hold a value smaller than 0x1000
 	IDUnwindNativeSmallPC = 59
 
-	// Indicator for whether the exeMetadata queue has been overwritten
-	IDExeMetadataOverwrite = 60
-
-	// Indicator for whether the countsForTraces queue has been overwritten
-	IDCountsForTracesOverwrite = 61
-
-	// Indicator for whether the metrics queue has been overwritten
-	IDMetricsOverwrite = 62
-
-	// Indicator for whether the framesForTraces queue has been overwritten
-	IDFramesForTracesOverwrite = 63
-
-	// Indicator for whether the frameMetadata queue has been overwritten
-	IDFrameMetadataOverwrite = 64
-
-	// Indicator for whether the hostMetadata queue has been overwritten
-	IDHostMetadataOverwrite = 65
-
-	// Indicator for whether the fallbackSymbols queue has been overwritten
-	IDFallbackSymbolsOverwrite = 66
-
 	// Number of lost perf events in the communication between kernel and user space (report_events)
 	IDPerfEventLost = 67
 
