@@ -20,9 +20,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-const (
-	MiB = 1 << 20
-)
+const MiB = 1 << 20
 
 // Controller is an instance that runs, manages and stops the agent.
 type Controller struct {
