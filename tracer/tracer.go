@@ -413,8 +413,7 @@ func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
 			return nil, nil, fmt.Errorf("failed to get kernel version: %v", err)
 		}
 		if hasProbeReadBug(major, minor, patch) {
-			err := checkForMaccessPatch(coll, ebpfMaps, kernelSymbols)
-			if err != nil {
+			if err = checkForMaccessPatch(coll, ebpfMaps, kernelSymbols); err != nil {
 				return nil, nil, fmt.Errorf("your kernel version %d.%d.%d may be "+
 					"affected by a Linux kernel bug that can lead to system "+
 					"freezes, terminating host agent now to avoid "+
