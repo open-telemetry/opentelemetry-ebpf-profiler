@@ -304,18 +304,22 @@ func (r *OTLPReporter) GetMetrics() Metrics {
 
 // Start sets up and manages the reporting connection to a OTLP backend.
 func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
-	executables, err := lru.NewSynced[libpf.FileID, execInfo](cfg.CacheSize, libpf.FileID.Hash32)
+	executables, err :=
+		lru.NewSynced[libpf.FileID, execInfo](cfg.ExecutablesCacheElements, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err
 	}
+	executables.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
 
 	frames, err := lru.NewSynced[libpf.FileID,
-		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](cfg.CacheSize, libpf.FileID.Hash32)
+		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](
+		cfg.FramesCacheElements, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err
 	}
+	frames.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
 
-	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CacheSize,
+	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
 		func(pid libpf.PID) uint32 { return uint32(pid) })
 	if err != nil {
 		return nil, err
@@ -367,6 +371,8 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 	go func() {
 		tick := time.NewTicker(cfg.ReportInterval)
 		defer tick.Stop()
+		purgeTick := time.NewTicker(5 * time.Minute)
+		defer purgeTick.Stop()
 		for {
 			select {
 			case <-ctx.Done():
@@ -378,6 +384,11 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 					log.Errorf("Request failed: %v", err)
 				}
 				tick.Reset(libpf.AddJitter(cfg.ReportInterval, 0.2))
+			case <-purgeTick.C:
+				// Allow the GC to purge expired entries to avoid memory leaks.
+				r.executables.PurgeExpired()
+				r.frames.PurgeExpired()
+				r.cgroupv2ID.PurgeExpired()
 			}
 		}
 	}()
