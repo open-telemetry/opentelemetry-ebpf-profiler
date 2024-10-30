@@ -60,7 +60,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: tools/coredump/modulecache
-          key: coredumps-${{ matrix.target_arch }}-${{ hashFiles('tools/coredump/testdata/${{ matrix.target_arch }}/*.json') }}
+          key: coredumps-${{ matrix.target_arch }}-${{ hashFiles('tools/coredump/testdata/*/*.json') }}
           restore-keys: |
             coredumps-${{ matrix.target_arch }}
             coredumps-
