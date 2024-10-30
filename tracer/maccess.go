@@ -4,6 +4,7 @@
 package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 
@@ -19,13 +20,13 @@ func checkForMaccessPatch(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 	faultyFunc, err := kernelSymbols.LookupSymbol(
 		libpf.SymbolName("copy_from_user_nofault"))
 	if err != nil {
-		return fmt.Errorf("Failed to look up Linux kernel symbol "+
+		return fmt.Errorf("failed to look up Linux kernel symbol "+
 			"'copy_from_user_nofault': %v", err)
 	}
 
 	code, err := loadKernelCode(coll, maps, faultyFunc.Address)
 	if err != nil {
-		return fmt.Errorf("Failed to load kernel code for %s: %v", faultyFunc.Name, err)
+		return fmt.Errorf("failed to load kernel code for %s: %v", faultyFunc.Name, err)
 	}
 
 	newCheckFunc, err := kernelSymbols.LookupSymbol(
@@ -43,17 +44,17 @@ func checkForMaccessPatch(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 		} else {
 			// Without the symbol information, we can not continue with checking the
 			// function and determine whether it got patched.
-			return fmt.Errorf("Failed to look up Linux kernel symbol 'nmi_uaccess_okay': %v", err)
+			return fmt.Errorf("failed to look up Linux kernel symbol 'nmi_uaccess_okay': %v", err)
 		}
 	}
 
 	patched, err := maccess.CopyFromUserNoFaultIsPatched(code, uint64(faultyFunc.Address),
 		uint64(newCheckFunc.Address))
 	if err != nil {
-		return fmt.Errorf("Failed to check if %s is patched: %v", faultyFunc.Name, err)
+		return fmt.Errorf("failed to check if %s is patched: %v", faultyFunc.Name, err)
 	}
 	if !patched {
-		return fmt.Errorf("Kernel is not patched")
+		return errors.New("kernel is not patched")
 	}
 	return nil
 }
