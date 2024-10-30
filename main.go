@@ -102,12 +102,6 @@ func mainWithExitCode() exitCode {
 	intervals := times.New(cfg.MonitorInterval,
 		cfg.ReporterInterval, cfg.ProbabilisticInterval)
 
-	tcs, err := controller.TraceCacheSize(cfg.MonitorInterval, cfg.SamplesPerSecond)
-	if err != nil {
-		log.Error(err)
-		return exitFailure
-	}
-
 	kernelVersion, err := helpers.GetKernelVersion()
 	if err != nil {
 		log.Error(err)
@@ -122,19 +116,22 @@ func mainWithExitCode() exitCode {
 	}
 
 	rep, err := reporter.NewOTLP(&reporter.Config{
-		CollAgentAddr:          cfg.CollAgentAddr,
-		DisableTLS:             cfg.DisableTLS,
-		MaxRPCMsgSize:          32 << 20, // 32 MiB
-		MaxGRPCRetries:         5,
-		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
-		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
-		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
-		ReportInterval:         intervals.ReportInterval(),
-		CacheSize:              tcs,
-		SamplesPerSecond:       cfg.SamplesPerSecond,
-		KernelVersion:          kernelVersion,
-		HostName:               hostname,
-		IPAddress:              sourceIP,
+		CollAgentAddr:            cfg.CollAgentAddr,
+		DisableTLS:               cfg.DisableTLS,
+		MaxRPCMsgSize:            32 << 20, // 32 MiB
+		MaxGRPCRetries:           5,
+		GRPCOperationTimeout:     intervals.GRPCOperationTimeout(),
+		GRPCStartupBackoffTime:   intervals.GRPCStartupBackoffTime(),
+		GRPCConnectionTimeout:    intervals.GRPCConnectionTimeout(),
+		ReportInterval:           intervals.ReportInterval(),
+		ExecutablesCacheElements: 4096,
+		// Next step: Calculate FramesCacheElements from numCores and samplingRate.
+		FramesCacheElements: 65536,
+		CGroupCacheElements: 1024,
+		SamplesPerSecond:    cfg.SamplesPerSecond,
+		KernelVersion:       kernelVersion,
+		HostName:            hostname,
+		IPAddress:           sourceIP,
 	})
 	if err != nil {
 		log.Error(err)

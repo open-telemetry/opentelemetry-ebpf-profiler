@@ -18,6 +18,8 @@ import (
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
+const MiB = 1 << 20
+
 // Controller is an instance that runs, manages and stops the agent.
 type Controller struct {
 	config   *Config

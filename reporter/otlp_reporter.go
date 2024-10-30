@@ -147,16 +147,28 @@ type OTLPReporter struct {
 
 // NewOTLP returns a new instance of OTLPReporter
 func NewOTLP(cfg *Config) (*OTLPReporter, error) {
-	executables, err := lru.NewSynced[libpf.FileID, execInfo](cfg.CacheSize, libpf.FileID.Hash32)
+	executables, err :=
+		lru.NewSynced[libpf.FileID, execInfo](cfg.ExecutablesCacheElements, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err
 	}
+	executables.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
 
 	frames, err := lru.NewSynced[libpf.FileID,
-		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](cfg.CacheSize, libpf.FileID.Hash32)
+		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](
+		cfg.FramesCacheElements, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err
 	}
+	frames.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
+
+	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
+		func(pid libpf.PID) uint32 { return uint32(pid) })
+	if err != nil {
+		return nil, err
+	}
+	// Set a lifetime to reduce risk of invalid data in case of PID reuse.
+	cgroupv2ID.SetLifetime(90 * time.Second)
 
 	// Next step: Dynamically configure the size of this LRU.
 	// Currently, we use the length of the JSON array in
@@ -165,14 +177,6 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CacheSize,
-		func(pid libpf.PID) uint32 { return uint32(pid) })
-	if err != nil {
-		return nil, err
-	}
-	// Set a lifetime to reduce risk of invalid data in case of PID reuse.
-	cgroupv2ID.SetLifetime(90 * time.Second)
 
 	return &OTLPReporter{
 		config:                  cfg,
@@ -372,6 +376,8 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 	go func() {
 		tick := time.NewTicker(r.config.ReportInterval)
 		defer tick.Stop()
+		purgeTick := time.NewTicker(5 * time.Minute)
+		defer purgeTick.Stop()
 		for {
 			select {
 			case <-ctx.Done():
@@ -383,6 +389,11 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 					log.Errorf("Request failed: %v", err)
 				}
 				tick.Reset(libpf.AddJitter(r.config.ReportInterval, 0.2))
+			case <-purgeTick.C:
+				// Allow the GC to purge expired entries to avoid memory leaks.
+				r.executables.PurgeExpired()
+				r.frames.PurgeExpired()
+				r.cgroupv2ID.PurgeExpired()
 			}
 		}
 	}()

@@ -434,6 +434,7 @@
     "id": 59
   },
   {
+    "obsolete": true,
     "description": "Indicator for whether the exeMetadata queue has been overwritten",
     "type": "counter",
     "name": "ExeMetadataOverwrite",
@@ -441,6 +442,7 @@
     "id": 60
   },
   {
+    "obsolete": true,
     "description": "Indicator for whether the countsForTraces queue has been overwritten",
     "type": "counter",
     "name": "CountsForTracesOverwrite",
@@ -448,6 +450,7 @@
     "id": 61
   },
   {
+    "obsolete": true,
     "description": "Indicator for whether the metrics queue has been overwritten",
     "type": "counter",
     "name": "MetricsOverwrite",
@@ -455,6 +458,7 @@
     "id": 62
   },
   {
+    "obsolete": true,
     "description": "Indicator for whether the framesForTraces queue has been overwritten",
     "type": "counter",
     "name": "FramesForTracesOverwrite",
@@ -462,6 +466,7 @@
     "id": 63
   },
   {
+    "obsolete": true,
     "description": "Indicator for whether the frameMetadata queue has been overwritten",
     "type": "counter",
     "name": "FrameMetadataOverwrite",
@@ -469,6 +474,7 @@
     "id": 64
   },
   {
+    "obsolete": true,
     "description": "Indicator for whether the hostMetadata queue has been overwritten",
     "type": "counter",
     "name": "HostMetadataOverwrite",
@@ -476,6 +482,7 @@
     "id": 65
   },
   {
+    "obsolete": true,
     "description": "Indicator for whether the fallbackSymbols queue has been overwritten",
     "type": "counter",
     "name": "FallbackSymbolsOverwrite",
