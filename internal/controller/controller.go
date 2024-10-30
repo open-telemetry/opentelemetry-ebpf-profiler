@@ -6,6 +6,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/tklauser/numcpus"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/hostmetadata"
@@ -16,6 +17,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 const MiB = 1 << 20
@@ -50,11 +52,13 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to probe tracepoint: %w", err)
 	}
 
-	traceHandlerCacheSize, err :=
-		TraceCacheSize(c.config.MonitorInterval, c.config.SamplesPerSecond)
+	presentCores, err := numcpus.GetPresent()
 	if err != nil {
-		return fmt.Errorf("retrieve trace cache size: %w", err)
+		return fmt.Errorf("failed to read CPU file: %w", err)
 	}
+
+	traceHandlerCacheSize :=
+		traceCacheSize(c.config.MonitorInterval, c.config.SamplesPerSecond, uint16(presentCores))
 
 	intervals := times.New(c.config.MonitorInterval,
 		c.config.ReporterInterval, c.config.ProbabilisticInterval)
@@ -178,6 +182,32 @@ func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
 	_, err := tracehandler.Start(ctx, rep, trc.TraceProcessor(),
 		traceCh, intervals, cacheSize)
 	return err
+}
+
+// traceCacheSize defines the maximum number of elements for the caches in tracehandler.
+//
+// The caches in tracehandler have a size-"processing overhead" trade-off: Every cache miss will
+// trigger additional processing for that trace in userspace (Go). For most maps, we use
+// maxElementsPerInterval as a base sizing factor. For the tracehandler caches, we also multiply
+// with traceCacheIntervals. For typical/small values of maxElementsPerInterval, this can lead to
+// non-optimal map sizing (reduced cache_hit:cache_miss ratio and increased processing overhead).
+// Simply increasing traceCacheIntervals is problematic when maxElementsPerInterval is large
+// (e.g. too many CPU cores present) as we end up using too much memory. A minimum size is
+// therefore used here.
+func traceCacheSize(monitorInterval time.Duration, samplesPerSecond int,
+	presentCPUCores uint16) uint32 {
+	const (
+		traceCacheIntervals = 6
+		traceCacheMinSize   = 65536
+	)
+
+	maxElements := maxElementsPerInterval(monitorInterval, samplesPerSecond, presentCPUCores)
+
+	size := maxElements * uint32(traceCacheIntervals)
+	if size < traceCacheMinSize {
+		size = traceCacheMinSize
+	}
+	return util.NextPowerOfTwo(size)
 }
 
 func maxElementsPerInterval(monitorInterval time.Duration, samplesPerSecond int,
