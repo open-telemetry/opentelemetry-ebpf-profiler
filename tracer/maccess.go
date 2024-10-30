@@ -4,10 +4,10 @@
 package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
+	"fmt"
 	"runtime"
 
 	cebpf "github.com/cilium/ebpf"
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/maccess"
 )
@@ -15,23 +15,17 @@ import (
 // checkForMmaccessPatch validates if a Linux kernel function is patched by
 // extracting the kernel code of the function and analyzing it.
 func checkForMaccessPatch(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kernelSymbols *libpf.SymbolMap) bool {
+	kernelSymbols *libpf.SymbolMap) error {
 	faultyFunc, err := kernelSymbols.LookupSymbol(
 		libpf.SymbolName("copy_from_user_nofault"))
 	if err != nil {
-		log.Warnf("Failed to look up Linux kernel symbol "+
+		return fmt.Errorf("Failed to look up Linux kernel symbol "+
 			"'copy_from_user_nofault': %v", err)
-		return false
 	}
 
 	code, err := loadKernelCode(coll, maps, faultyFunc.Address)
 	if err != nil {
-		log.Warnf("Failed to load code for %s: %v.\n"+
-			"Syscall tracepoints are not working on this system, so whether "+
-			"the kernel is patched could not be determined. "+
-			"Either use a kernel configured with syscall tracepoints, "+
-			"or upgrade to kernel version 6.4 or higher.", faultyFunc.Name, err)
-		return false
+		return fmt.Errorf("Failed to load kernel code for %s: %v", faultyFunc.Name, err)
 	}
 
 	newCheckFunc, err := kernelSymbols.LookupSymbol(
@@ -47,20 +41,19 @@ func checkForMaccessPatch(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 				Address: 0,
 			}
 		} else {
-			log.Warnf("Failed to look up Linux kernel symbol 'nmi_uaccess_okay': %v",
-				err)
-
 			// Without the symbol information, we can not continue with checking the
 			// function and determine whether it got patched.
-			return false
+			return fmt.Errorf("Failed to look up Linux kernel symbol 'nmi_uaccess_okay': %v", err)
 		}
 	}
 
 	patched, err := maccess.CopyFromUserNoFaultIsPatched(code, uint64(faultyFunc.Address),
 		uint64(newCheckFunc.Address))
 	if err != nil {
-		log.Warnf("Failed to check if %s is patched: %v", faultyFunc.Name, err)
-		return false
+		return fmt.Errorf("Failed to check if %s is patched: %v", faultyFunc.Name, err)
 	}
-	return patched
+	if !patched {
+		return fmt.Errorf("Kernel is not patched")
+	}
+	return nil
 }
