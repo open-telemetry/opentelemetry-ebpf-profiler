@@ -217,7 +217,7 @@ func dumpCore(pid uint64, noModuleBundling bool) (string, error) {
 		// Restore coredump filter mask upon leaving the function.
 		defer func() {
 			//nolint:gosec
-			err2 := os.WriteFile(coredumpFilterPath, prevMask, 0o644)
+			err2 := os.WriteFile(coredumpFilterPath, append([]byte("0x"), prevMask...), 0o644)
 			if err2 != nil {
 				log.Warnf("Failed to restore previous coredump filter: %v", err2)
 			}
