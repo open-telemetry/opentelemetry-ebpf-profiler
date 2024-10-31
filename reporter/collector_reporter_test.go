@@ -66,16 +66,14 @@ func TestCollectoReportProfile(t *testing.T) {
 		name              string
 		reportTraceEvents func(*testing.T, Reporter)
 
+		wantConsumedCount int
 		buildWantProfiles func(*testing.T) pprofile.Profiles
 		wantErr           error
 	}{
-		// Pending on https://github.com/open-telemetry/opentelemetry-collector/pull/11558
-		/*{
-			name: "with no data sent yet",
-			buildWantProfiles: func(t *testing.T) pprofile.Profiles {
-				return pprofile.NewProfiles()
-			},
-		},*/
+		{
+			name:              "with no data sent yet",
+			wantConsumedCount: 0,
+		},
 		{
 			name: "with a single sample",
 			reportTraceEvents: func(_ *testing.T, r Reporter) {
@@ -89,6 +87,7 @@ func TestCollectoReportProfile(t *testing.T) {
 				)
 			},
 
+			wantConsumedCount: 1,
 			buildWantProfiles: func(t *testing.T) pprofile.Profiles {
 				prof := pprofile.NewProfiles()
 
@@ -141,9 +140,11 @@ func TestCollectoReportProfile(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			var consumedCount int
 			var gotProfiles pprofile.Profiles
 			next, err := consumerprofiles.NewProfiles(
 				func(_ context.Context, p pprofile.Profiles) error {
+					consumedCount++
 					gotProfiles = p
 					return nil
 				},
@@ -165,6 +166,14 @@ func TestCollectoReportProfile(t *testing.T) {
 				require.NoError(t, err)
 			} else {
 				require.ErrorIs(t, tt.wantErr, err)
+			}
+
+			assert.Equal(t, tt.wantConsumedCount, consumedCount)
+
+			// If we don't expect anything to have been consumed, we don't have
+			// anything else to check.
+			if tt.wantConsumedCount == 0 {
+				return
 			}
 
 			wantProfiles := tt.buildWantProfiles(t)
