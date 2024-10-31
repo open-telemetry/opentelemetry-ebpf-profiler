@@ -11,13 +11,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path"
 	"strings"
 	"syscall"
 	"time"
 
-	s3manager "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
@@ -53,18 +53,27 @@ const (
 // at the same time, also when created within multiple different applications.
 type Store struct {
 	s3client       *s3.Client
+	httpClient     *http.Client
+	publicReadURL  string
 	bucket         string
 	localCachePath string
 }
 
 // New creates a new module storage. The modules present in the local cache are inspected and a
 // full index of the modules in the remote S3 bucket is retrieved and cached as well.
-func New(s3client *s3.Client, s3Bucket, localCachePath string) (*Store, error) {
+func New(s3client *s3.Client, publicReadURL, s3Bucket, localCachePath string) (*Store, error) {
 	if err := os.MkdirAll(localCachePath, 0o750); err != nil {
 		return nil, err
 	}
+	tr := &http.Transport{
+		MaxIdleConns:       2,
+		IdleConnTimeout:    30 * time.Second,
+		DisableCompression: true,
+	}
 	return &Store{
 		s3client:       s3client,
+		httpClient:     &http.Client{Transport: tr},
+		publicReadURL:  publicReadURL,
 		bucket:         s3Bucket,
 		localCachePath: localCachePath,
 	}, nil
@@ -179,7 +188,7 @@ func (store *Store) UploadModule(id ID) error {
 		return fmt.Errorf("failed to check whether the module exists locally: %w", err)
 	}
 	if !present {
-		return fmt.Errorf("the given module `%s` isn't present locally", id)
+		return fmt.Errorf("the given module `%x` isn't present locally", id)
 	}
 
 	localPath := store.makeLocalPath(id)
@@ -425,18 +434,13 @@ func (store *Store) ensurePresentLocally(id ID) (string, error) {
 	defer file.Close()
 
 	moduleKey := makeS3Key(id)
-	req := &s3.GetObjectInput{
-		Bucket: &store.bucket,
-		Key:    &moduleKey,
-	}
-
-	downloader := s3manager.NewDownloader(store.s3client)
-	_, err = downloader.Download(context.TODO(), file, req)
+	resp, err := http.Get(store.publicReadURL + moduleKey)
 	if err != nil {
-		if isErrNoSuchKey(err) {
-			return "", errors.New("module doesn't exist in remote storage")
-		}
-		return "", fmt.Errorf("failed to download file from S3: %w", err)
+		return "", fmt.Errorf("failed to request file: %w", err)
+	}
+	defer resp.Body.Close()
+	if _, err = io.Copy(file, resp.Body); err != nil {
+		return "", fmt.Errorf("failed to receive file: %w", err)
 	}
 
 	if err = commitTempFile(file, localPath); err != nil {
