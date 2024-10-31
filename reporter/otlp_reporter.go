@@ -91,6 +91,7 @@ type attrKeyValue struct {
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
 type OTLPReporter struct {
+	config *Config
 	// name is the ScopeProfile's name.
 	name string
 
@@ -142,6 +143,60 @@ type OTLPReporter struct {
 
 	// ipAddress is the IP address of the host.
 	ipAddress string
+}
+
+// NewOTLP returns a new instance of OTLPReporter
+func NewOTLP(cfg *Config) (*OTLPReporter, error) {
+	executables, err :=
+		lru.NewSynced[libpf.FileID, execInfo](cfg.ExecutablesCacheElements, libpf.FileID.Hash32)
+	if err != nil {
+		return nil, err
+	}
+	executables.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
+
+	frames, err := lru.NewSynced[libpf.FileID,
+		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](
+		cfg.FramesCacheElements, libpf.FileID.Hash32)
+	if err != nil {
+		return nil, err
+	}
+	frames.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
+
+	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
+		func(pid libpf.PID) uint32 { return uint32(pid) })
+	if err != nil {
+		return nil, err
+	}
+	// Set a lifetime to reduce risk of invalid data in case of PID reuse.
+	cgroupv2ID.SetLifetime(90 * time.Second)
+
+	// Next step: Dynamically configure the size of this LRU.
+	// Currently, we use the length of the JSON array in
+	// hostmetadata/hostmetadata.json.
+	hostmetadata, err := lru.NewSynced[string, string](115, hashString)
+	if err != nil {
+		return nil, err
+	}
+
+	return &OTLPReporter{
+		config:                  cfg,
+		name:                    cfg.Name,
+		version:                 cfg.Version,
+		kernelVersion:           cfg.KernelVersion,
+		hostName:                cfg.HostName,
+		ipAddress:               cfg.IPAddress,
+		samplesPerSecond:        cfg.SamplesPerSecond,
+		hostID:                  strconv.FormatUint(cfg.HostID, 10),
+		stopSignal:              make(chan libpf.Void),
+		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
+		client:                  nil,
+		rpcStats:                NewStatsHandler(),
+		executables:             executables,
+		frames:                  frames,
+		hostmetadata:            hostmetadata,
+		traceEvents:             xsync.NewRWMutex(map[traceAndMetaKey]*traceEvents{}),
+		cgroupv2ID:              cgroupv2ID,
+	}, nil
 }
 
 // hashString is a helper function for LRUs that use string as a key.
@@ -303,73 +358,23 @@ func (r *OTLPReporter) GetMetrics() Metrics {
 }
 
 // Start sets up and manages the reporting connection to a OTLP backend.
-func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
-	executables, err :=
-		lru.NewSynced[libpf.FileID, execInfo](cfg.ExecutablesCacheElements, libpf.FileID.Hash32)
-	if err != nil {
-		return nil, err
-	}
-	executables.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
-
-	frames, err := lru.NewSynced[libpf.FileID,
-		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](
-		cfg.FramesCacheElements, libpf.FileID.Hash32)
-	if err != nil {
-		return nil, err
-	}
-	frames.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
-
-	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
-		func(pid libpf.PID) uint32 { return uint32(pid) })
-	if err != nil {
-		return nil, err
-	}
-	// Set a lifetime to reduce risk of invalid data in case of PID reuse.
-	cgroupv2ID.SetLifetime(90 * time.Second)
-
-	// Next step: Dynamically configure the size of this LRU.
-	// Currently, we use the length of the JSON array in
-	// hostmetadata/hostmetadata.json.
-	hostmetadata, err := lru.NewSynced[string, string](115, hashString)
-	if err != nil {
-		return nil, err
-	}
-
-	r := &OTLPReporter{
-		name:                    cfg.Name,
-		version:                 cfg.Version,
-		kernelVersion:           cfg.KernelVersion,
-		hostName:                cfg.HostName,
-		ipAddress:               cfg.IPAddress,
-		samplesPerSecond:        cfg.SamplesPerSecond,
-		hostID:                  strconv.FormatUint(cfg.HostID, 10),
-		stopSignal:              make(chan libpf.Void),
-		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
-		client:                  nil,
-		rpcStats:                NewStatsHandler(),
-		executables:             executables,
-		frames:                  frames,
-		hostmetadata:            hostmetadata,
-		traceEvents:             xsync.NewRWMutex(map[traceAndMetaKey]*traceEvents{}),
-		cgroupv2ID:              cgroupv2ID,
-	}
-
+func (r *OTLPReporter) Start(ctx context.Context) error {
 	// Create a child context for reporting features
-	ctx, cancelReporting := context.WithCancel(mainCtx)
+	ctx, cancelReporting := context.WithCancel(ctx)
 
 	// Establish the gRPC connection before going on, waiting for a response
 	// from the collectionAgent endpoint.
 	// Use grpc.WithBlock() in setupGrpcConnection() for this to work.
-	otlpGrpcConn, err := waitGrpcEndpoint(ctx, cfg, r.rpcStats)
+	otlpGrpcConn, err := waitGrpcEndpoint(ctx, r.config, r.rpcStats)
 	if err != nil {
 		cancelReporting()
 		close(r.stopSignal)
-		return nil, err
+		return err
 	}
 	r.client = otlpcollector.NewProfilesServiceClient(otlpGrpcConn)
 
 	go func() {
-		tick := time.NewTicker(cfg.ReportInterval)
+		tick := time.NewTicker(r.config.ReportInterval)
 		defer tick.Stop()
 		purgeTick := time.NewTicker(5 * time.Minute)
 		defer purgeTick.Stop()
@@ -383,7 +388,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 				if err := r.reportOTLPProfile(ctx); err != nil {
 					log.Errorf("Request failed: %v", err)
 				}
-				tick.Reset(libpf.AddJitter(cfg.ReportInterval, 0.2))
+				tick.Reset(libpf.AddJitter(r.config.ReportInterval, 0.2))
 			case <-purgeTick.C:
 				// Allow the GC to purge expired entries to avoid memory leaks.
 				r.executables.PurgeExpired()
@@ -404,7 +409,7 @@ func Start(mainCtx context.Context, cfg *Config) (Reporter, error) {
 		}
 	}()
 
-	return r, nil
+	return nil
 }
 
 // reportOTLPProfile creates and sends out an OTLP profile.
