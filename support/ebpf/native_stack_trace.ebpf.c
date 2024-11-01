@@ -629,5 +629,6 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx) {
   u64 id = bpf_get_current_pid_tgid();
   u32 pid = id >> 32;
   u32 tid = id & 0xFFFFFFFF;
-  return collect_trace((struct pt_regs*) &ctx->regs, TRACE_SAMPLING, pid, tid, 0);
+  u64 ts = bpf_ktime_get_ns();
+  return collect_trace((struct pt_regs*) &ctx->regs, TRACE_SAMPLING, pid, tid, ts, 0);
 }
