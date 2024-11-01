@@ -126,6 +126,8 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		PID:            bpfTrace.PID,
 		TID:            bpfTrace.TID,
 		APMServiceName: "", // filled in below
+		Origin:         bpfTrace.Origin,
+		OffTime:        bpfTrace.OffTime,
 	}
 
 	if !m.reporter.SupportsReportTraceEvent() {

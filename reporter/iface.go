@@ -36,6 +36,8 @@ type TraceEventMeta struct {
 	Comm           string
 	APMServiceName string
 	PID, TID       libpf.PID
+	Origin         int
+	OffTime        uint64
 }
 
 type TraceReporter interface {

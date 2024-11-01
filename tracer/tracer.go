@@ -977,17 +977,21 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.apm_transaction_id)),
 		PID:              libpf.PID(ptr.pid),
 		TID:              libpf.PID(ptr.tid),
+		Origin:           int(ptr.origin),
+		OffTime:          uint64(ptr.offtime),
 		KTime:            times.KTime(ptr.ktime),
 	}
 
 	// Trace fields included in the hash:
 	//  - PID, kernel stack ID, length & frame array
 	// Intentionally excluded:
-	//  - ktime, COMM, APM trace, APM transaction ID
+	//  - ktime, COMM, APM trace, APM transaction ID, Origin and Off Time
 	ptr.comm = [16]C.char{}
 	ptr.apm_trace_id = C.ApmTraceID{}
 	ptr.apm_transaction_id = C.ApmSpanID{}
 	ptr.ktime = 0
+	ptr.origin = 0
+	ptr.offtime = 0
 	trace.Hash = host.TraceHash(xxh3.Hash128(raw).Lo)
 
 	userFrameOffs := 0
