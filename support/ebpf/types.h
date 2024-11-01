@@ -547,8 +547,7 @@ typedef struct Trace {
   // origin indicates the source of the trace.
   TraceOrigin origin;
 
-  // Time in nanosecond for off-cpu profiling,
-  // for how long the trace was off cpu.
+  // offtime stores the nanoseconds that the trace was off-cpu for.
   u64 offtime;
 
   // The frames of the stack trace.
