@@ -170,7 +170,7 @@ ErrorCode unwind_one_dotnet_frame(PerCPURecord *record, DotnetProcInfo *vi, bool
   u64 code_start = state->text_section_bias;
   u64 code_header_ptr = pc;
 
-  state->return_address = true;
+  unwinder_mark_nonleaf_frame(state);
 
   if (type < 0x100 && (type & DOTNET_CODE_FLAG_LEAF)) {
     // Stub frame that does not do calls.

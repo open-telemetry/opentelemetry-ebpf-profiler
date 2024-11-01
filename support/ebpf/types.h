@@ -571,8 +571,19 @@ typedef struct UnwindState {
 
   // Set if the PC is a return address. That is, it points to the next instruction
   // after a CALL instruction, and requires to be adjusted during symbolization.
-  // On aarch64, this additionally means that LR register can not be used.
+  //
+  // Consider calling unwinder_mark_nonleaf_frame rather than setting this directly.
   bool return_address;
+
+#if defined(__aarch64__)
+  // On aarch64, whether to forbid LR-based unwinding.
+  // LR unwinding is only allowed for leaf user-mode frames. Frames making a syscall
+  // are also considered leaf frames for this purpose, because LR is preserved across
+  // syscalls.
+  //
+  // Consider calling unwinder_mark_nonleaf_frame rather than setting this directly.
+  bool lr_invalid;
+#endif
 } UnwindState;
 
 // Container for unwinding state needed by the Perl unwinder. Keeping track of
