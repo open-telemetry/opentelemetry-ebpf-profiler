@@ -82,5 +82,5 @@ int finish_task_switch(struct pt_regs *ctx) {
 
   u64 diff = ts - *start_ts;
 
-  return collect_trace(ctx, TRACE_OFF_CPU, pid, tid, diff);
+  return collect_trace(ctx, TRACE_OFF_CPU, pid, tid, ts, diff);
 }

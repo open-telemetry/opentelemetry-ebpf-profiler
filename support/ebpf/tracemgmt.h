@@ -650,12 +650,11 @@ static inline ErrorCode get_usermode_regs(struct pt_regs *ctx,
 #endif // TESTING_COREDUMP
 
 static inline
-int collect_trace(struct pt_regs *ctx, TraceOrigin origin, u32 pid, u32 tid, u64 off_cpu_time) {
+int collect_trace(struct pt_regs *ctx, TraceOrigin origin, u32 pid, u32 tid,
+  u64 trace_timestamp, u64 off_cpu_time) {
   if (pid == 0) {
     return 0;
   }
-
-  u64 ktime = bpf_ktime_get_ns();
 
   // The trace is reused on each call to this function so we have to reset the
   // variables used to maintain state.
@@ -669,7 +668,7 @@ int collect_trace(struct pt_regs *ctx, TraceOrigin origin, u32 pid, u32 tid, u64
   trace->origin = origin;
   trace->pid = pid;
   trace->tid = tid;
-  trace->ktime = ktime;
+  trace->ktime = trace_timestamp;
   trace->offtime = off_cpu_time;
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);
