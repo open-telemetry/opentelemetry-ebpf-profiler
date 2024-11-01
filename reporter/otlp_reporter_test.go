@@ -26,6 +26,7 @@ func TestGetSampleAttributes(t *testing.T) {
 					comm:           "",
 					apmServiceName: "",
 					containerID:    "",
+					pid:            "",
 				},
 			},
 			attributeMap:           make(map[string]uint64),
@@ -40,16 +41,18 @@ func TestGetSampleAttributes(t *testing.T) {
 					comm:           "comm1",
 					apmServiceName: "apmServiceName1",
 					containerID:    "containerID1",
+					pid:            "pid1",
 				},
 				{
 					hash:           libpf.TraceHash{},
 					comm:           "comm1",
 					apmServiceName: "apmServiceName1",
 					containerID:    "containerID1",
+					pid:            "pid1",
 				},
 			},
 			attributeMap:    make(map[string]uint64),
-			expectedIndices: [][]uint64{{0, 1, 2}, {0, 1, 2}},
+			expectedIndices: [][]uint64{{0, 1, 2, 3}, {0, 1, 2, 3}},
 			expectedAttributeTable: []*common.KeyValue{
 				{
 					Key: "container.id",
@@ -67,6 +70,12 @@ func TestGetSampleAttributes(t *testing.T) {
 					Key: "service.name",
 					Value: &common.AnyValue{
 						Value: &common.AnyValue_StringValue{StringValue: "apmServiceName1"},
+					},
+				},
+				{
+					Key: "process.pid",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "pid1"},
 					},
 				},
 			},
@@ -79,16 +88,18 @@ func TestGetSampleAttributes(t *testing.T) {
 					comm:           "comm1",
 					apmServiceName: "apmServiceName1",
 					containerID:    "containerID1",
+					pid:            "pid1",
 				},
 				{
 					hash:           libpf.TraceHash{},
 					comm:           "comm2",
 					apmServiceName: "apmServiceName2",
 					containerID:    "containerID2",
+					pid:            "pid2",
 				},
 			},
 			attributeMap:    make(map[string]uint64),
-			expectedIndices: [][]uint64{{0, 1, 2}, {3, 4, 5}},
+			expectedIndices: [][]uint64{{0, 1, 2, 3}, {4, 5, 6, 7}},
 			expectedAttributeTable: []*common.KeyValue{
 				{
 					Key: "container.id",
@@ -106,6 +117,12 @@ func TestGetSampleAttributes(t *testing.T) {
 					Key: "service.name",
 					Value: &common.AnyValue{
 						Value: &common.AnyValue_StringValue{StringValue: "apmServiceName1"},
+					},
+				},
+				{
+					Key: "process.pid",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "pid1"},
 					},
 				},
 				{
@@ -126,6 +143,12 @@ func TestGetSampleAttributes(t *testing.T) {
 						Value: &common.AnyValue_StringValue{StringValue: "apmServiceName2"},
 					},
 				},
+				{
+					Key: "process.pid",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: "pid2"},
+					},
+				},
 			},
 		},
 	}
@@ -140,6 +163,7 @@ func TestGetSampleAttributes(t *testing.T) {
 					{key: string(semconv.ContainerIDKey), value: k.containerID},
 					{key: string(semconv.ThreadNameKey), value: k.comm},
 					{key: string(semconv.ServiceNameKey), value: k.apmServiceName},
+					{key: string(semconv.ProcessPIDKey), value: k.pid},
 				}, tc.attributeMap))
 			}
 			require.Equal(t, tc.expectedIndices, indices)
