@@ -90,7 +90,7 @@ func (symmap *SymbolMap) LookupSymbolByPrefix(prefix string) (*Symbol, error) {
 			return sym, nil
 		}
 	}
-	return nil, fmt.Errorf("no symbol not present that starts with '%s' in map", prefix)
+	return nil, fmt.Errorf("no symbol present that starts with '%s'", prefix)
 }
 
 // LookupSymbolAddress returns the address of a symbol.

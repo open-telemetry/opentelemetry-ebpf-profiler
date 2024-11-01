@@ -43,7 +43,8 @@ int tracepoint__sched_switch(void *ctx) {
   u64 ts = bpf_ktime_get_ns();
 
   if (bpf_map_update_elem(&profile_off_cpu, &pid_tgid, &ts, BPF_ANY)<0){
-      return 0;
+    DEBUG_PRINT("Failed to record sched_switch event entry");
+	  return 0;
   }
 
   return 0;
@@ -78,9 +79,8 @@ int finish_task_switch(struct pt_regs *ctx) {
     return 0;
   }
 
-  DEBUG_PRINT("==== finish_task_switch ====");
-
   u64 diff = ts - *start_ts;
+  DEBUG_PRINT("==== finish_task_switch ====");
 
   return collect_trace(ctx, TRACE_OFF_CPU, pid, tid, ts, diff);
 }

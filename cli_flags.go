@@ -63,9 +63,9 @@ var (
 		"on agent startup, but not periodically."
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
 	offCPUThresholdHelp = fmt.Sprintf("If set to a value between 1 and %d will enable "+
-		"off cpu profiling: Every time an off-cpu entry point is hit, a random number between "+
-		"0 and %d is chosen. If the given threshold is greater than this random number, the off "+
-		"cpu trace is collected and reported.",
+		"off-cpu profiling: Every time an off-cpu entry point is hit, a random number between "+
+		"0 and %d is chosen. If the given threshold is greater than this random number, the "+
+		"off-cpu trace is collected and reported.",
 		tracer.OffCPUThresholdMax-1, tracer.OffCPUThresholdMax-1)
 )
 
