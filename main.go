@@ -139,7 +139,7 @@ func mainWithExitCode() exitCode {
 	}
 	cfg.Reporter = rep
 
-	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
+	log.Infof("Starting Otel profiling agent %s (revision %s, build timestamp %s)",
 		vc.Version(), vc.Revision(), vc.BuildTimestamp())
 
 	ctlr := controller.New(cfg)
