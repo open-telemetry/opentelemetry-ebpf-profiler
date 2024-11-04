@@ -48,10 +48,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to probe eBPF syscall: %w", err)
 	}
 
-	if err := tracer.ProbeTracepoint(); err != nil {
-		return fmt.Errorf("failed to probe tracepoint: %w", err)
-	}
-
 	presentCores, err := numcpus.GetPresent()
 	if err != nil {
 		return fmt.Errorf("failed to read CPU file: %w", err)
