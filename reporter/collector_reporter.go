@@ -81,7 +81,7 @@ func NewCollector(cfg *Config, nextConsumer consumerprofiles.Profiles) (*Collect
 	}, nil
 }
 
-func (r *CollectorReporter) Start() {
+func (r *CollectorReporter) Start(context.Context) error {
 	go func() {
 		tick := time.NewTicker(r.cfg.ReportInterval)
 		defer tick.Stop()
@@ -97,6 +97,8 @@ func (r *CollectorReporter) Start() {
 			}
 		}
 	}()
+
+	return nil
 }
 
 // ExecutableKnown returns true if the metadata of the Executable specified by fileID is
