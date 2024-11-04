@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -735,8 +734,10 @@ func addProfileAttributes(profile *profiles.Profile,
 		var attributeCompositeKey string
 		var attributeValue common.AnyValue
 
-		valueType := reflect.TypeOf(attr.value)
-		if valueType != reflect.TypeOf("") && valueType != reflect.TypeOf(int64(0)) {
+		switch attr.value.(type) {
+		case string, int64:
+			//Supported types, continue to handling below
+		default:
 			return
 		}
 
