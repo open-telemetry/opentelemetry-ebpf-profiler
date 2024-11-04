@@ -26,7 +26,7 @@ func TestGetSampleAttributes(t *testing.T) {
 					comm:           "",
 					apmServiceName: "",
 					containerID:    "",
-					pid:            "",
+					pid:            0,
 				},
 			},
 			attributeMap:           make(map[string]uint64),
@@ -41,14 +41,14 @@ func TestGetSampleAttributes(t *testing.T) {
 					comm:           "comm1",
 					apmServiceName: "apmServiceName1",
 					containerID:    "containerID1",
-					pid:            "pid1",
+					pid:            1234,
 				},
 				{
 					hash:           libpf.TraceHash{},
 					comm:           "comm1",
 					apmServiceName: "apmServiceName1",
 					containerID:    "containerID1",
-					pid:            "pid1",
+					pid:            1234,
 				},
 			},
 			attributeMap:    make(map[string]uint64),
@@ -75,7 +75,7 @@ func TestGetSampleAttributes(t *testing.T) {
 				{
 					Key: "process.pid",
 					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "pid1"},
+						Value: &common.AnyValue_IntValue{IntValue: 1234},
 					},
 				},
 			},
@@ -88,14 +88,14 @@ func TestGetSampleAttributes(t *testing.T) {
 					comm:           "comm1",
 					apmServiceName: "apmServiceName1",
 					containerID:    "containerID1",
-					pid:            "pid1",
+					pid:            1234,
 				},
 				{
 					hash:           libpf.TraceHash{},
 					comm:           "comm2",
 					apmServiceName: "apmServiceName2",
 					containerID:    "containerID2",
-					pid:            "pid2",
+					pid:            6789,
 				},
 			},
 			attributeMap:    make(map[string]uint64),
@@ -122,7 +122,7 @@ func TestGetSampleAttributes(t *testing.T) {
 				{
 					Key: "process.pid",
 					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "pid1"},
+						Value: &common.AnyValue_IntValue{IntValue: 1234},
 					},
 				},
 				{
@@ -146,7 +146,7 @@ func TestGetSampleAttributes(t *testing.T) {
 				{
 					Key: "process.pid",
 					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: "pid2"},
+						Value: &common.AnyValue_IntValue{IntValue: 6789},
 					},
 				},
 			},
