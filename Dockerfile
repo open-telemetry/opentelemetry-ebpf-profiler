@@ -1,7 +1,5 @@
 FROM debian:testing
 
-ARG GOARCH
-
 WORKDIR /agent
 
 # cross_debian_arch: amd64 or arm64
@@ -16,9 +14,9 @@ RUN cross_debian_arch=$(uname -m | sed -e 's/aarch64/amd64/'  -e 's/x86_64/arm64
     apt-get autoremove --yes
 
 COPY go.mod /tmp/go.mod
-
 # Extract Go version from go.mod
 RUN GO_VERSION=$(grep -oPm1 '^go \K([[:digit:].]+)' /tmp/go.mod) && \
+    GOARCH=$(uname -m) && if [ "$GOARCH" = "x86_64" ]; then GOARCH=amd64; elif [ "$GOARCH" = "aarch64" ]; then GOARCH=arm64; fi && \
     wget -qO- https://golang.org/dl/go${GO_VERSION}.linux-${GOARCH}.tar.gz | tar -C /usr/local -xz
 
 # Set Go environment variables

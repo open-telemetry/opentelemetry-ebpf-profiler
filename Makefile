@@ -116,7 +116,7 @@ integration-test-binaries: generate ebpf
 	)
 
 docker-image:
-	docker build --progress=plain -t profiling-agent -f Dockerfile --build-arg GOARCH=$(TARGET_ARCH) .
+	docker build -t profiling-agent -f Dockerfile .
 
 agent:
 	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
