@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -70,7 +71,7 @@ type traceAndMetaKey struct {
 	apmServiceName string
 	// containerID is annotated based on PID information
 	containerID string
-	pid         string
+	pid         int64
 }
 
 // traceEvents holds known information about a trace.
@@ -87,7 +88,7 @@ type traceEvents struct {
 // attrKeyValue is a helper to populate Profile.attribute_table.
 type attrKeyValue struct {
 	key   string
-	value string
+	value any
 }
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
@@ -170,7 +171,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		comm:           meta.Comm,
 		apmServiceName: meta.APMServiceName,
 		containerID:    containerID,
-		pid:            strconv.FormatUint(uint64(meta.PID), 10),
+		pid:            int64(meta.PID),
 	}
 
 	if events, exists := (*traceEventsMap)[key]; exists {
@@ -731,10 +732,30 @@ func addProfileAttributes(profile *profiles.Profile,
 	indices := make([]uint64, 0, len(attributes))
 
 	addAttr := func(attr attrKeyValue) {
-		if attr.value == "" {
+		var attributeCompositeKey string
+		var attributeValue common.AnyValue
+
+		valueType := reflect.TypeOf(attr.value)
+		if valueType != reflect.TypeOf("") && valueType != reflect.TypeOf(int64(0)) {
 			return
 		}
-		attributeCompositeKey := attr.key + "_" + attr.value
+
+		if valString, ok := attr.value.(string); ok {
+			if valString == "" {
+				return
+			}
+			attributeCompositeKey = attr.key + "_" + valString
+			attributeValue = common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: valString}}
+		}
+
+		if valInt, ok := attr.value.(int64); ok {
+			if valInt == 0 {
+				return
+			}
+			attributeCompositeKey = attr.key + "_" + strconv.Itoa(int(valInt))
+			attributeValue = common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: int64(valInt)}}
+		}
+
 		if attributeIndex, exists := attributeMap[attributeCompositeKey]; exists {
 			indices = append(indices, attributeIndex)
 			return
@@ -743,7 +764,7 @@ func addProfileAttributes(profile *profiles.Profile,
 		indices = append(indices, newIndex)
 		profile.AttributeTable = append(profile.AttributeTable, &common.KeyValue{
 			Key:   attr.key,
-			Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: attr.value}},
+			Value: &attributeValue,
 		})
 		attributeMap[attributeCompositeKey] = newIndex
 	}
