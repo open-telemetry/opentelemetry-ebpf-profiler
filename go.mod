@@ -3,13 +3,14 @@ module go.opentelemetry.io/ebpf-profiler
 go 1.22.2
 
 require (
+	github.com/aws/aws-sdk-go-v2 v1.30.5
 	github.com/aws/aws-sdk-go-v2/config v1.27.35
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.21
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.62.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cilium/ebpf v0.16.0
 	github.com/elastic/go-freelru v0.15.0
 	github.com/elastic/go-perf v0.0.0-20241016160959-1342461adb4a
+	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
 	github.com/jsimonetti/rtnetlink v1.4.2
 	github.com/klauspost/compress v1.17.9
@@ -20,6 +21,8 @@ require (
 	github.com/tklauser/numcpus v0.8.0
 	github.com/zeebo/xxh3 v1.0.2
 	go.opentelemetry.io/collector/consumer/consumerprofiles v0.112.0
+	go.opentelemetry.io/collector/pdata v1.18.0
+	go.opentelemetry.io/collector/pdata/pprofile v0.112.0
 	go.opentelemetry.io/otel v1.30.0
 	go.opentelemetry.io/proto/otlp v1.3.1
 	golang.org/x/arch v0.10.0
@@ -30,7 +33,6 @@ require (
 )
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.30.5 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.4 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.33 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.13 // indirect
@@ -48,7 +50,6 @@ require (
 	github.com/aws/smithy-go v1.20.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect
 	github.com/josharian/native v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -59,8 +60,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	go.opentelemetry.io/collector/consumer v0.112.0 // indirect
-	go.opentelemetry.io/collector/pdata v1.18.0 // indirect
-	go.opentelemetry.io/collector/pdata/pprofile v0.112.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/text v0.17.0 // indirect

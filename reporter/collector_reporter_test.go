@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/consumer/consumerprofiles"
@@ -191,21 +192,13 @@ func TestCollectoReportProfile(t *testing.T) {
 				Profiles().At(0).
 				SetProfileID(pprofile.ProfileID([]byte("profile-id-for-tests")))
 
-			// Check the profile directly, as it's too nested for testify to provide
-			// a meaningful diff
-			require.Equal(t,
-				gotProfiles.ResourceProfiles().At(0).
-					ScopeProfiles().At(0).
-					Profiles().At(0).
-					Profile(),
-				wantProfiles.ResourceProfiles().At(0).
-					ScopeProfiles().At(0).
-					Profiles().At(0).
-					Profile(),
-			)
-
-			// Also check the global object
-			assert.Equal(t, wantProfiles, gotProfiles)
+			assert.Empty(t, cmp.Diff(
+				wantProfiles,
+				gotProfiles,
+				cmp.Comparer(func(a pprofile.Profiles, b pprofile.Profiles) bool {
+					return assert.ObjectsAreEqualValues(a, b)
+				}),
+			))
 		})
 	}
 }
