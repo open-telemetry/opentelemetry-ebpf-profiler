@@ -22,9 +22,6 @@ ENV GOPATH="/agent/go"
 ENV GOCACHE="/agent/.cache"
 ENV PATH="/usr/local/go/bin:$PATH"
 
-RUN wget -qO- https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-    | sh -s -- -b $(go env GOPATH)/bin v1.56.2
-
 # gRPC dependencies
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
 RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
