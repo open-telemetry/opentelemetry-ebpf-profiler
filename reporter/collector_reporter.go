@@ -55,13 +55,15 @@ type CollectorReporter struct {
 
 // NewCollector builds a new CollectorReporter
 func NewCollector(cfg *Config, nextConsumer consumerprofiles.Profiles) (*CollectorReporter, error) {
-	executables, err := lru.NewSynced[libpf.FileID, execInfo](cfg.CacheSize, libpf.FileID.Hash32)
+	executables, err :=
+		lru.NewSynced[libpf.FileID, execInfo](cfg.ExecutablesCacheElements, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err
 	}
 
 	frames, err := lru.NewSynced[libpf.FileID,
-		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](cfg.CacheSize, libpf.FileID.Hash32)
+		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](
+		cfg.FramesCacheElements, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err
 	}
