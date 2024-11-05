@@ -159,12 +159,16 @@ func TestGetSampleAttributes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			indices := make([][]uint64, 0)
 			for _, k := range tc.k {
-				indices = append(indices, addProfileAttributes(tc.profile, []attrKeyValue{
-					{key: string(semconv.ContainerIDKey), value: k.containerID},
-					{key: string(semconv.ThreadNameKey), value: k.comm},
-					{key: string(semconv.ServiceNameKey), value: k.apmServiceName},
-					{key: string(semconv.ProcessPIDKey), value: k.pid},
-				}, tc.attributeMap))
+				indices = append(indices, append(addProfileAttributes(tc.profile,
+					[]attrKeyValue[string]{
+						{key: string(semconv.ContainerIDKey), value: k.containerID},
+						{key: string(semconv.ThreadNameKey), value: k.comm},
+						{key: string(semconv.ServiceNameKey), value: k.apmServiceName},
+					}, tc.attributeMap),
+					addProfileAttributes(tc.profile,
+						[]attrKeyValue[int64]{
+							{key: string(semconv.ProcessPIDKey), value: k.pid},
+						}, tc.attributeMap)...))
 			}
 			require.Equal(t, tc.expectedIndices, indices)
 			require.Equal(t, tc.expectedAttributeTable, tc.profile.AttributeTable)

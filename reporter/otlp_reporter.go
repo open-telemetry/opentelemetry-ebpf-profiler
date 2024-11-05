@@ -85,9 +85,9 @@ type traceEvents struct {
 }
 
 // attrKeyValue is a helper to populate Profile.attribute_table.
-type attrKeyValue struct {
+type attrKeyValue[T string | int64] struct {
 	key   string
-	value any
+	value T
 }
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
@@ -552,7 +552,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 
 		// Walk every frame of the trace.
 		for i := range traceInfo.frameTypes {
-			frameAttributes := addProfileAttributes(profile, []attrKeyValue{
+			frameAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
 				{key: "profile.frame.type", value: traceInfo.frameTypes[i].String()},
 			}, attributeMap)
 
@@ -585,7 +585,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 						fileName = execInfo.fileName
 					}
 
-					mappingAttributes := addProfileAttributes(profile, []attrKeyValue{
+					mappingAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
 						// Once SemConv and its Go package is released with the new
 						// semantic convention for build_id, replace these hard coded
 						// strings.
@@ -650,12 +650,13 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 			profile.Location = append(profile.Location, loc)
 		}
 
-		sample.Attributes = addProfileAttributes(profile, []attrKeyValue{
+		sample.Attributes = append(addProfileAttributes(profile, []attrKeyValue[string]{
 			{key: string(semconv.ContainerIDKey), value: traceKey.containerID},
 			{key: string(semconv.ThreadNameKey), value: traceKey.comm},
 			{key: string(semconv.ServiceNameKey), value: traceKey.apmServiceName},
+		}, attributeMap), addProfileAttributes(profile, []attrKeyValue[int64]{
 			{key: string(semconv.ProcessPIDKey), value: traceKey.pid},
-		}, attributeMap)
+		}, attributeMap)...)
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
 		locationIndex += sample.LocationsLength
 
@@ -726,35 +727,29 @@ func createFunctionEntry(funcMap map[funcInfo]uint64,
 
 // addProfileAttributes adds attributes to Profile.attribute_table and returns
 // the indices to these attributes.
-func addProfileAttributes(profile *profiles.Profile,
-	attributes []attrKeyValue, attributeMap map[string]uint64) []uint64 {
+func addProfileAttributes[T string | int64](profile *profiles.Profile,
+	attributes []attrKeyValue[T], attributeMap map[string]uint64) []uint64 {
 	indices := make([]uint64, 0, len(attributes))
 
-	addAttr := func(attr attrKeyValue) {
+	addAttr := func(attr attrKeyValue[T]) {
 		var attributeCompositeKey string
 		var attributeValue common.AnyValue
 
-		switch attr.value.(type) {
-		case string, int64:
-			//Supported types, continue to handling below
+		switch val := any(attr.value).(type) {
+		case string:
+			if val == "" {
+				return
+			}
+			attributeCompositeKey = attr.key + "_" + val
+			attributeValue = common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: val}}
+		case int64:
+			if val == 0 {
+				return
+			}
+			attributeCompositeKey = attr.key + "_" + strconv.Itoa(int(val))
+			attributeValue = common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: int64(val)}}
 		default:
 			return
-		}
-
-		if valString, ok := attr.value.(string); ok {
-			if valString == "" {
-				return
-			}
-			attributeCompositeKey = attr.key + "_" + valString
-			attributeValue = common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: valString}}
-		}
-
-		if valInt, ok := attr.value.(int64); ok {
-			if valInt == 0 {
-				return
-			}
-			attributeCompositeKey = attr.key + "_" + strconv.Itoa(int(valInt))
-			attributeValue = common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: int64(valInt)}}
 		}
 
 		if attributeIndex, exists := attributeMap[attributeCompositeKey]; exists {
