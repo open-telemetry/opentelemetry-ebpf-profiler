@@ -747,7 +747,7 @@ func addProfileAttributes[T string | int64](profile *profiles.Profile,
 				return
 			}
 			attributeCompositeKey = attr.key + "_" + strconv.Itoa(int(val))
-			attributeValue = common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: int64(val)}}
+			attributeValue = common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: val}}
 		default:
 			return
 		}
