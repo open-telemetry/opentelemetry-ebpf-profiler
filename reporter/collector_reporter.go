@@ -546,16 +546,14 @@ func addPdataProfileAttributes(profile pprofile.Profile,
 func getDummyPdataMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
 	stringMap map[string]uint32, profile pprofile.Profile,
 	fileID libpf.FileID) uint64 {
-	var locationMappingIndex uint64
-	if tmpMappingIndex, exists := fileIDtoMapping[fileID]; exists {
-		locationMappingIndex = tmpMappingIndex
-	} else {
-		idx := uint64(len(fileIDtoMapping))
-		fileIDtoMapping[fileID] = idx
-		locationMappingIndex = idx
-
-		mapping := profile.Mapping().AppendEmpty()
-		mapping.SetFilename(int64(getStringMapIndex(stringMap, "")))
+	if mappingIndex, exists := fileIDtoMapping[fileID]; exists {
+		return mappingIndex
 	}
+
+	locationMappingIndex := uint64(len(fileIDtoMapping))
+	fileIDtoMapping[fileID] = locationMappingIndex
+
+	mapping := profile.Mapping().AppendEmpty()
+	mapping.SetFilename(int64(getStringMapIndex(stringMap, "")))
 	return locationMappingIndex
 }
