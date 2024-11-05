@@ -719,7 +719,7 @@ ErrorCode hotspot_execute_unwind_action(CodeBlobInfo *cbi, HotspotUnwindAction a
       return ERR_UNREACHABLE;
 #if defined(__aarch64__)
     case UA_UNWIND_AARCH64_LR:
-      if (state->return_address) {
+      if (state->lr_invalid) {
         increment_metric(metricID_UnwindHotspotErrLrUnwindingMidTrace);
         return ERR_HOTSPOT_LR_UNWINDING_MID_TRACE;
       }
@@ -761,7 +761,7 @@ ErrorCode hotspot_execute_unwind_action(CodeBlobInfo *cbi, HotspotUnwindAction a
       state->pc = ui->pc;
       state->sp = ui->sp;
       state->fp = ui->fp;
-      state->return_address = true;
+      unwinder_mark_nonleaf_frame(state);
       increment_metric(metricID_UnwindHotspotFrames);
     }
   }
