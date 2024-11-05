@@ -60,6 +60,7 @@ func NewCollector(cfg *Config, nextConsumer consumerprofiles.Profiles) (*Collect
 	if err != nil {
 		return nil, err
 	}
+	executables.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
 
 	frames, err := lru.NewSynced[libpf.FileID,
 		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](
@@ -67,6 +68,7 @@ func NewCollector(cfg *Config, nextConsumer consumerprofiles.Profiles) (*Collect
 	if err != nil {
 		return nil, err
 	}
+	frames.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
 
 	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
 		func(pid libpf.PID) uint32 { return uint32(pid) })
