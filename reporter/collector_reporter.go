@@ -85,6 +85,9 @@ func (r *CollectorReporter) Start(context.Context) error {
 	go func() {
 		tick := time.NewTicker(r.cfg.ReportInterval)
 		defer tick.Stop()
+		purgeTick := time.NewTicker(5 * time.Minute)
+		defer purgeTick.Stop()
+
 		for {
 			select {
 			case <-r.stopSignal:
@@ -94,6 +97,10 @@ func (r *CollectorReporter) Start(context.Context) error {
 					log.Errorf("Request failed: %v", err)
 				}
 				tick.Reset(libpf.AddJitter(r.cfg.ReportInterval, 0.2))
+			case <-purgeTick.C:
+				// Allow the GC to purge expired entries to avoid memory leaks.
+				r.executables.PurgeExpired()
+				r.frames.PurgeExpired()
 			}
 		}
 	}()
