@@ -737,18 +737,13 @@ func addProfileAttributes[T string | int64](profile *profiles.Profile,
 
 		switch val := any(attr.value).(type) {
 		case string:
-			if val == "" {
-				return
-			}
 			attributeCompositeKey = attr.key + "_" + val
 			attributeValue = common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: val}}
 		case int64:
-			if val == 0 {
-				return
-			}
 			attributeCompositeKey = attr.key + "_" + strconv.Itoa(int(val))
 			attributeValue = common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: val}}
 		default:
+			log.Error("Unsupported attribute value type. Only string and int64 are supported at this time.")
 			return
 		}
 

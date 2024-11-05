@@ -29,9 +29,34 @@ func TestGetSampleAttributes(t *testing.T) {
 					pid:            0,
 				},
 			},
-			attributeMap:           make(map[string]uint64),
-			expectedIndices:        [][]uint64{make([]uint64, 0, 4)},
-			expectedAttributeTable: nil,
+			attributeMap:    make(map[string]uint64),
+			expectedIndices: [][]uint64{{0, 1, 2, 3}},
+			expectedAttributeTable: []*common.KeyValue{
+				{
+					Key: "container.id",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: ""},
+					},
+				},
+				{
+					Key: "thread.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: ""},
+					},
+				},
+				{
+					Key: "service.name",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_StringValue{StringValue: ""},
+					},
+				},
+				{
+					Key: "process.pid",
+					Value: &common.AnyValue{
+						Value: &common.AnyValue_IntValue{IntValue: 0},
+					},
+				},
+			},
 		},
 		"duplicate": {
 			profile: &profiles.Profile{},
