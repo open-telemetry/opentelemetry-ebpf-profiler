@@ -54,7 +54,9 @@ func TestCollectorReporterReportTraceEvent(t *testing.T) {
 			}
 
 			r, err := NewCollector(&Config{
-				CacheSize: 1,
+				ExecutablesCacheElements: 1,
+				FramesCacheElements:      1,
+				CGroupCacheElements:      1,
 			}, next)
 			require.NoError(t, err)
 			r.ReportTraceEvent(tt.trace, tt.meta)
@@ -153,8 +155,10 @@ func TestCollectorReporterReportProfile(t *testing.T) {
 			require.NoError(t, err)
 
 			r, err := NewCollector(&Config{
-				CacheSize:        1,
-				SamplesPerSecond: 1,
+				ExecutablesCacheElements: 1,
+				FramesCacheElements:      1,
+				CGroupCacheElements:      1,
+				SamplesPerSecond:         1,
 			}, next)
 			require.NoError(t, err)
 
