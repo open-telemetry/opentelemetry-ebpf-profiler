@@ -62,7 +62,7 @@ func TestCollectorReporterReportTraceEvent(t *testing.T) {
 	}
 }
 
-func TestCollectoReportProfile(t *testing.T) {
+func TestCollectorReporterReportProfile(t *testing.T) {
 	for _, tt := range []struct {
 		name              string
 		reportTraceEvents func(*testing.T, Reporter)
