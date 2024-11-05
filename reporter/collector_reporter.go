@@ -26,7 +26,7 @@ import (
 // Assert that we implement the full Reporter interface.
 var _ Reporter = (*CollectorReporter)(nil)
 
-// OTLPReporter receives and transforms information to be Collector Collector compliant.
+// CollectorReporter receives and transforms information to be Collector Collector compliant.
 type CollectorReporter struct {
 	cfg          *Config
 	nextConsumer consumerprofiles.Profiles
