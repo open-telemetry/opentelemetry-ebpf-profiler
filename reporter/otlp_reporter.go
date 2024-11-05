@@ -743,7 +743,7 @@ func addProfileAttributes[T string | int64](profile *profiles.Profile,
 			attributeCompositeKey = attr.key + "_" + strconv.Itoa(int(val))
 			attributeValue = common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: val}}
 		default:
-			log.Error("Unsupported attribute value type. Only string and int64 are supported at this time.")
+			log.Error("Unsupported attribute value type. Only string and int64 are supported.")
 			return
 		}
 
