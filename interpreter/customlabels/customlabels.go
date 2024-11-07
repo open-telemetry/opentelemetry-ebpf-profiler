@@ -1,4 +1,4 @@
-package customlabels
+package customlabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/customlabels"
 
 // #include <stdlib.h>
 // #include "../../support/ebpf/types.h"

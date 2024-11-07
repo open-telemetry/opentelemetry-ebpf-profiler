@@ -1,4 +1,4 @@
-package golang
+package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/golang"
 
 // #include <stdlib.h>
 // #include "../../support/ebpf/types.h"
