@@ -6,7 +6,12 @@ local function compress_file(data)
 end
 
 function _M.comp(input)
-    return compress_file(input)
+    local comp_data = compress_file(input)
+    decomp_data = lzw.decompress(comp_data)
+    if input ~= decomp_data then
+        error("Error: input != decomp_data")
+    end
+    return comp_data
 end
 
 -- run if outside nginx

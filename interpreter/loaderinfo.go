@@ -74,7 +74,7 @@ func (i *LoaderInfo) Gaps() []util.Range {
 	return i.gaps
 }
 
-// Deltas returns and caches a *pfelf.File for this LoaderInfo.
+// Deltas returns the stack deltas for the executable of this LoaderInfo.
 func (i *LoaderInfo) Deltas() sdtypes.StackDeltaArray {
 	return i.deltas
 }

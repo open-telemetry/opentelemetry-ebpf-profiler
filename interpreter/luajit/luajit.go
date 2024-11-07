@@ -14,7 +14,6 @@ package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 import (
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"path"
 	"strings"
 	"sync"
@@ -37,6 +36,8 @@ import (
 // #include "../../support/ebpf/types.h"
 // #include "../../support/ebpf/luajit.h"
 import "C"
+
+const LuaJITFFIFunc = C.LUAJIT_FFI_FUNC
 
 // Records all the "global" pointers we've seen.
 type vmMap map[libpf.Address]struct{}
@@ -63,7 +64,8 @@ type luajitInstance struct {
 	rm         remotememory.RemoteMemory
 	protos     map[libpf.Address]*proto
 	jitRegions regionMap
-
+	pid        libpf.PID
+	ebpf       interpreter.EbpfHandler
 	// Map of g's we've seen, populated by the symbolizer goroutine and
 	// consumed in SynchronizeMappings so needs to be protected by a mutex.
 	mu  sync.Mutex
@@ -99,6 +101,8 @@ func (d *luajitData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf
 	}
 
 	return &luajitInstance{rm: rm,
+		pid:         pid,
+		ebpf:        ebpf,
 		protos:      make(map[libpf.Address]*proto),
 		jitRegions:  make(regionMap),
 		prefixes:    make(map[regionKey][]lpm.Prefix),
@@ -269,10 +273,17 @@ func (l *luajitInstance) synchronizeMappings(ebpf interpreter.EbpfHandler, pid l
 		}
 	}
 
+	return l.processVMs(ebpf, pid)
+}
+
+func (l *luajitInstance) processVMs(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	var badVMs []libpf.Address
 	for _, g := range l.getVMList() {
 		hash, traces, err := loadTraces(g+libpf.Address(l.g2Traces), l.rm)
 		if err != nil {
-			return err
+			// if g is bad remove it
+			badVMs = append(badVMs, g)
+			continue
 		}
 		// Don't do anything if nothing changed.
 		if hash == l.traceHashes[g] {
@@ -306,14 +317,14 @@ func (l *luajitInstance) synchronizeMappings(ebpf interpreter.EbpfHandler, pid l
 				return fmt.Errorf("trace %v not in a JIT region", t)
 			}
 
-			spadjust := uint64(t.spadjust)
+			stackDelta := uint64(t.spadjust) + uint64(cframeSizeJIT)
 			// If this is a side trace, we need to add the spadjust of the root trace but
 			// only if they are different.
 			//https://github.com/openresty/luajit2/blob/7952882d/src/lj_gdbjit.c#L597
 			if t.root != 0 && traces[t.root].spadjust != t.spadjust {
-				spadjust += uint64(traces[t.root].spadjust)
+				stackDelta += uint64(traces[t.root].spadjust) + uint64(cframeSizeJIT)
 			}
-			p, err := l.addTrace(ebpf, pid, t, uint64(g), spadjust)
+			p, err := l.addTrace(ebpf, pid, t, uint64(g), stackDelta)
 			if err != nil {
 				return err
 			}
@@ -326,7 +337,16 @@ func (l *luajitInstance) synchronizeMappings(ebpf interpreter.EbpfHandler, pid l
 		l.prefixesByG[g] = newPrefixes
 		l.traceHashes[g] = hash
 	}
+	l.removeVMs(badVMs)
 	return nil
+}
+
+func (l *luajitInstance) removeVMs(gs []libpf.Address) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, g := range gs {
+		delete(l.vms, g)
+	}
 }
 
 func (l *luajitInstance) getGCproto(pt libpf.Address) (*proto, error) {
@@ -346,7 +366,8 @@ func (l *luajitInstance) getGCproto(pt libpf.Address) (*proto, error) {
 
 // symbolizeFrame symbolizes the previous (up the stack)
 func (l *luajitInstance) symbolizeFrame(symbolReporter reporter.SymbolReporter,
-	funcName string, trace *libpf.Trace, ptAddr libpf.Address, pc uint32) error {
+	funcName string, trace *libpf.Trace, ptAddr libpf.Address, pc uint32,
+	frameID libpf.FrameID) error {
 	var line uint32
 	var fileName string
 	if ptAddr != C.LUAJIT_FFI_FUNC {
@@ -358,15 +379,6 @@ func (l *luajitInstance) symbolizeFrame(symbolReporter reporter.SymbolReporter,
 		fileName = pt.getName()
 	}
 	logf("lj: [%x] %v+%v at %v:%v", ptAddr, funcName, pc, fileName, line)
-	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(fileName)) //FIXME: needless allocation
-	_, _ = h.Write([]byte(funcName)) //FIXME: needless allocation
-	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
-	if err != nil {
-		return fmt.Errorf("failed to create a file ID: %v", err)
-	}
-	frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(pc))
 	trace.AppendFrameID(libpf.LuaJITFrame, frameID)
 	if !symbolReporter.FrameKnown(frameID) {
 		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
@@ -380,6 +392,15 @@ func (l *luajitInstance) symbolizeFrame(symbolReporter reporter.SymbolReporter,
 	return nil
 }
 
+func (l *luajitInstance) addVM(g libpf.Address) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_, ok := l.vms[g]
+	if !ok {
+		l.vms[g] = struct{}{}
+	}
+	return !ok
+}
 func (l *luajitInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame,
 	trace *libpf.Trace) error {
 	if !frame.Type.IsInterpType(libpf.LuaJIT) {
@@ -392,9 +413,10 @@ func (l *luajitInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame
 		// we reach a steady state where there's no new JIT activity this will always be 0.
 		g := libpf.Address(frame.Lineno)
 		if g != 0 {
-			l.mu.Lock()
-			defer l.mu.Unlock()
-			l.vms[g] = struct{}{}
+			unseen := l.addVM(g)
+			if unseen && l.ebpf.CoredumpTest() {
+				return interpreter.ErrLJRestart
+			}
 		}
 		return nil
 	}
@@ -427,9 +449,20 @@ func (l *luajitInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame
 		funcName = pt.getFunctionName(frame.LJCallerPC)
 	}
 
-	err := l.symbolizeFrame(symbolReporter, funcName, trace, libpf.Address(frame.File), frame.LJCalleePC)
+	calleePT := libpf.Address(frame.File)
+	frameID := CreateFrameID(frame)
+	if err := l.symbolizeFrame(symbolReporter, funcName, trace, calleePT,
+		frame.LJCalleePC, frameID); err != nil {
+		return err
+	}
 
-	return err
+	return nil
+}
+
+func CreateFrameID(frame *host.Frame) libpf.FrameID {
+	fileID := libpf.NewFileID(uint64(frame.File), uint64(frame.Lineno))
+	lineno := uint64(frame.LJCalleePC)<<32 + uint64(frame.LJCallerPC)
+	return libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineno))
 }
 
 func (l *luajitInstance) GetAndResetMetrics() ([]metrics.Metric, error) {

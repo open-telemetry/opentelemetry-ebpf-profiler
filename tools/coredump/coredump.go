@@ -7,6 +7,7 @@ import (
 	"context"
 	"debug/elf"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -15,6 +16,7 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 
+	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
@@ -78,13 +80,13 @@ func generateErrorMap() (map[libpf.AddressOrLineno]string, error) {
 		Name string `json:"name"`
 	}
 
-	var errors []JSONError
-	if err = json.NewDecoder(file).Decode(&errors); err != nil {
+	var errs []JSONError
+	if err = json.NewDecoder(file).Decode(&errs); err != nil {
 		return nil, fmt.Errorf("failed to parse errors.json: %w", err)
 	}
 
-	out := make(map[libpf.AddressOrLineno]string, len(errors))
-	for _, item := range errors {
+	out := make(map[libpf.AddressOrLineno]string, len(errs))
+	for _, item := range errs {
 		out[libpf.AddressOrLineno(item.ID)] = item.Name
 	}
 
@@ -191,7 +193,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)
 	}
-
+restart:
 	manager.SynchronizeProcess(pr)
 
 	info := make([]ThreadInfo, 0, len(threadInfo))
@@ -209,7 +211,13 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 			return nil, fmt.Errorf("failed to unwind lwp %v: %v", thread.LWP, rc)
 		}
 		// Symbolize traces with interpreter manager
-		trace := manager.ConvertTrace(&ebpfCtx.trace)
+		trace, err := manager.ConvertTrace(&ebpfCtx.trace)
+		if err != nil {
+			if errors.Is(err, interpreter.ErrLJRestart) {
+				goto restart
+			}
+			panic(err)
+		}
 		tinfo := ThreadInfo{LWP: thread.LWP}
 		for i := range trace.FrameTypes {
 			frame, err := symCache.symbolize(trace.FrameTypes[i], trace.Files[i], trace.Linenos[i])

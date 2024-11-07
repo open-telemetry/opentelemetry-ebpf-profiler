@@ -49,6 +49,9 @@ local function dictAddA(str, dict, a, b)
     return dict, a, b
 end
 
+local trace1 = true
+local trace2 = true
+
 local function compress(input)
     if type(input) ~= "string" then
         return nil, "string expected, got "..type(input)
@@ -90,6 +93,10 @@ local function compress(input)
     n = n+1
     if  len <= resultlen then
         return "u"..input
+    end
+    if trace1 then
+        ngx.say(debug.traceback())
+        trace1 = false
     end
     return tconcat(result)
 end
@@ -155,6 +162,10 @@ local function decompress(input)
             dict, a, b = dictAddB(tmp, dict, a, b)
         end
         last = code
+    end
+    if trace2 then
+        ngx.say(debug.traceback())
+        trace2 = false
     end
     return tconcat(result)
 end

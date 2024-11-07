@@ -33,12 +33,10 @@ func bcOp(ins uint32) uint32 {
 }
 
 func bcModeMM(op uint32) uint32 {
-	//nolint:gocritic
 	return uint32(bcMode[op] >> 11)
 }
 
 func bcModeA(op uint32) uint32 {
-	//nolint:gocritic
 	return uint32(bcMode[op] & 7)
 }
 
@@ -62,15 +60,14 @@ func bcD(ins uint32) uint32 {
 func getSlotOrMetaname(ins uint32) (slot uint32, metaname string) {
 	op := bcOp(ins)
 	mm := bcModeMM(op)
-	if mm == MM_call {
+	if mm == MMcall {
 		slot := bcA(ins)
 		if bcOp(ins) == BC_ITERC {
 			slot -= 3
 		}
 		return slot, ""
-	} else if mm != MM__MAX {
-		//nolint:gocritic
-		return 0, lj_metanames[mm]
+	} else if mm != MMMax {
+		return 0, ljMetaNames[mm]
 	}
 	return 0, ""
 }
@@ -81,7 +78,7 @@ func bcModeAIsDst(op uint32) bool {
 	return bcModeA(op) == BCMdst
 }
 
-var lj_metanames = []string{
+var ljMetaNames = []string{
 	"index", "newindex", "gc",
 	"mode", "eq", "len", "lt", "le", "concat",
 	"call", "add", "sub", "mul", "div", "mod", "pow", "unm",
@@ -92,10 +89,11 @@ var lj_metanames = []string{
 const (
 	BCMdst  = 1
 	BCMbase = 2
-	MM_call = 9
-	MM__MAX = 0x16
+	MMcall  = 9
+	MMMax   = 0x16
 )
 
+//nolint:revive,stylecheck
 const (
 	BC_ISLT = iota
 	BC_ISGE

@@ -271,6 +271,10 @@ func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map) (EbpfHandler, err
 	return impl, nil
 }
 
+func (impl *ebpfMapsImpl) CoredumpTest() bool {
+	return false
+}
+
 // UpdateInterpreterOffsets adds the given moduleRanges to the eBPF map interpreterOffsets.
 func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID host.FileID,
 	offsetRanges []util.Range) error {

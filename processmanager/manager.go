@@ -213,7 +213,7 @@ func (pm *ProcessManager) symbolizeFrame(frame int, trace *host.Trace,
 		len(pm.interpreters[trace.PID]), errSymbolizationNotSupported)
 }
 
-func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace) {
+func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace, err error) {
 	traceLen := len(trace.Frames)
 
 	newTrace = &libpf.Trace{
@@ -284,6 +284,9 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 		default:
 			err := pm.symbolizeFrame(i, trace, newTrace)
 			if err != nil {
+				if errors.Is(err, interpreter.ErrLJRestart) {
+					return nil, err
+				}
 				log.Debugf(
 					"symbolization failed for PID %d, frame %d/%d, frame type %d: %v",
 					trace.PID, i, traceLen, frame.Type, err)
@@ -293,7 +296,7 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 		}
 	}
 	newTrace.Hash = traceutil.HashTrace(newTrace)
-	return newTrace
+	return newTrace, nil
 }
 
 // findMappingForTrace locates the mapping for a given host trace.

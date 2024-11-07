@@ -926,6 +926,8 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 			Lineno:        libpf.AddressOrLineno(rawFrame.addr_or_line),
 			Type:          libpf.FrameType(rawFrame.kind),
 			ReturnAddress: rawFrame.return_address != 0,
+			LJCalleePC:    uint32(rawFrame.callee_pc_lo) + (uint32(rawFrame.callee_pc_hi) << 16),
+			LJCallerPC:    uint32(rawFrame.caller_pc_lo) + (uint32(rawFrame.caller_pc_hi) << 16),
 		}
 	}
 

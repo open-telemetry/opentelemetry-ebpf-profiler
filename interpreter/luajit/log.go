@@ -26,7 +26,7 @@ func init() {
 }
 
 // logf logs luajit debugging as higher level so they stick out w/o
-// enabling debug firehose if LUA_DEBUG env var.
+// enabling debug firehose if LUA_DEBUG env var is set.
 func logf(format string, args ...interface{}) {
 	if development {
 		logrus.Infof(format, args...)

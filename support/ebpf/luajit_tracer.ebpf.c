@@ -23,7 +23,7 @@ bpf_map_def SEC("maps") luajit_procs = {
   .max_entries = 1024,
 };
 
-// The number of LuaJIT frames to unwind per frame-unwinding eBPF program. 
+// The number of LuaJIT frames to unwind per frame-unwinding eBPF program.
 #define FRAMES_PER_WALK_LUAJIT_STACK 15
 
 #if defined(__x86_64__)
@@ -32,14 +32,14 @@ bpf_map_def SEC("maps") luajit_procs = {
 #define DISPATCH r7
 #endif
 
-// Non error checking bpf read, used sparingly for reading sections of the stack after 
+// Non error checking bpf read, used sparingly for reading sections of the stack after
 // we've established we can read neighboring memory.
 #define deref(o) ({ void*__val; bpf_probe_read_user(&__val, sizeof(void*), o); __val; })
 
 typedef signed long long    intptr_t;
 
 #define L_PART_OFFSET 0x10
-#define CFRAME_SIZE_JIT 0x60 
+#define CFRAME_SIZE_JIT 0x60
 // (gdb) p/x sizeof(GCproto)
 // $4 = 0x68
 #define GCPROTO_SIZE 0x68
@@ -62,8 +62,8 @@ enum {
 enum { LJ_CONT_TAILCALL, LJ_CONT_FFI_CALLBACK };  /* Special continuations. */
 
 // Use luajit2 style macros in case we come back and want to implement
-// support for luajit's compressed 32 bit pointer/value scheme, idea 
-// being we'd implement all the macros for both systems and build 
+// support for luajit's compressed 32 bit pointer/value scheme, idea
+// being we'd implement all the macros for both systems and build
 // two unwinders. Also the macros should make the code look familiar to
 // those familiar w/ luajit.
 #define bc_a(i)		((u32)(((i)>>8)&0xff))
@@ -125,8 +125,8 @@ TValue *frame_prevl(TValue *f, TValue frame_val) {
   return f - delta;
 }
 
-// lj_debug_framepc for a function.  There's no easy way to look at this, basically 
-// there's a bunch of places the return address is stored depending on the frame 
+// lj_debug_framepc for a function.  There's no easy way to look at this, basically
+// there's a bunch of places the return address is stored depending on the frame
 // type.
 // https://github.com/openresty/luajit2/blob/7952882d/src/lj_debug.c#L53
 static inline __attribute__((__always_inline__))
@@ -232,17 +232,23 @@ ErrorCode lj_debug_framepc(PerCPURecord *record, void *fn, u32 *startpc, TValue 
       }
     }
   }
+  // startpc can be for a different function if we land on instructions where things aren't synced.
+  // For instance the PC is up to date on the stack but jit_base wasn't updated yet.
+  if (ins < startpc) {
+    *pc = NO_BCPOS;
+    return ERR_OK;
+  }
   *pc = ins - startpc - 1;
   return ERR_OK;
 }
 
 // For Lua we need the caller and callee to process a frame.
-// The callee_pt is a pointer to the GCproto of the function being called, the 
-// callee_pc is an index into its bytecode. The caller_pt is the 
-// GCproto of the calling function and the caller_pc is the index into its 
+// The callee_pt is a pointer to the GCproto of the function being called, the
+// callee_pc is an index into its bytecode. The caller_pt is the
+// GCproto of the calling function and the caller_pc is the index into its
 // bytecode which we will walk backwards in userland to figure out a name for the
 // callee. The callee_pc is for information purposes only, so the user can see where
-// execution was. 
+// execution was.
 static inline __attribute__((__always_inline__))
 ErrorCode lj_push_frame(Trace *trace, u64 callee_pt, u64 caller_pt, u32 callee_pc, u32 caller_pc) {
   return _push_with_max_frames_lj_offsets(trace, callee_pt, caller_pt, FRAME_MARKER_LUAJIT, 0,
@@ -259,8 +265,8 @@ ErrorCode lj_record_frame(PerCPURecord *record, TValue *frame, TValue frame_valu
   if (frame_gc(frame) == obj2gco(record->luajitUnwindState.L_ptr)) {
     DEBUG_PRINT("lj: skip dummy frame");
     return ERR_OK; /* Skip dummy frames. See lj_err_optype_call(). */
-  }    
-  void *fn = frame_func(frame);  
+  }
+  void *fn = frame_func(frame);
   LJFuncPart *f = &scr->f;
   // +1 to skip the 8 byte GCHeader
   if (bpf_probe_read_user(f, sizeof(LJFuncPart), (void**)fn + 1)) {
@@ -287,16 +293,16 @@ ErrorCode lj_record_frame(PerCPURecord *record, TValue *frame, TValue frame_valu
     DEBUG_PRINT("lj: no bcpos");
     pc = 0xffffff;
   }
-  // Top frame, we can't emit anything yet but stash callee_pc for next time.
+  // Top frame, we can't emit anything yet because we don't know the caller PC but stash callee_pc
+  // for next time.
   if (record->luajitUnwindState.prevframe == NULL) {
-    scr->prev_proto = proto;
-    scr->prev_pc = pc;
-    return ERR_OK;
+    goto exit;
   }
 
   DEBUG_PRINT("lj: record frame callee %lx:%u", (unsigned long)scr->prev_proto, scr->prev_pc);
   DEBUG_PRINT("lj: record frame caller %lx:%u", (unsigned long)proto, pc);
   err = lj_push_frame(&record->trace, (u64)scr->prev_proto, (u64)proto, scr->prev_pc, pc);
+exit:
   scr->prev_proto = proto;
   scr->prev_pc = pc;
   return err;
@@ -327,10 +333,12 @@ ErrorCode unwind_jit_frame(const LuaJITProcInfo *info, UnwindState *state) {
   // Interpreter frames unwind naturally, we need to poke sp/pc for JIT frames
   // so we need to call this for the native unwinder to continue over them.
   //https://github.com/openresty/luajit2/blob/7952882d/src/lj_frame.h#L178
-  u64 delta = info->cframe_size_jit;
   u32 spadjust = (u32)state->text_section_id;
-  delta += spadjust;
-  state->sp += delta;
+  if (spadjust == 0) {
+    // Guess the default.
+    spadjust = info->cframe_size_jit;
+  }
+  state->sp += spadjust;
   u64 frame[2];
   if (bpf_probe_read_user(frame, sizeof(frame), (void*)(state->sp - sizeof(frame)))) {
     DEBUG_PRINT("lj: failed to read frame");
@@ -348,7 +356,7 @@ ErrorCode unwind_jit_frame(const LuaJITProcInfo *info, UnwindState *state) {
   return ERR_OK;
 }
 
-// walk_luajit_stack walks the luajit stack by inspecting the frame values 
+// walk_luajit_stack walks the luajit stack by inspecting the frame values
 // and finding ones that indicate a function call frame. Code inspired by
 // lj_debug_frame.
 // https://github.com/openresty/luajit2/blob/7952882d/src/lj_debug.c#L25
@@ -364,20 +372,20 @@ ErrorCode walk_luajit_stack(PerCPURecord *record, const LuaJITProcInfo *info,
   for (int i = 0; i < FRAMES_PER_WALK_LUAJIT_STACK; i++) {
     TValue *frame = (TValue*)(record->luajitUnwindState.frame);
     if (frame <= bot) {
-      // Need to clear 'frame' if we have more than one LuaJIT call on the stack, 
+      // Need to clear 'frame' if we have more than one LuaJIT call on the stack,
       // ie two different instances of LuaJIT, not sure if this happens in practice.
       // While conceptually this makes sense its kind of an edge case and
-      // if we clear it we run into a situation where if we clear it and 
+      // if we clear it we run into a situation where if we clear it and
       // encounter another luajit interpreter frame we'll walk the same stack
-      // twice. This occurs in currently unsupported unhandled FFI callback use 
+      // twice. This occurs in currently unsupported unhandled FFI callback use
       // cases where we need to jump back to the native unwinder, the code below
-      // that does this is probably correct but its untested because we don't 
+      // that does this is probably correct but its untested because we don't
       // properly unwind LuaJIT FFI frames (which is a different kind of JIT).
       // When that's fixed we can uncomment this and be more correct.
       // record->luajitUnwindState.frame = NULL;
 
-      // We have processed all frames, send final frame which will just have 
-      // a callee proto/pc and no caller proto/pc.  This is fine, we'll make one 
+      // We have processed all frames, send final frame which will just have
+      // a callee proto/pc and no caller proto/pc.  This is fine, we'll make one
       // up, e.g. "main".
       LJScratchSpace *scr = &record->luajitUnwindScratch;
       if ((err = lj_push_frame(&record->trace, (u64)scr->prev_proto, (u64)0, scr->prev_pc, 0))) {
@@ -385,7 +393,7 @@ ErrorCode walk_luajit_stack(PerCPURecord *record, const LuaJITProcInfo *info,
       }
       if (record->luajitUnwindState.is_jit) {
         unwind_jit_frame(info, &record->state);
-        
+
         if ((err = resolve_unwind_mapping(record, next_unwinder)) != ERR_OK) {
           *next_unwinder = PROG_UNWIND_STOP;
           return err;
@@ -428,15 +436,16 @@ ErrorCode walk_luajit_stack(PerCPURecord *record, const LuaJITProcInfo *info,
 
 static inline __attribute__((__always_inline__))
 ErrorCode find_context(struct pt_regs *ctx, PerCPURecord *record, const LuaJITProcInfo *info) {
+  bool reportG = false;
   void *G_ptr=NULL;
   void *L_ptr;
   UnwindState *state = &record->state;
   u32 high = (u32)(state->text_section_id >> 32);
-  
+
   // The initial state is for the entire anonymous/executable memory range to be mapped to
   // our unwinder with a token file ID. Then we fire a pid event which will call SynchronizeMappings
   // in the HA which will overlay the big anonymous/executable memory range with the actual mappings
-  // for each trace with a stack adjustment stored in the low bits. 
+  // for each trace with a stack adjustment stored in the low bits.
   if (high == LUAJIT_JIT_FILE_ID) {
     record->luajitUnwindState.is_jit = true;
 
@@ -445,14 +454,12 @@ ErrorCode find_context(struct pt_regs *ctx, PerCPURecord *record, const LuaJITPr
       DEBUG_PRINT("lj: unwinding unmapped JIT frame");
       report_pid(ctx, record->trace.pid, RATELIMIT_ACTION_DEFAULT);
 
-      // If top frame isn't luajit we can't rely on the register still holding the DISPATCH table, 
+      // If top frame isn't luajit we can't rely on the register still holding the DISPATCH table,
       // but once we propagate G to the HA text_section_bias will be set to the G pointer and we can
       // pull cur_L from that. So this is just a bootstrap crutch that just has to work once (or never
       // because G also gets picked up from interpreter hits).
       G_ptr = (char*)state->DISPATCH - info->g2dispatch;
-
-      // Make sure HA knows about "G" so it can map the traces properly.
-      lj_push_frame(&record->trace, 0, (u64)G_ptr, 0, 0);
+      reportG = true;
     } else {
       G_ptr = (void*)state->text_section_bias;
       DEBUG_PRINT("lj: unwinding trace mapped JIT frame %lx", (unsigned long)G_ptr);
@@ -469,6 +476,7 @@ ErrorCode find_context(struct pt_regs *ctx, PerCPURecord *record, const LuaJITPr
       increment_metric(metricID_UnwindLuaJITErrNoContext);
       return ERR_LUAJIT_READ_LUA_CONTEXT;
     }
+    reportG = true;
   }
 
   LJScratchSpace *scr = &record->luajitUnwindScratch;
@@ -497,6 +505,11 @@ ErrorCode find_context(struct pt_regs *ctx, PerCPURecord *record, const LuaJITPr
 
   DEBUG_PRINT("lj: L context: %lx", (unsigned long)L_ptr);
   record->luajitUnwindState.L_ptr = L_ptr;
+
+  // If we have valid context let's report it if we haven't mapped its traces yet.
+  if (reportG) {
+    lj_push_frame(&record->trace, 0, (u64)G_ptr, 0, 0);
+  }
 
   // The JIT doesn't update base as it goes but it does update G.jit_base.
   if (high == LUAJIT_JIT_FILE_ID) {
@@ -528,7 +541,7 @@ int unwind_luajit(struct pt_regs *ctx) {
   }
   increment_metric(metricID_UnwindLuaJITAttempts);
 
-  if (record->luajitUnwindState.frame == 0) {  
+  if (record->luajitUnwindState.frame == 0) {
     if ((error = find_context(ctx, record, info))) {
       goto exit;
     }
@@ -537,7 +550,7 @@ int unwind_luajit(struct pt_regs *ctx) {
   if ((error = walk_luajit_stack(record, info, &unwinder))) {
     goto exit;
   }
-  
+
 exit:
   state->unwind_error = error;
   tail_call(ctx, unwinder);

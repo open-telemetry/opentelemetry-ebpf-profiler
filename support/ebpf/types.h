@@ -328,7 +328,7 @@ enum {
 
   // total number of successes adding native custom labels
   metricID_UnwindNativeCustomLabelsAddSuccesses,
-  
+
   // number of attempts to unwind LuaJIT
   metricID_UnwindLuaJITAttempts,
 
@@ -401,9 +401,9 @@ typedef struct Frame {
   u8 kind;
   // Indicates that the address is a return address.
   u8 return_address;
-  // LuaJIT stores bytecode pointers in file_id and addr_or_line, but 
+  // LuaJIT stores bytecode pointers in file_id and addr_or_line, but
   // in order to symbolize we also need the offset into the bytecode array
-  // 24 bits allows for 16M instructions, in theory we should support 26 bits 
+  // 24 bits allows for 16M instructions, in theory we should support 26 bits
   // but 16M should be good enough.
   // https://github.com/openresty/luajit2/blob/7952882d/src/lj_def.h#L66
   u8 callee_pc_hi;
@@ -694,7 +694,7 @@ typedef u64 TValue;
 
 // This layout hasn't changed over LuaJIT versions.
 typedef struct LJState {
-  u64 glref;
+  void *glref;
   void *dummy3;
   TValue *base;     /* Base of currently executing function. */
   TValue *top;		  /* First free slot in the stack. */

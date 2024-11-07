@@ -166,6 +166,10 @@ type ebpfMapsMockup struct {
 
 var _ interpreter.EbpfHandler = &ebpfMapsMockup{}
 
+func (mockup *ebpfMapsMockup) CoredumpTest() bool {
+	return false
+}
+
 func (mockup *ebpfMapsMockup) RemoveReportedPID(libpf.PID) {
 }
 
@@ -322,7 +326,8 @@ func TestInterpreterConvertTrace(t *testing.T) {
 				false)
 			require.NoError(t, err)
 
-			newTrace := manager.ConvertTrace(testcase.trace)
+			newTrace, err := manager.ConvertTrace(testcase.trace)
+			require.NoError(t, err)
 
 			testcase.expect.Hash = traceutil.HashTrace(testcase.expect)
 			if testcase.expect.Hash == newTrace.Hash {

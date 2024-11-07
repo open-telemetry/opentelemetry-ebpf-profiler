@@ -44,7 +44,7 @@ type TraceProcessor interface {
 	// ConvertTrace converts a trace from eBPF into the form we want to send to
 	// the collection agent. Depending on the frame type it will attempt to symbolize
 	// the frame and send the associated metadata to the collection agent.
-	ConvertTrace(trace *host.Trace) *libpf.Trace
+	ConvertTrace(trace *host.Trace) (*libpf.Trace, error)
 
 	// SymbolizationComplete is called after a group of Trace has been symbolized.
 	// It gets the timestamp of when the Traces (if any) were captured. The timestamp
@@ -141,7 +141,11 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	}
 
 	// Slow path: convert trace.
-	umTrace := m.traceProcessor.ConvertTrace(bpfTrace)
+	umTrace, err := m.traceProcessor.ConvertTrace(bpfTrace)
+	if err != nil {
+		// Never happens except for coredump testing.
+		panic(err)
+	}
 	log.Debugf("Trace hash remap 0x%x -> 0x%x", bpfTrace.Hash, umTrace.Hash)
 	m.bpfTraceCache.Add(bpfTrace.Hash, umTrace.Hash)
 
