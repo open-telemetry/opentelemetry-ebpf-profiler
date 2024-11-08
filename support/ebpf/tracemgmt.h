@@ -10,6 +10,20 @@
 #include "types.h"
 #include "errors.h"
 
+// MULTI_USE_FUNC generates perf event and kprobe eBPF programs
+// for a given function.
+#define MULTI_USE_FUNC(func_name) \
+    SEC("perf_event/"#func_name) \
+    int perf_##func_name(struct pt_regs *ctx) { \
+        return func_name(ctx); \
+    } \
+    \
+    SEC("kprobe/"#func_name) \
+    int kprobe_##func_name(struct pt_regs *ctx) { \
+        return func_name(ctx); \
+    }
+
+
 // increment_metric increments the value of the given metricID by 1
 static inline __attribute__((__always_inline__))
 void increment_metric(u32 metricID) {

@@ -284,7 +284,7 @@ frame_done:
 // unwind_v8 is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // V8 stack frames to the trace object for the current CPU.
-SEC("perf_event/unwind_v8")
+static inline __attribute__((__always_inline__))
 int unwind_v8(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
@@ -328,3 +328,4 @@ exit:
   DEBUG_PRINT("v8: tail call for next frame unwinder (%d) failed", unwinder);
   return -1;
 }
+MULTI_USE_FUNC(unwind_v8)

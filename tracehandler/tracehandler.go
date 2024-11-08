@@ -129,6 +129,8 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		CPU:            bpfTrace.CPU,
 		ProcessName:    bpfTrace.ProcessName,
 		ExecutablePath: bpfTrace.ExecutablePath,
+		Origin:         bpfTrace.Origin,
+		OffTime:        bpfTrace.OffTime,
 	}
 
 	if !m.reporter.SupportsReportTraceEvent() {

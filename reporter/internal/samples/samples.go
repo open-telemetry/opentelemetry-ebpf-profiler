@@ -13,6 +13,8 @@ type TraceEventMeta struct {
 	APMServiceName string
 	PID, TID       libpf.PID
 	CPU            int
+	Origin         int
+	OffTime        uint64
 }
 
 // TraceEvents holds known information about a trace.
