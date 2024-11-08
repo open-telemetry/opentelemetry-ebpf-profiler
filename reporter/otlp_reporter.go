@@ -566,105 +566,16 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 		sample.TimestampsUnixNano = traceInfo.timestamps
 		sample.Value = []int64{1}
 
-		// Walk every frame of the trace.
-		for i := range traceInfo.frameTypes {
-			frameAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
-				{key: "profile.frame.type", value: traceInfo.frameTypes[i].String()},
-			}, attributeMap)
-
-			loc := &profiles.Location{
-				// Id - Optional element we do not use.
-				Address: uint64(traceInfo.linenos[i]),
-				// IsFolded - Optional element we do not use.
-				Attributes: frameAttributes,
-			}
-
-			switch frameKind := traceInfo.frameTypes[i]; frameKind {
-			case libpf.NativeFrame:
-				// As native frames are resolved in the backend, we use Mapping to
-				// report these frames.
-
-				var locationMappingIndex uint64
-				if tmpMappingIndex, exists := fileIDtoMapping[traceInfo.files[i]]; exists {
-					locationMappingIndex = tmpMappingIndex
-				} else {
-					idx := uint64(len(fileIDtoMapping))
-					fileIDtoMapping[traceInfo.files[i]] = idx
-					locationMappingIndex = idx
-
-					execInfo, exists := r.executables.Get(traceInfo.files[i])
-
-					// Next step: Select a proper default value,
-					// if the name of the executable is not known yet.
-					var fileName = "UNKNOWN"
-					if exists {
-						fileName = execInfo.fileName
-					}
-
-					mappingAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
-						// Once SemConv and its Go package is released with the new
-						// semantic convention for build_id, replace these hard coded
-						// strings.
-						{key: "process.executable.build_id.gnu", value: execInfo.gnuBuildID},
-						{key: "process.executable.build_id.profiling",
-							value: traceInfo.files[i].StringNoQuotes()},
-					}, attributeMap)
-
-					profile.Mapping = append(profile.Mapping, &profiles.Mapping{
-						// Id - Optional element we do not use.
-						MemoryStart: uint64(traceInfo.mappingStarts[i]),
-						MemoryLimit: uint64(traceInfo.mappingEnds[i]),
-						FileOffset:  traceInfo.mappingFileOffsets[i],
-						Filename:    int64(getStringMapIndex(stringMap, fileName)),
-						Attributes:  mappingAttributes,
-						// HasFunctions - Optional element we do not use.
-						// HasFilenames - Optional element we do not use.
-						// HasLineNumbers - Optional element we do not use.
-						// HasInlinedFrames - Optional element we do not use.
-					})
-				}
-				loc.MappingIndex = locationMappingIndex
-			case libpf.AbortFrame:
-				// Next step: Figure out how the OTLP protocol
-				// could handle artificial frames, like AbortFrame,
-				// that are not originated from a native or interpreted
-				// program.
-			default:
-				// Store interpreted frame information as a Line message:
-				line := &profiles.Line{}
-
-				fileIDInfoLock, exists := r.frames.Get(traceInfo.files[i])
-				if !exists {
-					// At this point, we do not have enough information for the frame.
-					// Therefore, we report a dummy entry and use the interpreter as filename.
-					line.FunctionIndex = createFunctionEntry(funcMap,
-						"UNREPORTED", frameKind.String())
-				} else {
-					fileIDInfo := fileIDInfoLock.RLock()
-					if si, exists := (*fileIDInfo)[traceInfo.linenos[i]]; exists {
-						line.Line = int64(si.lineNumber)
-
-						line.FunctionIndex = createFunctionEntry(funcMap,
-							si.functionName, si.filePath)
-					} else {
-						// At this point, we do not have enough information for the frame.
-						// Therefore, we report a dummy entry and use the interpreter as filename.
-						// To differentiate this case from the case where no information about
-						// the file ID is available at all, we use a different name for reported
-						// function.
-						line.FunctionIndex = createFunctionEntry(funcMap,
-							"UNRESOLVED", frameKind.String())
-					}
-					fileIDInfoLock.RUnlock(&fileIDInfo)
-				}
-				loc.Line = append(loc.Line, line)
-
-				// To be compliant with the protocol, generate a dummy mapping entry.
-				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping, stringMap,
-					profile, traceInfo.files[i])
-			}
-			profile.Location = append(profile.Location, loc)
-		}
+		walkFrames(
+			profile,
+			traceInfo,
+			r.executables,
+			r.frames,
+			attributeMap,
+			fileIDtoMapping,
+			funcMap,
+			stringMap,
+		)
 
 		sample.Attributes = append(addProfileAttributes(profile, []attrKeyValue[string]{
 			{key: string(semconv.ContainerIDKey), value: traceKey.containerID},
