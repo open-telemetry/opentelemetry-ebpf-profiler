@@ -356,7 +356,7 @@ func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 						// semantic convention for build_id, replace these hard coded
 						// strings.
 						{key: "process.executable.build_id.gnu", value: ei.gnuBuildID},
-						{key: "process.executable.build_id.profiling",
+						{key: "process.executable.build_id.htlhash",
 							value: traceInfo.files[i].StringNoQuotes()},
 					}, attributeMap)
 
