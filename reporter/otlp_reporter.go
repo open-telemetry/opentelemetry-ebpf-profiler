@@ -753,6 +753,9 @@ func addProfileAttributes[T string | int64](profile *profiles.Profile,
 
 		switch val := any(attr.value).(type) {
 		case string:
+			if val == "" {
+				return
+			}
 			attributeCompositeKey = attr.key + "_" + val
 			attributeValue = common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: val}}
 		case int64:
