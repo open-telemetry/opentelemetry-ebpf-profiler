@@ -10,6 +10,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"strconv"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -321,7 +322,7 @@ func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 
 		// Walk every frame of the trace.
 		for i := range traceInfo.frameTypes {
-			frameAttributes := addPdataProfileAttributes(profile, []attrKeyValue{
+			frameAttributes := addPdataProfileAttributes(profile, []attrKeyValue[string]{
 				{key: "profile.frame.type", value: traceInfo.frameTypes[i].String()},
 			}, attributeMap)
 
@@ -351,7 +352,7 @@ func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 						fileName = ei.fileName
 					}
 
-					mappingAttributes := addPdataProfileAttributes(profile, []attrKeyValue{
+					mappingAttributes := addPdataProfileAttributes(profile, []attrKeyValue[string]{
 						// Once SemConv and its Go package is released with the new
 						// semantic convention for build_id, replace these hard coded
 						// strings.
@@ -408,11 +409,14 @@ func (r *CollectorReporter) setProfile(profile pprofile.Profile) (startTS,
 			}
 		}
 
-		sampleAttrs := addPdataProfileAttributes(profile, []attrKeyValue{
+		sampleAttrs := append(addPdataProfileAttributes(profile, []attrKeyValue[string]{
 			{key: string(semconv.ContainerIDKey), value: traceKey.containerID},
 			{key: string(semconv.ThreadNameKey), value: traceKey.comm},
 			{key: string(semconv.ServiceNameKey), value: traceKey.apmServiceName},
-		}, attributeMap)
+		}, attributeMap), addPdataProfileAttributes(profile, []attrKeyValue[int64]{
+			{key: string(semconv.ProcessPIDKey), value: traceKey.pid},
+		}, attributeMap)...)
+
 		sample.Attributes().FromRaw(sampleAttrs)
 
 		sample.SetLocationsLength(uint64(len(traceInfo.frameTypes)))
@@ -516,22 +520,34 @@ func (r *CollectorReporter) lookupCgroupv2(pid libpf.PID) (string, error) {
 
 // addPdataProfileAttributes adds attributes to Profile.attribute_table and returns
 // the indices to these attributes.
-func addPdataProfileAttributes(profile pprofile.Profile,
-	attributes []attrKeyValue, attributeMap map[string]uint64) []uint64 {
+func addPdataProfileAttributes[T string | int64](profile pprofile.Profile,
+	attributes []attrKeyValue[T], attributeMap map[string]uint64) []uint64 {
 	indices := make([]uint64, 0, len(attributes))
 
-	addAttr := func(attr attrKeyValue) {
-		if attr.value == "" {
+	addAttr := func(attr attrKeyValue[T]) {
+		var attributeCompositeKey string
+		var attributeValue string
+
+		switch val := any(attr.value).(type) {
+		case string:
+			attributeCompositeKey = attr.key + "_" + val
+			attributeValue = val
+		case int64:
+			strVal := strconv.FormatInt(val, 10)
+			attributeCompositeKey = attr.key + "_" + strVal
+			attributeValue = strVal
+		default:
+			log.Error("Unsupported attribute value type. Only string and int64 are supported.")
 			return
 		}
-		attributeCompositeKey := attr.key + "_" + attr.value
+
 		if attributeIndex, exists := attributeMap[attributeCompositeKey]; exists {
 			indices = append(indices, attributeIndex)
 			return
 		}
 		newIndex := uint64(profile.AttributeTable().Len())
 		indices = append(indices, newIndex)
-		profile.AttributeTable().PutStr(attr.key, attr.value)
+		profile.AttributeTable().PutStr(attr.key, attributeValue)
 		attributeMap[attributeCompositeKey] = newIndex
 	}
 
