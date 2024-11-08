@@ -602,9 +602,14 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 			continue
 		}
 
-		progSpec, ok := coll.Programs[unwindProg.name]
+		unwindProgName := unwindProg.name
+		if !unwindProg.noTailCallTarget {
+			unwindProgName = "perf_" + unwindProg.name
+		}
+
+		progSpec, ok := coll.Programs[unwindProgName]
 		if !ok {
-			return fmt.Errorf("program %s does not exist", unwindProg.name)
+			return fmt.Errorf("program %s does not exist", unwindProgName)
 		}
 
 		if err := loadProgram(ebpfProgs, tailcallMap, unwindProg.progID, progSpec,
@@ -666,9 +671,14 @@ func loadKProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf
 			continue
 		}
 
-		progSpec, ok := coll.Programs[unwindProg.name]
+		unwindProgName := unwindProg.name
+		if !unwindProg.noTailCallTarget {
+			unwindProgName = "kprobe_" + unwindProg.name
+		}
+
+		progSpec, ok := coll.Programs[unwindProgName]
 		if !ok {
-			return fmt.Errorf("program %s does not exist", unwindProg.name)
+			return fmt.Errorf("program %s does not exist", unwindProgName)
 		}
 
 		// Replace the prog array for the tail calls.
@@ -679,15 +689,6 @@ func loadKProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf
 			}
 		}
 
-		// All the tail call targets are perf event programs. To be able to tail call them
-		// from a kprobe, adjust their specification.
-		if !unwindProg.noTailCallTarget {
-			// Adjust program type
-			progSpec.Type = cebpf.Kprobe
-
-			// Adjust program name for easier debugging
-			progSpec.Name = "kp_" + progSpec.Name
-		}
 		if err := loadProgram(ebpfProgs, tailcallMap, unwindProg.progID, progSpec,
 			programOptions, unwindProg.noTailCallTarget); err != nil {
 			return err

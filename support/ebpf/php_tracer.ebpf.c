@@ -182,7 +182,8 @@ int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted) {
   return unwinder;
 }
 
-SEC("perf_event/unwind_php")
+// unwind_php is the tail call destination for PROG_UNWIND_PHP.
+static inline __attribute__((__always_inline__))
 int unwind_php(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -239,3 +240,4 @@ exit:
   tail_call(ctx, unwinder);
   return -1;
 }
+MULTI_USE_FUNC(unwind_php)

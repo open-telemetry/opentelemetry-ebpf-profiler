@@ -571,7 +571,8 @@ frame_ok:
   #error unsupported architecture
 #endif
 
-SEC("perf_event/unwind_native")
+// unwind_native is the tail call destination for PROG_UNWIND_NATIVE.
+static inline __attribute__((__always_inline__))
 int unwind_native(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -632,3 +633,4 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx) {
   u64 ts = bpf_ktime_get_ns();
   return collect_trace((struct pt_regs*) &ctx->regs, TRACE_SAMPLING, pid, tid, ts, 0);
 }
+MULTI_USE_FUNC(unwind_native)
