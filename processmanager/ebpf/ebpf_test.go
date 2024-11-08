@@ -38,6 +38,6 @@ func TestMapID(t *testing.T) {
 		})
 	}
 
-	_, err := getMapID(1 << 22)
+	_, err := getMapID(1 << 24)
 	require.Error(t, err)
 }
