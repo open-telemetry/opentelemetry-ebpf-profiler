@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -50,28 +51,16 @@ func (cmd *gosymCmd) exec(context.Context, []string) (err error) {
 		return fmt.Errorf("failed to read test case: %w", err)
 	}
 
-	if got := len(test.Modules); got != 1 {
-		return fmt.Errorf("got=%d module but only 1 module is supported right now", got)
+	module, addrs, err := goModuleAddrs(test)
+	if err != nil {
+		return fmt.Errorf("failed to find go module addresses: %w", err)
 	}
 
-	binary, err := extractModuleToTempFile(cmd.store, test.Modules[0])
+	binary, err := extractModuleToTempFile(cmd.store, module)
 	if err != nil {
 		return fmt.Errorf("failed to extract binary: %w", err)
 	}
 	defer os.Remove(binary)
-
-	addrs := map[libpf.AddressOrLineno]struct{}{}
-	frames := map[libpf.AddressOrLineno][]*string{}
-	for _, thread := range test.Threads {
-		for i, frame := range thread.Frames {
-			_, addr, err := parseUnsymbolizedFrame(frame)
-			if err != nil {
-				continue
-			}
-			addrs[addr] = struct{}{}
-			frames[addr] = append(frames[addr], &thread.Frames[i])
-		}
-	}
 
 	locs, err := goSymbolize(binary, addrs)
 	if err != nil {
@@ -79,23 +68,73 @@ func (cmd *gosymCmd) exec(context.Context, []string) (err error) {
 	}
 
 	for addr, frame := range locs {
-		for _, frameS := range frames[addr] {
-			*frameS = formatSymbolizedFrame(frame, false) + " (" + *frameS + ")"
+		for _, originFrame := range addrs[addr] {
+			*originFrame = formatSymbolizedFrame(frame, false) + " (" + *originFrame + ")"
 		}
 	}
 
 	return writeTestCaseJSON(os.Stdout, test)
 }
 
-func extractModuleToTempFile(store *modulestore.Store, m ModuleInfo) (string, error) {
+// goModuleAddrs returns the go module and the addresses to symbolize for it
+// mapped to pointers to the frames in c that reference them.
+func goModuleAddrs(c *CoredumpTestCase) (*ModuleInfo, map[libpf.AddressOrLineno][]*string, error) {
+	type moduleAddrs struct {
+		module *ModuleInfo
+		addrs  map[libpf.AddressOrLineno][]*string
+	}
+
+	moduleNames := map[string]*moduleAddrs{}
+	for i, module := range c.Modules {
+		moduleName := filepath.Base(module.LocalPath)
+		if _, ok := moduleNames[moduleName]; ok {
+			return nil, nil, fmt.Errorf("ambiguous module name: %q", moduleName)
+		}
+		moduleNames[moduleName] = &moduleAddrs{
+			module: &c.Modules[i],
+			addrs:  map[libpf.AddressOrLineno][]*string{},
+		}
+	}
+
+	// maxAddrs is the module with the most addresses to symbolize. We use this
+	// as a heuristic to determine which module is the Go module we're
+	// interested in.
+	// TODO(fg) alternatively we could extract all modules and run some check on
+	// them to see if they are go binaries. But this is more complex, so the
+	// current heuristic should be good enough for now.
+	var maxAddrs *moduleAddrs
+	for _, thread := range c.Threads {
+		for i, frame := range thread.Frames {
+			moduleName, addr, err := parseUnsymbolizedFrame(frame)
+			if err != nil {
+				continue
+			}
+
+			moduleAddrs, ok := moduleNames[moduleName]
+			if !ok {
+				return nil, nil, fmt.Errorf("module not found: %q", moduleName)
+			}
+
+			moduleAddrs.addrs[addr] = append(moduleAddrs.addrs[addr], &thread.Frames[i])
+			if maxAddrs == nil || len(moduleAddrs.addrs[addr]) > len(maxAddrs.addrs[addr]) {
+				maxAddrs = moduleAddrs
+			}
+		}
+	}
+	return maxAddrs.module, maxAddrs.addrs, nil
+}
+
+func extractModuleToTempFile(store *modulestore.Store, m *ModuleInfo) (string, error) {
 	file, err := os.CreateTemp("", "")
 	if err != nil {
 		return "", err
 	}
-	return file.Name(), store.UnpackModuleToPath(m.Ref, file.Name())
+	return file.Name(), store.UnpackModule(m.Ref, file)
 }
 
-func goSymbolize(binary string, addrs map[libpf.AddressOrLineno]struct{}) (map[libpf.AddressOrLineno]*reporter.FrameMetadataArgs, error) {
+type addrSet[T any] map[libpf.AddressOrLineno]T
+
+func goSymbolize[T any](binary string, addrs addrSet[T]) (map[libpf.AddressOrLineno]*reporter.FrameMetadataArgs, error) {
 	// Launch addr2line process.
 	addr2line := exec.Command("go", "tool", "addr2line", binary)
 	inR, inW := io.Pipe()
