@@ -8,6 +8,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -73,13 +74,17 @@ func writeTestCase(path string, c *CoredumpTestCase, allowOverwrite bool) error 
 		return fmt.Errorf("failed to create JSON file: %w", err)
 	}
 
-	enc := json.NewEncoder(jsonFile)
+	return writeTestCaseJSON(jsonFile, c)
+}
+
+// writeTestCaseJSON writes a test case to the given writer as JSON.
+func writeTestCaseJSON(w io.Writer, c *CoredumpTestCase) error {
+	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(c); err != nil {
 		return fmt.Errorf("JSON Marshall failed: %w", err)
 	}
-
 	return nil
 }
 
