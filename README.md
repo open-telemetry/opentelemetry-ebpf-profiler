@@ -476,7 +476,7 @@ The host agent code is tested with three test suites:
   tests. This works great for the user-land portion of the agent, but is unable
   to test any of the unwinding logic and BPF interaction.
 - **coredump test suite**\
-  The coredump test suite (`utils/coredump`) we compile the whole BPF unwinder
+  The coredump test suite (`tools/coredump`) we compile the whole BPF unwinder
   code into a user-mode executable, then use the information from a coredump to
   simulate a realistic environment to test the unwinder code in. The coredump
   suite essentially implements all required BPF helper functions in user-space,
