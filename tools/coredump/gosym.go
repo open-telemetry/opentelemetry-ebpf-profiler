@@ -71,7 +71,9 @@ func (cmd *gosymCmd) exec(context.Context, []string) (err error) {
 // goModuleAddrs returns the symtable for the go module of test case and the
 // addresses to symbolize for it mapped to pointers to the frames in the test
 // case that reference them.
-func goModuleAddrs(store *modulestore.Store, c *CoredumpTestCase) (*gosym.Table, map[libpf.AddressOrLineno][]*string, error) {
+func goModuleAddrs(store *modulestore.Store, c *CoredumpTestCase) (
+	*gosym.Table, map[libpf.AddressOrLineno][]*string, error,
+) {
 	var symTable *gosym.Table
 	var module *ModuleInfo
 	for i := range c.Modules {
