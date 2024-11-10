@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -49,114 +48,92 @@ func (cmd *gosymCmd) exec(context.Context, []string) (err error) {
 		return fmt.Errorf("failed to read test case: %w", err)
 	}
 
-	module, addrs, err := goModuleAddrs(test)
+	symTable, addrs, err := goModuleAddrs(cmd.store, test)
 	if err != nil {
 		return fmt.Errorf("failed to find go module addresses: %w", err)
 	}
 
-	goBinary, err := cmd.store.OpenReadAt(module.Ref)
-	if err != nil {
-		return fmt.Errorf("failed to open module: %w", err)
-	}
-	defer goBinary.Close()
-
-	locs, err := goSymbolize(goBinary, addrs)
-	if err != nil {
-		return fmt.Errorf("failed to symbolize: %w", err)
-	}
-
-	for addr, frame := range locs {
-		for _, originFrame := range addrs[addr] {
-			*originFrame = formatSymbolizedFrame(frame, false) + " (" + *originFrame + ")"
+	for addr, originFrames := range addrs {
+		file, line, fn := symTable.PCToLine(uint64(addr))
+		for _, originFrame := range originFrames {
+			frame := reporter.FrameMetadataArgs{
+				FunctionName: fn.Name,
+				SourceFile:   file,
+				SourceLine:   libpf.SourceLineno(line),
+			}
+			*originFrame = formatSymbolizedFrame(&frame, false) + " (" + *originFrame + ")"
 		}
 	}
 
 	return writeTestCaseJSON(os.Stdout, test)
 }
 
-// goModuleAddrs returns the go module and the addresses to symbolize for it
-// mapped to pointers to the frames in c that reference them.
-func goModuleAddrs(c *CoredumpTestCase) (*ModuleInfo, map[libpf.AddressOrLineno][]*string, error) {
-	type moduleAddrs struct {
-		module *ModuleInfo
-		addrs  map[libpf.AddressOrLineno][]*string
-	}
-
-	moduleNames := map[string]*moduleAddrs{}
-	for i, module := range c.Modules {
-		moduleName := filepath.Base(module.LocalPath)
-		if _, ok := moduleNames[moduleName]; ok {
-			return nil, nil, fmt.Errorf("ambiguous module name: %q", moduleName)
-		}
-		moduleNames[moduleName] = &moduleAddrs{
-			module: &c.Modules[i],
-			addrs:  map[libpf.AddressOrLineno][]*string{},
+// goModuleAddrs returns the symtable for the go module of test case and the
+// addresses to symbolize for it mapped to pointers to the frames in the test
+// case that reference them.
+func goModuleAddrs(store *modulestore.Store, c *CoredumpTestCase) (*gosym.Table, map[libpf.AddressOrLineno][]*string, error) {
+	var symTable *gosym.Table
+	var module *ModuleInfo
+	for i := range c.Modules {
+		if table, err := gosymTable(store, &c.Modules[i]); err != nil {
+			continue
+		} else if symTable != nil {
+			return nil, nil, fmt.Errorf("multiple go modules found")
+		} else {
+			symTable = table
+			module = &c.Modules[i]
 		}
 	}
 
-	// maxAddrs is the module with the most addresses to symbolize. We use this
-	// as a heuristic to determine which module is the Go module we're
-	// interested in.
-	// TODO(fg) alternatively we could extract all modules and run some check on
-	// them to see if they are go binaries. But this is more complex, so the
-	// current heuristic should be good enough for now.
-	var maxAddrs *moduleAddrs
+	addrs := map[libpf.AddressOrLineno][]*string{}
+	moduleName := filepath.Base(module.LocalPath)
 	for _, thread := range c.Threads {
 		for i, frame := range thread.Frames {
-			moduleName, addr, err := parseUnsymbolizedFrame(frame)
+			frameModuleName, addr, err := parseUnsymbolizedFrame(frame)
 			if err != nil {
 				continue
 			}
 
-			moduleAddrs, ok := moduleNames[moduleName]
-			if !ok {
-				return nil, nil, fmt.Errorf("module not found: %q", moduleName)
+			if frameModuleName != moduleName {
+				continue
 			}
 
-			moduleAddrs.addrs[addr] = append(moduleAddrs.addrs[addr], &thread.Frames[i])
-			if maxAddrs == nil || len(moduleAddrs.addrs[addr]) > len(maxAddrs.addrs[addr]) {
-				maxAddrs = moduleAddrs
-			}
+			addrs[addr] = append(addrs[addr], &thread.Frames[i])
 		}
 	}
-	return maxAddrs.module, maxAddrs.addrs, nil
+	return symTable, addrs, nil
 }
 
-type addrSet[T any] map[libpf.AddressOrLineno]T
+func gosymTable(store *modulestore.Store, module *ModuleInfo) (*gosym.Table, error) {
+	reader, err := store.OpenReadAt(module.Ref)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open module: %w", err)
+	}
+	defer reader.Close()
 
-func goSymbolize[T any](goBinary io.ReaderAt, addrs addrSet[T]) (map[libpf.AddressOrLineno]*reporter.FrameMetadataArgs, error) {
-	exe, err := elf.NewFile(goBinary)
+	exe, err := elf.NewFile(reader)
 	if err != nil {
 		return nil, err
 	}
 
-	lineTableData, err := exe.Section(".gopclntab").Data()
+	textSection := exe.Section(".text")
+	if textSection == nil {
+		return nil, errors.New("missing .text section")
+	}
+
+	pclntab := exe.Section(".gopclntab")
+	if pclntab == nil {
+		return nil, errors.New("missing .gopclntab section")
+	}
+
+	lineTableData, err := pclntab.Data()
 	if err != nil {
 		return nil, err
 	}
-	lineTable := gosym.NewLineTable(lineTableData, exe.Section(".text").Addr)
+	lineTable := gosym.NewLineTable(lineTableData, textSection.Addr)
 	if err != nil {
 		return nil, err
 	}
 
-	symTableData, err := exe.Section(".gosymtab").Data()
-	if err != nil {
-		return nil, err
-	}
-
-	symTable, err := gosym.NewTable(symTableData, lineTable)
-	if err != nil {
-		return nil, err
-	}
-
-	frames := map[libpf.AddressOrLineno]*reporter.FrameMetadataArgs{}
-	for addr, _ := range addrs {
-		file, line, fn := symTable.PCToLine(uint64(addr))
-		frames[addr] = &reporter.FrameMetadataArgs{
-			FunctionName: fn.Name,
-			SourceFile:   file,
-			SourceLine:   libpf.SourceLineno(line),
-		}
-	}
-	return frames, nil
+	return gosym.NewTable(nil, lineTable)
 }
