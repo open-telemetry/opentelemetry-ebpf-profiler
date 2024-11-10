@@ -75,14 +75,14 @@ func goModuleAddrs(store *modulestore.Store, c *CoredumpTestCase) (*gosym.Table,
 	var symTable *gosym.Table
 	var module *ModuleInfo
 	for i := range c.Modules {
-		if table, err := gosymTable(store, &c.Modules[i]); err != nil {
+		table, err := gosymTable(store, &c.Modules[i])
+		if err != nil {
 			continue
 		} else if symTable != nil {
-			return nil, nil, fmt.Errorf("multiple go modules found")
-		} else {
-			symTable = table
-			module = &c.Modules[i]
+			return nil, nil, errors.New("multiple go modules found")
 		}
+		symTable = table
+		module = &c.Modules[i]
 	}
 
 	addrs := map[libpf.AddressOrLineno][]*string{}
@@ -131,9 +131,5 @@ func gosymTable(store *modulestore.Store, module *ModuleInfo) (*gosym.Table, err
 		return nil, err
 	}
 	lineTable := gosym.NewLineTable(lineTableData, textSection.Addr)
-	if err != nil {
-		return nil, err
-	}
-
 	return gosym.NewTable(nil, lineTable)
 }
