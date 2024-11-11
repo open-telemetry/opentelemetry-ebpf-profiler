@@ -76,15 +76,21 @@ func goModuleAddrs(store *modulestore.Store, c *CoredumpTestCase) (
 ) {
 	var symTable *gosym.Table
 	var module *ModuleInfo
+	var errs []error
 	for i := range c.Modules {
 		table, err := gosymTable(store, &c.Modules[i])
 		if err != nil {
+			errs = append(errs, err)
 			continue
 		} else if symTable != nil {
 			return nil, nil, errors.New("multiple go modules found")
 		}
 		symTable = table
 		module = &c.Modules[i]
+	}
+
+	if module == nil {
+		return nil, nil, fmt.Errorf("no go module found: %w", errors.Join(errs...))
 	}
 
 	addrs := map[libpf.AddressOrLineno][]*string{}
@@ -118,9 +124,25 @@ func gosymTable(store *modulestore.Store, module *ModuleInfo) (*gosym.Table, err
 		return nil, err
 	}
 
-	textSection := exe.Section(".text")
-	if textSection == nil {
-		return nil, errors.New("missing .text section")
+	// Look up the address of the .text section.
+	var textAddr uint64
+	if sect := exe.Section(".text"); sect != nil {
+		textAddr = sect.Addr
+	}
+
+	// But prefer the runtime.text symbol if it exists. This is modeled after go
+	// tool addr2line, see src/cmd/internal/objfile/objfile.go in the Go tree.
+	symbols, err := exe.Symbols()
+	if err == nil {
+		for _, sym := range symbols {
+			if sym.Name == "runtime.text" {
+				textAddr = sym.Value
+			}
+		}
+	}
+
+	if textAddr == 0 {
+		return nil, errors.New("missing .text section and runtime.text symbol")
 	}
 
 	// TODO(fg): The section headers might be stripped, in which case we could
@@ -135,6 +157,6 @@ func gosymTable(store *modulestore.Store, module *ModuleInfo) (*gosym.Table, err
 	if err != nil {
 		return nil, err
 	}
-	lineTable := gosym.NewLineTable(lineTableData, textSection.Addr)
+	lineTable := gosym.NewLineTable(lineTableData, textAddr)
 	return gosym.NewTable(nil, lineTable)
 }
