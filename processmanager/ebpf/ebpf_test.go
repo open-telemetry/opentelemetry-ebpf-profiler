@@ -1,6 +1,3 @@
-//go:build !integration
-// +build !integration
-
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
@@ -27,6 +24,7 @@ func TestMapID(t *testing.T) {
 		0x3FF:   10, // 1023
 		0x400:   11, // 1024
 		0xFFFFF: 20, // 1048575 (2^20 - 1)
+		(1 << support.StackDeltaBucketLargest) - 1: support.StackDeltaBucketLargest,
 	}
 	for numStackDeltas, expectedShift := range testCases {
 		numStackDeltas := numStackDeltas
