@@ -87,7 +87,7 @@ type traceEvents struct {
 // attrKeyValue is a helper to populate Profile.attribute_table.
 type attrKeyValue[T string | int64] struct {
 	key string
-	// Set to true for OTel SemConv attributes with RequirementL: Required
+	// Set to true for OTel SemConv attributes with requirement level: Required
 	required bool
 	value    T
 }
