@@ -123,6 +123,9 @@ func gosymTable(store *modulestore.Store, module *ModuleInfo) (*gosym.Table, err
 		return nil, errors.New("missing .text section")
 	}
 
+	// TODO(fg): The section headers might be stripped, in which case we could
+	// try to locate gopclntab using alternative heuristics. See
+	// nativeunwind/elfunwindinfo/elfgopclntab.go for code that does this.
 	pclntab := exe.Section(".gopclntab")
 	if pclntab == nil {
 		return nil, errors.New("missing .gopclntab section")
