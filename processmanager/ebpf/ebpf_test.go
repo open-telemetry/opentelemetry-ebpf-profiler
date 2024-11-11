@@ -32,8 +32,8 @@ func TestMapID(t *testing.T) {
 		t.Run(fmt.Sprintf("deltas %d", numStackDeltas), func(t *testing.T) {
 			shift, err := getMapID(numStackDeltas)
 			require.NoError(t, err)
-			assert.Equal(t, expectedShift, shift,
-				fmt.Sprintf("wrong map name for %d deltas", numStackDeltas))
+			assert.Equal(t, expectedShift, shift, "wrong map name for %d deltas",
+				numStackDeltas)
 		})
 	}
 
