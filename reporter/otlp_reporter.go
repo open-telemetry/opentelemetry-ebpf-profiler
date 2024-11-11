@@ -86,8 +86,10 @@ type traceEvents struct {
 
 // attrKeyValue is a helper to populate Profile.attribute_table.
 type attrKeyValue[T string | int64] struct {
-	key   string
-	value T
+	key string
+	// Set to true for OTel SemConv attributes with RequirementL: Required
+	required bool
+	value    T
 }
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
@@ -753,7 +755,7 @@ func addProfileAttributes[T string | int64](profile *profiles.Profile,
 
 		switch val := any(attr.value).(type) {
 		case string:
-			if val == "" {
+			if !attr.required && val == "" {
 				return
 			}
 			attributeCompositeKey = attr.key + "_" + val
