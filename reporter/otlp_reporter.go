@@ -660,8 +660,8 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 				loc.Line = append(loc.Line, line)
 
 				// To be compliant with the protocol, generate a dummy mapping entry.
-				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping, stringMap,
-					profile, traceInfo.files[i])
+				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping,
+					stringMap, attributeMap, profile, traceInfo.files[i])
 			}
 			profile.Location = append(profile.Location, loc)
 		}
@@ -785,24 +785,23 @@ func addProfileAttributes[T string | int64](profile *profiles.Profile,
 
 // getDummyMappingIndex inserts or looks up an entry for interpreted FileIDs.
 func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
-	stringMap map[string]uint32, profile *profiles.Profile,
-	fileID libpf.FileID) uint64 {
-	var locationMappingIndex uint64
+	stringMap map[string]uint32, attributeMap map[string]uint64,
+	profile *profiles.Profile, fileID libpf.FileID) uint64 {
 	if tmpMappingIndex, exists := fileIDtoMapping[fileID]; exists {
-		locationMappingIndex = tmpMappingIndex
-	} else {
-		idx := uint64(len(fileIDtoMapping))
-		fileIDtoMapping[fileID] = idx
-		locationMappingIndex = idx
-
-		profile.Mapping = append(profile.Mapping, &profiles.Mapping{
-			Filename: int64(getStringMapIndex(stringMap, "")),
-			BuildId: int64(getStringMapIndex(stringMap,
-				fileID.StringNoQuotes())),
-			BuildIdKind: *profiles.BuildIdKind_BUILD_ID_BINARY_HASH.Enum(),
-		})
+		return tmpMappingIndex
 	}
-	return locationMappingIndex
+	idx := uint64(len(fileIDtoMapping))
+	fileIDtoMapping[fileID] = idx
+
+	mappingAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
+		{key: "process.executable.build_id.htlhash",
+			value: fileID.StringNoQuotes()}}, attributeMap)
+
+	profile.Mapping = append(profile.Mapping, &profiles.Mapping{
+		Filename:   int64(getStringMapIndex(stringMap, "")),
+		Attributes: mappingAttributes,
+	})
+	return idx
 }
 
 // waitGrpcEndpoint waits until the gRPC connection is established.
