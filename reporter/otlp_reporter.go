@@ -606,7 +606,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 						// semantic convention for build_id, replace these hard coded
 						// strings.
 						{key: "process.executable.build_id.gnu", value: execInfo.gnuBuildID},
-						{key: "process.executable.build_id.profiling",
+						{key: "process.executable.build_id.htlhash",
 							value: traceInfo.files[i].StringNoQuotes()},
 					}, attributeMap)
 
