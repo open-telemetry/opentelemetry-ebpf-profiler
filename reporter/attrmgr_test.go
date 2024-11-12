@@ -12,7 +12,6 @@ import (
 
 func TestAttrTableManager(t *testing.T) {
 	tests := map[string]struct {
-		profile                *profiles.Profile
 		k                      []traceAndMetaKey
 		expectedIndices        [][]uint64
 		expectedAttributeTable []*common.KeyValue
