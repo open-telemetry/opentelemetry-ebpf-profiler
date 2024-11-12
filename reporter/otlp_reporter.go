@@ -71,6 +71,9 @@ type traceAndMetaKey struct {
 	// containerID is annotated based on PID information
 	containerID string
 	pid         int64
+	// extraMeta stores extra meta info that may have been produced by a
+	// `SampleAttrProducer` instance. May be nil.
+	extraMeta any
 }
 
 // traceEvents holds known information about a trace.
@@ -208,6 +211,11 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 	traceEventsMap := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEventsMap)
 
+	var extraMeta any
+	if r.config.ExtraSampleAttrProd != nil {
+		extraMeta = r.config.ExtraSampleAttrProd.CollectExtraSampleMeta(trace, meta)
+	}
+
 	containerID, err := r.lookupCgroupv2(meta.PID)
 	if err != nil {
 		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
@@ -220,6 +228,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		apmServiceName: meta.APMServiceName,
 		containerID:    containerID,
 		pid:            int64(meta.PID),
+		extraMeta:      extraMeta,
 	}
 
 	if events, exists := (*traceEventsMap)[key]; exists {
@@ -660,6 +669,11 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 			attrMgr.AddStringAttr(string(semconv.ThreadNameKey), traceKey.comm),
 			attrMgr.AddStringAttr(string(semconv.ServiceNameKey), traceKey.apmServiceName),
 			attrMgr.AddIntAttr(string(semconv.ProcessPIDKey), traceKey.pid),
+		}
+
+		if r.config.ExtraSampleAttrProd != nil {
+			extra := r.config.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, traceKey.extraMeta)
+			sample.Attributes = append(sample.Attributes, extra...)
 		}
 
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
