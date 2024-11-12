@@ -10,16 +10,14 @@ import (
 	profiles "go.opentelemetry.io/proto/otlp/profiles/v1experimental"
 )
 
-func TestGetSampleAttributes(t *testing.T) {
+func TestAttrTableManager(t *testing.T) {
 	tests := map[string]struct {
 		profile                *profiles.Profile
 		k                      []traceAndMetaKey
-		attributeMap           map[string]uint64
 		expectedIndices        [][]uint64
 		expectedAttributeTable []*common.KeyValue
 	}{
 		"empty": {
-			profile: &profiles.Profile{},
 			k: []traceAndMetaKey{
 				{
 					hash:           libpf.TraceHash{},
@@ -29,7 +27,6 @@ func TestGetSampleAttributes(t *testing.T) {
 					pid:            0,
 				},
 			},
-			attributeMap:    make(map[string]uint64),
 			expectedIndices: [][]uint64{{0, 1, 2, 3}},
 			expectedAttributeTable: []*common.KeyValue{
 				{
@@ -59,7 +56,6 @@ func TestGetSampleAttributes(t *testing.T) {
 			},
 		},
 		"duplicate": {
-			profile: &profiles.Profile{},
 			k: []traceAndMetaKey{
 				{
 					hash:           libpf.TraceHash{},
@@ -76,7 +72,6 @@ func TestGetSampleAttributes(t *testing.T) {
 					pid:            1234,
 				},
 			},
-			attributeMap:    make(map[string]uint64),
 			expectedIndices: [][]uint64{{0, 1, 2, 3}, {0, 1, 2, 3}},
 			expectedAttributeTable: []*common.KeyValue{
 				{
@@ -106,7 +101,6 @@ func TestGetSampleAttributes(t *testing.T) {
 			},
 		},
 		"different": {
-			profile: &profiles.Profile{},
 			k: []traceAndMetaKey{
 				{
 					hash:           libpf.TraceHash{},
@@ -123,7 +117,6 @@ func TestGetSampleAttributes(t *testing.T) {
 					pid:            6789,
 				},
 			},
-			attributeMap:    make(map[string]uint64),
 			expectedIndices: [][]uint64{{0, 1, 2, 3}, {4, 5, 6, 7}},
 			expectedAttributeTable: []*common.KeyValue{
 				{
@@ -180,23 +173,20 @@ func TestGetSampleAttributes(t *testing.T) {
 
 	for name, tc := range tests {
 		name := name
-		tc := tc
 		t.Run(name, func(t *testing.T) {
-			indices := make([][]uint64, 0)
+			profile := &profiles.Profile{}
+			mgr := NewAttrTableManager(profile)
+			indices := make([][]AttrIndex, 0)
 			for _, k := range tc.k {
-				indices = append(indices, append(addProfileAttributes(tc.profile,
-					[]attrKeyValue[string]{
-						{key: string(semconv.ContainerIDKey), value: k.containerID},
-						{key: string(semconv.ThreadNameKey), value: k.comm},
-						{key: string(semconv.ServiceNameKey), value: k.apmServiceName},
-					}, tc.attributeMap),
-					addProfileAttributes(tc.profile,
-						[]attrKeyValue[int64]{
-							{key: string(semconv.ProcessPIDKey), value: k.pid},
-						}, tc.attributeMap)...))
+				indices = append(indices, []AttrIndex{
+					mgr.AddStringAttr(string(semconv.ContainerIDKey), k.containerID),
+					mgr.AddStringAttr(string(semconv.ThreadNameKey), k.comm),
+					mgr.AddStringAttr(string(semconv.ServiceNameKey), k.apmServiceName),
+					mgr.AddIntAttr(string(semconv.ProcessPIDKey), k.pid),
+				})
 			}
 			require.Equal(t, tc.expectedIndices, indices)
-			require.Equal(t, tc.expectedAttributeTable, tc.profile.AttributeTable)
+			require.Equal(t, tc.expectedAttributeTable, profile.AttributeTable)
 		})
 	}
 }
