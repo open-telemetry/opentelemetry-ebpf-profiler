@@ -1,0 +1,26 @@
+name: Mend scan
+on:
+  pull_request:
+  schedule:
+    - cron: "0 0 * * *"
+jobs:
+  # reference: https://docs.mend.io/legacy-sca/latest/getting-started-with-the-unified-agent
+  mend-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Mend scan
+        env:
+          MEND_HOME: /opt/mend
+          WS_APIKEY: ${{ secrets.WS_APIKEY }}
+          WS_PRODUCTNAME: ${{ secrets.WS_PRODUCTNAME }}
+          WS_PROJECTNAME: ${{ secrets.WS_PROJECTNAME }}
+          WS_USERKEY: ${{ secrets.WS_USERKEY }}
+          WS_WSS_URL: ${{ secrets.WS_WSS_URL }}
+        run: |
+          wget -q https://unified-agent.s3.amazonaws.com/wss-unified-agent.jar https://unified-agent.s3.amazonaws.com/wss-unified-agent.jar.sha256
+          sha256sum --check wss-unified-agent.jar.sha256
+
+          mkdir -p $MEND_HOME
+          mv -t $MEND_HOME wss-unified-agent.jar*
+          java -jar $MEND_HOME/wss-unified-agent.jar
