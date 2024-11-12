@@ -38,6 +38,8 @@ extern bpf_map_def exe_id_to_18_stack_deltas;
 extern bpf_map_def exe_id_to_19_stack_deltas;
 extern bpf_map_def exe_id_to_20_stack_deltas;
 extern bpf_map_def exe_id_to_21_stack_deltas;
+extern bpf_map_def exe_id_to_22_stack_deltas;
+extern bpf_map_def exe_id_to_23_stack_deltas;
 extern bpf_map_def hotspot_procs;
 extern bpf_map_def kernel_stackmap;
 extern bpf_map_def dotnet_procs;

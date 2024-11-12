@@ -114,7 +114,8 @@ func __bpf_map_lookup_elem(id C.u64, mapdef *C.bpf_map_def, keyptr unsafe.Pointe
 		&C.exe_id_to_11_stack_deltas, &C.exe_id_to_12_stack_deltas, &C.exe_id_to_13_stack_deltas,
 		&C.exe_id_to_14_stack_deltas, &C.exe_id_to_15_stack_deltas, &C.exe_id_to_16_stack_deltas,
 		&C.exe_id_to_17_stack_deltas, &C.exe_id_to_18_stack_deltas, &C.exe_id_to_19_stack_deltas,
-		&C.exe_id_to_20_stack_deltas, &C.exe_id_to_21_stack_deltas:
+		&C.exe_id_to_20_stack_deltas, &C.exe_id_to_21_stack_deltas, &C.exe_id_to_22_stack_deltas,
+		&C.exe_id_to_23_stack_deltas:
 		ctx.stackDeltaFileID = *(*C.u64)(keyptr)
 		return unsafe.Pointer(stackDeltaInnerMap)
 	case &C.unwind_info_array:
