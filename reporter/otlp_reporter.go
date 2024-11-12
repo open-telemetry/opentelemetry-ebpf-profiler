@@ -602,6 +602,9 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 					}
 
 					mappingAttributes := []AttrIndex{
+						// Once SemConv and its Go package is released with the new
+						// semantic convention for build_id, replace these hard coded
+						// strings.
 						attrMgr.AddStringAttr("process.executable.build_id.gnu",
 							execInfo.gnuBuildID),
 						attrMgr.AddStringAttr("process.executable.build_id.profiling",
