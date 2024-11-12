@@ -34,7 +34,7 @@ func (m *AttrTableManager) AddIntAttr(key string, value int64) AttrIndex {
 	return m.addAnyAttr(key, compound, &val)
 }
 
-func (m *AttrTableManager) AddStringAttr(key string, value string) AttrIndex {
+func (m *AttrTableManager) AddStringAttr(key, value string) AttrIndex {
 	compound := fmt.Sprintf("%v_%s", key, value)
 	val := common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: value}}
 	return m.addAnyAttr(key, compound, &val)
@@ -58,5 +58,5 @@ func (m *AttrTableManager) addAnyAttr(
 
 	m.indices[compoundKey] = newIndex
 
-	return AttrIndex(newIndex)
+	return newIndex
 }
