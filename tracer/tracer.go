@@ -162,6 +162,8 @@ type Config struct {
 	ProbabilisticThreshold uint
 	// OffCPUThreshold is the user defined threshold for off-cpu profiling.
 	OffCPUThreshold uint32
+	// TraceByTrigger indicates whether traces should be triggered by external eBPF code.
+	TraceByTrigger bool
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -496,7 +498,7 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 		return nil, nil, fmt.Errorf("failed to load perf eBPF programs: %v", err)
 	}
 
-	if cfg.OffCPUThreshold < OffCPUThresholdMax {
+	if cfg.OffCPUThreshold < OffCPUThresholdMax || cfg.TraceByTrigger {
 		if err = loadKProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
@@ -664,6 +666,11 @@ func loadKProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf
 			noTailCallTarget: true,
 			enable:           true,
 		},
+		progLoaderHelper{
+			name:             "trigger_trace",
+			noTailCallTarget: true,
+			enable:           true,
+		},
 	)
 
 	for _, unwindProg := range progs {
@@ -680,7 +687,6 @@ func loadKProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf
 		if !ok {
 			return fmt.Errorf("program %s does not exist", unwindProgName)
 		}
-
 		// Replace the prog array for the tail calls.
 		insns := progArrayReferences(perfTailCallMapFD, progSpec.Instructions)
 		for _, ins := range insns {
@@ -1314,4 +1320,13 @@ func (t *Tracer) StartOffCPUProfiling() error {
 // TraceProcessor gets the trace processor.
 func (t *Tracer) TraceProcessor() tracehandler.TraceProcessor {
 	return t.processManager
+}
+
+func (t *Tracer) GetTraceByTriggerFD() (int, error) {
+	tracerProg, ok := t.ebpfProgs["trigger_trace"]
+	if !ok {
+		return 0, fmt.Errorf("entry program is not available")
+	}
+
+	return tracerProg.FD(), nil
 }

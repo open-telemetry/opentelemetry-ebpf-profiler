@@ -217,3 +217,4 @@ func maxElementsPerInterval(monitorInterval time.Duration, samplesPerSecond int,
 	presentCPUCores uint16) uint32 {
 	return uint32(uint16(samplesPerSecond) * uint16(monitorInterval.Seconds()) * presentCPUCores)
 }
+

@@ -84,3 +84,19 @@ int finish_task_switch(struct pt_regs *ctx) {
 
   return collect_trace(ctx, TRACE_OFF_CPU, pid, tid, ts, diff);
 }
+
+SEC("kprobe/trigger_trace")
+int trigger_trace(struct pt_regs *ctx) {
+  // Get the PID and TGID register.
+  u64 pid_tgid = bpf_get_current_pid_tgid();
+  u32 pid = pid_tgid >> 32;
+  u32 tid = pid_tgid & 0xFFFFFFFF;
+
+  if (pid == 0 || tid == 0) {
+    return 0;
+  }
+
+
+  DEBUG_PRINT("==== trigger_trace ====");
+  return collect_trace(ctx, TRACE_OFF_CPU, pid, tid, 0, 0);
+}
