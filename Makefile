@@ -41,8 +41,7 @@ REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
 
 LDFLAGS := -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
 	-X go.opentelemetry.io/ebpf-profiler/vc.revision=$(REVISION) \
-	-X go.opentelemetry.io/ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
-	-extldflags=-static
+	-X go.opentelemetry.io/ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP)
 
 GO_TAGS := osusergo,netgo
 EBPF_FLAGS := 
@@ -109,8 +108,8 @@ TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
 
 integration-test-binaries: generate ebpf
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
-		(go test -ldflags='-extldflags=-static' -trimpath -c \
-			-tags $(GO_TAGS),static_build,integration \
+		(go test -trimpath -c \
+			-tags $(GO_TAGS),integration \
 			-o ./support/$(subst /,_,$(test_name)).test \
 			./$(test_name)) || exit ; \
 	)
