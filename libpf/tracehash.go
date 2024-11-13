@@ -28,15 +28,6 @@ func TraceHashFromBytes(b []byte) (TraceHash, error) {
 	return TraceHash{h}, nil
 }
 
-// TraceHashFromString parses a byte slice of a trace hash into the internal data representation.
-func TraceHashFromString(s string) (TraceHash, error) {
-	h, err := basehash.New128FromString(s)
-	if err != nil {
-		return TraceHash{}, err
-	}
-	return TraceHash{h}, nil
-}
-
 func (h TraceHash) Equal(other TraceHash) bool {
 	return h.Hash128.Equal(other.Hash128)
 }
