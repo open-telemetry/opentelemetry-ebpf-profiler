@@ -525,6 +525,8 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
 
 // Container for a stack trace
 typedef struct Trace {
+    // Pt Regs
+  struct pt_regs registers;
   // The process ID
   // NOTE: Confusingly, this is what Linux calls "tgid"
   u32 pid;

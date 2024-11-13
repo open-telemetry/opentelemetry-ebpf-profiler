@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 )
@@ -38,6 +39,7 @@ type TraceEventMeta struct {
 	PID, TID       libpf.PID
 	Origin         int
 	OffTime        uint64
+	Registers      host.Regs
 }
 
 type TraceReporter interface {

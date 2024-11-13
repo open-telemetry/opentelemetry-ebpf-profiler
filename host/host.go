@@ -57,4 +57,29 @@ type Trace struct {
 	OffTime          uint64 // Time a task was off-cpu.
 	APMTraceID       libpf.APMTraceID
 	APMTransactionID libpf.APMTransactionID
+	Registers        Regs
+}
+
+type Regs struct {
+	R15    uint64
+	R14    uint64
+	R13    uint64
+	R12    uint64
+	Bp     uint64
+	Bx     uint64
+	R11    uint64
+	R10    uint64
+	R9     uint64
+	R8     uint64
+	Ax     uint64
+	Cx     uint64
+	Dx     uint64
+	Si     uint64
+	Di     uint64
+	OrigAx uint64
+	Ip     uint64
+	Cs     uint64
+	Flags  uint64
+	Sp     uint64
+	Ss     uint64
 }

@@ -978,6 +978,30 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 		panic("unexpected record size")
 	}
 
+	regs := host.Regs{
+		R15:    uint64(ptr.registers.r15),
+		R14:    uint64(ptr.registers.r14),
+		R13:    uint64(ptr.registers.r13),
+		R12:    uint64(ptr.registers.r12),
+		Bp:     uint64(ptr.registers.bp),
+		Bx:     uint64(ptr.registers.bx),
+		R11:    uint64(ptr.registers.r11),
+		R10:    uint64(ptr.registers.r10),
+		R9:     uint64(ptr.registers.r9),
+		R8:     uint64(ptr.registers.r8),
+		Ax:     uint64(ptr.registers.ax),
+		Cx:     uint64(ptr.registers.cx),
+		Dx:     uint64(ptr.registers.dx),
+		Si:     uint64(ptr.registers.si),
+		Di:     uint64(ptr.registers.di),
+		OrigAx: uint64(ptr.registers.orig_ax),
+		Ip:     uint64(ptr.registers.ip),
+		Cs:     uint64(ptr.registers.cs),
+		Flags:  uint64(ptr.registers.flags),
+		Sp:     uint64(ptr.registers.sp),
+		Ss:     uint64(ptr.registers.ss),
+	}
+
 	trace := &host.Trace{
 		Comm:             C.GoString((*C.char)(unsafe.Pointer(&ptr.comm))),
 		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.apm_trace_id)),
@@ -987,6 +1011,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 		Origin:           int(ptr.origin),
 		OffTime:          uint64(ptr.offtime),
 		KTime:            times.KTime(ptr.ktime),
+		Registers:        regs,
 	}
 
 	// Trace fields included in the hash:

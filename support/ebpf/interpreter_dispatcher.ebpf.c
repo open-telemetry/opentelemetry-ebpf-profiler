@@ -234,7 +234,10 @@ int unwind_stop(struct pt_regs *ctx) {
     }
   }
   // TEMPORARY HACK END
-
+  
+  struct pt_regs regs = {0}; 
+  __builtin_memcpy(&regs, ctx, sizeof(struct pt_regs));
+  trace->registers = regs;
   send_trace(ctx, trace);
 
   return 0;
