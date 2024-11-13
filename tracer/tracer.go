@@ -656,16 +656,16 @@ func loadKProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf
 	progs := make([]progLoaderHelper, len(tailCallProgs)+2)
 	copy(progs, tailCallProgs)
 	progs = append(progs,
-		progLoaderHelper{
-			name:             "finish_task_switch",
-			noTailCallTarget: true,
-			enable:           true,
-		},
-		progLoaderHelper{
-			name:             "tracepoint__sched_switch",
-			noTailCallTarget: true,
-			enable:           true,
-		},
+		// progLoaderHelper{
+		// 	name:             "finish_task_switch",
+		// 	noTailCallTarget: true,
+		// 	enable:           true,
+		// },
+		// progLoaderHelper{
+		// 	name:             "tracepoint__sched_switch",
+		// 	noTailCallTarget: true,
+		// 	enable:           true,
+		// },
 		progLoaderHelper{
 			name:             "trigger_trace",
 			noTailCallTarget: true,
@@ -694,7 +694,6 @@ func loadKProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf
 				return fmt.Errorf("failed to rewrite map ptr: %v", err)
 			}
 		}
-
 		if err := loadProgram(ebpfProgs, tailcallMap, unwindProg.progID, progSpec,
 			programOptions, unwindProg.noTailCallTarget); err != nil {
 			return err

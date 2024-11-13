@@ -34,6 +34,7 @@ ifeq ($(BUILD_TYPE),debug)
 endif
 
 FLAGS=$(TARGET_FLAGS) \
+	-g \
 	-fno-jump-tables \
 	-nostdlib \
 	-nostdinc \
