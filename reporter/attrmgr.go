@@ -1,4 +1,4 @@
-package reporter
+package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"fmt"
