@@ -30,6 +30,7 @@ var _ Times = (*times.Times)(nil)
 // Times is a subset of config.IntervalsAndTimers.
 type Times interface {
 	MonitorInterval() time.Duration
+	TraceHandlerCacheLifetime() time.Duration
 }
 
 // TraceProcessor is an interface used by traceHandler to convert traces
@@ -97,6 +98,7 @@ func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 	if err != nil {
 		return nil, err
 	}
+	umTraceCache.SetLifetime(intervals.TraceHandlerCacheLifetime())
 
 	metadataWarnInhib, err := lru.New[libpf.PID, libpf.Void](64, libpf.PID.Hash32)
 	if err != nil {

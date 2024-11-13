@@ -19,14 +19,21 @@ import (
 )
 
 type fakeTimes struct {
-	monitorInterval time.Duration
+	monitorInterval           time.Duration
+	traceHandlerCacheLifetime time.Duration
 }
 
 func defaultTimes() *fakeTimes {
-	return &fakeTimes{monitorInterval: 1 * time.Hour}
+	return &fakeTimes{
+		monitorInterval:           1 * time.Hour,
+		traceHandlerCacheLifetime: 1 * time.Hour,
+	}
 }
 
 func (ft *fakeTimes) MonitorInterval() time.Duration { return ft.monitorInterval }
+func (ft *fakeTimes) TraceHandlerCacheLifetime() time.Duration {
+	return ft.traceHandlerCacheLifetime
+}
 
 // fakeTraceProcessor implements a fake TraceProcessor used only within the test scope.
 type fakeTraceProcessor struct{}

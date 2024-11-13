@@ -57,7 +57,8 @@ func (c *Controller) Start(ctx context.Context) error {
 		traceCacheSize(c.config.MonitorInterval, c.config.SamplesPerSecond, uint16(presentCores))
 
 	intervals := times.New(c.config.MonitorInterval,
-		c.config.ReporterInterval, c.config.ProbabilisticInterval)
+		c.config.ReporterInterval, c.config.ProbabilisticInterval,
+		c.config.TraceHandlerCacheLifetime)
 
 	// Start periodic synchronization with the realtime clock
 	times.StartRealtimeSync(ctx, c.config.ClockSyncInterval)

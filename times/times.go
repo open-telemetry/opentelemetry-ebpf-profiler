@@ -50,6 +50,7 @@ type Times struct {
 	grpcAuthErrorDelay        time.Duration
 	pidCleanupInterval        time.Duration
 	probabilisticInterval     time.Duration
+	traceHandlerCacheLifetime time.Duration
 }
 
 // IntervalsAndTimers is a meta-interface that exists purely to document its functionality.
@@ -79,6 +80,9 @@ type IntervalsAndTimers interface {
 	// ProbabilisticInterval defines the interval for which probabilistic profiling will
 	// be enabled or disabled.
 	ProbabilisticInterval() time.Duration
+	// TraceHandlerCacheLifetime defines the duration for how long trace information is cached
+	// in the trace handler before it gets resend.
+	TraceHandlerCacheLifetime() time.Duration
 }
 
 func (t *Times) MonitorInterval() time.Duration { return t.monitorInterval }
@@ -101,6 +105,8 @@ func (t *Times) PIDCleanupInterval() time.Duration { return t.pidCleanupInterval
 
 func (t *Times) ProbabilisticInterval() time.Duration { return t.probabilisticInterval }
 
+func (t *Times) TraceHandlerCacheLifetime() time.Duration { return t.traceHandlerCacheLifetime }
+
 // StartRealtimeSync calculates a delta between the monotonic clock
 // (CLOCK_MONOTONIC, rebased to unixtime) and the realtime clock. If syncInterval is
 // greater than zero, it also starts a goroutine to perform that calculation periodically.
@@ -115,7 +121,8 @@ func StartRealtimeSync(ctx context.Context, syncInterval time.Duration) {
 }
 
 // New returns a new Times instance.
-func New(reportInterval, monitorInterval, probabilisticInterval time.Duration) *Times {
+func New(reportInterval, monitorInterval, probabilisticInterval,
+	traceHandlerCacheLifetime time.Duration) *Times {
 	return &Times{
 		reportMetricsInterval:     1 * time.Minute,
 		grpcAuthErrorDelay:        GRPCAuthErrorDelay,
@@ -127,6 +134,7 @@ func New(reportInterval, monitorInterval, probabilisticInterval time.Duration) *
 		reportInterval:            reportInterval,
 		monitorInterval:           monitorInterval,
 		probabilisticInterval:     probabilisticInterval,
+		traceHandlerCacheLifetime: traceHandlerCacheLifetime,
 	}
 }
 

@@ -100,7 +100,8 @@ func mainWithExitCode() exitCode {
 	}
 
 	intervals := times.New(cfg.MonitorInterval,
-		cfg.ReporterInterval, cfg.ProbabilisticInterval)
+		cfg.ReporterInterval, cfg.ProbabilisticInterval,
+		cfg.TraceHandlerCacheLifetime)
 
 	kernelVersion, err := helpers.GetKernelVersion()
 	if err != nil {

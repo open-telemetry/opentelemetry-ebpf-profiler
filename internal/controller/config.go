@@ -13,23 +13,24 @@ import (
 )
 
 type Config struct {
-	BpfVerifierLogLevel    uint
-	CollAgentAddr          string
-	Copyright              bool
-	DisableTLS             bool
-	MapScaleFactor         uint
-	MonitorInterval        time.Duration
-	ClockSyncInterval      time.Duration
-	NoKernelVersionCheck   bool
-	PprofAddr              string
-	ProbabilisticInterval  time.Duration
-	ProbabilisticThreshold uint
-	ReporterInterval       time.Duration
-	SamplesPerSecond       int
-	SendErrorFrames        bool
-	Tracers                string
-	VerboseMode            bool
-	Version                bool
+	BpfVerifierLogLevel       uint
+	CollAgentAddr             string
+	Copyright                 bool
+	DisableTLS                bool
+	MapScaleFactor            uint
+	MonitorInterval           time.Duration
+	ClockSyncInterval         time.Duration
+	NoKernelVersionCheck      bool
+	PprofAddr                 string
+	ProbabilisticInterval     time.Duration
+	ProbabilisticThreshold    uint
+	ReporterInterval          time.Duration
+	TraceHandlerCacheLifetime time.Duration
+	SamplesPerSecond          int
+	SendErrorFrames           bool
+	Tracers                   string
+	VerboseMode               bool
+	Version                   bool
 
 	Reporter reporter.Reporter
 
