@@ -668,10 +668,10 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 		}
 
 		sample.Attributes = []AttrIndex{
-			attrMgr.AddStringAttr(string(semconv.ContainerIDKey), traceKey.containerID),
-			attrMgr.AddStringAttr(string(semconv.ThreadNameKey), traceKey.comm),
-			attrMgr.AddStringAttr(string(semconv.ServiceNameKey), traceKey.apmServiceName),
-			attrMgr.AddIntAttr(string(semconv.ProcessPIDKey), traceKey.pid),
+			attrMgr.AddStringAttr(semconv.ContainerIDKey, traceKey.containerID),
+			attrMgr.AddStringAttr(semconv.ThreadNameKey, traceKey.comm),
+			attrMgr.AddStringAttr(semconv.ServiceNameKey, traceKey.apmServiceName),
+			attrMgr.AddIntAttr(semconv.ProcessPIDKey, traceKey.pid),
 		}
 
 		if r.config.ExtraSampleAttrProd != nil {

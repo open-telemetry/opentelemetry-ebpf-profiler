@@ -3,6 +3,7 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 import (
 	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
 	common "go.opentelemetry.io/proto/otlp/common/v1"
 )
 
@@ -25,20 +26,20 @@ func NewAttrTableManager(attrTable *[]*common.KeyValue) *AttrTableManager {
 	}
 }
 
-func (m *AttrTableManager) AddIntAttr(key string, value int64) AttrIndex {
+func (m *AttrTableManager) AddIntAttr(key attribute.Key, value int64) AttrIndex {
 	compound := fmt.Sprintf("%v_%d", key, value)
 	val := common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: value}}
 	return m.addAnyAttr(key, compound, &val)
 }
 
-func (m *AttrTableManager) AddStringAttr(key, value string) AttrIndex {
+func (m *AttrTableManager) AddStringAttr(key attribute.Key, value string) AttrIndex {
 	compound := fmt.Sprintf("%v_%s", key, value)
 	val := common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: value}}
 	return m.addAnyAttr(key, compound, &val)
 }
 
 func (m *AttrTableManager) addAnyAttr(
-	key string,
+	key attribute.Key,
 	compoundKey string,
 	value *common.AnyValue,
 ) AttrIndex {
@@ -49,7 +50,7 @@ func (m *AttrTableManager) addAnyAttr(
 	newIndex := AttrIndex(len(*m.attrTable))
 
 	*m.attrTable = append(*m.attrTable, &common.KeyValue{
-		Key:   key,
+		Key:   string(key),
 		Value: value,
 	})
 
