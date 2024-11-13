@@ -545,7 +545,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 		// DefaultSampleType - Optional element we do not use.
 	}
 
-	attrMgr := NewAttrTableManager(profile)
+	attrMgr := NewAttrTableManager(&profile.AttributeTable)
 	locationIndex := uint64(0)
 
 	// Temporary lookup to reference existing Mappings.

@@ -7,7 +7,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 	common "go.opentelemetry.io/proto/otlp/common/v1"
-	profiles "go.opentelemetry.io/proto/otlp/profiles/v1experimental"
 )
 
 func TestAttrTableManager(t *testing.T) {
@@ -173,8 +172,8 @@ func TestAttrTableManager(t *testing.T) {
 	for name, tc := range tests {
 		name := name
 		t.Run(name, func(t *testing.T) {
-			profile := &profiles.Profile{}
-			mgr := NewAttrTableManager(profile)
+			attrTable := []*common.KeyValue{}
+			mgr := NewAttrTableManager(&attrTable)
 			indices := make([][]AttrIndex, 0)
 			for _, k := range tc.k {
 				indices = append(indices, []AttrIndex{
@@ -185,7 +184,7 @@ func TestAttrTableManager(t *testing.T) {
 				})
 			}
 			require.Equal(t, tc.expectedIndices, indices)
-			require.Equal(t, tc.expectedAttributeTable, profile.AttributeTable)
+			require.Equal(t, tc.expectedAttributeTable, attrTable)
 		})
 	}
 }

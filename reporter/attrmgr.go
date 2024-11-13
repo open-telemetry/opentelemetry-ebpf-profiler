@@ -4,27 +4,24 @@ import (
 	"fmt"
 
 	common "go.opentelemetry.io/proto/otlp/common/v1"
-	profiles "go.opentelemetry.io/proto/otlp/profiles/v1experimental"
 )
 
 // AttrIndex is an index in the `Profile.attribute_table`.
 type AttrIndex = uint64
 
-// AttrTableManager maintains the `Profile.attribute_table` field for the
-// `profile.Profile` that it was created for. Attributes are automatically
-// deduplicated by the manager.
+// AttrTableManager maintains index allocation and deduplication for attribute tables.
 type AttrTableManager struct {
 	// indices maps compound keys to the indices in the attribute table.
 	indices map[string]AttrIndex
 
-	// profile being built right now.
-	profile *profiles.Profile
+	// attrTable being populated.
+	attrTable *[]*common.KeyValue
 }
 
-func NewAttrTableManager(profile *profiles.Profile) *AttrTableManager {
+func NewAttrTableManager(attrTable *[]*common.KeyValue) *AttrTableManager {
 	return &AttrTableManager{
-		indices: make(map[string]AttrIndex),
-		profile: profile,
+		indices:   make(map[string]AttrIndex),
+		attrTable: attrTable,
 	}
 }
 
@@ -49,9 +46,9 @@ func (m *AttrTableManager) addAnyAttr(
 		return attributeIndex
 	}
 
-	newIndex := AttrIndex(len(m.profile.AttributeTable))
+	newIndex := AttrIndex(len(*m.attrTable))
 
-	m.profile.AttributeTable = append(m.profile.AttributeTable, &common.KeyValue{
+	*m.attrTable = append(*m.attrTable, &common.KeyValue{
 		Key:   key,
 		Value: value,
 	})
