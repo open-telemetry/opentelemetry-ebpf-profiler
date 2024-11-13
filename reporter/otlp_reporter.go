@@ -662,7 +662,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 
 				// To be compliant with the protocol, generate a dummy mapping entry.
 				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping,
-					stringMap, attributeMap, profile, traceInfo.files[i])
+					stringMap, attrMgr, profile, traceInfo.files[i])
 			}
 			profile.Location = append(profile.Location, loc)
 		}
@@ -749,7 +749,7 @@ func createFunctionEntry(funcMap map[funcInfo]uint64,
 
 // getDummyMappingIndex inserts or looks up an entry for interpreted FileIDs.
 func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
-	stringMap map[string]uint32, attributeMap map[string]uint64,
+	stringMap map[string]uint32, attrMgr *AttrTableManager,
 	profile *profiles.Profile, fileID libpf.FileID) uint64 {
 	if tmpMappingIndex, exists := fileIDtoMapping[fileID]; exists {
 		return tmpMappingIndex
@@ -757,9 +757,10 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
 	idx := uint64(len(fileIDtoMapping))
 	fileIDtoMapping[fileID] = idx
 
-	mappingAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
-		{key: "process.executable.build_id.htlhash",
-			value: fileID.StringNoQuotes()}}, attributeMap)
+	mappingAttributes := []AttrIndex{
+		attrMgr.AddStringAttr("process.executable.build_id.htlhash",
+			fileID.StringNoQuotes()),
+	}
 
 	profile.Mapping = append(profile.Mapping, &profiles.Mapping{
 		Filename:   int64(getStringMapIndex(stringMap, "")),
