@@ -141,6 +141,14 @@ func IsGo118orNewer(magic uint32) bool {
 	return magic == magicGo1_18 || magic == magicGo1_20
 }
 
+// IsGo121OrNewer returns true if magic matches with the Go 1.21 or newer.
+// TODO(fg): This is actually checking for go1.21 right now, I need to figure
+// out how to detect go1.21+ here. But it "works" b/c the existing coredump test
+// cases are for go1.18.
+func IsGo21orNewer(magic uint32) bool {
+	return magic == magicGo1_20
+}
+
 // pclntabHeaderSignature returns a byte slice that can be
 // used to verify if some bytes represent a valid pclntab header.
 func pclntabHeaderSignature(arch elf.Machine) []byte {
@@ -550,7 +558,19 @@ func (ee *elfExtractor) parseGoPclntab() error {
 				return err
 			}
 		case elf.EM_AARCH64:
-			if err := parseArm64pclntabFunc(ee.deltas, fun, dataLen, pctab, i,
+			if !IsGo21orNewer(hdr.magic) {
+				// Before go1.21 frame pointers were not properly kept on arm64
+				// when the Go runtime copies the stack during
+				// `runtime.morestack` calls: all old frame pointers are set to
+				// 0.
+				//
+				// https://github.com/golang/go/blob/c318f191/src/runtime/stack.go#L676
+				// https://blog.felixge.de/waiting-for-go1-21-execution-tracing-with-less-than-one-percent-overhead/
+				//
+				// We thus need to unwind with stack delta offsets.
+				strategy = strategyDeltasWithoutRBP
+			}
+			if err := parseArm64pclntabFunc(ee.deltas, fun, dataLen, pctab, strategy, i,
 				hdr.quantum); err != nil {
 				return err
 			}
@@ -628,7 +648,8 @@ func parseX86pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc, data
 
 // parseArm64pclntabFunc extracts interval information from ARM64 based pclntabFunc.
 func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc,
-	dataLen uintptr, pctab []byte, i uint64, quantum uint8) error {
+	dataLen uintptr, pctab []byte, strategy int, i uint64, quantum uint8) error {
+
 	if fun.pcspOff == 0 {
 		// Some CGO functions don't have PCSP info: skip them.
 		return nil
@@ -637,13 +658,6 @@ func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc,
 		return fmt.Errorf(".gopclntab func %v pcspOff = %d is invalid", i, fun.pcspOff)
 	}
 
-	// On ARM64, frame pointers are not properly kept when the Go runtime copies the stack during
-	// `runtime.morestack` calls: all old frame pointers are set to 0.
-	//
-	// https://github.com/golang/go/blob/c318f191/src/runtime/stack.go#L676
-	//
-	// We thus need to unwind with stack delta offsets.
-
 	hint := sdtypes.UnwindHintKeep
 	p := newPcval(pctab[fun.pcspOff:], uint(fun.startPc), quantum)
 	for ok := true; ok; ok = p.step() {
@@ -651,6 +665,18 @@ func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc,
 		if p.val == 0 {
 			// Return instruction, function prologue or leaf function body: unwind via LR.
 			info = sdtypes.UnwindInfoLR
+		} else if strategy == strategyFramePointer {
+			param, ok := sdtypes.PackDerefParam(0, 8)
+			if !ok {
+				panic("bad")
+			}
+			// Use stack frame-pointer delta
+			info = sdtypes.UnwindInfo{
+				Opcode:   sdtypes.UnwindOpcodeBaseFP | sdtypes.UnwindOpcodeFlagDeref,
+				Param:    param,
+				FPOpcode: sdtypes.UnwindOpcodeBaseSP,
+				FPParam:  0,
+			}
 		} else {
 			// Regular basic block in the function body: unwind via SP.
 			info = sdtypes.UnwindInfo{

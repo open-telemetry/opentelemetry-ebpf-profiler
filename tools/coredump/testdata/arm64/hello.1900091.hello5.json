@@ -1,0 +1,75 @@
+{
+  "coredump-ref": "f941d6492b38f927820f32ab65196c88a357154e4d04a1502a02e268421448c0",
+  "threads": [
+    {
+      "lwp": 1900091,
+      "frames": [
+        "hello+0x92d4c",
+        "hello+0x92ceb",
+        "hello+0x92c33",
+        "hello+0x92bef",
+        "hello+0x92afb",
+        "hello+0x92ac7",
+        "hello+0x92dcb",
+        "hello+0x456fb",
+        "hello+0x73b03"
+      ]
+    },
+    {
+      "lwp": 1900101,
+      "frames": [
+        "hello+0x748e4",
+        "hello+0x530fb",
+        "hello+0x48a47",
+        "hello+0x48997",
+        "hello+0x716af"
+      ]
+    },
+    {
+      "lwp": 1900102,
+      "frames": [
+        "hello+0x74f4c",
+        "hello+0x3feeb",
+        "hello+0x1aefb",
+        "hello+0x4a723",
+        "hello+0x4c69f",
+        "hello+0x4dae7",
+        "hello+0x4e17f",
+        "hello+0x71723"
+      ]
+    },
+    {
+      "lwp": 1900103,
+      "frames": [
+        "hello+0x74f4c",
+        "hello+0x3feeb",
+        "hello+0x1aefb",
+        "hello+0x4a723",
+        "hello+0x4b37b",
+        "hello+0x4daab",
+        "hello+0x4e17f",
+        "hello+0x71723"
+      ]
+    },
+    {
+      "lwp": 1900104,
+      "frames": [
+        "hello+0x74f4c",
+        "hello+0x3feeb",
+        "hello+0x1aefb",
+        "hello+0x4a723",
+        "hello+0x4c69f",
+        "hello+0x4dae7",
+        "hello+0x48a77",
+        "hello+0x48997",
+        "hello+0x716af"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "a2dbc7c1f120e00e2da9881afad3eccb2a4b6d0469d28851acb59c4e570f4012",
+      "local-path": "/home/bits/go/src/github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/hello"
+    }
+  ]
+}
