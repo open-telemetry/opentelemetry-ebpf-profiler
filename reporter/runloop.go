@@ -16,7 +16,7 @@ type runLoop struct {
 	stopSignal chan libpf.Void
 }
 
-func (t *runLoop) Start(ctx context.Context, reportInterval time.Duration, run, purge func()) {
+func (rl *runLoop) Start(ctx context.Context, reportInterval time.Duration, run, purge func()) {
 	go func() {
 		tick := time.NewTicker(reportInterval)
 		defer tick.Stop()
