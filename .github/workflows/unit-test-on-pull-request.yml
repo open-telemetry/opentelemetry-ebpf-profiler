@@ -185,3 +185,18 @@ jobs:
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           support/run-tests.sh ${{ matrix.kernel }}
+  interpreter-integration-tests:
+    name: Interpreter integration
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target_arch: [amd64, arm64]
+    steps:
+      - name: Clone code
+        uses: actions/checkout@v4
+      - name: Set up environment
+        uses: ./.github/workflows/env
+      - name: Test interpreter integration
+        run: |
+          uname -a
+          sudo go test ./interpreter/... -v -run TestIntegration
