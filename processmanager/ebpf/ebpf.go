@@ -135,6 +135,8 @@ var outerMapsName = [...]string{
 	"exe_id_to_19_stack_deltas",
 	"exe_id_to_20_stack_deltas",
 	"exe_id_to_21_stack_deltas",
+	"exe_id_to_22_stack_deltas",
+	"exe_id_to_23_stack_deltas",
 }
 
 // Compile time check to make sure ebpfMapsImpl satisfies the interface .
