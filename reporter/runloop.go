@@ -39,6 +39,6 @@ func (rl *runLoop) Start(ctx context.Context, reportInterval time.Duration, run,
 	}()
 }
 
-func (t *runLoop) Stop() {
-	close(t.stopSignal)
+func (rl *runLoop) Stop() {
+	close(rl.stopSignal)
 }
