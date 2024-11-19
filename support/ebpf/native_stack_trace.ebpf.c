@@ -37,6 +37,8 @@ STACK_DELTA_BUCKET(18);
 STACK_DELTA_BUCKET(19);
 STACK_DELTA_BUCKET(20);
 STACK_DELTA_BUCKET(21);
+STACK_DELTA_BUCKET(22);
+STACK_DELTA_BUCKET(23);
 
 // Unwind info value for invalid stack delta
 #define STACK_DELTA_INVALID (STACK_DELTA_COMMAND_FLAG | UNWIND_COMMAND_INVALID)
@@ -154,6 +156,8 @@ void *get_stack_delta_map(int mapID) {
   case 19: return &exe_id_to_19_stack_deltas;
   case 20: return &exe_id_to_20_stack_deltas;
   case 21: return &exe_id_to_21_stack_deltas;
+  case 22: return &exe_id_to_22_stack_deltas;
+  case 23: return &exe_id_to_23_stack_deltas;
   default: return NULL;
   }
 }
