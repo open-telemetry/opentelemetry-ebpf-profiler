@@ -27,7 +27,7 @@ func (rl *runLoop) Start(ctx context.Context, reportInterval time.Duration, run,
 			select {
 			case <-ctx.Done():
 				return
-			case <-t.stopSignal:
+			case <-rl.stopSignal:
 				return
 			case <-tick.C:
 				run()
