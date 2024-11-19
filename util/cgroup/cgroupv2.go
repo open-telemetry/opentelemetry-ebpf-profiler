@@ -1,20 +1,25 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
+package cgroup // import "go.opentelemetry.io/ebpf-profiler/util/cgroup"
 
 import (
 	"bufio"
 	"fmt"
 	"os"
+	"regexp"
 
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
-// lookupCgroupv2 returns the cgroupv2 ID for pid.
-func lookupCgroupv2(cgrouplru *lru.SyncedLRU[libpf.PID, string], pid libpf.PID) (string, error) {
+var (
+	cgroupv2PathPattern = regexp.MustCompile(`0:.*?:(.*)`)
+)
+
+// LookupCgroupv2 returns the cgroupv2 ID for pid.
+func LookupCgroupv2(cgrouplru *lru.SyncedLRU[libpf.PID, string], pid libpf.PID) (string, error) {
 	id, ok := cgrouplru.Get(pid)
 	if ok {
 		return id, nil
