@@ -27,7 +27,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
-	"go.opentelemetry.io/ebpf-profiler/util/cgroup"
 )
 
 // Assert that we implement the full Reporter interface.
@@ -209,7 +208,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 	traceEventsMap := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEventsMap)
 
-	containerID, err := cgroup.LookupCgroupv2(r.cgroupv2ID, meta.PID)
+	containerID, err := libpf.LookupCgroupv2(r.cgroupv2ID, meta.PID)
 	if err != nil {
 		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
 			meta.PID, err)
