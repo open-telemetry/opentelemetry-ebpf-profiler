@@ -134,7 +134,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 // calls. Returns a function that can be called to retrieve perf event array
 // error counts.
 func startPollingPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
-	pollFrequency time.Duration, perCPUBufferSize int, triggerFunc func([]byte),
+	pollFrequency time.Duration, perCPUBufferSize int, triggerFunc func([]byte, int),
 ) func() (lost, noData, readError uint64) {
 	eventReader, err := perf.NewReader(perfEventMap, perCPUBufferSize)
 	if err != nil {
@@ -178,7 +178,7 @@ func startPollingPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 					noDataCount.Add(1)
 					continue
 				}
-				triggerFunc(data.RawSample)
+				triggerFunc(data.RawSample, data.CPU)
 			}
 		}
 	}()

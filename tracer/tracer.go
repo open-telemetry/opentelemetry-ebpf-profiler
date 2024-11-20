@@ -849,7 +849,7 @@ func (t *Tracer) eBPFMetricsCollector(
 //
 // If the raw trace contains a kernel stack ID, the kernel stack is also
 // retrieved and inserted at the appropriate position.
-func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
+func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	frameListOffs := int(unsafe.Offsetof(C.Trace{}.frames))
 
 	if len(raw) < frameListOffs {
@@ -871,6 +871,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 		PID:              libpf.PID(ptr.pid),
 		TID:              libpf.PID(ptr.tid),
 		KTime:            times.KTime(ptr.ktime),
+		CPU:              cpu,
 	}
 
 	// Trace fields included in the hash:
@@ -940,8 +941,8 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.T
 	eventMetricCollector := t.startEventMonitor(ctx)
 
 	startPollingPerfEventMonitor(ctx, t.ebpfMaps["trace_events"], t.intervals.TracePollInterval(),
-		t.samplesPerSecond*int(unsafe.Sizeof(C.Trace{})), func(rawTrace []byte) {
-			traceOutChan <- t.loadBpfTrace(rawTrace)
+		t.samplesPerSecond*int(unsafe.Sizeof(C.Trace{})), func(rawTrace []byte, cpu int) {
+			traceOutChan <- t.loadBpfTrace(rawTrace, cpu)
 		})
 
 	pidEvents := make([]uint32, 0)
