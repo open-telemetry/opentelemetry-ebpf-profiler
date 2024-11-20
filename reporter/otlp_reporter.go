@@ -4,14 +4,10 @@
 package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
-	"fmt"
 	"maps"
-	"os"
-	"regexp"
 	"slices"
 	"strconv"
 	"time"
@@ -31,10 +27,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
-)
-
-var (
-	cgroupv2PathPattern = regexp.MustCompile(`0:.*?:(.*)`)
 )
 
 // Assert that we implement the full Reporter interface.
@@ -218,7 +210,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 	traceEventsMap := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEventsMap)
 
-	containerID, err := r.lookupCgroupv2(meta.PID)
+	containerID, err := libpf.LookupCgroupv2(r.cgroupv2ID, meta.PID)
 	if err != nil {
 		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
 			meta.PID, err)
@@ -858,45 +850,4 @@ func setupGrpcConnection(parent context.Context, cfg *Config,
 	defer cancel()
 	//nolint:staticcheck
 	return grpc.DialContext(ctx, cfg.CollAgentAddr, opts...)
-}
-
-// lookupCgroupv2 returns the cgroupv2 ID for pid.
-func (r *OTLPReporter) lookupCgroupv2(pid libpf.PID) (string, error) {
-	id, ok := r.cgroupv2ID.Get(pid)
-	if ok {
-		return id, nil
-	}
-
-	// Slow path
-	f, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	var genericCgroupv2 string
-	scanner := bufio.NewScanner(f)
-	buf := make([]byte, 512)
-	// Providing a predefined buffer overrides the internal buffer that Scanner uses (4096 bytes).
-	// We can do that and also set a maximum allocation size on the following call.
-	// With a maximum of 4096 characters path in the kernel, 8192 should be fine here. We don't
-	// expect lines in /proc/<PID>/cgroup to be longer than that.
-	scanner.Buffer(buf, 8192)
-	var pathParts []string
-	for scanner.Scan() {
-		line := scanner.Text()
-		pathParts = cgroupv2PathPattern.FindStringSubmatch(line)
-		if pathParts == nil {
-			log.Debugf("Could not extract cgroupv2 path from line: %s", line)
-			continue
-		}
-		genericCgroupv2 = pathParts[1]
-		break
-	}
-
-	// Cache the cgroupv2 information.
-	// To avoid busy lookups, also empty cgroupv2 information is cached.
-	r.cgroupv2ID.Add(pid, genericCgroupv2)
-
-	return genericCgroupv2, nil
 }
