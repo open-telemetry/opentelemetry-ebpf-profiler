@@ -68,6 +68,8 @@ type traceAndMetaKey struct {
 	// containerID is annotated based on PID information
 	containerID string
 	pid         int64
+	// executable path is retrieved from /proc/PID/exe
+	executable string
 	// extraMeta stores extra meta info that may have been produced by a
 	// `SampleAttrProducer` instance. May be nil.
 	extraMeta any
@@ -224,6 +226,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 	key := traceAndMetaKey{
 		hash:           trace.Hash,
 		comm:           meta.Comm,
+		executable:     meta.Executable,
 		apmServiceName: meta.APMServiceName,
 		containerID:    containerID,
 		pid:            int64(meta.PID),
@@ -659,6 +662,8 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 			semconv.ContainerIDKey, traceKey.containerID)
 		attrMgr.AppendOptionalString(&sample.Attributes,
 			semconv.ThreadNameKey, traceKey.comm)
+		attrMgr.AppendOptionalString(&sample.Attributes,
+			semconv.ProcessExecutablePathKey, traceKey.executable)
 		attrMgr.AppendOptionalString(&sample.Attributes,
 			semconv.ServiceNameKey, traceKey.apmServiceName)
 		attrMgr.AppendInt(&sample.Attributes,

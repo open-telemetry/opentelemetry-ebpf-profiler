@@ -138,6 +138,8 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 // processInfo contains information about the executable mappings
 // and Thread Specific Data of a process.
 type processInfo struct {
+	// executable path retrieved from /proc/PID/exe
+	executable string
 	// executable mappings keyed by start address.
 	mappings map[libpf.Address]*Mapping
 	// executable mappings keyed by host file ID.
