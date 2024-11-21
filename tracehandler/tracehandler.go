@@ -126,6 +126,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		PID:            bpfTrace.PID,
 		TID:            bpfTrace.TID,
 		APMServiceName: "", // filled in below
+		CPU:            bpfTrace.CPU,
 	}
 
 	if !m.reporter.SupportsReportTraceEvent() {
