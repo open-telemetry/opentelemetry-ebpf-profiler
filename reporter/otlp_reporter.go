@@ -29,6 +29,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 )
 
+const (
+	executableCacheLifetime = 1 * time.Hour
+)
+
 // Assert that we implement the full Reporter interface.
 var _ Reporter = (*OTLPReporter)(nil)
 
@@ -147,7 +151,7 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 	if err != nil {
 		return nil, err
 	}
-	executables.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
+	executables.SetLifetime(executableCacheLifetime) // Allow GC to clean stale items.
 
 	frames, err := lru.NewSynced[libpf.FileID,
 		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](
@@ -574,7 +578,9 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 					fileIDtoMapping[traceInfo.files[i]] = idx
 					locationMappingIndex = idx
 
-					execInfo, exists := r.executables.Get(traceInfo.files[i])
+					// Ensure that actively used executables do not expire.
+					execInfo, exists := r.executables.GetAndRefresh(traceInfo.files[i],
+						executableCacheLifetime)
 
 					// Next step: Select a proper default value,
 					// if the name of the executable is not known yet.
