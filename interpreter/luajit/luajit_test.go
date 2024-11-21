@@ -63,10 +63,7 @@ func TestIntegration(t *testing.T) {
 			"u:run_duration",
 			"f",
 			"c:comp",
-			"compress_file",
-			// FIXME: somethings wrong with the unwinder here where we never get compress_file
-			// AND lzw:compress but only one or the other.
-			// "lzw:compress",
+			"lzw:compress",
 		}},
 		// TODO: get the unwinding working across ffi callbacks.
 		// {"ffi", []string{
