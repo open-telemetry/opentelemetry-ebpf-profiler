@@ -124,7 +124,7 @@ func GetKernelModules(modulesPath string,
 		nFields, err := fmt.Sscanf(line, "%s %d %d %s %s 0x%x",
 			&name, &size, &refcount, &dependencies, &state, &address)
 		if err != nil {
-			log.Warnf("err parsing line in modules: '%s'", err)
+			log.Warnf("error parsing line '%s' in modules: '%s'", line, err)
 			continue
 		}
 		if nFields < 6 {
