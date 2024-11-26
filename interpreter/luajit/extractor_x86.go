@@ -322,8 +322,39 @@ func findRipRelativeLea2ndArgTo2ndCall(b []byte, baseAddr, targetCall int64) (ui
 	return 0, errors.New("failed to find rip relative lea instruction stored in rsi")
 }
 
+//nolint:gocritic
+func skipCallsAABA(b []byte, ip, baseAddr int64) ([]byte, int64, error) {
+	var lastCall int64
+	step := 0
+	for len(b) > 0 && step < 3 {
+		i, err := x86asm.Decode(b, 64)
+		if err != nil {
+			return nil, 0, err
+		}
+		if i.Op == x86asm.CALL {
+			a0, ok := i.Args[0].(x86asm.Rel)
+			if ok {
+				callAddr := baseAddr + ip + int64(i.Len) + int64(a0)
+				if lastCall == callAddr {
+					// Found AA
+					step++
+				} else if step > 0 {
+					step++
+				}
+				lastCall = callAddr
+			}
+		}
+		ip += int64(i.Len)
+		b = b[i.Len:]
+	}
+	if step == 3 {
+		return b, ip, nil
+	}
+	return nil, 0, errors.New("failed to find AABA call pattern")
+}
+
 // This function finds the IP relative value passed to lj_lib_prereg as arg 3 (rdx).
-// There are 4 of these, we want the first 3rd one.
+// There are 4 of these, we want the 3rd one.
 // lj_lib_prereg(L, LUA_JITLIBNAME ".util", luaopen_jit_util, tabref(L->env));
 // 6d965:	48 8b 4b 48          	mov    0x48(%rbx),%rcx
 // 6d969:	48 89 df             	mov    %rbx,%rdi
@@ -331,25 +362,56 @@ func findRipRelativeLea2ndArgTo2ndCall(b []byte, baseAddr, targetCall int64) (ui
 // 6d973:	48 8d 35 1c a2 00 00 	lea    0xa21c(%rip),%rsi     # 77b96 <lj_lib_init_debug+0x236>
 // 6d97a:	e8 a1 28 ff ff       	call   60220 <lj_lib_prereg>
 func (x *x86Extractor) find3rdArgToLibPreregCall(b []byte, baseAddr int64) (uint64, error) {
-	var leaRdx int64
-	hits := 3
+	var rdxAddr int64
+	calls := 3
 	b, ip := skipEndBranch(b)
+	// Skip the lua_push* call sequence (and all the preceding calls which varies depending on
+	// inlining).
+	// libluajit-5.1.so[0x700a5] <+133>: movq   %rbx, %rdi
+	// libluajit-5.1.so[0x700a8] <+136>: movl   $0x5, %edx
+	// libluajit-5.1.so[0x700ad] <+141>: leaq   0x9b35(%rip), %rsi
+	// libluajit-5.1.so[0x700b4] <+148>: callq  0x9af0         ; symbol stub for: lua_pushlstring
+	// libluajit-5.1.so[0x700b9] <+153>: movl   $0x3, %edx
+	// libluajit-5.1.so[0x700be] <+158>: movq   %rbx, %rdi
+	// libluajit-5.1.so[0x700c1] <+161>: leaq   0x9b27(%rip), %rsi
+	// libluajit-5.1.so[0x700c8] <+168>: callq  0x9af0         ; symbol stub for: lua_pushlstring
+	// libluajit-5.1.so[0x700cd] <+173>: movq   %rbx, %rdi
+	// libluajit-5.1.so[0x700d0] <+176>: movl   $0x4ee7, %esi ; imm = 0x4EE7
+	// libluajit-5.1.so[0x700d5] <+181>: callq  0x9360         ; symbol stub for: lua_pushinteger
+	// libluajit-5.1.so[0x700da] <+186>: movq   %rbx, %rdi
+	// libluajit-5.1.so[0x700dd] <+189>: movl   $0x12, %edx
+	// libluajit-5.1.so[0x700e2] <+194>: leaq   0x9b0a(%rip), %rsi
+	// libluajit-5.1.so[0x700e9] <+201>: callq  0x9af0         ; symbol stub for: lua_pushlstring
+	var err error
+	b, ip, err = skipCallsAABA(b, ip, baseAddr)
+	if err != nil {
+		return 0, err
+	}
 	for len(b) > 0 {
 		i, err := x86asm.Decode(b, 64)
 		if err != nil {
 			return 0, err
+		}
+		// Some compilers will use MOV instead of LEA
+		if i.Op == x86asm.MOV {
+			a0, ok1 := i.Args[0].(x86asm.Reg)
+			if ok1 && a0 == x86asm.EDX {
+				rdxAddr = int64(i.Args[1].(x86asm.Imm))
+			}
 		}
 		if i.Op == x86asm.LEA {
 			a0, ok1 := i.Args[0].(x86asm.Reg)
 			a1, ok2 := i.Args[1].(x86asm.Mem)
 			if ok1 && ok2 {
 				if a0 == x86asm.RDX && a1.Base == x86asm.RIP {
-					leaRdx = calcRipRelativeAddr(a1, baseAddr, ip+int64(i.Len))
-					hits--
-					if hits == 0 {
-						return uint64(leaRdx), nil
-					}
+					rdxAddr = calcRipRelativeAddr(a1, baseAddr, ip+int64(i.Len))
 				}
+			}
+		}
+		if i.Op == x86asm.CALL {
+			calls--
+			if calls == 0 {
+				return uint64(rdxAddr), nil
 			}
 		}
 		ip += int64(i.Len)
@@ -384,6 +446,13 @@ func (x *x86Extractor) find4thArgToLibRegCall(b []byte, baseAddr int64) (int64, 
 				if a0 == x86asm.RCX && a1.Base == x86asm.RIP {
 					return calcRipRelativeAddr(a1, baseAddr, ip+int64(i.Len)), nil
 				}
+			}
+		}
+		if i.Op == x86asm.MOV {
+			a0, ok1 := i.Args[0].(x86asm.Reg)
+			a1, ok2 := i.Args[1].(x86asm.Imm)
+			if ok1 && ok2 && a0 == x86asm.ECX {
+				return int64(a1), nil
 			}
 		}
 		ip += int64(i.Len)
