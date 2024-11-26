@@ -164,31 +164,52 @@ func getLibFromImage(t *testing.T, name, platform, fullPath, target string) {
 	require.NoError(t, err)
 }
 
-// // spot testing
+// spot testing
 func TestFile(t *testing.T) {
-	target := "./testdata/libluajit-5.1.so"
-	if _, err := os.Stat(target); os.IsNotExist(err) {
-		t.Skip("no test file")
+	for _, target := range []string{
+		"./testdata/libluajit-5.1-jammy.so",
+		"./testdata/luajit-nixos"} {
+		if _, err := os.Stat(target); os.IsNotExist(err) {
+			continue
+		}
+		ef, err := pfelf.Open(target)
+		require.NoError(t, err)
+		ljd := luajitData{}
+
+		// create stacktrace deltas to make sure we can find interp bounds
+		// some ugliness so we can run arm and x86 unit tests on both platforms.
+		intervals, param, err := extractStackDeltas(target, ef)
+		require.NoError(t, err)
+
+		interp, err := extractInterpreterBounds(intervals.Deltas, param)
+		require.NoError(t, err)
+
+		err = extractOffsets(ef, &ljd, interp)
+		require.NoError(t, err)
+		require.NotZero(t, ljd.currentLOffset)
+		require.NotZero(t, ljd.g2Traces)
+		require.NotZero(t, ljd.g2Dispatch)
+
+		od := offsetData{}
+		err = od.init(ef)
+		require.NoError(t, err)
+
+		// Test that our chicanery for finding traceinfo checks out on symbolized builds.
+		if ti, err1 := od.lookupSymbol("lj_cf_jit_util_traceinfo"); err1 == nil {
+			ti2, err2 := od.findTraceInfoFromLuaOpen()
+			require.NoError(t, err2)
+			require.Equal(t, ti.Address, ti2.Address)
+		}
+
+		// Ditto for lj_dispatch_update
+		if du, err1 := od.lookupSymbol("lj_dispatch_update"); err1 == nil {
+			du2, err2 := od.e.findLjDispatchUpdateAddr(od.luajitOpen, od.luajitOpenAddr)
+			require.NoError(t, err2)
+			require.Equal(t, uint64(du.Address), du2)
+		}
+
+		t.Logf("%+v, interp: %+v", ljd, interp)
 	}
-	ef, err := pfelf.Open(target)
-	require.NoError(t, err)
-	ljd := luajitData{}
-
-	// create stacktrace deltas to make sure we can find interp bounds
-	// some ugliness so we can run arm and x86 unit tests on both platforms.
-	intervals, param, err := extractStackDeltas(target, ef)
-	require.NoError(t, err)
-
-	interp, err := extractInterpreterBounds(intervals.Deltas, param)
-	require.NoError(t, err)
-
-	err = extractOffsets(ef, &ljd, interp)
-	require.NoError(t, err)
-	require.NotZero(t, ljd.currentLOffset)
-	require.NotZero(t, ljd.g2Traces)
-	require.NotZero(t, ljd.g2Dispatch)
-
-	t.Logf("%+v, interp: %+v", ljd, interp)
 }
 
 func TestStructure(t *testing.T) {
