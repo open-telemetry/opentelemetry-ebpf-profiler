@@ -88,6 +88,19 @@ type attrKeyValue[T string | int64] struct {
 	value    T
 }
 
+// attributeMap is a temporary cache that maps deduplicated attribute keys to an
+// index into an attribute table mappings.
+type attributeMap map[string]uint64
+
+// stringMap is a temporary cache that maps deduplicated strings to a index.
+type stringMap map[string]uint32
+
+// funcMap is a temporary cache that maps deduplicated function information to a index.
+type funcMap map[funcInfo]uint64
+
+// fileIDMap is a temporary cache that maps deduplicated file IDs to a index.
+type fileIDMap map[libpf.FileID]uint64
+
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
 type OTLPReporter struct {
 	config *Config
@@ -497,32 +510,32 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 	clear(*traceEvents)
 	r.traceEvents.WUnlock(&traceEvents)
 
-	// stringMap is a temporary helper that will build the StringTable.
+	// strMap is a temporary helper that will build the StringTable.
 	// By specification, the first element should be empty.
-	stringMap := make(map[string]uint32)
-	stringMap[""] = 0
+	strMap := make(stringMap)
+	strMap[""] = 0
 
-	// funcMap is a temporary helper that will build the Function array
+	// fnMap is a temporary helper that will build the Function array
 	// in profile and make sure information is deduplicated.
-	funcMap := make(map[funcInfo]uint64)
-	funcMap[funcInfo{name: "", fileName: ""}] = 0
+	fnMap := make(funcMap)
+	fnMap[funcInfo{name: "", fileName: ""}] = 0
 
-	// attributeMap is a temporary helper that maps attribute values to
+	// attrMap is a temporary helper that maps attribute values to
 	// their respective indices.
 	// This is to ensure that AttributeTable does not contain duplicates.
-	attributeMap := make(map[string]uint64)
+	attrMap := make(attributeMap)
 
 	numSamples := len(samples)
 	profile = &profiles.Profile{
 		// SampleType - Next step: Figure out the correct SampleType.
 		Sample: make([]*profiles.Sample, 0, numSamples),
 		SampleType: []*profiles.ValueType{{
-			Type: int64(getStringMapIndex(stringMap, "samples")),
-			Unit: int64(getStringMapIndex(stringMap, "count")),
+			Type: int64(getStringMapIndex(strMap, "samples")),
+			Unit: int64(getStringMapIndex(strMap, "count")),
 		}},
 		PeriodType: &profiles.ValueType{
-			Type: int64(getStringMapIndex(stringMap, "cpu")),
-			Unit: int64(getStringMapIndex(stringMap, "nanoseconds")),
+			Type: int64(getStringMapIndex(strMap, "cpu")),
+			Unit: int64(getStringMapIndex(strMap, "nanoseconds")),
 		},
 		Period: 1e9 / int64(r.samplesPerSecond),
 		// AttributeUnits - Optional element we do not use.
@@ -536,13 +549,13 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 	locationIndex := uint64(0)
 
 	// Temporary lookup to reference existing Mappings.
-	fileIDtoMapping := make(map[libpf.FileID]uint64)
+	fileIDtoMapping := make(fileIDMap)
 
 	for traceKey, traceInfo := range samples {
 		sample := &profiles.Sample{}
 		sample.LocationsStartIndex = locationIndex
 
-		sample.StacktraceIdIndex = getStringMapIndex(stringMap,
+		sample.StacktraceIdIndex = getStringMapIndex(strMap,
 			traceKey.hash.Base64())
 
 		slices.Sort(traceInfo.timestamps)
@@ -556,7 +569,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 		for i := range traceInfo.frameTypes {
 			frameAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
 				{key: "profile.frame.type", value: traceInfo.frameTypes[i].String()},
-			}, attributeMap)
+			}, attrMap)
 
 			loc := &profiles.Location{
 				// Id - Optional element we do not use.
@@ -596,14 +609,14 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 						{key: "process.executable.build_id.gnu", value: execInfo.gnuBuildID},
 						{key: "process.executable.build_id.htlhash",
 							value: traceInfo.files[i].StringNoQuotes()},
-					}, attributeMap)
+					}, attrMap)
 
 					profile.Mapping = append(profile.Mapping, &profiles.Mapping{
 						// Id - Optional element we do not use.
 						MemoryStart: uint64(traceInfo.mappingStarts[i]),
 						MemoryLimit: uint64(traceInfo.mappingEnds[i]),
 						FileOffset:  traceInfo.mappingFileOffsets[i],
-						Filename:    int64(getStringMapIndex(stringMap, fileName)),
+						Filename:    int64(getStringMapIndex(strMap, fileName)),
 						Attributes:  mappingAttributes,
 						// HasFunctions - Optional element we do not use.
 						// HasFilenames - Optional element we do not use.
@@ -625,14 +638,14 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 				if !exists {
 					// At this point, we do not have enough information for the frame.
 					// Therefore, we report a dummy entry and use the interpreter as filename.
-					line.FunctionIndex = createFunctionEntry(funcMap,
+					line.FunctionIndex = createFunctionEntry(fnMap,
 						"UNREPORTED", frameKind.String())
 				} else {
 					fileIDInfo := fileIDInfoLock.RLock()
 					if si, exists := (*fileIDInfo)[traceInfo.linenos[i]]; exists {
 						line.Line = int64(si.lineNumber)
 
-						line.FunctionIndex = createFunctionEntry(funcMap,
+						line.FunctionIndex = createFunctionEntry(fnMap,
 							si.functionName, si.filePath)
 					} else {
 						// At this point, we do not have enough information for the frame.
@@ -640,7 +653,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 						// To differentiate this case from the case where no information about
 						// the file ID is available at all, we use a different name for reported
 						// function.
-						line.FunctionIndex = createFunctionEntry(funcMap,
+						line.FunctionIndex = createFunctionEntry(fnMap,
 							"UNRESOLVED", frameKind.String())
 					}
 					fileIDInfoLock.RUnlock(&fileIDInfo)
@@ -649,7 +662,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 
 				// To be compliant with the protocol, generate a dummy mapping entry.
 				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping,
-					stringMap, attributeMap, profile, traceInfo.files[i])
+					strMap, attrMap, profile, traceInfo.files[i])
 			}
 			profile.Location = append(profile.Location, loc)
 		}
@@ -658,9 +671,9 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 			{key: string(semconv.ContainerIDKey), value: traceKey.containerID},
 			{key: string(semconv.ThreadNameKey), value: traceKey.comm},
 			{key: string(semconv.ServiceNameKey), value: traceKey.apmServiceName},
-		}, attributeMap), addProfileAttributes(profile, []attrKeyValue[int64]{
+		}, attrMap), addProfileAttributes(profile, []attrKeyValue[int64]{
 			{key: string(semconv.ProcessPIDKey), value: traceKey.pid},
-		}, attributeMap)...)
+		}, attrMap)...)
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
 		locationIndex += sample.LocationsLength
 
@@ -669,20 +682,20 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 	log.Debugf("Reporting OTLP profile with %d samples", len(profile.Sample))
 
 	// Populate the deduplicated functions into profile.
-	funcTable := make([]*profiles.Function, len(funcMap))
-	for v, idx := range funcMap {
+	funcTable := make([]*profiles.Function, len(fnMap))
+	for v, idx := range fnMap {
 		funcTable[idx] = &profiles.Function{
-			Name:     int64(getStringMapIndex(stringMap, v.name)),
-			Filename: int64(getStringMapIndex(stringMap, v.fileName)),
+			Name:     int64(getStringMapIndex(strMap, v.name)),
+			Filename: int64(getStringMapIndex(strMap, v.fileName)),
 		}
 	}
 	profile.Function = append(profile.Function, funcTable...)
 
-	// When ranging over stringMap, the order will be according to the
+	// When ranging over strMap, the order will be according to the
 	// hash value of the key. To get the correct order for profile.StringTable,
-	// put the values in stringMap, in the correct array order.
-	stringTable := make([]string, len(stringMap))
-	for v, idx := range stringMap {
+	// put the values in strMap, in the correct array order.
+	stringTable := make([]string, len(strMap))
+	for v, idx := range strMap {
 		stringTable[idx] = v
 	}
 	profile.StringTable = append(profile.StringTable, stringTable...)
@@ -700,31 +713,31 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 	return profile, startTS, endTS
 }
 
-// getStringMapIndex inserts or looks up the index for value in stringMap.
-func getStringMapIndex(stringMap map[string]uint32, value string) uint32 {
-	if idx, exists := stringMap[value]; exists {
+// getStringMapIndex inserts or looks up the index for value in strMap.
+func getStringMapIndex(strMap stringMap, value string) uint32 {
+	if idx, exists := strMap[value]; exists {
 		return idx
 	}
 
-	idx := uint32(len(stringMap))
-	stringMap[value] = idx
+	idx := uint32(len(strMap))
+	strMap[value] = idx
 
 	return idx
 }
 
 // createFunctionEntry adds a new function and returns its reference index.
-func createFunctionEntry(funcMap map[funcInfo]uint64,
+func createFunctionEntry(fnMap funcMap,
 	name string, fileName string) uint64 {
 	key := funcInfo{
 		name:     name,
 		fileName: fileName,
 	}
-	if idx, exists := funcMap[key]; exists {
+	if idx, exists := fnMap[key]; exists {
 		return idx
 	}
 
-	idx := uint64(len(funcMap))
-	funcMap[key] = idx
+	idx := uint64(len(fnMap))
+	fnMap[key] = idx
 
 	return idx
 }
@@ -732,7 +745,7 @@ func createFunctionEntry(funcMap map[funcInfo]uint64,
 // addProfileAttributes adds attributes to Profile.attribute_table and returns
 // the indices to these attributes.
 func addProfileAttributes[T string | int64](profile *profiles.Profile,
-	attributes []attrKeyValue[T], attributeMap map[string]uint64) []uint64 {
+	attributes []attrKeyValue[T], attrMap attributeMap) []uint64 {
 	indices := make([]uint64, 0, len(attributes))
 
 	addAttr := func(attr attrKeyValue[T]) {
@@ -754,7 +767,7 @@ func addProfileAttributes[T string | int64](profile *profiles.Profile,
 			return
 		}
 
-		if attributeIndex, exists := attributeMap[attributeCompositeKey]; exists {
+		if attributeIndex, exists := attrMap[attributeCompositeKey]; exists {
 			indices = append(indices, attributeIndex)
 			return
 		}
@@ -764,7 +777,7 @@ func addProfileAttributes[T string | int64](profile *profiles.Profile,
 			Key:   attr.key,
 			Value: &attributeValue,
 		})
-		attributeMap[attributeCompositeKey] = newIndex
+		attrMap[attributeCompositeKey] = newIndex
 	}
 
 	for i := range attributes {
@@ -775,9 +788,8 @@ func addProfileAttributes[T string | int64](profile *profiles.Profile,
 }
 
 // getDummyMappingIndex inserts or looks up an entry for interpreted FileIDs.
-func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
-	stringMap map[string]uint32, attributeMap map[string]uint64,
-	profile *profiles.Profile, fileID libpf.FileID) uint64 {
+func getDummyMappingIndex(fileIDtoMapping fileIDMap, strMap stringMap,
+	attrMap attributeMap, profile *profiles.Profile, fileID libpf.FileID) uint64 {
 	if tmpMappingIndex, exists := fileIDtoMapping[fileID]; exists {
 		return tmpMappingIndex
 	}
@@ -786,10 +798,10 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
 
 	mappingAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
 		{key: "process.executable.build_id.htlhash",
-			value: fileID.StringNoQuotes()}}, attributeMap)
+			value: fileID.StringNoQuotes()}}, attrMap)
 
 	profile.Mapping = append(profile.Mapping, &profiles.Mapping{
-		Filename:   int64(getStringMapIndex(stringMap, "")),
+		Filename:   int64(getStringMapIndex(strMap, "")),
 		Attributes: mappingAttributes,
 	})
 	return idx

@@ -14,7 +14,7 @@ func TestGetSampleAttributes(t *testing.T) {
 	tests := map[string]struct {
 		profile                *profiles.Profile
 		k                      []traceAndMetaKey
-		attributeMap           map[string]uint64
+		attributeMap           attributeMap
 		expectedIndices        [][]uint64
 		expectedAttributeTable []*common.KeyValue
 	}{
@@ -29,7 +29,7 @@ func TestGetSampleAttributes(t *testing.T) {
 					pid:            0,
 				},
 			},
-			attributeMap:    make(map[string]uint64),
+			attributeMap:    make(attributeMap),
 			expectedIndices: [][]uint64{{0}},
 			expectedAttributeTable: []*common.KeyValue{
 				{
@@ -58,7 +58,7 @@ func TestGetSampleAttributes(t *testing.T) {
 					pid:            1234,
 				},
 			},
-			attributeMap:    make(map[string]uint64),
+			attributeMap:    make(attributeMap),
 			expectedIndices: [][]uint64{{0, 1, 2, 3}, {0, 1, 2, 3}},
 			expectedAttributeTable: []*common.KeyValue{
 				{
@@ -105,7 +105,7 @@ func TestGetSampleAttributes(t *testing.T) {
 					pid:            6789,
 				},
 			},
-			attributeMap:    make(map[string]uint64),
+			attributeMap:    make(attributeMap),
 			expectedIndices: [][]uint64{{0, 1, 2, 3}, {4, 5, 6, 7}},
 			expectedAttributeTable: []*common.KeyValue{
 				{
