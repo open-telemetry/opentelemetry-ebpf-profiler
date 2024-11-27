@@ -31,6 +31,7 @@ import (
 
 const (
 	executableCacheLifetime = 1 * time.Hour
+	framesCacheLifetime     = 1 * time.Hour
 )
 
 // Assert that we implement the full Reporter interface.
@@ -172,7 +173,7 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 	if err != nil {
 		return nil, err
 	}
-	frames.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
+	frames.SetLifetime(framesCacheLifetime) // Allow GC to clean stale items.
 
 	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
 		func(pid libpf.PID) uint32 { return uint32(pid) })
@@ -268,7 +269,7 @@ func (r *OTLPReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *Trace
 // ExecutableKnown returns true if the metadata of the Executable specified by fileID is
 // cached in the reporter.
 func (r *OTLPReporter) ExecutableKnown(fileID libpf.FileID) bool {
-	_, known := r.executables.Get(fileID)
+	_, known := r.executables.GetAndRefresh(fileID, executableCacheLifetime)
 	return known
 }
 
@@ -285,7 +286,8 @@ func (r *OTLPReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 // cached in the reporter.
 func (r *OTLPReporter) FrameKnown(frameID libpf.FrameID) bool {
 	known := false
-	if frameMapLock, exists := r.frames.Get(frameID.FileID()); exists {
+	if frameMapLock, exists := r.frames.GetAndRefresh(frameID.FileID(),
+		framesCacheLifetime); exists {
 		frameMap := frameMapLock.RLock()
 		defer frameMapLock.RUnlock(&frameMap)
 		_, known = (*frameMap)[frameID.AddressOrLine()]
@@ -634,7 +636,8 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 				// Store interpreted frame information as a Line message:
 				line := &profiles.Line{}
 
-				fileIDInfoLock, exists := r.frames.Get(traceInfo.files[i])
+				fileIDInfoLock, exists := r.frames.GetAndRefresh(traceInfo.files[i],
+					framesCacheLifetime)
 				if !exists {
 					// At this point, we do not have enough information for the frame.
 					// Therefore, we report a dummy entry and use the interpreter as filename.
