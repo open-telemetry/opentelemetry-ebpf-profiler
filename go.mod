@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.62.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cilium/ebpf v0.16.0
-	github.com/elastic/go-freelru v0.15.0
+	github.com/elastic/go-freelru v0.16.0
 	github.com/elastic/go-perf v0.0.0-20241016160959-1342461adb4a
 	github.com/google/uuid v1.6.0
 	github.com/jsimonetti/rtnetlink v1.4.2

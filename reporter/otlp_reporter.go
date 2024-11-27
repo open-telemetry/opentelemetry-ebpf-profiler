@@ -4,12 +4,9 @@
 package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
-	"bufio"
 	"context"
 	"crypto/tls"
-	"fmt"
-	"os"
-	"regexp"
+	"maps"
 	"strconv"
 	"time"
 
@@ -19,7 +16,6 @@ import (
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
 	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
-	"golang.org/x/exp/maps"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -28,10 +24,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
-)
-
-var (
-	cgroupv2PathPattern = regexp.MustCompile(`0:.*?:(.*)`)
 )
 
 // Assert that we implement the full Reporter interface.
@@ -49,8 +41,8 @@ type OTLPReporter struct {
 	// client for the connection to the receiver.
 	client pprofileotlp.GRPCClient
 
-	// stopSignal is the stop signal for shutting down all background tasks.
-	stopSignal chan libpf.Void
+	// runLoop handles the run loop
+	runLoop *runLoop
 
 	// rpcStats stores gRPC related statistics.
 	rpcStats *StatsHandlerImpl
@@ -115,14 +107,16 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 	}
 
 	return &OTLPReporter{
-		config:                  cfg,
-		name:                    cfg.Name,
-		version:                 cfg.Version,
-		kernelVersion:           cfg.KernelVersion,
-		hostName:                cfg.HostName,
-		ipAddress:               cfg.IPAddress,
-		hostID:                  strconv.FormatUint(cfg.HostID, 10),
-		stopSignal:              make(chan libpf.Void),
+		config:        cfg,
+		name:          cfg.Name,
+		version:       cfg.Version,
+		kernelVersion: cfg.KernelVersion,
+		hostName:      cfg.HostName,
+		ipAddress:     cfg.IPAddress,
+		hostID:        strconv.FormatUint(cfg.HostID, 10),
+		runLoop: &runLoop{
+			stopSignal: make(chan libpf.Void),
+		},
 		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
 		client:                  nil,
 		rpcStats:                NewStatsHandler(),
@@ -149,7 +143,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 	traceEventsMap := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEventsMap)
 
-	containerID, err := r.lookupCgroupv2(meta.PID)
+	containerID, err := libpf.LookupCgroupv2(r.cgroupv2ID, meta.PID)
 	if err != nil {
 		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
 			meta.PID, err)
@@ -281,7 +275,7 @@ func (r *OTLPReporter) ReportMetrics(_ uint32, _ []uint32, _ []int64) {}
 
 // Stop triggers a graceful shutdown of OTLPReporter.
 func (r *OTLPReporter) Stop() {
-	close(r.stopSignal)
+	r.runLoop.Stop()
 }
 
 // GetMetrics returns internal metrics of OTLPReporter.
@@ -305,40 +299,26 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 	otlpGrpcConn, err := waitGrpcEndpoint(ctx, r.config, r.rpcStats)
 	if err != nil {
 		cancelReporting()
-		close(r.stopSignal)
+		r.runLoop.Stop()
 		return err
 	}
 	r.client = pprofileotlp.NewGRPCClient(otlpGrpcConn)
 
-	go func() {
-		tick := time.NewTicker(r.config.ReportInterval)
-		defer tick.Stop()
-		purgeTick := time.NewTicker(5 * time.Minute)
-		defer purgeTick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-r.stopSignal:
-				return
-			case <-tick.C:
-				if err := r.reportOTLPProfile(ctx); err != nil {
-					log.Errorf("Request failed: %v", err)
-				}
-				tick.Reset(libpf.AddJitter(r.config.ReportInterval, 0.2))
-			case <-purgeTick.C:
-				// Allow the GC to purge expired entries to avoid memory leaks.
-				r.pdata.Purge()
-				r.cgroupv2ID.PurgeExpired()
-			}
+	r.runLoop.Start(ctx, r.config.ReportInterval, func() {
+		if err := r.reportOTLPProfile(ctx); err != nil {
+			log.Errorf("Request failed: %v", err)
 		}
-	}()
+	}, func() {
+		// Allow the GC to purge expired entries to avoid memory leaks.
+		r.pdata.Purge()
+		r.cgroupv2ID.PurgeExpired()
+	})
 
 	// When Stop() is called and a signal to 'stop' is received, then:
 	// - cancel the reporting functions currently running (using context)
 	// - close the gRPC connection with collection-agent
 	go func() {
-		<-r.stopSignal
+		<-r.runLoop.stopSignal
 		cancelReporting()
 		if err := otlpGrpcConn.Close(); err != nil {
 			log.Fatalf("Stopping connection of OTLP client client failed: %v", err)
@@ -456,45 +436,4 @@ func setupGrpcConnection(parent context.Context, cfg *Config,
 	defer cancel()
 	//nolint:staticcheck
 	return grpc.DialContext(ctx, cfg.CollAgentAddr, opts...)
-}
-
-// lookupCgroupv2 returns the cgroupv2 ID for pid.
-func (r *OTLPReporter) lookupCgroupv2(pid libpf.PID) (string, error) {
-	id, ok := r.cgroupv2ID.Get(pid)
-	if ok {
-		return id, nil
-	}
-
-	// Slow path
-	f, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	var genericCgroupv2 string
-	scanner := bufio.NewScanner(f)
-	buf := make([]byte, 512)
-	// Providing a predefined buffer overrides the internal buffer that Scanner uses (4096 bytes).
-	// We can do that and also set a maximum allocation size on the following call.
-	// With a maximum of 4096 characters path in the kernel, 8192 should be fine here. We don't
-	// expect lines in /proc/<PID>/cgroup to be longer than that.
-	scanner.Buffer(buf, 8192)
-	var pathParts []string
-	for scanner.Scan() {
-		line := scanner.Text()
-		pathParts = cgroupv2PathPattern.FindStringSubmatch(line)
-		if pathParts == nil {
-			log.Debugf("Could not extract cgroupv2 path from line: %s", line)
-			continue
-		}
-		genericCgroupv2 = pathParts[1]
-		break
-	}
-
-	// Cache the cgroupv2 information.
-	// To avoid busy lookups, also empty cgroupv2 information is cached.
-	r.cgroupv2ID.Add(pid, genericCgroupv2)
-
-	return genericCgroupv2, nil
 }

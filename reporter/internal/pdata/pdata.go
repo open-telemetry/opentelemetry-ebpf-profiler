@@ -13,6 +13,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
 )
 
+const (
+	executableCacheLifetime = 1 * time.Hour
+)
+
 // Pdata holds the cache for the data used to generate the events reporters
 // will export when handling OTLP data.
 type Pdata struct {
@@ -35,7 +39,7 @@ func New(sps int, executablesCacheElements, framesCacheElements uint32) (*Pdata,
 	if err != nil {
 		return nil, err
 	}
-	executables.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
+	executables.SetLifetime(executableCacheLifetime) // Allow GC to clean stale items.
 
 	frames, err := lru.NewSynced[libpf.FileID,
 		*xsync.RWMutex[map[libpf.AddressOrLineno]samples.SourceInfo]](
