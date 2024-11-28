@@ -551,10 +551,10 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 
 		// Walk every frame of the trace.
 		for i := range traceInfo.frameTypes {
-			frameAttributes := []AttrIndex{
-				attrMgr.AddStringAttr("profile.frame.type",
-					traceInfo.frameTypes[i].String()),
-			}
+			var frameAttributes []AttrIndex
+
+			attrMgr.AppendOptionalString(&frameAttributes,
+				"profile.frame.type", traceInfo.frameTypes[i].String())
 
 			loc := &profiles.Location{
 				// Id - Optional element we do not use.
@@ -587,15 +587,14 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 						fileName = execInfo.fileName
 					}
 
-					mappingAttributes := []AttrIndex{
-						// Once SemConv and its Go package is released with the new
-						// semantic convention for build_id, replace these hard coded
-						// strings.
-						attrMgr.AddStringAttr("process.executable.build_id.gnu",
-							execInfo.gnuBuildID),
-						attrMgr.AddStringAttr("process.executable.build_id.htlhash",
-							traceInfo.files[i].StringNoQuotes()),
-					}
+					// Once SemConv and its Go package is released with the new
+					// semantic convention for build_id, replace these hard coded
+					// strings.
+					var mappingAttributes []AttrIndex
+					attrMgr.AppendOptionalString(&mappingAttributes,
+						"process.executable.build_id.gnu", execInfo.gnuBuildID)
+					attrMgr.AppendOptionalString(&mappingAttributes,
+						"process.executable.build_id.htlhash", traceInfo.files[i].StringNoQuotes())
 
 					profile.Mapping = append(profile.Mapping, &profiles.Mapping{
 						// Id - Optional element we do not use.
@@ -653,12 +652,14 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 			profile.Location = append(profile.Location, loc)
 		}
 
-		sample.Attributes = []AttrIndex{
-			attrMgr.AddStringAttr(semconv.ContainerIDKey, traceKey.containerID),
-			attrMgr.AddStringAttr(semconv.ThreadNameKey, traceKey.comm),
-			attrMgr.AddStringAttr(semconv.ServiceNameKey, traceKey.apmServiceName),
-			attrMgr.AddIntAttr(semconv.ProcessPIDKey, traceKey.pid),
-		}
+		attrMgr.AppendOptionalString(&sample.Attributes,
+			semconv.ContainerIDKey, traceKey.containerID)
+		attrMgr.AppendOptionalString(&sample.Attributes,
+			semconv.ProcessCommandKey, traceKey.comm)
+		attrMgr.AppendOptionalString(&sample.Attributes,
+			semconv.ServiceNameKey, traceKey.apmServiceName)
+		attrMgr.AppendInt(&sample.Attributes,
+			semconv.ProcessPIDKey, traceKey.pid)
 
 		if r.config.ExtraSampleAttrProd != nil {
 			extra := r.config.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, traceKey.extraMeta)
@@ -743,10 +744,9 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
 	idx := uint64(len(fileIDtoMapping))
 	fileIDtoMapping[fileID] = idx
 
-	mappingAttributes := []AttrIndex{
-		attrMgr.AddStringAttr("process.executable.build_id.htlhash",
-			fileID.StringNoQuotes()),
-	}
+	var mappingAttributes []AttrIndex
+	attrMgr.AppendOptionalString(&mappingAttributes,
+		"process.executable.build_id.htlhash", fileID.StringNoQuotes())
 
 	profile.Mapping = append(profile.Mapping, &profiles.Mapping{
 		Filename:   int64(getStringMapIndex(stringMap, "")),

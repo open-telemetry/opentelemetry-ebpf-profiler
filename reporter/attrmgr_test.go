@@ -158,12 +158,12 @@ func TestAttrTableManager(t *testing.T) {
 			mgr := NewAttrTableManager(&attrTable)
 			indices := make([][]AttrIndex, 0)
 			for _, k := range tc.k {
-				indices = append(indices, []AttrIndex{
-					mgr.AddStringAttr(semconv.ContainerIDKey, k.containerID),
-					mgr.AddStringAttr(semconv.ThreadNameKey, k.comm),
-					mgr.AddStringAttr(semconv.ServiceNameKey, k.apmServiceName),
-					mgr.AddIntAttr(semconv.ProcessPIDKey, k.pid),
-				})
+				var inner []AttrIndex
+				mgr.AppendOptionalString(&inner, semconv.ContainerIDKey, k.containerID)
+				mgr.AppendOptionalString(&inner, semconv.ThreadNameKey, k.comm)
+				mgr.AppendOptionalString(&inner, semconv.ServiceNameKey, k.apmServiceName)
+				mgr.AppendInt(&inner, semconv.ProcessPIDKey, k.pid)
+				indices = append(indices, inner)
 			}
 			require.Equal(t, tc.expectedIndices, indices)
 			require.Equal(t, tc.expectedAttributeTable, attrTable)

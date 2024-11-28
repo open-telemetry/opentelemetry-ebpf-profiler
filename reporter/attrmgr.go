@@ -26,25 +26,36 @@ func NewAttrTableManager(attrTable *[]*common.KeyValue) *AttrTableManager {
 	}
 }
 
-func (m *AttrTableManager) AddIntAttr(key attribute.Key, value int64) AttrIndex {
+// AppendInt adds the index for the given integer attribute to an attribute index slice.
+func (m *AttrTableManager) AppendInt(
+	attrs *[]AttrIndex, key attribute.Key, value int64) {
 	compound := fmt.Sprintf("%v_%d", key, value)
 	val := common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: value}}
-	return m.addAnyAttr(key, compound, &val)
+	m.appendAny(attrs, key, compound, &val)
 }
 
-func (m *AttrTableManager) AddStringAttr(key attribute.Key, value string) AttrIndex {
+// AppendOptionalString adds the index for the given string attribute to an
+// attribute index slice if it is non-empty.
+func (m *AttrTableManager) AppendOptionalString(
+	attrs *[]AttrIndex, key attribute.Key, value string) {
+	if value == "" {
+		return
+	}
+
 	compound := fmt.Sprintf("%v_%s", key, value)
 	val := common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: value}}
-	return m.addAnyAttr(key, compound, &val)
+	m.appendAny(attrs, key, compound, &val)
 }
 
-func (m *AttrTableManager) addAnyAttr(
+func (m *AttrTableManager) appendAny(
+	attrs *[]AttrIndex,
 	key attribute.Key,
 	compoundKey string,
 	value *common.AnyValue,
-) AttrIndex {
+) {
 	if attributeIndex, exists := m.indices[compoundKey]; exists {
-		return attributeIndex
+		*attrs = append(*attrs, attributeIndex)
+		return
 	}
 
 	newIndex := AttrIndex(len(*m.attrTable))
@@ -56,5 +67,5 @@ func (m *AttrTableManager) addAnyAttr(
 
 	m.indices[compoundKey] = newIndex
 
-	return newIndex
+	*attrs = append(*attrs, newIndex)
 }
