@@ -25,26 +25,8 @@ func TestAttrTableManager(t *testing.T) {
 					pid:            0,
 				},
 			},
-			expectedIndices: [][]uint64{{0, 1, 2, 3}},
+			expectedIndices: [][]uint64{{0}},
 			expectedAttributeTable: []*common.KeyValue{
-				{
-					Key: "container.id",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: ""},
-					},
-				},
-				{
-					Key: "thread.name",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: ""},
-					},
-				},
-				{
-					Key: "service.name",
-					Value: &common.AnyValue{
-						Value: &common.AnyValue_StringValue{StringValue: ""},
-					},
-				},
 				{
 					Key: "process.pid",
 					Value: &common.AnyValue{
