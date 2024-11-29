@@ -184,7 +184,7 @@ func (r *OTLPReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *Trace
 // ExecutableKnown returns true if the metadata of the Executable specified by fileID is
 // cached in the reporter.
 func (r *OTLPReporter) ExecutableKnown(fileID libpf.FileID) bool {
-	_, known := r.pdata.Executables.GetAndRefresh(fileID, ...)
+	_, known := r.pdata.Executables.GetAndRefresh(fileID, pdata.ExecutableCacheLifetime)
 	return known
 }
 
@@ -201,7 +201,8 @@ func (r *OTLPReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 // cached in the reporter.
 func (r *OTLPReporter) FrameKnown(frameID libpf.FrameID) bool {
 	known := false
-	if frameMapLock, exists := r.pdata.Frames.GetAndRefresh(frameID.FileID(), ...); exists {
+	if frameMapLock, exists := r.pdata.Frames.GetAndRefresh(frameID.FileID(),
+		pdata.FramesCacheLifetime); exists {
 		frameMap := frameMapLock.RLock()
 		defer frameMapLock.RUnlock(&frameMap)
 		_, known = (*frameMap)[frameID.AddressOrLine()]
@@ -218,7 +219,8 @@ func (r *OTLPReporter) FrameMetadata(args *FrameMetadataArgs) {
 		fileID, args.FunctionName, args.FunctionOffset,
 		args.SourceFile, args.SourceLine)
 
-	if frameMapLock, exists := r.pdata.Frames.Get(fileID); exists {
+	if frameMapLock, exists := r.pdata.Frames.GetAndRefresh(fileID,
+		pdata.FramesCacheLifetime); exists {
 		frameMap := frameMapLock.WLock()
 		defer frameMapLock.WUnlock(&frameMap)
 

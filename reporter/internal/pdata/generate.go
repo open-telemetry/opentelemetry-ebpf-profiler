@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"slices"
 	"strconv"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -15,6 +16,11 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
+)
+
+const (
+	ExecutableCacheLifetime = 1 * time.Hour
+	FramesCacheLifetime     = 1 * time.Hour
 )
 
 // Generate generates a pdata request out of internal profiles data, to be
@@ -111,7 +117,8 @@ func (p *Pdata) setProfile(
 					fileIDtoMapping[traceInfo.Files[i]] = idx
 					locationMappingIndex = idx
 
-					ei, exists := p.Executables.GetAndRefresh(traceInfo.Files[i], ...)
+					ei, exists := p.Executables.GetAndRefresh(traceInfo.Files[i],
+						ExecutableCacheLifetime)
 
 					// Next step: Select a proper default value,
 					// if the name of the executable is not known yet.
@@ -150,7 +157,8 @@ func (p *Pdata) setProfile(
 				// Store interpreted frame information as a Line message:
 				line := loc.Line().AppendEmpty()
 
-				fileIDInfoLock, exists := p.Frames.GetAndRefresh(traceInfo.Files[i], ...)
+				fileIDInfoLock, exists := p.Frames.GetAndRefresh(traceInfo.Files[i],
+					FramesCacheLifetime)
 				if !exists {
 					// At this point, we do not have enough information for the frame.
 					// Therefore, we report a dummy entry and use the interpreter as filename.
