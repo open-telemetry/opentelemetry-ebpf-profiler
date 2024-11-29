@@ -150,7 +150,7 @@ func (p *Pdata) setProfile(
 				// Store interpreted frame information as a Line message:
 				line := loc.Line().AppendEmpty()
 
-				fileIDInfoLock, exists := p.Frames.Get(traceInfo.Files[i])
+				fileIDInfoLock, exists := p.Frames.GetAndRefresh(traceInfo.Files[i], ...)
 				if !exists {
 					// At this point, we do not have enough information for the frame.
 					// Therefore, we report a dummy entry and use the interpreter as filename.
