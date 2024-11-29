@@ -111,7 +111,7 @@ func (p *Pdata) setProfile(
 					fileIDtoMapping[traceInfo.Files[i]] = idx
 					locationMappingIndex = idx
 
-					ei, exists := p.Executables.Get(traceInfo.Files[i])
+					ei, exists := p.Executables.GetAndRefresh(traceInfo.Files[i], ...)
 
 					// Next step: Select a proper default value,
 					// if the name of the executable is not known yet.
