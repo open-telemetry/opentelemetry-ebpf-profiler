@@ -25,12 +25,9 @@ func (p Pdata) Generate(events map[samples.TraceAndMetaKey]*samples.TraceEvents)
 
 	sp := rp.ScopeProfiles().AppendEmpty()
 
-	pc := sp.Profiles().AppendEmpty()
-	pc.SetProfileID(pprofile.ProfileID(mkProfileID()))
-
-	startTS, endTS := p.setProfile(events, pc.Profile())
-	pc.SetStartTime(startTS)
-	pc.SetEndTime(endTS)
+	prof := sp.Profiles().AppendEmpty()
+	prof.SetProfileID(pprofile.ProfileID(mkProfileID()))
+	p.setProfile(events, prof)
 
 	return profiles
 }
@@ -50,42 +47,39 @@ func mkProfileID() []byte {
 func (p *Pdata) setProfile(
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
-) (startTS, endTS pcommon.Timestamp) {
+) {
 	// stringMap is a temporary helper that will build the StringTable.
 	// By specification, the first element should be empty.
-	stringMap := make(map[string]uint32)
+	stringMap := make(map[string]int32)
 	stringMap[""] = 0
 
 	// funcMap is a temporary helper that will build the Function array
 	// in profile and make sure information is deduplicated.
-	funcMap := make(map[samples.FuncInfo]uint64)
+	funcMap := make(map[samples.FuncInfo]int32)
 	funcMap[samples.FuncInfo{Name: "", FileName: ""}] = 0
 
 	// attributeMap is a temporary helper that maps attribute values to
 	// their respective indices.
 	// This is to ensure that AttributeTable does not contain duplicates.
-	attributeMap := make(map[string]uint64)
+	attributeMap := make(map[string]int32)
 
 	st := profile.SampleType().AppendEmpty()
-	st.SetType(int64(getStringMapIndex(stringMap, "samples")))
-	st.SetUnit(int64(getStringMapIndex(stringMap, "count")))
+	st.SetTypeStrindex(getStringMapIndex(stringMap, "samples"))
+	st.SetUnitStrindex(getStringMapIndex(stringMap, "count"))
 
 	pt := profile.PeriodType()
-	pt.SetType(int64(getStringMapIndex(stringMap, "cpu")))
-	pt.SetUnit(int64(getStringMapIndex(stringMap, "nanoseconds")))
+	pt.SetTypeStrindex(getStringMapIndex(stringMap, "cpu"))
+	pt.SetUnitStrindex(getStringMapIndex(stringMap, "nanoseconds"))
 	profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
 
-	locationIndex := uint64(0)
-
 	// Temporary lookup to reference existing Mappings.
-	fileIDtoMapping := make(map[libpf.FileID]uint64)
+	fileIDtoMapping := make(map[libpf.FileID]int32)
 
+	var locationIndex int32
+	var startTS, endTS pcommon.Timestamp
 	for traceKey, traceInfo := range events {
 		sample := profile.Sample().AppendEmpty()
 		sample.SetLocationsStartIndex(locationIndex)
-
-		sample.SetStacktraceIdIndex(getStringMapIndex(stringMap,
-			traceKey.Hash.Base64()))
 
 		slices.Sort(traceInfo.Timestamps)
 		startTS = pcommon.Timestamp(traceInfo.Timestamps[0])
@@ -100,20 +94,20 @@ func (p *Pdata) setProfile(
 				{Key: "profile.frame.type", Value: traceInfo.FrameTypes[i].String()},
 			}, attributeMap)
 
-			loc := profile.Location().AppendEmpty()
+			loc := profile.LocationTable().AppendEmpty()
 			loc.SetAddress(uint64(traceInfo.Linenos[i]))
-			loc.Attributes().FromRaw(frameAttributes)
+			loc.AttributeIndices().FromRaw(frameAttributes)
 
 			switch frameKind := traceInfo.FrameTypes[i]; frameKind {
 			case libpf.NativeFrame:
 				// As native frames are resolved in the backend, we use Mapping to
 				// report these frames.
 
-				var locationMappingIndex uint64
+				var locationMappingIndex int32
 				if tmpMappingIndex, exists := fileIDtoMapping[traceInfo.Files[i]]; exists {
 					locationMappingIndex = tmpMappingIndex
 				} else {
-					idx := uint64(len(fileIDtoMapping))
+					idx := int32(len(fileIDtoMapping))
 					fileIDtoMapping[traceInfo.Files[i]] = idx
 					locationMappingIndex = idx
 
@@ -139,12 +133,12 @@ func (p *Pdata) setProfile(
 						attributeMap,
 					)
 
-					mapping := profile.Mapping().AppendEmpty()
+					mapping := profile.MappingTable().AppendEmpty()
 					mapping.SetMemoryStart(uint64(traceInfo.MappingStarts[i]))
 					mapping.SetMemoryLimit(uint64(traceInfo.MappingEnds[i]))
 					mapping.SetFileOffset(traceInfo.MappingFileOffsets[i])
-					mapping.SetFilename(int64(getStringMapIndex(stringMap, fileName)))
-					mapping.Attributes().FromRaw(mappingAttributes)
+					mapping.SetFilenameStrindex(getStringMapIndex(stringMap, fileName))
+					mapping.AttributeIndices().FromRaw(mappingAttributes)
 				}
 				loc.SetMappingIndex(locationMappingIndex)
 			case libpf.AbortFrame:
@@ -195,18 +189,18 @@ func (p *Pdata) setProfile(
 			{Key: string(semconv.ProcessPIDKey), Value: traceKey.Pid},
 		}, attributeMap)...)
 
-		sample.Attributes().FromRaw(sampleAttrs)
+		sample.AttributeIndices().FromRaw(sampleAttrs)
 
-		sample.SetLocationsLength(uint64(len(traceInfo.FrameTypes)))
+		sample.SetLocationsLength(int32(len(traceInfo.FrameTypes)))
 		locationIndex += sample.LocationsLength()
 	}
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())
 
 	// Populate the deduplicated functions into profile.
 	for v := range funcMap {
-		f := profile.Function().AppendEmpty()
-		f.SetName(int64(getStringMapIndex(stringMap, v.Name)))
-		f.SetFilename(int64(getStringMapIndex(stringMap, v.FileName)))
+		f := profile.FunctionTable().AppendEmpty()
+		f.SetNameStrindex(getStringMapIndex(stringMap, v.Name))
+		f.SetFilenameStrindex(getStringMapIndex(stringMap, v.FileName))
 	}
 
 	// When ranging over stringMap, the order will be according to the
@@ -223,31 +217,29 @@ func (p *Pdata) setProfile(
 
 	// profile.LocationIndices is not optional, and we only write elements into
 	// profile.Location that at least one sample references.
-	for i := int64(0); i < int64(profile.Location().Len()); i++ {
+	for i := int32(0); i < int32(profile.LocationTable().Len()); i++ {
 		profile.LocationIndices().Append(i)
 	}
 
 	profile.SetDuration(endTS - startTS)
 	profile.SetStartTime(startTS)
-
-	return startTS, endTS
 }
 
 // getStringMapIndex inserts or looks up the index for value in stringMap.
-func getStringMapIndex(stringMap map[string]uint32, value string) uint32 {
+func getStringMapIndex(stringMap map[string]int32, value string) int32 {
 	if idx, exists := stringMap[value]; exists {
 		return idx
 	}
 
-	idx := uint32(len(stringMap))
+	idx := int32(len(stringMap))
 	stringMap[value] = idx
 
 	return idx
 }
 
 // createFunctionEntry adds a new function and returns its reference index.
-func createFunctionEntry(funcMap map[samples.FuncInfo]uint64,
-	name string, fileName string) uint64 {
+func createFunctionEntry(funcMap map[samples.FuncInfo]int32,
+	name string, fileName string) int32 {
 	key := samples.FuncInfo{
 		Name:     name,
 		FileName: fileName,
@@ -256,7 +248,7 @@ func createFunctionEntry(funcMap map[samples.FuncInfo]uint64,
 		return idx
 	}
 
-	idx := uint64(len(funcMap))
+	idx := int32(len(funcMap))
 	funcMap[key] = idx
 
 	return idx
@@ -265,8 +257,8 @@ func createFunctionEntry(funcMap map[samples.FuncInfo]uint64,
 // addProfileAttributes adds attributes to Profile.attribute_table and returns
 // the indices to these attributes.
 func addProfileAttributes[T string | int64](profile pprofile.Profile,
-	attributes []samples.AttrKeyValue[T], attributeMap map[string]uint64) []uint64 {
-	indices := make([]uint64, 0, len(attributes))
+	attributes []samples.AttrKeyValue[T], attributeMap map[string]int32) []int32 {
+	indices := make([]int32, 0, len(attributes))
 
 	addAttr := func(attr samples.AttrKeyValue[T]) {
 		var attributeCompositeKey string
@@ -291,14 +283,16 @@ func addProfileAttributes[T string | int64](profile pprofile.Profile,
 			indices = append(indices, attributeIndex)
 			return
 		}
-		newIndex := uint64(profile.AttributeTable().Len())
+		newIndex := int32(profile.AttributeTable().Len())
 		indices = append(indices, newIndex)
 
+		newAttr := profile.AttributeTable().AppendEmpty()
+		newAttr.SetKey(attr.Key)
 		switch v := attributeValue.(type) {
 		case int64:
-			profile.AttributeTable().PutInt(attr.Key, v)
+			newAttr.Value().SetInt(v)
 		case string:
-			profile.AttributeTable().PutStr(attr.Key, v)
+			newAttr.Value().SetStr(v)
 		}
 
 		attributeMap[attributeCompositeKey] = newIndex
@@ -312,17 +306,17 @@ func addProfileAttributes[T string | int64](profile pprofile.Profile,
 }
 
 // getDummyMappingIndex inserts or looks up an entry for interpreted FileIDs.
-func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
-	stringMap map[string]uint32, profile pprofile.Profile,
-	fileID libpf.FileID) uint64 {
+func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]int32,
+	stringMap map[string]int32, profile pprofile.Profile,
+	fileID libpf.FileID) int32 {
 	if mappingIndex, exists := fileIDtoMapping[fileID]; exists {
 		return mappingIndex
 	}
 
-	locationMappingIndex := uint64(len(fileIDtoMapping))
+	locationMappingIndex := int32(len(fileIDtoMapping))
 	fileIDtoMapping[fileID] = locationMappingIndex
 
-	mapping := profile.Mapping().AppendEmpty()
-	mapping.SetFilename(int64(getStringMapIndex(stringMap, "")))
+	mapping := profile.MappingTable().AppendEmpty()
+	mapping.SetFilenameStrindex(getStringMapIndex(stringMap, ""))
 	return locationMappingIndex
 }

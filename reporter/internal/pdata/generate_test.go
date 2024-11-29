@@ -3,8 +3,8 @@ package pdata
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 
@@ -12,13 +12,18 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
 )
 
+type attributeStruct struct {
+	Key   string
+	Value any
+}
+
 func TestGetSampleAttributes(t *testing.T) {
 	tests := map[string]struct {
 		profile                pprofile.Profile
 		k                      []samples.TraceAndMetaKey
-		attributeMap           map[string]uint64
-		expectedIndices        [][]uint64
-		expectedAttributeTable map[string]any
+		attributeMap           map[string]int32
+		expectedIndices        [][]int32
+		expectedAttributeTable []attributeStruct
 	}{
 		"empty": {
 			profile: pprofile.NewProfile(),
@@ -31,10 +36,10 @@ func TestGetSampleAttributes(t *testing.T) {
 					Pid:            0,
 				},
 			},
-			attributeMap:    make(map[string]uint64),
-			expectedIndices: [][]uint64{{0}},
-			expectedAttributeTable: map[string]any{
-				"process.pid": 0,
+			attributeMap:    make(map[string]int32),
+			expectedIndices: [][]int32{{0}},
+			expectedAttributeTable: []attributeStruct{
+				{Key: "process.pid", Value: int64(0)},
 			},
 		},
 		"duplicate": {
@@ -55,13 +60,13 @@ func TestGetSampleAttributes(t *testing.T) {
 					Pid:            1234,
 				},
 			},
-			attributeMap:    make(map[string]uint64),
-			expectedIndices: [][]uint64{{0, 1, 2, 3}, {0, 1, 2, 3}},
-			expectedAttributeTable: map[string]any{
-				"container.id": "containerID1",
-				"thread.name":  "comm1",
-				"service.name": "apmServiceName1",
-				"process.pid":  1234,
+			attributeMap:    make(map[string]int32),
+			expectedIndices: [][]int32{{0, 1, 2, 3}, {0, 1, 2, 3}},
+			expectedAttributeTable: []attributeStruct{
+				{Key: "container.id", Value: "containerID1"},
+				{Key: "thread.name", Value: "comm1"},
+				{Key: "service.name", Value: "apmServiceName1"},
+				{Key: "process.pid", Value: int64(1234)},
 			},
 		},
 		"different": {
@@ -82,13 +87,17 @@ func TestGetSampleAttributes(t *testing.T) {
 					Pid:            6789,
 				},
 			},
-			attributeMap:    make(map[string]uint64),
-			expectedIndices: [][]uint64{{0, 1, 2, 3}, {4, 5, 6, 7}},
-			expectedAttributeTable: map[string]any{
-				"container.id": "containerID1",
-				"thread.name":  "comm1",
-				"service.name": "apmServiceName1",
-				"process.pid":  1234,
+			attributeMap:    make(map[string]int32),
+			expectedIndices: [][]int32{{0, 1, 2, 3}, {4, 5, 6, 7}},
+			expectedAttributeTable: []attributeStruct{
+				{Key: "container.id", Value: "containerID1"},
+				{Key: "thread.name", Value: "comm1"},
+				{Key: "service.name", Value: "apmServiceName1"},
+				{Key: "process.pid", Value: int64(1234)},
+				{Key: "container.id", Value: "containerID2"},
+				{Key: "thread.name", Value: "comm2"},
+				{Key: "service.name", Value: "apmServiceName2"},
+				{Key: "process.pid", Value: int64(6789)},
 			},
 		},
 	}
@@ -97,7 +106,7 @@ func TestGetSampleAttributes(t *testing.T) {
 		name := name
 		tc := tc
 		t.Run(name, func(t *testing.T) {
-			indices := make([][]uint64, 0)
+			indices := make([][]int32, 0)
 			for _, k := range tc.k {
 				indices = append(indices, append(addProfileAttributes(tc.profile,
 					[]samples.AttrKeyValue[string]{
@@ -110,11 +119,14 @@ func TestGetSampleAttributes(t *testing.T) {
 							{Key: string(semconv.ProcessPIDKey), Value: k.Pid},
 						}, tc.attributeMap)...))
 			}
-			require.Equal(t, tc.expectedIndices, indices)
+			assert.Equal(t, tc.expectedIndices, indices)
 
-			wantAt := pcommon.NewMap()
-			require.NoError(t, wantAt.FromRaw(tc.expectedAttributeTable))
-			require.Equal(t, wantAt, tc.profile.AttributeTable())
+			require.Equal(t, len(tc.expectedAttributeTable), tc.profile.AttributeTable().Len())
+			for i, v := range tc.expectedAttributeTable {
+				attr := tc.profile.AttributeTable().At(i)
+				assert.Equal(t, v.Key, attr.Key())
+				assert.Equal(t, v.Value, attr.Value().AsRaw())
+			}
 		})
 	}
 }
