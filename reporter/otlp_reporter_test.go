@@ -18,7 +18,7 @@ import (
 )
 
 func TestReportOTLPProfile(t *testing.T) {
-	lis, err := net.Listen("tcp", "0.0.0.0:0")
+	lis, err := net.Listen("tcp", "0.0.0.0:0") //nolint:gosec
 	require.NoError(t, err)
 
 	pi := &protoImpl{}
@@ -44,14 +44,13 @@ func TestReportOTLPProfile(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, r.Start(context.Background()))
+	defer r.Stop()
 
 	r.ReportTraceEvent(&libpf.Trace{}, &TraceEventMeta{})
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.NotZero(c, pi.exportCount)
 	}, time.Second, time.Millisecond, "the grpc server should have received an export request")
-
-	defer r.Stop()
 }
 
 type protoImpl struct {
@@ -60,7 +59,8 @@ type protoImpl struct {
 	exportCount int
 }
 
-func (pi *protoImpl) Export(context.Context, pprofileotlp.ExportRequest) (pprofileotlp.ExportResponse, error) {
+func (pi *protoImpl) Export(context.Context,
+	pprofileotlp.ExportRequest) (pprofileotlp.ExportResponse, error) {
 	pi.exportCount++
 	return pprofileotlp.NewExportResponse(), nil
 }
