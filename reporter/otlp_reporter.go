@@ -184,7 +184,7 @@ func (r *OTLPReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *Trace
 // ExecutableKnown returns true if the metadata of the Executable specified by fileID is
 // cached in the reporter.
 func (r *OTLPReporter) ExecutableKnown(fileID libpf.FileID) bool {
-	_, known := r.pdata.Executables.Get(fileID)
+	_, known := r.pdata.Executables.GetAndRefresh(fileID, ...)
 	return known
 }
 
