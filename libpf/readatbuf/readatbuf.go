@@ -113,7 +113,20 @@ func (reader *Reader) ReadAt(p []byte, off int64) (int, error) {
 		}
 
 		copyLen := min(remaining, uint(len(data))-skipOffset)
-		copy(p[writeOffset:][:copyLen], data[skipOffset:][:copyLen])
+
+		if copyLen > 0 {
+			// Ensure destination slice bounds
+			if writeOffset+copyLen > uint(len(p)) {
+				return int(writeOffset), fmt.Errorf("destination buffer overflow")
+			}
+
+			// Ensure source slice bounds
+			if skipOffset+copyLen > uint(len(data)) {
+				return int(writeOffset), fmt.Errorf("source buffer overflow")
+			}
+
+			copy(p[writeOffset:writeOffset+copyLen], data[skipOffset:skipOffset+copyLen])
+		}
 
 		skipOffset = 0
 		pageIdx++
