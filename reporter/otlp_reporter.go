@@ -201,7 +201,7 @@ func (r *OTLPReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 // cached in the reporter.
 func (r *OTLPReporter) FrameKnown(frameID libpf.FrameID) bool {
 	known := false
-	if frameMapLock, exists := r.pdata.Frames.Get(frameID.FileID()); exists {
+	if frameMapLock, exists := r.pdata.Frames.GetAndRefresh(frameID.FileID(), ...); exists {
 		frameMap := frameMapLock.RLock()
 		defer frameMapLock.RUnlock(&frameMap)
 		_, known = (*frameMap)[frameID.AddressOrLine()]
