@@ -111,6 +111,9 @@ func (reader *Reader) ReadAt(p []byte, off int64) (int, error) {
 		if err != nil {
 			return int(writeOffset), err
 		}
+		if skipOffset > uint(len(data)) {
+			return 0, io.EOF
+		}
 
 		copyLen := min(remaining, uint(len(data))-skipOffset)
 		copy(p[writeOffset:][:copyLen], data[skipOffset:][:copyLen])
