@@ -185,20 +185,20 @@ func TestCreateFunctionEntry(t *testing.T) {
 
 			wantIndex: 0,
 			wantFuncMap: map[samples.FuncInfo]int32{
-				samples.FuncInfo{Name: "my_method", FileName: "/tmp"}: 0,
+				{Name: "my_method", FileName: "/tmp"}: 0,
 			},
 		},
 		{
 			name: "with ane entry already in the func map",
 			funcMap: map[samples.FuncInfo]int32{
-				samples.FuncInfo{Name: "my_method", FileName: "/tmp"}: 42,
+				{Name: "my_method", FileName: "/tmp"}: 42,
 			},
 			funcName: "my_method",
 			fileName: "/tmp",
 
 			wantIndex: 42,
 			wantFuncMap: map[samples.FuncInfo]int32{
-				samples.FuncInfo{Name: "my_method", FileName: "/tmp"}: 42,
+				{Name: "my_method", FileName: "/tmp"}: 42,
 			},
 		},
 	} {
@@ -217,12 +217,14 @@ func TestGetDummyMappingIndex(t *testing.T) {
 		name            string
 		fileIDToMapping map[libpf.FileID]int32
 		stringMap       map[string]int32
+		attributeMap    map[string]int32
 		fileID          libpf.FileID
 
 		wantIndex           int32
 		wantFileIDToMapping map[libpf.FileID]int32
 		wantMappingTable    []int32
 		wantStringMap       map[string]int32
+		wantAttributeMap    map[string]int32
 	}{
 		{
 			name: "with an index already in the file id mapping",
@@ -237,6 +239,7 @@ func TestGetDummyMappingIndex(t *testing.T) {
 			name:            "with an index not yet in the file id mapping",
 			fileIDToMapping: map[libpf.FileID]int32{},
 			stringMap:       map[string]int32{},
+			attributeMap:    map[string]int32{},
 			fileID:          libpf.UnsymbolizedFileID,
 
 			wantIndex: 0,
@@ -245,11 +248,16 @@ func TestGetDummyMappingIndex(t *testing.T) {
 			},
 			wantMappingTable: []int32{0},
 			wantStringMap:    map[string]int32{"": 0},
+			wantAttributeMap: map[string]int32{
+				"process.executable.build_id.htlhash_ffffffffffffffffffffffffffffffff": 0,
+			},
 		},
 		{
-			name:            "with an index not yet in the file id mapping and a filename in the string table",
+			name: "with an index not yet in the file id mapping and a filename in the string table",
+
 			fileIDToMapping: map[libpf.FileID]int32{},
 			stringMap:       map[string]int32{"": 42},
+			attributeMap:    map[string]int32{},
 			fileID:          libpf.UnsymbolizedFileID,
 
 			wantIndex: 0,
@@ -258,17 +266,42 @@ func TestGetDummyMappingIndex(t *testing.T) {
 			},
 			wantMappingTable: []int32{42},
 			wantStringMap:    map[string]int32{"": 42},
+			wantAttributeMap: map[string]int32{
+				"process.executable.build_id.htlhash_ffffffffffffffffffffffffffffffff": 0,
+			},
+		},
+		{
+			name: "with an index not yet in the file id mapping and an attribute in the map",
+
+			fileIDToMapping: map[libpf.FileID]int32{},
+			stringMap:       map[string]int32{},
+			attributeMap: map[string]int32{
+				"process.executable.build_id.htlhash_ffffffffffffffffffffffffffffffff": 42,
+			},
+			fileID: libpf.UnsymbolizedFileID,
+
+			wantIndex: 0,
+			wantFileIDToMapping: map[libpf.FileID]int32{
+				libpf.UnsymbolizedFileID: 0,
+			},
+			wantMappingTable: []int32{0},
+			wantStringMap:    map[string]int32{"": 0},
+			wantAttributeMap: map[string]int32{
+				"process.executable.build_id.htlhash_ffffffffffffffffffffffffffffffff": 42,
+			},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			fitm := tt.fileIDToMapping
 			stringMap := tt.stringMap
+			attributeMap := tt.attributeMap
 			profile := pprofile.NewProfile()
 
-			i := getDummyMappingIndex(fitm, stringMap, profile, tt.fileID)
+			i := getDummyMappingIndex(fitm, stringMap, attributeMap, profile, tt.fileID)
 			assert.Equal(t, tt.wantIndex, i)
 			assert.Equal(t, tt.fileIDToMapping, fitm)
 			assert.Equal(t, tt.wantStringMap, stringMap)
+			assert.Equal(t, tt.wantAttributeMap, attributeMap)
 
 			require.Equal(t, len(tt.wantMappingTable), profile.MappingTable().Len())
 			for i, v := range tt.wantMappingTable {

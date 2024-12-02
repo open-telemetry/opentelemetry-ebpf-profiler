@@ -185,7 +185,7 @@ func (p *Pdata) setProfile(
 
 				// To be compliant with the protocol, generate a dummy mapping entry.
 				loc.SetMappingIndex(getDummyMappingIndex(fileIDtoMapping, stringMap,
-					profile, traceInfo.Files[i]))
+					attributeMap, profile, traceInfo.Files[i]))
 			}
 		}
 
@@ -315,7 +315,7 @@ func addProfileAttributes[T string | int64](profile pprofile.Profile,
 
 // getDummyMappingIndex inserts or looks up an entry for interpreted FileIDs.
 func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]int32,
-	stringMap map[string]int32, profile pprofile.Profile,
+	stringMap map[string]int32, attributeMap map[string]int32, profile pprofile.Profile,
 	fileID libpf.FileID) int32 {
 	if mappingIndex, exists := fileIDtoMapping[fileID]; exists {
 		return mappingIndex
@@ -324,7 +324,19 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]int32,
 	locationMappingIndex := int32(len(fileIDtoMapping))
 	fileIDtoMapping[fileID] = locationMappingIndex
 
+	attrs := addProfileAttributes(
+		profile,
+		[]samples.AttrKeyValue[string]{
+			{
+				Key:   "process.executable.build_id.htlhash",
+				Value: fileID.StringNoQuotes(),
+			},
+		},
+		attributeMap,
+	)
+
 	mapping := profile.MappingTable().AppendEmpty()
 	mapping.SetFilenameStrindex(getStringMapIndex(stringMap, ""))
+	mapping.AttributeIndices().FromRaw(attrs)
 	return locationMappingIndex
 }
