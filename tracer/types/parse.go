@@ -130,7 +130,6 @@ func Parse(tracers string) (IncludedTracers, error) {
 		case "all":
 			result.enableAll()
 			if runtime.GOARCH == "arm64" {
-				result.Disable(V8Tracer)
 				result.Disable(DotnetTracer)
 			}
 		case "native":
@@ -141,10 +140,6 @@ func Parse(tracers string) (IncludedTracers, error) {
 	}
 
 	if runtime.GOARCH == "arm64" {
-		if result.Has(V8Tracer) {
-			result.Disable(V8Tracer)
-			log.Warn("The V8 tracer is currently not supported on ARM64")
-		}
 		if result.Has(DotnetTracer) {
 			result.Disable(DotnetTracer)
 			log.Warn("The dotnet tracer is currently not supported on ARM64")
