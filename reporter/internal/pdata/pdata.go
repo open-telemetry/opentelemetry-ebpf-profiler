@@ -31,9 +31,14 @@ type Pdata struct {
 		libpf.FileID,
 		*xsync.RWMutex[map[libpf.AddressOrLineno]samples.SourceInfo],
 	]
+
+	// ExtraSampleAttrProd is an optional hook point for adding custom
+	// attributes to samples.
+	ExtraSampleAttrProd samples.SampleAttrProducer
 }
 
-func New(sps int, executablesCacheElements, framesCacheElements uint32) (*Pdata, error) {
+func New(sps int, executablesCacheElements, framesCacheElements uint32,
+	extra samples.SampleAttrProducer) (*Pdata, error) {
 	executables, err :=
 		lru.NewSynced[libpf.FileID, samples.ExecInfo](executablesCacheElements, libpf.FileID.Hash32)
 	if err != nil {
@@ -50,9 +55,10 @@ func New(sps int, executablesCacheElements, framesCacheElements uint32) (*Pdata,
 	frames.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
 
 	return &Pdata{
-		samplesPerSecond: sps,
-		Executables:      executables,
-		Frames:           frames,
+		samplesPerSecond:    sps,
+		Executables:         executables,
+		Frames:              frames,
+		ExtraSampleAttrProd: extra,
 	}, nil
 }
 

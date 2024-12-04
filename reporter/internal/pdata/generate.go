@@ -6,7 +6,6 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 import (
 	"crypto/rand"
 	"slices"
-	"strconv"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -64,11 +63,6 @@ func (p *Pdata) setProfile(
 	funcMap := make(map[samples.FuncInfo]int32)
 	funcMap[samples.FuncInfo{Name: "", FileName: ""}] = 0
 
-	// attributeMap is a temporary helper that maps attribute values to
-	// their respective indices.
-	// This is to ensure that AttributeTable does not contain duplicates.
-	attributeMap := make(map[string]int32)
-
 	st := profile.SampleType().AppendEmpty()
 	st.SetTypeStrindex(getStringMapIndex(stringMap, "samples"))
 	st.SetUnitStrindex(getStringMapIndex(stringMap, "count"))
@@ -81,6 +75,7 @@ func (p *Pdata) setProfile(
 	// Temporary lookup to reference existing Mappings.
 	fileIDtoMapping := make(map[libpf.FileID]int32)
 
+	attrMgr := samples.NewAttrTableManager(profile.AttributeTable())
 	var locationIndex int32
 	var startTS, endTS pcommon.Timestamp
 	for traceKey, traceInfo := range events {
@@ -96,13 +91,10 @@ func (p *Pdata) setProfile(
 
 		// Walk every frame of the trace.
 		for i := range traceInfo.FrameTypes {
-			frameAttributes := addProfileAttributes(profile, []samples.AttrKeyValue[string]{
-				{Key: "profile.frame.type", Value: traceInfo.FrameTypes[i].String()},
-			}, attributeMap)
-
 			loc := profile.LocationTable().AppendEmpty()
 			loc.SetAddress(uint64(traceInfo.Linenos[i]))
-			loc.AttributeIndices().FromRaw(frameAttributes)
+			attrMgr.AppendOptionalString(loc.AttributeIndices(),
+				"profile.frame.type", traceInfo.FrameTypes[i].String())
 
 			switch frameKind := traceInfo.FrameTypes[i]; frameKind {
 			case libpf.NativeFrame:
@@ -127,25 +119,19 @@ func (p *Pdata) setProfile(
 						fileName = ei.FileName
 					}
 
-					mappingAttributes := addProfileAttributes(
-						profile,
-						[]samples.AttrKeyValue[string]{
-							// Once SemConv and its Go package is released with the new
-							// semantic convention for build_id, replace these hard coded
-							// strings.
-							{Key: "process.executable.build_id.gnu", Value: ei.GnuBuildID},
-							{Key: "process.executable.build_id.htlhash",
-								Value: traceInfo.Files[i].StringNoQuotes()},
-						},
-						attributeMap,
-					)
-
 					mapping := profile.MappingTable().AppendEmpty()
 					mapping.SetMemoryStart(uint64(traceInfo.MappingStarts[i]))
 					mapping.SetMemoryLimit(uint64(traceInfo.MappingEnds[i]))
 					mapping.SetFileOffset(traceInfo.MappingFileOffsets[i])
 					mapping.SetFilenameStrindex(getStringMapIndex(stringMap, fileName))
-					mapping.AttributeIndices().FromRaw(mappingAttributes)
+
+					// Once SemConv and its Go package is released with the new
+					// semantic convention for build_id, replace these hard coded
+					// strings.
+					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+						"process.executable.build_id.gnu", ei.GnuBuildID)
+					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+						"process.executable.build_id.htlhash", traceInfo.Files[i].StringNoQuotes())
 				}
 				loc.SetMappingIndex(locationMappingIndex)
 			case libpf.AbortFrame:
@@ -185,19 +171,23 @@ func (p *Pdata) setProfile(
 
 				// To be compliant with the protocol, generate a dummy mapping entry.
 				loc.SetMappingIndex(getDummyMappingIndex(fileIDtoMapping, stringMap,
-					attributeMap, profile, traceInfo.Files[i]))
+					attrMgr, profile, traceInfo.Files[i]))
 			}
 		}
 
-		sampleAttrs := append(addProfileAttributes(profile, []samples.AttrKeyValue[string]{
-			{Key: string(semconv.ContainerIDKey), Value: traceKey.ContainerID},
-			{Key: string(semconv.ThreadNameKey), Value: traceKey.Comm},
-			{Key: string(semconv.ServiceNameKey), Value: traceKey.ApmServiceName},
-		}, attributeMap), addProfileAttributes(profile, []samples.AttrKeyValue[int64]{
-			{Key: string(semconv.ProcessPIDKey), Value: traceKey.Pid},
-		}, attributeMap)...)
+		attrMgr.AppendOptionalString(sample.AttributeIndices(),
+			semconv.ContainerIDKey, traceKey.ContainerID)
+		attrMgr.AppendOptionalString(sample.AttributeIndices(),
+			semconv.ProcessCommandKey, traceKey.Comm)
+		attrMgr.AppendOptionalString(sample.AttributeIndices(),
+			semconv.ServiceNameKey, traceKey.ApmServiceName)
+		attrMgr.AppendInt(sample.AttributeIndices(),
+			semconv.ProcessPIDKey, traceKey.Pid)
 
-		sample.AttributeIndices().FromRaw(sampleAttrs)
+		if p.ExtraSampleAttrProd != nil {
+			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, traceKey.ExtraMeta)
+			sample.AttributeIndices().Append(extra...)
+		}
 
 		sample.SetLocationsLength(int32(len(traceInfo.FrameTypes)))
 		locationIndex += sample.LocationsLength()
@@ -262,60 +252,9 @@ func createFunctionEntry(funcMap map[samples.FuncInfo]int32,
 	return idx
 }
 
-// addProfileAttributes adds attributes to Profile.attribute_table and returns
-// the indices to these attributes.
-func addProfileAttributes[T string | int64](profile pprofile.Profile,
-	attributes []samples.AttrKeyValue[T], attributeMap map[string]int32) []int32 {
-	indices := make([]int32, 0, len(attributes))
-
-	addAttr := func(attr samples.AttrKeyValue[T]) {
-		var attributeCompositeKey string
-		var attributeValue any
-
-		switch val := any(attr.Value).(type) {
-		case string:
-			if !attr.Required && val == "" {
-				return
-			}
-			attributeCompositeKey = attr.Key + "_" + val
-			attributeValue = val
-		case int64:
-			attributeCompositeKey = attr.Key + "_" + strconv.Itoa(int(val))
-			attributeValue = val
-		default:
-			log.Error("Unsupported attribute value type. Only string and int64 are supported.")
-			return
-		}
-
-		if attributeIndex, exists := attributeMap[attributeCompositeKey]; exists {
-			indices = append(indices, attributeIndex)
-			return
-		}
-		newIndex := int32(profile.AttributeTable().Len())
-		indices = append(indices, newIndex)
-
-		newAttr := profile.AttributeTable().AppendEmpty()
-		newAttr.SetKey(attr.Key)
-		switch v := attributeValue.(type) {
-		case int64:
-			newAttr.Value().SetInt(v)
-		case string:
-			newAttr.Value().SetStr(v)
-		}
-
-		attributeMap[attributeCompositeKey] = newIndex
-	}
-
-	for i := range attributes {
-		addAttr(attributes[i])
-	}
-
-	return indices
-}
-
 // getDummyMappingIndex inserts or looks up an entry for interpreted FileIDs.
 func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]int32,
-	stringMap map[string]int32, attributeMap map[string]int32, profile pprofile.Profile,
+	stringMap map[string]int32, attrMgr *samples.AttrTableManager, profile pprofile.Profile,
 	fileID libpf.FileID) int32 {
 	if mappingIndex, exists := fileIDtoMapping[fileID]; exists {
 		return mappingIndex
@@ -324,19 +263,9 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]int32,
 	locationMappingIndex := int32(len(fileIDtoMapping))
 	fileIDtoMapping[fileID] = locationMappingIndex
 
-	attrs := addProfileAttributes(
-		profile,
-		[]samples.AttrKeyValue[string]{
-			{
-				Key:   "process.executable.build_id.htlhash",
-				Value: fileID.StringNoQuotes(),
-			},
-		},
-		attributeMap,
-	)
-
 	mapping := profile.MappingTable().AppendEmpty()
 	mapping.SetFilenameStrindex(getStringMapIndex(stringMap, ""))
-	mapping.AttributeIndices().FromRaw(attrs)
+	attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+		"process.executable.build_id.htlhash", fileID.StringNoQuotes())
 	return locationMappingIndex
 }

@@ -101,6 +101,7 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 		cfg.SamplesPerSecond,
 		cfg.ExecutablesCacheElements,
 		cfg.FramesCacheElements,
+		cfg.ExtraSampleAttrProd,
 	)
 	if err != nil {
 		return nil, err
@@ -143,6 +144,11 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 	traceEventsMap := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEventsMap)
 
+	var extraMeta any
+	if r.config.ExtraSampleAttrProd != nil {
+		extraMeta = r.config.ExtraSampleAttrProd.CollectExtraSampleMeta(trace, meta)
+	}
+
 	containerID, err := libpf.LookupCgroupv2(r.cgroupv2ID, meta.PID)
 	if err != nil {
 		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
@@ -155,6 +161,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		ApmServiceName: meta.APMServiceName,
 		ContainerID:    containerID,
 		Pid:            int64(meta.PID),
+		ExtraMeta:      extraMeta,
 	}
 
 	if events, exists := (*traceEventsMap)[key]; exists {
