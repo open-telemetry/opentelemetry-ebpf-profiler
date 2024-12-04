@@ -225,6 +225,8 @@ var (
 	// regex for the interpreter executable
 	v8Regex = regexp.MustCompile(`^(?:.*/)?node(\d+)?$`)
 
+	v8LibRegex = regexp.MustCompile(`^(?:.*/)libnode\.so(\.\d+)?$`)
+
 	// The FileID used for V8 stub frames
 	v8StubsFileID = libpf.NewFileID(0x578b, 0x1d)
 
@@ -2023,7 +2025,9 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	if !v8Regex.MatchString(info.FileName()) {
-		return nil, nil
+		if !v8LibRegex.MatchString(info.FileName()) {
+			return nil, nil
+		}
 	}
 
 	ef, err := info.GetELF()
