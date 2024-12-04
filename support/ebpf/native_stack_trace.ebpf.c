@@ -37,6 +37,8 @@ STACK_DELTA_BUCKET(18);
 STACK_DELTA_BUCKET(19);
 STACK_DELTA_BUCKET(20);
 STACK_DELTA_BUCKET(21);
+STACK_DELTA_BUCKET(22);
+STACK_DELTA_BUCKET(23);
 
 // Unwind info value for invalid stack delta
 #define STACK_DELTA_INVALID (STACK_DELTA_COMMAND_FLAG | UNWIND_COMMAND_INVALID)
@@ -154,6 +156,8 @@ void *get_stack_delta_map(int mapID) {
   case 19: return &exe_id_to_19_stack_deltas;
   case 20: return &exe_id_to_20_stack_deltas;
   case 21: return &exe_id_to_21_stack_deltas;
+  case 22: return &exe_id_to_22_stack_deltas;
+  case 23: return &exe_id_to_23_stack_deltas;
   default: return NULL;
   }
 }
@@ -472,7 +476,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bo
     return ERR_NATIVE_PC_READ;
   }
   state->sp = cfa;
-  state->return_address = true;
+  unwinder_mark_nonleaf_frame(state);
 frame_ok:
   increment_metric(metricID_UnwindNativeFrames);
   return ERR_OK;
@@ -512,6 +516,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
       state->lr = normalize_pac_ptr(rt_regs[30]);
       state->r22 = rt_regs[22];
       state->return_address = false;
+      state->lr_invalid = false;
       DEBUG_PRINT("signal frame");
       goto frame_ok;
     case UNWIND_COMMAND_STOP:
@@ -548,7 +553,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
     if (info->fpOpcode == UNWIND_OPCODE_BASE_LR) {
       // Allow LR unwinding only if it's known to be valid: either because
       // it's the topmost user-mode frame, or recovered by signal trampoline.
-      if (state->return_address) {
+      if (state->lr_invalid) {
         increment_metric(metricID_UnwindNativeErrLrUnwindingMidTrace);
         return ERR_NATIVE_LR_UNWINDING_MID_TRACE;
       }
@@ -593,7 +598,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
   }
 
   state->sp = cfa;
-  state->return_address = true;
+  unwinder_mark_nonleaf_frame(state);
 frame_ok:
   increment_metric(metricID_UnwindNativeFrames);
   return ERR_OK;
@@ -642,7 +647,12 @@ static inline ErrorCode copy_state_regs(UnwindState *state,
   // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/arm64/include/asm/ptrace.h#L118
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/arm64/include/asm/ptrace.h#L206-L209
+  //
+  // Note: We do not use `unwinder_mark_nonleaf_frame` here,
+  // because the frame is a leaf frame from the perspective of the user stack,
+  // regardless of whether we are in a syscall.
   state->return_address = interrupted_kernelmode && regs->syscallno != -1;
+  state->lr_invalid = false;
 #endif
 
   return ERR_OK;

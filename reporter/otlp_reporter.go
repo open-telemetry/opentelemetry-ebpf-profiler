@@ -4,14 +4,10 @@
 package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
-	"bufio"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
-	"fmt"
 	"maps"
-	"os"
-	"regexp"
 	"slices"
 	"strconv"
 	"time"
@@ -33,8 +29,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 )
 
-var (
-	cgroupv2PathPattern = regexp.MustCompile(`0:.*?:(.*)`)
+const (
+	executableCacheLifetime = 1 * time.Hour
 )
 
 // Assert that we implement the full Reporter interface.
@@ -70,6 +66,7 @@ type traceAndMetaKey struct {
 	apmServiceName string
 	// containerID is annotated based on PID information
 	containerID string
+	pid         int64
 }
 
 // traceEvents holds known information about a trace.
@@ -84,9 +81,11 @@ type traceEvents struct {
 }
 
 // attrKeyValue is a helper to populate Profile.attribute_table.
-type attrKeyValue struct {
-	key   string
-	value string
+type attrKeyValue[T string | int64] struct {
+	key string
+	// Set to true for OTel SemConv attributes with requirement level: Required
+	required bool
+	value    T
 }
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
@@ -101,8 +100,8 @@ type OTLPReporter struct {
 	// client for the connection to the receiver.
 	client otlpcollector.ProfilesServiceClient
 
-	// stopSignal is the stop signal for shutting down all background tasks.
-	stopSignal chan libpf.Void
+	// runLoop handles the run loop
+	runLoop *runLoop
 
 	// rpcStats stores gRPC related statistics.
 	rpcStats *StatsHandlerImpl
@@ -152,7 +151,7 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 	if err != nil {
 		return nil, err
 	}
-	executables.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
+	executables.SetLifetime(executableCacheLifetime) // Allow GC to clean stale items.
 
 	frames, err := lru.NewSynced[libpf.FileID,
 		*xsync.RWMutex[map[libpf.AddressOrLineno]sourceInfo]](
@@ -179,15 +178,17 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 	}
 
 	return &OTLPReporter{
-		config:                  cfg,
-		name:                    cfg.Name,
-		version:                 cfg.Version,
-		kernelVersion:           cfg.KernelVersion,
-		hostName:                cfg.HostName,
-		ipAddress:               cfg.IPAddress,
-		samplesPerSecond:        cfg.SamplesPerSecond,
-		hostID:                  strconv.FormatUint(cfg.HostID, 10),
-		stopSignal:              make(chan libpf.Void),
+		config:           cfg,
+		name:             cfg.Name,
+		version:          cfg.Version,
+		kernelVersion:    cfg.KernelVersion,
+		hostName:         cfg.HostName,
+		ipAddress:        cfg.IPAddress,
+		samplesPerSecond: cfg.SamplesPerSecond,
+		hostID:           strconv.FormatUint(cfg.HostID, 10),
+		runLoop: &runLoop{
+			stopSignal: make(chan libpf.Void),
+		},
 		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
 		client:                  nil,
 		rpcStats:                NewStatsHandler(),
@@ -213,7 +214,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 	traceEventsMap := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEventsMap)
 
-	containerID, err := r.lookupCgroupv2(meta.PID)
+	containerID, err := libpf.LookupCgroupv2(r.cgroupv2ID, meta.PID)
 	if err != nil {
 		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
 			meta.PID, err)
@@ -224,6 +225,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		comm:           meta.Comm,
 		apmServiceName: meta.APMServiceName,
 		containerID:    containerID,
+		pid:            int64(meta.PID),
 	}
 
 	if events, exists := (*traceEventsMap)[key]; exists {
@@ -344,7 +346,7 @@ func (r *OTLPReporter) ReportMetrics(_ uint32, _ []uint32, _ []int64) {}
 
 // Stop triggers a graceful shutdown of OTLPReporter.
 func (r *OTLPReporter) Stop() {
-	close(r.stopSignal)
+	r.runLoop.Stop()
 }
 
 // GetMetrics returns internal metrics of OTLPReporter.
@@ -368,41 +370,27 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 	otlpGrpcConn, err := waitGrpcEndpoint(ctx, r.config, r.rpcStats)
 	if err != nil {
 		cancelReporting()
-		close(r.stopSignal)
+		r.runLoop.Stop()
 		return err
 	}
 	r.client = otlpcollector.NewProfilesServiceClient(otlpGrpcConn)
 
-	go func() {
-		tick := time.NewTicker(r.config.ReportInterval)
-		defer tick.Stop()
-		purgeTick := time.NewTicker(5 * time.Minute)
-		defer purgeTick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-r.stopSignal:
-				return
-			case <-tick.C:
-				if err := r.reportOTLPProfile(ctx); err != nil {
-					log.Errorf("Request failed: %v", err)
-				}
-				tick.Reset(libpf.AddJitter(r.config.ReportInterval, 0.2))
-			case <-purgeTick.C:
-				// Allow the GC to purge expired entries to avoid memory leaks.
-				r.executables.PurgeExpired()
-				r.frames.PurgeExpired()
-				r.cgroupv2ID.PurgeExpired()
-			}
+	r.runLoop.Start(ctx, r.config.ReportInterval, func() {
+		if err := r.reportOTLPProfile(ctx); err != nil {
+			log.Errorf("Request failed: %v", err)
 		}
-	}()
+	}, func() {
+		// Allow the GC to purge expired entries to avoid memory leaks.
+		r.executables.PurgeExpired()
+		r.frames.PurgeExpired()
+		r.cgroupv2ID.PurgeExpired()
+	})
 
 	// When Stop() is called and a signal to 'stop' is received, then:
 	// - cancel the reporting functions currently running (using context)
 	// - close the gRPC connection with collection-agent
 	go func() {
-		<-r.stopSignal
+		<-r.runLoop.stopSignal
 		cancelReporting()
 		if err := otlpGrpcConn.Close(); err != nil {
 			log.Fatalf("Stopping connection of OTLP client client failed: %v", err)
@@ -566,7 +554,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 
 		// Walk every frame of the trace.
 		for i := range traceInfo.frameTypes {
-			frameAttributes := addProfileAttributes(profile, []attrKeyValue{
+			frameAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
 				{key: "profile.frame.type", value: traceInfo.frameTypes[i].String()},
 			}, attributeMap)
 
@@ -590,7 +578,9 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 					fileIDtoMapping[traceInfo.files[i]] = idx
 					locationMappingIndex = idx
 
-					execInfo, exists := r.executables.Get(traceInfo.files[i])
+					// Ensure that actively used executables do not expire.
+					execInfo, exists := r.executables.GetAndRefresh(traceInfo.files[i],
+						executableCacheLifetime)
 
 					// Next step: Select a proper default value,
 					// if the name of the executable is not known yet.
@@ -599,12 +589,12 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 						fileName = execInfo.fileName
 					}
 
-					mappingAttributes := addProfileAttributes(profile, []attrKeyValue{
+					mappingAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
 						// Once SemConv and its Go package is released with the new
 						// semantic convention for build_id, replace these hard coded
 						// strings.
 						{key: "process.executable.build_id.gnu", value: execInfo.gnuBuildID},
-						{key: "process.executable.build_id.profiling",
+						{key: "process.executable.build_id.htlhash",
 							value: traceInfo.files[i].StringNoQuotes()},
 					}, attributeMap)
 
@@ -658,17 +648,19 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 				loc.Line = append(loc.Line, line)
 
 				// To be compliant with the protocol, generate a dummy mapping entry.
-				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping, stringMap,
-					profile, traceInfo.files[i])
+				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping,
+					stringMap, attributeMap, profile, traceInfo.files[i])
 			}
 			profile.Location = append(profile.Location, loc)
 		}
 
-		sample.Attributes = addProfileAttributes(profile, []attrKeyValue{
+		sample.Attributes = append(addProfileAttributes(profile, []attrKeyValue[string]{
 			{key: string(semconv.ContainerIDKey), value: traceKey.containerID},
 			{key: string(semconv.ThreadNameKey), value: traceKey.comm},
 			{key: string(semconv.ServiceNameKey), value: traceKey.apmServiceName},
-		}, attributeMap)
+		}, attributeMap), addProfileAttributes(profile, []attrKeyValue[int64]{
+			{key: string(semconv.ProcessPIDKey), value: traceKey.pid},
+		}, attributeMap)...)
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
 		locationIndex += sample.LocationsLength
 
@@ -739,15 +731,29 @@ func createFunctionEntry(funcMap map[funcInfo]uint64,
 
 // addProfileAttributes adds attributes to Profile.attribute_table and returns
 // the indices to these attributes.
-func addProfileAttributes(profile *profiles.Profile,
-	attributes []attrKeyValue, attributeMap map[string]uint64) []uint64 {
+func addProfileAttributes[T string | int64](profile *profiles.Profile,
+	attributes []attrKeyValue[T], attributeMap map[string]uint64) []uint64 {
 	indices := make([]uint64, 0, len(attributes))
 
-	addAttr := func(attr attrKeyValue) {
-		if attr.value == "" {
+	addAttr := func(attr attrKeyValue[T]) {
+		var attributeCompositeKey string
+		var attributeValue common.AnyValue
+
+		switch val := any(attr.value).(type) {
+		case string:
+			if !attr.required && val == "" {
+				return
+			}
+			attributeCompositeKey = attr.key + "_" + val
+			attributeValue = common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: val}}
+		case int64:
+			attributeCompositeKey = attr.key + "_" + strconv.Itoa(int(val))
+			attributeValue = common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: val}}
+		default:
+			log.Error("Unsupported attribute value type. Only string and int64 are supported.")
 			return
 		}
-		attributeCompositeKey := attr.key + "_" + attr.value
+
 		if attributeIndex, exists := attributeMap[attributeCompositeKey]; exists {
 			indices = append(indices, attributeIndex)
 			return
@@ -756,7 +762,7 @@ func addProfileAttributes(profile *profiles.Profile,
 		indices = append(indices, newIndex)
 		profile.AttributeTable = append(profile.AttributeTable, &common.KeyValue{
 			Key:   attr.key,
-			Value: &common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: attr.value}},
+			Value: &attributeValue,
 		})
 		attributeMap[attributeCompositeKey] = newIndex
 	}
@@ -770,24 +776,23 @@ func addProfileAttributes(profile *profiles.Profile,
 
 // getDummyMappingIndex inserts or looks up an entry for interpreted FileIDs.
 func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
-	stringMap map[string]uint32, profile *profiles.Profile,
-	fileID libpf.FileID) uint64 {
-	var locationMappingIndex uint64
+	stringMap map[string]uint32, attributeMap map[string]uint64,
+	profile *profiles.Profile, fileID libpf.FileID) uint64 {
 	if tmpMappingIndex, exists := fileIDtoMapping[fileID]; exists {
-		locationMappingIndex = tmpMappingIndex
-	} else {
-		idx := uint64(len(fileIDtoMapping))
-		fileIDtoMapping[fileID] = idx
-		locationMappingIndex = idx
-
-		profile.Mapping = append(profile.Mapping, &profiles.Mapping{
-			Filename: int64(getStringMapIndex(stringMap, "")),
-			BuildId: int64(getStringMapIndex(stringMap,
-				fileID.StringNoQuotes())),
-			BuildIdKind: *profiles.BuildIdKind_BUILD_ID_BINARY_HASH.Enum(),
-		})
+		return tmpMappingIndex
 	}
-	return locationMappingIndex
+	idx := uint64(len(fileIDtoMapping))
+	fileIDtoMapping[fileID] = idx
+
+	mappingAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
+		{key: "process.executable.build_id.htlhash",
+			value: fileID.StringNoQuotes()}}, attributeMap)
+
+	profile.Mapping = append(profile.Mapping, &profiles.Mapping{
+		Filename:   int64(getStringMapIndex(stringMap, "")),
+		Attributes: mappingAttributes,
+	})
+	return idx
 }
 
 // waitGrpcEndpoint waits until the gRPC connection is established.
@@ -851,45 +856,4 @@ func setupGrpcConnection(parent context.Context, cfg *Config,
 	defer cancel()
 	//nolint:staticcheck
 	return grpc.DialContext(ctx, cfg.CollAgentAddr, opts...)
-}
-
-// lookupCgroupv2 returns the cgroupv2 ID for pid.
-func (r *OTLPReporter) lookupCgroupv2(pid libpf.PID) (string, error) {
-	id, ok := r.cgroupv2ID.Get(pid)
-	if ok {
-		return id, nil
-	}
-
-	// Slow path
-	f, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-
-	var genericCgroupv2 string
-	scanner := bufio.NewScanner(f)
-	buf := make([]byte, 512)
-	// Providing a predefined buffer overrides the internal buffer that Scanner uses (4096 bytes).
-	// We can do that and also set a maximum allocation size on the following call.
-	// With a maximum of 4096 characters path in the kernel, 8192 should be fine here. We don't
-	// expect lines in /proc/<PID>/cgroup to be longer than that.
-	scanner.Buffer(buf, 8192)
-	var pathParts []string
-	for scanner.Scan() {
-		line := scanner.Text()
-		pathParts = cgroupv2PathPattern.FindStringSubmatch(line)
-		if pathParts == nil {
-			log.Debugf("Could not extract cgroupv2 path from line: %s", line)
-			continue
-		}
-		genericCgroupv2 = pathParts[1]
-		break
-	}
-
-	// Cache the cgroupv2 information.
-	// To avoid busy lookups, also empty cgroupv2 information is cached.
-	r.cgroupv2ID.Add(pid, genericCgroupv2)
-
-	return genericCgroupv2, nil
 }

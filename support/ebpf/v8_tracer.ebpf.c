@@ -271,7 +271,7 @@ frame_done:
   state->sp = fp + sizeof(regs);
   state->fp = regs[0];
   state->pc = regs[1];
-  state->return_address = true;
+  unwinder_mark_nonleaf_frame(state);
 
   DEBUG_PRINT("v8: pc: %lx, sp: %lx, fp: %lx",
               (unsigned long) state->pc, (unsigned long) state->sp,

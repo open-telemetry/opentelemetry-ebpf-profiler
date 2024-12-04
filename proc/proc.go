@@ -121,10 +121,15 @@ func GetKernelModules(modulesPath string,
 
 		count++
 
-		nFields, _ := fmt.Sscanf(line, "%s %d %d %s %s 0x%x",
+		nFields, err := fmt.Sscanf(line, "%s %d %d %s %s 0x%x",
 			&name, &size, &refcount, &dependencies, &state, &address)
+		if err != nil {
+			log.Warnf("error parsing line '%s' in modules: '%s'", line, err)
+			continue
+		}
 		if nFields < 6 {
-			return nil, fmt.Errorf("unexpected line in modules: '%s'", line)
+			log.Warnf("unexpected line in modules: '%s'", line)
+			continue
 		}
 		if address == 0 {
 			continue

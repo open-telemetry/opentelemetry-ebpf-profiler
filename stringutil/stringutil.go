@@ -84,8 +84,3 @@ func SplitN(s, sep string, f []string) int {
 func ByteSlice2String(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
-
-// StrDataPtr returns the string's underlying Data pointer through reflection.
-func StrDataPtr(s string) *byte {
-	return unsafe.StringData(s)
-}

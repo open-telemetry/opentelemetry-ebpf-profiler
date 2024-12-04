@@ -5,33 +5,13 @@ package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
 	"context"
-	"fmt"
 	"math/rand/v2"
-	"os"
 	"reflect"
 	"time"
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
 )
-
-// WriteTempFile writes a data buffer to a temporary file on the filesystem. It
-// is the callers responsibility to clean up that file again. The function returns
-// the filename if successful.
-func WriteTempFile(data []byte, directory, prefix string) (string, error) {
-	file, err := os.CreateTemp(directory, prefix)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	if _, err := file.Write(data); err != nil {
-		return "", fmt.Errorf("failed to write data to temporary file: %w", err)
-	}
-	if err := file.Sync(); err != nil {
-		return "", fmt.Errorf("failed to synchronize file data: %w", err)
-	}
-	return file.Name(), nil
-}
 
 // SleepWithJitter sleeps for baseDuration +/- jitter (jitter is [0..1])
 func SleepWithJitter(baseDuration time.Duration, jitter float64) {
