@@ -29,7 +29,7 @@ endif
 export TARGET_ARCH
 export CGO_ENABLED = 1
 export GOARCH = $(TARGET_ARCH)
-export CC = $(ARCH_PREFIX)gcc
+export CC = $(ARCH_PREFIX)clang-16
 export OBJCOPY = $(ARCH_PREFIX)objcopy
 
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
