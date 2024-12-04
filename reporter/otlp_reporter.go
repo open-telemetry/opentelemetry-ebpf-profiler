@@ -67,6 +67,9 @@ type traceAndMetaKey struct {
 	// containerID is annotated based on PID information
 	containerID string
 	pid         int64
+	// extraMeta stores extra meta info that may have been produced by a
+	// `SampleAttrProducer` instance. May be nil.
+	extraMeta any
 }
 
 // traceEvents holds known information about a trace.
@@ -78,14 +81,6 @@ type traceEvents struct {
 	mappingEnds        []libpf.Address
 	mappingFileOffsets []uint64
 	timestamps         []uint64 // in nanoseconds
-}
-
-// attrKeyValue is a helper to populate Profile.attribute_table.
-type attrKeyValue[T string | int64] struct {
-	key string
-	// Set to true for OTel SemConv attributes with requirement level: Required
-	required bool
-	value    T
 }
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
@@ -214,6 +209,11 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 	traceEventsMap := r.traceEvents.WLock()
 	defer r.traceEvents.WUnlock(&traceEventsMap)
 
+	var extraMeta any
+	if r.config.ExtraSampleAttrProd != nil {
+		extraMeta = r.config.ExtraSampleAttrProd.CollectExtraSampleMeta(trace, meta)
+	}
+
 	containerID, err := libpf.LookupCgroupv2(r.cgroupv2ID, meta.PID)
 	if err != nil {
 		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
@@ -226,6 +226,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		apmServiceName: meta.APMServiceName,
 		containerID:    containerID,
 		pid:            int64(meta.PID),
+		extraMeta:      extraMeta,
 	}
 
 	if events, exists := (*traceEventsMap)[key]; exists {
@@ -507,11 +508,6 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 	funcMap := make(map[funcInfo]uint64)
 	funcMap[funcInfo{name: "", fileName: ""}] = 0
 
-	// attributeMap is a temporary helper that maps attribute values to
-	// their respective indices.
-	// This is to ensure that AttributeTable does not contain duplicates.
-	attributeMap := make(map[string]uint64)
-
 	numSamples := len(samples)
 	profile = &profiles.Profile{
 		// SampleType - Next step: Figure out the correct SampleType.
@@ -533,6 +529,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 		// DefaultSampleType - Optional element we do not use.
 	}
 
+	attrMgr := NewAttrTableManager(&profile.AttributeTable)
 	locationIndex := uint64(0)
 
 	// Temporary lookup to reference existing Mappings.
@@ -554,9 +551,10 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 
 		// Walk every frame of the trace.
 		for i := range traceInfo.frameTypes {
-			frameAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
-				{key: "profile.frame.type", value: traceInfo.frameTypes[i].String()},
-			}, attributeMap)
+			var frameAttributes []AttrIndex
+
+			attrMgr.AppendOptionalString(&frameAttributes,
+				"profile.frame.type", traceInfo.frameTypes[i].String())
 
 			loc := &profiles.Location{
 				// Id - Optional element we do not use.
@@ -589,14 +587,14 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 						fileName = execInfo.fileName
 					}
 
-					mappingAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
-						// Once SemConv and its Go package is released with the new
-						// semantic convention for build_id, replace these hard coded
-						// strings.
-						{key: "process.executable.build_id.gnu", value: execInfo.gnuBuildID},
-						{key: "process.executable.build_id.htlhash",
-							value: traceInfo.files[i].StringNoQuotes()},
-					}, attributeMap)
+					// Once SemConv and its Go package is released with the new
+					// semantic convention for build_id, replace these hard coded
+					// strings.
+					var mappingAttributes []AttrIndex
+					attrMgr.AppendOptionalString(&mappingAttributes,
+						"process.executable.build_id.gnu", execInfo.gnuBuildID)
+					attrMgr.AppendOptionalString(&mappingAttributes,
+						"process.executable.build_id.htlhash", traceInfo.files[i].StringNoQuotes())
 
 					profile.Mapping = append(profile.Mapping, &profiles.Mapping{
 						// Id - Optional element we do not use.
@@ -649,18 +647,25 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 
 				// To be compliant with the protocol, generate a dummy mapping entry.
 				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping,
-					stringMap, attributeMap, profile, traceInfo.files[i])
+					stringMap, attrMgr, profile, traceInfo.files[i])
 			}
 			profile.Location = append(profile.Location, loc)
 		}
 
-		sample.Attributes = append(addProfileAttributes(profile, []attrKeyValue[string]{
-			{key: string(semconv.ContainerIDKey), value: traceKey.containerID},
-			{key: string(semconv.ThreadNameKey), value: traceKey.comm},
-			{key: string(semconv.ServiceNameKey), value: traceKey.apmServiceName},
-		}, attributeMap), addProfileAttributes(profile, []attrKeyValue[int64]{
-			{key: string(semconv.ProcessPIDKey), value: traceKey.pid},
-		}, attributeMap)...)
+		attrMgr.AppendOptionalString(&sample.Attributes,
+			semconv.ContainerIDKey, traceKey.containerID)
+		attrMgr.AppendOptionalString(&sample.Attributes,
+			semconv.ProcessCommandKey, traceKey.comm)
+		attrMgr.AppendOptionalString(&sample.Attributes,
+			semconv.ServiceNameKey, traceKey.apmServiceName)
+		attrMgr.AppendInt(&sample.Attributes,
+			semconv.ProcessPIDKey, traceKey.pid)
+
+		if r.config.ExtraSampleAttrProd != nil {
+			extra := r.config.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, traceKey.extraMeta)
+			sample.Attributes = append(sample.Attributes, extra...)
+		}
+
 		sample.LocationsLength = uint64(len(traceInfo.frameTypes))
 		locationIndex += sample.LocationsLength
 
@@ -729,54 +734,9 @@ func createFunctionEntry(funcMap map[funcInfo]uint64,
 	return idx
 }
 
-// addProfileAttributes adds attributes to Profile.attribute_table and returns
-// the indices to these attributes.
-func addProfileAttributes[T string | int64](profile *profiles.Profile,
-	attributes []attrKeyValue[T], attributeMap map[string]uint64) []uint64 {
-	indices := make([]uint64, 0, len(attributes))
-
-	addAttr := func(attr attrKeyValue[T]) {
-		var attributeCompositeKey string
-		var attributeValue common.AnyValue
-
-		switch val := any(attr.value).(type) {
-		case string:
-			if !attr.required && val == "" {
-				return
-			}
-			attributeCompositeKey = attr.key + "_" + val
-			attributeValue = common.AnyValue{Value: &common.AnyValue_StringValue{StringValue: val}}
-		case int64:
-			attributeCompositeKey = attr.key + "_" + strconv.Itoa(int(val))
-			attributeValue = common.AnyValue{Value: &common.AnyValue_IntValue{IntValue: val}}
-		default:
-			log.Error("Unsupported attribute value type. Only string and int64 are supported.")
-			return
-		}
-
-		if attributeIndex, exists := attributeMap[attributeCompositeKey]; exists {
-			indices = append(indices, attributeIndex)
-			return
-		}
-		newIndex := uint64(len(profile.AttributeTable))
-		indices = append(indices, newIndex)
-		profile.AttributeTable = append(profile.AttributeTable, &common.KeyValue{
-			Key:   attr.key,
-			Value: &attributeValue,
-		})
-		attributeMap[attributeCompositeKey] = newIndex
-	}
-
-	for i := range attributes {
-		addAttr(attributes[i])
-	}
-
-	return indices
-}
-
 // getDummyMappingIndex inserts or looks up an entry for interpreted FileIDs.
 func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
-	stringMap map[string]uint32, attributeMap map[string]uint64,
+	stringMap map[string]uint32, attrMgr *AttrTableManager,
 	profile *profiles.Profile, fileID libpf.FileID) uint64 {
 	if tmpMappingIndex, exists := fileIDtoMapping[fileID]; exists {
 		return tmpMappingIndex
@@ -784,9 +744,9 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]uint64,
 	idx := uint64(len(fileIDtoMapping))
 	fileIDtoMapping[fileID] = idx
 
-	mappingAttributes := addProfileAttributes(profile, []attrKeyValue[string]{
-		{key: "process.executable.build_id.htlhash",
-			value: fileID.StringNoQuotes()}}, attributeMap)
+	var mappingAttributes []AttrIndex
+	attrMgr.AppendOptionalString(&mappingAttributes,
+		"process.executable.build_id.htlhash", fileID.StringNoQuotes())
 
 	profile.Mapping = append(profile.Mapping, &profiles.Mapping{
 		Filename:   int64(getStringMapIndex(stringMap, "")),
