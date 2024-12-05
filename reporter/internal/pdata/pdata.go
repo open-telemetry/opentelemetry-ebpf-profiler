@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	executableCacheLifetime = 1 * time.Hour
 )
 
 // Pdata holds the cache for the data used to generate the events reporters
