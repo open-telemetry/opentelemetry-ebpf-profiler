@@ -256,7 +256,7 @@ func symbolMapFromELFSymbols(syms []elf.Symbol) *libpf.SymbolMap {
 		symmap.Add(libpf.Symbol{
 			Name:    libpf.SymbolName(sym.Name),
 			Address: libpf.SymbolValue(sym.Value),
-			Size:    int(sym.Size),
+			Size:    sym.Size,
 		})
 	}
 	symmap.Finalize()

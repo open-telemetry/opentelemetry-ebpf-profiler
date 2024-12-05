@@ -32,7 +32,7 @@ type SymbolFinder interface {
 type Symbol struct {
 	Name    SymbolName
 	Address SymbolValue
-	Size    int
+	Size    uint64
 }
 
 var _ SymbolFinder = &SymbolMap{}
