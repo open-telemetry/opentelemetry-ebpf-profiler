@@ -50,7 +50,7 @@ func (i *LoaderInfo) GetSymbolAsRanges(symbol libpf.SymbolName) ([]util.Range, e
 	start := uint64(sym.Address)
 	return []util.Range{{
 		Start: start,
-		End:   start + uint64(sym.Size)},
+		End:   start + sym.Size},
 	}, nil
 }
 

@@ -48,7 +48,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 			deltas = append(
 				deltas,
 				sdtypes.StackDelta{Address: addr, Info: sdtypes.UnwindInfoSignal},
-				sdtypes.StackDelta{Address: addr + uint64(sym.Size), Info: sdtypes.UnwindInfoLR},
+				sdtypes.StackDelta{Address: addr + sym.Size, Info: sdtypes.UnwindInfoLR},
 			)
 			return
 		}
@@ -60,7 +60,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 
 		var frameStart uint64
 		var frameSize int
-		for offs := uint64(0); offs < uint64(sym.Size); offs += 4 {
+		for offs := uint64(0); offs < sym.Size; offs += 4 {
 			inst, err := aa.Decode(code[offs:])
 			if err != nil {
 				continue
