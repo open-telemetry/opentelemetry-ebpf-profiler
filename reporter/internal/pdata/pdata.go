@@ -43,7 +43,7 @@ func New(sps int, executablesCacheElements, framesCacheElements uint32,
 	if err != nil {
 		return nil, err
 	}
-	executables.SetLifetime(executableCacheLifetime) // Allow GC to clean stale items.
+	executables.SetLifetime(ExecutableCacheLifetime) // Allow GC to clean stale items.
 
 	frames, err := lru.NewSynced[libpf.FileID,
 		*xsync.RWMutex[map[libpf.AddressOrLineno]samples.SourceInfo]](
