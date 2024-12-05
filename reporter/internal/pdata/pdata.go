@@ -52,7 +52,7 @@ func New(sps int, executablesCacheElements, framesCacheElements uint32,
 	if err != nil {
 		return nil, err
 	}
-	frames.SetLifetime(1 * time.Hour) // Allow GC to clean stale items.
+	frames.SetLifetime(FramesCacheLifetime) // Allow GC to clean stale items.
 
 	return &Pdata{
 		samplesPerSecond:    sps,
