@@ -31,7 +31,7 @@ type Pdata struct {
 	ExtraSampleAttrProd samples.SampleAttrProducer
 }
 
-func New(sps int, executablesCacheElements, framesCacheElements uint32,
+func New(samplesPerSecond int, executablesCacheElements, framesCacheElements uint32,
 	extra samples.SampleAttrProducer) (*Pdata, error) {
 	executables, err :=
 		lru.NewSynced[libpf.FileID, samples.ExecInfo](executablesCacheElements, libpf.FileID.Hash32)
@@ -49,7 +49,7 @@ func New(sps int, executablesCacheElements, framesCacheElements uint32,
 	frames.SetLifetime(FramesCacheLifetime) // Allow GC to clean stale items.
 
 	return &Pdata{
-		samplesPerSecond:    sps,
+		samplesPerSecond:    samplesPerSecond,
 		Executables:         executables,
 		Frames:              frames,
 		ExtraSampleAttrProd: extra,
