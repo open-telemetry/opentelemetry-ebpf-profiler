@@ -323,10 +323,10 @@ func (o *offsetData) findTraceInfoFromLuaOpen() (*libpf.Symbol, error) {
 	slices.Sort(funcAddrs)
 
 	// Its a tiny function, give it reasonable default.
-	traceInfoSize := 100
+	traceInfoSize := uint64(100)
 	for i, addr := range funcAddrs {
 		if addr == traceInfoAddr && i != len(funcAddrs)-1 {
-			traceInfoSize = int(funcAddrs[i+1] - funcAddrs[i])
+			traceInfoSize = funcAddrs[i+1] - funcAddrs[i]
 			break
 		}
 	}

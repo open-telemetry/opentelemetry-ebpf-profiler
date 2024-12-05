@@ -786,7 +786,7 @@ func (f *File) readAndMatchSymbol(n uint32, name libpf.SymbolName) (libpf.Symbol
 	return libpf.Symbol{
 		Name:    name,
 		Address: libpf.SymbolValue(sym.Value),
-		Size:    int(sym.Size),
+		Size:    sym.Size,
 	}, true
 }
 
@@ -946,7 +946,7 @@ func (f *File) loadSymbolTable(name string) (*libpf.SymbolMap, error) {
 		symMap.Add(libpf.Symbol{
 			Name:    libpf.SymbolName(name),
 			Address: libpf.SymbolValue(sym.Value),
-			Size:    int(sym.Size),
+			Size:    sym.Size,
 		})
 	}
 	symMap.Finalize()
