@@ -4,16 +4,11 @@
 package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 
 import (
-	"time"
-
 	lru "github.com/elastic/go-freelru"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
-)
-
-const (
 )
 
 // Pdata holds the cache for the data used to generate the events reporters
