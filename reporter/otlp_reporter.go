@@ -658,7 +658,7 @@ func (r *OTLPReporter) getProfile() (profile *profiles.Profile, startTS, endTS u
 		attrMgr.AppendOptionalString(&sample.Attributes,
 			semconv.ContainerIDKey, traceKey.containerID)
 		attrMgr.AppendOptionalString(&sample.Attributes,
-			semconv.ProcessCommandKey, traceKey.comm)
+			semconv.ThreadNameKey, traceKey.comm)
 		attrMgr.AppendOptionalString(&sample.Attributes,
 			semconv.ServiceNameKey, traceKey.apmServiceName)
 		attrMgr.AppendInt(&sample.Attributes,
