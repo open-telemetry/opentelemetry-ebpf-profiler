@@ -27,9 +27,7 @@ const (
 func (p Pdata) Generate(events map[samples.TraceAndMetaKey]*samples.TraceEvents) pprofile.Profiles {
 	profiles := pprofile.NewProfiles()
 	rp := profiles.ResourceProfiles().AppendEmpty()
-
 	sp := rp.ScopeProfiles().AppendEmpty()
-
 	prof := sp.Profiles().AppendEmpty()
 	prof.SetProfileID(pprofile.ProfileID(mkProfileID()))
 	p.setProfile(events, prof)
