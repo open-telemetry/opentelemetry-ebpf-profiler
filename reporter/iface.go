@@ -34,6 +34,7 @@ type Reporter interface {
 type TraceEventMeta struct {
 	Timestamp      libpf.UnixTime64
 	Comm           string
+	Executable     string
 	APMServiceName string
 	PID, TID       libpf.PID
 	CPU            int
