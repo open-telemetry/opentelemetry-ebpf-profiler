@@ -178,7 +178,7 @@ func (p *Pdata) setProfile(
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ContainerIDKey, traceKey.ContainerID)
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
-			semconv.ProcessCommandKey, traceKey.Comm)
+			semconv.ThreadNameKey, traceKey.Comm)
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ServiceNameKey, traceKey.ApmServiceName)
 		attrMgr.AppendInt(sample.AttributeIndices(),
