@@ -158,6 +158,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 	key := samples.TraceAndMetaKey{
 		Hash:           trace.Hash,
 		Comm:           meta.Comm,
+		Executable:     meta.Executable,
 		ApmServiceName: meta.APMServiceName,
 		ContainerID:    containerID,
 		Pid:            int64(meta.PID),

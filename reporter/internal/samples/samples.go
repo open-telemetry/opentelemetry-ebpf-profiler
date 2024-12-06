@@ -8,6 +8,7 @@ import "go.opentelemetry.io/ebpf-profiler/libpf"
 type TraceEventMeta struct {
 	Timestamp      libpf.UnixTime64
 	Comm           string
+	Executable     string
 	APMServiceName string
 	PID, TID       libpf.PID
 	CPU            int
@@ -35,6 +36,8 @@ type TraceAndMetaKey struct {
 	// containerID is annotated based on PID information
 	ContainerID string
 	Pid         int64
+	// Executable path is retrieved from /proc/PID/exe
+	Executable string
 	// ExtraMeta stores extra meta info that may have been produced by a
 	// `SampleAttrProducer` instance. May be nil.
 	ExtraMeta any
