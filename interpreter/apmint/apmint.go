@@ -121,7 +121,10 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	// Establish socket connection with the agent.
 	socket, err := openAPMAgentSocket(pid, procStorage.TraceSocketPath)
 	if err != nil {
-		log.Warnf("Failed to open APM agent socket for PID %d", pid)
+		if err2 := ebpf.DeleteProcData(libpf.APMInt, pid); err2 != nil {
+			log.Errorf("Failed to remove APM information for PID %d: %v", pid, err2)
+		}
+		return nil, fmt.Errorf("failed to open APM agent socket: %v", err)
 	}
 
 	log.Debugf("PID %d apm.service.name: %s, trace socket: %s",
