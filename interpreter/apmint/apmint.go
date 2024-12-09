@@ -15,6 +15,7 @@ import (
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -143,6 +144,11 @@ var _ interpreter.Instance = &Instance{}
 
 // Detach implements the interpreter.Instance interface.
 func (i *Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	if err := unix.Unlink(i.socket.addr.Name); err != nil {
+		// If Unllinking fails just write a warning and continue
+		// as we want to delete eBPF map entries for this process.
+		log.Warnf("Failed to unlink '%s': %v", i.socket.addr.Name, err)
+	}
 	return ebpf.DeleteProcData(libpf.APMInt, pid)
 }
 
