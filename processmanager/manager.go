@@ -334,7 +334,7 @@ func (pm *ProcessManager) MaybeNotifyAPMAgent(
 			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, umTraceHash, count)
 
 			if serviceName != "" {
-				log.Warnf("Overwrite APM service name from '%s' to '%s' for PID %d",
+				log.Warnf("Overwriting APM service name from '%s' to '%s' for PID %d",
 					serviceName,
 					apm.APMServiceName(),
 					rawTrace.PID)
