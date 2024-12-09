@@ -8,7 +8,7 @@ RUN cross_debian_arch=$(uname -m | sed -e 's/aarch64/amd64/'  -e 's/x86_64/arm64
     cross_pkg_arch=$(uname -m | sed -e 's/aarch64/x86-64/' -e 's/x86_64/aarch64/'); \
     apt-get update -y && \
     apt-get dist-upgrade -y && \
-    apt-get install -y wget make git clang-16 unzip libc6-dev g++ gcc pkgconf \
+    apt-get install -y wget make git clang-17 unzip libc6-dev g++ gcc pkgconf \
         gcc-${cross_pkg_arch}-linux-gnu libc6-${cross_debian_arch}-cross && \
     apt-get clean autoclean && \
     apt-get autoremove --yes
