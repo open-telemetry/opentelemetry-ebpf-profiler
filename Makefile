@@ -16,21 +16,24 @@ endif
 # Valid values are: amd64, arm64.
 TARGET_ARCH ?= $(NATIVE_ARCH)
 
-ifeq ($(NATIVE_ARCH),$(TARGET_ARCH))
-ARCH_PREFIX :=
-else ifeq ($(TARGET_ARCH),arm64)
-ARCH_PREFIX := aarch64-linux-gnu-
+ifeq ($(TARGET_ARCH),arm64)
+COMPILER_TARGET_ARCH := aarch64
 else ifeq ($(TARGET_ARCH),amd64)
-ARCH_PREFIX := x86_64-linux-gnu-
+COMPILER_TARGET_ARCH := x86_64
 else
 $(error Unsupported architecture: $(TARGET_ARCH))
 endif
 
-export TARGET_ARCH
+COMPILER_TARGET ?= $(COMPILER_TARGET_ARCH)-redhat-linux
+SYSROOT_PATH ?= /
+
+export CC = clang-16
+export COMPILER_TARGET
+export CGO_CFLAGS = --sysroot=/usr/sysroot --target=$(COMPILER_TARGET)
 export CGO_ENABLED = 1
+export CGO_LDFLAGS = -fuse-ld=lld --sysroot=/usr/sysroot
 export GOARCH = $(TARGET_ARCH)
-export CC = $(ARCH_PREFIX)clang-16
-export OBJCOPY = $(ARCH_PREFIX)objcopy
+export TARGET_ARCH
 
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
 COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
@@ -41,7 +44,8 @@ REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
 
 LDFLAGS := -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
 	-X go.opentelemetry.io/ebpf-profiler/vc.revision=$(REVISION) \
-	-X go.opentelemetry.io/ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP)
+	-X go.opentelemetry.io/ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
+	\"-extldflags=$(CGO_CFLAGS)\"
 
 GO_TAGS := osusergo,netgo
 EBPF_FLAGS := 
@@ -118,12 +122,12 @@ docker-image:
 	docker build -t profiling-agent -f Dockerfile .
 
 agent:
-	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
-	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
+	docker run -v "$$PWD":/agent -v $(SYSROOT_PATH):/usr/sysroot -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
+	   "make COMPILER_TARGET=$(COMPILER_TARGET) TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
 
 debug-agent:
-	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
-	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP) debug"
+	docker run -v "$$PWD":/agent -v $(SYSROOT_PATH):/usr/sysroot -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
+	   "make COMPILER_TARGET=$(COMPILER_TARGET) TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP) debug"
 
 legal:
 	@go install github.com/google/go-licenses@latest

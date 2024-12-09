@@ -42,15 +42,17 @@ The agent can be built with the provided make targets. Docker is required for co
      ```sh
      make docker-image
      ```
-  2. Build the agent for your current machine's architecture:
+  2. Build the agent for your current machine's architecture with your current environment serving as sysroot:
      ```sh
      make agent
      ```
      Or `make debug-agent` for debug build.
-  3. To cross-complie for a different architecture (e.g. arm64):
+  3. To cross-compile for a different architecture (e.g. arm64):
      ```sh
-     make agent TARGET_ARCH=arm64
+     SYSROOT_PATH=/path/to/your/desired/sysroot TARGET_ARCH=arm64 make agent
      ```
+     Where `SYSROOT_PATH` is directed at a valid sysroot for the specified `TARGET_ARCH` as defined [here](https://clang.llvm.org/docs/CrossCompilation.html).
+
 The resulting binary will be named <ebpf-profiler> in the current directory.
 
 ## Other OSes

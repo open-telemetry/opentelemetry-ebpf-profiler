@@ -23,17 +23,12 @@ BUILD_TYPE ?= release
 
 TRACER_NAME ?= tracer.ebpf.$(BUILD_TYPE).$(TARGET_ARCH)
 
-ifeq ($(TARGET_ARCH),arm64)
-TARGET_FLAGS = -target aarch64-linux-gnu
-else
-TARGET_FLAGS = -target x86_64-linux-gnu
-endif
-
+CFLAGS = $(CGO_CFLAGS)
 ifeq ($(BUILD_TYPE),debug)
-	TARGET_FLAGS+=$(DEBUG_FLAGS)
+	CFLAGS+=$(DEBUG_FLAGS)
 endif
 
-FLAGS=$(TARGET_FLAGS) \
+FLAGS=$(CFLAGS) \
 	-fno-jump-tables \
 	-nostdlib \
 	-nostdinc \

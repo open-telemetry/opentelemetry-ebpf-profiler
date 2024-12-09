@@ -2,14 +2,9 @@ FROM debian:testing
 
 WORKDIR /agent
 
-# cross_debian_arch: amd64 or arm64
-# cross_pkg_arch: x86-64 or aarch64
-RUN cross_debian_arch=$(uname -m | sed -e 's/aarch64/amd64/'  -e 's/x86_64/arm64/'); \
-    cross_pkg_arch=$(uname -m | sed -e 's/aarch64/x86-64/' -e 's/x86_64/aarch64/'); \
-    apt-get update -y && \
+RUN apt-get update -y && \
     apt-get dist-upgrade -y && \
-    apt-get install -y wget make git clang-16 unzip libc6-dev g++ gcc pkgconf \
-        gcc-${cross_pkg_arch}-linux-gnu libc6-${cross_debian_arch}-cross && \
+    apt-get install -y clang-16 git lld-16 make pkgconf unzip wget && \
     apt-get clean autoclean && \
     apt-get autoremove --yes
 
