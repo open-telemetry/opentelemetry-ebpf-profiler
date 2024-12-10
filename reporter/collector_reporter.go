@@ -26,7 +26,8 @@ var _ Reporter = (*CollectorReporter)(nil)
 
 // CollectorReporter receives and transforms information to be Collector Collector compliant.
 type CollectorReporter struct {
-	cfg          *Config
+	*BaseReporter
+
 	nextConsumer consumerprofiles.Profiles
 
 	// name is the ScopeProfile's name.
@@ -40,15 +41,6 @@ type CollectorReporter struct {
 
 	// hostmetadata stores metadata that is sent out with every request.
 	hostmetadata *lru.SyncedLRU[string, string]
-
-	// cgroupv2ID caches PID to container ID information for cgroupv2 containers.
-	cgroupv2ID *lru.SyncedLRU[libpf.PID, string]
-
-	// pdata holds the generator for the data being exported.
-	pdata *pdata.Pdata
-
-	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[samples.TraceAndMetaKey]*samples.TraceEvents]
 
 	// hostID is the unique identifier of the host.
 	hostID string
@@ -92,7 +84,14 @@ func NewCollector(cfg *Config, nextConsumer consumerprofiles.Profiles) (*Collect
 	}
 
 	return &CollectorReporter{
-		cfg:           cfg,
+		BaseReporter: &BaseReporter{
+			cfg:        cfg,
+			pdata:      data,
+			cgroupv2ID: cgroupv2ID,
+			traceEvents: xsync.NewRWMutex(
+				map[samples.TraceAndMetaKey]*samples.TraceEvents{},
+			),
+		},
 		nextConsumer:  nextConsumer,
 		name:          cfg.Name,
 		version:       cfg.Version,
@@ -103,12 +102,7 @@ func NewCollector(cfg *Config, nextConsumer consumerprofiles.Profiles) (*Collect
 		runLoop: &runLoop{
 			stopSignal: make(chan libpf.Void),
 		},
-		pdata:        data,
 		hostmetadata: hostmetadata,
-		traceEvents: xsync.NewRWMutex(
-			map[samples.TraceAndMetaKey]*samples.TraceEvents{},
-		),
-		cgroupv2ID: cgroupv2ID,
 	}, nil
 }
 
@@ -166,49 +160,6 @@ func (r *CollectorReporter) FrameKnown(frameID libpf.FrameID) bool {
 	return known
 }
 
-// FrameMetadata accepts metadata associated with a frame and caches this information.
-func (r *CollectorReporter) FrameMetadata(args *FrameMetadataArgs) {
-	fileID := args.FrameID.FileID()
-	addressOrLine := args.FrameID.AddressOrLine()
-
-	log.Debugf("FrameMetadata [%x] %v+%v at %v:%v",
-		fileID, args.FunctionName, args.FunctionOffset,
-		args.SourceFile, args.SourceLine)
-
-	if frameMapLock, exists := r.pdata.Frames.GetAndRefresh(fileID,
-		pdata.FramesCacheLifetime); exists {
-		frameMap := frameMapLock.WLock()
-		defer frameMapLock.WUnlock(&frameMap)
-
-		sourceFile := args.SourceFile
-		if sourceFile == "" {
-			// The new SourceFile may be empty, and we don't want to overwrite
-			// an existing filePath with it.
-			if s, exists := (*frameMap)[addressOrLine]; exists {
-				sourceFile = s.FilePath
-			}
-		}
-
-		(*frameMap)[addressOrLine] = samples.SourceInfo{
-			LineNumber:     args.SourceLine,
-			FilePath:       sourceFile,
-			FunctionOffset: args.FunctionOffset,
-			FunctionName:   args.FunctionName,
-		}
-		return
-	}
-
-	v := make(map[libpf.AddressOrLineno]samples.SourceInfo)
-	v[addressOrLine] = samples.SourceInfo{
-		LineNumber:     args.SourceLine,
-		FilePath:       args.SourceFile,
-		FunctionOffset: args.FunctionOffset,
-		FunctionName:   args.FunctionName,
-	}
-	mu := xsync.NewRWMutex(v)
-	r.pdata.Frames.Add(fileID, &mu)
-}
-
 // GetMetrics returns internal metrics of CollectorReporter.
 func (r *CollectorReporter) GetMetrics() Metrics {
 	return Metrics{}
@@ -242,49 +193,6 @@ func (r *CollectorReporter) ReportHostMetadataBlocking(_ context.Context,
 	metadataMap map[string]string, _ int, _ time.Duration) error {
 	r.ReportHostMetadata(metadataMap)
 	return nil
-}
-
-// ReportTraceEvent enqueues reported trace events for the Collector reporter.
-func (r *CollectorReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta) {
-	traceEventsMap := r.traceEvents.WLock()
-	defer r.traceEvents.WUnlock(&traceEventsMap)
-
-	var extraMeta any
-	if r.cfg.ExtraSampleAttrProd != nil {
-		extraMeta = r.cfg.ExtraSampleAttrProd.CollectExtraSampleMeta(trace, meta)
-	}
-
-	containerID, err := libpf.LookupCgroupv2(r.cgroupv2ID, meta.PID)
-	if err != nil {
-		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
-			meta.PID, err)
-	}
-
-	key := samples.TraceAndMetaKey{
-		Hash:           trace.Hash,
-		Comm:           meta.Comm,
-		Executable:     meta.Executable,
-		ApmServiceName: meta.APMServiceName,
-		ContainerID:    containerID,
-		Pid:            int64(meta.PID),
-		ExtraMeta:      extraMeta,
-	}
-
-	if events, exists := (*traceEventsMap)[key]; exists {
-		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
-		(*traceEventsMap)[key] = events
-		return
-	}
-
-	(*traceEventsMap)[key] = &samples.TraceEvents{
-		Files:              trace.Files,
-		Linenos:            trace.Linenos,
-		FrameTypes:         trace.FrameTypes,
-		MappingStarts:      trace.MappingStart,
-		MappingEnds:        trace.MappingEnd,
-		MappingFileOffsets: trace.MappingFileOffsets,
-		Timestamps:         []uint64{uint64(meta.Timestamp)},
-	}
 }
 
 // reportProfile creates and sends out a profile.
