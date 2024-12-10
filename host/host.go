@@ -48,6 +48,7 @@ type Frame struct {
 
 type Trace struct {
 	Comm             string
+	Executable       string
 	Frames           []Frame
 	Hash             TraceHash
 	KTime            times.KTime
@@ -55,4 +56,5 @@ type Trace struct {
 	TID              libpf.PID
 	APMTraceID       libpf.APMTraceID
 	APMTransactionID libpf.APMTransactionID
+	CPU              int
 }

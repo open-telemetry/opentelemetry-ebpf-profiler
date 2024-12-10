@@ -1,6 +1,3 @@
-//go:build !integration
-// +build !integration
-
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 func TestMapID(t *testing.T) {
@@ -26,6 +24,7 @@ func TestMapID(t *testing.T) {
 		0x3FF:   10, // 1023
 		0x400:   11, // 1024
 		0xFFFFF: 20, // 1048575 (2^20 - 1)
+		(1 << support.StackDeltaBucketLargest) - 1: support.StackDeltaBucketLargest,
 	}
 	for numStackDeltas, expectedShift := range testCases {
 		numStackDeltas := numStackDeltas
@@ -33,11 +32,11 @@ func TestMapID(t *testing.T) {
 		t.Run(fmt.Sprintf("deltas %d", numStackDeltas), func(t *testing.T) {
 			shift, err := getMapID(numStackDeltas)
 			require.NoError(t, err)
-			assert.Equal(t, expectedShift, shift,
-				fmt.Sprintf("wrong map name for %d deltas", numStackDeltas))
+			assert.Equal(t, expectedShift, shift, "wrong map name for %d deltas",
+				numStackDeltas)
 		})
 	}
 
-	_, err := getMapID(1 << 22)
+	_, err := getMapID(1 << (support.StackDeltaBucketLargest + 1))
 	require.Error(t, err)
 }

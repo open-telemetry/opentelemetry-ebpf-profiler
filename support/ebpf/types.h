@@ -831,8 +831,8 @@ void decode_bias_and_unwind_program(u64 bias_and_unwind_program, u64* bias, int*
 
 // Smallest stack delta bucket that holds up to 2^8 entries
 #define STACK_DELTA_BUCKET_SMALLEST 8
-// Largest stack delta bucket that holds up to 2^21 entries
-#define STACK_DELTA_BUCKET_LARGEST 21
+// Largest stack delta bucket that holds up to 2^23 entries
+#define STACK_DELTA_BUCKET_LARGEST 23
 
 // Struct of the `system_config` map. Contains various configuration variables
 // determined and set by the host agent.
