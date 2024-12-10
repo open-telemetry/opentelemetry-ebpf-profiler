@@ -21,8 +21,8 @@ require (
 	github.com/tklauser/numcpus v0.8.0
 	github.com/zeebo/xxh3 v1.0.2
 	go.opentelemetry.io/collector/consumer/consumerprofiles v0.112.0
-	go.opentelemetry.io/collector/pdata v1.18.0
-	go.opentelemetry.io/collector/pdata/pprofile v0.112.0
+	go.opentelemetry.io/collector/pdata v1.21.0
+	go.opentelemetry.io/collector/pdata/pprofile v0.115.0
 	go.opentelemetry.io/otel v1.30.0
 	golang.org/x/arch v0.10.0
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0

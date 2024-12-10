@@ -91,23 +91,20 @@ func TestCollectorReporterReportProfile(t *testing.T) {
 			},
 
 			wantConsumedCount: 1,
-			buildWantProfiles: func(t *testing.T) pprofile.Profiles {
+			buildWantProfiles: func(*testing.T) pprofile.Profiles {
 				prof := pprofile.NewProfiles()
 
 				rp := prof.ResourceProfiles().AppendEmpty()
 				sp := rp.ScopeProfiles().AppendEmpty()
 
-				pc := sp.Profiles().AppendEmpty()
-				pc.SetProfileID(pprofile.ProfileID([]byte("profile-id-for-tests")))
-				pc.SetStartTime(1)
-				pc.SetEndTime(1)
-
-				profile := pc.Profile()
+				profile := sp.Profiles().AppendEmpty()
+				profile.SetProfileID(pprofile.ProfileID([]byte("profile-id-for-tests")))
 				profile.SetStartTime(1)
+				profile.SetDuration(1)
 
-				fn := profile.Function().AppendEmpty()
-				fn.SetName(0)
-				fn.SetFilename(0)
+				fn := profile.FunctionTable().AppendEmpty()
+				fn.SetNameStrindex(0)
+				fn.SetFilenameStrindex(0)
 
 				profile.StringTable().FromRaw([]string{
 					"",
@@ -118,25 +115,27 @@ func TestCollectorReporterReportProfile(t *testing.T) {
 					"AAAAAAAAAAAAAAAAAAAAAA",
 				})
 
-				require.NoError(t, profile.AttributeTable().FromRaw(map[string]any{
-					string(semconv.ThreadNameKey):  "comm",
-					string(semconv.ServiceNameKey): "opentelemetry-ebpf-profiler",
-				}))
+				attr := profile.AttributeTable().AppendEmpty()
+				attr.SetKey(string(semconv.ThreadNameKey))
+				attr.Value().SetStr("comm")
+
+				attr = profile.AttributeTable().AppendEmpty()
+				attr.SetKey(string(semconv.ServiceNameKey))
+				attr.Value().SetStr("opentelemetry-ebpf-profiler")
 
 				st := profile.SampleType().AppendEmpty()
-				st.SetType(1)
-				st.SetUnit(2)
+				st.SetTypeStrindex(1)
+				st.SetUnitStrindex(2)
 
 				pt := profile.PeriodType()
-				pt.SetType(3)
-				pt.SetUnit(4)
+				pt.SetTypeStrindex(3)
+				pt.SetUnitStrindex(4)
 				profile.SetPeriod(1000000000)
 
 				sample := profile.Sample().AppendEmpty()
-				sample.SetStacktraceIdIndex(5)
 				sample.Value().FromRaw([]int64{1})
 				sample.TimestampsUnixNano().FromRaw([]uint64{1})
-				sample.Attributes().FromRaw([]uint64{0, 1})
+				sample.AttributeIndices().FromRaw([]int32{0, 1})
 
 				return prof
 			},
