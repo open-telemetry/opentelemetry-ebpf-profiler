@@ -4,18 +4,44 @@
 package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
+	"context"
+	"time"
+
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
+	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 )
 
 // BaseReporter is a reporter than handles shared behavior between all the
 // available reporters.
 type BaseReporter struct {
 	cfg *Config
+
+	// name is the ScopeProfile's name.
+	name string
+
+	// version is the ScopeProfile's version.
+	version string
+
+	// hostID is the unique identifier of the host.
+	hostID string
+
+	// kernelVersion is the version of the kernel.
+	kernelVersion string
+
+	// hostName is the name of the host.
+	hostName string
+
+	// ipAddress is the IP address of the host.
+	ipAddress string
+
+	// runLoop handles the run loop
+	runLoop *runLoop
 
 	// pdata holds the generator for the data being exported.
 	pdata *pdata.Pdata
@@ -25,7 +51,72 @@ type BaseReporter struct {
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
 	traceEvents xsync.RWMutex[map[samples.TraceAndMetaKey]*samples.TraceEvents]
+
+	// hostmetadata stores metadata that is sent out with every request.
+	hostmetadata *lru.SyncedLRU[string, string]
 }
+
+// Stop triggers a graceful shutdown of the reporter
+func (b *BaseReporter) Stop() {
+	b.runLoop.Stop()
+}
+
+// ReportHostMetadata enqueues host metadata.
+func (b *BaseReporter) ReportHostMetadata(metadataMap map[string]string) {
+	b.addHostmetadata(metadataMap)
+}
+
+// ReportHostMetadataBlocking enqueues host metadata.
+func (b *BaseReporter) ReportHostMetadataBlocking(_ context.Context,
+	metadataMap map[string]string, _ int, _ time.Duration) error {
+	b.addHostmetadata(metadataMap)
+	return nil
+}
+
+// addHostmetadata adds to and overwrites host metadata.
+func (b *BaseReporter) addHostmetadata(metadataMap map[string]string) {
+	for k, v := range metadataMap {
+		b.hostmetadata.Add(k, v)
+	}
+}
+
+// ReportFramesForTrace is a NOP
+func (*BaseReporter) ReportFramesForTrace(_ *libpf.Trace) {}
+
+// ReportCountForTrace is a NOP
+func (b *BaseReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *TraceEventMeta) {
+}
+
+// ExecutableKnown returns true if the metadata of the Executable specified by fileID is
+// cached in the reporter.
+func (b *BaseReporter) ExecutableKnown(fileID libpf.FileID) bool {
+	_, known := b.pdata.Executables.GetAndRefresh(fileID, pdata.ExecutableCacheLifetime)
+	return known
+}
+
+// FrameKnown returns true if the metadata of the Frame specified by frameID is
+// cached in the reporter.
+func (b *BaseReporter) FrameKnown(frameID libpf.FrameID) bool {
+	known := false
+	if frameMapLock, exists := b.pdata.Frames.GetAndRefresh(frameID.FileID(),
+		pdata.FramesCacheLifetime); exists {
+		frameMap := frameMapLock.RLock()
+		defer frameMapLock.RUnlock(&frameMap)
+		_, known = (*frameMap)[frameID.AddressOrLine()]
+	}
+	return known
+}
+
+// ExecutableMetadata accepts a fileID with the corresponding filename
+// and caches this information.
+func (b *BaseReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
+	b.pdata.Executables.Add(args.FileID, samples.ExecInfo{
+		FileName:   args.FileName,
+		GnuBuildID: args.GnuBuildID,
+	})
+}
+
+func (*BaseReporter) ReportMetrics(_ uint32, _ []uint32, _ []int64) {}
 
 func (*BaseReporter) SupportsReportTraceEvent() bool { return true }
 
@@ -113,4 +204,27 @@ func (b *BaseReporter) FrameMetadata(args *FrameMetadataArgs) {
 	}
 	mu := xsync.NewRWMutex(v)
 	b.pdata.Frames.Add(fileID, &mu)
+}
+
+// setResource sets the resource information of the origin of the profiles.
+// Next step: maybe extend this information with go.opentelemetry.io/otel/sdk/resource.
+func (b *BaseReporter) setResource(rp pprofile.ResourceProfiles) {
+	keys := b.hostmetadata.Keys()
+	attrs := rp.Resource().Attributes()
+
+	// Add hostmedata to the attributes.
+	for _, k := range keys {
+		if v, ok := b.hostmetadata.Get(k); ok {
+			attrs.PutStr(k, v)
+		}
+	}
+
+	// Add event specific attributes.
+	// These attributes are also included in the host metadata, but with different names/keys.
+	// That makes our hostmetadata attributes incompatible with OTEL collectors.
+	attrs.PutStr(string(semconv.HostIDKey), b.hostID)
+	attrs.PutStr(string(semconv.HostIPKey), b.ipAddress)
+	attrs.PutStr(string(semconv.HostNameKey), b.hostName)
+	attrs.PutStr(string(semconv.ServiceVersionKey), b.version)
+	attrs.PutStr("os.kernel", b.kernelVersion)
 }

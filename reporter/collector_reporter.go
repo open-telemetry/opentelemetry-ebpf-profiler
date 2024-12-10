@@ -12,8 +12,6 @@ import (
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/consumer/consumerprofiles"
-	"go.opentelemetry.io/collector/pdata/pprofile"
-	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -30,29 +28,8 @@ type CollectorReporter struct {
 
 	nextConsumer consumerprofiles.Profiles
 
-	// name is the ScopeProfile's name.
-	name string
-
-	// version is the ScopeProfile's version.
-	version string
-
 	// runLoop handles the run loop
 	runLoop *runLoop
-
-	// hostmetadata stores metadata that is sent out with every request.
-	hostmetadata *lru.SyncedLRU[string, string]
-
-	// hostID is the unique identifier of the host.
-	hostID string
-
-	// kernelVersion is the version of the kernel.
-	kernelVersion string
-
-	// hostName is the name of the host.
-	hostName string
-
-	// ipAddress is the IP address of the host.
-	ipAddress string
 }
 
 // NewCollector builds a new CollectorReporter
@@ -85,24 +62,24 @@ func NewCollector(cfg *Config, nextConsumer consumerprofiles.Profiles) (*Collect
 
 	return &CollectorReporter{
 		BaseReporter: &BaseReporter{
-			cfg:        cfg,
-			pdata:      data,
-			cgroupv2ID: cgroupv2ID,
+			cfg:           cfg,
+			name:          cfg.Name,
+			version:       cfg.Version,
+			kernelVersion: cfg.KernelVersion,
+			hostName:      cfg.HostName,
+			ipAddress:     cfg.IPAddress,
+			hostID:        strconv.FormatUint(cfg.HostID, 10),
+			pdata:         data,
+			cgroupv2ID:    cgroupv2ID,
 			traceEvents: xsync.NewRWMutex(
 				map[samples.TraceAndMetaKey]*samples.TraceEvents{},
 			),
+			hostmetadata: hostmetadata,
+			runLoop: &runLoop{
+				stopSignal: make(chan libpf.Void),
+			},
 		},
-		nextConsumer:  nextConsumer,
-		name:          cfg.Name,
-		version:       cfg.Version,
-		kernelVersion: cfg.KernelVersion,
-		hostName:      cfg.HostName,
-		ipAddress:     cfg.IPAddress,
-		hostID:        strconv.FormatUint(cfg.HostID, 10),
-		runLoop: &runLoop{
-			stopSignal: make(chan libpf.Void),
-		},
-		hostmetadata: hostmetadata,
+		nextConsumer: nextConsumer,
 	}, nil
 }
 
@@ -131,66 +108,9 @@ func (r *CollectorReporter) Start(ctx context.Context) error {
 	return nil
 }
 
-// ExecutableKnown returns true if the metadata of the Executable specified by fileID is
-// cached in the reporter.
-func (r *CollectorReporter) ExecutableKnown(fileID libpf.FileID) bool {
-	_, known := r.pdata.Executables.GetAndRefresh(fileID, pdata.ExecutableCacheLifetime)
-	return known
-}
-
-// ExecutableMetadata accepts a fileID with the corresponding filename
-// and caches this information.
-func (r *CollectorReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
-	r.pdata.Executables.Add(args.FileID, samples.ExecInfo{
-		FileName:   args.FileName,
-		GnuBuildID: args.GnuBuildID,
-	})
-}
-
-// FrameKnown return true if the metadata of the Frame specified by frameID is
-// cached in the reporter.
-func (r *CollectorReporter) FrameKnown(frameID libpf.FrameID) bool {
-	known := false
-	if frameMapLock, exists := r.pdata.Frames.GetAndRefresh(frameID.FileID(),
-		pdata.FramesCacheLifetime); exists {
-		frameMap := frameMapLock.RLock()
-		defer frameMapLock.RUnlock(&frameMap)
-		_, known = (*frameMap)[frameID.AddressOrLine()]
-	}
-	return known
-}
-
 // GetMetrics returns internal metrics of CollectorReporter.
 func (r *CollectorReporter) GetMetrics() Metrics {
 	return Metrics{}
-}
-
-// ReportFramesForTrace is a NOP for CollectorReporter.
-func (r *CollectorReporter) ReportFramesForTrace(_ *libpf.Trace) {}
-
-// ReportCountForTrace is a NOP for CollectorReporter.
-func (r *CollectorReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *TraceEventMeta) {
-}
-
-// ReportMetrics is a NOP for CollectorReporter.
-func (r *CollectorReporter) ReportMetrics(_ uint32, _ []uint32, _ []int64) {}
-
-func (r *CollectorReporter) Stop() {
-	r.runLoop.Stop()
-}
-
-// ReportHostMetadata enqueues host metadata.
-func (r *CollectorReporter) ReportHostMetadata(metadataMap map[string]string) {
-	for k, v := range metadataMap {
-		r.hostmetadata.Add(k, v)
-	}
-}
-
-// ReportHostMetadataBlocking enqueues host metadata.
-func (r *CollectorReporter) ReportHostMetadataBlocking(_ context.Context,
-	metadataMap map[string]string, _ int, _ time.Duration) error {
-	r.ReportHostMetadata(metadataMap)
-	return nil
 }
 
 // reportProfile creates and sends out a profile.
@@ -211,27 +131,4 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	}
 
 	return r.nextConsumer.ConsumeProfiles(ctx, profiles)
-}
-
-// setResource sets the resource information of the origin of the profiles.
-// Next step: maybe extend this information with go.opentelemetry.io/otel/sdk/resource.
-func (r *CollectorReporter) setResource(rp pprofile.ResourceProfiles) {
-	keys := r.hostmetadata.Keys()
-	attrs := rp.Resource().Attributes()
-
-	// Add hostmedata to the attributes.
-	for _, k := range keys {
-		if v, ok := r.hostmetadata.Get(k); ok {
-			attrs.PutStr(k, v)
-		}
-	}
-
-	// Add event specific attributes.
-	// These attributes are also included in the host metadata, but with different names/keys.
-	// That makes our hostmetadata attributes incompatible with OTEL collectors.
-	attrs.PutStr(string(semconv.HostIDKey), r.hostID)
-	attrs.PutStr(string(semconv.HostIPKey), r.ipAddress)
-	attrs.PutStr(string(semconv.HostNameKey), r.hostName)
-	attrs.PutStr(string(semconv.ServiceVersionKey), r.version)
-	attrs.PutStr("os.kernel", r.kernelVersion)
 }

@@ -12,9 +12,7 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
-	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
-	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -32,18 +30,8 @@ var _ Reporter = (*OTLPReporter)(nil)
 type OTLPReporter struct {
 	*BaseReporter
 
-	config *Config
-	// name is the ScopeProfile's name.
-	name string
-
-	// version is the ScopeProfile's version.
-	version string
-
 	// client for the connection to the receiver.
 	client pprofileotlp.GRPCClient
-
-	// runLoop handles the run loop
-	runLoop *runLoop
 
 	// rpcStats stores gRPC related statistics.
 	rpcStats *StatsHandlerImpl
@@ -52,23 +40,8 @@ type OTLPReporter struct {
 	// this structure holds in long-term storage information that might
 	// be duplicated in other places but not accessible for OTLPReporter.
 
-	// hostmetadata stores metadata that is sent out with every request.
-	hostmetadata *lru.SyncedLRU[string, string]
-
 	// pkgGRPCOperationTimeout sets the time limit for GRPC requests.
 	pkgGRPCOperationTimeout time.Duration
-
-	// hostID is the unique identifier of the host.
-	hostID string
-
-	// kernelVersion is the version of the kernel.
-	kernelVersion string
-
-	// hostName is the name of the host.
-	hostName string
-
-	// ipAddress is the IP address of the host.
-	ipAddress string
 }
 
 // NewOTLP returns a new instance of OTLPReporter
@@ -101,90 +74,27 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 
 	return &OTLPReporter{
 		BaseReporter: &BaseReporter{
-			cfg:        cfg,
-			pdata:      data,
-			cgroupv2ID: cgroupv2ID,
+			cfg:           cfg,
+			name:          cfg.Name,
+			version:       cfg.Version,
+			kernelVersion: cfg.KernelVersion,
+			hostName:      cfg.HostName,
+			ipAddress:     cfg.IPAddress,
+			hostID:        strconv.FormatUint(cfg.HostID, 10),
+			pdata:         data,
+			cgroupv2ID:    cgroupv2ID,
 			traceEvents: xsync.NewRWMutex(
 				map[samples.TraceAndMetaKey]*samples.TraceEvents{},
 			),
-		},
-		name:          cfg.Name,
-		version:       cfg.Version,
-		kernelVersion: cfg.KernelVersion,
-		hostName:      cfg.HostName,
-		ipAddress:     cfg.IPAddress,
-		hostID:        strconv.FormatUint(cfg.HostID, 10),
-		runLoop: &runLoop{
-			stopSignal: make(chan libpf.Void),
+			hostmetadata: hostmetadata,
+			runLoop: &runLoop{
+				stopSignal: make(chan libpf.Void),
+			},
 		},
 		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
 		client:                  nil,
 		rpcStats:                NewStatsHandler(),
-		hostmetadata:            hostmetadata,
 	}, nil
-}
-
-// ReportFramesForTrace is a NOP for OTLPReporter.
-func (r *OTLPReporter) ReportFramesForTrace(_ *libpf.Trace) {}
-
-// ReportCountForTrace is a NOP for OTLPReporter.
-func (r *OTLPReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *TraceEventMeta) {
-}
-
-// ExecutableKnown returns true if the metadata of the Executable specified by fileID is
-// cached in the reporter.
-func (r *OTLPReporter) ExecutableKnown(fileID libpf.FileID) bool {
-	_, known := r.pdata.Executables.GetAndRefresh(fileID, pdata.ExecutableCacheLifetime)
-	return known
-}
-
-// ExecutableMetadata accepts a fileID with the corresponding filename
-// and caches this information.
-func (r *OTLPReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
-	r.pdata.Executables.Add(args.FileID, samples.ExecInfo{
-		FileName:   args.FileName,
-		GnuBuildID: args.GnuBuildID,
-	})
-}
-
-// FrameKnown returns true if the metadata of the Frame specified by frameID is
-// cached in the reporter.
-func (r *OTLPReporter) FrameKnown(frameID libpf.FrameID) bool {
-	known := false
-	if frameMapLock, exists := r.pdata.Frames.GetAndRefresh(frameID.FileID(),
-		pdata.FramesCacheLifetime); exists {
-		frameMap := frameMapLock.RLock()
-		defer frameMapLock.RUnlock(&frameMap)
-		_, known = (*frameMap)[frameID.AddressOrLine()]
-	}
-	return known
-}
-
-// ReportHostMetadata enqueues host metadata.
-func (r *OTLPReporter) ReportHostMetadata(metadataMap map[string]string) {
-	r.addHostmetadata(metadataMap)
-}
-
-// ReportHostMetadataBlocking enqueues host metadata.
-func (r *OTLPReporter) ReportHostMetadataBlocking(_ context.Context,
-	metadataMap map[string]string, _ int, _ time.Duration) error {
-	r.addHostmetadata(metadataMap)
-	return nil
-}
-
-// addHostmetadata adds to and overwrites host metadata.
-func (r *OTLPReporter) addHostmetadata(metadataMap map[string]string) {
-	for k, v := range metadataMap {
-		r.hostmetadata.Add(k, v)
-	}
-}
-
-// ReportMetrics is a NOP for OTLPReporter.
-func (r *OTLPReporter) ReportMetrics(_ uint32, _ []uint32, _ []int64) {}
-
-// Stop triggers a graceful shutdown of OTLPReporter.
-func (r *OTLPReporter) Stop() {
-	r.runLoop.Stop()
 }
 
 // GetMetrics returns internal metrics of OTLPReporter.
@@ -205,7 +115,7 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 	// Establish the gRPC connection before going on, waiting for a response
 	// from the collectionAgent endpoint.
 	// Use grpc.WithBlock() in setupGrpcConnection() for this to work.
-	otlpGrpcConn, err := waitGrpcEndpoint(ctx, r.config, r.rpcStats)
+	otlpGrpcConn, err := waitGrpcEndpoint(ctx, r.cfg, r.rpcStats)
 	if err != nil {
 		cancelReporting()
 		r.runLoop.Stop()
@@ -213,7 +123,7 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 	}
 	r.client = pprofileotlp.NewGRPCClient(otlpGrpcConn)
 
-	r.runLoop.Start(ctx, r.config.ReportInterval, func() {
+	r.runLoop.Start(ctx, r.cfg.ReportInterval, func() {
 		if err := r.reportOTLPProfile(ctx); err != nil {
 			log.Errorf("Request failed: %v", err)
 		}
@@ -259,29 +169,6 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	defer ctxCancel()
 	_, err := r.client.Export(reqCtx, req)
 	return err
-}
-
-// setResource sets the resource information of the origin of the profiles.
-// Next step: maybe extend this information with go.opentelemetry.io/otel/sdk/resource.
-func (r *OTLPReporter) setResource(rp pprofile.ResourceProfiles) {
-	keys := r.hostmetadata.Keys()
-	attrs := rp.Resource().Attributes()
-
-	// Add hostmedata to the attributes.
-	for _, k := range keys {
-		if v, ok := r.hostmetadata.Get(k); ok {
-			attrs.PutStr(k, v)
-		}
-	}
-
-	// Add event specific attributes.
-	// These attributes are also included in the host metadata, but with different names/keys.
-	// That makes our hostmetadata attributes incompatible with OTEL collectors.
-	attrs.PutStr(string(semconv.HostIDKey), r.hostID)
-	attrs.PutStr(string(semconv.HostIPKey), r.ipAddress)
-	attrs.PutStr(string(semconv.HostNameKey), r.hostName)
-	attrs.PutStr(string(semconv.ServiceVersionKey), r.version)
-	attrs.PutStr("os.kernel", r.kernelVersion)
 }
 
 // waitGrpcEndpoint waits until the gRPC connection is established.
