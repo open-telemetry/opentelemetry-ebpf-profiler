@@ -6,8 +6,9 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 import (
 	"time"
 
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"google.golang.org/grpc"
+
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
 )
 
 type Config struct {
@@ -55,22 +56,5 @@ type Config struct {
 
 	// ExtraSampleAttrProd is an optional hook point for adding custom
 	// attributes to samples.
-	ExtraSampleAttrProd SampleAttrProducer
-}
-
-// SampleAttrProducer provides a hook point to:
-//
-// - inspect each trace and its meta when it is enqueued in the reporter
-// - produce extra meta info
-// - attach extra attributes to the trace
-type SampleAttrProducer interface {
-	// CollectExtraSampleMeta gathers extra sample meta-info and returns it as
-	// a pointer to a **hashable** struct.
-	CollectExtraSampleMeta(trace *libpf.Trace, meta *TraceEventMeta) any
-
-	// ExtraSampleAttrs is called when the reporter populates the Sample struct
-	// before sending it out. Attributes returned from this function are added
-	// as Sample attributes. `meta` receives the pointer that was returned from
-	// CollectExtraSampleMeta.
-	ExtraSampleAttrs(attrMgr *AttrTableManager, meta any) []AttrIndex
+	ExtraSampleAttrProd samples.SampleAttrProducer
 }

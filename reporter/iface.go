@@ -9,6 +9,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
 )
 
 // Reporter is the top-level interface implemented by a full reporter.
@@ -31,14 +32,7 @@ type Reporter interface {
 	GetMetrics() Metrics
 }
 
-type TraceEventMeta struct {
-	Timestamp      libpf.UnixTime64
-	Comm           string
-	Executable     string
-	APMServiceName string
-	PID, TID       libpf.PID
-	CPU            int
-}
+type TraceEventMeta = samples.TraceEventMeta
 
 type TraceReporter interface {
 	// ReportFramesForTrace accepts a trace with the corresponding frames
