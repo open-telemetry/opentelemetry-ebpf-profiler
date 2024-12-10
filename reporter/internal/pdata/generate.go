@@ -15,6 +15,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
@@ -24,14 +25,15 @@ const (
 
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
-func (p Pdata) Generate(events map[samples.TraceAndMetaKey]*samples.TraceEvents) pprofile.Profiles {
+func (p Pdata) Generate(events map[int]samples.KeyToEventMapping) pprofile.Profiles {
 	profiles := pprofile.NewProfiles()
 	rp := profiles.ResourceProfiles().AppendEmpty()
 	sp := rp.ScopeProfiles().AppendEmpty()
-	prof := sp.Profiles().AppendEmpty()
-	prof.SetProfileID(pprofile.ProfileID(mkProfileID()))
-	p.setProfile(events, prof)
-
+	for _, origin := range []int{support.TraceOriginSampling, support.TraceOriginOffCPU} {
+		prof := sp.Profiles().AppendEmpty()
+		prof.SetProfileID(pprofile.ProfileID(mkProfileID()))
+		p.setProfile(origin, events[origin], prof)
+	}
 	return profiles
 }
 
@@ -48,6 +50,7 @@ func mkProfileID() []byte {
 // setProfile sets the data an OTLP profile with all collected samples up to
 // this moment.
 func (p *Pdata) setProfile(
+	origin int,
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
 ) {
@@ -62,13 +65,23 @@ func (p *Pdata) setProfile(
 	funcMap[samples.FuncInfo{Name: "", FileName: ""}] = 0
 
 	st := profile.SampleType().AppendEmpty()
-	st.SetTypeStrindex(getStringMapIndex(stringMap, "samples"))
-	st.SetUnitStrindex(getStringMapIndex(stringMap, "count"))
+	switch origin {
+	case support.TraceOriginSampling:
+		st.SetTypeStrindex(getStringMapIndex(stringMap, "samples"))
+		st.SetUnitStrindex(getStringMapIndex(stringMap, "count"))
 
-	pt := profile.PeriodType()
-	pt.SetTypeStrindex(getStringMapIndex(stringMap, "cpu"))
-	pt.SetUnitStrindex(getStringMapIndex(stringMap, "nanoseconds"))
-	profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
+		pt := profile.PeriodType()
+		pt.SetTypeStrindex(getStringMapIndex(stringMap, "cpu"))
+		pt.SetUnitStrindex(getStringMapIndex(stringMap, "nanoseconds"))
+
+		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
+	case support.TraceOriginOffCPU:
+		st.SetTypeStrindex(getStringMapIndex(stringMap, "events"))
+		st.SetUnitStrindex(getStringMapIndex(stringMap, "nanoseconds"))
+	default:
+		log.Errorf("Generating profile for unsupported origin %d", origin)
+		return
+	}
 
 	// Temporary lookup to reference existing Mappings.
 	fileIDtoMapping := make(map[libpf.FileID]int32)
@@ -85,7 +98,15 @@ func (p *Pdata) setProfile(
 		endTS = pcommon.Timestamp(traceInfo.Timestamps[len(traceInfo.Timestamps)-1])
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
-		sample.Value().Append(1)
+
+		switch origin {
+		case support.TraceOriginSampling:
+			sample.Value().Append(1)
+		case support.TraceOriginOffCPU:
+			for _, offTime := range traceInfo.OffTimes {
+				sample.Value().Append(int64(offTime))
+			}
+		}
 
 		// Walk every frame of the trace.
 		for i := range traceInfo.FrameTypes {
