@@ -27,6 +27,8 @@ type BaseReporter struct {
 	traceEvents xsync.RWMutex[map[samples.TraceAndMetaKey]*samples.TraceEvents]
 }
 
+func (*BaseReporter) SupportsReportTraceEvent() bool { return true }
+
 // ReportTraceEvent enqueues reported trace events for the reporter.
 func (b *BaseReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta) {
 	traceEventsMap := b.traceEvents.WLock()

@@ -186,8 +186,6 @@ func (r *CollectorReporter) ReportHostMetadata(metadataMap map[string]string) {
 	}
 }
 
-func (r *CollectorReporter) SupportsReportTraceEvent() bool { return true }
-
 // ReportHostMetadataBlocking enqueues host metadata.
 func (r *CollectorReporter) ReportHostMetadataBlocking(_ context.Context,
 	metadataMap map[string]string, _ int, _ time.Duration) error {

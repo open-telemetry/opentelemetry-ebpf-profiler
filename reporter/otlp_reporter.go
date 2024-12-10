@@ -124,8 +124,6 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 	}, nil
 }
 
-func (r *OTLPReporter) SupportsReportTraceEvent() bool { return true }
-
 // ReportFramesForTrace is a NOP for OTLPReporter.
 func (r *OTLPReporter) ReportFramesForTrace(_ *libpf.Trace) {}
 
