@@ -166,7 +166,8 @@ type kernelModule struct {
 
 func parseKernelModuleLine(line string) (kernelModule, error) {
 	// The format is: "name size refcount dependencies state address"
-	parts := strings.SplitN(line, " ", 6)
+	// The string is split into 7 parts as after address there can be an optional string.
+	parts := strings.SplitN(line, " ", 7)
 	if len(parts) < 6 {
 		return kernelModule{}, fmt.Errorf("unexpected line in modules: '%s'", line)
 	}
@@ -189,15 +190,10 @@ func parseKernelModuleLine(line string) (kernelModule, error) {
 }
 
 func parseAddress(addressStr string) (uint64, error) {
-	addrParts := strings.SplitAfter(addressStr, " ")
-	if len(addrParts) == 0 {
-		return 0, fmt.Errorf("failed to handle '%s' as address string", addressStr)
-	}
-	address, err := strconv.ParseUint(strings.TrimPrefix(
-		strings.TrimSpace(addrParts[0]), "0x"), 16, 64)
+	address, err := strconv.ParseUint(strings.TrimPrefix(addressStr, "0x"), 16, 64)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse address '%s' as hex value: %v",
-			addrParts[0], err)
+			addressStr, err)
 	}
 
 	return address, nil
