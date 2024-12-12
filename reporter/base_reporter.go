@@ -17,8 +17,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 )
 
-// BaseReporter is a reporter than handles shared behavior between all the
-// available reporters.
+// baseReporter encapsulates shared behavior between all the available reporters.
 type BaseReporter struct {
 	cfg *Config
 
