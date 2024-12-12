@@ -152,7 +152,6 @@ func (b *BaseReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 	}
 }
 
-// FrameMetadata accepts metadata associated with a frame and caches this information.
 func (b *BaseReporter) FrameMetadata(args *FrameMetadataArgs) {
 	fileID := args.FrameID.FileID()
 	addressOrLine := args.FrameID.AddressOrLine()
