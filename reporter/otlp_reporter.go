@@ -28,7 +28,7 @@ var _ Reporter = (*OTLPReporter)(nil)
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
 type OTLPReporter struct {
-	*BaseReporter
+	*baseReporter
 
 	// client for the connection to the receiver.
 	client pprofileotlp.GRPCClient
