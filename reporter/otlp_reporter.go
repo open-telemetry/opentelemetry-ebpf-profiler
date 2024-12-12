@@ -73,7 +73,7 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 	}
 
 	return &OTLPReporter{
-		BaseReporter: &BaseReporter{
+		baseReporter: &baseReporter{
 			cfg:           cfg,
 			name:          cfg.Name,
 			version:       cfg.Version,
