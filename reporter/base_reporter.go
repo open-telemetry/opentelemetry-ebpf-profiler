@@ -55,40 +55,40 @@ type baseReporter struct {
 	hostmetadata *lru.SyncedLRU[string, string]
 }
 
-func (b *BaseReporter) Stop() {
+func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
 }
 
-func (b *BaseReporter) ReportHostMetadata(metadataMap map[string]string) {
+func (b *baseReporter) ReportHostMetadata(metadataMap map[string]string) {
 	b.addHostmetadata(metadataMap)
 }
 
-func (b *BaseReporter) ReportHostMetadataBlocking(_ context.Context,
+func (b *baseReporter) ReportHostMetadataBlocking(_ context.Context,
 	metadataMap map[string]string, _ int, _ time.Duration) error {
 	b.addHostmetadata(metadataMap)
 	return nil
 }
 
 // addHostmetadata adds to and overwrites host metadata.
-func (b *BaseReporter) addHostmetadata(metadataMap map[string]string) {
+func (b *baseReporter) addHostmetadata(metadataMap map[string]string) {
 	for k, v := range metadataMap {
 		b.hostmetadata.Add(k, v)
 	}
 }
 
 // ReportFramesForTrace is a NOP
-func (*BaseReporter) ReportFramesForTrace(_ *libpf.Trace) {}
+func (*baseReporter) ReportFramesForTrace(_ *libpf.Trace) {}
 
 // ReportCountForTrace is a NOP
-func (b *BaseReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *TraceEventMeta) {
+func (b *baseReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *TraceEventMeta) {
 }
 
-func (b *BaseReporter) ExecutableKnown(fileID libpf.FileID) bool {
+func (b *baseReporter) ExecutableKnown(fileID libpf.FileID) bool {
 	_, known := b.pdata.Executables.GetAndRefresh(fileID, pdata.ExecutableCacheLifetime)
 	return known
 }
 
-func (b *BaseReporter) FrameKnown(frameID libpf.FrameID) bool {
+func (b *baseReporter) FrameKnown(frameID libpf.FrameID) bool {
 	known := false
 	if frameMapLock, exists := b.pdata.Frames.GetAndRefresh(frameID.FileID(),
 		pdata.FramesCacheLifetime); exists {
@@ -99,18 +99,18 @@ func (b *BaseReporter) FrameKnown(frameID libpf.FrameID) bool {
 	return known
 }
 
-func (b *BaseReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
+func (b *baseReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 	b.pdata.Executables.Add(args.FileID, samples.ExecInfo{
 		FileName:   args.FileName,
 		GnuBuildID: args.GnuBuildID,
 	})
 }
 
-func (*BaseReporter) ReportMetrics(_ uint32, _ []uint32, _ []int64) {}
+func (*baseReporter) ReportMetrics(_ uint32, _ []uint32, _ []int64) {}
 
-func (*BaseReporter) SupportsReportTraceEvent() bool { return true }
+func (*baseReporter) SupportsReportTraceEvent() bool { return true }
 
-func (b *BaseReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta) {
+func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta) {
 	traceEventsMap := b.traceEvents.WLock()
 	defer b.traceEvents.WUnlock(&traceEventsMap)
 
@@ -152,7 +152,7 @@ func (b *BaseReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 	}
 }
 
-func (b *BaseReporter) FrameMetadata(args *FrameMetadataArgs) {
+func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 	fileID := args.FrameID.FileID()
 	addressOrLine := args.FrameID.AddressOrLine()
 
@@ -196,7 +196,7 @@ func (b *BaseReporter) FrameMetadata(args *FrameMetadataArgs) {
 
 // setResource sets the resource information of the origin of the profiles.
 // Next step: maybe extend this information with go.opentelemetry.io/otel/sdk/resource.
-func (b *BaseReporter) setResource(rp pprofile.ResourceProfiles) {
+func (b *baseReporter) setResource(rp pprofile.ResourceProfiles) {
 	keys := b.hostmetadata.Keys()
 	attrs := rp.Resource().Attributes()
 
