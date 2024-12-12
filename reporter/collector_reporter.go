@@ -61,7 +61,7 @@ func NewCollector(cfg *Config, nextConsumer consumerprofiles.Profiles) (*Collect
 	}
 
 	return &CollectorReporter{
-		BaseReporter: &BaseReporter{
+		baseReporter: &baseReporter{
 			cfg:           cfg,
 			name:          cfg.Name,
 			version:       cfg.Version,
