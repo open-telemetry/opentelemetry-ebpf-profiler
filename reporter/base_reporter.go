@@ -18,7 +18,7 @@ import (
 )
 
 // baseReporter encapsulates shared behavior between all the available reporters.
-type BaseReporter struct {
+type baseReporter struct {
 	cfg *Config
 
 	// name is the ScopeProfile's name.
