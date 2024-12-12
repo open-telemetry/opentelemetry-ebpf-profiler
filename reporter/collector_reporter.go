@@ -24,7 +24,7 @@ var _ Reporter = (*CollectorReporter)(nil)
 
 // CollectorReporter receives and transforms information to be Collector Collector compliant.
 type CollectorReporter struct {
-	*BaseReporter
+	*baseReporter
 
 	nextConsumer consumerprofiles.Profiles
 
