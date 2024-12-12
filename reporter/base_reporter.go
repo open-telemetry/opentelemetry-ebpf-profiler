@@ -63,7 +63,6 @@ func (b *BaseReporter) ReportHostMetadata(metadataMap map[string]string) {
 	b.addHostmetadata(metadataMap)
 }
 
-// ReportHostMetadataBlocking enqueues host metadata.
 func (b *BaseReporter) ReportHostMetadataBlocking(_ context.Context,
 	metadataMap map[string]string, _ int, _ time.Duration) error {
 	b.addHostmetadata(metadataMap)
