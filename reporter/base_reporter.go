@@ -55,7 +55,6 @@ type baseReporter struct {
 	hostmetadata *lru.SyncedLRU[string, string]
 }
 
-// Stop triggers a graceful shutdown of the reporter
 func (b *BaseReporter) Stop() {
 	b.runLoop.Stop()
 }
