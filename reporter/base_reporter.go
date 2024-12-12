@@ -59,7 +59,6 @@ func (b *BaseReporter) Stop() {
 	b.runLoop.Stop()
 }
 
-// ReportHostMetadata enqueues host metadata.
 func (b *BaseReporter) ReportHostMetadata(metadataMap map[string]string) {
 	b.addHostmetadata(metadataMap)
 }
