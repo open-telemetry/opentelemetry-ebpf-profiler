@@ -9,12 +9,10 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
-	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
-	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 )
 
 // baseReporter encapsulates shared behavior between all the available reporters.
@@ -26,18 +24,6 @@ type baseReporter struct {
 
 	// version is the ScopeProfile's version.
 	version string
-
-	// hostID is the unique identifier of the host.
-	hostID string
-
-	// kernelVersion is the version of the kernel.
-	kernelVersion string
-
-	// hostName is the name of the host.
-	hostName string
-
-	// ipAddress is the IP address of the host.
-	ipAddress string
 
 	// runLoop handles the run loop
 	runLoop *runLoop
@@ -192,27 +178,4 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 	}
 	mu := xsync.NewRWMutex(v)
 	b.pdata.Frames.Add(fileID, &mu)
-}
-
-// setResource sets the resource information of the origin of the profiles.
-// Next step: maybe extend this information with go.opentelemetry.io/otel/sdk/resource.
-func (b *baseReporter) setResource(rp pprofile.ResourceProfiles) {
-	keys := b.hostmetadata.Keys()
-	attrs := rp.Resource().Attributes()
-
-	// Add hostmedata to the attributes.
-	for _, k := range keys {
-		if v, ok := b.hostmetadata.Get(k); ok {
-			attrs.PutStr(k, v)
-		}
-	}
-
-	// Add event specific attributes.
-	// These attributes are also included in the host metadata, but with different names/keys.
-	// That makes our hostmetadata attributes incompatible with OTEL collectors.
-	attrs.PutStr(string(semconv.HostIDKey), b.hostID)
-	attrs.PutStr(string(semconv.HostIPKey), b.ipAddress)
-	attrs.PutStr(string(semconv.HostNameKey), b.hostName)
-	attrs.PutStr(string(semconv.ServiceVersionKey), b.version)
-	attrs.PutStr("os.kernel", b.kernelVersion)
 }

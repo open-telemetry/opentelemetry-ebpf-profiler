@@ -12,7 +12,9 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
+	semconv "go.opentelemetry.io/otel/semconv/v1.22.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -29,6 +31,18 @@ var _ Reporter = (*OTLPReporter)(nil)
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
 type OTLPReporter struct {
 	*baseReporter
+
+	// hostID is the unique identifier of the host.
+	hostID string
+
+	// kernelVersion is the version of the kernel.
+	kernelVersion string
+
+	// hostName is the name of the host.
+	hostName string
+
+	// ipAddress is the IP address of the host.
+	ipAddress string
 
 	// client for the connection to the receiver.
 	client pprofileotlp.GRPCClient
@@ -74,15 +88,11 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 
 	return &OTLPReporter{
 		baseReporter: &baseReporter{
-			cfg:           cfg,
-			name:          cfg.Name,
-			version:       cfg.Version,
-			kernelVersion: cfg.KernelVersion,
-			hostName:      cfg.HostName,
-			ipAddress:     cfg.IPAddress,
-			hostID:        strconv.FormatUint(cfg.HostID, 10),
-			pdata:         data,
-			cgroupv2ID:    cgroupv2ID,
+			cfg:        cfg,
+			name:       cfg.Name,
+			version:    cfg.Version,
+			pdata:      data,
+			cgroupv2ID: cgroupv2ID,
 			traceEvents: xsync.NewRWMutex(
 				map[samples.TraceAndMetaKey]*samples.TraceEvents{},
 			),
@@ -91,6 +101,10 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 				stopSignal: make(chan libpf.Void),
 			},
 		},
+		kernelVersion:           cfg.KernelVersion,
+		hostName:                cfg.HostName,
+		ipAddress:               cfg.IPAddress,
+		hostID:                  strconv.FormatUint(cfg.HostID, 10),
 		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
 		client:                  nil,
 		rpcStats:                NewStatsHandler(),
@@ -169,6 +183,29 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	defer ctxCancel()
 	_, err := r.client.Export(reqCtx, req)
 	return err
+}
+
+// setResource sets the resource information of the origin of the profiles.
+// Next step: maybe extend this information with go.opentelemetry.io/otel/sdk/resource.
+func (r *OTLPReporter) setResource(rp pprofile.ResourceProfiles) {
+	keys := r.hostmetadata.Keys()
+	attrs := rp.Resource().Attributes()
+
+	// Add hostmedata to the attributes.
+	for _, k := range keys {
+		if v, ok := r.hostmetadata.Get(k); ok {
+			attrs.PutStr(k, v)
+		}
+	}
+
+	// Add event specific attributes.
+	// These attributes are also included in the host metadata, but with different names/keys.
+	// That makes our hostmetadata attributes incompatible with OTEL collectors.
+	attrs.PutStr(string(semconv.HostIDKey), r.hostID)
+	attrs.PutStr(string(semconv.HostIPKey), r.ipAddress)
+	attrs.PutStr(string(semconv.HostNameKey), r.hostName)
+	attrs.PutStr(string(semconv.ServiceVersionKey), r.version)
+	attrs.PutStr("os.kernel", r.kernelVersion)
 }
 
 // waitGrpcEndpoint waits until the gRPC connection is established.

@@ -6,7 +6,6 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 import (
 	"context"
 	"maps"
-	"strconv"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -62,15 +61,11 @@ func NewCollector(cfg *Config, nextConsumer consumerprofiles.Profiles) (*Collect
 
 	return &CollectorReporter{
 		baseReporter: &baseReporter{
-			cfg:           cfg,
-			name:          cfg.Name,
-			version:       cfg.Version,
-			kernelVersion: cfg.KernelVersion,
-			hostName:      cfg.HostName,
-			ipAddress:     cfg.IPAddress,
-			hostID:        strconv.FormatUint(cfg.HostID, 10),
-			pdata:         data,
-			cgroupv2ID:    cgroupv2ID,
+			cfg:        cfg,
+			name:       cfg.Name,
+			version:    cfg.Version,
+			pdata:      data,
+			cgroupv2ID: cgroupv2ID,
 			traceEvents: xsync.NewRWMutex(
 				map[samples.TraceAndMetaKey]*samples.TraceEvents{},
 			),
@@ -120,10 +115,6 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	r.traceEvents.WUnlock(&traceEvents)
 
 	profiles := r.pdata.Generate(events)
-	for i := 0; i < profiles.ResourceProfiles().Len(); i++ {
-		r.setResource(profiles.ResourceProfiles().At(i))
-	}
-
 	if profiles.SampleCount() == 0 {
 		log.Debugf("Skip sending profile with no samples")
 		return nil
