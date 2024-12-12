@@ -99,8 +99,6 @@ func (b *BaseReporter) FrameKnown(frameID libpf.FrameID) bool {
 	return known
 }
 
-// ExecutableMetadata accepts a fileID with the corresponding filename
-// and caches this information.
 func (b *BaseReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 	b.pdata.Executables.Add(args.FileID, samples.ExecInfo{
 		FileName:   args.FileName,
