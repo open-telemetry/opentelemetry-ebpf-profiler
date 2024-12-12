@@ -88,8 +88,6 @@ func (b *BaseReporter) ExecutableKnown(fileID libpf.FileID) bool {
 	return known
 }
 
-// FrameKnown returns true if the metadata of the Frame specified by frameID is
-// cached in the reporter.
 func (b *BaseReporter) FrameKnown(frameID libpf.FrameID) bool {
 	known := false
 	if frameMapLock, exists := b.pdata.Frames.GetAndRefresh(frameID.FileID(),
