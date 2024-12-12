@@ -108,7 +108,6 @@ func (r *CollectorReporter) Start(ctx context.Context) error {
 	return nil
 }
 
-// GetMetrics returns internal metrics of CollectorReporter.
 func (r *CollectorReporter) GetMetrics() Metrics {
 	return Metrics{}
 }
