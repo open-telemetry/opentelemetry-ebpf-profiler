@@ -83,8 +83,6 @@ func (*BaseReporter) ReportFramesForTrace(_ *libpf.Trace) {}
 func (b *BaseReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *TraceEventMeta) {
 }
 
-// ExecutableKnown returns true if the metadata of the Executable specified by fileID is
-// cached in the reporter.
 func (b *BaseReporter) ExecutableKnown(fileID libpf.FileID) bool {
 	_, known := b.pdata.Executables.GetAndRefresh(fileID, pdata.ExecutableCacheLifetime)
 	return known
