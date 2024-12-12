@@ -110,7 +110,6 @@ func (*BaseReporter) ReportMetrics(_ uint32, _ []uint32, _ []int64) {}
 
 func (*BaseReporter) SupportsReportTraceEvent() bool { return true }
 
-// ReportTraceEvent enqueues reported trace events for the reporter.
 func (b *BaseReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta) {
 	traceEventsMap := b.traceEvents.WLock()
 	defer b.traceEvents.WUnlock(&traceEventsMap)
