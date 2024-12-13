@@ -735,6 +735,17 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// Calls first: PyThread_tss_get(autoTSSKey)
 	autoTLSKey = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState", 0)
 	if autoTLSKey == libpf.SymbolValueInvalid {
+		// Starting with Python 3.12, PyGILState_GetThisThreadState calls PyThread_tss_is_created
+		// first before calling PyThread_tss_get.
+		// On default builds of python (without `--enable-optimizations`, `--with-lto`), the calls
+		// to PyThread_tss_is_created and PyThread_tss_get are not inlined, so the value of
+		// autoTLSKey is stored in a register before being passed to both function calls. This
+		// causes the decode disassembler to not find the value in the call instruction.
+		// To work around this, we look into PyGILState_Release which as of Python 3.13,
+		// calls PyThread_tss_get directly.
+		autoTLSKey = decodeStub(ef, pyruntimeAddr, "PyGILState_Release", 0)
+	}
+	if autoTLSKey == libpf.SymbolValueInvalid {
 		return nil, errors.New("unable to resolve autoTLSKey")
 	}
 	if version >= pythonVer(3, 7) && autoTLSKey%8 == 0 {
