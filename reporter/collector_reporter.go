@@ -38,7 +38,7 @@ func NewCollector(cfg *Config, nextConsumer consumerprofiles.Profiles) (*Collect
 	if err != nil {
 		return nil, err
 	}
-	// Set a lifetime to reduce risk of invalid data in case of PID reuse.
+	// Set a lifetime to reduce the risk of invalid data in case of PID reuse.
 	cgroupv2ID.SetLifetime(90 * time.Second)
 
 	// Next step: Dynamically configure the size of this LRU.
