@@ -33,17 +33,15 @@ func NewFactory() receiver.Factory {
 
 func createProfilesReceiver(
 	_ context.Context,
-	params receiver.Settings, //nolint:gocritic // we must respect the collector API
+	_ receiver.Settings, //nolint:gocritic // we must respect the collector API
 	baseCfg component.Config,
 	nextConsumer consumerprofiles.Profiles) (receiverprofiles.Profiles, error) {
-	logger := params.Logger
 	cfg, ok := baseCfg.(*controller.Config)
 	if !ok {
 		return nil, errInvalidConfig
 	}
 
-	rcvr := internal.NewController(logger, nextConsumer, cfg)
-	return rcvr, nil
+	return internal.NewController(cfg, nextConsumer)
 }
 
 // todo: export default values (currently in main.go)
@@ -54,7 +52,6 @@ func defaultConfig() component.Config {
 		SamplesPerSecond:       20,
 		ProbabilisticInterval:  1 * time.Minute,
 		ProbabilisticThreshold: 100,
-		CollAgentAddr:          "127.0.0.1:11000",
 		Tracers:                "all",
 	}
 }
