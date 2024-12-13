@@ -78,13 +78,15 @@ func (c *Controller) Start(ctx context.Context) error {
 	// OTel semantic introduced in https://github.com/open-telemetry/semantic-conventions/issues/66
 	metadataCollector.AddCustomData("os.kernel.release", kernelVersion)
 
-	// hostname and sourceIP will be populated from the root namespace.
-	hostname, sourceIP, err := helpers.GetHostnameAndSourceIP(c.config.CollAgentAddr)
-	if err != nil {
-		log.Warnf("Failed to fetch metadata information in the root namespace: %v", err)
+	if c.config.CollAgentAddr != "" {
+		// hostname and sourceIP will be populated from the root namespace.
+		hostname, sourceIP, err := helpers.GetHostnameAndSourceIP(c.config.CollAgentAddr)
+		if err != nil {
+			log.Warnf("Failed to fetch metadata information in the root namespace: %v", err)
+		}
+		metadataCollector.AddCustomData("host.name", hostname)
+		metadataCollector.AddCustomData("host.ip", sourceIP)
 	}
-	metadataCollector.AddCustomData("host.name", hostname)
-	metadataCollector.AddCustomData("host.ip", sourceIP)
 
 	err = c.reporter.Start(ctx)
 	if err != nil {
