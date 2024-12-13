@@ -10,6 +10,7 @@ require (
 	github.com/cilium/ebpf v0.16.0
 	github.com/elastic/go-freelru v0.16.0
 	github.com/elastic/go-perf v0.0.0-20241016160959-1342461adb4a
+	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
 	github.com/jsimonetti/rtnetlink v1.4.2
 	github.com/klauspost/compress v1.17.9
@@ -19,8 +20,9 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/tklauser/numcpus v0.8.0
 	github.com/zeebo/xxh3 v1.0.2
-	go.opentelemetry.io/collector/pdata v1.20.1-0.20241128084017-33264a5408cd
-	go.opentelemetry.io/collector/pdata/pprofile v0.114.1-0.20241128084017-33264a5408cd
+	go.opentelemetry.io/collector/consumer/consumerprofiles v0.112.0
+	go.opentelemetry.io/collector/pdata v1.21.0
+	go.opentelemetry.io/collector/pdata/pprofile v0.115.0
 	go.opentelemetry.io/otel v1.30.0
 	golang.org/x/arch v0.10.0
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
@@ -47,7 +49,6 @@ require (
 	github.com/aws/smithy-go v1.20.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/josharian/native v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
@@ -56,6 +57,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	go.opentelemetry.io/collector/consumer v0.112.0 // indirect
 	go.opentelemetry.io/otel/trace v1.30.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.28.0 // indirect
