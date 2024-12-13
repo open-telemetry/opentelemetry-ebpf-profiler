@@ -16,14 +16,13 @@ RUN cross_debian_arch=$(uname -m | sed -e 's/aarch64/amd64/'  -e 's/x86_64/arm64
 COPY go.mod /tmp/go.mod
 # Extract Go version from go.mod
 RUN GO_VERSION=$(grep -oPm1 '^go \K([[:digit:].]+)' /tmp/go.mod) && \
-    wget -qO- https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz | tar -C /usr/local -xz
+    GOARCH=$(uname -m) && if [ "$GOARCH" = "x86_64" ]; then GOARCH=amd64; elif [ "$GOARCH" = "aarch64" ]; then GOARCH=arm64; fi && \
+    wget -qO- https://golang.org/dl/go${GO_VERSION}.linux-${GOARCH}.tar.gz | tar -C /usr/local -xz
+
 # Set Go environment variables
 ENV GOPATH="/agent/go"
 ENV GOCACHE="/agent/.cache"
 ENV PATH="/usr/local/go/bin:$PATH"
-
-RUN wget -qO- https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
-    | sh -s -- -b $(go env GOPATH)/bin v1.56.2
 
 # gRPC dependencies
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0

@@ -243,13 +243,3 @@ char _license[] SEC("license") = "GPL";
 // this number will be interpreted by the elf loader
 // to set the current running kernel version
 u32 _version SEC("version") = 0xFFFFFFFE;
-
-// tracepoint__sys_enter_read serves as dummy tracepoint so we can check if tracepoints are
-// enabled and we can make use of them.
-// The argument that is passed to the tracepoint for the sys_enter_read hook is described in sysfs
-// at /sys/kernel/debug/tracing/events/syscalls/sys_enter_read/format.
-SEC("tracepoint/syscalls/sys_enter_read")
-int tracepoint__sys_enter_read(void *ctx) {
-  printt("The read tracepoint was triggered");
-  return 0;
-}

@@ -166,6 +166,10 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 func loadKernelCode(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	address libpf.SymbolValue) ([]byte, error) {
 	code, _, err := executeSystemAnalysisBpfCode(coll.Programs["read_kernel_memory"], maps, address)
+	if err != nil {
+		log.Warnf("Failed to load code: %v.\n"+
+			"Possible reasons include using a kernel without syscall tracepoints enabled.", err)
+	}
 	return code, err
 }
 

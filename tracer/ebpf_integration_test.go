@@ -14,11 +14,13 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/proc"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -90,6 +92,10 @@ func (f mockIntervals) TracePollInterval() time.Duration  { return 250 * time.Mi
 func (f mockIntervals) PIDCleanupInterval() time.Duration { return 1 * time.Second }
 
 type mockReporter struct{}
+
+func (f mockReporter) ExecutableKnown(_ libpf.FileID) bool {
+	return true
+}
 
 func (f mockReporter) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
 }
@@ -243,4 +249,13 @@ Loop:
 			validateTrace(t, numKernelFrames, &testcase.userSpaceTrace, trace)
 		})
 	}
+}
+
+func TestAllTracers(t *testing.T) {
+	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
+	require.NoError(t, err)
+
+	_, _, err = initializeMapsAndPrograms(tracertypes.AllTracers(), kernelSymbols,
+		false, 1, false, false, 0)
+	require.NoError(t, err)
 }

@@ -9,6 +9,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
 )
 
 // Reporter is the top-level interface implemented by a full reporter.
@@ -18,18 +19,20 @@ type Reporter interface {
 	HostMetadataReporter
 	MetricsReporter
 
+	// Start starts the reporter in the background.
+	//
+	// If the reporter needs to perform a long-running starting operation then it
+	// is recommended that Start() returns quickly and the long-running operation
+	// is performed in the background.
+	Start(context.Context) error
+
 	// Stop triggers a graceful shutdown of the reporter.
 	Stop()
 	// GetMetrics returns the reporter internal metrics.
 	GetMetrics() Metrics
 }
 
-type TraceEventMeta struct {
-	Timestamp      libpf.UnixTime64
-	Comm           string
-	APMServiceName string
-	PID, TID       libpf.PID
-}
+type TraceEventMeta = samples.TraceEventMeta
 
 type TraceReporter interface {
 	// ReportFramesForTrace accepts a trace with the corresponding frames
@@ -89,6 +92,13 @@ type FrameMetadataArgs struct {
 }
 
 type SymbolReporter interface {
+	// ExecutableKnown may be used to query the reporter if the FileID is known.
+	// The callers of ExecutableMetadata can optionally use this method to determine if the data
+	// is already cached and avoid extra work resolving the metadata. If the reporter returns false,
+	// the caller will resolve the executable metadata and submit it to the reporter
+	// via a subsequent ExecutableMetadata call.
+	ExecutableKnown(fileID libpf.FileID) bool
+
 	// ExecutableMetadata accepts a FileID with the corresponding filename
 	// and takes some action with it (for example, it might cache it for
 	// periodic reporting to a backend).
@@ -102,8 +112,8 @@ type SymbolReporter interface {
 	// FrameKnown may be used to query the reporter if the FrameID is known. The interpreter
 	// modules can optionally use this method to determine if the data is already cached
 	// and avoid extra work resolving the metadata. If the reporter returns false,
-	// the intepreter plugin will resolve the frame metadata and submit it to the reporter
-	// via a subsequent FrameMetdata call.
+	// the interpreter plugin will resolve the frame metadata and submit it to the reporter
+	// via a subsequent FrameMetadata call.
 	FrameKnown(frameID libpf.FrameID) bool
 
 	// FrameMetadata accepts metadata associated with a frame and caches this information before

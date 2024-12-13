@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/elastic/go-freelru"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -261,7 +262,6 @@ type peInfo struct {
 	typeSpecs    []peTypeSpec
 	methodSpecs  []peMethodSpec
 	sizeOfImage  uint32
-	reported     bool
 
 	// strings contains the preloaded strings from dotnet string heap.
 	// If this consumes too much memory, this could be converted to LRU and on-demand

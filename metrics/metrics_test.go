@@ -41,6 +41,7 @@ func TestMetrics(t *testing.T) {
 		{IDIOThroughput, MetricValue(55)},
 		{IDIODuration, MetricValue(66)},
 		{IDAgentGoRoutines, MetricValue(20)},
+		{IDUnwindCallInterpreter, MetricValue(0)},
 	}
 
 	AddSlice(inputMetrics[0:2])                    // 33, 55
@@ -49,6 +50,10 @@ func TestMetrics(t *testing.T) {
 	AddSlice(inputMetrics[3:4])                    // 20
 	Add(inputMetrics[0].ID, inputMetrics[0].Value) // 33, dropped
 	AddSlice(inputMetrics[1:3])                    // 55, 66 dropped
+	AddSlice(inputMetrics[2:5])                    // 66 dropped, 20 dropped, 0 dropped
+
+	// Drop counter with 0 value as we don't expect it to appear in output
+	inputMetrics = inputMetrics[:4]
 
 	// trigger reporting
 	time.Sleep(1 * time.Second)

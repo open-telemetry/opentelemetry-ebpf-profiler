@@ -82,7 +82,9 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 	if !ok {
 		// We don't have information for this pid, so we first need to
 		// allocate the embedded map for this process.
+		executable, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
 		info = &processInfo{
+			executable:       executable,
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
 			tsdInfo:          nil,
@@ -280,7 +282,12 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	info.fileID = hostFileID
 	info.addressMapper = ef.GetAddressMapper()
 	if mapping.IsVDSO() {
-		info.err = pm.insertSynthStackDeltas(hostFileID, ef)
+		intervals := createVDSOSyntheticRecord(ef)
+		if intervals.Deltas != nil {
+			if err := pm.AddSynthIntervalData(hostFileID, intervals); err != nil {
+				info.err = fmt.Errorf("failed to add synthetic deltas: %w", err)
+			}
+		}
 	}
 	// Do not cache the entry if synthetic stack delta loading failed,
 	// so next encounter of the VDSO will retry loading them.
@@ -288,6 +295,10 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		pm.elfInfoCache.Add(key, info)
 	}
 	pm.FileIDMapper.Set(hostFileID, fileID)
+
+	if pm.reporter.ExecutableKnown(fileID) {
+		return info
+	}
 
 	baseName := path.Base(mapping.Path)
 	if baseName == "/" {
@@ -628,4 +639,18 @@ func (pm *ProcessManager) CleanupPIDs() {
 	if len(deadPids) > 0 {
 		log.Debugf("Cleaned up %d dead PIDs", len(deadPids))
 	}
+}
+
+// ExePathForPID returns the full executable path for given PID.
+// If the PID is not tracked or belongs to a kernel worker,
+// it returns the empty string.
+func (pm *ProcessManager) ExePathForPID(pid libpf.PID) string {
+	var executable string
+
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
+		executable = procInfo.executable
+	}
+	return executable
 }

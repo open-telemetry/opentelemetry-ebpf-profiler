@@ -34,7 +34,22 @@ var (
 
 	//go:embed metrics.json
 	metricsJSON []byte
+
+	// Used in fallback checks, e.g. to avoid sending "counters" with 0 values
+	metricTypes map[MetricID]MetricType
 )
+
+func init() {
+	defs, err := GetDefinitions()
+	if err != nil {
+		panic("extracting definitions from metrics.json")
+	}
+
+	metricTypes = make(map[MetricID]MetricType, len(defs))
+	for _, md := range defs {
+		metricTypes[md.ID] = md.Type
+	}
+}
 
 // reporterImpl allows swapping out the global metrics reporter.
 //
@@ -101,6 +116,10 @@ func AddSlice(newMetrics []Metric) {
 		if metric.ID <= IDInvalid || metric.ID >= IDMax {
 			log.Errorf("Metric value %d out of range [%d,%d]- needs investigation",
 				metric.ID, IDInvalid+1, IDMax-1)
+			continue
+		}
+
+		if metric.Value == 0 && metricTypes[metric.ID] == MetricTypeCounter {
 			continue
 		}
 

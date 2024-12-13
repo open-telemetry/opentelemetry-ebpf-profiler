@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
 )
 
 type Config struct {
@@ -24,8 +26,12 @@ type Config struct {
 
 	// Disable secure communication with Collection Agent.
 	DisableTLS bool
-	// CacheSize defines the size of the reporter caches.
-	CacheSize uint32
+	// ExecutablesCacheElements defines item capacity of the executables cache.
+	ExecutablesCacheElements uint32
+	// FramesCacheElements defines the item capacity of the frames cache.
+	FramesCacheElements uint32
+	// CGroupCacheElements defines the item capacity of the cgroup cache.
+	CGroupCacheElements uint32
 	// samplesPerSecond defines the number of samples per second.
 	SamplesPerSecond int
 	// HostID is the host ID to be sent to the collection agent.
@@ -47,4 +53,8 @@ type Config struct {
 
 	// gRPCInterceptor is the client gRPC interceptor, e.g., for sending gRPC metadata.
 	GRPCClientInterceptor grpc.UnaryClientInterceptor
+
+	// ExtraSampleAttrProd is an optional hook point for adding custom
+	// attributes to samples.
+	ExtraSampleAttrProd samples.SampleAttrProducer
 }

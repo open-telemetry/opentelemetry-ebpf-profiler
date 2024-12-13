@@ -200,6 +200,7 @@ static inline PerCPURecord *get_pristine_per_cpu_record()
 #elif defined(__aarch64__)
   record->state.lr = 0;
   record->state.r22 = 0;
+  record->state.lr_invalid = false;
 #endif
   record->state.return_address = false;
   record->state.error_metric = -1;
@@ -240,6 +241,25 @@ bool unwinder_is_done(const PerCPURecord *record, int unwinder) {
 static inline __attribute__((__always_inline__))
 void unwinder_mark_done(PerCPURecord *record, int unwinder) {
   record->unwindersDone |= 1U << unwinder;
+}
+
+// unwinder_mark_nonleaf_frame marks the current frame as a non-leaf
+// frame from the perspective of the user-mode stack.
+// That is, frames that are making a syscall (thus the leaf for the user-mode
+// stack, though not the leaf for the entire logical stack) *are*
+// considered leaf frames in this sense.
+//
+// On both x86 and aarch64, this means we need to subtract 1 from
+// the address during later processing.
+//
+// Additionally, on aarch64, this means that we will not trust the current value of
+// `lr` to be the return address for this frame.
+static inline __attribute__((__always_inline__))
+void unwinder_mark_nonleaf_frame(UnwindState *state) {
+  state->return_address = true;
+#if defined(__aarch64__)
+  state->lr_invalid = true;
+#endif
 }
 
 // Push the file ID, line number and frame type into FrameList with a user-defined

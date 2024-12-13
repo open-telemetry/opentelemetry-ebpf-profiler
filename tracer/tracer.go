@@ -413,11 +413,15 @@ func initializeMapsAndPrograms(includeTracers types.IncludedTracers,
 			return nil, nil, fmt.Errorf("failed to get kernel version: %v", err)
 		}
 		if hasProbeReadBug(major, minor, patch) {
-			patched := checkForMaccessPatch(coll, ebpfMaps, kernelSymbols)
-			if !patched {
-				return nil, nil, fmt.Errorf("your kernel version %d.%d.%d is affected by a Linux "+
-					"kernel bug that can lead to system freezes, terminating host "+
-					"agent now to avoid triggering this bug", major, minor, patch)
+			if err = checkForMaccessPatch(coll, ebpfMaps, kernelSymbols); err != nil {
+				return nil, nil, fmt.Errorf("your kernel version %d.%d.%d may be "+
+					"affected by a Linux kernel bug that can lead to system "+
+					"freezes, terminating host agent now to avoid "+
+					"triggering this bug.\n"+
+					"If you are certain your kernel is not affected, "+
+					"you can override this check at your own risk "+
+					"with -no-kernel-version-check.\n"+
+					"Error: %v", major, minor, patch, err)
 			}
 		}
 	}
@@ -619,32 +623,6 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 		}
 	}
 
-	return nil
-}
-
-// List PIDs in /proc and send them in the Tracer channel for reading.
-func (t *Tracer) populatePIDs(ctx context.Context) error {
-	// Inform the process manager and our backend about the new mappings.
-	pids, err := proc.ListPIDs()
-	if err != nil {
-		return fmt.Errorf("failure reading PID list from /proc: %v", err)
-	}
-	for _, pid := range pids {
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case t.pidEvents <- pid:
-				goto next_pid
-			default:
-				// Workaround to implement a non blocking send to a channel.
-				// To avoid a busy loop on this non blocking channel send operation
-				// time.Sleep() is used.
-				time.Sleep(50 * time.Millisecond)
-			}
-		}
-	next_pid:
-	}
 	return nil
 }
 
@@ -863,7 +841,7 @@ func (t *Tracer) eBPFMetricsCollector(
 //
 // If the raw trace contains a kernel stack ID, the kernel stack is also
 // retrieved and inserted at the appropriate position.
-func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
+func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	frameListOffs := int(unsafe.Offsetof(C.Trace{}.frames))
 
 	if len(raw) < frameListOffs {
@@ -878,13 +856,16 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 		panic("unexpected record size")
 	}
 
+	pid := libpf.PID(ptr.pid)
 	trace := &host.Trace{
 		Comm:             C.GoString((*C.char)(unsafe.Pointer(&ptr.comm))),
+		Executable:       t.processManager.ExePathForPID(pid),
 		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.apm_trace_id)),
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.apm_transaction_id)),
-		PID:              libpf.PID(ptr.pid),
+		PID:              pid,
 		TID:              libpf.PID(ptr.tid),
 		KTime:            times.KTime(ptr.ktime),
+		CPU:              cpu,
 	}
 
 	// Trace fields included in the hash:
@@ -934,8 +915,8 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.T
 	eventMetricCollector := t.startEventMonitor(ctx)
 
 	startPollingPerfEventMonitor(ctx, t.ebpfMaps["trace_events"], t.intervals.TracePollInterval(),
-		t.samplesPerSecond*int(unsafe.Sizeof(C.Trace{})), func(rawTrace []byte) {
-			traceOutChan <- t.loadBpfTrace(rawTrace)
+		t.samplesPerSecond*int(unsafe.Sizeof(C.Trace{})), func(rawTrace []byte, cpu int) {
+			traceOutChan <- t.loadBpfTrace(rawTrace, cpu)
 		})
 
 	pidEvents := make([]uint32, 0)
