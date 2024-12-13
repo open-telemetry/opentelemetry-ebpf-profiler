@@ -80,7 +80,9 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	if c.config.CollAgentAddr != "" {
 		// hostname and sourceIP will be populated from the root namespace.
-		hostname, sourceIP, err := helpers.GetHostnameAndSourceIP(c.config.CollAgentAddr)
+		hostname, sourceIP,
+			err := //nolint:govet // shadowing err is fine, previous errors have been handled
+			helpers.GetHostnameAndSourceIP(c.config.CollAgentAddr)
 		if err != nil {
 			log.Warnf("Failed to fetch metadata information in the root namespace: %v", err)
 		}
