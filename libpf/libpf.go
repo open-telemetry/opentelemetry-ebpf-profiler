@@ -37,16 +37,6 @@ type UnixTime64 uint64
 // a native file.
 type AddressOrLineno uint64
 
-type TraceAndCounts struct {
-	Hash           TraceHash
-	Timestamp      UnixTime64
-	Count          uint16
-	Comm           string
-	PodName        string
-	ContainerName  string
-	APMServiceName string
-}
-
 type FrameMetadata struct {
 	FileID         FileID
 	AddressOrLine  AddressOrLineno
