@@ -80,7 +80,6 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	metadataCollector.AddCustomData("host.name", c.config.HostName)
 	metadataCollector.AddCustomData("host.ip", c.config.IPAddress)
-	}
 
 	err = c.reporter.Start(ctx)
 	if err != nil {
