@@ -114,6 +114,7 @@ func mainWithExitCode() exitCode {
 		log.Error(err)
 		return exitFailure
 	}
+	cfg.HostName, cfg.IPAddress = hostname, sourceIP
 
 	rep, err := reporter.NewOTLP(&reporter.Config{
 		CollAgentAddr:            cfg.CollAgentAddr,
