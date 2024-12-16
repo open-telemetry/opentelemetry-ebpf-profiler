@@ -36,7 +36,7 @@ type baseReporter struct {
 	cgroupv2ID *lru.SyncedLRU[libpf.PID, string]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[int]samples.KeyToEventMapping]
+	traceEvents xsync.RWMutex[map[libpf.Origin]samples.KeyToEventMapping]
 
 	// hostmetadata stores metadata that is sent out with every request.
 	hostmetadata *lru.SyncedLRU[string, string]

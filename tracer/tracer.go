@@ -65,12 +65,6 @@ const (
 	probProfilingDisable = -1
 )
 
-const (
-	// OffCpuThresholdMax defines the upper bound for the off-cpu profiling
-	// threshold.
-	OffCPUThresholdMax = support.OffCPUThresholdMax
-)
-
 // Intervals is a subset of config.IntervalsAndTimers.
 type Intervals interface {
 	MonitorInterval() time.Duration
@@ -496,7 +490,7 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 		return nil, nil, fmt.Errorf("failed to load perf eBPF programs: %v", err)
 	}
 
-	if cfg.OffCPUThreshold < OffCPUThresholdMax {
+	if cfg.OffCPUThreshold < support.OffCPUThresholdMax {
 		if err = loadKProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
@@ -575,7 +569,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, ebpfMaps map[string]*cebpf.Map,
 	return nil
 }
 
-// loadPerfUnwinders just satisfies the proof of concept and loads all eBPF programs
+// loadPerfUnwinders loads all perf eBPF Programs and their tail call targets.
 func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
 	tailcallMap *cebpf.Map, tailCallProgs []progLoaderHelper,
 	bpfVerifierLogLevel uint32) error {
@@ -643,7 +637,7 @@ func progArrayReferences(perfTailCallMapFD int, insns asm.Instructions) []int {
 
 // loadKProbeUnwinders reuses large parts of loadPerfUnwinders. By default all eBPF programs
 // are written as perf event eBPF programs. loadKProbeUnwinders dynamically rewrites the
-// specification of these programs to krpobe eBPF programs and adjusts tail call maps.
+// specification of these programs to kprobe eBPF programs and adjusts tail call maps.
 func loadKProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
 	tailcallMap *cebpf.Map, tailCallProgs []progLoaderHelper,
 	bpfVerifierLogLevel uint32, perfTailCallMapFD int) error {
@@ -981,7 +975,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.apm_transaction_id)),
 		PID:              pid,
 		TID:              libpf.PID(ptr.tid),
-		Origin:           int(ptr.origin),
+		Origin:           libpf.Origin(ptr.origin),
 		OffTime:          uint64(ptr.offtime),
 		KTime:            times.KTime(ptr.ktime),
 		CPU:              cpu,

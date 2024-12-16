@@ -10,8 +10,8 @@ bpf_map_def SEC("maps") kprobe_progs = {
   .max_entries = NUM_TRACER_PROGS,
 };
 
-// profile_off_cpu communicates scheduler tasks.
-bpf_map_def SEC("maps") profile_off_cpu = {
+// sched_times keeps track of sched_switch call times.
+	bpf_map_def SEC("maps") sched_times = {
   .type = BPF_MAP_TYPE_LRU_PERCPU_HASH,
   .key_size = sizeof(u64),   // pid_tgid
   .value_size = sizeof(u64), // time in ns
@@ -42,7 +42,7 @@ int tracepoint__sched_switch(void *ctx) {
 
   u64 ts = bpf_ktime_get_ns();
 
-  if (bpf_map_update_elem(&profile_off_cpu, &pid_tgid, &ts, BPF_ANY)<0){
+  if (bpf_map_update_elem(&sched_times, &pid_tgid, &ts, BPF_ANY)<0){
     DEBUG_PRINT("Failed to record sched_switch event entry");
 	  return 0;
   }
@@ -73,7 +73,7 @@ int finish_task_switch(struct pt_regs *ctx) {
 
   u64 ts = bpf_ktime_get_ns();
 
-  u64 *start_ts = bpf_map_lookup_elem(&profile_off_cpu, &pid_tgid);
+  u64 *start_ts = bpf_map_lookup_elem(&sched_times, &pid_tgid);
   if (!start_ts){
     // There is no information from the sched/sched_switch entry hook.
     return 0;

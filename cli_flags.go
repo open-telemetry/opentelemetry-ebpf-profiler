@@ -12,6 +12,7 @@ import (
 	"github.com/peterbourgon/ff/v3"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -24,7 +25,7 @@ const (
 	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
 	defaultProbabilisticInterval  = 1 * time.Minute
 	defaultArgSendErrorFrames     = false
-	defaultOffCPUThreshold        = tracer.OffCPUThresholdMax
+	defaultOffCPUThreshold        = support.OffCPUThresholdMax
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -66,7 +67,7 @@ var (
 		"off-cpu profiling: Every time an off-cpu entry point is hit, a random number between "+
 		"0 and %d is chosen. If the given threshold is greater than this random number, the "+
 		"off-cpu trace is collected and reported.",
-		tracer.OffCPUThresholdMax-1, tracer.OffCPUThresholdMax-1)
+		support.OffCPUThresholdMax-1, support.OffCPUThresholdMax-1)
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer

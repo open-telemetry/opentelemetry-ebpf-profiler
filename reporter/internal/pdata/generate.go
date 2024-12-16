@@ -25,11 +25,12 @@ const (
 
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
-func (p Pdata) Generate(events map[int]samples.KeyToEventMapping) pprofile.Profiles {
+func (p Pdata) Generate(events map[libpf.Origin]samples.KeyToEventMapping) pprofile.Profiles {
 	profiles := pprofile.NewProfiles()
 	rp := profiles.ResourceProfiles().AppendEmpty()
 	sp := rp.ScopeProfiles().AppendEmpty()
-	for _, origin := range []int{support.TraceOriginSampling, support.TraceOriginOffCPU} {
+	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
+		support.TraceOriginOffCPU} {
 		prof := sp.Profiles().AppendEmpty()
 		prof.SetProfileID(pprofile.ProfileID(mkProfileID()))
 		p.setProfile(origin, events[origin], prof)
@@ -50,7 +51,7 @@ func mkProfileID() []byte {
 // setProfile sets the data an OTLP profile with all collected samples up to
 // this moment.
 func (p *Pdata) setProfile(
-	origin int,
+	origin libpf.Origin,
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
 ) {

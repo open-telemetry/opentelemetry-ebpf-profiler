@@ -13,7 +13,7 @@ type TraceEventMeta struct {
 	APMServiceName string
 	PID, TID       libpf.PID
 	CPU            int
-	Origin         int
+	Origin         libpf.Origin
 	OffTime        uint64
 }
 

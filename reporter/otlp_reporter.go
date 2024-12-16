@@ -87,8 +87,8 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 		return nil, err
 	}
 
-	originsMap := make(map[int]samples.KeyToEventMapping, 2)
-	for _, origin := range []int{support.TraceOriginSampling,
+	originsMap := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
+	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
 		support.TraceOriginOffCPU} {
 		originsMap[origin] = make(samples.KeyToEventMapping)
 	}
@@ -170,9 +170,9 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	traceEvents := r.traceEvents.WLock()
 	events := maps.Clone(*traceEvents)
-	originsMap := make(map[int]samples.KeyToEventMapping, 2)
+	originsMap := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
 	clear(*traceEvents)
-	for _, origin := range []int{support.TraceOriginSampling,
+	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
 		support.TraceOriginOffCPU} {
 		originsMap[origin] = make(samples.KeyToEventMapping)
 	}
