@@ -74,7 +74,7 @@ int finish_task_switch(struct pt_regs *ctx) {
   u64 ts = bpf_ktime_get_ns();
 
   u64 *start_ts = bpf_map_lookup_elem(&sched_times, &pid_tgid);
-  if (!start_ts){
+  if (!start_ts || *start_ts == 0){
     // There is no information from the sched/sched_switch entry hook.
     return 0;
   }
