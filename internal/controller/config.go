@@ -32,7 +32,7 @@ type Config struct {
 	Version                bool
 	// HostName is the name of the host.
 	HostName string
-	// IPAddress is the IP address of the host.
+	// IPAddress is the IP address of the host that sends data to CollAgentAddr.
 	IPAddress string
 
 	Reporter reporter.Reporter
