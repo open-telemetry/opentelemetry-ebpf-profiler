@@ -356,13 +356,15 @@ func parseVarinfo(b []byte, pc, slot uint32) string {
 		}
 		b, pcdelta = parseULEB128(b)
 		endpc := startpc + pcdelta
-		if pc < endpc && slot == 0 {
-			if vn <= len(varnames) {
-				return varnames[vn-1]
+		if pc < endpc {
+			if slot == 0 {
+				if vn <= len(varnames) {
+					return varnames[vn-1]
+				}
+				return name
 			}
-			return name
+			slot--
 		}
-		slot--
 	}
 	return ""
 }
