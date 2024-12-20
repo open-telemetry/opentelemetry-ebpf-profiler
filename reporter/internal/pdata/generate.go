@@ -195,8 +195,13 @@ func (p *Pdata) setProfile(
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())
 
 	// Populate the deduplicated functions into profile.
-	for v := range funcMap {
-		f := profile.FunctionTable().AppendEmpty()
+	funcTable := profile.FunctionTable()
+	funcTable.EnsureCapacity(len(funcMap))
+	for range funcMap {
+		funcTable.AppendEmpty()
+	}
+	for v, idx := range funcMap {
+		f := funcTable.At(int(idx))
 		f.SetNameStrindex(getStringMapIndex(stringMap, v.Name))
 		f.SetFilenameStrindex(getStringMapIndex(stringMap, v.FileName))
 	}
