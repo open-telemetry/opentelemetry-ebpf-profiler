@@ -527,6 +527,11 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
     }
   }
 
+  if (state->fp == 0) {
+    *stop = true;
+    return ERR_OK;
+  }
+
   UnwindInfo *info = bpf_map_lookup_elem(&unwind_info_array, &unwindInfo);
   if (!info) {
     increment_metric(metricID_UnwindNativeErrBadUnwindInfoIndex);
@@ -589,7 +594,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
   // this implies that if no other changes are applied to the stack such
   // as alloca(), following the prolog SP/FP points to the frame record
   // itself, in such a case FP offset will be equal to 8
-  if (info->fpParam == 8) {
+  if (info->fpParam == 8 || (info->opcode == (UNWIND_OPCODEF_DEREF | UNWIND_OPCODE_BASE_FP))) {
     // we can assume the presence of frame pointers
     if (info->fpOpcode != UNWIND_OPCODE_BASE_LR) {
       // FP precedes the RA on the stack (Aarch64 ABI requirement)
