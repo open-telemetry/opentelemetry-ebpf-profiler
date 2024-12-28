@@ -1,4 +1,4 @@
-FROM debian:testing
+FROM debian:12.8
 
 WORKDIR /agent
 
