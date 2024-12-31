@@ -1,6 +1,6 @@
 #include "bpfdefs.h"
-#include "types.h"
 #include "tracemgmt.h"
+#include "types.h"
 
 // kprobe_progs maps from a program ID to a kprobe eBPF program
 bpf_map_def SEC("maps") kprobe_progs = {
@@ -11,7 +11,7 @@ bpf_map_def SEC("maps") kprobe_progs = {
 };
 
 // sched_times keeps track of sched_switch call times.
-	bpf_map_def SEC("maps") sched_times = {
+bpf_map_def SEC("maps") sched_times = {
   .type = BPF_MAP_TYPE_LRU_PERCPU_HASH,
   .key_size = sizeof(u64),   // pid_tgid
   .value_size = sizeof(u64), // time in ns
@@ -36,26 +36,27 @@ int tracepoint__sched_switch(void *ctx) {
     return ERR_UNREACHABLE;
   }
 
-  if (bpf_get_prandom_u32()%OFF_CPU_THRESHOLD_MAX > syscfg->off_cpu_threshold) {
+  if (bpf_get_prandom_u32() % OFF_CPU_THRESHOLD_MAX >
+      syscfg->off_cpu_threshold) {
     return 0;
   }
 
   u64 ts = bpf_ktime_get_ns();
 
-  if (bpf_map_update_elem(&sched_times, &pid_tgid, &ts, BPF_ANY)<0){
+  if (bpf_map_update_elem(&sched_times, &pid_tgid, &ts, BPF_ANY) < 0) {
     DEBUG_PRINT("Failed to record sched_switch event entry");
-	  return 0;
+    return 0;
   }
 
   return 0;
 }
 
-// dummy is never loaded or called. It just makes sure kprobe_progs is referenced
-// and make the compiler and linker happy.
+// dummy is never loaded or called. It just makes sure kprobe_progs is
+// referenced and make the compiler and linker happy.
 SEC("kprobe/dummy")
 int dummy(struct pt_regs *ctx) {
-    bpf_tail_call(ctx, &kprobe_progs,0);
-    return 0;
+  bpf_tail_call(ctx, &kprobe_progs, 0);
+  return 0;
 }
 
 // kp__finish_task_switch is triggered right after the scheduler updated
@@ -74,7 +75,7 @@ int finish_task_switch(struct pt_regs *ctx) {
   u64 ts = bpf_ktime_get_ns();
 
   u64 *start_ts = bpf_map_lookup_elem(&sched_times, &pid_tgid);
-  if (!start_ts || *start_ts == 0){
+  if (!start_ts || *start_ts == 0) {
     // There is no information from the sched/sched_switch entry hook.
     return 0;
   }
