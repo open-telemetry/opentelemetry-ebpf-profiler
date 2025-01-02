@@ -1,7 +1,7 @@
 SHELL ?= bash
-BPF_CLANG ?= clang-16
-BPF_LINK ?= llvm-link-16
-LLC ?= llc-16
+BPF_CLANG ?= clang-17
+BPF_LINK ?= llvm-link-17
+LLC ?= llc-17
 
 DEBUG_FLAGS = -DOPTI_DEBUG -g
 
