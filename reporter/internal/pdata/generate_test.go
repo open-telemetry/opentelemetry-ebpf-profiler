@@ -193,7 +193,7 @@ func TestFunctionTableOrder(t *testing.T) {
 				},
 			},
 			events: map[samples.TraceAndMetaKey]*samples.TraceEvents{
-				samples.TraceAndMetaKey{}: {
+				{}: {
 					Files: []libpf.FileID{
 						libpf.NewFileID(2, 3),
 						libpf.NewFileID(2, 3),
