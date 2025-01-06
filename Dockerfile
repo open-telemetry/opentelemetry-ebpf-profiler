@@ -1,4 +1,4 @@
-FROM debian:testing
+FROM debian:testing-20241223-slim
 
 WORKDIR /agent
 
