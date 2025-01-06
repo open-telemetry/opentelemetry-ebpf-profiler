@@ -66,7 +66,7 @@ clean:
 	@rm -rf go .cache
 
 generate:
-	go generate ./...
+	GOARCH=$(NATIVE_ARCH) go generate ./...
 
 ebpf:
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
