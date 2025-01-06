@@ -127,7 +127,8 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		TID:            bpfTrace.TID,
 		APMServiceName: "", // filled in below
 		CPU:            bpfTrace.CPU,
-		Executable:     bpfTrace.Executable,
+		ProcessName:    bpfTrace.ProcessName,
+		ExecutablePath: bpfTrace.ExecutablePath,
 	}
 
 	if !m.reporter.SupportsReportTraceEvent() {
