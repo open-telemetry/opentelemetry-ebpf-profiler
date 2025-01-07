@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	typeStr = component.MustNewType("otelreceiver")
+	typeStr = component.MustNewType("profiling")
 
 	errInvalidConfig = errors.New("invalid config")
 )
