@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/consumer/consumerprofiles"
+	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/collector/receiver"
-	"go.opentelemetry.io/collector/receiver/receiverprofiles"
+	"go.opentelemetry.io/collector/receiver/xreceiver"
 
 	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
@@ -25,17 +25,17 @@ var (
 
 // NewFactory creates a factory for the receiver.
 func NewFactory() receiver.Factory {
-	return receiver.NewFactory(
+	return xreceiver.NewFactory(
 		typeStr,
 		defaultConfig,
-		receiverprofiles.WithProfiles(createProfilesReceiver, component.StabilityLevelAlpha))
+		xreceiver.WithProfiles(createProfilesReceiver, component.StabilityLevelAlpha))
 }
 
 func createProfilesReceiver(
 	_ context.Context,
 	_ receiver.Settings, //nolint:gocritic // we must respect the collector API
 	baseCfg component.Config,
-	nextConsumer consumerprofiles.Profiles) (receiverprofiles.Profiles, error) {
+	nextConsumer xconsumer.Profiles) (xreceiver.Profiles, error) {
 	cfg, ok := baseCfg.(*controller.Config)
 	if !ok {
 		return nil, errInvalidConfig

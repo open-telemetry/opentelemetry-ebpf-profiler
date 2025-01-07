@@ -7,7 +7,7 @@ import (
 	"context"
 
 	"go.opentelemetry.io/collector/component"
-	"go.opentelemetry.io/collector/consumer/consumerprofiles"
+	"go.opentelemetry.io/collector/consumer/xconsumer"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -21,7 +21,7 @@ type Controller struct {
 }
 
 func NewController(cfg *controller.Config,
-	nextConsumer consumerprofiles.Profiles) (*Controller, error) {
+	nextConsumer xconsumer.Profiles) (*Controller, error) {
 	intervals := times.New(cfg.MonitorInterval,
 		cfg.ReporterInterval, cfg.ProbabilisticInterval)
 

@@ -10,7 +10,7 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
-	"go.opentelemetry.io/collector/consumer/consumerprofiles"
+	"go.opentelemetry.io/collector/consumer/xconsumer"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -25,14 +25,14 @@ var _ Reporter = (*CollectorReporter)(nil)
 type CollectorReporter struct {
 	*baseReporter
 
-	nextConsumer consumerprofiles.Profiles
+	nextConsumer xconsumer.Profiles
 
 	// runLoop handles the run loop
 	runLoop *runLoop
 }
 
 // NewCollector builds a new CollectorReporter
-func NewCollector(cfg *Config, nextConsumer consumerprofiles.Profiles) (*CollectorReporter, error) {
+func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorReporter, error) {
 	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
 		func(pid libpf.PID) uint32 { return uint32(pid) })
 	if err != nil {
