@@ -26,9 +26,6 @@ type CollectorReporter struct {
 	*baseReporter
 
 	nextConsumer xconsumer.Profiles
-
-	// runLoop handles the run loop
-	runLoop *runLoop
 }
 
 // NewCollector builds a new CollectorReporter
