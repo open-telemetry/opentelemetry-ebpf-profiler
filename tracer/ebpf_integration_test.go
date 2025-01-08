@@ -136,6 +136,7 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
+		OffCPUThreshold:        support.OffCPUThresholdMax,
 	})
 	require.NoError(t, err)
 
@@ -262,6 +263,7 @@ func TestAllTracers(t *testing.T) {
 		KernelVersionCheck:  false,
 		DebugTracer:         false,
 		BPFVerifierLogLevel: 0,
+		OffCPUThreshold:     10,
 	})
 	require.NoError(t, err)
 }

@@ -406,7 +406,7 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 	// Load all maps into the kernel that are used later on in eBPF programs. So we can rewrite
 	// in the next step the placesholders in the eBPF programs with the file descriptors of the
 	// loaded maps in the kernel.
-	if err = loadAllMaps(coll, ebpfMaps, cfg.MapScaleFactor); err != nil {
+	if err = loadAllMaps(coll, cfg, ebpfMaps); err != nil {
 		return nil, nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
@@ -523,8 +523,8 @@ func removeTemporaryMaps(ebpfMaps map[string]*cebpf.Map) error {
 }
 
 // loadAllMaps loads all eBPF maps that are used in our eBPF programs.
-func loadAllMaps(coll *cebpf.CollectionSpec, ebpfMaps map[string]*cebpf.Map,
-	mapScaleFactor int) error {
+func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
+	ebpfMaps map[string]*cebpf.Map) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
@@ -545,19 +545,31 @@ func loadAllMaps(coll *cebpf.CollectionSpec, ebpfMaps map[string]*cebpf.Map,
 	)
 
 	adaption["pid_page_to_mapping_info"] =
-		1 << uint32(pidPageMappingInfoSize+mapScaleFactor)
+		1 << uint32(pidPageMappingInfoSize+cfg.MapScaleFactor)
 	adaption["stack_delta_page_to_info"] =
-		1 << uint32(stackDeltaPageToInfoSize+mapScaleFactor)
+		1 << uint32(stackDeltaPageToInfoSize+cfg.MapScaleFactor)
+
+	// To not loose too many scheduling events but also not oversize
+	// sched_times, calculate a size based on some assumptions.
+	// On modern systems /proc/sys/kernel/pid_max defaults to 4194304.
+	// Try to fit this PID space scaled down with cfg.OffCPUThreshold into
+	// this map.
+	adaption["sched_times"] = (4194304 / support.OffCPUThresholdMax) * cfg.OffCPUThreshold
 
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
 		mapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)
-		adaption[mapName] = 1 << uint32(exeIDToStackDeltasSize+mapScaleFactor)
+		adaption[mapName] = 1 << uint32(exeIDToStackDeltasSize+cfg.MapScaleFactor)
 	}
 
 	for mapName, mapSpec := range coll.Maps {
 		if newSize, ok := adaption[mapName]; ok {
 			log.Debugf("Size of eBPF map %s: %v", mapName, newSize)
 			mapSpec.MaxEntries = newSize
+		}
+		if mapName == "sched_times" &&
+			cfg.OffCPUThreshold >= support.OffCPUThresholdMax {
+			// Off CPU Profiling is not enabled. So do not load this map.
+			continue
 		}
 		ebpfMap, err := cebpf.NewMap(mapSpec)
 		if err != nil {

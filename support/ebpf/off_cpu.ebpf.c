@@ -15,7 +15,7 @@ bpf_map_def SEC("maps") sched_times = {
   .type = BPF_MAP_TYPE_LRU_PERCPU_HASH,
   .key_size = sizeof(u64),   // pid_tgid
   .value_size = sizeof(u64), // time in ns
-  .max_entries = 256,
+  .max_entries = 256, // value is adjusted at load time in loadAllMaps.
 };
 
 // tracepoint__sched_switch serves as entry point for off cpu profiling.

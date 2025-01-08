@@ -87,6 +87,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		BPFVerifierLogLevel:    uint32(c.config.BpfVerifierLogLevel),
 		ProbabilisticInterval:  c.config.ProbabilisticInterval,
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
+		OffCPUThreshold:        uint32(c.config.OffCPUThreshold),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
