@@ -144,7 +144,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		MappingEnds:        trace.MappingEnd,
 		MappingFileOffsets: trace.MappingFileOffsets,
 		Timestamps:         []uint64{uint64(meta.Timestamp)},
-		OffTimes:           []uint64{meta.OffTime},
+		OffTimes:           []int64{meta.OffTime},
 	}
 }
 

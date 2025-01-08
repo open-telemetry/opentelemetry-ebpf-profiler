@@ -56,7 +56,7 @@ type Trace struct {
 	PID              libpf.PID
 	TID              libpf.PID
 	Origin           libpf.Origin
-	OffTime          uint64 // Time a task was off-cpu in nanoseconds.
+	OffTime          int64 // Time a task was off-cpu in nanoseconds.
 	APMTraceID       libpf.APMTraceID
 	APMTransactionID libpf.APMTransactionID
 	CPU              int

@@ -14,7 +14,7 @@ type TraceEventMeta struct {
 	PID, TID       libpf.PID
 	CPU            int
 	Origin         libpf.Origin
-	OffTime        uint64
+	OffTime        int64
 }
 
 // TraceEvents holds known information about a trace.
@@ -26,7 +26,7 @@ type TraceEvents struct {
 	MappingEnds        []libpf.Address
 	MappingFileOffsets []uint64
 	Timestamps         []uint64 // in nanoseconds
-	OffTimes           []uint64 // in nanoseconds
+	OffTimes           []int64  // in nanoseconds
 }
 
 // TraceAndMetaKey is the deduplication key for samples. This **must always**
