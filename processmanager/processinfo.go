@@ -649,14 +649,12 @@ func (pm *ProcessManager) CleanupPIDs() {
 // NameForPID returns the process name for given PID.
 // If the PID is not tracked it returns the empty string.
 func (pm *ProcessManager) NameForPID(pid libpf.PID) string {
-	var name string
-
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
-		name = procInfo.name
+		return procInfo.name
 	}
-	return name
+	return ""
 }
 
 // ExePathForPID returns the full executable path for given PID.
