@@ -9,6 +9,8 @@ import (
 	"github.com/tklauser/numcpus"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/hostmetadata"
+	"go.opentelemetry.io/ebpf-profiler/internal/helpers"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -66,12 +68,37 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to parse the included tracers: %w", err)
 	}
 
+	var metadataCollector *hostmetadata.Collector
+	if c.config.CollAgentAddr != "" {
+		metadataCollector = hostmetadata.NewCollector(c.config.CollAgentAddr)
+		metadataCollector.AddCustomData("os.type", "linux")
+
+		var kernelVersion string
+		kernelVersion, err = helpers.GetKernelVersion()
+		if err != nil {
+			return fmt.Errorf("failed to get Linux kernel version: %w", err)
+		}
+
+		// OTel semantic introduced in
+		// https://github.com/open-telemetry/semantic-conventions/issues/66
+		metadataCollector.AddCustomData("os.kernel.release", kernelVersion)
+
+		metadataCollector.AddCustomData("host.name", c.config.HostName)
+		metadataCollector.AddCustomData("host.ip", c.config.IPAddress)
+	}
+
 	err = c.reporter.Start(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start reporter: %w", err)
 	}
 
 	metrics.SetReporter(c.reporter)
+
+	if metadataCollector != nil {
+		// Now that set the initial host metadata, start a goroutine to keep
+		// sending updates regularly.
+		metadataCollector.StartMetadataCollection(ctx, c.reporter)
+	}
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
