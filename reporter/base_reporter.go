@@ -114,7 +114,8 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 	key := samples.TraceAndMetaKey{
 		Hash:           trace.Hash,
 		Comm:           meta.Comm,
-		Executable:     meta.Executable,
+		ProcessName:    meta.ProcessName,
+		ExecutablePath: meta.ExecutablePath,
 		ApmServiceName: meta.APMServiceName,
 		ContainerID:    containerID,
 		Pid:            int64(meta.PID),
