@@ -53,5 +53,6 @@ func defaultConfig() component.Config {
 		ProbabilisticInterval:  1 * time.Minute,
 		ProbabilisticThreshold: 100,
 		Tracers:                "all",
+		ClockSyncInterval:      3 * time.Minute,
 	}
 }
