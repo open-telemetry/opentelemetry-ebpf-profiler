@@ -44,7 +44,6 @@ func createProfilesReceiver(
 	return internal.NewController(cfg, nextConsumer)
 }
 
-// todo: export default values (currently in main.go)
 func defaultConfig() component.Config {
 	return &controller.Config{
 		ReporterInterval:       5 * time.Second,
