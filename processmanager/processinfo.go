@@ -82,9 +82,14 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 	if !ok {
 		// We don't have information for this pid, so we first need to
 		// allocate the embedded map for this process.
-		executable, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
+		var processName string
+		exePath, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
+		if name, err := os.ReadFile(fmt.Sprintf("/prod/%d/comm", pid)); err == nil {
+			processName = string(name)
+		}
 		info = &processInfo{
-			executable:       executable,
+			name:             processName,
+			executable:       exePath,
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
 			tsdInfo:          nil,
@@ -639,6 +644,17 @@ func (pm *ProcessManager) CleanupPIDs() {
 	if len(deadPids) > 0 {
 		log.Debugf("Cleaned up %d dead PIDs", len(deadPids))
 	}
+}
+
+// NameForPID returns the process name for given PID.
+// If the PID is not tracked it returns the empty string.
+func (pm *ProcessManager) NameForPID(pid libpf.PID) string {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
+		return procInfo.name
+	}
+	return ""
 }
 
 // ExePathForPID returns the full executable path for given PID.

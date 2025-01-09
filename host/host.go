@@ -48,7 +48,8 @@ type Frame struct {
 
 type Trace struct {
 	Comm             string
-	Executable       string
+	ProcessName      string
+	ExecutablePath   string
 	Frames           []Frame
 	Hash             TraceHash
 	KTime            times.KTime
