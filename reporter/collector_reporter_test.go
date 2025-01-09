@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/collector/consumer/consumerprofiles"
+	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -17,7 +17,7 @@ func TestCollectorReporterReportTraceEvent(t *testing.T) {
 		name   string
 		trace  *libpf.Trace
 		meta   *TraceEventMeta
-		nextFn consumerprofiles.ConsumeProfilesFunc
+		nextFn xconsumer.ConsumeProfilesFunc
 	}{
 		{
 			name:  "with no next consumer",
@@ -42,11 +42,11 @@ func TestCollectorReporterReportTraceEvent(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			var next consumerprofiles.Profiles
+			var next xconsumer.Profiles
 
 			if tt.nextFn != nil {
 				var err error
-				next, err = consumerprofiles.NewProfiles(tt.nextFn)
+				next, err = xconsumer.NewProfiles(tt.nextFn)
 				require.NoError(t, err)
 			}
 
