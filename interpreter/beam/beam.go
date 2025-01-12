@@ -56,24 +56,25 @@ func readSymbolValue(ef *pfelf.File, name libpf.SymbolName) ([]byte, error) {
 	log.Infof("read symbol value %s: %s", sym.Name, memory)
 	return memory, nil
 }
+
 func readReleaseVersion(ef *pfelf.File) (uint32, []byte, error) {
-	otp_release, err := readSymbolValue(ef, "etp_otp_release")
+	otpRelease, err := readSymbolValue(ef, "etp_otp_release")
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to read OTP release: %v", err)
 	}
 
 	// Slice off the null termination before converting
-	otp_major, err := strconv.Atoi(string(otp_release[:len(otp_release)-1]))
+	otpMajor, err := strconv.Atoi(string(otpRelease[:len(otpRelease)-1]))
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to parse OTP version: %v", err)
 	}
 
-	erts_version, err := readSymbolValue(ef, "etp_erts_version")
+	ertsVersion, err := readSymbolValue(ef, "etp_erts_version")
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to read erts version: %v", err)
 	}
 
-	return uint32(otp_major), erts_version, nil
+	return uint32(otpMajor), ertsVersion, nil
 }
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
@@ -88,7 +89,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, err
 	}
 
-	otp_version, _, err := readReleaseVersion(ef)
+	otpVersion, _, err := readReleaseVersion(ef)
 	if err != nil {
 		return nil, err
 	}
@@ -104,11 +105,10 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	d := &beamData{
-		version: otp_version,
+		version: otpVersion,
 	}
 
-	log.Infof("BEAM loaded, otp_version: %d, interpRanges: %v", otp_version, interpRanges)
-	//d.loadIntrospectionData()
+	log.Infof("BEAM loaded, otpVersion: %d, interpRanges: %v", otpVersion, interpRanges)
 
 	return d, nil
 }
@@ -121,11 +121,12 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	}, nil
 }
 
-func (r *beamInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+func (i *beamInstance) Detach(interpreter.EbpfHandler, libpf.PID) error {
+	log.Infof("BEAM interpreter detaching")
 	return nil
 }
 
-func (r *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame, trace *libpf.Trace) error {
+func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame, trace *libpf.Trace) error {
 	if !frame.Type.IsInterpType(libpf.BEAM) {
 		log.Warnf("BEAM failed to symbolize")
 		return interpreter.ErrMismatchInterpreterType
