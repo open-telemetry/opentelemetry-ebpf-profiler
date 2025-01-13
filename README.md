@@ -38,16 +38,12 @@ If you'd like to quickly test the agent, you can skip to the ["Visualizing data 
 The agent can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
 
  For **Linux**, the following steps apply:
-  1. Build the Docker image containing the build environment:
-     ```sh
-     make docker-image
-     ```
-  2. Build the agent for your current machine's architecture:
+  1. Build the agent for your current machine's architecture:
      ```sh
      make agent
      ```
      Or `make debug-agent` for debug build.
-  3. To cross-complie for a different architecture (e.g. arm64):
+  2. To cross-complie for a different architecture (e.g. arm64):
      ```sh
      make agent TARGET_ARCH=arm64
      ```
