@@ -24,6 +24,8 @@ void send_sample_traces(void *ctx, u64 pid, s32 kstack) {
   trace->comm[1] = 0xBB;
   trace->comm[2] = 0xCC;
 
+  trace->origin = TRACE_SAMPLING;
+
   trace->comm[3] = 1;
   trace->pid = pid;
   trace->tid = pid;

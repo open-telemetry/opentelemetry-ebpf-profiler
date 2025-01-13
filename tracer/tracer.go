@@ -993,6 +993,11 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		CPU:              cpu,
 	}
 
+	if trace.Origin != support.TraceOriginSampling && trace.Origin != support.TraceOriginOffCPU {
+		log.Warnf("Skip handling trace from unexpected %d origin", trace.Origin)
+		return nil
+	}
+
 	// Trace fields included in the hash:
 	//  - PID, kernel stack ID, length & frame array
 	// Intentionally excluded:
