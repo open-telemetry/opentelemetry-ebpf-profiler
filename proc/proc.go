@@ -165,8 +165,10 @@ type kernelModule struct {
 }
 
 func parseKernelModuleLine(line string) (kernelModule, error) {
-	// The format is: "name size refcount dependencies state address"
-	parts := strings.SplitN(line, " ", 6)
+	// The format is: "name size refcount dependencies state address flags"
+	parts := strings.SplitN(line, " ", 7)
+
+	// At least 6 parts are expected (flags are not always present and are not needed here)
 	if len(parts) < 6 {
 		return kernelModule{}, fmt.Errorf("unexpected line in modules: '%s'", line)
 	}
