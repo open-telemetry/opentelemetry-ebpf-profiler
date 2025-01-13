@@ -48,12 +48,13 @@ ahci 45056 - - Live 0xffffffffc0294000
 libahci 49152 - - Live 0xffffffffc027f000
 sp5100_tco 12288 - - Live 0xffffffffc0274000
 watchdog 40960 - - Live 0xffffffffc025f000
-k10temp 12288 - - Live 0xffffffffc0254000`)
+k10temp 12288 - - Live 0xffffffffc0254000
+vboxguest 499712 - - Live 0xffffffffc097d000 (OE)`)
 
 	kmods, err := parseKernelModules(bufio.NewScanner(bytes.NewReader(content)))
 	require.NoError(t, err)
 
-	require.Len(t, kmods, 7)
+	require.Len(t, kmods, 8)
 	require.Equal(t, []kernelModule{
 		{
 			name:    "i40e",
@@ -89,6 +90,11 @@ k10temp 12288 - - Live 0xffffffffc0254000`)
 			name:    "k10temp",
 			size:    12288,
 			address: 0xffffffffc0254000,
+		},
+		{
+			name:    "vboxguest",
+			size:    499712,
+			address: 0xffffffffc097d000,
 		},
 	}, kmods)
 }
