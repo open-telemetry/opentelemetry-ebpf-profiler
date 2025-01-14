@@ -76,9 +76,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Hash eBPF blobs
         run: |
-          sha256sum support/ebpf/tracer.ebpf.release.a* > ebpf-blobs.hash
+          sha256sum support/ebpf/tracer.ebpf.release.* > ebpf-blobs.hash
       - name: Rebuild eBPF blobs
         run: |
+          rm support/ebpf/tracer.ebpf.release.*
           make amd64 -C support/ebpf
           make arm64 -C support/ebpf
       - name: Check for differences
