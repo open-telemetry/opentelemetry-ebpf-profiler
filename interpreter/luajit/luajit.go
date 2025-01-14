@@ -424,6 +424,8 @@ func (l *luajitInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame
 	var funcName string
 	if frame.File == C.LUAJIT_FFI_FUNC {
 		switch frame.Lineno & 7 {
+		case 0:
+			funcName = "lua-frame"
 		case 1:
 			funcName = "c-frame"
 		case 2:
@@ -431,8 +433,7 @@ func (l *luajitInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame
 		case 3:
 			return errors.New("unexpected frame type 3")
 		case 4:
-			// TODO: Not yet understood why an FFI frame would have a lua func attached.
-			funcName = "lua-frame"
+			funcName = "lua-pframe"
 		case 5:
 			funcName = "cpcall"
 		case 6:

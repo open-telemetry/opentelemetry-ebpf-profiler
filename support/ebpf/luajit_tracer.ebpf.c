@@ -395,6 +395,7 @@ ErrorCode walk_luajit_stack(PerCPURecord *record, const LuaJITProcInfo *info,
         unwind_jit_frame(info, &record->state);
 
         if ((err = resolve_unwind_mapping(record, next_unwinder)) != ERR_OK) {
+          DEBUG_PRINT("lj: failed to walk over jit frame");
           *next_unwinder = PROG_UNWIND_STOP;
           return err;
         }
@@ -405,6 +406,24 @@ ErrorCode walk_luajit_stack(PerCPURecord *record, const LuaJITProcInfo *info,
     TValue frame_val;
     if (bpf_probe_read_user(&frame_val, sizeof(TValue), frame)) {
       return ERR_LUAJIT_FRAME_READ;
+    }
+    // If we have a frame with its own C stack frame we need to exit to native unwinder if
+    // there's a parent cframe.
+    if (frame_typep(frame_val) == FRAME_CP) {
+      void *cf = record->luajitUnwindState.cframe;
+      if (cf == NULL) {
+        cf = record->luajitUnwindState.cframe = record->luajitUnwindScratch.L.cframe;
+      }
+      if (cf != NULL) {
+        void *prev = cframe_prev(cf);
+        if (prev != NULL) {
+          DEBUG_PRINT("lj: walk_lua_stack: cframe encountered, leaving unwinder");
+          record->luajitUnwindState.cframe = prev;
+          *next_unwinder = PROG_UNWIND_NATIVE;
+          return ERR_OK;
+        }
+        // If there's no prev we're at the root cframe and finish normally.
+      }
     }
     if ((err = lj_record_frame(record, frame, frame_val, prevframe))) {
       DEBUG_PRINT("lj: walk_lua_stack: lj_record_frame=%d", err);
