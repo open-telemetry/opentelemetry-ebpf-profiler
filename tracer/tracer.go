@@ -1036,19 +1036,14 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 			ReturnAddress: rawFrame.return_address != 0,
 		}
 	}
-
 	return trace
 }
 
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
 // maps for tracepoints, new traces, trace count updates and unknown PCs.
-func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.Trace) error {
+func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host.Trace) error {
 	eventMetricCollector := t.startEventMonitor(ctx)
-
-	startPollingPerfEventMonitor(ctx, t.ebpfMaps["trace_events"], t.intervals.TracePollInterval(),
-		t.samplesPerSecond*int(unsafe.Sizeof(C.Trace{})), func(rawTrace []byte, cpu int) {
-			traceOutChan <- t.loadBpfTrace(rawTrace, cpu)
-		})
+	t.startTraceEventMonitor(ctx, traceOutChan)
 
 	pidEvents := make([]uint32, 0)
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
