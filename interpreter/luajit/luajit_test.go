@@ -65,6 +65,16 @@ func TestIntegration(t *testing.T) {
 			"c:comp",
 			"lzw:compress",
 		}},
+		// TODO: Do we want to checkin the cjson.so or can we load it dynamically?
+		// {"json", []string{
+		// 	"main",
+		// 	"u:run_duration",
+		// 	"f",
+		// 	"n:call",
+		// 	"pcall",
+
+		// 	//			"cjson:decode",
+		// }},
 		// TODO: get the unwinding working across ffi callbacks.
 		// {"ffi", []string{
 		// 	"main",

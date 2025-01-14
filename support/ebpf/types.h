@@ -737,6 +737,9 @@ typedef struct LJUnwindState {
   TValue* frame;
   TValue* prevframe;
   void* L_ptr;
+  // If we have intertwined interpreter and native frames use cframe to track we have more
+  // jumps back to native unwinder to do.
+  void* cframe;
   bool is_jit;
 } LJUnwindState;
 
