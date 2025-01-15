@@ -24,6 +24,8 @@ void send_sample_traces(void *ctx, u64 pid, s32 kstack) {
   trace->comm[1] = 0xBB;
   trace->comm[2] = 0xCC;
 
+  trace->origin = TRACE_SAMPLING;
+
   trace->comm[3] = 1;
   trace->pid = pid;
   trace->tid = pid;
@@ -80,10 +82,10 @@ void send_sample_traces(void *ctx, u64 pid, s32 kstack) {
   send_trace(ctx, trace);
 }
 
-// tracepoint__sched_switch fetches the current kernel stack ID from kernel_stackmap and
-// communicates it to userspace via kernel_stack_id map.
-SEC("tracepoint/sched/sched_switch")
-int tracepoint__sched_switch(void *ctx) {
+// tracepoint_integration__sched_switch fetches the current kernel stack ID from
+// kernel_stackmap and communicates it to userspace via kernel_stack_id map.
+SEC("tracepoint/integration/sched_switch")
+int tracepoint_integration__sched_switch(void *ctx) {
   u64 id = bpf_get_current_pid_tgid();
   u64 pid = id >> 32;
 

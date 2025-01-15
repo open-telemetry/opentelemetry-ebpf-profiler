@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // Assert that we implement the full Reporter interface.
@@ -86,16 +87,20 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 		return nil, err
 	}
 
+	originsMap := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
+	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
+		support.TraceOriginOffCPU} {
+		originsMap[origin] = make(samples.KeyToEventMapping)
+	}
+
 	return &OTLPReporter{
 		baseReporter: &baseReporter{
-			cfg:        cfg,
-			name:       cfg.Name,
-			version:    cfg.Version,
-			pdata:      data,
-			cgroupv2ID: cgroupv2ID,
-			traceEvents: xsync.NewRWMutex(
-				map[samples.TraceAndMetaKey]*samples.TraceEvents{},
-			),
+			cfg:          cfg,
+			name:         cfg.Name,
+			version:      cfg.Version,
+			pdata:        data,
+			cgroupv2ID:   cgroupv2ID,
+			traceEvents:  xsync.NewRWMutex(originsMap),
 			hostmetadata: hostmetadata,
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),
@@ -165,7 +170,13 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	traceEvents := r.traceEvents.WLock()
 	events := maps.Clone(*traceEvents)
+	originsMap := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
 	clear(*traceEvents)
+	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
+		support.TraceOriginOffCPU} {
+		originsMap[origin] = make(samples.KeyToEventMapping)
+	}
+	*traceEvents = originsMap
 	r.traceEvents.WUnlock(&traceEvents)
 
 	profiles := r.pdata.Generate(events)

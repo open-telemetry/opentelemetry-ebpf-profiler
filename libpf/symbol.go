@@ -6,6 +6,7 @@ package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 import (
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // SymbolValue represents the value associated with a symbol, e.g. either an
@@ -79,6 +80,17 @@ func (symmap *SymbolMap) LookupSymbol(symbolName SymbolName) (*Symbol, error) {
 		return sym, nil
 	}
 	return nil, fmt.Errorf("symbol %v not present in map", symbolName)
+}
+
+// LookupSymbolByPrefix loops over all known symbols and returns the first symbol
+// that starts with the given prefix.
+func (symmap *SymbolMap) LookupSymbolByPrefix(prefix string) (*Symbol, error) {
+	for name, sym := range symmap.nameToSymbol {
+		if strings.HasPrefix(string(name), prefix) {
+			return sym, nil
+		}
+	}
+	return nil, fmt.Errorf("no symbol present that starts with '%s'", prefix)
 }
 
 // LookupSymbolAddress returns the address of a symbol.

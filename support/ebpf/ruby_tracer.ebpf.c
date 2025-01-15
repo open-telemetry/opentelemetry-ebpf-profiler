@@ -216,7 +216,8 @@ save_state:
   return ERR_OK;
 }
 
-SEC("perf_event/unwind_ruby")
+// unwind_ruby is the tail call destination for PROG_UNWIND_RUBY.
+static inline __attribute__((__always_inline__))
 int unwind_ruby(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -273,3 +274,4 @@ exit:
   tail_call(ctx, unwinder);
   return -1;
 }
+MULTI_USE_FUNC(unwind_ruby)

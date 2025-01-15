@@ -13,6 +13,8 @@ type TraceEventMeta struct {
 	APMServiceName string
 	PID, TID       libpf.PID
 	CPU            int
+	Origin         libpf.Origin
+	OffTime        int64
 }
 
 // TraceEvents holds known information about a trace.
@@ -24,6 +26,7 @@ type TraceEvents struct {
 	MappingEnds        []libpf.Address
 	MappingFileOffsets []uint64
 	Timestamps         []uint64 // in nanoseconds
+	OffTimes           []int64  // in nanoseconds
 }
 
 // TraceAndMetaKey is the deduplication key for samples. This **must always**
@@ -45,6 +48,9 @@ type TraceAndMetaKey struct {
 	// `SampleAttrProducer` instance. May be nil.
 	ExtraMeta any
 }
+
+// KeyToEventMapping supports temporary mapping traces to additional information.
+type KeyToEventMapping map[TraceAndMetaKey]*TraceEvents
 
 // AttrKeyValue is a helper to populate Profile.attribute_table.
 type AttrKeyValue[T string | int64] struct {

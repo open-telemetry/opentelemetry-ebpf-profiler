@@ -105,3 +105,11 @@ const (
 	// PerfMaxStackDepth is the bpf map data array length for BPF_MAP_TYPE_STACK_TRACE traces
 	PerfMaxStackDepth = C.PERF_MAX_STACK_DEPTH
 )
+
+const (
+	TraceOriginUnknown  = C.TRACE_UNKNOWN
+	TraceOriginSampling = C.TRACE_SAMPLING
+	TraceOriginOffCPU   = C.TRACE_OFF_CPU
+)
+
+const OffCPUThresholdMax = C.OFF_CPU_THRESHOLD_MAX

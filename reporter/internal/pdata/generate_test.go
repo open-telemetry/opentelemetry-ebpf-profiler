@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 func TestGetStringMapIndex(t *testing.T) {
@@ -168,7 +169,7 @@ func TestFunctionTableOrder(t *testing.T) {
 		name        string
 		executables map[libpf.FileID]samples.ExecInfo
 		frames      map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo
-		events      map[samples.TraceAndMetaKey]*samples.TraceEvents
+		events      map[libpf.Origin]samples.KeyToEventMapping
 
 		wantFunctionTable []string
 	}{
@@ -176,7 +177,7 @@ func TestFunctionTableOrder(t *testing.T) {
 			name:              "with no executables",
 			executables:       map[libpf.FileID]samples.ExecInfo{},
 			frames:            map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo{},
-			events:            map[samples.TraceAndMetaKey]*samples.TraceEvents{},
+			events:            map[libpf.Origin]samples.KeyToEventMapping{},
 			wantFunctionTable: []string{""},
 		}, {
 			name: "single executable",
@@ -192,27 +193,29 @@ func TestFunctionTableOrder(t *testing.T) {
 					libpf.AddressOrLineno(0x4ef): {FunctionName: "func5"},
 				},
 			},
-			events: map[samples.TraceAndMetaKey]*samples.TraceEvents{
-				{}: {
-					Files: []libpf.FileID{
-						libpf.NewFileID(2, 3),
-						libpf.NewFileID(2, 3),
-						libpf.NewFileID(2, 3),
-						libpf.NewFileID(2, 3),
-						libpf.NewFileID(2, 3),
+			events: map[libpf.Origin]samples.KeyToEventMapping{
+				support.TraceOriginSampling: map[samples.TraceAndMetaKey]*samples.TraceEvents{
+					{}: {
+						Files: []libpf.FileID{
+							libpf.NewFileID(2, 3),
+							libpf.NewFileID(2, 3),
+							libpf.NewFileID(2, 3),
+							libpf.NewFileID(2, 3),
+							libpf.NewFileID(2, 3),
+						},
+						Linenos: []libpf.AddressOrLineno{
+							libpf.AddressOrLineno(0xef),
+							libpf.AddressOrLineno(0x1ef),
+							libpf.AddressOrLineno(0x2ef),
+							libpf.AddressOrLineno(0x3ef),
+							libpf.AddressOrLineno(0x4ef),
+						},
+						FrameTypes:         slices.Repeat([]libpf.FrameType{libpf.KernelFrame}, 5),
+						MappingStarts:      slices.Repeat([]libpf.Address{libpf.Address(0)}, 5),
+						MappingEnds:        slices.Repeat([]libpf.Address{libpf.Address(0)}, 5),
+						MappingFileOffsets: slices.Repeat([]uint64{0}, 5),
+						Timestamps:         []uint64{1, 2, 3, 4, 5},
 					},
-					Linenos: []libpf.AddressOrLineno{
-						libpf.AddressOrLineno(0xef),
-						libpf.AddressOrLineno(0x1ef),
-						libpf.AddressOrLineno(0x2ef),
-						libpf.AddressOrLineno(0x3ef),
-						libpf.AddressOrLineno(0x4ef),
-					},
-					FrameTypes:         slices.Repeat([]libpf.FrameType{libpf.KernelFrame}, 5),
-					MappingStarts:      slices.Repeat([]libpf.Address{libpf.Address(0)}, 5),
-					MappingEnds:        slices.Repeat([]libpf.Address{libpf.Address(0)}, 5),
-					MappingFileOffsets: slices.Repeat([]uint64{0}, 5),
-					Timestamps:         []uint64{1, 2, 3, 4, 5},
 				},
 			},
 			wantFunctionTable: []string{
@@ -233,7 +236,7 @@ func TestFunctionTableOrder(t *testing.T) {
 			res := d.Generate(tt.events)
 			require.Equal(t, 1, res.ResourceProfiles().Len())
 			require.Equal(t, 1, res.ResourceProfiles().At(0).ScopeProfiles().Len())
-			require.Equal(t, 1, res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().Len())
+			require.Equal(t, 2, res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().Len())
 			p := res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0)
 			require.Equal(t, len(tt.wantFunctionTable), p.FunctionTable().Len())
 			for i := 0; i < p.FunctionTable().Len(); i++ {

@@ -25,8 +25,8 @@ bpf_map_def SEC("maps") metrics = {
   .max_entries = metricID_Max,
 };
 
-// progs maps from a program ID to an eBPF program
-bpf_map_def SEC("maps") progs = {
+// perf_progs maps from a program ID to a perf eBPF program
+bpf_map_def SEC("maps") perf_progs = {
   .type = BPF_MAP_TYPE_PROG_ARRAY,
   .key_size = sizeof(u32),
   .value_size = sizeof(u32),
@@ -172,7 +172,8 @@ void maybe_add_apm_info(Trace *trace) {
               trace->apm_transaction_id.as_int, corr_buf.trace_flags);
 }
 
-SEC("perf_event/unwind_stop")
+// unwind_stop is the tail call destination for PROG_UNWIND_STOP.
+static inline __attribute__((__always_inline__))
 int unwind_stop(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -238,6 +239,7 @@ int unwind_stop(struct pt_regs *ctx) {
 
   return 0;
 }
+MULTI_USE_FUNC(unwind_stop)
 
 char _license[] SEC("license") = "GPL";
 // this number will be interpreted by the elf loader

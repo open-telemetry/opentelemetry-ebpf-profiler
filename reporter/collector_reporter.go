@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // Assert that we implement the full Reporter interface.
@@ -56,16 +57,20 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 		return nil, err
 	}
 
+	originsMap := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
+	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
+		support.TraceOriginOffCPU} {
+		originsMap[origin] = make(samples.KeyToEventMapping)
+	}
+
 	return &CollectorReporter{
 		baseReporter: &baseReporter{
-			cfg:        cfg,
-			name:       cfg.Name,
-			version:    cfg.Version,
-			pdata:      data,
-			cgroupv2ID: cgroupv2ID,
-			traceEvents: xsync.NewRWMutex(
-				map[samples.TraceAndMetaKey]*samples.TraceEvents{},
-			),
+			cfg:          cfg,
+			name:         cfg.Name,
+			version:      cfg.Version,
+			pdata:        data,
+			cgroupv2ID:   cgroupv2ID,
+			traceEvents:  xsync.NewRWMutex(originsMap),
 			hostmetadata: hostmetadata,
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),

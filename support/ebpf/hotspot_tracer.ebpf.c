@@ -890,7 +890,7 @@ static ErrorCode hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo 
 // unwind_hotspot is the entry point for tracing when invoked from the native tracer
 // and it recursive unwinds all HotSpot frames and then jumps back to unwind further
 // native frames that follow.
-SEC("perf_event/unwind_hotspot")
+static inline __attribute__((__always_inline__))
 int unwind_hotspot(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -927,3 +927,4 @@ int unwind_hotspot(struct pt_regs *ctx) {
   DEBUG_PRINT("jvm: tail call for next frame unwinder (%d) failed", unwinder);
   return -1;
 }
+MULTI_USE_FUNC(unwind_hotspot)

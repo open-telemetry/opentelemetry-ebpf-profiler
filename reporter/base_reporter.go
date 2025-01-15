@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // baseReporter encapsulates shared behavior between all the available reporters.
@@ -35,7 +36,7 @@ type baseReporter struct {
 	cgroupv2ID *lru.SyncedLRU[libpf.PID, string]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[samples.TraceAndMetaKey]*samples.TraceEvents]
+	traceEvents xsync.RWMutex[map[libpf.Origin]samples.KeyToEventMapping]
 
 	// hostmetadata stores metadata that is sent out with every request.
 	hostmetadata *lru.SyncedLRU[string, string]
@@ -97,8 +98,11 @@ func (*baseReporter) ReportMetrics(_ uint32, _ []uint32, _ []int64) {}
 func (*baseReporter) SupportsReportTraceEvent() bool { return true }
 
 func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta) {
-	traceEventsMap := b.traceEvents.WLock()
-	defer b.traceEvents.WUnlock(&traceEventsMap)
+	if meta.Origin != support.TraceOriginSampling && meta.Origin != support.TraceOriginOffCPU {
+		// At the moment only on-CPU and off-CPU traces are reported.
+		log.Errorf("Skip reporting trace for unexpected %d origin", meta.Origin)
+		return
+	}
 
 	var extraMeta any
 	if b.cfg.ExtraSampleAttrProd != nil {
@@ -122,13 +126,17 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		ExtraMeta:      extraMeta,
 	}
 
-	if events, exists := (*traceEventsMap)[key]; exists {
+	traceEventsMap := b.traceEvents.WLock()
+	defer b.traceEvents.WUnlock(&traceEventsMap)
+
+	if events, exists := (*traceEventsMap)[meta.Origin][key]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
-		(*traceEventsMap)[key] = events
+		events.OffTimes = append(events.OffTimes, meta.OffTime)
+		(*traceEventsMap)[meta.Origin][key] = events
 		return
 	}
 
-	(*traceEventsMap)[key] = &samples.TraceEvents{
+	(*traceEventsMap)[meta.Origin][key] = &samples.TraceEvents{
 		Files:              trace.Files,
 		Linenos:            trace.Linenos,
 		FrameTypes:         trace.FrameTypes,
@@ -136,6 +144,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		MappingEnds:        trace.MappingEnd,
 		MappingFileOffsets: trace.MappingFileOffsets,
 		Timestamps:         []uint64{uint64(meta.Timestamp)},
+		OffTimes:           []int64{meta.OffTime},
 	}
 }
 
