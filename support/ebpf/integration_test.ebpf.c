@@ -30,11 +30,12 @@ send_sample_traces(void *ctx, u64 pid, s32 kstack)
   trace->comm[3]         = 1;
   trace->pid             = pid;
   trace->tid             = pid;
-  trace->kernel_stack_id = -1, trace->stack_len = 1;
-  trace->frames[0] = (Frame){
-    .kind         = FRAME_MARKER_NATIVE,
-    .file_id      = 1337,
-    .addr_or_line = 21,
+  trace->kernel_stack_id = -1;
+  trace->stack_len       = 1;
+  trace->frames[0]       = (Frame){
+          .kind         = FRAME_MARKER_NATIVE,
+          .file_id      = 1337,
+          .addr_or_line = 21,
   };
   send_trace(ctx, trace);
 
