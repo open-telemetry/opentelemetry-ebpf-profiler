@@ -113,40 +113,23 @@ bsearch_step(void *inner_map, u32 *lo, u32 *hi, u16 page_offset)
 static inline __attribute__((__always_inline__)) void *get_stack_delta_map(int mapID)
 {
   switch (mapID) {
-  case 8:
-    return &exe_id_to_8_stack_deltas;
-  case 9:
-    return &exe_id_to_9_stack_deltas;
-  case 10:
-    return &exe_id_to_10_stack_deltas;
-  case 11:
-    return &exe_id_to_11_stack_deltas;
-  case 12:
-    return &exe_id_to_12_stack_deltas;
-  case 13:
-    return &exe_id_to_13_stack_deltas;
-  case 14:
-    return &exe_id_to_14_stack_deltas;
-  case 15:
-    return &exe_id_to_15_stack_deltas;
-  case 16:
-    return &exe_id_to_16_stack_deltas;
-  case 17:
-    return &exe_id_to_17_stack_deltas;
-  case 18:
-    return &exe_id_to_18_stack_deltas;
-  case 19:
-    return &exe_id_to_19_stack_deltas;
-  case 20:
-    return &exe_id_to_20_stack_deltas;
-  case 21:
-    return &exe_id_to_21_stack_deltas;
-  case 22:
-    return &exe_id_to_22_stack_deltas;
-  case 23:
-    return &exe_id_to_23_stack_deltas;
-  default:
-    return NULL;
+  case 8: return &exe_id_to_8_stack_deltas;
+  case 9: return &exe_id_to_9_stack_deltas;
+  case 10: return &exe_id_to_10_stack_deltas;
+  case 11: return &exe_id_to_11_stack_deltas;
+  case 12: return &exe_id_to_12_stack_deltas;
+  case 13: return &exe_id_to_13_stack_deltas;
+  case 14: return &exe_id_to_14_stack_deltas;
+  case 15: return &exe_id_to_15_stack_deltas;
+  case 16: return &exe_id_to_16_stack_deltas;
+  case 17: return &exe_id_to_17_stack_deltas;
+  case 18: return &exe_id_to_18_stack_deltas;
+  case 19: return &exe_id_to_19_stack_deltas;
+  case 20: return &exe_id_to_20_stack_deltas;
+  case 21: return &exe_id_to_21_stack_deltas;
+  case 22: return &exe_id_to_22_stack_deltas;
+  case 23: return &exe_id_to_23_stack_deltas;
+  default: return NULL;
   }
 }
 
@@ -286,15 +269,9 @@ unwind_register_address(UnwindState *state, u64 cfa, u8 opcode, s32 param)
 
   // Resolve the 'BASE' register, and fetch the CFA/FP/SP value.
   switch (opcode & ~UNWIND_OPCODEF_DEREF) {
-  case UNWIND_OPCODE_BASE_CFA:
-    addr = cfa;
-    break;
-  case UNWIND_OPCODE_BASE_FP:
-    addr = state->fp;
-    break;
-  case UNWIND_OPCODE_BASE_SP:
-    addr = state->sp;
-    break;
+  case UNWIND_OPCODE_BASE_CFA: addr = cfa; break;
+  case UNWIND_OPCODE_BASE_FP: addr = state->fp; break;
+  case UNWIND_OPCODE_BASE_SP: addr = state->sp; break;
 #if defined(__aarch64__)
   case UNWIND_OPCODE_BASE_LR:
     DEBUG_PRINT("unwind: lr");
@@ -324,26 +301,18 @@ unwind_register_address(UnwindState *state, u64 cfa, u8 opcode, s32 param)
     case 15: // r15
       addr = state->r15;
       break;
-    default:
-      return 0;
+    default: return 0;
     }
     return addr + val;
 #endif
-  default:
-    return 0;
+  default: return 0;
   }
 
 #ifdef OPTI_DEBUG
   switch (opcode) {
-  case UNWIND_OPCODE_BASE_CFA:
-    DEBUG_PRINT("unwind: cfa+%d", preDeref);
-    break;
-  case UNWIND_OPCODE_BASE_FP:
-    DEBUG_PRINT("unwind: fp+%d", preDeref);
-    break;
-  case UNWIND_OPCODE_BASE_SP:
-    DEBUG_PRINT("unwind: sp+%d", preDeref);
-    break;
+  case UNWIND_OPCODE_BASE_CFA: DEBUG_PRINT("unwind: cfa+%d", preDeref); break;
+  case UNWIND_OPCODE_BASE_FP: DEBUG_PRINT("unwind: fp+%d", preDeref); break;
+  case UNWIND_OPCODE_BASE_SP: DEBUG_PRINT("unwind: sp+%d", preDeref); break;
   case UNWIND_OPCODE_BASE_CFA | UNWIND_OPCODEF_DEREF:
     DEBUG_PRINT("unwind: *(cfa+%d)+%d", preDeref, postDeref);
     break;
@@ -433,11 +402,8 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bo
       state->return_address = false;
       DEBUG_PRINT("signal frame");
       goto frame_ok;
-    case UNWIND_COMMAND_STOP:
-      *stop = true;
-      return ERR_OK;
-    default:
-      return ERR_UNREACHABLE;
+    case UNWIND_COMMAND_STOP: *stop = true; return ERR_OK;
+    default: return ERR_UNREACHABLE;
     }
   } else {
     UnwindInfo *info = bpf_map_lookup_elem(&unwind_info_array, &unwindInfo);
@@ -518,11 +484,8 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
       state->lr_invalid     = false;
       DEBUG_PRINT("signal frame");
       goto frame_ok;
-    case UNWIND_COMMAND_STOP:
-      *stop = true;
-      return ERR_OK;
-    default:
-      return ERR_UNREACHABLE;
+    case UNWIND_COMMAND_STOP: *stop = true; return ERR_OK;
+    default: return ERR_UNREACHABLE;
     }
   }
 

@@ -209,8 +209,7 @@ static inline __attribute__((__always_inline__)) int unwind_stop(struct pt_regs 
       increment_metric(metricID_NumUnknownPC);
     }
     // Fallthrough to report the error
-  default:
-    increment_metric(state->error_metric);
+  default: increment_metric(state->error_metric);
   }
 
   // TEMPORARY HACK

@@ -739,8 +739,7 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_execute_unwind_ac
     Trace *trace)
 {
   switch (action) {
-  case UA_UNWIND_INVALID:
-    return ERR_UNREACHABLE;
+  case UA_UNWIND_INVALID: return ERR_UNREACHABLE;
 #if defined(__aarch64__)
   case UA_UNWIND_AARCH64_LR:
     if (state->lr_invalid) {
@@ -750,9 +749,7 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_execute_unwind_ac
     ui->pc = state->lr;
     goto unwind_complete;
 #endif
-  case UA_UNWIND_PC_ONLY:
-    cbi->frame_size = sizeof(u64);
-    goto unwind_frame;
+  case UA_UNWIND_PC_ONLY: cbi->frame_size = sizeof(u64); goto unwind_frame;
   case UA_UNWIND_FRAME_POINTER:
     ui->sp = ui->fp;
     // fallthrough

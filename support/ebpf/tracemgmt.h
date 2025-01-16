@@ -58,9 +58,7 @@ static inline void event_send_trigger(struct pt_regs *ctx, u32 event_type)
   }
 
   switch (event_type) {
-  case EVENT_TYPE_GENERIC_PID:
-    increment_metric(metricID_NumGenericPID);
-    break;
+  case EVENT_TYPE_GENERIC_PID: increment_metric(metricID_NumGenericPID); break;
   default:
     // no action
     break;

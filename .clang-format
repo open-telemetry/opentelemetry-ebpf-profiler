@@ -13,3 +13,4 @@ ConstructorInitializerAllOnOneLineOrOnePerLine: true
 IndentPPDirectives: BeforeHash
 AlignConsecutiveMacros: AcrossComments
 AlignConsecutiveAssignments: AcrossComments
+AllowShortCaseLabelsOnASingleLine: true
