@@ -19,7 +19,7 @@ import (
 //
 // hi represents the most significant 64 bits and lo represents the least
 // significant 64 bits.
-type Hash128 struct {
+type Hash128 struct { //nolint:recvcheck
 	hi uint64
 	lo uint64
 }
