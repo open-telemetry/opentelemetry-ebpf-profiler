@@ -7,20 +7,20 @@
 
 // system config is the bpf map containing HA provided system configuration
 bpf_map_def SEC("maps") system_config = {
-    .type        = BPF_MAP_TYPE_ARRAY,
-    .key_size    = sizeof(u32),
-    .value_size  = sizeof(struct SystemConfig),
-    .max_entries = 1,
+  .type        = BPF_MAP_TYPE_ARRAY,
+  .key_size    = sizeof(u32),
+  .value_size  = sizeof(struct SystemConfig),
+  .max_entries = 1,
 };
 
 #ifndef TESTING_COREDUMP
 
 // system_analysis is the bpf map the HA and this module uses to communicate
 bpf_map_def SEC("maps") system_analysis = {
-    .type        = BPF_MAP_TYPE_ARRAY,
-    .key_size    = sizeof(u32),
-    .value_size  = sizeof(struct SystemAnalysis),
-    .max_entries = 1,
+  .type        = BPF_MAP_TYPE_ARRAY,
+  .key_size    = sizeof(u32),
+  .value_size  = sizeof(struct SystemAnalysis),
+  .max_entries = 1,
 };
 
 // read_kernel_memory reads data from given kernel address. This is

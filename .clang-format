@@ -14,3 +14,4 @@ IndentPPDirectives: BeforeHash
 AlignConsecutiveMacros: AcrossComments
 AlignConsecutiveAssignments: AcrossComments
 AllowShortCaseLabelsOnASingleLine: true
+ContinuationIndentWidth: 2

@@ -92,12 +92,12 @@ typedef enum HotspotUnwindAction {
 #define FRAMETYPE_vtable_chunks  0x62617476 // "vtable chunks"
 
 bpf_map_def SEC("maps") hotspot_procs = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(pid_t),
-    .value_size  = sizeof(HotspotProcInfo),
-    // This is the maximum number of JVM processes. Few machines should ever exceed 256 simultaneous
-    // JVMs running. Increase this value if 256 turns out to be insufficient.
-    .max_entries = 256,
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(HotspotProcInfo),
+  // This is the maximum number of JVM processes. Few machines should ever exceed 256 simultaneous
+  // JVMs running. Increase this value if 256 turns out to be insufficient.
+  .max_entries = 256,
 };
 
 // Record a HotSpot frame
@@ -147,10 +147,10 @@ hotspot_find_codeblob(const UnwindState *state, const HotspotProcInfo *ji)
   u8 tag;
 
   DEBUG_PRINT(
-      "jvm:  -> %lx in code start %lx, offset %lx",
-      (unsigned long)state->pc,
-      (unsigned long)state->text_section_bias,
-      (unsigned long)state->text_section_offset);
+    "jvm:  -> %lx in code start %lx, offset %lx",
+    (unsigned long)state->pc,
+    (unsigned long)state->text_section_bias,
+    (unsigned long)state->text_section_offset);
 
   // The segment map contains information on finding the control data
   // structures given a PC. For documentation on this structure, see:
@@ -210,11 +210,11 @@ hotspot_handle_vtable_chunks(HotspotUnwindInfo *ui, HotspotUnwindAction *action)
 }
 
 __attribute__((always_inline)) inline static ErrorCode hotspot_handle_interpreter(
-    UnwindState *state,
-    Trace *trace,
-    HotspotUnwindInfo *ui,
-    HotspotProcInfo *ji,
-    HotspotUnwindAction *action)
+  UnwindState *state,
+  Trace *trace,
+  HotspotUnwindInfo *ui,
+  HotspotProcInfo *ji,
+  HotspotUnwindAction *action)
 {
   // Hotspot Interpreter has it's custom stack layout, and the unwinding is done based
   // on frame pointer. No frame information is in the CodeBlob header.
@@ -283,10 +283,10 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_handle_interprete
     bcp -= cmethod + ji->cmethod_size;
   }
   DEBUG_PRINT(
-      "jvm:  -> method = 0x%lx, cmethod = 0x%lx, bcp = %lx",
-      (unsigned long)method,
-      (unsigned long)cmethod,
-      (unsigned long)bcp);
+    "jvm:  -> method = 0x%lx, cmethod = 0x%lx, bcp = %lx",
+    (unsigned long)method,
+    (unsigned long)cmethod,
+    (unsigned long)bcp);
   if (bcp >= 0xffff) {
     // Range check, and mark BCI invalid if outside JVM spec range
     bcp = 0xffff;
@@ -453,8 +453,9 @@ found_ret:
   // Current instructions: 'testl %eax, (%r10)' + 'ret'
   // seen in the safe point polling, see:
   // https://hg.openjdk.org/jdk-updates/jdk14u/file/default/src/hotspot/cpu/x86/c1_LIRAssembler_x86.cpp#l558
-  if (code[CODE_CUR] == 0x41 && code[CODE_CUR + 1] == 0x85 && code[CODE_CUR + 2] == 0x02 &&
-      code[CODE_CUR + 3] == 0xc3) {
+  if (
+    code[CODE_CUR] == 0x41 && code[CODE_CUR + 1] == 0x85 && code[CODE_CUR + 2] == 0x02 &&
+    code[CODE_CUR + 3] == 0xc3) {
     DEBUG_PRINT("jvm:  -> epilogue on safepoint check'");
     goto pc_only;
   }
@@ -575,12 +576,12 @@ pattern_found:;
 #endif
 
 __attribute__((always_inline)) inline static ErrorCode hotspot_handle_nmethod(
-    const CodeBlobInfo *cbi,
-    Trace *trace,
-    HotspotUnwindInfo *ui,
-    HotspotProcInfo *ji,
-    HotspotUnwindAction *action,
-    bool topmost)
+  const CodeBlobInfo *cbi,
+  Trace *trace,
+  HotspotUnwindInfo *ui,
+  HotspotProcInfo *ji,
+  HotspotUnwindAction *action,
+  bool topmost)
 {
   // setup frame subtype, and get the native method _compile_id as pointer cookie
   // as it is unique to the compilation result
@@ -604,16 +605,17 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_handle_nmethod(
     // Similar fixup is strategy for external unwinding is in:
     // https://hg.openjdk.java.net/jdk-updates/jdk14u/file/default/src/java.base/solaris/native/libjvm_db/libjvm_db.c#l1059
     u64 orig;
-    if (bpf_probe_read_user(&orig, sizeof(orig), (void *)(ui->sp + cbi->orig_pc_offset)) ||
-        orig < cbi->code_start || orig >= cbi->code_end) {
+    if (
+      bpf_probe_read_user(&orig, sizeof(orig), (void *)(ui->sp + cbi->orig_pc_offset)) ||
+      orig < cbi->code_start || orig >= cbi->code_end) {
       // Just keep using the deoptimization point PC. It usually unwinds ok, and symbolizes
       // to the correct function. Potentially inlined scopes, and source line number is lost.
       DEBUG_PRINT("jvm:  -> deoptimized frame, pc recovery failed");
     } else {
       DEBUG_PRINT(
-          "jvm:  -> deoptimized frame, pc recovered as 0x%lx (from sp+%d)",
-          (unsigned long)orig,
-          (s32)cbi->orig_pc_offset);
+        "jvm:  -> deoptimized frame, pc recovered as 0x%lx (from sp+%d)",
+        (unsigned long)orig,
+        (s32)cbi->orig_pc_offset);
       ui->pc                   = orig;
       ui->line.pc_delta_or_bci = ui->pc - cbi->code_start;
     }
@@ -698,10 +700,10 @@ hotspot_handle_stub_fallback(const CodeBlobInfo *cbi, HotspotUnwindAction *actio
 }
 
 __attribute__((always_inline)) inline static ErrorCode hotspot_handle_stub(
-    const UnwindState *state,
-    const CodeBlobInfo *cbi,
-    HotspotUnwindInfo *ui,
-    HotspotUnwindAction *action)
+  const UnwindState *state,
+  const CodeBlobInfo *cbi,
+  HotspotUnwindInfo *ui,
+  HotspotUnwindAction *action)
 {
   ui->line.subtype = FRAME_HOTSPOT_STUB;
 
@@ -732,11 +734,11 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_handle_stub(
 }
 
 __attribute__((always_inline)) inline static ErrorCode hotspot_execute_unwind_action(
-    CodeBlobInfo *cbi,
-    HotspotUnwindAction action,
-    HotspotUnwindInfo *ui,
-    UnwindState *state,
-    Trace *trace)
+  CodeBlobInfo *cbi,
+  HotspotUnwindAction action,
+  HotspotUnwindInfo *ui,
+  UnwindState *state,
+  Trace *trace)
 {
   switch (action) {
   case UA_UNWIND_INVALID: return ERR_UNREACHABLE;
@@ -778,10 +780,10 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_execute_unwind_ac
     }
 
     DEBUG_PRINT(
-        "jvm:  -> pc: %lx, sp: %lx, fp: %lx",
-        (unsigned long)ui->pc,
-        (unsigned long)ui->sp,
-        (unsigned long)ui->fp);
+      "jvm:  -> pc: %lx, sp: %lx, fp: %lx",
+      (unsigned long)ui->pc,
+      (unsigned long)ui->sp,
+      (unsigned long)ui->fp);
     state->pc = ui->pc;
     state->sp = ui->sp;
     state->fp = ui->fp;
@@ -795,10 +797,10 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_execute_unwind_ac
 
 // Reads information from the CodeBlob for the current PC location from the JVM process.
 __attribute__((always_inline)) inline static ErrorCode hotspot_read_codeblob(
-    const UnwindState *state,
-    const HotspotProcInfo *ji,
-    HotspotUnwindScratchSpace *scratch,
-    CodeBlobInfo *cbi)
+  const UnwindState *state,
+  const HotspotProcInfo *ji,
+  HotspotUnwindScratchSpace *scratch,
+  CodeBlobInfo *cbi)
 {
   // Find the CodeBlob (JIT function metadata) for this PC.
   cbi->address = hotspot_find_codeblob(state, ji);
@@ -820,9 +822,10 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_read_codeblob(
 
   // Make the verifier happy. No bound checks required for the remaining offsets: they are u8, and
   // the verifier is aware that their maximum value is smaller than our `codeblob` buffer.
-  if (ji->nmethod_deopt_offset + sizeof(u64) > sizeof(scratch->codeblob) ||
-      ji->nmethod_compileid + sizeof(u32) > sizeof(scratch->codeblob) ||
-      ji->nmethod_orig_pc_offset + sizeof(u64) > sizeof(scratch->codeblob)) {
+  if (
+    ji->nmethod_deopt_offset + sizeof(u64) > sizeof(scratch->codeblob) ||
+    ji->nmethod_compileid + sizeof(u32) > sizeof(scratch->codeblob) ||
+    ji->nmethod_orig_pc_offset + sizeof(u64) > sizeof(scratch->codeblob)) {
     return ERR_UNREACHABLE;
   }
 
@@ -854,12 +857,12 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_read_codeblob(
   }
 
   DEBUG_PRINT(
-      "jvm:  -> code %lx-%lx", (unsigned long)cbi->code_start, (unsigned long)cbi->code_end);
+    "jvm:  -> code %lx-%lx", (unsigned long)cbi->code_start, (unsigned long)cbi->code_end);
   DEBUG_PRINT(
-      "jvm:  -> frame_complete %u, frame_size %u, frame_type 0x%x",
-      cbi->frame_comp,
-      cbi->frame_size,
-      cbi->frame_type);
+    "jvm:  -> frame_complete %u, frame_size %u, frame_type 0x%x",
+    cbi->frame_comp,
+    cbi->frame_size,
+    cbi->frame_type);
 
   return 0;
 
@@ -900,7 +903,7 @@ hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo *ji, bool maybe_t
   case FRAMETYPE_nmethod:        // JIT-compiled method
   case FRAMETYPE_native_nmethod: // stub to call C-implemented java method
     err = hotspot_handle_nmethod(
-        &cbi, trace, &ui, ji, &action, maybe_topmost && !state->return_address);
+      &cbi, trace, &ui, ji, &action, maybe_topmost && !state->return_address);
     break;
   case FRAMETYPE_Interpreter: // main Interpreter program running byte code
     err = hotspot_handle_interpreter(state, trace, &ui, ji, &action);

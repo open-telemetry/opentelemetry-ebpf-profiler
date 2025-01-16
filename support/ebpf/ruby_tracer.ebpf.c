@@ -7,10 +7,10 @@
 // Map from Ruby process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") ruby_procs = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(pid_t),
-    .value_size  = sizeof(RubyProcInfo),
-    .max_entries = 1024,
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(RubyProcInfo),
+  .max_entries = 1024,
 };
 
 // The number of Ruby frames to unwind per frame-unwinding eBPF program. If
@@ -51,10 +51,10 @@ push_ruby(Trace *trace, u64 file, u64 line)
 // [2] rb_iseq_struct
 // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L456
 static inline __attribute__((__always_inline__)) ErrorCode walk_ruby_stack(
-    PerCPURecord *record,
-    const RubyProcInfo *rubyinfo,
-    const void *current_ctx_addr,
-    int *next_unwinder)
+  PerCPURecord *record,
+  const RubyProcInfo *rubyinfo,
+  const void *current_ctx_addr,
+  int *next_unwinder)
 {
   if (!current_ctx_addr) {
     *next_unwinder = get_next_unwinder_after_interpreter(record);
@@ -80,18 +80,16 @@ static inline __attribute__((__always_inline__)) ErrorCode walk_ruby_stack(
     size_t stack_size;
 
     if (bpf_probe_read_user(
-            &stack_ptr_current,
-            sizeof(stack_ptr_current),
-            (void *)(current_ctx_addr + rubyinfo->vm_stack))) {
+          &stack_ptr_current,
+          sizeof(stack_ptr_current),
+          (void *)(current_ctx_addr + rubyinfo->vm_stack))) {
       DEBUG_PRINT("ruby: failed to read current stack pointer");
       increment_metric(metricID_UnwindRubyErrReadStackPtr);
       return ERR_RUBY_READ_STACK_PTR;
     }
 
     if (bpf_probe_read_user(
-            &stack_size,
-            sizeof(stack_size),
-            (void *)(current_ctx_addr + rubyinfo->vm_stack_size))) {
+          &stack_size, sizeof(stack_size), (void *)(current_ctx_addr + rubyinfo->vm_stack_size))) {
       DEBUG_PRINT("ruby: failed to get stack size");
       increment_metric(metricID_UnwindRubyErrReadStackSize);
       return ERR_RUBY_READ_STACK_SIZE;
@@ -104,7 +102,7 @@ static inline __attribute__((__always_inline__)) ErrorCode walk_ruby_stack(
                        (2 * rubyinfo->size_of_control_frame_struct);
 
     if (bpf_probe_read_user(
-            &stack_ptr, sizeof(stack_ptr), (void *)(current_ctx_addr + rubyinfo->cfp))) {
+          &stack_ptr, sizeof(stack_ptr), (void *)(current_ctx_addr + rubyinfo->cfp))) {
       DEBUG_PRINT("ruby: failed to get cfp");
       increment_metric(metricID_UnwindRubyErrReadCfp);
       return ERR_RUBY_READ_CFP;
@@ -155,8 +153,9 @@ static inline __attribute__((__always_inline__)) ErrorCode walk_ruby_stack(
         return ERR_RUBY_READ_EP;
       }
 
-      if ((ep & (RUBY_FRAME_FLAG_LAMBDA | RUBY_FRAME_FLAG_BMETHOD)) ==
-          (RUBY_FRAME_FLAG_LAMBDA | RUBY_FRAME_FLAG_BMETHOD)) {
+      if (
+        (ep & (RUBY_FRAME_FLAG_LAMBDA | RUBY_FRAME_FLAG_BMETHOD)) ==
+        (RUBY_FRAME_FLAG_LAMBDA | RUBY_FRAME_FLAG_BMETHOD)) {
         // When identifying Ruby lambda blocks at this point, we do not want to return to the
         // native unwinder. So we just skip this Ruby VM frame.
         goto skip;
@@ -174,14 +173,14 @@ static inline __attribute__((__always_inline__)) ErrorCode walk_ruby_stack(
     }
 
     if (bpf_probe_read_user(
-            &iseq_encoded, sizeof(iseq_encoded), (void *)(iseq_body + rubyinfo->iseq_encoded))) {
+          &iseq_encoded, sizeof(iseq_encoded), (void *)(iseq_body + rubyinfo->iseq_encoded))) {
       DEBUG_PRINT("ruby: failed to get iseq encoded");
       increment_metric(metricID_UnwindRubyErrReadIseqEncoded);
       return ERR_RUBY_READ_ISEQ_ENCODED;
     }
 
     if (bpf_probe_read_user(
-            &iseq_size, sizeof(iseq_size), (void *)(iseq_body + rubyinfo->iseq_size))) {
+          &iseq_size, sizeof(iseq_size), (void *)(iseq_body + rubyinfo->iseq_size))) {
       DEBUG_PRINT("ruby: failed to get iseq size");
       increment_metric(metricID_UnwindRubyErrReadIseqSize);
       return ERR_RUBY_READ_ISEQ_SIZE;
@@ -258,19 +257,19 @@ static inline __attribute__((__always_inline__)) int unwind_ruby(struct pt_regs 
 
     void *single_main_ractor = NULL;
     if (bpf_probe_read_user(
-            &single_main_ractor, sizeof(single_main_ractor), (void *)rubyinfo->current_ctx_ptr)) {
+          &single_main_ractor, sizeof(single_main_ractor), (void *)rubyinfo->current_ctx_ptr)) {
       goto exit;
     }
 
     if (bpf_probe_read_user(
-            &current_ctx_addr,
-            sizeof(current_ctx_addr),
-            (void *)(single_main_ractor + rubyinfo->running_ec))) {
+          &current_ctx_addr,
+          sizeof(current_ctx_addr),
+          (void *)(single_main_ractor + rubyinfo->running_ec))) {
       goto exit;
     }
   } else {
     if (bpf_probe_read_user(
-            &current_ctx_addr, sizeof(current_ctx_addr), (void *)rubyinfo->current_ctx_ptr)) {
+          &current_ctx_addr, sizeof(current_ctx_addr), (void *)rubyinfo->current_ctx_ptr)) {
       goto exit;
     }
   }

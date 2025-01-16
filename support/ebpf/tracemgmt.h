@@ -290,7 +290,7 @@ unwinder_mark_nonleaf_frame(UnwindState *state)
 //       calc_line). This should probably be renamed to something like "frame type
 //       specific data".
 static inline __attribute__((__always_inline__)) ErrorCode _push_with_max_frames(
-    Trace *trace, u64 file, u64 line, u8 frame_type, u8 return_address, u32 max_frames)
+  Trace *trace, u64 file, u64 line, u8 frame_type, u8 return_address, u32 max_frames)
 {
   if (trace->stack_len >= max_frames) {
     DEBUG_PRINT("unable to push frame: stack is full");
@@ -306,10 +306,10 @@ static inline __attribute__((__always_inline__)) ErrorCode _push_with_max_frames
   return __push_frame(__cgo_ctx->id, file, line, frame_type, return_address);
 #else
   trace->frames[trace->stack_len++] = (Frame){
-      .file_id        = file,
-      .addr_or_line   = line,
-      .kind           = frame_type,
-      .return_address = return_address,
+    .file_id        = file,
+    .addr_or_line   = line,
+    .kind           = frame_type,
+    .return_address = return_address,
   };
 
   return ERR_OK;
@@ -321,7 +321,7 @@ static inline __attribute__((__always_inline__)) ErrorCode
 _push_with_return_address(Trace *trace, u64 file, u64 line, u8 frame_type, bool return_address)
 {
   return _push_with_max_frames(
-      trace, file, line, frame_type, return_address, MAX_NON_ERROR_FRAME_UNWINDS);
+    trace, file, line, frame_type, return_address, MAX_NON_ERROR_FRAME_UNWINDS);
 }
 
 // Push the file ID, line number and frame type into FrameList
@@ -400,14 +400,14 @@ static ErrorCode resolve_unwind_mapping(PerCPURecord *record, int *unwinder)
   state->text_section_id     = val->file_id;
   state->text_section_offset = pc - state->text_section_bias;
   DEBUG_PRINT(
-      "Text section id for PC %lx is %llx (unwinder %d)",
-      (unsigned long)pc,
-      state->text_section_id,
-      *unwinder);
+    "Text section id for PC %lx is %llx (unwinder %d)",
+    (unsigned long)pc,
+    state->text_section_id,
+    *unwinder);
   DEBUG_PRINT(
-      "Text section bias is %llx, and offset is %llx",
-      state->text_section_bias,
-      state->text_section_offset);
+    "Text section bias is %llx, and offset is %llx",
+    state->text_section_bias,
+    state->text_section_offset);
 
   return ERR_OK;
 }
@@ -682,12 +682,7 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 #endif // TESTING_COREDUMP
 
 static inline int collect_trace(
-    struct pt_regs *ctx,
-    TraceOrigin origin,
-    u32 pid,
-    u32 tid,
-    u64 trace_timestamp,
-    u64 off_cpu_time)
+  struct pt_regs *ctx, TraceOrigin origin, u32 pid, u32 tid, u64 trace_timestamp, u64 off_cpu_time)
 {
   // The trace is reused on each call to this function so we have to reset the
   // variables used to maintain state.

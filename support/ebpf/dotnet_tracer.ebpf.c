@@ -22,10 +22,10 @@
 // Map from dotnet process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") dotnet_procs = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(pid_t),
-    .value_size  = sizeof(DotnetProcInfo),
-    .max_entries = 1024,
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(DotnetProcInfo),
+  .max_entries = 1024,
 };
 
 // Nibble map tunables
@@ -60,10 +60,10 @@ dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 pc, u64 *co
   u64 map_start                     = state->text_section_id;
 
   DEBUG_PRINT(
-      "dotnet:  --> find code start for %lx: pc_base %lx, map_start %lx",
-      (unsigned long)pc_delta,
-      (unsigned long)pc_base,
-      (unsigned long)map_start);
+    "dotnet:  --> find code start for %lx: pc_base %lx, map_start %lx",
+    (unsigned long)pc_delta,
+    (unsigned long)pc_base,
+    (unsigned long)map_start);
   pc_delta &= ~(DOTNET_CODE_ALIGN - 1);
 
   // Read the nibble map data
@@ -74,7 +74,7 @@ dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 pc, u64 *co
     // We can read full scratch buffer, adjust map_start so that last entry read corresponds
     // pc_delta
     map_start +=
-        pc_delta / DOTNET_CODE_BYTES_PER_ENTRY * sizeof(u32) - sizeof(scratch->map) + sizeof(u32);
+      pc_delta / DOTNET_CODE_BYTES_PER_ENTRY * sizeof(u32) - sizeof(scratch->map) + sizeof(u32);
     offs = 0;
   }
   offs %= map_elements;
@@ -96,7 +96,7 @@ dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 pc, u64 *co
     pc_delta -= DOTNET_CODE_BYTES_PER_NIBBLE;
     val = scratch->map[--pos];
     DEBUG_PRINT(
-        "dotnet:  --> find code start for %lx: second entry %x", (unsigned long)pc_delta, val);
+      "dotnet:  --> find code start for %lx: second entry %x", (unsigned long)pc_delta, val);
 
     // Find backwards the first non-zero entry as it marks function start
     // This is unrolled several times, so it needs to be minimal in size.
@@ -118,10 +118,10 @@ dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 pc, u64 *co
     }
     pc_delta -= pc_skipped;
     DEBUG_PRINT(
-        "dotnet:  --> find code start for %lx: skipped %d, entry %x",
-        (unsigned long)pc_delta,
-        orig_pos - pos,
-        val);
+      "dotnet:  --> find code start for %lx: skipped %d, entry %x",
+      (unsigned long)pc_delta,
+      orig_pos - pos,
+      val);
     if (val == 0) {
       increment_metric(metricID_UnwindDotnetErrCodeTooLarge);
       return ERR_DOTNET_CODE_TOO_LARGE;
@@ -135,10 +135,10 @@ dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 pc, u64 *co
     if (nybble != 0) {
       *code_start = pc_base + pc_delta + (nybble - 1) * DOTNET_CODE_ALIGN;
       DEBUG_PRINT(
-          "dotnet:  --> pc_delta = %lx, val=%x, ret=%lx",
-          (unsigned long)pc_delta,
-          nybble,
-          (unsigned long)*code_start);
+        "dotnet:  --> pc_delta = %lx, val=%x, ret=%lx",
+        (unsigned long)pc_delta,
+        nybble,
+        (unsigned long)*code_start);
       return ERR_OK;
     }
     val >>= 4;
@@ -156,7 +156,7 @@ static inline __attribute__((__always_inline__)) ErrorCode
 push_dotnet(Trace *trace, u64 code_header_ptr, u64 pc_offset, bool return_address)
 {
   return _push_with_return_address(
-      trace, code_header_ptr, pc_offset, FRAME_MARKER_DOTNET, return_address);
+    trace, code_header_ptr, pc_offset, FRAME_MARKER_DOTNET, return_address);
 }
 
 // Unwind one dotnet frame
@@ -170,11 +170,11 @@ unwind_one_dotnet_frame(PerCPURecord *record, DotnetProcInfo *vi, bool top)
 
   // All dotnet frames have frame pointer. Check that the FP looks valid.
   DEBUG_PRINT(
-      "dotnet: pc: %lx, sp: %lx, fp: %lx", (unsigned long)pc, (unsigned long)sp, (unsigned long)fp);
+    "dotnet: pc: %lx, sp: %lx, fp: %lx", (unsigned long)pc, (unsigned long)sp, (unsigned long)fp);
 
   if (fp < sp || fp >= sp + DOTNET_MAX_FRAME_LENGTH) {
     DEBUG_PRINT(
-        "dotnet: frame pointer too far off %lx / %lx", (unsigned long)fp, (unsigned long)sp);
+      "dotnet: frame pointer too far off %lx / %lx", (unsigned long)fp, (unsigned long)sp);
     increment_metric(metricID_UnwindDotnetErrBadFP);
     return ERR_DOTNET_BAD_FP;
   }
@@ -212,10 +212,10 @@ unwind_one_dotnet_frame(PerCPURecord *record, DotnetProcInfo *vi, bool top)
   state->fp = regs[0];
   state->pc = regs[1];
   DEBUG_PRINT(
-      "dotnet: pc: %lx, sp: %lx, fp: %lx",
-      (unsigned long)state->pc,
-      (unsigned long)state->sp,
-      (unsigned long)state->fp);
+    "dotnet: pc: %lx, sp: %lx, fp: %lx",
+    (unsigned long)state->pc,
+    (unsigned long)state->sp,
+    (unsigned long)state->fp);
 
   if (type < 0x100) {
     // Not a JIT frame. A R2R frame at this point.
@@ -239,7 +239,7 @@ unwind_one_dotnet_frame(PerCPURecord *record, DotnetProcInfo *vi, bool top)
   // https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/vm/codeman.h#L246-L248
   // This just reads the single pointer to the RealCodeHeader.
   if (bpf_probe_read_user(
-          &code_header_ptr, sizeof(code_header_ptr), (void *)code_start - sizeof(u64))) {
+        &code_header_ptr, sizeof(code_header_ptr), (void *)code_start - sizeof(u64))) {
     DEBUG_PRINT("dotnet:  --> bad code header");
     increment_metric(metricID_UnwindDotnetErrCodeHeader);
     return ERR_DOTNET_CODE_HEADER;
@@ -248,10 +248,10 @@ unwind_one_dotnet_frame(PerCPURecord *record, DotnetProcInfo *vi, bool top)
 
 push_frame:
   DEBUG_PRINT(
-      "dotnet:  --> code_start = %lx, code_header = %lx, pc_offset = %lx",
-      (unsigned long)code_start,
-      (unsigned long)code_header_ptr,
-      (unsigned long)(pc - code_start));
+    "dotnet:  --> code_start = %lx, code_header = %lx, pc_offset = %lx",
+    (unsigned long)code_start,
+    (unsigned long)code_header_ptr,
+    (unsigned long)(pc - code_start));
   error = push_dotnet(trace, (code_header_ptr << 5) + type, pc - code_start, return_address);
   if (error) {
     return error;

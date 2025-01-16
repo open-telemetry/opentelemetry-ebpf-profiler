@@ -51,7 +51,7 @@ static inline int bpf_map_delete_elem(bpf_map_def *map, const void *key)
 }
 
 static inline int bpf_perf_event_output(
-    void *ctx, bpf_map_def *mapdef, unsigned long long flags, void *data, int size)
+  void *ctx, bpf_map_def *mapdef, unsigned long long flags, void *data, int size)
 {
   return 0;
 }
@@ -70,28 +70,28 @@ static inline int bpf_get_stackid(void *ctx, bpf_map_def *map, u64 flags)
 
 static void *(*bpf_map_lookup_elem)(void *map, void *key) = (void *)BPF_FUNC_map_lookup_elem;
 static int (*bpf_map_update_elem)(void *map, void *key, void *value, u64 flags) = (void *)
-    BPF_FUNC_map_update_elem;
+  BPF_FUNC_map_update_elem;
 static int (*bpf_map_delete_elem)(void *map, void *key) = (void *)BPF_FUNC_map_delete_elem;
 static int (*bpf_probe_read)(void *dst, int size, const void *unsafe_ptr) = (void *)
-    BPF_FUNC_probe_read;
+  BPF_FUNC_probe_read;
 static unsigned long long (*bpf_ktime_get_ns)(void)         = (void *)BPF_FUNC_ktime_get_ns;
 static unsigned long long (*bpf_get_current_pid_tgid)(void) = (void *)BPF_FUNC_get_current_pid_tgid;
 static int (*bpf_get_current_comm)(void *buf, int buf_size) = (void *)BPF_FUNC_get_current_comm;
 static void (*bpf_tail_call)(void *ctx, void *map, int index) = (void *)BPF_FUNC_tail_call;
 static unsigned long long (*bpf_get_current_task)(void)       = (void *)BPF_FUNC_get_current_task;
 static int (*bpf_perf_event_output)(
-    void *ctx, void *map, unsigned long long flags, void *data, int size) = (void *)
-    BPF_FUNC_perf_event_output;
+  void *ctx, void *map, unsigned long long flags, void *data, int size) = (void *)
+  BPF_FUNC_perf_event_output;
 static int (*bpf_get_stackid)(void *ctx, void *map, u64 flags) = (void *)BPF_FUNC_get_stackid;
 static unsigned long long (*bpf_get_prandom_u32)(void)         = (void *)BPF_FUNC_get_prandom_u32;
 
 __attribute__((format(printf, 1, 3))) static int (*bpf_trace_printk)(
-    const char *fmt, int fmt_size, ...) = (void *)BPF_FUNC_trace_printk;
+  const char *fmt, int fmt_size, ...) = (void *)BPF_FUNC_trace_printk;
 
 static long (*bpf_probe_read_user)(void *dst, int size, const void *unsafe_ptr) = (void *)
-    BPF_FUNC_probe_read_user;
+  BPF_FUNC_probe_read_user;
 static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr) = (void *)
-    BPF_FUNC_probe_read_kernel;
+  BPF_FUNC_probe_read_kernel;
 
   // The sizeof in bpf_trace_printk() must include \0, else no output
   // is generated. The \n is not needed on 5.8+ kernels, but definitely on
@@ -140,7 +140,7 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
   // compilations.
   #define SEC(name)                                                                                \
     _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wignored-attributes\"")      \
-        __attribute__((section(name), used)) _Pragma("GCC diagnostic pop")
+      __attribute__((section(name), used)) _Pragma("GCC diagnostic pop")
 
 #endif // !TESTING_COREDUMP
 

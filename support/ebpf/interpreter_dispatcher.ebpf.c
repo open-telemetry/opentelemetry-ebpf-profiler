@@ -11,26 +11,26 @@
 
 // Per-CPU record of the stack being built and meta-data on the building process
 bpf_map_def SEC("maps") per_cpu_records = {
-    .type        = BPF_MAP_TYPE_PERCPU_ARRAY,
-    .key_size    = sizeof(int),
-    .value_size  = sizeof(PerCPURecord),
-    .max_entries = 1,
+  .type        = BPF_MAP_TYPE_PERCPU_ARRAY,
+  .key_size    = sizeof(int),
+  .value_size  = sizeof(PerCPURecord),
+  .max_entries = 1,
 };
 
 // metrics maps metric ID to a value
 bpf_map_def SEC("maps") metrics = {
-    .type        = BPF_MAP_TYPE_PERCPU_ARRAY,
-    .key_size    = sizeof(u32),
-    .value_size  = sizeof(u64),
-    .max_entries = metricID_Max,
+  .type        = BPF_MAP_TYPE_PERCPU_ARRAY,
+  .key_size    = sizeof(u32),
+  .value_size  = sizeof(u64),
+  .max_entries = metricID_Max,
 };
 
 // perf_progs maps from a program ID to a perf eBPF program
 bpf_map_def SEC("maps") perf_progs = {
-    .type        = BPF_MAP_TYPE_PROG_ARRAY,
-    .key_size    = sizeof(u32),
-    .value_size  = sizeof(u32),
-    .max_entries = NUM_TRACER_PROGS,
+  .type        = BPF_MAP_TYPE_PROG_ARRAY,
+  .key_size    = sizeof(u32),
+  .value_size  = sizeof(u32),
+  .max_entries = NUM_TRACER_PROGS,
 };
 
 // report_events notifies user space about events (GENERIC_PID and TRACES_FOR_SYMBOLIZATION).
@@ -41,10 +41,10 @@ bpf_map_def SEC("maps") perf_progs = {
 // the same time this will then also define the number of perf event rings that are
 // used for this map.
 bpf_map_def SEC("maps") report_events = {
-    .type        = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-    .key_size    = sizeof(int),
-    .value_size  = sizeof(u32),
-    .max_entries = 0,
+  .type        = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
+  .key_size    = sizeof(int),
+  .value_size  = sizeof(u32),
+  .max_entries = 0,
 };
 
 // reported_pids is a map that holds PIDs recently reported to user space.
@@ -56,10 +56,10 @@ bpf_map_def SEC("maps") report_events = {
 // either left to expire from the LRU or updated based on the rate limit token. Note that
 // timeout checks are done lazily on access, so this map may contain multiple expired PIDs.
 bpf_map_def SEC("maps") reported_pids = {
-    .type        = BPF_MAP_TYPE_LRU_HASH,
-    .key_size    = sizeof(u32),
-    .value_size  = sizeof(u64),
-    .max_entries = 65536,
+  .type        = BPF_MAP_TYPE_LRU_HASH,
+  .key_size    = sizeof(u32),
+  .value_size  = sizeof(u64),
+  .max_entries = 65536,
 };
 
 // pid_events is a map that holds PIDs that should be processed in user space.
@@ -72,10 +72,10 @@ bpf_map_def SEC("maps") reported_pids = {
 // (process new, process exit, unknown PC) within a map monitor/processing interval,
 // that we would like to support.
 bpf_map_def SEC("maps") pid_events = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(u32),
-    .value_size  = sizeof(bool),
-    .max_entries = 65536,
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(u32),
+  .value_size  = sizeof(bool),
+  .max_entries = 65536,
 };
 
 // The native unwinder needs to be able to determine how each mapping should be unwound.
@@ -84,11 +84,11 @@ bpf_map_def SEC("maps") pid_events = {
 // process. It contains information of the unwinder program to use, how to convert the virtual
 // address to relative address, and what executable file is in question.
 bpf_map_def SEC("maps") pid_page_to_mapping_info = {
-    .type        = BPF_MAP_TYPE_LPM_TRIE,
-    .key_size    = sizeof(PIDPage),
-    .value_size  = sizeof(PIDPageMappingInfo),
-    .max_entries = 524288, // 2^19
-    .map_flags   = BPF_F_NO_PREALLOC,
+  .type        = BPF_MAP_TYPE_LPM_TRIE,
+  .key_size    = sizeof(PIDPage),
+  .value_size  = sizeof(PIDPageMappingInfo),
+  .max_entries = 524288, // 2^19
+  .map_flags   = BPF_F_NO_PREALLOC,
 };
 
 // inhibit_events map is used to inhibit sending events to user space.
@@ -99,29 +99,29 @@ bpf_map_def SEC("maps") pid_page_to_mapping_info = {
 // NOTE: Update .max_entries if additional event types are added. The value should
 // equal the number of different event types using this mechanism.
 bpf_map_def SEC("maps") inhibit_events = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(u32),
-    .value_size  = sizeof(bool),
-    .max_entries = 2,
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(u32),
+  .value_size  = sizeof(bool),
+  .max_entries = 2,
 };
 
 // Perf event ring buffer for sending completed traces to user-mode.
 //
 // The map is periodically polled and read from in `tracer`.
 bpf_map_def SEC("maps") trace_events = {
-    .type        = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-    .key_size    = sizeof(int),
-    .value_size  = 0,
-    .max_entries = 0,
+  .type        = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
+  .key_size    = sizeof(int),
+  .value_size  = 0,
+  .max_entries = 0,
 };
 
 // End shared maps
 
 bpf_map_def SEC("maps") apm_int_procs = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(pid_t),
-    .value_size  = sizeof(ApmIntProcInfo),
-    .max_entries = 128,
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(ApmIntProcInfo),
+  .max_entries = 128,
 };
 
 static inline __attribute__((__always_inline__)) void maybe_add_apm_info(Trace *trace)
@@ -145,7 +145,7 @@ static inline __attribute__((__always_inline__)) void maybe_add_apm_info(Trace *
 
   void *apm_corr_buf_ptr;
   if (bpf_probe_read_user(
-          &apm_corr_buf_ptr, sizeof(apm_corr_buf_ptr), (void *)(tsd_base + proc->tls_offset))) {
+        &apm_corr_buf_ptr, sizeof(apm_corr_buf_ptr), (void *)(tsd_base + proc->tls_offset))) {
     increment_metric(metricID_UnwindApmIntErrReadCorrBufPtr);
     DEBUG_PRINT("Failed to read APM correlation buffer pointer");
     return;
@@ -168,9 +168,9 @@ static inline __attribute__((__always_inline__)) void maybe_add_apm_info(Trace *
 
   // WARN: we print this as little endian
   DEBUG_PRINT(
-      "APM transaction ID: %016llX, flags: 0x%02X",
-      trace->apm_transaction_id.as_int,
-      corr_buf.trace_flags);
+    "APM transaction ID: %016llX, flags: 0x%02X",
+    trace->apm_transaction_id.as_int,
+    corr_buf.trace_flags);
 }
 
 // unwind_stop is the tail call destination for PROG_UNWIND_STOP.

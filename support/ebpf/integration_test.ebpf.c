@@ -32,9 +32,9 @@ send_sample_traces(void *ctx, u64 pid, s32 kstack)
   trace->tid             = pid;
   trace->kernel_stack_id = -1, trace->stack_len = 1;
   trace->frames[0] = (Frame){
-      .kind         = FRAME_MARKER_NATIVE,
-      .file_id      = 1337,
-      .addr_or_line = 21,
+    .kind         = FRAME_MARKER_NATIVE,
+    .file_id      = 1337,
+    .addr_or_line = 21,
   };
   send_trace(ctx, trace);
 
@@ -48,19 +48,19 @@ send_sample_traces(void *ctx, u64 pid, s32 kstack)
   trace->kernel_stack_id = -1;
   trace->stack_len       = 3;
   trace->frames[0]       = (Frame){
-            .kind         = FRAME_MARKER_NATIVE,
-            .file_id      = 1337,
-            .addr_or_line = 42,
+          .kind         = FRAME_MARKER_NATIVE,
+          .file_id      = 1337,
+          .addr_or_line = 42,
   };
   trace->frames[1] = (Frame){
-      .kind         = FRAME_MARKER_NATIVE,
-      .file_id      = 1338,
-      .addr_or_line = 21,
+    .kind         = FRAME_MARKER_NATIVE,
+    .file_id      = 1338,
+    .addr_or_line = 21,
   };
   trace->frames[2] = (Frame){
-      .kind         = FRAME_MARKER_PYTHON,
-      .file_id      = 1339,
-      .addr_or_line = 22,
+    .kind         = FRAME_MARKER_PYTHON,
+    .file_id      = 1339,
+    .addr_or_line = 22,
   };
   send_trace(ctx, trace);
 
@@ -74,9 +74,9 @@ send_sample_traces(void *ctx, u64 pid, s32 kstack)
     // space later, we can instead just init `.kind` and a few fields in the
     // start, middle, and end of the trace.
     trace->frames[i] = (Frame){
-        .kind         = FRAME_MARKER_NATIVE,
-        .file_id      = ~i,
-        .addr_or_line = i,
+      .kind         = FRAME_MARKER_NATIVE,
+      .file_id      = ~i,
+      .addr_or_line = i,
     };
   }
   send_trace(ctx, trace);

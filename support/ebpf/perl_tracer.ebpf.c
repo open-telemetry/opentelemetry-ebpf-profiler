@@ -68,10 +68,10 @@
 // Map from Perl process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") perl_procs = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(pid_t),
-    .value_size  = sizeof(PerlProcInfo),
-    .max_entries = 1024,
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(PerlProcInfo),
+  .max_entries = 1024,
 };
 
 // Record a Perl frame
@@ -239,9 +239,9 @@ process_perl_frame(PerCPURecord *record, const PerlProcInfo *perlinfo, const voi
   // line number inside the sub/format block.
   if (!record->perlUnwindState.cop) {
     if (bpf_probe_read_user(
-            &record->perlUnwindState.cop,
-            sizeof(record->perlUnwindState.cop),
-            cx + perlinfo->context_blk_oldcop)) {
+          &record->perlUnwindState.cop,
+          sizeof(record->perlUnwindState.cop),
+          cx + perlinfo->context_blk_oldcop)) {
       goto err;
     }
     DEBUG_PRINT("COP from context stack 0x%lx", (unsigned long)record->perlUnwindState.cop);
@@ -268,8 +268,9 @@ prepare_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
   s32 cxix;
   void *cxstack;
 
-  if (bpf_probe_read_user(&cxstack, sizeof(cxstack), si + perlinfo->si_cxstack) ||
-      bpf_probe_read_user(&cxix, sizeof(cxix), si + perlinfo->si_cxix)) {
+  if (
+    bpf_probe_read_user(&cxstack, sizeof(cxstack), si + perlinfo->si_cxstack) ||
+    bpf_probe_read_user(&cxix, sizeof(cxix), si + perlinfo->si_cxix)) {
     DEBUG_PRINT("Failed to read stackinfo at 0x%lx", (unsigned long)si);
     unwinder_mark_done(record, PROG_UNWIND_PERL);
     increment_metric(metricID_UnwindPerlReadStackInfo);
@@ -336,8 +337,9 @@ walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
     // the context stack. Potential stackinfos below are not part of the real
     // Perl call stack.
     s32 type = 0;
-    if (bpf_probe_read_user(&type, sizeof(type), si + perlinfo->si_type) || type == PERLSI_MAIN ||
-        bpf_probe_read_user(&si, sizeof(si), si + perlinfo->si_next) || si == NULL) {
+    if (
+      bpf_probe_read_user(&type, sizeof(type), si + perlinfo->si_type) || type == PERLSI_MAIN ||
+      bpf_probe_read_user(&si, sizeof(si), si + perlinfo->si_next) || si == NULL) {
       // Stop walking stacks if main stack is finished, or something went wrong.
       DEBUG_PRINT("Perl stackinfos done");
       unwinder_mark_done(record, PROG_UNWIND_PERL);
@@ -351,10 +353,10 @@ walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
 
   // Stack completed. Prepare the next one.
   DEBUG_PRINT(
-      "Perl unwind done, next stackinfo 0x%lx, 0x%lx 0x%lx",
-      (unsigned long)si,
-      (unsigned long)record->perlUnwindState.cxbase,
-      (unsigned long)record->perlUnwindState.cxcur);
+    "Perl unwind done, next stackinfo 0x%lx, 0x%lx 0x%lx",
+    (unsigned long)si,
+    (unsigned long)record->perlUnwindState.cxbase,
+    (unsigned long)record->perlUnwindState.cxcur);
   return unwinder;
 }
 
@@ -411,14 +413,15 @@ static inline __attribute__((__always_inline__)) int unwind_perl(struct pt_regs 
     }
     DEBUG_PRINT("PerlInterpreter 0x%lx", (unsigned long)interpreter);
 
-    if (bpf_probe_read_user(
-            &record->perlUnwindState.stackinfo,
-            sizeof(record->perlUnwindState.stackinfo),
-            (void *)interpreter + perlinfo->interpreter_curstackinfo) ||
-        bpf_probe_read_user(
-            &record->perlUnwindState.cop,
-            sizeof(record->perlUnwindState.cop),
-            (void *)interpreter + perlinfo->interpreter_curcop)) {
+    if (
+      bpf_probe_read_user(
+        &record->perlUnwindState.stackinfo,
+        sizeof(record->perlUnwindState.stackinfo),
+        (void *)interpreter + perlinfo->interpreter_curstackinfo) ||
+      bpf_probe_read_user(
+        &record->perlUnwindState.cop,
+        sizeof(record->perlUnwindState.cop),
+        (void *)interpreter + perlinfo->interpreter_curcop)) {
       DEBUG_PRINT("Failed to read interpreter state");
       increment_metric(metricID_UnwindPerlReadStackInfo);
       goto exit;

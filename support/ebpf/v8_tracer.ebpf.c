@@ -24,25 +24,22 @@
 // Map from V8 process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") v8_procs = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(pid_t),
-    .value_size  = sizeof(V8ProcInfo),
-    .max_entries = 1024,
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(V8ProcInfo),
+  .max_entries = 1024,
 };
 
 // Record a V8 frame
 static inline __attribute__((__always_inline__)) ErrorCode push_v8(
-    Trace *trace,
-    unsigned long pointer_and_type,
-    unsigned long delta_or_marker,
-    bool return_address)
+  Trace *trace, unsigned long pointer_and_type, unsigned long delta_or_marker, bool return_address)
 {
   DEBUG_PRINT(
-      "Pushing v8 frame delta_or_marker=%lx, pointer_and_type=%lx",
-      delta_or_marker,
-      pointer_and_type);
+    "Pushing v8 frame delta_or_marker=%lx, pointer_and_type=%lx",
+    delta_or_marker,
+    pointer_and_type);
   return _push_with_return_address(
-      trace, pointer_and_type, delta_or_marker, FRAME_MARKER_V8, return_address);
+    trace, pointer_and_type, delta_or_marker, FRAME_MARKER_V8, return_address);
 }
 
 // Verify a V8 tagged pointer
@@ -118,9 +115,10 @@ unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
   }
 
   // Make the verifier happy to access fpctx using the HA provided fp_* variables
-  if (vi->fp_marker > V8_FP_CONTEXT_SIZE - sizeof(unsigned long) ||
-      vi->fp_function > V8_FP_CONTEXT_SIZE - sizeof(unsigned long) ||
-      vi->fp_bytecode_offset > V8_FP_CONTEXT_SIZE - sizeof(unsigned long)) {
+  if (
+    vi->fp_marker > V8_FP_CONTEXT_SIZE - sizeof(unsigned long) ||
+    vi->fp_function > V8_FP_CONTEXT_SIZE - sizeof(unsigned long) ||
+    vi->fp_bytecode_offset > V8_FP_CONTEXT_SIZE - sizeof(unsigned long)) {
     return ERR_UNREACHABLE;
   }
   unsigned long fp_marker          = *(unsigned long *)(scratch->fp_ctx + vi->fp_marker);
@@ -145,10 +143,10 @@ unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
   u16 jsfunc_tag   = v8_read_object_type(vi, jsfunc);
   if (jsfunc_tag < vi->type_JSFunction_first || jsfunc_tag > vi->type_JSFunction_last) {
     DEBUG_PRINT(
-        "v8:  -> not a JSFunction: %x <= %x <= %x",
-        vi->type_JSFunction_first,
-        jsfunc_tag,
-        vi->type_JSFunction_last);
+      "v8:  -> not a JSFunction: %x <= %x <= %x",
+      vi->type_JSFunction_first,
+      jsfunc_tag,
+      vi->type_JSFunction_last);
     increment_metric(metricID_UnwindV8ErrBadJSFunc);
     return ERR_V8_BAD_JS_FUNC;
   }
@@ -196,8 +194,9 @@ unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
     goto frame_done;
   }
   // Make the verifier happy to access fpctx using the HA provided fp_* variables
-  if (vi->off_Code_instruction_size > sizeof(scratch->code) - sizeof(u32) ||
-      vi->off_Code_flags > sizeof(scratch->code) - sizeof(u32)) {
+  if (
+    vi->off_Code_instruction_size > sizeof(scratch->code) - sizeof(u32) ||
+    vi->off_Code_flags > sizeof(scratch->code) - sizeof(u32)) {
     return ERR_UNREACHABLE;
   }
 
@@ -286,10 +285,10 @@ frame_done:
   unwinder_mark_nonleaf_frame(state);
 
   DEBUG_PRINT(
-      "v8: pc: %lx, sp: %lx, fp: %lx",
-      (unsigned long)state->pc,
-      (unsigned long)state->sp,
-      (unsigned long)state->fp);
+    "v8: pc: %lx, sp: %lx, fp: %lx",
+    (unsigned long)state->pc,
+    (unsigned long)state->sp,
+    (unsigned long)state->fp);
 
   increment_metric(metricID_UnwindV8Frames);
   return ERR_OK;

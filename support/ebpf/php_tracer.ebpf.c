@@ -19,10 +19,10 @@
 
 // Map from PHP process IDs to the address of the `executor_globals` for that process
 bpf_map_def SEC("maps") php_procs = {
-    .type        = BPF_MAP_TYPE_HASH,
-    .key_size    = sizeof(pid_t),
-    .value_size  = sizeof(PHPProcInfo),
-    .max_entries = 1024,
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(PHPProcInfo),
+  .max_entries = 1024,
 };
 
 // Record a PHP frame
@@ -40,21 +40,21 @@ static inline __attribute__((__always_inline__)) ErrorCode push_unknown_php(Trac
 }
 
 static inline __attribute__((__always_inline__)) int process_php_frame(
-    PerCPURecord *record,
-    PHPProcInfo *phpinfo,
-    bool is_jitted,
-    const void *execute_data,
-    u32 *type_info)
+  PerCPURecord *record,
+  PHPProcInfo *phpinfo,
+  bool is_jitted,
+  const void *execute_data,
+  u32 *type_info)
 {
   Trace *trace = &record->trace;
 
   // Get current_execute_data->func
   void *zend_function;
   if (bpf_probe_read_user(
-          &zend_function, sizeof(void *), execute_data + phpinfo->zend_execute_data_function)) {
+        &zend_function, sizeof(void *), execute_data + phpinfo->zend_execute_data_function)) {
     DEBUG_PRINT(
-        "Failed to read current_execute_data->func (0x%lx)",
-        (unsigned long)(execute_data + phpinfo->zend_execute_data_function));
+      "Failed to read current_execute_data->func (0x%lx)",
+      (unsigned long)(execute_data + phpinfo->zend_execute_data_function));
     return metricID_UnwindPHPErrBadZendExecuteData;
   }
 
@@ -70,7 +70,7 @@ static inline __attribute__((__always_inline__)) int process_php_frame(
   // Get zend_function->type
   u8 func_type;
   if (bpf_probe_read_user(
-          &func_type, sizeof(func_type), zend_function + phpinfo->zend_function_type)) {
+        &func_type, sizeof(func_type), zend_function + phpinfo->zend_function_type)) {
     DEBUG_PRINT("Failed to read execute_data->func->type (0x%lx)", (unsigned long)zend_function);
     return metricID_UnwindPHPErrBadZendFunction;
   }
@@ -80,27 +80,27 @@ static inline __attribute__((__always_inline__)) int process_php_frame(
     // Get execute_data->opline
     void *zend_op;
     if (bpf_probe_read_user(
-            &zend_op, sizeof(void *), execute_data + phpinfo->zend_execute_data_opline)) {
+          &zend_op, sizeof(void *), execute_data + phpinfo->zend_execute_data_opline)) {
       DEBUG_PRINT(
-          "Failed to read execute_data->opline (0x%lx)",
-          (unsigned long)(execute_data + phpinfo->zend_execute_data_opline));
+        "Failed to read execute_data->opline (0x%lx)",
+        (unsigned long)(execute_data + phpinfo->zend_execute_data_opline));
       return metricID_UnwindPHPErrBadZendExecuteData;
     }
 
     // Get opline->lineno
     if (bpf_probe_read_user(&lineno, sizeof(u32), zend_op + phpinfo->zend_op_lineno)) {
       DEBUG_PRINT(
-          "Failed to read executor_globals->opline->lineno (0x%lx)",
-          (unsigned long)(zend_op + phpinfo->zend_op_lineno));
+        "Failed to read executor_globals->opline->lineno (0x%lx)",
+        (unsigned long)(zend_op + phpinfo->zend_op_lineno));
       return metricID_UnwindPHPErrBadZendOpline;
     }
 
     // Get execute_data->This.type_info. This reads into the `type_info` argument
     // so we can reuse it in walk_php_stack
     if (bpf_probe_read_user(
-            type_info, sizeof(u32), execute_data + phpinfo->zend_execute_data_this_type_info)) {
+          type_info, sizeof(u32), execute_data + phpinfo->zend_execute_data_this_type_info)) {
       DEBUG_PRINT(
-          "Failed to read execute_data->This.type_info (0x%lx)", (unsigned long)execute_data);
+        "Failed to read execute_data->This.type_info (0x%lx)", (unsigned long)execute_data);
       return metricID_UnwindPHPErrBadZendExecuteData;
     }
   }
@@ -144,12 +144,12 @@ walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted)
 
     // Get current_execute_data->prev_execute_data
     if (bpf_probe_read_user(
-            &execute_data,
-            sizeof(void *),
-            execute_data + phpinfo->zend_execute_data_prev_execute_data)) {
+          &execute_data,
+          sizeof(void *),
+          execute_data + phpinfo->zend_execute_data_prev_execute_data)) {
       DEBUG_PRINT(
-          "Failed to read current_execute_data->prev_execute_data (0x%lx)",
-          (unsigned long)execute_data);
+        "Failed to read current_execute_data->prev_execute_data (0x%lx)",
+        (unsigned long)execute_data);
       increment_metric(metricID_UnwindPHPErrBadZendExecuteData);
       goto err;
     }
@@ -219,12 +219,12 @@ static inline __attribute__((__always_inline__)) int unwind_php(struct pt_regs *
   if (!record->phpUnwindState.zend_execute_data) {
     // Get executor_globals.current_execute_data
     if (bpf_probe_read_user(
-            &record->phpUnwindState.zend_execute_data,
-            sizeof(void *),
-            (void *)phpinfo->current_execute_data)) {
+          &record->phpUnwindState.zend_execute_data,
+          sizeof(void *),
+          (void *)phpinfo->current_execute_data)) {
       DEBUG_PRINT(
-          "Failed to read executor_globals.current_execute data (0x%lx)",
-          (unsigned long)phpinfo->current_execute_data);
+        "Failed to read executor_globals.current_execute data (0x%lx)",
+        (unsigned long)phpinfo->current_execute_data);
       increment_metric(metricID_UnwindPHPErrBadCurrentExecuteData);
       goto exit;
     }
@@ -246,8 +246,8 @@ static inline __attribute__((__always_inline__)) int unwind_php(struct pt_regs *
 #endif
 
   DEBUG_PRINT(
-      "Building PHP stack (execute_data = 0x%lx)",
-      (unsigned long)record->phpUnwindState.zend_execute_data);
+    "Building PHP stack (execute_data = 0x%lx)",
+    (unsigned long)record->phpUnwindState.zend_execute_data);
 
   // Unwind one call stack or unrolled length, and continue
   unwinder = walk_php_stack(record, phpinfo, is_jitted);
