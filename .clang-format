@@ -11,4 +11,4 @@ BreakStringLiterals: false
 ColumnLimit: 100
 ConstructorInitializerAllOnOneLineOrOnePerLine: true
 IndentPPDirectives: BeforeHash
-AlignConsecutiveMacros: true
+AlignConsecutiveMacros: AcrossComments

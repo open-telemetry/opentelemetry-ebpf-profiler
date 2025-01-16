@@ -233,7 +233,7 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_handle_interprete
   // https://github.com/openjdk/jdk8u/blob/master/hotspot/src/cpu/x86/vm/frame_x86.hpp#L117
   #define BCP_SLOT_JVM8 7
   // https://hg.openjdk.org/jdk-updates/jdk14u/file/default/src/hotspot/cpu/x86/templateInterpreterGenerator_x86.cpp#l66
-  #define BCP_REGISTER r13
+  #define BCP_REGISTER  r13
 #elif defined(__aarch64__)
   // https://hg.openjdk.org/jdk-updates/jdk14u/file/default/src/hotspot/cpu/aarch64/frame_aarch64.hpp#l88
   #define BCP_SLOT_JVM9 9

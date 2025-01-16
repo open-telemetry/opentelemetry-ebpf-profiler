@@ -88,11 +88,11 @@ static inline __attribute__((__always_inline__)) bool pid_information_exists(voi
 }
 
 // Reset the ratelimit cache
-#define RATELIMIT_ACTION_RESET 0
+#define RATELIMIT_ACTION_RESET   0
 // Use default timer
 #define RATELIMIT_ACTION_DEFAULT 1
 // Set PID to fast timer mode
-#define RATELIMIT_ACTION_FAST 2
+#define RATELIMIT_ACTION_FAST    2
 
 // pid_event_ratelimit determines if the PID event should be inhibited or not
 // based on rate limiting rules.

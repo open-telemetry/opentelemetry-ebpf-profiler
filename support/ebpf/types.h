@@ -804,7 +804,7 @@ typedef struct PIDPage {
 } PIDPage;
 
 // BIT_WIDTH_PID defines the number of bits used in the value pid of the PIDPage struct.
-#define BIT_WIDTH_PID 32
+#define BIT_WIDTH_PID  32
 // BIT_WIDTH_PAGE defines the number of bits used in the value page of the PIDPage struct.
 #define BIT_WIDTH_PAGE 64
 
@@ -829,7 +829,7 @@ typedef struct PIDPageMappingInfo {
 } PIDPageMappingInfo;
 
 // UNKNOWN_FILE indicates for unknown files.
-#define UNKNOWN_FILE 0x0
+#define UNKNOWN_FILE      0x0
 // FUNC_TYPE_UNKNOWN indicates an unknown interpreted function.
 #define FUNC_TYPE_UNKNOWN 0xfffffffffffffffe
 
@@ -851,7 +851,7 @@ decode_bias_and_unwind_program(u64 bias_and_unwind_program, u64 *bias, int *unwi
 // Smallest stack delta bucket that holds up to 2^8 entries
 #define STACK_DELTA_BUCKET_SMALLEST 8
 // Largest stack delta bucket that holds up to 2^23 entries
-#define STACK_DELTA_BUCKET_LARGEST 23
+#define STACK_DELTA_BUCKET_LARGEST  23
 
 // Struct of the `system_config` map. Contains various configuration variables
 // determined and set by the host agent.
