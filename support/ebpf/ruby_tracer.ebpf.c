@@ -7,9 +7,9 @@
 // Map from Ruby process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") ruby_procs = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(pid_t),
-    .value_size = sizeof(RubyProcInfo),
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(pid_t),
+    .value_size  = sizeof(RubyProcInfo),
     .max_entries = 1024,
 };
 
@@ -66,7 +66,7 @@ static inline __attribute__((__always_inline__)) ErrorCode walk_ruby_stack(
   *next_unwinder = PROG_UNWIND_STOP;
 
   // stack_ptr points to the frame of the Ruby VM call stack that will be unwound next
-  void *stack_ptr = record->rubyUnwindState.stack_ptr;
+  void *stack_ptr        = record->rubyUnwindState.stack_ptr;
   // last_stack_frame points to the last frame on the Ruby VM stack we want to process
   void *last_stack_frame = record->rubyUnwindState.last_stack_frame;
 
@@ -127,7 +127,7 @@ static inline __attribute__((__always_inline__)) ErrorCode walk_ruby_stack(
 
 #pragma unroll
   for (u32 i = 0; i < FRAMES_PER_WALK_RUBY_STACK; ++i) {
-    pc = 0;
+    pc        = 0;
     iseq_addr = NULL;
 
     bpf_probe_read_user(&iseq_addr, sizeof(iseq_addr), (void *)(stack_ptr + rubyinfo->iseq));
@@ -221,7 +221,7 @@ static inline __attribute__((__always_inline__)) ErrorCode walk_ruby_stack(
 save_state:
   // Store the current progress in the Ruby unwind state so we can continue walking the stack
   // after the tail call.
-  record->rubyUnwindState.stack_ptr = stack_ptr;
+  record->rubyUnwindState.stack_ptr        = stack_ptr;
   record->rubyUnwindState.last_stack_frame = last_stack_frame;
 
   return ERR_OK;
@@ -234,9 +234,9 @@ static inline __attribute__((__always_inline__)) int unwind_ruby(struct pt_regs 
   if (!record)
     return -1;
 
-  int unwinder = get_next_unwinder_after_interpreter(record);
-  ErrorCode error = ERR_OK;
-  u32 pid = record->trace.pid;
+  int unwinder           = get_next_unwinder_after_interpreter(record);
+  ErrorCode error        = ERR_OK;
+  u32 pid                = record->trace.pid;
   RubyProcInfo *rubyinfo = bpf_map_lookup_elem(&ruby_procs, &pid);
   if (!rubyinfo) {
     DEBUG_PRINT("No Ruby introspection data");

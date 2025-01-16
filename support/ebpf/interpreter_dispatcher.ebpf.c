@@ -11,25 +11,25 @@
 
 // Per-CPU record of the stack being built and meta-data on the building process
 bpf_map_def SEC("maps") per_cpu_records = {
-    .type = BPF_MAP_TYPE_PERCPU_ARRAY,
-    .key_size = sizeof(int),
-    .value_size = sizeof(PerCPURecord),
+    .type        = BPF_MAP_TYPE_PERCPU_ARRAY,
+    .key_size    = sizeof(int),
+    .value_size  = sizeof(PerCPURecord),
     .max_entries = 1,
 };
 
 // metrics maps metric ID to a value
 bpf_map_def SEC("maps") metrics = {
-    .type = BPF_MAP_TYPE_PERCPU_ARRAY,
-    .key_size = sizeof(u32),
-    .value_size = sizeof(u64),
+    .type        = BPF_MAP_TYPE_PERCPU_ARRAY,
+    .key_size    = sizeof(u32),
+    .value_size  = sizeof(u64),
     .max_entries = metricID_Max,
 };
 
 // perf_progs maps from a program ID to a perf eBPF program
 bpf_map_def SEC("maps") perf_progs = {
-    .type = BPF_MAP_TYPE_PROG_ARRAY,
-    .key_size = sizeof(u32),
-    .value_size = sizeof(u32),
+    .type        = BPF_MAP_TYPE_PROG_ARRAY,
+    .key_size    = sizeof(u32),
+    .value_size  = sizeof(u32),
     .max_entries = NUM_TRACER_PROGS,
 };
 
@@ -41,9 +41,9 @@ bpf_map_def SEC("maps") perf_progs = {
 // the same time this will then also define the number of perf event rings that are
 // used for this map.
 bpf_map_def SEC("maps") report_events = {
-    .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-    .key_size = sizeof(int),
-    .value_size = sizeof(u32),
+    .type        = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
+    .key_size    = sizeof(int),
+    .value_size  = sizeof(u32),
     .max_entries = 0,
 };
 
@@ -56,9 +56,9 @@ bpf_map_def SEC("maps") report_events = {
 // either left to expire from the LRU or updated based on the rate limit token. Note that
 // timeout checks are done lazily on access, so this map may contain multiple expired PIDs.
 bpf_map_def SEC("maps") reported_pids = {
-    .type = BPF_MAP_TYPE_LRU_HASH,
-    .key_size = sizeof(u32),
-    .value_size = sizeof(u64),
+    .type        = BPF_MAP_TYPE_LRU_HASH,
+    .key_size    = sizeof(u32),
+    .value_size  = sizeof(u64),
     .max_entries = 65536,
 };
 
@@ -72,9 +72,9 @@ bpf_map_def SEC("maps") reported_pids = {
 // (process new, process exit, unknown PC) within a map monitor/processing interval,
 // that we would like to support.
 bpf_map_def SEC("maps") pid_events = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(u32),
-    .value_size = sizeof(bool),
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(u32),
+    .value_size  = sizeof(bool),
     .max_entries = 65536,
 };
 
@@ -84,11 +84,11 @@ bpf_map_def SEC("maps") pid_events = {
 // process. It contains information of the unwinder program to use, how to convert the virtual
 // address to relative address, and what executable file is in question.
 bpf_map_def SEC("maps") pid_page_to_mapping_info = {
-    .type = BPF_MAP_TYPE_LPM_TRIE,
-    .key_size = sizeof(PIDPage),
-    .value_size = sizeof(PIDPageMappingInfo),
+    .type        = BPF_MAP_TYPE_LPM_TRIE,
+    .key_size    = sizeof(PIDPage),
+    .value_size  = sizeof(PIDPageMappingInfo),
     .max_entries = 524288, // 2^19
-    .map_flags = BPF_F_NO_PREALLOC,
+    .map_flags   = BPF_F_NO_PREALLOC,
 };
 
 // inhibit_events map is used to inhibit sending events to user space.
@@ -99,9 +99,9 @@ bpf_map_def SEC("maps") pid_page_to_mapping_info = {
 // NOTE: Update .max_entries if additional event types are added. The value should
 // equal the number of different event types using this mechanism.
 bpf_map_def SEC("maps") inhibit_events = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(u32),
-    .value_size = sizeof(bool),
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(u32),
+    .value_size  = sizeof(bool),
     .max_entries = 2,
 };
 
@@ -109,24 +109,24 @@ bpf_map_def SEC("maps") inhibit_events = {
 //
 // The map is periodically polled and read from in `tracer`.
 bpf_map_def SEC("maps") trace_events = {
-    .type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-    .key_size = sizeof(int),
-    .value_size = 0,
+    .type        = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
+    .key_size    = sizeof(int),
+    .value_size  = 0,
     .max_entries = 0,
 };
 
 // End shared maps
 
 bpf_map_def SEC("maps") apm_int_procs = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(pid_t),
-    .value_size = sizeof(ApmIntProcInfo),
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(pid_t),
+    .value_size  = sizeof(ApmIntProcInfo),
     .max_entries = 128,
 };
 
 static inline __attribute__((__always_inline__)) void maybe_add_apm_info(Trace *trace)
 {
-  u32 pid = trace->pid; // verifier needs this to be on stack on 4.15 kernel
+  u32 pid              = trace->pid; // verifier needs this to be on stack on 4.15 kernel
   ApmIntProcInfo *proc = bpf_map_lookup_elem(&apm_int_procs, &pid);
   if (!proc) {
     return;
@@ -159,8 +159,8 @@ static inline __attribute__((__always_inline__)) void maybe_add_apm_info(Trace *
   }
 
   if (corr_buf.trace_present && corr_buf.valid) {
-    trace->apm_trace_id.as_int.hi = corr_buf.trace_id.as_int.hi;
-    trace->apm_trace_id.as_int.lo = corr_buf.trace_id.as_int.lo;
+    trace->apm_trace_id.as_int.hi    = corr_buf.trace_id.as_int.hi;
+    trace->apm_trace_id.as_int.lo    = corr_buf.trace_id.as_int.lo;
     trace->apm_transaction_id.as_int = corr_buf.transaction_id.as_int;
   }
 
@@ -179,7 +179,7 @@ static inline __attribute__((__always_inline__)) int unwind_stop(struct pt_regs 
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;
-  Trace *trace = &record->trace;
+  Trace *trace       = &record->trace;
   UnwindState *state = &record->state;
 
   maybe_add_apm_info(trace);
@@ -224,7 +224,7 @@ static inline __attribute__((__always_inline__)) int unwind_stop(struct pt_regs 
   // also prevent the corresponding trace counts to be sent out. OTOH, if we do it here,
   // this is trivial.
   if (trace->stack_len == 1 && trace->kernel_stack_id < 0 && state->unwind_error) {
-    u32 syscfg_key = 0;
+    u32 syscfg_key       = 0;
     SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &syscfg_key);
     if (!syscfg) {
       return -1; // unreachable
@@ -245,4 +245,4 @@ MULTI_USE_FUNC(unwind_stop)
 char _license[] SEC("license") = "GPL";
 // this number will be interpreted by the elf loader
 // to set the current running kernel version
-u32 _version SEC("version") = 0xFFFFFFFE;
+u32 _version SEC("version")    = 0xFFFFFFFE;

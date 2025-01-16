@@ -22,9 +22,9 @@
 // Map from dotnet process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") dotnet_procs = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(pid_t),
-    .value_size = sizeof(DotnetProcInfo),
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(pid_t),
+    .value_size  = sizeof(DotnetProcInfo),
     .max_entries = 1024,
 };
 
@@ -52,12 +52,12 @@ dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 pc, u64 *co
   // The support code setups the page mapping so that:
   //   text_section_base = pHp->mapBase (base address of the JIT area)
   //   text_section_id   = pHp->pHdrMap (pointer to the nibble map)
-  const UnwindState *state = &record->state;
+  const UnwindState *state          = &record->state;
   DotnetUnwindScratchSpace *scratch = &record->dotnetUnwindScratch;
-  const int map_elements = sizeof(scratch->map) / sizeof(scratch->map[0]) / 2;
-  u64 pc_base = state->text_section_bias;
-  u64 pc_delta = pc - pc_base;
-  u64 map_start = state->text_section_id;
+  const int map_elements            = sizeof(scratch->map) / sizeof(scratch->map[0]) / 2;
+  u64 pc_base                       = state->text_section_bias;
+  u64 pc_delta                      = pc - pc_base;
+  u64 map_start                     = state->text_section_id;
 
   DEBUG_PRINT(
       "dotnet:  --> find code start for %lx: pc_base %lx, map_start %lx",
@@ -164,7 +164,7 @@ static inline __attribute__((__always_inline__)) ErrorCode
 unwind_one_dotnet_frame(PerCPURecord *record, DotnetProcInfo *vi, bool top)
 {
   UnwindState *state = &record->state;
-  Trace *trace = &record->trace;
+  Trace *trace       = &record->trace;
   u64 regs[2], sp = state->sp, fp = state->fp, pc = state->pc;
   bool return_address = state->return_address;
 
@@ -180,8 +180,8 @@ unwind_one_dotnet_frame(PerCPURecord *record, DotnetProcInfo *vi, bool top)
   }
 
   // Default to R2R/stub code_start.
-  u64 type = state->text_section_id;
-  u64 code_start = state->text_section_bias;
+  u64 type            = state->text_section_id;
+  u64 code_start      = state->text_section_bias;
   u64 code_header_ptr = pc;
 
   unwinder_mark_nonleaf_frame(state);
@@ -272,11 +272,11 @@ static inline __attribute__((__always_inline__)) int unwind_dotnet(struct pt_reg
   }
 
   Trace *trace = &record->trace;
-  u32 pid = trace->pid;
+  u32 pid      = trace->pid;
   DEBUG_PRINT("==== unwind_dotnet %d ====", trace->stack_len);
 
-  int unwinder = PROG_UNWIND_STOP;
-  ErrorCode error = ERR_OK;
+  int unwinder       = PROG_UNWIND_STOP;
+  ErrorCode error    = ERR_OK;
   DotnetProcInfo *vi = bpf_map_lookup_elem(&dotnet_procs, &pid);
   if (!vi) {
     DEBUG_PRINT("dotnet: no DotnetProcInfo for this pid");

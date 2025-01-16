@@ -18,9 +18,9 @@ struct pt_regs;
 // Map from Python process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") py_procs = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(pid_t),
-    .value_size = sizeof(PyProcInfo),
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(pid_t),
+    .value_size  = sizeof(PyProcInfo),
     .max_entries = 1024,
 };
 
@@ -42,7 +42,7 @@ static inline __attribute__((__always_inline__)) ErrorCode process_python_frame(
     void **py_frameobjectptr,
     bool *continue_with_next)
 {
-  Trace *trace = &record->trace;
+  Trace *trace               = &record->trace;
   const void *py_frameobject = *py_frameobjectptr;
   u64 lineno = FUNC_TYPE_UNKNOWN, file_id = UNKNOWN_FILE;
   u32 codeobject_id;
@@ -68,7 +68,7 @@ static inline __attribute__((__always_inline__)) ErrorCode process_python_frame(
   }
 
   void *py_codeobject = *(void **)(&pss->frame[pyinfo->PyFrameObject_f_code]);
-  *py_frameobjectptr = *(void **)(&pss->frame[pyinfo->PyFrameObject_f_back]);
+  *py_frameobjectptr  = *(void **)(&pss->frame[pyinfo->PyFrameObject_f_back]);
 
   // See experiments/python/README.md for a longer version of this. In short, we
   // cannot directly obtain the correct Python line number. It has to be calculated
@@ -132,16 +132,16 @@ static inline __attribute__((__always_inline__)) ErrorCode process_python_frame(
     return ERR_PYTHON_BAD_CODE_OBJECT_ADDR;
   }
 
-  int py_argcount = *(int *)(&pss->code[pyinfo->PyCodeObject_co_argcount]);
+  int py_argcount       = *(int *)(&pss->code[pyinfo->PyCodeObject_co_argcount]);
   int py_kwonlyargcount = *(int *)(&pss->code[pyinfo->PyCodeObject_co_kwonlyargcount]);
-  int py_flags = *(int *)(&pss->code[pyinfo->PyCodeObject_co_flags]);
-  int py_firstlineno = *(int *)(&pss->code[pyinfo->PyCodeObject_co_firstlineno]);
+  int py_flags          = *(int *)(&pss->code[pyinfo->PyCodeObject_co_flags]);
+  int py_firstlineno    = *(int *)(&pss->code[pyinfo->PyCodeObject_co_firstlineno]);
 
   codeobject_id =
       (py_argcount << 25) + (py_kwonlyargcount << 18) + (py_flags << 10) + py_firstlineno;
 
   file_id = (u64)py_codeobject;
-  lineno = py_encode_lineno(codeobject_id, (u32)py_f_lasti);
+  lineno  = py_encode_lineno(codeobject_id, (u32)py_f_lasti);
 
 push_frame:
   DEBUG_PRINT("Pushing Python %lx %lu", (unsigned long)file_id, (unsigned long)lineno);
@@ -157,9 +157,9 @@ push_frame:
 static inline __attribute__((__always_inline__)) ErrorCode
 walk_python_stack(PerCPURecord *record, const PyProcInfo *pyinfo, int *unwinder)
 {
-  void *py_frame = record->pythonUnwindState.py_frame;
+  void *py_frame  = record->pythonUnwindState.py_frame;
   ErrorCode error = ERR_OK;
-  *unwinder = PROG_UNWIND_STOP;
+  *unwinder       = PROG_UNWIND_STOP;
 
 #pragma unroll
   for (u32 i = 0; i < FRAMES_PER_WALK_PYTHON_STACK; ++i) {
@@ -286,9 +286,9 @@ static inline __attribute__((__always_inline__)) int unwind_python(struct pt_reg
     return -1;
 
   ErrorCode error = ERR_OK;
-  int unwinder = get_next_unwinder_after_interpreter(record);
-  Trace *trace = &record->trace;
-  u32 pid = trace->pid;
+  int unwinder    = get_next_unwinder_after_interpreter(record);
+  Trace *trace    = &record->trace;
+  u32 pid         = trace->pid;
 
   DEBUG_PRINT("unwind_python()");
 

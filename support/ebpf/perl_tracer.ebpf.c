@@ -68,9 +68,9 @@
 // Map from Perl process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") perl_procs = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(pid_t),
-    .value_size = sizeof(PerlProcInfo),
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(pid_t),
+    .value_size  = sizeof(PerlProcInfo),
     .max_entries = 1024,
 };
 
@@ -278,7 +278,7 @@ prepare_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
 
   DEBUG_PRINT("New stackinfo, cxbase 0x%lx, cxix %d", (unsigned long)cxstack, cxix);
   record->perlUnwindState.cxbase = cxstack;
-  record->perlUnwindState.cxcur = cxstack + cxix * perlinfo->context_sizeof;
+  record->perlUnwindState.cxcur  = cxstack + cxix * perlinfo->context_sizeof;
 }
 
 static inline __attribute__((__always_inline__)) int
@@ -292,7 +292,7 @@ walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
     return get_next_unwinder_after_interpreter(record);
   }
 
-  int unwinder = PROG_UNWIND_PERL;
+  int unwinder       = PROG_UNWIND_PERL;
   const void *cxbase = record->perlUnwindState.cxbase;
 #pragma unroll
   for (u32 i = 0; i < PERL_FRAMES_PER_PROGRAM; ++i) {
@@ -369,7 +369,7 @@ static inline __attribute__((__always_inline__)) int unwind_perl(struct pt_regs 
   }
 
   Trace *trace = &record->trace;
-  u32 pid = trace->pid;
+  u32 pid      = trace->pid;
   DEBUG_PRINT("unwind_perl()");
 
   PerlProcInfo *perlinfo = bpf_map_lookup_elem(&perl_procs, &pid);

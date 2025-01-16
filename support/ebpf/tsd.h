@@ -36,7 +36,7 @@ static inline __attribute__((__always_inline__)) int tsd_get_base(void **tsd_bas
   *tsd_base = (void *)__cgo_ctx->tp_base;
   return 0;
 #else
-  u32 key = 0;
+  u32 key              = 0;
   SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &key);
   if (!syscfg) {
     // Unreachable: array maps are always fully initialized.

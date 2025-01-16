@@ -139,15 +139,15 @@ struct bpf_raw_tracepoint_args {
 
 // Flags for bpf_map_update_elem
 enum {
-  BPF_ANY = 0,
+  BPF_ANY     = 0,
   BPF_NOEXIST = 1,
-  BPF_EXIST = 2,
-  BPF_F_LOCK = 4,
+  BPF_EXIST   = 2,
+  BPF_F_LOCK  = 4,
 };
 
 // Flags for perf event helpers
 enum {
-  BPF_F_INDEX_MASK = 0xFFFFFFFFULL,
+  BPF_F_INDEX_MASK  = 0xFFFFFFFFULL,
   BPF_F_CURRENT_CPU = BPF_F_INDEX_MASK,
   BPF_F_CTXLEN_MASK = (0xFFFFFULL << 32),
 };
@@ -193,10 +193,10 @@ enum bpf_map_type {
 // Flags bpf_get_stackid/bpf_get_stack.
 enum {
   BPF_F_SKIP_FIELD_MASK = 0xffULL,
-  BPF_F_USER_STACK = (1ULL << 8),
-  BPF_F_FAST_STACK_CMP = (1ULL << 9),
-  BPF_F_REUSE_STACKID = (1ULL << 10),
-  BPF_F_USER_BUILD_ID = (1ULL << 11),
+  BPF_F_USER_STACK      = (1ULL << 8),
+  BPF_F_FAST_STACK_CMP  = (1ULL << 9),
+  BPF_F_REUSE_STACKID   = (1ULL << 10),
+  BPF_F_USER_BUILD_ID   = (1ULL << 11),
 };
 
 // Flags for bpf_map_create

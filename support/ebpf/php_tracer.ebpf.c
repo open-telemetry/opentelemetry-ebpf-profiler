@@ -19,9 +19,9 @@
 
 // Map from PHP process IDs to the address of the `executor_globals` for that process
 bpf_map_def SEC("maps") php_procs = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(pid_t),
-    .value_size = sizeof(PHPProcInfo),
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(pid_t),
+    .value_size  = sizeof(PHPProcInfo),
     .max_entries = 1024,
 };
 
@@ -122,7 +122,7 @@ static inline __attribute__((__always_inline__)) int
 walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted)
 {
   const void *execute_data = record->phpUnwindState.zend_execute_data;
-  bool mixed_traces = get_next_unwinder_after_interpreter(record) != PROG_UNWIND_STOP;
+  bool mixed_traces        = get_next_unwinder_after_interpreter(record) != PROG_UNWIND_STOP;
 
   // If PHP data is not available, all frames have been processed, then
   // continue with native unwinding.
@@ -130,7 +130,7 @@ walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted)
     return get_next_unwinder_after_interpreter(record);
   }
 
-  int unwinder = PROG_UNWIND_PHP;
+  int unwinder  = PROG_UNWIND_PHP;
   u32 type_info = 0;
 #pragma unroll
   for (u32 i = 0; i < FRAMES_PER_WALK_PHP_STACK; ++i) {
@@ -174,7 +174,7 @@ walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted)
       // This is only necessary when it's the last function because walking the PHP
       // stack is enough for the other functions.
       if (is_jitted) {
-        record->state.pc = phpinfo->jit_return_address;
+        record->state.pc             = phpinfo->jit_return_address;
         record->state.return_address = false;
         if (resolve_unwind_mapping(record, &unwinder) != ERR_OK) {
           unwinder = PROG_UNWIND_STOP;
@@ -201,8 +201,8 @@ static inline __attribute__((__always_inline__)) int unwind_php(struct pt_regs *
   if (!record)
     return -1;
 
-  int unwinder = get_next_unwinder_after_interpreter(record);
-  u32 pid = record->trace.pid;
+  int unwinder         = get_next_unwinder_after_interpreter(record);
+  u32 pid              = record->trace.pid;
   PHPProcInfo *phpinfo = bpf_map_lookup_elem(&php_procs, &pid);
   if (!phpinfo) {
     DEBUG_PRINT("No PHP introspection data");

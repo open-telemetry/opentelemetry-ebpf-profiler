@@ -7,9 +7,9 @@
 
 // system config is the bpf map containing HA provided system configuration
 bpf_map_def SEC("maps") system_config = {
-    .type = BPF_MAP_TYPE_ARRAY,
-    .key_size = sizeof(u32),
-    .value_size = sizeof(struct SystemConfig),
+    .type        = BPF_MAP_TYPE_ARRAY,
+    .key_size    = sizeof(u32),
+    .value_size  = sizeof(struct SystemConfig),
     .max_entries = 1,
 };
 
@@ -17,9 +17,9 @@ bpf_map_def SEC("maps") system_config = {
 
 // system_analysis is the bpf map the HA and this module uses to communicate
 bpf_map_def SEC("maps") system_analysis = {
-    .type = BPF_MAP_TYPE_ARRAY,
-    .key_size = sizeof(u32),
-    .value_size = sizeof(struct SystemAnalysis),
+    .type        = BPF_MAP_TYPE_ARRAY,
+    .key_size    = sizeof(u32),
+    .value_size  = sizeof(struct SystemAnalysis),
     .max_entries = 1,
 };
 
@@ -60,7 +60,7 @@ SEC("raw_tracepoint/sys_enter")
 int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
 {
   struct pt_regs *regs = (struct pt_regs *)ctx->args[0];
-  u32 key0 = 0;
+  u32 key0             = 0;
 
   struct SystemAnalysis *sys = bpf_map_lookup_elem(&system_analysis, &key0);
   if (!sys) {

@@ -12,3 +12,4 @@ ColumnLimit: 100
 ConstructorInitializerAllOnOneLineOrOnePerLine: true
 IndentPPDirectives: BeforeHash
 AlignConsecutiveMacros: AcrossComments
+AlignConsecutiveAssignments: AcrossComments

@@ -4,18 +4,18 @@
 
 // kprobe_progs maps from a program ID to a kprobe eBPF program
 bpf_map_def SEC("maps") kprobe_progs = {
-    .type = BPF_MAP_TYPE_PROG_ARRAY,
-    .key_size = sizeof(u32),
-    .value_size = sizeof(u32),
+    .type        = BPF_MAP_TYPE_PROG_ARRAY,
+    .key_size    = sizeof(u32),
+    .value_size  = sizeof(u32),
     .max_entries = NUM_TRACER_PROGS,
 };
 
 // sched_times keeps track of sched_switch call times.
 bpf_map_def SEC("maps") sched_times = {
-    .type = BPF_MAP_TYPE_LRU_PERCPU_HASH,
-    .key_size = sizeof(u64),   // pid_tgid
-    .value_size = sizeof(u64), // time in ns
-    .max_entries = 256,        // value is adjusted at load time in loadAllMaps.
+    .type        = BPF_MAP_TYPE_LRU_PERCPU_HASH,
+    .key_size    = sizeof(u64), // pid_tgid
+    .value_size  = sizeof(u64), // time in ns
+    .max_entries = 256,         // value is adjusted at load time in loadAllMaps.
 };
 
 // tracepoint__sched_switch serves as entry point for off cpu profiling.
@@ -23,14 +23,14 @@ SEC("tracepoint/sched/sched_switch")
 int tracepoint__sched_switch(void *ctx)
 {
   u64 pid_tgid = bpf_get_current_pid_tgid();
-  u32 pid = pid_tgid >> 32;
-  u32 tid = pid_tgid & 0xFFFFFFFF;
+  u32 pid      = pid_tgid >> 32;
+  u32 tid      = pid_tgid & 0xFFFFFFFF;
 
   if (pid == 0 || tid == 0) {
     return 0;
   }
 
-  u32 key = 0;
+  u32 key              = 0;
   SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &key);
   if (!syscfg) {
     // Unreachable: array maps are always fully initialized.
@@ -67,8 +67,8 @@ int finish_task_switch(struct pt_regs *ctx)
 {
   // Get the PID and TGID register.
   u64 pid_tgid = bpf_get_current_pid_tgid();
-  u32 pid = pid_tgid >> 32;
-  u32 tid = pid_tgid & 0xFFFFFFFF;
+  u32 pid      = pid_tgid >> 32;
+  u32 tid      = pid_tgid & 0xFFFFFFFF;
 
   if (pid == 0 || tid == 0) {
     return 0;

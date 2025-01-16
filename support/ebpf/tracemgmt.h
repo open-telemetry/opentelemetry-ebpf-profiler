@@ -41,7 +41,7 @@ static inline __attribute__((__always_inline__)) void increment_metric(u32 metri
 // automatically inhibited until HA resets the type.
 static inline void event_send_trigger(struct pt_regs *ctx, u32 event_type)
 {
-  int inhibit_key = event_type;
+  int inhibit_key    = event_type;
   bool inhibit_value = true;
 
   // GENERIC_PID is a global notification that triggers eBPF map iteration+processing in Go.
@@ -79,10 +79,10 @@ struct bpf_perf_event_data;
 // pid_information_exists checks if the given pid exists in pid_page_to_mapping_info or not.
 static inline __attribute__((__always_inline__)) bool pid_information_exists(void *ctx, int pid)
 {
-  PIDPage key = {};
+  PIDPage key   = {};
   key.prefixLen = BIT_WIDTH_PID + BIT_WIDTH_PAGE;
-  key.pid = __constant_cpu_to_be32((u32)pid);
-  key.page = 0;
+  key.pid       = __constant_cpu_to_be32((u32)pid);
+  key.page      = 0;
 
   return bpf_map_lookup_elem(&pid_page_to_mapping_info, &key) != NULL;
 }
@@ -100,21 +100,21 @@ static inline __attribute__((__always_inline__)) bool
 pid_event_ratelimit(u32 pid, int ratelimit_action)
 {
   const u8 default_max_attempts = 8; // 25 seconds
-  const u8 fast_max_attempts = 4;    // 1.6 seconds
-  const u8 fast_timer_flag = 0x10;
-  u64 *token_ptr = bpf_map_lookup_elem(&reported_pids, &pid);
-  u64 ts = bpf_ktime_get_ns();
-  u8 attempt = 0;
-  u8 fast_timer = (ratelimit_action == RATELIMIT_ACTION_FAST) ? fast_timer_flag : 0;
+  const u8 fast_max_attempts    = 4; // 1.6 seconds
+  const u8 fast_timer_flag      = 0x10;
+  u64 *token_ptr                = bpf_map_lookup_elem(&reported_pids, &pid);
+  u64 ts                        = bpf_ktime_get_ns();
+  u8 attempt                    = 0;
+  u8 fast_timer                 = (ratelimit_action == RATELIMIT_ACTION_FAST) ? fast_timer_flag : 0;
 
   if (ratelimit_action == RATELIMIT_ACTION_RESET) {
     return false;
   }
 
   if (token_ptr) {
-    u64 token = *token_ptr;
+    u64 token   = *token_ptr;
     u64 diff_ts = ts - (token & ~0x1fULL);
-    attempt = token & 0xf;
+    attempt     = token & 0xf;
     fast_timer |= token & fast_timer_flag;
     // Calculate the limit window size. 100ms << attempt.
     u64 limit_window_ts = (100 * 1000000ULL) << attempt;
@@ -171,7 +171,7 @@ report_pid(void *ctx, int pid, int ratelimit_action)
   }
 
   bool value = true;
-  int errNo = bpf_map_update_elem(&pid_events, &key, &value, BPF_ANY);
+  int errNo  = bpf_map_update_elem(&pid_events, &key, &value, BPF_ANY);
   if (errNo != 0) {
     DEBUG_PRINT("Failed to update pid_events with PID %d: %d", pid, errNo);
     increment_metric(metricID_PIDEventsErr);
@@ -216,31 +216,31 @@ static inline PerCPURecord *get_pristine_per_cpu_record()
 #if defined(__x86_64__)
   record->state.r13 = 0;
 #elif defined(__aarch64__)
-  record->state.lr = 0;
-  record->state.r22 = 0;
+  record->state.lr         = 0;
+  record->state.r22        = 0;
   record->state.lr_invalid = false;
 #endif
-  record->state.return_address = false;
-  record->state.error_metric = -1;
-  record->state.unwind_error = ERR_OK;
-  record->perlUnwindState.stackinfo = 0;
-  record->perlUnwindState.cop = 0;
-  record->pythonUnwindState.py_frame = 0;
+  record->state.return_address             = false;
+  record->state.error_metric               = -1;
+  record->state.unwind_error               = ERR_OK;
+  record->perlUnwindState.stackinfo        = 0;
+  record->perlUnwindState.cop              = 0;
+  record->pythonUnwindState.py_frame       = 0;
   record->phpUnwindState.zend_execute_data = 0;
-  record->rubyUnwindState.stack_ptr = 0;
+  record->rubyUnwindState.stack_ptr        = 0;
   record->rubyUnwindState.last_stack_frame = 0;
-  record->unwindersDone = 0;
-  record->tailCalls = 0;
-  record->ratelimitAction = RATELIMIT_ACTION_DEFAULT;
+  record->unwindersDone                    = 0;
+  record->tailCalls                        = 0;
+  record->ratelimitAction                  = RATELIMIT_ACTION_DEFAULT;
 
-  Trace *trace = &record->trace;
+  Trace *trace           = &record->trace;
   trace->kernel_stack_id = -1;
-  trace->stack_len = 0;
-  trace->pid = 0;
-  trace->tid = 0;
+  trace->stack_len       = 0;
+  trace->pid             = 0;
+  trace->tid             = 0;
 
-  trace->apm_trace_id.as_int.hi = 0;
-  trace->apm_trace_id.as_int.lo = 0;
+  trace->apm_trace_id.as_int.hi    = 0;
+  trace->apm_trace_id.as_int.lo    = 0;
   trace->apm_transaction_id.as_int = 0;
 
   return record;
@@ -308,9 +308,9 @@ static inline __attribute__((__always_inline__)) ErrorCode _push_with_max_frames
   return __push_frame(__cgo_ctx->id, file, line, frame_type, return_address);
 #else
   trace->frames[trace->stack_len++] = (Frame){
-      .file_id = file,
-      .addr_or_line = line,
-      .kind = frame_type,
+      .file_id        = file,
+      .addr_or_line   = line,
+      .kind           = frame_type,
       .return_address = return_address,
   };
 
@@ -343,7 +343,7 @@ static inline __attribute__((__always_inline__)) ErrorCode push_error(Trace *tra
 static inline __attribute__((__always_inline__)) void send_trace(void *ctx, Trace *trace)
 {
   const u64 num_empty_frames = (MAX_FRAME_UNWINDS - trace->stack_len);
-  const u64 send_size = sizeof(Trace) - sizeof(Frame) * num_empty_frames;
+  const u64 send_size        = sizeof(Trace) - sizeof(Frame) * num_empty_frames;
 
   if (send_size > sizeof(Trace)) {
     return; // unreachable
@@ -364,8 +364,8 @@ static bool is_kernel_address(u64 addr)
 static ErrorCode resolve_unwind_mapping(PerCPURecord *record, int *unwinder)
 {
   UnwindState *state = &record->state;
-  pid_t pid = record->trace.pid;
-  u64 pc = state->pc;
+  pid_t pid          = record->trace.pid;
+  u64 pc             = state->pc;
 
   if (is_kernel_address(pc)) {
     // This should not happen as we should only be unwinding usermode stacks.
@@ -385,10 +385,10 @@ static ErrorCode resolve_unwind_mapping(PerCPURecord *record, int *unwinder)
     return ERR_NATIVE_SMALL_PC;
   }
 
-  PIDPage key = {};
+  PIDPage key   = {};
   key.prefixLen = BIT_WIDTH_PID + BIT_WIDTH_PAGE;
-  key.pid = __constant_cpu_to_be32((u32)pid);
-  key.page = __constant_cpu_to_be64(pc);
+  key.pid       = __constant_cpu_to_be32((u32)pid);
+  key.page      = __constant_cpu_to_be64(pc);
 
   // Check if we have the data for this virtual address
   PIDPageMappingInfo *val = bpf_map_lookup_elem(&pid_page_to_mapping_info, &key);
@@ -399,7 +399,7 @@ static ErrorCode resolve_unwind_mapping(PerCPURecord *record, int *unwinder)
   }
 
   decode_bias_and_unwind_program(val->bias_and_unwind_program, &state->text_section_bias, unwinder);
-  state->text_section_id = val->file_id;
+  state->text_section_id     = val->file_id;
   state->text_section_offset = pc - state->text_section_bias;
   DEBUG_PRINT(
       "Text section id for PC %lx is %llx (unwinder %d)",
@@ -420,7 +420,7 @@ static ErrorCode resolve_unwind_mapping(PerCPURecord *record, int *unwinder)
 static inline int get_next_interpreter(PerCPURecord *record)
 {
   UnwindState *state = &record->state;
-  u64 section_id = state->text_section_id;
+  u64 section_id     = state->text_section_id;
   u64 section_offset = state->text_section_offset;
   // Check if the section id happens to be in the interpreter map.
   OffsetRange *range = bpf_map_lookup_elem(&interpreter_offsets, &section_id);
@@ -443,7 +443,7 @@ static inline __attribute__((__always_inline__)) ErrorCode
 get_next_unwinder_after_native_frame(PerCPURecord *record, int *unwinder)
 {
   UnwindState *state = &record->state;
-  *unwinder = PROG_UNWIND_STOP;
+  *unwinder          = PROG_UNWIND_STOP;
 
   if (state->pc == 0) {
     DEBUG_PRINT("Stopping unwind due to unwind failure (PC == 0)");
@@ -492,7 +492,7 @@ static inline __attribute__((__always_inline__)) void tail_call(void *ctx, int n
     // tail calls. As a result we might lose the unwound stack as no further tail calls are left
     // to report it to user space. To make sure we do not run into this issue we stop unwinding
     // the stack at this point and report it to userspace.
-    next = PROG_UNWIND_STOP;
+    next                       = PROG_UNWIND_STOP;
     record->state.unwind_error = ERR_MAX_TAIL_CALLS;
     increment_metric(metricID_MaxTailCalls);
   }
@@ -519,7 +519,7 @@ static inline __attribute__((__always_inline__)) void tail_call(void *ctx, int n
 static inline u64 normalize_pac_ptr(u64 ptr)
 {
   // Retrieve PAC mask from the system config.
-  u32 key = 0;
+  u32 key              = 0;
   SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &key);
   if (!syscfg) {
     // Unreachable: array maps are always fully initialized.
@@ -545,11 +545,11 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   if (regs->cs == __USER32_CS) {
     return ERR_NATIVE_X64_32BIT_COMPAT_MODE;
   }
-  state->pc = regs->ip;
-  state->sp = regs->sp;
-  state->fp = regs->bp;
+  state->pc  = regs->ip;
+  state->sp  = regs->sp;
+  state->fp  = regs->bp;
   state->rax = regs->ax;
-  state->r9 = regs->r9;
+  state->r9  = regs->r9;
   state->r11 = regs->r11;
   state->r13 = regs->r13;
   state->r15 = regs->r15;
@@ -564,10 +564,10 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   if (regs->pstate & PSR_MODE32_BIT) {
     return ERR_NATIVE_AARCH64_32BIT_COMPAT_MODE;
   }
-  state->pc = normalize_pac_ptr(regs->pc);
-  state->sp = regs->sp;
-  state->fp = regs->regs[29];
-  state->lr = normalize_pac_ptr(regs->regs[30]);
+  state->pc  = normalize_pac_ptr(regs->pc);
+  state->sp  = regs->sp;
+  state->fp  = regs->regs[29];
+  state->lr  = normalize_pac_ptr(regs->regs[30]);
   state->r22 = regs->regs[22];
 
   // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
@@ -578,7 +578,7 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   // because the frame is a leaf frame from the perspective of the user stack,
   // regardless of whether we are in a syscall.
   state->return_address = interrupted_kernelmode && regs->syscallno != -1;
-  state->lr_invalid = false;
+  state->lr_invalid     = false;
 #endif
 
   return ERR_OK;
@@ -635,7 +635,7 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
   ErrorCode error;
 
   if (!ptregs_is_usermode(ctx)) {
-    u32 key = 0;
+    u32 key              = 0;
     SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &key);
     if (!syscfg) {
       // Unreachable: array maps are always fully initialized.
@@ -644,7 +644,7 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 
     // Use the current task's entry pt_regs
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-    long ptregs_addr = get_task_pt_regs(task, syscfg);
+    long ptregs_addr         = get_task_pt_regs(task, syscfg);
 
     struct pt_regs regs;
     if (!ptregs_addr || bpf_probe_read_kernel(&regs, sizeof(regs), (void *)ptregs_addr)) {
@@ -699,11 +699,11 @@ static inline int collect_trace(
     return -1;
   }
 
-  Trace *trace = &record->trace;
-  trace->origin = origin;
-  trace->pid = pid;
-  trace->tid = tid;
-  trace->ktime = trace_timestamp;
+  Trace *trace   = &record->trace;
+  trace->origin  = origin;
+  trace->pid     = pid;
+  trace->tid     = tid;
+  trace->ktime   = trace_timestamp;
   trace->offtime = off_cpu_time;
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);
@@ -714,9 +714,9 @@ static inline int collect_trace(
   DEBUG_PRINT("kernel stack id = %d", trace->kernel_stack_id);
 
   // Recursive unwind frames
-  int unwinder = PROG_UNWIND_STOP;
+  int unwinder           = PROG_UNWIND_STOP;
   bool has_usermode_regs = false;
-  ErrorCode error = get_usermode_regs(ctx, &record->state, &has_usermode_regs);
+  ErrorCode error        = get_usermode_regs(ctx, &record->state, &has_usermode_regs);
   if (error || !has_usermode_regs) {
     goto exit;
   }

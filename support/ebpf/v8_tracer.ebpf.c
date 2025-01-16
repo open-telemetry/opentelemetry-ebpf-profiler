@@ -24,9 +24,9 @@
 // Map from V8 process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") v8_procs = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(pid_t),
-    .value_size = sizeof(V8ProcInfo),
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(pid_t),
+    .value_size  = sizeof(V8ProcInfo),
     .max_entries = 1024,
 };
 
@@ -98,7 +98,7 @@ static inline __attribute__((__always_inline__)) ErrorCode
 unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
 {
   UnwindState *state = &record->state;
-  Trace *trace = &record->trace;
+  Trace *trace       = &record->trace;
   unsigned long regs[2], sp = state->sp, fp = state->fp, pc = state->pc;
   V8UnwindScratchSpace *scratch = &record->v8UnwindScratch;
 
@@ -123,8 +123,8 @@ unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
       vi->fp_bytecode_offset > V8_FP_CONTEXT_SIZE - sizeof(unsigned long)) {
     return ERR_UNREACHABLE;
   }
-  unsigned long fp_marker = *(unsigned long *)(scratch->fp_ctx + vi->fp_marker);
-  unsigned long fp_function = *(unsigned long *)(scratch->fp_ctx + vi->fp_function);
+  unsigned long fp_marker          = *(unsigned long *)(scratch->fp_ctx + vi->fp_marker);
+  unsigned long fp_function        = *(unsigned long *)(scratch->fp_ctx + vi->fp_function);
   unsigned long fp_bytecode_offset = *(unsigned long *)(scratch->fp_ctx + vi->fp_bytecode_offset);
 
   // Data that will be sent to HA is in these variables.
@@ -135,14 +135,14 @@ unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
   if ((fp_marker & SmiTagMask) == SmiTag) {
     // Shift with the tag length only (shift on normal SMI is different).
     pointer_and_type = V8_FILE_TYPE_MARKER;
-    delta_or_marker = fp_marker >> SmiTagShift;
+    delta_or_marker  = fp_marker >> SmiTagShift;
     DEBUG_PRINT("v8:  -> stub frame, tag %ld", delta_or_marker);
     goto frame_done;
   }
 
   // Extract the JSFunction being executed
   uintptr_t jsfunc = v8_verify_pointer(fp_function);
-  u16 jsfunc_tag = v8_read_object_type(vi, jsfunc);
+  u16 jsfunc_tag   = v8_read_object_type(vi, jsfunc);
   if (jsfunc_tag < vi->type_JSFunction_first || jsfunc_tag > vi->type_JSFunction_last) {
     DEBUG_PRINT(
         "v8:  -> not a JSFunction: %x <= %x <= %x",
@@ -179,7 +179,7 @@ unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
 
   // Try to determine the Code object from JSFunction.
   uintptr_t code = v8_read_object_ptr(jsfunc + vi->off_JSFunction_code);
-  u16 code_type = v8_read_object_type(vi, code);
+  u16 code_type  = v8_read_object_type(vi, code);
   if (code_type != vi->type_Code) {
     // If the object type tag does not match, it might be some new functionality
     // in the VM. Report the JSFunction for function name, but report no line
@@ -209,9 +209,9 @@ unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
   } else {
     code_start = code + vi->off_Code_instruction_start;
   }
-  u32 code_size = *(u32 *)(scratch->code + vi->off_Code_instruction_size);
+  u32 code_size  = *(u32 *)(scratch->code + vi->off_Code_instruction_size);
   u32 code_flags = *(u32 *)(scratch->code + vi->off_Code_flags);
-  u8 code_kind = (code_flags & vi->codekind_mask) >> vi->codekind_shift;
+  u8 code_kind   = (code_flags & vi->codekind_mask) >> vi->codekind_shift;
 
   uintptr_t code_end = code_start + code_size;
   DEBUG_PRINT("v8: func = %lx / sfi = %lx / code = %lx", jsfunc, sfi, code);
@@ -264,7 +264,7 @@ unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
   }
 
   // Use cookie that differentiates different types of Code objects
-  u32 cookie = (code_size << 4) | code_kind;
+  u32 cookie      = (code_size << 4) | code_kind;
   delta_or_marker = (pc - code_start) | ((uintptr_t)cookie << V8_LINE_COOKIE_SHIFT);
 
 frame_done:
@@ -306,12 +306,12 @@ static inline __attribute__((__always_inline__)) int unwind_v8(struct pt_regs *c
   }
 
   Trace *trace = &record->trace;
-  u32 pid = trace->pid;
+  u32 pid      = trace->pid;
   DEBUG_PRINT("==== unwind_v8 %d ====", trace->stack_len);
 
-  int unwinder = PROG_UNWIND_STOP;
+  int unwinder    = PROG_UNWIND_STOP;
   ErrorCode error = ERR_OK;
-  V8ProcInfo *vi = bpf_map_lookup_elem(&v8_procs, &pid);
+  V8ProcInfo *vi  = bpf_map_lookup_elem(&v8_procs, &pid);
   if (!vi) {
     DEBUG_PRINT("v8: no V8ProcInfo for this pid");
     error = ERR_V8_NO_PROC_INFO;

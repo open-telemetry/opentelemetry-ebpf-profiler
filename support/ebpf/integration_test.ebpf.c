@@ -27,46 +27,46 @@ send_sample_traces(void *ctx, u64 pid, s32 kstack)
 
   trace->origin = TRACE_SAMPLING;
 
-  trace->comm[3] = 1;
-  trace->pid = pid;
-  trace->tid = pid;
+  trace->comm[3]         = 1;
+  trace->pid             = pid;
+  trace->tid             = pid;
   trace->kernel_stack_id = -1, trace->stack_len = 1;
   trace->frames[0] = (Frame){
-      .kind = FRAME_MARKER_NATIVE,
-      .file_id = 1337,
+      .kind         = FRAME_MARKER_NATIVE,
+      .file_id      = 1337,
       .addr_or_line = 21,
   };
   send_trace(ctx, trace);
 
   // Single native frame, with kernel trace.
-  trace->comm[3] = 2;
+  trace->comm[3]         = 2;
   trace->kernel_stack_id = kstack;
   send_trace(ctx, trace);
 
   // Single Python frame.
-  trace->comm[3] = 3;
+  trace->comm[3]         = 3;
   trace->kernel_stack_id = -1;
-  trace->stack_len = 3;
-  trace->frames[0] = (Frame){
-      .kind = FRAME_MARKER_NATIVE,
-      .file_id = 1337,
-      .addr_or_line = 42,
+  trace->stack_len       = 3;
+  trace->frames[0]       = (Frame){
+            .kind         = FRAME_MARKER_NATIVE,
+            .file_id      = 1337,
+            .addr_or_line = 42,
   };
   trace->frames[1] = (Frame){
-      .kind = FRAME_MARKER_NATIVE,
-      .file_id = 1338,
+      .kind         = FRAME_MARKER_NATIVE,
+      .file_id      = 1338,
       .addr_or_line = 21,
   };
   trace->frames[2] = (Frame){
-      .kind = FRAME_MARKER_PYTHON,
-      .file_id = 1339,
+      .kind         = FRAME_MARKER_PYTHON,
+      .file_id      = 1339,
       .addr_or_line = 22,
   };
   send_trace(ctx, trace);
 
   // Maximum length native trace.
-  trace->comm[3] = 4;
-  trace->stack_len = MAX_FRAME_UNWINDS;
+  trace->comm[3]         = 4;
+  trace->stack_len       = MAX_FRAME_UNWINDS;
   trace->kernel_stack_id = kstack;
 #pragma unroll
   for (u64 i = 0; i < MAX_FRAME_UNWINDS; ++i) {
@@ -74,8 +74,8 @@ send_sample_traces(void *ctx, u64 pid, s32 kstack)
     // space later, we can instead just init `.kind` and a few fields in the
     // start, middle, and end of the trace.
     trace->frames[i] = (Frame){
-        .kind = FRAME_MARKER_NATIVE,
-        .file_id = ~i,
+        .kind         = FRAME_MARKER_NATIVE,
+        .file_id      = ~i,
         .addr_or_line = i,
     };
   }
@@ -87,7 +87,7 @@ send_sample_traces(void *ctx, u64 pid, s32 kstack)
 SEC("tracepoint/integration/sched_switch")
 int tracepoint_integration__sched_switch(void *ctx)
 {
-  u64 id = bpf_get_current_pid_tgid();
+  u64 id  = bpf_get_current_pid_tgid();
   u64 pid = id >> 32;
 
   s32 kernel_stack_id = bpf_get_stackid(ctx, &kernel_stackmap, BPF_F_REUSE_STACKID);

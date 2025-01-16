@@ -844,7 +844,7 @@ encode_bias_and_unwind_program(u64 bias, int unwind_program)
 static inline __attribute__((__always_inline__)) void
 decode_bias_and_unwind_program(u64 bias_and_unwind_program, u64 *bias, int *unwind_program)
 {
-  *bias = bias_and_unwind_program & 0x00FFFFFFFFFFFFFF;
+  *bias           = bias_and_unwind_program & 0x00FFFFFFFFFFFFFF;
   *unwind_program = bias_and_unwind_program >> 56;
 }
 

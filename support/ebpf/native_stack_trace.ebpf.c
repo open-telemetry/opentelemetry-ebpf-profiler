@@ -9,9 +9,9 @@
 // fileID.
 #define STACK_DELTA_BUCKET(X)                                                                      \
   bpf_map_def SEC("maps") exe_id_to_##X##_stack_deltas = {                                         \
-      .type = BPF_MAP_TYPE_HASH_OF_MAPS,                                                           \
-      .key_size = sizeof(u64),                                                                     \
-      .value_size = sizeof(u32),                                                                   \
+      .type        = BPF_MAP_TYPE_HASH_OF_MAPS,                                                    \
+      .key_size    = sizeof(u64),                                                                  \
+      .value_size  = sizeof(u32),                                                                  \
       .max_entries = 4096,                                                                         \
   };
 
@@ -40,9 +40,9 @@ STACK_DELTA_BUCKET(23);
 // An array of unwind info contains the all the different UnwindInfo instances
 // needed system wide. Individual stack delta entries refer to this array.
 bpf_map_def SEC("maps") unwind_info_array = {
-    .type = BPF_MAP_TYPE_ARRAY,
-    .key_size = sizeof(u32),
-    .value_size = sizeof(UnwindInfo),
+    .type        = BPF_MAP_TYPE_ARRAY,
+    .key_size    = sizeof(u32),
+    .value_size  = sizeof(UnwindInfo),
     // Maximum number of unique stack deltas needed on a system. This is based on
     // normal desktop /usr/bin/* and /usr/lib/*.so having about 9700 unique deltas.
     // Can be increased up to 2^15, see also STACK_DELTA_COMMAND_FLAG.
@@ -57,17 +57,17 @@ bpf_map_def SEC("maps") unwind_info_array = {
 // loops: The keys are those executable section IDs that contain interpreter loops, the values
 // identify the offset range within this executable section that contains the interpreter loop.
 bpf_map_def SEC("maps") interpreter_offsets = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(u64),
-    .value_size = sizeof(OffsetRange),
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(u64),
+    .value_size  = sizeof(OffsetRange),
     .max_entries = 32,
 };
 
 // Maps fileID and page to information of stack deltas associated with that page.
 bpf_map_def SEC("maps") stack_delta_page_to_info = {
-    .type = BPF_MAP_TYPE_HASH,
-    .key_size = sizeof(StackDeltaPageKey),
-    .value_size = sizeof(StackDeltaPageInfo),
+    .type        = BPF_MAP_TYPE_HASH,
+    .key_size    = sizeof(StackDeltaPageKey),
+    .value_size  = sizeof(StackDeltaPageInfo),
     .max_entries = 40000,
 };
 
@@ -75,9 +75,9 @@ bpf_map_def SEC("maps") stack_delta_page_to_info = {
 // program cannot read the contents, so we return the stackid in the Trace directly, and
 // make the profiling agent read the kernel mode stack trace portion from this map.
 bpf_map_def SEC("maps") kernel_stackmap = {
-    .type = BPF_MAP_TYPE_STACK_TRACE,
-    .key_size = sizeof(u32),
-    .value_size = PERF_MAX_STACK_DEPTH * sizeof(u64),
+    .type        = BPF_MAP_TYPE_STACK_TRACE,
+    .key_size    = sizeof(u32),
+    .value_size  = PERF_MAX_STACK_DEPTH * sizeof(u64),
     .max_entries = 16 * 1024,
 };
 
@@ -95,7 +95,7 @@ push_native(Trace *trace, u64 file, u64 line, bool return_address)
 static inline __attribute__((__always_inline__)) bool
 bsearch_step(void *inner_map, u32 *lo, u32 *hi, u16 page_offset)
 {
-  u32 pivot = (*lo + *hi) >> 1;
+  u32 pivot         = (*lo + *hi) >> 1;
   StackDelta *delta = bpf_map_lookup_elem(inner_map, &pivot);
   if (!delta) {
     *hi = 0;
@@ -157,8 +157,8 @@ static ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, u32 *unwindI
 
   // Look up the stack delta page information for this address.
   StackDeltaPageKey key = {};
-  key.fileID = state->text_section_id;
-  key.page = state->text_section_offset & ~STACK_DELTA_PAGE_MASK;
+  key.fileID            = state->text_section_id;
+  key.page              = state->text_section_offset & ~STACK_DELTA_PAGE_MASK;
   DEBUG_PRINT(
       "Look up stack delta for %lx:%lx",
       (unsigned long)state->text_section_id,
@@ -191,7 +191,7 @@ static ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, u32 *unwindI
   }
 
   // Preinitialize the idx for the index to use for page without any deltas.
-  u32 idx = info->firstDelta;
+  u32 idx         = info->firstDelta;
   u16 page_offset = state->text_section_offset & STACK_DELTA_PAGE_MASK;
   if (info->numDeltas) {
     // Page has deltas, so find the correct one to use using binary search.
@@ -246,7 +246,7 @@ static ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, u32 *unwindI
     deltaOffset += 1 << STACK_DELTA_PAGE_BITS;
   }
 
-  *addrDiff = deltaOffset;
+  *addrDiff   = deltaOffset;
   *unwindInfo = delta->unwindInfo;
 
   if (delta->unwindInfo == STACK_DELTA_INVALID) {
@@ -395,7 +395,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bo
   u32 unwindInfo = 0;
   u64 rt_regs[18];
   int addrDiff = 0;
-  u64 cfa = 0;
+  u64 cfa      = 0;
 
   // The relevant executable is compiled with frame pointer omission, so
   // stack deltas need to be retrieved from the relevant map.
@@ -422,14 +422,14 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bo
       if (bpf_probe_read_user(&rt_regs, sizeof(rt_regs), (void *)(state->sp + 40))) {
         goto err_native_pc_read;
       }
-      state->rax = rt_regs[13];
-      state->r9 = rt_regs[1];
-      state->r11 = rt_regs[3];
-      state->r13 = rt_regs[5];
-      state->r15 = rt_regs[7];
-      state->fp = rt_regs[10];
-      state->sp = rt_regs[15];
-      state->pc = rt_regs[16];
+      state->rax            = rt_regs[13];
+      state->r9             = rt_regs[1];
+      state->r11            = rt_regs[3];
+      state->r13            = rt_regs[5];
+      state->r15            = rt_regs[7];
+      state->fp             = rt_regs[10];
+      state->sp             = rt_regs[15];
+      state->pc             = rt_regs[16];
       state->return_address = false;
       DEBUG_PRINT("signal frame");
       goto frame_ok;
@@ -457,7 +457,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bo
 
     // Resolve the frame's CFA (previous PC is fixed to CFA) address, and
     // the previous FP address if any.
-    cfa = unwind_register_address(state, 0, info->opcode, param);
+    cfa     = unwind_register_address(state, 0, info->opcode, param);
     u64 fpa = unwind_register_address(state, cfa, info->fpOpcode, info->fpParam);
 
     if (fpa) {
@@ -485,7 +485,7 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
   *stop = false;
 
   u32 unwindInfo = 0;
-  int addrDiff = 0;
+  int addrDiff   = 0;
   u64 rt_regs[34];
   u64 cfa = 0;
 
@@ -509,13 +509,13 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
       if (bpf_probe_read_user(&rt_regs, sizeof(rt_regs), (void *)(state->sp + 312))) {
         goto err_native_pc_read;
       }
-      state->pc = normalize_pac_ptr(rt_regs[32]);
-      state->sp = rt_regs[31];
-      state->fp = rt_regs[29];
-      state->lr = normalize_pac_ptr(rt_regs[30]);
-      state->r22 = rt_regs[22];
+      state->pc             = normalize_pac_ptr(rt_regs[32]);
+      state->sp             = rt_regs[31];
+      state->fp             = rt_regs[29];
+      state->lr             = normalize_pac_ptr(rt_regs[30]);
+      state->r22            = rt_regs[22];
       state->return_address = false;
-      state->lr_invalid = false;
+      state->lr_invalid     = false;
       DEBUG_PRINT("signal frame");
       goto frame_ok;
     case UNWIND_COMMAND_STOP:
@@ -669,7 +669,7 @@ SEC("perf_event/native_tracer_entry")
 int native_tracer_entry(struct bpf_perf_event_data *ctx)
 {
   // Get the PID and TGID register.
-  u64 id = bpf_get_current_pid_tgid();
+  u64 id  = bpf_get_current_pid_tgid();
   u32 pid = id >> 32;
   u32 tid = id & 0xFFFFFFFF;
 

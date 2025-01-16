@@ -74,16 +74,16 @@ static int (*bpf_map_update_elem)(void *map, void *key, void *value, u64 flags) 
 static int (*bpf_map_delete_elem)(void *map, void *key) = (void *)BPF_FUNC_map_delete_elem;
 static int (*bpf_probe_read)(void *dst, int size, const void *unsafe_ptr) = (void *)
     BPF_FUNC_probe_read;
-static unsigned long long (*bpf_ktime_get_ns)(void) = (void *)BPF_FUNC_ktime_get_ns;
+static unsigned long long (*bpf_ktime_get_ns)(void)         = (void *)BPF_FUNC_ktime_get_ns;
 static unsigned long long (*bpf_get_current_pid_tgid)(void) = (void *)BPF_FUNC_get_current_pid_tgid;
 static int (*bpf_get_current_comm)(void *buf, int buf_size) = (void *)BPF_FUNC_get_current_comm;
 static void (*bpf_tail_call)(void *ctx, void *map, int index) = (void *)BPF_FUNC_tail_call;
-static unsigned long long (*bpf_get_current_task)(void) = (void *)BPF_FUNC_get_current_task;
+static unsigned long long (*bpf_get_current_task)(void)       = (void *)BPF_FUNC_get_current_task;
 static int (*bpf_perf_event_output)(
     void *ctx, void *map, unsigned long long flags, void *data, int size) = (void *)
     BPF_FUNC_perf_event_output;
 static int (*bpf_get_stackid)(void *ctx, void *map, u64 flags) = (void *)BPF_FUNC_get_stackid;
-static unsigned long long (*bpf_get_prandom_u32)(void) = (void *)BPF_FUNC_get_prandom_u32;
+static unsigned long long (*bpf_get_prandom_u32)(void)         = (void *)BPF_FUNC_get_prandom_u32;
 
 __attribute__((format(printf, 1, 3))) static int (*bpf_trace_printk)(
     const char *fmt, int fmt_size, ...) = (void *)BPF_FUNC_trace_printk;
