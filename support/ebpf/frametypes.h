@@ -39,9 +39,9 @@
 #define FRAME_MARKER_ABORT (0x7F | FRAME_MARKER_ERROR_BIT)
 
 // HotSpot frame subtypes stored in a bitfield of the trace->lines[]
-#define FRAME_HOTSPOT_STUB 0
-#define FRAME_HOTSPOT_VTABLE 1
+#define FRAME_HOTSPOT_STUB        0
+#define FRAME_HOTSPOT_VTABLE      1
 #define FRAME_HOTSPOT_INTERPRETER 2
-#define FRAME_HOTSPOT_NATIVE 3
+#define FRAME_HOTSPOT_NATIVE      3
 
 #endif

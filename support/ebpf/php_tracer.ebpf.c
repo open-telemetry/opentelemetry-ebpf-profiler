@@ -15,7 +15,7 @@
 
 // zend_function.type values we need from php/Zend/zend_compile.h
 #define ZEND_USER_FUNCTION 2
-#define ZEND_EVAL_CODE 4
+#define ZEND_EVAL_CODE     4
 
 // Map from PHP process IDs to the address of the `executor_globals` for that process
 bpf_map_def SEC("maps") php_procs = {

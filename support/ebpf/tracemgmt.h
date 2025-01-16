@@ -504,9 +504,9 @@ static inline __attribute__((__always_inline__)) void tail_call(void *ctx, int n
 #ifndef __USER32_CS
   // defined in arch/x86/include/asm/segment.h
   #define GDT_ENTRY_DEFAULT_USER32_CS 4
-  #define GDT_ENTRY_DEFAULT_USER_DS 5
-  #define __USER32_CS (GDT_ENTRY_DEFAULT_USER32_CS * 8 + 3)
-  #define __USER_DS (GDT_ENTRY_DEFAULT_USER_DS * 8 + 3)
+  #define GDT_ENTRY_DEFAULT_USER_DS   5
+  #define __USER32_CS                 (GDT_ENTRY_DEFAULT_USER32_CS * 8 + 3)
+  #define __USER_DS                   (GDT_ENTRY_DEFAULT_USER_DS * 8 + 3)
 #endif
 
 #ifdef __aarch64__

@@ -809,13 +809,13 @@ typedef struct PIDPage {
 #define BIT_WIDTH_PAGE 64
 
 // Constants for accessing bitfields within HotSpot text_section_offset/file_id.
-#define HS_TSID_IS_STUB_BIT 63
-#define HS_TSID_HAS_FRAME_BIT 62
-#define HS_TSID_STACK_DELTA_BIT 56
-#define HS_TSID_STACK_DELTA_MASK ((1UL << 6) - 1)
+#define HS_TSID_IS_STUB_BIT       63
+#define HS_TSID_HAS_FRAME_BIT     62
+#define HS_TSID_STACK_DELTA_BIT   56
+#define HS_TSID_STACK_DELTA_MASK  ((1UL << 6) - 1)
 #define HS_TSID_STACK_DELTA_SCALE 8
-#define HS_TSID_SEG_MAP_BIT 0
-#define HS_TSID_SEG_MAP_MASK ((1UL << 56) - 1)
+#define HS_TSID_SEG_MAP_BIT       0
+#define HS_TSID_SEG_MAP_MASK      ((1UL << 56) - 1)
 
 // PIDPageMappingInfo represents the value of the eBPF map pid_page_to_mapping_info.
 typedef struct PIDPageMappingInfo {
@@ -880,8 +880,8 @@ typedef struct SystemConfig {
 // Avoid including all of arch/arm64/include/uapi/asm/ptrace.h by copying the
 // actually used values.
 #define PSR_MODE32_BIT 0x00000010
-#define PSR_MODE_MASK 0x0000000f
-#define PSR_MODE_EL0t 0x00000000
+#define PSR_MODE_MASK  0x0000000f
+#define PSR_MODE_EL0t  0x00000000
 
 typedef struct ApmIntProcInfo {
   u64 tls_offset;

@@ -86,10 +86,10 @@ typedef enum HotspotUnwindAction {
 
 // The hotspot frame type is distinguished from the first 4 characters of the CodeBlob
 // type name. This provides constants for the needed strings.
-#define FRAMETYPE_nmethod 0x74656d6e        // "nmethod"
+#define FRAMETYPE_nmethod        0x74656d6e // "nmethod"
 #define FRAMETYPE_native_nmethod 0x6974616e // "native nmethod"
-#define FRAMETYPE_Interpreter 0x65746e49    // "Interpreter"
-#define FRAMETYPE_vtable_chunks 0x62617476  // "vtable chunks"
+#define FRAMETYPE_Interpreter    0x65746e49 // "Interpreter"
+#define FRAMETYPE_vtable_chunks  0x62617476 // "vtable chunks"
 
 bpf_map_def SEC("maps") hotspot_procs = {
     .type = BPF_MAP_TYPE_HASH,
@@ -240,7 +240,7 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_handle_interprete
   // https://github.com/openjdk/jdk8u/blob/master/hotspot/src/cpu/aarch64/vm/frame_aarch64.hpp#L125
   #define BCP_SLOT_JVM8 7
   // https://hg.openjdk.org/jdk-updates/jdk14u/file/default/src/hotspot/cpu/aarch64/assembler_aarch64.hpp#l136
-  #define BCP_REGISTER r22
+  #define BCP_REGISTER  r22
 #endif
   u64 regs[FP_OFFS + 2];
   if (bpf_probe_read_user(regs, sizeof(regs), (void *)(ui->fp - sizeof(u64[FP_OFFS])))) {
@@ -522,7 +522,7 @@ hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotU
   u64 add = 0x910003ff | ((u64)cbi->frame_size << 10);
 
   #define EPI_LOOKBACK 6
-  #define INSN_LEN 4
+  #define INSN_LEN     4
 
   // Scan for the epilogue pattern, using a 64-bit wide sliding window with a 32-bit stride.
   u8 find_offset = 0;

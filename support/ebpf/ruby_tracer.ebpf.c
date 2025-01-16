@@ -22,7 +22,7 @@ bpf_map_def SEC("maps") ruby_procs = {
 // treat frames in a dedicated way.
 // https://github.com/ruby/ruby/blob/5741ae379b2037ad5968b6994309e1d25cda6e1a/vm_core.h#L1208
 #define RUBY_FRAME_FLAG_BMETHOD 0x0040
-#define RUBY_FRAME_FLAG_LAMBDA 0x0100
+#define RUBY_FRAME_FLAG_LAMBDA  0x0100
 
 // Record a Ruby frame
 static inline __attribute__((__always_inline__)) ErrorCode

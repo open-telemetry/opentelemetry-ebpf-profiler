@@ -9,7 +9,7 @@
   // dispatch the BPF API to helpers implemented in ebpfhelpers.go.
   #define SEC(NAME)
 
-  #define printt(fmt, ...) bpf_log(fmt, ##__VA_ARGS__)
+  #define printt(fmt, ...)      bpf_log(fmt, ##__VA_ARGS__)
   #define DEBUG_PRINT(fmt, ...) bpf_log(fmt, ##__VA_ARGS__)
   #define OPTI_DEBUG
 

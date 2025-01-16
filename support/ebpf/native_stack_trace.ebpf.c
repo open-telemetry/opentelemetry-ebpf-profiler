@@ -35,7 +35,7 @@ STACK_DELTA_BUCKET(23);
 
 // Unwind info value for invalid stack delta
 #define STACK_DELTA_INVALID (STACK_DELTA_COMMAND_FLAG | UNWIND_COMMAND_INVALID)
-#define STACK_DELTA_STOP (STACK_DELTA_COMMAND_FLAG | UNWIND_COMMAND_STOP)
+#define STACK_DELTA_STOP    (STACK_DELTA_COMMAND_FLAG | UNWIND_COMMAND_STOP)
 
 // An array of unwind info contains the all the different UnwindInfo instances
 // needed system wide. Individual stack delta entries refer to this array.

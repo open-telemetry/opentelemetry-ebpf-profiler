@@ -18,14 +18,14 @@
 
 // The Trace 'file' field is split to object pointer (aligned to 8 bytes),
 // and the zero bits due to alignment are re-used as the following flags.
-#define V8_FILE_TYPE_MARKER 0x0
-#define V8_FILE_TYPE_BYTECODE 0x1
-#define V8_FILE_TYPE_NATIVE_SFI 0x2
-#define V8_FILE_TYPE_NATIVE_CODE 0x3
+#define V8_FILE_TYPE_MARKER        0x0
+#define V8_FILE_TYPE_BYTECODE      0x1
+#define V8_FILE_TYPE_NATIVE_SFI    0x2
+#define V8_FILE_TYPE_NATIVE_CODE   0x3
 #define V8_FILE_TYPE_NATIVE_JSFUNC 0x4
-#define V8_FILE_TYPE_MASK 0x7
+#define V8_FILE_TYPE_MASK          0x7
 
 // The Trace 'line' field is split to two 32-bit fields: cookie and PC-delta
 #define V8_LINE_COOKIE_SHIFT 32
-#define V8_LINE_COOKIE_MASK 0xffffffff00000000
-#define V8_LINE_DELTA_MASK 0x00000000ffffffff
+#define V8_LINE_COOKIE_MASK  0xffffffff00000000
+#define V8_LINE_DELTA_MASK   0x00000000ffffffff

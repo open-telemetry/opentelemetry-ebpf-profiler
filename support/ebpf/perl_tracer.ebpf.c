@@ -43,10 +43,10 @@
 // PERL_CONTEXT type definitions
 // https://github.com/Perl/perl5/blob/v5.32.0/cop.h#L886-L909
 #define CXTYPEMASK 0xf
-#define CXt_SUB 9
+#define CXt_SUB    9
 #define CXt_FORMAT 10
-#define CXt_EVAL 11
-#define CXt_SUBST 12
+#define CXt_EVAL   11
+#define CXt_SUBST  12
 
 // Flags for CXt_SUB (and FORMAT)
 // https://github.com/Perl/perl5/blob/v5.32.0/cop.h#L912-L917

@@ -16,7 +16,7 @@
 #define DOTNET_MAX_FRAME_LENGTH 8192
 
 // Keep in sync with dotnet interpreter code
-#define DOTNET_CODE_JIT 0x1f
+#define DOTNET_CODE_JIT       0x1f
 #define DOTNET_CODE_FLAG_LEAF 0x80
 
 // Map from dotnet process IDs to a structure containing addresses of variables
@@ -30,10 +30,10 @@ bpf_map_def SEC("maps") dotnet_procs = {
 
 // Nibble map tunables
 // https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/inc/nibblemapmacros.h
-#define DOTNET_CODE_ALIGN 4
-#define DOTNET_CODE_NIBBLES_PER_ENTRY 8 // 8nibbles * 4 bits/nibble = 32bit word
-#define DOTNET_CODE_BYTES_PER_NIBBLE 32 // one nibble maps to 32 bytes of code
-#define DOTNET_CODE_BYTES_PER_ENTRY (DOTNET_CODE_BYTES_PER_NIBBLE * DOTNET_CODE_NIBBLES_PER_ENTRY)
+#define DOTNET_CODE_ALIGN             4
+#define DOTNET_CODE_NIBBLES_PER_ENTRY 8  // 8nibbles * 4 bits/nibble = 32bit word
+#define DOTNET_CODE_BYTES_PER_NIBBLE  32 // one nibble maps to 32 bytes of code
+#define DOTNET_CODE_BYTES_PER_ENTRY   (DOTNET_CODE_BYTES_PER_NIBBLE * DOTNET_CODE_NIBBLES_PER_ENTRY)
 
 // Find method code header using a dotnet coreclr "NibbleMap"
 // Currently this technically could require an unbounded for loop to scan through the nibble map.
