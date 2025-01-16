@@ -20,22 +20,22 @@
 // We thus define the integer types based on primitive types and do a static
 // assertion that this works as expected. All of our target architectures use
 // the same integer model, so there's no need for ifdefs.
-typedef signed char         s8;
-typedef unsigned char       u8;
-typedef signed short        s16;
-typedef unsigned short      u16;
-typedef signed int          s32;
-typedef unsigned int        u32;
-typedef signed long long    s64;
-typedef unsigned long long  u64;
+typedef signed char s8;
+typedef unsigned char u8;
+typedef signed short s16;
+typedef unsigned short u16;
+typedef signed int s32;
+typedef unsigned int u32;
+typedef signed long long s64;
+typedef unsigned long long u64;
 
 // Size types need to be declared with __SIZE_TYPE__ built-in to not clash with
 // CGo's built-in prolog.
 typedef __SIZE_TYPE__ uintptr_t;
 typedef __SIZE_TYPE__ size_t;
 
-_Static_assert(sizeof(s8 ) == 1, "bad s8 size" );
-_Static_assert(sizeof(u8 ) == 1, "bad u8 size" );
+_Static_assert(sizeof(s8) == 1, "bad s8 size");
+_Static_assert(sizeof(u8) == 1, "bad u8 size");
 _Static_assert(sizeof(s16) == 2, "bad s16 size");
 _Static_assert(sizeof(u16) == 2, "bad u16 size");
 _Static_assert(sizeof(s32) == 4, "bad s32 size");
@@ -44,20 +44,20 @@ _Static_assert(sizeof(s64) == 8, "bad s64 size");
 _Static_assert(sizeof(u64) == 8, "bad u64 size");
 
 _Static_assert(sizeof(uintptr_t) == 8, "bad uintptr_t size");
-_Static_assert(sizeof(size_t   ) == 8, "bad size_t size"   );
+_Static_assert(sizeof(size_t) == 8, "bad size_t size");
 
 // Define bool type (emulates stdbool.h).
 typedef _Bool bool;
 #ifndef __bool_true_false_are_defined
-# define true 1
-# define false 0
-# define __bool_true_false_are_defined 1
+  #define true 1
+  #define false 0
+  #define __bool_true_false_are_defined 1
 #endif
 
 // Go defines `NULL` in `cgo-builtin-prolog`, so we have to check whether
 // it is already defined here (for when this is included in CGo).
 #ifndef NULL
-# define NULL ((void*)0)
+  #define NULL ((void *)0)
 #endif
 
 typedef int pid_t;
@@ -71,48 +71,48 @@ struct task_struct;
 
 // Defined in arch/{x86,arm64}/include/asm/ptrace.h
 #if defined(__x86_64)
-# define reg_pc ip
-  struct pt_regs {
-    unsigned long r15;
-    unsigned long r14;
-    unsigned long r13;
-    unsigned long r12;
-    unsigned long bp;
-    unsigned long bx;
-    unsigned long r11;
-    unsigned long r10;
-    unsigned long r9;
-    unsigned long r8;
-    unsigned long ax;
-    unsigned long cx;
-    unsigned long dx;
-    unsigned long si;
-    unsigned long di;
-    unsigned long orig_ax;
-    unsigned long ip;
-    unsigned long cs;
-    unsigned long flags;
-    unsigned long sp;
-    unsigned long ss;
-  };
-# elif defined(__aarch64__)
-  struct pt_regs {
-    u64 regs[31];
-    u64 sp;
-    u64 pc;
-    u64 pstate;
-    u64 orig_x0;
-    s32 syscallno;
-    u32 unused2;
-    u64 sdei_ttbr1;
-    u64 pmr_save;
-    u64 stackframe[2];
-    u64 lockdep_hardirqs;
-    u64 exit_rcu;
-  };
-# define reg_pc pc
+  #define reg_pc ip
+struct pt_regs {
+  unsigned long r15;
+  unsigned long r14;
+  unsigned long r13;
+  unsigned long r12;
+  unsigned long bp;
+  unsigned long bx;
+  unsigned long r11;
+  unsigned long r10;
+  unsigned long r9;
+  unsigned long r8;
+  unsigned long ax;
+  unsigned long cx;
+  unsigned long dx;
+  unsigned long si;
+  unsigned long di;
+  unsigned long orig_ax;
+  unsigned long ip;
+  unsigned long cs;
+  unsigned long flags;
+  unsigned long sp;
+  unsigned long ss;
+};
+#elif defined(__aarch64__)
+struct pt_regs {
+  u64 regs[31];
+  u64 sp;
+  u64 pc;
+  u64 pstate;
+  u64 orig_x0;
+  s32 syscallno;
+  u32 unused2;
+  u64 sdei_ttbr1;
+  u64 pmr_save;
+  u64 stackframe[2];
+  u64 lockdep_hardirqs;
+  u64 exit_rcu;
+};
+  #define reg_pc pc
 #else
-# error "Unsupported architecture"
+  #error "Unsupported architecture"
 #endif
 
 struct bpf_perf_event_data {
@@ -124,79 +124,79 @@ struct bpf_perf_event_data {
 //    clang -dM -E -x c /dev/null | grep ENDI
 //      gcc -dM -E -x c /dev/null | grep ENDI
 #if defined __BYTE_ORDER__ && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-# define __constant_cpu_to_be32(x) __builtin_bswap32(x)
-# define __constant_cpu_to_be64(x) __builtin_bswap64(x)
+  #define __constant_cpu_to_be32(x) __builtin_bswap32(x)
+  #define __constant_cpu_to_be64(x) __builtin_bswap64(x)
 #elif defined __BYTE_ORDER__ && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-# define __constant_cpu_to_be32(x) (x)
-# define __constant_cpu_to_be64(x) (x)
+  #define __constant_cpu_to_be32(x) (x)
+  #define __constant_cpu_to_be64(x) (x)
 #else
-# error "Unknown endianness"
+  #error "Unknown endianness"
 #endif
 
 struct bpf_raw_tracepoint_args {
-	u64 args[0];
+  u64 args[0];
 };
 
 // Flags for bpf_map_update_elem
 enum {
-  BPF_ANY     = 0,
-  BPF_NOEXIST	= 1,
-  BPF_EXIST   = 2,
-  BPF_F_LOCK  = 4,
+  BPF_ANY = 0,
+  BPF_NOEXIST = 1,
+  BPF_EXIST = 2,
+  BPF_F_LOCK = 4,
 };
 
 // Flags for perf event helpers
 enum {
-  BPF_F_INDEX_MASK  = 0xFFFFFFFFULL,
-	BPF_F_CURRENT_CPU = BPF_F_INDEX_MASK,
-	BPF_F_CTXLEN_MASK = (0xFFFFFULL << 32),
+  BPF_F_INDEX_MASK = 0xFFFFFFFFULL,
+  BPF_F_CURRENT_CPU = BPF_F_INDEX_MASK,
+  BPF_F_CTXLEN_MASK = (0xFFFFFULL << 32),
 };
 
 // BPF map variants.
 enum bpf_map_type {
-	BPF_MAP_TYPE_UNSPEC,
-	BPF_MAP_TYPE_HASH,
-	BPF_MAP_TYPE_ARRAY,
-	BPF_MAP_TYPE_PROG_ARRAY,
-	BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-	BPF_MAP_TYPE_PERCPU_HASH,
-	BPF_MAP_TYPE_PERCPU_ARRAY,
-	BPF_MAP_TYPE_STACK_TRACE,
-	BPF_MAP_TYPE_CGROUP_ARRAY,
-	BPF_MAP_TYPE_LRU_HASH,
-	BPF_MAP_TYPE_LRU_PERCPU_HASH,
-	BPF_MAP_TYPE_LPM_TRIE,
-	BPF_MAP_TYPE_ARRAY_OF_MAPS,
-	BPF_MAP_TYPE_HASH_OF_MAPS,
-	BPF_MAP_TYPE_DEVMAP,
-	BPF_MAP_TYPE_SOCKMAP,
-	BPF_MAP_TYPE_CPUMAP,
-	BPF_MAP_TYPE_XSKMAP,
-	BPF_MAP_TYPE_SOCKHASH,
-	BPF_MAP_TYPE_CGROUP_STORAGE_DEPRECATED,
-	BPF_MAP_TYPE_CGROUP_STORAGE = BPF_MAP_TYPE_CGROUP_STORAGE_DEPRECATED,
-	BPF_MAP_TYPE_REUSEPORT_SOCKARRAY,
-	BPF_MAP_TYPE_PERCPU_CGROUP_STORAGE,
-	BPF_MAP_TYPE_QUEUE,
-	BPF_MAP_TYPE_STACK,
-	BPF_MAP_TYPE_SK_STORAGE,
-	BPF_MAP_TYPE_DEVMAP_HASH,
-	BPF_MAP_TYPE_STRUCT_OPS,
-	BPF_MAP_TYPE_RINGBUF,
-	BPF_MAP_TYPE_INODE_STORAGE,
-	BPF_MAP_TYPE_TASK_STORAGE,
-	BPF_MAP_TYPE_BLOOM_FILTER,
-	BPF_MAP_TYPE_USER_RINGBUF,
-	BPF_MAP_TYPE_CGRP_STORAGE,
+  BPF_MAP_TYPE_UNSPEC,
+  BPF_MAP_TYPE_HASH,
+  BPF_MAP_TYPE_ARRAY,
+  BPF_MAP_TYPE_PROG_ARRAY,
+  BPF_MAP_TYPE_PERF_EVENT_ARRAY,
+  BPF_MAP_TYPE_PERCPU_HASH,
+  BPF_MAP_TYPE_PERCPU_ARRAY,
+  BPF_MAP_TYPE_STACK_TRACE,
+  BPF_MAP_TYPE_CGROUP_ARRAY,
+  BPF_MAP_TYPE_LRU_HASH,
+  BPF_MAP_TYPE_LRU_PERCPU_HASH,
+  BPF_MAP_TYPE_LPM_TRIE,
+  BPF_MAP_TYPE_ARRAY_OF_MAPS,
+  BPF_MAP_TYPE_HASH_OF_MAPS,
+  BPF_MAP_TYPE_DEVMAP,
+  BPF_MAP_TYPE_SOCKMAP,
+  BPF_MAP_TYPE_CPUMAP,
+  BPF_MAP_TYPE_XSKMAP,
+  BPF_MAP_TYPE_SOCKHASH,
+  BPF_MAP_TYPE_CGROUP_STORAGE_DEPRECATED,
+  BPF_MAP_TYPE_CGROUP_STORAGE = BPF_MAP_TYPE_CGROUP_STORAGE_DEPRECATED,
+  BPF_MAP_TYPE_REUSEPORT_SOCKARRAY,
+  BPF_MAP_TYPE_PERCPU_CGROUP_STORAGE,
+  BPF_MAP_TYPE_QUEUE,
+  BPF_MAP_TYPE_STACK,
+  BPF_MAP_TYPE_SK_STORAGE,
+  BPF_MAP_TYPE_DEVMAP_HASH,
+  BPF_MAP_TYPE_STRUCT_OPS,
+  BPF_MAP_TYPE_RINGBUF,
+  BPF_MAP_TYPE_INODE_STORAGE,
+  BPF_MAP_TYPE_TASK_STORAGE,
+  BPF_MAP_TYPE_BLOOM_FILTER,
+  BPF_MAP_TYPE_USER_RINGBUF,
+  BPF_MAP_TYPE_CGRP_STORAGE,
 };
 
 // Flags bpf_get_stackid/bpf_get_stack.
 enum {
-	BPF_F_SKIP_FIELD_MASK = 0xffULL,
-	BPF_F_USER_STACK      = (1ULL << 8),
-	BPF_F_FAST_STACK_CMP  = (1ULL << 9),
-	BPF_F_REUSE_STACKID   = (1ULL << 10),
-	BPF_F_USER_BUILD_ID   = (1ULL << 11),
+  BPF_F_SKIP_FIELD_MASK = 0xffULL,
+  BPF_F_USER_STACK = (1ULL << 8),
+  BPF_F_FAST_STACK_CMP = (1ULL << 9),
+  BPF_F_REUSE_STACKID = (1ULL << 10),
+  BPF_F_USER_BUILD_ID = (1ULL << 11),
 };
 
 // Flags for bpf_map_create

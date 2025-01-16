@@ -1,15 +1,16 @@
 // This file contains the code and map definitions that are used in integration tests only.
 
 #include "bpfdefs.h"
-#include "frametypes.h"
-#include "types.h"
 #include "extmaps.h"
+#include "frametypes.h"
 #include "tracemgmt.h"
+#include "types.h"
 
 extern bpf_map_def kernel_stackmap;
 
-static inline __attribute__((__always_inline__))
-void send_sample_traces(void *ctx, u64 pid, s32 kstack) {
+static inline __attribute__((__always_inline__)) void
+send_sample_traces(void *ctx, u64 pid, s32 kstack)
+{
   // Use the per CPU record for trace storage: it's too big for stack.
   PerCPURecord *record = get_pristine_per_cpu_record();
   if (!record) {
@@ -29,9 +30,8 @@ void send_sample_traces(void *ctx, u64 pid, s32 kstack) {
   trace->comm[3] = 1;
   trace->pid = pid;
   trace->tid = pid;
-  trace->kernel_stack_id = -1,
-  trace->stack_len = 1;
-  trace->frames[0] = (Frame) {
+  trace->kernel_stack_id = -1, trace->stack_len = 1;
+  trace->frames[0] = (Frame){
       .kind = FRAME_MARKER_NATIVE,
       .file_id = 1337,
       .addr_or_line = 21,
@@ -47,20 +47,20 @@ void send_sample_traces(void *ctx, u64 pid, s32 kstack) {
   trace->comm[3] = 3;
   trace->kernel_stack_id = -1;
   trace->stack_len = 3;
-  trace->frames[0] = (Frame) {
-    .kind = FRAME_MARKER_NATIVE,
-    .file_id = 1337,
-    .addr_or_line = 42,
+  trace->frames[0] = (Frame){
+      .kind = FRAME_MARKER_NATIVE,
+      .file_id = 1337,
+      .addr_or_line = 42,
   };
-  trace->frames[1] = (Frame) {
-    .kind = FRAME_MARKER_NATIVE,
-    .file_id = 1338,
-    .addr_or_line = 21,
+  trace->frames[1] = (Frame){
+      .kind = FRAME_MARKER_NATIVE,
+      .file_id = 1338,
+      .addr_or_line = 21,
   };
-  trace->frames[2] = (Frame) {
-    .kind = FRAME_MARKER_PYTHON,
-    .file_id = 1339,
-    .addr_or_line = 22,
+  trace->frames[2] = (Frame){
+      .kind = FRAME_MARKER_PYTHON,
+      .file_id = 1339,
+      .addr_or_line = 22,
   };
   send_trace(ctx, trace);
 
@@ -73,10 +73,10 @@ void send_sample_traces(void *ctx, u64 pid, s32 kstack) {
     // NOTE: this init schema eats up a lot of instructions. If we need more
     // space later, we can instead just init `.kind` and a few fields in the
     // start, middle, and end of the trace.
-    trace->frames[i] = (Frame) {
-      .kind = FRAME_MARKER_NATIVE,
-      .file_id = ~i,
-      .addr_or_line = i,
+    trace->frames[i] = (Frame){
+        .kind = FRAME_MARKER_NATIVE,
+        .file_id = ~i,
+        .addr_or_line = i,
     };
   }
   send_trace(ctx, trace);
@@ -85,7 +85,8 @@ void send_sample_traces(void *ctx, u64 pid, s32 kstack) {
 // tracepoint_integration__sched_switch fetches the current kernel stack ID from
 // kernel_stackmap and communicates it to userspace via kernel_stack_id map.
 SEC("tracepoint/integration/sched_switch")
-int tracepoint_integration__sched_switch(void *ctx) {
+int tracepoint_integration__sched_switch(void *ctx)
+{
   u64 id = bpf_get_current_pid_tgid();
   u64 pid = id >> 32;
 

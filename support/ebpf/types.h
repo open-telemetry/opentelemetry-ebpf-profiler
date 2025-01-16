@@ -3,8 +3,8 @@
 #ifndef OPTI_TYPES_H
 #define OPTI_TYPES_H
 
-#include "kernel.h"
 #include "errors.h"
+#include "kernel.h"
 
 // ID values used as index to maps/metrics array.
 // If you add enums below please update the following places too:
@@ -512,7 +512,8 @@ _Static_assert(sizeof(ApmSpanID) == 8, "unexpected trace ID size");
 
 // Defines the format of the APM correlation TLS buffer.
 //
-// Specification: https://github.com/elastic/apm/blob/bd5fa9c1/specs/agents/universal-profiling-integration.md#thread-local-storage-layout
+// Specification:
+// https://github.com/elastic/apm/blob/bd5fa9c1/specs/agents/universal-profiling-integration.md#thread-local-storage-layout
 typedef struct __attribute__((packed)) ApmCorrelationBuf {
   u16 layout_minor_ver;
   u8 valid;
@@ -646,7 +647,7 @@ typedef struct DotnetUnwindScratchSpace {
   // can recognize: 256 bytes/element * 128 elements = 32kB function size.
   // Multiplied by two for extra space to read to this array a fixed amount of bytes
   // to a dynamic offset.
-  u32 map[2*128];
+  u32 map[2 * 128];
 } DotnetUnwindScratchSpace;
 
 // Container for additional scratch space needed by the HotSpot unwinder.
@@ -658,7 +659,7 @@ typedef struct HotspotUnwindScratchSpace {
 } HotspotUnwindScratchSpace;
 
 // The number of bytes read from frame pointer for V8 context
-#define V8_FP_CONTEXT_SIZE      64
+#define V8_FP_CONTEXT_SIZE 64
 
 // Container for additional scratch space needed by the V8 unwinder.
 typedef struct V8UnwindScratchSpace {
@@ -718,11 +719,11 @@ typedef struct PerCPURecord {
 // UnwindInfo contains the unwind information needed to unwind one frame
 // from a specific address.
 typedef struct UnwindInfo {
-  u8 opcode;       // main opcode to unwind CFA
-  u8 fpOpcode;     // opcode to unwind FP
-  u8 mergeOpcode;  // opcode for generating next stack delta, see below
-  s32 param;       // parameter for the CFA expression
-  s32 fpParam;     // parameter for the FP expression
+  u8 opcode;      // main opcode to unwind CFA
+  u8 fpOpcode;    // opcode to unwind FP
+  u8 mergeOpcode; // opcode for generating next stack delta, see below
+  s32 param;      // parameter for the CFA expression
+  s32 fpParam;    // parameter for the FP expression
 } UnwindInfo;
 
 // The 8-bit mergeOpcode consists of two separate fields:
@@ -759,7 +760,6 @@ typedef struct StackDeltaPageInfo {
   u16 mapID;
 } StackDeltaPageInfo;
 
-
 // Keep stack deltas in 64kB pages to limit search space and to fit the low address
 // bits into the addrLow field of struct StackDelta.
 #define STACK_DELTA_PAGE_BITS 16
@@ -775,7 +775,7 @@ typedef struct StackDeltaPageInfo {
 typedef struct OffsetRange {
   u64 lower_offset;
   u64 upper_offset;
-  u16 program_index;  // The interpreter-specific program index to call.
+  u16 program_index; // The interpreter-specific program index to call.
 } OffsetRange;
 
 // SystemAnalysis is the structure in system_analysis map
@@ -796,36 +796,35 @@ typedef struct Event {
 
 // PIDPage represents the key of the eBPF map pid_page_to_mapping_info.
 typedef struct PIDPage {
-  u32 prefixLen;    // Number of bits for pid and page that defines the
-                    // longest prefix.
+  u32 prefixLen; // Number of bits for pid and page that defines the
+                 // longest prefix.
 
-  __be32 pid;       // Unique ID of the process.
-  __be64 page;      // Address to a certain part of memory within PID.
+  __be32 pid;  // Unique ID of the process.
+  __be64 page; // Address to a certain part of memory within PID.
 } PIDPage;
 
-
 // BIT_WIDTH_PID defines the number of bits used in the value pid of the PIDPage struct.
-#define BIT_WIDTH_PID  32
+#define BIT_WIDTH_PID 32
 // BIT_WIDTH_PAGE defines the number of bits used in the value page of the PIDPage struct.
 #define BIT_WIDTH_PAGE 64
 
 // Constants for accessing bitfields within HotSpot text_section_offset/file_id.
-#define HS_TSID_IS_STUB_BIT       63
-#define HS_TSID_HAS_FRAME_BIT     62
-#define HS_TSID_STACK_DELTA_BIT   56
-#define HS_TSID_STACK_DELTA_MASK  ((1UL << 6) - 1)
+#define HS_TSID_IS_STUB_BIT 63
+#define HS_TSID_HAS_FRAME_BIT 62
+#define HS_TSID_STACK_DELTA_BIT 56
+#define HS_TSID_STACK_DELTA_MASK ((1UL << 6) - 1)
 #define HS_TSID_STACK_DELTA_SCALE 8
-#define HS_TSID_SEG_MAP_BIT       0
-#define HS_TSID_SEG_MAP_MASK      ((1UL << 56) - 1)
+#define HS_TSID_SEG_MAP_BIT 0
+#define HS_TSID_SEG_MAP_MASK ((1UL << 56) - 1)
 
 // PIDPageMappingInfo represents the value of the eBPF map pid_page_to_mapping_info.
 typedef struct PIDPageMappingInfo {
-  u64 file_id;                  // Unique identifier for the executable file
+  u64 file_id; // Unique identifier for the executable file
 
-    // Load bias (7 bytes) + unwinding program to use (1 byte, shifted 7 bytes to the left), encoded in a u64.
-    // We can do so because the load bias is for userspace addresses, for which the most significant byte is always 0 on
-    // relevant architectures.
-    // This encoding may have to be changed if bias can be negative.
+  // Load bias (7 bytes) + unwinding program to use (1 byte, shifted 7 bytes to the left), encoded
+  // in a u64. We can do so because the load bias is for userspace addresses, for which the most
+  // significant byte is always 0 on relevant architectures. This encoding may have to be changed if
+  // bias can be negative.
   u64 bias_and_unwind_program;
 } PIDPageMappingInfo;
 
@@ -835,16 +834,18 @@ typedef struct PIDPageMappingInfo {
 #define FUNC_TYPE_UNKNOWN 0xfffffffffffffffe
 
 // Builds a bias_and_unwind_program value for PIDPageMappingInfo
-static inline __attribute__((__always_inline__))
-u64 encode_bias_and_unwind_program(u64 bias, int unwind_program) {
-    return bias | (((u64)unwind_program) << 56);
+static inline __attribute__((__always_inline__)) u64
+encode_bias_and_unwind_program(u64 bias, int unwind_program)
+{
+  return bias | (((u64)unwind_program) << 56);
 }
 
 // Reads a bias_and_unwind_program value from PIDPageMappingInfo
-static inline __attribute__((__always_inline__))
-void decode_bias_and_unwind_program(u64 bias_and_unwind_program, u64* bias, int* unwind_program) {
-    *bias = bias_and_unwind_program & 0x00FFFFFFFFFFFFFF;
-    *unwind_program = bias_and_unwind_program >> 56;
+static inline __attribute__((__always_inline__)) void
+decode_bias_and_unwind_program(u64 bias_and_unwind_program, u64 *bias, int *unwind_program)
+{
+  *bias = bias_and_unwind_program & 0x00FFFFFFFFFFFFFF;
+  *unwind_program = bias_and_unwind_program >> 56;
 }
 
 // Smallest stack delta bucket that holds up to 2^8 entries
@@ -879,8 +880,8 @@ typedef struct SystemConfig {
 // Avoid including all of arch/arm64/include/uapi/asm/ptrace.h by copying the
 // actually used values.
 #define PSR_MODE32_BIT 0x00000010
-#define PSR_MODE_MASK  0x0000000f
-#define PSR_MODE_EL0t  0x00000000
+#define PSR_MODE_MASK 0x0000000f
+#define PSR_MODE_EL0t 0x00000000
 
 typedef struct ApmIntProcInfo {
   u64 tls_offset;

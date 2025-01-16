@@ -8,40 +8,47 @@
 //
 // See the host agent interpreterv8.go for more references.
 
+#include "v8_tracer.h"
 #include "bpfdefs.h"
 #include "tracemgmt.h"
 #include "types.h"
-#include "v8_tracer.h"
 
-#define v8Ver(x,y,z) (((x)<<24)+((y)<<16)+(z))
+#define v8Ver(x, y, z) (((x) << 24) + ((y) << 16) + (z))
 
 // The number of V8 frames to unwind per frame-unwinding eBPF program.
-#define V8_FRAMES_PER_PROGRAM   8
+#define V8_FRAMES_PER_PROGRAM 8
 
 // The maximum V8 frame length used in heuristic to validate FP
-#define V8_MAX_FRAME_LENGTH     8192
+#define V8_MAX_FRAME_LENGTH 8192
 
 // Map from V8 process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") v8_procs = {
-  .type = BPF_MAP_TYPE_HASH,
-  .key_size = sizeof(pid_t),
-  .value_size = sizeof(V8ProcInfo),
-  .max_entries = 1024,
+    .type = BPF_MAP_TYPE_HASH,
+    .key_size = sizeof(pid_t),
+    .value_size = sizeof(V8ProcInfo),
+    .max_entries = 1024,
 };
 
 // Record a V8 frame
-static inline __attribute__((__always_inline__))
-ErrorCode push_v8(Trace *trace, unsigned long pointer_and_type, unsigned long delta_or_marker,
-    bool return_address) {
-  DEBUG_PRINT("Pushing v8 frame delta_or_marker=%lx, pointer_and_type=%lx",
-    delta_or_marker, pointer_and_type);
-  return _push_with_return_address(trace, pointer_and_type, delta_or_marker, FRAME_MARKER_V8, return_address);
+static inline __attribute__((__always_inline__)) ErrorCode push_v8(
+    Trace *trace,
+    unsigned long pointer_and_type,
+    unsigned long delta_or_marker,
+    bool return_address)
+{
+  DEBUG_PRINT(
+      "Pushing v8 frame delta_or_marker=%lx, pointer_and_type=%lx",
+      delta_or_marker,
+      pointer_and_type);
+  return _push_with_return_address(
+      trace, pointer_and_type, delta_or_marker, FRAME_MARKER_V8, return_address);
 }
 
 // Verify a V8 tagged pointer
-static inline __attribute__((__always_inline__))
-uintptr_t v8_verify_pointer(uintptr_t maybe_pointer) {
+static inline __attribute__((__always_inline__)) uintptr_t
+v8_verify_pointer(uintptr_t maybe_pointer)
+{
   if ((maybe_pointer & HeapObjectTagMask) != HeapObjectTag) {
     return 0;
   }
@@ -49,10 +56,10 @@ uintptr_t v8_verify_pointer(uintptr_t maybe_pointer) {
 }
 
 // Read and verify a V8 tagged pointer from given memory location.
-static inline __attribute__((__always_inline__))
-uintptr_t v8_read_object_ptr(uintptr_t addr) {
+static inline __attribute__((__always_inline__)) uintptr_t v8_read_object_ptr(uintptr_t addr)
+{
   uintptr_t maybe_pointer;
-  if (bpf_probe_read_user(&maybe_pointer, sizeof(maybe_pointer), (void*)addr)) {
+  if (bpf_probe_read_user(&maybe_pointer, sizeof(maybe_pointer), (void *)addr)) {
     return 0;
   }
   return v8_verify_pointer(maybe_pointer);
@@ -61,8 +68,9 @@ uintptr_t v8_read_object_ptr(uintptr_t addr) {
 // Verify and parse a V8 SMI  ("SMall Integer") value.
 // On 64-bit systems: SMI is the upper 32-bits of a 64-bit word, and the lowest bit is the tag.
 // Returns the SMI value, or def_value in case of errors.
-static inline __attribute__((__always_inline__))
-uintptr_t v8_parse_smi(uintptr_t maybe_smi, uintptr_t def_value) {
+static inline __attribute__((__always_inline__)) uintptr_t
+v8_parse_smi(uintptr_t maybe_smi, uintptr_t def_value)
+{
   if ((maybe_smi & SmiTagMask) != SmiTag) {
     return def_value;
   }
@@ -71,22 +79,24 @@ uintptr_t v8_parse_smi(uintptr_t maybe_smi, uintptr_t def_value) {
 
 // Read the type tag of a Heap Object at given memory location.
 // Returns zero on error (valid object type IDs are non-zero).
-static inline __attribute__((__always_inline__))
-u16 v8_read_object_type(V8ProcInfo *vi, uintptr_t addr) {
+static inline __attribute__((__always_inline__)) u16
+v8_read_object_type(V8ProcInfo *vi, uintptr_t addr)
+{
   if (!addr) {
     return 0;
   }
   uintptr_t map = v8_read_object_ptr(addr + vi->off_HeapObject_map);
   u16 type;
-  if (!map || bpf_probe_read_user(&type, sizeof(type), (void*)(map + vi->off_Map_instancetype))) {
+  if (!map || bpf_probe_read_user(&type, sizeof(type), (void *)(map + vi->off_Map_instancetype))) {
     return 0;
   }
   return type;
 }
 
 // Unwind one V8 frame
-static inline __attribute__((__always_inline__))
-ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
+static inline __attribute__((__always_inline__)) ErrorCode
+unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
+{
   UnwindState *state = &record->state;
   Trace *trace = &record->trace;
   unsigned long regs[2], sp = state->sp, fp = state->fp, pc = state->pc;
@@ -101,21 +111,21 @@ ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
   }
 
   // Read FP pointer data
-  if (bpf_probe_read_user(scratch->fp_ctx, V8_FP_CONTEXT_SIZE, (void*)(fp - V8_FP_CONTEXT_SIZE))) {
+  if (bpf_probe_read_user(scratch->fp_ctx, V8_FP_CONTEXT_SIZE, (void *)(fp - V8_FP_CONTEXT_SIZE))) {
     DEBUG_PRINT("v8:  -> failed to read frame pointer context");
     increment_metric(metricID_UnwindV8ErrBadFP);
     return ERR_V8_BAD_FP;
   }
 
   // Make the verifier happy to access fpctx using the HA provided fp_* variables
-  if (vi->fp_marker          > V8_FP_CONTEXT_SIZE - sizeof(unsigned long) ||
-      vi->fp_function        > V8_FP_CONTEXT_SIZE - sizeof(unsigned long) ||
+  if (vi->fp_marker > V8_FP_CONTEXT_SIZE - sizeof(unsigned long) ||
+      vi->fp_function > V8_FP_CONTEXT_SIZE - sizeof(unsigned long) ||
       vi->fp_bytecode_offset > V8_FP_CONTEXT_SIZE - sizeof(unsigned long)) {
     return ERR_UNREACHABLE;
   }
-  unsigned long fp_marker = *(unsigned long*)(scratch->fp_ctx + vi->fp_marker);
-  unsigned long fp_function = *(unsigned long*)(scratch->fp_ctx + vi->fp_function);
-  unsigned long fp_bytecode_offset = *(unsigned long*)(scratch->fp_ctx + vi->fp_bytecode_offset);
+  unsigned long fp_marker = *(unsigned long *)(scratch->fp_ctx + vi->fp_marker);
+  unsigned long fp_function = *(unsigned long *)(scratch->fp_ctx + vi->fp_function);
+  unsigned long fp_bytecode_offset = *(unsigned long *)(scratch->fp_ctx + vi->fp_bytecode_offset);
 
   // Data that will be sent to HA is in these variables.
   uintptr_t pointer_and_type = 0, delta_or_marker = 0;
@@ -134,8 +144,11 @@ ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
   uintptr_t jsfunc = v8_verify_pointer(fp_function);
   u16 jsfunc_tag = v8_read_object_type(vi, jsfunc);
   if (jsfunc_tag < vi->type_JSFunction_first || jsfunc_tag > vi->type_JSFunction_last) {
-    DEBUG_PRINT("v8:  -> not a JSFunction: %x <= %x <= %x",
-      vi->type_JSFunction_first, jsfunc_tag, vi->type_JSFunction_last);
+    DEBUG_PRINT(
+        "v8:  -> not a JSFunction: %x <= %x <= %x",
+        vi->type_JSFunction_first,
+        jsfunc_tag,
+        vi->type_JSFunction_last);
     increment_metric(metricID_UnwindV8ErrBadJSFunc);
     return ERR_V8_BAD_JS_FUNC;
   }
@@ -178,13 +191,13 @@ ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
   }
 
   // Read the Code blob type and size
-  if (bpf_probe_read_user(scratch->code, sizeof(scratch->code), (void*) code)) {
+  if (bpf_probe_read_user(scratch->code, sizeof(scratch->code), (void *)code)) {
     increment_metric(metricID_UnwindV8ErrBadCode);
     goto frame_done;
   }
   // Make the verifier happy to access fpctx using the HA provided fp_* variables
   if (vi->off_Code_instruction_size > sizeof(scratch->code) - sizeof(u32) ||
-      vi->off_Code_flags            > sizeof(scratch->code) - sizeof(u32)) {
+      vi->off_Code_flags > sizeof(scratch->code) - sizeof(u32)) {
     return ERR_UNREACHABLE;
   }
 
@@ -192,12 +205,12 @@ ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
   if (vi->version >= v8Ver(11, 1, 204)) {
     // Starting V8 11.1.204 the instruction/code start is a pointer field instead
     // of offset where the code starts.
-    code_start = *(uintptr_t*)(scratch->code + vi->off_Code_instruction_start);
+    code_start = *(uintptr_t *)(scratch->code + vi->off_Code_instruction_start);
   } else {
     code_start = code + vi->off_Code_instruction_start;
   }
-  u32 code_size  = *(u32*)(scratch->code + vi->off_Code_instruction_size);
-  u32 code_flags = *(u32*)(scratch->code + vi->off_Code_flags);
+  u32 code_size = *(u32 *)(scratch->code + vi->off_Code_instruction_size);
+  u32 code_flags = *(u32 *)(scratch->code + vi->off_Code_flags);
   u8 code_kind = (code_flags & vi->codekind_mask) >> vi->codekind_shift;
 
   uintptr_t code_end = code_start + code_size;
@@ -213,7 +226,7 @@ ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
 
     if (top && trace->stack_len == 0) {
       unsigned long stk[3];
-      if (bpf_probe_read_user(stk, sizeof(stk), (void*)(sp - sizeof(stk)))) {
+      if (bpf_probe_read_user(stk, sizeof(stk), (void *)(sp - sizeof(stk)))) {
         DEBUG_PRINT("v8:  --> bad stack pointer");
         increment_metric(metricID_UnwindV8ErrBadFP);
         return ERR_V8_BAD_FP;
@@ -221,7 +234,7 @@ ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
 
       int i;
 #pragma unroll
-      for (i = sizeof(stk)/sizeof(stk[0])-1; i >= 0; i--) {
+      for (i = sizeof(stk) / sizeof(stk[0]) - 1; i >= 0; i--) {
         if (stk[i] >= code_start && stk[i] < code_end) {
           break;
         }
@@ -229,8 +242,7 @@ ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
       if (i < 0) {
         // Not able to recover PC.
         // TODO: investigate why this seems to happen occasionally
-        DEBUG_PRINT("v8:  --> outside code blob: stack top %lx %lx %lx",
-          stk[2], stk[1], stk[0]);
+        DEBUG_PRINT("v8:  --> outside code blob: stack top %lx %lx %lx", stk[2], stk[1], stk[0]);
         goto frame_done;
       }
 
@@ -257,7 +269,7 @@ ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top) {
 
 frame_done:
   // Unwind with frame pointer
-  if (bpf_probe_read_user(regs, sizeof(regs), (void*)fp)) {
+  if (bpf_probe_read_user(regs, sizeof(regs), (void *)fp)) {
     DEBUG_PRINT("v8:  --> bad frame pointer");
     increment_metric(metricID_UnwindV8ErrBadFP);
     return ERR_V8_BAD_FP;
@@ -273,9 +285,11 @@ frame_done:
   state->pc = regs[1];
   unwinder_mark_nonleaf_frame(state);
 
-  DEBUG_PRINT("v8: pc: %lx, sp: %lx, fp: %lx",
-              (unsigned long) state->pc, (unsigned long) state->sp,
-              (unsigned long) state->fp);
+  DEBUG_PRINT(
+      "v8: pc: %lx, sp: %lx, fp: %lx",
+      (unsigned long)state->pc,
+      (unsigned long)state->sp,
+      (unsigned long)state->fp);
 
   increment_metric(metricID_UnwindV8Frames);
   return ERR_OK;
@@ -284,8 +298,8 @@ frame_done:
 // unwind_v8 is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // V8 stack frames to the trace object for the current CPU.
-static inline __attribute__((__always_inline__))
-int unwind_v8(struct pt_regs *ctx) {
+static inline __attribute__((__always_inline__)) int unwind_v8(struct pt_regs *ctx)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
     return -1;
