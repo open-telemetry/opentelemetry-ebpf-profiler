@@ -78,6 +78,7 @@ GOLANGCI_LINT_VERSION = "v1.60.1"
 lint: generate vanity-import-check
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
+	./.github/workflows/scripts/check-clang-format.sh
 
 linter-version:
 	@echo $(GOLANGCI_LINT_VERSION)

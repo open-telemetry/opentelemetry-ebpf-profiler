@@ -44,6 +44,11 @@ jobs:
           CGO_ENABLED: 1
         with:
           version: ${{ steps.linter-version.outputs.version }}
+      - name: Lint eBPF code
+        run: |
+          sudo apt update
+          sudo apt install -y clang-format-17
+          ./.github/workflows/scripts/check-clang-format.sh
 
   test:
     name: Test (${{ matrix.target_arch }})
