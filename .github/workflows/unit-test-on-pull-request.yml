@@ -48,7 +48,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y clang-format-17
-          make format-ebpf
+          make lint -C support/ebpf
 
   test:
     name: Test (${{ matrix.target_arch }})
