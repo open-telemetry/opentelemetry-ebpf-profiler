@@ -1,5 +1,6 @@
 .PHONY: all all-common clean ebpf generate test test-deps protobuf docker-image agent legal \
-	integration-test-binaries codespell lint linter-version debug debug-agent ebpf-profiler
+	integration-test-binaries codespell lint linter-version debug debug-agent ebpf-profiler \
+	format-ebpf
 
 SHELL := /usr/bin/env bash
 
@@ -76,9 +77,12 @@ ebpf-profiler: generate ebpf
 
 GOLANGCI_LINT_VERSION = "v1.60.1"
 lint: generate vanity-import-check
+	$(MAKE) lint -C support/ebpf
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
-	./.github/workflows/scripts/check-clang-format.sh
+
+format-ebpf:
+	$(MAKE) format -C support/ebpf
 
 linter-version:
 	@echo $(GOLANGCI_LINT_VERSION)

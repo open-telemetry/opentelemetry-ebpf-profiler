@@ -48,7 +48,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y clang-format-17
-          ./.github/workflows/scripts/check-clang-format.sh
+          make format-ebpf
 
   test:
     name: Test (${{ matrix.target_arch }})

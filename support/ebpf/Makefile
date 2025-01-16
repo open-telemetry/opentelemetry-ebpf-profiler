@@ -2,6 +2,7 @@ SHELL ?= bash
 BPF_CLANG ?= clang-17
 BPF_LINK ?= llvm-link-17
 LLC ?= llc-17
+CLANG_FORMAT ?= clang-format-17
 
 DEBUG_FLAGS = -DOPTI_DEBUG -g
 
@@ -85,6 +86,12 @@ baseline: $(TRACER_NAME)
 
 bloatcheck: $(TRACER_NAME)
 	python3 bloat-o-meter $(TRACER_NAME).baseline $(TRACER_NAME)
+
+lint:
+	$(CLANG_FORMAT) -Werror --dry-run -style=file *.[ch]
+
+format:
+	$(CLANG_FORMAT) -i -style=file *.[ch]
 
 clean:
 	rm -f *.o
