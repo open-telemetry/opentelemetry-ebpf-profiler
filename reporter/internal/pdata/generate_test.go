@@ -1,7 +1,6 @@
 package pdata
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -210,11 +209,35 @@ func TestFunctionTableOrder(t *testing.T) {
 							libpf.AddressOrLineno(0x3ef),
 							libpf.AddressOrLineno(0x4ef),
 						},
-						FrameTypes:         slices.Repeat([]libpf.FrameType{libpf.KernelFrame}, 5),
-						MappingStarts:      slices.Repeat([]libpf.Address{libpf.Address(0)}, 5),
-						MappingEnds:        slices.Repeat([]libpf.Address{libpf.Address(0)}, 5),
-						MappingFileOffsets: slices.Repeat([]uint64{0}, 5),
-						Timestamps:         []uint64{1, 2, 3, 4, 5},
+						FrameTypes: []libpf.FrameType{
+							libpf.KernelFrame,
+							libpf.KernelFrame,
+							libpf.KernelFrame,
+							libpf.KernelFrame,
+							libpf.KernelFrame,
+						},
+						MappingStarts: []libpf.Address{
+							libpf.Address(0),
+							libpf.Address(0),
+							libpf.Address(0),
+							libpf.Address(0),
+							libpf.Address(0),
+						},
+						MappingEnds: []libpf.Address{
+							libpf.Address(0),
+							libpf.Address(0),
+							libpf.Address(0),
+							libpf.Address(0),
+							libpf.Address(0),
+						},
+						MappingFileOffsets: []uint64{
+							0,
+							0,
+							0,
+							0,
+							0,
+						},
+						Timestamps: []uint64{1, 2, 3, 4, 5},
 					},
 				},
 			},
