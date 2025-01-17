@@ -53,4 +53,4 @@ extern bpf_map_def v8_procs;
 
 #endif // TESTING_COREDUMP
 
-#endif  // OPTI_EXTMAPS_H
+#endif // OPTI_EXTMAPS_H

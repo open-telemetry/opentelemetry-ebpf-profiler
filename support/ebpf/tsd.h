@@ -4,8 +4,9 @@
 #include "bpfdefs.h"
 
 // tsd_read reads from the Thread Specific Data location associated with the provided key.
-static inline __attribute__((__always_inline__))
-int tsd_read(const TSDInfo *tsi, const void *tsd_base, int key, void **out) {
+static inline __attribute__((__always_inline__)) int
+tsd_read(const TSDInfo *tsi, const void *tsd_base, int key, void **out)
+{
   const void *tsd_addr = tsd_base + tsi->offset;
   if (tsi->indirect) {
     // Read the memory pointer that contains the per-TSD key data
@@ -16,27 +17,27 @@ int tsd_read(const TSDInfo *tsi, const void *tsd_base, int key, void **out) {
 
   tsd_addr += key * tsi->multiplier;
 
-  DEBUG_PRINT("readTSD key %d from address 0x%lx", key, (unsigned long) tsd_addr);
+  DEBUG_PRINT("readTSD key %d from address 0x%lx", key, (unsigned long)tsd_addr);
   if (bpf_probe_read_user(out, sizeof(*out), tsd_addr)) {
     goto err;
   }
   return 0;
 
 err:
-  DEBUG_PRINT("Failed to read TSD from 0x%lx", (unsigned long) tsd_addr);
+  DEBUG_PRINT("Failed to read TSD from 0x%lx", (unsigned long)tsd_addr);
   increment_metric(metricID_UnwindErrBadTSDAddr);
   return -1;
 }
 
 // tsd_get_base looks up the base address for TSD variables (TPBASE).
-static inline __attribute__((__always_inline__))
-int tsd_get_base(void **tsd_base) {
+static inline __attribute__((__always_inline__)) int tsd_get_base(void **tsd_base)
+{
 #ifdef TESTING_COREDUMP
-  *tsd_base = (void *) __cgo_ctx->tp_base;
+  *tsd_base = (void *)__cgo_ctx->tp_base;
   return 0;
 #else
-  u32 key = 0;
-  SystemConfig* syscfg = bpf_map_lookup_elem(&system_config, &key);
+  u32 key              = 0;
+  SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &key);
   if (!syscfg) {
     // Unreachable: array maps are always fully initialized.
     return -1;

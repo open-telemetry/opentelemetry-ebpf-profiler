@@ -9,10 +9,11 @@
 // tracepoint__sched_process_exit is a tracepoint attached to the scheduler that stops processes.
 // Every time a processes stops this hook is triggered.
 SEC("tracepoint/sched/sched_process_exit")
-int tracepoint__sched_process_exit(void *ctx) {
+int tracepoint__sched_process_exit(void *ctx)
+{
   u64 pid_tgid = bpf_get_current_pid_tgid();
-  u32 pid = (u32)(pid_tgid >> 32);
-  u32 tid = (u32)(pid_tgid & 0xFFFFFFFF);
+  u32 pid      = (u32)(pid_tgid >> 32);
+  u32 tid      = (u32)(pid_tgid & 0xFFFFFFFF);
 
   if (pid != tid) {
     // Only if the thread group ID matched with the PID the process itself exits. If they don't

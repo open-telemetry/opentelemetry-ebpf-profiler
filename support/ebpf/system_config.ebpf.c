@@ -2,31 +2,32 @@
 // and analysis related functions.
 
 #include "bpfdefs.h"
-#include "types.h"
 #include "extmaps.h"
+#include "types.h"
 
 // system config is the bpf map containing HA provided system configuration
 bpf_map_def SEC("maps") system_config = {
-    .type = BPF_MAP_TYPE_ARRAY,
-    .key_size = sizeof(u32),
-    .value_size = sizeof(struct SystemConfig),
-    .max_entries = 1,
+  .type        = BPF_MAP_TYPE_ARRAY,
+  .key_size    = sizeof(u32),
+  .value_size  = sizeof(struct SystemConfig),
+  .max_entries = 1,
 };
 
 #ifndef TESTING_COREDUMP
 
 // system_analysis is the bpf map the HA and this module uses to communicate
 bpf_map_def SEC("maps") system_analysis = {
-  .type = BPF_MAP_TYPE_ARRAY,
-  .key_size = sizeof(u32),
-  .value_size = sizeof(struct SystemAnalysis),
+  .type        = BPF_MAP_TYPE_ARRAY,
+  .key_size    = sizeof(u32),
+  .value_size  = sizeof(struct SystemAnalysis),
   .max_entries = 1,
 };
 
 // read_kernel_memory reads data from given kernel address. This is
 // invoked once on entry to bpf() syscall on the given pid context.
 SEC("tracepoint/syscalls/sys_enter_bpf")
-int read_kernel_memory(void *ctx) {
+int read_kernel_memory(void *ctx)
+{
   u32 key0 = 0;
 
   struct SystemAnalysis *sys = bpf_map_lookup_elem(&system_analysis, &key0);
@@ -44,8 +45,8 @@ int read_kernel_memory(void *ctx) {
   sys->pid = 0;
 
   // Handle the read request
-  if (bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void*) sys->address)) {
-    DEBUG_PRINT("Failed to read code from 0x%lx", (unsigned long) sys->address);
+  if (bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)sys->address)) {
+    DEBUG_PRINT("Failed to read code from 0x%lx", (unsigned long)sys->address);
     return -1;
   }
 
@@ -56,9 +57,10 @@ int read_kernel_memory(void *ctx) {
 // the struct pt_regs pointer to the entry stack's usermode cpu state.
 // Requires kernel 4.19 or newer due to attaching to a raw tracepoint.
 SEC("raw_tracepoint/sys_enter")
-int read_task_struct(struct bpf_raw_tracepoint_args *ctx) {
-  struct pt_regs *regs = (struct pt_regs *) ctx->args[0];
-  u32 key0 = 0;
+int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
+{
+  struct pt_regs *regs = (struct pt_regs *)ctx->args[0];
+  u32 key0             = 0;
 
   struct SystemAnalysis *sys = bpf_map_lookup_elem(&system_analysis, &key0);
   if (!sys) {
@@ -81,11 +83,11 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx) {
   // As this is a raw tracepoint for syscall entry, the struct pt_regs *
   // is guaranteed to be the user mode cpu state on the entry stack.
   // Return this to the caller.
-  sys->address = (u64) regs;
+  sys->address = (u64)regs;
 
   // Execute the read request.
-  if (bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void*) addr)) {
-    DEBUG_PRINT("Failed to read task_struct from 0x%lx", (unsigned long) addr);
+  if (bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)addr)) {
+    DEBUG_PRINT("Failed to read task_struct from 0x%lx", (unsigned long)addr);
     return -1;
   }
 
