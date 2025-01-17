@@ -7,9 +7,9 @@
 // Map from Ruby process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") ruby_procs = {
-  .type = BPF_MAP_TYPE_HASH,
-  .key_size = sizeof(pid_t),
-  .value_size = sizeof(RubyProcInfo),
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(RubyProcInfo),
   .max_entries = 1024,
 };
 
@@ -21,12 +21,13 @@ bpf_map_def SEC("maps") ruby_procs = {
 // Ruby VM frame flags are internal indicators for the VM interpreter to
 // treat frames in a dedicated way.
 // https://github.com/ruby/ruby/blob/5741ae379b2037ad5968b6994309e1d25cda6e1a/vm_core.h#L1208
-#define RUBY_FRAME_FLAG_BMETHOD  0x0040
-#define RUBY_FRAME_FLAG_LAMBDA   0x0100
+#define RUBY_FRAME_FLAG_BMETHOD 0x0040
+#define RUBY_FRAME_FLAG_LAMBDA  0x0100
 
 // Record a Ruby frame
-static inline __attribute__((__always_inline__))
-ErrorCode push_ruby(Trace *trace, u64 file, u64 line) {
+static inline __attribute__((__always_inline__)) ErrorCode
+push_ruby(Trace *trace, u64 file, u64 line)
+{
   return _push(trace, file, line, FRAME_MARKER_RUBY);
 }
 
@@ -49,9 +50,12 @@ ErrorCode push_ruby(Trace *trace, u64 file, u64 line) {
 //
 // [2] rb_iseq_struct
 // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L456
-static inline __attribute__((__always_inline__))
-ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo, 
-                          const void *current_ctx_addr, int* next_unwinder) {
+static inline __attribute__((__always_inline__)) ErrorCode walk_ruby_stack(
+  PerCPURecord *record,
+  const RubyProcInfo *rubyinfo,
+  const void *current_ctx_addr,
+  int *next_unwinder)
+{
   if (!current_ctx_addr) {
     *next_unwinder = get_next_unwinder_after_interpreter(record);
     return ERR_OK;
@@ -62,7 +66,7 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
   *next_unwinder = PROG_UNWIND_STOP;
 
   // stack_ptr points to the frame of the Ruby VM call stack that will be unwound next
-  void *stack_ptr = record->rubyUnwindState.stack_ptr;
+  void *stack_ptr        = record->rubyUnwindState.stack_ptr;
   // last_stack_frame points to the last frame on the Ruby VM stack we want to process
   void *last_stack_frame = record->rubyUnwindState.last_stack_frame;
 
@@ -75,15 +79,17 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
     // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L846
     size_t stack_size;
 
-    if (bpf_probe_read_user(&stack_ptr_current, sizeof(stack_ptr_current),
-                            (void *)(current_ctx_addr + rubyinfo->vm_stack))) {
+    if (bpf_probe_read_user(
+          &stack_ptr_current,
+          sizeof(stack_ptr_current),
+          (void *)(current_ctx_addr + rubyinfo->vm_stack))) {
       DEBUG_PRINT("ruby: failed to read current stack pointer");
       increment_metric(metricID_UnwindRubyErrReadStackPtr);
       return ERR_RUBY_READ_STACK_PTR;
     }
 
-    if (bpf_probe_read_user(&stack_size, sizeof(stack_size),
-                            (void *)(current_ctx_addr + rubyinfo->vm_stack_size))) {
+    if (bpf_probe_read_user(
+          &stack_size, sizeof(stack_size), (void *)(current_ctx_addr + rubyinfo->vm_stack_size))) {
       DEBUG_PRINT("ruby: failed to get stack size");
       increment_metric(metricID_UnwindRubyErrReadStackSize);
       return ERR_RUBY_READ_STACK_SIZE;
@@ -93,9 +99,10 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
     // Ruby places two dummy frames on the Ruby VM stack in which we are not interested.
     // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_backtrace.c#L477-L485
     last_stack_frame = stack_ptr_current + (rubyinfo->size_of_value * stack_size) -
-      (2 * rubyinfo->size_of_control_frame_struct);
+                       (2 * rubyinfo->size_of_control_frame_struct);
 
-    if (bpf_probe_read_user(&stack_ptr, sizeof(stack_ptr), (void *)(current_ctx_addr + rubyinfo->cfp))) {
+    if (bpf_probe_read_user(
+          &stack_ptr, sizeof(stack_ptr), (void *)(current_ctx_addr + rubyinfo->cfp))) {
       DEBUG_PRINT("ruby: failed to get cfp");
       increment_metric(metricID_UnwindRubyErrReadCfp);
       return ERR_RUBY_READ_CFP;
@@ -118,7 +125,7 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
 
 #pragma unroll
   for (u32 i = 0; i < FRAMES_PER_WALK_RUBY_STACK; ++i) {
-    pc = 0;
+    pc        = 0;
     iseq_addr = NULL;
 
     bpf_probe_read_user(&iseq_addr, sizeof(iseq_addr), (void *)(stack_ptr + rubyinfo->iseq));
@@ -146,7 +153,9 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
         return ERR_RUBY_READ_EP;
       }
 
-      if ((ep & (RUBY_FRAME_FLAG_LAMBDA | RUBY_FRAME_FLAG_BMETHOD)) == (RUBY_FRAME_FLAG_LAMBDA | RUBY_FRAME_FLAG_BMETHOD) ) {
+      if (
+        (ep & (RUBY_FRAME_FLAG_LAMBDA | RUBY_FRAME_FLAG_BMETHOD)) ==
+        (RUBY_FRAME_FLAG_LAMBDA | RUBY_FRAME_FLAG_BMETHOD)) {
         // When identifying Ruby lambda blocks at this point, we do not want to return to the
         // native unwinder. So we just skip this Ruby VM frame.
         goto skip;
@@ -163,22 +172,23 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
       return ERR_RUBY_READ_ISEQ_BODY;
     }
 
-    if (bpf_probe_read_user(&iseq_encoded, sizeof(iseq_encoded),
-                            (void *)(iseq_body + rubyinfo->iseq_encoded))) {
+    if (bpf_probe_read_user(
+          &iseq_encoded, sizeof(iseq_encoded), (void *)(iseq_body + rubyinfo->iseq_encoded))) {
       DEBUG_PRINT("ruby: failed to get iseq encoded");
       increment_metric(metricID_UnwindRubyErrReadIseqEncoded);
       return ERR_RUBY_READ_ISEQ_ENCODED;
     }
 
-    if (bpf_probe_read_user(&iseq_size, sizeof(iseq_size), (void *)(iseq_body + rubyinfo->iseq_size))) {
+    if (bpf_probe_read_user(
+          &iseq_size, sizeof(iseq_size), (void *)(iseq_body + rubyinfo->iseq_size))) {
       DEBUG_PRINT("ruby: failed to get iseq size");
       increment_metric(metricID_UnwindRubyErrReadIseqSize);
       return ERR_RUBY_READ_ISEQ_SIZE;
     }
 
-    // To get the line number iseq_encoded is subtracted from pc. This result also represents the size
-    // of the current instruction sequence. If the calculated size of the instruction sequence is greater
-    // than the value in iseq_encoded we don't report this pc to user space.
+    // To get the line number iseq_encoded is subtracted from pc. This result also represents the
+    // size of the current instruction sequence. If the calculated size of the instruction sequence
+    // is greater than the value in iseq_encoded we don't report this pc to user space.
     //
     // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_backtrace.c#L47-L48
     n = (pc - iseq_encoded) / rubyinfo->size_of_value;
@@ -198,7 +208,7 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
     increment_metric(metricID_UnwindRubyFrames);
 
   skip:
-    if (last_stack_frame <= stack_ptr ) {
+    if (last_stack_frame <= stack_ptr) {
       // We have processed all frames in the Ruby VM and can stop here.
       *next_unwinder = PROG_UNWIND_NATIVE;
       return ERR_OK;
@@ -210,21 +220,22 @@ ErrorCode walk_ruby_stack(PerCPURecord *record, const RubyProcInfo *rubyinfo,
 save_state:
   // Store the current progress in the Ruby unwind state so we can continue walking the stack
   // after the tail call.
-  record->rubyUnwindState.stack_ptr = stack_ptr;
+  record->rubyUnwindState.stack_ptr        = stack_ptr;
   record->rubyUnwindState.last_stack_frame = last_stack_frame;
 
   return ERR_OK;
 }
 
-SEC("perf_event/unwind_ruby")
-int unwind_ruby(struct pt_regs *ctx) {
+// unwind_ruby is the tail call destination for PROG_UNWIND_RUBY.
+static inline __attribute__((__always_inline__)) int unwind_ruby(struct pt_regs *ctx)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;
 
-  int unwinder = get_next_unwinder_after_interpreter(record);
-  ErrorCode error = ERR_OK;
-  u32 pid = record->trace.pid;
+  int unwinder           = get_next_unwinder_after_interpreter(record);
+  ErrorCode error        = ERR_OK;
+  u32 pid                = record->trace.pid;
   RubyProcInfo *rubyinfo = bpf_map_lookup_elem(&ruby_procs, &pid);
   if (!rubyinfo) {
     DEBUG_PRINT("No Ruby introspection data");
@@ -234,7 +245,6 @@ int unwind_ruby(struct pt_regs *ctx) {
   }
 
   increment_metric(metricID_UnwindRubyAttempts);
-
 
   // Pointer for an address to a rb_execution_context_struct struct.
   void *current_ctx_addr = NULL;
@@ -246,18 +256,20 @@ int unwind_ruby(struct pt_regs *ctx) {
     // the offset to running_ec.
 
     void *single_main_ractor = NULL;
-    if (bpf_probe_read_user(&single_main_ractor, sizeof(single_main_ractor),
-                            (void *)rubyinfo->current_ctx_ptr)) {
+    if (bpf_probe_read_user(
+          &single_main_ractor, sizeof(single_main_ractor), (void *)rubyinfo->current_ctx_ptr)) {
       goto exit;
     }
 
-    if (bpf_probe_read_user(&current_ctx_addr, sizeof(current_ctx_addr),
-                            (void *)(single_main_ractor + rubyinfo->running_ec))) {
+    if (bpf_probe_read_user(
+          &current_ctx_addr,
+          sizeof(current_ctx_addr),
+          (void *)(single_main_ractor + rubyinfo->running_ec))) {
       goto exit;
     }
   } else {
-    if (bpf_probe_read_user(&current_ctx_addr, sizeof(current_ctx_addr),
-                            (void *)rubyinfo->current_ctx_ptr)) {
+    if (bpf_probe_read_user(
+          &current_ctx_addr, sizeof(current_ctx_addr), (void *)rubyinfo->current_ctx_ptr)) {
       goto exit;
     }
   }
@@ -273,3 +285,4 @@ exit:
   tail_call(ctx, unwinder);
   return -1;
 }
+MULTI_USE_FUNC(unwind_ruby)

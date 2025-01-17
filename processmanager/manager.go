@@ -333,7 +333,13 @@ func (pm *ProcessManager) MaybeNotifyAPMAgent(
 		if apm, ok := mapping.(*apmint.Instance); ok {
 			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, umTraceHash, count)
 
-			// It's pretty unusual for there to be more than one APM agent in a
+			if serviceName != "" {
+				log.Warnf("Overwriting APM service name from '%s' to '%s' for PID %d",
+					serviceName,
+					apm.APMServiceName(),
+					rawTrace.PID)
+			}
+			// It's pretty unusual to have more than one APM agent in a
 			// single process, but in case there is, just pick the last one.
 			serviceName = apm.APMServiceName()
 		}

@@ -27,6 +27,13 @@ issues:
     - virt-tests
     - vm-images
 
+  # Excluding configuration per-path, per-linter, per-text and per-source
+  exclude-rules:
+    # Don't complain about integer overflows
+    - text: "G115:"
+      linters:
+        - gosec
+
 linters:
   enable-all: true
   disable:
@@ -58,7 +65,6 @@ linters:
     - godot
     - godox # complains about TODO etc
     - gofumpt
-    - gomnd
     - gomoddirectives
     - inamedparam
     - interfacebloat
@@ -86,7 +92,7 @@ linters:
     - wsl
     - wrapcheck
     # the following linters are deprecated
-    - execinquery
+    - exportloopref
     # we don't want to change code to Go 1.22+ yet
     - intrange
     - copyloopvar
