@@ -27,7 +27,7 @@ endif
 COMPILER_TARGET ?= $(COMPILER_TARGET_ARCH)-redhat-linux
 SYSROOT_PATH ?= /
 
-export CC = clang-16
+export CC = clang-17
 export COMPILER_TARGET
 export CGO_CFLAGS = --sysroot=/usr/sysroot --target=$(COMPILER_TARGET)
 export CGO_ENABLED = 1
@@ -54,6 +54,10 @@ GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 
 MAKEFLAGS += -j$(shell nproc)
 
+ifneq ($(strip $(BASE_IMAGE)),)
+$(info BASE_IMAGE is $(BASE_IMAGE))
+endif
+
 all: ebpf-profiler
 
 debug: GO_TAGS := $(GO_TAGS),debugtracer
@@ -66,10 +70,10 @@ clean:
 	@$(MAKE) -s -C support/ebpf clean
 	@rm -f support/*.test
 	@chmod -Rf u+w go/ || true
-	@rm -rf go .cache
+	@rm -rf go/pkg go/.cache .cache
 
 generate:
-	go generate ./...
+	GOARCH=$(NATIVE_ARCH) go generate ./...
 
 ebpf:
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
@@ -77,22 +81,40 @@ ebpf:
 ebpf-profiler: generate ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
+PROTOC_GEN_VERSION = "v1.31.0"
+PROTOC_GRPC_VERSION = "v1.3.0"
 GOLANGCI_LINT_VERSION = "v1.60.1"
+PORTO_VERSION = "v0.6.0"
+
+install-grpc-deps:
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_VERSION)
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@$(PROTOC_GRPC_VERSION)
+
+install-ci-deps:
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	go install github.com/jcchavezs/porto/cmd/porto@$(PORTO_VERSION)
+
+install-go-deps: install-grpc-deps install-ci-deps
+
+clean-go-deps: clean
+	@rm go/bin/protoc*
+	@rm go/bin/porto*
+	@rm go/bin/golang*
+
 lint: generate vanity-import-check
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
+	golangci-lint version
+	golangci-lint run
 
 linter-version:
-	@echo $(GOLANGCI_LINT_VERSION)
+	@echo golangci-lint version: $(GOLANGCI_LINT_VERSION)
+	@echo porto version: $(PORTO_VERSION)
 
 .PHONY: vanity-import-check
 vanity-import-check:
-	@go install github.com/jcchavezs/porto/cmd/porto@latest
 	@porto --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 
 .PHONY: vanity-import-fix
 vanity-import-fix: $(PORTO)
-	@go install github.com/jcchavezs/porto/cmd/porto@latest
 	@porto --include-internal -w .
 
 test: generate ebpf test-deps
@@ -118,8 +140,13 @@ integration-test-binaries: generate ebpf
 			./$(test_name)) || exit ; \
 	)
 
+ifeq ($(strip $(BASE_IMAGE)),)
 docker-image:
-	docker build -t profiling-agent -f Dockerfile .
+	  docker build -t profiling-agent -f docker-image/Dockerfile .
+else
+docker-image:
+	  docker build --build-arg image=$(BASE_IMAGE) -t profiling-agent -f docker-image/Dockerfile .
+endif
 
 agent:
 	docker run -v "$$PWD":/agent -v $(SYSROOT_PATH):/usr/sysroot -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
