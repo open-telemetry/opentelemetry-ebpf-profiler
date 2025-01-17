@@ -25,7 +25,7 @@ const (
 
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
-func (p Pdata) Generate(events map[libpf.Origin]samples.KeyToEventMapping) pprofile.Profiles {
+func (p *Pdata) Generate(events map[libpf.Origin]samples.KeyToEventMapping) pprofile.Profiles {
 	profiles := pprofile.NewProfiles()
 	rp := profiles.ResourceProfiles().AppendEmpty()
 	sp := rp.ScopeProfiles().AppendEmpty()

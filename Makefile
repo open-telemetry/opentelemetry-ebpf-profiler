@@ -75,7 +75,7 @@ ebpf:
 ebpf-profiler: generate ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
-GOLANGCI_LINT_VERSION = "v1.60.1"
+GOLANGCI_LINT_VERSION = "v1.63.4"
 lint: generate vanity-import-check
 	$(MAKE) lint -C support/ebpf
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version

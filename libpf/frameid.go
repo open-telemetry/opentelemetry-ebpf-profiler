@@ -113,7 +113,7 @@ func (f FrameID) AddressOrLine() AddressOrLineno {
 
 // AsIP returns the FrameID as a net.IP type to be used
 // for the PC range in profiling-symbols-*.
-func (f *FrameID) AsIP() net.IP {
+func (f FrameID) AsIP() net.IP {
 	bytes := f.Bytes()
 	ip := make([]byte, 16)
 	copy(ip[:8], bytes[:8])  // first 64bits of FileID
