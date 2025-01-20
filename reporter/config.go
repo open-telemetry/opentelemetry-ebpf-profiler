@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
 type Config struct {

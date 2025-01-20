@@ -10,24 +10,25 @@ import (
 	"go.opentelemetry.io/collector/pdata/pprofile"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
 func TestCollectorReporterReportTraceEvent(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
 		trace  *libpf.Trace
-		meta   *TraceEventMeta
+		meta   *samples.TraceEventMeta
 		nextFn xconsumer.ConsumeProfilesFunc
 	}{
 		{
 			name:  "with no next consumer",
 			trace: &libpf.Trace{},
-			meta:  &TraceEventMeta{},
+			meta:  &samples.TraceEventMeta{},
 		},
 		{
 			name:  "with a next consumer that succeeds",
 			trace: &libpf.Trace{},
-			meta:  &TraceEventMeta{},
+			meta:  &samples.TraceEventMeta{},
 			nextFn: func(_ context.Context, _ pprofile.Profiles) error {
 				return nil
 			},
@@ -35,7 +36,7 @@ func TestCollectorReporterReportTraceEvent(t *testing.T) {
 		{
 			name:  "with a next consumer that returns an error",
 			trace: &libpf.Trace{},
-			meta:  &TraceEventMeta{},
+			meta:  &samples.TraceEventMeta{},
 			nextFn: func(_ context.Context, _ pprofile.Profiles) error {
 				return errors.New("next consumer failed")
 			},

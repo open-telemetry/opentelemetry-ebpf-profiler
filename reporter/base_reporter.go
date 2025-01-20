@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
-	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
@@ -67,7 +67,7 @@ func (b *baseReporter) addHostmetadata(metadataMap map[string]string) {
 func (*baseReporter) ReportFramesForTrace(_ *libpf.Trace) {}
 
 // ReportCountForTrace is a NOP
-func (b *baseReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *TraceEventMeta) {
+func (b *baseReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *samples.TraceEventMeta) {
 }
 
 func (b *baseReporter) ExecutableKnown(fileID libpf.FileID) bool {
@@ -97,7 +97,7 @@ func (*baseReporter) ReportMetrics(_ uint32, _ []uint32, _ []int64) {}
 
 func (*baseReporter) SupportsReportTraceEvent() bool { return true }
 
-func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta) {
+func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) {
 	if meta.Origin != support.TraceOriginSampling && meta.Origin != support.TraceOriginOffCPU {
 		// At the moment only on-CPU and off-CPU traces are reported.
 		log.Errorf("Skip reporting trace for unexpected %d origin", meta.Origin)

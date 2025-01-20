@@ -8,7 +8,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
-	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
 // Pdata holds the cache for the data used to generate the events reporters
