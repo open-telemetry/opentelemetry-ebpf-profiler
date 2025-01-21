@@ -112,14 +112,12 @@ func (r *CollectorReporter) GetMetrics() Metrics {
 // reportProfile creates and sends out a profile.
 func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	traceEvents := r.traceEvents.WLock()
-	events := maps.Clone(*traceEvents)
-	originsMap := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
-	clear(*traceEvents)
+	events := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
 	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
 		support.TraceOriginOffCPU} {
-		originsMap[origin] = make(samples.KeyToEventMapping)
+		events[origin] = maps.Clone((*traceEvents)[origin])
+		clear((*traceEvents)[origin])
 	}
-	*traceEvents = originsMap
 	r.traceEvents.WUnlock(&traceEvents)
 
 	profiles := r.pdata.Generate(events)
