@@ -107,6 +107,9 @@ func (p *Pdata) setProfile(
 			sample.Value().Append(traceInfo.OffTimes...)
 		}
 
+		// Keep track of frames without location information attached.
+		var framesWithLocation int32
+
 		// Walk every frame of the trace.
 		for i := range traceInfo.FrameTypes {
 			loc := profile.LocationTable().AppendEmpty()
@@ -116,6 +119,7 @@ func (p *Pdata) setProfile(
 
 			switch frameKind := traceInfo.FrameTypes[i]; frameKind {
 			case libpf.NativeFrame:
+				framesWithLocation++
 				// As native frames are resolved in the backend, we use Mapping to
 				// report these frames.
 
@@ -158,6 +162,7 @@ func (p *Pdata) setProfile(
 				// that are not originated from a native or interpreted
 				// program.
 			default:
+				framesWithLocation++
 				// Store interpreted frame information as a Line message:
 				line := loc.Line().AppendEmpty()
 
@@ -211,7 +216,7 @@ func (p *Pdata) setProfile(
 			sample.AttributeIndices().Append(extra...)
 		}
 
-		sample.SetLocationsLength(int32(len(traceInfo.FrameTypes)))
+		sample.SetLocationsLength(framesWithLocation)
 		locationIndex += sample.LocationsLength()
 	}
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())
