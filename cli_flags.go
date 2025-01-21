@@ -67,7 +67,7 @@ var (
 		"off-cpu profiling: It is the per-mille chance for an off-cpu event being reported. "+
 		"For example, 1 reports one out of %d off-cpu events. "+
 		"Set to 0 to disable off-cpu profiling.",
-		support.OffCPUThresholdMax, support.OffCPUThresholdMax, support.OffCPUThresholdMax)
+		support.OffCPUThresholdMax, support.OffCPUThresholdMax)
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
