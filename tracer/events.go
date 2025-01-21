@@ -146,12 +146,13 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	// unix epoch to always ensure the latter behavior.
 	eventReader.SetDeadline(time.Unix(1, 0))
 
-	pollTicker := time.NewTicker(t.intervals.TracePollInterval())
-
-	var oldKTime times.KTime
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
 	go func() {
 		var data perf.Record
+		var oldKTime, minKTime times.KTime
+
+		pollTicker := time.NewTicker(t.intervals.TracePollInterval())
+		defer pollTicker.Stop()
 
 	PollLoop:
 		for {
@@ -162,7 +163,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				break PollLoop
 			}
 
-			var minKTime times.KTime
+			minKTime = 0
 			// Eagerly read events until the buffer is exhausted.
 			for {
 				if err = eventReader.ReadInto(&data); err != nil {
