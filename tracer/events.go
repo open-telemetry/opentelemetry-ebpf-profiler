@@ -188,9 +188,9 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				}
 				traceOutChan <- trace
 			}
-			// After we've received and processed all trace events,
-			// call SymbolizationComplete if there is a pending oldKTime
-			// that we haven't yet propagated to the rest of the agent.
+			// After we've received and processed all trace events, call
+			// SymbolizationComplete if there is a pending oldKTime that we
+			// haven't yet propagated to the rest of the agent.
 			//
 			// This introduces both an upper bound to SymbolizationComplete
 			// call frequency (dictated by pollTicker) but also skips calls
@@ -199,6 +199,14 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			// We use oldKTime instead of minKTime (except when the latter is
 			// smaller than the former) to take into account scheduling delays
 			// that could in theory result in observed KTime going back in time.
+			//
+			// For example, as we don't control ordering of trace events being
+			// written by the kernel in per-CPU buffers across CPU cores, it's
+			// possible that given events generated on different cores with
+			// timestamps t0 < t1 < t2 < t3, this poll loop reads <t3 t1 t2>
+			// in a first iteration and t0 in a second iteration. If we use
+			// the current iteration minKTime we'll call
+			// SymbolizationComplete(t1) first and t0 next, with t0 < t1.
 			if oldKTime > 0 {
 				if oldKTime <= minKTime {
 					t.TraceProcessor().SymbolizationComplete(oldKTime)
