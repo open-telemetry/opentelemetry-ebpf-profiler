@@ -8,7 +8,9 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+
 	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -86,6 +88,14 @@ func (cfg *Config) Validate() error {
 			"invalid argument for probabilistic-threshold. Value "+
 				"should be between 1 and %d",
 			tracer.ProbabilisticThresholdMax,
+		)
+	}
+
+	if cfg.OffCPUThreshold > support.OffCPUThresholdMax {
+		return fmt.Errorf(
+			"invalid argument for off-cpu-threshold. Value "+
+				"should be between 0 and %d",
+			support.OffCPUThresholdMax,
 		)
 	}
 
