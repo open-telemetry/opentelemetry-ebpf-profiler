@@ -65,7 +65,7 @@ var (
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
 	offCPUThresholdHelp = fmt.Sprintf("The per-mille chance for an off-cpu event being reported. "+
 		"Valid values are in the range [0..%d]."+
-		"Default is %d (off-cpu profiling turned off). "+
+		"Default is %d (off-cpu profiling turned off). ",
 		support.OffCPUThresholdMax, defaultOffCPUThreshold)
 )
 
