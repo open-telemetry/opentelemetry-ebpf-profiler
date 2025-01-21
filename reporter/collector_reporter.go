@@ -113,7 +113,13 @@ func (r *CollectorReporter) GetMetrics() Metrics {
 func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	traceEvents := r.traceEvents.WLock()
 	events := maps.Clone(*traceEvents)
+	originsMap := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
 	clear(*traceEvents)
+	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
+		support.TraceOriginOffCPU} {
+		originsMap[origin] = make(samples.KeyToEventMapping)
+	}
+	*traceEvents = originsMap
 	r.traceEvents.WUnlock(&traceEvents)
 
 	profiles := r.pdata.Generate(events)
