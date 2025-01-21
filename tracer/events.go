@@ -199,14 +199,14 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			// smaller than the former) to take into account scheduling delays
 			// that could in theory result in observed KTime going back in time.
 			if oldKTime > 0 {
-				kt := oldKTime
-				if minKTime > 0 && minKTime < kt {
-					// If current minKTime is smaller than oldKTime, use it
-					// instead of oldKTime (and set it to 0 to avoid a repeat).
-					kt = minKTime
+				if oldKTime <= minKTime {
+					t.TraceProcessor().SymbolizationComplete(oldKTime)
+				} else {
+					// If minKTime is smaller than oldKTime, use it
+					// and reset it to avoid a repeat.
+					t.TraceProcessor().SymbolizationComplete(minKTime)
 					minKTime = 0
 				}
-				t.TraceProcessor().SymbolizationComplete(kt)
 			}
 			oldKTime = minKTime
 		}
