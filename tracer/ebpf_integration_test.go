@@ -56,7 +56,7 @@ func runKernelFrameProbe(t *testing.T, tracer *Tracer) {
 	require.NoError(t, err)
 	defer restoreRlimit()
 
-	prog, err := cebpf.NewProgram(coll.Programs["tracepoint__sched_switch"])
+	prog, err := cebpf.NewProgram(coll.Programs["tracepoint_integration__sched_switch"])
 	require.NoError(t, err)
 	defer prog.Close()
 
@@ -136,6 +136,7 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
+		OffCPUThreshold:        support.OffCPUThresholdMax,
 	})
 	require.NoError(t, err)
 
@@ -255,7 +256,14 @@ func TestAllTracers(t *testing.T) {
 	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
 	require.NoError(t, err)
 
-	_, _, err = initializeMapsAndPrograms(tracertypes.AllTracers(), kernelSymbols,
-		false, 1, false, false, 0)
+	_, _, err = initializeMapsAndPrograms(kernelSymbols, &Config{
+		IncludeTracers:      tracertypes.AllTracers(),
+		MapScaleFactor:      1,
+		FilterErrorFrames:   false,
+		KernelVersionCheck:  false,
+		DebugTracer:         false,
+		BPFVerifierLogLevel: 0,
+		OffCPUThreshold:     10,
+	})
 	require.NoError(t, err)
 }

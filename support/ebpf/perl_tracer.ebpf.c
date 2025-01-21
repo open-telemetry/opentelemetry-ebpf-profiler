@@ -30,23 +30,23 @@
 
 #include "bpfdefs.h"
 #include "tracemgmt.h"
-#include "types.h"
 #include "tsd.h"
+#include "types.h"
 
 // The number of Perl frames to unwind per frame-unwinding eBPF program.
 #define PERL_FRAMES_PER_PROGRAM 12
 
 // PERL SI types definitions
 // https://github.com/Perl/perl5/blob/v5.32.0/cop.h#L1017-L1035
-#define PERLSI_MAIN     1
+#define PERLSI_MAIN 1
 
 // PERL_CONTEXT type definitions
 // https://github.com/Perl/perl5/blob/v5.32.0/cop.h#L886-L909
-#define CXTYPEMASK      0xf
-#define CXt_SUB         9
-#define CXt_FORMAT      10
-#define CXt_EVAL        11
-#define CXt_SUBST       12
+#define CXTYPEMASK 0xf
+#define CXt_SUB    9
+#define CXt_FORMAT 10
+#define CXt_EVAL   11
+#define CXt_SUBST  12
 
 // Flags for CXt_SUB (and FORMAT)
 // https://github.com/Perl/perl5/blob/v5.32.0/cop.h#L912-L917
@@ -54,29 +54,30 @@
 
 // Scalar Value types (SVt)
 // https://github.com/Perl/perl5/blob/v5.32.0/sv.h#L132-L166
-#define SVt_MASK        0x1f
-#define SVt_PVGV        9
-#define SVt_PVCV        13
+#define SVt_MASK 0x1f
+#define SVt_PVGV 9
+#define SVt_PVCV 13
 
 // https://github.com/Perl/perl5/blob/v5.32.0/sv.h#L375-L377
-#define SVpgv_GP        0x00008000
+#define SVpgv_GP 0x00008000
 
 // Code Value flags (CVf)
 // https://github.com/Perl/perl5/blob/v5.32.0/cv.h#L115-L140
-#define CVf_NAMED       0x8000
+#define CVf_NAMED 0x8000
 
 // Map from Perl process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") perl_procs = {
-  .type = BPF_MAP_TYPE_HASH,
-  .key_size = sizeof(pid_t),
-  .value_size = sizeof(PerlProcInfo),
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(PerlProcInfo),
   .max_entries = 1024,
 };
 
 // Record a Perl frame
-static inline __attribute__((__always_inline__))
-ErrorCode push_perl(Trace *trace, u64 file, u64 line) {
+static inline __attribute__((__always_inline__)) ErrorCode
+push_perl(Trace *trace, u64 file, u64 line)
+{
   DEBUG_PRINT("Pushing perl frame cop=0x%lx, cv=0x%lx", (unsigned long)file, (unsigned long)line);
   return _push(trace, file, line, FRAME_MARKER_PERL);
 }
@@ -85,8 +86,9 @@ ErrorCode push_perl(Trace *trace, u64 file, u64 line) {
 // EGV to be reported for HA. This basically maps the internal code value, to its
 // canonical symbol name. This mapping is done in EBPF because it seems the CV*
 // can get undefined once it goes out of scope, but the EGV should be more permanent.
-static inline __attribute__((__always_inline__))
-void *resolve_cv_egv(const PerlProcInfo *perlinfo, const void *cv) {
+static inline __attribute__((__always_inline__)) void *
+resolve_cv_egv(const PerlProcInfo *perlinfo, const void *cv)
+{
   // First check the CV's type
   u32 cv_flags;
   if (bpf_probe_read_user(&cv_flags, sizeof(cv_flags), cv + perlinfo->sv_flags)) {
@@ -120,8 +122,7 @@ void *resolve_cv_egv(const PerlProcInfo *perlinfo, const void *cv) {
   // At this point we have CV with GV (symbol). This is expected of all seen CVs
   // inside the Context Stack.
   void *gv;
-  if (bpf_probe_read_user(&gv, sizeof(gv), xpvcv + perlinfo->xcv_gv) ||
-      !gv) {
+  if (bpf_probe_read_user(&gv, sizeof(gv), xpvcv + perlinfo->xcv_gv) || !gv) {
     goto err;
   }
 
@@ -133,7 +134,7 @@ void *resolve_cv_egv(const PerlProcInfo *perlinfo, const void *cv) {
     goto err;
   }
 
-  if ((gv_flags & (SVt_MASK|SVpgv_GP)) != (SVt_PVGV|SVpgv_GP)) {
+  if ((gv_flags & (SVt_MASK | SVpgv_GP)) != (SVt_PVGV | SVpgv_GP)) {
     // Perl VM should also ensure that we see only GV-with-GP type variables
     // via the Context stack.
     DEBUG_PRINT("Unexpected GV-without-GP, flags 0x%x", gv_flags);
@@ -164,8 +165,9 @@ err:
   return 0;
 }
 
-static inline __attribute__((__always_inline__))
-int process_perl_frame(PerCPURecord *record, const PerlProcInfo *perlinfo, const void *cx) {
+static inline __attribute__((__always_inline__)) int
+process_perl_frame(PerCPURecord *record, const PerlProcInfo *perlinfo, const void *cx)
+{
   Trace *trace = &record->trace;
   int unwinder = PROG_UNWIND_PERL;
 
@@ -236,9 +238,10 @@ int process_perl_frame(PerCPURecord *record, const PerlProcInfo *perlinfo, const
   // Record the first valid COP from block contexts to determine current
   // line number inside the sub/format block.
   if (!record->perlUnwindState.cop) {
-    if (bpf_probe_read_user(&record->perlUnwindState.cop,
-                            sizeof(record->perlUnwindState.cop),
-                            cx + perlinfo->context_blk_oldcop)) {
+    if (bpf_probe_read_user(
+          &record->perlUnwindState.cop,
+          sizeof(record->perlUnwindState.cop),
+          cx + perlinfo->context_blk_oldcop)) {
       goto err;
     }
     DEBUG_PRINT("COP from context stack 0x%lx", (unsigned long)record->perlUnwindState.cop);
@@ -256,16 +259,18 @@ err:
   return PROG_UNWIND_PERL;
 }
 
-static inline __attribute__((__always_inline__))
-void prepare_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo) {
+static inline __attribute__((__always_inline__)) void
+prepare_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
+{
   const void *si = record->perlUnwindState.stackinfo;
   // cxstack contains the base of the current context stack which is an array of PERL_CONTEXT
   // structures, while cxstack_ix is the index of the current frame within that stack.
   s32 cxix;
   void *cxstack;
 
-  if (bpf_probe_read_user(&cxstack, sizeof(cxstack), si + perlinfo->si_cxstack) ||
-      bpf_probe_read_user(&cxix, sizeof(cxix), si + perlinfo->si_cxix)) {
+  if (
+    bpf_probe_read_user(&cxstack, sizeof(cxstack), si + perlinfo->si_cxstack) ||
+    bpf_probe_read_user(&cxix, sizeof(cxix), si + perlinfo->si_cxix)) {
     DEBUG_PRINT("Failed to read stackinfo at 0x%lx", (unsigned long)si);
     unwinder_mark_done(record, PROG_UNWIND_PERL);
     increment_metric(metricID_UnwindPerlReadStackInfo);
@@ -277,8 +282,9 @@ void prepare_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo) {
   record->perlUnwindState.cxcur  = cxstack + cxix * perlinfo->context_sizeof;
 }
 
-static inline __attribute__((__always_inline__))
-int walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo) {
+static inline __attribute__((__always_inline__)) int
+walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
+{
   const void *si = record->perlUnwindState.stackinfo;
 
   // If Perl stackinfo is not available, all frames have been processed, then
@@ -287,7 +293,7 @@ int walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo) {
     return get_next_unwinder_after_interpreter(record);
   }
 
-  int unwinder = PROG_UNWIND_PERL;
+  int unwinder       = PROG_UNWIND_PERL;
   const void *cxbase = record->perlUnwindState.cxbase;
 #pragma unroll
   for (u32 i = 0; i < PERL_FRAMES_PER_PROGRAM; ++i) {
@@ -331,10 +337,9 @@ int walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo) {
     // the context stack. Potential stackinfos below are not part of the real
     // Perl call stack.
     s32 type = 0;
-    if (bpf_probe_read_user(&type, sizeof(type), si + perlinfo->si_type) ||
-        type == PERLSI_MAIN ||
-        bpf_probe_read_user(&si, sizeof(si), si + perlinfo->si_next) ||
-        si == NULL) {
+    if (
+      bpf_probe_read_user(&type, sizeof(type), si + perlinfo->si_type) || type == PERLSI_MAIN ||
+      bpf_probe_read_user(&si, sizeof(si), si + perlinfo->si_next) || si == NULL) {
       // Stop walking stacks if main stack is finished, or something went wrong.
       DEBUG_PRINT("Perl stackinfos done");
       unwinder_mark_done(record, PROG_UNWIND_PERL);
@@ -347,8 +352,10 @@ int walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo) {
   }
 
   // Stack completed. Prepare the next one.
-  DEBUG_PRINT("Perl unwind done, next stackinfo 0x%lx, 0x%lx 0x%lx",
-    (unsigned long)si, (unsigned long)record->perlUnwindState.cxbase,
+  DEBUG_PRINT(
+    "Perl unwind done, next stackinfo 0x%lx, 0x%lx 0x%lx",
+    (unsigned long)si,
+    (unsigned long)record->perlUnwindState.cxbase,
     (unsigned long)record->perlUnwindState.cxcur);
   return unwinder;
 }
@@ -356,15 +363,15 @@ int walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo) {
 // unwind_perl is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // Perl stack frames to the trace object for the current CPU.
-SEC("perf_event/unwind_perl")
-int unwind_perl(struct pt_regs *ctx) {
+static inline __attribute__((__always_inline__)) int unwind_perl(struct pt_regs *ctx)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
     return -1;
   }
 
   Trace *trace = &record->trace;
-  u32 pid = trace->pid;
+  u32 pid      = trace->pid;
   DEBUG_PRINT("unwind_perl()");
 
   PerlProcInfo *perlinfo = bpf_map_lookup_elem(&perl_procs, &pid);
@@ -389,7 +396,7 @@ int unwind_perl(struct pt_regs *ctx) {
       }
 
       int tsd_key;
-      if (bpf_probe_read_user(&tsd_key, sizeof(tsd_key), (void*)perlinfo->stateAddr)) {
+      if (bpf_probe_read_user(&tsd_key, sizeof(tsd_key), (void *)perlinfo->stateAddr)) {
         DEBUG_PRINT("Failed to read tsdKey from 0x%lx", (unsigned long)perlinfo->stateAddr);
         goto err_tsd;
       }
@@ -400,16 +407,21 @@ int unwind_perl(struct pt_regs *ctx) {
         goto exit;
       }
 
-      DEBUG_PRINT("TSD Base 0x%lx, TSD Key %d", (unsigned long) tsd_base, tsd_key);
+      DEBUG_PRINT("TSD Base 0x%lx, TSD Key %d", (unsigned long)tsd_base, tsd_key);
     } else {
-      interpreter = (void*)perlinfo->stateAddr;
+      interpreter = (void *)perlinfo->stateAddr;
     }
     DEBUG_PRINT("PerlInterpreter 0x%lx", (unsigned long)interpreter);
 
-    if (bpf_probe_read_user(&record->perlUnwindState.stackinfo, sizeof(record->perlUnwindState.stackinfo),
-                            (void*)interpreter + perlinfo->interpreter_curstackinfo) ||
-        bpf_probe_read_user(&record->perlUnwindState.cop, sizeof(record->perlUnwindState.cop),
-                            (void*)interpreter + perlinfo->interpreter_curcop)) {
+    if (
+      bpf_probe_read_user(
+        &record->perlUnwindState.stackinfo,
+        sizeof(record->perlUnwindState.stackinfo),
+        (void *)interpreter + perlinfo->interpreter_curstackinfo) ||
+      bpf_probe_read_user(
+        &record->perlUnwindState.cop,
+        sizeof(record->perlUnwindState.cop),
+        (void *)interpreter + perlinfo->interpreter_curcop)) {
       DEBUG_PRINT("Failed to read interpreter state");
       increment_metric(metricID_UnwindPerlReadStackInfo);
       goto exit;
@@ -426,3 +438,4 @@ exit:
   tail_call(ctx, unwinder);
   return -1;
 }
+MULTI_USE_FUNC(unwind_perl)

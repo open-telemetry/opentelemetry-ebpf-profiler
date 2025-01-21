@@ -29,6 +29,7 @@ type newCmd struct {
 
 	// User-specified command line arguments.
 	coredumpPath     string
+	sysroot          string
 	pid              uint64
 	name             string
 	importThreadInfo string
@@ -110,6 +111,7 @@ func newNewCmd(store *modulestore.Store) *ffcli.Command {
 
 	set := flag.NewFlagSet("new", flag.ExitOnError)
 	set.StringVar(&args.coredumpPath, "core", "", "Path of the coredump to import")
+	set.StringVar(&args.sysroot, "sysroot", "", "Path for the coredump associated ELF files")
 	set.Uint64Var(&args.pid, "pid", 0, "PID to create a fresh coredump for")
 	set.StringVar(&args.name, "name", "", "Name for the test case [required]")
 	set.StringVar(&args.importThreadInfo, "import-thread-info", "", "If this flag is specified, "+
@@ -139,17 +141,19 @@ func (cmd *newCmd) exec(context.Context, []string) (err error) {
 	}
 
 	var corePath string
-	prefix := ""
+	prefix := cmd.sysroot
 	if cmd.coredumpPath != "" {
 		corePath = cmd.coredumpPath
 	} else {
 		// No path provided: create a new dump.
-		corePath, err = dumpCore(cmd.pid)
+		corePath, err = dumpCore(cmd.pid, cmd.noModuleBundling)
 		if err != nil {
 			return fmt.Errorf("failed to create coredump: %w", err)
 		}
 		defer os.Remove(corePath)
-		prefix = fmt.Sprintf("/proc/%d/root/", cmd.pid)
+		if prefix == "" {
+			prefix = fmt.Sprintf("/proc/%d/root/", cmd.pid)
+		}
 	}
 
 	core, err := newTrackedCoredump(corePath, prefix)
@@ -195,32 +199,34 @@ func (cmd *newCmd) exec(context.Context, []string) (err error) {
 	return nil
 }
 
-func dumpCore(pid uint64) (string, error) {
-	// Backup current coredump filter mask.
-	// https://man7.org/linux/man-pages/man5/core.5.html
-	coredumpFilterPath := fmt.Sprintf("/proc/%d/coredump_filter", pid)
-	prevMask, err := os.ReadFile(coredumpFilterPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read coredump filter: %w", err)
-	}
-	// Adjust coredump filter mask.
-	//nolint:gosec
-	err = os.WriteFile(coredumpFilterPath, []byte("0x3f"), 0o644)
-	if err != nil {
-		return "", fmt.Errorf("failed to write coredump filter: %w", err)
-	}
-	// Restore coredump filter mask upon leaving the function.
-	defer func() {
-		//nolint:gosec
-		err2 := os.WriteFile(coredumpFilterPath, prevMask, 0o644)
-		if err2 != nil {
-			log.Warnf("Failed to restore previous coredump filter: %v", err2)
+func dumpCore(pid uint64, noModuleBundling bool) (string, error) {
+	if noModuleBundling {
+		// Backup current coredump filter mask.
+		// https://man7.org/linux/man-pages/man5/core.5.html
+		coredumpFilterPath := fmt.Sprintf("/proc/%d/coredump_filter", pid)
+		prevMask, err := os.ReadFile(coredumpFilterPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to read coredump filter: %w", err)
 		}
-	}()
+		// Adjust coredump filter mask.
+		//nolint:gosec
+		err = os.WriteFile(coredumpFilterPath, []byte("0x3f"), 0o644)
+		if err != nil {
+			return "", fmt.Errorf("failed to write coredump filter: %w", err)
+		}
+		// Restore coredump filter mask upon leaving the function.
+		defer func() {
+			//nolint:gosec
+			err2 := os.WriteFile(coredumpFilterPath, append([]byte("0x"), prevMask...), 0o644)
+			if err2 != nil {
+				log.Warnf("Failed to restore previous coredump filter: %v", err2)
+			}
+		}()
+	}
 
 	// `gcore` only accepts a path-prefix, not an exact path.
 	//nolint:gosec
-	err = exec.Command("gcore", "-o", gcorePathPrefix, strconv.FormatUint(pid, 10)).Run()
+	err := exec.Command("gcore", "-o", gcorePathPrefix, strconv.FormatUint(pid, 10)).Run()
 	if err != nil {
 		return "", fmt.Errorf("gcore failed: %w", err)
 	}

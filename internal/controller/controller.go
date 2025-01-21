@@ -9,10 +9,9 @@ import (
 	"github.com/tklauser/numcpus"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
-	"go.opentelemetry.io/ebpf-profiler/hostmetadata"
-	"go.opentelemetry.io/ebpf-profiler/internal/helpers"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -68,33 +67,12 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to parse the included tracers: %w", err)
 	}
 
-	metadataCollector := hostmetadata.NewCollector(c.config.CollAgentAddr)
-	metadataCollector.AddCustomData("os.type", "linux")
-
-	kernelVersion, err := helpers.GetKernelVersion()
-	if err != nil {
-		return fmt.Errorf("failed to get Linux kernel version: %w", err)
-	}
-	// OTel semantic introduced in https://github.com/open-telemetry/semantic-conventions/issues/66
-	metadataCollector.AddCustomData("os.kernel.release", kernelVersion)
-
-	// hostname and sourceIP will be populated from the root namespace.
-	hostname, sourceIP, err := helpers.GetHostnameAndSourceIP(c.config.CollAgentAddr)
-	if err != nil {
-		log.Warnf("Failed to fetch metadata information in the root namespace: %v", err)
-	}
-	metadataCollector.AddCustomData("host.name", hostname)
-	metadataCollector.AddCustomData("host.ip", sourceIP)
-
 	err = c.reporter.Start(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start reporter: %w", err)
 	}
 
 	metrics.SetReporter(c.reporter)
-
-	// Now that set the initial host metadata, start a goroutine to keep sending updates regularly.
-	metadataCollector.StartMetadataCollection(ctx, c.reporter)
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
@@ -109,6 +87,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		BPFVerifierLogLevel:    uint32(c.config.BpfVerifierLogLevel),
 		ProbabilisticInterval:  c.config.ProbabilisticInterval,
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
+		OffCPUThreshold:        uint32(c.config.OffCPUThreshold),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
@@ -128,6 +107,13 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to attach to perf event: %w", err)
 	}
 	log.Info("Attached tracer program")
+
+	if c.config.OffCPUThreshold < support.OffCPUThresholdMax {
+		if err := trc.StartOffCPUProfiling(); err != nil {
+			return fmt.Errorf("failed to start off-cpu profiling: %v", err)
+		}
+		log.Printf("Enabled off-cpu profiling")
+	}
 
 	if c.config.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
 		trc.StartProbabilisticProfiling(ctx)

@@ -106,50 +106,106 @@ func GetKernelModules(modulesPath string,
 	symmap.Add(libpf.Symbol{
 		Name:    "vmlinux",
 		Address: stext.Address,
-		Size:    int(etext.Address - stext.Address),
+		Size:    uint64(etext.Address - stext.Address),
 	})
 
-	atLeastOneValidAddress := false
-	count := 0
+	modules, err := parseKernelModules(bufio.NewScanner(file))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse kernel modules: %v", err)
+	}
 
-	var scanner = bufio.NewScanner(file)
+	for _, kmod := range modules {
+		symmap.Add(libpf.Symbol{
+			Name:    libpf.SymbolName(kmod.name),
+			Address: libpf.SymbolValue(kmod.address),
+			Size:    kmod.size,
+		})
+	}
+
+	symmap.Finalize()
+
+	return &symmap, nil
+}
+
+func parseKernelModules(scanner *bufio.Scanner) ([]kernelModule, error) {
+	var (
+		modules                []kernelModule
+		atLeastOneValidAddress = false
+		count                  = 0
+	)
+
 	for scanner.Scan() {
-		var size, refcount, address uint64
-		var name, dependencies, state string
-
 		line := scanner.Text()
 
 		count++
 
-		nFields, err := fmt.Sscanf(line, "%s %d %d %s %s 0x%x",
-			&name, &size, &refcount, &dependencies, &state, &address)
+		kmod, err := parseKernelModuleLine(line)
 		if err != nil {
-			log.Warnf("error parsing line '%s' in modules: '%s'", line, err)
-			continue
+			return nil, fmt.Errorf("failed to parse kernel module line '%s': %v", line, err)
 		}
-		if nFields < 6 {
-			log.Warnf("unexpected line in modules: '%s'", line)
-			continue
-		}
-		if address == 0 {
+		if kmod.address == 0 {
 			continue
 		}
 		atLeastOneValidAddress = true
 
-		symmap.Add(libpf.Symbol{
-			Name:    libpf.SymbolName(name),
-			Address: libpf.SymbolValue(address),
-			Size:    int(size),
-		})
+		modules = append(modules, kmod)
 	}
 
 	if count > 0 && !atLeastOneValidAddress {
 		return nil, errors.New("addresses from all modules is zero - check process permissions")
 	}
 
-	symmap.Finalize()
+	return modules, nil
+}
 
-	return &symmap, nil
+type kernelModule struct {
+	name    string
+	size    uint64
+	address uint64
+}
+
+func parseKernelModuleLine(line string) (kernelModule, error) {
+	// The format is: "name size refcount dependencies state address"
+	// The string is split into 7 parts as after address there can be an optional string.
+	parts := strings.SplitN(line, " ", 7)
+	if len(parts) < 6 {
+		return kernelModule{}, fmt.Errorf("unexpected line in modules: '%s'", line)
+	}
+
+	size, err := parseSize(parts[1])
+	if err != nil {
+		return kernelModule{}, err
+	}
+
+	address, err := parseAddress(parts[5])
+	if err != nil {
+		return kernelModule{}, err
+	}
+
+	return kernelModule{
+		name:    parts[0],
+		size:    size,
+		address: address,
+	}, nil
+}
+
+func parseAddress(addressStr string) (uint64, error) {
+	address, err := strconv.ParseUint(strings.TrimPrefix(addressStr, "0x"), 16, 64)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse address '%s' as hex value: %v",
+			addressStr, err)
+	}
+
+	return address, nil
+}
+
+func parseSize(sizeStr string) (uint64, error) {
+	size, err := strconv.ParseUint(sizeStr, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse size int value: %q: %v", sizeStr, err)
+	}
+
+	return size, nil
 }
 
 // IsPIDLive checks if a PID belongs to a live process. It will never produce a false negative but

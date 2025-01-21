@@ -117,6 +117,9 @@ func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 }
 
 func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
+	if bpfTrace == nil {
+		return
+	}
 	defer m.traceProcessor.SymbolizationComplete(bpfTrace.KTime)
 	timestamp := libpf.UnixTime64(bpfTrace.KTime.UnixNano())
 
@@ -127,6 +130,10 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		TID:            bpfTrace.TID,
 		APMServiceName: "", // filled in below
 		CPU:            bpfTrace.CPU,
+		ProcessName:    bpfTrace.ProcessName,
+		ExecutablePath: bpfTrace.ExecutablePath,
+		Origin:         bpfTrace.Origin,
+		OffTime:        bpfTrace.OffTime,
 	}
 
 	if !m.reporter.SupportsReportTraceEvent() {
