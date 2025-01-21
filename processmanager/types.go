@@ -154,6 +154,8 @@ type processInfo struct {
 	mappingsByFileID map[host.FileID]map[libpf.Address]*Mapping
 	// C-library Thread Specific Data information
 	tsdInfo *tpbase.TSDInfo
+	// process env vars from /proc/PID/environ
+	envVariables map[string]string
 }
 
 // addMapping adds a mapping to the internal indices.

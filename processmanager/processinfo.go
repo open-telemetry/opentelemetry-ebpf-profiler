@@ -16,6 +16,9 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"slices"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -35,6 +38,15 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
+
+type ProcessManagerConfig struct {
+	extractEnvVars []string
+}
+
+var pm_cfg = ProcessManagerConfig{extractEnvVars: []string{
+	"PIPELINE_PPOID",
+	"PIPELINE_SOFTWARENAME",
+	"PIPELINE_JOBID"}}
 
 // assignTSDInfo updates the TSDInfo for the Interpreters on given PID.
 // Caller must hold pm.mu write lock.
@@ -88,10 +100,25 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 		if name, err := os.ReadFile(fmt.Sprintf("/prod/%d/comm", pid)); err == nil {
 			processName = string(name)
 		}
+
+		envVarMap := make(map[string]string)
+		if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid)); err == nil {
+			splittedVars := strings.Split(string(envVars), "\000")
+			fmt.Println("EnvVars for PID" + strconv.Itoa(int(pid)))
+			for _, envVar := range splittedVars {
+				keyValuePair := strings.Split(envVar, "=")
+				if slices.Contains(pm_cfg.extractEnvVars, keyValuePair[0]) {
+					envVarMap[keyValuePair[0]] = keyValuePair[1]
+					fmt.Println(envVar)
+				}
+			}
+		}
+
 		info = &processInfo{
 			meta:             ProcessMeta{Name: processName, Executable: exePath},
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
+			envVariables:     envVarMap,
 			tsdInfo:          nil,
 		}
 		pm.pidToProcessInfo[pid] = info
@@ -723,3 +750,14 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 
 // Compile time check to make sure we satisfy the interface.
 var _ tracehandler.TraceProcessor = (*ProcessManager)(nil)
+
+func (pm *ProcessManager) EnvVarsForPID(pid libpf.PID) map[string]string {
+	var envVars map[string]string
+
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
+		envVars = procInfo.envVariables
+	}
+	return envVars
+}
