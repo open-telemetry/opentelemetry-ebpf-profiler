@@ -169,14 +169,12 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 // reportOTLPProfile creates and sends out an OTLP profile.
 func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	traceEvents := r.traceEvents.WLock()
-	events := maps.Clone(*traceEvents)
-	originsMap := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
-	clear(*traceEvents)
+	events := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
 	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
 		support.TraceOriginOffCPU} {
-		originsMap[origin] = make(samples.KeyToEventMapping)
+		events[origin] = maps.Clone((*traceEvents)[origin])
+		clear((*traceEvents)[origin])
 	}
-	*traceEvents = originsMap
 	r.traceEvents.WUnlock(&traceEvents)
 
 	profiles := r.pdata.Generate(events)
