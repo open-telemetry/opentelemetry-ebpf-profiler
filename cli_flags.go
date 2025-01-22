@@ -63,7 +63,7 @@ var (
 		"If zero, monotonic-realtime clock sync will be performed once, " +
 		"on agent startup, but not periodically."
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
-	offCPUThresholdHelp = fmt.Sprintf("The per-mille chance for an off-cpu event being reported. "+
+	offCPUThresholdHelp = fmt.Sprintf("The per-mille chance for an off-cpu event being recorded. "+
 		"Valid values are in the range [0..%d]."+
 		"Default is %d (off-cpu profiling turned off). ",
 		support.OffCPUThresholdMax, defaultOffCPUThreshold)
