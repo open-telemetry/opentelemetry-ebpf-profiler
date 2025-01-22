@@ -13,6 +13,7 @@ import (
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -123,7 +124,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	defer m.traceProcessor.SymbolizationComplete(bpfTrace.KTime)
 	timestamp := libpf.UnixTime64(bpfTrace.KTime.UnixNano())
 
-	meta := &reporter.TraceEventMeta{
+	meta := &samples.TraceEventMeta{
 		Timestamp:      timestamp,
 		Comm:           bpfTrace.Comm,
 		PID:            bpfTrace.PID,

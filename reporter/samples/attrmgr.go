@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package samples // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
+package samples // import "go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 import (
 	"fmt"
