@@ -37,7 +37,7 @@ int tracepoint__sched_switch(void *ctx)
     return ERR_UNREACHABLE;
   }
 
-  if (bpf_get_prandom_u32() % OFF_CPU_THRESHOLD_MAX > syscfg->off_cpu_threshold) {
+  if (bpf_get_prandom_u32() % OFF_CPU_THRESHOLD_MAX >= syscfg->off_cpu_threshold) {
     return 0;
   }
 

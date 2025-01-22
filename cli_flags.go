@@ -25,7 +25,7 @@ const (
 	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
 	defaultProbabilisticInterval  = 1 * time.Minute
 	defaultArgSendErrorFrames     = false
-	defaultOffCPUThreshold        = support.OffCPUThresholdMax
+	defaultOffCPUThreshold        = 0
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -63,11 +63,10 @@ var (
 		"If zero, monotonic-realtime clock sync will be performed once, " +
 		"on agent startup, but not periodically."
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
-	offCPUThresholdHelp = fmt.Sprintf("If set to a value between 1 and %d will enable "+
-		"off-cpu profiling: Every time an off-cpu entry point is hit, a random number between "+
-		"0 and %d is chosen. If the given threshold is greater than this random number, the "+
-		"off-cpu trace is collected and reported.",
-		support.OffCPUThresholdMax-1, support.OffCPUThresholdMax-1)
+	offCPUThresholdHelp = fmt.Sprintf("The per-mille chance for an off-cpu event being recorded. "+
+		"Valid values are in the range [1..%d], and 0 to disable off-cpu profiling."+
+		"Default is %d.",
+		support.OffCPUThresholdMax, defaultOffCPUThreshold)
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer

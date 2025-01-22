@@ -490,7 +490,7 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 		return nil, nil, fmt.Errorf("failed to load perf eBPF programs: %v", err)
 	}
 
-	if cfg.OffCPUThreshold < support.OffCPUThresholdMax {
+	if cfg.OffCPUThreshold > 0 {
 		if err = loadKProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
@@ -554,7 +554,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	// On modern systems /proc/sys/kernel/pid_max defaults to 4194304.
 	// Try to fit this PID space scaled down with cfg.OffCPUThreshold into
 	// this map.
-	adaption["sched_times"] = (4194304 / support.OffCPUThresholdMax) * cfg.OffCPUThreshold
+	adaption["sched_times"] = (4194304 * cfg.OffCPUThreshold) / support.OffCPUThresholdMax
 
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
 		mapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)
@@ -562,14 +562,13 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	}
 
 	for mapName, mapSpec := range coll.Maps {
+		if mapName == "sched_times" && cfg.OffCPUThreshold == 0 {
+			// Off CPU Profiling is disabled. So do not load this map.
+			continue
+		}
 		if newSize, ok := adaption[mapName]; ok {
 			log.Debugf("Size of eBPF map %s: %v", mapName, newSize)
 			mapSpec.MaxEntries = newSize
-		}
-		if mapName == "sched_times" &&
-			cfg.OffCPUThreshold >= support.OffCPUThresholdMax {
-			// Off CPU Profiling is not enabled. So do not load this map.
-			continue
 		}
 		ebpfMap, err := cebpf.NewMap(mapSpec)
 		if err != nil {
