@@ -135,10 +135,11 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 // error counts.
 func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	traceOutChan chan<- *host.Trace) func() (lost, noData, readError uint64) {
-	eventReader, err := perf.NewReader(t.ebpfMaps["trace_events"],
+	eventsMap := t.ebpfMaps["trace_events"]
+	eventReader, err := perf.NewReader(eventsMap,
 		t.samplesPerSecond*int(unsafe.Sizeof(C.Trace{})))
 	if err != nil {
-		log.Fatalf("Failed to setup perf reporting via %s: %v", t.ebpfMaps["trace_events"], err)
+		log.Fatalf("Failed to setup perf reporting via %s: %v", eventsMap, err)
 	}
 
 	// A deadline of zero is treated as "no deadline". A deadline in the past
@@ -191,7 +192,6 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			// After we've received and processed all trace events, call
 			// SymbolizationComplete if there is a pending oldKTime that we
 			// haven't yet propagated to the rest of the agent.
-			//
 			// This introduces both an upper bound to SymbolizationComplete
 			// call frequency (dictated by pollTicker) but also skips calls
 			// when none are needed (e.g. no trace events have been read).
@@ -203,8 +203,8 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			// For example, as we don't control ordering of trace events being
 			// written by the kernel in per-CPU buffers across CPU cores, it's
 			// possible that given events generated on different cores with
-			// timestamps t0 < t1 < t2 < t3, this poll loop reads <t3 t1 t2>
-			// in a first iteration and t0 in a second iteration. If we use
+			// timestamps t0 < t1 < t2 < t3, this poll loop reads [t3 t1 t2]
+			// in a first iteration and [t0] in a second iteration. If we use
 			// the current iteration minKTime we'll call
 			// SymbolizationComplete(t1) first and t0 next, with t0 < t1.
 			if oldKTime > 0 {
