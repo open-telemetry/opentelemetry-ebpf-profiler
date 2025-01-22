@@ -512,22 +512,29 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 // fast enough and this particular pid is reused again by the system.
 // NOTE: Exported only for tracer.
 func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) {
+	exitKTime := times.GetKTime()
 	log.Debugf("- PID: %v", pid)
 	defer pm.ebpf.RemoveReportedPID(pid)
 
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	exitKTime := times.GetKTime()
-	if pm.interpreterTracerEnabled {
-		if len(pm.interpreters[pid]) > 0 {
+	pidExited := false
+	info, pidExists := pm.pidToProcessInfo[pid]
+	if pidExists || (pm.interpreterTracerEnabled &&
+		len(pm.interpreters[pid]) > 0) {
+		// ProcessPIDExit may be called multiple times in short succession
+		// for the same PID, don't update exitKTime if we've previously recorded it.
+		if _, pidExited = pm.exitEvents[pid]; !pidExited {
 			pm.exitEvents[pid] = exitKTime
 		}
 	}
-
-	info, ok := pm.pidToProcessInfo[pid]
-	if !ok {
+	if !pidExists {
 		log.Debugf("Skip process exit handling for unknown PID %d", pid)
+		return
+	}
+	if pidExited {
+		log.Debugf("Skip duplicate process exit handling for PID %d", pid)
 		return
 	}
 
@@ -545,7 +552,6 @@ func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) {
 				address, pid, err)
 		}
 	}
-	delete(pm.pidToProcessInfo, pid)
 }
 
 func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {

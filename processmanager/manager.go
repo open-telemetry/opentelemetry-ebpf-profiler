@@ -360,6 +360,9 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		if pidExitKTime > traceCaptureKTime {
 			continue
 		}
+
+		delete(pm.pidToProcessInfo, pid)
+
 		for _, instance := range pm.interpreters[pid] {
 			if err := instance.Detach(pm.ebpf, pid); err != nil {
 				log.Errorf("Failed to handle interpreted process exit for PID %d: %v",
