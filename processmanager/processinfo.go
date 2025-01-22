@@ -506,32 +506,29 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	return newProcess
 }
 
-// ProcessPIDExit informs the ProcessManager that a process exited and no longer will be scheduled
-// for processing. It also schedules immediate symbolization if the exited PID needs it. exitKTime
-// is stored for later processing in SymbolizationComplete when all traces have been collected.
-// There can be a race condition if we can not clean up the references for this process
+// ProcessPIDExit informs the ProcessManager that a process exited and no longer will be scheduled.
+// exitKTime is stored for later processing in ProcessedUntil, when traces up to this time have been
+// processed. There can be a race condition if we can not clean up the references for this process
 // fast enough and this particular pid is reused again by the system.
 // NOTE: Exported only for tracer.
-func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) bool {
+func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) {
 	log.Debugf("- PID: %v", pid)
 	defer pm.ebpf.RemoveReportedPID(pid)
 
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	symbolize := false
 	exitKTime := times.GetKTime()
 	if pm.interpreterTracerEnabled {
 		if len(pm.interpreters[pid]) > 0 {
 			pm.exitEvents[pid] = exitKTime
-			symbolize = true
 		}
 	}
 
 	info, ok := pm.pidToProcessInfo[pid]
 	if !ok {
 		log.Debugf("Skip process exit handling for unknown PID %d", pid)
-		return symbolize
+		return
 	}
 
 	// Delete all entries we have for this particular PID from pid_page_to_mapping_info.
@@ -549,8 +546,6 @@ func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) bool {
 		}
 	}
 	delete(pm.pidToProcessInfo, pid)
-
-	return symbolize
 }
 
 func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
