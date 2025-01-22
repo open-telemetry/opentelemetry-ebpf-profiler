@@ -47,11 +47,11 @@ type TraceProcessor interface {
 	// the frame and send the associated metadata to the collection agent.
 	ConvertTrace(trace *host.Trace) *libpf.Trace
 
-	// SymbolizationComplete is called after a group of Trace has been symbolized.
+	// ProcessedUntil is called periodically after Traces are processed/symbolized.
 	// It gets the timestamp of when the Traces (if any) were captured. The timestamp
 	// is in essence an indicator that all Traces until that time have been now processed,
-	// and any events up to this time can be processed.
-	SymbolizationComplete(traceCaptureKTime times.KTime)
+	// and any events and cleanup actions up to this time can be processed.
+	ProcessedUntil(traceCaptureKTime times.KTime)
 }
 
 // traceHandler provides functions for handling new traces and trace count updates

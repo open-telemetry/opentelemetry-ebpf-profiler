@@ -40,7 +40,7 @@ func (f *fakeTraceProcessor) ConvertTrace(trace *host.Trace) *libpf.Trace {
 	return &newTrace
 }
 
-func (f *fakeTraceProcessor) SymbolizationComplete(times.KTime) {}
+func (f *fakeTraceProcessor) ProcessedUntil(times.KTime) {}
 
 func (f *fakeTraceProcessor) MaybeNotifyAPMAgent(*host.Trace, libpf.TraceHash, uint16) string {
 	return ""

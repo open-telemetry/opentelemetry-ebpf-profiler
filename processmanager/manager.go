@@ -348,12 +348,12 @@ func (pm *ProcessManager) MaybeNotifyAPMAgent(
 	return serviceName
 }
 
-func (pm *ProcessManager) SymbolizationComplete(traceCaptureKTime times.KTime) {
+func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
 	nowKTime := times.GetKTime()
-	log.Debugf("SymbolizationComplete captureKT: %v latency: %v ms",
+	log.Debugf("ProcessedUntil captureKT: %v latency: %v ms",
 		traceCaptureKTime, (nowKTime-traceCaptureKTime)/1e6)
 
 	for pid, pidExitKTime := range pm.exitEvents {
