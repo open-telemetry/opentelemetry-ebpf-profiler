@@ -208,6 +208,9 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			// the current iteration minKTime we'll call
 			// SymbolizationComplete(t1) first and t0 next, with t0 < t1.
 			if oldKTime > 0 {
+				// Ensure that all previously sent trace events have been processed
+				traceOutChan <- nil
+
 				if minKTime > 0 && minKTime <= oldKTime {
 					// If minKTime is smaller than oldKTime, use it and reset it
 					// to avoid a repeat during next iteration.

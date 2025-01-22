@@ -192,7 +192,9 @@ func Start(ctx context.Context, rep reporter.TraceReporter, traceProcessor Trace
 		for {
 			select {
 			case traceUpdate := <-traceInChan:
-				handler.HandleTrace(traceUpdate)
+				if traceUpdate != nil {
+					handler.HandleTrace(traceUpdate)
+				}
 			case <-metricsTicker.C:
 				handler.collectMetrics()
 			case <-ctx.Done():
