@@ -64,8 +64,8 @@ var (
 		"on agent startup, but not periodically."
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
 	offCPUThresholdHelp = fmt.Sprintf("The per-mille chance for an off-cpu event being recorded. "+
-		"Valid values are in the range [0..%d]."+
-		"Default is %d (off-cpu profiling turned off). ",
+		"Valid values are in the range [1..%d], and 0 to disable off-cpu profiling."+
+		"Default is %d.",
 		support.OffCPUThresholdMax, defaultOffCPUThreshold)
 )
 

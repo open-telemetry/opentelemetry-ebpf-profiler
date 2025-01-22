@@ -94,7 +94,7 @@ func (cfg *Config) Validate() error {
 	if cfg.OffCPUThreshold > support.OffCPUThresholdMax {
 		return fmt.Errorf(
 			"invalid argument for off-cpu-threshold. Value "+
-				"should be between 0 and %d",
+				"should be between 1 and %d, or 0 to disable off-cpu profiling",
 			support.OffCPUThresholdMax,
 		)
 	}
