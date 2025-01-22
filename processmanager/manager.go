@@ -353,6 +353,8 @@ func (pm *ProcessManager) SymbolizationComplete(traceCaptureKTime times.KTime) {
 	defer pm.mu.Unlock()
 
 	nowKTime := times.GetKTime()
+	log.Debugf("SymbolizationComplete captureKT: %v latency: %v ms",
+		traceCaptureKTime, (nowKTime-traceCaptureKTime)/1e6)
 
 	for pid, pidExitKTime := range pm.exitEvents {
 		if pidExitKTime > traceCaptureKTime {

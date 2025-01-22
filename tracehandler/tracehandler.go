@@ -118,14 +118,8 @@ func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 }
 
 func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
-	if bpfTrace == nil {
-		return
-	}
-	defer m.traceProcessor.SymbolizationComplete(bpfTrace.KTime)
-	timestamp := libpf.UnixTime64(bpfTrace.KTime.UnixNano())
-
 	meta := &samples.TraceEventMeta{
-		Timestamp:      timestamp,
+		Timestamp:      libpf.UnixTime64(bpfTrace.KTime.UnixNano()),
 		Comm:           bpfTrace.Comm,
 		PID:            bpfTrace.PID,
 		TID:            bpfTrace.TID,
@@ -198,7 +192,9 @@ func Start(ctx context.Context, rep reporter.TraceReporter, traceProcessor Trace
 		for {
 			select {
 			case traceUpdate := <-traceInChan:
-				handler.HandleTrace(traceUpdate)
+				if traceUpdate != nil {
+					handler.HandleTrace(traceUpdate)
+				}
 			case <-metricsTicker.C:
 				handler.collectMetrics()
 			case <-ctx.Done():
