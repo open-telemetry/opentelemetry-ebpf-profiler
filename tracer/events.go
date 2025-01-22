@@ -208,13 +208,13 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			// the current iteration minKTime we'll call
 			// SymbolizationComplete(t1) first and t0 next, with t0 < t1.
 			if oldKTime > 0 {
-				if oldKTime <= minKTime {
-					t.TraceProcessor().SymbolizationComplete(oldKTime)
-				} else {
-					// If minKTime is smaller than oldKTime, use it
-					// and reset it to avoid a repeat.
+				if minKTime > 0 && minKTime <= oldKTime {
+					// If minKTime is smaller than oldKTime, use it and reset it
+					// to avoid a repeat during next iteration.
 					t.TraceProcessor().SymbolizationComplete(minKTime)
 					minKTime = 0
+				} else {
+					t.TraceProcessor().SymbolizationComplete(oldKTime)
 				}
 			}
 			oldKTime = minKTime
