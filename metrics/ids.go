@@ -689,6 +689,15 @@ const (
 	// Number of times the stack delta provider succeeded to extract stack deltas
 	IDStackDeltaProviderSuccess = 271
 
+	// Number of lost trace events in the communication between kernel and user space (trace_events)
+	IDTraceEventLost = 272
+
+	// Number of times a trace event was received without data (trace_events)
+	IDTraceEventNoData = 273
+
+	// Number of times a trace event read failed (trace_events)
+	IDTraceEventReadError = 274
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 272
+	IDMax = 275
 )
