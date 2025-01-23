@@ -520,13 +520,13 @@ func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	pidExited := false
+	pidExitProcessed := false
 	info, pidExists := pm.pidToProcessInfo[pid]
 	if pidExists || (pm.interpreterTracerEnabled &&
 		len(pm.interpreters[pid]) > 0) {
 		// ProcessPIDExit may be called multiple times in short succession
 		// for the same PID, don't update exitKTime if we've previously recorded it.
-		if _, pidExited = pm.exitEvents[pid]; !pidExited {
+		if _, pidExitProcessed = pm.exitEvents[pid]; !pidExitProcessed {
 			pm.exitEvents[pid] = exitKTime
 		}
 	}
@@ -534,7 +534,7 @@ func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) {
 		log.Debugf("Skip process exit handling for unknown PID %d", pid)
 		return
 	}
-	if pidExited {
+	if pidExitProcessed {
 		log.Debugf("Skip duplicate process exit handling for PID %d", pid)
 		return
 	}
