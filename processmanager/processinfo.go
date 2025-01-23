@@ -673,6 +673,33 @@ func (pm *ProcessManager) ExePathForPID(pid libpf.PID) string {
 	return executable
 }
 
+// findMappingForTrace locates the mapping for a given host trace.
+func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
+	addr libpf.AddressOrLineno) (m Mapping, found bool) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	procInfo, ok := pm.pidToProcessInfo[pid]
+	if !ok {
+		return Mapping{}, false
+	}
+
+	fidMappings, ok := procInfo.mappingsByFileID[fid]
+	if !ok {
+		return Mapping{}, false
+	}
+
+	for _, candidate := range fidMappings {
+		procSpaceVA := libpf.Address(uint64(addr) + candidate.Bias)
+		mappingEnd := candidate.Vaddr + libpf.Address(candidate.Length)
+		if procSpaceVA >= candidate.Vaddr && procSpaceVA <= mappingEnd {
+			return *candidate, true
+		}
+	}
+
+	return Mapping{}, false
+}
+
 func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()

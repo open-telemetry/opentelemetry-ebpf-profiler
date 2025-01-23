@@ -293,33 +293,6 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 	return newTrace
 }
 
-// findMappingForTrace locates the mapping for a given host trace.
-func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
-	addr libpf.AddressOrLineno) (m Mapping, found bool) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-
-	procInfo, ok := pm.pidToProcessInfo[pid]
-	if !ok {
-		return Mapping{}, false
-	}
-
-	fidMappings, ok := procInfo.mappingsByFileID[fid]
-	if !ok {
-		return Mapping{}, false
-	}
-
-	for _, candidate := range fidMappings {
-		procSpaceVA := libpf.Address(uint64(addr) + candidate.Bias)
-		mappingEnd := candidate.Vaddr + libpf.Address(candidate.Length)
-		if procSpaceVA >= candidate.Vaddr && procSpaceVA <= mappingEnd {
-			return *candidate, true
-		}
-	}
-
-	return Mapping{}, false
-}
-
 func (pm *ProcessManager) MaybeNotifyAPMAgent(
 	rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16) string {
 	pidInterp, ok := pm.interpreters[rawTrace.PID]
