@@ -32,6 +32,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
+	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -671,3 +672,34 @@ func (pm *ProcessManager) ExePathForPID(pid libpf.PID) string {
 	}
 	return executable
 }
+
+func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	nowKTime := times.GetKTime()
+	log.Debugf("ProcessedUntil captureKT: %v latency: %v ms",
+		traceCaptureKTime, (nowKTime-traceCaptureKTime)/1e6)
+
+	for pid, pidExitKTime := range pm.exitEvents {
+		if pidExitKTime > traceCaptureKTime {
+			continue
+		}
+
+		delete(pm.pidToProcessInfo, pid)
+
+		for _, instance := range pm.interpreters[pid] {
+			if err := instance.Detach(pm.ebpf, pid); err != nil {
+				log.Errorf("Failed to handle interpreted process exit for PID %d: %v",
+					pid, err)
+			}
+		}
+		delete(pm.interpreters, pid)
+		delete(pm.exitEvents, pid)
+
+		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
+	}
+}
+
+// Compile time check to make sure we satisfy the interface.
+var _ tracehandler.TraceProcessor = (*ProcessManager)(nil)
