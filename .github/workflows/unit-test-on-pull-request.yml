@@ -23,6 +23,22 @@ jobs:
             exit 1
           fi
 
+  tracer:
+    name: Check that tracer is up-to-date
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Clone code
+        uses: actions/checkout@v4
+      - name: Set up environment
+        uses: ./.github/workflows/env
+      - name: Check that tracer is up-to-date
+        run: |
+          make -C support/ebpf
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "run \"make -C support/ebpf\"."
+            exit 1
+          fi
+
   lint:
     name: Lint (${{ matrix.target_arch }})
     runs-on: ubuntu-24.04
