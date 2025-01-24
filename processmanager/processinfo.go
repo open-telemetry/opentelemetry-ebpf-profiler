@@ -520,6 +520,10 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	defer pm.mu.Unlock()
 
 	info, pidExists := pm.pidToProcessInfo[pid]
+	if !pidExists {
+		log.Debugf("Skip process exit handling for unknown PID %d", pid)
+		return
+	}
 	if pidExists || (pm.interpreterTracerEnabled &&
 		len(pm.interpreters[pid]) > 0) {
 		// ProcessPIDExit may be called multiple times in short succession
@@ -530,10 +534,6 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 			log.Debugf("Skip duplicate process exit handling for PID %d", pid)
 			return
 		}
-	}
-	if !pidExists {
-		log.Debugf("Skip process exit handling for unknown PID %d", pid)
-		return
 	}
 
 	// Delete all entries we have for this particular PID from pid_page_to_mapping_info.
