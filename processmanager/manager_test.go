@@ -602,7 +602,7 @@ func TestProcExit(t *testing.T) {
 
 			populateManager(t, manager)
 
-			manager.ProcessPIDExit(testcase.pid)
+			manager.processPIDExit(testcase.pid)
 			assert.Equal(t, testcase.deletePidPageMappingCount,
 				ebpfMockup.deletePidPageMappingCount)
 			assert.Equal(t, testcase.deleteStackDeltaRangesCount,
