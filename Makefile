@@ -27,6 +27,13 @@ endif
 
 COMPILER_TARGET ?= $(COMPILER_TARGET_ARCH)-redhat-linux
 SYSROOT_PATH ?= /
+BUILD_ENV ?= local
+ifeq ($(BUILD_ENV),local)
+TTY_IT_OPT := -it
+else
+TTY_IT_OPT :=
+endif
+BUILD_IMAGE ?= profiling-agent
 
 export CC = clang-17
 export COMPILER_TARGET
@@ -147,18 +154,18 @@ integration-test-binaries: generate ebpf
 
 ifeq ($(strip $(BASE_IMAGE)),)
 docker-image:
-	  docker build -t profiling-agent -f docker-image/Dockerfile .
+	  docker build -t $(BUILD_IMAGE) -f docker-image/Dockerfile .
 else
 docker-image:
-	  docker build --build-arg image=$(BASE_IMAGE) -t profiling-agent -f docker-image/Dockerfile .
+	  docker build --build-arg image=$(BASE_IMAGE) -t $(BUILD_IMAGE) -f docker-image/Dockerfile .
 endif
 
 agent:
-	docker run -v "$$PWD":/agent -v $(SYSROOT_PATH):/usr/sysroot -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
+	docker run -v "$$PWD":/agent -v $(SYSROOT_PATH):/usr/sysroot $(TTY_IT_OPT) --rm --user $(shell id -u):$(shell id -g) $(BUILD_IMAGE) \
 	   "make COMPILER_TARGET=$(COMPILER_TARGET) TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
 
 debug-agent:
-	docker run -v "$$PWD":/agent -v $(SYSROOT_PATH):/usr/sysroot -it --rm --user $(shell id -u):$(shell id -g) profiling-agent \
+	docker run -v "$$PWD":/agent -v $(SYSROOT_PATH):/usr/sysroot $(TTY_IT_OPT) --rm --user $(shell id -u):$(shell id -g) $(BUILD_IMAGE) \
 	   "make COMPILER_TARGET=$(COMPILER_TARGET) TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP) debug"
 
 legal:
