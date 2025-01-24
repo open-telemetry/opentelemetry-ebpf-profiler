@@ -1,7 +1,5 @@
-Elastic symbolization protocol
-==============================
-
-## `symbfile` format
+symbfile format
+===============
 
 `symbfile` is our custom file format for efficiently storing large amounts of
 symbol information. A symbfile is a concatenation of length- and message-type
@@ -20,7 +18,7 @@ We currently use two different symbol information representations:
   given address, the user would sweep though the whole symbfile and collect all
   ranges that contain the desired address and then order the resulting range
   records by their `depth` field. This presents the ground truth for symbol
-  information. 
+  information.
 - **Return pad records ([`ReturnPadV1`])**\
   These map a single address to the symbols of a full inline trace. We generate
   such records for each instruction following a `call`. The idea here is that
@@ -31,7 +29,7 @@ We currently use two different symbol information representations:
 
 While the symbfile format would generally also allow mixing both record types
 into a single file, we currently always generate a separate symbfile per record
-kind. 
+kind.
 
 More details about the format itself can be found in the documentation comments
 of the [protobuf definition][symbfile-proto].
