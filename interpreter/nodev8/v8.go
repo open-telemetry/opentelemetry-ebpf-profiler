@@ -1877,6 +1877,14 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 	}
 
 	// Add some defaults when needed
+	if d.version >= v8Ver(11, 9, 0) {
+		// the class hierarchy changed: HeapObject no longer
+		// derives from Object. This confuses gen-postmortem-metadata.py
+		// and it no longer emits class hierarchy information correctly.
+		// But ScopeInfo indeed still derives from HeapObject, so just set
+		// that manually here.
+		vms.ScopeInfo.HeapObject = true
+	}
 	if vms.FramePointer.BytecodeArray == 0 {
 		// Not available before V8 9.5.2
 		if d.version >= v8Ver(8, 7, 198) {
