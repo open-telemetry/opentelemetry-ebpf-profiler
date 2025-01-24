@@ -524,8 +524,7 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 		log.Debugf("Skip process exit handling for unknown PID %d", pid)
 		return
 	}
-	if pidExists || (pm.interpreterTracerEnabled &&
-		len(pm.interpreters[pid]) > 0) {
+	if pm.interpreterTracerEnabled && len(pm.interpreters[pid]) > 0 {
 		// ProcessPIDExit may be called multiple times in short succession
 		// for the same PID, don't update exitKTime if we've previously recorded it.
 		if _, pidExitProcessed := pm.exitEvents[pid]; !pidExitProcessed {
