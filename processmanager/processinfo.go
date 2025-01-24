@@ -32,6 +32,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
+	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -506,32 +507,36 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	return newProcess
 }
 
-// ProcessPIDExit informs the ProcessManager that a process exited and no longer will be scheduled
-// for processing. It also schedules immediate symbolization if the exited PID needs it. exitKTime
-// is stored for later processing in SymbolizationComplete when all traces have been collected.
-// There can be a race condition if we can not clean up the references for this process
+// ProcessPIDExit informs the ProcessManager that a process exited and no longer will be scheduled.
+// exitKTime is stored for later processing in ProcessedUntil, when traces up to this time have been
+// processed. There can be a race condition if we can not clean up the references for this process
 // fast enough and this particular pid is reused again by the system.
 // NOTE: Exported only for tracer.
-func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) bool {
+func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) {
+	exitKTime := times.GetKTime()
 	log.Debugf("- PID: %v", pid)
 	defer pm.ebpf.RemoveReportedPID(pid)
 
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	symbolize := false
-	exitKTime := times.GetKTime()
-	if pm.interpreterTracerEnabled {
-		if len(pm.interpreters[pid]) > 0 {
+	pidExitProcessed := false
+	info, pidExists := pm.pidToProcessInfo[pid]
+	if pidExists || (pm.interpreterTracerEnabled &&
+		len(pm.interpreters[pid]) > 0) {
+		// ProcessPIDExit may be called multiple times in short succession
+		// for the same PID, don't update exitKTime if we've previously recorded it.
+		if _, pidExitProcessed = pm.exitEvents[pid]; !pidExitProcessed {
 			pm.exitEvents[pid] = exitKTime
-			symbolize = true
 		}
 	}
-
-	info, ok := pm.pidToProcessInfo[pid]
-	if !ok {
+	if !pidExists {
 		log.Debugf("Skip process exit handling for unknown PID %d", pid)
-		return symbolize
+		return
+	}
+	if pidExitProcessed {
+		log.Debugf("Skip duplicate process exit handling for PID %d", pid)
+		return
 	}
 
 	// Delete all entries we have for this particular PID from pid_page_to_mapping_info.
@@ -548,9 +553,6 @@ func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) bool {
 				address, pid, err)
 		}
 	}
-	delete(pm.pidToProcessInfo, pid)
-
-	return symbolize
 }
 
 func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
@@ -670,3 +672,61 @@ func (pm *ProcessManager) ExePathForPID(pid libpf.PID) string {
 	}
 	return executable
 }
+
+// findMappingForTrace locates the mapping for a given host trace.
+func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
+	addr libpf.AddressOrLineno) (m Mapping, found bool) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	procInfo, ok := pm.pidToProcessInfo[pid]
+	if !ok {
+		return Mapping{}, false
+	}
+
+	fidMappings, ok := procInfo.mappingsByFileID[fid]
+	if !ok {
+		return Mapping{}, false
+	}
+
+	for _, candidate := range fidMappings {
+		procSpaceVA := libpf.Address(uint64(addr) + candidate.Bias)
+		mappingEnd := candidate.Vaddr + libpf.Address(candidate.Length)
+		if procSpaceVA >= candidate.Vaddr && procSpaceVA <= mappingEnd {
+			return *candidate, true
+		}
+	}
+
+	return Mapping{}, false
+}
+
+func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	nowKTime := times.GetKTime()
+	log.Debugf("ProcessedUntil captureKT: %v latency: %v ms",
+		traceCaptureKTime, (nowKTime-traceCaptureKTime)/1e6)
+
+	for pid, pidExitKTime := range pm.exitEvents {
+		if pidExitKTime > traceCaptureKTime {
+			continue
+		}
+
+		delete(pm.pidToProcessInfo, pid)
+
+		for _, instance := range pm.interpreters[pid] {
+			if err := instance.Detach(pm.ebpf, pid); err != nil {
+				log.Errorf("Failed to handle interpreted process exit for PID %d: %v",
+					pid, err)
+			}
+		}
+		delete(pm.interpreters, pid)
+		delete(pm.exitEvents, pid)
+
+		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
+	}
+}
+
+// Compile time check to make sure we satisfy the interface.
+var _ tracehandler.TraceProcessor = (*ProcessManager)(nil)

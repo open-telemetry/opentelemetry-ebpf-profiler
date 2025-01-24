@@ -190,9 +190,9 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				traceOutChan <- trace
 			}
 			// After we've received and processed all trace events, call
-			// SymbolizationComplete if there is a pending oldKTime that we
+			// ProcessedUntil if there is a pending oldKTime that we
 			// haven't yet propagated to the rest of the agent.
-			// This introduces both an upper bound to SymbolizationComplete
+			// This introduces both an upper bound to ProcessedUntil
 			// call frequency (dictated by pollTicker) but also skips calls
 			// when none are needed (e.g. no trace events have been read).
 			//
@@ -206,7 +206,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			// timestamps t0 < t1 < t2 < t3, this poll loop reads [t3 t1 t2]
 			// in a first iteration and [t0] in a second iteration. If we use
 			// the current iteration minKTime we'll call
-			// SymbolizationComplete(t1) first and t0 next, with t0 < t1.
+			// ProcessedUntil(t1) first and t0 next, with t0 < t1.
 			if oldKTime > 0 {
 				// Ensure that all previously sent trace events have been processed
 				traceOutChan <- nil
@@ -214,10 +214,10 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				if minKTime > 0 && minKTime <= oldKTime {
 					// If minKTime is smaller than oldKTime, use it and reset it
 					// to avoid a repeat during next iteration.
-					t.TraceProcessor().SymbolizationComplete(minKTime)
+					t.TraceProcessor().ProcessedUntil(minKTime)
 					minKTime = 0
 				} else {
-					t.TraceProcessor().SymbolizationComplete(oldKTime)
+					t.TraceProcessor().ProcessedUntil(oldKTime)
 				}
 			}
 			oldKTime = minKTime
