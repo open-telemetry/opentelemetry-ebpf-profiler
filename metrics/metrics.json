@@ -1937,5 +1937,26 @@
     "name": "StackDeltaProviderSuccess",
     "field": "agent.stack_delta_extraction.success",
     "id": 271
+  },
+  {
+    "description": "Number of lost trace events in the communication between kernel and user space (trace_events)",
+    "type": "counter",
+    "name": "TraceEventLost",
+    "field": "agent.errors.trace_event_lost",
+    "id": 272
+  },
+  {
+    "description": "Number of times a trace event was received without data (trace_events)",
+    "type": "counter",
+    "name": "TraceEventNoData",
+    "field": "agent.errors.trace_event_no_data",
+    "id": 273
+  },
+  {
+    "description": "Number of times a trace event read failed (trace_events)",
+    "type": "counter",
+    "name": "TraceEventReadError",
+    "field": "agent.errors.trace_event_read_error",
+    "id": 274
   }
 ]

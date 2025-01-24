@@ -1043,7 +1043,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 // maps for tracepoints, new traces, trace count updates and unknown PCs.
 func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host.Trace) error {
 	eventMetricCollector := t.startEventMonitor(ctx)
-	t.startTraceEventMonitor(ctx, traceOutChan)
+	traceEventMetricCollector := t.startTraceEventMonitor(ctx, traceOutChan)
 
 	pidEvents := make([]uint32, 0)
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
@@ -1162,6 +1162,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 
 	periodiccaller.Start(ctx, t.intervals.MonitorInterval(), func() {
 		metrics.AddSlice(eventMetricCollector())
+		metrics.AddSlice(traceEventMetricCollector())
 		metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
 
 		metrics.AddSlice([]metrics.Metric{

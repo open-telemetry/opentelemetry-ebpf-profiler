@@ -134,7 +134,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 // Returns a function that can be called to retrieve perf event array
 // error counts.
 func (t *Tracer) startTraceEventMonitor(ctx context.Context,
-	traceOutChan chan<- *host.Trace) func() (lost, noData, readError uint64) {
+	traceOutChan chan<- *host.Trace) func() []metrics.Metric {
 	eventsMap := t.ebpfMaps["trace_events"]
 	eventReader, err := perf.NewReader(eventsMap,
 		t.samplesPerSecond*int(unsafe.Sizeof(C.Trace{})))
@@ -224,11 +224,15 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 		}
 	}()
 
-	return func() (lost, noData, readError uint64) {
-		lost = lostEventsCount.Swap(0)
-		noData = noDataCount.Swap(0)
-		readError = readErrorCount.Swap(0)
-		return
+	return func() []metrics.Metric {
+		lost := lostEventsCount.Swap(0)
+		noData := noDataCount.Swap(0)
+		readError := readErrorCount.Swap(0)
+		return []metrics.Metric{
+			{ID: metrics.IDTraceEventLost, Value: metrics.MetricValue(lost)},
+			{ID: metrics.IDTraceEventNoData, Value: metrics.MetricValue(noData)},
+			{ID: metrics.IDTraceEventReadError, Value: metrics.MetricValue(readError)},
+		}
 	}
 }
 
