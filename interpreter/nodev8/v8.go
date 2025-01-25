@@ -2009,6 +2009,17 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 		vms.BaselineData.Data = vms.HeapObject.Map + 2*pointerSize
 	}
 
+	if vms.SharedFunctionInfo.FunctionData == 0 {
+		// No metadata as of v8 242fa685d0c4eb07b27a167157e3b5c8cc70c244 --
+		// note that RELEASE_ACQUIRE_ACCESSORS(SharedFunctionInfo, function_data, Tagged<Object>,
+		//                          kFunctionDataOffset)
+		// was removed from shared-function-info-inl.h .
+		// Anyway, the way this works is changing with V8_SANDBOX,
+		// but Node doesn't turn that on,
+		// so we can probably get away with just hardcoding it for now.
+		vms.SharedFunctionInfo.FunctionData = 8
+	}
+
 	for i := 0; i < vmVal.NumField(); i++ {
 		classVal := vmVal.Field(i)
 		classType := vmType.Field(i)
