@@ -346,6 +346,7 @@ type v8Data struct {
 			Code               uint16 `name:"Code__CODE_TYPE"`
 			FixedArray         uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
 			WeakFixedArray     uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
+			TrustedFixedArray  uint16 `name:"TrustedFixedArray__TRUSTED_FIXED_ARRAY_TYPE" zero:""`
 			JSFunction         uint16 `name:"JSFunction__JS_FUNCTION_TYPE"`
 			Map                uint16 `name:"Map__MAP_TYPE"`
 			Script             uint16 `name:"Script__SCRIPT_TYPE"`
@@ -412,6 +413,10 @@ type v8Data struct {
 			InstructionStart    uint16 `name:"instruction_start__uintptr_t,instruction_start__Address"`
 			InstructionSize     uint16 `name:"instruction_size__int"`
 			Flags               uint16 `name:"flags__uint32_t"`
+		}
+
+		DeoptimizationData struct {
+			TrustedFixedArray bool
 		}
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/shared-function-info.tq#57
@@ -1200,10 +1205,19 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 
 	// Read the deoptimization data
 	deoptimizationDataPtr := npsr.Ptr(code, uint(vms.Code.DeoptimizationData))
-	deoptimizationDataPtr, err = i.getTypedObject(deoptimizationDataPtr, vms.Type.FixedArray)
+	if vms.DeoptimizationData.TrustedFixedArray {
+		deoptimizationDataPtr, err =
+			i.getTypedObject(deoptimizationDataPtr, vms.Type.TrustedFixedArray)
+	} else {
+		deoptimizationDataPtr, err =
+			i.getTypedObject(deoptimizationDataPtr, vms.Type.FixedArray)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("deoptimization data pointer read: %v", err)
 	}
+	// We don't have metadata for TrustedFixedArray (at least as of 12.3.219),
+	// but for now the layout is the same as FixedArray, so it's fine if what follows
+	// assumes FixedArray.
 	numItemsNeeded := uint32(vms.DeoptimizationDataIndex.InliningPositions + 1)
 	deoptimizationData, err := i.readFixedTable(deoptimizationDataPtr, pointerSize, numItemsNeeded)
 	if err != nil {
@@ -1884,6 +1898,10 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 		// But ScopeInfo indeed still derives from HeapObject, so just set
 		// that manually here.
 		vms.ScopeInfo.HeapObject = true
+	}
+	if d.version >= v8Ver(12, 3, 219) {
+		// DeoptimizationData changed base type to TrustedFixedArray, which doesn't have metadata.
+		vms.DeoptimizationData.TrustedFixedArray = true
 	}
 	if vms.FramePointer.BytecodeArray == 0 {
 		// Not available before V8 9.5.2
