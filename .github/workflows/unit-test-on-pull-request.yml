@@ -72,6 +72,18 @@ jobs:
       - name: Tests
         run: make test TARGET_ARCH=${{ matrix.target_arch }}
 
+  test-rust:
+    name: Test rust components
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Clone code
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Tests
+        run: |
+          cargo test
+
   check-ebpf-blobs:
     name: Check for differences in the eBPF binary blobs
     runs-on: ubuntu-24.04
