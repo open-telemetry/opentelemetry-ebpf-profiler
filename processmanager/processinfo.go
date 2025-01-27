@@ -507,12 +507,11 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	return newProcess
 }
 
-// ProcessPIDExit informs the ProcessManager that a process exited and no longer will be scheduled.
+// processPIDExit informs the ProcessManager that a process exited and no longer will be scheduled.
 // exitKTime is stored for later processing in ProcessedUntil, when traces up to this time have been
 // processed. There can be a race condition if we can not clean up the references for this process
 // fast enough and this particular pid is reused again by the system.
-// NOTE: Exported only for tracer.
-func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) {
+func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	exitKTime := times.GetKTime()
 	log.Debugf("- PID: %v", pid)
 	defer pm.ebpf.RemoveReportedPID(pid)
@@ -520,23 +519,20 @@ func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	pidExitProcessed := false
 	info, pidExists := pm.pidToProcessInfo[pid]
-	if pidExists || (pm.interpreterTracerEnabled &&
-		len(pm.interpreters[pid]) > 0) {
-		// ProcessPIDExit may be called multiple times in short succession
-		// for the same PID, don't update exitKTime if we've previously recorded it.
-		if _, pidExitProcessed = pm.exitEvents[pid]; !pidExitProcessed {
-			pm.exitEvents[pid] = exitKTime
-		}
-	}
 	if !pidExists {
 		log.Debugf("Skip process exit handling for unknown PID %d", pid)
 		return
 	}
-	if pidExitProcessed {
-		log.Debugf("Skip duplicate process exit handling for PID %d", pid)
-		return
+	if pm.interpreterTracerEnabled && len(pm.interpreters[pid]) > 0 {
+		// ProcessPIDExit may be called multiple times in short succession
+		// for the same PID, don't update exitKTime if we've previously recorded it.
+		if _, pidExitProcessed := pm.exitEvents[pid]; !pidExitProcessed {
+			pm.exitEvents[pid] = exitKTime
+		} else {
+			log.Debugf("Skip duplicate process exit handling for PID %d", pid)
+			return
+		}
 	}
 
 	// Delete all entries we have for this particular PID from pid_page_to_mapping_info.
@@ -555,6 +551,8 @@ func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) {
 	}
 }
 
+// SynchronizeProcess triggers ProcessManager to update its internal information
+// about a process. This includes process exit information as well as changed memory mappings.
 func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pid := pr.PID()
 	log.Debugf("= PID: %v", pid)
@@ -576,7 +574,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 		// All other errors imply that the process has exited.
 		// Clean up, and notify eBPF.
-		pm.ProcessPIDExit(pid)
+		pm.processPIDExit(pid)
 		if os.IsNotExist(err) {
 			// Since listing /proc and opening files in there later is inherently racy,
 			// we expect to lose the race sometimes and thus expect to hit os.IsNotExist.
@@ -602,7 +600,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		//    the process is changing: all mappings, comm, etc. If execve fails, we
 		//    reaped it early. If execve succeeds, we will get new synchronization
 		//    request soon, and handle it as a new process event.
-		pm.ProcessPIDExit(pid)
+		pm.processPIDExit(pid)
 		return
 	}
 
@@ -640,7 +638,7 @@ func (pm *ProcessManager) CleanupPIDs() {
 	pm.mu.RUnlock()
 
 	for _, pid := range deadPids {
-		pm.ProcessPIDExit(pid)
+		pm.processPIDExit(pid)
 	}
 
 	if len(deadPids) > 0 {
