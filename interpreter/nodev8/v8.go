@@ -346,6 +346,7 @@ type v8Data struct {
 			Code               uint16 `name:"Code__CODE_TYPE"`
 			FixedArray         uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
 			WeakFixedArray     uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
+			TrustedByteArray   uint16 `name:"TrustedByteArray__TRUSTED_BYTE_ARRAY_TYPE" zero:""`
 			TrustedFixedArray  uint16 `name:"TrustedFixedArray__TRUSTED_FIXED_ARRAY_TYPE" zero:""`
 			JSFunction         uint16 `name:"JSFunction__JS_FUNCTION_TYPE"`
 			Map                uint16 `name:"Map__MAP_TYPE"`
@@ -417,6 +418,13 @@ type v8Data struct {
 
 		DeoptimizationData struct {
 			TrustedFixedArray bool
+			FixedArray        bool
+		}
+
+		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.9.202.28/src/objects/bytecode-array-inl.h#116
+		SourcePositionTable struct {
+			TrustedByteArray bool
+			ByteArray        bool
 		}
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/shared-function-info.tq#57
@@ -1174,7 +1182,11 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 
 	// Read in full source position tables
 	sourcePositionPtr := npsr.Ptr(code, uint(vms.Code.SourcePositionTable))
-	sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr, vms.Type.ByteArray)
+	if vms.SourcePositionTable.TrustedByteArray {
+		sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr, vms.Type.TrustedByteArray)
+	} else {
+		sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr, vms.Type.ByteArray)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("code source position pointer read: %v", err)
 	}
@@ -1899,10 +1911,15 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 		// that manually here.
 		vms.ScopeInfo.HeapObject = true
 	}
-	if d.version >= v8Ver(12, 3, 219) {
+	if d.version >= v8Ver(12, 3, 0) && !vms.DeoptimizationData.FixedArray {
 		// DeoptimizationData changed base type to TrustedFixedArray, which doesn't have metadata.
 		vms.DeoptimizationData.TrustedFixedArray = true
 	}
+	if d.version >= v8Ver(12, 4, 0) && !vms.SourcePositionTable.ByteArray {
+		// SourcePositionTable changed base type to TrustedByteArray, which doesn't have metadata.
+		vms.SourcePositionTable.TrustedByteArray = true
+	}
+
 	if vms.FramePointer.BytecodeArray == 0 {
 		// Not available before V8 9.5.2
 		if d.version >= v8Ver(8, 7, 198) {
