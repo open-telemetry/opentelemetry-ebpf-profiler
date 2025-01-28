@@ -514,8 +514,14 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	exitKTime := times.GetKTime()
 	log.Debugf("- PID: %v", pid)
-	defer pm.ebpf.RemoveReportedPID(pid)
 
+	var err error
+	defer func() {
+		if err != nil {
+			log.Error(err)
+		}
+	}()
+	defer pm.ebpf.RemoveReportedPID(pid)
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -536,17 +542,17 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	}
 
 	// Delete all entries we have for this particular PID from pid_page_to_mapping_info.
-	deleted, err := pm.ebpf.DeletePidPageMappingInfo(pid, []lpm.Prefix{dummyPrefix})
-	if err != nil {
-		log.Errorf("Failed to delete dummy prefix for PID %d: %v",
-			pid, err)
+	deleted, err2 := pm.ebpf.DeletePidPageMappingInfo(pid, []lpm.Prefix{dummyPrefix})
+	if err2 != nil {
+		err = errors.Join(err, fmt.Errorf("failed to delete dummy prefix for PID %d: %v",
+			pid, err2))
 	}
 	pm.pidPageToMappingInfoSize -= uint64(deleted)
 
 	for address := range info.mappings {
-		if err := pm.deletePIDAddress(pid, address); err != nil {
-			log.Errorf("Failed to delete address 0x%x for PID %d: %v",
-				address, pid, err)
+		if err2 = pm.deletePIDAddress(pid, address); err2 != nil {
+			err = errors.Join(err, fmt.Errorf("failed to delete address 0x%x for PID %d: %v",
+				address, pid, err2))
 		}
 	}
 }
@@ -699,6 +705,12 @@ func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
 }
 
 func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
+	var err error
+	defer func() {
+		if err != nil {
+			log.Error(err)
+		}
+	}()
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -714,14 +726,14 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		delete(pm.pidToProcessInfo, pid)
 
 		for _, instance := range pm.interpreters[pid] {
-			if err := instance.Detach(pm.ebpf, pid); err != nil {
-				log.Errorf("Failed to handle interpreted process exit for PID %d: %v",
-					pid, err)
+			if err2 := instance.Detach(pm.ebpf, pid); err2 != nil {
+				err = errors.Join(err,
+					fmt.Errorf("failed to handle interpreted process exit for PID %d: %v",
+						pid, err2))
 			}
 		}
 		delete(pm.interpreters, pid)
 		delete(pm.exitEvents, pid)
-
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
 }
