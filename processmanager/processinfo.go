@@ -17,7 +17,6 @@ import (
 	"os"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -104,12 +103,10 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 		envVarMap := make(map[string]string)
 		if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid)); err == nil {
 			splittedVars := strings.Split(string(envVars), "\000")
-			fmt.Println("EnvVars for PID" + strconv.Itoa(int(pid)))
 			for _, envVar := range splittedVars {
-				keyValuePair := strings.Split(envVar, "=")
+				keyValuePair := strings.SplitN(envVar, "=", 2)
 				if slices.Contains(pm_cfg.extractEnvVars, keyValuePair[0]) {
 					envVarMap[keyValuePair[0]] = keyValuePair[1]
-					fmt.Println(envVar)
 				}
 			}
 		}
