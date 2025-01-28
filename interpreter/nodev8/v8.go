@@ -340,20 +340,21 @@ type v8Data struct {
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/tools/gen-postmortem-metadata.py#709
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/instance-type.h#75
 		Type struct {
-			BaselineData       uint16 `name:"BaselineData__BASELINE_DATA_TYPE" zero:""`
-			ByteArray          uint16 `name:"ByteArray__BYTE_ARRAY_TYPE"`
-			BytecodeArray      uint16 `name:"BytecodeArray__BYTECODE_ARRAY_TYPE"`
-			Code               uint16 `name:"Code__CODE_TYPE"`
-			CodeWrapper        uint16 `name:"CodeWrapper__CODE_WRAPPER_TYPE" zero:""`
-			FixedArray         uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
-			WeakFixedArray     uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
-			TrustedByteArray   uint16 `name:"TrustedByteArray__TRUSTED_BYTE_ARRAY_TYPE" zero:""`
-			TrustedFixedArray  uint16 `name:"TrustedFixedArray__TRUSTED_FIXED_ARRAY_TYPE" zero:""`
-			JSFunction         uint16 `name:"JSFunction__JS_FUNCTION_TYPE"`
-			Map                uint16 `name:"Map__MAP_TYPE"`
-			Script             uint16 `name:"Script__SCRIPT_TYPE"`
-			ScopeInfo          uint16 `name:"ScopeInfo__SCOPE_INFO_TYPE"`
-			SharedFunctionInfo uint16 `name:"SharedFunctionInfo__SHARED_FUNCTION_INFO_TYPE"`
+			BaselineData        uint16 `name:"BaselineData__BASELINE_DATA_TYPE" zero:""`
+			ByteArray           uint16 `name:"ByteArray__BYTE_ARRAY_TYPE"`
+			BytecodeArray       uint16 `name:"BytecodeArray__BYTECODE_ARRAY_TYPE"`
+			Code                uint16 `name:"Code__CODE_TYPE"`
+			CodeWrapper         uint16 `name:"CodeWrapper__CODE_WRAPPER_TYPE" zero:""`
+			FixedArray          uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
+			WeakFixedArray      uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
+			TrustedByteArray    uint16 `name:"TrustedByteArray__TRUSTED_BYTE_ARRAY_TYPE" zero:""`
+			TrustedFixedArray   uint16 `name:"TrustedFixedArray__TRUSTED_FIXED_ARRAY_TYPE" zero:""`
+			ProtectedFixedArray uint16 `name:"ProtectedFixedArray__PROTECTED_FIXED_ARRAY_TYPE" zero:""`
+			JSFunction          uint16 `name:"JSFunction__JS_FUNCTION_TYPE"`
+			Map                 uint16 `name:"Map__MAP_TYPE"`
+			Script              uint16 `name:"Script__SCRIPT_TYPE"`
+			ScopeInfo           uint16 `name:"ScopeInfo__SCOPE_INFO_TYPE"`
+			SharedFunctionInfo  uint16 `name:"SharedFunctionInfo__SHARED_FUNCTION_INFO_TYPE"`
 		} `name:"type"`
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/heap-object.tq#7
@@ -417,9 +418,11 @@ type v8Data struct {
 			Flags               uint16 `name:"flags__uint32_t"`
 		}
 
+		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.9.202.28/src/objects/deoptimization-data.h#266
 		DeoptimizationData struct {
-			TrustedFixedArray bool
-			FixedArray        bool
+			ProtectedFixedArray bool
+			TrustedFixedArray   bool
+			FixedArray          bool
 		}
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.9.202.28/src/objects/bytecode-array-inl.h#116
@@ -1218,7 +1221,10 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 
 	// Read the deoptimization data
 	deoptimizationDataPtr := npsr.Ptr(code, uint(vms.Code.DeoptimizationData))
-	if vms.DeoptimizationData.TrustedFixedArray {
+	if vms.DeoptimizationData.ProtectedFixedArray {
+		deoptimizationDataPtr, err =
+			i.getTypedObject(deoptimizationDataPtr, vms.Type.ProtectedFixedArray)
+	} else if vms.DeoptimizationData.TrustedFixedArray {
 		deoptimizationDataPtr, err =
 			i.getTypedObject(deoptimizationDataPtr, vms.Type.TrustedFixedArray)
 	} else {
@@ -1912,7 +1918,10 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 		// that manually here.
 		vms.ScopeInfo.HeapObject = true
 	}
-	if d.version >= v8Ver(12, 3, 0) && !vms.DeoptimizationData.FixedArray {
+	if d.version >= v8Ver(12, 5, 0) && !vms.DeoptimizationData.FixedArray &&
+		!vms.DeoptimizationData.TrustedFixedArray {
+		vms.DeoptimizationData.ProtectedFixedArray = true
+	} else if d.version >= v8Ver(12, 3, 0) && !vms.DeoptimizationData.FixedArray {
 		// DeoptimizationData changed base type to TrustedFixedArray, which doesn't have metadata.
 		vms.DeoptimizationData.TrustedFixedArray = true
 	}
