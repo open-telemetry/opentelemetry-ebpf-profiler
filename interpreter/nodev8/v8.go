@@ -430,7 +430,7 @@ type v8Data struct {
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/shared-function-info.tq#57
 		SharedFunctionInfo struct {
-			NameOrScopeInfo   uint16 `name:"name_or_scope_info__Object,name_or_scope_info__Tagged_Object_"`
+			NameOrScopeInfo   uint16 `name:"name_or_scope_info__Object,name_or_scope_info__Tagged_Object_,name_or_scope_info__Tagged_NameOrScopeInfoT_"`
 			FunctionData      uint16 `name:"function_data__Object,function_data__Tagged_Object_"`
 			ScriptOrDebugInfo uint16 `name:"script_or_debug_info__Object,script_or_debug_info__HeapObject,script__Tagged_HeapObject_"`
 		}
