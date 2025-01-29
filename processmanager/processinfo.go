@@ -551,7 +551,7 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 
 	for address := range info.mappings {
 		if err2 = pm.deletePIDAddress(pid, address); err2 != nil {
-			err = errors.Join(err, fmt.Errorf("failed to delete address 0x%x for PID %d: %v",
+			err = errors.Join(err, fmt.Errorf("failed to delete address %#x for PID %d: %v",
 				address, pid, err2))
 		}
 	}
