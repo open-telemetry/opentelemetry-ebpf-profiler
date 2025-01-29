@@ -291,10 +291,11 @@ type v8Data struct {
 		// submitted upstream: https://chromium-review.googlesource.com/c/v8/v8/+/3902524
 		DeoptimizationDataIndex struct {
 			// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/code.h#912
-			InlinedFunctionCount uint8 `name:"DeoptimizationDataInlinedFunctionCountIndex"`
-			LiteralArray         uint8 `name:"DeoptimizationDataLiteralArrayIndex"`
-			SharedFunctionInfo   uint8 `name:"DeoptimizationDataSharedFunctionInfoIndex"`
-			InliningPositions    uint8 `name:"DeoptimizationDataInliningPositionsIndex"`
+			InlinedFunctionCount      uint8 `name:"DeoptimizationDataInlinedFunctionCountIndex"`
+			LiteralArray              uint8 `name:"DeoptimizationDataLiteralArrayIndex"`
+			SharedFunctionInfo        uint8 `name:"DeoptimizationDataSharedFunctionInfoIndex" zero:""`
+			SharedFunctionInfoWrapper uint8 `name:"DeoptimizationDataSharedFunctionInfoWrapperIndex" zero:""`
+			InliningPositions         uint8 `name:"DeoptimizationDataInliningPositionsIndex"`
 		} `name:""`
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/code-kind.h#18
@@ -340,22 +341,28 @@ type v8Data struct {
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/tools/gen-postmortem-metadata.py#709
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/instance-type.h#75
 		Type struct {
-			BaselineData        uint16 `name:"BaselineData__BASELINE_DATA_TYPE" zero:""`
-			ByteArray           uint16 `name:"ByteArray__BYTE_ARRAY_TYPE"`
-			BytecodeArray       uint16 `name:"BytecodeArray__BYTECODE_ARRAY_TYPE"`
-			Code                uint16 `name:"Code__CODE_TYPE"`
-			CodeWrapper         uint16 `name:"CodeWrapper__CODE_WRAPPER_TYPE" zero:""`
-			FixedArray          uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
-			WeakFixedArray      uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
-			TrustedByteArray    uint16 `name:"TrustedByteArray__TRUSTED_BYTE_ARRAY_TYPE" zero:""`
-			TrustedFixedArray   uint16 `name:"TrustedFixedArray__TRUSTED_FIXED_ARRAY_TYPE" zero:""`
-			ProtectedFixedArray uint16 `name:"ProtectedFixedArray__PROTECTED_FIXED_ARRAY_TYPE" zero:""`
-			JSFunction          uint16 `name:"JSFunction__JS_FUNCTION_TYPE"`
-			Map                 uint16 `name:"Map__MAP_TYPE"`
-			Script              uint16 `name:"Script__SCRIPT_TYPE"`
-			ScopeInfo           uint16 `name:"ScopeInfo__SCOPE_INFO_TYPE"`
-			SharedFunctionInfo  uint16 `name:"SharedFunctionInfo__SHARED_FUNCTION_INFO_TYPE"`
+			BaselineData              uint16 `name:"BaselineData__BASELINE_DATA_TYPE" zero:""`
+			ByteArray                 uint16 `name:"ByteArray__BYTE_ARRAY_TYPE"`
+			BytecodeArray             uint16 `name:"BytecodeArray__BYTECODE_ARRAY_TYPE"`
+			Code                      uint16 `name:"Code__CODE_TYPE"`
+			CodeWrapper               uint16 `name:"CodeWrapper__CODE_WRAPPER_TYPE" zero:""`
+			FixedArray                uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
+			WeakFixedArray            uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
+			TrustedByteArray          uint16 `name:"TrustedByteArray__TRUSTED_BYTE_ARRAY_TYPE" zero:""`
+			TrustedFixedArray         uint16 `name:"TrustedFixedArray__TRUSTED_FIXED_ARRAY_TYPE" zero:""`
+			ProtectedFixedArray       uint16 `name:"ProtectedFixedArray__PROTECTED_FIXED_ARRAY_TYPE" zero:""`
+			JSFunction                uint16 `name:"JSFunction__JS_FUNCTION_TYPE"`
+			Map                       uint16 `name:"Map__MAP_TYPE"`
+			Script                    uint16 `name:"Script__SCRIPT_TYPE"`
+			ScopeInfo                 uint16 `name:"ScopeInfo__SCOPE_INFO_TYPE"`
+			SharedFunctionInfo        uint16 `name:"SharedFunctionInfo__SHARED_FUNCTION_INFO_TYPE"`
+			SharedFunctionInfoWrapper uint16 `name:"SharedFunctionInfoWrapper__SHARED_FUNCTION_INFO_WRAPPER_TYPE" zero:""`
 		} `name:"type"`
+
+		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.9.202.28/src/objects/shared-function-info.h#835
+		SharedFunctionInfoWrapper struct {
+			SharedFunctionInfo uint16 `name:"shared_info__Tagged_SharedFunctionInfo_" zero:""`
+		}
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/heap-object.tq#7
 		HeapObject struct {
@@ -1249,8 +1256,25 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 
 	if sfi == nil {
 		// Read the Code's SFI
-		sfiPtr := npsr.Ptr(deoptimizationData,
-			uint(vms.DeoptimizationDataIndex.SharedFunctionInfo*pointerSize))
+		var sfiPtr libpf.Address
+		if vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper != 0 {
+			sfiWrapperPtr := npsr.Ptr(deoptimizationData,
+				uint(vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper*pointerSize))
+			sfiWrapperPtr, err = i.getTypedObject(sfiWrapperPtr, vms.Type.SharedFunctionInfoWrapper)
+			if err != nil {
+				return nil, fmt.Errorf("sfi wrapper pointer read: %w", err)
+			}
+
+			sfiWrapperSize := vms.SharedFunctionInfoWrapper.SharedFunctionInfo + pointerSize
+			sfiWrapper := make([]byte, sfiWrapperSize)
+			if err = i.rm.Read(sfiWrapperPtr, sfiWrapper); err != nil {
+				return nil, fmt.Errorf("sfi wrapper read: %w", err)
+			}
+			sfiPtr = npsr.Ptr(sfiWrapper, uint(vms.SharedFunctionInfoWrapper.SharedFunctionInfo))
+		} else {
+			sfiPtr = npsr.Ptr(deoptimizationData,
+				uint(vms.DeoptimizationDataIndex.SharedFunctionInfo*pointerSize))
+		}
 		sfi, err = i.getSFI(sfiPtr)
 		if err != nil {
 			return nil, fmt.Errorf("getSFI: %w", err)
@@ -2037,7 +2061,8 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 		val := vms.DeoptimizationDataIndex.InlinedFunctionCount + 1
 		vms.DeoptimizationDataIndex.LiteralArray = val
 	}
-	if vms.DeoptimizationDataIndex.SharedFunctionInfo == 0 {
+	if vms.DeoptimizationDataIndex.SharedFunctionInfo == 0 &&
+		vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper == 0 {
 		vms.DeoptimizationDataIndex.SharedFunctionInfo = 6
 	}
 	if vms.DeoptimizationDataIndex.InliningPositions == 0 {
