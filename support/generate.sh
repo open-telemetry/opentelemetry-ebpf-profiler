@@ -16,7 +16,7 @@ go tool cgo -godefs types_def.go >> types_gen.go
 sed -i 's/^package support$/package support \/\/ import "go.opentelemetry.io\/ebpf-profiler\/support"/' types_gen.go
 
 if ! diff types_gen.go types.go; then
-    echo "Auto generated and existing code differ"
+    echo "Auto generated and existing code differ, please review and update support/types.go"
     exit 1
 fi
 
