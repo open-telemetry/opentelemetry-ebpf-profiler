@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -37,15 +36,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
-
-type ProcessManagerConfig struct {
-	extractEnvVars []string
-}
-
-var pm_cfg = ProcessManagerConfig{extractEnvVars: []string{
-	"PIPELINE_PPOID",
-	"PIPELINE_SOFTWARENAME",
-	"PIPELINE_JOBID"}}
 
 // assignTSDInfo updates the TSDInfo for the Interpreters on given PID.
 // Caller must hold pm.mu write lock.
@@ -105,7 +95,9 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 			splittedVars := strings.Split(string(envVars), "\000")
 			for _, envVar := range splittedVars {
 				keyValuePair := strings.SplitN(envVar, "=", 2)
-				if slices.Contains(pm_cfg.extractEnvVars, keyValuePair[0]) {
+				_, envVarShouldBeCaptured := pm.includeEnvVars[keyValuePair[0]]
+
+				if envVarShouldBeCaptured {
 					envVarMap[keyValuePair[0]] = keyValuePair[1]
 				}
 			}

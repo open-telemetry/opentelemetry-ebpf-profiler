@@ -3,6 +3,7 @@ package controller // import "go.opentelemetry.io/ebpf-profiler/internal/control
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -71,6 +72,14 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start reporter: %w", err)
 	}
 
+	var envVars map[string]bool
+	splittedEnvVars := strings.Split(c.config.IncludeEnvVars, ",")
+	for _, envVar := range splittedEnvVars {
+		if envVar != "" {
+			envVars[envVar] = true
+		}
+	}
+
 	metrics.SetReporter(c.reporter)
 
 	// Load the eBPF code and map definitions
@@ -87,6 +96,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		ProbabilisticInterval:  c.config.ProbabilisticInterval,
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
 		OffCPUThreshold:        uint32(c.config.OffCPUThreshold),
+		IncludeEnvVars:         envVars,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)

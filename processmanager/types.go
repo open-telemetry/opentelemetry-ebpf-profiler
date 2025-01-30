@@ -96,6 +96,9 @@ type ProcessManager struct {
 
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
+
+	// includeEnvVars holds a list of env vars that should be captured from processes
+	includeEnvVars map[string]bool
 }
 
 // Mapping represents an executable memory mapping of a process.
