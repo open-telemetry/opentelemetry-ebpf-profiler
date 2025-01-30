@@ -157,7 +157,7 @@ type Config struct {
 	// OffCPUThreshold is the user defined threshold for off-cpu profiling.
 	OffCPUThreshold uint32
 	// IncludeEnvVars holds a list of environment variables that should be captured and reported from processes
-	IncludeEnvVars map[string]bool
+	IncludeEnvVars libpf.Set[string]
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.

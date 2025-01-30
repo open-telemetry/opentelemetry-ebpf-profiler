@@ -10,6 +10,7 @@ import (
 	"github.com/tklauser/numcpus"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -72,11 +73,11 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start reporter: %w", err)
 	}
 
-	var envVars map[string]bool
+	envVars := libpf.Set[string]{}
 	splittedEnvVars := strings.Split(c.config.IncludeEnvVars, ",")
 	for _, envVar := range splittedEnvVars {
 		if envVar != "" {
-			envVars[envVar] = true
+			envVars[envVar] = libpf.Void{}
 		}
 	}
 

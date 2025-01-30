@@ -98,7 +98,7 @@ type ProcessManager struct {
 	filterErrorFrames bool
 
 	// includeEnvVars holds a list of env vars that should be captured from processes
-	includeEnvVars map[string]bool
+	includeEnvVars libpf.Set[string]
 }
 
 // Mapping represents an executable memory mapping of a process.
