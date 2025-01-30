@@ -3,9 +3,11 @@
 set -eu
 
 # Put license header at the top of the file
-echo "// Copyright The OpenTelemetry Authors" > types_gen.go
-echo "// SPDX-License-Identifier: Apache-2.0" >> types_gen.go
-echo "" >> types_gen.go
+cat <<EOF >types_gen.go
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+EOF
 
 # Generate Go definitions from C
 go tool cgo -godefs types_def.go >> types_gen.go
