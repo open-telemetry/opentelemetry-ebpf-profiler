@@ -34,7 +34,6 @@ debug-assertions = true
 opt-level = 1 # default of 0 is annoyingly slow
 
 [workspace.dependencies]
-anyhow = "1"
 argh = "0.1"
 base64 = "0.22.0"
 cpp_demangle = "0.4"
