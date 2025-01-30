@@ -68,6 +68,7 @@ clean:
 
 generate:
 	GOARCH=$(NATIVE_ARCH) go generate ./...
+	(cd support && ./generate.sh)
 
 ebpf:
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
