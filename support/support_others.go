@@ -1,4 +1,4 @@
-//go:build dummy
+//go:build !arm64 && !amd64
 
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
