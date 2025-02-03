@@ -16,14 +16,11 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"runtime"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 
 	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/require"
@@ -33,13 +30,14 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/testutils"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 // Run
 func TestIntegration(t *testing.T) {
-	if !isRoot() {
+	if !testutils.IsRoot() {
 		t.Skip("root privileges required")
 	}
 	// TODO:
@@ -118,8 +116,10 @@ func TestIntegration(t *testing.T) {
 					port, err := cont.MappedPort(ctx, "8080")
 					require.NoError(t, err)
 
+					enabledTracers, _ := tracertypes.Parse("luajit")
+					enabledTracers.Enable(tracertypes.LuaJITTracer)
 					r := &mockReporter{symbols: make(symbolMap)}
-					traceCh, trc := startTracer(ctx, t, r)
+					traceCh, trc := testutils.StartTracer(ctx, t, enabledTracers, r)
 
 					var waitGroup sync.WaitGroup
 					defer waitGroup.Wait()
@@ -203,44 +203,6 @@ outer:
 	return true
 }
 
-// FIXME: refactor this to copy less code.
-func startTracer(ctx context.Context, t *testing.T, r *mockReporter) (chan *host.Trace,
-	*tracer.Tracer) {
-	enabledTracers, _ := tracertypes.Parse("luajit")
-	enabledTracers.Enable(tracertypes.LuaJITTracer)
-	trc, err := tracer.NewTracer(ctx, &tracer.Config{
-		DebugTracer:            true,
-		Reporter:               r,
-		Intervals:              &mockIntervals{},
-		IncludeTracers:         enabledTracers,
-		SamplesPerSecond:       1000,
-		ProbabilisticInterval:  100,
-		ProbabilisticThreshold: 100,
-	})
-	require.NoError(t, err)
-
-	trc.StartPIDEventProcessor(ctx)
-
-	err = trc.AttachTracer()
-	require.NoError(t, err)
-
-	log.Info("Attached tracer program")
-
-	err = trc.EnableProfiling()
-	require.NoError(t, err)
-
-	err = trc.AttachSchedMonitor()
-	require.NoError(t, err)
-
-	traceCh := make(chan *host.Trace)
-
-	// Spawn monitors for the various result maps
-	err = trc.StartMapMonitors(ctx, traceCh)
-	require.NoError(t, err)
-
-	return traceCh, trc
-}
-
 func startContainer(ctx context.Context, t *testing.T, image string) testcontainers.Container {
 	t.Log("starting", image)
 	// The offset tests load both platform images so docker gets confused if we don't specify
@@ -316,12 +278,6 @@ func makeRequests(ctx context.Context, t *testing.T, wg *sync.WaitGroup,
 	}()
 }
 
-type mockIntervals struct{}
-
-func (f mockIntervals) MonitorInterval() time.Duration    { return 1 * time.Second }
-func (f mockIntervals) TracePollInterval() time.Duration  { return 250 * time.Millisecond }
-func (f mockIntervals) PIDCleanupInterval() time.Duration { return 1 * time.Second }
-
 type symbolMap map[libpf.FrameID]string
 
 type mockReporter struct {
@@ -347,10 +303,6 @@ func (m *mockReporter) getFunctionName(frameID libpf.FrameID) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.symbols[frameID]
-}
-
-func isRoot() bool {
-	return os.Geteuid() == 0
 }
 
 func removeSentinel(frames []host.Frame) []host.Frame {

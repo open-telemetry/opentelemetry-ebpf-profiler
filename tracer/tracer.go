@@ -588,6 +588,11 @@ func loadUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Progr
 			enable:           true,
 		},
 		{
+			progID: uint32(support.ProgGoLabels),
+			name:   "go_labels",
+			enable: includeTracers.Has(types.GoLabels),
+		},
+		{
 			progID: uint32(support.ProgUnwindLuaJIT),
 			name:   "unwind_luajit",
 			enable: includeTracers.Has(types.LuaJITTracer),
@@ -908,8 +913,10 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		trace.CustomLabels = make(map[string]string, int(lbls.len))
 		for i := 0; i < int(lbls.len); i++ {
 			lbl := lbls.labels[i]
-			key := string(lbl.key[0:(lbl.key_len)])
-			val := string(lbl.val[0:(lbl.val_len)])
+			klen := min(int(lbl.key_len), 64)
+			key := string(lbl.key[0:klen])
+			vlen := min(int(lbl.val_len), 64)
+			val := string(lbl.val[0:vlen])
 			trace.CustomLabels[key] = val
 		}
 	}
@@ -1079,6 +1086,11 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan *host.T
 	})
 
 	return nil
+}
+
+// Testing hook
+func (t *Tracer) GetEbpfMaps() map[string]*cebpf.Map {
+	return t.ebpfMaps
 }
 
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
