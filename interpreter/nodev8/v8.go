@@ -101,6 +101,8 @@ package nodev8 // import "go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 // 18.9.y   10.2.154
 // 20.1.y   11.3.244
 // 21.1.y   11.8.172
+// 22.0.y   12.4.254
+// 23.0.y   12.9.202
 
 // LIMITATIONS:
 //  - Line number information is not always available. The V8 generates the LineNumber
