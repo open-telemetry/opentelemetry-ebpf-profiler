@@ -36,7 +36,7 @@ var _ tracehandler.TraceProcessor = (*fakeTraceProcessor)(nil)
 
 func (f *fakeTraceProcessor) ConvertTrace(trace *host.Trace) *libpf.Trace {
 	var newTrace libpf.Trace
-	newTrace.Hash = libpf.NewTraceHash(uint64(trace.Hash), uint64(trace.Hash))
+	newTrace.Hash = trace.Hash
 	return &newTrace
 }
 
@@ -101,23 +101,23 @@ func TestTraceHandler(t *testing.T) {
 
 		// simulates a single trace being received.
 		"single trace": {input: []arguments{
-			{trace: &host.Trace{Hash: host.TraceHash(0x1234)}},
+			{trace: &host.Trace{Hash: libpf.NewTraceHash(0x12, 0x34)}},
 		},
-			expectedTraces: []reportedTrace{{traceHash: libpf.NewTraceHash(0x1234, 0x1234)}},
+			expectedTraces: []reportedTrace{{traceHash: libpf.NewTraceHash(0x12, 0x34)}},
 			expectedCounts: []reportedCount{
-				{traceHash: libpf.NewTraceHash(0x1234, 0x1234), count: 1},
+				{traceHash: libpf.NewTraceHash(0x12, 0x34), count: 1},
 			},
 		},
 
 		// double trace simulates a case where the same trace is encountered in quick succession.
 		"double trace": {input: []arguments{
-			{trace: &host.Trace{Hash: host.TraceHash(4)}},
-			{trace: &host.Trace{Hash: host.TraceHash(4)}},
+			{trace: &host.Trace{Hash: libpf.NewTraceHash(0x56, 0x78)}},
+			{trace: &host.Trace{Hash: libpf.NewTraceHash(0x56, 0x78)}},
 		},
-			expectedTraces: []reportedTrace{{traceHash: libpf.NewTraceHash(4, 4)}},
+			expectedTraces: []reportedTrace{{traceHash: libpf.NewTraceHash(0x56, 0x78)}},
 			expectedCounts: []reportedCount{
-				{traceHash: libpf.NewTraceHash(4, 4), count: 1},
-				{traceHash: libpf.NewTraceHash(4, 4), count: 1},
+				{traceHash: libpf.NewTraceHash(0x56, 0x78), count: 1},
+				{traceHash: libpf.NewTraceHash(0x56, 0x78), count: 1},
 			},
 		},
 	}

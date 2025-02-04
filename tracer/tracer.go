@@ -1007,7 +1007,8 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	ptr.ktime = 0
 	ptr.origin = 0
 	ptr.offtime = 0
-	trace.Hash = host.TraceHash(xxh3.Hash128(raw).Lo)
+	tmpHash := xxh3.Hash128(raw)
+	trace.Hash = libpf.NewTraceHash(tmpHash.Hi, tmpHash.Lo)
 
 	userFrameOffs := 0
 	if ptr.kernel_stack_id >= 0 {

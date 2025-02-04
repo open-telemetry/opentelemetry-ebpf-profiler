@@ -12,11 +12,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/times"
 )
 
-// TraceHash is used for unique identifiers for traces, and is required to be 64-bits
-// due to the constraints imposed by the eBPF maps, unlike the larger TraceHash used
-// outside the host agent.
-type TraceHash uint64
-
 // FileID is used for unique identifiers for files, and is required to be 64-bits
 // due to the constraints imposed by the eBPF maps, unlike the larger FileID used
 // outside the host agent.
@@ -51,7 +46,7 @@ type Trace struct {
 	ProcessName      string
 	ExecutablePath   string
 	Frames           []Frame
-	Hash             TraceHash
+	Hash             libpf.TraceHash
 	KTime            times.KTime
 	PID              libpf.PID
 	TID              libpf.PID

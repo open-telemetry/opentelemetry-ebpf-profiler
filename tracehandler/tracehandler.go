@@ -68,7 +68,7 @@ type traceHandler struct {
 	// bpfTraceCache stores mappings from BPF to user-mode hashes. This allows
 	// avoiding the overhead of re-doing user-mode symbolization of traces that
 	// we have recently seen already.
-	bpfTraceCache *lru.LRU[host.TraceHash, libpf.TraceHash]
+	bpfTraceCache *lru.LRU[libpf.TraceHash, libpf.TraceHash]
 
 	// umTraceCache is a LRU set that suppresses unnecessary resends of traces
 	// that we have recently reported to the collector already.
@@ -87,8 +87,8 @@ type traceHandler struct {
 // newTraceHandler creates a new traceHandler
 func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 	intervals Times, cacheSize uint32) (*traceHandler, error) {
-	bpfTraceCache, err := lru.New[host.TraceHash, libpf.TraceHash](
-		cacheSize, func(k host.TraceHash) uint32 { return uint32(k) })
+	bpfTraceCache, err := lru.New[libpf.TraceHash, libpf.TraceHash](
+		cacheSize, func(k libpf.TraceHash) uint32 { return k.Hash32() })
 	if err != nil {
 		return nil, err
 	}

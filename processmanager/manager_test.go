@@ -337,7 +337,7 @@ func TestInterpreterConvertTrace(t *testing.T) {
 // trace for tests below.
 func getExpectedTrace(origTrace *host.Trace, linenos []libpf.AddressOrLineno) *libpf.Trace {
 	newTrace := &libpf.Trace{
-		Hash: libpf.NewTraceHash(uint64(origTrace.Hash), uint64(origTrace.Hash)),
+		Hash: origTrace.Hash,
 	}
 
 	for _, frame := range origTrace.Frames {
