@@ -65,10 +65,9 @@ type traceHandler struct {
 
 	traceProcessor TraceProcessor
 
-	// bpfTraceCache stores mappings from BPF to user-mode hashes. This allows
-	// avoiding the overhead of re-doing user-mode symbolization of traces that
-	// we have recently seen already.
-	bpfTraceCache *lru.LRU[libpf.TraceHash, libpf.TraceHash]
+	// traceCache avoids the overhead of re-doing user-mode symbolization of traces
+	// that we have recently seen already.
+	traceCache *lru.LRU[libpf.TraceHash, libpf.Void]
 
 	// umTraceCache is a LRU set that suppresses unnecessary resends of traces
 	// that we have recently reported to the collector already.
@@ -87,7 +86,7 @@ type traceHandler struct {
 // newTraceHandler creates a new traceHandler
 func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 	intervals Times, cacheSize uint32) (*traceHandler, error) {
-	bpfTraceCache, err := lru.New[libpf.TraceHash, libpf.TraceHash](
+	traceCache, err := lru.New[libpf.TraceHash, libpf.Void](
 		cacheSize, func(k libpf.TraceHash) uint32 { return k.Hash32() })
 	if err != nil {
 		return nil, err
@@ -107,7 +106,7 @@ func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 
 	t := &traceHandler{
 		traceProcessor:    traceProcessor,
-		bpfTraceCache:     bpfTraceCache,
+		traceCache:        traceCache,
 		umTraceCache:      umTraceCache,
 		reporter:          rep,
 		times:             intervals,
@@ -133,11 +132,11 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 
 	if !m.reporter.SupportsReportTraceEvent() {
 		// Fast path: if the trace is already known remotely, we just send a counter update.
-		postConvHash, traceKnown := m.bpfTraceCache.Get(bpfTrace.Hash)
+		_, traceKnown := m.traceCache.Get(bpfTrace.Hash)
 		if traceKnown {
 			m.bpfTraceCacheHit++
-			meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, postConvHash, 1)
-			m.reporter.ReportCountForTrace(postConvHash, 1, meta)
+			meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, bpfTrace.Hash, 1)
+			m.reporter.ReportCountForTrace(bpfTrace.Hash, 1, meta)
 			return
 		}
 		m.bpfTraceCacheMiss++
@@ -146,7 +145,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	// Slow path: convert trace.
 	umTrace := m.traceProcessor.ConvertTrace(bpfTrace)
 	log.Debugf("Trace hash remap 0x%x -> 0x%x", bpfTrace.Hash, umTrace.Hash)
-	m.bpfTraceCache.Add(bpfTrace.Hash, umTrace.Hash)
+	m.traceCache.Add(bpfTrace.Hash, libpf.Void{})
 
 	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
 	if m.reporter.SupportsReportTraceEvent() {
