@@ -1,5 +1,4 @@
-// Provides functionality for adding frames to traces, hashing traces and
-// updating trace counts
+// Provides functionality for adding frames to traces and updating trace counts
 
 #ifndef OPTI_TRACEMGMT_H
 #define OPTI_TRACEMGMT_H
