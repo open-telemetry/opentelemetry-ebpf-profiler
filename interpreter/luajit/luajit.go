@@ -131,7 +131,8 @@ func (l *luajitInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) err
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	base := path.Base(info.FileName())
-	if !strings.HasPrefix(base, "libluajit-5.1.so") && base != "luajit" && base != "nginx" && base != "openresty" {
+	if !strings.HasPrefix(base, "libluajit-5.1.so") &&
+		base != "luajit" && base != "nginx" && base != "openresty" {
 		return nil, nil
 	}
 
