@@ -524,3 +524,47 @@ fn range_rel2abs(base: VirtAddr, rng: Range<raw::TextStartOffset>) -> Range<Virt
         end: base.wrapping_add(rng.end.0),
     }
 }
+
+/// Resolves program counter addresses to Go functions using binary search over
+/// the function table.
+#[derive(Debug)]
+pub struct PointResolver<'rt, 'obj> {
+    rt: &'rt GoRuntimeInfo<'obj>,
+}
+
+impl<'rt, 'obj> From<&'rt GoRuntimeInfo<'obj>> for PointResolver<'rt, 'obj> {
+    fn from(rt: &'rt GoRuntimeInfo<'obj>) -> Self {
+        Self { rt }
+    }
+}
+
+// Public API of PointResolver.
+impl<'rt, 'obj> PointResolver<'rt, 'obj> {
+    /// Locates the Go function containing the given virtual address.
+    /// 
+    /// Returns:
+    /// - `Ok(Some(Func))` if a function is found containing the address
+    /// - `Ok(None)` if no function contains the address
+    /// - `Err` if there was an error reading the function table
+    pub fn find_func(&self, addr: VirtAddr) -> Result<Option<Func<'rt, 'obj>>> {
+        let func_table = self.rt.func_table.index_iter()?;
+        
+        let entries: Result<Vec<_>> = func_table.collect();
+        let entries = entries?;
+        
+        match entries.binary_search_by(|entry| {
+            let entry_addr = match entry.entry {
+                raw::CodePtr::Addr(va) => va,
+                raw::CodePtr::Offs(offs) => self.rt.text_start.wrapping_add(offs.0),
+            };
+            entry_addr.cmp(&addr)
+        }) {
+            Ok(idx) | Err(idx) if idx > 0 => {
+                let entry = &entries[idx - 1];
+                let func = self.rt.func_table.func(entry.funcoff)?;
+                Ok(Some(Func { rt: self.rt, raw: func }))
+            }
+            _ => Ok(None)
+        }
+    }
+}
