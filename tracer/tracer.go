@@ -978,10 +978,11 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	}
 
 	pid := libpf.PID(ptr.pid)
+	procMeta := t.processManager.MetaForPID(pid)
 	trace := &host.Trace{
 		Comm:             C.GoString((*C.char)(unsafe.Pointer(&ptr.comm))),
-		ExecutablePath:   t.processManager.ExePathForPID(pid),
-		ProcessName:      t.processManager.NameForPID(pid),
+		ExecutablePath:   procMeta.Executable,
+		ProcessName:      procMeta.Name,
 		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.apm_trace_id)),
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.apm_transaction_id)),
 		PID:              pid,
