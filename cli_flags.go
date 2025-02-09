@@ -68,7 +68,7 @@ var (
 		"Valid values are in the range [1..%d], and 0 to disable off-cpu profiling."+
 		"Default is %d.",
 		support.OffCPUThresholdMax, defaultOffCPUThreshold)
-	envVarsHelp = "Defines a comma seperated list of env vars that should be reported with the captured profiling samples"
+	envVarsHelp = "Comma seperated list of environment variables that will be reported with the captured profiling samples."
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
