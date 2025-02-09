@@ -95,9 +95,8 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 			splittedVars := strings.Split(string(envVars), "\000")
 			for _, envVar := range splittedVars {
 				keyValuePair := strings.SplitN(envVar, "=", 2)
-				_, envVarShouldBeCaptured := pm.includeEnvVars[keyValuePair[0]]
 
-				if envVarShouldBeCaptured {
+				if _, ok := pm.includeEnvVars[keyValuePair[0]]; ok {
 					envVarMap[keyValuePair[0]] = keyValuePair[1]
 				}
 			}
