@@ -104,6 +104,22 @@ impl<'obj> GoRuntimeInfo<'obj> {
             iter: self.func_table.index_iter()?,
         })
     }
+
+    /// Locates the Go function containing the given virtual address.
+    ///
+    /// Returns:
+    /// - `Ok(Some(Func))` if a function is found containing the address
+    /// - `Ok(None)` if no function contains the address
+    /// - `Err` if there was an error reading the function table
+    pub fn find_func<'rt>(&'rt self, addr: VirtAddr) -> Result<Option<Func<'rt, 'obj>>> {
+        match self.func_table.func_by_addr(self.text_start, addr)? {
+            Some(raw_func) => Ok(Some(Func {
+                rt: self,
+                raw: raw_func,
+            })),
+            None => Ok(None),
+        }
+    }
 }
 
 /// Internal helpers.
@@ -522,37 +538,5 @@ fn range_rel2abs(base: VirtAddr, rng: Range<raw::TextStartOffset>) -> Range<Virt
     Range {
         start: base.wrapping_add(rng.start.0),
         end: base.wrapping_add(rng.end.0),
-    }
-}
-
-/// Resolves program counter addresses to Go functions using binary search over
-/// the function table.
-#[derive(Debug)]
-pub struct PointResolver<'rt, 'obj> {
-    rt: &'rt GoRuntimeInfo<'obj>,
-}
-
-impl<'rt, 'obj> From<&'rt GoRuntimeInfo<'obj>> for PointResolver<'rt, 'obj> {
-    fn from(rt: &'rt GoRuntimeInfo<'obj>) -> Self {
-        Self { rt }
-    }
-}
-
-// Public API of PointResolver.
-impl<'rt, 'obj> PointResolver<'rt, 'obj> {
-    /// Locates the Go function containing the given virtual address.
-    ///
-    /// Returns:
-    /// - `Ok(Some(Func))` if a function is found containing the address
-    /// - `Ok(None)` if no function contains the address
-    /// - `Err` if there was an error reading the function table
-    pub fn find_func(&self, addr: VirtAddr) -> Result<Option<Func<'rt, 'obj>>> {
-        match self.rt.func_table.func_by_addr(self.rt.text_start, addr)? {
-            Some(raw_func) => Ok(Some(Func {
-                rt: self.rt,
-                raw: raw_func,
-            })),
-            None => Ok(None),
-        }
     }
 }
