@@ -90,7 +90,7 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 			processName = string(name)
 		}
 
-		envVarMap := make(map[string]string)
+		envVarMap := make(map[string]string, len(pm.includeEnvVars))
 		if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid)); err == nil {
 			splittedVars := strings.Split(string(envVars), "\000")
 			for _, envVar := range splittedVars {
