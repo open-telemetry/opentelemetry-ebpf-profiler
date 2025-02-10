@@ -260,7 +260,9 @@ func TestFunctionTableOrder(t *testing.T) {
 			expectedProfiles := len(tt.events)
 			require.Equal(t, 1, res.ResourceProfiles().Len())
 			require.Equal(t, 1, res.ResourceProfiles().At(0).ScopeProfiles().Len())
-			require.Equal(t, expectedProfiles, res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().Len())
+			require.Equal(t, expectedProfiles, res.ResourceProfiles().
+				At(0).ScopeProfiles().
+				At(0).Profiles().Len())
 			if expectedProfiles == 0 {
 				return
 			}
