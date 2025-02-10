@@ -89,8 +89,7 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 			processName = string(name)
 		}
 		info = &processInfo{
-			name:             processName,
-			executable:       exePath,
+			meta:             ProcessMeta{Name: processName, Executable: exePath},
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
 			tsdInfo:          nil,
@@ -651,29 +650,14 @@ func (pm *ProcessManager) CleanupPIDs() {
 	}
 }
 
-// NameForPID returns the process name for given PID.
-// If the PID is not tracked it returns the empty string.
-func (pm *ProcessManager) NameForPID(pid libpf.PID) string {
+// MetaForPID returns the process metadata for given PID.
+func (pm *ProcessManager) MetaForPID(pid libpf.PID) ProcessMeta {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
-		return procInfo.name
+		return procInfo.meta
 	}
-	return ""
-}
-
-// ExePathForPID returns the full executable path for given PID.
-// If the PID is not tracked or belongs to a kernel worker,
-// it returns the empty string.
-func (pm *ProcessManager) ExePathForPID(pid libpf.PID) string {
-	var executable string
-
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
-		executable = procInfo.executable
-	}
-	return executable
+	return ProcessMeta{}
 }
 
 // findMappingForTrace locates the mapping for a given host trace.
