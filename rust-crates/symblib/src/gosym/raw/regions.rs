@@ -108,6 +108,51 @@ impl<'obj> FuncTable<'obj> {
     pub fn func(&self, offs: FuncTabOffset) -> Result<Func<'obj>> {
         Func::read(self.reader.sub_reader(offs.0 as usize..)?)
     }
+
+    // Look up function information for a virtual address using binary search.
+    pub fn func_by_addr(&self, text_start: VirtAddr, addr: VirtAddr) -> Result<Option<Func<'obj>>> {
+        let sz = FuncTabIndexEntry::size_of(self.reader.header());
+        let mut left = 0;
+        let mut right = self.num_funcs as usize * sz;
+
+        while left < right {
+            let mid = (left + (right - left) / 2) / sz * sz;
+            let mut reader = self.reader.sub_reader(mid..)?;
+            let entry = FuncTabIndexEntry::read(&mut reader)?;
+
+            let entry_addr = match entry.entry {
+                CodePtr::Addr(addr) => addr,
+                CodePtr::Offs(offset) => text_start + offset.0,
+            };
+
+            // Get next entry's address if available
+            let next_addr = if mid + sz < right {
+                let mut next_reader = self.reader.sub_reader(mid + sz..)?;
+                let next_entry = FuncTabIndexEntry::read(&mut next_reader)?;
+                match next_entry.entry {
+                    CodePtr::Addr(addr) => Some(addr),
+                    CodePtr::Offs(offset) => Some(text_start + offset.0),
+                }
+            } else {
+                None
+            };
+
+            if addr < entry_addr {
+                right = mid;
+            } else if let Some(next_addr) = next_addr {
+                if addr >= next_addr {
+                    left = mid + sz;
+                } else {
+                    return Ok(Some(self.func(entry.funcoff)?));
+                }
+            } else if mid + sz >= right {
+                return Ok(Some(self.func(entry.funcoff)?));
+            } else {
+                left = mid + sz;
+            }
+        }
+        Ok(None)
+    }
 }
 
 /// Iterator over the index in `.gopclntab`:`runtime.functab`.
