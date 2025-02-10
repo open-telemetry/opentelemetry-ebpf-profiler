@@ -31,6 +31,11 @@ func (p *Pdata) Generate(events map[libpf.Origin]samples.KeyToEventMapping) ppro
 	sp := rp.ScopeProfiles().AppendEmpty()
 	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
 		support.TraceOriginOffCPU} {
+		if len(events[origin]) == 0 {
+			// Do not append empty profiles, if there
+			// is not profiling data for this origin.
+			continue
+		}
 		prof := sp.Profiles().AppendEmpty()
 		prof.SetProfileID(pprofile.ProfileID(mkProfileID()))
 		p.setProfile(origin, events[origin], prof)

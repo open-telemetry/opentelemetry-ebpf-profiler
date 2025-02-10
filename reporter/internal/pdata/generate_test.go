@@ -257,9 +257,13 @@ func TestFunctionTableOrder(t *testing.T) {
 				d.Executables.Add(k, v)
 			}
 			res := d.Generate(tt.events)
+			expectedProfiles := len(tt.events)
 			require.Equal(t, 1, res.ResourceProfiles().Len())
 			require.Equal(t, 1, res.ResourceProfiles().At(0).ScopeProfiles().Len())
-			require.Equal(t, 2, res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().Len())
+			require.Equal(t, expectedProfiles, res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().Len())
+			if expectedProfiles == 0 {
+				return
+			}
 			p := res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0)
 			require.Equal(t, len(tt.wantFunctionTable), p.FunctionTable().Len())
 			for i := 0; i < p.FunctionTable().Len(); i++ {
