@@ -13,7 +13,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 var (
@@ -49,17 +48,7 @@ func init() {
 	}
 }
 
-// reporterImpl allows swapping out the global metrics reporter.
-//
-// nil is a valid value indicating that metrics should be voided.
-var reporterImpl reporter.MetricsReporter
-
-// SetReporter sets the reporter instance used to send out metrics.
-func SetReporter(r reporter.MetricsReporter) {
-	reporterImpl = r
-}
-
-// report converts and reports collected metrics via the reporter package.
+// report converts and reports collected metrics via OTel metrics
 func report() {
 	ids := make([]uint32, nMetrics)
 	values := make([]int64, nMetrics)
@@ -67,10 +56,6 @@ func report() {
 	for i := 0; i < nMetrics; i++ {
 		ids[i] = uint32(metricsBuffer[i].ID)
 		values[i] = int64(metricsBuffer[i].Value)
-	}
-
-	if reporterImpl != nil {
-		reporterImpl.ReportMetrics(uint32(prevTimestamp), ids, values)
 	}
 
 	nMetrics = 0

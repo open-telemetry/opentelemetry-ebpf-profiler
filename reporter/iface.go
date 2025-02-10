@@ -17,7 +17,6 @@ type Reporter interface {
 	TraceReporter
 	SymbolReporter
 	HostMetadataReporter
-	MetricsReporter
 
 	// Start starts the reporter in the background.
 	//
@@ -126,10 +125,4 @@ type HostMetadataReporter interface {
 	// ReportHostMetadataBlocking sends host metadata to the collection agent.
 	ReportHostMetadataBlocking(ctx context.Context, metadataMap map[string]string,
 		maxRetries int, waitRetry time.Duration) error
-}
-
-type MetricsReporter interface {
-	// ReportMetrics accepts an id with a corresponding value and caches this
-	// information before a periodic reporting to the backend.
-	ReportMetrics(timestamp uint32, ids []uint32, values []int64)
 }
