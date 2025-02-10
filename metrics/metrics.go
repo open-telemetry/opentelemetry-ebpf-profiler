@@ -7,6 +7,7 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -40,10 +41,7 @@ var (
 )
 
 func init() {
-	defs, err := GetDefinitions()
-	if err != nil {
-		panic("extracting definitions from metrics.json")
-	}
+	defs := GetDefinitions()
 
 	metricTypes = make(map[MetricID]MetricType, len(defs))
 	for _, md := range defs {
@@ -175,15 +173,15 @@ func Add(id MetricID, value MetricValue) {
 // and earlier.
 
 // GetDefinitions returns the metric definitions from the embedded metrics.json file.
-func GetDefinitions() ([]MetricDefinition, error) {
-	var definitions []MetricDefinition
+func GetDefinitions() []MetricDefinition {
+	var defs []MetricDefinition
 
 	dec := json.NewDecoder(bytes.NewReader(metricsJSON))
 	dec.DisallowUnknownFields()
 
-	err := dec.Decode(&definitions)
+	err := dec.Decode(&defs)
 	if err != nil {
-		return nil, err
+		panic(fmt.Sprintf("extracting definitions from metrics.json: %v", err))
 	}
-	return definitions, nil
+	return defs
 }

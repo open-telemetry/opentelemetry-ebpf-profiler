@@ -70,7 +70,6 @@ func TestMetrics(t *testing.T) {
 }
 
 func TestGetDefinitions(t *testing.T) {
-	defs, err := GetDefinitions()
-	require.NoError(t, err)
+	defs := GetDefinitions()
 	assert.Greater(t, len(defs), 1)
 }
