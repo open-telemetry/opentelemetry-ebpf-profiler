@@ -48,9 +48,6 @@ type OTLPReporter struct {
 	// client for the connection to the receiver.
 	client pprofileotlp.GRPCClient
 
-	// rpcStats stores gRPC related statistics.
-	rpcStats *StatsHandlerImpl
-
 	// To fill in the OTLP/profiles signal with the relevant information,
 	// this structure holds in long-term storage information that might
 	// be duplicated in other places but not accessible for OTLPReporter.
@@ -112,7 +109,6 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 		hostID:                  strconv.FormatUint(cfg.HostID, 10),
 		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
 		client:                  nil,
-		rpcStats:                NewStatsHandler(),
 	}, nil
 }
 
@@ -124,7 +120,7 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 	// Establish the gRPC connection before going on, waiting for a response
 	// from the collectionAgent endpoint.
 	// Use grpc.WithBlock() in setupGrpcConnection() for this to work.
-	otlpGrpcConn, err := waitGrpcEndpoint(ctx, r.cfg, r.rpcStats)
+	otlpGrpcConn, err := waitGrpcEndpoint(ctx, r.cfg)
 	if err != nil {
 		cancelReporting()
 		r.runLoop.Stop()
@@ -208,15 +204,14 @@ func (r *OTLPReporter) setResource(rp pprofile.ResourceProfiles) {
 }
 
 // waitGrpcEndpoint waits until the gRPC connection is established.
-func waitGrpcEndpoint(ctx context.Context, cfg *Config,
-	statsHandler *StatsHandlerImpl) (*grpc.ClientConn, error) {
+func waitGrpcEndpoint(ctx context.Context, cfg *Config) (*grpc.ClientConn, error) {
 	// Sleep with a fixed backoff time added of +/- 20% jitter
 	tick := time.NewTicker(libpf.AddJitter(cfg.GRPCStartupBackoffTime, 0.2))
 	defer tick.Stop()
 
 	var retries uint32
 	for {
-		if collAgentConn, err := setupGrpcConnection(ctx, cfg, statsHandler); err != nil {
+		if collAgentConn, err := setupGrpcConnection(ctx, cfg); err != nil {
 			if retries >= cfg.MaxGRPCRetries {
 				return nil, err
 			}
@@ -241,11 +236,9 @@ func waitGrpcEndpoint(ctx context.Context, cfg *Config,
 }
 
 // setupGrpcConnection sets up a gRPC connection instrumented with our auth interceptor
-func setupGrpcConnection(parent context.Context, cfg *Config,
-	statsHandler *StatsHandlerImpl) (*grpc.ClientConn, error) {
+func setupGrpcConnection(parent context.Context, cfg *Config) (*grpc.ClientConn, error) {
 	//nolint:staticcheck
 	opts := []grpc.DialOption{grpc.WithBlock(),
-		grpc.WithStatsHandler(statsHandler),
 		grpc.WithUnaryInterceptor(cfg.GRPCClientInterceptor),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(cfg.MaxRPCMsgSize),
