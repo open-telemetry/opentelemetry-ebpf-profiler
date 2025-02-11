@@ -20,7 +20,7 @@ slack channel for discussions and questions.
 
 ## Pre-requisites
 
-- Linux (The profiler currently supports only Linux systems)
+- Linux (4.19+ for x86-64, 5.5+ for ARM64) with eBPF enabled (the profiler currently only runs on Linux)
 - Go as specified in [go.mod](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/go.mod)
 - Others (TBD)
 
