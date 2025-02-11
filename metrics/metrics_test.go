@@ -12,10 +12,10 @@ import (
 // TestMetrics
 func TestMetrics(t *testing.T) {
 	inputMetrics := []Metric{
-		{IDCPUUsage, MetricValue(33)},
-		{IDIOThroughput, MetricValue(55)},
-		{IDIODuration, MetricValue(66)},
-		{IDAgentGoRoutines, MetricValue(20)},
+		{IDELFInfoCacheHit, MetricValue(33)},
+		{IDELFInfoCacheMiss, MetricValue(55)},
+		{IDErrProcESRCH, MetricValue(66)},
+		{IDErrProcNotExist, MetricValue(20)},
 		{IDUnwindCallInterpreter, MetricValue(0)},
 	}
 
