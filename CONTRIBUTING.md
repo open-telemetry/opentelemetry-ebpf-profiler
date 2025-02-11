@@ -18,6 +18,12 @@ get invited to meetings.
 See the [#otel-profiles](https://cloud-native.slack.com/archives/C03J794L0BV)
 slack channel for discussions and questions.
 
+## Pre-requisites
+
+- Linux (The profiler currently supports only Linux systems)
+- Windows users can also use WSL
+- Go (version 1.21 or higher)
+
 ## Development
 
 You can view and edit the source code by cloning this repository:
