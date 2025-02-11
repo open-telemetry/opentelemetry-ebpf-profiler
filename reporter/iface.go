@@ -27,8 +27,6 @@ type Reporter interface {
 
 	// Stop triggers a graceful shutdown of the reporter.
 	Stop()
-	// GetMetrics returns the reporter internal metrics.
-	GetMetrics() Metrics
 }
 
 type TraceReporter interface {

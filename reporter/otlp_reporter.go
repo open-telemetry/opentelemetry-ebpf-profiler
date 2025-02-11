@@ -116,16 +116,6 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 	}, nil
 }
 
-// GetMetrics returns internal metrics of OTLPReporter.
-func (r *OTLPReporter) GetMetrics() Metrics {
-	return Metrics{
-		RPCBytesOutCount:  r.rpcStats.GetRPCBytesOut(),
-		RPCBytesInCount:   r.rpcStats.GetRPCBytesIn(),
-		WireBytesOutCount: r.rpcStats.GetWireBytesOut(),
-		WireBytesInCount:  r.rpcStats.GetWireBytesIn(),
-	}
-}
-
 // Start sets up and manages the reporting connection to a OTLP backend.
 func (r *OTLPReporter) Start(ctx context.Context) error {
 	// Create a child context for reporting features
