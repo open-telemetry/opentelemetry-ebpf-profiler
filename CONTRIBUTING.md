@@ -21,7 +21,6 @@ slack channel for discussions and questions.
 ## Pre-requisites
 
 - Linux (The profiler currently supports only Linux systems)
-- Windows users can also use WSL
 - Go as specified in [go.mod](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/go.mod)
 
 ## Development
