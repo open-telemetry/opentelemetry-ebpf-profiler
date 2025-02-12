@@ -70,7 +70,7 @@ generate:
 	GOARCH=$(NATIVE_ARCH) go generate ./...
 	(cd support && ./generate.sh)
 
-ebpf:
+ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
 ebpf-profiler: generate ebpf
