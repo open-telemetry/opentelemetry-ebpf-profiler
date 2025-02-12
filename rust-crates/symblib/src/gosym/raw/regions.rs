@@ -152,44 +152,40 @@ impl<'obj> FuncTable<'obj> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gosym::GoRuntimeInfo;
     use crate::tests::testdata;
 
     #[test]
     fn test_func_by_addr() -> Result<()> {
         for test_file in ["go-1.20.14", "go-1.22.12", "go-1.24.0"] {
             let obj = objfile::File::load(&testdata(test_file))?;
-            let reader = obj.parse()?;
+            let obj = obj.parse()?;
 
-            // Find .gopclntab section
-            let (gopclntab_va, gopclntab) = {
-                let section = reader.load_section(b".gopclntab")?.unwrap();
-                (section.virt_addr(), section.as_obj_slice().unwrap())
-            };
+            let runtime_info = GoRuntimeInfo::open(&obj)?;
 
-            // Initialize Go runtime info structures
-            let header = Header::read(gopclntab)?;
-            let gopclntab = Reader::new(header, gopclntab_va, gopclntab);
-            let offsets = HeaderOffsets::new(gopclntab.clone())?;
-            let func_table = FuncTable::new(&offsets, gopclntab)?;
+            let text_start = obj.load_section(b".text")?.unwrap().virt_addr();
 
-            // Get text section start for relative addressing
-            let text_start = reader.load_section(b".text")?.unwrap().virt_addr();
+            for pc in (text_start..text_start + 0x10000).step_by(19) {
+                let bin_search_result = runtime_info.find_func(pc).unwrap();
 
-            // Iterate through function table entries
-            let mut iter = func_table.index_iter()?;
-            while let Some(entry) = iter.next()? {
-                let entry_addr = match entry.entry {
-                    CodePtr::Addr(addr) => addr,
-                    CodePtr::Offs(offset) => text_start + offset.0,
-                };
+                let mut fn_iter = runtime_info.funcs().unwrap().peekable();
+                let mut found = None;
+                while let Some(func) = fn_iter.next().unwrap() {
+                    let Some(next) = fn_iter.peek().unwrap() else {
+                        break;
+                    };
 
-                // Look up function by its address
-                let found = func_table.func_by_addr(text_start, entry_addr)?;
+                    let pc_rng = func.start_addr()..next.start_addr();
+                    if pc_rng.contains(&pc) {
+                        found = Some(func);
+                        break;
+                    }
+                }
 
-                // Verify we found the same function
-                assert!(found.is_some());
-                let original = func_table.func(entry.funcoff)?;
-                assert_eq!(found.unwrap().func_pc, original.func_pc);
+                assert_eq!(
+                    bin_search_result.map(|x| x.start_addr()),
+                    found.map(|x| x.start_addr())
+                );
             }
         }
         Ok(())
