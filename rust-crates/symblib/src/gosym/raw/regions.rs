@@ -149,6 +149,53 @@ impl<'obj> FuncTable<'obj> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tests::testdata;
+
+    #[test]
+    fn test_func_by_addr() -> Result<()> {
+        for test_file in ["go-1.20.14", "go-1.22.12", "go-1.24.0"] {
+            let obj = objfile::File::load(&testdata(test_file))?;
+            let reader = obj.parse()?;
+
+            // Find .gopclntab section
+            let (gopclntab_va, gopclntab) = {
+                let section = reader.load_section(b".gopclntab")?.unwrap();
+                (section.virt_addr(), section.as_obj_slice().unwrap())
+            };
+
+            // Initialize Go runtime info structures
+            let header = Header::read(gopclntab)?;
+            let gopclntab = Reader::new(header, gopclntab_va, gopclntab);
+            let offsets = HeaderOffsets::new(gopclntab.clone())?;
+            let func_table = FuncTable::new(&offsets, gopclntab)?;
+
+            // Get text section start for relative addressing
+            let text_start = reader.load_section(b".text")?.unwrap().virt_addr();
+
+            // Iterate through function table entries
+            let mut iter = func_table.index_iter()?;
+            while let Some(entry) = iter.next()? {
+                let entry_addr = match entry.entry {
+                    CodePtr::Addr(addr) => addr,
+                    CodePtr::Offs(offset) => text_start + offset.0,
+                };
+
+                // Look up function by its address
+                let found = func_table.func_by_addr(text_start, entry_addr)?;
+
+                // Verify we found the same function
+                assert!(found.is_some());
+                let original = func_table.func(entry.funcoff)?;
+                assert_eq!(found.unwrap().func_pc, original.func_pc);
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Iterator over the index in `.gopclntab`:`runtime.functab`.
 #[derive(Debug)]
 pub struct FuncIndexIter<'obj>(Reader<'obj>);
