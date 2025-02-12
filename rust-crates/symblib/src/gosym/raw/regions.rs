@@ -125,32 +125,26 @@ impl<'obj> FuncTable<'obj> {
                 CodePtr::Offs(offset) => text_start + offset.0,
             };
 
-            // Get next entry's address if available
-            let next_addr = if mid + sz < right {
-                let mut next_reader = self.reader.sub_reader(mid + sz..)?;
-                let next_entry = FuncTabIndexEntry::read(&mut next_reader)?;
-                match next_entry.entry {
-                    CodePtr::Addr(addr) => Some(addr),
-                    CodePtr::Offs(offset) => Some(text_start + offset.0),
-                }
-            } else {
-                None
-            };
-
             if addr < entry_addr {
                 right = mid;
-            } else if let Some(next_addr) = next_addr {
+            } else if mid + sz < right {
+                let mut next_reader = self.reader.sub_reader(mid + sz..)?;
+                let next_entry = FuncTabIndexEntry::read(&mut next_reader)?;
+                let next_addr = match next_entry.entry {
+                    CodePtr::Addr(addr) => addr,
+                    CodePtr::Offs(offset) => text_start + offset.0,
+                };
+
                 if addr >= next_addr {
                     left = mid + sz;
                 } else {
                     return Ok(Some(self.func(entry.funcoff)?));
                 }
-            } else if mid + sz >= right {
-                return Ok(Some(self.func(entry.funcoff)?));
             } else {
-                left = mid + sz;
+                return Ok(Some(self.func(entry.funcoff)?));
             }
         }
+
         Ok(None)
     }
 }
