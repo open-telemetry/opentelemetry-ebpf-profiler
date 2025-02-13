@@ -104,6 +104,22 @@ impl<'obj> GoRuntimeInfo<'obj> {
             iter: self.func_table.index_iter()?,
         })
     }
+
+    /// Locates the Go function containing the given virtual address.
+    ///
+    /// Returns:
+    /// - `Ok(Some(Func))` if a function is found containing the address
+    /// - `Ok(None)` if no function contains the address
+    /// - `Err` if there was an error reading the function table
+    pub fn find_func<'rt>(&'rt self, addr: VirtAddr) -> Result<Option<Func<'rt, 'obj>>> {
+        Ok(self
+            .func_table
+            .func_by_addr(self.text_start, addr)?
+            .map(|raw_func| Func {
+                rt: self,
+                raw: raw_func,
+            }))
+    }
 }
 
 /// Internal helpers.

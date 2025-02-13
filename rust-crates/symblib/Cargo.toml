@@ -3,6 +3,7 @@ name = "symblib"
 edition = "2021"
 version.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 base64.workspace = true
