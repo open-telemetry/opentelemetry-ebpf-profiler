@@ -144,6 +144,8 @@ type ProcessMeta struct {
 	Name string
 	// executable path retrieved from /proc/PID/exe
 	Executable string
+	// process env vars from /proc/PID/environ
+	EnvVariables map[string]string
 }
 
 // processInfo contains information about the executable mappings
@@ -157,8 +159,6 @@ type processInfo struct {
 	mappingsByFileID map[host.FileID]map[libpf.Address]*Mapping
 	// C-library Thread Specific Data information
 	tsdInfo *tpbase.TSDInfo
-	// process env vars from /proc/PID/environ
-	envVariables map[string]string
 }
 
 // addMapping adds a mapping to the internal indices.

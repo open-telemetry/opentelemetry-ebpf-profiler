@@ -993,7 +993,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		OffTime:          int64(ptr.offtime),
 		KTime:            times.KTime(ptr.ktime),
 		CPU:              cpu,
-		EnvVars:          t.processManager.EnvVarsForPID(pid),
+		EnvVars:          procMeta.EnvVariables,
 	}
 
 	if trace.Origin != support.TraceOriginSampling && trace.Origin != support.TraceOriginOffCPU {

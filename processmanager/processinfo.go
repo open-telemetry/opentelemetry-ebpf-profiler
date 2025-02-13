@@ -110,10 +110,9 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 		}
 
 		info = &processInfo{
-			meta:             ProcessMeta{Name: processName, Executable: exePath},
+			meta:             ProcessMeta{Name: processName, Executable: exePath, EnvVariables: envVarMap},
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
-			envVariables:     envVarMap,
 			tsdInfo:          nil,
 		}
 		pm.pidToProcessInfo[pid] = info
@@ -745,14 +744,3 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 
 // Compile time check to make sure we satisfy the interface.
 var _ tracehandler.TraceProcessor = (*ProcessManager)(nil)
-
-func (pm *ProcessManager) EnvVarsForPID(pid libpf.PID) map[string]string {
-	var envVars map[string]string
-
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
-		envVars = procInfo.envVariables
-	}
-	return envVars
-}
