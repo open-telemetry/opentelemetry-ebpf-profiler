@@ -167,8 +167,6 @@ jobs:
     steps:
       - name: Clone code
         uses: actions/checkout@v4
-      - name: Set up environment
-        uses: ./.github/workflows/env
       - name: Install dependencies
         run: |
           case "${{ matrix.target_arch }}" in
