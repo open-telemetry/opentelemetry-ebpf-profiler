@@ -112,13 +112,13 @@ impl<'obj> GoRuntimeInfo<'obj> {
     /// - `Ok(None)` if no function contains the address
     /// - `Err` if there was an error reading the function table
     pub fn find_func<'rt>(&'rt self, addr: VirtAddr) -> Result<Option<Func<'rt, 'obj>>> {
-        match self.func_table.func_by_addr(self.text_start, addr)? {
-            Some(raw_func) => Ok(Some(Func {
+        Ok(self
+            .func_table
+            .func_by_addr(self.text_start, addr)?
+            .map(|raw_func| Func {
                 rt: self,
                 raw: raw_func,
-            })),
-            None => Ok(None),
-        }
+            }))
     }
 }
 
