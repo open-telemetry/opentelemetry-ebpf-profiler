@@ -73,8 +73,19 @@ generate:
 ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
-ebpf-profiler: generate ebpf
+ebpf-profiler: generate ebpf rust-components
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
+
+rust-targets:
+	rustup target add aarch64-unknown-linux-musl
+	rustup target add x86_64-unknown-linux-musl
+
+rust-components: rust-targets
+	cargo build --lib --release --target aarch64-unknown-linux-musl
+	cargo build --lib --release --target x86_64-unknown-linux-musl
+
+rust-tests:
+	cargo test
 
 GOLANGCI_LINT_VERSION = "v1.63.4"
 lint: generate vanity-import-check
@@ -98,7 +109,7 @@ vanity-import-fix: $(PORTO)
 	@go install github.com/jcchavezs/porto/cmd/porto@latest
 	@porto --include-internal -w .
 
-test: generate ebpf test-deps
+test: generate ebpf test-deps rust-tests
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \

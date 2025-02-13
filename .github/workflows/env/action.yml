@@ -35,3 +35,5 @@ runs:
         go-version-file: go.mod
         cache-dependency-path: go.sum
       id: go
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
