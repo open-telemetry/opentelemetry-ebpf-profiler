@@ -5,7 +5,9 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 
 import (
 	"crypto/rand"
+	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -198,14 +200,30 @@ func (p *Pdata) setProfile(
 			}
 		}
 
+		exeName := traceKey.ExecutablePath
+		if exeName != "" {
+			// Remove separator characters which filepath.Base may produce
+			exeName = strings.Trim(filepath.Base(exeName),
+				""+string(filepath.Separator))
+			// Strip '.' if it's the only rune in the string
+			if libpf.Every([]rune(exeName), func(r rune) bool {
+				return r == '.'
+			}) {
+				exeName = ""
+			}
+		}
+
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ContainerIDKey, traceKey.ContainerID)
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ThreadNameKey, traceKey.Comm)
+
+		// TODO: Add traceKey.ProcessName via process.name key
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
-			semconv.ProcessExecutableNameKey, traceKey.ProcessName)
+			semconv.ProcessExecutableNameKey, exeName)
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ProcessExecutablePathKey, traceKey.ExecutablePath)
+
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ServiceNameKey, traceKey.ApmServiceName)
 		attrMgr.AppendInt(sample.AttributeIndices(),
