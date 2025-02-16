@@ -13,6 +13,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"unsafe"
 
 	log "github.com/sirupsen/logrus"
 
@@ -27,11 +28,16 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
+// #include "../../support/ebpf/types.h"
+// #include "../../support/ebpf/v8_tracer.h"
+import "C"
+
 var (
 	// regex for matching the process name
-	beamRegex                      = regexp.MustCompile(`beam.smp`)
-	_         interpreter.Data     = &beamData{}
-	_         interpreter.Instance = &beamInstance{}
+	beamRegex                        = regexp.MustCompile(`beam.smp`)
+	_           interpreter.Data     = &beamData{}
+	_           interpreter.Instance = &beamInstance{}
+	BogusFileID                      = libpf.NewFileID(0xf00d, 0x1001)
 )
 
 type beamData struct {
@@ -124,6 +130,14 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	log.Infof("BEAM interpreter attaching")
+
+	data := C.BEAMProcInfo{
+		version: C.uint(d.version),
+	}
+	if err := ebpf.UpdateProcData(libpf.BEAM, pid, unsafe.Pointer(&data)); err != nil {
+		return nil, err
+	}
+
 	return &beamInstance{
 		data:     d,
 		rm:       rm,
@@ -255,6 +269,12 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 		log.Warnf("BEAM failed to symbolize")
 		return interpreter.ErrMismatchInterpreterType
 	}
-	log.Infof("BEAM symbolizing")
+	log.Infof("BEAM symbolizing %v", frame)
+	frameID := libpf.NewFrameID(BogusFileID, frame.Lineno)
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:      frameID,
+		FunctionName: "Some Bogus Name",
+	})
+	trace.AppendFrameID(libpf.BEAMFrame, frameID)
 	return nil
 }

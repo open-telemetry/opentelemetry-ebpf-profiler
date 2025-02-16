@@ -33,7 +33,7 @@ const (
 	ProgUnwindPerl    = 0x3
 	ProgUnwindV8      = 0x7
 	ProgUnwindDotnet  = 0x8
-	ProgUnwindBeam    = 0x8
+	ProgUnwindBeam    = 0x9
 )
 
 const (
