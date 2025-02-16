@@ -484,7 +484,7 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
 		},
 		{
-			progID: uint32(support.ProgUnwindBeam),
+			progID: uint32(support.ProgUnwindBEAM),
 			name:   "unwind_beam",
 			enable: cfg.IncludeTracers.Has(types.BEAMTracer),
 		},

@@ -24,7 +24,7 @@ const (
 	FrameMarkerPerl     = C.FRAME_MARKER_PERL
 	FrameMarkerV8       = C.FRAME_MARKER_V8
 	FrameMarkerDotnet   = C.FRAME_MARKER_DOTNET
-	FrameMarkerBeam     = C.FRAME_MARKER_BEAM
+	FrameMarkerBEAM     = C.FRAME_MARKER_BEAM
 	FrameMarkerAbort    = C.FRAME_MARKER_ABORT
 )
 
@@ -38,7 +38,7 @@ const (
 	ProgUnwindPerl    = C.PROG_UNWIND_PERL
 	ProgUnwindV8      = C.PROG_UNWIND_V8
 	ProgUnwindDotnet  = C.PROG_UNWIND_DOTNET
-	ProgUnwindBeam    = C.PROG_UNWIND_BEAM
+	ProgUnwindBEAM    = C.PROG_UNWIND_BEAM
 )
 
 const (
