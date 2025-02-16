@@ -19,6 +19,7 @@ const (
 	FrameMarkerPerl		= 0x7
 	FrameMarkerV8		= 0x8
 	FrameMarkerDotnet	= 0xa
+	FrameMarkerBEAM		= 0xb
 	FrameMarkerAbort	= 0xff
 )
 
@@ -32,6 +33,7 @@ const (
 	ProgUnwindPerl		= 0x3
 	ProgUnwindV8		= 0x7
 	ProgUnwindDotnet	= 0x8
+	ProgUnwindBEAM		= 0x9
 )
 
 const (
