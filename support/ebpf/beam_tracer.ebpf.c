@@ -13,7 +13,7 @@ bpf_map_def SEC("maps") beam_procs = {
 };
 
 static inline __attribute__((__always_inline__))
-ErrorCode unwind_one_frame(PerCPURecord *record, BEAMProcInfo *info, bool top) {
+ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, bool top) {
   UnwindState *state = &record->state;
   Trace *trace = &record->trace;
   unsigned long regs[2], sp = state->sp, fp = state->fp, pc = state->pc;
@@ -72,7 +72,7 @@ int unwind_beam(struct pt_regs *ctx) {
 
 #pragma unroll
   for (int i = 0; i < FRAMES_PER_PROGRAM; i++) {
-    error = unwind_one_frame(record, info, i == 0);
+    error = unwind_one_beam_frame(record, info, i == 0);
     if (error) {
       break;
     }
