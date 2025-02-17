@@ -150,12 +150,15 @@ func (sp *systemProcess) GetMappings() ([]Mapping, error) {
 
 	mappings, err := parseMappings(mapsFile)
 	if err == nil {
-		fileToMapping := make(map[string]*Mapping)
+		fileToMapping := make(map[string]*Mapping, len(mappings))
 		for idx := range mappings {
 			m := &mappings[idx]
-			if m.Inode != 0 {
-				fileToMapping[m.Path] = m
+			if m.Inode == 0 {
+				// Ignore mappings that are invalid,
+				// non-existent or are special pseudo-files.
+				continue
 			}
+			fileToMapping[m.Path] = m
 		}
 		sp.fileToMapping = fileToMapping
 	}
