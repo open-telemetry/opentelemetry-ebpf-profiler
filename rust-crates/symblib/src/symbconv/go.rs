@@ -6,7 +6,7 @@
 //! This is currently still very basic and doesn't support inline functions
 //! or constructing line tables.
 
-use crate::{gosym, objfile, symbfile, AnyError};
+use crate::{debug, gosym, objfile, symbfile, AnyError};
 use fallible_iterator::FallibleIterator as _;
 
 /// Result type shorthand.
@@ -70,7 +70,7 @@ fn extract_ranges(obj: &objfile::Reader<'_>, visitor: super::RangeVisitor<'_>) -
     while let Some(func) = func_iter.next()? {
         // Infer end of function from line tables.
         let Some(end) = func.line_mapping()?.map(|(rng, _)| Ok(rng.end)).max()? else {
-            eprintln!(
+            debug!(
                 "WARN: unable to determine end of function ({})",
                 func.name()?
             );
@@ -80,7 +80,7 @@ fn extract_ranges(obj: &objfile::Reader<'_>, visitor: super::RangeVisitor<'_>) -
 
         let length = end.saturating_sub(func.start_addr());
         if length == 0 {
-            eprintln!("WARN: zero function length ({})", func.name()?);
+            debug!("WARN: zero function length ({})", func.name()?);
             stats.funcs_skipped += 1;
             continue;
         }
