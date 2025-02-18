@@ -92,7 +92,7 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 		}
 		bufPool.Put(scanBuf)
 	}()
-	scanner.Buffer((*scanBuf), 8192)
+	scanner.Buffer(*scanBuf, 8192)
 	for scanner.Scan() {
 		var fields [6]string
 		var addrs [2]string
