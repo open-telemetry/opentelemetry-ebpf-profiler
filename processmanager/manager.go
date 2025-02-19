@@ -42,6 +42,10 @@ const (
 
 	// TTL of entries in the LRU cache holding the executables' ELF information.
 	elfInfoCacheTTL = 6 * time.Hour
+
+	// Time to keep entries in the LRU cache before inspecting them again after
+	// the initial inspection returned an error.
+	elfInfoCacheRetry = 5 * time.Minute
 )
 
 var (
