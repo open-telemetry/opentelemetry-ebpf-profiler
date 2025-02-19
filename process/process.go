@@ -79,7 +79,7 @@ func trimMappingPath(path string) string {
 }
 
 func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
-	mappings := make([]Mapping, 0)
+	mappings := make([]Mapping, 0, 32)
 	scanner := bufio.NewScanner(mapsFile)
 	scanBuf := bufPool.Get().(*[]byte)
 	if scanBuf == nil {
