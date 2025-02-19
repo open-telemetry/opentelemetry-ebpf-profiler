@@ -1,6 +1,6 @@
 .PHONY: all all-common clean ebpf generate test test-deps protobuf docker-image agent legal \
 	integration-test-binaries codespell lint linter-version debug debug-agent ebpf-profiler \
-	format-ebpf
+	format-ebpf rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
 SHELL := /usr/bin/env bash
 
@@ -77,12 +77,18 @@ ebpf-profiler: generate ebpf rust-components
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 rust-targets:
+ifeq ($(TARGET_ARCH),arm64)
 	rustup target add aarch64-unknown-linux-musl
+else ifeq ($(TARGET_ARCH),amd64)
 	rustup target add x86_64-unknown-linux-musl
+endif
 
 rust-components: rust-targets
+ifeq ($(TARGET_ARCH),arm64)
 	cargo build --lib --release --target aarch64-unknown-linux-musl
+else ifeq ($(TARGET_ARCH),amd64)
 	cargo build --lib --release --target x86_64-unknown-linux-musl
+endif
 
 rust-tests: rust-targets
 	cargo test
@@ -99,12 +105,10 @@ format-ebpf:
 linter-version:
 	@echo $(GOLANGCI_LINT_VERSION)
 
-.PHONY: vanity-import-check
 vanity-import-check:
 	@go install github.com/jcchavezs/porto/cmd/porto@latest
 	@porto --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 
-.PHONY: vanity-import-fix
 vanity-import-fix: $(PORTO)
 	@go install github.com/jcchavezs/porto/cmd/porto@latest
 	@porto --include-internal -w .
