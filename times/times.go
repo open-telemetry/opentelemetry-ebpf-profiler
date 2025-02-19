@@ -43,7 +43,6 @@ type Times struct {
 	monitorInterval           time.Duration
 	tracePollInterval         time.Duration
 	reportInterval            time.Duration
-	reportMetricsInterval     time.Duration
 	grpcConnectionTimeout     time.Duration
 	grpcOperationTimeout      time.Duration
 	grpcStartupBackoffTimeout time.Duration
@@ -60,9 +59,6 @@ type IntervalsAndTimers interface {
 	TracePollInterval() time.Duration
 	// ReportInterval defines the interval at which collected data is sent to collection agent.
 	ReportInterval() time.Duration
-	// ReportMetricsInterval defines the interval at which collected metrics are sent
-	// to collection agent.
-	ReportMetricsInterval() time.Duration
 	// GRPCConnectionTimeout defines the timeout for each established gRPC connection.
 	GRPCConnectionTimeout() time.Duration
 	// GRPCOperationTimeout defines the timeout for each gRPC operation.
@@ -86,8 +82,6 @@ func (t *Times) MonitorInterval() time.Duration { return t.monitorInterval }
 func (t *Times) TracePollInterval() time.Duration { return t.tracePollInterval }
 
 func (t *Times) ReportInterval() time.Duration { return t.reportInterval }
-
-func (t *Times) ReportMetricsInterval() time.Duration { return t.reportMetricsInterval }
 
 func (t *Times) GRPCConnectionTimeout() time.Duration { return t.grpcConnectionTimeout }
 
@@ -117,7 +111,6 @@ func StartRealtimeSync(ctx context.Context, syncInterval time.Duration) {
 // New returns a new Times instance.
 func New(reportInterval, monitorInterval, probabilisticInterval time.Duration) *Times {
 	return &Times{
-		reportMetricsInterval:     1 * time.Minute,
 		grpcAuthErrorDelay:        GRPCAuthErrorDelay,
 		grpcConnectionTimeout:     GRPCConnectionTimeout,
 		grpcOperationTimeout:      GRPCOperationTimeout,

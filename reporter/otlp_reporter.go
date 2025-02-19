@@ -14,16 +14,22 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
-	semconv "go.opentelemetry.io/otel/semconv/v1.22.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/vc"
 )
 
 // Assert that we implement the full Reporter interface.
@@ -48,9 +54,6 @@ type OTLPReporter struct {
 	// client for the connection to the receiver.
 	client pprofileotlp.GRPCClient
 
-	// rpcStats stores gRPC related statistics.
-	rpcStats *StatsHandlerImpl
-
 	// To fill in the OTLP/profiles signal with the relevant information,
 	// this structure holds in long-term storage information that might
 	// be duplicated in other places but not accessible for OTLPReporter.
@@ -59,8 +62,42 @@ type OTLPReporter struct {
 	pkgGRPCOperationTimeout time.Duration
 }
 
+// TODO: Remove before merging, only used for testing
+func newResource() (*resource.Resource, error) {
+	return resource.Merge(resource.Default(),
+		resource.NewWithAttributes(semconv.SchemaURL,
+			semconv.ServiceName("ebpf-profiler"),
+			semconv.ServiceVersion(vc.Version())))
+}
+
+func newMeterProvider(res *resource.Resource) (*metric.MeterProvider, error) {
+	metricExporter, err := stdoutmetric.New()
+	if err != nil {
+		return nil, err
+	}
+	meterProvider := metric.NewMeterProvider(
+		metric.WithResource(res),
+		metric.WithReader(metric.NewPeriodicReader(metricExporter,
+			metric.WithInterval(3*time.Second))))
+	return meterProvider, nil
+}
+
+// End meter provider helpers for testing
+
 // NewOTLP returns a new instance of OTLPReporter
 func NewOTLP(cfg *Config) (*OTLPReporter, error) {
+	// TODO: Remove before merging, only used for testing
+	res, err := newResource()
+	if err != nil {
+		panic(err)
+	}
+	meterProvider, err := newMeterProvider(res)
+	if err != nil {
+		panic(err)
+	}
+	otel.SetMeterProvider(meterProvider)
+	// End testing meter provider
+
 	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
 		func(pid libpf.PID) uint32 { return uint32(pid) })
 	if err != nil {
@@ -112,18 +149,7 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 		hostID:                  strconv.FormatUint(cfg.HostID, 10),
 		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
 		client:                  nil,
-		rpcStats:                NewStatsHandler(),
 	}, nil
-}
-
-// GetMetrics returns internal metrics of OTLPReporter.
-func (r *OTLPReporter) GetMetrics() Metrics {
-	return Metrics{
-		RPCBytesOutCount:  r.rpcStats.GetRPCBytesOut(),
-		RPCBytesInCount:   r.rpcStats.GetRPCBytesIn(),
-		WireBytesOutCount: r.rpcStats.GetWireBytesOut(),
-		WireBytesInCount:  r.rpcStats.GetWireBytesIn(),
-	}
 }
 
 // Start sets up and manages the reporting connection to a OTLP backend.
@@ -134,7 +160,7 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 	// Establish the gRPC connection before going on, waiting for a response
 	// from the collectionAgent endpoint.
 	// Use grpc.WithBlock() in setupGrpcConnection() for this to work.
-	otlpGrpcConn, err := waitGrpcEndpoint(ctx, r.cfg, r.rpcStats)
+	otlpGrpcConn, err := waitGrpcEndpoint(ctx, r.cfg)
 	if err != nil {
 		cancelReporting()
 		r.runLoop.Stop()
@@ -218,15 +244,14 @@ func (r *OTLPReporter) setResource(rp pprofile.ResourceProfiles) {
 }
 
 // waitGrpcEndpoint waits until the gRPC connection is established.
-func waitGrpcEndpoint(ctx context.Context, cfg *Config,
-	statsHandler *StatsHandlerImpl) (*grpc.ClientConn, error) {
+func waitGrpcEndpoint(ctx context.Context, cfg *Config) (*grpc.ClientConn, error) {
 	// Sleep with a fixed backoff time added of +/- 20% jitter
 	tick := time.NewTicker(libpf.AddJitter(cfg.GRPCStartupBackoffTime, 0.2))
 	defer tick.Stop()
 
 	var retries uint32
 	for {
-		if collAgentConn, err := setupGrpcConnection(ctx, cfg, statsHandler); err != nil {
+		if collAgentConn, err := setupGrpcConnection(ctx, cfg); err != nil {
 			if retries >= cfg.MaxGRPCRetries {
 				return nil, err
 			}
@@ -251,11 +276,9 @@ func waitGrpcEndpoint(ctx context.Context, cfg *Config,
 }
 
 // setupGrpcConnection sets up a gRPC connection instrumented with our auth interceptor
-func setupGrpcConnection(parent context.Context, cfg *Config,
-	statsHandler *StatsHandlerImpl) (*grpc.ClientConn, error) {
+func setupGrpcConnection(parent context.Context, cfg *Config) (*grpc.ClientConn, error) {
 	//nolint:staticcheck
 	opts := []grpc.DialOption{grpc.WithBlock(),
-		grpc.WithStatsHandler(statsHandler),
 		grpc.WithUnaryInterceptor(cfg.GRPCClientInterceptor),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(cfg.MaxRPCMsgSize),

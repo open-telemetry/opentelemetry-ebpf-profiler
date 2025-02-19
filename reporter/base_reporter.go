@@ -93,8 +93,6 @@ func (b *baseReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 	})
 }
 
-func (*baseReporter) ReportMetrics(_ uint32, _ []uint32, _ []int64) {}
-
 func (*baseReporter) SupportsReportTraceEvent() bool { return true }
 
 func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) {
