@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/beam"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
@@ -123,6 +124,9 @@ func NewExecutableInfoManager(
 	}
 	if includeTracers.Has(types.DotnetTracer) {
 		interpreterLoaders = append(interpreterLoaders, dotnet.Loader)
+	}
+	if includeTracers.Has(types.BEAMTracer) {
+		interpreterLoaders = append(interpreterLoaders, beam.Loader)
 	}
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
