@@ -69,32 +69,10 @@ jobs:
           restore-keys: |
             coredumps-${{ matrix.target_arch }}
             coredumps-
+      - name: Direct Rust test
+        run: make rust-tests
       - name: Tests
         run: make test TARGET_ARCH=${{ matrix.target_arch }}
-
-  test-rust:
-    name: Test rust components
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Clone code
-        uses: actions/checkout@v4
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Install protoc
-        env:
-          PB_URL: "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/"
-          PB_FILE: "protoc-24.4-linux-x86_64.zip"
-          INSTALL_DIR: "/usr/local"
-        run: |
-          wget -q "$PB_URL/$PB_FILE"
-          sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
-          sudo chmod +xr "$INSTALL_DIR/bin/protoc"
-          sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
-          sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
-          rm "$PB_FILE"
-      - name: Tests
-        run: |
-          cargo test
 
   check-ebpf-blobs:
     name: Check for differences in the eBPF binary blobs
