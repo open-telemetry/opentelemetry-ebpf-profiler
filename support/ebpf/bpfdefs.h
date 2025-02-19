@@ -5,7 +5,7 @@
 #include "kernel.h"
 
 #if defined(TESTING_COREDUMP)
-  // utils/coredump uses CGO to build the eBPF code. Provide here the glue to
+  // tools/coredump uses CGO to build the eBPF code. Provide here the glue to
   // dispatch the BPF API to helpers implemented in ebpfhelpers.go.
   #define SEC(NAME)
 
