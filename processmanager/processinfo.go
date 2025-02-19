@@ -92,7 +92,7 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 
 		envVarMap := make(map[string]string, len(pm.includeEnvVars))
 		if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid)); err == nil {
-			// environ has environment variables seperated by a null byte (hex: 00)
+			// environ has environment variables separated by a null byte (hex: 00)
 			splittedVars := strings.Split(string(envVars), "\000")
 			for _, envVar := range splittedVars {
 				keyValuePair := strings.SplitN(envVar, "=", 2)
@@ -110,7 +110,10 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 		}
 
 		info = &processInfo{
-			meta:             ProcessMeta{Name: processName, Executable: exePath, EnvVariables: envVarMap},
+			meta: ProcessMeta{
+				Name:         processName,
+				Executable:   exePath,
+				EnvVariables: envVarMap},
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
 			tsdInfo:          nil,

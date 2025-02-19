@@ -156,7 +156,8 @@ type Config struct {
 	ProbabilisticThreshold uint
 	// OffCPUThreshold is the user defined threshold for off-cpu profiling.
 	OffCPUThreshold uint32
-	// IncludeEnvVars holds a list of environment variables that should be captured and reported from processes
+	// IncludeEnvVars holds a list of environment variables that should be captured and reported
+	// from processes
 	IncludeEnvVars libpf.Set[string]
 }
 

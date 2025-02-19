@@ -213,7 +213,10 @@ func (p *Pdata) setProfile(
 			semconv.ProcessPIDKey, traceKey.Pid)
 
 		for key, value := range traceInfo.EnvVars {
-			attrMgr.AppendOptionalString(sample.AttributeIndices(), attribute.Key("env."+key), value)
+			attrMgr.AppendOptionalString(
+				sample.AttributeIndices(),
+				attribute.Key("env."+key),
+				value)
 		}
 
 		if p.ExtraSampleAttrProd != nil {
