@@ -33,7 +33,7 @@ RUN                                                                             
   PB_FILE="protoc-24.4-linux-x86_64.zip";                                      \
   INSTALL_DIR="/usr/local";                                                        \
                                                                                    \
-  wget -q "$PB_URL/$PB_FILE"                                                       \
+  wget -nv "$PB_URL/$PB_FILE"                                                       \
     && unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'                      \
     && chmod +xr "$INSTALL_DIR/bin/protoc"                                         \
     && find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;                    \

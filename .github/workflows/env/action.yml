@@ -48,7 +48,7 @@ runs:
         PB_FILE: "protoc-24.4-linux-x86_64.zip"
         INSTALL_DIR: "/usr/local"
       run: |
-        wget -q "$PB_URL/$PB_FILE"
+        wget -nv "$PB_URL/$PB_FILE"
         sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
         sudo chmod +xr "$INSTALL_DIR/bin/protoc"
         sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
