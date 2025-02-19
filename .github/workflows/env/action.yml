@@ -40,6 +40,7 @@ runs:
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
+        toolchain: 1.77
     - name: Install protoc
       shell: bash
       env:

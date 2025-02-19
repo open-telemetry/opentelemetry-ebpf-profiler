@@ -47,7 +47,7 @@ RUN echo 'export PATH="/usr/local/go/bin:$PATH"' >> /etc/profile
 RUN mkdir -p /root/.cargo
 
 # Install rustup and cargo
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.77
 
 # Add cargo to PATH
 RUN echo 'export PATH="/root/.cargo/bin:$PATH"' >> /etc/profile
