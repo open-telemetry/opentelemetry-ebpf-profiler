@@ -813,7 +813,7 @@ struct GoString {
 
 struct GoSlice {
     void *array;
-    s64 len;
+    u64 len;
     s64 cap;
 };
 
@@ -862,6 +862,8 @@ typedef struct PerCPURecord {
     NativeCustomLabel nativeCustomLabel;
     // Go labels scratch
     GoMapBucket goMapBucket;
+    // Scratch for Go 1.24 labels
+    struct GoString labels[2];
   };
   // Mask to indicate which unwinders are complete
   u32 unwindersDone;
