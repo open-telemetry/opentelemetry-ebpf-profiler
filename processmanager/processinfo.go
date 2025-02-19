@@ -278,7 +278,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		if !errors.Is(err, os.ErrNotExist) {
 			// Cache the other errors: not an ELF, ELF corrupt, etc.
 			// to reduce opening it again and again.
-			pm.elfInfoCache.Add(key, info)
+			pm.elfInfoCache.AddWithLifetime(key, info, elfInfoCacheRetry)
 		}
 		return info
 	}
