@@ -101,6 +101,8 @@ package nodev8 // import "go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 // 18.9.y   10.2.154
 // 20.1.y   11.3.244
 // 21.1.y   11.8.172
+// 22.0.y   12.4.254
+// 23.0.y   12.9.202
 
 // LIMITATIONS:
 //  - Line number information is not always available. The V8 generates the LineNumber
@@ -291,10 +293,11 @@ type v8Data struct {
 		// submitted upstream: https://chromium-review.googlesource.com/c/v8/v8/+/3902524
 		DeoptimizationDataIndex struct {
 			// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/code.h#912
-			InlinedFunctionCount uint8 `name:"DeoptimizationDataInlinedFunctionCountIndex"`
-			LiteralArray         uint8 `name:"DeoptimizationDataLiteralArrayIndex"`
-			SharedFunctionInfo   uint8 `name:"DeoptimizationDataSharedFunctionInfoIndex"`
-			InliningPositions    uint8 `name:"DeoptimizationDataInliningPositionsIndex"`
+			InlinedFunctionCount      uint8 `name:"DeoptimizationDataInlinedFunctionCountIndex"`
+			LiteralArray              uint8 `name:"DeoptimizationDataLiteralArrayIndex"`
+			SharedFunctionInfo        uint8 `name:"DeoptimizationDataSharedFunctionInfoIndex" zero:""`
+			SharedFunctionInfoWrapper uint8 `name:"DeoptimizationDataSharedFunctionInfoWrapperIndex" zero:""`
+			InliningPositions         uint8 `name:"DeoptimizationDataInliningPositionsIndex"`
 		} `name:""`
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/code-kind.h#18
@@ -340,18 +343,28 @@ type v8Data struct {
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/tools/gen-postmortem-metadata.py#709
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/instance-type.h#75
 		Type struct {
-			BaselineData       uint16 `name:"BaselineData__BASELINE_DATA_TYPE" zero:""`
-			ByteArray          uint16 `name:"ByteArray__BYTE_ARRAY_TYPE"`
-			BytecodeArray      uint16 `name:"BytecodeArray__BYTECODE_ARRAY_TYPE"`
-			Code               uint16 `name:"Code__CODE_TYPE"`
-			FixedArray         uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
-			WeakFixedArray     uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
-			JSFunction         uint16 `name:"JSFunction__JS_FUNCTION_TYPE"`
-			Map                uint16 `name:"Map__MAP_TYPE"`
-			Script             uint16 `name:"Script__SCRIPT_TYPE"`
-			ScopeInfo          uint16 `name:"ScopeInfo__SCOPE_INFO_TYPE"`
-			SharedFunctionInfo uint16 `name:"SharedFunctionInfo__SHARED_FUNCTION_INFO_TYPE"`
+			BaselineData              uint16 `name:"BaselineData__BASELINE_DATA_TYPE" zero:""`
+			ByteArray                 uint16 `name:"ByteArray__BYTE_ARRAY_TYPE"`
+			BytecodeArray             uint16 `name:"BytecodeArray__BYTECODE_ARRAY_TYPE"`
+			Code                      uint16 `name:"Code__CODE_TYPE"`
+			CodeWrapper               uint16 `name:"CodeWrapper__CODE_WRAPPER_TYPE" zero:""`
+			FixedArray                uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
+			WeakFixedArray            uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
+			TrustedByteArray          uint16 `name:"TrustedByteArray__TRUSTED_BYTE_ARRAY_TYPE" zero:""`
+			TrustedFixedArray         uint16 `name:"TrustedFixedArray__TRUSTED_FIXED_ARRAY_TYPE" zero:""`
+			ProtectedFixedArray       uint16 `name:"ProtectedFixedArray__PROTECTED_FIXED_ARRAY_TYPE" zero:""`
+			JSFunction                uint16 `name:"JSFunction__JS_FUNCTION_TYPE"`
+			Map                       uint16 `name:"Map__MAP_TYPE"`
+			Script                    uint16 `name:"Script__SCRIPT_TYPE"`
+			ScopeInfo                 uint16 `name:"ScopeInfo__SCOPE_INFO_TYPE"`
+			SharedFunctionInfo        uint16 `name:"SharedFunctionInfo__SHARED_FUNCTION_INFO_TYPE"`
+			SharedFunctionInfoWrapper uint16 `name:"SharedFunctionInfoWrapper__SHARED_FUNCTION_INFO_WRAPPER_TYPE" zero:""`
 		} `name:"type"`
+
+		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.9.202.28/src/objects/shared-function-info.h#835
+		SharedFunctionInfoWrapper struct {
+			SharedFunctionInfo uint16 `name:"shared_info__Tagged_SharedFunctionInfo_" zero:""`
+		}
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/heap-object.tq#7
 		HeapObject struct {
@@ -414,9 +427,22 @@ type v8Data struct {
 			Flags               uint16 `name:"flags__uint32_t"`
 		}
 
+		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.9.202.28/src/objects/deoptimization-data.h#266
+		DeoptimizationData struct {
+			ProtectedFixedArray bool
+			TrustedFixedArray   bool
+			FixedArray          bool
+		}
+
+		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.9.202.28/src/objects/bytecode-array-inl.h#116
+		SourcePositionTable struct {
+			TrustedByteArray bool
+			ByteArray        bool
+		}
+
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/shared-function-info.tq#57
 		SharedFunctionInfo struct {
-			NameOrScopeInfo   uint16 `name:"name_or_scope_info__Object,name_or_scope_info__Tagged_Object_"`
+			NameOrScopeInfo   uint16 `name:"name_or_scope_info__Object,name_or_scope_info__Tagged_Object_,name_or_scope_info__Tagged_NameOrScopeInfoT_"`
 			FunctionData      uint16 `name:"function_data__Object,function_data__Tagged_Object_"`
 			ScriptOrDebugInfo uint16 `name:"script_or_debug_info__Object,script_or_debug_info__HeapObject,script__Tagged_HeapObject_"`
 		}
@@ -1169,7 +1195,11 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 
 	// Read in full source position tables
 	sourcePositionPtr := npsr.Ptr(code, uint(vms.Code.SourcePositionTable))
-	sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr, vms.Type.ByteArray)
+	if vms.SourcePositionTable.TrustedByteArray {
+		sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr, vms.Type.TrustedByteArray)
+	} else {
+		sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr, vms.Type.ByteArray)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("code source position pointer read: %v", err)
 	}
@@ -1200,10 +1230,22 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 
 	// Read the deoptimization data
 	deoptimizationDataPtr := npsr.Ptr(code, uint(vms.Code.DeoptimizationData))
-	deoptimizationDataPtr, err = i.getTypedObject(deoptimizationDataPtr, vms.Type.FixedArray)
+	if vms.DeoptimizationData.ProtectedFixedArray {
+		deoptimizationDataPtr, err =
+			i.getTypedObject(deoptimizationDataPtr, vms.Type.ProtectedFixedArray)
+	} else if vms.DeoptimizationData.TrustedFixedArray {
+		deoptimizationDataPtr, err =
+			i.getTypedObject(deoptimizationDataPtr, vms.Type.TrustedFixedArray)
+	} else {
+		deoptimizationDataPtr, err =
+			i.getTypedObject(deoptimizationDataPtr, vms.Type.FixedArray)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("deoptimization data pointer read: %v", err)
 	}
+	// We don't have metadata for TrustedFixedArray (at least as of 12.3.219),
+	// but for now the layout is the same as FixedArray, so it's fine if what follows
+	// assumes FixedArray.
 	numItemsNeeded := uint32(vms.DeoptimizationDataIndex.InliningPositions + 1)
 	deoptimizationData, err := i.readFixedTable(deoptimizationDataPtr, pointerSize, numItemsNeeded)
 	if err != nil {
@@ -1216,8 +1258,25 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 
 	if sfi == nil {
 		// Read the Code's SFI
-		sfiPtr := npsr.Ptr(deoptimizationData,
-			uint(vms.DeoptimizationDataIndex.SharedFunctionInfo*pointerSize))
+		var sfiPtr libpf.Address
+		if vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper != 0 {
+			sfiWrapperPtr := npsr.Ptr(deoptimizationData,
+				uint(vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper*pointerSize))
+			sfiWrapperPtr, err = i.getTypedObject(sfiWrapperPtr, vms.Type.SharedFunctionInfoWrapper)
+			if err != nil {
+				return nil, fmt.Errorf("sfi wrapper pointer read: %w", err)
+			}
+
+			sfiWrapperSize := vms.SharedFunctionInfoWrapper.SharedFunctionInfo + pointerSize
+			sfiWrapper := make([]byte, sfiWrapperSize)
+			if err = i.rm.Read(sfiWrapperPtr, sfiWrapper); err != nil {
+				return nil, fmt.Errorf("sfi wrapper read: %w", err)
+			}
+			sfiPtr = npsr.Ptr(sfiWrapper, uint(vms.SharedFunctionInfoWrapper.SharedFunctionInfo))
+		} else {
+			sfiPtr = npsr.Ptr(deoptimizationData,
+				uint(vms.DeoptimizationDataIndex.SharedFunctionInfo*pointerSize))
+		}
 		sfi, err = i.getSFI(sfiPtr)
 		if err != nil {
 			return nil, fmt.Errorf("getSFI: %w", err)
@@ -1877,6 +1936,26 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 	}
 
 	// Add some defaults when needed
+	if d.version >= v8Ver(11, 9, 0) {
+		// the class hierarchy changed: HeapObject no longer
+		// derives from Object. This confuses gen-postmortem-metadata.py
+		// and it no longer emits class hierarchy information correctly.
+		// But ScopeInfo indeed still derives from HeapObject, so just set
+		// that manually here.
+		vms.ScopeInfo.HeapObject = true
+	}
+	if d.version >= v8Ver(12, 5, 0) && !vms.DeoptimizationData.FixedArray &&
+		!vms.DeoptimizationData.TrustedFixedArray {
+		vms.DeoptimizationData.ProtectedFixedArray = true
+	} else if d.version >= v8Ver(12, 3, 0) && !vms.DeoptimizationData.FixedArray {
+		// DeoptimizationData changed base type to TrustedFixedArray, which doesn't have metadata.
+		vms.DeoptimizationData.TrustedFixedArray = true
+	}
+	if d.version >= v8Ver(12, 4, 0) && !vms.SourcePositionTable.ByteArray {
+		// SourcePositionTable changed base type to TrustedByteArray, which doesn't have metadata.
+		vms.SourcePositionTable.TrustedByteArray = true
+	}
+
 	if vms.FramePointer.BytecodeArray == 0 {
 		// Not available before V8 9.5.2
 		if d.version >= v8Ver(8, 7, 198) {
@@ -1924,8 +2003,15 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 	}
 	if vms.Code.InstructionSize != 0 {
 		if vms.Code.SourcePositionTable == 0 {
-			// At least back to V8 8.4
-			vms.Code.SourcePositionTable = vms.Code.InstructionSize - 2*pointerSize
+			if vms.Type.CodeWrapper != 0 {
+				// An extra pointer-sized variable for "code wrapper" was introduced
+				// between `InstructionStart` and `PositionTable`, so the offset here becomes
+				// 3 instead of 2.
+				vms.Code.SourcePositionTable = vms.Code.InstructionStart - 3*pointerSize
+			} else {
+				// At least back to V8 8.4
+				vms.Code.SourcePositionTable = vms.Code.InstructionSize - 2*pointerSize
+			}
 		}
 		if vms.Code.Flags == 0 {
 			// Back to V8 8.8.172
@@ -1977,7 +2063,8 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 		val := vms.DeoptimizationDataIndex.InlinedFunctionCount + 1
 		vms.DeoptimizationDataIndex.LiteralArray = val
 	}
-	if vms.DeoptimizationDataIndex.SharedFunctionInfo == 0 {
+	if vms.DeoptimizationDataIndex.SharedFunctionInfo == 0 &&
+		vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper == 0 {
 		vms.DeoptimizationDataIndex.SharedFunctionInfo = 6
 	}
 	if vms.DeoptimizationDataIndex.InliningPositions == 0 {
@@ -1999,6 +2086,17 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 	if vms.BaselineData.Data == 0 && vms.CodeKind.FieldMask != 0 {
 		// Unfortunately no metadata currently. Has been static.
 		vms.BaselineData.Data = vms.HeapObject.Map + 2*pointerSize
+	}
+
+	if vms.SharedFunctionInfo.FunctionData == 0 {
+		// No metadata as of v8 242fa685d0c4eb07b27a167157e3b5c8cc70c244 --
+		// note that RELEASE_ACQUIRE_ACCESSORS(SharedFunctionInfo, function_data, Tagged<Object>,
+		//                          kFunctionDataOffset)
+		// was removed from shared-function-info-inl.h .
+		// Anyway, the way this works is changing with V8_SANDBOX,
+		// but Node doesn't turn that on,
+		// so we can probably get away with just hardcoding it for now.
+		vms.SharedFunctionInfo.FunctionData = 8
 	}
 
 	for i := 0; i < vmVal.NumField(); i++ {
