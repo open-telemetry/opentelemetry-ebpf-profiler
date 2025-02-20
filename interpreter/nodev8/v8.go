@@ -344,6 +344,7 @@ type v8Data struct {
 			ByteArray          uint16 `name:"ByteArray__BYTE_ARRAY_TYPE"`
 			BytecodeArray      uint16 `name:"BytecodeArray__BYTECODE_ARRAY_TYPE"`
 			Code               uint16 `name:"Code__CODE_TYPE"`
+			CodeWrapper        uint16 `name:"CodeWrapper__CODE_WRAPPER_TYPE" zero:""`
 			FixedArray         uint16 `name:"FixedArray__FIXED_ARRAY_TYPE"`
 			WeakFixedArray     uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
 			TrustedByteArray   uint16 `name:"TrustedByteArray__TRUSTED_BYTE_ARRAY_TYPE" zero:""`
@@ -1967,8 +1968,15 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 	}
 	if vms.Code.InstructionSize != 0 {
 		if vms.Code.SourcePositionTable == 0 {
-			// At least back to V8 8.4
-			vms.Code.SourcePositionTable = vms.Code.InstructionSize - 2*pointerSize
+			if vms.Type.CodeWrapper != 0 {
+				// An extra pointer-sized variable for "code wrapper" was introduced
+				// between `InstructionStart` and `PositionTable`, so the offset here becomes
+				// 3 instead of 2.
+				vms.Code.SourcePositionTable = vms.Code.InstructionStart - 3*pointerSize
+			} else {
+				// At least back to V8 8.4
+				vms.Code.SourcePositionTable = vms.Code.InstructionSize - 2*pointerSize
+			}
 		}
 		if vms.Code.Flags == 0 {
 			// Back to V8 8.8.172
