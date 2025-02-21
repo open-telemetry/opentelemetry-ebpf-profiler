@@ -39,7 +39,7 @@ var bufPool sync.Pool
 
 // mappingParseBufferSize defines the initial buffer size
 // to parse mappings.
-const mappingParseBufferSize = 512
+const mappingParseBufferSize = 256
 
 func init() {
 	bufPool = sync.Pool{
