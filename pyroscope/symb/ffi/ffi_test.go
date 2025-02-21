@@ -12,7 +12,7 @@ type mycb struct {
 	cnt int
 }
 
-func (m *mycb) VisitRange(uint64, uint32, uint32, string) {
+func (m *mycb) VisitRange(_ *GoRange) {
 	m.cnt++
 }
 
