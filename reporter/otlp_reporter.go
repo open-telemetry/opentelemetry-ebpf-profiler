@@ -274,6 +274,8 @@ func setupGrpcConnection(parent context.Context, cfg *Config,
 			})))
 	}
 
+	opts = append(opts, cfg.GRPCDialOptions...)
+
 	ctx, cancel := context.WithTimeout(parent, cfg.GRPCConnectionTimeout)
 	defer cancel()
 	//nolint:staticcheck
