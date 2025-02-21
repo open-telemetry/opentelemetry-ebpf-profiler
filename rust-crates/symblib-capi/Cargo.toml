@@ -10,6 +10,7 @@ crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
 symblib.path = "../symblib"
-
 fallible-iterator.workspace = true
 thiserror.workspace = true
+[dev-dependencies]
+tempfile.workspace = true

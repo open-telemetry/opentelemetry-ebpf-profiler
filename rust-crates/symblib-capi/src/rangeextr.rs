@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{FfiResult, StatusCode, SymblibSlice, SymblibString};
-use std::ffi::{c_char, c_void, CStr, OsString};
+use std::ffi::{c_int, c_void, OsString};
+use std::fs;
 use std::os::unix::ffi::OsStringExt as _;
 use std::path::{Path, PathBuf};
 use symblib::objfile::{self, SymbolSource};
 use symblib::symbconv::RangeExtractor as _;
-use symblib::{dwarf, symbconv as sc, symbfile, VirtAddr};
+use symblib::{dwarf, symbconv as sc, symbconv, symbfile};
+use std::os::fd::FromRawFd;
 
 /// Extract ranges from an executable.
 ///
@@ -24,40 +26,39 @@ use symblib::{dwarf, symbconv as sc, symbfile, VirtAddr};
 /// the visitor untouched and may be NULL.
 #[no_mangle]
 pub unsafe extern "C" fn symblib_rangeextr(
-    executable: *const c_char,
-    follow_alt_link: bool,
+    executable_fd: c_int,
+    _dwarf_sup_fd: c_int,
     visitor: SymblibRangeVisitor,
     user_data: *mut c_void,
 ) -> StatusCode {
-    match rangeextr_impl(executable, follow_alt_link, visitor, user_data) {
+
+    let visitor: symbconv::RangeVisitor = &mut |rng|  {
+        let ffi_rng = SymblibRange::from(rng);
+        match visitor(user_data, &ffi_rng) {
+            StatusCode::Ok => Ok(()),
+            code => Err(Box::new(code)),
+        }
+    };
+    let executable =  fs::File::from_raw_fd(executable_fd);
+
+    let sup = &None;
+    let res = match rangeextr_impl(&executable, sup, visitor) {
         Ok(()) => StatusCode::Ok,
         Err(e) => e,
-    }
+    };
+    std::mem::forget(executable);
+    res
 }
 
-unsafe fn rangeextr_impl(
-    executable: *const c_char,
-    follow_alt_link: bool,
-    visitor: SymblibRangeVisitor,
-    user_data: *mut c_void,
-) -> FfiResult {
-    assert!(!executable.is_null());
-
-    let executable = Path::new(unsafe { CStr::from_ptr(executable).to_str()? });
+pub fn rangeextr_impl(
+    executable: &fs::File,
+    dwarf_sup: &Option<fs::File>,
+    visitor: symbconv::RangeVisitor,
+) -> FfiResult<()> {
 
     // Open and mmap main object file.
-    let obj = objfile::File::load(executable)?;
+    let obj = objfile::File::load_file(executable)?;
     let obj_reader = obj.parse()?;
-
-    // Resolve and use alt link, if requested by caller.
-    let mut sup_obj_path: Option<PathBuf> = None;
-    if follow_alt_link {
-        sup_obj_path = match resolve_alt_link(executable, &obj_reader) {
-            Ok(x) => x,
-            Err(StatusCode::IoFileNotFound) => None,
-            Err(other) => return Err(other),
-        }
-    }
 
     // Load DWARF sections.
     let mut dw = dwarf::Sections::load(&obj_reader)?;
@@ -65,13 +66,15 @@ unsafe fn rangeextr_impl(
     // If a supplementary path was found, load its data.
     let sup_obj;
     let sup_reader;
-    if let Some(sup_obj_path) = sup_obj_path {
-        sup_obj = objfile::File::load(&sup_obj_path)?;
+
+    if let Some(dwarf_sup) = dwarf_sup {
+        sup_obj = objfile::File::load_file(dwarf_sup)?;
         sup_reader = sup_obj.parse()?;
         dw.load_sup(&sup_reader)?;
     }
 
     let mut extr = sc::multi::Extractor::new(&obj_reader)?;
+
     extr.add("dwarf", sc::dwarf::Extractor::new(&dw));
     extr.add("go", sc::go::Extractor::new(&obj_reader));
     extr.add(
@@ -84,14 +87,8 @@ unsafe fn rangeextr_impl(
     );
 
     // Run the extractor with the user's callback.
-    let result = extr.extract(&mut |rng| {
-        let ffi_rng = SymblibRange::from(rng);
-        match visitor(user_data, &ffi_rng) {
-            StatusCode::Ok => Ok(()),
-            code => Err(Box::new(code)),
-        }
-    });
 
+    let result = extr.extract(visitor);
     // Extract the error code from the visitor error branches.
     match result {
         Ok(_) => Ok(()),
@@ -107,7 +104,7 @@ unsafe fn rangeextr_impl(
     }
 }
 
-fn resolve_alt_link(exec_path: &Path, obj: &objfile::Reader) -> FfiResult<Option<PathBuf>> {
+fn _resolve_alt_link(exec_path: &Path, obj: &objfile::Reader) -> FfiResult<Option<PathBuf>> {
     let alt_link = obj.gnu_debug_alt_link()?;
 
     let Some(alt_link) = alt_link else {
@@ -143,7 +140,7 @@ pub type SymblibRangeVisitor =
 #[repr(C)]
 #[derive(Debug)]
 pub struct SymblibRange {
-    pub elf_va: VirtAddr,
+    pub elf_va: u64,
     pub length: u32,
     pub func: SymblibString,      // never null
     pub file: SymblibString,      // may be null
@@ -152,13 +149,12 @@ pub struct SymblibRange {
     pub depth: u32,
     pub line_table: SymblibSlice<SymblibLineTableEntry>,
 
-    // Internal, for return pad code use.
-    pub(crate) rust_range: Box<symbfile::Range>,
+    // pub(crate) rust_range: Box<symbfile::Range>,
 }
 
 impl From<symbfile::Range> for SymblibRange {
     fn from(rng: symbfile::Range) -> Self {
-        let rust_range = Box::new(rng.clone());
+        // let rust_range = Box::new(rng.clone());
         let table: Vec<SymblibLineTableEntry> =
             rng.line_table.into_iter().map(Into::into).collect();
 
@@ -171,7 +167,7 @@ impl From<symbfile::Range> for SymblibRange {
             call_line: rng.call_line.unwrap_or(0),
             depth: rng.depth,
             line_table: SymblibSlice::from(table),
-            rust_range,
+            // rust_range,
         }
     }
 }
@@ -195,21 +191,26 @@ impl From<symbfile::LineTableEntry> for SymblibLineTableEntry {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::OpenOptions;
+    use std::os::fd::{AsFd, AsRawFd};
     use super::*;
     use std::ptr;
 
     #[test]
     fn rangeextr() {
-        let file = c"../symblib/testdata/inline";
+        let file = "../symblib/testdata/inline";
 
         extern "C" fn visitor(_: *mut c_void, rng: *const SymblibRange) -> StatusCode {
             assert_ne!(rng, ptr::null());
             dbg!(unsafe { &*rng });
             StatusCode::Ok
         }
+        let file = OpenOptions::new().read(true).open(file).unwrap();
 
         assert_eq!(
-            unsafe { symblib_rangeextr(file.as_ptr(), false, visitor, ptr::null_mut()) },
+            unsafe {
+                let fd = file.as_raw_fd();
+                symblib_rangeextr(fd as c_int, -1, visitor, ptr::null_mut()) },
             StatusCode::Ok
         );
     }
