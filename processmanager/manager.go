@@ -13,8 +13,6 @@ import (
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 
-	"go.opentelemetry.io/ebpf-profiler/tracer/types"
-
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
@@ -26,8 +24,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
+	"go.opentelemetry.io/ebpf-profiler/pyroscope/dynamicprofiling"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
+	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -66,7 +66,12 @@ var (
 // implementation.
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
 	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, symbolReporter reporter.SymbolReporter,
-	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool) (*ProcessManager, error) {
+	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool,
+	policy dynamicprofiling.Policy,
+) (*ProcessManager, error) {
+	if policy == nil {
+		return nil, errors.New("no dynamicprofiling Policy provided")
+	}
 	if fileIDMapper == nil {
 		var err error
 		fileIDMapper, err = newFileIDMapper(lruFileIDCacheSize)
@@ -101,6 +106,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		reporter:                 symbolReporter,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        filterErrorFrames,
+		policy:                   policy,
 	}
 
 	collectInterpreterMetrics(ctx, pm, monitorInterval)

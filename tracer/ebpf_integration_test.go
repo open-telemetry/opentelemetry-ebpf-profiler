@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/proc"
+	"go.opentelemetry.io/ebpf-profiler/pyroscope/dynamicprofiling"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -137,6 +138,7 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
 		OffCPUThreshold:        support.OffCPUThresholdMax,
+		Policy:                 dynamicprofiling.AlwaysOnPolicy{},
 	})
 	require.NoError(t, err)
 
@@ -264,6 +266,7 @@ func TestAllTracers(t *testing.T) {
 		DebugTracer:         false,
 		BPFVerifierLogLevel: 0,
 		OffCPUThreshold:     10,
+		Policy:              dynamicprofiling.AlwaysOnPolicy{},
 	})
 	require.NoError(t, err)
 }

@@ -7,6 +7,7 @@ package processmanager
 
 import (
 	"context"
+	"debug/elf"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -25,6 +26,7 @@ import (
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+	"go.opentelemetry.io/ebpf-profiler/pyroscope/dynamicprofiling"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
@@ -37,7 +39,9 @@ import (
 
 // dummyProcess implements pfelf.Process for testing purposes
 type dummyProcess struct {
-	pid libpf.PID
+	pid           libpf.PID
+	mappings      []process.Mapping
+	mappingsError error
 }
 
 func (d *dummyProcess) PID() libpf.PID {
@@ -49,7 +53,7 @@ func (d *dummyProcess) GetMachineData() process.MachineData {
 }
 
 func (d *dummyProcess) GetMappings() ([]process.Mapping, error) {
-	return nil, errors.New("not implemented")
+	return d.mappings, d.mappingsError
 }
 
 func (d *dummyProcess) GetThreads() ([]process.ThreadInfo, error) {
@@ -80,8 +84,8 @@ func (d *dummyProcess) Close() error {
 	return nil
 }
 
-func newTestProcess(pid libpf.PID) process.Process {
-	return &dummyProcess{pid: pid}
+func newTestProcess(pid libpf.PID) *dummyProcess {
+	return &dummyProcess{pid: pid, mappingsError: errors.New("not implemented")}
 }
 
 // dummyStackDeltaProvider is an implementation of nativeunwind.StackDeltaProvider.
@@ -318,7 +322,9 @@ func TestInterpreterConvertTrace(t *testing.T) {
 				nil,
 				&symbolReporterMockup{},
 				nil,
-				true)
+				true,
+				dynamicprofiling.AlwaysOnPolicy{},
+			)
 			require.NoError(t, err)
 
 			newTrace := manager.ConvertTrace(testcase.trace)
@@ -403,7 +409,9 @@ func TestNewMapping(t *testing.T) {
 				NewMapFileIDMapper(),
 				symRepMockup,
 				&dummyProvider,
-				true)
+				true,
+				dynamicprofiling.AlwaysOnPolicy{},
+			)
 			require.NoError(t, err)
 
 			// Replace the internal hooks for the tests. These hooks catch the
@@ -588,7 +596,9 @@ func TestProcExit(t *testing.T) {
 				NewMapFileIDMapper(),
 				repMockup,
 				&dummyProvider,
-				true)
+				true,
+				dynamicprofiling.AlwaysOnPolicy{},
+			)
 			require.NoError(t, err)
 			defer cancel()
 
@@ -611,4 +621,71 @@ func TestProcExit(t *testing.T) {
 				ebpfMockup.deleteStackDeltaRangesCount)
 		})
 	}
+}
+
+type testPolicy struct {
+	enabled bool
+}
+
+func (t *testPolicy) ProfilingEnabled(_ process.Process, _ []process.Mapping) bool {
+	return t.enabled
+}
+
+func TestDynamicProfilingPolicy(t *testing.T) {
+	dummyProvider := dummyStackDeltaProvider{}
+	ebpfMockup := &ebpfMapsMockup{}
+	symRepMockup := &symbolReporterMockup{}
+
+	noInterpreters, _ := tracertypes.Parse("")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	policy := &testPolicy{}
+	manager, err := New(ctx,
+		noInterpreters,
+		1*time.Second,
+		ebpfMockup,
+		NewMapFileIDMapper(),
+		symRepMockup,
+		&dummyProvider,
+		true,
+		policy)
+	require.NoError(t, err)
+	defer manager.Close()
+	manager.metricsAddSlice = func([]metrics.Metric) {}
+
+	pid := libpf.PID(os.Getpid())
+	pr := newTestProcess(pid)
+	pr.mappings, pr.mappingsError = process.New(pid).GetMappings()
+	exe, _ := os.Readlink("/proc/self/exe")
+	for _, m := range pr.mappings {
+		if m.Path == exe && m.Flags&elf.PF_X != 0 {
+			pr.mappings = []process.Mapping{m}
+			break
+		}
+	}
+	require.Len(t, pr.mappings, 1)
+
+	manager.SynchronizeProcess(pr)
+	manager.mu.RLock()
+	info := manager.pidToProcessInfo[pid]
+	manager.mu.RUnlock()
+	require.Nil(t, info)
+
+	policy.enabled = true
+
+	manager.SynchronizeProcess(pr)
+	manager.mu.RLock()
+	info = manager.pidToProcessInfo[pid]
+	manager.mu.RUnlock()
+	require.NotNil(t, info)
+
+	policy.enabled = false
+
+	manager.SynchronizeProcess(pr)
+	manager.mu.RLock()
+	info = manager.pidToProcessInfo[pid]
+	manager.mu.RUnlock()
+	require.NotNil(t, info)
 }
