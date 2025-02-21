@@ -71,15 +71,6 @@ version = "0.36.0"
 default-features = false
 features = ["std", "read_core", "elf", "macho", "unaligned"]
 
-[workspace.dependencies.serde]
-version = "1"
-features = ["derive"]
-
 [workspace.dependencies.smallvec]
 version = "1"
 features = ["const_new", "union", "const_generics", "write"]
-
-[workspace.dependencies.ureq]
-version = "2"
-default-features = false
-features = ["gzip", "native-tls", "native-certs"]
