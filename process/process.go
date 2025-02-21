@@ -37,8 +37,9 @@ var _ Process = &systemProcess{}
 
 var bufPool sync.Pool
 
-// mappingParseBufferSize defines the initial buffer size
-// to parse mappings.
+// mappingParseBufferSize defines the initial buffer size used to store lines from
+// /proc/PID/maps during parsing of mappings.
+
 const mappingParseBufferSize = 256
 
 func init() {
