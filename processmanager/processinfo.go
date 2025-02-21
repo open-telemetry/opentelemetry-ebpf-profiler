@@ -370,6 +370,7 @@ func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *pro
 			Device:     mapping.Device,
 			Inode:      mapping.Inode,
 			FileOffset: mapping.FileOffset,
+			FilePath:   mapping.Path,
 		}, elfRef); err != nil {
 		// Same as above, ignore the errors related to process having exited.
 		// Also ignore errors of deferred file IDs.

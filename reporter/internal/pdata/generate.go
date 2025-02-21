@@ -5,6 +5,7 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 
 import (
 	"crypto/rand"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"time"
@@ -15,6 +16,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/pyroscope/symb/irsymcache"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -61,10 +63,17 @@ func (p *Pdata) setProfile(
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
 ) {
+	defer func() {
+		if p.ExtraNativeSymbolResolver != nil {
+			p.ExtraNativeSymbolResolver.Cleanup()
+		}
+	}()
+
 	// stringMap is a temporary helper that will build the StringTable.
 	// By specification, the first element should be empty.
 	stringMap := make(map[string]int32)
 	stringMap[""] = 0
+	mappingIndex := make(map[int32]string)
 
 	// funcMap is a temporary helper that will build the Function array
 	// in profile and make sure information is deduplicated.
@@ -147,7 +156,9 @@ func (p *Pdata) setProfile(
 					mapping.SetMemoryStart(uint64(traceInfo.MappingStarts[i]))
 					mapping.SetMemoryLimit(uint64(traceInfo.MappingEnds[i]))
 					mapping.SetFileOffset(traceInfo.MappingFileOffsets[i])
-					mapping.SetFilenameStrindex(getStringMapIndex(stringMap, fileName))
+					fileNameIndex := getStringMapIndex(stringMap, fileName)
+					mappingIndex[fileNameIndex] = fileName
+					mapping.SetFilenameStrindex(fileNameIndex)
 
 					// Once SemConv and its Go package is released with the new
 					// semantic convention for build_id, replace these hard coded
@@ -158,6 +169,18 @@ func (p *Pdata) setProfile(
 						"process.executable.build_id.htlhash", traceInfo.Files[i].StringNoQuotes())
 				}
 				loc.SetMappingIndex(locationMappingIndex)
+				mapping := profile.MappingTable().At(int(locationMappingIndex))
+				mappingName := mappingIndex[mapping.FilenameStrindex()]
+				if p.ExtraNativeSymbolResolver != nil {
+					fileID := traceInfo.Files[i]
+					addr := traceInfo.Linenos[i]
+					frameID := libpf.NewFrameID(fileID, addr)
+					irsymcache.SymbolizeNativeFrame(p.ExtraNativeSymbolResolver, p.Frames,
+						mappingName, frameID, func(si samples.SourceInfo) {
+							symbolizeOtelLocation(si, loc, funcMap, mappingName, addr)
+						})
+				}
+
 			case libpf.AbortFrame:
 				// Next step: Figure out how the OTLP protocol
 				// could handle artificial frames, like AbortFrame,
@@ -177,10 +200,14 @@ func (p *Pdata) setProfile(
 				} else {
 					fileIDInfo := fileIDInfoLock.RLock()
 					if si, exists := (*fileIDInfo)[traceInfo.Linenos[i]]; exists {
-						line.SetLine(int64(si.LineNumber))
-
-						line.SetFunctionIndex(createFunctionEntry(funcMap,
-							si.FunctionName, si.FilePath))
+						if len(si.Frames) == 1 {
+							frame := si.Frames[0]
+							line.SetFunctionIndex(createFunctionEntry(funcMap,
+								frame.FunctionName, frame.FilePath))
+						} else {
+							line.SetFunctionIndex(createFunctionEntry(funcMap,
+								"UNRESOLVED", frameKind.String()))
+						}
 					} else {
 						// At this point, we do not have enough information for the frame.
 						// Therefore, we report a dummy entry and use the interpreter as filename.
@@ -213,9 +240,6 @@ func (p *Pdata) setProfile(
 			semconv.ProcessExecutableNameKey, exeName)
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ProcessExecutablePathKey, traceKey.ExecutablePath)
-
-		attrMgr.AppendOptionalString(sample.AttributeIndices(),
-			semconv.ServiceNameKey, traceKey.ApmServiceName)
 		attrMgr.AppendInt(sample.AttributeIndices(),
 			semconv.ProcessPIDKey, traceKey.Pid)
 
@@ -308,4 +332,25 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]int32,
 	attrMgr.AppendOptionalString(mapping.AttributeIndices(),
 		"process.executable.build_id.htlhash", fileID.StringNoQuotes())
 	return locationMappingIndex
+}
+
+func symbolizeOtelLocation(
+	si samples.SourceInfo,
+	loc pprofile.Location,
+	funcMap map[samples.FuncInfo]int32,
+	mappingName string,
+	addr libpf.AddressOrLineno,
+) {
+	if len(si.Frames) == 0 {
+		line := loc.Line().AppendEmpty()
+		line.SetFunctionIndex(createFunctionEntry(funcMap,
+			fmt.Sprintf("%s %x", mappingName, addr), ""))
+		return
+	}
+	for _, frame := range si.Frames {
+		line := loc.Line().AppendEmpty()
+		line.SetFunctionIndex(createFunctionEntry(funcMap,
+			frame.FunctionName, frame.FilePath))
+		line.SetLine(int64(frame.LineNumber))
+	}
 }

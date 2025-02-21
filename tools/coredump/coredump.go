@@ -194,6 +194,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 		symCache,
 		elfunwindinfo.NewStackDeltaProvider(),
 		false,
+		nil,
 		dynamicprofiling.AlwaysOnPolicy{},
 	)
 	if err != nil {

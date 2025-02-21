@@ -11,8 +11,12 @@ import (
 	"testing"
 	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"go.opentelemetry.io/ebpf-profiler/pyroscope/symb/ffi"
 )
 
@@ -27,7 +31,7 @@ type testRange struct {
 }
 type lookupChecks struct {
 	addr     uint64
-	expected []LookupResult
+	expected []samples.SourceInfoFrame
 }
 
 type test struct {
@@ -54,34 +58,66 @@ func testDataRanges() []testRange {
 func testDataChecks() []lookupChecks {
 	return []lookupChecks{
 		{addr: 0x0999, expected: nil},
-		{addr: 0x1000, expected: []LookupResult{{"outer", "file1", 0}}},
-		{addr: 0x1025, expected: []LookupResult{{"outer", "file1", 0}}},
-		{addr: 0x1050, expected: []LookupResult{{"middle", "file2", 0},
-			{"outer", "file1", 0}}},
-		{addr: 0x1074, expected: []LookupResult{{"middle", "file2", 0},
-			{"outer", "file1", 0}}},
-		{addr: 0x1075, expected: []LookupResult{{"inner", "file3", 0},
-			{"middle", "file2", 0}, {"outer", "file1", 0}}},
-		{addr: 0x1080, expected: []LookupResult{{"inner", "file3", 0},
-			{"middle", "file2", 0}, {"outer", "file1", 0}}},
-		{addr: 0x10c4, expected: []LookupResult{{"inner", "file3", 0},
-			{"middle", "file2", 0}, {"outer", "file1", 0}}},
-		{addr: 0x10c5, expected: []LookupResult{{"middle", "file2", 0},
-			{"outer", "file1", 0}}},
-		{addr: 0x1149, expected: []LookupResult{{"middle", "file2", 0},
-			{"outer", "file1", 0}}},
-		{addr: 0x1150, expected: []LookupResult{{"outer", "file1", 0}}},
-		{addr: 0x1199, expected: []LookupResult{{"outer", "file1", 0}}},
+		{addr: 0x1000, expected: []samples.SourceInfoFrame{
+			{FunctionName: "outer", FilePath: "file1"}}},
+		{addr: 0x1025, expected: []samples.SourceInfoFrame{
+			{FunctionName: "outer", FilePath: "file1"}}},
+		{addr: 0x1050, expected: []samples.SourceInfoFrame{
+			{FunctionName: "middle", FilePath: "file2"},
+			{FunctionName: "outer", FilePath: "file1"}}},
+		{addr: 0x1074, expected: []samples.SourceInfoFrame{
+			{FunctionName: "middle", FilePath: "file2"},
+			{FunctionName: "outer", FilePath: "file1"}}},
+		{addr: 0x1075, expected: []samples.SourceInfoFrame{
+			{FunctionName: "inner", FilePath: "file3"},
+			{FunctionName: "middle", FilePath: "file2"},
+			{FunctionName: "outer", FilePath: "file1"}}},
+		{addr: 0x1080, expected: []samples.SourceInfoFrame{
+			{FunctionName: "inner", FilePath: "file3"},
+			{FunctionName: "middle", FilePath: "file2"},
+			{FunctionName: "outer", FilePath: "file1"}}},
+		{addr: 0x10c4, expected: []samples.SourceInfoFrame{
+			{FunctionName: "inner", FilePath: "file3"},
+			{FunctionName: "middle", FilePath: "file2"},
+			{FunctionName: "outer", FilePath: "file1"}}},
+		{addr: 0x10c5, expected: []samples.SourceInfoFrame{
+			{FunctionName: "middle", FilePath: "file2"},
+			{FunctionName: "outer", FilePath: "file1"}}},
+		{addr: 0x1149, expected: []samples.SourceInfoFrame{
+			{FunctionName: "middle", FilePath: "file2"},
+			{FunctionName: "outer", FilePath: "file1"}}},
+		{addr: 0x1150, expected: []samples.SourceInfoFrame{
+			{FunctionName: "outer", FilePath: "file1"}}},
+		{addr: 0x1199, expected: []samples.SourceInfoFrame{
+			{FunctionName: "outer", FilePath: "file1"}}},
 		{addr: 0x1200, expected: nil},
-		{addr: 0x2000, expected: []LookupResult{{"func1", "file4", 0}}},
-		{addr: 0x2050, expected: []LookupResult{{"func1", "file4", 0}}},
-		{addr: 0x3100, expected: []LookupResult{{"func2", "file5", 0}}},
+		{addr: 0x2000, expected: []samples.SourceInfoFrame{
+			{FunctionName: "func1", FilePath: "file4"}}},
+		{addr: 0x2050, expected: []samples.SourceInfoFrame{
+			{FunctionName: "func1", FilePath: "file4"}}},
+		{addr: 0x3100, expected: []samples.SourceInfoFrame{
+			{FunctionName: "func2", FilePath: "file5"}}},
 		{addr: 0x3200, expected: nil},
-		{addr: 0x3400, expected: []LookupResult{{"func_with_lines", "file_with_lines", 4}}},
-		{addr: 0x3401, expected: []LookupResult{{"func_with_lines", "file_with_lines", 4}}},
-		{addr: 0x3402, expected: []LookupResult{{"func_with_lines", "file_with_lines", 4}}},
-		{addr: 0x3403, expected: []LookupResult{{"func_with_lines", "file_with_lines", 9}}},
-		{addr: 0x34ff, expected: []LookupResult{{"func_with_lines", "file_with_lines", 9}}},
+		{addr: 0x3400, expected: []samples.SourceInfoFrame{
+			{LineNumber: 4,
+				FunctionName: "func_with_lines",
+				FilePath:     "file_with_lines"}}},
+		{addr: 0x3401, expected: []samples.SourceInfoFrame{
+			{LineNumber: 4,
+				FunctionName: "func_with_lines",
+				FilePath:     "file_with_lines"}}},
+		{addr: 0x3402, expected: []samples.SourceInfoFrame{
+			{LineNumber: 4,
+				FunctionName: "func_with_lines",
+				FilePath:     "file_with_lines"}}},
+		{addr: 0x3403, expected: []samples.SourceInfoFrame{
+			{LineNumber: 9,
+				FunctionName: "func_with_lines",
+				FilePath:     "file_with_lines"}}},
+		{addr: 0x34ff, expected: []samples.SourceInfoFrame{
+			{LineNumber: 9,
+				FunctionName: "func_with_lines",
+				FilePath:     "file_with_lines"}}},
 		{addr: 0x3500, expected: nil},
 		{addr: 0x4000, expected: nil},
 	}
@@ -140,12 +176,13 @@ func TestSymbTable(t *testing.T) {
 			assert.Equal(t, 4, int(st.hdr.rangeTableHeader.fieldSize))
 			assert.Equal(t, 2, int(st.hdr.lineTablesHeader.fieldSize))
 		}},
-		{"u64 va", testDataRanges2, append(testDataChecks(), lookupChecks{
+		{name: "u64 va", testRanges: testDataRanges2, checks: append(testDataChecks(), lookupChecks{
 			addr: uint64(^uint32(0)) + 1 + 3,
-			expected: []LookupResult{
-				{"largefunc1", "largefile1", int(uint32(^uint16(0)) + 1)},
+			expected: []samples.SourceInfoFrame{
+				{LineNumber: libpf.SourceLineno(int64(uint32(^uint16(0)) + 1)),
+					FunctionName: "largefunc1", FilePath: "largefile1"},
 			},
-		}), func(t *testing.T, st *Table) {
+		}), extraChecks: func(t *testing.T, st *Table) {
 			assert.Equal(t, 8, int(st.hdr.vaTableHeader.entrySize))
 			assert.Equal(t, 4, int(st.hdr.rangeTableHeader.fieldSize))
 			assert.Equal(t, 4, int(st.hdr.lineTablesHeader.fieldSize))
@@ -233,43 +270,79 @@ func TestLibc(t *testing.T) {
 
 	testdata := []struct {
 		addr     []uint64
-		expected []LookupResult
+		expected []samples.SourceInfoFrame
 	}{
-		{[]uint64{0x9cbb0}, []LookupResult{
-			{"__pthread_create_2_1", "./nptl/pthread_create.c", 626},
+		{addr: []uint64{0x9cbb0}, expected: []samples.SourceInfoFrame{
+			{LineNumber: 626,
+				FunctionName: "__pthread_create_2_1",
+				FilePath:     "./nptl/pthread_create.c"},
 		}},
-		{[]uint64{0x9cbf3}, []LookupResult{
-			{"__pthread_create_2_1", "./nptl/pthread_create.c", 632},
+		{addr: []uint64{0x9cbf3}, expected: []samples.SourceInfoFrame{
+			{LineNumber: 632,
+				FunctionName: "__pthread_create_2_1",
+				FilePath:     "./nptl/pthread_create.c"},
 		}},
-		{[]uint64{0x9d1e0, 0x9d1e7}, []LookupResult{
-			{"late_init", "./nptl/pthread_create.c", 83},
-			{"__pthread_create_2_1", "./nptl/pthread_create.c", 634},
+		{addr: []uint64{0x9d1e0, 0x9d1e7}, expected: []samples.SourceInfoFrame{
+			{LineNumber: 83,
+				FunctionName: "late_init",
+				FilePath:     "./nptl/pthread_create.c"},
+			{LineNumber: 634,
+				FunctionName: "__pthread_create_2_1",
+				FilePath:     "./nptl/pthread_create.c"},
 		}},
-		{[]uint64{0x9d1e9}, []LookupResult{
-			{"late_init", "./nptl/pthread_create.c", 81},
-			{"__pthread_create_2_1", "./nptl/pthread_create.c", 634},
+		{addr: []uint64{0x9d1e9}, expected: []samples.SourceInfoFrame{
+			{LineNumber: 81,
+				FunctionName: "late_init",
+				FilePath:     "./nptl/pthread_create.c"},
+			{LineNumber: 634,
+				FunctionName: "__pthread_create_2_1",
+				FilePath:     "./nptl/pthread_create.c"},
 		}},
-		{[]uint64{0x9d1f5}, []LookupResult{
-			{"__sigemptyset", "../sysdeps/unix/sysv/linux/sigsetops.h", 54},
-			{"late_init", "./nptl/pthread_create.c", 75},
-			{"__pthread_create_2_1", "./nptl/pthread_create.c", 634},
+		{addr: []uint64{0x9d1f5}, expected: []samples.SourceInfoFrame{
+			{LineNumber: 54,
+				FunctionName: "__sigemptyset",
+				FilePath:     "../sysdeps/unix/sysv/linux/sigsetops.h"},
+			{LineNumber: 75,
+				FunctionName: "late_init",
+				FilePath:     "./nptl/pthread_create.c"},
+			{LineNumber: 634,
+				FunctionName: "__pthread_create_2_1",
+				FilePath:     "./nptl/pthread_create.c"},
 		}},
-		{[]uint64{0x9ca94}, []LookupResult{
-			{"start_thread", "./nptl/pthread_create.c", 447}}},
-		{[]uint64{0x11ba61}, []LookupResult{
-			{"__GI___libc_read", "../sysdeps/unix/sysv/linux/read.c", 26}}},
-		{[]uint64{0x18833e}, []LookupResult{
-			{"__memcmp_avx2_movbe", "../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S", 136}}},
+		{addr: []uint64{0x9ca94}, expected: []samples.SourceInfoFrame{
+			{LineNumber: 447,
+				FunctionName: "start_thread",
+				FilePath:     "./nptl/pthread_create.c"}}},
+		{addr: []uint64{0x11ba61}, expected: []samples.SourceInfoFrame{
+			{LineNumber: 26,
+				FunctionName: "__GI___libc_read",
+				FilePath:     "../sysdeps/unix/sysv/linux/read.c"}}},
+		{addr: []uint64{0x18833e}, expected: []samples.SourceInfoFrame{
+			{LineNumber: 136,
+				FunctionName: "__memcmp_avx2_movbe",
+				FilePath:     "../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S"}}},
 
-		{[]uint64{0x129c3c}, []LookupResult{
-			{"__clone3", "../sysdeps/unix/sysv/linux/x86_64/clone3.S", 80}}},
-		{[]uint64{0x98d61}, []LookupResult{
-			{"__futex_abstimed_wait_common64", "./nptl/futex-internal.c", 57},
-			{"__futex_abstimed_wait_common", "./nptl/futex-internal.c", 87},
-			{"__GI___futex_abstimed_wait_cancelable64", "./nptl/futex-internal.c", 139}}},
-		{[]uint64{0x9bc7e}, []LookupResult{
-			{"__pthread_cond_wait_common", "./nptl/pthread_cond_wait.c", 506},
-			{"___pthread_cond_timedwait64", "./nptl/pthread_cond_wait.c", 652},
+		{addr: []uint64{0x129c3c}, expected: []samples.SourceInfoFrame{
+			{LineNumber: 80,
+				FunctionName: "__clone3",
+				FilePath:     "../sysdeps/unix/sysv/linux/x86_64/clone3.S"}}},
+		{addr: []uint64{0x98d61}, expected: []samples.SourceInfoFrame{
+			{LineNumber: 57,
+				FunctionName: "__futex_abstimed_wait_common64",
+				FilePath:     "./nptl/futex-internal.c"},
+			{LineNumber: 87,
+				FunctionName: "__futex_abstimed_wait_common",
+				FilePath:     "./nptl/futex-internal.c"},
+			{LineNumber: 139,
+				FunctionName: "__GI___futex_abstimed_wait_cancelable64",
+				FilePath:     "./nptl/futex-internal.c"}}},
+		{addr: []uint64{0x9bc7e}, expected: []samples.SourceInfoFrame{
+			{LineNumber: 506,
+				FunctionName: "__pthread_cond_wait_common",
+				FilePath:     "./nptl/pthread_cond_wait.c"},
+			{LineNumber: 652,
+				FunctionName: "___pthread_cond_timedwait64",
+				FilePath:     "./nptl/pthread_cond_wait.c"},
 		}},
 	}
 
@@ -277,7 +350,7 @@ func TestLibc(t *testing.T) {
 		addr := td.addr
 		expected := td.expected
 		name := fmt.Sprintf("%s %s %d",
-			expected[0].Name, expected[0].File, expected[0].Line)
+			expected[0].FunctionName, expected[0].FilePath, expected[0].LineNumber)
 		t.Run(name, func(t *testing.T) {
 			for _, a := range addr {
 				t.Run(strconv.FormatUint(a, 16), func(t *testing.T) {
@@ -349,8 +422,9 @@ func TestSelfAddrLookup(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			require.NotEqual(t, uint32(0), test.addr)
 			res, _ := table.Lookup(test.addr)
-			res[0].File = "" // Don't check file
-			expected := []LookupResult{{test.name, "", 0}}
+			res[0].FilePath = "" // Don't check file
+			expected := []samples.SourceInfoFrame{{
+				FunctionName: test.name}}
 			assert.Equal(t, expected, res)
 		})
 	}
@@ -390,7 +464,7 @@ func TestLibcAddrLookup(t *testing.T) {
 		t.Run(fmt.Sprintf("%x %+v", addr, expectedNames), func(t *testing.T) {
 			res, _ := table.Lookup(addr)
 			require.NotEmpty(t, res)
-			name := res[len(res)-1].Name
+			name := res[len(res)-1].FunctionName
 			found := false
 			for _, expectedName := range expectedNames {
 				if name == expectedName || strings.HasPrefix(expectedName, name) {

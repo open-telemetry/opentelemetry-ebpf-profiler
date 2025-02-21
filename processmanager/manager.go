@@ -17,15 +17,18 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/pyroscope/dynamicprofiling"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/traceutil"
@@ -67,6 +70,7 @@ var (
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
 	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, symbolReporter reporter.SymbolReporter,
 	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool,
+	fo samples.NativeSymbolResolver,
 	policy dynamicprofiling.Policy,
 ) (*ProcessManager, error) {
 	if policy == nil {
@@ -106,6 +110,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		reporter:                 symbolReporter,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        filterErrorFrames,
+		fileObserver:             fo,
 		policy:                   policy,
 	}
 
@@ -263,13 +268,6 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 			// Locate mapping info for the frame.
 			var mappingStart, mappingEnd libpf.Address
 			var fileOffset uint64
-			if frame.Type.Interpreter() == libpf.Native {
-				if mapping, ok := pm.findMappingForTrace(trace.PID, frame.File, frame.Lineno); ok {
-					mappingStart = mapping.Vaddr - libpf.Address(mapping.Bias)
-					mappingEnd = mappingStart + libpf.Address(mapping.Length)
-					fileOffset = mapping.FileOffset
-				}
-			}
 
 			fileID, ok := pm.FileIDMapper.Get(frame.File)
 			if !ok {
@@ -280,6 +278,15 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 				newTrace.AppendFrameFull(frame.Type, libpf.UnsymbolizedFileID,
 					libpf.AddressOrLineno(0), mappingStart, mappingEnd, fileOffset)
 				continue
+			}
+
+			if frame.Type.Interpreter() == libpf.Native {
+				if mapping, ok := pm.findMappingForTrace(trace.PID, frame.File, frame.Lineno); ok {
+					mappingStart = mapping.Vaddr - libpf.Address(mapping.Bias)
+					mappingEnd = mappingStart + libpf.Address(mapping.Length)
+					fileOffset = mapping.FileOffset
+					pm.observeFile(trace, mapping, fileID)
+				}
 			}
 
 			newTrace.AppendFrameFull(frame.Type, fileID,
@@ -324,6 +331,16 @@ func (pm *ProcessManager) MaybeNotifyAPMAgent(
 	}
 
 	return serviceName
+}
+
+func (pm *ProcessManager) observeFile(trace *host.Trace, mapping Mapping, fileID libpf.FileID) {
+	if pm.fileObserver == nil {
+		return
+	}
+	pr := process.New(trace.PID)
+	elfRef := pfelf.NewReference(mapping.FilePath, pr)
+	defer elfRef.Close()
+	_ = pm.fileObserver.Observe(fileID, elfRef)
 }
 
 // AddSynthIntervalData adds synthetic stack deltas to the manager. This is useful for cases where
