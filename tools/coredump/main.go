@@ -58,6 +58,7 @@ func main() {
 			newRebaseCmd(store),
 			newUploadCmd(store),
 			newGdbCmd(store),
+			newGosymCmd(store),
 		},
 		Exec: func(context.Context, []string) error {
 			return flag.ErrHelp
