@@ -87,10 +87,6 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 		return mappings, errors.New("failed to get memory from sync pool")
 	}
 	defer func() {
-		// Reset memory and return it for reuse.
-		for j := 0; j < len(*scanBuf); j++ {
-			(*scanBuf)[j] = 0x0
-		}
 		bufPool.Put(scanBuf)
 	}()
 	scanner.Buffer(*scanBuf, 8192)
