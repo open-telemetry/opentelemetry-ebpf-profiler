@@ -4,7 +4,6 @@
 
 #include "bpfdefs.h"
 #include "util.h"
-#include "hash.h"
 #include "kernel.h"
 #include "tracemgmt.h"
 #include "tsd.h"
@@ -142,32 +141,6 @@ bpf_map_def SEC("maps") cl_procs = {
   .max_entries = 128,
 };
 
-#define MAX_BUCKETS 8
-#define MAX_CUSTOM_LABELS_ENTRIES 1000
-
-bpf_map_def SEC("maps") custom_labels = {
-  .type = BPF_MAP_TYPE_HASH,
-  .key_size = sizeof(u64),
-  .value_size = sizeof(CustomLabelsArray),
-  .max_entries = MAX_CUSTOM_LABELS_ENTRIES,
-};
-
-static inline __attribute__((__always_inline__))
-bool add_custom_labels(PerCPURecord *record) {
-  CustomLabelsArray *lbls = &record->customLabelsState.cla;
-  DEBUG_PRINT("cl: got %d custom labels", lbls->len);
-  u64 hash = hash_custom_labels(lbls);
-  int err = bpf_map_update_elem(&custom_labels, &hash, lbls, BPF_ANY);
-  if (err) {
-    DEBUG_PRINT("cl: failed to update custom labels with error %d\n", err);
-    return false;
-  } else {
-    record->trace.custom_labels_hash = hash;
-    DEBUG_PRINT("cl: successfully computed hash 0x%llx for %d custom labels", hash, lbls->len);
-    return true;
-  }
-}
-
 static inline __attribute__((__always_inline__))
 void *get_m_ptr(struct GoCustomLabelsOffsets *offs, UnwindState *state) {
     long res;
@@ -224,15 +197,8 @@ void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record) {
 
     DEBUG_PRINT("cl: trace is within a process with Go custom labels enabled");
     increment_metric(metricID_UnwindGoCustomLabelsAttempts);
-    clear_custom_labels(&record->customLabelsState.cla);
     record->state.processed_go_labels = true;
     tail_call(ctx, PROG_GO_LABELS);
-  } else {
-    if (record->customLabelsState.cla.len > 0) {
-      if (!add_custom_labels(record)) {
-        increment_metric(metricID_UnwindGoCustomLabelsFailures);
-      }
-    }
   }
 }
 
@@ -271,7 +237,7 @@ bool get_native_custom_labels(PerCPURecord *record, NativeCustomLabelsProcInfo *
   DEBUG_PRINT("cl: native custom labels count: %lu", current_set.count);
 
   unsigned ct = 0;
-  CustomLabelsArray *out = &record->customLabelsState.cla;
+  CustomLabelsArray *out = &record->trace.custom_labels;
 
 #pragma unroll
   for (int i = 0; i < MAX_CUSTOM_LABELS; i++) {
@@ -287,16 +253,14 @@ bool get_native_custom_labels(PerCPURecord *record, NativeCustomLabelsProcInfo *
     if (!lbl->key.buf)
       continue;
     CustomLabel *out_lbl = &out->labels[ct];
-    unsigned len = MIN(lbl->key.len, CUSTOM_LABEL_MAX_KEY_LEN);
-    out_lbl->key_len = len;
-    if ((err = bpf_probe_read_user(out_lbl->key.key_bytes, len, (void *)lbl->key.buf))) {
+    unsigned klen = MIN(lbl->key.len, CUSTOM_LABEL_MAX_KEY_LEN-1);
+    if ((err = bpf_probe_read_user(out_lbl->key, klen, (void *)lbl->key.buf))) {
       increment_metric(metricID_UnwindNativeCustomLabelsErrReadKey);
       DEBUG_PRINT("cl: failed to read label key: %d", err);
       goto exit;
     }
-    len = MIN(lbl->value.len, CUSTOM_LABEL_MAX_VAL_LEN);
-    out_lbl->val_len = len;
-    if ((err = bpf_probe_read_user(out_lbl->val.val_bytes, len, (void *)lbl->value.buf))) {
+    unsigned vlen = MIN(lbl->value.len, CUSTOM_LABEL_MAX_VAL_LEN-1);
+    if ((err = bpf_probe_read_user(out_lbl->val, vlen, (void *)lbl->value.buf))) {
       increment_metric(metricID_UnwindNativeCustomLabelsErrReadValue);
       DEBUG_PRINT("cl: failed to read label value: %d", err);
       goto exit;
@@ -317,12 +281,8 @@ void maybe_add_native_custom_labels(PerCPURecord *record) {
     DEBUG_PRINT("cl: %d does not support native custom labels", pid);
     return;
   }
-  clear_custom_labels(&record->customLabelsState.cla);
   DEBUG_PRINT("cl: trace is within a process with native custom labels enabled");
   bool success = get_native_custom_labels(record, proc);
-  if (success) {
-    success = add_custom_labels(record);
-  }
   if (success)
     increment_metric(metricID_UnwindNativeCustomLabelsAddSuccesses);
   else

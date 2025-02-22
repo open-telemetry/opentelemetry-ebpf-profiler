@@ -565,6 +565,15 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
   ApmSpanID transaction_id;
 } ApmCorrelationBuf;
 
+#define CUSTOM_LABEL_MAX_KEY_LEN COMM_LEN
+// Big enough to hold UUIDs, etc.
+#define CUSTOM_LABEL_MAX_VAL_LEN 48
+
+typedef struct CustomLabel {
+  char key[CUSTOM_LABEL_MAX_KEY_LEN];
+  char val[CUSTOM_LABEL_MAX_VAL_LEN];
+} CustomLabel;
+
 typedef struct NativeCustomLabelsString {
   size_t len;
   const unsigned char *buf;
@@ -580,6 +589,13 @@ typedef struct NativeCustomLabelsThreadLocalData {
   size_t count;
   size_t capacity;
 } NativeCustomLabelsSet;
+
+#define MAX_CUSTOM_LABELS 10
+
+typedef struct CustomLabelsArray {
+    unsigned len;
+    CustomLabel labels[MAX_CUSTOM_LABELS];
+} CustomLabelsArray;
 
 // Container for a stack trace
 typedef struct Trace {
@@ -597,8 +613,8 @@ typedef struct Trace {
   ApmSpanID apm_transaction_id;
   // APM trace ID or all-zero if not present.
   ApmTraceID apm_trace_id;
-  // custom labels hash or zero if not present
-  u64 custom_labels_hash;
+  // Custom Labels
+  CustomLabelsArray custom_labels;
   // The kernel stack ID.
   s32 kernel_stack_id;
   // The number of frames in the stack.
@@ -792,7 +808,7 @@ typedef struct PythonUnwindScratchSpace {
 
 struct GoString {
     char *str;
-    s64 len;
+    u64 len;
 };
 
 struct GoSlice {
@@ -808,36 +824,8 @@ typedef struct GoMapBucket {
     void *overflow;
 } GoMapBucket;
 
-
-// These must be divisible by 8 and a power of 2
-#define CUSTOM_LABEL_MAX_KEY_LEN 64
-#define CUSTOM_LABEL_MAX_VAL_LEN 64
-
-typedef struct CustomLabel {
-    unsigned key_len;
-    unsigned val_len;
-    // If we use unaligned `unsigned char` instead of `u64`
-    // buffers, the hash function becomes too complex to verify.
-    union {
-      u64 key_u64[CUSTOM_LABEL_MAX_KEY_LEN / 8];
-      unsigned char key_bytes[CUSTOM_LABEL_MAX_KEY_LEN];
-    } key;
-    union {
-      u64 val_u64[CUSTOM_LABEL_MAX_VAL_LEN / 8];
-      unsigned char val_bytes[CUSTOM_LABEL_MAX_VAL_LEN];
-    } val;
-} CustomLabel;
-
-#define MAX_CUSTOM_LABELS 14
-
-typedef struct CustomLabelsArray {
-    unsigned len;
-    struct CustomLabel labels[MAX_CUSTOM_LABELS];
-} CustomLabelsArray;
-
 typedef struct CustomLabelsState {
   void *go_m_ptr;
-  CustomLabelsArray cla;
 } CustomLabelsState;
 
 // Per-CPU info for the stack being built. This contains the stack as well as

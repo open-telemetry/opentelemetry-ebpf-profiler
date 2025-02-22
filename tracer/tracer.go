@@ -901,22 +901,12 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		}
 	}
 
-	if ptr.custom_labels_hash != 0 {
-		var lbls C.CustomLabelsArray
-
-		if err := t.ebpfMaps["custom_labels"].Lookup(
-			unsafe.Pointer(&ptr.custom_labels_hash), unsafe.Pointer(&lbls),
-		); err != nil {
-			log.Warnf("Failed to read custom labels: %v", err)
-		}
-
-		trace.CustomLabels = make(map[string]string, int(lbls.len))
-		for i := 0; i < int(lbls.len); i++ {
-			lbl := lbls.labels[i]
-			klen := min(int(lbl.key_len), 64)
-			key := string(lbl.key[0:klen])
-			vlen := min(int(lbl.val_len), 64)
-			val := string(lbl.val[0:vlen])
+	if ptr.custom_labels.len > 0 {
+		trace.CustomLabels = make(map[string]string, int(ptr.custom_labels.len))
+		for i := 0; i < int(ptr.custom_labels.len); i++ {
+			lbl := ptr.custom_labels.labels[i]
+			key := C.GoString((*C.char)(unsafe.Pointer(&lbl.key)))
+			val := C.GoString((*C.char)(unsafe.Pointer(&lbl.val)))
 			trace.CustomLabels[key] = val
 		}
 	}

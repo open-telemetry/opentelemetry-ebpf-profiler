@@ -2,7 +2,6 @@
 
 #include "bpfdefs.h"
 #include "util.h"
-#include "hash.h"
 #include "kernel.h"
 #include "tracemgmt.h"
 #include "tsd.h"
@@ -16,25 +15,25 @@ void process_value(GoMapBucket *map_value, CustomLabelsArray *out, unsigned i) {
         return;
     CustomLabel *lbl = &out->labels[out->len];
     if (map_value->keys[i].str != NULL) {
-        long res = bpf_probe_read_user(lbl->key.key_bytes, CUSTOM_LABEL_MAX_KEY_LEN, map_value->keys[i].str);
+        unsigned klen = MIN(map_value->keys[i].len, CUSTOM_LABEL_MAX_KEY_LEN-1);
+        long res = bpf_probe_read_user(lbl->key, klen, map_value->keys[i].str);
         if (res) {
             DEBUG_PRINT("cl: failed to read key for custom label (%lx): %ld", (unsigned long) map_value->keys[i].str, res);
             return;
         }
-        res = bpf_probe_read_user(lbl->val.val_bytes, CUSTOM_LABEL_MAX_VAL_LEN, map_value->values[i].str);
+        unsigned vlen = MIN(map_value->values[i].len, CUSTOM_LABEL_MAX_VAL_LEN-1);
+        res = bpf_probe_read_user(lbl->val, vlen, map_value->values[i].str);
         if (res) {
             DEBUG_PRINT("cl: failed to read value for custom label: %ld", res);
             return;
         }
-        lbl->key_len = map_value->keys[i].len;
-        lbl->val_len = map_value->values[i].len;
     }
     out->len++;
 }
 
 static inline __attribute__((__always_inline__))
 bool process_bucket(PerCPURecord *record, void *label_buckets, int j) {
-    CustomLabelsArray *out = &record->customLabelsState.cla;
+    CustomLabelsArray *out = &record->trace.custom_labels;
     GoMapBucket *map_value = &record->goMapBucket;
     long res = bpf_probe_read(map_value, sizeof(GoMapBucket), label_buckets + (j * sizeof(GoMapBucket)));
     if (res < 0) {
