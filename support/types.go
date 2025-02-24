@@ -7,37 +7,37 @@
 package support // import "go.opentelemetry.io/ebpf-profiler/support"
 
 const (
-	FrameMarkerUnknown	= 0x0
-	FrameMarkerErrorBit	= 0x80
-	FrameMarkerPython	= 0x1
-	FrameMarkerNative	= 0x3
-	FrameMarkerPHP		= 0x2
-	FrameMarkerPHPJIT	= 0x9
-	FrameMarkerKernel	= 0x4
-	FrameMarkerHotSpot	= 0x5
-	FrameMarkerRuby		= 0x6
-	FrameMarkerPerl		= 0x7
-	FrameMarkerV8		= 0x8
-	FrameMarkerDotnet	= 0xa
-	FrameMarkerAbort	= 0xff
+	FrameMarkerUnknown  = 0x0
+	FrameMarkerErrorBit = 0x80
+	FrameMarkerPython   = 0x1
+	FrameMarkerNative   = 0x3
+	FrameMarkerPHP      = 0x2
+	FrameMarkerPHPJIT   = 0x9
+	FrameMarkerKernel   = 0x4
+	FrameMarkerHotSpot  = 0x5
+	FrameMarkerRuby     = 0x6
+	FrameMarkerPerl     = 0x7
+	FrameMarkerV8       = 0x8
+	FrameMarkerDotnet   = 0xa
+	FrameMarkerAbort    = 0xff
 )
 
 const (
-	ProgUnwindStop		= 0x0
-	ProgUnwindNative	= 0x1
-	ProgUnwindHotspot	= 0x2
-	ProgUnwindPython	= 0x4
-	ProgUnwindPHP		= 0x5
-	ProgUnwindRuby		= 0x6
-	ProgUnwindPerl		= 0x3
-	ProgUnwindV8		= 0x7
-	ProgUnwindDotnet	= 0x8
+	ProgUnwindStop    = 0x0
+	ProgUnwindNative  = 0x1
+	ProgUnwindHotspot = 0x2
+	ProgUnwindPython  = 0x4
+	ProgUnwindPHP     = 0x5
+	ProgUnwindRuby    = 0x6
+	ProgUnwindPerl    = 0x3
+	ProgUnwindV8      = 0x7
+	ProgUnwindDotnet  = 0x8
 )
 
 const (
-	DeltaCommandFlag	= 0x8000
+	DeltaCommandFlag = 0x8000
 
-	MergeOpcodeNegative	= 0x80
+	MergeOpcodeNegative = 0x80
 )
 
 const (
@@ -51,26 +51,26 @@ const (
 )
 
 const (
-	BitWidthPID	= 0x20
-	BitWidthPage	= 0x40
+	BitWidthPID  = 0x20
+	BitWidthPage = 0x40
 )
 
 const (
-	StackDeltaBucketSmallest	= 0x8
-	StackDeltaBucketLargest		= 0x17
+	StackDeltaBucketSmallest = 0x8
+	StackDeltaBucketLargest  = 0x17
 
-	StackDeltaPageBits	= 0x10
-	StackDeltaPageMask	= 0xffff
+	StackDeltaPageBits = 0x10
+	StackDeltaPageMask = 0xffff
 )
 
 const (
-	HSTSIDIsStubBit		= 0x3f
-	HSTSIDHasFrameBit	= 0x3e
-	HSTSIDStackDeltaBit	= 0x38
-	HSTSIDStackDeltaMask	= 0x3f
-	HSTSIDStackDeltaScale	= 0x8
-	HSTSIDSegMapBit		= 0x0
-	HSTSIDSegMapMask	= 0xffffffffffffff
+	HSTSIDIsStubBit       = 0x3f
+	HSTSIDHasFrameBit     = 0x3e
+	HSTSIDStackDeltaBit   = 0x38
+	HSTSIDStackDeltaMask  = 0x3f
+	HSTSIDStackDeltaScale = 0x8
+	HSTSIDSegMapBit       = 0x0
+	HSTSIDSegMapMask      = 0xffffffffffffff
 )
 
 const (
@@ -78,9 +78,45 @@ const (
 )
 
 const (
-	TraceOriginUnknown	= 0x0
-	TraceOriginSampling	= 0x1
-	TraceOriginOffCPU	= 0x2
+	TraceOriginUnknown  = 0x0
+	TraceOriginSampling = 0x1
+	TraceOriginOffCPU   = 0x2
 )
 
 const OffCPUThresholdMax = 0x3e8
+
+type ApmIntProcInfo = struct {
+	Offset uint64
+}
+type DotnetProcInfo = struct {
+	Version uint32
+}
+type PHPProcInfo = struct {
+	Current_execute_data                uint64
+	Jit_return_address                  uint64
+	Zend_execute_data_function          uint8
+	Zend_execute_data_opline            uint8
+	Zend_execute_data_prev_execute_data uint8
+	Zend_execute_data_this_type_info    uint8
+	Zend_function_type                  uint8
+	Zend_op_lineno                      uint8
+	Pad_cgo_0                           [2]byte
+}
+type RubyProcInfo = struct {
+	Version                      uint32
+	Current_ctx_ptr              uint64
+	Vm_stack                     uint8
+	Vm_stack_size                uint8
+	Cfp                          uint8
+	Pc                           uint8
+	Iseq                         uint8
+	Ep                           uint8
+	Size_of_control_frame_struct uint8
+	Body                         uint8
+	Iseq_type                    uint8
+	Iseq_encoded                 uint8
+	Iseq_size                    uint8
+	Size_of_value                uint8
+	Running_ec                   uint16
+	Pad_cgo_0                    [2]byte
+}
