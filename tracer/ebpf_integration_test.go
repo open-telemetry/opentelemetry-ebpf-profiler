@@ -3,7 +3,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package tracer
+package tracer_test
 
 import (
 	"context"
@@ -20,10 +20,10 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/proc"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/testutils"
+	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
@@ -45,11 +45,11 @@ func forceContextSwitch() {
 
 // runKernelFrameProbe executes a perf event on the sched/sched_switch tracepoint
 // that sends a selection of hand-crafted, predictable traces.
-func runKernelFrameProbe(t *testing.T, tracer *Tracer) {
+func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
 	coll, err := support.LoadCollectionSpec(false)
 	require.NoError(t, err)
 
-	err = coll.RewriteMaps(tracer.ebpfMaps) //nolint:staticcheck
+	err = coll.RewriteMaps(tr.GetEbpfMaps()) //nolint:staticcheck
 	require.NoError(t, err)
 
 	restoreRlimit, err := rlimit.MaximizeMemlock()
@@ -85,27 +85,6 @@ func validateTrace(t *testing.T, numKernelFrames int, expected, returned *host.T
 	}
 }
 
-type mockIntervals struct{}
-
-func (f mockIntervals) MonitorInterval() time.Duration    { return 1 * time.Second }
-func (f mockIntervals) TracePollInterval() time.Duration  { return 250 * time.Millisecond }
-func (f mockIntervals) PIDCleanupInterval() time.Duration { return 1 * time.Second }
-
-type mockReporter struct{}
-
-func (f mockReporter) ExecutableKnown(_ libpf.FileID) bool {
-	return true
-}
-
-func (f mockReporter) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
-}
-
-func (f mockReporter) FrameKnown(_ libpf.FrameID) bool {
-	return true
-}
-
-func (f mockReporter) FrameMetadata(_ *reporter.FrameMetadataArgs) {}
-
 func generateMaxLengthTrace() host.Trace {
 	var trace host.Trace
 	for i := 0; i < support.MaxFrameUnwinds; i++ {
@@ -123,9 +102,9 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 
 	enabledTracers, _ := tracertypes.Parse("")
 	enabledTracers.Enable(tracertypes.PythonTracer)
-	tracer, err := NewTracer(ctx, &Config{
-		Reporter:               &mockReporter{},
-		Intervals:              &mockIntervals{},
+	tr, err := tracer.NewTracer(ctx, &tracer.Config{
+		Reporter:               &testutils.MockReporter{},
+		Intervals:              &testutils.MockIntervals{},
 		IncludeTracers:         enabledTracers,
 		FilterErrorFrames:      false,
 		SamplesPerSecond:       20,
@@ -138,10 +117,10 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 	require.NoError(t, err)
 
 	traceChan := make(chan *host.Trace, 16)
-	err = tracer.StartMapMonitors(ctx, traceChan)
+	err = tr.StartMapMonitors(ctx, traceChan)
 	require.NoError(t, err)
 
-	runKernelFrameProbe(t, tracer)
+	runKernelFrameProbe(t, tr)
 
 	traces := make(map[uint8]*host.Trace)
 	timeout := time.NewTimer(1 * time.Second)
@@ -250,10 +229,6 @@ Loop:
 }
 
 func TestAllTracers(t *testing.T) {
-	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
-	require.NoError(t, err)
-
-	_, _, err = initializeMapsAndPrograms(tracertypes.AllTracers(), kernelSymbols,
-		false, 1, false, false, 0)
-	require.NoError(t, err)
+	_, _ = testutils.StartTracer(context.Background(), t, tracertypes.AllTracers(),
+		&testutils.MockReporter{})
 }

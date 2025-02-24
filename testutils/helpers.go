@@ -50,7 +50,6 @@ func StartTracer(ctx context.Context, t *testing.T, et tracertypes.IncludedTrace
 		SamplesPerSecond:       20,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
-		// DebugTracer: true,
 	})
 	require.NoError(t, err)
 

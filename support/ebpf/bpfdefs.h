@@ -157,14 +157,4 @@ static long (*bpf_perf_prog_read_value)(struct pt_regs *ctx, struct bpf_perf_eve
 
 #endif // !TESTING_COREDUMP
 
-// HACK: On failure, bpf_perf_prog_read_value() zeroes the buffer. We ensure that this always
-// fail with a compile time assert that ensures that the struct size is different to the size
-// of the expected structure.
-#define bpf_large_memzero(_d, _l)                                                                                        \
-    ({                                                                                                                   \
-        _Static_assert(_l != sizeof(struct bpf_perf_event_value), "stack size must be different to the valid argument"); \
-        bpf_perf_prog_read_value(ctx, _d, _l);                                                                           \
-    })
-
-
 #endif // OPTI_BPFDEFS_H

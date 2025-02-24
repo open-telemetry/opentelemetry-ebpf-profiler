@@ -207,6 +207,7 @@ static inline PerCPURecord *get_pristine_per_cpu_record()
   record->state.return_address = false;
   record->state.error_metric = -1;
   record->state.unwind_error = ERR_OK;
+  record->state.processed_go_labels = false;
   record->perlUnwindState.stackinfo = 0;
   record->perlUnwindState.cop = 0;
   record->pythonUnwindState.py_frame = 0;
@@ -221,10 +222,10 @@ static inline PerCPURecord *get_pristine_per_cpu_record()
   record->unwindersDone = 0;
   record->tailCalls = 0;
   record->ratelimitAction = RATELIMIT_ACTION_DEFAULT;
+  record->customLabelsState.go_m_ptr = NULL;
 
   Trace *trace = &record->trace;
   trace->kernel_stack_id = -1;
-  trace->custom_labels_hash = 0;
   trace->stack_len = 0;
   trace->pid = 0;
   trace->tid = 0;
@@ -232,6 +233,12 @@ static inline PerCPURecord *get_pristine_per_cpu_record()
   trace->apm_trace_id.as_int.hi = 0;
   trace->apm_trace_id.as_int.lo = 0;
   trace->apm_transaction_id.as_int = 0;
+
+  u64 *labels_space = (u64*)&trace->custom_labels;
+#pragma unroll
+  for (int i=0; i < sizeof(CustomLabelsArray)/8; i++) {
+    labels_space[i] = 0;
+  }
 
   return record;
 }
