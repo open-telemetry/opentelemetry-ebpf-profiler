@@ -18,10 +18,10 @@ import (
 
 const (
 	abiVersionExport = "custom_labels_abi_version"
-	tlsExport        = "custom_labels_thread_local_data"
+	tlsExport        = "custom_labels_current_set"
 )
 
-var dsoRegex = regexp.MustCompile(`.*/libcustomlabels.*\.so`)
+var dsoRegex = regexp.MustCompile(`.*/libcustomlabels.*\.so|.*/customlabels\.node`)
 
 type data struct {
 	abiVersionElfVA libpf.Address
@@ -125,12 +125,14 @@ type instance struct {
 func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 
-	abiVersionPtr := rm.Ptr(bias + d.abiVersionElfVA)
-	abiVersion := rm.Uint32(abiVersionPtr)
+	abiVersion, err := rm.Uint32Checked(bias + d.abiVersionElfVA)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read custom labels ABI version: %w", err)
+	}
 
-	if abiVersion != 0 {
+	if abiVersion != 1 {
 		return nil, fmt.Errorf("unsupported custom labels ABI version: %d"+
-			" (only 0 is supported)", abiVersion)
+			" (only 1 is supported)", abiVersion)
 	}
 
 	var tlsOffset uint64

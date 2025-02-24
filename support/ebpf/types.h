@@ -577,7 +577,8 @@ typedef struct NativeCustomLabel {
 typedef struct NativeCustomLabelsThreadLocalData {
   NativeCustomLabel *storage;
   size_t count;
-} NativeCustomLabelsThreadLocalData;
+  size_t capacity;
+} NativeCustomLabelsSet;
 
 // Container for a stack trace
 typedef struct Trace {

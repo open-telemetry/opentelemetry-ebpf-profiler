@@ -436,24 +436,36 @@ bool get_native_custom_labels(struct pt_regs *ctx, UnwindState *state, void *dat
   u64 offset = tsd_base + proc->tls_offset;
   DEBUG_PRINT("native custom labels data at 0x%llx", offset);
 
-  NativeCustomLabelsThreadLocalData tls;
+  NativeCustomLabelsSet *p_current_set;
   int err;
-  if ((err = bpf_probe_read_user(&tls, sizeof(tls), (void *)(offset)))) {
+  if ((err = bpf_probe_read_user(&p_current_set, sizeof(void *), (void *)(offset)))) {
+    increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+    DEBUG_PRINT("Failed to read custom labels current set pointer: %d", err);
+    return false;
+  }
+
+  if (!p_current_set) {
+    DEBUG_PRINT("Null labelset");
+    return true;
+  }
+
+  NativeCustomLabelsSet current_set;
+  if ((err = bpf_probe_read_user(&current_set, sizeof(current_set), p_current_set))) {
     increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
     DEBUG_PRINT("Failed to read custom labels data: %d", err);
     return false;
   }
 
-  DEBUG_PRINT("Native custom labels count: %lu", tls.count);
+  DEBUG_PRINT("Native custom labels count: %lu", current_set.count);
 
-  int remaining = MIN(tls.count, MAX_CUSTOM_LABELS);
+  int remaining = MIN(current_set.count, MAX_CUSTOM_LABELS);
   int i = 0;
   int ct = 0;
 
   while (remaining) {
     if (i >= MAX_CUSTOM_LABELS)
       break;
-    NativeCustomLabel *lbl_ptr = tls.storage + i;
+    NativeCustomLabel *lbl_ptr = current_set.storage + i;
     ++i;
     NativeCustomLabel lbl;
     if ((err = bpf_probe_read_user(&lbl, sizeof(lbl), (void *)(lbl_ptr)))) {
