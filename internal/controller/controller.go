@@ -71,8 +71,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start reporter: %w", err)
 	}
 
-	metrics.SetReporter(c.reporter)
-
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
 		Reporter:               c.reporter,
