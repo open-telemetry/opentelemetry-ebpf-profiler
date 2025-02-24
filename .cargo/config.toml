@@ -7,10 +7,3 @@ CC_x86_64_unknown_linux_musl = "x86_64-linux-musl-gcc"
 # trick CMake into passing the check for a C++ compiler: it isn't actually
 # used anyway.
 TARGET_CXX = "g++"
-
-[target.aarch64-unknown-linux-musl]
-# The vendored OpenSSL fails to link with GNU ld on aarch64+musl.
-rustflags = ["-C", "link-arg=-fuse-ld=lld"]
-
-[registries.crates-io]
-protocol = "sparse"
