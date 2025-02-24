@@ -94,7 +94,14 @@ const (
 
 const OffCPUThresholdMax = C.OFF_CPU_THRESHOLD_MAX
 
-type ApmIntProcInfo = C.ApmIntProcInfo
-type DotnetProcInfo = C.DotnetProcInfo
-type PHPProcInfo = C.PHPProcInfo
-type RubyProcInfo = C.RubyProcInfo
+type ApmIntProcInfo C.ApmIntProcInfo
+type DotnetProcInfo C.DotnetProcInfo
+type PHPProcInfo C.PHPProcInfo
+type RubyProcInfo C.RubyProcInfo
+
+const (
+	sizeof_ApmIntProcInfo = C.sizeof_ApmIntProcInfo
+	sizeof_DotnetProcInfo = C.sizeof_DotnetProcInfo
+	sizeof_PHPProcInfo    = C.sizeof_PHPProcInfo
+	sizeof_RubyProcInfo   = C.sizeof_RubyProcInfo
+)

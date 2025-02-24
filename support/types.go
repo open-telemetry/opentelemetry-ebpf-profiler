@@ -85,13 +85,13 @@ const (
 
 const OffCPUThresholdMax = 0x3e8
 
-type ApmIntProcInfo = struct {
+type ApmIntProcInfo struct {
 	Offset uint64
 }
-type DotnetProcInfo = struct {
+type DotnetProcInfo struct {
 	Version uint32
 }
-type PHPProcInfo = struct {
+type PHPProcInfo struct {
 	Current_execute_data                uint64
 	Jit_return_address                  uint64
 	Zend_execute_data_function          uint8
@@ -102,7 +102,7 @@ type PHPProcInfo = struct {
 	Zend_op_lineno                      uint8
 	Pad_cgo_0                           [2]byte
 }
-type RubyProcInfo = struct {
+type RubyProcInfo struct {
 	Version                      uint32
 	Current_ctx_ptr              uint64
 	Vm_stack                     uint8
@@ -120,3 +120,10 @@ type RubyProcInfo = struct {
 	Running_ec                   uint16
 	Pad_cgo_0                    [2]byte
 }
+
+const (
+	sizeof_ApmIntProcInfo = 0x8
+	sizeof_DotnetProcInfo = 0x4
+	sizeof_PHPProcInfo    = 0x18
+	sizeof_RubyProcInfo   = 0x20
+)
