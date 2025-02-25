@@ -82,15 +82,19 @@ func (symmap *SymbolMap) LookupSymbol(symbolName SymbolName) (*Symbol, error) {
 	return nil, fmt.Errorf("symbol %v not present in map", symbolName)
 }
 
-// LookupSymbolByPrefix loops over all known symbols and returns the first symbol
+// LookupSymbolsByPrefix loops over all known symbols and returns all symbols
 // that starts with the given prefix.
-func (symmap *SymbolMap) LookupSymbolByPrefix(prefix string) (*Symbol, error) {
+func (symmap *SymbolMap) LookupSymbolsByPrefix(prefix string) ([]*Symbol, error) {
+	var symbols []*Symbol
 	for name, sym := range symmap.nameToSymbol {
 		if strings.HasPrefix(string(name), prefix) {
-			return sym, nil
+			symbols = append(symbols, sym)
 		}
 	}
-	return nil, fmt.Errorf("no symbol present that starts with '%s'", prefix)
+	if len(symbols) == 0 {
+		return nil, fmt.Errorf("no symbol present that starts with '%s'", prefix)
+	}
+	return symbols, nil
 }
 
 // LookupSymbolAddress returns the address of a symbol.
