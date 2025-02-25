@@ -53,6 +53,7 @@ int bpf_log(const char *fmt, ...)
 #include "../../support/ebpf/hotspot_tracer.ebpf.c"
 #include "../../support/ebpf/ruby_tracer.ebpf.c"
 #include "../../support/ebpf/v8_tracer.ebpf.c"
+#include "../../support/ebpf/beam_tracer.ebpf.c"
 #include "../../support/ebpf/system_config.ebpf.c"
 
 int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx)
@@ -116,6 +117,9 @@ int bpf_tail_call(void *ctx, bpf_map_def *map, int index)
 		break;
 	case PROG_UNWIND_DOTNET:
 		rc = unwind_dotnet(ctx);
+		break;
+	case PROG_UNWIND_BEAM:
+		rc = unwind_beam(ctx);
 		break;
 	default:
 		return -1;

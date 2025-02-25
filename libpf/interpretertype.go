@@ -31,6 +31,8 @@ const (
 	V8 InterpreterType = support.FrameMarkerV8
 	// Dotnet identifies the Dotnet interpreter.
 	Dotnet InterpreterType = support.FrameMarkerDotnet
+	// BEAM identifies the BEAM interpreter.
+	BEAM InterpreterType = support.FrameMarkerBEAM
 )
 
 // Pseudo-interpreters without a corresponding frame type.
@@ -64,6 +66,7 @@ var interpreterTypeToString = map[InterpreterType]string{
 	Perl:    "perl",
 	V8:      "v8js",
 	Dotnet:  "dotnet",
+	BEAM:    "beam",
 	APMInt:  "apm-integration",
 }
 

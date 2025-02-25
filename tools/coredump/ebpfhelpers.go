@@ -95,7 +95,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef *C.bpf_map_def, keyptr unsafe.Pointe
 	case &C.per_cpu_records:
 		return ctx.perCPURecord
 	case &C.interpreter_offsets, &C.dotnet_procs, &C.perl_procs, &C.php_procs, &C.py_procs,
-		&C.hotspot_procs, &C.ruby_procs, &C.v8_procs:
+		&C.hotspot_procs, &C.ruby_procs, &C.v8_procs, &C.beam_procs:
 		var key any
 		switch mapdef.key_size {
 		case 8:
