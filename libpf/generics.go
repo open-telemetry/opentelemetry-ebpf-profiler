@@ -74,3 +74,13 @@ func MapSlice[T, V any](in []T, mapf func(T) V) []V {
 	}
 	return ret
 }
+
+// Every returns true if test is true for every element in slice
+func Every[T any](in []T, test func(T) bool) bool {
+	for _, v := range in {
+		if !test(v) {
+			return false
+		}
+	}
+	return true
+}
