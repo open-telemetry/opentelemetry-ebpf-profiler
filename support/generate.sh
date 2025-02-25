@@ -12,6 +12,9 @@ EOF
 # Generate Go definitions from C
 go tool cgo -godefs types_def.go >> types_gen.go
 
+# Properly format the generated code
+go fmt .
+
 # Set correct package path
 sed -i 's/^package support$/package support \/\/ import "go.opentelemetry.io\/ebpf-profiler\/support"/' types_gen.go
 
