@@ -93,7 +93,7 @@ endif
 rust-tests: rust-targets
 	cargo test
 
-GOLANGCI_LINT_VERSION = "v1.63.4"
+GOLANGCI_LINT_VERSION = "v1.64.5"
 lint: generate vanity-import-check
 	$(MAKE) lint -C support/ebpf
 	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version

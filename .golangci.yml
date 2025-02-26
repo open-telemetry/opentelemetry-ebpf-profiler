@@ -96,6 +96,7 @@ linters:
     # we don't want to change code to Go 1.22+ yet
     - intrange
     - copyloopvar
+    - tenv
 
 linters-settings:
   goconst:
