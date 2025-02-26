@@ -83,7 +83,7 @@ func (symmap *SymbolMap) LookupSymbol(symbolName SymbolName) (*Symbol, error) {
 }
 
 // LookupSymbolsByPrefix loops over all known symbols and returns all symbols
-// that starts with the given prefix.
+// that start with the given prefix.
 func (symmap *SymbolMap) LookupSymbolsByPrefix(prefix string) ([]*Symbol, error) {
 	var symbols []*Symbol
 	for name, sym := range symmap.nameToSymbol {

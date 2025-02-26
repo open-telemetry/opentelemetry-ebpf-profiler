@@ -1303,7 +1303,7 @@ func (t *Tracer) StartOffCPUProfiling() error {
 	}
 
 	attached := false
-	// Attach to all the symbols with the prefix finish_task_switch
+	// Attach to all symbols with the prefix finish_task_switch.
 	for _, symb := range kprobeSymbs {
 		kprobeLink, linkErr := link.Kprobe(string(symb.Name), kprobeProg, nil)
 		if linkErr != nil {
