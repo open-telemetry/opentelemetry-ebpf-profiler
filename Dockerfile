@@ -43,13 +43,23 @@ RUN                                                                             
 # Append to /etc/profile for login shells
 RUN echo 'export PATH="/usr/local/go/bin:$PATH"' >> /etc/profile
 
-# Create .cargo directory
-RUN mkdir -p /root/.cargo
+# Create rust related directories in /usr/local
+RUN mkdir -p /usr/local/cargo
+RUN mkdir -p /usr/local/rustup
+
+# Set environment variable before rustup installation
+ENV CARGO_HOME=/usr/local/cargo
+ENV RUSTUP_HOME=/usr/local/rustup
 
 # Install rustup and cargo
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.77
 
-# Add cargo to PATH
-RUN echo 'export PATH="/root/.cargo/bin:$PATH"' >> /etc/profile
+# Add rust related environment variables
+RUN echo 'export PATH="/usr/local/cargo/bin:$PATH"' >> /etc/profile
+RUN echo 'export CARGO_HOME="/usr/local/cargo"' >> /etc/profile
+RUN echo 'export RUSTUP_HOME="/usr/local/rustup"' >> /etc/profile
+
+# Set mode bits for rustup
+RUN chmod -R a+w /usr/local/rustup
 
 ENTRYPOINT ["/bin/bash", "-l", "-c"]
