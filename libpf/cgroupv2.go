@@ -6,6 +6,7 @@ package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 
@@ -14,7 +15,7 @@ import (
 )
 
 var (
-	cgroupv2PathPattern = regexp.MustCompile(`0:.*?:(.*)`)
+	cgroupv2PathPattern = regexp.MustCompile(`.*:.*?:(.*)`)
 )
 
 // LookupCgroupv2 returns the cgroupv2 ID for pid.
@@ -31,6 +32,14 @@ func LookupCgroupv2(cgrouplru *lru.SyncedLRU[PID, string], pid PID) (string, err
 	}
 	defer f.Close()
 
+	return LookupCgroupFromReader(cgrouplru, pid, f)
+}
+
+func LookupCgroupFromReader(
+	cgrouplru *lru.SyncedLRU[PID, string],
+	pid PID,
+	f io.Reader,
+) (string, error) {
 	var genericCgroupv2 string
 	scanner := bufio.NewScanner(f)
 	buf := make([]byte, 512)

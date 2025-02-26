@@ -14,14 +14,14 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
+	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	semconv "go.opentelemetry.io/otel/semconv/v1.22.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
-	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -60,12 +60,9 @@ type OTLPReporter struct {
 }
 
 // NewOTLP returns a new instance of OTLPReporter
-func NewOTLP(cfg *Config) (*OTLPReporter, error) {
-	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
-		func(pid libpf.PID) uint32 { return uint32(pid) })
-	if err != nil {
-		return nil, err
-	}
+func NewOTLP(cfg *Config,
+	cgroupv2ID *lru.SyncedLRU[libpf.PID, string],
+) (*OTLPReporter, error) {
 	// Set a lifetime to reduce risk of invalid data in case of PID reuse.
 	cgroupv2ID.SetLifetime(90 * time.Second)
 

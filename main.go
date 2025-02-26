@@ -13,15 +13,15 @@ import (
 	"os"
 	"os/signal"
 
-	"golang.org/x/sys/unix"
-
+	"github.com/elastic/go-freelru"
+	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/helpers"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/vc"
-
-	log "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 // Short copyright / license text for eBPF code
@@ -116,6 +116,13 @@ func mainWithExitCode() exitCode {
 	}
 	cfg.HostName, cfg.IPAddress = hostname, sourceIP
 
+	cgroups, err := freelru.NewSynced[libpf.PID, string](1024,
+		func(pid libpf.PID) uint32 { return uint32(pid) })
+	if err != nil {
+		log.Error(err)
+		return exitFailure
+	}
+
 	rep, err := reporter.NewOTLP(&reporter.Config{
 		CollAgentAddr:            cfg.CollAgentAddr,
 		DisableTLS:               cfg.DisableTLS,
@@ -133,7 +140,7 @@ func mainWithExitCode() exitCode {
 		KernelVersion:       kernelVersion,
 		HostName:            hostname,
 		IPAddress:           sourceIP,
-	})
+	}, cgroups)
 	if err != nil {
 		log.Error(err)
 		return exitFailure

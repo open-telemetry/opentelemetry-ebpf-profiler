@@ -1,3 +1,4 @@
+.idea/
 *.o
 *.pb.go
 .cache
