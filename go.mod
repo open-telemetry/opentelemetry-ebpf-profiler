@@ -1,6 +1,6 @@
 module go.opentelemetry.io/ebpf-profiler
 
-go 1.22.2
+go 1.23.6
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.30.5
@@ -30,6 +30,7 @@ require (
 	go.opentelemetry.io/collector/receiver/receivertest v0.116.0
 	go.opentelemetry.io/collector/receiver/xreceiver v0.116.0
 	go.opentelemetry.io/otel v1.32.0
+	go.opentelemetry.io/otel/metric v1.32.0
 	golang.org/x/arch v0.10.0
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
 	golang.org/x/sync v0.10.0
@@ -74,7 +75,6 @@ require (
 	go.opentelemetry.io/collector/consumer v1.22.0 // indirect
 	go.opentelemetry.io/collector/consumer/consumererror v0.116.0 // indirect
 	go.opentelemetry.io/collector/pipeline v0.116.0 // indirect
-	go.opentelemetry.io/otel/metric v1.32.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.32.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.32.0 // indirect
 	go.opentelemetry.io/otel/trace v1.32.0 // indirect

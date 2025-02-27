@@ -9,7 +9,7 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 // these two components can be audited to be consistent.
 
 // The public functions in this file are restricted to be used from the
-// HA/tracer and utils/coredump modules only.
+// HA/tracer and tools/coredump modules only.
 
 import (
 	"errors"

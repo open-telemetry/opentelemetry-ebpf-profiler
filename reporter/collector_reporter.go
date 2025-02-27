@@ -105,10 +105,6 @@ func (r *CollectorReporter) Start(ctx context.Context) error {
 	return nil
 }
 
-func (r *CollectorReporter) GetMetrics() Metrics {
-	return Metrics{}
-}
-
 // reportProfile creates and sends out a profile.
 func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	traceEvents := r.traceEvents.WLock()
