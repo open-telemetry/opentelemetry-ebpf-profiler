@@ -53,6 +53,9 @@ type ProcessManager struct {
 	// pidToProcessInfo keeps track of the executable memory mappings.
 	pidToProcessInfo map[libpf.PID]*processInfo
 
+	// pidMainThreadExit keeps track of PIDs whose main thread (pid == tgid) has exited.
+	pidMainThreadExit libpf.Set[libpf.PID]
+
 	// exitEvents records the pid exit time and is a list of pending exit events to be handled.
 	exitEvents map[libpf.PID]times.KTime
 
