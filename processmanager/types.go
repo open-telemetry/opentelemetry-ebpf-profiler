@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
+	"go.opentelemetry.io/ebpf-profiler/pyroscope/dynamicprofiling"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
@@ -96,6 +97,8 @@ type ProcessManager struct {
 
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
+
+	policy dynamicprofiling.Policy
 }
 
 // Mapping represents an executable memory mapping of a process.

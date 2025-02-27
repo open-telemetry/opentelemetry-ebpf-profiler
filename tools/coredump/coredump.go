@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
+	"go.opentelemetry.io/ebpf-profiler/pyroscope/dynamicprofiling"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
@@ -189,7 +190,12 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	includeTracers, _ := tracertypes.Parse("all")
 
 	manager, err := pm.New(todo, includeTracers, monitorInterval, &coredumpEbpfMaps,
-		pm.NewMapFileIDMapper(), symCache, elfunwindinfo.NewStackDeltaProvider(), false)
+		pm.NewMapFileIDMapper(),
+		symCache,
+		elfunwindinfo.NewStackDeltaProvider(),
+		false,
+		dynamicprofiling.AlwaysOnPolicy{},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)
 	}

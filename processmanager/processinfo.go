@@ -611,6 +611,11 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	util.AtomicUpdateMaxUint32(&pm.mappingStats.maxProcParseUsec, uint32(elapsed.Microseconds()))
 	pm.mappingStats.totalProcParseUsec.Add(uint32(elapsed.Microseconds()))
 
+	if !pm.profilingEnabled(pr, mappings) {
+		log.Debugf("- PID: %d Skip profiling for", pid)
+		return
+	}
+
 	if pm.synchronizeMappings(pr, mappings) {
 		log.Debugf("+ PID: %v", pid)
 		// TODO: Fine-grained reported_pids handling (evaluate per-PID mapping
@@ -626,6 +631,17 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		// Also see: Unified PID Events design doc
 		pm.ebpf.RemoveReportedPID(pid)
 	}
+}
+
+func (pm *ProcessManager) profilingEnabled(pr process.Process, mappings []process.Mapping) bool {
+	enabled := pm.policy.ProfilingEnabled(pr, mappings)
+	if enabled {
+		return true
+	}
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	_, enabled = pm.pidToProcessInfo[pr.PID()]
+	return enabled
 }
 
 // CleanupPIDs executes a periodic synchronization of pidToProcessInfo table with system processes.

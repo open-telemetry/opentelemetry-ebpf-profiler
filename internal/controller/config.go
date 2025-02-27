@@ -9,6 +9,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"go.opentelemetry.io/ebpf-profiler/pyroscope/dynamicprofiling"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -37,6 +38,8 @@ type Config struct {
 	// IPAddress is the IP address of the host that sends data to CollAgentAddr.
 	IPAddress       string
 	OffCPUThreshold uint
+
+	Policy dynamicprofiling.Policy
 
 	Reporter reporter.Reporter
 
