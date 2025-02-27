@@ -4,7 +4,7 @@
 //! Defines FFI error codes and their conversion from Rust error types.
 
 use std::io;
-use symblib::{dwarf, objfile, retpads, symbconv};
+use symblib::{dwarf, gosym, objfile, retpads, symbconv};
 
 pub type FfiResult<T = ()> = Result<T, StatusCode>;
 
@@ -42,6 +42,21 @@ pub enum StatusCode {
 
     #[error("The channel was already closed in a previous call")]
     AlreadyClosed = 8,
+
+    #[error("Functionname is not available")]
+    GosymMissingFuncName = 9,
+
+    #[error("File mapping error")]
+    GosymBadFileMapping = 10,
+
+    #[error("Line mapping error")]
+    GosymBadLineMapping = 11,
+
+    #[error("Address lookup error")]
+    GosymBadAddrLookup = 12,
+
+    #[error("No mapping found for address")]
+    GosymMissingAddrMapping = 13,
 }
 
 impl From<StatusCode> for FfiResult {
@@ -115,5 +130,11 @@ impl From<std::str::Utf8Error> for StatusCode {
 impl From<retpads::Error> for StatusCode {
     fn from(_: retpads::Error) -> Self {
         Self::Retpad
+    }
+}
+
+impl From<gosym::Error> for StatusCode {
+    fn from(_: gosym::Error) -> Self {
+        StatusCode::Symbconv
     }
 }

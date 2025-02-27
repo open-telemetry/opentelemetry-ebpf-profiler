@@ -138,6 +138,33 @@ extern SymblibStatus symblib_retpadextr_submit(
 // Frees a return pad extractor.
 extern void symblib_retpadextr_free(SymblibRetPadExtractor* extr);
 
+// Opaque handle to GoRuntimeInfo
+typedef struct SymblibGoRuntime SymblibGoRuntime;
+
+// Go function information
+typedef struct {
+    uint64_t start_addr;
+    SymblibString function_name;
+    SymblibString file_name;
+    uint32_t line_number;
+} SymblibGoFunc;
+
+// Create a new GoRuntime handler
+extern SymblibStatus symblib_goruntime_new(
+    const char* executable,
+    SymblibGoRuntime** runtime // out arg
+);
+
+// Lookup function by address
+extern SymblibStatus symblib_goruntime_lookup(
+    SymblibGoRuntime* runtime,
+    uint64_t addr,
+    SymblibGoFunc** func_info // out arg
+);
+
+// Free the GoRuntime handler
+extern void symblib_goruntime_free(SymblibGoRuntime* runtime);
+
 #ifdef __cplusplus
 }
 #endif
