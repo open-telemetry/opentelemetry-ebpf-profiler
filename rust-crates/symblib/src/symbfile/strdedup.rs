@@ -68,6 +68,7 @@ impl Mapper {
     }
 }
 
+/// Mapping type
 #[derive(Debug, PartialEq, Eq)]
 pub enum Mapping {
     /// String is unique within current sequence: inline it.
