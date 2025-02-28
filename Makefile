@@ -137,7 +137,7 @@ integration-test-binaries: generate ebpf
 	)
 
 docker-image:
-	docker build -t profiling-agent -f Dockerfile .
+	docker build -t otel/opentelemetry-ebpf-profiler-dev -f Dockerfile .
 
 agent:
 	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) otel/opentelemetry-ebpf-profiler-dev:latest \
