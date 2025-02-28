@@ -591,20 +591,12 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		return
 	}
 	if len(mappings) == 0 {
-		// Valid process without any (executable) mappings. All cases are
-		// handled as process exit. Possible causes and reasoning:
-		// 1. It is a kernel worker process. The eBPF does not send events from these,
-		//    but we can see kernel threads here during startup when tracer walks
-		//    /proc and tries to synchronize all PIDs it sees.
-		//    The PID should not exist anywhere, but we can still double check and
-		//    make sure the PID is not tracked.
-		// 2. It is a normal process executing, but we just sampled it when the kernel
-		//    execve() is rebuilding the mappings and nothing is currently mapped.
-		//    In this case we can handle it as process exit because everything about
-		//    the process is changing: all mappings, comm, etc. If execve fails, we
-		//    reaped it early. If execve succeeds, we will get new synchronization
-		//    request soon, and handle it as a new process event.
-		pm.processPIDExit(pid)
+		// TODO: Check if main thread has exited, e.g. /proc/PID/stat will show zombie
+		log.Warnf("%v: main thread exit", pid)
+		pm.mu.Lock()
+		defer pm.mu.Unlock()
+		pm.pidMainThreadExit[pid] = libpf.Void{}
+		pm.ebpf.RemoveReportedPID(pid)
 		return
 	}
 
@@ -630,23 +622,33 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 // CleanupPIDs executes a periodic synchronization of pidToProcessInfo table with system processes.
 // NOTE: Exported only for tracer.
-func (pm *ProcessManager) CleanupPIDs() {
+func (pm *ProcessManager) CleanupPIDs(fast bool) {
 	deadPids := make([]libpf.PID, 0, 16)
-
 	pm.mu.RLock()
-	for pid := range pm.pidToProcessInfo {
+	defer func() {
+		pm.mu.RUnlock()
+		for _, pid := range deadPids {
+			pm.processPIDExit(pid)
+		}
+		if len(deadPids) > 0 {
+			log.Debugf("Cleaned up %d dead PIDs", len(deadPids))
+		}
+	}()
+
+	log.Warnf("Fast cleanup")
+	for pid := range pm.pidMainThreadExit {
 		if live, _ := proc.IsPIDLive(pid); !live {
 			deadPids = append(deadPids, pid)
 		}
 	}
-	pm.mu.RUnlock()
-
-	for _, pid := range deadPids {
-		pm.processPIDExit(pid)
+	if fast {
+		return
 	}
-
-	if len(deadPids) > 0 {
-		log.Debugf("Cleaned up %d dead PIDs", len(deadPids))
+	log.Warnf("Slow cleanup")
+	for pid := range pm.pidToProcessInfo {
+		if live, _ := proc.IsPIDLive(pid); !live {
+			deadPids = append(deadPids, pid)
+		}
 	}
 }
 
@@ -707,6 +709,10 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		}
 
 		delete(pm.pidToProcessInfo, pid)
+		if _, ok := pm.pidMainThreadExit[pid]; ok {
+			delete(pm.pidMainThreadExit, pid)
+			log.Warnf("%v: cleanup", pid)
+		}
 
 		for _, instance := range pm.interpreters[pid] {
 			if err2 := instance.Detach(pm.ebpf, pid); err2 != nil {
