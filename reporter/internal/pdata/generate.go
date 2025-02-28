@@ -5,6 +5,7 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 
 import (
 	"crypto/rand"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -198,14 +199,21 @@ func (p *Pdata) setProfile(
 			}
 		}
 
+		exeName := traceKey.ExecutablePath
+		if exeName != "" {
+			_, exeName = filepath.Split(exeName)
+		}
+
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ContainerIDKey, traceKey.ContainerID)
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ThreadNameKey, traceKey.Comm)
+
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
-			semconv.ProcessExecutableNameKey, traceKey.ProcessName)
+			semconv.ProcessExecutableNameKey, exeName)
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ProcessExecutablePathKey, traceKey.ExecutablePath)
+
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ServiceNameKey, traceKey.ApmServiceName)
 		attrMgr.AppendInt(sample.AttributeIndices(),
