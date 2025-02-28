@@ -224,6 +224,7 @@ bool get_native_custom_labels(PerCPURecord *record, NativeCustomLabelsProcInfo *
 
   if (!p_current_set) {
     DEBUG_PRINT("Null labelset");
+    record->trace.custom_labels.len = 0;
     return true;
   }
 
