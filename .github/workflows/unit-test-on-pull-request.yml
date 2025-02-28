@@ -147,9 +147,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Install dependencies
         run: |
+          sudo apt-get update -y
           case "${{ matrix.target_arch }}" in
-            amd64) sudo apt-get update -y && sudo apt-get -y install qemu-system-x86;;
-            arm64) sudo apt-get update -y && sudo apt-get -y install qemu-system-arm;;
+            amd64) sudo apt-get -y install qemu-system-x86;;
+            arm64) sudo apt-get -y install qemu-system-arm;;
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           go install github.com/florianl/bluebox@v0.0.1
