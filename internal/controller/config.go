@@ -44,6 +44,11 @@ type Config struct {
 
 	Reporter reporter.Reporter
 
+	PyroscopeUsername               string
+	PyroscopePasswordFile           string
+	PyroscopeReporterType           string
+	PyroscopeDynamicProfilingPolicy bool
+
 	Fs *flag.FlagSet
 
 	SymbCachePath         string
