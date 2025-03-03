@@ -141,29 +141,42 @@ extern void symblib_retpadextr_free(SymblibRetPadExtractor* extr);
 // Opaque handle to GoRuntimeInfo
 typedef struct SymblibGoRuntime SymblibGoRuntime;
 
-// Go function information
-typedef struct {
-    uint64_t start_addr;
-    SymblibString function_name;
-    SymblibString file_name;
-    uint32_t line_number;
-} SymblibGoFunc;
-
 // Create a new GoRuntime handler
 extern SymblibStatus symblib_goruntime_new(
     const char* executable,
     SymblibGoRuntime** runtime // out arg
 );
 
-// Lookup function by address
-extern SymblibStatus symblib_goruntime_lookup(
-    SymblibGoRuntime* runtime,
-    uint64_t addr,
-    SymblibGoFunc** func_info // out arg
-);
-
 // Free the GoRuntime handler
 extern void symblib_goruntime_free(SymblibGoRuntime* runtime);
+
+// Opaque handle to SymblibPointResolver
+typedef struct SymblibPointResolver SymblibPointResolver;
+
+// Convert GoRuntime to PointResolver
+const SymblibPointResolver* symblib_go_runtime_as_point_resolver(
+    const SymblibGoRuntime* runtime
+);
+
+typedef struct SymblibResolvedSymbol {
+    uint64_t start_addr;
+    SymblibString function_name;
+    SymblibSlice file_names;
+    SymblibSlice line_numbers;
+} SymblibResolvedSymbol;
+
+// Point resolver functions
+SymblibStatus symblib_point_resolver_symbols_for_pc(
+    const SymblibPointResolver* resolver,
+    uint64_t pc,
+    SymblibResolvedSymbol** out_symbols, // out arg
+    size_t* out_len                      // out arg
+);
+
+void symblib_point_resolver_free_symbols(
+    SymblibResolvedSymbol* symbols,
+    size_t len
+);
 
 #ifdef __cplusplus
 }

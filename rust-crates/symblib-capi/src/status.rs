@@ -43,20 +43,11 @@ pub enum StatusCode {
     #[error("The channel was already closed in a previous call")]
     AlreadyClosed = 8,
 
-    #[error("Functionname is not available")]
-    GosymMissingFuncName = 9,
+    #[error("Invalid argument")]
+    InvalArg = 9,
 
-    #[error("File mapping error")]
-    GosymBadFileMapping = 10,
-
-    #[error("Line mapping error")]
-    GosymBadLineMapping = 11,
-
-    #[error("Address lookup error")]
-    GosymBadAddrLookup = 12,
-
-    #[error("No mapping found for address")]
-    GosymMissingAddrMapping = 13,
+    #[error("Point resolver error")]
+    PointResolver = 10,
 }
 
 impl From<StatusCode> for FfiResult {
