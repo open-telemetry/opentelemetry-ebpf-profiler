@@ -6,6 +6,7 @@
 mod ffislice;
 mod ffistr;
 mod gosym;
+mod pointresolver;
 mod rangeextr;
 mod retpadextr;
 mod status;
@@ -13,6 +14,7 @@ mod status;
 pub use ffislice::*;
 pub use ffistr::*;
 pub use gosym::*;
+pub use pointresolver::*;
 pub use rangeextr::*;
 pub use retpadextr::*;
 pub use status::*;

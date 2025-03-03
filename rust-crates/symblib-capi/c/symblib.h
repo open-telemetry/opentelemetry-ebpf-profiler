@@ -138,32 +138,43 @@ extern SymblibStatus symblib_retpadextr_submit(
 // Frees a return pad extractor.
 extern void symblib_retpadextr_free(SymblibRetPadExtractor* extr);
 
-// Opaque handle to GoRuntimeInfo
-typedef struct SymblibGoRuntime SymblibGoRuntime;
+// Opaque handle to SymblibPointResolver.
+typedef struct SymblibPointResolver SymblibPointResolver;
 
-// Go function information
-typedef struct {
-    uint64_t start_addr;
-    SymblibString function_name;
-    SymblibString file_name;
-    uint32_t line_number;
-} SymblibGoFunc;
-
-// Create a new GoRuntime handler
+// Create a new SymblibPointResolver handler from a Go executable.
 extern SymblibStatus symblib_goruntime_new(
     const char* executable,
-    SymblibGoRuntime** runtime // out arg
+    SymblibPointResolver** runtime // out arg
 );
 
-// Lookup function by address
-extern SymblibStatus symblib_goruntime_lookup(
-    SymblibGoRuntime* runtime,
-    uint64_t addr,
-    SymblibGoFunc** func_info // out arg
+// Frees a Go based SymblibPointResolver
+extern void symblib_goruntime_free(SymblibPointResolver* runtime);
+
+// Hold information about a symbol and its origin.
+typedef struct SymblibResolvedSymbol {
+    uint64_t start_addr;
+    SymblibString function_name;
+    SymblibSlice file_names;
+    SymblibSlice line_numbers;
+} SymblibResolvedSymbol;
+
+// Enveloping struct that holds len number of symbols in data.
+typedef struct SymblibSlice_SymblibResolvedSymbol {
+    const SymblibResolvedSymbol* data;
+    size_t len;
+} SymblibSlice_SymblibResolvedSymbol;
+
+// Single point lookup for pc using SymblibPointResolver.
+SymblibStatus symblib_point_resolver_symbols_for_pc(
+    const SymblibPointResolver* resolver,
+    uint64_t pc,
+    SymblibSlice_SymblibResolvedSymbol** symbols // out arg
 );
 
-// Free the GoRuntime handler
-extern void symblib_goruntime_free(SymblibGoRuntime* runtime);
+// Frees a SymblibSlice_SymblibResolvedSymbol.
+void symblib_slice_symblibresolved_symbol_free(
+    SymblibSlice_SymblibResolvedSymbol* slice
+);
 
 #ifdef __cplusplus
 }
