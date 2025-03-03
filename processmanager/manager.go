@@ -95,6 +95,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		interpreters:             interpreters,
 		exitEvents:               make(map[libpf.PID]times.KTime),
 		pidToProcessInfo:         make(map[libpf.PID]*processInfo),
+		pidMainThreadExit:        make(libpf.Set[libpf.PID]),
 		ebpf:                     ebpf,
 		FileIDMapper:             fileIDMapper,
 		elfInfoCache:             elfInfoCache,

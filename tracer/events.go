@@ -43,14 +43,23 @@ func (t *Tracer) StartPIDEventProcessor(ctx context.Context) {
 
 // Process the PID events that are incoming in the Tracer channel.
 func (t *Tracer) processPIDEvents(ctx context.Context) {
-	pidCleanupTicker := time.NewTicker(t.intervals.PIDCleanupInterval())
+	var lastSlowPIDCleanup time.Time
+	// TODO: Add the following to times.go
+	pidCleanupTicker := time.NewTicker(5 * time.Second)
 	defer pidCleanupTicker.Stop()
 	for {
 		select {
 		case pid := <-t.pidEvents:
+			log.Warnf("PID: %v", pid)
 			t.processManager.SynchronizeProcess(process.New(pid))
 		case <-pidCleanupTicker.C:
-			t.processManager.CleanupPIDs()
+			fast := true
+			now := time.Now()
+			if now.Sub(lastSlowPIDCleanup) >= t.intervals.PIDCleanupInterval() {
+				fast = false
+				lastSlowPIDCleanup = now
+			}
+			t.processManager.CleanupPIDs(fast)
 		case <-ctx.Done():
 			return
 		}
