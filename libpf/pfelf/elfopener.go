@@ -5,12 +5,17 @@
 // them. This file implements an interface to open ELF files from arbitrary location with name.
 
 package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+import "os"
 
 // ELFOpener is the interface to open ELF files from arbitrary location with given filename.
 //
 // Implementations must be safe to be called from different threads simultaneously.
 type ELFOpener interface {
 	OpenELF(string) (*File, error)
+}
+
+type RootFSOpener interface {
+	OpenRootFSFile(file string) (*os.File, error)
 }
 
 // SystemOpener implements ELFOpener by opening files from file system

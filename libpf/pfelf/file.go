@@ -960,3 +960,8 @@ func (f *File) DynString(tag elf.DynTag) ([]string, error) {
 func (f *File) IsGolang() bool {
 	return f.Section(".go.buildinfo") != nil || f.Section(".gopclntab") != nil
 }
+
+func (f *File) OSFile() *os.File {
+	ff, _ := f.closer.(*os.File)
+	return ff
+}
