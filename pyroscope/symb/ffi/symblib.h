@@ -21,8 +21,6 @@ typedef enum SymblibStatus {
   Retpad = 6,
   BadUtf8 = 7,
   AlreadyClosed = 8,
-  InvalidSymdbTablePath = 9,
-  U32Overflow = 10,
 } SymblibStatus;
 
 /**
