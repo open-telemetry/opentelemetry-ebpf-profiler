@@ -561,6 +561,16 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pid := pr.PID()
 	log.Debugf("= PID: %v", pid)
 
+	// Abort early if process is waiting for cleanup in ProcessedUntil
+	pm.mu.Lock()
+	if _, ok := pm.exitEvents[pid]; ok {
+		defer pm.mu.Unlock()
+		defer pm.ebpf.RemoveReportedPID(pid)
+		log.Debugf("PID %v waiting for cleanup, aborting SynchronizeProcess", pid)
+		return
+	}
+	pm.mu.Unlock()
+
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
 	mappings, err := pr.GetMappings()
