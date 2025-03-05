@@ -65,6 +65,7 @@ clean:
 	@rm -f support/*.test
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache
+	@cargo clean
 
 generate:
 	GOARCH=$(NATIVE_ARCH) go generate ./...
