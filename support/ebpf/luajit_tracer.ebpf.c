@@ -415,9 +415,9 @@ ErrorCode walk_luajit_stack(PerCPURecord *record, const LuaJITProcInfo *info,
         cf = record->luajitUnwindState.cframe = record->luajitUnwindScratch.L.cframe;
       }
       if (cf != NULL) {
-        void *prev = cframe_prev(cf);
+        void *prev = cframe_prev(cframe_raw(cf));
         if (prev != NULL) {
-          DEBUG_PRINT("lj: walk_lua_stack: cframe encountered, leaving unwinder");
+          DEBUG_PRINT("lj: walk_lua_stack: cframe encountered, leaving unwinder, %lx prev: %lx", (unsigned long)cf, (unsigned long)prev);
           record->luajitUnwindState.cframe = prev;
           *next_unwinder = PROG_UNWIND_NATIVE;
           return ERR_OK;
