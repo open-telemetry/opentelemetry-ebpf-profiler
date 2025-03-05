@@ -13,12 +13,12 @@ int disassociate_ctty(struct pt_regs *ctx)
   u32 pid      = (u32)(pid_tgid >> 32);
 
   if (!bpf_map_lookup_elem(&reported_pids, &pid) && !pid_information_exists(ctx, pid)) {
-    // Only report PIDs that we explicitly track. This avoids sending kernel worker PIDs
-    // to userspace.
+    // Only report PIDs that we explicitly track.
+    // This avoids sending kernel worker PIDs to userspace.
     goto exit;
   }
 
-  if (report_pid(ctx, pid, RATELIMIT_ACTION_RESET)) {
+  if (report_pid(ctx, pid_tgid, RATELIMIT_ACTION_RESET)) {
     increment_metric(metricID_NumProcExit);
   }
 exit:
