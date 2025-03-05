@@ -593,7 +593,7 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 	copy(progs, tailCallProgs)
 	progs = append(progs,
 		progLoaderHelper{
-			name:             "tracepoint__sched_process_exit",
+			name:             "tracepoint__sched_process_free",
 			noTailCallTarget: true,
 			enable:           true,
 		},
