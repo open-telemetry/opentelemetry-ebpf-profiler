@@ -563,13 +563,14 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	// Abort early if process is waiting for cleanup in ProcessedUntil
 	pm.mu.Lock()
-	if _, ok := pm.exitEvents[pid]; ok {
-		defer pm.mu.Unlock()
-		defer pm.ebpf.RemoveReportedPID(pid)
+	_, ok := pm.exitEvents[pid]
+	pm.mu.Unlock()
+
+	if ok {
 		log.Debugf("PID %v waiting for cleanup, aborting SynchronizeProcess", pid)
+		pm.ebpf.RemoveReportedPID(pid)
 		return
 	}
-	pm.mu.Unlock()
 
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
