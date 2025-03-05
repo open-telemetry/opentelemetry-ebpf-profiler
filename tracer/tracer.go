@@ -592,7 +592,7 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 	copy(progs, tailCallProgs)
 	progs = append(progs,
 		progLoaderHelper{
-			name:             "tracepoint__sched_process_exit",
+			name:             "disassociate_ctty",
 			noTailCallTarget: true,
 			enable:           true,
 		},
@@ -1336,4 +1336,25 @@ func (t *Tracer) StartOffCPUProfiling() error {
 // TraceProcessor gets the trace processor.
 func (t *Tracer) TraceProcessor() tracehandler.TraceProcessor {
 	return t.processManager
+}
+
+// AttachProcessMonitor attaches a kprobe to track thread group exit. This hook detects
+// the exit of a process and enables us to clean up data we associated with this process.
+func (t *Tracer) AttachProcessMonitor() error {
+	restoreRlimit, err := rlimit.MaximizeMemlock()
+	if err != nil {
+		return fmt.Errorf("failed to adjust rlimit: %v", err)
+	}
+	defer restoreRlimit()
+
+	hookName := "disassociate_ctty"
+	prog := t.ebpfProgs[hookName]
+
+	hook, err := link.Kprobe(hookName, prog, nil)
+	if err != nil {
+		return fmt.Errorf("failed to configure kprobe on %v: %v", hookName, err)
+	}
+
+	t.hooks[hookPoint{group: "kprobe", name: hookName}] = hook
+	return nil
 }
