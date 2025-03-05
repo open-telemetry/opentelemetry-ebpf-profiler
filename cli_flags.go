@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/peterbourgon/ff/v3"
-
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	controller2 "go.opentelemetry.io/ebpf-profiler/pyroscope/internalshim/controller"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
@@ -73,7 +73,7 @@ var (
 // to the same flagset.
 
 func parseArgs() (*controller.Config, error) {
-	var args controller.Config
+	args := new(controller.Config)
 
 	fs := flag.NewFlagSet("ebpf-profiler", flag.ExitOnError)
 
@@ -123,13 +123,15 @@ func parseArgs() (*controller.Config, error) {
 	fs.UintVar(&args.OffCPUThreshold, "off-cpu-threshold",
 		defaultOffCPUThreshold, offCPUThresholdHelp)
 
+	controller2.RegisterPyroscopeFlags(fs, args)
+
 	fs.Usage = func() {
 		fs.PrintDefaults()
 	}
 
 	args.Fs = fs
 
-	return &args, ff.Parse(fs, os.Args[1:],
+	return args, ff.Parse(fs, os.Args[1:],
 		ff.WithEnvVarPrefix("OTEL_PROFILING_AGENT"),
 		ff.WithConfigFileFlag("config"),
 		ff.WithConfigFileParser(ff.PlainParser),

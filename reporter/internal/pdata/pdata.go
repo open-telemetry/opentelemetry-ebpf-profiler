@@ -5,7 +5,6 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 
 import (
 	lru "github.com/elastic/go-freelru"
-
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
@@ -29,10 +28,14 @@ type Pdata struct {
 	// ExtraSampleAttrProd is an optional hook point for adding custom
 	// attributes to samples.
 	ExtraSampleAttrProd samples.SampleAttrProducer
+
+	ExtraNativeSymbolResolver samples.NativeSymbolResolver
 }
 
 func New(samplesPerSecond int, executablesCacheElements, framesCacheElements uint32,
-	extra samples.SampleAttrProducer) (*Pdata, error) {
+	extra samples.SampleAttrProducer,
+	sym samples.NativeSymbolResolver,
+) (*Pdata, error) {
 	executables, err :=
 		lru.NewSynced[libpf.FileID, samples.ExecInfo](executablesCacheElements, libpf.FileID.Hash32)
 	if err != nil {
@@ -49,10 +52,11 @@ func New(samplesPerSecond int, executablesCacheElements, framesCacheElements uin
 	frames.SetLifetime(FramesCacheLifetime) // Allow GC to clean stale items.
 
 	return &Pdata{
-		samplesPerSecond:    samplesPerSecond,
-		Executables:         executables,
-		Frames:              frames,
-		ExtraSampleAttrProd: extra,
+		samplesPerSecond:          samplesPerSecond,
+		Executables:               executables,
+		Frames:                    frames,
+		ExtraSampleAttrProd:       extra,
+		ExtraNativeSymbolResolver: sym,
 	}, nil
 }
 

@@ -259,6 +259,11 @@ func (sp *systemProcess) CalculateMappingFileID(m *Mapping) (libpf.FileID, error
 	return libpf.FileIDFromExecutableFile(sp.getMappingFile(m))
 }
 
+func (sp *systemProcess) OpenRootFSFile(file string) (*os.File, error) {
+	path := fmt.Sprintf("/proc/%v/root/%s", sp.pid, file)
+	return os.Open(path)
+}
+
 func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
 	// Always open via map_files as it can open deleted files if available.
 	// No fallback is attempted:

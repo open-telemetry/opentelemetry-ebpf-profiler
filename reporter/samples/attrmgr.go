@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
 // SampleAttrProducer provides a hook point to:
@@ -28,6 +29,12 @@ type SampleAttrProducer interface {
 	// as Sample attributes. `meta` receives the pointer that was returned from
 	// CollectExtraSampleMeta.
 	ExtraSampleAttrs(attrMgr *AttrTableManager, meta any) []int32
+}
+
+type NativeSymbolResolver interface {
+	Observe(id libpf.FileID, ref *pfelf.Reference) error
+	ResolveAddress(file libpf.FileID, addr uint64) ([]SourceInfoFrame, error)
+	Cleanup()
 }
 
 // AttrTableManager maintains index allocation and deduplication for attribute tables.

@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/dgraph-io/ristretto/v2"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
-	"go.opentelemetry.io/ebpf-profiler/pyroscope/symb/table"
+	"github.com/dgraph-io/ristretto/v2"
 
 	"github.com/sirupsen/logrus"
 
@@ -26,7 +26,7 @@ var errUnknownFile = errors.New("unknown file")
 var erroredMarker = "errored"
 
 type Table interface {
-	Lookup(addr uint64) ([]table.LookupResult, error)
+	Lookup(addr uint64) ([]samples.SourceInfoFrame, error)
 	Close()
 }
 
@@ -45,7 +45,8 @@ type Resolver struct {
 	f        TableFactory
 	mutex    sync.Mutex
 	cacheDir string
-	cache    *ristretto.Cache[string, string]
+	// todo make cache lookups / stores not allocate
+	cache *ristretto.Cache[string, string]
 
 	jobs     chan convertJob
 	tables   map[libpf.FileID]Table
@@ -311,7 +312,10 @@ func (c *Resolver) tableFilePath(fid libpf.FileID) string {
 	return filepath.Join(c.cacheDir, fid.StringNoQuotes())
 }
 
-func (c *Resolver) ResolveAddress(fid libpf.FileID, addr uint64) ([]table.LookupResult, error) {
+func (c *Resolver) ResolveAddress(
+	fid libpf.FileID,
+	addr uint64,
+) ([]samples.SourceInfoFrame, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	v, known := c.cache.Get(fid.StringNoQuotes())

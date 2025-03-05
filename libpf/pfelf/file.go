@@ -605,34 +605,74 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 	return ParseDebugLink(d)
 }
 
-// OpenDebugLink tries to locate and open the corresponding debug ELF for this DSO.
+// OpenDebugLink tries to locate and open the corresponding debug ELF for this DSO,
+// following GDB's search logic for separate debug files.
 func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
 	debugELF *File, debugFile string) {
 	f.debuglinkChecked = true
-	// Get the debug link
-	linkName, linkCRC32, err := f.GetDebugLink()
-	if err != nil {
-		// Treat missing or corrupt tag as soft error.
-		return
+
+	var err error
+
+	buildID, _ := f.GetBuildID()
+
+	globalDebugDirs := []string{
+		"/usr/lib/debug",
 	}
 
-	// Try to find the debug file
-	executablePath := filepath.Dir(elfFilePath)
-	for _, debugPath := range []string{"/usr/lib/debug/"} {
-		debugFile = filepath.Join(debugPath, executablePath, linkName)
-		debugELF, err = elfOpener.OpenELF(debugFile)
+	if buildID != "" {
+		for _, debugDir := range globalDebugDirs {
+			if len(buildID) < 3 {
+				continue
+			}
+			prefix := buildID[:2]
+			suffix := buildID[2:]
+			debugFile = filepath.Join(debugDir, ".build-id", prefix, suffix+".debug")
+
+			debugELF, err = elfOpener.OpenELF(debugFile)
+			if err == nil {
+				f.debuglinkPath = debugFile
+				return debugELF, debugFile
+			}
+		}
+	}
+
+	linkName, linkCRC32, err := f.GetDebugLink()
+	if err != nil {
+		return nil, ""
+	}
+
+	executableDir := filepath.Dir(elfFilePath)
+
+	searchPaths := []string{
+		filepath.Join(executableDir, linkName),
+		filepath.Join(executableDir, ".debug", linkName),
+	}
+
+	for _, debugDir := range globalDebugDirs {
+		relPath := executableDir
+		if filepath.IsAbs(relPath) {
+			relPath = relPath[1:] // Remove leading "/"
+			searchPaths = append(searchPaths, filepath.Join(debugDir, relPath, linkName))
+		}
+	}
+
+	for _, path := range searchPaths {
+		debugELF, err = elfOpener.OpenELF(path)
 		if err != nil {
 			continue
 		}
+
 		fileCRC32, err := debugELF.CRC32()
 		if err != nil || fileCRC32 != linkCRC32 {
 			debugELF.Close()
 			continue
 		}
-		f.debuglinkPath = debugFile
-		return debugELF, debugFile
+
+		f.debuglinkPath = path
+		return debugELF, path
 	}
-	return
+
+	return nil, ""
 }
 
 // CRC32 calculates the .gnu_debuglink compatible CRC-32 of the ELF file

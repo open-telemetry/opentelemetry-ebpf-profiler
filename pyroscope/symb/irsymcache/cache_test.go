@@ -6,6 +6,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -89,7 +91,7 @@ func TestResolver_ResolveAddress(t *testing.T) {
 	type lookup struct {
 		fid         libpf.FileID
 		addr        uint64
-		expectedRes []table.LookupResult
+		expectedRes []samples.SourceInfoFrame
 		expectedErr error
 	}
 	tests := []struct {
@@ -111,8 +113,9 @@ func TestResolver_ResolveAddress(t *testing.T) {
 				{
 					fid:  libpf.NewFileID(456, 123),
 					addr: 0x9cbb0,
-					expectedRes: []table.LookupResult{
-						{Name: "__pthread_create_2_1", File: "./nptl/pthread_create.c", Line: 626},
+					expectedRes: []samples.SourceInfoFrame{
+						{FunctionName: "__pthread_create_2_1",
+							FilePath: "./nptl/pthread_create.c", LineNumber: 626},
 					},
 				},
 			},
@@ -150,8 +153,9 @@ func TestResolver_ResolveAddress(t *testing.T) {
 				{
 					fid:  libpf.NewFileID(4242, 4242),
 					addr: 0x9cbb0,
-					expectedRes: []table.LookupResult{
-						{Name: "__pthread_create_2_1", File: "./nptl/pthread_create.c", Line: 626},
+					expectedRes: []samples.SourceInfoFrame{
+						{FunctionName: "__pthread_create_2_1",
+							FilePath: "./nptl/pthread_create.c", LineNumber: 626},
 					},
 				},
 			},
@@ -198,7 +202,7 @@ func TestResolver_ResolveAddress(t *testing.T) {
 				}
 			}
 			for _, l := range tt.lookups {
-				var results []table.LookupResult
+				var results []samples.SourceInfoFrame
 				results, err = resolver.ResolveAddress(l.fid, l.addr)
 				t.Logf("resolve %s %x = %+v, %+v", l.fid.StringNoQuotes(), l.addr, results, err)
 				if l.expectedErr != nil {

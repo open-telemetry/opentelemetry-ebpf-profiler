@@ -41,6 +41,7 @@ export GOARCH = $(TARGET_ARCH)
 export CC = $(ARCH_PREFIX)gcc
 export OBJCOPY = $(ARCH_PREFIX)objcopy
 
+
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
 COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
 
@@ -51,7 +52,7 @@ REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
 LDFLAGS := -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
 	-X go.opentelemetry.io/ebpf-profiler/vc.revision=$(REVISION) \
 	-X go.opentelemetry.io/ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
-	-extldflags=-static -extldflags=$(SYMBLIB_PATH)
+	-extldflags=-static 
 
 GO_TAGS := osusergo,netgo
 EBPF_FLAGS :=
@@ -82,7 +83,7 @@ ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
 ebpf-profiler: generate ebpf rust-components
-	go build $(GO_FLAGS) -tags $(GO_TAGS)
+	CGO_LDFLAGS=$(SYMBLIB_PATH) go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 rust-targets:
 ifeq ($(TARGET_ARCH),arm64)
@@ -122,7 +123,7 @@ vanity-import-fix: $(PORTO)
 	@porto --include-internal -w .
 
 test: generate ebpf test-deps rust-components
-	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	CGO_LDFLAGS=$(SYMBLIB_PATH) go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
@@ -138,7 +139,7 @@ TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
 
 integration-test-binaries: generate ebpf rust-components
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
-		(go test -ldflags='-extldflags=-static' -trimpath -c \
+		(CGO_LDFLAGS=$(SYMBLIB_PATH) go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
 			-o ./support/$(subst /,_,$(test_name)).test \
 			./$(test_name)) || exit ; \

@@ -159,30 +159,19 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 		frameMap := frameMapLock.WLock()
 		defer frameMapLock.WUnlock(&frameMap)
 
-		sourceFile := args.SourceFile
-		if sourceFile == "" {
-			// The new SourceFile may be empty, and we don't want to overwrite
-			// an existing filePath with it.
-			if s, exists := (*frameMap)[addressOrLine]; exists {
-				sourceFile = s.FilePath
-			}
-		}
-
 		(*frameMap)[addressOrLine] = samples.SourceInfo{
-			LineNumber:     args.SourceLine,
-			FilePath:       sourceFile,
-			FunctionOffset: args.FunctionOffset,
-			FunctionName:   args.FunctionName,
+			Frames: []samples.SourceInfoFrame{},
 		}
 		return
 	}
 
 	v := make(map[libpf.AddressOrLineno]samples.SourceInfo)
 	v[addressOrLine] = samples.SourceInfo{
-		LineNumber:     args.SourceLine,
-		FilePath:       args.SourceFile,
-		FunctionOffset: args.FunctionOffset,
-		FunctionName:   args.FunctionName,
+		Frames: []samples.SourceInfoFrame{{
+			LineNumber:   args.SourceLine,
+			FunctionName: args.FunctionName,
+			FilePath:     args.SourceFile,
+		}},
 	}
 	mu := xsync.NewRWMutex(v)
 	b.pdata.Frames.Add(fileID, &mu)

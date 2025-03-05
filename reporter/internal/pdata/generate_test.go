@@ -185,11 +185,16 @@ func TestFunctionTableOrder(t *testing.T) {
 			},
 			frames: map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo{
 				libpf.NewFileID(2, 3): {
-					libpf.AddressOrLineno(0xef):  {FunctionName: "func1"},
-					libpf.AddressOrLineno(0x1ef): {FunctionName: "func2"},
-					libpf.AddressOrLineno(0x2ef): {FunctionName: "func3"},
-					libpf.AddressOrLineno(0x3ef): {FunctionName: "func4"},
-					libpf.AddressOrLineno(0x4ef): {FunctionName: "func5"},
+					libpf.AddressOrLineno(0xef): {Frames: []samples.SourceInfoFrame{
+						{FunctionName: "func1"}}},
+					libpf.AddressOrLineno(0x1ef): {Frames: []samples.SourceInfoFrame{
+						{FunctionName: "func2"}}},
+					libpf.AddressOrLineno(0x2ef): {Frames: []samples.SourceInfoFrame{
+						{FunctionName: "func3"}}},
+					libpf.AddressOrLineno(0x3ef): {Frames: []samples.SourceInfoFrame{
+						{FunctionName: "func4"}}},
+					libpf.AddressOrLineno(0x4ef): {Frames: []samples.SourceInfoFrame{
+						{FunctionName: "func5"}}},
 				},
 			},
 			events: map[libpf.Origin]samples.KeyToEventMapping{
@@ -247,7 +252,7 @@ func TestFunctionTableOrder(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := New(100, 100, 100, nil)
+			d, err := New(100, 100, 100, nil, nil)
 			require.NoError(t, err)
 			for k, v := range tt.frames {
 				frames := xsync.NewRWMutex[map[libpf.AddressOrLineno]samples.SourceInfo](v)

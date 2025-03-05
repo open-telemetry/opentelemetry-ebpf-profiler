@@ -323,6 +323,7 @@ func TestInterpreterConvertTrace(t *testing.T) {
 				&symbolReporterMockup{},
 				nil,
 				true,
+				nil,
 				dynamicprofiling.AlwaysOnPolicy{},
 			)
 			require.NoError(t, err)
@@ -410,6 +411,7 @@ func TestNewMapping(t *testing.T) {
 				symRepMockup,
 				&dummyProvider,
 				true,
+				nil,
 				dynamicprofiling.AlwaysOnPolicy{},
 			)
 			require.NoError(t, err)
@@ -597,6 +599,7 @@ func TestProcExit(t *testing.T) {
 				repMockup,
 				&dummyProvider,
 				true,
+				nil,
 				dynamicprofiling.AlwaysOnPolicy{},
 			)
 			require.NoError(t, err)
@@ -650,6 +653,7 @@ func TestDynamicProfilingPolicy(t *testing.T) {
 		symRepMockup,
 		&dummyProvider,
 		true,
+		nil,
 		policy)
 	require.NoError(t, err)
 	defer manager.Close()

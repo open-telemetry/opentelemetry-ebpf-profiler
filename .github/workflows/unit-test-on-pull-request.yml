@@ -111,6 +111,7 @@ jobs:
         uses: ./.github/workflows/env
       - name: Prepare integration test binaries for qemu tests
         run: make integration-test-binaries TARGET_ARCH=${{ matrix.target_arch }}
+      - run: ls -ltr support
       - name: Upload integration test binaries
         uses: actions/upload-artifact@v4
         with:
@@ -167,6 +168,7 @@ jobs:
           mv ci-kernels/boot/ ci-kernels/${{ matrix.kernel }}/
       - name: Test on kernel ${{ matrix.kernel }}
         run: |
+          ls -ltr *.test
           chmod a+rx *.test
           case "${{ matrix.target_arch }}" in
             amd64) export QEMU_ARCH=x86_64;;

@@ -9,6 +9,9 @@ import (
 	"os"
 	"sort"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+
 	"golang.org/x/sys/unix"
 )
 
@@ -205,14 +208,8 @@ func (st *Table) line(it entry, addr uint64) (int, error) {
 	return prev, nil
 }
 
-type LookupResult struct {
-	Name string
-	File string
-	Line int
-}
-
-func (st *Table) Lookup(addr64 uint64) ([]LookupResult, error) {
-	var result []LookupResult
+func (st *Table) Lookup(addr64 uint64) ([]samples.SourceInfoFrame, error) {
+	var result []samples.SourceInfoFrame
 
 	addr := addr64
 	idx := sort.Search(int(st.hdr.vaTableHeader.count), func(i int) bool {
@@ -229,17 +226,17 @@ func (st *Table) Lookup(addr64 uint64) ([]LookupResult, error) {
 		covered := it.va <= addr && addr < it.va+it.length
 		if covered {
 			name := st.str(it.funcOffset)
-			res := LookupResult{
-				Name: name,
+			res := samples.SourceInfoFrame{
+				FunctionName: name,
 			}
 			if st.opt.files {
 				if len(result) == 0 {
-					res.File = st.str(it.fileOffset)
+					res.FilePath = st.str(it.fileOffset)
 				} else {
 					if prev.callFile != 0 {
-						res.File = st.str(prev.callFile)
+						res.FilePath = st.str(prev.callFile)
 					} else {
-						res.File = st.str(it.fileOffset)
+						res.FilePath = st.str(it.fileOffset)
 					}
 				}
 			}
@@ -249,9 +246,9 @@ func (st *Table) Lookup(addr64 uint64) ([]LookupResult, error) {
 					if err != nil {
 						return nil, err
 					}
-					res.Line = line
+					res.LineNumber = libpf.SourceLineno(line)
 				} else {
-					res.Line = int(prev.callLine)
+					res.LineNumber = libpf.SourceLineno(int(prev.callLine))
 				}
 			}
 			result = append(result, res)

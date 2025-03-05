@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	lru "github.com/elastic/go-freelru"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -99,6 +100,8 @@ type ProcessManager struct {
 	filterErrorFrames bool
 
 	policy dynamicprofiling.Policy
+
+	fileObserver samples.NativeSymbolResolver
 }
 
 // Mapping represents an executable memory mapping of a process.
@@ -128,6 +131,8 @@ type Mapping struct {
 
 	// File offset of the backing file
 	FileOffset uint64
+
+	FilePath string
 }
 
 // GetOnDiskFileIdentifier returns the OnDiskFileIdentifier for the mapping
