@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -47,8 +48,10 @@ func (t *Tracer) processPIDEvents(ctx context.Context) {
 	defer pidCleanupTicker.Stop()
 	for {
 		select {
-		case pid := <-t.pidEvents:
-			t.processManager.SynchronizeProcess(process.New(pid))
+		case pidTgid := <-t.pidEvents:
+			pid := libpf.PID(pidTgid >> 32)
+			tid := libpf.PID(pidTgid & 0xFFFFFFFF)
+			t.processManager.SynchronizeProcess(process.New(pid, tid))
 		case <-pidCleanupTicker.C:
 			t.processManager.CleanupPIDs()
 		case <-ctx.Done():
