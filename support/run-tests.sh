@@ -3,6 +3,7 @@
 # Requires qemu-system-$QEMU_ARCH and bluebox to be installed.
 
 set -eu
+set -x
 set -o pipefail
 
 qemu_arch="${QEMU_ARCH:-x86_64}"
