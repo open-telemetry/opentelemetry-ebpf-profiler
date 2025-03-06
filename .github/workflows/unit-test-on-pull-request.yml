@@ -75,6 +75,13 @@ jobs:
         uses: actions/checkout@v4
       - name: Set up environment
         uses: ./.github/workflows/env
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache-dependency-path: go.sum
+        id: go
       - name: Cache coredump modules
         uses: actions/cache@v4
         with:
@@ -140,7 +147,7 @@ jobs:
           path: support/*.test
 
   integration-tests:
-    name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }})
+    name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }} ${{ matrix.go_version}})
     runs-on: ubuntu-24.04
     needs: build-integration-test-binaries
     timeout-minutes: 10
@@ -170,6 +177,13 @@ jobs:
     steps:
       - name: Clone code
         uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go_version }}
+          check-latest: true
+          cache-dependency-path: go.sum
+        id: go
       - name: Install dependencies
         run: |
           sudo apt-get update -y
