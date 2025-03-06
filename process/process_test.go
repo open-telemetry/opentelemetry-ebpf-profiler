@@ -98,7 +98,8 @@ func TestParseMappings(t *testing.T) {
 }
 
 func TestNewPIDOfSelf(t *testing.T) {
-	pr := New(libpf.PID(os.Getpid()))
+	pid := libpf.PID(os.Getpid())
+	pr := New(pid, pid)
 	assert.NotNil(t, pr)
 
 	mappings, err := pr.GetMappings()

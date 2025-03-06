@@ -27,8 +27,10 @@ import (
 // process that is currently running on this machine.
 type systemProcess struct {
 	pid libpf.PID
+	tid libpf.PID
 
-	remoteMemory remotememory.RemoteMemory
+	mainThreadExit bool
+	remoteMemory   remotememory.RemoteMemory
 
 	fileToMapping map[string]*Mapping
 }
@@ -52,9 +54,10 @@ func init() {
 }
 
 // New returns an object with Process interface accessing it
-func New(pid libpf.PID) Process {
+func New(pid, tid libpf.PID) Process {
 	return &systemProcess{
 		pid:          pid,
+		tid:          tid,
 		remoteMemory: remotememory.NewProcessVirtualMemory(pid),
 	}
 }
@@ -176,20 +179,37 @@ func (sp *systemProcess) GetMappings() ([]Mapping, error) {
 	defer mapsFile.Close()
 
 	mappings, err := parseMappings(mapsFile)
-	if err == nil {
-		fileToMapping := make(map[string]*Mapping, len(mappings))
-		for idx := range mappings {
-			m := &mappings[idx]
-			if m.Inode == 0 {
-				// Ignore mappings that are invalid,
-				// non-existent or are special pseudo-files.
-				continue
-			}
-			fileToMapping[m.Path] = m
-		}
-		sp.fileToMapping = fileToMapping
+	if err != nil {
+		return mappings, err
 	}
-	return mappings, err
+
+	if len(mappings) == 0 {
+		// TODO: Test for main thread exit
+		sp.mainThreadExit = true
+		mapsFileAlt, err := os.Open(fmt.Sprintf("/proc/%d/task/%d/maps", sp.pid, sp.tid))
+		if err != nil {
+			return mappings, err
+		}
+		defer mapsFileAlt.Close()
+
+		mappings, err = parseMappings(mapsFileAlt)
+		if err != nil {
+			return mappings, err
+		}
+	}
+
+	fileToMapping := make(map[string]*Mapping, len(mappings))
+	for idx := range mappings {
+		m := &mappings[idx]
+		if m.Inode == 0 {
+			// Ignore mappings that are invalid,
+			// non-existent or are special pseudo-files.
+			continue
+		}
+		fileToMapping[m.Path] = m
+	}
+	sp.fileToMapping = fileToMapping
+	return mappings, nil
 }
 
 func (sp *systemProcess) GetThreads() ([]ThreadInfo, error) {
@@ -217,6 +237,11 @@ func (sp *systemProcess) extractMapping(m *Mapping) (*bytes.Reader, error) {
 func (sp *systemProcess) getMappingFile(m *Mapping) string {
 	if m.IsAnonymous() || m.IsVDSO() {
 		return ""
+	}
+	if sp.mainThreadExit {
+		// Neither /proc/sp.pid/map_files nor /proc/sp.pid/task/sp.tid/map_files
+		// exist if main thread has exited, so we use the mapping path directly.
+		return m.Path
 	}
 	return fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
 }

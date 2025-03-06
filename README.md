@@ -409,7 +409,7 @@ traces user-land will simply read and then clear this map on a timer.
 The BPF components are responsible for notifying user-land about new and exiting
 processes. An event about a new process is produced when we first interrupt it
 with the unwinders. Events about exiting processes are created with a
-`sched_process_exit` probe. In both cases the BPF code sends a perf event to
+`disassociate_ctty` kprobe. In both cases the BPF code sends a perf event to
 notify user-land. We also re-report a PID if we detect execution in previously
 unknown memory region to prompt re-scan of the mappings.
 
