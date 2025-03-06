@@ -112,7 +112,7 @@ jobs:
 
 
   build-integration-test-binaries:
-    name: Build integration test binaries (${{ matrix.target_arch }})
+    name: Build integration test binaries (${{ matrix.target_arch }}-${{ matrix.go_version}})
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
