@@ -604,8 +604,8 @@ typedef struct NativeCustomLabelsThreadLocalData {
 #define MAX_CUSTOM_LABELS 10
 
 typedef struct CustomLabelsArray {
-    unsigned len;
-    CustomLabel labels[MAX_CUSTOM_LABELS];
+  unsigned len;
+  CustomLabel labels[MAX_CUSTOM_LABELS];
 } CustomLabelsArray;
 
 // Container for a stack trace
@@ -736,18 +736,18 @@ typedef struct LJState {
   void *glref;
   void *dummy3;
   TValue *base;     /* Base of currently executing function. */
-  TValue *top;		  /* First free slot in the stack. */
-  TValue *maxstack;	/* Last free slot in the stack. */
-  TValue *stack;	  /* Stack base. */
-  void* openupval;	/* List of open upvalues in the stack. */
-  void* env;		/* Thread environment (table of globals). */
-  void *cframe;		/* End of C stack frame chain. */
+  TValue *top;      /* First free slot in the stack. */
+  TValue *maxstack; /* Last free slot in the stack. */
+  TValue *stack;    /* Stack base. */
+  void *openupval;  /* List of open upvalues in the stack. */
+  void *env;        /* Thread environment (table of globals). */
+  void *cframe;     /* End of C stack frame chain. */
 } LJState;
 
 // These two are always adjacent, cur_L offset comes from HA.
 typedef struct LJGlobalPart {
   void *cur_L;
-  TValue* jit_base;
+  TValue *jit_base;
 } LJGlobalPart;
 
 // Part of a function we need access to, skips first 8 bytes.  Again
@@ -773,12 +773,12 @@ typedef struct LJScratchSpace {
 } LJScratchSpace;
 
 typedef struct LJUnwindState {
-  TValue* frame;
-  TValue* prevframe;
-  void* L_ptr;
+  TValue *frame;
+  TValue *prevframe;
+  void *L_ptr;
   // If we have intertwined interpreter and native frames use cframe to track we have more
   // jumps back to native unwinder to do.
-  void* cframe;
+  void *cframe;
   bool is_jit;
 } LJUnwindState;
 
@@ -823,23 +823,22 @@ typedef struct PythonUnwindScratchSpace {
   u8 code[192];
 } PythonUnwindScratchSpace;
 
-
 struct GoString {
-    char *str;
-    u64 len;
+  char *str;
+  u64 len;
 };
 
 struct GoSlice {
-    void *array;
-    u64 len;
-    s64 cap;
+  void *array;
+  u64 len;
+  s64 cap;
 };
 
 typedef struct GoMapBucket {
-    char tophash[8];
-    struct GoString keys[8];
-    struct GoString values[8];
-    void *overflow;
+  char tophash[8];
+  struct GoString keys[8];
+  struct GoString values[8];
+  void *overflow;
 } GoMapBucket;
 
 typedef struct CustomLabelsState {
@@ -1076,7 +1075,5 @@ typedef struct GoCustomLabelsOffsets {
   u32 hmap_log2_bucket_count;
   u32 hmap_buckets;
 } GoCustomLabelsOffsets;
-
-
 
 #endif // OPTI_TYPES_H
