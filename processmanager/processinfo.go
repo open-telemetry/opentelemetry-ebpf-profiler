@@ -9,7 +9,7 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 // these two components can be audited to be consistent.
 
 // The public functions in this file are restricted to be used from the
-// HA/tracer and utils/coredump modules only.
+// HA/tracer and tools/coredump modules only.
 
 import (
 	"errors"
@@ -32,6 +32,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
+	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -82,7 +83,13 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 	if !ok {
 		// We don't have information for this pid, so we first need to
 		// allocate the embedded map for this process.
+		var processName string
+		exePath, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
+		if name, err := os.ReadFile(fmt.Sprintf("/prod/%d/comm", pid)); err == nil {
+			processName = string(name)
+		}
 		info = &processInfo{
+			meta:             ProcessMeta{Name: processName, Executable: exePath},
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
 			tsdInfo:          nil,
@@ -499,53 +506,57 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	return newProcess
 }
 
-// ProcessPIDExit informs the ProcessManager that a process exited and no longer will be scheduled
-// for processing. It also schedules immediate symbolization if the exited PID needs it. exitKTime
-// is stored for later processing in SymbolizationComplete when all traces have been collected.
-// There can be a race condition if we can not clean up the references for this process
+// processPIDExit informs the ProcessManager that a process exited and no longer will be scheduled.
+// exitKTime is stored for later processing in ProcessedUntil, when traces up to this time have been
+// processed. There can be a race condition if we can not clean up the references for this process
 // fast enough and this particular pid is reused again by the system.
-// NOTE: Exported only for tracer.
-func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) bool {
+func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
+	exitKTime := times.GetKTime()
 	log.Debugf("- PID: %v", pid)
-	defer pm.ebpf.RemoveReportedPID(pid)
 
+	var err error
+	defer func() {
+		if err != nil {
+			log.Error(err)
+		}
+	}()
+	defer pm.ebpf.RemoveReportedPID(pid)
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	symbolize := false
-	exitKTime := times.GetKTime()
-	if pm.interpreterTracerEnabled {
-		if len(pm.interpreters[pid]) > 0 {
-			pm.exitEvents[pid] = exitKTime
-			symbolize = true
-		}
+	info, pidExists := pm.pidToProcessInfo[pid]
+	if !pidExists {
+		log.Debugf("Skip process exit handling for unknown PID %d", pid)
+		return
 	}
 
-	info, ok := pm.pidToProcessInfo[pid]
-	if !ok {
-		log.Debugf("Skip process exit handling for unknown PID %d", pid)
-		return symbolize
+	// ProcessPIDExit may be called multiple times in short succession
+	// for the same PID, don't update exitKTime if we've previously recorded it.
+	if _, pidExitProcessed := pm.exitEvents[pid]; !pidExitProcessed {
+		pm.exitEvents[pid] = exitKTime
+	} else {
+		log.Debugf("Skip duplicate process exit handling for PID %d", pid)
+		return
 	}
 
 	// Delete all entries we have for this particular PID from pid_page_to_mapping_info.
-	deleted, err := pm.ebpf.DeletePidPageMappingInfo(pid, []lpm.Prefix{dummyPrefix})
-	if err != nil {
-		log.Errorf("Failed to delete dummy prefix for PID %d: %v",
-			pid, err)
+	deleted, err2 := pm.ebpf.DeletePidPageMappingInfo(pid, []lpm.Prefix{dummyPrefix})
+	if err2 != nil {
+		err = errors.Join(err, fmt.Errorf("failed to delete dummy prefix for PID %d: %v",
+			pid, err2))
 	}
 	pm.pidPageToMappingInfoSize -= uint64(deleted)
 
 	for address := range info.mappings {
-		if err := pm.deletePIDAddress(pid, address); err != nil {
-			log.Errorf("Failed to delete address 0x%x for PID %d: %v",
-				address, pid, err)
+		if err2 = pm.deletePIDAddress(pid, address); err2 != nil {
+			err = errors.Join(err, fmt.Errorf("failed to delete address %#x for PID %d: %v",
+				address, pid, err2))
 		}
 	}
-	delete(pm.pidToProcessInfo, pid)
-
-	return symbolize
 }
 
+// SynchronizeProcess triggers ProcessManager to update its internal information
+// about a process. This includes process exit information as well as changed memory mappings.
 func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pid := pr.PID()
 	log.Debugf("= PID: %v", pid)
@@ -567,7 +578,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 		// All other errors imply that the process has exited.
 		// Clean up, and notify eBPF.
-		pm.ProcessPIDExit(pid)
+		pm.processPIDExit(pid)
 		if os.IsNotExist(err) {
 			// Since listing /proc and opening files in there later is inherently racy,
 			// we expect to lose the race sometimes and thus expect to hit os.IsNotExist.
@@ -593,7 +604,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		//    the process is changing: all mappings, comm, etc. If execve fails, we
 		//    reaped it early. If execve succeeds, we will get new synchronization
 		//    request soon, and handle it as a new process event.
-		pm.ProcessPIDExit(pid)
+		pm.processPIDExit(pid)
 		return
 	}
 
@@ -631,10 +642,84 @@ func (pm *ProcessManager) CleanupPIDs() {
 	pm.mu.RUnlock()
 
 	for _, pid := range deadPids {
-		pm.ProcessPIDExit(pid)
+		pm.processPIDExit(pid)
 	}
 
 	if len(deadPids) > 0 {
 		log.Debugf("Cleaned up %d dead PIDs", len(deadPids))
 	}
 }
+
+// MetaForPID returns the process metadata for given PID.
+func (pm *ProcessManager) MetaForPID(pid libpf.PID) ProcessMeta {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
+		return procInfo.meta
+	}
+	return ProcessMeta{}
+}
+
+// findMappingForTrace locates the mapping for a given host trace.
+func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
+	addr libpf.AddressOrLineno) (m Mapping, found bool) {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	procInfo, ok := pm.pidToProcessInfo[pid]
+	if !ok {
+		return Mapping{}, false
+	}
+
+	fidMappings, ok := procInfo.mappingsByFileID[fid]
+	if !ok {
+		return Mapping{}, false
+	}
+
+	for _, candidate := range fidMappings {
+		procSpaceVA := libpf.Address(uint64(addr) + candidate.Bias)
+		mappingEnd := candidate.Vaddr + libpf.Address(candidate.Length)
+		if procSpaceVA >= candidate.Vaddr && procSpaceVA <= mappingEnd {
+			return *candidate, true
+		}
+	}
+
+	return Mapping{}, false
+}
+
+func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
+	var err error
+	defer func() {
+		if err != nil {
+			log.Error(err)
+		}
+	}()
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	nowKTime := times.GetKTime()
+	log.Debugf("ProcessedUntil captureKT: %v latency: %v ms",
+		traceCaptureKTime, (nowKTime-traceCaptureKTime)/1e6)
+
+	for pid, pidExitKTime := range pm.exitEvents {
+		if pidExitKTime > traceCaptureKTime {
+			continue
+		}
+
+		delete(pm.pidToProcessInfo, pid)
+
+		for _, instance := range pm.interpreters[pid] {
+			if err2 := instance.Detach(pm.ebpf, pid); err2 != nil {
+				err = errors.Join(err,
+					fmt.Errorf("failed to handle interpreted process exit for PID %d: %v",
+						pid, err2))
+			}
+		}
+		delete(pm.interpreters, pid)
+		delete(pm.exitEvents, pid)
+		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
+	}
+}
+
+// Compile time check to make sure we satisfy the interface.
+var _ tracehandler.TraceProcessor = (*ProcessManager)(nil)

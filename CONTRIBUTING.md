@@ -18,6 +18,13 @@ get invited to meetings.
 See the [#otel-profiles](https://cloud-native.slack.com/archives/C03J794L0BV)
 slack channel for discussions and questions.
 
+## Pre-requisites
+
+- Linux (4.19+ for x86-64, 5.5+ for ARM64) with eBPF enabled (the profiler currently only runs on Linux)
+- Go as specified in [go.mod](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/go.mod)
+- docker
+- Rust as specified in [Cargo.toml](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/Cargo.toml)
+
 ## Development
 
 You can view and edit the source code by cloning this repository:

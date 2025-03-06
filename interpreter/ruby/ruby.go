@@ -33,9 +33,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-// #include "../../support/ebpf/types.h"
-import "C"
-
 const (
 	// iseqCacheSize is the LRU size for caching Ruby instruction sequences for an interpreter.
 	// This should reflect the number of hot functions that are seen often in a trace.
@@ -181,29 +178,28 @@ func rubyVersion(major, minor, release uint32) uint32 {
 
 func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-	cdata := C.RubyProcInfo{
-		version: C.u32(r.version),
+	cdata := support.RubyProcInfo{
+		Version: r.version,
 
-		current_ctx_ptr: C.u64(r.currentCtxPtr + bias),
+		Current_ctx_ptr: uint64(r.currentCtxPtr + bias),
 
-		vm_stack:      C.u8(r.vmStructs.execution_context_struct.vm_stack),
-		vm_stack_size: C.u8(r.vmStructs.execution_context_struct.vm_stack_size),
-		cfp:           C.u8(r.vmStructs.execution_context_struct.cfp),
+		Vm_stack:      r.vmStructs.execution_context_struct.vm_stack,
+		Vm_stack_size: r.vmStructs.execution_context_struct.vm_stack_size,
+		Cfp:           r.vmStructs.execution_context_struct.cfp,
 
-		pc:   C.u8(r.vmStructs.control_frame_struct.pc),
-		iseq: C.u8(r.vmStructs.control_frame_struct.iseq),
-		ep:   C.u8(r.vmStructs.control_frame_struct.ep),
-		size_of_control_frame_struct: C.u8(
-			r.vmStructs.control_frame_struct.size_of_control_frame_struct),
+		Pc:                           r.vmStructs.control_frame_struct.pc,
+		Iseq:                         r.vmStructs.control_frame_struct.iseq,
+		Ep:                           r.vmStructs.control_frame_struct.ep,
+		Size_of_control_frame_struct: r.vmStructs.control_frame_struct.size_of_control_frame_struct,
 
-		body: C.u8(r.vmStructs.iseq_struct.body),
+		Body: r.vmStructs.iseq_struct.body,
 
-		iseq_size:    C.u8(r.vmStructs.iseq_constant_body.size),
-		iseq_encoded: C.u8(r.vmStructs.iseq_constant_body.encoded),
+		Iseq_size:    r.vmStructs.iseq_constant_body.size,
+		Iseq_encoded: r.vmStructs.iseq_constant_body.encoded,
 
-		size_of_value: C.u8(r.vmStructs.size_of_value),
+		Size_of_value: r.vmStructs.size_of_value,
 
-		running_ec: C.u16(r.vmStructs.rb_ractor_struct.running_ec),
+		Running_ec: r.vmStructs.rb_ractor_struct.running_ec,
 	}
 
 	if err := ebpf.UpdateProcData(libpf.Ruby, pid, unsafe.Pointer(&cdata)); err != nil {

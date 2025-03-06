@@ -2,6 +2,7 @@ SHELL ?= bash
 BPF_CLANG ?= clang-17
 BPF_LINK ?= llvm-link-17
 LLC ?= llc-17
+CLANG_FORMAT ?= clang-format-17
 
 DEBUG_FLAGS = -DOPTI_DEBUG -g
 
@@ -24,9 +25,9 @@ BUILD_TYPE ?= release
 TRACER_NAME ?= tracer.ebpf.$(BUILD_TYPE).$(TARGET_ARCH)
 
 ifeq ($(TARGET_ARCH),arm64)
-TARGET_FLAGS = -D__aarch64__ -D__aarch64
+TARGET_FLAGS = -target aarch64-linux-gnu
 else
-TARGET_FLAGS = -D__x86_64__ -D__x86_64
+TARGET_FLAGS = -target x86_64-linux-gnu
 endif
 
 ifeq ($(BUILD_TYPE),debug)
@@ -34,7 +35,6 @@ ifeq ($(BUILD_TYPE),debug)
 endif
 
 FLAGS=$(TARGET_FLAGS) \
-	-target bpf \
 	-fno-jump-tables \
 	-nostdlib \
 	-nostdinc \
@@ -86,6 +86,12 @@ baseline: $(TRACER_NAME)
 
 bloatcheck: $(TRACER_NAME)
 	python3 bloat-o-meter $(TRACER_NAME).baseline $(TRACER_NAME)
+
+lint:
+	$(CLANG_FORMAT) -Werror --dry-run -style=file *.[ch]
+
+format:
+	$(CLANG_FORMAT) -i -style=file *.[ch]
 
 clean:
 	rm -f *.o

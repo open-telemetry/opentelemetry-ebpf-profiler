@@ -18,7 +18,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version-file: go.mod
           check-latest: true
           cache-dependency-path: go.sum
         id: go
@@ -27,27 +27,6 @@ jobs:
           make legal
           if [ -n "$(git status --porcelain)" ]; then
             echo "run \"make legal\"."
-            exit 1
-          fi
-
-  tracer:
-    name: Check that tracer is up-to-date
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        target_arch: [amd64, arm64]
-    steps:
-      - name: Clone code
-        uses: actions/checkout@v4
-      - name: Set up environment
-        uses: ./.github/workflows/env
-      - name: Check that tracer is up-to-date
-        env:
-          TARGET_ARCH: ${{ matrix.target_arch }}
-        run: |
-          make -C support/ebpf
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "run \"make -C support/ebpf\"."
             exit 1
           fi
 
@@ -65,7 +44,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version-file: go.mod
           check-latest: true
           cache-dependency-path: go.sum
         id: go
@@ -79,6 +58,11 @@ jobs:
           CGO_ENABLED: 1
         with:
           version: ${{ steps.linter-version.outputs.version }}
+      - name: Lint eBPF code
+        run: |
+          sudo apt update
+          sudo apt install -y clang-format-17
+          make lint -C support/ebpf
 
   test:
     name: Test (${{ matrix.target_arch }})
@@ -91,6 +75,13 @@ jobs:
         uses: actions/checkout@v4
       - name: Set up environment
         uses: ./.github/workflows/env
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache-dependency-path: go.sum
+        id: go
       - name: Cache coredump modules
         uses: actions/cache@v4
         with:
@@ -99,11 +90,36 @@ jobs:
           restore-keys: |
             coredumps-${{ matrix.target_arch }}
             coredumps-
+      - name: Direct Rust test
+        run: make rust-tests
       - name: Tests
         run: make test TARGET_ARCH=${{ matrix.target_arch }}
 
+  check-ebpf-blobs:
+    name: Check for differences in the eBPF binary blobs
+    runs-on: ubuntu-24.04
+    container: otel/opentelemetry-ebpf-profiler-dev:latest
+    steps:
+      - name: Clone code
+        uses: actions/checkout@v4
+      - name: Hash eBPF blobs
+        run: |
+          sha256sum support/ebpf/tracer.ebpf.release.* > ebpf-blobs.hash
+      - name: Rebuild eBPF blobs
+        run: |
+          rm support/ebpf/tracer.ebpf.release.*
+          make amd64 -C support/ebpf
+          make arm64 -C support/ebpf
+      - name: Check for differences
+        run: |
+          if ! sha256sum --check ebpf-blobs.hash; then
+            echo "Please rebuild and commit the updated eBPF binary blobs."
+            exit 1
+          fi
+
+
   build-integration-test-binaries:
-    name: Build integration test binaries (${{ matrix.target_arch }})
+    name: Build integration test binaries (${{ matrix.target_arch }}-${{ matrix.go_version}})
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -131,7 +147,7 @@ jobs:
           path: support/*.test
 
   integration-tests:
-    name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }})
+    name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }} ${{ matrix.go_version}})
     runs-on: ubuntu-24.04
     needs: build-integration-test-binaries
     timeout-minutes: 10
@@ -151,18 +167,26 @@ jobs:
           - { target_arch: amd64, kernel: 6.6.31 }
           - { target_arch: amd64, kernel: 6.8.10 }
           - { target_arch: amd64, kernel: 6.9.1 }
+          - { target_arch: amd64, kernel: 6.12.16 }
 
           # ARM64 (NOTE: older ARM64 kernels are not available in Cilium repos)
           - { target_arch: arm64, kernel: 6.6.31 }
           - { target_arch: arm64, kernel: 6.8.4 }
           - { target_arch: arm64, kernel: 6.9.1 }
+          - { target_arch: arm64, kernel: 6.12.16 }
     steps:
       - name: Clone code
         uses: actions/checkout@v4
-      - name: Set up environment
-        uses: ./.github/workflows/env
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go_version }}
+          check-latest: true
+          cache-dependency-path: go.sum
+        id: go
       - name: Install dependencies
         run: |
+          sudo apt-get update -y
           case "${{ matrix.target_arch }}" in
             amd64) sudo apt-get -y install qemu-system-x86;;
             arm64) sudo apt-get -y install qemu-system-arm;;

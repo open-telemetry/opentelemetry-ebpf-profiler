@@ -124,7 +124,6 @@ type instance struct {
 
 func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-
 	abiVersion, err := rm.Uint32Checked(bias + d.abiVersionElfVA)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read custom labels ABI version: %w", err)

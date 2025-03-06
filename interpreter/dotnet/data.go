@@ -14,10 +14,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
-
-// #include "../../support/ebpf/types.h"
-import "C"
 
 type dotnetData struct {
 	// version contains the version
@@ -144,8 +142,8 @@ func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias li
 		return nil, err
 	}
 
-	procInfo := C.DotnetProcInfo{
-		version: C.uint(d.version),
+	procInfo := support.DotnetProcInfo{
+		Version: d.version,
 	}
 	if err = ebpf.UpdateProcData(libpf.Dotnet, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err

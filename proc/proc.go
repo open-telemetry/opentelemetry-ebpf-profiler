@@ -141,7 +141,7 @@ func parseKernelModules(scanner *bufio.Scanner) ([]kernelModule, error) {
 
 		kmod, err := parseKernelModuleLine(line)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse kernel module line: %v", err)
+			return nil, fmt.Errorf("failed to parse kernel module line '%s': %v", line, err)
 		}
 		if kmod.address == 0 {
 			continue
@@ -165,22 +165,21 @@ type kernelModule struct {
 }
 
 func parseKernelModuleLine(line string) (kernelModule, error) {
-	// The format is: "name size refcount dependencies state address flags"
+	// The format is: "name size refcount dependencies state address"
+	// The string is split into 7 parts as after address there can be an optional string.
 	parts := strings.SplitN(line, " ", 7)
-
-	// At least 6 parts are expected (flags are not always present and are not needed here)
 	if len(parts) < 6 {
 		return kernelModule{}, fmt.Errorf("unexpected line in modules: '%s'", line)
 	}
 
 	size, err := parseSize(parts[1])
 	if err != nil {
-		return kernelModule{}, fmt.Errorf("failed to parse size value: '%s'", parts[1])
+		return kernelModule{}, err
 	}
 
 	address, err := parseAddress(parts[5])
 	if err != nil {
-		return kernelModule{}, fmt.Errorf("failed to parse address value: '%s'", parts[5])
+		return kernelModule{}, err
 	}
 
 	return kernelModule{
@@ -193,7 +192,8 @@ func parseKernelModuleLine(line string) (kernelModule, error) {
 func parseAddress(addressStr string) (uint64, error) {
 	address, err := strconv.ParseUint(strings.TrimPrefix(addressStr, "0x"), 16, 64)
 	if err != nil {
-		return 0, fmt.Errorf("failed to parse address as hex value: '%s'", addressStr)
+		return 0, fmt.Errorf("failed to parse address '%s' as hex value: %v",
+			addressStr, err)
 	}
 
 	return address, nil
@@ -202,7 +202,7 @@ func parseAddress(addressStr string) (uint64, error) {
 func parseSize(sizeStr string) (uint64, error) {
 	size, err := strconv.ParseUint(sizeStr, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("failed to parse size int value: %q", sizeStr)
+		return 0, fmt.Errorf("failed to parse size int value: %q: %v", sizeStr, err)
 	}
 
 	return size, nil

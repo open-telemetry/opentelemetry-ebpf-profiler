@@ -6,8 +6,9 @@
 #include "bpf_map.h"
 
 // References to map definitions in *.ebpf.c.
-extern bpf_map_def progs;
+extern bpf_map_def perf_progs;
 extern bpf_map_def per_cpu_records;
+extern bpf_map_def kernel_stackmap;
 extern bpf_map_def pid_page_to_mapping_info;
 extern bpf_map_def metrics;
 extern bpf_map_def report_events;
@@ -42,7 +43,6 @@ extern bpf_map_def exe_id_to_21_stack_deltas;
 extern bpf_map_def exe_id_to_22_stack_deltas;
 extern bpf_map_def exe_id_to_23_stack_deltas;
 extern bpf_map_def hotspot_procs;
-extern bpf_map_def kernel_stackmap;
 extern bpf_map_def dotnet_procs;
 extern bpf_map_def perl_procs;
 extern bpf_map_def php_procs;
@@ -55,4 +55,4 @@ extern bpf_map_def luajit_procs;
 
 #endif // TESTING_COREDUMP
 
-#endif  // OPTI_EXTMAPS_H
+#endif // OPTI_EXTMAPS_H

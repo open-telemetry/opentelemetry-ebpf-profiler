@@ -13,7 +13,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 )
@@ -40,7 +40,7 @@ func (f *fakeTraceProcessor) ConvertTrace(trace *host.Trace) (*libpf.Trace, erro
 	return &newTrace, nil
 }
 
-func (f *fakeTraceProcessor) SymbolizationComplete(times.KTime) {}
+func (f *fakeTraceProcessor) ProcessedUntil(times.KTime) {}
 
 func (f *fakeTraceProcessor) MaybeNotifyAPMAgent(*host.Trace, libpf.TraceHash, uint16) string {
 	return ""
@@ -75,7 +75,7 @@ func (m *mockReporter) ReportFramesForTrace(trace *libpf.Trace) {
 }
 
 func (m *mockReporter) ReportCountForTrace(traceHash libpf.TraceHash,
-	count uint16, _ *reporter.TraceEventMeta) {
+	count uint16, _ *samples.TraceEventMeta) {
 	m.reportedCounts = append(m.reportedCounts, reportedCount{
 		traceHash: traceHash,
 		count:     count,
@@ -85,7 +85,7 @@ func (m *mockReporter) ReportCountForTrace(traceHash libpf.TraceHash,
 
 func (m *mockReporter) SupportsReportTraceEvent() bool { return false }
 
-func (m *mockReporter) ReportTraceEvent(_ *libpf.Trace, _ *reporter.TraceEventMeta) {
+func (m *mockReporter) ReportTraceEvent(_ *libpf.Trace, _ *samples.TraceEventMeta) {
 }
 
 func TestTraceHandler(t *testing.T) {

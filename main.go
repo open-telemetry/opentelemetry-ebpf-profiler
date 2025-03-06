@@ -114,6 +114,7 @@ func mainWithExitCode() exitCode {
 		log.Error(err)
 		return exitFailure
 	}
+	cfg.HostName, cfg.IPAddress = hostname, sourceIP
 
 	rep, err := reporter.NewOTLP(&reporter.Config{
 		CollAgentAddr:            cfg.CollAgentAddr,
@@ -124,7 +125,7 @@ func mainWithExitCode() exitCode {
 		GRPCStartupBackoffTime:   intervals.GRPCStartupBackoffTime(),
 		GRPCConnectionTimeout:    intervals.GRPCConnectionTimeout(),
 		ReportInterval:           intervals.ReportInterval(),
-		ExecutablesCacheElements: 4096,
+		ExecutablesCacheElements: 16384,
 		// Next step: Calculate FramesCacheElements from numCores and samplingRate.
 		FramesCacheElements: 65536,
 		CGroupCacheElements: 1024,

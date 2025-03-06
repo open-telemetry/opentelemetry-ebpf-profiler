@@ -15,9 +15,11 @@ import (
 	"github.com/cilium/ebpf/perf"
 	log "github.com/sirupsen/logrus"
 
+	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/times"
 )
 
 /*
@@ -125,20 +127,19 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 	}
 }
 
-// startPollingPerfEventMonitor spawns a goroutine that receives events from
-// the given perf event map by periodically polling the perf event buffer.
+// startTraceEventMonitor spawns a goroutine that receives trace events from
+// the kernel by periodically polling the underlying perf event buffer.
 // Events written to the perf event buffer do not wake user-land immediately.
 //
-// For each received event, triggerFunc is called. triggerFunc may NOT store
-// references into the buffer that it is given: the buffer is re-used across
-// calls. Returns a function that can be called to retrieve perf event array
+// Returns a function that can be called to retrieve perf event array
 // error counts.
-func startPollingPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
-	pollFrequency time.Duration, perCPUBufferSize int, triggerFunc func([]byte, int),
-) func() (lost, noData, readError uint64) {
-	eventReader, err := perf.NewReader(perfEventMap, perCPUBufferSize)
+func (t *Tracer) startTraceEventMonitor(ctx context.Context,
+	traceOutChan chan<- *host.Trace) func() []metrics.Metric {
+	eventsMap := t.ebpfMaps["trace_events"]
+	eventReader, err := perf.NewReader(eventsMap,
+		t.samplesPerSecond*int(unsafe.Sizeof(C.Trace{})))
 	if err != nil {
-		log.Fatalf("Failed to setup perf reporting via %s: %v", perfEventMap, err)
+		log.Fatalf("Failed to setup perf reporting via %s: %v", eventsMap, err)
 	}
 
 	// A deadline of zero is treated as "no deadline". A deadline in the past
@@ -146,11 +147,13 @@ func startPollingPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 	// unix epoch to always ensure the latter behavior.
 	eventReader.SetDeadline(time.Unix(1, 0))
 
-	pollTicker := time.NewTicker(pollFrequency)
-
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
 	go func() {
 		var data perf.Record
+		var oldKTime, minKTime times.KTime
+
+		pollTicker := time.NewTicker(t.intervals.TracePollInterval())
+		defer pollTicker.Stop()
 
 	PollLoop:
 		for {
@@ -161,13 +164,13 @@ func startPollingPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 				break PollLoop
 			}
 
+			minKTime = 0
 			// Eagerly read events until the buffer is exhausted.
 			for {
 				if err = eventReader.ReadInto(&data); err != nil {
 					if !errors.Is(err, os.ErrDeadlineExceeded) {
 						readErrorCount.Add(1)
 					}
-
 					break
 				}
 				if data.LostSamples != 0 {
@@ -178,16 +181,58 @@ func startPollingPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 					noDataCount.Add(1)
 					continue
 				}
-				triggerFunc(data.RawSample, data.CPU)
+
+				// Keep track of min KTime seen in this batch processing loop
+				trace := t.loadBpfTrace(data.RawSample, data.CPU)
+				if minKTime == 0 || trace.KTime < minKTime {
+					minKTime = trace.KTime
+				}
+				traceOutChan <- trace
 			}
+			// After we've received and processed all trace events, call
+			// ProcessedUntil if there is a pending oldKTime that we
+			// haven't yet propagated to the rest of the agent.
+			// This introduces both an upper bound to ProcessedUntil
+			// call frequency (dictated by pollTicker) but also skips calls
+			// when none are needed (e.g. no trace events have been read).
+			//
+			// We use oldKTime instead of minKTime (except when the latter is
+			// smaller than the former) to take into account scheduling delays
+			// that could in theory result in observed KTime going back in time.
+			//
+			// For example, as we don't control ordering of trace events being
+			// written by the kernel in per-CPU buffers across CPU cores, it's
+			// possible that given events generated on different cores with
+			// timestamps t0 < t1 < t2 < t3, this poll loop reads [t3 t1 t2]
+			// in a first iteration and [t0] in a second iteration. If we use
+			// the current iteration minKTime we'll call
+			// ProcessedUntil(t1) first and t0 next, with t0 < t1.
+			if oldKTime > 0 {
+				// Ensure that all previously sent trace events have been processed
+				traceOutChan <- nil
+
+				if minKTime > 0 && minKTime <= oldKTime {
+					// If minKTime is smaller than oldKTime, use it and reset it
+					// to avoid a repeat during next iteration.
+					t.TraceProcessor().ProcessedUntil(minKTime)
+					minKTime = 0
+				} else {
+					t.TraceProcessor().ProcessedUntil(oldKTime)
+				}
+			}
+			oldKTime = minKTime
 		}
 	}()
 
-	return func() (lost, noData, readError uint64) {
-		lost = lostEventsCount.Swap(0)
-		noData = noDataCount.Swap(0)
-		readError = readErrorCount.Swap(0)
-		return
+	return func() []metrics.Metric {
+		lost := lostEventsCount.Swap(0)
+		noData := noDataCount.Swap(0)
+		readError := readErrorCount.Swap(0)
+		return []metrics.Metric{
+			{ID: metrics.IDTraceEventLost, Value: metrics.MetricValue(lost)},
+			{ID: metrics.IDTraceEventNoData, Value: metrics.MetricValue(noData)},
+			{ID: metrics.IDTraceEventReadError, Value: metrics.MetricValue(readError)},
+		}
 	}
 }
 

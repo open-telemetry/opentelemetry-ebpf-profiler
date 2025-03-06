@@ -123,8 +123,9 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 	}
 
 	// Parse the zend_function structure
-	ftype := npsr.Uint8(fobj, vms.zend_function.common_type)
-	fname := i.rm.String(npsr.Ptr(fobj, vms.zend_function.common_funcname) + vms.zend_string.val)
+	ftype := npsr.Uint8(fobj, uint(vms.zend_function.common_type))
+	fname := i.rm.String(npsr.Ptr(fobj, uint(vms.zend_function.common_funcname)) +
+		vms.zend_string.val)
 
 	if fname != "" && !util.IsValidString(fname) {
 		log.Debugf("Extracted invalid PHP function name at 0x%x '%v'", addr, []byte(fname))

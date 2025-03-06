@@ -28,7 +28,6 @@ import (
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -299,33 +298,6 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 	return newTrace, nil
 }
 
-// findMappingForTrace locates the mapping for a given host trace.
-func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
-	addr libpf.AddressOrLineno) (m Mapping, found bool) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-
-	procInfo, ok := pm.pidToProcessInfo[pid]
-	if !ok {
-		return Mapping{}, false
-	}
-
-	fidMappings, ok := procInfo.mappingsByFileID[fid]
-	if !ok {
-		return Mapping{}, false
-	}
-
-	for _, candidate := range fidMappings {
-		procSpaceVA := libpf.Address(uint64(addr) + candidate.Bias)
-		mappingEnd := candidate.Vaddr + libpf.Address(candidate.Length)
-		if procSpaceVA >= candidate.Vaddr && procSpaceVA <= mappingEnd {
-			return *candidate, true
-		}
-	}
-
-	return Mapping{}, false
-}
-
 func (pm *ProcessManager) MaybeNotifyAPMAgent(
 	rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16) string {
 	pidInterp, ok := pm.interpreters[rawTrace.PID]
@@ -338,7 +310,13 @@ func (pm *ProcessManager) MaybeNotifyAPMAgent(
 		if apm, ok := mapping.(*apmint.Instance); ok {
 			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, umTraceHash, count)
 
-			// It's pretty unusual for there to be more than one APM agent in a
+			if serviceName != "" {
+				log.Warnf("Overwriting APM service name from '%s' to '%s' for PID %d",
+					serviceName,
+					apm.APMServiceName(),
+					rawTrace.PID)
+			}
+			// It's pretty unusual to have more than one APM agent in a
 			// single process, but in case there is, just pick the last one.
 			serviceName = apm.APMServiceName()
 		}
@@ -346,32 +324,6 @@ func (pm *ProcessManager) MaybeNotifyAPMAgent(
 
 	return serviceName
 }
-
-func (pm *ProcessManager) SymbolizationComplete(traceCaptureKTime times.KTime) {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	nowKTime := times.GetKTime()
-
-	for pid, pidExitKTime := range pm.exitEvents {
-		if pidExitKTime > traceCaptureKTime {
-			continue
-		}
-		for _, instance := range pm.interpreters[pid] {
-			if err := instance.Detach(pm.ebpf, pid); err != nil {
-				log.Errorf("Failed to handle interpreted process exit for PID %d: %v",
-					pid, err)
-			}
-		}
-		delete(pm.interpreters, pid)
-		delete(pm.exitEvents, pid)
-
-		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
-	}
-}
-
-// Compile time check to make sure we satisfy the interface.
-var _ tracehandler.TraceProcessor = (*ProcessManager)(nil)
 
 // AddSynthIntervalData adds synthetic stack deltas to the manager. This is useful for cases where
 // populating the information via the stack delta provider isn't viable, for example because the

@@ -50,13 +50,17 @@ type Frame struct {
 
 type Trace struct {
 	Comm             string
+	ProcessName      string
+	ExecutablePath   string
 	Frames           []Frame
 	Hash             TraceHash
 	KTime            times.KTime
 	PID              libpf.PID
 	TID              libpf.PID
+	Origin           libpf.Origin
+	OffTime          int64 // Time a task was off-cpu in nanoseconds.
 	APMTraceID       libpf.APMTraceID
 	APMTransactionID libpf.APMTransactionID
-	CustomLabels     map[string]string
 	CPU              int
+	CustomLabels     map[string]string
 }
