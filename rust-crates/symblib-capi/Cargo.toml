@@ -1,0 +1,15 @@
+[package]
+name = "symblib-capi"
+edition = "2021"
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+symblib.path = "../symblib"
+
+fallible-iterator.workspace = true
+thiserror.workspace = true

@@ -9,6 +9,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
 // Reporter is the top-level interface implemented by a full reporter.
@@ -16,7 +17,6 @@ type Reporter interface {
 	TraceReporter
 	SymbolReporter
 	HostMetadataReporter
-	MetricsReporter
 
 	// Start starts the reporter in the background.
 	//
@@ -27,16 +27,6 @@ type Reporter interface {
 
 	// Stop triggers a graceful shutdown of the reporter.
 	Stop()
-	// GetMetrics returns the reporter internal metrics.
-	GetMetrics() Metrics
-}
-
-type TraceEventMeta struct {
-	Timestamp      libpf.UnixTime64
-	Comm           string
-	APMServiceName string
-	PID, TID       libpf.PID
-	CPU            int
 }
 
 type TraceReporter interface {
@@ -46,12 +36,12 @@ type TraceReporter interface {
 
 	// ReportCountForTrace accepts a hash of a trace with a corresponding count and
 	// caches this information before a periodic reporting to the backend.
-	ReportCountForTrace(traceHash libpf.TraceHash, count uint16, meta *TraceEventMeta)
+	ReportCountForTrace(traceHash libpf.TraceHash, count uint16, meta *samples.TraceEventMeta)
 
 	// ReportTraceEvent accepts a trace event (trace metadata with frames and counts)
 	// and caches it for reporting to the backend. It returns true if the event was
 	// enqueued for reporting, and false if the event was ignored.
-	ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta)
+	ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta)
 
 	// SupportsReportTraceEvent returns true if the reporter supports reporting trace events
 	// via ReportTraceEvent().
@@ -133,10 +123,4 @@ type HostMetadataReporter interface {
 	// ReportHostMetadataBlocking sends host metadata to the collection agent.
 	ReportHostMetadataBlocking(ctx context.Context, metadataMap map[string]string,
 		maxRetries int, waitRetry time.Duration) error
-}
-
-type MetricsReporter interface {
-	// ReportMetrics accepts an id with a corresponding value and caches this
-	// information before a periodic reporting to the backend.
-	ReportMetrics(timestamp uint32, ids []uint32, values []int64)
 }

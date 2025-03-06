@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
 type Config struct {
@@ -51,4 +53,12 @@ type Config struct {
 
 	// gRPCInterceptor is the client gRPC interceptor, e.g., for sending gRPC metadata.
 	GRPCClientInterceptor grpc.UnaryClientInterceptor
+
+	// ExtraSampleAttrProd is an optional hook point for adding custom
+	// attributes to samples.
+	ExtraSampleAttrProd samples.SampleAttrProducer
+
+	// GRPCDialOptions allows passing additional gRPC dial options when establishing
+	// the connection to the collector. These options are appended after the default options.
+	GRPCDialOptions []grpc.DialOption
 }

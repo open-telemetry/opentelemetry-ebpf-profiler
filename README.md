@@ -38,16 +38,12 @@ If you'd like to quickly test the agent, you can skip to the ["Visualizing data 
 The agent can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
 
  For **Linux**, the following steps apply:
-  1. Build the Docker image containing the build environment:
-     ```sh
-     make docker-image
-     ```
-  2. Build the agent for your current machine's architecture:
+  1. Build the agent for your current machine's architecture:
      ```sh
      make agent
      ```
      Or `make debug-agent` for debug build.
-  3. To cross-complie for a different architecture (e.g. arm64):
+  2. To cross-compile for a different architecture (e.g. arm64):
      ```sh
      make agent TARGET_ARCH=arm64
      ```
@@ -91,9 +87,9 @@ devfiler spins up a local server that listens on `0.0.0.0:11000`.
 
 To run it, simply download and unpack the archive from the following URL:
 
-https://upload.elastic.co/d/f8aa0c386baa808a616ca29f86b34c726edb5af36f8840a4cf28468ad534a4b5
+https://upload.elastic.co/d/05d06f7a9a1898bc39e90b74647a1fb3ae19db7497d88e22aea27f47b8565dde
 
-Authentication token: `2635c0750bf8ea69`
+Authentication token: `abe24ec533283049`
 
 
 The archive contains a build for each of the following platforms:
@@ -476,7 +472,7 @@ The host agent code is tested with three test suites:
   tests. This works great for the user-land portion of the agent, but is unable
   to test any of the unwinding logic and BPF interaction.
 - **coredump test suite**\
-  The coredump test suite (`utils/coredump`) we compile the whole BPF unwinder
+  The coredump test suite (`tools/coredump`) we compile the whole BPF unwinder
   code into a user-mode executable, then use the information from a coredump to
   simulate a realistic environment to test the unwinder code in. The coredump
   suite essentially implements all required BPF helper functions in user-space,

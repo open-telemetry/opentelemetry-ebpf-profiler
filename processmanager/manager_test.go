@@ -3,7 +3,7 @@
 
 package processmanager
 
-// See also utils/coredump/coredump_test.go for core dump based testing.
+// See also tools/coredump/coredump_test.go for core dump based testing.
 
 import (
 	"context"
@@ -120,7 +120,7 @@ func generateDummyFiles(t *testing.T, num int) []string {
 
 	for i := 0; i < num; i++ {
 		name := fmt.Sprintf("dummy%d", i)
-		tmpfile, err := os.CreateTemp("", "*"+name)
+		tmpfile, err := os.CreateTemp(t.TempDir(), "*"+name)
 		require.NoError(t, err)
 
 		// The generated fileID is based on the content of the file.
@@ -387,10 +387,6 @@ func TestNewMapping(t *testing.T) {
 			expectedStackDeltas: 27},
 	}
 
-	cacheDir, err := os.MkdirTemp("", "*_cacheDir")
-	require.NoError(t, err)
-	defer os.RemoveAll(cacheDir)
-
 	for name, testcase := range tests {
 		testcase := testcase
 		t.Run(name, func(t *testing.T) {
@@ -425,11 +421,6 @@ func TestNewMapping(t *testing.T) {
 			}
 
 			execs := generateDummyFiles(t, len(testcase.newMapping))
-			defer func() {
-				for _, exe := range execs {
-					os.Remove(exe)
-				}
-			}()
 
 			if testcase.duplicate {
 				execs = append(execs, execs...)
@@ -617,7 +608,7 @@ func TestProcExit(t *testing.T) {
 
 			populateManager(t, manager)
 
-			_ = manager.ProcessPIDExit(testcase.pid)
+			manager.processPIDExit(testcase.pid)
 			assert.Equal(t, testcase.deletePidPageMappingCount,
 				ebpfMockup.deletePidPageMappingCount)
 			assert.Equal(t, testcase.deleteStackDeltaRangesCount,

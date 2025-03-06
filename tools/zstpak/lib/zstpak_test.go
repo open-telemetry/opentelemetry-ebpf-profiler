@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	"go.opentelemetry.io/ebpf-profiler/testsupport"
 	zstpak "go.opentelemetry.io/ebpf-profiler/tools/zstpak/lib"
 )
@@ -27,9 +28,8 @@ func testRandomAccesses(t *testing.T, seqLen uint8, fileSize uint64,
 	file := generateInputFile(seqLen, fileSize)
 	reader := bytes.NewReader(file)
 
-	temp, err := os.CreateTemp("", "")
+	temp, err := os.CreateTemp(t.TempDir(), "")
 	require.NoError(t, err)
-	defer os.Remove(temp.Name())
 
 	err = zstpak.CompressInto(reader, temp, chunkSize)
 	require.NoError(t, err)

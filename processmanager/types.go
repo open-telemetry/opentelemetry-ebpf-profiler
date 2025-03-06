@@ -135,9 +135,19 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 	}
 }
 
+// ProcessMeta contains metadata about a tracked process.
+type ProcessMeta struct {
+	// process name retrieved from /proc/PID/comm
+	Name string
+	// executable path retrieved from /proc/PID/exe
+	Executable string
+}
+
 // processInfo contains information about the executable mappings
 // and Thread Specific Data of a process.
 type processInfo struct {
+	// process metadata, fixed for process lifetime (read-only)
+	meta ProcessMeta
 	// executable mappings keyed by start address.
 	mappings map[libpf.Address]*Mapping
 	// executable mappings keyed by host file ID.

@@ -540,8 +540,8 @@ ErrorCode find_context(struct pt_regs *ctx, PerCPURecord *record, const LuaJITPr
   return ERR_OK;
 }
 
-SEC("perf_event/unwind_luajit")
-int unwind_luajit(struct pt_regs *ctx) {
+static inline __attribute__((__always_inline__)) int unwind_luajit(struct pt_regs *ctx)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;
@@ -575,3 +575,4 @@ exit:
   tail_call(ctx, unwinder);
   return -1;
 }
+MULTI_USE_FUNC(unwind_luajit)

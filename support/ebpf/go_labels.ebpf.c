@@ -35,7 +35,7 @@ static inline __attribute__((__always_inline__))
 bool process_bucket(PerCPURecord *record, void *label_buckets, int j) {
     CustomLabelsArray *out = &record->trace.custom_labels;
     GoMapBucket *map_value = &record->goMapBucket;
-    long res = bpf_probe_read(map_value, sizeof(GoMapBucket), label_buckets + (j * sizeof(GoMapBucket)));
+    long res = bpf_probe_read_user(map_value, sizeof(GoMapBucket), label_buckets + (j * sizeof(GoMapBucket)));
     if (res < 0) {
         return false;
     }
@@ -110,14 +110,14 @@ bool get_go_custom_labels_from_slice(struct pt_regs *ctx, PerCPURecord *record, 
 static inline __attribute__((__always_inline__))
 bool get_go_custom_labels_from_map(struct pt_regs *ctx, PerCPURecord *record, void *labels_map_ptr_ptr, GoCustomLabelsOffsets *offs) {
     void *labels_map_ptr;
-    long res = bpf_probe_read(&labels_map_ptr, sizeof(labels_map_ptr), labels_map_ptr_ptr);
+    long res = bpf_probe_read_user(&labels_map_ptr, sizeof(labels_map_ptr), labels_map_ptr_ptr);
     if (res < 0) {
         DEBUG_PRINT("cl: failed to read value for labels_map_ptr (%lx): %ld", (unsigned long)labels_map_ptr_ptr, res);
         return false;
     }
 
     u64 labels_count = 0;
-    res = bpf_probe_read(&labels_count, sizeof(labels_count), labels_map_ptr + offs->hmap_count);
+    res = bpf_probe_read_user(&labels_count, sizeof(labels_count), labels_map_ptr + offs->hmap_count);
     if (res < 0) {
         DEBUG_PRINT("cl: failed to read value for labels_count: %ld", res);
         return false;
@@ -128,13 +128,13 @@ bool get_go_custom_labels_from_map(struct pt_regs *ctx, PerCPURecord *record, vo
     }
 
     unsigned char log_2_bucket_count;
-    res = bpf_probe_read(&log_2_bucket_count, sizeof(log_2_bucket_count), labels_map_ptr + offs->hmap_log2_bucket_count);
+    res = bpf_probe_read_user(&log_2_bucket_count, sizeof(log_2_bucket_count), labels_map_ptr + offs->hmap_log2_bucket_count);
     if (res < 0) {
         DEBUG_PRINT("cl: failed to read value for bucket_count: %ld", res);
         return false;
     }
     void *label_buckets;
-    res = bpf_probe_read(&label_buckets, sizeof(label_buckets), labels_map_ptr + offs->hmap_buckets);
+    res = bpf_probe_read_user(&label_buckets, sizeof(label_buckets), labels_map_ptr + offs->hmap_buckets);
     if (res < 0) {
         DEBUG_PRINT("cl: failed to read value for label_buckets: %ld", res);
         return false;
@@ -196,7 +196,7 @@ bool get_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record, GoCustomLab
 }
 
 SEC("perf_event/go_labels")
-int go_labels(struct pt_regs *ctx) {
+int perf_go_labels(struct pt_regs *ctx) {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;

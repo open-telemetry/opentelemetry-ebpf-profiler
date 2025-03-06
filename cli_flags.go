@@ -12,6 +12,7 @@ import (
 	"github.com/peterbourgon/ff/v3"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -24,6 +25,7 @@ const (
 	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
 	defaultProbabilisticInterval  = 1 * time.Minute
 	defaultArgSendErrorFrames     = false
+	defaultOffCPUThreshold        = 0
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -61,6 +63,10 @@ var (
 		"If zero, monotonic-realtime clock sync will be performed once, " +
 		"on agent startup, but not periodically."
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
+	offCPUThresholdHelp = fmt.Sprintf("The per-mille chance for an off-cpu event being recorded. "+
+		"Valid values are in the range [1..%d], and 0 to disable off-cpu profiling."+
+		"Default is %d.",
+		support.OffCPUThresholdMax, defaultOffCPUThreshold)
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -113,6 +119,9 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.VerboseMode, "v", false, "Shorthand for -verbose.")
 	fs.BoolVar(&args.VerboseMode, "verbose", false, verboseModeHelp)
 	fs.BoolVar(&args.Version, "version", false, versionHelp)
+
+	fs.UintVar(&args.OffCPUThreshold, "off-cpu-threshold",
+		defaultOffCPUThreshold, offCPUThresholdHelp)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()

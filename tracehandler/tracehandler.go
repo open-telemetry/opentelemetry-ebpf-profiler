@@ -13,6 +13,7 @@ import (
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -46,11 +47,11 @@ type TraceProcessor interface {
 	// the frame and send the associated metadata to the collection agent.
 	ConvertTrace(trace *host.Trace) (*libpf.Trace, error)
 
-	// SymbolizationComplete is called after a group of Trace has been symbolized.
+	// ProcessedUntil is called periodically after Traces are processed/symbolized.
 	// It gets the timestamp of when the Traces (if any) were captured. The timestamp
 	// is in essence an indicator that all Traces until that time have been now processed,
-	// and any events up to this time can be processed.
-	SymbolizationComplete(traceCaptureKTime times.KTime)
+	// and any events and cleanup actions up to this time can be processed.
+	ProcessedUntil(traceCaptureKTime times.KTime)
 }
 
 // traceHandler provides functions for handling new traces and trace count updates
@@ -117,16 +118,17 @@ func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 }
 
 func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
-	defer m.traceProcessor.SymbolizationComplete(bpfTrace.KTime)
-	timestamp := libpf.UnixTime64(bpfTrace.KTime.UnixNano())
-
-	meta := &reporter.TraceEventMeta{
-		Timestamp:      timestamp,
+	meta := &samples.TraceEventMeta{
+		Timestamp:      libpf.UnixTime64(bpfTrace.KTime.UnixNano()),
 		Comm:           bpfTrace.Comm,
 		PID:            bpfTrace.PID,
 		TID:            bpfTrace.TID,
 		APMServiceName: "", // filled in below
 		CPU:            bpfTrace.CPU,
+		ProcessName:    bpfTrace.ProcessName,
+		ExecutablePath: bpfTrace.ExecutablePath,
+		Origin:         bpfTrace.Origin,
+		OffTime:        bpfTrace.OffTime,
 	}
 
 	if !m.reporter.SupportsReportTraceEvent() {
@@ -194,7 +196,9 @@ func Start(ctx context.Context, rep reporter.TraceReporter, traceProcessor Trace
 		for {
 			select {
 			case traceUpdate := <-traceInChan:
-				handler.HandleTrace(traceUpdate)
+				if traceUpdate != nil {
+					handler.HandleTrace(traceUpdate)
+				}
 			case <-metricsTicker.C:
 				handler.collectMetrics()
 			case <-ctx.Done():

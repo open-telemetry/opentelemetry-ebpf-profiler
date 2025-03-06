@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 
 	"golang.org/x/sys/unix"
 
@@ -33,6 +34,22 @@ type systemProcess struct {
 }
 
 var _ Process = &systemProcess{}
+
+var bufPool sync.Pool
+
+// mappingParseBufferSize defines the initial buffer size used to store lines from
+// /proc/PID/maps during parsing of mappings.
+
+const mappingParseBufferSize = 256
+
+func init() {
+	bufPool = sync.Pool{
+		New: func() any {
+			buf := make([]byte, mappingParseBufferSize)
+			return &buf
+		},
+	}
+}
 
 // New returns an object with Process interface accessing it
 func New(pid libpf.PID) Process {
@@ -63,10 +80,20 @@ func trimMappingPath(path string) string {
 }
 
 func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
-	mappings := make([]Mapping, 0)
+	mappings := make([]Mapping, 0, 32)
 	scanner := bufio.NewScanner(mapsFile)
-	buf := make([]byte, 512)
-	scanner.Buffer(buf, 8192)
+	scanBuf := bufPool.Get().(*[]byte)
+	if scanBuf == nil {
+		return mappings, errors.New("failed to get memory from sync pool")
+	}
+	defer func() {
+		// Reset memory and return it for reuse.
+		for j := 0; j < len(*scanBuf); j++ {
+			(*scanBuf)[j] = 0x0
+		}
+		bufPool.Put(scanBuf)
+	}()
+	scanner.Buffer(*scanBuf, 8192)
 	for scanner.Scan() {
 		var fields [6]string
 		var addrs [2]string
@@ -150,12 +177,15 @@ func (sp *systemProcess) GetMappings() ([]Mapping, error) {
 
 	mappings, err := parseMappings(mapsFile)
 	if err == nil {
-		fileToMapping := make(map[string]*Mapping)
+		fileToMapping := make(map[string]*Mapping, len(mappings))
 		for idx := range mappings {
 			m := &mappings[idx]
-			if m.Inode != 0 {
-				fileToMapping[m.Path] = m
+			if m.Inode == 0 {
+				// Ignore mappings that are invalid,
+				// non-existent or are special pseudo-files.
+				continue
 			}
+			fileToMapping[m.Path] = m
 		}
 		sp.fileToMapping = fileToMapping
 	}

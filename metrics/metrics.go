@@ -5,14 +5,19 @@ package metrics // import "go.opentelemetry.io/ebpf-profiler/metrics"
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/vc"
 )
 
 var (
@@ -34,32 +39,66 @@ var (
 
 	//go:embed metrics.json
 	metricsJSON []byte
+
+	// Used in fallback checks, e.g. to avoid sending "counters" with 0 values
+	metricTypes map[MetricID]MetricType
+
+	// OTel metric instrumentation
+	meter = otel.Meter("go.opentelemetry.io/ebpf-profiler",
+		metric.WithInstrumentationVersion(vc.Version()))
+	counters = map[MetricID]metric.Int64Counter{}
+	gauges   = map[MetricID]metric.Int64Gauge{}
 )
 
-// reporterImpl allows swapping out the global metrics reporter.
-//
-// nil is a valid value indicating that metrics should be voided.
-var reporterImpl reporter.MetricsReporter
-
-// SetReporter sets the reporter instance used to send out metrics.
-func SetReporter(r reporter.MetricsReporter) {
-	reporterImpl = r
+func init() {
+	defs := GetDefinitions()
+	metricTypes = make(map[MetricID]MetricType, len(defs))
+	for _, md := range defs {
+		if md.Obsolete {
+			continue
+		}
+		metricTypes[md.ID] = md.Type
+		switch typ := md.Type; typ {
+		case MetricTypeCounter:
+			counter, err := meter.Int64Counter(md.Name,
+				metric.WithDescription(md.Description),
+				metric.WithUnit(md.Unit))
+			if err != nil {
+				log.Errorf("Creating Int64Counter: %v", err)
+				continue
+			}
+			counters[md.ID] = counter
+		case MetricTypeGauge:
+			gauge, err := meter.Int64Gauge(md.Name,
+				metric.WithDescription(md.Description),
+				metric.WithUnit(md.Unit))
+			if err != nil {
+				log.Errorf("Creating Int64Gauge: %v", err)
+				continue
+			}
+			gauges[md.ID] = gauge
+		default:
+			panic(fmt.Sprintf("Unknown metric type: %v", typ))
+		}
+	}
 }
 
-// report converts and reports collected metrics via the reporter package.
+// report converts and reports collected metrics via OTel metrics
 func report() {
-	ids := make([]uint32, nMetrics)
-	values := make([]int64, nMetrics)
-
+	ctx := context.Background()
 	for i := 0; i < nMetrics; i++ {
-		ids[i] = uint32(metricsBuffer[i].ID)
-		values[i] = int64(metricsBuffer[i].Value)
+		metric := metricsBuffer[i]
+		switch typ := metricTypes[metric.ID]; typ {
+		case MetricTypeCounter:
+			if counter, ok := counters[metric.ID]; ok {
+				counter.Add(ctx, int64(metric.Value))
+			}
+		case MetricTypeGauge:
+			if gauge, ok := gauges[metric.ID]; ok {
+				gauge.Record(ctx, int64(metric.Value))
+			}
+		}
 	}
-
-	if reporterImpl != nil {
-		reporterImpl.ReportMetrics(uint32(prevTimestamp), ids, values)
-	}
-
 	nMetrics = 0
 	for idx := range metricIDSet {
 		metricIDSet[idx] = 0
@@ -101,6 +140,15 @@ func AddSlice(newMetrics []Metric) {
 		if metric.ID <= IDInvalid || metric.ID >= IDMax {
 			log.Errorf("Metric value %d out of range [%d,%d]- needs investigation",
 				metric.ID, IDInvalid+1, IDMax-1)
+			continue
+		}
+
+		if _, ok := metricTypes[metric.ID]; !ok {
+			log.Warnf("Invalid metric id %d, skipping", metric.ID)
+			continue
+		}
+
+		if metric.Value == 0 && metricTypes[metric.ID] == MetricTypeCounter {
 			continue
 		}
 
@@ -156,15 +204,15 @@ func Add(id MetricID, value MetricValue) {
 // and earlier.
 
 // GetDefinitions returns the metric definitions from the embedded metrics.json file.
-func GetDefinitions() ([]MetricDefinition, error) {
-	var definitions []MetricDefinition
+func GetDefinitions() []MetricDefinition {
+	var defs []MetricDefinition
 
 	dec := json.NewDecoder(bytes.NewReader(metricsJSON))
 	dec.DisallowUnknownFields()
 
-	err := dec.Decode(&definitions)
+	err := dec.Decode(&defs)
 	if err != nil {
-		return nil, err
+		panic(fmt.Sprintf("extracting definitions from metrics.json: %v", err))
 	}
-	return definitions, nil
+	return defs
 }

@@ -5,3 +5,4 @@
 /go
 ebpf-profiler
 ci-kernels
+/target

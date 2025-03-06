@@ -49,14 +49,15 @@ func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
 	coll, err := support.LoadCollectionSpec(false)
 	require.NoError(t, err)
 
-	err = coll.RewriteMaps(tr.GetEbpfMaps()) //nolint:staticcheck
+	//nolint:staticcheck
+	err = coll.RewriteMaps(tr.GetEbpfMaps())
 	require.NoError(t, err)
 
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	require.NoError(t, err)
 	defer restoreRlimit()
 
-	prog, err := cebpf.NewProgram(coll.Programs["tracepoint__sched_switch"])
+	prog, err := cebpf.NewProgram(coll.Programs["tracepoint_integration__sched_switch"])
 	require.NoError(t, err)
 	defer prog.Close()
 
@@ -113,6 +114,8 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
+		OffCPUThreshold:        support.OffCPUThresholdMax,
+		DebugTracer:            true,
 	})
 	require.NoError(t, err)
 

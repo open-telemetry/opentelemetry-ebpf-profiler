@@ -9,7 +9,7 @@ file="$1"
 
 OBJDUMP_CMD=llvm-objdump
 if ! type -p "${OBJDUMP_CMD}"; then
-    OBJDUMP_CMD=llvm-objdump-16
+    OBJDUMP_CMD=llvm-objdump-17
 fi
 
 echo -e "\nInstruction counts for ${file}:\n"
