@@ -12,7 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
@@ -118,7 +118,7 @@ func (p *Pdata) setProfile(
 			loc := profile.LocationTable().AppendEmpty()
 			loc.SetAddress(uint64(traceInfo.Linenos[i]))
 			attrMgr.AppendOptionalString(loc.AttributeIndices(),
-				"profile.frame.type", traceInfo.FrameTypes[i].String())
+				semconv.ProfileFrameTypeKey, traceInfo.FrameTypes[i].String())
 
 			switch frameKind := traceInfo.FrameTypes[i]; frameKind {
 			case libpf.NativeFrame:
@@ -153,9 +153,11 @@ func (p *Pdata) setProfile(
 					// semantic convention for build_id, replace these hard coded
 					// strings.
 					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-						"process.executable.build_id.gnu", ei.GnuBuildID)
+						semconv.ProcessExecutableBuildIDGnuKey,
+						ei.GnuBuildID)
 					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-						"process.executable.build_id.htlhash", traceInfo.Files[i].StringNoQuotes())
+						semconv.ProcessExecutableBuildIDHtlhashKey,
+						traceInfo.Files[i].StringNoQuotes())
 				}
 				loc.SetMappingIndex(locationMappingIndex)
 			case libpf.AbortFrame:
@@ -306,6 +308,7 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]int32,
 	mapping := profile.MappingTable().AppendEmpty()
 	mapping.SetFilenameStrindex(getStringMapIndex(stringMap, ""))
 	attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-		"process.executable.build_id.htlhash", fileID.StringNoQuotes())
+		semconv.ProcessExecutableBuildIDHtlhashKey,
+		fileID.StringNoQuotes())
 	return locationMappingIndex
 }

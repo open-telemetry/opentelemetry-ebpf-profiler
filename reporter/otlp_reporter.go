@@ -14,7 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
-	semconv "go.opentelemetry.io/otel/semconv/v1.22.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
