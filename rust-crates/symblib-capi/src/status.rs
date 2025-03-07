@@ -4,7 +4,7 @@
 //! Defines FFI error codes and their conversion from Rust error types.
 
 use std::io;
-use symblib::{dwarf, objfile, retpads, symbconv};
+use symblib::{dwarf, gosym, objfile, retpads, symbconv};
 
 pub type FfiResult<T = ()> = Result<T, StatusCode>;
 
@@ -42,6 +42,9 @@ pub enum StatusCode {
 
     #[error("The channel was already closed in a previous call")]
     AlreadyClosed = 8,
+
+    #[error("Point resolver error")]
+    PointResolver = 9,
 }
 
 impl From<StatusCode> for FfiResult {
@@ -115,5 +118,11 @@ impl From<std::str::Utf8Error> for StatusCode {
 impl From<retpads::Error> for StatusCode {
     fn from(_: retpads::Error) -> Self {
         Self::Retpad
+    }
+}
+
+impl From<gosym::Error> for StatusCode {
+    fn from(_: gosym::Error) -> Self {
+        StatusCode::Symbconv
     }
 }

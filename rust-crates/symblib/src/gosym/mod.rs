@@ -17,7 +17,7 @@ mod errors;
 pub use errors::*;
 mod raw;
 
-use crate::{objfile, VirtAddr};
+use crate::{objfile, symbconv, VirtAddr};
 use fallible_iterator::FallibleIterator;
 use std::ops::Range;
 
@@ -538,5 +538,57 @@ fn range_rel2abs(base: VirtAddr, rng: Range<raw::TextStartOffset>) -> Range<Virt
     Range {
         start: base.wrapping_add(rng.start.0),
         end: base.wrapping_add(rng.end.0),
+    }
+}
+
+impl symbconv::PointResolver for GoRuntimeInfo<'_> {
+    fn symbols_for_pc(&self, pc: VirtAddr) -> symbconv::Result<Vec<symbconv::ResolvedSymbol>> {
+        let mut symbols = Vec::new();
+
+        match self.find_func(pc) {
+            Ok(Some(func)) => {
+                let mut source_files = Vec::new();
+                let mut line_numbers = Vec::new();
+
+                // For file mappings
+                let mut file_iter = func
+                    .file_mapping()
+                    .map_err(|e| symbconv::Error::Go(symbconv::go::Error::Gosym(e)))?;
+                while let Ok(Some((range, file))) = file_iter.next() {
+                    if range.contains(&VirtAddr::from(pc)) {
+                        source_files.push(file.unwrap_or("<unknown>").into());
+                    }
+                }
+
+                // For line mappings
+                let mut line_iter = func
+                    .line_mapping()
+                    .map_err(|e| symbconv::Error::Go(symbconv::go::Error::Gosym(e)))?;
+                while let Ok(Some((range, line))) = line_iter.next() {
+                    if range.contains(&VirtAddr::from(pc)) {
+                        line_numbers.push(line.unwrap_or(0));
+                    }
+                }
+
+                symbols.push(symbconv::ResolvedSymbol {
+                    start_addr: func.start_addr(),
+                    function_name: func.name().ok().map(|s| s.to_string()),
+                    file_names: if !source_files.is_empty() {
+                        Some(source_files)
+                    } else {
+                        None
+                    },
+                    line_numbers: if !line_numbers.is_empty() {
+                        Some(line_numbers)
+                    } else {
+                        None
+                    },
+                });
+            }
+            Ok(None) => {}
+            Err(e) => return Err(symbconv::Error::Go(symbconv::go::Error::Gosym(e))),
+        }
+
+        Ok(symbols)
     }
 }
