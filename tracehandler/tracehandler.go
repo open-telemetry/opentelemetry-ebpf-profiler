@@ -21,10 +21,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
-// metadataWarnInhibDuration defines the minimum duration between warnings printed
-// about failure to obtain metadata for a single PID.
-const metadataWarnInhibDuration = 1 * time.Minute
-
 // Compile time check to make sure config.Times satisfies the interfaces.
 var _ Times = (*times.Times)(nil)
 
@@ -77,10 +73,6 @@ type traceHandler struct {
 	// reporter instance to use to send out traces.
 	reporter reporter.TraceReporter
 
-	// metadataWarnInhib tracks inhibitions for warnings printed about failure to
-	// update container metadata (rate-limiting).
-	metadataWarnInhib *lru.LRU[libpf.PID, libpf.Void]
-
 	times Times
 }
 
@@ -99,19 +91,12 @@ func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 		return nil, err
 	}
 
-	metadataWarnInhib, err := lru.New[libpf.PID, libpf.Void](64, libpf.PID.Hash32)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create metadata warning inhibitor LRU: %v", err)
-	}
-	metadataWarnInhib.SetLifetime(metadataWarnInhibDuration)
-
 	t := &traceHandler{
-		traceProcessor:    traceProcessor,
-		bpfTraceCache:     bpfTraceCache,
-		umTraceCache:      umTraceCache,
-		reporter:          rep,
-		times:             intervals,
-		metadataWarnInhib: metadataWarnInhib,
+		traceProcessor: traceProcessor,
+		bpfTraceCache:  bpfTraceCache,
+		umTraceCache:   umTraceCache,
+		reporter:       rep,
+		times:          intervals,
 	}
 
 	return t, nil
