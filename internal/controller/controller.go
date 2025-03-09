@@ -81,8 +81,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		}
 	}
 
-	metrics.SetReporter(c.reporter)
-
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
 		Reporter:               c.reporter,
