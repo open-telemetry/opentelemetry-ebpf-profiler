@@ -108,6 +108,88 @@ impl<'obj> FuncTable<'obj> {
     pub fn func(&self, offs: FuncTabOffset) -> Result<Func<'obj>> {
         Func::read(self.reader.sub_reader(offs.0 as usize..)?)
     }
+
+    // Look up function information for a virtual address using binary search.
+    pub fn func_by_addr(&self, text_start: VirtAddr, addr: VirtAddr) -> Result<Option<Func<'obj>>> {
+        let sz = FuncTabIndexEntry::size_of(self.reader.header());
+        let mut left = 0;
+        let mut right = self.num_funcs as usize * sz;
+
+        while left < right {
+            let mid = (left + (right - left) / 2) / sz * sz;
+            let mut reader = self.reader.sub_reader(mid..)?;
+            let entry = FuncTabIndexEntry::read(&mut reader)?;
+
+            let entry_addr = match entry.entry {
+                CodePtr::Addr(addr) => addr,
+                CodePtr::Offs(offset) => text_start + offset.0,
+            };
+
+            if addr < entry_addr {
+                right = mid;
+            } else if mid + sz < right {
+                let mut next_reader = self.reader.sub_reader(mid + sz..)?;
+                let next_entry = FuncTabIndexEntry::read(&mut next_reader)?;
+                let next_addr = match next_entry.entry {
+                    CodePtr::Addr(addr) => addr,
+                    CodePtr::Offs(offset) => text_start + offset.0,
+                };
+
+                if addr >= next_addr {
+                    left = mid + sz;
+                } else {
+                    return Ok(Some(self.func(entry.funcoff)?));
+                }
+            } else {
+                return Ok(Some(self.func(entry.funcoff)?));
+            }
+        }
+
+        Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::gosym::GoRuntimeInfo;
+    use crate::tests::testdata;
+
+    #[test]
+    fn test_func_by_addr() -> Result<()> {
+        for test_file in ["go-1.20.14", "go-1.22.12", "go-1.24.0"] {
+            let obj = objfile::File::load(&testdata(test_file))?;
+            let obj = obj.parse()?;
+
+            let runtime_info = GoRuntimeInfo::open(&obj)?;
+
+            let text_start = obj.load_section(b".text")?.unwrap().virt_addr();
+
+            for pc in (text_start..text_start + 0x10000).step_by(19) {
+                let bin_search_result = runtime_info.find_func(pc).unwrap();
+
+                let mut fn_iter = runtime_info.funcs().unwrap().peekable();
+                let mut found = None;
+                while let Some(func) = fn_iter.next().unwrap() {
+                    let Some(next) = fn_iter.peek().unwrap() else {
+                        break;
+                    };
+
+                    let pc_rng = func.start_addr()..next.start_addr();
+                    if pc_rng.contains(&pc) {
+                        found = Some(func);
+                        break;
+                    }
+                }
+
+                assert_eq!(
+                    bin_search_result.map(|x| x.start_addr()),
+                    found.map(|x| x.start_addr())
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Iterator over the index in `.gopclntab`:`runtime.functab`.

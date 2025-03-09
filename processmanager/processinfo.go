@@ -9,7 +9,7 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 // these two components can be audited to be consistent.
 
 // The public functions in this file are restricted to be used from the
-// HA/tracer and utils/coredump modules only.
+// HA/tracer and tools/coredump modules only.
 
 import (
 	"errors"
@@ -584,6 +584,17 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pid := pr.PID()
 	log.Debugf("= PID: %v", pid)
+
+	// Abort early if process is waiting for cleanup in ProcessedUntil
+	pm.mu.Lock()
+	_, ok := pm.exitEvents[pid]
+	pm.mu.Unlock()
+
+	if ok {
+		log.Debugf("PID %v waiting for cleanup, aborting SynchronizeProcess", pid)
+		pm.ebpf.RemoveReportedPID(pid)
+		return
+	}
 
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()

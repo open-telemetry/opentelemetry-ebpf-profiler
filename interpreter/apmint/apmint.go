@@ -21,11 +21,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
-
-// #include <stdlib.h>
-// #include "../../support/ebpf/types.h"
-import "C"
 
 const (
 	// serviceNameMaxLength defines the maximum allowed length of service names.
@@ -113,7 +110,7 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 
 	// Read TLS offset from the TLS descriptor.
 	tlsOffset := rm.Uint64(bias + d.tlsDescElfAddr + 8)
-	procInfo := C.ApmIntProcInfo{tls_offset: C.u64(tlsOffset)}
+	procInfo := support.ApmIntProcInfo{Offset: tlsOffset}
 	if err = ebpf.UpdateProcData(libpf.APMInt, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err
 	}

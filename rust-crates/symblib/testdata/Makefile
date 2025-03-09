@@ -1,8 +1,8 @@
 .PHONY: inline inline-compressed-dwarf inline-split-dwarf inline-big-fake-compressed-dwarf \
-	inline-no-tco clean inline-compressed-dwarf-zstd
+	inline-no-tco clean inline-compressed-dwarf-zstd go-toolchains
 
 all: inline inline-compressed-dwarf inline-split-dwarf inline-big-fake-compressed-dwarf \
-	inline-no-tco inline-compressed-dwarf-zstd
+	inline-no-tco inline-compressed-dwarf-zstd go-toolchains
 
 inline: inline.c
 	cc $< -o $@ -O2 -g
@@ -26,6 +26,11 @@ inline-big-fake-compressed-dwarf: inline
 inline-split-dwarf: inline
 	cp inline inline-split-dwarf
 	dwz -M meow -m inline-split-dwarf.dwp inline-split-dwarf inline-split-dwarf
+
+go-toolchains:
+	GOTOOLCHAIN=go1.20.14 go build -o go-1.20.14 main.go
+	GOTOOLCHAIN=go1.22.12 go build -o go-1.22.12 main.go
+	GOTOOLCHAIN=go1.24.0 go build -o go-1.24.0 main.go
 
 clean:
 	echo "not deleting anything: executables are meant to be kept under VC"

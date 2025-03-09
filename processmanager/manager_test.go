@@ -3,7 +3,7 @@
 
 package processmanager
 
-// See also utils/coredump/coredump_test.go for core dump based testing.
+// See also tools/coredump/coredump_test.go for core dump based testing.
 
 import (
 	"context"

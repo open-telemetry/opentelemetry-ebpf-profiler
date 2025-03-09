@@ -1301,16 +1301,27 @@ func (t *Tracer) StartOffCPUProfiling() error {
 		return errors.New("off-cpu program finish_task_switch is not available")
 	}
 
-	kprobeSymbol, err := t.kernelSymbols.LookupSymbolByPrefix("finish_task_switch")
-	if err != nil {
-		return errors.New("failed to find kernel symbol for finish_task_switch")
-	}
-
-	kprobeLink, err := link.Kprobe(string(kprobeSymbol.Name), kprobeProg, nil)
+	hookSymbolPrefix := "finish_task_switch"
+	kprobeSymbs, err := t.kernelSymbols.LookupSymbolsByPrefix(hookSymbolPrefix)
 	if err != nil {
 		return err
 	}
-	t.hooks[hookPoint{group: "kprobe", name: "finish_task_switch"}] = kprobeLink
+
+	attached := false
+	// Attach to all symbols with the prefix finish_task_switch.
+	for _, symb := range kprobeSymbs {
+		kprobeLink, linkErr := link.Kprobe(string(symb.Name), kprobeProg, nil)
+		if linkErr != nil {
+			log.Warnf("Failed to attach to %s: %v", symb.Name, linkErr)
+			continue
+		}
+		attached = true
+		t.hooks[hookPoint{group: "kprobe", name: string(symb.Name)}] = kprobeLink
+	}
+	if !attached {
+		return fmt.Errorf("failed to attach to one of %d symbols with prefix '%s'",
+			len(kprobeSymbs), hookSymbolPrefix)
+	}
 
 	// Attach the first hook that enables off-cpu profiling.
 	tpProg, ok := t.ebpfProgs["tracepoint__sched_switch"]

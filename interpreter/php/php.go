@@ -22,9 +22,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-// #include "../../support/ebpf/types.h"
-import "C"
-
 //nolint:golint,stylecheck,revive
 const (
 	// This is used to check if the VM mode is the default one
@@ -82,13 +79,13 @@ type phpData struct {
 		}
 		// https://github.com/php/php-src/blob/PHP-7.4/Zend/zend_compile.h#L503
 		zend_execute_data struct {
-			opline, function  uint
-			this_type_info    uint
-			prev_execute_data uint
+			opline, function  uint8
+			this_type_info    uint8
+			prev_execute_data uint8
 		}
 		// https://github.com/php/php-src/blob/PHP-7.4/Zend/zend_compile.h#L483
 		zend_function struct {
-			common_type, common_funcname          uint
+			common_type, common_funcname          uint8
 			op_array_filename, op_array_linestart uint
 			Sizeof                                uint
 		}
@@ -98,7 +95,7 @@ type phpData struct {
 		}
 		// https://github.com/php/php-src/blob/PHP-7.4/Zend/zend_compile.h#L136
 		zend_op struct {
-			lineno uint
+			lineno uint8
 		}
 	}
 }
@@ -118,16 +115,16 @@ func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf
 	}
 
 	vms := &d.vmStructs
-	data := C.PHPProcInfo{
-		current_execute_data: C.u64(d.egAddr+bias) +
-			C.u64(vms.zend_executor_globals.current_execute_data),
-		jit_return_address:                  C.u64(d.rtAddr + bias),
-		zend_execute_data_function:          C.u8(vms.zend_execute_data.function),
-		zend_execute_data_opline:            C.u8(vms.zend_execute_data.opline),
-		zend_execute_data_prev_execute_data: C.u8(vms.zend_execute_data.prev_execute_data),
-		zend_execute_data_this_type_info:    C.u8(vms.zend_execute_data.this_type_info),
-		zend_function_type:                  C.u8(vms.zend_function.common_type),
-		zend_op_lineno:                      C.u8(vms.zend_op.lineno),
+	data := support.PHPProcInfo{
+		Current_execute_data: uint64(d.egAddr+bias) +
+			uint64(vms.zend_executor_globals.current_execute_data),
+		Jit_return_address:                  uint64(d.rtAddr + bias),
+		Zend_execute_data_function:          vms.zend_execute_data.function,
+		Zend_execute_data_opline:            vms.zend_execute_data.opline,
+		Zend_execute_data_prev_execute_data: vms.zend_execute_data.prev_execute_data,
+		Zend_execute_data_this_type_info:    vms.zend_execute_data.this_type_info,
+		Zend_function_type:                  vms.zend_function.common_type,
+		Zend_op_lineno:                      vms.zend_op.lineno,
 	}
 	if err := ebpf.UpdateProcData(libpf.PHP, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err

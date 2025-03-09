@@ -7,6 +7,7 @@
     "id": 0
   },
   {
+    "obsolete": true,
     "description": "CPU Usage: values are 0-100%",
     "type": "gauge",
     "name": "CPUUsage",
@@ -15,6 +16,7 @@
     "id": 1
   },
   {
+    "obsolete": true,
     "description": "I/O Throughput: values are bytes/s",
     "type": "gauge",
     "name": "IOThroughput",
@@ -23,6 +25,7 @@
     "id": 2
   },
   {
+    "obsolete": true,
     "description": "I/O Duration: values are 'weighted # of milliseconds doing I/O'",
     "type": "gauge",
     "name": "IODuration",
@@ -31,6 +34,7 @@
     "id": 3
   },
   {
+    "obsolete": true,
     "description": "Absolute number of goroutines when the metric was collected.",
     "type": "gauge",
     "name": "AgentGoRoutines",
@@ -38,6 +42,7 @@
     "id": 4
   },
   {
+    "obsolete": true,
     "description": "Absolute number in bytes of allocated heap objects of the agent.",
     "type": "gauge",
     "name": "AgentHeapAlloc",
@@ -46,6 +51,7 @@
     "id": 5
   },
   {
+    "obsolete": true,
     "description": "Difference to previous user CPU time of the agent in Milliseconds.",
     "type": "counter",
     "name": "AgentUTime",
@@ -54,6 +60,7 @@
     "id": 6
   },
   {
+    "obsolete": true,
     "description": "Difference to previous system CPU time of the agent in Milliseconds.",
     "type": "counter",
     "name": "AgentSTime",
@@ -357,6 +364,7 @@
     "id": 48
   },
   {
+    "obsolete": true,
     "description": "Current size of the hash map pycodeobject_to_fileid",
     "type": "gauge",
     "name": "HashmapPyCodeObjectToFileID",
@@ -709,6 +717,7 @@
     "id": 97
   },
   {
+    "obsolete": true,
     "description": "Current size in bytes of the local interval cache",
     "type": "gauge",
     "name": "LocalIntervalCacheSize",
@@ -717,6 +726,7 @@
     "id": 98
   },
   {
+    "obsolete": true,
     "description": "Number of cache hits of the local interval cache",
     "type": "counter",
     "name": "LocalIntervalCacheHit",
@@ -724,6 +734,7 @@
     "id": 99
   },
   {
+    "obsolete": true,
     "description": "Number of cache misses of the local interval cache",
     "type": "counter",
     "name": "LocalIntervalCacheMiss",
@@ -1095,6 +1106,7 @@
     "id": 152
   },
   {
+    "obsolete": true,
     "description": "Outgoing total RPC byte count (payload, uncompressed)",
     "type": "counter",
     "name": "RPCBytesOutCount",
@@ -1103,6 +1115,7 @@
     "id": 153
   },
   {
+    "obsolete": true,
     "description": "Incoming total RPC byte count (payload, uncompressed)",
     "type": "counter",
     "name": "RPCBytesInCount",
@@ -1111,6 +1124,7 @@
     "id": 154
   },
   {
+    "obsolete": true,
     "description": "Number of times reading /proc/<PID> failed due to missing text section",
     "type": "counter",
     "name": "ErrProcNoTextSec",
@@ -1407,6 +1421,7 @@
     "id": 196
   },
   {
+    "obsolete": true,
     "description": "Number of times deleting an element from exeIDToStackDeltas failed",
     "type": "counter",
     "name": "ExeIDToStackDeltasDelete",
@@ -1581,6 +1596,7 @@
     "id": 220
   },
   {
+    "obsolete": true,
     "description": "Number of kubernetes client queries.",
     "type": "counter",
     "name": "KubernetesClientQuery",
@@ -1588,6 +1604,7 @@
     "id": 221
   },
   {
+    "obsolete": true,
     "description": "Number of docker client queries.",
     "type": "counter",
     "name": "DockerClientQuery",
@@ -1595,6 +1612,7 @@
     "id": 222
   },
   {
+    "obsolete": true,
     "description": "Number of containerd client queries.",
     "type": "counter",
     "name": "ContainerdClientQuery",
@@ -1811,6 +1829,7 @@
     "id": 253
   },
   {
+    "obsolete": true,
     "description": "Outgoing total RPC byte count (on-the-wire, compressed)",
     "type": "counter",
     "name": "WireBytesOutCount",
@@ -1819,6 +1838,7 @@
     "id": 254
   },
   {
+    "obsolete": true,
     "description": "Incoming total RPC byte count (on-the-wire, compressed)",
     "type": "counter",
     "name": "WireBytesInCount",
