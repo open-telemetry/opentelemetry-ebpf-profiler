@@ -114,6 +114,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		ExecutablePath: bpfTrace.ExecutablePath,
 		Origin:         bpfTrace.Origin,
 		OffTime:        bpfTrace.OffTime,
+		EnvVars:        bpfTrace.EnvVars,
 	}
 
 	if !m.reporter.SupportsReportTraceEvent() {
