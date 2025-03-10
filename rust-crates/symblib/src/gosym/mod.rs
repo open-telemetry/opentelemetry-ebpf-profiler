@@ -542,6 +542,7 @@ fn range_rel2abs(base: VirtAddr, rng: Range<raw::TextStartOffset>) -> Range<Virt
 }
 
 impl symbconv::PointResolver for GoRuntimeInfo<'_> {
+    /// NOTE: this is currently doesn't support inline functions
     fn symbols_for_pc(&self, pc: VirtAddr) -> symbconv::Result<Vec<symbconv::ResolvedSymbol>> {
         let func = match self.find_func(pc) {
             Ok(Some(func)) => func,
