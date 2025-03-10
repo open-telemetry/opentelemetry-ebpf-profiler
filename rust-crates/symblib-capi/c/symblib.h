@@ -154,8 +154,8 @@ extern void symblib_goruntime_free(SymblibPointResolver* runtime);
 typedef struct SymblibResolvedSymbol {
     uint64_t start_addr;
     SymblibString function_name;
-    SymblibSlice file_names;
-    SymblibSlice line_numbers;
+    SymblibString file_name;
+    uint32_t line_number;
 } SymblibResolvedSymbol;
 
 // Enveloping struct that holds len number of symbols in data.

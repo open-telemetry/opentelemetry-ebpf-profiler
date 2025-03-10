@@ -85,10 +85,10 @@ pub struct ResolvedSymbol {
     pub start_addr: VirtAddr,
     /// Function name associated with an address.
     pub function_name: Option<String>,
-    /// File names that hold this function or any inlined function.
-    pub file_names: Option<Vec<String>>,
-    /// Line numbers associcated with this virtual address.
-    pub line_numbers: Option<Vec<u32>>,
+    /// File name that hold this function.
+    pub file_name: Option<String>,
+    /// Line number associcated with this virtual address.
+    pub line_number: Option<u32>,
 }
 
 /// Common interface to tesolve symbols for a specific program counter address.

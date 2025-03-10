@@ -11,26 +11,17 @@ use symblib::VirtAddr;
 pub struct SymblibResolvedSymbol {
     pub start_addr: VirtAddr,
     pub function_name: SymblibString,
-    pub file_names: SymblibSlice<SymblibString>,
-    pub line_numbers: SymblibSlice<u32>,
+    pub file_name: SymblibString, // may be empty
+    pub line_number: u32,         // 0 = unknown
 }
 
 impl From<symbconv::ResolvedSymbol> for SymblibResolvedSymbol {
     fn from(sym: symbconv::ResolvedSymbol) -> Self {
-        let file_names: Vec<SymblibString> = sym
-            .file_names
-            .unwrap_or_default()
-            .into_iter()
-            .map(Into::into)
-            .collect();
-
-        let line_numbers: Vec<u32> = sym.line_numbers.unwrap_or_default();
-
         Self {
             start_addr: sym.start_addr,
             function_name: sym.function_name.into(),
-            file_names: file_names.into(),
-            line_numbers: line_numbers.into(),
+            file_name: sym.file_name.unwrap_or("".to_string()).into(),
+            line_number: sym.line_number.unwrap_or(0),
         }
     }
 }
