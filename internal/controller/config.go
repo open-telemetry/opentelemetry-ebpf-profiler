@@ -32,11 +32,7 @@ type Config struct {
 	Tracers                string
 	VerboseMode            bool
 	Version                bool
-	// HostName is the name of the host.
-	HostName string
-	// IPAddress is the IP address of the host that sends data to CollAgentAddr.
-	IPAddress       string
-	OffCPUThreshold uint
+	OffCPUThreshold        uint
 
 	Reporter reporter.Reporter
 
