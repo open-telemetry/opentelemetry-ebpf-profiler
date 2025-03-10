@@ -3,7 +3,7 @@
 
 //! Extract symbol info and convert it to [`symbfile`] format.
 
-use crate::{objfile, symbfile, AnyError};
+use crate::{objfile, symbfile, AnyError, VirtAddr};
 use std::io;
 
 /// Result type shorthand.
@@ -77,6 +77,27 @@ pub trait RangeExtractor {
         out.finalize()?;
         Ok(stats)
     }
+}
+
+/// Hold information about a symbol and its origin.
+pub struct ResolvedSymbol {
+    /// Start address of a symbol
+    pub start_addr: VirtAddr,
+    /// Function name associated with an address.
+    pub function_name: Option<String>,
+    /// File name that hold this function.
+    pub file_name: Option<String>,
+    /// Line number associcated with this virtual address.
+    pub line_number: Option<u32>,
+}
+
+/// Common interface to tesolve symbols for a specific program counter address.
+pub trait PointResolver {
+    /// Returns all symbols that match the given program counter address.
+    ///
+    /// The returned vector contains all resolved symbols at the given address,
+    /// which can include both the direct function and any inline frames
+    fn symbols_for_pc(&self, pc: VirtAddr) -> Result<Vec<ResolvedSymbol>>;
 }
 
 fn _assert_obj_safe(_: &dyn RangeExtractor) {}
