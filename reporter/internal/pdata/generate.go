@@ -12,6 +12,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
+	"go.opentelemetry.io/otel/attribute"
+
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -220,6 +222,13 @@ func (p *Pdata) setProfile(
 			semconv.ServiceNameKey, traceKey.ApmServiceName)
 		attrMgr.AppendInt(sample.AttributeIndices(),
 			semconv.ProcessPIDKey, traceKey.Pid)
+
+		for key, value := range traceInfo.EnvVars {
+			attrMgr.AppendOptionalString(
+				sample.AttributeIndices(),
+				attribute.Key("env."+key),
+				value)
+		}
 
 		if p.ExtraSampleAttrProd != nil {
 			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, traceKey.ExtraMeta)
