@@ -242,8 +242,8 @@ get_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record, GoCustomLabelsOf
   return get_go_custom_labels_from_map(ctx, record, labels_ptr, offs);
 }
 
-SEC("perf_event/go_labels")
-int perf_go_labels(struct pt_regs *ctx)
+// go_labels is the entrypoint for extracting custom labels from Go runtime.
+static inline __attribute__((__always_inline__)) int go_labels(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -267,3 +267,4 @@ int perf_go_labels(struct pt_regs *ctx)
   tail_call(ctx, PROG_UNWIND_STOP);
   return 0;
 }
+MULTI_USE_FUNC(go_labels)
