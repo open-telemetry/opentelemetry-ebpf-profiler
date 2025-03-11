@@ -269,6 +269,21 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 				}
 			}
 
+			if pm.eim.IsGolang(frame.File) {
+				// Special case handling for Golang. In the eBPF space Golang is
+				// treated as native code but on user space side it handled as
+				// interpreter for symbolization.
+				err := pm.symbolizeFrame(i, trace, newTrace)
+				if err != nil {
+					log.Debugf(
+						"symbolization failed for PID %d, frame %d/%d, frame type %d: %v",
+						trace.PID, i, traceLen, frame.Type, err)
+					newTrace.AppendFrame(frame.Type, libpf.UnsymbolizedFileID,
+						libpf.AddressOrLineno(0))
+				}
+				continue
+			}
+
 			fileID, ok := pm.FileIDMapper.Get(frame.File)
 			if !ok {
 				log.Debugf(
