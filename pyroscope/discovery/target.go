@@ -117,13 +117,13 @@ type TargetsOptions struct {
 type targetProducer struct {
 	cid2target    map[containerID]*Target
 	pid2target    map[uint32]*Target
-	cgroups       *freelru.LRU[libpf.PID, string]
+	cgroups       freelru.Cache[libpf.PID, string]
 	defaultTarget *Target
 	sync          sync.Mutex
 }
 
 func NewTargetProducer(
-	cgroups *freelru.LRU[libpf.PID, string],
+	cgroups freelru.Cache[libpf.PID, string],
 	options TargetsOptions,
 ) TargetProducer {
 	res := &targetProducer{
