@@ -10,9 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	lru "github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-
-	"github.com/dgraph-io/ristretto/v2"
 
 	"github.com/sirupsen/logrus"
 
@@ -21,9 +20,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 )
 
-var errTTL = 5 * time.Minute
 var errUnknownFile = errors.New("unknown file")
-var erroredMarker = "errored"
+
+type cachedMarker int
+
+var cached cachedMarker = 1
+var erroredMarker cachedMarker = 2
 
 type Table interface {
 	Lookup(addr uint64) ([]samples.SourceInfoFrame, error)
@@ -43,15 +45,14 @@ func NewTableFactory() TableFactory {
 type Resolver struct {
 	logger   *logrus.Entry
 	f        TableFactory
-	mutex    sync.Mutex
 	cacheDir string
-	// todo make cache lookups / stores not allocate
-	cache *ristretto.Cache[string, string]
-
+	cache    *lru.SyncedLRU[libpf.FileID, cachedMarker]
 	jobs     chan convertJob
+	wg       sync.WaitGroup
+
+	mutex    sync.Mutex
 	tables   map[libpf.FileID]Table
 	shutdown chan struct{}
-	wg       sync.WaitGroup
 }
 
 func (c *Resolver) Cleanup() {
@@ -72,16 +73,16 @@ type convertJob struct {
 }
 
 type Options struct {
-	Path string
-	Size int
+	Path        string
+	SizeEntries uint32
 }
 
 func NewFSCache(impl TableFactory, opt Options) (*Resolver, error) {
 	l := logrus.WithField("component", "irsymtab")
 	l.WithFields(logrus.Fields{
 		"path": opt.Path,
-		"size": opt.Size,
-	}).Info()
+		"size": opt.SizeEntries,
+	}).Debug()
 
 	shutdown := make(chan struct{})
 	res := &Resolver{
@@ -98,27 +99,23 @@ func NewFSCache(impl TableFactory, opt Options) (*Resolver, error) {
 		return nil, err
 	}
 
-	cache, err := ristretto.NewCache(&ristretto.Config[string, string]{
-		NumCounters: 10000,
-		MaxCost:     int64(opt.Size),
-		BufferItems: 64,
-		OnEvict: func(item *ristretto.Item[string]) {
-			if item.Value == erroredMarker {
-				return
-			}
-			id, err := libpf.FileIDFromString(item.Value)
-			if err != nil {
-				l.Error(err)
-				return
-			}
-			filePath := res.tableFilePath(id)
-			l.WithFields(logrus.Fields{
-				"file": filePath,
-			}).Debug("symbcache evicting")
-			if err = os.Remove(filePath); err != nil {
-				l.Error(err)
-			}
-		},
+	cache, err := lru.NewSynced[libpf.FileID, cachedMarker](
+		opt.SizeEntries,
+		func(id libpf.FileID,
+		) uint32 {
+			return id.Hash32()
+		})
+	cache.SetOnEvict(func(id libpf.FileID, marker cachedMarker) {
+		if marker == erroredMarker {
+			return
+		}
+		filePath := res.tableFilePath(id)
+		l.WithFields(logrus.Fields{
+			"file": filePath,
+		}).Debug("symbcache evicting")
+		if err = os.Remove(filePath); err != nil {
+			l.Error(err)
+		}
 	})
 	if err != nil {
 		return nil, err
@@ -141,7 +138,7 @@ func NewFSCache(impl TableFactory, opt Options) (*Resolver, error) {
 		if filename != id2 {
 			return nil
 		}
-		res.cache.Set(filename, filename, info.Size())
+		res.cache.Add(id, cached)
 		return nil
 	})
 	if err != nil {
@@ -175,22 +172,21 @@ func convertLoop(res *Resolver, shutdown <-chan struct{}) {
 	}
 }
 
-func (c *Resolver) Observe(fid libpf.FileID, elfRef *pfelf.Reference) error {
+func (c *Resolver) ExecutableKnown(id libpf.FileID) bool {
+	_, known := c.cache.Get(id)
+	return known
+}
+
+func (c *Resolver) ObserveExecutable(fid libpf.FileID, elfRef *pfelf.Reference) error {
 	o, ok := elfRef.ELFOpener.(pfelf.RootFSOpener)
 	if !ok {
 		return nil
 	}
 	if elfRef.FileName() == process.VdsoPathName {
+		c.cache.Add(fid, cached)
 		return nil
 	}
 
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	_, known := c.cache.Get(fid.StringNoQuotes())
-	if known {
-		return nil
-	}
 	pid := 0
 	if pp, ok := elfRef.ELFOpener.(process.Process); ok {
 		pid = int(pp.PID())
@@ -204,8 +200,7 @@ func (c *Resolver) Observe(fid libpf.FileID, elfRef *pfelf.Reference) error {
 	err := c.convert(l, fid, elfRef, o)
 	if err != nil {
 		l.WithError(err).WithField("duration", time.Since(t1)).Error("conversion failed")
-		c.cache.SetWithTTL(fid.StringNoQuotes(), erroredMarker, 128*1024, errTTL)
-		c.cache.Wait()
+		c.cache.Add(fid, erroredMarker)
 	} else {
 		l.WithField("duration", time.Since(t1)).Debug("converted")
 	}
@@ -261,16 +256,7 @@ func (c *Resolver) convert(
 		_ = os.Remove(tableFilePath)
 		return err
 	}
-
-	sz := 0
-	stat, _ := dst.Stat()
-	if stat != nil {
-		sz = int(stat.Size())
-	}
-
-	c.cache.Set(fid.StringNoQuotes(), fid.StringNoQuotes(), int64(sz))
-	c.cache.Wait()
-
+	c.cache.Add(fid, cached)
 	return nil
 }
 
@@ -318,7 +304,7 @@ func (c *Resolver) ResolveAddress(
 ) ([]samples.SourceInfoFrame, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	v, known := c.cache.Get(fid.StringNoQuotes())
+	v, known := c.cache.Get(fid)
 
 	if !known || v == erroredMarker {
 		return nil, errUnknownFile
@@ -331,7 +317,7 @@ func (c *Resolver) ResolveAddress(
 	t, err := c.f.OpenTable(path)
 	if err != nil {
 		_ = os.Remove(path)
-		c.cache.Del(fid.StringNoQuotes())
+		c.cache.Remove(fid)
 		return nil, err
 	}
 	c.tables[fid] = t

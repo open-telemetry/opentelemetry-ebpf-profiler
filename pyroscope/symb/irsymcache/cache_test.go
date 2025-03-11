@@ -42,16 +42,16 @@ func TestNewFSCache(t *testing.T) {
 		{
 			name: "valid options",
 			opt: Options{
-				Path: tmpDir,
-				Size: 1000,
+				Path:        tmpDir,
+				SizeEntries: 1000,
 			},
 			wantErr: false,
 		},
 		{
 			name: "invalid path",
 			opt: Options{
-				Path: "/nonexistent/path/that/should/fail",
-				Size: 1000,
+				Path:        "/nonexistent/path/that/should/fail",
+				SizeEntries: 1000,
 			},
 			wantErr: true,
 		},
@@ -96,13 +96,13 @@ func TestResolver_ResolveAddress(t *testing.T) {
 	}
 	tests := []struct {
 		name      string
-		cacheSize int
+		cacheSize uint32
 		observes  []observe
 		lookups   []lookup
 	}{
 		{
 			name:      "successful lookup",
-			cacheSize: 1024 * 1024 * 1024,
+			cacheSize: 1024,
 			observes: []observe{
 				{
 					filepath: testLibcFIle,
@@ -122,7 +122,7 @@ func TestResolver_ResolveAddress(t *testing.T) {
 		},
 		{
 			name:      "unknown file",
-			cacheSize: 1024 * 1024 * 1024,
+			cacheSize: 1024,
 			lookups: []lookup{
 				{
 					fid:         libpf.NewFileID(456, 123),
@@ -133,7 +133,7 @@ func TestResolver_ResolveAddress(t *testing.T) {
 		},
 		{
 			name:      "eviction ",
-			cacheSize: int(float64(calculateLibcConvertedSize(t)) * 1.5),
+			cacheSize: 1,
 			observes: []observe{
 				{
 					filepath: testLibcFIle,
@@ -162,7 +162,7 @@ func TestResolver_ResolveAddress(t *testing.T) {
 		},
 		{
 			name:      "errored",
-			cacheSize: 1024 * 1024 * 1024,
+			cacheSize: 1024,
 			observes: []observe{
 				{
 					filepath:    "unknown/file/path/that/should/fail",
@@ -179,24 +179,24 @@ func TestResolver_ResolveAddress(t *testing.T) {
 			dir := t.TempDir()
 			t.Log(dir)
 			resolver, err := NewFSCache(tf, Options{
-				Path: dir,
-				Size: tt.cacheSize,
+				Path:        dir,
+				SizeEntries: tt.cacheSize,
 			})
 			require.NoError(t, err)
 
 			for _, o := range tt.observes {
 				reference := testElfRef(o.filepath)
 				elfRef := reference
-				err = resolver.Observe(o.fid, elfRef)
+				err = resolver.ObserveExecutable(o.fid, elfRef)
 				if o.expectedErr != "" {
 					require.Error(t, err)
 					assert.Contains(t, err.Error(), o.expectedErr)
-					v, ok := resolver.cache.Get(o.fid.StringNoQuotes())
+					v, ok := resolver.cache.Get(o.fid)
 					assert.True(t, ok)
 					assert.Equal(t, erroredMarker, v)
 				} else {
 					require.NoError(t, err)
-					v, ok := resolver.cache.Get(o.fid.StringNoQuotes())
+					v, ok := resolver.cache.Get(o.fid)
 					assert.True(t, ok)
 					assert.NotEqual(t, erroredMarker, v)
 				}
@@ -227,14 +227,14 @@ func TestResolver_Cleanup(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	resolver, err := NewFSCache(tf, Options{
-		Path: tmpDir,
-		Size: 1000,
+		Path:        tmpDir,
+		SizeEntries: 1000,
 	})
 	require.NoError(t, err)
 
 	elfRef := testElfRef(testLibcFIle)
 	fid := libpf.NewFileID(456, 123)
-	err = resolver.Observe(fid, elfRef)
+	err = resolver.ObserveExecutable(fid, elfRef)
 	require.NoError(t, err)
 
 	resolver.Cleanup()
@@ -249,14 +249,14 @@ func TestResolver_Close(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	resolver, err := NewFSCache(tf, Options{
-		Path: tmpDir,
-		Size: 1000,
+		Path:        tmpDir,
+		SizeEntries: 1000,
 	})
 	require.NoError(t, err)
 
 	elfRef := testElfRef(testLibcFIle)
 	fid := libpf.NewFileID(456, 123)
-	err = resolver.Observe(fid, elfRef)
+	err = resolver.ObserveExecutable(fid, elfRef)
 	require.NoError(t, err)
 
 	err = resolver.Close()
@@ -266,14 +266,30 @@ func TestResolver_Close(t *testing.T) {
 	assert.Nil(t, resolver.shutdown)
 }
 
-func calculateLibcConvertedSize(t *testing.T) int {
-	srcf, err := os.Open(testLibcFIle)
-	require.NoError(t, err)
-	dstf, err := os.Create(t.TempDir() + "/libc.converted")
-	require.NoError(t, err)
-	err = tf.ConvertTable(srcf, dstf)
-	require.NoError(t, err)
-	stat, err := dstf.Stat()
-	require.NoError(t, err)
-	return int(stat.Size())
+func BenchmarkCache(b *testing.B) {
+	resolver, err := NewFSCache(tf, Options{
+		Path:        b.TempDir(),
+		SizeEntries: 2048,
+	})
+	loop := func(b *testing.B, resolver *Resolver, fid libpf.FileID) {
+		for i := 0; i < b.N; i++ {
+			if resolver.ExecutableKnown(fid) {
+				continue
+			}
+			elfRef := testElfRef(testLibcFIle)
+			err = resolver.ObserveExecutable(fid, elfRef)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	require.NoError(b, err)
+	fid := libpf.NewFileID(456, 123)
+
+	elfRef := testElfRef(testLibcFIle)
+	err = resolver.ObserveExecutable(fid, elfRef)
+	require.NoError(b, err)
+	b.ResetTimer()
+	loop(b, resolver, fid)
 }

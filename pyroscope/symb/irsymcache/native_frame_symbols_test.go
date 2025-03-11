@@ -16,8 +16,8 @@ func TestNativeFrameSymbols(t *testing.T) {
 	resolver, err := NewFSCache(TableTableFactory{
 		Options: []table.Option{table.WithLines(), table.WithFiles()},
 	}, Options{
-		Size: 1024 * 1024 * 1024,
-		Path: t.TempDir(),
+		SizeEntries: 1024,
+		Path:        t.TempDir(),
 	})
 	require.NoError(t, err)
 	frames, err := lru.NewSynced[libpf.FileID,
@@ -27,7 +27,7 @@ func TestNativeFrameSymbols(t *testing.T) {
 
 	reference := testElfRef(testLibcFIle)
 	fid := libpf.NewFileID(1, 3)
-	err = resolver.Observe(fid, reference)
+	err = resolver.ObserveExecutable(fid, reference)
 	require.NoError(t, err)
 	res := samples.SourceInfo{}
 	SymbolizeNativeFrame(resolver, frames, "testmapping",

@@ -52,7 +52,7 @@ type Config struct {
 	Fs *flag.FlagSet
 
 	SymbCachePath         string
-	SymbCacheSizeBytes    int
+	SymbCacheSizeEntries  int
 	SymbolizeNativeFrames bool
 }
 

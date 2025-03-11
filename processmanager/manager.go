@@ -337,10 +337,13 @@ func (pm *ProcessManager) observeFile(trace *host.Trace, mapping Mapping, fileID
 	if pm.fileObserver == nil {
 		return
 	}
+	if pm.fileObserver.ExecutableKnown(fileID) {
+		return
+	}
 	pr := process.New(trace.PID)
 	elfRef := pfelf.NewReference(mapping.FilePath, pr)
 	defer elfRef.Close()
-	_ = pm.fileObserver.Observe(fileID, elfRef)
+	_ = pm.fileObserver.ObserveExecutable(fileID, elfRef)
 }
 
 // AddSynthIntervalData adds synthetic stack deltas to the manager. This is useful for cases where

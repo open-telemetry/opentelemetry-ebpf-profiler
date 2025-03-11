@@ -132,8 +132,8 @@ func mainWithExitCode() exitCode {
 	if cfg.SymbolizeNativeFrames {
 		tf := irsymcache.NewTableFactory()
 		nsr, err = irsymcache.NewFSCache(tf, irsymcache.Options{
-			Size: cfg.SymbCacheSizeBytes,
-			Path: cfg.SymbCachePath,
+			SizeEntries: uint32(cfg.SymbCacheSizeEntries),
+			Path:        cfg.SymbCachePath,
 		})
 		if err != nil {
 			log.Error(err)
