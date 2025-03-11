@@ -1985,5 +1985,19 @@
     "name": "ErrProcParse",
     "field": "agent.errors.proc_parse",
     "id": 275
+  },
+  {
+    "description": "Number of successfully symbolized Golang frames",
+    "type": "counter",
+    "name": "GolangSymbolizationSuccess",
+    "field": "agent.golang.symbolization.successes",
+    "id": 276
+  },
+  {
+    "description": "Number of Golang frames that failed symbolization",
+    "type": "counter",
+    "name": "GolangSymbolizationFailure",
+    "field": "agent.golang.symbolization.failures",
+    "id": 277
   }
 ]

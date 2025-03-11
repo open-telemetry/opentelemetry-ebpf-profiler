@@ -641,6 +641,12 @@ const (
 	// Number of parsing errors seen during processing /proc/<PID>/maps
 	IDErrProcParse = 275
 
+	// Number of successfully symbolized Golang frames
+	IDGolangSymbolizationSuccess = 276
+
+	// Number of Golang frames that failed symbolization
+	IDGolangSymbolizationFailure = 277
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 276
+	IDMax = 278
 )

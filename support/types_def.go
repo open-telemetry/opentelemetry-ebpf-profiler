@@ -24,6 +24,7 @@ const (
 	FrameMarkerPerl     = C.FRAME_MARKER_PERL
 	FrameMarkerV8       = C.FRAME_MARKER_V8
 	FrameMarkerDotnet   = C.FRAME_MARKER_DOTNET
+	FrameMarkerGolang   = C.FRAME_MARKER_GOLANG
 	FrameMarkerAbort    = C.FRAME_MARKER_ABORT
 )
 

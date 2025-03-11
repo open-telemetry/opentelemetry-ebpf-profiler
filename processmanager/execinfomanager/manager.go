@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/golang"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
@@ -64,6 +65,9 @@ type ExecutableInfo struct {
 	Data interpreter.Data
 	// TSDInfo stores TSD information if the executable is libc, otherwise nil.
 	TSDInfo *tpbase.TSDInfo
+
+	// isGolang indicates if the executable is Golang.
+	isGolang bool
 }
 
 // ExecutableInfoManager manages all per-executable (FileID) information that we require to
@@ -125,7 +129,8 @@ func NewExecutableInfoManager(
 		interpreterLoaders = append(interpreterLoaders, dotnet.Loader)
 	}
 
-	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
+	interpreterLoaders = append(interpreterLoaders,
+		apmint.Loader, golang.Loader)
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
 		func(id host.FileID) uint32 { return uint32(id) })
@@ -191,6 +196,12 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 		}
 	}
 
+	ef, err := elfRef.GetELF()
+	if err != nil {
+		return ExecutableInfo{}, fmt.Errorf("failed to get ELF from reference: %v", err)
+	}
+	isGolang := ef.IsGolang()
+
 	// Re-take the lock and check whether another thread beat us to
 	// inserting the data while we were waiting for the write lock.
 	state = mgr.state.WLock()
@@ -213,8 +224,9 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// Insert a corresponding record into our map.
 	info = &entry{
 		ExecutableInfo: ExecutableInfo{
-			Data:    state.detectAndLoadInterpData(loaderInfo),
-			TSDInfo: tsdInfo,
+			Data:     state.detectAndLoadInterpData(loaderInfo),
+			TSDInfo:  tsdInfo,
+			isGolang: isGolang,
 		},
 		mapRef: ref,
 		rc:     1,
@@ -285,6 +297,19 @@ func (mgr *ExecutableInfoManager) NumInterpreterLoaders() int {
 	state := mgr.state.RLock()
 	defer mgr.state.RUnlock(&state)
 	return len(state.interpreterLoaders)
+}
+
+// IsGolang returns true if the fileID maps to a Golang executable.
+func (mgr *ExecutableInfoManager) IsGolang(fileID host.FileID) bool {
+	state := mgr.state.RLock()
+	defer mgr.state.RUnlock(&state)
+
+	info, ok := state.executables[fileID]
+	if !ok {
+		return false
+	}
+
+	return info.isGolang
 }
 
 // UpdateMetricSummary updates the metrics in the given metric map.
