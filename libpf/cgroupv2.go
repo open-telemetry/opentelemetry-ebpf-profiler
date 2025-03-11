@@ -11,15 +11,10 @@ import (
 	"regexp"
 
 	lru "github.com/elastic/go-freelru"
-	log "github.com/sirupsen/logrus"
-)
-
-var (
-	cgroupv2PathPattern = regexp.MustCompile(`.*:.*?:(.*)`)
 )
 
 // LookupCgroupv2 returns the cgroupv2 ID for pid.
-func LookupCgroupv2(cgrouplru *lru.SyncedLRU[PID, string], pid PID) (string, error) {
+func LookupCgroupv2(cgrouplru lru.Cache[PID, string], pid PID) (string, error) {
 	id, ok := cgrouplru.Get(pid)
 	if ok {
 		return id, nil
@@ -36,7 +31,7 @@ func LookupCgroupv2(cgrouplru *lru.SyncedLRU[PID, string], pid PID) (string, err
 }
 
 func LookupCgroupFromReader(
-	cgrouplru *lru.SyncedLRU[PID, string],
+	cgrouplru lru.Cache[PID, string],
 	pid PID,
 	f io.Reader,
 ) (string, error) {
@@ -48,15 +43,12 @@ func LookupCgroupFromReader(
 	// With a maximum of 4096 characters path in the kernel, 8192 should be fine here. We don't
 	// expect lines in /proc/<PID>/cgroup to be longer than that.
 	scanner.Buffer(buf, 8192)
-	var pathParts []string
 	for scanner.Scan() {
 		line := scanner.Text()
-		pathParts = cgroupv2PathPattern.FindStringSubmatch(line)
-		if pathParts == nil {
-			log.Debugf("Could not extract cgroupv2 path from line: %s", line)
+		genericCgroupv2 = getContainerIDFromCGroup(line)
+		if genericCgroupv2 == "" {
 			continue
 		}
-		genericCgroupv2 = pathParts[1]
 		break
 	}
 
@@ -65,4 +57,17 @@ func LookupCgroupFromReader(
 	cgrouplru.Add(pid, genericCgroupv2)
 
 	return genericCgroupv2, nil
+}
+
+var (
+	// cgroupContainerIDRe matches a container ID from a /proc/{pid}}/cgroup
+	cgroupContainerIDRe = regexp.MustCompile(`^.*/(?:.*-)?([0-9a-f]{64})(?:\.|\s*$)`)
+)
+
+func getContainerIDFromCGroup(line string) string {
+	matches := cgroupContainerIDRe.FindStringSubmatch(line)
+	if len(matches) <= 1 {
+		return ""
+	}
+	return matches[1]
 }

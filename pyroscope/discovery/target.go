@@ -117,30 +117,32 @@ type TargetsOptions struct {
 type targetProducer struct {
 	cid2target    map[containerID]*Target
 	pid2target    map[uint32]*Target
-	cgroups       *freelru.SyncedLRU[libpf.PID, string]
+	cgroups       *freelru.LRU[libpf.PID, string]
 	defaultTarget *Target
 	sync          sync.Mutex
 }
 
 func NewTargetProducer(
-	cgroups *freelru.SyncedLRU[libpf.PID, string],
+	cgroups *freelru.LRU[libpf.PID, string],
 	options TargetsOptions,
-) (TargetProducer, error) {
+) TargetProducer {
 	res := &targetProducer{
 		cgroups: cgroups,
 	}
 	res.setTargets(options)
-	return res, nil
+	return res
 }
 
 func (tf *targetProducer) FindTarget(pid uint32) *Target {
 	tf.sync.Lock()
-	defer tf.sync.Unlock()
 	res := tf.findTarget(pid)
 	if res != nil {
+		tf.sync.Unlock()
 		return res
 	}
-	return tf.defaultTarget
+	res = tf.defaultTarget
+	tf.sync.Unlock()
+	return res
 }
 
 func (tf *targetProducer) Update(args TargetsOptions) {
@@ -186,12 +188,8 @@ func (tf *targetProducer) findTarget(pid uint32) *Target {
 	if target, ok := tf.pid2target[pid]; ok {
 		return target
 	}
-	cgroup, err := libpf.LookupCgroupv2(tf.cgroups, libpf.PID(pid))
+	cid, err := libpf.LookupCgroupv2(tf.cgroups, libpf.PID(pid))
 	if err != nil {
-		return nil
-	}
-	cid := getContainerIDFromCGroup(cgroup)
-	if cid == "" {
 		return nil
 	}
 
