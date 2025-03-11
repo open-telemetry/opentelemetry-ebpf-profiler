@@ -141,16 +141,16 @@ extern void symblib_retpadextr_free(SymblibRetPadExtractor* extr);
 // Opaque handle to SymblibPointResolver.
 typedef struct SymblibPointResolver SymblibPointResolver;
 
-// Create a new SymblibPointResolver handler from a Go executable.
+// Creates a new SymblibPointResolver.
 extern SymblibStatus symblib_goruntime_new(
     const char* executable,
     SymblibPointResolver** runtime // out arg
 );
 
-// Frees a Go based SymblibPointResolver
+// Frees a SymblibPointResolver.
 extern void symblib_goruntime_free(SymblibPointResolver* runtime);
 
-// Hold information about a symbol and its origin.
+// Contains information about a symbol and its origin.
 typedef struct SymblibResolvedSymbol {
     uint64_t start_addr;
     SymblibString function_name;
@@ -158,7 +158,7 @@ typedef struct SymblibResolvedSymbol {
     uint32_t line_number;
 } SymblibResolvedSymbol;
 
-// Enveloping struct that holds len number of symbols in data.
+// Enveloping struct that contains len number of symbols in data.
 typedef struct SymblibSlice_SymblibResolvedSymbol {
     const SymblibResolvedSymbol* data;
     size_t len;
