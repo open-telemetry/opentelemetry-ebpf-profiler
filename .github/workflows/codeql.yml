@@ -11,7 +11,7 @@ on:
 jobs:
   analyze:
     name: Analyze Go (${{ matrix.target_arch }})
-    if: ${{ github.actor != 'dependabot[bot]' }}
+    if: ${{ github.actor != 'dependabot[bot]' && github.repository == 'open-telemetry/opentelemetry-ebpf-profiler' }}
     runs-on: ubuntu-24.04
     strategy:
       matrix:
