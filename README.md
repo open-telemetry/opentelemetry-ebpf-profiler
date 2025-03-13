@@ -31,8 +31,6 @@ eBPF.
   optimizations and offer a higher precision of function call chains.
 
 ## Building
-## Quick Start
-If you'd like to quickly test the agent, you can skip to the ["Visualizing data locally"](https://github.com/open-telemetry/opentelemetry-ebpf-profiler?tab=readme-ov-file#visualizing-data-locally) section and launch devfiler. From there, follow the download links for prebuilt agent binaries.
 
 ## Platform Requirements
 The agent can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
@@ -76,61 +74,6 @@ of the recently released OTel profiling [signal](https://github.com/open-telemet
 
 The agent loads the eBPF program and its maps, starts unwinding and reports
 captured traces to the backend.
-
-## Visualizing data locally
-
-We created a desktop application called "devfiler" that allows visualizing the
-profiling agent's output locally, making it very convenient for development use.
-devfiler spins up a local server that listens on `0.0.0.0:11000`.
-
-![Screenshot of devfiler UI](./doc/devfiler.png)
-
-To run it, simply download and unpack the archive from the following URL:
-
-https://upload.elastic.co/d/05d06f7a9a1898bc39e90b74647a1fb3ae19db7497d88e22aea27f47b8565dde
-
-Authentication token: `abe24ec533283049`
-
-
-The archive contains a build for each of the following platforms:
-
-- macOS (Intel)
-- macOS (Apple Silicon)
-- Linux AppImage (x86_64)
-- Linux AppImage (aarch64)
-
-> [!IMPORTANT]
-> 
-> The macOS application isn't properly signed with an Apple developer certificate: macOS will
-> complain about the application being corrupted on start. To work around that, simply run the following
-> command after downloading the archive:
->
-> ```
-> xattr -d com.apple.quarantine ~/Downloads/devfiler.app.zip
-> ```
->
-> If you did this correctly, the application should run just fine after unpacking the ZIP.
-
-> [!NOTE]
-> devfiler is currently in an experimental preview stage.
-
-### macOS
-
-This build of devfiler is currently not signed with a globally trusted Apple
-developer ID, but with a developer certificate. If you simply double-click the
-application, you'll run into an error. Instead of opening it with a double
-click, simply do a **right-click** on `devfiler.app`, then choose "Open". If you
-go this route, you'll instead be presented with the option to run it anyway.
-
-### Linux
-
-The AppImages in the archive should run on any Linux distribution with a
-reasonably modern glibc and libgl installation. To run the application, simply
-extract the archive and then do:
-
-```console
-./devfiler-appimage-$(uname -m).AppImage
-```
 
 ## Agent internals
 
