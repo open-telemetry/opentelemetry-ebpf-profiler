@@ -37,6 +37,8 @@ type Config struct {
 	Reporter reporter.Reporter
 
 	Fs *flag.FlagSet
+
+	IncludeEnvVars string
 }
 
 const (
