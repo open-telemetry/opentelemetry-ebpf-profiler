@@ -756,6 +756,7 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm
 			deleted2, _ := impl.DeletePidPageMappingInfoSingle(pid, prefixes)
 			return (deleted + deleted2), err
 		}
+		return deleted, nil
 	}
 	return impl.DeletePidPageMappingInfoSingle(pid, prefixes)
 }
