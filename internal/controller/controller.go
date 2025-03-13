@@ -76,6 +76,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	envVars := libpf.Set[string]{}
 	splittedEnvVars := strings.Split(c.config.IncludeEnvVars, ",")
 	for _, envVar := range splittedEnvVars {
+		envVar = strings.TrimSpace(envVar)
 		if envVar != "" {
 			envVars[envVar] = libpf.Void{}
 		}
