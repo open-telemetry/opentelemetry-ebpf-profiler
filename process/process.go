@@ -93,6 +93,8 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 		}
 		bufPool.Put(scanBuf)
 	}()
+
+	lastPath := ""
 	scanner.Buffer(*scanBuf, 8192)
 	for scanner.Scan() {
 		var fields [6]string
@@ -146,7 +148,14 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 			}
 		} else {
 			path = trimMappingPath(path)
-			path = strings.Clone(path)
+			if path == lastPath {
+				// Take advantage of the fact that mappings are sorted by path
+				// and avoid allocating the same string multiple times.
+				path = lastPath
+			} else {
+				path = strings.Clone(path)
+				lastPath = path
+			}
 		}
 
 		vaddr := util.HexToUint64(addrs[0])
