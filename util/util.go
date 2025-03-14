@@ -5,35 +5,12 @@ package util // import "go.opentelemetry.io/ebpf-profiler/util"
 
 import (
 	"math/bits"
-	"strconv"
 	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/sirupsen/logrus"
-
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 )
-
-// HexToUint64 is a convenience function to extract a hex string to a uint64 and
-// not worry about errors. Essentially a "mustConvertHexToUint64".
-func HexToUint64(str string) uint64 {
-	v, err := strconv.ParseUint(str, 16, 64)
-	if err != nil {
-		logrus.Fatalf("Failure to hex-convert %s to uint64: %v", str, err)
-	}
-	return v
-}
-
-// DecToUint64 is a convenience function to extract a decimal string to a uint64
-// and not worry about errors. Essentially a "mustConvertDecToUint64".
-func DecToUint64(str string) uint64 {
-	v, err := strconv.ParseUint(str, 10, 64)
-	if err != nil {
-		logrus.Fatalf("Failure to dec-convert %s to uint64: %v", str, err)
-	}
-	return v
-}
 
 // IsValidString checks if string is UTF-8-encoded and only contains expected characters.
 func IsValidString(s string) bool {
