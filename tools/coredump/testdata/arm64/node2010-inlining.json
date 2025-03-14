@@ -1,0 +1,170 @@
+{
+  "coredump-ref": "5ad0bbad40495d5224acd302578055065d61ee4157e0120bba9919838c0e4bcd",
+  "threads": [
+    {
+      "lwp": 39027,
+      "frames": [
+        "node+0xfe6a0c",
+        "node+0xfe8237",
+        "node+0xee513f",
+        "V8::BuiltinExitFrame+0 in :0",
+        "prepareStackTrace+37 in node:internal/errors:126",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0xfba13f",
+        "node+0xfbafbf",
+        "node+0xe82e3f",
+        "node+0xb9e78f",
+        "node+0xfd9e17",
+        "node+0xfe8907",
+        "node+0xfe9b97",
+        "node+0xec681f",
+        "node+0x12ee7ff",
+        "node+0x144bb73",
+        "node+0x144f23b",
+        "V8::ExitFrame+0 in :0",
+        "trace+6 in node:internal/console/constructor:427",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0xfba13f",
+        "node+0xfbafbf",
+        "node+0xe82e3f",
+        "node+0xd8e33f",
+        "V8::ExitFrame+0 in :0",
+        "add+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:3",
+        "add3+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:8",
+        "test+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:12",
+        "submain+2 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:17",
+        "main+2 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:23",
+        "<anonymous>+26 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:27",
+        "Module._compile+46 in node:internal/modules/cjs/loader:1267",
+        "Module._extensions..js+45 in node:internal/modules/cjs/loader:1321",
+        "Module.load+12 in node:internal/modules/cjs/loader:1125",
+        "Module._load+71 in node:internal/modules/cjs/loader:965",
+        "executeUserEntryPoint+8 in node:internal/modules/run_main:83",
+        "<anonymous>+0 in node:internal/main/run_main_module:0",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0xfba13f",
+        "node+0xfbafbf",
+        "node+0xe82e3f",
+        "node+0xc4c9e7",
+        "node+0xce6cef",
+        "node+0xc285db",
+        "node+0xc2aa07",
+        "node+0xb9fd33",
+        "node+0xcae117",
+        "node+0xc29e03",
+        "node+0xc2cceb",
+        "libc.so.6+0x284c3",
+        "libc.so.6+0x28597",
+        "node+0xb9a2ef"
+      ]
+    },
+    {
+      "lwp": 39033,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x8e2ef",
+        "node+0x17a8387",
+        "node+0xd80713",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 39032,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x17a855b",
+        "node+0xcd5347",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 39031,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x17a855b",
+        "node+0xcd5347",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 39030,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x17a855b",
+        "node+0xcd5347",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 39029,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x17a855b",
+        "node+0xcd5347",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 39028,
+      "frames": [
+        "libc.so.6+0xebd74",
+        "node+0x17ab893",
+        "node+0x179ab93",
+        "node+0xcd9daf",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "1a8c3655af0173b4dd4a3444233778098f2e1a4c33bcc65752f3342f9eeae9a5",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "a9c3487e01ae9f87dede4741ca08458c0cd507c2778381ded987fa1c2154c9be",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "4bde85854b2354752a55cdf131bbec6574c0babaa9da65e9b860f64544fe7b95",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "779b30165fa16a24d8656af9d4c8ca9068bed57cab0e302331804dea568fd6ad",
+      "local-path": "/home/ubuntu/.nvm/versions/node/v20.1.0/bin/node"
+    },
+    {
+      "ref": "3f0d3c8aa8284c6d268e3f6984f43e5905ddb92d695db9571fd762e8eac3ad5c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.33"
+    },
+    {
+      "ref": "d0e52ef545744b3976ef297113b4a66ff98969085553ed2e696a17084d3ab54c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libdl.so.2"
+    },
+    {
+      "ref": "86ef8631bf0d39ae4cb5957dd8ea5859f66fda2fc4b6f59a62fe6a53b19d9a4c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libpthread.so.0"
+    },
+    {
+      "ref": "af9f0346cd155b0cc2d2c549e54f22100ed5e03771f2f666dc4ba737987654a8",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    }
+  ]
+}

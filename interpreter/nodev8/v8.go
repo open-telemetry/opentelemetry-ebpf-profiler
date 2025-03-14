@@ -94,7 +94,7 @@ package nodev8 // import "go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 // 14.0.y   8.1.307
 // 14.5.y   8.3.110
 // 14.6.y   8.4.371
-// 16.0.y   9.0.257
+// 16.0.y   9.0.257    earliest supported version for arm64
 // 16.4.y   9.1.269
 // 16.6.y   9.2.230
 // 16.11.y  9.4.19
@@ -224,8 +224,8 @@ const (
 )
 
 var (
-	// regex for the interpreter executable
-	v8Regex = regexp.MustCompile(`^(?:.*/)?node(\d+)?$`)
+	// regex for the interpreter executable or shared library
+	v8Regex = regexp.MustCompile(`^(?:.*/)?node(\d+)?$|^(?:.*/)libnode\.so(\.\d+)?$`)
 
 	// The FileID used for V8 stub frames
 	v8StubsFileID = libpf.NewFileID(0x578b, 0x1d)

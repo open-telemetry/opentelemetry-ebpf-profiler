@@ -1,0 +1,172 @@
+{
+  "coredump-ref": "b555d7f16f177f0c1815f81f5d91235ce6a176a130eef9a54f54997b6737d2da",
+  "threads": [
+    {
+      "lwp": 37732,
+      "frames": [
+        "libc.so.6+0xe1d20",
+        "node+0x14c5e37",
+        "node+0xbc6457",
+        "node+0xbc16cf",
+        "node+0xbc1ad3",
+        "V8::ExitFrame+0 in :0",
+        "handleWriteReq+16 in node:internal/stream_base_commons:61",
+        "writeGeneric+2 in node:internal/stream_base_commons:153",
+        "Socket._writeGeneric+0 in node:net:0",
+        "Socket._write+0 in node:net:0",
+        "writeOrBuffer+24 in node:internal/streams/writable:389",
+        "_write+47 in node:internal/streams/writable:330",
+        "Writable.write+1 in node:internal/streams/writable:334",
+        "value+28 in node:internal/console/constructor:285",
+        "warn+1 in node:internal/console/constructor:364",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0xdee9d7",
+        "node+0xdef51b",
+        "node+0xce14d3",
+        "node+0xbf128b",
+        "V8::ExitFrame+0 in :0",
+        "trace+6 in node:internal/console/constructor:410",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0xdee9d7",
+        "node+0xdef51b",
+        "node+0xce14d3",
+        "node+0xbf128b",
+        "V8::ExitFrame+0 in :0",
+        "add+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:3",
+        "add3+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:8",
+        "test+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:12",
+        "submain+2 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:17",
+        "main+2 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:23",
+        "<anonymous>+26 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:27",
+        "Module._compile+46 in node:internal/modules/cjs/loader:1101",
+        "Module._extensions..js+43 in node:internal/modules/cjs/loader:1153",
+        "Module.load+12 in node:internal/modules/cjs/loader:981",
+        "Module._load+65 in node:internal/modules/cjs/loader:822",
+        "executeUserEntryPoint+0 in node:internal/modules/run_main:0",
+        "<anonymous>+0 in node:internal/main/run_main_module:0",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0xdee9d7",
+        "node+0xdef51b",
+        "node+0xce14d3",
+        "node+0xab8f17",
+        "node+0xab9137",
+        "node+0xaba40f",
+        "node+0xa46457",
+        "node+0xb2e987",
+        "node+0xabc237",
+        "libc.so.6+0x284c3",
+        "libc.so.6+0x28597",
+        "node+0xa41c3b",
+        "<unwinding aborted due to error native_stack_delta_invalid>"
+      ]
+    },
+    {
+      "lwp": 37738,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x8e2ef",
+        "node+0x14c89e3",
+        "node+0xbe4f6f",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 37737,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x14c8bfb",
+        "node+0xb55947",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 37736,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x14c8bfb",
+        "node+0xb55947",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 37735,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x14c8bfb",
+        "node+0xb55947",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 37734,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x14c8bfb",
+        "node+0xb55947",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 37733,
+      "frames": [
+        "libc.so.6+0xebd74",
+        "node+0x14cc1d3",
+        "node+0x14bb6bf",
+        "node+0xb5a0b7",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "1a8c3655af0173b4dd4a3444233778098f2e1a4c33bcc65752f3342f9eeae9a5",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "86ef8631bf0d39ae4cb5957dd8ea5859f66fda2fc4b6f59a62fe6a53b19d9a4c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libpthread.so.0"
+    },
+    {
+      "ref": "4bde85854b2354752a55cdf131bbec6574c0babaa9da65e9b860f64544fe7b95",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "3f0d3c8aa8284c6d268e3f6984f43e5905ddb92d695db9571fd762e8eac3ad5c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.33"
+    },
+    {
+      "ref": "8fe9e4297ec52bd22f6e31a227a7a15d7bdff7a01429c37011a173c8d5386669",
+      "local-path": "/home/ubuntu/.nvm/versions/node/v16.11.0/bin/node"
+    },
+    {
+      "ref": "d0e52ef545744b3976ef297113b4a66ff98969085553ed2e696a17084d3ab54c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libdl.so.2"
+    },
+    {
+      "ref": "af9f0346cd155b0cc2d2c549e54f22100ed5e03771f2f666dc4ba737987654a8",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "a9c3487e01ae9f87dede4741ca08458c0cd507c2778381ded987fa1c2154c9be",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    }
+  ]
+}

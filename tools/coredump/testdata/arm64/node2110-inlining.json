@@ -1,0 +1,191 @@
+{
+  "coredump-ref": "3f9d6f1eff5508988ad30bc00c15f8d42ff769e80ed75394e21ecadef91e51a4",
+  "threads": [
+    {
+      "lwp": 39347,
+      "frames": [
+        "libc.so.6+0xe1d8c",
+        "node+0x194c477",
+        "node+0xebc9c3",
+        "node+0xeb8abb",
+        "node+0xeb8bcb",
+        "V8::ExitFrame+0 in :0",
+        "handleWriteReq+0 in node:internal/stream_base_commons:0",
+        "writeGeneric+0 in node:internal/stream_base_commons:0",
+        "Socket._writeGeneric+0 in node:net:0",
+        "Socket._write+0 in node:net:0",
+        "writeOrBuffer+0 in node:internal/streams/writable:0",
+        "_write+0 in node:internal/streams/writable:0",
+        "Writable.write+0 in node:internal/streams/writable:0",
+        "value+0 in node:internal/console/constructor:0",
+        "warn+0 in node:internal/console/constructor:0",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0x113b4eb",
+        "node+0x113c253",
+        "node+0xffc27b",
+        "node+0xee5397",
+        "V8::ExitFrame+0 in :0",
+        "trace+0 in node:internal/console/constructor:0",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0x113b4eb",
+        "node+0x113c253",
+        "node+0xffc27b",
+        "node+0xee5397",
+        "V8::ExitFrame+0 in :0",
+        "add+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:3",
+        "add3+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:8",
+        "test+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:12",
+        "submain+2 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:17",
+        "main+2 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:23",
+        "<anonymous>+26 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:27",
+        "Module._compile+46 in node:internal/modules/cjs/loader:1376",
+        "Module._extensions..js+46 in node:internal/modules/cjs/loader:1435",
+        "Module.load+13 in node:internal/modules/cjs/loader:1207",
+        "Module._load+73 in node:internal/modules/cjs/loader:1023",
+        "executeUserEntryPoint+0 in node:internal/modules/run_main:0",
+        "<anonymous>+0 in node:internal/main/run_main_module:0",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0x113b4eb",
+        "node+0x113c253",
+        "node+0xffc27b",
+        "node+0xd9bc17",
+        "node+0xe3a1c3",
+        "node+0xd7600b",
+        "node+0xd77ffb",
+        "node+0xce5dd3",
+        "node+0xe002af",
+        "node+0xe00bff",
+        "node+0xd7aecb",
+        "libc.so.6+0x284c3",
+        "libc.so.6+0x28597",
+        "node+0xce03cf"
+      ]
+    },
+    {
+      "lwp": 39356,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x8e2ef",
+        "node+0x194f767",
+        "node+0xed7623",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 39355,
+      "frames": [
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 39354,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x194f93b",
+        "node+0xe28677",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 39353,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x194f93b",
+        "node+0xe28677",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 39352,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x194f93b",
+        "node+0xe28677",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 39351,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x194f93b",
+        "node+0xe28677",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 39350,
+      "frames": [
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 39349,
+      "frames": [
+        "libc.so.6+0xebd74",
+        "node+0x19542c3",
+        "node+0x1941a5b",
+        "node+0xe2d1cf",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 39348,
+      "frames": [
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "1a8c3655af0173b4dd4a3444233778098f2e1a4c33bcc65752f3342f9eeae9a5",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "af9f0346cd155b0cc2d2c549e54f22100ed5e03771f2f666dc4ba737987654a8",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "a9c3487e01ae9f87dede4741ca08458c0cd507c2778381ded987fa1c2154c9be",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "86ef8631bf0d39ae4cb5957dd8ea5859f66fda2fc4b6f59a62fe6a53b19d9a4c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libpthread.so.0"
+    },
+    {
+      "ref": "4bde85854b2354752a55cdf131bbec6574c0babaa9da65e9b860f64544fe7b95",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "c564268acd39e5b7bcebf777fb2c36c3f3747e29ce455c6b0f41f17521aef073",
+      "local-path": "/home/ubuntu/.nvm/versions/node/v21.1.0/bin/node"
+    },
+    {
+      "ref": "3f0d3c8aa8284c6d268e3f6984f43e5905ddb92d695db9571fd762e8eac3ad5c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.33"
+    },
+    {
+      "ref": "d0e52ef545744b3976ef297113b4a66ff98969085553ed2e696a17084d3ab54c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libdl.so.2"
+    }
+  ]
+}

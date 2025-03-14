@@ -21,6 +21,15 @@
 // The maximum V8 frame length used in heuristic to validate FP
 #define V8_MAX_FRAME_LENGTH 8192
 
+#if defined(__aarch64__)
+  // On aarch64, a JS EntryFrame's layout differs from that of any other frame,
+  // and stores 20 registers, the fp being the top-most.
+  // See: https://chromium.googlesource.com/v8/v8/+/main/src/execution/arm64/frame-constants-arm64.h
+  #define V8_ENTRYFRAME_CALLEE_SAVED_REGS_BEFORE_FP_LR_PAIR 18
+#else
+  #define V8_ENTRYFRAME_CALLEE_SAVED_REGS_BEFORE_FP_LR_PAIR 0
+#endif
+
 // Map from V8 process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 bpf_map_def SEC("maps") v8_procs = {
@@ -280,6 +289,14 @@ frame_done:
   }
 
   state->sp = fp + sizeof(regs);
+
+  // The JS Entry Frame's layout differs from other frames because some callee
+  // saved registers might be pushed onto the stack before the [fp, lr] pair.
+  // This frame is represented by markers 0 (inner) and 1 (outermost).
+  // See: https://chromium.googlesource.com/v8/v8/+/main/src/execution/frames.h#167
+  if (pointer_and_type == V8_FILE_TYPE_MARKER && delta_or_marker == 1)
+    state->sp += V8_ENTRYFRAME_CALLEE_SAVED_REGS_BEFORE_FP_LR_PAIR * sizeof(size_t);
+
   state->fp = regs[0];
   state->pc = regs[1];
   unwinder_mark_nonleaf_frame(state);
