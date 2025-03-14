@@ -1,0 +1,163 @@
+{
+  "coredump-ref": "131c9e02ff1c035f8b71875779b1812e63b20b56c41944ff21f0c0b6ebd25f0b",
+  "threads": [
+    {
+      "lwp": 38384,
+      "frames": [
+        "libc.so.6+0x1405c4",
+        "libc.so.6+0x88bbf",
+        "node+0x15296fb",
+        "node+0xb1108b",
+        "node+0xb1160f",
+        "node+0x105f3f7",
+        "node+0x106217f",
+        "node+0x11f55ff",
+        "V8::ExitFrame+0 in :0",
+        "V8::StubFrame+0 in :0",
+        "getColorDepth+0 in node:internal/tty:0",
+        "value+5 in node:internal/console/constructor:308",
+        "value+1 in node:internal/console/constructor:333",
+        "trace+3 in node:internal/console/constructor:411",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0xe3a78b",
+        "node+0xe3b35b",
+        "node+0xd01147",
+        "node+0xc103a3",
+        "V8::ExitFrame+0 in :0",
+        "add+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:3",
+        "add3+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:8",
+        "test+1 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:12",
+        "submain+2 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:17",
+        "main+2 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:23",
+        "<anonymous>+26 in /home/ubuntu/opentelemetry-ebpf-profiler/tools/coredump/testsources/node/inlining.js:27",
+        "Module._compile+46 in node:internal/modules/cjs/loader:1095",
+        "Module._extensions..js+20 in node:internal/modules/cjs/loader:1124",
+        "Module.load+12 in node:internal/modules/cjs/loader:975",
+        "Module._load+65 in node:internal/modules/cjs/loader:816",
+        "executeUserEntryPoint+0 in node:internal/modules/run_main:0",
+        "<anonymous>+0 in node:internal/main/run_main_module:0",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0xe3a78b",
+        "node+0xe3b35b",
+        "node+0xd01147",
+        "node+0xaddcaf",
+        "node+0xaddecf",
+        "node+0xadf1bf",
+        "node+0xa6b26f",
+        "node+0xb4f577",
+        "node+0xae0fe7",
+        "libc.so.6+0x284c3",
+        "libc.so.6+0x28597",
+        "node+0xa66af3",
+        "<unwinding aborted due to error native_stack_delta_invalid>"
+      ]
+    },
+    {
+      "lwp": 38390,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x8e2ef",
+        "node+0x1529b43",
+        "node+0xc03d77",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 38389,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x1529d5b",
+        "node+0xb760a7",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 38388,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x1529d5b",
+        "node+0xb760a7",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 38387,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x1529d5b",
+        "node+0xb760a7",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 38386,
+      "frames": [
+        "libc.so.6+0x81e9c",
+        "libc.so.6+0x84b1f",
+        "node+0x1529d5b",
+        "node+0xb760a7",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    },
+    {
+      "lwp": 38385,
+      "frames": [
+        "libc.so.6+0xebd74",
+        "node+0x152da23",
+        "node+0x151c917",
+        "node+0xb7a817",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0x8595b",
+        "libc.so.6+0xeba4b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "a9c3487e01ae9f87dede4741ca08458c0cd507c2778381ded987fa1c2154c9be",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "26358c5349edf879225ff11c26f2b240840025fe1bceaf78097818391fb7a8b1",
+      "local-path": "/home/ubuntu/.nvm/versions/node/v16.4.0/bin/node"
+    },
+    {
+      "ref": "1a8c3655af0173b4dd4a3444233778098f2e1a4c33bcc65752f3342f9eeae9a5",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "d0e52ef545744b3976ef297113b4a66ff98969085553ed2e696a17084d3ab54c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libdl.so.2"
+    },
+    {
+      "ref": "3f0d3c8aa8284c6d268e3f6984f43e5905ddb92d695db9571fd762e8eac3ad5c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.33"
+    },
+    {
+      "ref": "4bde85854b2354752a55cdf131bbec6574c0babaa9da65e9b860f64544fe7b95",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "af9f0346cd155b0cc2d2c549e54f22100ed5e03771f2f666dc4ba737987654a8",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "86ef8631bf0d39ae4cb5957dd8ea5859f66fda2fc4b6f59a62fe6a53b19d9a4c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libpthread.so.0"
+    }
+  ]
+}
