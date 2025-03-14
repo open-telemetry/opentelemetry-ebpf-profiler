@@ -11,16 +11,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
-	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // systemProcess provides an implementation of the Process interface for a
@@ -126,12 +127,27 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 		if flags&(elf.PF_R|elf.PF_X) == 0 {
 			continue
 		}
-		inode := util.DecToUint64(fields[4])
+		inode, err := strconv.ParseUint(fields[4], 10, 64)
+		if err != nil {
+			logrus.Errorf("inode: failed to convert %s to uint64: %v", fields[4], err)
+			continue
+		}
+
 		path := fields[5]
 		if stringutil.SplitN(fields[3], ":", devs[:]) < 2 {
 			continue
 		}
-		device := util.HexToUint64(devs[0])<<8 + util.HexToUint64(devs[1])
+		major, err := strconv.ParseUint(devs[0], 16, 64)
+		if err != nil {
+			logrus.Errorf("major device: failed to convert %s to uint64: %v", devs[0], err)
+			continue
+		}
+		minor, err := strconv.ParseUint(devs[1], 16, 64)
+		if err != nil {
+			logrus.Errorf("minor device: failed to convert %s to uint64: %v", devs[0], err)
+			continue
+		}
+		device := major<<8 + minor
 
 		if inode == 0 {
 			if path == "[vdso]" {
@@ -149,12 +165,29 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 			path = strings.Clone(path)
 		}
 
-		vaddr := util.HexToUint64(addrs[0])
+		vaddr, err := strconv.ParseUint(addrs[0], 16, 64)
+		if err != nil {
+			logrus.Errorf("vaddr: failed to convert %s to uint64: %v", addrs[0], err)
+			continue
+		}
+		vend, err := strconv.ParseUint(addrs[1], 16, 64)
+		if err != nil {
+			logrus.Errorf("vend: failed to convert %s to uint64: %v", addrs[1], err)
+			continue
+		}
+		length := vend - vaddr
+
+		fileOffset, err := strconv.ParseUint(fields[2], 16, 64)
+		if err != nil {
+			logrus.Errorf("fileOffset: failed to convert %s to uint64: %v", fields[2], err)
+			continue
+		}
+
 		mappings = append(mappings, Mapping{
 			Vaddr:      vaddr,
-			Length:     util.HexToUint64(addrs[1]) - vaddr,
+			Length:     length,
 			Flags:      flags,
-			FileOffset: util.HexToUint64(fields[2]),
+			FileOffset: fileOffset,
 			Device:     device,
 			Inode:      inode,
 			Path:       path,
