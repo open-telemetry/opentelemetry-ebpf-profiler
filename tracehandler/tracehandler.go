@@ -116,6 +116,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		if err := m.reporter.ReportTraceEvent(trace, meta); err != nil {
 			log.Errorf("Failed to report trace event: %v", err)
 		}
+		return
 	}
 	m.traceCacheMiss++
 
