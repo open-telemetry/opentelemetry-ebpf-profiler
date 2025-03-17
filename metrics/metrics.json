@@ -952,6 +952,7 @@
     "id": 130
   },
   {
+    "obsolete": true,
     "description": "Number of cache hits in tracehandler trace cache by BPF hash",
     "type": "counter",
     "name": "KnownTracesHit",
@@ -959,6 +960,7 @@
     "id": 131
   },
   {
+    "obsolete": true,
     "description": "Number of cache misses in tracehandler trace cache by BPF hash",
     "type": "counter",
     "name": "KnownTracesMiss",

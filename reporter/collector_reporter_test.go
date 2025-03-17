@@ -57,7 +57,9 @@ func TestCollectorReporterReportTraceEvent(t *testing.T) {
 				CGroupCacheElements:      1,
 			}, next)
 			require.NoError(t, err)
-			r.ReportTraceEvent(tt.trace, tt.meta)
+			if err := r.ReportTraceEvent(tt.trace, tt.meta); err != nil {
+				t.Fatal(err)
+			}
 		})
 	}
 }

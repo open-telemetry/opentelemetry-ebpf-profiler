@@ -29,6 +29,10 @@ type Times interface {
 	MonitorInterval() time.Duration
 }
 
+// Default lifetime of elements in the cache to reduce recurring
+// symbolization efforts.
+var traceCacheLifetime = 5 * time.Minute
+
 // TraceProcessor is an interface used by traceHandler to convert traces
 // from a form received from eBPF to the form we wish to dispatch to the
 // collection agent.
@@ -54,21 +58,15 @@ type TraceProcessor interface {
 // from the eBPF components.
 type traceHandler struct {
 	// Metrics
-	umTraceCacheHit   uint64
-	umTraceCacheMiss  uint64
-	bpfTraceCacheHit  uint64
-	bpfTraceCacheMiss uint64
+	traceCacheHit  uint64
+	traceCacheMiss uint64
 
 	traceProcessor TraceProcessor
 
-	// bpfTraceCache stores mappings from BPF to user-mode hashes. This allows
+	// traceCache stores mappings from BPF hashes to symbolized traces. This allows
 	// avoiding the overhead of re-doing user-mode symbolization of traces that
 	// we have recently seen already.
-	bpfTraceCache *lru.LRU[host.TraceHash, libpf.TraceHash]
-
-	// umTraceCache is a LRU set that suppresses unnecessary resends of traces
-	// that we have recently reported to the collector already.
-	umTraceCache *lru.LRU[libpf.TraceHash, libpf.Void]
+	traceCache *lru.LRU[host.TraceHash, *libpf.Trace]
 
 	// reporter instance to use to send out traces.
 	reporter reporter.TraceReporter
@@ -79,27 +77,20 @@ type traceHandler struct {
 // newTraceHandler creates a new traceHandler
 func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 	intervals Times, cacheSize uint32) (*traceHandler, error) {
-	bpfTraceCache, err := lru.New[host.TraceHash, libpf.TraceHash](
+	traceCache, err := lru.New[host.TraceHash, *libpf.Trace](
 		cacheSize, func(k host.TraceHash) uint32 { return uint32(k) })
 	if err != nil {
 		return nil, err
 	}
+	// Do not hold elements indefinitely in the cache.
+	traceCache.SetLifetime(traceCacheLifetime)
 
-	umTraceCache, err := lru.New[libpf.TraceHash, libpf.Void](
-		cacheSize, libpf.TraceHash.Hash32)
-	if err != nil {
-		return nil, err
-	}
-
-	t := &traceHandler{
+	return &traceHandler{
 		traceProcessor: traceProcessor,
-		bpfTraceCache:  bpfTraceCache,
-		umTraceCache:   umTraceCache,
+		traceCache:     traceCache,
 		reporter:       rep,
 		times:          intervals,
-	}
-
-	return t, nil
+	}, nil
 }
 
 func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
@@ -117,40 +108,25 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		EnvVars:        bpfTrace.EnvVars,
 	}
 
-	if !m.reporter.SupportsReportTraceEvent() {
-		// Fast path: if the trace is already known remotely, we just send a counter update.
-		postConvHash, traceKnown := m.bpfTraceCache.Get(bpfTrace.Hash)
-		if traceKnown {
-			m.bpfTraceCacheHit++
-			meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, postConvHash, 1)
-			m.reporter.ReportCountForTrace(postConvHash, 1, meta)
-			return
+	if trace, exists := m.traceCache.GetAndRefresh(bpfTrace.Hash,
+		traceCacheLifetime); exists {
+		m.traceCacheHit++
+		// Fast path
+		meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
+		if err := m.reporter.ReportTraceEvent(trace, meta); err != nil {
+			log.Errorf("Failed to report trace event: %v", err)
 		}
-		m.bpfTraceCacheMiss++
 	}
+	m.traceCacheMiss++
 
 	// Slow path: convert trace.
 	umTrace := m.traceProcessor.ConvertTrace(bpfTrace)
-	log.Debugf("Trace hash remap 0x%x -> 0x%x", bpfTrace.Hash, umTrace.Hash)
-	m.bpfTraceCache.Add(bpfTrace.Hash, umTrace.Hash)
+	m.traceCache.Add(bpfTrace.Hash, umTrace)
 
 	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
-	if m.reporter.SupportsReportTraceEvent() {
-		m.reporter.ReportTraceEvent(umTrace, meta)
-		return
+	if err := m.reporter.ReportTraceEvent(umTrace, meta); err != nil {
+		log.Errorf("Failed to report trace event: %v", err)
 	}
-	m.reporter.ReportCountForTrace(umTrace.Hash, 1, meta)
-
-	// Trace already known to collector by UM hash?
-	if _, known := m.umTraceCache.Get(umTrace.Hash); known {
-		m.umTraceCacheHit++
-		return
-	}
-	m.umTraceCacheMiss++
-
-	// Nope. Send it now.
-	m.reporter.ReportFramesForTrace(umTrace)
-	m.umTraceCache.Add(umTrace.Hash, libpf.Void{})
 }
 
 // Start starts a goroutine that receives and processes trace updates over

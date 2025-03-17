@@ -5,6 +5,7 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -63,13 +64,6 @@ func (b *baseReporter) addHostmetadata(metadataMap map[string]string) {
 	}
 }
 
-// ReportFramesForTrace is a NOP
-func (*baseReporter) ReportFramesForTrace(_ *libpf.Trace) {}
-
-// ReportCountForTrace is a NOP
-func (b *baseReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *samples.TraceEventMeta) {
-}
-
 func (b *baseReporter) ExecutableKnown(fileID libpf.FileID) bool {
 	_, known := b.pdata.Executables.GetAndRefresh(fileID, pdata.ExecutableCacheLifetime)
 	return known
@@ -93,13 +87,10 @@ func (b *baseReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 	})
 }
 
-func (*baseReporter) SupportsReportTraceEvent() bool { return true }
-
-func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) {
+func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
 	if meta.Origin != support.TraceOriginSampling && meta.Origin != support.TraceOriginOffCPU {
 		// At the moment only on-CPU and off-CPU traces are reported.
-		log.Errorf("Skip reporting trace for unexpected %d origin", meta.Origin)
-		return
+		return fmt.Errorf("skip reporting trace for unexpected %d origin", meta.Origin)
 	}
 
 	var extraMeta any
@@ -131,7 +122,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
 		events.OffTimes = append(events.OffTimes, meta.OffTime)
 		(*traceEventsMap)[meta.Origin][key] = events
-		return
+		return nil
 	}
 
 	(*traceEventsMap)[meta.Origin][key] = &samples.TraceEvents{
@@ -145,6 +136,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		OffTimes:           []int64{meta.OffTime},
 		EnvVars:            meta.EnvVars,
 	}
+	return nil
 }
 
 func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
