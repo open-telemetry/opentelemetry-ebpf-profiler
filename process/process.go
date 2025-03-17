@@ -129,7 +129,7 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 		}
 		inode, err := strconv.ParseUint(fields[4], 10, 64)
 		if err != nil {
-			logrus.Errorf("inode: failed to convert %s to uint64: %v", fields[4], err)
+			logrus.Debugf("inode: failed to convert %s to uint64: %v", fields[4], err)
 			continue
 		}
 
@@ -139,12 +139,12 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 		}
 		major, err := strconv.ParseUint(devs[0], 16, 64)
 		if err != nil {
-			logrus.Errorf("major device: failed to convert %s to uint64: %v", devs[0], err)
+			logrus.Debugf("major device: failed to convert %s to uint64: %v", devs[0], err)
 			continue
 		}
 		minor, err := strconv.ParseUint(devs[1], 16, 64)
 		if err != nil {
-			logrus.Errorf("minor device: failed to convert %s to uint64: %v", devs[0], err)
+			logrus.Debugf("minor device: failed to convert %s to uint64: %v", devs[0], err)
 			continue
 		}
 		device := major<<8 + minor
@@ -167,19 +167,19 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 
 		vaddr, err := strconv.ParseUint(addrs[0], 16, 64)
 		if err != nil {
-			logrus.Errorf("vaddr: failed to convert %s to uint64: %v", addrs[0], err)
+			logrus.Debugf("vaddr: failed to convert %s to uint64: %v", addrs[0], err)
 			continue
 		}
 		vend, err := strconv.ParseUint(addrs[1], 16, 64)
 		if err != nil {
-			logrus.Errorf("vend: failed to convert %s to uint64: %v", addrs[1], err)
+			logrus.Debugf("vend: failed to convert %s to uint64: %v", addrs[1], err)
 			continue
 		}
 		length := vend - vaddr
 
 		fileOffset, err := strconv.ParseUint(fields[2], 16, 64)
 		if err != nil {
-			logrus.Errorf("fileOffset: failed to convert %s to uint64: %v", fields[2], err)
+			logrus.Debugf("fileOffset: failed to convert %s to uint64: %v", fields[2], err)
 			continue
 		}
 
