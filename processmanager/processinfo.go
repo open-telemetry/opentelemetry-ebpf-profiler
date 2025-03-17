@@ -341,17 +341,10 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	}
 
 	gnuBuildID, _ := ef.GetBuildID()
-	mapping2 := *mapping // copy to avoid races if callee saves the closure
-	open := func() (process.ReadAtCloser, error) {
-		return pr.OpenMappingFile(&mapping2)
-	}
 	pm.reporter.ExecutableMetadata(&reporter.ExecutableMetadataArgs{
-		FileID:            fileID,
-		FileName:          baseName,
-		GnuBuildID:        gnuBuildID,
-		DebuglinkFileName: ef.DebuglinkFileName(elfRef.FileName(), elfRef),
-		Interp:            libpf.Native,
-		Open:              open,
+		FileID:     fileID,
+		FileName:   baseName,
+		GnuBuildID: gnuBuildID,
 	})
 	return info
 }

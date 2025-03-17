@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
@@ -48,9 +47,6 @@ type TraceReporter interface {
 	SupportsReportTraceEvent() bool
 }
 
-// ExecutableOpener is a function that attempts to open an executable.
-type ExecutableOpener = func() (process.ReadAtCloser, error)
-
 // ExecutableMetadataArgs collects metadata about a discovered
 // executable, for reporting to a SymbolReporter via the ExecutableMetadata function.
 type ExecutableMetadataArgs struct {
@@ -60,15 +56,6 @@ type ExecutableMetadataArgs struct {
 	FileName string
 	// GnuBuildID is the GNU build ID from .note.gnu.build-id, if any.
 	GnuBuildID string
-	// DebuglinkFileName is the path to the matching debug file
-	// from the .gnu.debuglink, if any. The caller should
-	// verify that the file in question matches the GnuBuildID of this executable..
-	DebuglinkFileName string
-	// Interp is the discovered interpreter type of this executable, if any.
-	Interp libpf.InterpreterType
-	// Open is a function that can be used to open the executable for reading,
-	// or nil for interpreters that don't support this.
-	Open ExecutableOpener
 }
 
 // FrameMetadataArgs collects metadata about a single frame in a trace, for

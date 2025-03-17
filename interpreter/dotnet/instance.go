@@ -622,17 +622,11 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			info.simpleName, info.guid)
 
 		if !symbolReporter.ExecutableKnown(info.fileID) {
-			open := func() (process.ReadAtCloser, error) {
-				return pr.OpenMappingFile(m)
-			}
 			symbolReporter.ExecutableMetadata(
 				&reporter.ExecutableMetadataArgs{
-					FileID:            info.fileID,
-					FileName:          path.Base(m.Path),
-					GnuBuildID:        info.guid,
-					DebuglinkFileName: "",
-					Interp:            libpf.Dotnet,
-					Open:              open,
+					FileID:     info.fileID,
+					FileName:   path.Base(m.Path),
+					GnuBuildID: info.guid,
 				},
 			)
 		}
