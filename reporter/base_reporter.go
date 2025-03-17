@@ -5,6 +5,7 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -42,6 +43,8 @@ type baseReporter struct {
 	// hostmetadata stores metadata that is sent out with every request.
 	hostmetadata *lru.SyncedLRU[string, string]
 }
+
+var errUnknownOrigin = errors.New("unknown trace origin")
 
 func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
@@ -90,7 +93,8 @@ func (b *baseReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
 	if meta.Origin != support.TraceOriginSampling && meta.Origin != support.TraceOriginOffCPU {
 		// At the moment only on-CPU and off-CPU traces are reported.
-		return fmt.Errorf("skip reporting trace for unexpected %d origin", meta.Origin)
+		return fmt.Errorf("skip reporting trace for %d origin: %w", meta.Origin,
+			errUnknownOrigin)
 	}
 
 	var extraMeta any
