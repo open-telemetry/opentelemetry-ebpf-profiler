@@ -8,6 +8,7 @@ package tracehandler // import "go.opentelemetry.io/ebpf-profiler/tracehandler"
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -66,7 +67,7 @@ type traceHandler struct {
 	// traceCache stores mappings from BPF hashes to symbolized traces. This allows
 	// avoiding the overhead of re-doing user-mode symbolization of traces that
 	// we have recently seen already.
-	traceCache *lru.LRU[host.TraceHash, *libpf.Trace]
+	traceCache *lru.SyncedLRU[host.TraceHash, *libpf.Trace]
 
 	// reporter instance to use to send out traces.
 	reporter reporter.TraceReporter
@@ -75,15 +76,38 @@ type traceHandler struct {
 }
 
 // newTraceHandler creates a new traceHandler
-func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
-	intervals Times, cacheSize uint32) (*traceHandler, error) {
-	traceCache, err := lru.New[host.TraceHash, *libpf.Trace](
+func newTraceHandler(ctx context.Context, rep reporter.TraceReporter,
+	traceProcessor TraceProcessor, intervals Times, cacheSize uint32) (*traceHandler, error) {
+	traceCache, err := lru.NewSynced[host.TraceHash, *libpf.Trace](
 		cacheSize, func(k host.TraceHash) uint32 { return uint32(k) })
 	if err != nil {
 		return nil, err
 	}
 	// Do not hold elements indefinitely in the cache.
 	traceCache.SetLifetime(traceCacheLifetime)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		wg.Done()
+		jitter := 0.2
+		ticker := time.NewTicker(libpf.AddJitter(traceCacheLifetime, jitter))
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				traceCache.PurgeExpired()
+				ticker.Reset(libpf.AddJitter(traceCacheLifetime, jitter))
+			}
+		}
+	}()
+
+	// Wait to make sure the purge routine did start.
+	wg.Wait()
 
 	return &traceHandler{
 		traceProcessor: traceProcessor,
@@ -138,7 +162,7 @@ func Start(ctx context.Context, rep reporter.TraceReporter, traceProcessor Trace
 	traceInChan <-chan *host.Trace, intervals Times, cacheSize uint32,
 ) (workerExited <-chan libpf.Void, err error) {
 	handler, err :=
-		newTraceHandler(rep, traceProcessor, intervals, cacheSize)
+		newTraceHandler(ctx, rep, traceProcessor, intervals, cacheSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create traceHandler: %v", err)
 	}
