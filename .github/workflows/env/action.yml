@@ -30,12 +30,6 @@ runs:
         sudo apt-get install -y curl unzip gcc-aarch64-linux-gnu \
           libc6-arm64-cross qemu-user-binfmt libc6:arm64 \
           musl-dev:amd64 musl-dev:arm64 musl-tools binutils-aarch64-linux-gnu
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: go.mod
-        cache-dependency-path: go.sum
-      id: go
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
       with:
