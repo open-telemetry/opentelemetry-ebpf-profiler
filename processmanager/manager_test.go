@@ -48,8 +48,8 @@ func (d *dummyProcess) GetMachineData() process.MachineData {
 	return process.MachineData{}
 }
 
-func (d *dummyProcess) GetMappings() ([]process.Mapping, error) {
-	return nil, errors.New("not implemented")
+func (d *dummyProcess) GetMappings() ([]process.Mapping, uint32, error) {
+	return nil, 0, errors.New("not implemented")
 }
 
 func (d *dummyProcess) GetThreads() ([]process.ThreadInfo, error) {

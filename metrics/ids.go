@@ -638,6 +638,9 @@ const (
 	// Number of times a trace event read failed (trace_events)
 	IDTraceEventReadError = 274
 
+	// Number of format errors seen during parsing /proc/<PID>/maps
+	IDErrProcFormat = 275
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 275
+	IDMax = 276
 )

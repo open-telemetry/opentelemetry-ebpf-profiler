@@ -80,12 +80,13 @@ func trimMappingPath(path string) string {
 	return path
 }
 
-func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
+func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
+	numFormatErrors := uint32(0)
 	mappings := make([]Mapping, 0, 32)
 	scanner := bufio.NewScanner(mapsFile)
 	scanBuf := bufPool.Get().(*[]byte)
 	if scanBuf == nil {
-		return mappings, errors.New("failed to get memory from sync pool")
+		return mappings, 0, errors.New("failed to get memory from sync pool")
 	}
 	defer func() {
 		// Reset memory and return it for reuse.
@@ -102,14 +103,17 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 
 		line := stringutil.ByteSlice2String(scanner.Bytes())
 		if stringutil.FieldsN(line, fields[:]) < 5 {
+			numFormatErrors++
 			continue
 		}
 		if stringutil.SplitN(fields[0], "-", addrs[:]) < 2 {
+			numFormatErrors++
 			continue
 		}
 
 		mapsFlags := fields[1]
 		if len(mapsFlags) < 3 {
+			numFormatErrors++
 			continue
 		}
 		flags := elf.ProgFlag(0)
@@ -130,21 +134,25 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 		inode, err := strconv.ParseUint(fields[4], 10, 64)
 		if err != nil {
 			logrus.Debugf("inode: failed to convert %s to uint64: %v", fields[4], err)
+			numFormatErrors++
 			continue
 		}
 
 		path := fields[5]
 		if stringutil.SplitN(fields[3], ":", devs[:]) < 2 {
+			numFormatErrors++
 			continue
 		}
 		major, err := strconv.ParseUint(devs[0], 16, 64)
 		if err != nil {
 			logrus.Debugf("major device: failed to convert %s to uint64: %v", devs[0], err)
+			numFormatErrors++
 			continue
 		}
 		minor, err := strconv.ParseUint(devs[1], 16, 64)
 		if err != nil {
 			logrus.Debugf("minor device: failed to convert %s to uint64: %v", devs[0], err)
+			numFormatErrors++
 			continue
 		}
 		device := major<<8 + minor
@@ -168,11 +176,13 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 		vaddr, err := strconv.ParseUint(addrs[0], 16, 64)
 		if err != nil {
 			logrus.Debugf("vaddr: failed to convert %s to uint64: %v", addrs[0], err)
+			numFormatErrors++
 			continue
 		}
 		vend, err := strconv.ParseUint(addrs[1], 16, 64)
 		if err != nil {
 			logrus.Debugf("vend: failed to convert %s to uint64: %v", addrs[1], err)
+			numFormatErrors++
 			continue
 		}
 		length := vend - vaddr
@@ -180,6 +190,7 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 		fileOffset, err := strconv.ParseUint(fields[2], 16, 64)
 		if err != nil {
 			logrus.Debugf("fileOffset: failed to convert %s to uint64: %v", fields[2], err)
+			numFormatErrors++
 			continue
 		}
 
@@ -193,7 +204,7 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 			Path:       path,
 		})
 	}
-	return mappings, scanner.Err()
+	return mappings, numFormatErrors, scanner.Err()
 }
 
 // GetMappings will process the mappings file from proc. Additionally,
@@ -201,14 +212,14 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 // OpenELF opening ELF files using the corresponding proc map_files entry.
 // WARNING: This implementation does not support calling GetMappings
 // concurrently with itself, or with OpenELF.
-func (sp *systemProcess) GetMappings() ([]Mapping, error) {
+func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 	mapsFile, err := os.Open(fmt.Sprintf("/proc/%d/maps", sp.pid))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer mapsFile.Close()
 
-	mappings, err := parseMappings(mapsFile)
+	mappings, numFormatErrors, err := parseMappings(mapsFile)
 	if err == nil {
 		fileToMapping := make(map[string]*Mapping, len(mappings))
 		for idx := range mappings {
@@ -222,7 +233,7 @@ func (sp *systemProcess) GetMappings() ([]Mapping, error) {
 		}
 		sp.fileToMapping = fileToMapping
 	}
-	return mappings, err
+	return mappings, numFormatErrors, err
 }
 
 func (sp *systemProcess) GetThreads() ([]ThreadInfo, error) {

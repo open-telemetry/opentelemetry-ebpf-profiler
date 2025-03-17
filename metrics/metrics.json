@@ -1978,5 +1978,12 @@
     "name": "TraceEventReadError",
     "field": "agent.errors.trace_event_read_error",
     "id": 274
+  },
+  {
+    "description": "Number of format errors seen during parsing /proc/<PID>/maps",
+    "type": "counter",
+    "name": "ErrProcFormat",
+    "field": "agent.errors.proc_format",
+    "id": 275
   }
 ]

@@ -101,7 +101,7 @@ type Process interface {
 	GetMachineData() MachineData
 
 	// GetMappings reads and parses process memory mappings
-	GetMappings() ([]Mapping, error)
+	GetMappings() ([]Mapping, uint32, error)
 
 	// GetThreads reads the process thread states
 	GetThreads() ([]ThreadInfo, error)

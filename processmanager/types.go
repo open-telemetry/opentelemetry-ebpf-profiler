@@ -72,12 +72,13 @@ type ProcessManager struct {
 
 	// mappingStats are statistics for parsing process mappings
 	mappingStats struct {
-		errProcNotExist    atomic.Uint32
-		errProcESRCH       atomic.Uint32
-		errProcPerm        atomic.Uint32
-		numProcAttempts    atomic.Uint32
-		maxProcParseUsec   atomic.Uint32
-		totalProcParseUsec atomic.Uint32
+		errProcNotExist     atomic.Uint32
+		errProcESRCH        atomic.Uint32
+		errProcPerm         atomic.Uint32
+		numProcAttempts     atomic.Uint32
+		maxProcParseUsec    atomic.Uint32
+		totalProcParseUsec  atomic.Uint32
+		numProcFormatErrors atomic.Uint32
 	}
 
 	// elfInfoCache provides a cache to quickly retrieve the ELF info and fileID for a particular

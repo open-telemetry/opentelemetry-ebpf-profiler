@@ -600,8 +600,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
-	mappings, err := pr.GetMappings()
+	mappings, numFormatErrors, err := pr.GetMappings()
 	elapsed := time.Since(start)
+	pm.mappingStats.numProcFormatErrors.Add(numFormatErrors)
 
 	if err != nil {
 		if os.IsPermission(err) {
@@ -622,7 +623,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			pm.mappingStats.errProcNotExist.Add(1)
 		} else if e, ok := err.(*os.PathError); ok && e.Err == syscall.ESRCH {
 			// If the process exits while reading its /proc/$PID/maps, the kernel will
-			// return ESRCH. Handle it as if the process did not exists.
+			// return ESRCH. Handle it as if the process did not exist.
 			pm.mappingStats.errProcESRCH.Add(1)
 		}
 		return
