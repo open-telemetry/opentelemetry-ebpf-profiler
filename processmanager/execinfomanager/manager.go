@@ -196,11 +196,14 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 		}
 	}
 
+	isGolang := false
 	ef, err := elfRef.GetELF()
 	if err != nil {
-		return ExecutableInfo{}, fmt.Errorf("failed to get ELF from reference: %v", err)
+		log.Debugf("Failed to get ELF for '%s' from reference: %v",
+			elfRef.FileName(), err)
+	} else {
+		isGolang = ef.IsGolang()
 	}
-	isGolang := ef.IsGolang()
 
 	// Re-take the lock and check whether another thread beat us to
 	// inserting the data while we were waiting for the write lock.
