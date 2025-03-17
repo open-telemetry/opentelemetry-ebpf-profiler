@@ -14,16 +14,14 @@ fn rand_str() -> String {
 }
 
 fn main() {
-    let mut last_update = Instant::now();
+    let start = Instant::now();
 
-    loop {
-        custom_labels::with_label("l1", rand_str(), || {
-            custom_labels::with_label("l2", rand_str(), || loop {
-                if last_update.elapsed() >= Duration::from_secs(10) {
-                    break;
-                }
-            })
-        });
-        last_update = Instant::now();
-    }
+    custom_labels::with_label("l1", rand_str(), || {
+        custom_labels::with_label("l2", rand_str(), || loop {
+            if start.elapsed() >= Duration::from_secs(10) {
+                println!("PASS");
+                return;
+            }
+        })
+    });
 }

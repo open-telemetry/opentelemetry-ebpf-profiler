@@ -94,6 +94,8 @@ jobs:
         run: make rust-tests
       - name: Tests
         run: make test TARGET_ARCH=${{ matrix.target_arch }}
+      - name: sudo tests
+        run: make sudo-tests
 
   check-ebpf-blobs:
     name: Check for differences in the eBPF binary blobs

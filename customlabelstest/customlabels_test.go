@@ -23,19 +23,12 @@ func TestNativeCustomLabels(t *testing.T) {
 	defer cancel()
 
 	traceCh, _ := testutils.StartTracer(ctx, t, enabledTracers, r)
-	// TODO - change this to `cargo build --release --bin custom-labels-example`
-	// once we have the Rust workspace from upstream.
-	cmd := exec.Command("cargo", "build", "--release",
-		"--manifest-path", "./rust-crates/custom-labels-example/Cargo.toml")
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, string(out))
 
 	errCh := make(chan error, 1)
 
-	cmd = exec.CommandContext(ctx,
-		"./rust-crates/custom-labels-example/target/release/custom-labels-example")
-	err = cmd.Start()
-	require.NoError(t, err)
+	cmd := exec.CommandContext(ctx, "../target/release/custom-labels-example")
+	err := cmd.Start()
+	require.NoError(t, err, "run 'cargo build --release --bin custom-labels-example' first")
 
 	go func() {
 		err := cmd.Wait()
