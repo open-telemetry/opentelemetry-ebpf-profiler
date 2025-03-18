@@ -46,16 +46,12 @@ process_bucket(PerCPURecord *record, void *label_buckets, int j)
     return false;
   }
 
-  process_value(map_value, out, 0);
-  process_value(map_value, out, 1);
-  process_value(map_value, out, 2);
-  process_value(map_value, out, 3);
-  process_value(map_value, out, 4);
-  process_value(map_value, out, 5);
-  process_value(map_value, out, 6);
-  process_value(map_value, out, 7);
+#pragma unroll
+  for (int i = 0; i < 8; i++) {
+    process_value(map_value, out, i);
+  }
 
-  return false;
+  return true;
 }
 
 static inline __attribute__((__always_inline__)) void
@@ -167,38 +163,38 @@ static inline __attribute__((__always_inline__)) bool get_go_custom_labels_from_
   u64 bucket_count = MIN(MAX_CUSTOM_LABELS, 1 << log_2_bucket_count);
   switch (bucket_count) {
   case 10:
-    if (process_bucket(record, label_buckets, 9))
-      return true;
+    if (!process_bucket(record, label_buckets, 9))
+      return false;
   case 9:
-    if (process_bucket(record, label_buckets, 8))
-      return true;
+    if (!process_bucket(record, label_buckets, 8))
+      return false;
   case 8:
-    if (process_bucket(record, label_buckets, 7))
-      return true;
+    if (!process_bucket(record, label_buckets, 7))
+      return false;
   case 7:
-    if (process_bucket(record, label_buckets, 6))
-      return true;
+    if (!process_bucket(record, label_buckets, 6))
+      return false;
   case 6:
-    if (process_bucket(record, label_buckets, 5))
-      return true;
+    if (!process_bucket(record, label_buckets, 5))
+      return false;
   case 5:
-    if (process_bucket(record, label_buckets, 4))
-      return true;
+    if (!process_bucket(record, label_buckets, 4))
+      return false;
   case 4:
-    if (process_bucket(record, label_buckets, 3))
-      return true;
+    if (!process_bucket(record, label_buckets, 3))
+      return false;
   case 3:
-    if (process_bucket(record, label_buckets, 2))
-      return true;
+    if (!process_bucket(record, label_buckets, 2))
+      return false;
   case 2:
-    if (process_bucket(record, label_buckets, 1))
-      return true;
+    if (!process_bucket(record, label_buckets, 1))
+      return false;
   case 1:
-    if (process_bucket(record, label_buckets, 0))
-      return true;
+    if (!process_bucket(record, label_buckets, 0))
+      return false;
   }
 
-  return false;
+  return true;
 }
 
 // Go processes store the current goroutine in thread local store. From there
