@@ -487,6 +487,11 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 			name:   "unwind_dotnet",
 			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
 		},
+		{
+			progID: uint32(support.ProgGoLabels),
+			name:   "go_labels",
+			enable: cfg.IncludeTracers.Has(types.Labels),
+		},
 	}
 
 	if err = loadPerfUnwinders(coll, ebpfProgs, ebpfMaps["perf_progs"], tailCallProgs,
@@ -1022,6 +1027,16 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 			log.Errorf("Failed to get kernel stack frames for 0x%x: %v", trace.Hash, err)
 		} else {
 			userFrameOffs = int(kstackLen)
+		}
+	}
+
+	if ptr.custom_labels.len > 0 {
+		trace.CustomLabels = make(map[string]string, int(ptr.custom_labels.len))
+		for i := 0; i < int(ptr.custom_labels.len); i++ {
+			lbl := ptr.custom_labels.labels[i]
+			key := C.GoString((*C.char)(unsafe.Pointer(&lbl.key)))
+			val := C.GoString((*C.char)(unsafe.Pointer(&lbl.val)))
+			trace.CustomLabels[key] = val
 		}
 	}
 
