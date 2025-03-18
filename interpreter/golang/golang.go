@@ -22,11 +22,9 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
-	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
-	"go.opentelemetry.io/ebpf-profiler/tpbase"
 )
 
 var (
@@ -47,6 +45,8 @@ type golangData struct {
 }
 
 type golangInstance struct {
+	interpreter.InstanceStubs
+
 	// Golang symbolization metrics
 	successCount atomic.Uint64
 	failCount    atomic.Uint64
@@ -103,18 +103,6 @@ func (g *golangData) Attach(_ interpreter.EbpfHandler, pid libpf.PID,
 	gi.pin.Pin(unsafe.Pointer(&gi.goRuntime))
 
 	return gi, nil
-}
-
-// SynchronizeMappings is a NOP for Golang.
-func (g *golangInstance) SynchronizeMappings(_ interpreter.EbpfHandler, _ reporter.SymbolReporter,
-	_ process.Process, _ []process.Mapping) error {
-	return nil
-}
-
-// UpdateTSDInfo is a NOP for Golang.
-func (g *golangInstance) UpdateTSDInfo(_ interpreter.EbpfHandler, _ libpf.PID,
-	_ tpbase.TSDInfo) error {
-	return nil
 }
 
 func (g *golangInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
