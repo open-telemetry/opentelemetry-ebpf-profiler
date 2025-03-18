@@ -14,6 +14,7 @@ type Trace struct {
 	MappingEnd         []Address
 	MappingFileOffsets []uint64
 	Hash               TraceHash
+	CustomLabels       map[string]string
 }
 
 // AppendFrame appends a frame to the columnar frame array without mapping information.

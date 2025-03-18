@@ -40,6 +40,9 @@ const (
 
 	// APMInt identifies the pseudo-interpreter for the APM integration.
 	APMInt InterpreterType = 0x100
+
+	// Go identifies the pseudo-interpreter for Go custom labels support.
+	Go InterpreterType = 0x101
 )
 
 // Frame converts the interpreter type into the corresponding frame type.

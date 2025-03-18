@@ -148,6 +148,9 @@ type Config struct {
 	KernelVersionCheck bool
 	// DebugTracer indicates whether to load the debug version of eBPF tracers.
 	DebugTracer bool
+	// CollectCustomLabels determines whether to collect custom labels in
+	// languages that support them.
+	CollectCustomLabels bool
 	// BPFVerifierLogLevel is the log level of the eBPF verifier output.
 	BPFVerifierLogLevel uint32
 	// ProbabilisticInterval is the time interval for which probabilistic profiling will be enabled.
@@ -299,7 +302,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
 		ebpfHandler, nil, cfg.Reporter, elfunwindinfo.NewStackDeltaProvider(),
-		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
+		cfg.FilterErrorFrames, cfg.IncludeEnvVars, cfg.CollectCustomLabels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
@@ -485,6 +488,11 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 			progID: uint32(support.ProgUnwindDotnet),
 			name:   "unwind_dotnet",
 			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
+		},
+		{
+			progID: uint32(support.ProgGoLabels),
+			name:   "go_labels",
+			enable: cfg.IncludeTracers.Has(types.GoLabels),
 		},
 	}
 
@@ -1026,6 +1034,16 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		}
 	}
 
+	if ptr.custom_labels.len > 0 {
+		trace.CustomLabels = make(map[string]string, int(ptr.custom_labels.len))
+		for i := 0; i < int(ptr.custom_labels.len); i++ {
+			lbl := ptr.custom_labels.labels[i]
+			key := C.GoString((*C.char)(unsafe.Pointer(&lbl.key)))
+			val := C.GoString((*C.char)(unsafe.Pointer(&lbl.val)))
+			trace.CustomLabels[key] = val
+		}
+	}
+
 	// If there are no kernel frames, or reading them failed, we are responsible
 	// for allocating the columnar frame array.
 	if len(trace.Frames) == 0 {
@@ -1183,6 +1201,11 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 	})
 
 	return nil
+}
+
+// Testing hook
+func (t *Tracer) GetEbpfMaps() map[string]*cebpf.Map {
+	return t.ebpfMaps
 }
 
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
