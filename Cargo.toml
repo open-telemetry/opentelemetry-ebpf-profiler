@@ -6,6 +6,7 @@
 members = [
     "rust-crates/symblib",
     "rust-crates/symblib-capi",
+    "rust-crates/custom-labels-example"
 ]
 resolver = "2"
 

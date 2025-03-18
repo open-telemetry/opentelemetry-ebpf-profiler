@@ -117,6 +117,17 @@ vanity-import-fix: $(PORTO)
 test: generate ebpf test-deps
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
+
+SUDOTEST_DIRS := ./customlabelstest
+
+target/release/custom-labels-example:
+	cargo build --release --bin custom-labels-example
+
+sudo-tests: generate ebpf target/release/custom-labels-example
+	$(foreach test_dir, $(SUDOTEST_DIRS), \
+		sudo go test $(GO_FLAGS) -tags $(GO_TAGS) "$(test_dir)" \
+	)
+
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
 	libpf/pfelf/testdata \

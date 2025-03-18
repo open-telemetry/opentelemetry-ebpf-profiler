@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/customlabels"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/golang"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
@@ -129,7 +130,7 @@ func NewExecutableInfoManager(
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
 	if collectCustomLabels {
-		interpreterLoaders = append(interpreterLoaders, golang.Loader)
+		interpreterLoaders = append(interpreterLoaders, golang.Loader, customlabels.Loader)
 	}
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,

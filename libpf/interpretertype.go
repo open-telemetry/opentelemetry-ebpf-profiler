@@ -43,6 +43,9 @@ const (
 
 	// Go identifies the pseudo-interpreter for Go custom labels support.
 	Go InterpreterType = 0x101
+
+	// CustomLabels identifies the pseudo-interpreter for native custom labels support.
+	CustomLabels InterpreterType = 0x102
 )
 
 // Frame converts the interpreter type into the corresponding frame type.
