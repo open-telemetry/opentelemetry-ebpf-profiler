@@ -1,0 +1,54 @@
+package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
+
+// #include "../../support/ebpf/types.h"
+import "C"
+import (
+	"go/version"
+
+	log "github.com/sirupsen/logrus"
+)
+
+// Offsets come from DWARF debug information, use tools/gooffsets to extract them.
+// However since DWARF information can be stripped we record them here.
+// TODO: Should we look for DWARF information to support new versions
+// automatically when available?
+func getOffsets(vers string) C.GoLabelsOffsets {
+	offsets := C.GoLabelsOffsets{
+		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L410
+		m_offset: 48,
+		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L541
+		curg: 192,
+		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L483
+		labels: 0,
+		// https://github.com/golang/go/blob/6885bad7dd86880be6929c0/src/runtime/map.go#L112
+		hmap_count: 0,
+		// https://github.com/golang/go/blob/6885bad7dd86880be6929c0/src/runtime/map.go#L114
+		hmap_log2_bucket_count: 0,
+		// https://github.com/golang/go/blob/6885bad7dd86880be6929c0/src/runtime/map.go#L118
+		hmap_buckets: 0,
+	}
+
+	if version.Compare(vers, "go1.24") >= 0 {
+		if version.Compare(vers, "go1.25") >= 0 {
+			log.Warnf("version %s unknown; using offsets for latest known Go version 1.24."+
+				"If Go traceID integration and other pprof labels support is buggy,"+
+				" try upgrading to the latest profiler version.", vers)
+		}
+		offsets.labels = 352
+		return offsets
+	}
+
+	// These are the same for all versions but we have to leave them zero for 1.24+ detection.
+	offsets.hmap_log2_bucket_count = 9
+	offsets.hmap_buckets = 16
+	if version.Compare(vers, "go1.23") >= 0 {
+		offsets.labels = 352
+	} else if version.Compare(vers, "go1.21") >= 0 {
+		offsets.labels = 344
+	} else if version.Compare(vers, "go1.17") >= 0 {
+		offsets.labels = 360
+	} else {
+		offsets.labels = 344
+	}
+	return offsets
+}

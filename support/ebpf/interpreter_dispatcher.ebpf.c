@@ -3,9 +3,11 @@
 // perf event and will call the appropriate tracer for a given process
 
 #include "bpfdefs.h"
+#include "kernel.h"
 #include "tracemgmt.h"
 #include "tsd.h"
 #include "types.h"
+#include "util.h"
 
 // Begin shared maps
 
@@ -124,6 +126,84 @@ bpf_map_def SEC("maps") apm_int_procs = {
   .max_entries = 128,
 };
 
+bpf_map_def SEC("maps") go_labels_procs = {
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(GoLabelsOffsets),
+  .max_entries = 128,
+};
+
+#if defined(__x86_64__)
+// https://github.com/golang/go/blob/396a48bea6f2dc07/src/cmd/compile/internal/amd64/ssa.go#L174
+  #define TLSG_OFFSET (-8)
+#elif defined(__aarch64__)
+// https://github.com/golang/go/blob/6885bad7dd86880be/src/runtime/tls_arm64.s#L11
+//  Get's compiled into:
+//  0x000000000007f260 <+0>:     adrp    x27, 0x1c2000 <runtime.mheap_+101440>
+//  0x000000000007f264 <+4>:     ldrsb   x0, [x27, #284]
+//  0x000000000007f268 <+8>:     cbz     x0, 0x7f278 <runtime.load_g+24>
+//  0x000000000007f26c <+12>:    mrs     x0, tpidr_el0
+//  0x000000000007f270 <+16>:    mov     x27, #0x10                      // #16
+//  0x000000000007f274 <+20>:    ldr     x28, [x0, x27]
+//  0x000000000007f278 <+24>:    ret
+  #define TLSG_OFFSET (0x10)
+#endif
+
+static inline __attribute__((__always_inline__)) void *
+get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
+{
+  size_t g_addr;
+  void *tls_base = NULL;
+  if (tsd_get_base(&tls_base) < 0) {
+    DEBUG_PRINT("cl: failed to get tsd base; can't read m_ptr");
+    return NULL;
+  }
+  DEBUG_PRINT("cl: read tsd_base at 0x%lx", (unsigned long)tls_base);
+
+  if (bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((u64)tls_base + TLSG_OFFSET))) {
+    DEBUG_PRINT("cl: failed to read g_addr, tls_base(%lx)", (unsigned long)tls_base);
+#if defined(__x86_64__)
+    return NULL;
+#elif defined(__aarch64__)
+    // On aarch64, we need to use the r28 register as a fallback, TLS is only used on iscgo
+    // binaries.
+    g_addr = state->r28;
+#endif
+  }
+
+  DEBUG_PRINT("cl: reading m_ptr_addr at 0x%lx + 0x%x", g_addr, offs->m_offset);
+  void *m_ptr_addr;
+  if (bpf_probe_read_user(&m_ptr_addr, sizeof(void *), (void *)(g_addr + offs->m_offset))) {
+    DEBUG_PRINT("cl: failed m_ptr_addr");
+    return NULL;
+  }
+
+  return m_ptr_addr;
+}
+
+static inline __attribute__((__always_inline__)) void
+maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
+{
+  u32 pid                  = record->trace.pid;
+  GoLabelsOffsets *offsets = bpf_map_lookup_elem(&go_labels_procs, &pid);
+  if (!offsets) {
+    DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", pid);
+    return;
+  }
+
+  void *m_ptr_addr = get_m_ptr(offsets, &record->state);
+  if (!m_ptr_addr) {
+    return;
+  }
+  record->customLabelsState.go_m_ptr = m_ptr_addr;
+
+  DEBUG_PRINT("cl: trace is within a process with Go custom labels enabled");
+  increment_metric(metricID_UnwindGoLabelsAttempts);
+  // The Go label extraction code is too big to fit in the UNWIND_STOP program, so
+  // it is tail_call'd.
+  tail_call(ctx, PROG_GO_LABELS);
+}
+
 static inline __attribute__((__always_inline__)) void maybe_add_apm_info(Trace *trace)
 {
   u32 pid              = trace->pid; // verifier needs this to be on stack on 4.15 kernel
@@ -235,6 +315,9 @@ static inline __attribute__((__always_inline__)) int unwind_stop(struct pt_regs 
     }
   }
   // TEMPORARY HACK END
+
+  // Must be last since it may not return (it will call send_trace).
+  maybe_add_go_custom_labels(ctx, record);
 
   send_trace(ctx, trace);
 
