@@ -19,7 +19,7 @@ const (
 	FrameMarkerPerl     = 0x7
 	FrameMarkerV8       = 0x8
 	FrameMarkerDotnet   = 0xa
-	FrameMarkerGolang   = 0xb
+	FrameMarkerGo       = 0xb
 	FrameMarkerAbort    = 0xff
 )
 
