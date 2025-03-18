@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/golang"
+package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
 /*
 #cgo CFLAGS: -g -Wall
@@ -28,15 +28,15 @@ import (
 
 var (
 	// compiler check to make sure the needed interfaces are satisfied
-	_ interpreter.Data     = &golangData{}
-	_ interpreter.Instance = &golangInstance{}
+	_ interpreter.Data     = &goData{}
+	_ interpreter.Instance = &goInstance{}
 )
 
-type golangData struct {
+type goData struct {
 	exec string
 }
 
-type golangInstance struct {
+type goInstance struct {
 	interpreter.InstanceStubs
 
 	// Golang symbolization metrics
@@ -65,14 +65,14 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 		return nil, nil
 	}
 
-	return &golangData{
+	return &goData{
 		exec: exec,
 	}, nil
 }
 
-func (g *golangData) Attach(_ interpreter.EbpfHandler, pid libpf.PID,
+func (g *goData) Attach(_ interpreter.EbpfHandler, pid libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
-	gi := &golangInstance{}
+	gi := &goInstance{}
 
 	executablePath := C.CString(fmt.Sprintf("/proc/%d/root%s", pid, g.exec))
 	defer C.free(unsafe.Pointer(executablePath))
@@ -88,7 +88,7 @@ func (g *golangData) Attach(_ interpreter.EbpfHandler, pid libpf.PID,
 	return gi, nil
 }
 
-func (g *golangInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
+func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	return []metrics.Metric{
 		{
 			ID:    metrics.IDGolangSymbolizationSuccess,
@@ -101,7 +101,7 @@ func (g *golangInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
-func (g *golangInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
+func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
 	if g.goRuntime != nil {
 		g.pin.Unpin()
 		C.symblib_goruntime_free(g.goRuntime)
@@ -110,7 +110,7 @@ func (g *golangInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
 	return nil
 }
 
-func (g *golangInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame,
+func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame,
 	trace *libpf.Trace) error {
 	if !frame.Type.IsInterpType(libpf.Native) {
 		return interpreter.ErrMismatchInterpreterType
@@ -143,7 +143,7 @@ func (g *golangInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame
 	frameID := libpf.NewFrameID(libpf.NewFileID(uint64(frame.File), uint64(frame.File)),
 		libpf.AddressOrLineno(symbolsSlice[0].line_number))
 
-	trace.AppendFrameID(libpf.GolangFrame, frameID)
+	trace.AppendFrameID(libpf.GoFrame, frameID)
 
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      frameID,

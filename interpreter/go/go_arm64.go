@@ -3,7 +3,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/golang"
+package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
 /*
 #cgo LDFLAGS: ${SRCDIR}/../../target/aarch64-unknown-linux-musl/release/libsymblib_capi.a
