@@ -17,7 +17,6 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	lru "github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -33,13 +32,6 @@ var (
 	_ interpreter.Instance = &golangInstance{}
 )
 
-// goSymData caches source information.
-type goSymData struct {
-	function   string
-	sourceFile string
-	line       libpf.SourceLineno
-}
-
 type golangData struct {
 	exec string
 }
@@ -50,9 +42,6 @@ type golangInstance struct {
 	// Golang symbolization metrics
 	successCount atomic.Uint64
 	failCount    atomic.Uint64
-
-	// pcToFunc is a helper cache ... tdb
-	pcToFunc *lru.SyncedLRU[libpf.FrameID, goSymData]
 
 	goRuntime *C.SymblibPointResolver
 	pin       runtime.Pinner
@@ -83,13 +72,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 
 func (g *golangData) Attach(_ interpreter.EbpfHandler, pid libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
-	pcToFunc, err := lru.NewSynced[libpf.FrameID, goSymData](1024, libpf.FrameID.Hash32)
-	if err != nil {
-		return nil, err
-	}
-	gi := &golangInstance{
-		pcToFunc: pcToFunc,
-	}
+	gi := &golangInstance{}
 
 	executablePath := C.CString(fmt.Sprintf("/proc/%d/root%s", pid, g.exec))
 	defer C.free(unsafe.Pointer(executablePath))
@@ -140,20 +123,6 @@ func (g *golangInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame
 		return errors.New("point resolver is out of scope")
 	}
 
-	frameID := libpf.NewFrameID(libpf.NewFileID(uint64(frame.File), uint64(frame.File)),
-		frame.Lineno)
-
-	if frameInfo, exist := g.pcToFunc.Get(frameID); exist {
-		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-			FrameID:      frameID,
-			FunctionName: frameInfo.function,
-			SourceFile:   frameInfo.sourceFile,
-			SourceLine:   frameInfo.line,
-		})
-		sfCounter.ReportSuccess()
-		return nil
-	}
-
 	var symbols *C.SymblibSlice_SymblibResolvedSymbol
 	defer C.symblib_slice_symblibresolved_symbol_free(symbols)
 
@@ -171,21 +140,17 @@ func (g *golangInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame
 	if len(symbolsSlice) != 1 {
 		return fmt.Errorf("unexpected return for point lookup: %d", len(symbolsSlice))
 	}
+
+	frameID := libpf.NewFrameID(libpf.NewFileID(uint64(frame.File), uint64(frame.File)),
+		libpf.AddressOrLineno(symbolsSlice[0].line_number))
+
 	trace.AppendFrameID(libpf.GolangFrame, frameID)
-
-	frameInfo := goSymData{
-		function:   C.GoString(symbolsSlice[0].function_name),
-		sourceFile: C.GoString(symbolsSlice[0].file_name),
-		line:       libpf.SourceLineno(symbolsSlice[0].line_number),
-	}
-
-	g.pcToFunc.Add(frameID, frameInfo)
 
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      frameID,
-		FunctionName: frameInfo.function,
-		SourceFile:   frameInfo.sourceFile,
-		SourceLine:   frameInfo.line,
+		FunctionName: C.GoString(symbolsSlice[0].function_name),
+		SourceFile:   C.GoString(symbolsSlice[0].file_name),
+		SourceLine:   libpf.SourceLineno(symbolsSlice[0].line_number),
 	})
 	sfCounter.ReportSuccess()
 	return nil
