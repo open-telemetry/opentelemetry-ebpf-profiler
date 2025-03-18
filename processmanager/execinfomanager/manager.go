@@ -65,9 +65,6 @@ type ExecutableInfo struct {
 	Data interpreter.Data
 	// TSDInfo stores TSD information if the executable is libc, otherwise nil.
 	TSDInfo *tpbase.TSDInfo
-
-	// isGolang indicates if the executable is Golang.
-	isGolang bool
 }
 
 // ExecutableInfoManager manages all per-executable (FileID) information that we require to
@@ -196,15 +193,6 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 		}
 	}
 
-	isGolang := false
-	ef, err := elfRef.GetELF()
-	if err != nil {
-		log.Debugf("Failed to get ELF for '%s' from reference: %v",
-			elfRef.FileName(), err)
-	} else {
-		isGolang = ef.IsGolang()
-	}
-
 	// Re-take the lock and check whether another thread beat us to
 	// inserting the data while we were waiting for the write lock.
 	state = mgr.state.WLock()
@@ -227,9 +215,8 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// Insert a corresponding record into our map.
 	info = &entry{
 		ExecutableInfo: ExecutableInfo{
-			Data:     state.detectAndLoadInterpData(loaderInfo),
-			TSDInfo:  tsdInfo,
-			isGolang: isGolang,
+			Data:    state.detectAndLoadInterpData(loaderInfo),
+			TSDInfo: tsdInfo,
 		},
 		mapRef: ref,
 		rc:     1,
@@ -300,19 +287,6 @@ func (mgr *ExecutableInfoManager) NumInterpreterLoaders() int {
 	state := mgr.state.RLock()
 	defer mgr.state.RUnlock(&state)
 	return len(state.interpreterLoaders)
-}
-
-// IsGolang returns true if the fileID maps to a Golang executable.
-func (mgr *ExecutableInfoManager) IsGolang(fileID host.FileID) bool {
-	state := mgr.state.RLock()
-	defer mgr.state.RUnlock(&state)
-
-	info, ok := state.executables[fileID]
-	if !ok {
-		return false
-	}
-
-	return info.isGolang
 }
 
 // UpdateMetricSummary updates the metrics in the given metric map.

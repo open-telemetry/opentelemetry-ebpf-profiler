@@ -142,6 +142,9 @@ func (g *golangInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
 
 func (g *golangInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame,
 	trace *libpf.Trace) error {
+	if !frame.Type.IsInterpType(libpf.Native) {
+		return interpreter.ErrMismatchInterpreterType
+	}
 	sfCounter := successfailurecounter.New(&g.successCount, &g.failCount)
 	defer sfCounter.DefaultToFailure()
 
