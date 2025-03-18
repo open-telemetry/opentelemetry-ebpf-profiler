@@ -2001,5 +2001,19 @@
     "name": "GoSymbolizationFailure",
     "field": "agent.go.symbolization.failures",
     "id": 277
+  },
+  {
+    "description": "Number of attempts to read Go custom labels",
+    "type": "counter",
+    "name": "UnwindGoCustomLabelsAttempts",
+    "field": "bpf.golabels.attempts",
+    "id": 278
+  },
+  {
+    "description": "Number of failures reading Go custom labels",
+    "type": "counter",
+    "name": "UnwindGoCustomLabelsFailures",
+    "field": "bpf.golabels.errors",
+    "id": 279
   }
 ]
