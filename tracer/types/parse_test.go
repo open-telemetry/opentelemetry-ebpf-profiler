@@ -78,7 +78,7 @@ func availableOnArch(tracer tracerType) bool {
 	case "amd64":
 		return true
 	case "arm64":
-		return tracer != V8Tracer && tracer != DotnetTracer
+		return tracer != DotnetTracer
 	default:
 		panic("unsupported architecture")
 	}
