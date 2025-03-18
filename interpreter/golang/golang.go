@@ -101,7 +101,6 @@ func (g *golangInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
-// Detach is a NOP for Golang.
 func (g *golangInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
 	if g.goRuntime != nil {
 		g.pin.Unpin()
