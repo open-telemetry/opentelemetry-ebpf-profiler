@@ -39,7 +39,7 @@ type goData struct {
 type goInstance struct {
 	interpreter.InstanceStubs
 
-	// Golang symbolization metrics
+	// Go symbolization metrics
 	successCount atomic.Uint64
 	failCount    atomic.Uint64
 
@@ -91,11 +91,11 @@ func (g *goData) Attach(_ interpreter.EbpfHandler, pid libpf.PID,
 func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	return []metrics.Metric{
 		{
-			ID:    metrics.IDGolangSymbolizationSuccess,
+			ID:    metrics.IDGoSymbolizationSuccess,
 			Value: metrics.MetricValue(g.successCount.Swap(0)),
 		},
 		{
-			ID:    metrics.IDGolangSymbolizationFailure,
+			ID:    metrics.IDGoSymbolizationFailure,
 			Value: metrics.MetricValue(g.failCount.Swap(0)),
 		},
 	}, nil

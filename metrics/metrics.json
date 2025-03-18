@@ -1987,17 +1987,17 @@
     "id": 275
   },
   {
-    "description": "Number of successfully symbolized Golang frames",
+    "description": "Number of successfully symbolized Go frames",
     "type": "counter",
-    "name": "GolangSymbolizationSuccess",
-    "field": "agent.golang.symbolization.successes",
+    "name": "GoSymbolizationSuccess",
+    "field": "agent.go.symbolization.successes",
     "id": 276
   },
   {
-    "description": "Number of Golang frames that failed symbolization",
+    "description": "Number of Go frames that failed symbolization",
     "type": "counter",
-    "name": "GolangSymbolizationFailure",
-    "field": "agent.golang.symbolization.failures",
+    "name": "GoSymbolizationFailure",
+    "field": "agent.go.symbolization.failures",
     "id": 277
   }
 ]
