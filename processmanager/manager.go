@@ -72,6 +72,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool,
 	fo samples.NativeSymbolResolver,
 	policy dynamicprofiling.Policy,
+	includeEnvVars libpf.Set[string],
 ) (*ProcessManager, error) {
 	if policy == nil {
 		return nil, errors.New("no dynamicprofiling Policy provided")
@@ -112,6 +113,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		filterErrorFrames:        filterErrorFrames,
 		fileObserver:             fo,
 		policy:                   policy,
+		includeEnvVars:           includeEnvVars,
 	}
 
 	collectInterpreterMetrics(ctx, pm, monitorInterval)

@@ -4,7 +4,6 @@
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
-	"context"
 	"math/rand/v2"
 	"reflect"
 	"time"
@@ -12,24 +11,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
-
-// SleepWithJitter sleeps for baseDuration +/- jitter (jitter is [0..1])
-func SleepWithJitter(baseDuration time.Duration, jitter float64) {
-	time.Sleep(AddJitter(baseDuration, jitter))
-}
-
-// SleepWithJitterAndContext blocks for duration +/- jitter (jitter is [0..1]) or until ctx
-// is canceled.
-func SleepWithJitterAndContext(ctx context.Context, duration time.Duration, jitter float64) error {
-	tick := time.NewTicker(AddJitter(duration, jitter))
-	defer tick.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-tick.C:
-		return nil
-	}
-}
 
 // AddJitter adds +/- jitter (jitter is [0..1]) to baseDuration
 func AddJitter(baseDuration time.Duration, jitter float64) time.Duration {

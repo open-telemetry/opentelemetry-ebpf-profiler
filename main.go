@@ -118,7 +118,6 @@ func mainWithExitCode() exitCode {
 		log.Error(err)
 		return exitFailure
 	}
-	cfg.HostName, cfg.IPAddress = hostname, sourceIP
 
 	cgroups, err := freelru.NewSynced[libpf.PID, string](1024,
 		func(pid libpf.PID) uint32 { return uint32(pid) })

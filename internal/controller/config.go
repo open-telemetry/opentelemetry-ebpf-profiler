@@ -33,11 +33,7 @@ type Config struct {
 	Tracers                string
 	VerboseMode            bool
 	Version                bool
-	// HostName is the name of the host.
-	HostName string
-	// IPAddress is the IP address of the host that sends data to CollAgentAddr.
-	IPAddress       string
-	OffCPUThreshold uint
+	OffCPUThreshold        uint
 
 	Policy       dynamicprofiling.Policy
 	FileObserver samples.NativeSymbolResolver
@@ -48,12 +44,13 @@ type Config struct {
 	PyroscopePasswordFile           string
 	PyroscopeReporterType           string
 	PyroscopeDynamicProfilingPolicy bool
-
-	Fs *flag.FlagSet
-
 	SymbCachePath         string
 	SymbCacheSizeEntries  int
 	SymbolizeNativeFrames bool
+
+	Fs *flag.FlagSet
+
+	IncludeEnvVars string
 }
 
 const (

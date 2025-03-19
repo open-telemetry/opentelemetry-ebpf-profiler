@@ -196,6 +196,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 		false,
 		nil,
 		dynamicprofiling.AlwaysOnPolicy{},
+		libpf.Set[string]{},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)

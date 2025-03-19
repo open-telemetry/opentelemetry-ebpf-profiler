@@ -3,12 +3,14 @@ package controller // import "go.opentelemetry.io/ebpf-profiler/internal/control
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/tklauser/numcpus"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -71,6 +73,15 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start reporter: %w", err)
 	}
 
+	envVars := libpf.Set[string]{}
+	splittedEnvVars := strings.Split(c.config.IncludeEnvVars, ",")
+	for _, envVar := range splittedEnvVars {
+		envVar = strings.TrimSpace(envVar)
+		if envVar != "" {
+			envVars[envVar] = libpf.Void{}
+		}
+	}
+
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
 		Reporter:               c.reporter,
@@ -87,6 +98,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		OffCPUThreshold:        uint32(c.config.OffCPUThreshold),
 		Policy:                 c.config.Policy,
 		FileObserver:           c.config.FileObserver,
+		IncludeEnvVars:         envVars,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)

@@ -26,6 +26,7 @@ const (
 	defaultProbabilisticInterval  = 1 * time.Minute
 	defaultArgSendErrorFrames     = false
 	defaultOffCPUThreshold        = 0
+	defaultEnvVarsValue           = ""
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -67,6 +68,8 @@ var (
 		"Valid values are in the range [1..%d], and 0 to disable off-cpu profiling."+
 		"Default is %d.",
 		support.OffCPUThresholdMax, defaultOffCPUThreshold)
+	envVarsHelp = "Comma separated list of environment variables that will be reported with the" +
+		"captured profiling samples."
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -124,6 +127,8 @@ func parseArgs() (*controller.Config, error) {
 		defaultOffCPUThreshold, offCPUThresholdHelp)
 
 	controller2.RegisterPyroscopeFlags(fs, args)
+
+	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()

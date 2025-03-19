@@ -325,6 +325,7 @@ func TestInterpreterConvertTrace(t *testing.T) {
 				true,
 				nil,
 				dynamicprofiling.AlwaysOnPolicy{},
+				libpf.Set[string]{},
 			)
 			require.NoError(t, err)
 
@@ -413,6 +414,7 @@ func TestNewMapping(t *testing.T) {
 				true,
 				nil,
 				dynamicprofiling.AlwaysOnPolicy{},
+				libpf.Set[string]{},
 			)
 			require.NoError(t, err)
 
@@ -601,6 +603,7 @@ func TestProcExit(t *testing.T) {
 				true,
 				nil,
 				dynamicprofiling.AlwaysOnPolicy{},
+				libpf.Set[string]{},
 			)
 			require.NoError(t, err)
 			defer cancel()

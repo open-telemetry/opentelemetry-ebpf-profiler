@@ -17,7 +17,7 @@ mod errors;
 pub use errors::*;
 mod raw;
 
-use crate::{objfile, VirtAddr};
+use crate::{objfile, symbconv, VirtAddr};
 use fallible_iterator::FallibleIterator;
 use std::ops::Range;
 
@@ -538,5 +538,51 @@ fn range_rel2abs(base: VirtAddr, rng: Range<raw::TextStartOffset>) -> Range<Virt
     Range {
         start: base.wrapping_add(rng.start.0),
         end: base.wrapping_add(rng.end.0),
+    }
+}
+
+impl symbconv::PointResolver for GoRuntimeInfo<'_> {
+    /// NOTE: this is currently doesn't support inline functions
+    fn symbols_for_pc(&self, pc: VirtAddr) -> symbconv::Result<Vec<symbconv::ResolvedSymbol>> {
+        let func = match self.find_func(pc) {
+            Ok(Some(func)) => func,
+            Ok(None) => return Ok(Vec::new()),
+            Err(e) => return Err(symbconv::Error::Go(symbconv::go::Error::Gosym(e))),
+        };
+
+        let mut symbols = Vec::new();
+        let mut source_file = None;
+        let mut line_number = None;
+
+        // For file mappings
+        let mut file_iter = func
+            .file_mapping()
+            .map_err(|e| symbconv::Error::Go(symbconv::go::Error::Gosym(e)))?;
+        while let Ok(Some((range, file))) = file_iter.next() {
+            if range.contains(&VirtAddr::from(pc)) {
+                source_file = Some(file.unwrap_or("<unknown>").into());
+                break;
+            }
+        }
+
+        // For line mappings
+        let mut line_iter = func
+            .line_mapping()
+            .map_err(|e| symbconv::Error::Go(symbconv::go::Error::Gosym(e)))?;
+        while let Ok(Some((range, line))) = line_iter.next() {
+            if range.contains(&VirtAddr::from(pc)) {
+                line_number = Some(line.unwrap_or(0));
+                break;
+            }
+        }
+
+        symbols.push(symbconv::ResolvedSymbol {
+            start_addr: func.start_addr(),
+            function_name: func.name().ok().map(|s| s.to_string()),
+            file_name: source_file,
+            line_number: line_number,
+        });
+
+        Ok(symbols)
     }
 }

@@ -102,6 +102,9 @@ type ProcessManager struct {
 	policy dynamicprofiling.Policy
 
 	fileObserver samples.NativeSymbolResolver
+
+	// includeEnvVars holds a list of env vars that should be captured from processes
+	includeEnvVars libpf.Set[string]
 }
 
 // Mapping represents an executable memory mapping of a process.
@@ -149,6 +152,8 @@ type ProcessMeta struct {
 	Name string
 	// executable path retrieved from /proc/PID/exe
 	Executable string
+	// process env vars from /proc/PID/environ
+	EnvVariables map[string]string
 }
 
 // processInfo contains information about the executable mappings
