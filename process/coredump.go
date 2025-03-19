@@ -258,8 +258,8 @@ func (cd *CoredumpProcess) GetMachineData() MachineData {
 }
 
 // GetMappings implements the Process interface
-func (cd *CoredumpProcess) GetMappings() ([]Mapping, error) {
-	return cd.mappings, nil
+func (cd *CoredumpProcess) GetMappings() ([]Mapping, uint32, error) {
+	return cd.mappings, 0, nil
 }
 
 // GetThreadInfo implements the Process interface
