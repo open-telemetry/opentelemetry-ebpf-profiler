@@ -161,7 +161,13 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 		defer frameMapLock.WUnlock(&frameMap)
 
 		(*frameMap)[addressOrLine] = samples.SourceInfo{
-			Frames: []samples.SourceInfoFrame{},
+			Frames: []samples.SourceInfoFrame{
+				{
+					LineNumber:   args.SourceLine,
+					FunctionName: args.FunctionName,
+					FilePath:     args.SourceFile,
+				},
+			},
 		}
 		return
 	}
