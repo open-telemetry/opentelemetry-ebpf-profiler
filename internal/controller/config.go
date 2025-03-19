@@ -19,6 +19,7 @@ type Config struct {
 	CollAgentAddr          string
 	Copyright              bool
 	DisableTLS             bool
+	BasicAuth              string
 	MapScaleFactor         uint
 	MonitorInterval        time.Duration
 	ClockSyncInterval      time.Duration

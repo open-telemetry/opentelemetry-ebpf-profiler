@@ -45,6 +45,7 @@ var (
 		"Default is %d corresponding to 4GB of executable address space, max is %d.",
 		defaultArgMapScaleFactor, controller.MaxArgMapScaleFactor)
 	disableTLSHelp             = "Disable encryption for data in transit."
+	basicAuthHelp             = "Use basic auth for reporter. Specify as user:password."
 	bpfVerifierLogLevelHelp    = "Log level of the eBPF verifier output (0,1,2). Default is 0."
 	versionHelp                = "Show version."
 	probabilisticThresholdHelp = fmt.Sprintf("If set to a value between 1 and %d will enable "+
@@ -87,6 +88,8 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.Copyright, "copyright", false, copyrightHelp)
 
 	fs.BoolVar(&args.DisableTLS, "disable-tls", false, disableTLSHelp)
+
+	fs.StringVar(&args.BasicAuth, "basic-auth", "", basicAuthHelp)
 
 	fs.UintVar(&args.MapScaleFactor, "map-scale-factor",
 		defaultArgMapScaleFactor, mapScaleFactorHelp)

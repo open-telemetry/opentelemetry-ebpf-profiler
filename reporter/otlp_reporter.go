@@ -6,6 +6,7 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"maps"
 	"strconv"
 	"time"
@@ -235,6 +236,22 @@ func waitGrpcEndpoint(ctx context.Context, cfg *Config) (*grpc.ClientConn, error
 	}
 }
 
+type headerAuth map[string]string
+
+func newHeaderAuth(key, value string) headerAuth {
+	return headerAuth{
+		key: value,
+	}
+}
+
+func (m headerAuth) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
+	return m, nil
+}
+
+func (_ headerAuth) RequireTransportSecurity() bool {
+	return true
+}
+
 // setupGrpcConnection sets up a gRPC connection instrumented with our auth interceptor
 func setupGrpcConnection(parent context.Context, cfg *Config) (*grpc.ClientConn, error) {
 	//nolint:staticcheck
@@ -255,6 +272,11 @@ func setupGrpcConnection(parent context.Context, cfg *Config) (*grpc.ClientConn,
 				MinVersion:         tls.VersionTLS13,
 				InsecureSkipVerify: false,
 			})))
+	}
+
+	if cfg.BasicAuth != "" {
+		value := "Basic " + base64.StdEncoding.EncodeToString([]byte(cfg.BasicAuth))
+		opts = append(opts, grpc.WithPerRPCCredentials(newHeaderAuth("Authorization", value)))
 	}
 
 	opts = append(opts, cfg.GRPCDialOptions...)

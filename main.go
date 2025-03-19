@@ -118,6 +118,7 @@ func mainWithExitCode() exitCode {
 	rep, err := reporter.NewOTLP(&reporter.Config{
 		CollAgentAddr:            cfg.CollAgentAddr,
 		DisableTLS:               cfg.DisableTLS,
+		BasicAuth:                cfg.BasicAuth,
 		MaxRPCMsgSize:            32 << 20, // 32 MiB
 		MaxGRPCRetries:           5,
 		GRPCOperationTimeout:     intervals.GRPCOperationTimeout(),

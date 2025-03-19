@@ -26,6 +26,8 @@ type Config struct {
 
 	// Disable secure communication with Collection Agent.
 	DisableTLS bool
+	// Enable basic auth.
+	BasicAuth string
 	// ExecutablesCacheElements defines item capacity of the executables cache.
 	ExecutablesCacheElements uint32
 	// FramesCacheElements defines the item capacity of the frames cache.
