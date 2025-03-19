@@ -29,9 +29,9 @@ var testMappings = `55fe82710000-55fe8273c000 r--p 00000000 fd:01 1068432       
 7f63c8eef000 r-xp 0001c000 1fd:01 1075944`
 
 func TestParseMappings(t *testing.T) {
-	mappings, numFormatErrors, err := parseMappings(strings.NewReader(testMappings))
+	mappings, numParseErrors, err := parseMappings(strings.NewReader(testMappings))
 	require.NoError(t, err)
-	require.Equal(t, uint32(4), numFormatErrors)
+	require.Equal(t, uint32(4), numParseErrors)
 	assert.NotNil(t, mappings)
 
 	expected := []Mapping{
@@ -106,8 +106,8 @@ func TestNewPIDOfSelf(t *testing.T) {
 	pr := New(libpf.PID(os.Getpid()))
 	assert.NotNil(t, pr)
 
-	mappings, numFormatErrors, err := pr.GetMappings()
+	mappings, numParseErrors, err := pr.GetMappings()
 	require.NoError(t, err)
-	require.Equal(t, uint32(0), numFormatErrors)
+	require.Equal(t, uint32(0), numParseErrors)
 	assert.NotEmpty(t, mappings)
 }

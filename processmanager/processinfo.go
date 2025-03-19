@@ -600,9 +600,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
-	mappings, numFormatErrors, err := pr.GetMappings()
+	mappings, numParseErrors, err := pr.GetMappings()
 	elapsed := time.Since(start)
-	pm.mappingStats.numProcFormatErrors.Add(numFormatErrors)
+	pm.mappingStats.numProcParseErrors.Add(numParseErrors)
 
 	if err != nil {
 		if os.IsPermission(err) {

@@ -1980,10 +1980,10 @@
     "id": 274
   },
   {
-    "description": "Number of format errors seen during parsing /proc/<PID>/maps",
+    "description": "Number of parsing errors seen during processing /proc/<PID>/maps",
     "type": "counter",
-    "name": "ErrProcFormat",
-    "field": "agent.errors.proc_format",
+    "name": "ErrProcParse",
+    "field": "agent.errors.proc_parse",
     "id": 275
   }
 ]

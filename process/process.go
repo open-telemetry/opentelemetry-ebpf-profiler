@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -81,7 +81,7 @@ func trimMappingPath(path string) string {
 }
 
 func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
-	numFormatErrors := uint32(0)
+	numParseErrors := uint32(0)
 	mappings := make([]Mapping, 0, 32)
 	scanner := bufio.NewScanner(mapsFile)
 	scanBuf := bufPool.Get().(*[]byte)
@@ -103,17 +103,17 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 
 		line := stringutil.ByteSlice2String(scanner.Bytes())
 		if stringutil.FieldsN(line, fields[:]) < 5 {
-			numFormatErrors++
+			numParseErrors++
 			continue
 		}
 		if stringutil.SplitN(fields[0], "-", addrs[:]) < 2 {
-			numFormatErrors++
+			numParseErrors++
 			continue
 		}
 
 		mapsFlags := fields[1]
 		if len(mapsFlags) < 3 {
-			numFormatErrors++
+			numParseErrors++
 			continue
 		}
 		flags := elf.ProgFlag(0)
@@ -133,26 +133,26 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 		}
 		inode, err := strconv.ParseUint(fields[4], 10, 64)
 		if err != nil {
-			logrus.Debugf("inode: failed to convert %s to uint64: %v", fields[4], err)
-			numFormatErrors++
+			log.Debugf("inode: failed to convert %s to uint64: %v", fields[4], err)
+			numParseErrors++
 			continue
 		}
 
 		path := fields[5]
 		if stringutil.SplitN(fields[3], ":", devs[:]) < 2 {
-			numFormatErrors++
+			numParseErrors++
 			continue
 		}
 		major, err := strconv.ParseUint(devs[0], 16, 64)
 		if err != nil {
-			logrus.Debugf("major device: failed to convert %s to uint64: %v", devs[0], err)
-			numFormatErrors++
+			log.Debugf("major device: failed to convert %s to uint64: %v", devs[0], err)
+			numParseErrors++
 			continue
 		}
 		minor, err := strconv.ParseUint(devs[1], 16, 64)
 		if err != nil {
-			logrus.Debugf("minor device: failed to convert %s to uint64: %v", devs[0], err)
-			numFormatErrors++
+			log.Debugf("minor device: failed to convert %s to uint64: %v", devs[1], err)
+			numParseErrors++
 			continue
 		}
 		device := major<<8 + minor
@@ -175,22 +175,22 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 
 		vaddr, err := strconv.ParseUint(addrs[0], 16, 64)
 		if err != nil {
-			logrus.Debugf("vaddr: failed to convert %s to uint64: %v", addrs[0], err)
-			numFormatErrors++
+			log.Debugf("vaddr: failed to convert %s to uint64: %v", addrs[0], err)
+			numParseErrors++
 			continue
 		}
 		vend, err := strconv.ParseUint(addrs[1], 16, 64)
 		if err != nil {
-			logrus.Debugf("vend: failed to convert %s to uint64: %v", addrs[1], err)
-			numFormatErrors++
+			log.Debugf("vend: failed to convert %s to uint64: %v", addrs[1], err)
+			numParseErrors++
 			continue
 		}
 		length := vend - vaddr
 
 		fileOffset, err := strconv.ParseUint(fields[2], 16, 64)
 		if err != nil {
-			logrus.Debugf("fileOffset: failed to convert %s to uint64: %v", fields[2], err)
-			numFormatErrors++
+			log.Debugf("fileOffset: failed to convert %s to uint64: %v", fields[2], err)
+			numParseErrors++
 			continue
 		}
 
@@ -204,7 +204,7 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 			Path:       path,
 		})
 	}
-	return mappings, numFormatErrors, scanner.Err()
+	return mappings, numParseErrors, scanner.Err()
 }
 
 // GetMappings will process the mappings file from proc. Additionally,
@@ -219,7 +219,7 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 	}
 	defer mapsFile.Close()
 
-	mappings, numFormatErrors, err := parseMappings(mapsFile)
+	mappings, numParseErrors, err := parseMappings(mapsFile)
 	if err == nil {
 		fileToMapping := make(map[string]*Mapping, len(mappings))
 		for idx := range mappings {
@@ -233,7 +233,7 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 		}
 		sp.fileToMapping = fileToMapping
 	}
-	return mappings, numFormatErrors, err
+	return mappings, numParseErrors, err
 }
 
 func (sp *systemProcess) GetThreads() ([]ThreadInfo, error) {
