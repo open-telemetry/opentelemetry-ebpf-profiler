@@ -244,11 +244,11 @@ func newHeaderAuth(key, value string) headerAuth {
 	}
 }
 
-func (m headerAuth) GetRequestMetadata(ctx context.Context, uri ...string) (map[string]string, error) {
+func (m headerAuth) GetRequestMetadata(_ context.Context, _ ...string) (map[string]string, error) {
 	return m, nil
 }
 
-func (_ headerAuth) RequireTransportSecurity() bool {
+func (headerAuth) RequireTransportSecurity() bool {
 	return true
 }
 
