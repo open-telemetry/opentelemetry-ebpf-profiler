@@ -17,14 +17,15 @@ import (
 // #include "../../support/ebpf/types.h"
 import "C"
 
-func decodeStubArgumentWrapperX64(code []byte, argNumber uint8, symbolValue,
+func decodeStubArgumentWrapperX64(code []byte, symbolValue,
 	addrBase libpf.SymbolValue) libpf.SymbolValue {
+	if len(code) == 0 {
+		return 0
+	}
 	return libpf.SymbolValue(C.decode_stub_argument(
-		(*C.uint8_t)(unsafe.Pointer(&code[0])), C.size_t(len(code)),
-		C.uint8_t(argNumber), C.uint64_t(symbolValue), C.uint64_t(addrBase)))
+		(*C.uint8_t)(unsafe.Pointer(&code[0])), C.size_t(len(code)), C.uint64_t(symbolValue), C.uint64_t(addrBase)))
 }
 
-func decodeStubArgumentWrapper(code []byte, argNumber uint8, symbolValue,
-	addrBase libpf.SymbolValue) libpf.SymbolValue {
-	return decodeStubArgumentWrapperX64(code, argNumber, symbolValue, addrBase)
+func decodeStubArgumentWrapper(code []byte, symbolValue, addrBase libpf.SymbolValue) libpf.SymbolValue {
+	return decodeStubArgumentWrapperX64(code, symbolValue, addrBase)
 }

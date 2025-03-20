@@ -652,8 +652,7 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
 // the code to resolve specified argument parameter to the first jump/call.
-func decodeStub(ef *pfelf.File, addrBase libpf.SymbolValue, symbolName libpf.SymbolName,
-	argNumber uint8) libpf.SymbolValue {
+func decodeStub(ef *pfelf.File, addrBase libpf.SymbolValue, symbolName libpf.SymbolName) libpf.SymbolValue {
 	symbolValue, err := ef.LookupSymbolAddress(symbolName)
 	if err != nil {
 		return libpf.SymbolValueInvalid
@@ -664,7 +663,7 @@ func decodeStub(ef *pfelf.File, addrBase libpf.SymbolValue, symbolName libpf.Sym
 		return libpf.SymbolValueInvalid
 	}
 
-	value := decodeStubArgumentWrapper(code, argNumber, symbolValue, addrBase)
+	value := decodeStubArgumentWrapper(code, symbolValue, addrBase)
 
 	// Sanity check the value range and alignment
 	if value%4 != 0 {
@@ -733,7 +732,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	// Calls first: PyThread_tss_get(autoTSSKey)
-	autoTLSKey = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState", 0)
+	autoTLSKey = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
 	if autoTLSKey == libpf.SymbolValueInvalid {
 		return nil, errors.New("unable to resolve autoTLSKey")
 	}
