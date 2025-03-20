@@ -67,7 +67,7 @@ type traceHandler struct {
 	// traceCache stores mappings from BPF hashes to symbolized traces. This allows
 	// avoiding the overhead of re-doing user-mode symbolization of traces that
 	// we have recently seen already.
-	traceCache *lru.SyncedLRU[host.TraceHash, *libpf.Trace]
+	traceCache *lru.SyncedLRU[host.TraceHash, libpf.Trace]
 
 	// reporter instance to use to send out traces.
 	reporter reporter.TraceReporter
@@ -78,7 +78,7 @@ type traceHandler struct {
 // newTraceHandler creates a new traceHandler
 func newTraceHandler(ctx context.Context, rep reporter.TraceReporter,
 	traceProcessor TraceProcessor, intervals Times, cacheSize uint32) (*traceHandler, error) {
-	traceCache, err := lru.NewSynced[host.TraceHash, *libpf.Trace](
+	traceCache, err := lru.NewSynced[host.TraceHash, libpf.Trace](
 		cacheSize, func(k host.TraceHash) uint32 { return uint32(k) })
 	if err != nil {
 		return nil, err
@@ -135,7 +135,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		m.traceCacheHit++
 		// Fast path
 		meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
-		if err := m.reporter.ReportTraceEvent(trace, meta); err != nil {
+		if err := m.reporter.ReportTraceEvent(&trace, meta); err != nil {
 			log.Errorf("Failed to report trace event: %v", err)
 		}
 		return
@@ -144,7 +144,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 
 	// Slow path: convert trace.
 	umTrace := m.traceProcessor.ConvertTrace(bpfTrace)
-	m.traceCache.Add(bpfTrace.Hash, umTrace)
+	m.traceCache.Add(bpfTrace.Hash, *umTrace)
 
 	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
 	if err := m.reporter.ReportTraceEvent(umTrace, meta); err != nil {
