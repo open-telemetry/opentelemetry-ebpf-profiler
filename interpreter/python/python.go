@@ -6,6 +6,7 @@ package python // import "go.opentelemetry.io/ebpf-profiler/interpreter/python"
 import (
 	"bytes"
 	"debug/elf"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -666,11 +667,15 @@ func decodeStub(
 	if _, err := ef.ReadVirtualMemory(code, int64(codeAddress)); err != nil {
 		return libpf.SymbolValueInvalid
 	}
+	dumpCode := func() {
+		log.Debugf("python stub code: %s", hex.Dump(code))
+	}
 
 	value := decodeStubArgumentWrapper(code, codeAddress, memoryBase)
 
 	// Sanity check the value range and alignment
 	if value%4 != 0 {
+		dumpCode()
 		return libpf.SymbolValueInvalid
 	}
 	// If base symbol (_PyRuntime) is not provided, accept any found value.
@@ -681,6 +686,7 @@ func decodeStub(
 	if value > memoryBase && value < memoryBase+4096 {
 		return value
 	}
+	dumpCode()
 	return libpf.SymbolValueInvalid
 }
 
