@@ -22,6 +22,9 @@ pub enum Error {
 
     #[error("visitor returned an error: {0}")]
     Visitor(#[source] AnyError),
+
+    #[error("line mapping failed with error: {0}")]
+    GoSymbolBadLineMapping(#[source] AnyError),
 }
 
 /// Go symbol extraction statistics.
@@ -55,6 +58,25 @@ impl<'obj> super::RangeExtractor for Extractor<'obj> {
     }
 }
 
+fn find_func_end(func: &gosym::Func<'_, '_>) -> Result<Option<u64>> {
+    let mut end: Option<u64> = None;
+    let mut iter = func.line_mapping()?;
+    loop {
+        match iter.next()? {
+            Some((rng, _)) => {
+                if let Some(e) = end {
+                    if rng.end < e {
+                        continue;
+                    }
+                }
+                end = Some(rng.end)
+            }
+            None => break,
+        }
+    }
+    Ok(end)
+}
+
 fn extract_ranges(obj: &objfile::Reader<'_>, visitor: super::RangeVisitor<'_>) -> Result<Stats> {
     let mut stats = Stats::default();
 
@@ -67,36 +89,10 @@ fn extract_ranges(obj: &objfile::Reader<'_>, visitor: super::RangeVisitor<'_>) -
     stats.is_go_binary = true;
 
     let mut func_iter = go.funcs()?;
-    'outer: while let Some(func) = func_iter.next()? {
-        // Infer end of function from line tables.
-        let mut end: Option<u64> = None;
-        let mut line_iter = func.line_mapping()?;
-        loop {
-            match line_iter.next() {
-                Ok(Some((rng, _))) => {
-                    if let Some(e) = end {
-                        if rng.end < e {
-                            continue;
-                        }
-                    }
-                    end = Some(rng.end)
-                }
-                Ok(None) => break,
-                Err(gosym::Error::BadLineNumber) => {
-                    // skip function once we hit a BadLineNumber error
-                    stats.funcs_skipped += 1;
-                    debug!("WARN: bad line number of function ({})", func.name()?);
-                    continue 'outer;
-                }
-                Err(e) => {
-                    return Err(e.into());
-                }
-            }
-        }
-
-        let length = match end {
-            Some(e) => e.saturating_sub(func.start_addr()),
-            None => {
+    while let Some(func) = func_iter.next()? {
+        let end = match find_func_end(&func) {
+            Ok(Some(e)) => e,
+            Ok(None) => {
                 debug!(
                     "WARN: unable to determine end of function ({})",
                     func.name()?
@@ -104,7 +100,18 @@ fn extract_ranges(obj: &objfile::Reader<'_>, visitor: super::RangeVisitor<'_>) -
                 stats.funcs_skipped += 1;
                 continue;
             }
+            Err(Error::Gosym(gosym::Error::BadLineNumber)) => {
+                // skip function once we hit a BadLineNumber error
+                debug!("WARN: bad line number of function ({})", func.name()?);
+                stats.funcs_skipped += 1;
+                continue;
+            }
+            Err(e) => {
+                return Err(Error::GoSymbolBadLineMapping(e.into()));
+            }
         };
+
+        let length = end.saturating_sub(func.start_addr());
 
         if length == 0 {
             debug!("WARN: zero function length ({})", func.name()?);
@@ -168,9 +175,6 @@ mod tests {
                 "main.main not found in {:?}",
                 test_file
             );
-
-            // Verify ranges contains the main function
-            assert!(ranges.iter().any(|range| range.func == "main.main"));
 
             // Verify ranges are valid
             for range in ranges {
