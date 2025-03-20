@@ -91,8 +91,7 @@ func newTraceHandler(ctx context.Context, rep reporter.TraceReporter,
 
 	go func() {
 		wg.Done()
-		jitter := 0.2
-		ticker := time.NewTicker(libpf.AddJitter(traceCacheLifetime, jitter))
+		ticker := time.NewTicker(traceCacheLifetime)
 		defer ticker.Stop()
 
 		for {
@@ -101,7 +100,6 @@ func newTraceHandler(ctx context.Context, rep reporter.TraceReporter,
 				return
 			case <-ticker.C:
 				traceCache.PurgeExpired()
-				ticker.Reset(libpf.AddJitter(traceCacheLifetime, jitter))
 			}
 		}
 	}()
