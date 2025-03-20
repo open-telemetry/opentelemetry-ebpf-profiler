@@ -174,6 +174,8 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 			metrics.MetricValue(pm.mappingStats.maxProcParseUsec.Swap(0))
 		summary[metrics.IDTotalProcParseUsec] =
 			metrics.MetricValue(pm.mappingStats.totalProcParseUsec.Swap(0))
+		summary[metrics.IDErrProcParse] =
+			metrics.MetricValue(pm.mappingStats.numProcParseErrors.Swap(0))
 
 		mapsMetrics := pm.ebpf.CollectMetrics()
 		for _, metric := range mapsMetrics {
