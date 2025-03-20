@@ -5,10 +5,10 @@ package tracehandler_test
 
 import (
 	"context"
+	"maps"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -52,48 +52,26 @@ type arguments struct {
 	trace *host.Trace
 }
 
-// reportedCount / reportedTrace hold the information reported from traceHandler
-// via the reporter functions (reportCountForTrace / reportFramesForTrace).
-type reportedCount struct {
-	traceHash libpf.TraceHash
-	count     uint16
-}
-
-type reportedTrace struct {
-	traceHash libpf.TraceHash
-}
-
 type mockReporter struct {
-	t              *testing.T
-	reportedCounts []reportedCount
-	reportedTraces []reportedTrace
+	t       *testing.T
+	reports map[libpf.TraceHash]uint16
 }
 
-func (m *mockReporter) ReportFramesForTrace(trace *libpf.Trace) {
-	m.reportedTraces = append(m.reportedTraces, reportedTrace{traceHash: trace.Hash})
-	m.t.Logf("reportFramesForTrace: new trace 0x%x", trace.Hash)
-}
+func (m *mockReporter) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEventMeta) error {
+	if _, exists := m.reports[trace.Hash]; exists {
+		m.reports[trace.Hash]++
+		return nil
+	}
+	m.reports[trace.Hash] = 1
 
-func (m *mockReporter) ReportCountForTrace(traceHash libpf.TraceHash,
-	count uint16, _ *samples.TraceEventMeta) {
-	m.reportedCounts = append(m.reportedCounts, reportedCount{
-		traceHash: traceHash,
-		count:     count,
-	})
-	m.t.Logf("reportCountForTrace: 0x%x count: %d", traceHash, count)
-}
-
-func (m *mockReporter) SupportsReportTraceEvent() bool { return false }
-
-func (m *mockReporter) ReportTraceEvent(_ *libpf.Trace, _ *samples.TraceEventMeta) {
+	return nil
 }
 
 func TestTraceHandler(t *testing.T) {
 	tests := map[string]struct {
 		input          []arguments
-		expectedCounts []reportedCount
-		expectedTraces []reportedTrace
 		expireTimeout  time.Duration
+		expectedEvents map[libpf.TraceHash]uint16
 	}{
 		// no input simulates a case where no data is provided as input
 		// to the functions of traceHandler.
@@ -103,9 +81,8 @@ func TestTraceHandler(t *testing.T) {
 		"single trace": {input: []arguments{
 			{trace: &host.Trace{Hash: host.TraceHash(0x1234)}},
 		},
-			expectedTraces: []reportedTrace{{traceHash: libpf.NewTraceHash(0x1234, 0x1234)}},
-			expectedCounts: []reportedCount{
-				{traceHash: libpf.NewTraceHash(0x1234, 0x1234), count: 1},
+			expectedEvents: map[libpf.TraceHash]uint16{
+				libpf.NewTraceHash(0x1234, 0x1234): 1,
 			},
 		},
 
@@ -114,10 +91,8 @@ func TestTraceHandler(t *testing.T) {
 			{trace: &host.Trace{Hash: host.TraceHash(4)}},
 			{trace: &host.Trace{Hash: host.TraceHash(4)}},
 		},
-			expectedTraces: []reportedTrace{{traceHash: libpf.NewTraceHash(4, 4)}},
-			expectedCounts: []reportedCount{
-				{traceHash: libpf.NewTraceHash(4, 4), count: 1},
-				{traceHash: libpf.NewTraceHash(4, 4), count: 1},
+			expectedEvents: map[libpf.TraceHash]uint16{
+				libpf.NewTraceHash(4, 4): 2,
 			},
 		},
 	}
@@ -126,7 +101,10 @@ func TestTraceHandler(t *testing.T) {
 		name := name
 		test := test
 		t.Run(name, func(t *testing.T) {
-			r := &mockReporter{t: t}
+			r := &mockReporter{
+				t:       t,
+				reports: make(map[libpf.TraceHash]uint16),
+			}
 
 			traceChan := make(chan *host.Trace)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -142,23 +120,8 @@ func TestTraceHandler(t *testing.T) {
 			cancel()
 			<-exitNotify
 
-			assert.Equal(t, len(test.expectedCounts), len(r.reportedCounts))
-			assert.Equal(t, len(test.expectedTraces), len(r.reportedTraces))
-
-			// Expected and reported traces order should match.
-			assert.Equal(t, test.expectedTraces, r.reportedTraces)
-
-			for _, expCount := range test.expectedCounts {
-				// Expected and reported count order doesn't necessarily match.
-				found := false
-				for _, repCount := range r.reportedCounts {
-					if expCount == repCount {
-						found = true
-						break
-					}
-				}
-				assert.True(t, found, "Expected count %d for trace 0x%x not found",
-					expCount.count, expCount.traceHash)
+			if !maps.Equal(r.reports, test.expectedEvents) {
+				t.Fatalf("Expected %#v but got %#v", test.expectedEvents, r.reports)
 			}
 		})
 	}
