@@ -61,4 +61,5 @@ type Trace struct {
 	APMTransactionID libpf.APMTransactionID
 	CPU              int
 	EnvVars          map[string]string
+	CustomLabels     map[string]string
 }

@@ -37,6 +37,7 @@ const (
 	ProgUnwindPerl    = C.PROG_UNWIND_PERL
 	ProgUnwindV8      = C.PROG_UNWIND_V8
 	ProgUnwindDotnet  = C.PROG_UNWIND_DOTNET
+	ProgGoLabels      = C.PROG_GO_LABELS
 )
 
 const (
