@@ -538,7 +538,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 // fast enough and this particular pid is reused again by the system.
 func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	exitKTime := times.GetKTime()
-	log.Debugf("- PID: %v", pid)
+	log.Warnf("- PID: %v", pid)
 
 	var err error
 	defer func() {
@@ -736,6 +736,7 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 			continue
 		}
 
+		log.Warnf("PID %v deleted", pid)
 		delete(pm.pidToProcessInfo, pid)
 
 		for _, instance := range pm.interpreters[pid] {
