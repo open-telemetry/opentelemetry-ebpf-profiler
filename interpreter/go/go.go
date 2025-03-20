@@ -13,6 +13,7 @@ import "C"
 import (
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"runtime"
 	"sync/atomic"
 	"unsafe"
@@ -140,16 +141,29 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 		return fmt.Errorf("unexpected return for point lookup: %d", len(symbolsSlice))
 	}
 
-	frameID := libpf.NewFrameID(libpf.NewFileID(uint64(frame.File), uint64(frame.File)),
-		libpf.AddressOrLineno(symbolsSlice[0].line_number))
+	lineNo := libpf.SourceLineno(symbolsSlice[0].line_number)
+	funcName := C.GoString(symbolsSlice[0].function_name)
+	sourceFile := C.GoString(symbolsSlice[0].file_name)
+
+	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
+	h := fnv.New128a()
+	_, _ = h.Write([]byte(frame.File.StringNoQuotes()))
+	_, _ = h.Write([]byte(funcName))
+	_, _ = h.Write([]byte(sourceFile))
+	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
+	if err != nil {
+		return fmt.Errorf("failed to create a file ID: %v", err)
+	}
+
+	frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
 
 	trace.AppendFrameID(libpf.GoFrame, frameID)
 
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      frameID,
-		FunctionName: C.GoString(symbolsSlice[0].function_name),
-		SourceFile:   C.GoString(symbolsSlice[0].file_name),
-		SourceLine:   libpf.SourceLineno(symbolsSlice[0].line_number),
+		FunctionName: funcName,
+		SourceFile:   sourceFile,
+		SourceLine:   lineNo,
 	})
 	sfCounter.ReportSuccess()
 	return nil
