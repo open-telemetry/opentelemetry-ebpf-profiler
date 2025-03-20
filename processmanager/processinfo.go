@@ -614,9 +614,16 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			return
 		}
 
+		if errors.Is(err, process.ErrNoMappings) {
+			// When no mappings can be extracted but the process is still alive,
+			// do not trigger a process exit to avoid unloading process metadata.
+			// As it's likely that a future iteration can extract mappings from a
+			// different thread in the process, notify eBPF to enable further notifications.
+			pm.ebpf.RemoveReportedPID(pid)
+			return
+		}
+
 		// All other errors imply that the process has exited.
-		// Clean up, and notify eBPF.
-		pm.processPIDExit(pid)
 		if os.IsNotExist(err) {
 			// Since listing /proc and opening files in there later is inherently racy,
 			// we expect to lose the race sometimes and thus expect to hit os.IsNotExist.
@@ -626,22 +633,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			// return ESRCH. Handle it as if the process did not exist.
 			pm.mappingStats.errProcESRCH.Add(1)
 		}
-		return
-	}
-	if len(mappings) == 0 {
-		// Valid process without any (executable) mappings. All cases are
-		// handled as process exit. Possible causes and reasoning:
-		// 1. It is a kernel worker process. The eBPF does not send events from these,
-		//    but we can see kernel threads here during startup when tracer walks
-		//    /proc and tries to synchronize all PIDs it sees.
-		//    The PID should not exist anywhere, but we can still double check and
-		//    make sure the PID is not tracked.
-		// 2. It is a normal process executing, but we just sampled it when the kernel
-		//    execve() is rebuilding the mappings and nothing is currently mapped.
-		//    In this case we can handle it as process exit because everything about
-		//    the process is changing: all mappings, comm, etc. If execve fails, we
-		//    reaped it early. If execve succeeds, we will get new synchronization
-		//    request soon, and handle it as a new process event.
+		// Clean up, and notify eBPF.
 		pm.processPIDExit(pid)
 		return
 	}
