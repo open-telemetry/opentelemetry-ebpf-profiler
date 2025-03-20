@@ -242,7 +242,9 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 	if len(mappings) == 0 {
 		// We could test for main thread exit here by checking for zombie state
 		// in /proc/sp.pid/stat but it's simpler to assume that this is the case
-		// and try extracting mappings for a different thread.
+		// and try extracting mappings for a different thread. Since we stopped
+		// processing /proc at agent startup, it's very unlikely that the agent
+		// will sample a process being initialized without mappings.
 		sp.mainThreadExit = true
 		mapsFileAlt, err := os.Open(fmt.Sprintf("/proc/%d/task/%d/maps", sp.pid, sp.tid))
 		// On all errors resulting from trying to get mappings from a different thread,
