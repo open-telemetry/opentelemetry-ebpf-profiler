@@ -9,7 +9,7 @@
 // #define DECODE_AMD_DEBUG
 
 #if defined(DECODE_AMD_DEBUG)
-#include <stdio.h>
+  #include <stdio.h>
 #endif
 
 static int reg_index(ZydisRegister reg)
@@ -55,10 +55,7 @@ struct reg_state {
 // todo rewrite in go
 // todo add coredump tests
 uint64_t decode_stub_argument(
-  const uint8_t *code,
-  size_t code_sz,
-  uint64_t code_address,
-  uint64_t memory_base)
+  const uint8_t *code, size_t code_sz, uint64_t code_address, uint64_t memory_base)
 {
   ZydisDecoder decoder;
   ZydisDecoderInit(&decoder, ZYDIS_MACHINE_MODE_LONG_64, ZYDIS_STACK_WIDTH_64);
@@ -71,22 +68,20 @@ uint64_t decode_stub_argument(
   ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
   ZyanUSize instruction_offset = 0;
   struct reg_state regs[32]    = {};
-  while (ZYAN_SUCCESS(
-    ZydisDecoderDecodeFull(
-      &decoder, code + instruction_offset, code_sz - instruction_offset, &instr, operands))) {
-    #if defined(DECODE_AMD_DEBUG)
+  while (ZYAN_SUCCESS(ZydisDecoderDecodeFull(
+    &decoder, code + instruction_offset, code_sz - instruction_offset, &instr, operands))) {
+#if defined(DECODE_AMD_DEBUG)
     ZydisDisassembledInstruction dbgi = {};
-    if (ZYAN_SUCCESS(
-      ZydisDisassembleIntel(
-        ZYDIS_MACHINE_MODE_LONG_64,
-        code_address + instruction_offset,
-        code + instruction_offset,
-        code_sz - instruction_offset,
-        &dbgi))) {
+    if (ZYAN_SUCCESS(ZydisDisassembleIntel(
+          ZYDIS_MACHINE_MODE_LONG_64,
+          code_address + instruction_offset,
+          code + instruction_offset,
+          code_sz - instruction_offset,
+          &dbgi))) {
       printf("%-12p %s\n", (void *)(code_address + instruction_offset), dbgi.text);
       fflush(stdout);
     }
-    #endif
+#endif
     instruction_offset += instr.length;
     regs[reg_index(ZYDIS_REGISTER_RIP)].value = code_address + instruction_offset;
     if (instr.mnemonic == ZYDIS_MNEMONIC_CALL || instr.mnemonic == ZYDIS_MNEMONIC_JMP) {
@@ -107,7 +102,6 @@ uint64_t decode_stub_argument(
       if (operands[1].type == ZYDIS_OPERAND_TYPE_MEMORY && operands[1].mem.disp.has_displacement) {
         ZyanU64 at = regs[reg_index(operands[1].mem.base)].value + operands[1].mem.disp.value;
         if (instr.mnemonic == ZYDIS_MNEMONIC_MOV) {
-          // todo: do not assume that we're reading a ptr to memory_base
           v           = memory_base;
           loaded_from = at;
         }
@@ -118,21 +112,22 @@ uint64_t decode_stub_argument(
       if (operands[1].type == ZYDIS_OPERAND_TYPE_REGISTER) {
         v = regs[reg_index(operands[1].reg.value)].value;
       }
-      #if defined(DECODE_AMD_DEBUG)
+#if defined(DECODE_AMD_DEBUG)
       printf("   | regs[%d] = %lx\n", reg_index(operands[0].reg.value), v);
-      #endif
+#endif
       regs[reg_index(operands[0].reg.value)].value       = v;
       regs[reg_index(operands[0].reg.value)].loaded_from = loaded_from;
     }
-    if (instr.mnemonic == ZYDIS_MNEMONIC_ADD && instr.operand_count == 3 && operands[0].type ==
-        ZYDIS_OPERAND_TYPE_REGISTER && operands[1].type == ZYDIS_OPERAND_TYPE_MEMORY) {
-      // todo: do not assume that we're reading a ptr to memory_base
+    if (
+      instr.mnemonic == ZYDIS_MNEMONIC_ADD && instr.operand_count == 3 &&
+      operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+      operands[1].type == ZYDIS_OPERAND_TYPE_MEMORY) {
       ZyanU64 v = regs[reg_index(operands[0].reg.value)].value + memory_base;
-      regs[reg_index(operands[0].reg.value)].value = v;
+      regs[reg_index(operands[0].reg.value)].value       = v;
       regs[reg_index(operands[0].reg.value)].loaded_from = 0;
-      #if defined(DECODE_AMD_DEBUG)
+#if defined(DECODE_AMD_DEBUG)
       printf("   | regs[%d] = %lx\n", reg_index(operands[0].reg.value), v);
-      #endif
+#endif
     }
   }
   return 0;

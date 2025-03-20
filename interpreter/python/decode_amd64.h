@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 
-uint64_t decode_stub_argument(const uint8_t* code, size_t code_sz, uint64_t code_address, uint64_t memory_base);
+uint64_t decode_stub_argument(
+  const uint8_t *code, size_t code_sz, uint64_t code_address, uint64_t memory_base);
 
 #endif
