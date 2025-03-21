@@ -60,7 +60,7 @@ bpf_map_def SEC("maps") interpreter_offsets = {
   .type        = BPF_MAP_TYPE_HASH,
   .key_size    = sizeof(u64),
   .value_size  = sizeof(OffsetRange),
-  .max_entries = 32,
+  .max_entries = 256,
 };
 
 // Maps fileID and page to information of stack deltas associated with that page.

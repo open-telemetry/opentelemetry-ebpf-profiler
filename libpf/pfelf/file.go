@@ -46,6 +46,9 @@ const (
 	// parsed sections (e.g. symbol tables and string tables; libxul
 	// has about 4MB .dynstr)
 	maxBytesLargeSection = 16 * 1024 * 1024
+
+	sectionNameSymtab = ".symtab"
+	sectionNameDynSym = ".dynsym"
 )
 
 // ErrSymbolNotFound is returned when requested symbol was not found
@@ -885,25 +888,37 @@ func (f *File) LookupSymbolAddress(symbol libpf.SymbolName) (libpf.SymbolValue, 
 
 // loadSymbolTable reads given symbol table
 func (f *File) loadSymbolTable(name string) (*libpf.SymbolMap, error) {
+	symMap := new(libpf.SymbolMap)
+	err := f.eachSymbolSlow(name, func(s libpf.Symbol) bool {
+		symMap.Add(s)
+		return true
+	})
+	if err != nil {
+		return nil, err
+	}
+	symMap.Finalize()
+	return symMap, nil
+}
+
+func (f *File) eachSymbolSlow(name string, it func(s libpf.Symbol) bool) error {
 	symTab := f.Section(name)
 	if symTab == nil {
-		return nil, fmt.Errorf("failed to read %v: section not present", name)
+		return fmt.Errorf("failed to read %v: section not present", name)
 	}
 	if symTab.Link >= uint32(len(f.Sections)) {
-		return nil, fmt.Errorf("failed to read %v strtab: link %v out of range",
+		return fmt.Errorf("failed to read %v strtab: link %v out of range",
 			name, symTab.Link)
 	}
 	strTab := f.Sections[symTab.Link]
 	strs, err := strTab.Data(maxBytesLargeSection)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %v: %v", strTab.Name, err)
+		return fmt.Errorf("failed to read %v: %v", strTab.Name, err)
 	}
 	syms, err := symTab.Data(maxBytesLargeSection)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %v: %v", name, err)
+		return fmt.Errorf("failed to read %v: %v", name, err)
 	}
 
-	symMap := libpf.SymbolMap{}
 	symSz := int(unsafe.Sizeof(elf.Sym64{}))
 	for i := 0; i < len(syms); i += symSz {
 		sym := (*elf.Sym64)(unsafe.Pointer(&syms[i]))
@@ -911,25 +926,46 @@ func (f *File) loadSymbolTable(name string) (*libpf.SymbolMap, error) {
 		if !ok {
 			continue
 		}
-		symMap.Add(libpf.Symbol{
+		cont := it(libpf.Symbol{
 			Name:    libpf.SymbolName(name),
 			Address: libpf.SymbolValue(sym.Value),
 			Size:    sym.Size,
 		})
+		if !cont {
+			break
+		}
 	}
-	symMap.Finalize()
-
-	return &symMap, nil
+	return nil
 }
 
 // ReadSymbols reads the full dynamic symbol table from the ELF
 func (f *File) ReadSymbols() (*libpf.SymbolMap, error) {
-	return f.loadSymbolTable(".symtab")
+	return f.loadSymbolTable(sectionNameSymtab)
 }
 
 // ReadDynamicSymbols reads the full dynamic symbol table from the ELF
 func (f *File) ReadDynamicSymbols() (*libpf.SymbolMap, error) {
-	return f.loadSymbolTable(".dynsym")
+	return f.loadSymbolTable(sectionNameDynSym)
+}
+
+func (f *File) LookupSymbolSlow(name string) (libpf.Symbol, error) {
+	found := false
+	res := libpf.Symbol{}
+	err := f.eachSymbolSlow(sectionNameSymtab, func(s libpf.Symbol) bool {
+		if string(s.Name) == name {
+			found = true
+			res = s
+			return false
+		}
+		return true
+	})
+	if err != nil {
+		return libpf.Symbol{}, err
+	}
+	if !found {
+		return libpf.Symbol{}, ErrSymbolNotFound
+	}
+	return res, nil
 }
 
 // DynString returns the strings listed for the given tag in the file's dynamic
