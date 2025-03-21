@@ -3,6 +3,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+//nolint:lll
 package python
 
 import (
