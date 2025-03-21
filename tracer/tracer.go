@@ -109,7 +109,7 @@ type Tracer struct {
 	// value, see bpf_get_current_pid_tgid for information on how the value is encoded.
 	// It needs to be buffered to avoid locking the writers and stacking up resources when we
 	// read new PIDs at startup or notified via eBPF.
-	pidEvents chan uint64
+	pidEvents chan libpf.PIDTID
 
 	// intervals provides access to globally configured timers and counters.
 	intervals Intervals
@@ -324,7 +324,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		kernelSymbols:          kernelSymbols,
 		kernelModules:          kernelModules,
 		triggerPIDProcessing:   make(chan bool, 1),
-		pidEvents:              make(chan uint64, pidEventBufferSize),
+		pidEvents:              make(chan libpf.PIDTID, pidEventBufferSize),
 		ebpfMaps:               ebpfMaps,
 		ebpfProgs:              ebpfProgs,
 		hooks:                  make(map[hookPoint]link.Link),
@@ -844,7 +844,7 @@ func (t *Tracer) enableEvent(eventType int) {
 
 // monitorPIDEventsMap periodically iterates over the eBPF map pid_events,
 // collects PIDs and writes them to the keys slice.
-func (t *Tracer) monitorPIDEventsMap(keys *[]uint64) {
+func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) {
 	eventsMap := t.ebpfMaps["pid_events"]
 	var key, nextKey uint64
 	var value bool
@@ -892,7 +892,7 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]uint64) {
 		// exact point), we may block sending to the channel, delay the iteration and may introduce
 		// race conditions (related to deletion). For that reason, keys are first collected and,
 		// after the iteration has finished, sent to the channel.
-		*keys = append(*keys, key)
+		*keys = append(*keys, libpf.PIDTID(key))
 	}
 
 	keysToDelete := len(deleteBatch)
@@ -1049,15 +1049,15 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 	eventMetricCollector := t.startEventMonitor(ctx)
 	traceEventMetricCollector := t.startTraceEventMonitor(ctx, traceOutChan)
 
-	pidEvents := make([]uint64, 0)
+	pidEvents := make([]libpf.PIDTID, 0)
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
 		t.triggerPIDProcessing, func(_ bool) {
 			t.enableEvent(support.EventTypeGenericPID)
 			t.monitorPIDEventsMap(&pidEvents)
 
-			for _, pidTgid := range pidEvents {
-				log.Warnf("=> PID: %v TID: %v", pidTgid>>32, pidTgid&0xFFFFFFFF)
-				t.pidEvents <- pidTgid
+			for _, pidTid := range pidEvents {
+				log.Warnf("=> %v", pidTid)
+				t.pidEvents <- pidTid
 			}
 
 			// Keep the underlying array alive to avoid GC pressure
