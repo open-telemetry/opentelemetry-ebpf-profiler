@@ -1,3 +1,6 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
 /*
  * Implements a profiling test based on a multi-threaded process with
  * a main thread that exits early.
@@ -6,8 +9,8 @@
  *   1. Burns CPU, ensures process is sampled by the profiler
  *   2. Burns CPU in newly mapped pages
  *
- * After main thread exits, /proc/PID/maps no longer exists and the
- * expected behavior is for thee profiler to not cleanup the process,
+ * After main thread exits, /proc/PID/maps is empty and the expected
+ * behavior is for the profiler to not cleanup the process, but instead
  * keep profiling the remaining thread and use /proc/PID/task/TID/maps
  * (TID corresponding to thread 2) to synchronize mappings.
  *
