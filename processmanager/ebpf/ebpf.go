@@ -266,7 +266,7 @@ func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID 
 }
 
 func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
-	offsetRanges []util.Range) (uint64, C.OffsetRange, error) {
+	offsetRanges []util.Range) (key uint64, value C.OffsetRange, err error) {
 	if len(offsetRanges) != 1 && len(offsetRanges) != 2 {
 		return 0, C.OffsetRange{}, fmt.Errorf("ivalid ranges %+v", offsetRanges)
 	}
@@ -274,9 +274,9 @@ func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
 	//  the offset_range associated with them gives the precise area in that page
 	//  where the main interpreter loop is located. This is required to unwind
 	//  nicely from native code into interpreted code.
-	key := uint64(fileID)
+	key = uint64(fileID)
 	first := offsetRanges[0]
-	value := C.OffsetRange{
+	value = C.OffsetRange{
 		lower_offset1: C.u64(first.Start),
 		upper_offset1: C.u64(first.End),
 		program_index: C.u16(ebpfProgIndex),
