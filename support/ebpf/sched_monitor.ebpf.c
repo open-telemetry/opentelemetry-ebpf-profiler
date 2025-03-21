@@ -6,6 +6,8 @@
 
 #include "types.h"
 
+// See /sys/kernel/debug/tracing/events/sched/sched_process_free/format
+// for struct layout.
 struct sched_process_free_ctx {
   unsigned char skip[24];
   pid_t pid;
