@@ -96,6 +96,30 @@ jobs:
             exit 1
           fi
 
+  check-rust-blobs:
+    name: Check for differences in the Rust binary blobs
+    runs-on: ubuntu-24.04
+    container: otel/opentelemetry-ebpf-profiler-dev:latest
+    defaults:
+      run:
+        shell: bash --login {0}
+    steps:
+      - name: Clone code
+        uses: actions/checkout@v4
+      - name: Hash Rust blobs
+        run: |
+          sha256sum target/*-unknown-linux-musl/release/libsymblib_capi.a > rust-blobs.hash
+      - name: Rebuild Rust blobs
+        run: |
+          rm -rf target/
+          make rust-components TARGET_ARCH=amd64
+          make rust-components TARGET_ARCH=arm64
+      - name: Check for differences
+        run: |
+          if ! sha256sum --check rust-blobs.hash; then
+            echo "Please rebuild and commit the updated Rust binary blobs."
+            exit 1
+          fi
 
   build-integration-test-binaries:
     name: Build integration test binaries (${{ matrix.target_arch }})
