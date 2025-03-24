@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/golang"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
@@ -127,6 +128,9 @@ func NewExecutableInfoManager(
 	if includeTracers.Has(types.DotnetTracer) {
 		interpreterLoaders = append(interpreterLoaders, dotnet.Loader)
 	}
+	if includeTracers.Has(types.LuaJITTracer) {
+		interpreterLoaders = append(interpreterLoaders, luajit.Loader)
+	}
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
 	if collectCustomLabels {
@@ -214,7 +218,7 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	}
 
 	// Create the LoaderInfo for interpreter detection
-	loaderInfo := interpreter.NewLoaderInfo(fileID, elfRef, gaps)
+	loaderInfo := interpreter.NewLoaderInfo(fileID, elfRef, gaps, intervalData.Deltas)
 
 	// Insert a corresponding record into our map.
 	info = &entry{

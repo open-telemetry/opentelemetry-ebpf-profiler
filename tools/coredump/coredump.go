@@ -140,7 +140,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	for _, mapName := range []string{"interpreter_offsets",
 		"pid_page_to_mapping_info", "stack_delta_page_to_info", "pid_page_to_mapping_info",
 		"dotnet_procs", "perl_procs", "py_procs", "hotspot_procs", "ruby_procs",
-		"php_procs", "v8_procs"} {
+		"php_procs", "v8_procs", "luajit_procs"} {
 		dummyMaps[mapName] = &cebpf.Map{}
 	}
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {

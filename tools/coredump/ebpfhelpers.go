@@ -37,7 +37,8 @@ func __bpf_log(buf unsafe.Pointer, sz C.int) {
 }
 
 //export __push_frame
-func __push_frame(id, file, line C.u64, frameType, returnAddress C.uchar) C.int {
+func __push_frame(id, file, line C.u64, frameType, returnAddress C.uchar,
+	calleePC C.u32, callerPC C.u32) C.int {
 	ctx := ebpfContextMap[id]
 
 	ctx.trace.Frames = append(ctx.trace.Frames, host.Frame{
@@ -45,6 +46,8 @@ func __push_frame(id, file, line C.u64, frameType, returnAddress C.uchar) C.int 
 		Lineno:        libpf.AddressOrLineno(line),
 		Type:          libpf.FrameType(frameType),
 		ReturnAddress: returnAddress != 0,
+		LJCalleePC:    uint32(calleePC),
+		LJCallerPC:    uint32(callerPC),
 	})
 
 	return C.ERR_OK
@@ -95,7 +98,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef *C.bpf_map_def, keyptr unsafe.Pointe
 	case &C.per_cpu_records:
 		return ctx.perCPURecord
 	case &C.interpreter_offsets, &C.dotnet_procs, &C.perl_procs, &C.php_procs, &C.py_procs,
-		&C.hotspot_procs, &C.ruby_procs, &C.v8_procs:
+		&C.hotspot_procs, &C.ruby_procs, &C.v8_procs, &C.luajit_procs:
 		var key any
 		switch mapdef.key_size {
 		case 8:
@@ -126,7 +129,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef *C.bpf_map_def, keyptr unsafe.Pointe
 		if deltas, ok := ctx.exeIDToStackDeltaMaps[ctx.stackDeltaFileID]; ok {
 			return unsafe.Pointer(uintptr(deltas) + key*C.sizeof_StackDelta)
 		}
-	case &C.metrics:
+	case &C.metrics, &C.reported_pids:
 		return unsafe.Pointer(uintptr(0))
 	case &C.system_config:
 		return ctx.systemConfig

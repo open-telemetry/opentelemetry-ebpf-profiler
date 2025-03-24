@@ -118,14 +118,14 @@ test: generate ebpf test-deps
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 
-SUDOTEST_DIRS := ./customlabelstest
+SUDOTEST_DIRS := ./customlabelstest ./interpreter/luajit
 
 target/release/custom-labels-example:
 	cargo build --release --bin custom-labels-example
 
 sudo-tests: generate ebpf target/release/custom-labels-example
 	$(foreach test_dir, $(SUDOTEST_DIRS), \
-		sudo go test $(GO_FLAGS) -tags $(GO_TAGS) "$(test_dir)" \
+		sudo go test -v $(GO_FLAGS) -tags $(GO_TAGS) "$(test_dir)" ;\
 	)
 
 TESTDATA_DIRS:= \

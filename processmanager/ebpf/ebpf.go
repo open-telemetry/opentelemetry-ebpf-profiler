@@ -105,6 +105,7 @@ type ebpfMapsImpl struct {
 	apmIntProcs        *cebpf.Map
 	goProcs            *cebpf.Map
 	clProcs            *cebpf.Map
+	luajitProcs        *cebpf.Map
 
 	// Stackdelta and process related eBPF maps
 	exeIDToStackDeltaMaps []*cebpf.Map
@@ -219,6 +220,12 @@ func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map) (EbpfHandler, err
 	}
 	impl.clProcs = clProcs
 
+	luajitProcs, ok := maps["luajit_procs"]
+	if !ok {
+		log.Fatalf("Map luajit_procs is not available")
+	}
+	impl.luajitProcs = luajitProcs
+
 	impl.stackDeltaPageToInfo, ok = maps["stack_delta_page_to_info"]
 	if !ok {
 		log.Fatalf("Map stack_delta_page_to_info is not available")
@@ -314,6 +321,8 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.goProcs, nil
 	case libpf.CustomLabels:
 		return impl.clProcs, nil
+	case libpf.LuaJIT:
+		return impl.luajitProcs, nil
 	default:
 		return nil, fmt.Errorf("type %d is not (yet) supported", typ)
 	}

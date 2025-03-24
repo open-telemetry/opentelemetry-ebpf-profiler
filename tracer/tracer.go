@@ -494,6 +494,11 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 			name:   "go_labels",
 			enable: cfg.IncludeTracers.Has(types.GoLabels),
 		},
+		{
+			progID: uint32(support.ProgUnwindLuaJIT),
+			name:   "unwind_luajit",
+			enable: cfg.IncludeTracers.Has(types.LuaJITTracer),
+		},
 	}
 
 	if err = loadPerfUnwinders(coll, ebpfProgs, ebpfMaps["perf_progs"], tailCallProgs,
@@ -1057,6 +1062,11 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 			Lineno:        libpf.AddressOrLineno(rawFrame.addr_or_line),
 			Type:          libpf.FrameType(rawFrame.kind),
 			ReturnAddress: rawFrame.return_address != 0,
+			LJCalleePC:    uint32(rawFrame.callee_pc_lo) + (uint32(rawFrame.callee_pc_hi) << 16),
+			LJCallerPC:    uint32(rawFrame.caller_pc_lo) + (uint32(rawFrame.caller_pc_hi) << 16),
+		}
+		if trace.Frames[userFrameOffs+i].Type == libpf.LuaJITFrame {
+			log.Warnf("LuaJIT frame detected in trace %d", trace.PID)
 		}
 	}
 	return trace
@@ -1177,6 +1187,8 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 		C.metricID_UnwindDotnetErrBadFP:                       metrics.IDUnwindDotnetErrBadFP,
 		C.metricID_UnwindDotnetErrCodeHeader:                  metrics.IDUnwindDotnetErrCodeHeader,
 		C.metricID_UnwindDotnetErrCodeTooLarge:                metrics.IDUnwindDotnetErrCodeTooLarge,
+		C.metricID_UnwindLuaJITAttempts:                       metrics.IDUnwindLuaJITAttempts,
+		C.metricID_UnwindLuaJITErrNoProcInfo:                  metrics.IDUnwindLuaJITErrNoProcInfo,
 	}
 
 	// previousMetricValue stores the previously retrieved metric values to

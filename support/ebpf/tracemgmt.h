@@ -228,6 +228,11 @@ static inline PerCPURecord *get_pristine_per_cpu_record()
   record->phpUnwindState.zend_execute_data = 0;
   record->rubyUnwindState.stack_ptr        = 0;
   record->rubyUnwindState.last_stack_frame = 0;
+  record->luajitUnwindState.frame          = 0;
+  record->luajitUnwindState.prevframe      = 0;
+  record->luajitUnwindState.L_ptr          = 0;
+  record->luajitUnwindState.cframe         = 0;
+  record->luajitUnwindState.is_jit         = false;
   record->unwindersDone                    = 0;
   record->tailCalls                        = 0;
   record->ratelimitAction                  = RATELIMIT_ACTION_DEFAULT;
@@ -297,8 +302,15 @@ unwinder_mark_nonleaf_frame(UnwindState *state)
 //       and hotspot puts a subtype and BCI indices, amongst other things (see
 //       calc_line). This should probably be renamed to something like "frame type
 //       specific data".
-static inline __attribute__((__always_inline__)) ErrorCode _push_with_max_frames(
-  Trace *trace, u64 file, u64 line, u8 frame_type, u8 return_address, u32 max_frames)
+static inline __attribute__((__always_inline__)) ErrorCode _push_with_max_frames_lj_offsets(
+  Trace *trace,
+  u64 file,
+  u64 line,
+  u8 frame_type,
+  u8 return_address,
+  u32 max_frames,
+  u32 cee,
+  u32 cer)
 {
   if (trace->stack_len >= max_frames) {
     DEBUG_PRINT("unable to push frame: stack is full");
@@ -309,19 +321,30 @@ static inline __attribute__((__always_inline__)) ErrorCode _push_with_max_frames
 #ifdef TESTING_COREDUMP
   // tools/coredump uses CGO to build the eBPF code. This dispatches
   // the frame information directly to helper implemented in ebpfhelpers.go.
-  int __push_frame(u64, u64, u64, u8, u8);
+  int __push_frame(u64, u64, u64, u8, u8, u32, u32);
   trace->stack_len++;
-  return __push_frame(__cgo_ctx->id, file, line, frame_type, return_address);
+  return __push_frame(__cgo_ctx->id, file, line, frame_type, return_address, cee, cer);
 #else
   trace->frames[trace->stack_len++] = (Frame){
     .file_id        = file,
     .addr_or_line   = line,
     .kind           = frame_type,
     .return_address = return_address,
+    .callee_pc_hi   = cee >> 16,
+    .callee_pc_lo   = cee & 0xffff,
+    .caller_pc_hi   = cer >> 16,
+    .caller_pc_lo   = cer & 0xffff,
   };
 
   return ERR_OK;
 #endif
+}
+
+static inline __attribute__((__always_inline__)) ErrorCode _push_with_max_frames(
+  Trace *trace, u64 file, u64 line, u8 frame_type, u8 return_address, u32 max_frames)
+{
+  return _push_with_max_frames_lj_offsets(
+    trace, file, line, frame_type, return_address, MAX_NON_ERROR_FRAME_UNWINDS, 0, 0);
 }
 
 // Push the file ID, line number and frame type into FrameList
@@ -558,6 +581,7 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   state->r9  = regs->r9;
   state->r11 = regs->r11;
   state->r13 = regs->r13;
+  state->r14 = regs->r14;
   state->r15 = regs->r15;
 
   // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..

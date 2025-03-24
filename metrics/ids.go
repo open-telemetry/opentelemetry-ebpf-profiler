@@ -638,6 +638,12 @@ const (
 	// Number of times a trace event read failed (trace_events)
 	IDTraceEventReadError = 274
 
+	// Number of attempted LuaJIT unwinds
+	IDUnwindLuaJITAttempts = 275
+
+	// Number of times we didn't find an entry for this process in the LuaJIT process info array
+	IDUnwindLuaJITErrNoProcInfo = 276
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 275
+	IDMax = 277
 )

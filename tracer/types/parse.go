@@ -23,6 +23,7 @@ const (
 	V8Tracer
 	DotnetTracer
 	GoLabels
+	LuaJITTracer
 
 	// maxTracers indicates the max. number of different tracers
 	maxTracers
@@ -37,6 +38,7 @@ var tracerTypeToName = map[tracerType]string{
 	V8Tracer:      "v8",
 	DotnetTracer:  "dotnet",
 	GoLabels:      "go-labels",
+	LuaJITTracer:  "luajit",
 }
 
 var tracerNameToType = make(map[string]tracerType, maxTracers)

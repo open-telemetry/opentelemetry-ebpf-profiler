@@ -19,6 +19,7 @@ const (
 	FrameMarkerPerl     = 0x7
 	FrameMarkerV8       = 0x8
 	FrameMarkerDotnet   = 0xa
+	FrameMarkerLuaJIT   = 0xb
 	FrameMarkerAbort    = 0xff
 )
 
@@ -33,6 +34,7 @@ const (
 	ProgUnwindV8      = 0x7
 	ProgUnwindDotnet  = 0x8
 	ProgGoLabels      = 0x9
+	ProgUnwindLuaJIT  = 0xa
 )
 
 const (
@@ -48,7 +50,7 @@ const (
 const MaxFrameUnwinds = 0x80
 
 const (
-	MetricIDBeginCumulative = 0x62
+	MetricIDBeginCumulative = 0x6d
 )
 
 const (

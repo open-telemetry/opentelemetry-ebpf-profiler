@@ -22,7 +22,7 @@ import (
 type MockIntervals struct{}
 
 func (f MockIntervals) MonitorInterval() time.Duration    { return 1 * time.Second }
-func (f MockIntervals) TracePollInterval() time.Duration  { return 250 * time.Millisecond }
+func (f MockIntervals) TracePollInterval() time.Duration  { return 10 * time.Millisecond }
 func (f MockIntervals) PIDCleanupInterval() time.Duration { return 1 * time.Second }
 
 type MockReporter struct{}
@@ -47,7 +47,7 @@ func StartTracer(ctx context.Context, t *testing.T, et tracertypes.IncludedTrace
 		Reporter:               r,
 		Intervals:              &MockIntervals{},
 		IncludeTracers:         et,
-		SamplesPerSecond:       20,
+		SamplesPerSecond:       100,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
 	})
