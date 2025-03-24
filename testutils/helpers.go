@@ -112,6 +112,9 @@ func readTracePipe(ctx context.Context) {
 			if errors.Is(err, io.EOF) {
 				continue
 			}
+			if errors.Is(err, os.ErrClosed) {
+				return
+			}
 			log.Error(err)
 			return
 		}
