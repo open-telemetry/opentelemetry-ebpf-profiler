@@ -1978,5 +1978,12 @@
     "name": "TraceEventReadError",
     "field": "agent.errors.trace_event_read_error",
     "id": 274
+  },
+  {
+    "description": "Number of parsing errors seen during processing /proc/<PID>/maps",
+    "type": "counter",
+    "name": "ErrProcParse",
+    "field": "agent.errors.proc_parse",
+    "id": 275
   }
 ]

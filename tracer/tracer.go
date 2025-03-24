@@ -542,26 +542,24 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	adaption := make(map[string]uint32, 4)
 
 	const (
-		// The following sizes X are used as 2^X, and determined empirically
-
+		// The following sizes X are used as 2^X, and determined empirically.
 		// 1 million executable pages / 4GB of executable address space
-		pidPageMappingInfoSize = 20
-
+		pidPageMappingInfoSize   = 20
 		stackDeltaPageToInfoSize = 16
 		exeIDToStackDeltasSize   = 16
 	)
 
 	adaption["pid_page_to_mapping_info"] =
 		1 << uint32(pidPageMappingInfoSize+cfg.MapScaleFactor)
+
 	adaption["stack_delta_page_to_info"] =
 		1 << uint32(stackDeltaPageToInfoSize+cfg.MapScaleFactor)
 
-	// To not loose too many scheduling events but also not oversize
-	// sched_times, calculate a size based on some assumptions.
-	// On modern systems /proc/sys/kernel/pid_max defaults to 4194304.
-	// Try to fit this PID space scaled down with cfg.OffCPUThreshold into
-	// this map.
-	adaption["sched_times"] = (4194304 * cfg.OffCPUThreshold) / support.OffCPUThresholdMax
+	// To not lose too many scheduling events but also not oversize sched_times,
+	// calculate a size based on an assumed upper bound of scheduler events per
+	// second (1000hz) multiplied by an average time a task remains off CPU (3s),
+	// scaled by the probability of capturing a trace.
+	adaption["sched_times"] = (4096 * cfg.OffCPUThreshold) / support.OffCPUThresholdMax
 
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
 		mapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)

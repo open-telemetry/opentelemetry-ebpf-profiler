@@ -273,7 +273,7 @@ func (c *Resolver) getElf(l *logrus.Entry, elfRef *pfelf.Reference) (*pfelf.File
 	if !ok {
 		return nil, err
 	}
-	_, _ = p.GetMappings() // todo we have the mapping 3 stack frames above
+	_, _, _ = p.GetMappings() // todo we have the mapping 3 stack frames above
 	l.WithField("proc", fmt.Sprintf("%+v", p)).Debug("Get mappings")
 	openELF, err := p.OpenELF(elfRef.FileName())
 	if err != nil {

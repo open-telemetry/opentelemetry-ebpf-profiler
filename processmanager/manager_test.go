@@ -52,8 +52,8 @@ func (d *dummyProcess) GetMachineData() process.MachineData {
 	return process.MachineData{}
 }
 
-func (d *dummyProcess) GetMappings() ([]process.Mapping, error) {
-	return d.mappings, d.mappingsError
+func (d *dummyProcess) GetMappings() ([]process.Mapping, uint32, error) {
+	return d.mappings, 0, d.mappingsError
 }
 
 func (d *dummyProcess) GetThreads() ([]process.ThreadInfo, error) {
@@ -657,14 +657,14 @@ func TestDynamicProfilingPolicy(t *testing.T) {
 		&dummyProvider,
 		true,
 		nil,
-		policy)
+		policy, nil)
 	require.NoError(t, err)
 	defer manager.Close()
 	manager.metricsAddSlice = func([]metrics.Metric) {}
 
 	pid := libpf.PID(os.Getpid())
 	pr := newTestProcess(pid)
-	pr.mappings, pr.mappingsError = process.New(pid).GetMappings()
+	pr.mappings, _, pr.mappingsError = process.New(pid).GetMappings()
 	exe, _ := os.Readlink("/proc/self/exe")
 	for _, m := range pr.mappings {
 		if m.Path == exe && m.Flags&elf.PF_X != 0 {
