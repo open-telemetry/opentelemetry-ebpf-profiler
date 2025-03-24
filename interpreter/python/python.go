@@ -750,19 +750,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		autoTLSKey += 4
 	}
 
-	// The Python main interpreter loop history in CPython git is:
-	//
-	//nolint:lll
-	// 87af12bff33 v3.11 2022-02-15 _PyEval_EvalFrameDefault(PyThreadState*,_PyInterpreterFrame*,int)
-	// ae0a2b75625 v3.10 2021-06-25 _PyEval_EvalFrameDefault(PyThreadState*,_interpreter_frame*,int)
-	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
-	// 3cebf938727 v3.6  2016-09-05 _PyEval_EvalFrameDefault(PyFrameObject*,int)
-	// 49fd7fa4431 v3.0  2006-04-21 PyEval_EvalFrameEx(PyFrameObject*,int)
-	interpRanges, err := info.GetSymbolAsRanges("_PyEval_EvalFrameDefault")
+	interpRanges, err := findInterpreterRanges(ef, info)
 	if err != nil {
-		if interpRanges, err = info.GetSymbolAsRanges("PyEval_EvalFrameEx"); err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	pd := &pythonData{
@@ -836,4 +826,47 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	return pd, nil
+}
+
+func findInterpreterRanges(ef *pfelf.File, info *interpreter.LoaderInfo) ([]util.Range, error) {
+	// The Python main interpreter loop history in CPython git is:
+	//
+	//nolint:lll
+	// 87af12bff33 v3.11 2022-02-15 _PyEval_EvalFrameDefault(PyThreadState*,_PyInterpreterFrame*,int)
+	// ae0a2b75625 v3.10 2021-06-25 _PyEval_EvalFrameDefault(PyThreadState*,_interpreter_frame*,int)
+	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
+	// 3cebf938727 v3.6  2016-09-05 _PyEval_EvalFrameDefault(PyFrameObject*,int)
+	// 49fd7fa4431 v3.0  2006-04-21 PyEval_EvalFrameEx(PyFrameObject*,int)
+	interpRanges, err := info.GetSymbolAsRanges("_PyEval_EvalFrameDefault")
+	if err != nil {
+		if interpRanges, err = info.GetSymbolAsRanges("PyEval_EvalFrameEx"); err != nil {
+			return nil, err
+		}
+		return interpRanges, nil
+	}
+	if len(interpRanges) == 0 {
+		return nil, errors.New("no _PyEval_EvalFrameDefault/PyEval_EvalFrameEx symbol found")
+	}
+	gnuBuildID, _ := ef.GetBuildID()
+	if coldRange, ok := interpreterColdRanges[gnuBuildID]; ok {
+		interpRanges = append(interpRanges, coldRange)
+		return interpRanges, nil
+	}
+	// TODO: find cold ranges for unknown binaries (not in interpreterColdRanges)
+	// see tools/coredump/testdata/amd64/alpine320-nobuildid.json
+	// https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
+	return interpRanges, nil
+}
+
+var interpreterColdRanges = map[string]util.Range{
+	// alpine:3.20
+	"4913fe1380aebd0f4f0d69411b797d7e22d2799b": {
+		Start: 0x88a9a,
+		End:   0x88a9a + 0xdcdf,
+	},
+	// alpine 3.21
+	"f0f26a21d40d3c089975a8b136fc2469df40a0e6": {
+		Start: 0x89228,
+		End:   0x89228 + 0x35d9,
+	},
 }
