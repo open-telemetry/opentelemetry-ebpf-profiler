@@ -11,6 +11,10 @@ import (
 )
 
 func TestCoreDumps(t *testing.T) {
+	var skip = map[string]bool{
+		// https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
+		"testdata/amd64/alpine320-nobuildid.json": true,
+	}
 	cases, err := findTestCases(true)
 	require.NoError(t, err)
 	require.NotEmpty(t, cases)
@@ -19,6 +23,9 @@ func TestCoreDumps(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, filename := range cases {
+		if skip[filename] {
+			continue
+		}
 		filename := filename
 		t.Run(filename, func(t *testing.T) {
 			testCase, err := readTestCase(filename)

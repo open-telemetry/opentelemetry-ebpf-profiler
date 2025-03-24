@@ -852,21 +852,9 @@ func findInterpreterRanges(ef *pfelf.File, info *interpreter.LoaderInfo) ([]util
 		interpRanges = append(interpRanges, coldRange)
 		return interpRanges, nil
 	}
-	// find debug file, check .cold function
-	// TODO: find cold chunk range without debug file
-	debugELF, _ := ef.OpenDebugLink(info.FileName(), info.ElfOpener())
-	if debugELF == nil {
-		return interpRanges, nil
-	}
-	defer debugELF.Close()
-	coldSym, err := debugELF.LookupSymbolSlow("_PyEval_EvalFrameDefault.cold")
-	if err != nil {
-		return interpRanges, nil
-	}
-	interpRanges = append(interpRanges, util.Range{
-		Start: uint64(coldSym.Address),
-		End:   uint64(coldSym.Address) + coldSym.Size,
-	})
+	// TODO: find cold ranges for unknown binaries (not in interpreterColdRanges)
+	// see tools/coredump/testdata/amd64/alpine320-nobuildid.json
+	// https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
 	return interpRanges, nil
 }
 
