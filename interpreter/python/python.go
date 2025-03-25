@@ -856,7 +856,12 @@ func findInterpreterRanges(ef *pfelf.File, info *interpreter.LoaderInfo) ([]util
 	if len(interpRanges) == 0 {
 		return nil, errors.New("no _PyEval_EvalFrameDefault/PyEval_EvalFrameEx symbol found")
 	}
-	if coldRange, ok := interpreterColdRanges[info.FileID()]; ok {
+	fid := info.FileID()
+	buildID, _ := ef.GetBuildID()
+	if debugFid, ok := debugBuildIDs[buildID]; ok {
+		fid = debugFid
+	}
+	if coldRange, ok := interpreterColdRanges[fid]; ok {
 		interpRanges = append(interpRanges, coldRange)
 		return interpRanges, nil
 	}
@@ -864,4 +869,9 @@ func findInterpreterRanges(ef *pfelf.File, info *interpreter.LoaderInfo) ([]util
 	// see tools/coredump/testdata/amd64/alpine320-nobuildid.json
 	// https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
 	return interpRanges, nil
+}
+
+var debugBuildIDs = map[string]host.FileID{ // coredump fileIDs
+	"4eae81b751b9b32782743b25a7377485ba117c81": host.FileID(0x62632b30fae656d7),
+	"4913fe1380aebd0f4f0d69411b797d7e22d2799b": host.FileID(0x9c4acf83b333e10),
 }
