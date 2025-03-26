@@ -5,4 +5,8 @@
 /go
 ebpf-profiler
 ci-kernels
-/target
+# Ignore target directory
+target/*
+# But not these specific paths
+!target/x86_64-unknown-linux-musl/release/libsymblib_capi.a
+!target/aarch64-unknown-linux-musl/release/libsymblib_capi.a
