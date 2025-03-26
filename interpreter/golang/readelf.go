@@ -2,7 +2,6 @@ package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/golang"
 
 import (
 	"bytes"
-	"debug/elf"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -13,11 +12,6 @@ import (
 func getVersionSection(f *pfelf.File) io.ReaderAt {
 	if sec := f.Section(".go.buildinfo"); sec != nil {
 		return sec
-	}
-	for _, seg := range f.Progs {
-		if seg.Type == elf.PT_LOAD && seg.Flags&(elf.PF_X|elf.PF_W) == elf.PF_W {
-			return &seg
-		}
 	}
 	return nil
 }

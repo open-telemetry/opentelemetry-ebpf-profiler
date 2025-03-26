@@ -6,7 +6,7 @@ import "C"
 
 // defaultVersion is used if the go binary has an unrecognized major+minor version.
 // Consider bumping this whenever a new version of Go is released.
-var defaultVersion = "go1.23"
+var latestVersion = "go1.24"
 
 var allOffsets = map[string]C.GoCustomLabelsOffsets{
 	"go1.11": {
