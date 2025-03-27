@@ -6,6 +6,7 @@ package python // import "go.opentelemetry.io/ebpf-profiler/interpreter/python"
 import (
 	"bytes"
 	"debug/elf"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -652,32 +653,40 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
 // the code to resolve specified argument parameter to the first jump/call.
-func decodeStub(ef *pfelf.File, addrBase libpf.SymbolValue, symbolName libpf.SymbolName,
-	argNumber uint8) libpf.SymbolValue {
-	symbolValue, err := ef.LookupSymbolAddress(symbolName)
+func decodeStub(
+	ef *pfelf.File,
+	memoryBase libpf.SymbolValue,
+	symbolName libpf.SymbolName,
+) libpf.SymbolValue {
+	codeAddress, err := ef.LookupSymbolAddress(symbolName)
 	if err != nil {
 		return libpf.SymbolValueInvalid
 	}
 
 	code := make([]byte, 64)
-	if _, err := ef.ReadVirtualMemory(code, int64(symbolValue)); err != nil {
+	if _, err := ef.ReadVirtualMemory(code, int64(codeAddress)); err != nil {
 		return libpf.SymbolValueInvalid
 	}
+	dumpCode := func() {
+		log.Debugf("python stub code: %s", hex.Dump(code))
+	}
 
-	value := decodeStubArgumentWrapper(code, argNumber, symbolValue, addrBase)
+	value := decodeStubArgumentWrapper(code, codeAddress, memoryBase)
 
 	// Sanity check the value range and alignment
 	if value%4 != 0 {
+		dumpCode()
 		return libpf.SymbolValueInvalid
 	}
 	// If base symbol (_PyRuntime) is not provided, accept any found value.
-	if addrBase == 0 && value != 0 {
+	if memoryBase == 0 && value != 0 {
 		return value
 	}
 	// Check that the found value is within reasonable distance from the given symbol.
-	if value > addrBase && value < addrBase+4096 {
+	if value > memoryBase && value < memoryBase+4096 {
 		return value
 	}
+	dumpCode()
 	return libpf.SymbolValueInvalid
 }
 
@@ -733,7 +742,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	// Calls first: PyThread_tss_get(autoTSSKey)
-	autoTLSKey = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState", 0)
+	autoTLSKey = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
 	if autoTLSKey == libpf.SymbolValueInvalid {
 		return nil, errors.New("unable to resolve autoTLSKey")
 	}
