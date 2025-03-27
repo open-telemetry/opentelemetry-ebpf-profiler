@@ -644,12 +644,33 @@ const (
 	// Number of failures reading Go custom labels
 	IDUnwindGoCustomLabelsFailures = 276
 
+	// Number of failures to get TSD base for native custom labels
+	IDUnwindNativeCustomLabelsErrReadTsdBase = 277
+
+	// Number of failures to read native custom labels thread-local object
+	IDUnwindNativeCustomLabelsErrReadData = 278
+
+	// Number of failures to read native custom labels key buffer
+	IDUnwindNativeCustomLabelsErrReadKey = 279
+
+	// Number of failures to read native custom labels value buffer
+	IDUnwindNativeCustomLabelsErrReadValue = 280
+
+	// Number of successful reads of native custom labels
+	IDUnwindNativeCustomLabelsReadSuccesses = 281
+
+	// Total number of failures to add native custom labels
+	IDUnwindNativeCustomLabelsAddErrors = 282
+
+	// Number of successes adding native custom labels
+	IDUnwindNativeCustomLabelsAddSuccesses = 283
+
 	// Number of attempted LuaJIT unwinds
-	IDUnwindLuaJITAttempts = 277
+	IDUnwindLuaJITAttempts = 284
 
 	// Number of times we didn't find an entry for this process in the LuaJIT process info array
-	IDUnwindLuaJITErrNoProcInfo = 278
+	IDUnwindLuaJITErrNoProcInfo = 285
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 279
+	IDMax = 286
 )
