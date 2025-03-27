@@ -641,6 +641,12 @@ const (
 	// Number of parsing errors seen during processing /proc/<PID>/maps
 	IDErrProcParse = 275
 
+	// Number of attempts to read Go custom labels
+	IDUnwindGoCustomLabelsAttempts = 276
+
+	// Number of failures reading Go custom labels
+	IDUnwindGoCustomLabelsFailures = 277
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 276
+	IDMax = 278
 )
