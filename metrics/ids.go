@@ -638,12 +638,18 @@ const (
 	// Number of times a trace event read failed (trace_events)
 	IDTraceEventReadError = 274
 
+	// Number of attempts to read Go custom labels
+	IDUnwindGoCustomLabelsAttempts = 275
+
+	// Number of failures reading Go custom labels
+	IDUnwindGoCustomLabelsFailures = 276
+
 	// Number of attempted LuaJIT unwinds
-	IDUnwindLuaJITAttempts = 275
+	IDUnwindLuaJITAttempts = 277
 
 	// Number of times we didn't find an entry for this process in the LuaJIT process info array
-	IDUnwindLuaJITErrNoProcInfo = 276
+	IDUnwindLuaJITErrNoProcInfo = 278
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 277
+	IDMax = 279
 )
