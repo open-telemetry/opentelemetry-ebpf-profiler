@@ -9,13 +9,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
-func getVersionSection(f *pfelf.File) io.ReaderAt {
-	if sec := f.Section(".go.buildinfo"); sec != nil {
-		return sec
-	}
-	return nil
-}
-
 var ErrNoGoVersion = errors.New("go version not found")
 var buildInfoMagic = []byte("\xff Go buildinf:")
 
@@ -88,7 +81,7 @@ func readString(x *pfelf.File, ptrSize int,
 //
 // It is guaranteed not to consume more than 1 MiB of memory.
 func ReadGoVersion(f *pfelf.File) (string, error) {
-	vs := getVersionSection(f)
+	vs := f.Section(".go.buildinfo")
 	if vs == nil {
 		return "", ErrNoGoVersion
 	}
