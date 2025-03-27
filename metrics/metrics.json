@@ -1990,21 +1990,70 @@
     "description": "Number of failures reading Go custom labels",
     "type": "counter",
     "name": "UnwindGoCustomLabelsFailures",
-    "field": "bpf.golabls.errors.no_proc_info",
+    "field": "bpf.golabels.errors.no_proc_info",
     "id": 276
+  },
+  {
+    "description": "Number of failures to get TSD base for native custom labels",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsErrReadTsdBase",
+    "field": "bpf.nativelabels.errors.read_tsd_base",
+    "id": 277
+  },
+  {
+    "description": "Number of failures to read native custom labels thread-local object",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsErrReadData",
+    "field": "bpf.nativelabels.errors.read_data",
+    "id": 278
+  },
+  {
+    "description": "Number of failures to read native custom labels key buffer",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsErrReadKey",
+    "field": "bpf.nativelabels.errors.read_key",
+    "id": 279
+  },
+  {
+    "description": "Number of failures to read native custom labels value buffer",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsErrReadValue",
+    "field": "bpf.nativelabels.errors.read_value",
+    "id": 280
+  },
+  {
+    "description": "Number of successful reads of native custom labels",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsReadSuccesses",
+    "field": "bpf.nativelabels.read.successes",
+    "id": 281
+  },
+  {
+    "description": "Total number of failures to add native custom labels",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsAddErrors",
+    "field": "bpf.nativelabels.add.errors",
+    "id": 282
+  },
+  {
+    "description": "Number of successes adding native custom labels",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsAddSuccesses",
+    "field": "bpf.nativelabels.add.successes",
+    "id": 283
   },
   {
     "description": "Number of attempted LuaJIT unwinds",
     "type": "counter",
     "name": "UnwindLuaJITAttempts",
     "field": "bpf.luajit.attempts",
-    "id": 277
+    "id": 284
   },
   {
     "description": "Number of times we didn't find an entry for this process in the LuaJIT process info array",
     "type": "counter",
     "name": "UnwindLuaJITErrNoProcInfo",
     "field": "bpf.luajit.errors.no_proc_info",
-    "id": 278
+    "id": 285
   }
 ]
