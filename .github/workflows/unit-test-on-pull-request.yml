@@ -84,6 +84,11 @@ jobs:
     steps:
       - name: Clone code
         uses: actions/checkout@v4
+      - name: Hash binary blobs
+        run: |
+          sha256sum support/ebpf/tracer.ebpf.release.* > binary-blobs.hash
+          sha256sum target/x86_64-unknown-linux-musl/release/libsymblib_capi.a >> binary-blobs.hash
+          sha256sum target/aarch64-unknown-linux-musl/release/libsymblib_capi.a >> binary-blobs.hash
       - name: Rebuild eBPF blobs
         run: |
           rm support/ebpf/tracer.ebpf.release.*
@@ -96,8 +101,8 @@ jobs:
           make rust-components TARGET_ARCH=arm64
       - name: Check for differences
         run: |
-          if ! git diff --exit-code --name-only; then
-            echo "Binary blob(s) changed, please rebuild and commit the updated blobs."
+          if ! sha256sum --check binary-blobs.hash; then
+            echo "Please rebuild and commit the updated binary blobs."
             exit 1
           fi
 

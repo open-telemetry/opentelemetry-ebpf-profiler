@@ -86,9 +86,9 @@ endif
 
 rust-components: rust-targets
 ifeq ($(TARGET_ARCH),arm64)
-	cargo build --lib --release --target aarch64-unknown-linux-musl
+	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target aarch64-unknown-linux-musl
 else ifeq ($(TARGET_ARCH),amd64)
-	cargo build --lib --release --target x86_64-unknown-linux-musl
+	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target x86_64-unknown-linux-musl
 endif
 
 rust-tests: rust-targets
