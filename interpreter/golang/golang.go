@@ -70,7 +70,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		// are our best bet.
 		log.Warnf("version %s unknown; using offsets for latest known Go version %s."+
 			"If Go traceID integration and other custom labels support is buggy,"+
-			" try upgrading to the latest version.", goVersion, latestVersion)
+			" try upgrading to the latest profiler version.", goVersion, latestVersion)
 		return data{
 			goVersion: goVersion,
 			offsets:   allOffsets[latestVersion],
