@@ -1,4 +1,4 @@
-package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/golang"
+package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
 	"errors"
