@@ -66,17 +66,14 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 
 	offsets, ok := allOffsets[majorMinor]
 	if !ok {
-		// Info instead of warn: this is often going to be fine,
-		// as the offsets tend not to change every release cycle.
-		//
-		// TODO: Reword the message if we upstream this,
-		// since it mentions `parca-agent` by name.
-		log.Infof("version %s unknown; using offsets for latest known Go version %s."+
+		// If we don't know this version its probably a new version and the latest offsets
+		// are our best bet.
+		log.Warnf("version %s unknown; using offsets for latest known Go version %s."+
 			"If Go traceID integration and other custom labels support is buggy,"+
-			" try upgrading parca-agent to the latest version.", goVersion, defaultVersion)
+			" try upgrading to the latest profiler version.", goVersion, latestVersion)
 		return data{
 			goVersion: goVersion,
-			offsets:   allOffsets[defaultVersion],
+			offsets:   allOffsets[latestVersion],
 		}, nil
 	}
 
