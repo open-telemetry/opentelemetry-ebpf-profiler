@@ -153,12 +153,12 @@ impl<'obj> FuncTable<'obj> {
 mod tests {
     use super::*;
     use crate::gosym::GoRuntimeInfo;
-    use crate::tests::testdata;
+    use crate::tests::go_testdata;
 
     #[test]
     fn test_func_by_addr() -> Result<()> {
-        for test_file in ["go-1.20.14", "go-1.22.12", "go-1.24.0"] {
-            let obj = objfile::File::load(&testdata(test_file))?;
+        for test_file in go_testdata() {
+            let obj = objfile::File::load(&test_file)?;
             let obj = obj.parse()?;
 
             let runtime_info = GoRuntimeInfo::open(&obj)?;
