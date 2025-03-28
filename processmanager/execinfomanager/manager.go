@@ -125,9 +125,11 @@ func NewExecutableInfoManager(
 	if includeTracers.Has(types.DotnetTracer) {
 		interpreterLoaders = append(interpreterLoaders, dotnet.Loader)
 	}
+	if includeTracers.Has(types.GoTracer) {
+		interpreterLoaders = append(interpreterLoaders, golang.Loader)
+	}
 
-	interpreterLoaders = append(interpreterLoaders,
-		apmint.Loader, golang.Loader)
+	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
 		func(id host.FileID) uint32 { return uint32(id) })
