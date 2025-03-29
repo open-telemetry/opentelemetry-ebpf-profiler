@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
+	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
@@ -123,6 +124,9 @@ func NewExecutableInfoManager(
 	}
 	if includeTracers.Has(types.DotnetTracer) {
 		interpreterLoaders = append(interpreterLoaders, dotnet.Loader)
+	}
+	if includeTracers.Has(types.GoTracer) {
+		interpreterLoaders = append(interpreterLoaders, golang.Loader)
 	}
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
