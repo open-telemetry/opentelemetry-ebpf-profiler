@@ -318,6 +318,11 @@ func newFile(r io.ReaderAt, closer io.Closer, loadAddress uint64, hasMusl bool) 
 	return f, nil
 }
 
+// FileReader returns a ReaderAt to read from the actual file
+func (f *File) FileReader() io.ReaderAt {
+	return f.elfReader
+}
+
 // getString extracts a null terminated string from an ELF string table
 func getString(section []byte, start int) (string, bool) {
 	if start < 0 || start >= len(section) {
