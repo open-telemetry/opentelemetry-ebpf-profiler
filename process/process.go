@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -304,8 +305,10 @@ func (sp *systemProcess) getMappingFile(m *Mapping) string {
 	}
 	if sp.mainThreadExit {
 		// Neither /proc/sp.pid/map_files nor /proc/sp.pid/task/sp.tid/map_files
-		// exist if main thread has exited, so we use the mapping path directly.
-		return m.Path
+		// nor /proc/sp.pid/root exist if main thread has exited, so we use the
+		// mapping path directly under the sp.tid root.
+		rootPath := fmt.Sprintf("/proc/%v/task/%v/root", sp.pid, sp.tid)
+		return filepath.Join(rootPath, m.Path)
 	}
 	return fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
 }
