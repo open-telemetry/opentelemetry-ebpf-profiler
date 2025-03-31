@@ -284,7 +284,8 @@ unwinder_mark_nonleaf_frame(UnwindState *state)
 // mechanism. On architectures with Link Register, it is used first on leaf
 // frames, and followed with the standard Frame Pointer unwinding.
 static inline __attribute__((__always_inline__)) bool
-unwinder_unwind_frame_pointer(UnwindState *state) {
+unwinder_unwind_frame_pointer(UnwindState *state)
+{
   unsigned long regs[2];
 
 #if defined(__aarch64__)
