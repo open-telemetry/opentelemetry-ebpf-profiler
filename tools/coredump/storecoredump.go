@@ -18,8 +18,9 @@ import (
 type StoreCoredump struct {
 	*process.CoredumpProcess
 
-	store   *modulestore.Store
-	modules map[string]ModuleInfo
+	store     *modulestore.Store
+	modules   map[string]ModuleInfo
+	tempFiles map[string]string
 }
 
 var _ pfelf.ELFOpener = &StoreCoredump{}
@@ -60,6 +61,34 @@ func (scd *StoreCoredump) OpenELF(path string) (*pfelf.File, error) {
 	return scd.CoredumpProcess.OpenELF(path)
 }
 
+func (scd *StoreCoredump) ExtractAsFile(file string) (string, error) {
+	info, ok := scd.modules[file]
+	if !ok {
+		return "", fmt.Errorf("failed to open file `%s`: %w", file, os.ErrNotExist)
+	}
+
+	f, err := os.CreateTemp("", "ebpf-profiler-coredump.*")
+	if err != nil {
+		return "", fmt.Errorf("failed to extract file `%s`: %w", file, os.ErrNotExist)
+	}
+	tmpFile := f.Name()
+	f.Close()
+
+	if err := scd.store.UnpackModuleToPath(info.Ref, tmpFile); err != nil {
+		os.Remove(tmpFile)
+		return "", err
+	}
+	scd.tempFiles[file] = tmpFile
+	return tmpFile, nil
+}
+
+func (scd *StoreCoredump) Close() error {
+	for _, tmpFile := range scd.tempFiles {
+		os.Remove(tmpFile)
+	}
+	return scd.CoredumpProcess.Close()
+}
+
 func OpenStoreCoredump(store *modulestore.Store, coreFileRef modulestore.ID, modules []ModuleInfo) (
 	process.Process, error) {
 	// Open the coredump from the module store.
@@ -84,7 +113,8 @@ func OpenStoreCoredump(store *modulestore.Store, coreFileRef modulestore.ID, mod
 	return &StoreCoredump{
 		CoredumpProcess: core,
 
-		store:   store,
-		modules: moduleMap,
+		store:     store,
+		modules:   moduleMap,
+		tempFiles: make(map[string]string),
 	}, nil
 }

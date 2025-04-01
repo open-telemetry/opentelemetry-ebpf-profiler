@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -67,4 +68,14 @@ func (i *LoaderInfo) FileName() string {
 // Gaps returns the gaps for the executable of this LoaderInfo.
 func (i *LoaderInfo) Gaps() []util.Range {
 	return i.gaps
+}
+
+// ExtractAsFile returns a filename referring to the ELF executable. Extracting it from
+// a backing archive if needed.
+func (i *LoaderInfo) ExtractAsFile() (string, error) {
+	if pr, ok := i.elfRef.ELFOpener.(process.Process); ok {
+		return pr.ExtractAsFile(i.FileName())
+	}
+	return "", fmt.Errorf("unable to open main executable '%v' due to wrong interface type",
+		i.FileName())
 }
