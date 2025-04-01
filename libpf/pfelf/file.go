@@ -499,11 +499,10 @@ func (f *File) GoVersion() (string, error) {
 	if f.goBuildInfo != nil {
 		return f.goBuildInfo.GoVersion, nil
 	}
-	// We require a ".gopclntab" to be present and then delegate to buildinfo,
-	// this avoids most overhead for non-go binaries, buildinfo uses debug/elf
+	// We require a ".gopclntab" or ".note.go.buildid" section to be present and then delegate
+	// to buildinfo, this avoids most overhead for non-go binaries, buildinfo uses debug/elf
 	// under the covers.
-	s := f.Section(".gopclntab")
-	if s == nil {
+	if !f.IsGolang() {
 		return "", nil
 	}
 	bi, err := buildinfo.Read(f.elfReader)
