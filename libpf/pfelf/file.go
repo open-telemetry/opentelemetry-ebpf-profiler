@@ -494,25 +494,25 @@ func (f *File) GetBuildID() (string, error) {
 	return getBuildIDFromNotes(data)
 }
 
-// GoVersion return the Go version if present.
-func (f *File) GoVersion() string {
+// GoVersion return the Go version if present and empty string otherwise.
+func (f *File) GoVersion() (string, error) {
 	if f.goBuildInfo != nil {
-		return f.goBuildInfo.GoVersion
+		return f.goBuildInfo.GoVersion, nil
 	}
 	// We require a ".gopclntab" to be present and then delegate to buildinfo,
 	// this avoids most overhead for non-go binaries, buildinfo uses debug/elf
 	// under the covers.
 	s := f.Section(".gopclntab")
 	if s == nil {
-		return ""
+		return "", nil
 	}
 	bi, err := buildinfo.Read(f.elfReader)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	f.goBuildInfo = bi
 
-	return bi.GoVersion
+	return bi.GoVersion, nil
 }
 
 // DebuglinkFileName returns the debug file linked by .gnu_debuglink if any
