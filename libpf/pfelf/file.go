@@ -21,6 +21,7 @@ package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 import (
 	"bytes"
+	"debug/buildinfo"
 	"debug/elf"
 	"errors"
 	"fmt"
@@ -28,6 +29,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"syscall"
 	"unsafe"
@@ -119,6 +121,9 @@ type File struct {
 	debuglinkPath string
 	// Whether we have checked for a debuglink
 	debuglinkChecked bool
+
+	// Contains the Go build information if present
+	goBuildInfo *debug.BuildInfo
 }
 
 var _ libpf.SymbolFinder = &File{}
@@ -487,6 +492,27 @@ func (f *File) GetBuildID() (string, error) {
 	}
 
 	return getBuildIDFromNotes(data)
+}
+
+// GoVersion return the Go version if present.
+func (f *File) GoVersion() string {
+	if f.goBuildInfo != nil {
+		return f.goBuildInfo.GoVersion
+	}
+	// We require a ".gopclntab" to be present and then delegate to buildinfo,
+	// this avoids most overhead for non-go binaries, buildinfo uses debug/elf
+	// under the covers.
+	s := f.Section(".gopclntab")
+	if s == nil {
+		return ""
+	}
+	bi, err := buildinfo.Read(f.elfReader)
+	if err != nil {
+		return ""
+	}
+	f.goBuildInfo = bi
+
+	return bi.GoVersion
 }
 
 // DebuglinkFileName returns the debug file linked by .gnu_debuglink if any

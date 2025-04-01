@@ -4,6 +4,7 @@
 package pfelf
 
 import (
+	"go/version"
 	"os"
 	"testing"
 
@@ -77,4 +78,12 @@ func testPFELFIsGolang(t *testing.T, filename string, isGoExpected bool) {
 func TestPFELFIsGolang(t *testing.T) {
 	testPFELFIsGolang(t, "testdata/go-binary", true)
 	testPFELFIsGolang(t, "testdata/without-debug-syms", false)
+}
+
+func TestGoVersion(t *testing.T) {
+	ef := getPFELF("testdata/go-binary", t)
+	defer ef.Close()
+
+	vers := ef.GoVersion()
+	assert.GreaterOrEqual(t, version.Compare(vers, "go1.23.6"), 0)
 }
