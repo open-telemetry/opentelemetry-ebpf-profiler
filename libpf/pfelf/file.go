@@ -494,14 +494,14 @@ func (f *File) GetBuildID() (string, error) {
 	return getBuildIDFromNotes(data)
 }
 
-// GoVersion return the Go version if present and empty string otherwise.
+// GoVersion returns the Go version if present and empty string otherwise. This will delegate
+// to buildinfo.Read for any binaries where IsGolang is true which will scan the binary with
+// debug/elf. This will incur additional CPU/IO overhead but the libpf.readbufat buffer and
+// OS file buffers should ameliorate most of that.
 func (f *File) GoVersion() (string, error) {
 	if f.goBuildInfo != nil {
 		return f.goBuildInfo.GoVersion, nil
 	}
-	// We require a ".gopclntab" or ".note.go.buildid" section to be present and then delegate
-	// to buildinfo, this avoids most overhead for non-go binaries, buildinfo uses debug/elf
-	// under the covers.
 	if !f.IsGolang() {
 		return "", nil
 	}
