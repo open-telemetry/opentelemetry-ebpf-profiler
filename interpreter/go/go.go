@@ -58,12 +58,9 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 		return nil, nil
 	}
 
-	exec := info.FileName()
-	if len(exec) < 2 {
-		// There are cases where FileName() just returns /.
-		// In these cases we can not access the backing executable
-		// by FileName() and therefore can not continue here.
-		return nil, nil
+	exec, err := info.ExtractAsFile()
+	if err != nil {
+		return nil, err
 	}
 
 	return &goData{
@@ -75,7 +72,7 @@ func (g *goData) Attach(_ interpreter.EbpfHandler, pid libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
 	gi := &goInstance{}
 
-	executablePath := C.CString(fmt.Sprintf("/proc/%d/root%s", pid, g.exec))
+	executablePath := C.CString(g.exec)
 	defer C.free(unsafe.Pointer(executablePath))
 
 	//nolint:gocritic

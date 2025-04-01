@@ -119,6 +119,11 @@ type Process interface {
 	// CalculateMappingFileID calculates FileID of the backing file
 	CalculateMappingFileID(*Mapping) (libpf.FileID, error)
 
+	// ExtractAsFile returns a filename suitable for opening the given file from
+	// the target process namespace. The returned filename may refer to /proc, or be
+	// a temporarily extracted file from backing archive.
+	ExtractAsFile(string) (string, error)
+
 	io.Closer
 
 	pfelf.ELFOpener

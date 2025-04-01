@@ -106,6 +106,16 @@ func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
 	return tc.CoredumpProcess.OpenELF(fileName)
 }
 
+func (tc *trackedCoredump) ExtractAsFile(fileName string) (string, error) {
+	prefixedFileName := tc.prefix + fileName
+	if _, err := os.Stat(prefixedFileName); err != nil {
+		tc.warnMissing(fileName)
+		return "", err
+	}
+	tc.seen[fileName] = libpf.Void{}
+	return prefixedFileName, nil
+}
+
 func newNewCmd(store *modulestore.Store) *ffcli.Command {
 	args := &newCmd{store: store}
 

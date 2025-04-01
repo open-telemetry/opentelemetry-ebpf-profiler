@@ -312,6 +312,12 @@ func (cd *CoredumpProcess) OpenELF(path string) (*pfelf.File, error) {
 	return nil, fmt.Errorf("ELF file `%s` not found", path)
 }
 
+// ExtractAsFile implements the Process interface
+func (cd *CoredumpProcess) ExtractAsFile(_ string) (string, error) {
+	// No filesystem level backing file in coredumps
+	return "", errors.New("coredump does not support opening backing file")
+}
+
 // getFile returns (creating if needed) a matching CoredumpFile for given file name
 func (cd *CoredumpProcess) getFile(name string) *CoredumpFile {
 	if cf, ok := cd.files[name]; ok {
