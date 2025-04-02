@@ -3,9 +3,11 @@
 // perf event and will call the appropriate tracer for a given process
 
 #include "bpfdefs.h"
+#include "kernel.h"
 #include "tracemgmt.h"
 #include "tsd.h"
 #include "types.h"
+#include "util.h"
 
 // Begin shared maps
 
@@ -124,6 +126,173 @@ bpf_map_def SEC("maps") apm_int_procs = {
   .max_entries = 128,
 };
 
+bpf_map_def SEC("maps") go_procs = {
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(GoCustomLabelsOffsets),
+  .max_entries = 128,
+};
+
+bpf_map_def SEC("maps") cl_procs = {
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(NativeCustomLabelsProcInfo),
+  .max_entries = 128,
+};
+
+static inline __attribute__((__always_inline__)) void *
+get_m_ptr(struct GoCustomLabelsOffsets *offs, UnwindState *state)
+{
+  long res;
+
+  size_t g_addr;
+#if defined(__x86_64__)
+  u64 g_addr_offset = 0xfffffffffffffff8;
+  void *tls_base    = NULL;
+  res               = tsd_get_base(&tls_base);
+  if (res < 0) {
+    DEBUG_PRINT("cl: failed to get tsd base; can't read m_ptr");
+    return NULL;
+  }
+
+  res = bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((u64)tls_base + g_addr_offset));
+  if (res < 0) {
+    DEBUG_PRINT("cl: failed to read g_addr, tls_base(%lx)", (unsigned long)tls_base);
+    return NULL;
+  }
+#elif defined(__aarch64__)
+  g_addr = state->r28;
+#endif
+
+  DEBUG_PRINT("cl: reading m_ptr_addr at 0x%lx + 0x%x", g_addr, offs->m_offset);
+  void *m_ptr_addr;
+  res = bpf_probe_read_user(&m_ptr_addr, sizeof(void *), (void *)(g_addr + offs->m_offset));
+  if (res < 0) {
+    DEBUG_PRINT("cl: failed m_ptr_addr");
+    return NULL;
+  }
+
+  return m_ptr_addr;
+}
+
+static inline __attribute__((__always_inline__)) void
+maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
+{
+  u32 pid = record->trace.pid;
+  // The Go label extraction code is too big to fit in this program, so we need to
+  // tail call it, in order to keep the hashing and clearing code in this program it
+  // will tail call back to us with this bool set.
+  if (!record->state.processed_go_labels) {
+    GoCustomLabelsOffsets *offsets = bpf_map_lookup_elem(&go_procs, &pid);
+    if (!offsets) {
+      DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", pid);
+      return;
+    }
+
+    void *m_ptr_addr = get_m_ptr(offsets, &record->state);
+    if (!m_ptr_addr) {
+      return;
+    }
+    record->customLabelsState.go_m_ptr = m_ptr_addr;
+
+    DEBUG_PRINT("cl: trace is within a process with Go custom labels enabled");
+    increment_metric(metricID_UnwindGoCustomLabelsAttempts);
+    record->state.processed_go_labels = true;
+    tail_call(ctx, PROG_GO_LABELS);
+  }
+}
+
+static inline __attribute__((__always_inline__)) bool
+get_native_custom_labels(PerCPURecord *record, NativeCustomLabelsProcInfo *proc)
+{
+  u64 tsd_base;
+  if (tsd_get_base((void **)&tsd_base) != 0) {
+    increment_metric(metricID_UnwindNativeCustomLabelsErrReadTsdBase);
+    DEBUG_PRINT("cl: failed to get TSD base for native custom labels");
+    return false;
+  }
+
+  u64 offset = tsd_base + proc->tls_offset;
+  DEBUG_PRINT("cl: native custom labels data at 0x%llx", offset);
+
+  NativeCustomLabelsSet *p_current_set;
+  int err;
+  if ((err = bpf_probe_read_user(&p_current_set, sizeof(void *), (void *)(offset)))) {
+    increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+    DEBUG_PRINT("Failed to read custom labels current set pointer: %d", err);
+    return false;
+  }
+
+  if (!p_current_set) {
+    DEBUG_PRINT("Null labelset");
+    record->trace.custom_labels.len = 0;
+    return true;
+  }
+
+  NativeCustomLabelsSet current_set;
+  if ((err = bpf_probe_read_user(&current_set, sizeof(current_set), p_current_set))) {
+    increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+    DEBUG_PRINT("cl: failed to read custom labels data: %d", err);
+    return false;
+  }
+
+  DEBUG_PRINT("cl: native custom labels count: %lu", current_set.count);
+
+  unsigned ct            = 0;
+  CustomLabelsArray *out = &record->trace.custom_labels;
+
+#pragma unroll
+  for (int i = 0; i < MAX_CUSTOM_LABELS; i++) {
+    if (i >= current_set.count)
+      break;
+    NativeCustomLabel *lbl_ptr = current_set.storage + i;
+    if ((err = bpf_probe_read_user(
+           &record->nativeCustomLabel, sizeof(NativeCustomLabel), (void *)(lbl_ptr)))) {
+      increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+      DEBUG_PRINT("cl: failed to read label storage struct: %d", err);
+      return false;
+    }
+    NativeCustomLabel *lbl = &record->nativeCustomLabel;
+    if (!lbl->key.buf)
+      continue;
+    CustomLabel *out_lbl = &out->labels[ct];
+    unsigned klen        = MIN(lbl->key.len, CUSTOM_LABEL_MAX_KEY_LEN - 1);
+    if ((err = bpf_probe_read_user(out_lbl->key, klen, (void *)lbl->key.buf))) {
+      increment_metric(metricID_UnwindNativeCustomLabelsErrReadKey);
+      DEBUG_PRINT("cl: failed to read label key: %d", err);
+      goto exit;
+    }
+    unsigned vlen = MIN(lbl->value.len, CUSTOM_LABEL_MAX_VAL_LEN - 1);
+    if ((err = bpf_probe_read_user(out_lbl->val, vlen, (void *)lbl->value.buf))) {
+      increment_metric(metricID_UnwindNativeCustomLabelsErrReadValue);
+      DEBUG_PRINT("cl: failed to read label value: %d", err);
+      goto exit;
+    }
+    ++ct;
+  }
+exit:
+  out->len = ct;
+  increment_metric(metricID_UnwindNativeCustomLabelsReadSuccesses);
+  return true;
+}
+
+static inline __attribute__((__always_inline__)) void
+maybe_add_native_custom_labels(PerCPURecord *record)
+{
+  u32 pid                          = record->trace.pid;
+  NativeCustomLabelsProcInfo *proc = bpf_map_lookup_elem(&cl_procs, &pid);
+  if (!proc) {
+    DEBUG_PRINT("cl: %d does not support native custom labels", pid);
+    return;
+  }
+  DEBUG_PRINT("cl: trace is within a process with native custom labels enabled");
+  bool success = get_native_custom_labels(record, proc);
+  if (success)
+    increment_metric(metricID_UnwindNativeCustomLabelsAddSuccesses);
+  else
+    increment_metric(metricID_UnwindNativeCustomLabelsAddErrors);
+}
+
 static inline __attribute__((__always_inline__)) void maybe_add_apm_info(Trace *trace)
 {
   u32 pid              = trace->pid; // verifier needs this to be on stack on 4.15 kernel
@@ -182,6 +351,9 @@ static inline __attribute__((__always_inline__)) int unwind_stop(struct pt_regs 
   Trace *trace       = &record->trace;
   UnwindState *state = &record->state;
 
+  // Do Go first since we might tail call out and back again.
+  maybe_add_go_custom_labels(ctx, record);
+  maybe_add_native_custom_labels(record);
   maybe_add_apm_info(trace);
 
   // If the stack is otherwise empty, push an error for that: we should
