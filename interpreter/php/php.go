@@ -146,6 +146,9 @@ func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf
 	return instance, nil
 }
 
+func (d *phpData) Unload(_ interpreter.EbpfHandler) {
+}
+
 func versionExtract(rodata string) (uint, error) {
 	matches := versionMatch.FindStringSubmatch(rodata)
 	if matches == nil {
