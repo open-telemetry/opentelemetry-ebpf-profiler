@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"runtime"
 	"sync/atomic"
 	"unsafe"
 
@@ -34,7 +33,7 @@ var (
 )
 
 type goData struct {
-	exec string
+	goExecutable *C.SymblibPointResolver
 }
 
 type goInstance struct {
@@ -44,8 +43,7 @@ type goInstance struct {
 	successCount atomic.Uint64
 	failCount    atomic.Uint64
 
-	goRuntime *C.SymblibPointResolver
-	pin       runtime.Pinner
+	d *goData
 }
 
 func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
@@ -63,27 +61,27 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 		return nil, err
 	}
 
-	return &goData{
-		exec: exec,
-	}, nil
-}
-
-func (g *goData) Attach(_ interpreter.EbpfHandler, pid libpf.PID,
-	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
-	gi := &goInstance{}
-
-	executablePath := C.CString(g.exec)
+	executablePath := C.CString(exec)
 	defer C.free(unsafe.Pointer(executablePath))
 
+	gd := &goData{}
+
 	//nolint:gocritic
-	status := C.symblib_goruntime_new(executablePath, &gi.goRuntime)
+	status := C.symblib_goruntime_new(executablePath, &gd.goExecutable)
 	if status != C.SYMBLIB_OK {
 		return nil, fmt.Errorf("failed to create point resolver for '%s': %d",
 			C.GoString(executablePath), status)
 	}
-	gi.pin.Pin(unsafe.Pointer(&gi.goRuntime))
 
-	return gi, nil
+	return gd, nil
+}
+
+func (g *goData) Attach(_ interpreter.EbpfHandler, pid libpf.PID,
+	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
+
+	return &goInstance{
+		d: g,
+	}, nil
 }
 
 func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
@@ -100,10 +98,9 @@ func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 }
 
 func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
-	if g.goRuntime != nil {
-		g.pin.Unpin()
-		C.symblib_goruntime_free(g.goRuntime)
-		g.goRuntime = nil
+	if g.d.goExecutable != nil {
+		C.symblib_goruntime_free(g.d.goExecutable)
+		g.d.goExecutable = nil
 	}
 	return nil
 }
@@ -116,7 +113,7 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 	sfCounter := successfailurecounter.New(&g.successCount, &g.failCount)
 	defer sfCounter.DefaultToFailure()
 
-	if g.goRuntime == nil {
+	if g.d.goExecutable == nil {
 		return errors.New("point resolver is out of scope")
 	}
 
@@ -124,7 +121,7 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 	defer C.symblib_slice_symblibresolved_symbol_free(symbols)
 
 	//nolint:gocritic
-	status := C.symblib_point_resolver_symbols_for_pc(g.goRuntime,
+	status := C.symblib_point_resolver_symbols_for_pc(g.d.goExecutable,
 		C.uint64_t(frame.Lineno), &symbols)
 	if status != C.SYMBLIB_OK {
 		return fmt.Errorf("failed to do point lookup at 0x%x: %d",
