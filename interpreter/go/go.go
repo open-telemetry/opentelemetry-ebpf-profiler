@@ -76,7 +76,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	return gd, nil
 }
 
-func (g *goData) Attach(_ interpreter.EbpfHandler, pid libpf.PID,
+func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
 
 	return &goInstance{
