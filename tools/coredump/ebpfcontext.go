@@ -97,6 +97,7 @@ func initSystemConfig(md process.MachineData) unsafe.Pointer {
 	// for coredump tests via `ifdefs`, so the value we set here doesn't matter.
 	sv.tpbase_offset = 0
 	sv.drop_error_only_traces = C.bool(false)
+	sv.max_tail_calls = 29
 
 	return rawPtr
 }
