@@ -332,3 +332,7 @@ func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
 	// Fall back to opening the file using the process specific root
 	return pfelf.Open(fmt.Sprintf("/proc/%v/root/%s", sp.pid, file))
 }
+
+func (sp *systemProcess) ExtractAsFile(file string) (string, error) {
+	return fmt.Sprintf("/proc/%v/root/%s", sp.pid, file), nil
+}
