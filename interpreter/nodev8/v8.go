@@ -1877,6 +1877,9 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 	}, nil
 }
 
+func (d *v8Data) Unload(_ interpreter.EbpfHandler) {
+}
+
 func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) error {
 	// Read the variables from the pfelf.File so we avoid failures if the process
 	// exists during extraction of the introspection data.
