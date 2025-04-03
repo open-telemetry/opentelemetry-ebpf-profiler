@@ -204,6 +204,10 @@ static inline PerCPURecord *get_per_cpu_record(void)
 static inline PerCPURecord *get_pristine_per_cpu_record()
 {
   PerCPURecord *record = get_per_cpu_record();
+  int key0             = 0;
+  SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &key0);
+  if (!syscfg)
+    return NULL;
   if (!record)
     return record;
 
@@ -227,7 +231,7 @@ static inline PerCPURecord *get_pristine_per_cpu_record()
   record->rubyUnwindState.stack_ptr        = 0;
   record->rubyUnwindState.last_stack_frame = 0;
   record->unwindersDone                    = 0;
-  record->tailCalls                        = 0;
+  record->tailCallsRemaining               = syscfg->max_tail_calls;
   record->ratelimitAction                  = RATELIMIT_ACTION_DEFAULT;
 
   Trace *trace           = &record->trace;
@@ -483,8 +487,8 @@ static inline __attribute__((__always_inline__)) void tail_call(void *ctx, int n
     return;
   }
 
-  if (record->tailCalls >= 29) {
-    // The maximum tail call count we need to support on older kernels is 32. At this point
+  if (!record->tailCallsRemaining) {
+    // At this point
     // there is a chance that continuing unwinding the stack would further increase the number of
     // tail calls. As a result we might lose the unwound stack as no further tail calls are left
     // to report it to user space. To make sure we do not run into this issue we stop unwinding
@@ -493,7 +497,7 @@ static inline __attribute__((__always_inline__)) void tail_call(void *ctx, int n
     record->state.unwind_error = ERR_MAX_TAIL_CALLS;
     increment_metric(metricID_MaxTailCalls);
   }
-  record->tailCalls += 1;
+  --record->tailCallsRemaining;
 
   bpf_tail_call(ctx, &perf_progs, next);
 }

@@ -345,7 +345,7 @@ typedef enum TraceOrigin {
 // MAX_FRAME_UNWINDS defines the maximum number of frames per
 // Trace we can unwind and respect the limit of eBPF instructions,
 // limit of tail calls and limit of stack size per eBPF program.
-#define MAX_FRAME_UNWINDS 128
+#define MAX_FRAME_UNWINDS 256
 
 // MAX_NON_ERROR_FRAME_UNWINDS defines the maximum number of frames
 // to be pushed by unwinders while still leaving space for an error frame.
@@ -710,7 +710,7 @@ typedef struct PerCPURecord {
   u32 unwindersDone;
 
   // tailCalls tracks the number of calls to bpf_tail_call().
-  u8 tailCalls;
+  u8 tailCallsRemaining;
 
   // ratelimitAction determines the PID event rate limiting mode
   u8 ratelimitAction;
@@ -875,6 +875,9 @@ typedef struct SystemConfig {
 
   // Enables the temporary hack that drops pure errors frames in unwind_stop.
   bool drop_error_only_traces;
+
+  // Maximum number of eBPF tail calls before giving up.
+  u8 max_tail_calls;
 } SystemConfig;
 
 // Avoid including all of arch/arm64/include/uapi/asm/ptrace.h by copying the

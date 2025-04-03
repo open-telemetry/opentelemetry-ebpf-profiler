@@ -22,6 +22,8 @@ import (
 
 const MiB = 1 << 20
 
+const MaxTailCalls = 29
+
 // Controller is an instance that runs, manages and stops the agent.
 type Controller struct {
 	config   *Config
@@ -97,6 +99,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
 		OffCPUThreshold:        uint32(c.config.OffCPUThreshold),
 		IncludeEnvVars:         envVars,
+		MaxTailCalls:           MaxTailCalls,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)

@@ -159,6 +159,8 @@ type Config struct {
 	// IncludeEnvVars holds a list of environment variables that should be captured and reported
 	// from processes
 	IncludeEnvVars libpf.Set[string]
+	// MaxTailCalls is the number of tail calls the eBPF is allowed to make before giving up.
+	MaxTailCalls uint8
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -501,7 +503,7 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 	}
 
 	if err = loadSystemConfig(coll, ebpfMaps, kernelSymbols, cfg.IncludeTracers,
-		cfg.OffCPUThreshold, cfg.FilterErrorFrames); err != nil {
+		cfg.OffCPUThreshold, cfg.FilterErrorFrames, cfg.MaxTailCalls); err != nil {
 		return nil, nil, fmt.Errorf("failed to load system config: %v", err)
 	}
 
