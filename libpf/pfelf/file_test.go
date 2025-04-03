@@ -6,6 +6,7 @@ package pfelf
 import (
 	"go/version"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,4 +88,10 @@ func TestGoVersion(t *testing.T) {
 	vers, err := ef.GoVersion()
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, version.Compare(vers, "go1.23.6"), 0)
+
+	testEF := getPFELF("/proc/self/exe", t)
+	defer testEF.Close()
+	testVersion, err := testEF.GoVersion()
+	require.NoError(t, err)
+	assert.Equal(t, runtime.Version(), testVersion)
 }
