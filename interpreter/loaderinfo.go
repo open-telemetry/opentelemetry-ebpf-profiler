@@ -70,8 +70,8 @@ func (i *LoaderInfo) Gaps() []util.Range {
 	return i.gaps
 }
 
-// ExtractAsFile returns a filename referring to the ELF executable. Extracting it from
-// a backing archive if needed.
+// ExtractAsFile returns a filename referring to the ELF executable, extracting
+// it from a backing archive if needed.
 func (i *LoaderInfo) ExtractAsFile() (string, error) {
 	if pr, ok := i.elfRef.ELFOpener.(process.Process); ok {
 		return pr.ExtractAsFile(i.FileName())

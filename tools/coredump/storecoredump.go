@@ -64,12 +64,12 @@ func (scd *StoreCoredump) OpenELF(path string) (*pfelf.File, error) {
 func (scd *StoreCoredump) ExtractAsFile(file string) (string, error) {
 	info, ok := scd.modules[file]
 	if !ok {
-		return "", fmt.Errorf("failed to open file `%s`: %w", file, os.ErrNotExist)
+		return "", os.ErrNotExist
 	}
 
 	f, err := os.CreateTemp("", "ebpf-profiler-coredump.*")
 	if err != nil {
-		return "", fmt.Errorf("failed to extract file `%s`: %w", file, os.ErrNotExist)
+		return "", err
 	}
 	tmpFile := f.Name()
 	f.Close()
