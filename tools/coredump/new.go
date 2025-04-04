@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strconv"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
@@ -72,7 +73,7 @@ func (tc *trackedCoredump) warnMissing(fileName string) {
 
 func (tc *trackedCoredump) CalculateMappingFileID(m *process.Mapping) (libpf.FileID, error) {
 	if !m.IsVDSO() && !m.IsAnonymous() {
-		fid, err := libpf.FileIDFromExecutableFile(tc.prefix + m.Path)
+		fid, err := libpf.FileIDFromExecutableFile(path.Join(tc.prefix, m.Path))
 		if err == nil {
 			tc.seen[m.Path] = libpf.Void{}
 			return fid, nil
@@ -84,7 +85,7 @@ func (tc *trackedCoredump) CalculateMappingFileID(m *process.Mapping) (libpf.Fil
 
 func (tc *trackedCoredump) OpenMappingFile(m *process.Mapping) (process.ReadAtCloser, error) {
 	if !m.IsVDSO() && !m.IsAnonymous() {
-		rac, err := os.Open(tc.prefix + m.Path)
+		rac, err := os.Open(path.Join(tc.prefix, m.Path))
 		if err == nil {
 			tc.seen[m.Path] = libpf.Void{}
 			return rac, nil
@@ -96,7 +97,7 @@ func (tc *trackedCoredump) OpenMappingFile(m *process.Mapping) (process.ReadAtCl
 
 func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
 	if fileName != process.VdsoPathName {
-		f, err := pfelf.Open(tc.prefix + fileName)
+		f, err := pfelf.Open(path.Join(tc.prefix, fileName))
 		if err == nil {
 			tc.seen[fileName] = libpf.Void{}
 			return f, err
@@ -107,7 +108,7 @@ func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
 }
 
 func (tc *trackedCoredump) ExtractAsFile(fileName string) (string, error) {
-	prefixedFileName := tc.prefix + fileName
+	prefixedFileName := path.Join(tc.prefix, fileName)
 	if _, err := os.Stat(prefixedFileName); err != nil {
 		tc.warnMissing(fileName)
 		return "", err
