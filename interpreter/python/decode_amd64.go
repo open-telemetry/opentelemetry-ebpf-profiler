@@ -42,7 +42,7 @@ type regState struct {
 	value      uint64
 }
 
-func decodeStubArgumentAMD64(code []byte, codeAddress uint64, memoryBase uint64) uint64 {
+func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) uint64 {
 	targetRegister := x86asm.RDI
 
 	instructionOffset := 0
@@ -125,7 +125,8 @@ func decodeStubArgumentAMD64(code []byte, codeAddress uint64, memoryBase uint64)
 				}
 
 				if debugDecodeAMD64 {
-					fmt.Printf("  Setting register %s: value=0x%x, loaded from=0x%x\n", reg, value, loadedFrom)
+					fmt.Printf("  Setting register %s: value=0x%x, loaded from=0x%x\n",
+						reg, value, loadedFrom)
 				}
 
 				regs[regIdx].value = value

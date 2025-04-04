@@ -198,7 +198,7 @@ func TestAmd64DecodeStub(t *testing.T) {
 }
 
 func FuzzDecodeAmd(f *testing.F) {
-	f.Fuzz(func(t *testing.T, code []byte, rip uint64) {
+	f.Fuzz(func(_ *testing.T, code []byte, rip uint64) {
 		decodeStubArgumentAMD64(code, rip, 0)
 	})
 }
