@@ -29,10 +29,11 @@ const (
 	UnwindOpcodeFlagDeref uint8 = C.UNWIND_OPCODEF_DEREF
 
 	// UnwindCommands from the C header file
-	UnwindCommandInvalid int32 = C.UNWIND_COMMAND_INVALID
-	UnwindCommandStop    int32 = C.UNWIND_COMMAND_STOP
-	UnwindCommandPLT     int32 = C.UNWIND_COMMAND_PLT
-	UnwindCommandSignal  int32 = C.UNWIND_COMMAND_SIGNAL
+	UnwindCommandInvalid      int32 = C.UNWIND_COMMAND_INVALID
+	UnwindCommandStop         int32 = C.UNWIND_COMMAND_STOP
+	UnwindCommandPLT          int32 = C.UNWIND_COMMAND_PLT
+	UnwindCommandSignal       int32 = C.UNWIND_COMMAND_SIGNAL
+	UnwindCommandFramePointer int32 = C.UNWIND_COMMAND_FRAME_POINTER
 
 	// UnwindDeref handling from the C header file
 	UnwindDerefMask       int32 = C.UNWIND_DEREF_MASK
@@ -63,12 +64,10 @@ var UnwindInfoStop = UnwindInfo{Opcode: UnwindOpcodeCommand, Param: UnwindComman
 // UnwindInfoSignal is the stack delta info indicating signal return frame.
 var UnwindInfoSignal = UnwindInfo{Opcode: UnwindOpcodeCommand, Param: UnwindCommandSignal}
 
-// UnwindInfoFramePointerX64 contains the description to unwind a x86-64 frame pointer frame.
-var UnwindInfoFramePointerX64 = UnwindInfo{
-	Opcode:   UnwindOpcodeBaseFP,
-	Param:    16,
-	FPOpcode: UnwindOpcodeBaseCFA,
-	FPParam:  -16,
+// UnwindInfoFramePointer contains the description to unwind a frame pointer frame.
+var UnwindInfoFramePointer = UnwindInfo{
+	Opcode: UnwindOpcodeCommand,
+	Param:  UnwindCommandFramePointer,
 }
 
 // UnwindInfoLR contains the description to unwind ARM64 function without a frame (LR only)

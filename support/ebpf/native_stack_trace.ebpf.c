@@ -403,6 +403,11 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bo
       DEBUG_PRINT("signal frame");
       goto frame_ok;
     case UNWIND_COMMAND_STOP: *stop = true; return ERR_OK;
+    case UNWIND_COMMAND_FRAME_POINTER:
+      if (!unwinder_unwind_frame_pointer(state)) {
+        goto err_native_pc_read;
+      }
+      goto frame_ok;
     default: return ERR_UNREACHABLE;
     }
   } else {
@@ -485,6 +490,11 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
       DEBUG_PRINT("signal frame");
       goto frame_ok;
     case UNWIND_COMMAND_STOP: *stop = true; return ERR_OK;
+    case UNWIND_COMMAND_FRAME_POINTER:
+      if (!unwinder_unwind_frame_pointer(state)) {
+        goto err_native_pc_read;
+      }
+      goto frame_ok;
     default: return ERR_UNREACHABLE;
     }
   }
