@@ -16,27 +16,27 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-// VdsoPathName is the path to use for VDSO mappings
+// VdsoPathName is the path to use for VDSO mappings.
 const VdsoPathName = "linux-vdso.1.so"
 
-// vdsoInode is the synthesized inode number for VDSO mappings
+// vdsoInode is the synthesized inode number for VDSO mappings.
 const vdsoInode = 50
 
-// Mapping contains information about a memory mapping
+// Mapping contains information about a memory mapping.
 type Mapping struct {
-	// Vaddr is the virtual memory start for this mapping
+	// Vaddr is the virtual memory start for this mapping.
 	Vaddr uint64
-	// Length is the length of the mapping
+	// Length is the length of the mapping.
 	Length uint64
-	// Flags contains the mapping flags and permissions
+	// Flags contains the mapping flags and permissions.
 	Flags elf.ProgFlag
-	// FileOffset contains for file backed mappings the offset from the file start
+	// FileOffset contains for file backed mappings the offset from the file start.
 	FileOffset uint64
-	// Device holds the device ID where the file is located
+	// Device holds the device ID where the file is located.
 	Device uint64
-	// Inode holds the mapped file's inode number
+	// Inode holds the mapped file's inode number.
 	Inode uint64
-	// Path contains the file name for file backed mappings
+	// Path contains the file name for file backed mappings.
 	Path string
 }
 
@@ -63,19 +63,19 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 	}
 }
 
-// ThreadInfo contains the information about a thread CPU state needed for unwinding
+// ThreadInfo contains the information about a thread CPU state needed for unwinding.
 type ThreadInfo struct {
-	// TPBase contains the Thread Pointer Base value
+	// TPBase contains the Thread Pointer Base value.
 	TPBase uint64
-	// GPRegs contains the CPU state (registers) for the thread
+	// GPRegs contains the CPU state (registers) for the thread.
 	GPRegs []byte
-	// LWP is the Light Weight Process ID (thread ID)
+	// LWP is the Light Weight Process ID (thread ID).
 	LWP uint32
 }
 
-// MachineData contains machine specific information about the process
+// MachineData contains machine specific information about the process.
 type MachineData struct {
-	// Machine is the Process Machine type
+	// Machine is the Process Machine type.
 	Machine elf.Machine
 	// CodePACMask contains the PAC mask for code pointers. ARM64 specific, otherwise 0.
 	CodePACMask uint64
@@ -83,7 +83,7 @@ type MachineData struct {
 	DataPACMask uint64
 }
 
-// ReadAtCloser interfaces implements io.ReaderAt and io.Closer
+// ReadAtCloser interfaces implements io.ReaderAt and io.Closer.
 type ReadAtCloser interface {
 	io.ReaderAt
 	io.Closer
@@ -94,29 +94,29 @@ type ReadAtCloser interface {
 // from different goroutines. As an exception the ELFOpener and the returned
 // GetRemoteMemory object are safe for concurrent use.
 type Process interface {
-	// PID returns the process identifier
+	// PID returns the process identifier.
 	PID() libpf.PID
 
-	// GetMachineData reads machine specific data from the target process
+	// GetMachineData reads machine specific data from the target process.
 	GetMachineData() MachineData
 
-	// GetMappings reads and parses process memory mappings
+	// GetMappings reads and parses process memory mappings.
 	GetMappings() ([]Mapping, uint32, error)
 
-	// GetThreads reads the process thread states
+	// GetThreads reads the process thread states.
 	GetThreads() ([]ThreadInfo, error)
 
-	// GetRemoteMemory returns a remote memory reader accessing the target process
+	// GetRemoteMemory returns a remote memory reader accessing the target process.
 	GetRemoteMemory() remotememory.RemoteMemory
 
-	// OpenMappingFile returns ReadAtCloser accessing the backing file of the mapping
+	// OpenMappingFile returns ReadAtCloser accessing the backing file of the mapping.
 	OpenMappingFile(*Mapping) (ReadAtCloser, error)
 
 	// GetMappingFileLastModifed returns the timestamp when the backing file was last modified
-	// or zero if an error occurs or mapping file is not accessible via filesystem
+	// or zero if an error occurs or mapping file is not accessible via filesystem.
 	GetMappingFileLastModified(*Mapping) int64
 
-	// CalculateMappingFileID calculates FileID of the backing file
+	// CalculateMappingFileID calculates FileID of the backing file.
 	CalculateMappingFileID(*Mapping) (libpf.FileID, error)
 
 	// ExtractAsFile returns a filename suitable for opening the given file from
