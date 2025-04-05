@@ -99,8 +99,8 @@ func mainWithExitCode() exitCode {
 		}()
 	}
 
-	intervals := times.New(cfg.MonitorInterval,
-		cfg.ReporterInterval, cfg.ProbabilisticInterval)
+	intervals := times.New(cfg.ReporterInterval,
+		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
 	kernelVersion, err := helpers.GetKernelVersion()
 	if err != nil {

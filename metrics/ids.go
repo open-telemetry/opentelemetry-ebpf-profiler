@@ -269,12 +269,6 @@ const (
 	// Number of failures to unwind because return address was not found with heuristic
 	IDUnwindHotspotErrInvalidRA = 130
 
-	// Number of cache hits in tracehandler trace cache by BPF hash
-	IDKnownTracesHit = 131
-
-	// Number of cache misses in tracehandler trace cache by BPF hash
-	IDKnownTracesMiss = 132
-
 	// Current size of the unwind info array
 	IDUnwindInfoArraySize = 133
 
@@ -638,6 +632,9 @@ const (
 	// Number of times a trace event read failed (trace_events)
 	IDTraceEventReadError = 274
 
+	// Number of parsing errors seen during processing /proc/<PID>/maps
+	IDErrProcParse = 275
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 275
+	IDMax = 276
 )

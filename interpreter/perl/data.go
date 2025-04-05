@@ -162,6 +162,9 @@ func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Add
 	}, nil
 }
 
+func (d *perlData) Unload(_ interpreter.EbpfHandler) {
+}
+
 func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 	ef *pfelf.File) (*perlData, error) {
 	// The version is encoded in these globals since Perl 5.15.0.

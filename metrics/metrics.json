@@ -952,6 +952,7 @@
     "id": 130
   },
   {
+    "obsolete": true,
     "description": "Number of cache hits in tracehandler trace cache by BPF hash",
     "type": "counter",
     "name": "KnownTracesHit",
@@ -959,6 +960,7 @@
     "id": 131
   },
   {
+    "obsolete": true,
     "description": "Number of cache misses in tracehandler trace cache by BPF hash",
     "type": "counter",
     "name": "KnownTracesMiss",
@@ -1978,5 +1980,12 @@
     "name": "TraceEventReadError",
     "field": "agent.errors.trace_event_read_error",
     "id": 274
+  },
+  {
+    "description": "Number of parsing errors seen during processing /proc/<PID>/maps",
+    "type": "counter",
+    "name": "ErrProcParse",
+    "field": "agent.errors.proc_parse",
+    "id": 275
   }
 ]

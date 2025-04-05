@@ -22,11 +22,16 @@ var testMappings = `55fe82710000-55fe8273c000 r--p 00000000 fd:01 1068432       
 55fe82836000-55fe8283d000 r--p 00125000 fd:01 1068432                    /tmp/usr_bin_seahorse
 55fe8283d000-55fe8283e000 rw-p 0012c000 fd:01 1068432                    /tmp/usr_bin_seahorse
 7f63c8c3e000-7f63c8de0000 r-xp 00085000 08:01 1048922                    /tmp/usr_lib_x86_64-linux-gnu_libcrypto.so.1.1
-7f63c8ebf000-7f63c8fef000 r-xp 0001c000 1fd:01 1075944                   /tmp/usr_lib_x86_64-linux-gnu_libopensc.so.6.0.0`
+7f63c8ebf000-7f63c8fef000 r-xp 0001c000 1fd:01 1075944                   /tmp/usr_lib_x86_64-linux-gnu_libopensc.so.6.0.0
+7f63c8eef000-7f63c8fdf000 r-xp 0001c000 1fd:01
+7f63c8eef000-7f63c8fdf000 r-xp 0001c000 1fd.01 1075944
+7f63c8eef000-7f63c8fdf000 r- 0001c000 1fd:01 1075944
+7f63c8eef000 r-xp 0001c000 1fd:01 1075944`
 
 func TestParseMappings(t *testing.T) {
-	mappings, err := parseMappings(strings.NewReader(testMappings))
+	mappings, numParseErrors, err := parseMappings(strings.NewReader(testMappings))
 	require.NoError(t, err)
+	require.Equal(t, uint32(4), numParseErrors)
 	assert.NotNil(t, mappings)
 
 	expected := []Mapping{
@@ -101,7 +106,8 @@ func TestNewPIDOfSelf(t *testing.T) {
 	pr := New(libpf.PID(os.Getpid()))
 	assert.NotNil(t, pr)
 
-	mappings, err := pr.GetMappings()
+	mappings, numParseErrors, err := pr.GetMappings()
 	require.NoError(t, err)
+	require.Equal(t, uint32(0), numParseErrors)
 	assert.NotEmpty(t, mappings)
 }

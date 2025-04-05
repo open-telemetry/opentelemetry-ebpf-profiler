@@ -101,7 +101,7 @@ type Process interface {
 	GetMachineData() MachineData
 
 	// GetMappings reads and parses process memory mappings
-	GetMappings() ([]Mapping, error)
+	GetMappings() ([]Mapping, uint32, error)
 
 	// GetThreads reads the process thread states
 	GetThreads() ([]ThreadInfo, error)
@@ -118,6 +118,13 @@ type Process interface {
 
 	// CalculateMappingFileID calculates FileID of the backing file
 	CalculateMappingFileID(*Mapping) (libpf.FileID, error)
+
+	// ExtractAsFile returns a filename suitable for opening the given file from
+	// the target process namespace. This is a last resort method to access the file
+	// when the ReaderAt interface from OpenMappingFile is not sufficient. The returned
+	// filename may refer to /proc or be a temporarily file, and it must not be modified
+	// or deleted.
+	ExtractAsFile(string) (string, error)
 
 	io.Closer
 
