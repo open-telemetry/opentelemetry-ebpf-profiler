@@ -82,3 +82,5 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		offsets:   offsets,
 	}, nil
 }
+
+func (d data) Unload(_ interpreter.EbpfHandler) {}

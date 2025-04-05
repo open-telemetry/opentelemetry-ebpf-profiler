@@ -246,6 +246,9 @@ func (d *opcacheData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.
 	}, nil
 }
 
+func (d *opcacheData) Unload(_ interpreter.EbpfHandler) {
+}
+
 func determineOPCacheVersion(ef *pfelf.File) (uint, error) {
 	// In contrast to interpreterphp, the opcache actually contains
 	// a really straightforward way to recover the version. As the opcache

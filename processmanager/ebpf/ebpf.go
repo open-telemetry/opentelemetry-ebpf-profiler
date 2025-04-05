@@ -780,7 +780,14 @@ func (impl *ebpfMapsImpl) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Pre
 func (impl *ebpfMapsImpl) DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm.Prefix) (int,
 	error) {
 	if impl.hasLPMTrieBatchOperations {
-		return impl.DeletePidPageMappingInfoBatch(pid, prefixes)
+		deleted, err := impl.DeletePidPageMappingInfoBatch(pid, prefixes)
+		if err != nil {
+			// BatchDelete may return early and not run to completion. If that happens,
+			// fall back to a single Delete pass to avoid leaking map entries.
+			deleted2, _ := impl.DeletePidPageMappingInfoSingle(pid, prefixes)
+			return (deleted + deleted2), err
+		}
+		return deleted, nil
 	}
 	return impl.DeletePidPageMappingInfoSingle(pid, prefixes)
 }

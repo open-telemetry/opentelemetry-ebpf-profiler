@@ -148,6 +148,9 @@ func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.A
 	return i, nil
 }
 
+func (d *pythonData) Unload(_ interpreter.EbpfHandler) {
+}
+
 // pythonCodeObject contains the information we cache for a corresponding
 // Python interpreter's PyCodeObject structures.
 type pythonCodeObject struct {

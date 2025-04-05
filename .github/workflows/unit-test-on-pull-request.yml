@@ -95,28 +95,37 @@ jobs:
       - name: Tests
         run: make test TARGET_ARCH=${{ matrix.target_arch }}
 
-  check-ebpf-blobs:
-    name: Check for differences in the eBPF binary blobs
+  check-binary-blobs:
+    name: Check for differences in the eBPF and Rust binary blobs
     runs-on: ubuntu-24.04
     container: otel/opentelemetry-ebpf-profiler-dev:latest
+    defaults:
+      run:
+        shell: bash --login {0}
     steps:
       - name: Clone code
         uses: actions/checkout@v4
-      - name: Hash eBPF blobs
+      - name: Hash binary blobs
         run: |
-          sha256sum support/ebpf/tracer.ebpf.release.* > ebpf-blobs.hash
+          sha256sum support/ebpf/tracer.ebpf.release.* > binary-blobs.hash
+          sha256sum target/x86_64-unknown-linux-musl/release/libsymblib_capi.a >> binary-blobs.hash
+          sha256sum target/aarch64-unknown-linux-musl/release/libsymblib_capi.a >> binary-blobs.hash
       - name: Rebuild eBPF blobs
         run: |
           rm support/ebpf/tracer.ebpf.release.*
           make amd64 -C support/ebpf
           make arm64 -C support/ebpf
+      - name: Rebuild Rust blobs
+        run: |
+          rm -rf target/
+          make rust-components TARGET_ARCH=amd64
+          make rust-components TARGET_ARCH=arm64
       - name: Check for differences
         run: |
-          if ! sha256sum --check ebpf-blobs.hash; then
-            echo "Please rebuild and commit the updated eBPF binary blobs."
+          if ! sha256sum --check binary-blobs.hash; then
+            echo "Please rebuild and commit the updated binary blobs."
             exit 1
           fi
-
 
   build-integration-test-binaries:
     name: Build integration test binaries (${{ matrix.target_arch }}-${{ matrix.go_version}})

@@ -151,6 +151,8 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	return &instance{}, nil
 }
 
+func (d data) Unload(_ interpreter.EbpfHandler) {}
+
 func (i *instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	return ebpf.DeleteProcData(libpf.CustomLabels, pid)
 }

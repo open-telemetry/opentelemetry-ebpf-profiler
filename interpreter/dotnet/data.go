@@ -159,6 +159,9 @@ func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias li
 	}, nil
 }
 
+func (d *dotnetData) Unload(_ interpreter.EbpfHandler) {
+}
+
 func (d *dotnetData) loadIntrospectionData() {
 	vms := &d.vmStructs
 

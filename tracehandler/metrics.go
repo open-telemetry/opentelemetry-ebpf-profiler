@@ -9,24 +9,14 @@ func (m *traceHandler) collectMetrics() {
 	metrics.AddSlice([]metrics.Metric{
 		{
 			ID:    metrics.IDTraceCacheHit,
-			Value: metrics.MetricValue(m.umTraceCacheHit),
+			Value: metrics.MetricValue(m.traceCacheHit),
 		},
 		{
 			ID:    metrics.IDTraceCacheMiss,
-			Value: metrics.MetricValue(m.umTraceCacheMiss),
-		},
-		{
-			ID:    metrics.IDKnownTracesHit,
-			Value: metrics.MetricValue(m.bpfTraceCacheHit),
-		},
-		{
-			ID:    metrics.IDKnownTracesMiss,
-			Value: metrics.MetricValue(m.bpfTraceCacheMiss),
+			Value: metrics.MetricValue(m.traceCacheMiss),
 		},
 	})
 
-	m.umTraceCacheHit = 0
-	m.umTraceCacheMiss = 0
-	m.bpfTraceCacheHit = 0
-	m.bpfTraceCacheMiss = 0
+	m.traceCacheHit = 0
+	m.traceCacheMiss = 0
 }

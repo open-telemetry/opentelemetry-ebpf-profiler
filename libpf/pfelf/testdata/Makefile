@@ -44,7 +44,6 @@ kernel-image: test.c
 ubuntu-kernel-image: test.c
 	$(CC) $< -s -o $@ -DLINUX_VERSION="\"Linux version 1.2.3 (Ubuntu 4.5.6)\\n\""
 
-# A fake go binary (with a .gopclntab section)
-go-binary: without-debug-syms
-	$(OBJCOPY) --add-section .gopclntab=/dev/null $< $@
+go-binary: gotest.go
+	go build -o go-binary -ldflags "-w -s" gotest.go
 

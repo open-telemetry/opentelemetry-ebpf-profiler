@@ -99,8 +99,8 @@ func mainWithExitCode() exitCode {
 		}()
 	}
 
-	intervals := times.New(cfg.MonitorInterval,
-		cfg.ReporterInterval, cfg.ProbabilisticInterval)
+	intervals := times.New(cfg.ReporterInterval,
+		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
 	kernelVersion, err := helpers.GetKernelVersion()
 	if err != nil {
@@ -114,7 +114,6 @@ func mainWithExitCode() exitCode {
 		log.Error(err)
 		return exitFailure
 	}
-	cfg.HostName, cfg.IPAddress = hostname, sourceIP
 
 	rep, err := reporter.NewOTLP(&reporter.Config{
 		CollAgentAddr:            cfg.CollAgentAddr,

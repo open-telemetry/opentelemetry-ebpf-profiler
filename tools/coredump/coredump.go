@@ -189,7 +189,8 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	includeTracers, _ := tracertypes.Parse("all")
 
 	manager, err := pm.New(todo, includeTracers, monitorInterval, &coredumpEbpfMaps,
-		pm.NewMapFileIDMapper(), symCache, elfunwindinfo.NewStackDeltaProvider(), false, false)
+		pm.NewMapFileIDMapper(), symCache, elfunwindinfo.NewStackDeltaProvider(), false, false,
+		libpf.Set[string]{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)
 	}

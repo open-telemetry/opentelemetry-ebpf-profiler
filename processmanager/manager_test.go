@@ -48,8 +48,8 @@ func (d *dummyProcess) GetMachineData() process.MachineData {
 	return process.MachineData{}
 }
 
-func (d *dummyProcess) GetMappings() ([]process.Mapping, error) {
-	return nil, errors.New("not implemented")
+func (d *dummyProcess) GetMappings() ([]process.Mapping, uint32, error) {
+	return nil, 0, errors.New("not implemented")
 }
 
 func (d *dummyProcess) GetThreads() ([]process.ThreadInfo, error) {
@@ -323,7 +323,8 @@ func TestInterpreterConvertTrace(t *testing.T) {
 				&symbolReporterMockup{},
 				nil,
 				true,
-				false)
+				false,
+				libpf.Set[string]{})
 			require.NoError(t, err)
 
 			newTrace, err := manager.ConvertTrace(testcase.trace)
@@ -409,7 +410,9 @@ func TestNewMapping(t *testing.T) {
 				NewMapFileIDMapper(),
 				symRepMockup,
 				&dummyProvider,
-				true, false)
+				true,
+				false,
+				libpf.Set[string]{})
 			require.NoError(t, err)
 
 			// Replace the internal hooks for the tests. These hooks catch the
@@ -594,7 +597,9 @@ func TestProcExit(t *testing.T) {
 				NewMapFileIDMapper(),
 				repMockup,
 				&dummyProvider,
-				true, false)
+				true,
+				false,
+				libpf.Set[string]{})
 			require.NoError(t, err)
 			defer cancel()
 

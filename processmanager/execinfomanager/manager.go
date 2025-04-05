@@ -279,6 +279,9 @@ func (mgr *ExecutableInfoManager) RemoveOrDecRef(fileID host.FileID) error {
 		if err := state.unloadDeltas(fileID, &info.mapRef); err != nil {
 			return fmt.Errorf("failed remove fileID 0x%x from BPF maps: %w", fileID, err)
 		}
+		if info.Data != nil {
+			info.Data.Unload(state.ebpf)
+		}
 		delete(state.executables, fileID)
 	case 0:
 		// This should be unreachable.
