@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	// maxNotesSection the maximum section size for notes.
+	// maxNotesSection is the maximum section size for notes.
 	maxNotesSection = 16 * 1024 * 1024
 )
 
