@@ -6,19 +6,20 @@ package python // import "go.opentelemetry.io/ebpf-profiler/interpreter/python"
 import (
 	"errors"
 	"fmt"
-	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
-	"go.opentelemetry.io/ebpf-profiler/asm/amd"
-	aa "golang.org/x/arch/arm64/arm64asm"
-	"golang.org/x/arch/x86/x86asm"
 	"runtime"
 
+	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	aa "golang.org/x/arch/arm64/arm64asm"
+	"golang.org/x/arch/x86/x86asm"
 )
 
 // decodeStubArgumentWrapperARM64 disassembles arm64 code and decodes the assumed value
 // of requested argument.
-func decodeStubArgumentWrapperARM64(code []byte, argNumber uint8, _,
+func decodeStubArgumentWrapperARM64(code []byte,
 	addrBase libpf.SymbolValue) libpf.SymbolValue {
+	const argNumber uint8 = 0
 	// The concept is to track the latest load offset for all X0..X30 registers.
 	// These registers are used as the function arguments. Once the first branch
 	// instruction (function call/tail jump) is found, the state of the requested
@@ -106,7 +107,8 @@ func decodeStubArgumentWrapperARM64(code []byte, argNumber uint8, _,
 	return libpf.SymbolValueInvalid
 }
 
-func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) (libpf.SymbolValue, error) {
+func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) (
+	libpf.SymbolValue, error) {
 	targetRegister := x86asm.RDI
 
 	instructionOffset := 0
@@ -121,7 +123,7 @@ func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) (libpf
 
 		inst, err := x86asm.Decode(rem, 64)
 		if err != nil { // todo return the error
-			return 0, fmt.Errorf("insn @ 0x%x failed: %w",
+			return 0, fmt.Errorf("failed to decode instruction at 0x%x : %w",
 				instructionOffset, err)
 		}
 
@@ -155,7 +157,7 @@ func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) (libpf
 						value = baseAddr + displacement
 					}
 
-					if src.Index != 0 { // todo this is dead code according to test coverage, need a test or remove this
+					if src.Index != 0 { // todo cover this
 						indexValue, _ := regs.Get(src.Index)
 						value += indexValue * uint64(src.Scale)
 					}
@@ -186,11 +188,8 @@ func decodeStubArgumentWrapper(
 	codeAddress libpf.SymbolValue,
 	memoryBase libpf.SymbolValue,
 ) (libpf.SymbolValue, error) {
-	if len(code) == 0 {
-		return libpf.SymbolValueInvalid, errors.New("empty code")
-	}
 	if runtime.GOARCH == "arm64" {
-		return decodeStubArgumentWrapperARM64(code, 0, codeAddress, memoryBase), nil
+		return decodeStubArgumentWrapperARM64(code, memoryBase), nil
 	}
 	if runtime.GOARCH == "amd64" {
 		return decodeStubArgumentAMD64(code, uint64(codeAddress), uint64(memoryBase))

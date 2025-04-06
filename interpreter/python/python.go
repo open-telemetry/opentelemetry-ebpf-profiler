@@ -668,7 +668,7 @@ func decodeStub(
 	}
 
 	code := make([]byte, 64)
-	if _, err := ef.ReadVirtualMemory(code, int64(codeAddress)); err != nil {
+	if _, err = ef.ReadVirtualMemory(code, int64(codeAddress)); err != nil {
 		return libpf.SymbolValueInvalid, fmt.Errorf("reading %s 0x%x code failed: %w",
 			symbolName, codeAddress, err)
 	}

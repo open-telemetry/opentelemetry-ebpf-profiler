@@ -3,7 +3,7 @@
 
 package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
 
-func IsEndbr64(code []byte) (bool, int) {
+func IsEndbr64(code []byte) (isEndbr bool, size int) {
 	if len(code) >= 4 &&
 		code[0] == 0xf3 &&
 		code[1] == 0x0f &&

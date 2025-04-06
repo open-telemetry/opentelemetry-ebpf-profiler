@@ -1,12 +1,14 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+//nolint:lll
 package python
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
@@ -16,7 +18,7 @@ func TestAnalyzeArm64Stubs(t *testing.T) {
 			0x40, 0x0a, 0x00, 0x90, 0x01, 0xd4, 0x43, 0xf9,
 			0x22, 0x60, 0x17, 0x91, 0x40, 0x00, 0x40, 0xf9,
 			0xa2, 0xff, 0xff, 0x17},
-		0, 0, 0)
+		0)
 	assert.Equal(t, libpf.SymbolValue(1496), val, "PyEval_ReleaseLock stub test")
 
 	val = decodeStubArgumentWrapperARM64(
@@ -24,7 +26,7 @@ func TestAnalyzeArm64Stubs(t *testing.T) {
 			0x80, 0x12, 0x00, 0xb0, 0x02, 0xd4, 0x43, 0xf9,
 			0x41, 0xf4, 0x42, 0xf9, 0x61, 0x00, 0x00, 0xb4,
 			0x40, 0xc0, 0x17, 0x91, 0xad, 0xe4, 0xfe, 0x17},
-		0, 0, 0)
+		0)
 	assert.Equal(t, libpf.SymbolValue(1520), val, "PyGILState_GetThisThreadState test")
 
 	// Python 3.10.12 on ARM64 Nix
@@ -39,7 +41,7 @@ func TestAnalyzeArm64Stubs(t *testing.T) {
 			0x00, 0x00, 0x80, 0xd2, // mov	x0, #0x0
 			0xc0, 0x03, 0x5f, 0xd6, // ret
 		},
-		0, 0, 0)
+		0)
 	assert.Equal(t, libpf.SymbolValue(604), val, "PyGILState_GetThisThreadState test")
 }
 
@@ -67,10 +69,11 @@ func BenchmarkDecodeAmd64(b *testing.B) {
 
 func TestAmd64DecodeStub(t *testing.T) {
 	testdata := []struct {
-		name     string
-		code     []byte
-		rip      uint64
-		expected uint64
+		name          string
+		code          []byte
+		rip           uint64
+		expected      uint64
+		expectedError string
 	}{
 		{
 			name: "3.10.16 gcc12 enable-optimizations disable-shared",
@@ -216,15 +219,41 @@ func TestAmd64DecodeStub(t *testing.T) {
 			rip:      0x1c03c0,
 			expected: 0x24c,
 		},
+		{
+			name:          "empty code",
+			code:          nil,
+			expectedError: "no call/jump instructions found",
+		},
+		{
+			name: "no call/jump instructions found",
+			code: []byte{
+				0x48, 0xC7, 0xC7, 0xEF, 0xEF, 0xEF, 0x00, // mov rdi, 0xefefef
+			},
+			expectedError: "no call/jump instructions found",
+		},
+		{
+			name: "bad instruction",
+			code: []byte{
+				0x48, 0xC7, 0xC7, 0xEF, 0xEF, 0xEF, 0x00, // mov rdi, 0xefefef
+				0xea, // :shrug:
+			},
+			expectedError: "failed to decode instruction at 0x7",
+		},
 	}
 
 	for _, td := range testdata {
 		t.Run(td.name, func(t *testing.T) {
-			val, _ := decodeStubArgumentAMD64(
+			val, err := decodeStubArgumentAMD64(
 				td.code,
 				td.rip,
 				0, // NULL pointer as mem
 			)
+			if td.expectedError != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), td.expectedError)
+			} else {
+				require.NoError(t, err)
+			}
 			assert.Equal(t, td.expected, uint64(val))
 		})
 	}
@@ -232,6 +261,9 @@ func TestAmd64DecodeStub(t *testing.T) {
 
 func FuzzDecodeAmd(f *testing.F) {
 	f.Fuzz(func(_ *testing.T, code []byte, rip uint64) {
-		decodeStubArgumentAMD64(code, rip, 0)
+		_, err := decodeStubArgumentAMD64(code, rip, 0)
+		if err != nil {
+			return
+		}
 	})
 }
