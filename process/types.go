@@ -83,7 +83,7 @@ type MachineData struct {
 	DataPACMask uint64
 }
 
-// ReadAtCloser interfaces implements io.ReaderAt and io.Closer.
+// ReadAtCloser combines the io.ReaderAt and io.Closer interfaces.
 type ReadAtCloser interface {
 	io.ReaderAt
 	io.Closer
