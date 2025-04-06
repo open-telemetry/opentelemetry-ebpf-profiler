@@ -122,11 +122,11 @@ func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) (
 		}
 
 		inst, err := x86asm.Decode(rem, 64)
-		if err != nil { // todo return the error
+		if err != nil {
 			return 0, fmt.Errorf("failed to decode instruction at 0x%x : %w",
 				instructionOffset, err)
 		}
-
+		fmt.Printf("insn %s\n", inst.String())
 		instructionOffset += inst.Len
 		regs.Set(x86asm.RIP, codeAddress+uint64(instructionOffset), 0)
 
@@ -153,13 +153,16 @@ func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) (
 					if inst.Op == x86asm.MOV {
 						value = memoryBase
 						loadedFrom = baseAddr + displacement
+						if src.Index != 0 {
+							indexValue, _ := regs.Get(src.Index)
+							loadedFrom += indexValue * uint64(src.Scale)
+						}
 					} else if inst.Op == x86asm.LEA {
 						value = baseAddr + displacement
-					}
-
-					if src.Index != 0 { // todo cover this
-						indexValue, _ := regs.Get(src.Index)
-						value += indexValue * uint64(src.Scale)
+						if src.Index != 0 {
+							indexValue, _ := regs.Get(src.Index)
+							value += indexValue * uint64(src.Scale)
+						}
 					}
 
 				case x86asm.Reg:
@@ -180,7 +183,7 @@ func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) (
 			}
 		}
 	}
-	return 0, errors.New("no call/jump instructions found") // todo cover this
+	return 0, errors.New("no call/jump instructions found")
 }
 
 func decodeStubArgumentWrapper(
