@@ -4,8 +4,13 @@
 package python // import "go.opentelemetry.io/ebpf-profiler/interpreter/python"
 
 import (
+	"errors"
+	"fmt"
 	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	aa "golang.org/x/arch/arm64/arm64asm"
+	"golang.org/x/arch/x86/x86asm"
+	"runtime"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
@@ -99,4 +104,96 @@ func decodeStubArgumentWrapperARM64(code []byte, argNumber uint8, _,
 	}
 
 	return libpf.SymbolValueInvalid
+}
+
+func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) (libpf.SymbolValue, error) {
+	targetRegister := x86asm.RDI
+
+	instructionOffset := 0
+	regs := amd.RegsState{}
+
+	for instructionOffset < len(code) {
+		rem := code[instructionOffset:]
+		if endbr64, insnLen := amd.IsEndbr64(rem); endbr64 {
+			instructionOffset += insnLen
+			continue
+		}
+
+		inst, err := x86asm.Decode(rem, 64)
+		if err != nil { // todo return the error
+			return 0, fmt.Errorf("insn @ 0x%x failed: %w",
+				instructionOffset, err)
+		}
+
+		instructionOffset += inst.Len
+		regs.Set(x86asm.RIP, codeAddress+uint64(instructionOffset), 0)
+
+		if inst.Op == x86asm.CALL || inst.Op == x86asm.JMP {
+			value, loadedFrom := regs.Get(targetRegister)
+			if loadedFrom != 0 {
+				return libpf.SymbolValue(loadedFrom), nil
+			}
+			return libpf.SymbolValue(value), nil
+		}
+
+		if (inst.Op == x86asm.LEA || inst.Op == x86asm.MOV) && inst.Args[0] != nil {
+			if reg, ok := inst.Args[0].(x86asm.Reg); ok {
+				var value uint64
+				var loadedFrom uint64
+
+				switch src := inst.Args[1].(type) {
+				case x86asm.Imm:
+					value = uint64(src)
+				case x86asm.Mem:
+					baseAddr, _ := regs.Get(src.Base)
+					displacement := uint64(src.Disp)
+
+					if inst.Op == x86asm.MOV {
+						value = memoryBase
+						loadedFrom = baseAddr + displacement
+					} else if inst.Op == x86asm.LEA {
+						value = baseAddr + displacement
+					}
+
+					if src.Index != 0 { // todo this is dead code according to test coverage, need a test or remove this
+						indexValue, _ := regs.Get(src.Index)
+						value += indexValue * uint64(src.Scale)
+					}
+
+				case x86asm.Reg:
+					value, _ = regs.Get(src)
+				}
+
+				regs.Set(reg, value, loadedFrom)
+			}
+		}
+
+		if inst.Op == x86asm.ADD && inst.Args[0] != nil && inst.Args[1] != nil {
+			if reg, ok0 := inst.Args[0].(x86asm.Reg); ok0 {
+				if _, ok1 := inst.Args[1].(x86asm.Mem); ok1 {
+					oldValue, _ := regs.Get(reg)
+					value := oldValue + memoryBase
+					regs.Set(reg, value, 0)
+				}
+			}
+		}
+	}
+	return 0, errors.New("no call/jump instructions found") // todo cover this
+}
+
+func decodeStubArgumentWrapper(
+	code []byte,
+	codeAddress libpf.SymbolValue,
+	memoryBase libpf.SymbolValue,
+) (libpf.SymbolValue, error) {
+	if len(code) == 0 {
+		return libpf.SymbolValueInvalid, errors.New("empty code")
+	}
+	if runtime.GOARCH == "arm64" {
+		return decodeStubArgumentWrapperARM64(code, 0, codeAddress, memoryBase), nil
+	}
+	if runtime.GOARCH == "amd64" {
+		return decodeStubArgumentAMD64(code, uint64(codeAddress), uint64(memoryBase))
+	}
+	return libpf.SymbolValueInvalid, fmt.Errorf("unsupported arch %s", runtime.GOARCH)
 }

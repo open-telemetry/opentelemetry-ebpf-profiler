@@ -669,15 +669,15 @@ func decodeStub(
 
 	code := make([]byte, 64)
 	if _, err := ef.ReadVirtualMemory(code, int64(codeAddress)); err != nil {
-		return libpf.SymbolValueInvalid, fmt.Errorf("reading %s %x code failed: %w",
+		return libpf.SymbolValueInvalid, fmt.Errorf("reading %s 0x%x code failed: %w",
 			symbolName, codeAddress, err)
 	}
-	value := decodeStubArgumentWrapper(code, codeAddress, memoryBase)
+	value, err := decodeStubArgumentWrapper(code, codeAddress, memoryBase)
 
 	// Sanity check the value range and alignment
-	if value%4 != 0 {
-		return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s %x %s failed (%x)",
-			symbolName, codeAddress, hex.Dump(code), value)
+	if err != nil || value%4 != 0 {
+		return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x, %w)",
+			symbolName, codeAddress, hex.Dump(code), value, err)
 	}
 	// If base symbol (_PyRuntime) is not provided, accept any found value.
 	if memoryBase == 0 && value != 0 {
@@ -687,7 +687,7 @@ func decodeStub(
 	if value > memoryBase && value < memoryBase+4096 {
 		return value, nil
 	}
-	return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s %x %s failed (%x)",
+	return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x)",
 		symbolName, codeAddress, hex.Dump(code), value)
 }
 

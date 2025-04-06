@@ -54,7 +54,7 @@ func BenchmarkDecodeAmd64(b *testing.B) {
 			0xe9, 0xe7, 0xea, 0xe9, 0xff, // 1bbbb4: jmp    5a6a0 <pthread_getspecific@plt>
 		}
 		rip := uint64(0x1bbba0)
-		val := decodeStubArgumentAMD64(
+		val, _ := decodeStubArgumentAMD64(
 			code,
 			rip,
 			0,
@@ -220,12 +220,12 @@ func TestAmd64DecodeStub(t *testing.T) {
 
 	for _, td := range testdata {
 		t.Run(td.name, func(t *testing.T) {
-			val := decodeStubArgumentAMD64(
+			val, _ := decodeStubArgumentAMD64(
 				td.code,
 				td.rip,
 				0, // NULL pointer as mem
 			)
-			assert.Equal(t, td.expected, val)
+			assert.Equal(t, td.expected, uint64(val))
 		})
 	}
 }
