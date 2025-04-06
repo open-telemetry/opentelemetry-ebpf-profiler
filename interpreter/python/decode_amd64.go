@@ -17,18 +17,14 @@ func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) uint64
 
 	for instructionOffset < len(code) {
 		rem := code[instructionOffset:]
-		if len(rem) >= 4 &&
-			code[instructionOffset] == 0xf3 &&
-			code[instructionOffset+1] == 0x0f &&
-			code[instructionOffset+2] == 0x1e &&
-			code[instructionOffset+3] == 0xfa {
-			instructionOffset += 4
+		if endbr64, insnLen := amd.IsEndbr64(rem); endbr64 {
+			instructionOffset += insnLen
 			continue
 		}
 
 		inst, err := x86asm.Decode(rem, 64)
 		if err != nil { // todo return the error
-			break
+			break // todo cover this
 		}
 
 		instructionOffset += inst.Len
@@ -84,7 +80,7 @@ func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) uint64
 			}
 		}
 	}
-	return 0
+	return 0 // todo cover this
 }
 
 func decodeStubArgumentWrapper(
