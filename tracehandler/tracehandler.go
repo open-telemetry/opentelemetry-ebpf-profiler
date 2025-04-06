@@ -8,6 +8,7 @@ package tracehandler // import "go.opentelemetry.io/ebpf-profiler/tracehandler"
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -21,10 +22,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
-// metadataWarnInhibDuration defines the minimum duration between warnings printed
-// about failure to obtain metadata for a single PID.
-const metadataWarnInhibDuration = 1 * time.Minute
-
 // Compile time check to make sure config.Times satisfies the interfaces.
 var _ Times = (*times.Times)(nil)
 
@@ -32,6 +29,10 @@ var _ Times = (*times.Times)(nil)
 type Times interface {
 	MonitorInterval() time.Duration
 }
+
+// Default lifetime of elements in the cache to reduce recurring
+// symbolization efforts.
+var traceCacheLifetime = 5 * time.Minute
 
 // TraceProcessor is an interface used by traceHandler to convert traces
 // from a form received from eBPF to the form we wish to dispatch to the
@@ -58,63 +59,60 @@ type TraceProcessor interface {
 // from the eBPF components.
 type traceHandler struct {
 	// Metrics
-	umTraceCacheHit   uint64
-	umTraceCacheMiss  uint64
-	bpfTraceCacheHit  uint64
-	bpfTraceCacheMiss uint64
+	traceCacheHit  uint64
+	traceCacheMiss uint64
 
 	traceProcessor TraceProcessor
 
-	// bpfTraceCache stores mappings from BPF to user-mode hashes. This allows
+	// traceCache stores mappings from BPF hashes to symbolized traces. This allows
 	// avoiding the overhead of re-doing user-mode symbolization of traces that
 	// we have recently seen already.
-	bpfTraceCache *lru.LRU[host.TraceHash, libpf.TraceHash]
-
-	// umTraceCache is a LRU set that suppresses unnecessary resends of traces
-	// that we have recently reported to the collector already.
-	umTraceCache *lru.LRU[libpf.TraceHash, libpf.Void]
+	traceCache *lru.SyncedLRU[host.TraceHash, libpf.Trace]
 
 	// reporter instance to use to send out traces.
 	reporter reporter.TraceReporter
-
-	// metadataWarnInhib tracks inhibitions for warnings printed about failure to
-	// update container metadata (rate-limiting).
-	metadataWarnInhib *lru.LRU[libpf.PID, libpf.Void]
 
 	times Times
 }
 
 // newTraceHandler creates a new traceHandler
-func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
-	intervals Times, cacheSize uint32) (*traceHandler, error) {
-	bpfTraceCache, err := lru.New[host.TraceHash, libpf.TraceHash](
+func newTraceHandler(ctx context.Context, rep reporter.TraceReporter,
+	traceProcessor TraceProcessor, intervals Times, cacheSize uint32) (*traceHandler, error) {
+	traceCache, err := lru.NewSynced[host.TraceHash, libpf.Trace](
 		cacheSize, func(k host.TraceHash) uint32 { return uint32(k) })
 	if err != nil {
 		return nil, err
 	}
+	// Do not hold elements indefinitely in the cache.
+	traceCache.SetLifetime(traceCacheLifetime)
 
-	umTraceCache, err := lru.New[libpf.TraceHash, libpf.Void](
-		cacheSize, libpf.TraceHash.Hash32)
-	if err != nil {
-		return nil, err
-	}
+	var wg sync.WaitGroup
+	wg.Add(1)
 
-	metadataWarnInhib, err := lru.New[libpf.PID, libpf.Void](64, libpf.PID.Hash32)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create metadata warning inhibitor LRU: %v", err)
-	}
-	metadataWarnInhib.SetLifetime(metadataWarnInhibDuration)
+	go func() {
+		wg.Done()
+		ticker := time.NewTicker(traceCacheLifetime)
+		defer ticker.Stop()
 
-	t := &traceHandler{
-		traceProcessor:    traceProcessor,
-		bpfTraceCache:     bpfTraceCache,
-		umTraceCache:      umTraceCache,
-		reporter:          rep,
-		times:             intervals,
-		metadataWarnInhib: metadataWarnInhib,
-	}
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				traceCache.PurgeExpired()
+			}
+		}
+	}()
 
-	return t, nil
+	// Wait to make sure the purge routine did start.
+	wg.Wait()
+
+	return &traceHandler{
+		traceProcessor: traceProcessor,
+		traceCache:     traceCache,
+		reporter:       rep,
+		times:          intervals,
+	}, nil
 }
 
 func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
@@ -129,19 +127,20 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		ExecutablePath: bpfTrace.ExecutablePath,
 		Origin:         bpfTrace.Origin,
 		OffTime:        bpfTrace.OffTime,
+		EnvVars:        bpfTrace.EnvVars,
 	}
 
-	if !m.reporter.SupportsReportTraceEvent() {
-		// Fast path: if the trace is already known remotely, we just send a counter update.
-		postConvHash, traceKnown := m.bpfTraceCache.Get(bpfTrace.Hash)
-		if traceKnown {
-			m.bpfTraceCacheHit++
-			meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, postConvHash, 1)
-			m.reporter.ReportCountForTrace(postConvHash, 1, meta)
-			return
+	if trace, exists := m.traceCache.GetAndRefresh(bpfTrace.Hash,
+		traceCacheLifetime); exists {
+		m.traceCacheHit++
+		// Fast path
+		meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
+		if err := m.reporter.ReportTraceEvent(&trace, meta); err != nil {
+			log.Errorf("Failed to report trace event: %v", err)
 		}
-		m.bpfTraceCacheMiss++
+		return
 	}
+	m.traceCacheMiss++
 
 	// Slow path: convert trace.
 	umTrace, err := m.traceProcessor.ConvertTrace(bpfTrace)
@@ -150,25 +149,12 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		panic(err)
 	}
 	log.Debugf("Trace hash remap 0x%x -> 0x%x", bpfTrace.Hash, umTrace.Hash)
-	m.bpfTraceCache.Add(bpfTrace.Hash, umTrace.Hash)
+	m.traceCache.Add(bpfTrace.Hash, *umTrace)
 
 	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
-	if m.reporter.SupportsReportTraceEvent() {
-		m.reporter.ReportTraceEvent(umTrace, meta)
-		return
+	if err := m.reporter.ReportTraceEvent(umTrace, meta); err != nil {
+		log.Errorf("Failed to report trace event: %v", err)
 	}
-	m.reporter.ReportCountForTrace(umTrace.Hash, 1, meta)
-
-	// Trace already known to collector by UM hash?
-	if _, known := m.umTraceCache.Get(umTrace.Hash); known {
-		m.umTraceCacheHit++
-		return
-	}
-	m.umTraceCacheMiss++
-
-	// Nope. Send it now.
-	m.reporter.ReportFramesForTrace(umTrace)
-	m.umTraceCache.Add(umTrace.Hash, libpf.Void{})
 }
 
 // Start starts a goroutine that receives and processes trace updates over
@@ -179,7 +165,7 @@ func Start(ctx context.Context, rep reporter.TraceReporter, traceProcessor Trace
 	traceInChan <-chan *host.Trace, intervals Times, cacheSize uint32,
 ) (workerExited <-chan libpf.Void, err error) {
 	handler, err :=
-		newTraceHandler(rep, traceProcessor, intervals, cacheSize)
+		newTraceHandler(ctx, rep, traceProcessor, intervals, cacheSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create traceHandler: %v", err)
 	}

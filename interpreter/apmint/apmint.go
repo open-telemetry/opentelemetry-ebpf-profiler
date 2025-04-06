@@ -133,6 +133,9 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	}, nil
 }
 
+func (d data) Unload(_ interpreter.EbpfHandler) {
+}
+
 type Instance struct {
 	serviceName string
 	socket      *apmAgentSocket

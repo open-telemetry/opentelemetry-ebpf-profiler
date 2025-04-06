@@ -269,12 +269,6 @@ const (
 	// Number of failures to unwind because return address was not found with heuristic
 	IDUnwindHotspotErrInvalidRA = 130
 
-	// Number of cache hits in tracehandler trace cache by BPF hash
-	IDKnownTracesHit = 131
-
-	// Number of cache misses in tracehandler trace cache by BPF hash
-	IDKnownTracesMiss = 132
-
 	// Current size of the unwind info array
 	IDUnwindInfoArraySize = 133
 
@@ -638,39 +632,42 @@ const (
 	// Number of times a trace event read failed (trace_events)
 	IDTraceEventReadError = 274
 
+	// Number of parsing errors seen during processing /proc/<PID>/maps
+	IDErrProcParse = 275
+
 	// Number of attempts to read Go custom labels
-	IDUnwindGoCustomLabelsAttempts = 275
+	IDUnwindGoCustomLabelsAttempts = 276
 
 	// Number of failures reading Go custom labels
-	IDUnwindGoCustomLabelsFailures = 276
+	IDUnwindGoCustomLabelsFailures = 277
 
 	// Number of failures to get TSD base for native custom labels
-	IDUnwindNativeCustomLabelsErrReadTsdBase = 277
+	IDUnwindNativeCustomLabelsErrReadTsdBase = 278
 
 	// Number of failures to read native custom labels thread-local object
-	IDUnwindNativeCustomLabelsErrReadData = 278
+	IDUnwindNativeCustomLabelsErrReadData = 279
 
 	// Number of failures to read native custom labels key buffer
-	IDUnwindNativeCustomLabelsErrReadKey = 279
+	IDUnwindNativeCustomLabelsErrReadKey = 280
 
 	// Number of failures to read native custom labels value buffer
-	IDUnwindNativeCustomLabelsErrReadValue = 280
+	IDUnwindNativeCustomLabelsErrReadValue = 281
 
 	// Number of successful reads of native custom labels
-	IDUnwindNativeCustomLabelsReadSuccesses = 281
+	IDUnwindNativeCustomLabelsReadSuccesses = 282
 
 	// Total number of failures to add native custom labels
-	IDUnwindNativeCustomLabelsAddErrors = 282
+	IDUnwindNativeCustomLabelsAddErrors = 283
 
 	// Number of successes adding native custom labels
-	IDUnwindNativeCustomLabelsAddSuccesses = 283
+	IDUnwindNativeCustomLabelsAddSuccesses = 284
 
 	// Number of attempted LuaJIT unwinds
-	IDUnwindLuaJITAttempts = 284
+	IDUnwindLuaJITAttempts = 285
 
 	// Number of times we didn't find an entry for this process in the LuaJIT process info array
-	IDUnwindLuaJITErrNoProcInfo = 285
+	IDUnwindLuaJITErrNoProcInfo = 286
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 286
+	IDMax = 287
 )

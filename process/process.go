@@ -11,16 +11,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
-	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // systemProcess provides an implementation of the Process interface for a
@@ -79,12 +80,13 @@ func trimMappingPath(path string) string {
 	return path
 }
 
-func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
+func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
+	numParseErrors := uint32(0)
 	mappings := make([]Mapping, 0, 32)
 	scanner := bufio.NewScanner(mapsFile)
 	scanBuf := bufPool.Get().(*[]byte)
 	if scanBuf == nil {
-		return mappings, errors.New("failed to get memory from sync pool")
+		return mappings, 0, errors.New("failed to get memory from sync pool")
 	}
 	defer func() {
 		// Reset memory and return it for reuse.
@@ -93,6 +95,8 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 		}
 		bufPool.Put(scanBuf)
 	}()
+
+	lastPath := ""
 	scanner.Buffer(*scanBuf, 8192)
 	for scanner.Scan() {
 		var fields [6]string
@@ -101,14 +105,17 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 
 		line := stringutil.ByteSlice2String(scanner.Bytes())
 		if stringutil.FieldsN(line, fields[:]) < 5 {
+			numParseErrors++
 			continue
 		}
 		if stringutil.SplitN(fields[0], "-", addrs[:]) < 2 {
+			numParseErrors++
 			continue
 		}
 
 		mapsFlags := fields[1]
 		if len(mapsFlags) < 3 {
+			numParseErrors++
 			continue
 		}
 		flags := elf.ProgFlag(0)
@@ -126,12 +133,31 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 		if flags&(elf.PF_R|elf.PF_X) == 0 {
 			continue
 		}
-		inode := util.DecToUint64(fields[4])
-		path := fields[5]
-		if stringutil.SplitN(fields[3], ":", devs[:]) < 2 {
+		inode, err := strconv.ParseUint(fields[4], 10, 64)
+		if err != nil {
+			log.Debugf("inode: failed to convert %s to uint64: %v", fields[4], err)
+			numParseErrors++
 			continue
 		}
-		device := util.HexToUint64(devs[0])<<8 + util.HexToUint64(devs[1])
+
+		path := fields[5]
+		if stringutil.SplitN(fields[3], ":", devs[:]) < 2 {
+			numParseErrors++
+			continue
+		}
+		major, err := strconv.ParseUint(devs[0], 16, 64)
+		if err != nil {
+			log.Debugf("major device: failed to convert %s to uint64: %v", devs[0], err)
+			numParseErrors++
+			continue
+		}
+		minor, err := strconv.ParseUint(devs[1], 16, 64)
+		if err != nil {
+			log.Debugf("minor device: failed to convert %s to uint64: %v", devs[1], err)
+			numParseErrors++
+			continue
+		}
+		device := major<<8 + minor
 
 		if inode == 0 {
 			if path == "[vdso]" {
@@ -146,21 +172,48 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 			}
 		} else {
 			path = trimMappingPath(path)
-			path = strings.Clone(path)
+			if path == lastPath {
+				// Take advantage of the fact that mappings are sorted by path
+				// and avoid allocating the same string multiple times.
+				path = lastPath
+			} else {
+				path = strings.Clone(path)
+				lastPath = path
+			}
 		}
 
-		vaddr := util.HexToUint64(addrs[0])
+		vaddr, err := strconv.ParseUint(addrs[0], 16, 64)
+		if err != nil {
+			log.Debugf("vaddr: failed to convert %s to uint64: %v", addrs[0], err)
+			numParseErrors++
+			continue
+		}
+		vend, err := strconv.ParseUint(addrs[1], 16, 64)
+		if err != nil {
+			log.Debugf("vend: failed to convert %s to uint64: %v", addrs[1], err)
+			numParseErrors++
+			continue
+		}
+		length := vend - vaddr
+
+		fileOffset, err := strconv.ParseUint(fields[2], 16, 64)
+		if err != nil {
+			log.Debugf("fileOffset: failed to convert %s to uint64: %v", fields[2], err)
+			numParseErrors++
+			continue
+		}
+
 		mappings = append(mappings, Mapping{
 			Vaddr:      vaddr,
-			Length:     util.HexToUint64(addrs[1]) - vaddr,
+			Length:     length,
 			Flags:      flags,
-			FileOffset: util.HexToUint64(fields[2]),
+			FileOffset: fileOffset,
 			Device:     device,
 			Inode:      inode,
 			Path:       path,
 		})
 	}
-	return mappings, scanner.Err()
+	return mappings, numParseErrors, scanner.Err()
 }
 
 // GetMappings will process the mappings file from proc. Additionally,
@@ -168,14 +221,14 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, error) {
 // OpenELF opening ELF files using the corresponding proc map_files entry.
 // WARNING: This implementation does not support calling GetMappings
 // concurrently with itself, or with OpenELF.
-func (sp *systemProcess) GetMappings() ([]Mapping, error) {
+func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 	mapsFile, err := os.Open(fmt.Sprintf("/proc/%d/maps", sp.pid))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer mapsFile.Close()
 
-	mappings, err := parseMappings(mapsFile)
+	mappings, numParseErrors, err := parseMappings(mapsFile)
 	if err == nil {
 		fileToMapping := make(map[string]*Mapping, len(mappings))
 		for idx := range mappings {
@@ -189,7 +242,7 @@ func (sp *systemProcess) GetMappings() ([]Mapping, error) {
 		}
 		sp.fileToMapping = fileToMapping
 	}
-	return mappings, err
+	return mappings, numParseErrors, err
 }
 
 func (sp *systemProcess) GetThreads() ([]ThreadInfo, error) {

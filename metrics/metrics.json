@@ -952,6 +952,7 @@
     "id": 130
   },
   {
+    "obsolete": true,
     "description": "Number of cache hits in tracehandler trace cache by BPF hash",
     "type": "counter",
     "name": "KnownTracesHit",
@@ -959,6 +960,7 @@
     "id": 131
   },
   {
+    "obsolete": true,
     "description": "Number of cache misses in tracehandler trace cache by BPF hash",
     "type": "counter",
     "name": "KnownTracesMiss",
@@ -1980,80 +1982,87 @@
     "id": 274
   },
   {
+    "description": "Number of parsing errors seen during processing /proc/<PID>/maps",
+    "type": "counter",
+    "name": "ErrProcParse",
+    "field": "agent.errors.proc_parse",
+    "id": 275
+  },
+  {
     "description": "Number of attempts to read Go custom labels",
     "type": "counter",
     "name": "UnwindGoCustomLabelsAttempts",
     "field": "bpf.golabels.attempts",
-    "id": 275
+    "id": 276
   },
   {
     "description": "Number of failures reading Go custom labels",
     "type": "counter",
     "name": "UnwindGoCustomLabelsFailures",
     "field": "bpf.golabels.errors.no_proc_info",
-    "id": 276
+    "id": 277
   },
   {
     "description": "Number of failures to get TSD base for native custom labels",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsErrReadTsdBase",
     "field": "bpf.nativelabels.errors.read_tsd_base",
-    "id": 277
+    "id": 278
   },
   {
     "description": "Number of failures to read native custom labels thread-local object",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsErrReadData",
     "field": "bpf.nativelabels.errors.read_data",
-    "id": 278
+    "id": 279
   },
   {
     "description": "Number of failures to read native custom labels key buffer",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsErrReadKey",
     "field": "bpf.nativelabels.errors.read_key",
-    "id": 279
+    "id": 280
   },
   {
     "description": "Number of failures to read native custom labels value buffer",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsErrReadValue",
     "field": "bpf.nativelabels.errors.read_value",
-    "id": 280
+    "id": 281
   },
   {
     "description": "Number of successful reads of native custom labels",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsReadSuccesses",
     "field": "bpf.nativelabels.read.successes",
-    "id": 281
+    "id": 282
   },
   {
     "description": "Total number of failures to add native custom labels",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsAddErrors",
     "field": "bpf.nativelabels.add.errors",
-    "id": 282
+    "id": 283
   },
   {
     "description": "Number of successes adding native custom labels",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsAddSuccesses",
     "field": "bpf.nativelabels.add.successes",
-    "id": 283
+    "id": 284
   },
   {
     "description": "Number of attempted LuaJIT unwinds",
     "type": "counter",
     "name": "UnwindLuaJITAttempts",
     "field": "bpf.luajit.attempts",
-    "id": 284
+    "id": 285
   },
   {
     "description": "Number of times we didn't find an entry for this process in the LuaJIT process info array",
     "type": "counter",
     "name": "UnwindLuaJITErrNoProcInfo",
     "field": "bpf.luajit.errors.no_proc_info",
-    "id": 285
+    "id": 286
   }
 ]

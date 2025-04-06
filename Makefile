@@ -86,9 +86,9 @@ endif
 
 rust-components: rust-targets
 ifeq ($(TARGET_ARCH),arm64)
-	cargo build --lib --release --target aarch64-unknown-linux-musl
+	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target aarch64-unknown-linux-musl
 else ifeq ($(TARGET_ARCH),amd64)
-	cargo build --lib --release --target x86_64-unknown-linux-musl
+	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target x86_64-unknown-linux-musl
 endif
 
 rust-tests: rust-targets
@@ -117,6 +117,9 @@ vanity-import-fix: $(PORTO)
 test: generate ebpf test-deps
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
+sudo-test: integration-test-binaries
+	(cd support && sudo ./go_labels.test -test.v)
+
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
 	libpf/pfelf/testdata \
@@ -129,9 +132,14 @@ test-deps:
 
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support go_labels
 
-integration-test-binaries: generate ebpf
-# Call it a ".test" even though it isn't to get included into bluebox initramfs
-	go build -o ./support/go_labels_canary.test ./go_labels
+# These binaries are named ".test" to get included into bluebox initramfs
+support/go_labels_canary1.23.test: ./go_labels/*.go
+	GOTOOLCHAIN=go1.23.7 go build -tags $(GO_TAGS) -o $@ ./go_labels
+
+support/go_labels_canary1.24.test: ./go_labels/*.go
+	GOTOOLCHAIN=go1.24.1 go build -tags $(GO_TAGS) -o $@ ./go_labels
+
+integration-test-binaries: generate ebpf support/go_labels_canary1.23.test support/go_labels_canary1.24.test
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \

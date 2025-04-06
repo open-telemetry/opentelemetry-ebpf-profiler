@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 	"syscall"
 	"time"
 
@@ -88,8 +89,33 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 		if name, err := os.ReadFile(fmt.Sprintf("/prod/%d/comm", pid)); err == nil {
 			processName = string(name)
 		}
+
+		envVarMap := make(map[string]string, len(pm.includeEnvVars))
+		if len(pm.includeEnvVars) > 0 {
+			if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid)); err == nil {
+				// environ has environment variables separated by a null byte (hex: 00)
+				splittedVars := strings.Split(string(envVars), "\000")
+				for _, envVar := range splittedVars {
+					keyValuePair := strings.SplitN(envVar, "=", 2)
+
+					// If the entry could not be split at a '=', ignore it
+					// (last entry of environ might be empty)
+					if len(keyValuePair) != 2 {
+						continue
+					}
+
+					if _, ok := pm.includeEnvVars[keyValuePair[0]]; ok {
+						envVarMap[keyValuePair[0]] = keyValuePair[1]
+					}
+				}
+			}
+		}
+
 		info = &processInfo{
-			meta:             ProcessMeta{Name: processName, Executable: exePath},
+			meta: ProcessMeta{
+				Name:         processName,
+				Executable:   exePath,
+				EnvVariables: envVarMap},
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
 			tsdInfo:          nil,
@@ -561,10 +587,22 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pid := pr.PID()
 	log.Debugf("= PID: %v", pid)
 
+	// Abort early if process is waiting for cleanup in ProcessedUntil
+	pm.mu.Lock()
+	_, ok := pm.exitEvents[pid]
+	pm.mu.Unlock()
+
+	if ok {
+		log.Debugf("PID %v waiting for cleanup, aborting SynchronizeProcess", pid)
+		pm.ebpf.RemoveReportedPID(pid)
+		return
+	}
+
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
-	mappings, err := pr.GetMappings()
+	mappings, numParseErrors, err := pr.GetMappings()
 	elapsed := time.Since(start)
+	pm.mappingStats.numProcParseErrors.Add(numParseErrors)
 
 	if err != nil {
 		if os.IsPermission(err) {
@@ -585,7 +623,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			pm.mappingStats.errProcNotExist.Add(1)
 		} else if e, ok := err.(*os.PathError); ok && e.Err == syscall.ESRCH {
 			// If the process exits while reading its /proc/$PID/maps, the kernel will
-			// return ESRCH. Handle it as if the process did not exists.
+			// return ESRCH. Handle it as if the process did not exist.
 			pm.mappingStats.errProcESRCH.Add(1)
 		}
 		return

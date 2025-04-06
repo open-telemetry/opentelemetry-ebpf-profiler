@@ -125,6 +125,9 @@ type Data interface {
 	// of it to the ebpf maps.
 	Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory) (
 		Instance, error)
+
+	// Unload can undo any allocations or eBPF entries the Loader function created
+	Unload(ebpf EbpfHandler)
 }
 
 // Instance is the interface to operate on per-PID data.

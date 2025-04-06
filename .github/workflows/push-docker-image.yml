@@ -9,6 +9,7 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    if: github.repository == 'open-telemetry/opentelemetry-ebpf-profiler'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

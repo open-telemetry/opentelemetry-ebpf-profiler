@@ -113,6 +113,8 @@ func (d *luajitData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf
 	}, nil
 }
 
+func (d *luajitData) Unload(_ interpreter.EbpfHandler) {}
+
 func (l *luajitInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	// Clear memory ranges
 	for _, prefixes := range l.prefixes {

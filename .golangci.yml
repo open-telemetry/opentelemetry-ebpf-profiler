@@ -91,8 +91,6 @@ linters:
     - wastedassign
     - wsl
     - wrapcheck
-    # the following linters are deprecated
-    - exportloopref
     # we don't want to change code to Go 1.22+ yet
     - intrange
     - copyloopvar

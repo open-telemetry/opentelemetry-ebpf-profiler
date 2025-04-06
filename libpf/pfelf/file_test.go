@@ -4,7 +4,9 @@
 package pfelf
 
 import (
+	"go/version"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -77,4 +79,19 @@ func testPFELFIsGolang(t *testing.T, filename string, isGoExpected bool) {
 func TestPFELFIsGolang(t *testing.T) {
 	testPFELFIsGolang(t, "testdata/go-binary", true)
 	testPFELFIsGolang(t, "testdata/without-debug-syms", false)
+}
+
+func TestGoVersion(t *testing.T) {
+	ef := getPFELF("testdata/go-binary", t)
+	defer ef.Close()
+
+	vers, err := ef.GoVersion()
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, version.Compare(vers, "go1.23.6"), 0)
+
+	testEF := getPFELF("/proc/self/exe", t)
+	defer testEF.Close()
+	testVersion, err := testEF.GoVersion()
+	require.NoError(t, err)
+	assert.Equal(t, runtime.Version(), testVersion)
 }

@@ -11,42 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestHexTo(t *testing.T) {
-	tests := map[string]struct {
-		result uint64
-	}{
-		"0":      {result: 0},
-		"FFFFFF": {result: 16777215},
-		"42":     {result: 66},
-	}
-
-	for name, testcase := range tests {
-		name := name
-		testcase := testcase
-		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, testcase.result, util.HexToUint64(name))
-		})
-	}
-}
-
-func TestDecTo(t *testing.T) {
-	tests := map[string]struct {
-		result uint64
-	}{
-		"0":   {result: 0},
-		"123": {result: 123},
-		"42":  {result: 42},
-	}
-
-	for name, testcase := range tests {
-		name := name
-		testcase := testcase
-		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, testcase.result, util.DecToUint64(name))
-		})
-	}
-}
-
 func TestIsValidString(t *testing.T) {
 	tests := map[string]struct {
 		input    []byte

@@ -21,6 +21,7 @@ package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 import (
 	"bytes"
+	"debug/buildinfo"
 	"debug/elf"
 	"errors"
 	"fmt"
@@ -28,6 +29,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"syscall"
 	"unsafe"
@@ -125,6 +127,9 @@ type File struct {
 	debuglinkPath string
 	// Whether we have checked for a debuglink
 	debuglinkChecked bool
+
+	// Contains the Go build information if present
+	goBuildInfo *debug.BuildInfo
 }
 
 var _ libpf.SymbolFinder = &File{}
@@ -519,6 +524,26 @@ func (f *File) GetBuildID() (string, error) {
 	}
 
 	return getBuildIDFromNotes(data)
+}
+
+// GoVersion returns the Go version if present and empty string otherwise. This will delegate
+// to buildinfo.Read for any binaries where IsGolang is true which will scan the binary with
+// debug/elf. This will incur additional CPU/IO overhead but the libpf.readbufat buffer and
+// OS file buffers should ameliorate most of that.
+func (f *File) GoVersion() (string, error) {
+	if f.goBuildInfo != nil {
+		return f.goBuildInfo.GoVersion, nil
+	}
+	if !f.IsGolang() {
+		return "", nil
+	}
+	bi, err := buildinfo.Read(f.elfReader)
+	if err != nil {
+		return "", err
+	}
+	f.goBuildInfo = bi
+
+	return bi.GoVersion, nil
 }
 
 // DebuglinkFileName returns the debug file linked by .gnu_debuglink if any
