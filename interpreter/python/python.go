@@ -660,37 +660,35 @@ func decodeStub(
 	ef *pfelf.File,
 	memoryBase libpf.SymbolValue,
 	symbolName libpf.SymbolName,
-) libpf.SymbolValue {
+) (libpf.SymbolValue, error) {
 	codeAddress, err := ef.LookupSymbolAddress(symbolName)
 	if err != nil {
-		return libpf.SymbolValueInvalid
+		return libpf.SymbolValueInvalid, fmt.Errorf("lookup %s failed: %w",
+			symbolName, err)
 	}
 
 	code := make([]byte, 64)
 	if _, err := ef.ReadVirtualMemory(code, int64(codeAddress)); err != nil {
-		return libpf.SymbolValueInvalid
+		return libpf.SymbolValueInvalid, fmt.Errorf("reading %s %x code failed: %w",
+			symbolName, codeAddress, err)
 	}
-	dumpCode := func() {
-		log.Debugf("python stub code: %s", hex.Dump(code))
-	}
-
 	value := decodeStubArgumentWrapper(code, codeAddress, memoryBase)
 
 	// Sanity check the value range and alignment
 	if value%4 != 0 {
-		dumpCode()
-		return libpf.SymbolValueInvalid
+		return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s %x %s failed (%x)",
+			symbolName, codeAddress, hex.Dump(code), value)
 	}
 	// If base symbol (_PyRuntime) is not provided, accept any found value.
 	if memoryBase == 0 && value != 0 {
-		return value
+		return value, nil
 	}
 	// Check that the found value is within reasonable distance from the given symbol.
 	if value > memoryBase && value < memoryBase+4096 {
-		return value
+		return value, nil
 	}
-	dumpCode()
-	return libpf.SymbolValueInvalid
+	return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s %x %s failed (%x)",
+		symbolName, codeAddress, hex.Dump(code), value)
 }
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
@@ -745,9 +743,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	// Calls first: PyThread_tss_get(autoTSSKey)
-	autoTLSKey = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
+	autoTLSKey, err = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
 	if autoTLSKey == libpf.SymbolValueInvalid {
-		return nil, errors.New("unable to resolve autoTLSKey")
+		return nil, fmt.Errorf("unable to resolve autoTLSKey %w", err)
 	}
 	if version >= pythonVer(3, 7) && autoTLSKey%8 == 0 {
 		// On Python 3.7+, the call is to PyThread_tss_get, but can get optimized to
