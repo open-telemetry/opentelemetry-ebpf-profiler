@@ -126,7 +126,6 @@ func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) (
 			return 0, fmt.Errorf("failed to decode instruction at 0x%x : %w",
 				instructionOffset, err)
 		}
-		fmt.Printf("insn %s\n", inst.String())
 		instructionOffset += inst.Len
 		regs.Set(x86asm.RIP, codeAddress+uint64(instructionOffset), 0)
 
