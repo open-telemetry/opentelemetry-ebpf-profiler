@@ -1,4 +1,7 @@
-package amd
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
 
 func IsEndbr64(code []byte) (bool, int) {
 	if len(code) >= 4 &&
