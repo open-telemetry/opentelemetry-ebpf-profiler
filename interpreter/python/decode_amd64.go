@@ -4,13 +4,9 @@
 package python // import "go.opentelemetry.io/ebpf-profiler/interpreter/python"
 
 import (
-	"fmt"
-
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"golang.org/x/arch/x86/x86asm"
 )
-
-const debugDecodeAMD64 = false
 
 func regIndex(reg x86asm.Reg) int {
 	switch reg {
@@ -55,23 +51,13 @@ func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) uint64
 			code[instructionOffset+1] == 0x0f &&
 			code[instructionOffset+2] == 0x1e &&
 			code[instructionOffset+3] == 0xfa {
-			if debugDecodeAMD64 {
-				fmt.Printf("0x%x: endbr64 (special case)\n", codeAddress+uint64(instructionOffset))
-			}
 			instructionOffset += 4
 			continue
 		}
 
 		inst, err := x86asm.Decode(rem, 64)
-		if err != nil {
-			if debugDecodeAMD64 {
-				fmt.Printf("Error decoding instruction at offset %d: %v\n", instructionOffset, err)
-			}
+		if err != nil { // todo return the error
 			break
-		}
-
-		if debugDecodeAMD64 {
-			fmt.Printf("0x%x: %s\n", codeAddress+uint64(instructionOffset), inst.String())
 		}
 
 		instructionOffset += inst.Len
@@ -113,20 +99,10 @@ func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) uint64
 					if src.Index != 0 {
 						indexValue := regs[regIndex(src.Index)].value
 						value += indexValue * uint64(src.Scale)
-						if debugDecodeAMD64 {
-							fmt.Printf("  Adding scaled index: index=%s (0x%x) * scale=%d = 0x%x\n",
-								src.Index, indexValue, src.Scale, indexValue*uint64(src.Scale))
-							fmt.Printf("  Updated value: 0x%x\n", value)
-						}
 					}
 
 				case x86asm.Reg:
 					value = regs[regIndex(src)].value
-				}
-
-				if debugDecodeAMD64 {
-					fmt.Printf("  Setting register %s: value=0x%x, loaded from=0x%x\n",
-						reg, value, loadedFrom)
 				}
 
 				regs[regIdx].value = value
