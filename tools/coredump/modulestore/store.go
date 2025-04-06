@@ -426,19 +426,23 @@ func (store *Store) ensurePresentLocally(id ID) (string, error) {
 		return localPath, nil
 	}
 
-	// Download the file to a temporary location to prevent half-complete modules on crashes.
-	file, err := os.CreateTemp(store.localCachePath, localTempPrefix)
-	if err != nil {
-		return "", fmt.Errorf("failed to create local file: %w", err)
-	}
-	defer file.Close()
-
 	moduleKey := makeS3Key(id)
 	resp, err := http.Get(store.publicReadURL + moduleKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to request file: %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		errorResponse, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("store returned %d %s", resp.StatusCode, errorResponse)
+	}
+
+	// Download the file to a temporary location to prevent half-complete modules on crashes.
+	file, err := os.CreateTemp(store.localCachePath, localTempPrefix)
+	if err != nil {
+		return "", fmt.Errorf("failed to create local file: %w", err)
+	}
+	defer file.Close()
 	if _, err = io.Copy(file, resp.Body); err != nil {
 		return "", fmt.Errorf("failed to receive file: %w", err)
 	}
