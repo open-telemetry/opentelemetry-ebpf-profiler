@@ -134,34 +134,38 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 	// Access resolved symbols
 	symbolsSlice := unsafe.Slice((*C.SymblibResolvedSymbol)(unsafe.Pointer(symbols.data)),
 		symbols.len)
-	if len(symbolsSlice) != 1 {
-		return fmt.Errorf("unexpected return for point lookup: %d", len(symbolsSlice))
+	if len(symbolsSlice) == 0 {
+		return fmt.Errorf("failed to symbolize 0x%x", frame.Lineno)
 	}
 
-	lineNo := libpf.SourceLineno(symbolsSlice[0].line_number)
-	funcName := C.GoString(symbolsSlice[0].function_name)
-	sourceFile := C.GoString(symbolsSlice[0].file_name)
+	frameFileBytes := []byte(frame.File.StringNoQuotes())
+	for i := 0; i < len(symbolsSlice); i++ {
+		lineNo := libpf.SourceLineno(symbolsSlice[i].line_number)
+		funcName := C.GoString(symbolsSlice[i].function_name)
+		sourceFile := C.GoString(symbolsSlice[i].file_name)
 
-	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(frame.File.StringNoQuotes()))
-	_, _ = h.Write([]byte(funcName))
-	_, _ = h.Write([]byte(sourceFile))
-	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
-	if err != nil {
-		return fmt.Errorf("failed to create a file ID: %v", err)
+		// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
+		h := fnv.New128a()
+		_, _ = h.Write(frameFileBytes)
+		_, _ = h.Write([]byte(funcName))
+		_, _ = h.Write([]byte(sourceFile))
+		fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
+		if err != nil {
+			return fmt.Errorf("failed to create a file ID: %v", err)
+		}
+
+		frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
+
+		trace.AppendFrameID(libpf.GoFrame, frameID)
+
+		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+			FrameID:      frameID,
+			FunctionName: funcName,
+			SourceFile:   sourceFile,
+			SourceLine:   lineNo,
+		})
 	}
 
-	frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
-
-	trace.AppendFrameID(libpf.GoFrame, frameID)
-
-	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-		FrameID:      frameID,
-		FunctionName: funcName,
-		SourceFile:   sourceFile,
-		SourceLine:   lineNo,
-	})
 	sfCounter.ReportSuccess()
 	return nil
 }
