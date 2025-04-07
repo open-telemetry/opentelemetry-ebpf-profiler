@@ -47,7 +47,7 @@ func openAPMAgentSocket(pid libpf.PID, socketPath string) (*apmAgentSocket, erro
 	}
 
 	// Prepend root system to ensure that this also works with containerized apps.
-	socketPath = path.Join("/proc/", strconv.Itoa(int(pid)), "/root/", socketPath)
+	socketPath = path.Join("/proc", strconv.Itoa(int(pid)), "root", socketPath)
 
 	// Read effective UID/GID of the APM agent process.
 	euid, egid, err := readProcessOwner(pid)
