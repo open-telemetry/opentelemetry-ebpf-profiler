@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,12 +25,17 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
+// GetMappings returns this error when no mappings can be extracted.
+var ErrNoMappings = errors.New("no mappings")
+
 // systemProcess provides an implementation of the Process interface for a
 // process that is currently running on this machine.
 type systemProcess struct {
 	pid libpf.PID
+	tid libpf.PID
 
-	remoteMemory remotememory.RemoteMemory
+	mainThreadExit bool
+	remoteMemory   remotememory.RemoteMemory
 
 	fileToMapping map[string]*Mapping
 }
@@ -53,9 +59,10 @@ func init() {
 }
 
 // New returns an object with Process interface accessing it
-func New(pid libpf.PID) Process {
+func New(pid, tid libpf.PID) Process {
 	return &systemProcess{
 		pid:          pid,
+		tid:          tid,
 		remoteMemory: remotememory.NewProcessVirtualMemory(pid),
 	}
 }
@@ -165,9 +172,8 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 				path = VdsoPathName
 				device = 0
 				inode = vdsoInode
-			} else if path != "" {
-				// Ignore [vsyscall] and similar executable kernel
-				// pages we don't care about
+			} else {
+				// Ignore mappings that are invalid, non-existent or are special pseudo-files
 				continue
 			}
 		} else {
@@ -229,20 +235,61 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 	defer mapsFile.Close()
 
 	mappings, numParseErrors, err := parseMappings(mapsFile)
-	if err == nil {
-		fileToMapping := make(map[string]*Mapping, len(mappings))
-		for idx := range mappings {
-			m := &mappings[idx]
-			if m.Inode == 0 {
-				// Ignore mappings that are invalid,
-				// non-existent or are special pseudo-files.
-				continue
-			}
-			fileToMapping[m.Path] = m
-		}
-		sp.fileToMapping = fileToMapping
+	if err != nil {
+		return mappings, numParseErrors, err
 	}
-	return mappings, numParseErrors, err
+
+	if len(mappings) == 0 {
+		// Test for main thread exit by checking for Zombie state
+		pidStat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", sp.pid))
+		if err != nil {
+			// Should never happen while process is alive
+			return nil, 0, err
+		}
+
+		var p int
+		var c string
+		var state rune
+		n, err := fmt.Sscanf(string(pidStat), "%d %s %c", &p, &c, &state)
+		if err != nil || n < 3 {
+			// Should never happen
+			return nil, 0, err
+		}
+		if state != 'Z' {
+			return mappings, numParseErrors, ErrNoMappings
+		}
+
+		log.Warnf("PID: %v main thread exit", sp.pid)
+		sp.mainThreadExit = true
+
+		log.Warnf("TID: %v extracting mappings", sp.tid)
+		mapsFileAlt, err := os.Open(fmt.Sprintf("/proc/%d/task/%d/maps", sp.pid, sp.tid))
+		// On all errors resulting from trying to get mappings from a different thread,
+		// return ErrNoMappings which will keep the PID tracked in processmanager and
+		// allow for a future iteration to try extracting mappings from a different thread.
+		// This is done to deal with race conditions triggered by thread exits (we do not want
+		// the agent to unload process metadata when a thread exits but the process is still
+		// alive).
+		if err != nil {
+			return mappings, numParseErrors, ErrNoMappings
+		}
+		defer mapsFileAlt.Close()
+
+		numParseErrorsAlt := uint32(0)
+		mappings, numParseErrorsAlt, err = parseMappings(mapsFileAlt)
+		numParseErrors += numParseErrorsAlt
+		if err != nil || len(mappings) == 0 {
+			return mappings, numParseErrors, ErrNoMappings
+		}
+	}
+
+	fileToMapping := make(map[string]*Mapping, len(mappings))
+	for idx := range mappings {
+		m := &mappings[idx]
+		fileToMapping[m.Path] = m
+	}
+	sp.fileToMapping = fileToMapping
+	return mappings, numParseErrors, nil
 }
 
 func (sp *systemProcess) GetThreads() ([]ThreadInfo, error) {
@@ -270,6 +317,13 @@ func (sp *systemProcess) extractMapping(m *Mapping) (*bytes.Reader, error) {
 func (sp *systemProcess) getMappingFile(m *Mapping) string {
 	if m.IsAnonymous() || m.IsVDSO() {
 		return ""
+	}
+	if sp.mainThreadExit {
+		// Neither /proc/sp.pid/map_files nor /proc/sp.pid/task/sp.tid/map_files
+		// nor /proc/sp.pid/root exist if main thread has exited, so we use the
+		// mapping path directly under the sp.tid root.
+		rootPath := fmt.Sprintf("/proc/%v/task/%v/root", sp.pid, sp.tid)
+		return filepath.Join(rootPath, m.Path)
 	}
 	return fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
 }
