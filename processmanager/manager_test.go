@@ -323,7 +323,8 @@ func TestInterpreterConvertTrace(t *testing.T) {
 				&symbolReporterMockup{},
 				nil,
 				true,
-				libpf.Set[string]{})
+				libpf.Set[string]{},
+				true)
 			require.NoError(t, err)
 
 			newTrace := manager.ConvertTrace(testcase.trace)
@@ -409,7 +410,8 @@ func TestNewMapping(t *testing.T) {
 				symRepMockup,
 				&dummyProvider,
 				true,
-				libpf.Set[string]{})
+				libpf.Set[string]{},
+				true)
 			require.NoError(t, err)
 
 			// Replace the internal hooks for the tests. These hooks catch the
@@ -595,7 +597,8 @@ func TestProcExit(t *testing.T) {
 				repMockup,
 				&dummyProvider,
 				true,
-				libpf.Set[string]{})
+				libpf.Set[string]{},
+				true)
 			require.NoError(t, err)
 			defer cancel()
 

@@ -46,7 +46,7 @@ LDFLAGS := -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
 	-extldflags=-static
 
 GO_TAGS := osusergo,netgo
-EBPF_FLAGS := 
+EBPF_FLAGS :=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 
@@ -117,6 +117,17 @@ vanity-import-fix: $(PORTO)
 test: generate ebpf test-deps
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
+
+SUDOTEST_DIRS := ./customlabelstest
+
+target/release/custom-labels-example:
+	cargo build --release --bin custom-labels-example
+
+sudo-tests: generate ebpf target/release/custom-labels-example
+	$(foreach test_dir, $(SUDOTEST_DIRS), \
+		sudo go test $(GO_FLAGS) -tags $(GO_TAGS) "$(test_dir)" \
+	)
+
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
 	libpf/pfelf/testdata \
@@ -127,9 +138,12 @@ test-deps:
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
-TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support go_labels
 
 integration-test-binaries: generate ebpf
+# Call it a ".test" even though it isn't to get included into bluebox initramfs
+	GOTOOLCHAIN=go1.23.7 go build -tags $(GO_TAGS) -o ./support/go_labels_canary1.23.test ./go_labels
+	GOTOOLCHAIN=go1.24.1 go build -tags $(GO_TAGS) -o ./support/go_labels_canary1.24.test ./go_labels
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
