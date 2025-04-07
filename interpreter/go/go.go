@@ -78,10 +78,16 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
-
 	return &goInstance{
 		d: g,
 	}, nil
+}
+
+func (g *goData) Unload(_ interpreter.EbpfHandler) {
+	if g.goExecutable != nil {
+		C.symblib_goruntime_free(g.goExecutable)
+		g.goExecutable = nil
+	}
 }
 
 func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
@@ -97,11 +103,8 @@ func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
+// Detach is a NOP for goInstance.
 func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
-	if g.d.goExecutable != nil {
-		C.symblib_goruntime_free(g.d.goExecutable)
-		g.d.goExecutable = nil
-	}
 	return nil
 }
 
