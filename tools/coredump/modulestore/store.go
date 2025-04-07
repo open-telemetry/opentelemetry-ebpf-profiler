@@ -432,7 +432,7 @@ func (store *Store) ensurePresentLocally(id ID) (string, error) {
 		return "", fmt.Errorf("failed to request file: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		errorResponse, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("store returned %d %s", resp.StatusCode, errorResponse)
 	}
