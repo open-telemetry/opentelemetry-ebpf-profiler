@@ -663,20 +663,20 @@ func decodeStub(
 ) (libpf.SymbolValue, error) {
 	codeAddress, err := ef.LookupSymbolAddress(symbolName)
 	if err != nil {
-		return libpf.SymbolValueInvalid, fmt.Errorf("lookup %s failed: %w",
+		return libpf.SymbolValueInvalid, fmt.Errorf("lookup %s failed: %v",
 			symbolName, err)
 	}
 
 	code := make([]byte, 64)
 	if _, err = ef.ReadVirtualMemory(code, int64(codeAddress)); err != nil {
-		return libpf.SymbolValueInvalid, fmt.Errorf("reading %s 0x%x code failed: %w",
+		return libpf.SymbolValueInvalid, fmt.Errorf("reading %s 0x%x code failed: %v",
 			symbolName, codeAddress, err)
 	}
 	value, err := decodeStubArgumentWrapper(code, codeAddress, memoryBase)
 
 	// Sanity check the value range and alignment
 	if err != nil || value%4 != 0 {
-		return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x, %w)",
+		return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x):  %v",
 			symbolName, codeAddress, hex.Dump(code), value, err)
 	}
 	// If base symbol (_PyRuntime) is not provided, accept any found value.
@@ -745,7 +745,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// Calls first: PyThread_tss_get(autoTSSKey)
 	autoTLSKey, err = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
 	if autoTLSKey == libpf.SymbolValueInvalid {
-		return nil, fmt.Errorf("unable to resolve autoTLSKey %w", err)
+		return nil, fmt.Errorf("unable to resolve autoTLSKey %v", err)
 	}
 	if version >= pythonVer(3, 7) && autoTLSKey%8 == 0 {
 		// On Python 3.7+, the call is to PyThread_tss_get, but can get optimized to
