@@ -212,12 +212,33 @@ get_native_custom_labels(PerCPURecord *record, NativeCustomLabelsProcInfo *proc)
     return false;
   }
 
-  u64 offset = tsd_base + proc->tls_offset;
-  DEBUG_PRINT("cl: native custom labels data at 0x%llx", offset);
+  int err;
+#if defined(__aarch64__)
+  // ELF Handling For Thread-Local Storage, p.5.
+  // The thread register points to a "TCB" (Thread Control Block)
+  // whose first element is a pointer to a "DTV"  (Dynamic Thread Vector)...
+  u64 dtv_addr;
+  if ((err = bpf_probe_read_user(&dtv_addr, sizeof(void *), (void *)(tsd_base)))) {
+    increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+    DEBUG_PRINT("Failed to read TLS DTV addr: %d", err);
+    return false;
+  }
+  // ... and at offsite 16 in the DTV, there is a pointer to the TLS block.
+  u64 addr;
+  if ((err = bpf_probe_read_user(&addr, sizeof(void *), (void *)(dtv_addr + 16)))) {
+    increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+    DEBUG_PRINT("Failed to read main TLS block addr: %d", err);
+    return false;
+  }
+  addr += proc->tls_offset;
+#else
+  u64 addr = tsd_base + proc->tls_offset;
+#endif
+
+  DEBUG_PRINT("cl: native custom labels data at 0x%llx", addr);
 
   NativeCustomLabelsSet *p_current_set;
-  int err;
-  if ((err = bpf_probe_read_user(&p_current_set, sizeof(void *), (void *)(offset)))) {
+  if ((err = bpf_probe_read_user(&p_current_set, sizeof(void *), (void *)(addr)))) {
     increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
     DEBUG_PRINT("Failed to read custom labels current set pointer: %d", err);
     return false;

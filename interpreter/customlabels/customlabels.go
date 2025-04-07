@@ -80,7 +80,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 			return nil, err
 		}
 		if ef.Machine == elf.EM_AARCH64 {
-			tlsAddr = libpf.Address(tlsSym.Address + 16)
+			tlsAddr = libpf.Address(tlsSym.Address)
 		} else if ef.Machine == elf.EM_X86_64 {
 			// Symbol addresses are relative to the start of the
 			// thread-local storage image, but the thread pointer points to the _end_
