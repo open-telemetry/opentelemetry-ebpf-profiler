@@ -331,9 +331,9 @@ func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
 	}
 
 	// Fall back to opening the file using the process specific root
-	return pfelf.Open(path.Join("/proc/", strconv.Itoa(int(sp.pid)), "/root/", file))
+	return pfelf.Open(path.Join("/proc", strconv.Itoa(int(sp.pid)), "root", file))
 }
 
 func (sp *systemProcess) ExtractAsFile(file string) (string, error) {
-	return path.Join("/proc/", strconv.Itoa(int(sp.pid)), "/root/", file), nil
+	return path.Join("/proc", strconv.Itoa(int(sp.pid)), "root", file), nil
 }
