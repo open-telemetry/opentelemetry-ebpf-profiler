@@ -259,6 +259,16 @@ func TestAmd64DecodeStub(t *testing.T) {
 			},
 			expected: 0xCAFE*2 + 0x6E000000 + 7,
 		},
+		{
+			name: "synthetic lea edi, ... scale index",
+			code: []byte{
+				0xB8, 0xEF, 0x00, 0x00, 0x00, // mov 	eax, 0xef
+				0xBB, 0x2A, 0x00, 0x00, 0x00, // mov 	ebx, 0x2a
+				0x67, 0x8D, 0x7C, 0x43, 0x07, // lea 	edi, [ebx + eax*2 + 7]
+				0xEB, 0xEF, // jmp 	0
+			},
+			expected: 0xEF*2 + 0x2a + 7,
+		},
 	}
 
 	for _, td := range testdata {
