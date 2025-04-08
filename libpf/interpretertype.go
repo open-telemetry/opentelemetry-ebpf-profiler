@@ -31,6 +31,8 @@ const (
 	V8 InterpreterType = support.FrameMarkerV8
 	// Dotnet identifies the Dotnet interpreter.
 	Dotnet InterpreterType = support.FrameMarkerDotnet
+	// Go identifies Go code.
+	Go InterpreterType = support.FrameMarkerGo
 )
 
 // Pseudo-interpreters without a corresponding frame type.
@@ -65,6 +67,7 @@ var interpreterTypeToString = map[InterpreterType]string{
 	V8:      "v8js",
 	Dotnet:  "dotnet",
 	APMInt:  "apm-integration",
+	Go:      "go",
 }
 
 var stringToInterpreterType = make(map[string]InterpreterType, len(interpreterTypeToString))

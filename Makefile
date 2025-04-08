@@ -114,7 +114,7 @@ vanity-import-fix: $(PORTO)
 	@go install github.com/jcchavezs/porto/cmd/porto@latest
 	@porto --include-internal -w .
 
-test: generate ebpf test-deps
+test: generate ebpf test-deps rust-components
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \
@@ -129,7 +129,7 @@ test-deps:
 
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
 
-integration-test-binaries: generate ebpf
+integration-test-binaries: generate ebpf rust-components
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
