@@ -270,7 +270,7 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 			}
 
 			// Attempt symbolization of native frames. It is best effort and
-			// provide non-symbolized frames if no native symbolizer is active.
+			// provides non-symbolized frames if no native symbolizer is active.
 			if err := pm.symbolizeFrame(i, trace, newTrace); err == nil {
 				continue
 			}

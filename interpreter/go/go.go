@@ -70,7 +70,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	status := C.symblib_goruntime_new(executablePath, &gd.goExecutable)
 	if status != C.SYMBLIB_OK {
 		return nil, fmt.Errorf("failed to create point resolver for '%s': %d",
-			C.GoString(executablePath), status)
+			exec, status)
 	}
 
 	return gd, nil
