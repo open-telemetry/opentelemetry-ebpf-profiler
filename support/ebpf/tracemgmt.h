@@ -280,6 +280,22 @@ unwinder_mark_nonleaf_frame(UnwindState *state)
 #endif
 }
 
+// unwinder_unwind_frame_pointer unwinds using the Frame Pointer.
+static inline __attribute__((__always_inline__)) bool
+unwinder_unwind_frame_pointer(UnwindState *state)
+{
+  unsigned long regs[2];
+
+  if (bpf_probe_read_user(regs, sizeof(regs), (void *)state->fp)) {
+    return false;
+  }
+  state->sp = state->fp + sizeof(regs);
+  state->fp = regs[0];
+  state->pc = regs[1];
+  unwinder_mark_nonleaf_frame(state);
+  return true;
+}
+
 // Push the file ID, line number and frame type into FrameList with a user-defined
 // maximum stack size.
 //

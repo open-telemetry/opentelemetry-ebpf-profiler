@@ -17,13 +17,15 @@
 #define UNWIND_OPCODEF_DEREF   0x80
 
 // Unsupported or no value for the register
-#define UNWIND_COMMAND_INVALID 0
+#define UNWIND_COMMAND_INVALID       0
 // For CFA: stop unwinding, this function is a stack root function
-#define UNWIND_COMMAND_STOP    1
+#define UNWIND_COMMAND_STOP          1
 // Unwind a PLT entry
-#define UNWIND_COMMAND_PLT     2
+#define UNWIND_COMMAND_PLT           2
 // Unwind a signal frame
-#define UNWIND_COMMAND_SIGNAL  3
+#define UNWIND_COMMAND_SIGNAL        3
+// Unwind using standard frame pointer
+#define UNWIND_COMMAND_FRAME_POINTER 4
 
 // If opcode has UNWIND_OPCODEF_DEREF set, the lowest bits of 'param' are used
 // as second adder as post-deref operation. This contains the mask for that.
