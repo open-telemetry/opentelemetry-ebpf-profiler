@@ -41,20 +41,38 @@ var (
 )
 
 type beamData struct {
-	version uint32
+	version               uint32
+	the_active_code_index uint64
+	r                     uint64
 }
 
 type beamInstance struct {
 	interpreter.InstanceStubs
 
-	data *beamData
-	rm   remotememory.RemoteMemory
+	pid          libpf.PID
+	bias         libpf.Address
+	data         *beamData
+	rm           remotememory.RemoteMemory
+	rangesPtr    libpf.Address
+	codeIndexPtr libpf.Address
 	// mappings is indexed by the Mapping to its generation
 	mappings map[process.Mapping]*uint32
 	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
 	prefixes map[lpm.Prefix]*uint32
 	// mappingGeneration is the current generation (so old entries can be pruned)
 	mappingGeneration uint32
+}
+
+type beamRange struct {
+	start libpf.Address
+	end   libpf.Address
+}
+
+type beamRanges struct {
+	modules   *beamRange
+	n         uint64
+	allocated uint64
+	mid       libpf.Address
 }
 
 func readSymbolValue(ef *pfelf.File, name libpf.SymbolName) ([]byte, error) {
@@ -104,13 +122,17 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, err
 	}
 
+	symbols, err := ef.ReadSymbols()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read symbols: %v", err)
+	}
+
 	otpVersion, _, err := readReleaseVersion(ef)
 	if err != nil {
 		return nil, err
 	}
 
-	symbolName := libpf.SymbolName("process_main")
-	interpRanges, err := info.GetSymbolAsRanges(symbolName)
+	interpRanges, err := info.GetSymbolAsRanges(libpf.SymbolName("process_main"))
 	if err != nil {
 		return nil, err
 	}
@@ -119,31 +141,79 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, err
 	}
 
-	d := &beamData{
-		version: otpVersion,
+	// "the_active_code_index" and "r" symbols are from:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
+	the_active_code_index, err := ef.LookupSymbolAddress("the_active_code_index")
+	if err != nil {
+		return nil, fmt.Errorf("symbol 'the_active_code_index' not found: %v", err)
 	}
 
-	log.Infof("BEAM loaded, otpVersion: %d, interpRanges: %v", otpVersion, interpRanges)
+	r, err := symbols.LookupSymbolAddress(libpf.SymbolName("r"))
+	if err != nil {
+		return nil, fmt.Errorf("symbol 'r' not found: %v", err)
+	}
+
+	log.Infof("BEAM r address: %x", r)
+
+	d := &beamData{
+		version:               otpVersion,
+		the_active_code_index: uint64(the_active_code_index),
+		r:                     uint64(r),
+	}
+
+	log.Infof("BEAM loaded %v", d)
 
 	return d, nil
 }
 
 func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-	log.Infof("BEAM interpreter attaching")
+	log.Infof("BEAM interpreter attaching, bias: %x", bias)
 
 	data := C.BEAMProcInfo{
-		version: C.uint(d.version),
+		version: C.u32(d.version),
+		bias:    C.u64(bias),
 	}
 	if err := ebpf.UpdateProcData(libpf.BEAM, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err
 	}
 
 	return &beamInstance{
-		data:     d,
-		rm:       rm,
-		mappings: make(map[process.Mapping]*uint32),
-		prefixes: make(map[lpm.Prefix]*uint32),
+		pid:          pid,
+		bias:         bias,
+		data:         d,
+		rm:           rm,
+		rangesPtr:    bias + libpf.Address(d.r),
+		codeIndexPtr: bias + libpf.Address(d.the_active_code_index),
+		mappings:     make(map[process.Mapping]*uint32),
+		prefixes:     make(map[lpm.Prefix]*uint32),
 	}, nil
+}
+
+func (i *beamInstance) SynchronizeMappingsFromBEAMRanges(ebpf interpreter.EbpfHandler,
+	_ reporter.SymbolReporter, pr process.Process, mappings []process.Mapping) error {
+	pid := pr.PID()
+
+	codeIndex := i.rm.Uint64(i.codeIndexPtr)
+	activeRanges := i.rangesPtr + libpf.Address(32*codeIndex)
+
+	n := i.rm.Uint64(activeRanges + libpf.Address(8))
+
+	low := i.rm.Ptr(i.rm.Ptr(activeRanges))
+	high := i.rm.Ptr(i.rm.Ptr(activeRanges) + libpf.Address(16*n) + 8)
+
+	log.Infof("Enabling BEAM for %#x - %#x", low, high)
+	prefixes, err := lpm.CalculatePrefixList(uint64(low), uint64(high))
+	if err != nil {
+		return fmt.Errorf("new anonymous mapping lpm failure %#x - %#x", low, high)
+	}
+	for _, prefix := range prefixes {
+		err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindBEAM, 0, 0)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
@@ -152,7 +222,14 @@ func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	i.mappingGeneration++
 	for idx := range mappings {
 		m := &mappings[idx]
-		if !m.IsExecutable() || !m.IsAnonymous() {
+
+		if !m.IsExecutable() {
+			continue
+		}
+
+		// log.Infof("Synchronizing executable Mapping %#x/%#x", m.Vaddr, m.Length)
+
+		if !m.IsAnonymous() {
 			continue
 		}
 
@@ -166,8 +243,7 @@ func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		mappingGeneration := i.mappingGeneration
 		i.mappings[*m] = &mappingGeneration
 
-		// Just assume all anonymous and executable mappings are BEAM for now
-		log.Infof("Enabling BEAM for %#x/%#x", m.Vaddr, m.Length)
+		log.Infof("Enabling BEAM for range %#x/%#x", m.Vaddr, m.Length)
 
 		prefixes, err := lpm.CalculatePrefixList(m.Vaddr, m.Vaddr+m.Length)
 		if err != nil {
@@ -191,7 +267,7 @@ func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		if *generationPtr == i.mappingGeneration {
 			continue
 		}
-		log.Infof("Delete BEAM prefix %#v", prefix)
+		log.Infof("Delete prefix %#v", prefix)
 		_ = ebpf.DeletePidInterpreterMapping(pid, prefix)
 		delete(i.prefixes, prefix)
 	}
@@ -199,7 +275,7 @@ func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		if *generationPtr == i.mappingGeneration {
 			continue
 		}
-		log.Infof("Disabling BEAM for %#x/%#x", m.Vaddr, m.Length)
+		log.Infof("Disabling mapping for %#x/%#x", m.Vaddr, m.Length)
 		delete(i.mappings, m)
 	}
 
@@ -252,10 +328,6 @@ func (i *beamInstance) SynchronizeMappingsFromJITDump(ebpf interpreter.EbpfHandl
 		}
 	}
 
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -270,11 +342,72 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 		return interpreter.ErrMismatchInterpreterType
 	}
 	log.Infof("BEAM symbolizing %v", frame)
-	frameID := libpf.NewFrameID(BogusFileID, frame.Lineno)
-	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-		FrameID:      frameID,
-		FunctionName: "Some Bogus Name",
-	})
-	trace.AppendFrameID(libpf.BEAMFrame, frameID)
+
+	codeIndex := i.rm.Uint64(i.codeIndexPtr)
+	activeRanges := i.rangesPtr + libpf.Address(32*codeIndex)
+
+	n := i.rm.Uint64(activeRanges + libpf.Address(8))
+
+	pc := libpf.Address(frame.Lineno)
+
+	low := i.rm.Ptr(activeRanges)
+	mid := i.rm.Ptr(activeRanges + libpf.Address(24))
+	high := low + libpf.Address(16*n)
+
+	log.Infof("BEAM symbolizing pc: %x, low: %x, mid: %x, high: %x", pc, low, mid, high)
+	if pc < low || pc > high {
+		log.Infof("BEAM symbolizing pc %x outside known module ranges", pc)
+	} else {
+		for low < high {
+			log.Infof("BEAM symbolizing pc: %x, low: %x, mid: %x, high: %x", pc, low, mid, high)
+			midStart := i.rm.Ptr(mid)
+			midEnd := i.rm.Ptr(mid + 8)
+			if pc < midStart {
+				high = mid
+			} else if pc >= midEnd {
+				low = mid + libpf.Address(8)
+			} else {
+				log.Warnf("BEAM failed to find the function")
+				return interpreter.ErrMismatchInterpreterType
+			}
+			mid = low + (high-low)/2
+		}
+	}
+
+	file, err := os.Open(fmt.Sprintf("/tmp/jit-%d.dump", uint32(i.pid)))
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = ReadJITDumpHeader(file)
+	if err != nil {
+		return err
+	}
+
+	for recordHeader, err := ReadJITDumpRecordHeader(file); err == nil; recordHeader, err = ReadJITDumpRecordHeader(file) {
+		switch recordHeader.ID {
+		case JITCodeLoad:
+			record, name, err := ReadJITDumpRecordCodeLoad(file, recordHeader)
+			if err != nil {
+				return err
+			}
+
+			if pc >= libpf.Address(record.CodeAddr) && pc <= libpf.Address(record.CodeAddr)+libpf.Address(record.CodeSize) {
+				log.Infof("BEAM JITDump found matching code %s @ 0x%x (%d bytes)", name, record.CodeAddr, record.CodeSize)
+				frameID := libpf.NewFrameID(libpf.NewFileID(record.CodeIndex, 0x0), frame.Lineno)
+				symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+					FrameID:      frameID,
+					FunctionName: name,
+				})
+				trace.AppendFrameID(libpf.BEAMFrame, frameID)
+				return nil
+			}
+
+		default:
+			SkipJITDumpRecord(file, recordHeader)
+		}
+	}
+
 	return nil
 }
