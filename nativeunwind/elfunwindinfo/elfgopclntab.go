@@ -229,8 +229,10 @@ func getString(data []byte, offset int) []byte {
 	return data[offset : offset+zeroIdx]
 }
 
+type strategy int
+
 const (
-	strategyUnknown = iota
+	strategyUnknown strategy = iota
 	strategyFramePointer
 	strategyDeltasWithFrame
 	strategyDeltasWithoutFrame
@@ -251,7 +253,7 @@ var noFPSourceSuffixes = [][]byte{
 }
 
 // getSourceFileStrategy categorizes sourceFile's unwinding strategy based on its name
-func getSourceFileStrategy(arch elf.Machine, sourceFile []byte, defaultStrategy int) int {
+func getSourceFileStrategy(arch elf.Machine, sourceFile []byte, defaultStrategy strategy) strategy {
 	switch arch {
 	case elf.EM_X86_64:
 		// Most of the assembly code needs explicit SP delta as they do not
@@ -468,13 +470,13 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	// would fill up our precious kernel delta maps fast, the strategy is to
 	// create deltastack maps for non-Go source files only, and otherwise
 	// cover the vast majority with "use frame pointer" stack delta.
-	sourceStrategy := make(map[int]int)
+	sourceStrategy := make(map[int]strategy)
 
 	// Get target machine architecture for the ELF file
 	arch := ef.Machine
 	defaultStrategy := strategyFramePointer
 	var parsePclntab func(*sdtypes.StackDeltaArray, *pclntabFunc, uintptr, []byte,
-		int, uint64, uint8) error
+		strategy, uint64, uint8) error
 
 	switch arch {
 	case elf.EM_X86_64:
@@ -547,7 +549,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 
 		// Use source file to determine strategy if possible, and default
 		// to using frame pointers in the unlikely case of no file info
-		strategy := defaultStrategy
+		fileStrategy := defaultStrategy
 		if fun.pcfileOff != 0 {
 			p := newPcval(pctab[fun.pcfileOff:], uint(fun.startPc), hdr.quantum)
 			fileIndex := int(p.val)
@@ -556,15 +558,15 @@ func (ee *elfExtractor) parseGoPclntab() error {
 			}
 
 			// Determine strategy
-			strategy = sourceStrategy[fileIndex]
-			if strategy == strategyUnknown {
+			fileStrategy = sourceStrategy[fileIndex]
+			if fileStrategy == strategyUnknown {
 				sourceFile := getString(filetab, getInt32(cutab, 4*fileIndex))
-				strategy = getSourceFileStrategy(arch, sourceFile, defaultStrategy)
-				sourceStrategy[fileIndex] = strategy
+				fileStrategy = getSourceFileStrategy(arch, sourceFile, defaultStrategy)
+				sourceStrategy[fileIndex] = fileStrategy
 			}
 		}
 
-		if strategy == strategyFramePointer {
+		if fileStrategy == strategyFramePointer {
 			// Use stack frame-pointer delta
 			ee.deltas.Add(sdtypes.StackDelta{
 				Address: fun.startPc,
@@ -572,7 +574,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 			})
 			continue
 		}
-		if err := parsePclntab(ee.deltas, fun, dataLen, pctab, strategy, i,
+		if err := parsePclntab(ee.deltas, fun, dataLen, pctab, fileStrategy, i,
 			hdr.quantum); err != nil {
 			return err
 		}
@@ -608,7 +610,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 
 // parseX86pclntabFunc extracts interval information from x86_64 based pclntabFunc.
 func parseX86pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc, dataLen uintptr,
-	pctab []byte, strategy int, i uint64, quantum uint8) error {
+	pctab []byte, s strategy, i uint64, quantum uint8) error {
 	if fun.pcspOff == 0 {
 		// Some functions don't have PCSP info: skip them.
 		return nil
@@ -626,7 +628,7 @@ func parseX86pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc, data
 			Opcode: sdtypes.UnwindOpcodeBaseSP,
 			Param:  p.val + 8,
 		}
-		if strategy == strategyDeltasWithFrame && info.Param >= 16 {
+		if s == strategyDeltasWithFrame && info.Param >= 16 {
 			info.FPOpcode = sdtypes.UnwindOpcodeBaseCFA
 			info.FPParam = -16
 		}
@@ -642,7 +644,7 @@ func parseX86pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc, data
 
 // parseArm64pclntabFunc extracts interval information from ARM64 based pclntabFunc.
 func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc,
-	dataLen uintptr, pctab []byte, strategy int, i uint64, quantum uint8) error {
+	dataLen uintptr, pctab []byte, s strategy, i uint64, quantum uint8) error {
 	if fun.pcspOff == 0 {
 		// Some CGO functions don't have PCSP info: skip them.
 		return nil
@@ -665,7 +667,7 @@ func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc,
 				Opcode: sdtypes.UnwindOpcodeBaseSP,
 				Param:  p.val,
 			}
-			if strategy == strategyDeltasWithFrame {
+			if s == strategyDeltasWithFrame {
 				// On ARM64, the previous LR value is stored to top-of-stack.
 				info.FPOpcode = sdtypes.UnwindOpcodeBaseSP
 				info.FPParam = 0
