@@ -16,11 +16,16 @@ static inline __attribute__((__always_inline__))
 ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, bool top) {
   UnwindState *state = &record->state;
   Trace *trace = &record->trace;
-  unsigned long regs[2], sp = state->sp, fp = state->fp, pc = state->pc;
+  u64 sp = state->sp, fp = state->fp, pc = state->pc;
 
-  DEBUG_PRINT("beam: pc: %lx, sp: %lx, fp: %lx", pc, sp, fp);
+  DEBUG_PRINT("beam: pc: %llx, sp: %llx, fp: %llx", pc, sp, fp);
+  DEBUG_PRINT("beam: c_p(r13): %llx", state->r13);
 
-  if (fp) {
+  bpf_probe_read_user(&state->fp, sizeof(u64), (void*)fp);
+  bpf_probe_read_user(&state->pc, sizeof(u64), (void*)(fp+8));
+  bpf_probe_read_user(&state->sp, sizeof(u64), (void*)(fp+16));
+
+  if (fp && sp) {
     unwinder_mark_nonleaf_frame(state);
   }
   _push_with_return_address(trace, 0xf00d, pc, FRAME_MARKER_BEAM, state->return_address);
@@ -30,27 +35,29 @@ ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, bool t
 
 frame_done:
   // Unwind with frame pointer
-  if (bpf_probe_read_user(regs, sizeof(regs), (void*)fp)) {
-    DEBUG_PRINT("beam:  --> bad frame pointer");
-    return ERR_UNREACHABLE;
-  }
+  // if (fp & 0x3 || bpf_probe_read_user(regs, sizeof(regs), (void*)fp)) {
+  //   DEBUG_PRINT("beam:  --> bad frame pointer");
+  //   return ERR_UNREACHABLE;
+  // }
 
-  state->sp = fp + sizeof(regs);
-  state->fp = regs[0];
-  state->pc = regs[1];
+  // state->sp = fp - 2 * sizeof(void*);
+  // state->fp = regs[1];
+  // state->pc = regs[0];
   if (state->fp) {
     unwinder_mark_nonleaf_frame(state);
   }
 
-  DEBUG_PRINT("beam: pc: %lx, sp: %lx, fp: %lx",
-              (unsigned long) state->pc, (unsigned long) state->sp,
-              (unsigned long) state->fp);
+  DEBUG_PRINT("beam: pc: %llx, sp: %llx, fp: %llx",
+              state->pc, state->sp,
+              state->fp);
 
   return ERR_OK;
 }
 
-SEC("perf_event/unwind_beam")
-int unwind_beam(struct pt_regs *ctx) {
+// unwind_beam is the entry point for tracing when invoked from the native tracer
+// or interpreter dispatcher. It does not reset the trace object and will append the
+// BEAM stack frames to the trace object for the current CPU.
+static inline __attribute__((__always_inline__)) int unwind_beam(struct pt_regs *ctx) {
   DEBUG_PRINT(">>>>>>>>>>>>>>>>>Unwinding BEAM stack<<<<<<<<<<<<<<<<<");
 
   PerCPURecord *record = get_per_cpu_record();
@@ -72,6 +79,11 @@ int unwind_beam(struct pt_regs *ctx) {
 
 #pragma unroll
   for (int i = 0; i < FRAMES_PER_PROGRAM; i++) {
+    if (record->state.fp & 0x3) {
+      unwinder = PROG_UNWIND_NATIVE;
+      break;
+    }
+
     error = unwind_one_beam_frame(record, info, i == 0);
     if (error) {
       break;
@@ -94,3 +106,5 @@ exit:
   DEBUG_PRINT("beam: tail call for next frame unwinder (%d) failed", unwinder);
   return -1;
 }
+
+MULTI_USE_FUNC(unwind_beam)

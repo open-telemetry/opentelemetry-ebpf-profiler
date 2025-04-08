@@ -492,6 +492,7 @@ typedef struct V8ProcInfo {
 // BEAMProcInfo is a container for the data needed to build a stack trace for a BEAM process.
 typedef struct BEAMProcInfo {
   u32 version;
+  u64 bias;
 } BEAMProcInfo;
 
 // COMM_LEN defines the maximum length we will receive for the comm of a task.
