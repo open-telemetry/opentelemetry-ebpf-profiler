@@ -139,7 +139,7 @@ func TestIntegration(t *testing.T) {
 							break done
 						case trace := <-traceCh:
 							// See if PID is openresty
-							if int(trace.PID) != st.Pid {
+							if trace == nil || int(trace.PID) != st.Pid {
 								continue
 							}
 							traces++
