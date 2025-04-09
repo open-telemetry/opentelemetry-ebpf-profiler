@@ -71,7 +71,7 @@ generate:
 ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
-ebpf-profiler: generate ebpf rust-components
+ebpf-profiler: generate ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 rust-targets:
