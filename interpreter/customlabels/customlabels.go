@@ -4,7 +4,6 @@ package customlabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/cu
 // #include "../../support/ebpf/types.h"
 import "C"
 import (
-	"debug/elf"
 	"errors"
 	"fmt"
 	"regexp"
@@ -30,13 +29,6 @@ type data struct {
 }
 
 var _ interpreter.Data = &data{}
-
-func roundUp(multiple, value uint64) uint64 {
-	if multiple == 0 {
-		return value
-	}
-	return (value + multiple - 1) / multiple * multiple
-}
 
 func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	ef, err := info.GetELF()
@@ -75,39 +67,11 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 			return nil, errors.New("failed to locate TLS descriptor for custom labels")
 		}
 	} else {
-		tlsSym, err := ef.LookupSymbol(tlsExport)
+		offset, err := ef.LookupTLSSymbolOffset(tlsExport)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get tls symbol offset: %w", err)
 		}
-		if ef.Machine == elf.EM_AARCH64 {
-			tlsAddr = libpf.Address(tlsSym.Address)
-		} else if ef.Machine == elf.EM_X86_64 {
-			// Symbol addresses are relative to the start of the
-			// thread-local storage image, but the thread pointer points to the _end_
-			// of the image. So we need to find the size of the image in order to know where the
-			// beginning is.
-			//
-			// The image is just .tdata followed by .tbss,
-			// but we also have to respect the alignment.
-			tbss, err := ef.Tbss()
-			if err != nil {
-				return nil, err
-			}
-			tdata, err := ef.Tdata()
-			var tdataSize uint64
-			if err != nil {
-				// No Tdata is ok, it's the same as size 0
-				if err != pfelf.ErrNoTdata {
-					return nil, err
-				}
-			} else {
-				tdataSize = tdata.Size
-			}
-			imageSize := roundUp(tbss.Addralign, tdataSize) + tbss.Size
-			tlsAddr = libpf.Address(int64(tlsSym.Address) - int64(imageSize))
-		} else {
-			return nil, fmt.Errorf("unrecognized machine: %s", ef.Machine.String())
-		}
+		tlsAddr = libpf.Address(offset)
 	}
 
 	d := data{

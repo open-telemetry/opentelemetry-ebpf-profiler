@@ -13,9 +13,9 @@ package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 
 import (
 	"errors"
-	"slices"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	xh "go.opentelemetry.io/ebpf-profiler/x86helpers"
 	"golang.org/x/arch/x86/x86asm"
 )
 
@@ -50,7 +50,7 @@ which is a dynamic public symbol that should be in all binaries of LuaJIT includ
 */
 //nolint:nonamedreturns
 func (x *x86Extractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, err error) {
-	b, _ = skipEndBranch(b)
+	b, _ = xh.SkipEndBranch(b)
 	var greg x86asm.Reg
 	for len(b) > 0 {
 		var i x86asm.Inst
@@ -101,7 +101,7 @@ func (x *x86Extractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, er
 // 0xfa8 is the g to dispatch offset.
 // https://github.com/openresty/luajit2/blob/7952882d/src/lj_dispatch.c#L122
 func (x *x86Extractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (uint64, error) {
-	b, _ = skipEndBranch(b)
+	b, _ = xh.SkipEndBranch(b)
 	var greg x86asm.Reg
 	for len(b) > 0 {
 		i, err := x86asm.Decode(b, 64)
@@ -159,7 +159,7 @@ func (x *x86Extractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (uint6
 //
 //nolint:lll
 func (x *x86Extractor) findLjDispatchUpdateAddr(b []byte, addr uint64) (uint64, error) {
-	b, ip := skipEndBranch(b)
+	b, ip := xh.SkipEndBranch(b)
 	var Lreg x86asm.Reg
 	rdiHasG := false
 	for len(b) > 0 {
@@ -212,7 +212,7 @@ func (x *x86Extractor) findLjDispatchUpdateAddr(b []byte, addr uint64) (uint64, 
 // ----------- 0x430 is the G to J->traces offset
 // libluajit-5.1.so[0x637a1] <+33>: movq   0x430(%rdx), %rdx
 func (x *x86Extractor) findG2TracesOffsetFromChecktrace(b []byte) (uint64, error) {
-	b, _ = skipEndBranch(b)
+	b, _ = xh.SkipEndBranch(b)
 	var Greg x86asm.Reg
 	for len(b) > 0 {
 		i, err := x86asm.Decode(b, 64)
@@ -236,7 +236,7 @@ func (x *x86Extractor) findG2TracesOffsetFromChecktrace(b []byte) (uint64, error
 }
 
 func (x *x86Extractor) findFirstCall(b []byte, baseAddr int64) (uint64, error) {
-	b, ip := skipEndBranch(b)
+	b, ip := xh.SkipEndBranch(b)
 	for len(b) > 0 {
 		i, err := x86asm.Decode(b, 64)
 		if err != nil {
@@ -258,7 +258,7 @@ func (x *x86Extractor) findFirstCall(b []byte, baseAddr int64) (uint64, error) {
 
 // Return true if the code in b calls targetCall.
 func (x *x86Extractor) callExists(b []byte, baseAddr, targetCall int64) (bool, error) {
-	b, ip := skipEndBranch(b)
+	b, ip := xh.SkipEndBranch(b)
 	for len(b) > 0 {
 		i, err := x86asm.Decode(b, 64)
 		if err != nil {
@@ -289,7 +289,7 @@ func (x *x86Extractor) callExists(b []byte, baseAddr, targetCall int64) (bool, e
 func findRipRelativeLea2ndArgTo2ndCall(b []byte, baseAddr, targetCall int64) (uint64, error) {
 	var leaRsi int64
 	calls := 2
-	b, ip := skipEndBranch(b)
+	b, ip := xh.SkipEndBranch(b)
 	for len(b) > 0 {
 		i, err := x86asm.Decode(b, 64)
 		if err != nil {
@@ -364,7 +364,7 @@ func skipCallsAABA(b []byte, ip, baseAddr int64) ([]byte, int64, error) {
 func (x *x86Extractor) find3rdArgToLibPreregCall(b []byte, baseAddr int64) (uint64, error) {
 	var rdxAddr int64
 	calls := 3
-	b, ip := skipEndBranch(b)
+	b, ip := xh.SkipEndBranch(b)
 	// Skip the lua_push* call sequence (and all the preceding calls which varies depending on
 	// inlining).
 	// libluajit-5.1.so[0x700a5] <+133>: movq   %rbx, %rdi
@@ -432,7 +432,7 @@ func (x *x86Extractor) find3rdArgToLibPreregCall(b []byte, baseAddr int64) (uint
 // bbc2:	c3                   	ret
 func (x *x86Extractor) find4thArgToLibRegCall(b []byte, baseAddr int64) (int64, error) {
 	var ip int64
-	b, ip = skipEndBranch(b)
+	b, ip = xh.SkipEndBranch(b)
 	for len(b) > 0 {
 		i, err := x86asm.Decode(b, 64)
 		if err != nil {
@@ -466,24 +466,6 @@ func calcRipRelativeAddr(a1 x86asm.Mem, baseAddr, ip int64) int64 {
 	// are 32 bit.  TODO: This is a bug that should be created/looked up.
 	disp := int32(a1.Disp)
 	return baseAddr + ip + int64(disp)
-}
-
-var endbr64 = [4]byte{0xf3, 0x0f, 0x1e, 0xfa}
-
-// On some binaries the function starts like this:
-//
-//	0x0000000000012860 <+0>:     f3 0f 1e fa     endbr64
-//	0x0000000000012864 <+4>:     41 55   push   %r13
-//
-// This is some kind of stack smashing indirect jump protection, treat it as a nop,
-// x86asm doesn't know how to handle it.
-//
-//nolint:gocritic
-func skipEndBranch(b []byte) ([]byte, int64) {
-	if slices.Equal(b[0:4], endbr64[:]) {
-		return b[4:], 4
-	}
-	return b, 0
 }
 
 // If we're dealing with 32bit values compilers will use R or E prefix
