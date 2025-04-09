@@ -126,15 +126,15 @@ bpf_map_def SEC("maps") apm_int_procs = {
   .max_entries = 128,
 };
 
-bpf_map_def SEC("maps") go_procs = {
+bpf_map_def SEC("maps") go_labels_procs = {
   .type        = BPF_MAP_TYPE_HASH,
   .key_size    = sizeof(pid_t),
-  .value_size  = sizeof(GoCustomLabelsOffsets),
+  .value_size  = sizeof(GoLabelsOffsets),
   .max_entries = 128,
 };
 
 static inline __attribute__((__always_inline__)) void *
-get_m_ptr(struct GoCustomLabelsOffsets *offs, UnwindState *state)
+get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
 {
   long res;
 
@@ -171,8 +171,8 @@ get_m_ptr(struct GoCustomLabelsOffsets *offs, UnwindState *state)
 static inline __attribute__((__always_inline__)) void
 maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
 {
-  u32 pid                        = record->trace.pid;
-  GoCustomLabelsOffsets *offsets = bpf_map_lookup_elem(&go_procs, &pid);
+  u32 pid                  = record->trace.pid;
+  GoLabelsOffsets *offsets = bpf_map_lookup_elem(&go_labels_procs, &pid);
   if (!offsets) {
     DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", pid);
     return;
@@ -185,7 +185,7 @@ maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
   record->customLabelsState.go_m_ptr = m_ptr_addr;
 
   DEBUG_PRINT("cl: trace is within a process with Go custom labels enabled");
-  increment_metric(metricID_UnwindGoCustomLabelsAttempts);
+  increment_metric(metricID_UnwindGoLabelsAttempts);
   // The Go label extraction code is too big to fit in the UNWIND_STOP program, so
   // it is tail_call'd.
   tail_call(ctx, PROG_GO_LABELS);

@@ -120,7 +120,7 @@ get_go_custom_labels_from_slice(struct pt_regs *ctx, PerCPURecord *record, void 
 }
 
 static inline __attribute__((__always_inline__)) bool get_go_custom_labels_from_map(
-  struct pt_regs *ctx, PerCPURecord *record, void *labels_map_ptr_ptr, GoCustomLabelsOffsets *offs)
+  struct pt_regs *ctx, PerCPURecord *record, void *labels_map_ptr_ptr, GoLabelsOffsets *offs)
 {
   void *labels_map_ptr;
   long res = bpf_probe_read_user(&labels_map_ptr, sizeof(labels_map_ptr), labels_map_ptr_ptr);
@@ -206,7 +206,7 @@ static inline __attribute__((__always_inline__)) bool get_go_custom_labels_from_
 // curg is nil, then g is either a system stack (called g0) or a signal handler
 // g (gsignal). Neither one will ever have label.
 static inline __attribute__((__always_inline__)) bool
-get_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record, GoCustomLabelsOffsets *offs)
+get_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record, GoLabelsOffsets *offs)
 {
   long res;
 
@@ -245,8 +245,8 @@ static inline __attribute__((__always_inline__)) int go_labels(struct pt_regs *c
   if (!record)
     return -1;
 
-  u32 pid                        = record->trace.pid;
-  GoCustomLabelsOffsets *offsets = bpf_map_lookup_elem(&go_procs, &pid);
+  u32 pid                  = record->trace.pid;
+  GoLabelsOffsets *offsets = bpf_map_lookup_elem(&go_labels_procs, &pid);
   if (!offsets) {
     DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", pid);
     return -1;
@@ -257,7 +257,7 @@ static inline __attribute__((__always_inline__)) int go_labels(struct pt_regs *c
     (unsigned long)record->customLabelsState.go_m_ptr);
   bool success = get_go_custom_labels(ctx, record, offsets);
   if (!success) {
-    increment_metric(metricID_UnwindGoCustomLabelsFailures);
+    increment_metric(metricID_UnwindGoLabelsFailures);
   }
 
   send_trace(ctx, &record->trace);

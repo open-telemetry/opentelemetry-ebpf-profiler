@@ -2005,14 +2005,14 @@
   {
     "description": "Number of attempts to read Go custom labels",
     "type": "counter",
-    "name": "UnwindGoCustomLabelsAttempts",
+    "name": "UnwindGoLabelsAttempts",
     "field": "bpf.golabels.attempts",
     "id": 278
   },
   {
     "description": "Number of failures reading Go custom labels",
     "type": "counter",
-    "name": "UnwindGoCustomLabelsFailures",
+    "name": "UnwindGoLabelsFailures",
     "field": "bpf.golabels.errors",
     "id": 279
   }

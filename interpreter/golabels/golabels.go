@@ -1,7 +1,6 @@
 package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
-	"fmt"
 	"regexp"
 	"unsafe"
 
@@ -20,7 +19,7 @@ var goMajorMinorRegex = regexp.MustCompile(`^go\d+\.\d+`)
 
 type data struct {
 	goVersion string
-	offsets   C.GoCustomLabelsOffsets
+	offsets   C.GoLabelsOffsets
 	interpreter.InstanceStubs
 }
 
@@ -52,34 +51,17 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, err
 	}
 	goVersion, err := file.GoVersion()
+	if err != nil {
+		return nil, err
+	}
 	if goVersion == "" {
 		log.Debugf("file %s is not a Go binary", info.FileName())
 		return nil, nil
 	}
-	if err != nil {
-		return nil, err
-	}
 	log.Debugf("file %s detected as go version %s", info.FileName(), goVersion)
-	majorMinor := goMajorMinorRegex.FindString(goVersion)
-	if majorMinor == "" {
-		return nil, fmt.Errorf("failed to parse go version %s into goM.mm", goVersion)
-	}
-
-	offsets, ok := allOffsets[majorMinor]
-	if !ok {
-		// If we don't know this version its probably a new version and the latest offsets
-		// are our best bet.
-		log.Warnf("version %s unknown; using offsets for latest known Go version %s."+
-			"If Go traceID integration and other custom labels support is buggy,"+
-			" try upgrading to the latest profiler version.", goVersion, latestVersion)
-		return &data{
-			goVersion: goVersion,
-			offsets:   allOffsets[latestVersion],
-		}, nil
-	}
 
 	return &data{
 		goVersion: goVersion,
-		offsets:   offsets,
+		offsets:   getOffsets(goVersion),
 	}, nil
 }

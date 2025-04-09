@@ -14,7 +14,7 @@ import (
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
-func TestGoCustomLabels(t *testing.T) {
+func TestGoLabels(t *testing.T) {
 	if !testutils.IsRoot() {
 		t.Skip("root privileges required")
 	}

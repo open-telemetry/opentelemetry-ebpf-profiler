@@ -302,10 +302,10 @@ enum {
   metricID_UnwindDotnetErrCodeTooLarge,
 
   // number of attempts to read Go custom labels
-  metricID_UnwindGoCustomLabelsAttempts,
+  metricID_UnwindGoLabelsAttempts,
 
   // number of failures to read Go custom labels
-  metricID_UnwindGoCustomLabelsFailures,
+  metricID_UnwindGoLabelsFailures,
 
   //
   // Metric IDs above are for counters (cumulative values)
@@ -940,13 +940,13 @@ typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
 
-typedef struct GoCustomLabelsOffsets {
+typedef struct GoLabelsOffsets {
   u32 m_offset;
   u32 curg;
   u32 labels;
   u32 hmap_count;
   u32 hmap_log2_bucket_count;
   u32 hmap_buckets;
-} GoCustomLabelsOffsets;
+} GoLabelsOffsets;
 
 #endif // OPTI_TYPES_H

@@ -642,10 +642,10 @@ const (
 	IDGoSymbolizationFailure = 277
 
 	// Number of attempts to read Go custom labels
-	IDUnwindGoCustomLabelsAttempts = 278
+	IDUnwindGoLabelsAttempts = 278
 
 	// Number of failures reading Go custom labels
-	IDUnwindGoCustomLabelsFailures = 279
+	IDUnwindGoLabelsFailures = 279
 
 	// max number of ID values, keep this as *last entry*
 	IDMax = 280

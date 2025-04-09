@@ -3,113 +3,60 @@ package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabe
 // #include <stdlib.h>
 // #include "../../support/ebpf/types.h"
 import "C"
+import (
+	"strings"
 
-// defaultVersion is used if the go binary has an unrecognized major+minor version.
-// Consider bumping this whenever a new version of Go is released.
-var latestVersion = "go1.24"
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/mod/semver"
+)
+
+// #include <stdlib.h>
+// #include "../../support/ebpf/types.h"
+import "C"
 
 // Offsets come from DWARF debug information, use tools/gooffsets to extract them.
 // However since DWARF information can be stripped we record them here.
 // TODO: Should we look for DWARF information to support new versions
 // automatically when available?
-var allOffsets = map[string]C.GoCustomLabelsOffsets{
-	"go1.13": {
+func getOffsets(version string) C.GoLabelsOffsets {
+	offsets := C.GoLabelsOffsets{
 		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L410
 		m_offset: 48,
 		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L541
 		curg: 192,
 		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L483
-		labels: 344,
+		labels: 0,
 		// https://github.com/golang/go/blob/6885bad7dd86880be6929c0/src/runtime/map.go#L112
 		hmap_count: 0,
 		// https://github.com/golang/go/blob/6885bad7dd86880be6929c0/src/runtime/map.go#L114
-		hmap_log2_bucket_count: 9,
+		hmap_log2_bucket_count: 0,
 		// https://github.com/golang/go/blob/6885bad7dd86880be6929c0/src/runtime/map.go#L118
-		hmap_buckets: 16,
-	},
-	"go1.14": {
-		m_offset:               48,
-		curg:                   192,
-		labels:                 344,
-		hmap_count:             0,
-		hmap_log2_bucket_count: 9,
-		hmap_buckets:           16,
-	},
-	"go1.15": {
-		m_offset:               48,
-		curg:                   192,
-		labels:                 344,
-		hmap_count:             0,
-		hmap_log2_bucket_count: 9,
-		hmap_buckets:           16,
-	},
-	"go1.16": {
-		m_offset:               48,
-		curg:                   192,
-		labels:                 344,
-		hmap_count:             0,
-		hmap_log2_bucket_count: 9,
-		hmap_buckets:           16,
-	},
-	"go1.17": {
-		m_offset:               48,
-		curg:                   192,
-		labels:                 360,
-		hmap_count:             0,
-		hmap_log2_bucket_count: 9,
-		hmap_buckets:           16,
-	},
-	"go1.18": {
-		m_offset:               48,
-		curg:                   192,
-		labels:                 360,
-		hmap_count:             0,
-		hmap_log2_bucket_count: 9,
-		hmap_buckets:           16,
-	},
-	"go1.19": {
-		m_offset:               48,
-		curg:                   192,
-		labels:                 360,
-		hmap_count:             0,
-		hmap_log2_bucket_count: 9,
-		hmap_buckets:           16,
-	},
-	"go1.20": {
-		m_offset:               48,
-		curg:                   192,
-		labels:                 360,
-		hmap_count:             0,
-		hmap_log2_bucket_count: 9,
-		hmap_buckets:           16,
-	},
-	"go1.21": {
-		m_offset:               48,
-		curg:                   192,
-		labels:                 344,
-		hmap_count:             0,
-		hmap_log2_bucket_count: 9,
-		hmap_buckets:           16,
-	},
-	"go1.22": {
-		m_offset:               48,
-		curg:                   192,
-		labels:                 344,
-		hmap_count:             0,
-		hmap_log2_bucket_count: 9,
-		hmap_buckets:           16,
-	},
-	"go1.23": {
-		m_offset:               48,
-		curg:                   192,
-		labels:                 352,
-		hmap_count:             0,
-		hmap_log2_bucket_count: 9,
-		hmap_buckets:           16,
-	},
-	"go1.24": {
-		m_offset: 48,
-		curg:     192,
-		labels:   352,
-	},
+		hmap_buckets: 0,
+	}
+
+	sver := "v" + strings.TrimPrefix(version, "go")
+
+	if semver.Compare(sver, "v1.24") >= 0 {
+		if semver.Compare(sver, "v1.25") >= 0 {
+			log.Warnf("version %s unknown; using offsets for latest known Go version 1.24."+
+				"If Go traceID integration and other pprof labels support is buggy,"+
+				" try upgrading to the latest profiler version.", version)
+		}
+		offsets.labels = 352
+		return offsets
+	}
+
+	// These are the same for all versions but we have to leave them zero for 1.24+ detection.
+	offsets.hmap_log2_bucket_count = 9
+	offsets.hmap_buckets = 16
+	if semver.Compare(sver, "v1.23") >= 0 {
+		offsets.labels = 352
+	} else if semver.Compare(sver, "v1.21") >= 0 {
+		offsets.labels = 344
+	} else if semver.Compare(sver, "v1.17") >= 0 {
+		offsets.labels = 360
+	} else {
+		offsets.labels = 344
+	}
+	return offsets
 }
