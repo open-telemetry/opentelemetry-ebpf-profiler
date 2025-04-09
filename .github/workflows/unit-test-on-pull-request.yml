@@ -71,7 +71,7 @@ jobs:
         run: make test TARGET_ARCH=${{ matrix.target_arch }}
 
   check-binary-blobs:
-    name: Check for differences in the eBPF and Rust binary blobs
+    name: Check for differences in the eBPF binary blobs
     runs-on: ubuntu-24.04
     container: otel/opentelemetry-ebpf-profiler-dev:latest@sha256:acce547f366150eb25392e1aff270df430ef6b759baeb4292999116018e70e6e
     defaults:
@@ -83,18 +83,11 @@ jobs:
       - name: Hash binary blobs
         run: |
           sha256sum support/ebpf/tracer.ebpf.release.* > binary-blobs.hash
-          sha256sum target/x86_64-unknown-linux-musl/release/libsymblib_capi.a >> binary-blobs.hash
-          sha256sum target/aarch64-unknown-linux-musl/release/libsymblib_capi.a >> binary-blobs.hash
       - name: Rebuild eBPF blobs
         run: |
           rm support/ebpf/tracer.ebpf.release.*
           make amd64 -C support/ebpf
           make arm64 -C support/ebpf
-      - name: Rebuild Rust blobs
-        run: |
-          rm -rf target/
-          make rust-components TARGET_ARCH=amd64
-          make rust-components TARGET_ARCH=arm64
       - name: Check for differences
         run: |
           if ! sha256sum --check binary-blobs.hash; then
