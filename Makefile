@@ -46,7 +46,7 @@ LDFLAGS := -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
 	-extldflags=-static
 
 GO_TAGS := osusergo,netgo
-EBPF_FLAGS := 
+EBPF_FLAGS :=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 
@@ -117,6 +117,11 @@ vanity-import-fix: $(PORTO)
 test: generate ebpf test-deps rust-components
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
+# This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
+# amd64) and the CI kernel tests run them already. Useful for local testing.
+sudo-test: integration-test-binaries
+	(cd support && sudo ./go_labels.test -test.v)
+
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
 	libpf/pfelf/testdata \
@@ -127,9 +132,16 @@ test-deps:
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
-TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support go_labels
 
-integration-test-binaries: generate ebpf rust-components
+# These binaries are named ".test" to get included into bluebox initramfs
+support/go_labels_canary1.23.test: ./go_labels/*.go
+	GOTOOLCHAIN=go1.23.7 go build -tags $(GO_TAGS) -o $@ ./go_labels
+
+support/go_labels_canary1.24.test: ./go_labels/*.go
+	GOTOOLCHAIN=go1.24.1 go build -tags $(GO_TAGS) -o $@ ./go_labels
+
+integration-test-binaries: generate ebpf support/go_labels_canary1.23.test support/go_labels_canary1.24.test
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \

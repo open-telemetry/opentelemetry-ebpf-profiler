@@ -486,6 +486,11 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 			name:   "unwind_dotnet",
 			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
 		},
+		{
+			progID: uint32(support.ProgGoLabels),
+			name:   "go_labels",
+			enable: cfg.IncludeTracers.Has(types.GoLabels),
+		},
 	}
 
 	if err = loadPerfUnwinders(coll, ebpfProgs, ebpfMaps["perf_progs"], tailCallProgs,
@@ -1024,6 +1029,16 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		}
 	}
 
+	if ptr.custom_labels.len > 0 {
+		trace.CustomLabels = make(map[string]string, int(ptr.custom_labels.len))
+		for i := 0; i < int(ptr.custom_labels.len); i++ {
+			lbl := ptr.custom_labels.labels[i]
+			key := C.GoString((*C.char)(unsafe.Pointer(&lbl.key)))
+			val := C.GoString((*C.char)(unsafe.Pointer(&lbl.val)))
+			trace.CustomLabels[key] = val
+		}
+	}
+
 	// If there are no kernel frames, or reading them failed, we are responsible
 	// for allocating the columnar frame array.
 	if len(trace.Frames) == 0 {
@@ -1181,6 +1196,11 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 	})
 
 	return nil
+}
+
+// Make accessible for testing
+func (t *Tracer) GetEbpfMaps() map[string]*cebpf.Map {
+	return t.ebpfMaps
 }
 
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
