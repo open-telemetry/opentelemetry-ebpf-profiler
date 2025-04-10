@@ -138,7 +138,7 @@ jobs:
           # https://github.com/cilium/ci-kernels/pkgs/container/ci-kernels/versions?filters%5Bversion_type%5D=tagged
 
           # AMD64
-          - { target_arch: amd64, kernel: 4.19.314 }
+          # - { target_arch: amd64, kernel: 4.19.314 }
           - { target_arch: amd64, kernel: 5.4.276 }
           - { target_arch: amd64, kernel: 5.10.217 }
           - { target_arch: amd64, kernel: 5.15.159 }

@@ -47,7 +47,7 @@ const (
 	EventTypeGenericPID = 0x1
 )
 
-const MaxFrameUnwinds = 0x80
+const MaxFrameUnwinds = 0x100
 
 const (
 	MetricIDBeginCumulative = 0x6d

@@ -50,7 +50,7 @@ bpf_map_def SEC("maps") unwind_info_array = {
 };
 
 // The number of native frames to unwind per frame-unwinding eBPF program.
-#define NATIVE_FRAMES_PER_PROGRAM 4
+#define NATIVE_FRAMES_PER_PROGRAM 8
 
 // The decision whether to unwind native stacks or interpreter stacks is made by checking if a given
 // PC address falls into the "interpreter loop" of an interpreter. This map helps identify such
