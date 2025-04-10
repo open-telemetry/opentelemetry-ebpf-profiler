@@ -130,3 +130,8 @@ const (
 	sizeof_PHPProcInfo    = 0x18
 	sizeof_RubyProcInfo   = 0x20
 )
+
+const (
+	CustomLabelMaxKeyLen = 0x10
+	CustomLabelMaxValLen = 0x30
+)

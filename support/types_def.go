@@ -108,3 +108,8 @@ const (
 	sizeof_PHPProcInfo    = C.sizeof_PHPProcInfo
 	sizeof_RubyProcInfo   = C.sizeof_RubyProcInfo
 )
+
+const (
+	CustomLabelMaxKeyLen	= C.CUSTOM_LABEL_MAX_KEY_LEN
+	CustomLabelMaxValLen	= C.CUSTOM_LABEL_MAX_VAL_LEN
+)
