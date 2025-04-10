@@ -111,7 +111,7 @@ bpf_map_def SEC("maps") inhibit_events = {
 bpf_map_def SEC("maps") trace_events = {
   .type        = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
   .key_size    = sizeof(int),
-  .value_size  = 0,
+  .value_size  = sizeof(u32),
   .max_entries = 0,
 };
 
