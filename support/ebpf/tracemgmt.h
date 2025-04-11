@@ -243,7 +243,7 @@ static inline PerCPURecord *get_pristine_per_cpu_record()
   trace->apm_transaction_id.as_int = 0;
 
   trace->custom_labels.len = 0;
-  u64 *labels_space = (u64 *)&trace->custom_labels.labels;
+  u64 *labels_space        = (u64 *)&trace->custom_labels.labels;
   // I'm not sure this is necessary since we only increment len after
   // we successfully write the label.
 #pragma unroll
