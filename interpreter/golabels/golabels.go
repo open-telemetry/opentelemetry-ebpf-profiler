@@ -1,7 +1,6 @@
 package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
-	"regexp"
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
@@ -14,8 +13,6 @@ import (
 // #include <stdlib.h>
 // #include "../../support/ebpf/types.h"
 import "C"
-
-var goMajorMinorRegex = regexp.MustCompile(`^go\d+\.\d+`)
 
 type data struct {
 	goVersion string
