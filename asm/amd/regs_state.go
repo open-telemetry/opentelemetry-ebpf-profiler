@@ -22,25 +22,25 @@ func regIndex(reg x86asm.Reg) int {
 		return 6
 	case x86asm.RBP, x86asm.EBP:
 		return 7
-	case x86asm.RSP, x86asm.ESP:
+	case x86asm.R8, x86asm.R8L:
 		return 8
-	case x86asm.RIP:
+	case x86asm.R9, x86asm.R9L:
 		return 9
-	case x86asm.R8:
+	case x86asm.R10, x86asm.R10L:
 		return 10
-	case x86asm.R9:
+	case x86asm.R11, x86asm.R11L:
 		return 11
-	case x86asm.R10:
+	case x86asm.R12, x86asm.R12L:
 		return 12
-	case x86asm.R11:
+	case x86asm.R13, x86asm.R13L:
 		return 13
-	case x86asm.R12:
+	case x86asm.R14, x86asm.R14L:
 		return 14
-	case x86asm.R13:
+	case x86asm.R15, x86asm.R15L:
 		return 15
-	case x86asm.R14:
+	case x86asm.RSP, x86asm.ESP:
 		return 16
-	case x86asm.R15:
+	case x86asm.RIP:
 		return 17
 	default:
 		return 0
