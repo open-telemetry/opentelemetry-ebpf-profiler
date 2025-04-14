@@ -2,17 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
+import "bytes"
 
-// IsEndbr64 returns true if the first 4 bytes of the code is endbr64 instruction
 // https://www.felixcloutier.com/x86/endbr64
-// The second returned argument is the size of the instruction which is always 4
-func IsEndbr64(code []byte) (isEndbr bool, size int) {
-	if len(code) >= 4 &&
-		code[0] == 0xf3 &&
-		code[1] == 0x0f &&
-		code[2] == 0x1e &&
-		code[3] == 0xfa {
-		return true, 4
+var opcodeEndBr64 = []byte{0xf3, 0x0f, 0x1e, 0xfa}
+
+// DecodeSkippable decodes an instruction that we don't care much about and are going to skip,
+// as golang.org/x/arch/x86/x86asm fails to decode it.
+// The second returned argument is the size of the decoded instruction to skip.
+func DecodeSkippable(code []byte) (ok bool, size int) {
+	switch {
+	case bytes.HasPrefix(code, opcodeEndBr64):
+		return true, len(opcodeEndBr64)
+	default:
+		return false, 0
 	}
-	return false, 0
 }

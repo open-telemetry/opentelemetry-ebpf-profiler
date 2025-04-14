@@ -26,13 +26,29 @@ func regIndex(reg x86asm.Reg) int {
 		return 8
 	case x86asm.RIP:
 		return 9
+	case x86asm.R8:
+		return 10
+	case x86asm.R9:
+		return 11
+	case x86asm.R10:
+		return 12
+	case x86asm.R11:
+		return 13
+	case x86asm.R12:
+		return 14
+	case x86asm.R13:
+		return 15
+	case x86asm.R14:
+		return 16
+	case x86asm.R15:
+		return 17
 	default:
 		return 0
 	}
 }
 
 type RegsState struct {
-	regs [10]regState
+	regs [18]regState
 }
 
 func (r *RegsState) Set(reg x86asm.Reg, value, loadedFrom uint64) {

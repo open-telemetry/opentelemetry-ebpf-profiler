@@ -13,7 +13,7 @@ import (
 )
 
 func TestAnalyzeArm64Stubs(t *testing.T) {
-	val := decodeStubArgumentWrapperARM64(
+	val := decodeStubArgumentARM64(
 		[]byte{
 			0x40, 0x0a, 0x00, 0x90, 0x01, 0xd4, 0x43, 0xf9,
 			0x22, 0x60, 0x17, 0x91, 0x40, 0x00, 0x40, 0xf9,
@@ -21,7 +21,7 @@ func TestAnalyzeArm64Stubs(t *testing.T) {
 		0)
 	assert.Equal(t, libpf.SymbolValue(1496), val, "PyEval_ReleaseLock stub test")
 
-	val = decodeStubArgumentWrapperARM64(
+	val = decodeStubArgumentARM64(
 		[]byte{
 			0x80, 0x12, 0x00, 0xb0, 0x02, 0xd4, 0x43, 0xf9,
 			0x41, 0xf4, 0x42, 0xf9, 0x61, 0x00, 0x00, 0xb4,
@@ -30,7 +30,7 @@ func TestAnalyzeArm64Stubs(t *testing.T) {
 	assert.Equal(t, libpf.SymbolValue(1520), val, "PyGILState_GetThisThreadState test")
 
 	// Python 3.10.12 on ARM64 Nix
-	val = decodeStubArgumentWrapperARM64(
+	val = decodeStubArgumentARM64(
 		[]byte{
 			0x40, 0x1a, 0x00, 0xd0, // adrp	x0, 0xffffa0eff000 <mknodat@got.plt>
 			0x00, 0xa0, 0x46, 0xf9, // ldr	x0, [x0, #3392]

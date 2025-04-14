@@ -15,9 +15,9 @@ import (
 	"golang.org/x/arch/x86/x86asm"
 )
 
-// decodeStubArgumentWrapperARM64 disassembles arm64 code and decodes the assumed value
+// decodeStubArgumentARM64 disassembles arm64 code and decodes the assumed value
 // of requested argument.
-func decodeStubArgumentWrapperARM64(code []byte,
+func decodeStubArgumentARM64(code []byte,
 	addrBase libpf.SymbolValue) libpf.SymbolValue {
 	const argNumber uint8 = 0
 	// The concept is to track the latest load offset for all X0..X30 registers.
@@ -116,7 +116,7 @@ func decodeStubArgumentAMD64(code []byte, codeAddress, memoryBase uint64) (
 
 	for instructionOffset < len(code) {
 		rem := code[instructionOffset:]
-		if endbr64, insnLen := amd.IsEndbr64(rem); endbr64 {
+		if ok, insnLen := amd.DecodeSkippable(rem); ok {
 			instructionOffset += insnLen
 			continue
 		}
@@ -190,11 +190,12 @@ func decodeStubArgumentWrapper(
 	codeAddress libpf.SymbolValue,
 	memoryBase libpf.SymbolValue,
 ) (libpf.SymbolValue, error) {
-	if runtime.GOARCH == "arm64" {
-		return decodeStubArgumentWrapperARM64(code, memoryBase), nil
-	}
-	if runtime.GOARCH == "amd64" {
+	switch runtime.GOARCH {
+	case "arm64":
+		return decodeStubArgumentARM64(code, memoryBase), nil
+	case "amd64":
 		return decodeStubArgumentAMD64(code, uint64(codeAddress), uint64(memoryBase))
+	default:
+		return libpf.SymbolValueInvalid, fmt.Errorf("unsupported arch %s", runtime.GOARCH)
 	}
-	return libpf.SymbolValueInvalid, fmt.Errorf("unsupported arch %s", runtime.GOARCH)
 }
