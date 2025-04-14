@@ -21,7 +21,7 @@ func TestGoLabels(t *testing.T) {
 
 	r := &testutils.MockReporter{}
 	enabledTracers, _ := tracertypes.Parse("")
-	enabledTracers.Enable(tracertypes.GoLabels)
+	enabledTracers.Enable(tracertypes.Labels)
 	traceCh, _ := testutils.StartTracer(context.Background(), t, enabledTracers, r)
 	for _, tc := range []string{
 		"./go_labels_canary1.23.test",

@@ -489,7 +489,7 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 		{
 			progID: uint32(support.ProgGoLabels),
 			name:   "go_labels",
-			enable: cfg.IncludeTracers.Has(types.GoLabels),
+			enable: cfg.IncludeTracers.Has(types.Labels),
 		},
 	}
 

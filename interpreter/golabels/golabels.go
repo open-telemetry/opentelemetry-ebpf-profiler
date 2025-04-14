@@ -22,7 +22,7 @@ type data struct {
 
 func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
-	if err := ebpf.UpdateProcData(libpf.Go, pid, unsafe.Pointer(&d.offsets)); err != nil {
+	if err := ebpf.UpdateProcData(libpf.GoLabels, pid, unsafe.Pointer(&d.offsets)); err != nil {
 		return nil, err
 	}
 
@@ -30,7 +30,7 @@ func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 }
 
 func (d *data) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	return ebpf.DeleteProcData(libpf.Go, pid)
+	return ebpf.DeleteProcData(libpf.GoLabels, pid)
 }
 
 func (d *data) Unload(_ interpreter.EbpfHandler) {}

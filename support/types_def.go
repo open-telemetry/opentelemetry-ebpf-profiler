@@ -25,6 +25,7 @@ const (
 	FrameMarkerV8       = C.FRAME_MARKER_V8
 	FrameMarkerDotnet   = C.FRAME_MARKER_DOTNET
 	FrameMarkerGo       = C.FRAME_MARKER_GO
+	FrameMarkerGoLabels = C.FRAME_MARKER_GOLABELS
 	FrameMarkerAbort    = C.FRAME_MARKER_ABORT
 )
 

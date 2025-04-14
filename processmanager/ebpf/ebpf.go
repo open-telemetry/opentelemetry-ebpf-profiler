@@ -302,7 +302,7 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.v8Procs, nil
 	case libpf.APMInt:
 		return impl.apmIntProcs, nil
-	case libpf.Go:
+	case libpf.GoLabels:
 		return impl.goLabelsProcs, nil
 	default:
 		return nil, fmt.Errorf("type %d is not (yet) supported", typ)
