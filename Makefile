@@ -132,13 +132,13 @@ test-deps:
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
-TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support go_labels
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support interpreter/golabels/test
 
 # These binaries are named ".test" to get included into bluebox initramfs
-support/go_labels_canary1.23.test: ./go_labels/*.go
+support/go_labels_canary1.23.test: ./interpreter/golabels/test/*.go
 	GOTOOLCHAIN=go1.23.7 go build -tags $(GO_TAGS) -o $@ ./go_labels
 
-support/go_labels_canary1.24.test: ./go_labels/*.go
+support/go_labels_canary1.24.test: ./interpreter/golabels/test/*.go
 	GOTOOLCHAIN=go1.24.1 go build -tags $(GO_TAGS) -o $@ ./go_labels
 
 integration-test-binaries: generate ebpf support/go_labels_canary1.23.test support/go_labels_canary1.24.test
