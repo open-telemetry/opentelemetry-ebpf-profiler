@@ -65,7 +65,7 @@ process_slice_pair(PerCPURecord *record, struct GoSlice *labels_slice, int i)
   unsigned klen = MIN(record->labels[0].len, CUSTOM_LABEL_MAX_KEY_LEN - 1);
   if (bpf_probe_read_user(lbl->key, klen, record->labels[0].str)) {
     DEBUG_PRINT(
-      "cl: failed to read key for custom label (%lx): %ld", (unsigned long)record->labels[0].str);
+      "cl: failed to read key for custom label (%lx)", (unsigned long)record->labels[0].str);
     return;
   }
   unsigned vlen = MIN(record->labels[1].len, CUSTOM_LABEL_MAX_VAL_LEN - 1);
