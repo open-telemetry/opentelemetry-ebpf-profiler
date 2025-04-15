@@ -140,6 +140,7 @@ get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
 
   size_t g_addr;
 #if defined(__x86_64__)
+  // https://github.com/golang/go/blob/396a48bea6f2dc07/src/cmd/compile/internal/amd64/ssa.go#L174
   u64 g_addr_offset = 0xfffffffffffffff8;
   void *tls_base    = NULL;
   res               = tsd_get_base(&tls_base);
@@ -154,6 +155,7 @@ get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
     return NULL;
   }
 #elif defined(__aarch64__)
+  // https://github.com/golang/go/blob/6885bad7dd86880be6929c/src/cmd/compile/abi-internal.md#L549
   g_addr = state->r28;
 #endif
 
