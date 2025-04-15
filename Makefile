@@ -136,12 +136,12 @@ TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support interpreter/g
 
 # These binaries are named ".test" to get included into bluebox initramfs
 support/go_labels_canary1.23.test: ./interpreter/golabels/test/*.go
-	GOTOOLCHAIN=go1.23.7 go build -tags $(GO_TAGS) -o $@ ./go_labels
+	GOTOOLCHAIN=go1.23.7 go build -tags $(GO_TAGS) -o $@ ./interpreter/golabels/test
 
 support/go_labels_canary1.24.test: ./interpreter/golabels/test/*.go
-	GOTOOLCHAIN=go1.24.1 go build -tags $(GO_TAGS) -o $@ ./go_labels
+	GOTOOLCHAIN=go1.24.1 go build -tags $(GO_TAGS) -o $@ ./interpreter/golabels/test
 
-integration-test-binaries: generate ebpf support/go_labels_canary1.23.test support/go_labels_canary1.24.test
+integration-test-binaries: generate ebpf rust-components support/go_labels_canary1.23.test support/go_labels_canary1.24.test
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
