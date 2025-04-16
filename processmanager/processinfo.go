@@ -86,7 +86,7 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 		// allocate the embedded map for this process.
 		var processName string
 		exePath, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
-		if name, err := os.ReadFile(fmt.Sprintf("/prod/%d/comm", pid)); err == nil {
+		if name, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid)); err == nil {
 			processName = string(name)
 		}
 
