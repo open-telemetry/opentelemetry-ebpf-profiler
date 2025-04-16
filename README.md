@@ -50,6 +50,10 @@ The resulting binary will be named <ebpf-profiler> in the current directory.
 ## Other OSes
 Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run the agent. Ensure the appropriate architecture is specified if using cross-compilation. Use the same make targets as above after the Linux environment is configured in the VM.
 
+## Supported Linux kernel version
+
+[7ddc23ea](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/commit/7ddc23ea135a2e00fffc17850ab90534e9b63108) is the last commit with support for 4.19. Changes after this commit may require a minimal Linux kernel version of 5.4.
+
 ## Alternative Build (Without Docker)
 You can build the agent without Docker by directly installing the dependencies listed in the Dockerfile. Once dependencies are set up, simply run:
 ```sh
