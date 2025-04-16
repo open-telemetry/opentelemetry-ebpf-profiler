@@ -6,21 +6,20 @@
 
 #include "types.h"
 
-// tracepoint__sched_process_exit is a tracepoint attached to the scheduler that stops processes.
-// Every time a processes stops this hook is triggered.
-SEC("tracepoint/sched/sched_process_exit")
-int tracepoint__sched_process_exit(void *ctx)
-{
-  u64 pid_tgid = bpf_get_current_pid_tgid();
-  u32 pid      = (u32)(pid_tgid >> 32);
-  u32 tid      = (u32)(pid_tgid & 0xFFFFFFFF);
+// See /sys/kernel/debug/tracing/events/sched/sched_process_free/format
+// for struct layout.
+struct sched_process_free_ctx {
+  unsigned char skip[24];
+  pid_t pid;
+  int prio;
+};
 
-  if (pid != tid) {
-    // Only if the thread group ID matched with the PID the process itself exits. If they don't
-    // match only a thread of the process stopped and we do not need to report this PID to
-    // userspace for further processing.
-    goto exit;
-  }
+// tracepoint__sched_process_free is a tracepoint attached to the scheduler that frees processes.
+// Every time a processes exits this hook is triggered.
+SEC("tracepoint/sched/sched_process_free")
+int tracepoint__sched_process_free(struct sched_process_free_ctx *ctx)
+{
+  u32 pid = ctx->pid;
 
   if (!bpf_map_lookup_elem(&reported_pids, &pid) && !pid_information_exists(ctx, pid)) {
     // Only report PIDs that we explicitly track. This avoids sending kernel worker PIDs
@@ -28,7 +27,7 @@ int tracepoint__sched_process_exit(void *ctx)
     goto exit;
   }
 
-  if (report_pid(ctx, pid, RATELIMIT_ACTION_RESET)) {
+  if (report_pid(ctx, (u64)pid << 32 | pid, RATELIMIT_ACTION_RESET)) {
     increment_metric(metricID_NumProcExit);
   }
 exit:

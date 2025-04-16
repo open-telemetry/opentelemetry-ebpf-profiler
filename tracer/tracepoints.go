@@ -36,6 +36,6 @@ func (t *Tracer) AttachSchedMonitor() error {
 	}
 	defer restoreRlimit()
 
-	prog := t.ebpfProgs["tracepoint__sched_process_exit"]
-	return t.attachToTracepoint("sched", "sched_process_exit", prog)
+	prog := t.ebpfProgs["tracepoint__sched_process_free"]
+	return t.attachToTracepoint("sched", "sched_process_free", prog)
 }
