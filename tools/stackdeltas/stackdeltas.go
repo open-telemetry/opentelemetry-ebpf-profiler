@@ -44,6 +44,8 @@ func getOpcode(opcode uint8, param int32) string {
 			return "plt"
 		case sdtypes.UnwindCommandSignal:
 			return "signal"
+		case sdtypes.UnwindCommandFramePointer:
+			return "framepointer"
 		default:
 			return "?"
 		}
