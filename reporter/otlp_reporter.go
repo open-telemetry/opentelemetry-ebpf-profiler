@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"maps"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -201,6 +202,8 @@ func (r *OTLPReporter) setResource(rp pprofile.ResourceProfiles) {
 	attrs.PutStr(string(semconv.HostNameKey), r.hostName)
 	attrs.PutStr(string(semconv.ServiceVersionKey), r.version)
 	attrs.PutStr("os.kernel", r.kernelVersion)
+	attrs.PutStr(string(semconv.HostArchKey), runtime.GOARCH)
+	attrs.PutStr(string(semconv.ArtifactFilenameKey), "opentelmetry-eBPF-profiler")
 }
 
 // waitGrpcEndpoint waits until the gRPC connection is established.
