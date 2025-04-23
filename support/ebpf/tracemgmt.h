@@ -438,7 +438,9 @@ static inline int get_next_interpreter(PerCPURecord *record)
   // Check if the section id happens to be in the interpreter map.
   OffsetRange *range = bpf_map_lookup_elem(&interpreter_offsets, &section_id);
   if (range != 0) {
-    if ((section_offset >= range->lower_offset) && (section_offset <= range->upper_offset)) {
+    if (
+      ((section_offset >= range->lower_offset1) && (section_offset <= range->upper_offset1)) ||
+      ((section_offset >= range->lower_offset2) && (section_offset <= range->upper_offset2))) {
       DEBUG_PRINT("interpreter_offsets match %d", range->program_index);
       if (!unwinder_is_done(record, range->program_index)) {
         increment_metric(metricID_UnwindCallInterpreter);
