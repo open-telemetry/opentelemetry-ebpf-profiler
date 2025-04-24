@@ -345,32 +345,50 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 
 	codeIndex := i.rm.Uint64(i.codeIndexPtr)
 	activeRanges := i.rangesPtr + libpf.Address(32*codeIndex)
-
+	modules := i.rm.Ptr(activeRanges)
 	n := i.rm.Uint64(activeRanges + libpf.Address(8))
 
 	pc := libpf.Address(frame.Lineno)
 
-	low := i.rm.Ptr(activeRanges)
-	mid := i.rm.Ptr(activeRanges + libpf.Address(24))
-	high := low + libpf.Address(16*n)
+	log.Infof("BEAM symbolizing pc: %x, n: %d", pc, n)
 
-	log.Infof("BEAM symbolizing pc: %x, low: %x, mid: %x, high: %x", pc, low, mid, high)
-	if pc < low || pc > high {
-		log.Infof("BEAM symbolizing pc %x outside known module ranges", pc)
+	low := i.rm.Ptr(modules)
+	mid := i.rm.Ptr(modules + libpf.Address(24))
+	high := i.rm.Ptr(modules + libpf.Address((n-1)*16+8))
+
+	log.Infof("BEAM symbolizing low: %x, mid: %x, high: %x", low, mid, high)
+
+	// for idx := uint64(0); idx < n; idx++ {
+	// 	start := i.rm.Ptr(modules + libpf.Address(idx*16))
+	// 	end := i.rm.Ptr(modules + libpf.Address(idx*16+8))
+	// 	log.Infof("BEAM Range %x - %x: idx %d", start, end, idx)
+	// }
+
+	if pc < low {
+		log.Infof("BEAM pc %x < %x", pc, low)
+	} else if pc > high {
+		log.Infof("BEAM pc %x > %x", pc, high)
 	} else {
-		for low < high {
-			log.Infof("BEAM symbolizing pc: %x, low: %x, mid: %x, high: %x", pc, low, mid, high)
-			midStart := i.rm.Ptr(mid)
-			midEnd := i.rm.Ptr(mid + 8)
+		lowIdx := uint64(0)
+		midIdx := (n - 1) / 2
+		highIdx := n - 1
+		midStart := i.rm.Ptr(modules + libpf.Address(midIdx*16))
+		midEnd := i.rm.Ptr(modules + libpf.Address(midIdx*16+8))
+		for lowIdx < highIdx {
 			if pc < midStart {
-				high = mid
+				highIdx = midIdx
+				log.Infof("BEAM symbolizing %x < %x, highIdx: %d", pc, midStart, highIdx)
 			} else if pc >= midEnd {
-				low = mid + libpf.Address(8)
+				lowIdx = midIdx + 1
+				log.Infof("BEAM symbolizing %x >= %x, lowIdx: %d", pc, midEnd, lowIdx)
 			} else {
-				log.Warnf("BEAM failed to find the function")
-				return interpreter.ErrMismatchInterpreterType
+				log.Warnf("BEAM found the correct range: midIdx: %d, start: %x, end: %x", midIdx, midStart, midEnd)
+				break
 			}
-			mid = low + (high-low)/2
+			midIdx = lowIdx + (highIdx-lowIdx)/2
+			midStart = i.rm.Ptr(modules + libpf.Address(midIdx*16))
+			midEnd = i.rm.Ptr(modules + libpf.Address(midIdx*16+8))
+			log.Infof("BEAM symbolizing midIdx: %d, start: %x, end: %x", midIdx, midStart, midEnd)
 		}
 	}
 
