@@ -2108,8 +2108,7 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 	if d.version >= v8Ver(12, 5, 0) {
 		// This changed in f6c936e836b4d8ffafe790bcc3586f2ba5ffcf74
 		vms.DeoptimizationLiteralArray.TrustedWeakFixedArray = true
-	}
-	if !vms.DeoptimizationLiteralArray.TrustedWeakFixedArray && d.version >= v8Ver(11, 9, 0) {
+	} else if d.version >= v8Ver(11, 9, 0) {
 		// This had been WeakFixedArray for a very long time,
 		// but we lost the metadata in 0698c376801dcde939850b7ad0b55c7459c83f4d.
 		vms.DeoptimizationLiteralArray.WeakFixedArray = true
