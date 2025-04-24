@@ -16,6 +16,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"golang.org/x/sys/unix"
 )
 
 // Go runtime functions for which we should not attempt to unwind further
@@ -273,8 +274,12 @@ func getSourceFileStrategy(arch elf.Machine, sourceFile []byte, defaultStrategy 
 	}
 }
 
+// CleanUpFunc frees resources.
+type CleanUpFunc func()
+
 // SearchGoPclntab uses heuristic to find the gopclntab from RO data.
-func SearchGoPclntab(ef *pfelf.File) ([]byte, error) {
+// If the returned data is mmaped, caller is responsible to use func() to free resources.
+func SearchGoPclntab(ef *pfelf.File) ([]byte, CleanUpFunc, error) {
 	// The sections headers are not available for coredump testing, because they are
 	// not inside any PT_LOAD segment. And in the case ofwhere they might be available
 	// because of alignment they are likely not usable, e.g. the musl C-library will
@@ -301,8 +306,19 @@ func SearchGoPclntab(ef *pfelf.File) ([]byte, error) {
 
 		var data []byte
 		var err error
-		if data, err = p.Data(maxBytesGoPclntab); err != nil {
-			return nil, err
+		var cleanUp CleanUpFunc
+
+		if data, err = p.MmapData(); err != nil {
+			// Fallback option if mmap is not possible.
+			if data, err = p.Data(maxBytesGoPclntab); err != nil {
+				// Continue the loop with the next ELF prog.
+				continue
+			}
+			// If the fallback option provides the data of the ELF prog,
+			// then cleanUp becomes a NOP.
+			cleanUp = func() {}
+		} else {
+			cleanUp = func() { unix.Munmap(data) } //nolint:errcheck
 		}
 
 		for i := 1; i < len(data)-PclntabHeaderSize(); i += 8 {
@@ -320,12 +336,13 @@ func SearchGoPclntab(ef *pfelf.File) ([]byte, error) {
 			hdr := (*pclntabHeader)(unsafe.Pointer(&data[i]))
 			switch hdr.magic {
 			case magicGo1_20, magicGo1_18, magicGo1_16, magicGo1_2:
-				return data[i:], nil
+				return data[i:], cleanUp, nil
 			}
 		}
+		cleanUp()
 	}
 
-	return nil, nil
+	return nil, func() {}, nil
 }
 
 // Parse Golang .gopclntab spdelta tables and try to produce minified intervals
@@ -333,17 +350,29 @@ func SearchGoPclntab(ef *pfelf.File) ([]byte, error) {
 func (ee *elfExtractor) parseGoPclntab() error {
 	var err error
 	var data []byte
+	var cleanUp CleanUpFunc
 
 	ef := ee.file
 
 	if ef.InsideCore {
 		// Section tables not available. Use heuristic. Ignore errors as
 		// this might not be a Go binary.
-		data, _ = SearchGoPclntab(ef)
+		data, cleanUp, _ = SearchGoPclntab(ef)
+		defer cleanUp()
 	} else if s := ef.Section(".gopclntab"); s != nil {
 		// Load the .gopclntab via section if available.
-		if data, err = s.Data(maxBytesGoPclntab); err != nil {
-			return fmt.Errorf("failed to load .gopclntab section: %v", err)
+		if data, err = s.MmapData(); err != nil {
+			switch err {
+			case pfelf.ErrNoFD:
+				// Fallback option if mmap is not possible.
+				if data, err = s.Data(maxBytesGoPclntab); err != nil {
+					return fmt.Errorf("failed to load .gopclntab section: %v", err)
+				}
+			default:
+				return fmt.Errorf("failed to mmap .gopclntab section :%v", err)
+			}
+		} else {
+			defer unix.Munmap(data) //nolint:errcheck
 		}
 	} else if s := ef.Section(".go.buildinfo"); s != nil {
 		// This looks like Go binary. Lookup the runtime.pclntab symbols,
@@ -354,9 +383,10 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		if err != nil {
 			// It seems the Go binary was stripped. So we use the heuristic approach
 			// to get the stack deltas.
-			if data, err = SearchGoPclntab(ef); err != nil {
+			if data, cleanUp, err = SearchGoPclntab(ef); err != nil {
 				return fmt.Errorf("failed to search .gopclntab: %v", err)
 			}
+			defer cleanUp()
 		} else {
 			start, err := symtab.LookupSymbolAddress("runtime.pclntab")
 			if err != nil {

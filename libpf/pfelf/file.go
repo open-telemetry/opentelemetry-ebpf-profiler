@@ -37,6 +37,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -55,6 +56,9 @@ var ErrSymbolNotFound = errors.New("symbol not found")
 
 // ErrNotELF is returned when the file is not an ELF
 var ErrNotELF = errors.New("not an ELF file")
+
+// ErrNoFD is returned if no file descriptor is available for the ELF
+var ErrNoFD = errors.New("no FD available")
 
 // File represents an open ELF file
 type File struct {
@@ -124,6 +128,9 @@ type File struct {
 
 	// Contains the Go build information if present
 	goBuildInfo *debug.BuildInfo
+
+	// File descriptor to the open ELF file.
+	fd int
 }
 
 var _ libpf.SymbolFinder = &File{}
@@ -148,6 +155,9 @@ type Prog struct {
 
 	// elfReader is the same ReadAt as used for the File
 	elfReader io.ReaderAt
+
+	// File descriptor to the backing ELF file.
+	fd *int
 }
 
 // Section represents a section header, and data associated with it
@@ -161,6 +171,9 @@ type Section struct {
 	// return the same copy to multiple callers, otherwise they corrupt
 	// each other's reader file position.
 	sr *io.SectionReader
+
+	// File descriptor to the backing ELF file.
+	fd *int
 }
 
 // Open opens the named file using os.Open and prepares it for use as an ELF binary.
@@ -176,7 +189,7 @@ func Open(name string) (*File, error) {
 		return nil, err
 	}
 
-	ff, err := newFile(buffered, f, 0, false)
+	ff, err := newFile(buffered, f, int(f.Fd()), 0, false)
 	if err != nil {
 		f.Close()
 		return nil, err
@@ -189,20 +202,23 @@ func (f *File) Close() (err error) {
 	if f.closer != nil {
 		err = f.closer.Close()
 		f.closer = nil
+		f.fd = -1
 	}
 	return
 }
 
 // NewFile creates a new ELF file object that borrows the given reader.
 func NewFile(r io.ReaderAt, loadAddress uint64, hasMusl bool) (*File, error) {
-	return newFile(r, nil, loadAddress, hasMusl)
+	return newFile(r, nil, -1, loadAddress, hasMusl)
 }
 
-func newFile(r io.ReaderAt, closer io.Closer, loadAddress uint64, hasMusl bool) (*File, error) {
+func newFile(r io.ReaderAt, closer io.Closer, fd int, loadAddress uint64,
+	hasMusl bool) (*File, error) {
 	f := &File{
 		elfReader:  r,
 		InsideCore: loadAddress != 0,
 		closer:     closer,
+		fd:         fd,
 	}
 
 	hdr := &f.elfHeader
@@ -238,6 +254,9 @@ func newFile(r io.ReaderAt, closer io.Closer, loadAddress uint64, hasMusl bool) 
 	virtualBase := ^uint64(0)
 	for i, ph := range progs {
 		p := &f.Progs[i]
+		if f.fd != -1 {
+			p.fd = &f.fd
+		}
 		p.ProgHeader = elf.ProgHeader{
 			Type:   elf.ProgType(ph.Type),
 			Flags:  elf.ProgFlag(ph.Flags),
@@ -400,6 +419,14 @@ func (f *File) LoadSections() error {
 		if !ok {
 			return fmt.Errorf("bad section name index (section %d, index %d/%d)",
 				i, sections[i].Name, len(strtab))
+		}
+		// Special case handling for .gopclntab, so that this section can
+		// be mmaped.
+		if (sh.Name == ".gopclntab" || sh.Name == ".rodata" ||
+			sh.Name == ".data.rel.ro") && f.fd != -1 {
+			sh.fd = &f.fd
+		} else {
+			sh.fd = nil
 		}
 	}
 
@@ -720,6 +747,26 @@ func (ph *Prog) Data(maxSize uint) ([]byte, error) {
 	return p, err
 }
 
+// MmapData returns the mmap backed prog. Caller is responsible to use unix.Munmap.
+func (ph *Prog) MmapData() ([]byte, error) {
+	if ph.fd == nil {
+		return []byte{}, ErrNoFD
+	}
+
+	pageSize := int64(unix.Getpagesize())
+
+	// Page align offset for mmap
+	alignedOffset := int64(ph.Off) / pageSize * pageSize
+
+	// Calculate the adjustment needed for the length
+	offsetDifference := int64(ph.Off) - alignedOffset
+	alignedLength := int(ph.Filesz) + int(offsetDifference)
+
+	data, err := unix.Mmap(*ph.fd, alignedOffset, alignedLength,
+		unix.PROT_READ, unix.MAP_PRIVATE)
+	return data[offsetDifference:], err
+}
+
 // DataReader loads the whole program header referenced data, and returns reader to it.
 func (ph *Prog) DataReader(maxSize uint) (io.Reader, error) {
 	p, err := ph.Data(maxSize)
@@ -740,6 +787,29 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 	p := make([]byte, sh.FileSize)
 	_, err := sh.ReadAt(p, 0)
 	return p, err
+}
+
+// MmapData returns the mmap backed section. Caller is responsible to use unix.Munmap.
+func (sh *Section) MmapData() ([]byte, error) {
+	if sh.fd == nil {
+		return []byte{}, ErrNoFD
+	}
+	if sh.Flags&elf.SHF_COMPRESSED != 0 {
+		return nil, errors.New("compressed sections not supported")
+	}
+
+	pageSize := int64(unix.Getpagesize())
+
+	// Page align offset for mmap
+	alignedOffset := int64(sh.Offset) / pageSize * pageSize
+
+	// Calculate the adjustment needed for the length
+	offsetDifference := int64(sh.Offset) - alignedOffset
+	alignedLength := int(sh.Size) + int(offsetDifference)
+
+	data, err := unix.Mmap(*sh.fd, alignedOffset, alignedLength,
+		unix.PROT_READ, unix.MAP_PRIVATE)
+	return data[offsetDifference:], err
 }
 
 // ReadAt reads bytes from given virtual address
