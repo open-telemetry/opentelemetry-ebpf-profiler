@@ -352,6 +352,7 @@ type v8Data struct {
 			WeakFixedArray            uint16 `name:"WeakFixedArray__WEAK_FIXED_ARRAY_TYPE"`
 			TrustedByteArray          uint16 `name:"TrustedByteArray__TRUSTED_BYTE_ARRAY_TYPE" zero:""`
 			TrustedFixedArray         uint16 `name:"TrustedFixedArray__TRUSTED_FIXED_ARRAY_TYPE" zero:""`
+			TrustedWeakFixedArray     uint16 `name:"TrustedFixedArray__TRUSTED_WEAK_FIXED_ARRAY_TYPE" zero:""`
 			ProtectedFixedArray       uint16 `name:"ProtectedFixedArray__PROTECTED_FIXED_ARRAY_TYPE" zero:""`
 			JSFunction                uint16 `name:"JSFunction__JS_FUNCTION_TYPE"`
 			Map                       uint16 `name:"Map__MAP_TYPE"`
@@ -468,7 +469,8 @@ type v8Data struct {
 		// class DeoptimizationLiteralArray introduced in V8 9.8.23
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/10.2.154.1/src/objects/code.h#1090
 		DeoptimizationLiteralArray struct {
-			WeakFixedArray bool
+			WeakFixedArray        bool
+			TrustedWeakFixedArray bool
 		}
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/script.tq#18
@@ -1292,7 +1294,9 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 		// The first numSFI entries of literal array are the pointers for
 		// inlined function's SFI structures
 		expectedTag := vms.Type.FixedArray
-		if vms.DeoptimizationLiteralArray.WeakFixedArray {
+		if vms.DeoptimizationLiteralArray.TrustedWeakFixedArray {
+			expectedTag = vms.Type.TrustedWeakFixedArray
+		} else if vms.DeoptimizationLiteralArray.WeakFixedArray {
 			expectedTag = vms.Type.WeakFixedArray
 		}
 		literalArrayPtr := npsr.Ptr(deoptimizationData,
@@ -2100,6 +2104,14 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 		// but Node doesn't turn that on,
 		// so we can probably get away with just hardcoding it for now.
 		vms.SharedFunctionInfo.FunctionData = 8
+	}
+	if d.version >= v8Ver(12, 5, 0) {
+		// This changed in f6c936e836b4d8ffafe790bcc3586f2ba5ffcf74
+		vms.DeoptimizationLiteralArray.TrustedWeakFixedArray = true
+	} else if d.version >= v8Ver(11, 9, 0) {
+		// This had been WeakFixedArray for a very long time,
+		// but we lost the metadata in 0698c376801dcde939850b7ad0b55c7459c83f4d.
+		vms.DeoptimizationLiteralArray.WeakFixedArray = true
 	}
 
 	for i := 0; i < vmVal.NumField(); i++ {
