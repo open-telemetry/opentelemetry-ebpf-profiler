@@ -159,23 +159,24 @@ pid_event_ratelimit(u32 pid, int ratelimit_action)
 // and reporting aborted if PID has been recently reported.
 // Returns true if the PID was successfully reported to user space.
 static inline __attribute__((__always_inline__)) bool
-report_pid(void *ctx, int pid, int ratelimit_action)
+report_pid(void *ctx, u64 pid_tgid, int ratelimit_action)
 {
-  u32 key = (u32)pid;
+  u32 pid = pid_tgid >> 32;
 
   if (pid_event_ratelimit(pid, ratelimit_action)) {
     return false;
   }
 
   bool value = true;
-  int errNo  = bpf_map_update_elem(&pid_events, &key, &value, BPF_ANY);
+  int errNo  = bpf_map_update_elem(&pid_events, &pid_tgid, &value, BPF_ANY);
   if (errNo != 0) {
-    DEBUG_PRINT("Failed to update pid_events with PID %d: %d", pid, errNo);
+    __attribute__((unused)) u32 tid = pid_tgid & 0xFFFFFFFF;
+    DEBUG_PRINT("Failed to update pid_events with PID %d TID: %d: %d", pid, tid, errNo);
     increment_metric(metricID_PIDEventsErr);
     return false;
   }
   if (ratelimit_action == RATELIMIT_ACTION_RESET || errNo != 0) {
-    bpf_map_delete_elem(&reported_pids, &key);
+    bpf_map_delete_elem(&reported_pids, &pid);
   }
 
   // Notify userspace that there is a PID waiting to be processed.
@@ -730,7 +731,8 @@ static inline int collect_trace(
   }
 
   if (!pid_information_exists(ctx, pid)) {
-    if (report_pid(ctx, pid, RATELIMIT_ACTION_DEFAULT)) {
+    u64 pid_tgid = (u64)pid << 32 | tid;
+    if (report_pid(ctx, pid_tgid, RATELIMIT_ACTION_DEFAULT)) {
       increment_metric(metricID_NumProcNew);
     }
     return 0;
