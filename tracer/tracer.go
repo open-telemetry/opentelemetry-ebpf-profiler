@@ -1056,7 +1056,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 			t.monitorPIDEventsMap(&pidEvents)
 
 			for _, pidTid := range pidEvents {
-				log.Warnf("=> %v", pidTid)
+				log.Debugf("=> %v", pidTid)
 				t.pidEvents <- pidTid
 			}
 

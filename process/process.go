@@ -245,14 +245,14 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 		// and try extracting mappings for a different thread. Since we stopped
 		// processing /proc at agent startup, it's not possible that the agent
 		// will sample a process without mappings
-		log.Warnf("PID: %v main thread exit", sp.pid)
+		log.Debugf("PID: %v main thread exit", sp.pid)
 		sp.mainThreadExit = true
 
 		if sp.pid == sp.tid {
 			return mappings, numParseErrors, ErrNoMappings
 		}
 
-		log.Warnf("TID: %v extracting mappings", sp.tid)
+		log.Debugf("TID: %v extracting mappings", sp.tid)
 		mapsFileAlt, err := os.Open(fmt.Sprintf("/proc/%d/task/%d/maps", sp.pid, sp.tid))
 		// On all errors resulting from trying to get mappings from a different thread,
 		// return ErrNoMappings which will keep the PID tracked in processmanager and
