@@ -240,27 +240,17 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 	}
 
 	if len(mappings) == 0 {
-		// Test for main thread exit by checking for Zombie state
-		pidStat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", sp.pid))
-		if err != nil {
-			// Should never happen while process is alive
-			return nil, 0, err
-		}
-
-		var p int
-		var c string
-		var state rune
-		n, err := fmt.Sscanf(string(pidStat), "%d %s %c", &p, &c, &state)
-		if err != nil || n < 3 {
-			// Should never happen
-			return nil, 0, err
-		}
-		if state != 'Z' {
-			return mappings, numParseErrors, ErrNoMappings
-		}
-
+		// We could test for main thread exit here by checking for zombie state
+		// in /proc/sp.pid/stat but it's simpler to assume that this is the case
+		// and try extracting mappings for a different thread. Since we stopped
+		// processing /proc at agent startup, it's not possible that the agent
+		// will sample a process without mappings
 		log.Warnf("PID: %v main thread exit", sp.pid)
 		sp.mainThreadExit = true
+
+		if sp.pid == sp.tid {
+			return mappings, numParseErrors, ErrNoMappings
+		}
 
 		log.Warnf("TID: %v extracting mappings", sp.tid)
 		mapsFileAlt, err := os.Open(fmt.Sprintf("/proc/%d/task/%d/maps", sp.pid, sp.tid))
@@ -274,10 +264,7 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 			return mappings, numParseErrors, ErrNoMappings
 		}
 		defer mapsFileAlt.Close()
-
-		numParseErrorsAlt := uint32(0)
-		mappings, numParseErrorsAlt, err = parseMappings(mapsFileAlt)
-		numParseErrors += numParseErrorsAlt
+		mappings, numParseErrors, err = parseMappings(mapsFileAlt)
 		if err != nil || len(mappings) == 0 {
 			return mappings, numParseErrors, ErrNoMappings
 		}
