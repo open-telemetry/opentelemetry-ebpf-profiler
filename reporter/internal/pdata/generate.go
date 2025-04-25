@@ -24,6 +24,7 @@ import (
 const (
 	ExecutableCacheLifetime = 1 * time.Hour
 	FramesCacheLifetime     = 1 * time.Hour
+	FrameMapLifetime        = 1 * time.Hour
 )
 
 // Generate generates a pdata request out of internal profiles data, to be
@@ -180,7 +181,7 @@ func (p *Pdata) setProfile(
 						"UNREPORTED", frameKind.String()))
 				} else {
 					fileIDInfo := fileIDInfoLock.RLock()
-					if si, exists := (*fileIDInfo)[traceInfo.Linenos[i]]; exists {
+					if si, exists := (*fileIDInfo).Get(traceInfo.Linenos[i]); exists {
 						line.SetLine(int64(si.LineNumber))
 
 						line.SetFunctionIndex(createFunctionEntry(funcMap,

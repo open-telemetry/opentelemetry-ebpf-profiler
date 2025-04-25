@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 
+	lru "github.com/elastic/go-freelru"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
@@ -250,8 +252,21 @@ func TestFunctionTableOrder(t *testing.T) {
 			d, err := New(100, 100, 100, nil)
 			require.NoError(t, err)
 			for k, v := range tt.frames {
-				frames := xsync.NewRWMutex[map[libpf.AddressOrLineno]samples.SourceInfo](v)
-				d.Frames.Add(k, &frames)
+				frameMap, err := lru.New[libpf.AddressOrLineno, samples.SourceInfo](4096,
+					func(k libpf.AddressOrLineno) uint32 { return uint32(k) })
+				if err != nil {
+					t.Fatalf("Failed to create inner frameMap for %x: %v", k, err)
+					return
+				}
+
+				for a, s := range v {
+					frameMap.Add(a, samples.SourceInfo{
+						FunctionName: s.FunctionName,
+					})
+				}
+
+				mu := xsync.NewRWMutex(frameMap)
+				d.Frames.Add(k, &mu)
 			}
 			for k, v := range tt.executables {
 				d.Executables.Add(k, v)
