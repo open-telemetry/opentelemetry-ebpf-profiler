@@ -16,6 +16,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // Go runtime functions for which we should not attempt to unwind further
@@ -625,11 +626,11 @@ func parseX86pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc, data
 	hints := sdtypes.UnwindHintKeep
 	for ok := true; ok; ok = p.step() {
 		info := sdtypes.UnwindInfo{
-			Opcode: sdtypes.UnwindOpcodeBaseSP,
+			Opcode: support.UnwindOpcodeBaseSP,
 			Param:  p.val + 8,
 		}
 		if s == strategyDeltasWithFrame && info.Param >= 16 {
-			info.FPOpcode = sdtypes.UnwindOpcodeBaseCFA
+			info.FPOpcode = support.UnwindOpcodeBaseCFA
 			info.FPParam = -16
 		}
 		deltas.Add(sdtypes.StackDelta{
@@ -664,12 +665,12 @@ func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, fun *pclntabFunc,
 			// Regular basic block in the function body: unwind via SP.
 			info = sdtypes.UnwindInfo{
 				// Unwind via SP offset.
-				Opcode: sdtypes.UnwindOpcodeBaseSP,
+				Opcode: support.UnwindOpcodeBaseSP,
 				Param:  p.val,
 			}
 			if s == strategyDeltasWithFrame {
 				// On ARM64, the previous LR value is stored to top-of-stack.
-				info.FPOpcode = sdtypes.UnwindOpcodeBaseSP
+				info.FPOpcode = support.UnwindOpcodeBaseSP
 				info.FPParam = 0
 			}
 		}

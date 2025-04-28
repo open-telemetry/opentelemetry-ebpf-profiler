@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
@@ -856,7 +857,7 @@ func (regs *vmRegs) getUnwindInfo(allowGenericRegisters bool) sdtypes.UnwindInfo
 	default:
 		panic(fmt.Sprintf("architecture %d is not supported", regs.arch))
 	}
-	if !allowGenericRegisters && info.Opcode == sdtypes.UnwindOpcodeBaseReg {
+	if !allowGenericRegisters && info.Opcode == support.UnwindOpcodeBaseReg {
 		return sdtypes.UnwindInfoInvalid
 	}
 	return info

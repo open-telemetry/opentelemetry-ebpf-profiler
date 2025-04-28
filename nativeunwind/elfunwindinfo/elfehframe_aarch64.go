@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 //nolint:deadcode,varcheck
@@ -117,10 +118,10 @@ func (regs *vmRegs) getUnwindInfoARM() sdtypes.UnwindInfo {
 	// are used for CFA.
 	switch regs.cfa.reg {
 	case armRegFP:
-		info.Opcode = sdtypes.UnwindOpcodeBaseFP
+		info.Opcode = support.UnwindOpcodeBaseFP
 		info.Param = int32(regs.cfa.off)
 	case armRegSP:
-		info.Opcode = sdtypes.UnwindOpcodeBaseSP
+		info.Opcode = support.UnwindOpcodeBaseSP
 		info.Param = int32(regs.cfa.off)
 	}
 
@@ -139,7 +140,7 @@ func (regs *vmRegs) getUnwindInfoARM() sdtypes.UnwindInfo {
 		// thus, the assumption - use UnwindOpcodeBaseLR to instruct native stack
 		// unwinder to load RA from link register
 		// This is either prolog or epilog sequence, read RA from link register.
-		info.FPOpcode = sdtypes.UnwindOpcodeBaseLR
+		info.FPOpcode = support.UnwindOpcodeBaseLR
 		info.FPParam = 0
 	case regCFA:
 		if regs.cfa.off != 0 {

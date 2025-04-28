@@ -33,32 +33,32 @@ type stats struct {
 
 func getOpcode(opcode uint8, param int32) string {
 	str := ""
-	switch opcode &^ sdtypes.UnwindOpcodeFlagDeref {
-	case sdtypes.UnwindOpcodeCommand:
+	switch opcode &^ support.UnwindOpcodeFlagDeref {
+	case support.UnwindOpcodeCommand:
 		switch param {
-		case sdtypes.UnwindCommandInvalid:
+		case support.UnwindCommandInvalid:
 			return "invalid"
-		case sdtypes.UnwindCommandStop:
+		case support.UnwindCommandStop:
 			return "stop"
-		case sdtypes.UnwindCommandPLT:
+		case support.UnwindCommandPLT:
 			return "plt"
-		case sdtypes.UnwindCommandSignal:
+		case support.UnwindCommandSignal:
 			return "signal"
-		case sdtypes.UnwindCommandFramePointer:
+		case support.UnwindCommandFramePointer:
 			return "framepointer"
 		default:
 			return "?"
 		}
-	case sdtypes.UnwindOpcodeBaseCFA:
+	case support.UnwindOpcodeBaseCFA:
 		str = "cfa"
-	case sdtypes.UnwindOpcodeBaseFP:
+	case support.UnwindOpcodeBaseFP:
 		str = "fp"
-	case sdtypes.UnwindOpcodeBaseSP:
+	case support.UnwindOpcodeBaseSP:
 		str = "sp"
 	default:
 		return "?"
 	}
-	if opcode&sdtypes.UnwindOpcodeFlagDeref != 0 {
+	if opcode&support.UnwindOpcodeFlagDeref != 0 {
 		preDeref, postDeref := sdtypes.UnpackDerefParam(param)
 		if postDeref != 0 {
 			str = fmt.Sprintf("*(%s%+x)%+x", str, preDeref, postDeref)
