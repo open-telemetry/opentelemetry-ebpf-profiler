@@ -166,12 +166,12 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 			}
 		}
 
-		(*frameMap).AddWithLifetime(addressOrLine, samples.SourceInfo{
+		(*frameMap).Add(addressOrLine, samples.SourceInfo{
 			LineNumber:     args.SourceLine,
 			FilePath:       sourceFile,
 			FunctionOffset: args.FunctionOffset,
 			FunctionName:   args.FunctionName,
-		}, pdata.FrameMapLifetime)
+		})
 
 		return
 	}
@@ -184,12 +184,12 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 	}
 	frameMap.SetLifetime(pdata.FrameMapLifetime)
 
-	frameMap.AddWithLifetime(addressOrLine, samples.SourceInfo{
+	frameMap.Add(addressOrLine, samples.SourceInfo{
 		LineNumber:     args.SourceLine,
 		FilePath:       args.SourceFile,
 		FunctionOffset: args.FunctionOffset,
 		FunctionName:   args.FunctionName,
-	}, pdata.FrameMapLifetime)
+	})
 
 	mu := xsync.NewRWMutex(frameMap)
 	b.pdata.Frames.Add(fileID, &mu)
