@@ -78,7 +78,7 @@ func (b *baseReporter) FrameKnown(frameID libpf.FrameID) bool {
 		pdata.FramesCacheLifetime); exists {
 		frameMap := frameMapLock.RLock()
 		defer frameMapLock.RUnlock(&frameMap)
-		_, known = (*frameMap)[frameID.AddressOrLine()]
+		_, known = (*frameMap).GetAndRefresh(frameID.AddressOrLine(), pdata.FrameMapLifetime)
 	}
 	return known
 }
@@ -160,27 +160,37 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 		if sourceFile == "" {
 			// The new SourceFile may be empty, and we don't want to overwrite
 			// an existing filePath with it.
-			if s, exists := (*frameMap)[addressOrLine]; exists {
-				sourceFile = s.FilePath
+			if source, exists := (*frameMap).GetAndRefresh(addressOrLine,
+				pdata.FrameMapLifetime); exists {
+				sourceFile = source.FilePath
 			}
 		}
 
-		(*frameMap)[addressOrLine] = samples.SourceInfo{
+		(*frameMap).Add(addressOrLine, samples.SourceInfo{
 			LineNumber:     args.SourceLine,
 			FilePath:       sourceFile,
 			FunctionOffset: args.FunctionOffset,
 			FunctionName:   args.FunctionName,
-		}
+		})
+
 		return
 	}
 
-	v := make(map[libpf.AddressOrLineno]samples.SourceInfo)
-	v[addressOrLine] = samples.SourceInfo{
+	frameMap, err := lru.New[libpf.AddressOrLineno, samples.SourceInfo](1024,
+		func(k libpf.AddressOrLineno) uint32 { return uint32(k) })
+	if err != nil {
+		log.Errorf("Failed to create inner frameMap for %x: %v", fileID, err)
+		return
+	}
+	frameMap.SetLifetime(pdata.FrameMapLifetime)
+
+	frameMap.Add(addressOrLine, samples.SourceInfo{
 		LineNumber:     args.SourceLine,
 		FilePath:       args.SourceFile,
 		FunctionOffset: args.FunctionOffset,
 		FunctionName:   args.FunctionName,
-	}
-	mu := xsync.NewRWMutex(v)
+	})
+
+	mu := xsync.NewRWMutex(frameMap)
 	b.pdata.Frames.Add(fileID, &mu)
 }
