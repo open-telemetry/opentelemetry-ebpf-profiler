@@ -52,11 +52,19 @@ which is a dynamic public symbol that should be in all binaries of LuaJIT includ
 func (x *x86Extractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, err error) {
 	b, _ = xh.SkipEndBranch(b)
 	var greg x86asm.Reg
+	var zeroReg x86asm.Reg
 	for len(b) > 0 {
 		var i x86asm.Inst
 		i, err = x86asm.Decode(b, 64)
 		if err != nil {
 			return 0, 0, err
+		}
+		if i.Op == x86asm.XOR {
+			a0, ok1 := i.Args[0].(x86asm.Reg)
+			a1, ok2 := i.Args[1].(x86asm.Reg)
+			if ok1 && ok2 && a0 == a1 {
+				zeroReg = a0
+			}
 		}
 		if i.Op == x86asm.MOV {
 			if greg == 0 {
@@ -68,10 +76,17 @@ func (x *x86Extractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, er
 				}
 			} else {
 				a0, ok1 := i.Args[0].(x86asm.Mem)
-				a1, ok2 := i.Args[1].(x86asm.Imm)
-				if ok1 && ok2 && sameReg(a0.Base, greg) && a1 == 0 {
-					curL = uint64(a0.Disp)
-					return glref, curL, nil
+				if ok1 && sameReg(a0.Base, greg) {
+					imm, ok2 := i.Args[1].(x86asm.Imm)
+					if ok2 && imm == 0 {
+						curL = uint64(a0.Disp)
+						return glref, curL, nil
+					}
+					r1, ok2 := i.Args[1].(x86asm.Reg)
+					if ok2 && sameReg(r1, zeroReg) {
+						curL = uint64(a0.Disp)
+						return glref, curL, nil
+					}
 				}
 				// If Greg is dest error
 				if r0, ok := i.Args[0].(x86asm.Reg); ok && sameReg(r0, greg) {
@@ -82,7 +97,7 @@ func (x *x86Extractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, er
 		}
 		b = b[i.Len:]
 	}
-	return 0, 0, errors.New("offsets not found")
+	return 0, 0, errors.New("find offsets from lua_close failed")
 }
 
 // This is different in most builds and we need to get it from stripped binaries.
@@ -325,8 +340,10 @@ func findRipRelativeLea2ndArgTo2ndCall(b []byte, baseAddr, targetCall int64) (ui
 //nolint:gocritic
 func skipCallsAABA(b []byte, ip, baseAddr int64) ([]byte, int64, error) {
 	var lastCall int64
+	var acall int64
+	// 3 Step process, 1 is find AA, 2 is find B and 3 is find A.
 	step := 0
-	for len(b) > 0 && step < 3 {
+	for len(b) > 0 {
 		i, err := x86asm.Decode(b, 64)
 		if err != nil {
 			return nil, 0, err
@@ -335,20 +352,29 @@ func skipCallsAABA(b []byte, ip, baseAddr int64) ([]byte, int64, error) {
 			a0, ok := i.Args[0].(x86asm.Rel)
 			if ok {
 				callAddr := baseAddr + ip + int64(i.Len) + int64(a0)
-				if lastCall == callAddr {
-					// Found AA
-					step++
-				} else if step > 0 {
-					step++
+				if step == 0 && callAddr == lastCall {
+					// Found potential AA
+					step = 1
+					acall = callAddr
+				} else if step == 1 && callAddr != lastCall {
+					// Found AAB
+					step = 2
+				} else if step == 2 && callAddr == acall {
+					// Found AABA
+					step = 3
+				} else {
+					// Found different pattern, reset
+					step = 0
+					acall = 0
 				}
 				lastCall = callAddr
 			}
 		}
 		ip += int64(i.Len)
 		b = b[i.Len:]
-	}
-	if step == 3 {
-		return b, ip, nil
+		if step == 3 {
+			return b, ip, nil
+		}
 	}
 	return nil, 0, errors.New("failed to find AABA call pattern")
 }
