@@ -13,12 +13,12 @@ package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 
 import (
 	"errors"
-	"fmt"
 	"path"
 	"strings"
 	"sync"
 	"unsafe"
 
+	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -285,6 +285,7 @@ func (l *luajitInstance) processVMs(ebpf interpreter.EbpfHandler, pid libpf.PID)
 		hash, traces, err := loadTraces(g+libpf.Address(l.g2Traces), l.rm)
 		if err != nil {
 			// if g is bad remove it
+			log.Warnf("LuaJIT instance (%v) deleted: %v", g, err)
 			badVMs = append(badVMs, g)
 			continue
 		}
@@ -301,6 +302,7 @@ func (l *luajitInstance) processVMs(ebpf interpreter.EbpfHandler, pid libpf.PID)
 		}
 
 		newPrefixes := []lpm.Prefix{}
+	traceLoop:
 		for i := range traces {
 			t := traces[i]
 			// Validate the trace
@@ -310,14 +312,16 @@ func (l *luajitInstance) processVMs(ebpf interpreter.EbpfHandler, pid libpf.PID)
 					foundRegion = true
 					end := t.mcode + uint64(t.szmcode)
 					if end > reg.Vaddr+reg.Length {
-						return fmt.Errorf("trace %v end goes beyond JIT region", t)
+						log.Errorf("trace %v end goes beyond JIT region, bad szmcode", t)
+						continue traceLoop
 					}
 					break
 				}
 			}
 
 			if !foundRegion {
-				return fmt.Errorf("trace %v not in a JIT region", t)
+				log.Errorf("trace %v not in a JIT region", t)
+				continue
 			}
 
 			stackDelta := uint64(t.spadjust) + uint64(cframeSizeJIT)
@@ -329,12 +333,13 @@ func (l *luajitInstance) processVMs(ebpf interpreter.EbpfHandler, pid libpf.PID)
 			}
 			p, err := l.addTrace(ebpf, pid, t, uint64(g), stackDelta)
 			if err != nil {
-				return err
+				log.Errorf("Error adding trace(%d): %v", t.traceno, err)
+				continue
 			}
 			newPrefixes = append(newPrefixes, p...)
 		}
 
-		logf("lj: new traces detected pid(%v) added: %d with %d prefixes and removed %d prefixes",
+		log.Infof("LuaJIT traces for pid(%v) added: %d with %d prefixes and removed %d prefixes",
 			pid, len(traces), len(newPrefixes), len(prefixes))
 
 		l.prefixesByG[g] = newPrefixes
@@ -417,8 +422,11 @@ func (l *luajitInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame
 		g := libpf.Address(frame.Lineno)
 		if g != 0 {
 			unseen := l.addVM(g)
-			if unseen && l.ebpf.CoredumpTest() {
-				return interpreter.ErrLJRestart
+			if unseen {
+				log.Infof("New LuaJIT instance detected: %v", g)
+				if l.ebpf.CoredumpTest() {
+					return interpreter.ErrLJRestart
+				}
 			}
 		}
 		return nil

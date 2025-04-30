@@ -93,6 +93,7 @@ func loadTraces(tracesAddr libpf.Address, rm remotememory.RemoteMemory) (uint64,
 		if t.traceno > uint16(sztrace) {
 			return 0, nil, errors.New("invalid traceno")
 		}
+		logf("lj: added trace(%d) from %x", t.traceno, tracesAddr)
 		traces[t.traceno] = t
 	}
 	return h, traces, nil
