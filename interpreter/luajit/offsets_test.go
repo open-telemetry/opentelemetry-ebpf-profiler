@@ -165,15 +165,20 @@ func getLibFromImage(t *testing.T, name, platform, fullPath, target string) {
 }
 
 // spot testing
-func TestFile(t *testing.T) {
-	for _, target := range []string{
-		"./testdata/libluajit-5.1-jammy.so",
-		"./testdata/luajit-nixos"} {
-		if _, err := os.Stat(target); os.IsNotExist(err) {
+func TestFiles(t *testing.T) {
+	files, err := os.ReadDir("./testdata")
+	require.NoError(t, err)
+	for _, de := range files {
+		target := "./testdata/" + de.Name()
+		fi, err := os.Stat(target)
+		if err != nil || fi.IsDir() {
 			continue
 		}
 		ef, err := pfelf.Open(target)
-		require.NoError(t, err)
+		// Skip non-elf files
+		if err != nil {
+			continue
+		}
 		ljd := luajitData{}
 
 		// create stacktrace deltas to make sure we can find interp bounds
@@ -208,7 +213,7 @@ func TestFile(t *testing.T) {
 			require.Equal(t, uint64(du.Address), du2)
 		}
 
-		t.Logf("%+v, interp: %+v", ljd, interp)
+		t.Logf("%s: %+v, interp: %+v", target, ljd, interp)
 	}
 }
 
