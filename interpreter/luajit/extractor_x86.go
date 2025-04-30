@@ -510,6 +510,8 @@ func sameReg(r1, r2 x86asm.Reg) bool {
 			return r2 == x86asm.RDX
 		case x86asm.EBX:
 			return r2 == x86asm.RBX
+		case x86asm.ESI:
+			return r2 == x86asm.RSI
 		default:
 			return false
 		}
