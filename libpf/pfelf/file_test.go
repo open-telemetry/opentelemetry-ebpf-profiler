@@ -4,14 +4,18 @@
 package pfelf
 
 import (
+	"errors"
+	"fmt"
 	"go/version"
 	"os"
+	"reflect"
 	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/ebpf-profiler/testsupport"
+	"golang.org/x/exp/mmap"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
@@ -94,4 +98,54 @@ func TestGoVersion(t *testing.T) {
 	testVersion, err := testEF.GoVersion()
 	require.NoError(t, err)
 	assert.Equal(t, runtime.Version(), testVersion)
+}
+
+func TestMmapSection(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), t.Name()+".testfile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(f.Name())
+
+	t.Run("invalid reader", func(t *testing.T) {
+		readerValue := reflect.ValueOf(f).Elem()
+		_, err := mmapSection(readerValue, 0, 1)
+		if !errors.Is(err, errInvalReader) {
+			t.Fatalf("expected %v but got %v", errInvalReader, err)
+		}
+	})
+
+	testData := "data-for-the-test"
+
+	t.Run("valid reader", func(t *testing.T) {
+		fmt.Fprintf(f, "%s", testData)
+		mf, err := mmap.Open(f.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer mf.Close()
+
+		readerValue := reflect.ValueOf(mf).Elem()
+
+		t.Run("invalid request", func(t *testing.T) {
+			// Try to access data out of scope from the data
+			// in the backing file.
+			_, err := mmapSection(readerValue, 1024, 1024)
+			if !errors.Is(err, errInvalRequest) {
+				t.Fatalf("expected %v but got %v", errInvalRequest, err)
+			}
+		})
+
+		t.Run("valid request", func(t *testing.T) {
+			// Try to access data out within the scope of
+			// len(testData).
+			res, err := mmapSection(readerValue, 9, 8)
+			if err != nil {
+				t.Fatalf("expected no error but got %v", err)
+			}
+			if string(res) != testData[9:] {
+				t.Fatalf("expected '%s' but got '%s'", testData[9:], string(res))
+			}
+		})
+	})
 }

@@ -27,16 +27,16 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"os"
 	"path/filepath"
+	"reflect"
 	"runtime/debug"
 	"sort"
 	"syscall"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"golang.org/x/exp/mmap"
 )
 
 const (
@@ -50,11 +50,22 @@ const (
 	maxBytesLargeSection = 16 * 1024 * 1024
 )
 
-// ErrSymbolNotFound is returned when requested symbol was not found
-var ErrSymbolNotFound = errors.New("symbol not found")
+// List of public errors.
+var (
+	// ErrSymbolNotFound is returned when requested symbol was not found
+	ErrSymbolNotFound = errors.New("symbol not found")
 
-// ErrNotELF is returned when the file is not an ELF
-var ErrNotELF = errors.New("not an ELF file")
+	// ErrNotELF is returned when the file is not an ELF
+	ErrNotELF = errors.New("not an ELF file")
+)
+
+// List of internal errors.
+var (
+	// The provided reader can not be used to mmap data.
+	errInvalReader = errors.New("invalid reader for mmap")
+	// The requested data exceeds available mapped data.
+	errInvalRequest = errors.New("invalid request")
+)
 
 // File represents an open ELF file
 type File struct {
@@ -63,6 +74,9 @@ type File struct {
 
 	// elfReader is the ReadAt implementation used for this File
 	elfReader io.ReaderAt
+
+	// backing provides access to the mmaped file if possible.
+	backing *mmap.ReaderAt
 
 	// ehFrame is a pointer to the PT_GNU_EH_FRAME segment of the ELF
 	ehFrame *Prog
@@ -148,6 +162,9 @@ type Prog struct {
 
 	// elfReader is the same ReadAt as used for the File
 	elfReader io.ReaderAt
+
+	// If not nil it provides access to the mmaped file.
+	m *mmap.ReaderAt
 }
 
 // Section represents a section header, and data associated with it
@@ -161,22 +178,19 @@ type Section struct {
 	// return the same copy to multiple callers, otherwise they corrupt
 	// each other's reader file position.
 	sr *io.SectionReader
+
+	// If not nil it provides access to the mmaped file.
+	m *mmap.ReaderAt
 }
 
 // Open opens the named file using os.Open and prepares it for use as an ELF binary.
 func Open(name string) (*File, error) {
-	f, err := os.Open(name)
+	f, err := mmap.Open(name)
 	if err != nil {
 		return nil, err
 	}
 
-	// Wrap it in a cacher as we often do short reads
-	buffered, err := readatbuf.New(f, 1024, 4)
-	if err != nil {
-		return nil, err
-	}
-
-	ff, err := newFile(buffered, f, 0, false)
+	ff, err := newFile(f, f, f, 0, false)
 	if err != nil {
 		f.Close()
 		return nil, err
@@ -195,11 +209,13 @@ func (f *File) Close() (err error) {
 
 // NewFile creates a new ELF file object that borrows the given reader.
 func NewFile(r io.ReaderAt, loadAddress uint64, hasMusl bool) (*File, error) {
-	return newFile(r, nil, loadAddress, hasMusl)
+	return newFile(nil, r, nil, loadAddress, hasMusl)
 }
 
-func newFile(r io.ReaderAt, closer io.Closer, loadAddress uint64, hasMusl bool) (*File, error) {
+func newFile(m *mmap.ReaderAt, r io.ReaderAt, closer io.Closer,
+	loadAddress uint64, hasMusl bool) (*File, error) {
 	f := &File{
+		backing:    m,
 		elfReader:  r,
 		InsideCore: loadAddress != 0,
 		closer:     closer,
@@ -249,6 +265,7 @@ func newFile(r io.ReaderAt, closer io.Closer, loadAddress uint64, hasMusl bool) 
 			Align:  ph.Align,
 		}
 		p.elfReader = r
+		p.m = m
 
 		if p.Type == elf.PT_LOAD {
 			if p.Vaddr < virtualBase {
@@ -381,6 +398,7 @@ func (f *File) LoadSections() error {
 		}
 		s.sr = io.NewSectionReader(f.elfReader, int64(s.Offset), int64(s.FileSize))
 		s.ReaderAt = s.sr
+		s.m = f.backing
 	}
 
 	// Load the section name string table
@@ -710,14 +728,47 @@ func (ph *Prog) Open() io.ReadSeeker {
 	return io.NewSectionReader(ph, 0, 1<<63-1)
 }
 
+// mmapSection returns a mmap backed byte slice of a ELF section.
+// reflection and unsafe are used to access the underlying memory-mapped data
+// The actual implementation of mmap.ReaderAt has a 'data []byte' field
+// that points directly to the memory-mapped region
+func mmapSection(readerValue reflect.Value, secOffset, secSize int) ([]byte, error) {
+	// Find the 'data' field
+	dataField := readerValue.FieldByName("data")
+	if dataField.Kind() == reflect.Invalid {
+		return nil, errInvalReader
+	}
+
+	// Get the first byte's address and the length
+	dataPtr := unsafe.Pointer(dataField.Pointer())
+	length := dataField.Len()
+
+	// Make sure the requested data does not exceed the mmaped data
+	if secOffset+secSize > length {
+		return nil, fmt.Errorf("requested data %d at 0x%x exceeds %d: %w",
+			secSize, secOffset, length, errInvalRequest)
+	}
+
+	// Create a byte slice that points to the memory at the specified offset
+	return unsafe.Slice((*byte)(unsafe.Add(dataPtr, secOffset)), secSize), nil
+}
+
 // Data loads the whole program header referenced data, and returns it as slice.
 func (ph *Prog) Data(maxSize uint) ([]byte, error) {
-	if ph.Filesz > uint64(maxSize) {
-		return nil, fmt.Errorf("segment size %d is too large", ph.Filesz)
+	if ph.m == nil {
+		// Fallback option if the file is not mmaped.
+		if ph.Filesz > uint64(maxSize) {
+			return nil, fmt.Errorf("segment size %d is too large", ph.Filesz)
+		}
+		p := make([]byte, ph.Filesz)
+		_, err := ph.ReadAt(p, 0)
+		return p, err
 	}
-	p := make([]byte, ph.Filesz)
-	_, err := ph.ReadAt(p, 0)
-	return p, err
+
+	// Get a reflect.Value for the reader
+	readerValue := reflect.ValueOf(ph.m).Elem()
+
+	return mmapSection(readerValue, int(ph.Off), int(ph.Filesz))
 }
 
 // DataReader loads the whole program header referenced data, and returns reader to it.
@@ -734,12 +785,20 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 	if sh.Flags&elf.SHF_COMPRESSED != 0 {
 		return nil, errors.New("compressed sections not supported")
 	}
-	if sh.FileSize > uint64(maxSize) {
-		return nil, fmt.Errorf("section size %d is too large", sh.FileSize)
+	if sh.m == nil {
+		// Fallback option if the file is not mmaped.
+		if sh.FileSize > uint64(maxSize) {
+			return nil, fmt.Errorf("section size %d is too large", sh.FileSize)
+		}
+		p := make([]byte, sh.FileSize)
+		_, err := sh.ReadAt(p, 0)
+		return p, err
 	}
-	p := make([]byte, sh.FileSize)
-	_, err := sh.ReadAt(p, 0)
-	return p, err
+
+	// Get a reflect.Value for the reader
+	readerValue := reflect.ValueOf(sh.m).Elem()
+
+	return mmapSection(readerValue, int(sh.Offset), int(sh.FileSize))
 }
 
 // ReadAt reads bytes from given virtual address
