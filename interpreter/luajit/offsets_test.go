@@ -164,6 +164,45 @@ func getLibFromImage(t *testing.T, name, platform, fullPath, target string) {
 	require.NoError(t, err)
 }
 
+func TestX86LuaClose(t *testing.T) {
+	testdata := []struct {
+		name          string
+		glRefExpected uint64
+		curLExpected  uint64
+		code          []byte
+	}{
+		{
+			name:          "size-optimized-register-zero",
+			glRefExpected: 0x10,
+			curLExpected:  0x158,
+			code: []byte{
+				0x41, 0x55, //                               pushq   %r13
+				0x4c, 0x8d, 0x2d, 0x3f, 0xd4, 0xff, 0xff, // leaq    -0x2bc1(%rip), %r13
+				0x41, 0x54, //                               pushq   %r12
+				0x41, 0xbc, 0x0a, 0x00, 0x00, 0x00, //       movl    $0xa, %r12d
+				0x55,                   //                   pushq   %rbp
+				0x53,                   //                   pushq   %rbx
+				0x51,                   //                   pushq   %rcx
+				0x48, 0x8b, 0x5f, 0x10, //                   movq    0x10(%rdi), %rbx
+				0x48, 0x8b, 0xab, 0xc8, 0x00, 0x00, 0x00, // movq    0xc8(%rbx), %rbp
+				0x48, 0x89, 0xef, // movq    %rbp, %rdi
+				0xe8, 0x6e, 0x17, 0x00, 0x00, // callq   0x175f0 <luaJIT_profile_stop>
+				0x31, 0xf6, // xorl    %esi, %esi
+				0x48, 0x89, 0xef, // movq    %rbp, %rdi
+				0x48, 0x89, 0xb3, 0x58, 0x01, 0x00, 0x00, // movq    %rsi, 0x158(%rbx)
+			},
+		},
+	}
+
+	for _, test := range testdata {
+		x := x86Extractor{}
+		glref, curL, err := x.findOffsetsFromLuaClose(test.code)
+		require.NoError(t, err)
+		require.Equal(t, test.glRefExpected, glref)
+		require.Equal(t, test.curLExpected, curL)
+	}
+}
+
 // spot testing
 func TestFiles(t *testing.T) {
 	files, err := os.ReadDir("./testdata")
