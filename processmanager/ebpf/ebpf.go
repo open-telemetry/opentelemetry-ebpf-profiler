@@ -267,8 +267,9 @@ func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID 
 
 func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
 	offsetRanges []util.Range) (key uint64, value C.OffsetRange, err error) {
-	if len(offsetRanges) != 1 && len(offsetRanges) != 2 {
-		return 0, C.OffsetRange{}, fmt.Errorf("ivalid ranges %+v", offsetRanges)
+	rLen := len(offsetRanges)
+	if rLen < 1 || rLen > 2 {
+		return 0, C.OffsetRange{}, fmt.Errorf("invalid ranges %v", offsetRanges)
 	}
 	//  The keys of this map are executable-id-and-offset-into-text entries, and
 	//  the offset_range associated with them gives the precise area in that page
