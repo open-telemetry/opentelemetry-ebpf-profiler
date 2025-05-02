@@ -13,6 +13,7 @@ package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 
 import (
 	"errors"
+	"fmt"
 	"path"
 	"strings"
 	"sync"
@@ -256,22 +257,26 @@ func (l *luajitInstance) synchronizeMappings(ebpf interpreter.EbpfHandler, pid l
 		l.jitRegions[*m] = cycle
 	}
 
-	// Add new ones and remove garbage ones
+	// Remove old ones
 	for m, c := range l.jitRegions {
 		k := regionKey{start: m.Vaddr, end: m.Vaddr + m.Length}
 		if c != cycle {
 			for _, prefix := range l.prefixes[k] {
 				if err := ebpf.DeletePidInterpreterMapping(pid, prefix); err != nil {
-					return err
+					return errors.Join(err, fmt.Errorf("failed to delete prefix %v", prefix))
 				}
 			}
 			delete(l.jitRegions, m)
 			delete(l.prefixes, k)
-		} else {
-			if _, ok := l.prefixes[k]; !ok {
-				if err := l.addJITRegion(ebpf, pid, m.Vaddr, m.Vaddr+m.Length); err != nil {
-					return err
-				}
+		}
+	}
+
+	// Add new ones
+	for m := range l.jitRegions {
+		k := regionKey{start: m.Vaddr, end: m.Vaddr + m.Length}
+		if _, ok := l.prefixes[k]; !ok {
+			if err := l.addJITRegion(ebpf, pid, m.Vaddr, m.Vaddr+m.Length); err != nil {
+				return errors.Join(err, fmt.Errorf("failed to add JIT region %v", m))
 			}
 		}
 	}
