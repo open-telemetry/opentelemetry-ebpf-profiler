@@ -338,13 +338,15 @@ func (i *beamInstance) Detach(interpreter.EbpfHandler, libpf.PID) error {
 
 func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame, trace *libpf.Trace) error {
 	if !frame.Type.IsInterpType(libpf.BEAM) {
-		log.Warnf("BEAM failed to symbolize")
 		return interpreter.ErrMismatchInterpreterType
 	}
-	log.Infof("BEAM symbolizing %v", frame)
-
+	// Index into the active static `r` variable using the currently-active code index (the size of the `ranges` struct is 32 bytes)
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
 	codeIndex := i.rm.Uint64(i.codeIndexPtr)
 	activeRanges := i.rangesPtr + libpf.Address(32*codeIndex)
+
+	// Use offsets into the `ranges` struct to get the beginning of the array and the number of entries based on
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L56-L61
 	modules := i.rm.Ptr(activeRanges)
 	n := i.rm.Uint64(activeRanges + libpf.Address(8))
 
@@ -353,78 +355,91 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 	log.Infof("BEAM symbolizing pc: %x, n: %d", pc, n)
 
 	low := i.rm.Ptr(modules)
-	mid := i.rm.Ptr(modules + libpf.Address(24))
 	high := i.rm.Ptr(modules + libpf.Address((n-1)*16+8))
 
-	log.Infof("BEAM symbolizing low: %x, mid: %x, high: %x", low, mid, high)
-
-	// for idx := uint64(0); idx < n; idx++ {
-	// 	start := i.rm.Ptr(modules + libpf.Address(idx*16))
-	// 	end := i.rm.Ptr(modules + libpf.Address(idx*16+8))
-	// 	log.Infof("BEAM Range %x - %x: idx %d", start, end, idx)
-	// }
-
-	if pc < low {
-		log.Infof("BEAM pc %x < %x", pc, low)
-	} else if pc > high {
-		log.Infof("BEAM pc %x > %x", pc, high)
-	} else {
+	if pc >= low && pc <= high {
+		// Get a pointer to both the target `BeamCodeHeader` struct and the one following it,
+		// because we will want the last field in the struct, which is the pointer to the `functions` table,
+		// but the size of the struct depends on configuration, so we hack around that by using a negative offset from the next struct,
+		// since they'll be adjacent in memory.
+		codeHeader := libpf.Address(0)
 		lowIdx := uint64(0)
-		midIdx := (n - 1) / 2
 		highIdx := n - 1
-		midStart := i.rm.Ptr(modules + libpf.Address(midIdx*16))
-		midEnd := i.rm.Ptr(modules + libpf.Address(midIdx*16+8))
 		for lowIdx < highIdx {
+			midIdx := lowIdx + (highIdx-lowIdx)/2
+			// Each `Range` entry is 16 bytes: a pointer to the `start` and a pointer to the `end`
+			// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L31-L34
+			midStart := i.rm.Ptr(modules + libpf.Address(midIdx*16))
+			midEnd := i.rm.Ptr(modules + libpf.Address(midIdx*16+8))
 			if pc < midStart {
 				highIdx = midIdx
-				log.Infof("BEAM symbolizing %x < %x, highIdx: %d", pc, midStart, highIdx)
 			} else if pc >= midEnd {
 				lowIdx = midIdx + 1
-				log.Infof("BEAM symbolizing %x >= %x, lowIdx: %d", pc, midEnd, lowIdx)
 			} else {
-				log.Warnf("BEAM found the correct range: midIdx: %d, start: %x, end: %x", midIdx, midStart, midEnd)
+				log.Warnf("BEAM found the correct range: idx: %d, start: %x, end: %x", midIdx, midStart, midEnd)
+				codeHeader = midStart
 				break
 			}
-			midIdx = lowIdx + (highIdx-lowIdx)/2
-			midStart = i.rm.Ptr(modules + libpf.Address(midIdx*16))
-			midEnd = i.rm.Ptr(modules + libpf.Address(midIdx*16+8))
-			log.Infof("BEAM symbolizing midIdx: %d, start: %x, end: %x", midIdx, midStart, midEnd)
 		}
-	}
 
-	file, err := os.Open(fmt.Sprintf("/tmp/jit-%d.dump", uint32(i.pid)))
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+		// `codeHeader` points to `BeamCodeHeader` struct, defined here:
+		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_code.h#L56-L125
+		// Need to figure out a better way to maintain offsets for the `functions` field, but for now...
+		// (gdb) set var $hdr=(BeamCodeHeader*)(r[the_active_code_index.counter].modules[3].start)
+		// (gdb) ptype/o $hdr
+		// type = struct beam_code_header {
+		//      0      |       8     UWord num_functions;
+		//      8      |       8     const byte *attr_ptr;
+		//     16      |       8     UWord attr_size;
+		//     24      |       8     UWord attr_size_on_heap;
+		//     32      |       8     const byte *compile_ptr;
+		//     40      |       8     UWord compile_size;
+		//     48      |       8     UWord compile_size_on_heap;
+		//     56      |       8     struct ErtsLiteralArea_ *literal_area;
+		//     64      |       8     const ErtsCodeInfo *on_load;
+		//     72      |       8     const BeamCodeLineTab *line_table;
+		//     80      |       8     Uint coverage_mode;
+		//     88      |       8     void *coverage;
+		//     96      |       8     byte *line_coverage_valid;
+		//    104      |       8     Uint32 *loc_index_to_cover_id;
+		//    112      |       8     Uint line_coverage_len;
+		//    120      |       8     const byte *md5_ptr;
+		//    128      |       8     byte *are_nifs;
+		//    136      |       8     const ErtsCodeInfo *functions[1];
+		// total size (bytes):  144
+		// }
 
-	_, err = ReadJITDumpHeader(file)
-	if err != nil {
-		return err
-	}
+		// `functions` is a pointer to an array of `ErtsCodeInfo` structs, defined here:
+		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.h#L104-L123
+		// (gdb) ptype/o $hdr.functions
+		// type = const struct ErtsCodeInfo_ {
+		// 	/*      0      |       8 */    struct {
+		// 	/*      0      |       8 */        struct {
+		// 	/*      0      |       7 */            char raise_function_clause[7];
+		// 	/*      7      |       1 */            char breakpoint_flag;
+		//
+		// 										   /* total size (bytes):    8 */
+		// 									   } metadata;
+		//
+		// 									   /* total size (bytes):    8 */
+		// 								   } u;
+		// 	/*      8      |       8 */    struct GenericBp *gen_bp;
+		// 	/*     16      |      24 */    ErtsCodeMFA mfa;
+		//
+		// 								   /* total size (bytes):   40 */
 
-	for recordHeader, err := ReadJITDumpRecordHeader(file); err == nil; recordHeader, err = ReadJITDumpRecordHeader(file) {
-		switch recordHeader.ID {
-		case JITCodeLoad:
-			record, name, err := ReadJITDumpRecordCodeLoad(file, recordHeader)
-			if err != nil {
-				return err
-			}
+		numFunctions := i.rm.Uint32(codeHeader)
+		log.Infof("BEAM module has %d functions", numFunctions)
 
-			if pc >= libpf.Address(record.CodeAddr) && pc <= libpf.Address(record.CodeAddr)+libpf.Address(record.CodeSize) {
-				log.Infof("BEAM JITDump found matching code %s @ 0x%x (%d bytes)", name, record.CodeAddr, record.CodeSize)
-				frameID := libpf.NewFrameID(libpf.NewFileID(record.CodeIndex, 0x0), frame.Lineno)
-				symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-					FrameID:      frameID,
-					FunctionName: name,
-				})
-				trace.AppendFrameID(libpf.BEAMFrame, frameID)
-				return nil
-			}
+		for idx := range numFunctions {
+			ertsCodeInfo := i.rm.Ptr(codeHeader + libpf.Address(136+idx*8))
 
-		default:
-			SkipJITDumpRecord(file, recordHeader)
+			module := i.rm.Uint32(ertsCodeInfo + libpf.Address(16))
+			function := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+8))
+			arity := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+16))
+			log.Warnf("BEAM functions[%d]: %d.%d/%d", idx, module, function, arity)
 		}
+
 	}
 
 	return nil
