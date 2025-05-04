@@ -44,6 +44,7 @@ type beamData struct {
 	version               uint32
 	the_active_code_index uint64
 	r                     uint64
+	erts_atom_table       uint64
 }
 
 type beamInstance struct {
@@ -55,6 +56,7 @@ type beamInstance struct {
 	rm           remotememory.RemoteMemory
 	rangesPtr    libpf.Address
 	codeIndexPtr libpf.Address
+	atomTable    libpf.Address
 	// mappings is indexed by the Mapping to its generation
 	mappings map[process.Mapping]*uint32
 	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
@@ -153,12 +155,18 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, fmt.Errorf("symbol 'r' not found: %v", err)
 	}
 
-	log.Infof("BEAM r address: %x", r)
+	// "erts_atom_table" symbol is from:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/atom.c#L35
+	erts_atom_table, err := ef.LookupSymbolAddress("erts_atom_table")
+	if err != nil {
+		return nil, fmt.Errorf("symbol 'erts_atom_table' not found: %v", err)
+	}
 
 	d := &beamData{
 		version:               otpVersion,
 		the_active_code_index: uint64(the_active_code_index),
 		r:                     uint64(r),
+		erts_atom_table:       uint64(erts_atom_table),
 	}
 
 	log.Infof("BEAM loaded %v", d)
@@ -184,6 +192,7 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		rm:           rm,
 		rangesPtr:    bias + libpf.Address(d.r),
 		codeIndexPtr: bias + libpf.Address(d.the_active_code_index),
+		atomTable:    bias + libpf.Address(d.erts_atom_table),
 		mappings:     make(map[process.Mapping]*uint32),
 		prefixes:     make(map[lpm.Prefix]*uint32),
 	}, nil
@@ -428,19 +437,83 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 		//
 		// 								   /* total size (bytes):   40 */
 
+		// `mfa` is defined here:
+		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.h#L87-L95
+
 		numFunctions := i.rm.Uint32(codeHeader)
 		log.Infof("BEAM module has %d functions", numFunctions)
 
+		moduleName := ""
+		functionName := ""
+		err := error(nil)
 		for idx := range numFunctions {
 			ertsCodeInfo := i.rm.Ptr(codeHeader + libpf.Address(136+idx*8))
 
 			module := i.rm.Uint32(ertsCodeInfo + libpf.Address(16))
+			if idx == 0 {
+				moduleName, err = LookupAtom(i, module)
+			}
+			if err != nil {
+				return err
+			}
+
 			function := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+8))
+			if idx == 0 {
+				functionName, err = LookupAtom(i, function)
+			}
+			if err != nil {
+				return err
+			}
+
 			arity := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+16))
-			log.Warnf("BEAM functions[%d]: %d.%d/%d", idx, module, function, arity)
+			log.Warnf("BEAM functions[%d]: %s.%s/%d", idx, moduleName, functionName, arity)
 		}
 
 	}
 
 	return nil
+}
+
+func LookupAtom(i *beamInstance, index uint32) (string, error) {
+	// `atomTable` points to an `IndexTable`:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/index.h#L39-L47
+	// (gdb) ptype/o erts_atom_table
+	// type = struct index_table {
+	//      0      |     104     Hash htable;
+	//    104      |       4     ErtsAlcType_t type;
+	//    108      |       4     int size;
+	//    112      |       4     int limit;
+	//    116      |       4     int entries;
+	//    120      |       8     IndexSlot ***seg_table;
+	// total size (bytes):  128
+
+	log.Infof("BEAM Looking up Atom %d from atomTable @ %x", index, i.atomTable)
+
+	segTable := i.rm.Ptr(i.atomTable + libpf.Address(120))
+	segment := i.rm.Ptr(segTable + libpf.Address(8*(index>>16)))
+	entry := i.rm.Ptr(segment + libpf.Address(8*((index>>6)&0x3FF)))
+	log.Infof("BEAM &segTable: %x, &segment: %x, & entry: %x", segTable, segment, entry)
+
+	// `entry` points to an `Atom`:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/atom.h#L48-L54
+	// (gdb) ptype/o $etp_atom_1_ap
+	// type = struct atom {
+	//       0      |      24     IndexSlot slot;
+	//      24      |       2     Sint16 len;
+	//      26      |       2     Sint16 latin1_chars;
+	//      28      |       4     int ord0;
+	//      32      |       8     byte *name;
+	// total size (bytes):   40
+
+	len := i.rm.Uint16(entry + libpf.Address(24))
+	log.Infof("BEAM Found atom with length %d", len)
+
+	name := make([]byte, len)
+	err := i.rm.Read(i.rm.Ptr(entry+libpf.Address(32)), name)
+	if err != nil {
+		return "", fmt.Errorf("BEAM Unable to lookup atom with index %d: %v", index, err)
+	}
+
+	log.Infof("BEAM Looked up atom at index %d: %s", index, name)
+	return string(name), nil
 }
