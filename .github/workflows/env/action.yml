@@ -37,7 +37,7 @@ runs:
         cache-dependency-path: go.sum
       id: go
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
+      uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1
       with:
         targets: x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
         toolchain: 1.77
