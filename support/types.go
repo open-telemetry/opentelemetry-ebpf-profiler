@@ -20,7 +20,6 @@ const (
 	FrameMarkerV8       = 0x8
 	FrameMarkerDotnet   = 0xa
 	FrameMarkerGo       = 0xb
-	FrameMarkerGoLabels = 0xc
 	FrameMarkerAbort    = 0xff
 )
 
