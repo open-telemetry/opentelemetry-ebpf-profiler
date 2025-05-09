@@ -28,15 +28,14 @@ import (
 	"hash/crc32"
 	"io"
 	"path/filepath"
-	"reflect"
 	"runtime/debug"
 	"sort"
 	"syscall"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"golang.org/x/exp/mmap"
 )
 
 const (
@@ -57,14 +56,6 @@ var (
 
 	// ErrNotELF is returned when the file is not an ELF
 	ErrNotELF = errors.New("not an ELF file")
-)
-
-// List of internal errors.
-var (
-	// The provided reader can not be used to mmap data.
-	errInvalReader = errors.New("invalid reader for mmap")
-	// The requested data exceeds available mapped data.
-	errInvalRequest = errors.New("invalid request")
 )
 
 // File represents an open ELF file
@@ -716,48 +707,20 @@ func (ph *Prog) Open() io.ReadSeeker {
 	return io.NewSectionReader(ph, 0, 1<<63-1)
 }
 
-// mmapSection returns a mmap backed byte slice of a ELF section.
-// reflection and unsafe are used to access the underlying memory-mapped data
-// The actual implementation of mmap.ReaderAt has a 'data []byte' field
-// that points directly to the memory-mapped region
-func mmapSection(readerValue reflect.Value, secOffset, secSize int) ([]byte, error) {
-	// Find the 'data' field
-	dataField := readerValue.FieldByName("data")
-	if dataField.Kind() == reflect.Invalid {
-		return nil, errInvalReader
-	}
-
-	// Get the first byte's address and the length
-	dataPtr := unsafe.Pointer(dataField.Pointer())
-	length := dataField.Len()
-
-	// Make sure the requested data does not exceed the mmaped data
-	if secOffset+secSize > length {
-		return nil, fmt.Errorf("requested data %d at 0x%x exceeds %d: %w",
-			secSize, secOffset, length, errInvalRequest)
-	}
-
-	// Create a byte slice that points to the memory at the specified offset
-	return unsafe.Slice((*byte)(unsafe.Add(dataPtr, secOffset)), secSize), nil
-}
-
 // Data loads the whole program header referenced data, and returns it as slice.
 func (ph *Prog) Data(maxSize uint) ([]byte, error) {
-	_, ok := ph.elfReader.(*mmap.ReaderAt)
-	if !ok {
-		// Fallback option if the file is not mmaped.
-		if ph.Filesz > uint64(maxSize) {
-			return nil, fmt.Errorf("segment size %d is too large", ph.Filesz)
-		}
-		p := make([]byte, ph.Filesz)
-		_, err := ph.ReadAt(p, 0)
-		return p, err
+	mapping, ok := ph.elfReader.(*mmap.ReaderAt)
+	if ok {
+		return mapping.Subslice(int(ph.Off), int(ph.Filesz))
 	}
 
-	// Get a reflect.Value for the reader
-	readerValue := reflect.ValueOf(ph.elfReader).Elem()
-
-	return mmapSection(readerValue, int(ph.Off), int(ph.Filesz))
+	// Fallback option if the file is not mmaped.
+	if ph.Filesz > uint64(maxSize) {
+		return nil, fmt.Errorf("segment size %d is too large", ph.Filesz)
+	}
+	p := make([]byte, ph.Filesz)
+	_, err := ph.ReadAt(p, 0)
+	return p, err
 }
 
 // DataReader loads the whole program header referenced data, and returns reader to it.
@@ -775,21 +738,18 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 		return nil, errors.New("compressed sections not supported")
 	}
 
-	_, ok := sh.elfReader.(*mmap.ReaderAt)
-	if !ok {
-		// Fallback option if the file is not mmaped.
-		if sh.FileSize > uint64(maxSize) {
-			return nil, fmt.Errorf("section size %d is too large", sh.FileSize)
-		}
-		p := make([]byte, sh.FileSize)
-		_, err := sh.elfReader.ReadAt(p, 0)
-		return p, err
+	mapping, ok := sh.elfReader.(*mmap.ReaderAt)
+	if ok {
+		return mapping.Subslice(int(sh.Offset), int(sh.FileSize))
 	}
 
-	// Get a reflect.Value for the reader
-	readerValue := reflect.ValueOf(sh.elfReader).Elem()
-
-	return mmapSection(readerValue, int(sh.Offset), int(sh.FileSize))
+	// Fallback option if the file is not mmaped.
+	if sh.FileSize > uint64(maxSize) {
+		return nil, fmt.Errorf("section size %d is too large", sh.FileSize)
+	}
+	p := make([]byte, sh.FileSize)
+	_, err := sh.elfReader.ReadAt(p, 0)
+	return p, err
 }
 
 // ReadAt reads bytes from given virtual address
