@@ -13,6 +13,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
@@ -367,15 +368,12 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 	high := i.rm.Ptr(modules + libpf.Address((n-1)*16+8))
 
 	if pc >= low && pc <= high {
-		// Get a pointer to both the target `BeamCodeHeader` struct and the one following it,
-		// because we will want the last field in the struct, which is the pointer to the `functions` table,
-		// but the size of the struct depends on configuration, so we hack around that by using a negative offset from the next struct,
-		// since they'll be adjacent in memory.
 		codeHeader := libpf.Address(0)
 		lowIdx := uint64(0)
+		midIdx := uint64(0)
 		highIdx := n - 1
 		for lowIdx < highIdx {
-			midIdx := lowIdx + (highIdx-lowIdx)/2
+			midIdx = lowIdx + (highIdx-lowIdx)/2
 			// Each `Range` entry is 16 bytes: a pointer to the `start` and a pointer to the `end`
 			// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L31-L34
 			midStart := i.rm.Ptr(modules + libpf.Address(midIdx*16))
@@ -385,7 +383,7 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 			} else if pc >= midEnd {
 				lowIdx = midIdx + 1
 			} else {
-				log.Warnf("BEAM found the correct range: idx: %d, start: %x, end: %x", midIdx, midStart, midEnd)
+				log.Warnf("BEAM found range[%d]: (0x%x - 0x%x)", midIdx, midStart, midEnd)
 				codeHeader = midStart
 				break
 			}
@@ -418,6 +416,8 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 		// total size (bytes):  144
 		// }
 
+		numFunctions := i.rm.Uint32(codeHeader)
+
 		// `functions` is a pointer to an array of `ErtsCodeInfo` structs, defined here:
 		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.h#L104-L123
 		// (gdb) ptype/o $hdr.functions
@@ -437,40 +437,75 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 		//
 		// 								   /* total size (bytes):   40 */
 
-		// `mfa` is defined here:
-		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.h#L87-L95
+		ertsCodeInfo := libpf.Address(0)
+		lowIdx = uint64(0)
+		highIdx = uint64(numFunctions) - 1
+		for lowIdx < highIdx {
+			midIdx = lowIdx + (highIdx-lowIdx)/2
+			midStart := i.rm.Ptr(codeHeader + libpf.Address(136+midIdx*8))
+			midEnd := i.rm.Ptr(codeHeader + libpf.Address(136+(midIdx+1)*8))
+			if pc < midStart {
+				highIdx = midIdx
+			} else if pc >= midEnd {
+				lowIdx = midIdx + 1
+			} else {
+				ertsCodeInfo = midStart
 
-		numFunctions := i.rm.Uint32(codeHeader)
-		log.Infof("BEAM module has %d functions", numFunctions)
+				// `mfa` is defined here:
+				// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.h#L87-L95
+				module := i.rm.Uint32(ertsCodeInfo + libpf.Address(16))
+				moduleName, err := LookupAtom(i, module)
+				if err != nil {
+					return err
+				}
 
-		moduleName := ""
-		functionName := ""
-		err := error(nil)
-		for idx := range numFunctions {
-			ertsCodeInfo := i.rm.Ptr(codeHeader + libpf.Address(136+idx*8))
+				function := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+8))
+				functionName, err := LookupAtom(i, function)
+				if err != nil {
+					return err
+				}
 
-			module := i.rm.Uint32(ertsCodeInfo + libpf.Address(16))
-			if idx == 0 {
-				moduleName, err = LookupAtom(i, module)
+				arity := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+16))
+
+				mfaName := ""
+				if strings.HasPrefix(moduleName, "Elixir.") {
+					// This is an Elixir module, so format the function using Elixir syntax (without the "Elixir." prefix)
+					mfaName = fmt.Sprintf("%s.%s/%d", moduleName[7:], functionName, arity)
+				} else {
+					// Assume it's Erlang and format it using Erlang syntax
+					mfaName = fmt.Sprintf("%s:%s/%d", moduleName, functionName, arity)
+				}
+				log.Warnf("BEAM Found function[%d]: %s (0x%x - 0x%x)", midIdx, mfaName, midStart, midEnd)
+
+				frameID := libpf.NewFrameID(libpf.NewFileID(uint64(module), 0x0), libpf.AddressOrLineno((uint64(function)<<32)+uint64(arity)))
+
+				symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+					FrameID:      frameID,
+					FunctionName: mfaName,
+				})
+				trace.AppendFrameID(libpf.BEAMFrame, frameID)
+				break
 			}
-			if err != nil {
-				return err
-			}
-
-			function := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+8))
-			if idx == 0 {
-				functionName, err = LookupAtom(i, function)
-			}
-			if err != nil {
-				return err
-			}
-
-			arity := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+16))
-			log.Warnf("BEAM functions[%d]: %s.%s/%d", idx, moduleName, functionName, arity)
 		}
 
-	}
+		//lineTable := i.rm.Ptr(codeHeader + libpf.Address(72))
 
+		// `lineTable` points to a table of `BeamCodeLineTab_` structs:
+		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_code.h#L130-L138
+		// (gdb) ptype/o $hdr.line_table
+		// type = const struct BeamCodeLineTab_ {
+		// 	     0      |       8     const Eterm *fname_ptr;
+		// 	     8      |       4     int loc_size;
+		// 	XXX  4-byte hole
+		// 	    16      |       8     union {
+		// 	                    8         Uint16 *p2;
+		// 	                    8         Uint32 *p4;
+		// 									   total size (bytes):    8
+		// 								   } loc_tab;
+		// 	    24      |       8    const void **func_tab[1];
+		//
+		// total size (bytes):   32
+	}
 	return nil
 }
 
@@ -487,12 +522,9 @@ func LookupAtom(i *beamInstance, index uint32) (string, error) {
 	//    120      |       8     IndexSlot ***seg_table;
 	// total size (bytes):  128
 
-	log.Infof("BEAM Looking up Atom %d from atomTable @ %x", index, i.atomTable)
-
 	segTable := i.rm.Ptr(i.atomTable + libpf.Address(120))
 	segment := i.rm.Ptr(segTable + libpf.Address(8*(index>>16)))
 	entry := i.rm.Ptr(segment + libpf.Address(8*((index>>6)&0x3FF)))
-	log.Infof("BEAM &segTable: %x, &segment: %x, & entry: %x", segTable, segment, entry)
 
 	// `entry` points to an `Atom`:
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/atom.h#L48-L54
@@ -506,7 +538,6 @@ func LookupAtom(i *beamInstance, index uint32) (string, error) {
 	// total size (bytes):   40
 
 	len := i.rm.Uint16(entry + libpf.Address(24))
-	log.Infof("BEAM Found atom with length %d", len)
 
 	name := make([]byte, len)
 	err := i.rm.Read(i.rm.Ptr(entry+libpf.Address(32)), name)
@@ -514,6 +545,5 @@ func LookupAtom(i *beamInstance, index uint32) (string, error) {
 		return "", fmt.Errorf("BEAM Unable to lookup atom with index %d: %v", index, err)
 	}
 
-	log.Infof("BEAM Looked up atom at index %d: %s", index, name)
 	return string(name), nil
 }
