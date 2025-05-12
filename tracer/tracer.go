@@ -1199,11 +1199,6 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 	return nil
 }
 
-// Make accessible for testing
-func (t *Tracer) GetEbpfMaps() map[string]*cebpf.Map {
-	return t.ebpfMaps
-}
-
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
 // entry point is always the native tracer. The native tracer will determine when to invoke the
 // interpreter tracers based on address range information.
