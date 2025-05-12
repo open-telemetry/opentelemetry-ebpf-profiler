@@ -12,7 +12,6 @@ import (
 	"github.com/peterbourgon/ff/v3"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
-	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -64,10 +63,10 @@ var (
 		"If zero, monotonic-realtime clock sync will be performed once, " +
 		"on agent startup, but not periodically."
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
-	offCPUThresholdHelp = fmt.Sprintf("The per-mille chance for an off-cpu event being recorded. "+
-		"Valid values are in the range [1..%d], and 0 to disable off-cpu profiling."+
+	offCPUThresholdHelp = fmt.Sprintf("The probability for an off-cpu event being recorded. "+
+		"Valid values are in the range [0..1]. 0 disables off-cpu profiling. "+
 		"Default is %d.",
-		support.OffCPUThresholdMax, defaultOffCPUThreshold)
+		defaultOffCPUThreshold)
 	envVarsHelp = "Comma separated list of environment variables that will be reported with the" +
 		"captured profiling samples."
 )
@@ -123,7 +122,7 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.VerboseMode, "verbose", false, verboseModeHelp)
 	fs.BoolVar(&args.Version, "version", false, versionHelp)
 
-	fs.UintVar(&args.OffCPUThreshold, "off-cpu-threshold",
+	fs.Float64Var(&args.OffCPUThreshold, "off-cpu-threshold",
 		defaultOffCPUThreshold, offCPUThresholdHelp)
 
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)

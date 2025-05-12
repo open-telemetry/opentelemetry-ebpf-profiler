@@ -3,6 +3,7 @@ package controller // import "go.opentelemetry.io/ebpf-profiler/internal/control
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -95,7 +96,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		BPFVerifierLogLevel:    uint32(c.config.BpfVerifierLogLevel),
 		ProbabilisticInterval:  c.config.ProbabilisticInterval,
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
-		OffCPUThreshold:        uint32(c.config.OffCPUThreshold),
+		OffCPUThreshold:        uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
 		IncludeEnvVars:         envVars,
 	})
 	if err != nil {
@@ -117,11 +118,11 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 	log.Info("Attached tracer program")
 
-	if c.config.OffCPUThreshold > 0 {
+	if c.config.OffCPUThreshold > 0.0 {
 		if err := trc.StartOffCPUProfiling(); err != nil {
 			return fmt.Errorf("failed to start off-cpu profiling: %v", err)
 		}
-		log.Printf("Enabled off-cpu profiling")
+		log.Printf("Enabled off-cpu profiling with p=%f", c.config.OffCPUThreshold)
 	}
 
 	if c.config.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
