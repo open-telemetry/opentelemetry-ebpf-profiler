@@ -47,11 +47,13 @@ _Static_assert(sizeof(uintptr_t) == 8, "bad uintptr_t size");
 _Static_assert(sizeof(size_t) == 8, "bad size_t size");
 
 // Define bool type (emulates stdbool.h).
+#if __STDC_VERSION__ < 202311L
 typedef _Bool bool;
-#ifndef __bool_true_false_are_defined
-  #define true                          1
-  #define false                         0
-  #define __bool_true_false_are_defined 1
+  #ifndef __bool_true_false_are_defined
+    #define true                          1
+    #define false                         0
+    #define __bool_true_false_are_defined 1
+  #endif
 #endif
 
 // Go defines `NULL` in `cgo-builtin-prolog`, so we have to check whether
