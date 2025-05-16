@@ -350,25 +350,84 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 	if !frame.Type.IsInterpType(libpf.BEAM) {
 		return interpreter.ErrMismatchInterpreterType
 	}
+	pc := libpf.Address(frame.Lineno)
+
+	log.Infof("BEAM symbolizing pc: %x", pc)
+
+	codeHeader, err := i.findCodeHeader(pc)
+	if err != nil {
+		return err
+	}
+
+	moduleID, functionID, arity, err := i.findMFA(pc, codeHeader)
+	if err != nil {
+		return err
+	}
+
+	moduleName, err := i.lookupAtom(moduleID)
+	if err != nil {
+		return err
+	}
+	functionName, err := i.lookupAtom(functionID)
+	if err != nil {
+		return err
+	}
+
+	mfaName := ""
+	if strings.HasPrefix(moduleName, "Elixir.") {
+		// This is an Elixir module, so format the function using Elixir syntax (without the "Elixir." prefix)
+		mfaName = fmt.Sprintf("%s.%s/%d", moduleName[7:], functionName, arity)
+	} else {
+		// Assume it's Erlang and format it using Erlang syntax
+		mfaName = fmt.Sprintf("%s:%s/%d", moduleName, functionName, arity)
+	}
+
+	log.Warnf("BEAM Found function: %s", mfaName)
+	frameID := libpf.NewFrameID(libpf.NewFileID(uint64(moduleID), 0x0), libpf.AddressOrLineno((uint64(functionID)<<32)+uint64(arity)))
+
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:      frameID,
+		FunctionName: mfaName,
+	})
+	trace.AppendFrameID(libpf.BEAMFrame, frameID)
+
+	//lineTable := i.rm.Ptr(codeHeader + libpf.Address(72))
+
+	// `lineTable` points to a table of `BeamCodeLineTab_` structs:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_code.h#L130-L138
+	// (gdb) ptype/o $hdr.line_table
+	// type = const struct BeamCodeLineTab_ {
+	// 	     0      |       8     const Eterm *fname_ptr;
+	// 	     8      |       4     int loc_size;
+	// 	XXX  4-byte hole
+	// 	    16      |       8     union {
+	// 	                    8         Uint16 *p2;
+	// 	                    8         Uint32 *p4;
+	// 									   total size (bytes):    8
+	// 								   } loc_tab;
+	// 	    24      |       8    const void **func_tab[1];
+	//
+	// total size (bytes):   32
+	return nil
+}
+
+func (i *beamInstance) findCodeHeader(pc libpf.Address) (libpf.Address, error) {
 	// Index into the active static `r` variable using the currently-active code index (the size of the `ranges` struct is 32 bytes)
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
 	codeIndex := i.rm.Uint64(i.codeIndexPtr)
 	activeRanges := i.rangesPtr + libpf.Address(32*codeIndex)
+
+	codeHeader := libpf.Address(0)
 
 	// Use offsets into the `ranges` struct to get the beginning of the array and the number of entries based on
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L56-L61
 	modules := i.rm.Ptr(activeRanges)
 	n := i.rm.Uint64(activeRanges + libpf.Address(8))
 
-	pc := libpf.Address(frame.Lineno)
-
-	log.Infof("BEAM symbolizing pc: %x, n: %d", pc, n)
-
 	low := i.rm.Ptr(modules)
 	high := i.rm.Ptr(modules + libpf.Address((n-1)*16+8))
 
 	if pc >= low && pc <= high {
-		codeHeader := libpf.Address(0)
 		lowIdx := uint64(0)
 		midIdx := uint64(0)
 		highIdx := n - 1
@@ -383,133 +442,95 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 			} else if pc >= midEnd {
 				lowIdx = midIdx + 1
 			} else {
-				log.Warnf("BEAM found range[%d]: (0x%x - 0x%x)", midIdx, midStart, midEnd)
 				codeHeader = midStart
 				break
 			}
 		}
-
-		// `codeHeader` points to `BeamCodeHeader` struct, defined here:
-		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_code.h#L56-L125
-		// Need to figure out a better way to maintain offsets for the `functions` field, but for now...
-		// (gdb) set var $hdr=(BeamCodeHeader*)(r[the_active_code_index.counter].modules[3].start)
-		// (gdb) ptype/o $hdr
-		// type = struct beam_code_header {
-		//      0      |       8     UWord num_functions;
-		//      8      |       8     const byte *attr_ptr;
-		//     16      |       8     UWord attr_size;
-		//     24      |       8     UWord attr_size_on_heap;
-		//     32      |       8     const byte *compile_ptr;
-		//     40      |       8     UWord compile_size;
-		//     48      |       8     UWord compile_size_on_heap;
-		//     56      |       8     struct ErtsLiteralArea_ *literal_area;
-		//     64      |       8     const ErtsCodeInfo *on_load;
-		//     72      |       8     const BeamCodeLineTab *line_table;
-		//     80      |       8     Uint coverage_mode;
-		//     88      |       8     void *coverage;
-		//     96      |       8     byte *line_coverage_valid;
-		//    104      |       8     Uint32 *loc_index_to_cover_id;
-		//    112      |       8     Uint line_coverage_len;
-		//    120      |       8     const byte *md5_ptr;
-		//    128      |       8     byte *are_nifs;
-		//    136      |       8     const ErtsCodeInfo *functions[1];
-		// total size (bytes):  144
-		// }
-
-		numFunctions := i.rm.Uint32(codeHeader)
-
-		// `functions` is a pointer to an array of `ErtsCodeInfo` structs, defined here:
-		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.h#L104-L123
-		// (gdb) ptype/o $hdr.functions
-		// type = const struct ErtsCodeInfo_ {
-		// 	/*      0      |       8 */    struct {
-		// 	/*      0      |       8 */        struct {
-		// 	/*      0      |       7 */            char raise_function_clause[7];
-		// 	/*      7      |       1 */            char breakpoint_flag;
-		//
-		// 										   /* total size (bytes):    8 */
-		// 									   } metadata;
-		//
-		// 									   /* total size (bytes):    8 */
-		// 								   } u;
-		// 	/*      8      |       8 */    struct GenericBp *gen_bp;
-		// 	/*     16      |      24 */    ErtsCodeMFA mfa;
-		//
-		// 								   /* total size (bytes):   40 */
-
-		ertsCodeInfo := libpf.Address(0)
-		lowIdx = uint64(0)
-		highIdx = uint64(numFunctions) - 1
-		for lowIdx < highIdx {
-			midIdx = lowIdx + (highIdx-lowIdx)/2
-			midStart := i.rm.Ptr(codeHeader + libpf.Address(136+midIdx*8))
-			midEnd := i.rm.Ptr(codeHeader + libpf.Address(136+(midIdx+1)*8))
-			if pc < midStart {
-				highIdx = midIdx
-			} else if pc >= midEnd {
-				lowIdx = midIdx + 1
-			} else {
-				ertsCodeInfo = midStart
-
-				// `mfa` is defined here:
-				// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.h#L87-L95
-				module := i.rm.Uint32(ertsCodeInfo + libpf.Address(16))
-				moduleName, err := LookupAtom(i, module)
-				if err != nil {
-					return err
-				}
-
-				function := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+8))
-				functionName, err := LookupAtom(i, function)
-				if err != nil {
-					return err
-				}
-
-				arity := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+16))
-
-				mfaName := ""
-				if strings.HasPrefix(moduleName, "Elixir.") {
-					// This is an Elixir module, so format the function using Elixir syntax (without the "Elixir." prefix)
-					mfaName = fmt.Sprintf("%s.%s/%d", moduleName[7:], functionName, arity)
-				} else {
-					// Assume it's Erlang and format it using Erlang syntax
-					mfaName = fmt.Sprintf("%s:%s/%d", moduleName, functionName, arity)
-				}
-				log.Warnf("BEAM Found function[%d]: %s (0x%x - 0x%x)", midIdx, mfaName, midStart, midEnd)
-
-				frameID := libpf.NewFrameID(libpf.NewFileID(uint64(module), 0x0), libpf.AddressOrLineno((uint64(function)<<32)+uint64(arity)))
-
-				symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-					FrameID:      frameID,
-					FunctionName: mfaName,
-				})
-				trace.AppendFrameID(libpf.BEAMFrame, frameID)
-				break
-			}
-		}
-
-		//lineTable := i.rm.Ptr(codeHeader + libpf.Address(72))
-
-		// `lineTable` points to a table of `BeamCodeLineTab_` structs:
-		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_code.h#L130-L138
-		// (gdb) ptype/o $hdr.line_table
-		// type = const struct BeamCodeLineTab_ {
-		// 	     0      |       8     const Eterm *fname_ptr;
-		// 	     8      |       4     int loc_size;
-		// 	XXX  4-byte hole
-		// 	    16      |       8     union {
-		// 	                    8         Uint16 *p2;
-		// 	                    8         Uint32 *p4;
-		// 									   total size (bytes):    8
-		// 								   } loc_tab;
-		// 	    24      |       8    const void **func_tab[1];
-		//
-		// total size (bytes):   32
+	} else {
+		return codeHeader, fmt.Errorf("PC 0x%x not in valid address ranges (0x%x - 0x%x)", pc, low, high)
 	}
-	return nil
+
+	return codeHeader, nil
 }
 
-func LookupAtom(i *beamInstance, index uint32) (string, error) {
+func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (moduleID uint32, functionID uint32, arity uint32, err error) {
+	// `codeHeader` points to `BeamCodeHeader` struct, defined here:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_code.h#L56-L125
+	// Need to figure out a better way to maintain offsets for the `functions` field, but for now...
+	// (gdb) set var $hdr=(BeamCodeHeader*)(r[the_active_code_index.counter].modules[3].start)
+	// (gdb) ptype/o $hdr
+	// type = struct beam_code_header {
+	//      0      |       8     UWord num_functions;
+	//      8      |       8     const byte *attr_ptr;
+	//     16      |       8     UWord attr_size;
+	//     24      |       8     UWord attr_size_on_heap;
+	//     32      |       8     const byte *compile_ptr;
+	//     40      |       8     UWord compile_size;
+	//     48      |       8     UWord compile_size_on_heap;
+	//     56      |       8     struct ErtsLiteralArea_ *literal_area;
+	//     64      |       8     const ErtsCodeInfo *on_load;
+	//     72      |       8     const BeamCodeLineTab *line_table;
+	//     80      |       8     Uint coverage_mode;
+	//     88      |       8     void *coverage;
+	//     96      |       8     byte *line_coverage_valid;
+	//    104      |       8     Uint32 *loc_index_to_cover_id;
+	//    112      |       8     Uint line_coverage_len;
+	//    120      |       8     const byte *md5_ptr;
+	//    128      |       8     byte *are_nifs;
+	//    136      |       8     const ErtsCodeInfo *functions[1];
+	// total size (bytes):  144
+	// }
+
+	numFunctions := i.rm.Uint32(codeHeader)
+
+	// `functions` is a pointer to an array of `ErtsCodeInfo` structs, defined here:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.h#L104-L123
+	// (gdb) ptype/o $hdr.functions
+	// type = const struct ErtsCodeInfo_ {
+	// 	/*      0      |       8 */    struct {
+	// 	/*      0      |       8 */        struct {
+	// 	/*      0      |       7 */            char raise_function_clause[7];
+	// 	/*      7      |       1 */            char breakpoint_flag;
+	//
+	// 										   /* total size (bytes):    8 */
+	// 									   } metadata;
+	//
+	// 									   /* total size (bytes):    8 */
+	// 								   } u;
+	// 	/*      8      |       8 */    struct GenericBp *gen_bp;
+	// 	/*     16      |      24 */    ErtsCodeMFA mfa;
+	//
+	// 								   /* total size (bytes):   40 */
+
+	ertsCodeInfo := libpf.Address(0)
+	lowIdx := uint64(0)
+	highIdx := uint64(numFunctions) - 1
+	for lowIdx < highIdx {
+		midIdx := lowIdx + (highIdx-lowIdx)/2
+		midStart := i.rm.Ptr(codeHeader + libpf.Address(136+midIdx*8))
+		midEnd := i.rm.Ptr(codeHeader + libpf.Address(136+(midIdx+1)*8))
+		if pc < midStart {
+			highIdx = midIdx
+		} else if pc >= midEnd {
+			lowIdx = midIdx + 1
+		} else {
+			ertsCodeInfo = midStart
+
+			// `mfa` is defined here:
+			// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.h#L87-L95
+			moduleID := i.rm.Uint32(ertsCodeInfo + libpf.Address(16))
+			functionID := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+8))
+			arity := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+16))
+
+			return moduleID, functionID, arity, nil
+		}
+	}
+	lowStart := i.rm.Ptr(codeHeader + libpf.Address(136))
+	highEnd := i.rm.Ptr(codeHeader + libpf.Address(136+(highIdx+1)*8))
+	return 0, 0, 0, fmt.Errorf("unable to find the MFA for PC 0x%x in expected code range (0x%x - 0x%x)", pc, lowStart, highEnd)
+}
+
+func (i *beamInstance) lookupAtom(index uint32) (string, error) {
 	// `atomTable` points to an `IndexTable`:
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/index.h#L39-L47
 	// (gdb) ptype/o erts_atom_table
