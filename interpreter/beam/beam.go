@@ -359,7 +359,7 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 		return err
 	}
 
-	moduleID, functionID, arity, err := i.findMFA(pc, codeHeader)
+	functionIndex, moduleID, functionID, arity, err := i.findMFA(pc, codeHeader)
 	if err != nil {
 		return err
 	}
@@ -382,42 +382,26 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 		mfaName = fmt.Sprintf("%s:%s/%d", moduleName, functionName, arity)
 	}
 
-	log.Warnf("BEAM Found function: %s", mfaName)
+	lineNumber := i.findFileLocation(codeHeader, functionIndex, pc)
+
+	log.Warnf("BEAM Found function %s at line %d", mfaName, lineNumber)
 	frameID := libpf.NewFrameID(libpf.NewFileID(uint64(moduleID), 0x0), libpf.AddressOrLineno((uint64(functionID)<<32)+uint64(arity)))
 
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      frameID,
 		FunctionName: mfaName,
+		SourceLine:   libpf.SourceLineno(lineNumber),
 	})
 	trace.AppendFrameID(libpf.BEAMFrame, frameID)
 
-	//lineTable := i.rm.Ptr(codeHeader + libpf.Address(72))
-
-	// `lineTable` points to a table of `BeamCodeLineTab_` structs:
-	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_code.h#L130-L138
-	// (gdb) ptype/o $hdr.line_table
-	// type = const struct BeamCodeLineTab_ {
-	// 	     0      |       8     const Eterm *fname_ptr;
-	// 	     8      |       4     int loc_size;
-	// 	XXX  4-byte hole
-	// 	    16      |       8     union {
-	// 	                    8         Uint16 *p2;
-	// 	                    8         Uint32 *p4;
-	// 									   total size (bytes):    8
-	// 								   } loc_tab;
-	// 	    24      |       8    const void **func_tab[1];
-	//
-	// total size (bytes):   32
 	return nil
 }
 
-func (i *beamInstance) findCodeHeader(pc libpf.Address) (libpf.Address, error) {
+func (i *beamInstance) findCodeHeader(pc libpf.Address) (codeHeader libpf.Address, err error) {
 	// Index into the active static `r` variable using the currently-active code index (the size of the `ranges` struct is 32 bytes)
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
 	codeIndex := i.rm.Uint64(i.codeIndexPtr)
 	activeRanges := i.rangesPtr + libpf.Address(32*codeIndex)
-
-	codeHeader := libpf.Address(0)
 
 	// Use offsets into the `ranges` struct to get the beginning of the array and the number of entries based on
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L56-L61
@@ -443,6 +427,7 @@ func (i *beamInstance) findCodeHeader(pc libpf.Address) (libpf.Address, error) {
 				lowIdx = midIdx + 1
 			} else {
 				codeHeader = midStart
+				log.Warnf("BEAM codeHeader[%d] range: 0x%x - 0x%x (%d)", midIdx, midStart, midEnd, midEnd-midStart)
 				break
 			}
 		}
@@ -453,7 +438,7 @@ func (i *beamInstance) findCodeHeader(pc libpf.Address) (libpf.Address, error) {
 	return codeHeader, nil
 }
 
-func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (moduleID uint32, functionID uint32, arity uint32, err error) {
+func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (functionIndex uint64, moduleID uint32, functionID uint32, arity uint32, err error) {
 	// `codeHeader` points to `BeamCodeHeader` struct, defined here:
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_code.h#L56-L125
 	// Need to figure out a better way to maintain offsets for the `functions` field, but for now...
@@ -515,6 +500,7 @@ func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (modu
 			lowIdx = midIdx + 1
 		} else {
 			ertsCodeInfo = midStart
+			functionIndex = midIdx
 
 			// `mfa` is defined here:
 			// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.h#L87-L95
@@ -522,12 +508,65 @@ func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (modu
 			functionID := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+8))
 			arity := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+16))
 
-			return moduleID, functionID, arity, nil
+			log.Warnf("BEAM MFA range: 0x%x - 0x%x (%d)", midStart, midEnd, midEnd-midStart)
+			return functionIndex, moduleID, functionID, arity, nil
 		}
 	}
 	lowStart := i.rm.Ptr(codeHeader + libpf.Address(136))
 	highEnd := i.rm.Ptr(codeHeader + libpf.Address(136+(highIdx+1)*8))
-	return 0, 0, 0, fmt.Errorf("unable to find the MFA for PC 0x%x in expected code range (0x%x - 0x%x)", pc, lowStart, highEnd)
+	return 0, 0, 0, 0, fmt.Errorf("BEAM unable to find the MFA for PC 0x%x in expected code range (0x%x - 0x%x)", pc, lowStart, highEnd)
+}
+
+func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex uint64, pc libpf.Address) uint64 {
+	lineTable := i.rm.Ptr(codeHeader + libpf.Address(72))
+
+	// `lineTable` points to a table of `BeamCodeLineTab_` structs:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_code.h#L130-L138
+	// (gdb) ptype/o $hdr.line_table
+	// type = const struct BeamCodeLineTab_ {
+	// 	     0      |       8     const Eterm *fname_ptr;
+	// 	     8      |       4     int loc_size;
+	// 	XXX  4-byte hole
+	// 	    16      |       8     union {
+	// 	                    8         Uint16 *p2;
+	// 	                    8         Uint32 *p4;
+	// 									   total size (bytes):    8
+	// 								   } loc_tab;
+	// 	    24      |       8    const void **func_tab[1];
+	//
+	// total size (bytes):   32
+
+	lineLow := i.rm.Ptr(lineTable + libpf.Address(8*functionIndex+24))
+	lineHigh := i.rm.Ptr(lineTable + libpf.Address(8*(functionIndex+1)+24))
+
+	log.Warnf("BEAM line range for functionIndex %d: (0x%x - 0x%x)", functionIndex, lineLow, lineHigh)
+
+	// We need to align the lineMid values on 8-byte address boundaries
+	bitmask := libpf.Address(^(uint64(0xf)))
+	for lineHigh > lineLow {
+		lineMid := lineLow + ((lineHigh-lineLow)/2)&bitmask
+		// log.Warnf("BEAM lineMid: 0x%x, midRange: (0x%x - 0x%x)", lineMid, i.rm.Ptr(lineMid), i.rm.Ptr(lineMid+libpf.Address(8)))
+
+		if pc < i.rm.Ptr(lineMid) {
+			lineHigh = lineMid
+		} else if pc < i.rm.Ptr(lineMid+libpf.Address(8)) {
+			funcTab := i.rm.Ptr(lineTable + libpf.Address(24))
+			locIndex := uint32((lineMid - funcTab) / 8)
+			locSize := i.rm.Uint32(lineTable + libpf.Address(8))
+			locTab := i.rm.Ptr(lineTable + libpf.Address(16))
+			locAddr := locTab + libpf.Address(locSize*locIndex)
+			log.Warnf("BEAM locIndex: %d, locSize: %d, locAddr: %x", locIndex, locSize, locAddr)
+			if locSize == 2 {
+				return uint64(i.rm.Uint16(locAddr))
+			} else {
+				return uint64(i.rm.Uint32(locAddr))
+			}
+		} else {
+			lineLow = lineMid + 8
+		}
+	}
+
+	return 0
 }
 
 func (i *beamInstance) lookupAtom(index uint32) (string, error) {
