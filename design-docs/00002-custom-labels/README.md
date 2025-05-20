@@ -37,4 +37,4 @@ The initial proposal will only deal with Go pprof labels which are just string/s
 
 The solution we propose is to add support for 10 64 byte custom labels associated with each sample with 16 bytes for the label key and 48 bytes for the label value. These will be stored in the Trace struct with the stack frame information for each sample so each Trace will be 640 bytes larger than before.
 
-In Go 1.23 labels are stored in a map so its non-deterministic which labels are read from the program, in Go 1.24+ the labels are stored as a map so it will be first come first serve which labels are extracted. If the labels key or value is larger than 16/48 bytes they will be truncated. No effort is made to validate the strings from a UTF8 perspective.
+In Go 1.23 labels are stored in a map so its non-deterministic which labels are read from the program, in Go 1.24+ the labels are stored in a list sorted by their keys so it will be first come first serve which labels are extracted. If the labels key or value is larger than 16/48 bytes they will be truncated. No effort is made to validate the strings from a UTF8 perspective.
