@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 	"unsafe"
 
@@ -114,16 +116,44 @@ func (c *symbolizationCache) symbolize(ty libpf.FrameType, fileID libpf.FileID,
 	}
 
 	if data, ok := c.symbols[libpf.NewFrameID(fileID, lineNumber)]; ok {
-		return fmt.Sprintf("%s+%d in %s:%d",
-			data.FunctionName, data.FunctionOffset,
-			data.SourceFile, data.SourceLine), nil
+		return formatSymbolizedFrame(data, true), nil
 	}
 
 	sourceFile, ok := c.files[fileID]
 	if !ok {
 		sourceFile = fmt.Sprintf("%08x", fileID)
 	}
-	return fmt.Sprintf("%s+0x%x", sourceFile, lineNumber), nil
+	return formatUnsymbolizedFrame(sourceFile, lineNumber), nil
+}
+
+func formatSymbolizedFrame(frame *reporter.FrameMetadataArgs, functionOffsets bool) string {
+	var funcOffset string
+	if functionOffsets {
+		funcOffset = "+" + strconv.Itoa(int(frame.FunctionOffset))
+	}
+	return fmt.Sprintf("%s%s in %s:%d",
+		frame.FunctionName, funcOffset,
+		frame.SourceFile, frame.SourceLine)
+}
+
+func formatUnsymbolizedFrame(file string, addr libpf.AddressOrLineno) string {
+	return fmt.Sprintf("%s+0x%x", file, addr)
+}
+
+func parseUnsymbolizedFrame(frame string) (file string, addr libpf.AddressOrLineno, err error) {
+	fileS, addrS, found := strings.Cut(frame, "+0x")
+	if !found {
+		err = fmt.Errorf("bad frame string: %q", frame)
+		return
+	}
+	file = fileS
+	var addrU uint64
+	addrU, err = strconv.ParseUint(addrS, 16, 64)
+	if err != nil {
+		return
+	}
+	addr = libpf.AddressOrLineno(addrU)
+	return
 }
 
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
