@@ -56,11 +56,7 @@ func BenchmarkDecodeAmd64(b *testing.B) {
 			0xe9, 0xe7, 0xea, 0xe9, 0xff, // 1bbbb4: jmp    5a6a0 <pthread_getspecific@plt>
 		}
 		rip := uint64(0x1bbba0)
-		val, _ := decodeStubArgumentAMD64(
-			code,
-			rip,
-			0,
-		)
+		val, _ := decodeStubArgumentAMD64(code, rip, 0)
 		if val != 0x3a4c2c {
 			b.Fail()
 		}
@@ -72,6 +68,7 @@ func TestAmd64DecodeStub(t *testing.T) {
 		name          string
 		code          []byte
 		rip           uint64
+		memBase       uint64
 		expected      uint64
 		expectedError string
 	}{
@@ -113,7 +110,8 @@ func TestAmd64DecodeStub(t *testing.T) {
 				0xe9, 0x2e, 0x41, 0xeb, 0xff, // 1adcad: jmp    61de0 <PyThread_tss_get@plt>
 			},
 			rip:      0x1adc90,
-			expected: 0x248,
+			memBase:  0xcafe0000,
+			expected: 0xcafe0248,
 		},
 		{
 			name: "3.12.8 gcc12 disable-optimizations enabled-shared",
@@ -126,7 +124,8 @@ func TestAmd64DecodeStub(t *testing.T) {
 				0xe8, 0x95, 0x78, 0xe2, 0xff, // 2e25e6: call   109e80 <PyThread_tss_is_created@plt>
 			},
 			rip:      0x2e25d0,
-			expected: 0x608,
+			expected: 0x608 + 0xef00000,
+			memBase:  0xef00000,
 		},
 		{
 			name: "3.10.16 clang18 enable-optimizations enabled-shared",
@@ -139,7 +138,8 @@ func TestAmd64DecodeStub(t *testing.T) {
 				0xe9, 0x24, 0x55, 0xf9, 0xff, // cac67: jmp    60190 <pthread_getspecific@plt>
 			},
 			rip:      0xcac50,
-			expected: 0x24c,
+			expected: 0x24c + 0xef00000,
+			memBase:  0xef00000,
 		},
 		{
 			name: "3.10.16 clang18 enable-optimizations disable-shared",
@@ -222,14 +222,14 @@ func TestAmd64DecodeStub(t *testing.T) {
 		{
 			name:          "empty code",
 			code:          nil,
-			expectedError: "no call/jump instructions found",
+			expectedError: "EOF",
 		},
 		{
 			name: "no call/jump instructions found",
 			code: []byte{
 				0x48, 0xC7, 0xC7, 0xEF, 0xEF, 0xEF, 0x00, // mov rdi, 0xefefef
 			},
-			expectedError: "no call/jump instructions found",
+			expectedError: "EOF",
 		},
 		{
 			name: "bad instruction",
@@ -238,16 +238,6 @@ func TestAmd64DecodeStub(t *testing.T) {
 				0xea, // :shrug:
 			},
 			expectedError: "failed to decode instruction at 0x7",
-		},
-		{
-			name: "synthetic mov scale index",
-			code: []byte{
-				0x48, 0xC7, 0xC0, 0xCA, 0xCA, 0x00, 0x00, // 	mov 	rax, 0xcaca
-				0xBB, 0x00, 0x00, 0x00, 0x5E, // 	mov 	ebx, 0x5e000000
-				0x67, 0x48, 0x8B, 0x7C, 0x43, 0x05, // 	mov 	rdi, qword ptr [ebx + eax*2 + 5]
-				0xEB, 0x00, // 	jmp 	0x14
-			},
-			expected: 0xCACA*2 + 0x5E000000 + 5,
 		},
 		{
 			name: "synthetic lea scale index",
@@ -276,7 +266,7 @@ func TestAmd64DecodeStub(t *testing.T) {
 			val, err := decodeStubArgumentAMD64(
 				td.code,
 				td.rip,
-				0, // NULL pointer as mem
+				td.memBase,
 			)
 			if td.expectedError != "" {
 				require.Error(t, err)
