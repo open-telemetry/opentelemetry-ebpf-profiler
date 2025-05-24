@@ -382,14 +382,18 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 		mfaName = fmt.Sprintf("%s:%s/%d", moduleName, functionName, arity)
 	}
 
-	lineNumber := i.findFileLocation(codeHeader, functionIndex, pc)
+	fileName, lineNumber, err := i.findFileLocation(codeHeader, functionIndex, pc)
+	if err != nil {
+		return err
+	}
 
-	log.Warnf("BEAM Found function %s at line %d", mfaName, lineNumber)
+	log.Warnf("BEAM Found function %s at %s:%d", mfaName, fileName, lineNumber)
 	frameID := libpf.NewFrameID(libpf.NewFileID(uint64(moduleID), 0x0), libpf.AddressOrLineno((uint64(functionID)<<32)+uint64(arity)))
 
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      frameID,
 		FunctionName: mfaName,
+		SourceFile:   fileName,
 		SourceLine:   libpf.SourceLineno(lineNumber),
 	})
 	trace.AppendFrameID(libpf.BEAMFrame, frameID)
@@ -427,7 +431,7 @@ func (i *beamInstance) findCodeHeader(pc libpf.Address) (codeHeader libpf.Addres
 				lowIdx = midIdx + 1
 			} else {
 				codeHeader = midStart
-				log.Warnf("BEAM codeHeader[%d] range: 0x%x - 0x%x (%d)", midIdx, midStart, midEnd, midEnd-midStart)
+				// log.Warnf("BEAM codeHeader[%d] range: 0x%x - 0x%x (%d)", midIdx, midStart, midEnd, midEnd-midStart)
 				break
 			}
 		}
@@ -508,7 +512,7 @@ func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (func
 			functionID := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+8))
 			arity := i.rm.Uint32(ertsCodeInfo + libpf.Address(16+16))
 
-			log.Warnf("BEAM MFA range: 0x%x - 0x%x (%d)", midStart, midEnd, midEnd-midStart)
+			// log.Warnf("BEAM MFA range: 0x%x - 0x%x (%d)", midStart, midEnd, midEnd-midStart)
 			return functionIndex, moduleID, functionID, arity, nil
 		}
 	}
@@ -517,7 +521,7 @@ func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (func
 	return 0, 0, 0, 0, fmt.Errorf("BEAM unable to find the MFA for PC 0x%x in expected code range (0x%x - 0x%x)", pc, lowStart, highEnd)
 }
 
-func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex uint64, pc libpf.Address) uint64 {
+func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex uint64, pc libpf.Address) (fileName string, lineNumber uint64, err error) {
 	lineTable := i.rm.Ptr(codeHeader + libpf.Address(72))
 
 	// `lineTable` points to a table of `BeamCodeLineTab_` structs:
@@ -539,7 +543,7 @@ func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex 
 	lineLow := i.rm.Ptr(lineTable + libpf.Address(8*functionIndex+24))
 	lineHigh := i.rm.Ptr(lineTable + libpf.Address(8*(functionIndex+1)+24))
 
-	log.Warnf("BEAM line range for functionIndex %d: (0x%x - 0x%x)", functionIndex, lineLow, lineHigh)
+	// log.Warnf("BEAM line range for functionIndex %d: (0x%x - 0x%x)", functionIndex, lineLow, lineHigh)
 
 	// We need to align the lineMid values on 8-byte address boundaries
 	bitmask := libpf.Address(^(uint64(0xf)))
@@ -555,18 +559,24 @@ func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex 
 			locSize := i.rm.Uint32(lineTable + libpf.Address(8))
 			locTab := i.rm.Ptr(lineTable + libpf.Address(16))
 			locAddr := locTab + libpf.Address(locSize*locIndex)
-			log.Warnf("BEAM locIndex: %d, locSize: %d, locAddr: %x", locIndex, locSize, locAddr)
+			// log.Warnf("BEAM locIndex: %d, locSize: %d, locAddr: %x", locIndex, locSize, locAddr)
+			loc := uint64(0)
 			if locSize == 2 {
-				return uint64(i.rm.Uint16(locAddr))
+				loc = uint64(i.rm.Uint16(locAddr))
 			} else {
-				return uint64(i.rm.Uint32(locAddr))
+				loc = uint64(i.rm.Uint32(locAddr))
 			}
+			fnameIndex := loc >> 24
+			fileNamePtr := libpf.Address(i.rm.Uint64(lineTable) + 8*fnameIndex)
+			fileName = i.readErlangString(libpf.Address(i.rm.Uint64(fileNamePtr)), 256)
+
+			return fileName, loc & ((1 << 24) - 1), nil
 		} else {
 			lineLow = lineMid + 8
 		}
 	}
 
-	return 0
+	return "", 0, fmt.Errorf("BEAM unable to find file and line number")
 }
 
 func (i *beamInstance) lookupAtom(index uint32) (string, error) {
@@ -606,4 +616,32 @@ func (i *beamInstance) lookupAtom(index uint32) (string, error) {
 	}
 
 	return string(name), nil
+}
+
+// TODO: read these values from the symbol table
+const (
+	ETP_NIL      = libpf.Address(0x3B)
+	ETP_PTR_MASK = ^libpf.Address(0x3)
+)
+
+func (i *beamInstance) readErlangString(eterm libpf.Address, maxLength uint64) string {
+	result := strings.Builder{}
+	length := uint64(0)
+
+	for eterm != ETP_NIL && length < maxLength {
+		charAddr := eterm & ETP_PTR_MASK
+		charValue := i.rm.Uint64(charAddr)
+		char := uint8(charValue >> 4)
+		result.WriteByte(char)
+		length++
+		nextAddr := libpf.Address((eterm & ETP_PTR_MASK) + 8)
+		eterm = libpf.Address(i.rm.Uint64(nextAddr))
+		// log.Warnf("BEAM charAddr: %x, charValue: %x, char: %c, nextAddr: %x", charAddr, charValue, char, nextAddr)
+	}
+
+	if length > maxLength {
+		return result.String() + "..."
+	}
+
+	return result.String()
 }
