@@ -99,7 +99,7 @@ func Open(filename string) (*ReaderAt, error) {
 	if size < 0 {
 		return nil, fmt.Errorf("mmap: file %q has negative size", filename)
 	}
-	if size != int64(size) {
+	if size != int64(int(size)) {
 		return nil, fmt.Errorf("mmap: file %q is too large", filename)
 	}
 
