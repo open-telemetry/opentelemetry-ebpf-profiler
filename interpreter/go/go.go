@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"os"
 	"sync/atomic"
 	"unsafe"
 
@@ -46,6 +47,19 @@ type goInstance struct {
 	d *goData
 }
 
+func mapSymblibError(status C.SymblibStatus) error {
+	switch status {
+	case C.SYMBLIB_ERR_IOFILENOTFOUND:
+		return fmt.Errorf("failed to create point resolver: %w", os.ErrNotExist)
+	case C.SYMBLIB_ERR_OBJFILE:
+		return fmt.Errorf("failed to create point resolver: invalid object file format (%d)", status)
+	case C.SYMBLIB_ERR_DWARF:
+		return fmt.Errorf("failed to create point resolver: DWARF parsing error (%d)", status)
+	default:
+		return fmt.Errorf("failed to create point resolver: %d", status)
+	}
+}
+
 func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	interpreter.Data, error) {
 	ef, err := info.GetELF()
@@ -69,8 +83,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	//nolint:gocritic
 	status := C.symblib_goruntime_new(executablePath, &gd.goExecutable)
 	if status != C.SYMBLIB_OK {
-		return nil, fmt.Errorf("failed to create point resolver: %d",
-			status)
+		return nil, mapSymblibError(status)
 	}
 
 	return gd, nil
