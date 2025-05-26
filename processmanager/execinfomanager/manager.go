@@ -350,7 +350,7 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 				log.Debugf("Failed to load %v (%#016x): file not found",
 					loaderInfo.FileName(), loaderInfo.FileID())
 			} else {
-				log.Debugf("Failed to load %v (%#016x): %v",
+				log.Errorf("Failed to load %v (%#016x): %v",
 					loaderInfo.FileName(), loaderInfo.FileID(), err)
 			}
 			return nil
