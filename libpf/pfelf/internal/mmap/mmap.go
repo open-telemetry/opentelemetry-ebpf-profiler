@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	// The requested data exceeds available mapped data.
+	// ErrInvalRequest indicates that the requested data exceeds the available mapped data.
 	ErrInvalRequest = errors.New("invalid request")
 )
 
@@ -99,7 +99,7 @@ func Open(filename string) (*ReaderAt, error) {
 	if size < 0 {
 		return nil, fmt.Errorf("mmap: file %q has negative size", filename)
 	}
-	if size != int64(int(size)) {
+	if size != int64(size) {
 		return nil, fmt.Errorf("mmap: file %q is too large", filename)
 	}
 

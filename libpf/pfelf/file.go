@@ -51,10 +51,10 @@ const (
 
 // List of public errors.
 var (
-	// ErrSymbolNotFound is returned when requested symbol was not found
+	// ErrSymbolNotFound is returned when the requested symbol was not found.
 	ErrSymbolNotFound = errors.New("symbol not found")
 
-	// ErrNotELF is returned when the file is not an ELF
+	// ErrNotELF is returned when the file is not an ELF file.
 	ErrNotELF = errors.New("not an ELF file")
 )
 
