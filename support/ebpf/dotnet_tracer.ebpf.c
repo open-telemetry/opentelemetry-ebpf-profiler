@@ -44,7 +44,7 @@ bpf_map_def SEC("maps") dotnet_procs = {
 // currently not Garbage Collected by the runtime. Though, we have submitted also an enhancement
 // request to fix the nibble map format to something sane, and this might get implemented.
 // see: https://github.com/dotnet/runtime/issues/93550
-static inline __attribute__((__always_inline__)) ErrorCode
+static EBPF_INLINE ErrorCode
 dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 pc, u64 *code_start)
 {
   // This is an ebpf optimized implementation of EEJitManager::FindMethodCode()
@@ -152,7 +152,7 @@ bad_code_header:
 }
 
 // Record a Dotnet frame
-static inline __attribute__((__always_inline__)) ErrorCode
+static EBPF_INLINE ErrorCode
 push_dotnet(Trace *trace, u64 code_header_ptr, u64 pc_offset, bool return_address)
 {
   return _push_with_return_address(
@@ -160,7 +160,7 @@ push_dotnet(Trace *trace, u64 code_header_ptr, u64 pc_offset, bool return_addres
 }
 
 // Unwind one dotnet frame
-static inline __attribute__((__always_inline__)) ErrorCode
+static EBPF_INLINE ErrorCode
 unwind_one_dotnet_frame(PerCPURecord *record, DotnetProcInfo *vi, bool top)
 {
   UnwindState *state = &record->state;
@@ -264,7 +264,7 @@ push_frame:
 // unwind_dotnet is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // dotnet stack frames to the trace object for the current CPU.
-static inline __attribute__((__always_inline__)) int unwind_dotnet(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_dotnet(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {

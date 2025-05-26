@@ -101,22 +101,20 @@ bpf_map_def SEC("maps") hotspot_procs = {
 };
 
 // Record a HotSpot frame
-static inline __attribute__((__always_inline__)) ErrorCode
-push_hotspot(Trace *trace, u64 file, u64 line, bool return_address)
+static EBPF_INLINE ErrorCode push_hotspot(Trace *trace, u64 file, u64 line, bool return_address)
 {
   return _push_with_return_address(trace, file, line, FRAME_MARKER_HOTSPOT, return_address);
 }
 
 // calc_line merges the three values to be encoded in a frame 'line'
-static inline __attribute__((__always_inline__)) u64
-calc_line(u8 subtype, u32 pc_or_bci, u32 ptr_check)
+static EBPF_INLINE u64 calc_line(u8 subtype, u32 pc_or_bci, u32 ptr_check)
 {
   return ((u64)subtype << 60) | ((u64)pc_or_bci << 32) | (u64)ptr_check;
 }
 
 #ifdef __x86_64__
 // hotspot_addr_in_codecache checks if given address belongs to the JVM JIT code cache
-__attribute__((always_inline)) inline static bool hotspot_addr_in_codecache(u32 pid, u64 addr)
+static EBPF_INLINE bool hotspot_addr_in_codecache(u32 pid, u64 addr)
 {
   PIDPage key   = {};
   key.prefixLen = BIT_WIDTH_PID + BIT_WIDTH_PAGE;
@@ -140,8 +138,7 @@ __attribute__((always_inline)) inline static bool hotspot_addr_in_codecache(u32 
 // hotspot_find_codeblob maps a given PC to the CodeBlob* that describes the
 // JIT information regarding the method (or stub) this PC belongs to. This uses
 // information from the PidPageMapping for the PC.
-static inline __attribute__((__always_inline__)) u64
-hotspot_find_codeblob(const UnwindState *state, const HotspotProcInfo *ji)
+static EBPF_INLINE u64 hotspot_find_codeblob(const UnwindState *state, const HotspotProcInfo *ji)
 {
   unsigned long segment, codeblob, segmap_start;
   u8 tag;
@@ -191,7 +188,7 @@ hotspot_find_codeblob(const UnwindState *state, const HotspotProcInfo *ji)
   return codeblob;
 }
 
-__attribute__((always_inline)) inline static ErrorCode
+static EBPF_INLINE ErrorCode
 hotspot_handle_vtable_chunks(HotspotUnwindInfo *ui, HotspotUnwindAction *action)
 {
   DEBUG_PRINT("jvm:  -> unwind vtable");
@@ -209,7 +206,7 @@ hotspot_handle_vtable_chunks(HotspotUnwindInfo *ui, HotspotUnwindAction *action)
   return ERR_OK;
 }
 
-__attribute__((always_inline)) inline static ErrorCode hotspot_handle_interpreter(
+static EBPF_INLINE ErrorCode hotspot_handle_interpreter(
   UnwindState *state,
   Trace *trace,
   HotspotUnwindInfo *ui,
@@ -307,12 +304,12 @@ error:
 }
 
 #if defined(__x86_64__)
-__attribute__((always_inline)) inline static void breadcrumb_fixup(HotspotUnwindInfo *ui)
+static EBPF_INLINE void breadcrumb_fixup(HotspotUnwindInfo *ui)
 {
   // Nothing to do: breadcrumbs are not a thing on X86.
 }
 #elif defined(__aarch64__)
-__attribute__((always_inline)) inline static void breadcrumb_fixup(HotspotUnwindInfo *ui)
+static EBPF_INLINE void breadcrumb_fixup(HotspotUnwindInfo *ui)
 {
   // On ARM64, for some calls, the JVM pushes "breadcrumbs" onto the stack to make unwinding
   // easier for them. In the process, they unfortunately make it harder for us, since we have
@@ -344,7 +341,7 @@ __attribute__((always_inline)) inline static void breadcrumb_fixup(HotspotUnwind
 #endif
 
 #if defined(__x86_64__)
-__attribute__((always_inline)) inline static ErrorCode
+static EBPF_INLINE ErrorCode
 hotspot_handle_prologue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotUnwindAction *action)
 {
   // In the prologue code. It generally consists of stack 'banging' (check for stack
@@ -364,7 +361,7 @@ hotspot_handle_prologue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotU
   return ERR_OK;
 }
 #elif defined(__aarch64__)
-__attribute__((always_inline)) inline static ErrorCode
+static EBPF_INLINE ErrorCode
 hotspot_handle_prologue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotUnwindAction *action)
 {
   // On ARM64, the prologue consists of various assembly snippets, most of which we aren't really
@@ -414,7 +411,7 @@ hotspot_handle_prologue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotU
 #endif
 
 #if defined(__x86_64__)
-__attribute__((always_inline)) inline static bool
+static EBPF_INLINE bool
 hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotUnwindAction *action)
 {
   // On X86, use a heuristic to catch the likely spots of the epilogue.
@@ -477,7 +474,7 @@ pc_only:
   return true;
 }
 #elif defined(__aarch64__)
-__attribute__((always_inline)) inline static bool
+static EBPF_INLINE bool
 hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotUnwindAction *action)
 {
   // On ARM64, the epilogue code is generated roughly like this:
@@ -575,7 +572,7 @@ pattern_found:;
 }
 #endif
 
-__attribute__((always_inline)) inline static ErrorCode hotspot_handle_nmethod(
+static EBPF_INLINE ErrorCode hotspot_handle_nmethod(
   const CodeBlobInfo *cbi,
   Trace *trace,
   HotspotUnwindInfo *ui,
@@ -683,7 +680,7 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_handle_nmethod(
 #endif
 }
 
-__attribute__((always_inline)) inline static ErrorCode
+static EBPF_INLINE ErrorCode
 hotspot_handle_stub_fallback(const CodeBlobInfo *cbi, HotspotUnwindAction *action)
 {
   DEBUG_PRINT("jvm:  -> unwind stub fallback path");
@@ -699,7 +696,7 @@ hotspot_handle_stub_fallback(const CodeBlobInfo *cbi, HotspotUnwindAction *actio
   return ERR_OK;
 }
 
-__attribute__((always_inline)) inline static ErrorCode hotspot_handle_stub(
+static EBPF_INLINE ErrorCode hotspot_handle_stub(
   const UnwindState *state,
   const CodeBlobInfo *cbi,
   HotspotUnwindInfo *ui,
@@ -733,7 +730,7 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_handle_stub(
 #endif
 }
 
-__attribute__((always_inline)) inline static ErrorCode hotspot_execute_unwind_action(
+static EBPF_INLINE ErrorCode hotspot_execute_unwind_action(
   CodeBlobInfo *cbi,
   HotspotUnwindAction action,
   HotspotUnwindInfo *ui,
@@ -796,7 +793,7 @@ __attribute__((always_inline)) inline static ErrorCode hotspot_execute_unwind_ac
 }
 
 // Reads information from the CodeBlob for the current PC location from the JVM process.
-__attribute__((always_inline)) inline static ErrorCode hotspot_read_codeblob(
+static EBPF_INLINE ErrorCode hotspot_read_codeblob(
   const UnwindState *state,
   const HotspotProcInfo *ji,
   HotspotUnwindScratchSpace *scratch,
@@ -873,7 +870,7 @@ read_error_exit:
 }
 
 // hotspot_unwind_one_frame fully unwinds one HotSpot frame
-static ErrorCode
+static EBPF_INLINE ErrorCode
 hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo *ji, bool maybe_topmost)
 {
   UnwindState *state = &record->state;
@@ -925,7 +922,7 @@ hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo *ji, bool maybe_t
 // unwind_hotspot is the entry point for tracing when invoked from the native tracer
 // and it recursive unwinds all HotSpot frames and then jumps back to unwind further
 // native frames that follow.
-static inline __attribute__((__always_inline__)) int unwind_hotspot(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_hotspot(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
