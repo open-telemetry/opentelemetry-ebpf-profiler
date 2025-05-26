@@ -191,14 +191,20 @@ func Start(ctx context.Context, rep reporter.TraceReporter, traceProcessor Trace
 		// Poll the output channels
 		for {
 			select {
-			case traceUpdate := <-traceInChan:
+			// 这里检测 traceInChan关闭后退出,不依赖context,关闭操作在发送端执行
+			case traceUpdate, ok := <-traceInChan:
+				if !ok {
+					return
+				}
 				if traceUpdate != nil {
 					handler.HandleTrace(traceUpdate)
 				}
 			case <-metricsTicker.C:
 				handler.collectMetrics()
-			case <-ctx.Done():
-				return
+				// 这里直接退出会导致发送给 traceInChan的操作阻塞
+				// 从而导致 events下面的startTraceEventMonitor卡住，致使 goroutine leak, 内存无法回收
+				//case <-ctx.Done():
+				//	return
 			}
 		}
 	}()
