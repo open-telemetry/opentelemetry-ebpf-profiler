@@ -305,7 +305,9 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 
 func (pm *ProcessManager) MaybeNotifyAPMAgent(
 	rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16) string {
+	pm.mu.RLock()
 	pidInterp, ok := pm.interpreters[rawTrace.PID]
+	pm.mu.RUnlock()
 	if !ok {
 		return ""
 	}
