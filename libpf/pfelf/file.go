@@ -27,7 +27,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"os"
 	"path/filepath"
 	"runtime/debug"
 	"sort"
@@ -35,7 +34,7 @@ import (
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
@@ -50,11 +49,14 @@ const (
 	maxBytesLargeSection = 16 * 1024 * 1024
 )
 
-// ErrSymbolNotFound is returned when requested symbol was not found
-var ErrSymbolNotFound = errors.New("symbol not found")
+// List of public errors.
+var (
+	// ErrSymbolNotFound is returned when the requested symbol was not found.
+	ErrSymbolNotFound = errors.New("symbol not found")
 
-// ErrNotELF is returned when the file is not an ELF
-var ErrNotELF = errors.New("not an ELF file")
+	// ErrNotELF is returned when the file is not an ELF file.
+	ErrNotELF = errors.New("not an ELF file")
+)
 
 // File represents an open ELF file
 type File struct {
@@ -154,8 +156,8 @@ type Prog struct {
 type Section struct {
 	elf.SectionHeader
 
-	// Embed ReaderAt for ReadAt method.
-	io.ReaderAt
+	// elfReader is the same ReadAt as used for the File
+	elfReader io.ReaderAt
 
 	// Do not embed SectionReader directly, or as public member. We can't
 	// return the same copy to multiple callers, otherwise they corrupt
@@ -165,18 +167,12 @@ type Section struct {
 
 // Open opens the named file using os.Open and prepares it for use as an ELF binary.
 func Open(name string) (*File, error) {
-	f, err := os.Open(name)
+	f, err := mmap.Open(name)
 	if err != nil {
 		return nil, err
 	}
 
-	// Wrap it in a cacher as we often do short reads
-	buffered, err := readatbuf.New(f, 1024, 4)
-	if err != nil {
-		return nil, err
-	}
-
-	ff, err := newFile(buffered, f, 0, false)
+	ff, err := newFile(f, f, 0, false)
 	if err != nil {
 		f.Close()
 		return nil, err
@@ -198,7 +194,8 @@ func NewFile(r io.ReaderAt, loadAddress uint64, hasMusl bool) (*File, error) {
 	return newFile(r, nil, loadAddress, hasMusl)
 }
 
-func newFile(r io.ReaderAt, closer io.Closer, loadAddress uint64, hasMusl bool) (*File, error) {
+func newFile(r io.ReaderAt, closer io.Closer,
+	loadAddress uint64, hasMusl bool) (*File, error) {
 	f := &File{
 		elfReader:  r,
 		InsideCore: loadAddress != 0,
@@ -380,7 +377,7 @@ func (f *File) LoadSections() error {
 			FileSize:  sh.Size,
 		}
 		s.sr = io.NewSectionReader(f.elfReader, int64(s.Offset), int64(s.FileSize))
-		s.ReaderAt = s.sr
+		s.elfReader = s.sr
 	}
 
 	// Load the section name string table
@@ -599,7 +596,7 @@ func (f *File) insertTLSDescriptorsForSection(descs map[string]libpf.Address,
 		sym := elf.Sym64{}
 		symSz := int64(unsafe.Sizeof(sym))
 		symNo := int64(rela.Info >> 32)
-		n, err := symtabSection.ReadAt(libpf.SliceFrom(&sym), symNo*symSz)
+		n, err := symtabSection.elfReader.ReadAt(libpf.SliceFrom(&sym), symNo*symSz)
 		if err != nil || n != int(symSz) {
 			return fmt.Errorf("failed to read relocation symbol: %w", err)
 		}
@@ -712,6 +709,12 @@ func (ph *Prog) Open() io.ReadSeeker {
 
 // Data loads the whole program header referenced data, and returns it as slice.
 func (ph *Prog) Data(maxSize uint) ([]byte, error) {
+	mapping, ok := ph.elfReader.(*mmap.ReaderAt)
+	if ok {
+		return mapping.Subslice(int(ph.Off), int(ph.Filesz))
+	}
+
+	// Fallback option if the file is not mmaped.
 	if ph.Filesz > uint64(maxSize) {
 		return nil, fmt.Errorf("segment size %d is too large", ph.Filesz)
 	}
@@ -734,11 +737,18 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 	if sh.Flags&elf.SHF_COMPRESSED != 0 {
 		return nil, errors.New("compressed sections not supported")
 	}
+
+	mapping, ok := sh.elfReader.(*mmap.ReaderAt)
+	if ok {
+		return mapping.Subslice(int(sh.Offset), int(sh.FileSize))
+	}
+
+	// Fallback option if the file is not mmaped.
 	if sh.FileSize > uint64(maxSize) {
 		return nil, fmt.Errorf("section size %d is too large", sh.FileSize)
 	}
 	p := make([]byte, sh.FileSize)
-	_, err := sh.ReadAt(p, 0)
+	_, err := sh.elfReader.ReadAt(p, 0)
 	return p, err
 }
 
