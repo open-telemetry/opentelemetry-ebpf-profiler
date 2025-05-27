@@ -50,13 +50,13 @@ type goInstance struct {
 func mapSymblibError(status C.SymblibStatus) error {
 	switch status {
 	case C.SYMBLIB_ERR_IOFILENOTFOUND:
-		return fmt.Errorf("failed to create point resolver: %w", os.ErrNotExist)
+		return os.ErrNotExist
 	case C.SYMBLIB_ERR_OBJFILE:
-		return fmt.Errorf("failed to create point resolver: invalid object file format (%d)", status)
+		return errors.New("failed to read object file")
 	case C.SYMBLIB_ERR_DWARF:
-		return fmt.Errorf("failed to create point resolver: DWARF parsing error (%d)", status)
+		return errors.New("failed to parse DWARF")
 	default:
-		return fmt.Errorf("failed to create point resolver: %d", status)
+		return fmt.Errorf("error %d", status)
 	}
 }
 
