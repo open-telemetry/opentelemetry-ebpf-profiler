@@ -4,7 +4,7 @@
 #include "bpfdefs.h"
 
 // tsd_read reads from the Thread Specific Data location associated with the provided key.
-static inline __attribute__((__always_inline__)) int
+static inline EBPF_INLINE int
 tsd_read(const TSDInfo *tsi, const void *tsd_base, int key, void **out)
 {
   const void *tsd_addr = tsd_base + tsi->offset;
@@ -30,7 +30,7 @@ err:
 }
 
 // tsd_get_base looks up the base address for TSD variables (TPBASE).
-static inline __attribute__((__always_inline__)) int tsd_get_base(void **tsd_base)
+static inline EBPF_INLINE int tsd_get_base(void **tsd_base)
 {
 #ifdef TESTING_COREDUMP
   *tsd_base = (void *)__cgo_ctx->tp_base;

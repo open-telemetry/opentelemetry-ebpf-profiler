@@ -124,7 +124,7 @@ bpf_map_def SEC("maps") apm_int_procs = {
   .max_entries = 128,
 };
 
-static inline __attribute__((__always_inline__)) void maybe_add_apm_info(Trace *trace)
+static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 {
   u32 pid              = trace->pid; // verifier needs this to be on stack on 4.15 kernel
   ApmIntProcInfo *proc = bpf_map_lookup_elem(&apm_int_procs, &pid);
@@ -174,7 +174,7 @@ static inline __attribute__((__always_inline__)) void maybe_add_apm_info(Trace *
 }
 
 // unwind_stop is the tail call destination for PROG_UNWIND_STOP.
-static inline __attribute__((__always_inline__)) int unwind_stop(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
