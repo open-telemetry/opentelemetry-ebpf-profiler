@@ -76,8 +76,8 @@ func (b *baseReporter) FrameKnown(frameID libpf.FrameID) bool {
 	known := false
 	if frameMapLock, exists := b.pdata.Frames.GetAndRefresh(frameID.FileID(),
 		pdata.FramesCacheLifetime); exists {
-		frameMap := frameMapLock.RLock()
-		defer frameMapLock.RUnlock(&frameMap)
+		frameMap := frameMapLock.WLock()
+		defer frameMapLock.WUnlock(&frameMap)
 		_, known = (*frameMap).GetAndRefresh(frameID.AddressOrLine(), pdata.FrameMapLifetime)
 	}
 	return known
