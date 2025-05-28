@@ -6,7 +6,6 @@ package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabe
 import (
 	"fmt"
 	"go/version"
-	"runtime"
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
@@ -60,29 +59,12 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 
 	log.Debugf("file %s detected as go version %s", info.FileName(), goVersion)
 
-	iscgo, err := file.IsCgoEnabled()
-	if err != nil {
-		return nil, err
-	}
 	offsets := getOffsets(goVersion)
-	switch runtime.GOARCH {
-	case "amd64":
-		// https://github.com/golang/go/blob/396a48bea6f/src/cmd/compile/internal/amd64/ssa.go#L174
-		offsets.tls_offset = -8
-	case "arm64":
-		// https://github.com/golang/go/blob/6885bad7dd86880be/src/runtime/tls_arm64.s#L11
-		//  Get's compiled into:
-		//  0x000000000007f260 <+0>:     adrp    x27, 0x1c2000 <runtime.mheap_+101440>
-		//  0x000000000007f264 <+4>:     ldrsb   x0, [x27, #284]
-		//  0x000000000007f268 <+8>:     cbz     x0, 0x7f278 <runtime.load_g+24>
-		//  0x000000000007f26c <+12>:    mrs     x0, tpidr_el0
-		//  0x000000000007f270 <+16>:    mov     x27, #0x30                      // #48
-		//  0x000000000007f274 <+20>:    ldr     x28, [x0, x27]
-		//  0x000000000007f278 <+24>:    ret
-		if iscgo {
-			offsets.tls_offset = 0x30
-		}
+	tlsOffset, err := extractTLSGOffset(file)
+	if err != nil {
+		return nil, fmt.Errorf("failed to extract TLS offset: %w", err)
 	}
+	offsets.tls_offset = C.s32(tlsOffset)
 
 	return &data{
 		goVersion: goVersion,
