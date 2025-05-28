@@ -10,6 +10,7 @@ import (
 	"hash/fnv"
 	"sync/atomic"
 
+	"github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -39,6 +40,9 @@ type goInstance struct {
 	failCount    atomic.Uint64
 
 	d *goData
+
+	// addrToFunction provides a cache for faster symbolization of repeating frames.
+	addrToFunction *freelru.LRU[libpf.AddressOrLineno, *reporter.FrameMetadataArgs]
 }
 
 func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
@@ -103,8 +107,14 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
+	addrToFunction, err := freelru.New[libpf.AddressOrLineno, *reporter.FrameMetadataArgs](
+		256, func(k libpf.AddressOrLineno) uint32 { return uint32(k) })
+	if err != nil {
+		return nil, err
+	}
 	return &goInstance{
-		d: g,
+		d:              g,
+		addrToFunction: addrToFunction,
 	}, nil
 }
 
@@ -113,6 +123,8 @@ func (g *goData) Unload(_ interpreter.EbpfHandler) {
 }
 
 func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
+	addrToFuncStats := g.addrToFunction.ResetMetrics()
+
 	return []metrics.Metric{
 		{
 			ID:    metrics.IDGoSymbolizationSuccess,
@@ -121,6 +133,22 @@ func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 		{
 			ID:    metrics.IDGoSymbolizationFailure,
 			Value: metrics.MetricValue(g.failCount.Swap(0)),
+		},
+		{
+			ID:    metrics.IDGoAddrToFuncHit,
+			Value: metrics.MetricValue(addrToFuncStats.Hits),
+		},
+		{
+			ID:    metrics.IDGoAddrToFuncMiss,
+			Value: metrics.MetricValue(addrToFuncStats.Misses),
+		},
+		{
+			ID:    metrics.IDGoAddrToFuncAdd,
+			Value: metrics.MetricValue(addrToFuncStats.Inserts),
+		},
+		{
+			ID:    metrics.IDGoAddrToFuncDel,
+			Value: metrics.MetricValue(addrToFuncStats.Removals),
 		},
 	}, nil
 }
@@ -138,6 +166,13 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 	sfCounter := successfailurecounter.New(&g.successCount, &g.failCount)
 	defer sfCounter.DefaultToFailure()
 
+	if data, ok := g.addrToFunction.Get(frame.Lineno); ok {
+		trace.AppendFrameID(libpf.GoFrame, data.FrameID)
+		symbolReporter.FrameMetadata(data)
+		sfCounter.ReportSuccess()
+		return nil
+	}
+
 	sourceFile, lineNo, fn := g.d.symTable.PCToLine(uint64(frame.Lineno))
 	if fn == nil {
 		return fmt.Errorf("failed to symbolize 0x%x", frame.Lineno)
@@ -154,6 +189,13 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 	}
 
 	frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
+
+	g.addrToFunction.Add(frame.Lineno, &reporter.FrameMetadataArgs{
+		FrameID:      frameID,
+		FunctionName: fn.Name,
+		SourceFile:   sourceFile,
+		SourceLine:   libpf.SourceLineno(lineNo),
+	})
 
 	trace.AppendFrameID(libpf.GoFrame, frameID)
 

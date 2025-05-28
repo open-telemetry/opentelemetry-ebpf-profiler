@@ -641,6 +641,18 @@ const (
 	// Number of Go frames that failed symbolization
 	IDGoSymbolizationFailure = 277
 
+	// Number of cache hits for Go AddrToFunc
+	IDGoAddrToFuncHit = 278
+
+	// Number of cache misses for Go AddrToFunc
+	IDGoAddrToFuncMiss = 279
+
+	// Number of added cache elements for Go AddrToFunc
+	IDGoAddrToFuncAdd = 280
+
+	// Number of deleted cache elements for Go AddrToFunc
+	IDGoAddrToFuncDel = 281
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 278
+	IDMax = 282
 )
