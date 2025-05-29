@@ -35,6 +35,7 @@ service ProfilesService {
   // alive for the entire life of the application.
   rpc Export(ExportProfilesServiceRequest) returns (ExportProfilesServiceResponse) {}
   rpc ExportZeroTime(ExportProfilesServiceRequest) returns (ExportProfilesServiceResponse) {}
+  rpc ExportDeltaTime(ExportProfilesServiceRequest) returns (ExportProfilesServiceResponse) {}
 }
 
 message ExportProfilesServiceRequest {

@@ -388,8 +388,8 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 		// https://github.com/open-telemetry/oteps/pull/239#discussion_r1491546899
 		// As an ID with all zeros is considered invalid, we write ELASTIC here.
 		ProfileId:         []byte("ELASTIC"),
-		StartTimeUnixNano: uint64(time.Unix(int64(startTS), 0).UnixNano()),
-		EndTimeUnixNano:   uint64(time.Unix(int64(endTS), 0).UnixNano()),
+		StartTimeUnixNano: startTS,
+		EndTimeUnixNano:   endTS,
 		// Attributes - Optional element we do not use.
 		// DroppedAttributesCount - Optional element we do not use.
 		// OriginalPayloadFormat - Optional element we do not use.
@@ -421,15 +421,22 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	// Base RPC (no proto changes)
 	_, err := r.client.Export(ctx, &req, gzipOption)
 
-	// Zeroed-out timestamps
+	// Delta timestamps
+	for _, s := range profile.Sample {
+		for idx, v := range s.Timestamps {
+			s.Timestamps[idx] = v - startTS
+			//			log.Warnf("DD: %v", s.Timestamps[idx])
+		}
+	}
+	_, err = r.client.ExportDeltaTime(ctx, &req, gzipOption)
+
+	// Zero-out timestamps
 	for _, s := range profile.Sample {
 		for idx, _ := range s.Timestamps {
 			//			log.Warnf("TT: %v", time.Unix(0, int64(s.Timestamps[idx])))
 			s.Timestamps[idx] = 0
 		}
 	}
-
-	// Timestamps set to zero
 	_, err = r.client.ExportZeroTime(ctx, &req, gzipOption)
 
 	r.LogMetrics()
