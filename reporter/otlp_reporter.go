@@ -9,6 +9,7 @@ package reporter
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -270,11 +271,19 @@ func (r *OTLPReporter) LogMetrics() {
 		}
 	}
 
-	for name, numWireBytes := range methodWireOut {
+	// Consistent ordering
+	keys := libpf.MapKeysToSlice(methodWireOut)
+	sort.Strings(keys)
+
+	for _, name := range keys {
 		if strings.HasPrefix(name, rpcPrefix) {
-			log.Warnf("Bytes: %v WireBytes: %v [%v]", rpcBytes[name], numWireBytes, name)
+			log.Warnf("Bytes: %v WireBytes: %v [%v]",
+				rpcBytes[name], methodWireOut[name],
+				name[strings.LastIndex(name, "/")+1:])
 		}
 	}
+
+	log.Warnf("")
 }
 
 // StartOTLP sets up and manages the reporting connection to a OTLP backend.
