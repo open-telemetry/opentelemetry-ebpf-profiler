@@ -42,6 +42,7 @@ import (
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
 	"github.com/elastic/otel-profiling-agent/reporter"
 	"github.com/elastic/otel-profiling-agent/support"
+	"github.com/elastic/otel-profiling-agent/times"
 )
 
 /*
@@ -840,7 +841,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) *host.Trace {
 	trace := &host.Trace{
 		Comm:  C.GoString((*C.char)(unsafe.Pointer(&ptr.comm))),
 		PID:   libpf.PID(ptr.pid),
-		KTime: libpf.KTime(ptr.ktime),
+		KTime: times.KTime(ptr.ktime),
 	}
 
 	// Trace fields included in the hash:
@@ -1128,6 +1129,6 @@ func (t *Tracer) ConvertTrace(trace *host.Trace) *libpf.Trace {
 	return t.processManager.ConvertTrace(trace)
 }
 
-func (t *Tracer) SymbolizationComplete(traceCaptureKTime libpf.KTime) {
+func (t *Tracer) SymbolizationComplete(traceCaptureKTime times.KTime) {
 	t.processManager.SymbolizationComplete(traceCaptureKTime)
 }

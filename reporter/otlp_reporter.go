@@ -424,8 +424,8 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	// Zeroed-out timestamps
 	for _, s := range profile.Sample {
 		for idx, _ := range s.Timestamps {
+			//			log.Warnf("TT: %v", time.Unix(0, int64(s.Timestamps[idx])))
 			s.Timestamps[idx] = 0
-			// log.Warnf("TT: %v => %v", v, v-startTS)
 		}
 	}
 
@@ -534,8 +534,7 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 
 		sample.Timestamps = make([]uint64, 0, len(sampleInfo.timestamps))
 		for _, ts := range sampleInfo.timestamps {
-			sample.Timestamps = append(sample.Timestamps,
-				uint64(time.Unix(int64(ts), 0).UnixMilli()))
+			sample.Timestamps = append(sample.Timestamps, uint64(ts))
 			if ts < startTS || startTS == 0 {
 				startTS = ts
 				continue

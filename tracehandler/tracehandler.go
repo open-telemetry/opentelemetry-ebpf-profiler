@@ -20,6 +20,7 @@ import (
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/libpf/memorydebug"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/elastic/otel-profiling-agent/times"
 	"github.com/elastic/otel-profiling-agent/tracer"
 	log "github.com/sirupsen/logrus"
 )
@@ -49,7 +50,7 @@ type TraceProcessor interface {
 	// It gets the timestamp of when the Traces (if any) were captured. The timestamp
 	// is in essence an indicator that all Traces until that time have been now processed,
 	// and any events up to this time can be processed.
-	SymbolizationComplete(traceCaptureKTime libpf.KTime)
+	SymbolizationComplete(traceCaptureKTime times.KTime)
 }
 
 // Compile time check to make sure Tracer satisfies the interfaces.
@@ -132,7 +133,8 @@ func newTraceHandler(ctx context.Context, rep reporter.TraceReporter,
 }
 
 func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
-	timestamp := libpf.UnixTime32(libpf.NowAsUInt32())
+	//timestamp := libpf.UnixTime32(libpf.NowAsUInt32())
+	timestamp := libpf.UnixTime32(bpfTrace.KTime.UnixNano())
 	defer m.traceProcessor.SymbolizationComplete(bpfTrace.KTime)
 
 	meta, err := m.containerMetadataHandler.GetContainerMetadata(bpfTrace.PID)

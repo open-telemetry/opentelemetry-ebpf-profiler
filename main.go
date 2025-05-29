@@ -27,6 +27,7 @@ import (
 	"github.com/elastic/otel-profiling-agent/metrics"
 	"github.com/elastic/otel-profiling-agent/metrics/agentmetrics"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	tim "github.com/elastic/otel-profiling-agent/times"
 
 	"github.com/elastic/otel-profiling-agent/tracer"
 
@@ -318,6 +319,8 @@ func mainWithExitCode() exitCode {
 	// regularly. This is required so pf-web-service only needs to query metadata for bounded
 	// periods of time.
 	metadataCollector.StartMetadataCollection(mainCtx, rep)
+
+	tim.StartRealtimeSync()
 
 	// Start agent specific metric retrieval and report them every second.
 	agentMetricCancel, agentErr := agentmetrics.Start(mainCtx, 1*time.Second)
