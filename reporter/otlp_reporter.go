@@ -25,6 +25,8 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 	"github.com/zeebo/xxh3"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/encoding/gzip"
 )
 
 // Assert that we implement the full Reporter interface.
@@ -391,7 +393,8 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 		ResourceProfiles: resourceProfiles,
 	}
 
-	_, err := r.client.Export(ctx, &req)
+	gzipOption := grpc.UseCompressor(gzip.Name)
+	_, err := r.client.Export(ctx, &req, gzipOption)
 	return err
 }
 
