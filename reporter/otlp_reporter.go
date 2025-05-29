@@ -9,6 +9,7 @@ package reporter
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/elastic/otel-profiling-agent/config"
@@ -254,6 +255,28 @@ func (r *OTLPReporter) GetMetrics() Metrics {
 	}
 }
 
+const rpcPrefix = "/opentelemetry.proto.collector.profiles.v1.ProfilesService/Export"
+
+// LogMetrics logs internal metrics of OTLPReporter.
+func (r *OTLPReporter) LogMetrics() {
+	methodOut := r.rpcStats.getMethodRPCBytesOut()
+	methodWireOut := r.rpcStats.getMethodWireBytesOut()
+
+	rpcBytes := map[string]uint64{}
+
+	for name, numBytes := range methodOut {
+		if strings.HasPrefix(name, rpcPrefix) {
+			rpcBytes[name] = numBytes
+		}
+	}
+
+	for name, numWireBytes := range methodWireOut {
+		if strings.HasPrefix(name, rpcPrefix) {
+			log.Warnf("Bytes: %v WireBytes: %v [%v]", rpcBytes[name], numWireBytes, name)
+		}
+	}
+}
+
 // StartOTLP sets up and manages the reporting connection to a OTLP backend.
 func StartOTLP(mainCtx context.Context, c *Config) (Reporter, error) {
 	cacheSize := config.TraceCacheEntries()
@@ -395,6 +418,7 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 
 	gzipOption := grpc.UseCompressor(gzip.Name)
 	_, err := r.client.Export(ctx, &req, gzipOption)
+	r.LogMetrics()
 	return err
 }
 
