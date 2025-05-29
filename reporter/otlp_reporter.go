@@ -518,9 +518,6 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 		// Earlier we peeked into traces for traceHash and know it exists.
 		trace, _ := r.traces.Get(traceHash)
 
-		sample.StacktraceIdIndex = getStringMapIndex(stringMap,
-			traceHash.StringNoQuotes())
-
 		sample.Timestamps = make([]uint64, 0, len(sampleInfo.timestamps))
 		for _, ts := range sampleInfo.timestamps {
 			sample.Timestamps = append(sample.Timestamps,

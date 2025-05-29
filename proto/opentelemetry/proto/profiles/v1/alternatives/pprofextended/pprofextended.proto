@@ -174,17 +174,12 @@ message ValueType {
 // augmented with auxiliary information like the thread-id, some
 // indicator of a higher level request being handled etc.
 message Sample {
-  // The indices recorded here correspond to locations in Profile.location.
-  // The leaf is at location_index[0]. [deprecated, superseded by locations_start_index / locations_length]
-  repeated uint64 location_index = 1;
   // locations_start_index along with locations_length refers to to a slice of locations in Profile.location.
   // Supersedes location_index.
   uint64 locations_start_index = 7;
   // locations_length along with locations_start_index refers to a slice of locations in Profile.location.
   // Supersedes location_index.
   uint64 locations_length = 8;
-  // A 128bit id that uniquely identifies this stacktrace, globally. Index into string table. [optional]
-  uint32 stacktrace_id_index = 9;
   // The type and unit of each value is defined by the corresponding
   // entry in Profile.sample_type. All samples must have the same
   // number of values, the same as the length of Profile.sample_type.
