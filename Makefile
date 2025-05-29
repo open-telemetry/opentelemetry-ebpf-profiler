@@ -2,7 +2,7 @@
 
 SHELL:=/usr/bin/env bash
 
-all: generate ebpf binary
+all: generate ebpf binary server
 
 # Removes the go build cache and binaries in the current project
 clean:
@@ -11,13 +11,20 @@ clean:
 	@rm -f support/*.test
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache
+	@rm -f server/server
 
 generate: protobuf
 	go install github.com/florianl/bluebox@v0.0.1
 	go generate ./...
 
-binary:
+binary: generate ebpf
 	go build -buildvcs=false -ldflags="-extldflags=-static" -tags osusergo,netgo
+
+server: generate
+	cd server && go build
+
+bench: binary
+	sudo ./otel-profiling-agent -disable-tls -collection-agent localhost:8260
 
 ebpf:
 	$(MAKE) -j$(shell nproc) -C support/ebpf
