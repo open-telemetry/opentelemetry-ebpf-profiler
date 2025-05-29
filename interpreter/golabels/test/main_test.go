@@ -24,9 +24,9 @@ func TestGoLabels(t *testing.T) {
 	enabledTracers.Enable(tracertypes.Labels)
 	traceCh, _ := testutils.StartTracer(context.Background(), t, enabledTracers, r)
 	for _, tc := range [][]string{
-		{"./go_labels_canary1.23.test", "123"},
-		{"./go_labels_canary1.24.test", "124"},
-		{"./go_labels_canary_cgo.test", "cgo"},
+		{"./golbls_1_23.test", "123"},
+		{"./golbls_1_24.test", "124"},
+		{"./golbls_cgo.test", "cgo"},
 	} {
 		t.Run(tc[0], func(t *testing.T) {
 			// Use a separate exe for getting labels as the bpf code doesn't seem to work with

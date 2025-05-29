@@ -141,7 +141,8 @@ static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *st
     DEBUG_PRINT("cl: failed to get tsd base; can't read m_ptr");
     return NULL;
   }
-  DEBUG_PRINT("cl: read tsd_base at 0x%lx", (unsigned long)tls_base);
+  DEBUG_PRINT(
+    "cl: read tsd_base at 0x%lx, g offset: %d", (unsigned long)tls_base, offs->tls_offset);
 
   if (offs->tls_offset == 0) {
 #if defined(__aarch64__)

@@ -5,10 +5,45 @@
 
 package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
-import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+import (
+	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"golang.org/x/arch/x86/x86asm"
+)
 
-// On AMD64, the TLS offset for the goroutine structure is at a fixed offset
-func extractTLSGOffset(*pfelf.File) (int32, error) {
-	// https://github.com/golang/go/blob/396a48bea6f/src/cmd/compile/internal/amd64/ssa.go#L174
+// Most normal amd64 Go binaries use -8 as offset into TLS space for
+// storing the current g but "static" binaries it ends up as -80. There
+// may be dynamic relocating going on so just read it from a known
+// symbol if possible.
+func extractTLSGOffset(f *pfelf.File) (int32, error) {
+	syms, err := f.ReadSymbols()
+	if err != nil {
+		return 0, err
+	}
+	// Dump of assembler code for function runtime.stackcheck:
+	// 0x0000000000470080 <+0>:     mov    %fs:0xfffffffffffffff8,%rax
+	sym, err := syms.LookupSymbol("runtime.stackcheck.abi0")
+	if err != nil {
+		// Binary must be stripped, hope default is correct and warn.
+		log.Warnf("Failed to find stackcheck symbol, Go labels might not work: %v", err)
+		return -8, nil
+	}
+	b := make([]byte, 10)
+	_, err = f.ReadAt(b, int64(sym.Address))
+	if err != nil {
+		return 0, err
+	}
+
+	i, err := x86asm.Decode(b, 64)
+	if err != nil {
+		return 0, err
+	}
+	if i.Op == x86asm.MOV {
+		mem, ok := i.Args[1].(x86asm.Mem)
+		if ok {
+			return int32(mem.Disp), nil
+		}
+	}
+	log.Warnf("Failed to decode stackcheck symbol, Go label collection might not work")
 	return -8, nil
 }
