@@ -87,6 +87,9 @@ message Profile {
   // Index into the string table of the type of the preferred sample
   // value. If unset, clients should default to the last sample value.
   int64 default_sample_type = 14;
+
+  // Stacks referenced by samples via stack_index.
+  repeated Stack stack_table = 19;
 }
 // Represents a mapping between Attribute Keys and Units.
 message AttributeUnit {
@@ -174,6 +177,8 @@ message ValueType {
 // augmented with auxiliary information like the thread-id, some
 // indicator of a higher level request being handled etc.
 message Sample {
+ // Reference to stack in Profile.stack_table.
+  int32 stack_index = 1;
   // locations_start_index along with locations_length refers to to a slice of locations in Profile.location.
   // Supersedes location_index.
   uint64 locations_start_index = 7;
@@ -205,6 +210,13 @@ message Sample {
   // to fall within the Profile's time range. [optional]
   repeated uint64 timestamps = 13;
 }
+
+// A Stack represents a stack trace as a list of locations. The first location
+// is the leaf frame.
+message Stack {
+  repeated int32 location_indices = 1;
+}
+
 // Provides additional context for a sample,
 // such as thread ID or allocation size, with optional units. [deprecated]
 message Label {
