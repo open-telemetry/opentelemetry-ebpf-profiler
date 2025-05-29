@@ -91,6 +91,7 @@ message Profile {
   // Stacks referenced by samples via stack_index.
   repeated Stack stack_table = 19;
 }
+
 // Represents a mapping between Attribute Keys and Units.
 message AttributeUnit {
   // Index into string table.

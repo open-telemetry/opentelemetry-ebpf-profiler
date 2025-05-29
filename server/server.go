@@ -51,6 +51,12 @@ func (p *profilesServer) ExportDeltaTime(context.Context, *pb.ExportProfilesServ
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 
+func (p *profilesServer) ExportStacks(context.Context, *pb.ExportProfilesServiceRequest) (
+	*pb.ExportProfilesServiceResponse, error) {
+	log.Printf("ExportStacks")
+	return &pb.ExportProfilesServiceResponse{}, nil
+}
+
 func newServer() *profilesServer {
 	p := &profilesServer{}
 	return p
