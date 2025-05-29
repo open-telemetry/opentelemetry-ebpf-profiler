@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Clone code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Check for changes in licenses of dependencies
@@ -31,14 +31,14 @@ jobs:
         target_arch: [amd64, arm64]
     steps:
       - name: Clone code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Get linter version
         id: linter-version
         run: (echo -n "version="; make linter-version) >> "$GITHUB_OUTPUT"
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6
         env:
           GOARCH: ${{ matrix.target-arch }}
           CGO_ENABLED: 1
@@ -58,11 +58,11 @@ jobs:
         target_arch: [amd64, arm64]
     steps:
       - name: Clone code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Cache coredump modules
-        uses: actions/cache@v4
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
         with:
           path: tools/coredump/modulecache
           key: coredumps-${{ matrix.target_arch }}-${{ hashFiles('tools/coredump/testdata/*/*.json') }}
@@ -77,13 +77,13 @@ jobs:
   check-binary-blobs:
     name: Check for differences in the eBPF and Rust binary blobs
     runs-on: ubuntu-24.04
-    container: otel/opentelemetry-ebpf-profiler-dev:latest
+    container: otel/opentelemetry-ebpf-profiler-dev:latest@sha256:688e4651a9a482700836ff59ea00270b2c237bbcb2cf6b6c9daffcf29fa0a0cb
     defaults:
       run:
         shell: bash --login {0}
     steps:
       - name: Clone code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Hash binary blobs
         run: |
           sha256sum support/ebpf/tracer.ebpf.release.* > binary-blobs.hash
@@ -115,13 +115,13 @@ jobs:
         target_arch: [amd64, arm64]
     steps:
       - name: Clone code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Prepare integration test binaries for qemu tests
         run: make integration-test-binaries TARGET_ARCH=${{ matrix.target_arch }}
       - name: Upload integration test binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: integration-test-binaries-${{ matrix.target_arch }}
           path: support/*.test
@@ -154,7 +154,7 @@ jobs:
           - { target_arch: arm64, kernel: 6.12.16 }
     steps:
       - name: Clone code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Install dependencies
         run: |
           sudo apt-get update -y
@@ -166,7 +166,7 @@ jobs:
           go install github.com/florianl/bluebox@v0.0.1
           sudo mv ~/go/bin/bluebox /usr/local/bin/.
       - name: Fetch integration test binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { name: "integration-test-binaries-${{ matrix.target_arch }}" }
       - name: Fetch precompiled kernel
         run: |
