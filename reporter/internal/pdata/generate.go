@@ -223,6 +223,8 @@ func (p *Pdata) setProfile(
 			semconv.ServiceNameKey, traceKey.ApmServiceName)
 		attrMgr.AppendInt(sample.AttributeIndices(),
 			semconv.ProcessPIDKey, traceKey.Pid)
+		attrMgr.AppendInt(sample.AttributeIndices(),
+			semconv.ThreadIDKey, traceKey.Tid)
 
 		for key, value := range traceInfo.EnvVars {
 			attrMgr.AppendOptionalString(
