@@ -35,7 +35,13 @@ type profilesServer struct {
 
 func (p *profilesServer) Export(context.Context, *pb.ExportProfilesServiceRequest) (
 	*pb.ExportProfilesServiceResponse, error) {
-	log.Printf("Export!")
+	log.Printf("Export")
+	return &pb.ExportProfilesServiceResponse{}, nil
+}
+
+func (p *profilesServer) ExportZeroTime(context.Context, *pb.ExportProfilesServiceRequest) (
+	*pb.ExportProfilesServiceResponse, error) {
+	log.Printf("ExportZeroTime")
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 

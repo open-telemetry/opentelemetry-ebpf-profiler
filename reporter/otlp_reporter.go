@@ -417,7 +417,21 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	}
 
 	gzipOption := grpc.UseCompressor(gzip.Name)
+
+	// Base RPC (no proto changes)
 	_, err := r.client.Export(ctx, &req, gzipOption)
+
+	// Zeroed-out timestamps
+	for _, s := range profile.Sample {
+		for idx, _ := range s.Timestamps {
+			s.Timestamps[idx] = 0
+			// log.Warnf("TT: %v => %v", v, v-startTS)
+		}
+	}
+
+	// Timestamps set to zero
+	_, err = r.client.ExportZeroTime(ctx, &req, gzipOption)
+
 	r.LogMetrics()
 	return err
 }
