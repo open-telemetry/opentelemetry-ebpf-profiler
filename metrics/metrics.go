@@ -83,10 +83,11 @@ func init() {
 	}
 }
 
-// report converts and reports collected metrics via OTel metrics
-func report() {
+// report converts and reports collected metrics via OTel metrics.
+// Allow for report to be overridden in the test.
+var report = func() {
 	ctx := context.Background()
-	for i := 0; i < nMetrics; i++ {
+	for i := range nMetrics {
 		metric := metricsBuffer[i]
 		switch typ := metricTypes[metric.ID]; typ {
 		case MetricTypeCounter:
