@@ -6,13 +6,24 @@
   ],
   "packageRules": [
     {
-      "groupName": "all patch versions",
-      "matchUpdateTypes": ["patch"],
+      "groupName": "Go dependencies",
+      "matchManagers": ["gomod"],
       "schedule": ["before 8am every weekday"]
     },
     {
-      "matchUpdateTypes": ["minor", "major"],
-      "schedule": ["before 8am on Monday"]
+      "groupName": "Dockerfile dependencies",
+      "matchManagers": ["dockerfile"],
+      "schedule": ["before 8am every weekday"]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": ["github-actions"],
+      "schedule": ["before 8am every weekday"]
+    },
+    {
+      "groupName": "Other dependencies",
+      "matchManagers": ["!gomod", "!dockerfile", "!github-actions"],
+      "schedule": ["before 8am every weekday"]
     }
   ],
   "labels": [
