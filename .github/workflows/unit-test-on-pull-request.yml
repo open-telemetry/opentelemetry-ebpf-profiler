@@ -77,7 +77,7 @@ jobs:
   check-binary-blobs:
     name: Check for differences in the eBPF and Rust binary blobs
     runs-on: ubuntu-24.04
-    container: otel/opentelemetry-ebpf-profiler-dev:latest@sha256:688e4651a9a482700836ff59ea00270b2c237bbcb2cf6b6c9daffcf29fa0a0cb
+    container: otel/opentelemetry-ebpf-profiler-dev:latest@sha256:acce547f366150eb25392e1aff270df430ef6b759baeb4292999116018e70e6e
     defaults:
       run:
         shell: bash --login {0}
