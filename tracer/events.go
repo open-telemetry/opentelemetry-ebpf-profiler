@@ -47,12 +47,15 @@ func (t *Tracer) processPIDEvents(ctx context.Context) {
 	defer pidCleanupTicker.Stop()
 	for {
 		select {
-		case pid := <-t.pidEvents:
+		case pid, ok := <-t.pidEvents:
+			if !ok {
+				return
+			}
 			t.processManager.SynchronizeProcess(process.New(pid))
 		case <-pidCleanupTicker.C:
 			t.processManager.CleanupPIDs()
-		case <-ctx.Done():
-			return
+			//case <-ctx.Done():
+			//	return
 		}
 	}
 }
@@ -165,6 +168,8 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			case <-pollTicker.C:
 				// Continue execution below.
 			case <-ctx.Done():
+				// 退出时关闭traceOutChan
+				close(traceOutChan)
 				break PollLoop
 			}
 
@@ -191,6 +196,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				if minKTime == 0 || trace.KTime < minKTime {
 					minKTime = trace.KTime
 				}
+				// 这个修改是避免这里阻塞导致泄漏
 				traceOutChan <- trace
 			}
 			// After we've received and processed all trace events, call

@@ -7,6 +7,7 @@ package periodiccaller
 import (
 	"context"
 	"fmt"
+	"github.com/toliu/opentelemetry-ebpf-profiler/libpf"
 	"os"
 	"runtime"
 	"strings"
@@ -134,7 +135,7 @@ func TestPeriodicCaller(t *testing.T) {
 			return StartWithJitter(ctx, interval, 0.2, cb)
 		},
 		"StartWithManualTrigger": func(ctx context.Context, cb func()) func() {
-			return StartWithManualTrigger(ctx, interval, trigger, func(bool) { cb() })
+			return StartWithManualTrigger(ctx, interval, trigger, func(bool) { cb() }, make(chan libpf.PID))
 		},
 	}
 
@@ -187,7 +188,7 @@ func TestPeriodicCallerCancellation(t *testing.T) {
 			return StartWithJitter(ctx, interval, 0.2, cb)
 		},
 		"StartWithManualTrigger": func(ctx context.Context, cb func()) func() {
-			return StartWithManualTrigger(ctx, interval, trigger, func(bool) { cb() })
+			return StartWithManualTrigger(ctx, interval, trigger, func(bool) { cb() }, make(chan libpf.PID))
 		},
 	}
 
@@ -235,7 +236,7 @@ func TestPeriodicCallerManualTrigger(t *testing.T) {
 		if n == int32(numTrigger) {
 			done <- true
 		}
-	})
+	}, make(chan libpf.PID))
 	defer stop()
 
 	for i := 0; i < numTrigger; i++ {
