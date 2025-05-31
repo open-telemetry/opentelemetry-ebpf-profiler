@@ -17,7 +17,7 @@ require (
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
-	github.com/tklauser/numcpus v0.8.0
+	github.com/tklauser/numcpus v0.10.0
 	github.com/zeebo/xxh3 v1.0.2
 	go.opentelemetry.io/collector/component v0.116.0
 	go.opentelemetry.io/collector/consumer/consumertest v0.116.0
@@ -29,7 +29,7 @@ require (
 	go.opentelemetry.io/collector/receiver/xreceiver v0.116.0
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/metric v1.35.0
-	golang.org/x/arch v0.10.0
+	golang.org/x/arch v0.17.0
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
 	golang.org/x/sync v0.14.0
 	golang.org/x/sys v0.33.0
