@@ -3,25 +3,19 @@
 
 package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
-/*
-#cgo CFLAGS: -g -Wall
-#include "../../rust-crates/symblib-capi/c/symblib.h"
-#include <stdlib.h>
-*/
-import "C"
-
 import (
+	"debug/gosym"
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"os"
 	"sync/atomic"
-	"unsafe"
 
+	"github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
@@ -34,7 +28,8 @@ var (
 )
 
 type goData struct {
-	goExecutable *C.SymblibPointResolver
+	pclnData []byte
+	symTable *gosym.Table
 }
 
 type goInstance struct {
@@ -45,19 +40,9 @@ type goInstance struct {
 	failCount    atomic.Uint64
 
 	d *goData
-}
 
-func mapSymblibError(status C.SymblibStatus) error {
-	switch status {
-	case C.SYMBLIB_ERR_IOFILENOTFOUND:
-		return os.ErrNotExist
-	case C.SYMBLIB_ERR_OBJFILE:
-		return errors.New("failed to read object file")
-	case C.SYMBLIB_ERR_DWARF:
-		return errors.New("failed to parse DWARF")
-	default:
-		return fmt.Errorf("error %d", status)
-	}
+	// addrToFunction provides a cache for faster symbolization of repeating frames.
+	addrToFunction *freelru.LRU[libpf.AddressOrLineno, *reporter.FrameMetadataArgs]
 }
 
 func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
@@ -70,40 +55,76 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 		return nil, nil
 	}
 
-	exec, err := info.ExtractAsFile()
+	pclnData, err := elfunwindinfo.SearchGoPclntab(ef)
+	if err != nil {
+		return nil, err
+	}
+	if pclnData == nil {
+		return nil, errors.New("failed to identify .gopclntab")
+	}
+
+	runtimeTextAddr := uint64(0)
+
+	textSec := ef.Section(".text")
+	if textSec != nil {
+		runtimeTextAddr = textSec.Addr
+	} else {
+		// Fallback via symbols lookup:
+		//nolint:govet
+		sm, err := ef.ReadDynamicSymbols()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read symbols table: %v", err)
+		}
+		sm.VisitAll(func(s libpf.Symbol) {
+			if s.Name == "runtime.text" {
+				runtimeTextAddr = uint64(s.Address)
+			}
+		})
+	}
+
+	if runtimeTextAddr == 0 {
+		return nil, errors.New("failed to get address of runtime.text")
+	}
+
+	// Avoid race conditions where the mmaped backed data is no longer
+	// available but we try to symbolize Go frames.
+	cpy := make([]byte, len(pclnData))
+	copy(cpy, pclnData)
+	gD := &goData{pclnData: cpy}
+
+	pcln := gosym.NewLineTable(gD.pclnData, runtimeTextAddr)
+	if pcln == nil {
+		return nil, errors.New("failed to create Line Table from .gopclntab")
+	}
+
+	gD.symTable, err = gosym.NewTable(nil, pcln)
 	if err != nil {
 		return nil, err
 	}
 
-	executablePath := C.CString(exec)
-	defer C.free(unsafe.Pointer(executablePath))
-
-	gd := &goData{}
-
-	//nolint:gocritic
-	status := C.symblib_goruntime_new(executablePath, &gd.goExecutable)
-	if status != C.SYMBLIB_OK {
-		return nil, fmt.Errorf("failed to create point resolver: %w", mapSymblibError(status))
-	}
-
-	return gd, nil
+	return gD, nil
 }
 
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
+	addrToFunction, err := freelru.New[libpf.AddressOrLineno, *reporter.FrameMetadataArgs](
+		256, func(k libpf.AddressOrLineno) uint32 { return uint32(k) })
+	if err != nil {
+		return nil, err
+	}
 	return &goInstance{
-		d: g,
+		d:              g,
+		addrToFunction: addrToFunction,
 	}, nil
 }
 
+// Unload is a NOP for goData.
 func (g *goData) Unload(_ interpreter.EbpfHandler) {
-	if g.goExecutable != nil {
-		C.symblib_goruntime_free(g.goExecutable)
-		g.goExecutable = nil
-	}
 }
 
 func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
+	addrToFuncStats := g.addrToFunction.ResetMetrics()
+
 	return []metrics.Metric{
 		{
 			ID:    metrics.IDGoSymbolizationSuccess,
@@ -112,6 +133,22 @@ func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 		{
 			ID:    metrics.IDGoSymbolizationFailure,
 			Value: metrics.MetricValue(g.failCount.Swap(0)),
+		},
+		{
+			ID:    metrics.IDGoAddrToFuncHit,
+			Value: metrics.MetricValue(addrToFuncStats.Hits),
+		},
+		{
+			ID:    metrics.IDGoAddrToFuncMiss,
+			Value: metrics.MetricValue(addrToFuncStats.Misses),
+		},
+		{
+			ID:    metrics.IDGoAddrToFuncAdd,
+			Value: metrics.MetricValue(addrToFuncStats.Inserts),
+		},
+		{
+			ID:    metrics.IDGoAddrToFuncDel,
+			Value: metrics.MetricValue(addrToFuncStats.Removals),
 		},
 	}, nil
 }
@@ -129,55 +166,45 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 	sfCounter := successfailurecounter.New(&g.successCount, &g.failCount)
 	defer sfCounter.DefaultToFailure()
 
-	if g.d.goExecutable == nil {
-		return errors.New("point resolver is out of scope")
+	if data, ok := g.addrToFunction.Get(frame.Lineno); ok {
+		trace.AppendFrameID(libpf.GoFrame, data.FrameID)
+		symbolReporter.FrameMetadata(data)
+		sfCounter.ReportSuccess()
+		return nil
 	}
 
-	var symbols *C.SymblibSlice_SymblibResolvedSymbol
-	defer C.symblib_slice_symblibresolved_symbol_free(symbols)
-
-	//nolint:gocritic
-	status := C.symblib_point_resolver_symbols_for_pc(g.d.goExecutable,
-		C.uint64_t(frame.Lineno), &symbols)
-	if status != C.SYMBLIB_OK {
-		return fmt.Errorf("failed to do point lookup at 0x%x: %d",
-			frame.Lineno, status)
-	}
-
-	// Access resolved symbols
-	symbolsSlice := unsafe.Slice((*C.SymblibResolvedSymbol)(unsafe.Pointer(symbols.data)),
-		symbols.len)
-	if len(symbolsSlice) == 0 {
+	sourceFile, lineNo, fn := g.d.symTable.PCToLine(uint64(frame.Lineno))
+	if fn == nil {
 		return fmt.Errorf("failed to symbolize 0x%x", frame.Lineno)
 	}
 
-	frameFileBytes := []byte(frame.File.StringNoQuotes())
-	for i := 0; i < len(symbolsSlice); i++ {
-		lineNo := libpf.SourceLineno(symbolsSlice[i].line_number)
-		funcName := C.GoString(symbolsSlice[i].function_name)
-		sourceFile := C.GoString(symbolsSlice[i].file_name)
-
-		// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
-		h := fnv.New128a()
-		_, _ = h.Write(frameFileBytes)
-		_, _ = h.Write([]byte(funcName))
-		_, _ = h.Write([]byte(sourceFile))
-		fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
-		if err != nil {
-			return fmt.Errorf("failed to create a file ID: %v", err)
-		}
-
-		frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
-
-		trace.AppendFrameID(libpf.GoFrame, frameID)
-
-		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-			FrameID:      frameID,
-			FunctionName: funcName,
-			SourceFile:   sourceFile,
-			SourceLine:   lineNo,
-		})
+	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
+	h := fnv.New128a()
+	_, _ = h.Write([]byte(frame.File.StringNoQuotes()))
+	_, _ = h.Write([]byte(fn.Name))
+	_, _ = h.Write([]byte(sourceFile))
+	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
+	if err != nil {
+		return fmt.Errorf("failed to create a file ID: %v", err)
 	}
+
+	frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
+
+	g.addrToFunction.Add(frame.Lineno, &reporter.FrameMetadataArgs{
+		FrameID:      frameID,
+		FunctionName: fn.Name,
+		SourceFile:   sourceFile,
+		SourceLine:   libpf.SourceLineno(lineNo),
+	})
+
+	trace.AppendFrameID(libpf.GoFrame, frameID)
+
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:      frameID,
+		FunctionName: fn.Name,
+		SourceFile:   sourceFile,
+		SourceLine:   libpf.SourceLineno(lineNo),
+	})
 
 	sfCounter.ReportSuccess()
 	return nil
