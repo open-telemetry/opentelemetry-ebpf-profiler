@@ -8,15 +8,16 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestVDSOArm64(t *testing.T) {
 	frameSize16 := sdtypes.UnwindInfo{
-		Opcode:   sdtypes.UnwindOpcodeBaseFP,
+		Opcode:   support.UnwindOpcodeBaseFP,
 		Param:    16,
-		FPOpcode: sdtypes.UnwindOpcodeBaseFP,
+		FPOpcode: support.UnwindOpcodeBaseFP,
 		FPParam:  8,
 	}
 

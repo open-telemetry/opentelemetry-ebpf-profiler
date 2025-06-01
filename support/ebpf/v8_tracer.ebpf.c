@@ -40,7 +40,7 @@ bpf_map_def SEC("maps") v8_procs = {
 };
 
 // Record a V8 frame
-static inline __attribute__((__always_inline__)) ErrorCode push_v8(
+static EBPF_INLINE ErrorCode push_v8(
   Trace *trace, unsigned long pointer_and_type, unsigned long delta_or_marker, bool return_address)
 {
   DEBUG_PRINT(
@@ -52,8 +52,7 @@ static inline __attribute__((__always_inline__)) ErrorCode push_v8(
 }
 
 // Verify a V8 tagged pointer
-static inline __attribute__((__always_inline__)) uintptr_t
-v8_verify_pointer(uintptr_t maybe_pointer)
+static EBPF_INLINE uintptr_t v8_verify_pointer(uintptr_t maybe_pointer)
 {
   if ((maybe_pointer & HeapObjectTagMask) != HeapObjectTag) {
     return 0;
@@ -62,7 +61,7 @@ v8_verify_pointer(uintptr_t maybe_pointer)
 }
 
 // Read and verify a V8 tagged pointer from given memory location.
-static inline __attribute__((__always_inline__)) uintptr_t v8_read_object_ptr(uintptr_t addr)
+static EBPF_INLINE uintptr_t v8_read_object_ptr(uintptr_t addr)
 {
   uintptr_t maybe_pointer;
   if (bpf_probe_read_user(&maybe_pointer, sizeof(maybe_pointer), (void *)addr)) {
@@ -74,8 +73,7 @@ static inline __attribute__((__always_inline__)) uintptr_t v8_read_object_ptr(ui
 // Verify and parse a V8 SMI  ("SMall Integer") value.
 // On 64-bit systems: SMI is the upper 32-bits of a 64-bit word, and the lowest bit is the tag.
 // Returns the SMI value, or def_value in case of errors.
-static inline __attribute__((__always_inline__)) uintptr_t
-v8_parse_smi(uintptr_t maybe_smi, uintptr_t def_value)
+static EBPF_INLINE uintptr_t v8_parse_smi(uintptr_t maybe_smi, uintptr_t def_value)
 {
   if ((maybe_smi & SmiTagMask) != SmiTag) {
     return def_value;
@@ -85,8 +83,7 @@ v8_parse_smi(uintptr_t maybe_smi, uintptr_t def_value)
 
 // Read the type tag of a Heap Object at given memory location.
 // Returns zero on error (valid object type IDs are non-zero).
-static inline __attribute__((__always_inline__)) u16
-v8_read_object_type(V8ProcInfo *vi, uintptr_t addr)
+static EBPF_INLINE u16 v8_read_object_type(V8ProcInfo *vi, uintptr_t addr)
 {
   if (!addr) {
     return 0;
@@ -100,8 +97,7 @@ v8_read_object_type(V8ProcInfo *vi, uintptr_t addr)
 }
 
 // Unwind one V8 frame
-static inline __attribute__((__always_inline__)) ErrorCode
-unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
+static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInfo *vi, bool top)
 {
   UnwindState *state = &record->state;
   Trace *trace       = &record->trace;
@@ -308,7 +304,7 @@ frame_done:;
 // unwind_v8 is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // V8 stack frames to the trace object for the current CPU.
-static inline __attribute__((__always_inline__)) int unwind_v8(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {

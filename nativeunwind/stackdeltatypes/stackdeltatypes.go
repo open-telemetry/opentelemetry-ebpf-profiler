@@ -6,8 +6,9 @@
 // stack delta information that is used in all relevant packages.
 package stackdeltatypes // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 
-// #include "../../support/ebpf/stackdeltatypes.h"
-import "C"
+import (
+	"go.opentelemetry.io/ebpf-profiler/support"
+)
 
 const (
 	// ABI is the current binary compatibility version. It is incremented
@@ -18,26 +19,6 @@ const (
 	// MinimumGap determines the minimum number of alignment bytes needed
 	// in order to keep the created STOP stack delta between functions
 	MinimumGap = 15
-
-	// UnwindOpcodes from the C header file
-	UnwindOpcodeCommand   uint8 = C.UNWIND_OPCODE_COMMAND
-	UnwindOpcodeBaseCFA   uint8 = C.UNWIND_OPCODE_BASE_CFA
-	UnwindOpcodeBaseSP    uint8 = C.UNWIND_OPCODE_BASE_SP
-	UnwindOpcodeBaseFP    uint8 = C.UNWIND_OPCODE_BASE_FP
-	UnwindOpcodeBaseLR    uint8 = C.UNWIND_OPCODE_BASE_LR
-	UnwindOpcodeBaseReg   uint8 = C.UNWIND_OPCODE_BASE_REG
-	UnwindOpcodeFlagDeref uint8 = C.UNWIND_OPCODEF_DEREF
-
-	// UnwindCommands from the C header file
-	UnwindCommandInvalid      int32 = C.UNWIND_COMMAND_INVALID
-	UnwindCommandStop         int32 = C.UNWIND_COMMAND_STOP
-	UnwindCommandPLT          int32 = C.UNWIND_COMMAND_PLT
-	UnwindCommandSignal       int32 = C.UNWIND_COMMAND_SIGNAL
-	UnwindCommandFramePointer int32 = C.UNWIND_COMMAND_FRAME_POINTER
-
-	// UnwindDeref handling from the C header file
-	UnwindDerefMask       int32 = C.UNWIND_DEREF_MASK
-	UnwindDerefMultiplier int32 = C.UNWIND_DEREF_MULTIPLIER
 
 	// UnwindHintNone indicates that no flags are set.
 	UnwindHintNone uint8 = 0
@@ -56,24 +37,27 @@ type UnwindInfo struct {
 }
 
 // UnwindInfoInvalid is the stack delta info indicating invalid or unsupported PC.
-var UnwindInfoInvalid = UnwindInfo{Opcode: UnwindOpcodeCommand, Param: UnwindCommandInvalid}
+var UnwindInfoInvalid = UnwindInfo{Opcode: support.UnwindOpcodeCommand,
+	Param: support.UnwindCommandInvalid}
 
 // UnwindInfoStop is the stack delta info indicating root function of a stack.
-var UnwindInfoStop = UnwindInfo{Opcode: UnwindOpcodeCommand, Param: UnwindCommandStop}
+var UnwindInfoStop = UnwindInfo{Opcode: support.UnwindOpcodeCommand,
+	Param: support.UnwindCommandStop}
 
 // UnwindInfoSignal is the stack delta info indicating signal return frame.
-var UnwindInfoSignal = UnwindInfo{Opcode: UnwindOpcodeCommand, Param: UnwindCommandSignal}
+var UnwindInfoSignal = UnwindInfo{Opcode: support.UnwindOpcodeCommand,
+	Param: support.UnwindCommandSignal}
 
 // UnwindInfoFramePointer contains the description to unwind a frame pointer frame.
 var UnwindInfoFramePointer = UnwindInfo{
-	Opcode: UnwindOpcodeCommand,
-	Param:  UnwindCommandFramePointer,
+	Opcode: support.UnwindOpcodeCommand,
+	Param:  support.UnwindCommandFramePointer,
 }
 
 // UnwindInfoLR contains the description to unwind ARM64 function without a frame (LR only)
 var UnwindInfoLR = UnwindInfo{
-	Opcode:   UnwindOpcodeBaseSP,
-	FPOpcode: UnwindOpcodeBaseLR,
+	Opcode:   support.UnwindOpcodeBaseSP,
+	FPOpcode: support.UnwindOpcodeBaseLR,
 }
 
 // StackDelta defines the start address for the delta interval, along with
@@ -99,12 +83,12 @@ type IntervalData struct {
 // AddEx adds a new stack delta to the array.
 func (deltas *StackDeltaArray) AddEx(delta StackDelta, sorted bool) {
 	num := len(*deltas)
-	if delta.Info.Opcode == UnwindOpcodeCommand {
+	if delta.Info.Opcode == support.UnwindOpcodeCommand {
 		// FP information is invalid/unused for command opcodes.
 		// But DWARF info often leaves bogus data there, so resetting it
 		// reduces the number of unique Info contents generated.
-		delta.Info.FPOpcode = UnwindOpcodeCommand
-		delta.Info.FPParam = UnwindCommandInvalid
+		delta.Info.FPOpcode = support.UnwindOpcodeCommand
+		delta.Info.FPParam = support.UnwindCommandInvalid
 	}
 	if num > 0 && sorted {
 		prev := &(*deltas)[num-1]
@@ -139,13 +123,15 @@ func (deltas *StackDeltaArray) Add(delta StackDelta) {
 
 // PackDerefParam compresses pre- and post-dereference parameters to single value
 func PackDerefParam(preDeref, postDeref int32) (int32, bool) {
-	if postDeref < 0 || postDeref > 0x20 || postDeref%UnwindDerefMultiplier != 0 {
+	if postDeref < 0 || postDeref > 0x20 ||
+		postDeref%support.UnwindDerefMultiplier != 0 {
 		return 0, false
 	}
-	return preDeref + postDeref/UnwindDerefMultiplier, true
+	return preDeref + postDeref/support.UnwindDerefMultiplier, true
 }
 
 // UnpackDerefParam splits the pre- and post-dereference parameters from single value
 func UnpackDerefParam(param int32) (preDeref, postDeref int32) {
-	return param &^ UnwindDerefMask, (param & UnwindDerefMask) * UnwindDerefMultiplier
+	return param &^ support.UnwindDerefMask,
+		(param & support.UnwindDerefMask) * support.UnwindDerefMultiplier
 }

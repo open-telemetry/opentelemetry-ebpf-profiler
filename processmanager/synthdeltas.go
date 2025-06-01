@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // regFP is the arm64 frame-pointer register (x29) number
@@ -99,9 +100,9 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 					sdtypes.StackDelta{
 						Address: addr + frameStart,
 						Info: sdtypes.UnwindInfo{
-							Opcode:   sdtypes.UnwindOpcodeBaseFP,
+							Opcode:   support.UnwindOpcodeBaseFP,
 							Param:    int32(frameSize),
-							FPOpcode: sdtypes.UnwindOpcodeBaseFP,
+							FPOpcode: support.UnwindOpcodeBaseFP,
 							FPParam:  8,
 						},
 					},
