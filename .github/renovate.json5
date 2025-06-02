@@ -11,8 +11,8 @@
       "schedule": ["before 8am every weekday"]
     },
     {
-      "groupName": "Dockerfile dependencies",
-      "matchManagers": ["dockerfile"],
+      "groupName": "Docker related dependencies",
+      "matchManagers": ["buildpacks", "devcontainer", "docker-compose", "dockerfile"],
       "schedule": ["before 8am every weekday"]
     },
     {
@@ -21,8 +21,8 @@
       "schedule": ["before 8am every weekday"]
     },
     {
-      "groupName": "Other dependencies",
-      "matchManagers": ["!gomod", "!dockerfile", "!github-actions"],
+      "groupName": "Rust dependencies",
+      "matchManagers": ["cargo"],
       "schedule": ["before 8am every weekday"]
     }
   ],
