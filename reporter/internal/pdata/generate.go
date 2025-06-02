@@ -33,8 +33,10 @@ func (p *Pdata) Generate(events map[libpf.Origin]samples.KeyToEventMapping) ppro
 	profiles := pprofile.NewProfiles()
 	rp := profiles.ResourceProfiles().AppendEmpty()
 	sp := rp.ScopeProfiles().AppendEmpty()
-	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
-		support.TraceOriginOffCPU} {
+	for _, origin := range []libpf.Origin{
+		support.TraceOriginSampling,
+		support.TraceOriginOffCPU,
+	} {
 		if len(events[origin]) == 0 {
 			// Do not append empty profiles, if there
 			// is not profiling data for this origin.
@@ -42,7 +44,7 @@ func (p *Pdata) Generate(events map[libpf.Origin]samples.KeyToEventMapping) ppro
 		}
 		prof := sp.Profiles().AppendEmpty()
 		prof.SetProfileID(pprofile.ProfileID(mkProfileID()))
-		p.setProfile(origin, events[origin], prof)
+		p.setProfile(profiles.ProfilesDictionary(), origin, events[origin], prof)
 	}
 	return profiles
 }
@@ -60,6 +62,7 @@ func mkProfileID() []byte {
 // setProfile sets the data an OTLP profile with all collected samples up to
 // this moment.
 func (p *Pdata) setProfile(
+	dic pprofile.ProfilesDictionary,
 	origin libpf.Origin,
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
@@ -96,7 +99,7 @@ func (p *Pdata) setProfile(
 	// Temporary lookup to reference existing Mappings.
 	fileIDtoMapping := make(map[libpf.FileID]int32)
 
-	attrMgr := samples.NewAttrTableManager(profile.AttributeTable())
+	attrMgr := samples.NewAttrTableManager(dic.AttributeTable())
 	var locationIndex int32
 	var startTS, endTS pcommon.Timestamp
 	for traceKey, traceInfo := range events {
@@ -118,7 +121,7 @@ func (p *Pdata) setProfile(
 
 		// Walk every frame of the trace.
 		for i := range traceInfo.FrameTypes {
-			loc := profile.LocationTable().AppendEmpty()
+			loc := dic.LocationTable().AppendEmpty()
 			loc.SetAddress(uint64(traceInfo.Linenos[i]))
 			attrMgr.AppendOptionalString(loc.AttributeIndices(),
 				semconv.ProfileFrameTypeKey, traceInfo.FrameTypes[i].String())
@@ -141,12 +144,12 @@ func (p *Pdata) setProfile(
 
 					// Next step: Select a proper default value,
 					// if the name of the executable is not known yet.
-					var fileName = "UNKNOWN"
+					fileName := "UNKNOWN"
 					if exists {
 						fileName = ei.FileName
 					}
 
-					mapping := profile.MappingTable().AppendEmpty()
+					mapping := dic.MappingTable().AppendEmpty()
 					mapping.SetMemoryStart(uint64(traceInfo.MappingStarts[i]))
 					mapping.SetMemoryLimit(uint64(traceInfo.MappingEnds[i]))
 					mapping.SetFileOffset(traceInfo.MappingFileOffsets[i])
@@ -200,7 +203,7 @@ func (p *Pdata) setProfile(
 
 				// To be compliant with the protocol, generate a dummy mapping entry.
 				loc.SetMappingIndex(getDummyMappingIndex(fileIDtoMapping, stringMap,
-					attrMgr, profile, traceInfo.Files[i]))
+					attrMgr, dic, traceInfo.Files[i]))
 			}
 		}
 
@@ -244,7 +247,7 @@ func (p *Pdata) setProfile(
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())
 
 	// Populate the deduplicated functions into profile.
-	funcTable := profile.FunctionTable()
+	funcTable := dic.FunctionTable()
 	funcTable.EnsureCapacity(len(funcMap))
 	for range funcMap {
 		funcTable.AppendEmpty()
@@ -264,12 +267,12 @@ func (p *Pdata) setProfile(
 	}
 
 	for _, v := range stringTable {
-		profile.StringTable().Append(v)
+		dic.StringTable().Append(v)
 	}
 
 	// profile.LocationIndices is not optional, and we only write elements into
 	// profile.Location that at least one sample references.
-	for i := int32(0); i < int32(profile.LocationTable().Len()); i++ {
+	for i := int32(0); i < int32(dic.LocationTable().Len()); i++ {
 		profile.LocationIndices().Append(i)
 	}
 
@@ -291,7 +294,8 @@ func getStringMapIndex(stringMap map[string]int32, value string) int32 {
 
 // createFunctionEntry adds a new function and returns its reference index.
 func createFunctionEntry(funcMap map[samples.FuncInfo]int32,
-	name string, fileName string) int32 {
+	name string, fileName string,
+) int32 {
 	key := samples.FuncInfo{
 		Name:     name,
 		FileName: fileName,
@@ -308,8 +312,10 @@ func createFunctionEntry(funcMap map[samples.FuncInfo]int32,
 
 // getDummyMappingIndex inserts or looks up an entry for interpreted FileIDs.
 func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]int32,
-	stringMap map[string]int32, attrMgr *samples.AttrTableManager, profile pprofile.Profile,
-	fileID libpf.FileID) int32 {
+	stringMap map[string]int32, attrMgr *samples.AttrTableManager,
+	dic pprofile.ProfilesDictionary,
+	fileID libpf.FileID,
+) int32 {
 	if mappingIndex, exists := fileIDtoMapping[fileID]; exists {
 		return mappingIndex
 	}
@@ -317,7 +323,7 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]int32,
 	locationMappingIndex := int32(len(fileIDtoMapping))
 	fileIDtoMapping[fileID] = locationMappingIndex
 
-	mapping := profile.MappingTable().AppendEmpty()
+	mapping := dic.MappingTable().AppendEmpty()
 	mapping.SetFilenameStrindex(getStringMapIndex(stringMap, ""))
 	attrMgr.AppendOptionalString(mapping.AttributeIndices(),
 		semconv.ProcessExecutableBuildIDHtlhashKey,

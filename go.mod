@@ -22,8 +22,8 @@ require (
 	go.opentelemetry.io/collector/component v0.116.0
 	go.opentelemetry.io/collector/consumer/consumertest v0.116.0
 	go.opentelemetry.io/collector/consumer/xconsumer v0.116.0
-	go.opentelemetry.io/collector/pdata v1.22.0
-	go.opentelemetry.io/collector/pdata/pprofile v0.116.0
+	go.opentelemetry.io/collector/pdata v1.33.1-0.20250602101155-2e615287a4e1
+	go.opentelemetry.io/collector/pdata/pprofile v0.127.1-0.20250602101155-2e615287a4e1
 	go.opentelemetry.io/collector/receiver v0.116.0
 	go.opentelemetry.io/collector/receiver/receivertest v0.116.0
 	go.opentelemetry.io/collector/receiver/xreceiver v0.116.0
@@ -33,7 +33,7 @@ require (
 	golang.org/x/exp v0.0.0-20250531010427-b6e5de432a8b
 	golang.org/x/sync v0.14.0
 	golang.org/x/sys v0.33.0
-	google.golang.org/grpc v1.69.2
+	google.golang.org/grpc v1.72.2
 )
 
 require (
@@ -71,14 +71,14 @@ require (
 	go.opentelemetry.io/collector/consumer v1.22.0 // indirect
 	go.opentelemetry.io/collector/consumer/consumererror v0.116.0 // indirect
 	go.opentelemetry.io/collector/pipeline v0.116.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.32.0 // indirect
-	go.opentelemetry.io/otel/sdk/metric v1.32.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.34.0 // indirect
+	go.opentelemetry.io/otel/sdk/metric v1.34.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250102185135-69823020774d // indirect
-	google.golang.org/protobuf v1.36.1 // indirect
+	golang.org/x/net v0.39.0 // indirect
+	golang.org/x/text v0.24.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a // indirect
+	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
