@@ -38,7 +38,7 @@ jobs:
         id: linter-version
         run: (echo -n "version="; make linter-version) >> "$GITHUB_OUTPUT"
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6.5.2
         env:
           GOARCH: ${{ matrix.target-arch }}
           CGO_ENABLED: 1
