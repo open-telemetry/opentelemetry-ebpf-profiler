@@ -37,7 +37,7 @@ func TestCreateProfilesReceiver(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			typ, err := component.NewType("ProfilesReceiver")
-			require.ErrorIs(t, err, nil)
+			require.NoError(t, err)
 			_, err = createProfilesReceiver(
 				context.Background(),
 				receivertest.NewNopSettings(typ),
