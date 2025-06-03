@@ -29,13 +29,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
-const (
-	kallsymsPath = "/proc/kallsyms"
+// Kernel is the internal name for "module" containing the built-in symbols
+const Kernel = "vmlinux"
 
-	Kernel = "vmlinux"
-
-	pointerBits = int(unsafe.Sizeof(libpf.Address(0)) * 8)
-)
+// pointerBits is the number of bits for pointer. Used to validate data
+// from the kernel kallsyms file.
+const pointerBits = int(unsafe.Sizeof(libpf.Address(0)) * 8)
 
 var ErrSymbolPermissions = errors.New("unable to read kallsyms addresses - check capabilities")
 
@@ -43,11 +42,16 @@ var ErrNoModule = errors.New("module not found")
 
 var ErrNoSymbol = errors.New("symbol not found")
 
+// symbol is the per-symbol structure. The size should be minimal as
+// a typical installation has 100k-200k kernel symbols.
 type symbol struct {
-	offset uint32 // symbol offset from module start
-	index  uint32 // symbol name offset within module 'names' data
+	// offset is the symbol offset from the Module start address
+	offset uint32
+	// index is the offset to the symbol name within the Module names slice
+	index uint32
 }
 
+// Module contains symbols and metadata for one kernel module.
 type Module struct {
 	start libpf.Address
 	end   libpf.Address
@@ -59,16 +63,21 @@ type Module struct {
 	symbols []symbol
 }
 
+// Symbolizer provides the main API for reading, updating and querying
+// the kernel symbols.
 type Symbolizer struct {
 	valid atomic.Bool
 
 	modules []Module
 }
 
+// NewSymbolizer creates and returns a new kallsyms symbolizer.
 func NewSymbolizer() *Symbolizer {
 	return &Symbolizer{}
 }
 
+// addName appends the 'name' to the module's string slice, and returns
+// an index suitable for storing in the `symbol` struct.
 func (m *Module) addName(name string) uint32 {
 	index := len(m.names)
 	l := len(name)
@@ -77,15 +86,19 @@ func (m *Module) addName(name string) uint32 {
 	return uint32(index)
 }
 
+// bytesAt recovers a []byte representation of the string at `index`
+// received from previous `addName` call.
 func (m *Module) bytesAt(index uint32) []byte {
 	i := int(index)
 	return m.names[i+1 : i+1+int(m.names[i])]
 }
 
+// stringAt recovers the string at `index` received from previous `addName` call.
 func (m *Module) stringAt(index uint32) string {
 	return stringutil.ByteSlice2String(m.bytesAt(index))
 }
 
+// getSysfsMtime determine the kernel modules load time.
 func getSysfsMtime(mod string) time.Time {
 	if mod == Kernel {
 		return time.Time{}
@@ -96,6 +109,7 @@ func getSysfsMtime(mod string) time.Time {
 	return time.Time{}
 }
 
+// parseSysfsUint reads a kernel module specific attribute from sysfs.
 func parseSysfsUint(mod, knob string) (uint64, error) {
 	text, err := os.ReadFile(path.Join("/sys/module", mod, knob))
 	if err != nil {
@@ -104,6 +118,8 @@ func parseSysfsUint(mod, knob string) (uint64, error) {
 	return strconv.ParseUint(strings.Trim(stringutil.ByteSlice2String(text), "\n"), 0, pointerBits)
 }
 
+// init prepare Module. The module name is recorded at index 0, and the needed
+// metadata (start, end, buildID) are read from sysfs.
 func (m *Module) init(mod string) {
 	// Record module name
 	m.addName(mod)
@@ -131,6 +147,8 @@ func (m *Module) init(mod string) {
 	}
 }
 
+// finish will finalize the Module. The 'names' and 'symbols' slices are cloned
+// and sorted. A fallback fileID is synthesized if buildID is not available.
 func (m *Module) finish() {
 	m.names = bytes.Clone(m.names)
 	m.symbols = slices.Clone(m.symbols)
@@ -184,6 +202,8 @@ func (m *Module) FileID() libpf.FileID {
 	return m.fileID
 }
 
+// LookupSymbolByAddress resolves the `pc` address to the function and offset from it.
+// On error, an empty string with zero offset is returned.
 func (m *Module) LookupSymbolByAddress(pc libpf.Address) (funcName string, offset uint) {
 	pcOffs := uint32(pc - m.start)
 	symIdx := sort.Search(len(m.symbols), func(i int) bool {
@@ -197,6 +217,7 @@ func (m *Module) LookupSymbolByAddress(pc libpf.Address) (funcName string, offse
 	return symName, uint(pcOffs - sym.offset)
 }
 
+// LookupSymbol finds a symbol with 'name' from the Module.
 func (m *Module) LookupSymbol(name string) (libpf.Address, error) {
 	for _, sym := range m.symbols {
 		if m.stringAt(sym.index) == name {
@@ -206,6 +227,7 @@ func (m *Module) LookupSymbol(name string) (libpf.Address, error) {
 	return 0, ErrNoSymbol
 }
 
+// LookupSymbolsByPrefix finds all symbols with the given prefix in from the Module.
 func (m *Module) LookupSymbolsByPrefix(prefix string) []*libpf.Symbol {
 	res := make([]*libpf.Symbol, 0, 8)
 	for _, sym := range m.symbols {
@@ -221,6 +243,10 @@ func (m *Module) LookupSymbolsByPrefix(prefix string) []*libpf.Symbol {
 	return res
 }
 
+// updateSymbolsFrom parses /proc/kallsyms format data from the reader 'r'.
+// If possible the data from previous reads is re-used to avoid allocations.
+// The Symbolizer internal state is update only if the input data is parsed
+// successfully.
 func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	var mod *Module
 	var curName string
@@ -349,30 +375,33 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	return nil
 }
 
-func (s *Symbolizer) reload() error {
-	file, err := os.Open(kallsymsPath)
+// Refresh will reload kernel symbols if they are not yet loaded or invalidated.
+func (s *Symbolizer) Refresh() error {
+	if s.valid.Load() {
+		return nil
+	}
+
+	file, err := os.Open("/proc/kallsyms")
 	if err != nil {
-		return fmt.Errorf("unable to open %s: %v", kallsymsPath, err)
+		return fmt.Errorf("unable to open kallsyms: %v", err)
 	}
 	defer file.Close()
 
-	return s.updateSymbolsFrom(file)
-}
-
-func (s *Symbolizer) Refresh() error {
-	if !s.valid.Load() {
-		if err := s.reload(); err != nil {
-			s.valid.Store(false)
-			return err
-		}
+	err = s.updateSymbolsFrom(file)
+	if err != nil {
+		s.valid.Store(false)
 	}
-	return nil
+	return err
 }
 
+// Invalidate triggers reloading of kernel symbols on next Refresh. Can be called
+// concurrently from another goroutine.
 func (s *Symbolizer) Invalidate() {
 	s.valid.Store(false)
 }
 
+// getModuleByAddress finds the Module containing the address 'pc'. This is
+// the internal helper used also while loading symbols.
 func (s *Symbolizer) getModuleByAddress(pc libpf.Address) *Module {
 	modIdx := sort.Search(len(s.modules), func(i int) bool {
 		return pc >= s.modules[i].start
@@ -387,6 +416,9 @@ func (s *Symbolizer) getModuleByAddress(pc libpf.Address) *Module {
 	return m
 }
 
+// GetModuleByAddress finds the Module containing the address 'pc'. The symbols
+// are reloaded if needed. An error is returned if no symbols are available, or
+// a matching module is not found.
 func (s *Symbolizer) GetModuleByAddress(pc libpf.Address) (*Module, error) {
 	if err := s.Refresh(); err != nil {
 		return nil, err
@@ -397,6 +429,9 @@ func (s *Symbolizer) GetModuleByAddress(pc libpf.Address) (*Module, error) {
 	return nil, ErrNoModule
 }
 
+// GetModuleByAddress finds the Module containing the module 'module'. The symbols
+// are reloaded if needed. An error is returned if no symbols are available, or
+// a matching module is not found.
 func (s *Symbolizer) GetModuleByName(module string) (*Module, error) {
 	if err := s.Refresh(); err != nil {
 		return nil, err
@@ -408,12 +443,4 @@ func (s *Symbolizer) GetModuleByName(module string) (*Module, error) {
 		}
 	}
 	return nil, ErrNoModule
-}
-
-func (s *Symbolizer) LookupSymbol(module, name string) (libpf.Address, error) {
-	mod, err := s.GetModuleByName(module)
-	if err != nil {
-		return 0, err
-	}
-	return mod.LookupSymbol(name)
 }
