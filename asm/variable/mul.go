@@ -8,7 +8,10 @@ func Multiply(vs ...Expression) Expression {
 }
 
 type Options struct {
-	NoUnwrap bool
+	// Do not simplify (a + b) * c into a * c + b * c
+	// May be useful if you want to match-extract exactly a/b/c
+	// which may be simplified if unwrapped
+	NoUnwrapMultiplyAdd bool
 }
 
 func MultiplyWithOptions(opt Options, vs ...Expression) Expression {
@@ -37,7 +40,7 @@ func MultiplyWithOptions(opt Options, vs ...Expression) Expression {
 		return oss[0]
 	}
 
-	if len(oss) == 2 && !opt.NoUnwrap {
+	if len(oss) == 2 && !opt.NoUnwrapMultiplyAdd {
 		if a, ok := oss[0].(*op); ok && a.typ == opAdd {
 			var res []Expression
 			for _, ait := range a.operands {
