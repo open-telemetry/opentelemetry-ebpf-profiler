@@ -44,11 +44,13 @@ func (emc *ebpfMapsCoredump) CollectMetrics() []metrics.Metric {
 
 func (emc *ebpfMapsCoredump) UpdateInterpreterOffsets(ebpfProgIndex uint16,
 	fileID host.FileID, offsetRanges []util.Range) error {
-	key, value, err := pmebpf.InterpreterOffsetKeyValue(ebpfProgIndex, fileID, offsetRanges)
-	if err != nil {
-		return err
+	offsetRange := offsetRanges[0]
+	value := C.OffsetRange{
+		lower_offset:  C.u64(offsetRange.Start),
+		upper_offset:  C.u64(offsetRange.End),
+		program_index: C.u16(ebpfProgIndex),
 	}
-	emc.ctx.addMap(&C.interpreter_offsets, C.u64(key), libpf.SliceFrom(&value))
+	emc.ctx.addMap(&C.interpreter_offsets, C.u64(fileID), libpf.SliceFrom(&value))
 	return nil
 }
 

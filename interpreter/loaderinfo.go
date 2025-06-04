@@ -68,7 +68,3 @@ func (i *LoaderInfo) FileName() string {
 func (i *LoaderInfo) Gaps() []util.Range {
 	return i.gaps
 }
-
-func (i *LoaderInfo) ElfOpener() pfelf.ELFOpener {
-	return i.elfRef.ELFOpener
-}
