@@ -113,9 +113,9 @@ func decodeStubArgumentAMD64(
 ) (
 	libpf.SymbolValue, error,
 ) {
-	it := amd.NewInterpreter(code)
+	it := amd.NewInterpreterWithCode(code)
 	it.CodeAddress = variable.Imm(codeAddress)
-	err := it.LoopWithBreak(func(op x86asm.Inst) bool {
+	_, err := it.LoopWithBreak(func(op x86asm.Inst) bool {
 		return op.Op == x86asm.JMP || op.Op == x86asm.CALL
 	})
 	if err != nil {
@@ -130,32 +130,33 @@ func decodeStubArgumentAMD64(
 
 func evaluateStubAnswerAMD64(res variable.U64, memBase uint64) (uint64, error) {
 	answer := variable.Var("answer")
-	if res.Eval(variable.Crop(variable.Mem(answer), 32)) {
-		return answer.ExtractedValue, nil
+	if res.Eval(variable.ZeroExtend(variable.Mem(answer, 8), 32)) {
+		return answer.ExtractedValueImm(), nil
 	}
 	if res.Eval(
 		variable.Add(
-			variable.Mem(variable.Var("mem")),
+			variable.Mem(variable.Var("mem"), 8),
 			answer,
 		),
 	) {
-		return memBase + answer.ExtractedValue, nil
+		return memBase + answer.ExtractedValueImm(), nil
 	}
 	if res.Eval(
-		variable.Crop(
+		variable.ZeroExtend(
 			variable.Mem(
 				variable.Add(
-					variable.Mem(variable.Var("mem")),
+					variable.Mem(variable.Var("mem"), 8),
 					answer,
 				),
+				8,
 			),
 			32,
 		),
 	) {
-		return memBase + answer.ExtractedValue, nil
+		return memBase + answer.ExtractedValueImm(), nil
 	}
 	if res.Eval(answer) {
-		return answer.ExtractedValue, nil
+		return answer.ExtractedValueImm(), nil
 	}
 	return 0, fmt.Errorf("not found %s", res.String())
 }

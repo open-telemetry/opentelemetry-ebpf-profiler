@@ -18,7 +18,7 @@ func Any() *Variable {
 
 func Var(name string) *Variable {
 	return &Variable{
-		ExtractedValue:     0,
+		extracted:          nil,
 		name:               name,
 		maxValueConstraint: math.MaxUint64,
 		isAny:              false,
@@ -26,28 +26,50 @@ func Var(name string) *Variable {
 }
 
 type Variable struct {
-	ExtractedValue     uint64
 	name               string
 	maxValueConstraint uint64
-	isAny              bool
+	// if true - extract any U64, if false - extract only immediate
+	isAny     bool
+	extracted U64
 }
 
-func (v *Variable) maxValue() uint64 {
+func (v *Variable) ExtractedValueImm() uint64 {
+	if v.extracted == nil {
+		return 0
+	}
+	imm, ok := v.extracted.(*immediate)
+	if ok {
+		return imm.Value
+	}
+	return 0
+}
+
+func (v *Variable) MaxValue() uint64 {
+	if v.extracted != nil {
+		if v.extracted == v {
+			return v.maxValueConstraint
+		}
+		return v.extracted.MaxValue()
+	}
 	return v.maxValueConstraint
 }
 
-func (v *Variable) Simplify() U64 {
-	return v
-}
-
 func (v *Variable) String() string {
-	return fmt.Sprintf("{ @%s }", v.name)
+	return fmt.Sprintf("@%s", v.name)
 }
 
 func (v *Variable) Eval(other U64) bool {
 	switch typed := other.(type) {
 	case *Variable:
-		return v == typed || typed.isAny
+		if typed.isAny {
+			typed.extracted = v
+			return true
+		}
+		if v == typed {
+			typed.extracted = v
+			return true
+		}
+		return false
 	default:
 		return false
 	}

@@ -3,7 +3,15 @@
 
 package variable // import "go.opentelemetry.io/ebpf-profiler/asm/variable"
 
-func Mul(vs ...U64) U64 {
+func Multiply(vs ...U64) U64 {
+	return MultiplyWithOptions(Options{}, vs...)
+}
+
+type Options struct {
+	NoUnwrap bool
+}
+
+func MultiplyWithOptions(opt Options, vs ...U64) U64 {
 	oss := make(operands, 0, len(vs)+1)
 	v := uint64(1)
 	for _, it := range vs {
@@ -13,7 +21,7 @@ func Mul(vs ...U64) U64 {
 		if it == one {
 			continue
 		}
-		if imm, immOk := it.(immediate); immOk {
+		if imm, immOk := it.(*immediate); immOk {
 			v *= imm.Value
 		} else {
 			oss = append(oss, it)
@@ -29,11 +37,11 @@ func Mul(vs ...U64) U64 {
 		return oss[0]
 	}
 
-	if len(oss) == 2 {
-		if a, ok := oss[0].(op); ok && a.typ == opAdd {
+	if len(oss) == 2 && !opt.NoUnwrap {
+		if a, ok := oss[0].(*op); ok && a.typ == opAdd {
 			var res []U64
 			for _, ait := range a.operands {
-				res = append(res, Mul(ait, oss[1]))
+				res = append(res, MultiplyWithOptions(opt, ait, oss[1]))
 			}
 			return Add(res...)
 		}
