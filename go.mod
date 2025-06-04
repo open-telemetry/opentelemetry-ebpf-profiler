@@ -11,7 +11,7 @@ require (
 	github.com/elastic/go-freelru v0.16.0
 	github.com/elastic/go-perf v0.0.0-20241029065020-30bec95324b8
 	github.com/google/uuid v1.6.0
-	github.com/jsimonetti/rtnetlink v1.4.2
+	github.com/jsimonetti/rtnetlink/v2 v2.0.3
 	github.com/jsimonetti/rtnetlink/v2 v2.0.3
 	github.com/klauspost/compress v1.18.0
 	github.com/minio/sha256-simd v1.0.1
