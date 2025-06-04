@@ -12,7 +12,6 @@ require (
 	github.com/elastic/go-perf v0.0.0-20241029065020-30bec95324b8
 	github.com/google/uuid v1.6.0
 	github.com/jsimonetti/rtnetlink/v2 v2.0.3
-	github.com/jsimonetti/rtnetlink/v2 v2.0.3
 	github.com/klauspost/compress v1.18.0
 	github.com/minio/sha256-simd v1.0.1
 	github.com/peterbourgon/ff/v3 v3.4.0
@@ -69,7 +68,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/collector/component/componenttest v0.127.0 // indirect
-	go.opentelemetry.io/collector/config/configtelemetry v0.116.0 // indirect
 	go.opentelemetry.io/collector/consumer v1.33.0 // indirect
 	go.opentelemetry.io/collector/consumer/consumererror v0.116.0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.33.0 // indirect
