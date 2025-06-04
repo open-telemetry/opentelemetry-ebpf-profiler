@@ -255,6 +255,13 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	s.valid.Store(true)
 	noSymbols := true
 
+	// Set of seen module names. This is to workaround an issue in some kernels
+	// where __init module symbols are listed when the module is already live.
+	// Usually they appear in the kallsyms after symbols from other modules. So
+	// this is used to filter out all symbols after the initial sequence of core
+	// symbols of the module.
+	seen := make(libpf.Set[string])
+
 	// Allocate buffers which should be able to hold the symbol data
 	// from the vmlinux main image (or large modules on reloads) without
 	// resizing based on normal distribution kernel. These are later
@@ -314,7 +321,7 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 			if curName == Kernel && noSymbols {
 				return ErrSymbolPermissions
 			}
-			if mod != nil {
+			if mod != nil && len(mod.symbols) > 0 {
 				// Update the working buffers from potentially reallocated
 				// slices to avoid continuous reallocations.
 				names = mod.names[0:0]
@@ -325,25 +332,30 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 				mod.names = bytes.Clone(mod.names)
 				mod.symbols = slices.Clone(mod.symbols)
 				mod.finish()
+				// Update seen map with the cloned module name string so
+				// it does not get overwritten later on.
+				seen[mod.Name()] = libpf.Void{}
 			}
 
-			mod = s.getModuleByAddress(libpf.Address(address))
-			mtime := getSysfsMtime(moduleName)
-			if mod != nil && mod.Name() == moduleName && mod.mtime == mtime {
-				mods = append(mods, *mod)
-				curName = mod.Name()
-				mod = nil
-			} else {
-				mods = append(mods, Module{
-					start:   0,
-					end:     ^libpf.Address(0),
-					mtime:   mtime,
-					symbols: syms[0:0],
-					names:   names[0:0],
-				})
-				mod = &mods[len(mods)-1]
-				mod.init(moduleName)
-				curName = mod.Name()
+			if _, ok := seen[moduleName]; !ok {
+				mod = s.getModuleByAddress(libpf.Address(address))
+				mtime := getSysfsMtime(moduleName)
+				if mod != nil && mod.Name() == moduleName && mod.mtime == mtime {
+					mods = append(mods, *mod)
+					curName = mod.Name()
+					mod = nil
+				} else {
+					mods = append(mods, Module{
+						start:   0,
+						end:     ^libpf.Address(0),
+						mtime:   mtime,
+						symbols: syms[0:0],
+						names:   names[0:0],
+					})
+					mod = &mods[len(mods)-1]
+					mod.init(moduleName)
+					curName = mod.Name()
+				}
 			}
 		}
 
