@@ -195,7 +195,7 @@ func (i *Interpreter) WithMemory() *Interpreter {
 func (i *Interpreter) WriteMem(at, v variable.Expression) {
 	if i.mem != nil {
 		if debugPrinting {
-			fmt.Printf("    [W] %s = %s\n", at, v)
+			fmt.Printf("    [W] %s = %s\n", at.DebugString(), v.DebugString())
 		}
 		i.mem[at] = v
 	}

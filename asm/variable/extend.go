@@ -82,5 +82,5 @@ func (c *extend) DebugString() string {
 	if c.sign {
 		s = "sign"
 	}
-	return fmt.Sprintf("%s-extend(%s, %d bits)", s, c.v, c.bits)
+	return fmt.Sprintf("%s-extend(%s, %d bits)", s, c.v.DebugString(), c.bits)
 }

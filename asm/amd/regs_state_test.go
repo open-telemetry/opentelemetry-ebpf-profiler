@@ -139,12 +139,21 @@ func TestMoveSignExtend(t *testing.T) {
 		0x0F, 0xBF, 0x40, 0x04,
 	})
 	_, err := i.Loop()
-	require.NoError(t, err)
-	t.Error("TODO")
+	require.ErrorIs(t, err, io.EOF)
+	pattern := variable.SignExtend(variable.Mem(variable.Imm(7), 2), 64)
+	require.True(t, i.Regs.Get(x86asm.RAX).Match(pattern))
 }
 
 func TestMemory(t *testing.T) {
-	t.Error("TODO")
+	it := NewInterpreterWithCode([]byte{
+		0x48, 0xC7, 0x04, 0x24, 0xFE, 0xCA, 0x00, 0x00, 0x48, 0x89, 0xE7, 0x48,
+		0x8B, 0x3F,
+	}).WithMemory()
+	_, err := it.Loop()
+	require.ErrorIs(t, err, io.EOF)
+	rdi := it.Regs.Get(x86asm.RDI)
+	expected := variable.Imm(0xcafe)
+	require.True(t, rdi.Match(expected))
 }
 
 func TestCompareJumpConstraints(t *testing.T) {
