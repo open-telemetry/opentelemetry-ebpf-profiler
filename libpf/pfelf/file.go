@@ -1038,6 +1038,9 @@ func (f *File) IsGolang() bool {
 }
 
 func (f *File) OSFile() *os.File {
-	ff, _ := f.closer.(*os.File)
-	return ff
+	ff, _ := f.closer.(*mmap.ReaderAt)
+	if ff == nil {
+		return nil
+	}
+	return ff.OSFile()
 }
