@@ -41,6 +41,7 @@ import (
 // may produce a false positive (e.g. due to permissions) in which case an error will also be
 // returned.
 func isPIDLive(pid libpf.PID) (bool, error) {
+	// Check first with the kill syscall which is the fastest route.
 	// A kill syscall with a 0 signal is documented to still do the check
 	// whether the process exists: https://linux.die.net/man/2/kill
 	err := unix.Kill(int(pid), 0)
@@ -54,7 +55,8 @@ func isPIDLive(pid libpf.PID) (bool, error) {
 		case unix.ESRCH:
 			return false, nil
 		case unix.EPERM:
-			// continue with procfs fallback
+			// It seems that in some rare cases this check can fail with
+			// a permission error. Fallback to a procfs check.
 		default:
 			return true, err
 		}

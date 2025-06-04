@@ -82,7 +82,7 @@ func (m *Module) addName(name string) uint32 {
 	index := len(m.names)
 	l := len(name)
 	m.names = append(m.names, byte(l))
-	m.names = append(m.names, stringutil.String2ByteSlice(name)...)
+	m.names = append(m.names, unsafe.Slice(unsafe.StringData(name), l)...)
 	return uint32(index)
 }
 
@@ -90,7 +90,8 @@ func (m *Module) addName(name string) uint32 {
 // received from previous `addName` call.
 func (m *Module) bytesAt(index uint32) []byte {
 	i := int(index)
-	return m.names[i+1 : i+1+int(m.names[i])]
+	l := int(m.names[i])
+	return m.names[i+1 : i+1+l]
 }
 
 // stringAt recovers the string at `index` received from previous `addName` call.
@@ -147,11 +148,9 @@ func (m *Module) init(mod string) {
 	}
 }
 
-// finish will finalize the Module. The 'names' and 'symbols' slices are cloned
-// and sorted. A fallback fileID is synthesized if buildID is not available.
+// finish will finalize the Module. The 'symbols' slice is sorted, and
+// a fallback fileID is synthesized if buildID is not available.
 func (m *Module) finish() {
-	m.names = bytes.Clone(m.names)
-	m.symbols = slices.Clone(m.symbols)
 	sort.Slice(m.symbols, func(i, j int) bool {
 		return m.symbols[i].offset >= m.symbols[j].offset
 	})
@@ -250,19 +249,30 @@ func (m *Module) LookupSymbolsByPrefix(prefix string) []*libpf.Symbol {
 func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	var mod *Module
 	var curName string
+	var syms []symbol
+	var names []byte
 
 	s.valid.Store(true)
 	noSymbols := true
 
 	// Allocate buffers which should be able to hold the symbol data
-	// from the vmlinux main image without resizing based on normal
-	// distribution kernel (all modules are significantly smaller):
-	// - about 200-300 modules
-	// - 2.5MB for symbol names
-	// - 100k symbols
+	// from the vmlinux main image (or large modules on reloads) without
+	// resizing based on normal distribution kernel. These are later
+	// cloned to the exact size needed, so these are stack allocated.
+
+	// The modules (typical sysmtes have 200-300)
 	mods := make([]Module, 0, 400)
-	names := make([]byte, 0, 3*1024*1024)
-	syms := make([]symbol, 0, 128*1024)
+	if len(s.modules) == 0 {
+		// - 2.5MB for symbol names
+		// - 100k symbols
+		names = make([]byte, 0, 3*1024*1024)
+		syms = make([]symbol, 0, 128*1024)
+	} else {
+		// - 0.5MB for symbol names (e.g. i915 needs 400k)
+		// - 64k symbols (e.g. i915 has 12k symbols)
+		names = make([]byte, 0, 512*1024)
+		syms = make([]symbol, 0, 64*1024)
+	}
 
 	for scanner := bufio.NewScanner(r); scanner.Scan(); {
 		// Avoid heap allocation by not using scanner.Text().
@@ -305,6 +315,15 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 				return ErrSymbolPermissions
 			}
 			if mod != nil {
+				// Update the working buffers from potentially reallocated
+				// slices to avoid continuous reallocations.
+				names = mod.names[0:0]
+				syms = mod.symbols[0:0]
+				// Clone a copy of the data to the module so that it does not
+				// overlap with the working buffer, and is sized exactly the
+				// needed size.
+				mod.names = bytes.Clone(mod.names)
+				mod.symbols = slices.Clone(mod.symbols)
 				mod.finish()
 			}
 
@@ -371,6 +390,9 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	sort.Slice(mods, func(i, j int) bool {
 		return mods[i].start >= mods[j].start
 	})
+
+	// Heap allocate the exact amount needed. This also makes the initial
+	// buffer stack allocated.
 	s.modules = slices.Clone(mods)
 	return nil
 }

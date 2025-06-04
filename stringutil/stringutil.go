@@ -84,10 +84,3 @@ func SplitN(s, sep string, f []string) int {
 func ByteSlice2String(b []byte) string {
 	return unsafe.String(unsafe.SliceData(b), len(b))
 }
-
-// String2ByteSlice converts a string into a byte slice without a heap allocation.
-// Be aware that the byte slice and the string share the same memory - which makes
-// the string mutable.
-func String2ByteSlice(s string) []byte {
-	return unsafe.Slice(unsafe.StringData(s), len(s))
-}
