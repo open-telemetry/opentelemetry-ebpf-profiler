@@ -28,7 +28,6 @@ func IsJump(op x86asm.Op) bool {
 	case
 		x86asm.RET,
 		x86asm.JMP,
-
 		x86asm.JA,
 		x86asm.JAE,
 		x86asm.JB,

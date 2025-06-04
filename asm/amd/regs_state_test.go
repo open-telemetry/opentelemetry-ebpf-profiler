@@ -137,8 +137,13 @@ func TestMoveSignExtend(t *testing.T) {
 		0x40, 0x04, 0xB8, 0x03, 0x00, 0x00, 0x00, 0x48,
 		0x0F, 0xBF, 0x40, 0x04,
 	})
-	i.Loop()
-	// todo assert
+	_, err := i.Loop()
+	require.NoError(t, err)
+	t.Error("TODO")
+}
+
+func TestMemory(t *testing.T) {
+	t.Error("TODO")
 }
 
 func TestCompareJumpConstraints(t *testing.T) {

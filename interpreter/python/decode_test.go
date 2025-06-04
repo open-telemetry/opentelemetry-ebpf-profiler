@@ -237,7 +237,7 @@ func TestAmd64DecodeStub(t *testing.T) {
 				0x48, 0xC7, 0xC7, 0xEF, 0xEF, 0xEF, 0x00, // mov rdi, 0xefefef
 				0xea, // :shrug:
 			},
-			expectedError: "failed to decode instruction at 0x7",
+			expectedError: "at 0x7",
 		},
 		{
 			name: "synthetic lea scale index",

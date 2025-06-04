@@ -264,27 +264,24 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 	if len(rem) == 0 {
 		return x86asm.Inst{}, io.EOF
 	}
+	var inst x86asm.Inst
+	var err error
 	if ok, instLen := DecodeSkippable(rem); ok {
-		i.pc += instLen
-		i.Regs.Set(x86asm.RIP, variable.Add(i.CodeAddress, variable.Imm(uint64(i.pc))))
-		return x86asm.Inst{Op: x86asm.NOP}, nil
+		inst = x86asm.Inst{Op: x86asm.NOP, Len: instLen}
+	} else {
+		inst, err = x86asm.Decode(rem, 64)
+		if err != nil {
+			return inst, fmt.Errorf("at 0x%x : %v", i.pc, err)
+		}
 	}
-	inst, err := x86asm.Decode(rem, 64)
-	if err != nil {
-		return x86asm.Inst{}, fmt.Errorf("failed to decode instruction at 0x%x : %v",
-			i.pc, err)
-	}
-
 	i.pc += inst.Len
 	i.Regs.Set(x86asm.RIP, variable.Add(i.CodeAddress, variable.Imm(uint64(i.pc))))
 	if debugPrinting {
 		isnAddr := variable.Add(i.CodeAddress, variable.Imm(uint64(i.pc-inst.Len)))
 		fmt.Printf("| %6s %s\n", isnAddr.DebugString(), x86asm.IntelSyntax(inst, uint64(i.pc), nil))
 	}
-	if inst.Op == x86asm.RET {
-		return inst, nil
-	}
-	if inst.Op == x86asm.ADD {
+	switch inst.Op {
+	case x86asm.ADD:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			switch src := inst.Args[1].(type) {
 			case x86asm.Imm:
@@ -297,8 +294,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				i.Regs.Set(dst, variable.Add(i.Regs.Get(dst), v))
 			}
 		}
-	}
-	if inst.Op == x86asm.SHL {
+	case x86asm.SHL:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, imm := inst.Args[1].(x86asm.Imm); imm {
 				v := variable.MultiplyWithOptions(
@@ -309,8 +305,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				i.Regs.Set(dst, v)
 			}
 		}
-	}
-	if inst.Op == x86asm.MOV || inst.Op == x86asm.MOVZX || inst.Op == x86asm.MOVSXD || inst.Op == x86asm.MOVSX {
+	case x86asm.MOV, x86asm.MOVZX, x86asm.MOVSXD, x86asm.MOVSX:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			switch src := inst.Args[1].(type) {
 			case x86asm.Imm:
@@ -351,8 +346,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				}
 			}
 		}
-	}
-	if inst.Op == x86asm.XOR {
+	case x86asm.XOR:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, reg := inst.Args[1].(x86asm.Reg); reg {
 				if src == dst {
@@ -360,8 +354,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				}
 			}
 		}
-	}
-	if inst.Op == x86asm.AND {
+	case x86asm.AND:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, imm := inst.Args[1].(x86asm.Imm); imm {
 				if src == 3 { // todo other cases
@@ -369,24 +362,24 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				}
 			}
 		}
-	}
-	if inst.Op == x86asm.LEA {
+	case x86asm.LEA:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, mem := inst.Args[1].(x86asm.Mem); mem {
 				v := i.MemArg(i.Opt, src)
 				i.Regs.Set(dst, v)
 			}
 		}
-	}
-	if inst.Op == x86asm.CMP {
+	case x86asm.CMP:
 		if left, ok := inst.Args[0].(x86asm.Reg); ok {
 			if right, mem := inst.Args[1].(x86asm.Imm); mem {
 				i.compare(left, right)
 			}
 		}
-	}
-	if inst.Op == x86asm.JA || inst.Op == x86asm.JAE {
+	case x86asm.JAE, x86asm.JA:
 		i.saveCompareConstraint(inst.Op)
+	case x86asm.NOP, x86asm.RET:
+	default:
+		return inst, nil
 	}
 	return inst, nil
 }
