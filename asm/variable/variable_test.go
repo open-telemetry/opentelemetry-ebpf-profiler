@@ -85,7 +85,7 @@ func TestVariable(t *testing.T) {
 		v := Var("v")
 
 		assertEqualRecursive(t,
-			&op{opMul, []U64{v, Imm(239)}},
+			&op{opMul, []Expression{v, Imm(239)}},
 			Multiply(Imm(239), v),
 		)
 	})
@@ -168,10 +168,10 @@ func TestVariable(t *testing.T) {
 
 	t.Run("any", func(t *testing.T) {
 		assert.False(t,
-			Any().Eval(Var("v1")),
+			Any().Match(Var("v1")),
 		)
 		assert.True(t,
-			Var("v1").Eval(Any()),
+			Var("v1").Match(Any()),
 		)
 	})
 
@@ -195,17 +195,17 @@ func TestVariable(t *testing.T) {
 	})
 
 	t.Run("any matches ops", func(t *testing.T) {
-		assert.True(t, Add(Var("v1"), Var("2")).Eval(Any()))
+		assert.True(t, Add(Var("v1"), Var("2")).Match(Any()))
 	})
 }
 
-func assertEqualRecursive(t *testing.T, a, b U64) {
+func assertEqualRecursive(t *testing.T, a, b Expression) {
 	if !equalRecursive(a, b) {
-		t.Errorf("expected %s to be recursive equal to %s", a.String(), b.String())
+		t.Errorf("expected %s to be recursive equal to %s", a.DebugString(), b.DebugString())
 	}
 }
 
-func equalRecursive(a, b U64) bool {
+func equalRecursive(a, b Expression) bool {
 	if ima, aok := a.(*immediate); aok {
 		if imb, bok := b.(*immediate); bok {
 			return ima.Value == imb.Value

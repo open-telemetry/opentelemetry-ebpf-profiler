@@ -7,12 +7,12 @@ import (
 	"math"
 )
 
-var _ U64 = &extend{}
+var _ Expression = &extend{}
 
-func SignExtend(v U64, bits int) U64 {
+func SignExtend(v Expression, bits int) Expression {
 	return &extend{v, bits, true}
 }
-func ZeroExtend(v U64, bits int) U64 {
+func ZeroExtend(v Expression, bits int) Expression {
 	if bits >= 64 {
 		bits = 64
 	}
@@ -48,7 +48,7 @@ func ZeroExtend(v U64, bits int) U64 {
 }
 
 type extend struct {
-	v    U64
+	v    Expression
 	bits int
 	sign bool
 }
@@ -60,10 +60,10 @@ func (c *extend) MaxValue() uint64 {
 	return 1<<c.bits - 1
 }
 
-func (c *extend) Eval(v U64) bool {
+func (c *extend) Match(v Expression) bool {
 	switch typed := v.(type) {
 	case *extend:
-		return typed.bits == c.bits && typed.sign == c.sign && c.v.Eval(typed.v)
+		return typed.bits == c.bits && typed.sign == c.sign && c.v.Match(typed.v)
 	case *Variable:
 		if typed.isAny {
 			typed.extracted = c
@@ -75,7 +75,7 @@ func (c *extend) Eval(v U64) bool {
 	}
 }
 
-func (c *extend) String() string {
+func (c *extend) DebugString() string {
 	s := "zero"
 	if c.sign {
 		s = "sign"

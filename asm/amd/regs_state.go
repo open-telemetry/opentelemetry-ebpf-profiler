@@ -108,23 +108,23 @@ func regEntryFor(reg x86asm.Reg) regEntry {
 }
 
 type RegsState struct {
-	regs [18]variable.U64
+	regs [18]variable.Expression
 }
 
-func (r *RegsState) Set(reg x86asm.Reg, v variable.U64) {
+func (r *RegsState) Set(reg x86asm.Reg, v variable.Expression) {
 	e := regEntryFor(reg)
 	if e.bits != 64 {
 		v = variable.ZeroExtend(v, e.bits)
 	}
 	if debugPrinting {
 		if reg != x86asm.RIP {
-			fmt.Printf("    [REG-W] %6s = %s\n", reg, v.String())
+			fmt.Printf("    [REG-W] %6s = %s\n", reg, v.DebugString())
 		}
 	}
 	r.regs[e.idx] = v
 }
 
-func (r *RegsState) Get(reg x86asm.Reg) variable.U64 {
+func (r *RegsState) Get(reg x86asm.Reg) variable.Expression {
 	e := regEntryFor(reg)
 	res := r.regs[e.idx]
 	if e.bits != 64 {
@@ -135,44 +135,44 @@ func (r *RegsState) Get(reg x86asm.Reg) variable.U64 {
 
 func (r *RegsState) DebugString() string {
 	res := ""
-	res += "RAX: " + r.regs[regIndex(x86asm.RAX)].String() + "\n"
-	res += "RCX: " + r.regs[regIndex(x86asm.RCX)].String() + "\n"
-	res += "RDX: " + r.regs[regIndex(x86asm.RDX)].String() + "\n"
-	res += "RBX: " + r.regs[regIndex(x86asm.RBX)].String() + "\n"
-	res += "RSP: " + r.regs[regIndex(x86asm.RSP)].String() + "\n"
-	res += "RBP: " + r.regs[regIndex(x86asm.RBP)].String() + "\n"
-	res += "RSI: " + r.regs[regIndex(x86asm.RSI)].String() + "\n"
-	res += "RDI: " + r.regs[regIndex(x86asm.RDI)].String() + "\n"
-	res += "R8 : " + r.regs[regIndex(x86asm.R8)].String() + "\n"
-	res += "R9 : " + r.regs[regIndex(x86asm.R9)].String() + "\n"
-	res += "R10: " + r.regs[regIndex(x86asm.R10)].String() + "\n"
-	res += "R11: " + r.regs[regIndex(x86asm.R11)].String() + "\n"
-	res += "R12: " + r.regs[regIndex(x86asm.R12)].String() + "\n"
-	res += "R13: " + r.regs[regIndex(x86asm.R13)].String() + "\n"
-	res += "R14: " + r.regs[regIndex(x86asm.R14)].String() + "\n"
-	res += "R15: " + r.regs[regIndex(x86asm.R15)].String() + "\n"
-	res += "RIP: " + r.regs[regIndex(x86asm.RIP)].String() + "\n"
+	res += "RAX: " + r.regs[regIndex(x86asm.RAX)].DebugString() + "\n"
+	res += "RCX: " + r.regs[regIndex(x86asm.RCX)].DebugString() + "\n"
+	res += "RDX: " + r.regs[regIndex(x86asm.RDX)].DebugString() + "\n"
+	res += "RBX: " + r.regs[regIndex(x86asm.RBX)].DebugString() + "\n"
+	res += "RSP: " + r.regs[regIndex(x86asm.RSP)].DebugString() + "\n"
+	res += "RBP: " + r.regs[regIndex(x86asm.RBP)].DebugString() + "\n"
+	res += "RSI: " + r.regs[regIndex(x86asm.RSI)].DebugString() + "\n"
+	res += "RDI: " + r.regs[regIndex(x86asm.RDI)].DebugString() + "\n"
+	res += "R8 : " + r.regs[regIndex(x86asm.R8)].DebugString() + "\n"
+	res += "R9 : " + r.regs[regIndex(x86asm.R9)].DebugString() + "\n"
+	res += "R10: " + r.regs[regIndex(x86asm.R10)].DebugString() + "\n"
+	res += "R11: " + r.regs[regIndex(x86asm.R11)].DebugString() + "\n"
+	res += "R12: " + r.regs[regIndex(x86asm.R12)].DebugString() + "\n"
+	res += "R13: " + r.regs[regIndex(x86asm.R13)].DebugString() + "\n"
+	res += "R14: " + r.regs[regIndex(x86asm.R14)].DebugString() + "\n"
+	res += "R15: " + r.regs[regIndex(x86asm.R15)].DebugString() + "\n"
+	res += "RIP: " + r.regs[regIndex(x86asm.RIP)].DebugString() + "\n"
 	return res
 }
 
 type compare struct {
-	left  variable.U64
+	left  variable.Expression
 	right uint64
-	//cmpRIP variable.U64
+	//cmpRIP variable.Expression
 	jmp x86asm.Op
 }
 
 type Interpreter struct {
 	Regs        RegsState
 	code        []byte
-	CodeAddress variable.U64
+	CodeAddress variable.Expression
 	pc          int
 
 	Opt variable.Options
 
 	cmp compare
 
-	mem            map[variable.U64]variable.U64
+	mem            map[variable.Expression]variable.Expression
 	cmpConstraints []compare
 }
 
@@ -189,11 +189,11 @@ func NewInterpreterWithCode(code []byte) *Interpreter {
 }
 
 func (i *Interpreter) WithMemory() *Interpreter {
-	i.mem = make(map[variable.U64]variable.U64)
+	i.mem = make(map[variable.Expression]variable.Expression)
 	return i
 }
 
-func (i *Interpreter) WriteMem(at, v variable.U64) {
+func (i *Interpreter) WriteMem(at, v variable.Expression) {
 	if i.mem != nil {
 		if debugPrinting {
 			fmt.Printf("    [W] %s = %s\n", at, v)
@@ -202,20 +202,20 @@ func (i *Interpreter) WriteMem(at, v variable.U64) {
 	}
 }
 
-func (i *Interpreter) ReadMem(at variable.U64, debug bool) (variable.U64, bool) {
+func (i *Interpreter) ReadMem(at variable.Expression, debug bool) (variable.Expression, bool) {
 	if debugPrinting && debug {
 		//fmt.Printf("    [R] %s\n", at.String())
 	}
 	for a, v := range i.mem {
 		//fmt.Printf("    |- [R] test %s\n", a.String())
-		if a.Eval(at) {
+		if a.Match(at) {
 			return v, true
 		}
 	}
 	return variable.Imm(0), false
 }
 
-func (i *Interpreter) ResetCode(code []byte, address variable.U64) {
+func (i *Interpreter) ResetCode(code []byte, address variable.Expression) {
 	i.code = code
 	i.CodeAddress = address
 	i.pc = 0
@@ -284,8 +284,8 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 	bp := false
 	if debugPrinting {
 		isnAddr := variable.Add(i.CodeAddress, variable.Imm(uint64(i.pc-inst.Len)))
-		fmt.Printf("| %6s %s\n", isnAddr.String(), x86asm.IntelSyntax(inst, uint64(i.pc), nil))
-		if "0x1bee05" == isnAddr.String() {
+		fmt.Printf("| %6s %s\n", isnAddr.DebugString(), x86asm.IntelSyntax(inst, uint64(i.pc), nil))
+		if "0x1bee05" == isnAddr.DebugString() {
 			bp = true
 		}
 	}
@@ -400,8 +400,8 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 	return inst, nil
 }
 
-func (i *Interpreter) MemArg(opt variable.Options, src x86asm.Mem) variable.U64 {
-	vs := make([]variable.U64, 0, 3)
+func (i *Interpreter) MemArg(opt variable.Options, src x86asm.Mem) variable.Expression {
+	vs := make([]variable.Expression, 0, 3)
 	if src.Disp != 0 {
 		vs = append(vs, variable.Imm(uint64(src.Disp)))
 	}
@@ -432,12 +432,12 @@ func (i *Interpreter) saveCompareConstraint(inst x86asm.Op) {
 	i.cmp = compare{}
 }
 
-func (i *Interpreter) MaxValue(of variable.U64) uint64 {
+func (i *Interpreter) MaxValue(of variable.Expression) uint64 {
 	for _, cmp := range i.cmpConstraints {
 		if cmp.left == nil { // unhandled compare instruction
 			continue
 		}
-		if cmp.left.Eval(of) {
+		if cmp.left.Match(of) {
 			switch cmp.jmp {
 			case x86asm.JAE:
 				return cmp.right - 1
@@ -452,6 +452,6 @@ func (i *Interpreter) MaxValue(of variable.U64) uint64 {
 }
 
 type CodeBlock struct {
-	Address variable.U64
+	Address variable.Expression
 	Code    []byte
 }

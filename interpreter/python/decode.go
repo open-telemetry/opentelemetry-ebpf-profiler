@@ -128,12 +128,12 @@ func decodeStubArgumentAMD64(
 	return libpf.SymbolValue(answer), err
 }
 
-func evaluateStubAnswerAMD64(res variable.U64, memBase uint64) (uint64, error) {
+func evaluateStubAnswerAMD64(res variable.Expression, memBase uint64) (uint64, error) {
 	answer := variable.Var("answer")
-	if res.Eval(variable.ZeroExtend(variable.Mem(answer, 8), 32)) {
+	if res.Match(variable.ZeroExtend(variable.Mem(answer, 8), 32)) {
 		return answer.ExtractedValueImm(), nil
 	}
-	if res.Eval(
+	if res.Match(
 		variable.Add(
 			variable.Mem(variable.Var("mem"), 8),
 			answer,
@@ -141,7 +141,7 @@ func evaluateStubAnswerAMD64(res variable.U64, memBase uint64) (uint64, error) {
 	) {
 		return memBase + answer.ExtractedValueImm(), nil
 	}
-	if res.Eval(
+	if res.Match(
 		variable.ZeroExtend(
 			variable.Mem(
 				variable.Add(
@@ -155,10 +155,10 @@ func evaluateStubAnswerAMD64(res variable.U64, memBase uint64) (uint64, error) {
 	) {
 		return memBase + answer.ExtractedValueImm(), nil
 	}
-	if res.Eval(answer) {
+	if res.Match(answer) {
 		return answer.ExtractedValueImm(), nil
 	}
-	return 0, fmt.Errorf("not found %s", res.String())
+	return 0, fmt.Errorf("not found %s", res.DebugString())
 }
 
 func decodeStubArgumentWrapper(

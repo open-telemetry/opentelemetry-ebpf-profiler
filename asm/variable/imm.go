@@ -4,10 +4,10 @@
 package variable // import "go.opentelemetry.io/ebpf-profiler/asm/variable"
 import "fmt"
 
-var zero U64 = &immediate{0}
-var one U64 = &immediate{1}
+var zero Expression = &immediate{0}
+var one Expression = &immediate{1}
 
-func Imm(v uint64) U64 {
+func Imm(v uint64) Expression {
 	switch v {
 	case 0:
 		return zero
@@ -26,15 +26,15 @@ func (v *immediate) MaxValue() uint64 {
 	return v.Value
 }
 
-func (v *immediate) Simplify() U64 {
+func (v *immediate) Simplify() Expression {
 	return v
 }
 
-func (v *immediate) String() string {
+func (v *immediate) DebugString() string {
 	return fmt.Sprintf("0x%x", v.Value)
 }
 
-func (v *immediate) Eval(other U64) bool {
+func (v *immediate) Match(other Expression) bool {
 	switch typed := other.(type) {
 	case *immediate:
 		return v.Value == typed.Value

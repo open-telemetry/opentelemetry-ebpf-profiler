@@ -56,7 +56,7 @@ func testPythonInterpreter(t testing.TB) {
 		),
 		8,
 	)
-	if !actual.Eval(expected) {
+	if !actual.Match(expected) {
 		t.Fatal()
 	}
 }
@@ -110,11 +110,11 @@ func TestRecoverSwitchCase(t *testing.T) {
 	})
 }
 
-func assertEval(t *testing.T, left, right variable.U64) {
-	if !left.Eval(right) {
-		assert.Fail(t, "failed to eval %s to %s", left.String(), right.String())
-		t.Logf("left  %s", left.String())
-		t.Logf("right %s", right.String())
+func assertEval(t *testing.T, left, right variable.Expression) {
+	if !left.Match(right) {
+		assert.Fail(t, "failed to eval %s to %s", left.DebugString(), right.DebugString())
+		t.Logf("left  %s", left.DebugString())
+		t.Logf("right %s", right.DebugString())
 	}
 }
 
@@ -151,7 +151,7 @@ func TestCompareJumpConstraints(t *testing.T) {
 	_, err := i.Loop()
 	require.ErrorIs(t, err, io.EOF)
 	r8 := i.Regs.Get(x86asm.R8L)
-	fmt.Println(r8.String())
+	fmt.Println(r8.DebugString())
 	maxValue := i.MaxValue(r8)
 	require.EqualValues(t, maxValue, 0xa5)
 }

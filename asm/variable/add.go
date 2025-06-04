@@ -7,7 +7,7 @@ import (
 	"math/bits"
 )
 
-func Add(vs ...U64) U64 {
+func Add(vs ...Expression) Expression {
 	oss := make(operands, 0, len(vs)+1)
 	v := uint64(0)
 	for _, it := range vs {

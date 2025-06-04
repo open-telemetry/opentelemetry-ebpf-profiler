@@ -8,7 +8,7 @@ import (
 	"math"
 )
 
-var _ U64 = &Variable{}
+var _ Expression = &Variable{}
 
 func Any() *Variable {
 	v := Var("any")
@@ -28,9 +28,9 @@ func Var(name string) *Variable {
 type Variable struct {
 	name               string
 	maxValueConstraint uint64
-	// if true - extract any U64, if false - extract only immediate
+	// if true - extract any Expression, if false - extract only immediate
 	isAny     bool
-	extracted U64
+	extracted Expression
 }
 
 func (v *Variable) ExtractedValueImm() uint64 {
@@ -54,11 +54,11 @@ func (v *Variable) MaxValue() uint64 {
 	return v.maxValueConstraint
 }
 
-func (v *Variable) String() string {
+func (v *Variable) DebugString() string {
 	return fmt.Sprintf("@%s", v.name)
 }
 
-func (v *Variable) Eval(other U64) bool {
+func (v *Variable) Match(other Expression) bool {
 	switch typed := other.(type) {
 	case *Variable:
 		if typed.isAny {

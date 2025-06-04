@@ -19,12 +19,12 @@ type op struct {
 	operands operands
 }
 
-func newOp(typ opType, operands operands) U64 {
+func newOp(typ opType, operands operands) Expression {
 	res := &op{typ: typ, operands: operands}
 	return res
 }
 
-func (o *op) Eval(other U64) bool {
+func (o *op) Match(other Expression) bool {
 	switch typed := other.(type) {
 	case *op:
 		if o.typ != typed.typ || len(o.operands) != len(typed.operands) {
@@ -42,10 +42,10 @@ func (o *op) Eval(other U64) bool {
 	}
 }
 
-func (o *op) String() string {
+func (o *op) DebugString() string {
 	ss := make([]string, len(o.operands))
 	for i := range o.operands {
-		ss[i] = o.operands[i].String()
+		ss[i] = o.operands[i].DebugString()
 	}
 	sep := ""
 	switch o.typ {
