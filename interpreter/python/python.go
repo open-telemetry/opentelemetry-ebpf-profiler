@@ -847,12 +847,8 @@ func findInterpreterRanges(info *interpreter.LoaderInfo) ([]util.Range, error) {
 	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
 	// 3cebf938727 v3.6  2016-09-05 _PyEval_EvalFrameDefault(PyFrameObject*,int)
 	// 49fd7fa4431 v3.0  2006-04-21 PyEval_EvalFrameEx(PyFrameObject*,int)
-	interpRanges, err := info.GetSymbolAsRanges("_PyEval_EvalFrameDefault")
-	if err != nil {
-		if interpRanges, err = info.GetSymbolAsRanges("PyEval_EvalFrameEx"); err != nil {
-			return nil, err
-		}
-		return interpRanges, nil
+	if interpRanges, err := info.GetSymbolAsRanges("_PyEval_EvalFrameDefault"); err != nil {
+		interpRanges, _ = info.GetSymbolAsRanges("PyEval_EvalFrameEx")
 	}
 	if len(interpRanges) == 0 {
 		return nil, errors.New("no _PyEval_EvalFrameDefault/PyEval_EvalFrameEx symbol found")

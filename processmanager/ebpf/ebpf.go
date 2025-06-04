@@ -285,7 +285,7 @@ func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
 	if len(offsetRanges) == 2 {
 		// Fields {lower,upper}_offset2 may be used to specify an optional second range
 		// of an interpreter function. This may be useful if the interpreter function
-		// consists of two non-contiguous memory ranges, which may happen due Hot/Cold
+		// consists of two non-contiguous memory ranges, which may happen due to Hot/Cold
 		// split compiler optimization
 		second := offsetRanges[1]
 		value.lower_offset2 = C.u64(second.Start)
