@@ -264,13 +264,14 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 	if len(rem) == 0 {
 		return x86asm.Inst{}, io.EOF
 	}
-	if ok, insnLen := DecodeSkippable(rem); ok {
-		i.pc += insnLen
+	if ok, instLen := DecodeSkippable(rem); ok {
+		i.pc += instLen
+		i.Regs.Set(x86asm.RIP, variable.Add(i.CodeAddress, variable.Imm(uint64(i.pc))))
 		return x86asm.Inst{Op: x86asm.NOP}, nil
 	}
 	inst, err := x86asm.Decode(rem, 64)
 	if err != nil {
-		return x86asm.Inst{}, fmt.Errorf("failed to decode instruction at 0x%x : %w",
+		return x86asm.Inst{}, fmt.Errorf("failed to decode instruction at 0x%x : %v",
 			i.pc, err)
 	}
 
