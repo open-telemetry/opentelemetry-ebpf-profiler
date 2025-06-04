@@ -226,7 +226,7 @@ func equalRecursive(a, b U64) bool {
 	}
 	if ima, aok := a.(*extend); aok {
 		if imb, bok := b.(*extend); bok {
-			return ima.bitsSize == imb.bitsSize && equalRecursive(ima.v, imb.v)
+			return ima.bits == imb.bits && equalRecursive(ima.v, imb.v)
 		}
 		return false
 	}

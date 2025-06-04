@@ -13,107 +13,98 @@ import (
 	"golang.org/x/arch/x86/x86asm"
 )
 
-const (
-	size64 = 64
-	size32 = 32
-	size16 = 16
-	size08 = 8
-)
-
 var debugPrinting = false
 
-type regIndexTableEntry struct {
-	idx int
-	sz  int
+type regEntry struct {
+	idx  int
+	bits int
 }
 
-var regIndexTable [128]regIndexTableEntry
+var regs [128]regEntry
 
 func init() {
-	//todo size8, size16 does not zeroout msb, should we support this?
-	//(this would require to make Var of variable size and support concat/crop ?)
-	regIndexTable[x86asm.AL] = regIndexTableEntry{idx: 1, sz: size08}
-	regIndexTable[x86asm.CL] = regIndexTableEntry{idx: 2, sz: size08}
-	regIndexTable[x86asm.DL] = regIndexTableEntry{idx: 3, sz: size08}
-	regIndexTable[x86asm.BL] = regIndexTableEntry{idx: 4, sz: size08}
-	regIndexTable[x86asm.SPB] = regIndexTableEntry{idx: 5, sz: size08}
-	regIndexTable[x86asm.BPB] = regIndexTableEntry{idx: 6, sz: size08}
-	regIndexTable[x86asm.SIB] = regIndexTableEntry{idx: 7, sz: size08}
-	regIndexTable[x86asm.DIB] = regIndexTableEntry{idx: 8, sz: size08}
-	regIndexTable[x86asm.R8B] = regIndexTableEntry{idx: 9, sz: size08}
-	regIndexTable[x86asm.R9B] = regIndexTableEntry{idx: 10, sz: size08}
-	regIndexTable[x86asm.R10B] = regIndexTableEntry{idx: 11, sz: size08}
-	regIndexTable[x86asm.R11B] = regIndexTableEntry{idx: 12, sz: size08}
-	regIndexTable[x86asm.R12B] = regIndexTableEntry{idx: 13, sz: size08}
-	regIndexTable[x86asm.R13B] = regIndexTableEntry{idx: 14, sz: size08}
-	regIndexTable[x86asm.R14B] = regIndexTableEntry{idx: 15, sz: size08}
-	regIndexTable[x86asm.R15B] = regIndexTableEntry{idx: 16, sz: size08}
+	regs[x86asm.AL] = regEntry{idx: 1, bits: 8}
+	regs[x86asm.CL] = regEntry{idx: 2, bits: 8}
+	regs[x86asm.DL] = regEntry{idx: 3, bits: 8}
+	regs[x86asm.BL] = regEntry{idx: 4, bits: 8}
+	regs[x86asm.SPB] = regEntry{idx: 5, bits: 8}
+	regs[x86asm.BPB] = regEntry{idx: 6, bits: 8}
+	regs[x86asm.SIB] = regEntry{idx: 7, bits: 8}
+	regs[x86asm.DIB] = regEntry{idx: 8, bits: 8}
+	regs[x86asm.R8B] = regEntry{idx: 9, bits: 8}
+	regs[x86asm.R9B] = regEntry{idx: 10, bits: 8}
+	regs[x86asm.R10B] = regEntry{idx: 11, bits: 8}
+	regs[x86asm.R11B] = regEntry{idx: 12, bits: 8}
+	regs[x86asm.R12B] = regEntry{idx: 13, bits: 8}
+	regs[x86asm.R13B] = regEntry{idx: 14, bits: 8}
+	regs[x86asm.R14B] = regEntry{idx: 15, bits: 8}
+	regs[x86asm.R15B] = regEntry{idx: 16, bits: 8}
 
-	regIndexTable[x86asm.AX] = regIndexTableEntry{idx: 1, sz: size16}
-	regIndexTable[x86asm.CX] = regIndexTableEntry{idx: 2, sz: size16}
-	regIndexTable[x86asm.DX] = regIndexTableEntry{idx: 3, sz: size16}
-	regIndexTable[x86asm.BX] = regIndexTableEntry{idx: 4, sz: size16}
-	regIndexTable[x86asm.SP] = regIndexTableEntry{idx: 5, sz: size16}
-	regIndexTable[x86asm.BP] = regIndexTableEntry{idx: 6, sz: size16}
-	regIndexTable[x86asm.SI] = regIndexTableEntry{idx: 7, sz: size16}
-	regIndexTable[x86asm.DI] = regIndexTableEntry{idx: 8, sz: size16}
-	regIndexTable[x86asm.R8W] = regIndexTableEntry{idx: 9, sz: size16}
-	regIndexTable[x86asm.R9W] = regIndexTableEntry{idx: 10, sz: size16}
-	regIndexTable[x86asm.R10W] = regIndexTableEntry{idx: 11, sz: size16}
-	regIndexTable[x86asm.R11W] = regIndexTableEntry{idx: 12, sz: size16}
-	regIndexTable[x86asm.R12W] = regIndexTableEntry{idx: 13, sz: size16}
-	regIndexTable[x86asm.R13W] = regIndexTableEntry{idx: 14, sz: size16}
-	regIndexTable[x86asm.R14W] = regIndexTableEntry{idx: 15, sz: size16}
-	regIndexTable[x86asm.R15W] = regIndexTableEntry{idx: 16, sz: size16}
+	regs[x86asm.AX] = regEntry{idx: 1, bits: 16}
+	regs[x86asm.CX] = regEntry{idx: 2, bits: 16}
+	regs[x86asm.DX] = regEntry{idx: 3, bits: 16}
+	regs[x86asm.BX] = regEntry{idx: 4, bits: 16}
+	regs[x86asm.SP] = regEntry{idx: 5, bits: 16}
+	regs[x86asm.BP] = regEntry{idx: 6, bits: 16}
+	regs[x86asm.SI] = regEntry{idx: 7, bits: 16}
+	regs[x86asm.DI] = regEntry{idx: 8, bits: 16}
+	regs[x86asm.R8W] = regEntry{idx: 9, bits: 16}
+	regs[x86asm.R9W] = regEntry{idx: 10, bits: 16}
+	regs[x86asm.R10W] = regEntry{idx: 11, bits: 16}
+	regs[x86asm.R11W] = regEntry{idx: 12, bits: 16}
+	regs[x86asm.R12W] = regEntry{idx: 13, bits: 16}
+	regs[x86asm.R13W] = regEntry{idx: 14, bits: 16}
+	regs[x86asm.R14W] = regEntry{idx: 15, bits: 16}
+	regs[x86asm.R15W] = regEntry{idx: 16, bits: 16}
 
-	regIndexTable[x86asm.EAX] = regIndexTableEntry{idx: 1, sz: size32}
-	regIndexTable[x86asm.ECX] = regIndexTableEntry{idx: 2, sz: size32}
-	regIndexTable[x86asm.EDX] = regIndexTableEntry{idx: 3, sz: size32}
-	regIndexTable[x86asm.EBX] = regIndexTableEntry{idx: 4, sz: size32}
-	regIndexTable[x86asm.ESP] = regIndexTableEntry{idx: 5, sz: size32}
-	regIndexTable[x86asm.EBP] = regIndexTableEntry{idx: 6, sz: size32}
-	regIndexTable[x86asm.ESI] = regIndexTableEntry{idx: 7, sz: size32}
-	regIndexTable[x86asm.EDI] = regIndexTableEntry{idx: 8, sz: size32}
-	regIndexTable[x86asm.R8L] = regIndexTableEntry{idx: 9, sz: size32}
-	regIndexTable[x86asm.R9L] = regIndexTableEntry{idx: 10, sz: size32}
-	regIndexTable[x86asm.R10L] = regIndexTableEntry{idx: 11, sz: size32}
-	regIndexTable[x86asm.R11L] = regIndexTableEntry{idx: 12, sz: size32}
-	regIndexTable[x86asm.R12L] = regIndexTableEntry{idx: 13, sz: size32}
-	regIndexTable[x86asm.R13L] = regIndexTableEntry{idx: 14, sz: size32}
-	regIndexTable[x86asm.R14L] = regIndexTableEntry{idx: 15, sz: size32}
-	regIndexTable[x86asm.R15L] = regIndexTableEntry{idx: 16, sz: size32}
+	regs[x86asm.EAX] = regEntry{idx: 1, bits: 32}
+	regs[x86asm.ECX] = regEntry{idx: 2, bits: 32}
+	regs[x86asm.EDX] = regEntry{idx: 3, bits: 32}
+	regs[x86asm.EBX] = regEntry{idx: 4, bits: 32}
+	regs[x86asm.ESP] = regEntry{idx: 5, bits: 32}
+	regs[x86asm.EBP] = regEntry{idx: 6, bits: 32}
+	regs[x86asm.ESI] = regEntry{idx: 7, bits: 32}
+	regs[x86asm.EDI] = regEntry{idx: 8, bits: 32}
+	regs[x86asm.R8L] = regEntry{idx: 9, bits: 32}
+	regs[x86asm.R9L] = regEntry{idx: 10, bits: 32}
+	regs[x86asm.R10L] = regEntry{idx: 11, bits: 32}
+	regs[x86asm.R11L] = regEntry{idx: 12, bits: 32}
+	regs[x86asm.R12L] = regEntry{idx: 13, bits: 32}
+	regs[x86asm.R13L] = regEntry{idx: 14, bits: 32}
+	regs[x86asm.R14L] = regEntry{idx: 15, bits: 32}
+	regs[x86asm.R15L] = regEntry{idx: 16, bits: 32}
 
-	regIndexTable[x86asm.RAX] = regIndexTableEntry{idx: 1, sz: size64}
-	regIndexTable[x86asm.RCX] = regIndexTableEntry{idx: 2, sz: size64}
-	regIndexTable[x86asm.RDX] = regIndexTableEntry{idx: 3, sz: size64}
-	regIndexTable[x86asm.RBX] = regIndexTableEntry{idx: 4, sz: size64}
-	regIndexTable[x86asm.RSP] = regIndexTableEntry{idx: 5, sz: size64}
-	regIndexTable[x86asm.RBP] = regIndexTableEntry{idx: 6, sz: size64}
-	regIndexTable[x86asm.RSI] = regIndexTableEntry{idx: 7, sz: size64}
-	regIndexTable[x86asm.RDI] = regIndexTableEntry{idx: 8, sz: size64}
-	regIndexTable[x86asm.R8] = regIndexTableEntry{idx: 9, sz: size64}
-	regIndexTable[x86asm.R9] = regIndexTableEntry{idx: 10, sz: size64}
-	regIndexTable[x86asm.R10] = regIndexTableEntry{idx: 11, sz: size64}
-	regIndexTable[x86asm.R11] = regIndexTableEntry{idx: 12, sz: size64}
-	regIndexTable[x86asm.R12] = regIndexTableEntry{idx: 13, sz: size64}
-	regIndexTable[x86asm.R13] = regIndexTableEntry{idx: 14, sz: size64}
-	regIndexTable[x86asm.R14] = regIndexTableEntry{idx: 15, sz: size64}
-	regIndexTable[x86asm.R15] = regIndexTableEntry{idx: 16, sz: size64}
+	regs[x86asm.RAX] = regEntry{idx: 1, bits: 64}
+	regs[x86asm.RCX] = regEntry{idx: 2, bits: 64}
+	regs[x86asm.RDX] = regEntry{idx: 3, bits: 64}
+	regs[x86asm.RBX] = regEntry{idx: 4, bits: 64}
+	regs[x86asm.RSP] = regEntry{idx: 5, bits: 64}
+	regs[x86asm.RBP] = regEntry{idx: 6, bits: 64}
+	regs[x86asm.RSI] = regEntry{idx: 7, bits: 64}
+	regs[x86asm.RDI] = regEntry{idx: 8, bits: 64}
+	regs[x86asm.R8] = regEntry{idx: 9, bits: 64}
+	regs[x86asm.R9] = regEntry{idx: 10, bits: 64}
+	regs[x86asm.R10] = regEntry{idx: 11, bits: 64}
+	regs[x86asm.R11] = regEntry{idx: 12, bits: 64}
+	regs[x86asm.R12] = regEntry{idx: 13, bits: 64}
+	regs[x86asm.R13] = regEntry{idx: 14, bits: 64}
+	regs[x86asm.R14] = regEntry{idx: 15, bits: 64}
+	regs[x86asm.R15] = regEntry{idx: 16, bits: 64}
 
-	regIndexTable[x86asm.RIP] = regIndexTableEntry{idx: 17, sz: size64}
+	regs[x86asm.RIP] = regEntry{idx: 17, bits: 64}
 }
 
 func regIndex(reg x86asm.Reg) int {
-	idx, _ := regIndexWithSize(reg)
-	return idx
+	e := regEntryFor(reg)
+	return e.idx
 }
 
-func regIndexWithSize(reg x86asm.Reg) (idx, size int) {
-	if reg > 0 && int(reg) < len(regIndexTable) {
-		e := regIndexTable[reg]
-		return e.idx, e.sz
+func regEntryFor(reg x86asm.Reg) regEntry {
+	if reg > 0 && int(reg) < len(regs) {
+		e := regs[reg]
+		return e
 	}
-	return 0, 0
+	return regEntry{}
 }
 
 type RegsState struct {
@@ -121,23 +112,23 @@ type RegsState struct {
 }
 
 func (r *RegsState) Set(reg x86asm.Reg, v variable.U64) {
-	idx, _ := regIndexWithSize(reg)
-	//if sz != size64 {
-	//	v = variable.ZeroExtend(v, sz)
-	//}
+	e := regEntryFor(reg)
+	if e.bits != 64 {
+		v = variable.ZeroExtend(v, e.bits)
+	}
 	if debugPrinting {
 		if reg != x86asm.RIP {
 			fmt.Printf("    [REG-W] %6s = %s\n", reg, v.String())
 		}
 	}
-	r.regs[idx] = v
+	r.regs[e.idx] = v
 }
 
 func (r *RegsState) Get(reg x86asm.Reg) variable.U64 {
-	idx, sz := regIndexWithSize(reg)
-	res := r.regs[idx]
-	if sz != size64 {
-		res = variable.ZeroExtend(res, sz)
+	e := regEntryFor(reg)
+	res := r.regs[e.idx]
+	if e.bits != 64 {
+		res = variable.ZeroExtend(res, e.bits)
 	}
 	return res
 }

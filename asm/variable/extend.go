@@ -9,21 +9,21 @@ import (
 
 var _ U64 = &extend{}
 
-func SignExtend(v U64, bitsSize int) U64 {
-	return &extend{v, bitsSize, true}
+func SignExtend(v U64, bits int) U64 {
+	return &extend{v, bits, true}
 }
-func ZeroExtend(v U64, bitsSize int) U64 {
-	if bitsSize >= 64 {
-		bitsSize = 64
+func ZeroExtend(v U64, bits int) U64 {
+	if bits >= 64 {
+		bits = 64
 	}
 	c := &extend{
-		v:        v,
-		bitsSize: bitsSize,
+		v:    v,
+		bits: bits,
 	}
-	if c.bitsSize == 0 {
+	if c.bits == 0 {
 		return Imm(0)
 	}
-	if c.bitsSize == 64 {
+	if c.bits == 64 {
 		return c.v
 	}
 	switch typed := c.v.(type) {
@@ -33,12 +33,10 @@ func ZeroExtend(v U64, bitsSize int) U64 {
 		if typed.sign {
 			return c
 		}
-		//todo sign check
-		//todo add tests
-		if typed.bitsSize <= c.bitsSize {
+		if typed.bits <= c.bits {
 			return typed
 		}
-		return &extend{typed.v, c.bitsSize, false}
+		return &extend{typed.v, c.bits, false}
 	default:
 		myMax := c.MaxValue()
 		vMax := c.v.MaxValue()
@@ -50,22 +48,22 @@ func ZeroExtend(v U64, bitsSize int) U64 {
 }
 
 type extend struct {
-	v        U64
-	bitsSize int
-	sign     bool
+	v    U64
+	bits int
+	sign bool
 }
 
 func (c *extend) MaxValue() uint64 {
-	if c.bitsSize >= 64 || c.sign {
+	if c.bits >= 64 || c.sign {
 		return math.MaxUint64
 	}
-	return 1<<c.bitsSize - 1
+	return 1<<c.bits - 1
 }
 
 func (c *extend) Eval(v U64) bool {
 	switch typed := v.(type) {
 	case *extend:
-		return typed.bitsSize == c.bitsSize && typed.sign == c.sign && c.v.Eval(typed.v)
+		return typed.bits == c.bits && typed.sign == c.sign && c.v.Eval(typed.v)
 	case *Variable:
 		if typed.isAny {
 			typed.extracted = c
@@ -82,5 +80,5 @@ func (c *extend) String() string {
 	if c.sign {
 		s = "sign"
 	}
-	return fmt.Sprintf("%s-extend(%s, %d bits)", s, c.v, c.bitsSize)
+	return fmt.Sprintf("%s-extend(%s, %d bits)", s, c.v, c.bits)
 }
