@@ -2,7 +2,6 @@ package irsymcache
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -199,8 +198,13 @@ func (c *Resolver) ObserveExecutable(fid libpf.FileID, elfRef *pfelf.Reference) 
 	t1 := time.Now()
 	err := c.convert(l, fid, elfRef, o)
 	if err != nil {
-		l.WithError(err).WithField("duration", time.Since(t1)).Error("conversion failed")
 		c.cache.Add(fid, erroredMarker)
+		l = l.WithError(err).WithField("duration", time.Since(t1))
+		if !errors.Is(err, syscall.ESRCH) && !errors.Is(err, os.ErrNotExist) {
+			l.Error("conversion failed")
+		} else {
+			l.Debug("conversion failed")
+		}
 	} else {
 		l.WithField("duration", time.Since(t1)).Debug("converted")
 	}
@@ -223,7 +227,7 @@ func (c *Resolver) convert(
 		return nil
 	}
 
-	elf, err := c.getElf(l, elfRef)
+	elf, err := elfRef.GetELF()
 	if err != nil {
 		return err
 	}
@@ -258,29 +262,6 @@ func (c *Resolver) convert(
 	}
 	c.cache.Add(fid, cached)
 	return nil
-}
-
-func (c *Resolver) getElf(l *logrus.Entry, elfRef *pfelf.Reference) (*pfelf.File, error) {
-	elf, err := elfRef.GetELF()
-	if err == nil {
-		return elf, nil
-	}
-	// todo why is this happening? mostly on my firefox sleeping processes
-	if !errors.Is(err, syscall.ESRCH) && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-	p, ok := elfRef.ELFOpener.(process.Process)
-	if !ok {
-		return nil, err
-	}
-	l.WithField("proc", fmt.Sprintf("%+v", p)).Debug("Get mappings")
-	openELF, err := p.OpenELF(elfRef.FileName())
-	if err != nil {
-		l.WithError(err).Error("DEBUG ESRCH open elf")
-		return nil, err
-	}
-
-	return openELF, err
 }
 
 func (c *Resolver) convertAsync(src, dst *os.File) error {
