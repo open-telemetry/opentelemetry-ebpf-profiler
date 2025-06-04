@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"time"
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
@@ -55,7 +54,7 @@ type symbol struct {
 type Module struct {
 	start libpf.Address
 	end   libpf.Address
-	mtime time.Time
+	mtime int64
 
 	buildID string
 	fileID  libpf.FileID
@@ -99,17 +98,6 @@ func (m *Module) stringAt(index uint32) string {
 	return stringutil.ByteSlice2String(m.bytesAt(index))
 }
 
-// getSysfsMtime determine the kernel modules load time.
-func getSysfsMtime(mod string) time.Time {
-	if mod == Kernel {
-		return time.Time{}
-	}
-	if info, err := os.Stat(path.Join("/sys/module", mod)); err == nil {
-		return info.ModTime()
-	}
-	return time.Time{}
-}
-
 // parseSysfsUint reads a kernel module specific attribute from sysfs.
 func parseSysfsUint(mod, knob string) (uint64, error) {
 	text, err := os.ReadFile(path.Join("/sys/module", mod, knob))
@@ -119,20 +107,29 @@ func parseSysfsUint(mod, knob string) (uint64, error) {
 	return strconv.ParseUint(strings.Trim(stringutil.ByteSlice2String(text), "\n"), 0, pointerBits)
 }
 
-// init prepare Module. The module name is recorded at index 0, and the needed
-// metadata (start, end, buildID) are read from sysfs.
-func (m *Module) init(mod string) {
-	// Record module name
-	m.addName(mod)
+// getModuleLoadtime determines the module's load time.
+// Overridable for the test suite.
+var getModuleLoadtime = func(mod string) int64 {
+	if mod == Kernel {
+		return 0
+	}
+	if info, err := os.Stat(path.Join("/sys/module", mod)); err == nil {
+		return info.ModTime().UnixMilli()
+	}
+	return 0
+}
 
+// loadModuleMetadata is the function to load module bounds and fileID data.
+// Overridable for the test suite.
+var loadModuleMetadata = func(m *Module, name string) {
 	// Determine notes location and module size
 	notesFile := "/sys/kernel/notes"
-	if mod != Kernel {
-		notesFile = path.Join("/sys/module", mod, "notes/.note.gnu.build-id")
+	if name != Kernel {
+		notesFile = path.Join("/sys/module", name, "notes/.note.gnu.build-id")
 
-		if addr, err := parseSysfsUint(mod, "sections/.text"); err == nil {
+		if addr, err := parseSysfsUint(name, "sections/.text"); err == nil {
 			m.start = libpf.Address(addr)
-			if size, err := parseSysfsUint(mod, "coresize"); err == nil {
+			if size, err := parseSysfsUint(name, "coresize"); err == nil {
 				m.end = m.start + libpf.Address(size)
 			}
 		}
@@ -148,9 +145,22 @@ func (m *Module) init(mod string) {
 	}
 }
 
+// init records the module name and loads the module metadata.
+func (m *Module) init(name string) {
+	m.addName(name)
+	loadModuleMetadata(m, name)
+}
+
 // finish will finalize the Module. The 'symbols' slice is sorted, and
 // a fallback fileID is synthesized if buildID is not available.
 func (m *Module) finish() {
+	if m.end == ^libpf.Address(0) {
+		// Synthesize the end address at last symbol rounded up to page size
+		// because it could not be reliably determined.
+		lastSymbol := m.start + libpf.Address(m.symbols[len(m.symbols)-1].offset)
+		m.end = (lastSymbol + 4095) & ^libpf.Address(4095)
+	}
+
 	sort.Slice(m.symbols, func(i, j int) bool {
 		return m.symbols[i].offset >= m.symbols[j].offset
 	})
@@ -173,7 +183,7 @@ func (m *Module) finish() {
 		var hash [16]byte
 		fileID, err := libpf.FileIDFromBytes(h.Sum(hash[:0]))
 		if err != nil {
-			panic("calcFallbackModuleID file ID construction is broken")
+			panic("kernel module fallback fileID construction is broken")
 		}
 
 		log.Debugf("Fallback module ID for module %s is '%s' (num syms: %d)",
@@ -346,7 +356,7 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 
 			if _, ok := seen[moduleName]; !ok {
 				mod = s.getModuleByAddress(libpf.Address(address))
-				mtime := getSysfsMtime(moduleName)
+				mtime := getModuleLoadtime(moduleName)
 				if mod != nil && mod.Name() == moduleName && mod.mtime == mtime {
 					mods = append(mods, *mod)
 					curName = mod.Name()
@@ -394,12 +404,6 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 		}
 	}
 	if mod != nil {
-		if mod.end == ^libpf.Address(0) && len(mod.symbols) > 0 {
-			// Synthesize the end address at last symbol rounded up to page size
-			// because it could not be reliably determined.
-			lastSymbol := mod.start + libpf.Address(mod.symbols[len(mod.symbols)-1].offset)
-			mod.end = (lastSymbol + 4095) & ^libpf.Address(4095)
-		}
 		mod.finish()
 	}
 	if noSymbols {

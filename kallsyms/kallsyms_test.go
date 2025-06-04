@@ -24,6 +24,10 @@ func assertSymbol(t *testing.T, s *Symbolizer, pc libpf.Address,
 }
 
 func TestKallSyms(t *testing.T) {
+	// override the metadata loading to avoid mixing data from running system
+	getModuleLoadtime = func(_ string) int64 { return 0 }
+	loadModuleMetadata = func(_ *Module, _ string) {}
+
 	s := NewSymbolizer()
 
 	err := s.updateSymbolsFrom(strings.NewReader(`0000000000000000 t pvh_start_xen
@@ -84,11 +88,16 @@ ffffffffc13cc610 t perf_trace_xfs_attr_list_class	[xfs]
 ffffffffc13cc770 t perf_trace_xfs_perag_class	[xfs]
 ffffffffc13cc8b0 t perf_trace_xfs_inodegc_worker	[xfs]
 ffffffffc13cc9d0 t perf_trace_xfs_fs_class	[xfs]
-ffffffffc13ccb20 t perf_trace_xfs_inodegc_shrinker_scan	[xfs]`))
+ffffffffc13ccb20 t perf_trace_xfs_inodegc_shrinker_scan	[xfs]
+ffffffffc1400000 t foo	[foo]
+ffffffffc13fcb20 t init_xfs_fs	[xfs]`))
 	require.NoError(t, err)
 
 	_, err = s.GetModuleByAddress(0xffffffffc03cc610 + 1)
-	assert.Equal(t, err, ErrNoModule)
+	assert.Equal(t, ErrNoModule, err)
+
+	_, err = s.GetModuleByAddress(0xffffffffc13fcb20)
+	assert.Equal(t, ErrNoModule, err)
 
 	assertSymbol(t, s, 0xffffffffb5000470, "vmlinux", "startup_64_setup_gdt_idt", 0)
 	assertSymbol(t, s, 0xffffffffc13cc610+1, "xfs", "perf_trace_xfs_attr_list_class", 1)
