@@ -232,6 +232,9 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	}, nil
 }
 
+func (r *rubyData) Unload(_ interpreter.EbpfHandler) {
+}
+
 // rubyIseqBodyPC holds a reported address to a iseq_constant_body and Ruby VM program counter
 // combination and is used as key in the cache.
 type rubyIseqBodyPC struct {

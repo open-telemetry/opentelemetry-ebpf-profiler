@@ -12,51 +12,54 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
-const FramesCacheLifetime = 1 * time.Hour
+const (
+	ExecutableCacheLifetime = 1 * time.Hour
+	FramesCacheLifetime     = 1 * time.Hour
+	FrameMapLifetime        = 1 * time.Hour
+)
 
 func SymbolizeNativeFrame(
 	resolver samples.NativeSymbolResolver,
-	frames *lru.SyncedLRU[libpf.FileID,
-		*xsync.RWMutex[map[libpf.AddressOrLineno]samples.SourceInfo]],
+	frames *lru.SyncedLRU[
+		libpf.FileID,
+		*xsync.RWMutex[*lru.LRU[libpf.AddressOrLineno, samples.SourceInfo]],
+	],
 	mappingName string,
 	frameID libpf.FrameID,
 	symbolize func(si samples.SourceInfo),
 ) {
 	fileID := frameID.FileID()
 	addr := frameID.AddressOrLine()
-	LookupFrame := func(frameID libpf.FrameID) (samples.SourceInfo, bool) {
-		known := false
-		si := samples.SourceInfo{}
-		if frameMapLock, exists := frames.GetAndRefresh(frameID.FileID(),
-			FramesCacheLifetime); exists {
-			frameMap := frameMapLock.RLock()
-			defer frameMapLock.RUnlock(&frameMap)
-			si, known = (*frameMap)[frameID.AddressOrLine()]
-		}
-		return si, known
-	}
+
 	frameMetadata := func(symbols []samples.SourceInfoFrame) samples.SourceInfo {
 		si := samples.SourceInfo{Frames: symbols}
 		if frameMapLock, exists := frames.GetAndRefresh(fileID,
 			FramesCacheLifetime); exists {
 			frameMap := frameMapLock.WLock()
 			defer frameMapLock.WUnlock(&frameMap)
-
-			(*frameMap)[addr] = si
+			(*frameMap).AddWithLifetime(addr, si, FramesCacheLifetime)
 			return si
 		}
 
-		v := make(map[libpf.AddressOrLineno]samples.SourceInfo)
-		v[addr] = si
-		mu := xsync.NewRWMutex(v)
+		frameMap, _ := lru.New[libpf.AddressOrLineno, samples.SourceInfo](1024,
+			func(k libpf.AddressOrLineno) uint32 { return uint32(k) })
+		frameMap.SetLifetime(FrameMapLifetime)
+		frameMap.Add(addr, si)
+		mu := xsync.NewRWMutex(frameMap)
 		frames.Add(fileID, &mu)
 		return si
 	}
-	si, known := LookupFrame(frameID)
-	if known {
-		symbolize(si)
-		return
+	if frameMapLock, exists := frames.GetAndRefresh(frameID.FileID(),
+		FramesCacheLifetime); exists {
+		frameMap := frameMapLock.RLock()
+		defer frameMapLock.RUnlock(&frameMap)
+		si, known := (*frameMap).GetAndRefresh(frameID.AddressOrLine(), FrameMapLifetime)
+		if known {
+			symbolize(si)
+			return
+		}
 	}
+
 	var (
 		symbols []samples.SourceInfoFrame
 		err     error

@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 //nolint:deadcode,varcheck
@@ -116,13 +117,13 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 	case regCFA:
 		// Check that RBP is between CFA and stack top
 		if regs.cfa.reg != x86RegRSP || (regs.fp.off < 0 && regs.fp.off >= -regs.cfa.off) {
-			info.FPOpcode = sdtypes.UnwindOpcodeBaseCFA
+			info.FPOpcode = support.UnwindOpcodeBaseCFA
 			info.FPParam = int32(regs.fp.off)
 		}
 	case regExprReg:
 		// expression: RBP+offrbp
 		if r, _, offrbp, _ := splitOff(regs.fp.off); uleb128(r) == x86RegRBP {
-			info.FPOpcode = sdtypes.UnwindOpcodeBaseFP
+			info.FPOpcode = support.UnwindOpcodeBaseFP
 			info.FPParam = int32(offrbp)
 		}
 	}
@@ -130,11 +131,11 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 	// Determine unwind info for stack pointer
 	switch regs.cfa.reg {
 	case x86RegRBP:
-		info.Opcode = sdtypes.UnwindOpcodeBaseFP
+		info.Opcode = support.UnwindOpcodeBaseFP
 		info.Param = int32(regs.cfa.off)
 	case x86RegRSP:
 		if regs.cfa.off != 0 {
-			info.Opcode = sdtypes.UnwindOpcodeBaseSP
+			info.Opcode = support.UnwindOpcodeBaseSP
 			info.Param = int32(regs.cfa.off)
 		}
 	case x86RegRAX, x86RegR9, x86RegR11, x86RegR15:
@@ -142,23 +143,23 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 		// as the CFA directly. These function do not call other code that would
 		// trash the register, so allow these for libcrypto.
 		if regs.cfa.off%8 == 0 {
-			info.Opcode = sdtypes.UnwindOpcodeBaseReg
+			info.Opcode = support.UnwindOpcodeBaseReg
 			info.Param = int32(regs.cfa.reg) + int32(regs.cfa.off)<<1
 		}
 	case regExprPLT:
-		info.Opcode = sdtypes.UnwindOpcodeCommand
-		info.Param = sdtypes.UnwindCommandPLT
+		info.Opcode = support.UnwindOpcodeCommand
+		info.Param = support.UnwindCommandPLT
 	case regExprRegDeref:
 		reg, _, off, off2 := splitOff(regs.cfa.off)
 		if param, ok := sdtypes.PackDerefParam(int32(off), int32(off2)); ok {
 			switch uleb128(reg) {
 			case x86RegRBP:
 				// GCC SSE vectorized functions
-				info.Opcode = sdtypes.UnwindOpcodeBaseFP | sdtypes.UnwindOpcodeFlagDeref
+				info.Opcode = support.UnwindOpcodeBaseFP | support.UnwindOpcodeFlagDeref
 				info.Param = param
 			case x86RegRSP:
 				// OpenSSL assembly using SSE/AVX
-				info.Opcode = sdtypes.UnwindOpcodeBaseSP | sdtypes.UnwindOpcodeFlagDeref
+				info.Opcode = support.UnwindOpcodeBaseSP | support.UnwindOpcodeFlagDeref
 				info.Param = param
 			}
 		}

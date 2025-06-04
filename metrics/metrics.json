@@ -952,6 +952,7 @@
     "id": 130
   },
   {
+    "obsolete": true,
     "description": "Number of cache hits in tracehandler trace cache by BPF hash",
     "type": "counter",
     "name": "KnownTracesHit",
@@ -959,6 +960,7 @@
     "id": 131
   },
   {
+    "obsolete": true,
     "description": "Number of cache misses in tracehandler trace cache by BPF hash",
     "type": "counter",
     "name": "KnownTracesMiss",
@@ -1985,5 +1987,19 @@
     "name": "ErrProcParse",
     "field": "agent.errors.proc_parse",
     "id": 275
+  },
+  {
+    "description": "Number of successfully symbolized Go frames",
+    "type": "counter",
+    "name": "GoSymbolizationSuccess",
+    "field": "agent.go.symbolization.successes",
+    "id": 276
+  },
+  {
+    "description": "Number of Go frames that failed symbolization",
+    "type": "counter",
+    "name": "GoSymbolizationFailure",
+    "field": "agent.go.symbolization.failures",
+    "id": 277
   }
 ]

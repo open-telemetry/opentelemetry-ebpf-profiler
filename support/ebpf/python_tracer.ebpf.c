@@ -25,18 +25,17 @@ bpf_map_def SEC("maps") py_procs = {
 };
 
 // Record a Python frame
-static inline __attribute__((__always_inline__)) ErrorCode
-push_python(Trace *trace, u64 file, u64 line)
+static EBPF_INLINE ErrorCode push_python(Trace *trace, u64 file, u64 line)
 {
   return _push(trace, file, line, FRAME_MARKER_PYTHON);
 }
 
-static inline __attribute__((__always_inline__)) u64 py_encode_lineno(u32 object_id, u32 f_lasti)
+static EBPF_INLINE u64 py_encode_lineno(u32 object_id, u32 f_lasti)
 {
   return (object_id | (((u64)f_lasti) << 32));
 }
 
-static inline __attribute__((__always_inline__)) ErrorCode process_python_frame(
+static EBPF_INLINE ErrorCode process_python_frame(
   PerCPURecord *record,
   const PyProcInfo *pyinfo,
   void **py_frameobjectptr,
@@ -156,7 +155,7 @@ push_frame:
   return ERR_OK;
 }
 
-static inline __attribute__((__always_inline__)) ErrorCode
+static EBPF_INLINE ErrorCode
 walk_python_stack(PerCPURecord *record, const PyProcInfo *pyinfo, int *unwinder)
 {
   void *py_frame  = record->pythonUnwindState.py_frame;
@@ -194,7 +193,7 @@ stop:
 //
 // Python sets the thread_state using pthread_setspecific with the key
 // stored in a global variable autoTLSkey.
-static inline __attribute__((__always_inline__)) ErrorCode get_PyThreadState(
+static EBPF_INLINE ErrorCode get_PyThreadState(
   const PyProcInfo *pyinfo, void *tsd_base, void *autoTLSkeyAddr, void **thread_state)
 {
   int key;
@@ -212,8 +211,7 @@ static inline __attribute__((__always_inline__)) ErrorCode get_PyThreadState(
   return ERR_OK;
 }
 
-static inline __attribute__((__always_inline__)) ErrorCode
-get_PyFrame(const PyProcInfo *pyinfo, void **frame)
+static EBPF_INLINE ErrorCode get_PyFrame(const PyProcInfo *pyinfo, void **frame)
 {
   void *tsd_base;
   if (tsd_get_base(&tsd_base)) {
@@ -281,7 +279,7 @@ get_PyFrame(const PyProcInfo *pyinfo, void **frame)
 // unwind_python is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // Python stack frames to the trace object for the current CPU.
-static inline __attribute__((__always_inline__)) int unwind_python(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)

@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
+	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
@@ -123,6 +124,9 @@ func NewExecutableInfoManager(
 	}
 	if includeTracers.Has(types.DotnetTracer) {
 		interpreterLoaders = append(interpreterLoaders, dotnet.Loader)
+	}
+	if includeTracers.Has(types.GoTracer) {
+		interpreterLoaders = append(interpreterLoaders, golang.Loader)
 	}
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
@@ -268,6 +272,9 @@ func (mgr *ExecutableInfoManager) RemoveOrDecRef(fileID host.FileID) error {
 		// This was the last reference: clean up all associated resources.
 		if err := state.unloadDeltas(fileID, &info.mapRef); err != nil {
 			return fmt.Errorf("failed remove fileID 0x%x from BPF maps: %w", fileID, err)
+		}
+		if info.Data != nil {
+			info.Data.Unload(state.ebpf)
 		}
 		delete(state.executables, fileID)
 	case 0:
@@ -443,7 +450,7 @@ func (state *executableInfoManagerState) loadDeltas(
 // Zero means no merging happened. Only small differences for address and the CFA delta
 // are considered, in order to limit the amount of unique combinations generated.
 func calculateMergeOpcode(delta, nextDelta sdtypes.StackDelta) uint8 {
-	if delta.Info.Opcode == sdtypes.UnwindOpcodeCommand {
+	if delta.Info.Opcode == support.UnwindOpcodeCommand {
 		return 0
 	}
 	addrDiff := nextDelta.Address - delta.Address
@@ -471,7 +478,7 @@ func calculateMergeOpcode(delta, nextDelta sdtypes.StackDelta) uint8 {
 func (state *executableInfoManagerState) getUnwindInfoIndex(
 	info sdtypes.UnwindInfo,
 ) (uint16, error) {
-	if info.Opcode == sdtypes.UnwindOpcodeCommand {
+	if info.Opcode == support.UnwindOpcodeCommand {
 		return uint16(info.Param) | support.DeltaCommandFlag, nil
 	}
 

@@ -26,7 +26,7 @@ jobs:
         uses: ./.github/workflows/env
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@ff0a06e83cb2de871e5a09832bc6a81e7276941f # v3.28.18
         with:
           languages: go
 
@@ -35,7 +35,7 @@ jobs:
           make TARGET_ARCH=${{ matrix.target_arch }}
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@ff0a06e83cb2de871e5a09832bc6a81e7276941f # v3.28.18
         with:
           category: "/language:Go"
         timeout-minutes: 10

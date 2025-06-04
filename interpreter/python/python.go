@@ -6,6 +6,7 @@ package python // import "go.opentelemetry.io/ebpf-profiler/interpreter/python"
 import (
 	"bytes"
 	"debug/elf"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -146,6 +147,9 @@ func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.A
 	}
 
 	return i, nil
+}
+
+func (d *pythonData) Unload(_ interpreter.EbpfHandler) {
 }
 
 // pythonCodeObject contains the information we cache for a corresponding
@@ -652,33 +656,39 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
 // the code to resolve specified argument parameter to the first jump/call.
-func decodeStub(ef *pfelf.File, addrBase libpf.SymbolValue, symbolName libpf.SymbolName,
-	argNumber uint8) libpf.SymbolValue {
-	symbolValue, err := ef.LookupSymbolAddress(symbolName)
+func decodeStub(
+	ef *pfelf.File,
+	memoryBase libpf.SymbolValue,
+	symbolName libpf.SymbolName,
+) (libpf.SymbolValue, error) {
+	codeAddress, err := ef.LookupSymbolAddress(symbolName)
 	if err != nil {
-		return libpf.SymbolValueInvalid
+		return libpf.SymbolValueInvalid, fmt.Errorf("lookup %s failed: %v",
+			symbolName, err)
 	}
 
 	code := make([]byte, 64)
-	if _, err := ef.ReadVirtualMemory(code, int64(symbolValue)); err != nil {
-		return libpf.SymbolValueInvalid
+	if _, err = ef.ReadVirtualMemory(code, int64(codeAddress)); err != nil {
+		return libpf.SymbolValueInvalid, fmt.Errorf("reading %s 0x%x code failed: %v",
+			symbolName, codeAddress, err)
 	}
-
-	value := decodeStubArgumentWrapper(code, argNumber, symbolValue, addrBase)
+	value, err := decodeStubArgumentWrapper(code, codeAddress, memoryBase)
 
 	// Sanity check the value range and alignment
-	if value%4 != 0 {
-		return libpf.SymbolValueInvalid
+	if err != nil || value%4 != 0 {
+		return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x):  %v",
+			symbolName, codeAddress, hex.Dump(code), value, err)
 	}
 	// If base symbol (_PyRuntime) is not provided, accept any found value.
-	if addrBase == 0 && value != 0 {
-		return value
+	if memoryBase == 0 && value != 0 {
+		return value, nil
 	}
 	// Check that the found value is within reasonable distance from the given symbol.
-	if value > addrBase && value < addrBase+4096 {
-		return value
+	if value > memoryBase && value < memoryBase+4096 {
+		return value, nil
 	}
-	return libpf.SymbolValueInvalid
+	return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x)",
+		symbolName, codeAddress, hex.Dump(code), value)
 }
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
@@ -733,9 +743,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	// Calls first: PyThread_tss_get(autoTSSKey)
-	autoTLSKey = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState", 0)
+	autoTLSKey, err = decodeStub(ef, pyruntimeAddr, "PyGILState_GetThisThreadState")
 	if autoTLSKey == libpf.SymbolValueInvalid {
-		return nil, errors.New("unable to resolve autoTLSKey")
+		return nil, fmt.Errorf("unable to resolve autoTLSKey %v", err)
 	}
 	if version >= pythonVer(3, 7) && autoTLSKey%8 == 0 {
 		// On Python 3.7+, the call is to PyThread_tss_get, but can get optimized to

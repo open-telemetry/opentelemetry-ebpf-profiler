@@ -16,13 +16,10 @@ endif
 
 # Valid values are: amd64, arm64.
 TARGET_ARCH ?= $(NATIVE_ARCH)
-
-ifeq ($(NATIVE_ARCH),$(TARGET_ARCH))
-ARCH_PREFIX :=
-else ifeq ($(TARGET_ARCH),arm64)
-ARCH_PREFIX := aarch64-linux-gnu-
+ifeq ($(TARGET_ARCH),arm64)
+ARCH_PREFIX := aarch64
 else ifeq ($(TARGET_ARCH),amd64)
-ARCH_PREFIX := x86_64-linux-gnu-
+ARCH_PREFIX := x86_64
 else
 $(error Unsupported architecture: $(TARGET_ARCH))
 endif
@@ -38,8 +35,8 @@ endif
 export TARGET_ARCH
 export CGO_ENABLED = 1
 export GOARCH = $(TARGET_ARCH)
-export CC = $(ARCH_PREFIX)gcc
-export OBJCOPY = $(ARCH_PREFIX)objcopy
+export CC = $(ARCH_PREFIX)-linux-gnu-gcc
+export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
 
 
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
@@ -52,7 +49,7 @@ REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
 LDFLAGS := -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
 	-X go.opentelemetry.io/ebpf-profiler/vc.revision=$(REVISION) \
 	-X go.opentelemetry.io/ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
-	-extldflags=-static 
+	-extldflags=-static
 
 GO_TAGS := osusergo,netgo
 EBPF_FLAGS :=
@@ -87,18 +84,10 @@ ebpf-profiler: generate ebpf rust-components
 	CGO_LDFLAGS=$(SYMBLIB_PATH) go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 rust-targets:
-ifeq ($(TARGET_ARCH),arm64)
-	rustup target add aarch64-unknown-linux-musl
-else ifeq ($(TARGET_ARCH),amd64)
-	rustup target add x86_64-unknown-linux-musl
-endif
+	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
 
 rust-components: rust-targets
-ifeq ($(TARGET_ARCH),arm64)
-	cargo build --lib --release --target aarch64-unknown-linux-musl
-else ifeq ($(TARGET_ARCH),amd64)
-	cargo build --lib --release --target x86_64-unknown-linux-musl
-endif
+	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target $(ARCH_PREFIX)-unknown-linux-musl
 
 rust-tests: rust-targets
 	cargo test

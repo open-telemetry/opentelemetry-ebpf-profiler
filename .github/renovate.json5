@@ -1,0 +1,32 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    "helpers:pinGitHubActionDigestsToSemver"
+  ],
+  "packageRules": [
+    {
+      "groupName": "Go dependencies",
+      "matchManagers": ["gomod"],
+      "schedule": ["before 8am every weekday"]
+    },
+    {
+      "groupName": "Docker related dependencies",
+      "matchManagers": ["buildpacks", "devcontainer", "docker-compose", "dockerfile"],
+      "schedule": ["before 8am every weekday"]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": ["github-actions"],
+      "schedule": ["before 8am every weekday"]
+    },
+    {
+      "groupName": "Rust dependencies",
+      "matchManagers": ["cargo"],
+      "schedule": ["before 8am every weekday"]
+    }
+  ],
+  "labels": [
+    "dependencies"
+  ]
+}

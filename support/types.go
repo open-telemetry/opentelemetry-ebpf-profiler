@@ -19,6 +19,7 @@ const (
 	FrameMarkerPerl     = 0x7
 	FrameMarkerV8       = 0x8
 	FrameMarkerDotnet   = 0xa
+	FrameMarkerGo       = 0xb
 	FrameMarkerAbort    = 0xff
 )
 
@@ -126,4 +127,23 @@ const (
 	sizeof_DotnetProcInfo = 0x4
 	sizeof_PHPProcInfo    = 0x18
 	sizeof_RubyProcInfo   = 0x20
+)
+
+const (
+	UnwindOpcodeCommand   uint8 = 0x0
+	UnwindOpcodeBaseCFA   uint8 = 0x1
+	UnwindOpcodeBaseSP    uint8 = 0x2
+	UnwindOpcodeBaseFP    uint8 = 0x3
+	UnwindOpcodeBaseLR    uint8 = 0x4
+	UnwindOpcodeBaseReg   uint8 = 0x5
+	UnwindOpcodeFlagDeref uint8 = 0x80
+
+	UnwindCommandInvalid      int32 = 0x0
+	UnwindCommandStop         int32 = 0x1
+	UnwindCommandPLT          int32 = 0x2
+	UnwindCommandSignal       int32 = 0x3
+	UnwindCommandFramePointer int32 = 0x4
+
+	UnwindDerefMask       int32 = 0x7
+	UnwindDerefMultiplier int32 = 0x8
 )

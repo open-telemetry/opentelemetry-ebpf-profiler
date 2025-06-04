@@ -8,6 +8,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,18 +49,18 @@ func genDelta(opcode uint8, cfa, rbp int32) sdtypes.UnwindInfo {
 		Param:  cfa,
 	}
 	if rbp != 0 {
-		res.FPOpcode = sdtypes.UnwindOpcodeBaseCFA
+		res.FPOpcode = support.UnwindOpcodeBaseCFA
 		res.FPParam = -rbp
 	}
 	return res
 }
 
 func deltaRSP(cfa, rbp int32) sdtypes.UnwindInfo {
-	return genDelta(sdtypes.UnwindOpcodeBaseSP, cfa, rbp)
+	return genDelta(support.UnwindOpcodeBaseSP, cfa, rbp)
 }
 
 func deltaRBP(cfa, rbp int32) sdtypes.UnwindInfo {
-	return genDelta(sdtypes.UnwindOpcodeBaseFP, cfa, rbp)
+	return genDelta(support.UnwindOpcodeBaseFP, cfa, rbp)
 }
 
 func TestEhFrame(t *testing.T) {

@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 
+	lru "github.com/elastic/go-freelru"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
@@ -146,17 +148,17 @@ func TestGetDummyMappingIndex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fitm := tt.fileIDToMapping
 			stringMap := tt.stringMap
-			profile := pprofile.NewProfile()
-			mgr := samples.NewAttrTableManager(profile.AttributeTable())
+			dic := pprofile.NewProfilesDictionary()
+			mgr := samples.NewAttrTableManager(dic.AttributeTable())
 
-			i := getDummyMappingIndex(fitm, stringMap, mgr, profile, tt.fileID)
+			i := getDummyMappingIndex(fitm, stringMap, mgr, dic, tt.fileID)
 			assert.Equal(t, tt.wantIndex, i)
 			assert.Equal(t, tt.fileIDToMapping, fitm)
 			assert.Equal(t, tt.wantStringMap, stringMap)
 
-			require.Equal(t, len(tt.wantMappingTable), profile.MappingTable().Len())
+			require.Equal(t, len(tt.wantMappingTable), dic.MappingTable().Len())
 			for i, v := range tt.wantMappingTable {
-				mapp := profile.MappingTable().At(i)
+				mapp := dic.MappingTable().At(i)
 				assert.Equal(t, v, mapp.FilenameStrindex())
 			}
 		})
@@ -255,8 +257,21 @@ func TestFunctionTableOrder(t *testing.T) {
 			d, err := New(100, 100, 100, nil, nil)
 			require.NoError(t, err)
 			for k, v := range tt.frames {
-				frames := xsync.NewRWMutex[map[libpf.AddressOrLineno]samples.SourceInfo](v)
-				d.Frames.Add(k, &frames)
+				frameMap, err := lru.New[libpf.AddressOrLineno, samples.SourceInfo](4096,
+					func(k libpf.AddressOrLineno) uint32 { return uint32(k) })
+				if err != nil {
+					t.Fatalf("Failed to create inner frameMap for %x: %v", k, err)
+					return
+				}
+
+				for a, s := range v {
+					frameMap.Add(a, samples.SourceInfo{
+						FunctionName: s.FunctionName,
+					})
+				}
+
+				mu := xsync.NewRWMutex(frameMap)
+				d.Frames.Add(k, &mu)
 			}
 			for k, v := range tt.executables {
 				d.Executables.Add(k, v)
@@ -271,10 +286,10 @@ func TestFunctionTableOrder(t *testing.T) {
 			if expectedProfiles == 0 {
 				return
 			}
-			p := res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0)
-			require.Equal(t, len(tt.wantFunctionTable), p.FunctionTable().Len())
-			for i := 0; i < p.FunctionTable().Len(); i++ {
-				funcName := p.StringTable().At(int(p.FunctionTable().At(i).NameStrindex()))
+			dic := res.ProfilesDictionary()
+			require.Equal(t, len(tt.wantFunctionTable), dic.FunctionTable().Len())
+			for i := 0; i < dic.FunctionTable().Len(); i++ {
+				funcName := dic.StringTable().At(int(dic.FunctionTable().At(i).NameStrindex()))
 				assert.Equal(t, tt.wantFunctionTable[i], funcName)
 			}
 		})

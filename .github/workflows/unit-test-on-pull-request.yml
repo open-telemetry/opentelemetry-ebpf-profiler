@@ -41,7 +41,7 @@ jobs:
         id: linter-version
         run: (echo -n "version="; make linter-version) >> "$GITHUB_OUTPUT"
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@1481404843c368bc19ca9406f87d6e0fc97bdcfd # v7.0.0
+        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6.5.2
         env:
           GOARCH: ${{ matrix.target-arch }}
           CGO_ENABLED: 1
@@ -79,30 +79,39 @@ jobs:
       - name: Tests
         run: make test TARGET_ARCH=${{ matrix.target_arch }}
 
-  check-ebpf-blobs:
-    name: Check for differences in the eBPF binary blobs
+  check-binary-blobs:
+    name: Check for differences in the eBPF and Rust binary blobs
     runs-on: ubuntu-24.04
-    container: otel/opentelemetry-ebpf-profiler-dev:latest
+    container: otel/opentelemetry-ebpf-profiler-dev:latest@sha256:acce547f366150eb25392e1aff270df430ef6b759baeb4292999116018e70e6e
+    defaults:
+      run:
+        shell: bash --login {0}
     steps:
       - name: Clone code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: 'false'
-      - name: Hash eBPF blobs
+      - name: Hash binary blobs
         run: |
-          sha256sum support/ebpf/tracer.ebpf.release.* > ebpf-blobs.hash
+          sha256sum support/ebpf/tracer.ebpf.release.* > binary-blobs.hash
+          sha256sum target/x86_64-unknown-linux-musl/release/libsymblib_capi.a >> binary-blobs.hash
+          sha256sum target/aarch64-unknown-linux-musl/release/libsymblib_capi.a >> binary-blobs.hash
       - name: Rebuild eBPF blobs
         run: |
           rm support/ebpf/tracer.ebpf.release.*
           make amd64 -C support/ebpf
           make arm64 -C support/ebpf
+      - name: Rebuild Rust blobs
+        run: |
+          rm -rf target/
+          make rust-components TARGET_ARCH=amd64
+          make rust-components TARGET_ARCH=arm64
       - name: Check for differences
         run: |
-          if ! sha256sum --check ebpf-blobs.hash; then
-            echo "Please rebuild and commit the updated eBPF binary blobs."
+          if ! sha256sum --check binary-blobs.hash; then
+            echo "Please rebuild and commit the updated binary blobs."
             exit 1
           fi
-
 
   build-integration-test-binaries:
     name: Build integration test binaries (${{ matrix.target_arch }})
@@ -139,7 +148,6 @@ jobs:
           # https://github.com/cilium/ci-kernels/pkgs/container/ci-kernels/versions?filters%5Bversion_type%5D=tagged
 
           # AMD64
-          - { target_arch: amd64, kernel: 4.19.314 }
           - { target_arch: amd64, kernel: 5.4.276 }
           - { target_arch: amd64, kernel: 5.10.217 }
           - { target_arch: amd64, kernel: 5.15.159 }

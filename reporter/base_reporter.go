@@ -5,6 +5,8 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -42,6 +44,8 @@ type baseReporter struct {
 	hostmetadata *lru.SyncedLRU[string, string]
 }
 
+var errUnknownOrigin = errors.New("unknown trace origin")
+
 func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
 }
@@ -63,13 +67,6 @@ func (b *baseReporter) addHostmetadata(metadataMap map[string]string) {
 	}
 }
 
-// ReportFramesForTrace is a NOP
-func (*baseReporter) ReportFramesForTrace(_ *libpf.Trace) {}
-
-// ReportCountForTrace is a NOP
-func (b *baseReporter) ReportCountForTrace(_ libpf.TraceHash, _ uint16, _ *samples.TraceEventMeta) {
-}
-
 func (b *baseReporter) ExecutableKnown(fileID libpf.FileID) bool {
 	_, known := b.pdata.Executables.GetAndRefresh(fileID, pdata.ExecutableCacheLifetime)
 	return known
@@ -79,9 +76,9 @@ func (b *baseReporter) FrameKnown(frameID libpf.FrameID) bool {
 	known := false
 	if frameMapLock, exists := b.pdata.Frames.GetAndRefresh(frameID.FileID(),
 		pdata.FramesCacheLifetime); exists {
-		frameMap := frameMapLock.RLock()
-		defer frameMapLock.RUnlock(&frameMap)
-		_, known = (*frameMap)[frameID.AddressOrLine()]
+		frameMap := frameMapLock.WLock()
+		defer frameMapLock.WUnlock(&frameMap)
+		_, known = (*frameMap).GetAndRefresh(frameID.AddressOrLine(), pdata.FrameMapLifetime)
 	}
 	return known
 }
@@ -93,13 +90,11 @@ func (b *baseReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 	})
 }
 
-func (*baseReporter) SupportsReportTraceEvent() bool { return true }
-
-func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) {
+func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
 	if meta.Origin != support.TraceOriginSampling && meta.Origin != support.TraceOriginOffCPU {
 		// At the moment only on-CPU and off-CPU traces are reported.
-		log.Errorf("Skip reporting trace for unexpected %d origin", meta.Origin)
-		return
+		return fmt.Errorf("skip reporting trace for %d origin: %w", meta.Origin,
+			errUnknownOrigin)
 	}
 
 	var extraMeta any
@@ -121,6 +116,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		ApmServiceName: meta.APMServiceName,
 		ContainerID:    containerID,
 		Pid:            int64(meta.PID),
+		Tid:            int64(meta.TID),
 		ExtraMeta:      extraMeta,
 	}
 
@@ -131,7 +127,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
 		events.OffTimes = append(events.OffTimes, meta.OffTime)
 		(*traceEventsMap)[meta.Origin][key] = events
-		return
+		return nil
 	}
 
 	(*traceEventsMap)[meta.Origin][key] = &samples.TraceEvents{
@@ -145,6 +141,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		OffTimes:           []int64{meta.OffTime},
 		EnvVars:            meta.EnvVars,
 	}
+	return nil
 }
 
 func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
@@ -160,26 +157,50 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 		frameMap := frameMapLock.WLock()
 		defer frameMapLock.WUnlock(&frameMap)
 
-		(*frameMap)[addressOrLine] = samples.SourceInfo{
+		sourceFile := args.SourceFile
+		if sourceFile == "" {
+			// The new SourceFile may be empty, and we don't want to overwrite
+			// an existing filePath with it.
+			if source, exists := (*frameMap).GetAndRefresh(addressOrLine,
+				pdata.FrameMapLifetime); exists {
+				if len(source.Frames) > 0 {
+					frame := source.Frames[0]
+					sourceFile = frame.FilePath
+				}
+			}
+		}
+
+		(*frameMap).Add(addressOrLine, samples.SourceInfo{
 			Frames: []samples.SourceInfoFrame{
 				{
 					LineNumber:   args.SourceLine,
+					FilePath:     sourceFile,
 					FunctionName: args.FunctionName,
-					FilePath:     args.SourceFile,
 				},
 			},
-		}
+		})
+
 		return
 	}
 
-	v := make(map[libpf.AddressOrLineno]samples.SourceInfo)
-	v[addressOrLine] = samples.SourceInfo{
-		Frames: []samples.SourceInfoFrame{{
-			LineNumber:   args.SourceLine,
-			FunctionName: args.FunctionName,
-			FilePath:     args.SourceFile,
-		}},
+	frameMap, err := lru.New[libpf.AddressOrLineno, samples.SourceInfo](1024,
+		func(k libpf.AddressOrLineno) uint32 { return uint32(k) })
+	if err != nil {
+		log.Errorf("Failed to create inner frameMap for %x: %v", fileID, err)
+		return
 	}
-	mu := xsync.NewRWMutex(v)
+	frameMap.SetLifetime(pdata.FrameMapLifetime)
+
+	frameMap.Add(addressOrLine, samples.SourceInfo{
+		Frames: []samples.SourceInfoFrame{
+			{
+				LineNumber:   args.SourceLine,
+				FilePath:     args.SourceFile,
+				FunctionName: args.FunctionName,
+			},
+		},
+	})
+
+	mu := xsync.NewRWMutex(frameMap)
 	b.pdata.Frames.Add(fileID, &mu)
 }

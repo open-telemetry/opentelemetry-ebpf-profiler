@@ -22,8 +22,8 @@ type Controller struct {
 
 func NewController(cfg *controller.Config,
 	nextConsumer xconsumer.Profiles) (*Controller, error) {
-	intervals := times.New(cfg.MonitorInterval,
-		cfg.ReporterInterval, cfg.ProbabilisticInterval)
+	intervals := times.New(cfg.ReporterInterval,
+		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
 	rep, err := reporter.NewCollector(&reporter.Config{
 		MaxRPCMsgSize:            32 << 20, // 32 MiB

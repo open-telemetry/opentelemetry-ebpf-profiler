@@ -30,22 +30,10 @@ type Reporter interface {
 }
 
 type TraceReporter interface {
-	// ReportFramesForTrace accepts a trace with the corresponding frames
-	// and caches this information before a periodic reporting to the backend.
-	ReportFramesForTrace(trace *libpf.Trace)
-
-	// ReportCountForTrace accepts a hash of a trace with a corresponding count and
-	// caches this information before a periodic reporting to the backend.
-	ReportCountForTrace(traceHash libpf.TraceHash, count uint16, meta *samples.TraceEventMeta)
-
-	// ReportTraceEvent accepts a trace event (trace metadata with frames and counts)
-	// and caches it for reporting to the backend. It returns true if the event was
-	// enqueued for reporting, and false if the event was ignored.
-	ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta)
-
-	// SupportsReportTraceEvent returns true if the reporter supports reporting trace events
-	// via ReportTraceEvent().
-	SupportsReportTraceEvent() bool
+	// ReportTraceEvent accepts a trace event (trace metadata with frames)
+	// and enqueues it for reporting to the backend.
+	// If handling the trace event fails it returns an error.
+	ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error
 }
 
 // ExecutableOpener is a function that attempts to open an executable.

@@ -22,7 +22,7 @@ type Pdata struct {
 	// Frames maps frame information to its source location.
 	Frames *lru.SyncedLRU[
 		libpf.FileID,
-		*xsync.RWMutex[map[libpf.AddressOrLineno]samples.SourceInfo],
+		*xsync.RWMutex[*lru.LRU[libpf.AddressOrLineno, samples.SourceInfo]],
 	]
 
 	// ExtraSampleAttrProd is an optional hook point for adding custom
@@ -44,7 +44,7 @@ func New(samplesPerSecond int, executablesCacheElements, framesCacheElements uin
 	executables.SetLifetime(ExecutableCacheLifetime) // Allow GC to clean stale items.
 
 	frames, err := lru.NewSynced[libpf.FileID,
-		*xsync.RWMutex[map[libpf.AddressOrLineno]samples.SourceInfo]](
+		*xsync.RWMutex[*lru.LRU[libpf.AddressOrLineno, samples.SourceInfo]]](
 		framesCacheElements, libpf.FileID.Hash32)
 	if err != nil {
 		return nil, err

@@ -381,6 +381,9 @@ func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.
 	}, nil
 }
 
+func (d *hotspotData) Unload(_ interpreter.EbpfHandler) {
+}
+
 // locateJvmciVMStructs attempts to heuristically locate the JVMCI VM structs by
 // searching for references to the string `Klass_vtable_start_offset`. In all JVM
 // versions >= 9.0, this corresponds to the first entry in the VM structs:
