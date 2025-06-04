@@ -5,6 +5,7 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 
 import (
 	"crypto/rand"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"time"
@@ -180,7 +181,7 @@ func (p *Pdata) setProfile(
 					frameID := libpf.NewFrameID(fileID, addr)
 					irsymcache.SymbolizeNativeFrame(p.ExtraNativeSymbolResolver, p.Frames,
 						mappingName, frameID, func(si samples.SourceInfo) {
-							symbolizeOtelLocation(si, loc, funcMap)
+							symbolizeOtelLocation(si, loc, funcMap, mappingName, addr)
 						})
 				}
 
@@ -349,7 +350,15 @@ func symbolizeOtelLocation(
 	si samples.SourceInfo,
 	loc pprofile.Location,
 	funcMap map[samples.FuncInfo]int32,
+	mappingName string,
+	addr libpf.AddressOrLineno,
 ) {
+	if len(si.Frames) == 0 {
+		line := loc.Line().AppendEmpty()
+		line.SetFunctionIndex(createFunctionEntry(funcMap,
+			fmt.Sprintf("%s %x", mappingName, addr), ""))
+		return
+	}
 	for _, frame := range si.Frames {
 		line := loc.Line().AppendEmpty()
 		line.SetFunctionIndex(createFunctionEntry(funcMap,
