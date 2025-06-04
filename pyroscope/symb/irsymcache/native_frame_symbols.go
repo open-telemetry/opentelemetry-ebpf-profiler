@@ -52,8 +52,8 @@ func SymbolizeNativeFrame(
 	if frameMapLock, exists := frames.GetAndRefresh(frameID.FileID(),
 		FramesCacheLifetime); exists {
 		frameMap := frameMapLock.RLock()
-		defer frameMapLock.RUnlock(&frameMap)
 		si, known := (*frameMap).GetAndRefresh(frameID.AddressOrLine(), FrameMapLifetime)
+		frameMapLock.RUnlock(&frameMap)
 		if known {
 			symbolize(si)
 			return
