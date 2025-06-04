@@ -60,13 +60,15 @@ func (c *extend) MaxValue() uint64 {
 	return 1<<c.bits - 1
 }
 
-func (c *extend) Match(v Expression) bool {
-	switch typed := v.(type) {
+func (c *extend) Match(pattern Expression) bool {
+	switch typedPattern := pattern.(type) {
 	case *extend:
-		return typed.bits == c.bits && typed.sign == c.sign && c.v.Match(typed.v)
+		return typedPattern.bits == c.bits &&
+			typedPattern.sign == c.sign &&
+			c.v.Match(typedPattern.v)
 	case *Variable:
-		if typed.isAny {
-			typed.extracted = c
+		if typedPattern.isAny {
+			typedPattern.extracted = c
 			return true
 		}
 		return false

@@ -37,16 +37,16 @@ func (v *mem) DebugString() string {
 	return fmt.Sprintf("[%s : %s : %d bits]", v.segment, v.at.DebugString(), v.sizeBytes*8)
 }
 
-func (v *mem) Match(other Expression) bool {
-	switch typed := other.(type) {
+func (v *mem) Match(pattern Expression) bool {
+	switch typedPattern := pattern.(type) {
 	case *mem:
-		if v.segment != typed.segment {
+		if v.segment != typedPattern.segment {
 			return false
 		}
-		return v.at.Match(typed.at)
+		return v.at.Match(typedPattern.at)
 	case *Variable:
-		if typed.isAny {
-			typed.extracted = v
+		if typedPattern.isAny {
+			typedPattern.extracted = v
 			return true
 		}
 		return false

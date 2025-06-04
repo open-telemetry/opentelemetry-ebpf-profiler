@@ -58,15 +58,15 @@ func (v *Variable) DebugString() string {
 	return fmt.Sprintf("@%s", v.name)
 }
 
-func (v *Variable) Match(other Expression) bool {
-	switch typed := other.(type) {
+func (v *Variable) Match(pattern Expression) bool {
+	switch typedPattern := pattern.(type) {
 	case *Variable:
-		if typed.isAny {
-			typed.extracted = v
+		if typedPattern.isAny {
+			typedPattern.extracted = v
 			return true
 		}
-		if v == typed {
-			typed.extracted = v
+		if v == typedPattern {
+			typedPattern.extracted = v
 			return true
 		}
 		return false

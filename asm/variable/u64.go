@@ -14,7 +14,7 @@ type Expression interface {
 	// - For memory references: checks if segments and addresses match
 	// - For extend operations: checks if sizes and inner values match
 	// - For variables: checks if they are the same or if one is marked as "any"
-	Match(v Expression) bool
+	Match(pattern Expression) bool
 	DebugString() string
 	MaxValue() uint64
 }

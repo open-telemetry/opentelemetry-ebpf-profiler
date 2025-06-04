@@ -24,16 +24,17 @@ func newOp(typ opType, operands operands) Expression {
 	return res
 }
 
-func (o *op) Match(other Expression) bool {
-	switch typed := other.(type) {
+func (o *op) Match(pattern Expression) bool {
+	switch typedPattern := pattern.(type) {
 	case *op:
-		if o.typ != typed.typ || len(o.operands) != len(typed.operands) {
+		if o.typ != typedPattern.typ ||
+			len(o.operands) != len(typedPattern.operands) {
 			return false
 		}
-		return o.operands.Eval(typed.operands)
+		return o.operands.Eval(typedPattern.operands)
 	case *Variable:
-		if typed.isAny {
-			typed.extracted = o
+		if typedPattern.isAny {
+			typedPattern.extracted = o
 			return true
 		}
 		return false

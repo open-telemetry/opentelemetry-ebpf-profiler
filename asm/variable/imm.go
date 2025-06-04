@@ -26,20 +26,16 @@ func (v *immediate) MaxValue() uint64 {
 	return v.Value
 }
 
-func (v *immediate) Simplify() Expression {
-	return v
-}
-
 func (v *immediate) DebugString() string {
 	return fmt.Sprintf("0x%x", v.Value)
 }
 
-func (v *immediate) Match(other Expression) bool {
-	switch typed := other.(type) {
+func (v *immediate) Match(pattern Expression) bool {
+	switch typedPattern := pattern.(type) {
 	case *immediate:
-		return v.Value == typed.Value
+		return v.Value == typedPattern.Value
 	case *Variable:
-		typed.extracted = v
+		typedPattern.extracted = v
 		return true
 	default:
 		return false
