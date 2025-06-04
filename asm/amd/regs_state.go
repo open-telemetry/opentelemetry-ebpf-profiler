@@ -222,7 +222,7 @@ func (i *Interpreter) ResetCode(code []byte, address variable.U64) {
 }
 
 func (i *Interpreter) initRegs() {
-	i.Regs.regs[0] = variable.Var("invali reg")
+	i.Regs.regs[0] = variable.Var("invalid reg")
 	i.Regs.regs[regIndex(x86asm.RAX)] = variable.Var("initial RAX")
 	i.Regs.regs[regIndex(x86asm.RCX)] = variable.Var("initial RCX")
 	i.Regs.regs[regIndex(x86asm.RDX)] = variable.Var("initial RDX")
@@ -243,7 +243,7 @@ func (i *Interpreter) initRegs() {
 }
 
 func (i *Interpreter) Loop() (x86asm.Inst, error) {
-	return i.LoopWithBreak(nil)
+	return i.LoopWithBreak(function(x86asm.Inst) { return false })
 }
 
 func (i *Interpreter) LoopWithBreak(breakLoop func(op x86asm.Inst) bool) (x86asm.Inst, error) {
