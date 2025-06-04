@@ -158,8 +158,7 @@ func (r *RegsState) DebugString() string {
 type compare struct {
 	left  variable.Expression
 	right uint64
-	//cmpRIP variable.Expression
-	jmp x86asm.Op
+	jmp   x86asm.Op
 }
 
 type Interpreter struct {
@@ -202,12 +201,8 @@ func (i *Interpreter) WriteMem(at, v variable.Expression) {
 	}
 }
 
-func (i *Interpreter) ReadMem(at variable.Expression, debug bool) (variable.Expression, bool) {
-	if debugPrinting && debug {
-		//fmt.Printf("    [R] %s\n", at.String())
-	}
+func (i *Interpreter) ReadMem(at variable.Expression) (variable.Expression, bool) {
 	for a, v := range i.mem {
-		//fmt.Printf("    |- [R] test %s\n", a.String())
 		if a.Match(at) {
 			return v, true
 		}
@@ -281,13 +276,9 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 
 	i.pc += inst.Len
 	i.Regs.Set(x86asm.RIP, variable.Add(i.CodeAddress, variable.Imm(uint64(i.pc))))
-	bp := false
 	if debugPrinting {
 		isnAddr := variable.Add(i.CodeAddress, variable.Imm(uint64(i.pc-inst.Len)))
 		fmt.Printf("| %6s %s\n", isnAddr.DebugString(), x86asm.IntelSyntax(inst, uint64(i.pc), nil))
-		if "0x1bee05" == isnAddr.DebugString() {
-			bp = true
-		}
 	}
 	if inst.Op == x86asm.RET {
 		return inst, nil
@@ -331,7 +322,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				dataSizeBits := inst.DataSize
 
 				if dataSizeBits == 64 {
-					if m, memOk := i.ReadMem(v, bp); memOk {
+					if m, memOk := i.ReadMem(v); memOk {
 						v = m
 					} else {
 						v = variable.MemS(src.Segment, v, inst.MemBytes)
@@ -359,7 +350,6 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				}
 			}
 		}
-
 	}
 	if inst.Op == x86asm.XOR {
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {

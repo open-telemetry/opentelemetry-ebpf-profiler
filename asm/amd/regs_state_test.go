@@ -138,7 +138,7 @@ func TestMoveSignExtend(t *testing.T) {
 		0x0F, 0xBF, 0x40, 0x04,
 	})
 	i.Loop()
-	//todo assert
+	// todo assert
 }
 
 func TestCompareJumpConstraints(t *testing.T) {
@@ -153,7 +153,7 @@ func TestCompareJumpConstraints(t *testing.T) {
 	r8 := i.Regs.Get(x86asm.R8L)
 	fmt.Println(r8.DebugString())
 	maxValue := i.MaxValue(r8)
-	require.EqualValues(t, maxValue, 0xa5)
+	require.EqualValues(t, 0xa5, maxValue)
 }
 
 func TestDebugPrinting(t *testing.T) {

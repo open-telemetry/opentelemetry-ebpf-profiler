@@ -4,6 +4,7 @@
 package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
 import (
 	"bytes"
+
 	"golang.org/x/arch/x86/x86asm"
 )
 

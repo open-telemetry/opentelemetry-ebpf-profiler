@@ -4,7 +4,6 @@
 package variable // import "go.opentelemetry.io/ebpf-profiler/asm/variable"
 
 import (
-	"fmt"
 	"math"
 )
 
@@ -55,7 +54,7 @@ func (v *Variable) MaxValue() uint64 {
 }
 
 func (v *Variable) DebugString() string {
-	return fmt.Sprintf("@%s", v.name)
+	return "@" + v.name
 }
 
 func (v *Variable) Match(pattern Expression) bool {
