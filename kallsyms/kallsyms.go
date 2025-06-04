@@ -255,13 +255,6 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	s.valid.Store(true)
 	noSymbols := true
 
-	// Set of seen module names. This is to workaround an issue in some kernels
-	// where __init module symbols are listed when the module is already live.
-	// Usually they appear in the kallsyms after symbols from other modules. So
-	// this is used to filter out all symbols after the initial sequence of core
-	// symbols of the module.
-	seen := make(libpf.Set[string])
-
 	// Allocate buffers which should be able to hold the symbol data
 	// from the vmlinux main image (or large modules on reloads) without
 	// resizing based on normal distribution kernel. These are later
@@ -280,6 +273,20 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 		names = make([]byte, 0, 512*1024)
 		syms = make([]symbol, 0, 64*1024)
 	}
+
+	// The kallsyms symbol order is in generic the following:
+	// 1. kernel symbols (from compressed kallsyms)
+	// 2. kernel arch symbols (if any)
+	// 3. module symbols (grouped by module from all loaded modules)
+	// 4. ftrace module symbols (ftrace cloned __init section symbols if needed)
+	// 5. bpf module symbols (dynamically generated from JITted bpf programs)
+	//
+	// We load the per-module symbols from group #3 in one go. We also generally
+	// do not care about the symbols in group #4 as they are typically __init
+	// symbols after they have been freed. So we just ignore them. This is done
+	// with the 'seen' set to avoid loading symbols for a module if has been
+	// already processed.
+	seen := make(libpf.Set[string])
 
 	for scanner := bufio.NewScanner(r); scanner.Scan(); {
 		// Avoid heap allocation by not using scanner.Text().
