@@ -243,7 +243,7 @@ func (i *Interpreter) initRegs() {
 }
 
 func (i *Interpreter) Loop() (x86asm.Inst, error) {
-	return i.LoopWithBreak(function(x86asm.Inst) { return false })
+	return i.LoopWithBreak(func(x86asm.Inst) bool { return false })
 }
 
 func (i *Interpreter) LoopWithBreak(breakLoop func(op x86asm.Inst) bool) (x86asm.Inst, error) {
@@ -253,7 +253,7 @@ func (i *Interpreter) LoopWithBreak(breakLoop func(op x86asm.Inst) bool) (x86asm
 		if err != nil {
 			return prev, err
 		}
-		if breakLoop != nil && breakLoop(op) {
+		if breakLoop(op) {
 			return op, nil
 		}
 		prev = op
