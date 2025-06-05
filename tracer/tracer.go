@@ -552,11 +552,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	adaption["stack_delta_page_to_info"] =
 		1 << uint32(stackDeltaPageToInfoSize+cfg.MapScaleFactor)
 
-	// To not lose too many scheduling events but also not oversize sched_times,
-	// calculate a size based on an assumed upper bound of scheduler events per
-	// second (1000hz) multiplied by an average time a task remains off CPU (3s),
-	// scaled by the probability of capturing a trace.
-	adaption["sched_times"] = (4096 * cfg.OffCPUThreshold) / support.OffCPUThresholdMax
+	adaption["sched_times"] = schedTimesSize(cfg.OffCPUThreshold)
 
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
 		mapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)
@@ -580,6 +576,25 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	}
 
 	return nil
+}
+
+// schedTimesSize calculates the size of the sched_times map based on the
+// configured off-cpu threshold.
+// To not lose too many scheduling events but also not oversize sched_times,
+// calculate a size based on an assumed upper bound of scheduler events per
+// second (1000hz) multiplied by an average time a task remains off CPU (3s),
+// scaled by the probability of capturing a trace.
+func schedTimesSize(threshold uint32) uint32 {
+	size := uint32((4096 * uint64(threshold)) / math.MaxUint32)
+	if size < 16 {
+		// Guarantee a minimal size of 16.
+		return 16
+	}
+	if size > 4096 {
+		// Guarantee a maximum size of 4096.
+		return 4096
+	}
+	return size
 }
 
 // loadPerfUnwinders loads all perf eBPF Programs and their tail call targets.
