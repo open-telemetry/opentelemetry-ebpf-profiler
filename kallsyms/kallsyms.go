@@ -288,14 +288,24 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	// 1. kernel symbols (from compressed kallsyms)
 	// 2. kernel arch symbols (if any)
 	// 3. module symbols (grouped by module from all loaded modules)
-	// 4. ftrace module symbols (ftrace cloned __init section symbols if needed)
+	// 4. module symbols ftrace cloned from __init section
+	//    (all __init symbols ftrace traced during module load)
 	// 5. bpf module symbols (dynamically generated from JITted bpf programs)
 	//
 	// We load the per-module symbols from group #3 in one go. We also generally
-	// do not care about the symbols in group #4 as they are typically __init
-	// symbols after they have been freed. So we just ignore them. This is done
-	// with the 'seen' set to avoid loading symbols for a module if has been
-	// already processed.
+	// do not care about the symbols in group #4 as they are only the __init
+	// symbols after they have been freed. Trying to use these symbolis is
+	// problematic:
+	// 1. the symbol data is normally not present at all
+	// 2. they are used during init only (getting traces with them is unlikely)
+	// 3. after the __init data is freed, the same VMA range can be reused for
+	//    another newly loaded module. deciding afterwards if it was the now
+	//    released __init symbol or the newly loaded module code is non-trivial.
+	// 4. loading these symbols means we would have potentially overlapping symbols.
+	//
+	// For the above reasons, it is better to just ignore these ftrace cloned
+	// __init symbols. This is done with the 'seen' set to avoid loading symbols
+	// for a module if has been already processed.
 	seen := make(libpf.Set[string])
 
 	for scanner := bufio.NewScanner(r); scanner.Scan(); {
