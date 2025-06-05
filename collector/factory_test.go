@@ -36,10 +36,11 @@ func TestCreateProfilesReceiver(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-
-			_, err := createProfilesReceiver(
+			typ, err := component.NewType("ProfilesReceiver")
+			require.NoError(t, err)
+			_, err = createProfilesReceiver(
 				context.Background(),
-				receivertest.NewNopSettings(),
+				receivertest.NewNopSettings(typ),
 				tt.config,
 				consumertest.NewNop(),
 			)
