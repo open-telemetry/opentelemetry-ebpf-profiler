@@ -1,41 +1,34 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      # simplify code: gofmt with `-s` option, true by default
+      simplify: true
+    goimports:
+      # put imports beginning with prefix after 3rd-party packages;
+      # it's a comma-separated list of prefixes
+      local-prefixes:
+        - github.com/open-telemetry/opentelemetry-ebpf-profiler
+
 run:
   timeout: 10m
   build-tags:
     - integration
     - linux
 
-issues:
-  exclude-dirs:
-    - artifacts
-    - build-targets
-    - design
-    - docker-images
-    - docs
-    - etc
-    - experiments
-    - infrastructure
-    - legal
-    - libpf-rs
-    - mocks
-    - pf-code-indexing-service/cibackend/gomock_*
-    - pf-debug-metadata-service/dmsbackend/gomock_*
-    - pf-host-agent/support/ci-kernels
-    - pf-storage-backend/storagebackend/gomock_*
-    - scratch
-    - systemtests/benchmarks/_outdata
-    - target
-    - virt-tests
-    - vm-images
-
-  # Excluding configuration per-path, per-linter, per-text and per-source
-  exclude-rules:
-    # Don't complain about integer overflows
-    - text: "G115:"
-      linters:
-        - gosec
+#issues:
+#  exclude-dirs:
+#    - design-docs
+#    - doc
+#    - legal
+#    - target
 
 linters:
-  enable-all: true
+  default: all
   disable:
     # Disabled because of
     #   - too many non-sensical warnings
@@ -50,13 +43,14 @@ linters:
     - dupword
     - durationcheck # might be worth fixing
     - err113
+    - errcheck
     - errorlint # might be worth fixing
     - exhaustive
     - exhaustruct
     - forbidigo
     - forcetypeassert # might be worth fixing
     - funlen
-    - gci # might be worth fixing
+    - funcorder
     - gochecknoglobals
     - gochecknoinits
     - gocognit
@@ -64,8 +58,8 @@ linters:
     - gocyclo
     - godot
     - godox # complains about TODO etc
-    - gofumpt
     - gomoddirectives
+    - gosmopolitan
     - inamedparam
     - interfacebloat
     - ireturn
@@ -81,6 +75,7 @@ linters:
     - paralleltest
     - protogetter
     - sqlclosecheck # might be worth fixing
+    - staticcheck
     - tagalign
     - tagliatelle
     - testableexamples # might be worth fixing
@@ -94,45 +89,59 @@ linters:
     # we don't want to change code to Go 1.22+ yet
     - intrange
     - copyloopvar
-    - tenv
 
-linters-settings:
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport # https://github.com/go-critic/go-critic/issues/845
-      - ifElseChain
-      - whyNoLint
-      - sloppyReassign
-      - uncheckedInlineErr # Experimental rule with high false positive rate.
-  gocyclo:
-    min-complexity: 15
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment
-    settings:
-      printf: # analyzer name, run `go tool vet help` to see all analyzers
-        funcs: # run `go tool vet help printf` to see available settings for `printf` analyzer
-          - debug,debugf,debugln
-          - error,errorf,errorln
-          - fatal,fatalf,fataln
-          - info,infof,infoln
-          - log,logf,logln
-          - warn,warnf,warnln
-          - print,printf,println,sprint,sprintf,sprintln,fprint,fprintf,fprintln
-  lll:
-    line-length: 100
-    tab-width: 4
-  misspell:
-    locale: US
-    ignore-words:
-      - rela
+  settings:
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - dupImport # https://github.com/go-critic/go-critic/issues/845
+        - ifElseChain
+        - whyNoLint
+        - sloppyReassign
+        - uncheckedInlineErr # experimental rule with high false positive rate.
+        - importShadow # shadow of imported package
+    gocyclo:
+      min-complexity: 15
+    gosec:
+      excludes:
+        - G103 # unsafe calls should be audited
+        - G104 # unhandled errors
+        - G115 # integer overflow
+        - G204 # subprocess launched with variable
+        - G301 # directory permissions
+        - G302 # file permissions
+        - G304 # potential file inclusion via variable
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - unsafeptr
+      settings:
+        printf: # analyzer name, run `go tool vet help` to see all analyzers
+          funcs: # run `go tool vet help printf` to see available settings for `printf` analyzer
+            - debug,debugf,debugln
+            - error,errorf,errorln
+            - fatal,fatalf,fataln
+            - info,infof,infoln
+            - log,logf,logln
+            - warn,warnf,warnln
+            - print,printf,println,sprint,sprintf,sprintln,fprint,fprintf,fprintln
+    lll:
+      line-length: 100
+      tab-width: 4
+    misspell:
+      locale: US
+      ignore-rules:
+        - rela
+    revive:
+      rules:
+        - name: unexported-naming
+          disabled: true

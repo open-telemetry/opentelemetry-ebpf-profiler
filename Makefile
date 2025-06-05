@@ -83,11 +83,12 @@ rust-components: rust-targets
 rust-tests: rust-targets
 	cargo test
 
-GOLANGCI_LINT_VERSION = "v1.64.5"
+GOLANGCI_LINT_VERSION = "v2.1.6"
 lint: generate vanity-import-check
 	$(MAKE) lint -C support/ebpf
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
+	docker run --rm -t -v $$(pwd):/app -w /app golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) golangci-lint version
+	docker run --rm -t -v $$(pwd):/app -w /app golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) golangci-lint config verify
+	docker run --rm -t -v $$(pwd):/app -w /app golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) golangci-lint run
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf
