@@ -236,7 +236,6 @@ func dumpCore(pid uint64, noModuleBundling bool) (string, error) {
 	}
 
 	// `gcore` only accepts a path-prefix, not an exact path.
-	//nolint:gosec
 	err := exec.Command("gcore", "-o", gcorePathPrefix, strconv.FormatUint(pid, 10)).Run()
 	if err != nil {
 		return "", fmt.Errorf("gcore failed: %w", err)
