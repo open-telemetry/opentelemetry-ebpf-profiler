@@ -11,6 +11,7 @@ import (
 	cebpf "github.com/cilium/ebpf"
 	log "github.com/sirupsen/logrus"
 
+	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
 )
@@ -35,15 +36,15 @@ import (
 // kernel struct. This offset varies depending on kernel configuration, so we have to learn
 // it dynamically at runtime.
 func loadTPBaseOffset(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kernelSymbols *libpf.SymbolMap) (uint64, error) {
+	kmod *kallsyms.Module) (uint64, error) {
 	var tpbaseOffset uint32
 	for _, analyzer := range tpbase.GetAnalyzers() {
-		sym, err := kernelSymbols.LookupSymbol(libpf.SymbolName(analyzer.FunctionName))
+		sym, err := kmod.LookupSymbol(analyzer.FunctionName)
 		if err != nil {
 			continue
 		}
 
-		code, err := loadKernelCode(coll, maps, sym.Address)
+		code, err := loadKernelCode(coll, maps, libpf.SymbolValue(sym))
 		if err != nil {
 			return 0, err
 		}
