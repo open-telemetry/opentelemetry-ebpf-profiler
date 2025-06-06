@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"log"
@@ -33,33 +34,49 @@ type profilesServer struct {
 	pb.UnimplementedProfilesServiceServer
 }
 
-func (p *profilesServer) Export(context.Context, *pb.ExportProfilesServiceRequest) (
+func (p *profilesServer) Export(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
 	*pb.ExportProfilesServiceResponse, error) {
-	log.Printf("Export")
+
+	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
+	id := binary.BigEndian.Uint32(container.ProfileId)
+	log.Printf("Export[%d]", id)
+
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 
-func (p *profilesServer) ExportZeroTime(context.Context, *pb.ExportProfilesServiceRequest) (
+func (p *profilesServer) ExportZeroTime(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
 	*pb.ExportProfilesServiceResponse, error) {
-	log.Printf("ExportZeroTime")
+
+	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
+	id := binary.BigEndian.Uint32(container.ProfileId)
+	log.Printf("ExportZeroTime[%d]", id)
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 
-func (p *profilesServer) ExportDeltaTime(context.Context, *pb.ExportProfilesServiceRequest) (
+func (p *profilesServer) ExportDeltaTime(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
 	*pb.ExportProfilesServiceResponse, error) {
-	log.Printf("ExportDeltaTime")
+
+	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
+	id := binary.BigEndian.Uint32(container.ProfileId)
+	log.Printf("ExportDeltaTime[%d]", id)
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 
-func (p *profilesServer) ExportDedup(context.Context, *pb.ExportProfilesServiceRequest) (
+func (p *profilesServer) ExportDedup(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
 	*pb.ExportProfilesServiceResponse, error) {
-	log.Printf("ExportDedup")
+
+	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
+	id := binary.BigEndian.Uint32(container.ProfileId)
+	log.Printf("ExportDedup[%d]", id)
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 
-func (p *profilesServer) ExportStacks(context.Context, *pb.ExportProfilesServiceRequest) (
+func (p *profilesServer) ExportStacks(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
 	*pb.ExportProfilesServiceResponse, error) {
-	log.Printf("ExportStacks")
+
+	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
+	id := binary.BigEndian.Uint32(container.ProfileId)
+	log.Printf("ExportStacks[%d]", id)
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 

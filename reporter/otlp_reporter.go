@@ -8,6 +8,7 @@ package reporter
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"sort"
 	"strings"
@@ -105,6 +106,9 @@ type OTLPReporter struct {
 
 	// frames maps frame information to its source location.
 	frames *lru.SyncedLRU[libpf.FileID, map[libpf.AddressOrLineno]sourceInfo]
+
+	// RPC count
+	count uint
 }
 
 // hashString is a helper function for LRUs that use string as a key.
@@ -430,6 +434,11 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 
 	gzipOption := grpc.UseCompressor(gzip.Name)
 
+	profileId := make([]byte, 4)
+	binary.BigEndian.PutUint32(profileId, uint32(r.count))
+
+	req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0].ProfileId = profileId
+
 	// Base RPC (no proto changes)
 	_, err := r.client.Export(ctx, &req, gzipOption)
 
@@ -460,6 +469,7 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	_, err = r.client.ExportStacks(ctx, &req, gzipOption)
 
 	r.LogMetrics()
+	r.count += 1
 	return err
 }
 
