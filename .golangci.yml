@@ -20,13 +20,6 @@ run:
     - integration
     - linux
 
-#issues:
-#  exclude-dirs:
-#    - design-docs
-#    - doc
-#    - legal
-#    - target
-
 linters:
   default: all
   disable:
@@ -89,6 +82,13 @@ linters:
     # we don't want to change code to Go 1.22+ yet
     - intrange
     - copyloopvar
+
+  exclusions:
+    paths:
+      - design-docs
+      - doc
+      - legal
+      - target
 
   settings:
     goconst:
