@@ -36,6 +36,7 @@ service ProfilesService {
   rpc Export(ExportProfilesServiceRequest) returns (ExportProfilesServiceResponse) {}
   rpc ExportZeroTime(ExportProfilesServiceRequest) returns (ExportProfilesServiceResponse) {}
   rpc ExportDeltaTime(ExportProfilesServiceRequest) returns (ExportProfilesServiceResponse) {}
+  rpc ExportDedup(ExportProfilesServiceRequest) returns (ExportProfilesServiceResponse) {}
   rpc ExportStacks(ExportProfilesServiceRequest) returns (ExportProfilesServiceResponse) {}
 }
 
