@@ -113,7 +113,6 @@ linters:
     gosec:
       excludes:
         - G103 # unsafe calls should be audited
-        - G104 # unhandled errors
         - G115 # integer overflow
         - G204 # subprocess launched with variable
         - G301 # directory permissions

@@ -27,7 +27,7 @@ func writeExecutable(exeContents string) (string, error) {
 	} else if err != nil {
 		return "", fmt.Errorf("failed to write file: %v", err)
 	}
-	exeFile.Close()
+	_ = exeFile.Close()
 
 	return exeFile.Name(), nil
 }
