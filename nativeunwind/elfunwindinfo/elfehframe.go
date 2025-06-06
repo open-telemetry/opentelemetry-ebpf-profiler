@@ -96,7 +96,6 @@ const (
 // The subset needed for normal .eh_frame handling
 type expressionOpcode uint8
 
-//nolint:deadcode,varcheck
 const (
 	opDeref      expressionOpcode = 0x06
 	opConstU     expressionOpcode = 0x10
@@ -123,7 +122,6 @@ type dwarfExpression struct {
 // https://refspecs.linuxfoundation.org/LSB_5.0.0/LSB-Core-generic/LSB-Core-generic/dwarfext.html
 type encoding uint8
 
-//nolint:deadcode,varcheck
 const (
 	encFormatNative  encoding = 0x00
 	encFormatLeb128  encoding = 0x01

@@ -94,7 +94,7 @@ func (ee *elfExtractor) extractDebugDeltas() error {
 	debugELF, _ := ee.file.OpenDebugLink(ee.ref.FileName(), ee.ref)
 	if debugELF != nil {
 		err = ee.parseDebugFrame(debugELF)
-		debugELF.Close()
+		_ = debugELF.Close()
 	}
 	return err
 }

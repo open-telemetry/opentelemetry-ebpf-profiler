@@ -52,7 +52,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 )
 
-//nolint:golint,stylecheck,revive
 const (
 	// Scalar Value types (SVt)
 	// https://github.com/Perl/perl5/blob/v5.32.0/sv.h#L132-L166

@@ -24,7 +24,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-//nolint:golint,stylecheck,revive
 const (
 	// zend_function.type definitions from PHP sources
 	ZEND_USER_FUNCTION = (1 << 1)

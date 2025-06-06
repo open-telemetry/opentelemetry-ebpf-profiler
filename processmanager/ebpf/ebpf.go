@@ -42,8 +42,6 @@ const (
 )
 
 // EbpfHandler provides the functionality to interact with eBPF maps.
-//
-//nolint:revive
 type EbpfHandler interface {
 	// Embed interpreter.EbpfHandler as subset of this interface.
 	interpreter.EbpfHandler
@@ -793,8 +791,6 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid libpf.PID, prefixes 
 // LookupPidPageInformation returns the fileID and bias for a given pid and page combination from
 // the eBPF map pid_page_to_mapping_info.
 // So far this function is used only in tests.
-//
-//nolint:deadcode
 func (impl *ebpfMapsImpl) LookupPidPageInformation(pid uint32, page uint64) (host.FileID,
 	uint64, error) {
 	// pid_page_to_mapping_info is a LPM trie and expects the pid and page

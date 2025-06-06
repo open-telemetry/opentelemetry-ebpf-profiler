@@ -37,18 +37,14 @@ jobs:
       - name: Get linter version
         id: linter-version
         run: (echo -n "version="; make linter-version) >> "$GITHUB_OUTPUT"
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@55c2c1448f86e01eaae002a5a3a9624417608d84 # v6.5.2
+      - name: linter
         env:
           GOARCH: ${{ matrix.target-arch }}
           CGO_ENABLED: 1
-        with:
-          version: ${{ steps.linter-version.outputs.version }}
-      - name: Lint eBPF code
         run: |
           sudo apt update
           sudo apt install -y clang-format-17
-          make lint -C support/ebpf
+          make lint
 
   test:
     name: Test (${{ matrix.target_arch }})

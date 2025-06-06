@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-//nolint:deadcode,varcheck
 const (
 	// x86_64 abi (https://refspecs.linuxbase.org/elf/x86_64-abi-0.99.pdf, page 57)
 	x86RegRAX uleb128 = 0

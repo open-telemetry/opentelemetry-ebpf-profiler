@@ -46,8 +46,6 @@ const (
 )
 
 // pclntabHeader is the Golang pclntab header structure
-//
-//nolint:structcheck
 type pclntabHeader struct {
 	// magic is one of the magicGo1_xx constants identifying the version
 	magic uint32
@@ -63,8 +61,6 @@ type pclntabHeader struct {
 
 // pclntabHeader116 is the Golang pclntab header structure starting Go 1.16
 // structural definition of this is found in go/src/runtime/symtab.go as pcHeader
-//
-//nolint:structcheck
 type pclntabHeader116 struct {
 	pclntabHeader
 	nfiles         uint
@@ -77,8 +73,6 @@ type pclntabHeader116 struct {
 
 // pclntabHeader118 is the Golang pclntab header structure starting Go 1.18
 // structural definition of this is found in go/src/runtime/symtab.go as pcHeader
-//
-//nolint:structcheck
 type pclntabHeader118 struct {
 	pclntabHeader
 	nfiles         uint
@@ -91,16 +85,12 @@ type pclntabHeader118 struct {
 }
 
 // pclntabFuncMap is the Golang function symbol table map entry
-//
-//nolint:structcheck
 type pclntabFuncMap struct {
 	pc      uint64
 	funcOff uint64
 }
 
 // pclntabFunc is the Golang function definition (struct _func in the spec) as before Go 1.18.
-//
-//nolint:structcheck
 type pclntabFunc struct {
 	startPc                      uint64
 	nameOff, argsSize, frameSize int32
@@ -111,8 +101,6 @@ type pclntabFunc struct {
 // pclntabFunc118 is the Golang function definition (struct _func in the spec)
 // starting with Go 1.18.
 // see: go/src/runtime/runtime2.go (struct _func)
-//
-//nolint:structcheck
 type pclntabFunc118 struct {
 	entryoff                     uint32 // start pc, as offset from pcHeader.textStart
 	nameOff, argsSize, frameSize int32

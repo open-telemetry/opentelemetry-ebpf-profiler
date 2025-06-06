@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-//nolint:deadcode,varcheck
 const (
 	// Aarch64 ABI
 	armRegX0  uleb128 = 0
