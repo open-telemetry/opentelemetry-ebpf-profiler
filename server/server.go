@@ -10,8 +10,11 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"reflect"
 
 	pb "github.com/elastic/otel-profiling-agent/proto/experiments/opentelemetry/proto/collector/profiles/v1"
+	"github.com/elastic/otel-profiling-agent/proto/experiments/opentelemetry/proto/profiles/v1/alternatives/pprofextended"
+	//"github.com/google/go-cmp/cmp"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	_ "google.golang.org/grpc/encoding/gzip"
@@ -24,6 +27,8 @@ const (
 
 	exitSuccess exitCode = 0
 	exitFailure exitCode = 1
+
+	RPCNum = 5
 )
 
 var (
@@ -32,6 +37,126 @@ var (
 
 type profilesServer struct {
 	pb.UnimplementedProfilesServiceServer
+	batches chan batch
+}
+
+type Line struct { // Line
+	LineNo int64
+	Column int64
+
+	// Function
+	Name       string
+	Filename   string
+	SystemName string
+	StartLine  int64
+}
+
+type Frame struct { // Location
+	Address   uint64
+	FrameType string
+	Lines     []Line
+
+	// Mapping
+	MemoryStart uint64
+	MemoryLimit uint64
+	FileOffset  uint64
+	Filename    string
+	BuildID     string
+}
+
+type stackTrace struct { // Sample
+	Frames []Frame
+}
+
+type batch struct {
+	id      uint32
+	rpcName string
+	traces  []stackTrace
+}
+
+func extractFrame(profile *pprofextended.Profile, locIdx int64) Frame {
+	stringTable := profile.StringTable
+	pLoc := profile.Location[locIdx]
+	pMap := profile.Mapping[pLoc.MappingIndex]
+	frm := Frame{
+		Address:     pLoc.Address,
+		FrameType:   stringTable[pLoc.TypeIndex],
+		MemoryStart: pMap.MemoryStart,
+		MemoryLimit: pMap.MemoryLimit,
+		FileOffset:  pMap.FileOffset,
+		Filename:    stringTable[pMap.Filename],
+		BuildID:     stringTable[pMap.BuildId],
+	}
+
+	for _, pLine := range pLoc.Line {
+		pFunc := profile.Function[pLine.FunctionIndex]
+		lin := Line{
+			LineNo:     pLine.Line,
+			Column:     pLine.Column,
+			Name:       stringTable[pFunc.Name],
+			Filename:   stringTable[pFunc.Filename],
+			SystemName: stringTable[pFunc.SystemName],
+			StartLine:  pFunc.StartLine,
+		}
+
+		frm.Lines = append(frm.Lines, lin)
+	}
+	return frm
+}
+
+// Extract and return all stack traces from a pprofextended.Profile
+func extractStackTraces(profile *pprofextended.Profile) []stackTrace {
+	traces := make([]stackTrace, 0, len(profile.Sample))
+
+	for _, sample := range profile.Sample {
+		stackTrace := stackTrace{}
+
+		if len(profile.StackTable) == 0 {
+			locStart := sample.LocationsStartIndex
+			locEnd := locStart + sample.LocationsLength
+			for locIdx := locStart; locIdx < locEnd; locIdx++ {
+				frm := extractFrame(profile, profile.LocationIndices[locIdx])
+				stackTrace.Frames = append(stackTrace.Frames, frm)
+			}
+		} else {
+			// Alternate stack representation
+			stack := profile.StackTable[sample.StackIndex]
+			for _, locIdx := range stack.LocationIndices {
+				frm := extractFrame(profile, int64(locIdx))
+				stackTrace.Frames = append(stackTrace.Frames, frm)
+			}
+		}
+		traces = append(traces, stackTrace)
+	}
+	return traces
+}
+
+func verify(ctx context.Context, in <-chan batch) {
+	batches := make(map[uint32][]batch)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case b := <-in:
+			batches[b.id] = append(batches[b.id], b)
+
+			if len(batches[b.id]) == RPCNum {
+				for i := 0; i < RPCNum-1; i++ {
+					b1 := batches[b.id][i]
+					b2 := batches[b.id][i+1]
+
+					if !reflect.DeepEqual(b1.traces, b2.traces) {
+						//if diff := cmp.Diff(b1.traces, b2.traces); diff != "" {
+
+						//log.Fatalf("Mismatch: %v %v %v", b1.rpcName, b2.rpcName, diff)
+						log.Printf("ERROR: %v != %v", b1.rpcName, b2.rpcName)
+					}
+				}
+				delete(batches, b.id)
+			}
+		}
+	}
 }
 
 func (p *profilesServer) Export(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
@@ -40,6 +165,12 @@ func (p *profilesServer) Export(ctx context.Context, req *pb.ExportProfilesServi
 	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
 	id := binary.BigEndian.Uint32(container.ProfileId)
 	log.Printf("Export[%d]", id)
+
+	p.batches <- batch{
+		id:      id,
+		rpcName: "Export",
+		traces:  extractStackTraces(container.Profile),
+	}
 
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
@@ -50,6 +181,13 @@ func (p *profilesServer) ExportZeroTime(ctx context.Context, req *pb.ExportProfi
 	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
 	id := binary.BigEndian.Uint32(container.ProfileId)
 	log.Printf("ExportZeroTime[%d]", id)
+
+	p.batches <- batch{
+		id:      id,
+		rpcName: "ExportZeroTime",
+		traces:  extractStackTraces(container.Profile),
+	}
+
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 
@@ -59,6 +197,13 @@ func (p *profilesServer) ExportDeltaTime(ctx context.Context, req *pb.ExportProf
 	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
 	id := binary.BigEndian.Uint32(container.ProfileId)
 	log.Printf("ExportDeltaTime[%d]", id)
+
+	p.batches <- batch{
+		id:      id,
+		rpcName: "ExportDeltaTime",
+		traces:  extractStackTraces(container.Profile),
+	}
+
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 
@@ -68,6 +213,13 @@ func (p *profilesServer) ExportDedup(ctx context.Context, req *pb.ExportProfiles
 	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
 	id := binary.BigEndian.Uint32(container.ProfileId)
 	log.Printf("ExportDedup[%d]", id)
+
+	p.batches <- batch{
+		id:      id,
+		rpcName: "ExportDedup",
+		traces:  extractStackTraces(container.Profile),
+	}
+
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 
@@ -77,11 +229,18 @@ func (p *profilesServer) ExportStacks(ctx context.Context, req *pb.ExportProfile
 	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
 	id := binary.BigEndian.Uint32(container.ProfileId)
 	log.Printf("ExportStacks[%d]", id)
+
+	p.batches <- batch{
+		id:      id,
+		rpcName: "ExportStacks",
+		traces:  extractStackTraces(container.Profile),
+	}
+
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 
 func newServer() *profilesServer {
-	p := &profilesServer{}
+	p := &profilesServer{batches: make(chan batch)}
 	return p
 }
 
@@ -104,11 +263,15 @@ func mainWithExitCode() exitCode {
 		grpc.MaxSendMsgSize(RPCMaxMsgSize),
 	}
 	grpcServer := grpc.NewServer(opts...)
-	pb.RegisterProfilesServiceServer(grpcServer, newServer())
+	pbServer := newServer()
+
+	pb.RegisterProfilesServiceServer(grpcServer, pbServer)
 
 	ctx, stop := signal.NotifyContext(context.Background(),
 		unix.SIGINT, unix.SIGTERM, unix.SIGABRT)
 	defer stop()
+
+	go verify(ctx, pbServer.batches)
 
 	go func() {
 		<-ctx.Done()
