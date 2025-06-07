@@ -199,6 +199,9 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	}, nil
 }
 
+func (d *beamData) Unload(_ interpreter.EbpfHandler) {
+}
+
 func (i *beamInstance) SynchronizeMappingsFromBEAMRanges(ebpf interpreter.EbpfHandler,
 	_ reporter.SymbolReporter, pr process.Process, mappings []process.Mapping) error {
 	pid := pr.PID()
