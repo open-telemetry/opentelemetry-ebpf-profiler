@@ -388,15 +388,15 @@ func StartOTLP(mainCtx context.Context, c *Config) (Reporter, error) {
 
 // reportOTLPProfile creates and sends out an OTLP profile.
 func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
-	profile, startTS, endTS, samples := r.getProfile()
+	profile, startTS, endTS, hashes, samples := r.getProfile()
 
 	if len(profile.Sample) == 0 {
 		log.Debugf("Skip sending of OTLP profile with no samples")
 		return nil
 	}
 
-	profileStacks, _, _ := r.getProfileStacks(samples)
-	profileDedup, _, _ := r.getProfileDedup(samples)
+	profileStacks, _, _ := r.getProfileStacks(hashes, samples)
+	profileDedup, _, _ := r.getProfileDedup(hashes, samples)
 
 	pc := []*profiles.ProfileContainer{{
 		// Next step: not sure about the value of ProfileId
@@ -499,7 +499,7 @@ func (r *OTLPReporter) getResource() *resource.Resource {
 
 // getProfile returns an OTLP profile containing all collected samples up to this moment.
 func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uint64, endTS uint64,
-	samples map[libpf.TraceHash]sample) {
+	hashes []libpf.TraceHash, samples map[libpf.TraceHash]sample) {
 	// Avoid overlapping locks by copying its content.
 	sampleKeys := r.samples.Keys()
 	samplesCpy := make(map[libpf.TraceHash]sample, len(sampleKeys))
@@ -568,6 +568,7 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 	frameIDtoFunction := make(map[libpf.FrameID]uint64)
 
 	for traceHash, sampleInfo := range samplesCpy {
+		hashes = append(hashes, traceHash)
 		sample := &pprofextended.Sample{}
 		sample.LocationsStartIndex = locationIndex
 
@@ -734,11 +735,11 @@ func (r *OTLPReporter) getProfile() (profile *pprofextended.Profile, startTS uin
 		profile.LocationIndices[i] = i
 	}
 
-	return profile, startTS, endTS, samplesCpy
+	return profile, startTS, endTS, hashes, samplesCpy
 }
 
 // getProfileDedup returns an OTLP profile containing all collected samples up to this moment (deduplicating Locations)
-func (r *OTLPReporter) getProfileDedup(samples map[libpf.TraceHash]sample) (profile *pprofextended.Profile, startTS uint64, endTS uint64) {
+func (r *OTLPReporter) getProfileDedup(hashes []libpf.TraceHash, samples map[libpf.TraceHash]sample) (profile *pprofextended.Profile, startTS uint64, endTS uint64) {
 	// stringMap is a temporary helper that will build the StringTable.
 	// By specification, the first element should be empty.
 	stringMap := make(map[string]uint32)
@@ -777,7 +778,8 @@ func (r *OTLPReporter) getProfileDedup(samples map[libpf.TraceHash]sample) (prof
 	fileIDtoMapping := make(map[libpf.FileID]uint64)
 	frameIDtoFunction := make(map[libpf.FrameID]uint64)
 
-	for traceHash, sampleInfo := range samples {
+	for _, traceHash := range hashes {
+		sampleInfo := samples[traceHash]
 		sample := &pprofextended.Sample{}
 		sample.LocationsStartIndex = locationIndex
 
@@ -961,7 +963,7 @@ func (r *OTLPReporter) getProfileDedup(samples map[libpf.TraceHash]sample) (prof
 }
 
 // getProfileStacks returns an OTLP profile containing all collected samples up to this moment (deduplicating Locations and stacktraces)
-func (r *OTLPReporter) getProfileStacks(samples map[libpf.TraceHash]sample) (profile *pprofextended.Profile, startTS uint64, endTS uint64) {
+func (r *OTLPReporter) getProfileStacks(hashes []libpf.TraceHash, samples map[libpf.TraceHash]sample) (profile *pprofextended.Profile, startTS uint64, endTS uint64) {
 	// stringMap is a temporary helper that will build the StringTable.
 	// By specification, the first element should be empty.
 	stringMap := make(map[string]uint32)
@@ -1000,7 +1002,8 @@ func (r *OTLPReporter) getProfileStacks(samples map[libpf.TraceHash]sample) (pro
 	fileIDtoMapping := make(map[libpf.FileID]uint64)
 	frameIDtoFunction := make(map[libpf.FrameID]uint64)
 
-	for traceHash, sampleInfo := range samples {
+	for _, traceHash := range hashes {
+		sampleInfo := samples[traceHash]
 		sample := &pprofextended.Sample{}
 		stack := &pprofextended.Stack{}
 
