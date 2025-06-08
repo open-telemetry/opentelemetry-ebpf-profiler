@@ -12,8 +12,7 @@ bpf_map_def SEC("maps") beam_procs = {
   .max_entries = 1024,
 };
 
-static inline __attribute__((__always_inline__))
-ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, bool top) {
+static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, bool top) {
   UnwindState *state = &record->state;
   Trace *trace = &record->trace;
   u64 sp = state->sp, fp = state->fp, pc = state->pc;
@@ -57,7 +56,7 @@ frame_done:
 // unwind_beam is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // BEAM stack frames to the trace object for the current CPU.
-static inline __attribute__((__always_inline__)) int unwind_beam(struct pt_regs *ctx) {
+static EBPF_INLINE int unwind_beam(struct pt_regs *ctx) {
   DEBUG_PRINT(">>>>>>>>>>>>>>>>>Unwinding BEAM stack<<<<<<<<<<<<<<<<<");
 
   PerCPURecord *record = get_per_cpu_record();
