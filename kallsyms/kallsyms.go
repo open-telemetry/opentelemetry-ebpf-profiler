@@ -110,7 +110,7 @@ func parseSysfsUint(mod, knob string) (uint64, error) {
 // getModuleLoadtime determines the module's load time.
 // Overridable for the test suite.
 var getModuleLoadtime = func(mod string) int64 {
-	if mod == Kernel {
+	if mod == Kernel || mod == "bpf" {
 		return 0
 	}
 	if info, err := os.Stat(path.Join("/sys/module", mod)); err == nil {
@@ -122,6 +122,12 @@ var getModuleLoadtime = func(mod string) int64 {
 // loadModuleMetadata is the function to load module bounds and fileID data.
 // Overridable for the test suite.
 var loadModuleMetadata = func(m *Module, name string) {
+	if name == "bpf" {
+		// Kernel reports the BPF JIT symbols as part of 'bpf' module.
+		// There is no metadata available.
+		return
+	}
+
 	// Determine notes location and module size
 	notesFile := "/sys/kernel/notes"
 	if name != Kernel {
