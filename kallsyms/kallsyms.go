@@ -65,14 +65,17 @@ type Module struct {
 // Symbolizer provides the main API for reading, updating and querying
 // the kernel symbols.
 type Symbolizer struct {
-	valid atomic.Bool
-
-	modules []Module
+	modules atomic.Value
 }
 
-// NewSymbolizer creates and returns a new kallsyms symbolizer.
-func NewSymbolizer() *Symbolizer {
-	return &Symbolizer{}
+// NewSymbolizer creates and returns a new kallsyms symbolizer and loads
+// the initial 'kallsymbols'.
+func NewSymbolizer() (*Symbolizer, error) {
+	s := &Symbolizer{}
+	if err := s.Reload(); err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // addName appends the 'name' to the module's string slice, and returns
@@ -268,8 +271,8 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	var syms []symbol
 	var names []byte
 
-	s.valid.Store(true)
 	noSymbols := true
+	modules, _ := s.modules.Load().([]Module)
 
 	// Allocate buffers which should be able to hold the symbol data
 	// from the vmlinux main image (or large modules on reloads) without
@@ -278,7 +281,7 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 
 	// The modules (typical sysmtes have 200-300)
 	mods := make([]Module, 0, 400)
-	if len(s.modules) == 0 {
+	if len(modules) == 0 {
 		// - 2.5MB for symbol names
 		// - 100k symbols
 		names = make([]byte, 0, 3*1024*1024)
@@ -371,7 +374,7 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 			}
 
 			if _, ok := seen[moduleName]; !ok {
-				mod = s.getModuleByAddress(libpf.Address(address))
+				mod, _ = getModuleByAddress(modules, libpf.Address(address))
 				mtime := getModuleLoadtime(moduleName)
 				if mod != nil && mod.Name() == moduleName && mod.mtime == mtime {
 					mods = append(mods, *mod)
@@ -432,73 +435,48 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 
 	// Heap allocate the exact amount needed. This also makes the initial
 	// buffer stack allocated.
-	s.modules = slices.Clone(mods)
+	s.modules.Store(slices.Clone(mods))
 	return nil
 }
 
-// Refresh will reload kernel symbols if they are not yet loaded or invalidated.
-func (s *Symbolizer) Refresh() error {
-	if s.valid.Load() {
-		return nil
-	}
-
+// Reload will reload kernel symbols. This function can run concurrently with
+// module module lookups. The reload result is visible atomically after success.
+func (s *Symbolizer) Reload() error {
 	file, err := os.Open("/proc/kallsyms")
 	if err != nil {
 		return fmt.Errorf("unable to open kallsyms: %v", err)
 	}
 	defer file.Close()
 
-	err = s.updateSymbolsFrom(file)
-	if err != nil {
-		s.valid.Store(false)
-	}
-	return err
+	return s.updateSymbolsFrom(file)
 }
 
-// Invalidate triggers reloading of kernel symbols on next Refresh. Can be called
-// concurrently from another goroutine.
-func (s *Symbolizer) Invalidate() {
-	s.valid.Store(false)
-}
-
-// getModuleByAddress finds the Module containing the address 'pc'. This is
-// the internal helper used also while loading symbols.
-func (s *Symbolizer) getModuleByAddress(pc libpf.Address) *Module {
-	modIdx := sort.Search(len(s.modules), func(i int) bool {
-		return pc >= s.modules[i].start
+// getModuleByAddress is a helper to find a Module from the sorted 'modules'
+// slice matching the address 'pc'.
+func getModuleByAddress(modules []Module, pc libpf.Address) (*Module, error) {
+	modIdx := sort.Search(len(modules), func(i int) bool {
+		return pc >= modules[i].start
 	})
-	if modIdx >= len(s.modules) {
-		return nil
+	if modIdx >= len(modules) {
+		return nil, ErrNoModule
 	}
-	m := &s.modules[modIdx]
+	m := &modules[modIdx]
 	if pc < m.start || pc >= m.end {
-		return nil
+		return nil, ErrNoModule
 	}
-	return m
+	return m, nil
 }
 
-// GetModuleByAddress finds the Module containing the address 'pc'. The symbols
-// are reloaded if needed. An error is returned if no symbols are available, or
-// a matching module is not found.
+// GetModuleByAddress finds the Module containing the address 'pc'.
 func (s *Symbolizer) GetModuleByAddress(pc libpf.Address) (*Module, error) {
-	if err := s.Refresh(); err != nil {
-		return nil, err
-	}
-	if mod := s.getModuleByAddress(pc); mod != nil {
-		return mod, nil
-	}
-	return nil, ErrNoModule
+	return getModuleByAddress(s.modules.Load().([]Module), pc)
 }
 
-// GetModuleByAddress finds the Module containing the module 'module'. The symbols
-// are reloaded if needed. An error is returned if no symbols are available, or
-// a matching module is not found.
+// GetModuleByAddress finds the Module containing the module 'module'.
 func (s *Symbolizer) GetModuleByName(module string) (*Module, error) {
-	if err := s.Refresh(); err != nil {
-		return nil, err
-	}
-	for i := range s.modules {
-		kmod := &s.modules[i]
+	modules := s.modules.Load().([]Module)
+	for i := range modules {
+		kmod := &modules[i]
 		if kmod.Name() == module {
 			return kmod, nil
 		}

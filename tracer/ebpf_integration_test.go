@@ -253,7 +253,10 @@ Loop:
 }
 
 func TestAllTracers(t *testing.T) {
-	kmod, err := kallsyms.NewSymbolizer().GetModuleByName(kallsyms.Kernel)
+	s, err := kallsyms.NewSymbolizer()
+	require.NoError(t, err)
+
+	kmod, err := s.GetModuleByName(kallsyms.Kernel)
 	require.NoError(t, err)
 
 	_, _, err = initializeMapsAndPrograms(kmod, &Config{

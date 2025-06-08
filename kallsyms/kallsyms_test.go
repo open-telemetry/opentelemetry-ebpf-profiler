@@ -28,7 +28,7 @@ func TestKallSyms(t *testing.T) {
 	getModuleLoadtime = func(_ string) int64 { return 0 }
 	loadModuleMetadata = func(_ *Module, _ string) {}
 
-	s := NewSymbolizer()
+	s := &Symbolizer{}
 
 	err := s.updateSymbolsFrom(strings.NewReader(`0000000000000000 t pvh_start_xen
 0000000000000000 T _stext

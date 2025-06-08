@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -173,7 +174,11 @@ type progLoaderHelper struct {
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
 func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
-	kernelSymbolizer := kallsyms.NewSymbolizer()
+	kernelSymbolizer, err := kallsyms.NewSymbolizer()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
+	}
+
 	kmod, err := kernelSymbolizer.GetModuleByName(kallsyms.Kernel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
@@ -641,14 +646,37 @@ func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 	return nil
 }
 
+// pollKobjectClient listens for kernel kobject events to reload kallsyms when needed.
 func (t *Tracer) pollKobjectClient() {
+	reloadRatelimit := time.Now().Add(10 * time.Second)
 	for {
 		event, err := t.kobjectClient.Receive()
 		if err != nil {
-			return
+			if err != os.ErrDeadlineExceeded {
+				return
+			}
+			err := t.kernelSymbolizer.Reload()
+			if err != nil {
+				log.Warnf("Failed to reload kernel symbols: %v", err)
+				// Retry reload after a minute.
+				reloadRatelimit = time.Now().Add(time.Minute)
+				_ = t.kobjectClient.SetDeadline(reloadRatelimit)
+			} else {
+				// Remove deadline, and ratelimit next reload.
+				reloadRatelimit = time.Now().Add(10 * time.Second)
+				_ = t.kobjectClient.SetDeadline(time.Time{})
+			}
+			continue
 		}
+
 		if event.Subsystem == "module" {
-			t.kernelSymbolizer.Invalidate()
+			// Wait for 100ms to batch potential further changes
+			// or until the next ratelimited reload time comes.
+			reloadTime := time.Now().Add(100 * time.Millisecond)
+			if reloadTime.Before(reloadRatelimit) {
+				reloadTime = reloadRatelimit
+			}
+			_ = t.kobjectClient.SetDeadline(reloadTime)
 		}
 	}
 }
