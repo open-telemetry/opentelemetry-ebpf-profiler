@@ -9,7 +9,7 @@ bpf_map_def SEC("maps") beam_procs = {
   .type = BPF_MAP_TYPE_HASH,
   .key_size = sizeof(pid_t),
   .value_size = sizeof(BEAMProcInfo),
-  .max_entries = 1024,
+  .max_entries = 256,
 };
 
 static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, bool top) {
@@ -18,7 +18,6 @@ static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMPro
   u64 sp = state->sp, fp = state->fp, pc = state->pc;
 
   DEBUG_PRINT("beam: pc: %llx, sp: %llx, fp: %llx", pc, sp, fp);
-  DEBUG_PRINT("beam: c_p(r13): %llx", state->r13);
 
   bpf_probe_read_user(&state->fp, sizeof(u64), (void*)fp);
   bpf_probe_read_user(&state->pc, sizeof(u64), (void*)(fp+8));
@@ -29,26 +28,9 @@ static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMPro
   }
   _push_with_return_address(trace, 0xf00d, pc, FRAME_MARKER_BEAM, state->return_address);
 
-  // Data that will be sent to HA is in these variables.
-  //uintptr_t pointer_and_type = 0, delta_or_marker = 0;
-
-frame_done:
-  // Unwind with frame pointer
-  // if (fp & 0x3 || bpf_probe_read_user(regs, sizeof(regs), (void*)fp)) {
-  //   DEBUG_PRINT("beam:  --> bad frame pointer");
-  //   return ERR_UNREACHABLE;
-  // }
-
-  // state->sp = fp - 2 * sizeof(void*);
-  // state->fp = regs[1];
-  // state->pc = regs[0];
   if (state->fp) {
     unwinder_mark_nonleaf_frame(state);
   }
-
-  DEBUG_PRINT("beam: pc: %llx, sp: %llx, fp: %llx",
-              state->pc, state->sp,
-              state->fp);
 
   return ERR_OK;
 }
@@ -57,8 +39,6 @@ frame_done:
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // BEAM stack frames to the trace object for the current CPU.
 static EBPF_INLINE int unwind_beam(struct pt_regs *ctx) {
-  DEBUG_PRINT(">>>>>>>>>>>>>>>>>Unwinding BEAM stack<<<<<<<<<<<<<<<<<");
-
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
     return -1;

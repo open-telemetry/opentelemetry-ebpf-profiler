@@ -50,7 +50,6 @@ type beamInstance struct {
 	interpreter.InstanceStubs
 
 	pid          libpf.PID
-	bias         libpf.Address
 	data         *beamData
 	rm           remotememory.RemoteMemory
 	rangesPtr    libpf.Address
@@ -158,7 +157,6 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 
 	return &beamInstance{
 		pid:          pid,
-		bias:         bias,
 		data:         d,
 		rm:           rm,
 		rangesPtr:    bias + libpf.Address(d.r),
@@ -173,13 +171,18 @@ func (d *beamData) Unload(_ interpreter.EbpfHandler) {
 func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ reporter.SymbolReporter, pr process.Process, mappings []process.Mapping) error {
 	pid := pr.PID()
 
+	// Index into the active static `r` variable using the currently-active code index (the size of the `ranges` struct is 32 bytes)
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
 	codeIndex := i.rm.Uint64(i.codeIndexPtr)
 	activeRanges := i.rangesPtr + libpf.Address(32*codeIndex)
 
+	// Use offsets into the `ranges` struct to get the beginning of the array and the number of entries based on
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L56-L61
+	modules := i.rm.Ptr(activeRanges)
 	n := i.rm.Uint64(activeRanges + libpf.Address(8))
 
-	low := i.rm.Ptr(i.rm.Ptr(activeRanges))
-	high := i.rm.Ptr(i.rm.Ptr(activeRanges) + libpf.Address(16*n) + 8)
+	low := i.rm.Ptr(modules)
+	high := i.rm.Ptr(modules + libpf.Address((n-1)*16+8))
 
 	log.Infof("Enabling BEAM for %#x - %#x", low, high)
 
@@ -187,7 +190,7 @@ func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ repor
 	// ERRO[0004] Failed to handle new anonymous mapping for PID 375011: update: key already exists
 	prefixes, err := lpm.CalculatePrefixList(uint64(low), uint64(high))
 	if err != nil {
-		return fmt.Errorf("new anonymous mapping lpm failure %#x - %#x", low, high)
+		return fmt.Errorf("new anonymous mapping lpm failure %#x - %#x: %v", low, high, err)
 	}
 	for _, prefix := range prefixes {
 		err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindBEAM, 0, 0)
@@ -246,7 +249,7 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 	}
 
 	log.Warnf("BEAM Found function %s at %s:%d", mfaName, fileName, lineNumber)
-	frameID := libpf.NewFrameID(libpf.NewFileID(uint64(moduleID), 0x0), libpf.AddressOrLineno((uint64(functionID)<<32)+uint64(arity)))
+	frameID := libpf.NewFrameID(libpf.NewFileID(0x0, uint64(codeHeader)), libpf.AddressOrLineno(pc))
 
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      frameID,
