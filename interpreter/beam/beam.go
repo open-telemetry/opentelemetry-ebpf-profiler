@@ -49,12 +49,11 @@ type beamData struct {
 type beamInstance struct {
 	interpreter.InstanceStubs
 
-	pid          libpf.PID
-	data         *beamData
-	rm           remotememory.RemoteMemory
-	rangesPtr    libpf.Address
-	codeIndexPtr libpf.Address
-	atomTable    libpf.Address
+	pid       libpf.PID
+	data      *beamData
+	rm        remotememory.RemoteMemory
+	rangesPtr libpf.Address
+	atomTable libpf.Address
 }
 
 func readSymbolValue(ef *pfelf.File, name libpf.SymbolName) ([]byte, error) {
@@ -113,13 +112,15 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, err
 	}
 
-	// "the_active_code_index" and "r" symbols are from:
-	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
+	// "the_active_code_index" symbol is from:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.c#L46
 	the_active_code_index, err := ef.LookupSymbolAddress("the_active_code_index")
 	if err != nil {
 		return nil, fmt.Errorf("symbol 'the_active_code_index' not found: %v", err)
 	}
 
+	// "r" symbol is from:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
 	r, err := symbols.LookupSymbolAddress(libpf.SymbolName("r"))
 	if err != nil {
 		return nil, fmt.Errorf("symbol 'r' not found: %v", err)
@@ -148,20 +149,21 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	log.Infof("BEAM attaching, bias: 0x%x", bias)
 
 	data := C.BEAMProcInfo{
-		version: C.u32(d.version),
-		bias:    C.u64(bias),
+		version:               C.u32(d.version),
+		bias:                  C.u64(bias),
+		r:                     C.u64(uint64(bias) + d.r),
+		the_active_code_index: C.u64(uint64(bias) + d.the_active_code_index),
 	}
 	if err := ebpf.UpdateProcData(libpf.BEAM, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err
 	}
 
 	return &beamInstance{
-		pid:          pid,
-		data:         d,
-		rm:           rm,
-		rangesPtr:    bias + libpf.Address(d.r),
-		codeIndexPtr: bias + libpf.Address(d.the_active_code_index),
-		atomTable:    bias + libpf.Address(d.erts_atom_table),
+		pid:       pid,
+		data:      d,
+		rm:        rm,
+		rangesPtr: bias + libpf.Address(d.r),
+		atomTable: bias + libpf.Address(d.erts_atom_table),
 	}, nil
 }
 
@@ -171,34 +173,35 @@ func (d *beamData) Unload(_ interpreter.EbpfHandler) {
 func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ reporter.SymbolReporter, pr process.Process, mappings []process.Mapping) error {
 	pid := pr.PID()
 
-	// Index into the active static `r` variable using the currently-active code index (the size of the `ranges` struct is 32 bytes)
+	// Index into the active static `r` variable using each valid index (the size of the `ranges` struct is 32 bytes)
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
-	codeIndex := i.rm.Uint64(i.codeIndexPtr)
-	activeRanges := i.rangesPtr + libpf.Address(32*codeIndex)
+	// The max index is defined as 3 here: https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.h#L70
+	for codeIndex := 0; codeIndex < 3; codeIndex++ {
+		activeRanges := i.rangesPtr + libpf.Address(32*codeIndex)
 
-	// Use offsets into the `ranges` struct to get the beginning of the array and the number of entries based on
-	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L56-L61
-	modules := i.rm.Ptr(activeRanges)
-	n := i.rm.Uint64(activeRanges + libpf.Address(8))
+		// Use offsets into the `ranges` struct to get the beginning of the array and the number of entries based on
+		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L56-L61
+		modules := i.rm.Ptr(activeRanges)
+		n := i.rm.Uint64(activeRanges + libpf.Address(8))
 
-	low := i.rm.Ptr(modules)
-	high := i.rm.Ptr(modules + libpf.Address((n-1)*16+8))
+		low := i.rm.Ptr(modules)
+		high := i.rm.Ptr(modules + libpf.Address((n-1)*16+8))
 
-	log.Infof("Enabling BEAM for %#x - %#x", low, high)
+		log.Infof("Enabling BEAM for %#x - %#x", low, high)
 
-	// TODO: I think this is resulting in the following error (figure out why):
-	// ERRO[0004] Failed to handle new anonymous mapping for PID 375011: update: key already exists
-	prefixes, err := lpm.CalculatePrefixList(uint64(low), uint64(high))
-	if err != nil {
-		return fmt.Errorf("new anonymous mapping lpm failure %#x - %#x: %v", low, high, err)
-	}
-	for _, prefix := range prefixes {
-		err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindBEAM, 0, 0)
+		// TODO: I think this is resulting in the following error (figure out why):
+		// ERRO[0004] Failed to handle new anonymous mapping for PID 375011: update: key already exists
+		prefixes, err := lpm.CalculatePrefixList(uint64(low), uint64(high))
 		if err != nil {
-			return err
+			return fmt.Errorf("new anonymous mapping lpm failure %#x - %#x: %v", low, high, err)
+		}
+		for _, prefix := range prefixes {
+			err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindBEAM, 0, 0)
+			if err != nil {
+				return err
+			}
 		}
 	}
-
 	return nil
 }
 
@@ -212,10 +215,11 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 		return interpreter.ErrMismatchInterpreterType
 	}
 	pc := libpf.Address(frame.Lineno)
+	activeRanges := libpf.Address(frame.File)
 
-	log.Infof("BEAM symbolizing pc: %x", pc)
+	log.Infof("BEAM symbolizing pc: 0x%x", pc)
 
-	codeHeader, err := i.findCodeHeader(pc)
+	codeHeader, err := i.findCodeHeader(activeRanges, pc)
 	if err != nil {
 		return err
 	}
@@ -262,12 +266,7 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 	return nil
 }
 
-func (i *beamInstance) findCodeHeader(pc libpf.Address) (codeHeader libpf.Address, err error) {
-	// Index into the active static `r` variable using the currently-active code index (the size of the `ranges` struct is 32 bytes)
-	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
-	codeIndex := i.rm.Uint64(i.codeIndexPtr)
-	activeRanges := i.rangesPtr + libpf.Address(32*codeIndex)
-
+func (i *beamInstance) findCodeHeader(activeRanges libpf.Address, pc libpf.Address) (codeHeader libpf.Address, err error) {
 	// Use offsets into the `ranges` struct to get the beginning of the array and the number of entries based on
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L56-L61
 	modules := i.rm.Ptr(activeRanges)
