@@ -372,9 +372,12 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 				// it does not get overwritten later on.
 				seen[mod.Name()] = libpf.Void{}
 			}
+			mod = nil
 
 			if _, ok := seen[moduleName]; !ok {
-				mod, _ = getModuleByAddress(modules, libpf.Address(address))
+				if moduleName != "bpf" {
+					mod, _ = getModuleByAddress(modules, libpf.Address(address))
+				}
 				mtime := getModuleLoadtime(moduleName)
 				if mod != nil && mod.Name() == moduleName && mod.mtime == mtime {
 					mods = append(mods, *mod)
