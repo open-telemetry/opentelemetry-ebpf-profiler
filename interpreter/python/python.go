@@ -760,7 +760,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		autoTLSKey += 4
 	}
 
-	interpRanges, err := findInterpreterRanges(info)
+	interpRanges, err := findInterpreterRanges(info, ef, version)
 	if err != nil {
 		return nil, err
 	}
@@ -838,7 +838,10 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	return pd, nil
 }
 
-func findInterpreterRanges(info *interpreter.LoaderInfo) ([]util.Range, error) {
+func findInterpreterRanges(info *interpreter.LoaderInfo,
+	ef *pfelf.File,
+	pythonVersion uint16,
+) ([]util.Range, error) {
 	// The Python main interpreter loop history in CPython git is:
 	//
 	//nolint:lll
@@ -853,10 +856,14 @@ func findInterpreterRanges(info *interpreter.LoaderInfo) ([]util.Range, error) {
 		interpRanges, _ = info.GetSymbolAsRanges("PyEval_EvalFrameEx")
 	}
 	if len(interpRanges) == 0 {
-		return nil, errors.New("no _PyEval_EvalFrameDefault/PyEval_EvalFrameEx symbol found")
+		return nil, errors.New("no _PyEval_EvalFrameDefault symbol found")
 	}
-	// TODO(korniltsev): find cold ranges
-	// see tools/coredump/testdata/amd64/alpine320-nobuildid.json
-	// https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
-	return interpRanges, nil
+	fid := info.FileID()
+	recovered, err := recoverInterpreterRangesCached(fid, ef, interpRanges[0], pythonVersion)
+	if err != nil {
+		log.WithError(err).Errorf("failed to recover python ranges %s %d",
+			fid.StringNoQuotes(), pythonVersion)
+		return interpRanges, nil
+	}
+	return recovered, nil
 }

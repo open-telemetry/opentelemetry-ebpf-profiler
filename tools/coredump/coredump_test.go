@@ -12,11 +12,7 @@ import (
 )
 
 func TestCoreDumps(t *testing.T) {
-	var skip = map[string]bool{
-		// https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
-		"testdata/amd64/alpine320-nobuildid.json": true,
-		"testdata/amd64/alpine320.json":           true,
-	}
+	var skip = map[string]bool{}
 	cases, err := findTestCases(true)
 	require.NoError(t, err)
 	require.NotEmpty(t, cases)

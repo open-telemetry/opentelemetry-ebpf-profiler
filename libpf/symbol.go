@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // SymbolValue represents the value associated with a symbol, e.g. either an
@@ -34,6 +36,13 @@ type Symbol struct {
 	Name    SymbolName
 	Address SymbolValue
 	Size    uint64
+}
+
+func (s Symbol) AsRange() util.Range {
+	return util.Range{
+		Start: uint64(s.Address),
+		End:   uint64(s.Address) + s.Size,
+	}
 }
 
 var _ SymbolFinder = &SymbolMap{}
