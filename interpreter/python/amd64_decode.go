@@ -34,32 +34,32 @@ func decodeStubArgumentAMD64(
 }
 
 func evaluateStubAnswerAMD64(res e.Expression, memBase uint64) (uint64, error) {
-	answer := e.Var("answer")
+	answer := e.NewImmediateCapture("answer")
 	if res.Match(e.ZeroExtend32(e.Mem8(answer))) {
-		return answer.ExtractedValueImm(), nil
+		return answer.CapturedValue(), nil
 	}
 	if res.Match(
 		e.Add(
-			e.Mem8(e.Var("mem")),
+			e.Mem8(e.NewImmediateCapture("mem")),
 			answer,
 		),
 	) {
-		return memBase + answer.ExtractedValueImm(), nil
+		return memBase + answer.CapturedValue(), nil
 	}
 	if res.Match(
 		e.ZeroExtend32(
 			e.Mem8(
 				e.Add(
-					e.Mem8(e.Var("mem")),
+					e.Mem8(e.NewImmediateCapture("mem")),
 					answer,
 				),
 			),
 		),
 	) {
-		return memBase + answer.ExtractedValueImm(), nil
+		return memBase + answer.CapturedValue(), nil
 	}
 	if res.Match(answer) {
-		return answer.ExtractedValueImm(), nil
+		return answer.CapturedValue(), nil
 	}
 	return 0, fmt.Errorf("not found %s", res.DebugString())
 }

@@ -73,10 +73,12 @@ func cmpOrder(u Expression) int {
 		return 1
 	case *op:
 		return 2
-	case *immediate:
-		return 4
-	case *Variable:
+	case *ImmediateCapture:
 		return 3
+	case *variable:
+		return 4
+	case *immediate:
+		return 5
 	default:
 		return 0
 	}

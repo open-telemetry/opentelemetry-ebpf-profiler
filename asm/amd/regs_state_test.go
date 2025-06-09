@@ -90,8 +90,8 @@ func TestRecoverSwitchCase(t *testing.T) {
 		it.ResetCode(blocks[1].Code, blocks[1].Address)
 		_, err = it.Loop()
 		require.ErrorIs(t, err, io.EOF)
-		table := expression.Var("table")
-		base := expression.Var("base")
+		table := expression.NewImmediateCapture("table")
+		base := expression.NewImmediateCapture("base")
 		expected = expression.Add(
 			expression.SignExtend(
 				expression.Mem(
@@ -109,8 +109,8 @@ func TestRecoverSwitchCase(t *testing.T) {
 			base,
 		)
 		assertEval(t, it.Regs.Get(RAX), expected)
-		assert.EqualValues(t, 0xf3f82c, table.ExtractedValueImm())
-		assert.EqualValues(t, 0xf3f82c, base.ExtractedValueImm())
+		assert.EqualValues(t, 0xf3f82c, table.CapturedValue())
+		assert.EqualValues(t, 0xf3f82c, base.CapturedValue())
 	})
 }
 

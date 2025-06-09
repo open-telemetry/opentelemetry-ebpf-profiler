@@ -34,8 +34,8 @@ func (v *immediate) Match(pattern Expression) bool {
 	switch typedPattern := pattern.(type) {
 	case *immediate:
 		return v.Value == typedPattern.Value
-	case *Variable:
-		typedPattern.extractedImm = *v
+	case *ImmediateCapture:
+		typedPattern.capturedValue = *v
 		return true
 	default:
 		return false

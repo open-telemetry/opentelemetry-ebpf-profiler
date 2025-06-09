@@ -151,8 +151,15 @@ func equalRecursive(a, b Expression) bool {
 		}
 		return false
 	}
-	if ima, aok := a.(*Variable); aok {
-		if imb, bok := b.(*Variable); bok {
+	if ima, aok := a.(*variable); aok {
+		if imb, bok := b.(*variable); bok {
+			return ima == imb
+		}
+		return false
+	}
+
+	if ima, aok := a.(*ImmediateCapture); aok {
+		if imb, bok := b.(*ImmediateCapture); bok {
 			return ima == imb
 		}
 		return false
