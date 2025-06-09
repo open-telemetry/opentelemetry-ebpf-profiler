@@ -24,14 +24,6 @@ else
 $(error Unsupported architecture: $(TARGET_ARCH))
 endif
 
-ifeq ($(TARGET_ARCH),arm64)
-SYMBLIB_PATH := target/aarch64-unknown-linux-musl/release/libsymblib_capi.a
-else ifeq ($(TARGET_ARCH),amd64)
-SYMBLIB_PATH := target/x86_64-unknown-linux-musl/release/libsymblib_capi.a
-else
-$(error Unsupported architecture: $(TARGET_ARCH))
-endif
-
 export TARGET_ARCH
 export CGO_ENABLED = 1
 export GOARCH = $(TARGET_ARCH)
@@ -81,7 +73,7 @@ ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
 ebpf-profiler: generate ebpf rust-components
-	CGO_LDFLAGS=$(SYMBLIB_PATH) go build $(GO_FLAGS) -tags $(GO_TAGS)
+	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 rust-targets:
 	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
@@ -113,7 +105,7 @@ vanity-import-fix: $(PORTO)
 	@porto --include-internal -w .
 
 test: generate ebpf test-deps rust-components
-	CGO_LDFLAGS=$(SYMBLIB_PATH) go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
@@ -129,7 +121,7 @@ TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
 
 integration-test-binaries: generate ebpf rust-components
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
-		(CGO_LDFLAGS=$(SYMBLIB_PATH) go test -ldflags='-extldflags=-static' -trimpath -c \
+		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
 			-o ./support/$(subst /,_,$(test_name)).test \
 			./$(test_name)) || exit ; \
