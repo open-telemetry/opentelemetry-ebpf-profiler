@@ -44,9 +44,9 @@ type Config struct {
 	PyroscopePasswordFile           string
 	PyroscopeReporterType           string
 	PyroscopeDynamicProfilingPolicy bool
-	SymbCachePath         string
-	SymbCacheSizeEntries  int
-	SymbolizeNativeFrames bool
+	SymbCachePath                   string
+	SymbCacheSizeEntries            int
+	SymbolizeNativeFrames           bool
 
 	Fs *flag.FlagSet
 

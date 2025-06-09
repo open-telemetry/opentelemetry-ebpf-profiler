@@ -20,8 +20,10 @@ func TestNativeFrameSymbols(t *testing.T) {
 		Path:        t.TempDir(),
 	})
 	require.NoError(t, err)
-	frames, err := lru.NewSynced[libpf.FileID,
-		*xsync.RWMutex[map[libpf.AddressOrLineno]samples.SourceInfo]](
+	frames, err := lru.NewSynced[
+		libpf.FileID,
+		*xsync.RWMutex[*lru.LRU[libpf.AddressOrLineno, samples.SourceInfo]],
+	](
 		1024, libpf.FileID.Hash32)
 	require.NoError(t, err)
 

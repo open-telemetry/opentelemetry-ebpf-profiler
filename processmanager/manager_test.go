@@ -669,7 +669,7 @@ func TestDynamicProfilingPolicy(t *testing.T) {
 
 	pid := libpf.PID(os.Getpid())
 	pr := newTestProcess(pid)
-	pr.mappings, _, pr.mappingsError = process.New(pid).GetMappings()
+	pr.mappings, _, pr.mappingsError = process.New(pid, pid).GetMappings()
 	exe, _ := os.Readlink("/proc/self/exe")
 	for _, m := range pr.mappings {
 		if m.Path == exe && m.Flags&elf.PF_X != 0 {

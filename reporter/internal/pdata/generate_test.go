@@ -265,9 +265,7 @@ func TestFunctionTableOrder(t *testing.T) {
 				}
 
 				for a, s := range v {
-					frameMap.Add(a, samples.SourceInfo{
-						FunctionName: s.FunctionName,
-					})
+					frameMap.Add(a, s)
 				}
 
 				mu := xsync.NewRWMutex(frameMap)

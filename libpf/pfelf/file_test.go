@@ -87,7 +87,9 @@ func TestGoVersion(t *testing.T) {
 
 	vers, err := ef.GoVersion()
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, version.Compare(vers, "go1.23.6"), 0)
+	cmp := version.Compare(vers, "go1.23.6")
+	t.Logf("%s %v", vers, cmp)
+	assert.GreaterOrEqual(t, cmp, 0)
 
 	testEF := getPFELF("/proc/self/exe", t)
 	defer testEF.Close()

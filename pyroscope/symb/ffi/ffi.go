@@ -4,7 +4,7 @@ package ffi
 #cgo CFLAGS: -g -Wall
 #include "symblib.h"
 #include <stdlib.h>
-// inc-4
+// inc-5
 
 // Declare wrapper functions for linking.
 SymblibStatus rangeVisitorWrapper(void* user_data, SymblibRange* range);
@@ -16,6 +16,9 @@ import (
 	"os"
 	"runtime"
 	"unsafe"
+
+	// link to symblib
+	_ "go.opentelemetry.io/ebpf-profiler/interpreter/go/link" // link to symblib
 )
 
 func symlibError(c C.SymblibStatus) error {
