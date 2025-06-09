@@ -8,6 +8,7 @@ package kallsyms // import "go.opentelemetry.io/ebpf-profiler/kallsyms"
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -19,8 +20,10 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
+	"github.com/mdlayher/kobject"
 	log "github.com/sirupsen/logrus"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -35,11 +38,16 @@ const Kernel = "vmlinux"
 // from the kernel kallsyms file.
 const pointerBits = int(unsafe.Sizeof(libpf.Address(0)) * 8)
 
+// sysModule is the sysfs path for module metadata
+const sysModule = "/sys/module"
+
 var ErrSymbolPermissions = errors.New("unable to read kallsyms addresses - check capabilities")
 
 var ErrNoModule = errors.New("module not found")
 
 var ErrNoSymbol = errors.New("symbol not found")
+
+var ErrModuleStub = errors.New("symbols are not available yet - retry later")
 
 // symbol is the per-symbol structure. The size should be minimal as
 // a typical installation has 100k-200k kernel symbols.
@@ -55,6 +63,7 @@ type Module struct {
 	start libpf.Address
 	end   libpf.Address
 	mtime int64
+	stub  bool
 
 	buildID string
 	fileID  libpf.FileID
@@ -66,13 +75,17 @@ type Module struct {
 // the kernel symbols.
 type Symbolizer struct {
 	modules atomic.Value
+
+	reloadModules chan bool
 }
 
 // NewSymbolizer creates and returns a new kallsyms symbolizer and loads
 // the initial 'kallsymbols'.
 func NewSymbolizer() (*Symbolizer, error) {
-	s := &Symbolizer{}
-	if err := s.Reload(); err != nil {
+	s := &Symbolizer{
+		reloadModules: make(chan bool, 1),
+	}
+	if err := s.loadKallsyms(); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -86,6 +99,13 @@ func (m *Module) addName(name string) uint32 {
 	m.names = append(m.names, byte(l))
 	m.names = append(m.names, unsafe.Slice(unsafe.StringData(name), l)...)
 	return uint32(index)
+}
+
+// setStub makes this module a stub entry for given module name.
+func (m *Module) setStub(name string) {
+	m.names = make([]byte, 0, len(name))
+	m.addName(name)
+	m.stub = true
 }
 
 // bytesAt recovers a []byte representation of the string at `index`
@@ -103,45 +123,52 @@ func (m *Module) stringAt(index uint32) string {
 
 // parseSysfsUint reads a kernel module specific attribute from sysfs.
 func parseSysfsUint(mod, knob string) (uint64, error) {
-	text, err := os.ReadFile(path.Join("/sys/module", mod, knob))
+	text, err := os.ReadFile(path.Join(sysModule, mod, knob))
 	if err != nil {
 		return 0, err
 	}
 	return strconv.ParseUint(strings.Trim(stringutil.ByteSlice2String(text), "\n"), 0, pointerBits)
 }
 
-// getModuleLoadtime determines the module's load time.
-// Overridable for the test suite.
-var getModuleLoadtime = func(mod string) int64 {
-	if mod == Kernel || mod == "bpf" {
-		return 0
-	}
-	if info, err := os.Stat(path.Join("/sys/module", mod)); err == nil {
-		return info.ModTime().UnixMilli()
-	}
-	return 0
-}
-
 // loadModuleMetadata is the function to load module bounds and fileID data.
-// Overridable for the test suite.
-var loadModuleMetadata = func(m *Module, name string) {
+// Overridable for the test suite. Returns true if the metadata was loaded
+// successfully.
+var loadModuleMetadata = func(m *Module, name string, oldMtime int64) bool {
 	if name == "bpf" {
 		// Kernel reports the BPF JIT symbols as part of 'bpf' module.
 		// There is no metadata available.
-		return
+		return true
 	}
 
 	// Determine notes location and module size
 	notesFile := "/sys/kernel/notes"
 	if name != Kernel {
-		notesFile = path.Join("/sys/module", name, "notes/.note.gnu.build-id")
-
-		if addr, err := parseSysfsUint(name, "sections/.text"); err == nil {
-			m.start = libpf.Address(addr)
-			if size, err := parseSysfsUint(name, "coresize"); err == nil {
-				m.end = m.start + libpf.Address(size)
-			}
+		info, err := os.Stat(path.Join(sysModule, name))
+		if err != nil {
+			return false
 		}
+		m.mtime = info.ModTime().UnixMilli()
+		if m.mtime == oldMtime {
+			return false
+		}
+
+		notesFile = path.Join(sysModule, name, "notes/.note.gnu.build-id")
+		addr, err := parseSysfsUint(name, "sections/.text")
+		if err != nil {
+			return false
+		}
+		size, err := parseSysfsUint(name, "coresize")
+		if err != nil {
+			return false
+		}
+		m.start = libpf.Address(addr)
+		m.end = m.start + libpf.Address(size)
+	} else {
+		// No need to reload kernel symbols
+		if m.mtime == 1 {
+			return false
+		}
+		m.mtime = 1
 	}
 
 	// Require at least 16 bytes of BuildID to ensure there is enough entropy for a FileID.
@@ -152,18 +179,13 @@ var loadModuleMetadata = func(m *Module, name string) {
 	if err == nil && len(m.buildID) >= 16 {
 		m.fileID = libpf.FileIDFromKernelBuildID(m.buildID)
 	}
-}
-
-// init records the module name and loads the module metadata.
-func (m *Module) init(name string) {
-	m.addName(name)
-	loadModuleMetadata(m, name)
+	return true
 }
 
 // finish will finalize the Module. The 'symbols' slice is sorted, and
 // a fallback fileID is synthesized if buildID is not available.
 func (m *Module) finish() {
-	if m.end == ^libpf.Address(0) {
+	if m.end == 0 || m.end == ^libpf.Address(0) {
 		// Synthesize the end address at last symbol rounded up to page size
 		// because it could not be reliably determined.
 		lastSymbol := m.start + libpf.Address(m.symbols[len(m.symbols)-1].offset)
@@ -222,17 +244,20 @@ func (m *Module) FileID() libpf.FileID {
 
 // LookupSymbolByAddress resolves the `pc` address to the function and offset from it.
 // On error, an empty string with zero offset is returned.
-func (m *Module) LookupSymbolByAddress(pc libpf.Address) (funcName string, offset uint) {
+func (m *Module) LookupSymbolByAddress(pc libpf.Address) (funcName string, offset uint, err error) {
+	if m.stub {
+		return "", 0, ErrModuleStub
+	}
 	pcOffs := uint32(pc - m.start)
 	symIdx := sort.Search(len(m.symbols), func(i int) bool {
 		return pcOffs >= m.symbols[i].offset
 	})
 	if symIdx >= len(m.symbols) {
-		return "", 0
+		return "", 0, ErrNoSymbol
 	}
 	sym := &m.symbols[symIdx]
 	symName := m.stringAt(sym.index)
-	return symName, uint(pcOffs - sym.offset)
+	return symName, uint(pcOffs - sym.offset), nil
 }
 
 // LookupSymbol finds a symbol with 'name' from the Module.
@@ -274,25 +299,6 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	noSymbols := true
 	modules, _ := s.modules.Load().([]Module)
 
-	// Allocate buffers which should be able to hold the symbol data
-	// from the vmlinux main image (or large modules on reloads) without
-	// resizing based on normal distribution kernel. These are later
-	// cloned to the exact size needed, so these are stack allocated.
-
-	// The modules (typical sysmtes have 200-300)
-	mods := make([]Module, 0, 400)
-	if len(modules) == 0 {
-		// - 2.5MB for symbol names
-		// - 100k symbols
-		names = make([]byte, 0, 3*1024*1024)
-		syms = make([]symbol, 0, 128*1024)
-	} else {
-		// - 0.5MB for symbol names (e.g. i915 needs 400k)
-		// - 64k symbols (e.g. i915 has 12k symbols)
-		names = make([]byte, 0, 512*1024)
-		syms = make([]symbol, 0, 64*1024)
-	}
-
 	// The kallsyms symbol order is in generic the following:
 	// 1. kernel symbols (from compressed kallsyms)
 	// 2. kernel arch symbols (if any)
@@ -316,6 +322,36 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	// __init symbols. This is done with the 'seen' set to avoid loading symbols
 	// for a module if has been already processed.
 	seen := make(libpf.Set[string])
+
+	// Allocate buffers which should be able to hold the symbol data
+	// from the vmlinux main image (or large modules on reloads) without
+	// resizing based on normal distribution kernel. These are later
+	// cloned to the exact size needed, so these are stack allocated.
+
+	// The modules (typical sysmtes have 200-300)
+	mods := make([]Module, 0, 400)
+	if len(modules) == 0 {
+		// - 2.5MB for symbol names
+		// - 100k symbols
+		names = make([]byte, 0, 3*1024*1024)
+		syms = make([]symbol, 0, 128*1024)
+	} else {
+		// - 0.5MB for symbol names (e.g. i915 needs 400k)
+		// - 64k symbols (e.g. i915 has 12k symbols)
+		names = make([]byte, 0, 512*1024)
+		syms = make([]symbol, 0, 64*1024)
+
+		// Copy the static symbols here. The kallsyms often starts
+		// with symbols not within kernel .text, and the logic below
+		// would not correctly detect already seen kernel symbols.
+		for _, mod := range modules {
+			if mod.Name() == Kernel {
+				mods = append(mods, mod)
+				seen[Kernel] = libpf.Void{}
+				break
+			}
+		}
+	}
 
 	for scanner := bufio.NewScanner(r); scanner.Scan(); {
 		// Avoid heap allocation by not using scanner.Text().
@@ -375,25 +411,31 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 			mod = nil
 
 			if _, ok := seen[moduleName]; !ok {
-				if moduleName != "bpf" {
-					mod, _ = getModuleByAddress(modules, libpf.Address(address))
+				var oldMod *Module
+				var oldMtime int64
+				newMod := Module{
+					end:     ^libpf.Address(0),
+					symbols: syms[0:0],
+					names:   names[0:0],
 				}
-				mtime := getModuleLoadtime(moduleName)
-				if mod != nil && mod.Name() == moduleName && mod.mtime == mtime {
-					mods = append(mods, *mod)
-					curName = mod.Name()
-					mod = nil
-				} else {
-					mods = append(mods, Module{
-						start:   0,
-						end:     ^libpf.Address(0),
-						mtime:   mtime,
-						symbols: syms[0:0],
-						names:   names[0:0],
-					})
+				if moduleName != "bpf" {
+					oldMod, _ = getModuleByAddress(modules, libpf.Address(address))
+					if oldMod != nil && !oldMod.stub && oldMod.Name() == moduleName {
+						oldMtime = oldMod.mtime
+					} else {
+						oldMod = nil
+					}
+				}
+				if loadModuleMetadata(&newMod, moduleName, oldMtime) {
+					// Module metadata was updated. Parse this module symbols.
+					mods = append(mods, newMod)
 					mod = &mods[len(mods)-1]
-					mod.init(moduleName)
+					mod.addName(moduleName)
 					curName = mod.Name()
+				} else if oldMod != nil {
+					// Reuse the existing module data if any.
+					mods = append(mods, *oldMod)
+					curName = oldMod.Name()
 				}
 			}
 		}
@@ -435,16 +477,15 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	sort.Slice(mods, func(i, j int) bool {
 		return mods[i].start >= mods[j].start
 	})
-
 	// Heap allocate the exact amount needed. This also makes the initial
 	// buffer stack allocated.
 	s.modules.Store(slices.Clone(mods))
 	return nil
 }
 
-// Reload will reload kernel symbols. This function can run concurrently with
+// loadKallsyms will reload kernel symbols. This function can run concurrently with
 // module module lookups. The reload result is visible atomically after success.
-func (s *Symbolizer) Reload() error {
+func (s *Symbolizer) loadKallsyms() error {
 	file, err := os.Open("/proc/kallsyms")
 	if err != nil {
 		return fmt.Errorf("unable to open kallsyms: %v", err)
@@ -452,6 +493,144 @@ func (s *Symbolizer) Reload() error {
 	defer file.Close()
 
 	return s.updateSymbolsFrom(file)
+}
+
+var nonsyfsModules = libpf.Set[string]{
+	Kernel: libpf.Void{},
+	"bpf":  libpf.Void{},
+}
+
+// loadModules will reload module metadata.
+func (s *Symbolizer) loadModules() (bool, error) {
+	dir, err := os.Open(sysModule)
+	if err != nil {
+		return false, err
+	}
+	defer dir.Close()
+
+	needReloadSymbols := false
+	modules, _ := s.modules.Load().([]Module)
+	mods := make([]Module, 0, 400)
+
+	// Copy the modules not present in sysfs
+	for _, mod := range modules {
+		if _, ok := nonsyfsModules[mod.Name()]; ok {
+			mods = append(mods, mod)
+		}
+	}
+
+	// Scan sysfs for current module listing and its metadata
+	for {
+		dirEntries, err := dir.ReadDir(64)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return false, err
+		}
+		for _, dirEnt := range dirEntries {
+			if !dirEnt.IsDir() {
+				continue
+			}
+
+			moduleName := dirEnt.Name()
+			curMod := Module{}
+			if !loadModuleMetadata(&curMod, moduleName, 0) {
+				// sysfs contains directories also for statically built
+				// kernel modules. Ignore these.
+				continue
+			}
+
+			oldMod, _ := getModuleByAddress(modules, curMod.start)
+			if oldMod != nil && oldMod.Name() == moduleName && oldMod.mtime == curMod.mtime {
+				// Reuse the old module
+				mods = append(mods, *oldMod)
+			} else {
+				// Create a stub module without symbols
+				curMod.setStub(moduleName)
+				mods = append(mods, curMod)
+				needReloadSymbols = true
+			}
+		}
+	}
+
+	sort.Slice(mods, func(i, j int) bool {
+		return mods[i].start >= mods[j].start
+	})
+	// Heap allocate the exact amount needed. This also makes the initial
+	// buffer stack allocated.
+	s.modules.Store(slices.Clone(mods))
+
+	return needReloadSymbols, nil
+}
+
+// reloadWorker is the goroutine handling the reloads of the kallsyms.
+func (s *Symbolizer) reloadWorker(ctx context.Context, kobjectClient *kobject.Client) {
+	noTimeout := make(<-chan time.Time)
+	nextKallsymsReload := noTimeout
+	nextModulesReload := noTimeout
+	for {
+		select {
+		case <-s.reloadModules:
+			// Just trigger reloading of modules with small delay to batch
+			// potentially multiple module loads.
+			if nextModulesReload == noTimeout {
+				nextModulesReload = time.After(100 * time.Millisecond)
+			}
+		case <-nextModulesReload:
+			if reloadSymbols, err := s.loadModules(); err == nil {
+				log.Debugf("Kernel modules metadata reloaded, new symbols: %v", reloadSymbols)
+				nextModulesReload = noTimeout
+				if reloadSymbols && nextKallsymsReload == noTimeout {
+					nextKallsymsReload = time.After(time.Minute)
+				}
+			} else {
+				log.Warnf("Failed to reload kernel modules metadata: %v", err)
+				nextModulesReload = time.After(10 * time.Second)
+			}
+		case <-nextKallsymsReload:
+			if err := s.loadKallsyms(); err == nil {
+				log.Debugf("Kernel symbols reloaded")
+				nextKallsymsReload = noTimeout
+			} else {
+				log.Warnf("Failed to reload kernel symbols: %v", err)
+				nextKallsymsReload = time.After(time.Minute)
+			}
+		case <-ctx.Done():
+			// Terminate also the kobject poller thread
+			kobjectClient.Close()
+			return
+		}
+	}
+}
+
+// pollKobjectClient listens for kernel kobject events to reload kallsyms when needed.
+func (s *Symbolizer) pollKobjectClient(kobjectClient *kobject.Client) {
+	for {
+		event, err := kobjectClient.Receive()
+		if err != nil {
+			return
+		}
+		if event.Subsystem == "module" {
+			log.Debugf("Kernel modules changed")
+			// Notify worker thread without blocking
+			select {
+			case s.reloadModules <- true:
+			default:
+			}
+		}
+	}
+}
+
+// Reload will trigger asynchronous update of modules and symbols.
+func (s *Symbolizer) StartMonitor(ctx context.Context) error {
+	kobjectClient, err := kobject.New()
+	if err != nil {
+		return fmt.Errorf("failed to create kobject netlink socket: %v", err)
+	}
+	go s.reloadWorker(ctx, kobjectClient)
+	go s.pollKobjectClient(kobjectClient)
+	return nil
 }
 
 // getModuleByAddress is a helper to find a Module from the sorted 'modules'

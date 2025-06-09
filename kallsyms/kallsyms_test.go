@@ -17,16 +17,17 @@ func assertSymbol(t *testing.T, s *Symbolizer, pc libpf.Address,
 	eModName, eFuncName string, eOffset uint) {
 	kmod, err := s.GetModuleByAddress(pc)
 	if assert.NoError(t, err) && assert.Equal(t, kmod.Name(), eModName) {
-		funcName, offset := kmod.LookupSymbolByAddress(pc)
-		assert.Equal(t, eFuncName, funcName)
-		assert.Equal(t, eOffset, offset)
+		funcName, offset, err := kmod.LookupSymbolByAddress(pc)
+		if assert.NoError(t, err) {
+			assert.Equal(t, eFuncName, funcName)
+			assert.Equal(t, eOffset, offset)
+		}
 	}
 }
 
 func TestKallSyms(t *testing.T) {
 	// override the metadata loading to avoid mixing data from running system
-	getModuleLoadtime = func(_ string) int64 { return 0 }
-	loadModuleMetadata = func(_ *Module, _ string) {}
+	loadModuleMetadata = func(_ *Module, _ string, _ int64) bool { return true }
 
 	s := &Symbolizer{}
 

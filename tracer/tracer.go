@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
-	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -20,7 +19,6 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
-	"github.com/mdlayher/kobject"
 	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
 
@@ -82,8 +80,6 @@ type Tracer struct {
 
 	// kernelSymbolizer does kernel fallback symbolization
 	kernelSymbolizer *kallsyms.Symbolizer
-	// kobjectClient is the kernel kobject event listener
-	kobjectClient *kobject.Client
 
 	// perfEntrypoints holds a list of frequency based perf events that are opened on the system.
 	perfEntrypoints xsync.RWMutex[[]*perf.Event]
@@ -184,11 +180,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
 
-	kobjectClient, err := kobject.New()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create kobject netlink socket: %v", err)
-	}
-
 	// Based on includeTracers we decide later which are loaded into the kernel.
 	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(kmod, cfg)
 	if err != nil {
@@ -215,7 +206,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 
 	tracer := &Tracer{
 		kernelSymbolizer:       kernelSymbolizer,
-		kobjectClient:          kobjectClient,
 		processManager:         processManager,
 		triggerPIDProcessing:   make(chan bool, 1),
 		pidEvents:              make(chan libpf.PIDTID, pidEventBufferSize),
@@ -230,7 +220,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
 	}
-	go tracer.pollKobjectClient()
 
 	return tracer, nil
 }
@@ -258,7 +247,6 @@ func (t *Tracer) Close() {
 		delete(t.hooks, hookPoint)
 	}
 
-	t.kobjectClient.Close()
 	t.processManager.Close()
 }
 
@@ -646,41 +634,6 @@ func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 	return nil
 }
 
-// pollKobjectClient listens for kernel kobject events to reload kallsyms when needed.
-func (t *Tracer) pollKobjectClient() {
-	reloadRatelimit := time.Now().Add(10 * time.Second)
-	for {
-		event, err := t.kobjectClient.Receive()
-		if err != nil {
-			if err != os.ErrDeadlineExceeded {
-				return
-			}
-			err := t.kernelSymbolizer.Reload()
-			if err != nil {
-				log.Warnf("Failed to reload kernel symbols: %v", err)
-				// Retry reload after a minute.
-				reloadRatelimit = time.Now().Add(time.Minute)
-				_ = t.kobjectClient.SetDeadline(reloadRatelimit)
-			} else {
-				// Remove deadline, and ratelimit next reload.
-				reloadRatelimit = time.Now().Add(10 * time.Second)
-				_ = t.kobjectClient.SetDeadline(time.Time{})
-			}
-			continue
-		}
-
-		if event.Subsystem == "module" {
-			// Wait for 100ms to batch potential further changes
-			// or until the next ratelimited reload time comes.
-			reloadTime := time.Now().Add(100 * time.Millisecond)
-			if reloadTime.Before(reloadRatelimit) {
-				reloadTime = reloadRatelimit
-			}
-			_ = t.kobjectClient.SetDeadline(reloadTime)
-		}
-	}
-}
-
 // insertKernelFrames fetches the kernel stack frames for a particular kstackID and populates
 // the trace with these kernel frames. It also allocates the memory for the frames of the trace.
 // It returns the number of kernel frames for kstackID or an error.
@@ -738,8 +691,10 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 		}
 		kernelSymbolCacheMiss++
 
-		if kmod != nil {
-			funcName, _ := kmod.LookupSymbolByAddress(libpf.Address(kstackVal[i]))
+		if kmod == nil {
+			continue
+		}
+		if funcName, _, err := kmod.LookupSymbolByAddress(libpf.Address(kstackVal[i])); err == nil {
 			t.reporter.FrameMetadata(&reporter.FrameMetadataArgs{
 				FrameID:      frameID,
 				FunctionName: funcName,
@@ -973,6 +928,9 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
 // maps for tracepoints, new traces, trace count updates and unknown PCs.
 func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host.Trace) error {
+	if err := t.kernelSymbolizer.StartMonitor(ctx); err != nil {
+		log.Warnf("Failed to start kallsyms monitor: %v", err)
+	}
 	eventMetricCollector := t.startEventMonitor(ctx)
 	traceEventMetricCollector := t.startTraceEventMonitor(ctx, traceOutChan)
 
