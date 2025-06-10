@@ -4,8 +4,6 @@
 package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
 import (
 	"bytes"
-
-	"golang.org/x/arch/x86/x86asm"
 )
 
 // https://www.felixcloutier.com/x86/endbr64
@@ -20,35 +18,5 @@ func DecodeSkippable(code []byte) (ok bool, size int) {
 		return true, len(opcodeEndBr64)
 	default:
 		return false, 0
-	}
-}
-
-func IsJump(op x86asm.Op) bool {
-	switch op {
-	case
-		x86asm.RET,
-		x86asm.JMP,
-		x86asm.JA,
-		x86asm.JAE,
-		x86asm.JB,
-		x86asm.JBE,
-		x86asm.JCXZ,
-		x86asm.JE,
-		x86asm.JECXZ,
-		x86asm.JG,
-		x86asm.JGE,
-		x86asm.JL,
-		x86asm.JLE,
-		x86asm.JNE,
-		x86asm.JNO,
-		x86asm.JNP,
-		x86asm.JNS,
-		x86asm.JO,
-		x86asm.JP,
-		x86asm.JRCXZ,
-		x86asm.JS:
-		return true
-	default:
-		return false
 	}
 }
