@@ -90,6 +90,9 @@ message Profile {
 
   // Stacks referenced by samples via stack_index.
   repeated Stack stack_table = 19;
+
+  repeated int32 stack_parent_array = 20;
+  repeated int32 stack_location_index = 21;
 }
 
 // Represents a mapping between Attribute Keys and Units.

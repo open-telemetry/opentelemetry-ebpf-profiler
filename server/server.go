@@ -14,7 +14,6 @@ import (
 
 	pb "github.com/elastic/otel-profiling-agent/proto/experiments/opentelemetry/proto/collector/profiles/v1"
 	"github.com/elastic/otel-profiling-agent/proto/experiments/opentelemetry/proto/profiles/v1/alternatives/pprofextended"
-	//"github.com/google/go-cmp/cmp"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	_ "google.golang.org/grpc/encoding/gzip"
@@ -28,7 +27,8 @@ const (
 	exitSuccess exitCode = 0
 	exitFailure exitCode = 1
 
-	RPCNum = 5
+	// Number of ExportXYZ RPCs
+	RPCCount = 6
 )
 
 var (
@@ -68,6 +68,14 @@ type stackTrace struct { // Sample
 	Frames []Frame
 }
 
+func (st stackTrace) String() string {
+	out := ""
+	for _, fr := range st.Frames {
+		out += fmt.Sprintf("%v\n", fr)
+	}
+	return out
+}
+
 type batch struct {
 	id      uint32
 	rpcName string
@@ -104,29 +112,53 @@ func extractFrame(profile *pprofextended.Profile, locIdx int64) Frame {
 	return frm
 }
 
+func extractSimple(prof *pprofextended.Profile, sample *pprofextended.Sample) stackTrace {
+	var st stackTrace
+	locStart := sample.LocationsStartIndex
+	locEnd := locStart + sample.LocationsLength
+	for locIdx := locStart; locIdx < locEnd; locIdx++ {
+		st.Frames = append(st.Frames,
+			extractFrame(prof, prof.LocationIndices[locIdx]))
+	}
+	return st
+}
+
+func extractStacks(prof *pprofextended.Profile, sample *pprofextended.Sample) stackTrace {
+	var st stackTrace
+	stack := prof.StackTable[sample.StackIndex]
+	for _, locIdx := range stack.LocationIndices {
+		st.Frames = append(st.Frames,
+			extractFrame(prof, int64(locIdx)))
+	}
+	return st
+}
+
+func extractArrays(prof *pprofextended.Profile, sample *pprofextended.Sample) stackTrace {
+	var st stackTrace
+	for stackIdx := sample.StackIndex; stackIdx != 0; {
+		locIdx := prof.StackLocationIndex[stackIdx]
+		st.Frames = append(st.Frames,
+			extractFrame(prof, int64(locIdx)))
+		stackIdx = prof.StackParentArray[stackIdx]
+	}
+	return st
+}
+
 // Extract and return all stack traces from a pprofextended.Profile
 func extractStackTraces(profile *pprofextended.Profile) []stackTrace {
 	traces := make([]stackTrace, 0, len(profile.Sample))
-
 	for _, sample := range profile.Sample {
-		stackTrace := stackTrace{}
-
+		var st stackTrace
 		if len(profile.StackTable) == 0 {
-			locStart := sample.LocationsStartIndex
-			locEnd := locStart + sample.LocationsLength
-			for locIdx := locStart; locIdx < locEnd; locIdx++ {
-				frm := extractFrame(profile, profile.LocationIndices[locIdx])
-				stackTrace.Frames = append(stackTrace.Frames, frm)
+			if len(profile.StackParentArray) > 0 {
+				st = extractArrays(profile, sample)
+			} else {
+				st = extractSimple(profile, sample)
 			}
 		} else {
-			// Alternate stack representation
-			stack := profile.StackTable[sample.StackIndex]
-			for _, locIdx := range stack.LocationIndices {
-				frm := extractFrame(profile, int64(locIdx))
-				stackTrace.Frames = append(stackTrace.Frames, frm)
-			}
+			st = extractStacks(profile, sample)
 		}
-		traces = append(traces, stackTrace)
+		traces = append(traces, st)
 	}
 	return traces
 }
@@ -141,16 +173,19 @@ func verify(ctx context.Context, in <-chan batch) {
 		case b := <-in:
 			batches[b.id] = append(batches[b.id], b)
 
-			if len(batches[b.id]) == RPCNum {
-				for i := 0; i < RPCNum-1; i++ {
+			if len(batches[b.id]) == RPCCount {
+				for i := 0; i < RPCCount-1; i++ {
 					b1 := batches[b.id][i]
 					b2 := batches[b.id][i+1]
 
 					if !reflect.DeepEqual(b1.traces, b2.traces) {
-						//if diff := cmp.Diff(b1.traces, b2.traces); diff != "" {
-
-						//log.Fatalf("Mismatch: %v %v %v", b1.rpcName, b2.rpcName, diff)
-						log.Printf("ERROR: %v != %v", b1.rpcName, b2.rpcName)
+						log.Printf("len(B1): %v len(B2): %v", len(b1.traces), len(b2.traces))
+						for idx, st := range b1.traces {
+							if !reflect.DeepEqual(st, b2.traces[idx]) {
+								log.Printf("IDX: %v B1: %v\nB2: %v\n\n", idx, st, b2.traces[idx])
+							}
+						}
+						log.Fatalf("ERROR: %v != %v", b1.rpcName, b2.rpcName)
 					}
 				}
 				delete(batches, b.id)
@@ -239,13 +274,25 @@ func (p *profilesServer) ExportStacks(ctx context.Context, req *pb.ExportProfile
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 
+func (p *profilesServer) ExportArrays(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
+	*pb.ExportProfilesServiceResponse, error) {
+
+	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
+	id := binary.BigEndian.Uint32(container.ProfileId)
+	log.Printf("ExportArrays[%d]", id)
+
+	p.batches <- batch{
+		id:      id,
+		rpcName: "ExportArrays",
+		traces:  extractStackTraces(container.Profile),
+	}
+
+	return &pb.ExportProfilesServiceResponse{}, nil
+}
+
 func newServer() *profilesServer {
 	p := &profilesServer{batches: make(chan batch)}
 	return p
-}
-
-func main() {
-	os.Exit(int(mainWithExitCode()))
 }
 
 func mainWithExitCode() exitCode {
@@ -285,4 +332,8 @@ func mainWithExitCode() exitCode {
 		return exitFailure
 	}
 	return exitSuccess
+}
+
+func main() {
+	os.Exit(int(mainWithExitCode()))
 }

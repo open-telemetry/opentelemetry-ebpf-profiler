@@ -27,6 +27,7 @@ import (
 	resource "go.opentelemetry.io/proto/otlp/resource/v1"
 
 	lru "github.com/elastic/go-freelru"
+	"github.com/rockdaboot/go-trie/trie"
 	"github.com/zeebo/xxh3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/encoding/gzip"
@@ -397,6 +398,7 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 
 	profileStacks, _, _ := r.getProfileStacks(hashes, samples)
 	profileDedup, _, _ := r.getProfileDedup(hashes, samples)
+	profileArrays, _, _ := r.getProfileArrays(hashes, samples)
 
 	pc := []*profiles.ProfileContainer{{
 		// Next step: not sure about the value of ProfileId
@@ -467,6 +469,10 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	// Alternate stack representation
 	req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0].Profile = profileStacks
 	_, err = r.client.ExportStacks(ctx, &req, gzipOption)
+
+	// Alternate stack representation - arrays
+	req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0].Profile = profileArrays
+	_, err = r.client.ExportArrays(ctx, &req, gzipOption)
 
 	r.LogMetrics()
 	r.count += 1
@@ -898,7 +904,6 @@ func (r *OTLPReporter) getProfileDedup(hashes []libpf.TraceHash, samples map[lib
 							"UNRESOLVED", frameKind.String())
 					} else {
 						line.Line = int64(si.lineNumber)
-
 						line.FunctionIndex = createFunctionEntry(funcMap,
 							si.functionName, si.filePath)
 					}
@@ -928,7 +933,6 @@ func (r *OTLPReporter) getProfileDedup(hashes []libpf.TraceHash, samples map[lib
 		sample.Label = getTraceLabels(stringMap, trace)
 		sample.LocationsLength = uint64(len(trace.frameTypes))
 		locationIndex += sample.LocationsLength
-
 		profile.Sample = append(profile.Sample, sample)
 	}
 	log.Debugf("Reporting OTLP profile with %d samples", len(profile.Sample))
@@ -1166,6 +1170,250 @@ func (r *OTLPReporter) getProfileStacks(hashes []libpf.TraceHash, samples map[li
 	}
 
 	log.Debugf("Reporting OTLP profile with %d samples", len(profile.Sample))
+
+	// Populate the deduplicated functions into profile.
+	funcTable := make([]*pprofextended.Function, len(funcMap))
+	for v, idx := range funcMap {
+		funcTable[idx] = &pprofextended.Function{
+			Name:     int64(getStringMapIndex(stringMap, v.name)),
+			Filename: int64(getStringMapIndex(stringMap, v.fileName)),
+		}
+	}
+	profile.Function = append(profile.Function, funcTable...)
+
+	// When ranging over stringMap the order will be according to the
+	// hash value of the key. To get the correct order for profile.StringTable,
+	// put the values in stringMap in the correct array order.
+	stringTable := make([]string, len(stringMap))
+	for v, idx := range stringMap {
+		stringTable[idx] = v
+	}
+	profile.StringTable = append(profile.StringTable, stringTable...)
+
+	return profile, startTS, endTS
+}
+
+// getProfileArrays returns an OTLP profile containing all collected samples up to this moment
+// (using arrays to deduplicate Locations and stacktraces)
+func (r *OTLPReporter) getProfileArrays(hashes []libpf.TraceHash, samples map[libpf.TraceHash]sample) (profile *pprofextended.Profile, startTS uint64, endTS uint64) {
+	// stringMap is a temporary helper that will build the StringTable.
+	// By specification, the first element should be empty.
+	stringMap := make(map[string]uint32)
+	stringMap[""] = 0
+
+	// funcMap is a temporary helper that will build the Function array
+	// in profile and make sure information is deduplicated.
+	funcMap := make(map[funcInfo]uint64)
+	funcMap[funcInfo{name: "", fileName: ""}] = 0
+
+	// Used to deduplicate Locations
+	locationKeyMap := make(map[locationKey]uint32)
+
+	numSamples := len(samples)
+	profile = &pprofextended.Profile{
+		// SampleType - Next step: Figure out the correct SampleType.
+		Sample: make([]*pprofextended.Sample, 0, numSamples),
+		// LocationIndices - Optional element we do not use.
+		// AttributeTable - Optional element we do not use.
+		// AttributeUnits - Optional element we do not use.
+		// LinkTable - Optional element we do not use.
+		// DropFrames - Optional element we do not use.
+		// KeepFrames - Optional element we do not use.
+		// TimeNanos - Optional element we do not use.
+		// DurationNanos - Optional element we do not use.
+		// PeriodType - Optional element we do not use.
+		// Period - Optional element we do not use.
+		// Comment - Optional element we do not use.
+		// DefaultSampleType - Optional element we do not use.
+	}
+
+	locationIndices := make([]int64, 0)
+	locationIndex := uint64(0)
+
+	// Temporary lookup to reference existing Mappings.
+	fileIDtoMapping := make(map[libpf.FileID]uint64)
+	frameIDtoFunction := make(map[libpf.FrameID]uint64)
+
+	profile.Location = append(profile.Location, &pprofextended.Location{})
+	locationKeyMap[locationKey{}] = 0
+
+	stacksTrie := trie.New[int64]()
+
+	for _, traceHash := range hashes {
+		sampleInfo := samples[traceHash]
+		sample := &pprofextended.Sample{}
+
+		// Earlier we peeked into traces for traceHash and know it exists.
+		trace, _ := r.traces.Get(traceHash)
+
+		sample.Timestamps = make([]uint64, 0, len(sampleInfo.timestamps))
+		for _, ts := range sampleInfo.timestamps {
+			sample.Timestamps = append(sample.Timestamps, uint64(ts))
+			if ts < startTS || startTS == 0 {
+				startTS = ts
+				continue
+			}
+			if ts > endTS {
+				endTS = ts
+			}
+		}
+
+		// Walk every frame of the trace.
+		for i := range trace.frameTypes {
+			loc := &pprofextended.Location{
+				// Id - Optional element we do not use.
+				TypeIndex: getStringMapIndex(stringMap,
+					trace.frameTypes[i].String()),
+				Address: uint64(trace.linenos[i]),
+				// IsFolded - Optional element we do not use.
+				// Attributes - Optional element we do not use.
+			}
+
+			switch frameKind := trace.frameTypes[i]; frameKind {
+			case libpf.NativeFrame:
+				// As native frames are resolved in the backend, we use Mapping to
+				// report these frames.
+
+				var locationMappingIndex uint64
+				if tmpMappingIndex, exists := fileIDtoMapping[trace.files[i]]; exists {
+					locationMappingIndex = tmpMappingIndex
+				} else {
+					idx := uint64(len(fileIDtoMapping))
+					fileIDtoMapping[trace.files[i]] = idx
+					locationMappingIndex = idx
+
+					execInfo, exists := r.executables.Get(trace.files[i])
+
+					// Next step: Select a proper default value,
+					// if the name of the executable is not known yet.
+					var fileName = "UNKNOWN"
+					if exists {
+						fileName = execInfo.fileName
+					}
+
+					profile.Mapping = append(profile.Mapping, &pprofextended.Mapping{
+						// Id - Optional element we do not use.
+						// MemoryStart - Optional element we do not use.
+						// MemoryLImit - Optional element we do not use.
+						FileOffset: uint64(trace.linenos[i]),
+						Filename:   int64(getStringMapIndex(stringMap, fileName)),
+						BuildId: int64(getStringMapIndex(stringMap,
+							trace.files[i].StringNoQuotes())),
+						BuildIdKind: *pprofextended.BuildIdKind_BUILD_ID_BINARY_HASH.Enum(),
+						// Attributes - Optional element we do not use.
+						// HasFunctions - Optional element we do not use.
+						// HasFilenames - Optional element we do not use.
+						// HasLineNumbers - Optional element we do not use.
+						// HasInlinedFrames - Optional element we do not use.
+					})
+				}
+				loc.MappingIndex = locationMappingIndex
+			case libpf.KernelFrame:
+				// Reconstruct frameID
+				frameID := libpf.NewFrameID(trace.files[i], trace.linenos[i])
+				// Store Kernel frame information as Line message:
+				line := &pprofextended.Line{}
+
+				if tmpFunctionIndex, exists := frameIDtoFunction[frameID]; exists {
+					line.FunctionIndex = tmpFunctionIndex
+				} else {
+					symbol, exists := r.fallbackSymbols.Get(frameID)
+					if !exists {
+						// TODO: choose a proper default value if the kernel symbol was not
+						// reported yet.
+						symbol = "UNKNOWN"
+					}
+					line.FunctionIndex = createFunctionEntry(funcMap,
+						symbol, "vmlinux")
+				}
+				loc.Line = append(loc.Line, line)
+
+				// To be compliant with the protocol generate a dummy mapping entry.
+				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping, stringMap,
+					profile, trace.files[i])
+			case libpf.AbortFrame:
+				// Next step: Figure out how the OTLP protocol
+				// could handle artificial frames, like AbortFrame,
+				// that are not originate from a native or interpreted
+				// program.
+			default:
+				// Store interpreted frame information as Line message:
+				line := &pprofextended.Line{}
+
+				fileIDInfo, exists := r.frames.Get(trace.files[i])
+				if !exists {
+					// At this point, we do not have enough information for the frame.
+					// Therefore, we report a dummy entry and use the interpreter as filename.
+					line.FunctionIndex = createFunctionEntry(funcMap,
+						"UNREPORTED", frameKind.String())
+				} else {
+					si, exists := fileIDInfo[trace.linenos[i]]
+					if !exists {
+						// At this point, we do not have enough information for the frame.
+						// Therefore, we report a dummy entry and use the interpreter as filename.
+						// To differentiate this case with the case where no information about
+						// the file ID is available at all, we use a different name for reported
+						// function.
+						line.FunctionIndex = createFunctionEntry(funcMap,
+							"UNRESOLVED", frameKind.String())
+					} else {
+						line.Line = int64(si.lineNumber)
+						line.FunctionIndex = createFunctionEntry(funcMap,
+							si.functionName, si.filePath)
+					}
+				}
+				loc.Line = append(loc.Line, line)
+
+				// To be compliant with the protocol generate a dummy mapping entry.
+				loc.MappingIndex = getDummyMappingIndex(fileIDtoMapping, stringMap,
+					profile, trace.files[i])
+			}
+
+			// Deduplicate Location
+			locKey := locationKey{
+				typeIndex:    loc.TypeIndex,
+				address:      loc.Address,
+				mappingIndex: loc.MappingIndex,
+				line:         fmt.Sprintf("%v", loc.Line),
+			}
+
+			locIdx, exists := getLocationIndex(locationKeyMap, locKey)
+			if !exists {
+				profile.Location = append(profile.Location, loc)
+			}
+
+			locationIndices = append(locationIndices, int64(locIdx))
+		}
+
+		sample.Label = getTraceLabels(stringMap, trace)
+
+		locLen := uint64(len(trace.frameTypes))
+		locStart := locationIndex
+		locEnd := locStart + locLen
+		locationIndex += locLen
+
+		sample.StackIndex = int32(stacksTrie.AddStack(locationIndices[locStart:locEnd]))
+		profile.Sample = append(profile.Sample, sample)
+	}
+
+	log.Debugf("Reporting OTLP profile with %d samples", len(profile.Sample))
+
+	// Populate the two stack arrays
+	locIdxTable, stackParent, stackLocation, _ := stacksTrie.ToArrays()
+	profile.StackParentArray = make([]int32, len(stackParent))
+	profile.StackLocationIndex = make([]int32, len(stackLocation))
+
+	locTable := profile.Location
+	profile.Location = make([]*pprofextended.Location, len(locIdxTable))
+
+	for idx := 0; idx < len(locIdxTable); idx++ {
+		profile.Location[idx] = locTable[locIdxTable[idx]]
+	}
+
+	for i, _ := range stackParent {
+		profile.StackParentArray[i] = int32(stackParent[i])
+		profile.StackLocationIndex[i] = int32(stackLocation[i])
+	}
 
 	// Populate the deduplicated functions into profile.
 	funcTable := make([]*pprofextended.Function, len(funcMap))
