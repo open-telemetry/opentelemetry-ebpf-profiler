@@ -133,28 +133,6 @@ func (r *RegsState) Get(reg x86asm.Reg) expression.Expression {
 	return res
 }
 
-func (r *RegsState) DebugString() string {
-	res := ""
-	res += "RAX: " + r.regs[regIndex(x86asm.RAX)].DebugString() + "\n"
-	res += "RCX: " + r.regs[regIndex(x86asm.RCX)].DebugString() + "\n"
-	res += "RDX: " + r.regs[regIndex(x86asm.RDX)].DebugString() + "\n"
-	res += "RBX: " + r.regs[regIndex(x86asm.RBX)].DebugString() + "\n"
-	res += "RSP: " + r.regs[regIndex(x86asm.RSP)].DebugString() + "\n"
-	res += "RBP: " + r.regs[regIndex(x86asm.RBP)].DebugString() + "\n"
-	res += "RSI: " + r.regs[regIndex(x86asm.RSI)].DebugString() + "\n"
-	res += "RDI: " + r.regs[regIndex(x86asm.RDI)].DebugString() + "\n"
-	res += "R8 : " + r.regs[regIndex(x86asm.R8)].DebugString() + "\n"
-	res += "R9 : " + r.regs[regIndex(x86asm.R9)].DebugString() + "\n"
-	res += "R10: " + r.regs[regIndex(x86asm.R10)].DebugString() + "\n"
-	res += "R11: " + r.regs[regIndex(x86asm.R11)].DebugString() + "\n"
-	res += "R12: " + r.regs[regIndex(x86asm.R12)].DebugString() + "\n"
-	res += "R13: " + r.regs[regIndex(x86asm.R13)].DebugString() + "\n"
-	res += "R14: " + r.regs[regIndex(x86asm.R14)].DebugString() + "\n"
-	res += "R15: " + r.regs[regIndex(x86asm.R15)].DebugString() + "\n"
-	res += "RIP: " + r.regs[regIndex(x86asm.RIP)].DebugString() + "\n"
-	return res
-}
-
 type compare struct {
 	left  expression.Expression
 	right uint64
