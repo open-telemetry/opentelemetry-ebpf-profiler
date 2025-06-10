@@ -13,7 +13,7 @@ import (
 	"golang.org/x/arch/x86/x86asm"
 )
 
-var debugPrinting = false
+const debugPrinting = false
 
 type regEntry struct {
 	idx  int
