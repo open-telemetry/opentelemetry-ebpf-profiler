@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/ebpf-profiler/asm/variable"
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/x86/x86asm"
 )
 
@@ -39,20 +39,20 @@ func testPythonInterpreter(t testing.TB) {
 		0xc1, 0xff, 0xe0,
 	}
 	it := NewInterpreterWithCode(code)
-	it.CodeAddress = variable.Imm(0x8AF05)
+	it.CodeAddress = expression.Imm(0x8AF05)
 
 	_, err := it.Loop()
 	if err == nil || err != io.EOF {
 		t.Fatal(err)
 	}
 	actual := it.Regs.Get(x86asm.RAX)
-	expected := variable.Mem(
-		variable.Add(
-			variable.Multiply(
-				variable.ZeroExtend(variable.Mem(variable.Any(), 8), 8),
-				variable.Imm(8),
+	expected := expression.Mem(
+		expression.Add(
+			expression.Multiply(
+				expression.ZeroExtend(expression.Mem(expression.Any(), 8), 8),
+				expression.Imm(8),
 			),
-			variable.Var("switch table"),
+			expression.Var("switch table"),
 		),
 		8,
 	)
@@ -64,13 +64,13 @@ func testPythonInterpreter(t testing.TB) {
 func TestRecoverSwitchCase(t *testing.T) {
 	blocks := []CodeBlock{
 		{
-			Address: variable.Imm(0x3310E3),
+			Address: expression.Imm(0x3310E3),
 			Code: []byte{0x48, 0x8b, 0x44, 0x24, 0x20, 0x48, 0x89, 0x18, 0x49,
 				0x83, 0xc2, 0x02, 0x44, 0x89, 0xe0, 0x83, 0xe0, 0x03, 0x31, 0xdb,
 				0x41, 0xf6, 0xc4, 0x04, 0x4c, 0x89, 0x74, 0x24, 0x10, 0x74, 0x08},
 		},
 		{
-			Address: variable.Imm(0x33110a),
+			Address: expression.Imm(0x33110a),
 			Code: []byte{
 				0x4d, 0x89, 0xdc, 0x4d, 0x8d, 0x47, 0xf8, 0x4c, 0x89, 0x7c, 0x24,
 				0x60, 0x4d, 0x8b, 0x7f, 0xf8, 0x48, 0x8b, 0x0d, 0x87, 0x06, 0x17,
@@ -87,20 +87,20 @@ func TestRecoverSwitchCase(t *testing.T) {
 		_, err := it.Loop()
 		require.ErrorIs(t, err, io.EOF)
 
-		expected := variable.ZeroExtend(initR12, 2)
+		expected := expression.ZeroExtend(initR12, 2)
 		assertEval(t, it.Regs.Get(x86asm.RAX), expected)
 		it.ResetCode(blocks[1].Code, blocks[1].Address)
 		_, err = it.Loop()
 		require.ErrorIs(t, err, io.EOF)
-		table := variable.Var("table")
-		base := variable.Var("base")
-		expected = variable.Add(
-			variable.SignExtend(
-				variable.Mem(
-					variable.Add(
-						variable.Multiply(
-							variable.ZeroExtend(initR12, 2),
-							variable.Imm(4),
+		table := expression.Var("table")
+		base := expression.Var("base")
+		expected = expression.Add(
+			expression.SignExtend(
+				expression.Mem(
+					expression.Add(
+						expression.Multiply(
+							expression.ZeroExtend(initR12, 2),
+							expression.Imm(4),
 						),
 						table,
 					),
@@ -116,7 +116,7 @@ func TestRecoverSwitchCase(t *testing.T) {
 	})
 }
 
-func assertEval(t *testing.T, left, right variable.Expression) {
+func assertEval(t *testing.T, left, right expression.Expression) {
 	if !left.Match(right) {
 		assert.Fail(t, "failed to eval %s to %s", left.DebugString(), right.DebugString())
 		t.Logf("left  %s", left.DebugString())
@@ -140,7 +140,7 @@ func TestMoveSignExtend(t *testing.T) {
 	})
 	_, err := i.Loop()
 	require.ErrorIs(t, err, io.EOF)
-	pattern := variable.SignExtend(variable.Mem(variable.Imm(7), 2), 64)
+	pattern := expression.SignExtend(expression.Mem(expression.Imm(7), 2), 64)
 	require.True(t, i.Regs.Get(x86asm.RAX).Match(pattern))
 }
 
@@ -152,7 +152,7 @@ func TestMemory(t *testing.T) {
 	_, err := it.Loop()
 	require.ErrorIs(t, err, io.EOF)
 	rdi := it.Regs.Get(x86asm.RDI)
-	expected := variable.Imm(0xcafe)
+	expected := expression.Imm(0xcafe)
 	require.True(t, rdi.Match(expected))
 }
 

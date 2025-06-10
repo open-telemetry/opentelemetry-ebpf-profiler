@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package variable // import "go.opentelemetry.io/ebpf-profiler/asm/variable"
+package expression // import "go.opentelemetry.io/ebpf-profiler/asm/expression"
 import "sort"
 
 // Expression is an interface representing a 64-bit size value. It can be immediate

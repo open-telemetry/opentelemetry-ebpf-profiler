@@ -9,7 +9,7 @@ import (
 	"io"
 	"math"
 
-	"go.opentelemetry.io/ebpf-profiler/asm/variable"
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"golang.org/x/arch/x86/x86asm"
 )
 
@@ -108,13 +108,13 @@ func regEntryFor(reg x86asm.Reg) regEntry {
 }
 
 type RegsState struct {
-	regs [18]variable.Expression
+	regs [18]expression.Expression
 }
 
-func (r *RegsState) Set(reg x86asm.Reg, v variable.Expression) {
+func (r *RegsState) Set(reg x86asm.Reg, v expression.Expression) {
 	e := regEntryFor(reg)
 	if e.bits != 64 {
-		v = variable.ZeroExtend(v, e.bits)
+		v = expression.ZeroExtend(v, e.bits)
 	}
 	if debugPrinting {
 		if reg != x86asm.RIP {
@@ -124,11 +124,11 @@ func (r *RegsState) Set(reg x86asm.Reg, v variable.Expression) {
 	r.regs[e.idx] = v
 }
 
-func (r *RegsState) Get(reg x86asm.Reg) variable.Expression {
+func (r *RegsState) Get(reg x86asm.Reg) expression.Expression {
 	e := regEntryFor(reg)
 	res := r.regs[e.idx]
 	if e.bits != 64 {
-		res = variable.ZeroExtend(res, e.bits)
+		res = expression.ZeroExtend(res, e.bits)
 	}
 	return res
 }
@@ -156,7 +156,7 @@ func (r *RegsState) DebugString() string {
 }
 
 type compare struct {
-	left  variable.Expression
+	left  expression.Expression
 	right uint64
 	jmp   x86asm.Op
 }
@@ -164,14 +164,14 @@ type compare struct {
 type Interpreter struct {
 	Regs        RegsState
 	code        []byte
-	CodeAddress variable.Expression
+	CodeAddress expression.Expression
 	pc          int
 
-	Opt variable.Options
+	Opt expression.Options
 
 	cmp compare
 
-	mem            map[variable.Expression]variable.Expression
+	mem            map[expression.Expression]expression.Expression
 	cmpConstraints []compare
 }
 
@@ -182,17 +182,17 @@ func NewInterpreter() *Interpreter {
 }
 
 func NewInterpreterWithCode(code []byte) *Interpreter {
-	it := &Interpreter{code: code, CodeAddress: variable.Var("code address")}
+	it := &Interpreter{code: code, CodeAddress: expression.Var("code address")}
 	it.initRegs()
 	return it
 }
 
 func (i *Interpreter) WithMemory() *Interpreter {
-	i.mem = make(map[variable.Expression]variable.Expression)
+	i.mem = make(map[expression.Expression]expression.Expression)
 	return i
 }
 
-func (i *Interpreter) WriteMem(at, v variable.Expression) {
+func (i *Interpreter) WriteMem(at, v expression.Expression) {
 	if i.mem != nil {
 		if debugPrinting {
 			fmt.Printf("    [W] %s = %s\n", at.DebugString(), v.DebugString())
@@ -201,40 +201,40 @@ func (i *Interpreter) WriteMem(at, v variable.Expression) {
 	}
 }
 
-func (i *Interpreter) ReadMem(at variable.Expression) (variable.Expression, bool) {
+func (i *Interpreter) ReadMem(at expression.Expression) (expression.Expression, bool) {
 	for a, v := range i.mem {
 		if a.Match(at) {
 			return v, true
 		}
 	}
-	return variable.Imm(0), false
+	return expression.Imm(0), false
 }
 
-func (i *Interpreter) ResetCode(code []byte, address variable.Expression) {
+func (i *Interpreter) ResetCode(code []byte, address expression.Expression) {
 	i.code = code
 	i.CodeAddress = address
 	i.pc = 0
 }
 
 func (i *Interpreter) initRegs() {
-	i.Regs.regs[0] = variable.Var("invalid reg")
-	i.Regs.regs[regIndex(x86asm.RAX)] = variable.Var("initial RAX")
-	i.Regs.regs[regIndex(x86asm.RCX)] = variable.Var("initial RCX")
-	i.Regs.regs[regIndex(x86asm.RDX)] = variable.Var("initial RDX")
-	i.Regs.regs[regIndex(x86asm.RBX)] = variable.Var("initial RBX")
-	i.Regs.regs[regIndex(x86asm.RSP)] = variable.Var("initial RSP")
-	i.Regs.regs[regIndex(x86asm.RBP)] = variable.Var("initial RBP")
-	i.Regs.regs[regIndex(x86asm.RSI)] = variable.Var("initial RSI")
-	i.Regs.regs[regIndex(x86asm.RDI)] = variable.Var("initial RDI")
-	i.Regs.regs[regIndex(x86asm.R8)] = variable.Var("initial R8")
-	i.Regs.regs[regIndex(x86asm.R9)] = variable.Var("initial R9")
-	i.Regs.regs[regIndex(x86asm.R10)] = variable.Var("initial R10")
-	i.Regs.regs[regIndex(x86asm.R11)] = variable.Var("initial R11")
-	i.Regs.regs[regIndex(x86asm.R12)] = variable.Var("initial R12")
-	i.Regs.regs[regIndex(x86asm.R13)] = variable.Var("initial R13")
-	i.Regs.regs[regIndex(x86asm.R14)] = variable.Var("initial R14")
-	i.Regs.regs[regIndex(x86asm.R15)] = variable.Var("initial R15")
-	i.Regs.regs[regIndex(x86asm.RIP)] = variable.Var("initial RIP")
+	i.Regs.regs[0] = expression.Var("invalid reg")
+	i.Regs.regs[regIndex(x86asm.RAX)] = expression.Var("initial RAX")
+	i.Regs.regs[regIndex(x86asm.RCX)] = expression.Var("initial RCX")
+	i.Regs.regs[regIndex(x86asm.RDX)] = expression.Var("initial RDX")
+	i.Regs.regs[regIndex(x86asm.RBX)] = expression.Var("initial RBX")
+	i.Regs.regs[regIndex(x86asm.RSP)] = expression.Var("initial RSP")
+	i.Regs.regs[regIndex(x86asm.RBP)] = expression.Var("initial RBP")
+	i.Regs.regs[regIndex(x86asm.RSI)] = expression.Var("initial RSI")
+	i.Regs.regs[regIndex(x86asm.RDI)] = expression.Var("initial RDI")
+	i.Regs.regs[regIndex(x86asm.R8)] = expression.Var("initial R8")
+	i.Regs.regs[regIndex(x86asm.R9)] = expression.Var("initial R9")
+	i.Regs.regs[regIndex(x86asm.R10)] = expression.Var("initial R10")
+	i.Regs.regs[regIndex(x86asm.R11)] = expression.Var("initial R11")
+	i.Regs.regs[regIndex(x86asm.R12)] = expression.Var("initial R12")
+	i.Regs.regs[regIndex(x86asm.R13)] = expression.Var("initial R13")
+	i.Regs.regs[regIndex(x86asm.R14)] = expression.Var("initial R14")
+	i.Regs.regs[regIndex(x86asm.R15)] = expression.Var("initial R15")
+	i.Regs.regs[regIndex(x86asm.RIP)] = expression.Var("initial RIP")
 }
 
 func (i *Interpreter) Loop() (x86asm.Inst, error) {
@@ -275,9 +275,9 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 		}
 	}
 	i.pc += inst.Len
-	i.Regs.Set(x86asm.RIP, variable.Add(i.CodeAddress, variable.Imm(uint64(i.pc))))
+	i.Regs.Set(x86asm.RIP, expression.Add(i.CodeAddress, expression.Imm(uint64(i.pc))))
 	if debugPrinting {
-		isnAddr := variable.Add(i.CodeAddress, variable.Imm(uint64(i.pc-inst.Len)))
+		isnAddr := expression.Add(i.CodeAddress, expression.Imm(uint64(i.pc-inst.Len)))
 		fmt.Printf("| %6s %s\n", isnAddr.DebugString(), x86asm.IntelSyntax(inst, uint64(i.pc), nil))
 	}
 	switch inst.Op {
@@ -285,22 +285,22 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			switch src := inst.Args[1].(type) {
 			case x86asm.Imm:
-				i.Regs.Set(dst, variable.Add(i.Regs.Get(dst), variable.Imm(uint64(src))))
+				i.Regs.Set(dst, expression.Add(i.Regs.Get(dst), expression.Imm(uint64(src))))
 			case x86asm.Reg:
-				i.Regs.Set(dst, variable.Add(i.Regs.Get(dst), i.Regs.Get(src)))
+				i.Regs.Set(dst, expression.Add(i.Regs.Get(dst), i.Regs.Get(src)))
 			case x86asm.Mem:
 				v := i.MemArg(i.Opt, src)
-				v = variable.MemS(src.Segment, v, inst.MemBytes)
-				i.Regs.Set(dst, variable.Add(i.Regs.Get(dst), v))
+				v = expression.MemS(src.Segment, v, inst.MemBytes)
+				i.Regs.Set(dst, expression.Add(i.Regs.Get(dst), v))
 			}
 		}
 	case x86asm.SHL:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, imm := inst.Args[1].(x86asm.Imm); imm {
-				v := variable.MultiplyWithOptions(
+				v := expression.MultiplyWithOptions(
 					i.Opt,
 					i.Regs.Get(dst),
-					variable.Imm(uint64(math.Pow(2, float64(src)))),
+					expression.Imm(uint64(math.Pow(2, float64(src)))),
 				)
 				i.Regs.Set(dst, v)
 			}
@@ -309,7 +309,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			switch src := inst.Args[1].(type) {
 			case x86asm.Imm:
-				i.Regs.Set(dst, variable.Imm(uint64(src)))
+				i.Regs.Set(dst, expression.Imm(uint64(src)))
 			case x86asm.Reg:
 				i.Regs.Set(dst, i.Regs.Get(src))
 			case x86asm.Mem:
@@ -321,15 +321,15 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 					if m, memOk := i.ReadMem(v); memOk {
 						v = m
 					} else {
-						v = variable.MemS(src.Segment, v, inst.MemBytes)
+						v = expression.MemS(src.Segment, v, inst.MemBytes)
 					}
 				} else {
-					v = variable.MemS(src.Segment, v, inst.MemBytes)
+					v = expression.MemS(src.Segment, v, inst.MemBytes)
 				}
 				if inst.Op == x86asm.MOVSXD || inst.Op == x86asm.MOVSX {
-					v = variable.SignExtend(v, dataSizeBits)
+					v = expression.SignExtend(v, dataSizeBits)
 				} else {
-					v = variable.ZeroExtend(v, dataSizeBits)
+					v = expression.ZeroExtend(v, dataSizeBits)
 				}
 				i.Regs.Set(dst, v)
 			}
@@ -340,7 +340,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				dsta := i.MemArg(i.Opt, dst)
 				switch src := inst.Args[1].(type) {
 				case x86asm.Imm:
-					i.WriteMem(dsta, variable.Imm(uint64(src)))
+					i.WriteMem(dsta, expression.Imm(uint64(src)))
 				case x86asm.Reg:
 					i.WriteMem(dsta, i.Regs.Get(src))
 				}
@@ -350,7 +350,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, reg := inst.Args[1].(x86asm.Reg); reg {
 				if src == dst {
-					i.Regs.Set(dst, variable.Imm(0))
+					i.Regs.Set(dst, expression.Imm(0))
 				}
 			}
 		}
@@ -358,7 +358,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, imm := inst.Args[1].(x86asm.Imm); imm {
 				if src == 3 { // todo other cases
-					i.Regs.Set(dst, variable.ZeroExtend(i.Regs.Get(dst), 2))
+					i.Regs.Set(dst, expression.ZeroExtend(i.Regs.Get(dst), 2))
 				}
 			}
 		}
@@ -384,23 +384,23 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 	return inst, nil
 }
 
-func (i *Interpreter) MemArg(opt variable.Options, src x86asm.Mem) variable.Expression {
-	vs := make([]variable.Expression, 0, 3)
+func (i *Interpreter) MemArg(opt expression.Options, src x86asm.Mem) expression.Expression {
+	vs := make([]expression.Expression, 0, 3)
 	if src.Disp != 0 {
-		vs = append(vs, variable.Imm(uint64(src.Disp)))
+		vs = append(vs, expression.Imm(uint64(src.Disp)))
 	}
 	if src.Base != 0 {
 		vs = append(vs, i.Regs.Get(src.Base))
 	}
 	if src.Index != 0 {
-		v := variable.MultiplyWithOptions(
+		v := expression.MultiplyWithOptions(
 			opt,
 			i.Regs.Get(src.Index),
-			variable.Imm(uint64(src.Scale)),
+			expression.Imm(uint64(src.Scale)),
 		)
 		vs = append(vs, v)
 	}
-	v := variable.Add(vs...)
+	v := expression.Add(vs...)
 	return v
 }
 
@@ -416,7 +416,7 @@ func (i *Interpreter) saveCompareConstraint(inst x86asm.Op) {
 	i.cmp = compare{}
 }
 
-func (i *Interpreter) MaxValue(of variable.Expression) uint64 {
+func (i *Interpreter) MaxValue(of expression.Expression) uint64 {
 	for _, cmp := range i.cmpConstraints {
 		if cmp.left == nil { // unhandled compare instruction
 			continue
@@ -436,6 +436,6 @@ func (i *Interpreter) MaxValue(of variable.Expression) uint64 {
 }
 
 type CodeBlock struct {
-	Address variable.Expression
+	Address expression.Expression
 	Code    []byte
 }

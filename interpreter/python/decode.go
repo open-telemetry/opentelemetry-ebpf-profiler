@@ -9,7 +9,7 @@ import (
 
 	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
-	"go.opentelemetry.io/ebpf-profiler/asm/variable"
+	"go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	aa "golang.org/x/arch/arm64/arm64asm"
 	"golang.org/x/arch/x86/x86asm"
@@ -114,7 +114,7 @@ func decodeStubArgumentAMD64(
 	libpf.SymbolValue, error,
 ) {
 	it := amd.NewInterpreterWithCode(code)
-	it.CodeAddress = variable.Imm(codeAddress)
+	it.CodeAddress = expression.Imm(codeAddress)
 	_, err := it.LoopWithBreak(func(op x86asm.Inst) bool {
 		return op.Op == x86asm.JMP || op.Op == x86asm.CALL
 	})
@@ -128,24 +128,24 @@ func decodeStubArgumentAMD64(
 	return libpf.SymbolValue(answer), err
 }
 
-func evaluateStubAnswerAMD64(res variable.Expression, memBase uint64) (uint64, error) {
-	answer := variable.Var("answer")
-	if res.Match(variable.ZeroExtend(variable.Mem(answer, 8), 32)) {
+func evaluateStubAnswerAMD64(res expression.Expression, memBase uint64) (uint64, error) {
+	answer := expression.Var("answer")
+	if res.Match(expression.ZeroExtend(expression.Mem(answer, 8), 32)) {
 		return answer.ExtractedValueImm(), nil
 	}
 	if res.Match(
-		variable.Add(
-			variable.Mem(variable.Var("mem"), 8),
+		expression.Add(
+			expression.Mem(expression.Var("mem"), 8),
 			answer,
 		),
 	) {
 		return memBase + answer.ExtractedValueImm(), nil
 	}
 	if res.Match(
-		variable.ZeroExtend(
-			variable.Mem(
-				variable.Add(
-					variable.Mem(variable.Var("mem"), 8),
+		expression.ZeroExtend(
+			expression.Mem(
+				expression.Add(
+					expression.Mem(expression.Var("mem"), 8),
 					answer,
 				),
 				8,
