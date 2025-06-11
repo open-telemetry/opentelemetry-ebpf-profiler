@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
+	"strings"
 
 	pb "github.com/elastic/otel-profiling-agent/proto/experiments/opentelemetry/proto/collector/profiles/v1"
 	"github.com/elastic/otel-profiling-agent/proto/experiments/opentelemetry/proto/profiles/v1/alternatives/pprofextended"
@@ -27,12 +28,14 @@ const (
 	exitSuccess exitCode = 0
 	exitFailure exitCode = 1
 
-	// Number of ExportXYZ RPCs
-	RPCCount = 6
+	rpcPrefix = "/opentelemetry.proto.collector.profiles.v1.ProfilesService/"
 )
 
 var (
 	port = flag.Int("port", 8260, "The gRPC server port")
+
+	// Number of ExportXYZ RPCs, set in mainWithExitCode
+	rpcCount int
 )
 
 type profilesServer struct {
@@ -173,8 +176,8 @@ func verify(ctx context.Context, in <-chan batch) {
 		case b := <-in:
 			batches[b.id] = append(batches[b.id], b)
 
-			if len(batches[b.id]) == RPCCount {
-				for i := 0; i < RPCCount-1; i++ {
+			if len(batches[b.id]) == rpcCount {
+				for i := 0; i < rpcCount-1; i++ {
 					b1 := batches[b.id][i]
 					b2 := batches[b.id][i+1]
 
@@ -194,96 +197,16 @@ func verify(ctx context.Context, in <-chan batch) {
 	}
 }
 
-func (p *profilesServer) Export(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
-	*pb.ExportProfilesServiceResponse, error) {
-
+// RPC handler method for every ExportXYZ RPC
+func (p *profilesServer) exportHandler(_ context.Context, rpcMethod string,
+	req *pb.ExportProfilesServiceRequest) (*pb.ExportProfilesServiceResponse, error) {
 	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
 	id := binary.BigEndian.Uint32(container.ProfileId)
-	log.Printf("Export[%d]", id)
+	log.Printf("%v[%d]", rpcMethod, id)
 
 	p.batches <- batch{
 		id:      id,
-		rpcName: "Export",
-		traces:  extractStackTraces(container.Profile),
-	}
-
-	return &pb.ExportProfilesServiceResponse{}, nil
-}
-
-func (p *profilesServer) ExportZeroTime(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
-	*pb.ExportProfilesServiceResponse, error) {
-
-	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
-	id := binary.BigEndian.Uint32(container.ProfileId)
-	log.Printf("ExportZeroTime[%d]", id)
-
-	p.batches <- batch{
-		id:      id,
-		rpcName: "ExportZeroTime",
-		traces:  extractStackTraces(container.Profile),
-	}
-
-	return &pb.ExportProfilesServiceResponse{}, nil
-}
-
-func (p *profilesServer) ExportDeltaTime(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
-	*pb.ExportProfilesServiceResponse, error) {
-
-	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
-	id := binary.BigEndian.Uint32(container.ProfileId)
-	log.Printf("ExportDeltaTime[%d]", id)
-
-	p.batches <- batch{
-		id:      id,
-		rpcName: "ExportDeltaTime",
-		traces:  extractStackTraces(container.Profile),
-	}
-
-	return &pb.ExportProfilesServiceResponse{}, nil
-}
-
-func (p *profilesServer) ExportDedup(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
-	*pb.ExportProfilesServiceResponse, error) {
-
-	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
-	id := binary.BigEndian.Uint32(container.ProfileId)
-	log.Printf("ExportDedup[%d]", id)
-
-	p.batches <- batch{
-		id:      id,
-		rpcName: "ExportDedup",
-		traces:  extractStackTraces(container.Profile),
-	}
-
-	return &pb.ExportProfilesServiceResponse{}, nil
-}
-
-func (p *profilesServer) ExportStacks(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
-	*pb.ExportProfilesServiceResponse, error) {
-
-	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
-	id := binary.BigEndian.Uint32(container.ProfileId)
-	log.Printf("ExportStacks[%d]", id)
-
-	p.batches <- batch{
-		id:      id,
-		rpcName: "ExportStacks",
-		traces:  extractStackTraces(container.Profile),
-	}
-
-	return &pb.ExportProfilesServiceResponse{}, nil
-}
-
-func (p *profilesServer) ExportArrays(ctx context.Context, req *pb.ExportProfilesServiceRequest) (
-	*pb.ExportProfilesServiceResponse, error) {
-
-	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
-	id := binary.BigEndian.Uint32(container.ProfileId)
-	log.Printf("ExportArrays[%d]", id)
-
-	p.batches <- batch{
-		id:      id,
-		rpcName: "ExportArrays",
+		rpcName: rpcMethod,
 		traces:  extractStackTraces(container.Profile),
 	}
 
@@ -305,14 +228,40 @@ func mainWithExitCode() exitCode {
 		return exitFailure
 	}
 
+	pbServer := newServer()
+
+	var unaryAuth grpc.UnaryServerInterceptor = func(ctx context.Context,
+		req any, si *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler) (any, error) {
+
+		if v, ok := req.(*pb.ExportProfilesServiceRequest); ok {
+			return pbServer.exportHandler(ctx,
+				strings.TrimPrefix(si.FullMethod, rpcPrefix), v)
+		}
+		return handler(ctx, req)
+	}
+
 	opts := []grpc.ServerOption{
 		grpc.MaxRecvMsgSize(RPCMaxMsgSize),
 		grpc.MaxSendMsgSize(RPCMaxMsgSize),
+		grpc.UnaryInterceptor(unaryAuth),
 	}
 	grpcServer := grpc.NewServer(opts...)
-	pbServer := newServer()
-
 	pb.RegisterProfilesServiceServer(grpcServer, pbServer)
+
+	info := grpcServer.GetServiceInfo()
+
+	// Iterate over the services and extract RPC "ExportXYZ" count.
+	// This is later used by the batch verification logic.
+	for sname, si := range info {
+		if strings.HasSuffix(sname, ".ProfilesService") {
+			for _, methodInfo := range si.Methods {
+				if strings.HasPrefix(methodInfo.Name, "Export") {
+					rpcCount += 1
+				}
+			}
+		}
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(),
 		unix.SIGINT, unix.SIGTERM, unix.SIGABRT)
