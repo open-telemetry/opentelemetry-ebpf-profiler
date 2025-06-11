@@ -229,7 +229,7 @@ func TestFiles(t *testing.T) {
 		require.NoError(t, err)
 
 		err = extractOffsets(ef, &ljd, interp)
-		require.NoError(t, err)
+		require.NoError(t, err, de)
 		require.NotZero(t, ljd.currentLOffset)
 		require.NotZero(t, ljd.g2Traces)
 		require.NotZero(t, ljd.g2Dispatch)
