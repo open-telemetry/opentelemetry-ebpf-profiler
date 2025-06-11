@@ -93,7 +93,7 @@ func ParseArgs() (*Config, error) {
 	fs.DurationVar(&args.ClockSyncInterval, "clock-sync-interval", defaultClockSyncInterval,
 		clockSyncIntervalHelp)
 
-	fs.BoolVar(&args.NoKernelVersionCheck, "no-kernel-version-check", false,
+	fs.BoolVar(&args.NoKernelVersionCheck, "no-kernel-version-check", true,
 		noKernelVersionCheckHelp)
 
 	fs.StringVar(&args.PprofAddr, "pprof", "", pprofHelp)
