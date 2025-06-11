@@ -14,6 +14,7 @@ package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/fnv"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -58,6 +59,9 @@ func getAndHashTraceAddrs(tracesAddr libpf.Address, rm remotememory.RemoteMemory
 	j := jitStatePart{}
 	if err := rm.Read(tracesAddr, libpf.SliceFrom(&j)); err != nil {
 		return 0, 0, nil, err
+	}
+	if j.sizetrace > 65535 {
+		return 0, 0, nil, fmt.Errorf("invalid sizetrace %d (traces:%x)", j.sizetrace, tracesAddr)
 	}
 	traceAddrs = []libpf.Address{}
 	b := make([]byte, 8)
