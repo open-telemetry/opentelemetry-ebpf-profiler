@@ -94,7 +94,6 @@ type rubyData struct {
 	version uint32
 
 	// vmStructs reflects the Ruby internal names and offsets of named fields.
-	//nolint:golint,stylecheck,revive
 	vmStructs struct {
 		// rb_execution_context_struct
 		// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L843

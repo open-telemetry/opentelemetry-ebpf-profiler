@@ -174,7 +174,7 @@ func Open(name string) (*File, error) {
 
 	ff, err := newFile(f, f, 0, false)
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, err
 	}
 	return ff, nil
@@ -518,7 +518,7 @@ func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string
 	}
 	file, path := f.OpenDebugLink(elfFilePath, elfOpener)
 	if file != nil {
-		file.Close()
+		_ = file.Close()
 	}
 	return path
 }
@@ -648,7 +648,7 @@ func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
 		}
 		fileCRC32, err := debugELF.CRC32()
 		if err != nil || fileCRC32 != linkCRC32 {
-			debugELF.Close()
+			_ = debugELF.Close()
 			continue
 		}
 		f.debuglinkPath = debugFile

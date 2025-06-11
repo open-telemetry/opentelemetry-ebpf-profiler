@@ -72,10 +72,10 @@ func (scd *StoreCoredump) ExtractAsFile(file string) (string, error) {
 		return "", err
 	}
 	tmpFile := f.Name()
-	f.Close()
+	_ = f.Close()
 
 	if err := scd.store.UnpackModuleToPath(info.Ref, tmpFile); err != nil {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 		return "", err
 	}
 	scd.tempFiles[file] = tmpFile
@@ -84,7 +84,7 @@ func (scd *StoreCoredump) ExtractAsFile(file string) (string, error) {
 
 func (scd *StoreCoredump) Close() error {
 	for _, tmpFile := range scd.tempFiles {
-		os.Remove(tmpFile)
+		_ = os.Remove(tmpFile)
 	}
 	return scd.CoredumpProcess.Close()
 }
