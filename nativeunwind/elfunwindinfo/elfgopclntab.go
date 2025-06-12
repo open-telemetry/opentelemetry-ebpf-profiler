@@ -12,6 +12,7 @@ import (
 	"debug/elf"
 	"fmt"
 	"go/version"
+	"strings"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -206,16 +207,16 @@ func getInt32(data []byte, offset int) int {
 	return int(*(*int32)(unsafe.Pointer(&data[offset])))
 }
 
-// getString returns a zero terminated string from the data slice at given offset as []byte
-func getString(data []byte, offset int) []byte {
+// getString returns a string from the data slice at given offset.
+func getString(data []byte, offset int) string {
 	if offset < 0 || offset > len(data) {
-		return nil
+		return ""
 	}
 	zeroIdx := bytes.IndexByte(data[offset:], 0)
 	if zeroIdx < 0 {
-		return nil
+		return ""
 	}
-	return data[offset : offset+zeroIdx]
+	return unsafe.String(unsafe.SliceData(data[offset:]), zeroIdx)
 }
 
 type strategy int
@@ -232,27 +233,27 @@ const (
 // RBP can be recovered, and be then further used for frame pointer based unwinding.
 // This lists the most notable problem cases from Go runtime.
 // TODO(tteras) Go Runtime files calling internal.bytealg.Index* may need to be added here.
-var noFPSourceSuffixes = [][]byte{
-	[]byte("/src/crypto/sha1/sha1.go"),
-	[]byte("/src/crypto/sha256/sha256.go"),
-	[]byte("/src/crypto/sha512/sha512.go"),
-	[]byte("/src/crypto/elliptic/p256_asm.go"),
-	[]byte("golang.org/x/crypto/curve25519/curve25519_amd64.go"),
-	[]byte("golang.org/x/crypto/chacha20poly1305/chacha20poly1305_amd64.go"),
+var noFPSourceSuffixes = []string{
+	"/src/crypto/sha1/sha1.go",
+	"/src/crypto/sha256/sha256.go",
+	"/src/crypto/sha512/sha512.go",
+	"/src/crypto/elliptic/p256_asm.go",
+	"golang.org/x/crypto/curve25519/curve25519_amd64.go",
+	"golang.org/x/crypto/chacha20poly1305/chacha20poly1305_amd64.go",
 }
 
 // getSourceFileStrategy categorizes sourceFile's unwinding strategy based on its name
-func getSourceFileStrategy(arch elf.Machine, sourceFile []byte, defaultStrategy strategy) strategy {
+func getSourceFileStrategy(arch elf.Machine, sourceFile string, defaultStrategy strategy) strategy {
 	switch arch {
 	case elf.EM_X86_64:
 		// Most of the assembly code needs explicit SP delta as they do not
 		// create stack frame. Do not recover RBP as it is not modified.
-		if bytes.HasSuffix(sourceFile, []byte(".s")) {
+		if strings.HasSuffix(sourceFile, ".s") {
 			return strategyDeltasWithoutFrame
 		}
 		// Check for the Go source files needing SP delta unwinding to recover RBP
 		for _, suffix := range noFPSourceSuffixes {
-			if bytes.HasSuffix(sourceFile, suffix) {
+			if strings.HasSuffix(sourceFile, suffix) {
 				return strategyDeltasWithFrame
 			}
 		}
@@ -528,7 +529,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		}
 		// First, check for functions with special handling.
 		funcName := getString(funcnametab, int(fun.nameOff))
-		if info, found := goFunctionsStopDelta[string(funcName)]; found {
+		if info, found := goFunctionsStopDelta[funcName]; found {
 			ee.deltas.Add(sdtypes.StackDelta{
 				Address: fun.startPc,
 				Info:    *info,
