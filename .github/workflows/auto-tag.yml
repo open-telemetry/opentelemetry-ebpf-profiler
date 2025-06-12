@@ -1,4 +1,4 @@
-name: Weekly Tagging
+name: Monthly Tagging
 on:
   schedule:
     # Run every month on the 1st day at 08:15 AM.
