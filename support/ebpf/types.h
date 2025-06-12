@@ -345,7 +345,7 @@ typedef enum TraceOrigin {
 // MAX_FRAME_UNWINDS defines the maximum number of frames per
 // Trace we can unwind and respect the limit of eBPF instructions,
 // limit of tail calls and limit of stack size per eBPF program.
-#define MAX_FRAME_UNWINDS 128
+#define MAX_FRAME_UNWINDS 256
 
 // MAX_NON_ERROR_FRAME_UNWINDS defines the maximum number of frames
 // to be pushed by unwinders while still leaving space for an error frame.
@@ -417,6 +417,7 @@ typedef struct PyProcInfo {
   u8 PyCodeObject_co_argcount, PyCodeObject_co_kwonlyargcount;
   u8 PyCodeObject_co_flags, PyCodeObject_co_firstlineno;
   u8 PyCodeObject_sizeof;
+  u8 continue_with_next_unwinder;
 } PyProcInfo;
 
 // PHPProcInfo is a container for the data needed to build a stack trace for a PHP process.

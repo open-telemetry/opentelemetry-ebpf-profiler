@@ -420,6 +420,7 @@ func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.P
 		PyCodeObject_co_flags:          C.u8(vm.PyCodeObject.Flags),
 		PyCodeObject_co_firstlineno:    C.u8(vm.PyCodeObject.FirstLineno),
 		PyCodeObject_sizeof:            C.u8(vm.PyCodeObject.Sizeof),
+		continue_with_next_unwinder:    C.u8(continueWithNextUnwinder()),
 	}
 
 	err := ebpf.UpdateProcData(libpf.Python, pid, unsafe.Pointer(&cdata))
@@ -866,4 +867,14 @@ func findInterpreterRanges(info *interpreter.LoaderInfo,
 		return interpRanges, nil
 	}
 	return recovered, nil
+}
+
+var NoContinueWithNextUnwinder = atomic.Bool{}
+
+func continueWithNextUnwinder() int {
+	res := 1
+	if NoContinueWithNextUnwinder.Load() {
+		res = 0
+	}
+	return res
 }

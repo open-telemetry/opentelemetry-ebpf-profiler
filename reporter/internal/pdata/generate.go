@@ -24,9 +24,9 @@ import (
 )
 
 const (
-	ExecutableCacheLifetime = 1 * time.Hour
-	FramesCacheLifetime     = 1 * time.Hour
-	FrameMapLifetime        = 1 * time.Hour
+	ExecutableCacheLifetime = 8 * time.Hour
+	FramesCacheLifetime     = 8 * time.Hour
+	FrameMapLifetime        = 8 * time.Hour
 )
 
 // Generate generates a pdata request out of internal profiles data, to be
