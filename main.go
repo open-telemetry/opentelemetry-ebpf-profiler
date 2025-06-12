@@ -21,12 +21,13 @@ import (
 	"github.com/elastic/otel-profiling-agent/tracehandler"
 
 	"github.com/elastic/otel-profiling-agent/hostmetadata"
-	"github.com/elastic/otel-profiling-agent/metrics/reportermetrics"
+	//	"github.com/elastic/otel-profiling-agent/metrics/reportermetrics"
 
 	"github.com/elastic/otel-profiling-agent/config"
 	"github.com/elastic/otel-profiling-agent/metrics"
 	"github.com/elastic/otel-profiling-agent/metrics/agentmetrics"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	tim "github.com/elastic/otel-profiling-agent/times"
 
 	"github.com/elastic/otel-profiling-agent/tracer"
 
@@ -319,6 +320,8 @@ func mainWithExitCode() exitCode {
 	// periods of time.
 	metadataCollector.StartMetadataCollection(mainCtx, rep)
 
+	tim.StartRealtimeSync()
+
 	// Start agent specific metric retrieval and report them every second.
 	agentMetricCancel, agentErr := agentmetrics.Start(mainCtx, 1*time.Second)
 	if agentErr != nil {
@@ -329,7 +332,7 @@ func mainWithExitCode() exitCode {
 	}
 	defer agentMetricCancel()
 	// Start reporter metric reporting with 60 second intervals.
-	defer reportermetrics.Start(mainCtx, rep, 60*time.Second)()
+	//	defer reportermetrics.Start(mainCtx, rep, 60*time.Second)()
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(mainCtx, rep, times, includeTracers, !argSendErrorFrames)

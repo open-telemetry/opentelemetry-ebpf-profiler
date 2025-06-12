@@ -33,7 +33,7 @@ import (
 // and since the code is mostly dealing with UNIX timestamps, we may
 // as well use uint32s instead.
 // To restore some semblance of type safety, we declare a type alias here.
-type UnixTime32 uint32
+type UnixTime32 uint64
 
 func (t *UnixTime32) MarshalJSON() ([]byte, error) {
 	return time.Unix(int64(*t), 0).UTC().MarshalJSON()
@@ -563,18 +563,6 @@ func Int64ToTime(t int64) time.Time {
 	}
 	return time.Unix(0, t)
 }
-
-// KTime stores a time value, retrieved from a monotonic clock, in nanoseconds
-type KTime int64
-
-// GetKTime gets the current time in same nanosecond format as bpf_ktime_get_ns() eBPF call
-// This relies runtime.nanotime to use CLOCK_MONOTONIC. If this changes, this needs to
-// be adjusted accordingly. Using this internal is superior in performance, as it is able
-// to use the vDSO to query the time without syscall.
-//
-//go:noescape
-//go:linkname GetKTime runtime.nanotime
-func GetKTime() KTime
 
 // Void allows to use maps as sets without memory allocation for the values.
 // From the "Go Programming Language":

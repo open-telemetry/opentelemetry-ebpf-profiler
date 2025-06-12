@@ -87,7 +87,14 @@ message Profile {
   // Index into the string table of the type of the preferred sample
   // value. If unset, clients should default to the last sample value.
   int64 default_sample_type = 14;
+
+  // Stacks referenced by samples via stack_index.
+  repeated Stack stack_table = 19;
+
+  repeated int32 stack_parent_array = 20;
+  repeated int32 stack_location_index = 21;
 }
+
 // Represents a mapping between Attribute Keys and Units.
 message AttributeUnit {
   // Index into string table.
@@ -174,17 +181,14 @@ message ValueType {
 // augmented with auxiliary information like the thread-id, some
 // indicator of a higher level request being handled etc.
 message Sample {
-  // The indices recorded here correspond to locations in Profile.location.
-  // The leaf is at location_index[0]. [deprecated, superseded by locations_start_index / locations_length]
-  repeated uint64 location_index = 1;
-  // locations_start_index along with locations_length refers to to a slice of locations in Profile.location.
+ // Reference to stack in Profile.stack_table.
+  int32 stack_index = 1;
+  // locations_start_index along with locations_length refers to to a slice of locations in Profile.location_indices.
   // Supersedes location_index.
   uint64 locations_start_index = 7;
-  // locations_length along with locations_start_index refers to a slice of locations in Profile.location.
+  // locations_length along with locations_start_index refers to a slice of locations in Profile.location_indices.
   // Supersedes location_index.
   uint64 locations_length = 8;
-  // A 128bit id that uniquely identifies this stacktrace, globally. Index into string table. [optional]
-  uint32 stacktrace_id_index = 9;
   // The type and unit of each value is defined by the corresponding
   // entry in Profile.sample_type. All samples must have the same
   // number of values, the same as the length of Profile.sample_type.
@@ -210,6 +214,13 @@ message Sample {
   // to fall within the Profile's time range. [optional]
   repeated uint64 timestamps = 13;
 }
+
+// A Stack represents a stack trace as a list of locations. The first location
+// is the leaf frame.
+message Stack {
+  repeated int32 location_indices = 1;
+}
+
 // Provides additional context for a sample,
 // such as thread ID or allocation size, with optional units. [deprecated]
 message Label {
