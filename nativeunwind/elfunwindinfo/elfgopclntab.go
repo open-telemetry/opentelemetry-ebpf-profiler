@@ -468,6 +468,22 @@ func (g *Gopclntab) getFunc(funcOff uintptr) (uintptr, *pclntabFunc) {
 	return pc, (*pclntabFunc)(unsafe.Pointer(&g.funcdata[funcOff]))
 }
 
+// getPcval returns the pcval table at given offset with 'pc' as the pc start value.
+func (g *Gopclntab) getPcval(offs int32, startPc uint) pcval {
+	return newPcval(g.pctab[int(offs):], startPc, g.quantum)
+}
+
+// mapPcval steps the given pcval table until matching PC is found and returns the value.
+func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
+	p := g.getPcval(offs, startPc)
+	for pc >= p.pcEnd {
+		if ok := p.step(); !ok {
+			return 0, false
+		}
+	}
+	return p.val, true
+}
+
 // Symbolize returns the file, line and function information for given PC
 func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
 	index := sort.Search(g.numFuncs, func(i int) bool {
@@ -486,12 +502,16 @@ func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcNam
 
 	funcName = getString(g.funcnametab, int(fun.nameOff))
 	if fun.pcfileOff != 0 {
-		p := newPcval(g.pctab[fun.pcfileOff:], uint(funcPc), g.quantum)
-		fileIndex := int(p.val)
-		if g.version >= go1_16 {
-			fileIndex += int(fun.npcData)
+		if fileIndex, ok := g.mapPcval(fun.pcfileOff, uint(funcPc), uint(pc)); ok {
+			if g.version >= go1_16 {
+				fileIndex += fun.npcData
+			}
+			sourceFile = getString(g.filetab, getInt32(g.cutab, 4*int(fileIndex)))
 		}
-		sourceFile = getString(g.filetab, getInt32(g.cutab, 4*fileIndex))
+	}
+	if fun.pclnOff != 0 {
+		lineNo, _ := g.mapPcval(fun.pclnOff, uint(funcPc), uint(pc))
+		line = uint(lineNo)
 	}
 	return sourceFile, line, funcName
 }
@@ -665,7 +685,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		// to using frame pointers in the unlikely case of no file info
 		fileStrategy := defaultStrategy
 		if fun.pcfileOff != 0 {
-			p := newPcval(g.pctab[fun.pcfileOff:], uint(funcPc), g.quantum)
+			p := g.getPcval(fun.pcfileOff, uint(funcPc))
 			fileIndex := int(p.val)
 			if g.version >= go1_16 {
 				fileIndex += int(fun.npcData)
@@ -699,7 +719,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 			return fmt.Errorf(".gopclntab func %v pcscOff (%d) is invalid",
 				i, fun.pcspOff)
 		}
-		p := newPcval(g.pctab[fun.pcspOff:], uint(funcPc), g.quantum)
+		p := g.getPcval(fun.pcspOff, uint(funcPc))
 		if err := parsePclntab(ee.deltas, p, fileStrategy); err != nil {
 			return err
 		}
