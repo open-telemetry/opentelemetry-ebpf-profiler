@@ -5,7 +5,7 @@ on:
     - cron: '15 8 * 1 *'
 
 jobs:
-  create-weekly-tag:
+  create-monthly-tag:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
