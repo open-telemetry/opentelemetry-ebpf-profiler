@@ -104,8 +104,14 @@ type pclntabHeader118 struct {
 
 // pclntabFuncMap is the Golang function symbol table map entry
 type pclntabFuncMap struct {
-	pc      uint64
-	funcOff uint64
+	pc      uintptr
+	funcOff uintptr
+}
+
+// pclntabFuncMap118 is the Golang function symbol table map entry starting Go 1.18
+type pclntabFuncMap118 struct {
+	pc      uint32
+	funcOff uint32
 }
 
 // pclntabFunc is the Golang function definition (struct _func in the spec) as before Go 1.18.
@@ -337,10 +343,9 @@ type Gopclntab struct {
 	version uint8
 	quantum uint8
 
-	numFuncs  int
-	mapSize   int
-	funSize   int
-	fieldSize int
+	numFuncs    int
+	funSize     int
+	funcMapSize int
 
 	functab, funcdata, funcnametab, filetab, pctab, cutab []byte
 }
@@ -360,13 +365,12 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 
 	hdr := (*pclntabHeader)(unsafe.Pointer(&data[0]))
 	g := &Gopclntab{
-		data:      data,
-		version:   goMagicToVersion(hdr.magic),
-		quantum:   hdr.quantum,
-		mapSize:   int(unsafe.Sizeof(pclntabFuncMap{})),
-		funSize:   int(unsafe.Sizeof(pclntabFunc{})),
-		fieldSize: int(hdr.ptrSize),
-		numFuncs:  int(hdr.numFuncs),
+		data:        data,
+		version:     goMagicToVersion(hdr.magic),
+		quantum:     hdr.quantum,
+		funSize:     int(unsafe.Sizeof(pclntabFunc{})),
+		funcMapSize: int(hdr.ptrSize) * 2,
+		numFuncs:    int(hdr.numFuncs),
 	}
 	if g.version == goInvalid || hdr.pad != 0 || hdr.ptrSize != 8 {
 		return nil, fmt.Errorf(".gopclntab header: %x, %x, %x", hdr.magic, hdr.pad, hdr.ptrSize)
@@ -374,7 +378,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 
 	switch g.version {
 	case go1_2:
-		functabEnd := int(hdrSize) + g.numFuncs*g.mapSize + int(hdr.ptrSize)
+		functabEnd := int(hdrSize) + g.numFuncs*g.funcMapSize + int(hdr.ptrSize)
 		filetabOffset := getInt32(data, functabEnd)
 		numSourceFiles := getInt32(data, filetabOffset)
 		if filetabOffset == 0 || numSourceFiles == 0 {
@@ -434,11 +438,23 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		//
 		//nolint:lll
 		// See https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L376-L382
-		g.fieldSize = int(4)
-		g.mapSize = g.fieldSize * 2
+		g.funcMapSize = 2 * int(4)
 	}
 
 	return g, nil
+}
+
+// getFuncMapEntry returns the entry at 'index' from the gopclntab function lookup map.
+func (g *Gopclntab) getFuncMapEntry(index int) (pc, funcOff uintptr) {
+	if g.version >= go1_18 {
+		//nolint:lll
+		// See: https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L401-L413
+		fmap := (*pclntabFuncMap118)(unsafe.Pointer(&g.functab[index*g.funcMapSize]))
+		return g.textStart + uintptr(fmap.pc), uintptr(fmap.funcOff)
+	} else {
+		fmap := (*pclntabFuncMap)(unsafe.Pointer(&g.functab[index*g.funcMapSize]))
+		return fmap.pc, fmap.funcOff
+	}
 }
 
 ////
@@ -589,27 +605,17 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		return fmt.Errorf("unsupported ELF architecture (%x)", arch)
 	}
 
-	fmap := &pclntabFuncMap{}
 	fun := &pclntabFunc{}
 	// Iterate the golang PC to function lookup table (sorted by PC)
 	for i := 0; i < g.numFuncs; i++ {
-		if g.version >= go1_18 {
-			//nolint:lll
-			// See: https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L401-L413
-			*fmap = pclntabFuncMap{}
-			funcIdx := i * 2 * g.fieldSize
-			fmap.pc = uint64(*(*uint32)(unsafe.Pointer(&g.functab[funcIdx])))
-			fmap.funcOff = uint64(*(*uint32)(unsafe.Pointer(&g.functab[funcIdx+g.fieldSize])))
-			fmap.pc += uint64(g.textStart)
-		} else {
-			fmap = (*pclntabFuncMap)(unsafe.Pointer(&g.functab[i*g.mapSize]))
-		}
+		_, funcOff := g.getFuncMapEntry(i)
+
 		// Get the function data
-		if len(g.funcdata) < int(fmap.funcOff)+g.funSize {
+		if len(g.funcdata) < int(funcOff)+g.funSize {
 			return fmt.Errorf(".gopclntab func %v descriptor is invalid", i)
 		}
 		if g.version >= go1_18 {
-			tmp := (*pclntabFunc118)(unsafe.Pointer(&g.funcdata[fmap.funcOff]))
+			tmp := (*pclntabFunc118)(unsafe.Pointer(&g.funcdata[funcOff]))
 			*fun = pclntabFunc{
 				startPc:   uint64(g.textStart) + uint64(tmp.entryoff),
 				nameOff:   tmp.nameOff,
@@ -622,7 +628,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 				npcData:   tmp.npcData,
 			}
 		} else {
-			fun = (*pclntabFunc)(unsafe.Pointer(&g.funcdata[fmap.funcOff]))
+			fun = (*pclntabFunc)(unsafe.Pointer(&g.funcdata[funcOff]))
 		}
 		// First, check for functions with special handling.
 		funcName := getString(g.funcnametab, int(fun.nameOff))
@@ -679,22 +685,8 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	}
 
 	// Filter out .gopclntab info from other sources
-	var start, end uintptr
-	if g.version >= go1_18 {
-		//nolint:lll
-		// https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L440-L450
-		start = uintptr(*(*uint32)(unsafe.Pointer(&g.functab[0])))
-		start += g.textStart
-		// From go12symtab document, reason for indexing beyond numFuncs:
-		// "The final pcN value is the address just beyond func(N-1), so that the binary
-		// search can distinguish between a pc inside func(N-1) and a pc outside the text
-		// segment."
-		end = uintptr(*(*uint32)(unsafe.Pointer(&g.functab[g.numFuncs*g.mapSize])))
-		end += g.textStart
-	} else {
-		start = *(*uintptr)(unsafe.Pointer(&g.functab[0]))
-		end = *(*uintptr)(unsafe.Pointer(&g.functab[g.numFuncs*g.mapSize]))
-	}
+	start, _ := g.getFuncMapEntry(0)
+	end, _ := g.getFuncMapEntry(g.numFuncs)
 	ee.hooks.golangHook(start, end)
 
 	// Add end of code indicator
