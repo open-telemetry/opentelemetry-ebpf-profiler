@@ -103,7 +103,7 @@ func Open(filename string) (*ReaderAt, error) {
 		return nil, fmt.Errorf("mmap: file %q is too large", filename)
 	}
 
-	data, err := syscall.Mmap(int(f.Fd()), 0, int(size), syscall.PROT_READ, syscall.MAP_SHARED)
+	data, err := syscall.Mmap(int(f.Fd()), 0, int(size), syscall.PROT_READ, syscall.MAP_PRIVATE)
 	if err != nil {
 		return nil, err
 	}
