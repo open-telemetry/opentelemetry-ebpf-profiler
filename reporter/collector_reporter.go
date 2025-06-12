@@ -5,7 +5,6 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
-	"maps"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -16,7 +15,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // Assert that we implement the full Reporter interface.
@@ -57,11 +55,7 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 		return nil, err
 	}
 
-	originsMap := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
-	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
-		support.TraceOriginOffCPU} {
-		originsMap[origin] = make(samples.KeyToEventMapping)
-	}
+	tree := make(samples.TraceEventsTree)
 
 	return &CollectorReporter{
 		baseReporter: &baseReporter{
@@ -70,7 +64,7 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 			version:      cfg.Version,
 			pdata:        data,
 			cgroupv2ID:   cgroupv2ID,
-			traceEvents:  xsync.NewRWMutex(originsMap),
+			traceEvents:  xsync.NewRWMutex(tree),
 			hostmetadata: hostmetadata,
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),
@@ -107,16 +101,13 @@ func (r *CollectorReporter) Start(ctx context.Context) error {
 
 // reportProfile creates and sends out a profile.
 func (r *CollectorReporter) reportProfile(ctx context.Context) error {
-	traceEvents := r.traceEvents.WLock()
-	events := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
-	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
-		support.TraceOriginOffCPU} {
-		events[origin] = maps.Clone((*traceEvents)[origin])
-		clear((*traceEvents)[origin])
-	}
-	r.traceEvents.WUnlock(&traceEvents)
+	traceEventsPtr := r.traceEvents.WLock()
+	reportedEvents := (*traceEventsPtr)
+	newEvents := make(samples.TraceEventsTree)
+	*traceEventsPtr = newEvents
+	r.traceEvents.WUnlock(&traceEventsPtr)
 
-	profiles := r.pdata.Generate(events)
+	profiles := r.pdata.Generate(reportedEvents, r.name, r.version)
 	if profiles.SampleCount() == 0 {
 		log.Debugf("Skip sending profile with no samples")
 		return nil
