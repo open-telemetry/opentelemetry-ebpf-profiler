@@ -311,18 +311,14 @@ func getOpcacheJITInfo(ef *pfelf.File) (dasmBuf, dasmSize libpf.Address, err err
 	// Note: zend_jit_unprotect was chosen because it immediately calls mprotect with
 	// dasm_buf as the first parameter, which should be in a register for both x86-64
 	// and ARM64.
-	zendJit, err := ef.LookupSymbolAddress("zend_jit_unprotect")
+
+	// We should only need 64 bytes, since this should be early in the instruction sequence.
+	addr, code, err := ef.SymbolData("zend_jit_unprotect", 64)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	// We should only need 64 bytes, since this should be early in the instruction sequence.
-	code := make([]byte, 64)
-	if _, err = ef.ReadVirtualMemory(code, int64(zendJit)); err != nil {
-		return 0, 0, err
-	}
-
-	dasmBufPtr, dasmSizePtr, err := retrieveJITBufferPtrWrapper(code, zendJit)
+	dasmBufPtr, dasmSizePtr, err := retrieveJITBufferPtrWrapper(code, addr)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to extract DASM pointers: %w", err)
 	}

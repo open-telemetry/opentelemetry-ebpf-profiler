@@ -69,6 +69,9 @@ type File struct {
 	// ehFrame is a pointer to the PT_GNU_EH_FRAME segment of the ELF
 	ehFrame *Prog
 
+	// loadData is a slice of pointers to the PT_LOAD data segments of the ELF.
+	loadData []*Prog
+
 	// ROData is a slice of pointers to the read-only data segments of the ELF
 	// These are sorted so that segments marked as "read" appear before those
 	// marked as "read-execute"
@@ -233,6 +236,8 @@ func newFile(r io.ReaderAt, closer io.Closer,
 
 	f.Progs = make([]Prog, hdr.Phnum)
 	virtualBase := ^uint64(0)
+	numROData := 0
+	numLoad := 0
 	for i, ph := range progs {
 		p := &f.Progs[i]
 		p.ProgHeader = elf.ProgHeader{
@@ -251,12 +256,24 @@ func newFile(r io.ReaderAt, closer io.Closer,
 			if p.Vaddr < virtualBase {
 				virtualBase = p.Vaddr
 			}
-			andFlags := p.Flags & (elf.PF_R | elf.PF_W | elf.PF_X)
-			if andFlags == elf.PF_R || andFlags == (elf.PF_R|elf.PF_X) {
+			if p.isRoData() {
+				numROData++
+			}
+			numLoad++
+		}
+	}
+	f.loadData = make([]*Prog, 0, numLoad)
+	f.ROData = make([]*Prog, 0, numROData)
+	for i := range progs {
+		p := &f.Progs[i]
+		if p.Type == elf.PT_LOAD {
+			f.loadData = append(f.loadData, p)
+			if p.isRoData() {
 				f.ROData = append(f.ROData, p)
 			}
 		}
 	}
+
 	if loadAddress != 0 {
 		// Calculate the bias for coredump files
 		f.bias = libpf.Address(loadAddress - virtualBase)
@@ -421,20 +438,56 @@ func (f *File) Section(name string) *Section {
 	return nil
 }
 
+// findVirtualAddressProg determines the Prog header containing the virtual address.
+func (f *File) findVirtualAddressProg(addr uint64) *Prog {
+	// Search for the Program header that contains the start address.
+	for _, ph := range f.loadData {
+		if addr >= ph.Vaddr && addr < ph.Vaddr+ph.Memsz {
+			return ph
+		}
+	}
+	return nil
+}
+
+// VirtualMemory returns a slice for the request data at a virtual address.
+// The slice may point to mmapped data or be a newly allocated slice.
+func (f *File) VirtualMemory(addr int64, sz int) ([]byte, error) {
+	if sz == 0 {
+		return nil, nil
+	}
+	if ph := f.findVirtualAddressProg(uint64(addr)); ph != nil {
+		offset := addr - int64(ph.Vaddr)
+		if offset+int64(sz) <= int64(ph.Filesz) {
+			if mapping, ok := ph.elfReader.(*mmap.ReaderAt); ok {
+				return mapping.Subslice(int(ph.Off)+int(addr), sz)
+			}
+		}
+		buf := make([]byte, sz)
+		n, err := ph.ReadAt(buf, offset)
+		return buf[:n], err
+	}
+	return nil, fmt.Errorf("no matching segment for 0x%x", uint64(addr))
+}
+
+// SymbolData returns the data associated with given dynamic symbol.
+// The backing mmapped data is returned if possible, otherwise a maximum of
+// maxCopy bytes of the symbol data will read to newly allocated buffer.
+func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (libpf.SymbolValue, []byte, error) {
+	sym, err := f.LookupSymbol(name)
+	if err != nil {
+		return 0, nil, err
+	}
+	data, err := f.VirtualMemory(int64(sym.Address), int(sym.Size))
+	return sym.Address, data, err
+}
+
 // ReadVirtualMemory reads bytes from given virtual address
 func (f *File) ReadVirtualMemory(p []byte, addr int64) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	for _, ph := range f.Progs {
-		// Search for the Program header that contains the start address.
-		// ReadVirtualMemory() supports ReadAt() style indication of reading
-		// less bytes then requested, so addr+len(p) can be an address beyond
-		// the segment and ReadAt() will give short read.
-		if ph.Type == elf.PT_LOAD && uint64(addr) >= ph.Vaddr &&
-			uint64(addr) < ph.Vaddr+ph.Memsz {
-			return ph.ReadAt(p, addr-int64(ph.Vaddr))
-		}
+	if ph := f.findVirtualAddressProg(uint64(addr)); ph != nil {
+		return ph.ReadAt(p, addr-int64(ph.Vaddr))
 	}
 	return 0, fmt.Errorf("no matching segment for 0x%x", uint64(addr))
 }
@@ -667,6 +720,15 @@ func (f *File) CRC32() (int32, error) {
 	return int32(h.Sum32()), nil
 }
 
+// isRoData determine if this program header is read-only data.
+func (ph *Prog) isRoData() bool {
+	if ph.Type != elf.PT_LOAD {
+		return false
+	}
+	andFlags := ph.Flags & (elf.PF_R | elf.PF_W | elf.PF_X)
+	return andFlags == elf.PF_R || andFlags == (elf.PF_R|elf.PF_X)
+}
+
 // ReadAt implements the io.ReaderAt interface
 func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 	// First load as much as possible from the disk
@@ -709,8 +771,7 @@ func (ph *Prog) Open() io.ReadSeeker {
 
 // Data loads the whole program header referenced data, and returns it as slice.
 func (ph *Prog) Data(maxSize uint) ([]byte, error) {
-	mapping, ok := ph.elfReader.(*mmap.ReaderAt)
-	if ok {
+	if mapping, ok := ph.elfReader.(*mmap.ReaderAt); ok {
 		return mapping.Subslice(int(ph.Off), int(ph.Filesz))
 	}
 
@@ -738,8 +799,7 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 		return nil, errors.New("compressed sections not supported")
 	}
 
-	mapping, ok := sh.elfReader.(*mmap.ReaderAt)
-	if ok {
+	if mapping, ok := sh.elfReader.(*mmap.ReaderAt); ok {
 		return mapping.Subslice(int(sh.Offset), int(sh.FileSize))
 	}
 
@@ -776,13 +836,13 @@ func (f *File) readAndMatchSymbol(n uint32, name libpf.SymbolName) (libpf.Symbol
 		return libpf.Symbol{}, false
 	}
 	slen := len(name) + 1
-	sname := make([]byte, slen)
-	if _, err := f.ReadVirtualMemory(sname, f.stringsAddr+int64(sym.Name)); err != nil {
+	sname, err := f.VirtualMemory(f.stringsAddr+int64(sym.Name), slen)
+	if err != nil {
 		return libpf.Symbol{}, false
 	}
 
 	// Verify that name matches
-	if sname[slen-1] != 0 || libpf.SymbolName(sname[:slen-1]) != name {
+	if sname[slen-1] != 0 || unsafe.String(unsafe.SliceData(sname), slen) != string(name) {
 		return libpf.Symbol{}, false
 	}
 
@@ -918,43 +978,48 @@ func (f *File) LookupSymbolAddress(symbol libpf.SymbolName) (libpf.SymbolValue, 
 	return s.Address, nil
 }
 
-// loadSymbolTable reads given symbol table
-func (f *File) loadSymbolTable(name string) (*libpf.SymbolMap, error) {
+// visitSymbolTable visits all symbols in the given symbol table.
+func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol)) error {
 	symTab := f.Section(name)
 	if symTab == nil {
-		return nil, fmt.Errorf("failed to read %v: section not present", name)
+		return fmt.Errorf("failed to read %v: section not present", name)
 	}
 	if symTab.Link >= uint32(len(f.Sections)) {
-		return nil, fmt.Errorf("failed to read %v strtab: link %v out of range",
+		return fmt.Errorf("failed to read %v strtab: link %v out of range",
 			name, symTab.Link)
 	}
 	strTab := f.Sections[symTab.Link]
 	strs, err := strTab.Data(maxBytesLargeSection)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %v: %v", strTab.Name, err)
+		return fmt.Errorf("failed to read %v: %v", strTab.Name, err)
 	}
 	syms, err := symTab.Data(maxBytesLargeSection)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %v: %v", name, err)
+		return fmt.Errorf("failed to read %v: %v", name, err)
 	}
 
-	symMap := libpf.SymbolMap{}
 	symSz := int(unsafe.Sizeof(elf.Sym64{}))
 	for i := 0; i < len(syms); i += symSz {
 		sym := (*elf.Sym64)(unsafe.Pointer(&syms[i]))
-		name, ok := getString(strs, int(sym.Name))
-		if !ok {
-			continue
+		if name, ok := getString(strs, int(sym.Name)); ok {
+			visitor(libpf.Symbol{
+				Name:    libpf.SymbolName(name),
+				Address: libpf.SymbolValue(sym.Value),
+				Size:    sym.Size,
+			})
 		}
-		symMap.Add(libpf.Symbol{
-			Name:    libpf.SymbolName(name),
-			Address: libpf.SymbolValue(sym.Value),
-			Size:    sym.Size,
-		})
+	}
+	return nil
+}
+
+// loadSymbolTable reads given symbol table
+func (f *File) loadSymbolTable(name string) (*libpf.SymbolMap, error) {
+	symMap := &libpf.SymbolMap{}
+	if err := f.visitSymbolTable(name, func(s libpf.Symbol) { symMap.Add(s) }); err != nil {
+		return nil, err
 	}
 	symMap.Finalize()
-
-	return &symMap, nil
+	return symMap, nil
 }
 
 // ReadSymbols reads the full dynamic symbol table from the ELF
@@ -965,6 +1030,11 @@ func (f *File) ReadSymbols() (*libpf.SymbolMap, error) {
 // ReadDynamicSymbols reads the full dynamic symbol table from the ELF
 func (f *File) ReadDynamicSymbols() (*libpf.SymbolMap, error) {
 	return f.loadSymbolTable(".dynsym")
+}
+
+// VisitDynamicSymbols iterates through the dynamic symbol table
+func (f *File) VisitDynamicSymbols(visitor func(libpf.Symbol)) error {
+	return f.visitSymbolTable(".dynsym", visitor)
 }
 
 // DynString returns the strings listed for the given tag in the file's dynamic

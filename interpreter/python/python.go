@@ -661,23 +661,18 @@ func decodeStub(
 	memoryBase libpf.SymbolValue,
 	symbolName libpf.SymbolName,
 ) (libpf.SymbolValue, error) {
-	codeAddress, err := ef.LookupSymbolAddress(symbolName)
+
+	addr, code, err := ef.SymbolData(symbolName, 64)
 	if err != nil {
 		return libpf.SymbolValueInvalid, fmt.Errorf("lookup %s failed: %v",
 			symbolName, err)
 	}
-
-	code := make([]byte, 64)
-	if _, err = ef.ReadVirtualMemory(code, int64(codeAddress)); err != nil {
-		return libpf.SymbolValueInvalid, fmt.Errorf("reading %s 0x%x code failed: %v",
-			symbolName, codeAddress, err)
-	}
-	value, err := decodeStubArgumentWrapper(code, codeAddress, memoryBase)
+	value, err := decodeStubArgumentWrapper(code, addr, memoryBase)
 
 	// Sanity check the value range and alignment
 	if err != nil || value%4 != 0 {
 		return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x):  %v",
-			symbolName, codeAddress, hex.Dump(code), value, err)
+			symbolName, addr, hex.Dump(code), value, err)
 	}
 	// If base symbol (_PyRuntime) is not provided, accept any found value.
 	if memoryBase == 0 && value != 0 {
@@ -688,7 +683,7 @@ func decodeStub(
 		return value, nil
 	}
 	return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x)",
-		symbolName, codeAddress, hex.Dump(code), value)
+		symbolName, addr, hex.Dump(code), value)
 }
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
