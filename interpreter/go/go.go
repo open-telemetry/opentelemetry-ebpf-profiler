@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -28,7 +29,7 @@ var (
 )
 
 type goData struct {
-	pclnData []byte
+	pfElf    *pfelf.File
 	symTable *gosym.Table
 }
 
@@ -86,23 +87,20 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 		return nil, errors.New("failed to get address of runtime.text")
 	}
 
-	// Avoid race conditions where the mmaped backed data is no longer
-	// available but we try to symbolize Go frames.
-	cpy := make([]byte, len(pclnData))
-	copy(cpy, pclnData)
-	gD := &goData{pclnData: cpy}
-
-	pcln := gosym.NewLineTable(gD.pclnData, runtimeTextAddr)
+	pcln := gosym.NewLineTable(pclnData, runtimeTextAddr)
 	if pcln == nil {
 		return nil, errors.New("failed to create Line Table from .gopclntab")
 	}
 
-	gD.symTable, err = gosym.NewTable(nil, pcln)
+	symTable, err := gosym.NewTable(nil, pcln)
 	if err != nil {
 		return nil, err
 	}
 
-	return gD, nil
+	return &goData{
+		pfElf:    ef.Take(),
+		symTable: symTable,
+	}, nil
 }
 
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
@@ -118,8 +116,8 @@ func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
 	}, nil
 }
 
-// Unload is a NOP for goData.
 func (g *goData) Unload(_ interpreter.EbpfHandler) {
+	_ = g.pfElf.Close()
 }
 
 func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
