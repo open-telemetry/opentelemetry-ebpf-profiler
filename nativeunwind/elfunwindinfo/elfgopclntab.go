@@ -12,6 +12,7 @@ import (
 	"debug/elf"
 	"fmt"
 	"go/version"
+	"sort"
 	"strings"
 	"unsafe"
 
@@ -114,19 +115,11 @@ type pclntabFuncMap118 struct {
 	funcOff uint32
 }
 
-// pclntabFunc is the Golang function definition (struct _func in the spec) as before Go 1.18.
+// pclntabFunc is the common portion of the Golang function definition.
 type pclntabFunc struct {
-	startPc                      uint64
-	nameOff, argsSize, frameSize int32
-	pcspOff, pcfileOff, pclnOff  int32
-	nfuncData, npcData           int32
-}
-
-// pclntabFunc118 is the Golang function definition (struct _func in the spec)
-// starting with Go 1.18.
-// see: go/src/runtime/runtime2.go (struct _func)
-type pclntabFunc118 struct {
-	entryoff                     uint32 // start pc, as offset from pcHeader.textStart
+	// The actual data is preceded with the function start PC value, which is
+	// a pointer (pre-Go1.18) or fixed 32-bit offset from .text start (Go1.18+).
+	// startPc                   uintptr | uint32
 	nameOff, argsSize, frameSize int32
 	pcspOff, pcfileOff, pclnOff  int32
 	nfuncData, npcData           int32
@@ -291,8 +284,8 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, error) {
 	return nil, nil
 }
 
-// ExtractGoPclntab extracts the .gopclntab data from a given pfelf.File.
-func ExtractGoPclntab(ef *pfelf.File) (data []byte, err error) {
+// extractGoPclntab extracts the .gopclntab data from a given pfelf.File.
+func extractGoPclntab(ef *pfelf.File) (data []byte, err error) {
 	if ef.InsideCore {
 		// Section tables not available. Use heuristic. Ignore errors as
 		// this might not be a Go binary.
@@ -339,20 +332,20 @@ func ExtractGoPclntab(ef *pfelf.File) (data []byte, err error) {
 type Gopclntab struct {
 	data      []byte
 	textStart uintptr
+	numFuncs  int
 
-	version uint8
-	quantum uint8
-
-	numFuncs    int
-	funSize     int
-	funcMapSize int
+	version     uint8
+	quantum     uint8
+	ptrSize     uint8
+	funSize     uint8
+	funcMapSize uint8
 
 	functab, funcdata, funcnametab, filetab, pctab, cutab []byte
 }
 
 // NewGopclntab parses and returns the parsed data for further operations.
 func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
-	data, err := ExtractGoPclntab(ef)
+	data, err := extractGoPclntab(ef)
 	if data == nil {
 		return nil, err
 	}
@@ -368,8 +361,9 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		data:        data,
 		version:     goMagicToVersion(hdr.magic),
 		quantum:     hdr.quantum,
-		funSize:     int(unsafe.Sizeof(pclntabFunc{})),
-		funcMapSize: int(hdr.ptrSize) * 2,
+		ptrSize:     hdr.ptrSize,
+		funSize:     hdr.ptrSize + uint8(unsafe.Sizeof(pclntabFunc{})),
+		funcMapSize: hdr.ptrSize * 2,
 		numFuncs:    int(hdr.numFuncs),
 	}
 	if g.version == goInvalid || hdr.pad != 0 || hdr.ptrSize != 8 {
@@ -378,7 +372,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 
 	switch g.version {
 	case go1_2:
-		functabEnd := int(hdrSize) + g.numFuncs*g.funcMapSize + int(hdr.ptrSize)
+		functabEnd := int(hdrSize) + g.numFuncs*int(g.funcMapSize) + int(hdr.ptrSize)
 		filetabOffset := getInt32(data, functabEnd)
 		numSourceFiles := getInt32(data, filetabOffset)
 		if filetabOffset == 0 || numSourceFiles == 0 {
@@ -432,13 +426,13 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.functab = data[hdr118.pclnOffset:]
 		g.funcdata = g.functab
 		g.textStart = hdr118.textStart
-		g.funSize = int(unsafe.Sizeof(pclntabFunc118{}))
 		// With the change of the type of the first field of _func in Go 1.18, this
 		// value is now hard coded.
 		//
 		//nolint:lll
 		// See https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L376-L382
-		g.funcMapSize = 2 * int(4)
+		g.funcMapSize = 2 * 4
+		g.funSize = 4 + uint8(unsafe.Sizeof(pclntabFunc{}))
 	}
 
 	return g, nil
@@ -449,15 +443,58 @@ func (g *Gopclntab) getFuncMapEntry(index int) (pc, funcOff uintptr) {
 	if g.version >= go1_18 {
 		//nolint:lll
 		// See: https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L401-L413
-		fmap := (*pclntabFuncMap118)(unsafe.Pointer(&g.functab[index*g.funcMapSize]))
+		fmap := (*pclntabFuncMap118)(unsafe.Pointer(&g.functab[index*int(g.funcMapSize)]))
 		return g.textStart + uintptr(fmap.pc), uintptr(fmap.funcOff)
 	} else {
-		fmap := (*pclntabFuncMap)(unsafe.Pointer(&g.functab[index*g.funcMapSize]))
+		fmap := (*pclntabFuncMap)(unsafe.Pointer(&g.functab[index*int(g.funcMapSize)]))
 		return fmap.pc, fmap.funcOff
 	}
 }
 
-////
+// getFunc returns the gopclntab function data and its starts address given.
+func (g *Gopclntab) getFunc(funcOff uintptr) (uintptr, *pclntabFunc) {
+	// Get the function data
+	if uintptr(len(g.funcdata)) < funcOff+uintptr(g.funSize) {
+		return 0, nil
+	}
+	var pc uintptr
+	if g.version >= go1_18 {
+		pc = g.textStart + uintptr(*(*uint32)(unsafe.Pointer(&g.funcdata[funcOff])))
+		funcOff += 4
+	} else {
+		pc = *(*uintptr)(unsafe.Pointer(&g.funcdata[funcOff]))
+		funcOff += uintptr(g.ptrSize)
+	}
+	return pc, (*pclntabFunc)(unsafe.Pointer(&g.funcdata[funcOff]))
+}
+
+// Symbolize returns the file, line and function information for given PC
+func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
+	index := sort.Search(g.numFuncs, func(i int) bool {
+		funcPc, _ := g.getFuncMapEntry(i)
+		return funcPc >= pc
+	}) - 1
+	if index < 0 {
+		return "", 0, ""
+	}
+
+	mapPc, funcOff := g.getFuncMapEntry(index)
+	funcPc, fun := g.getFunc(funcOff)
+	if fun == nil || mapPc != funcPc {
+		return "", 0, ""
+	}
+
+	funcName = getString(g.funcnametab, int(fun.nameOff))
+	if fun.pcfileOff != 0 {
+		p := newPcval(g.pctab[fun.pcfileOff:], uint(funcPc), g.quantum)
+		fileIndex := int(p.val)
+		if g.version >= go1_16 {
+			fileIndex += int(fun.npcData)
+		}
+		sourceFile = getString(g.filetab, getInt32(g.cutab, 4*fileIndex))
+	}
+	return sourceFile, line, funcName
+}
 
 type strategy int
 
@@ -605,36 +642,20 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		return fmt.Errorf("unsupported ELF architecture (%x)", arch)
 	}
 
-	fun := &pclntabFunc{}
 	// Iterate the golang PC to function lookup table (sorted by PC)
 	for i := 0; i < g.numFuncs; i++ {
-		_, funcOff := g.getFuncMapEntry(i)
+		mapPc, funcOff := g.getFuncMapEntry(i)
+		funcPc, fun := g.getFunc(funcOff)
+		if fun == nil || mapPc != funcPc {
+			return fmt.Errorf(".gopclntab func %v descriptor is invalid (pc %x/%x)",
+				i, mapPc, funcPc)
+		}
 
-		// Get the function data
-		if len(g.funcdata) < int(funcOff)+g.funSize {
-			return fmt.Errorf(".gopclntab func %v descriptor is invalid", i)
-		}
-		if g.version >= go1_18 {
-			tmp := (*pclntabFunc118)(unsafe.Pointer(&g.funcdata[funcOff]))
-			*fun = pclntabFunc{
-				startPc:   uint64(g.textStart) + uint64(tmp.entryoff),
-				nameOff:   tmp.nameOff,
-				argsSize:  tmp.argsSize,
-				frameSize: tmp.argsSize,
-				pcspOff:   tmp.pcspOff,
-				pcfileOff: tmp.pcfileOff,
-				pclnOff:   tmp.pclnOff,
-				nfuncData: tmp.nfuncData,
-				npcData:   tmp.npcData,
-			}
-		} else {
-			fun = (*pclntabFunc)(unsafe.Pointer(&g.funcdata[funcOff]))
-		}
 		// First, check for functions with special handling.
 		funcName := getString(g.funcnametab, int(fun.nameOff))
 		if info, found := goFunctionsStopDelta[funcName]; found {
 			ee.deltas.Add(sdtypes.StackDelta{
-				Address: fun.startPc,
+				Address: uint64(funcPc),
 				Info:    *info,
 			})
 			continue
@@ -644,7 +665,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		// to using frame pointers in the unlikely case of no file info
 		fileStrategy := defaultStrategy
 		if fun.pcfileOff != 0 {
-			p := newPcval(g.pctab[fun.pcfileOff:], uint(fun.startPc), g.quantum)
+			p := newPcval(g.pctab[fun.pcfileOff:], uint(funcPc), g.quantum)
 			fileIndex := int(p.val)
 			if g.version >= go1_16 {
 				fileIndex += int(fun.npcData)
@@ -662,7 +683,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		if fileStrategy == strategyFramePointer {
 			// Use stack frame-pointer delta
 			ee.deltas.Add(sdtypes.StackDelta{
-				Address: fun.startPc,
+				Address: uint64(funcPc),
 				Info:    sdtypes.UnwindInfoFramePointer,
 			})
 			continue
@@ -678,7 +699,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 			return fmt.Errorf(".gopclntab func %v pcscOff (%d) is invalid",
 				i, fun.pcspOff)
 		}
-		p := newPcval(g.pctab[fun.pcspOff:], uint(fun.startPc), g.quantum)
+		p := newPcval(g.pctab[fun.pcspOff:], uint(funcPc), g.quantum)
 		if err := parsePclntab(ee.deltas, p, fileStrategy); err != nil {
 			return err
 		}
