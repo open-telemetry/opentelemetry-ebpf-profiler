@@ -251,27 +251,45 @@ func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map) (EbpfHandler, err
 // UpdateInterpreterOffsets adds the given moduleRanges to the eBPF map interpreterOffsets.
 func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID host.FileID,
 	offsetRanges []util.Range) error {
-	if offsetRanges == nil {
-		return errors.New("offsetRanges is nil")
+	key, value, err := InterpreterOffsetKeyValue(ebpfProgIndex, fileID, offsetRanges)
+	if err != nil {
+		return err
 	}
-	for _, offsetRange := range offsetRanges {
-		//  The keys of this map are executable-id-and-offset-into-text entries, and
-		//  the offset_range associated with them gives the precise area in that page
-		//  where the main interpreter loop is located. This is required to unwind
-		//  nicely from native code into interpreted code.
-		key := uint64(fileID)
-		value := C.OffsetRange{
-			lower_offset:  C.u64(offsetRange.Start),
-			upper_offset:  C.u64(offsetRange.End),
-			program_index: C.u16(ebpfProgIndex),
-		}
-		if err := impl.interpreterOffsets.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
-			cebpf.UpdateAny); err != nil {
-			log.Fatalf("Failed to place interpreter range in map: %v", err)
-		}
+	if err := impl.interpreterOffsets.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
+		cebpf.UpdateAny); err != nil {
+		log.Fatalf("Failed to place interpreter range in map: %v", err)
 	}
 
 	return nil
+}
+
+func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
+	offsetRanges []util.Range) (key uint64, value C.OffsetRange, err error) {
+	rLen := len(offsetRanges)
+	if rLen < 1 || rLen > 2 {
+		return 0, C.OffsetRange{}, fmt.Errorf("invalid ranges %v", offsetRanges)
+	}
+	//  The keys of this map are executable-id-and-offset-into-text entries, and
+	//  the offset_range associated with them gives the precise area in that page
+	//  where the main interpreter loop is located. This is required to unwind
+	//  nicely from native code into interpreted code.
+	key = uint64(fileID)
+	first := offsetRanges[0]
+	value = C.OffsetRange{
+		lower_offset1: C.u64(first.Start),
+		upper_offset1: C.u64(first.End),
+		program_index: C.u16(ebpfProgIndex),
+	}
+	if len(offsetRanges) == 2 {
+		// Fields {lower,upper}_offset2 may be used to specify an optional second range
+		// of an interpreter function. This may be useful if the interpreter function
+		// consists of two non-contiguous memory ranges, which may happen due to Hot/Cold
+		// split compiler optimization
+		second := offsetRanges[1]
+		value.lower_offset2 = C.u64(second.Start)
+		value.upper_offset2 = C.u64(second.End)
+	}
+	return key, value, nil
 }
 
 // getInterpreterTypeMap returns the eBPF map for the given typ
