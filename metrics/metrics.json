@@ -2001,5 +2001,33 @@
     "name": "GoSymbolizationFailure",
     "field": "agent.go.symbolization.failures",
     "id": 277
+  },
+  {
+    "description": "Number of cache hits for Go AddrToFunc",
+    "type": "counter",
+    "name": "GoAddrToFuncHit",
+    "field": "agent.go.addr_to_func.hits",
+    "id": 278
+  },
+  {
+    "description": "Number of cache misses for Go AddrToFunc",
+    "type": "counter",
+    "name": "GoAddrToFuncMiss",
+    "field": "agent.go.addr_to_func.misses",
+    "id": 279
+  },
+  {
+    "description": "Number of added cache elements for Go AddrToFunc",
+    "type": "counter",
+    "name": "GoAddrToFuncAdd",
+    "field": "agent.go.addr_to_func.add",
+    "id": 280
+  },
+  {
+    "description": "Number of deleted cache elements for Go AddrToFunc",
+    "type": "counter",
+    "name": "GoAddrToFuncDel",
+    "field": "agent.go.addr_to_func.del",
+    "id": 281
   }
 ]

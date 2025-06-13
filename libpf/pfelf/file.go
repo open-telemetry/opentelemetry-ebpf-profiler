@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 
@@ -60,6 +61,9 @@ var (
 
 // File represents an open ELF file
 type File struct {
+	// refCount is the number of references
+	refCount atomic.Int32
+
 	// closer is called internally when resources for this File are to be released
 	closer io.Closer
 
@@ -182,11 +186,13 @@ func Open(name string) (*File, error) {
 
 // Close closes the File.
 func (f *File) Close() (err error) {
-	if f.closer != nil {
-		err = f.closer.Close()
-		f.closer = nil
+	if f.refCount.Add(-1) == 0 {
+		if f.closer != nil {
+			err = f.closer.Close()
+			f.closer = nil
+		}
 	}
-	return
+	return err
 }
 
 // NewFile creates a new ELF file object that borrows the given reader.
@@ -317,6 +323,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		}
 	}
 
+	f.refCount.Store(1)
 	return f, nil
 }
 
@@ -330,6 +337,11 @@ func getString(section []byte, start int) (string, bool) {
 		return "", false
 	}
 	return string(section[start : start+slen]), true
+}
+
+func (f *File) Take() *File {
+	f.refCount.Add(1)
+	return f
 }
 
 // LoadSections loads the ELF file sections
