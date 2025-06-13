@@ -459,7 +459,7 @@ func (f *File) VirtualMemory(addr int64, sz int) ([]byte, error) {
 		offset := addr - int64(ph.Vaddr)
 		if offset+int64(sz) <= int64(ph.Filesz) {
 			if mapping, ok := ph.elfReader.(*mmap.ReaderAt); ok {
-				return mapping.Subslice(int(ph.Off)+int(addr), sz)
+				return mapping.Subslice(int(ph.Off)+int(offset), sz)
 			}
 		}
 		buf := make([]byte, sz)

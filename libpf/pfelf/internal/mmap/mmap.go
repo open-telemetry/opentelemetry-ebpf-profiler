@@ -12,11 +12,6 @@ import (
 	"unsafe"
 )
 
-var (
-	// ErrInvalRequest indicates that the requested data exceeds the available mapped data.
-	ErrInvalRequest = errors.New("invalid request")
-)
-
 // ReaderAt reads a memory-mapped file.
 //
 // Like any io.ReaderAt, clients can execute parallel ReadAt calls, but it is
@@ -67,8 +62,8 @@ func (r *ReaderAt) ReadAt(p []byte, off int64) (int, error) {
 // Subslice returns a subset of the mmaped backed data.
 func (r *ReaderAt) Subslice(offset, length int) ([]byte, error) {
 	if offset+length > r.Len() {
-		return nil, fmt.Errorf("requested data %d at 0x%x exceeds %d: %w",
-			length, offset, length, ErrInvalRequest)
+		return nil, fmt.Errorf("requested data %x-%x exceeds %x: %w",
+			offset, offset+length, r.Len(), io.EOF)
 	}
 	return unsafe.Slice((*byte)(unsafe.Pointer(&r.data[offset])), length), nil
 }
