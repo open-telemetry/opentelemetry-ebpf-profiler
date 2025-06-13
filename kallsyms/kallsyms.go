@@ -603,7 +603,7 @@ func (s *Symbolizer) reloadWorker(ctx context.Context, kobjectClient *kobject.Cl
 			}
 		case <-ctx.Done():
 			// Terminate also the kobject poller thread
-			kobjectClient.Close()
+			_ = kobjectClient.Close()
 			return
 		}
 	}
