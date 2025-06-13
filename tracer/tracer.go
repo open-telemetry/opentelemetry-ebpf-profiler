@@ -860,8 +860,9 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]uint32) {
 	if err := eventsMap.NextKey(unsafe.Pointer(&key), unsafe.Pointer(&nextKey)); err != nil {
 		if errors.Is(err, cebpf.ErrKeyNotExist) {
 			log.Tracef("Empty pid_events map")
+		} else {
+			log.Warnf("Failed to read from pid_events map: %v", err)
 		}
-		log.Warnf("Failed to read from pid_events map: %v", err)
 		return
 	}
 
