@@ -53,6 +53,13 @@ type TraceAndMetaKey struct {
 	ExtraMeta any
 }
 
+// TraceEventsTree stores samples and their related metadata in a tree-like
+// structure optimized for the OTel Profiling protocol representation.
+type TraceEventsTree map[ContainerID]map[libpf.Origin]KeyToEventMapping
+
+// ContainerID represents an extracted key from /proc/<PID>/cgroup.
+type ContainerID string
+
 // KeyToEventMapping supports temporary mapping traces to additional information.
 type KeyToEventMapping map[TraceAndMetaKey]*TraceEvents
 
