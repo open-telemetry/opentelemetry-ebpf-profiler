@@ -4,8 +4,6 @@
 package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
 import (
-	"debug/gosym"
-	"errors"
 	"fmt"
 	"hash/fnv"
 	"sync/atomic"
@@ -28,8 +26,8 @@ var (
 )
 
 type goData struct {
-	pfElf    *pfelf.File
-	symTable *gosym.Table
+	pfElf   *pfelf.File
+	pclntab *elfunwindinfo.Gopclntab
 }
 
 type goInstance struct {
@@ -52,50 +50,14 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 		return nil, nil
 	}
 
-	pclnData, err := elfunwindinfo.SearchGoPclntab(ef)
-	if err != nil {
-		return nil, err
-	}
-	if pclnData == nil {
-		return nil, errors.New("failed to identify .gopclntab")
-	}
-
-	runtimeTextAddr := uint64(0)
-
-	textSec := ef.Section(".text")
-	if textSec != nil {
-		runtimeTextAddr = textSec.Addr
-	} else {
-		// Fallback via symbols lookup:
-		//nolint:govet
-		sm, err := ef.ReadDynamicSymbols()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read symbols table: %v", err)
-		}
-		sm.VisitAll(func(s libpf.Symbol) {
-			if s.Name == "runtime.text" {
-				runtimeTextAddr = uint64(s.Address)
-			}
-		})
-	}
-
-	if runtimeTextAddr == 0 {
-		return nil, errors.New("failed to get address of runtime.text")
-	}
-
-	pcln := gosym.NewLineTable(pclnData, runtimeTextAddr)
-	if pcln == nil {
-		return nil, errors.New("failed to create Line Table from .gopclntab")
-	}
-
-	symTable, err := gosym.NewTable(nil, pcln)
-	if err != nil {
+	pclntab, err := elfunwindinfo.NewGopclntab(ef)
+	if pclntab == nil {
 		return nil, err
 	}
 
 	return &goData{
-		pfElf:    ef.Take(),
-		symTable: symTable,
+		pfElf:   ef.Take(),
+		pclntab: pclntab,
 	}, nil
 }
 
@@ -136,15 +98,15 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 	sfCounter := successfailurecounter.New(&g.successCount, &g.failCount)
 	defer sfCounter.DefaultToFailure()
 
-	sourceFile, lineNo, fn := g.d.symTable.PCToLine(uint64(frame.Lineno))
-	if fn == nil {
+	sourceFile, lineNo, fn := g.d.pclntab.Symbolize(uintptr(frame.Lineno))
+	if fn == "" {
 		return fmt.Errorf("failed to symbolize 0x%x", frame.Lineno)
 	}
 
 	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
 	h := fnv.New128a()
 	_, _ = h.Write([]byte(frame.File.StringNoQuotes()))
-	_, _ = h.Write([]byte(fn.Name))
+	_, _ = h.Write([]byte(fn))
 	_, _ = h.Write([]byte(sourceFile))
 	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
 	if err != nil {
@@ -157,7 +119,7 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      frameID,
-		FunctionName: fn.Name,
+		FunctionName: fn,
 		SourceFile:   sourceFile,
 		SourceLine:   libpf.SourceLineno(lineNo),
 	})
