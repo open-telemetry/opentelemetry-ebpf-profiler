@@ -96,6 +96,11 @@ func NewSymbolizer() (*Symbolizer, error) {
 func (m *Module) addName(name string) uint32 {
 	index := len(m.names)
 	l := len(name)
+	// Cap the length to 255 bytes so it fits a byte. Longest seen
+	// symbol so far is 83 bytes.
+	if l > 255 {
+		l = 255
+	}
 	m.names = append(m.names, byte(l))
 	m.names = append(m.names, unsafe.Slice(unsafe.StringData(name), l)...)
 	return uint32(index)
@@ -288,7 +293,7 @@ func (m *Module) LookupSymbolsByPrefix(prefix string) []*libpf.Symbol {
 
 // updateSymbolsFrom parses /proc/kallsyms format data from the reader 'r'.
 // If possible the data from previous reads is re-used to avoid allocations.
-// The Symbolizer internal state is update only if the input data is parsed
+// The Symbolizer internal state is updated only if the input data is parsed
 // successfully.
 func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	var mod *Module
@@ -299,7 +304,7 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	noSymbols := true
 	modules, _ := s.modules.Load().([]Module)
 
-	// The kallsyms symbol order is in generic the following:
+	// The kallsyms symbol order is the following:
 	// 1. kernel symbols (from compressed kallsyms)
 	// 2. kernel arch symbols (if any)
 	// 3. module symbols (grouped by module from all loaded modules)
@@ -309,7 +314,7 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	//
 	// We load the per-module symbols from group #3 in one go. We also generally
 	// do not care about the symbols in group #4 as they are only the __init
-	// symbols after they have been freed. Trying to use these symbolis is
+	// symbols after they have been freed. Trying to use these symbols is
 	// problematic:
 	// 1. the symbol data is normally not present at all
 	// 2. they are used during init only (getting traces with them is unlikely)
@@ -328,7 +333,7 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	// resizing based on normal distribution kernel. These are later
 	// cloned to the exact size needed, so these are stack allocated.
 
-	// The modules (typical sysmtes have 200-300)
+	// The modules (typical systems have 200-300)
 	mods := make([]Module, 0, 400)
 	if len(modules) == 0 {
 		// - 2.5MB for symbol names
@@ -484,7 +489,7 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 }
 
 // loadKallsyms will reload kernel symbols. This function can run concurrently with
-// module module lookups. The reload result is visible atomically after success.
+// module and symbol lookups. The reload result is visible atomically after success.
 func (s *Symbolizer) loadKallsyms() error {
 	file, err := os.Open("/proc/kallsyms")
 	if err != nil {
