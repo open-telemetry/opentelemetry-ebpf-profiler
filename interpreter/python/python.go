@@ -656,15 +656,12 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
 // the code to resolve specified argument parameter to the first jump/call.
-func decodeStub(
-	ef *pfelf.File,
-	memoryBase libpf.SymbolValue,
-	symbolName libpf.SymbolName,
-) (libpf.SymbolValue, error) {
-
+func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
+	symbolName libpf.SymbolName) (libpf.SymbolValue, error) {
+	// Read and decode the code for the symbol
 	addr, code, err := ef.SymbolData(symbolName, 64)
 	if err != nil {
-		return libpf.SymbolValueInvalid, fmt.Errorf("lookup %s failed: %v",
+		return libpf.SymbolValueInvalid, fmt.Errorf("unable to read '%s': %v",
 			symbolName, err)
 	}
 	value, err := decodeStubArgumentWrapper(code, addr, memoryBase)

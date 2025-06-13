@@ -97,7 +97,7 @@ func ExtractTSDInfo(ef *pfelf.File) (*TSDInfo, error) {
 	if err != nil {
 		_, code, err = ef.SymbolData("pthread_getspecific", 2048)
 		if err != nil {
-			return nil, fmt.Errorf("no getspecific function: %s", err)
+			return nil, fmt.Errorf("unable to read 'pthread_getspecific': %s", err)
 		}
 	}
 	if len(code) < 8 {

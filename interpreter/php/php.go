@@ -208,7 +208,7 @@ func recoverExecuteExJumpLabelAddress(ef *pfelf.File) (libpf.SymbolValue, error)
 	addr, code, err := ef.SymbolData("execute_ex", 128)
 	if err != nil {
 		return libpf.SymbolValueInvalid,
-			fmt.Errorf("could not find execute_ex: %w", err)
+			fmt.Errorf("unable to read 'execute_ex': %w", err)
 	}
 
 	returnAddress, err := retrieveExecuteExJumpLabelAddressWrapper(code, addr)
@@ -233,7 +233,7 @@ func determineVMKind(ef *pfelf.File) (uint, error) {
 	// really short (e.g a mov and a ret).
 	_, code, err := ef.SymbolData("zend_vm_kind", 64)
 	if err != nil {
-		return 0, fmt.Errorf("could not read from zend_vm_kind: %w", err)
+		return 0, fmt.Errorf("unable to read 'zend_vm_kind': %w", err)
 	}
 	vmKind, err := retrieveZendVMKindWrapper(code)
 	if err != nil {

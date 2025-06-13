@@ -835,14 +835,14 @@ func (f *File) readAndMatchSymbol(n uint32, name libpf.SymbolName) (libpf.Symbol
 		f.symbolsAddr+int64(n)*symSz); err != nil {
 		return libpf.Symbol{}, false
 	}
-	slen := len(name) + 1
-	sname, err := f.VirtualMemory(f.stringsAddr+int64(sym.Name), slen)
+	slen := len(name)
+	sname, err := f.VirtualMemory(f.stringsAddr+int64(sym.Name), slen+1)
 	if err != nil {
 		return libpf.Symbol{}, false
 	}
 
 	// Verify that name matches
-	if sname[slen-1] != 0 || unsafe.String(unsafe.SliceData(sname), slen) != string(name) {
+	if sname[slen] != 0 || unsafe.String(unsafe.SliceData(sname), slen) != string(name) {
 		return libpf.Symbol{}, false
 	}
 
