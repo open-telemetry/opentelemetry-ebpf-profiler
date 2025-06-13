@@ -54,6 +54,8 @@ func (m *hotspotMethod) symbolize(symbolReporter reporter.SymbolReporter, bci ui
 			SourceFile:     m.sourceFileName,
 			SourceLine:     libpf.SourceLineno(lineNo),
 			FunctionOffset: functionOffset,
+
+			FileIDCacheSizeHint: 1,
 		})
 	}
 }
