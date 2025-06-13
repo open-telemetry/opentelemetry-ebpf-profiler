@@ -123,7 +123,7 @@ var (
 	hiddenClassMask  = "+<hidden>"
 
 	// The FileID used for intrinsic stub frames
-	hotspotStubsFileID = libpf.NewFileID(0x578b, uint64(0x1d00|libpf.HotSpotFrame))
+	hotspotStubsFileID = libpf.NewStubFileID(libpf.HotSpotFrame)
 
 	_ interpreter.Data     = &hotspotData{}
 	_ interpreter.Instance = &hotspotInstance{}

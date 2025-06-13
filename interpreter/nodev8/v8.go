@@ -228,7 +228,7 @@ var (
 	v8Regex = regexp.MustCompile(`^(?:.*/)?(?:node|nsolid)(\d+)?$|^(?:.*/)libnode\.so(\.\d+)?$`)
 
 	// The FileID used for V8 stub frames
-	v8StubsFileID = libpf.NewFileID(0x578b, uint64(0x1d00|libpf.V8Frame))
+	v8StubsFileID = libpf.NewStubFileID(libpf.V8Frame)
 
 	// the source file entry for unknown code blobs
 	unknownSource = &v8Source{fileName: interpreter.UnknownSourceFile}
