@@ -86,7 +86,6 @@ type Note64 struct {
 	Namesz, Descsz, Type uint32
 }
 
-//nolint:revive,stylecheck
 const (
 	NAMESPACE_CORE  = "CORE\x00"
 	NAMESPACE_LINUX = "LINUX\x00"
