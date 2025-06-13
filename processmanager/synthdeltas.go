@@ -37,13 +37,7 @@ func createVDSOSyntheticRecordNone(_ *pfelf.File) sdtypes.IntervalData {
 func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 	deltas := sdtypes.StackDeltaArray{}
 	deltas = append(deltas, sdtypes.StackDelta{Address: 0, Info: sdtypes.UnwindInfoLR})
-
-	symbols, err := ef.ReadDynamicSymbols()
-	if err != nil {
-		return sdtypes.IntervalData{}
-	}
-
-	symbols.VisitAll(func(sym libpf.Symbol) {
+	_ = ef.VisitDynamicSymbols(func(sym libpf.Symbol) {
 		addr := uint64(sym.Address)
 		if sym.Name == "__kernel_rt_sigreturn" {
 			deltas = append(
@@ -55,7 +49,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 		}
 		// Determine if LR is on stack
 		code := make([]byte, sym.Size)
-		if _, err = ef.ReadVirtualMemory(code, int64(sym.Address)); err != nil {
+		if _, err := ef.ReadVirtualMemory(code, int64(sym.Address)); err != nil {
 			return
 		}
 

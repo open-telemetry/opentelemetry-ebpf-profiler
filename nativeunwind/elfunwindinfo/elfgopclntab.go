@@ -355,11 +355,11 @@ func (ee *elfExtractor) parseGoPclntab() error {
 			if err != nil {
 				return fmt.Errorf("failed to load .gopclntab via symbols: %v", err)
 			}
-			if start >= end {
+			if start >= end || end-start >= maxBytesGoPclntab {
 				return fmt.Errorf("invalid .gopclntab symbols: %v-%v", start, end)
 			}
-			data = make([]byte, end-start)
-			if _, err := ef.ReadVirtualMemory(data, int64(start)); err != nil {
+			data, err = ef.VirtualMemory(int64(start), int(end-start))
+			if err != nil {
 				return fmt.Errorf("failed to load .gopclntab via symbols: %v", err)
 			}
 		}

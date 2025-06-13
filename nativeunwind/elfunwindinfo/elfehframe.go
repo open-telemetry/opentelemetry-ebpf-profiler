@@ -883,8 +883,8 @@ func isSignalTrampoline(efCode *pfelf.File, fde *fdeInfo) bool {
 	if fde.ipLen != uintptr(len(sigretCode)) {
 		return false
 	}
-	fdeCode := make([]byte, len(sigretCode))
-	if _, err := efCode.ReadVirtualMemory(fdeCode, int64(fde.ipStart)); err != nil {
+	fdeCode, err := efCode.VirtualMemory(int64(fde.ipStart), len(sigretCode))
+	if err != nil {
 		return false
 	}
 	return bytes.Equal(fdeCode, sigretCode)

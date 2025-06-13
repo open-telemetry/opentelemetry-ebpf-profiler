@@ -1,49 +1,42 @@
 package mmap_test
 
 import (
-	"errors"
 	"fmt"
+	"io"
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
 )
 
 func TestMmap_Subslice(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), t.Name()+".testfile")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer os.Remove(f.Name())
 
 	// Write some testData into the file.
-	testData := "data-for-the-test"
+	testData := []byte("data-for-the-test")
 	fmt.Fprintf(f, "%s", testData)
 
 	mf, err := mmap.Open(f.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer mf.Close()
 
 	t.Run("invalid subslice", func(t *testing.T) {
 		// Try to access data out of scope from the data
 		// in the backing file.
 		_, err := mf.Subslice(1024, 1024)
-		if !errors.Is(err, mmap.ErrInvalRequest) {
-			t.Fatalf("expected %v but got %v", mmap.ErrInvalRequest, err)
-		}
+		assert.ErrorIs(t, err, io.EOF)
 	})
 
 	t.Run("valid subslice", func(t *testing.T) {
 		// Try to access data out within the scope of
 		// len(testData).
 		res, err := mf.Subslice(9, 8)
-		if err != nil {
-			t.Fatalf("expected no error but got %v", err)
-		}
-		if string(res) != testData[9:] {
-			t.Fatalf("expected '%s' but got '%s'", testData[9:], string(res))
+		if assert.NoError(t, err) {
+			assert.Equal(t, res, testData[9:])
 		}
 	})
 }
