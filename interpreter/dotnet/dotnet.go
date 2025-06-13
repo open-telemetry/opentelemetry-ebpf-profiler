@@ -126,7 +126,7 @@ var (
 	dotnetRegex = regexp.MustCompile(`/(\d+)\.(\d+).(\d+)/libcoreclr.so$`)
 
 	// The FileID used for Dotnet stub frames. Same FileID as in other interpreters.
-	stubsFileID = libpf.NewFileID(0x578b, 0x1d)
+	stubsFileID = libpf.NewFileID(0x578b, uint64(0x1d00|libpf.DotnetFrame))
 
 	// compiler check to make sure the needed interfaces are satisfied
 	_ interpreter.Data     = &dotnetData{}
