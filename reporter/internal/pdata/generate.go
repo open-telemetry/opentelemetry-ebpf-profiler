@@ -175,30 +175,21 @@ func (p *Pdata) setProfile(
 				// Store interpreted frame information as a Line message:
 				line := loc.Line().AppendEmpty()
 
-				fileIDInfoLock, exists := p.Frames.GetAndRefresh(traceInfo.Files[i],
-					FramesCacheLifetime)
-				if !exists {
+				if si, exists := p.Frames.GetAndRefresh(
+					libpf.NewFrameID(traceInfo.Files[i], traceInfo.Linenos[i]),
+					FramesCacheLifetime); exists {
+					line.SetLine(int64(si.LineNumber))
+
+					line.SetFunctionIndex(createFunctionEntry(funcMap,
+						si.FunctionName, si.FilePath))
+				} else {
 					// At this point, we do not have enough information for the frame.
 					// Therefore, we report a dummy entry and use the interpreter as filename.
+					// To differentiate this case from the case where no information about
+					// the file ID is available at all, we use a different name for reported
+					// function.
 					line.SetFunctionIndex(createFunctionEntry(funcMap,
-						"UNREPORTED", frameKind.String()))
-				} else {
-					fileIDInfo := fileIDInfoLock.RLock()
-					if si, exists := (*fileIDInfo).Get(traceInfo.Linenos[i]); exists {
-						line.SetLine(int64(si.LineNumber))
-
-						line.SetFunctionIndex(createFunctionEntry(funcMap,
-							si.FunctionName, si.FilePath))
-					} else {
-						// At this point, we do not have enough information for the frame.
-						// Therefore, we report a dummy entry and use the interpreter as filename.
-						// To differentiate this case from the case where no information about
-						// the file ID is available at all, we use a different name for reported
-						// function.
-						line.SetFunctionIndex(createFunctionEntry(funcMap,
-							"UNRESOLVED", frameKind.String()))
-					}
-					fileIDInfoLock.RUnlock(&fileIDInfo)
+						"UNRESOLVED", frameKind.String()))
 				}
 
 				// To be compliant with the protocol, generate a dummy mapping entry.

@@ -34,7 +34,7 @@ func NewController(cfg *controller.Config,
 		ReportInterval:           intervals.ReportInterval(),
 		ExecutablesCacheElements: 16384,
 		// Next step: Calculate FramesCacheElements from numCores and samplingRate.
-		FramesCacheElements: 65536,
+		FramesCacheElements: 131072,
 		CGroupCacheElements: 1024,
 		SamplesPerSecond:    cfg.SamplesPerSecond,
 	}, nextConsumer)
