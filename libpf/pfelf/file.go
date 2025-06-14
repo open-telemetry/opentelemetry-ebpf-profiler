@@ -734,10 +734,16 @@ func (sh *Section) ReadAt(p []byte, off int64) (n int, err error) {
 	if off < 0 || uint64(off) >= sh.FileSize {
 		return 0, io.EOF
 	}
+	truncated := false
 	if uint64(off)+uint64(len(p)) > sh.FileSize {
 		p = p[:sh.FileSize-uint64(off)]
+		truncated = true
 	}
-	return sh.elfReader.ReadAt(p, off+int64(sh.Offset))
+	n, err = sh.elfReader.ReadAt(p, off+int64(sh.Offset))
+	if err == nil && truncated {
+		err = io.EOF
+	}
+	return n, err
 }
 
 // Data loads the whole section header referenced data, and returns it as a slice.
