@@ -67,7 +67,11 @@ func (p *asyncMapUpdaterPool) EnqueueUpdate(
 	outer *cebpf.Map, fileID host.FileID, inner *cebpf.Map) {
 	workerIdx := uint64(fileID) % uint64(len(p.workers))
 	if err := p.workers[workerIdx].ctx.Err(); err != nil {
-		log.Warnf("Skipping handling of %v: %v", fileID, err)
+		if errors.Is(err, context.Canceled) {
+			log.Debugf("Skipping handling of %v: %v", fileID, err)
+		} else {
+			log.Warnf("Skipping handling of %v: %v", fileID, err)
+		}
 		return
 	}
 	p.workers[workerIdx].queue <- asyncMapInMapUpdate{

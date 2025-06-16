@@ -284,7 +284,7 @@ func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID 
 		}
 		if err := impl.interpreterOffsets.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
 			cebpf.UpdateAny); err != nil {
-			log.Fatalf("Failed to place interpreter range in map: %v", err)
+			log.Warnf("Failed to place interpreter range in map: %v", err)
 		}
 	}
 

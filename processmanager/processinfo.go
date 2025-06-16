@@ -374,7 +374,7 @@ func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *pro
 		// Same as above, ignore the errors related to process having exited.
 		// Also ignore errors of deferred file IDs.
 		if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, eim.ErrDeferredFileID) {
-			log.Errorf("Failed to handle mapping for PID %d, file %s: %v",
+			log.Infof("Failed to handle mapping for PID %d, file %s: %v",
 				pr.PID(), mapping.Path, err)
 		}
 	}
