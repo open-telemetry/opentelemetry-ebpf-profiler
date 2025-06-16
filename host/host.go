@@ -13,6 +13,7 @@ import (
 
 	"github.com/elastic/otel-profiling-agent/libpf"
 	"github.com/elastic/otel-profiling-agent/libpf/pfelf"
+	"github.com/elastic/otel-profiling-agent/times"
 )
 
 // TraceHash is used for unique identifiers for traces, and is required to be 64-bits
@@ -61,6 +62,6 @@ type Trace struct {
 	Comm   string
 	Frames []Frame
 	Hash   TraceHash
-	KTime  libpf.KTime
+	KTime  times.KTime
 	PID    libpf.PID
 }

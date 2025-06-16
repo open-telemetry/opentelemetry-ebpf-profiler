@@ -20,6 +20,7 @@ import (
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
 	eim "github.com/elastic/otel-profiling-agent/processmanager/execinfomanager"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/elastic/otel-profiling-agent/times"
 	"github.com/elastic/otel-profiling-agent/tpbase"
 )
 
@@ -56,7 +57,7 @@ type ProcessManager struct {
 	pidToProcessInfo map[libpf.PID]*processInfo
 
 	// exitEvents records the pid exit time and is a list of pending exit events to be handled.
-	exitEvents map[libpf.PID]libpf.KTime
+	exitEvents map[libpf.PID]times.KTime
 
 	// ebpf contains the interface to manipulate ebpf maps
 	ebpf pmebpf.EbpfHandler

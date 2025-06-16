@@ -15,6 +15,7 @@ import (
 
 	"github.com/elastic/otel-profiling-agent/host"
 	"github.com/elastic/otel-profiling-agent/libpf"
+	"github.com/elastic/otel-profiling-agent/times"
 )
 
 type fakeTimes struct {
@@ -39,7 +40,7 @@ func (f *fakeTraceProcessor) ConvertTrace(trace *host.Trace) *libpf.Trace {
 	return &newTrace
 }
 
-func (f *fakeTraceProcessor) SymbolizationComplete(libpf.KTime) {
+func (f *fakeTraceProcessor) SymbolizationComplete(times.KTime) {
 }
 
 // arguments holds the inputs to test the appropriate functions.

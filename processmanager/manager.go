@@ -28,6 +28,7 @@ import (
 	pmebpf "github.com/elastic/otel-profiling-agent/processmanager/ebpf"
 	eim "github.com/elastic/otel-profiling-agent/processmanager/execinfomanager"
 	"github.com/elastic/otel-profiling-agent/reporter"
+	"github.com/elastic/otel-profiling-agent/times"
 )
 
 const (
@@ -87,7 +88,7 @@ func New(ctx context.Context, includeTracers []bool, monitorInterval time.Durati
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
 		eim:                      em,
 		interpreters:             interpreters,
-		exitEvents:               make(map[libpf.PID]libpf.KTime),
+		exitEvents:               make(map[libpf.PID]times.KTime),
 		pidToProcessInfo:         make(map[libpf.PID]*processInfo),
 		ebpf:                     ebpf,
 		FileIDMapper:             fileIDMapper,
@@ -292,11 +293,11 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 	return newTrace
 }
 
-func (pm *ProcessManager) SymbolizationComplete(traceCaptureKTime libpf.KTime) {
+func (pm *ProcessManager) SymbolizationComplete(traceCaptureKTime times.KTime) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	nowKTime := libpf.GetKTime()
+	nowKTime := times.GetKTime()
 
 	for pid, pidExitKTime := range pm.exitEvents {
 		if pidExitKTime > traceCaptureKTime {

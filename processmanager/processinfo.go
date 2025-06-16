@@ -34,6 +34,7 @@ import (
 	"github.com/elastic/otel-profiling-agent/lpm"
 	"github.com/elastic/otel-profiling-agent/proc"
 	eim "github.com/elastic/otel-profiling-agent/processmanager/execinfomanager"
+	"github.com/elastic/otel-profiling-agent/times"
 	"github.com/elastic/otel-profiling-agent/tpbase"
 
 	log "github.com/sirupsen/logrus"
@@ -506,7 +507,7 @@ func (pm *ProcessManager) ProcessPIDExit(pid libpf.PID) bool {
 	defer pm.mu.Unlock()
 
 	symbolize := false
-	exitKTime := libpf.GetKTime()
+	exitKTime := times.GetKTime()
 	if pm.interpreterTracerEnabled {
 		if len(pm.interpreters[pid]) > 0 {
 			pm.exitEvents[pid] = exitKTime
