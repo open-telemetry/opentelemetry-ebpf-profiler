@@ -34,8 +34,8 @@ type baseReporter struct {
 	// pdata holds the generator for the data being exported.
 	pdata *pdata.Pdata
 
-	// cgroupv2ID caches PID to container ID information for cgroupv2 containers.
-	cgroupv2ID *lru.SyncedLRU[libpf.PID, string]
+	// containerID caches PID to container ID information.
+	containerID *lru.SyncedLRU[libpf.PID, string]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
 	traceEvents xsync.RWMutex[map[libpf.Origin]samples.KeyToEventMapping]
@@ -96,7 +96,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		extraMeta = b.cfg.ExtraSampleAttrProd.CollectExtraSampleMeta(trace, meta)
 	}
 
-	containerID, err := libpf.LookupCgroupv2(b.cgroupv2ID, meta.PID)
+	containerID, err := libpf.LookupContainerIDFromCgroup(b.containerID, meta.PID)
 	if err != nil {
 		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
 			meta.PID, err)

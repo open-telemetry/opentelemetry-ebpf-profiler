@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+//nolint:lll
 func TestExtractContainerID(t *testing.T) {
 	tests := map[string]struct {
 		input    string
@@ -32,17 +33,17 @@ func TestExtractContainerID(t *testing.T) {
 		name := name
 		tc := tc
 		t.Run(name, func(t *testing.T) {
-			tmpFile, err := os.CreateTemp("", name)
+			tmpFile, err := os.CreateTemp(t.TempDir(), name)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer tmpFile.Close()
 
-			if _, err := tmpFile.Write([]byte(tc.input)); err != nil {
+			if _, err = tmpFile.WriteString(tc.input); err != nil {
 				t.Fatal(err)
 			}
 
-			if _, err := tmpFile.Seek(0, 0); err != nil {
+			if _, err = tmpFile.Seek(0, 0); err != nil {
 				t.Fatal(err)
 			}
 
@@ -50,11 +51,9 @@ func TestExtractContainerID(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			//t.Log(result)
 			if result != tc.expected {
 				t.Fatalf("expected '%s' but got '%s'", tc.expected, result)
 			}
-
 		})
 	}
 }

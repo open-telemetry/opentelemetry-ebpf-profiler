@@ -5,6 +5,7 @@ package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -17,16 +18,20 @@ var (
 	// `([0-9a-fA-F]+)`       : This is the main capturing group. It greedily matches
 	//                         one or more hexadecimal characters (0-9, a-f, A-F).
 	//                         This will capture the full hash regardless of its length.
-	// `(?:\.scope)?`        : Non-capturing group that optionally matches the literal ".scope" suffix.
+	// `(?:\.scope)?`        : Non-capturing group that optionally matches the literal
+	//                         ".scope" suffix.
 	// `$`                   : Anchors the match to the end of the line.
 	// This regex effectively finds the last hexadecimal string right before the end
 	// of the line, optionally preceded by ".scope".
 	containerIDRegex = regexp.MustCompile(`([0-9a-fA-F]+)(?:\.scope)?$`)
+
+	errNoMatch = errors.New("could not find a valid container ID")
 )
 
-// LookupCgroupv2 returns the container ID for pid.
-func LookupCgroupv2(cgrouplru *lru.SyncedLRU[PID, string], pid PID) (string, error) {
-	id, ok := cgrouplru.Get(pid)
+// LookupContainerIDFromCgroup returns the container ID for a PID.
+func LookupContainerIDFromCgroup(containerIDs *lru.SyncedLRU[PID, string],
+	pid PID) (string, error) {
+	id, ok := containerIDs.Get(pid)
 	if ok {
 		return id, nil
 	}
@@ -43,9 +48,9 @@ func LookupCgroupv2(cgrouplru *lru.SyncedLRU[PID, string], pid PID) (string, err
 		return "", err
 	}
 
-	// Cache the cgroupv2 information.
-	// To avoid busy lookups, also empty cgroupv2 information is cached.
-	cgrouplru.Add(pid, containerID)
+	// Cache the container ID information.
+	// To avoid busy lookups, also empty container ID information is cached.
+	containerIDs.Add(pid, containerID)
 
 	return containerID, nil
 }
@@ -71,7 +76,7 @@ func extractContainerID(f *os.File) (string, error) {
 	}
 
 	if extractedID == "" {
-		return "", fmt.Errorf("could not find a valid container ID")
+		return "", errNoMatch
 	}
 
 	return extractedID, nil
