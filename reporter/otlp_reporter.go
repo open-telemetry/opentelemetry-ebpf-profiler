@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -110,6 +111,8 @@ type OTLPReporter struct {
 
 	// RPC count
 	count uint
+
+	config *Config
 }
 
 // hashString is a helper function for LRUs that use string as a key.
@@ -339,6 +342,7 @@ func StartOTLP(mainCtx context.Context, c *Config) (Reporter, error) {
 		executables:     executables,
 		frames:          frames,
 		hostmetadata:    hostmetadata,
+		config:          c,
 	}
 
 	// Create a child context for reporting features
@@ -462,10 +466,6 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	}
 	_, err = r.client.ExportZeroTime(ctx, &req, gzipOption)
 
-	// Deduped Locations
-	req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0].Profile = profileDedup
-	_, err = r.client.ExportDedup(ctx, &req, gzipOption)
-
 	// Alternate stack representation
 	req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0].Profile = profileStacks
 	_, err = r.client.ExportStacks(ctx, &req, gzipOption)
@@ -473,6 +473,13 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	// Alternate stack representation - arrays
 	req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0].Profile = profileArrays
 	_, err = r.client.ExportArrays(ctx, &req, gzipOption)
+
+	// Deduped Locations
+	req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0].Profile = profileDedup
+	_, err = r.client.ExportDedup(ctx, &req, gzipOption)
+
+	log.Warnf("Samples: %v MaxSamples: %v",
+		len(profile.Sample), runtime.NumCPU()*int(r.config.SamplesPerSecond))
 
 	r.LogMetrics()
 	r.count += 1

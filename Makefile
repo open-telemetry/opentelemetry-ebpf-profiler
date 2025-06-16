@@ -18,7 +18,7 @@ generate: protobuf
 	go generate ./...
 
 binary: generate ebpf
-	go build -buildvcs=false -ldflags="-extldflags=-static" -tags osusergo,netgo
+	go build -buildvcs=false -ldflags="-extldflags=-static" -tags osusergo,netgo,internal
 
 server: generate
 	cd server && go build

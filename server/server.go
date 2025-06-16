@@ -189,6 +189,8 @@ func verify(ctx context.Context, in <-chan batch) {
 							}
 						}
 						log.Fatalf("ERROR: %v != %v", b1.rpcName, b2.rpcName)
+					} else {
+						log.Printf("%v = %v", b1.rpcName, b2.rpcName)
 					}
 				}
 				delete(batches, b.id)
@@ -202,7 +204,6 @@ func (p *profilesServer) exportHandler(_ context.Context, rpcMethod string,
 	req *pb.ExportProfilesServiceRequest) (*pb.ExportProfilesServiceResponse, error) {
 	container := req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0]
 	id := binary.BigEndian.Uint32(container.ProfileId)
-	log.Printf("%v[%d]", rpcMethod, id)
 
 	p.batches <- batch{
 		id:      id,
@@ -210,6 +211,7 @@ func (p *profilesServer) exportHandler(_ context.Context, rpcMethod string,
 		traces:  extractStackTraces(container.Profile),
 	}
 
+	log.Printf("%v[%d]", rpcMethod, id)
 	return &pb.ExportProfilesServiceResponse{}, nil
 }
 

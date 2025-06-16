@@ -306,6 +306,7 @@ func mainWithExitCode() exitCode {
 		DisableTLS:              argDisableTLS,
 		MaxGRPCRetries:          5,
 		Times:                   times,
+		SamplesPerSecond:        uint(argSamplesPerSecond) * uint(argReporterInterval.Seconds()),
 	})
 	if err != nil {
 		msg := fmt.Sprintf("Failed to start reporting: %v", err)
