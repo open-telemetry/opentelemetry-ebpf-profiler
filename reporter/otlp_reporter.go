@@ -448,9 +448,11 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	// Base RPC (no proto changes)
 	_, err := r.client.Export(ctx, &req, gzipOption)
 
+	tsCount := 0
 	// Delta timestamps
 	for _, s := range profile.Sample {
 		for idx, v := range s.Timestamps {
+			tsCount += 1
 			s.Timestamps[idx] = v - startTS
 			//			log.Warnf("DD: %v", s.Timestamps[idx])
 		}
@@ -478,8 +480,8 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	req.ResourceProfiles[0].ScopeProfiles[0].Profiles[0].Profile = profileDedup
 	_, err = r.client.ExportDedup(ctx, &req, gzipOption)
 
-	log.Warnf("Samples: %v MaxSamples: %v",
-		len(profile.Sample), runtime.NumCPU()*int(r.config.SamplesPerSecond))
+	log.Warnf("Samples: %v MaxSamples: %v Timestamps: %v",
+		len(profile.Sample), runtime.NumCPU()*int(r.config.SamplesPerSecond), tsCount)
 
 	r.LogMetrics()
 	r.count += 1
