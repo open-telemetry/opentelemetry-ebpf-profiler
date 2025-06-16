@@ -129,6 +129,9 @@ type File struct {
 }
 
 var _ libpf.SymbolFinder = &File{}
+var _ io.ReaderAt = &File{}
+var _ io.ReaderAt = &Section{}
+var _ io.ReaderAt = &Prog{}
 
 // sysvHashHeader is the ELF DT_HASH section header
 type sysvHashHeader struct {
@@ -158,11 +161,6 @@ type Section struct {
 
 	// elfReader is the same ReadAt as used for the File
 	elfReader io.ReaderAt
-
-	// Do not embed SectionReader directly, or as public member. We can't
-	// return the same copy to multiple callers, otherwise they corrupt
-	// each other's reader file position.
-	sr *io.SectionReader
 }
 
 // Open opens the named file using os.Open and prepares it for use as an ELF binary.
@@ -376,8 +374,7 @@ func (f *File) LoadSections() error {
 			Entsize:   sh.Entsize,
 			FileSize:  sh.Size,
 		}
-		s.sr = io.NewSectionReader(f.elfReader, int64(s.Offset), int64(s.FileSize))
-		s.elfReader = s.sr
+		s.elfReader = f.elfReader
 	}
 
 	// Load the section name string table
@@ -596,7 +593,7 @@ func (f *File) insertTLSDescriptorsForSection(descs map[string]libpf.Address,
 		sym := elf.Sym64{}
 		symSz := int64(unsafe.Sizeof(sym))
 		symNo := int64(rela.Info >> 32)
-		n, err := symtabSection.elfReader.ReadAt(libpf.SliceFrom(&sym), symNo*symSz)
+		n, err := symtabSection.ReadAt(libpf.SliceFrom(&sym), symNo*symSz)
 		if err != nil || n != int(symSz) {
 			return fmt.Errorf("failed to read relocation symbol: %w", err)
 		}
@@ -732,6 +729,23 @@ func (ph *Prog) DataReader(maxSize uint) (io.Reader, error) {
 	return bytes.NewReader(p), nil
 }
 
+// ReadAt implements the io.ReaderAt interface
+func (sh *Section) ReadAt(p []byte, off int64) (n int, err error) {
+	if off < 0 || uint64(off) >= sh.FileSize {
+		return 0, io.EOF
+	}
+	truncated := false
+	if uint64(off)+uint64(len(p)) > sh.FileSize {
+		p = p[:sh.FileSize-uint64(off)]
+		truncated = true
+	}
+	n, err = sh.elfReader.ReadAt(p, off+int64(sh.Offset))
+	if err == nil && truncated {
+		err = io.EOF
+	}
+	return n, err
+}
+
 // Data loads the whole section header referenced data, and returns it as a slice.
 func (sh *Section) Data(maxSize uint) ([]byte, error) {
 	if sh.Flags&elf.SHF_COMPRESSED != 0 {
@@ -748,7 +762,7 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 		return nil, fmt.Errorf("section size %d is too large", sh.FileSize)
 	}
 	p := make([]byte, sh.FileSize)
-	_, err := sh.elfReader.ReadAt(p, 0)
+	_, err := sh.ReadAt(p, 0)
 	return p, err
 }
 
