@@ -43,7 +43,7 @@ func (v *Variable) ExtractedValueImm() uint64 {
 }
 
 func (v *Variable) MaxValue() uint64 {
-	if v.extracted != nil && if v.extracted != v {
+	if v.extracted != nil && v.extracted != v {
 		return v.extracted.MaxValue()
 	}
 	return v.maxValueConstraint

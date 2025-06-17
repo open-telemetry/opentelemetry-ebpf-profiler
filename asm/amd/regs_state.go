@@ -268,7 +268,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				i.Regs.Set(dst, expression.Add(i.Regs.Get(dst), i.Regs.Get(src)))
 			case x86asm.Mem:
 				v := i.MemArg(i.Opt, src)
-				v = expression.MemS(src.Segment, v, inst.MemBytes)
+				v = expression.MemWithSegment(src.Segment, v, inst.MemBytes)
 				i.Regs.Set(dst, expression.Add(i.Regs.Get(dst), v))
 			}
 		}
@@ -299,10 +299,10 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 					if m, memOk := i.ReadMem(v); memOk {
 						v = m
 					} else {
-						v = expression.MemS(src.Segment, v, inst.MemBytes)
+						v = expression.MemWithSegment(src.Segment, v, inst.MemBytes)
 					}
 				} else {
-					v = expression.MemS(src.Segment, v, inst.MemBytes)
+					v = expression.MemWithSegment(src.Segment, v, inst.MemBytes)
 				}
 				if inst.Op == x86asm.MOVSXD || inst.Op == x86asm.MOVSX {
 					v = expression.SignExtend(v, dataSizeBits)
