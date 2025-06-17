@@ -91,11 +91,6 @@ func init() {
 	regs[x86asm.RIP] = regEntry{idx: 17, bits: 64}
 }
 
-func regIndex(reg x86asm.Reg) int {
-	e := regMappingFor(reg)
-	return e.idx
-}
-
 func regMappingFor(reg x86asm.Reg) regEntry {
 	if reg > 0 && int(reg) < len(regs) {
 		e := regs[reg]
