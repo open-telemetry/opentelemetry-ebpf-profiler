@@ -16,13 +16,10 @@ endif
 
 # Valid values are: amd64, arm64.
 TARGET_ARCH ?= $(NATIVE_ARCH)
-
-ifeq ($(NATIVE_ARCH),$(TARGET_ARCH))
-ARCH_PREFIX :=
-else ifeq ($(TARGET_ARCH),arm64)
-ARCH_PREFIX := aarch64-linux-gnu-
+ifeq ($(TARGET_ARCH),arm64)
+ARCH_PREFIX := aarch64
 else ifeq ($(TARGET_ARCH),amd64)
-ARCH_PREFIX := x86_64-linux-gnu-
+ARCH_PREFIX := x86_64
 else
 $(error Unsupported architecture: $(TARGET_ARCH))
 endif
@@ -30,8 +27,8 @@ endif
 export TARGET_ARCH
 export CGO_ENABLED = 1
 export GOARCH = $(TARGET_ARCH)
-export CC = $(ARCH_PREFIX)gcc
-export OBJCOPY = $(ARCH_PREFIX)objcopy
+export CC = $(ARCH_PREFIX)-linux-gnu-gcc
+export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
 
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
 COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
@@ -78,27 +75,18 @@ ebpf-profiler: generate ebpf rust-components
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 rust-targets:
-ifeq ($(TARGET_ARCH),arm64)
-	rustup target add aarch64-unknown-linux-musl
-else ifeq ($(TARGET_ARCH),amd64)
-	rustup target add x86_64-unknown-linux-musl
-endif
+	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
 
 rust-components: rust-targets
-ifeq ($(TARGET_ARCH),arm64)
-	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target aarch64-unknown-linux-musl
-else ifeq ($(TARGET_ARCH),amd64)
-	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target x86_64-unknown-linux-musl
-endif
+	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target $(ARCH_PREFIX)-unknown-linux-musl
 
 rust-tests: rust-targets
 	cargo test
 
-GOLANGCI_LINT_VERSION = "v1.64.5"
+GOLANGCI_LINT_VERSION = "v2.1.6"
 lint: generate vanity-import-check
 	$(MAKE) lint -C support/ebpf
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
+	docker run --rm -t -v $$(pwd):/app -w /app golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) sh -c "golangci-lint version && golangci-lint config verify && golangci-lint run --max-issues-per-linter -1 --max-same-issues -1"
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf

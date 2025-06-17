@@ -8,8 +8,7 @@
 
 extern bpf_map_def kernel_stackmap;
 
-static inline __attribute__((__always_inline__)) void
-send_sample_traces(void *ctx, u64 pid, s32 kstack)
+static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, s32 kstack)
 {
   // Use the per CPU record for trace storage: it's too big for stack.
   PerCPURecord *record = get_pristine_per_cpu_record();

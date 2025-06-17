@@ -833,21 +833,6 @@ typedef struct PIDPageMappingInfo {
 // FUNC_TYPE_UNKNOWN indicates an unknown interpreted function.
 #define FUNC_TYPE_UNKNOWN 0xfffffffffffffffe
 
-// Builds a bias_and_unwind_program value for PIDPageMappingInfo
-static inline __attribute__((__always_inline__)) u64
-encode_bias_and_unwind_program(u64 bias, int unwind_program)
-{
-  return bias | (((u64)unwind_program) << 56);
-}
-
-// Reads a bias_and_unwind_program value from PIDPageMappingInfo
-static inline __attribute__((__always_inline__)) void
-decode_bias_and_unwind_program(u64 bias_and_unwind_program, u64 *bias, int *unwind_program)
-{
-  *bias           = bias_and_unwind_program & 0x00FFFFFFFFFFFFFF;
-  *unwind_program = bias_and_unwind_program >> 56;
-}
-
 // Smallest stack delta bucket that holds up to 2^8 entries
 #define STACK_DELTA_BUCKET_SMALLEST 8
 // Largest stack delta bucket that holds up to 2^23 entries

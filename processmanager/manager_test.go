@@ -27,6 +27,7 @@ import (
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/support"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -102,7 +103,7 @@ func (d *dummyStackDeltaProvider) GetIntervalStructuresForFile(_ host.FileID,
 		data := int32(8 * r.IntN(42))
 		result.Deltas.Add(sdtypes.StackDelta{
 			Address: uint64(addr),
-			Info:    sdtypes.UnwindInfo{Opcode: sdtypes.UnwindOpcodeBaseSP, Param: data},
+			Info:    sdtypes.UnwindInfo{Opcode: support.UnwindOpcodeBaseSP, Param: data},
 		})
 	}
 	return nil
@@ -132,7 +133,7 @@ func generateDummyFiles(t *testing.T, num int) []string {
 		content := []byte(tmpfile.Name())
 		_, err = tmpfile.Write(content)
 		require.NoError(t, err)
-		tmpfile.Close()
+		_ = tmpfile.Close()
 		require.NoError(t, err)
 		files = append(files, tmpfile.Name())
 	}

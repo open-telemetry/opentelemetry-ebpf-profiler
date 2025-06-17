@@ -73,13 +73,7 @@ func (b *baseReporter) ExecutableKnown(fileID libpf.FileID) bool {
 }
 
 func (b *baseReporter) FrameKnown(frameID libpf.FrameID) bool {
-	known := false
-	if frameMapLock, exists := b.pdata.Frames.GetAndRefresh(frameID.FileID(),
-		pdata.FramesCacheLifetime); exists {
-		frameMap := frameMapLock.RLock()
-		defer frameMapLock.RUnlock(&frameMap)
-		_, known = (*frameMap)[frameID.AddressOrLine()]
-	}
+	_, known := b.pdata.Frames.GetAndRefresh(frameID, pdata.FrameMapLifetime)
 	return known
 }
 
@@ -116,6 +110,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		ApmServiceName: meta.APMServiceName,
 		ContainerID:    containerID,
 		Pid:            int64(meta.PID),
+		Tid:            int64(meta.TID),
 		ExtraMeta:      extraMeta,
 	}
 
@@ -144,43 +139,19 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 }
 
 func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
-	fileID := args.FrameID.FileID()
-	addressOrLine := args.FrameID.AddressOrLine()
-
 	log.Debugf("FrameMetadata [%x] %v+%v at %v:%v",
-		fileID, args.FunctionName, args.FunctionOffset,
+		args.FrameID.FileID(), args.FunctionName, args.FunctionOffset,
 		args.SourceFile, args.SourceLine)
-
-	if frameMapLock, exists := b.pdata.Frames.GetAndRefresh(fileID,
-		pdata.FramesCacheLifetime); exists {
-		frameMap := frameMapLock.WLock()
-		defer frameMapLock.WUnlock(&frameMap)
-
-		sourceFile := args.SourceFile
-		if sourceFile == "" {
-			// The new SourceFile may be empty, and we don't want to overwrite
-			// an existing filePath with it.
-			if s, exists := (*frameMap)[addressOrLine]; exists {
-				sourceFile = s.FilePath
-			}
-		}
-
-		(*frameMap)[addressOrLine] = samples.SourceInfo{
-			LineNumber:     args.SourceLine,
-			FilePath:       sourceFile,
-			FunctionOffset: args.FunctionOffset,
-			FunctionName:   args.FunctionName,
-		}
-		return
-	}
-
-	v := make(map[libpf.AddressOrLineno]samples.SourceInfo)
-	v[addressOrLine] = samples.SourceInfo{
+	si := samples.SourceInfo{
 		LineNumber:     args.SourceLine,
 		FilePath:       args.SourceFile,
 		FunctionOffset: args.FunctionOffset,
 		FunctionName:   args.FunctionName,
 	}
-	mu := xsync.NewRWMutex(v)
-	b.pdata.Frames.Add(fileID, &mu)
+	if si.FilePath == "" {
+		if oldsi, exists := b.pdata.Frames.Get(args.FrameID); exists {
+			si.FilePath = oldsi.FilePath
+		}
+	}
+	b.pdata.Frames.Add(args.FrameID, si)
 }

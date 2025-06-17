@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
@@ -95,7 +96,6 @@ const (
 // The subset needed for normal .eh_frame handling
 type expressionOpcode uint8
 
-//nolint:deadcode,varcheck
 const (
 	opDeref      expressionOpcode = 0x06
 	opConstU     expressionOpcode = 0x10
@@ -122,7 +122,6 @@ type dwarfExpression struct {
 // https://refspecs.linuxfoundation.org/LSB_5.0.0/LSB-Core-generic/LSB-Core-generic/dwarfext.html
 type encoding uint8
 
-//nolint:deadcode,varcheck
 const (
 	encFormatNative  encoding = 0x00
 	encFormatLeb128  encoding = 0x01
@@ -856,7 +855,7 @@ func (regs *vmRegs) getUnwindInfo(allowGenericRegisters bool) sdtypes.UnwindInfo
 	default:
 		panic(fmt.Sprintf("architecture %d is not supported", regs.arch))
 	}
-	if !allowGenericRegisters && info.Opcode == sdtypes.UnwindOpcodeBaseReg {
+	if !allowGenericRegisters && info.Opcode == support.UnwindOpcodeBaseReg {
 		return sdtypes.UnwindInfoInvalid
 	}
 	return info

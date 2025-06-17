@@ -62,7 +62,7 @@ func (cmd *rebaseCmd) exec(context.Context, []string) (err error) {
 		}
 
 		testCase.Threads, err = ExtractTraces(context.Background(), core, false, nil)
-		core.Close()
+		_ = core.Close()
 		if err != nil {
 			return fmt.Errorf("failed to extract traces: %w", err)
 		}

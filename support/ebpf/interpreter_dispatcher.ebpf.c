@@ -66,14 +66,14 @@ bpf_map_def SEC("maps") reported_pids = {
 //
 // User space code will periodically iterate through the map and process each entry.
 // Additionally, each time eBPF code writes a value into the map, user space is notified
-// through event_send_trigger (which uses maps/report_events). As key we use the PID of
-// the process and as value always true. When sizing this map, we are thinking about
-// the maximum number of unique PIDs that could generate events we're interested in
-// (process new, process exit, unknown PC) within a map monitor/processing interval,
+// through event_send_trigger (which uses maps/report_events). As key we use the PID/TID
+// of the process/thread and as value always true. When sizing this map, we are thinking
+// about the maximum number of unique PIDs that could generate events we're interested in
+// (process new, thread group exit, unknown PC) within a map monitor/processing interval,
 // that we would like to support.
 bpf_map_def SEC("maps") pid_events = {
   .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(u32),
+  .key_size    = sizeof(u64),
   .value_size  = sizeof(bool),
   .max_entries = 65536,
 };
@@ -124,7 +124,7 @@ bpf_map_def SEC("maps") apm_int_procs = {
   .max_entries = 128,
 };
 
-static inline __attribute__((__always_inline__)) void maybe_add_apm_info(Trace *trace)
+static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 {
   u32 pid              = trace->pid; // verifier needs this to be on stack on 4.15 kernel
   ApmIntProcInfo *proc = bpf_map_lookup_elem(&apm_int_procs, &pid);
@@ -174,7 +174,7 @@ static inline __attribute__((__always_inline__)) void maybe_add_apm_info(Trace *
 }
 
 // unwind_stop is the tail call destination for PROG_UNWIND_STOP.
-static inline __attribute__((__always_inline__)) int unwind_stop(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -205,7 +205,8 @@ static inline __attribute__((__always_inline__)) int unwind_stop(struct pt_regs 
     // No Error
     break;
   case metricID_UnwindNativeErrWrongTextSection:;
-    if (report_pid(ctx, trace->pid, record->ratelimitAction)) {
+    u64 pid_tgid = (u64)trace->pid << 32 | trace->tid;
+    if (report_pid(ctx, pid_tgid, record->ratelimitAction)) {
       increment_metric(metricID_NumUnknownPC);
     }
     // Fallthrough to report the error
