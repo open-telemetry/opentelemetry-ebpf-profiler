@@ -69,28 +69,34 @@ func (p *Pdata) setProfile(
 ) {
 	// stringMap is a temporary helper that will build the StringTable.
 	// By specification, the first element should be empty.
+	strDicOffset := int32(dic.StringTable().Len())
 	stringMap := make(map[string]int32)
-	stringMap[""] = 0
+	if strDicOffset == 0 {
+		stringMap[""] = strDicOffset
+	}
 
 	// funcMap is a temporary helper that will build the Function array
 	// in profile and make sure information is deduplicated.
+	funcDicOffset := int32(dic.FunctionTable().Len())
 	funcMap := make(map[samples.FuncInfo]int32)
-	funcMap[samples.FuncInfo{Name: "", FileName: ""}] = 0
+	if funcDicOffset == 0 {
+		funcMap[samples.FuncInfo{Name: "", FileName: ""}] = 0
+	}
 
 	st := profile.SampleType().AppendEmpty()
 	switch origin {
 	case support.TraceOriginSampling:
-		st.SetTypeStrindex(getStringMapIndex(stringMap, "samples"))
-		st.SetUnitStrindex(getStringMapIndex(stringMap, "count"))
+		st.SetTypeStrindex(getStringMapIndex(stringMap, strDicOffset, "samples"))
+		st.SetUnitStrindex(getStringMapIndex(stringMap, strDicOffset, "count"))
 
 		pt := profile.PeriodType()
-		pt.SetTypeStrindex(getStringMapIndex(stringMap, "cpu"))
-		pt.SetUnitStrindex(getStringMapIndex(stringMap, "nanoseconds"))
+		pt.SetTypeStrindex(getStringMapIndex(stringMap, strDicOffset, "cpu"))
+		pt.SetUnitStrindex(getStringMapIndex(stringMap, strDicOffset, "nanoseconds"))
 
 		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
 	case support.TraceOriginOffCPU:
-		st.SetTypeStrindex(getStringMapIndex(stringMap, "events"))
-		st.SetUnitStrindex(getStringMapIndex(stringMap, "nanoseconds"))
+		st.SetTypeStrindex(getStringMapIndex(stringMap, strDicOffset, "events"))
+		st.SetUnitStrindex(getStringMapIndex(stringMap, strDicOffset, "nanoseconds"))
 	default:
 		log.Errorf("Generating profile for unsupported origin %d", origin)
 		return
@@ -100,7 +106,8 @@ func (p *Pdata) setProfile(
 	fileIDtoMapping := make(map[libpf.FileID]int32)
 
 	attrMgr := samples.NewAttrTableManager(dic.AttributeTable())
-	var locationIndex int32
+	locationIndex := int32(dic.LocationTable().Len())
+	startLocationIndex := locationIndex
 	var startTS, endTS pcommon.Timestamp
 	for traceKey, traceInfo := range events {
 		sample := profile.Sample().AppendEmpty()
@@ -153,7 +160,8 @@ func (p *Pdata) setProfile(
 					mapping.SetMemoryStart(uint64(traceInfo.MappingStarts[i]))
 					mapping.SetMemoryLimit(uint64(traceInfo.MappingEnds[i]))
 					mapping.SetFileOffset(traceInfo.MappingFileOffsets[i])
-					mapping.SetFilenameStrindex(getStringMapIndex(stringMap, fileName))
+					mapping.SetFilenameStrindex(getStringMapIndex(stringMap, strDicOffset,
+						fileName))
 
 					// Once SemConv and its Go package is released with the new
 					// semantic convention for build_id, replace these hard coded
@@ -180,7 +188,7 @@ func (p *Pdata) setProfile(
 					FramesCacheLifetime); exists {
 					line.SetLine(int64(si.LineNumber))
 
-					line.SetFunctionIndex(createFunctionEntry(funcMap,
+					line.SetFunctionIndex(createFunctionEntry(funcMap, funcDicOffset,
 						si.FunctionName, si.FilePath))
 				} else {
 					// At this point, we do not have enough information for the frame.
@@ -188,12 +196,12 @@ func (p *Pdata) setProfile(
 					// To differentiate this case from the case where no information about
 					// the file ID is available at all, we use a different name for reported
 					// function.
-					line.SetFunctionIndex(createFunctionEntry(funcMap,
+					line.SetFunctionIndex(createFunctionEntry(funcMap, funcDicOffset,
 						"UNRESOLVED", frameKind.String()))
 				}
 
 				// To be compliant with the protocol, generate a dummy mapping entry.
-				loc.SetMappingIndex(getDummyMappingIndex(fileIDtoMapping, stringMap,
+				loc.SetMappingIndex(getDummyMappingIndex(fileIDtoMapping, stringMap, strDicOffset,
 					attrMgr, dic, traceInfo.Files[i]))
 			}
 		}
@@ -239,31 +247,33 @@ func (p *Pdata) setProfile(
 
 	// Populate the deduplicated functions into profile.
 	funcTable := dic.FunctionTable()
-	funcTable.EnsureCapacity(len(funcMap))
+	funcTable.EnsureCapacity(len(funcMap) + int(funcDicOffset))
 	for range funcMap {
 		funcTable.AppendEmpty()
 	}
 	for v, idx := range funcMap {
 		f := funcTable.At(int(idx))
-		f.SetNameStrindex(getStringMapIndex(stringMap, v.Name))
-		f.SetFilenameStrindex(getStringMapIndex(stringMap, v.FileName))
+		f.SetNameStrindex(getStringMapIndex(stringMap, strDicOffset, v.Name))
+		f.SetFilenameStrindex(getStringMapIndex(stringMap, strDicOffset, v.FileName))
 	}
 
 	// When ranging over stringMap, the order will be according to the
 	// hash value of the key. To get the correct order for profile.StringTable,
 	// put the values in stringMap, in the correct array order.
-	stringTable := make([]string, len(stringMap))
+	tmpStringTable := make([]string, len(stringMap)+int(strDicOffset))
 	for v, idx := range stringMap {
-		stringTable[idx] = v
+		tmpStringTable[idx] = v
 	}
 
-	for _, v := range stringTable {
-		dic.StringTable().Append(v)
+	strTable := dic.StringTable()
+	strTable.EnsureCapacity(len(stringMap) + int(strDicOffset))
+	for _, value := range tmpStringTable[strDicOffset:] {
+		dic.StringTable().Append(value)
 	}
 
 	// profile.LocationIndices is not optional, and we only write elements into
 	// profile.Location that at least one sample references.
-	for i := int32(0); i < int32(dic.LocationTable().Len()); i++ {
+	for i := startLocationIndex; i < locationIndex; i++ {
 		profile.LocationIndices().Append(i)
 	}
 
@@ -272,19 +282,19 @@ func (p *Pdata) setProfile(
 }
 
 // getStringMapIndex inserts or looks up the index for value in stringMap.
-func getStringMapIndex(stringMap map[string]int32, value string) int32 {
+func getStringMapIndex(stringMap map[string]int32, offset int32, value string) int32 {
 	if idx, exists := stringMap[value]; exists {
 		return idx
 	}
 
-	idx := int32(len(stringMap))
+	idx := int32(len(stringMap)) + offset
 	stringMap[value] = idx
 
 	return idx
 }
 
 // createFunctionEntry adds a new function and returns its reference index.
-func createFunctionEntry(funcMap map[samples.FuncInfo]int32,
+func createFunctionEntry(funcMap map[samples.FuncInfo]int32, offset int32,
 	name string, fileName string,
 ) int32 {
 	key := samples.FuncInfo{
@@ -295,7 +305,7 @@ func createFunctionEntry(funcMap map[samples.FuncInfo]int32,
 		return idx
 	}
 
-	idx := int32(len(funcMap))
+	idx := int32(len(funcMap)) + offset
 	funcMap[key] = idx
 
 	return idx
@@ -303,7 +313,7 @@ func createFunctionEntry(funcMap map[samples.FuncInfo]int32,
 
 // getDummyMappingIndex inserts or looks up an entry for interpreted FileIDs.
 func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]int32,
-	stringMap map[string]int32, attrMgr *samples.AttrTableManager,
+	stringMap map[string]int32, strDicOffset int32, attrMgr *samples.AttrTableManager,
 	dic pprofile.ProfilesDictionary,
 	fileID libpf.FileID,
 ) int32 {
@@ -315,7 +325,7 @@ func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]int32,
 	fileIDtoMapping[fileID] = locationMappingIndex
 
 	mapping := dic.MappingTable().AppendEmpty()
-	mapping.SetFilenameStrindex(getStringMapIndex(stringMap, ""))
+	mapping.SetFilenameStrindex(getStringMapIndex(stringMap, strDicOffset, ""))
 	attrMgr.AppendOptionalString(mapping.AttributeIndices(),
 		semconv.ProcessExecutableBuildIDHtlhashKey,
 		fileID.StringNoQuotes())
