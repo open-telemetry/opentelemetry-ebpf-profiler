@@ -4,7 +4,6 @@
 package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -13,14 +12,12 @@ import (
 	"golang.org/x/arch/x86/x86asm"
 )
 
-const debugPrinting = false
-
 type regEntry struct {
 	idx  int
 	bits int
 }
 
-var regs [128]regEntry
+var regs [x86asm.RIP + 1]regEntry
 
 func init() {
 	regs[x86asm.AL] = regEntry{idx: 1, bits: 8}
@@ -95,11 +92,11 @@ func init() {
 }
 
 func regIndex(reg x86asm.Reg) int {
-	e := regEntryFor(reg)
+	e := regMappingFor(reg)
 	return e.idx
 }
 
-func regEntryFor(reg x86asm.Reg) regEntry {
+func regMappingFor(reg x86asm.Reg) regEntry {
 	if reg > 0 && int(reg) < len(regs) {
 		e := regs[reg]
 		return e
@@ -107,25 +104,20 @@ func regEntryFor(reg x86asm.Reg) regEntry {
 	return regEntry{}
 }
 
-type RegsState struct {
+type Registers struct {
 	regs [18]expression.Expression
 }
 
-func (r *RegsState) Set(reg x86asm.Reg, v expression.Expression) {
-	e := regEntryFor(reg)
+func (r *Registers) Set(reg x86asm.Reg, v expression.Expression) {
+	e := regMappingFor(reg)
 	if e.bits != 64 {
 		v = expression.ZeroExtend(v, e.bits)
-	}
-	if debugPrinting {
-		if reg != x86asm.RIP {
-			fmt.Printf("    [REG-W] %6s = %s\n", reg, v.DebugString())
-		}
 	}
 	r.regs[e.idx] = v
 }
 
-func (r *RegsState) Get(reg x86asm.Reg) expression.Expression {
-	e := regEntryFor(reg)
+func (r *Registers) Get(reg x86asm.Reg) expression.Expression {
+	e := regMappingFor(reg)
 	res := r.regs[e.idx]
 	if e.bits != 64 {
 		res = expression.ZeroExtend(res, e.bits)
@@ -140,7 +132,7 @@ type compare struct {
 }
 
 type Interpreter struct {
-	Regs        RegsState
+	Regs        Registers
 	code        []byte
 	CodeAddress expression.Expression
 	pc          int
@@ -172,9 +164,6 @@ func (i *Interpreter) WithMemory() *Interpreter {
 
 func (i *Interpreter) WriteMem(at, v expression.Expression) {
 	if i.mem != nil {
-		if debugPrinting {
-			fmt.Printf("    [W] %s = %s\n", at.DebugString(), v.DebugString())
-		}
 		i.mem[at] = v
 	}
 }
@@ -195,24 +184,9 @@ func (i *Interpreter) ResetCode(code []byte, address expression.Expression) {
 }
 
 func (i *Interpreter) initRegs() {
-	i.Regs.regs[0] = expression.Var("invalid reg")
-	i.Regs.regs[regIndex(x86asm.RAX)] = expression.Var("initial RAX")
-	i.Regs.regs[regIndex(x86asm.RCX)] = expression.Var("initial RCX")
-	i.Regs.regs[regIndex(x86asm.RDX)] = expression.Var("initial RDX")
-	i.Regs.regs[regIndex(x86asm.RBX)] = expression.Var("initial RBX")
-	i.Regs.regs[regIndex(x86asm.RSP)] = expression.Var("initial RSP")
-	i.Regs.regs[regIndex(x86asm.RBP)] = expression.Var("initial RBP")
-	i.Regs.regs[regIndex(x86asm.RSI)] = expression.Var("initial RSI")
-	i.Regs.regs[regIndex(x86asm.RDI)] = expression.Var("initial RDI")
-	i.Regs.regs[regIndex(x86asm.R8)] = expression.Var("initial R8")
-	i.Regs.regs[regIndex(x86asm.R9)] = expression.Var("initial R9")
-	i.Regs.regs[regIndex(x86asm.R10)] = expression.Var("initial R10")
-	i.Regs.regs[regIndex(x86asm.R11)] = expression.Var("initial R11")
-	i.Regs.regs[regIndex(x86asm.R12)] = expression.Var("initial R12")
-	i.Regs.regs[regIndex(x86asm.R13)] = expression.Var("initial R13")
-	i.Regs.regs[regIndex(x86asm.R14)] = expression.Var("initial R14")
-	i.Regs.regs[regIndex(x86asm.R15)] = expression.Var("initial R15")
-	i.Regs.regs[regIndex(x86asm.RIP)] = expression.Var("initial RIP")
+	for j := 0; j < len(i.Regs.regs); j++ {
+		i.Regs.regs[j] = expression.Var(fmt.Sprintf("invalid reg #%d", j))
+	}
 }
 
 func (i *Interpreter) Loop() (x86asm.Inst, error) {
@@ -221,7 +195,7 @@ func (i *Interpreter) Loop() (x86asm.Inst, error) {
 
 func (i *Interpreter) LoopWithBreak(breakLoop func(op x86asm.Inst) bool) (x86asm.Inst, error) {
 	prev := x86asm.Inst{}
-	for j := 0; j < 137; j++ {
+	for {
 		op, err := i.Step()
 		if err != nil {
 			return prev, err
@@ -231,33 +205,25 @@ func (i *Interpreter) LoopWithBreak(breakLoop func(op x86asm.Inst) bool) (x86asm
 		}
 		prev = op
 	}
-	return prev, errors.New("interpreter loop bound")
 }
 
 func (i *Interpreter) Step() (x86asm.Inst, error) {
 	if len(i.code) == 0 {
 		return x86asm.Inst{}, io.EOF
 	}
-	rem := i.code[i.pc:]
-	if len(rem) == 0 {
-		return x86asm.Inst{}, io.EOF
-	}
 	var inst x86asm.Inst
 	var err error
-	if ok, instLen := DecodeSkippable(rem); ok {
+	if ok, instLen := DecodeSkippable(i.code); ok {
 		inst = x86asm.Inst{Op: x86asm.NOP, Len: instLen}
 	} else {
-		inst, err = x86asm.Decode(rem, 64)
+		inst, err = x86asm.Decode(i.code, 64)
 		if err != nil {
 			return inst, fmt.Errorf("at 0x%x : %v", i.pc, err)
 		}
 	}
 	i.pc += inst.Len
+	i.code = i.code[inst.Len:]
 	i.Regs.Set(x86asm.RIP, expression.Add(i.CodeAddress, expression.Imm(uint64(i.pc))))
-	if debugPrinting {
-		isnAddr := expression.Add(i.CodeAddress, expression.Imm(uint64(i.pc-inst.Len)))
-		fmt.Printf("| %6s %s\n", isnAddr.DebugString(), x86asm.IntelSyntax(inst, uint64(i.pc), nil))
-	}
 	switch inst.Op {
 	case x86asm.ADD:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {

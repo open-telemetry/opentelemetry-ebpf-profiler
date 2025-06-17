@@ -170,7 +170,3 @@ func TestCompareJumpConstraints(t *testing.T) {
 	maxValue := i.MaxValue(r8)
 	require.EqualValues(t, 0xa5, maxValue)
 }
-
-func TestDebugPrinting(t *testing.T) {
-	assert.False(t, debugPrinting)
-}

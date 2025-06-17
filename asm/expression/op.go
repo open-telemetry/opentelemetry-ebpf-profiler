@@ -11,8 +11,11 @@ import (
 
 type opType int
 
-const opAdd = opType(1)
-const opMul = opType(2)
+const (
+	_ opType = iota
+	opAdd
+	opMul
+)
 
 type op struct {
 	typ      opType
