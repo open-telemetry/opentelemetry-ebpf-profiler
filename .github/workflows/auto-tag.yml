@@ -19,15 +19,7 @@ jobs:
       - name: Get current year and week number
         id: date
         run: |
-          # Get the year (YYYY)
-          YEAR=$(date +%G)
-          # Get the week number (WW)
-          WEEK=$(date +%V)
-          # Pad week with a leading zero if it's a single digit
-          WEEK_PADDED=$(printf "%02d" $WEEK)
-          echo "Current year: $YEAR"
-          echo "Current week: $WEEK_PADDED"
-          echo "tag_name=v0.0.${YEAR}${WEEK_PADDED}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=v0.0.$(date +%G%V)" >> "$GITHUB_OUTPUT"
 
       - name: Create and push tag
         run: |
