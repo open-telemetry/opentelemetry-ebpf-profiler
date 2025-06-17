@@ -109,7 +109,7 @@ type pclntabFuncMap struct {
 	funcOff uintptr
 }
 
-// pclntabFuncMap118 is the Golang function symbol table map entry starting Go 1.18
+// pclntabFuncMap118 is the Golang function symbol table map entry for Go 1.18+.
 type pclntabFuncMap118 struct {
 	pc      uint32
 	funcOff uint32
@@ -340,6 +340,11 @@ type Gopclntab struct {
 	funSize     uint8
 	funcMapSize uint8
 
+	// These are read-only byte slices to various areas within .gopclntab
+	// (subslices of data []byte). Since 'data' a slice returned by pfelf.File
+	// it can be allocated or mmapped read-only data. To keep memory usage
+	// and GC stress minimal the returned strings (symbol and file names) refer
+	// to this data directly (via unsafe.String).
 	functab, funcdata, funcnametab, filetab, pctab, cutab []byte
 }
 
@@ -451,7 +456,7 @@ func (g *Gopclntab) getFuncMapEntry(index int) (pc, funcOff uintptr) {
 	}
 }
 
-// getFunc returns the gopclntab function data and its starts address given.
+// getFunc returns the gopclntab function data and its start address.
 func (g *Gopclntab) getFunc(funcOff uintptr) (uintptr, *pclntabFunc) {
 	// Get the function data
 	if uintptr(len(g.funcdata)) < funcOff+uintptr(g.funSize) {
@@ -468,7 +473,7 @@ func (g *Gopclntab) getFunc(funcOff uintptr) (uintptr, *pclntabFunc) {
 	return pc, (*pclntabFunc)(unsafe.Pointer(&g.funcdata[funcOff]))
 }
 
-// getPcval returns the pcval table at given offset with 'pc' as the pc start value.
+// getPcval returns the pcval table at given offset with 'startPc' as the pc start value.
 func (g *Gopclntab) getPcval(offs int32, startPc uint) pcval {
 	return newPcval(g.pctab[int(offs):], startPc, g.quantum)
 }
