@@ -1,4 +1,4 @@
-package discovery
+package discovery // import "go.opentelemetry.io/ebpf-profiler/pyroscope/discovery"
 
 import "strings"
 

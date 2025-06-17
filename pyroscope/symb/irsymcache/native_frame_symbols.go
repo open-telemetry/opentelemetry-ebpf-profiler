@@ -1,4 +1,4 @@
-package irsymcache
+package irsymcache // import "go.opentelemetry.io/ebpf-profiler/pyroscope/symb/irsymcache"
 
 import (
 	"time"
@@ -7,7 +7,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
@@ -21,8 +20,8 @@ const (
 func SymbolizeNativeFrame(
 	resolver samples.NativeSymbolResolver,
 	frames *lru.SyncedLRU[
-		libpf.FileID,
-		*xsync.RWMutex[*lru.LRU[libpf.AddressOrLineno, samples.SourceInfo]],
+		libpf.FrameID,
+		samples.SourceInfo,
 	],
 	mappingName string,
 	frameID libpf.FrameID,
@@ -31,33 +30,9 @@ func SymbolizeNativeFrame(
 	fileID := frameID.FileID()
 	addr := frameID.AddressOrLine()
 
-	frameMetadata := func(symbols []samples.SourceInfoFrame) samples.SourceInfo {
-		si := samples.SourceInfo{Frames: symbols}
-		if frameMapLock, exists := frames.GetAndRefresh(fileID,
-			FramesCacheLifetime); exists {
-			frameMap := frameMapLock.WLock()
-			defer frameMapLock.WUnlock(&frameMap)
-			(*frameMap).AddWithLifetime(addr, si, FramesCacheLifetime)
-			return si
-		}
-
-		frameMap, _ := lru.New[libpf.AddressOrLineno, samples.SourceInfo](1024,
-			func(k libpf.AddressOrLineno) uint32 { return uint32(k) })
-		frameMap.SetLifetime(FrameMapLifetime)
-		frameMap.Add(addr, si)
-		mu := xsync.NewRWMutex(frameMap)
-		frames.Add(fileID, &mu)
-		return si
-	}
-	if frameMapLock, exists := frames.GetAndRefresh(frameID.FileID(),
-		FramesCacheLifetime); exists {
-		frameMap := frameMapLock.RLock()
-		si, known := (*frameMap).GetAndRefresh(frameID.AddressOrLine(), FrameMapLifetime)
-		frameMapLock.RUnlock(&frameMap)
-		if known {
-			symbolize(si)
-			return
-		}
+	if si, exists := frames.GetAndRefresh(frameID, FramesCacheLifetime); exists {
+		symbolize(si)
+		return
 	}
 
 	var (
@@ -67,8 +42,12 @@ func SymbolizeNativeFrame(
 	if mappingName != process.VdsoPathName {
 		symbols, err = resolver.ResolveAddress(fileID, uint64(addr))
 		if err != nil {
-			logrus.Debugf("Failed to symbolize native frame %v:%v: %v", fileID, addr, err)
+			logrus.Debugf("Failed to symbolize %v %v", frameID.String(), err)
 		}
 	}
-	symbolize(frameMetadata(symbols))
+	si := samples.SourceInfo{
+		Frames: symbols,
+	}
+	frames.Add(frameID, si)
+	symbolize(si)
 }

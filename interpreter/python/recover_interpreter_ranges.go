@@ -1,4 +1,4 @@
-package python
+package python // import "go.opentelemetry.io/ebpf-profiler/interpreter/python"
 
 import (
 	"cmp"

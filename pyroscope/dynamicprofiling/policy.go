@@ -1,4 +1,4 @@
-package dynamicprofiling
+package dynamicprofiling // import "go.opentelemetry.io/ebpf-profiler/pyroscope/dynamicprofiling"
 
 import (
 	"go.opentelemetry.io/ebpf-profiler/process"

@@ -1,4 +1,4 @@
-package modulestore
+package modulestore // import "go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 
 import (
 	"context"

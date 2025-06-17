@@ -95,7 +95,7 @@ func Open(filename string) (*ReaderAt, error) {
 
 	size := fi.Size()
 	if size == 0 {
-		f.Close()
+		_ = f.Close()
 		// Treat (size == 0) as a special case, avoiding the syscall, since
 		// "man 2 mmap" says "the length... must be greater than 0".
 		//
@@ -106,17 +106,17 @@ func Open(filename string) (*ReaderAt, error) {
 		}, nil
 	}
 	if size < 0 {
-		f.Close()
+		_ = f.Close()
 		return nil, fmt.Errorf("mmap: file %q has negative size", filename)
 	}
 	if size != int64(int(size)) {
-		f.Close()
+		_ = f.Close()
 		return nil, fmt.Errorf("mmap: file %q is too large", filename)
 	}
 
 	data, err := syscall.Mmap(int(f.Fd()), 0, int(size), syscall.PROT_READ, syscall.MAP_SHARED)
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, err
 	}
 	r := &ReaderAt{data, f}

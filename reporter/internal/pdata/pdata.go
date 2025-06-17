@@ -6,7 +6,6 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 import (
 	lru "github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
@@ -20,10 +19,7 @@ type Pdata struct {
 	Executables *lru.SyncedLRU[libpf.FileID, samples.ExecInfo]
 
 	// Frames maps frame information to its source location.
-	Frames *lru.SyncedLRU[
-		libpf.FileID,
-		*xsync.RWMutex[*lru.LRU[libpf.AddressOrLineno, samples.SourceInfo]],
-	]
+	Frames *lru.SyncedLRU[libpf.FrameID, samples.SourceInfo]
 
 	// ExtraSampleAttrProd is an optional hook point for adding custom
 	// attributes to samples.
@@ -43,9 +39,8 @@ func New(samplesPerSecond int, executablesCacheElements, framesCacheElements uin
 	}
 	executables.SetLifetime(ExecutableCacheLifetime) // Allow GC to clean stale items.
 
-	frames, err := lru.NewSynced[libpf.FileID,
-		*xsync.RWMutex[*lru.LRU[libpf.AddressOrLineno, samples.SourceInfo]]](
-		framesCacheElements, libpf.FileID.Hash32)
+	frames, err :=
+		lru.NewSynced[libpf.FrameID, samples.SourceInfo](framesCacheElements, libpf.FrameID.Hash32)
 	if err != nil {
 		return nil, err
 	}

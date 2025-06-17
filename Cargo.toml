@@ -48,12 +48,12 @@ rustc-demangle = "0.1"
 serde_json = "1"
 sha2 = "0.10"
 tempfile = "3"
-thiserror = "1"
+thiserror = "2"
 zstd = "0.13.0"
 zydis = "4.1.1"
 
 [workspace.dependencies.gimli]
-version = "0.31.0"
+version = "0.32.0"
 default-features = false
 features = ["std", "endian-reader", "fallible-iterator"]
 

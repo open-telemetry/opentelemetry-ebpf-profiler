@@ -1,4 +1,4 @@
-package ffi
+package ffi // import "go.opentelemetry.io/ebpf-profiler/pyroscope/symb/ffi"
 
 /*
 #cgo CFLAGS: -g -Wall

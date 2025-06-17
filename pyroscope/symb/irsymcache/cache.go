@@ -1,4 +1,4 @@
-package irsymcache
+package irsymcache // import "go.opentelemetry.io/ebpf-profiler/pyroscope/symb/irsymcache"
 
 import (
 	"errors"

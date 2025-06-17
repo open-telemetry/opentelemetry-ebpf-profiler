@@ -86,13 +86,13 @@ func (e dockerPythonExtractor) extract(t testing.TB) (elf, debugElf *pfelf.File)
 	elf, err = pfelf.Open(elfPath)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		elf.Close()
+		_ = elf.Close()
 	})
 	if e.withDebug {
 		debugElf, err = pfelf.Open(filepath.Join(d, debugElfPath))
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			debugElf.Close()
+			_ = debugElf.Close()
 		})
 	} else {
 		s, _ := elf.ReadSymbols()
@@ -193,7 +193,7 @@ func (e storeExtractor) extract(t testing.TB) (elf, debugElf *pfelf.File) {
 	file, err := pfelf.NewFile(bytes.NewReader(buf.Bytes()), 0, false)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		file.Close()
+		_ = file.Close()
 	})
 	return file, nil
 }

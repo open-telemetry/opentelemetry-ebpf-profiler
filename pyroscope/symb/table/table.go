@@ -1,4 +1,4 @@
-package table
+package table // import "go.opentelemetry.io/ebpf-profiler/pyroscope/symb/table"
 
 import (
 	"encoding/binary"

@@ -252,13 +252,13 @@ func TestLibc(t *testing.T) {
 	libc, err := os.Open("../testdata/64b17fbac799e68da7ebd9985ddf9b5cb375e6.debug")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		libc.Close()
+		_ = libc.Close()
 	})
 
 	tableFile, err := os.Create(t.TempDir() + "/out")
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		tableFile.Close()
+		_ = tableFile.Close()
 	})
 	err = FDToTable(libc, tableFile, WithCRC(), WithFiles(), WithLines())
 	require.NoError(t, err)

@@ -7,10 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 
-	lru "github.com/elastic/go-freelru"
-
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -169,7 +166,7 @@ func TestFunctionTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
 		executables map[libpf.FileID]samples.ExecInfo
-		frames      map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo
+		frames      map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfoFrame
 		events      map[libpf.Origin]samples.KeyToEventMapping
 
 		wantFunctionTable []string
@@ -177,7 +174,7 @@ func TestFunctionTableOrder(t *testing.T) {
 		{
 			name:              "with no executables",
 			executables:       map[libpf.FileID]samples.ExecInfo{},
-			frames:            map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo{},
+			frames:            map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfoFrame{},
 			events:            map[libpf.Origin]samples.KeyToEventMapping{},
 			wantFunctionTable: []string{""},
 		}, {
@@ -185,18 +182,13 @@ func TestFunctionTableOrder(t *testing.T) {
 			executables: map[libpf.FileID]samples.ExecInfo{
 				libpf.NewFileID(2, 3): {},
 			},
-			frames: map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo{
+			frames: map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfoFrame{
 				libpf.NewFileID(2, 3): {
-					libpf.AddressOrLineno(0xef): {Frames: []samples.SourceInfoFrame{
-						{FunctionName: "func1"}}},
-					libpf.AddressOrLineno(0x1ef): {Frames: []samples.SourceInfoFrame{
-						{FunctionName: "func2"}}},
-					libpf.AddressOrLineno(0x2ef): {Frames: []samples.SourceInfoFrame{
-						{FunctionName: "func3"}}},
-					libpf.AddressOrLineno(0x3ef): {Frames: []samples.SourceInfoFrame{
-						{FunctionName: "func4"}}},
-					libpf.AddressOrLineno(0x4ef): {Frames: []samples.SourceInfoFrame{
-						{FunctionName: "func5"}}},
+					libpf.AddressOrLineno(0xef):  {FunctionName: "func1"},
+					libpf.AddressOrLineno(0x1ef): {FunctionName: "func2"},
+					libpf.AddressOrLineno(0x2ef): {FunctionName: "func3"},
+					libpf.AddressOrLineno(0x3ef): {FunctionName: "func4"},
+					libpf.AddressOrLineno(0x4ef): {FunctionName: "func5"},
 				},
 			},
 			events: map[libpf.Origin]samples.KeyToEventMapping{
@@ -256,20 +248,11 @@ func TestFunctionTableOrder(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d, err := New(100, 100, 100, nil, nil)
 			require.NoError(t, err)
-			for k, v := range tt.frames {
-				frameMap, err := lru.New[libpf.AddressOrLineno, samples.SourceInfo](4096,
-					func(k libpf.AddressOrLineno) uint32 { return uint32(k) })
-				if err != nil {
-					t.Fatalf("Failed to create inner frameMap for %x: %v", k, err)
-					return
+			for fileID, addrWithSourceInfos := range tt.frames {
+				for addr, si := range addrWithSourceInfos {
+					d.Frames.Add(libpf.NewFrameID(fileID, addr),
+						samples.SourceInfo{Frames: []samples.SourceInfoFrame{si}})
 				}
-
-				for a, s := range v {
-					frameMap.Add(a, s)
-				}
-
-				mu := xsync.NewRWMutex(frameMap)
-				d.Frames.Add(k, &mu)
 			}
 			for k, v := range tt.executables {
 				d.Executables.Add(k, v)

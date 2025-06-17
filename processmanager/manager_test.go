@@ -137,7 +137,7 @@ func generateDummyFiles(t *testing.T, num int) []string {
 		content := []byte(tmpfile.Name())
 		_, err = tmpfile.Write(content)
 		require.NoError(t, err)
-		tmpfile.Close()
+		_ = tmpfile.Close()
 		require.NoError(t, err)
 		files = append(files, tmpfile.Name())
 	}

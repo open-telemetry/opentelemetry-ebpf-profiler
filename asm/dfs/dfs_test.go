@@ -109,7 +109,7 @@ func TestRanges(t *testing.T) {
 	b2 := d.AddBasicBlock(0x10C5A8)
 	_ = d.AddInstruction(b2, 3, true)
 	ranges := d.Ranges()
-	require.EqualValues(t, []util.Range{{Start: 0x10C59D, End: 0x10C5A8 + 3}}, ranges)
+	require.Equal(t, []util.Range{{Start: 0x10C59D, End: 0x10C5A8 + 3}}, ranges)
 }
 
 func TestAddBBSplitEdges(t *testing.T) {

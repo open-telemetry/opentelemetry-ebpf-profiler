@@ -1,4 +1,4 @@
-package helpers
+package helpers // import "go.opentelemetry.io/ebpf-profiler/pyroscope/internalshim/helpers"
 
 import (
 	"go.opentelemetry.io/ebpf-profiler/internal/helpers"
