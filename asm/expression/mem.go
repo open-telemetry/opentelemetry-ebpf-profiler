@@ -12,7 +12,7 @@ import (
 
 var _ Expression = &mem{}
 
-func MemS(segment x86asm.Reg, at Expression, sizeBytes int) Expression {
+func MemWithSegment(segment x86asm.Reg, at Expression, sizeBytes int) Expression {
 	return &mem{at: at, segment: segment, sizeBytes: sizeBytes}
 }
 

@@ -36,18 +36,14 @@ func (v *Variable) ExtractedValueImm() uint64 {
 	if v.extracted == nil {
 		return 0
 	}
-	imm, ok := v.extracted.(*immediate)
-	if ok {
+	if imm, ok := v.extracted.(*immediate); ok {
 		return imm.Value
 	}
 	return 0
 }
 
 func (v *Variable) MaxValue() uint64 {
-	if v.extracted != nil {
-		if v.extracted == v {
-			return v.maxValueConstraint
-		}
+	if v.extracted != nil && if v.extracted != v {
 		return v.extracted.MaxValue()
 	}
 	return v.maxValueConstraint
@@ -60,11 +56,7 @@ func (v *Variable) DebugString() string {
 func (v *Variable) Match(pattern Expression) bool {
 	switch typedPattern := pattern.(type) {
 	case *Variable:
-		if typedPattern.isAny {
-			typedPattern.extracted = v
-			return true
-		}
-		if v == typedPattern {
+		if typedPattern.isAny || typedPattern == v {
 			typedPattern.extracted = v
 			return true
 		}
