@@ -1,4 +1,4 @@
-package amd
+package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
 
 import (
 	"encoding/hex"

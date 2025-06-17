@@ -72,8 +72,6 @@ type FrameMetadataArgs struct {
 	SourceLine libpf.SourceLineno
 	// FunctionOffset is the line offset from function start line for the frame.
 	FunctionOffset uint32
-
-	FileIDCacheSizeHint uint32 //todo maybe pass a frame type or some other information
 }
 
 type SymbolReporter interface {

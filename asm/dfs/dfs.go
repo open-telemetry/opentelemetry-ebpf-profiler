@@ -1,4 +1,4 @@
-package dfs
+package dfs // import "go.opentelemetry.io/ebpf-profiler/asm/dfs"
 
 import (
 	"errors"

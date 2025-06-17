@@ -118,7 +118,7 @@ func TestRecoverSwitchCase(t *testing.T) {
 
 func assertEval(t *testing.T, left, right variable.Expression) {
 	if !left.Match(right) {
-		assert.Fail(t, "failed to eval %s to %s", left.DebugString(), right.DebugString())
+		assert.Failf(t, "failed to eval %s to %s", left.DebugString(), right.DebugString())
 		t.Logf("left  %s", left.DebugString())
 		t.Logf("right %s", right.DebugString())
 	}

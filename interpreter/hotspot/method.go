@@ -13,8 +13,6 @@ import (
 )
 
 // Constants for the JVM internals that have never changed
-//
-//nolint:golint,stylecheck,revive
 const ConstMethod_has_linenumber_table = 0x0001
 
 // hotspotMethod contains symbolization information for one Java method. It caches
@@ -54,8 +52,6 @@ func (m *hotspotMethod) symbolize(symbolReporter reporter.SymbolReporter, bci ui
 			SourceFile:     m.sourceFileName,
 			SourceLine:     libpf.SourceLineno(lineNo),
 			FunctionOffset: functionOffset,
-
-			FileIDCacheSizeHint: 1,
 		})
 	}
 }

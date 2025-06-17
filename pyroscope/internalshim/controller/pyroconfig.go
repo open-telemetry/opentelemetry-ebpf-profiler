@@ -1,4 +1,4 @@
-package controller
+package controller // import "go.opentelemetry.io/ebpf-profiler/pyroscope/internalshim/controller"
 
 import (
 	"flag"

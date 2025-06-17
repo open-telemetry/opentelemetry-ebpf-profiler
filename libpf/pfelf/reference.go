@@ -41,7 +41,7 @@ func (ref *Reference) GetELF() (*File, error) {
 // Close closes the File if it has been opened earlier.
 func (ref *Reference) Close() {
 	if ref.elfFile != nil {
-		ref.elfFile.Close()
+		_ = ref.elfFile.Close()
 		ref.elfFile = nil
 	}
 }

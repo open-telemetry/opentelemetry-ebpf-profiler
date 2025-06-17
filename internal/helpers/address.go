@@ -6,7 +6,7 @@ import (
 	"net"
 	"os"
 
-	"github.com/jsimonetti/rtnetlink"
+	"github.com/jsimonetti/rtnetlink/v2"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )

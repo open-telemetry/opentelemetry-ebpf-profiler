@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/pyroscope/symb/table"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
@@ -21,10 +20,9 @@ func TestNativeFrameSymbols(t *testing.T) {
 	})
 	require.NoError(t, err)
 	frames, err := lru.NewSynced[
-		libpf.FileID,
-		*xsync.RWMutex[*lru.LRU[libpf.AddressOrLineno, samples.SourceInfo]],
+		libpf.FrameID, samples.SourceInfo,
 	](
-		1024, libpf.FileID.Hash32)
+		1024, libpf.FrameID.Hash32)
 	require.NoError(t, err)
 
 	reference := testElfRef(testLibcFIle)

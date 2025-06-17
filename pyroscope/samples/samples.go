@@ -1,4 +1,4 @@
-package samples
+package samples // import "go.opentelemetry.io/ebpf-profiler/pyroscope/samples"
 
 import (
 	"go.opentelemetry.io/collector/pdata/pcommon"

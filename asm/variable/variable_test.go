@@ -153,14 +153,14 @@ func TestVariable(t *testing.T) {
 	t.Run("extend max value", func(t *testing.T) {
 		v := Var("v")
 
-		assert.EqualValues(t,
+		assert.Equal(t,
 			uint64(math.MaxUint64),
 			ZeroExtend(v, 64).MaxValue(),
 		)
 	})
 
 	t.Run("add max value overflow", func(t *testing.T) {
-		assert.EqualValues(t,
+		assert.Equal(t,
 			uint64(math.MaxUint64),
 			Add(Var("max64"), Var("max1").SetMaxValue(1)).MaxValue(),
 		)

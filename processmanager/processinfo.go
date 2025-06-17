@@ -21,13 +21,13 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
-	"go.opentelemetry.io/ebpf-profiler/proc"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -36,6 +36,40 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
+
+// isPIDLive checks if a PID belongs to a live process. It will never produce a false negative but
+// may produce a false positive (e.g. due to permissions) in which case an error will also be
+// returned.
+func isPIDLive(pid libpf.PID) (bool, error) {
+	// Check first with the kill syscall which is the fastest route.
+	// A kill syscall with a 0 signal is documented to still do the check
+	// whether the process exists: https://linux.die.net/man/2/kill
+	err := unix.Kill(int(pid), 0)
+	if err == nil {
+		return true, nil
+	}
+
+	var errno unix.Errno
+	if errors.As(err, &errno) {
+		switch errno {
+		case unix.ESRCH:
+			return false, nil
+		case unix.EPERM:
+			// It seems that in some rare cases this check can fail with
+			// a permission error. Fallback to a procfs check.
+		default:
+			return true, err
+		}
+	}
+
+	path := fmt.Sprintf("/proc/%d/maps", pid)
+	_, err = os.Stat(path)
+	if err != nil && os.IsNotExist(err) {
+		return false, nil
+	}
+
+	return true, err
+}
 
 // assignTSDInfo updates the TSDInfo for the Interpreters on given PID.
 // Caller must hold pm.mu write lock.
@@ -515,7 +549,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		for _, instance := range pm.interpreters[pid] {
 			err := instance.SynchronizeMappings(pm.ebpf, pm.reporter, pr, mappings)
 			if err != nil {
-				if alive, _ := proc.IsPIDLive(pid); alive {
+				if alive, _ := isPIDLive(pid); alive {
 					log.Errorf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
 				} else {
 					log.Debugf("Failed to handle new anonymous mapping for PID %d: process exited",
@@ -682,7 +716,7 @@ func (pm *ProcessManager) CleanupPIDs() {
 
 	pm.mu.RLock()
 	for pid := range pm.pidToProcessInfo {
-		if live, _ := proc.IsPIDLive(pid); !live {
+		if live, _ := isPIDLive(pid); !live {
 			deadPids = append(deadPids, pid)
 		}
 	}

@@ -14,18 +14,16 @@ import (
 	"os/signal"
 
 	"github.com/elastic/go-freelru"
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/helpers"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/pyroscope/dynamicprofiling"
-	"go.opentelemetry.io/ebpf-profiler/pyroscope/symb/irsymcache"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
-	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/vc"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Short copyright / license text for eBPF code
@@ -118,29 +116,12 @@ func mainWithExitCode() exitCode {
 		log.Error(err)
 		return exitFailure
 	}
-
 	cgroups, err := freelru.NewSynced[libpf.PID, string](1024,
 		func(pid libpf.PID) uint32 { return uint32(pid) })
 	if err != nil {
 		log.Error(err)
 		return exitFailure
 	}
-	cfg.Policy = dynamicprofiling.AlwaysOnPolicy{}
-
-	var nsr samples.NativeSymbolResolver
-	if cfg.SymbolizeNativeFrames {
-		tf := irsymcache.NewTableFactory()
-		nsr, err = irsymcache.NewFSCache(tf, irsymcache.Options{
-			SizeEntries: uint32(cfg.SymbCacheSizeEntries),
-			Path:        cfg.SymbCachePath,
-		})
-		if err != nil {
-			log.Error(err)
-			return exitFailure
-		}
-	}
-
-	cfg.FileObserver = nsr
 
 	rep, err := reporter.NewOTLP(&reporter.Config{
 		CollAgentAddr:            cfg.CollAgentAddr,
@@ -153,13 +134,12 @@ func mainWithExitCode() exitCode {
 		ReportInterval:           intervals.ReportInterval(),
 		ExecutablesCacheElements: 16384,
 		// Next step: Calculate FramesCacheElements from numCores and samplingRate.
-		FramesCacheElements:       65536,
-		CGroupCacheElements:       1024,
-		SamplesPerSecond:          cfg.SamplesPerSecond,
-		KernelVersion:             kernelVersion,
-		HostName:                  hostname,
-		IPAddress:                 sourceIP,
-		ExtraNativeSymbolResolver: nsr,
+		FramesCacheElements: 131072,
+		CGroupCacheElements: 1024,
+		SamplesPerSecond:    cfg.SamplesPerSecond,
+		KernelVersion:       kernelVersion,
+		HostName:            hostname,
+		IPAddress:           sourceIP,
 	}, cgroups)
 	if err != nil {
 		log.Error(err)
