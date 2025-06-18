@@ -4,7 +4,7 @@
     {
       "lwp": 156629,
       "frames": [
-        "type..eq.fmt.fmt+0 in :0",
+        "main.leaf+0 in /media/psf/devel/prodfiler/utils/coredump/testsources/go/hello.go:6",
         "main.hello5+0 in /media/psf/devel/prodfiler/utils/coredump/testsources/go/hello.go:43",
         "main.hello4+0 in /media/psf/devel/prodfiler/utils/coredump/testsources/go/hello.go:36",
         "main.hello3+0 in /media/psf/devel/prodfiler/utils/coredump/testsources/go/hello.go:30",

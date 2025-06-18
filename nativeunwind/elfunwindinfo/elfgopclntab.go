@@ -494,7 +494,7 @@ func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
 func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
 	index := sort.Search(g.numFuncs, func(i int) bool {
 		funcPc, _ := g.getFuncMapEntry(i)
-		return funcPc >= pc
+		return funcPc > pc
 	}) - 1
 	if index < 0 {
 		return "", 0, ""
