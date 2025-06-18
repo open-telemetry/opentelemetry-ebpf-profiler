@@ -5,7 +5,6 @@ package internal // import "go.opentelemetry.io/ebpf-profiler/collector/internal
 
 import (
 	"context"
-	"os"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/xconsumer"
@@ -28,7 +27,7 @@ func NewController(cfg *controller.Config,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
 	rep, err := reporter.NewCollector(&reporter.Config{
-		Name:                     os.Args[0],
+		Name:                     "otelcol-ebpf-profiler",
 		Version:                  vc.Version(),
 		MaxRPCMsgSize:            32 << 20, // 32 MiB
 		MaxGRPCRetries:           5,
