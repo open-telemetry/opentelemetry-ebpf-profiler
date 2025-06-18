@@ -282,14 +282,6 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, error) {
 		}
 	}
 
-	for i := range ef.Sections {
-		s := &ef.Sections[i]
-		if s.Name != ".gopclntab" {
-			continue
-		}
-		return s.Data(maxBytesGoPclntab)
-	}
-
 	return nil, nil
 }
 
