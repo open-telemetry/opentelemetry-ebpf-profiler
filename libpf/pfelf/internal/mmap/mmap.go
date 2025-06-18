@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 )
@@ -22,11 +23,25 @@ var (
 // Like any io.ReaderAt, clients can execute parallel ReadAt calls, but it is
 // not safe to call Close and reading methods concurrently.
 type ReaderAt struct {
+	// refCount is the number of references
+	refCount atomic.Int32
+
 	data []byte
+}
+
+// Take takes a reference on the data
+func (r *ReaderAt) Take() io.Closer {
+	r.refCount.Add(1)
+	return r
 }
 
 // Close closes the reader.
 func (r *ReaderAt) Close() error {
+	// Drop reference
+	if r.refCount.Add(-1) != 0 {
+		return nil
+	}
+	// No more references - unmap data
 	if r.data == nil {
 		return nil
 	} else if len(r.data) == 0 {
@@ -107,8 +122,8 @@ func Open(filename string) (*ReaderAt, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &ReaderAt{data}
-
+	r := &ReaderAt{data: data}
+	r.refCount.Store(1)
 	runtime.SetFinalizer(r, (*ReaderAt).Close)
 	return r, nil
 }

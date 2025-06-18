@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -26,7 +25,6 @@ var (
 )
 
 type goData struct {
-	pfElf   *pfelf.File
 	pclntab *elfunwindinfo.Gopclntab
 }
 
@@ -56,7 +54,6 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	}
 
 	return &goData{
-		pfElf:   ef.Take(),
 		pclntab: pclntab,
 	}, nil
 }
@@ -69,7 +66,7 @@ func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
 }
 
 func (g *goData) Unload(_ interpreter.EbpfHandler) {
-	_ = g.pfElf.Close()
+	_ = g.pclntab.Close()
 }
 
 func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {

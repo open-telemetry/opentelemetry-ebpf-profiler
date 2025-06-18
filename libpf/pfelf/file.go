@@ -30,7 +30,6 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sort"
-	"sync/atomic"
 	"syscall"
 	"unsafe"
 
@@ -61,9 +60,6 @@ var (
 
 // File represents an open ELF file
 type File struct {
-	// refCount is the number of references
-	refCount atomic.Int32
-
 	// closer is called internally when resources for this File are to be released
 	closer io.Closer
 
@@ -184,11 +180,9 @@ func Open(name string) (*File, error) {
 
 // Close closes the File.
 func (f *File) Close() (err error) {
-	if f.refCount.Add(-1) == 0 {
-		if f.closer != nil {
-			err = f.closer.Close()
-			f.closer = nil
-		}
+	if f.closer != nil {
+		err = f.closer.Close()
+		f.closer = nil
 	}
 	return err
 }
@@ -321,7 +315,6 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		}
 	}
 
-	f.refCount.Store(1)
 	return f, nil
 }
 
@@ -337,9 +330,23 @@ func getString(section []byte, start int) (string, bool) {
 	return string(section[start : start+slen]), true
 }
 
-func (f *File) Take() *File {
-	f.refCount.Add(1)
-	return f
+// NoMmapCloser is a no-op io.Closer which is returned from Take() when
+// the File is not memory mapped.
+type NoMmapCloser libpf.Void
+
+// Close implements io.Closer interface.
+func (_ NoMmapCloser) Close() error {
+	return nil
+}
+
+// Take takes a reference on the backing mmapped data. This allows callers to
+// keep slices returned by Section.Data() and Prog.Data() after File has been
+// GCd. The returned Close() will release the reference on data.
+func (f *File) Take() io.Closer {
+	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
+		return mapping.Take()
+	}
+	return NoMmapCloser{}
 }
 
 // LoadSections loads the ELF file sections
