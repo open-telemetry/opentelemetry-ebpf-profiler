@@ -162,6 +162,7 @@ func TestGetDummyMappingIndex(t *testing.T) {
 	}
 }
 
+//nolint:lll
 func TestFunctionTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
@@ -169,16 +170,19 @@ func TestFunctionTableOrder(t *testing.T) {
 		frames      map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo
 		events      map[libpf.Origin]samples.KeyToEventMapping
 
-		wantFunctionTable []string
+		wantFunctionTable        []string
+		expectedResourceProfiles int
 	}{
 		{
-			name:              "with no executables",
-			executables:       map[libpf.FileID]samples.ExecInfo{},
-			frames:            map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo{},
-			events:            map[libpf.Origin]samples.KeyToEventMapping{},
-			wantFunctionTable: []string{""},
+			name:                     "no events",
+			executables:              map[libpf.FileID]samples.ExecInfo{},
+			frames:                   map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo{},
+			events:                   map[libpf.Origin]samples.KeyToEventMapping{},
+			wantFunctionTable:        []string{""},
+			expectedResourceProfiles: 0,
 		}, {
-			name: "single executable",
+			name:                     "single executable",
+			expectedResourceProfiles: 1,
 			executables: map[libpf.FileID]samples.ExecInfo{
 				libpf.NewFileID(2, 3): {},
 			},
@@ -256,10 +260,17 @@ func TestFunctionTableOrder(t *testing.T) {
 			for k, v := range tt.executables {
 				d.Executables.Add(k, v)
 			}
-			res := d.Generate(tt.events)
-			expectedProfiles := len(tt.events)
-			require.Equal(t, 1, res.ResourceProfiles().Len())
+			tree := make(samples.TraceEventsTree)
+			tree[""] = tt.events
+			res := d.Generate(tree, tt.name, "version")
+			require.Equal(t, tt.expectedResourceProfiles, res.ResourceProfiles().Len())
+			if tt.expectedResourceProfiles == 0 {
+				// Do not check elements of ResourceProfile if there is no expected
+				// ResourceProfile.
+				return
+			}
 			require.Equal(t, 1, res.ResourceProfiles().At(0).ScopeProfiles().Len())
+			expectedProfiles := len(tt.events)
 			require.Equal(t, expectedProfiles, res.ResourceProfiles().
 				At(0).ScopeProfiles().
 				At(0).Profiles().Len())

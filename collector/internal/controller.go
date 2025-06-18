@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
+	"go.opentelemetry.io/ebpf-profiler/vc"
 )
 
 // Controller is a bridge between the Collector's [receiverprofiles.Profiles]
@@ -26,6 +27,8 @@ func NewController(cfg *controller.Config,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
 	rep, err := reporter.NewCollector(&reporter.Config{
+		Name:                     "otelcol-ebpf-profiler",
+		Version:                  vc.Version(),
 		MaxRPCMsgSize:            32 << 20, // 32 MiB
 		MaxGRPCRetries:           5,
 		GRPCOperationTimeout:     intervals.GRPCOperationTimeout(),
