@@ -7,7 +7,6 @@
 #include "tracemgmt.h"
 #include "tsd.h"
 #include "types.h"
-#include "util.h"
 
 // Begin shared maps
 

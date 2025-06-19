@@ -5,7 +5,6 @@
 #include "tracemgmt.h"
 #include "tsd.h"
 #include "types.h"
-#include "util.h"
 
 static EBPF_INLINE bool
 get_go_custom_labels_from_slice(struct pt_regs *ctx, PerCPURecord *record, void *labels_slice_ptr)
