@@ -100,6 +100,7 @@ type ebpfMapsImpl struct {
 	phpProcs           *cebpf.Map
 	rubyProcs          *cebpf.Map
 	v8Procs            *cebpf.Map
+	beamProcs          *cebpf.Map
 	apmIntProcs        *cebpf.Map
 
 	// Stackdelta and process related eBPF maps
@@ -196,6 +197,12 @@ func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map) (EbpfHandler, err
 		log.Fatalf("Map v8_procs is not available")
 	}
 	impl.v8Procs = v8Procs
+
+	beamProcs, ok := maps["beam_procs"]
+	if !ok {
+		log.Fatalf("Map beam_procs is not available")
+	}
+	impl.beamProcs = beamProcs
 
 	apmIntProcs, ok := maps["apm_int_procs"]
 	if !ok {
@@ -310,6 +317,8 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.rubyProcs, nil
 	case libpf.V8:
 		return impl.v8Procs, nil
+	case libpf.BEAM:
+		return impl.beamProcs, nil
 	case libpf.APMInt:
 		return impl.apmIntProcs, nil
 	default:

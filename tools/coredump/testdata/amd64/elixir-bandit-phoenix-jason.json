@@ -1,0 +1,216 @@
+{
+  "coredump-ref": "fa1e34ca3ab34882fadca410a4979e6c64c3df365cc7211e1a29ac29cfca3409",
+  "threads": [
+    {
+      "lwp": 556577,
+      "frames": [
+        "libc.so.6+0x126cd7",
+        "beam.smp+0x4c790f",
+        "beam.smp+0x32a8db",
+        "beam.smp+0x2037cd",
+        "libc.so.6+0x2a1c9",
+        "libc.so.6+0x2a28a",
+        "beam.smp+0x205364"
+      ]
+    },
+    {
+      "lwp": 556619,
+      "frames": [
+        "libc.so.6+0x12a042",
+        "beam.smp+0x4d9bb6",
+        "beam.smp+0x4e0524",
+        "beam.smp+0x20b5a9",
+        "beam.smp+0x54fa71",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c3b"
+      ]
+    },
+    {
+      "lwp": 556618,
+      "frames": [
+        "libc.so.6+0x11ba00",
+        "beam.smp+0x4ee5d9",
+        "beam.smp+0x4e0437",
+        "beam.smp+0x211345",
+        "beam.smp+0x54fa71",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c3b"
+      ]
+    },
+    {
+      "lwp": 556617,
+      "frames": [
+        "libc.so.6+0x10e7db",
+        "beam.smp+0x220852",
+        "beam.smp+0x2e5999",
+        "beam.smp+0x206550",
+        "beam.smp+0x54fa71",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c3b"
+      ]
+    },
+    {
+      "lwp": 556616,
+      "frames": [
+        "libc.so.6+0x12725d",
+        "beam.smp+0x550877",
+        "beam.smp+0x220eeb",
+        "beam.smp+0x2e5999",
+        "beam.smp+0x20640a",
+        "beam.smp+0x54fa71",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c3b"
+      ]
+    },
+    {
+      "lwp": 556615,
+      "frames": [
+        "Jason.Encode.map_naive_loop/3+0 in lib/encode.ex:199",
+        "Jason.Encode.map_naive_loop/3+0 in lib/encode.ex:199",
+        "Jason.Encode.map_naive/3+0 in lib/encode.ex:189",
+        "Jason.Encode.list_loop/3+0 in lib/encode.ex:168",
+        "Jason.Encode.list/3+0 in lib/encode.ex:160",
+        "Jason.Encode.list/3+0 in lib/encode.ex:159",
+        "Jason.Encode.encode/2+0 in lib/encode.ex:37",
+        "Jason.encode!/2+0 in lib/jason.ex:162",
+        "Phoenix.HTML.Safe.Phoenix.LiveView.JS.to_iodata/1+0 in lib/phoenix_live_view/js.ex:153",
+        "Phoenix.HTML.build_attrs/1+0 in lib/phoenix_html.ex:238",
+        "Phoenix.HTML.build_attrs/1+0 in lib/phoenix_html.ex:238",
+        "Phoenix.HTML.build_attrs/1+0 in lib/phoenix_html.ex:199",
+        "Phoenix.HTML.attributes_escape/1+0 in lib/phoenix_html.ex:191",
+        "ElixirLoadAppWeb.CoreComponents.-flash (overridable 1)/1-fun-4-/3+0 in lib/elixir_load_app_web/components/core_components.ex:112",
+        "Phoenix.HTML.Safe.Phoenix.LiveView.Rendered.to_iodata/1+0 in lib/phoenix_live_view/engine.ex:149",
+        "Phoenix.HTML.Safe.Phoenix.LiveView.Rendered.to_iodata/3+0 in lib/phoenix_live_view/engine.ex:165",
+        "Phoenix.HTML.Safe.Phoenix.LiveView.Rendered.to_iodata/3+0 in lib/phoenix_live_view/engine.ex:165",
+        "Phoenix.HTML.Safe.Phoenix.LiveView.Rendered.to_iodata/3+0 in lib/phoenix_live_view/engine.ex:165",
+        "Phoenix.HTML.Safe.Phoenix.LiveView.Rendered.to_iodata/3+0 in lib/phoenix_live_view/engine.ex:165",
+        "Phoenix.Controller.-template_render_to_iodata/4-fun-0-/5+0 in lib/phoenix/controller.ex:1008",
+        "telemetry:span/3+0 in /home/greg/elixir_load_app/deps/telemetry/src/telemetry.erl:324",
+        "Phoenix.Controller.render_and_send/4+0 in lib/phoenix/controller.ex:974",
+        "ElixirLoadAppWeb.PageController.action/2+0 in lib/elixir_load_app_web/controllers/page_controller.ex:1",
+        "ElixirLoadAppWeb.PageController.phoenix_controller_pipeline/2+0 in lib/elixir_load_app_web/controllers/page_controller.ex:1",
+        "Phoenix.Router.__call__/5+0 in lib/phoenix/router.ex:484",
+        "ElixirLoadAppWeb.Endpoint.plug_builder_call/2+0 in lib/elixir_load_app_web/endpoint.ex:1",
+        "ElixirLoadAppWeb.Endpoint.call (overridable 3)/2+0 in deps/plug/lib/plug/debugger.ex:136",
+        "ElixirLoadAppWeb.Endpoint.call/2+0 in lib/elixir_load_app_web/endpoint.ex:1",
+        "Phoenix.Endpoint.SyncCodeReloadPlug.do_call/4+0 in lib/phoenix/endpoint/sync_code_reload_plug.ex:22",
+        "Bandit.Pipeline.call_plug!/2+0 in lib/bandit/pipeline.ex:127",
+        "Bandit.Pipeline.run/4+0 in lib/bandit/pipeline.ex:37",
+        "Bandit.HTTP1.Handler.handle_data/3+0 in lib/bandit/http1/handler.ex:12",
+        "Bandit.DelegatingHandler.handle_data/3+0 in lib/bandit/delegating_handler.ex:18",
+        "Bandit.DelegatingHandler.handle_info/2+0 in /home/greg/elixir_load_app/deps/thousand_island/lib/thousand_island/handler.ex:385",
+        "gen_server:try_handle_info/3+0 in gen_server.erl:2345",
+        "gen_server:handle_msg/6+0 in gen_server.erl:2433",
+        "proc_lib:init_p_do_apply/3+0 in proc_lib.erl:329"
+      ]
+    },
+    {
+      "lwp": 556614,
+      "frames": [
+        "libc.so.6+0x10e7db",
+        "beam.smp+0x220852",
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 556613,
+      "frames": [
+        "beam.smp+0x489ba2",
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 556612,
+      "frames": [
+        "libc.so.6+0x12a042",
+        "beam.smp+0x4d99ca",
+        "beam.smp+0x4e0404",
+        "beam.smp+0x221979",
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 556610,
+      "frames": [
+        "libc.so.6+0x12725d",
+        "beam.smp+0x550657",
+        "beam.smp+0x432f53",
+        "beam.smp+0x54fa71",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c3b"
+      ]
+    },
+    {
+      "lwp": 556609,
+      "frames": [
+        "libc.so.6+0x98d71",
+        "libc.so.6+0x9b7ec",
+        "beam.smp+0x54e54c",
+        "beam.smp+0x359b8e",
+        "beam.smp+0x54fa71",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c3b"
+      ]
+    },
+    {
+      "lwp": 556608,
+      "frames": [
+        "libc.so.6+0x11ba9a",
+        "beam.smp+0x4c636a",
+        "beam.smp+0x54fa71",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c3b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "61f693cd7f8e55ad3ab518b20a00c01adb46ef829cf90773c97615a73f99e09b",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libtinfo.so.6.4"
+    },
+    {
+      "ref": "6c5e1b4528b704dc7081aa45b5037bda4ea9cad78ca562b4fb6b0dbdbfc7e7e7",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "004029ede11189ef8548c63890d5cda36f60bcee9a17990c068b905109a1bf00",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ossl-modules/legacy.so"
+    },
+    {
+      "ref": "9b64150b28505a33d6bc3ecf709c279f6de97a1c184dbda65d06ee4537f6d286",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libz.so.1.3"
+    },
+    {
+      "ref": "c09178edd7fbc58aa8415f4bbe54dd76c5ff6c6398ba3e56e5a4743fd7e9adfc",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "4e5a08a976fb125a40e4e4c60fdbbe030bea7793196d4ff69c2d862c7009cc73",
+      "local-path": "/home/greg/.asdf/installs/erlang/27.2.4/lib/crypto-5.5.2/priv/lib/crypto.so"
+    },
+    {
+      "ref": "02f3f192bf5f79b811f1e34a650fea443d407408703448906585232383957f60",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "a68762c86d371e6041f03f03a33a78fa235809ae7d81c90185940c93c3535aed",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33"
+    },
+    {
+      "ref": "e7a914a33fd4f6d25057b8d48c7c5f3d55ab870ec4ee27693d6c5f3a532e6226",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "fca80f7e62d9507f4385f2febcf4b1a1507273e6d4445bf58961078d8af9acec",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcrypto.so.3"
+    },
+    {
+      "ref": "375c367bee06eabc0f6cb53764835d1ae4fc6bd37dae5ed9b46b17aae0cda650",
+      "local-path": "/home/greg/.asdf/installs/erlang/27.2.4/lib/crypto-5.5.2/priv/lib/crypto_callback.so"
+    },
+    {
+      "ref": "53180b32e9533f2ccf64ef81c731ceda8a60d53e265100df3b8cec3d4057a265",
+      "local-path": "/home/greg/.asdf/installs/erlang/27.2.4/erts-15.2.2/bin/beam.smp"
+    }
+  ]
+}
