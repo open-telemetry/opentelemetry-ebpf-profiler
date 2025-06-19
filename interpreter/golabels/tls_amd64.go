@@ -28,8 +28,7 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 		log.Warnf("Failed to find stackcheck symbol, Go labels might not work: %v", err)
 		return -8, nil
 	}
-	b := make([]byte, 10)
-	_, err = f.ReadAt(b, int64(sym.Address))
+	b, err := f.VirtualMemory(int64(sym.Address), 10, 10)
 	if err != nil {
 		return 0, err
 	}

@@ -38,8 +38,7 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 			"label collection in CGO frames may not work: %v", err)
 		return 0, nil
 	}
-	b := make([]byte, 8*4)
-	_, err = f.ReadAt(b, int64(sym.Address))
+	b, err := f.VirtualMemory(int64(sym.Address), 32, 32)
 	if err != nil {
 		return 0, err
 	}
