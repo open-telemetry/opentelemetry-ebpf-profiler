@@ -146,4 +146,6 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
 
 #endif // !TESTING_COREDUMP
 
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+
 #endif // OPTI_BPFDEFS_H

@@ -101,6 +101,7 @@ type ebpfMapsImpl struct {
 	rubyProcs          *cebpf.Map
 	v8Procs            *cebpf.Map
 	apmIntProcs        *cebpf.Map
+	goLabelsProcs      *cebpf.Map
 
 	// Stackdelta and process related eBPF maps
 	exeIDToStackDeltaMaps []*cebpf.Map
@@ -203,6 +204,11 @@ func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map) (EbpfHandler, err
 	}
 	impl.apmIntProcs = apmIntProcs
 
+	goLabelsProcs, ok := maps["go_labels_procs"]
+	if !ok {
+		log.Fatalf("Map go_labels_procs is not available")
+	}
+	impl.goLabelsProcs = goLabelsProcs
 	impl.stackDeltaPageToInfo, ok = maps["stack_delta_page_to_info"]
 	if !ok {
 		log.Fatalf("Map stack_delta_page_to_info is not available")
@@ -312,6 +318,8 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.v8Procs, nil
 	case libpf.APMInt:
 		return impl.apmIntProcs, nil
+	case libpf.GoLabels:
+		return impl.goLabelsProcs, nil
 	default:
 		return nil, fmt.Errorf("type %d is not (yet) supported", typ)
 	}

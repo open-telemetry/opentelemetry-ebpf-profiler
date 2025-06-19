@@ -568,6 +568,21 @@ func (f *File) GoVersion() (string, error) {
 	return bi.GoVersion, nil
 }
 
+func (f *File) IsCgoEnabled() (bool, error) {
+	_, err := f.GoVersion()
+	if err != nil {
+		return false, err
+	}
+	for _, kv := range f.goBuildInfo.Settings {
+		if kv.Key == "CGO_ENABLED" {
+			return kv.Value == "1", nil
+		}
+	}
+	// On some platforms GCO_ENABLED might be missing b/c they don't support
+	// CGO at all.
+	return false, nil
+}
+
 // DebuglinkFileName returns the debug file linked by .gnu_debuglink if any
 func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string {
 	if f.debuglinkChecked {
