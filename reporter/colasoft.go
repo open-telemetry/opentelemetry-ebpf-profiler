@@ -17,7 +17,12 @@ type (
 		*CollectorReporter
 		sr SymbolReporter
 
-		consumer ColaSoftConsumerFunc
+		consumer             ColaSoftConsumerFunc
+		cacheMapping         map[uint32]map[libpf.Origin]samples.KeyToEventMapping
+		cacheEventSCount     int
+		lastReportTime       time.Time
+		cacheEventSTolerance int
+		cacheEventSTimeout   time.Duration
 	}
 )
 
@@ -28,6 +33,8 @@ func NewColaSoft(
 	extra samples.SampleAttrProducer,
 	f ColaSoftConsumerFunc,
 	sr SymbolReporter,
+	cacheEventSTolerance int,
+	cacheEventSTimeout time.Duration,
 ) (*ColaSoft, error) {
 	cfg := &Config{
 		ExecutablesCacheElements: 16384,
@@ -42,7 +49,12 @@ func NewColaSoft(
 	if err != nil {
 		return nil, err
 	}
-	return &ColaSoft{CollectorReporter: r, sr: sr, consumer: f}, nil
+
+	return &ColaSoft{CollectorReporter: r, sr: sr, consumer: f,
+		cacheMapping:         make(map[uint32]map[libpf.Origin]samples.KeyToEventMapping),
+		cacheEventSCount:     0,
+		cacheEventSTolerance: cacheEventSTolerance,
+		cacheEventSTimeout:   cacheEventSTimeout}, nil
 }
 
 func (c *ColaSoft) Start(parent context.Context) error {
@@ -78,8 +90,9 @@ func (c *ColaSoft) reportProfile(ctx context.Context) error {
 		clear((*traceEvents)[origin])
 	}
 	c.traceEvents.WUnlock(&traceEvents)
-	events := make(map[uint32]map[libpf.Origin]samples.KeyToEventMapping)
+	events := c.cacheMapping
 	for kind, mapping := range mappings {
+		c.cacheEventSCount += len(mapping)
 		for key, value := range mapping {
 			pid := uint32(key.Pid)
 			if _, ok := events[pid]; !ok {
@@ -90,6 +103,10 @@ func (c *ColaSoft) reportProfile(ctx context.Context) error {
 			}
 			events[pid][kind][key] = value
 		}
+	}
+	// 这里至少1分钟上报一次
+	if c.cacheEventSCount < c.cacheEventSTolerance && time.Since(c.lastReportTime) < c.cacheEventSTimeout {
+		return nil
 	}
 	tds := make(map[uint32]pprofile.Profiles)
 	for pid, val := range events {
@@ -103,7 +120,12 @@ func (c *ColaSoft) reportProfile(ctx context.Context) error {
 	if len(tds) == 0 {
 		return nil
 	}
-	return c.consumer(ctx, tds)
+
+	err := c.consumer(ctx, tds)
+	c.cacheMapping = make(map[uint32]map[libpf.Origin]samples.KeyToEventMapping)
+	c.cacheEventSCount = 0
+	c.lastReportTime = time.Now()
+	return err
 }
 
 func (c *ColaSoft) ExecutableKnown(fileID libpf.FileID) bool {

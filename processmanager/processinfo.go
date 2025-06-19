@@ -702,7 +702,7 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		traceCaptureKTime, (nowKTime-traceCaptureKTime)/1e6)
 
 	for pid, pidExitKTime := range pm.exitEvents {
-		if pidExitKTime > traceCaptureKTime {
+		if pidExitKTime > traceCaptureKTime-10e9 { // 这里等最早的trace_event的时间都超过了10s才删除过期的进程的信息。
 			continue
 		}
 

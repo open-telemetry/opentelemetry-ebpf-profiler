@@ -161,9 +161,39 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	eventReader.SetDeadline(time.Unix(1, 0))
 
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
+	var oldKTime, minKTime times.KTime
+
+	go func() {
+		existTicker := time.NewTicker(30 * time.Second)
+		defer existTicker.Stop()
+		for {
+			select {
+			case <-existTicker.C:
+				// Continue execution below.
+			case <-ctx.Done():
+				return
+			}
+			if oldKTime > 0 {
+				// Ensure that all previously sent trace events have been processed
+				traceOutChan <- nil
+
+				if minKTime > 0 && minKTime <= oldKTime {
+					// If minKTime is smaller than oldKTime, use it and reset it
+					// to avoid a repeat during next iteration.
+					t.TraceProcessor().ProcessedUntil(minKTime)
+					minKTime = 0
+				} else {
+					t.TraceProcessor().ProcessedUntil(oldKTime)
+				}
+			}
+			oldKTime = minKTime
+			minKTime = 0
+		}
+	}()
+
 	go func() {
 		var data perf.Record
-		var oldKTime, minKTime times.KTime
+		//var oldKTime, minKTime times.KTime
 
 		pollTicker := time.NewTicker(t.intervals.TracePollInterval())
 		defer pollTicker.Stop()
@@ -179,7 +209,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				break PollLoop
 			}
 
-			minKTime = 0
+			//minKTime = 0
 			// Eagerly read events until the buffer is exhausted.
 			for {
 				if err = eventReader.ReadInto(&data); err != nil {
@@ -223,20 +253,22 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			// in a first iteration and [t0] in a second iteration. If we use
 			// the current iteration minKTime we'll call
 			// ProcessedUntil(t1) first and t0 next, with t0 < t1.
-			if oldKTime > 0 {
-				// Ensure that all previously sent trace events have been processed
-				traceOutChan <- nil
+			// 这里单独起一个协程来做，因为上面trace很忙的时候，根本就走不到这里来。导致过期的processInfo没法清理
 
-				if minKTime > 0 && minKTime <= oldKTime {
-					// If minKTime is smaller than oldKTime, use it and reset it
-					// to avoid a repeat during next iteration.
-					t.TraceProcessor().ProcessedUntil(minKTime)
-					minKTime = 0
-				} else {
-					t.TraceProcessor().ProcessedUntil(oldKTime)
-				}
-			}
-			oldKTime = minKTime
+			//if oldKTime > 0 {
+			//	// Ensure that all previously sent trace events have been processed
+			//	traceOutChan <- nil
+			//
+			//	if minKTime > 0 && minKTime <= oldKTime {
+			//		// If minKTime is smaller than oldKTime, use it and reset it
+			//		// to avoid a repeat during next iteration.
+			//		t.TraceProcessor().ProcessedUntil(minKTime)
+			//		minKTime = 0
+			//	} else {
+			//		t.TraceProcessor().ProcessedUntil(oldKTime)
+			//	}
+			//}
+			//oldKTime = minKTime
 		}
 	}()
 
