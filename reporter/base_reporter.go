@@ -38,7 +38,7 @@ type baseReporter struct {
 	cgroupv2ID *lru.SyncedLRU[libpf.PID, string]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[libpf.Origin]samples.KeyToEventMapping]
+	traceEvents xsync.RWMutex[samples.TraceEventsTree]
 
 	// hostmetadata stores metadata that is sent out with every request.
 	hostmetadata *lru.SyncedLRU[string, string]
@@ -114,17 +114,26 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		ExtraMeta:      extraMeta,
 	}
 
-	traceEventsMap := b.traceEvents.WLock()
-	defer b.traceEvents.WUnlock(&traceEventsMap)
+	eventsTree := b.traceEvents.WLock()
+	defer b.traceEvents.WUnlock(&eventsTree)
 
-	if events, exists := (*traceEventsMap)[meta.Origin][key]; exists {
-		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
-		events.OffTimes = append(events.OffTimes, meta.OffTime)
-		(*traceEventsMap)[meta.Origin][key] = events
-		return nil
+	if _, exists := (*eventsTree)[samples.ContainerID(containerID)]; !exists {
+		(*eventsTree)[samples.ContainerID(containerID)] =
+			make(map[libpf.Origin]samples.KeyToEventMapping)
 	}
 
-	(*traceEventsMap)[meta.Origin][key] = &samples.TraceEvents{
+	if _, exists := (*eventsTree)[samples.ContainerID(containerID)][meta.Origin]; !exists {
+		(*eventsTree)[samples.ContainerID(containerID)][meta.Origin] =
+			make(samples.KeyToEventMapping)
+	}
+
+	if events, exists := (*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key]; exists {
+		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
+		events.OffTimes = append(events.OffTimes, meta.OffTime)
+		(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = events
+		return nil
+	}
+	(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = &samples.TraceEvents{
 		Files:              trace.Files,
 		Linenos:            trace.Linenos,
 		FrameTypes:         trace.FrameTypes,
