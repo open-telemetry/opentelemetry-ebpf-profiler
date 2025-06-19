@@ -16,7 +16,6 @@ import (
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
-	"go.opentelemetry.io/ebpf-profiler/internal/helpers"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/vc"
@@ -102,20 +101,9 @@ func mainWithExitCode() exitCode {
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
-	kernelVersion, err := helpers.GetKernelVersion()
-	if err != nil {
-		log.Error(err)
-		return exitFailure
-	}
-
-	// hostname and sourceIP will be populated from the root namespace.
-	hostname, sourceIP, err := helpers.GetHostnameAndSourceIP(cfg.CollAgentAddr)
-	if err != nil {
-		log.Error(err)
-		return exitFailure
-	}
-
 	rep, err := reporter.NewOTLP(&reporter.Config{
+		Name:                     os.Args[0],
+		Version:                  vc.Version(),
 		CollAgentAddr:            cfg.CollAgentAddr,
 		DisableTLS:               cfg.DisableTLS,
 		MaxRPCMsgSize:            32 << 20, // 32 MiB
@@ -126,12 +114,9 @@ func mainWithExitCode() exitCode {
 		ReportInterval:           intervals.ReportInterval(),
 		ExecutablesCacheElements: 16384,
 		// Next step: Calculate FramesCacheElements from numCores and samplingRate.
-		FramesCacheElements: 65536,
+		FramesCacheElements: 131072,
 		CGroupCacheElements: 1024,
 		SamplesPerSecond:    cfg.SamplesPerSecond,
-		KernelVersion:       kernelVersion,
-		HostName:            hostname,
-		IPAddress:           sourceIP,
 	})
 	if err != nil {
 		log.Error(err)
