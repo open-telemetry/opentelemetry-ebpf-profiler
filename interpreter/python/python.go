@@ -847,8 +847,6 @@ func findInterpreterRanges(info *interpreter.LoaderInfo) (interpRanges []util.Ra
 	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
 	// 3cebf938727 v3.6  2016-09-05 _PyEval_EvalFrameDefault(PyFrameObject*,int)
 	// 49fd7fa4431 v3.0  2006-04-21 PyEval_EvalFrameEx(PyFrameObject*,int)
-	var interpRanges []util.Range
-	var err error
 	if interpRanges, err = info.GetSymbolAsRanges("_PyEval_EvalFrameDefault"); err != nil {
 		interpRanges, _ = info.GetSymbolAsRanges("PyEval_EvalFrameEx")
 	}
@@ -856,7 +854,7 @@ func findInterpreterRanges(info *interpreter.LoaderInfo) (interpRanges []util.Ra
 		return nil, errors.New("no _PyEval_EvalFrameDefault/PyEval_EvalFrameEx symbol found")
 	}
 	// TODO(korniltsev): find cold ranges
-	// see tools/coredump/testdata/amd64/alpine320-nobuildid.json
+	// see tools/coredump/testdata/amd64/python312-alpine320-nobuildid.json
 	// https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
 	return interpRanges, nil
 }
