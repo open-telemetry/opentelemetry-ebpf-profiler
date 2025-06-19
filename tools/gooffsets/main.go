@@ -129,7 +129,7 @@ func open(path string) (*elf.File, string, error) {
 	}
 	ef, err := elf.NewFile(f)
 	if err != nil {
-		ef.Close()
+		_ = ef.Close()
 		return nil, "", err
 	}
 	bi, err := buildinfo.Read(f)

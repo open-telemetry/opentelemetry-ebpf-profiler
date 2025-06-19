@@ -33,7 +33,6 @@ func TestGoLabels(t *testing.T) {
 			// go test static binaries at the moment, not clear if that's a problem with the bpf
 			// code or a bug/fact of life for static go binaries and getting g from TLS.
 			cookie := tc[1]
-			//nolint:gosec
 			cmd := exec.Command(tc[0], "-subtest", cookie)
 			err := cmd.Start()
 			require.NoError(t, err)
