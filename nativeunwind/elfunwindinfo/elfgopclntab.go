@@ -317,10 +317,10 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, err error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to load .gopclntab via symbols: %v", err)
 			}
-			if start >= end || end-start >= maxBytesGoPclntab {
+			if start >= end {
 				return nil, fmt.Errorf("invalid .gopclntab symbols: %v-%v", start, end)
 			}
-			data, err = ef.VirtualMemory(int64(start), int(end-start))
+			data, err = ef.VirtualMemory(int64(start), int(end-start), maxBytesGoPclntab)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load .gopclntab via symbols: %v", err)
 			}

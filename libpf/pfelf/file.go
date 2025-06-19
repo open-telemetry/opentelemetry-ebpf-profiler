@@ -396,10 +396,6 @@ func (f *File) LoadSections() error {
 
 	// Load the section name string table
 	strsh := f.Sections[hdr.Shstrndx]
-	if strsh.FileSize >= 1024*1024 {
-		return fmt.Errorf("section headers string table too large (%d)",
-			strsh.FileSize)
-	}
 	strtab, err := strsh.Data(maxBytesLargeSection)
 	if err != nil {
 		return err
@@ -448,7 +444,8 @@ func (f *File) findVirtualAddressProg(addr uint64) *Prog {
 
 // VirtualMemory returns a slice for the request data at a virtual address.
 // The slice may point to mmapped data or be a newly allocated slice.
-func (f *File) VirtualMemory(addr int64, sz int) ([]byte, error) {
+// The maxSize is the limit for allocating the memory from heap.
+func (f *File) VirtualMemory(addr int64, sz, maxSize int) ([]byte, error) {
 	if sz == 0 {
 		return nil, nil
 	}
@@ -458,6 +455,9 @@ func (f *File) VirtualMemory(addr int64, sz int) ([]byte, error) {
 			if mapping, ok := ph.elfReader.(*mmap.ReaderAt); ok {
 				return mapping.Subslice(int(ph.Off)+int(offset), sz)
 			}
+		}
+		if sz > maxSize {
+			return nil, fmt.Errorf("virtual memory area too large (%d) to copy", sz)
 		}
 		buf := make([]byte, sz)
 		n, err := ph.ReadAt(buf, offset)
@@ -474,7 +474,14 @@ func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (libpf.SymbolValue
 	if err != nil {
 		return 0, nil, err
 	}
-	data, err := f.VirtualMemory(int64(sym.Address), int(sym.Size))
+	symSize := int(sym.Size)
+	if symSize > maxCopy {
+		// Truncate read size if not memory mapped data.
+		if _, ok := f.elfReader.(*mmap.ReaderAt); !ok {
+			symSize = maxCopy
+		}
+	}
+	data, err := f.VirtualMemory(int64(sym.Address), symSize, maxCopy)
 	return sym.Address, data, err
 }
 
@@ -850,7 +857,7 @@ func (f *File) readAndMatchSymbol(n uint32, name libpf.SymbolName) (libpf.Symbol
 		return libpf.Symbol{}, false
 	}
 	slen := len(name)
-	sname, err := f.VirtualMemory(f.stringsAddr+int64(sym.Name), slen+1)
+	sname, err := f.VirtualMemory(f.stringsAddr+int64(sym.Name), slen+1, maxBytesSmallSection)
 	if err != nil {
 		return libpf.Symbol{}, false
 	}
