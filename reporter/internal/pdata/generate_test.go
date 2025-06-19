@@ -41,7 +41,7 @@ func TestGetStringMapIndex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			stringMap := tt.stringMap
 
-			i := getStringMapIndex(stringMap, tt.value)
+			i := getStringMapIndex(stringMap, 0, tt.value)
 			assert.Equal(t, tt.wantIndex, i)
 			assert.Equal(t, tt.wantStringMap, stringMap)
 		})
@@ -86,7 +86,7 @@ func TestCreateFunctionEntry(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			funcMap := tt.funcMap
 
-			i := createFunctionEntry(funcMap, tt.funcName, tt.fileName)
+			i := createFunctionEntry(funcMap, 0, tt.funcName, tt.fileName)
 			assert.Equal(t, tt.wantIndex, i)
 			assert.Equal(t, tt.wantFuncMap, funcMap)
 		})
@@ -148,7 +148,7 @@ func TestGetDummyMappingIndex(t *testing.T) {
 			dic := pprofile.NewProfilesDictionary()
 			mgr := samples.NewAttrTableManager(dic.AttributeTable())
 
-			i := getDummyMappingIndex(fitm, stringMap, mgr, dic, tt.fileID)
+			i := getDummyMappingIndex(fitm, stringMap, 0, mgr, dic, tt.fileID)
 			assert.Equal(t, tt.wantIndex, i)
 			assert.Equal(t, tt.fileIDToMapping, fitm)
 			assert.Equal(t, tt.wantStringMap, stringMap)
