@@ -429,6 +429,17 @@ static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record,
   return ERR_OK;
 }
 
+// matches_interpreter_range checks if the given text section offset falls within
+// the valid address ranges of a known interpreter. An OffsetRange can contain up to
+// two disjoint ranges (lower_offset1-upper_offset1 and lower_offset2-upper_offset2)
+// to accommodate interpreters that may have code sections split across non-contiguous
+// memory regions. Returns true if the offset matches either range.
+static inline EBPF_INLINE bool matches_interpreter_range(u64 section_offset, OffsetRange *range)
+{
+  return ((section_offset >= range->lower_offset1) && (section_offset <= range->upper_offset1)) ||
+         ((section_offset >= range->lower_offset2) && (section_offset <= range->upper_offset2));
+}
+
 // get_next_interpreter tries to get the next interpreter unwinder from the section id.
 // If the section id happens to be within the range of a known interpreter it will
 // return the interpreter unwinder otherwise the native unwinder.
@@ -440,7 +451,7 @@ static inline EBPF_INLINE int get_next_interpreter(PerCPURecord *record)
   // Check if the section id happens to be in the interpreter map.
   OffsetRange *range = bpf_map_lookup_elem(&interpreter_offsets, &section_id);
   if (range != 0) {
-    if ((section_offset >= range->lower_offset) && (section_offset <= range->upper_offset)) {
+    if (matches_interpreter_range(section_offset, range)) {
       DEBUG_PRINT("interpreter_offsets match %d", range->program_index);
       if (!unwinder_is_done(record, range->program_index)) {
         increment_metric(metricID_UnwindCallInterpreter);
