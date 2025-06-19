@@ -838,7 +838,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	return pd, nil
 }
 
-func findInterpreterRanges(info *interpreter.LoaderInfo) ([]util.Range, error) {
+func findInterpreterRanges(info *interpreter.LoaderInfo) (interpRanges []util.Range, err error) {
 	// The Python main interpreter loop history in CPython git is:
 	//
 	//nolint:lll
