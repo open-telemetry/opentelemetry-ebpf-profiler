@@ -32,7 +32,7 @@ func (c *Collector) Start(ctx context.Context, freq, offCpuThreshold int, interv
 		c.Stop()
 	}
 
-	rpt, err := reporter.NewColaSoft(freq, interval, c.sr, c.sr.ConsumeProfilesFunc, noFrameOpSymbolReporter{c.sr})
+	rpt, err := reporter.NewColaSoft(freq, interval, c.sr, c.sr.ConsumeProfilesFunc, noFrameOpSymbolReporter{c.sr}, 5000, time.Minute)
 	if err != nil {
 		return err
 	}
