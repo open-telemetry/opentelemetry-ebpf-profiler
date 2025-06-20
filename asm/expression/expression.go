@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 package expression // import "go.opentelemetry.io/ebpf-profiler/asm/expression"
+import "sort"
 
 // Expression is an interface representing a 64-bit size value. It can be immediate
 type Expression interface {
@@ -27,6 +28,8 @@ func (os *operands) Match(other operands) bool {
 	if len(*os) != len(other) {
 		return false
 	}
+	sort.Sort(sortedOperands(*os))
+	sort.Sort(sortedOperands(other))
 	for i := 0; i < len(*os); i++ {
 		if !(*os)[i].Match(other[i]) {
 			return false

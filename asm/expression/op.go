@@ -5,7 +5,6 @@ package expression // import "go.opentelemetry.io/ebpf-profiler/asm/expression"
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -24,7 +23,7 @@ type op struct {
 
 func newOp(typ opType, operands operands) Expression {
 	res := &op{typ: typ, operands: operands}
-	sort.Sort(sortedOperands(operands))
+
 	return res
 }
 
