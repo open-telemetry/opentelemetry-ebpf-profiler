@@ -6,9 +6,12 @@ package elfunwindinfo
 import (
 	"encoding/base64"
 	"os"
+	"path/filepath"
 	"testing"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/util"
 
 	"github.com/stretchr/testify/require"
 )
@@ -156,4 +159,23 @@ func TestExtractStackDeltasFromFilename(t *testing.T) {
 		t.Logf("%#v", delta)
 	}
 	require.Equal(t, data.Deltas[:len(firstDeltas)], firstDeltas)
+}
+
+func TestCaptureFDE(t *testing.T) {
+	buffer, err := base64.StdEncoding.DecodeString(usrBinVolname)
+	require.NoError(t, err)
+	filename := filepath.Join(t.TempDir(), "dwarf_extract_elf_")
+	err = os.WriteFile(filename, buffer, 0644)
+	require.NoError(t, err)
+	elfRef := pfelf.NewReference(filename, pfelf.SystemOpener)
+	defer elfRef.Close()
+	expected := util.Range{Start: 0x8d0, End: 0x9EF}
+	actual := util.Range{}
+	err = ExtractELF(elfRef, new(sdtypes.IntervalData),
+		WithCaptureFDEHook(0x973, func(p util.Range) {
+			actual = p
+		}),
+	)
+	require.NoError(t, err)
+	require.Equal(t, expected, actual)
 }

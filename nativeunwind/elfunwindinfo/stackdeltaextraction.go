@@ -11,6 +11,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 const (
@@ -19,6 +20,18 @@ const (
 	// intervals are needed to not follow .gnu_debuglink.
 	numIntervalsToOmitDebugLink = 20
 )
+
+type Option func(*elfExtractor, *extractionFilter)
+
+// WithCaptureFDEHook configures ExtractELF to capture FDE information for a specific address.
+// When an FDE contains the given address 'at', the hook function is called with the address
+// range covered by that FDE.
+func WithCaptureFDEHook(at uintptr, hook func(p util.Range)) Option {
+	return func(ee *elfExtractor, f *extractionFilter) {
+		f.captureFDEAt = at
+		f.capturedFDEHook = hook
+	}
+}
 
 // extractionFilter is used to filter in .eh_frame data when a better source
 // is available (.gopclntab).
@@ -35,12 +48,21 @@ type extractionFilter struct {
 
 	// unsortedFrames is set if stack deltas from unsorted source are found
 	unsortedFrames bool
+
+	captureFDEAt    uintptr
+	capturedFDEHook func(util.Range)
 }
 
 var _ ehframeHooks = &extractionFilter{}
 
 // fdeHook filters out .eh_frame data that is superseded by .gopclntab data
 func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo) bool {
+	if f.captureFDEAt != 0 && f.captureFDEAt >= fde.ipStart && f.captureFDEAt < fde.ipStart+fde.ipLen {
+		f.capturedFDEHook(util.Range{
+			Start: uint64(fde.ipStart),
+			End:   uint64(fde.ipStart + fde.ipLen),
+		})
+	}
 	if !fde.sorted {
 		// Seems .debug_frame sometimes has broken FDEs for zero address
 		if fde.ipStart == 0 {
@@ -117,7 +139,7 @@ func Extract(filename string, interval *sdtypes.IntervalData) error {
 
 // ExtractELF takes a pfelf.Reference and provides the stack delta
 // intervals for it in the interval parameter.
-func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
+func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData, opt ...Option) error {
 	elfFile, err := elfRef.GetELF()
 	if err != nil {
 		return err
@@ -132,6 +154,9 @@ func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
 		deltas:           &deltas,
 		hooks:            &filter,
 		allowGenericRegs: isLibCrypto(elfFile),
+	}
+	for _, o := range opt {
+		o(&ee, &filter)
 	}
 
 	if err = ee.parseGoPclntab(); err != nil {
