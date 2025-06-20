@@ -66,12 +66,33 @@ func TestRecoverSwitchCase(t *testing.T) {
 	blocks := []CodeBlock{
 		{
 			Address: expression.Imm(0x3310E3),
+			// 003310E3 	48 8B 44 24 20 	mov 	rax, qword ptr [rsp + 0x20]
+			// 003310E8 	48 89 18 	mov 	qword ptr [rax], rbx
+			// 003310EB 	49 83 C2 02 	add 	r10, 2
+			// 003310EF 	44 89 E0 	mov 	eax, r12d
+			// 003310F2 	83 E0 03 	and 	eax, 3
+			// 003310F5 	31 DB 	xor 	ebx, ebx
+			// 003310F7 	41 F6 C4 04 	test 	r12b, 4
+			// 003310FB 	4C 89 74 24 10 	mov 	qword ptr [rsp + 0x10], r14
+			// 00331100 	74 08 	je 	0x33110a
 			Code: []byte{0x48, 0x8b, 0x44, 0x24, 0x20, 0x48, 0x89, 0x18, 0x49,
 				0x83, 0xc2, 0x02, 0x44, 0x89, 0xe0, 0x83, 0xe0, 0x03, 0x31, 0xdb,
 				0x41, 0xf6, 0xc4, 0x04, 0x4c, 0x89, 0x74, 0x24, 0x10, 0x74, 0x08},
 		},
 		{
 			Address: expression.Imm(0x33110a),
+			// 0033110A 	4D 89 DC 	mov 	r12, r11
+			// 0033110D 	4D 8D 47 F8 	lea 	r8, [r15 - 8]
+			// 00331111 	4C 89 7C 24 60 	mov 	qword ptr [rsp + 0x60], r15
+			// 00331116 	4D 8B 7F F8 	mov 	r15, qword ptr [r15 - 8]
+			// 0033111A 	48 8B 0D 87 06 17 01 	mov 	rcx, qword ptr [rip + 0x1170687]
+			// 00331121 	89 C0 	mov 	eax, eax
+			// 00331123 	48 8D 15 02 E7 C0 00 	lea 	rdx, [rip + 0xc0e702]
+			// 0033112A 	48 63 04 82 	movsxd 	rax, dword ptr [rdx + rax*4]
+			// 0033112E 	48 01 D0 	add 	rax, rdx
+			// 00331131 	4C 89 D5 	mov 	rbp, r10
+			// 00331134 	4D 89 C5 	mov 	r13, r8
+			// 00331137 	FF E0 	jmp 	rax
 			Code: []byte{
 				0x4d, 0x89, 0xdc, 0x4d, 0x8d, 0x47, 0xf8, 0x4c, 0x89, 0x7c, 0x24,
 				0x60, 0x4d, 0x8b, 0x7f, 0xf8, 0x48, 0x8b, 0x0d, 0x87, 0x06, 0x17,
@@ -81,40 +102,38 @@ func TestRecoverSwitchCase(t *testing.T) {
 			},
 		},
 	}
-	t.Run("manual", func(t *testing.T) {
-		it := NewInterpreter()
-		initR12 := it.Regs.Get(R12)
-		it.ResetCode(blocks[0].Code, blocks[0].Address)
-		_, err := it.Loop()
-		require.ErrorIs(t, err, io.EOF)
+	it := NewInterpreter()
+	initR12 := it.Regs.Get(R12)
+	it.ResetCode(blocks[0].Code, blocks[0].Address)
+	_, err := it.Loop()
+	require.ErrorIs(t, err, io.EOF)
 
-		expected := expression.ZeroExtend(initR12, 2)
-		assertEval(t, it.Regs.Get(RAX), expected)
-		it.ResetCode(blocks[1].Code, blocks[1].Address)
-		_, err = it.Loop()
-		require.ErrorIs(t, err, io.EOF)
-		table := expression.NewImmediateCapture("table")
-		base := expression.NewImmediateCapture("base")
-		expected = expression.Add(
-			expression.SignExtend(
-				expression.Mem(
-					expression.Add(
-						expression.Multiply(
-							expression.ZeroExtend(initR12, 2),
-							expression.Imm(4),
-						),
-						table,
+	expected := expression.ZeroExtend(initR12, 2)
+	assertEval(t, it.Regs.Get(RAX), expected)
+	it.ResetCode(blocks[1].Code, blocks[1].Address)
+	_, err = it.Loop()
+	require.ErrorIs(t, err, io.EOF)
+	table := expression.NewImmediateCapture("table")
+	base := expression.NewImmediateCapture("base")
+	expected = expression.Add(
+		expression.SignExtend(
+			expression.Mem(
+				expression.Add(
+					expression.Multiply(
+						expression.ZeroExtend(initR12, 2),
+						expression.Imm(4),
 					),
-					4,
+					table,
 				),
-				64,
+				4,
 			),
-			base,
-		)
-		assertEval(t, it.Regs.Get(RAX), expected)
-		assert.EqualValues(t, 0xf3f82c, table.CapturedValue())
-		assert.EqualValues(t, 0xf3f82c, base.CapturedValue())
-	})
+			64,
+		),
+		base,
+	)
+	assertEval(t, it.Regs.Get(RAX), expected)
+	assert.EqualValues(t, 0xf3f82c, table.CapturedValue())
+	assert.EqualValues(t, 0xf3f82c, base.CapturedValue())
 }
 
 func assertEval(t *testing.T, left, right expression.Expression) {
@@ -134,6 +153,12 @@ func FuzzInterpreter(f *testing.F) {
 
 func TestMoveSignExtend(t *testing.T) {
 	i := NewInterpreterWithCode([]byte{
+		// 00000000 	B8 01 00 00 00 	mov 	eax, 1
+		// 00000005 	8B 40 04 	mov 	eax, dword ptr [rax + 4]
+		// 00000008 	B8 02 00 00 00 	mov 	eax, 2
+		// 0000000D 	48 0F B6 40 04 	movzx 	rax, byte ptr [rax + 4]
+		// 00000012 	B8 03 00 00 00 	mov 	eax, 3
+		// 00000017 	48 0F BF 40 04 	movsx 	rax, word ptr [rax + 4]
 		0xB8, 0x01, 0x00, 0x00, 0x00, 0x8B, 0x40, 0x04,
 		0xB8, 0x02, 0x00, 0x00, 0x00, 0x48, 0x0F, 0xB6,
 		0x40, 0x04, 0xB8, 0x03, 0x00, 0x00, 0x00, 0x48,
