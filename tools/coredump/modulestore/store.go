@@ -202,7 +202,7 @@ func (store *Store) UploadModule(id ID) error {
 
 	fileData, err := io.ReadAll(file)
 	if err != nil {
-		return fmt.Errorf("failed to read file: %w")
+		return fmt.Errorf("failed to read file: %w", err)
 	}
 
 	hasher := sha256.New()
