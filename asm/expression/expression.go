@@ -34,15 +34,6 @@ func (os *operands) Match(other operands) bool {
 	if len(*os) != len(other) {
 		return false
 	}
-	if len(*os) == 2 {
-		if (*os)[0].Match(other[0]) && (*os)[1].Match(other[1]) {
-			return true
-		}
-		if (*os)[0].Match(other[1]) && (*os)[1].Match(other[0]) {
-			return true
-		}
-		return false
-	}
 	for i := 0; i < len(*os); i++ {
 		if !(*os)[i].Match(other[i]) {
 			return false
