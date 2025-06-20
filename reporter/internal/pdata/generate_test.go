@@ -7,10 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 
-	lru "github.com/elastic/go-freelru"
-
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -148,23 +145,24 @@ func TestGetDummyMappingIndex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fitm := tt.fileIDToMapping
 			stringMap := tt.stringMap
-			profile := pprofile.NewProfile()
-			mgr := samples.NewAttrTableManager(profile.AttributeTable())
+			dic := pprofile.NewProfilesDictionary()
+			mgr := samples.NewAttrTableManager(dic.AttributeTable())
 
-			i := getDummyMappingIndex(fitm, stringMap, mgr, profile, tt.fileID)
+			i := getDummyMappingIndex(fitm, stringMap, mgr, dic, tt.fileID)
 			assert.Equal(t, tt.wantIndex, i)
 			assert.Equal(t, tt.fileIDToMapping, fitm)
 			assert.Equal(t, tt.wantStringMap, stringMap)
 
-			require.Equal(t, len(tt.wantMappingTable), profile.MappingTable().Len())
+			require.Equal(t, len(tt.wantMappingTable), dic.MappingTable().Len())
 			for i, v := range tt.wantMappingTable {
-				mapp := profile.MappingTable().At(i)
+				mapp := dic.MappingTable().At(i)
 				assert.Equal(t, v, mapp.FilenameStrindex())
 			}
 		})
 	}
 }
 
+//nolint:lll
 func TestFunctionTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
@@ -172,16 +170,19 @@ func TestFunctionTableOrder(t *testing.T) {
 		frames      map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo
 		events      map[libpf.Origin]samples.KeyToEventMapping
 
-		wantFunctionTable []string
+		wantFunctionTable        []string
+		expectedResourceProfiles int
 	}{
 		{
-			name:              "with no executables",
-			executables:       map[libpf.FileID]samples.ExecInfo{},
-			frames:            map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo{},
-			events:            map[libpf.Origin]samples.KeyToEventMapping{},
-			wantFunctionTable: []string{""},
+			name:                     "no events",
+			executables:              map[libpf.FileID]samples.ExecInfo{},
+			frames:                   map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo{},
+			events:                   map[libpf.Origin]samples.KeyToEventMapping{},
+			wantFunctionTable:        []string{""},
+			expectedResourceProfiles: 0,
 		}, {
-			name: "single executable",
+			name:                     "single executable",
+			expectedResourceProfiles: 1,
 			executables: map[libpf.FileID]samples.ExecInfo{
 				libpf.NewFileID(2, 3): {},
 			},
@@ -251,40 +252,35 @@ func TestFunctionTableOrder(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d, err := New(100, 100, 100, nil)
 			require.NoError(t, err)
-			for k, v := range tt.frames {
-				frameMap, err := lru.New[libpf.AddressOrLineno, samples.SourceInfo](4096,
-					func(k libpf.AddressOrLineno) uint32 { return uint32(k) })
-				if err != nil {
-					t.Fatalf("Failed to create inner frameMap for %x: %v", k, err)
-					return
+			for fileID, addrWithSourceInfos := range tt.frames {
+				for addr, si := range addrWithSourceInfos {
+					d.Frames.Add(libpf.NewFrameID(fileID, addr), si)
 				}
-
-				for a, s := range v {
-					frameMap.Add(a, samples.SourceInfo{
-						FunctionName: s.FunctionName,
-					})
-				}
-
-				mu := xsync.NewRWMutex(frameMap)
-				d.Frames.Add(k, &mu)
 			}
 			for k, v := range tt.executables {
 				d.Executables.Add(k, v)
 			}
-			res := d.Generate(tt.events)
-			expectedProfiles := len(tt.events)
-			require.Equal(t, 1, res.ResourceProfiles().Len())
+			tree := make(samples.TraceEventsTree)
+			tree[""] = tt.events
+			res := d.Generate(tree, tt.name, "version")
+			require.Equal(t, tt.expectedResourceProfiles, res.ResourceProfiles().Len())
+			if tt.expectedResourceProfiles == 0 {
+				// Do not check elements of ResourceProfile if there is no expected
+				// ResourceProfile.
+				return
+			}
 			require.Equal(t, 1, res.ResourceProfiles().At(0).ScopeProfiles().Len())
+			expectedProfiles := len(tt.events)
 			require.Equal(t, expectedProfiles, res.ResourceProfiles().
 				At(0).ScopeProfiles().
 				At(0).Profiles().Len())
 			if expectedProfiles == 0 {
 				return
 			}
-			p := res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0)
-			require.Equal(t, len(tt.wantFunctionTable), p.FunctionTable().Len())
-			for i := 0; i < p.FunctionTable().Len(); i++ {
-				funcName := p.StringTable().At(int(p.FunctionTable().At(i).NameStrindex()))
+			dic := res.ProfilesDictionary()
+			require.Equal(t, len(tt.wantFunctionTable), dic.FunctionTable().Len())
+			for i := 0; i < dic.FunctionTable().Len(); i++ {
+				funcName := dic.StringTable().At(int(dic.FunctionTable().At(i).NameStrindex()))
 				assert.Equal(t, tt.wantFunctionTable[i], funcName)
 			}
 		})

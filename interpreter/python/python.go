@@ -656,28 +656,20 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
 // the code to resolve specified argument parameter to the first jump/call.
-func decodeStub(
-	ef *pfelf.File,
-	memoryBase libpf.SymbolValue,
-	symbolName libpf.SymbolName,
-) (libpf.SymbolValue, error) {
-	codeAddress, err := ef.LookupSymbolAddress(symbolName)
+func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
+	symbolName libpf.SymbolName) (libpf.SymbolValue, error) {
+	// Read and decode the code for the symbol
+	addr, code, err := ef.SymbolData(symbolName, 64)
 	if err != nil {
-		return libpf.SymbolValueInvalid, fmt.Errorf("lookup %s failed: %v",
+		return libpf.SymbolValueInvalid, fmt.Errorf("unable to read '%s': %v",
 			symbolName, err)
 	}
-
-	code := make([]byte, 64)
-	if _, err = ef.ReadVirtualMemory(code, int64(codeAddress)); err != nil {
-		return libpf.SymbolValueInvalid, fmt.Errorf("reading %s 0x%x code failed: %v",
-			symbolName, codeAddress, err)
-	}
-	value, err := decodeStubArgumentWrapper(code, codeAddress, memoryBase)
+	value, err := decodeStubArgumentWrapper(code, addr, memoryBase)
 
 	// Sanity check the value range and alignment
 	if err != nil || value%4 != 0 {
 		return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x):  %v",
-			symbolName, codeAddress, hex.Dump(code), value, err)
+			symbolName, addr, hex.Dump(code), value, err)
 	}
 	// If base symbol (_PyRuntime) is not provided, accept any found value.
 	if memoryBase == 0 && value != 0 {
@@ -688,7 +680,7 @@ func decodeStub(
 		return value, nil
 	}
 	return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x)",
-		symbolName, codeAddress, hex.Dump(code), value)
+		symbolName, addr, hex.Dump(code), value)
 }
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
@@ -760,19 +752,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		autoTLSKey += 4
 	}
 
-	// The Python main interpreter loop history in CPython git is:
-	//
-	//nolint:lll
-	// 87af12bff33 v3.11 2022-02-15 _PyEval_EvalFrameDefault(PyThreadState*,_PyInterpreterFrame*,int)
-	// ae0a2b75625 v3.10 2021-06-25 _PyEval_EvalFrameDefault(PyThreadState*,_interpreter_frame*,int)
-	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
-	// 3cebf938727 v3.6  2016-09-05 _PyEval_EvalFrameDefault(PyFrameObject*,int)
-	// 49fd7fa4431 v3.0  2006-04-21 PyEval_EvalFrameEx(PyFrameObject*,int)
-	interpRanges, err := info.GetSymbolAsRanges("_PyEval_EvalFrameDefault")
+	interpRanges, err := findInterpreterRanges(info)
 	if err != nil {
-		if interpRanges, err = info.GetSymbolAsRanges("PyEval_EvalFrameEx"); err != nil {
-			return nil, err
-		}
+		return nil, err
 	}
 
 	pd := &pythonData{
@@ -846,4 +828,25 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	return pd, nil
+}
+
+func findInterpreterRanges(info *interpreter.LoaderInfo) (interpRanges []util.Range, err error) {
+	// The Python main interpreter loop history in CPython git is:
+	//
+	//nolint:lll
+	// 87af12bff33 v3.11 2022-02-15 _PyEval_EvalFrameDefault(PyThreadState*,_PyInterpreterFrame*,int)
+	// ae0a2b75625 v3.10 2021-06-25 _PyEval_EvalFrameDefault(PyThreadState*,_interpreter_frame*,int)
+	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
+	// 3cebf938727 v3.6  2016-09-05 _PyEval_EvalFrameDefault(PyFrameObject*,int)
+	// 49fd7fa4431 v3.0  2006-04-21 PyEval_EvalFrameEx(PyFrameObject*,int)
+	if interpRanges, err = info.GetSymbolAsRanges("_PyEval_EvalFrameDefault"); err != nil {
+		interpRanges, _ = info.GetSymbolAsRanges("PyEval_EvalFrameEx")
+	}
+	if len(interpRanges) == 0 {
+		return nil, errors.New("no _PyEval_EvalFrameDefault/PyEval_EvalFrameEx symbol found")
+	}
+	// TODO(korniltsev): find cold ranges
+	// see tools/coredump/testdata/amd64/python312-alpine320-nobuildid.json
+	// https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
+	return interpRanges, nil
 }

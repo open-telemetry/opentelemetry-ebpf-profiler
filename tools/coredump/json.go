@@ -18,6 +18,7 @@ import (
 // CoredumpTestCase is the data structure generated from the core dump.
 type CoredumpTestCase struct {
 	CoredumpRef modulestore.ID `json:"coredump-ref"`
+	Skip        string         `json:"skip,omitempty"`
 	Threads     []ThreadInfo   `json:"threads"`
 	Modules     []ModuleInfo   `json:"modules"`
 }

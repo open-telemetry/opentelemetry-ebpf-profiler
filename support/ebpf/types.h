@@ -773,8 +773,14 @@ typedef struct StackDeltaPageInfo {
 // the upper boundary of the loop, and the relevant index to call in the prog
 // array.
 typedef struct OffsetRange {
-  u64 lower_offset;
-  u64 upper_offset;
+  u64 lower_offset1;
+  u64 upper_offset1;
+  // Fields {lower,upper}_offset2 may be used to specify an optional second range
+  // of an interpreter function. This may be useful if the interpreter function
+  // consists of two non-contiguous memory ranges, which may happen due to Hot/Cold
+  // split compiler optimization
+  u64 lower_offset2;
+  u64 upper_offset2;
   u16 program_index; // The interpreter-specific program index to call.
 } OffsetRange;
 
@@ -832,21 +838,6 @@ typedef struct PIDPageMappingInfo {
 #define UNKNOWN_FILE      0x0
 // FUNC_TYPE_UNKNOWN indicates an unknown interpreted function.
 #define FUNC_TYPE_UNKNOWN 0xfffffffffffffffe
-
-// Builds a bias_and_unwind_program value for PIDPageMappingInfo
-static inline __attribute__((__always_inline__)) u64
-encode_bias_and_unwind_program(u64 bias, int unwind_program)
-{
-  return bias | (((u64)unwind_program) << 56);
-}
-
-// Reads a bias_and_unwind_program value from PIDPageMappingInfo
-static inline __attribute__((__always_inline__)) void
-decode_bias_and_unwind_program(u64 bias_and_unwind_program, u64 *bias, int *unwind_program)
-{
-  *bias           = bias_and_unwind_program & 0x00FFFFFFFFFFFFFF;
-  *unwind_program = bias_and_unwind_program >> 56;
-}
 
 // Smallest stack delta bucket that holds up to 2^8 entries
 #define STACK_DELTA_BUCKET_SMALLEST 8

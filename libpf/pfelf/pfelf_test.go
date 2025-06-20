@@ -69,7 +69,7 @@ func TestGetBuildIDError(t *testing.T) {
 
 	buildID, err := pfelf.GetBuildID(elfFile)
 	if assert.ErrorIs(t, pfelf.ErrNoBuildID, err) {
-		assert.Equal(t, "", buildID)
+		assert.Empty(t, buildID)
 	}
 }
 
@@ -83,7 +83,7 @@ func TestGetDebugLinkError(t *testing.T) {
 
 	debugLink, _, err := pfelf.GetDebugLink(elfFile)
 	if assert.ErrorIs(t, pfelf.ErrNoDebugLink, err) {
-		assert.Equal(t, "", debugLink)
+		assert.Empty(t, debugLink)
 	}
 }
 
