@@ -12,10 +12,11 @@ type Expression interface {
 	// It returns true if the values are considered equal or compatible according to
 	// the type-specific rules:
 	// - For operations (add, mul): checks if operation types and operands match
-	// - For immediate: checks if values are equal and extracts value into a Variable
-	// - For memory references: checks if segments and addresses match
+	// - For immediate: checks if values are equal and extracts value into a ImmediateCapture
+	// - For mem references: checks if segments and addresses match
 	// - For extend operations: checks if sizes and inner values match
-	// - For variables: checks if they are pointing to the same object instance.
+	// - For named: checks if they are pointing to the same object instance.
+	// - For ImmediateCapture: matches nothing - see immediate
 	Match(pattern Expression) bool
 	DebugString() string
 }
