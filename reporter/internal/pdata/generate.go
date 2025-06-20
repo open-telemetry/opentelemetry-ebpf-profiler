@@ -4,7 +4,6 @@
 package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 
 import (
-	"crypto/rand"
 	"path/filepath"
 	"slices"
 	"time"
@@ -29,34 +28,38 @@ const (
 
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
-func (p *Pdata) Generate(events map[libpf.Origin]samples.KeyToEventMapping) pprofile.Profiles {
+func (p *Pdata) Generate(tree samples.TraceEventsTree,
+	agentName, agentVersion string) pprofile.Profiles {
 	profiles := pprofile.NewProfiles()
-	rp := profiles.ResourceProfiles().AppendEmpty()
-	sp := rp.ScopeProfiles().AppendEmpty()
-	for _, origin := range []libpf.Origin{
-		support.TraceOriginSampling,
-		support.TraceOriginOffCPU,
-	} {
-		if len(events[origin]) == 0 {
-			// Do not append empty profiles, if there
-			// is not profiling data for this origin.
+
+	for containerID, originToEvents := range tree {
+		if len(originToEvents) == 0 {
 			continue
 		}
-		prof := sp.Profiles().AppendEmpty()
-		prof.SetProfileID(pprofile.ProfileID(mkProfileID()))
-		p.setProfile(profiles.ProfilesDictionary(), origin, events[origin], prof)
+
+		rp := profiles.ResourceProfiles().AppendEmpty()
+		rp.Resource().Attributes().PutStr(string(semconv.ContainerIDKey), string(containerID))
+
+		sp := rp.ScopeProfiles().AppendEmpty()
+		sp.Scope().SetName(agentName)
+		sp.Scope().SetVersion(agentVersion)
+
+		for _, origin := range []libpf.Origin{
+			support.TraceOriginSampling,
+			support.TraceOriginOffCPU,
+		} {
+			if len(originToEvents[origin]) == 0 {
+				// Do not append empty profiles, if there
+				// is not profiling data for this origin.
+				continue
+			}
+
+			prof := sp.Profiles().AppendEmpty()
+
+			p.setProfile(profiles.ProfilesDictionary(), origin, originToEvents[origin], prof)
+		}
 	}
 	return profiles
-}
-
-// mkProfileID creates a random profile ID.
-func mkProfileID() []byte {
-	profileID := make([]byte, 16)
-	_, err := rand.Read(profileID)
-	if err != nil {
-		return []byte("opentelemetry-ebpf-profiler")
-	}
-	return profileID
 }
 
 // setProfile sets the data an OTLP profile with all collected samples up to
