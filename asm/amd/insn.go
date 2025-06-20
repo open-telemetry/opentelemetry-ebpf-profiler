@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
-import "bytes"
+import (
+	"bytes"
+)
 
 // https://www.felixcloutier.com/x86/endbr64
 var opcodeEndBr64 = []byte{0xf3, 0x0f, 0x1e, 0xfa}
