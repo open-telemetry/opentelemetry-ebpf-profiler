@@ -165,7 +165,7 @@ func TestCaptureFDE(t *testing.T) {
 	buffer, err := base64.StdEncoding.DecodeString(usrBinVolname)
 	require.NoError(t, err)
 	filename := filepath.Join(t.TempDir(), "dwarf_extract_elf_")
-	err = os.WriteFile(filename, buffer, 0644)
+	err = os.WriteFile(filename, buffer, 0600)
 	require.NoError(t, err)
 	elfRef := pfelf.NewReference(filename, pfelf.SystemOpener)
 	defer elfRef.Close()

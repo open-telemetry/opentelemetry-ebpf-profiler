@@ -57,7 +57,9 @@ var _ ehframeHooks = &extractionFilter{}
 
 // fdeHook filters out .eh_frame data that is superseded by .gopclntab data
 func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo) bool {
-	if f.captureFDEAt != 0 && f.captureFDEAt >= fde.ipStart && f.captureFDEAt < fde.ipStart+fde.ipLen {
+	if f.captureFDEAt != 0 &&
+		f.captureFDEAt >= fde.ipStart &&
+		f.captureFDEAt < fde.ipStart+fde.ipLen {
 		f.capturedFDEHook(util.Range{
 			Start: uint64(fde.ipStart),
 			End:   uint64(fde.ipStart + fde.ipLen),
