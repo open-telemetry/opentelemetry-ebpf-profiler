@@ -1,3 +1,6 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package expression
 
 import (
@@ -7,7 +10,7 @@ import (
 
 func TestVariable(t *testing.T) {
 	t.Run("add sort-summ-immediate", func(t *testing.T) {
-		v := Var("v")
+		v := Named("v")
 		assertEqualRecursive(t,
 			Add(v, Imm(14)),
 			Add(Imm(1), Imm(3), Imm(1), v, Imm(9)),
@@ -15,7 +18,7 @@ func TestVariable(t *testing.T) {
 	})
 
 	t.Run("add 0", func(t *testing.T) {
-		v := Var("v")
+		v := Named("v")
 		assertEqualRecursive(t,
 			v,
 			Add(Imm(0), v),
@@ -23,9 +26,9 @@ func TestVariable(t *testing.T) {
 	})
 
 	t.Run("add nested", func(t *testing.T) {
-		s1 := Var("s1")
-		s2 := Var("s2")
-		s3 := Var("s3")
+		s1 := Named("s1")
+		s2 := Named("s2")
+		s3 := Named("s3")
 		assertEqualRecursive(t,
 			Add(Add(s1, s3), s2),
 			Add(s1, s3, s2),
@@ -37,7 +40,7 @@ func TestVariable(t *testing.T) {
 	})
 
 	t.Run("add opt", func(t *testing.T) {
-		v := Var("v")
+		v := Named("v")
 		assertEqualRecursive(t,
 			Add(Add(Imm(2), v), Imm(7)),
 			Add(v, Imm(9)),
@@ -52,7 +55,7 @@ func TestVariable(t *testing.T) {
 	})
 
 	t.Run("mul immediate", func(t *testing.T) {
-		v := Var("v")
+		v := Named("v")
 		assertEqualRecursive(t,
 			Multiply(v, Imm(27)),
 			Multiply(Imm(1), Imm(3), Imm(1), v, Imm(9)),
@@ -60,7 +63,7 @@ func TestVariable(t *testing.T) {
 	})
 
 	t.Run("mul 1", func(t *testing.T) {
-		v := Var("v")
+		v := Named("v")
 
 		assertEqualRecursive(t,
 			v,
@@ -69,9 +72,9 @@ func TestVariable(t *testing.T) {
 	})
 
 	t.Run("mul add", func(t *testing.T) {
-		v1 := Var("v1")
-		v2 := Var("v2")
-		v3 := Var("v3")
+		v1 := Named("v1")
+		v2 := Named("v2")
+		v3 := Named("v3")
 		assertEqualRecursive(t,
 			Add(Multiply(v1, v3), Multiply(v2, v3)),
 			Multiply(Add(v1, v2), v3),
@@ -79,7 +82,7 @@ func TestVariable(t *testing.T) {
 	})
 
 	t.Run("mul order", func(t *testing.T) {
-		v := Var("v")
+		v := Named("v")
 
 		assertEqualRecursive(t,
 			&op{opMul, []Expression{v, Imm(239)}},
@@ -88,7 +91,7 @@ func TestVariable(t *testing.T) {
 	})
 
 	t.Run("mul 0", func(t *testing.T) {
-		v := Var("v")
+		v := Named("v")
 
 		assertEqualRecursive(t,
 			Imm(0),
@@ -97,7 +100,7 @@ func TestVariable(t *testing.T) {
 	})
 
 	t.Run("extend nested", func(t *testing.T) {
-		v := Var("v")
+		v := Named("v")
 
 		assertEqualRecursive(t,
 			ZeroExtend(v, 7),
@@ -106,7 +109,7 @@ func TestVariable(t *testing.T) {
 	})
 
 	t.Run("extend nested smaller", func(t *testing.T) {
-		v := Var("v")
+		v := Named("v")
 
 		assertEqualRecursive(t,
 			ZeroExtend(v, 5),
@@ -114,7 +117,7 @@ func TestVariable(t *testing.T) {
 		)
 	})
 	t.Run("extend nested smaller", func(t *testing.T) {
-		v := Var("v")
+		v := Named("v")
 
 		assertEqualRecursive(t,
 			ZeroExtend(v, 5),
@@ -125,12 +128,12 @@ func TestVariable(t *testing.T) {
 	t.Run("extend 0", func(t *testing.T) {
 		assertEqualRecursive(t,
 			Imm(0),
-			ZeroExtend(Var("v1"), 0),
+			ZeroExtend(Named("v1"), 0),
 		)
 	})
 
 	t.Run("nested extend ", func(t *testing.T) {
-		v1 := Var("v1")
+		v1 := Named("v1")
 		assertEqualRecursive(t,
 			ZeroExtend(v1, 8),
 			ZeroExtend(ZeroExtend(v1, 8), 8),
@@ -151,8 +154,8 @@ func equalRecursive(a, b Expression) bool {
 		}
 		return false
 	}
-	if ima, aok := a.(*variable); aok {
-		if imb, bok := b.(*variable); bok {
+	if ima, aok := a.(*named); aok {
+		if imb, bok := b.(*named); bok {
 			return ima == imb
 		}
 		return false

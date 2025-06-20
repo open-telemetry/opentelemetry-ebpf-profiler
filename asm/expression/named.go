@@ -3,25 +3,25 @@
 
 package expression // import "go.opentelemetry.io/ebpf-profiler/asm/expression"
 
-var _ Expression = &variable{}
+var _ Expression = &named{}
 
-func Var(name string) Expression {
-	return &variable{
+func Named(name string) Expression {
+	return &named{
 		name: name,
 	}
 }
 
-type variable struct {
+type named struct {
 	name string
 }
 
-func (v *variable) DebugString() string {
+func (v *named) DebugString() string {
 	return "@" + v.name
 }
 
-func (v *variable) Match(pattern Expression) bool {
+func (v *named) Match(pattern Expression) bool {
 	switch typedPattern := pattern.(type) {
-	case *variable:
+	case *named:
 		return typedPattern == v
 	default:
 		return false

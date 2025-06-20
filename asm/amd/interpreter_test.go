@@ -1,3 +1,6 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
 package amd
 
 import (
@@ -50,7 +53,7 @@ func testPythonInterpreter(t testing.TB) {
 				expression.ZeroExtend8(expression.Mem1(r14)),
 				expression.Imm(8),
 			),
-			expression.Var("switch table"),
+			expression.NewImmediateCapture("switch table"),
 		),
 		8,
 	)
