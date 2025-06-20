@@ -18,7 +18,7 @@ type CodeBlock struct {
 }
 
 type Registers struct {
-	regs [18]expression.Expression
+	regs [int(registersCount)]expression.Expression
 }
 
 type Interpreter struct {
@@ -29,148 +29,171 @@ type Interpreter struct {
 }
 
 type regEntry struct {
-	idx  int
+	idx  Reg
 	bits int
 }
+type Reg uint8
+
+const (
+	_ Reg = iota
+	RAX
+	RCX
+	RDX
+	RBX
+	RSP
+	RBP
+	RSI
+	RDI
+	R8
+	R9
+	R10
+	R11
+	R12
+	R13
+	R14
+	R15
+	RIP
+	registersCount
+)
 
 func regMappingFor(reg x86asm.Reg) regEntry {
 	switch reg {
 	case x86asm.AL:
-		return regEntry{idx: 1, bits: 8}
+		return regEntry{idx: RAX, bits: 8}
 	case x86asm.CL:
-		return regEntry{idx: 2, bits: 8}
+		return regEntry{idx: RCX, bits: 8}
 	case x86asm.DL:
-		return regEntry{idx: 3, bits: 8}
+		return regEntry{idx: RDX, bits: 8}
 	case x86asm.BL:
-		return regEntry{idx: 4, bits: 8}
+		return regEntry{idx: RBX, bits: 8}
 	case x86asm.SPB:
-		return regEntry{idx: 5, bits: 8}
+		return regEntry{idx: RSP, bits: 8}
 	case x86asm.BPB:
-		return regEntry{idx: 6, bits: 8}
+		return regEntry{idx: RBP, bits: 8}
 	case x86asm.SIB:
-		return regEntry{idx: 7, bits: 8}
+		return regEntry{idx: RSI, bits: 8}
 	case x86asm.DIB:
-		return regEntry{idx: 8, bits: 8}
+		return regEntry{idx: RDI, bits: 8}
 	case x86asm.R8B:
-		return regEntry{idx: 9, bits: 8}
+		return regEntry{idx: R8, bits: 8}
 	case x86asm.R9B:
-		return regEntry{idx: 10, bits: 8}
+		return regEntry{idx: R9, bits: 8}
 	case x86asm.R10B:
-		return regEntry{idx: 11, bits: 8}
+		return regEntry{idx: R10, bits: 8}
 	case x86asm.R11B:
-		return regEntry{idx: 12, bits: 8}
+		return regEntry{idx: R11, bits: 8}
 	case x86asm.R12B:
-		return regEntry{idx: 13, bits: 8}
+		return regEntry{idx: R12, bits: 8}
 	case x86asm.R13B:
-		return regEntry{idx: 14, bits: 8}
+		return regEntry{idx: R13, bits: 8}
 	case x86asm.R14B:
-		return regEntry{idx: 15, bits: 8}
+		return regEntry{idx: R14, bits: 8}
 	case x86asm.R15B:
-		return regEntry{idx: 16, bits: 8}
+		return regEntry{idx: R15, bits: 8}
 	case x86asm.AX:
-		return regEntry{idx: 1, bits: 16}
+		return regEntry{idx: RAX, bits: 16}
 	case x86asm.CX:
-		return regEntry{idx: 2, bits: 16}
+		return regEntry{idx: RCX, bits: 16}
 	case x86asm.DX:
-		return regEntry{idx: 3, bits: 16}
+		return regEntry{idx: RDX, bits: 16}
 	case x86asm.BX:
-		return regEntry{idx: 4, bits: 16}
+		return regEntry{idx: RBX, bits: 16}
 	case x86asm.SP:
-		return regEntry{idx: 5, bits: 16}
+		return regEntry{idx: RSP, bits: 16}
 	case x86asm.BP:
-		return regEntry{idx: 6, bits: 16}
+		return regEntry{idx: RBP, bits: 16}
 	case x86asm.SI:
-		return regEntry{idx: 7, bits: 16}
+		return regEntry{idx: RSI, bits: 16}
 	case x86asm.DI:
-		return regEntry{idx: 8, bits: 16}
+		return regEntry{idx: RDI, bits: 16}
 	case x86asm.R8W:
-		return regEntry{idx: 9, bits: 16}
+		return regEntry{idx: R8, bits: 16}
 	case x86asm.R9W:
-		return regEntry{idx: 10, bits: 16}
+		return regEntry{idx: R9, bits: 16}
 	case x86asm.R10W:
-		return regEntry{idx: 11, bits: 16}
+		return regEntry{idx: R10, bits: 16}
 	case x86asm.R11W:
-		return regEntry{idx: 12, bits: 16}
+		return regEntry{idx: R11, bits: 16}
 	case x86asm.R12W:
-		return regEntry{idx: 13, bits: 16}
+		return regEntry{idx: R12, bits: 16}
 	case x86asm.R13W:
-		return regEntry{idx: 14, bits: 16}
+		return regEntry{idx: R13, bits: 16}
 	case x86asm.R14W:
-		return regEntry{idx: 15, bits: 16}
+		return regEntry{idx: R14, bits: 16}
 	case x86asm.R15W:
-		return regEntry{idx: 16, bits: 16}
+		return regEntry{idx: R15, bits: 16}
 	case x86asm.EAX:
-		return regEntry{idx: 1, bits: 32}
+		return regEntry{idx: RAX, bits: 32}
 	case x86asm.ECX:
-		return regEntry{idx: 2, bits: 32}
+		return regEntry{idx: RCX, bits: 32}
 	case x86asm.EDX:
-		return regEntry{idx: 3, bits: 32}
+		return regEntry{idx: RDX, bits: 32}
 	case x86asm.EBX:
-		return regEntry{idx: 4, bits: 32}
+		return regEntry{idx: RBX, bits: 32}
 	case x86asm.ESP:
-		return regEntry{idx: 5, bits: 32}
+		return regEntry{idx: RSP, bits: 32}
 	case x86asm.EBP:
-		return regEntry{idx: 6, bits: 32}
+		return regEntry{idx: RBP, bits: 32}
 	case x86asm.ESI:
-		return regEntry{idx: 7, bits: 32}
+		return regEntry{idx: RSI, bits: 32}
 	case x86asm.EDI:
-		return regEntry{idx: 8, bits: 32}
+		return regEntry{idx: RDI, bits: 32}
 	case x86asm.R8L:
-		return regEntry{idx: 9, bits: 32}
+		return regEntry{idx: R8, bits: 32}
 	case x86asm.R9L:
-		return regEntry{idx: 10, bits: 32}
+		return regEntry{idx: R9, bits: 32}
 	case x86asm.R10L:
-		return regEntry{idx: 11, bits: 32}
+		return regEntry{idx: R10, bits: 32}
 	case x86asm.R11L:
-		return regEntry{idx: 12, bits: 32}
+		return regEntry{idx: R11, bits: 32}
 	case x86asm.R12L:
-		return regEntry{idx: 13, bits: 32}
+		return regEntry{idx: R12, bits: 32}
 	case x86asm.R13L:
-		return regEntry{idx: 14, bits: 32}
+		return regEntry{idx: R13, bits: 32}
 	case x86asm.R14L:
-		return regEntry{idx: 15, bits: 32}
+		return regEntry{idx: R14, bits: 32}
 	case x86asm.R15L:
-		return regEntry{idx: 16, bits: 32}
+		return regEntry{idx: R15, bits: 32}
 	case x86asm.RAX:
-		return regEntry{idx: 1, bits: 64}
+		return regEntry{idx: RAX, bits: 64}
 	case x86asm.RCX:
-		return regEntry{idx: 2, bits: 64}
+		return regEntry{idx: RCX, bits: 64}
 	case x86asm.RDX:
-		return regEntry{idx: 3, bits: 64}
+		return regEntry{idx: RDX, bits: 64}
 	case x86asm.RBX:
-		return regEntry{idx: 4, bits: 64}
+		return regEntry{idx: RBX, bits: 64}
 	case x86asm.RSP:
-		return regEntry{idx: 5, bits: 64}
+		return regEntry{idx: RSP, bits: 64}
 	case x86asm.RBP:
-		return regEntry{idx: 6, bits: 64}
+		return regEntry{idx: RBP, bits: 64}
 	case x86asm.RSI:
-		return regEntry{idx: 7, bits: 64}
+		return regEntry{idx: RSI, bits: 64}
 	case x86asm.RDI:
-		return regEntry{idx: 8, bits: 64}
+		return regEntry{idx: RDI, bits: 64}
 	case x86asm.R8:
-		return regEntry{idx: 9, bits: 64}
+		return regEntry{idx: R8, bits: 64}
 	case x86asm.R9:
-		return regEntry{idx: 10, bits: 64}
+		return regEntry{idx: R9, bits: 64}
 	case x86asm.R10:
-		return regEntry{idx: 11, bits: 64}
+		return regEntry{idx: R10, bits: 64}
 	case x86asm.R11:
-		return regEntry{idx: 12, bits: 64}
+		return regEntry{idx: R11, bits: 64}
 	case x86asm.R12:
-		return regEntry{idx: 13, bits: 64}
+		return regEntry{idx: R12, bits: 64}
 	case x86asm.R13:
-		return regEntry{idx: 14, bits: 64}
+		return regEntry{idx: R13, bits: 64}
 	case x86asm.R14:
-		return regEntry{idx: 15, bits: 64}
+		return regEntry{idx: R14, bits: 64}
 	case x86asm.R15:
-		return regEntry{idx: 16, bits: 64}
+		return regEntry{idx: R15, bits: 64}
 	case x86asm.RIP:
-		return regEntry{idx: 17, bits: 64}
+		return regEntry{idx: RIP, bits: 64}
 	default:
 		return regEntry{idx: 0, bits: 64}
 	}
 }
 
-func (r *Registers) Set(reg x86asm.Reg, v expression.Expression) {
+func (r *Registers) setX86asm(reg x86asm.Reg, v expression.Expression) {
 	e := regMappingFor(reg)
 	if e.bits != 64 {
 		v = expression.ZeroExtend(v, e.bits)
@@ -178,13 +201,20 @@ func (r *Registers) Set(reg x86asm.Reg, v expression.Expression) {
 	r.regs[e.idx] = v
 }
 
-func (r *Registers) Get(reg x86asm.Reg) expression.Expression {
+func (r *Registers) getX86asm(reg x86asm.Reg) expression.Expression {
 	e := regMappingFor(reg)
 	res := r.regs[e.idx]
 	if e.bits != 64 {
 		res = expression.ZeroExtend(res, e.bits)
 	}
 	return res
+}
+
+func (r *Registers) Get(reg Reg) expression.Expression {
+	if int(reg) >= len(r.regs) {
+		return r.regs[0]
+	}
+	return r.regs[int(reg)]
 }
 
 func NewInterpreter() *Interpreter {
@@ -239,38 +269,41 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 	}
 	i.pc += inst.Len
 	i.code = i.code[inst.Len:]
-	i.Regs.Set(x86asm.RIP, expression.Add(i.CodeAddress, expression.Imm(uint64(i.pc))))
+	i.Regs.setX86asm(x86asm.RIP, expression.Add(i.CodeAddress, expression.Imm(uint64(i.pc))))
 	switch inst.Op {
 	case x86asm.ADD:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
+			left := i.Regs.getX86asm(dst)
 			switch src := inst.Args[1].(type) {
 			case x86asm.Imm:
-				i.Regs.Set(dst, expression.Add(i.Regs.Get(dst), expression.Imm(uint64(src))))
+				right := expression.Imm(uint64(src))
+				i.Regs.setX86asm(dst, expression.Add(left, right))
 			case x86asm.Reg:
-				i.Regs.Set(dst, expression.Add(i.Regs.Get(dst), i.Regs.Get(src)))
+				right := i.Regs.getX86asm(src)
+				i.Regs.setX86asm(dst, expression.Add(left, right))
 			case x86asm.Mem:
-				v := i.MemArg(src)
-				v = expression.MemWithSegment(src.Segment, v, inst.MemBytes)
-				i.Regs.Set(dst, expression.Add(i.Regs.Get(dst), v))
+				right := i.MemArg(src)
+				right = expression.MemWithSegment(src.Segment, right, inst.MemBytes)
+				i.Regs.setX86asm(dst, expression.Add(left, right))
 			}
 		}
 	case x86asm.SHL:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, imm := inst.Args[1].(x86asm.Imm); imm {
 				v := expression.Multiply(
-					i.Regs.Get(dst),
+					i.Regs.getX86asm(dst),
 					expression.Imm(uint64(math.Pow(2, float64(src)))),
 				)
-				i.Regs.Set(dst, v)
+				i.Regs.setX86asm(dst, v)
 			}
 		}
 	case x86asm.MOV, x86asm.MOVZX, x86asm.MOVSXD, x86asm.MOVSX:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			switch src := inst.Args[1].(type) {
 			case x86asm.Imm:
-				i.Regs.Set(dst, expression.Imm(uint64(src)))
+				i.Regs.setX86asm(dst, expression.Imm(uint64(src)))
 			case x86asm.Reg:
-				i.Regs.Set(dst, i.Regs.Get(src))
+				i.Regs.setX86asm(dst, i.Regs.getX86asm(src))
 			case x86asm.Mem:
 				v := i.MemArg(src)
 
@@ -282,7 +315,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				} else {
 					v = expression.ZeroExtend(v, dataSizeBits)
 				}
-				i.Regs.Set(dst, v)
+				i.Regs.setX86asm(dst, v)
 			}
 		}
 
@@ -290,7 +323,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, reg := inst.Args[1].(x86asm.Reg); reg {
 				if src == dst {
-					i.Regs.Set(dst, expression.Imm(0))
+					i.Regs.setX86asm(dst, expression.Imm(0))
 				}
 			}
 		}
@@ -298,7 +331,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, imm := inst.Args[1].(x86asm.Imm); imm {
 				if src == 3 { // todo other cases
-					i.Regs.Set(dst, expression.ZeroExtend(i.Regs.Get(dst), 2))
+					i.Regs.setX86asm(dst, expression.ZeroExtend(i.Regs.getX86asm(dst), 2))
 				}
 			}
 		}
@@ -306,7 +339,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, mem := inst.Args[1].(x86asm.Mem); mem {
 				v := i.MemArg(src)
-				i.Regs.Set(dst, v)
+				i.Regs.setX86asm(dst, v)
 			}
 		}
 	case x86asm.NOP, x86asm.RET:
@@ -322,11 +355,11 @@ func (i *Interpreter) MemArg(src x86asm.Mem) expression.Expression {
 		vs = append(vs, expression.Imm(uint64(src.Disp)))
 	}
 	if src.Base != 0 {
-		vs = append(vs, i.Regs.Get(src.Base))
+		vs = append(vs, i.Regs.getX86asm(src.Base))
 	}
 	if src.Index != 0 {
 		v := expression.Multiply(
-			i.Regs.Get(src.Index),
+			i.Regs.getX86asm(src.Index),
 			expression.Imm(uint64(src.Scale)),
 		)
 		vs = append(vs, v)

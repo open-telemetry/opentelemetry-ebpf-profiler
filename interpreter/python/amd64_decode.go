@@ -26,7 +26,7 @@ func decodeStubArgumentAMD64(
 	if err != nil {
 		return 0, err
 	}
-	answer, err := evaluateStubAnswerAMD64(it.Regs.Get(x86asm.RDI), memBase)
+	answer, err := evaluateStubAnswerAMD64(it.Regs.Get(amd.RDI), memBase)
 	if err != nil {
 		return 0, err
 	}

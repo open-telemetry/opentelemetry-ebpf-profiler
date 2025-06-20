@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/ebpf-profiler/asm/expression"
-	"golang.org/x/arch/x86/x86asm"
 )
 
 func BenchmarkPythonInterpreter(b *testing.B) {
@@ -39,12 +38,12 @@ func testPythonInterpreter(t testing.TB) {
 	}
 	it := NewInterpreterWithCode(code)
 	it.CodeAddress = expression.Imm(0x8AF05)
-	r14 := it.Regs.Get(x86asm.R14)
+	r14 := it.Regs.Get(R14)
 	_, err := it.Loop()
 	if err == nil || err != io.EOF {
 		t.Fatal(err)
 	}
-	actual := it.Regs.Get(x86asm.RAX)
+	actual := it.Regs.Get(RAX)
 	expected := expression.Mem(
 		expression.Add(
 			expression.Multiply(
@@ -81,13 +80,13 @@ func TestRecoverSwitchCase(t *testing.T) {
 	}
 	t.Run("manual", func(t *testing.T) {
 		it := NewInterpreter()
-		initR12 := it.Regs.Get(x86asm.R12)
+		initR12 := it.Regs.Get(R12)
 		it.ResetCode(blocks[0].Code, blocks[0].Address)
 		_, err := it.Loop()
 		require.ErrorIs(t, err, io.EOF)
 
 		expected := expression.ZeroExtend(initR12, 2)
-		assertEval(t, it.Regs.Get(x86asm.RAX), expected)
+		assertEval(t, it.Regs.Get(RAX), expected)
 		it.ResetCode(blocks[1].Code, blocks[1].Address)
 		_, err = it.Loop()
 		require.ErrorIs(t, err, io.EOF)
@@ -109,7 +108,7 @@ func TestRecoverSwitchCase(t *testing.T) {
 			),
 			base,
 		)
-		assertEval(t, it.Regs.Get(x86asm.RAX), expected)
+		assertEval(t, it.Regs.Get(RAX), expected)
 		assert.EqualValues(t, 0xf3f82c, table.ExtractedValueImm())
 		assert.EqualValues(t, 0xf3f82c, base.ExtractedValueImm())
 	})
@@ -140,5 +139,5 @@ func TestMoveSignExtend(t *testing.T) {
 	_, err := i.Loop()
 	require.ErrorIs(t, err, io.EOF)
 	pattern := expression.SignExtend(expression.Mem(expression.Imm(7), 2), 64)
-	require.True(t, i.Regs.Get(x86asm.RAX).Match(pattern))
+	require.True(t, i.Regs.Get(RAX).Match(pattern))
 }
