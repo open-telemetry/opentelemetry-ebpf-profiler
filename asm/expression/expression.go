@@ -23,14 +23,6 @@ type Expression interface {
 
 type operands []Expression
 
-func (os *operands) Pop() {
-	*os = (*os)[:len(*os)-1]
-}
-
-func (os *operands) Push(v Expression) {
-	*os = append(*os, v)
-}
-
 func (os *operands) Match(other operands) bool {
 	if len(*os) != len(other) {
 		return false
