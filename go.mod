@@ -5,7 +5,7 @@ go 1.23.6
 require (
 	github.com/aws/aws-sdk-go-v2 v1.36.5
 	github.com/aws/aws-sdk-go-v2/config v1.29.17
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.80.3
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.81.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cilium/ebpf v0.18.0
 	github.com/elastic/go-freelru v0.16.0
@@ -30,7 +30,7 @@ require (
 	go.opentelemetry.io/otel v1.36.0
 	go.opentelemetry.io/otel/metric v1.36.0
 	golang.org/x/arch v0.18.0
-	golang.org/x/exp v0.0.0-20250606033433-dcc06ee1d476
+	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
 	golang.org/x/sync v0.15.0
 	golang.org/x/sys v0.33.0
 	google.golang.org/grpc v1.73.0
