@@ -2,21 +2,22 @@
 // SPDX-License-Identifier: Apache-2.0
 
 package expression // import "go.opentelemetry.io/ebpf-profiler/asm/expression"
-import "sort"
 
 // Expression is an interface representing a 64-bit size value. It can be immediate
 type Expression interface {
-	// Match compares this Expression value with another Expression for equality or compatibility.
+	// Match compares this Expression value against a pattern Expression.
+	// The order of the arguments matters: a.Match(b) or b.Match(a) may
+	// produce different results. The intended order The pattern should be passed as
+	// an argument, not the other way around.
 	// It returns true if the values are considered equal or compatible according to
 	// the type-specific rules:
 	// - For operations (add, mul): checks if operation types and operands match
-	// - For immediate: checks if values are equal, or extracts value into a Variable
+	// - For immediate: checks if values are equal and extracts value into a Variable
 	// - For memory references: checks if segments and addresses match
 	// - For extend operations: checks if sizes and inner values match
-	// - For variables: checks if they are the same or if one is marked as "any"
+	// - For variables: checks if they are pointing to the same object instance.
 	Match(pattern Expression) bool
 	DebugString() string
-	MaxValue() uint64
 }
 
 type operands []Expression
@@ -29,7 +30,7 @@ func (os *operands) Push(v Expression) {
 	*os = append(*os, v)
 }
 
-func (os *operands) Eval(other operands) bool {
+func (os *operands) Match(other operands) bool {
 	if len(*os) != len(other) {
 		return false
 	}
@@ -42,7 +43,6 @@ func (os *operands) Eval(other operands) bool {
 		}
 		return false
 	}
-	sort.Sort(sortedOperands(*os))
 	for i := 0; i < len(*os); i++ {
 		if !(*os)[i].Match(other[i]) {
 			return false

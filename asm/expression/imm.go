@@ -35,7 +35,7 @@ func (v *immediate) Match(pattern Expression) bool {
 	case *immediate:
 		return v.Value == typedPattern.Value
 	case *Variable:
-		typedPattern.extracted = v
+		typedPattern.extractedImm = *v
 		return true
 	default:
 		return false

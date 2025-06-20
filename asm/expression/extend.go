@@ -12,6 +12,15 @@ var _ Expression = &extend{}
 func SignExtend(v Expression, bits int) Expression {
 	return &extend{v, bits, true}
 }
+
+func ZeroExtend32(v Expression) Expression {
+	return ZeroExtend(v, 32)
+}
+
+func ZeroExtend8(v Expression) Expression {
+	return ZeroExtend(v, 8)
+}
+
 func ZeroExtend(v Expression, bits int) Expression {
 	if bits >= 64 {
 		bits = 64
@@ -38,11 +47,6 @@ func ZeroExtend(v Expression, bits int) Expression {
 		}
 		return &extend{typed.v, c.bits, false}
 	default:
-		myMax := c.MaxValue()
-		vMax := c.v.MaxValue()
-		if vMax <= myMax {
-			return c.v
-		}
 		return c
 	}
 }
@@ -66,12 +70,6 @@ func (c *extend) Match(pattern Expression) bool {
 		return typedPattern.bits == c.bits &&
 			typedPattern.sign == c.sign &&
 			c.v.Match(typedPattern.v)
-	case *Variable:
-		if typedPattern.isAny {
-			typedPattern.extracted = c
-			return true
-		}
-		return false
 	default:
 		return false
 	}

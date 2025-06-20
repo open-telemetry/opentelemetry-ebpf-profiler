@@ -5,15 +5,26 @@ package expression // import "go.opentelemetry.io/ebpf-profiler/asm/expression"
 
 import (
 	"fmt"
-	"math"
 
 	"golang.org/x/arch/x86/x86asm"
 )
 
 var _ Expression = &mem{}
 
+func MemWithSegment8(segment x86asm.Reg, at Expression) Expression {
+	return MemWithSegment(segment, at, 8)
+}
+
 func MemWithSegment(segment x86asm.Reg, at Expression, sizeBytes int) Expression {
 	return &mem{at: at, segment: segment, sizeBytes: sizeBytes}
+}
+
+func Mem8(at Expression) Expression {
+	return Mem(at, 8)
+}
+
+func Mem1(at Expression) Expression {
+	return Mem(at, 1)
 }
 
 func Mem(at Expression, sizeBytes int) Expression {
@@ -24,10 +35,6 @@ type mem struct {
 	segment   x86asm.Reg
 	at        Expression
 	sizeBytes int
-}
-
-func (v *mem) MaxValue() uint64 {
-	return math.MaxUint64
 }
 
 func (v *mem) DebugString() string {
@@ -44,12 +51,6 @@ func (v *mem) Match(pattern Expression) bool {
 			return false
 		}
 		return v.at.Match(typedPattern.at)
-	case *Variable:
-		if typedPattern.isAny {
-			typedPattern.extracted = v
-			return true
-		}
-		return false
 	default:
 		return false
 	}

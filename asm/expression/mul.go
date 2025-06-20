@@ -4,17 +4,6 @@
 package expression // import "go.opentelemetry.io/ebpf-profiler/asm/expression"
 
 func Multiply(vs ...Expression) Expression {
-	return MultiplyWithOptions(Options{}, vs...)
-}
-
-type Options struct {
-	// Do not simplify (a + b) * c into a * c + b * c
-	// May be useful if you want to match-extract exactly a/b/c
-	// which may be simplified if unwrapped
-	NoUnwrapMultiplyAdd bool
-}
-
-func MultiplyWithOptions(opt Options, vs ...Expression) Expression {
 	oss := make(operands, 0, len(vs)+1)
 	v := uint64(1)
 	for _, it := range vs {
@@ -40,11 +29,11 @@ func MultiplyWithOptions(opt Options, vs ...Expression) Expression {
 		return oss[0]
 	}
 
-	if len(oss) == 2 && !opt.NoUnwrapMultiplyAdd {
+	if len(oss) == 2 {
 		if a, ok := oss[0].(*op); ok && a.typ == opAdd {
 			var res []Expression
 			for _, ait := range a.operands {
-				res = append(res, MultiplyWithOptions(opt, ait, oss[1]))
+				res = append(res, Multiply(ait, oss[1]))
 			}
 			return Add(res...)
 		}

@@ -5,7 +5,7 @@ package expression // import "go.opentelemetry.io/ebpf-profiler/asm/expression"
 
 import (
 	"fmt"
-	"math"
+	"sort"
 	"strings"
 )
 
@@ -24,6 +24,7 @@ type op struct {
 
 func newOp(typ opType, operands operands) Expression {
 	res := &op{typ: typ, operands: operands}
+	sort.Sort(sortedOperands(operands))
 	return res
 }
 
@@ -34,13 +35,7 @@ func (o *op) Match(pattern Expression) bool {
 			len(o.operands) != len(typedPattern.operands) {
 			return false
 		}
-		return o.operands.Eval(typedPattern.operands)
-	case *Variable:
-		if typedPattern.isAny {
-			typedPattern.extracted = o
-			return true
-		}
-		return false
+		return o.operands.Match(typedPattern.operands)
 	default:
 		return false
 	}
@@ -59,13 +54,4 @@ func (o *op) DebugString() string {
 		sep = "*"
 	}
 	return fmt.Sprintf("( %s )", strings.Join(ss, sep))
-}
-
-func (o *op) MaxValue() uint64 {
-	switch o.typ {
-	case opAdd:
-		return o.maxAddValue()
-	default:
-		return math.MaxUint64
-	}
 }

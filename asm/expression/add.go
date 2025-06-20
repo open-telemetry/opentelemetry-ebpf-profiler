@@ -2,10 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 package expression // import "go.opentelemetry.io/ebpf-profiler/asm/expression"
-import (
-	"math"
-	"math/bits"
-)
 
 func Add(vs ...Expression) Expression {
 	oss := make(operands, 0, len(vs)+1)
@@ -37,16 +33,4 @@ func Add(vs ...Expression) Expression {
 		return oss[0]
 	}
 	return newOp(opAdd, oss)
-}
-
-func (o *op) maxAddValue() uint64 {
-	v := uint64(0)
-	c := uint64(0)
-	for i := range o.operands {
-		v, c = bits.Add64(v, o.operands[i].MaxValue(), 0)
-		if c != 0 {
-			return math.MaxUint64
-		}
-	}
-	return v
 }

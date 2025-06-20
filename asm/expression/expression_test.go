@@ -1,11 +1,8 @@
 package expression
 
 import (
-	"math"
 	"slices"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestVariable(t *testing.T) {
@@ -125,61 +122,7 @@ func TestVariable(t *testing.T) {
 		)
 	})
 
-	t.Run("extend max1", func(t *testing.T) {
-		maxFF := Var("ff").SetMaxValue(0xff)
-		assertEqualRecursive(t,
-			maxFF,
-			ZeroExtend(maxFF, 11),
-		)
-	})
-
-	t.Run("extend max value", func(t *testing.T) {
-		maxFF := Var("ff").SetMaxValue(0xff)
-		assert.EqualValues(t,
-			0b1111111,
-			ZeroExtend(maxFF, 7).MaxValue(),
-		)
-	})
-
-	t.Run("extend max value", func(t *testing.T) {
-		v := Var("v")
-
-		assert.EqualValues(t,
-			math.MaxUint32,
-			ZeroExtend(v, 32).MaxValue(),
-		)
-	})
-
-	t.Run("extend max value", func(t *testing.T) {
-		v := Var("v")
-
-		assert.Equal(t,
-			uint64(math.MaxUint64),
-			ZeroExtend(v, 64).MaxValue(),
-		)
-	})
-
-	t.Run("add max value overflow", func(t *testing.T) {
-		assert.Equal(t,
-			uint64(math.MaxUint64),
-			Add(Var("max64"), Var("max1").SetMaxValue(1)).MaxValue(),
-		)
-	})
-
-	t.Run("any", func(t *testing.T) {
-		assert.False(t,
-			Any().Match(Var("v1")),
-		)
-		assert.True(t,
-			Var("v1").Match(Any()),
-		)
-	})
-
 	t.Run("extend 0", func(t *testing.T) {
-		assert.EqualValues(t,
-			0,
-			ZeroExtend(Var("v1"), 0).MaxValue(),
-		)
 		assertEqualRecursive(t,
 			Imm(0),
 			ZeroExtend(Var("v1"), 0),
@@ -192,10 +135,6 @@ func TestVariable(t *testing.T) {
 			ZeroExtend(v1, 8),
 			ZeroExtend(ZeroExtend(v1, 8), 8),
 		)
-	})
-
-	t.Run("any matches ops", func(t *testing.T) {
-		assert.True(t, Add(Var("v1"), Var("2")).Match(Any()))
 	})
 }
 

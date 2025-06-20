@@ -1,7 +1,6 @@
 package amd
 
 import (
-	"fmt"
 	"io"
 	"testing"
 
@@ -40,7 +39,7 @@ func testPythonInterpreter(t testing.TB) {
 	}
 	it := NewInterpreterWithCode(code)
 	it.CodeAddress = expression.Imm(0x8AF05)
-
+	r14 := it.Regs.Get(x86asm.R14)
 	_, err := it.Loop()
 	if err == nil || err != io.EOF {
 		t.Fatal(err)
@@ -49,7 +48,7 @@ func testPythonInterpreter(t testing.TB) {
 	expected := expression.Mem(
 		expression.Add(
 			expression.Multiply(
-				expression.ZeroExtend(expression.Mem(expression.Any(), 8), 8),
+				expression.ZeroExtend8(expression.Mem1(r14)),
 				expression.Imm(8),
 			),
 			expression.Var("switch table"),
@@ -118,7 +117,7 @@ func TestRecoverSwitchCase(t *testing.T) {
 
 func assertEval(t *testing.T, left, right expression.Expression) {
 	if !left.Match(right) {
-		assert.Fail(t, "failed to eval %s to %s", left.DebugString(), right.DebugString())
+		assert.Failf(t, "failed to eval %s to %s", left.DebugString(), right.DebugString())
 		t.Logf("left  %s", left.DebugString())
 		t.Logf("right %s", right.DebugString())
 	}
@@ -142,31 +141,4 @@ func TestMoveSignExtend(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 	pattern := expression.SignExtend(expression.Mem(expression.Imm(7), 2), 64)
 	require.True(t, i.Regs.Get(x86asm.RAX).Match(pattern))
-}
-
-func TestMemory(t *testing.T) {
-	it := NewInterpreterWithCode([]byte{
-		0x48, 0xC7, 0x04, 0x24, 0xFE, 0xCA, 0x00, 0x00, 0x48, 0x89, 0xE7, 0x48,
-		0x8B, 0x3F,
-	}).WithMemory()
-	_, err := it.Loop()
-	require.ErrorIs(t, err, io.EOF)
-	rdi := it.Regs.Get(x86asm.RDI)
-	expected := expression.Imm(0xcafe)
-	require.True(t, rdi.Match(expected))
-}
-
-func TestCompareJumpConstraints(t *testing.T) {
-	i := NewInterpreterWithCode([]byte{
-		0x41, 0x0f, 0xb7, 0x04, 0x24, 0x49, 0x83, 0xc4, 0x02, 0x0f, 0xb6, 0xf4, 0x44,
-		0x0f, 0xb6, 0xf8, 0x41, 0x89, 0xf1, 0x41, 0x81, 0xff, 0xa5, 0x00, 0x00, 0x00,
-		0x0f, 0x87, 0xbb, 0xab, 0xf1, 0xff, 0x45, 0x89, 0xf8, 0x42, 0xff, 0x24, 0xc5,
-		0x40, 0xec, 0x6d, 0x00,
-	})
-	_, err := i.Loop()
-	require.ErrorIs(t, err, io.EOF)
-	r8 := i.Regs.Get(x86asm.R8L)
-	fmt.Println(r8.DebugString())
-	maxValue := i.MaxValue(r8)
-	require.EqualValues(t, 0xa5, maxValue)
 }
