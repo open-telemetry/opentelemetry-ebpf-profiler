@@ -12,6 +12,7 @@ import (
 	"debug/elf"
 	"fmt"
 	"go/version"
+	"io"
 	"sort"
 	"strings"
 	"unsafe"
@@ -331,6 +332,7 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, err error) {
 
 // Gopclntab is the API for extracting data from .gopclntab
 type Gopclntab struct {
+	dataRef   io.Closer
 	data      []byte
 	textStart uintptr
 	numFuncs  int
@@ -440,8 +442,14 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.funcMapSize = 2 * 4
 		g.funSize = 4 + uint8(unsafe.Sizeof(pclntabFunc{}))
 	}
+	g.dataRef = ef.Take()
 
 	return g, nil
+}
+
+// Close releases the pfelf Data reference taken.
+func (g *Gopclntab) Close() error {
+	return g.dataRef.Close()
 }
 
 // getFuncMapEntry returns the entry at 'index' from the gopclntab function lookup map.
@@ -494,7 +502,7 @@ func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
 func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
 	index := sort.Search(g.numFuncs, func(i int) bool {
 		funcPc, _ := g.getFuncMapEntry(i)
-		return funcPc >= pc
+		return funcPc > pc
 	}) - 1
 	if index < 0 {
 		return "", 0, ""
@@ -629,6 +637,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	if g == nil || err != nil {
 		return err
 	}
+	defer g.Close()
 
 	// Go uses frame-pointers by default since Go 1.7, but unfortunately
 	// it is not necessarily available when in code from non-Golang source
