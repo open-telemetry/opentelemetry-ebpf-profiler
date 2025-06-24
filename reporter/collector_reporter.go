@@ -52,7 +52,6 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 		cfg.ExecutablesCacheElements,
 		cfg.FramesCacheElements,
 		cfg.ExtraSampleAttrProd,
-		nil,
 	)
 	if err != nil {
 		return nil, err

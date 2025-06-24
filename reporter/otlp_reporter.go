@@ -10,14 +10,15 @@ import (
 	"strconv"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
+
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
 	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -76,7 +77,6 @@ func NewOTLP(cfg *Config,
 		cfg.ExecutablesCacheElements,
 		cfg.FramesCacheElements,
 		cfg.ExtraSampleAttrProd,
-		cfg.ExtraNativeSymbolResolver,
 	)
 	if err != nil {
 		return nil, err

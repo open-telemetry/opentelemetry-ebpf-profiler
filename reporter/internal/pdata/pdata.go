@@ -24,13 +24,10 @@ type Pdata struct {
 	// ExtraSampleAttrProd is an optional hook point for adding custom
 	// attributes to samples.
 	ExtraSampleAttrProd samples.SampleAttrProducer
-
-	ExtraNativeSymbolResolver samples.NativeSymbolResolver
 }
 
 func New(samplesPerSecond int, executablesCacheElements, framesCacheElements uint32,
 	extra samples.SampleAttrProducer,
-	sym samples.NativeSymbolResolver,
 ) (*Pdata, error) {
 	executables, err :=
 		lru.NewSynced[libpf.FileID, samples.ExecInfo](executablesCacheElements, libpf.FileID.Hash32)
@@ -47,11 +44,10 @@ func New(samplesPerSecond int, executablesCacheElements, framesCacheElements uin
 	frames.SetLifetime(FramesCacheLifetime) // Allow GC to clean stale items.
 
 	return &Pdata{
-		samplesPerSecond:          samplesPerSecond,
-		Executables:               executables,
-		Frames:                    frames,
-		ExtraSampleAttrProd:       extra,
-		ExtraNativeSymbolResolver: sym,
+		samplesPerSecond:    samplesPerSecond,
+		Executables:         executables,
+		Frames:              frames,
+		ExtraSampleAttrProd: extra,
 	}, nil
 }
 

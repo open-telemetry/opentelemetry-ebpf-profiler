@@ -246,7 +246,7 @@ func TestFunctionTableOrder(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := New(100, 100, 100, nil, nil)
+			d, err := New(100, 100, 100, nil)
 			require.NoError(t, err)
 			for fileID, addrWithSourceInfos := range tt.frames {
 				for addr, si := range addrWithSourceInfos {

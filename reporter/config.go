@@ -61,6 +61,4 @@ type Config struct {
 	// GRPCDialOptions allows passing additional gRPC dial options when establishing
 	// the connection to the collector. These options are appended after the default options.
 	GRPCDialOptions []grpc.DialOption
-
-	ExtraNativeSymbolResolver samples.NativeSymbolResolver
 }
