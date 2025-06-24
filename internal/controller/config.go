@@ -42,7 +42,6 @@ type Config struct {
 
 	PyroscopeUsername               string
 	PyroscopePasswordFile           string
-	PyroscopeReporterType           string
 	PyroscopeDynamicProfilingPolicy bool
 	SymbCachePath                   string
 	SymbCacheSizeEntries            int
