@@ -770,8 +770,14 @@ typedef struct StackDeltaPageInfo {
 // the upper boundary of the loop, and the relevant index to call in the prog
 // array.
 typedef struct OffsetRange {
-  u64 lower_offset;
-  u64 upper_offset;
+  u64 lower_offset1;
+  u64 upper_offset1;
+  // Fields {lower,upper}_offset2 may be used to specify an optional second range
+  // of an interpreter function. This may be useful if the interpreter function
+  // consists of two non-contiguous memory ranges, which may happen due to Hot/Cold
+  // split compiler optimization
+  u64 lower_offset2;
+  u64 upper_offset2;
   u16 program_index; // The interpreter-specific program index to call.
 } OffsetRange;
 

@@ -38,7 +38,7 @@ type baseReporter struct {
 	cgroupv2ID *lru.SyncedLRU[libpf.PID, string]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[libpf.Origin]samples.KeyToEventMapping]
+	traceEvents xsync.RWMutex[samples.TraceEventsTree]
 
 	// hostmetadata stores metadata that is sent out with every request.
 	hostmetadata *lru.SyncedLRU[string, string]
@@ -73,13 +73,7 @@ func (b *baseReporter) ExecutableKnown(fileID libpf.FileID) bool {
 }
 
 func (b *baseReporter) FrameKnown(frameID libpf.FrameID) bool {
-	known := false
-	if frameMapLock, exists := b.pdata.Frames.GetAndRefresh(frameID.FileID(),
-		pdata.FramesCacheLifetime); exists {
-		frameMap := frameMapLock.RLock()
-		defer frameMapLock.RUnlock(&frameMap)
-		_, known = (*frameMap).GetAndRefresh(frameID.AddressOrLine(), pdata.FrameMapLifetime)
-	}
+	_, known := b.pdata.Frames.GetAndRefresh(frameID, pdata.FrameMapLifetime)
 	return known
 }
 
@@ -116,20 +110,30 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		ApmServiceName: meta.APMServiceName,
 		ContainerID:    containerID,
 		Pid:            int64(meta.PID),
+		Tid:            int64(meta.TID),
 		ExtraMeta:      extraMeta,
 	}
 
-	traceEventsMap := b.traceEvents.WLock()
-	defer b.traceEvents.WUnlock(&traceEventsMap)
+	eventsTree := b.traceEvents.WLock()
+	defer b.traceEvents.WUnlock(&eventsTree)
 
-	if events, exists := (*traceEventsMap)[meta.Origin][key]; exists {
-		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
-		events.OffTimes = append(events.OffTimes, meta.OffTime)
-		(*traceEventsMap)[meta.Origin][key] = events
-		return nil
+	if _, exists := (*eventsTree)[samples.ContainerID(containerID)]; !exists {
+		(*eventsTree)[samples.ContainerID(containerID)] =
+			make(map[libpf.Origin]samples.KeyToEventMapping)
 	}
 
-	(*traceEventsMap)[meta.Origin][key] = &samples.TraceEvents{
+	if _, exists := (*eventsTree)[samples.ContainerID(containerID)][meta.Origin]; !exists {
+		(*eventsTree)[samples.ContainerID(containerID)][meta.Origin] =
+			make(samples.KeyToEventMapping)
+	}
+
+	if events, exists := (*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key]; exists {
+		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
+		events.OffTimes = append(events.OffTimes, meta.OffTime)
+		(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = events
+		return nil
+	}
+	(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = &samples.TraceEvents{
 		Files:              trace.Files,
 		Linenos:            trace.Linenos,
 		FrameTypes:         trace.FrameTypes,
@@ -144,53 +148,19 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 }
 
 func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
-	fileID := args.FrameID.FileID()
-	addressOrLine := args.FrameID.AddressOrLine()
-
 	log.Debugf("FrameMetadata [%x] %v+%v at %v:%v",
-		fileID, args.FunctionName, args.FunctionOffset,
+		args.FrameID.FileID(), args.FunctionName, args.FunctionOffset,
 		args.SourceFile, args.SourceLine)
-
-	if frameMapLock, exists := b.pdata.Frames.GetAndRefresh(fileID,
-		pdata.FramesCacheLifetime); exists {
-		frameMap := frameMapLock.WLock()
-		defer frameMapLock.WUnlock(&frameMap)
-
-		sourceFile := args.SourceFile
-		if sourceFile == "" {
-			// The new SourceFile may be empty, and we don't want to overwrite
-			// an existing filePath with it.
-			if source, exists := (*frameMap).GetAndRefresh(addressOrLine,
-				pdata.FrameMapLifetime); exists {
-				sourceFile = source.FilePath
-			}
-		}
-
-		(*frameMap).Add(addressOrLine, samples.SourceInfo{
-			LineNumber:     args.SourceLine,
-			FilePath:       sourceFile,
-			FunctionOffset: args.FunctionOffset,
-			FunctionName:   args.FunctionName,
-		})
-
-		return
-	}
-
-	frameMap, err := lru.New[libpf.AddressOrLineno, samples.SourceInfo](1024,
-		func(k libpf.AddressOrLineno) uint32 { return uint32(k) })
-	if err != nil {
-		log.Errorf("Failed to create inner frameMap for %x: %v", fileID, err)
-		return
-	}
-	frameMap.SetLifetime(pdata.FrameMapLifetime)
-
-	frameMap.Add(addressOrLine, samples.SourceInfo{
+	si := samples.SourceInfo{
 		LineNumber:     args.SourceLine,
 		FilePath:       args.SourceFile,
 		FunctionOffset: args.FunctionOffset,
 		FunctionName:   args.FunctionName,
-	})
-
-	mu := xsync.NewRWMutex(frameMap)
-	b.pdata.Frames.Add(fileID, &mu)
+	}
+	if si.FilePath == "" {
+		if oldsi, exists := b.pdata.Frames.Get(args.FrameID); exists {
+			si.FilePath = oldsi.FilePath
+		}
+	}
+	b.pdata.Frames.Add(args.FrameID, si)
 }

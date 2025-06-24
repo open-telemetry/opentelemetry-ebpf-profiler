@@ -34,14 +34,6 @@ type Config struct {
 	CGroupCacheElements uint32
 	// samplesPerSecond defines the number of samples per second.
 	SamplesPerSecond int
-	// HostID is the host ID to be sent to the collection agent.
-	HostID uint64
-	// KernelVersion is the kernel version of the host.
-	KernelVersion string
-	// HostName is the name of the host.
-	HostName string
-	// IPAddress is the IP address of the host.
-	IPAddress string
 
 	// Number of connection attempts to the collector after which we give up retrying.
 	MaxGRPCRetries uint32

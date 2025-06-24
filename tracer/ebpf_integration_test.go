@@ -20,8 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/proc"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -254,13 +254,16 @@ Loop:
 }
 
 func TestAllTracers(t *testing.T) {
-	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
+	s, err := kallsyms.NewSymbolizer()
 	require.NoError(t, err)
 
 	// Without this intermediate variable, typecheck complains about float64/int conversion.
 	threshold := 0.01 * float64(math.MaxUint32)
 
-	_, _, err = initializeMapsAndPrograms(kernelSymbols, &Config{
+	kmod, err := s.GetModuleByName(kallsyms.Kernel)
+	require.NoError(t, err)
+
+	_, _, err = initializeMapsAndPrograms(kmod, &Config{
 		IncludeTracers:      tracertypes.AllTracers(),
 		MapScaleFactor:      1,
 		FilterErrorFrames:   false,

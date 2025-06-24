@@ -225,10 +225,10 @@ const (
 
 var (
 	// regex for the interpreter executable or shared library
-	v8Regex = regexp.MustCompile(`^(?:.*/)?node(\d+)?$|^(?:.*/)libnode\.so(\.\d+)?$`)
+	v8Regex = regexp.MustCompile(`^(?:.*/)?(?:node|nsolid)(\d+)?$|^(?:.*/)libnode\.so(\.\d+)?$`)
 
 	// The FileID used for V8 stub frames
-	v8StubsFileID = libpf.NewFileID(0x578b, 0x1d)
+	v8StubsFileID = libpf.NewStubFileID(libpf.V8Frame)
 
 	// the source file entry for unknown code blobs
 	unknownSource = &v8Source{fileName: interpreter.UnknownSourceFile}
@@ -1884,7 +1884,7 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 func (d *v8Data) Unload(_ interpreter.EbpfHandler) {
 }
 
-func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) error {
+func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 	// Read the variables from the pfelf.File so we avoid failures if the process
 	// exists during extraction of the introspection data.
 	rm := ef.GetRemoteMemory()
@@ -1921,7 +1921,7 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File, syms libpf.SymbolFinder) 
 				if memberVal.Kind() == reflect.Bool {
 					s = "v8dbg_parent_" + className + "__" + memberName
 				}
-				addr, err := syms.LookupSymbolAddress(libpf.SymbolName(s))
+				addr, err := ef.LookupSymbolAddress(libpf.SymbolName(s))
 				if err != nil {
 					log.Debugf("V8: %s = not found", s)
 					if classType.Name == "FrameType" {
@@ -2146,18 +2146,14 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	var vers [3]uint32
 	for i, sym := range []string{"major", "minor", "build"} {
-		var addr libpf.SymbolValue
-		var raw [4]byte
 		// Resolve and read "v8::internal::Versions::XXXXXX_E"
+		var val []byte
 		sym = fmt.Sprintf("_ZN2v88internal7Version6%s_E", sym)
-		addr, err = ef.LookupSymbolAddress(libpf.SymbolName(sym))
-		if err == nil {
-			_, err = ef.ReadVirtualMemory(raw[:], int64(addr))
-		}
+		_, val, err = ef.SymbolData(libpf.SymbolName(sym), 4)
 		if err != nil {
-			return nil, fmt.Errorf("symbol '%s': %v", sym, err)
+			return nil, fmt.Errorf("unable to read '%s': %v", sym, err)
 		}
-		vers[i] = npsr.Uint32(raw[:], 0)
+		vers[i] = npsr.Uint32(val, 0)
 	}
 
 	version := vers[0]*0x1000000 + vers[1]*0x10000 + vers[2]
@@ -2167,19 +2163,11 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			vers[0], vers[1], vers[2])
 	}
 
-	var syms libpf.SymbolFinder
-	syms, err = ef.ReadDynamicSymbols()
-	if err != nil {
-		// Dynamic section does not exists for core dumps. Use the pfelf as
-		// symbol finder then.
-		syms = ef
-	}
-
 	d := &v8Data{
 		version: version,
 	}
 
-	addr, err := syms.LookupSymbolAddress("_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv")
+	addr, err := ef.LookupSymbolAddress("_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv")
 	if err == nil {
 		// If there is a big stack delta soon after v8::internal::Snapshot::DefaultSnapshotBlob()
 		// assume it is the V8 snapshot data.
@@ -2192,7 +2180,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 	}
 
-	sym, err := syms.LookupSymbol("_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE")
+	sym, err := ef.LookupSymbol("_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE")
 	if err == nil && sym.Size%3 == 0 && sym.Size < 3*256 {
 		// Symbol v8::internal::interpreter::Bytecodes::kBytecodeSizes:
 		// static const uint8_t Bytecodes::kBytecodeSizes[3][kBytecodeCount];
@@ -2215,7 +2203,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	// load introspection data
-	if err = d.readIntrospectionData(ef, syms); err != nil {
+	if err = d.readIntrospectionData(ef); err != nil {
 		return nil, err
 	}
 

@@ -22,7 +22,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-//nolint:golint,stylecheck,revive
 const (
 	// This is used to check if the VM mode is the default one
 	// From https://github.com/php/php-src/blob/PHP-8.0/Zend/zend_vm_opcodes.h#L29
@@ -71,7 +70,6 @@ type phpData struct {
 	rtAddr libpf.Address
 
 	// vmStructs reflects the PHP internal class names and the offsets of named field
-	//nolint:golint,stylecheck,revive
 	vmStructs struct {
 		// https://github.com/php/php-src/blob/PHP-7.4/Zend/zend_globals.h#L135
 		zend_executor_globals struct {
@@ -204,21 +202,16 @@ func recoverExecuteExJumpLabelAddress(ef *pfelf.File) (libpf.SymbolValue, error)
 	// executor function, has been such at least since PHP7.0. This is guaranteed
 	// to be the vm executor function in PHP JIT'd code, since the JIT is (currently)
 	// inoperable with overridden execute_ex's
-	executeExAddr, err := ef.LookupSymbolAddress("execute_ex")
-	if err != nil {
-		return libpf.SymbolValueInvalid,
-			fmt.Errorf("could not find execute_ex: %w", err)
-	}
 
 	// The address we care about varies from being 47 bytes in to about 107 bytes in,
-	// so we'll read 128 bytes. This might need to be adjusted up in future.
-	code := make([]byte, 128)
-	if _, err = ef.ReadVirtualMemory(code, int64(executeExAddr)); err != nil {
+	// so we'll cap at 128 bytes. This might need to be adjusted up in future.
+	addr, code, err := ef.SymbolData("execute_ex", 128)
+	if err != nil {
 		return libpf.SymbolValueInvalid,
-			fmt.Errorf("could not read from executeExAddr: %w", err)
+			fmt.Errorf("unable to read 'execute_ex': %w", err)
 	}
 
-	returnAddress, err := retrieveExecuteExJumpLabelAddressWrapper(code, executeExAddr)
+	returnAddress, err := retrieveExecuteExJumpLabelAddressWrapper(code, addr)
 	if err != nil {
 		return libpf.SymbolValueInvalid,
 			fmt.Errorf("reading the return address from execute_ex failed (%w)",
@@ -235,23 +228,17 @@ func determineVMKind(ef *pfelf.File) (uint, error) {
 
 	// This is a publicly exposed function in PHP that returns the VM type
 	// This has been implemented in PHP since at least 7.2
-	vmKindAddr, err := ef.LookupSymbolAddress("zend_vm_kind")
-	if err != nil {
-		return 0, fmt.Errorf("zend_vm_kind not found: %w", err)
-	}
 
 	// We should only need around 32 bytes here, since this function should be
 	// really short (e.g a mov and a ret).
-	code := make([]byte, 32)
-	if _, err = ef.ReadVirtualMemory(code, int64(vmKindAddr)); err != nil {
-		return 0, fmt.Errorf("could not read from zend_vm_kind: %w", err)
+	_, code, err := ef.SymbolData("zend_vm_kind", 64)
+	if err != nil {
+		return 0, fmt.Errorf("unable to read 'zend_vm_kind': %w", err)
 	}
-
 	vmKind, err := retrieveZendVMKindWrapper(code)
 	if err != nil {
 		return 0, fmt.Errorf("an error occurred decoding zend_vm_kind: %w", err)
 	}
-
 	return vmKind, nil
 }
 

@@ -42,6 +42,7 @@ type TraceAndMetaKey struct {
 	// containerID is annotated based on PID information
 	ContainerID string
 	Pid         int64
+	Tid         int64
 	// Process name is retrieved from /proc/PID/comm
 	ProcessName string
 	// Executable path is retrieved from /proc/PID/exe
@@ -51,6 +52,13 @@ type TraceAndMetaKey struct {
 	// `SampleAttrProducer` instance. May be nil.
 	ExtraMeta any
 }
+
+// TraceEventsTree stores samples and their related metadata in a tree-like
+// structure optimized for the OTel Profiling protocol representation.
+type TraceEventsTree map[ContainerID]map[libpf.Origin]KeyToEventMapping
+
+// ContainerID represents an extracted key from /proc/<PID>/cgroup.
+type ContainerID string
 
 // KeyToEventMapping supports temporary mapping traces to additional information.
 type KeyToEventMapping map[TraceAndMetaKey]*TraceEvents
