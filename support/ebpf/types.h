@@ -301,6 +301,12 @@ enum {
   // number of failures to unwind code object due to its large size
   metricID_UnwindDotnetErrCodeTooLarge,
 
+  // number of attempts to read Go custom labels
+  metricID_UnwindGoLabelsAttempts,
+
+  // number of failures to read Go custom labels
+  metricID_UnwindGoLabelsFailures,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -328,6 +334,7 @@ typedef enum TracePrograms {
   PROG_UNWIND_RUBY,
   PROG_UNWIND_V8,
   PROG_UNWIND_DOTNET,
+  PROG_GO_LABELS,
   NUM_TRACER_PROGS,
 } TracePrograms;
 
@@ -524,6 +531,22 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
   ApmSpanID transaction_id;
 } ApmCorrelationBuf;
 
+#define CUSTOM_LABEL_MAX_KEY_LEN COMM_LEN
+// Big enough to hold UUIDs, etc.
+#define CUSTOM_LABEL_MAX_VAL_LEN 48
+
+typedef struct CustomLabel {
+  char key[CUSTOM_LABEL_MAX_KEY_LEN];
+  char val[CUSTOM_LABEL_MAX_VAL_LEN];
+} CustomLabel;
+
+#define MAX_CUSTOM_LABELS 10
+
+typedef struct CustomLabelsArray {
+  unsigned len;
+  CustomLabel labels[MAX_CUSTOM_LABELS];
+} CustomLabelsArray;
+
 // Container for a stack trace
 typedef struct Trace {
   // The process ID
@@ -540,6 +563,8 @@ typedef struct Trace {
   ApmSpanID apm_transaction_id;
   // APM trace ID or all-zero if not present.
   ApmTraceID apm_trace_id;
+  // Custom Labels
+  CustomLabelsArray custom_labels;
   // The kernel stack ID.
   s32 kernel_stack_id;
   // The number of frames in the stack.
@@ -573,7 +598,7 @@ typedef struct UnwindState {
   u64 rax, r9, r11, r13, r15;
 #elif defined(__aarch64__)
   // Current register values for named registers
-  u64 lr, r22;
+  u64 lr, r22, r28;
 #endif
 
   // The executable ID/hash associated with PC
@@ -681,6 +706,31 @@ typedef struct PythonUnwindScratchSpace {
   u8 code[192];
 } PythonUnwindScratchSpace;
 
+// https://github.com/golang/go/blob/6885bad7dd/src/cmd/compile/internal/types/size.go#L28
+struct GoString {
+  char *str;
+  u64 len;
+};
+
+// https://github.com/golang/go/blob/6885bad7dd/src/cmd/compile/internal/types/size.go#L20
+struct GoSlice {
+  void *array;
+  u64 len;
+  s64 cap;
+};
+
+// https://github.com/golang/go/blob/6885bad7dd/src/runtime/map.go#L109
+typedef struct GoMapBucket {
+  char tophash[8];
+  struct GoString keys[8];
+  struct GoString values[8];
+  void *overflow;
+} GoMapBucket;
+
+typedef struct CustomLabelsState {
+  void *go_m_ptr;
+} CustomLabelsState;
+
 // Per-CPU info for the stack being built. This contains the stack as well as
 // meta-data on the number of eBPF tail-calls used so far to construct it.
 typedef struct PerCPURecord {
@@ -696,6 +746,8 @@ typedef struct PerCPURecord {
   PHPUnwindState phpUnwindState;
   // The current Ruby unwinder state.
   RubyUnwindState rubyUnwindState;
+  // State for Go and Native custom labels
+  CustomLabelsState customLabelsState;
   union {
     // Scratch space for the Dotnet unwinder.
     DotnetUnwindScratchSpace dotnetUnwindScratch;
@@ -705,6 +757,10 @@ typedef struct PerCPURecord {
     V8UnwindScratchSpace v8UnwindScratch;
     // Scratch space for the Python unwinder
     PythonUnwindScratchSpace pythonUnwindScratch;
+    // Go labels scratch
+    GoMapBucket goMapBucket;
+    // Scratch for Go 1.24 labels
+    struct GoString labels[MAX_CUSTOM_LABELS * 2];
   };
   // Mask to indicate which unwinders are complete
   u32 unwindersDone;
@@ -878,4 +934,14 @@ typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
 
-#endif
+typedef struct GoLabelsOffsets {
+  u32 m_offset;
+  u32 curg;
+  u32 labels;
+  u32 hmap_count;
+  u32 hmap_log2_bucket_count;
+  u32 hmap_buckets;
+  s32 tls_offset;
+} GoLabelsOffsets;
+
+#endif // OPTI_TYPES_H

@@ -641,6 +641,12 @@ const (
 	// Number of Go frames that failed symbolization
 	IDGoSymbolizationFailure = 277
 
+	// Number of attempts to read Go custom labels
+	IDUnwindGoLabelsAttempts = 278
+
+	// Number of failures reading Go custom labels
+	IDUnwindGoLabelsFailures = 279
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 278
+	IDMax = 280
 )
