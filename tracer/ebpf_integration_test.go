@@ -7,6 +7,7 @@ package tracer
 
 import (
 	"context"
+	"math"
 	"runtime"
 	"sync"
 	"testing"
@@ -136,7 +137,7 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
-		OffCPUThreshold:        support.OffCPUThresholdMax,
+		OffCPUThreshold:        1 * math.MaxUint32,
 	})
 	require.NoError(t, err)
 
@@ -256,6 +257,9 @@ func TestAllTracers(t *testing.T) {
 	s, err := kallsyms.NewSymbolizer()
 	require.NoError(t, err)
 
+	// Without this intermediate variable, typecheck complains about float64/int conversion.
+	threshold := 0.01 * float64(math.MaxUint32)
+
 	kmod, err := s.GetModuleByName(kallsyms.Kernel)
 	require.NoError(t, err)
 
@@ -266,7 +270,7 @@ func TestAllTracers(t *testing.T) {
 		KernelVersionCheck:  false,
 		DebugTracer:         false,
 		BPFVerifierLogLevel: 0,
-		OffCPUThreshold:     10,
+		OffCPUThreshold:     uint32(threshold),
 	})
 	require.NoError(t, err)
 }
