@@ -15,8 +15,6 @@ func RegisterPyroscopeFlags(fs *flag.FlagSet, args *controller.Config) {
 		"",
 	)
 	fs.StringVar(&args.SymbCachePath, "pyroscope-symb-cache-path", "/tmp/symb-cache", "")
-	fs.StringVar(&args.PyroscopeUsername, "pyroscope-username", "", "")
-	fs.StringVar(&args.PyroscopePasswordFile, "pyroscope-password-file", "", "")
 	fs.BoolVar(
 		&args.PyroscopeDynamicProfilingPolicy,
 		"pyroscope-dynamic-profiling-policy",

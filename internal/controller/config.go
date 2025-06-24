@@ -40,8 +40,6 @@ type Config struct {
 
 	Reporter reporter.Reporter
 
-	PyroscopeUsername               string
-	PyroscopePasswordFile           string
 	PyroscopeDynamicProfilingPolicy bool
 	SymbCachePath                   string
 	SymbCacheSizeEntries            int
