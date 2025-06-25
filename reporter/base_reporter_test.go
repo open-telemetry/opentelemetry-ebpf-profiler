@@ -3,11 +3,13 @@ package reporter
 import (
 	"testing"
 
+	lru "github.com/elastic/go-freelru"
 	"github.com/stretchr/testify/assert"
 )
 
 //nolint:lll
 func TestExtractContainerID(t *testing.T) {
+
 	tests := []struct {
 		cgroupv2Path        string
 		expectedContainerID string
@@ -30,10 +32,19 @@ func TestExtractContainerID(t *testing.T) {
 		},
 	}
 
+	cache, err := lru.NewSynced[string, string](1, hashString)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	br := baseReporter{
+		cgroupv2PathToContainerID: cache,
+	}
+
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.expectedContainerID, func(t *testing.T) {
-			gotContainerID := extractContainerID(tc.cgroupv2Path)
+			gotContainerID := br.extractContainerID(tc.cgroupv2Path)
 			assert.Equal(t, tc.expectedContainerID, gotContainerID)
 		})
 	}

@@ -41,13 +41,20 @@ type OTLPReporter struct {
 
 // NewOTLP returns a new instance of OTLPReporter
 func NewOTLP(cfg *Config) (*OTLPReporter, error) {
-	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
+	cgroupv2paths, err := lru.NewSynced[libpf.PID, string](cfg.CGroupv2PathCacheElements,
 		func(pid libpf.PID) uint32 { return uint32(pid) })
 	if err != nil {
 		return nil, err
 	}
 	// Set a lifetime to reduce risk of invalid data in case of PID reuse.
-	cgroupv2ID.SetLifetime(90 * time.Second)
+	cgroupv2paths.SetLifetime(90 * time.Second)
+
+	containerIDs, err := lru.NewSynced[string, string](cfg.ContainerIDCacheElements, hashString)
+	if err != nil {
+		return nil, err
+	}
+	// Set a lifetime to reduce the risk of invalid data.
+	containerIDs.SetLifetime(90 * time.Second)
 
 	// Next step: Dynamically configure the size of this LRU.
 	// Currently, we use the length of the JSON array in
@@ -71,13 +78,14 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 
 	return &OTLPReporter{
 		baseReporter: &baseReporter{
-			cfg:          cfg,
-			name:         cfg.Name,
-			version:      cfg.Version,
-			pdata:        data,
-			cgroupv2ID:   cgroupv2ID,
-			traceEvents:  xsync.NewRWMutex(eventsTree),
-			hostmetadata: hostmetadata,
+			cfg:                       cfg,
+			name:                      cfg.Name,
+			version:                   cfg.Version,
+			pdata:                     data,
+			cgroupv2paths:             cgroupv2paths,
+			cgroupv2PathToContainerID: containerIDs,
+			traceEvents:               xsync.NewRWMutex(eventsTree),
+			hostmetadata:              hostmetadata,
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),
 			},
@@ -110,7 +118,7 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 	}, func() {
 		// Allow the GC to purge expired entries to avoid memory leaks.
 		r.pdata.Purge()
-		r.cgroupv2ID.PurgeExpired()
+		r.cgroupv2paths.PurgeExpired()
 	})
 
 	// When Stop() is called and a signal to 'stop' is received, then:
