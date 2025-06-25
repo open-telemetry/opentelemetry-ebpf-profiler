@@ -165,7 +165,7 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 	b.pdata.Frames.Add(args.FrameID, si)
 }
 
-// extractContainerID extracts the container ID from a cgroup v2 path or
+// lookupContainerID extracts the container ID from a cgroup v2 path or
 // returns an empty string otherwise.
 func (b *baseReporter) lookupContainerID(pid libpf.PID) (string, error) {
 	if v, ok := b.pidToContainerID.GetAndRefresh(pid, 90*time.Second); ok {
