@@ -134,18 +134,23 @@ Any [Maintainer] can merge the PR once the above criteria have been met.
 
 ## Approvers and Maintainers
 
-### Approvers
-
-- [Florian Lehner](https://github.com/florianl), Elastic
-- [Joel Höner](https://github.com/athre0z)
-- [Tim Rühsen](https://github.com/rockdaboot), Elastic
-
 ### Maintainers
 
 - [Christos Kalkanis](https://github.com/christos68k), Elastic
 - [Dmitry Filimonov](https://github.com/petethepig), Pyroscope/Grafana
 - [Felix Geisendörfer](https://github.com/felixge), Datadog
 - [Timo Teräs](https://github.com/fabled)
+
+For more information about the maintainer role, see the [community repository](https://github.com/open-telemetry/community/blob/main/community-membership.md#maintainer).
+
+### Approvers
+
+- [Florian Lehner](https://github.com/florianl), Elastic
+- [Joel Höner](https://github.com/athre0z)
+- [Tim Rühsen](https://github.com/rockdaboot), Elastic
+- [Damien Mathieu](https://github.com/dmathieu), Elastic
+
+For more information about the approver role, see the [community repository](https://github.com/open-telemetry/community/blob/main/community-membership.md#approver).
 
 ### Become an Approver or a Maintainer
 
