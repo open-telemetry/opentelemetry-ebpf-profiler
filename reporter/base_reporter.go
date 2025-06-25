@@ -7,7 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
+	"os"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -35,11 +35,8 @@ type baseReporter struct {
 	// pdata holds the generator for the data being exported.
 	pdata *pdata.Pdata
 
-	// cgroupv2paths caches PID to cgroupv2 path information for cgroupv2 containers.
-	cgroupv2paths *lru.SyncedLRU[libpf.PID, string]
-
-	// cgroupv2PathToContainerID caches cgroup v2 path to contaienr ID information.
-	cgroupv2PathToContainerID *lru.SyncedLRU[string, string]
+	// pidToContainerID caches PID to container ID for cgroupv2 containers.
+	pidToContainerID *lru.SyncedLRU[libpf.PID, string]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
 	traceEvents xsync.RWMutex[samples.TraceEventsTree]
@@ -49,18 +46,6 @@ type baseReporter struct {
 }
 
 var errUnknownOrigin = errors.New("unknown trace origin")
-
-var (
-	// `([0-9a-fA-F]+)`      : This is the main capturing group. It greedily matches
-	//                         one or more hexadecimal characters (0-9, a-f, A-F).
-	//                         This will capture the full hash regardless of its length.
-	// `(?:\.scope)?`        : Non-capturing group that optionally matches the literal
-	//                         ".scope" suffix.
-	// `$`                   : Anchors the match to the end of the line.
-	// This regex effectively finds the last hexadecimal string right before the end
-	// of the line, optionally suffixed with ".scope".
-	containerIDRegex = regexp.MustCompile(`([0-9a-fA-F]+)(?:\.scope)?$`)
-)
 
 func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
@@ -112,13 +97,10 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		extraMeta = b.cfg.ExtraSampleAttrProd.CollectExtraSampleMeta(trace, meta)
 	}
 
-	cgroupv2Path, err := libpf.LookupCgroupv2(b.cgroupv2paths, meta.PID)
+	containerID, err := b.lookupContainerID(meta.PID)
 	if err != nil {
-		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
-			meta.PID, err)
+		return err
 	}
-
-	containerID := b.extractContainerID(cgroupv2Path)
 
 	key := samples.TraceAndMetaKey{
 		Hash:           trace.Hash,
@@ -185,15 +167,20 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 
 // extractContainerID extracts the container ID from a cgroup v2 path or
 // returns an empty string otherwise.
-func (b *baseReporter) extractContainerID(cgroupv2Path string) string {
-	if v, ok := b.cgroupv2PathToContainerID.GetAndRefresh(cgroupv2Path, 90*time.Second); ok {
-		return v
+func (b *baseReporter) lookupContainerID(pid libpf.PID) (string, error) {
+	if v, ok := b.pidToContainerID.GetAndRefresh(pid, 90*time.Second); ok {
+		return v, nil
 	}
-	matches := containerIDRegex.FindStringSubmatch(cgroupv2Path)
-	if len(matches) > 1 {
-		b.cgroupv2PathToContainerID.Add(cgroupv2Path, matches[1])
-		return matches[1]
+
+	// Slow path
+	pidCgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
+	if err != nil {
+		return "", err
 	}
-	b.cgroupv2PathToContainerID.Add(cgroupv2Path, "")
-	return ""
+	defer pidCgroupFile.Close()
+
+	containerID := extractContainerID(pidCgroupFile)
+
+	b.pidToContainerID.Add(pid, containerID)
+	return containerID, nil
 }

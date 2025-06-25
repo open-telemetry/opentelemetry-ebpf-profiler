@@ -30,10 +30,8 @@ type Config struct {
 	ExecutablesCacheElements uint32
 	// FramesCacheElements defines the item capacity of the frames cache.
 	FramesCacheElements uint32
-	// CGroupv2PathCacheElements defines the item capacity of the cgroup v2 path cache.
-	CGroupv2PathCacheElements uint32
-	// ContainerIDCacheElements defines the item capacity of the container ID cache.
-	ContainerIDCacheElements uint32
+	// PIDToContainerIDCacheElements defines the item capacity of the pid cache.
+	PIDToContainerIDCacheElements uint32
 	// samplesPerSecond defines the number of samples per second.
 	SamplesPerSecond int
 

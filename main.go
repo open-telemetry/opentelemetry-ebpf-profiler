@@ -114,10 +114,9 @@ func mainWithExitCode() exitCode {
 		ReportInterval:           intervals.ReportInterval(),
 		ExecutablesCacheElements: 16384,
 		// Next step: Calculate FramesCacheElements from numCores and samplingRate.
-		FramesCacheElements:       131072,
-		CGroupv2PathCacheElements: 1024,
-		ContainerIDCacheElements:  256,
-		SamplesPerSecond:          cfg.SamplesPerSecond,
+		FramesCacheElements:           131072,
+		PIDToContainerIDCacheElements: 1024,
+		SamplesPerSecond:              cfg.SamplesPerSecond,
 	})
 	if err != nil {
 		log.Error(err)
