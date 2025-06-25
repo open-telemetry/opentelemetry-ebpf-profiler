@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 )
@@ -202,7 +203,7 @@ func TestLookupFDE(t *testing.T) {
 	require.NoError(t, err)
 	defer elf.Close()
 	for _, check := range checks {
-		actual, err := LookupFDE(elf, check.at)
+		actual, err := LookupFDE(elf, libpf.Address(check.at))
 		if check.expected == (FDE{}) {
 			require.Error(t, err)
 		} else {

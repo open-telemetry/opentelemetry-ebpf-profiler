@@ -7,6 +7,7 @@ import (
 	"errors"
 	"sort"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
@@ -16,7 +17,7 @@ type FDE struct {
 }
 
 // LookupFDE performs a binary search in .eh_frame_hdr for an FDE covering the given addr.
-func LookupFDE(ef *pfelf.File, addr uintptr) (FDE, error) {
+func LookupFDE(ef *pfelf.File, addr libpf.Address) (FDE, error) {
 	t, err := newEhFrameTable(ef)
 	if err != nil {
 		return FDE{}, err
@@ -25,7 +26,7 @@ func LookupFDE(ef *pfelf.File, addr uintptr) (FDE, error) {
 	idx := sort.Search(t.count(), func(idx int) bool {
 		t.position(idx)
 		ipStart, _, _ := t.parseHdrEntry() // ignoring error, check bounds later
-		return ipStart > addr
+		return ipStart > uintptr(addr)
 	})
 	idx--
 	if idx < 0 {
@@ -40,7 +41,7 @@ func LookupFDE(ef *pfelf.File, addr uintptr) (FDE, error) {
 	if err != nil {
 		return FDE{}, err
 	}
-	if addr < fde.ipStart || addr >= fde.ipStart+fde.ipLen {
+	if uintptr(addr) < fde.ipStart || uintptr(addr) >= fde.ipStart+fde.ipLen {
 		return FDE{}, errors.New("FDE not found")
 	}
 
