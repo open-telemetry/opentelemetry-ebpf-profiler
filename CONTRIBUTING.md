@@ -148,6 +148,7 @@ For more information about the maintainer role, see the [community repository](h
 - [Florian Lehner](https://github.com/florianl), Elastic
 - [Joel Höner](https://github.com/athre0z)
 - [Tim Rühsen](https://github.com/rockdaboot), Elastic
+- [Damien Mathieu](https://github.com/dmathieu), Elastic
 
 For more information about the approver role, see the [community repository](https://github.com/open-telemetry/community/blob/main/community-membership.md#approver).
 
