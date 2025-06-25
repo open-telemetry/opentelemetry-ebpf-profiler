@@ -96,11 +96,13 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		extraMeta = b.cfg.ExtraSampleAttrProd.CollectExtraSampleMeta(trace, meta)
 	}
 
-	containerID, err := libpf.LookupCgroupv2(b.cgroupv2ID, meta.PID)
+	cgroupv2Path, err := libpf.LookupCgroupv2(b.cgroupv2ID, meta.PID)
 	if err != nil {
 		log.Debugf("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
 			meta.PID, err)
 	}
+
+	containerID := extractContainerID(cgroupv2Path)
 
 	key := samples.TraceAndMetaKey{
 		Hash:           trace.Hash,
