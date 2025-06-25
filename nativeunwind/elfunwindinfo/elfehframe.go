@@ -312,7 +312,7 @@ func (r *reader) expression() ([]dwarfExpression, error) {
 }
 
 // formatLen returns the length of a field encoded with enc encoding.
-func (r *reader) formatLen(enc encoding) int {
+func formatLen(enc encoding) int {
 	switch enc & encFormatMask {
 	case encFormatData2:
 		return 2
@@ -380,7 +380,6 @@ type cieInfo struct {
 
 // fdeInfo contains one Frame Description Entry (FDE)
 type fdeInfo struct {
-	len     uint64
 	ciePos  uint64
 	ipLen   uintptr
 	ipStart uintptr
@@ -904,22 +903,18 @@ func isSignalTrampoline(efCode *pfelf.File, fde *fdeInfo) bool {
 	return bytes.Equal(fdeCode, sigretCode)
 }
 
-// parseFDE reads and processes one Frame Description Entry and returns the size of
-// the CIE/FDE entry, and amends the intervals to deltas table.
-// The FDE format is described in:
-// http://dwarfstd.org/doc/DWARF5.pdf §6.4.1
-// https://refspecs.linuxfoundation.org/LSB_5.0.0/LSB-Core-generic/LSB-Core-generic/ehframechpt.html
-func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
-	cieCache *lru.LRU[uint64, *cieInfo], sorted bool) (size uintptr, err error) {
+// parses first fields of FDE, specifically PC Begin, PC Range
+func parseFDEHDR(r *reader, ef *pfelf.File, ipStart uintptr,
+	cieCache *lru.LRU[uint64, *cieInfo]) (fdeLen uint64, fde fdeInfo, info *cieInfo, err error) {
 	// Parse FDE header
 	fdeID := r.pos
-	fde := fdeInfo{sorted: sorted}
-	fde.len, fde.ciePos, err = r.parseHDR(false)
+	fde = fdeInfo{}
+	fdeLen, fde.ciePos, err = r.parseHDR(false)
 	if err != nil {
 		// parseHDR returns unconditionally the CIE/FDE entry length.
 		// Also return the size here. This is to allow walkFDEs to use
 		// this function and skip CIEs.
-		return uintptr(fde.len), err
+		return fdeLen, fde, nil, err
 	}
 
 	// Calculate CIE location, and get and cache the CIE data
@@ -930,7 +925,7 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 
 		cie = &cieInfo{}
 		if err = cr.parseCIE(cie); err != nil {
-			return 0, fmt.Errorf("CIE %#x failed: %v", fde.ciePos, err)
+			return 0, fde, nil, fmt.Errorf("CIE %#x failed: %v", fde.ciePos, err)
 		}
 
 		// initialize vmRegs from initialState - these can be used by restore
@@ -943,45 +938,63 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 			cur: newVMRegs(ef.Machine),
 		}
 		if err = st.step(&cr); err != nil {
-			return 0, err
+			return 0, fde, nil, err
 		}
 		if !cr.isValid() {
-			return 0, fmt.Errorf("CIE %x parsing failed", fde.ciePos)
+			return 0, fde, nil, fmt.Errorf("CIE %x parsing failed", fde.ciePos)
 		}
 		cie.initialState = st.cur
 		cieCache.Add(fde.ciePos, cie)
 	}
 
 	// Parse rest of FDE structure (CIE dependent part)
-	st := state{cie: cie, cur: cie.initialState}
-	fde.ipStart, err = r.ptr(st.cie.enc)
+
+	fde.ipStart, err = r.ptr(cie.enc)
 	if err != nil {
-		return 0, err
+		return 0, fde, nil, err
 	}
 	if ipStart != 0 && fde.ipStart != ipStart {
-		return 0, fmt.Errorf(
+		return 0, fde, nil, fmt.Errorf(
 			"FDE ipStart (%x) not matching search table FDE ipStart (%x)",
 			fde.ipStart, ipStart)
 	}
-	if st.cie.enc&encIndirect != 0 {
-		fde.ipLen, err = r.ptr(st.cie.enc)
+	if cie.enc&encIndirect != 0 {
+		fde.ipLen, err = r.ptr(cie.enc)
 	} else {
-		fde.ipLen, err = r.ptr(st.cie.enc & (encFormatMask | encSignedMask))
+		fde.ipLen, err = r.ptr(cie.enc & (encFormatMask | encSignedMask))
 	}
 	if err != nil {
-		return 0, err
+		return 0, fde, nil, err
 	}
 
-	if st.cie.hasAugmentation {
+	if cie.hasAugmentation {
 		r.pos += uintptr(r.uleb())
 	}
 	if !r.isValid() {
-		return 0, fmt.Errorf("FDE %x not valid after header", fdeID)
+		return 0, fde, nil, fmt.Errorf("FDE %x not valid after header", fdeID)
 	}
+	return fdeLen, fde, cie, nil
+}
+
+// parseFDE reads and processes one Frame Description Entry and returns the size of
+// the CIE/FDE entry, and amends the intervals to deltas table.
+// The FDE format is described in:
+// http://dwarfstd.org/doc/DWARF5.pdf §6.4.1
+// https://refspecs.linuxfoundation.org/LSB_5.0.0/LSB-Core-generic/LSB-Core-generic/ehframechpt.html
+func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
+	cieCache *lru.LRU[uint64, *cieInfo], sorted bool) (size uintptr, err error) {
+	// Parse FDE header
+	fdeID := r.pos
+	fdeLen, fde, cie, err := parseFDEHDR(r, ef, ipStart, cieCache)
+	if err != nil {
+		return uintptr(fdeLen), err
+	}
+	st := state{cie: cie, cur: cie.initialState}
+	fde.sorted = sorted
 
 	// Process the FDE opcodes
 	if !ee.hooks.fdeHook(st.cie, &fde) {
-		return uintptr(fde.len), nil
+		return uintptr(fdeLen), nil
 	}
 	st.loc = fde.ipStart
 
@@ -1035,7 +1048,7 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 		Info:    info,
 	}, sorted)
 
-	return uintptr(fde.len), nil
+	return uintptr(fdeLen), nil
 }
 
 // elfRegion is a reference to a region within an ELF file. Such a region reference can be
@@ -1171,69 +1184,26 @@ func findEhSections(ef *pfelf.File) (
 	return ehFrameHdrSec, ehFrameSec, nil
 }
 
-// ehFrameHdrParser is a helper structure holding bits needed to decode bin search
-// table in the .eh_frame_hdr
-type ehFrameHdrParser struct {
-	hdr      *ehFrameHdr
-	fdeCount uintptr
-	r        reader
-	cieCache *lru.LRU[uint64, *cieInfo]
-}
-
-// newHdrParser returns a new ehFrameHdrParser
-func (ee *elfExtractor) newHdrParser(ehFrameHdrSec *elfRegion) (hp ehFrameHdrParser, err error) {
-	hp = ehFrameHdrParser{
-		hdr: (*ehFrameHdr)(unsafe.Pointer(&ehFrameHdrSec.data[0])),
-		r:   ehFrameHdrSec.reader(unsafe.Sizeof(ehFrameHdr{}), false),
-	}
-	if _, err = hp.r.ptr(hp.hdr.ehFramePtrEnc); err != nil {
-		return hp, err
-	}
-	if hp.fdeCount, err = hp.r.ptr(hp.hdr.fdeCountEnc); err != nil {
-		return hp, err
-	}
-	if hp.cieCache, err = lru.New[uint64, *cieInfo](cieCacheSize, hashUint64); err != nil {
-		return hp, err
-	}
-
-	return hp, nil
-}
-
-// parseHdrEntry parsers an entry in the .eh_frame_hdr binary search table and the corresponding
-// entry in the .eh_frame section
-func (ee *elfExtractor) parseHdrEntry(ef *pfelf.File, hp *ehFrameHdrParser,
-	ehFrameSec *elfRegion) error {
-	ipStart, err := hp.r.ptr(hp.hdr.tableEnc)
-	if err != nil {
-		return err
-	}
-	fdeAddr, err := hp.r.ptr(hp.hdr.tableEnc)
-	if err != nil {
-		return err
-	}
-	if fdeAddr < ehFrameSec.vaddr {
-		return fmt.Errorf("FDE %#x before section start %#x",
-			fdeAddr, ehFrameSec.vaddr)
-	}
-	fr := ehFrameSec.reader(fdeAddr-ehFrameSec.vaddr, false)
-	_, err = ee.parseFDE(&fr, ef, ipStart, hp.cieCache, true)
-	if err != nil && !errors.Is(err, errEmptyEntry) {
-		return fmt.Errorf("failed to parse FDE: %v", err)
-	}
-	return nil
-}
-
 // walkBinSearchTable parses FDEs by following all references in the binary search table in the
 // `.eh_frame_hdr` section.
 func (ee *elfExtractor) walkBinSearchTable(ef *pfelf.File, ehFrameHdrSec *elfRegion,
 	ehFrameSec *elfRegion) error {
-	hp, err := ee.newHdrParser(ehFrameHdrSec)
+	t, err := newEhFrameTableFromSections(ehFrameHdrSec, ehFrameSec)
 	if err != nil {
 		return err
 	}
-	for f := uintptr(0); f < hp.fdeCount; f++ {
-		if err = ee.parseHdrEntry(ef, &hp, ehFrameSec); err != nil {
+	for f := uintptr(0); f < t.fdeCount; f++ {
+		var (
+			ipStart uintptr
+			fr      reader
+		)
+		ipStart, fr, entryErr := t.parseHdrEntry()
+		if entryErr != nil {
 			return err
+		}
+		_, err = ee.parseFDE(&fr, ef, ipStart, t.cieCache, true)
+		if err != nil && !errors.Is(err, errEmptyEntry) {
+			return fmt.Errorf("failed to parse FDE: %v", err)
 		}
 	}
 	return nil

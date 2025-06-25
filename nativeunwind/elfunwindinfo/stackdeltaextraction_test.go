@@ -4,9 +4,9 @@
 package elfunwindinfo
 
 import (
+	"bytes"
 	"encoding/base64"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -166,32 +166,31 @@ func TestLookupFDE(t *testing.T) {
 	}{
 		{at: 0x0, expected: FDE{}},
 		{at: 0x840, expected: FDE{}},
-		{at: 0x850, expected: FDE{0x850, 0x860}},
-		{at: 0x855, expected: FDE{0x850, 0x860}},
-		{at: 0x859, expected: FDE{0x850, 0x860}},
-
-		{at: 0x860, expected: FDE{0x860, 0x8c8}},
-		{at: 0x865, expected: FDE{0x860, 0x8c8}},
-		{at: 0x8c7, expected: FDE{0x860, 0x8c8}},
+		{at: 0x850, expected: FDE{PCBegin: 0x850, PCRange: 0x10}},
+		{at: 0x855, expected: FDE{PCBegin: 0x850, PCRange: 0x10}},
+		{at: 0x859, expected: FDE{PCBegin: 0x850, PCRange: 0x10}},
+		{at: 0x860, expected: FDE{PCBegin: 0x860, PCRange: 0x68}},
+		{at: 0x865, expected: FDE{PCBegin: 0x860, PCRange: 0x68}},
+		{at: 0x8c7, expected: FDE{PCBegin: 0x860, PCRange: 0x68}},
 		{at: 0x8c8, expected: FDE{}},
 		{at: 0x8c9, expected: FDE{}},
 		{at: 0x8cf, expected: FDE{}},
-		{at: 0x8d0, expected: FDE{0x8d0, 0x9ef}},
-		{at: 0x8d3, expected: FDE{0x8d0, 0x9ef}},
-		{at: 0x9ee, expected: FDE{0x8d0, 0x9ef}},
+		{at: 0x8d0, expected: FDE{PCBegin: 0x8d0, PCRange: 0x11f}},
+		{at: 0x8d3, expected: FDE{PCBegin: 0x8d0, PCRange: 0x11f}},
+		{at: 0x9ee, expected: FDE{PCBegin: 0x8d0, PCRange: 0x11f}},
 		{at: 0x9ef, expected: FDE{}},
-		{at: 0x9f0, expected: FDE{0x9f0, 0xa1b}},
-		{at: 0x9f1, expected: FDE{0x9f0, 0xa1b}},
-		{at: 0xa1a, expected: FDE{0x9f0, 0xa1b}},
+		{at: 0x9f0, expected: FDE{PCBegin: 0x9f0, PCRange: 0x2b}},
+		{at: 0x9f1, expected: FDE{PCBegin: 0x9f0, PCRange: 0x2b}},
+		{at: 0xa1a, expected: FDE{PCBegin: 0x9f0, PCRange: 0x2b}},
 		{at: 0xa1b, expected: FDE{}},
 		{at: 0xa1c, expected: FDE{}},
 		{at: 0xb1f, expected: FDE{}},
-		{at: 0xb20, expected: FDE{0xb20, 0xb85}},
-		{at: 0xb32, expected: FDE{0xb20, 0xb85}},
-		{at: 0xb84, expected: FDE{0xb20, 0xb85}},
+		{at: 0xb20, expected: FDE{PCBegin: 0xb20, PCRange: 0x65}},
+		{at: 0xb32, expected: FDE{PCBegin: 0xb20, PCRange: 0x65}},
+		{at: 0xb84, expected: FDE{PCBegin: 0xb20, PCRange: 0x65}},
 		{at: 0xb85, expected: FDE{}},
-		{at: 0xb90, expected: FDE{0xb90, 0xb92}},
-		{at: 0xb91, expected: FDE{0xb90, 0xb92}},
+		{at: 0xb90, expected: FDE{PCBegin: 0xb90, PCRange: 0x2}},
+		{at: 0xb91, expected: FDE{PCBegin: 0xb90, PCRange: 0x2}},
 		{at: 0xb92, expected: FDE{}},
 		{at: 0xb93, expected: FDE{}},
 		{at: 0x1000, expected: FDE{}},
@@ -199,13 +198,9 @@ func TestLookupFDE(t *testing.T) {
 	}
 	buffer, err := base64.StdEncoding.DecodeString(usrBinVolname)
 	require.NoError(t, err)
-	filename := filepath.Join(t.TempDir(), "dwarf_extract_elf_")
-	err = os.WriteFile(filename, buffer, 0o600)
+	elf, err := pfelf.NewFile(bytes.NewReader(buffer), 0, false)
 	require.NoError(t, err)
-	elfRef := pfelf.NewReference(filename, pfelf.SystemOpener)
-	defer elfRef.Close()
-	elf, err := elfRef.GetELF()
-	require.NoError(t, err)
+	defer elf.Close()
 	for _, check := range checks {
 		actual, err := LookupFDE(elf, check.at)
 		if check.expected == (FDE{}) {
