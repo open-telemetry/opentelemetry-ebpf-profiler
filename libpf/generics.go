@@ -34,3 +34,32 @@ func SliceAllEqual[T comparable](s []T, value T) bool {
 
 	return true
 }
+
+// OrderedSet is a set that keeps order of insertion.
+type OrderedSet[T comparable] map[T]int
+
+// Add adds an element to the set and returns its index.
+func (os OrderedSet[T]) Add(key T) int {
+	idx, _ := os.AddWithCheck(key)
+	return idx
+}
+
+func (os OrderedSet[T]) AddWithCheck(key T) (int, bool) {
+	if idx, exists := os[key]; exists {
+		return idx, true
+	}
+
+	idx := len(os)
+	os[key] = idx
+	return idx, false
+}
+
+// ToSlice returns the elements of the set as a slice, in insertion order.
+func (os OrderedSet[T]) ToSlice() []T {
+	ret := make([]T, len(os))
+	for key, idx := range os {
+		ret[idx] = key
+	}
+
+	return ret
+}
