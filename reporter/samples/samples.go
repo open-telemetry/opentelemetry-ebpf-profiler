@@ -84,9 +84,3 @@ type SourceInfo struct {
 	FunctionName   string
 	FilePath       string
 }
-
-// FuncInfo is a helper to construct profile.Function messages.
-type FuncInfo struct {
-	Name     string
-	FileName string
-}

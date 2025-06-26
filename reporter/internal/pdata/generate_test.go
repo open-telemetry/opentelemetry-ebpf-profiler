@@ -74,13 +74,13 @@ func TestGetDummyMappingIndex(t *testing.T) {
 			idx, exists := mappingSet.AddWithCheck(tt.fileID)
 			if !exists {
 				mapping := dic.MappingTable().AppendEmpty()
-				mapping.SetFilenameStrindex(int32(stringSet.Add("")))
+				mapping.SetFilenameStrindex(stringSet.Add(""))
 				mgr.AppendOptionalString(mapping.AttributeIndices(),
 					semconv.ProcessExecutableBuildIDHtlhashKey,
 					tt.fileID.StringNoQuotes())
 			}
 
-			assert.Equal(t, tt.wantIndex, int32(idx))
+			assert.Equal(t, tt.wantIndex, idx)
 			assert.Equal(t, tt.wantMappingSet, mappingSet)
 			assert.Equal(t, tt.wantStringSet, stringSet)
 

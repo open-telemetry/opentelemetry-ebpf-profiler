@@ -9,6 +9,7 @@ func (os OrderedSet[T]) Add(key T) int32 {
 	return idx
 }
 
+// AddWithCheck adds an element to the set, returns its index and presence state.
 func (os OrderedSet[T]) AddWithCheck(key T) (int32, bool) {
 	if idx, exists := os[key]; exists {
 		return idx, true
@@ -27,4 +28,20 @@ func (os OrderedSet[T]) ToSlice() []T {
 	}
 
 	return ret
+}
+
+// locationInfo is a helper used to deduplicate Locations.
+type locationInfo struct {
+	address       uint64
+	mappingIndex  int32
+	frameType     string
+	hasLine       bool
+	lineNumber    int64
+	functionIndex int32
+}
+
+// funcInfo is a helper to construct profile.Function messages.
+type funcInfo struct {
+	nameIdx     int32
+	fileNameIdx int32
 }

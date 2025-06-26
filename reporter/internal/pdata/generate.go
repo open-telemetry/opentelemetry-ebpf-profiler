@@ -27,16 +27,6 @@ const (
 	FrameMapLifetime        = 1 * time.Hour
 )
 
-// Used as a key in an ordered set, in order to deduplicate Locations.
-type locationInfo struct {
-	address       uint64
-	mappingIndex  int32
-	frameType     string
-	hasLine       bool
-	lineNumber    int64
-	functionIndex int32
-}
-
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
 func (p *Pdata) Generate(tree samples.TraceEventsTree,
@@ -45,14 +35,14 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	dic := profiles.ProfilesDictionary()
 
 	// Temporary helpers that will build the various tables in ProfilesDictionary.
-	stringSet := OrderedSet[string]{}
-	funcSet := OrderedSet[samples.FuncInfo]{}
-	mappingSet := OrderedSet[libpf.FileID]{}
-	locationSet := OrderedSet[locationInfo]{}
+	stringSet := make(OrderedSet[string], 64)
+	funcSet := make(OrderedSet[funcInfo], 64)
+	mappingSet := make(OrderedSet[libpf.FileID], 64)
+	locationSet := make(OrderedSet[locationInfo], 64)
 
 	// By specification, the first element should be empty.
 	stringSet.Add("")
-	funcSet.Add(samples.FuncInfo{Name: "", FileName: ""})
+	funcSet.Add(funcInfo{nameIdx: stringSet.Add(""), fileNameIdx: stringSet.Add("")})
 
 	for containerID, originToEvents := range tree {
 		if len(originToEvents) == 0 {
@@ -93,12 +83,14 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	}
 	for v, idx := range funcSet {
 		f := funcTable.At(int(idx))
-		f.SetNameStrindex(stringSet.Add(v.Name))
-		f.SetFilenameStrindex(stringSet.Add(v.FileName))
+		f.SetNameStrindex(v.nameIdx)
+		f.SetFilenameStrindex(v.fileNameIdx)
 	}
 
+	stringTable := dic.StringTable()
+	stringTable.EnsureCapacity(len(stringSet))
 	for _, val := range stringSet.ToSlice() {
-		dic.StringTable().Append(val)
+		stringTable.Append(val)
 	}
 
 	return profiles, nil
@@ -109,7 +101,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 func (p *Pdata) setProfile(
 	dic pprofile.ProfilesDictionary,
 	stringSet OrderedSet[string],
-	funcSet OrderedSet[samples.FuncInfo],
+	funcSet OrderedSet[funcInfo],
 	mappingSet OrderedSet[libpf.FileID],
 	locationSet OrderedSet[locationInfo],
 	origin libpf.Origin,
@@ -204,9 +196,9 @@ func (p *Pdata) setProfile(
 					libpf.NewFrameID(traceInfo.Files[i], traceInfo.Linenos[i]),
 					FramesCacheLifetime); exists {
 					locInfo.lineNumber = int64(si.LineNumber)
-					fi := samples.FuncInfo{
-						Name:     si.FunctionName,
-						FileName: si.FilePath,
+					fi := funcInfo{
+						nameIdx:     stringSet.Add(si.FunctionName),
+						fileNameIdx: stringSet.Add(si.FilePath),
 					}
 					locInfo.functionIndex = funcSet.Add(fi)
 				} else {
@@ -215,9 +207,9 @@ func (p *Pdata) setProfile(
 					// To differentiate this case from the case where no information about
 					// the file ID is available at all, we use a different name for reported
 					// function.
-					fi := samples.FuncInfo{
-						Name:     "UNRESOLVED",
-						FileName: frameKind.String(),
+					fi := funcInfo{
+						nameIdx:     stringSet.Add("UNRESOLVED"),
+						fileNameIdx: stringSet.Add(frameKind.String()),
 					}
 					locInfo.functionIndex = funcSet.Add(fi)
 				}
