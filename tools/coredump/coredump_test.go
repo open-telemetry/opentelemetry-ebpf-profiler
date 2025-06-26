@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 )
 
 func TestCoreDumps(t *testing.T) {
@@ -16,7 +15,7 @@ func TestCoreDumps(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, cases)
 
-	store, err := modulestore.InitModuleStore(localCachePath)
+	store, err := initModuleStore()
 	require.NoError(t, err)
 
 	for _, filename := range cases {
