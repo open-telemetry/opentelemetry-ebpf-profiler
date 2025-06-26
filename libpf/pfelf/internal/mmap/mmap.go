@@ -38,7 +38,7 @@ func (r *ReaderAt) Take() io.Closer {
 // Close closes the reader.
 func (r *ReaderAt) Close() error {
 	// Drop reference
-	if r.refCount.Add(-1) != 0 {
+	if r.refCount.Add(-1) > 0 {
 		return nil
 	}
 	// No more references - unmap data
