@@ -30,7 +30,7 @@ type EhFrameTable struct {
 	cieCache      *lru.LRU[uint64, *cieInfo]
 }
 
-func NewEhFrameTable(ef *pfelf.File) (EhFrameTable, error) {
+func NewEhFrameTable(ef *pfelf.File) (*EhFrameTable, error) {
 	ehFrameHdrSec, ehFrameSec, err := findEhSections(ef)
 	if err != nil {
 		return EhFrameTable{}, fmt.Errorf("failed to get EH sections: %w", err)
