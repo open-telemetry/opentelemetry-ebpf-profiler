@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/otel/attribute"
 
-	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
@@ -162,7 +162,7 @@ func (p *Pdata) setProfile(
 					// semantic convention for build_id, replace these hard coded
 					// strings.
 					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-						semconv.ProcessExecutableBuildIDGnuKey,
+						semconv.ProcessExecutableBuildIDGNUKey,
 						ei.GnuBuildID)
 					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
 						semconv.ProcessExecutableBuildIDHtlhashKey,
@@ -226,7 +226,7 @@ func (p *Pdata) setProfile(
 		for key, value := range traceInfo.EnvVars {
 			attrMgr.AppendOptionalString(
 				sample.AttributeIndices(),
-				attribute.Key("env."+key),
+				attribute.Key("process.environment_variable."+key),
 				value)
 		}
 
