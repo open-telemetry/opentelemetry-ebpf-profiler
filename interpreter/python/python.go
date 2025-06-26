@@ -13,7 +13,6 @@ import (
 	"io"
 	"reflect"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -666,13 +665,13 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 			symbolName, err)
 	}
 	var value libpf.SymbolValue
-	switch runtime.GOARCH {
-	case "arm64":
+	switch ef.Machine {
+	case elf.EM_AARCH64:
 		value, err = decodeStubArgumentARM64(code, memoryBase), nil
-	case "amd64":
+	case elf.EM_X86_64:
 		value, err = decodeStubArgumentAMD64(code, uint64(codeAddress), uint64(memoryBase))
 	default:
-		return libpf.SymbolValueInvalid, fmt.Errorf("unsupported arch %s", runtime.GOARCH)
+		return libpf.SymbolValueInvalid, fmt.Errorf("unsupported arch %s", ef.Machine.String())
 	}
 
 	// Sanity check the value range and alignment
