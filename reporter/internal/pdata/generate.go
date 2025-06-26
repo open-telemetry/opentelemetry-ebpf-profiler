@@ -27,6 +27,16 @@ const (
 	FrameMapLifetime        = 1 * time.Hour
 )
 
+// Used as a key in an ordered set, in order to deduplicate Locations.
+type locationInfo struct {
+	address       uint64
+	mappingIndex  int32
+	frameType     string
+	hasLine       bool
+	lineNumber    int64
+	functionIndex int32
+}
+
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
 func (p *Pdata) Generate(tree samples.TraceEventsTree,
@@ -38,6 +48,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	stringSet := libpf.OrderedSet[string]{}
 	funcSet := libpf.OrderedSet[samples.FuncInfo]{}
 	mappingSet := libpf.OrderedSet[libpf.FileID]{}
+	locationSet := libpf.OrderedSet[locationInfo]{}
 
 	// By specification, the first element should be empty.
 	stringSet.Add("")
@@ -67,7 +78,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic,
-				stringSet, funcSet, mappingSet,
+				stringSet, funcSet, mappingSet, locationSet,
 				origin, originToEvents[origin], prof); err != nil {
 				return profiles, err
 			}
@@ -100,6 +111,7 @@ func (p *Pdata) setProfile(
 	stringSet libpf.OrderedSet[string],
 	funcSet libpf.OrderedSet[samples.FuncInfo],
 	mappingSet libpf.OrderedSet[libpf.FileID],
+	locationSet libpf.OrderedSet[locationInfo],
 	origin libpf.Origin,
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
@@ -124,8 +136,7 @@ func (p *Pdata) setProfile(
 
 	attrMgr := samples.NewAttrTableManager(dic.AttributeTable())
 
-	locationIndex := int32(dic.LocationTable().Len())
-	startLocationIndex := locationIndex
+	locationIndex := int32(profile.LocationIndices().Len())
 	var startTS, endTS pcommon.Timestamp
 	for traceKey, traceInfo := range events {
 		sample := profile.Sample().AppendEmpty()
@@ -145,11 +156,10 @@ func (p *Pdata) setProfile(
 
 		// Walk every frame of the trace.
 		for i := range traceInfo.FrameTypes {
-			loc := dic.LocationTable().AppendEmpty()
-			loc.SetAddress(uint64(traceInfo.Linenos[i]))
-			attrMgr.AppendOptionalString(loc.AttributeIndices(),
-				semconv.ProfileFrameTypeKey, traceInfo.FrameTypes[i].String())
-
+			locInfo := locationInfo{
+				address:   uint64(traceInfo.Linenos[i]),
+				frameType: traceInfo.FrameTypes[i].String(),
+			}
 			switch frameKind := traceInfo.FrameTypes[i]; frameKind {
 			case libpf.NativeFrame:
 				// As native frames are resolved in the backend, we use Mapping to
@@ -181,24 +191,24 @@ func (p *Pdata) setProfile(
 						semconv.ProcessExecutableBuildIDHtlhashKey,
 						traceInfo.Files[i].StringNoQuotes())
 				}
-				loc.SetMappingIndex(int32(locationMappingIndex))
+				locInfo.mappingIndex = int32(locationMappingIndex)
 			case libpf.AbortFrame:
 				// Next step: Figure out how the OTLP protocol
 				// could handle artificial frames, like AbortFrame,
 				// that are not originated from a native or interpreted
 				// program.
 			default:
-				// Store interpreted frame information as a Line message:
-				line := loc.Line().AppendEmpty()
+				// Store interpreted frame information as a Line message
+				locInfo.hasLine = true
 				if si, exists := p.Frames.GetAndRefresh(
 					libpf.NewFrameID(traceInfo.Files[i], traceInfo.Linenos[i]),
 					FramesCacheLifetime); exists {
-					line.SetLine(int64(si.LineNumber))
+					locInfo.lineNumber = int64(si.LineNumber)
 					fi := samples.FuncInfo{
 						Name:     si.FunctionName,
 						FileName: si.FilePath,
 					}
-					line.SetFunctionIndex(int32(funcSet.Add(fi)))
+					locInfo.functionIndex = int32(funcSet.Add(fi))
 				} else {
 					// At this point, we do not have enough information for the frame.
 					// Therefore, we report a dummy entry and use the interpreter as filename.
@@ -209,11 +219,11 @@ func (p *Pdata) setProfile(
 						Name:     "UNRESOLVED",
 						FileName: frameKind.String(),
 					}
-					line.SetFunctionIndex(int32(funcSet.Add(fi)))
+					locInfo.functionIndex = int32(funcSet.Add(fi))
 				}
 
 				idx, exists := mappingSet.AddWithCheck(traceInfo.Files[i])
-				loc.SetMappingIndex(int32(idx))
+				locInfo.mappingIndex = int32(idx)
 				if !exists {
 					// To be compliant with the protocol, generate a dummy mapping entry.
 					mapping := dic.MappingTable().AppendEmpty()
@@ -222,8 +232,24 @@ func (p *Pdata) setProfile(
 						semconv.ProcessExecutableBuildIDHtlhashKey,
 						traceInfo.Files[i].StringNoQuotes())
 				}
+			} // End frame type switch
+
+			idx, exists := locationSet.AddWithCheck(locInfo)
+			if !exists {
+				// Add a new Location to the dictionary
+				loc := dic.LocationTable().AppendEmpty()
+				loc.SetAddress(locInfo.address)
+				loc.SetMappingIndex(locInfo.mappingIndex)
+				if locInfo.hasLine {
+					line := loc.Line().AppendEmpty()
+					line.SetLine(locInfo.lineNumber)
+					line.SetFunctionIndex(locInfo.functionIndex)
+				}
+				attrMgr.AppendOptionalString(loc.AttributeIndices(),
+					semconv.ProfileFrameTypeKey, locInfo.frameType)
 			}
-		}
+			profile.LocationIndices().Append(int32(idx))
+		} // End per-frame processing
 
 		exeName := traceKey.ExecutablePath
 		if exeName != "" {
@@ -261,14 +287,9 @@ func (p *Pdata) setProfile(
 
 		sample.SetLocationsLength(int32(len(traceInfo.FrameTypes)))
 		locationIndex += sample.LocationsLength()
-	}
-	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())
+	} // End sample processing
 
-	// profile.LocationIndices is not optional, and we only write elements into
-	// profile.Location that at least one sample references.
-	for i := startLocationIndex; i < locationIndex; i++ {
-		profile.LocationIndices().Append(i)
-	}
+	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())
 
 	profile.SetDuration(endTS - startTS)
 	profile.SetStartTime(startTS)
