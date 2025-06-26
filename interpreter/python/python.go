@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
-	"math"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -662,17 +661,17 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 	symbolName libpf.SymbolName) (libpf.SymbolValue, error) {
 	// Read and decode the code for the symbol
-	addr, code, err := ef.SymbolData(symbolName, 64)
+	sym, code, err := ef.SymbolData(symbolName, 64)
 	if err != nil {
 		return libpf.SymbolValueInvalid, fmt.Errorf("unable to read '%s': %v",
 			symbolName, err)
 	}
-	value, err := decodeStubArgumentWrapper(code, addr, memoryBase)
+	value, err := decodeStubArgumentWrapper(code, sym.Address, memoryBase)
 
 	// Sanity check the value range and alignment
 	if err != nil || value%4 != 0 {
 		return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x):  %v",
-			symbolName, addr, hex.Dump(code), value, err)
+			symbolName, sym.Address, hex.Dump(code), value, err)
 	}
 	// If base symbol (_PyRuntime) is not provided, accept any found value.
 	if memoryBase == 0 && value != 0 {
@@ -683,7 +682,7 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 		return value, nil
 	}
 	return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x)",
-		symbolName, addr, hex.Dump(code), value)
+		symbolName, sym.Address, hex.Dump(code), value)
 }
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
@@ -755,7 +754,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		autoTLSKey += 4
 	}
 
-	interpRanges, err := findInterpreterRanges(info.FileID(), ef)
+	interpRanges, err := findInterpreterRanges(info, ef)
 	if err != nil {
 		return nil, err
 	}
@@ -833,7 +832,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	return pd, nil
 }
 
-func findInterpreterRanges(fid host.FileID, ef *pfelf.File) (interpRanges []util.Range, err error) {
+func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File) (interpRanges []util.Range, err error) {
 	// The Python main interpreter loop history in CPython git is:
 	//
 	//nolint:lll
@@ -842,24 +841,24 @@ func findInterpreterRanges(fid host.FileID, ef *pfelf.File) (interpRanges []util
 	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
 	// 3cebf938727 v3.6  2016-09-05 _PyEval_EvalFrameDefault(PyFrameObject*,int)
 	// 49fd7fa4431 v3.0  2006-04-21 PyEval_EvalFrameEx(PyFrameObject*,int)
-	var interp libpf.SymbolValue
+	var interp *libpf.Symbol
 	var code []byte
-	if interp, code, err = ef.SymbolData("_PyEval_EvalFrameDefault", math.MaxInt64); err != nil {
-		interp, code, err = ef.SymbolData("PyEval_EvalFrameEx", math.MaxInt64)
+	const maxCodeSize = 128 * 1024 // observed ~65k in the wild
+	if interp, code, err = ef.SymbolData("_PyEval_EvalFrameDefault", maxCodeSize); err != nil {
+		interp, code, err = ef.SymbolData("PyEval_EvalFrameEx", maxCodeSize)
 	}
 	if err != nil {
 		return nil, errors.New("no _PyEval_EvalFrameDefault/PyEval_EvalFrameEx symbol found")
 	}
-	hotRange := util.Range{
-		Start: uint64(interp),
-		End:   uint64(interp) + uint64(len(code)),
-	}
 	interpRanges = make([]util.Range, 0, 2)
-	interpRanges = append(interpRanges, hotRange)
-	coldRange, err := findColdRange(ef, code, hotRange)
+	interpRanges = append(interpRanges, util.Range{
+		Start: uint64(interp.Address),
+		End:   uint64(interp.Address) + interp.Size,
+	})
+	coldRange, err := findColdRange(ef, code, interp)
 	if err != nil {
-		log.WithError(err).Errorf("failed to recover python ranges %s",
-			fid.StringNoQuotes())
+		log.WithError(err).Warnf("failed to recover python ranges %s",
+			info.FileName())
 	}
 	if coldRange != (util.Range{}) {
 		interpRanges = append(interpRanges, coldRange)
@@ -872,7 +871,7 @@ func findInterpreterRanges(fid host.FileID, ef *pfelf.File) (interpRanges []util
 // symbol using an instance of elfunwindinfo.EhFrameTable.
 // findColdRange returns the util.Range of the `.cold` symbol or an empty util.Range
 // https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
-func findColdRange(ef *pfelf.File, code []byte, interp util.Range) (util.Range, error) {
+func findColdRange(ef *pfelf.File, code []byte, interp *libpf.Symbol) (util.Range, error) {
 	if ef.Machine != elf.EM_X86_64 {
 		return util.Range{}, nil
 	}
