@@ -33,13 +33,13 @@ type EhFrameTable struct {
 func NewEhFrameTable(ef *pfelf.File) (*EhFrameTable, error) {
 	ehFrameHdrSec, ehFrameSec, err := findEhSections(ef)
 	if err != nil {
-		return EhFrameTable{}, fmt.Errorf("failed to get EH sections: %w", err)
+		return nil, fmt.Errorf("failed to get EH sections: %w", err)
 	}
 	if ehFrameSec == nil {
-		return EhFrameTable{}, errors.New(".eh_frame not found")
+		return nil, errors.New(".eh_frame not found")
 	}
 	if ehFrameHdrSec == nil {
-		return EhFrameTable{}, errors.New(".eh_frame_hdr not found")
+		return nil, errors.New(".eh_frame_hdr not found")
 	}
 	return newEhFrameTableFromSections(ehFrameHdrSec, ehFrameSec, ef.Machine)
 }
@@ -75,8 +75,8 @@ func (e *EhFrameTable) LookupFDE(addr libpf.Address) (FDE, error) {
 
 func newEhFrameTableFromSections(ehFrameHdrSec *elfRegion,
 	ehFrameSec *elfRegion, efm elf.Machine,
-) (hp EhFrameTable, err error) {
-	hp = EhFrameTable{
+) (hp *EhFrameTable, err error) {
+	hp = &EhFrameTable{
 		hdr: (*ehFrameHdr)(unsafe.Pointer(&ehFrameHdrSec.data[0])),
 		r:   ehFrameHdrSec.reader(unsafe.Sizeof(ehFrameHdr{}), false),
 	}
