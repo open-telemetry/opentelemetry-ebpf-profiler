@@ -30,6 +30,8 @@ type EhFrameTable struct {
 	cieCache      *lru.LRU[uint64, *cieInfo]
 }
 
+// NewEhFrameTable creates a new EhFrameTable from the given pfelf.File
+// The returned EhFrameTable must not be used concurrently
 func NewEhFrameTable(ef *pfelf.File) (*EhFrameTable, error) {
 	ehFrameHdrSec, ehFrameSec, err := findEhSections(ef)
 	if err != nil {
