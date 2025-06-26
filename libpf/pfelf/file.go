@@ -187,7 +187,7 @@ func (f *File) Close() (err error) {
 		err = f.closer.Close()
 		f.closer = nil
 	}
-	return
+	return err
 }
 
 // NewFile creates a new ELF file object that borrows the given reader.
@@ -345,6 +345,25 @@ func getString(section []byte, start int) (string, bool) {
 		return "", false
 	}
 	return string(section[start : start+slen]), true
+}
+
+// NoMmapCloser is a no-op io.Closer which is returned from Take() when
+// the File is not memory mapped.
+type NoMmapCloser libpf.Void
+
+// Close implements io.Closer interface.
+func (_ NoMmapCloser) Close() error {
+	return nil
+}
+
+// Take takes a reference on the backing mmapped data. This allows callers to
+// keep slices returned by Section.Data() and Prog.Data() after File has been
+// GCd. The returned Close() will release the reference on data.
+func (f *File) Take() io.Closer {
+	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
+		return mapping.Take()
+	}
+	return NoMmapCloser{}
 }
 
 // LoadSections loads the ELF file sections
