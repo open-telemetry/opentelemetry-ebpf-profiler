@@ -4,8 +4,6 @@ BPF_LINK ?= llvm-link-17
 LLC ?= llc-17
 CLANG_FORMAT ?= clang-format-17
 
-DEBUG_FLAGS = -DOPTI_DEBUG -g
-
 # Detect native architecture and translate to GOARCH.
 NATIVE_ARCH := $(shell uname -m)
 ifeq ($(NATIVE_ARCH),x86_64)
@@ -30,11 +28,7 @@ else
 TARGET_FLAGS = -target x86_64-linux-gnu
 endif
 
-ifeq ($(BUILD_TYPE),debug)
-	TARGET_FLAGS+=$(DEBUG_FLAGS)
-endif
-
-FLAGS=$(TARGET_FLAGS) \
+FLAGS=$(TARGET_FLAGS) -g \
 	-fno-jump-tables \
 	-nostdlib \
 	-nostdinc \
@@ -62,12 +56,6 @@ amd64:
 
 arm64:
 	$(MAKE) TARGET_ARCH=arm64
-
-debug-amd64:
-	$(MAKE) BUILD_TYPE=debug TARGET_ARCH=amd64
-
-debug-arm64:
-	$(MAKE) BUILD_TYPE=debug TARGET_ARCH=arm64
 
 errors.h: ../../tools/errors-codegen/errors.json
 	go run ../../tools/errors-codegen/main.go bpf $@
