@@ -13,6 +13,7 @@ import (
 	"io"
 	"reflect"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -659,17 +660,25 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 	symbolName libpf.SymbolName) (libpf.SymbolValue, error) {
 	// Read and decode the code for the symbol
-	addr, code, err := ef.SymbolData(symbolName, 64)
+	codeAddress, code, err := ef.SymbolData(symbolName, 64)
 	if err != nil {
 		return libpf.SymbolValueInvalid, fmt.Errorf("unable to read '%s': %v",
 			symbolName, err)
 	}
-	value, err := decodeStubArgumentWrapper(code, addr, memoryBase)
+	var value libpf.SymbolValue
+	switch runtime.GOARCH {
+	case "arm64":
+		value, err = decodeStubArgumentARM64(code, memoryBase), nil
+	case "amd64":
+		value, err = decodeStubArgumentAMD64(code, uint64(codeAddress), uint64(memoryBase))
+	default:
+		return libpf.SymbolValueInvalid, fmt.Errorf("unsupported arch %s", runtime.GOARCH)
+	}
 
 	// Sanity check the value range and alignment
 	if err != nil || value%4 != 0 {
 		return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x):  %v",
-			symbolName, addr, hex.Dump(code), value, err)
+			symbolName, codeAddress, hex.Dump(code), value, err)
 	}
 	// If base symbol (_PyRuntime) is not provided, accept any found value.
 	if memoryBase == 0 && value != 0 {
@@ -680,7 +689,7 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 		return value, nil
 	}
 	return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x)",
-		symbolName, addr, hex.Dump(code), value)
+		symbolName, codeAddress, hex.Dump(code), value)
 }
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
