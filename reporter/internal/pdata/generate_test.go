@@ -17,52 +17,52 @@ import (
 func TestGetDummyMappingIndex(t *testing.T) {
 	for _, tt := range []struct {
 		name       string
-		mappingSet libpf.OrderedSet[libpf.FileID]
-		stringSet  libpf.OrderedSet[string]
+		mappingSet OrderedSet[libpf.FileID]
+		stringSet  OrderedSet[string]
 		fileID     libpf.FileID
 
 		wantIndex        int32
-		wantMappingSet   libpf.OrderedSet[libpf.FileID]
+		wantMappingSet   OrderedSet[libpf.FileID]
 		wantMappingTable []int32
-		wantStringSet    libpf.OrderedSet[string]
+		wantStringSet    OrderedSet[string]
 	}{
 		{
 			name: "with an index already in the file id mapping",
-			mappingSet: libpf.OrderedSet[libpf.FileID]{
+			mappingSet: OrderedSet[libpf.FileID]{
 				libpf.UnsymbolizedFileID: 42,
 			},
 			fileID:    libpf.UnsymbolizedFileID,
 			wantIndex: 42,
-			wantMappingSet: libpf.OrderedSet[libpf.FileID]{
+			wantMappingSet: OrderedSet[libpf.FileID]{
 				libpf.UnsymbolizedFileID: 42,
 			},
 		},
 		{
 			name:       "with an index not yet in the file id mapping",
-			mappingSet: libpf.OrderedSet[libpf.FileID]{},
-			stringSet:  libpf.OrderedSet[string]{},
+			mappingSet: OrderedSet[libpf.FileID]{},
+			stringSet:  OrderedSet[string]{},
 			fileID:     libpf.UnsymbolizedFileID,
 
 			wantIndex: 0,
-			wantMappingSet: libpf.OrderedSet[libpf.FileID]{
+			wantMappingSet: OrderedSet[libpf.FileID]{
 				libpf.UnsymbolizedFileID: 0,
 			},
 			wantMappingTable: []int32{0},
-			wantStringSet:    libpf.OrderedSet[string]{"": 0},
+			wantStringSet:    OrderedSet[string]{"": 0},
 		},
 		{
 			name: "with an index not yet in the file id mapping and a filename in the string table",
 
-			mappingSet: libpf.OrderedSet[libpf.FileID]{},
-			stringSet:  libpf.OrderedSet[string]{"": 42},
+			mappingSet: OrderedSet[libpf.FileID]{},
+			stringSet:  OrderedSet[string]{"": 42},
 			fileID:     libpf.UnsymbolizedFileID,
 
 			wantIndex: 0,
-			wantMappingSet: libpf.OrderedSet[libpf.FileID]{
+			wantMappingSet: OrderedSet[libpf.FileID]{
 				libpf.UnsymbolizedFileID: 0,
 			},
 			wantMappingTable: []int32{42},
-			wantStringSet:    libpf.OrderedSet[string]{"": 42},
+			wantStringSet:    OrderedSet[string]{"": 42},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

@@ -1,4 +1,4 @@
-package libpf
+package pdata
 
 import (
 	"testing"
@@ -13,7 +13,7 @@ func TestOrderedSet(t *testing.T) {
 		key  string
 
 		wantSet    OrderedSet[string]
-		wantIndex  int
+		wantIndex  int32
 		wantExists bool
 	}{
 		{
