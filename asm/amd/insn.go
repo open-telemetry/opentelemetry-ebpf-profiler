@@ -4,11 +4,9 @@
 package amd // import "go.opentelemetry.io/ebpf-profiler/asm/amd"
 import (
 	"bytes"
-	"errors"
-	"math"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/util"
 	"golang.org/x/arch/x86/x86asm"
 )
 
@@ -30,22 +28,12 @@ func DecodeSkippable(code []byte) (ok bool, size int) {
 // FindExternalJump decodes every instruction in the sym function and searches for
 // a relative jump outside itself - to an address not covered by the sym.
 // FindExternalJump returns the destination address of the relative jump outside the function or 0.
-func FindExternalJump(ef *pfelf.File, f *libpf.Symbol) (libpf.Address, error) {
+func FindExternalJump(code []byte, f util.Range) (libpf.Address, error) {
 	var (
-		err   error
-		inst  x86asm.Inst
-		start = int64(f.Address)
-		rip   = start
-		end   = int64(f.Address) + int64(f.Size)
-		code  []byte
+		err  error
+		inst x86asm.Inst
+		rip  = int64(f.Start)
 	)
-	code, err = ef.VirtualMemory(rip, int(f.Size), math.MaxInt)
-	if err != nil {
-		return 0, err
-	}
-	if int(f.Size) != len(code) {
-		return 0, errors.New("truncated code")
-	}
 	for len(code) > 0 {
 		if ok, l := DecodeSkippable(code); ok {
 			inst = x86asm.Inst{Op: x86asm.NOP, Len: l}
@@ -64,7 +52,7 @@ func FindExternalJump(ef *pfelf.File, f *libpf.Symbol) (libpf.Address, error) {
 			continue
 		} else {
 			dst := rip + int64(rel)
-			if dst >= int64(f.Address) && dst < end {
+			if dst >= int64(f.Start) && dst < int64(f.End) {
 				continue
 			}
 			return libpf.Address(dst), nil

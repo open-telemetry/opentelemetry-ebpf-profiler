@@ -34,12 +34,6 @@ func (fid FileID) StringNoQuotes() string {
 	return fmt.Sprintf("%016x%016x", uint64(fid), uint64(fid))
 }
 
-// Hash32 returns a 32 bits hash of the input.
-// It's main purpose is to be used as key for caching.
-func (fid FileID) Hash32() uint32 {
-	return uint32(fid)
-}
-
 // FileIDFromLibpf truncates a libpf.FileID to be a host.FileID.
 func FileIDFromLibpf(id libpf.FileID) FileID {
 	return FileID(id.Hi())
