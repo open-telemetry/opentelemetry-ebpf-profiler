@@ -4,6 +4,7 @@
 package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 
 import (
+	"fmt"
 	"path/filepath"
 	"slices"
 	"time"
@@ -29,8 +30,18 @@ const (
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
 func (p *Pdata) Generate(tree samples.TraceEventsTree,
-	agentName, agentVersion string) pprofile.Profiles {
+	agentName, agentVersion string) (pprofile.Profiles, error) {
 	profiles := pprofile.NewProfiles()
+	dic := profiles.ProfilesDictionary()
+
+	// Temporary helpers that will build the various tables in ProfilesDictionary.
+	stringSet := libpf.OrderedSet[string]{}
+	funcSet := libpf.OrderedSet[samples.FuncInfo]{}
+	mappingSet := libpf.OrderedSet[libpf.FileID]{}
+
+	// By specification, the first element should be empty.
+	stringSet.Add("")
+	funcSet.Add(samples.FuncInfo{Name: "", FileName: ""})
 
 	for containerID, originToEvents := range tree {
 		if len(originToEvents) == 0 {
@@ -38,7 +49,8 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		}
 
 		rp := profiles.ResourceProfiles().AppendEmpty()
-		rp.Resource().Attributes().PutStr(string(semconv.ContainerIDKey), string(containerID))
+		rp.Resource().Attributes().PutStr(string(semconv.ContainerIDKey),
+			string(containerID))
 
 		sp := rp.ScopeProfiles().AppendEmpty()
 		sp.Scope().SetName(agentName)
@@ -49,61 +61,71 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			support.TraceOriginOffCPU,
 		} {
 			if len(originToEvents[origin]) == 0 {
-				// Do not append empty profiles, if there
-				// is not profiling data for this origin.
+				// Do not append empty profiles.
 				continue
 			}
 
 			prof := sp.Profiles().AppendEmpty()
-
-			p.setProfile(profiles.ProfilesDictionary(), origin, originToEvents[origin], prof)
+			if err := p.setProfile(dic,
+				stringSet, funcSet, mappingSet,
+				origin, originToEvents[origin], prof); err != nil {
+				return profiles, err
+			}
 		}
 	}
-	return profiles
+
+	// Populate the ProfilesDictionary tables.
+	funcTable := dic.FunctionTable()
+	funcTable.EnsureCapacity(len(funcSet))
+	for range funcSet {
+		funcTable.AppendEmpty()
+	}
+	for v, idx := range funcSet {
+		f := funcTable.At(idx)
+		f.SetNameStrindex(int32(stringSet.Add(v.Name)))
+		f.SetFilenameStrindex(int32(stringSet.Add(v.FileName)))
+	}
+
+	for _, val := range stringSet.ToSlice() {
+		dic.StringTable().Append(val)
+	}
+
+	return profiles, nil
 }
 
 // setProfile sets the data an OTLP profile with all collected samples up to
 // this moment.
 func (p *Pdata) setProfile(
 	dic pprofile.ProfilesDictionary,
+	stringSet libpf.OrderedSet[string],
+	funcSet libpf.OrderedSet[samples.FuncInfo],
+	mappingSet libpf.OrderedSet[libpf.FileID],
 	origin libpf.Origin,
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
-) {
-	// stringMap is a temporary helper that will build the StringTable.
-	// By specification, the first element should be empty.
-	stringMap := make(map[string]int32)
-	stringMap[""] = 0
-
-	// funcMap is a temporary helper that will build the Function array
-	// in profile and make sure information is deduplicated.
-	funcMap := make(map[samples.FuncInfo]int32)
-	funcMap[samples.FuncInfo{Name: "", FileName: ""}] = 0
-
+) error {
 	st := profile.SampleType().AppendEmpty()
 	switch origin {
 	case support.TraceOriginSampling:
-		st.SetTypeStrindex(getStringMapIndex(stringMap, "samples"))
-		st.SetUnitStrindex(getStringMapIndex(stringMap, "count"))
-
-		pt := profile.PeriodType()
-		pt.SetTypeStrindex(getStringMapIndex(stringMap, "cpu"))
-		pt.SetUnitStrindex(getStringMapIndex(stringMap, "nanoseconds"))
-
 		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
+		pt := profile.PeriodType()
+		pt.SetTypeStrindex(int32(stringSet.Add("cpu")))
+		pt.SetUnitStrindex(int32(stringSet.Add("nanoseconds")))
+
+		st.SetTypeStrindex(int32(stringSet.Add("samples")))
+		st.SetUnitStrindex(int32(stringSet.Add("count")))
 	case support.TraceOriginOffCPU:
-		st.SetTypeStrindex(getStringMapIndex(stringMap, "events"))
-		st.SetUnitStrindex(getStringMapIndex(stringMap, "nanoseconds"))
+		st.SetTypeStrindex(int32(stringSet.Add("events")))
+		st.SetUnitStrindex(int32(stringSet.Add("nanoseconds")))
 	default:
-		log.Errorf("Generating profile for unsupported origin %d", origin)
-		return
+		// Should never happen
+		return fmt.Errorf("generating profile for unsupported origin %d", origin)
 	}
 
-	// Temporary lookup to reference existing Mappings.
-	fileIDtoMapping := make(map[libpf.FileID]int32)
-
 	attrMgr := samples.NewAttrTableManager(dic.AttributeTable())
-	var locationIndex int32
+
+	locationIndex := int32(dic.LocationTable().Len())
+	startLocationIndex := locationIndex
 	var startTS, endTS pcommon.Timestamp
 	for traceKey, traceInfo := range events {
 		sample := profile.Sample().AppendEmpty()
@@ -112,7 +134,6 @@ func (p *Pdata) setProfile(
 		slices.Sort(traceInfo.Timestamps)
 		startTS = pcommon.Timestamp(traceInfo.Timestamps[0])
 		endTS = pcommon.Timestamp(traceInfo.Timestamps[len(traceInfo.Timestamps)-1])
-
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
 
 		switch origin {
@@ -133,18 +154,10 @@ func (p *Pdata) setProfile(
 			case libpf.NativeFrame:
 				// As native frames are resolved in the backend, we use Mapping to
 				// report these frames.
-
-				var locationMappingIndex int32
-				if tmpMappingIndex, exists := fileIDtoMapping[traceInfo.Files[i]]; exists {
-					locationMappingIndex = tmpMappingIndex
-				} else {
-					idx := int32(len(fileIDtoMapping))
-					fileIDtoMapping[traceInfo.Files[i]] = idx
-					locationMappingIndex = idx
-
+				locationMappingIndex, exists := mappingSet.AddWithCheck(traceInfo.Files[i])
+				if !exists {
 					ei, exists := p.Executables.GetAndRefresh(traceInfo.Files[i],
 						ExecutableCacheLifetime)
-
 					// Next step: Select a proper default value,
 					// if the name of the executable is not known yet.
 					fileName := "UNKNOWN"
@@ -156,7 +169,7 @@ func (p *Pdata) setProfile(
 					mapping.SetMemoryStart(uint64(traceInfo.MappingStarts[i]))
 					mapping.SetMemoryLimit(uint64(traceInfo.MappingEnds[i]))
 					mapping.SetFileOffset(traceInfo.MappingFileOffsets[i])
-					mapping.SetFilenameStrindex(getStringMapIndex(stringMap, fileName))
+					mapping.SetFilenameStrindex(int32(stringSet.Add(fileName)))
 
 					// Once SemConv and its Go package is released with the new
 					// semantic convention for build_id, replace these hard coded
@@ -168,7 +181,7 @@ func (p *Pdata) setProfile(
 						semconv.ProcessExecutableBuildIDHtlhashKey,
 						traceInfo.Files[i].StringNoQuotes())
 				}
-				loc.SetMappingIndex(locationMappingIndex)
+				loc.SetMappingIndex(int32(locationMappingIndex))
 			case libpf.AbortFrame:
 				// Next step: Figure out how the OTLP protocol
 				// could handle artificial frames, like AbortFrame,
@@ -177,27 +190,38 @@ func (p *Pdata) setProfile(
 			default:
 				// Store interpreted frame information as a Line message:
 				line := loc.Line().AppendEmpty()
-
 				if si, exists := p.Frames.GetAndRefresh(
 					libpf.NewFrameID(traceInfo.Files[i], traceInfo.Linenos[i]),
 					FramesCacheLifetime); exists {
 					line.SetLine(int64(si.LineNumber))
-
-					line.SetFunctionIndex(createFunctionEntry(funcMap,
-						si.FunctionName, si.FilePath))
+					fi := samples.FuncInfo{
+						Name:     si.FunctionName,
+						FileName: si.FilePath,
+					}
+					line.SetFunctionIndex(int32(funcSet.Add(fi)))
 				} else {
 					// At this point, we do not have enough information for the frame.
 					// Therefore, we report a dummy entry and use the interpreter as filename.
 					// To differentiate this case from the case where no information about
 					// the file ID is available at all, we use a different name for reported
 					// function.
-					line.SetFunctionIndex(createFunctionEntry(funcMap,
-						"UNRESOLVED", frameKind.String()))
+					fi := samples.FuncInfo{
+						Name:     "UNRESOLVED",
+						FileName: frameKind.String(),
+					}
+					line.SetFunctionIndex(int32(funcSet.Add(fi)))
 				}
 
-				// To be compliant with the protocol, generate a dummy mapping entry.
-				loc.SetMappingIndex(getDummyMappingIndex(fileIDtoMapping, stringMap,
-					attrMgr, dic, traceInfo.Files[i]))
+				idx, exists := mappingSet.AddWithCheck(traceInfo.Files[i])
+				loc.SetMappingIndex(int32(idx))
+				if !exists {
+					// To be compliant with the protocol, generate a dummy mapping entry.
+					mapping := dic.MappingTable().AppendEmpty()
+					mapping.SetFilenameStrindex(int32(stringSet.Add("")))
+					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+						semconv.ProcessExecutableBuildIDHtlhashKey,
+						traceInfo.Files[i].StringNoQuotes())
+				}
 			}
 		}
 
@@ -240,87 +264,14 @@ func (p *Pdata) setProfile(
 	}
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())
 
-	// Populate the deduplicated functions into profile.
-	funcTable := dic.FunctionTable()
-	funcTable.EnsureCapacity(len(funcMap))
-	for range funcMap {
-		funcTable.AppendEmpty()
-	}
-	for v, idx := range funcMap {
-		f := funcTable.At(int(idx))
-		f.SetNameStrindex(getStringMapIndex(stringMap, v.Name))
-		f.SetFilenameStrindex(getStringMapIndex(stringMap, v.FileName))
-	}
-
-	// When ranging over stringMap, the order will be according to the
-	// hash value of the key. To get the correct order for profile.StringTable,
-	// put the values in stringMap, in the correct array order.
-	stringTable := make([]string, len(stringMap))
-	for v, idx := range stringMap {
-		stringTable[idx] = v
-	}
-
-	for _, v := range stringTable {
-		dic.StringTable().Append(v)
-	}
-
 	// profile.LocationIndices is not optional, and we only write elements into
 	// profile.Location that at least one sample references.
-	for i := int32(0); i < int32(dic.LocationTable().Len()); i++ {
+	for i := startLocationIndex; i < locationIndex; i++ {
 		profile.LocationIndices().Append(i)
 	}
 
 	profile.SetDuration(endTS - startTS)
 	profile.SetStartTime(startTS)
-}
 
-// getStringMapIndex inserts or looks up the index for value in stringMap.
-func getStringMapIndex(stringMap map[string]int32, value string) int32 {
-	if idx, exists := stringMap[value]; exists {
-		return idx
-	}
-
-	idx := int32(len(stringMap))
-	stringMap[value] = idx
-
-	return idx
-}
-
-// createFunctionEntry adds a new function and returns its reference index.
-func createFunctionEntry(funcMap map[samples.FuncInfo]int32,
-	name string, fileName string,
-) int32 {
-	key := samples.FuncInfo{
-		Name:     name,
-		FileName: fileName,
-	}
-	if idx, exists := funcMap[key]; exists {
-		return idx
-	}
-
-	idx := int32(len(funcMap))
-	funcMap[key] = idx
-
-	return idx
-}
-
-// getDummyMappingIndex inserts or looks up an entry for interpreted FileIDs.
-func getDummyMappingIndex(fileIDtoMapping map[libpf.FileID]int32,
-	stringMap map[string]int32, attrMgr *samples.AttrTableManager,
-	dic pprofile.ProfilesDictionary,
-	fileID libpf.FileID,
-) int32 {
-	if mappingIndex, exists := fileIDtoMapping[fileID]; exists {
-		return mappingIndex
-	}
-
-	locationMappingIndex := int32(len(fileIDtoMapping))
-	fileIDtoMapping[fileID] = locationMappingIndex
-
-	mapping := dic.MappingTable().AppendEmpty()
-	mapping.SetFilenameStrindex(getStringMapIndex(stringMap, ""))
-	attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-		semconv.ProcessExecutableBuildIDHtlhashKey,
-		fileID.StringNoQuotes())
-	return locationMappingIndex
+	return nil
 }

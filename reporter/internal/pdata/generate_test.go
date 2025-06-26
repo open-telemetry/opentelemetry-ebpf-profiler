@@ -7,151 +7,82 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-func TestGetStringMapIndex(t *testing.T) {
-	for _, tt := range []struct {
-		name      string
-		stringMap map[string]int32
-		value     string
-
-		wantStringMap map[string]int32
-		wantIndex     int32
-	}{
-		{
-			name:      "with a value not yet in the string map",
-			stringMap: map[string]int32{},
-			value:     "test",
-
-			wantIndex:     0,
-			wantStringMap: map[string]int32{"test": 0},
-		},
-		{
-			name:      "with a value already in the string map",
-			stringMap: map[string]int32{"test": 42},
-			value:     "test",
-
-			wantIndex:     42,
-			wantStringMap: map[string]int32{"test": 42},
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			stringMap := tt.stringMap
-
-			i := getStringMapIndex(stringMap, tt.value)
-			assert.Equal(t, tt.wantIndex, i)
-			assert.Equal(t, tt.wantStringMap, stringMap)
-		})
-	}
-}
-
-func TestCreateFunctionEntry(t *testing.T) {
-	for _, tt := range []struct {
-		name     string
-		funcMap  map[samples.FuncInfo]int32
-		funcName string
-		fileName string
-
-		wantIndex   int32
-		wantFuncMap map[samples.FuncInfo]int32
-	}{
-		{
-			name:     "with ane entry not yet in the func map",
-			funcMap:  map[samples.FuncInfo]int32{},
-			funcName: "my_method",
-			fileName: "/tmp",
-
-			wantIndex: 0,
-			wantFuncMap: map[samples.FuncInfo]int32{
-				{Name: "my_method", FileName: "/tmp"}: 0,
-			},
-		},
-		{
-			name: "with ane entry already in the func map",
-			funcMap: map[samples.FuncInfo]int32{
-				{Name: "my_method", FileName: "/tmp"}: 42,
-			},
-			funcName: "my_method",
-			fileName: "/tmp",
-
-			wantIndex: 42,
-			wantFuncMap: map[samples.FuncInfo]int32{
-				{Name: "my_method", FileName: "/tmp"}: 42,
-			},
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			funcMap := tt.funcMap
-
-			i := createFunctionEntry(funcMap, tt.funcName, tt.fileName)
-			assert.Equal(t, tt.wantIndex, i)
-			assert.Equal(t, tt.wantFuncMap, funcMap)
-		})
-	}
-}
-
 func TestGetDummyMappingIndex(t *testing.T) {
 	for _, tt := range []struct {
-		name            string
-		fileIDToMapping map[libpf.FileID]int32
-		stringMap       map[string]int32
-		fileID          libpf.FileID
+		name       string
+		mappingSet libpf.OrderedSet[libpf.FileID]
+		stringSet  libpf.OrderedSet[string]
+		fileID     libpf.FileID
 
-		wantIndex           int32
-		wantFileIDToMapping map[libpf.FileID]int32
-		wantMappingTable    []int32
-		wantStringMap       map[string]int32
+		wantIndex        int32
+		wantMappingSet   libpf.OrderedSet[libpf.FileID]
+		wantMappingTable []int32
+		wantStringSet    libpf.OrderedSet[string]
 	}{
 		{
 			name: "with an index already in the file id mapping",
-			fileIDToMapping: map[libpf.FileID]int32{
+			mappingSet: libpf.OrderedSet[libpf.FileID]{
 				libpf.UnsymbolizedFileID: 42,
 			},
-			fileID: libpf.UnsymbolizedFileID,
-
+			fileID:    libpf.UnsymbolizedFileID,
 			wantIndex: 42,
+			wantMappingSet: libpf.OrderedSet[libpf.FileID]{
+				libpf.UnsymbolizedFileID: 42,
+			},
 		},
 		{
-			name:            "with an index not yet in the file id mapping",
-			fileIDToMapping: map[libpf.FileID]int32{},
-			stringMap:       map[string]int32{},
-			fileID:          libpf.UnsymbolizedFileID,
+			name:       "with an index not yet in the file id mapping",
+			mappingSet: libpf.OrderedSet[libpf.FileID]{},
+			stringSet:  libpf.OrderedSet[string]{},
+			fileID:     libpf.UnsymbolizedFileID,
 
 			wantIndex: 0,
-			wantFileIDToMapping: map[libpf.FileID]int32{
+			wantMappingSet: libpf.OrderedSet[libpf.FileID]{
 				libpf.UnsymbolizedFileID: 0,
 			},
 			wantMappingTable: []int32{0},
-			wantStringMap:    map[string]int32{"": 0},
+			wantStringSet:    libpf.OrderedSet[string]{"": 0},
 		},
 		{
 			name: "with an index not yet in the file id mapping and a filename in the string table",
 
-			fileIDToMapping: map[libpf.FileID]int32{},
-			stringMap:       map[string]int32{"": 42},
-			fileID:          libpf.UnsymbolizedFileID,
+			mappingSet: libpf.OrderedSet[libpf.FileID]{},
+			stringSet:  libpf.OrderedSet[string]{"": 42},
+			fileID:     libpf.UnsymbolizedFileID,
 
 			wantIndex: 0,
-			wantFileIDToMapping: map[libpf.FileID]int32{
+			wantMappingSet: libpf.OrderedSet[libpf.FileID]{
 				libpf.UnsymbolizedFileID: 0,
 			},
 			wantMappingTable: []int32{42},
-			wantStringMap:    map[string]int32{"": 42},
+			wantStringSet:    libpf.OrderedSet[string]{"": 42},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			fitm := tt.fileIDToMapping
-			stringMap := tt.stringMap
+			mappingSet := tt.mappingSet
+			stringSet := tt.stringSet
 			dic := pprofile.NewProfilesDictionary()
 			mgr := samples.NewAttrTableManager(dic.AttributeTable())
 
-			i := getDummyMappingIndex(fitm, stringMap, mgr, dic, tt.fileID)
-			assert.Equal(t, tt.wantIndex, i)
-			assert.Equal(t, tt.fileIDToMapping, fitm)
-			assert.Equal(t, tt.wantStringMap, stringMap)
+			idx, exists := mappingSet.AddWithCheck(tt.fileID)
+			if !exists {
+				mapping := dic.MappingTable().AppendEmpty()
+				mapping.SetFilenameStrindex(int32(stringSet.Add("")))
+				mgr.AppendOptionalString(mapping.AttributeIndices(),
+					semconv.ProcessExecutableBuildIDHtlhashKey,
+					tt.fileID.StringNoQuotes())
+			}
+
+			assert.Equal(t, tt.wantIndex, int32(idx))
+			assert.Equal(t, tt.wantMappingSet, mappingSet)
+			assert.Equal(t, tt.wantStringSet, stringSet)
 
 			require.Equal(t, len(tt.wantMappingTable), dic.MappingTable().Len())
 			for i, v := range tt.wantMappingTable {
@@ -262,7 +193,7 @@ func TestFunctionTableOrder(t *testing.T) {
 			}
 			tree := make(samples.TraceEventsTree)
 			tree[""] = tt.events
-			res := d.Generate(tree, tt.name, "version")
+			res, _ := d.Generate(tree, tt.name, "version")
 			require.Equal(t, tt.expectedResourceProfiles, res.ResourceProfiles().Len())
 			if tt.expectedResourceProfiles == 0 {
 				// Do not check elements of ResourceProfile if there is no expected
