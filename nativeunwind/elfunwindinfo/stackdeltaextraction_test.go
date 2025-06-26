@@ -203,7 +203,8 @@ func TestLookupFDE(t *testing.T) {
 	elf, err := pfelf.NewFile(bytes.NewReader(buffer), 0, false)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		elf.Close()
+		err = elf.Close()
+		require.NoError(t, err)
 	})
 	e, err := NewEhFrameTable(elf)
 	require.NoError(t, err)
