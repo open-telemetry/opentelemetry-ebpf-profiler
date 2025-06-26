@@ -200,7 +200,7 @@ func (store *Store) UploadModule(id ID) error {
 	}
 
 	hasher := sha256.New()
-	if _, err := io.Copy(hasher, file); err != nil {
+	if _, err = io.Copy(hasher, file); err != nil {
 		return fmt.Errorf("failed to hash content of %q: %v", localPath, err)
 	}
 	contentSHA256 := base64.StdEncoding.EncodeToString(hasher.Sum(nil))
@@ -209,7 +209,9 @@ func (store *Store) UploadModule(id ID) error {
 	contentType := "application/octet-stream"
 	contentDisposition := "attachment"
 
-	file.Seek(0, io.SeekStart)
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("failed to set position in file %q: %v", localPath, err)
+	}
 
 	_, err = store.s3client.PutObject(context.TODO(), &s3.PutObjectInput{
 		Bucket:             &store.bucket,
