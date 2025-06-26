@@ -21,8 +21,8 @@ type ehtester struct {
 }
 
 func (e *ehtester) fdeHook(cie *cieInfo, fde *fdeInfo) bool {
-	e.t.Logf("FDE len %d, ciePos %x, ip %x...%x, ipLen %d (enc %x, cf %d, df %d, ra %d)",
-		fde.len, fde.ciePos, fde.ipStart, fde.ipStart+fde.ipLen, fde.ipLen,
+	e.t.Logf("FDE ciePos %x, ip %x...%x, ipLen %d (enc %x, cf %d, df %d, ra %d)",
+		fde.ciePos, fde.ipStart, fde.ipStart+fde.ipLen, fde.ipLen,
 		cie.enc, cie.codeAlign, cie.dataAlign, cie.regRA)
 	e.t.Logf("   LOC           CFA          rbp   ra")
 	return true

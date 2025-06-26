@@ -8,9 +8,8 @@ import (
 	"os"
 	"testing"
 
-	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
-
 	"github.com/stretchr/testify/require"
+	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 )
 
 // Base64-encoded data from /usr/bin/volname on a stock debian box, the smallest
