@@ -141,7 +141,7 @@ Any [Maintainer] can merge the PR once the above criteria have been met.
 - [Felix Geisendörfer](https://github.com/felixge), Datadog
 - [Timo Teräs](https://github.com/fabled)
 
-For more information about the maintainer role, see the [community repository](https://github.com/open-telemetry/community/blob/main/community-membership.md#maintainer).
+For more information about the maintainer role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#maintainer).
 
 ### Approvers
 
@@ -150,7 +150,7 @@ For more information about the maintainer role, see the [community repository](h
 - [Tim Rühsen](https://github.com/rockdaboot), Elastic
 - [Damien Mathieu](https://github.com/dmathieu), Elastic
 
-For more information about the approver role, see the [community repository](https://github.com/open-telemetry/community/blob/main/community-membership.md#approver).
+For more information about the approver role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).
 
 ### Become an Approver or a Maintainer
 
