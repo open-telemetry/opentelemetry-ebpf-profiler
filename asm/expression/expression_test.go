@@ -15,6 +15,12 @@ func TestExpression(t *testing.T) {
 		require.Equal(t, Add(v, Imm(14)), Add(Imm(1), Imm(3), Imm(1), v, Imm(9)))
 	})
 
+	t.Run("named match", func(t *testing.T) {
+		n := Named("v")
+		require.True(t, n.Match(n))
+		require.False(t, n.Match(Imm(239)))
+	})
+
 	t.Run("add 0", func(t *testing.T) {
 		v := Named("v")
 		require.Equal(t, v, Add(Imm(0), v))

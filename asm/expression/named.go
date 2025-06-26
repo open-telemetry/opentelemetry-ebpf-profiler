@@ -20,10 +20,5 @@ func (v *named) DebugString() string {
 }
 
 func (v *named) Match(pattern Expression) bool {
-	switch typedPattern := pattern.(type) {
-	case *named:
-		return typedPattern == v
-	default:
-		return false
-	}
+	return pattern == v
 }
