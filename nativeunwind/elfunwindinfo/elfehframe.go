@@ -311,20 +311,6 @@ func (r *reader) expression() ([]dwarfExpression, error) {
 	return expr, nil
 }
 
-// formatLen returns the length of a field encoded with enc encoding.
-func formatLen(enc encoding) int {
-	switch enc & encFormatMask {
-	case encFormatData2:
-		return 2
-	case encFormatData4:
-		return 4
-	case encFormatData8, encFormatNative:
-		return 8
-	default:
-		return 0
-	}
-}
-
 // ptr reads one pointer value encoded with enc encoding
 func (r *reader) ptr(enc encoding) (uintptr, error) {
 	if enc == encOmit {
@@ -904,7 +890,7 @@ func isSignalTrampoline(efCode *pfelf.File, fde *fdeInfo) bool {
 }
 
 // parses first fields of FDE, specifically PC Begin, PC Range
-func parseFDEHDR(r *reader, ef *pfelf.File, ipStart uintptr,
+func parsesFDEHeader(r *reader, efm elf.Machine, ipStart uintptr,
 	cieCache *lru.LRU[uint64, *cieInfo]) (fdeLen uint64, fde fdeInfo, info *cieInfo, err error) {
 	// Parse FDE header
 	fdeID := r.pos
@@ -930,12 +916,12 @@ func parseFDEHDR(r *reader, ef *pfelf.File, ipStart uintptr,
 
 		// initialize vmRegs from initialState - these can be used by restore
 		// opcode during initial CIE run
-		cie.initialState = newVMRegs(ef.Machine)
+		cie.initialState = newVMRegs(efm)
 
 		// Run CIE initial opcodes
 		st := state{
 			cie: cie,
-			cur: newVMRegs(ef.Machine),
+			cur: newVMRegs(efm),
 		}
 		if err = st.step(&cr); err != nil {
 			return 0, fde, nil, err
@@ -985,7 +971,7 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 	cieCache *lru.LRU[uint64, *cieInfo], sorted bool) (size uintptr, err error) {
 	// Parse FDE header
 	fdeID := r.pos
-	fdeLen, fde, cie, err := parseFDEHDR(r, ef, ipStart, cieCache)
+	fdeLen, fde, cie, err := parsesFDEHeader(r, ef.Machine, ipStart, cieCache)
 	if err != nil {
 		return uintptr(fdeLen), err
 	}
@@ -1188,7 +1174,7 @@ func findEhSections(ef *pfelf.File) (
 // `.eh_frame_hdr` section.
 func (ee *elfExtractor) walkBinSearchTable(ef *pfelf.File, ehFrameHdrSec *elfRegion,
 	ehFrameSec *elfRegion) error {
-	t, err := newEhFrameTableFromSections(ehFrameHdrSec, ehFrameSec)
+	t, err := newEhFrameTableFromSections(ehFrameHdrSec, ehFrameSec, ef.Machine)
 	if err != nil {
 		return err
 	}

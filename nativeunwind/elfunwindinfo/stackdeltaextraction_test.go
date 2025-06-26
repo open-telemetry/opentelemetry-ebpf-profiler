@@ -6,6 +6,7 @@ package elfunwindinfo
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"os"
 	"testing"
 
@@ -201,14 +202,20 @@ func TestLookupFDE(t *testing.T) {
 	require.NoError(t, err)
 	elf, err := pfelf.NewFile(bytes.NewReader(buffer), 0, false)
 	require.NoError(t, err)
-	defer elf.Close()
+	t.Cleanup(func() {
+		elf.Close()
+	})
+	e, err := NewEhFrameTable(elf)
+	require.NoError(t, err)
 	for _, check := range checks {
-		actual, err := LookupFDE(elf, libpf.Address(check.at))
-		if check.expected == (FDE{}) {
-			require.Error(t, err)
-		} else {
-			require.NoError(t, err)
-			require.Equal(t, check.expected, actual)
-		}
+		t.Run(fmt.Sprintf("%x", check.at), func(t *testing.T) {
+			actual, err := e.LookupFDE(libpf.Address(check.at))
+			if check.expected == (FDE{}) {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, check.expected, actual)
+			}
+		})
 	}
 }
