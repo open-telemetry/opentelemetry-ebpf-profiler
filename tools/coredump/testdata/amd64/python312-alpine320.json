@@ -1,5 +1,4 @@
 {
-  "skip": "https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416",
   "coredump-ref": "4652115623df00987a1a480431a360edbd67b0795e9529543d40be190e37c74d",
   "threads": [
     {
