@@ -488,10 +488,10 @@ func (f *File) VirtualMemory(addr int64, sz, maxSize int) ([]byte, error) {
 // SymbolData returns the data associated with given dynamic symbol.
 // The backing mmapped data is returned if possible, otherwise a maximum of
 // maxCopy bytes of the symbol data will read to newly allocated buffer.
-func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (libpf.SymbolValue, []byte, error) {
+func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (*libpf.Symbol, []byte, error) {
 	sym, err := f.LookupSymbol(name)
 	if err != nil {
-		return 0, nil, err
+		return nil, nil, err
 	}
 	symSize := int(sym.Size)
 	if symSize > maxCopy {
@@ -501,7 +501,7 @@ func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (libpf.SymbolValue
 		}
 	}
 	data, err := f.VirtualMemory(int64(sym.Address), symSize, maxCopy)
-	return sym.Address, data, err
+	return sym, data, err
 }
 
 // ReadVirtualMemory reads bytes from given virtual address
