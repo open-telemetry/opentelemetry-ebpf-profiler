@@ -86,8 +86,10 @@ type elfExtractor struct {
 	allowGenericRegs bool
 }
 
-func (ee *elfExtractor) extractDebugDeltas() error {
-	var err error
+func (ee *elfExtractor) extractDebugDeltas() (err error) {
+	if ee.ref == nil {
+		return nil
+	}
 
 	// Attempt finding the associated debug information file with .debug_frame,
 	// but ignore errors if it's not available; many production systems
@@ -123,7 +125,13 @@ func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
 	if err != nil {
 		return err
 	}
+	return extractFile(elfFile, elfRef, interval)
+}
 
+// extractFile extracts the elfFile stack deltas and uses the optional elfRef to resolve
+// debug link references if needed.
+func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference,
+	interval *sdtypes.IntervalData) (err error) {
 	// Parse the stack deltas from the ELF
 	filter := extractionFilter{}
 	deltas := sdtypes.StackDeltaArray{}
