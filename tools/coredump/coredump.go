@@ -115,8 +115,8 @@ func (c *symbolizationCache) symbolize(ty libpf.FrameType, fileID libpf.FileID,
 
 	if data, ok := c.symbols[libpf.NewFrameID(fileID, lineNumber)]; ok {
 		return fmt.Sprintf("%s+%d in %s:%d",
-			data.FunctionName, data.FunctionOffset,
-			data.SourceFile, data.SourceLine), nil
+			data.FunctionName.Value(), data.FunctionOffset,
+			data.SourceFile.Value(), data.SourceLine), nil
 	}
 
 	sourceFile, ok := c.files[fileID]

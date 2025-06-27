@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"unique"
 
 	log "github.com/sirupsen/logrus"
 
@@ -176,7 +177,8 @@ func (i *dotnetInstance) insertAndSymbolizeStubFrame(symbolReporter reporter.Sym
 	trace.AppendFrameID(libpf.DotnetFrame, frameID)
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      frameID,
-		FunctionName: name,
+		FunctionName: unique.Make(name),
+		SourceFile:   unique.Make(""),
 	})
 }
 
@@ -307,7 +309,7 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf
 		i.moduleToPEInfo[modulePtr] = info
 		log.Debugf("%x-%x flags:%x  module: %x -> %s",
 			lowAddress, highAddress, flags,
-			modulePtr, info.simpleName)
+			modulePtr, info.simpleName.Value())
 		i.addRange(ebpf, pid, lowAddress, highAddress, lowAddress, codeReadyToRun)
 	}
 
@@ -649,7 +651,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	i.mappings = dotnetMappings
 
 	for _, m := range dotnetMappings {
-		log.Debugf("mapped %x-%x %s", m.start, m.end, m.info.simpleName)
+		log.Debugf("mapped %x-%x %s", m.start, m.end, m.info.simpleName.Value())
 	}
 
 	if err := i.d.walkRangeSectionsMethod(i, ebpf, pr.PID()); err != nil {

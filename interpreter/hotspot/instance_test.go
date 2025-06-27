@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"strings"
 	"testing"
+	"unique"
 
 	"github.com/elastic/go-freelru"
 	"github.com/stretchr/testify/assert"
@@ -31,7 +32,7 @@ func TestJavaSymbolExtraction(t *testing.T) {
 	rd := bytes.NewReader(sym)
 	rm := remotememory.RemoteMemory{ReaderAt: rd}
 
-	addrToSymbol, err := freelru.New[libpf.Address, string](2, libpf.Address.Hash32)
+	addrToSymbol, err := freelru.New[libpf.Address, unique.Handle[string]](2, libpf.Address.Hash32)
 	require.NoError(t, err, "symbol cache failed")
 
 	ii := hotspotInstance{
@@ -47,7 +48,7 @@ func TestJavaSymbolExtraction(t *testing.T) {
 	for i := 0; i <= maxLength; i++ {
 		binary.LittleEndian.PutUint16(sym[vmd.vmStructs.Symbol.Length:], uint16(i))
 		got := ii.getSymbol(0)
-		assert.Equal(t, str[:i], got, "symbol length %d mismatched read", i)
+		assert.Equal(t, str[:i], got.Value(), "symbol length %d mismatched read", i)
 		ii.addrToSymbol.Purge()
 	}
 }

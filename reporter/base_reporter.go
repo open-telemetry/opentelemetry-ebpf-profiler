@@ -149,15 +149,15 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 
 func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 	log.Debugf("FrameMetadata [%x] %v+%v at %v:%v",
-		args.FrameID.FileID(), args.FunctionName, args.FunctionOffset,
-		args.SourceFile, args.SourceLine)
+		args.FrameID.FileID(), args.FunctionName.Value(), args.FunctionOffset,
+		args.SourceFile.Value(), args.SourceLine)
 	si := samples.SourceInfo{
 		LineNumber:     args.SourceLine,
 		FilePath:       args.SourceFile,
 		FunctionOffset: args.FunctionOffset,
 		FunctionName:   args.FunctionName,
 	}
-	if si.FilePath == "" {
+	if si.FilePath.Value() == "" {
 		if oldsi, exists := b.pdata.Frames.Get(args.FrameID); exists {
 			si.FilePath = oldsi.FilePath
 		}

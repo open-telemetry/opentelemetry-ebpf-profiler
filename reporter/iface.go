@@ -6,6 +6,7 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 import (
 	"context"
 	"time"
+	"unique"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -65,9 +66,9 @@ type FrameMetadataArgs struct {
 	// FrameID is a unique identifier for the frame.
 	FrameID libpf.FrameID
 	// FunctionName is the name of the function for the frame.
-	FunctionName string
+	FunctionName unique.Handle[string]
 	// SourceFile is the source code file name for the frame.
-	SourceFile string
+	SourceFile unique.Handle[string]
 	// SourceLine is the source code level line number of this frame.
 	SourceLine libpf.SourceLineno
 	// FunctionOffset is the line offset from function start line for the frame.
