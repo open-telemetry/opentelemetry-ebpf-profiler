@@ -100,8 +100,15 @@ func (c *ColaSoft) reportProfile(ctx context.Context) error {
 			}
 			if _, ok := events[pid][kind]; !ok {
 				events[pid][kind] = make(samples.KeyToEventMapping)
+				events[pid][kind][key] = value
+			} else {
+				if _traceEvents, ok := events[pid][kind][key]; ok {
+					_traceEvents.Timestamps = append(_traceEvents.Timestamps, value.Timestamps...)
+					_traceEvents.OffTimes = append(_traceEvents.OffTimes, value.OffTimes...)
+				} else {
+					events[pid][kind][key] = value
+				}
 			}
-			events[pid][kind][key] = value
 		}
 	}
 	// 这里至少1分钟上报一次
