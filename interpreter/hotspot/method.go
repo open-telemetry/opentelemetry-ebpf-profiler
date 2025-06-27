@@ -19,9 +19,9 @@ const ConstMethod_has_linenumber_table = 0x0001
 // information from Hotspot class Method, the connected class ConstMethod, and
 // chasing the pointers in the ConstantPool and other dynamic parts.
 type hotspotMethod struct {
-	sourceFileName string
+	sourceFileName libpf.String
 	objectID       libpf.FileID
-	methodName     string
+	methodName     libpf.String
 	bytecodeSize   uint16
 	startLineNo    uint16
 	lineTable      []byte

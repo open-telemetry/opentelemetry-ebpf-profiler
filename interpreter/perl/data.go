@@ -137,8 +137,8 @@ func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Add
 		return nil, err
 	}
 
-	addrToGV, err := freelru.New[libpf.Address, string](interpreter.LruFunctionCacheSize,
-		libpf.Address.Hash32)
+	addrToGV, err := freelru.New[libpf.Address, libpf.String](
+		interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}

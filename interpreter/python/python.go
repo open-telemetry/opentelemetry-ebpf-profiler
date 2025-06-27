@@ -162,10 +162,10 @@ type pythonCodeObject struct {
 	version uint16
 
 	// name is the extracted co_name (the unqualified method or function name)
-	name string
+	name libpf.String
 
 	// sourceFileName is the extracted co_filename field
-	sourceFileName string
+	sourceFileName libpf.String
 
 	// For Python version < 3.10 lineTable is the extracted co_lnotab, and contains the
 	// "bytecode index" to "line number" mapping data.
@@ -569,8 +569,8 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 
 	pco := &pythonCodeObject{
 		version:        p.d.version,
-		name:           name,
-		sourceFileName: sourceFileName,
+		name:           libpf.Intern(name),
+		sourceFileName: libpf.Intern(sourceFileName),
 		firstLineNo:    firstLineNo,
 		lineTable:      lineTable,
 		ebpfChecksum:   ebpfChecksum,

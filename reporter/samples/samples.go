@@ -3,7 +3,9 @@
 
 package samples // import "go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
-import "go.opentelemetry.io/ebpf-profiler/libpf"
+import (
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+)
 
 type TraceEventMeta struct {
 	Timestamp      libpf.UnixTime64
@@ -81,6 +83,6 @@ type ExecInfo struct {
 type SourceInfo struct {
 	LineNumber     libpf.SourceLineno
 	FunctionOffset uint32
-	FunctionName   string
-	FilePath       string
+	FunctionName   libpf.String
+	FilePath       libpf.String
 }

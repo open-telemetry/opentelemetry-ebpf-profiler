@@ -342,7 +342,7 @@ func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.
 	// method name and signature. However, most of them are shared across
 	// different methods, so assume about 2 unique symbols per function.
 	addrToSymbol, err :=
-		freelru.New[libpf.Address, string](2*interpreter.LruFunctionCacheSize,
+		freelru.New[libpf.Address, libpf.String](2*interpreter.LruFunctionCacheSize,
 			libpf.Address.Hash32)
 	if err != nil {
 		return nil, err

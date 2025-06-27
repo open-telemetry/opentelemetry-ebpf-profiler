@@ -176,7 +176,7 @@ func (i *dotnetInstance) insertAndSymbolizeStubFrame(symbolReporter reporter.Sym
 	trace.AppendFrameID(libpf.DotnetFrame, frameID)
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      frameID,
-		FunctionName: name,
+		FunctionName: libpf.Intern(name),
 	})
 }
 
