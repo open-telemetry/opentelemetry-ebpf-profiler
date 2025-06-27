@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"sync/atomic"
+	"unique"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -25,6 +26,8 @@ var (
 )
 
 type goData struct {
+	refs atomic.Int32
+
 	pclntab *elfunwindinfo.Gopclntab
 }
 
@@ -53,20 +56,25 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 		return nil, err
 	}
 
-	return &goData{
-		pclntab: pclntab,
-	}, nil
+	g := &goData{pclntab: pclntab}
+	g.refs.Store(1)
+	return g, nil
+}
+
+func (g *goData) unref() {
+	if g.refs.Add(-1) == 0 {
+		_ = g.pclntab.Close()
+	}
 }
 
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
-	return &goInstance{
-		d: g,
-	}, nil
+	g.refs.Add(1)
+	return &goInstance{d: g}, nil
 }
 
 func (g *goData) Unload(_ interpreter.EbpfHandler) {
-	_ = g.pclntab.Close()
+	g.unref()
 }
 
 func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
@@ -82,9 +90,13 @@ func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
-// Detach is a NOP for goInstance.
 func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
+	g.d.unref()
 	return nil
+}
+
+func intern(str string) string {
+	return unique.Make(str).Value()
 }
 
 func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame,
@@ -116,8 +128,8 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      frameID,
-		FunctionName: fn,
-		SourceFile:   sourceFile,
+		FunctionName: intern(fn),
+		SourceFile:   intern(sourceFile),
 		SourceLine:   libpf.SourceLineno(lineNo),
 	})
 
