@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // cloudstore provides access to the cloud based storage used in the tests.
-package cloudstore
+package cloudstore // import "go.opentelemetry.io/ebpf-profiler/tools/coredump/cloudstore"
 
 import (
 	"context"
@@ -30,7 +30,6 @@ const moduleStoreS3Bucket = "ebpf-profiling-coredumps"
 func PublicReadURL() string {
 	return fmt.Sprintf("https://%s.objectstorage.%s.oci.customer-oci.com/p/%s/b/%s/o/",
 		moduleStoreObjectNamespace, moduleStoreRegion, modulePublicReadURL, moduleStoreS3Bucket)
-
 }
 
 func ModulestoreS3Bucket() string {
