@@ -11,6 +11,7 @@ import (
 	"io"
 	"runtime"
 	"sync/atomic"
+	"unique"
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
@@ -74,7 +75,7 @@ type hotspotInstance struct {
 	prefixes libpf.Set[lpm.Prefix]
 
 	// addrToSymbol maps a JVM class Symbol address to it's string value
-	addrToSymbol *freelru.LRU[libpf.Address, string]
+	addrToSymbol *freelru.LRU[libpf.Address, unique.Handle[string]]
 
 	// addrToMethod maps a JVM class Method to a hotspotMethod which caches
 	// the needed data from it.
@@ -180,7 +181,7 @@ func (d *hotspotInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 }
 
 // getSymbol extracts a class Symbol value from the given address in the target JVM process
-func (d *hotspotInstance) getSymbol(addr libpf.Address) string {
+func (d *hotspotInstance) getSymbol(addr libpf.Address) unique.Handle[string] {
 	if value, ok := d.addrToSymbol.Get(addr); ok {
 		return value
 	}
@@ -191,11 +192,11 @@ func (d *hotspotInstance) getSymbol(addr libpf.Address) string {
 	// good enough"; this value can be increased if it turns out to be necessary.
 	var buf [128]byte
 	if d.rm.Read(addr, buf[:]) != nil {
-		return ""
+		return unique.Make("")
 	}
 	symLen := npsr.Uint16(buf[:], vms.Symbol.Length)
 	if symLen == 0 {
-		return ""
+		return unique.Make("")
 	}
 
 	// Always allocate the string separately so it does not hold the backing
@@ -205,24 +206,25 @@ func (d *hotspotInstance) getSymbol(addr libpf.Address) string {
 	if vms.Symbol.Body+uint(symLen) > uint(len(buf)) {
 		prefixLen := uint(len(buf[vms.Symbol.Body:]))
 		if d.rm.Read(addr+libpf.Address(vms.Symbol.Body+prefixLen), tmp[prefixLen:]) != nil {
-			return ""
+			return unique.Make("")
 		}
 	}
 	s := string(tmp)
 	if !util.IsValidString(s) {
 		log.Debugf("Extracted Hotspot symbol is invalid at 0x%x '%v'", addr, []byte(s))
-		return ""
+		return unique.Make("")
 	}
-	d.addrToSymbol.Add(addr, s)
-	return s
+	value := unique.Make(s)
+	d.addrToSymbol.Add(addr, value)
+	return value
 }
 
 // getPoolSymbol reads a class ConstantPool value from given index, and reads the
 // symbol value it is referencing
-func (d *hotspotInstance) getPoolSymbol(addr libpf.Address, ndx uint16) string {
+func (d *hotspotInstance) getPoolSymbol(addr libpf.Address, ndx uint16) unique.Handle[string] {
 	// Zero index is not valid
 	if ndx == 0 {
-		return ""
+		return unique.Make("")
 	}
 
 	vms := &d.d.Get().vmStructs
@@ -258,7 +260,8 @@ func (d *hotspotInstance) getStubNameID(symbolReporter reporter.SymbolReporter, 
 	stubID := libpf.AddressOrLineno(npsr.Uint64(nameHash, 0))
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      libpf.NewFrameID(hotspotStubsFileID, stubID),
-		FunctionName: stubName,
+		FunctionName: unique.Make(stubName),
+		SourceFile:   unique.Make(""),
 	})
 	d.addrToStubNameID.Add(addr, stubID)
 
@@ -289,7 +292,7 @@ func (d *hotspotInstance) getMethod(addr libpf.Address, _ uint32) (*hotspotMetho
 		return nil, fmt.Errorf("invalid PoolHolder ptr: %v", err)
 	}
 
-	var sourceFileName string
+	var sourceFileName unique.Handle[string]
 	switch {
 	case vms.ConstantPool.SourceFileNameIndex != 0:
 		// JDK15
@@ -304,17 +307,17 @@ func (d *hotspotInstance) getMethod(addr libpf.Address, _ uint32) (*hotspotMetho
 		sourceFileName = d.getSymbol(
 			npsr.Ptr(instanceKlass, vms.InstanceKlass.SourceFileName))
 	}
-	klassName := d.getSymbol(npsr.Ptr(instanceKlass, vms.Klass.Name))
+	klassName := d.getSymbol(npsr.Ptr(instanceKlass, vms.Klass.Name)).Value()
 	methodName := d.getPoolSymbol(cpoolAddr, npsr.Uint16(constMethod,
 		vms.ConstMethod.NameIndex))
 	signature := d.getPoolSymbol(cpoolAddr, npsr.Uint16(constMethod,
 		vms.ConstMethod.SignatureIndex))
 
-	if sourceFileName == "" {
+	if sourceFileName.Value() == "" {
 		// Java and Scala can autogenerate lambdas which have no source
 		// information available. The HotSpot VM backtraces displays
 		// "Unknown Source" as the filename for these.
-		sourceFileName = interpreter.UnknownSourceFile
+		sourceFileName = unique.Make(interpreter.UnknownSourceFile)
 
 		// Java 15 introduced "Hidden Classes" via JEP 371. These class names
 		// contain pointers. Mask the pointers to reduce cardinality.
@@ -326,10 +329,10 @@ func (d *hotspotInstance) getMethod(addr libpf.Address, _ uint32) (*hotspotMetho
 	// Keep the sourcefileName there to start with, and add klass name, method
 	// name, byte code and the JVM presentation of the source line table.
 	h := fnv.New128a()
-	_, _ = h.Write([]byte(sourceFileName))
+	_, _ = h.Write([]byte(sourceFileName.Value()))
 	_, _ = h.Write([]byte(klassName))
-	_, _ = h.Write([]byte(methodName))
-	_, _ = h.Write([]byte(signature))
+	_, _ = h.Write([]byte(methodName.Value()))
+	_, _ = h.Write([]byte(signature.Value()))
 
 	// Read the byte code for CodeObjectID
 	bytecodeSize := npsr.Uint16(constMethod, vms.ConstMethod.CodeSize)
@@ -394,10 +397,11 @@ func (d *hotspotInstance) getMethod(addr libpf.Address, _ uint32) (*hotspotMetho
 		return nil, fmt.Errorf("failed to create a code object ID: %v", err)
 	}
 
+	demangledName := demangleJavaMethod(klassName, methodName.Value(), signature.Value())
 	sym := &hotspotMethod{
 		sourceFileName: sourceFileName,
 		objectID:       objectID,
-		methodName:     demangleJavaMethod(klassName, methodName, signature),
+		methodName:     unique.Make(demangledName),
 		bytecodeSize:   bytecodeSize,
 		lineTable:      lineTable,
 		startLineNo:    uint16(startLine),

@@ -163,6 +163,7 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
+	"unique"
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
@@ -231,7 +232,7 @@ var (
 	v8StubsFileID = libpf.NewStubFileID(libpf.V8Frame)
 
 	// the source file entry for unknown code blobs
-	unknownSource = &v8Source{fileName: interpreter.UnknownSourceFile}
+	unknownSource = &v8Source{fileName: unique.Make(interpreter.UnknownSourceFile)}
 
 	// compiler check to make sure the needed interfaces are satisfied
 	_ interpreter.Data     = &v8Data{}
@@ -508,7 +509,7 @@ type v8Instance struct {
 	rm remotememory.RemoteMemory
 
 	// addrToString maps a V8 string object address to a Go string literal
-	addrToString *freelru.LRU[libpf.Address, string]
+	addrToString *freelru.LRU[libpf.Address, unique.Handle[string]]
 	addrToSFI    *freelru.LRU[libpf.Address, *v8SFI]
 	addrToCode   *freelru.LRU[libpf.Address, *v8Code]
 	addrToSource *freelru.LRU[libpf.Address, *v8Source]
@@ -525,7 +526,7 @@ type v8Instance struct {
 // v8Source caches the data we need from V8 class Source
 type v8Source struct {
 	lineTable []uint32
-	fileName  string
+	fileName  unique.Handle[string]
 }
 
 // v8Code caches the data we need from V8 class Code
@@ -545,7 +546,7 @@ type v8SFI struct {
 	bytecodeDeltaSeen     libpf.Set[uint32]
 	bytecodePositionTable []byte
 	bytecode              []byte
-	funcName              string
+	funcName              unique.Handle[string]
 	funcID                libpf.FileID
 	funcStartLine         libpf.SourceLineno
 	funcStartPos          int
@@ -766,7 +767,8 @@ func (i *v8Instance) symbolizeMarkerFrame(symbolReporter reporter.SymbolReporter
 		i.d.frametypeToID[marker] = stubID
 		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 			FrameID:      frameID,
-			FunctionName: name,
+			FunctionName: unique.Make(name),
+			SourceFile:   unique.Make(""),
 		})
 	}
 	trace.AppendFrameID(libpf.V8Frame, frameID)
@@ -903,7 +905,7 @@ func (i *v8Instance) extractStringPtr(ptr libpf.Address, cb func(string) error) 
 }
 
 // getString extracts and caches a small string object from given address.
-func (i *v8Instance) getString(ptr libpf.Address, tag uint16) (string, error) {
+func (i *v8Instance) getString(ptr libpf.Address, tag uint16) (unique.Handle[string], error) {
 	taggedPtr := ptr | HeapObjectTag
 	if value, ok := i.addrToString.Get(taggedPtr); ok {
 		return value, nil
@@ -920,24 +922,25 @@ func (i *v8Instance) getString(ptr libpf.Address, tag uint16) (string, error) {
 		return nil
 	})
 	if err != nil {
-		return "", err
+		return unique.Make(""), err
 	}
 	if str != "" && !util.IsValidString(str) {
-		return "", fmt.Errorf("invalid string at 0x%x", ptr)
+		return unique.Make(""), fmt.Errorf("invalid string at 0x%x", ptr)
 	}
 
-	i.addrToString.Add(taggedPtr, str)
-	return str, nil
+	value := unique.Make(str)
+	i.addrToString.Add(taggedPtr, value)
+	return value, nil
 }
 
 // getStringPtr reads a V8 string pointer and dereferences it.
-func (i *v8Instance) getStringPtr(ptr libpf.Address) (string, error) {
+func (i *v8Instance) getStringPtr(ptr libpf.Address) (unique.Handle[string], error) {
 	return i.getString(i.rm.Ptr(ptr), 0)
 }
 
 // analyzeScopeInfo reads and heuristically analyzes V8 ScopeInfo data. It tries to
 // extract the function name, and its start and end line.
-func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name string,
+func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name unique.Handle[string],
 	startPos, endPos int, err error) {
 	vms := &i.d.vmStructs
 	var data libpf.Address
@@ -959,7 +962,7 @@ func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name string,
 	const slotSize = pointerSize
 	slotData := make([]byte, numSlots*slotSize)
 	if err = i.rm.Read(data, slotData); err != nil {
-		return "", 0, 0, nil
+		return unique.Make(""), 0, 0, nil
 	}
 
 	// Skip reserved slots and the context locals
@@ -967,10 +970,11 @@ func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name string,
 	ndx += 2 * int(decodeSMI(npsr.Uint64(slotData,
 		uint(vms.ScopeInfoIndex.NContextLocals)*slotSize)))
 
+	name = unique.Make("")
 	prev := uint64(HeapObjectTag)
 	for ; ndx < numSlots; ndx++ {
 		cur := npsr.Uint64(slotData, uint(ndx*slotSize))
-		if name == "" && isHeapObject(libpf.Address(cur)) {
+		if name.Value() == "" && isHeapObject(libpf.Address(cur)) {
 			// Just try getting the string ignoring errors and
 			// assume that first valid string is the function name
 			name, _ = i.getString(libpf.Address(cur), 0)
@@ -1106,10 +1110,10 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 		sfi.funcName, err = i.getString(nosAddr, nosType)
 	}
 	if err != nil {
-		sfi.funcName = fmt.Sprintf("<%s>", err)
+		sfi.funcName = unique.Make(fmt.Sprintf("<%s>", err))
 	}
-	if sfi.funcName == "" {
-		sfi.funcName = "<anonymous>"
+	if sfi.funcName.Value() == "" {
+		sfi.funcName = unique.Make("<anonymous>")
 	}
 
 	// Function data
@@ -1159,8 +1163,8 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 
 	// Synthesize function ID hash
 	h := fnv.New128a()
-	_, _ = h.Write([]byte(sfi.source.fileName))
-	_, _ = h.Write([]byte(sfi.funcName))
+	_, _ = h.Write([]byte(sfi.source.fileName.Value()))
+	_, _ = h.Write([]byte(sfi.funcName.Value()))
 	_, _ = h.Write(sfi.bytecode)
 	_, _ = h.Write(sfi.bytecodePositionTable)
 	sfi.funcID, err = libpf.FileIDFromBytes(h.Sum(nil))
@@ -1528,9 +1532,9 @@ func (i *v8Instance) symbolize(symbolReporter reporter.SymbolReporter, frameID l
 	})
 }
 
-const externalFunctionTag = "<external-file>"
+var externalFunctionTag = unique.Make("<external-file>")
 
-var externalStubID = calculateStubID(externalFunctionTag)
+var externalStubID = calculateStubID(externalFunctionTag.Value())
 
 // generateNativeFrame and conditionally symbolizes a native frame.
 func (i *v8Instance) generateNativeFrame(symbolReporter reporter.SymbolReporter,
@@ -1541,6 +1545,7 @@ func (i *v8Instance) generateNativeFrame(symbolReporter reporter.SymbolReporter,
 		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 			FrameID:      frameID,
 			FunctionName: externalFunctionTag,
+			SourceFile:   unique.Make(""),
 		})
 		return
 	}
@@ -1842,8 +1847,8 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 		return nil, err
 	}
 
-	addrToString, err := freelru.New[libpf.Address, string](interpreter.LruFunctionCacheSize,
-		libpf.Address.Hash32)
+	addrToString, err := freelru.New[libpf.Address, unique.Handle[string]](
+		interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"sync/atomic"
+	"unique"
 
 	log "github.com/sirupsen/logrus"
 
@@ -39,10 +40,10 @@ const (
 // PHP interpreter's zend_function structure.
 type phpFunction struct {
 	// name is the extracted name
-	name string
+	name unique.Handle[string]
 
 	// sourceFileName is the extracted filename field
-	sourceFileName string
+	sourceFileName unique.Handle[string]
 
 	// fileID is the synthesized methodID
 	fileID libpf.FileID
@@ -177,8 +178,8 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 	}
 
 	pf := &phpFunction{
-		name:           fname,
-		sourceFileName: sourceFileName,
+		name:           unique.Make(fname),
+		sourceFileName: unique.Make(sourceFileName),
 		fileID:         fileID,
 		lineStart:      lineStart,
 	}

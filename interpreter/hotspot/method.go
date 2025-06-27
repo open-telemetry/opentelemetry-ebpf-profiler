@@ -6,6 +6,7 @@ package hotspot // import "go.opentelemetry.io/ebpf-profiler/interpreter/hotspot
 import (
 	"bytes"
 	"fmt"
+	"unique"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
@@ -19,9 +20,9 @@ const ConstMethod_has_linenumber_table = 0x0001
 // information from Hotspot class Method, the connected class ConstMethod, and
 // chasing the pointers in the ConstantPool and other dynamic parts.
 type hotspotMethod struct {
-	sourceFileName string
+	sourceFileName unique.Handle[string]
 	objectID       libpf.FileID
-	methodName     string
+	methodName     unique.Handle[string]
 	bytecodeSize   uint16
 	startLineNo    uint16
 	lineTable      []byte

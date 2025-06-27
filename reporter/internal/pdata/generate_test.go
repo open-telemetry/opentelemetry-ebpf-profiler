@@ -2,6 +2,7 @@ package pdata
 
 import (
 	"testing"
+	"unique"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -95,6 +96,7 @@ func TestGetDummyMappingIndex(t *testing.T) {
 
 //nolint:lll
 func TestFunctionTableOrder(t *testing.T) {
+	none := unique.Make("")
 	for _, tt := range []struct {
 		name        string
 		executables map[libpf.FileID]samples.ExecInfo
@@ -119,11 +121,11 @@ func TestFunctionTableOrder(t *testing.T) {
 			},
 			frames: map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo{
 				libpf.NewFileID(2, 3): {
-					libpf.AddressOrLineno(0xef):  {FunctionName: "func1"},
-					libpf.AddressOrLineno(0x1ef): {FunctionName: "func2"},
-					libpf.AddressOrLineno(0x2ef): {FunctionName: "func3"},
-					libpf.AddressOrLineno(0x3ef): {FunctionName: "func4"},
-					libpf.AddressOrLineno(0x4ef): {FunctionName: "func5"},
+					libpf.AddressOrLineno(0xef):  {FunctionName: unique.Make("func1"), FilePath: none},
+					libpf.AddressOrLineno(0x1ef): {FunctionName: unique.Make("func2"), FilePath: none},
+					libpf.AddressOrLineno(0x2ef): {FunctionName: unique.Make("func3"), FilePath: none},
+					libpf.AddressOrLineno(0x3ef): {FunctionName: unique.Make("func4"), FilePath: none},
+					libpf.AddressOrLineno(0x4ef): {FunctionName: unique.Make("func5"), FilePath: none},
 				},
 			},
 			events: map[libpf.Origin]samples.KeyToEventMapping{
