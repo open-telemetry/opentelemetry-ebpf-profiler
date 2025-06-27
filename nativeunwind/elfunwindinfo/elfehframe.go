@@ -1179,14 +1179,11 @@ func (ee *elfExtractor) walkBinSearchTable(ef *pfelf.File, ehFrameHdrSec *elfReg
 	if err != nil {
 		return err
 	}
+	r := t.entryAt(0)
 	for f := uintptr(0); f < t.fdeCount; f++ {
-		var (
-			ipStart uintptr
-			fr      reader
-		)
-		ipStart, fr, entryErr := t.parseHdrEntry()
+		ipStart, fr, entryErr := t.decodeEntry(&r)
 		if entryErr != nil {
-			return err
+			return entryErr
 		}
 		_, err = ee.parseFDE(&fr, ef, ipStart, t.cieCache, f > 0)
 		if err != nil && !errors.Is(err, errEmptyEntry) {
