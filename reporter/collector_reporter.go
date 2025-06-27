@@ -107,7 +107,12 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	*traceEventsPtr = newEvents
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
-	profiles := r.pdata.Generate(reportedEvents, r.name, r.version)
+	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version)
+	if err != nil {
+		log.Errorf("pdata: %v", err)
+		return nil
+	}
+
 	if profiles.SampleCount() == 0 {
 		log.Debugf("Skip sending profile with no samples")
 		return nil

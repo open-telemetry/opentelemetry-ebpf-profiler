@@ -135,16 +135,21 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	*traceEventsPtr = newEvents
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
-	profiles := r.pdata.Generate(reportedEvents, r.name, r.version)
+	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version)
+	if err != nil {
+		log.Errorf("pdata: %v", err)
+		return nil
+	}
 	if profiles.SampleCount() == 0 {
 		log.Debugf("Skip sending of OTLP profile with no samples")
 		return nil
 	}
+
 	req := pprofileotlp.NewExportRequestFromProfiles(profiles)
 
 	reqCtx, ctxCancel := context.WithTimeout(ctx, r.pkgGRPCOperationTimeout)
 	defer ctxCancel()
-	_, err := r.client.Export(reqCtx, req)
+	_, err = r.client.Export(reqCtx, req)
 	return err
 }
 
