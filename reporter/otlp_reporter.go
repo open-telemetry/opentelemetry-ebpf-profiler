@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding/gzip"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -23,6 +24,8 @@ import (
 
 // Assert that we implement the full Reporter interface.
 var _ Reporter = (*OTLPReporter)(nil)
+
+var gzipOption = grpc.UseCompressor(gzip.Name)
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
 type OTLPReporter struct {
@@ -149,7 +152,7 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 
 	reqCtx, ctxCancel := context.WithTimeout(ctx, r.pkgGRPCOperationTimeout)
 	defer ctxCancel()
-	_, err = r.client.Export(reqCtx, req)
+	_, err = r.client.Export(reqCtx, req, gzipOption)
 	return err
 }
 
