@@ -4,6 +4,9 @@
 #include "bpf_map.h"
 #include "kernel.h"
 
+// with_debug_output is declared in the scope of native unwind.
+extern volatile const u32 with_debug_output;
+
 #if defined(TESTING_COREDUMP)
   // tools/coredump uses CGO to build the eBPF code. Provide here the glue to
   // dispatch the BPF API to helpers implemented in ebpfhelpers.go.
@@ -12,7 +15,6 @@
 
   #define printt(fmt, ...)      bpf_log(fmt, ##__VA_ARGS__)
   #define DEBUG_PRINT(fmt, ...) bpf_log(fmt, ##__VA_ARGS__)
-  #define OPTI_DEBUG
 
 // BPF helpers. Mostly stubs to dispatch the call to Go code with the context ID.
 int bpf_tail_call(void *ctx, bpf_map_def *map, int index);
@@ -103,39 +105,40 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
       bpf_trace_printk(____fmt, sizeof(____fmt), ##__VA_ARGS__);                                   \
     })
 
-  #ifdef OPTI_DEBUG
-    #define DEBUG_PRINT(fmt, ...) printt(fmt, ##__VA_ARGS__);
+  #define DEBUG_PRINT(fmt, ...)                                                                    \
+    ({                                                                                             \
+      if (with_debug_output) {                                                                     \
+        printt(fmt, ##__VA_ARGS__);                                                                \
+      }                                                                                            \
+    })
 
-    // Sends `SIGTRAP` to the current task, killing it and capturing a coredump.
-    //
-    // Only use this in code paths that you expect to be hit by a very specific process that you
-    // intend to debug. Placing it into frequently taken code paths might otherwise take down
-    // important system processes like sshd or your window manager. For frequently taken cases,
-    // prefer using the `DEBUG_CAPTURE_COREDUMP_IF_TGID` macro.
-    //
-    // This macro requires linking against kernel headers >= 5.6.
-    #define DEBUG_CAPTURE_COREDUMP()                                                               \
-      ({                                                                                           \
+  // Sends `SIGTRAP` to the current task, killing it and capturing a coredump.
+  //
+  // Only use this in code paths that you expect to be hit by a very specific process that you
+  // intend to debug. Placing it into frequently taken code paths might otherwise take down
+  // important system processes like sshd or your window manager. For frequently taken cases,
+  // prefer using the `DEBUG_CAPTURE_COREDUMP_IF_TGID` macro.
+  //
+  // This macro requires linking against kernel headers >= 5.6.
+  #define DEBUG_CAPTURE_COREDUMP()                                                                 \
+    ({                                                                                             \
+      if (with_debug_output) {                                                                     \
         /* We don't define `bpf_send_signal_thread` globally because it requires a      */         \
         /* rather recent kernel (>= 5.6) and otherwise breaks builds of older versions. */         \
         long (*bpf_send_signal_thread)(u32 sig) = (void *)BPF_FUNC_send_signal_thread;             \
         bpf_send_signal_thread(SIGTRAP);                                                           \
-      })
+      }                                                                                            \
+    })
 
-    // Like `DEBUG_CAPTURE_COREDUMP`, but only coredumps if the current task is a member of the
-    // given thread group ID ("process").
-    #define DEBUG_CAPTURE_COREDUMP_IF_TGID(tgid)                                                   \
-      ({                                                                                           \
-        if (bpf_get_current_pid_tgid() >> 32 == (tgid)) {                                          \
-          DEBUG_PRINT("coredumping process %d", (tgid));                                           \
-          DEBUG_CAPTURE_COREDUMP();                                                                \
-        }                                                                                          \
-      })
-  #else
-    #define DEBUG_PRINT(fmt, ...)
-    #define DEBUG_CAPTURE_COREDUMP()
-    #define DEBUG_CAPTURE_COREDUMP_IF_TGID(tgid)
-  #endif
+  // Like `DEBUG_CAPTURE_COREDUMP`, but only coredumps if the current task is a member of the
+  // given thread group ID ("process").
+  #define DEBUG_CAPTURE_COREDUMP_IF_TGID(tgid)                                                     \
+    ({                                                                                             \
+      if (with_debug_output && bpf_get_current_pid_tgid() >> 32 == (tgid)) {                       \
+        DEBUG_PRINT("coredumping process %d", (tgid));                                             \
+        DEBUG_CAPTURE_COREDUMP();                                                                  \
+      }                                                                                            \
+    })
 
   // Definition of SEC as used by the Linux kernel in tools/lib/bpf/bpf_helpers.h for clang
   // compilations.
