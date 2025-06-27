@@ -31,6 +31,19 @@ type TraceEvents struct {
 	EnvVars            map[string]string
 }
 
+func (t *TraceEvents) Len() int {
+	return len(t.Timestamps)
+}
+
+func (t *TraceEvents) Less(i, j int) bool {
+	return t.Timestamps[i] < t.Timestamps[j]
+}
+
+func (t *TraceEvents) Swap(i, j int) {
+	t.Timestamps[i], t.Timestamps[j] = t.Timestamps[j], t.Timestamps[i]
+	t.OffTimes[i], t.OffTimes[j] = t.OffTimes[j], t.OffTimes[i]
+}
+
 // TraceAndMetaKey is the deduplication key for samples. This **must always**
 // contain all trace fields that aren't already part of the trace hash to ensure
 // that we don't accidentally merge traces with different fields.

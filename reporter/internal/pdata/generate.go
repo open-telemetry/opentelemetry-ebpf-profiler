@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"sort"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -134,7 +135,12 @@ func (p *Pdata) setProfile(
 		sample := profile.Sample().AppendEmpty()
 		sample.SetLocationsStartIndex(locationIndex)
 
-		slices.Sort(traceInfo.Timestamps)
+		if origin == support.TraceOriginSampling {
+			slices.Sort(traceInfo.Timestamps)
+		} else {
+			sort.Sort(traceInfo)
+		}
+
 		startTS = pcommon.Timestamp(traceInfo.Timestamps[0])
 		endTS = pcommon.Timestamp(traceInfo.Timestamps[len(traceInfo.Timestamps)-1])
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
