@@ -39,14 +39,15 @@ type extractionFilter struct {
 
 var _ ehframeHooks = &extractionFilter{}
 
+func (f *extractionFilter) fdeIsUnsorted() {
+	f.unsortedFrames = true
+}
+
 // fdeHook filters out .eh_frame data that is superseded by .gopclntab data
 func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo) bool {
-	if !fde.sorted {
-		// Seems .debug_frame sometimes has broken FDEs for zero address
-		if fde.ipStart == 0 {
-			return false
-		}
-		f.unsortedFrames = true
+	// Seems .debug_frame sometimes has broken FDEs for zero address
+	if f.unsortedFrames && fde.ipStart == 0 {
+		return false
 	}
 	// Parse functions outside the gopclntab area
 	if fde.ipStart < f.start || fde.ipStart > f.end {
