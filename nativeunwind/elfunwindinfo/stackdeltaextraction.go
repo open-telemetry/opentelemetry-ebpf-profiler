@@ -39,14 +39,15 @@ type extractionFilter struct {
 
 var _ ehframeHooks = &extractionFilter{}
 
+func (f *extractionFilter) fdeUnsorted() {
+	f.unsortedFrames = true
+}
+
 // fdeHook filters out .eh_frame data that is superseded by .gopclntab data
 func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo) bool {
-	if !fde.sorted {
-		// Seems .debug_frame sometimes has broken FDEs for zero address
-		if fde.ipStart == 0 {
-			return false
-		}
-		f.unsortedFrames = true
+	// Seems .debug_frame sometimes has broken FDEs for zero address
+	if f.unsortedFrames && fde.ipStart == 0 {
+		return false
 	}
 	// Parse functions outside the gopclntab area
 	if fde.ipStart < f.start || fde.ipStart > f.end {
@@ -85,8 +86,10 @@ type elfExtractor struct {
 	allowGenericRegs bool
 }
 
-func (ee *elfExtractor) extractDebugDeltas() error {
-	var err error
+func (ee *elfExtractor) extractDebugDeltas() (err error) {
+	if ee.ref == nil {
+		return nil
+	}
 
 	// Attempt finding the associated debug information file with .debug_frame,
 	// but ignore errors if it's not available; many production systems
@@ -122,7 +125,13 @@ func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
 	if err != nil {
 		return err
 	}
+	return extractFile(elfFile, elfRef, interval)
+}
 
+// extractFile extracts the elfFile stack deltas and uses the optional elfRef to resolve
+// debug link references if needed.
+func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference,
+	interval *sdtypes.IntervalData) (err error) {
 	// Parse the stack deltas from the ELF
 	filter := extractionFilter{}
 	deltas := sdtypes.StackDeltaArray{}

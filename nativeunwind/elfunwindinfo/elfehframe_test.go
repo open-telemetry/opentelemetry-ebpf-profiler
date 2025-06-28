@@ -20,6 +20,9 @@ type ehtester struct {
 	found int
 }
 
+func (e *ehtester) fdeUnsorted() {
+}
+
 func (e *ehtester) fdeHook(cie *cieInfo, fde *fdeInfo) bool {
 	e.t.Logf("FDE ciePos %x, ip %x...%x, ipLen %d (enc %x, cf %d, df %d, ra %d)",
 		fde.ciePos, fde.ipStart, fde.ipStart+fde.ipLen, fde.ipLen,

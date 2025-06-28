@@ -4,11 +4,12 @@
 package elfunwindinfo
 
 import (
+	"bytes"
 	"encoding/base64"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 )
 
@@ -133,23 +134,20 @@ var firstDeltas = sdtypes.StackDeltaArray{
 	{Address: 0x8e7, Info: deltaRSP(80, 16)},
 }
 
-func TestExtractStackDeltasFromFilename(t *testing.T) {
+func getUsrBinPfelf() (*pfelf.File, error) {
 	buffer, err := base64.StdEncoding.DecodeString(usrBinVolname)
+	if err != nil {
+		return nil, err
+	}
+	return pfelf.NewFile(bytes.NewReader(buffer), 0, false)
+}
+
+func TestExtractStackDeltasFromFilename(t *testing.T) {
+	elf, err := getUsrBinPfelf()
 	require.NoError(t, err)
-	// Write the executable file to a temporary file, and the symbol
-	// file, too.
-	exeFile, err := os.CreateTemp("/tmp", "dwarf_extract_elf_")
-	require.NoError(t, err)
-	defer exeFile.Close()
-	_, err = exeFile.Write(buffer)
-	require.NoError(t, err)
-	err = exeFile.Sync()
-	require.NoError(t, err)
-	defer os.Remove(exeFile.Name())
-	filename := exeFile.Name()
 
 	var data sdtypes.IntervalData
-	err = Extract(filename, &data)
+	err = extractFile(elf, nil, &data)
 	require.NoError(t, err)
 	for _, delta := range data.Deltas {
 		t.Logf("%#v", delta)

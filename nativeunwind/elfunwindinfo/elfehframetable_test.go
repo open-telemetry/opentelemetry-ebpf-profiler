@@ -4,14 +4,11 @@
 package elfunwindinfo
 
 import (
-	"bytes"
-	"encoding/base64"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
 func TestLookupFDE(t *testing.T) {
@@ -51,9 +48,7 @@ func TestLookupFDE(t *testing.T) {
 		{at: 0x1000, expected: FDE{}},
 		{at: 0xcafe000, expected: FDE{}},
 	}
-	buffer, err := base64.StdEncoding.DecodeString(usrBinVolname)
-	require.NoError(t, err)
-	elf, err := pfelf.NewFile(bytes.NewReader(buffer), 0, false)
+	elf, err := getUsrBinPfelf()
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		err = elf.Close()

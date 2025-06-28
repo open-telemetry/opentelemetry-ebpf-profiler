@@ -38,6 +38,8 @@ var errEmptyEntry = errors.New("FDE/CIE empty")
 
 // ehframeHooks interface provides hooks for filtering and debugging eh_frame parsing
 type ehframeHooks interface {
+	// fdeUnsorted is called if FDE entries from unsorted area are found.
+	fdeUnsorted()
 	// fdeHook is called for each FDE. Returns false if the FDE should be filtered out.
 	fdeHook(cie *cieInfo, fde *fdeInfo) bool
 	// deltaHook is called for each stack delta found
@@ -369,7 +371,6 @@ type fdeInfo struct {
 	ciePos  uint64
 	ipLen   uintptr
 	ipStart uintptr
-	sorted  bool
 }
 
 const (
@@ -976,7 +977,6 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 		return uintptr(fdeLen), err
 	}
 	st := state{cie: cie, cur: cie.initialState}
-	fde.sorted = sorted
 
 	// Process the FDE opcodes
 	if !ee.hooks.fdeHook(st.cie, &fde) {
@@ -1006,6 +1006,7 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 			}
 			ee.hooks.deltaHook(ip, &st.cur, delta)
 			ee.deltas.AddEx(delta, sorted)
+			sorted = true
 			hint = sdtypes.UnwindHintNone
 		}
 
@@ -1028,11 +1029,11 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 
 	// Add end-of-function stop delta. This might later get removed if there is
 	// another function starting on this address.
-	ee.deltas.AddEx(sdtypes.StackDelta{
+	ee.deltas.Add(sdtypes.StackDelta{
 		Address: uint64(fde.ipStart + fde.ipLen),
 		Hints:   sdtypes.UnwindHintGap,
 		Info:    info,
-	}, sorted)
+	})
 
 	return uintptr(fdeLen), nil
 }
@@ -1178,16 +1179,13 @@ func (ee *elfExtractor) walkBinSearchTable(ef *pfelf.File, ehFrameHdrSec *elfReg
 	if err != nil {
 		return err
 	}
+	r := t.entryAt(0)
 	for f := uintptr(0); f < t.fdeCount; f++ {
-		var (
-			ipStart uintptr
-			fr      reader
-		)
-		ipStart, fr, entryErr := t.parseHdrEntry()
+		ipStart, fr, entryErr := t.decodeEntry(&r)
 		if entryErr != nil {
-			return err
+			return entryErr
 		}
-		_, err = ee.parseFDE(&fr, ef, ipStart, t.cieCache, true)
+		_, err = ee.parseFDE(&fr, ef, ipStart, t.cieCache, f > 0)
 		if err != nil && !errors.Is(err, errEmptyEntry) {
 			return fmt.Errorf("failed to parse FDE: %v", err)
 		}
@@ -1203,6 +1201,8 @@ func (ee *elfExtractor) walkFDEs(ef *pfelf.File, ehFrameSec *elfRegion, debugFra
 	if err != nil {
 		return err
 	}
+
+	ee.hooks.fdeUnsorted()
 
 	// Walk the section, and process each FDE it contains
 	var entryLen uintptr
