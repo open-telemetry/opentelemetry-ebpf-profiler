@@ -28,10 +28,14 @@ type EhFrameTable struct {
 	ehFrameHdrSec  *elfRegion
 	ehFrameSec     *elfRegion
 	efm            elf.Machine
-	cieCache       *lru.LRU[uint64, *cieInfo]
+
+	// cieCache holds the CIEs decoded so far. This is the only piece that is
+	// not concurrent safe, and could be made into a sync lru if needed.
+	cieCache *lru.LRU[uint64, *cieInfo]
 }
 
-// NewEhFrameTable creates a new EhFrameTable from the given pfelf.File
+// NewEhFrameTable creates a new EhFrameTable from the given pfelf.File.
+// The returned EhFrameTable is not concurrent safe.
 func NewEhFrameTable(ef *pfelf.File) (*EhFrameTable, error) {
 	ehFrameHdrSec, ehFrameSec, err := findEhSections(ef)
 	if err != nil {

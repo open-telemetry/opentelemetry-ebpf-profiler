@@ -39,7 +39,7 @@ var errEmptyEntry = errors.New("FDE/CIE empty")
 // ehframeHooks interface provides hooks for filtering and debugging eh_frame parsing
 type ehframeHooks interface {
 	// fdeUnsorted is called if FDE entries from unsorted area are found.
-	fdeIsUnsorted()
+	fdeUnsorted()
 	// fdeHook is called for each FDE. Returns false if the FDE should be filtered out.
 	fdeHook(cie *cieInfo, fde *fdeInfo) bool
 	// deltaHook is called for each stack delta found
@@ -1202,7 +1202,7 @@ func (ee *elfExtractor) walkFDEs(ef *pfelf.File, ehFrameSec *elfRegion, debugFra
 		return err
 	}
 
-	ee.hooks.fdeIsUnsorted()
+	ee.hooks.fdeUnsorted()
 
 	// Walk the section, and process each FDE it contains
 	var entryLen uintptr

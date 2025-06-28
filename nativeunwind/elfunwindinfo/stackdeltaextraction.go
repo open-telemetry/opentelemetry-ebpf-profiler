@@ -39,7 +39,7 @@ type extractionFilter struct {
 
 var _ ehframeHooks = &extractionFilter{}
 
-func (f *extractionFilter) fdeIsUnsorted() {
+func (f *extractionFilter) fdeUnsorted() {
 	f.unsortedFrames = true
 }
 

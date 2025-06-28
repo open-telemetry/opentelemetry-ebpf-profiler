@@ -20,7 +20,7 @@ type ehtester struct {
 	found int
 }
 
-func (e *ehtester) fdeIsUnsorted() {
+func (e *ehtester) fdeUnsorted() {
 }
 
 func (e *ehtester) fdeHook(cie *cieInfo, fde *fdeInfo) bool {
