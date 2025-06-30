@@ -94,6 +94,11 @@ jobs:
             echo "Please rebuild and commit the updated binary blobs."
             exit 1
           fi
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: binary-blobs
+          path: support/ebpf/tracer.ebpf.release.*
 
   build-integration-test-binaries:
     name: Build integration test binaries (${{ matrix.target_arch }})
