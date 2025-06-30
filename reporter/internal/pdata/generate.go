@@ -52,6 +52,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		rp := profiles.ResourceProfiles().AppendEmpty()
 		rp.Resource().Attributes().PutStr(string(semconv.ContainerIDKey),
 			string(containerID))
+		rp.SetSchemaUrl(semconv.SchemaURL)
 
 		sp := rp.ScopeProfiles().AppendEmpty()
 		sp.Scope().SetName(agentName)
