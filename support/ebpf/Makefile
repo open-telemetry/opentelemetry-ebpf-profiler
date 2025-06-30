@@ -1,6 +1,7 @@
 SHELL ?= bash
 BPF_CLANG ?= clang-17
 BPF_LINK ?= llvm-link-17
+STRIP ?= llvm-strip-17
 LLC ?= llc-17
 CLANG_FORMAT ?= clang-format-17
 
@@ -13,6 +14,11 @@ NATIVE_ARCH := arm64
 else
 $(error Unsupported architecture: $(NATIVE_ARCH))
 endif
+
+# Get the current build directory (absolute path).
+BUILD_DIR := $(shell pwd)
+# Use a placeholder like '.' or '/' as the new prefix.
+REPRODUCIBLE_PREFIX := .
 
 # Valid values: amd64, arm64.
 TARGET_ARCH ?= $(NATIVE_ARCH)
@@ -39,7 +45,10 @@ FLAGS=$(TARGET_FLAGS) -g \
 	-Wno-unused-label \
 	-Wno-unused-parameter \
 	-Wno-sign-compare \
-	-fno-stack-protector
+	-fno-stack-protector \
+	-D__SOURCE_DATE_EPOCH__=0 \
+	-Xclang -fdebug-prefix-map=$(BUILD_DIR)=$(REPRODUCIBLE_PREFIX) \
+	-Xclang -fmacro-prefix-map=$(BUILD_DIR)=$(REPRODUCIBLE_PREFIX)
 
 SRCS := $(wildcard *.ebpf.c)
 OBJS := $(SRCS:.c=.$(BUILD_TYPE).$(TARGET_ARCH).o)
@@ -67,6 +76,7 @@ errors.h: ../../tools/errors-codegen/errors.json
 
 $(TRACER_NAME): $(OBJS)
 	$(BPF_LINK) $^ -o - | $(LLC) -march=bpf -mcpu=v2 -filetype=obj -o $@
+	$(STRIP) --strip-debug --enable-deterministic-archives $@
 	@./print_instruction_count.sh $@
 
 baseline: $(TRACER_NAME)
