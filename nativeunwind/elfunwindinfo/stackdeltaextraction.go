@@ -27,6 +27,13 @@ type extractionFilter struct {
 	// should be excluded from .eh_frame extraction.
 	start, end uintptr
 
+	// entryStart and entryEnd contains the virtual address for the entry
+	// stub code with synthesized stackd deltas.
+	entryStart, entryEnd uintptr
+
+	// entryPending is true if the entry stub stack delta has not been added.
+	entryPending bool
+
 	// ehFrames is true if .eh_frame stack deltas are found
 	ehFrames bool
 
@@ -39,8 +46,27 @@ type extractionFilter struct {
 
 var _ ehframeHooks = &extractionFilter{}
 
+// addEntryDeltas generates the entry stub stack deltas.
+func (f *extractionFilter) addEntryDeltas(deltas *sdtypes.StackDeltaArray) {
+	deltas.AddEx(sdtypes.StackDelta{
+		Address: uint64(f.entryStart),
+		Hints:   sdtypes.UnwindHintKeep,
+		Info:    sdtypes.UnwindInfoStop,
+	}, !f.unsortedFrames)
+	deltas.Add(sdtypes.StackDelta{
+		Address: uint64(f.entryEnd),
+		Info:    sdtypes.UnwindInfoInvalid,
+	})
+	f.ehFrames = true
+	f.entryPending = false
+}
+
 // fdeHook filters out .eh_frame data that is superseded by .gopclntab data
-func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo) bool {
+func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo, deltas *sdtypes.StackDeltaArray) bool {
+	// Drop FDEs inside the gopclntab area
+	if f.start <= fde.ipStart && fde.ipStart+fde.ipLen <= f.end {
+		return false
+	}
 	if !fde.sorted {
 		// Seems .debug_frame sometimes has broken FDEs for zero address
 		if fde.ipStart == 0 {
@@ -48,14 +74,18 @@ func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo) bool {
 		}
 		f.unsortedFrames = true
 	}
-	// Parse functions outside the gopclntab area
-	if fde.ipStart < f.start || fde.ipStart > f.end {
-		// This is here to set the flag only when we have collected at least
-		// one stack delta from the relevant source.
-		f.ehFrames = true
-		return true
+	// Insert entry stub deltas to their sorted position.
+	if f.entryPending && fde.ipStart >= f.entryStart {
+		f.addEntryDeltas(deltas)
 	}
-	return false
+	// Drop FDEs overlapping with the detected entry stub.
+	if fde.ipStart+fde.ipLen > f.entryStart && f.entryEnd >= fde.ipStart {
+		return false
+	}
+	// This is here to set the flag only when we have collected at least
+	// one stack delta from the relevant source.
+	f.ehFrames = true
+	return true
 }
 
 // deltaHook is a stub to satisfy ehframeHooks interface
@@ -115,6 +145,21 @@ func Extract(filename string, interval *sdtypes.IntervalData) error {
 	return ExtractELF(elfRef, interval)
 }
 
+// detectEntry matches the ELF DSO entry for known stub types.
+func detectEntry(ef *pfelf.File) int {
+	if ef.Entry == 0 {
+		return 0
+	}
+	switch ef.Machine {
+	case elf.EM_X86_64:
+		return detectEntryX86(ef)
+	case elf.EM_AARCH64:
+		return detectEntryARM(ef)
+	default:
+		return 0
+	}
+}
+
 // ExtractELF takes a pfelf.Reference and provides the stack delta
 // intervals for it in the interval parameter.
 func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
@@ -134,6 +179,12 @@ func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
 		allowGenericRegs: isLibCrypto(elfFile),
 	}
 
+	if entryLength := detectEntry(elfFile); entryLength != 0 {
+		filter.entryStart = uintptr(elfFile.Entry)
+		filter.entryEnd = filter.entryStart + uintptr(entryLength)
+		filter.entryPending = true
+	}
+
 	if err = ee.parseGoPclntab(); err != nil {
 		return fmt.Errorf("failure to parse golang stack deltas: %v", err)
 	}
@@ -150,6 +201,9 @@ func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
 			return fmt.Errorf("failure to parse debug stack deltas: %v", err)
 		}
 	}
+	if filter.entryPending {
+		filter.addEntryDeltas(ee.deltas)
+	}
 
 	// If multiple sources were merged, sort them.
 	if filter.unsortedFrames || (filter.ehFrames && filter.golangFrames) {
@@ -157,9 +211,12 @@ func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
 			if deltas[i].Address != deltas[j].Address {
 				return deltas[i].Address < deltas[j].Address
 			}
-			// Make sure that the potential duplicate stop delta is sorted
-			// after the real delta.
-			return deltas[i].Info.Opcode < deltas[j].Info.Opcode
+			// Make sure that the potential duplicate "invalid" delta is sorted
+			// after the real delta so the proper delta is removed in next stage.
+			if deltas[i].Info.Opcode != deltas[j].Info.Opcode {
+				return deltas[i].Info.Opcode < deltas[j].Info.Opcode
+			}
+			return deltas[i].Info.Param < deltas[j].Info.Param
 		})
 
 		maxDelta := 0

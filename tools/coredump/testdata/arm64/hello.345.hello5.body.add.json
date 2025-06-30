@@ -23,7 +23,6 @@
         "runtime.mstart1+0 in /usr/local/go/src/runtime/proc.go:1428",
         "runtime.mstart0+0 in /usr/local/go/src/runtime/proc.go:1359",
         "runtime.mstart+0 in /usr/local/go/src/runtime/asm_arm64.s:129"
-
       ]
     },
     {
@@ -50,7 +49,6 @@
         "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:3206",
         "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:3356",
         "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:193"
-
       ]
     }
   ],

@@ -30,8 +30,7 @@
         "libpython3.11.so.1.0+0x270c06",
         "libpython3.11.so.1.0+0x235b06",
         "ld-musl-x86_64.so.1+0x1c9c9",
-        "python3.11+0x1075",
-        "<unwinding aborted due to error native_stack_delta_invalid>"
+        "python3.11+0x1075"
       ]
     }
   ],

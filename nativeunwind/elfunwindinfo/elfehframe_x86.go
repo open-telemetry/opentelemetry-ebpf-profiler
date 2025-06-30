@@ -8,11 +8,14 @@ package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/
 // can be taken into account regardless of the target build platform.
 
 import (
+	"bytes"
 	"debug/elf"
 	"fmt"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
+	"golang.org/x/arch/x86/x86asm"
 )
 
 const (
@@ -164,4 +167,55 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 		}
 	}
 	return info
+}
+
+func detectEntryX86(ef *pfelf.File) int {
+	// On glibc, the entry has FDE. No fixup is needed.
+	// On musl, the entry has no FDE, or possibly has an FDE covering part of it.
+	// Detect the musl case and return entry.
+
+	// Typically 52 bytes, allow for a bit of variance
+	code, err := ef.VirtualMemory(int64(ef.Entry), 64, 64)
+	if err != nil || len(code) < 52 {
+		return 0
+	}
+
+	// The typical musl entry point:
+	// 1. assembly code from crt_arch.h (no FDE at all):
+	// 48 31 ed             xor    %rbp,%rbp
+	// 48 89 e7             mov    %rsp,%rdi
+	// 48 8d 35 b2 c2 00 00 lea    0xc2b2(%rip),%rsi
+	// 48 83 e4 f0          and    $0xfffffffffffffff0,%rsp
+	// e8 00 00 00 00       call   0x4587
+	// 2. immediately followed with C code from [r]crt1.c (maybe with FDE):
+	// 8b 37                mov    (%rdi),%esi
+	// 48 8d 57 08          lea    0x8(%rdi),%rdx
+	// 4c 8d 05 d0 62 00 00 lea    0x62d0(%rip),%r8
+	// 45 31 c9             xor    %r9d,%r9d
+	// 48 8d 0d 62 fa ff ff lea    -0x59e(%rip),%rcx
+	// 48 8d 3d 8b fa ff ff lea    -0x575(%rip),%rdi
+	// e9 76 fa ff ff       jmp    0x4020 <__libc_start_main@plt>
+
+	// Match the assembly exactly except the LEA call offset
+	if !bytes.Equal(code[:9], []byte{0x48, 0x31, 0xed, 0x48, 0x89, 0xe7, 0x48, 0x8d, 0x35}) ||
+		!bytes.Equal(code[13:22], []byte{0x48, 0x83, 0xe4, 0xf0, 0xe8, 0x00, 0x00, 0x00, 0x00}) {
+		return 0
+	}
+
+	// Decode the second portion and allow whitelisted opcodes finding the JMP
+	for pos := 22; pos < len(code); {
+		inst, err := x86asm.Decode(code[pos:], 64)
+		if err != nil {
+			return 0
+		}
+		switch inst.Op {
+		case x86asm.MOV, x86asm.LEA, x86asm.XOR:
+			pos += inst.Len
+		case x86asm.JMP:
+			return pos + inst.Len
+		default:
+			return 0
+		}
+	}
+	return 0
 }

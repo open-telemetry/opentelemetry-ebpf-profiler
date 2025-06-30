@@ -39,7 +39,7 @@ var errEmptyEntry = errors.New("FDE/CIE empty")
 // ehframeHooks interface provides hooks for filtering and debugging eh_frame parsing
 type ehframeHooks interface {
 	// fdeHook is called for each FDE. Returns false if the FDE should be filtered out.
-	fdeHook(cie *cieInfo, fde *fdeInfo) bool
+	fdeHook(cie *cieInfo, fde *fdeInfo, deltas *sdtypes.StackDeltaArray) bool
 	// deltaHook is called for each stack delta found
 	deltaHook(ip uintptr, regs *vmRegs, delta sdtypes.StackDelta)
 	// golangHook is called if .gopclntab is found to report its coverage
@@ -979,11 +979,10 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 	fde.sorted = sorted
 
 	// Process the FDE opcodes
-	if !ee.hooks.fdeHook(st.cie, &fde) {
+	if !ee.hooks.fdeHook(st.cie, &fde, ee.deltas) {
 		return uintptr(fdeLen), nil
 	}
 	st.loc = fde.ipStart
-
 	if st.cie.isSignalHandler || isSignalTrampoline(ee.file, &fde) {
 		delta := sdtypes.StackDelta{
 			Address: uint64(st.loc),
@@ -1021,17 +1020,12 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 		}
 	}
 
-	info := sdtypes.UnwindInfoInvalid
-	if ef.Entry == uint64(fde.ipStart+fde.ipLen) {
-		info = sdtypes.UnwindInfoStop
-	}
-
 	// Add end-of-function stop delta. This might later get removed if there is
 	// another function starting on this address.
 	ee.deltas.AddEx(sdtypes.StackDelta{
 		Address: uint64(fde.ipStart + fde.ipLen),
 		Hints:   sdtypes.UnwindHintGap,
-		Info:    info,
+		Info:    sdtypes.UnwindInfoInvalid,
 	}, sorted)
 
 	return uintptr(fdeLen), nil
