@@ -4,12 +4,10 @@
 package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
-	"io"
-	"os"
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 //nolint:lll
@@ -49,16 +47,9 @@ func TestExtractContainerID(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.expectedContainerID, func(t *testing.T) {
-			tmpFile, err := os.CreateTemp(t.TempDir(), "TestExtractContainerID")
-			require.NoError(t, err)
-			defer tmpFile.Close()
+			reader := bytes.NewReader([]byte(tc.line))
 
-			_, err = tmpFile.WriteString(tc.line)
-			require.NoError(t, err)
-			_, err = tmpFile.Seek(0, io.SeekStart)
-			require.NoError(t, err)
-
-			gotContainerID := extractContainerID(tmpFile)
+			gotContainerID := extractContainerID(reader)
 			assert.Equal(t, tc.expectedContainerID, gotContainerID)
 		})
 	}
