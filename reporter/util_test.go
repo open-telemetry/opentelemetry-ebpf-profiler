@@ -40,6 +40,10 @@ func TestExtractContainerID(t *testing.T) {
 		{
 			line: "0::/../../user.slice/user-501.slice/session-3.scope",
 		},
+		{
+			line:                "0::/system.slice/docker-b1eba9dfaeba29d8b80532a574a03ea3cac29384327f339c26da13649e2120df.scope/init",
+			expectedContainerID: "b1eba9dfaeba29d8b80532a574a03ea3cac29384327f339c26da13649e2120df",
+		},
 	}
 
 	for _, tc := range tests {

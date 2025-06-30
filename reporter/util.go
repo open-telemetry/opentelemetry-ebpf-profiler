@@ -12,8 +12,9 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
+//nolint:lll
 var (
-	cgroupv2ContainerIDPattern = regexp.MustCompile(`0:.*?:.*?([0-9a-fA-F]{64})(?:\.scope)?$`)
+	cgroupv2ContainerIDPattern = regexp.MustCompile(`0:.*?:.*?([0-9a-fA-F]{64})(?:\.scope)?(?:/[a-z]+)?$`)
 )
 
 // hashString is a helper function for LRUs that use string as a key.
