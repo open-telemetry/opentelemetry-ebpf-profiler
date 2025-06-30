@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
@@ -214,6 +215,41 @@ func TestFunctionTableOrder(t *testing.T) {
 				funcName := dic.StringTable().At(int(dic.FunctionTable().At(i).NameStrindex()))
 				assert.Equal(t, tt.wantFunctionTable[i], funcName)
 			}
+		})
+	}
+}
+
+func TestProfileDuration(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		events map[libpf.Origin]samples.KeyToEventMapping
+	}{
+		{
+			name: "profile duration",
+			events: map[libpf.Origin]samples.KeyToEventMapping{
+				support.TraceOriginSampling: map[samples.TraceAndMetaKey]*samples.TraceEvents{
+					{Pid: 1}: {
+						Timestamps: []uint64{2, 1, 3, 4, 7},
+					},
+					{Pid: 2}: {
+						Timestamps: []uint64{8},
+					},
+				},
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			d, err := New(100, 100, 100, nil)
+			require.NoError(t, err)
+
+			tree := make(samples.TraceEventsTree)
+			tree[""] = tt.events
+			res, err := d.Generate(tree, tt.name, "version")
+			require.NoError(t, err)
+
+			profile := res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0)
+			require.Equal(t, pcommon.Timestamp(7), profile.Duration())
+			require.Equal(t, pcommon.Timestamp(1), profile.StartTime())
 		})
 	}
 }
