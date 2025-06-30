@@ -22,7 +22,7 @@ type (
 
 func NewCollector(sr SymbolReporter) *Collector { return &Collector{sr: sr} }
 
-func (c *Collector) Start(ctx context.Context, freq, offCpuThreshold int, interval time.Duration, targetPIDs []libpf.PID) error {
+func (c *Collector) Start(ctx context.Context, freq, offCpuThreshold int, interval time.Duration, targetPIDs []libpf.PID, cacheEventSTolerance int, cacheEventSTimeout time.Duration) error {
 	if c.cfg != nil {
 		if c.cfg.ReporterInterval == interval &&
 			c.cfg.SamplesPerSecond == freq &&
@@ -32,7 +32,7 @@ func (c *Collector) Start(ctx context.Context, freq, offCpuThreshold int, interv
 		c.Stop()
 	}
 
-	rpt, err := reporter.NewColaSoft(freq, interval, c.sr, c.sr.ConsumeProfilesFunc, noFrameOpSymbolReporter{c.sr}, 5000, time.Minute)
+	rpt, err := reporter.NewColaSoft(freq, interval, c.sr, c.sr.ConsumeProfilesFunc, noFrameOpSymbolReporter{c.sr}, cacheEventSTolerance, cacheEventSTimeout)
 	if err != nil {
 		return err
 	}
