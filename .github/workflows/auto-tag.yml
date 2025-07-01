@@ -1,8 +1,8 @@
 name: Monthly Tagging
 on:
   schedule:
-    # Run every month on the 1st day at 08:15 AM.
-    - cron: '15 8 1 * *'
+    # Run every month on the 3rd day at 08:15 AM.
+    - cron: '15 8 3 * *'
 
 jobs:
   create-monthly-tag:
