@@ -102,7 +102,7 @@ vanity-import-fix: $(PORTO)
 	@go install github.com/jcchavezs/porto/cmd/porto@latest
 	@porto --include-internal -w .
 
-test: generate ebpf test-deps rust-components
+test: generate ebpf test-deps
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 # This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
