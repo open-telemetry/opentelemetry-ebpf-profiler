@@ -52,10 +52,12 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		rp := profiles.ResourceProfiles().AppendEmpty()
 		rp.Resource().Attributes().PutStr(string(semconv.ContainerIDKey),
 			string(containerID))
+		rp.SetSchemaUrl(semconv.SchemaURL)
 
 		sp := rp.ScopeProfiles().AppendEmpty()
 		sp.Scope().SetName(agentName)
 		sp.Scope().SetVersion(agentVersion)
+		sp.SetSchemaUrl(semconv.SchemaURL)
 
 		for _, origin := range []libpf.Origin{
 			support.TraceOriginSampling,
