@@ -1,5 +1,6 @@
 name: Monthly Tagging
 on:
+  workflow_dispatch: # Allows manual triggering of the workflow
   schedule:
     # Run every month on the 3rd day at 08:15 AM.
     - cron: '15 8 3 * *'
