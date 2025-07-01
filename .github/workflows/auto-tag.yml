@@ -4,8 +4,13 @@ on:
     # Run every month on the 1st day at 08:15 AM.
     - cron: '15 8 * 1 *'
 
+permissions:
+  contents: read
+
 jobs:
   create-monthly-tag:
+    permissions:
+      contents: write # required for pushing git tags
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
