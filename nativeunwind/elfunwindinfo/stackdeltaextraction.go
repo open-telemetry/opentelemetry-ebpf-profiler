@@ -61,18 +61,19 @@ func (f *extractionFilter) addEntryDeltas(deltas *sdtypes.StackDeltaArray) {
 	f.entryPending = false
 }
 
+func (f *extractionFilter) fdeUnsorted() {
+	f.unsortedFrames = true
+}
+
 // fdeHook filters out .eh_frame data that is superseded by .gopclntab data
 func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo, deltas *sdtypes.StackDeltaArray) bool {
 	// Drop FDEs inside the gopclntab area
 	if f.start <= fde.ipStart && fde.ipStart+fde.ipLen <= f.end {
 		return false
 	}
-	if !fde.sorted {
-		// Seems .debug_frame sometimes has broken FDEs for zero address
-		if fde.ipStart == 0 {
-			return false
-		}
-		f.unsortedFrames = true
+	// Seems .debug_frame sometimes has broken FDEs for zero address
+	if f.unsortedFrames && fde.ipStart == 0 {
+		return false
 	}
 	// Insert entry stub deltas to their sorted position.
 	if f.entryPending && fde.ipStart >= f.entryStart {
@@ -115,9 +116,7 @@ type elfExtractor struct {
 	allowGenericRegs bool
 }
 
-func (ee *elfExtractor) extractDebugDeltas() error {
-	var err error
-
+func (ee *elfExtractor) extractDebugDeltas() (err error) {
 	// Attempt finding the associated debug information file with .debug_frame,
 	// but ignore errors if it's not available; many production systems
 	// do not intentionally have debug packages installed.
@@ -178,7 +177,13 @@ func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
 	if err != nil {
 		return err
 	}
+	return extractFile(elfFile, elfRef, interval)
+}
 
+// extractFile extracts the elfFile stack deltas and uses the optional elfRef to resolve
+// debug link references if needed.
+func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference,
+	interval *sdtypes.IntervalData) (err error) {
 	// Parse the stack deltas from the ELF
 	filter := extractionFilter{}
 	deltas := sdtypes.StackDeltaArray{}
@@ -205,7 +210,7 @@ func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
 	if err = ee.parseDebugFrame(elfFile); err != nil {
 		return fmt.Errorf("failure to parse debug_frame stack deltas: %v", err)
 	}
-	if len(deltas) < numIntervalsToOmitDebugLink {
+	if ee.ref != nil && len(deltas) < numIntervalsToOmitDebugLink {
 		// There is only few stack deltas. See if we find the .gnu_debuglink
 		// debug information for additional .debug_frame stack deltas.
 		if err = ee.extractDebugDeltas(); err != nil {
