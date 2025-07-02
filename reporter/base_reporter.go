@@ -99,7 +99,8 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 
 	containerID, err := b.lookupContainerID(meta.PID)
 	if err != nil {
-		return err
+		log.Debugf("Failed to get a container ID for PID %d: %v",
+			meta.PID, err)
 	}
 
 	key := samples.TraceAndMetaKey{
