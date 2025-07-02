@@ -87,10 +87,6 @@ type elfExtractor struct {
 }
 
 func (ee *elfExtractor) extractDebugDeltas() (err error) {
-	if ee.ref == nil {
-		return nil
-	}
-
 	// Attempt finding the associated debug information file with .debug_frame,
 	// but ignore errors if it's not available; many production systems
 	// do not intentionally have debug packages installed.
@@ -152,7 +148,7 @@ func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference,
 	if err = ee.parseDebugFrame(elfFile); err != nil {
 		return fmt.Errorf("failure to parse debug_frame stack deltas: %v", err)
 	}
-	if len(deltas) < numIntervalsToOmitDebugLink {
+	if ee.ref != nil && len(deltas) < numIntervalsToOmitDebugLink {
 		// There is only few stack deltas. See if we find the .gnu_debuglink
 		// debug information for additional .debug_frame stack deltas.
 		if err = ee.extractDebugDeltas(); err != nil {
