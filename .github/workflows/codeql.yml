@@ -8,8 +8,7 @@ on:
   schedule:
     - cron: "21 6 * * 1"
 
-permissions:
-  contents: read
+permissions: read-all
 
 jobs:
   analyze:
