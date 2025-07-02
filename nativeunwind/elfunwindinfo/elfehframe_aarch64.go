@@ -12,7 +12,6 @@ import (
 	"debug/elf"
 	"fmt"
 
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"golang.org/x/arch/arm64/arm64asm"
@@ -164,56 +163,16 @@ func (regs *vmRegs) getUnwindInfoARM() sdtypes.UnwindInfo {
 	return info
 }
 
-func detectEntryARM(ef *pfelf.File) int {
+func detectEntryARM(code []byte) int {
+	// Refer to test cases for the seen assembly dumps.
 	// Both, on GLIBC and MUSL there is no FDE for the entry code. This code tries
 	// to match both. The main difference is that glibc uses BL (Branch with Link)
 	// or a proper function call to maintain frame, and musl uses B (Branch) or
 	// a jump so the entry is not seen on traces.
 
-	// Glibc, 56 bytes
-	// d280001d	mov	x29, #0x0
-	// d280001e	mov	x30, #0x0
-	// aa0003e5	mov	x5, x0
-	// f94003e1	ldr	x1, [sp]
-	// 910023e2	add	x2, sp, #0x8
-	// 910003e6	mov	x6, sp
-	// b0000080	adrp	x0, 0x11000
-	// f947f000	ldr	x0, [x0, #4064]
-	// b0000083	adrp	x3, 0x11000
-	// f947ec63	ldr	x3, [x3, #4056]
-	// b0000084	adrp	x4, 0x11000
-	// f947d484	ldr	x4, [x4, #4008]
-	// 97ffffab	bl	0xa90 <__libc_start_main@plt>
-	// 97ffffbe	bl	0xae0 <abort@plt>
-	// Seen also another glibc variant with movz/movk of length 80 bytes.
-
-	// Musl, 64 bytes:
-	// d280001d	mov	x29, #0x0
-	// d280001e	mov	x30, #0x0
-	// 910003e0	mov	x0, sp
-	// f00000c1	adrp	x1, 0x1f000
-	// 911f4021	add	x1, x1, #0x7d0
-	// 927cec1f	and	sp, x0, #0xfffffffffffffff0
-	// 14000001	b	0x413c
-	// aa0003e2	mov	x2, x0
-	// d2800005	mov	x5, #0x0
-	// f00000c4	adrp	x4, 0x1f000
-	// f947ac84	ldr	x4, [x4, #3928]
-	// f8408441	ldr	x1, [x2], #8
-	// f00000c3	adrp	x3, 0x1f000
-	// f947f863	ldr	x3, [x3, #4080]
-	// f00000c0	adrp	x0, 0x1f000
-	// f947f400	ldr	x0, [x0, #4072]
-	// 17fffd10	b	0x35a0 <__libc_start_main@plt>
-
-	// Typically 64 bytes or less, allow for a bit of variance
-	code, err := ef.VirtualMemory(int64(ef.Entry), 128, 128)
-	if err != nil || len(code) < 32 {
-		return 0
-	}
-
 	// Match the prolog for clearing LR/FP
-	if !bytes.Equal(code[:8], []byte{0x1d, 0x00, 0x80, 0xd2, 0x1e, 0x00, 0x80, 0xd2}) {
+	if len(code) < 32 ||
+		!bytes.Equal(code[:8], []byte{0x1d, 0x00, 0x80, 0xd2, 0x1e, 0x00, 0x80, 0xd2}) {
 		return 0
 	}
 

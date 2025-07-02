@@ -145,19 +145,30 @@ func Extract(filename string, interval *sdtypes.IntervalData) error {
 	return ExtractELF(elfRef, interval)
 }
 
-// detectEntry matches the ELF DSO entry for known stub types.
+// detectEntryCode matches machine code for known entry stubs, and detects its length.
+func detectEntryCode(machine elf.Machine, code []byte) int {
+	switch machine {
+	case elf.EM_X86_64:
+		return detectEntryX86(code)
+	case elf.EM_AARCH64:
+		return detectEntryARM(code)
+	default:
+		return 0
+	}
+}
+
+// detectEntry loads the entry stub from the ELF DSO entry and matches it.
 func detectEntry(ef *pfelf.File) int {
 	if ef.Entry == 0 {
 		return 0
 	}
-	switch ef.Machine {
-	case elf.EM_X86_64:
-		return detectEntryX86(ef)
-	case elf.EM_AARCH64:
-		return detectEntryARM(ef)
-	default:
+
+	// Typically 52-80 bytes, allow for a bit of variance
+	code, err := ef.VirtualMemory(int64(ef.Entry), 128, 128)
+	if err != nil {
 		return 0
 	}
+	return detectEntryCode(ef.Machine, code)
 }
 
 // ExtractELF takes a pfelf.Reference and provides the stack delta
