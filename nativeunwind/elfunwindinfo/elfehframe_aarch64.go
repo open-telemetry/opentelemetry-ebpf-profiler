@@ -176,7 +176,7 @@ func detectEntryARM(code []byte) int {
 		return 0
 	}
 
-	// Find for the second B or BL
+	// Search for the second B or BL
 	numBranch := 0
 	for pos := 8; pos < len(code); pos += 4 {
 		inst, err := arm64asm.Decode(code[pos:])
@@ -189,7 +189,7 @@ func detectEntryARM(code []byte) int {
 			// nop, allowed instruction
 		case arm64asm.B, arm64asm.BL:
 			numBranch++
-			if numBranch >= 2 {
+			if numBranch == 2 {
 				return pos + 4
 			}
 		default:

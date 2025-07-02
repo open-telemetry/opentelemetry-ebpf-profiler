@@ -27,8 +27,8 @@ type extractionFilter struct {
 	// should be excluded from .eh_frame extraction.
 	start, end uintptr
 
-	// entryStart and entryEnd contains the virtual address for the entry
-	// stub code with synthesized stackd deltas.
+	// entryStart and entryEnd contain the virtual address for the entry
+	// stub code with synthesized stack deltas.
 	entryStart, entryEnd uintptr
 
 	// entryPending is true if the entry stub stack delta has not been added.
