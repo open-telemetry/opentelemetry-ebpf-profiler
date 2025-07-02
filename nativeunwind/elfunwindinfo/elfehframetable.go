@@ -21,17 +21,21 @@ type FDE struct {
 }
 
 type EhFrameTable struct {
-	r             reader
-	hdr           *ehFrameHdr
-	fdeCount      uintptr
-	tableStartPos uintptr
-	ehFrameSec    *elfRegion
-	efm           elf.Machine
-	cieCache      *lru.LRU[uint64, *cieInfo]
+	fdeCount       uintptr
+	tableStartPos  uintptr
+	tableEntrySize int
+	tableEnc       encoding
+	ehFrameHdrSec  *elfRegion
+	ehFrameSec     *elfRegion
+	efm            elf.Machine
+
+	// cieCache holds the CIEs decoded so far. This is the only piece that is
+	// not concurrent safe, and could be made into a sync lru if needed.
+	cieCache *lru.LRU[uint64, *cieInfo]
 }
 
-// NewEhFrameTable creates a new EhFrameTable from the given pfelf.File
-// The returned EhFrameTable must not be used concurrently
+// NewEhFrameTable creates a new EhFrameTable from the given pfelf.File.
+// The returned EhFrameTable is not concurrent safe.
 func NewEhFrameTable(ef *pfelf.File) (*EhFrameTable, error) {
 	ehFrameHdrSec, ehFrameSec, err := findEhSections(ef)
 	if err != nil {
@@ -49,15 +53,14 @@ func NewEhFrameTable(ef *pfelf.File) (*EhFrameTable, error) {
 // LookupFDE performs a binary search in .eh_frame_hdr for an FDE covering the given addr.
 func (e *EhFrameTable) LookupFDE(addr libpf.Address) (FDE, error) {
 	idx := sort.Search(e.count(), func(idx int) bool {
-		e.position(idx)
-		ipStart, _, _ := e.parseHdrEntry() // ignoring error, check bounds later
+		r := e.entryAt(idx)
+		ipStart, _ := r.ptr(e.tableEnc) // ignoring error, check bounds later
 		return ipStart > uintptr(addr)
 	})
 	if idx <= 0 {
 		return FDE{}, errors.New("FDE not found")
 	}
-	e.position(idx - 1)
-	ipStart, fr, entryErr := e.parseHdrEntry()
+	ipStart, fr, entryErr := e.decodeEntryAt(idx - 1)
 	if entryErr != nil {
 		return FDE{}, entryErr
 	}
@@ -78,23 +81,30 @@ func (e *EhFrameTable) LookupFDE(addr libpf.Address) (FDE, error) {
 func newEhFrameTableFromSections(ehFrameHdrSec *elfRegion,
 	ehFrameSec *elfRegion, efm elf.Machine,
 ) (hp *EhFrameTable, err error) {
-	hp = &EhFrameTable{
-		hdr: (*ehFrameHdr)(unsafe.Pointer(&ehFrameHdrSec.data[0])),
-		r:   ehFrameHdrSec.reader(unsafe.Sizeof(ehFrameHdr{}), false),
+	hdr := (*ehFrameHdr)(unsafe.Pointer(&ehFrameHdrSec.data[0]))
+
+	r := ehFrameHdrSec.reader(unsafe.Sizeof(ehFrameHdr{}), false)
+	if _, err = r.ptr(hdr.ehFramePtrEnc); err != nil {
+		return nil, err
 	}
-	if _, err = hp.r.ptr(hp.hdr.ehFramePtrEnc); err != nil {
-		return hp, err
+	fdeCount, err := r.ptr(hdr.fdeCountEnc)
+	if err != nil {
+		return nil, err
 	}
-	if hp.fdeCount, err = hp.r.ptr(hp.hdr.fdeCountEnc); err != nil {
-		return hp, err
+	cieCache, err := lru.New[uint64, *cieInfo](cieCacheSize, hashUint64)
+	if err != nil {
+		return nil, err
 	}
-	if hp.cieCache, err = lru.New[uint64, *cieInfo](cieCacheSize, hashUint64); err != nil {
-		return hp, err
-	}
-	hp.ehFrameSec = ehFrameSec
-	hp.tableStartPos = hp.r.pos
-	hp.efm = efm
-	return hp, nil
+	return &EhFrameTable{
+		fdeCount:       fdeCount,
+		tableStartPos:  r.pos,
+		tableEntrySize: formatLen(hdr.tableEnc) * 2,
+		tableEnc:       hdr.tableEnc,
+		ehFrameHdrSec:  ehFrameHdrSec,
+		ehFrameSec:     ehFrameSec,
+		efm:            efm,
+		cieCache:       cieCache,
+	}, nil
 }
 
 // returns FDE count
@@ -102,21 +112,19 @@ func (e *EhFrameTable) count() int {
 	return int(e.fdeCount)
 }
 
-// position adjusts the reader position to point at the table entry with idx index
-func (e *EhFrameTable) position(idx int) {
-	tableEntrySize := formatLen(e.hdr.tableEnc) * 2
-	e.r.pos = e.tableStartPos + uintptr(tableEntrySize*idx)
+// entryAt returns a reader for the binary search table at given index.
+func (e *EhFrameTable) entryAt(idx int) reader {
+	return e.ehFrameHdrSec.reader(e.tableStartPos+uintptr(e.tableEntrySize*idx), false)
 }
 
-// parseHdrEntry parsers an entry in the .eh_frame_hdr binary search table and the corresponding
-// entry in the .eh_frame section
-func (e *EhFrameTable) parseHdrEntry() (ipStart uintptr, fr reader, err error) {
-	ipStart, err = e.r.ptr(e.hdr.tableEnc)
+// decodeEntry decodes one entry of the binary search table from the reader.
+func (e *EhFrameTable) decodeEntry(r *reader) (ipStart uintptr, fr reader, err error) {
+	ipStart, err = r.ptr(e.tableEnc)
 	if err != nil {
 		return 0, reader{}, err
 	}
 	var fdeAddr uintptr
-	fdeAddr, err = e.r.ptr(e.hdr.tableEnc)
+	fdeAddr, err = r.ptr(e.tableEnc)
 	if err != nil {
 		return 0, reader{}, err
 	}
@@ -125,8 +133,13 @@ func (e *EhFrameTable) parseHdrEntry() (ipStart uintptr, fr reader, err error) {
 			fdeAddr, e.ehFrameSec.vaddr)
 	}
 	fr = e.ehFrameSec.reader(fdeAddr-e.ehFrameSec.vaddr, false)
-
 	return ipStart, fr, err
+}
+
+// decodeEntryAt decodes the entry from given index.
+func (e *EhFrameTable) decodeEntryAt(idx int) (ipStart uintptr, fr reader, err error) {
+	r := e.entryAt(idx)
+	return e.decodeEntry(&r)
 }
 
 // formatLen returns the length of a field encoded with enc encoding.
