@@ -871,6 +871,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	trace := &host.Trace{
 		Comm:             C.GoString((*C.char)(unsafe.Pointer(&ptr.comm))),
 		ExecutablePath:   procMeta.Executable,
+		ContainerID:      procMeta.ContainerID,
 		ProcessName:      procMeta.Name,
 		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.apm_trace_id)),
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.apm_transaction_id)),

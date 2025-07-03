@@ -145,10 +145,16 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 			}
 		}
 
+		containerID, err := extractContainerID(pid)
+		if err != nil {
+			log.Debugf("Failed extracting containerID for %d: %v", pid, err)
+		}
+
 		info = &processInfo{
 			meta: ProcessMeta{
 				Name:         processName,
 				Executable:   exePath,
+				ContainerID:  containerID,
 				EnvVariables: envVarMap},
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
