@@ -135,9 +135,9 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
   #define DEBUG_CAPTURE_COREDUMP_IF_TGID(tgid)                                                     \
     ({                                                                                             \
       if (with_debug_output && bpf_get_current_pid_tgid() >> 32 == (tgid)) {                       \
-        printt("coredumping process %d", (tgid));                                             \
+        printt("coredumping process %d", (tgid));                                                  \
         long (*bpf_send_signal_thread)(u32 sig) = (void *)BPF_FUNC_send_signal_thread;             \
-        bpf_send_signal_thread(SIGTRAP);                                                                  \
+        bpf_send_signal_thread(SIGTRAP);                                                           \
       }                                                                                            \
     })
 
