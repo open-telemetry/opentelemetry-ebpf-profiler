@@ -4,7 +4,7 @@
 #include "bpf_map.h"
 #include "kernel.h"
 
-// with_debug_output is declared in the scope of native unwind.
+// with_debug_output is declared in native_stack_trace.ebpf.c
 extern volatile const u32 with_debug_output;
 
 #if defined(TESTING_COREDUMP)
@@ -135,7 +135,7 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
   #define DEBUG_CAPTURE_COREDUMP_IF_TGID(tgid)                                                     \
     ({                                                                                             \
       if (with_debug_output && bpf_get_current_pid_tgid() >> 32 == (tgid)) {                       \
-        DEBUG_PRINT("coredumping process %d", (tgid));                                             \
+        printt("coredumping process %d", (tgid));                                             \
         DEBUG_CAPTURE_COREDUMP();                                                                  \
       }                                                                                            \
     })
