@@ -15,8 +15,6 @@ else
 $(error Unsupported architecture: $(NATIVE_ARCH))
 endif
 
-# Get the current build directory (absolute path).
-BUILD_DIR := $(shell pwd)
 # Use a placeholder like '.' or '/' as the new prefix.
 REPRODUCIBLE_PREFIX := .
 
@@ -48,8 +46,8 @@ FLAGS=$(TARGET_FLAGS) -g \
 	-Wno-sign-compare \
 	-fno-stack-protector \
 	-D__SOURCE_DATE_EPOCH__=0 \
-	-Xclang -fdebug-prefix-map=$(BUILD_DIR)=$(REPRODUCIBLE_PREFIX) \
-	-Xclang -fmacro-prefix-map=$(BUILD_DIR)=$(REPRODUCIBLE_PREFIX)
+	-Xclang -fdebug-prefix-map=$(CURDIR)=$(REPRODUCIBLE_PREFIX) \
+	-Xclang -fmacro-prefix-map=$(CURDIR)=$(REPRODUCIBLE_PREFIX)
 
 SRCS := $(wildcard *.ebpf.c)
 OBJS := $(SRCS:.c=.$(BUILD_TYPE).$(TARGET_ARCH).o)
