@@ -5,7 +5,6 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
-	"time"
 
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
@@ -29,14 +28,6 @@ type CollectorReporter struct {
 
 // NewCollector builds a new CollectorReporter
 func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorReporter, error) {
-	pidToContainerID, err := lru.NewSynced[libpf.PID, string](cfg.PIDToContainerIDCacheElements,
-		func(pid libpf.PID) uint32 { return uint32(pid) })
-	if err != nil {
-		return nil, err
-	}
-	// Set a lifetime to reduce the risk of invalid data in case of PID reuse.
-	pidToContainerID.SetLifetime(90 * time.Second)
-
 	// Next step: Dynamically configure the size of this LRU.
 	// Currently, we use the length of the JSON array in
 	// hostmetadata/hostmetadata.json.
@@ -59,13 +50,12 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 
 	return &CollectorReporter{
 		baseReporter: &baseReporter{
-			cfg:              cfg,
-			name:             cfg.Name,
-			version:          cfg.Version,
-			pdata:            data,
-			pidToContainerID: pidToContainerID,
-			traceEvents:      xsync.NewRWMutex(tree),
-			hostmetadata:     hostmetadata,
+			cfg:          cfg,
+			name:         cfg.Name,
+			version:      cfg.Version,
+			pdata:        data,
+			traceEvents:  xsync.NewRWMutex(tree),
+			hostmetadata: hostmetadata,
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),
 			},
@@ -85,7 +75,6 @@ func (r *CollectorReporter) Start(ctx context.Context) error {
 	}, func() {
 		// Allow the GC to purge expired entries to avoid memory leaks.
 		r.pdata.Purge()
-		r.pidToContainerID.PurgeExpired()
 	})
 
 	// When Stop() is called and a signal to 'stop' is received, then:

@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -34,9 +33,6 @@ type baseReporter struct {
 
 	// pdata holds the generator for the data being exported.
 	pdata *pdata.Pdata
-
-	// pidToContainerID caches PID to container ID for cgroupv2 containers.
-	pidToContainerID *lru.SyncedLRU[libpf.PID, string]
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
 	traceEvents xsync.RWMutex[samples.TraceEventsTree]
@@ -97,12 +93,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		extraMeta = b.cfg.ExtraSampleAttrProd.CollectExtraSampleMeta(trace, meta)
 	}
 
-	containerID, err := b.lookupContainerID(meta.PID)
-	if err != nil {
-		log.Debugf("Failed to get a container ID for PID %d: %v",
-			meta.PID, err)
-	}
-
+	containerID := meta.ContainerID
 	key := samples.TraceAndMetaKey{
 		Hash:           trace.Hash,
 		Comm:           meta.Comm,
@@ -164,24 +155,4 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 		}
 	}
 	b.pdata.Frames.Add(args.FrameID, si)
-}
-
-// lookupContainerID extracts the container ID from a cgroup v2 path or
-// returns an empty string otherwise.
-func (b *baseReporter) lookupContainerID(pid libpf.PID) (string, error) {
-	if v, ok := b.pidToContainerID.GetAndRefresh(pid, 90*time.Second); ok {
-		return v, nil
-	}
-
-	// Slow path
-	pidCgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
-	if err != nil {
-		return "", err
-	}
-	defer pidCgroupFile.Close()
-
-	containerID := extractContainerID(pidCgroupFile)
-
-	b.pidToContainerID.Add(pid, containerID)
-	return containerID, nil
 }
