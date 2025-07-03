@@ -5,8 +5,8 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
-	"slices"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -131,14 +131,15 @@ func (p *Pdata) setProfile(
 	attrMgr := samples.NewAttrTableManager(dic.AttributeTable())
 
 	locationIndex := int32(profile.LocationIndices().Len())
-	var startTS, endTS pcommon.Timestamp
+	startTS, endTS := uint64(math.MaxUint64), uint64(0)
 	for traceKey, traceInfo := range events {
 		sample := profile.Sample().AppendEmpty()
 		sample.SetLocationsStartIndex(locationIndex)
 
-		slices.Sort(traceInfo.Timestamps)
-		startTS = pcommon.Timestamp(traceInfo.Timestamps[0])
-		endTS = pcommon.Timestamp(traceInfo.Timestamps[len(traceInfo.Timestamps)-1])
+		for _, ts := range traceInfo.Timestamps {
+			startTS = min(startTS, ts)
+			endTS = max(endTS, ts)
+		}
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
 
 		switch origin {
@@ -283,8 +284,8 @@ func (p *Pdata) setProfile(
 
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())
 
-	profile.SetDuration(endTS - startTS)
-	profile.SetStartTime(startTS)
+	profile.SetDuration(pcommon.Timestamp(endTS - startTS))
+	profile.SetStartTime(pcommon.Timestamp(startTS))
 
 	return nil
 }
