@@ -74,7 +74,7 @@ type CoredumpFile struct {
 	// inode is the synthesized inode for this file.
 	inode uint64
 	// Name is the mapped file's name.
-	Name string
+	Name libpf.String
 	// Mappings contains mappings regarding this file.
 	Mappings []CoredumpMapping
 	// Base is the virtual address where this file is loaded.
@@ -238,7 +238,7 @@ func (cd *CoredumpProcess) MainExecutable() string {
 		for _, mapping := range file.Mappings {
 			if cd.execPhdrPtr >= libpf.Address(mapping.Prog.Vaddr) &&
 				cd.execPhdrPtr <= libpf.Address(mapping.Prog.Vaddr+mapping.Prog.Memsz) {
-				return file.Name
+				return file.Name.String()
 			}
 		}
 	}
@@ -286,7 +286,7 @@ func (cd *CoredumpProcess) CalculateMappingFileID(m *Mapping) (libpf.FileID, err
 
 	h := fnv.New128a()
 	_, _ = h.Write(vaddr)
-	_, _ = h.Write([]byte(m.Path))
+	_, _ = h.Write([]byte(m.Path.String()))
 	return libpf.FileIDFromBytes(h.Sum(nil))
 }
 
@@ -328,7 +328,7 @@ func (cd *CoredumpProcess) getFile(name string) *CoredumpFile {
 	cf := &CoredumpFile{
 		parent: cd,
 		inode:  uint64(len(cd.files) + 1),
-		Name:   name,
+		Name:   libpf.Intern(name),
 	}
 	cd.files[name] = cf
 	return cf
@@ -415,7 +415,7 @@ func (cd *CoredumpProcess) parseAuxVector(desc []byte, vaddrToMappings map[uint6
 			vm.Inode = vdsoInode
 			vm.Path = VdsoPathName
 
-			cf := cd.getFile(vm.Path)
+			cf := cd.getFile(vm.Path.String())
 			cm := CoredumpMapping{
 				Prog: m.prog,
 				File: cf,

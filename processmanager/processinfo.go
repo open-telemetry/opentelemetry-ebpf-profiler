@@ -365,7 +365,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		return info
 	}
 
-	baseName := path.Base(mapping.Path)
+	baseName := path.Base(mapping.Path.String())
 	if baseName == "/" {
 		// There are circumstances where there is no filename.
 		// E.g. kernel module 'bpfilter_umh' before Linux 5.9-rc1 uses
@@ -398,7 +398,7 @@ func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *pro
 	}
 
 	// Create a Reference so we don't need to open the ELF multiple times
-	elfRef := pfelf.NewReference(mapping.Path, pr)
+	elfRef := pfelf.NewReference(mapping.Path.String(), pr)
 	defer elfRef.Close()
 
 	info := pm.getELFInfo(pr, mapping, elfRef)
