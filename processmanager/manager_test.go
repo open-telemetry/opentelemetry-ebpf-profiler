@@ -66,11 +66,11 @@ func (d *dummyProcess) GetMappingFileLastModified(_ *process.Mapping) int64 {
 }
 
 func (d *dummyProcess) CalculateMappingFileID(m *process.Mapping) (libpf.FileID, error) {
-	return libpf.FileIDFromExecutableFile(m.Path)
+	return libpf.FileIDFromExecutableFile(m.Path.String())
 }
 
 func (d *dummyProcess) OpenMappingFile(m *process.Mapping) (process.ReadAtCloser, error) {
-	return os.Open(m.Path)
+	return os.Open(m.Path.String())
 }
 
 func (d *dummyProcess) OpenELF(name string) (*pfelf.File, error) {

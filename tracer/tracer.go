@@ -702,7 +702,7 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 		if funcName, _, err := kmod.LookupSymbolByAddress(libpf.Address(kstackVal[i])); err == nil {
 			t.reporter.FrameMetadata(&reporter.FrameMetadataArgs{
 				FrameID:      frameID,
-				FunctionName: funcName,
+				FunctionName: libpf.Intern(funcName),
 			})
 			t.reporter.ExecutableMetadata(&reporter.ExecutableMetadataArgs{
 				FileID:     kmod.FileID(),

@@ -176,7 +176,7 @@ func (i *dotnetInstance) insertAndSymbolizeStubFrame(symbolReporter reporter.Sym
 	trace.AppendFrameID(libpf.DotnetFrame, frameID)
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      frameID,
-		FunctionName: name,
+		FunctionName: libpf.Intern(name),
 	})
 }
 
@@ -600,7 +600,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		if m.IsAnonymous() {
 			continue
 		}
-		if !strings.HasSuffix(m.Path, ".dll") {
+		if !strings.HasSuffix(m.Path.String(), ".dll") {
 			continue
 		}
 
@@ -628,7 +628,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			symbolReporter.ExecutableMetadata(
 				&reporter.ExecutableMetadataArgs{
 					FileID:            info.fileID,
-					FileName:          path.Base(m.Path),
+					FileName:          path.Base(m.Path.String()),
 					GnuBuildID:        info.guid,
 					DebuglinkFileName: "",
 					Interp:            libpf.Dotnet,

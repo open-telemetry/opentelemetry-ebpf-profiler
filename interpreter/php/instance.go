@@ -39,10 +39,10 @@ const (
 // PHP interpreter's zend_function structure.
 type phpFunction struct {
 	// name is the extracted name
-	name string
+	name libpf.String
 
 	// sourceFileName is the extracted filename field
-	sourceFileName string
+	sourceFileName libpf.String
 
 	// fileID is the synthesized methodID
 	fileID libpf.FileID
@@ -131,12 +131,13 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 		fname = ""
 	}
 
-	if fname == "" {
+	functionName := libpf.Intern(fname)
+	if functionName == libpf.NullString {
 		// If we're at the top-most scope then we can display that information.
 		if typeInfo&ZEND_CALL_TOP_CODE > 0 {
-			fname = interpreter.TopLevelFunctionName
+			functionName = interpreter.TopLevelFunctionName
 		} else {
-			fname = unknownFunctionName
+			functionName = interpreter.UnknownFunctionName
 		}
 	}
 
@@ -154,7 +155,7 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 		}
 
 		if ftype == ZEND_EVAL_CODE {
-			fname = evalCodeFunctionName
+			functionName = evalCodeFunctionName
 			// To avoid duplication we get rid of the filename
 			// It'll look something like "eval'd code", so no
 			// information is lost here.
@@ -169,7 +170,7 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
 	h := fnv.New128a()
 	_, _ = h.Write([]byte(sourceFileName))
-	_, _ = h.Write([]byte(fname))
+	_, _ = h.Write([]byte(functionName.String()))
 	_, _ = h.Write(lineBytes)
 	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
 	if err != nil {
@@ -177,8 +178,8 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 	}
 
 	pf := &phpFunction{
-		name:           fname,
-		sourceFileName: sourceFileName,
+		name:           functionName,
+		sourceFileName: libpf.Intern(sourceFileName),
 		fileID:         fileID,
 		lineStart:      lineStart,
 	}
