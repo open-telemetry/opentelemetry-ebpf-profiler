@@ -107,7 +107,7 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
 
   #define DEBUG_PRINT(fmt, ...)                                                                    \
     ({                                                                                             \
-      if (with_debug_output) {                                                                     \
+      if (__builtin_expect(with_debug_output, 0)) {                                                \
         printt(fmt, ##__VA_ARGS__);                                                                \
       }                                                                                            \
     })
@@ -122,7 +122,7 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
   // This macro requires linking against kernel headers >= 5.6.
   #define DEBUG_CAPTURE_COREDUMP()                                                                 \
     ({                                                                                             \
-      if (with_debug_output) {                                                                     \
+      if (__builtin_expect(with_debug_output, 0)) {                                                \
         /* We don't define `bpf_send_signal_thread` globally because it requires a      */         \
         /* rather recent kernel (>= 5.6) and otherwise breaks builds of older versions. */         \
         long (*bpf_send_signal_thread)(u32 sig) = (void *)BPF_FUNC_send_signal_thread;             \
@@ -134,7 +134,7 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
   // given thread group ID ("process").
   #define DEBUG_CAPTURE_COREDUMP_IF_TGID(tgid)                                                     \
     ({                                                                                             \
-      if (with_debug_output && bpf_get_current_pid_tgid() >> 32 == (tgid)) {                       \
+      if (__builtin_expect(with_debug_output, 0) && bpf_get_current_pid_tgid() >> 32 == (tgid)) {  \
         printt("coredumping process %d", (tgid));                                                  \
         long (*bpf_send_signal_thread)(u32 sig) = (void *)BPF_FUNC_send_signal_thread;             \
         bpf_send_signal_thread(SIGTRAP);                                                           \
