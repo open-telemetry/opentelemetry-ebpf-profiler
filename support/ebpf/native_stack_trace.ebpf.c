@@ -5,7 +5,7 @@
 #include "types.h"
 
 // with_debug_output is set during load time.
-volatile const u32 with_debug_output = 0;
+BPF_RODATA_VAR(u32, with_debug_output, 0)
 
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given

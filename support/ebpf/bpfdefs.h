@@ -4,8 +4,20 @@
 #include "bpf_map.h"
 #include "kernel.h"
 
+// BPF_RODATA_VAR declares a global variable in the .rodata section,
+// ensuring it's not optimized away by the compiler or linker.
+//
+// Arguments:
+//   _type: The data type of the variable (e.g., u32, int, struct my_config).
+//   _name: The name of the global variable.
+//   _value: The initial value for the variable.
+#define BPF_RODATA_VAR(_type, _name, _value)                                                       \
+  _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wignored-attributes\"")        \
+    _type _name __attribute__((section(".rodata"), used)) = _value;                                \
+  _Pragma("GCC diagnostic pop")
+
 // with_debug_output is declared in native_stack_trace.ebpf.c
-extern volatile const u32 with_debug_output;
+extern u32 with_debug_output;
 
 #if defined(TESTING_COREDUMP)
   // tools/coredump uses CGO to build the eBPF code. Provide here the glue to
