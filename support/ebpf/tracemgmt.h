@@ -173,7 +173,7 @@ static inline EBPF_INLINE bool report_pid(void *ctx, u64 pid_tgid, int ratelimit
     increment_metric(metricID_PIDEventsErr);
     return false;
   }
-  if (ratelimit_action == RATELIMIT_ACTION_RESET || errNo != 0) {
+  if (ratelimit_action == RATELIMIT_ACTION_RESET) {
     bpf_map_delete_elem(&reported_pids, &pid);
   }
 
