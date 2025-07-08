@@ -284,13 +284,10 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		return nil, nil, fmt.Errorf("failed to load specification for tracers: %v", err)
 	}
 
-	with_debug_output := uint32(0)
 	if cfg.DebugTracer {
-		with_debug_output = 1
-	}
-
-	if err = coll.Variables["with_debug_output"].Set(with_debug_output); err != nil {
-		return nil, nil, fmt.Errorf("failed to set debug output: %v", err)
+		if err = coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
+			return nil, nil, fmt.Errorf("failed to set debug output: %v", err)
+		}
 	}
 
 	err = buildStackDeltaTemplates(coll)
