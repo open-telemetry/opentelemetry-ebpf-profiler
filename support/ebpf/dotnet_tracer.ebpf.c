@@ -102,12 +102,16 @@ dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 pc, u64 *co
     // This is unrolled several times, so it needs to be minimal in size.
     // And currently this is the major limit for DOTNET_FRAMES_PER_PROGRAM.
     int orig_pos = pos;
-#pragma unroll 256
-    for (int i = 0; i < map_elements - 2; i++) {
-      if (val != 0) {
-        break;
+    if (val == 0) {
+#pragma unroll
+      for (int i = 0, pos = map_elements - 2; i < map_elements - 2; i++) {
+        if (scratch->map[--pos] != 0) {
+          break;
+        }
       }
-      val = scratch->map[--pos];
+      if (scratch->map[pos] != 0) {
+        val = scratch->map[pos];
+      }
     }
 
     // Adjust pc_delta based on how many iterations were done
