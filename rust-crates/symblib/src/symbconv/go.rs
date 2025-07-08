@@ -22,6 +22,9 @@ pub enum Error {
 
     #[error("visitor returned an error: {0}")]
     Visitor(#[source] AnyError),
+
+    #[error("line mapping failed with error: {0}")]
+    GoSymbolBadLineMapping(#[source] AnyError),
 }
 
 /// Go symbol extraction statistics.
@@ -55,6 +58,25 @@ impl<'obj> super::RangeExtractor for Extractor<'obj> {
     }
 }
 
+fn find_func_end(func: &gosym::Func<'_, '_>) -> Result<Option<u64>> {
+    let mut end: Option<u64> = None;
+    let mut iter = func.line_mapping()?;
+    loop {
+        match iter.next()? {
+            Some((rng, _)) => {
+                if let Some(e) = end {
+                    if rng.end < e {
+                        continue;
+                    }
+                }
+                end = Some(rng.end)
+            }
+            None => break,
+        }
+    }
+    Ok(end)
+}
+
 fn extract_ranges(obj: &objfile::Reader<'_>, visitor: super::RangeVisitor<'_>) -> Result<Stats> {
     let mut stats = Stats::default();
 
@@ -68,17 +90,29 @@ fn extract_ranges(obj: &objfile::Reader<'_>, visitor: super::RangeVisitor<'_>) -
 
     let mut func_iter = go.funcs()?;
     while let Some(func) = func_iter.next()? {
-        // Infer end of function from line tables.
-        let Some(end) = func.line_mapping()?.map(|(rng, _)| Ok(rng.end)).max()? else {
-            debug!(
-                "WARN: unable to determine end of function ({})",
-                func.name()?
-            );
-            stats.funcs_skipped += 1;
-            continue;
+        let end = match find_func_end(&func) {
+            Ok(Some(e)) => e,
+            Ok(None) => {
+                debug!(
+                    "WARN: unable to determine end of function ({})",
+                    func.name()?
+                );
+                stats.funcs_skipped += 1;
+                continue;
+            }
+            Err(Error::Gosym(gosym::Error::BadLineNumber)) => {
+                // skip function once we hit a BadLineNumber error
+                debug!("WARN: bad line number of function ({})", func.name()?);
+                stats.funcs_skipped += 1;
+                continue;
+            }
+            Err(e) => {
+                return Err(Error::GoSymbolBadLineMapping(e.into()));
+            }
         };
 
         let length = end.saturating_sub(func.start_addr());
+
         if length == 0 {
             debug!("WARN: zero function length ({})", func.name()?);
             stats.funcs_skipped += 1;
@@ -110,4 +144,47 @@ fn extract_ranges(obj: &objfile::Reader<'_>, visitor: super::RangeVisitor<'_>) -
     }
 
     Ok(stats)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tests::go_testdata;
+
+    #[test]
+    fn test_extract_ranges() -> Result<(), AnyError> {
+        for test_file in go_testdata() {
+            let obj = objfile::File::load(&test_file)?;
+            let obj = obj.parse()?;
+
+            let mut ranges = Vec::new();
+            let mut visitor = |range: symbfile::Range| -> Result<(), AnyError> {
+                ranges.push(range);
+                Ok(())
+            };
+            extract_ranges(&obj, &mut visitor)?;
+
+            // Verify we got some ranges
+            assert!(!ranges.is_empty());
+
+            // Verify ranges contains the main function
+            assert!(
+                ranges.iter().any(|range| range.func == "main.main"
+                    && range.file.is_some()
+                    && range.file.as_ref().unwrap().ends_with("main.go")),
+                "main.main not found in {:?}",
+                test_file
+            );
+
+            // Verify ranges are valid
+            for range in ranges {
+                // Basic validity checks
+                assert!(range.elf_va > 0);
+                assert!(range.length > 0);
+                assert!(!range.func.is_empty());
+                assert!(range.file.is_some());
+            }
+        }
+        Ok(())
+    }
 }

@@ -18,6 +18,9 @@ func CopyFromUserNoFaultIsPatched(codeblob []byte,
 	if len(codeblob) == 0 {
 		return false, errors.New("empty code blob")
 	}
+	if newCheckFuncAddr == 0 {
+		return false, errors.New("nmi_uaccess_okay function not found")
+	}
 
 	for i := 0; i < len(codeblob); {
 		idx, offset := getRelativeOffset(codeblob[i:])

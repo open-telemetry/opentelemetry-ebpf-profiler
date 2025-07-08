@@ -50,6 +50,7 @@ func StartTracer(ctx context.Context, t *testing.T, et tracertypes.IncludedTrace
 		SamplesPerSecond:       20,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
+		DebugTracer:            true,
 	})
 	require.NoError(t, err)
 
@@ -102,7 +103,7 @@ func readTracePipe(ctx context.Context) {
 	// When we're done kick ReadString out of blocked I/O.
 	go func() {
 		<-ctx.Done()
-		tp.Close()
+		_ = tp.Close()
 	}()
 
 	r := bufio.NewReader(tp)

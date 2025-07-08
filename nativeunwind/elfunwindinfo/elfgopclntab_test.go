@@ -53,16 +53,16 @@ func TestPcvalInvalid(_ *testing.T) {
 // Some strategy tests
 func TestGoStrategy(t *testing.T) {
 	res := []struct {
-		file     string
-		strategy int
+		file   string
+		result strategy
 	}{
 		{"foo.go", strategyFramePointer},
-		{"foo.s", strategyDeltasWithoutRBP},
-		{"go/src/crypto/elliptic/p256_asm.go", strategyDeltasWithRBP},
+		{"foo.s", strategyDeltasWithoutFrame},
+		{"go/src/crypto/elliptic/p256_asm.go", strategyDeltasWithFrame},
 	}
 	for _, x := range res {
-		s := getSourceFileStrategy(elf.EM_X86_64, []byte(x.file))
-		assert.Equal(t, x.strategy, s)
+		s := getSourceFileStrategy(elf.EM_X86_64, x.file, strategyFramePointer)
+		assert.Equal(t, x.result, s)
 	}
 }
 

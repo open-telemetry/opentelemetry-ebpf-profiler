@@ -116,7 +116,8 @@ func TestIntegration(t *testing.T) {
 					port, err := cont.MappedPort(ctx, "8080")
 					require.NoError(t, err)
 
-					enabledTracers, _ := tracertypes.Parse("luajit")
+					enabledTracers, err := tracertypes.Parse("luajit")
+					require.NoError(t, err)
 					enabledTracers.Enable(tracertypes.LuaJITTracer)
 					r := &mockReporter{symbols: make(symbolMap)}
 					traceCh, trc := testutils.StartTracer(ctx, t, enabledTracers, r)
@@ -265,7 +266,10 @@ func makeRequests(ctx context.Context, t *testing.T, wg *sync.WaitGroup,
 				continue
 			}
 			body, err := io.ReadAll(res.Body)
-			res.Body.Close()
+			if err != nil {
+				t.Log(err)
+			}
+			err = res.Body.Close()
 			if err != nil {
 				t.Log(err)
 			}

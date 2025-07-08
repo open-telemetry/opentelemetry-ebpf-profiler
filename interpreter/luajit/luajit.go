@@ -180,8 +180,8 @@ func extractInterpreterBounds(deltas sdtypes.StackDeltaArray, param int32) (util
 		if next.Address-d.Address > 10_000 {
 			// The first case covers x86 w/ dwarf and old versions of luajit ARM that used dwarf and
 			// the second covers more recent arm versions that use frame pointers.
-			if d.Info.Opcode == sdtypes.UnwindOpcodeBaseSP && d.Info.Param == param ||
-				d.Info.Opcode == sdtypes.UnwindOpcodeBaseFP && d.Info.Param == 16 {
+			if d.Info.Opcode == support.UnwindOpcodeBaseSP && d.Info.Param == param ||
+				d.Info.Opcode == support.UnwindOpcodeBaseFP && d.Info.Param == 16 {
 				return util.Range{Start: d.Address, End: next.Address}, nil
 			}
 		}

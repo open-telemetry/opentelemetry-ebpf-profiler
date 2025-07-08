@@ -20,6 +20,7 @@ const (
 	FrameMarkerV8       = 0x8
 	FrameMarkerDotnet   = 0xa
 	FrameMarkerLuaJIT   = 0xb
+	FrameMarkerGo       = 0xc
 	FrameMarkerAbort    = 0xff
 )
 
@@ -50,7 +51,7 @@ const (
 const MaxFrameUnwinds = 0x100
 
 const (
-	MetricIDBeginCumulative = 0x6d
+	MetricIDBeginCumulative = 0x6f
 )
 
 const (
@@ -134,4 +135,23 @@ const (
 const (
 	CustomLabelMaxKeyLen = 0x10
 	CustomLabelMaxValLen = 0x30
+)
+
+const (
+	UnwindOpcodeCommand   uint8 = 0x0
+	UnwindOpcodeBaseCFA   uint8 = 0x1
+	UnwindOpcodeBaseSP    uint8 = 0x2
+	UnwindOpcodeBaseFP    uint8 = 0x3
+	UnwindOpcodeBaseLR    uint8 = 0x4
+	UnwindOpcodeBaseReg   uint8 = 0x5
+	UnwindOpcodeFlagDeref uint8 = 0x80
+
+	UnwindCommandInvalid      int32 = 0x0
+	UnwindCommandStop         int32 = 0x1
+	UnwindCommandPLT          int32 = 0x2
+	UnwindCommandSignal       int32 = 0x3
+	UnwindCommandFramePointer int32 = 0x4
+
+	UnwindDerefMask       int32 = 0x7
+	UnwindDerefMultiplier int32 = 0x8
 )

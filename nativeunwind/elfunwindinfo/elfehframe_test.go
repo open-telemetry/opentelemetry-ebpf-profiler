@@ -8,6 +8,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,9 +20,12 @@ type ehtester struct {
 	found int
 }
 
-func (e *ehtester) fdeHook(cie *cieInfo, fde *fdeInfo) bool {
-	e.t.Logf("FDE len %d, ciePos %x, ip %x...%x, ipLen %d (enc %x, cf %d, df %d, ra %d)",
-		fde.len, fde.ciePos, fde.ipStart, fde.ipStart+fde.ipLen, fde.ipLen,
+func (e *ehtester) fdeUnsorted() {
+}
+
+func (e *ehtester) fdeHook(cie *cieInfo, fde *fdeInfo, _ *sdtypes.StackDeltaArray) bool {
+	e.t.Logf("FDE ciePos %x, ip %x...%x, ipLen %d (enc %x, cf %d, df %d, ra %d)",
+		fde.ciePos, fde.ipStart, fde.ipStart+fde.ipLen, fde.ipLen,
 		cie.enc, cie.codeAlign, cie.dataAlign, cie.regRA)
 	e.t.Logf("   LOC           CFA          rbp   ra")
 	return true
@@ -48,18 +52,18 @@ func genDelta(opcode uint8, cfa, rbp int32) sdtypes.UnwindInfo {
 		Param:  cfa,
 	}
 	if rbp != 0 {
-		res.FPOpcode = sdtypes.UnwindOpcodeBaseCFA
+		res.FPOpcode = support.UnwindOpcodeBaseCFA
 		res.FPParam = -rbp
 	}
 	return res
 }
 
 func deltaRSP(cfa, rbp int32) sdtypes.UnwindInfo {
-	return genDelta(sdtypes.UnwindOpcodeBaseSP, cfa, rbp)
+	return genDelta(support.UnwindOpcodeBaseSP, cfa, rbp)
 }
 
 func deltaRBP(cfa, rbp int32) sdtypes.UnwindInfo {
-	return genDelta(sdtypes.UnwindOpcodeBaseFP, cfa, rbp)
+	return genDelta(support.UnwindOpcodeBaseFP, cfa, rbp)
 }
 
 func TestEhFrame(t *testing.T) {

@@ -1,4 +1,4 @@
-FROM debian:testing-20241223-slim
+FROM debian:testing-20241223-slim@sha256:2ed89b1e8012d945cfcc111fa1dc11a628edaa24b9af5d63d6935b5ee35d3377
 
 WORKDIR /agent
 

@@ -301,10 +301,10 @@ enum {
   // number of failures to unwind code object due to its large size
   metricID_UnwindDotnetErrCodeTooLarge,
 
-  // number of attempts to read Go custom labels
+  // number of attempts to read Go custom labels (legacy)
   metricID_UnwindGoCustomLabelsAttempts,
 
-  // number of failures to read Go custom labels
+  // number of failures to read Go custom labels (legacy)
   metricID_UnwindGoCustomLabelsFailures,
 
   // number of failures to get TSD base for native custom labels
@@ -339,6 +339,12 @@ enum {
 
   // number of failures in context pointer validity check
   metricID_UnwindLuaJITErrLMismatch,
+
+  // number of attempts to read Go labels (upstream)
+  metricID_UnwindGoLabelsAttempts,
+
+  // number of failures to read Go labels (upstream)
+  metricID_UnwindGoLabelsFailures,
 
   //
   // Metric IDs above are for counters (cumulative values)
@@ -823,17 +829,20 @@ typedef struct PythonUnwindScratchSpace {
   u8 code[192];
 } PythonUnwindScratchSpace;
 
+// https://github.com/golang/go/blob/6885bad7dd/src/cmd/compile/internal/types/size.go#L28
 struct GoString {
   char *str;
   u64 len;
 };
 
+// https://github.com/golang/go/blob/6885bad7dd/src/cmd/compile/internal/types/size.go#L20
 struct GoSlice {
   void *array;
   u64 len;
   s64 cap;
 };
 
+// https://github.com/golang/go/blob/6885bad7dd/src/runtime/map.go#L109
 typedef struct GoMapBucket {
   char tophash[8];
   struct GoString keys[8];
@@ -880,7 +889,7 @@ typedef struct PerCPURecord {
     // Go labels scratch
     GoMapBucket goMapBucket;
     // Scratch for Go 1.24 labels
-    struct GoString labels[2];
+    struct GoString labels[MAX_CUSTOM_LABELS * 2];
   };
   // Mask to indicate which unwinders are complete
   u32 unwindersDone;
@@ -949,8 +958,14 @@ typedef struct StackDeltaPageInfo {
 // the upper boundary of the loop, and the relevant index to call in the prog
 // array.
 typedef struct OffsetRange {
-  u64 lower_offset;
-  u64 upper_offset;
+  u64 lower_offset1;
+  u64 upper_offset1;
+  // Fields {lower,upper}_offset2 may be used to specify an optional second range
+  // of an interpreter function. This may be useful if the interpreter function
+  // consists of two non-contiguous memory ranges, which may happen due to Hot/Cold
+  // split compiler optimization
+  u64 lower_offset2;
+  u64 upper_offset2;
   u16 program_index; // The interpreter-specific program index to call.
 } OffsetRange;
 
@@ -1009,21 +1024,6 @@ typedef struct PIDPageMappingInfo {
 // FUNC_TYPE_UNKNOWN indicates an unknown interpreted function.
 #define FUNC_TYPE_UNKNOWN 0xfffffffffffffffe
 
-// Builds a bias_and_unwind_program value for PIDPageMappingInfo
-static inline __attribute__((__always_inline__)) u64
-encode_bias_and_unwind_program(u64 bias, int unwind_program)
-{
-  return bias | (((u64)unwind_program) << 56);
-}
-
-// Reads a bias_and_unwind_program value from PIDPageMappingInfo
-static inline __attribute__((__always_inline__)) void
-decode_bias_and_unwind_program(u64 bias_and_unwind_program, u64 *bias, int *unwind_program)
-{
-  *bias           = bias_and_unwind_program & 0x00FFFFFFFFFFFFFF;
-  *unwind_program = bias_and_unwind_program >> 56;
-}
-
 // Smallest stack delta bucket that holds up to 2^8 entries
 #define STACK_DELTA_BUCKET_SMALLEST 8
 // Largest stack delta bucket that holds up to 2^23 entries
@@ -1075,5 +1075,15 @@ typedef struct GoCustomLabelsOffsets {
   u32 hmap_log2_bucket_count;
   u32 hmap_buckets;
 } GoCustomLabelsOffsets;
+
+typedef struct GoLabelsOffsets {
+  u32 m_offset;
+  u32 curg;
+  u32 labels;
+  u32 hmap_count;
+  u32 hmap_log2_bucket_count;
+  u32 hmap_buckets;
+  s32 tls_offset;
+} GoLabelsOffsets;
 
 #endif // OPTI_TYPES_H

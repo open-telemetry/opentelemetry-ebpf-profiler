@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // regFP is the arm64 frame-pointer register (x29) number
@@ -36,13 +37,7 @@ func createVDSOSyntheticRecordNone(_ *pfelf.File) sdtypes.IntervalData {
 func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 	deltas := sdtypes.StackDeltaArray{}
 	deltas = append(deltas, sdtypes.StackDelta{Address: 0, Info: sdtypes.UnwindInfoLR})
-
-	symbols, err := ef.ReadDynamicSymbols()
-	if err != nil {
-		return sdtypes.IntervalData{}
-	}
-
-	symbols.VisitAll(func(sym libpf.Symbol) {
+	_ = ef.VisitDynamicSymbols(func(sym libpf.Symbol) {
 		addr := uint64(sym.Address)
 		if sym.Name == "__kernel_rt_sigreturn" {
 			deltas = append(
@@ -54,7 +49,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 		}
 		// Determine if LR is on stack
 		code := make([]byte, sym.Size)
-		if _, err = ef.ReadVirtualMemory(code, int64(sym.Address)); err != nil {
+		if _, err := ef.ReadVirtualMemory(code, int64(sym.Address)); err != nil {
 			return
 		}
 
@@ -99,9 +94,9 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 					sdtypes.StackDelta{
 						Address: addr + frameStart,
 						Info: sdtypes.UnwindInfo{
-							Opcode:   sdtypes.UnwindOpcodeBaseFP,
+							Opcode:   support.UnwindOpcodeBaseFP,
 							Param:    int32(frameSize),
-							FPOpcode: sdtypes.UnwindOpcodeBaseFP,
+							FPOpcode: support.UnwindOpcodeBaseFP,
 							FPParam:  8,
 						},
 					},

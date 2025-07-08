@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -94,7 +95,6 @@ type rubyData struct {
 	version uint32
 
 	// vmStructs reflects the Ruby internal names and offsets of named fields.
-	//nolint:golint,stylecheck,revive
 	vmStructs struct {
 		// rb_execution_context_struct
 		// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L843
@@ -785,19 +785,16 @@ func (r *rubyInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 // determineRubyVersion looks for the symbol ruby_version and extracts version
 // information from its value.
 func determineRubyVersion(ef *pfelf.File) (uint32, error) {
-	sym, err := ef.LookupSymbol("ruby_version")
+	_, memory, err := ef.SymbolData("ruby_version", 64)
 	if err != nil {
-		return 0, fmt.Errorf("symbol ruby_version not found: %v", err)
+		return 0, fmt.Errorf("unable to read 'ruby_version': %v", err)
 	}
 
-	memory := make([]byte, 5)
-	if _, err := ef.ReadVirtualMemory(memory, int64(sym.Address)); err != nil {
-		return 0, fmt.Errorf("failed to read process memory at 0x%x:%v",
-			sym.Address, err)
+	versionString := strings.TrimRight(unsafe.String(unsafe.SliceData(memory), len(memory)), "\x00")
+	matches := rubyVersionRegex.FindStringSubmatch(versionString)
+	if len(matches) < 3 {
+		return 0, fmt.Errorf("failed to parse version string: '%s'", versionString)
 	}
-
-	matches := rubyVersionRegex.FindStringSubmatch(string(memory))
-
 	major, _ := strconv.Atoi(matches[1])
 	minor, _ := strconv.Atoi(matches[2])
 	release, _ := strconv.Atoi(matches[3])

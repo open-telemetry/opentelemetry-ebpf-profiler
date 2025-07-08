@@ -68,14 +68,14 @@ bpf_map_def SEC("maps") reported_pids = {
 //
 // User space code will periodically iterate through the map and process each entry.
 // Additionally, each time eBPF code writes a value into the map, user space is notified
-// through event_send_trigger (which uses maps/report_events). As key we use the PID of
-// the process and as value always true. When sizing this map, we are thinking about
-// the maximum number of unique PIDs that could generate events we're interested in
-// (process new, process exit, unknown PC) within a map monitor/processing interval,
+// through event_send_trigger (which uses maps/report_events). As key we use the PID/TID
+// of the process/thread and as value always true. When sizing this map, we are thinking
+// about the maximum number of unique PIDs that could generate events we're interested in
+// (process new, thread group exit, unknown PC) within a map monitor/processing interval,
 // that we would like to support.
 bpf_map_def SEC("maps") pid_events = {
   .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(u32),
+  .key_size    = sizeof(u64),
   .value_size  = sizeof(bool),
   .max_entries = 65536,
 };
@@ -133,6 +133,13 @@ bpf_map_def SEC("maps") go_procs = {
   .max_entries = 128,
 };
 
+bpf_map_def SEC("maps") go_labels_procs = {
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(GoLabelsOffsets),
+  .max_entries = 128,
+};
+
 bpf_map_def SEC("maps") cl_procs = {
   .type        = BPF_MAP_TYPE_HASH,
   .key_size    = sizeof(pid_t),
@@ -141,7 +148,7 @@ bpf_map_def SEC("maps") cl_procs = {
 };
 
 static inline __attribute__((__always_inline__)) void *
-get_m_ptr(struct GoCustomLabelsOffsets *offs, UnwindState *state)
+get_m_ptr_legacy(struct GoCustomLabelsOffsets *offs, UnwindState *state)
 {
   long res;
 
@@ -175,8 +182,46 @@ get_m_ptr(struct GoCustomLabelsOffsets *offs, UnwindState *state)
   return m_ptr_addr;
 }
 
+static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
+{
+  u64 g_addr     = 0;
+  void *tls_base = NULL;
+  if (tsd_get_base(&tls_base) < 0) {
+    DEBUG_PRINT("cl: failed to get tsd base; can't read m_ptr");
+    return NULL;
+  }
+  DEBUG_PRINT(
+    "cl: read tsd_base at 0x%lx, g offset: %d", (unsigned long)tls_base, offs->tls_offset);
+
+  if (offs->tls_offset == 0) {
+#if defined(__aarch64__)
+    // On aarch64 for !iscgo programs the g is only stored in r28 register.
+    g_addr = state->r28;
+#elif defined(__x86_64__)
+    DEBUG_PRINT("cl: TLS offset for g pointer missing for amd64");
+    return NULL;
+#endif
+  }
+
+  if (g_addr == 0) {
+    if (bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((s64)tls_base + offs->tls_offset))) {
+      DEBUG_PRINT("cl: failed to read g_addr, tls_base(%lx)", (unsigned long)tls_base);
+      return NULL;
+    }
+  }
+
+  DEBUG_PRINT("cl: reading m_ptr_addr at 0x%lx + 0x%x", (unsigned long)g_addr, offs->m_offset);
+  void *m_ptr_addr;
+  if (bpf_probe_read_user(&m_ptr_addr, sizeof(void *), (void *)(g_addr + offs->m_offset))) {
+    DEBUG_PRINT("cl: failed m_ptr_addr");
+    return NULL;
+  }
+  DEBUG_PRINT("cl: m_ptr_addr 0x%lx", (unsigned long)m_ptr_addr);
+  return m_ptr_addr;
+}
+
 static inline __attribute__((__always_inline__)) void
-maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
+maybe_add_go_custom_labels_legacy(struct pt_regs *ctx, PerCPURecord *record)
 {
   u32 pid = record->trace.pid;
   // The Go label extraction code is too big to fit in this program, so we need to
@@ -189,7 +234,7 @@ maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
       return;
     }
 
-    void *m_ptr_addr = get_m_ptr(offsets, &record->state);
+    void *m_ptr_addr = get_m_ptr_legacy(offsets, &record->state);
     if (!m_ptr_addr) {
       return;
     }
@@ -200,6 +245,28 @@ maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
     record->state.processed_go_labels = true;
     tail_call(ctx, PROG_GO_LABELS);
   }
+}
+
+static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
+{
+  u32 pid                  = record->trace.pid;
+  GoLabelsOffsets *offsets = bpf_map_lookup_elem(&go_labels_procs, &pid);
+  if (!offsets) {
+    DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", pid);
+    return;
+  }
+
+  void *m_ptr_addr = get_m_ptr(offsets, &record->state);
+  if (!m_ptr_addr) {
+    return;
+  }
+  record->customLabelsState.go_m_ptr = m_ptr_addr;
+
+  DEBUG_PRINT("cl: trace is within a process with Go custom labels enabled");
+  increment_metric(metricID_UnwindGoLabelsAttempts);
+  // The Go label extraction code is too big to fit in the UNWIND_STOP program, so
+  // it is tail_call'd.
+  tail_call(ctx, PROG_GO_LABELS);
 }
 
 static inline __attribute__((__always_inline__)) bool
@@ -364,7 +431,7 @@ static inline __attribute__((__always_inline__)) void maybe_add_apm_info(Trace *
 }
 
 // unwind_stop is the tail call destination for PROG_UNWIND_STOP.
-static inline __attribute__((__always_inline__)) int unwind_stop(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -373,6 +440,8 @@ static inline __attribute__((__always_inline__)) int unwind_stop(struct pt_regs 
   UnwindState *state = &record->state;
 
   // Do Go first since we might tail call out and back again.
+  // Try legacy Go custom labels first, then new Go labels implementation
+  maybe_add_go_custom_labels_legacy(ctx, record);
   maybe_add_go_custom_labels(ctx, record);
   maybe_add_native_custom_labels(record);
   maybe_add_apm_info(trace);
@@ -398,7 +467,8 @@ static inline __attribute__((__always_inline__)) int unwind_stop(struct pt_regs 
     // No Error
     break;
   case metricID_UnwindNativeErrWrongTextSection:;
-    if (report_pid(ctx, trace->pid, record->ratelimitAction)) {
+    u64 pid_tgid = (u64)trace->pid << 32 | trace->tid;
+    if (report_pid(ctx, pid_tgid, record->ratelimitAction)) {
       increment_metric(metricID_NumUnknownPC);
     }
     // Fallthrough to report the error

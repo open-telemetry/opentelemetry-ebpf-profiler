@@ -8,6 +8,7 @@
   // tools/coredump uses CGO to build the eBPF code. Provide here the glue to
   // dispatch the BPF API to helpers implemented in ebpfhelpers.go.
   #define SEC(NAME)
+  #define EBPF_INLINE
 
   #define printt(fmt, ...)      bpf_log(fmt, ##__VA_ARGS__)
   #define DEBUG_PRINT(fmt, ...) bpf_log(fmt, ##__VA_ARGS__)
@@ -141,7 +142,10 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
   #define SEC(name)                                                                                \
     _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wignored-attributes\"")      \
       __attribute__((section(name), used)) _Pragma("GCC diagnostic pop")
+  #define EBPF_INLINE __attribute__((__always_inline__))
 
 #endif // !TESTING_COREDUMP
+
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 #endif // OPTI_BPFDEFS_H

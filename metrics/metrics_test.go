@@ -11,6 +11,9 @@ import (
 
 // TestMetrics
 func TestMetrics(t *testing.T) {
+	// NOP report to avoid timing-based interference.
+	report = func() {}
+
 	inputMetrics := []Metric{
 		{IDELFInfoCacheHit, MetricValue(33)},
 		{IDELFInfoCacheMiss, MetricValue(55)},

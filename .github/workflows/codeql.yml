@@ -8,6 +8,8 @@ on:
   schedule:
     - cron: "21 6 * * 1"
 
+permissions: read-all
+
 jobs:
   analyze:
     name: Analyze Go (${{ matrix.target_arch }})
@@ -18,13 +20,13 @@ jobs:
         target_arch: [amd64, arm64]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up environment
         uses: ./.github/workflows/env
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@181d5eefc20863364f96762470ba6f862bdef56b # v3.29.2
         with:
           languages: go
 
@@ -33,7 +35,7 @@ jobs:
           make TARGET_ARCH=${{ matrix.target_arch }}
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@181d5eefc20863364f96762470ba6f862bdef56b # v3.29.2
         with:
             category: "/language:Go"
         timeout-minutes: 10

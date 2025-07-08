@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"slices"
 
+	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -148,10 +149,16 @@ type offsetData struct {
 func (o *offsetData) init(ef *pfelf.File) error {
 	o.f = ef
 	o.e = newExtractor(ef)
-	o.syms, _ = ef.ReadSymbols()
-	o.dsyms, _ = ef.ReadDynamicSymbols()
-	//nolint: misspell
-	// Two analyses use luaopen_jit so cache it.
+	var err error
+	o.syms, err = ef.ReadSymbols()
+	if err != nil {
+		log.Warningf("failed to read symbols: %v", err)
+	}
+	o.dsyms, err = ef.ReadDynamicSymbols()
+	if err != nil {
+		log.Warningf("failed to read dynamic symbols: %v", err)
+	}
+	// Two extractors use luaopen_jit so cache it.
 	b, addr, err := o.readSymByName("luaopen_jit")
 	if err != nil {
 		return err

@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -77,4 +78,14 @@ func (i *LoaderInfo) Gaps() []util.Range {
 // Deltas returns the stack deltas for the executable of this LoaderInfo.
 func (i *LoaderInfo) Deltas() sdtypes.StackDeltaArray {
 	return i.deltas
+}
+
+// ExtractAsFile returns a filename referring to the ELF executable, extracting
+// it from a backing archive if needed.
+func (i *LoaderInfo) ExtractAsFile() (string, error) {
+	if pr, ok := i.elfRef.ELFOpener.(process.Process); ok {
+		return pr.ExtractAsFile(i.FileName())
+	}
+	return "", fmt.Errorf("unable to open main executable '%v' due to wrong interface type",
+		i.FileName())
 }

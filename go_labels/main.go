@@ -31,7 +31,6 @@ func main() {
 		"l3", "label3"+randomString(48))
 	lastUpdate := time.Now()
 	pprof.Do(context.TODO(), labels, func(context.Context) {
-		//nolint:revive
 		for time.Since(lastUpdate) < 10*time.Second {
 			// CPU go burr on purpose.
 		}

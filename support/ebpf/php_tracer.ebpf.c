@@ -26,20 +26,19 @@ bpf_map_def SEC("maps") php_procs = {
 };
 
 // Record a PHP frame
-static inline __attribute__((__always_inline__)) ErrorCode
-push_php(Trace *trace, u64 file, u64 line, bool is_jitted)
+static EBPF_INLINE ErrorCode push_php(Trace *trace, u64 file, u64 line, bool is_jitted)
 {
   int frame_type = is_jitted ? FRAME_MARKER_PHP_JIT : FRAME_MARKER_PHP;
   return _push(trace, file, line, frame_type);
 }
 
 // Record a PHP call for which no function object is available
-static inline __attribute__((__always_inline__)) ErrorCode push_unknown_php(Trace *trace)
+static EBPF_INLINE ErrorCode push_unknown_php(Trace *trace)
 {
   return _push(trace, UNKNOWN_FILE, FUNC_TYPE_UNKNOWN, FRAME_MARKER_PHP);
 }
 
-static inline __attribute__((__always_inline__)) int process_php_frame(
+static EBPF_INLINE int process_php_frame(
   PerCPURecord *record,
   PHPProcInfo *phpinfo,
   bool is_jitted,
@@ -118,8 +117,7 @@ static inline __attribute__((__always_inline__)) int process_php_frame(
   return metricID_UnwindPHPFrames;
 }
 
-static inline __attribute__((__always_inline__)) int
-walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted)
+static EBPF_INLINE int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted)
 {
   const void *execute_data = record->phpUnwindState.zend_execute_data;
   bool mixed_traces        = get_next_unwinder_after_interpreter(record) != PROG_UNWIND_STOP;
@@ -195,7 +193,7 @@ walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted)
 }
 
 // unwind_php is the tail call destination for PROG_UNWIND_PHP.
-static inline __attribute__((__always_inline__)) int unwind_php(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_php(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)

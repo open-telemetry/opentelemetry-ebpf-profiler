@@ -20,7 +20,7 @@ slack channel for discussions and questions.
 
 ## Pre-requisites
 
-- Linux (4.19+ for x86-64, 5.5+ for ARM64) with eBPF enabled (the profiler currently only runs on Linux)
+- Linux (5.4+ for x86-64, 5.5+ for ARM64) with eBPF enabled (the profiler currently only runs on Linux)
 - Go as specified in [go.mod](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/go.mod)
 - docker
 - Rust as specified in [Cargo.toml](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/Cargo.toml)
@@ -134,18 +134,23 @@ Any [Maintainer] can merge the PR once the above criteria have been met.
 
 ## Approvers and Maintainers
 
-### Approvers
-
-- [Florian Lehner](https://github.com/florianl), Elastic
-- [Joel Höner](https://github.com/athre0z)
-- [Tim Rühsen](https://github.com/rockdaboot), Elastic
-
 ### Maintainers
 
 - [Christos Kalkanis](https://github.com/christos68k), Elastic
 - [Dmitry Filimonov](https://github.com/petethepig), Pyroscope/Grafana
 - [Felix Geisendörfer](https://github.com/felixge), Datadog
 - [Timo Teräs](https://github.com/fabled)
+
+For more information about the maintainer role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#maintainer).
+
+### Approvers
+
+- [Florian Lehner](https://github.com/florianl), Elastic
+- [Joel Höner](https://github.com/athre0z)
+- [Tim Rühsen](https://github.com/rockdaboot), Elastic
+- [Damien Mathieu](https://github.com/dmathieu), Elastic
+
+For more information about the approver role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).
 
 ### Become an Approver or a Maintainer
 
