@@ -11,8 +11,8 @@
 //   _type: The data type of the variable (e.g., u32, int, struct my_config).
 //   _name: The name of the global variable.
 //   _value: The initial value for the variable.
-#define BPF_RODATA_VAR(_type, _name, _value) \
-    _type _name __attribute__((section(".rodata.var"), used)) = _value;
+#define BPF_RODATA_VAR(_type, _name, _value)                                                       \
+  _type _name __attribute__((section(".rodata.var"), used)) = _value;
 
 // with_debug_output is declared in native_stack_trace.ebpf.c
 extern u32 with_debug_output;
