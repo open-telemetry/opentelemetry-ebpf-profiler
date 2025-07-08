@@ -6,6 +6,7 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 
@@ -90,14 +91,8 @@ type FileIDMapper interface {
 	Set(pre host.FileID, post libpf.FileID)
 }
 
-// extractContainerID returns the containerID for pid if cgroup v2 is used.
-func extractContainerID(pid libpf.PID) (string, error) {
-	pidCgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
-	if err != nil {
-		return "", err
-	}
-
-	scanner := bufio.NewScanner(pidCgroupFile)
+func parseContainerID(cgroupFile io.Reader) string {
+	scanner := bufio.NewScanner(cgroupFile)
 	buf := make([]byte, 512)
 	// Providing a predefined buffer overrides the internal buffer that Scanner uses (4096 bytes).
 	// We can do that and also set a maximum allocation size on the following call.
@@ -112,9 +107,19 @@ func extractContainerID(pid libpf.PID) (string, error) {
 			log.Debugf("Could not extract cgroupv2 path from line: %s", line)
 			continue
 		}
-		return pathParts[1], nil
+		return pathParts[1]
 	}
 
-	// No container ID could be extracted
-	return "", nil
+	// No containerID could be extracted
+	return ""
+}
+
+// extractContainerID returns the containerID for pid if cgroup v2 is used.
+func extractContainerID(pid libpf.PID) (string, error) {
+	cgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
+	if err != nil {
+		return "", err
+	}
+
+	return parseContainerID(cgroupFile), nil
 }
