@@ -9,5 +9,5 @@ import (
 	_ "embed"
 )
 
-//go:embed ebpf/tracer.ebpf.release.arm64
+//go:embed ebpf/tracer.ebpf.arm64
 var tracerData []byte
