@@ -147,6 +147,8 @@ type ProcessMeta struct {
 	Executable string
 	// process env vars from /proc/PID/environ
 	EnvVariables map[string]string
+	// container ID retrieved from /proc/PID/cgroup
+	ContainerID string
 }
 
 // processInfo contains information about the executable mappings
