@@ -282,9 +282,15 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	// References to eBPF maps in the eBPF programs are just placeholders that need to be
 	// replaced by the actual loaded maps later on with RewriteMaps before loading the
 	// programs into the kernel.
-	coll, err := support.LoadCollectionSpec(cfg.DebugTracer)
+	coll, err := support.LoadCollectionSpec()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load specification for tracers: %v", err)
+	}
+
+	if cfg.DebugTracer {
+		if err = coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
+			return nil, nil, fmt.Errorf("failed to set debug output: %v", err)
+		}
 	}
 
 	err = buildStackDeltaTemplates(coll)
@@ -879,6 +885,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	trace := &host.Trace{
 		Comm:             C.GoString((*C.char)(unsafe.Pointer(&ptr.comm))),
 		ExecutablePath:   procMeta.Executable,
+		ContainerID:      procMeta.ContainerID,
 		ProcessName:      procMeta.Name,
 		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.apm_trace_id)),
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.apm_transaction_id)),

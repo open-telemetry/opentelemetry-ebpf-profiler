@@ -52,6 +52,7 @@ type Trace struct {
 	Comm             string
 	ProcessName      string
 	ExecutablePath   string
+	ContainerID      string
 	Frames           []Frame
 	Hash             TraceHash
 	KTime            times.KTime
