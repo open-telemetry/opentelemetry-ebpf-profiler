@@ -21,10 +21,7 @@ REPRODUCIBLE_PREFIX := .
 # Valid values: amd64, arm64.
 TARGET_ARCH ?= $(NATIVE_ARCH)
 
-# Valid values: release, debug
-BUILD_TYPE ?= release
-
-TRACER_NAME ?= tracer.ebpf.$(BUILD_TYPE).$(TARGET_ARCH)
+TRACER_NAME ?= tracer.ebpf.$(TARGET_ARCH)
 
 ifeq ($(TARGET_ARCH),arm64)
 TARGET_FLAGS = -target aarch64-linux-gnu
@@ -50,14 +47,11 @@ FLAGS=$(TARGET_FLAGS) -g \
 	-Xclang -fmacro-prefix-map=$(CURDIR)=$(REPRODUCIBLE_PREFIX)
 
 SRCS := $(wildcard *.ebpf.c)
-OBJS := $(SRCS:.c=.$(BUILD_TYPE).$(TARGET_ARCH).o)
+OBJS := $(SRCS:.c=.$(TARGET_ARCH).o)
 
 .DEFAULT_GOAL := all
 
 all: $(TRACER_NAME)
-
-debug:
-	$(MAKE) BUILD_TYPE=debug
 
 amd64:
 	$(MAKE) TARGET_ARCH=amd64
@@ -70,7 +64,7 @@ errors.h: ../../tools/errors-codegen/errors.json
 
 %.ebpf.c: errors.h ;
 
-%.ebpf.$(BUILD_TYPE).$(TARGET_ARCH).o: %.ebpf.c
+%.ebpf.$(TARGET_ARCH).o: %.ebpf.c
 	$(BPF_CLANG) $(FLAGS) -o $@
 
 $(TRACER_NAME): $(OBJS)
