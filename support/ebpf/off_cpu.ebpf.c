@@ -85,6 +85,7 @@ int finish_task_switch(struct pt_regs *ctx)
     // There is no information from the sched/sched_switch entry hook.
     return 0;
   }
+  bpf_map_delete_elem(&sched_times, &pid_tgid);
 
   u64 diff = ts - *start_ts;
   DEBUG_PRINT("==== finish_task_switch ====");
