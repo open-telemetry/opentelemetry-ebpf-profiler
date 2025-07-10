@@ -75,8 +75,7 @@ bpf_map_def SEC("maps") perl_procs = {
 };
 
 // Record a Perl frame
-static inline __attribute__((__always_inline__)) ErrorCode
-push_perl(Trace *trace, u64 file, u64 line)
+static EBPF_INLINE ErrorCode push_perl(Trace *trace, u64 file, u64 line)
 {
   DEBUG_PRINT("Pushing perl frame cop=0x%lx, cv=0x%lx", (unsigned long)file, (unsigned long)line);
   return _push(trace, file, line, FRAME_MARKER_PERL);
@@ -86,8 +85,7 @@ push_perl(Trace *trace, u64 file, u64 line)
 // EGV to be reported for HA. This basically maps the internal code value, to its
 // canonical symbol name. This mapping is done in EBPF because it seems the CV*
 // can get undefined once it goes out of scope, but the EGV should be more permanent.
-static inline __attribute__((__always_inline__)) void *
-resolve_cv_egv(const PerlProcInfo *perlinfo, const void *cv)
+static EBPF_INLINE void *resolve_cv_egv(const PerlProcInfo *perlinfo, const void *cv)
 {
   // First check the CV's type
   u32 cv_flags;
@@ -165,7 +163,7 @@ err:
   return 0;
 }
 
-static inline __attribute__((__always_inline__)) int
+static EBPF_INLINE int
 process_perl_frame(PerCPURecord *record, const PerlProcInfo *perlinfo, const void *cx)
 {
   Trace *trace = &record->trace;
@@ -259,8 +257,7 @@ err:
   return PROG_UNWIND_PERL;
 }
 
-static inline __attribute__((__always_inline__)) void
-prepare_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
+static EBPF_INLINE void prepare_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
 {
   const void *si = record->perlUnwindState.stackinfo;
   // cxstack contains the base of the current context stack which is an array of PERL_CONTEXT
@@ -282,8 +279,7 @@ prepare_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
   record->perlUnwindState.cxcur  = cxstack + cxix * perlinfo->context_sizeof;
 }
 
-static inline __attribute__((__always_inline__)) int
-walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
+static EBPF_INLINE int walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
 {
   const void *si = record->perlUnwindState.stackinfo;
 
@@ -363,7 +359,7 @@ walk_perl_stack(PerCPURecord *record, const PerlProcInfo *perlinfo)
 // unwind_perl is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // Perl stack frames to the trace object for the current CPU.
-static inline __attribute__((__always_inline__)) int unwind_perl(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_perl(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {

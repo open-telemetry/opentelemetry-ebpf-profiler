@@ -26,7 +26,8 @@ var testMappings = `55fe82710000-55fe8273c000 r--p 00000000 fd:01 1068432       
 7f63c8eef000-7f63c8fdf000 r-xp 0001c000 1fd:01
 7f63c8eef000-7f63c8fdf000 r-xp 0001c000 1fd.01 1075944
 7f63c8eef000-7f63c8fdf000 r- 0001c000 1fd:01 1075944
-7f63c8eef000 r-xp 0001c000 1fd:01 1075944`
+7f63c8eef000 r-xp 0001c000 1fd:01 1075944
+7f8b929f0000-7f8b92a00000 r-xp 00000000 00:00 0 `
 
 func TestParseMappings(t *testing.T) {
 	mappings, numParseErrors, err := parseMappings(strings.NewReader(testMappings))
@@ -98,12 +99,22 @@ func TestParseMappings(t *testing.T) {
 			FileOffset: 114688,
 			Path:       "/tmp/usr_lib_x86_64-linux-gnu_libopensc.so.6.0.0",
 		},
+		{
+			Vaddr:      0x7f8b929f0000,
+			Device:     0x0,
+			Flags:      elf.PF_R + elf.PF_X,
+			Inode:      0,
+			Length:     0x10000,
+			FileOffset: 0,
+			Path:       "",
+		},
 	}
 	assert.Equal(t, expected, mappings)
 }
 
 func TestNewPIDOfSelf(t *testing.T) {
-	pr := New(libpf.PID(os.Getpid()))
+	pid := libpf.PID(os.Getpid())
+	pr := New(pid, pid)
 	assert.NotNil(t, pr)
 
 	mappings, numParseErrors, err := pr.GetMappings()

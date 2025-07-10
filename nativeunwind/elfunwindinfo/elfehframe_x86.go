@@ -8,13 +8,15 @@ package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/
 // can be taken into account regardless of the target build platform.
 
 import (
+	"bytes"
 	"debug/elf"
 	"fmt"
 
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
+	"golang.org/x/arch/x86/x86asm"
 )
 
-//nolint:deadcode,varcheck
 const (
 	// x86_64 abi (https://refspecs.linuxbase.org/elf/x86_64-abi-0.99.pdf, page 57)
 	x86RegRAX uleb128 = 0
@@ -116,13 +118,13 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 	case regCFA:
 		// Check that RBP is between CFA and stack top
 		if regs.cfa.reg != x86RegRSP || (regs.fp.off < 0 && regs.fp.off >= -regs.cfa.off) {
-			info.FPOpcode = sdtypes.UnwindOpcodeBaseCFA
+			info.FPOpcode = support.UnwindOpcodeBaseCFA
 			info.FPParam = int32(regs.fp.off)
 		}
 	case regExprReg:
 		// expression: RBP+offrbp
 		if r, _, offrbp, _ := splitOff(regs.fp.off); uleb128(r) == x86RegRBP {
-			info.FPOpcode = sdtypes.UnwindOpcodeBaseFP
+			info.FPOpcode = support.UnwindOpcodeBaseFP
 			info.FPParam = int32(offrbp)
 		}
 	}
@@ -130,11 +132,11 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 	// Determine unwind info for stack pointer
 	switch regs.cfa.reg {
 	case x86RegRBP:
-		info.Opcode = sdtypes.UnwindOpcodeBaseFP
+		info.Opcode = support.UnwindOpcodeBaseFP
 		info.Param = int32(regs.cfa.off)
 	case x86RegRSP:
 		if regs.cfa.off != 0 {
-			info.Opcode = sdtypes.UnwindOpcodeBaseSP
+			info.Opcode = support.UnwindOpcodeBaseSP
 			info.Param = int32(regs.cfa.off)
 		}
 	case x86RegRAX, x86RegR9, x86RegR11, x86RegR15:
@@ -142,26 +144,57 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 		// as the CFA directly. These function do not call other code that would
 		// trash the register, so allow these for libcrypto.
 		if regs.cfa.off%8 == 0 {
-			info.Opcode = sdtypes.UnwindOpcodeBaseReg
+			info.Opcode = support.UnwindOpcodeBaseReg
 			info.Param = int32(regs.cfa.reg) + int32(regs.cfa.off)<<1
 		}
 	case regExprPLT:
-		info.Opcode = sdtypes.UnwindOpcodeCommand
-		info.Param = sdtypes.UnwindCommandPLT
+		info.Opcode = support.UnwindOpcodeCommand
+		info.Param = support.UnwindCommandPLT
 	case regExprRegDeref:
 		reg, _, off, off2 := splitOff(regs.cfa.off)
 		if param, ok := sdtypes.PackDerefParam(int32(off), int32(off2)); ok {
 			switch uleb128(reg) {
 			case x86RegRBP:
 				// GCC SSE vectorized functions
-				info.Opcode = sdtypes.UnwindOpcodeBaseFP | sdtypes.UnwindOpcodeFlagDeref
+				info.Opcode = support.UnwindOpcodeBaseFP | support.UnwindOpcodeFlagDeref
 				info.Param = param
 			case x86RegRSP:
 				// OpenSSL assembly using SSE/AVX
-				info.Opcode = sdtypes.UnwindOpcodeBaseSP | sdtypes.UnwindOpcodeFlagDeref
+				info.Opcode = support.UnwindOpcodeBaseSP | support.UnwindOpcodeFlagDeref
 				info.Param = param
 			}
 		}
 	}
 	return info
+}
+
+func detectEntryX86(code []byte) int {
+	// Refer to test cases for the actual assembly code seen.
+	// On glibc, the entry has FDE. No fixup is needed.
+	// On musl, the entry has no FDE, or possibly has an FDE covering part of it.
+	// Detect the musl case and return entry.
+
+	// Match the assembly exactly except the LEA call offset
+	if len(code) < 32 ||
+		!bytes.Equal(code[:9], []byte{0x48, 0x31, 0xed, 0x48, 0x89, 0xe7, 0x48, 0x8d, 0x35}) ||
+		!bytes.Equal(code[13:22], []byte{0x48, 0x83, 0xe4, 0xf0, 0xe8, 0x00, 0x00, 0x00, 0x00}) {
+		return 0
+	}
+
+	// Decode the second portion and allow whitelisted opcodes finding the JMP
+	for pos := 22; pos < len(code); {
+		inst, err := x86asm.Decode(code[pos:], 64)
+		if err != nil {
+			return 0
+		}
+		switch inst.Op {
+		case x86asm.MOV, x86asm.LEA, x86asm.XOR:
+			pos += inst.Len
+		case x86asm.JMP:
+			return pos + inst.Len
+		default:
+			return 0
+		}
+	}
+	return 0
 }

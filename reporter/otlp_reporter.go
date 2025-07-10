@@ -6,44 +6,30 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 import (
 	"context"
 	"crypto/tls"
-	"maps"
-	"strconv"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
-	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
-	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding/gzip"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // Assert that we implement the full Reporter interface.
 var _ Reporter = (*OTLPReporter)(nil)
 
+var gzipOption = grpc.UseCompressor(gzip.Name)
+
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
 type OTLPReporter struct {
 	*baseReporter
-
-	// hostID is the unique identifier of the host.
-	hostID string
-
-	// kernelVersion is the version of the kernel.
-	kernelVersion string
-
-	// hostName is the name of the host.
-	hostName string
-
-	// ipAddress is the IP address of the host.
-	ipAddress string
 
 	// client for the connection to the receiver.
 	client pprofileotlp.GRPCClient
@@ -58,14 +44,6 @@ type OTLPReporter struct {
 
 // NewOTLP returns a new instance of OTLPReporter
 func NewOTLP(cfg *Config) (*OTLPReporter, error) {
-	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
-		func(pid libpf.PID) uint32 { return uint32(pid) })
-	if err != nil {
-		return nil, err
-	}
-	// Set a lifetime to reduce risk of invalid data in case of PID reuse.
-	cgroupv2ID.SetLifetime(90 * time.Second)
-
 	// Next step: Dynamically configure the size of this LRU.
 	// Currently, we use the length of the JSON array in
 	// hostmetadata/hostmetadata.json.
@@ -84,11 +62,7 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 		return nil, err
 	}
 
-	originsMap := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
-	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
-		support.TraceOriginOffCPU} {
-		originsMap[origin] = make(samples.KeyToEventMapping)
-	}
+	eventsTree := make(samples.TraceEventsTree)
 
 	return &OTLPReporter{
 		baseReporter: &baseReporter{
@@ -96,17 +70,12 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 			name:         cfg.Name,
 			version:      cfg.Version,
 			pdata:        data,
-			cgroupv2ID:   cgroupv2ID,
-			traceEvents:  xsync.NewRWMutex(originsMap),
+			traceEvents:  xsync.NewRWMutex(eventsTree),
 			hostmetadata: hostmetadata,
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),
 			},
 		},
-		kernelVersion:           cfg.KernelVersion,
-		hostName:                cfg.HostName,
-		ipAddress:               cfg.IPAddress,
-		hostID:                  strconv.FormatUint(cfg.HostID, 10),
 		pkgGRPCOperationTimeout: cfg.GRPCOperationTimeout,
 		client:                  nil,
 	}, nil
@@ -135,7 +104,6 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 	}, func() {
 		// Allow the GC to purge expired entries to avoid memory leaks.
 		r.pdata.Purge()
-		r.cgroupv2ID.PurgeExpired()
 	})
 
 	// When Stop() is called and a signal to 'stop' is received, then:
@@ -154,53 +122,28 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 
 // reportOTLPProfile creates and sends out an OTLP profile.
 func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
-	traceEvents := r.traceEvents.WLock()
-	events := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
-	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
-		support.TraceOriginOffCPU} {
-		events[origin] = maps.Clone((*traceEvents)[origin])
-		clear((*traceEvents)[origin])
-	}
-	r.traceEvents.WUnlock(&traceEvents)
+	traceEventsPtr := r.traceEvents.WLock()
+	reportedEvents := (*traceEventsPtr)
+	newEvents := make(samples.TraceEventsTree)
+	*traceEventsPtr = newEvents
+	r.traceEvents.WUnlock(&traceEventsPtr)
 
-	profiles := r.pdata.Generate(events)
-	for i := 0; i < profiles.ResourceProfiles().Len(); i++ {
-		r.setResource(profiles.ResourceProfiles().At(i))
+	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version)
+	if err != nil {
+		log.Errorf("pdata: %v", err)
+		return nil
 	}
-
 	if profiles.SampleCount() == 0 {
 		log.Debugf("Skip sending of OTLP profile with no samples")
 		return nil
 	}
+
 	req := pprofileotlp.NewExportRequestFromProfiles(profiles)
 
 	reqCtx, ctxCancel := context.WithTimeout(ctx, r.pkgGRPCOperationTimeout)
 	defer ctxCancel()
-	_, err := r.client.Export(reqCtx, req)
+	_, err = r.client.Export(reqCtx, req, gzipOption)
 	return err
-}
-
-// setResource sets the resource information of the origin of the profiles.
-// Next step: maybe extend this information with go.opentelemetry.io/otel/sdk/resource.
-func (r *OTLPReporter) setResource(rp pprofile.ResourceProfiles) {
-	keys := r.hostmetadata.Keys()
-	attrs := rp.Resource().Attributes()
-
-	// Add hostmedata to the attributes.
-	for _, k := range keys {
-		if v, ok := r.hostmetadata.Get(k); ok {
-			attrs.PutStr(k, v)
-		}
-	}
-
-	// Add event specific attributes.
-	// These attributes are also included in the host metadata, but with different names/keys.
-	// That makes our hostmetadata attributes incompatible with OTEL collectors.
-	attrs.PutStr(string(semconv.HostIDKey), r.hostID)
-	attrs.PutStr(string(semconv.HostIPKey), r.ipAddress)
-	attrs.PutStr(string(semconv.HostNameKey), r.hostName)
-	attrs.PutStr(string(semconv.ServiceVersionKey), r.version)
-	attrs.PutStr("os.kernel", r.kernelVersion)
 }
 
 // waitGrpcEndpoint waits until the gRPC connection is established.

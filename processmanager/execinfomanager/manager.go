@@ -20,7 +20,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/customlabels"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/golang"
+	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
@@ -128,13 +129,19 @@ func NewExecutableInfoManager(
 	if includeTracers.Has(types.DotnetTracer) {
 		interpreterLoaders = append(interpreterLoaders, dotnet.Loader)
 	}
+	if includeTracers.Has(types.GoTracer) {
+		interpreterLoaders = append(interpreterLoaders, golang.Loader)
+	}
 	if includeTracers.Has(types.LuaJITTracer) {
 		interpreterLoaders = append(interpreterLoaders, luajit.Loader)
 	}
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
+	if includeTracers.Has(types.Labels) {
+		interpreterLoaders = append(interpreterLoaders, golabels.Loader)
+	}
 	if collectCustomLabels {
-		interpreterLoaders = append(interpreterLoaders, golang.Loader, customlabels.Loader)
+		interpreterLoaders = append(interpreterLoaders, customlabels.Loader)
 	}
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
@@ -456,7 +463,7 @@ func (state *executableInfoManagerState) loadDeltas(
 // Zero means no merging happened. Only small differences for address and the CFA delta
 // are considered, in order to limit the amount of unique combinations generated.
 func calculateMergeOpcode(delta, nextDelta sdtypes.StackDelta) uint8 {
-	if delta.Info.Opcode == sdtypes.UnwindOpcodeCommand {
+	if delta.Info.Opcode == support.UnwindOpcodeCommand {
 		return 0
 	}
 	addrDiff := nextDelta.Address - delta.Address
@@ -484,7 +491,7 @@ func calculateMergeOpcode(delta, nextDelta sdtypes.StackDelta) uint8 {
 func (state *executableInfoManagerState) getUnwindInfoIndex(
 	info sdtypes.UnwindInfo,
 ) (uint16, error) {
-	if info.Opcode == sdtypes.UnwindOpcodeCommand {
+	if info.Opcode == support.UnwindOpcodeCommand {
 		return uint16(info.Param) | support.DeltaCommandFlag, nil
 	}
 

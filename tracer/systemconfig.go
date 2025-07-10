@@ -12,6 +12,9 @@ import (
 	"strings"
 	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/kallsyms"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/pacmask"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 
@@ -19,9 +22,6 @@ import (
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
 	log "github.com/sirupsen/logrus"
-
-	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/pacmask"
 )
 
 // #include "../support/ebpf/types.h"
@@ -226,7 +226,7 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 }
 
 func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kernelSymbols *libpf.SymbolMap, includeTracers types.IncludedTracers,
+	kmod *kallsyms.Module, includeTracers types.IncludedTracers,
 	offCPUThreshold uint32, filterErrorFrames bool) error {
 	pacMask := pacmask.GetPACMask()
 	if pacMask != 0 {
@@ -248,9 +248,9 @@ func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		}
 
 		if includeTracers.Has(types.PerlTracer) || includeTracers.Has(types.PythonTracer) ||
-			includeTracers.Has(types.GoLabels) {
+			includeTracers.Has(types.GoLabels) || includeTracers.Has(types.Labels) {
 			var tpbaseOffset uint64
-			tpbaseOffset, err = loadTPBaseOffset(coll, maps, kernelSymbols)
+			tpbaseOffset, err = loadTPBaseOffset(coll, maps, kmod)
 			if err != nil {
 				return err
 			}

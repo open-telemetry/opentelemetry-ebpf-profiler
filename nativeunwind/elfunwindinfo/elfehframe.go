@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
@@ -37,8 +38,10 @@ var errEmptyEntry = errors.New("FDE/CIE empty")
 
 // ehframeHooks interface provides hooks for filtering and debugging eh_frame parsing
 type ehframeHooks interface {
+	// fdeUnsorted is called if FDE entries from unsorted area are found.
+	fdeUnsorted()
 	// fdeHook is called for each FDE. Returns false if the FDE should be filtered out.
-	fdeHook(cie *cieInfo, fde *fdeInfo) bool
+	fdeHook(cie *cieInfo, fde *fdeInfo, deltas *sdtypes.StackDeltaArray) bool
 	// deltaHook is called for each stack delta found
 	deltaHook(ip uintptr, regs *vmRegs, delta sdtypes.StackDelta)
 	// golangHook is called if .gopclntab is found to report its coverage
@@ -95,7 +98,6 @@ const (
 // The subset needed for normal .eh_frame handling
 type expressionOpcode uint8
 
-//nolint:deadcode,varcheck
 const (
 	opDeref      expressionOpcode = 0x06
 	opConstU     expressionOpcode = 0x10
@@ -122,7 +124,6 @@ type dwarfExpression struct {
 // https://refspecs.linuxfoundation.org/LSB_5.0.0/LSB-Core-generic/LSB-Core-generic/dwarfext.html
 type encoding uint8
 
-//nolint:deadcode,varcheck
 const (
 	encFormatNative  encoding = 0x00
 	encFormatLeb128  encoding = 0x01
@@ -367,11 +368,9 @@ type cieInfo struct {
 
 // fdeInfo contains one Frame Description Entry (FDE)
 type fdeInfo struct {
-	len     uint64
 	ciePos  uint64
 	ipLen   uintptr
 	ipStart uintptr
-	sorted  bool
 }
 
 const (
@@ -856,7 +855,7 @@ func (regs *vmRegs) getUnwindInfo(allowGenericRegisters bool) sdtypes.UnwindInfo
 	default:
 		panic(fmt.Sprintf("architecture %d is not supported", regs.arch))
 	}
-	if !allowGenericRegisters && info.Opcode == sdtypes.UnwindOpcodeBaseReg {
+	if !allowGenericRegisters && info.Opcode == support.UnwindOpcodeBaseReg {
 		return sdtypes.UnwindInfoInvalid
 	}
 	return info
@@ -884,11 +883,84 @@ func isSignalTrampoline(efCode *pfelf.File, fde *fdeInfo) bool {
 	if fde.ipLen != uintptr(len(sigretCode)) {
 		return false
 	}
-	fdeCode := make([]byte, len(sigretCode))
-	if _, err := efCode.ReadVirtualMemory(fdeCode, int64(fde.ipStart)); err != nil {
+	fdeCode, err := efCode.VirtualMemory(int64(fde.ipStart), len(sigretCode), 64)
+	if err != nil {
 		return false
 	}
 	return bytes.Equal(fdeCode, sigretCode)
+}
+
+// parses first fields of FDE, specifically PC Begin, PC Range
+func parsesFDEHeader(r *reader, efm elf.Machine, ipStart uintptr,
+	cieCache *lru.LRU[uint64, *cieInfo]) (fdeLen uint64, fde fdeInfo, info *cieInfo, err error) {
+	// Parse FDE header
+	fdeID := r.pos
+	fde = fdeInfo{}
+	fdeLen, fde.ciePos, err = r.parseHDR(false)
+	if err != nil {
+		// parseHDR returns unconditionally the CIE/FDE entry length.
+		// Also return the size here. This is to allow walkFDEs to use
+		// this function and skip CIEs.
+		return fdeLen, fde, nil, err
+	}
+
+	// Calculate CIE location, and get and cache the CIE data
+	cie, ok := cieCache.Get(fde.ciePos)
+	if !ok {
+		cr := *r
+		cr.pos = uintptr(fde.ciePos)
+
+		cie = &cieInfo{}
+		if err = cr.parseCIE(cie); err != nil {
+			return 0, fde, nil, fmt.Errorf("CIE %#x failed: %v", fde.ciePos, err)
+		}
+
+		// initialize vmRegs from initialState - these can be used by restore
+		// opcode during initial CIE run
+		cie.initialState = newVMRegs(efm)
+
+		// Run CIE initial opcodes
+		st := state{
+			cie: cie,
+			cur: newVMRegs(efm),
+		}
+		if err = st.step(&cr); err != nil {
+			return 0, fde, nil, err
+		}
+		if !cr.isValid() {
+			return 0, fde, nil, fmt.Errorf("CIE %x parsing failed", fde.ciePos)
+		}
+		cie.initialState = st.cur
+		cieCache.Add(fde.ciePos, cie)
+	}
+
+	// Parse rest of FDE structure (CIE dependent part)
+
+	fde.ipStart, err = r.ptr(cie.enc)
+	if err != nil {
+		return 0, fde, nil, err
+	}
+	if ipStart != 0 && fde.ipStart != ipStart {
+		return 0, fde, nil, fmt.Errorf(
+			"FDE ipStart (%x) not matching search table FDE ipStart (%x)",
+			fde.ipStart, ipStart)
+	}
+	if cie.enc&encIndirect != 0 {
+		fde.ipLen, err = r.ptr(cie.enc)
+	} else {
+		fde.ipLen, err = r.ptr(cie.enc & (encFormatMask | encSignedMask))
+	}
+	if err != nil {
+		return 0, fde, nil, err
+	}
+
+	if cie.hasAugmentation {
+		r.pos += uintptr(r.uleb())
+	}
+	if !r.isValid() {
+		return 0, fde, nil, fmt.Errorf("FDE %x not valid after header", fdeID)
+	}
+	return fdeLen, fde, cie, nil
 }
 
 // parseFDE reads and processes one Frame Description Entry and returns the size of
@@ -900,78 +972,17 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 	cieCache *lru.LRU[uint64, *cieInfo], sorted bool) (size uintptr, err error) {
 	// Parse FDE header
 	fdeID := r.pos
-	fde := fdeInfo{sorted: sorted}
-	fde.len, fde.ciePos, err = r.parseHDR(false)
+	fdeLen, fde, cie, err := parsesFDEHeader(r, ef.Machine, ipStart, cieCache)
 	if err != nil {
-		// parseHDR returns unconditionally the CIE/FDE entry length.
-		// Also return the size here. This is to allow walkFDEs to use
-		// this function and skip CIEs.
-		return uintptr(fde.len), err
+		return uintptr(fdeLen), err
 	}
-
-	// Calculate CIE location, and get and cache the CIE data
-	cie, ok := cieCache.Get(fde.ciePos)
-	if !ok {
-		cr := *r
-		cr.pos = uintptr(fde.ciePos)
-
-		cie = &cieInfo{}
-		if err = cr.parseCIE(cie); err != nil {
-			return 0, fmt.Errorf("CIE %#x failed: %v", fde.ciePos, err)
-		}
-
-		// initialize vmRegs from initialState - these can be used by restore
-		// opcode during initial CIE run
-		cie.initialState = newVMRegs(ef.Machine)
-
-		// Run CIE initial opcodes
-		st := state{
-			cie: cie,
-			cur: newVMRegs(ef.Machine),
-		}
-		if err = st.step(&cr); err != nil {
-			return 0, err
-		}
-		if !cr.isValid() {
-			return 0, fmt.Errorf("CIE %x parsing failed", fde.ciePos)
-		}
-		cie.initialState = st.cur
-		cieCache.Add(fde.ciePos, cie)
-	}
-
-	// Parse rest of FDE structure (CIE dependent part)
 	st := state{cie: cie, cur: cie.initialState}
-	fde.ipStart, err = r.ptr(st.cie.enc)
-	if err != nil {
-		return 0, err
-	}
-	if ipStart != 0 && fde.ipStart != ipStart {
-		return 0, fmt.Errorf(
-			"FDE ipStart (%x) not matching search table FDE ipStart (%x)",
-			fde.ipStart, ipStart)
-	}
-	if st.cie.enc&encIndirect != 0 {
-		fde.ipLen, err = r.ptr(st.cie.enc)
-	} else {
-		fde.ipLen, err = r.ptr(st.cie.enc & (encFormatMask | encSignedMask))
-	}
-	if err != nil {
-		return 0, err
-	}
-
-	if st.cie.hasAugmentation {
-		r.pos += uintptr(r.uleb())
-	}
-	if !r.isValid() {
-		return 0, fmt.Errorf("FDE %x not valid after header", fdeID)
-	}
 
 	// Process the FDE opcodes
-	if !ee.hooks.fdeHook(st.cie, &fde) {
-		return uintptr(fde.len), nil
+	if !ee.hooks.fdeHook(st.cie, &fde, ee.deltas) {
+		return uintptr(fdeLen), nil
 	}
 	st.loc = fde.ipStart
-
 	if st.cie.isSignalHandler || isSignalTrampoline(ee.file, &fde) {
 		delta := sdtypes.StackDelta{
 			Address: uint64(st.loc),
@@ -994,6 +1005,7 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 			}
 			ee.hooks.deltaHook(ip, &st.cur, delta)
 			ee.deltas.AddEx(delta, sorted)
+			sorted = true
 			hint = sdtypes.UnwindHintNone
 		}
 
@@ -1009,20 +1021,15 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 		}
 	}
 
-	info := sdtypes.UnwindInfoInvalid
-	if ef.Entry == uint64(fde.ipStart+fde.ipLen) {
-		info = sdtypes.UnwindInfoStop
-	}
-
 	// Add end-of-function stop delta. This might later get removed if there is
 	// another function starting on this address.
 	ee.deltas.AddEx(sdtypes.StackDelta{
 		Address: uint64(fde.ipStart + fde.ipLen),
 		Hints:   sdtypes.UnwindHintGap,
-		Info:    info,
+		Info:    sdtypes.UnwindInfoInvalid,
 	}, sorted)
 
-	return uintptr(fde.len), nil
+	return uintptr(fdeLen), nil
 }
 
 // elfRegion is a reference to a region within an ELF file. Such a region reference can be
@@ -1160,51 +1167,23 @@ func findEhSections(ef *pfelf.File) (
 
 // walkBinSearchTable parses FDEs by following all references in the binary search table in the
 // `.eh_frame_hdr` section.
-func (ee *elfExtractor) walkBinSearchTable(parsedFile *pfelf.File, ehFrameHdrSec *elfRegion,
+func (ee *elfExtractor) walkBinSearchTable(ef *pfelf.File, ehFrameHdrSec *elfRegion,
 	ehFrameSec *elfRegion) error {
-	h := (*ehFrameHdr)(unsafe.Pointer(&ehFrameHdrSec.data[0]))
-
-	// Skip header, which is immediately followed by the binary search table. The header was
-	// already previously validated in `validateEhFrameHdr`.
-	r := ehFrameHdrSec.reader(unsafe.Sizeof(*h), false)
-
-	if _, err := r.ptr(h.ehFramePtrEnc); err != nil {
-		return err
-	}
-	fdeCount, err := r.ptr(h.fdeCountEnc)
+	t, err := newEhFrameTableFromSections(ehFrameHdrSec, ehFrameSec, ef.Machine)
 	if err != nil {
 		return err
 	}
-
-	cieCache, err := lru.New[uint64, *cieInfo](cieCacheSize, hashUint64)
-	if err != nil {
-		return err
-	}
-
-	// Walk the IP search table and dump each FDE found via it
-	for f := uintptr(0); f < fdeCount; f++ {
-		ipStart, err := r.ptr(h.tableEnc)
-		if err != nil {
-			return err
+	r := t.entryAt(0)
+	for f := uintptr(0); f < t.fdeCount; f++ {
+		ipStart, fr, entryErr := t.decodeEntry(&r)
+		if entryErr != nil {
+			return entryErr
 		}
-
-		fdeAddr, err := r.ptr(h.tableEnc)
-		if err != nil {
-			return err
-		}
-
-		if fdeAddr < ehFrameSec.vaddr {
-			return fmt.Errorf("FDE %#x before section start %#x",
-				fdeAddr, ehFrameSec.vaddr)
-		}
-
-		fr := ehFrameSec.reader(fdeAddr-ehFrameSec.vaddr, false)
-		_, err = ee.parseFDE(&fr, parsedFile, ipStart, cieCache, true)
+		_, err = ee.parseFDE(&fr, ef, ipStart, t.cieCache, f > 0)
 		if err != nil && !errors.Is(err, errEmptyEntry) {
 			return fmt.Errorf("failed to parse FDE: %v", err)
 		}
 	}
-
 	return nil
 }
 
@@ -1216,6 +1195,8 @@ func (ee *elfExtractor) walkFDEs(ef *pfelf.File, ehFrameSec *elfRegion, debugFra
 	if err != nil {
 		return err
 	}
+
+	ee.hooks.fdeUnsorted()
 
 	// Walk the section, and process each FDE it contains
 	var entryLen uintptr

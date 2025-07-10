@@ -4,6 +4,9 @@
 #include "tracemgmt.h"
 #include "types.h"
 
+// with_debug_output is set during load time.
+BPF_RODATA_VAR(u32, with_debug_output, 0)
+
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
 // fileID.
@@ -82,8 +85,7 @@ bpf_map_def SEC("maps") kernel_stackmap = {
 };
 
 // Record a native frame
-static inline __attribute__((__always_inline__)) ErrorCode
-push_native(Trace *trace, u64 file, u64 line, bool return_address)
+static EBPF_INLINE ErrorCode push_native(Trace *trace, u64 file, u64 line, bool return_address)
 {
   return _push_with_return_address(trace, file, line, FRAME_MARKER_NATIVE, return_address);
 }
@@ -92,8 +94,7 @@ push_native(Trace *trace, u64 file, u64 line, bool return_address)
 // step, built in a way to update the value of *lo and *hi. This function will be called repeatedly
 // (since we cannot do loops). The return value signals whether the bsearch came to an end / found
 // the right element or whether it needs to continue.
-static inline __attribute__((__always_inline__)) bool
-bsearch_step(void *inner_map, u32 *lo, u32 *hi, u16 page_offset)
+static EBPF_INLINE bool bsearch_step(void *inner_map, u32 *lo, u32 *hi, u16 page_offset)
 {
   u32 pivot         = (*lo + *hi) >> 1;
   StackDelta *delta = bpf_map_lookup_elem(inner_map, &pivot);
@@ -110,7 +111,7 @@ bsearch_step(void *inner_map, u32 *lo, u32 *hi, u16 page_offset)
 }
 
 // Get the outer map based on the number of stack delta entries.
-static inline __attribute__((__always_inline__)) void *get_stack_delta_map(int mapID)
+static EBPF_INLINE void *get_stack_delta_map(int mapID)
 {
   switch (mapID) {
   case 8: return &exe_id_to_8_stack_deltas;
@@ -134,7 +135,7 @@ static inline __attribute__((__always_inline__)) void *get_stack_delta_map(int m
 }
 
 // Get the stack offset of the given instruction.
-static ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, u32 *unwindInfo)
+static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, u32 *unwindInfo)
 {
   u64 exe_id = state->text_section_id;
 
@@ -254,8 +255,7 @@ static ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, u32 *unwindI
 //      BASE + param
 //   3. When UNWIND_OPCODEF_DEREF is set:
 //      *(BASE + preDeref) + postDeref
-static inline __attribute__((__always_inline__)) u64
-unwind_register_address(UnwindState *state, u64 cfa, u8 opcode, s32 param)
+static EBPF_INLINE u64 unwind_register_address(UnwindState *state, u64 cfa, u8 opcode, s32 param)
 {
   unsigned long addr, val;
   s32 preDeref = param, postDeref = 0;
@@ -357,7 +357,8 @@ unwind_register_address(UnwindState *state, u64 cfa, u8 opcode, s32 param)
 // is marked with UNWIND_COMMAND_STOP which marks entry points (main function,
 // thread spawn function, signal handlers, ...).
 #if defined(__x86_64__)
-static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode
+unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bool *stop)
 {
   *stop = false;
 
@@ -403,6 +404,11 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bo
       DEBUG_PRINT("signal frame");
       goto frame_ok;
     case UNWIND_COMMAND_STOP: *stop = true; return ERR_OK;
+    case UNWIND_COMMAND_FRAME_POINTER:
+      if (!unwinder_unwind_frame_pointer(state)) {
+        goto err_native_pc_read;
+      }
+      goto frame_ok;
     default: return ERR_UNREACHABLE;
     }
   } else {
@@ -446,7 +452,8 @@ frame_ok:
   return ERR_OK;
 }
 #elif defined(__aarch64__)
-static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode
+unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *state, bool *stop)
 {
   *stop = false;
 
@@ -487,6 +494,11 @@ static ErrorCode unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *st
       DEBUG_PRINT("signal frame");
       goto frame_ok;
     case UNWIND_COMMAND_STOP: *stop = true; return ERR_OK;
+    case UNWIND_COMMAND_FRAME_POINTER:
+      if (!unwinder_unwind_frame_pointer(state)) {
+        goto err_native_pc_read;
+      }
+      goto frame_ok;
     default: return ERR_UNREACHABLE;
     }
   }
@@ -572,7 +584,7 @@ frame_ok:
 #endif
 
 // unwind_native is the tail call destination for PROG_UNWIND_NATIVE.
-static inline __attribute__((__always_inline__)) int unwind_native(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)

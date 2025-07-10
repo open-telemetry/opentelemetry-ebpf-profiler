@@ -50,7 +50,7 @@ which is a dynamic public symbol that should be in all binaries of LuaJIT includ
 */
 //nolint:nonamedreturns
 func (x *x86Extractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, err error) {
-	b, _ = xh.SkipEndBranch(b)
+	b, _ = xh.SkipEndBranch(b) //nolint:errcheck
 	var greg x86asm.Reg
 	var zeroReg x86asm.Reg
 	for len(b) > 0 {
@@ -116,7 +116,7 @@ func (x *x86Extractor) findOffsetsFromLuaClose(b []byte) (glref, curL uint64, er
 // 0xfa8 is the g to dispatch offset.
 // https://github.com/openresty/luajit2/blob/7952882d/src/lj_dispatch.c#L122
 func (x *x86Extractor) findG2DispatchOffsetFromLjDispatchUpdate(b []byte) (uint64, error) {
-	b, _ = xh.SkipEndBranch(b)
+	b, _ = xh.SkipEndBranch(b) //nolint:errcheck
 	var greg x86asm.Reg
 	for len(b) > 0 {
 		i, err := x86asm.Decode(b, 64)
@@ -227,7 +227,7 @@ func (x *x86Extractor) findLjDispatchUpdateAddr(b []byte, addr uint64) (uint64, 
 // ----------- 0x430 is the G to J->traces offset
 // libluajit-5.1.so[0x637a1] <+33>: movq   0x430(%rdx), %rdx
 func (x *x86Extractor) findG2TracesOffsetFromChecktrace(b []byte) (uint64, error) {
-	b, _ = xh.SkipEndBranch(b)
+	b, _ = xh.SkipEndBranch(b) //nolint:errcheck
 	var Greg x86asm.Reg
 	for len(b) > 0 {
 		i, err := x86asm.Decode(b, 64)

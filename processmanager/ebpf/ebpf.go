@@ -42,8 +42,6 @@ const (
 )
 
 // EbpfHandler provides the functionality to interact with eBPF maps.
-//
-//nolint:revive
 type EbpfHandler interface {
 	// Embed interpreter.EbpfHandler as subset of this interface.
 	interpreter.EbpfHandler
@@ -104,6 +102,7 @@ type ebpfMapsImpl struct {
 	v8Procs            *cebpf.Map
 	apmIntProcs        *cebpf.Map
 	goProcs            *cebpf.Map
+	goLabelsProcs      *cebpf.Map
 	clProcs            *cebpf.Map
 	luajitProcs        *cebpf.Map
 
@@ -214,6 +213,12 @@ func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map) (EbpfHandler, err
 	}
 	impl.goProcs = goProcs
 
+	goLabelsProcs, ok := maps["go_labels_procs"]
+	if !ok {
+		log.Fatalf("Map go_labels_procs is not available")
+	}
+	impl.goLabelsProcs = goLabelsProcs
+
 	clProcs, ok := maps["cl_procs"]
 	if !ok {
 		log.Fatalf("Map cl_procs is not available")
@@ -278,27 +283,45 @@ func (impl *ebpfMapsImpl) CoredumpTest() bool {
 // UpdateInterpreterOffsets adds the given moduleRanges to the eBPF map interpreterOffsets.
 func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID host.FileID,
 	offsetRanges []util.Range) error {
-	if offsetRanges == nil {
-		return errors.New("offsetRanges is nil")
+	key, value, err := InterpreterOffsetKeyValue(ebpfProgIndex, fileID, offsetRanges)
+	if err != nil {
+		return err
 	}
-	for _, offsetRange := range offsetRanges {
-		//  The keys of this map are executable-id-and-offset-into-text entries, and
-		//  the offset_range associated with them gives the precise area in that page
-		//  where the main interpreter loop is located. This is required to unwind
-		//  nicely from native code into interpreted code.
-		key := uint64(fileID)
-		value := C.OffsetRange{
-			lower_offset:  C.u64(offsetRange.Start),
-			upper_offset:  C.u64(offsetRange.End),
-			program_index: C.u16(ebpfProgIndex),
-		}
-		if err := impl.interpreterOffsets.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
-			cebpf.UpdateAny); err != nil {
-			log.Fatalf("Failed to place interpreter range in map: %v", err)
-		}
+	if err := impl.interpreterOffsets.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
+		cebpf.UpdateAny); err != nil {
+		log.Fatalf("Failed to place interpreter range in map: %v", err)
 	}
 
 	return nil
+}
+
+func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
+	offsetRanges []util.Range) (key uint64, value C.OffsetRange, err error) {
+	rLen := len(offsetRanges)
+	if rLen < 1 || rLen > 2 {
+		return 0, C.OffsetRange{}, fmt.Errorf("invalid ranges %v", offsetRanges)
+	}
+	//  The keys of this map are executable-id-and-offset-into-text entries, and
+	//  the offset_range associated with them gives the precise area in that page
+	//  where the main interpreter loop is located. This is required to unwind
+	//  nicely from native code into interpreted code.
+	key = uint64(fileID)
+	first := offsetRanges[0]
+	value = C.OffsetRange{
+		lower_offset1: C.u64(first.Start),
+		upper_offset1: C.u64(first.End),
+		program_index: C.u16(ebpfProgIndex),
+	}
+	if len(offsetRanges) == 2 {
+		// Fields {lower,upper}_offset2 may be used to specify an optional second range
+		// of an interpreter function. This may be useful if the interpreter function
+		// consists of two non-contiguous memory ranges, which may happen due to Hot/Cold
+		// split compiler optimization
+		second := offsetRanges[1]
+		value.lower_offset2 = C.u64(second.Start)
+		value.upper_offset2 = C.u64(second.End)
+	}
+	return key, value, nil
 }
 
 // getInterpreterTypeMap returns the eBPF map for the given typ
@@ -323,6 +346,8 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.apmIntProcs, nil
 	case libpf.Go:
 		return impl.goProcs, nil
+	case libpf.GoLabels:
+		return impl.goLabelsProcs, nil
 	case libpf.CustomLabels:
 		return impl.clProcs, nil
 	case libpf.LuaJIT:
@@ -824,8 +849,6 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid libpf.PID, prefixes 
 // LookupPidPageInformation returns the fileID and bias for a given pid and page combination from
 // the eBPF map pid_page_to_mapping_info.
 // So far this function is used only in tests.
-//
-//nolint:deadcode
 func (impl *ebpfMapsImpl) LookupPidPageInformation(pid uint32, page uint64) (host.FileID,
 	uint64, error) {
 	// pid_page_to_mapping_info is a LPM trie and expects the pid and page

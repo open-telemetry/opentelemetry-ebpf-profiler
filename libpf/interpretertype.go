@@ -33,6 +33,8 @@ const (
 	Dotnet InterpreterType = support.FrameMarkerDotnet
 	// LuaJIT identifies the LuaJIT interpreter.
 	LuaJIT InterpreterType = support.FrameMarkerLuaJIT
+	// Go identifies Go code.
+	Go InterpreterType = support.FrameMarkerGo
 )
 
 // Pseudo-interpreters without a corresponding frame type.
@@ -43,8 +45,8 @@ const (
 	// APMInt identifies the pseudo-interpreter for the APM integration.
 	APMInt InterpreterType = 0x100
 
-	// Go identifies the pseudo-interpreter for Go custom labels support.
-	Go InterpreterType = 0x101
+	// GoLabels identifies the pseudo-interpreter for Go custom labels support.
+	GoLabels InterpreterType = 0x101
 
 	// CustomLabels identifies the pseudo-interpreter for native custom labels support.
 	CustomLabels InterpreterType = 0x102
@@ -63,17 +65,20 @@ var interpreterTypeToString = map[InterpreterType]string{
 	UnknownInterp: "unknown",
 	PHP:           "php",
 	// OTel SemConv does not differentiate between jitted code and interpreted code.
-	PHPJIT:  "php",
-	Python:  "cpython",
-	Native:  "native",
-	Kernel:  "kernel",
-	HotSpot: "jvm",
-	Ruby:    "ruby",
-	Perl:    "perl",
-	V8:      "v8js",
-	Dotnet:  "dotnet",
-	APMInt:  "apm-integration",
-	LuaJIT:  "luajit",
+	PHPJIT:       "php",
+	Python:       "cpython",
+	Native:       "native",
+	Kernel:       "kernel",
+	HotSpot:      "jvm",
+	Ruby:         "ruby",
+	Perl:         "perl",
+	V8:           "v8js",
+	Dotnet:       "dotnet",
+	APMInt:       "apm-integration",
+	LuaJIT:       "luajit",
+	Go:           "go",
+	GoLabels:     "go-labels",
+	CustomLabels: "custom-labels",
 }
 
 var stringToInterpreterType = make(map[string]InterpreterType, len(interpreterTypeToString))

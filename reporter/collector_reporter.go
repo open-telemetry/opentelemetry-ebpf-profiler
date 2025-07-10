@@ -5,8 +5,6 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
-	"maps"
-	"time"
 
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
@@ -16,7 +14,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // Assert that we implement the full Reporter interface.
@@ -31,14 +28,6 @@ type CollectorReporter struct {
 
 // NewCollector builds a new CollectorReporter
 func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorReporter, error) {
-	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
-		func(pid libpf.PID) uint32 { return uint32(pid) })
-	if err != nil {
-		return nil, err
-	}
-	// Set a lifetime to reduce the risk of invalid data in case of PID reuse.
-	cgroupv2ID.SetLifetime(90 * time.Second)
-
 	// Next step: Dynamically configure the size of this LRU.
 	// Currently, we use the length of the JSON array in
 	// hostmetadata/hostmetadata.json.
@@ -57,11 +46,7 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 		return nil, err
 	}
 
-	originsMap := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
-	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
-		support.TraceOriginOffCPU} {
-		originsMap[origin] = make(samples.KeyToEventMapping)
-	}
+	tree := make(samples.TraceEventsTree)
 
 	return &CollectorReporter{
 		baseReporter: &baseReporter{
@@ -69,8 +54,7 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 			name:         cfg.Name,
 			version:      cfg.Version,
 			pdata:        data,
-			cgroupv2ID:   cgroupv2ID,
-			traceEvents:  xsync.NewRWMutex(originsMap),
+			traceEvents:  xsync.NewRWMutex(tree),
 			hostmetadata: hostmetadata,
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),
@@ -91,7 +75,6 @@ func (r *CollectorReporter) Start(ctx context.Context) error {
 	}, func() {
 		// Allow the GC to purge expired entries to avoid memory leaks.
 		r.pdata.Purge()
-		r.cgroupv2ID.PurgeExpired()
 	})
 
 	// When Stop() is called and a signal to 'stop' is received, then:
@@ -107,16 +90,18 @@ func (r *CollectorReporter) Start(ctx context.Context) error {
 
 // reportProfile creates and sends out a profile.
 func (r *CollectorReporter) reportProfile(ctx context.Context) error {
-	traceEvents := r.traceEvents.WLock()
-	events := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
-	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
-		support.TraceOriginOffCPU} {
-		events[origin] = maps.Clone((*traceEvents)[origin])
-		clear((*traceEvents)[origin])
-	}
-	r.traceEvents.WUnlock(&traceEvents)
+	traceEventsPtr := r.traceEvents.WLock()
+	reportedEvents := (*traceEventsPtr)
+	newEvents := make(samples.TraceEventsTree)
+	*traceEventsPtr = newEvents
+	r.traceEvents.WUnlock(&traceEventsPtr)
 
-	profiles := r.pdata.Generate(events)
+	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version)
+	if err != nil {
+		log.Errorf("pdata: %v", err)
+		return nil
+	}
+
 	if profiles.SampleCount() == 0 {
 		log.Debugf("Skip sending profile with no samples")
 		return nil

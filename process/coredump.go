@@ -23,30 +23,30 @@ import (
 )
 
 const (
-	// maxNotesSection the maximum section size for notes
+	// maxNotesSection is the maximum section size for notes.
 	maxNotesSection = 16 * 1024 * 1024
 )
 
-// CoredumpProcess implements Process interface to ELF coredumps
+// CoredumpProcess implements Process interface to ELF coredumps.
 type CoredumpProcess struct {
 	*pfelf.File
 
-	// files contains coredump's files by name
+	// files contains coredump's files by name.
 	files map[string]*CoredumpFile
 
-	// pid the original PID of the coredump
+	// pid is the original PID from which the coredump was generated.
 	pid libpf.PID
 
-	// machineData contains the parsed machine data
+	// machineData contains the parsed machine data.
 	machineData MachineData
 
-	// mappings contains the parsed mappings
+	// mappings contains the parsed mappings.
 	mappings []Mapping
 
-	// threadInfo contains the parsed thread info
+	// threadInfo contains the parsed thread info.
 	threadInfo []ThreadInfo
 
-	// execPhdrPtr points to the main executable's program headers
+	// execPhdrPtr points to the main executable's program headers.
 	execPhdrPtr libpf.Address
 
 	// hasMusl is set if musl c-library is detected in this coredump. This
@@ -57,27 +57,27 @@ type CoredumpProcess struct {
 
 var _ Process = &CoredumpProcess{}
 
-// CoredumpMapping describes a file backed mapping in a coredump
+// CoredumpMapping describes a file backed mapping in a coredump.
 type CoredumpMapping struct {
-	// Corresponding PT_LOAD segment
+	// Prog points to the corresponding PT_LOAD segment.
 	Prog *pfelf.Prog
-	// File is the backing file for this mapping
+	// File is the backing file for this mapping.
 	File *CoredumpFile
-	// FileOffset is the offset in the original backing file
+	// FileOffset is the offset in the original backing file.
 	FileOffset uint64
 }
 
-// CoredumpFile contains information about a file mapped into a coredump
+// CoredumpFile contains information about a file mapped into a coredump.
 type CoredumpFile struct {
-	// parent is the Coredump inside which this file is
+	// parent is the Coredump inside which this file is.
 	parent *CoredumpProcess
-	// inode is the synthesized inode for this file
+	// inode is the synthesized inode for this file.
 	inode uint64
-	// Name is the mapped file's name
+	// Name is the mapped file's name.
 	Name string
-	// Mappings contains mappings regarding this file
+	// Mappings contains mappings regarding this file.
 	Mappings []CoredumpMapping
-	// Base is the virtual address where this file is loaded
+	// Base is the virtual address where this file is loaded.
 	Base uint64
 }
 
@@ -86,7 +86,6 @@ type Note64 struct {
 	Namesz, Descsz, Type uint32
 }
 
-//nolint:revive,stylecheck
 const (
 	NAMESPACE_CORE  = "CORE\x00"
 	NAMESPACE_LINUX = "LINUX\x00"
@@ -127,10 +126,10 @@ func OpenCoredump(name string) (*CoredumpProcess, error) {
 // It's the value of a map indexed with mapping virtual address, and contains the data
 // needed to associate data from different coredump data structures to proper internals.
 type vaddrMappings struct {
-	// prog is the ELF PT_LOAD Program header for this virtual address
+	// prog is the ELF PT_LOAD Program header for this virtual address.
 	prog *pfelf.Prog
 
-	// mappingIndex is the mapping's index in processState.Mappings
+	// mappingIndex is the mapping's index in processState.Mappings.
 	mappingIndex int
 }
 
@@ -194,7 +193,7 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 				break
 			}
 
-			// Parse the note if we are interested in it (skip others)
+			// Parse the note if we are interested in it (skip others).
 			name := string(nameBytes)
 			ty := elf.NType(note.Type)
 			if name == NAMESPACE_CORE {
@@ -247,38 +246,38 @@ func (cd *CoredumpProcess) MainExecutable() string {
 	return ""
 }
 
-// PID implements the Process interface
+// PID implements the Process interface.
 func (cd *CoredumpProcess) PID() libpf.PID {
 	return cd.pid
 }
 
-// GetMachineData implements the Process interface
+// GetMachineData implements the Process interface.
 func (cd *CoredumpProcess) GetMachineData() MachineData {
 	return cd.machineData
 }
 
-// GetMappings implements the Process interface
+// GetMappings implements the Process interface.
 func (cd *CoredumpProcess) GetMappings() ([]Mapping, uint32, error) {
 	return cd.mappings, 0, nil
 }
 
-// GetThreadInfo implements the Process interface
+// GetThreadInfo implements the Process interface.
 func (cd *CoredumpProcess) GetThreads() ([]ThreadInfo, error) {
 	return cd.threadInfo, nil
 }
 
-// OpenMappingFile implements the Process interface
+// OpenMappingFile implements the Process interface.
 func (cd *CoredumpProcess) OpenMappingFile(_ *Mapping) (ReadAtCloser, error) {
-	// No filesystem level backing file in coredumps
+	// Coredumps do not contain the original backing files.
 	return nil, errors.New("coredump does not support opening backing file")
 }
 
-// GetMappingFileLastModified implements the Process interface
+// GetMappingFileLastModified implements the Process interface.
 func (cd *CoredumpProcess) GetMappingFileLastModified(_ *Mapping) int64 {
 	return 0
 }
 
-// CalculateMappingFileID implements the Process interface
+// CalculateMappingFileID implements the Process interface.
 func (cd *CoredumpProcess) CalculateMappingFileID(m *Mapping) (libpf.FileID, error) {
 	// It is not possible to calculate the real FileID as the section headers
 	// are likely missing. So just return a synthesized FileID.
@@ -291,7 +290,7 @@ func (cd *CoredumpProcess) CalculateMappingFileID(m *Mapping) (libpf.FileID, err
 	return libpf.FileIDFromBytes(h.Sum(nil))
 }
 
-// OpenELF implements the ELFOpener and Process interfaces
+// OpenELF implements the ELFOpener and Process interfaces.
 func (cd *CoredumpProcess) OpenELF(path string) (*pfelf.File, error) {
 	// Fallback to directly returning the data from coredump. This comes with caveats:
 	//
@@ -312,7 +311,13 @@ func (cd *CoredumpProcess) OpenELF(path string) (*pfelf.File, error) {
 	return nil, fmt.Errorf("ELF file `%s` not found", path)
 }
 
-// getFile returns (creating if needed) a matching CoredumpFile for given file name
+// ExtractAsFile implements the Process interface.
+func (cd *CoredumpProcess) ExtractAsFile(_ string) (string, error) {
+	// Coredumps do not contain the original backing files.
+	return "", errors.New("coredump does not support opening backing file")
+}
+
+// getFile returns (creating if needed) a matching CoredumpFile for given file name.
 func (cd *CoredumpProcess) getFile(name string) *CoredumpFile {
 	if cf, ok := cd.files[name]; ok {
 		return cf
@@ -329,18 +334,18 @@ func (cd *CoredumpProcess) getFile(name string) *CoredumpFile {
 	return cf
 }
 
-// FileMappingHeader64 is the header for CORE/NT_FILE note
+// FileMappingHeader64 is the header for CORE/NT_FILE note.
 type FileMappingHeader64 struct {
 	Entries  uint64
 	PageSize uint64
 }
 
-// FileMappingEntry64 is the per-mapping data header in CORE/NT_FILE note
+// FileMappingEntry64 is the per-mapping data header in CORE/NT_FILE note.
 type FileMappingEntry64 struct {
 	Start, End, FileOffset uint64
 }
 
-// parseMappings processes CORE/NT_FILE note with description of memory mappings
+// parseMappings processes a CORE/NT_FILE note with the description of memory mappings.
 func (cd *CoredumpProcess) parseMappings(desc []byte,
 	vaddrToMappings map[uint64]vaddrMappings) error {
 	hdrSize := uint64(unsafe.Sizeof(FileMappingHeader64{}))
@@ -386,7 +391,7 @@ func (cd *CoredumpProcess) parseMappings(desc []byte,
 			mapping := &cd.mappings[m.mappingIndex]
 			mapping.Path = cf.Name
 			mapping.FileOffset = entry.FileOffset * hdr.PageSize
-			// Synthesize non-zero device and inode indicating this is a filebacked mapping
+			// Synthesize non-zero device and inode indicating this is a filebacked mapping.
 			mapping.Device = 1
 			mapping.Inode = cf.inode
 		}
@@ -395,7 +400,7 @@ func (cd *CoredumpProcess) parseMappings(desc []byte,
 	return nil
 }
 
-// parseAuxVector processes CORE/NT_AUXV note
+// parseAuxVector processes a CORE/NT_AUXV note.
 func (cd *CoredumpProcess) parseAuxVector(desc []byte, vaddrToMappings map[uint64]vaddrMappings) {
 	for i := 0; i+16 <= len(desc); i += 16 {
 		value := binary.LittleEndian.Uint64(desc[i+8:])
@@ -423,7 +428,7 @@ func (cd *CoredumpProcess) parseAuxVector(desc []byte, vaddrToMappings map[uint6
 	}
 }
 
-// PrpsInfo64 is the 64-bit NT_PRPSINFO note header
+// PrpsInfo64 is the 64-bit NT_PRPSINFO note header.
 type PrpsInfo64 struct {
 	State  uint8
 	Sname  uint8
@@ -441,7 +446,7 @@ type PrpsInfo64 struct {
 	Args   [80]byte
 }
 
-// parseProcessInfo processes CORE/NT_PRPSINFO note
+// parseProcessInfo processes a CORE/NT_PRPSINFO note.
 func (cd *CoredumpProcess) parseProcessInfo(desc []byte) error {
 	if len(desc) == int(unsafe.Sizeof(PrpsInfo64{})) {
 		info := (*PrpsInfo64)(unsafe.Pointer(&desc[0]))
@@ -451,7 +456,7 @@ func (cd *CoredumpProcess) parseProcessInfo(desc []byte) error {
 	return fmt.Errorf("unsupported NT_PRPSINFO size: %d", len(desc))
 }
 
-// parseProcessStatus processes CORE/NT_PRSTATUS note
+// parseProcessStatus processes a CORE/NT_PRSTATUS note.
 func (cd *CoredumpProcess) parseProcessStatus(desc []byte) error {
 	// The corresponding struct definition can be found here:
 	// https://github.com/torvalds/linux/blob/49d766f3a0e4/include/linux/elfcore.h#L48

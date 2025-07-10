@@ -67,7 +67,7 @@ func getAndHashTraceAddrs(tracesAddr libpf.Address, rm remotememory.RemoteMemory
 	b := make([]byte, 8)
 	h := fnv.New64()
 	binary.LittleEndian.PutUint32(b, j.sizetrace)
-	h.Write(b[:4])
+	_, _ = h.Write(b[:4])
 	addrs := make([]libpf.Address, j.sizetrace)
 	if err := rm.Read(j.trace, libpf.SliceFrom(addrs)); err != nil {
 		return 0, 0, nil, err
@@ -77,7 +77,7 @@ func getAndHashTraceAddrs(tracesAddr libpf.Address, rm remotememory.RemoteMemory
 			continue
 		}
 		binary.LittleEndian.PutUint64(b, uint64(addr))
-		h.Write(b)
+		_, _ = h.Write(b)
 		traceAddrs = append(traceAddrs, addr)
 	}
 	return h.Sum64(), int(j.sizetrace), traceAddrs, nil

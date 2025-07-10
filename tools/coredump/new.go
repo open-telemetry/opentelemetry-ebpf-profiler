@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"strconv"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
@@ -72,7 +73,7 @@ func (tc *trackedCoredump) warnMissing(fileName string) {
 
 func (tc *trackedCoredump) CalculateMappingFileID(m *process.Mapping) (libpf.FileID, error) {
 	if !m.IsVDSO() && !m.IsAnonymous() {
-		fid, err := libpf.FileIDFromExecutableFile(tc.prefix + m.Path)
+		fid, err := libpf.FileIDFromExecutableFile(path.Join(tc.prefix, m.Path))
 		if err == nil {
 			tc.seen[m.Path] = libpf.Void{}
 			return fid, nil
@@ -84,7 +85,7 @@ func (tc *trackedCoredump) CalculateMappingFileID(m *process.Mapping) (libpf.Fil
 
 func (tc *trackedCoredump) OpenMappingFile(m *process.Mapping) (process.ReadAtCloser, error) {
 	if !m.IsVDSO() && !m.IsAnonymous() {
-		rac, err := os.Open(tc.prefix + m.Path)
+		rac, err := os.Open(path.Join(tc.prefix, m.Path))
 		if err == nil {
 			tc.seen[m.Path] = libpf.Void{}
 			return rac, nil
@@ -96,7 +97,7 @@ func (tc *trackedCoredump) OpenMappingFile(m *process.Mapping) (process.ReadAtCl
 
 func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
 	if fileName != process.VdsoPathName {
-		f, err := pfelf.Open(tc.prefix + fileName)
+		f, err := pfelf.Open(path.Join(tc.prefix, fileName))
 		if err == nil {
 			tc.seen[fileName] = libpf.Void{}
 			return f, err
@@ -104,6 +105,16 @@ func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
 		tc.warnMissing(fileName)
 	}
 	return tc.CoredumpProcess.OpenELF(fileName)
+}
+
+func (tc *trackedCoredump) ExtractAsFile(fileName string) (string, error) {
+	prefixedFileName := path.Join(tc.prefix, fileName)
+	if _, err := os.Stat(prefixedFileName); err != nil {
+		tc.warnMissing(fileName)
+		return "", err
+	}
+	tc.seen[fileName] = libpf.Void{}
+	return prefixedFileName, nil
 }
 
 func newNewCmd(store *modulestore.Store) *ffcli.Command {
@@ -225,7 +236,6 @@ func dumpCore(pid uint64, noModuleBundling bool) (string, error) {
 	}
 
 	// `gcore` only accepts a path-prefix, not an exact path.
-	//nolint:gosec
 	err := exec.Command("gcore", "-o", gcorePathPrefix, strconv.FormatUint(pid, 10)).Run()
 	if err != nil {
 		return "", fmt.Errorf("gcore failed: %w", err)

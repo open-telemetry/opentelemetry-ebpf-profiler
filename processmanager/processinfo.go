@@ -21,13 +21,13 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
-	"go.opentelemetry.io/ebpf-profiler/proc"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -36,6 +36,40 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
+
+// isPIDLive checks if a PID belongs to a live process. It will never produce a false negative but
+// may produce a false positive (e.g. due to permissions) in which case an error will also be
+// returned.
+func isPIDLive(pid libpf.PID) (bool, error) {
+	// Check first with the kill syscall which is the fastest route.
+	// A kill syscall with a 0 signal is documented to still do the check
+	// whether the process exists: https://linux.die.net/man/2/kill
+	err := unix.Kill(int(pid), 0)
+	if err == nil {
+		return true, nil
+	}
+
+	var errno unix.Errno
+	if errors.As(err, &errno) {
+		switch errno {
+		case unix.ESRCH:
+			return false, nil
+		case unix.EPERM:
+			// It seems that in some rare cases this check can fail with
+			// a permission error. Fallback to a procfs check.
+		default:
+			return true, err
+		}
+	}
+
+	path := fmt.Sprintf("/proc/%d/maps", pid)
+	_, err = os.Stat(path)
+	if err != nil && os.IsNotExist(err) {
+		return false, nil
+	}
+
+	return true, err
+}
 
 // assignTSDInfo updates the TSDInfo for the Interpreters on given PID.
 // Caller must hold pm.mu write lock.
@@ -86,7 +120,7 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 		// allocate the embedded map for this process.
 		var processName string
 		exePath, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
-		if name, err := os.ReadFile(fmt.Sprintf("/prod/%d/comm", pid)); err == nil {
+		if name, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid)); err == nil {
 			processName = string(name)
 		}
 
@@ -111,10 +145,16 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 			}
 		}
 
+		containerID, err := extractContainerID(pid)
+		if err != nil {
+			log.Debugf("Failed extracting containerID for %d: %v", pid, err)
+		}
+
 		info = &processInfo{
 			meta: ProcessMeta{
 				Name:         processName,
 				Executable:   exePath,
+				ContainerID:  containerID,
 				EnvVariables: envVarMap},
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
@@ -514,7 +554,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		for _, instance := range pm.interpreters[pid] {
 			err := instance.SynchronizeMappings(pm.ebpf, pm.reporter, pr, mappings)
 			if err != nil {
-				if alive, _ := proc.IsPIDLive(pid); alive {
+				if alive, _ := isPIDLive(pid); alive {
 					log.Errorf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
 				} else {
 					log.Debugf("Failed to handle new anonymous mapping for PID %d: process exited",
@@ -614,9 +654,16 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			return
 		}
 
+		if errors.Is(err, process.ErrNoMappings) {
+			// When no mappings can be extracted but the process is still alive,
+			// do not trigger a process exit to avoid unloading process metadata.
+			// As it's likely that a future iteration can extract mappings from a
+			// different thread in the process, notify eBPF to enable further notifications.
+			pm.ebpf.RemoveReportedPID(pid)
+			return
+		}
+
 		// All other errors imply that the process has exited.
-		// Clean up, and notify eBPF.
-		pm.processPIDExit(pid)
 		if os.IsNotExist(err) {
 			// Since listing /proc and opening files in there later is inherently racy,
 			// we expect to lose the race sometimes and thus expect to hit os.IsNotExist.
@@ -626,22 +673,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			// return ESRCH. Handle it as if the process did not exist.
 			pm.mappingStats.errProcESRCH.Add(1)
 		}
-		return
-	}
-	if len(mappings) == 0 {
-		// Valid process without any (executable) mappings. All cases are
-		// handled as process exit. Possible causes and reasoning:
-		// 1. It is a kernel worker process. The eBPF does not send events from these,
-		//    but we can see kernel threads here during startup when tracer walks
-		//    /proc and tries to synchronize all PIDs it sees.
-		//    The PID should not exist anywhere, but we can still double check and
-		//    make sure the PID is not tracked.
-		// 2. It is a normal process executing, but we just sampled it when the kernel
-		//    execve() is rebuilding the mappings and nothing is currently mapped.
-		//    In this case we can handle it as process exit because everything about
-		//    the process is changing: all mappings, comm, etc. If execve fails, we
-		//    reaped it early. If execve succeeds, we will get new synchronization
-		//    request soon, and handle it as a new process event.
+		// Clean up, and notify eBPF.
 		pm.processPIDExit(pid)
 		return
 	}
@@ -673,7 +705,7 @@ func (pm *ProcessManager) CleanupPIDs() {
 
 	pm.mu.RLock()
 	for pid := range pm.pidToProcessInfo {
-		if live, _ := proc.IsPIDLive(pid); !live {
+		if live, _ := isPIDLive(pid); !live {
 			deadPids = append(deadPids, pid)
 		}
 	}
@@ -744,6 +776,7 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 			continue
 		}
 
+		log.Debugf("PID %v deleted", pid)
 		delete(pm.pidToProcessInfo, pid)
 
 		for _, instance := range pm.interpreters[pid] {

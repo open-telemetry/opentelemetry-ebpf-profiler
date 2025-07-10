@@ -635,39 +635,51 @@ const (
 	// Number of parsing errors seen during processing /proc/<PID>/maps
 	IDErrProcParse = 275
 
+	// Number of successfully symbolized Go frames
+	IDGoSymbolizationSuccess = 276
+
+	// Number of Go frames that failed symbolization
+	IDGoSymbolizationFailure = 277
+
 	// Number of attempts to read Go custom labels
-	IDUnwindGoCustomLabelsAttempts = 276
+	IDUnwindGoLabelsAttempts = 278
 
 	// Number of failures reading Go custom labels
-	IDUnwindGoCustomLabelsFailures = 277
+	IDUnwindGoLabelsFailures = 279
+
+	// Number of attempts to read Go custom labels (legacy)
+	IDUnwindGoCustomLabelsAttempts = 280
+
+	// Number of failures reading Go custom labels (legacy)
+	IDUnwindGoCustomLabelsFailures = 281
 
 	// Number of failures to get TSD base for native custom labels
-	IDUnwindNativeCustomLabelsErrReadTsdBase = 278
+	IDUnwindNativeCustomLabelsErrReadTsdBase = 282
 
 	// Number of failures to read native custom labels thread-local object
-	IDUnwindNativeCustomLabelsErrReadData = 279
+	IDUnwindNativeCustomLabelsErrReadData = 283
 
 	// Number of failures to read native custom labels key buffer
-	IDUnwindNativeCustomLabelsErrReadKey = 280
+	IDUnwindNativeCustomLabelsErrReadKey = 284
 
 	// Number of failures to read native custom labels value buffer
-	IDUnwindNativeCustomLabelsErrReadValue = 281
+	IDUnwindNativeCustomLabelsErrReadValue = 285
 
 	// Number of successful reads of native custom labels
-	IDUnwindNativeCustomLabelsReadSuccesses = 282
+	IDUnwindNativeCustomLabelsReadSuccesses = 286
 
 	// Total number of failures to add native custom labels
-	IDUnwindNativeCustomLabelsAddErrors = 283
+	IDUnwindNativeCustomLabelsAddErrors = 287
 
 	// Number of successes adding native custom labels
-	IDUnwindNativeCustomLabelsAddSuccesses = 284
+	IDUnwindNativeCustomLabelsAddSuccesses = 288
 
 	// Number of attempted LuaJIT unwinds
-	IDUnwindLuaJITAttempts = 285
+	IDUnwindLuaJITAttempts = 289
 
 	// Number of times we didn't find an entry for this process in the LuaJIT process info array
-	IDUnwindLuaJITErrNoProcInfo = 286
+	IDUnwindLuaJITErrNoProcInfo = 290
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 287
+	IDMax = 291
 )

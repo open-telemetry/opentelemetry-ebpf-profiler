@@ -18,8 +18,7 @@
         "ld-musl-x86_64.so.1+0x5846a",
         "sig+0x11f8",
         "ld-musl-x86_64.so.1+0x1b87f",
-        "sig+0x1065",
-        "<unwinding aborted due to error native_small_pc>"
+        "sig+0x1065"
       ]
     }
   ],

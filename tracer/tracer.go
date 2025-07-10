@@ -9,10 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash/fnv"
-	"math"
 	"math/rand/v2"
-	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -26,13 +23,12 @@ import (
 	"github.com/zeebo/xxh3"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
-	"go.opentelemetry.io/ebpf-profiler/proc"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -41,7 +37,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
-	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 /*
@@ -83,11 +78,8 @@ type Tracer struct {
 	// ebpfProgs holds the currently loaded eBPF programs.
 	ebpfProgs map[string]*cebpf.Program
 
-	// kernelSymbols is used to hold the kernel symbol addresses we are tracking
-	kernelSymbols *libpf.SymbolMap
-
-	// kernelModules holds symbols/addresses for the kernel module address space
-	kernelModules *libpf.SymbolMap
+	// kernelSymbolizer does kernel fallback symbolization
+	kernelSymbolizer *kallsyms.Symbolizer
 
 	// perfEntrypoints holds a list of frequency based perf events that are opened on the system.
 	perfEntrypoints xsync.RWMutex[[]*perf.Event]
@@ -105,18 +97,16 @@ type Tracer struct {
 	// when process events take place (new, exit, unknown PC).
 	triggerPIDProcessing chan bool
 
-	// pidEvents notifies the tracer of new PID events.
+	// pidEvents notifies the tracer of new PID events. Each PID event is a 64bit integer
+	// value, see bpf_get_current_pid_tgid for information on how the value is encoded.
 	// It needs to be buffered to avoid locking the writers and stacking up resources when we
 	// read new PIDs at startup or notified via eBPF.
-	pidEvents chan libpf.PID
+	pidEvents chan libpf.PIDTID
 
 	// intervals provides access to globally configured timers and counters.
 	intervals Intervals
 
 	hasBatchOperations bool
-
-	// moduleFileIDs maps kernel module names to their respective FileID.
-	moduleFileIDs map[string]libpf.FileID
 
 	// reporter allows swapping out the reporter implementation.
 	reporter reporter.SymbolReporter
@@ -181,114 +171,20 @@ type progLoaderHelper struct {
 	noTailCallTarget bool
 }
 
-// processKernelModulesMetadata computes the FileID of kernel files and reports executable metadata
-// for all kernel modules and the vmlinux image.
-func processKernelModulesMetadata(rep reporter.SymbolReporter, kernelModules *libpf.SymbolMap,
-	kernelSymbols *libpf.SymbolMap) (map[string]libpf.FileID, error) {
-	result := make(map[string]libpf.FileID, kernelModules.Len())
-	kernelModules.VisitAll(func(moduleSym libpf.Symbol) {
-		nameStr := string(moduleSym.Name)
-		if !util.IsValidString(nameStr) {
-			log.Errorf("Invalid string representation of file name in "+
-				"processKernelModulesMetadata: %v", []byte(nameStr))
-			return
-		}
-
-		// Read the kernel and modules ELF notes from sysfs (works since Linux 2.6.24)
-		notesFile := fmt.Sprintf("/sys/module/%s/notes/.note.gnu.build-id", nameStr)
-
-		// The vmlinux notes section is in a different location
-		if nameStr == "vmlinux" {
-			notesFile = "/sys/kernel/notes"
-		}
-
-		buildID, err := pfelf.GetBuildIDFromNotesFile(notesFile)
-		var fileID libpf.FileID
-		// Require at least 16 bytes of BuildID to ensure there is enough entropy for a FileID.
-		// 16 bytes could happen when --build-id=md5 is passed to `ld`. This would imply a custom
-		// kernel.
-		if err == nil && len(buildID) >= 16 {
-			fileID = libpf.FileIDFromKernelBuildID(buildID)
-		} else {
-			fileID = calcFallbackModuleID(moduleSym, kernelSymbols)
-			buildID = ""
-		}
-
-		result[nameStr] = fileID
-		rep.ExecutableMetadata(&reporter.ExecutableMetadataArgs{
-			FileID:            fileID,
-			FileName:          nameStr,
-			GnuBuildID:        buildID,
-			DebuglinkFileName: "",
-			Interp:            libpf.Kernel,
-		})
-	})
-
-	return result, nil
-}
-
-// calcFallbackModuleID computes a fallback file ID for kernel modules that do not
-// have a GNU build ID. Getting the actual file for the kernel module isn't always
-// possible since they don't necessarily reside on disk, e.g. when modules are loaded
-// from the initramfs that is later unmounted again.
-//
-// This fallback checksum locates all symbols exported by a given driver, normalizes
-// them to offsets and hashes over that. Additionally, the module's name and size are
-// hashed as well. This isn't perfect, and we can't do any server-side symbolization
-// with these IDs, but at least it provides a stable unique key for the kernel fallback
-// symbols that we send.
-func calcFallbackModuleID(moduleSym libpf.Symbol, kernelSymbols *libpf.SymbolMap) libpf.FileID {
-	modStart := moduleSym.Address
-	modEnd := moduleSym.Address + libpf.SymbolValue(moduleSym.Size)
-
-	// Collect symbols belonging to this module + track minimum address.
-	var moduleSymbols []libpf.Symbol
-	minAddr := libpf.SymbolValue(math.MaxUint64)
-	kernelSymbols.VisitAll(func(symbol libpf.Symbol) {
-		if symbol.Address >= modStart && symbol.Address < modEnd {
-			moduleSymbols = append(moduleSymbols, symbol)
-			minAddr = min(minAddr, symbol.Address)
-		}
-	})
-
-	// Ensure consistent order.
-	sort.Slice(moduleSymbols, func(a, b int) bool {
-		return moduleSymbols[a].Address < moduleSymbols[b].Address
-	})
-
-	// Hash exports and their normalized addresses.
-	h := fnv.New128a()
-	h.Write([]byte(moduleSym.Name))
-	h.Write(libpf.SliceFrom(&moduleSym.Size))
-
-	for _, sym := range moduleSymbols {
-		sym.Address -= minAddr // KASLR normalization
-
-		h.Write([]byte(sym.Name))
-		h.Write(libpf.SliceFrom(&sym.Address))
-	}
-
-	var hash [16]byte
-	fileID, err := libpf.FileIDFromBytes(h.Sum(hash[:0]))
-	if err != nil {
-		panic("calcFallbackModuleID file ID construction is broken")
-	}
-
-	log.Debugf("Fallback module ID for module %s is '%s' (min addr: 0x%08X, num exports: %d)",
-		moduleSym.Name, fileID.Base64(), minAddr, len(moduleSymbols))
-
-	return fileID
-}
-
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
 func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
-	kernelSymbols, err := proc.GetKallsyms("/proc/kallsyms")
+	kernelSymbolizer, err := kallsyms.NewSymbolizer()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
+	}
+
+	kmod, err := kernelSymbolizer.GetModuleByName(kallsyms.Kernel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
 
 	// Based on includeTracers we decide later which are loaded into the kernel.
-	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(kernelSymbols, cfg)
+	ebpfMaps, ebpfProgs, err := initializeMapsAndPrograms(kmod, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
@@ -309,36 +205,26 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 
 	const fallbackSymbolsCacheSize = 16384
 
-	kernelModules, err := proc.GetKernelModules("/proc/modules", kernelSymbols)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read kernel modules: %v", err)
-	}
-
-	moduleFileIDs, err := processKernelModulesMetadata(cfg.Reporter, kernelModules, kernelSymbols)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract kernel modules metadata: %v", err)
-	}
-
 	perfEventList := []*perf.Event{}
 
-	return &Tracer{
+	tracer := &Tracer{
+		kernelSymbolizer:       kernelSymbolizer,
 		processManager:         processManager,
-		kernelSymbols:          kernelSymbols,
-		kernelModules:          kernelModules,
 		triggerPIDProcessing:   make(chan bool, 1),
-		pidEvents:              make(chan libpf.PID, pidEventBufferSize),
+		pidEvents:              make(chan libpf.PIDTID, pidEventBufferSize),
 		ebpfMaps:               ebpfMaps,
 		ebpfProgs:              ebpfProgs,
 		hooks:                  make(map[hookPoint]link.Link),
 		intervals:              cfg.Intervals,
 		hasBatchOperations:     hasBatchOperations,
 		perfEntrypoints:        xsync.NewRWMutex(perfEventList),
-		moduleFileIDs:          moduleFileIDs,
 		reporter:               cfg.Reporter,
 		samplesPerSecond:       cfg.SamplesPerSecond,
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
-	}, nil
+	}
+
+	return tracer, nil
 }
 
 // Close provides functionality for Tracer to perform cleanup tasks.
@@ -388,7 +274,7 @@ func buildStackDeltaTemplates(coll *cebpf.CollectionSpec) error {
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
 // by the embedded elf file and loads these into the kernel.
-func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
+func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	ebpfMaps map[string]*cebpf.Map, ebpfProgs map[string]*cebpf.Program, err error) {
 	// Loading specifications about eBPF programs and maps from the embedded elf file
 	// does not load them into the kernel.
@@ -396,9 +282,15 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 	// References to eBPF maps in the eBPF programs are just placeholders that need to be
 	// replaced by the actual loaded maps later on with RewriteMaps before loading the
 	// programs into the kernel.
-	coll, err := support.LoadCollectionSpec(cfg.DebugTracer)
+	coll, err := support.LoadCollectionSpec()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load specification for tracers: %v", err)
+	}
+
+	if cfg.DebugTracer {
+		if err = coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
+			return nil, nil, fmt.Errorf("failed to set debug output: %v", err)
+		}
 	}
 
 	err = buildStackDeltaTemplates(coll)
@@ -430,7 +322,7 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 			return nil, nil, fmt.Errorf("failed to get kernel version: %v", err)
 		}
 		if hasProbeReadBug(major, minor, patch) {
-			if err = checkForMaccessPatch(coll, ebpfMaps, kernelSymbols); err != nil {
+			if err = checkForMaccessPatch(coll, ebpfMaps, kmod); err != nil {
 				return nil, nil, fmt.Errorf("your kernel version %d.%d.%d may be "+
 					"affected by a Linux kernel bug that can lead to system "+
 					"freezes, terminating host agent now to avoid "+
@@ -492,7 +384,7 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 		{
 			progID: uint32(support.ProgGoLabels),
 			name:   "go_labels",
-			enable: cfg.IncludeTracers.Has(types.GoLabels),
+			enable: cfg.IncludeTracers.Has(types.GoLabels) || cfg.IncludeTracers.Has(types.Labels),
 		},
 		{
 			progID: uint32(support.ProgUnwindLuaJIT),
@@ -513,7 +405,7 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 		}
 	}
 
-	if err = loadSystemConfig(coll, ebpfMaps, kernelSymbols, cfg.IncludeTracers,
+	if err = loadSystemConfig(coll, ebpfMaps, kmod, cfg.IncludeTracers,
 		cfg.OffCPUThreshold, cfg.FilterErrorFrames); err != nil {
 		return nil, nil, fmt.Errorf("failed to load system config: %v", err)
 	}
@@ -606,7 +498,7 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 	copy(progs, tailCallProgs)
 	progs = append(progs,
 		progLoaderHelper{
-			name:             "tracepoint__sched_process_exit",
+			name:             "tracepoint__sched_process_free",
 			noTailCallTarget: true,
 			enable:           true,
 		},
@@ -787,19 +679,12 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 	var kernelSymbolCacheHit, kernelSymbolCacheMiss uint64
 
 	for i := uint32(0); i < kstackLen; i++ {
-		// Translate the kernel address into something that can be
-		// later symbolized. The address is made relative to
-		// matching module's ELF .text section:
-		//  - main image should have .text section at start of the code segment
-		//  - modules are ELF object files (.o) without program headers and
-		//    LOAD segments. the address is relative to the .text section
-		mod, addr, _ := t.kernelModules.LookupByAddress(
-			libpf.SymbolValue(kstackVal[i]))
-
-		fileID, foundFileID := t.moduleFileIDs[string(mod)]
-
-		if !foundFileID {
-			fileID = libpf.UnknownKernelFileID
+		fileID := libpf.UnknownKernelFileID
+		address := libpf.Address(kstackVal[i])
+		kmod, err := t.kernelSymbolizer.GetModuleByAddress(address)
+		if err == nil {
+			fileID = kmod.FileID()
+			address -= kmod.Start()
 		}
 
 		hostFileID := host.FileIDFromLibpf(fileID)
@@ -807,17 +692,13 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 
 		trace.Frames[i] = host.Frame{
 			File:   hostFileID,
-			Lineno: libpf.AddressOrLineno(addr),
+			Lineno: libpf.AddressOrLineno(address),
 			Type:   libpf.KernelFrame,
 
 			// For all kernel frames, the kernel unwinder will always produce a
 			// frame in which the RIP is after a call instruction (it hides the
 			// top frames that leads to the unwinder itself).
 			ReturnAddress: true,
-		}
-
-		if !foundFileID {
-			continue
 		}
 
 		// Kernel frame PCs need to be adjusted by -1. This duplicates logic done in the trace
@@ -829,11 +710,19 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 		}
 		kernelSymbolCacheMiss++
 
-		if symbol, _, foundSymbol := t.kernelSymbols.LookupByAddress(
-			libpf.SymbolValue(kstackVal[i])); foundSymbol {
+		if kmod == nil {
+			continue
+		}
+		if funcName, _, err := kmod.LookupSymbolByAddress(libpf.Address(kstackVal[i])); err == nil {
 			t.reporter.FrameMetadata(&reporter.FrameMetadataArgs{
 				FrameID:      frameID,
-				FunctionName: string(symbol),
+				FunctionName: funcName,
+			})
+			t.reporter.ExecutableMetadata(&reporter.ExecutableMetadataArgs{
+				FileID:     kmod.FileID(),
+				FileName:   kmod.Name(),
+				GnuBuildID: kmod.BuildID(),
+				Interp:     libpf.Kernel,
 			})
 		}
 	}
@@ -856,12 +745,12 @@ func (t *Tracer) enableEvent(eventType int) {
 
 // monitorPIDEventsMap periodically iterates over the eBPF map pid_events,
 // collects PIDs and writes them to the keys slice.
-func (t *Tracer) monitorPIDEventsMap(keys *[]uint32) {
+func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) {
 	eventsMap := t.ebpfMaps["pid_events"]
-	var key, nextKey uint32
+	var key, nextKey uint64
 	var value bool
 	keyFound := true
-	deleteBatch := make(libpf.Set[uint32])
+	deleteBatch := make(libpf.Set[uint64])
 
 	// Key 0 retrieves the very first element in the hash map as
 	// it is guaranteed not to exist in pid_events.
@@ -904,7 +793,7 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]uint32) {
 		// exact point), we may block sending to the channel, delay the iteration and may introduce
 		// race conditions (related to deletion). For that reason, keys are first collected and,
 		// after the iteration has finished, sent to the channel.
-		*keys = append(*keys, key)
+		*keys = append(*keys, libpf.PIDTID(key))
 	}
 
 	keysToDelete := len(deleteBatch)
@@ -996,6 +885,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	trace := &host.Trace{
 		Comm:             C.GoString((*C.char)(unsafe.Pointer(&ptr.comm))),
 		ExecutablePath:   procMeta.Executable,
+		ContainerID:      procMeta.ContainerID,
 		ProcessName:      procMeta.Name,
 		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.apm_trace_id)),
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.apm_transaction_id)),
@@ -1070,18 +960,21 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
 // maps for tracepoints, new traces, trace count updates and unknown PCs.
 func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host.Trace) error {
+	if err := t.kernelSymbolizer.StartMonitor(ctx); err != nil {
+		log.Warnf("Failed to start kallsyms monitor: %v", err)
+	}
 	eventMetricCollector := t.startEventMonitor(ctx)
 	traceEventMetricCollector := t.startTraceEventMonitor(ctx, traceOutChan)
 
-	pidEvents := make([]uint32, 0)
+	pidEvents := make([]libpf.PIDTID, 0)
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
 		t.triggerPIDProcessing, func(_ bool) {
 			t.enableEvent(support.EventTypeGenericPID)
 			t.monitorPIDEventsMap(&pidEvents)
 
-			for _, ev := range pidEvents {
-				log.Debugf("=> PID: %v", ev)
-				t.pidEvents <- libpf.PID(ev)
+			for _, pidTid := range pidEvents {
+				log.Debugf("=> %v", pidTid)
+				t.pidEvents <- pidTid
 			}
 
 			// Keep the underlying array alive to avoid GC pressure
@@ -1210,11 +1103,6 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 	return nil
 }
 
-// Testing hook
-func (t *Tracer) GetEbpfMaps() map[string]*cebpf.Map {
-	return t.ebpfMaps
-}
-
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
 // entry point is always the native tracer. The native tracer will determine when to invoke the
 // interpreter tracers based on address range information.
@@ -1331,10 +1219,15 @@ func (t *Tracer) StartOffCPUProfiling() error {
 		return errors.New("off-cpu program finish_task_switch is not available")
 	}
 
-	hookSymbolPrefix := "finish_task_switch"
-	kprobeSymbs, err := t.kernelSymbols.LookupSymbolsByPrefix(hookSymbolPrefix)
+	kmod, err := t.kernelSymbolizer.GetModuleByName(kallsyms.Kernel)
 	if err != nil {
 		return err
+	}
+
+	hookSymbolPrefix := "finish_task_switch"
+	kprobeSymbs := kmod.LookupSymbolsByPrefix(hookSymbolPrefix)
+	if len(kprobeSymbs) == 0 {
+		return errors.New("no finish_task_switch symbols found")
 	}
 
 	attached := false

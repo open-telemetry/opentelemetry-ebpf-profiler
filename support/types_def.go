@@ -8,6 +8,7 @@ package support // import "go.opentelemetry.io/ebpf-profiler/support"
 /*
 #include "./ebpf/types.h"
 #include "./ebpf/frametypes.h"
+#include "./ebpf/stackdeltatypes.h"
 */
 import "C"
 
@@ -25,6 +26,7 @@ const (
 	FrameMarkerV8       = C.FRAME_MARKER_V8
 	FrameMarkerDotnet   = C.FRAME_MARKER_DOTNET
 	FrameMarkerLuaJIT   = C.FRAME_MARKER_LUAJIT
+	FrameMarkerGo       = C.FRAME_MARKER_GO
 	FrameMarkerAbort    = C.FRAME_MARKER_ABORT
 )
 
@@ -112,4 +114,26 @@ const (
 const (
 	CustomLabelMaxKeyLen = C.CUSTOM_LABEL_MAX_KEY_LEN
 	CustomLabelMaxValLen = C.CUSTOM_LABEL_MAX_VAL_LEN
+)
+
+const (
+	// UnwindOpcodes from the C header file
+	UnwindOpcodeCommand   uint8 = C.UNWIND_OPCODE_COMMAND
+	UnwindOpcodeBaseCFA   uint8 = C.UNWIND_OPCODE_BASE_CFA
+	UnwindOpcodeBaseSP    uint8 = C.UNWIND_OPCODE_BASE_SP
+	UnwindOpcodeBaseFP    uint8 = C.UNWIND_OPCODE_BASE_FP
+	UnwindOpcodeBaseLR    uint8 = C.UNWIND_OPCODE_BASE_LR
+	UnwindOpcodeBaseReg   uint8 = C.UNWIND_OPCODE_BASE_REG
+	UnwindOpcodeFlagDeref uint8 = C.UNWIND_OPCODEF_DEREF
+
+	// UnwindCommands from the C header file
+	UnwindCommandInvalid      int32 = C.UNWIND_COMMAND_INVALID
+	UnwindCommandStop         int32 = C.UNWIND_COMMAND_STOP
+	UnwindCommandPLT          int32 = C.UNWIND_COMMAND_PLT
+	UnwindCommandSignal       int32 = C.UNWIND_COMMAND_SIGNAL
+	UnwindCommandFramePointer int32 = C.UNWIND_COMMAND_FRAME_POINTER
+
+	// UnwindDeref handling from the C header file
+	UnwindDerefMask       int32 = C.UNWIND_DEREF_MASK
+	UnwindDerefMultiplier int32 = C.UNWIND_DEREF_MULTIPLIER
 )

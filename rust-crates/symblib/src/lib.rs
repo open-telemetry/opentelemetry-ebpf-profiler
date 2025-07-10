@@ -64,4 +64,13 @@ mod tests {
             .join("testdata")
             .join(name)
     }
+
+    // Get go testdata binaries
+    pub fn go_testdata() -> Vec<PathBuf> {
+        vec![
+            testdata("go-1.20.14"),
+            testdata("go-1.22.12"),
+            testdata("go-1.24.0"),
+        ]
+    }
 }

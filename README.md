@@ -50,6 +50,10 @@ The resulting binary will be named <ebpf-profiler> in the current directory.
 ## Other OSes
 Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run the agent. Ensure the appropriate architecture is specified if using cross-compilation. Use the same make targets as above after the Linux environment is configured in the VM.
 
+## Supported Linux kernel version
+
+[7ddc23ea](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/commit/7ddc23ea135a2e00fffc17850ab90534e9b63108) is the last commit with support for 4.19. Changes after this commit may require a minimal Linux kernel version of 5.4.
+
 ## Alternative Build (Without Docker)
 You can build the agent without Docker by directly installing the dependencies listed in the Dockerfile. Once dependencies are set up, simply run:
 ```sh
@@ -352,9 +356,10 @@ traces user-land will simply read and then clear this map on a timer.
 The BPF components are responsible for notifying user-land about new and exiting
 processes. An event about a new process is produced when we first interrupt it
 with the unwinders. Events about exiting processes are created with a
-`sched_process_exit` probe. In both cases the BPF code sends a perf event to
+`sched_process_free` tracepoint. In both cases the BPF code sends a perf event to
 notify user-land. We also re-report a PID if we detect execution in previously
-unknown memory region to prompt re-scan of the mappings.
+unknown memory region to prompt re-scan of the mappings. Finally, the profiler
+can also profile processes whose main thread exits, leaving other threads running.
 
 ### Network protocol
 

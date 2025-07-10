@@ -16,13 +16,10 @@ endif
 
 # Valid values are: amd64, arm64.
 TARGET_ARCH ?= $(NATIVE_ARCH)
-
-ifeq ($(NATIVE_ARCH),$(TARGET_ARCH))
-ARCH_PREFIX :=
-else ifeq ($(TARGET_ARCH),arm64)
-ARCH_PREFIX := aarch64-linux-gnu-
+ifeq ($(TARGET_ARCH),arm64)
+ARCH_PREFIX := aarch64
 else ifeq ($(TARGET_ARCH),amd64)
-ARCH_PREFIX := x86_64-linux-gnu-
+ARCH_PREFIX := x86_64
 else
 $(error Unsupported architecture: $(TARGET_ARCH))
 endif
@@ -30,8 +27,8 @@ endif
 export TARGET_ARCH
 export CGO_ENABLED = 1
 export GOARCH = $(TARGET_ARCH)
-export CC = $(ARCH_PREFIX)gcc
-export OBJCOPY = $(ARCH_PREFIX)objcopy
+export CC = $(ARCH_PREFIX)-linux-gnu-gcc
+export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
 
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
 COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
@@ -74,31 +71,22 @@ generate:
 ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
-ebpf-profiler: generate ebpf rust-components
+ebpf-profiler: generate ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 rust-targets:
-ifeq ($(TARGET_ARCH),arm64)
-	rustup target add aarch64-unknown-linux-musl
-else ifeq ($(TARGET_ARCH),amd64)
-	rustup target add x86_64-unknown-linux-musl
-endif
+	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
 
 rust-components: rust-targets
-ifeq ($(TARGET_ARCH),arm64)
-	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target aarch64-unknown-linux-musl
-else ifeq ($(TARGET_ARCH),amd64)
-	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target x86_64-unknown-linux-musl
-endif
+	RUSTFLAGS="--remap-path-prefix $(PWD)=/" cargo build --lib --release --target $(ARCH_PREFIX)-unknown-linux-musl
 
 rust-tests: rust-targets
 	cargo test
 
-GOLANGCI_LINT_VERSION = "v1.64.5"
+GOLANGCI_LINT_VERSION = "v2.1.6"
 lint: generate vanity-import-check
 	$(MAKE) lint -C support/ebpf
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) version
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run
+	docker run --rm -t -v $$(pwd):/app -w /app golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) sh -c "golangci-lint version && golangci-lint config verify && golangci-lint run --max-issues-per-linter -1 --max-same-issues -1"
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf
@@ -117,8 +105,10 @@ vanity-import-fix: $(PORTO)
 test: generate ebpf test-deps
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
-sudo-test: integration-test-binaries
-	(cd support && sudo ./go_labels.test -test.v)
+# This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
+# amd64) and the CI kernel tests run them already. Useful for local testing.
+sudo-golabels-test: integration-test-binaries
+	(cd support && sudo ./interpreter_golabels_test.test -test.v)
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
@@ -130,16 +120,19 @@ test-deps:
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
-TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support go_labels
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support interpreter/golabels/test
 
 # These binaries are named ".test" to get included into bluebox initramfs
-support/go_labels_canary1.23.test: ./go_labels/*.go
-	GOTOOLCHAIN=go1.23.7 go build -tags $(GO_TAGS) -o $@ ./go_labels
+support/golbls_1_23.test: ./interpreter/golabels/test/main.go
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go build -tags $(GO_TAGS),nocgo -o $@ $<
 
-support/go_labels_canary1.24.test: ./go_labels/*.go
-	GOTOOLCHAIN=go1.24.1 go build -tags $(GO_TAGS) -o $@ ./go_labels
+support/golbls_1_24.test: ./interpreter/golabels/test/main.go
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.1 go build -tags $(GO_TAGS),nocgo -o $@ $<
 
-integration-test-binaries: generate ebpf support/go_labels_canary1.23.test support/go_labels_canary1.24.test
+support/golbls_cgo.test: ./interpreter/golabels/test/main-cgo.go
+	GOTOOLCHAIN=go1.24.1 go build -ldflags '-extldflags "-static"' -tags $(GO_TAGS),usecgo  -o $@ $<
+
+integration-test-binaries: generate ebpf rust-components support/golbls_1_23.test support/golbls_1_24.test support/golbls_cgo.test
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \

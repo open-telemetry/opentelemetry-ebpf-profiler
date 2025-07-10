@@ -93,7 +93,7 @@ const (
 	MMMax   = 0x16
 )
 
-//nolint:revive,stylecheck
+//nolint:stylecheck
 const (
 	BC_ISLT = iota
 	BC_ISGE

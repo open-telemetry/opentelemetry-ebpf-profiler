@@ -19,6 +19,8 @@ extern bpf_map_def interpreter_offsets;
 extern bpf_map_def system_config;
 extern bpf_map_def trace_events;
 extern bpf_map_def go_procs;
+extern bpf_map_def go_labels_procs;
+extern bpf_map_def cl_procs;
 
 #if defined(TESTING_COREDUMP)
 

@@ -25,8 +25,7 @@ bpf_map_def SEC("maps") ruby_procs = {
 #define RUBY_FRAME_FLAG_LAMBDA  0x0100
 
 // Record a Ruby frame
-static inline __attribute__((__always_inline__)) ErrorCode
-push_ruby(Trace *trace, u64 file, u64 line)
+static EBPF_INLINE ErrorCode push_ruby(Trace *trace, u64 file, u64 line)
 {
   return _push(trace, file, line, FRAME_MARKER_RUBY);
 }
@@ -50,7 +49,7 @@ push_ruby(Trace *trace, u64 file, u64 line)
 //
 // [2] rb_iseq_struct
 // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L456
-static inline __attribute__((__always_inline__)) ErrorCode walk_ruby_stack(
+static EBPF_INLINE ErrorCode walk_ruby_stack(
   PerCPURecord *record,
   const RubyProcInfo *rubyinfo,
   const void *current_ctx_addr,
@@ -227,7 +226,7 @@ save_state:
 }
 
 // unwind_ruby is the tail call destination for PROG_UNWIND_RUBY.
-static inline __attribute__((__always_inline__)) int unwind_ruby(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)

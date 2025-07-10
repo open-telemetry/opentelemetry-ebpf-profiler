@@ -1989,80 +1989,108 @@
     "id": 275
   },
   {
+    "description": "Number of successfully symbolized Go frames",
+    "type": "counter",
+    "name": "GoSymbolizationSuccess",
+    "field": "agent.go.symbolization.successes",
+    "id": 276
+  },
+  {
+    "description": "Number of Go frames that failed symbolization",
+    "type": "counter",
+    "name": "GoSymbolizationFailure",
+    "field": "agent.go.symbolization.failures",
+    "id": 277
+  },
+  {
     "description": "Number of attempts to read Go custom labels",
     "type": "counter",
-    "name": "UnwindGoCustomLabelsAttempts",
+    "name": "UnwindGoLabelsAttempts",
     "field": "bpf.golabels.attempts",
-    "id": 276
+    "id": 278
   },
   {
     "description": "Number of failures reading Go custom labels",
     "type": "counter",
+    "name": "UnwindGoLabelsFailures",
+    "field": "bpf.golabels.errors",
+    "id": 279
+  },
+  {
+    "description": "Number of attempts to read Go custom labels (legacy)",
+    "type": "counter",
+    "name": "UnwindGoCustomLabelsAttempts",
+    "field": "bpf.go_custom_labels.attempts",
+    "id": 280
+  },
+  {
+    "description": "Number of failures reading Go custom labels (legacy)",
+    "type": "counter",
     "name": "UnwindGoCustomLabelsFailures",
-    "field": "bpf.golabels.errors.no_proc_info",
-    "id": 277
+    "field": "bpf.go_custom_labels.errors",
+    "id": 281
   },
   {
     "description": "Number of failures to get TSD base for native custom labels",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsErrReadTsdBase",
-    "field": "bpf.nativelabels.errors.read_tsd_base",
-    "id": 278
+    "field": "bpf.native_custom_labels.errors.read_tsd_base",
+    "id": 282
   },
   {
     "description": "Number of failures to read native custom labels thread-local object",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsErrReadData",
-    "field": "bpf.nativelabels.errors.read_data",
-    "id": 279
+    "field": "bpf.native_custom_labels.errors.read_data",
+    "id": 283
   },
   {
     "description": "Number of failures to read native custom labels key buffer",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsErrReadKey",
-    "field": "bpf.nativelabels.errors.read_key",
-    "id": 280
+    "field": "bpf.native_custom_labels.errors.read_key",
+    "id": 284
   },
   {
     "description": "Number of failures to read native custom labels value buffer",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsErrReadValue",
-    "field": "bpf.nativelabels.errors.read_value",
-    "id": 281
+    "field": "bpf.native_custom_labels.errors.read_value",
+    "id": 285
   },
   {
     "description": "Number of successful reads of native custom labels",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsReadSuccesses",
-    "field": "bpf.nativelabels.read.successes",
-    "id": 282
+    "field": "bpf.native_custom_labels.read.successes",
+    "id": 286
   },
   {
     "description": "Total number of failures to add native custom labels",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsAddErrors",
-    "field": "bpf.nativelabels.add.errors",
-    "id": 283
+    "field": "bpf.native_custom_labels.add.errors",
+    "id": 287
   },
   {
     "description": "Number of successes adding native custom labels",
     "type": "counter",
     "name": "UnwindNativeCustomLabelsAddSuccesses",
-    "field": "bpf.nativelabels.add.successes",
-    "id": 284
+    "field": "bpf.native_custom_labels.add.successes",
+    "id": 288
   },
   {
     "description": "Number of attempted LuaJIT unwinds",
     "type": "counter",
     "name": "UnwindLuaJITAttempts",
     "field": "bpf.luajit.attempts",
-    "id": 285
+    "id": 289
   },
   {
     "description": "Number of times we didn't find an entry for this process in the LuaJIT process info array",
     "type": "counter",
     "name": "UnwindLuaJITErrNoProcInfo",
     "field": "bpf.luajit.errors.no_proc_info",
-    "id": 286
+    "id": 290
   }
 ]
