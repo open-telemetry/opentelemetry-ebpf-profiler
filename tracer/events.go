@@ -16,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -34,6 +35,8 @@ const (
 	// so that the hostagent startup phase can wait on most PID notifications
 	// to be processed before starting the tracer.
 	pidEventBufferSize = 10
+	// Maximum number of trace events to process in one batch.
+	maxEvents = 1024
 )
 
 // StartPIDEventProcessor spawns a goroutine to process PID events.
@@ -151,19 +154,23 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	go func() {
 		var data perf.Record
 		var oldKTime, minKTime times.KTime
+		var eventCount int
 
 		pollTicker := time.NewTicker(t.intervals.TracePollInterval())
 		defer pollTicker.Stop()
 
+		noWait := make(chan libpf.Void, 1)
 	PollLoop:
 		for {
 			select {
+			case <-noWait:
 			case <-pollTicker.C:
 				// Continue execution below.
 			case <-ctx.Done():
 				break PollLoop
 			}
 
+			eventCount = 0
 			minKTime = 0
 			// Eagerly read events until the buffer is exhausted.
 			for {
@@ -173,6 +180,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 					}
 					break
 				}
+
 				if data.LostSamples != 0 {
 					lostEventsCount.Add(data.LostSamples)
 					continue
@@ -182,12 +190,24 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 					continue
 				}
 
+				eventCount++
+
 				// Keep track of min KTime seen in this batch processing loop
 				trace := t.loadBpfTrace(data.RawSample, data.CPU)
 				if minKTime == 0 || trace.KTime < minKTime {
 					minKTime = trace.KTime
 				}
 				traceOutChan <- trace
+
+				if eventCount == maxEvents {
+					// Go into the next iteration without waiting for pollTicker to fire
+					select {
+					// We don't want to ever block here
+					case noWait <- libpf.Void{}:
+					default:
+					}
+					break
+				}
 			}
 			// After we've received and processed all trace events, call
 			// ProcessedUntil if there is a pending oldKTime that we
