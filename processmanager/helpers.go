@@ -5,6 +5,7 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -91,6 +92,7 @@ type FileIDMapper interface {
 	Set(pre host.FileID, post libpf.FileID)
 }
 
+// parseContainerID parses cgroup v2 container IDs
 func parseContainerID(cgroupFile io.Reader) string {
 	scanner := bufio.NewScanner(cgroupFile)
 	buf := make([]byte, 512)
@@ -101,7 +103,11 @@ func parseContainerID(cgroupFile io.Reader) string {
 	scanner.Buffer(buf, 8192)
 	var pathParts []string
 	for scanner.Scan() {
-		line := scanner.Text()
+		b := scanner.Bytes()
+		if bytes.Equal(b, []byte("0::/")) {
+			continue // Skip a common case
+		}
+		line := string(b)
 		pathParts = cgroupv2ContainerIDPattern.FindStringSubmatch(line)
 		if pathParts == nil {
 			log.Debugf("Could not extract cgroupv2 path from line: %s", line)
