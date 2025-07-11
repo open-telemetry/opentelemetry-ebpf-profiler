@@ -162,12 +162,21 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 		noWait := make(chan libpf.Void, 1)
 	PollLoop:
 		for {
+			// We use two selects to avoid starvation
 			select {
-			case <-noWait:
-			case <-pollTicker.C:
-				// Continue execution below.
+			// Always check for context cancellation in each iteration
 			case <-ctx.Done():
 				break PollLoop
+			default:
+				// Continue below
+			}
+			select {
+			// This context cancellation check may not execute in timely manner
+			case <-ctx.Done():
+				break PollLoop
+			case <-noWait:
+			case <-pollTicker.C:
+				// Continue execution below
 			}
 
 			eventCount = 0
