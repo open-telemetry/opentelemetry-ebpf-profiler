@@ -1,5 +1,4 @@
 {
-  "skip": "https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416",
   "coredump-ref": "3eb6bae4e0089983f436d6bbd4a0b7ee0d72738eac29f15495494f53bc82263d",
   "threads": [
     {
@@ -54,8 +53,7 @@
         "libpython3.12.so.1.0+0x21f742",
         "libpython3.12.so.1.0+0x1d6ed6",
         "ld-musl-x86_64.so.1+0x1c709",
-        "python3.12+0x1045",
-        "<unwinding aborted due to error native_small_pc>"
+        "python3.12+0x1045"
       ]
     }
   ],

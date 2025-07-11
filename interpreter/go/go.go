@@ -3,25 +3,17 @@
 
 package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
-/*
-#cgo CFLAGS: -g -Wall
-#include "../../rust-crates/symblib-capi/c/symblib.h"
-#include <stdlib.h>
-*/
-import "C"
-
 import (
-	"errors"
 	"fmt"
 	"hash/fnv"
-	"os"
 	"sync/atomic"
-	"unsafe"
+	"unique"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
@@ -34,7 +26,9 @@ var (
 )
 
 type goData struct {
-	goExecutable *C.SymblibPointResolver
+	refs atomic.Int32
+
+	pclntab *elfunwindinfo.Gopclntab
 }
 
 type goInstance struct {
@@ -47,19 +41,6 @@ type goInstance struct {
 	d *goData
 }
 
-func mapSymblibError(status C.SymblibStatus) error {
-	switch status {
-	case C.SYMBLIB_ERR_IOFILENOTFOUND:
-		return os.ErrNotExist
-	case C.SYMBLIB_ERR_OBJFILE:
-		return errors.New("failed to read object file")
-	case C.SYMBLIB_ERR_DWARF:
-		return errors.New("failed to parse DWARF")
-	default:
-		return fmt.Errorf("error %d", status)
-	}
-}
-
 func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	interpreter.Data, error) {
 	ef, err := info.GetELF()
@@ -70,37 +51,30 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 		return nil, nil
 	}
 
-	exec, err := info.ExtractAsFile()
-	if err != nil {
+	pclntab, err := elfunwindinfo.NewGopclntab(ef)
+	if pclntab == nil {
 		return nil, err
 	}
 
-	executablePath := C.CString(exec)
-	defer C.free(unsafe.Pointer(executablePath))
+	g := &goData{pclntab: pclntab}
+	g.refs.Store(1)
+	return g, nil
+}
 
-	gd := &goData{}
-
-	//nolint:gocritic
-	status := C.symblib_goruntime_new(executablePath, &gd.goExecutable)
-	if status != C.SYMBLIB_OK {
-		return nil, fmt.Errorf("failed to create point resolver: %w", mapSymblibError(status))
+func (g *goData) unref() {
+	if g.refs.Add(-1) == 0 {
+		_ = g.pclntab.Close()
 	}
-
-	return gd, nil
 }
 
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
-	return &goInstance{
-		d: g,
-	}, nil
+	g.refs.Add(1)
+	return &goInstance{d: g}, nil
 }
 
 func (g *goData) Unload(_ interpreter.EbpfHandler) {
-	if g.goExecutable != nil {
-		C.symblib_goruntime_free(g.goExecutable)
-		g.goExecutable = nil
-	}
+	g.unref()
 }
 
 func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
@@ -116,9 +90,13 @@ func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
-// Detach is a NOP for goInstance.
 func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
+	g.d.unref()
 	return nil
+}
+
+func intern(str string) string {
+	return unique.Make(str).Value()
 }
 
 func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame,
@@ -129,55 +107,31 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 	sfCounter := successfailurecounter.New(&g.successCount, &g.failCount)
 	defer sfCounter.DefaultToFailure()
 
-	if g.d.goExecutable == nil {
-		return errors.New("point resolver is out of scope")
-	}
-
-	var symbols *C.SymblibSlice_SymblibResolvedSymbol
-	defer C.symblib_slice_symblibresolved_symbol_free(symbols)
-
-	//nolint:gocritic
-	status := C.symblib_point_resolver_symbols_for_pc(g.d.goExecutable,
-		C.uint64_t(frame.Lineno), &symbols)
-	if status != C.SYMBLIB_OK {
-		return fmt.Errorf("failed to do point lookup at 0x%x: %d",
-			frame.Lineno, status)
-	}
-
-	// Access resolved symbols
-	symbolsSlice := unsafe.Slice((*C.SymblibResolvedSymbol)(unsafe.Pointer(symbols.data)),
-		symbols.len)
-	if len(symbolsSlice) == 0 {
+	sourceFile, lineNo, fn := g.d.pclntab.Symbolize(uintptr(frame.Lineno))
+	if fn == "" {
 		return fmt.Errorf("failed to symbolize 0x%x", frame.Lineno)
 	}
 
-	frameFileBytes := []byte(frame.File.StringNoQuotes())
-	for i := 0; i < len(symbolsSlice); i++ {
-		lineNo := libpf.SourceLineno(symbolsSlice[i].line_number)
-		funcName := C.GoString(symbolsSlice[i].function_name)
-		sourceFile := C.GoString(symbolsSlice[i].file_name)
-
-		// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
-		h := fnv.New128a()
-		_, _ = h.Write(frameFileBytes)
-		_, _ = h.Write([]byte(funcName))
-		_, _ = h.Write([]byte(sourceFile))
-		fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
-		if err != nil {
-			return fmt.Errorf("failed to create a file ID: %v", err)
-		}
-
-		frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
-
-		trace.AppendFrameID(libpf.GoFrame, frameID)
-
-		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-			FrameID:      frameID,
-			FunctionName: funcName,
-			SourceFile:   sourceFile,
-			SourceLine:   lineNo,
-		})
+	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
+	h := fnv.New128a()
+	_, _ = h.Write([]byte(frame.File.StringNoQuotes()))
+	_, _ = h.Write([]byte(fn))
+	_, _ = h.Write([]byte(sourceFile))
+	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
+	if err != nil {
+		return fmt.Errorf("failed to create a file ID: %v", err)
 	}
+
+	frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
+
+	trace.AppendFrameID(libpf.GoFrame, frameID)
+
+	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
+		FrameID:      frameID,
+		FunctionName: intern(fn),
+		SourceFile:   intern(sourceFile),
+		SourceLine:   libpf.SourceLineno(lineNo),
+	})
 
 	sfCounter.ReportSuccess()
 	return nil

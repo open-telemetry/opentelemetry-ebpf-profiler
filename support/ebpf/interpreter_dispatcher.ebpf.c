@@ -3,6 +3,7 @@
 // perf event and will call the appropriate tracer for a given process
 
 #include "bpfdefs.h"
+#include "kernel.h"
 #include "tracemgmt.h"
 #include "tsd.h"
 #include "types.h"
@@ -124,6 +125,73 @@ bpf_map_def SEC("maps") apm_int_procs = {
   .max_entries = 128,
 };
 
+bpf_map_def SEC("maps") go_labels_procs = {
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(GoLabelsOffsets),
+  .max_entries = 128,
+};
+
+static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
+{
+  u64 g_addr     = 0;
+  void *tls_base = NULL;
+  if (tsd_get_base(&tls_base) < 0) {
+    DEBUG_PRINT("cl: failed to get tsd base; can't read m_ptr");
+    return NULL;
+  }
+  DEBUG_PRINT(
+    "cl: read tsd_base at 0x%lx, g offset: %d", (unsigned long)tls_base, offs->tls_offset);
+
+  if (offs->tls_offset == 0) {
+#if defined(__aarch64__)
+    // On aarch64 for !iscgo programs the g is only stored in r28 register.
+    g_addr = state->r28;
+#elif defined(__x86_64__)
+    DEBUG_PRINT("cl: TLS offset for g pointer missing for amd64");
+    return NULL;
+#endif
+  }
+
+  if (g_addr == 0) {
+    if (bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((s64)tls_base + offs->tls_offset))) {
+      DEBUG_PRINT("cl: failed to read g_addr, tls_base(%lx)", (unsigned long)tls_base);
+      return NULL;
+    }
+  }
+
+  DEBUG_PRINT("cl: reading m_ptr_addr at 0x%lx + 0x%x", (unsigned long)g_addr, offs->m_offset);
+  void *m_ptr_addr;
+  if (bpf_probe_read_user(&m_ptr_addr, sizeof(void *), (void *)(g_addr + offs->m_offset))) {
+    DEBUG_PRINT("cl: failed m_ptr_addr");
+    return NULL;
+  }
+  DEBUG_PRINT("cl: m_ptr_addr 0x%lx", (unsigned long)m_ptr_addr);
+  return m_ptr_addr;
+}
+
+static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
+{
+  u32 pid                  = record->trace.pid;
+  GoLabelsOffsets *offsets = bpf_map_lookup_elem(&go_labels_procs, &pid);
+  if (!offsets) {
+    DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", pid);
+    return;
+  }
+
+  void *m_ptr_addr = get_m_ptr(offsets, &record->state);
+  if (!m_ptr_addr) {
+    return;
+  }
+  record->customLabelsState.go_m_ptr = m_ptr_addr;
+
+  DEBUG_PRINT("cl: trace is within a process with Go custom labels enabled");
+  increment_metric(metricID_UnwindGoLabelsAttempts);
+  // The Go label extraction code is too big to fit in the UNWIND_STOP program, so
+  // it is tail_call'd.
+  tail_call(ctx, PROG_GO_LABELS);
+}
+
 static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 {
   u32 pid              = trace->pid; // verifier needs this to be on stack on 4.15 kernel
@@ -235,6 +303,9 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
     }
   }
   // TEMPORARY HACK END
+
+  // Must be last since it may not return (it will call send_trace).
+  maybe_add_go_custom_labels(ctx, record);
 
   send_trace(ctx, trace);
 

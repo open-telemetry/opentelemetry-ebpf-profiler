@@ -279,9 +279,15 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	// References to eBPF maps in the eBPF programs are just placeholders that need to be
 	// replaced by the actual loaded maps later on with RewriteMaps before loading the
 	// programs into the kernel.
-	coll, err := support.LoadCollectionSpec(cfg.DebugTracer)
+	coll, err := support.LoadCollectionSpec()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load specification for tracers: %v", err)
+	}
+
+	if cfg.DebugTracer {
+		if err = coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
+			return nil, nil, fmt.Errorf("failed to set debug output: %v", err)
+		}
 	}
 
 	err = buildStackDeltaTemplates(coll)
@@ -371,6 +377,11 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 			progID: uint32(support.ProgUnwindDotnet),
 			name:   "unwind_dotnet",
 			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
+		},
+		{
+			progID: uint32(support.ProgGoLabels),
+			name:   "go_labels",
+			enable: cfg.IncludeTracers.Has(types.Labels),
 		},
 	}
 
@@ -866,6 +877,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	trace := &host.Trace{
 		Comm:             C.GoString((*C.char)(unsafe.Pointer(&ptr.comm))),
 		ExecutablePath:   procMeta.Executable,
+		ContainerID:      procMeta.ContainerID,
 		ProcessName:      procMeta.Name,
 		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.apm_trace_id)),
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.apm_transaction_id)),
@@ -904,6 +916,16 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 			log.Errorf("Failed to get kernel stack frames for 0x%x: %v", trace.Hash, err)
 		} else {
 			userFrameOffs = int(kstackLen)
+		}
+	}
+
+	if ptr.custom_labels.len > 0 {
+		trace.CustomLabels = make(map[string]string, int(ptr.custom_labels.len))
+		for i := 0; i < int(ptr.custom_labels.len); i++ {
+			lbl := ptr.custom_labels.labels[i]
+			key := C.GoString((*C.char)(unsafe.Pointer(&lbl.key)))
+			val := C.GoString((*C.char)(unsafe.Pointer(&lbl.val)))
+			trace.CustomLabels[key] = val
 		}
 	}
 

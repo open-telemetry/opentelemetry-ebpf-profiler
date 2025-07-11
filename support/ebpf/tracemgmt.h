@@ -173,7 +173,7 @@ static inline EBPF_INLINE bool report_pid(void *ctx, u64 pid_tgid, int ratelimit
     increment_metric(metricID_PIDEventsErr);
     return false;
   }
-  if (ratelimit_action == RATELIMIT_ACTION_RESET || errNo != 0) {
+  if (ratelimit_action == RATELIMIT_ACTION_RESET) {
     bpf_map_delete_elem(&reported_pids, &pid);
   }
 
@@ -214,6 +214,7 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
 #elif defined(__aarch64__)
   record->state.lr         = 0;
   record->state.r22        = 0;
+  record->state.r28        = 0;
   record->state.lr_invalid = false;
 #endif
   record->state.return_address             = false;
@@ -228,6 +229,7 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->unwindersDone                    = 0;
   record->tailCalls                        = 0;
   record->ratelimitAction                  = RATELIMIT_ACTION_DEFAULT;
+  record->customLabelsState.go_m_ptr       = NULL;
 
   Trace *trace           = &record->trace;
   trace->kernel_stack_id = -1;
@@ -238,6 +240,15 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   trace->apm_trace_id.as_int.hi    = 0;
   trace->apm_trace_id.as_int.lo    = 0;
   trace->apm_transaction_id.as_int = 0;
+
+  trace->custom_labels.len = 0;
+  u64 *labels_space        = (u64 *)&trace->custom_labels.labels;
+  // I'm not sure this is necessary since we only increment len after
+  // we successfully write the label.
+#pragma unroll
+  for (int i = 0; i < sizeof(CustomLabel) * MAX_CUSTOM_LABELS / 8; i++) {
+    labels_space[i] = 0;
+  }
 
   return record;
 }
@@ -594,6 +605,7 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   state->fp  = regs->regs[29];
   state->lr  = normalize_pac_ptr(regs->regs[30]);
   state->r22 = regs->regs[22];
+  state->r28 = regs->regs[28];
 
   // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/arm64/include/asm/ptrace.h#L118

@@ -11,6 +11,7 @@ type TraceEventMeta struct {
 	ProcessName    string
 	ExecutablePath string
 	APMServiceName string
+	ContainerID    string
 	PID, TID       libpf.PID
 	CPU            int
 	Origin         libpf.Origin
@@ -39,7 +40,7 @@ type TraceAndMetaKey struct {
 	// comm and apmServiceName are provided by the eBPF programs
 	Comm           string
 	ApmServiceName string
-	// containerID is annotated based on PID information
+	// ContainerID is annotated based on PID information
 	ContainerID string
 	Pid         int64
 	Tid         int64
@@ -83,10 +84,4 @@ type SourceInfo struct {
 	FunctionOffset uint32
 	FunctionName   string
 	FilePath       string
-}
-
-// FuncInfo is a helper to construct profile.Function messages.
-type FuncInfo struct {
-	Name     string
-	FileName string
 }

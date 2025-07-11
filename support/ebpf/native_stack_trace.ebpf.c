@@ -4,6 +4,9 @@
 #include "tracemgmt.h"
 #include "types.h"
 
+// with_debug_output is set during load time.
+BPF_RODATA_VAR(u32, with_debug_output, 0)
+
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
 // fileID.
@@ -484,6 +487,7 @@ unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *state, bool *stop)
       state->fp             = rt_regs[29];
       state->lr             = normalize_pac_ptr(rt_regs[30]);
       state->r22            = rt_regs[22];
+      state->r28            = rt_regs[28];
       state->return_address = false;
       state->lr_invalid     = false;
       DEBUG_PRINT("signal frame");

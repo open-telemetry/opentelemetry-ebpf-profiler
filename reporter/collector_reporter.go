@@ -5,7 +5,6 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
-	"time"
 
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
@@ -29,14 +28,6 @@ type CollectorReporter struct {
 
 // NewCollector builds a new CollectorReporter
 func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorReporter, error) {
-	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
-		func(pid libpf.PID) uint32 { return uint32(pid) })
-	if err != nil {
-		return nil, err
-	}
-	// Set a lifetime to reduce the risk of invalid data in case of PID reuse.
-	cgroupv2ID.SetLifetime(90 * time.Second)
-
 	// Next step: Dynamically configure the size of this LRU.
 	// Currently, we use the length of the JSON array in
 	// hostmetadata/hostmetadata.json.
@@ -63,7 +54,6 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 			name:         cfg.Name,
 			version:      cfg.Version,
 			pdata:        data,
-			cgroupv2ID:   cgroupv2ID,
 			traceEvents:  xsync.NewRWMutex(tree),
 			hostmetadata: hostmetadata,
 			runLoop: &runLoop{
@@ -85,7 +75,6 @@ func (r *CollectorReporter) Start(ctx context.Context) error {
 	}, func() {
 		// Allow the GC to purge expired entries to avoid memory leaks.
 		r.pdata.Purge()
-		r.cgroupv2ID.PurgeExpired()
 	})
 
 	// When Stop() is called and a signal to 'stop' is received, then:
@@ -107,7 +96,12 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	*traceEventsPtr = newEvents
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
-	profiles := r.pdata.Generate(reportedEvents, r.name, r.version)
+	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version)
+	if err != nil {
+		log.Errorf("pdata: %v", err)
+		return nil
+	}
+
 	if profiles.SampleCount() == 0 {
 		log.Debugf("Skip sending profile with no samples")
 		return nil
