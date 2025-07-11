@@ -45,7 +45,6 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 	// By specification, the first element should be empty.
 	stringSet.Add("")
-	funcSet.Add(funcInfo{nameIdx: stringSet.Add(""), fileNameIdx: stringSet.Add("")})
 	mappingSet.Add(dummyFileID)
 	dic.MappingTable().AppendEmpty()
 
