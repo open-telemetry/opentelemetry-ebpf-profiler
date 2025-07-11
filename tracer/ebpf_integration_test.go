@@ -233,28 +233,6 @@ Loop:
 }
 
 func TestAllTracers(t *testing.T) {
-<<<<<<< HEAD
-	s, err := kallsyms.NewSymbolizer()
-	require.NoError(t, err)
-
-	// Without this intermediate variable, typecheck complains about float64/int conversion.
-	threshold := 0.01 * float64(math.MaxUint32)
-
-	kmod, err := s.GetModuleByName(kallsyms.Kernel)
-	require.NoError(t, err)
-
-	_, _, err = initializeMapsAndPrograms(kmod, &Config{
-		IncludeTracers:      tracertypes.AllTracers(),
-		MapScaleFactor:      1,
-		FilterErrorFrames:   false,
-		KernelVersionCheck:  false,
-		DebugTracer:         false,
-		BPFVerifierLogLevel: 0,
-		OffCPUThreshold:     uint32(threshold),
-	})
-	require.NoError(t, err)
-=======
 	_, _ = testutils.StartTracer(context.Background(), t, tracertypes.AllTracers(),
 		&testutils.MockReporter{})
->>>>>>> upstream/main
 }

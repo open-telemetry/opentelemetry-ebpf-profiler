@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -42,6 +44,9 @@ func (f MockReporter) FrameMetadata(_ *reporter.FrameMetadataArgs) {}
 
 func StartTracer(ctx context.Context, t *testing.T, et tracertypes.IncludedTracers,
 	r reporter.SymbolReporter) (chan *host.Trace, *tracer.Tracer) {
+	// Without this intermediate variable, typecheck complains about float64/int conversion.
+	threshold := 0.01 * float64(math.MaxUint32)
+
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
 		Reporter:               r,
 		Intervals:              &MockIntervals{},
@@ -49,6 +54,7 @@ func StartTracer(ctx context.Context, t *testing.T, et tracertypes.IncludedTrace
 		SamplesPerSecond:       20,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
+		OffCPUThreshold:        uint32(threshold),
 		DebugTracer:            true,
 	})
 	require.NoError(t, err)
