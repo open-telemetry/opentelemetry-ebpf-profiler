@@ -88,8 +88,6 @@ const (
 	TraceOriginMemory   = 0x3
 )
 
-const OffCPUThresholdMax = 0x3e8
-
 type ApmIntProcInfo struct {
 	Offset uint64
 }
