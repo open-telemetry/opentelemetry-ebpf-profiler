@@ -110,7 +110,7 @@ func TestFunctionTableOrder(t *testing.T) {
 			executables:              map[libpf.FileID]samples.ExecInfo{},
 			frames:                   map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo{},
 			events:                   map[libpf.Origin]samples.KeyToEventMapping{},
-			wantFunctionTable:        []string{""},
+			wantFunctionTable:        []string{},
 			expectedResourceProfiles: 0,
 		}, {
 			name:                     "single executable",
@@ -177,7 +177,7 @@ func TestFunctionTableOrder(t *testing.T) {
 				},
 			},
 			wantFunctionTable: []string{
-				"", "func1", "func2", "func3", "func4", "func5",
+				"func1", "func2", "func3", "func4", "func5",
 			},
 		},
 	} {
