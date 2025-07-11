@@ -205,13 +205,13 @@ func recoverExecuteExJumpLabelAddress(ef *pfelf.File) (libpf.SymbolValue, error)
 
 	// The address we care about varies from being 47 bytes in to about 107 bytes in,
 	// so we'll cap at 128 bytes. This might need to be adjusted up in future.
-	addr, code, err := ef.SymbolData("execute_ex", 128)
+	sym, code, err := ef.SymbolData("execute_ex", 128)
 	if err != nil {
 		return libpf.SymbolValueInvalid,
 			fmt.Errorf("unable to read 'execute_ex': %w", err)
 	}
 
-	returnAddress, err := retrieveExecuteExJumpLabelAddressWrapper(code, addr)
+	returnAddress, err := retrieveExecuteExJumpLabelAddressWrapper(code, sym.Address)
 	if err != nil {
 		return libpf.SymbolValueInvalid,
 			fmt.Errorf("reading the return address from execute_ex failed (%w)",

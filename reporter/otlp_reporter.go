@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding/gzip"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -23,6 +24,8 @@ import (
 
 // Assert that we implement the full Reporter interface.
 var _ Reporter = (*OTLPReporter)(nil)
+
+var gzipOption = grpc.UseCompressor(gzip.Name)
 
 // OTLPReporter receives and transforms information to be OTLP/profiles compliant.
 type OTLPReporter struct {
@@ -41,14 +44,6 @@ type OTLPReporter struct {
 
 // NewOTLP returns a new instance of OTLPReporter
 func NewOTLP(cfg *Config) (*OTLPReporter, error) {
-	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
-		func(pid libpf.PID) uint32 { return uint32(pid) })
-	if err != nil {
-		return nil, err
-	}
-	// Set a lifetime to reduce risk of invalid data in case of PID reuse.
-	cgroupv2ID.SetLifetime(90 * time.Second)
-
 	// Next step: Dynamically configure the size of this LRU.
 	// Currently, we use the length of the JSON array in
 	// hostmetadata/hostmetadata.json.
@@ -75,7 +70,6 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 			name:         cfg.Name,
 			version:      cfg.Version,
 			pdata:        data,
-			cgroupv2ID:   cgroupv2ID,
 			traceEvents:  xsync.NewRWMutex(eventsTree),
 			hostmetadata: hostmetadata,
 			runLoop: &runLoop{
@@ -110,7 +104,6 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 	}, func() {
 		// Allow the GC to purge expired entries to avoid memory leaks.
 		r.pdata.Purge()
-		r.cgroupv2ID.PurgeExpired()
 	})
 
 	// When Stop() is called and a signal to 'stop' is received, then:
@@ -135,16 +128,21 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	*traceEventsPtr = newEvents
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
-	profiles := r.pdata.Generate(reportedEvents, r.name, r.version)
+	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version)
+	if err != nil {
+		log.Errorf("pdata: %v", err)
+		return nil
+	}
 	if profiles.SampleCount() == 0 {
 		log.Debugf("Skip sending of OTLP profile with no samples")
 		return nil
 	}
+
 	req := pprofileotlp.NewExportRequestFromProfiles(profiles)
 
 	reqCtx, ctxCancel := context.WithTimeout(ctx, r.pkgGRPCOperationTimeout)
 	defer ctxCancel()
-	_, err := r.client.Export(reqCtx, req)
+	_, err = r.client.Export(reqCtx, req, gzipOption)
 	return err
 }
 

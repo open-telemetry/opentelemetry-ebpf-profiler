@@ -61,8 +61,7 @@
         "node+0xae0fe7",
         "libc.so.6+0x273fb",
         "libc.so.6+0x274cb",
-        "node+0xa66af3",
-        "<unwinding aborted due to error native_stack_delta_invalid>"
+        "node+0xa66af3"
       ]
     },
     {

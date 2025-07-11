@@ -43,7 +43,7 @@ LDFLAGS := -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
 	-extldflags=-static
 
 GO_TAGS := osusergo,netgo
-EBPF_FLAGS := 
+EBPF_FLAGS :=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 
@@ -71,7 +71,7 @@ generate:
 ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
-ebpf-profiler: generate ebpf rust-components
+ebpf-profiler: generate ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 rust-targets:
@@ -102,8 +102,13 @@ vanity-import-fix: $(PORTO)
 	@go install github.com/jcchavezs/porto/cmd/porto@latest
 	@porto --include-internal -w .
 
-test: generate ebpf test-deps rust-components
+test: generate ebpf test-deps
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
+
+# This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
+# amd64) and the CI kernel tests run them already. Useful for local testing.
+sudo-golabels-test: integration-test-binaries
+	(cd support && sudo ./interpreter_golabels_test.test -test.v)
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
@@ -115,9 +120,19 @@ test-deps:
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
-TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support interpreter/golabels/test
 
-integration-test-binaries: generate ebpf rust-components
+# These binaries are named ".test" to get included into bluebox initramfs
+support/golbls_1_23.test: ./interpreter/golabels/test/main.go
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go build -tags $(GO_TAGS),nocgo -o $@ $<
+
+support/golbls_1_24.test: ./interpreter/golabels/test/main.go
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.1 go build -tags $(GO_TAGS),nocgo -o $@ $<
+
+support/golbls_cgo.test: ./interpreter/golabels/test/main-cgo.go
+	GOTOOLCHAIN=go1.24.1 go build -ldflags '-extldflags "-static"' -tags $(GO_TAGS),usecgo  -o $@ $<
+
+integration-test-binaries: generate ebpf rust-components support/golbls_1_23.test support/golbls_1_24.test support/golbls_cgo.test
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \

@@ -172,8 +172,10 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 				path = VdsoPathName
 				device = 0
 				inode = vdsoInode
+			} else if path == "" {
+				// This is an anonymous mapping, keep it
 			} else {
-				// Ignore mappings that are invalid, non-existent or are special pseudo-files
+				// Ignore other mappings that are invalid, non-existent or are special pseudo-files
 				continue
 			}
 		} else {

@@ -4,7 +4,20 @@
 #include "bpf_map.h"
 #include "kernel.h"
 
+// with_debug_output is declared in native_stack_trace.ebpf.c
+extern u32 with_debug_output;
+
 #if defined(TESTING_COREDUMP)
+
+  // BPF_RODATA_VAR declares a global variable in the .rodata section,
+  // ensuring it's not optimized away by the compiler or linker.
+  //
+  // Arguments:
+  //   _type: The data type of the variable (e.g., u32, int, struct my_config).
+  //   _name: The name of the global variable.
+  //   _value: The initial value for the variable.
+  #define BPF_RODATA_VAR(_type, _name, _value) _type _name = _value;
+
   // tools/coredump uses CGO to build the eBPF code. Provide here the glue to
   // dispatch the BPF API to helpers implemented in ebpfhelpers.go.
   #define SEC(NAME)
@@ -12,7 +25,6 @@
 
   #define printt(fmt, ...)      bpf_log(fmt, ##__VA_ARGS__)
   #define DEBUG_PRINT(fmt, ...) bpf_log(fmt, ##__VA_ARGS__)
-  #define OPTI_DEBUG
 
 // BPF helpers. Mostly stubs to dispatch the call to Go code with the context ID.
 int bpf_tail_call(void *ctx, bpf_map_def *map, int index);
@@ -64,7 +76,17 @@ static inline int bpf_get_stackid(void *ctx, bpf_map_def *map, u64 flags)
 
 #else // TESTING_COREDUMP
 
-// Native eBPF build
+  // Native eBPF build
+
+  // BPF_RODATA_VAR declares a global variable in the .rodata section,
+  // ensuring it's not optimized away by the compiler or linker.
+  //
+  // Arguments:
+  //   _type: The data type of the variable (e.g., u32, int, struct my_config).
+  //   _name: The name of the global variable.
+  //   _value: The initial value for the variable.
+  #define BPF_RODATA_VAR(_type, _name, _value)                                                     \
+    _type _name __attribute__((section(".rodata.var"), used)) = _value;
 
 // definitions of bpf helper functions we need, as found in
 // https://elixir.bootlin.com/linux/v4.11/source/samples/bpf/bpf_helpers.h
@@ -103,39 +125,41 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
       bpf_trace_printk(____fmt, sizeof(____fmt), ##__VA_ARGS__);                                   \
     })
 
-  #ifdef OPTI_DEBUG
-    #define DEBUG_PRINT(fmt, ...) printt(fmt, ##__VA_ARGS__);
+  #define DEBUG_PRINT(fmt, ...)                                                                    \
+    ({                                                                                             \
+      if (__builtin_expect(with_debug_output, 0)) {                                                \
+        printt(fmt, ##__VA_ARGS__);                                                                \
+      }                                                                                            \
+    })
 
-    // Sends `SIGTRAP` to the current task, killing it and capturing a coredump.
-    //
-    // Only use this in code paths that you expect to be hit by a very specific process that you
-    // intend to debug. Placing it into frequently taken code paths might otherwise take down
-    // important system processes like sshd or your window manager. For frequently taken cases,
-    // prefer using the `DEBUG_CAPTURE_COREDUMP_IF_TGID` macro.
-    //
-    // This macro requires linking against kernel headers >= 5.6.
-    #define DEBUG_CAPTURE_COREDUMP()                                                               \
-      ({                                                                                           \
+  // Sends `SIGTRAP` to the current task, killing it and capturing a coredump.
+  //
+  // Only use this in code paths that you expect to be hit by a very specific process that you
+  // intend to debug. Placing it into frequently taken code paths might otherwise take down
+  // important system processes like sshd or your window manager. For frequently taken cases,
+  // prefer using the `DEBUG_CAPTURE_COREDUMP_IF_TGID` macro.
+  //
+  // This macro requires linking against kernel headers >= 5.6.
+  #define DEBUG_CAPTURE_COREDUMP()                                                                 \
+    ({                                                                                             \
+      if (__builtin_expect(with_debug_output, 0)) {                                                \
         /* We don't define `bpf_send_signal_thread` globally because it requires a      */         \
         /* rather recent kernel (>= 5.6) and otherwise breaks builds of older versions. */         \
         long (*bpf_send_signal_thread)(u32 sig) = (void *)BPF_FUNC_send_signal_thread;             \
         bpf_send_signal_thread(SIGTRAP);                                                           \
-      })
+      }                                                                                            \
+    })
 
-    // Like `DEBUG_CAPTURE_COREDUMP`, but only coredumps if the current task is a member of the
-    // given thread group ID ("process").
-    #define DEBUG_CAPTURE_COREDUMP_IF_TGID(tgid)                                                   \
-      ({                                                                                           \
-        if (bpf_get_current_pid_tgid() >> 32 == (tgid)) {                                          \
-          DEBUG_PRINT("coredumping process %d", (tgid));                                           \
-          DEBUG_CAPTURE_COREDUMP();                                                                \
-        }                                                                                          \
-      })
-  #else
-    #define DEBUG_PRINT(fmt, ...)
-    #define DEBUG_CAPTURE_COREDUMP()
-    #define DEBUG_CAPTURE_COREDUMP_IF_TGID(tgid)
-  #endif
+  // Like `DEBUG_CAPTURE_COREDUMP`, but only coredumps if the current task is a member of the
+  // given thread group ID ("process").
+  #define DEBUG_CAPTURE_COREDUMP_IF_TGID(tgid)                                                     \
+    ({                                                                                             \
+      if (__builtin_expect(with_debug_output, 0) && bpf_get_current_pid_tgid() >> 32 == (tgid)) {  \
+        printt("coredumping process %d", (tgid));                                                  \
+        long (*bpf_send_signal_thread)(u32 sig) = (void *)BPF_FUNC_send_signal_thread;             \
+        bpf_send_signal_thread(SIGTRAP);                                                           \
+      }                                                                                            \
+    })
 
   // Definition of SEC as used by the Linux kernel in tools/lib/bpf/bpf_helpers.h for clang
   // compilations.
@@ -145,5 +169,7 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
   #define EBPF_INLINE __attribute__((__always_inline__))
 
 #endif // !TESTING_COREDUMP
+
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 #endif // OPTI_BPFDEFS_H

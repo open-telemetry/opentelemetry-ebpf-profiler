@@ -8,6 +8,8 @@ package modulestore // import "go.opentelemetry.io/ebpf-profiler/tools/coredump/
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -197,9 +199,19 @@ func (store *Store) UploadModule(id ID) error {
 		return fmt.Errorf("failed to open local file: %w", err)
 	}
 
+	hasher := sha256.New()
+	if _, err = io.Copy(hasher, file); err != nil {
+		return fmt.Errorf("failed to hash content of %q: %v", localPath, err)
+	}
+	contentSHA256 := base64.StdEncoding.EncodeToString(hasher.Sum(nil))
+
 	moduleKey := makeS3Key(id)
 	contentType := "application/octet-stream"
 	contentDisposition := "attachment"
+
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("failed to set position in file %q: %v", localPath, err)
+	}
 
 	_, err = store.s3client.PutObject(context.TODO(), &s3.PutObjectInput{
 		Bucket:             &store.bucket,
@@ -207,6 +219,7 @@ func (store *Store) UploadModule(id ID) error {
 		Body:               file,
 		ContentType:        &contentType,
 		ContentDisposition: &contentDisposition,
+		ChecksumSHA256:     &contentSHA256,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)

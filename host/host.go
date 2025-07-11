@@ -50,6 +50,7 @@ type Trace struct {
 	Comm             string
 	ProcessName      string
 	ExecutablePath   string
+	ContainerID      string
 	Frames           []Frame
 	Hash             TraceHash
 	KTime            times.KTime
@@ -61,4 +62,5 @@ type Trace struct {
 	APMTransactionID libpf.APMTransactionID
 	CPU              int
 	EnvVars          map[string]string
+	CustomLabels     map[string]string
 }
