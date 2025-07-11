@@ -65,9 +65,9 @@ type FrameMetadataArgs struct {
 	// FrameID is a unique identifier for the frame.
 	FrameID libpf.FrameID
 	// FunctionName is the name of the function for the frame.
-	FunctionName string
+	FunctionName libpf.String
 	// SourceFile is the source code file name for the frame.
-	SourceFile string
+	SourceFile libpf.String
 	// SourceLine is the source code level line number of this frame.
 	SourceLine libpf.SourceLineno
 	// FunctionOffset is the line offset from function start line for the frame.

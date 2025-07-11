@@ -149,10 +149,5 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 		FunctionOffset: args.FunctionOffset,
 		FunctionName:   args.FunctionName,
 	}
-	if si.FilePath == "" {
-		if oldsi, exists := b.pdata.Frames.Get(args.FrameID); exists {
-			si.FilePath = oldsi.FilePath
-		}
-	}
 	b.pdata.Frames.Add(args.FrameID, si)
 }

@@ -120,11 +120,11 @@ func TestFunctionTableOrder(t *testing.T) {
 			},
 			frames: map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo{
 				libpf.NewFileID(2, 3): {
-					libpf.AddressOrLineno(0xef):  {FunctionName: "func1"},
-					libpf.AddressOrLineno(0x1ef): {FunctionName: "func2"},
-					libpf.AddressOrLineno(0x2ef): {FunctionName: "func3"},
-					libpf.AddressOrLineno(0x3ef): {FunctionName: "func4"},
-					libpf.AddressOrLineno(0x4ef): {FunctionName: "func5"},
+					libpf.AddressOrLineno(0xef):  {FunctionName: libpf.Intern("func1")},
+					libpf.AddressOrLineno(0x1ef): {FunctionName: libpf.Intern("func2")},
+					libpf.AddressOrLineno(0x2ef): {FunctionName: libpf.Intern("func3")},
+					libpf.AddressOrLineno(0x3ef): {FunctionName: libpf.Intern("func4")},
+					libpf.AddressOrLineno(0x4ef): {FunctionName: libpf.Intern("func5")},
 				},
 			},
 			events: map[libpf.Origin]samples.KeyToEventMapping{

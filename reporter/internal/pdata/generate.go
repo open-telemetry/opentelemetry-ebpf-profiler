@@ -200,8 +200,8 @@ func (p *Pdata) setProfile(
 					FramesCacheLifetime); exists {
 					locInfo.lineNumber = int64(si.LineNumber)
 					fi := funcInfo{
-						nameIdx:     stringSet.Add(si.FunctionName),
-						fileNameIdx: stringSet.Add(si.FilePath),
+						nameIdx:     stringSet.Add(si.FunctionName.String()),
+						fileNameIdx: stringSet.Add(si.FilePath.String()),
 					}
 					locInfo.functionIndex = funcSet.Add(fi)
 				} else {
