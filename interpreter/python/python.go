@@ -666,7 +666,15 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 		return libpf.SymbolValueInvalid, fmt.Errorf("unable to read '%s': %v",
 			symbolName, err)
 	}
-	value, err := decodeStubArgumentWrapper(code, sym.Address, memoryBase)
+	var value libpf.SymbolValue
+	switch ef.Machine {
+	case elf.EM_AARCH64:
+		value, err = decodeStubArgumentARM64(code, memoryBase), nil
+	case elf.EM_X86_64:
+		value, err = decodeStubArgumentAMD64(code, uint64(sym.Address), uint64(memoryBase))
+	default:
+		return libpf.SymbolValueInvalid, fmt.Errorf("unsupported arch %s", ef.Machine.String())
+	}
 
 	// Sanity check the value range and alignment
 	if err != nil || value%4 != 0 {
