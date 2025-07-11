@@ -125,7 +125,6 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				i.Regs.setX86asm(dst, v)
 			}
 		}
-
 	case x86asm.XOR:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, reg := inst.Args[1].(x86asm.Reg); reg {
@@ -149,9 +148,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 				i.Regs.setX86asm(dst, v)
 			}
 		}
-	case x86asm.NOP, x86asm.RET:
 	default:
-		return inst, nil
 	}
 	return inst, nil
 }
