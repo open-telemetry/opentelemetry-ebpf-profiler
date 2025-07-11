@@ -10,7 +10,7 @@
 #include "types.h"
 
 // The number of dotnet frames to unwind per frame-unwinding eBPF program.
-#define DOTNET_FRAMES_PER_PROGRAM 5
+#define DOTNET_FRAMES_PER_PROGRAM 7
 
 // The maximum dotnet frame length used in heuristic to validate FP
 #define DOTNET_MAX_FRAME_LENGTH 8192
@@ -102,12 +102,30 @@ dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 pc, u64 *co
     // This is unrolled several times, so it needs to be minimal in size.
     // And currently this is the major limit for DOTNET_FRAMES_PER_PROGRAM.
     int orig_pos = pos;
+    if (val == 0) {
+      // pos has already been decremented twice, pos = map_elements - 2.
+      // The `-1` indicates moving to the next u64.
+      int pos64 = (map_elements - 2) / 2 - 1;
+      u64 val64 = scratch->map64[pos64];
 #pragma unroll 256
-    for (int i = 0; i < map_elements - 2; i++) {
-      if (val != 0) {
-        break;
+      for (int i = 0; i < (map_elements - 2) / 2 - 1; i++) {
+        if (val64 != 0) {
+          break;
+        }
+        // pos64 will be decremented at most (map_elements - 2) / 2 - 1 times,
+        // so there is no out-of-bounds access.
+        val64 = scratch->map64[--pos64];
       }
-      val = scratch->map[--pos];
+      // If val64 is 0, then val is also 0, and ERR_DOTNET_CODE_TOO_LARGE will be returned in the
+      // end, so there's no need to update pos.
+      if (val64 != 0) {
+        // update to pos
+        pos = pos64 * 2 + 1;
+        if (scratch->map[pos] == 0) {
+          pos--;
+        }
+        val = scratch->map[pos];
+      }
     }
 
     // Adjust pc_delta based on how many iterations were done
