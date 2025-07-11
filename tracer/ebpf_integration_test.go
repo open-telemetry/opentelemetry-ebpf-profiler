@@ -7,6 +7,7 @@ package tracer_test
 
 import (
 	"context"
+	"math"
 	"runtime"
 	"sync"
 	"testing"
@@ -114,7 +115,7 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
-		OffCPUThreshold:        support.OffCPUThresholdMax,
+		OffCPUThreshold:        1 * math.MaxUint32,
 		DebugTracer:            true,
 	})
 	require.NoError(t, err)

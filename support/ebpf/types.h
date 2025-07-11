@@ -346,9 +346,6 @@ typedef enum TraceOrigin {
   TRACE_OFF_CPU,
 } TraceOrigin;
 
-// OFF_CPU_THRESHOLD_MAX defines the maximum threshold.
-#define OFF_CPU_THRESHOLD_MAX 1000
-
 // MAX_FRAME_UNWINDS defines the maximum number of frames per
 // Trace we can unwind and respect the limit of eBPF instructions,
 // limit of tail calls and limit of stack size per eBPF program.

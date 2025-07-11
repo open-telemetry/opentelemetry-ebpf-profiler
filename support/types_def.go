@@ -95,8 +95,6 @@ const (
 	TraceOriginOffCPU   = C.TRACE_OFF_CPU
 )
 
-const OffCPUThresholdMax = C.OFF_CPU_THRESHOLD_MAX
-
 type ApmIntProcInfo C.ApmIntProcInfo
 type DotnetProcInfo C.DotnetProcInfo
 type PHPProcInfo C.PHPProcInfo
