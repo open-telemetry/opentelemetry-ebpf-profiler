@@ -12,7 +12,7 @@ import (
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
 
-// retrieveZendVMKindARM. This function reads the code blob and recovers
+// retrieveZendVMKindARM reads the code blob and recovers
 // the type of the PHP VM that is used by this process.
 func retrieveZendVMKindARM(code []byte) (uint, error) {
 	// Here we need to decode assembly that looks like this:
@@ -52,7 +52,7 @@ func retrieveZendVMKindARM(code []byte) (uint, error) {
 	return 0, errors.New("did not find a mov into w0 in the given code blob")
 }
 
-// retrieveExecuteExJumpLabelAddressARM. This function reads the code blob and returns
+// retrieveExecuteExJumpLabelAddressARM reads the code blob and returns
 // the address of the jump label for any JIT code called from execute_ex. Since all JIT
 // code is ultimately called from execute_ex, this is the same as returning the return address
 // for all JIT code.

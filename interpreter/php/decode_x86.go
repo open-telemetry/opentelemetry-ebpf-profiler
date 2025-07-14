@@ -5,7 +5,6 @@ package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 
 import (
 	"errors"
-	"fmt"
 
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	e "go.opentelemetry.io/ebpf-profiler/asm/expression"
@@ -28,10 +27,10 @@ func retrieveZendVMKindX86(code []byte) (uint, error) {
 	if res.Match(imm) {
 		return uint(imm.CapturedValue()), nil
 	}
-	return 0, errors.New("failed to decode zend_vm_kind: target not found")
+	return 0, errors.New("failed to decode zend_vm_kind")
 }
 
-// retrieveExecuteExJumpLabelAddressX86. This function reads the code blob and returns
+// retrieveExecuteExJumpLabelAddressX86 reads the code blob and returns
 // the address of the return address for any JIT code called from execute_ex. Since all JIT
 // code is ultimately called from execute_ex, this is the same as returning the return address
 // for all JIT code.
@@ -50,11 +49,10 @@ func retrieveExecuteExJumpLabelAddressX86(code []byte, addrBase libpf.SymbolValu
 	if res.Match(imm) {
 		return libpf.SymbolValue(imm.CapturedValue()), nil
 	}
-	return libpf.SymbolValueInvalid,
-		fmt.Errorf("failed to decode execute_ex: %s", "target not found")
+	return libpf.SymbolValueInvalid, errors.New("failed to decode execute_ex")
 }
 
-// retrieveJITBufferPtrx86. This function reads the code blob and returns a pointer
+// retrieveJITBufferPtrx86 reads the code blob and returns a pointer
 // to the JIT buffer used by PHP (called "dasm_buf" in the PHP source).
 func retrieveJITBufferPtrx86(code []byte, addrBase libpf.SymbolValue) (
 	dasmBuf libpf.SymbolValue, dasmSize libpf.SymbolValue, err error) {
@@ -75,5 +73,5 @@ func retrieveJITBufferPtrx86(code []byte, addrBase libpf.SymbolValue) (
 		return rdiValue, rsiValue, nil
 	}
 	return libpf.SymbolValueInvalid, libpf.SymbolValueInvalid,
-		fmt.Errorf("failed to recover jit buffer: %s", "target not found")
+		errors.New("failed to recover jit buffer")
 }
