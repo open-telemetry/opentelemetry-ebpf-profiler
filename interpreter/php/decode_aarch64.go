@@ -44,6 +44,9 @@ func retrieveZendVMKindARM(code []byte) (uint, error) {
 			if !ok {
 				break
 			}
+			if val > ZEND_VM_KIND_HYBRID {
+				return 0, fmt.Errorf("zend_vm_kind has an invalid value %d", val)
+			}
 			return uint(val), nil
 		}
 	}
@@ -117,7 +120,7 @@ func retrieveJITBufferPtrARM(code []byte, addrBase libpf.SymbolValue) (
 	//
 	// We also assume that the first BL we encounter is the one we care about.
 	// This is because the first call inside zend_jit_protect is a call to mprotect.
-	var regOffset [32]uint64
+	var regOffset [32]int64
 
 	bufRetVal := libpf.SymbolValueInvalid
 	sizeRetVal := libpf.SymbolValueInvalid
@@ -163,7 +166,7 @@ func retrieveJITBufferPtrARM(code []byte, addrBase libpf.SymbolValue) (
 
 			// The instruction specifies that this value needs to
 			// shifted about before being added to the PC.
-			pc := uint64(addrBase) + uint64(offs)
+			pc := int64(addrBase) + int64(offs)
 			regOffset[dest] = ((pc + a2) >> 12) << 12
 		case aa.LDR:
 			m, ok := inst.Args[1].(aa.MemImmediate)

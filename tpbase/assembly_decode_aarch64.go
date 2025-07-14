@@ -13,13 +13,13 @@ import (
 
 func arm64GetAnalyzers() []Analyzer {
 	return []Analyzer{
-		{"tls_set", AnalyzeTLSSetARM64},
+		{"tls_set", analyzeTLSSetARM},
 	}
 }
 
-// AnalyzeTLSSet looks at the assembly of the `tls_set` function in the
+// analyzeTLSSetARM looks at the assembly of the `tls_set` function in the
 // kernel in order to compute the offset of `tp_value` into `task_struct`.
-func AnalyzeTLSSetARM64(code []byte) (uint32, error) {
+func analyzeTLSSetARM(code []byte) (uint32, error) {
 	// This tries to extract offset of thread.uw.tp_value relative to
 	// struct task_struct. The code analyzed comes from:
 	// linux/arch/arm64/kernel/ptrace.c: tls_set(struct task_struct *target, ...) {

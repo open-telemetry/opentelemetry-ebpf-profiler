@@ -258,7 +258,7 @@ func TestExtractTSDInfo(t *testing.T) {
 			case elf.EM_X86_64:
 				info, err = ExtractTSDInfoX64_64(test.code)
 			case elf.EM_AARCH64:
-				info, err = ExtractTSDInfoARM64(test.code)
+				info, err = extractTSDInfoARM(test.code)
 			}
 			if errors.Is(err, errArchNotImplemented) {
 				t.Skip("tests not available on this platform")
