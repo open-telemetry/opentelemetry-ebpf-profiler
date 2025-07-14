@@ -6,6 +6,7 @@ package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 import (
 	"errors"
 	"fmt"
+
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	e "go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"go.opentelemetry.io/ebpf-profiler/libpf"

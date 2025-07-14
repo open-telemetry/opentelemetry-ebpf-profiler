@@ -5,10 +5,11 @@ package php
 
 import (
 	"debug/elf"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"testing"
 )
 
 func TestRetrieveZendVMKind(t *testing.T) {
@@ -197,7 +198,8 @@ func TestRetrieveJITBufferPtr(t *testing.T) {
 		{
 			code: []byte{
 				// 000CC930 	F3 0F 1E FA 	endbr64
-				// 000CC934 	48 F7 05 99 7E 03 00 20 01 00 00 	test 	qword ptr [rip + 0x37e99], 0x120
+				// 000CC934 	48 F7 05 99 7E 03 00 20 01 00 00
+				//					test 	qword ptr [rip + 0x37e99], 0x120
 				// 000CC93F 	74 07 	je 	0xcc948
 				// 000CC941 	C3 	ret
 				// 000CC942 	66 0F 1F 44 00 00 	nop 	word ptr [rax + rax]
