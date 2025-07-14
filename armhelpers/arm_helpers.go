@@ -6,7 +6,6 @@ package armhelpers // import "go.opentelemetry.io/ebpf-profiler/armhelpers"
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 
@@ -48,6 +47,8 @@ func Xreg2num(arg interface{}) (int, bool) {
 // DecodeRegister converts the result of calling Reg.String()
 // into the initial register's value.
 func DecodeRegister(reg string) (aa.Reg, bool) {
+	const maxRegister = uint64(aa.V31)
+
 	// This function is essentially just the inverse
 	// of https://cs.opensource.google/go/x/arch/+/fc48f9fe:arm64/arm64asm/inst.go;l=335
 	length := len(reg)
@@ -66,7 +67,7 @@ func DecodeRegister(reg string) (aa.Reg, bool) {
 		if err != nil {
 			return 0, false
 		}
-		if val > math.MaxUint16 {
+		if val > maxRegister {
 			return 0, false
 		}
 		return aa.Reg(val), true
@@ -103,7 +104,7 @@ func DecodeRegister(reg string) (aa.Reg, bool) {
 	}
 
 	res := val + regOffset
-	if res > math.MaxUint16 {
+	if res > maxRegister {
 		return 0, false
 	}
 	return aa.Reg(res), true
