@@ -32,17 +32,13 @@ const (
 	// maxPHPRODataSize is the maximum PHP RO Data segment size to scan
 	// (currently the largest seen is about 9M)
 	maxPHPRODataSize = 16 * 1024 * 1024
-
-	// unknownFunctionName is the name to be used when it cannot be read from the
-	// interpreter, or explicit function name does not exist (global code not in function)
-	unknownFunctionName = "<unknown>"
-
-	// evalCodeFunctionName is a placeholder name to show that code has been evaluated
-	// using eval in PHP.
-	evalCodeFunctionName = "<eval'd code>"
 )
 
 var (
+	// evalCodeFunctionName is a placeholder name to show that code has been evaluated
+	// using eval in PHP.
+	evalCodeFunctionName = libpf.Intern("<eval'd code>")
+
 	// regex for the interpreter executable
 	phpRegex     = regexp.MustCompile(".*/php(-cgi|-fpm)?[0-9.]*$|^php(-cgi|-fpm)?[0-9.]*$")
 	versionMatch = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)`)

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"sync/atomic"
-	"unique"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -95,10 +94,6 @@ func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
 	return nil
 }
 
-func intern(str string) string {
-	return unique.Make(str).Value()
-}
-
 func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame,
 	trace *libpf.Trace) error {
 	if !frame.Type.IsInterpType(libpf.Native) {
@@ -128,8 +123,8 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 
 	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
 		FrameID:      frameID,
-		FunctionName: intern(fn),
-		SourceFile:   intern(sourceFile),
+		FunctionName: libpf.Intern(fn),
+		SourceFile:   libpf.Intern(sourceFile),
 		SourceLine:   libpf.SourceLineno(lineNo),
 	})
 

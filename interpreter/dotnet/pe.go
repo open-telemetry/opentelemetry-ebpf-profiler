@@ -257,7 +257,7 @@ type peInfo struct {
 	err          error
 	lastModified int64
 	fileID       libpf.FileID
-	simpleName   string
+	simpleName   libpf.String
 	guid         string
 	typeSpecs    []peTypeSpec
 	methodSpecs  []peMethodSpec
@@ -697,7 +697,7 @@ func (pp *peParser) parseModuleTable() {
 		guidIdx := pp.readDotnetIndex(indexGUID)
 		pp.skipDotnetBytes(2 * pp.indexSizes[indexGUID])
 
-		pp.info.simpleName = pp.readDotnetString(nameIdx)
+		pp.info.simpleName = libpf.Intern(pp.readDotnetString(nameIdx))
 		pp.info.guid = pp.readDotnetGUID(guidIdx)
 	}
 }
@@ -1132,9 +1132,10 @@ func (pp *peParser) parse() error {
 	return pp.parseCLI()
 }
 
-func (pi *peInfo) resolveMethodName(methodIdx uint32) string {
+func (pi *peInfo) resolveMethodName(methodIdx uint32) libpf.String {
 	if methodIdx == 0 || methodIdx > uint32(len(pi.methodSpecs)) {
-		return fmt.Sprintf("<invalid method index %d/%d>", methodIdx, len(pi.methodSpecs))
+		return libpf.Intern(fmt.Sprintf("<invalid method index %d/%d>",
+			methodIdx, len(pi.methodSpecs)))
 	}
 
 	idx, ok := slices.BinarySearchFunc(pi.typeSpecs, methodIdx,
@@ -1160,14 +1161,14 @@ func (pi *peInfo) resolveMethodName(methodIdx uint32) string {
 	}
 	methodName := pi.strings[pi.methodSpecs[methodIdx-1].methodNameIdx]
 	if typeSpec.namespaceIdx != 0 {
-		return fmt.Sprintf("%s.%s.%s",
+		return libpf.Intern(fmt.Sprintf("%s.%s.%s",
 			pi.strings[typeSpec.namespaceIdx],
-			typeName, methodName)
+			typeName, methodName))
 	}
-	return fmt.Sprintf("%s.%s", typeName, methodName)
+	return libpf.Intern(fmt.Sprintf("%s.%s", typeName, methodName))
 }
 
-func (pi *peInfo) resolveR2RMethodName(pcRVA uint32) string {
+func (pi *peInfo) resolveR2RMethodName(pcRVA uint32) libpf.String {
 	idx, ok := slices.BinarySearchFunc(pi.methodSpecs, pcRVA<<1,
 		func(methodspec peMethodSpec, pcRVA uint32) int {
 			if pcRVA < methodspec.startRVA {
@@ -1181,8 +1182,7 @@ func (pi *peInfo) resolveR2RMethodName(pcRVA uint32) string {
 	if !ok {
 		idx--
 	}
-	str := pi.resolveMethodName(uint32(idx + 1))
-	return str
+	return pi.resolveMethodName(uint32(idx + 1))
 }
 
 func (pi *peInfo) parse(r io.ReaderAt) error {
