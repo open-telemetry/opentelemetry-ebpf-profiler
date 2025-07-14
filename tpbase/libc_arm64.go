@@ -10,5 +10,5 @@ func ExtractTSDInfoX64_64(_ []byte) (TSDInfo, error) {
 }
 
 func ExtractTSDInfoNative(code []byte) (TSDInfo, error) {
-	return ExtractTSDInfoARM64(code)
+	return extractTSDInfoARM(code)
 }
