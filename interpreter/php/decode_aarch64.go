@@ -1,5 +1,3 @@
-//go:build arm64
-
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
@@ -14,9 +12,9 @@ import (
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
 
-// retrieveZendVMKindWrapper. This function reads the code blob and recovers
+// retrieveZendVMKindARM reads the code blob and recovers
 // the type of the PHP VM that is used by this process.
-func retrieveZendVMKindWrapper(code []byte) (uint, error) {
+func retrieveZendVMKindARM(code []byte) (uint, error) {
 	// Here we need to decode assembly that looks like this:
 	//
 	// mov w0, ## constant
@@ -54,11 +52,11 @@ func retrieveZendVMKindWrapper(code []byte) (uint, error) {
 	return 0, errors.New("did not find a mov into w0 in the given code blob")
 }
 
-// retrieveExecuteExJumpLabelAddressWrapper. This function reads the code blob and returns
+// retrieveExecuteExJumpLabelAddressARM reads the code blob and returns
 // the address of the jump label for any JIT code called from execute_ex. Since all JIT
 // code is ultimately called from execute_ex, this is the same as returning the return address
 // for all JIT code.
-func retrieveExecuteExJumpLabelAddressWrapper(
+func retrieveExecuteExJumpLabelAddressARM(
 	code []byte, addrBase libpf.SymbolValue) (libpf.SymbolValue, error) {
 	// Here we're looking for the first unrestricted jump in the execute_ex function
 	// The reasons for this are given in the php8 unwinding document, but essentially we
@@ -96,9 +94,9 @@ func retrieveExecuteExJumpLabelAddressWrapper(
 	return libpf.SymbolValueInvalid, errors.New("did not find a BR in the given code blob")
 }
 
-// retrieveJITBufferPtrWrapper reads the code blob and returns a pointer to the JIT buffer used by
+// retrieveJITBufferPtrARM reads the code blob and returns a pointer to the JIT buffer used by
 // PHP (called "dasm_buf" in the PHP source).
-func retrieveJITBufferPtrWrapper(code []byte, addrBase libpf.SymbolValue) (
+func retrieveJITBufferPtrARM(code []byte, addrBase libpf.SymbolValue) (
 	dasmBuf libpf.SymbolValue, dasmSize libpf.SymbolValue, err error) {
 	// The code for recovering the JIT buffer is a little bit more involved on ARM than on x86.
 	//

@@ -5,6 +5,7 @@ package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 
 import (
 	"bytes"
+	"debug/elf"
 	"errors"
 	"fmt"
 	"regexp"
@@ -206,8 +207,15 @@ func recoverExecuteExJumpLabelAddress(ef *pfelf.File) (libpf.SymbolValue, error)
 		return libpf.SymbolValueInvalid,
 			fmt.Errorf("unable to read 'execute_ex': %w", err)
 	}
-
-	returnAddress, err := retrieveExecuteExJumpLabelAddressWrapper(code, sym.Address)
+	var returnAddress libpf.SymbolValue
+	switch ef.Machine {
+	case elf.EM_AARCH64:
+		returnAddress, err = retrieveExecuteExJumpLabelAddressARM(code, sym.Address)
+	case elf.EM_X86_64:
+		returnAddress, err = retrieveExecuteExJumpLabelAddressX86(code, sym.Address)
+	default:
+		return returnAddress, fmt.Errorf("unsupported architecture: %s", ef.Machine)
+	}
 	if err != nil {
 		return libpf.SymbolValueInvalid,
 			fmt.Errorf("reading the return address from execute_ex failed (%w)",
@@ -231,7 +239,15 @@ func determineVMKind(ef *pfelf.File) (uint, error) {
 	if err != nil {
 		return 0, fmt.Errorf("unable to read 'zend_vm_kind': %w", err)
 	}
-	vmKind, err := retrieveZendVMKindWrapper(code)
+	var vmKind uint
+	switch ef.Machine {
+	case elf.EM_AARCH64:
+		vmKind, err = retrieveZendVMKindARM(code)
+	case elf.EM_X86_64:
+		vmKind, err = retrieveZendVMKindX86(code)
+	default:
+		return 0, fmt.Errorf("unsupported architecture: %s", ef.Machine)
+	}
 	if err != nil {
 		return 0, fmt.Errorf("an error occurred decoding zend_vm_kind: %w", err)
 	}
