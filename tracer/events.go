@@ -16,7 +16,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -35,8 +34,10 @@ const (
 	// so that the hostagent startup phase can wait on most PID notifications
 	// to be processed before starting the tracer.
 	pidEventBufferSize = 10
-	// Maximum number of trace events to process in one batch.
-	maxEvents = 1024
+	// Maximum number of trace events to process in one batch. This is used as a
+	// safe threshold for when off-cpu profiling is enabled, as the kernel can generate
+	// enough events to completely monopolize userspace processing.
+	maxEvents = 4096
 )
 
 // StartPIDEventProcessor spawns a goroutine to process PID events.
@@ -158,11 +159,10 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 
 		pollTicker := time.NewTicker(t.intervals.TracePollInterval())
 		defer pollTicker.Stop()
-
-		noWait := make(chan libpf.Void, 1)
 	PollLoop:
 		for {
-			// We use two selects to avoid starvation
+			// We use two selects to avoid starvation in scenarios where the kernel
+			// is generating a lot of events.
 			select {
 			// Always check for context cancellation in each iteration
 			case <-ctx.Done():
@@ -170,18 +170,19 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			default:
 				// Continue below
 			}
+
 			select {
 			// This context cancellation check may not execute in timely manner
 			case <-ctx.Done():
 				break PollLoop
-			case <-noWait:
 			case <-pollTicker.C:
 				// Continue execution below
 			}
 
 			eventCount = 0
 			minKTime = 0
-			// Eagerly read events until the buffer is exhausted.
+
+			// Eagerly read events until the buffer is exhausted or we reach maxEvents
 			for {
 				if err = eventReader.ReadInto(&data); err != nil {
 					if !errors.Is(err, os.ErrDeadlineExceeded) {
@@ -207,14 +208,8 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 					minKTime = trace.KTime
 				}
 				traceOutChan <- trace
-
 				if eventCount == maxEvents {
-					// Go into the next iteration without waiting for pollTicker to fire
-					select {
-					// We don't want to ever block here
-					case noWait <- libpf.Void{}:
-					default:
-					}
+					// Break this inner loop to ensure ProcessedUntil logic executes
 					break
 				}
 			}
