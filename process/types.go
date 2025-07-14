@@ -17,7 +17,7 @@ import (
 )
 
 // VdsoPathName is the path to use for VDSO mappings.
-const VdsoPathName = "linux-vdso.1.so"
+var VdsoPathName = libpf.Intern("linux-vdso.1.so")
 
 // vdsoInode is the synthesized inode number for VDSO mappings.
 const vdsoInode = 50
@@ -37,7 +37,7 @@ type Mapping struct {
 	// Inode holds the mapped file's inode number.
 	Inode uint64
 	// Path contains the file name for file backed mappings.
-	Path string
+	Path libpf.String
 }
 
 func (m *Mapping) IsExecutable() bool {
@@ -45,11 +45,11 @@ func (m *Mapping) IsExecutable() bool {
 }
 
 func (m *Mapping) IsAnonymous() bool {
-	return m.Path == "" || m.IsMemFD()
+	return m.Path == libpf.NullString || m.IsMemFD()
 }
 
 func (m *Mapping) IsMemFD() bool {
-	return strings.HasPrefix(m.Path, "/memfd:")
+	return strings.HasPrefix(m.Path.String(), "/memfd:")
 }
 
 func (m *Mapping) IsVDSO() bool {

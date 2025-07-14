@@ -36,7 +36,7 @@ func (m *mockReporter) CompareFunctionName(fn string) {
 	for _, v := range m.frameMetadata {
 		// The returned anonymous function has the suffic 'func1'.
 		// Therefore check only for a matching prefix.
-		if !strings.HasPrefix(v.FunctionName, fn) {
+		if !strings.HasPrefix(v.FunctionName.String(), fn) {
 			m.b.Fatalf("Expected '%s()' but got '%s()'", fn, v.FunctionName)
 		}
 	}

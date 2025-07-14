@@ -103,7 +103,6 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 		bufPool.Put(scanBuf)
 	}()
 
-	lastPath := ""
 	scanner.Buffer(*scanBuf, 8192)
 	for scanner.Scan() {
 		var fields [6]string
@@ -147,7 +146,6 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 			continue
 		}
 
-		path := fields[5]
 		if stringutil.SplitN(fields[3], ":", devs[:]) < 2 {
 			numParseErrors++
 			continue
@@ -166,28 +164,21 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 		}
 		device := major<<8 + minor
 
+		var path libpf.String
 		if inode == 0 {
-			if path == "[vdso]" {
+			if fields[5] == "[vdso]" {
 				// Map to something filename looking with synthesized inode
 				path = VdsoPathName
 				device = 0
 				inode = vdsoInode
-			} else if path == "" {
+			} else if fields[5] == "" {
 				// This is an anonymous mapping, keep it
 			} else {
 				// Ignore other mappings that are invalid, non-existent or are special pseudo-files
 				continue
 			}
 		} else {
-			path = trimMappingPath(path)
-			if path == lastPath {
-				// Take advantage of the fact that mappings are sorted by path
-				// and avoid allocating the same string multiple times.
-				path = lastPath
-			} else {
-				path = strings.Clone(path)
-				lastPath = path
-			}
+			path = libpf.Intern(trimMappingPath(fields[5]))
 		}
 
 		vaddr, err := strconv.ParseUint(addrs[0], 16, 64)
@@ -275,7 +266,7 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 	fileToMapping := make(map[string]*Mapping, len(mappings))
 	for idx := range mappings {
 		m := &mappings[idx]
-		fileToMapping[m.Path] = m
+		fileToMapping[m.Path.String()] = m
 	}
 	sp.fileToMapping = fileToMapping
 	return mappings, numParseErrors, nil
@@ -312,7 +303,7 @@ func (sp *systemProcess) getMappingFile(m *Mapping) string {
 		// nor /proc/sp.pid/root exist if main thread has exited, so we use the
 		// mapping path directly under the sp.tid root.
 		rootPath := fmt.Sprintf("/proc/%v/task/%v/root", sp.pid, sp.tid)
-		return path.Join(rootPath, m.Path)
+		return path.Join(rootPath, m.Path.String())
 	}
 	return fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
 }

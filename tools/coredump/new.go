@@ -73,30 +73,32 @@ func (tc *trackedCoredump) warnMissing(fileName string) {
 
 func (tc *trackedCoredump) CalculateMappingFileID(m *process.Mapping) (libpf.FileID, error) {
 	if !m.IsVDSO() && !m.IsAnonymous() {
-		fid, err := libpf.FileIDFromExecutableFile(path.Join(tc.prefix, m.Path))
+		file := m.Path.String()
+		fid, err := libpf.FileIDFromExecutableFile(path.Join(tc.prefix, file))
 		if err == nil {
-			tc.seen[m.Path] = libpf.Void{}
+			tc.seen[file] = libpf.Void{}
 			return fid, nil
 		}
-		tc.warnMissing(m.Path)
+		tc.warnMissing(file)
 	}
 	return tc.CoredumpProcess.CalculateMappingFileID(m)
 }
 
 func (tc *trackedCoredump) OpenMappingFile(m *process.Mapping) (process.ReadAtCloser, error) {
 	if !m.IsVDSO() && !m.IsAnonymous() {
-		rac, err := os.Open(path.Join(tc.prefix, m.Path))
+		file := m.Path.String()
+		rac, err := os.Open(path.Join(tc.prefix, file))
 		if err == nil {
-			tc.seen[m.Path] = libpf.Void{}
+			tc.seen[file] = libpf.Void{}
 			return rac, nil
 		}
-		tc.warnMissing(m.Path)
+		tc.warnMissing(file)
 	}
 	return tc.CoredumpProcess.OpenMappingFile(m)
 }
 
 func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
-	if fileName != process.VdsoPathName {
+	if fileName != process.VdsoPathName.String() {
 		f, err := pfelf.Open(path.Join(tc.prefix, fileName))
 		if err == nil {
 			tc.seen[fileName] = libpf.Void{}
