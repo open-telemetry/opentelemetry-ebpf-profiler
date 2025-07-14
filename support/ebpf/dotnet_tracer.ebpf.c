@@ -10,7 +10,7 @@
 #include "types.h"
 
 // The number of dotnet frames to unwind per frame-unwinding eBPF program.
-#define DOTNET_FRAMES_PER_PROGRAM 5
+#define DOTNET_FRAMES_PER_PROGRAM 6
 
 // The maximum dotnet frame length used in heuristic to validate FP
 #define DOTNET_MAX_FRAME_LENGTH 8192
@@ -102,12 +102,29 @@ dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 pc, u64 *co
     // This is unrolled several times, so it needs to be minimal in size.
     // And currently this is the major limit for DOTNET_FRAMES_PER_PROGRAM.
     int orig_pos = pos;
+    if (val == 0) {
+      // pos is fixed to map_elements-2 at this point, and is even.
+      // convert it from u32 to u64 offset
+      int pos64 = (map_elements - 2) / 2;
+      u64 val64 = scratch->map64[--pos64];
 #pragma unroll 256
-    for (int i = 0; i < map_elements - 2; i++) {
-      if (val != 0) {
-        break;
+      // the loop iterations is number of u64 elements minus two:
+      // - the last element special handled earlier
+      // - the second last element which is preloaded immediately above
+      for (int i = 0; i < map_elements / 2 - 2; i++) {
+        if (val64 != 0) {
+          break;
+        }
+        val64 = scratch->map64[--pos64];
       }
-      val = scratch->map[--pos];
+      // convert u64 offset back to u32 offset
+      pos = pos64 * 2;
+      // use the upper half entry if it is non-zero
+      if (val64 >> 32 != 0) {
+        val64 >>= 32;
+        pos++;
+      }
+      val = val64;
     }
 
     // Adjust pc_delta based on how many iterations were done
