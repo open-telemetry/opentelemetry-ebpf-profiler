@@ -106,7 +106,7 @@ func TestParseMappings(t *testing.T) {
 			Inode:      0,
 			Length:     0x10000,
 			FileOffset: 0,
-			Path:       "",
+			Path:       libpf.NullString,
 		},
 	}
 	assert.Equal(t, expected, mappings)
