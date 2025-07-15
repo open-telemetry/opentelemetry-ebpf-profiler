@@ -80,13 +80,13 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 	switch inst.Op {
 	case x86asm.ADD:
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
-			left := i.Regs.getX86asm(dst)
+			left := i.Regs.GetX86(dst)
 			switch src := inst.Args[1].(type) {
 			case x86asm.Imm:
 				right := expression.Imm(uint64(src))
 				i.Regs.setX86asm(dst, expression.Add(left, right))
 			case x86asm.Reg:
-				right := i.Regs.getX86asm(src)
+				right := i.Regs.GetX86(src)
 				i.Regs.setX86asm(dst, expression.Add(left, right))
 			case x86asm.Mem:
 				right := i.MemArg(src)
@@ -98,7 +98,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, imm := inst.Args[1].(x86asm.Imm); imm {
 				v := expression.Multiply(
-					i.Regs.getX86asm(dst),
+					i.Regs.GetX86(dst),
 					expression.Imm(uint64(math.Pow(2, float64(src)))),
 				)
 				i.Regs.setX86asm(dst, v)
@@ -110,7 +110,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 			case x86asm.Imm:
 				i.Regs.setX86asm(dst, expression.Imm(uint64(src)))
 			case x86asm.Reg:
-				i.Regs.setX86asm(dst, i.Regs.getX86asm(src))
+				i.Regs.setX86asm(dst, i.Regs.GetX86(src))
 			case x86asm.Mem:
 				v := i.MemArg(src)
 
@@ -137,7 +137,7 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 		if dst, ok := inst.Args[0].(x86asm.Reg); ok {
 			if src, imm := inst.Args[1].(x86asm.Imm); imm {
 				if src == 3 { // todo other cases
-					i.Regs.setX86asm(dst, expression.ZeroExtend(i.Regs.getX86asm(dst), 2))
+					i.Regs.setX86asm(dst, expression.ZeroExtend(i.Regs.GetX86(dst), 2))
 				}
 			}
 		}
@@ -159,11 +159,11 @@ func (i *Interpreter) MemArg(src x86asm.Mem) expression.Expression {
 		vs = append(vs, expression.Imm(uint64(src.Disp)))
 	}
 	if src.Base != 0 {
-		vs = append(vs, i.Regs.getX86asm(src.Base))
+		vs = append(vs, i.Regs.GetX86(src.Base))
 	}
 	if src.Index != 0 {
 		v := expression.Multiply(
-			i.Regs.getX86asm(src.Index),
+			i.Regs.GetX86(src.Index),
 			expression.Imm(uint64(src.Scale)),
 		)
 		vs = append(vs, v)

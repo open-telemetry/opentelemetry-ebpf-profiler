@@ -215,7 +215,9 @@ func (r *Registers) setX86asm(reg x86asm.Reg, v expression.Expression) {
 	r.regs[e.idx] = v
 }
 
-func (r *Registers) getX86asm(reg x86asm.Reg) expression.Expression {
+// GetX86 returns the expression.Expression value associated with the given x86asm.Reg, with
+// appropriate zero-extension if necessary.
+func (r *Registers) GetX86(reg x86asm.Reg) expression.Expression {
 	e := regMappingFor(reg)
 	res := r.regs[e.idx]
 	if e.bits != 64 {
@@ -224,6 +226,7 @@ func (r *Registers) getX86asm(reg x86asm.Reg) expression.Expression {
 	return res
 }
 
+// Get returns the expression.Expression value associated with the given Reg register
 func (r *Registers) Get(reg Reg) expression.Expression {
 	if int(reg) >= len(r.regs) {
 		return r.regs[0]
