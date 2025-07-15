@@ -27,6 +27,9 @@ const (
 	FrameMapLifetime        = 1 * time.Hour
 )
 
+// DummyFileID is used as the FileID for a dummy mapping
+var dummyFileID = libpf.NewFileID(0, 0)
+
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
 func (p *Pdata) Generate(tree samples.TraceEventsTree,
@@ -42,7 +45,8 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 	// By specification, the first element should be empty.
 	stringSet.Add("")
-	funcSet.Add(funcInfo{nameIdx: stringSet.Add(""), fileNameIdx: stringSet.Add("")})
+	mappingSet.Add(dummyFileID)
+	dic.MappingTable().AppendEmpty()
 
 	for containerID, originToEvents := range tree {
 		if len(originToEvents) == 0 {
@@ -200,8 +204,8 @@ func (p *Pdata) setProfile(
 					FramesCacheLifetime); exists {
 					locInfo.lineNumber = int64(si.LineNumber)
 					fi := funcInfo{
-						nameIdx:     stringSet.Add(si.FunctionName),
-						fileNameIdx: stringSet.Add(si.FilePath),
+						nameIdx:     stringSet.Add(si.FunctionName.String()),
+						fileNameIdx: stringSet.Add(si.FilePath.String()),
 					}
 					locInfo.functionIndex = funcSet.Add(fi)
 				} else {
@@ -216,17 +220,8 @@ func (p *Pdata) setProfile(
 					}
 					locInfo.functionIndex = funcSet.Add(fi)
 				}
-
-				idx, exists := mappingSet.AddWithCheck(traceInfo.Files[i])
-				locInfo.mappingIndex = idx
-				if !exists {
-					// To be compliant with the protocol, generate a dummy mapping entry.
-					mapping := dic.MappingTable().AppendEmpty()
-					mapping.SetFilenameStrindex(stringSet.Add(""))
-					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-						semconv.ProcessExecutableBuildIDHtlhashKey,
-						traceInfo.Files[i].StringNoQuotes())
-				}
+				// mapping_table[0] is always the dummy mapping
+				locInfo.mappingIndex = 0
 			} // End frame type switch
 
 			idx, exists := locationSet.AddWithCheck(locInfo)

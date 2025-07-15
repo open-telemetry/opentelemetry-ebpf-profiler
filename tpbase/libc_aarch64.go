@@ -13,17 +13,17 @@ import (
 )
 
 const (
-	unspec int = iota
-	tsDBase
-	tsdElementBase
-	tsdIndex
-	tsdValue
-	tsdConstant
+	Unspec int = iota
+	TSDBase
+	TSDElementBase
+	TSDIndex
+	TSDValue
+	TSDConstant
 )
 
 type regState struct {
 	status     int
-	offset     int
+	offset     int64
 	multiplier int
 	indirect   bool
 }
@@ -39,14 +39,14 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 	// Start tracking of X0
 	var regs [32]regState
 
-	regs[0].status = tsdIndex
+	regs[0].status = TSDIndex
 	regs[0].multiplier = 1
 	resetReg := int(-1)
 
 	for offs := 0; offs < len(code); offs += 4 {
 		if resetReg >= 0 {
 			// Reset register state if something unsupported happens on it
-			regs[resetReg] = regState{status: unspec}
+			regs[resetReg] = regState{status: Unspec}
 		}
 
 		inst, err := aa.Decode(code[offs:])
@@ -68,14 +68,14 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 			switch val := inst.Args[1].(type) {
 			case aa.Imm64:
 				regs[destReg] = regState{
-					status:     tsdConstant,
-					offset:     int(val.Imm),
+					status:     TSDConstant,
+					offset:     int64(val.Imm),
 					multiplier: 1,
 				}
 			case aa.Imm:
 				regs[destReg] = regState{
-					status:     tsdConstant,
-					offset:     int(val.Imm),
+					status:     TSDConstant,
+					offset:     int64(val.Imm),
 					multiplier: 1,
 				}
 			default:
@@ -90,7 +90,7 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 			// MRS X1, S3_3_C13_C0_2
 			if inst.Args[1].String() == "S3_3_C13_C0_2" {
 				regs[destReg] = regState{
-					status:     tsDBase,
+					status:     TSDBase,
 					multiplier: 1,
 				}
 			}
@@ -104,14 +104,14 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 			if !ok {
 				continue
 			}
-			if regs[srcReg].status == tsDBase {
+			if regs[srcReg].status == TSDBase {
 				imm, ok := ah.DecodeImmediate(m)
 				if !ok {
 					continue
 				}
 				regs[destReg] = regState{
-					status:     tsDBase,
-					offset:     regs[srcReg].offset + int(imm),
+					status:     TSDBase,
+					offset:     regs[srcReg].offset + imm,
 					multiplier: regs[srcReg].multiplier,
 					indirect:   true,
 				}
@@ -130,9 +130,9 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 				if !ok {
 					continue
 				}
-				if regs[srcReg].status == tsDBase && regs[srcIndex].status == tsdIndex {
+				if regs[srcReg].status == TSDBase && regs[srcIndex].status == TSDIndex {
 					regs[destReg] = regState{
-						status:     tsdValue,
+						status:     TSDValue,
 						offset:     regs[srcReg].offset + (regs[srcIndex].offset << m.Amount),
 						multiplier: regs[srcReg].multiplier << m.Amount,
 						indirect:   regs[srcReg].indirect,
@@ -146,14 +146,14 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 				if !ok {
 					continue
 				}
-				if regs[srcReg].status == tsdElementBase {
+				if regs[srcReg].status == TSDElementBase {
 					i, ok := ah.DecodeImmediate(m)
 					if !ok {
 						continue
 					}
 					regs[destReg] = regState{
-						status:     tsdValue,
-						offset:     regs[srcReg].offset + int(i),
+						status:     TSDValue,
+						offset:     regs[srcReg].offset + i,
 						multiplier: regs[srcReg].multiplier,
 						indirect:   regs[srcReg].indirect,
 					}
@@ -167,13 +167,13 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 			if !ok {
 				continue
 			}
-			if regs[srcReg].status == tsdIndex {
+			if regs[srcReg].status == TSDIndex {
 				i, ok := inst.Args[2].(aa.Imm)
 				if !ok {
 					continue
 				}
 				regs[destReg] = regState{
-					status:     tsdIndex,
+					status:     TSDIndex,
 					offset:     regs[srcReg].offset << i.Imm,
 					multiplier: regs[srcReg].multiplier << i.Imm,
 				}
@@ -190,7 +190,7 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 					continue
 				}
 				regs[destReg] = regs[srcReg]
-				regs[destReg].offset += int(i)
+				regs[destReg].offset += i
 			case aa.RegExtshiftAmount:
 				regStr := inst.Args[2].String()
 				shift := int(0)
@@ -209,20 +209,20 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 				if !ok {
 					continue
 				}
-				srcReg2, ok := ah.Xreg2num(aa.Reg(reg))
+				srcReg2, ok := ah.Xreg2num(reg)
 				if !ok {
 					continue
 				}
-				if regs[srcReg].status == tsDBase && regs[srcReg2].status == tsdIndex {
+				if regs[srcReg].status == TSDBase && regs[srcReg2].status == TSDIndex {
 					regs[destReg] = regState{
-						status:     tsdElementBase,
+						status:     TSDElementBase,
 						offset:     regs[srcReg].offset + regs[srcReg2].offset<<shift,
 						multiplier: regs[srcReg2].multiplier << shift,
 						indirect:   regs[srcReg].indirect,
 					}
-				} else if regs[srcReg].status == tsdConstant && regs[srcReg2].status == tsdIndex {
+				} else if regs[srcReg].status == TSDConstant && regs[srcReg2].status == TSDIndex {
 					regs[destReg] = regState{
-						status:     tsdIndex,
+						status:     TSDIndex,
 						offset:     regs[srcReg].offset + regs[srcReg2].offset<<shift,
 						multiplier: regs[srcReg2].multiplier << shift,
 					}
@@ -235,13 +235,13 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 			if !ok {
 				continue
 			}
-			if regs[srcReg].status != unspec {
+			if regs[srcReg].status != Unspec {
 				i, ok := ah.DecodeImmediate(inst.Args[2])
 				if !ok {
 					continue
 				}
 				regs[destReg] = regs[srcReg]
-				regs[destReg].offset -= int(i)
+				regs[destReg].offset -= i
 			} else {
 				continue
 			}
@@ -254,7 +254,7 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 		resetReg = -1
 	}
 
-	if regs[0].status != tsdValue {
+	if regs[0].status != TSDValue {
 		return TSDInfo{}, errors.New("libc data not found")
 	}
 

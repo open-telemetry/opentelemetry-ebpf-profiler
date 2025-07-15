@@ -47,7 +47,7 @@ func decodeStubArgumentARM64(code []byte,
 	// B    .pthread_getspecific
 
 	// Storage for load offsets for each Xn register
-	var regOffset [32]uint64
+	var regOffset [32]int64
 	retValue := libpf.SymbolValueInvalid
 
 	for offs := 0; offs < len(code); offs += 4 {
@@ -65,7 +65,7 @@ func decodeStubArgumentARM64(code []byte,
 			continue
 		}
 
-		instOffset := uint64(0)
+		instOffset := int64(0)
 		instRetval := libpf.SymbolValueInvalid
 		switch inst.Op {
 		case aa.ADD:

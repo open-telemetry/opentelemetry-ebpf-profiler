@@ -669,7 +669,10 @@ typedef struct DotnetUnwindScratchSpace {
   // can recognize: 256 bytes/element * 128 elements = 32kB function size.
   // Multiplied by two for extra space to read to this array a fixed amount of bytes
   // to a dynamic offset.
-  u32 map[2 * 128];
+  union {
+    u32 map[2 * 128];
+    u64 map64[128];
+  };
 } DotnetUnwindScratchSpace;
 
 // Container for additional scratch space needed by the HotSpot unwinder.

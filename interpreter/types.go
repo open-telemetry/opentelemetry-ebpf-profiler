@@ -22,16 +22,22 @@ const (
 	// LruFunctionCacheSize is the LRU size for caching functions for an interpreter.
 	// This should reflect the number of hot functions that are seen often in a trace.
 	LruFunctionCacheSize = 1024
-
-	// UnknownSourceFile is the source file name to use when the real one is not available
-	UnknownSourceFile = "<unknown>"
-
-	// TopLevelFunctionName is the name to be used when a function does not have a name,
-	// but we can deduce that it is at the highest possible scope (e.g for top-level PHP code)
-	TopLevelFunctionName = "<top-level>"
 )
 
 var (
+	// UnknownSourceFile is the source file name to use when the real one is not available
+	UnknownSourceFile = libpf.Intern("<unknown>")
+
+	// AnonymousFunction is the name to be used when a function is anonymous.
+	AnonymousFunctionName = libpf.Intern("<anonymous>")
+
+	// TopLevelFunctionName is the name to be used when a function does not have a name,
+	// but we can deduce that it is at the highest possible scope (e.g for top-level PHP code)
+	TopLevelFunctionName = libpf.Intern("<top-level>")
+
+	// UnknownFunction is the name to be used when a function name is not known.
+	UnknownFunctionName = libpf.Intern("<unknown>")
+
 	ErrMismatchInterpreterType = errors.New("mismatched interpreter type")
 )
 

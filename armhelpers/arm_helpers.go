@@ -29,7 +29,7 @@ func Xreg2num(arg interface{}) (int, bool) {
 		if !ok {
 			return 0, false
 		}
-		ndx = aa.Reg(n)
+		ndx = n
 	default:
 		return 0, false
 	}
@@ -46,7 +46,9 @@ func Xreg2num(arg interface{}) (int, bool) {
 
 // DecodeRegister converts the result of calling Reg.String()
 // into the initial register's value.
-func DecodeRegister(reg string) (uint64, bool) {
+func DecodeRegister(reg string) (aa.Reg, bool) {
+	const maxRegister = uint64(aa.V31)
+
 	// This function is essentially just the inverse
 	// of https://cs.opensource.google/go/x/arch/+/fc48f9fe:arm64/arm64asm/inst.go;l=335
 	length := len(reg)
@@ -65,7 +67,10 @@ func DecodeRegister(reg string) (uint64, bool) {
 		if err != nil {
 			return 0, false
 		}
-		return val, true
+		if val > maxRegister {
+			return 0, false
+		}
+		return aa.Reg(val), true
 	}
 
 	// Otherwise, we want to strip out the
@@ -98,16 +103,20 @@ func DecodeRegister(reg string) (uint64, bool) {
 		return 0, false
 	}
 
-	return val + regOffset, true
+	res := val + regOffset
+	if res > maxRegister {
+		return 0, false
+	}
+	return aa.Reg(res), true
 }
 
 // DecodeImmediate converts an arm64asm Arg of immediate type to it's value.
-func DecodeImmediate(arg aa.Arg) (uint64, bool) {
+func DecodeImmediate(arg aa.Arg) (int64, bool) {
 	switch val := arg.(type) {
 	case aa.Imm:
-		return uint64(val.Imm), true
+		return int64(val.Imm), true
 	case aa.PCRel:
-		return uint64(val), true
+		return int64(val), true
 	case aa.MemImmediate:
 		// The MemImmediate layout changes quite
 		// a bit depending on its mode.
@@ -139,13 +148,13 @@ func DecodeImmediate(arg aa.Arg) (uint64, bool) {
 			// Note that the second %s here is the print
 			// format from a register. Annoyingly this isn't a
 			// register type, so we have to unwind it manually
-			val, err := DecodeRegister(fields[1])
-			if !err {
+			reg, ok := DecodeRegister(fields[1])
+			if !ok {
 				return 0, false
 			}
 			// The Go disassembler always adds X0 here.
 			// See https://cs.opensource.google/go/x/arch/+/fc48f9fe:arm64/arm64asm/inst.go;l=526
-			return val - uint64(aa.X0), true
+			return int64(reg - aa.X0), true
 		}
 
 		// Otherwise all of the strings end with a ], so we just parse
@@ -156,12 +165,12 @@ func DecodeImmediate(arg aa.Arg) (uint64, bool) {
 		if err != nil {
 			return 0, false
 		}
-		return uint64(out), true
+		return out, true
 
 	case aa.ImmShift:
 		// Sadly, ImmShift{} does not have public fields.
 		// https://github.com/golang/go/issues/51517
-		var imm uint64
+		var imm int64
 		n, err := fmt.Sscanf(val.String(), "#%v", &imm)
 		if err != nil || n != 1 {
 			return 0, false
