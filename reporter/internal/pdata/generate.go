@@ -33,7 +33,8 @@ var dummyFileID = libpf.NewFileID(0, 0)
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
 func (p *Pdata) Generate(tree samples.TraceEventsTree,
-	agentName, agentVersion string) (pprofile.Profiles, error) {
+	agentName, agentVersion string,
+) (pprofile.Profiles, error) {
 	profiles := pprofile.NewProfiles()
 	dic := profiles.ProfilesDictionary()
 
@@ -280,7 +281,7 @@ func (p *Pdata) setProfile(
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())
 
 	profile.SetDuration(pcommon.Timestamp(endTS - startTS))
-	profile.SetStartTime(pcommon.Timestamp(startTS))
+	profile.SetTime(pcommon.Timestamp(startTS))
 
 	return nil
 }

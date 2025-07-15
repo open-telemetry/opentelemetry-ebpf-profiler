@@ -249,7 +249,7 @@ func TestProfileDuration(t *testing.T) {
 
 			profile := res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0)
 			require.Equal(t, pcommon.Timestamp(7), profile.Duration())
-			require.Equal(t, pcommon.Timestamp(1), profile.StartTime())
+			require.Equal(t, pcommon.Timestamp(1), profile.Time())
 		})
 	}
 }
