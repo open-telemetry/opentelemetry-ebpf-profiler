@@ -50,7 +50,13 @@ bpf_map_def SEC("maps") unwind_info_array = {
 };
 
 // The number of native frames to unwind per frame-unwinding eBPF program.
+// In order to be compatible with the old kylin system and to control the unwind_native program instructions below 4096, 
+// the number of loops is reduced here
+#if defined(__x86_64__)
 #define NATIVE_FRAMES_PER_PROGRAM 4
+#elif defined(__aarch64__)
+#define NATIVE_FRAMES_PER_PROGRAM 3
+#endif
 
 // The decision whether to unwind native stacks or interpreter stacks is made by checking if a given
 // PC address falls into the "interpreter loop" of an interpreter. This map helps identify such
