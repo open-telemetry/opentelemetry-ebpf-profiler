@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ebpf // import "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+package impl // import "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 
 import (
 	"context"
