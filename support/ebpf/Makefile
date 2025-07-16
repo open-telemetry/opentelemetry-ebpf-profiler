@@ -63,7 +63,7 @@ arm64:
 errors.h: ../../tools/errors-codegen/errors.json
 	go run ../../tools/errors-codegen/main.go bpf $@
 
-%.ebpf.$(TARGET_ARCH).o: %.ebpf.c
+%.ebpf.$(TARGET_ARCH).o: %.ebpf.c errors.h
 	$(BPF_CLANG) $(FLAGS) -MMD -MP -o $@
 
 $(TRACER_NAME): $(OBJS)
