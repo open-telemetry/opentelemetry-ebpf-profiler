@@ -64,7 +64,7 @@ errors.h: ../../tools/errors-codegen/errors.json
 	go run ../../tools/errors-codegen/main.go bpf $@
 
 %.ebpf.$(TARGET_ARCH).o: %.ebpf.c
-	$(BPF_CLANG) $(FLAGS) -MMD -MF $(@:.o=.d) -o $@
+	$(BPF_CLANG) $(FLAGS) -MMD -MP -o $@
 
 $(TRACER_NAME): $(OBJS)
 	$(BPF_LINK) $^ -o - | $(LLC) -march=bpf -mcpu=v2 -filetype=obj -o $@
