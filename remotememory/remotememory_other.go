@@ -1,6 +1,6 @@
 //go:build !linux
 
-//Copyright The OpenTelemetry Authors
+// Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
 package remotememory // import "go.opentelemetry.io/ebpf-profiler/remotememory"
