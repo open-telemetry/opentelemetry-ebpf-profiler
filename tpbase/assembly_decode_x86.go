@@ -27,6 +27,13 @@ func analyzeAoutDumpDebugregsX86(code []byte) (uint32, error) {
 		return 0, errors.New("empty code blob passed to getFSBaseOffset")
 	}
 	it := amd.NewInterpreterWithCode(code)
+	offset := e.NewImmediateCapture("offset")
+	expected := e.Mem8(
+		e.Add(
+			e.MemWithSegment8(x86asm.GS, e.NewImmediateCapture("")),
+			offset,
+		),
+	)
 	for {
 		op, err := it.Step()
 		if err != nil {
@@ -40,13 +47,6 @@ func analyzeAoutDumpDebugregsX86(code []byte) (uint32, error) {
 			continue
 		}
 		actual := it.Regs.GetX86(dst)
-		offset := e.NewImmediateCapture("offset")
-		expected := e.Mem8(
-			e.Add(
-				e.MemWithSegment8(x86asm.GS, e.NewImmediateCapture("")),
-				offset,
-			),
-		)
 		if actual.Match(expected) {
 			res := int64(offset.CapturedValue()) - 2*8
 			if res < 0 || res > 256*1024 {
