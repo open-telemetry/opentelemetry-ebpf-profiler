@@ -7,7 +7,7 @@
 #include "types.h"
 
 static EBPF_INLINE bool
-get_go_custom_labels_from_slice(struct pt_regs *ctx, PerCPURecord *record, void *labels_slice_ptr)
+get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
 {
   // https://github.com/golang/go/blob/80e2e474/src/runtime/pprof/label.go#L20
   struct GoSlice labels_slice;
@@ -52,8 +52,8 @@ get_go_custom_labels_from_slice(struct pt_regs *ctx, PerCPURecord *record, void 
 // https://github.com/golang/go/blob/6885bad7dd86880be6929c02085/src/internal/abi/map.go#L12
 #define GO_MAP_BUCKET_SIZE 8
 
-static EBPF_INLINE bool get_go_custom_labels_from_map(
-  struct pt_regs *ctx, PerCPURecord *record, void *labels_map_ptr_ptr, GoLabelsOffsets *offs)
+static EBPF_INLINE bool
+get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr, GoLabelsOffsets *offs)
 {
   void *labels_map_ptr;
   if (bpf_probe_read_user(&labels_map_ptr, sizeof(labels_map_ptr), labels_map_ptr_ptr)) {
@@ -134,8 +134,7 @@ static EBPF_INLINE bool get_go_custom_labels_from_map(
 // may be nil if there is no user g, such as when running in the scheduler. If
 // curg is nil, then g is either a system stack (called g0) or a signal handler
 // g (gsignal). Neither one will ever have label.
-static EBPF_INLINE bool
-get_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record, GoLabelsOffsets *offs)
+static EBPF_INLINE bool get_go_custom_labels(PerCPURecord *record, GoLabelsOffsets *offs)
 {
   size_t curg_ptr_addr;
   if (bpf_probe_read_user(
@@ -157,11 +156,11 @@ get_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record, GoLabelsOffsets 
 
   if (offs->hmap_buckets == 0) {
     // go 1.24+ labels is a slice
-    return get_go_custom_labels_from_slice(ctx, record, labels_ptr);
+    return get_go_custom_labels_from_slice(record, labels_ptr);
   }
 
   // go 1.23- labels is a map
-  return get_go_custom_labels_from_map(ctx, record, labels_ptr, offs);
+  return get_go_custom_labels_from_map(record, labels_ptr, offs);
 }
 
 // go_labels is the entrypoint for extracting custom labels from Go runtime.
@@ -181,7 +180,7 @@ static EBPF_INLINE int go_labels(struct pt_regs *ctx)
     "cl: go offsets found, %d recognized as a go binary: m_ptr: %lx",
     pid,
     (unsigned long)record->customLabelsState.go_m_ptr);
-  bool success = get_go_custom_labels(ctx, record, offsets);
+  bool success = get_go_custom_labels(record, offsets);
   if (!success) {
     increment_metric(metricID_UnwindGoLabelsFailures);
   }
