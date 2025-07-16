@@ -29,7 +29,7 @@ struct cgo_ctx {
 
 __thread struct cgo_ctx *__cgo_ctx;
 
-int bpf_log(const char *fmt, ...)
+void bpf_log(const char *fmt, ...)
 {
 	void __bpf_log(const char *, int);
 	if (__cgo_ctx->debug) {
