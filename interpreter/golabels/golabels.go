@@ -13,14 +13,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
-
-// #include "../../support/ebpf/types.h"
-import "C"
 
 type data struct {
 	goVersion string
-	offsets   C.GoLabelsOffsets
+	offsets   support.GoLabelsOffsets
 	interpreter.InstanceStubs
 }
 
@@ -64,7 +62,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract TLS offset: %w", err)
 	}
-	offsets.tls_offset = C.s32(tlsOffset)
+	offsets.Tls_offset = tlsOffset
 
 	return &data{
 		goVersion: goVersion,

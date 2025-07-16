@@ -17,9 +17,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-// #include "../../support/ebpf/types.h"
-import "C"
-
 type perlData struct {
 	// vmStructs reflects the Perl internal class names and the offsets of named field
 	// The struct names are based on the Perl C "struct name", the alternate typedef seen
@@ -146,7 +143,7 @@ func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Add
 	return &perlInstance{
 		d:         d,
 		rm:        rm,
-		bias:      C.u64(bias),
+		bias:      bias,
 		addrToHEK: addrToHEK,
 		addrToCOP: addrToCOP,
 		addrToGV:  addrToGV,
