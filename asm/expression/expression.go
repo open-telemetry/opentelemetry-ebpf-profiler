@@ -60,9 +60,9 @@ func cmpOrder(u Expression) int {
 		return 1
 	case *op:
 		return 2
-	case *ImmediateCapture:
-		return 3
 	case *named:
+		return 3
+	case *ImmediateCapture:
 		return 4
 	case *immediate:
 		return 5

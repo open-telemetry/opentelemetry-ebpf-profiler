@@ -4,7 +4,7 @@
 package tpbase // import "go.opentelemetry.io/ebpf-profiler/tpbase"
 
 import (
-	"errors"
+	"debug/elf"
 	"fmt"
 	"regexp"
 
@@ -77,9 +77,6 @@ type TSDInfo struct {
 var (
 	// regex for the libc
 	libcRegex = regexp.MustCompile(`.*/(ld-musl|libc|libpthread)([-.].*)?\.so`)
-
-	// error that a non-native architectures is not implemented (to skip tests)
-	errArchNotImplemented = errors.New("architecture not implemented")
 )
 
 // IsPotentialTSDDSO determines if the DSO filename potentially contains pthread code
@@ -100,7 +97,15 @@ func ExtractTSDInfo(ef *pfelf.File) (*TSDInfo, error) {
 		return nil, fmt.Errorf("getspecific function size is %d", len(code))
 	}
 
-	info, err := ExtractTSDInfoNative(code)
+	var info TSDInfo
+	switch ef.Machine {
+	case elf.EM_AARCH64:
+		info, err = extractTSDInfoARM(code)
+	case elf.EM_X86_64:
+		info, err = extractTSDInfoX86(code)
+	default:
+		return nil, fmt.Errorf("unsupported arch %s", ef.Machine.String())
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract getspecific data: %s", err)
 	}

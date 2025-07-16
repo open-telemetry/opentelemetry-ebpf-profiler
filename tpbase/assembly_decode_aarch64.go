@@ -11,7 +11,7 @@ import (
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
 
-func arm64GetAnalyzers() []Analyzer {
+func getAnalyzersARM() []Analyzer {
 	return []Analyzer{
 		{"tls_set", analyzeTLSSetARM},
 	}

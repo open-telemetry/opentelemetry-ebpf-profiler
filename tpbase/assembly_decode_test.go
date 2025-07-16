@@ -1,5 +1,3 @@
-//go:build amd64
-
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
@@ -257,9 +255,9 @@ func TestFSBase(t *testing.T) {
 			var analyzers []Analyzer
 			switch test.machine {
 			case elf.EM_X86_64:
-				analyzers = x86GetAnalyzers()
+				analyzers = getAnalyzersX86()
 			case elf.EM_AARCH64:
-				analyzers = arm64GetAnalyzers()
+				analyzers = getAnalyzersARM()
 			}
 			if analyzers == nil {
 				t.Skip("tests not available on this platform")

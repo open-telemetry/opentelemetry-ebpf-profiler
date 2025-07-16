@@ -1,5 +1,3 @@
-//go:build amd64
-
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,51 +7,60 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"unsafe"
 
-	_ "go.opentelemetry.io/ebpf-profiler/zydis" // links Zydis
+	"go.opentelemetry.io/ebpf-profiler/asm/amd"
+	e "go.opentelemetry.io/ebpf-profiler/asm/expression"
+	"golang.org/x/arch/x86/x86asm"
 )
 
-// #cgo CFLAGS: -g -Wall
-// #include <stdlib.h>
-// #include "fsbase_decode_amd64.h"
-import "C"
-
-func x86GetAnalyzers() []Analyzer {
+func getAnalyzersX86() []Analyzer {
 	return []Analyzer{
-		{"x86_fsbase_write_task", AnalyzeX86fsbaseWriteTask},
-		{"aout_dump_debugregs", AnalyzeAoutDumpDebugregs},
+		{"x86_fsbase_write_task", analyzefsbaseWriteTaskX86},
+		{"aout_dump_debugregs", analyzeAoutDumpDebugregsX86},
 	}
 }
 
-func GetAnalyzers() []Analyzer {
-	return x86GetAnalyzers()
-}
-
-// AnalyzeAoutDumpDebugregs looks at the assembly of the `aout_dump_debugregs` function in the
+// analyzeAoutDumpDebugregsX86 looks at the assembly of the `aout_dump_debugregs` function in the
 // kernel in order to compute the offset of `fsbase` into `task_struct`.
-func AnalyzeAoutDumpDebugregs(code []byte) (uint32, error) {
+func analyzeAoutDumpDebugregsX86(code []byte) (uint32, error) {
 	if len(code) == 0 {
 		return 0, errors.New("empty code blob passed to getFSBaseOffset")
 	}
-
-	// Because different compilers generate code that looks different enough, we disassemble the
-	// function in order to properly analyze the code and deduce the fsbase offset.
-	// The underlying logic uses the zydis library, hence the cgo call.
-	offset := uint32(C.decode_fsbase_aout_dump_debugregs(
-		(*C.uint8_t)(unsafe.Pointer(&code[0])), C.size_t(len(code))))
-
-	if offset == 0 {
-		return 0, errors.New("unable to determine fsbase offset")
+	it := amd.NewInterpreterWithCode(code)
+	offset := e.NewImmediateCapture("offset")
+	expected := e.Mem8(
+		e.Add(
+			e.MemWithSegment8(x86asm.GS, e.NewImmediateCapture("")),
+			offset,
+		),
+	)
+	for {
+		op, err := it.Step()
+		if err != nil {
+			return 0, err
+		}
+		if op.Op != x86asm.MOV {
+			continue
+		}
+		dst, ok := op.Args[0].(x86asm.Reg)
+		if !ok {
+			continue
+		}
+		actual := it.Regs.GetX86(dst)
+		if actual.Match(expected) {
+			res := int64(offset.CapturedValue()) - 2*8
+			if res < 0 || res > 256*1024 {
+				return 0, errors.New("failed to determine offset of fsbase")
+			}
+			return uint32(res), nil
+		}
 	}
-
-	return offset, nil
 }
 
-// AnalyzeX86fsbaseWriteTask looks at the assembly of the function x86_fsbase_write_task which
+// analyzefsbaseWriteTaskX86 looks at the assembly of the function x86_fsbase_write_task which
 // is ideal because it only writes the argument to the fsbase function. We can get the fsbase
 // offset directly from the assembly here. Available since kernel version 4.20.
-func AnalyzeX86fsbaseWriteTask(code []byte) (uint32, error) {
+func analyzefsbaseWriteTaskX86(code []byte) (uint32, error) {
 	// Supported sequences (might be surrounded be additional code for the WARN_ONCE):
 	//
 	// 1) Alpine Linux (kernel 5.10+)
