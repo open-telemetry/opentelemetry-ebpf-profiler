@@ -155,8 +155,7 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 		return nil, 0, fmt.Errorf("failed to get analysis data: %v", err)
 	}
 
-	return unsafe.Slice(unsafe.SliceData(data.Code[:]), len(data.Code)),
-		data.Address, nil
+	return data.Code[:], data.Address, nil
 }
 
 // loadKernelCode will request the ebpf code to read the first X bytes from given address.

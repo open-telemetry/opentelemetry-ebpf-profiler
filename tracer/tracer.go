@@ -6,6 +6,7 @@ package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -163,16 +164,13 @@ type progLoaderHelper struct {
 	noTailCallTarget bool
 }
 
-// Convert a C-string to Go string
-func goString(p unsafe.Pointer, maxLen int) string {
-	ptr := uintptr(p)
-	length := 0
-	for ; length < maxLen; length++ {
-		if *(*byte)(unsafe.Pointer(ptr + uintptr(length))) == 0 {
-			break
-		}
+// Convert a C-string to Go string.
+func goString(cstr []byte) string {
+	index := bytes.IndexByte(cstr, byte(0))
+	if index < 0 {
+		index = len(cstr)
 	}
-	return strings.Clone(unsafe.String((*byte)(p), length))
+	return strings.Clone(unsafe.String(unsafe.SliceData(cstr), index))
 }
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
@@ -895,7 +893,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	pid := libpf.PID(ptr.Pid)
 	procMeta := t.processManager.MetaForPID(pid)
 	trace := &host.Trace{
-		Comm:             goString(unsafe.Pointer(&ptr.Comm), len(ptr.Comm)),
+		Comm:             goString(ptr.Comm[:]),
 		ExecutablePath:   procMeta.Executable,
 		ContainerID:      procMeta.ContainerID,
 		ProcessName:      procMeta.Name,
@@ -919,7 +917,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	//  - PID, kernel stack ID, length & frame array
 	// Intentionally excluded:
 	//  - ktime, COMM, APM trace, APM transaction ID, Origin and Off Time
-	ptr.Comm = [16]uint8{}
+	ptr.Comm = [16]byte{}
 	ptr.Apm_trace_id = support.ApmTraceID{}
 	ptr.Apm_transaction_id = support.ApmSpanID{}
 	ptr.Ktime = 0
@@ -943,8 +941,8 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		trace.CustomLabels = make(map[string]string, int(ptr.Custom_labels.Len))
 		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
 			lbl := ptr.Custom_labels.Labels[i]
-			key := goString(unsafe.Pointer(&lbl.Key), len(lbl.Key))
-			val := goString(unsafe.Pointer(&lbl.Val), len(lbl.Val))
+			key := goString(lbl.Key[:])
+			val := goString(lbl.Val[:])
 			trace.CustomLabels[key] = val
 		}
 	}
