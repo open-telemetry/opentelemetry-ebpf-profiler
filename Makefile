@@ -154,7 +154,6 @@ debug-agent:
 legal:
 	@go install github.com/google/go-licenses@latest
 	@go-licenses save --force . --save_path=LICENSES
-	@./legal/add-non-go.sh legal/non-go-dependencies.json LICENSES
 
 codespell:
 	@codespell
