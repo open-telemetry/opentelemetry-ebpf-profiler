@@ -29,7 +29,7 @@ struct cgo_ctx {
 
 __thread struct cgo_ctx *__cgo_ctx;
 
-int bpf_log(const char *fmt, ...)
+void bpf_log(const char *fmt, ...)
 {
 	void __bpf_log(const char *, int);
 	if (__cgo_ctx->debug) {
@@ -119,7 +119,7 @@ int bpf_tail_call(void *ctx, bpf_map_def *map, int index)
 		rc = unwind_dotnet(ctx);
 		break;
 	case PROG_GO_LABELS:
-		rc = perf_go_labels(ctx);
+		rc = go_labels(ctx);
 		break;
 	default:
 		return -1;
