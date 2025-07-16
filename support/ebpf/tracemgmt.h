@@ -9,20 +9,28 @@
 #include "frametypes.h"
 #include "types.h"
 
-// MULTI_USE_FUNC generates perf event and kprobe eBPF programs
-// for a given function.
-#define MULTI_USE_FUNC(func_name)                                                                  \
-  SEC("perf_event/" #func_name)                                                                    \
-  static int EBPF_INLINE perf_##func_name(struct pt_regs *ctx)                                     \
-  {                                                                                                \
-    return func_name(ctx);                                                                         \
-  }                                                                                                \
+#if defined(TESTING_COREDUMP)
+
+  #define MULTI_USE_FUNC(func_name)
+
+#else // TESTING_COREDUMP
+
+  // MULTI_USE_FUNC generates perf event and kprobe eBPF programs
+  // for a given function.
+  #define MULTI_USE_FUNC(func_name)                                                                \
+    SEC("perf_event/" #func_name)                                                                  \
+    static int EBPF_INLINE perf_##func_name(struct pt_regs *ctx)                                   \
+    {                                                                                              \
+      return func_name(ctx);                                                                       \
+    }                                                                                              \
                                                                                                    \
-  SEC("kprobe/" #func_name)                                                                        \
-  static int EBPF_INLINE kprobe_##func_name(struct pt_regs *ctx)                                   \
-  {                                                                                                \
-    return func_name(ctx);                                                                         \
-  }
+    SEC("kprobe/" #func_name)                                                                      \
+    static int EBPF_INLINE kprobe_##func_name(struct pt_regs *ctx)                                 \
+    {                                                                                              \
+      return func_name(ctx);                                                                       \
+    }
+
+#endif // TESTING_COREDUMP
 
 // increment_metric increments the value of the given metricID by 1
 static inline EBPF_INLINE void increment_metric(u32 metricID)
