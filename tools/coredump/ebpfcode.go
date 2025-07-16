@@ -119,7 +119,7 @@ int bpf_tail_call(void *ctx, bpf_map_def *map, int index)
 		rc = unwind_dotnet(ctx);
 		break;
 	case PROG_GO_LABELS:
-		rc = perf_go_labels(ctx);
+		rc = go_labels(ctx);
 		break;
 	default:
 		return -1;
