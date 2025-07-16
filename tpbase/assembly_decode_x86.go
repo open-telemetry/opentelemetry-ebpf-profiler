@@ -32,27 +32,27 @@ func analyzeAoutDumpDebugregsX86(code []byte) (uint32, error) {
 		if err != nil {
 			return 0, err
 		}
-		switch op.Op {
-		case x86asm.MOV:
-			if dst, ok := op.Args[0].(x86asm.Reg); ok {
-				actual := it.Regs.GetX86(dst)
-				offset := e.NewImmediateCapture("offset")
-				expected := e.Mem8(
-					e.Add(
-						e.MemWithSegment8(x86asm.GS, e.NewImmediateCapture("")),
-						offset,
-					),
-				)
-				if actual.Match(expected) {
-					res := int64(offset.CapturedValue()) - 2*8
-					if res < 0 || res > 256*1024 {
-						return 0, errors.New("failed to determine offset of fsbase")
-					}
-					return uint32(res), nil
-				}
-			}
-		default:
+		if op.Op != x86asm.MOV {
 			continue
+		}
+		dst, ok := op.Args[0].(x86asm.Reg)
+		if !ok {
+			continue
+		}
+		actual := it.Regs.GetX86(dst)
+		offset := e.NewImmediateCapture("offset")
+		expected := e.Mem8(
+			e.Add(
+				e.MemWithSegment8(x86asm.GS, e.NewImmediateCapture("")),
+				offset,
+			),
+		)
+		if actual.Match(expected) {
+			res := int64(offset.CapturedValue()) - 2*8
+			if res < 0 || res > 256*1024 {
+				return 0, errors.New("failed to determine offset of fsbase")
+			}
+			return uint32(res), nil
 		}
 	}
 }
