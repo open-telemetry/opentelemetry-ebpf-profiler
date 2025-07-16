@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"runtime"
 	"syscall"
 	"testing"
 	"unsafe"
@@ -19,14 +20,14 @@ import (
 
 func RemoteMemTests(t *testing.T, rm RemoteMemory) {
 	data := []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08}
-	dataPtr := libpf.Address(uintptr(unsafe.Pointer(&data[0])))
+	dataPtr := libpf.Address(unsafe.Pointer(&data[0]))
 	str := []byte("this is a string\x00")
-	strPtr := libpf.Address(uintptr(unsafe.Pointer(&str[0])))
+	strPtr := libpf.Address(unsafe.Pointer(&str[0]))
 	longStr := append(bytes.Repeat([]byte("long test string"), 4095/16), 0x00)
-	longStrPtr := libpf.Address(uintptr(unsafe.Pointer(&longStr[0])))
+	longStrPtr := libpf.Address(unsafe.Pointer(&longStr[0]))
 
 	foo := make([]byte, len(data))
-	err := rm.Read(libpf.Address(uintptr(unsafe.Pointer(&data))), foo)
+	err := rm.Read(libpf.Address(unsafe.Pointer(&data)), foo)
 	if errors.Is(err, syscall.ENOSYS) {
 		t.Skipf("skipping due to error: %v", err)
 	}
@@ -38,5 +39,8 @@ func RemoteMemTests(t *testing.T, rm RemoteMemory) {
 }
 
 func TestProcessVirtualMemory(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported os %s", runtime.GOOS)
+	}
 	RemoteMemTests(t, NewProcessVirtualMemory(libpf.PID(os.Getpid())))
 }

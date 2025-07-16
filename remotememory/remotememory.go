@@ -9,10 +9,7 @@ package remotememory // import "go.opentelemetry.io/ebpf-profiler/remotememory"
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
-
-	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
@@ -122,30 +119,13 @@ func (rm RemoteMemory) StringPtr(addr libpf.Address) string {
 	return rm.String(addr)
 }
 
-// ProcessVirtualMemory implements RemoteMemory by using process_vm_readv syscalls
+// ProcessVirtualMemory implements ReaderAt by using process_vm_readv syscalls
 // to read the remote memory.
 type ProcessVirtualMemory struct {
 	pid libpf.PID
 }
 
-func (vm ProcessVirtualMemory) ReadAt(p []byte, off int64) (int, error) {
-	numBytesWanted := len(p)
-	if numBytesWanted == 0 {
-		return 0, nil
-	}
-	localIov := []unix.Iovec{{Base: &p[0], Len: uint64(numBytesWanted)}}
-	remoteIov := []unix.RemoteIovec{{Base: uintptr(off), Len: numBytesWanted}}
-	numBytesRead, err := unix.ProcessVMReadv(int(vm.pid), localIov, remoteIov, 0)
-	if err != nil {
-		err = fmt.Errorf("failed to read PID %v at 0x%x: %w", vm.pid, off, err)
-	} else if numBytesRead != numBytesWanted {
-		err = fmt.Errorf("failed to read PID %v at 0x%x: got only %d of %d",
-			vm.pid, off, numBytesRead, numBytesWanted)
-	}
-	return numBytesRead, err
-}
-
-// NewRemoteMemory returns ProcessVirtualMemory implementation of RemoteMemory.
+// NewProcessVirtualMemory returns RemoteMemory with ProcessVirtualMemory as the underlying reader
 func NewProcessVirtualMemory(pid libpf.PID) RemoteMemory {
 	return RemoteMemory{ReaderAt: ProcessVirtualMemory{pid}}
 }
