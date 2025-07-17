@@ -12,7 +12,7 @@ package main
 // Also the tail call helper "bpf_tail_call" is overridden here, as it works in
 // tandem with the main entry point's setjmp.
 
-// todo: enable -Wunused-parameter after 1.25 upgrade https://go-review.googlesource.com/c/go/+/642196
+// todo: enable -Wunused-parameter after 1.25  https://go-review.googlesource.com/c/go/+/642196
 
 /*
 #cgo CFLAGS: -Wall -Wextra -Werror
@@ -20,7 +20,6 @@ package main
 #cgo CFLAGS: -Wno-unused-label
 #cgo CFLAGS: -Wno-sign-compare
 #cgo CFLAGS: -Wno-unknown-pragmas
-#cgo CFLAGS: -Wno-unused-parameter
 #cgo CFLAGS: -Wno-strict-aliasing
 #define TESTING_COREDUMP
 #include <stdio.h>
