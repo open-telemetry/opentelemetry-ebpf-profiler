@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   test:
@@ -37,4 +38,11 @@ jobs:
       - name: Setup replace statement
         run: COLLECTOR_PATH=/tmp/opentelemetry-collector make local-collector
       - name: Tests
-        run: make test
+        run: make test > /tmp/test-results
+      - name: Generate Issue
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          go install go.opentelemetry.io/build-tools/issuegenerator@latest
+          issuegenerator -path /tmp/test-results
