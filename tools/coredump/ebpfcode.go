@@ -20,6 +20,7 @@ package main
 #cgo CFLAGS: -Wno-unused-label
 #cgo CFLAGS: -Wno-sign-compare
 #cgo CFLAGS: -Wno-unknown-pragmas
+#cgo CFLAGS: -Wno-unused-parameter
 #cgo CFLAGS: -Wno-strict-aliasing
 #define TESTING_COREDUMP
 #include <stdio.h>
