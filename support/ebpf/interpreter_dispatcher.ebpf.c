@@ -148,6 +148,7 @@ static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *st
     // On aarch64 for !iscgo programs the g is only stored in r28 register.
     g_addr = state->r28;
 #elif defined(__x86_64__)
+    (void)state;
     DEBUG_PRINT("cl: TLS offset for g pointer missing for amd64");
     return NULL;
 #endif

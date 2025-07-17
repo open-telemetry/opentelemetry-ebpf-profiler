@@ -357,8 +357,7 @@ static EBPF_INLINE u64 unwind_register_address(UnwindState *state, u64 cfa, u8 o
 // is marked with UNWIND_COMMAND_STOP which marks entry points (main function,
 // thread spawn function, signal handlers, ...).
 #if defined(__x86_64__)
-static EBPF_INLINE ErrorCode
-unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
 {
   *stop = false;
 
@@ -452,8 +451,7 @@ frame_ok:
   return ERR_OK;
 }
 #elif defined(__aarch64__)
-static EBPF_INLINE ErrorCode
-unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *stop)
 {
   *stop = false;
 
@@ -619,7 +617,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 
     // Unwind the native frame using stack deltas. Stop if no next frame.
     bool stop;
-    error = unwind_one_frame(trace->pid, frame_idx, &record->state, &stop);
+    error = unwind_one_frame(&record->state, &stop);
     if (error || stop) {
       break;
     }

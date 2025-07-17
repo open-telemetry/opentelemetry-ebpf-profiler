@@ -39,6 +39,9 @@ static inline long bpf_probe_read_user(void *buf, u32 sz, const void *ptr)
 
 static inline long bpf_probe_read_kernel(void *buf, u32 sz, const void *ptr)
 {
+  (void)buf;
+  (void)sz;
+  (void)ptr;
   return -1;
 }
 
@@ -55,22 +58,36 @@ static inline void *bpf_map_lookup_elem(bpf_map_def *map, const void *key)
 
 static inline int bpf_map_update_elem(bpf_map_def *map, const void *key, const void *val, u64 flags)
 {
+  (void)map;
+  (void)key;
+  (void)val;
+  (void)flags;
   return -1;
 }
 
 static inline int bpf_map_delete_elem(bpf_map_def *map, const void *key)
 {
+  (void)map;
+  (void)key;
   return -1;
 }
 
 static inline int bpf_perf_event_output(
   void *ctx, bpf_map_def *mapdef, unsigned long long flags, void *data, int size)
 {
+  (void)ctx;
+  (void)mapdef;
+  (void)flags;
+  (void)data;
+  (void)size;
   return 0;
 }
 
 static inline int bpf_get_stackid(void *ctx, bpf_map_def *map, u64 flags)
 {
+  (void)ctx;
+  (void)map;
+  (void)flags;
   return -1;
 }
 

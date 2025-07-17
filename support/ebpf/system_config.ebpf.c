@@ -28,6 +28,7 @@ bpf_map_def SEC("maps") system_analysis = {
 SEC("tracepoint/syscalls/sys_enter_bpf")
 int read_kernel_memory(void *ctx)
 {
+  (void)ctx;
   u32 key0 = 0;
 
   struct SystemAnalysis *sys = bpf_map_lookup_elem(&system_analysis, &key0);

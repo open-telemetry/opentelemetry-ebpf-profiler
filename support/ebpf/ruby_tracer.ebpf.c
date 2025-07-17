@@ -56,7 +56,7 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
   int *next_unwinder)
 {
   if (!current_ctx_addr) {
-    *next_unwinder = get_next_unwinder_after_interpreter(record);
+    *next_unwinder = get_next_unwinder_after_interpreter();
     return ERR_OK;
   }
 
@@ -232,7 +232,7 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
   if (!record)
     return -1;
 
-  int unwinder           = get_next_unwinder_after_interpreter(record);
+  int unwinder           = get_next_unwinder_after_interpreter();
   ErrorCode error        = ERR_OK;
   u32 pid                = record->trace.pid;
   RubyProcInfo *rubyinfo = bpf_map_lookup_elem(&ruby_procs, &pid);

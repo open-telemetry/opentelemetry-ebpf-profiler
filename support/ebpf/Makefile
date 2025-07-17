@@ -39,7 +39,6 @@ FLAGS=$(TARGET_FLAGS) -g \
 	-Wall -Wextra -Werror \
 	-Wno-address-of-packed-member \
 	-Wno-unused-label \
-	-Wno-unused-parameter \
 	-Wno-sign-compare \
 	-fno-stack-protector \
 	-D__SOURCE_DATE_EPOCH__=0 \

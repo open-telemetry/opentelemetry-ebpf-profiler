@@ -12,8 +12,16 @@ package main
 // Also the tail call helper "bpf_tail_call" is overridden here, as it works in
 // tandem with the main entry point's setjmp.
 
+// todo: enable -Wunused-parameter after 1.25 upgrade https://go-review.googlesource.com/c/go/+/642196
+
 /*
-#define TESTING
+#cgo CFLAGS: -Wall -Wextra -Werror
+#cgo CFLAGS: -Wno-address-of-packed-member
+#cgo CFLAGS: -Wno-unused-label
+#cgo CFLAGS: -Wno-sign-compare
+#cgo CFLAGS: -Wno-unknown-pragmas
+#cgo CFLAGS: -Wno-unused-parameter
+#cgo CFLAGS: -Wno-strict-aliasing
 #define TESTING_COREDUMP
 #include <stdio.h>
 #include <stdarg.h>
@@ -76,6 +84,8 @@ int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx)
 // require us to properly emulate all the maps required for sending frames
 // to usermode.
 int coredump_unwind_stop(struct bpf_perf_event_data* ctx) {
+  (void)ctx;
+  (void)unwind_stop;
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;
@@ -89,6 +99,7 @@ int coredump_unwind_stop(struct bpf_perf_event_data* ctx) {
 
 int bpf_tail_call(void *ctx, bpf_map_def *map, int index)
 {
+	(void)map;
 	int rc = 0;
 	switch (index) {
 	case PROG_UNWIND_STOP:
