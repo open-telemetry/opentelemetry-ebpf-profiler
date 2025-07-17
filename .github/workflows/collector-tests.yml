@@ -38,7 +38,7 @@ jobs:
       - name: Setup replace statement
         run: COLLECTOR_PATH=/tmp/opentelemetry-collector make local-collector
       - name: Tests
-        run: make test > /tmp/test-results
+        run: make test-junit
       - name: Generate Issue
         if: failure()
         env:

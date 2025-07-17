@@ -49,6 +49,8 @@ GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 
 MAKEFLAGS += -j$(shell nproc)
 
+JUNIT_OUT_DIR ?= /tmp/testresults
+
 all: ebpf-profiler
 
 debug: GO_TAGS := $(GO_TAGS),debugtracer
@@ -104,6 +106,11 @@ vanity-import-fix: $(PORTO)
 
 test: generate ebpf test-deps
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
+
+test-junit: generate ebpf test-deps
+	mkdir -p $(JUNIT_OUT_DIR)
+	go install gotest.tools/gotestsum@latest
+	gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 # This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
 # amd64) and the CI kernel tests run them already. Useful for local testing.
