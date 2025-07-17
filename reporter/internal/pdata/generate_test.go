@@ -334,8 +334,10 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 				}
 			}
 		}
-		assert.True(t, foundFOOKey, "Environment variable attribute 'process.environment_variable.FOO' should be in the attribute table")
-		assert.True(t, foundBarValue, "Environment variable value 'bar' should be in the attribute table")
+		assert.True(t, foundFOOKey,
+			"Attribute 'process.environment_variable.FOO' should be in the attribute table")
+		assert.True(t, foundBarValue,
+			"Environment variable value 'bar' should be in the attribute table")
 	})
 }
 
@@ -510,15 +512,16 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	assert.Equal(t, pcommon.Timestamp(0), prof.Duration())
 
 	// Verify profile contains one sample
-	require.Equal(t, 1, prof.Sample().Len())
+	assert.Len(t, prof.Sample().Len(), 1)
 	sample := prof.Sample().At(0)
-	assert.Equal(t, 1, len(sample.Value().AsRaw()))
+	assert.Len(t, len(sample.Value().AsRaw()), 1)
 	assert.Equal(t, int64(1), sample.Value().At(0)) // sampling count
 
 	// Check that the mapping table contains our native frame mapping
 	// (plus the dummy mapping at index 0)
 	dic := profiles.ProfilesDictionary()
-	assert.GreaterOrEqual(t, dic.MappingTable().Len(), 2, "Mapping table should have dummy mapping + native frame mapping")
+	assert.GreaterOrEqual(t, dic.MappingTable().Len(), 2,
+		"Mapping table should have dummy mapping + native frame mapping")
 
 	// Find the mapping for our native frame (not the dummy one at index 0)
 	var nativeMapping pprofile.Mapping
@@ -545,5 +548,6 @@ func TestGenerate_NativeFrame(t *testing.T) {
 
 	// For native frames, function information is not populated in the function table
 	// since it's resolved by the backend. The function table should be empty.
-	assert.Equal(t, 0, dic.FunctionTable().Len(), "Function table should be empty for native frames")
+	assert.Equal(t, 0, dic.FunctionTable().Len(),
+		"Function table should be empty for native frames")
 }
