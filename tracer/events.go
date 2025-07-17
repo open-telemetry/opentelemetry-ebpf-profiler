@@ -34,6 +34,12 @@ const (
 	// so that the hostagent startup phase can wait on most PID notifications
 	// to be processed before starting the tracer.
 	pidEventBufferSize = 10
+	// Maximum number of trace events to process in one batch. This is used as a
+	// safe threshold for when off-cpu profiling is enabled, as the kernel can generate
+	// enough events to completely monopolize userspace processing. If more than maxEvents
+	// events are produced by the kernel between two polling intervals, the queue from bpf
+	// to userspace will fill up and the kernel will start dropping events.
+	maxEvents = 4096
 )
 
 // StartPIDEventProcessor spawns a goroutine to process PID events.
@@ -151,21 +157,34 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	go func() {
 		var data perf.Record
 		var oldKTime, minKTime times.KTime
+		var eventCount int
 
 		pollTicker := time.NewTicker(t.intervals.TracePollInterval())
 		defer pollTicker.Stop()
-
 	PollLoop:
 		for {
+			// We use two selects to avoid starvation in scenarios where the kernel
+			// is generating a lot of events.
 			select {
-			case <-pollTicker.C:
-				// Continue execution below.
+			// Always check for context cancellation in each iteration
 			case <-ctx.Done():
 				break PollLoop
+			default:
+				// Continue below
 			}
 
+			select {
+			// This context cancellation check may not execute in timely manner
+			case <-ctx.Done():
+				break PollLoop
+			case <-pollTicker.C:
+				// Continue execution below
+			}
+
+			eventCount = 0
 			minKTime = 0
-			// Eagerly read events until the buffer is exhausted.
+
+			// Eagerly read events until the buffer is exhausted or we reach maxEvents
 			for {
 				if err = eventReader.ReadInto(&data); err != nil {
 					if !errors.Is(err, os.ErrDeadlineExceeded) {
@@ -173,6 +192,20 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 					}
 					break
 				}
+
+				// There's a theoretical possibility that this inner loop never exits if the
+				// following two error cases are continuously being hit. In practice this would
+				// mean that userspace doesn't manage to make ANY progress when reading events
+				// (eventCount never reaching maxEvents and underlying buffers never being empty),
+				// something that should not happen even with off-cpu at maximum sampling rates:
+				// probabilistically, there should always be some events read per X iterations.
+				// We could add a secondary fallback (ideally deterministic, e.g. maximum time
+				// elapsed) to guard against that possibility if we see it as a concern (currently
+				// not done).
+				//
+				// Regardless, the current data transmission architecture from kernel to user and
+				// the -serial- event processing pipeline in the rest of the agent is not designed
+				// for the data volumes that off-cpu profiling can generate and should be revisited.
 				if data.LostSamples != 0 {
 					lostEventsCount.Add(data.LostSamples)
 					continue
@@ -182,12 +215,20 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 					continue
 				}
 
+				eventCount++
+
 				// Keep track of min KTime seen in this batch processing loop
 				trace := t.loadBpfTrace(data.RawSample, data.CPU)
 				if minKTime == 0 || trace.KTime < minKTime {
 					minKTime = trace.KTime
 				}
+				// TODO: This per-event channel send couples event processing in the rest of
+				// the agent with event reading from the perf buffers slowing down the latter.
 				traceOutChan <- trace
+				if eventCount == maxEvents {
+					// Break this inner loop to ensure ProcessedUntil logic executes
+					break
+				}
 			}
 			// After we've received and processed all trace events, call
 			// ProcessedUntil if there is a pending oldKTime that we
