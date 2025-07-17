@@ -49,6 +49,8 @@ GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 
 MAKEFLAGS += -j$(shell nproc)
 
+JUNIT_OUT_DIR ?= /tmp/testresults
+
 all: ebpf-profiler
 
 debug: GO_TAGS := $(GO_TAGS),debugtracer
@@ -105,6 +107,11 @@ vanity-import-fix: $(PORTO)
 test: generate ebpf test-deps
 	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
+test-junit: generate ebpf test-deps
+	mkdir -p $(JUNIT_OUT_DIR)
+	go install gotest.tools/gotestsum@latest
+	gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
+
 # This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
 # amd64) and the CI kernel tests run them already. Useful for local testing.
 sudo-golabels-test: integration-test-binaries
@@ -157,3 +164,14 @@ legal:
 
 codespell:
 	@codespell
+
+# Setup replace statements to run with a local checkout of the collector
+local-collector:
+	@echo "Setting the local Collector to a local checkout at $(COLLECTOR_PATH)"
+	@go list -m -u all | grep 'go\.opentelemetry\.io\/collector' | while read -r line; do \
+		MODULE=$$(echo $$line | awk '{print $$1}'); \
+		REL_PATH=$${MODULE#go.opentelemetry.io/collector\/}; \
+		LOCAL_PATH=$(COLLECTOR_PATH)/$$REL_PATH; \
+		echo "Replacing $$MODULE => $$LOCAL_PATH"; \
+		go mod edit -replace=$$MODULE=$$LOCAL_PATH; \
+	done
