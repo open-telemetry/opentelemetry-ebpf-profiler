@@ -512,9 +512,9 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	assert.Equal(t, pcommon.Timestamp(0), prof.Duration())
 
 	// Verify profile contains one sample
-	assert.Len(t, prof.Sample().Len(), 1)
+	assert.Equal(t, 1, prof.Sample().Len())
 	sample := prof.Sample().At(0)
-	assert.Len(t, len(sample.Value().AsRaw()), 1)
+	assert.Len(t, sample.Value().AsRaw(), 1)
 	assert.Equal(t, int64(1), sample.Value().At(0)) // sampling count
 
 	// Check that the mapping table contains our native frame mapping
