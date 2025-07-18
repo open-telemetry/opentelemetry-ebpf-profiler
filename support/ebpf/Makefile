@@ -81,7 +81,7 @@ bloatcheck: $(TRACER_NAME)
 	python3 bloat-o-meter $(TRACER_NAME).baseline $(TRACER_NAME)
 
 lint:
-	$(CLANG_FORMAT) -Werror --dry-run -style=file *.[ch]
+	$(CLANG_FORMAT) -Werror --dry-run -style=file *.[ch] ../../tools/coredump/*.[ch]
 
 format:
 	$(CLANG_FORMAT) -i -style=file *.[ch]

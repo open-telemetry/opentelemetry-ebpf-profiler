@@ -304,7 +304,7 @@ error:
 }
 
 #if defined(__x86_64__)
-static EBPF_INLINE void breadcrumb_fixup(HotspotUnwindInfo *ui)
+static EBPF_INLINE void breadcrumb_fixup(UNUSED HotspotUnwindInfo *ui)
 {
   (void)ui;
   // Nothing to do: breadcrumbs are not a thing on X86.
@@ -412,10 +412,9 @@ hotspot_handle_prologue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotU
 #endif
 
 #if defined(__x86_64__)
-static EBPF_INLINE bool
-hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotUnwindAction *action)
+static EBPF_INLINE bool hotspot_handle_epilogue(
+  UNUSED const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotUnwindAction *action)
 {
-  (void)cbi;
   // On X86, use a heuristic to catch the likely spots of the epilogue.
   #define CODE_CUR 1
   u8 code[14];
