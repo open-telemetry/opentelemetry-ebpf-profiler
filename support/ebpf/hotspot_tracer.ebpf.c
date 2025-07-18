@@ -306,7 +306,6 @@ error:
 #if defined(__x86_64__)
 static EBPF_INLINE void breadcrumb_fixup(UNUSED HotspotUnwindInfo *ui)
 {
-  (void)ui;
   // Nothing to do: breadcrumbs are not a thing on X86.
 }
 #elif defined(__aarch64__)
