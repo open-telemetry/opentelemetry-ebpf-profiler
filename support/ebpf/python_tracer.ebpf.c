@@ -170,7 +170,7 @@ walk_python_stack(PerCPURecord *record, const PyProcInfo *pyinfo, int *unwinder)
       goto stop;
     }
     if (continue_with_next) {
-      *unwinder = get_next_unwinder_after_interpreter(record);
+      *unwinder = get_next_unwinder_after_interpreter();
       goto stop;
     }
     if (!py_frame) {
@@ -286,7 +286,7 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
     return -1;
 
   ErrorCode error = ERR_OK;
-  int unwinder    = get_next_unwinder_after_interpreter(record);
+  int unwinder    = get_next_unwinder_after_interpreter();
   Trace *trace    = &record->trace;
   u32 pid         = trace->pid;
 

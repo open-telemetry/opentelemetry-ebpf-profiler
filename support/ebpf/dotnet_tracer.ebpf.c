@@ -44,8 +44,7 @@ bpf_map_def SEC("maps") dotnet_procs = {
 // currently not Garbage Collected by the runtime. Though, we have submitted also an enhancement
 // request to fix the nibble map format to something sane, and this might get implemented.
 // see: https://github.com/dotnet/runtime/issues/93550
-static EBPF_INLINE ErrorCode
-dotnet_find_code_start(PerCPURecord *record, DotnetProcInfo *vi, u64 pc, u64 *code_start)
+static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc, u64 *code_start)
 {
   // This is an ebpf optimized implementation of EEJitManager::FindMethodCode()
   // https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/vm/codeman.cpp#L4115
@@ -177,8 +176,7 @@ push_dotnet(Trace *trace, u64 code_header_ptr, u64 pc_offset, bool return_addres
 }
 
 // Unwind one dotnet frame
-static EBPF_INLINE ErrorCode
-unwind_one_dotnet_frame(PerCPURecord *record, DotnetProcInfo *vi, bool top)
+static EBPF_INLINE ErrorCode unwind_one_dotnet_frame(PerCPURecord *record)
 {
   UnwindState *state = &record->state;
   Trace *trace       = &record->trace;
@@ -241,7 +239,7 @@ unwind_one_dotnet_frame(PerCPURecord *record, DotnetProcInfo *vi, bool top)
   }
 
   // JIT generated code, locate code start
-  ErrorCode error = dotnet_find_code_start(record, vi, pc, &code_start);
+  ErrorCode error = dotnet_find_code_start(record, pc, &code_start);
   if (error != ERR_OK) {
     DEBUG_PRINT("dotnet:  --> code_start failed with %d", error);
     // dotnet_find_code_start incremented the metric already
@@ -309,7 +307,7 @@ static EBPF_INLINE int unwind_dotnet(struct pt_regs *ctx)
   for (int i = 0; i < DOTNET_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
 
-    error = unwind_one_dotnet_frame(record, vi, i == 0);
+    error = unwind_one_dotnet_frame(record);
     if (error) {
       break;
     }

@@ -7,6 +7,8 @@
 // with_debug_output is declared in native_stack_trace.ebpf.c
 extern u32 with_debug_output;
 
+#define UNUSED __attribute__((unused))
+
 #if defined(TESTING_COREDUMP)
 
   // BPF_RODATA_VAR declares a global variable in the .rodata section,
@@ -37,7 +39,7 @@ static inline long bpf_probe_read_user(void *buf, u32 sz, const void *ptr)
   return __bpf_probe_read_user(__cgo_ctx->id, buf, sz, ptr);
 }
 
-static inline long bpf_probe_read_kernel(void *buf, u32 sz, const void *ptr)
+static inline long bpf_probe_read_kernel(UNUSED void *buf, UNUSED u32 sz, UNUSED const void *ptr)
 {
   return -1;
 }
@@ -53,23 +55,29 @@ static inline void *bpf_map_lookup_elem(bpf_map_def *map, const void *key)
   return __bpf_map_lookup_elem(__cgo_ctx->id, map, key);
 }
 
-static inline int bpf_map_update_elem(bpf_map_def *map, const void *key, const void *val, u64 flags)
+static inline int bpf_map_update_elem(
+  UNUSED bpf_map_def *map, UNUSED const void *key, UNUSED const void *val, UNUSED u64 flags)
 {
   return -1;
 }
 
-static inline int bpf_map_delete_elem(bpf_map_def *map, const void *key)
+static inline int bpf_map_delete_elem(UNUSED bpf_map_def *map, UNUSED const void *key)
 {
   return -1;
 }
 
 static inline int bpf_perf_event_output(
-  void *ctx, bpf_map_def *mapdef, unsigned long long flags, void *data, int size)
+  UNUSED void *ctx,
+  UNUSED bpf_map_def *mapdef,
+  UNUSED unsigned long long flags,
+  UNUSED void *data,
+  UNUSED int size)
 {
+
   return 0;
 }
 
-static inline int bpf_get_stackid(void *ctx, bpf_map_def *map, u64 flags)
+static inline int bpf_get_stackid(UNUSED void *ctx, UNUSED bpf_map_def *map, UNUSED u64 flags)
 {
   return -1;
 }

@@ -304,7 +304,7 @@ error:
 }
 
 #if defined(__x86_64__)
-static EBPF_INLINE void breadcrumb_fixup(HotspotUnwindInfo *ui)
+static EBPF_INLINE void breadcrumb_fixup(UNUSED HotspotUnwindInfo *ui)
 {
   // Nothing to do: breadcrumbs are not a thing on X86.
 }
@@ -411,8 +411,8 @@ hotspot_handle_prologue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotU
 #endif
 
 #if defined(__x86_64__)
-static EBPF_INLINE bool
-hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotUnwindAction *action)
+static EBPF_INLINE bool hotspot_handle_epilogue(
+  UNUSED const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotUnwindAction *action)
 {
   // On X86, use a heuristic to catch the likely spots of the epilogue.
   #define CODE_CUR 1
@@ -574,7 +574,7 @@ pattern_found:;
 
 static EBPF_INLINE ErrorCode hotspot_handle_nmethod(
   const CodeBlobInfo *cbi,
-  Trace *trace,
+  UNUSED Trace *trace,
   HotspotUnwindInfo *ui,
   HotspotProcInfo *ji,
   HotspotUnwindAction *action,
@@ -697,7 +697,7 @@ hotspot_handle_stub_fallback(const CodeBlobInfo *cbi, HotspotUnwindAction *actio
 }
 
 static EBPF_INLINE ErrorCode hotspot_handle_stub(
-  const UnwindState *state,
+  UNUSED const UnwindState *state,
   const CodeBlobInfo *cbi,
   HotspotUnwindInfo *ui,
   HotspotUnwindAction *action)
