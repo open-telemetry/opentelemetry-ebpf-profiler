@@ -574,7 +574,7 @@ pattern_found:;
 
 static EBPF_INLINE ErrorCode hotspot_handle_nmethod(
   const CodeBlobInfo *cbi,
-  Trace *trace,
+  UNUSED Trace *trace,
   HotspotUnwindInfo *ui,
   HotspotProcInfo *ji,
   HotspotUnwindAction *action,
@@ -652,7 +652,6 @@ static EBPF_INLINE ErrorCode hotspot_handle_nmethod(
   ui->sp += cbi->frame_size;
 
 #ifndef HOTSPOT_RA_SEARCH_SLOTS
-  (void)trace;
   // Frame size can be trusted.
   *action = UA_UNWIND_REGS;
   return ERR_OK;
@@ -698,7 +697,7 @@ hotspot_handle_stub_fallback(const CodeBlobInfo *cbi, HotspotUnwindAction *actio
 }
 
 static EBPF_INLINE ErrorCode hotspot_handle_stub(
-  const UnwindState *state,
+  UNUSED const UnwindState *state,
   const CodeBlobInfo *cbi,
   HotspotUnwindInfo *ui,
   HotspotUnwindAction *action)
@@ -727,7 +726,6 @@ static EBPF_INLINE ErrorCode hotspot_handle_stub(
   *action = UA_UNWIND_AARCH64_LR;
   return ERR_OK;
 #else
-  (void)state;
   return hotspot_handle_stub_fallback(cbi, action);
 #endif
 }

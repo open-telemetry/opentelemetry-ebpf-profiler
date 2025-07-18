@@ -22,7 +22,6 @@ bpf_map_def SEC("maps") sched_times = {
 SEC("tracepoint/sched/sched_switch")
 int tracepoint__sched_switch(UNUSED void *ctx)
 {
-  (void)ctx;
   u64 pid_tgid = bpf_get_current_pid_tgid();
   u32 pid      = pid_tgid >> 32;
   u32 tid      = pid_tgid & 0xFFFFFFFF;

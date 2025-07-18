@@ -132,7 +132,7 @@ bpf_map_def SEC("maps") go_labels_procs = {
   .max_entries = 128,
 };
 
-static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
+static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UNUSED UnwindState *state)
 {
   u64 g_addr     = 0;
   void *tls_base = NULL;
@@ -148,7 +148,6 @@ static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *st
     // On aarch64 for !iscgo programs the g is only stored in r28 register.
     g_addr = state->r28;
 #elif defined(__x86_64__)
-    (void)state;
     DEBUG_PRINT("cl: TLS offset for g pointer missing for amd64");
     return NULL;
 #endif
