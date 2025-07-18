@@ -1,4 +1,5 @@
 *.o
+*.d
 *.pb.go
 .cache
 /.idea
