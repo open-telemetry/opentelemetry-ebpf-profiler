@@ -103,6 +103,7 @@ vanity-import-fix: $(PORTO)
 	@porto --include-internal -w .
 
 test: generate ebpf test-deps
+	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
 	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 # This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
