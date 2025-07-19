@@ -25,7 +25,7 @@ $(error Unsupported architecture: $(TARGET_ARCH))
 endif
 
 export TARGET_ARCH
-export CGO_ENABLED = 1
+export CGO_ENABLED = 0
 export GOARCH = $(TARGET_ARCH)
 export CC = $(ARCH_PREFIX)-linux-gnu-gcc
 export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
@@ -103,7 +103,8 @@ vanity-import-fix: $(PORTO)
 	@porto --include-internal -w .
 
 test: generate ebpf test-deps
-	go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
+	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 # This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
 # amd64) and the CI kernel tests run them already. Useful for local testing.
@@ -130,7 +131,7 @@ support/golbls_1_24.test: ./interpreter/golabels/test/main.go
 	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.1 go build -tags $(GO_TAGS),nocgo -o $@ $<
 
 support/golbls_cgo.test: ./interpreter/golabels/test/main-cgo.go
-	GOTOOLCHAIN=go1.24.1 go build -ldflags '-extldflags "-static"' -tags $(GO_TAGS),usecgo  -o $@ $<
+	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.1 go build -ldflags '-extldflags "-static"' -tags $(GO_TAGS),usecgo  -o $@ $<
 
 integration-test-binaries: generate ebpf rust-components support/golbls_1_23.test support/golbls_1_24.test support/golbls_cgo.test
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \

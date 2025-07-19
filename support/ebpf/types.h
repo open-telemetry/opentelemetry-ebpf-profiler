@@ -8,10 +8,10 @@
 
 // ID values used as index to maps/metrics array.
 // If you add enums below please update the following places too:
-//  - The host agent ebpf metricID to DB IDMetric translation table in:
-//    tracer/tracer.go/(StartMapMonitors).
-//  - The ebpf userland test code metricID stringification table in:
-//    support/ebpf/tests/tostring.c
+//  - The actual metric knob in:
+//    metrics/metrics.json
+//  - The mapping of this enum to the metric in Go:
+//    support/types_def.go
 enum {
   // number of calls to interpreter unwinding in get_next_interpreter()
   metricID_UnwindCallInterpreter = 0,
@@ -533,8 +533,8 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
 #define CUSTOM_LABEL_MAX_VAL_LEN 48
 
 typedef struct CustomLabel {
-  char key[CUSTOM_LABEL_MAX_KEY_LEN];
-  char val[CUSTOM_LABEL_MAX_VAL_LEN];
+  u8 key[CUSTOM_LABEL_MAX_KEY_LEN];
+  u8 val[CUSTOM_LABEL_MAX_VAL_LEN];
 } CustomLabel;
 
 #define MAX_CUSTOM_LABELS 10
@@ -555,7 +555,7 @@ typedef struct Trace {
   // Monotonic kernel time in nanosecond precision.
   u64 ktime;
   // The current COMM of the thread of this Trace.
-  char comm[COMM_LEN];
+  u8 comm[COMM_LEN];
   // APM transaction ID or all-zero if not present.
   ApmSpanID apm_transaction_id;
   // APM trace ID or all-zero if not present.

@@ -22,12 +22,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/times"
 )
 
-/*
-#include <stdint.h>
-#include "../support/ebpf/types.h"
-*/
-import "C"
-
 const (
 	// Length of the pidEvents channel. It must be large enough so the
 	// consuming goroutine doesn't go idle due to scheduling, but small enough
@@ -79,8 +73,8 @@ func (t *Tracer) handleGenericPID() {
 // C structure in the received data is transformed to a Go structure and the event
 // handler is invoked.
 func (t *Tracer) triggerPidEvent(data []byte) {
-	event := (*C.Event)(unsafe.Pointer(&data[0]))
-	if event.event_type == support.EventTypeGenericPID {
+	event := (*support.Event)(unsafe.Pointer(&data[0]))
+	if event.Type == support.EventTypeGenericPID {
 		t.handleGenericPID()
 	}
 }
@@ -143,7 +137,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	traceOutChan chan<- *host.Trace) func() []metrics.Metric {
 	eventsMap := t.ebpfMaps["trace_events"]
 	eventReader, err := perf.NewReader(eventsMap,
-		t.samplesPerSecond*int(unsafe.Sizeof(C.Trace{})))
+		t.samplesPerSecond*support.Sizeof_Trace)
 	if err != nil {
 		log.Fatalf("Failed to setup perf reporting via %s: %v", eventsMap, err)
 	}
