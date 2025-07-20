@@ -105,6 +105,11 @@ type beamInstance struct {
 	rm        remotememory.RemoteMemory
 	rangesPtr libpf.Address
 	atomTable libpf.Address
+
+	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
+	prefixes map[lpm.Prefix]uint32
+	// mappingGeneration is the current generation (so old entries can be pruned)
+	mappingGeneration uint32
 }
 
 func readSymbolValue(ef *pfelf.File, name libpf.SymbolName) ([]byte, error) {
@@ -253,6 +258,7 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		rm:        rm,
 		rangesPtr: bias + libpf.Address(d.r),
 		atomTable: bias + libpf.Address(d.erts_atom_table),
+		prefixes:  make(map[lpm.Prefix]uint32),
 	}, nil
 }
 
@@ -261,36 +267,49 @@ func (d *beamData) Unload(_ interpreter.EbpfHandler) {
 
 func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ reporter.SymbolReporter, pr process.Process, mappings []process.Mapping) error {
 	pid := pr.PID()
+	i.mappingGeneration++
+	vms := i.data.vmStructs
 
-	// Index into the active static `r` variable using each valid index (the size of the `ranges` struct is 32 bytes)
-	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
-	// The max index is defined as 3 here: https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.h#L70
-	for codeIndex := 0; codeIndex < 3; codeIndex++ {
-		activeRanges := i.rangesPtr + libpf.Address(32*codeIndex)
+	codeIndex := i.rm.Uint32(libpf.Address(i.data.the_active_code_index))
+	activeRanges := i.rangesPtr + libpf.Address(uint32(vms.ranges.size_of)*codeIndex)
+	modules := i.rm.Ptr(activeRanges + libpf.Address(vms.ranges.modules))
 
-		// Use offsets into the `ranges` struct to get the beginning of the array and the number of entries based on
-		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L56-L61
-		modules := i.rm.Ptr(activeRanges)
-		n := i.rm.Uint64(activeRanges + libpf.Address(8))
+	n := i.rm.Uint64(activeRanges + libpf.Address(vms.ranges.n))
 
-		low := i.rm.Ptr(modules)
-		high := i.rm.Ptr(modules + libpf.Address((n-1)*16+8))
+	for idx := uint64(0); idx < n; idx++ {
+		moduleRange := modules + libpf.Address(idx*uint64(vms.ranges_entry.size_of))
+		low := i.rm.Uint64(moduleRange + libpf.Address(vms.ranges_entry.start))
+		high := i.rm.Uint64(moduleRange + libpf.Address(vms.ranges_entry.end))
 
-		log.Infof("Enabling BEAM for %#x - %#x", low, high)
-
-		// TODO: I think this is resulting in the following error (figure out why):
-		// ERRO[0004] Failed to handle new anonymous mapping for PID 375011: update: key already exists
-		prefixes, err := lpm.CalculatePrefixList(uint64(low), uint64(high))
+		prefixes, err := lpm.CalculatePrefixList(low, high)
 		if err != nil {
-			return fmt.Errorf("new anonymous mapping lpm failure %#x - %#x: %v", low, high, err)
+			return fmt.Errorf("new anonymous mapping lpm failure %#x - %#x", low, high)
 		}
+
 		for _, prefix := range prefixes {
-			err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindBEAM, 0, 0)
-			if err != nil {
-				return err
+			log.Debugf("Enabling BEAM for %#v", prefix)
+
+			_, exists := i.prefixes[prefix]
+			if !exists {
+				err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindBEAM, 0, 0)
+				if err != nil {
+					return err
+				}
 			}
+			i.prefixes[prefix] = i.mappingGeneration
 		}
 	}
+
+	// Remove prefixes not seen
+	for prefix, generation := range i.prefixes {
+		if generation == i.mappingGeneration {
+			continue
+		}
+		log.Debugf("Disabling BEAM for %#v", prefix)
+		_ = ebpf.DeletePidInterpreterMapping(pid, prefix)
+		delete(i.prefixes, prefix)
+	}
+
 	return nil
 }
 
