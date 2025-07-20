@@ -36,12 +36,6 @@ func (f MockReporter) ExecutableKnown(_ libpf.FileID) bool {
 func (f MockReporter) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
 }
 
-func (f MockReporter) FrameKnown(_ libpf.FrameID) bool {
-	return true
-}
-
-func (f MockReporter) FrameMetadata(_ *reporter.FrameMetadataArgs) {}
-
 func StartTracer(ctx context.Context, t *testing.T, et tracertypes.IncludedTracers,
 	r reporter.SymbolReporter) (chan *host.Trace, *tracer.Tracer) {
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{

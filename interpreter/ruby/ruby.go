@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"math/bits"
 	"regexp"
 	"runtime"
@@ -24,11 +23,9 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -206,12 +203,6 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		return nil, err
 	}
 
-	iseqBodyPCToFunction, err := freelru.New[rubyIseqBodyPC, *rubyIseq](iseqCacheSize,
-		hashRubyIseqBodyPC)
-	if err != nil {
-		return nil, err
-	}
-
 	addrToString, err := freelru.New[libpf.Address, libpf.String](addrToStringSize,
 		libpf.Address.Hash32)
 	if err != nil {
@@ -219,10 +210,9 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	}
 
 	return &rubyInstance{
-		r:                    r,
-		rm:                   rm,
-		iseqBodyPCToFunction: iseqBodyPCToFunction,
-		addrToString:         addrToString,
+		r:            r,
+		rm:           rm,
+		addrToString: addrToString,
 		memPool: sync.Pool{
 			New: func() any {
 				buf := make([]byte, 512)
@@ -235,31 +225,6 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 func (r *rubyData) Unload(_ interpreter.EbpfHandler) {
 }
 
-// rubyIseqBodyPC holds a reported address to a iseq_constant_body and Ruby VM program counter
-// combination and is used as key in the cache.
-type rubyIseqBodyPC struct {
-	addr libpf.Address
-	pc   uint64
-}
-
-func hashRubyIseqBodyPC(iseq rubyIseqBodyPC) uint32 {
-	h := iseq.addr.Hash()
-	h ^= hash.Uint64(iseq.pc)
-	return uint32(h)
-}
-
-// rubyIseq stores information extracted from a iseq_constant_body struct.
-type rubyIseq struct {
-	// sourceFileName is the extracted filename field
-	sourceFileName libpf.String
-
-	// fileID is the synthesized methodID
-	fileID libpf.FileID
-
-	// line of code in source file for this instruction sequence
-	line libpf.AddressOrLineno
-}
-
 type rubyInstance struct {
 	interpreter.InstanceStubs
 
@@ -269,10 +234,6 @@ type rubyInstance struct {
 
 	r  *rubyData
 	rm remotememory.RemoteMemory
-
-	// iseqBodyPCToFunction maps an address and Ruby VM program counter combination to extracted
-	// information from a Ruby instruction sequence object.
-	iseqBodyPCToFunction *freelru.LRU[rubyIseqBodyPC, *rubyIseq]
 
 	// addrToString maps an address to an extracted Ruby String from this address.
 	addrToString *freelru.LRU[libpf.Address, libpf.String]
@@ -638,8 +599,7 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 	return lineNo, nil
 }
 
-func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
-	frame *host.Frame, trace *libpf.Trace) error {
+func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	if !frame.Type.IsInterpType(libpf.Ruby) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -657,18 +617,6 @@ func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	// The Ruby VM program counter that was extracted from the current call frame is embedded in
 	// the Linenos field.
 	pc := frame.Lineno
-
-	key := rubyIseqBodyPC{
-		addr: iseqBody,
-		pc:   uint64(pc),
-	}
-
-	if iseq, ok := r.iseqBodyPCToFunction.Get(key); ok &&
-		symbolReporter.FrameKnown(libpf.NewFrameID(iseq.fileID, iseq.line)) {
-		trace.AppendFrame(libpf.RubyFrame, iseq.fileID, iseq.line)
-		sfCounter.ReportSuccess()
-		return nil
-	}
 
 	lineNo, err := r.getRubyLineNo(iseqBody, uint64(pc))
 	if err != nil {
@@ -689,33 +637,11 @@ func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 		return err
 	}
 
-	pcBytes := uint64ToBytes(uint64(pc))
-	iseqBodyBytes := uint64ToBytes(uint64(iseqBody))
-
-	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(sourceFileName.String()))
-	_, _ = h.Write([]byte(functionName.String()))
-	_, _ = h.Write(pcBytes)
-	_, _ = h.Write(iseqBodyBytes)
-	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
-	if err != nil {
-		return fmt.Errorf("failed to create a file ID: %v", err)
-	}
-
-	iseq := &rubyIseq{
-		sourceFileName: sourceFileName,
-		fileID:         fileID,
-		line:           libpf.AddressOrLineno(lineNo),
-	}
-	r.iseqBodyPCToFunction.Add(key, iseq)
-
 	// Ruby doesn't provide the information about the function offset for the
 	// particular line. So we report 0 for this to our backend.
-	frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
-	trace.AppendFrameID(libpf.RubyFrame, frameID)
-	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-		FrameID:      frameID,
+
+	frames.Append(&libpf.Frame{
+		Type:         libpf.RubyFrame,
 		FunctionName: functionName,
 		SourceFile:   sourceFileName,
 		SourceLine:   libpf.SourceLineno(lineNo),
@@ -725,7 +651,6 @@ func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 }
 
 func (r *rubyInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
-	rubyIseqBodyPCStats := r.iseqBodyPCToFunction.ResetMetrics()
 	addrToStringStats := r.addrToString.ResetMetrics()
 
 	return []metrics.Metric{
@@ -736,22 +661,6 @@ func (r *rubyInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 		{
 			ID:    metrics.IDRubySymbolizationFailure,
 			Value: metrics.MetricValue(r.failCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDRubyIseqBodyPCHit,
-			Value: metrics.MetricValue(rubyIseqBodyPCStats.Hits),
-		},
-		{
-			ID:    metrics.IDRubyIseqBodyPCMiss,
-			Value: metrics.MetricValue(rubyIseqBodyPCStats.Misses),
-		},
-		{
-			ID:    metrics.IDRubyIseqBodyPCAdd,
-			Value: metrics.MetricValue(rubyIseqBodyPCStats.Inserts),
-		},
-		{
-			ID:    metrics.IDRubyIseqBodyPCDel,
-			Value: metrics.MetricValue(rubyIseqBodyPCStats.Removals),
 		},
 		{
 			ID:    metrics.IDRubyAddrToStringHit,

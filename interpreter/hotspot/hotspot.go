@@ -111,7 +111,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 var (
@@ -121,9 +120,6 @@ var (
 	// Match Java Hidden Class identifier and the replacement string
 	hiddenClassRegex = regexp.MustCompile(`\+0x[0-9a-f]{16}`)
 	hiddenClassMask  = "+<hidden>"
-
-	// The FileID used for intrinsic stub frames
-	hotspotStubsFileID = libpf.NewStubFileID(libpf.HotSpotFrame)
 
 	_ interpreter.Data     = &hotspotData{}
 	_ interpreter.Instance = &hotspotInstance{}
