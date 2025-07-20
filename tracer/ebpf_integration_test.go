@@ -203,14 +203,9 @@ Loop:
 			trace, ok := traces[testcase.id]
 			require.Truef(t, ok, "trace ID %d not received", testcase.id)
 
-			var numKernelFrames int
-			for _, frame := range trace.Frames {
-				if frame.Type == support.FrameMarkerKernel {
-					numKernelFrames++
-				}
-			}
+			numKernelFrames := len(trace.KernelFrames)
+			userspaceFrameCount := len(trace.Frames)
 
-			userspaceFrameCount := len(trace.Frames) - numKernelFrames
 			assert.Equal(t, len(testcase.userSpaceTrace.Frames), userspaceFrameCount)
 			assert.False(t, !testcase.hasKernelFrames && numKernelFrames > 0,
 				"unexpected kernel frames")

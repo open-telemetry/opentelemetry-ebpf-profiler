@@ -131,7 +131,6 @@ func newTestFrames() libpf.Frames {
 	return frames
 }
 
-//nolint:lll
 func TestFunctionTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name        string
