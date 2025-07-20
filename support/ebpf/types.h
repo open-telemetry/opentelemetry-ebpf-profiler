@@ -493,8 +493,8 @@ typedef struct V8ProcInfo {
 typedef struct BEAMProcInfo {
   u32 version;
   u64 bias;
-	u64 r;
-	u64 the_active_code_index;
+  u64 r;
+  u64 the_active_code_index;
   u64 active_ranges;
 } BEAMProcInfo;
 
