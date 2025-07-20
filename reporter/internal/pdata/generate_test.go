@@ -253,3 +253,301 @@ func TestProfileDuration(t *testing.T) {
 		})
 	}
 }
+func TestGenerate_EmptyTree(t *testing.T) {
+	d, err := New(100, 100, 100, nil)
+	require.NoError(t, err)
+
+	tree := make(samples.TraceEventsTree)
+	profiles, err := d.Generate(tree, "agent", "v1")
+	require.NoError(t, err)
+	assert.Equal(t, 0, profiles.ResourceProfiles().Len())
+}
+
+func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
+	d, err := New(100, 100, 100, nil)
+	require.NoError(t, err)
+
+	fileID := libpf.NewFileID(1, 2)
+	funcName := "main"
+	filePath := "/bin/test"
+	d.Executables.Add(fileID, samples.ExecInfo{FileName: filePath})
+	d.Frames.Add(libpf.NewFrameID(fileID, 0x10), samples.SourceInfo{
+		FunctionName: libpf.Intern(funcName),
+		FilePath:     libpf.Intern(filePath),
+		LineNumber:   42,
+	})
+
+	traceKey := samples.TraceAndMetaKey{
+		ExecutablePath: filePath,
+		Comm:           "testproc",
+		Pid:            123,
+		Tid:            456,
+		ApmServiceName: "svc",
+	}
+	events := map[libpf.Origin]samples.KeyToEventMapping{
+		support.TraceOriginSampling: {
+			traceKey: &samples.TraceEvents{
+				Files:              []libpf.FileID{fileID},
+				Linenos:            []libpf.AddressOrLineno{0x10},
+				FrameTypes:         []libpf.FrameType{libpf.GoFrame},
+				MappingStarts:      []libpf.Address{0},
+				MappingEnds:        []libpf.Address{0},
+				MappingFileOffsets: []uint64{0},
+				Timestamps:         []uint64{100},
+				EnvVars:            map[string]string{"FOO": "BAR"},
+			},
+		},
+	}
+	tree := samples.TraceEventsTree{
+		"container1": events,
+	}
+
+	profiles, err := d.Generate(tree, "agent", "v1")
+	require.NoError(t, err)
+	require.Equal(t, 1, profiles.ResourceProfiles().Len())
+	rp := profiles.ResourceProfiles().At(0)
+	val, _ := rp.Resource().Attributes().Get(string(semconv.ContainerIDKey))
+	assert.Equal(t, "container1", val.Str())
+	assert.Equal(t, semconv.SchemaURL, rp.SchemaUrl())
+	require.Equal(t, 1, rp.ScopeProfiles().Len())
+	sp := rp.ScopeProfiles().At(0)
+	assert.Equal(t, "agent", sp.Scope().Name())
+	assert.Equal(t, "v1", sp.Scope().Version())
+	assert.Equal(t, semconv.SchemaURL, sp.SchemaUrl())
+	require.Equal(t, 1, sp.Profiles().Len())
+	prof := sp.Profiles().At(0)
+	assert.Equal(t, pcommon.Timestamp(100), prof.Time())
+	assert.Equal(t, pcommon.Timestamp(0), prof.Duration())
+
+	t.Run("Check environment variable attribute", func(t *testing.T) {
+		foundFOOKey := false
+		foundBarValue := false
+
+		for _, attr := range profiles.ProfilesDictionary().AttributeTable().All() {
+			key := attr.Key()
+			value := attr.Value()
+			// Check if this is an environment variable attribute
+			if key == "process.environment_variable.FOO" {
+				foundFOOKey = true
+				if value.Type() == pcommon.ValueTypeStr && value.Str() == "BAR" {
+					foundBarValue = true
+				}
+			}
+		}
+		assert.True(t, foundFOOKey,
+			"Attribute 'process.environment_variable.FOO' should be in the attribute table")
+		assert.True(t, foundBarValue,
+			"Environment variable value 'bar' should be in the attribute table")
+	})
+}
+
+func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
+	d, err := New(100, 100, 100, nil)
+	require.NoError(t, err)
+
+	fileID := libpf.NewFileID(5, 6)
+	d.Executables.Add(fileID, samples.ExecInfo{FileName: "/bin/foo"})
+	d.Frames.Add(libpf.NewFrameID(fileID, 0x20), samples.SourceInfo{
+		FunctionName: libpf.Intern("f"),
+		FilePath:     libpf.Intern("/bin/foo"),
+		LineNumber:   1,
+	})
+
+	traceKey := samples.TraceAndMetaKey{ExecutablePath: "/bin/foo"}
+	events1 := map[libpf.Origin]samples.KeyToEventMapping{
+		support.TraceOriginSampling: {
+			traceKey: &samples.TraceEvents{
+				Files:      []libpf.FileID{fileID},
+				Linenos:    []libpf.AddressOrLineno{0x20},
+				FrameTypes: []libpf.FrameType{libpf.PythonFrame},
+				Timestamps: []uint64{1, 2},
+			},
+		},
+		support.TraceOriginOffCPU: {
+			traceKey: &samples.TraceEvents{
+				Files:      []libpf.FileID{fileID},
+				Linenos:    []libpf.AddressOrLineno{0x20},
+				FrameTypes: []libpf.FrameType{libpf.PythonFrame},
+				Timestamps: []uint64{3, 4},
+				OffTimes:   []int64{10, 20},
+			},
+		},
+	}
+	events2 := map[libpf.Origin]samples.KeyToEventMapping{
+		support.TraceOriginSampling: {
+			traceKey: &samples.TraceEvents{
+				Files:      []libpf.FileID{fileID},
+				Linenos:    []libpf.AddressOrLineno{0x20},
+				FrameTypes: []libpf.FrameType{libpf.PythonFrame},
+				Timestamps: []uint64{5},
+			},
+		},
+	}
+	tree := samples.TraceEventsTree{
+		"c1": events1,
+		"c2": events2,
+	}
+
+	profiles, err := d.Generate(tree, "agent", "v2")
+	require.NoError(t, err)
+	require.Equal(t, 2, profiles.ResourceProfiles().Len())
+
+	// Since map iteration order is not guaranteed, we need to check containers by their ID
+	containerProfileCounts := make(map[string]int)
+	for i := 0; i < profiles.ResourceProfiles().Len(); i++ {
+		rp := profiles.ResourceProfiles().At(i)
+		val, exists := rp.Resource().Attributes().Get(string(semconv.ContainerIDKey))
+		require.True(t, exists)
+		containerID := val.Str()
+		profileCount := rp.ScopeProfiles().At(0).Profiles().Len()
+		containerProfileCounts[containerID] = profileCount
+	}
+
+	// c1 has both origins, so 2 profiles
+	assert.Equal(t, 2, containerProfileCounts["c1"])
+	// c2 has only sampling, so 1 profile
+	assert.Equal(t, 1, containerProfileCounts["c2"])
+}
+
+func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
+	d, err := New(100, 100, 100, nil)
+	require.NoError(t, err)
+
+	fileID := libpf.NewFileID(7, 8)
+	funcName := "myfunc"
+	filePath := "/bin/bar"
+	d.Executables.Add(fileID, samples.ExecInfo{FileName: filePath})
+	d.Frames.Add(libpf.NewFrameID(fileID, 0x30), samples.SourceInfo{
+		FunctionName: libpf.Intern(funcName),
+		FilePath:     libpf.Intern(filePath),
+		LineNumber:   123,
+	})
+
+	traceKey := samples.TraceAndMetaKey{ExecutablePath: filePath}
+	events := map[libpf.Origin]samples.KeyToEventMapping{
+		support.TraceOriginSampling: {
+			traceKey: &samples.TraceEvents{
+				Files:      []libpf.FileID{fileID},
+				Linenos:    []libpf.AddressOrLineno{0x30},
+				FrameTypes: []libpf.FrameType{libpf.PythonFrame},
+				Timestamps: []uint64{42},
+			},
+		},
+	}
+	tree := samples.TraceEventsTree{
+		"c": events,
+	}
+
+	profiles, err := d.Generate(tree, "agent", "v3")
+	require.NoError(t, err)
+	dic := profiles.ProfilesDictionary()
+	// The string table should contain "" as first element, then function name and file path
+	strs := dic.StringTable().At(0)
+	assert.Contains(t, strs, "")
+	// Convert StringSlice to a Go slice for assertion
+	var stringTableSlice []string
+	for i := 0; i < dic.StringTable().Len(); i++ {
+		stringTableSlice = append(stringTableSlice, dic.StringTable().At(i))
+	}
+	assert.Contains(t, stringTableSlice, funcName)
+	assert.Contains(t, stringTableSlice, filePath)
+	// The function table should have the function name and file path indices set
+	require.Equal(t, 1, dic.FunctionTable().Len())
+	fn := dic.FunctionTable().At(0)
+	assert.Equal(t, funcName, dic.StringTable().At(int(fn.NameStrindex())))
+	assert.Equal(t, filePath, dic.StringTable().At(int(fn.FilenameStrindex())))
+}
+
+func TestGenerate_NativeFrame(t *testing.T) {
+	d, err := New(100, 100, 100, nil)
+	require.NoError(t, err)
+
+	fileID := libpf.NewFileID(9, 10)
+	filePath := "/usr/lib/libexample.so"
+	d.Executables.Add(fileID, samples.ExecInfo{FileName: filePath})
+
+	traceKey := samples.TraceAndMetaKey{
+		ExecutablePath: filePath,
+		Comm:           "native_app",
+		Pid:            789,
+		Tid:            1011,
+	}
+	events := map[libpf.Origin]samples.KeyToEventMapping{
+		support.TraceOriginSampling: {
+			traceKey: &samples.TraceEvents{
+				Files:              []libpf.FileID{fileID},
+				Linenos:            []libpf.AddressOrLineno{0x1000},
+				FrameTypes:         []libpf.FrameType{libpf.NativeFrame},
+				MappingStarts:      []libpf.Address{0x1000},
+				MappingEnds:        []libpf.Address{0x2000},
+				MappingFileOffsets: []uint64{0x100},
+				Timestamps:         []uint64{789},
+			},
+		},
+	}
+	tree := samples.TraceEventsTree{
+		"native_container": events,
+	}
+
+	profiles, err := d.Generate(tree, "agent", "v1")
+	require.NoError(t, err)
+	require.Equal(t, 1, profiles.ResourceProfiles().Len())
+
+	// Check resource profile attributes
+	rp := profiles.ResourceProfiles().At(0)
+	val, exists := rp.Resource().Attributes().Get(string(semconv.ContainerIDKey))
+	require.True(t, exists)
+	assert.Equal(t, "native_container", val.Str())
+
+	// Check scope profile
+	require.Equal(t, 1, rp.ScopeProfiles().Len())
+	sp := rp.ScopeProfiles().At(0)
+	assert.Equal(t, "agent", sp.Scope().Name())
+	assert.Equal(t, "v1", sp.Scope().Version())
+
+	// Check profile
+	require.Equal(t, 1, sp.Profiles().Len())
+	prof := sp.Profiles().At(0)
+	assert.Equal(t, pcommon.Timestamp(789), prof.Time())
+	assert.Equal(t, pcommon.Timestamp(0), prof.Duration())
+
+	// Verify profile contains one sample
+	assert.Equal(t, 1, prof.Sample().Len())
+	sample := prof.Sample().At(0)
+	assert.Len(t, sample.Value().AsRaw(), 1)
+	assert.Equal(t, int64(1), sample.Value().At(0)) // sampling count
+
+	// Check that the mapping table contains our native frame mapping
+	// (plus the dummy mapping at index 0)
+	dic := profiles.ProfilesDictionary()
+	assert.GreaterOrEqual(t, dic.MappingTable().Len(), 2,
+		"Mapping table should have dummy mapping + native frame mapping")
+
+	// Find the mapping for our native frame (not the dummy one at index 0)
+	var nativeMapping pprofile.Mapping
+	found := false
+	for i := 1; i < dic.MappingTable().Len(); i++ { // Skip dummy mapping at index 0
+		mapping := dic.MappingTable().At(i)
+		if mapping.MemoryStart() == uint64(0x1000) {
+			nativeMapping = mapping
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "Should find mapping for native frame")
+
+	// Verify mapping details
+	assert.Equal(t, uint64(0x1000), nativeMapping.MemoryStart())
+	assert.Equal(t, uint64(0x2000), nativeMapping.MemoryLimit())
+	assert.Equal(t, uint64(0x100), nativeMapping.FileOffset())
+
+	// Verify the filename is correctly set in the mapping
+	filenameStrIndex := nativeMapping.FilenameStrindex()
+	filename := dic.StringTable().At(int(filenameStrIndex))
+	assert.Equal(t, filePath, filename)
+
+	// For native frames, function information is not populated in the function table
+	// since it's resolved by the backend. The function table should be empty.
+	assert.Equal(t, 0, dic.FunctionTable().Len(),
+		"Function table should be empty for native frames")
+}

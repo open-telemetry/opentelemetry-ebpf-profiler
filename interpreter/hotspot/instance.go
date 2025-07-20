@@ -31,10 +31,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-// #include "../../support/ebpf/types.h"
-// #include "../../support/ebpf/frametypes.h"
-import "C"
-
 // heapRange contains info for an individual heap.
 type heapRange struct {
 	codeStart, codeEnd     libpf.Address
@@ -237,9 +233,9 @@ func (d *hotspotInstance) getPoolSymbol(addr libpf.Address, ndx uint16) libpf.St
 
 // getStubNameID read the stub name from the code blob at given address and generates a ID.
 func (d *hotspotInstance) getStubNameID(symbolReporter reporter.SymbolReporter, ripOrBci uint32,
-	addr libpf.Address, _ uint32) (libpf.AddressOrLineno, error) {
+	addr libpf.Address, _ uint32) libpf.AddressOrLineno {
 	if value, ok := d.addrToStubNameID.Get(addr); ok {
-		return value, nil
+		return value
 	}
 	vms := &d.d.Get().vmStructs
 	constStubNameAddr := d.rm.Ptr(addr + libpf.Address(vms.CodeBlob.Name))
@@ -263,7 +259,7 @@ func (d *hotspotInstance) getStubNameID(symbolReporter reporter.SymbolReporter, 
 	})
 	d.addrToStubNameID.Add(addr, stubID)
 
-	return stubID, nil
+	return stubID
 }
 
 // getMethod reads and returns the interesting data from "class Method" at given address
@@ -745,31 +741,31 @@ func (d *hotspotInstance) populateMainMappings(vmd *hotspotVMData,
 
 	// Set up the main eBPF info structure.
 	vms := &vmd.vmStructs
-	procInfo := C.HotspotProcInfo{
-		nmethod_deopt_offset:   C.u16(vms.Nmethod.DeoptimizeOffset),
-		nmethod_compileid:      C.u16(vms.Nmethod.CompileID),
-		nmethod_orig_pc_offset: C.u16(vms.Nmethod.OrigPcOffset),
-		codeblob_name:          C.u8(vms.CodeBlob.Name),
-		codeblob_codestart:     C.u8(vms.CodeBlob.CodeBegin),
-		codeblob_codeend:       C.u8(vms.CodeBlob.CodeEnd),
-		codeblob_framecomplete: C.u8(vms.CodeBlob.FrameCompleteOffset),
-		codeblob_framesize:     C.u8(vms.CodeBlob.FrameSize),
-		cmethod_size:           C.u8(vms.ConstMethod.Sizeof),
-		heapblock_size:         C.u8(vms.HeapBlock.Sizeof),
-		method_constmethod:     C.u8(vms.Method.ConstMethod),
-		jvm_version:            C.u8(vmd.version >> 24),
-		segment_shift:          C.u8(heap.segmentShift),
-		nmethod_uses_offsets:   C.u8(vmd.nmethodUsesOffsets),
+	procInfo := support.HotspotProcInfo{
+		Nmethod_deopt_offset:   uint16(vms.Nmethod.DeoptimizeOffset),
+		Nmethod_compileid:      uint16(vms.Nmethod.CompileID),
+		Nmethod_orig_pc_offset: uint16(vms.Nmethod.OrigPcOffset),
+		Codeblob_name:          uint8(vms.CodeBlob.Name),
+		Codeblob_codestart:     uint8(vms.CodeBlob.CodeBegin),
+		Codeblob_codeend:       uint8(vms.CodeBlob.CodeEnd),
+		Codeblob_framecomplete: uint8(vms.CodeBlob.FrameCompleteOffset),
+		Codeblob_framesize:     uint8(vms.CodeBlob.FrameSize),
+		Cmethod_size:           uint8(vms.ConstMethod.Sizeof),
+		Heapblock_size:         uint8(vms.HeapBlock.Sizeof),
+		Method_constmethod:     uint8(vms.Method.ConstMethod),
+		Jvm_version:            uint8(vmd.version >> 24),
+		Segment_shift:          uint8(heap.segmentShift),
+		Nmethod_uses_offsets:   vmd.nmethodUsesOffsets,
 	}
 
 	if vms.CodeCache.LowBound == 0 {
 		// JDK-8 has only one heap, use its bounds
-		procInfo.codecache_start = C.u64(heap.ranges[0].codeStart)
-		procInfo.codecache_end = C.u64(heap.ranges[0].codeEnd)
+		procInfo.Codecache_start = uint64(heap.ranges[0].codeStart)
+		procInfo.Codecache_end = uint64(heap.ranges[0].codeEnd)
 	} else {
 		// JDK9+ the VM tracks it separately
-		procInfo.codecache_start = C.u64(d.rm.Ptr(vms.CodeCache.LowBound + d.bias))
-		procInfo.codecache_end = C.u64(d.rm.Ptr(vms.CodeCache.HighBound + d.bias))
+		procInfo.Codecache_start = uint64(d.rm.Ptr(vms.CodeCache.LowBound + d.bias))
+		procInfo.Codecache_end = uint64(d.rm.Ptr(vms.CodeCache.HighBound + d.bias))
 	}
 
 	if err = ebpf.UpdateProcData(libpf.HotSpot, pid, unsafe.Pointer(&procInfo)); err != nil {
@@ -875,22 +871,19 @@ func (d *hotspotInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	sfCounter := successfailurecounter.New(&d.successCount, &d.failCount)
 	defer sfCounter.DefaultToFailure()
 
-	switch subtype {
-	case C.FRAME_HOTSPOT_STUB, C.FRAME_HOTSPOT_VTABLE:
+	switch uint8(subtype) {
+	case support.FrameHotspotStub, support.FrameHotspotVtable:
 		// These are stub frames that may or may not be interesting
 		// to be seen in the trace.
-		stubID, err1 := d.getStubNameID(symbolReporter, ripOrBci, ptr, ptrCheck)
-		if err1 != nil {
-			return err
-		}
+		stubID := d.getStubNameID(symbolReporter, ripOrBci, ptr, ptrCheck)
 		trace.AppendFrame(libpf.HotSpotFrame, hotspotStubsFileID, stubID)
-	case C.FRAME_HOTSPOT_INTERPRETER:
+	case support.FrameHotspotInterpreter:
 		method, err1 := d.getMethod(ptr, ptrCheck)
 		if err1 != nil {
 			return err1
 		}
 		method.symbolize(symbolReporter, ripOrBci, d, trace)
-	case C.FRAME_HOTSPOT_NATIVE:
+	case support.FrameHotspotNative:
 		jitinfo, err1 := d.getJITInfo(ptr, ptrCheck)
 		if err1 != nil {
 			return err1

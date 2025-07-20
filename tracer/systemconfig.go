@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/pacmask"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
+	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 
 	cebpf "github.com/cilium/ebpf"
@@ -23,9 +24,6 @@ import (
 	"github.com/cilium/ebpf/link"
 	log "github.com/sirupsen/logrus"
 )
-
-// #include "../support/ebpf/types.h"
-import "C"
 
 // memberByName resolves btf Member from a Struct with given name
 func memberByName(t *btf.Struct, field string) (*btf.Member, error) {
@@ -72,7 +70,7 @@ func getTSDBaseFieldSpec() string {
 }
 
 // parseBTF resolves the SystemConfig data from kernel BTF
-func parseBTF(syscfg *C.SystemConfig) error {
+func parseBTF(syscfg *support.SystemConfig) error {
 	fh, err := os.Open("/sys/kernel/btf/vmlinux")
 	if err != nil {
 		return err
@@ -94,13 +92,13 @@ func parseBTF(syscfg *C.SystemConfig) error {
 	if err != nil {
 		return err
 	}
-	syscfg.task_stack_offset = C.u32(stackOffset)
+	syscfg.Task_stack_offset = uint32(stackOffset)
 
 	tpbaseOffset, err := calculateFieldOffset(taskStruct, getTSDBaseFieldSpec())
 	if err != nil {
 		return err
 	}
-	syscfg.tpbase_offset = C.u64(tpbaseOffset)
+	syscfg.Tpbase_offset = uint64(tpbaseOffset)
 
 	return nil
 }
@@ -111,9 +109,9 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 	systemAnalysis := maps["system_analysis"]
 
 	key0 := uint32(0)
-	data := C.SystemAnalysis{
-		pid:     C.uint(os.Getpid()),
-		address: C.u64(address),
+	data := support.SystemAnalysis{
+		Pid:     uint32(os.Getpid()),
+		Address: uint64(address),
 	}
 
 	if err = systemAnalysis.Update(unsafe.Pointer(&key0), unsafe.Pointer(&data),
@@ -152,14 +150,12 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 		return nil, 0, fmt.Errorf("failed to configure tracepoint: %v", err)
 	}
 	err = systemAnalysis.Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&data))
-	progLink.Close()
+	_ = progLink.Close()
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get analysis data: %v", err)
 	}
 
-	//nolint:gocritic
-	return C.GoBytes(unsafe.Pointer(&data.code[0]), C.int(len(data.code))),
-		uint64(data.address), nil
+	return data.Code[:], data.Address, nil
 }
 
 // loadKernelCode will request the ebpf code to read the first X bytes from given address.
@@ -183,20 +179,20 @@ func readTaskStruct(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 // determineStackPtregs determines the offset of `struct pt_regs` within the entry stack
 // when the `stack` field offset within `task_struct` is already known.
 func determineStackPtregs(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	syscfg *C.SystemConfig) error {
-	data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(syscfg.task_stack_offset))
+	syscfg *support.SystemConfig) error {
+	data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(syscfg.Task_stack_offset))
 	if err != nil {
 		return err
 	}
 	stackBase := binary.LittleEndian.Uint64(data)
-	syscfg.stack_ptregs_offset = C.u32(ptregs - stackBase)
+	syscfg.Stack_ptregs_offset = uint32(ptregs - stackBase)
 	return nil
 }
 
 // determineStackLayout scans `task_struct` for offset of the `stack` field, and using
 // its value determines the offset of `struct pt_regs` within the entry stack.
 func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	syscfg *C.SystemConfig) error {
+	syscfg *support.SystemConfig) error {
 	const maxTaskStructSize = 8 * 1024
 	const maxStackSize = 64 * 1024
 
@@ -215,8 +211,8 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 				continue
 			}
 			if ptregs > stackBase && ptregs < stackBase+maxStackSize {
-				syscfg.task_stack_offset = C.u32(offs + i)
-				syscfg.stack_ptregs_offset = C.u32(ptregs - stackBase)
+				syscfg.Task_stack_offset = uint32(offs + i)
+				syscfg.Stack_ptregs_offset = uint32(ptregs - stackBase)
 				return nil
 			}
 		}
@@ -234,10 +230,10 @@ func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	} else {
 		log.Debug("PAC is not enabled on the system.")
 	}
-	syscfg := C.SystemConfig{
-		inverse_pac_mask:       ^C.u64(pacMask),
-		drop_error_only_traces: C.bool(filterErrorFrames),
-		off_cpu_threshold:      C.u32(offCPUThreshold),
+	syscfg := support.SystemConfig{
+		Inverse_pac_mask:       ^pacMask,
+		Drop_error_only_traces: filterErrorFrames,
+		Off_cpu_threshold:      offCPUThreshold,
 	}
 
 	if err := parseBTF(&syscfg); err != nil {
@@ -254,7 +250,7 @@ func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 			if err != nil {
 				return err
 			}
-			syscfg.tpbase_offset = C.u64(tpbaseOffset)
+			syscfg.Tpbase_offset = tpbaseOffset
 		}
 	} else {
 		// Sadly BTF does not currently include THREAD_SIZE which is needed
@@ -267,9 +263,9 @@ func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	}
 
 	log.Infof("Found offsets: task stack %#x, pt_regs %#x, tpbase %#x",
-		syscfg.task_stack_offset,
-		syscfg.stack_ptregs_offset,
-		syscfg.tpbase_offset)
+		syscfg.Task_stack_offset,
+		syscfg.Stack_ptregs_offset,
+		syscfg.Tpbase_offset)
 
 	key0 := uint32(0)
 	return maps["system_config"].Update(unsafe.Pointer(&key0), unsafe.Pointer(&syscfg),

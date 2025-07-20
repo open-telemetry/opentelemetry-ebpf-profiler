@@ -26,12 +26,6 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
-/*
-#include <stdint.h>
-#include "../../support/ebpf/types.h"
-*/
-import "C"
-
 const (
 	// updatePoolWorkers decides how many background workers we spawn to
 	// process map-in-map updates.
@@ -269,10 +263,10 @@ func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID 
 }
 
 func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
-	offsetRanges []util.Range) (key uint64, value C.OffsetRange, err error) {
+	offsetRanges []util.Range) (key uint64, value support.OffsetRange, err error) {
 	rLen := len(offsetRanges)
 	if rLen < 1 || rLen > 2 {
-		return 0, C.OffsetRange{}, fmt.Errorf("invalid ranges %v", offsetRanges)
+		return 0, support.OffsetRange{}, fmt.Errorf("invalid ranges %v", offsetRanges)
 	}
 	//  The keys of this map are executable-id-and-offset-into-text entries, and
 	//  the offset_range associated with them gives the precise area in that page
@@ -280,10 +274,10 @@ func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
 	//  nicely from native code into interpreted code.
 	key = uint64(fileID)
 	first := offsetRanges[0]
-	value = C.OffsetRange{
-		lower_offset1: C.u64(first.Start),
-		upper_offset1: C.u64(first.End),
-		program_index: C.u16(ebpfProgIndex),
+	value = support.OffsetRange{
+		Lower_offset1: first.Start,
+		Upper_offset1: first.End,
+		Program_index: ebpfProgIndex,
 	}
 	if len(offsetRanges) == 2 {
 		// Fields {lower,upper}_offset2 may be used to specify an optional second range
@@ -291,8 +285,8 @@ func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
 		// consists of two non-contiguous memory ranges, which may happen due to Hot/Cold
 		// split compiler optimization
 		second := offsetRanges[1]
-		value.lower_offset2 = C.u64(second.Start)
-		value.upper_offset2 = C.u64(second.End)
+		value.Lower_offset2 = second.Start
+		value.Upper_offset2 = second.End
 	}
 	return key, value, nil
 }
@@ -366,19 +360,19 @@ func (impl *ebpfMapsImpl) UpdatePidInterpreterMapping(pid libpf.PID, prefix lpm.
 	bePid := bits.ReverseBytes32(uint32(pid))
 	bePage := bits.ReverseBytes64(prefix.Key)
 
-	cKey := C.PIDPage{
-		prefixLen: C.u32(support.BitWidthPID + prefix.Length),
-		pid:       C.u32(bePid),
-		page:      C.u64(bePage),
+	cKey := support.PIDPage{
+		PrefixLen: support.BitWidthPID + prefix.Length,
+		Pid:       bePid,
+		Page:      bePage,
 	}
 	biasAndUnwindProgram, err := support.EncodeBiasAndUnwindProgram(bias, interpreterProgram)
 	if err != nil {
 		return err
 	}
 
-	cValue := C.PIDPageMappingInfo{
-		file_id:                 C.u64(fileID),
-		bias_and_unwind_program: C.u64(biasAndUnwindProgram),
+	cValue := support.PIDPageMappingInfo{
+		File_id:                 uint64(fileID),
+		Bias_and_unwind_program: biasAndUnwindProgram,
 	}
 
 	return impl.pidPageToMappingInfo.Update(unsafe.Pointer(&cKey), unsafe.Pointer(&cValue),
@@ -395,10 +389,10 @@ func (impl *ebpfMapsImpl) DeletePidInterpreterMapping(pid libpf.PID, prefix lpm.
 	bePid := bits.ReverseBytes32(uint32(pid))
 	bePage := bits.ReverseBytes64(prefix.Key)
 
-	cKey := C.PIDPage{
-		prefixLen: C.u32(support.BitWidthPID + prefix.Length),
-		pid:       C.u32(bePid),
-		page:      C.u64(bePage),
+	cKey := support.PIDPage{
+		PrefixLen: support.BitWidthPID + prefix.Length,
+		Pid:       bePid,
+		Page:      bePage,
 	}
 	return impl.pidPageToMappingInfo.Delete(unsafe.Pointer(&cKey))
 }
@@ -432,29 +426,29 @@ func (impl *ebpfMapsImpl) CollectMetrics() []metrics.Metric {
 	return counts
 }
 
-// poolPIDPage caches reusable heap-allocated C.PIDPage instances
+// poolPIDPage caches reusable heap-allocated support.PIDPage instances
 // to avoid excessive heap allocations.
 var poolPIDPage = sync.Pool{
 	New: func() any {
-		return new(C.PIDPage)
+		return new(support.PIDPage)
 	},
 }
 
-// getPIDPage initializes a C.PIDPage instance.
-func getPIDPage(pid libpf.PID, prefix lpm.Prefix) C.PIDPage {
+// getPIDPage initializes a support.PIDPage instance.
+func getPIDPage(pid libpf.PID, prefix lpm.Prefix) support.PIDPage {
 	// pid_page_to_mapping_info is an LPM trie and expects the pid and page
 	// to be in big endian format.
-	return C.PIDPage{
-		pid:       C.u32(bits.ReverseBytes32(uint32(pid))),
-		page:      C.u64(bits.ReverseBytes64(prefix.Key)),
-		prefixLen: C.u32(support.BitWidthPID + prefix.Length),
+	return support.PIDPage{
+		Pid:       bits.ReverseBytes32(uint32(pid)),
+		Page:      bits.ReverseBytes64(prefix.Key),
+		PrefixLen: support.BitWidthPID + prefix.Length,
 	}
 }
 
-// getPIDPagePooled returns a heap-allocated and initialized C.PIDPage instance.
+// getPIDPagePooled returns a heap-allocated and initialized support.PIDPage instance.
 // After usage, put the instance back into the pool with poolPIDPage.Put().
-func getPIDPagePooled(pid libpf.PID, prefix lpm.Prefix) *C.PIDPage {
-	cPIDPage := poolPIDPage.Get().(*C.PIDPage)
+func getPIDPagePooled(pid libpf.PID, prefix lpm.Prefix) *support.PIDPage {
+	cPIDPage := poolPIDPage.Get().(*support.PIDPage)
 	*cPIDPage = getPIDPage(pid, prefix)
 	return cPIDPage
 }
@@ -463,16 +457,16 @@ func getPIDPagePooled(pid libpf.PID, prefix lpm.Prefix) *C.PIDPage {
 // to avoid excessive heap allocations.
 var poolPIDPageMappingInfo = sync.Pool{
 	New: func() any {
-		return new(C.PIDPageMappingInfo)
+		return new(support.PIDPageMappingInfo)
 	},
 }
 
-// getPIDPageMappingInfo returns a heap-allocated and initialized C.PIDPageMappingInfo instance.
+// getPIDPageMappingInfo returns a heap-allocated and initialized PIDPageMappingInfo instance.
 // After usage, put the instance back into the pool with poolPIDPageMappingInfo.Put().
-func getPIDPageMappingInfo(fileID, biasAndUnwindProgram uint64) *C.PIDPageMappingInfo {
-	cInfo := poolPIDPageMappingInfo.Get().(*C.PIDPageMappingInfo)
-	cInfo.file_id = C.u64(fileID)
-	cInfo.bias_and_unwind_program = C.u64(biasAndUnwindProgram)
+func getPIDPageMappingInfo(fileID, biasAndUnwindProgram uint64) *support.PIDPageMappingInfo {
+	cInfo := poolPIDPageMappingInfo.Get().(*support.PIDPageMappingInfo)
+	cInfo.File_id = fileID
+	cInfo.Bias_and_unwind_program = biasAndUnwindProgram
 
 	return cInfo
 }
@@ -577,13 +571,13 @@ func (impl *ebpfMapsImpl) UpdateUnwindInfo(index uint16, info sdtypes.UnwindInfo
 			index, impl.unwindInfoArray.MaxEntries())
 	}
 
-	key := C.u32(index)
-	value := C.UnwindInfo{
-		opcode:      C.u8(info.Opcode),
-		fpOpcode:    C.u8(info.FPOpcode),
-		mergeOpcode: C.u8(info.MergeOpcode),
-		param:       C.s32(info.Param),
-		fpParam:     C.s32(info.FPParam),
+	key := uint32(index)
+	value := support.UnwindInfo{
+		Opcode:      info.Opcode,
+		FpOpcode:    info.FPOpcode,
+		MergeOpcode: info.MergeOpcode,
+		Param:       info.Param,
+		FpParam:     info.FPParam,
 	}
 	return impl.trackMapError(metrics.IDUnwindInfoArrayUpdate,
 		impl.unwindInfoArray.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
@@ -601,9 +595,6 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID, deltas []
 	}
 	outerMap := impl.getOuterMap(mapID)
 
-	keySize := uint32(C.sizeof_uint32_t)
-	valueSize := uint32(C.sizeof_StackDelta)
-
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return 0, fmt.Errorf("failed to increase rlimit: %v", err)
@@ -611,8 +602,8 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID, deltas []
 	defer restoreRlimit()
 	innerMap, err := cebpf.NewMap(&cebpf.MapSpec{
 		Type:       cebpf.Array,
-		KeySize:    keySize,
-		ValueSize:  valueSize,
+		KeySize:    4,
+		ValueSize:  support.Sizeof_StackDelta,
 		MaxEntries: 1 << mapID,
 	})
 	if err != nil {
@@ -639,18 +630,18 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID, deltas []
 
 	if impl.hasGenericBatchOperations {
 		innerKeys := make([]uint32, numDeltas)
-		stackDeltas := make([]C.StackDelta, numDeltas)
+		stackDeltas := make([]support.StackDelta, numDeltas)
 
 		// Prepare values for batch update.
 		for index, delta := range deltas {
 			innerKeys[index] = uint32(index)
-			stackDeltas[index].addrLow = C.uint16_t(delta.AddressLow)
-			stackDeltas[index].unwindInfo = C.uint16_t(delta.UnwindInfo)
+			stackDeltas[index].AddrLow = delta.AddressLow
+			stackDeltas[index].UnwindInfo = delta.UnwindInfo
 		}
 
 		_, err := innerMap.BatchUpdate(
 			ptrCastMarshaler[uint32](innerKeys),
-			ptrCastMarshaler[C.StackDelta](stackDeltas),
+			ptrCastMarshaler[support.StackDelta](stackDeltas),
 			&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateAny)})
 		if err != nil {
 			return 0, impl.trackMapError(metrics.IDExeIDToStackDeltasBatchUpdate,
@@ -662,10 +653,10 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID, deltas []
 	}
 
 	innerKey := uint32(0)
-	stackDelta := C.StackDelta{}
+	stackDelta := support.StackDelta{}
 	for index, delta := range deltas {
-		stackDelta.addrLow = C.uint16_t(delta.AddressLow)
-		stackDelta.unwindInfo = C.uint16_t(delta.UnwindInfo)
+		stackDelta.AddrLow = delta.AddressLow
+		stackDelta.UnwindInfo = delta.UnwindInfo
 		innerKey = uint32(index)
 		if err := innerMap.Update(unsafe.Pointer(&innerKey), unsafe.Pointer(&stackDelta),
 			cebpf.UpdateAny); err != nil {
@@ -697,28 +688,28 @@ func (impl *ebpfMapsImpl) DeleteExeIDToStackDeltas(fileID host.FileID, mapID uin
 func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPerPage []uint16,
 	mapID uint16, firstPageAddr uint64) error {
 	firstDelta := uint32(0)
-	keys := make([]C.StackDeltaPageKey, len(numDeltasPerPage))
-	values := make([]C.StackDeltaPageInfo, len(numDeltasPerPage))
+	keys := make([]support.StackDeltaPageKey, len(numDeltasPerPage))
+	values := make([]support.StackDeltaPageInfo, len(numDeltasPerPage))
 
 	// Prepare the key/value combinations that will be loaded.
 	for pageNumber, numDeltas := range numDeltasPerPage {
 		pageAddr := firstPageAddr + uint64(pageNumber)<<support.StackDeltaPageBits
-		keys[pageNumber] = C.StackDeltaPageKey{
-			fileID: C.u64(fileID),
-			page:   C.u64(pageAddr),
+		keys[pageNumber] = support.StackDeltaPageKey{
+			FileID: uint64(fileID),
+			Page:   pageAddr,
 		}
-		values[pageNumber] = C.StackDeltaPageInfo{
-			firstDelta: C.u32(firstDelta),
-			numDeltas:  C.u16(numDeltas),
-			mapID:      C.u16(mapID),
+		values[pageNumber] = support.StackDeltaPageInfo{
+			FirstDelta: firstDelta,
+			NumDeltas:  numDeltas,
+			MapID:      mapID,
 		}
 		firstDelta += uint32(numDeltas)
 	}
 
 	if impl.hasGenericBatchOperations {
 		_, err := impl.stackDeltaPageToInfo.BatchUpdate(
-			ptrCastMarshaler[C.StackDeltaPageKey](keys),
-			ptrCastMarshaler[C.StackDeltaPageInfo](values),
+			ptrCastMarshaler[support.StackDeltaPageKey](keys),
+			ptrCastMarshaler[support.StackDeltaPageInfo](values),
 			&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateNoExist)})
 		return impl.trackMapError(metrics.IDStackDeltaPageToInfoBatchUpdate, err)
 	}
@@ -735,9 +726,9 @@ func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPer
 
 // DeleteStackDeltaPage removes the entry specified by fileID and page from the eBPF map.
 func (impl *ebpfMapsImpl) DeleteStackDeltaPage(fileID host.FileID, page uint64) error {
-	key := C.StackDeltaPageKey{
-		fileID: C.u64(fileID),
-		page:   C.u64(page),
+	key := support.StackDeltaPageKey{
+		FileID: uint64(fileID),
+		Page:   page,
 	}
 	return impl.trackMapError(metrics.IDStackDeltaPageToInfoDelete,
 		impl.stackDeltaPageToInfo.Delete(unsafe.Pointer(&key)))
@@ -786,7 +777,7 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm
 
 func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid libpf.PID, prefixes []lpm.Prefix) (int,
 	error) {
-	var cKey = &C.PIDPage{}
+	var cKey = &support.PIDPage{}
 	var deleted int
 	var combinedErrors error
 	for _, prefix := range prefixes {
@@ -804,12 +795,13 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid libpf.PID, prefixes
 func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid libpf.PID, prefixes []lpm.Prefix) (int,
 	error) {
 	// Prepare all keys based on the given prefixes.
-	cKeys := make([]C.PIDPage, 0, len(prefixes))
+	cKeys := make([]support.PIDPage, 0, len(prefixes))
 	for _, prefix := range prefixes {
 		cKeys = append(cKeys, getPIDPage(pid, prefix))
 	}
 
-	deleted, err := impl.pidPageToMappingInfo.BatchDelete(ptrCastMarshaler[C.PIDPage](cKeys), nil)
+	deleted, err := impl.pidPageToMappingInfo.BatchDelete(
+		ptrCastMarshaler[support.PIDPage](cKeys), nil)
 	return deleted, impl.trackMapError(metrics.IDPidPageToMappingInfoBatchDelete, err)
 }
 
@@ -823,20 +815,20 @@ func (impl *ebpfMapsImpl) LookupPidPageInformation(pid uint32, page uint64) (hos
 	bePid := bits.ReverseBytes32(pid)
 	bePage := bits.ReverseBytes64(page)
 
-	cKey := C.PIDPage{
-		prefixLen: C.u32(support.BitWidthPID + support.BitWidthPage),
-		pid:       C.u32(bePid),
-		page:      C.u64(bePage),
+	cKey := support.PIDPage{
+		PrefixLen: uint32(support.BitWidthPID + support.BitWidthPage),
+		Pid:       bePid,
+		Page:      bePage,
 	}
-	cValue := C.PIDPageMappingInfo{}
+	cValue := support.PIDPageMappingInfo{}
 
 	if err := impl.pidPageToMappingInfo.Lookup(unsafe.Pointer(&cKey),
 		unsafe.Pointer(&cValue)); err != nil {
 		return host.FileID(0), 0, fmt.Errorf("failed to lookup page 0x%x for PID %d: %v",
 			page, pid, err)
 	}
-	bias, _ := support.DecodeBiasAndUnwindProgram(uint64(cValue.bias_and_unwind_program))
-	return host.FileID(cValue.file_id), bias, nil
+	bias, _ := support.DecodeBiasAndUnwindProgram(cValue.Bias_and_unwind_program)
+	return host.FileID(cValue.File_id), bias, nil
 }
 
 // SupportsGenericBatchOperations returns true if the kernel supports eBPF batch operations

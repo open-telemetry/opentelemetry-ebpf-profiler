@@ -23,12 +23,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
+	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
-
-// #include "../../support/ebpf/types.h"
-import "C"
 
 type perlInstance struct {
 	interpreter.InstanceStubs
@@ -39,7 +37,7 @@ type perlInstance struct {
 
 	d    *perlData
 	rm   remotememory.RemoteMemory
-	bias C.u64
+	bias libpf.Address
 
 	// addrToHEK maps a PERL Hash Element Key (string with hash) to a Go string
 	addrToHEK *freelru.LRU[libpf.Address, string]
@@ -84,42 +82,42 @@ func hashCOPKey(k copKey) uint32 {
 func (i *perlInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	tsdInfo tpbase.TSDInfo) error {
 	d := i.d
-	stateInTSD := C.u8(0)
+	stateInTSD := uint8(0)
 	if d.stateInTSD {
 		stateInTSD = 1
 	}
 	vms := &d.vmStructs
-	data := C.PerlProcInfo{
-		version:    C.uint(d.version),
-		stateAddr:  C.u64(d.stateAddr) + i.bias,
-		stateInTSD: stateInTSD,
+	data := support.PerlProcInfo{
+		Version:    d.version,
+		StateAddr:  uint64(d.stateAddr) + uint64(i.bias),
+		StateInTSD: stateInTSD,
 
-		tsdInfo: C.TSDInfo{
-			offset:     C.s16(tsdInfo.Offset),
-			multiplier: C.u8(tsdInfo.Multiplier),
-			indirect:   C.u8(tsdInfo.Indirect),
+		TsdInfo: support.TSDInfo{
+			Offset:     tsdInfo.Offset,
+			Multiplier: tsdInfo.Multiplier,
+			Indirect:   tsdInfo.Indirect,
 		},
 
-		interpreter_curcop:       C.u16(vms.interpreter.curcop),
-		interpreter_curstackinfo: C.u16(vms.interpreter.curstackinfo),
+		Interpreter_curcop:       uint16(vms.interpreter.curcop),
+		Interpreter_curstackinfo: uint16(vms.interpreter.curstackinfo),
 
-		si_cxstack: C.u8(vms.stackinfo.si_cxstack),
-		si_next:    C.u8(vms.stackinfo.si_next),
-		si_cxix:    C.u8(vms.stackinfo.si_cxix),
-		si_type:    C.u8(vms.stackinfo.si_type),
+		Si_cxstack: uint8(vms.stackinfo.si_cxstack),
+		Si_next:    uint8(vms.stackinfo.si_next),
+		Si_cxix:    uint8(vms.stackinfo.si_cxix),
+		Si_type:    uint8(vms.stackinfo.si_type),
 
-		context_type:          C.u8(vms.context.cx_type),
-		context_blk_oldcop:    C.u8(vms.context.blk_oldcop),
-		context_blk_sub_retop: C.u8(vms.context.blk_sub_retop),
-		context_blk_sub_cv:    C.u8(vms.context.blk_sub_cv),
-		context_sizeof:        C.u8(vms.context.sizeof),
+		Context_type:          uint8(vms.context.cx_type),
+		Context_blk_oldcop:    uint8(vms.context.blk_oldcop),
+		Context_blk_sub_retop: uint8(vms.context.blk_sub_retop),
+		Context_blk_sub_cv:    uint8(vms.context.blk_sub_cv),
+		Context_sizeof:        uint8(vms.context.sizeof),
 
-		sv_flags:  C.u8(vms.sv.sv_flags),
-		sv_any:    C.u8(vms.sv.sv_any),
-		svu_gp:    C.u8(vms.sv.svu_gp),
-		xcv_flags: C.u8(vms.xpvcv.xcv_flags),
-		xcv_gv:    C.u8(vms.xpvcv.xcv_gv),
-		gp_egv:    C.u8(vms.gp.gp_egv),
+		Sv_flags:  uint8(vms.sv.sv_flags),
+		Sv_any:    uint8(vms.sv.sv_any),
+		Svu_gp:    uint8(vms.sv.svu_gp),
+		Xcv_flags: uint8(vms.xpvcv.xcv_flags),
+		Xcv_gv:    uint8(vms.xpvcv.xcv_gv),
+		Gp_egv:    uint8(vms.gp.gp_egv),
 	}
 
 	err := ebpf.UpdateProcData(libpf.Perl, pid, unsafe.Pointer(&data))
