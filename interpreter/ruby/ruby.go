@@ -371,13 +371,6 @@ func immBlockRankGet(v uint64, i uint32) uint32 {
 	return uint32(tmp) & 0x7f
 }
 
-// uint64ToBytes is a helper function to convert an uint64 into its []byte representation.
-func uint64ToBytes(val uint64) []byte {
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, val)
-	return b
-}
-
 // getObsoleteRubyLineNo implements a binary search algorithm to get the line number for a position.
 //
 // Implementation according to Ruby:
