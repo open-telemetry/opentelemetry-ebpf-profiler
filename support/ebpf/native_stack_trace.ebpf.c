@@ -191,7 +191,9 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
     // Do the binary search, up to 16 iterations. Deltas are paged to 64kB pages.
     // They can contain at most 64kB deltas even if everything is single byte opcodes.
     int i;
+#if !defined(TESTING_COREDUMP)
 #pragma unroll
+#endif
     for (i = 0; i < 16; i++) {
       if (!bsearch_step(inner_map, &lo, &hi, page_offset)) {
         break;
@@ -590,7 +592,9 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
   Trace *trace = &record->trace;
   int unwinder;
   ErrorCode error;
+#if !defined(TESTING_COREDUMP)
 #pragma unroll
+#endif
   for (int i = 0; i < NATIVE_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
 

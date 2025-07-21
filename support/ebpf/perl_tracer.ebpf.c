@@ -291,7 +291,9 @@ static EBPF_INLINE int walk_perl_stack(PerCPURecord *record, const PerlProcInfo 
 
   int unwinder       = PROG_UNWIND_PERL;
   const void *cxbase = record->perlUnwindState.cxbase;
+#if !defined(TESTING_COREDUMP)
 #pragma unroll
+#endif
   for (u32 i = 0; i < PERL_FRAMES_PER_PROGRAM; ++i) {
     // Test first the stack 'cxcur' validity. Some stacks can have 'cxix=-1'
     // when they are being constructed or ran.
