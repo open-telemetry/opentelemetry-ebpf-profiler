@@ -87,6 +87,45 @@ func trimMappingPath(path string) string {
 	return path
 }
 
+// Fast hex parsing function optimized for performance
+func fastParseHex(s string) (uint64, error) {
+	if s == "" {
+		return 0, strconv.ErrSyntax
+	}
+	var result uint64
+	for i := 0; i < len(s); i++ {
+		result <<= 4
+		c := s[i]
+		switch {
+		case c >= '0' && c <= '9':
+			result |= uint64(c - '0')
+		case c >= 'a' && c <= 'f':
+			result |= uint64(c - 'a' + 10)
+		case c >= 'A' && c <= 'F':
+			result |= uint64(c - 'A' + 10)
+		default:
+			return 0, strconv.ErrSyntax
+		}
+	}
+	return result, nil
+}
+
+// Fast decimal parsing function optimized for performance
+func fastParseDecimal(s string) (uint64, error) {
+	if s == "" {
+		return 0, strconv.ErrSyntax
+	}
+	var result uint64
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c < '0' || c > '9' {
+			return 0, strconv.ErrSyntax
+		}
+		result = result*10 + uint64(c-'0')
+	}
+	return result, nil
+}
+
 func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 	numParseErrors := uint32(0)
 	mappings := make([]Mapping, 0, 32)
@@ -139,7 +178,8 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 		if flags&(elf.PF_R|elf.PF_X) == 0 {
 			continue
 		}
-		inode, err := strconv.ParseUint(fields[4], 10, 64)
+
+		inode, err := fastParseDecimal(fields[4])
 		if err != nil {
 			log.Debugf("inode: failed to convert %s to uint64: %v", fields[4], err)
 			numParseErrors++
@@ -150,13 +190,13 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 			numParseErrors++
 			continue
 		}
-		major, err := strconv.ParseUint(devs[0], 16, 64)
+		major, err := fastParseHex(devs[0])
 		if err != nil {
 			log.Debugf("major device: failed to convert %s to uint64: %v", devs[0], err)
 			numParseErrors++
 			continue
 		}
-		minor, err := strconv.ParseUint(devs[1], 16, 64)
+		minor, err := fastParseHex(devs[1])
 		if err != nil {
 			log.Debugf("minor device: failed to convert %s to uint64: %v", devs[1], err)
 			numParseErrors++
@@ -181,13 +221,13 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 			path = libpf.Intern(trimMappingPath(fields[5]))
 		}
 
-		vaddr, err := strconv.ParseUint(addrs[0], 16, 64)
+		vaddr, err := fastParseHex(addrs[0])
 		if err != nil {
 			log.Debugf("vaddr: failed to convert %s to uint64: %v", addrs[0], err)
 			numParseErrors++
 			continue
 		}
-		vend, err := strconv.ParseUint(addrs[1], 16, 64)
+		vend, err := fastParseHex(addrs[1])
 		if err != nil {
 			log.Debugf("vend: failed to convert %s to uint64: %v", addrs[1], err)
 			numParseErrors++
@@ -195,7 +235,7 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 		}
 		length := vend - vaddr
 
-		fileOffset, err := strconv.ParseUint(fields[2], 16, 64)
+		fileOffset, err := fastParseHex(fields[2])
 		if err != nil {
 			log.Debugf("fileOffset: failed to convert %s to uint64: %v", fields[2], err)
 			numParseErrors++

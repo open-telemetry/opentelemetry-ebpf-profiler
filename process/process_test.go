@@ -122,3 +122,13 @@ func TestNewPIDOfSelf(t *testing.T) {
 	require.Equal(t, uint32(0), numParseErrors)
 	assert.NotEmpty(t, mappings)
 }
+
+func BenchmarkParseMappings(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		reader := strings.NewReader(testMappings)
+		_, _, err := parseMappings(reader)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
