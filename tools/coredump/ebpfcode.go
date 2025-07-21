@@ -21,6 +21,7 @@ package main
 #cgo CFLAGS: -Wno-sign-compare
 #cgo CFLAGS: -Wno-pass-failed
 #cgo CFLAGS: -Wno-unused-parameter
+#cgo CFLAGS: -fno-strict-aliasing
 #include "ebpfcode.h"
 */
 import "C"
