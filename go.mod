@@ -11,6 +11,7 @@ require (
 	github.com/elastic/go-freelru v0.16.0
 	github.com/elastic/go-perf v0.0.0-20241029065020-30bec95324b8
 	github.com/google/uuid v1.6.0
+	github.com/grafana/pyroscope/lidia v0.0.0-20250716102313-506840f4afcd
 	github.com/jsimonetti/rtnetlink/v2 v2.0.3
 	github.com/klauspost/compress v1.18.0
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d

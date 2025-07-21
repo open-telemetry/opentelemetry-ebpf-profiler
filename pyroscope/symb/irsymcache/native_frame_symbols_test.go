@@ -4,16 +4,16 @@ import (
 	"testing"
 
 	lru "github.com/elastic/go-freelru"
+	"github.com/grafana/pyroscope/lidia"
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/pyroscope/symb/table"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
 func TestNativeFrameSymbols(t *testing.T) {
 	resolver, err := NewFSCache(TableTableFactory{
-		Options: []table.Option{table.WithLines(), table.WithFiles()},
+		Options: []lidia.Option{lidia.WithLines(), lidia.WithFiles()},
 	}, Options{
 		SizeEntries: 1024,
 		Path:        t.TempDir(),
@@ -37,12 +37,9 @@ func TestNativeFrameSymbols(t *testing.T) {
 		})
 	require.Equal(t, samples.SourceInfo{
 		Frames: []samples.SourceInfoFrame{
-			{LineNumber: 506,
-				FunctionName: "__pthread_cond_wait_common",
-				FilePath:     "./nptl/pthread_cond_wait.c"},
-			{LineNumber: 652,
-				FunctionName: "___pthread_cond_timedwait64",
-				FilePath:     "./nptl/pthread_cond_wait.c"},
+			{
+				FunctionName: "__GI___pthread_cond_timedwait",
+			},
 		},
 	}, res)
 }

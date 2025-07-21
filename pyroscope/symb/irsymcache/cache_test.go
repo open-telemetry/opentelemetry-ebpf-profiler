@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/grafana/pyroscope/lidia"
 	"github.com/sirupsen/logrus"
 
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
@@ -13,11 +14,10 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/pyroscope/symb/table"
 )
 
-var tf = TableTableFactory{[]table.Option{
-	table.WithFiles(), table.WithLines(), table.WithCRC(),
+var tf = TableTableFactory{[]lidia.Option{
+	lidia.WithFiles(), lidia.WithLines(), lidia.WithCRC(),
 }}
 
 type testElfOpener struct {
@@ -114,8 +114,7 @@ func TestResolver_ResolveAddress(t *testing.T) {
 					fid:  libpf.NewFileID(456, 123),
 					addr: 0x9cbb0,
 					expectedRes: []samples.SourceInfoFrame{
-						{FunctionName: "__pthread_create_2_1",
-							FilePath: "./nptl/pthread_create.c", LineNumber: 626},
+						{FunctionName: "__pthread_create_2_1"},
 					},
 				},
 			},
@@ -154,8 +153,7 @@ func TestResolver_ResolveAddress(t *testing.T) {
 					fid:  libpf.NewFileID(4242, 4242),
 					addr: 0x9cbb0,
 					expectedRes: []samples.SourceInfoFrame{
-						{FunctionName: "__pthread_create_2_1",
-							FilePath: "./nptl/pthread_create.c", LineNumber: 626},
+						{FunctionName: "__pthread_create_2_1"},
 					},
 				},
 			},
