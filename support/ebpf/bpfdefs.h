@@ -13,8 +13,6 @@ extern u32 with_debug_output;
 
 #if defined(TESTING_COREDUMP)
 
-  #define UNROLL(x)
-
   // BPF_RODATA_VAR declares a global variable in the .rodata section,
   // ensuring it's not optimized away by the compiler or linker.
   //
