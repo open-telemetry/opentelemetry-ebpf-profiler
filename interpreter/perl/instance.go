@@ -239,7 +239,7 @@ func (i *perlInstance) getHEK(addr libpf.Address) (string, error) {
 
 	defer func() {
 		// Reset memory and return it for reuse.
-		for j := uint32(0); j < hekLen; j++ {
+		for j := range hekLen {
 			(*syncPoolData)[j] = 0x0
 		}
 		i.memPool.Put(syncPoolData)

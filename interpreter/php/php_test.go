@@ -47,8 +47,6 @@ func TestVersionExtract(t *testing.T) {
 	}
 
 	for name, test := range tests {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			v, err := versionExtract(test.given)
 			assert.Equal(t, test.expected, v)

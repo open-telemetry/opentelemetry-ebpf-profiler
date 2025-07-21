@@ -24,7 +24,6 @@ func TestCoreDumps(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, filename := range cases {
-		filename := filename
 		t.Run(filename, func(t *testing.T) {
 			testCase, err := readTestCase(filename)
 			require.NoError(t, err)

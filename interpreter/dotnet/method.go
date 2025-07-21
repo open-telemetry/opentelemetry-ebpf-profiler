@@ -66,7 +66,7 @@ func (m *dotnetMethod) mapPCOffsetToILOffset(pcOffset uint32, findCall bool) uin
 	nativeOffset := uint32(0)
 	ilOffset := uint32(0)
 	lastCallILOffset := uint32(0)
-	for i := uint32(0); i < numEntries; i++ {
+	for i := range numEntries {
 		nativeOffset += nr.Uint32()
 		if findCall && nativeOffset >= pcOffset {
 			// If finding call site, always return lastCallILOffset.
@@ -109,7 +109,7 @@ func (m *dotnetMethod) dumpBounds() {
 	// Decode Bounds Info portion of DebugInfo
 	// https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/debuginfostore.cpp#L289-L310
 	nativeOffset := uint32(0)
-	for i := uint32(0); i < numEntries; i++ {
+	for i := range numEntries {
 		nativeOffset += nr.Uint32()
 		ilOffset := uint32(int32(nr.Uint32()) + mappingTypeMaxValue)
 		sourceFlags := nr.Uint32()
@@ -130,7 +130,7 @@ func dumpRichDebugInfo(richInfo []byte) {
 	// Decode Rich Debug info's Inline Tree Nodes
 	// https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/debuginfostore.cpp#L404-L429
 	var ilOffset, child, sibling int32
-	for i := uint32(0); i < numInlineTree; i++ {
+	for range numInlineTree {
 		ptr := nr.Ptr()
 		ilOffset += nr.Int32()
 		child += nr.Int32()
@@ -144,7 +144,7 @@ func dumpRichDebugInfo(richInfo []byte) {
 	nativeOffset := uint32(0)
 	ilOffset = 0
 	inlinee := int32(0)
-	for i := uint32(0); i < numRichOffsets; i++ {
+	for range numRichOffsets {
 		nativeOffset += nr.Uint32()
 		inlinee += nr.Int32()
 		ilOffset += nr.Int32()

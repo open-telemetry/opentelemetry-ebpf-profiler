@@ -140,7 +140,7 @@ func mainWithExitCode() exitCode {
 	return exitSuccess
 }
 
-func failure(msg string, args ...interface{}) exitCode {
+func failure(msg string, args ...any) exitCode {
 	log.Errorf(msg, args...)
 	return exitFailure
 }

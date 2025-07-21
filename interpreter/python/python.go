@@ -13,6 +13,7 @@ import (
 	"io"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -606,10 +607,8 @@ func fieldByPythonName(obj reflect.Value, fieldName string) reflect.Value {
 	for i := 0; i < obj.NumField(); i++ {
 		objField := objType.Field(i)
 		if nameTag, ok := objField.Tag.Lookup("name"); ok {
-			for _, pythonName := range strings.Split(nameTag, ",") {
-				if fieldName == pythonName {
-					return obj.Field(i)
-				}
+			if slices.Contains(strings.Split(nameTag, ","), fieldName) {
+				return obj.Field(i)
 			}
 		}
 		if fieldName == objField.Name {
@@ -711,12 +710,10 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		if err != nil {
 			return nil, err
 		}
-		for _, n := range needed {
-			if libpythonRegex.MatchString(n) {
-				// 'python' linked with 'libpython'. The beef is in the library,
-				// so do not try to inspect the shim main binary.
-				return nil, nil
-			}
+		if slices.ContainsFunc(needed, libpythonRegex.MatchString) {
+			// 'python' linked with 'libpython'. The beef is in the library,
+			// so do not try to inspect the shim main binary.
+			return nil, nil
 		}
 	}
 
