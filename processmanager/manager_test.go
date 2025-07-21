@@ -121,7 +121,7 @@ var _ nativeunwind.StackDeltaProvider = (*dummyStackDeltaProvider)(nil)
 // these files afterwards.
 func generateDummyFiles(t *testing.T, num int) []string {
 	t.Helper()
-	var files []string
+	files := make([]string, 0, num)
 
 	for i := range num {
 		name := fmt.Sprintf("dummy%d", i)
