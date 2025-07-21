@@ -23,7 +23,6 @@ import (
 
 const (
 	ExecutableCacheLifetime = 1 * time.Hour
-	FrameMapLifetime        = 1 * time.Hour
 )
 
 // DummyFileID is used as the FileID for a dummy mapping
