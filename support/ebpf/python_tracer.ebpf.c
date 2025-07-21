@@ -163,7 +163,7 @@ walk_python_stack(PerCPURecord *record, const PyProcInfo *pyinfo, int *unwinder)
   *unwinder       = PROG_UNWIND_STOP;
 
 #if !defined(TESTING_COREDUMP)
-#pragma unroll
+  #pragma unroll
 #endif
   for (u32 i = 0; i < FRAMES_PER_WALK_PYTHON_STACK; ++i) {
     bool continue_with_next;

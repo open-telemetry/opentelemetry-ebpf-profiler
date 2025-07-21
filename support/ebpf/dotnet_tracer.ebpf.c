@@ -107,7 +107,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
       int pos64 = (map_elements - 2) / 2;
       u64 val64 = scratch->map64[--pos64];
 #if !defined(TESTING_COREDUMP)
-#pragma unroll 256
+  #pragma unroll 256
 #endif
       // the loop iterations is number of u64 elements minus two:
       // - the last element special handled earlier
@@ -148,7 +148,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
 
   // Decode the code start info from the entry
 #if !defined(TESTING_COREDUMP)
-#pragma unroll
+  #pragma unroll
 #endif
   for (int i = 0; i < DOTNET_CODE_NIBBLES_PER_ENTRY; i++) {
     u8 nybble = val & 0xf;
@@ -308,7 +308,7 @@ static EBPF_INLINE int unwind_dotnet(struct pt_regs *ctx)
   increment_metric(metricID_UnwindDotnetAttempts);
 
 #if !defined(TESTING_COREDUMP)
-#pragma unroll
+  #pragma unroll
 #endif
   for (int i = 0; i < DOTNET_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;

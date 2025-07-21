@@ -69,7 +69,7 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, s32 kstack)
   trace->stack_len       = MAX_FRAME_UNWINDS;
   trace->kernel_stack_id = kstack;
 #if !defined(TESTING_COREDUMP)
-#pragma unroll
+  #pragma unroll
 #endif
   for (u64 i = 0; i < MAX_FRAME_UNWINDS; ++i) {
     // NOTE: this init schema eats up a lot of instructions. If we need more

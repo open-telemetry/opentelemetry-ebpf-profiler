@@ -254,7 +254,7 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   // I'm not sure this is necessary since we only increment len after
   // we successfully write the label.
 #if !defined(TESTING_COREDUMP)
-#pragma unroll
+  #pragma unroll
 #endif
   for (int i = 0; i < sizeof(CustomLabel) * MAX_CUSTOM_LABELS / 8; i++) {
     labels_space[i] = 0;
