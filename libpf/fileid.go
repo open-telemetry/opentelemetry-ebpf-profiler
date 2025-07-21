@@ -34,6 +34,11 @@ func NewFileID(hi, lo uint64) FileID {
 	return FileID{basehash.New128(hi, lo)}
 }
 
+// ZeroFileID returns a special ID with all bits set to 0.
+func ZeroFileID() FileID {
+	return FileID{basehash.New128(0, 0)}
+}
+
 // NewStubFileID returns a FrameType specific stub FileID.
 func NewStubFileID(typ FrameType) FileID {
 	return FileID{basehash.New128(0x578b, uint64(0x1d00|typ))}
