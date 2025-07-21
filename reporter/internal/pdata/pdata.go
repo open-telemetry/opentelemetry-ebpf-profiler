@@ -24,7 +24,7 @@ type Pdata struct {
 	ExtraSampleAttrProd samples.SampleAttrProducer
 }
 
-func New(samplesPerSecond int, executablesCacheElements, framesCacheElements uint32,
+func New(samplesPerSecond int, executablesCacheElements uint32,
 	extra samples.SampleAttrProducer) (*Pdata, error) {
 	executables, err :=
 		lru.NewSynced[libpf.FileID, samples.ExecInfo](executablesCacheElements, libpf.FileID.Hash32)

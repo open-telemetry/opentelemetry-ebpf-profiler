@@ -167,7 +167,7 @@ func TestFunctionTableOrder(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := New(100, 100, 100, nil)
+			d, err := New(100, 100, nil)
 			require.NoError(t, err)
 			for k, v := range tt.executables {
 				d.Executables.Add(k, v)
@@ -219,7 +219,7 @@ func TestProfileDuration(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := New(100, 100, 100, nil)
+			d, err := New(100, 100, nil)
 			require.NoError(t, err)
 
 			tree := make(samples.TraceEventsTree)
@@ -234,7 +234,7 @@ func TestProfileDuration(t *testing.T) {
 	}
 }
 func TestGenerate_EmptyTree(t *testing.T) {
-	d, err := New(100, 100, 100, nil)
+	d, err := New(100, 100, nil)
 	require.NoError(t, err)
 
 	tree := make(samples.TraceEventsTree)
@@ -258,7 +258,7 @@ func singleFrameTrace(ty libpf.FrameType, fileID libpf.FileID, lineno libpf.Addr
 }
 
 func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
-	d, err := New(100, 100, 100, nil)
+	d, err := New(100, 100, nil)
 	require.NoError(t, err)
 
 	fileID := libpf.NewFileID(1, 2)
@@ -326,7 +326,7 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 }
 
 func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
-	d, err := New(100, 100, 100, nil)
+	d, err := New(100, 100, nil)
 	require.NoError(t, err)
 
 	fileID := libpf.NewFileID(5, 6)
@@ -384,7 +384,7 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 }
 
 func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
-	d, err := New(100, 100, 100, nil)
+	d, err := New(100, 100, nil)
 	require.NoError(t, err)
 
 	fileID := libpf.NewFileID(7, 8)
@@ -441,7 +441,7 @@ func singleFrameNative(fileID libpf.FileID, lineno libpf.AddressOrLineno,
 }
 
 func TestGenerate_NativeFrame(t *testing.T) {
-	d, err := New(100, 100, 100, nil)
+	d, err := New(100, 100, nil)
 	require.NoError(t, err)
 
 	fileID := libpf.NewFileID(9, 10)
