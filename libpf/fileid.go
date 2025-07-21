@@ -34,11 +34,6 @@ func NewFileID(hi, lo uint64) FileID {
 	return FileID{basehash.New128(hi, lo)}
 }
 
-// NewStubFileID returns a FrameType specific stub FileID.
-func NewStubFileID(typ FrameType) FileID {
-	return FileID{basehash.New128(0x578b, uint64(0x1d00|typ))}
-}
-
 // FileIDFromBytes parses a byte slice into the internal data representation for a file ID.
 func FileIDFromBytes(b []byte) (FileID, error) {
 	// We need to check for nil since byte slice fields in protobuf messages can be optional.

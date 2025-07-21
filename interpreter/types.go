@@ -147,11 +147,9 @@ type Instance interface {
 	// introspection data has been updated.
 	UpdateTSDInfo(ebpf EbpfHandler, pid libpf.PID, info tpbase.TSDInfo) error
 
-	// Symbolize requests symbolization of the given frame, and dispatches this symbolization
-	// to the collection agent. The frame's contents (frame type, file ID and line number)
-	// are appended to newTrace.
-	Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame,
-		trace *libpf.Trace) error
+	// Symbolize converts one ebpf frame to one or more (if inlining was expanded) libpf.Frames.
+	// The frames' contents are appeneded to frames.
+	Symbolize(ebpfFrame *host.Frame, frames *libpf.Frames) error
 
 	// GetAndResetMetrics collects the metrics from the Instance and resets
 	// the counters to their initial value.

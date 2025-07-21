@@ -254,20 +254,11 @@ func (mockup *ebpfMapsMockup) SupportsLPMTrieBatchOperations() bool { return fal
 
 type symbolReporterMockup struct{}
 
-func (s *symbolReporterMockup) ReportFallbackSymbol(_ libpf.FrameID, _ string) {}
-
 func (s *symbolReporterMockup) ExecutableKnown(_ libpf.FileID) bool {
 	return true
 }
 
 func (s *symbolReporterMockup) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
-}
-
-func (s *symbolReporterMockup) FrameKnown(_ libpf.FrameID) bool {
-	return true
-}
-
-func (s *symbolReporterMockup) FrameMetadata(_ *reporter.FrameMetadataArgs) {
 }
 
 var _ reporter.SymbolReporter = (*symbolReporterMockup)(nil)
@@ -305,8 +296,8 @@ func TestInterpreterConvertTrace(t *testing.T) {
 		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			mapper := NewMapFileIDMapper()
-			for i := range testcase.trace.Frames {
-				mapper.Set(testcase.trace.Frames[i].File, testcase.expect.Files[i])
+			for i, f := range testcase.trace.Frames {
+				mapper.Set(f.File, testcase.expect.Frames[i].Value().File)
 			}
 
 			// For this test do not include interpreters.
@@ -331,8 +322,7 @@ func TestInterpreterConvertTrace(t *testing.T) {
 
 			testcase.expect.Hash = traceutil.HashTrace(testcase.expect)
 			if testcase.expect.Hash == newTrace.Hash {
-				assert.Equal(t, testcase.expect.Linenos, newTrace.Linenos)
-				assert.Equal(t, testcase.expect.Files, newTrace.Files)
+				assert.Equal(t, testcase.expect, newTrace)
 			}
 		})
 	}
@@ -346,18 +336,13 @@ func getExpectedTrace(origTrace *host.Trace, linenos []libpf.AddressOrLineno) *l
 		Hash: libpf.NewTraceHash(uint64(origTrace.Hash), uint64(origTrace.Hash)),
 	}
 
-	for _, frame := range origTrace.Frames {
-		newTrace.Files = append(newTrace.Files, libpf.NewFileID(uint64(frame.File), 0))
-		newTrace.FrameTypes = append(newTrace.FrameTypes, frame.Type)
-		if linenos == nil {
-			newTrace.Linenos = append(newTrace.Linenos, frame.Lineno)
+	for i, frame := range origTrace.Frames {
+		lineno := frame.Lineno
+		if linenos != nil {
+			lineno = linenos[i]
 		}
+		newTrace.AppendFrame(frame.Type, libpf.NewFileID(uint64(frame.File), 0), lineno)
 	}
-
-	if linenos != nil {
-		newTrace.Linenos = linenos
-	}
-
 	return newTrace
 }
 

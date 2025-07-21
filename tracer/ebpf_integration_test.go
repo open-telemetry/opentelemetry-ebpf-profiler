@@ -74,13 +74,13 @@ func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
 	require.NoError(t, err)
 }
 
-func validateTrace(t *testing.T, numKernelFrames int, expected, returned *host.Trace) {
+func validateTrace(t *testing.T, expected, returned *host.Trace) {
 	t.Helper()
 
-	assert.Equal(t, len(expected.Frames), len(returned.Frames)-numKernelFrames)
+	require.Len(t, returned.Frames, len(expected.Frames))
 
 	for i, expFrame := range expected.Frames {
-		retFrame := returned.Frames[numKernelFrames+i]
+		retFrame := returned.Frames[i]
 		assert.Equal(t, expFrame.File, retFrame.File)
 		assert.Equal(t, expFrame.Lineno, retFrame.Lineno)
 		assert.Equal(t, expFrame.Type, retFrame.Type)
@@ -203,14 +203,9 @@ Loop:
 			trace, ok := traces[testcase.id]
 			require.Truef(t, ok, "trace ID %d not received", testcase.id)
 
-			var numKernelFrames int
-			for _, frame := range trace.Frames {
-				if frame.Type == support.FrameMarkerKernel {
-					numKernelFrames++
-				}
-			}
+			numKernelFrames := len(trace.KernelFrames)
+			userspaceFrameCount := len(trace.Frames)
 
-			userspaceFrameCount := len(trace.Frames) - numKernelFrames
 			assert.Equal(t, len(testcase.userSpaceTrace.Frames), userspaceFrameCount)
 			assert.False(t, !testcase.hasKernelFrames && numKernelFrames > 0,
 				"unexpected kernel frames")
@@ -227,7 +222,7 @@ Loop:
 			t.Logf("Received %d user frames and %d kernel frames",
 				userspaceFrameCount, numKernelFrames)
 
-			validateTrace(t, numKernelFrames, &testcase.userSpaceTrace, trace)
+			validateTrace(t, &testcase.userSpaceTrace, trace)
 		})
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"math/bits"
 	"regexp"
 	"runtime"
@@ -28,7 +27,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -253,11 +251,11 @@ type rubyIseq struct {
 	// sourceFileName is the extracted filename field
 	sourceFileName libpf.String
 
-	// fileID is the synthesized methodID
-	fileID libpf.FileID
+	// functionName is the function name for this sequence
+	functionName libpf.String
 
 	// line of code in source file for this instruction sequence
-	line libpf.AddressOrLineno
+	line libpf.SourceLineno
 }
 
 type rubyInstance struct {
@@ -411,13 +409,6 @@ func smallBlockRankGet(v uint64, i uint32) uint32 {
 func immBlockRankGet(v uint64, i uint32) uint32 {
 	tmp := v >> (i * 7)
 	return uint32(tmp) & 0x7f
-}
-
-// uint64ToBytes is a helper function to convert an uint64 into its []byte representation.
-func uint64ToBytes(val uint64) []byte {
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, val)
-	return b
 }
 
 // getObsoleteRubyLineNo implements a binary search algorithm to get the line number for a position.
@@ -638,8 +629,7 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 	return lineNo, nil
 }
 
-func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
-	frame *host.Frame, trace *libpf.Trace) error {
+func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	if !frame.Type.IsInterpType(libpf.Ruby) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -663,62 +653,42 @@ func (r *rubyInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 		pc:   uint64(pc),
 	}
 
-	if iseq, ok := r.iseqBodyPCToFunction.Get(key); ok &&
-		symbolReporter.FrameKnown(libpf.NewFrameID(iseq.fileID, iseq.line)) {
-		trace.AppendFrame(libpf.RubyFrame, iseq.fileID, iseq.line)
-		sfCounter.ReportSuccess()
-		return nil
-	}
+	iseq, ok := r.iseqBodyPCToFunction.Get(key)
+	if !ok {
+		lineNo, err := r.getRubyLineNo(iseqBody, uint64(pc))
+		if err != nil {
+			return err
+		}
 
-	lineNo, err := r.getRubyLineNo(iseqBody, uint64(pc))
-	if err != nil {
-		return err
-	}
+		sourceFileNamePtr := r.rm.Ptr(iseqBody +
+			libpf.Address(vms.iseq_constant_body.location+vms.iseq_location_struct.pathobj))
+		sourceFileName, err := r.getStringCached(sourceFileNamePtr, r.readPathObjRealPath)
+		if err != nil {
+			return err
+		}
 
-	sourceFileNamePtr := r.rm.Ptr(iseqBody +
-		libpf.Address(vms.iseq_constant_body.location+vms.iseq_location_struct.pathobj))
-	sourceFileName, err := r.getStringCached(sourceFileNamePtr, r.readPathObjRealPath)
-	if err != nil {
-		return err
-	}
+		funcNamePtr := r.rm.Ptr(iseqBody +
+			libpf.Address(vms.iseq_constant_body.location+vms.iseq_location_struct.base_label))
+		functionName, err := r.getStringCached(funcNamePtr, r.readRubyString)
+		if err != nil {
+			return err
+		}
 
-	funcNamePtr := r.rm.Ptr(iseqBody +
-		libpf.Address(vms.iseq_constant_body.location+vms.iseq_location_struct.base_label))
-	functionName, err := r.getStringCached(funcNamePtr, r.readRubyString)
-	if err != nil {
-		return err
+		iseq = &rubyIseq{
+			functionName:   functionName,
+			sourceFileName: sourceFileName,
+			line:           libpf.SourceLineno(lineNo),
+		}
+		r.iseqBodyPCToFunction.Add(key, iseq)
 	}
-
-	pcBytes := uint64ToBytes(uint64(pc))
-	iseqBodyBytes := uint64ToBytes(uint64(iseqBody))
-
-	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(sourceFileName.String()))
-	_, _ = h.Write([]byte(functionName.String()))
-	_, _ = h.Write(pcBytes)
-	_, _ = h.Write(iseqBodyBytes)
-	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
-	if err != nil {
-		return fmt.Errorf("failed to create a file ID: %v", err)
-	}
-
-	iseq := &rubyIseq{
-		sourceFileName: sourceFileName,
-		fileID:         fileID,
-		line:           libpf.AddressOrLineno(lineNo),
-	}
-	r.iseqBodyPCToFunction.Add(key, iseq)
 
 	// Ruby doesn't provide the information about the function offset for the
 	// particular line. So we report 0 for this to our backend.
-	frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
-	trace.AppendFrameID(libpf.RubyFrame, frameID)
-	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-		FrameID:      frameID,
-		FunctionName: functionName,
-		SourceFile:   sourceFileName,
-		SourceLine:   libpf.SourceLineno(lineNo),
+	frames.Append(&libpf.Frame{
+		Type:         libpf.RubyFrame,
+		FunctionName: iseq.functionName,
+		SourceFile:   iseq.sourceFileName,
+		SourceLine:   iseq.line,
 	})
 	sfCounter.ReportSuccess()
 	return nil

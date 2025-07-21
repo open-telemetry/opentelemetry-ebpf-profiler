@@ -6,7 +6,6 @@ package perl // import "go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 import (
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -21,7 +20,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
@@ -61,7 +59,6 @@ type perlInstance struct {
 
 // perlCOP contains information about Perl Control OPS structure
 type perlCOP struct {
-	fileID         libpf.FileID
 	sourceFileName libpf.String
 	line           libpf.AddressOrLineno
 }
@@ -402,30 +399,15 @@ func (i *perlInstance) getCOP(copAddr libpf.Address, funcName libpf.String) (
 
 	line := npsr.Uint32(cop, vms.cop.cop_line)
 
-	// Synthesize a FileID.
-	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
-	h := fnv.New128a()
-	_, _ = h.Write([]byte{uint8(libpf.PerlFrame)})
-	_, _ = h.Write([]byte(sourceFileName))
-	// Unfortunately there is very little information to extract for each function
-	// from the GV. Use just the function name at this time.
-	_, _ = h.Write([]byte(funcName.String()))
-	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create a file ID: %v", err)
-	}
-
 	c := &perlCOP{
 		sourceFileName: libpf.Intern(sourceFileName),
-		fileID:         fileID,
 		line:           libpf.AddressOrLineno(line),
 	}
 	i.addrToCOP.Add(key, c)
 	return c, nil
 }
 
-func (i *perlInstance) Symbolize(symbolReporter reporter.SymbolReporter,
-	frame *host.Frame, trace *libpf.Trace) error {
+func (i *perlInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	if !frame.Type.IsInterpType(libpf.Perl) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -448,10 +430,8 @@ func (i *perlInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 
 	// Since the COP contains all the data without extra work, just always
 	// send the symbolization information.
-	frameID := libpf.NewFrameID(cop.fileID, cop.line)
-	trace.AppendFrameID(libpf.PerlFrame, frameID)
-	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-		FrameID:      frameID,
+	frames.Append(&libpf.Frame{
+		Type:         libpf.PerlFrame,
 		FunctionName: functionName,
 		SourceFile:   cop.sourceFileName,
 		SourceLine:   libpf.SourceLineno(cop.line),

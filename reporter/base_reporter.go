@@ -10,7 +10,6 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
@@ -69,11 +68,6 @@ func (b *baseReporter) ExecutableKnown(fileID libpf.FileID) bool {
 	return known
 }
 
-func (b *baseReporter) FrameKnown(frameID libpf.FrameID) bool {
-	_, known := b.pdata.Frames.GetAndRefresh(frameID, pdata.FrameMapLifetime)
-	return known
-}
-
 func (b *baseReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 	b.pdata.Executables.Add(args.FileID, samples.ExecInfo{
 		FileName:   args.FileName,
@@ -126,28 +120,10 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		return nil
 	}
 	(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = &samples.TraceEvents{
-		Files:              trace.Files,
-		Linenos:            trace.Linenos,
-		FrameTypes:         trace.FrameTypes,
-		MappingStarts:      trace.MappingStart,
-		MappingEnds:        trace.MappingEnd,
-		MappingFileOffsets: trace.MappingFileOffsets,
-		Timestamps:         []uint64{uint64(meta.Timestamp)},
-		OffTimes:           []int64{meta.OffTime},
-		EnvVars:            meta.EnvVars,
+		Frames:     trace.Frames,
+		Timestamps: []uint64{uint64(meta.Timestamp)},
+		OffTimes:   []int64{meta.OffTime},
+		EnvVars:    meta.EnvVars,
 	}
 	return nil
-}
-
-func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
-	log.Debugf("FrameMetadata [%x] %v+%v at %v:%v",
-		args.FrameID.FileID(), args.FunctionName, args.FunctionOffset,
-		args.SourceFile, args.SourceLine)
-	si := samples.SourceInfo{
-		LineNumber:     args.SourceLine,
-		FilePath:       args.SourceFile,
-		FunctionOffset: args.FunctionOffset,
-		FunctionName:   args.FunctionName,
-	}
-	b.pdata.Frames.Add(args.FrameID, si)
 }

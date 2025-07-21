@@ -36,9 +36,7 @@ func NewController(cfg *controller.Config,
 		GRPCConnectionTimeout:    intervals.GRPCConnectionTimeout(),
 		ReportInterval:           intervals.ReportInterval(),
 		ExecutablesCacheElements: 16384,
-		// Next step: Calculate FramesCacheElements from numCores and samplingRate.
-		FramesCacheElements: 131072,
-		SamplesPerSecond:    cfg.SamplesPerSecond,
+		SamplesPerSecond:         cfg.SamplesPerSecond,
 	}, nextConsumer)
 	if err != nil {
 		return nil, err
