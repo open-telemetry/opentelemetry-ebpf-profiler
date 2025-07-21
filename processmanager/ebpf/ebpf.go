@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/bits"
+	"reflect"
 	"sync"
 	"unsafe"
 
@@ -85,23 +86,23 @@ type EbpfHandler interface {
 
 type ebpfMapsImpl struct {
 	// Interpreter related eBPF maps
-	interpreterOffsets *cebpf.Map
-	dotnetProcs        *cebpf.Map
-	perlProcs          *cebpf.Map
-	pyProcs            *cebpf.Map
-	hotspotProcs       *cebpf.Map
-	phpProcs           *cebpf.Map
-	rubyProcs          *cebpf.Map
-	v8Procs            *cebpf.Map
-	apmIntProcs        *cebpf.Map
-	goLabelsProcs      *cebpf.Map
+	InterpreterOffsets *cebpf.Map `name:"interpreter_offsets"`
+	DotnetProcs        *cebpf.Map `name:"dotnet_procs"`
+	PerlProcs          *cebpf.Map `name:"perl_procs"`
+	PyProcs            *cebpf.Map `name:"py_procs"`
+	HotspotProcs       *cebpf.Map `name:"hotspot_procs"`
+	PhpProcs           *cebpf.Map `name:"php_procs"`
+	RubyProcs          *cebpf.Map `name:"ruby_procs"`
+	V8Procs            *cebpf.Map `name:"v8_procs"`
+	ApmIntProcs        *cebpf.Map `name:"apm_int_procs"`
+	GoLabelsProcs      *cebpf.Map `name:"go_labels_procs"`
 
 	// Stackdelta and process related eBPF maps
-	exeIDToStackDeltaMaps []*cebpf.Map
-	stackDeltaPageToInfo  *cebpf.Map
-	pidPageToMappingInfo  *cebpf.Map
-	unwindInfoArray       *cebpf.Map
-	reportedPIDs          *cebpf.Map
+	ExeIDToStackDeltaMaps []*cebpf.Map
+	StackDeltaPageToInfo  *cebpf.Map `name:"stack_delta_page_to_info"`
+	PidPageToMappingInfo  *cebpf.Map `name:"pid_page_to_mapping_info"`
+	UnwindInfoArray       *cebpf.Map `name:"unwind_info_array"`
+	ReportedPIDs          *cebpf.Map `name:"reported_pids"`
 
 	errCounterLock sync.Mutex
 	errCounter     map[metrics.MetricID]int64
@@ -110,25 +111,6 @@ type ebpfMapsImpl struct {
 	hasLPMTrieBatchOperations bool
 
 	updateWorkers *asyncMapUpdaterPool
-}
-
-var outerMapsName = [...]string{
-	"exe_id_to_8_stack_deltas",
-	"exe_id_to_9_stack_deltas",
-	"exe_id_to_10_stack_deltas",
-	"exe_id_to_11_stack_deltas",
-	"exe_id_to_12_stack_deltas",
-	"exe_id_to_13_stack_deltas",
-	"exe_id_to_14_stack_deltas",
-	"exe_id_to_15_stack_deltas",
-	"exe_id_to_16_stack_deltas",
-	"exe_id_to_17_stack_deltas",
-	"exe_id_to_18_stack_deltas",
-	"exe_id_to_19_stack_deltas",
-	"exe_id_to_20_stack_deltas",
-	"exe_id_to_21_stack_deltas",
-	"exe_id_to_22_stack_deltas",
-	"exe_id_to_23_stack_deltas",
 }
 
 // Compile time check to make sure ebpfMapsImpl satisfies the interface .
@@ -143,93 +125,30 @@ func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map) (EbpfHandler, err
 	impl := &ebpfMapsImpl{}
 	impl.errCounter = make(map[metrics.MetricID]int64)
 
-	interpreterOffsets, ok := maps["interpreter_offsets"]
-	if !ok {
-		log.Fatalf("Map interpreter_offsets is not available")
-	}
-	impl.interpreterOffsets = interpreterOffsets
-
-	dotnetProcs, ok := maps["dotnet_procs"]
-	if !ok {
-		log.Fatalf("Map dotnet_procs is not available")
-	}
-	impl.dotnetProcs = dotnetProcs
-
-	perlProcs, ok := maps["perl_procs"]
-	if !ok {
-		log.Fatalf("Map perl_procs is not available")
-	}
-	impl.perlProcs = perlProcs
-
-	pyProcs, ok := maps["py_procs"]
-	if !ok {
-		log.Fatalf("Map py_procs is not available")
-	}
-	impl.pyProcs = pyProcs
-
-	hotspotProcs, ok := maps["hotspot_procs"]
-	if !ok {
-		log.Fatalf("Map hotspot_procs is not available")
-	}
-	impl.hotspotProcs = hotspotProcs
-
-	phpProcs, ok := maps["php_procs"]
-	if !ok {
-		log.Fatalf("Map php_procs is not available")
-	}
-	impl.phpProcs = phpProcs
-
-	rubyProcs, ok := maps["ruby_procs"]
-	if !ok {
-		log.Fatalf("Map ruby_procs is not available")
-	}
-	impl.rubyProcs = rubyProcs
-
-	v8Procs, ok := maps["v8_procs"]
-	if !ok {
-		log.Fatalf("Map v8_procs is not available")
-	}
-	impl.v8Procs = v8Procs
-
-	apmIntProcs, ok := maps["apm_int_procs"]
-	if !ok {
-		log.Fatalf("Map apm_int_procs is not available")
-	}
-	impl.apmIntProcs = apmIntProcs
-
-	goLabelsProcs, ok := maps["go_labels_procs"]
-	if !ok {
-		log.Fatalf("Map go_labels_procs is not available")
-	}
-	impl.goLabelsProcs = goLabelsProcs
-	impl.stackDeltaPageToInfo, ok = maps["stack_delta_page_to_info"]
-	if !ok {
-		log.Fatalf("Map stack_delta_page_to_info is not available")
+	implRefVal := reflect.ValueOf(impl).Elem()
+	implRefType := reflect.TypeOf(impl).Elem()
+	for i := 0; i < implRefType.NumField(); i++ {
+		fieldType := implRefType.Field(i)
+		nameTag, ok := fieldType.Tag.Lookup("name")
+		if !ok {
+			continue
+		}
+		mapVal, ok := maps[nameTag]
+		if !ok {
+			log.Fatalf("Map %v is not available", nameTag)
+		}
+		implRefVal.Field(i).Set(reflect.ValueOf(mapVal))
 	}
 
-	impl.pidPageToMappingInfo, ok = maps["pid_page_to_mapping_info"]
-	if !ok {
-		log.Fatalf("Map pid_page_to_mapping_info is not available")
-	}
-
-	impl.unwindInfoArray, ok = maps["unwind_info_array"]
-	if !ok {
-		log.Fatalf("Map unwind_info_array is not available")
-	}
-
-	impl.reportedPIDs, ok = maps["reported_pids"]
-	if !ok {
-		log.Fatalf("Map reported_pids is not available")
-	}
-
-	impl.exeIDToStackDeltaMaps = make([]*cebpf.Map, len(outerMapsName))
+	numBuckets := support.StackDeltaBucketLargest - support.StackDeltaBucketSmallest + 1
+	impl.ExeIDToStackDeltaMaps = make([]*cebpf.Map, numBuckets)
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
 		deltasMapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)
 		deltasMap, ok := maps[deltasMapName]
 		if !ok {
 			log.Fatalf("Map %s is not available", deltasMapName)
 		}
-		impl.exeIDToStackDeltaMaps[i-support.StackDeltaBucketSmallest] = deltasMap
+		impl.ExeIDToStackDeltaMaps[i-support.StackDeltaBucketSmallest] = deltasMap
 	}
 
 	if err := probeBatchOperations(cebpf.Hash); err == nil {
@@ -254,7 +173,7 @@ func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID 
 	if err != nil {
 		return err
 	}
-	if err := impl.interpreterOffsets.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
+	if err := impl.InterpreterOffsets.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
 		cebpf.UpdateAny); err != nil {
 		log.Fatalf("Failed to place interpreter range in map: %v", err)
 	}
@@ -296,23 +215,23 @@ func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
 func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*cebpf.Map, error) {
 	switch typ {
 	case libpf.Dotnet:
-		return impl.dotnetProcs, nil
+		return impl.DotnetProcs, nil
 	case libpf.Perl:
-		return impl.perlProcs, nil
+		return impl.PerlProcs, nil
 	case libpf.Python:
-		return impl.pyProcs, nil
+		return impl.PyProcs, nil
 	case libpf.HotSpot:
-		return impl.hotspotProcs, nil
+		return impl.HotspotProcs, nil
 	case libpf.PHP:
-		return impl.phpProcs, nil
+		return impl.PhpProcs, nil
 	case libpf.Ruby:
-		return impl.rubyProcs, nil
+		return impl.RubyProcs, nil
 	case libpf.V8:
-		return impl.v8Procs, nil
+		return impl.V8Procs, nil
 	case libpf.APMInt:
-		return impl.apmIntProcs, nil
+		return impl.ApmIntProcs, nil
 	case libpf.GoLabels:
-		return impl.goLabelsProcs, nil
+		return impl.GoLabelsProcs, nil
 	default:
 		return nil, fmt.Errorf("type %d is not (yet) supported", typ)
 	}
@@ -351,20 +270,27 @@ func (impl *ebpfMapsImpl) DeleteProcData(typ libpf.InterpreterType, pid libpf.PI
 	return nil
 }
 
+// getPIDPage initializes a PIDPage instance.
+func getPIDPage(pid libpf.PID, key uint64, length uint32) support.PIDPage {
+	// pid_page_to_mapping_info is an LPM trie and expects the pid and page
+	// to be in big endian format.
+	return support.PIDPage{
+		Pid:       bits.ReverseBytes32(uint32(pid)),
+		Page:      bits.ReverseBytes64(key),
+		PrefixLen: support.BitWidthPID + length,
+	}
+}
+
+// getPIDPageFromPrefix initializes a PIDPage instance from a PID and lpm.Prefix.
+func getPIDPageFromPrefix(pid libpf.PID, prefix lpm.Prefix) support.PIDPage {
+	return getPIDPage(pid, prefix.Key, prefix.Length)
+}
+
 // UpdatePidInterpreterMapping updates the eBPF map pidPageToMappingInfo with the
 // data required to call the correct interpreter unwinder for that memory region.
 func (impl *ebpfMapsImpl) UpdatePidInterpreterMapping(pid libpf.PID, prefix lpm.Prefix,
 	interpreterProgram uint8, fileID host.FileID, bias uint64) error {
-	// pidPageToMappingInfo is a LPM trie and expects the pid and page
-	// to be in big endian format.
-	bePid := bits.ReverseBytes32(uint32(pid))
-	bePage := bits.ReverseBytes64(prefix.Key)
-
-	cKey := support.PIDPage{
-		PrefixLen: support.BitWidthPID + prefix.Length,
-		Pid:       bePid,
-		Page:      bePage,
-	}
+	cKey := getPIDPageFromPrefix(pid, prefix)
 	biasAndUnwindProgram, err := support.EncodeBiasAndUnwindProgram(bias, interpreterProgram)
 	if err != nil {
 		return err
@@ -375,7 +301,7 @@ func (impl *ebpfMapsImpl) UpdatePidInterpreterMapping(pid libpf.PID, prefix lpm.
 		Bias_and_unwind_program: biasAndUnwindProgram,
 	}
 
-	return impl.pidPageToMappingInfo.Update(unsafe.Pointer(&cKey), unsafe.Pointer(&cValue),
+	return impl.PidPageToMappingInfo.Update(unsafe.Pointer(&cKey), unsafe.Pointer(&cValue),
 		cebpf.UpdateNoExist)
 }
 
@@ -384,17 +310,8 @@ func (impl *ebpfMapsImpl) UpdatePidInterpreterMapping(pid libpf.PID, prefix lpm.
 // interpreter process dies or a region that formerly required interpreter-based unwinding is no
 // longer needed.
 func (impl *ebpfMapsImpl) DeletePidInterpreterMapping(pid libpf.PID, prefix lpm.Prefix) error {
-	// pidPageToMappingInfo is a LPM trie and expects the pid and page
-	// to be in big endian format.
-	bePid := bits.ReverseBytes32(uint32(pid))
-	bePage := bits.ReverseBytes64(prefix.Key)
-
-	cKey := support.PIDPage{
-		PrefixLen: support.BitWidthPID + prefix.Length,
-		Pid:       bePid,
-		Page:      bePage,
-	}
-	return impl.pidPageToMappingInfo.Delete(unsafe.Pointer(&cKey))
+	cKey := getPIDPageFromPrefix(pid, prefix)
+	return impl.PidPageToMappingInfo.Delete(unsafe.Pointer(&cKey))
 }
 
 // trackMapError is a wrapper to report issues with changes to eBPF maps.
@@ -426,7 +343,7 @@ func (impl *ebpfMapsImpl) CollectMetrics() []metrics.Metric {
 	return counts
 }
 
-// poolPIDPage caches reusable heap-allocated support.PIDPage instances
+// poolPIDPage caches reusable heap-allocated PIDPage instances
 // to avoid excessive heap allocations.
 var poolPIDPage = sync.Pool{
 	New: func() any {
@@ -434,22 +351,11 @@ var poolPIDPage = sync.Pool{
 	},
 }
 
-// getPIDPage initializes a support.PIDPage instance.
-func getPIDPage(pid libpf.PID, prefix lpm.Prefix) support.PIDPage {
-	// pid_page_to_mapping_info is an LPM trie and expects the pid and page
-	// to be in big endian format.
-	return support.PIDPage{
-		Pid:       bits.ReverseBytes32(uint32(pid)),
-		Page:      bits.ReverseBytes64(prefix.Key),
-		PrefixLen: support.BitWidthPID + prefix.Length,
-	}
-}
-
-// getPIDPagePooled returns a heap-allocated and initialized support.PIDPage instance.
+// getPIDPagePooled returns a heap-allocated and initialized PIDPage instance.
 // After usage, put the instance back into the pool with poolPIDPage.Put().
 func getPIDPagePooled(pid libpf.PID, prefix lpm.Prefix) *support.PIDPage {
 	cPIDPage := poolPIDPage.Get().(*support.PIDPage)
-	*cPIDPage = getPIDPage(pid, prefix)
+	*cPIDPage = getPIDPageFromPrefix(pid, prefix)
 	return cPIDPage
 }
 
@@ -554,21 +460,21 @@ func (impl *ebpfMapsImpl) getOuterMap(mapID uint16) *cebpf.Map {
 		mapID > support.StackDeltaBucketLargest {
 		return nil
 	}
-	return impl.exeIDToStackDeltaMaps[mapID-support.StackDeltaBucketSmallest]
+	return impl.ExeIDToStackDeltaMaps[mapID-support.StackDeltaBucketSmallest]
 }
 
 // RemoveReportedPID removes a PID from the reported_pids eBPF map. The kernel component will
 // place a PID in this map before it reports it to Go for further processing.
 func (impl *ebpfMapsImpl) RemoveReportedPID(pid libpf.PID) {
 	key := uint32(pid)
-	_ = impl.reportedPIDs.Delete(unsafe.Pointer(&key))
+	_ = impl.ReportedPIDs.Delete(unsafe.Pointer(&key))
 }
 
 // UpdateUnwindInfo writes UnwindInfo into the unwind info array at the given index
 func (impl *ebpfMapsImpl) UpdateUnwindInfo(index uint16, info sdtypes.UnwindInfo) error {
-	if uint32(index) >= impl.unwindInfoArray.MaxEntries() {
+	if uint32(index) >= impl.UnwindInfoArray.MaxEntries() {
 		return fmt.Errorf("unwind info array full (%d/%d items)",
-			index, impl.unwindInfoArray.MaxEntries())
+			index, impl.UnwindInfoArray.MaxEntries())
 	}
 
 	key := uint32(index)
@@ -580,7 +486,7 @@ func (impl *ebpfMapsImpl) UpdateUnwindInfo(index uint16, info sdtypes.UnwindInfo
 		FpParam:     info.FPParam,
 	}
 	return impl.trackMapError(metrics.IDUnwindInfoArrayUpdate,
-		impl.unwindInfoArray.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
+		impl.UnwindInfoArray.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
 			cebpf.UpdateAny))
 }
 
@@ -707,7 +613,7 @@ func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPer
 	}
 
 	if impl.hasGenericBatchOperations {
-		_, err := impl.stackDeltaPageToInfo.BatchUpdate(
+		_, err := impl.StackDeltaPageToInfo.BatchUpdate(
 			ptrCastMarshaler[support.StackDeltaPageKey](keys),
 			ptrCastMarshaler[support.StackDeltaPageInfo](values),
 			&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateNoExist)})
@@ -716,7 +622,7 @@ func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPer
 
 	for index := range keys {
 		if err := impl.trackMapError(metrics.IDStackDeltaPageToInfoUpdate,
-			impl.stackDeltaPageToInfo.Update(unsafe.Pointer(&keys[index]),
+			impl.StackDeltaPageToInfo.Update(unsafe.Pointer(&keys[index]),
 				unsafe.Pointer(&values[index]), cebpf.UpdateNoExist)); err != nil {
 			return err
 		}
@@ -731,7 +637,7 @@ func (impl *ebpfMapsImpl) DeleteStackDeltaPage(fileID host.FileID, page uint64) 
 		Page:   page,
 	}
 	return impl.trackMapError(metrics.IDStackDeltaPageToInfoDelete,
-		impl.stackDeltaPageToInfo.Delete(unsafe.Pointer(&key)))
+		impl.StackDeltaPageToInfo.Delete(unsafe.Pointer(&key)))
 }
 
 // UpdatePidPageMappingInfo adds the pid and page combination with a corresponding fileID and
@@ -754,7 +660,7 @@ func (impl *ebpfMapsImpl) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Pre
 	defer poolPIDPageMappingInfo.Put(cValue)
 
 	return impl.trackMapError(metrics.IDPidPageToMappingInfoUpdate,
-		impl.pidPageToMappingInfo.Update(unsafe.Pointer(cKey), unsafe.Pointer(cValue),
+		impl.PidPageToMappingInfo.Update(unsafe.Pointer(cKey), unsafe.Pointer(cValue),
 			cebpf.UpdateNoExist))
 }
 
@@ -781,8 +687,8 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid libpf.PID, prefixes
 	var deleted int
 	var combinedErrors error
 	for _, prefix := range prefixes {
-		*cKey = getPIDPage(pid, prefix)
-		if err := impl.pidPageToMappingInfo.Delete(unsafe.Pointer(cKey)); err != nil {
+		*cKey = getPIDPageFromPrefix(pid, prefix)
+		if err := impl.PidPageToMappingInfo.Delete(unsafe.Pointer(cKey)); err != nil {
 			_ = impl.trackMapError(metrics.IDPidPageToMappingInfoDelete, err)
 			combinedErrors = errors.Join(combinedErrors, err)
 			continue
@@ -797,10 +703,10 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid libpf.PID, prefixes 
 	// Prepare all keys based on the given prefixes.
 	cKeys := make([]support.PIDPage, 0, len(prefixes))
 	for _, prefix := range prefixes {
-		cKeys = append(cKeys, getPIDPage(pid, prefix))
+		cKeys = append(cKeys, getPIDPageFromPrefix(pid, prefix))
 	}
 
-	deleted, err := impl.pidPageToMappingInfo.BatchDelete(
+	deleted, err := impl.PidPageToMappingInfo.BatchDelete(
 		ptrCastMarshaler[support.PIDPage](cKeys), nil)
 	return deleted, impl.trackMapError(metrics.IDPidPageToMappingInfoBatchDelete, err)
 }
@@ -808,21 +714,11 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid libpf.PID, prefixes 
 // LookupPidPageInformation returns the fileID and bias for a given pid and page combination from
 // the eBPF map pid_page_to_mapping_info.
 // So far this function is used only in tests.
-func (impl *ebpfMapsImpl) LookupPidPageInformation(pid uint32, page uint64) (host.FileID,
+func (impl *ebpfMapsImpl) LookupPidPageInformation(pid libpf.PID, page uint64) (host.FileID,
 	uint64, error) {
-	// pid_page_to_mapping_info is a LPM trie and expects the pid and page
-	// to be in big endian format.
-	bePid := bits.ReverseBytes32(pid)
-	bePage := bits.ReverseBytes64(page)
-
-	cKey := support.PIDPage{
-		PrefixLen: uint32(support.BitWidthPID + support.BitWidthPage),
-		Pid:       bePid,
-		Page:      bePage,
-	}
+	cKey := getPIDPage(pid, page, support.BitWidthPage)
 	cValue := support.PIDPageMappingInfo{}
-
-	if err := impl.pidPageToMappingInfo.Lookup(unsafe.Pointer(&cKey),
+	if err := impl.PidPageToMappingInfo.Lookup(unsafe.Pointer(&cKey),
 		unsafe.Pointer(&cValue)); err != nil {
 		return host.FileID(0), 0, fmt.Errorf("failed to lookup page 0x%x for PID %d: %v",
 			page, pid, err)
