@@ -7,9 +7,14 @@
 // with_debug_output is declared in native_stack_trace.ebpf.c
 extern u32 with_debug_output;
 
+
+// UNUSED is a macro that marks a parameter or variable as intentionally unused.
+// It prevents compiler warnings about unused variables while keeping them in the code.
 #define UNUSED __attribute__((unused))
 
-#if defined(TESTING_COREDUMP)
+#if defined(TESTING_COREDUMP)  
+
+  #define UNROLL(x)
 
   // BPF_RODATA_VAR declares a global variable in the .rodata section,
   // ensuring it's not optimized away by the compiler or linker.
