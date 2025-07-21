@@ -41,7 +41,8 @@ var (
 	evalCodeFunctionName = libpf.Intern("<eval'd code>")
 
 	// regex for the interpreter executable
-	phpRegex     = regexp.MustCompile(".*/php(-cgi|-fpm)?[0-9.]*$|^php(-cgi|-fpm)?[0-9.]*$")
+	phpRegex = regexp.MustCompile(`.*/php(-cgi|-fpm)?[0-9.]*$|^php(-cgi|-fpm)?[0-9.]*$` +
+		`|.*/libphp.*\.so$`)
 	versionMatch = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)`)
 
 	// compiler check to make sure the needed interfaces are satisfied
