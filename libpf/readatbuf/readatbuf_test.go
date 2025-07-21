@@ -32,7 +32,7 @@ func TestOutOfBoundsTail(t *testing.T) {
 	r, err := readatbuf.New(buf, 5, 10)
 	require.NoError(t, err)
 	b := make([]byte, 1)
-	for i := int64(0); i < 32; i++ {
+	for i := range int64(32) {
 		_, err = r.ReadAt(b, i)
 		if i > 7 {
 			require.ErrorIs(t, err, io.EOF)

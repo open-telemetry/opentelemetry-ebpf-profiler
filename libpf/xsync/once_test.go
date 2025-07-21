@@ -25,7 +25,7 @@ func TestOnceLock(t *testing.T) {
 
 	assert.Nil(t, once.Get())
 
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		wg.Add(1)
 
 		go func() {

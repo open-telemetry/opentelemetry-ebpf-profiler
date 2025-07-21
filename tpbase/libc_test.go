@@ -248,8 +248,6 @@ func TestExtractTSDInfo(t *testing.T) {
 	}
 
 	for name, test := range testCases {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			var info TSDInfo
 			var err error

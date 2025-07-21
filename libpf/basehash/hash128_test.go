@@ -146,8 +146,6 @@ func TestHash128Format(t *testing.T) {
 	}
 
 	for name, test := range tests {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			output := fmt.Sprintf(test.formatter, h)
 			assert.Equal(t, test.expected, output)
@@ -175,8 +173,6 @@ func TestNew128FromString(t *testing.T) {
 	}
 
 	for name, tc := range tests {
-		name := name
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			got, err := New128FromString(tc.stringRepresentation)
 			require.ErrorIs(t, err, tc.err)
