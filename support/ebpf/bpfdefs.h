@@ -182,11 +182,10 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
       __attribute__((section(name), used)) _Pragma("GCC diagnostic pop")
   #define EBPF_INLINE __attribute__((__always_inline__))
 
-
   #if defined(__clang__)
     #define _PRAGMA_UNROLL(x) _Pragma(_STR(unroll x))
     // Macro for loop unrolling. Expands to the appropriate pragma for clang.
-    #define UNROLL(N) _PRAGMA_UNROLL(N)
+    #define UNROLL(N)         _PRAGMA_UNROLL(N)
   #else
     // Macro for loop unrolling. Expands to nothing for gcc.
     #define UNROLL(N)

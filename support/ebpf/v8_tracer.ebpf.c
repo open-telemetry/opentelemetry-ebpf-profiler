@@ -237,7 +237,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
       }
 
       int i;
-UNROLL()
+      UNROLL()
       for (i = sizeof(stk) / sizeof(stk[0]) - 1; i >= 0; i--) {
         if (stk[i] >= code_start && stk[i] < code_end) {
           break;
@@ -327,7 +327,7 @@ static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
 
   increment_metric(metricID_UnwindV8Attempts);
 
-UNROLL()
+  UNROLL()
   for (int i = 0; i < V8_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
 

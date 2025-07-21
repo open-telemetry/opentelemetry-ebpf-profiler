@@ -122,7 +122,7 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
   u32 iseq_size;
   s64 n;
 
-UNROLL()
+  UNROLL()
   for (u32 i = 0; i < FRAMES_PER_WALK_RUBY_STACK; ++i) {
     pc        = 0;
     iseq_addr = NULL;

@@ -106,7 +106,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
       // convert it from u32 to u64 offset
       int pos64 = (map_elements - 2) / 2;
       u64 val64 = scratch->map64[--pos64];
-UNROLL(256)
+      UNROLL(256)
       // the loop iterations is number of u64 elements minus two:
       // - the last element special handled earlier
       // - the second last element which is preloaded immediately above
@@ -145,7 +145,7 @@ UNROLL(256)
   }
 
   // Decode the code start info from the entry
-UNROLL()
+  UNROLL()
   for (int i = 0; i < DOTNET_CODE_NIBBLES_PER_ENTRY; i++) {
     u8 nybble = val & 0xf;
     if (nybble != 0) {
@@ -303,7 +303,7 @@ static EBPF_INLINE int unwind_dotnet(struct pt_regs *ctx)
   record->ratelimitAction = RATELIMIT_ACTION_FAST;
   increment_metric(metricID_UnwindDotnetAttempts);
 
-UNROLL()
+  UNROLL()
   for (int i = 0; i < DOTNET_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
 

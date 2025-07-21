@@ -161,7 +161,7 @@ static EBPF_INLINE u64 hotspot_find_codeblob(const UnwindState *state, const Hot
   // Segment map start is put in to the PidPageMapping's file_id.
   segmap_start = (state->text_section_id >> HS_TSID_SEG_MAP_BIT) & HS_TSID_SEG_MAP_MASK;
 
-UNROLL()
+  UNROLL()
   for (int i = 0; i < HOTSPOT_SEGMAP_ITERATIONS; i++) {
     if (bpf_probe_read_user(&tag, sizeof(tag), (void *)(segmap_start + segment))) {
       return 0;
@@ -940,7 +940,7 @@ static EBPF_INLINE int unwind_hotspot(struct pt_regs *ctx)
 
   int unwinder    = PROG_UNWIND_STOP;
   ErrorCode error = ERR_OK;
-UNROLL()
+  UNROLL()
   for (int i = 0; i < HOTSPOT_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
     error    = hotspot_unwind_one_frame(record, ji, i == 0);
