@@ -19,7 +19,6 @@ package main
 #cgo CFLAGS: -Wno-address-of-packed-member
 #cgo CFLAGS: -Wno-unused-label
 #cgo CFLAGS: -Wno-sign-compare
-#cgo CFLAGS: -Wno-pass-failed
 #cgo CFLAGS: -Wno-unused-parameter
 #cgo CFLAGS: -fno-strict-aliasing
 #include "ebpfcode.h"

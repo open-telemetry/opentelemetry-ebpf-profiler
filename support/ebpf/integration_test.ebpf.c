@@ -68,9 +68,7 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, s32 kstack)
   trace->comm[3]         = 4;
   trace->stack_len       = MAX_FRAME_UNWINDS;
   trace->kernel_stack_id = kstack;
-#if !defined(TESTING_COREDUMP)
-  #pragma unroll
-#endif
+UNROLL()
   for (u64 i = 0; i < MAX_FRAME_UNWINDS; ++i) {
     // NOTE: this init schema eats up a lot of instructions. If we need more
     // space later, we can instead just init `.kind` and a few fields in the

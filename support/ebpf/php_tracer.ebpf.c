@@ -130,9 +130,7 @@ static EBPF_INLINE int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo
 
   int unwinder  = PROG_UNWIND_PHP;
   u32 type_info = 0;
-#if !defined(TESTING_COREDUMP)
-  #pragma unroll
-#endif
+UNROLL()
   for (u32 i = 0; i < FRAMES_PER_WALK_PHP_STACK; ++i) {
     int metric = process_php_frame(record, phpinfo, is_jitted, execute_data, &type_info);
     if (metric >= 0) {
