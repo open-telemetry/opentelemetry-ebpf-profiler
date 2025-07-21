@@ -104,7 +104,7 @@ vanity-import-fix: $(PORTO)
 
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
-	CC=clang-17 CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 # This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
 # amd64) and the CI kernel tests run them already. Useful for local testing.
