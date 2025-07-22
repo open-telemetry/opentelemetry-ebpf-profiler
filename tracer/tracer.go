@@ -384,7 +384,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		{
 			progID: uint32(support.ProgGoLabels),
 			name:   "go_labels",
-			enable: cfg.IncludeTracers.Has(types.GoLabels) || cfg.IncludeTracers.Has(types.Labels),
+			enable: cfg.IncludeTracers.Has(types.Labels),
 		},
 		{
 			progID: uint32(support.ProgUnwindLuaJIT),
