@@ -47,6 +47,7 @@ RUN                                                                             
 
 # Append to /etc/profile for login shells
 RUN echo 'export PATH="/usr/local/go/bin:$PATH"' >> /etc/profile
+RUN echo 'export PATH="/agent/go/bin:$PATH"' >> /etc/profile
 
 # Create rust related directories in /usr/local
 RUN mkdir -p /usr/local/cargo /usr/local/rustup
