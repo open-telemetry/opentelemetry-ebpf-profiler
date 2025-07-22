@@ -21,7 +21,7 @@ import (
 //	0x000000000007f270 <+16>:    mov     x27, #0x30                      // #48
 //	0x000000000007f274 <+20>:    ldr     x28, [x0, x27]
 //	0x000000000007f278 <+24>:    ret
-func extractTLSGOffset(f *pfelf.File) (int32, error) {
+func extractTLSGOffset(f *pfelf.File, path string) (int32, error) {
 	iscgo, err := f.IsCgoEnabled()
 	if err != nil || !iscgo {
 		return 0, err
@@ -54,6 +54,6 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 			}
 		}
 	}
-	log.Warnf("Failed to decode load_g symbol, Go label collection might not work with CGO frames")
+	log.Warnf("Failed to decode load_g symbol, Go label collection might not work with CGO frames (%s)", path)
 	return 0, nil
 }
