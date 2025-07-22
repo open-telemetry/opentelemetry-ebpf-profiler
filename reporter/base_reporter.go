@@ -143,13 +143,9 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 		args.FrameID.FileID(), args.FunctionName, args.FunctionOffset,
 		args.SourceFile, args.SourceLine)
 	si := samples.SourceInfo{
-		Frames: []samples.SourceInfoFrame{
-			{
-				LineNumber:   args.SourceLine,
-				FilePath:     args.SourceFile,
-				FunctionName: args.FunctionName,
-			},
-		},
+		LineNumber:   args.SourceLine,
+		FilePath:     args.SourceFile,
+		FunctionName: args.FunctionName,
 	}
 	b.pdata.Frames.Add(args.FrameID, si)
 }

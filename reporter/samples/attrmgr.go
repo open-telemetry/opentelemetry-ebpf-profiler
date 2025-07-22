@@ -34,7 +34,7 @@ type SampleAttrProducer interface {
 type NativeSymbolResolver interface {
 	ExecutableKnown(id libpf.FileID) bool
 	ObserveExecutable(id libpf.FileID, ref *pfelf.Reference) error
-	ResolveAddress(file libpf.FileID, addr uint64) ([]SourceInfoFrame, error)
+	ResolveAddress(file libpf.FileID, addr uint64) (SourceInfo, error)
 	Cleanup()
 }
 

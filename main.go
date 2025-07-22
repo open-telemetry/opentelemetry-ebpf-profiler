@@ -13,8 +13,6 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/elastic/go-freelru"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
@@ -116,13 +114,6 @@ func mainWithExitCode() exitCode {
 		log.Error(err)
 		return exitFailure
 	}
-	cgroups, err := freelru.NewSynced[libpf.PID, string](1024,
-		func(pid libpf.PID) uint32 { return uint32(pid) })
-	if err != nil {
-		log.Error(err)
-		return exitFailure
-	}
-
 	rep, err := reporter.NewOTLP(&reporter.Config{
 		CollAgentAddr:            cfg.CollAgentAddr,
 		DisableTLS:               cfg.DisableTLS,
@@ -140,7 +131,7 @@ func mainWithExitCode() exitCode {
 		KernelVersion:       kernelVersion,
 		HostName:            hostname,
 		IPAddress:           sourceIP,
-	}, cgroups)
+	})
 	if err != nil {
 		log.Error(err)
 		return exitFailure

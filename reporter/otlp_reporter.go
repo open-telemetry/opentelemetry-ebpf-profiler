@@ -58,9 +58,12 @@ type OTLPReporter struct {
 }
 
 // NewOTLP returns a new instance of OTLPReporter
-func NewOTLP(cfg *Config,
-	cgroupv2ID *lru.SyncedLRU[libpf.PID, string],
-) (*OTLPReporter, error) {
+func NewOTLP(cfg *Config) (*OTLPReporter, error) {
+	cgroupv2ID, err := lru.NewSynced[libpf.PID, string](cfg.CGroupCacheElements,
+		func(pid libpf.PID) uint32 { return uint32(pid) })
+	if err != nil {
+		return nil, err
+	}
 	// Set a lifetime to reduce risk of invalid data in case of PID reuse.
 	cgroupv2ID.SetLifetime(90 * time.Second)
 

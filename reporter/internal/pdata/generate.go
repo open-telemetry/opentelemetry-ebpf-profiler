@@ -178,15 +178,9 @@ func (p *Pdata) setProfile(
 				if si, exists := p.Frames.GetAndRefresh(
 					libpf.NewFrameID(traceInfo.Files[i], traceInfo.Linenos[i]),
 					FramesCacheLifetime); exists {
-					if len(si.Frames) == 1 {
-						frame := si.Frames[0]
-						line.SetLine(int64(frame.LineNumber))
-						line.SetFunctionIndex(createFunctionEntry(funcMap,
-							frame.FunctionName, frame.FilePath))
-					} else {
-						line.SetFunctionIndex(createFunctionEntry(funcMap,
-							"UNRESOLVED2", frameKind.String()))
-					}
+					line.SetLine(int64(si.LineNumber))
+					line.SetFunctionIndex(createFunctionEntry(funcMap,
+						si.FunctionName, si.FilePath))
 				} else {
 					// At this point, we do not have enough information for the frame.
 					// Therefore, we report a dummy entry and use the interpreter as filename.

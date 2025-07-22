@@ -72,10 +72,6 @@ type ExecInfo struct {
 
 // SourceInfo allows mapping a frame to its source origin.
 type SourceInfo struct {
-	Frames []SourceInfoFrame
-}
-
-type SourceInfoFrame struct {
 	LineNumber   libpf.SourceLineno
 	FunctionName string
 	FilePath     string

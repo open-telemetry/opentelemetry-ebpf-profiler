@@ -36,10 +36,6 @@ func TestNativeFrameSymbols(t *testing.T) {
 			res = si
 		})
 	require.Equal(t, samples.SourceInfo{
-		Frames: []samples.SourceInfoFrame{
-			{
-				FunctionName: "__GI___pthread_cond_timedwait",
-			},
-		},
+		FunctionName: "__GI___pthread_cond_timedwait",
 	}, res)
 }
