@@ -12,7 +12,7 @@ RUN cross_debian_arch=$(uname -m | sed -e 's/aarch64/amd64/'  -e 's/x86_64/arm64
     apt-get dist-upgrade -y && \
     apt-get install -y --no-install-recommends --no-install-suggests \
         curl wget make git cmake unzip libc6-dev g++ gcc pkgconf \
-        clang-17 clang-format-17 \
+        clang-17 clang-format-17 ca-certificates\
         gcc-${cross_pkg_arch}-linux-gnu libc6-${cross_debian_arch}-cross \
         musl-dev:amd64 musl-dev:arm64 && \
     apt-get clean autoclean && \
