@@ -27,7 +27,7 @@ RUN GO_VERSION=$(grep -oPm1 '^go \K([[:digit:].]+)' /tmp/go.mod) && \
 # Set Go environment variables
 ENV GOPATH="/agent/go"
 ENV GOCACHE="/agent/.cache"
-ENV PATH="/usr/local/go/bin:/agent/go/bin:$PATH"
+ENV PATH="/usr/local/go/bin:$PATH"
 
 # gRPC dependencies
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
@@ -47,6 +47,7 @@ RUN                                                                             
 
 # Append to /etc/profile for login shells
 RUN echo 'export PATH="/usr/local/go/bin:$PATH"' >> /etc/profile
+RUN echo 'export PATH="/agent/go/bin:$PATH"' >> /etc/profile
 
 # Create rust related directories in /usr/local
 RUN mkdir -p /usr/local/cargo /usr/local/rustup
