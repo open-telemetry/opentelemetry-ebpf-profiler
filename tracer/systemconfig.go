@@ -248,7 +248,7 @@ func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		}
 
 		if includeTracers.Has(types.PerlTracer) || includeTracers.Has(types.PythonTracer) ||
-			includeTracers.Has(types.GoLabels) || includeTracers.Has(types.Labels) {
+			includeTracers.Has(types.Labels) {
 			var tpbaseOffset uint64
 			tpbaseOffset, err = loadTPBaseOffset(coll, maps, kmod)
 			if err != nil {
