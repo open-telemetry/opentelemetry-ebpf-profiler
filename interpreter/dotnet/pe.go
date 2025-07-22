@@ -835,7 +835,7 @@ func (pp *peParser) parseTables() error {
 	if err := binary.Read(r, binary.LittleEndian, &tablesHeader); err != nil {
 		return err
 	}
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		if tablesHeader.Valid&(1<<i) == 0 {
 			continue
 		}

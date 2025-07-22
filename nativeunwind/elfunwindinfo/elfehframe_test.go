@@ -105,8 +105,6 @@ func TestEhFrame(t *testing.T) {
 	}
 
 	for name, test := range tests {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			ef, err := pfelf.Open(test.elfFile)
 			require.NoError(t, err)
@@ -167,8 +165,6 @@ func TestParseCIE(t *testing.T) {
 	}
 
 	for name, tc := range tests {
-		name := name
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			fakeReader := &reader{
 				debugFrame: tc.debugFrame,

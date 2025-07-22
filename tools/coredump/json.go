@@ -94,7 +94,7 @@ func readTestCase(path string) (*CoredumpTestCase, error) {
 }
 
 // readJSON reads a JSON file and unmarshalls it into the given object.
-func readJSON(path string, to interface{}) error {
+func readJSON(path string, to any) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err

@@ -74,7 +74,7 @@ func readFooter(input io.ReaderAt, fileSize uint64) (*footer, error) {
 
 	// Convert into array of uint64.
 	index := make([]uint64, 0, numberOfChunks)
-	for i := uint64(0); i < numberOfChunks; i++ {
+	for i := range numberOfChunks {
 		entry := binary.LittleEndian.Uint64(rawIndex[i*8:])
 		if i > 0 && entry < index[i-1] {
 			return nil, errors.New("index entries aren't monotonically increasing")

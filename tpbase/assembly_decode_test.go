@@ -249,8 +249,6 @@ func TestFSBase(t *testing.T) {
 	}
 
 	for name, test := range testCases {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			var analyzers []Analyzer
 			switch test.machine {

@@ -18,7 +18,7 @@ func ValidateReadAtWrapperTransparency(
 
 	// Samples random slices to validate within the file.
 	r := rand.New(rand.NewPCG(0, 0)) //nolint:gosec
-	for i := uint(0); i < iterations; i++ {
+	for range iterations {
 		// Intentionally allow slices that over-read the file to test this case.
 		length := r.Uint64() % bufferSize
 		start := r.Uint64() % bufferSize
@@ -56,7 +56,7 @@ func ValidateReadAtWrapperTransparency(
 // GenerateTestInputFile generates a test input file, repeating a number sequence over and over.
 func GenerateTestInputFile(seqLen uint8, outputSize uint) []byte {
 	out := make([]byte, 0, outputSize)
-	for i := uint(0); i < outputSize; i++ {
+	for i := range outputSize {
 		out = append(out, byte(i%uint(seqLen)))
 	}
 

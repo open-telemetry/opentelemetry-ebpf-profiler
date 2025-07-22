@@ -48,7 +48,7 @@ type asyncMapUpdaterPool struct {
 func newAsyncMapUpdaterPool(ctx context.Context,
 	numWorkers, workerQueueCapacity int) *asyncMapUpdaterPool {
 	pool := &asyncMapUpdaterPool{}
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		queue := make(chan asyncMapInMapUpdate, workerQueueCapacity)
 		worker := &asyncUpdateWorker{ctx: ctx, queue: queue}
 		go worker.serve()

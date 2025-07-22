@@ -33,8 +33,6 @@ func TestIsValidString(t *testing.T) {
 	}
 
 	for name, testcase := range tests {
-		name := name
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			assert.Equal(t, testcase.expected, util.IsValidString(string(testcase.input)))
 		})

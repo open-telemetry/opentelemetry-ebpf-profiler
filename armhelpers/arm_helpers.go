@@ -15,7 +15,7 @@ import (
 
 // Xreg2num converts arm64asm Reg or RegSP X0...X30 and W0...W30 register enum into a register
 // number. X0/W0 return 0, X1/W1 return 1, etc.
-func Xreg2num(arg interface{}) (int, bool) {
+func Xreg2num(arg any) (int, bool) {
 	var ndx aa.Reg
 	switch reg := arg.(type) {
 	case aa.Reg:

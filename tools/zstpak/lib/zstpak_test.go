@@ -16,7 +16,7 @@ import (
 
 func generateInputFile(seqLen uint8, outputSize uint64) []byte {
 	out := make([]byte, 0, outputSize)
-	for i := uint64(0); i < outputSize; i++ {
+	for i := range outputSize {
 		out = append(out, byte(i%uint64(seqLen)))
 	}
 

@@ -231,7 +231,7 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 				stubName, blockNum, err)
 			return
 		}
-		for index := uint(0); index < numRangesInBlock; index++ {
+		for index := range uint(numRangesInBlock) {
 			startAddr := npsr.Ptr(block, index*rangeSize)
 			endAddr := npsr.Ptr(block, index*rangeSize+8)
 			id := npsr.Ptr(block, index*rangeSize+16)

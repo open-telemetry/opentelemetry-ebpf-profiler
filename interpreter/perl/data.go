@@ -209,11 +209,7 @@ func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 			return nil, fmt.Errorf("perl %x: PL_curstackinfo not found: %v", version, err)
 		}
 		stateInTSD = false
-		if curcopAddr < cursiAddr {
-			stateAddr = curcopAddr
-		} else {
-			stateAddr = cursiAddr
-		}
+		stateAddr = min(curcopAddr, cursiAddr)
 	}
 
 	// Perl_runops_standard is the main loop since Perl 5.6.0 (1999)

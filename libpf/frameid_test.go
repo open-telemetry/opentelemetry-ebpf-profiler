@@ -38,7 +38,6 @@ func TestFrameID(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
 			frameID, err := NewFrameIDFromString(test.input)
 			assert.Equal(t, test.err, err)

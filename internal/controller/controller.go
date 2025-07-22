@@ -195,10 +195,7 @@ func traceCacheSize(monitorInterval time.Duration, samplesPerSecond int,
 
 	maxElements := maxElementsPerInterval(monitorInterval, samplesPerSecond, presentCPUCores)
 
-	size := maxElements * uint32(traceCacheIntervals)
-	if size < traceCacheMinSize {
-		size = traceCacheMinSize
-	}
+	size := max(maxElements*uint32(traceCacheIntervals), traceCacheMinSize)
 	return util.NextPowerOfTwo(size)
 }
 

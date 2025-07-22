@@ -29,8 +29,6 @@ func TestFieldsN(t *testing.T) {
 	}
 
 	for name, testcase := range tests {
-		name := name
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			var fields [4]string
 			n := FieldsN(testcase.input, fields[:testcase.maxFields])
@@ -58,8 +56,6 @@ func TestSplitN(t *testing.T) {
 	}
 
 	for name, testcase := range tests {
-		name := name
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			var fields [4]string
 			n := SplitN(testcase.input, "-", fields[:testcase.maxFields])

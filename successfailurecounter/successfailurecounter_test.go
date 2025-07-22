@@ -72,8 +72,6 @@ func TestSuccessFailureCounter(t *testing.T) {
 	}
 
 	for name, test := range tests {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			var success, failure atomic.Uint64
 			sfc := New(&success, &failure)
