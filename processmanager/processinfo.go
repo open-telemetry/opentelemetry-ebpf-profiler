@@ -283,6 +283,60 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, m *Mapping,
 	return nil
 }
 
+// handleNewObservers processes observers for a new executable mapping.
+// Unlike interpreters where only one can handle an executable, multiple observers
+// can be attached to the same executable.
+//
+// The caller is responsible to hold the ProcessManager lock to avoid race conditions.
+func (pm *ProcessManager) handleNewObservers(pr process.Process, m *Mapping,
+	ei *eim.ExecutableInfo) {
+	if len(ei.Observers) == 0 {
+		return
+	}
+
+	pid := pr.PID()
+	key := m.GetOnDiskFileIdentifier()
+
+	// Initialize observer map for this PID if needed
+	if _, ok := pm.observers[pid]; !ok {
+		pm.observers[pid] = make(map[util.OnDiskFileIdentifier][]interpreter.Observer)
+	}
+
+	// Check if observers are already attached for this key
+	if _, ok := pm.observers[pid][key]; ok {
+		// Already handled
+		return
+	}
+
+	// Attach all observers
+	var observers []interpreter.Observer //nolint:prealloc
+	for _, observerData := range ei.Observers {
+		observer, err := observerData.Attach(pm.ebpf, pid, libpf.Address(m.Bias),
+			pr.GetRemoteMemory())
+		if err != nil {
+			log.Errorf("Failed to attach observer %v to PID %v: %v", observerData, pid, err)
+			continue
+		}
+		if observer == nil {
+			continue
+		}
+
+		log.Debugf("Attached observer %v to PID %v", observerData, pid)
+		observers = append(observers, observer)
+
+		// Update TSD info if available
+		if tsdInfo := pm.getTSDInfo(pid); tsdInfo != nil {
+			if err := observer.UpdateTSDInfo(pm.ebpf, pid, *tsdInfo); err != nil {
+				log.Errorf("Failed to update observer TSDInfo for PID %v: %v", pid, err)
+			}
+		}
+	}
+
+	if len(observers) > 0 {
+		pm.observers[pid][key] = observers
+	}
+}
+
 // handleNewMapping processes new file backed mappings
 func (pm *ProcessManager) handleNewMapping(pr process.Process, m *Mapping,
 	elfRef *pfelf.Reference) error {
@@ -308,9 +362,15 @@ func (pm *ProcessManager) handleNewMapping(pr process.Process, m *Mapping,
 
 	pm.assignTSDInfo(pid, ei.TSDInfo)
 
+	// Handle interpreter if present
 	if ei.Data != nil {
-		return pm.handleNewInterpreter(pr, m, &ei)
+		if err := pm.handleNewInterpreter(pr, m, &ei); err != nil {
+			return err
+		}
 	}
+
+	// Handle observers if present
+	pm.handleNewObservers(pr, m, &ei)
 
 	return nil
 }
@@ -484,6 +544,26 @@ func (pm *ProcessManager) processRemovedMappings(pid libpf.PID, mappings []libpf
 		// There are no longer any mapped interpreters in the process, therefore we can
 		// remove the entry.
 		delete(pm.interpreters, pid)
+	}
+
+	// Clean up observers that are no longer valid
+	for key, observerList := range pm.observers[pid] {
+		if _, ok := interpretersValid[key]; ok {
+			continue
+		}
+		for _, observer := range observerList {
+			if err := observer.Detach(pm.ebpf, pid); err != nil {
+				log.Errorf("Failed to unload observer for PID %d: %v",
+					pid, err)
+			}
+		}
+		delete(pm.observers[pid], key)
+	}
+
+	if len(pm.observers[pid]) == 0 {
+		// There are no longer any mapped observers in the process, therefore we can
+		// remove the entry.
+		delete(pm.observers, pid)
 	}
 }
 
@@ -779,6 +859,7 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		log.Debugf("PID %v deleted", pid)
 		delete(pm.pidToProcessInfo, pid)
 
+		// Detach all interpreters for this PID
 		for _, instance := range pm.interpreters[pid] {
 			if err2 := instance.Detach(pm.ebpf, pid); err2 != nil {
 				err = errors.Join(err,
@@ -787,6 +868,19 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 			}
 		}
 		delete(pm.interpreters, pid)
+
+		// Detach all observers for this PID
+		for _, observerList := range pm.observers[pid] {
+			for _, observer := range observerList {
+				if err2 := observer.Detach(pm.ebpf, pid); err2 != nil {
+					err = errors.Join(err,
+						fmt.Errorf("failed to handle observer process exit for PID %d: %v",
+							pid, err2))
+				}
+			}
+		}
+		delete(pm.observers, pid)
+
 		delete(pm.exitEvents, pid)
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}

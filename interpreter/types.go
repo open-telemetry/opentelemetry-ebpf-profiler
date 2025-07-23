@@ -130,14 +130,16 @@ type Data interface {
 	Unload(ebpf EbpfHandler)
 }
 
-// Instance is the interface to operate on per-PID data.
-type Instance interface {
+// Observer is the base interface for observing per-PID data without symbolization.
+// This interface is useful for components that need to observe processes without
+// providing frame symbolization capabilities.
+type Observer interface {
 	// Detach removes any information from the ebpf maps. The pid is given as argument so
-	// simple interpreters can use the global Data also as the Instance implementation.
+	// simple observers can use the global Data also as the Observer implementation.
 	Detach(ebpf EbpfHandler, pid libpf.PID) error
 
 	// SynchronizeMappings is called when the processmanager has reread process memory
-	// mappings. Interpreters not needing to process these events can simply ignore them
+	// mappings. Observers not needing to process these events can simply ignore them
 	// by just returning a nil.
 	SynchronizeMappings(ebpf EbpfHandler, symbolReporter reporter.SymbolReporter,
 		pr process.Process, mappings []process.Mapping) error
@@ -146,13 +148,19 @@ type Instance interface {
 	// introspection data has been updated.
 	UpdateTSDInfo(ebpf EbpfHandler, pid libpf.PID, info tpbase.TSDInfo) error
 
+	// GetAndResetMetrics collects the metrics from the Observer and resets
+	// the counters to their initial value.
+	GetAndResetMetrics() ([]metrics.Metric, error)
+}
+
+// Instance is the interface to operate on per-PID data with symbolization support.
+// It extends Observer with the ability to symbolize frames.
+type Instance interface {
+	Observer
+
 	// Symbolize requests symbolization of the given frame, and dispatches this symbolization
 	// to the collection agent. The frame's contents (frame type, file ID and line number)
 	// are appended to newTrace.
 	Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame,
 		trace *libpf.Trace) error
-
-	// GetAndResetMetrics collects the metrics from the Instance and resets
-	// the counters to their initial value.
-	GetAndResetMetrics() ([]metrics.Metric, error)
 }

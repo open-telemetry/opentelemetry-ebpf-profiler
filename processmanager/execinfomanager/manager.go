@@ -25,6 +25,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/oomwatcher"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/python"
@@ -66,6 +67,9 @@ type ExecutableInfo struct {
 	// instance belongs to was previously identified as an interpreter. Otherwise,
 	// this field is nil.
 	Data interpreter.Data
+	// Observers stores per-executable observer information. Multiple observers
+	// can be associated with a single executable.
+	Observers []interpreter.Data
 	// TSDInfo stores TSD information if the executable is libc, otherwise nil.
 	TSDInfo *tpbase.TSDInfo
 }
@@ -144,6 +148,12 @@ func NewExecutableInfoManager(
 		interpreterLoaders = append(interpreterLoaders, customlabels.Loader)
 	}
 
+	// Initialize observer loaders
+	observerLoaders := []interpreter.Loader{
+		oomwatcher.Loader,
+		// Additional observers can be added here
+	}
+
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
 		func(id host.FileID) uint32 { return uint32(id) })
 	if err != nil {
@@ -155,6 +165,7 @@ func NewExecutableInfoManager(
 		sdp: sdp,
 		state: xsync.NewRWMutex(executableInfoManagerState{
 			interpreterLoaders: interpreterLoaders,
+			observerLoaders:    observerLoaders,
 			executables:        map[host.FileID]*entry{},
 			unwindInfoIndex:    map[sdtypes.UnwindInfo]uint16{},
 			ebpf:               ebpf,
@@ -230,8 +241,9 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// Insert a corresponding record into our map.
 	info = &entry{
 		ExecutableInfo: ExecutableInfo{
-			Data:    state.detectAndLoadInterpData(loaderInfo),
-			TSDInfo: tsdInfo,
+			Data:      state.detectAndLoadInterpData(loaderInfo),
+			Observers: state.detectAndLoadObservers(loaderInfo),
+			TSDInfo:   tsdInfo,
 		},
 		mapRef: ref,
 		rc:     1,
@@ -330,6 +342,11 @@ type executableInfoManagerState struct {
 	// for loading the host agent support for a specific interpreter type.
 	interpreterLoaders []interpreter.Loader
 
+	// observerLoaders is a list of instances of an interface that provide functionality
+	// for loading observers for executables. Unlike interpreters, multiple observers
+	// can be associated with a single executable.
+	observerLoaders []interpreter.Loader
+
 	// ebpf provides the interface to manipulate eBPF maps.
 	ebpf pmebpf.EbpfHandler
 
@@ -378,6 +395,38 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 	}
 
 	return nil
+}
+
+// detectAndLoadObservers attempts to detect observers for the given executable.
+// Unlike interpreters, multiple observers can be loaded for a single executable.
+func (state *executableInfoManagerState) detectAndLoadObservers(
+	loaderInfo *interpreter.LoaderInfo) []interpreter.Data {
+	var observers []interpreter.Data
+
+	// Ask all observer loaders to check this executable
+	for _, loader := range state.observerLoaders {
+		data, err := loader(state.ebpf, loaderInfo)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// Very common if the process exited when we tried to analyze it.
+				log.Debugf("Failed to load observer for %v (%#016x): file not found",
+					loaderInfo.FileName(), loaderInfo.FileID())
+			} else {
+				log.Errorf("Loader for %v (%#016x) failed: %v",
+					loaderInfo.FileName(), loaderInfo.FileID(), err)
+			}
+			continue
+		}
+
+		// All observers return a data instance (possibly no-op)
+		if data != nil {
+			log.Debugf("Observer data %v for %v (%#016x)",
+				data, loaderInfo.FileName(), loaderInfo.FileID())
+			observers = append(observers, data)
+		}
+	}
+
+	return observers
 }
 
 // loadDeltas converts the sdtypes.StackDelta to StackDeltaEBPF and passes that to
