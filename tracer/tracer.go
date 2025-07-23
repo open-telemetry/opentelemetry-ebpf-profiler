@@ -870,13 +870,15 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]uint32) {
 		key = nextKey
 
 		if err := eventsMap.Lookup(unsafe.Pointer(&key), unsafe.Pointer(&value)); err != nil {
-			log.Fatalf("Failed to lookup '%v' in pid_events: %v", key, err)
+			log.Warnf("Failed to lookup '%v' in pid_events: %v", key, err)
+			break
 		}
 
 		// Lookup the next map entry before deleting the current one.
 		if err := eventsMap.NextKey(unsafe.Pointer(&key), unsafe.Pointer(&nextKey)); err != nil {
 			if !errors.Is(err, cebpf.ErrKeyNotExist) {
-				log.Fatalf("Failed to read from pid_events map: %v", err)
+				log.Warnf("Failed to read from pid_events map: %v", err)
+				break
 			}
 			keyFound = false
 		}
@@ -884,7 +886,7 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]uint32) {
 		if !t.hasBatchOperations {
 			// Now that we have the next key, we can delete the current one.
 			if err := eventsMap.Delete(unsafe.Pointer(&key)); err != nil {
-				log.Fatalf("Failed to delete '%v' from pid_events: %v", key, err)
+				log.Warnf("Failed to delete '%v' from pid_events: %v", key, err)
 			}
 		} else {
 			// Store to-be-deleted keys in a map so we can delete them all with a single
@@ -903,7 +905,7 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]uint32) {
 	if keysToDelete != 0 {
 		keys := libpf.MapKeysToSlice(deleteBatch)
 		if _, err := eventsMap.BatchDelete(keys, nil); err != nil {
-			log.Fatalf("Failed to batch delete %d entries from pid_events map: %v",
+			log.Warnf("Failed to batch delete %d entries from pid_events map: %v",
 				keysToDelete, err)
 		}
 	}
