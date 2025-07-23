@@ -90,7 +90,7 @@ jobs:
   check-binary-blobs:
     name: Check for differences in the eBPF binary blobs
     runs-on: ubuntu-24.04
-    container: otel/opentelemetry-ebpf-profiler-dev:latest@sha256:acce547f366150eb25392e1aff270df430ef6b759baeb4292999116018e70e6e
+    container: otel/opentelemetry-ebpf-profiler-dev:latest@sha256:2b19f53b664a8d588c1bc2e1e38bcde33893bb5bf3f4ef2be46c7a74b9b54c4d
     defaults:
       run:
         shell: bash --login {0}
