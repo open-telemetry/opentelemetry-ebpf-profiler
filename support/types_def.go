@@ -95,6 +95,7 @@ const (
 	TraceOriginUnknown  = C.TRACE_UNKNOWN
 	TraceOriginSampling = C.TRACE_SAMPLING
 	TraceOriginOffCPU   = C.TRACE_OFF_CPU
+	TraceOriginMemory   = C.TRACE_MEMORY
 )
 
 const OffCPUThresholdMax = C.OFF_CPU_THRESHOLD_MAX

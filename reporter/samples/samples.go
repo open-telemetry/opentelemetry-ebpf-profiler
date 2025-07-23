@@ -6,17 +6,19 @@ package samples // import "go.opentelemetry.io/ebpf-profiler/reporter/samples"
 import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 type TraceEventMeta struct {
-	Timestamp      libpf.UnixTime64
-	Comm           string
-	ProcessName    string
-	ExecutablePath string
-	APMServiceName string
-	ContainerID    string
-	PID, TID       libpf.PID
-	CPU            int
-	Origin         libpf.Origin
-	OffTime        int64
-	EnvVars        map[string]string
+	Timestamp             libpf.UnixTime64
+	Comm                  string
+	ProcessName           string
+	ExecutablePath        string
+	APMServiceName        string
+	ContainerID           string
+	PID, TID              libpf.PID
+	CPU                   int
+	Origin                libpf.Origin
+	OffTime               int64
+	Allocs, Frees         uint64
+	AllocBytes, FreeBytes uint64
+	EnvVars               map[string]string
 }
 
 // TraceEvents holds known information about a trace.
