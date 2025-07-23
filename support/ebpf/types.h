@@ -413,6 +413,7 @@ typedef enum TraceOrigin {
   TRACE_SAMPLING,
   TRACE_OFF_CPU,
   TRACE_PROBE,
+  TRACE_MEMORY,
   TRACE_CUDA_LAUNCH,
 } TraceOrigin;
 

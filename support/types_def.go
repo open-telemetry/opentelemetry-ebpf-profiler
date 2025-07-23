@@ -110,6 +110,7 @@ const (
 	TraceOriginSampling = C.TRACE_SAMPLING
 	TraceOriginOffCPU   = C.TRACE_OFF_CPU
 	TraceOriginProbe    = C.TRACE_PROBE
+	TraceOriginMemory   = C.TRACE_MEMORY
 	TraceOriginCuda     = C.TRACE_CUDA_LAUNCH
 )
 

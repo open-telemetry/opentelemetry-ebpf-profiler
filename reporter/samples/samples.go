@@ -8,17 +8,19 @@ import (
 )
 
 type TraceEventMeta struct {
-	Timestamp      libpf.UnixTime64
-	Comm           libpf.String
-	ProcessName    libpf.String
-	ExecutablePath libpf.String
-	APMServiceName string
-	ContainerID    libpf.String
-	PID, TID       libpf.PID
-	CPU            int
-	Origin         libpf.Origin
-	OffTime        int64
-	EnvVars        map[libpf.String]libpf.String
+	Timestamp             libpf.UnixTime64
+	Comm                  libpf.String
+	ProcessName           libpf.String
+	ExecutablePath        libpf.String
+	APMServiceName        string
+	ContainerID           libpf.String
+	PID, TID              libpf.PID
+	CPU                   int
+	Origin                libpf.Origin
+	OffTime               int64
+	Allocs, Frees         uint64
+	AllocBytes, FreeBytes uint64
+	EnvVars               map[libpf.String]libpf.String
 }
 
 // TraceEvents holds known information about a trace.
