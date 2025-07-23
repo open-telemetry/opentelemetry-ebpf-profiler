@@ -408,7 +408,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 			},
 		}...)
 		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], offCPUProgs,
-			"kprobe", cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
+			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
 		}
 	}
@@ -423,8 +423,8 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 				enable:           true,
 			},
 		}...)
-		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["uprobe_progs"], uprobeProgs,
-			"uprobe", cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
+		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], uprobeProgs,
+			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, fmt.Errorf("failed to load uprobe eBPF programs: %v", err)
 		}
 	}
@@ -595,7 +595,7 @@ func progArrayReferences(perfTailCallMapFD int, insns asm.Instructions) []int {
 // are written as perf event eBPF programs. loadProbeUnwinders dynamically rewrites the
 // specification of these programs to xProbe eBPF programs and adjusts tail call maps.
 func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
-	tailcallMap *cebpf.Map, progs []progLoaderHelper, probePrefix string,
+	tailcallMap *cebpf.Map, progs []progLoaderHelper,
 	bpfVerifierLogLevel uint32, perfTailCallMapFD int) error {
 	programOptions := cebpf.ProgramOptions{
 		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
@@ -608,7 +608,7 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 
 		unwindProgName := unwindProg.name
 		if !unwindProg.noTailCallTarget {
-			unwindProgName = probePrefix + "_" + unwindProg.name
+			unwindProgName = "kprobe_" + unwindProg.name
 		}
 
 		progSpec, ok := coll.Programs[unwindProgName]
