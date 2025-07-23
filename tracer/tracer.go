@@ -903,6 +903,16 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		return nil
 	}
 
+	if ptr.custom_labels.len > 0 {
+		trace.CustomLabels = make(map[string]string, int(ptr.custom_labels.len))
+		for i := 0; i < int(ptr.custom_labels.len); i++ {
+			lbl := ptr.custom_labels.labels[i]
+			key := C.GoString((*C.char)(unsafe.Pointer(&lbl.key)))
+			val := C.GoString((*C.char)(unsafe.Pointer(&lbl.val)))
+			trace.CustomLabels[key] = val
+		}
+	}
+
 	// Trace fields included in the hash:
 	//  - PID, kernel stack ID, length & frame array
 	// Intentionally excluded:
@@ -913,6 +923,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	ptr.ktime = 0
 	ptr.origin = 0
 	ptr.offtime = 0
+	ptr.custom_labels = C.CustomLabelsArray{}
 	trace.Hash = host.TraceHash(xxh3.Hash128(raw).Lo)
 
 	userFrameOffs := 0
@@ -924,16 +935,6 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 			log.Errorf("Failed to get kernel stack frames for 0x%x: %v", trace.Hash, err)
 		} else {
 			userFrameOffs = int(kstackLen)
-		}
-	}
-
-	if ptr.custom_labels.len > 0 {
-		trace.CustomLabels = make(map[string]string, int(ptr.custom_labels.len))
-		for i := 0; i < int(ptr.custom_labels.len); i++ {
-			lbl := ptr.custom_labels.labels[i]
-			key := C.GoString((*C.char)(unsafe.Pointer(&lbl.key)))
-			val := C.GoString((*C.char)(unsafe.Pointer(&lbl.val)))
-			trace.CustomLabels[key] = val
 		}
 	}
 
