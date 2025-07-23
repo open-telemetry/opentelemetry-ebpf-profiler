@@ -62,6 +62,9 @@ func mainWithExitCode() exitCode {
 		log.Errorf("Failure to parse arguments: %v", err)
 		return exitParseError
 	}
+	if argUprobe != "" {
+		cfg.UProbes = append(cfg.UProbes, argUprobe)
+	}
 
 	if cfg.Copyright {
 		fmt.Print(copyright)
