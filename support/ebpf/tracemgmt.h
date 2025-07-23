@@ -28,6 +28,12 @@
     static int EBPF_INLINE kprobe_##func_name(struct pt_regs *ctx)                                 \
     {                                                                                              \
       return func_name(ctx);                                                                       \
+    }                                                                                              \
+                                                                                                   \
+    SEC("uprobe/" #func_name)                                                                      \
+    static int EBPF_INLINE uprobe_##func_name(struct pt_regs *ctx)                                 \
+    {                                                                                              \
+      return func_name(ctx);                                                                       \
     }
 
 #endif // TESTING_COREDUMP
