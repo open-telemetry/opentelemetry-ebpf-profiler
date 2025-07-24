@@ -111,7 +111,7 @@ test: generate ebpf test-deps
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
 	go install gotest.tools/gotestsum@latest
-	gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 # This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
 # amd64) and the CI kernel tests run them already. Useful for local testing.
