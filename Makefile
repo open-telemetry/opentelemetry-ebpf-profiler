@@ -1,6 +1,7 @@
-.PHONY: all all-common clean ebpf generate test test-deps protobuf docker-image agent legal \
-	integration-test-binaries codespell lint linter-version debug debug-agent ebpf-profiler \
-	format-ebpf rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
+.PHONY: all all-common clean ebpf generate local-collector test test-deps \
+	test-junit protobuf docker-image agent legal integration-test-binaries \
+	codespell lint linter-version debug debug-agent ebpf-profiler format-ebpf \
+	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
 SHELL := /usr/bin/env bash
 
