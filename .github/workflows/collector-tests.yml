@@ -36,7 +36,9 @@ jobs:
           collector_path=/tmp/opentelemetry-collector
           git clone --depth=1 https://github.com/open-telemetry/opentelemetry-collector.git $collector_path
       - name: Setup replace statement
-        run: COLLECTOR_PATH=/tmp/opentelemetry-collector make local-collector
+        run: |
+          COLLECTOR_PATH=/tmp/opentelemetry-collector make local-collector
+          go mod tidy
       - name: Tests
         run: make test-junit
       - name: Generate Issue
