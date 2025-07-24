@@ -81,8 +81,6 @@ func TestParseGoPclntab(t *testing.T) {
 	}
 
 	for name, test := range tests {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			ef, err := pfelf.Open(test.elfFile)
 			require.NoError(t, err)

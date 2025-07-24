@@ -33,7 +33,7 @@ func loadTracers(t *testing.T) *ebpfMapsImpl {
 	require.NoError(t, err)
 
 	return &ebpfMapsImpl{
-		pidPageToMappingInfo: pidPageToMappingInfo,
+		PidPageToMappingInfo: pidPageToMappingInfo,
 	}
 }
 
@@ -63,7 +63,7 @@ func TestLPM(t *testing.T) {
 			err := impl.UpdatePidPageMappingInfo(test.pid, prefix, test.fileID, test.bias)
 			require.NoError(t, err)
 
-			fileID, bias, err := impl.LookupPidPageInformation(uint32(test.pid), test.rip)
+			fileID, bias, err := impl.LookupPidPageInformation(test.pid, test.rip)
 			if assert.NoError(t, err) {
 				assert.Equal(t, test.fileID, uint64(fileID))
 				assert.Equal(t, test.bias, bias)

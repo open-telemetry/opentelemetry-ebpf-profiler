@@ -13,6 +13,7 @@ import (
 	"io"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -37,10 +38,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
-
-// #include <stdlib.h>
-// #include "../../support/ebpf/types.h"
-import "C"
 
 // The following regexs are intended to match either a path to a Python binary or
 // library.
@@ -135,7 +132,7 @@ func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.A
 	i := &pythonInstance{
 		d:                d,
 		rm:               rm,
-		bias:             C.u64(bias),
+		bias:             bias,
 		addrToCodeObject: addrToCodeObject,
 	}
 
@@ -349,7 +346,7 @@ type pythonInstance struct {
 
 	d    *pythonData
 	rm   remotememory.RemoteMemory
-	bias C.u64
+	bias libpf.Address
 
 	// addrToCodeObject maps a Python Code object to a pythonCodeObject which caches
 	// the needed data from it.
@@ -400,28 +397,28 @@ func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.P
 	tsdInfo tpbase.TSDInfo) error {
 	d := p.d
 	vm := &d.vmStructs
-	cdata := C.PyProcInfo{
-		autoTLSKeyAddr: C.u64(d.autoTLSKey) + p.bias,
-		version:        C.u16(d.version),
+	cdata := support.PyProcInfo{
+		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
+		Version:        d.version,
 
-		tsdInfo: C.TSDInfo{
-			offset:     C.s16(tsdInfo.Offset),
-			multiplier: C.u8(tsdInfo.Multiplier),
-			indirect:   C.u8(tsdInfo.Indirect),
+		TsdInfo: support.TSDInfo{
+			Offset:     tsdInfo.Offset,
+			Multiplier: tsdInfo.Multiplier,
+			Indirect:   tsdInfo.Indirect,
 		},
 
-		PyThreadState_frame:            C.u8(vm.PyThreadState.Frame),
-		PyCFrame_current_frame:         C.u8(vm.PyCFrame.CurrentFrame),
-		PyFrameObject_f_back:           C.u8(vm.PyFrameObject.Back),
-		PyFrameObject_f_code:           C.u8(vm.PyFrameObject.Code),
-		PyFrameObject_f_lasti:          C.u8(vm.PyFrameObject.LastI),
-		PyFrameObject_entry_member:     C.u8(vm.PyFrameObject.EntryMember),
-		PyFrameObject_entry_val:        C.u8(vm.PyFrameObject.EntryVal),
-		PyCodeObject_co_argcount:       C.u8(vm.PyCodeObject.ArgCount),
-		PyCodeObject_co_kwonlyargcount: C.u8(vm.PyCodeObject.KwOnlyArgCount),
-		PyCodeObject_co_flags:          C.u8(vm.PyCodeObject.Flags),
-		PyCodeObject_co_firstlineno:    C.u8(vm.PyCodeObject.FirstLineno),
-		PyCodeObject_sizeof:            C.u8(vm.PyCodeObject.Sizeof),
+		PyThreadState_frame:            uint8(vm.PyThreadState.Frame),
+		PyCFrame_current_frame:         uint8(vm.PyCFrame.CurrentFrame),
+		PyFrameObject_f_back:           uint8(vm.PyFrameObject.Back),
+		PyFrameObject_f_code:           uint8(vm.PyFrameObject.Code),
+		PyFrameObject_f_lasti:          uint8(vm.PyFrameObject.LastI),
+		PyFrameObject_entry_member:     uint8(vm.PyFrameObject.EntryMember),
+		PyFrameObject_entry_val:        uint8(vm.PyFrameObject.EntryVal),
+		PyCodeObject_co_argcount:       uint8(vm.PyCodeObject.ArgCount),
+		PyCodeObject_co_kwonlyargcount: uint8(vm.PyCodeObject.KwOnlyArgCount),
+		PyCodeObject_co_flags:          uint8(vm.PyCodeObject.Flags),
+		PyCodeObject_co_firstlineno:    uint8(vm.PyCodeObject.FirstLineno),
+		PyCodeObject_sizeof:            uint8(vm.PyCodeObject.Sizeof),
 	}
 
 	err := ebpf.UpdateProcData(libpf.Python, pid, unsafe.Pointer(&cdata))
@@ -610,10 +607,8 @@ func fieldByPythonName(obj reflect.Value, fieldName string) reflect.Value {
 	for i := 0; i < obj.NumField(); i++ {
 		objField := objType.Field(i)
 		if nameTag, ok := objField.Tag.Lookup("name"); ok {
-			for _, pythonName := range strings.Split(nameTag, ",") {
-				if fieldName == pythonName {
-					return obj.Field(i)
-				}
+			if slices.Contains(strings.Split(nameTag, ","), fieldName) {
+				return obj.Field(i)
 			}
 		}
 		if fieldName == objField.Name {
@@ -715,12 +710,10 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		if err != nil {
 			return nil, err
 		}
-		for _, n := range needed {
-			if libpythonRegex.MatchString(n) {
-				// 'python' linked with 'libpython'. The beef is in the library,
-				// so do not try to inspect the shim main binary.
-				return nil, nil
-			}
+		if slices.ContainsFunc(needed, libpythonRegex.MatchString) {
+			// 'python' linked with 'libpython'. The beef is in the library,
+			// so do not try to inspect the shim main binary.
+			return nil, nil
 		}
 	}
 

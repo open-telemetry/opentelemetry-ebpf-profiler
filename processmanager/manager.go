@@ -56,6 +56,8 @@ var (
 	errUnknownMapping = errors.New("unknown memory mapping")
 	// errUnknownPID indicates that the process is not known to the process manager.
 	errUnknownPID = errors.New("unknown process")
+	// errPIDGone indicates that a process is no longer managed by the process manager.
+	errPIDGone = errors.New("interpreter process gone")
 )
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
@@ -196,7 +198,7 @@ func (pm *ProcessManager) symbolizeFrame(frame int, trace *host.Trace,
 	defer pm.mu.Unlock()
 
 	if len(pm.interpreters[trace.PID]) == 0 {
-		return errors.New("interpreter process gone")
+		return errPIDGone
 	}
 
 	for _, instance := range pm.interpreters[trace.PID] {
@@ -206,7 +208,7 @@ func (pm *ProcessManager) symbolizeFrame(frame int, trace *host.Trace,
 				// So continue with the next interpreter instance for this PID.
 				continue
 			}
-			return fmt.Errorf("symbolization failed: %w", err)
+			return err
 		}
 		return nil
 	}
@@ -225,7 +227,7 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 		CustomLabels: trace.CustomLabels,
 	}
 
-	for i := 0; i < traceLen; i++ {
+	for i := range traceLen {
 		frame := &trace.Frames[i]
 
 		if frame.Type.IsError() {

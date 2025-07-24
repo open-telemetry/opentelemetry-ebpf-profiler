@@ -5,10 +5,15 @@
 
 package support // import "go.opentelemetry.io/ebpf-profiler/support"
 
+import (
+	"go.opentelemetry.io/ebpf-profiler/metrics"
+)
+
 /*
 #include "./ebpf/types.h"
 #include "./ebpf/frametypes.h"
 #include "./ebpf/stackdeltatypes.h"
+#include "./ebpf/v8_tracer.h"
 */
 import "C"
 
@@ -95,12 +100,39 @@ const (
 	TraceOriginOffCPU   = C.TRACE_OFF_CPU
 )
 
+type ApmSpanID C.ApmSpanID
+type ApmTraceID C.ApmTraceID
+type CustomLabel C.CustomLabel
+type CustomLabelsArray C.CustomLabelsArray
+type Event C.Event
+type Frame C.Frame
+type OffsetRange C.OffsetRange
+type PIDPage C.PIDPage
+type PIDPageMappingInfo C.PIDPageMappingInfo
+type StackDelta C.StackDelta
+type StackDeltaPageInfo C.StackDeltaPageInfo
+type StackDeltaPageKey C.StackDeltaPageKey
+type SystemAnalysis C.SystemAnalysis
+type SystemConfig C.SystemConfig
+type TSDInfo C.TSDInfo
+type Trace C.Trace
+type UnwindInfo C.UnwindInfo
+
 type ApmIntProcInfo C.ApmIntProcInfo
 type DotnetProcInfo C.DotnetProcInfo
+type GoLabelsOffsets C.GoLabelsOffsets
+type HotspotProcInfo C.HotspotProcInfo
 type PHPProcInfo C.PHPProcInfo
+type PerlProcInfo C.PerlProcInfo
+type PyProcInfo C.PyProcInfo
 type RubyProcInfo C.RubyProcInfo
+type V8ProcInfo C.V8ProcInfo
 
 const (
+	Sizeof_Frame      = C.sizeof_Frame
+	Sizeof_StackDelta = C.sizeof_StackDelta
+	Sizeof_Trace      = C.sizeof_Trace
+
 	sizeof_ApmIntProcInfo = C.sizeof_ApmIntProcInfo
 	sizeof_DotnetProcInfo = C.sizeof_DotnetProcInfo
 	sizeof_PHPProcInfo    = C.sizeof_PHPProcInfo
@@ -128,3 +160,125 @@ const (
 	UnwindDerefMask       int32 = C.UNWIND_DEREF_MASK
 	UnwindDerefMultiplier int32 = C.UNWIND_DEREF_MULTIPLIER
 )
+
+const (
+	// Hotspot specific
+	FrameHotspotStub        = C.FRAME_HOTSPOT_STUB
+	FrameHotspotVtable      = C.FRAME_HOTSPOT_VTABLE
+	FrameHotspotInterpreter = C.FRAME_HOTSPOT_INTERPRETER
+	FrameHotspotNative      = C.FRAME_HOTSPOT_NATIVE
+
+	// V8 specific
+	V8SmiTag            = C.V8_SmiTag
+	V8SmiTagMask        = C.V8_SmiTagMask
+	V8SmiTagShift       = C.V8_SmiTagShift
+	V8SmiValueShift     = C.V8_SmiValueShift
+	V8HeapObjectTag     = C.V8_HeapObjectTag
+	V8HeapObjectTagMask = C.V8_HeapObjectTagMask
+
+	V8FpContextSize = C.V8_FP_CONTEXT_SIZE
+
+	V8FileTypeMarker       = C.V8_FILE_TYPE_MARKER
+	V8FileTypeByteCode     = C.V8_FILE_TYPE_BYTECODE
+	V8FileTypeNativeSFI    = C.V8_FILE_TYPE_NATIVE_SFI
+	V8FileTypeNativeCode   = C.V8_FILE_TYPE_NATIVE_CODE
+	V8FileTypeNativeJSFunc = C.V8_FILE_TYPE_NATIVE_JSFUNC
+	V8FileTypeMask         = C.V8_FILE_TYPE_MASK
+
+	V8LineCookieShift = C.V8_LINE_COOKIE_SHIFT
+	V8LineCookieMask  = C.V8_LINE_COOKIE_MASK
+	V8LineDeltaMask   = C.V8_LINE_DELTA_MASK
+)
+
+var MetricsTranslation = []metrics.MetricID{
+	C.metricID_UnwindCallInterpreter:                      metrics.IDUnwindCallInterpreter,
+	C.metricID_UnwindErrZeroPC:                            metrics.IDUnwindErrZeroPC,
+	C.metricID_UnwindErrStackLengthExceeded:               metrics.IDUnwindErrStackLengthExceeded,
+	C.metricID_UnwindErrBadTSDAddr:                        metrics.IDUnwindErrBadTLSAddr,
+	C.metricID_UnwindErrBadTPBaseAddr:                     metrics.IDUnwindErrBadTPBaseAddr,
+	C.metricID_UnwindNativeAttempts:                       metrics.IDUnwindNativeAttempts,
+	C.metricID_UnwindNativeFrames:                         metrics.IDUnwindNativeFrames,
+	C.metricID_UnwindNativeStackDeltaStop:                 metrics.IDUnwindNativeStackDeltaStop,
+	C.metricID_UnwindNativeErrLookupTextSection:           metrics.IDUnwindNativeErrLookupTextSection,
+	C.metricID_UnwindNativeErrLookupIterations:            metrics.IDUnwindNativeErrLookupIterations,
+	C.metricID_UnwindNativeErrLookupRange:                 metrics.IDUnwindNativeErrLookupRange,
+	C.metricID_UnwindNativeErrKernelAddress:               metrics.IDUnwindNativeErrKernelAddress,
+	C.metricID_UnwindNativeErrWrongTextSection:            metrics.IDUnwindNativeErrWrongTextSection,
+	C.metricID_UnwindNativeErrPCRead:                      metrics.IDUnwindNativeErrPCRead,
+	C.metricID_UnwindPythonAttempts:                       metrics.IDUnwindPythonAttempts,
+	C.metricID_UnwindPythonFrames:                         metrics.IDUnwindPythonFrames,
+	C.metricID_UnwindPythonErrBadPyThreadStateCurrentAddr: metrics.IDUnwindPythonErrBadPyThreadStateCurrentAddr,
+	C.metricID_UnwindPythonErrZeroThreadState:             metrics.IDUnwindPythonErrZeroThreadState,
+	C.metricID_UnwindPythonErrBadThreadStateFrameAddr:     metrics.IDUnwindPythonErrBadThreadStateFrameAddr,
+	C.metricID_UnwindPythonZeroFrameCodeObject:            metrics.IDUnwindPythonZeroFrameCodeObject,
+	C.metricID_UnwindPythonErrBadCodeObjectArgCountAddr:   metrics.IDUnwindPythonErrBadCodeObjectArgCountAddr,
+	C.metricID_UnwindNativeErrStackDeltaInvalid:           metrics.IDUnwindNativeErrStackDeltaInvalid,
+	C.metricID_ErrEmptyStack:                              metrics.IDErrEmptyStack,
+	C.metricID_UnwindHotspotAttempts:                      metrics.IDUnwindHotspotAttempts,
+	C.metricID_UnwindHotspotFrames:                        metrics.IDUnwindHotspotFrames,
+	C.metricID_UnwindHotspotErrNoCodeblob:                 metrics.IDUnwindHotspotErrNoCodeblob,
+	C.metricID_UnwindHotspotErrInvalidCodeblob:            metrics.IDUnwindHotspotErrInvalidCodeblob,
+	C.metricID_UnwindHotspotErrInterpreterFP:              metrics.IDUnwindHotspotErrInterpreterFP,
+	C.metricID_UnwindHotspotErrLrUnwindingMidTrace:        metrics.IDUnwindHotspotErrLrUnwindingMidTrace,
+	C.metricID_UnwindHotspotUnsupportedFrameSize:          metrics.IDHotspotUnsupportedFrameSize,
+	C.metricID_UnwindNativeSmallPC:                        metrics.IDUnwindNativeSmallPC,
+	C.metricID_UnwindNativeErrLookupStackDeltaInnerMap:    metrics.IDUnwindNativeErrLookupStackDeltaInnerMap,
+	C.metricID_UnwindNativeErrLookupStackDeltaOuterMap:    metrics.IDUnwindNativeErrLookupStackDeltaOuterMap,
+	C.metricID_ErrBPFCurrentComm:                          metrics.IDErrBPFCurrentComm,
+	C.metricID_UnwindPHPAttempts:                          metrics.IDUnwindPHPAttempts,
+	C.metricID_UnwindPHPFrames:                            metrics.IDUnwindPHPFrames,
+	C.metricID_UnwindPHPErrBadCurrentExecuteData:          metrics.IDUnwindPHPErrBadCurrentExecuteData,
+	C.metricID_UnwindPHPErrBadZendExecuteData:             metrics.IDUnwindPHPErrBadZendExecuteData,
+	C.metricID_UnwindPHPErrBadZendFunction:                metrics.IDUnwindPHPErrBadZendFunction,
+	C.metricID_UnwindPHPErrBadZendOpline:                  metrics.IDUnwindPHPErrBadZendOpline,
+	C.metricID_UnwindRubyAttempts:                         metrics.IDUnwindRubyAttempts,
+	C.metricID_UnwindRubyFrames:                           metrics.IDUnwindRubyFrames,
+	C.metricID_UnwindPerlAttempts:                         metrics.IDUnwindPerlAttempts,
+	C.metricID_UnwindPerlFrames:                           metrics.IDUnwindPerlFrames,
+	C.metricID_UnwindPerlTSD:                              metrics.IDUnwindPerlTLS,
+	C.metricID_UnwindPerlReadStackInfo:                    metrics.IDUnwindPerlReadStackInfo,
+	C.metricID_UnwindPerlReadContextStackEntry:            metrics.IDUnwindPerlReadContextStackEntry,
+	C.metricID_UnwindPerlResolveEGV:                       metrics.IDUnwindPerlResolveEGV,
+	C.metricID_UnwindHotspotErrInvalidRA:                  metrics.IDUnwindHotspotErrInvalidRA,
+	C.metricID_UnwindV8Attempts:                           metrics.IDUnwindV8Attempts,
+	C.metricID_UnwindV8Frames:                             metrics.IDUnwindV8Frames,
+	C.metricID_UnwindV8ErrBadFP:                           metrics.IDUnwindV8ErrBadFP,
+	C.metricID_UnwindV8ErrBadJSFunc:                       metrics.IDUnwindV8ErrBadJSFunc,
+	C.metricID_UnwindV8ErrBadCode:                         metrics.IDUnwindV8ErrBadCode,
+	C.metricID_ReportedPIDsErr:                            metrics.IDReportedPIDsErr,
+	C.metricID_PIDEventsErr:                               metrics.IDPIDEventsErr,
+	C.metricID_UnwindNativeLr0:                            metrics.IDUnwindNativeLr0,
+	C.metricID_NumProcNew:                                 metrics.IDNumProcNew,
+	C.metricID_NumProcExit:                                metrics.IDNumProcExit,
+	C.metricID_NumUnknownPC:                               metrics.IDNumUnknownPC,
+	C.metricID_NumGenericPID:                              metrics.IDNumGenericPID,
+	C.metricID_UnwindPythonErrBadCFrameFrameAddr:          metrics.IDUnwindPythonErrBadCFrameFrameAddr,
+	C.metricID_MaxTailCalls:                               metrics.IDMaxTailCalls,
+	C.metricID_UnwindPythonErrNoProcInfo:                  metrics.IDUnwindPythonErrNoProcInfo,
+	C.metricID_UnwindPythonErrBadAutoTlsKeyAddr:           metrics.IDUnwindPythonErrBadAutoTlsKeyAddr,
+	C.metricID_UnwindPythonErrReadThreadStateAddr:         metrics.IDUnwindPythonErrReadThreadStateAddr,
+	C.metricID_UnwindPythonErrReadTsdBase:                 metrics.IDUnwindPythonErrReadTsdBase,
+	C.metricID_UnwindRubyErrNoProcInfo:                    metrics.IDUnwindRubyErrNoProcInfo,
+	C.metricID_UnwindRubyErrReadStackPtr:                  metrics.IDUnwindRubyErrReadStackPtr,
+	C.metricID_UnwindRubyErrReadStackSize:                 metrics.IDUnwindRubyErrReadStackSize,
+	C.metricID_UnwindRubyErrReadCfp:                       metrics.IDUnwindRubyErrReadCfp,
+	C.metricID_UnwindRubyErrReadEp:                        metrics.IDUnwindRubyErrReadEp,
+	C.metricID_UnwindRubyErrReadIseqBody:                  metrics.IDUnwindRubyErrReadIseqBody,
+	C.metricID_UnwindRubyErrReadIseqEncoded:               metrics.IDUnwindRubyErrReadIseqEncoded,
+	C.metricID_UnwindRubyErrReadIseqSize:                  metrics.IDUnwindRubyErrReadIseqSize,
+	C.metricID_UnwindNativeErrLrUnwindingMidTrace:         metrics.IDUnwindNativeErrLrUnwindingMidTrace,
+	C.metricID_UnwindNativeErrReadKernelModeRegs:          metrics.IDUnwindNativeErrReadKernelModeRegs,
+	C.metricID_UnwindNativeErrChaseIrqStackLink:           metrics.IDUnwindNativeErrChaseIrqStackLink,
+	C.metricID_UnwindV8ErrNoProcInfo:                      metrics.IDUnwindV8ErrNoProcInfo,
+	C.metricID_UnwindNativeErrBadUnwindInfoIndex:          metrics.IDUnwindNativeErrBadUnwindInfoIndex,
+	C.metricID_UnwindApmIntErrReadTsdBase:                 metrics.IDUnwindApmIntErrReadTsdBase,
+	C.metricID_UnwindApmIntErrReadCorrBufPtr:              metrics.IDUnwindApmIntErrReadCorrBufPtr,
+	C.metricID_UnwindApmIntErrReadCorrBuf:                 metrics.IDUnwindApmIntErrReadCorrBuf,
+	C.metricID_UnwindApmIntReadSuccesses:                  metrics.IDUnwindApmIntReadSuccesses,
+	C.metricID_UnwindDotnetAttempts:                       metrics.IDUnwindDotnetAttempts,
+	C.metricID_UnwindDotnetFrames:                         metrics.IDUnwindDotnetFrames,
+	C.metricID_UnwindDotnetErrNoProcInfo:                  metrics.IDUnwindDotnetErrNoProcInfo,
+	C.metricID_UnwindDotnetErrBadFP:                       metrics.IDUnwindDotnetErrBadFP,
+	C.metricID_UnwindDotnetErrCodeHeader:                  metrics.IDUnwindDotnetErrCodeHeader,
+	C.metricID_UnwindDotnetErrCodeTooLarge:                metrics.IDUnwindDotnetErrCodeTooLarge,
+}
