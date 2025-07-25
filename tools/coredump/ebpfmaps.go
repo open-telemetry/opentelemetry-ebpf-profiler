@@ -5,7 +5,6 @@ package main
 
 import (
 	"fmt"
-	"go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"math/bits"
 	"unsafe"
 
@@ -15,6 +14,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )

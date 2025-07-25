@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf/impl"
 	"math"
 	"math/rand/v2"
 	"strings"
@@ -24,7 +23,7 @@ import (
 	"github.com/elastic/go-perf"
 	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
-
+	
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -33,6 +32,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
+	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf/impl"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"

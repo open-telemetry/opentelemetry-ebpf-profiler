@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"math/bits"
 	"reflect"
 	"sync"
@@ -21,6 +20,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -414,7 +414,8 @@ func (impl *ebpfMapsImpl) UpdateUnwindInfo(index uint16, info sdtypes.UnwindInfo
 
 // UpdateExeIDToStackDeltas creates a nested map for fileID in the eBPF map exeIDTostack_deltas
 // and inserts the elements of the deltas array in this nested map. Returns mapID or error.
-func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID, deltas []ebpf.StackDeltaEBPF) (
+func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
+	deltas []ebpf.StackDeltaEBPF) (
 	uint16, error) {
 	numDeltas := len(deltas)
 	mapID, err := getMapID(uint32(numDeltas))

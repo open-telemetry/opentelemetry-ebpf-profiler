@@ -5,6 +5,7 @@ package ebpf // import "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 
 import (
 	"fmt"
+
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
