@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -40,10 +41,8 @@ type apmAgentSocket struct {
 func openAPMAgentSocket(pid libpf.PID, socketPath string) (*apmAgentSocket, error) {
 	// Ensure that the socket path can't escape our root.
 	socketPath = filepath.Clean(socketPath)
-	for _, segment := range strings.Split(socketPath, "/") {
-		if segment == ".." {
-			return nil, errors.New("socket path escapes root")
-		}
+	if slices.Contains(strings.Split(socketPath, "/"), "..") {
+		return nil, errors.New("socket path escapes root")
 	}
 
 	// Prepend root system to ensure that this also works with containerized apps.

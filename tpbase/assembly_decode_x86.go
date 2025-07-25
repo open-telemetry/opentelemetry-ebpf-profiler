@@ -66,7 +66,7 @@ func analyzefsbaseWriteTaskX86(code []byte) (uint32, error) {
 	// 1) Alpine Linux (kernel 5.10+)
 	//    48 89 b7 XX XX XX XX 	mov    %rsi,0xXXXXXXXX(%rdi)
 
-	// No need to disassemble via zydis here, as it's highly unlikely the below machine code
+	// No need to disassemble here, as it's highly unlikely the below machine code
 	// matching approach would fail. Indeed, x86-64 calling conventions ensure that:
 	// * %rdi is a pointer to a `task_struct` (first parameter)
 	// * %rsi == fsbase value (second parameter)

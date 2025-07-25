@@ -127,8 +127,6 @@ func TestFileIDFromExecutableReader(t *testing.T) {
 	}
 
 	for name, testcase := range tests {
-		name := name
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			fileID, err := FileIDFromExecutableReader(bytes.NewReader(testcase.data))
 			require.NoError(t, err, "Failed to calculate executable ID")

@@ -98,7 +98,6 @@ func TestAttrTableManager(t *testing.T) {
 	}
 
 	for name, tc := range tests {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			attrTable := pprofile.NewAttributeTableSlice()
 			mgr := NewAttrTableManager(attrTable)

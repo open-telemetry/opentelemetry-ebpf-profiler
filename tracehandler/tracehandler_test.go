@@ -98,8 +98,6 @@ func TestTraceHandler(t *testing.T) {
 	}
 
 	for name, test := range tests {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			r := &mockReporter{
 				t:       t,

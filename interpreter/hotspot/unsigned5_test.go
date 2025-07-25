@@ -41,7 +41,7 @@ func TestJavaLineNumbers(t *testing.T) {
 	}
 
 	var bci, line uint32
-	for i := 0; i < len(bciLine); i++ {
+	for i := range bciLine {
 		err := decoder.decodeLineTableEntry(&bci, &line)
 		require.NoError(t, err)
 		assert.Equal(t, bciLine[i].bci, bci)

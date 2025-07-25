@@ -1,9 +1,0 @@
-[
-	{
-		"Dependency": "zyantific/zydis",
-		"Version": "v4.1.0",
-		"Licence": "MIT",
-		"URL": "https://zydis.re",
-		"LicenceFile": "https://raw.githubusercontent.com/zyantific/zydis/v4.1.0/LICENSE"
-	}
-]

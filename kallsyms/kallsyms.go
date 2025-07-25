@@ -95,12 +95,9 @@ func NewSymbolizer() (*Symbolizer, error) {
 // an index suitable for storing in the `symbol` struct.
 func (m *Module) addName(name string) uint32 {
 	index := len(m.names)
-	l := len(name)
 	// Cap the length to 255 bytes so it fits a byte. Longest seen
 	// symbol so far is 83 bytes.
-	if l > 255 {
-		l = 255
-	}
+	l := min(len(name), 255)
 	m.names = append(m.names, byte(l))
 	m.names = append(m.names, unsafe.Slice(unsafe.StringData(name), l)...)
 	return uint32(index)

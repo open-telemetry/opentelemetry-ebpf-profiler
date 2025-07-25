@@ -4,17 +4,17 @@
 // They are unlikely to change, and likely require larger modifications on change.
 
 // https://chromium.googlesource.com/v8/v8.git/+/refs/heads/9.2.230/include/v8-internal.h#52
-#define SmiTag            0x0
+#define V8_SmiTag            0x0
 // https://chromium.googlesource.com/v8/v8.git/+/refs/heads/9.2.230/include/v8-internal.h#54
-#define SmiTagMask        0x1
+#define V8_SmiTagMask        0x1
 // https://chromium.googlesource.com/v8/v8.git/+/refs/heads/9.2.230/include/v8-internal.h#91
-#define SmiTagShift       1
+#define V8_SmiTagShift       1
 // https://chromium.googlesource.com/v8/v8.git/+/refs/heads/9.2.230/include/v8-internal.h#98
-#define SmiValueShift     32
+#define V8_SmiValueShift     32
 // https://chromium.googlesource.com/v8/v8.git/+/refs/heads/9.2.230/include/v8-internal.h#39
-#define HeapObjectTag     0x1
+#define V8_HeapObjectTag     0x1
 // https://chromium.googlesource.com/v8/v8.git/+/refs/heads/9.2.230/include/v8-internal.h#42
-#define HeapObjectTagMask 0x3
+#define V8_HeapObjectTagMask 0x3
 
 // The Trace 'file' field is split to object pointer (aligned to 8 bytes),
 // and the zero bits due to alignment are re-used as the following flags.
