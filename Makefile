@@ -1,6 +1,7 @@
-.PHONY: all all-common clean ebpf generate test test-deps protobuf docker-image agent legal \
-	integration-test-binaries codespell lint linter-version debug debug-agent ebpf-profiler \
-	format-ebpf rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
+.PHONY: all all-common clean ebpf generate local-collector test test-deps \
+	test-junit protobuf docker-image agent legal integration-test-binaries \
+	codespell lint linter-version debug debug-agent ebpf-profiler format-ebpf \
+	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
 SHELL := /usr/bin/env bash
 
@@ -48,6 +49,8 @@ EBPF_FLAGS :=
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 
 MAKEFLAGS += -j$(shell nproc)
+
+JUNIT_OUT_DIR ?= /tmp/testresults
 
 all: ebpf-profiler
 
@@ -106,6 +109,11 @@ test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
 	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
+test-junit: generate ebpf test-deps
+	mkdir -p $(JUNIT_OUT_DIR)
+	go install gotest.tools/gotestsum@latest
+	CGO_ENABLED=1 gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
+
 # This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
 # amd64) and the CI kernel tests run them already. Useful for local testing.
 sudo-golabels-test: integration-test-binaries
@@ -158,3 +166,18 @@ legal:
 
 codespell:
 	@codespell
+
+# Setup replace statements to run with a local checkout of the collector
+local-collector:
+	@if [ -z "$(COLLECTOR_PATH)" ]; then \
+		echo "Error: COLLECTOR_PATH is not set"; \
+		exit 1; \
+	fi
+	@echo "Setting the local Collector to a local checkout at $(COLLECTOR_PATH)"
+	@go list -m -u all | grep 'go\.opentelemetry\.io\/collector' | while read -r line; do \
+		MODULE=$$(echo $$line | awk '{print $$1}'); \
+		REL_PATH=$${MODULE#go.opentelemetry.io/collector\/}; \
+		LOCAL_PATH=$(COLLECTOR_PATH)/$$REL_PATH; \
+		echo "Replacing $$MODULE => $$LOCAL_PATH"; \
+		go mod edit -replace=$$MODULE=$$LOCAL_PATH; \
+	done
