@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	// argUprobe is a helper variable, as we can not assign
-	// an argument to a []string{}.
-	argUprobe string
+	// argUProbeLink is a helper variable, as package flag does not allow to
+	// assign an argument to a []string{}.
+	argUProbeLink string
 )
 
 const (
@@ -75,8 +75,10 @@ var (
 		defaultOffCPUThreshold)
 	envVarsHelp = "Comma separated list of environment variables that will be reported with the" +
 		"captured profiling samples."
-	uprobeHelper = "Attach a uprobe to a symbol of an executable. " +
+	probeLinkHelper = "Attach a probe to a symbol of an executable. " +
 		"Expected format: /path/to/executable:symbol"
+	loadProbeHelper = "Load generic eBPF program that can be attached externally to " +
+		"various user or kernel space hooks."
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -135,7 +137,9 @@ func parseArgs() (*controller.Config, error) {
 
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
 
-	fs.StringVar(&argUprobe, "uprobe", "", uprobeHelper)
+	fs.StringVar(&argUProbeLink, "uprobe-link", "", probeLinkHelper)
+
+	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()

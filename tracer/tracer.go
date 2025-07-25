@@ -143,7 +143,10 @@ type Config struct {
 	IncludeEnvVars libpf.Set[string]
 	// UProbes holds a list of executable:symbol elements to which
 	// a uprobe will be attached.
-	UProbes []string
+	UProbeLinks []string
+	// LoadProbe inidicates whether the generic eBPF program should be loaded
+	// without being attached to something.
+	LoadProbe bool
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -413,7 +416,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		}
 	}
 
-	if len(cfg.UProbes) > 0 {
+	if len(cfg.UProbeLinks) > 0 || cfg.LoadProbe {
 		uprobeProgs := make([]progLoaderHelper, len(tailCallProgs)+1)
 		copy(uprobeProgs, tailCallProgs)
 		uprobeProgs = append(uprobeProgs, []progLoaderHelper{

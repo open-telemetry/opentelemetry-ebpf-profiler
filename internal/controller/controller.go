@@ -98,7 +98,8 @@ func (c *Controller) Start(ctx context.Context) error {
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
 		OffCPUThreshold:        uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
 		IncludeEnvVars:         envVars,
-		UProbes:                c.config.UProbes,
+		UProbeLinks:            c.config.UProbeLinks,
+		LoadProbe:              c.config.LoadProbe,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
@@ -126,8 +127,8 @@ func (c *Controller) Start(ctx context.Context) error {
 		log.Printf("Enabled off-cpu profiling with p=%f", c.config.OffCPUThreshold)
 	}
 
-	if len(c.config.UProbes) > 0 {
-		if err := trc.AttachUProbes(c.config.UProbes); err != nil {
+	if len(c.config.UProbeLinks) > 0 {
+		if err := trc.AttachUProbes(c.config.UProbeLinks); err != nil {
 			return fmt.Errorf("failed to attach uprobes: %v", err)
 		}
 		log.Printf("Attached uprobes")
