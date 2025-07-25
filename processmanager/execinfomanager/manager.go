@@ -31,7 +31,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
-	"go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
@@ -100,7 +100,7 @@ type ExecutableInfoManager struct {
 // NewExecutableInfoManager creates a new instance of the executable info manager.
 func NewExecutableInfoManager(
 	sdp nativeunwind.StackDeltaProvider,
-	ebpf ebpf.EbpfHandler,
+	ebpf pmebpf.EbpfHandler,
 	includeTracers types.IncludedTracers,
 ) (*ExecutableInfoManager, error) {
 	// Initialize interpreter loaders.
@@ -322,7 +322,7 @@ type executableInfoManagerState struct {
 	interpreterLoaders []interpreter.Loader
 
 	// ebpf provides the interface to manipulate eBPF maps.
-	ebpf ebpf.EbpfHandler
+	ebpf pmebpf.EbpfHandler
 
 	// executables is the primary mapping from file ID to executable information. Entries are
 	// managed with reference counting and are synchronized with various eBPF maps:
@@ -392,7 +392,7 @@ func (state *executableInfoManagerState) loadDeltas(
 
 	// Index the unwind-info.
 	var unwindInfo sdtypes.UnwindInfo
-	ebpfDeltas := make([]ebpf.StackDeltaEBPF, 0, numDeltas)
+	ebpfDeltas := make([]pmebpf.StackDeltaEBPF, 0, numDeltas)
 	for index, delta := range deltas {
 		if unwindInfo.MergeOpcode != 0 {
 			// This delta was merged in the previous iteration.
@@ -420,7 +420,7 @@ func (state *executableInfoManagerState) loadDeltas(
 		if err != nil {
 			return mapRef{}, nil, err
 		}
-		ebpfDeltas = append(ebpfDeltas, ebpf.StackDeltaEBPF{
+		ebpfDeltas = append(ebpfDeltas, pmebpf.StackDeltaEBPF{
 			AddressLow: uint16(delta.Address),
 			UnwindInfo: unwindInfoIndex,
 		})

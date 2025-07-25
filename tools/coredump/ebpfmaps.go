@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
-	"go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -44,7 +44,7 @@ func (emc *ebpfMapsCoredump) CollectMetrics() []metrics.Metric {
 
 func (emc *ebpfMapsCoredump) UpdateInterpreterOffsets(ebpfProgIndex uint16,
 	fileID host.FileID, offsetRanges []util.Range) error {
-	key, value, err := ebpf.InterpreterOffsetKeyValue(ebpfProgIndex, fileID, offsetRanges)
+	key, value, err := pmebpf.InterpreterOffsetKeyValue(ebpfProgIndex, fileID, offsetRanges)
 	if err != nil {
 		return err
 	}
@@ -166,7 +166,7 @@ func (emc *ebpfMapsCoredump) UpdateUnwindInfo(index uint16, info sdtypes.UnwindI
 
 // Stack delta management
 func (emc *ebpfMapsCoredump) UpdateExeIDToStackDeltas(fileID host.FileID,
-	deltaArrays []ebpf.StackDeltaEBPF) (uint16, error) {
+	deltaArrays []pmebpf.StackDeltaEBPF) (uint16, error) {
 	entSize := C.sizeof_StackDelta
 	deltas := C.malloc(C.size_t(len(deltaArrays) * entSize))
 	for index, delta := range deltaArrays {

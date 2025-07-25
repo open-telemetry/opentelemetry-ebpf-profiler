@@ -27,7 +27,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/process"
-	"go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -155,7 +155,7 @@ type mappingArgs struct {
 type ebpfMapsMockup struct {
 	updateProcCount, deleteProcCount uint8
 
-	stackDeltaMemory []ebpf.StackDeltaEBPF
+	stackDeltaMemory []pmebpf.StackDeltaEBPF
 	// deleteStackDeltaRangesCount reflects the number of times
 	// the deleteStackDeltaRanges to update the eBPF map was called.
 	deleteStackDeltaRangesCount uint8
@@ -202,7 +202,7 @@ func (mockup *ebpfMapsMockup) DeletePidInterpreterMapping(libpf.PID, lpm.Prefix)
 func (mockup *ebpfMapsMockup) UpdateUnwindInfo(uint16, sdtypes.UnwindInfo) error { return nil }
 
 func (mockup *ebpfMapsMockup) UpdateExeIDToStackDeltas(fileID host.FileID,
-	deltaArrays []ebpf.StackDeltaEBPF) (uint16, error) {
+	deltaArrays []pmebpf.StackDeltaEBPF) (uint16, error) {
 	mockup.stackDeltaMemory = append(mockup.stackDeltaMemory, deltaArrays...)
 	// execinfomanager expects a mapID >0. So to fake this behavior, we return
 	// parts of the fileID.
