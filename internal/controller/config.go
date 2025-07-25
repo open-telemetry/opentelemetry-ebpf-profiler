@@ -32,7 +32,8 @@ type Config struct {
 	VerboseMode            bool
 	Version                bool
 	OffCPUThreshold        float64
-	UProbes                []string
+	UProbeLinks            []string
+	LoadProbe              bool
 
 	Reporter reporter.Reporter
 
