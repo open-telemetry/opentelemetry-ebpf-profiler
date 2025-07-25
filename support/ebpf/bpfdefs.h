@@ -7,6 +7,11 @@
 // with_debug_output is declared in native_stack_trace.ebpf.c
 extern u32 with_debug_output;
 
+// UNUSED is a macro that marks a parameter or variable as intentionally unused.
+// It prevents compiler warnings about unused variables while keeping them in the code.
+#define UNUSED __attribute__((unused))
+
+#define _STR(x) #x
 #if defined(TESTING_COREDUMP)
 
   // BPF_RODATA_VAR declares a global variable in the .rodata section,
@@ -26,6 +31,9 @@ extern u32 with_debug_output;
   #define printt(fmt, ...)      bpf_log(fmt, ##__VA_ARGS__)
   #define DEBUG_PRINT(fmt, ...) bpf_log(fmt, ##__VA_ARGS__)
 
+  // Macro for loop unrolling. Expands to nothing for TESTING_COREDUMP.
+  #define UNROLL(N)
+
 // BPF helpers. Mostly stubs to dispatch the call to Go code with the context ID.
 int bpf_tail_call(void *ctx, bpf_map_def *map, int index);
 unsigned long long bpf_ktime_get_ns(void);
@@ -37,7 +45,7 @@ static inline long bpf_probe_read_user(void *buf, u32 sz, const void *ptr)
   return __bpf_probe_read_user(__cgo_ctx->id, buf, sz, ptr);
 }
 
-static inline long bpf_probe_read_kernel(void *buf, u32 sz, const void *ptr)
+static inline long bpf_probe_read_kernel(UNUSED void *buf, UNUSED u32 sz, UNUSED const void *ptr)
 {
   return -1;
 }
@@ -53,23 +61,29 @@ static inline void *bpf_map_lookup_elem(bpf_map_def *map, const void *key)
   return __bpf_map_lookup_elem(__cgo_ctx->id, map, key);
 }
 
-static inline int bpf_map_update_elem(bpf_map_def *map, const void *key, const void *val, u64 flags)
+static inline int bpf_map_update_elem(
+  UNUSED bpf_map_def *map, UNUSED const void *key, UNUSED const void *val, UNUSED u64 flags)
 {
   return -1;
 }
 
-static inline int bpf_map_delete_elem(bpf_map_def *map, const void *key)
+static inline int bpf_map_delete_elem(UNUSED bpf_map_def *map, UNUSED const void *key)
 {
   return -1;
 }
 
 static inline int bpf_perf_event_output(
-  void *ctx, bpf_map_def *mapdef, unsigned long long flags, void *data, int size)
+  UNUSED void *ctx,
+  UNUSED bpf_map_def *mapdef,
+  UNUSED unsigned long long flags,
+  UNUSED void *data,
+  UNUSED int size)
 {
+
   return 0;
 }
 
-static inline int bpf_get_stackid(void *ctx, bpf_map_def *map, u64 flags)
+static inline int bpf_get_stackid(UNUSED void *ctx, UNUSED bpf_map_def *map, UNUSED u64 flags)
 {
   return -1;
 }
@@ -167,6 +181,15 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
     _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wignored-attributes\"")      \
       __attribute__((section(name), used)) _Pragma("GCC diagnostic pop")
   #define EBPF_INLINE __attribute__((__always_inline__))
+
+  #if defined(__clang__)
+    #define _PRAGMA_UNROLL(x) _Pragma(_STR(unroll x))
+    // Macro for loop unrolling. Expands to the appropriate pragma for clang.
+    #define UNROLL(N)         _PRAGMA_UNROLL(N)
+  #else
+    // Macro for loop unrolling. Expands to nothing for gcc.
+    #define UNROLL(N)
+  #endif
 
 #endif // !TESTING_COREDUMP
 
