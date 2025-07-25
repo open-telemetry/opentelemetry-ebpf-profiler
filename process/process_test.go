@@ -6,6 +6,7 @@ package process
 import (
 	"debug/elf"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -113,6 +114,9 @@ func TestParseMappings(t *testing.T) {
 }
 
 func TestNewPIDOfSelf(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported os %s", runtime.GOOS)
+	}
 	pid := libpf.PID(os.Getpid())
 	pr := New(pid, pid)
 	assert.NotNil(t, pr)
