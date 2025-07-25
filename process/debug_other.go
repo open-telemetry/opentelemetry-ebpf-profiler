@@ -7,8 +7,9 @@ package process // import "go.opentelemetry.io/ebpf-profiler/process"
 
 import (
 	"fmt"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"runtime"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // NewPtrace is the stub implementation, allowing to compile the process
