@@ -64,14 +64,6 @@ type EbpfHandler interface {
 	SupportsLPMTrieBatchOperations() bool
 }
 
-// StackDeltaEBPF represents stack deltas preprocessed by the ProcessManager which are
-// then loaded to the eBPF map. This is Go equivalent of 'struct StackDelta' in eBPF types.h.
-// See the eBPF header file for details.
-type StackDeltaEBPF struct {
-	AddressLow uint16
-	UnwindInfo uint16
-}
-
 func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
 	offsetRanges []util.Range) (key uint64, value support.OffsetRange, err error) {
 	rLen := len(offsetRanges)
