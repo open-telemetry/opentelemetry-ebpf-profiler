@@ -4,6 +4,7 @@
 package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
+	ebpf2 "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"sync"
 	"sync/atomic"
 
@@ -14,7 +15,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
-	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -57,7 +57,7 @@ type ProcessManager struct {
 	exitEvents map[libpf.PID]times.KTime
 
 	// ebpf contains the interface to manipulate ebpf maps
-	ebpf pmebpf.EbpfHandler
+	ebpf ebpf2.EbpfHandler
 
 	// FileIDMapper provides a cache that implements the FileIDMapper interface. The tracer writes
 	// the 64-bit to 128-bit file ID mapping to the cache, as this is where the two values are
