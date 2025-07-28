@@ -47,6 +47,7 @@ FLAGS=$(TARGET_FLAGS) -g \
 
 SRCS := $(wildcard *.ebpf.c)
 OBJS := $(SRCS:.c=.$(TARGET_ARCH).o)
+DEPS := $(OBJS:.o=.d)
 
 .DEFAULT_GOAL := all
 
@@ -61,10 +62,8 @@ arm64:
 errors.h: ../../tools/errors-codegen/errors.json
 	go run ../../tools/errors-codegen/main.go bpf $@
 
-%.ebpf.c: errors.h ;
-
-%.ebpf.$(TARGET_ARCH).o: %.ebpf.c
-	$(BPF_CLANG) $(FLAGS) -o $@
+%.ebpf.$(TARGET_ARCH).o: %.ebpf.c errors.h
+	$(BPF_CLANG) $(FLAGS) -MMD -MP -o $@
 
 $(TRACER_NAME): $(OBJS)
 	$(BPF_LINK) $^ -o - | $(LLC) -march=bpf -mcpu=v2 -filetype=obj -o $@
@@ -87,4 +86,6 @@ format:
 	$(CLANG_FORMAT) -i -style=file *.[ch]
 
 clean:
-	rm -f *.o
+	rm -f *.o *.d
+
+-include $(DEPS)
