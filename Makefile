@@ -1,4 +1,4 @@
-.PHONY: all all-common clean ebpf generate local-collector test test-deps \
+.PHONY: all all-common clean ebpf generate test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
 	codespell lint linter-version debug debug-agent ebpf-profiler format-ebpf \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
@@ -166,18 +166,3 @@ legal:
 
 codespell:
 	@codespell
-
-# Setup replace statements to run with a local checkout of the collector
-local-collector:
-	@if [ -z "$(COLLECTOR_PATH)" ]; then \
-		echo "Error: COLLECTOR_PATH is not set"; \
-		exit 1; \
-	fi
-	@echo "Setting the local Collector to a local checkout at $(COLLECTOR_PATH)"
-	@go list -m -u all | grep 'go\.opentelemetry\.io\/collector' | while read -r line; do \
-		MODULE=$$(echo $$line | awk '{print $$1}'); \
-		REL_PATH=$${MODULE#go.opentelemetry.io/collector\/}; \
-		LOCAL_PATH=$(COLLECTOR_PATH)/$$REL_PATH; \
-		echo "Replacing $$MODULE => $$LOCAL_PATH"; \
-		go mod edit -replace=$$MODULE=$$LOCAL_PATH; \
-	done
