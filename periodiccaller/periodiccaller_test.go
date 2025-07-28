@@ -238,7 +238,7 @@ func TestPeriodicCallerManualTrigger(t *testing.T) {
 	})
 	defer stop()
 
-	for i := 0; i < numTrigger; i++ {
+	for range numTrigger {
 		trigger <- true
 	}
 	<-done

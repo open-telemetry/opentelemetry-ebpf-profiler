@@ -173,7 +173,7 @@ func (i *Interpreter) MemArg(src x86asm.Mem) expression.Expression {
 }
 
 func (i *Interpreter) initRegs() {
-	for j := 0; j < len(i.Regs.regs); j++ {
+	for j := range len(i.Regs.regs) {
 		i.Regs.regs[j] = expression.Named(Reg(j).String())
 	}
 }

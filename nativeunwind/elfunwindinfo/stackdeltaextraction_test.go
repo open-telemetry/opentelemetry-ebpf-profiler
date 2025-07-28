@@ -291,8 +291,6 @@ func TestEntryDetection(t *testing.T) {
 	}
 
 	for name, test := range testCases {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			entryLen := detectEntryCode(test.machine, test.code)
 			assert.Equal(t, test.len, entryLen)

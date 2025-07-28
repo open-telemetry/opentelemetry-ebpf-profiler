@@ -121,9 +121,9 @@ var _ nativeunwind.StackDeltaProvider = (*dummyStackDeltaProvider)(nil)
 // these files afterwards.
 func generateDummyFiles(t *testing.T, num int) []string {
 	t.Helper()
-	var files []string
+	files := make([]string, 0, num)
 
-	for i := 0; i < num; i++ {
+	for i := range num {
 		name := fmt.Sprintf("dummy%d", i)
 		tmpfile, err := os.CreateTemp(t.TempDir(), "*"+name)
 		require.NoError(t, err)
@@ -292,8 +292,6 @@ func TestInterpreterConvertTrace(t *testing.T) {
 	}
 
 	for name, testcase := range tests {
-		name := name
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			mapper := NewMapFileIDMapper()
 			for i, f := range testcase.trace.Frames {
@@ -373,7 +371,6 @@ func TestNewMapping(t *testing.T) {
 	}
 
 	for name, testcase := range tests {
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			// The generated dummy files do not contain valid stack deltas,
 			// so we replace the stack delta provider.
@@ -560,7 +557,6 @@ func TestProcExit(t *testing.T) {
 	}
 
 	for name, testcase := range tests {
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			// The generated dummy files do not contain valid stack deltas,
 			// so we replace the stack delta provider.

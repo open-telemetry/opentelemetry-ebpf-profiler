@@ -829,10 +829,7 @@ func (i *v8Instance) extractString(ptr libpf.Address, tag uint16, cb func(string
 		length := i.rm.Uint32(ptr + libpf.Address(vms.String.Length))
 		switch tag & vms.Fixed.StringEncodingMask {
 		case vms.Fixed.OneByteStringTag:
-			bufSz := uint32(16 * 1024)
-			if bufSz > length {
-				bufSz = length
-			}
+			bufSz := min(uint32(16*1024), length)
 			buf := make([]byte, bufSz)
 			for offs := uint32(0); offs < length; offs += bufSz {
 				if length-offs < bufSz {
@@ -1018,7 +1015,7 @@ func (i *v8Instance) getSource(addr libpf.Address) *v8Source {
 		log.Debugf("Reading LineEnds: %d: %v", len(data), err)
 		if err == nil {
 			lines := make([]uint32, len(data)/8)
-			for i := 0; i < len(lines); i++ {
+			for i := range lines {
 				val := npsr.Uint64(data, uint(i*8))
 				lines[i] = decodeSMI(val)
 			}

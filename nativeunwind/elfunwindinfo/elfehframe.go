@@ -588,7 +588,7 @@ func matchExpression(expr []dwarfExpression, template []expressionOpcode) bool {
 	if len(expr) != len(template) {
 		return false
 	}
-	for i := 0; i < len(expr); i++ {
+	for i := range expr {
 		if expr[i].opcode != template[i] {
 			return false
 		}

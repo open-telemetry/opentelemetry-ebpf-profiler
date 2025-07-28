@@ -1,4 +1,4 @@
-FROM debian:testing-20241223-slim@sha256:2ed89b1e8012d945cfcc111fa1dc11a628edaa24b9af5d63d6935b5ee35d3377
+FROM debian:testing-20250721-slim@sha256:aaa28744f5b892a7ccc3e97c0e9b9cdd0fcc447227efaf9e54080801b990f973
 
 WORKDIR /agent
 
@@ -12,7 +12,7 @@ RUN cross_debian_arch=$(uname -m | sed -e 's/aarch64/amd64/'  -e 's/x86_64/arm64
     apt-get dist-upgrade -y && \
     apt-get install -y --no-install-recommends --no-install-suggests \
         curl wget make git cmake unzip libc6-dev g++ gcc pkgconf \
-        clang-17 clang-format-17 \
+        llvm-17 clang-17 clang-format-17 ca-certificates \
         gcc-${cross_pkg_arch}-linux-gnu libc6-${cross_debian_arch}-cross \
         musl-dev:amd64 musl-dev:arm64 && \
     apt-get clean autoclean && \
@@ -47,6 +47,7 @@ RUN                                                                             
 
 # Append to /etc/profile for login shells
 RUN echo 'export PATH="/usr/local/go/bin:$PATH"' >> /etc/profile
+RUN echo 'export PATH="/agent/go/bin:$PATH"' >> /etc/profile
 
 # Create rust related directories in /usr/local
 RUN mkdir -p /usr/local/cargo /usr/local/rustup
