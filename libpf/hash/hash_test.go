@@ -23,8 +23,6 @@ func TestUint64(t *testing.T) {
 	}
 
 	for name, testcase := range tests {
-		name := name
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			result := Uint64(testcase.input)
 			assert.Equal(t, testcase.expect, result)
@@ -44,8 +42,6 @@ func TestUint32(t *testing.T) {
 	}
 
 	for name, testcase := range tests {
-		name := name
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			result := Uint32(testcase.input)
 			assert.Equal(t, testcase.expect, result)

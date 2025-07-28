@@ -27,8 +27,6 @@ func TestMapID(t *testing.T) {
 		(1 << support.StackDeltaBucketLargest) - 1: support.StackDeltaBucketLargest,
 	}
 	for numStackDeltas, expectedShift := range testCases {
-		numStackDeltas := numStackDeltas
-		expectedShift := expectedShift
 		t.Run(fmt.Sprintf("deltas %d", numStackDeltas), func(t *testing.T) {
 			shift, err := getMapID(numStackDeltas)
 			require.NoError(t, err)
