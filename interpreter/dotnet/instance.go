@@ -745,11 +745,11 @@ func (i *dotnetInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) erro
 		// - on non-leaf frames, it is the return address
 		// - on leaf frames, it is the address after the CALL machine opcode
 		frames.Append(&libpf.Frame{
-			Type:         libpf.DotnetFrame,
-			File:         module.fileID,
-			Lineno:       libpf.AddressOrLineno(pcOffset),
-			FunctionName: module.resolveR2RMethodName(pcOffset),
-			SourceFile:   module.simpleName,
+			Type:            libpf.DotnetFrame,
+			FileID:          module.fileID,
+			AddressOrLineno: libpf.AddressOrLineno(pcOffset),
+			FunctionName:    module.resolveR2RMethodName(pcOffset),
+			SourceFile:      module.simpleName,
 		})
 	case codeJIT:
 		// JITted frame in anonymous mapping
@@ -773,12 +773,12 @@ func (i *dotnetInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) erro
 			libpf.AddressOrLineno(ilOffset)
 		methodName := method.module.resolveMethodName(method.index)
 		frames.Append(&libpf.Frame{
-			Type:           libpf.DotnetFrame,
-			File:           method.module.fileID,
-			Lineno:         lineID,
-			SourceFile:     method.module.simpleName,
-			FunctionName:   methodName,
-			FunctionOffset: ilOffset,
+			Type:            libpf.DotnetFrame,
+			FileID:          method.module.fileID,
+			AddressOrLineno: lineID,
+			SourceFile:      method.module.simpleName,
+			FunctionName:    methodName,
+			FunctionOffset:  ilOffset,
 		})
 	default:
 		// Stub code

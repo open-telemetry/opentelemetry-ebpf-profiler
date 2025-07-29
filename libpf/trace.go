@@ -20,15 +20,17 @@ type Frame struct {
 	// SourceLine is the source code level line number of this frame.
 	SourceLine SourceLineno
 
-	File   FileID
-	Lineno AddressOrLineno
+	// Calculated executable FileID for the backing mapping file.
+	FileID FileID
+	// An address in ELF VA space (native frame) or line number (interpreted frame).
+	AddressOrLineno AddressOrLineno
 
 	MappingStart      Address
 	MappingEnd        Address
 	MappingFileOffset uint64
 }
 
-// Frames is a list of frames
+// Frames is a list of interned frames.
 type Frames []unique.Handle[Frame]
 
 // Append interns and appends a frame to the slice of frames.
@@ -51,14 +53,12 @@ func (trace *Trace) AppendFrame(ty FrameType, file FileID, addrOrLine AddressOrL
 // AppendFrameFull appends a frame with mapping info to the columnar frame array.
 func (trace *Trace) AppendFrameFull(ty FrameType, file FileID, addrOrLine AddressOrLineno,
 	mappingStart Address, mappingEnd Address, mappingFileOffset uint64) {
-	// make unique frame
-	frame := unique.Make(Frame{
+	trace.Frames.Append(&Frame{
 		Type:              ty,
-		File:              file,
-		Lineno:            addrOrLine,
+		FileID:            file,
+		AddressOrLineno:   addrOrLine,
 		MappingStart:      mappingStart,
 		MappingEnd:        mappingEnd,
 		MappingFileOffset: mappingFileOffset,
 	})
-	trace.Frames = append(trace.Frames, frame)
 }

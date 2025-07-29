@@ -85,10 +85,11 @@ func (c *symbolizationCache) formatFrame(frame *libpf.Frame) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("unable to construct error map: %v", err)
 		}
-		errName, ok := (*errMap)[frame.Lineno]
+		errName, ok := (*errMap)[frame.AddressOrLineno]
 		if !ok {
 			return "", fmt.Errorf(
-				"got invalid error code %d. forgot to `make generate`", frame.Lineno)
+				"got invalid error code %d. forgot to `make generate`",
+				frame.AddressOrLineno)
 		}
 		if frame.Type == libpf.AbortFrame {
 			return fmt.Sprintf("<unwinding aborted due to error %s>", errName), nil
@@ -102,11 +103,11 @@ func (c *symbolizationCache) formatFrame(frame *libpf.Frame) (string, error) {
 			frame.SourceFile, frame.SourceLine), nil
 	}
 
-	sourceFile, ok := c.files[frame.File]
+	sourceFile, ok := c.files[frame.FileID]
 	if !ok {
-		sourceFile = fmt.Sprintf("%08x", frame.File)
+		sourceFile = fmt.Sprintf("%08x", frame.FileID)
 	}
-	return fmt.Sprintf("%s+0x%x", sourceFile, frame.Lineno), nil
+	return fmt.Sprintf("%s+0x%x", sourceFile, frame.AddressOrLineno), nil
 }
 
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,

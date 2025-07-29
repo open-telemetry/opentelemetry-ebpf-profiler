@@ -682,15 +682,15 @@ func (t *Tracer) readKernelFrames(kstackID int32) (libpf.Frames, error) {
 	for i := uint32(0); i < kstackLen; i++ {
 		address := libpf.Address(kstackVal[i])
 		frame := libpf.Frame{
-			Type:   libpf.KernelFrame,
-			File:   libpf.UnknownKernelFileID,
-			Lineno: libpf.AddressOrLineno(address - 1),
+			Type:            libpf.KernelFrame,
+			FileID:          libpf.UnknownKernelFileID,
+			AddressOrLineno: libpf.AddressOrLineno(address - 1),
 		}
 
 		kmod, err := t.kernelSymbolizer.GetModuleByAddress(address)
 		if err == nil {
-			frame.File = kmod.FileID()
-			frame.Lineno -= libpf.AddressOrLineno(kmod.Start())
+			frame.FileID = kmod.FileID()
+			frame.AddressOrLineno -= libpf.AddressOrLineno(kmod.Start())
 
 			if funcName, _, err := kmod.LookupSymbolByAddress(address); err == nil {
 				frame.FunctionName = libpf.Intern(funcName)

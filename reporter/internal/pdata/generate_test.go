@@ -99,34 +99,34 @@ func newTestFrames() libpf.Frames {
 	fileID := libpf.NewFileID(2, 3)
 	frames := make(libpf.Frames, 0, 5)
 	frames.Append(&libpf.Frame{
-		Type:         libpf.KernelFrame,
-		File:         fileID,
-		Lineno:       0xef,
-		FunctionName: libpf.Intern("func1"),
+		Type:            libpf.KernelFrame,
+		FileID:          fileID,
+		AddressOrLineno: 0xef,
+		FunctionName:    libpf.Intern("func1"),
 	})
 	frames.Append(&libpf.Frame{
-		Type:         libpf.KernelFrame,
-		File:         fileID,
-		Lineno:       0x1ef,
-		FunctionName: libpf.Intern("func2"),
+		Type:            libpf.KernelFrame,
+		FileID:          fileID,
+		AddressOrLineno: 0x1ef,
+		FunctionName:    libpf.Intern("func2"),
 	})
 	frames.Append(&libpf.Frame{
-		Type:         libpf.KernelFrame,
-		File:         fileID,
-		Lineno:       0x2ef,
-		FunctionName: libpf.Intern("func3"),
+		Type:            libpf.KernelFrame,
+		FileID:          fileID,
+		AddressOrLineno: 0x2ef,
+		FunctionName:    libpf.Intern("func3"),
 	})
 	frames.Append(&libpf.Frame{
-		Type:         libpf.KernelFrame,
-		File:         fileID,
-		Lineno:       0x3ef,
-		FunctionName: libpf.Intern("func4"),
+		Type:            libpf.KernelFrame,
+		FileID:          fileID,
+		AddressOrLineno: 0x3ef,
+		FunctionName:    libpf.Intern("func4"),
 	})
 	frames.Append(&libpf.Frame{
-		Type:         libpf.KernelFrame,
-		File:         fileID,
-		Lineno:       0x4ef,
-		FunctionName: libpf.Intern("func5"),
+		Type:            libpf.KernelFrame,
+		FileID:          fileID,
+		AddressOrLineno: 0x4ef,
+		FunctionName:    libpf.Intern("func5"),
 	})
 	return frames
 }
@@ -247,12 +247,12 @@ func singleFrameTrace(ty libpf.FrameType, fileID libpf.FileID, lineno libpf.Addr
 	funcName, sourceFile string, sourceLine libpf.SourceLineno) libpf.Frames {
 	frames := make(libpf.Frames, 1)
 	frames[0] = unique.Make(libpf.Frame{
-		Type:         ty,
-		File:         fileID,
-		Lineno:       lineno,
-		FunctionName: libpf.Intern(funcName),
-		SourceFile:   libpf.Intern(sourceFile),
-		SourceLine:   sourceLine,
+		Type:            ty,
+		FileID:          fileID,
+		AddressOrLineno: lineno,
+		FunctionName:    libpf.Intern(funcName),
+		SourceFile:      libpf.Intern(sourceFile),
+		SourceLine:      sourceLine,
 	})
 	return frames
 }
@@ -431,8 +431,8 @@ func singleFrameNative(fileID libpf.FileID, lineno libpf.AddressOrLineno,
 	frames := make(libpf.Frames, 1)
 	frames[0] = unique.Make(libpf.Frame{
 		Type:              libpf.NativeFrame,
-		File:              fileID,
-		Lineno:            lineno,
+		FileID:            fileID,
+		AddressOrLineno:   lineno,
 		MappingStart:      mappingStart,
 		MappingEnd:        mappingEnd,
 		MappingFileOffset: mappingFileOffset,

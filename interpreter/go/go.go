@@ -107,10 +107,10 @@ func (g *goInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	frames.Append(&libpf.Frame{
 		Type: libpf.GoFrame,
 		//TODO: File: convert the frame.File (host.FileID) to libpf.FileID here
-		Lineno:       frame.Lineno,
-		FunctionName: libpf.Intern(fn),
-		SourceFile:   libpf.Intern(sourceFile),
-		SourceLine:   libpf.SourceLineno(lineNo),
+		AddressOrLineno: frame.Lineno,
+		FunctionName:    libpf.Intern(fn),
+		SourceFile:      libpf.Intern(sourceFile),
+		SourceLine:      libpf.SourceLineno(lineNo),
 	})
 	sfCounter.ReportSuccess()
 	return nil

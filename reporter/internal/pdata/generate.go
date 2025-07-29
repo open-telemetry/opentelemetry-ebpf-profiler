@@ -155,16 +155,16 @@ func (p *Pdata) setProfile(
 		for _, uniqueFrame := range traceInfo.Frames {
 			frame := uniqueFrame.Value()
 			locInfo := locationInfo{
-				address:   uint64(frame.Lineno),
+				address:   uint64(frame.AddressOrLineno),
 				frameType: frame.Type.String(),
 			}
 			switch frameKind := frame.Type; frameKind {
 			case libpf.NativeFrame:
 				// As native frames are resolved in the backend, we use Mapping to
 				// report these frames.
-				locationMappingIndex, exists := mappingSet.AddWithCheck(frame.File)
+				locationMappingIndex, exists := mappingSet.AddWithCheck(frame.FileID)
 				if !exists {
-					ei, exists := p.Executables.GetAndRefresh(frame.File,
+					ei, exists := p.Executables.GetAndRefresh(frame.FileID,
 						ExecutableCacheLifetime)
 					// Next step: Select a proper default value,
 					// if the name of the executable is not known yet.
@@ -187,7 +187,7 @@ func (p *Pdata) setProfile(
 						ei.GnuBuildID)
 					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
 						semconv.ProcessExecutableBuildIDHtlhashKey,
-						frame.File.StringNoQuotes())
+						frame.FileID.StringNoQuotes())
 				}
 				locInfo.mappingIndex = locationMappingIndex
 			case libpf.AbortFrame:

@@ -295,7 +295,7 @@ func TestInterpreterConvertTrace(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			mapper := NewMapFileIDMapper()
 			for i, f := range testcase.trace.Frames {
-				mapper.Set(f.File, testcase.expect.Frames[i].Value().File)
+				mapper.Set(f.File, testcase.expect.Frames[i].Value().FileID)
 			}
 
 			// For this test do not include interpreters.

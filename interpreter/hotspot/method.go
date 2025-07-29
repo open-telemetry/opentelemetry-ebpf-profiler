@@ -42,12 +42,12 @@ func (m *hotspotMethod) symbolize(bci uint32, ii *hotspotInstance, frames *libpf
 	}
 
 	frames.Append(&libpf.Frame{
-		Type:           libpf.HotSpotFrame,
-		Lineno:         libpf.AddressOrLineno(bci),
-		FunctionName:   m.methodName,
-		SourceFile:     m.sourceFileName,
-		SourceLine:     libpf.SourceLineno(lineNo),
-		FunctionOffset: functionOffset,
+		Type:            libpf.HotSpotFrame,
+		AddressOrLineno: libpf.AddressOrLineno(bci),
+		FunctionName:    m.methodName,
+		SourceFile:      m.sourceFileName,
+		SourceLine:      libpf.SourceLineno(lineNo),
+		FunctionOffset:  functionOffset,
 	})
 }
 
