@@ -161,8 +161,8 @@ static EBPF_INLINE u64 hotspot_find_codeblob(const UnwindState *state, const Hot
   // Segment map start is put in to the PidPageMapping's file_id.
   segmap_start = (state->text_section_id >> HS_TSID_SEG_MAP_BIT) & HS_TSID_SEG_MAP_MASK;
 
-  UNROLL()
-  for (int i = 0; i < HOTSPOT_SEGMAP_ITERATIONS; i++) {
+  UNROLL for (int i = 0; i < HOTSPOT_SEGMAP_ITERATIONS; i++)
+  {
     if (bpf_probe_read_user(&tag, sizeof(tag), (void *)(segmap_start + segment))) {
       return 0;
     }
@@ -431,8 +431,8 @@ static EBPF_INLINE bool hotspot_handle_epilogue(
   // Is 'ret' instruction *possible* in the next 'code' bytes?
   // NOTE: This can find false positives because x86 is variable length
   // instruction set.
-  UNROLL()
-  for (int i = CODE_CUR + 1; i < sizeof(code); i++) {
+  UNROLL for (int i = CODE_CUR + 1; i < sizeof(code); i++)
+  {
     if (code[i] == 0xc3) {
       goto found_ret;
     }
@@ -530,8 +530,8 @@ hotspot_handle_epilogue(const CodeBlobInfo *cbi, HotspotUnwindInfo *ui, HotspotU
     return false;
   }
 
-  UNROLL()
-  for (; find_offset < EPI_LOOKBACK - 1; ++find_offset) {
+  UNROLL for (; find_offset < EPI_LOOKBACK - 1; ++find_offset)
+  {
     if (*(u64 *)&window[find_offset] == needle) {
       goto pattern_found;
     }
@@ -940,8 +940,8 @@ static EBPF_INLINE int unwind_hotspot(struct pt_regs *ctx)
 
   int unwinder    = PROG_UNWIND_STOP;
   ErrorCode error = ERR_OK;
-  UNROLL()
-  for (int i = 0; i < HOTSPOT_FRAMES_PER_PROGRAM; i++) {
+  UNROLL for (int i = 0; i < HOTSPOT_FRAMES_PER_PROGRAM; i++)
+  {
     unwinder = PROG_UNWIND_STOP;
     error    = hotspot_unwind_one_frame(record, ji, i == 0);
     if (error) {

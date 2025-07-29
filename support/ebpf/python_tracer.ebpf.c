@@ -162,8 +162,8 @@ walk_python_stack(PerCPURecord *record, const PyProcInfo *pyinfo, int *unwinder)
   ErrorCode error = ERR_OK;
   *unwinder       = PROG_UNWIND_STOP;
 
-  UNROLL()
-  for (u32 i = 0; i < FRAMES_PER_WALK_PYTHON_STACK; ++i) {
+  UNROLL for (u32 i = 0; i < FRAMES_PER_WALK_PYTHON_STACK; ++i)
+  {
     bool continue_with_next;
     error = process_python_frame(record, pyinfo, &py_frame, &continue_with_next);
     if (error) {
