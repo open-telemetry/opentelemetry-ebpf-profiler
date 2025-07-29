@@ -184,6 +184,7 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
 
   #if defined(__clang__)
     // Macro for loop unrolling. Expands to the appropriate pragma for clang.
+    // Unrolls up to 256 loop iterations.
     #define UNROLL _Pragma("unroll 256")
   #else
     // Macro for loop unrolling. Expands to nothing for gcc.
