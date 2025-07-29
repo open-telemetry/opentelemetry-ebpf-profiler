@@ -63,18 +63,6 @@ func (b *baseReporter) addHostmetadata(metadataMap map[string]string) {
 	}
 }
 
-func (b *baseReporter) ExecutableKnown(fileID libpf.FileID) bool {
-	_, known := b.pdata.Executables.GetAndRefresh(fileID, pdata.ExecutableCacheLifetime)
-	return known
-}
-
-func (b *baseReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
-	b.pdata.Executables.Add(args.FileID, samples.ExecInfo{
-		FileName:   args.FileName,
-		GnuBuildID: args.GnuBuildID,
-	})
-}
-
 func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
 	if meta.Origin != support.TraceOriginSampling && meta.Origin != support.TraceOriginOffCPU {
 		// At the moment only on-CPU and off-CPU traces are reported.

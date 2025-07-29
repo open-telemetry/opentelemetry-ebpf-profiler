@@ -554,7 +554,7 @@ func (i *v8Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 }
 
 func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
-	_ reporter.SymbolReporter, pr process.Process, mappings []process.Mapping) error {
+	_ reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping) error {
 	pid := pr.PID()
 	i.mappingGeneration++
 	for idx := range mappings {

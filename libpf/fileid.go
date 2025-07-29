@@ -23,9 +23,6 @@ type FileID struct {
 	basehash.Hash128
 }
 
-// UnsymbolizedFileID is used as 128-bit FileID when symbolization fails.
-var UnsymbolizedFileID = NewFileID(math.MaxUint64, math.MaxUint64)
-
 // UnknownKernelFileID is used as 128-bit FileID when the host agent isn't able to derive a FileID
 // for a kernel frame.
 var UnknownKernelFileID = NewFileID(math.MaxUint64-2, math.MaxUint64-2)

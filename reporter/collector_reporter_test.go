@@ -51,9 +51,7 @@ func TestCollectorReporterReportTraceEvent(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			r, err := NewCollector(&Config{
-				ExecutablesCacheElements: 1,
-			}, next)
+			r, err := NewCollector(&Config{}, next)
 			require.NoError(t, err)
 			if err := r.ReportTraceEvent(tt.trace, tt.meta); err != nil &&
 				!errors.Is(err, errUnknownOrigin) {

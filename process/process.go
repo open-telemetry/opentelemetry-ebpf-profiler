@@ -329,11 +329,11 @@ func (sp *systemProcess) GetMappingFileLastModified(m *Mapping) int64 {
 
 // vdsoFileID caches the VDSO FileID. This assumes there is single instance of
 // VDSO for the system.
-var vdsoFileID libpf.FileID = libpf.UnsymbolizedFileID
+var vdsoFileID libpf.FileID
 
 func (sp *systemProcess) CalculateMappingFileID(m *Mapping) (libpf.FileID, error) {
 	if m.IsVDSO() {
-		if vdsoFileID != libpf.UnsymbolizedFileID {
+		if vdsoFileID != (libpf.FileID{}) {
 			return vdsoFileID, nil
 		}
 		vdso, err := sp.extractMapping(m)

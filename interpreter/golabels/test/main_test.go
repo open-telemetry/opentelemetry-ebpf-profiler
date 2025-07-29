@@ -13,8 +13,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/ebpf-profiler/host"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
@@ -24,11 +22,6 @@ type mockIntervals struct{}
 func (mockIntervals) MonitorInterval() time.Duration    { return 1 * time.Second }
 func (mockIntervals) TracePollInterval() time.Duration  { return 250 * time.Millisecond }
 func (mockIntervals) PIDCleanupInterval() time.Duration { return 1 * time.Second }
-
-type mockReporter struct{}
-
-func (mockReporter) ExecutableKnown(_ libpf.FileID) bool                   { return true }
-func (mockReporter) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {}
 
 func isRoot() bool {
 	return os.Geteuid() == 0
@@ -44,7 +37,6 @@ func TestGoLabels(t *testing.T) {
 	enabledTracers.Enable(tracertypes.Labels)
 
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
-		Reporter:               &mockReporter{},
 		Intervals:              &mockIntervals{},
 		IncludeTracers:         enabledTracers,
 		SamplesPerSecond:       20,
