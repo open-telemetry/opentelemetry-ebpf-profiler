@@ -152,9 +152,9 @@ jobs:
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: tools/coredump/modulecache
-          key: coredumps-macos-${{ hashFiles('tools/coredump/testdata/*/*.json') }}
+          key: coredumps-arm64-${{ hashFiles('tools/coredump/testdata/*/*.json') }}
           restore-keys: |
-            coredumps-macos
+            coredumps-arm64
             coredumps-
       - name: Run coredump tests
         run: GODEBUG=asyncpreemptoff=1 go test -v ./tools/coredump/
