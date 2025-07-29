@@ -3,8 +3,8 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package process // import "go.opentelemetry.io/ebpf-profiler/process"
+package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 import "debug/elf"
 
-const currentMachine = elf.EM_AARCH64
+const CurrentMachine = elf.EM_AARCH64
