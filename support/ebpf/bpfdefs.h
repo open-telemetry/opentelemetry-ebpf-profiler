@@ -11,7 +11,6 @@ extern u32 with_debug_output;
 // It prevents compiler warnings about unused variables while keeping them in the code.
 #define UNUSED __attribute__((unused))
 
-#define _STR(x) #x
 #if defined(TESTING_COREDUMP)
 
   // BPF_RODATA_VAR declares a global variable in the .rodata section,
