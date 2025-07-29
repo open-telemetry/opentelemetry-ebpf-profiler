@@ -1,6 +1,7 @@
-.PHONY: all all-common clean ebpf generate test test-deps protobuf docker-image agent legal \
-	integration-test-binaries codespell lint linter-version debug debug-agent ebpf-profiler \
-	format-ebpf rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
+.PHONY: all all-common clean ebpf generate test test-deps \
+	test-junit protobuf docker-image agent legal integration-test-binaries \
+	codespell lint linter-version debug debug-agent ebpf-profiler format-ebpf \
+	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
 SHELL := /usr/bin/env bash
 
@@ -48,6 +49,8 @@ EBPF_FLAGS :=
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 
 MAKEFLAGS += -j$(shell nproc)
+
+JUNIT_OUT_DIR ?= /tmp/testresults
 
 all: ebpf-profiler
 
@@ -105,6 +108,11 @@ vanity-import-fix: $(PORTO)
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
 	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
+
+test-junit: generate ebpf test-deps
+	mkdir -p $(JUNIT_OUT_DIR)
+	go install gotest.tools/gotestsum@latest
+	CGO_ENABLED=1 gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 # This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
 # amd64) and the CI kernel tests run them already. Useful for local testing.
