@@ -1,0 +1,116 @@
+{
+  "coredump-ref": "830f2066414f782959b0fe54ce4f142bf27d7325b75e06fba2b5a98a4ade1cfd",
+  "threads": [
+    {
+      "lwp": 404194,
+      "frames": [
+        "percentiles+8 in /pnpm/global/5/.pnpm/@pm2+io@6.1.0/node_modules/@pm2/io/build/main/utils/metrics/histogram.js:60",
+        "handler+0 in /pnpm/global/5/.pnpm/@pm2+io@6.1.0/node_modules/@pm2/io/build/main/metrics/eventLoopMetrics.js:64",
+        "<anonymous>+5 in /pnpm/global/5/.pnpm/@pm2+io@6.1.0/node_modules/@pm2/io/build/main/services/metrics.js:60",
+        "listOnTimeout+0 in node:internal/timers:0",
+        "processTimers+0 in node:internal/timers:0",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0x1193d7d",
+        "node+0x1194c27",
+        "node+0x1022d18",
+        "node+0xcaa3dd",
+        "node+0x1bd3a83",
+        "node+0x1bd84f9",
+        "node+0xc2b138",
+        "node+0xdaf523",
+        "node+0xcf926f",
+        "ld-musl-x86_64.so.1+0x41495",
+        "<unwinding aborted due to error native_lookup_text_section>"
+      ]
+    },
+    {
+      "lwp": 404213,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68347",
+        "<unwinding aborted due to error native_lookup_text_section>"
+      ]
+    },
+    {
+      "lwp": 404212,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68347",
+        "<unwinding aborted due to error native_lookup_text_section>"
+      ]
+    },
+    {
+      "lwp": 404211,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68347",
+        "<unwinding aborted due to error native_lookup_text_section>"
+      ]
+    },
+    {
+      "lwp": 404210,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68347",
+        "<unwinding aborted due to error native_lookup_text_section>"
+      ]
+    },
+    {
+      "lwp": 404200,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68347",
+        "<unwinding aborted due to error native_lookup_text_section>"
+      ]
+    },
+    {
+      "lwp": 404199,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68347",
+        "<unwinding aborted due to error native_lookup_text_section>"
+      ]
+    },
+    {
+      "lwp": 404198,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68347",
+        "<unwinding aborted due to error native_lookup_text_section>"
+      ]
+    },
+    {
+      "lwp": 404197,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68347",
+        "<unwinding aborted due to error native_lookup_text_section>"
+      ]
+    },
+    {
+      "lwp": 404196,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68347",
+        "<unwinding aborted due to error native_lookup_text_section>"
+      ]
+    },
+    {
+      "lwp": 404195,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68347",
+        "<unwinding aborted due to error native_lookup_text_section>"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "2b04c4c0665648228ea458e2714ecec1b0fb8a2f3cbe4761af5a3a2b0b52643f",
+      "local-path": "/usr/local/bin/node"
+    },
+    {
+      "ref": "2298274ad3316109d6e895083398e220f16fbdd12957c4afcc9af8849e734151",
+      "local-path": "/usr/lib/libgcc_s.so.1"
+    },
+    {
+      "ref": "08d5c7eb7c1e210d0fb56a33af0b97ab86339f2d321ceb31fcd53c563f8803c9",
+      "local-path": "/usr/lib/libstdc++.so.6.0.33"
+    },
+    {
+      "ref": "a3f9d4664f494ffd08fec303e9ad8e20561befe4f307343a00638f8e741d51b1",
+      "local-path": "/lib/ld-musl-x86_64.so.1"
+    }
+  ]
+}

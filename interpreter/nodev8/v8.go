@@ -160,6 +160,7 @@ import (
 	"io"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -385,7 +386,7 @@ type v8Data struct {
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/string.tq#10
 		String struct {
-			Length uint16 `name:"length__int32_t"`
+			Length uint16 `name:"length__int32_t,length__SMI"`
 		}
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/string.tq#108
@@ -441,7 +442,7 @@ type v8Data struct {
 		SharedFunctionInfo struct {
 			NameOrScopeInfo   uint16 `name:"name_or_scope_info__Object,name_or_scope_info__Tagged_Object_,name_or_scope_info__Tagged_NameOrScopeInfoT_"`
 			FunctionData      uint16 `name:"function_data__Object,function_data__Tagged_Object_"`
-			ScriptOrDebugInfo uint16 `name:"script_or_debug_info__Object,script_or_debug_info__HeapObject,script__Tagged_HeapObject_"`
+			ScriptOrDebugInfo uint16 `name:"script_or_debug_info__Object,script_or_debug_info__HeapObject,script__Tagged_HeapObject_,debug_info__Object"`
 		}
 
 		// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/objects/shared-function-info.tq#19
@@ -795,14 +796,14 @@ func (i *v8Instance) getObjectAddrAndType(taggedPtr libpf.Address) (libpf.Addres
 }
 
 // getTypedObject checks the object's type, and returns its address or error.
-func (i *v8Instance) getTypedObject(taggedPtr libpf.Address, expectedType uint16) (
+func (i *v8Instance) getTypedObject(taggedPtr libpf.Address, expectedTypes []uint16) (
 	libpf.Address, error) {
 	addr, tag, err := i.getObjectAddrAndType(taggedPtr)
 	if err != nil {
 		return 0, err
 	}
-	if tag != expectedType {
-		return 0, fmt.Errorf("%#x instance is %#x, but expected %#x", addr, tag, expectedType)
+	if !slices.Contains(expectedTypes, tag) {
+		return 0, fmt.Errorf("%#x instance is %#x, but expected %#x", addr, tag, expectedTypes)
 	}
 	return addr, nil
 }
@@ -813,14 +814,14 @@ func (i *v8Instance) readObjectPtr(addr libpf.Address) (libpf.Address, uint16, e
 }
 
 // readTypedObjectPtr reads an object pointer and makes sure it is a HeapObject of expected type
-func (i *v8Instance) readTypedObjectPtr(addr libpf.Address, expectedType uint16) (
+func (i *v8Instance) readTypedObjectPtr(addr libpf.Address, expectedTypes []uint16) (
 	libpf.Address, error) {
 	addr, tag, err := i.readObjectPtr(addr)
 	if err != nil {
 		return 0, err
 	}
-	if tag != expectedType {
-		return 0, fmt.Errorf("%#x instance is %#x, but expected %#x", addr, tag, expectedType)
+	if !slices.Contains(expectedTypes, tag) {
+		return 0, fmt.Errorf("%#x instance is %#x, but expected %#x", addr, tag, expectedTypes)
 	}
 	return addr, nil
 }
@@ -1009,9 +1010,9 @@ func (i *v8Instance) readFixedTable(addr libpf.Address, itemSize, maxItems uint3
 }
 
 // readFixedTablePtr read the data of a FixedArray object.
-func (i *v8Instance) readFixedTablePtr(taggedPtr libpf.Address, tag uint16,
+func (i *v8Instance) readFixedTablePtr(taggedPtr libpf.Address, tags []uint16,
 	itemSize, maxItems uint32) ([]byte, error) {
-	addr, err := i.readTypedObjectPtr(taggedPtr, tag)
+	addr, err := i.readTypedObjectPtr(taggedPtr, tags)
 	if err != nil {
 		return nil, err
 	}
@@ -1034,7 +1035,7 @@ func (i *v8Instance) getSource(addr libpf.Address) *v8Source {
 		var data []byte
 		data, err = i.readFixedTablePtr(
 			addr+libpf.Address(vms.Script.LineEnds),
-			vms.Type.FixedArray, 8, 0)
+			[]uint16{vms.Type.FixedArray, vms.Type.TrustedFixedArray}, 8, 0)
 		log.Debugf("Reading LineEnds: %d: %v", len(data), err)
 		if err == nil {
 			lines := make([]uint32, len(data)/8)
@@ -1079,7 +1080,7 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 	}
 
 	vms := &i.d.vmStructs
-	addr, err := i.getTypedObject(taggedPtr, vms.Type.SharedFunctionInfo)
+	addr, err := i.getTypedObject(taggedPtr, []uint16{vms.Type.SharedFunctionInfo})
 	if err != nil {
 		return nil, fmt.Errorf("failed to read SFI: %w", err)
 	}
@@ -1133,7 +1134,7 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 		}
 		sfi.bytecodePositionTable, err = i.readFixedTablePtr(
 			fdAddr+libpf.Address(vms.BytecodeArray.SourcePositionTable),
-			vms.Type.ByteArray, 1, 0)
+			[]uint16{vms.Type.ByteArray, vms.Type.TrustedByteArray}, 1, 0)
 		log.Debugf("Bytecode positions: %d bytes: %v", len(sfi.bytecodePositionTable), err)
 	}
 
@@ -1171,7 +1172,7 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI) (*v8Code, error) {
 	vms := &i.d.vmStructs
 
-	codeAddr, err := i.getTypedObject(taggedPtr, vms.Type.Code)
+	codeAddr, err := i.getTypedObject(taggedPtr, []uint16{vms.Type.Code})
 	if err != nil {
 		return nil, fmt.Errorf("code pointer read: %v", err)
 	}
@@ -1193,9 +1194,10 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 	// Read in full source position tables
 	sourcePositionPtr := npsr.Ptr(code, uint(vms.Code.SourcePositionTable))
 	if vms.SourcePositionTable.TrustedByteArray {
-		sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr, vms.Type.TrustedByteArray)
+		sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr,
+			[]uint16{vms.Type.TrustedByteArray})
 	} else {
-		sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr, vms.Type.ByteArray)
+		sourcePositionPtr, err = i.getTypedObject(sourcePositionPtr, []uint16{vms.Type.ByteArray})
 	}
 	if err != nil {
 		return nil, fmt.Errorf("code source position pointer read: %v", err)
@@ -1229,13 +1231,13 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 	deoptimizationDataPtr := npsr.Ptr(code, uint(vms.Code.DeoptimizationData))
 	if vms.DeoptimizationData.ProtectedFixedArray {
 		deoptimizationDataPtr, err =
-			i.getTypedObject(deoptimizationDataPtr, vms.Type.ProtectedFixedArray)
+			i.getTypedObject(deoptimizationDataPtr, []uint16{vms.Type.ProtectedFixedArray})
 	} else if vms.DeoptimizationData.TrustedFixedArray {
 		deoptimizationDataPtr, err =
-			i.getTypedObject(deoptimizationDataPtr, vms.Type.TrustedFixedArray)
+			i.getTypedObject(deoptimizationDataPtr, []uint16{vms.Type.TrustedFixedArray})
 	} else {
 		deoptimizationDataPtr, err =
-			i.getTypedObject(deoptimizationDataPtr, vms.Type.FixedArray)
+			i.getTypedObject(deoptimizationDataPtr, []uint16{vms.Type.FixedArray})
 	}
 	if err != nil {
 		return nil, fmt.Errorf("deoptimization data pointer read: %v", err)
@@ -1259,7 +1261,8 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 		if vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper != 0 {
 			sfiWrapperPtr := npsr.Ptr(deoptimizationData,
 				uint(vms.DeoptimizationDataIndex.SharedFunctionInfoWrapper*pointerSize))
-			sfiWrapperPtr, err = i.getTypedObject(sfiWrapperPtr, vms.Type.SharedFunctionInfoWrapper)
+			sfiWrapperPtr, err = i.getTypedObject(sfiWrapperPtr,
+				[]uint16{vms.Type.SharedFunctionInfoWrapper})
 			if err != nil {
 				return nil, fmt.Errorf("sfi wrapper pointer read: %w", err)
 			}
@@ -1288,15 +1291,15 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 	if numSFI > 0 {
 		// The first numSFI entries of literal array are the pointers for
 		// inlined function's SFI structures
-		expectedTag := vms.Type.FixedArray
+		expectedTags := []uint16{vms.Type.FixedArray, vms.Type.TrustedFixedArray}
 		if vms.DeoptimizationLiteralArray.TrustedWeakFixedArray {
-			expectedTag = vms.Type.TrustedWeakFixedArray
+			expectedTags = []uint16{vms.Type.TrustedWeakFixedArray}
 		} else if vms.DeoptimizationLiteralArray.WeakFixedArray {
-			expectedTag = vms.Type.WeakFixedArray
+			expectedTags = []uint16{vms.Type.WeakFixedArray}
 		}
 		literalArrayPtr := npsr.Ptr(deoptimizationData,
 			uint(vms.DeoptimizationDataIndex.LiteralArray*pointerSize))
-		literalArrayPtr, err = i.getTypedObject(literalArrayPtr, expectedTag)
+		literalArrayPtr, err = i.getTypedObject(literalArrayPtr, expectedTags)
 		if err != nil {
 			return nil, fmt.Errorf("literal array pointer read: %v", err)
 		}
@@ -1309,7 +1312,8 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 		// Read the complete inlining positions structure
 		inliningPositionsPtr := npsr.Ptr(deoptimizationData,
 			uint(vms.DeoptimizationDataIndex.InliningPositions*pointerSize))
-		inliningPositionsPtr, err = i.getTypedObject(inliningPositionsPtr, vms.Type.ByteArray)
+		inliningPositionsPtr, err = i.getTypedObject(inliningPositionsPtr,
+			[]uint16{vms.Type.ByteArray, vms.Type.TrustedByteArray})
 		if err != nil {
 			return nil, fmt.Errorf("inlining position pointer read: %v", err)
 		}
