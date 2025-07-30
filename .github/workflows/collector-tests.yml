@@ -37,7 +37,7 @@ jobs:
           git clone --depth=1 https://github.com/open-telemetry/opentelemetry-collector.git $collector_path
       - name: Setup replace statement
         run: |
-          COLLECTOR_PATH=/tmp/opentelemetry-collector ./scripts/local-collector
+          COLLECTOR_PATH=/tmp/opentelemetry-collector ./scripts/local-collector.sh
           go mod tidy
       - name: Tests
         run: make test-junit
