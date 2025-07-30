@@ -147,8 +147,8 @@ type Instance interface {
 	// introspection data has been updated.
 	UpdateTSDInfo(ebpf EbpfHandler, pid libpf.PID, info tpbase.TSDInfo) error
 
-	// Symbolize converts one ebpf frame to one or more (if inlining was expanded) libpf.Frames.
-	// The frames' contents are appeneded to frames.
+	// Symbolize converts one ebpf frame to one or more (if inlining was expanded) libpf.Frame.
+	// The resulting libpf.Frame values are appended to frames.
 	Symbolize(ebpfFrame *host.Frame, frames *libpf.Frames) error
 
 	// GetAndResetMetrics collects the metrics from the Instance and resets
