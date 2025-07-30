@@ -132,7 +132,7 @@ bpf_map_def SEC("maps") go_labels_procs = {
   .max_entries = 128,
 };
 
-static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
+static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UNUSED UnwindState *state)
 {
   u64 g_addr     = 0;
   void *tls_base = NULL;

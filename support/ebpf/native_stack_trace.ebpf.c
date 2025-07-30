@@ -191,8 +191,8 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
     // Do the binary search, up to 16 iterations. Deltas are paged to 64kB pages.
     // They can contain at most 64kB deltas even if everything is single byte opcodes.
     int i;
-#pragma unroll
-    for (i = 0; i < 16; i++) {
+    UNROLL for (i = 0; i < 16; i++)
+    {
       if (!bsearch_step(inner_map, &lo, &hi, page_offset)) {
         break;
       }
@@ -357,8 +357,7 @@ static EBPF_INLINE u64 unwind_register_address(UnwindState *state, u64 cfa, u8 o
 // is marked with UNWIND_COMMAND_STOP which marks entry points (main function,
 // thread spawn function, signal handlers, ...).
 #if defined(__x86_64__)
-static EBPF_INLINE ErrorCode
-unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
 {
   *stop = false;
 
@@ -452,8 +451,7 @@ frame_ok:
   return ERR_OK;
 }
 #elif defined(__aarch64__)
-static EBPF_INLINE ErrorCode
-unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *stop)
 {
   *stop = false;
 
@@ -592,8 +590,8 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
   Trace *trace = &record->trace;
   int unwinder;
   ErrorCode error;
-#pragma unroll
-  for (int i = 0; i < NATIVE_FRAMES_PER_PROGRAM; i++) {
+  UNROLL for (int i = 0; i < NATIVE_FRAMES_PER_PROGRAM; i++)
+  {
     unwinder = PROG_UNWIND_STOP;
 
     // Unwind native code
@@ -619,7 +617,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 
     // Unwind the native frame using stack deltas. Stop if no next frame.
     bool stop;
-    error = unwind_one_frame(trace->pid, frame_idx, &record->state, &stop);
+    error = unwind_one_frame(&record->state, &stop);
     if (error || stop) {
       break;
     }
