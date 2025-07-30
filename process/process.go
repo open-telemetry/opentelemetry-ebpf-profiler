@@ -72,7 +72,7 @@ func (sp *systemProcess) PID() libpf.PID {
 }
 
 func (sp *systemProcess) GetMachineData() MachineData {
-	return MachineData{Machine: currentMachine}
+	return MachineData{Machine: pfelf.CurrentMachine}
 }
 
 func trimMappingPath(path string) string {

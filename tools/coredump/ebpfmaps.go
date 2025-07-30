@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
-	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )

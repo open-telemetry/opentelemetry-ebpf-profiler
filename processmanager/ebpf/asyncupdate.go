@@ -10,6 +10,7 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	log "github.com/sirupsen/logrus"
+
 	"go.opentelemetry.io/ebpf-profiler/host"
 )
 

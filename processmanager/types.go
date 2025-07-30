@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
-	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
