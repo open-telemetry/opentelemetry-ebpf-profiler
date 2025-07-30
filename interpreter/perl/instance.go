@@ -6,7 +6,6 @@ package perl // import "go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 import (
 	"errors"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"unsafe"
 
@@ -38,16 +37,13 @@ type perlInstance struct {
 	bias libpf.Address
 
 	// addrToHEK maps a PERL Hash Element Key (string with hash) to a Go string
-	addrToHEK *freelru.LRU[libpf.Address, string]
+	addrToHEK *freelru.LRU[libpf.Address, libpf.String]
 
 	// addrToCOP maps a PERL Control OP (COP) structure to a perlCOP which caches data from it
 	addrToCOP *freelru.LRU[copKey, *perlCOP]
 
 	// addrToGV maps a PERL Glob Value (GV) aka "symbol" to its name string
 	addrToGV *freelru.LRU[libpf.Address, libpf.String]
-
-	// memPool provides pointers to byte arrays for efficient memory reuse.
-	memPool sync.Pool
 
 	// hekLen is the largest number we did see in the last reporting interval for hekLen
 	// in getHEK.
@@ -202,22 +198,24 @@ func (i *perlInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
-func (i *perlInstance) getHEK(addr libpf.Address) (string, error) {
+func (i *perlInstance) getHEK(addr libpf.Address) (libpf.String, error) {
 	if addr == 0 {
-		return "", errors.New("null hek pointer")
+		return libpf.NullString, errors.New("null hek pointer")
 	}
 	if value, ok := i.addrToHEK.Get(addr); ok {
 		return value, nil
 	}
 	vms := &i.d.vmStructs
 
+	var buf [hekLenLimit]byte
+
 	// Read the Hash Element Key (HEK) length and readahead bytes in
 	// attempt to avoid second system call to read the target string.
 	// 128 is chosen arbitrarily as "hopefully good enough"; this value can
 	// be increased if it turns out to be necessary.
-	var buf [128]byte
-	if err := i.rm.Read(addr, buf[:]); err != nil {
-		return "", err
+	const hekInitialRead = 128
+	if err := i.rm.Read(addr, buf[:hekInitialRead]); err != nil {
+		return libpf.NullString, err
 	}
 	hekLen := npsr.Uint32(buf[:], vms.hek.hek_len)
 
@@ -225,55 +223,38 @@ func (i *perlInstance) getHEK(addr libpf.Address) (string, error) {
 	// hekLen and report it.
 	util.AtomicUpdateMaxUint32(&i.hekLen, hekLen)
 
-	if hekLen > hekLenLimit {
-		return "", fmt.Errorf("hek too large (%d)", hekLen)
-	}
-
-	syncPoolData := i.memPool.Get().(*[]byte)
-	if syncPoolData == nil {
-		return "", errors.New("failed to get memory from sync pool")
-	}
-
-	defer func() {
-		// Reset memory and return it for reuse.
-		for j := range hekLen {
-			(*syncPoolData)[j] = 0x0
+	if hekSize := uint32(vms.hek.hek_key) + hekLen; hekSize > hekInitialRead {
+		if hekSize > hekLenLimit {
+			return libpf.NullString, fmt.Errorf("hek too large (%d)", hekLen)
 		}
-		i.memPool.Put(syncPoolData)
-	}()
-
-	tmp := (*syncPoolData)[:hekLen]
-	// Always allocate the string separately so it does not hold the backing
-	// buffer that might be larger than needed
-	numCopied := copy(tmp, buf[vms.hek.hek_key:])
-	if hekLen > uint32(numCopied) {
-		err := i.rm.Read(addr+libpf.Address(vms.hek.hek_key+uint(numCopied)), tmp[numCopied:])
-		if err != nil {
-			return "", err
+		if err := i.rm.Read(addr+hekInitialRead, buf[hekInitialRead:]); err != nil {
+			return libpf.NullString, err
 		}
 	}
-	s := string(tmp)
+
+	s := unsafe.String(unsafe.SliceData(buf[vms.hek.hek_key:]), hekLen)
 	if !util.IsValidString(s) {
 		log.Debugf("Extracted invalid hek string at 0x%x '%v'", addr, []byte(s))
-		return "", fmt.Errorf("extracted invalid hek string at 0x%x", addr)
+		return libpf.NullString, fmt.Errorf("extracted invalid hek string at 0x%x", addr)
 	}
-	i.addrToHEK.Add(addr, s)
+	value := libpf.Intern(s)
+	i.addrToHEK.Add(addr, value)
 
-	return s, nil
+	return value, nil
 }
 
-func (i *perlInstance) getHVName(hvAddr libpf.Address) (string, error) {
+func (i *perlInstance) getHVName(hvAddr libpf.Address) (libpf.String, error) {
 	if hvAddr == 0 {
-		return "", nil
+		return libpf.NullString, nil
 	}
 	vms := &i.d.vmStructs
 	hv := make([]byte, vms.sv.sizeof)
 	if err := i.rm.Read(hvAddr, hv); err != nil {
-		return "", err
+		return libpf.NullString, err
 	}
 	hvFlags := npsr.Uint32(hv, vms.sv.sv_flags)
 	if hvFlags&SVt_MASK != SVt_PVHV {
-		return "", errors.New("not a HV")
+		return libpf.NullString, errors.New("not a HV")
 	}
 
 	xpvhvAddr := npsr.Ptr(hv, vms.sv.sv_any)
@@ -284,14 +265,14 @@ func (i *perlInstance) getHVName(hvAddr libpf.Address) (string, error) {
 		end := i.rm.Uint64(xpvhvAddr + libpf.Address(vms.xpvhv.xhv_max))
 		xpvhvAuxAddr := arrayAddr + libpf.Address((end+1)*uint64(vms.xpvhv_aux.pointer_size))
 		if err := i.rm.Read(xpvhvAuxAddr, xpvhvAux); err != nil {
-			return "", err
+			return libpf.NullString, err
 		}
 	} else {
 		// In Perl 5.36.x.XPVHV got replaced with xpvhv_with_aux to hold this information.
 		// https://github.com/Perl/perl5/commit/94ee6ed79dbca73d0345b745534477e4017fb990
 		if err := i.rm.Read(xpvhvAddr+libpf.Address(vms.xpvhv_with_aux.xpvhv_aux),
 			xpvhvAux); err != nil {
-			return "", err
+			return libpf.NullString, err
 		}
 	}
 
@@ -332,12 +313,12 @@ func (i *perlInstance) getGV(gvAddr libpf.Address, nameOnly bool) (libpf.String,
 	// Follow the GV's "body" pointer to get the function name
 	xpvgvAddr := i.rm.Ptr(gvAddr + libpf.Address(vms.sv.sv_any))
 	hekAddr := i.rm.Ptr(xpvgvAddr + libpf.Address(vms.xpvgv.xivu_namehek))
-	gvName, err := i.getHEK(hekAddr)
+	value, err := i.getHEK(hekAddr)
 	if err != nil {
 		return libpf.NullString, err
 	}
 
-	if !nameOnly && gvName != "" {
+	if !nameOnly && value != libpf.NullString {
 		stashAddr := i.rm.Ptr(xpvgvAddr + libpf.Address(vms.xpvgv.xgv_stash))
 		packageName, err := i.getHVName(stashAddr)
 		if err != nil {
@@ -345,14 +326,14 @@ func (i *perlInstance) getGV(gvAddr libpf.Address, nameOnly bool) (libpf.String,
 		}
 
 		// Build the qualified name
-		if packageName == "" {
+		if packageName == libpf.NullString {
 			// per Perl_gv_fullname4
-			packageName = "__ANON__"
+			value = libpf.Intern("__ANON__::" + value.String())
+		} else {
+			value = libpf.Intern(packageName.String() + "::" + value.String())
 		}
-		gvName = packageName + "::" + gvName
 	}
 
-	value := libpf.Intern(gvName)
 	i.addrToGV.Add(gvAddr, value)
 	return value, nil
 }
