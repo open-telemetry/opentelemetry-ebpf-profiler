@@ -94,8 +94,8 @@ func newTestProcess(pid libpf.PID) process.Process {
 type dummyStackDeltaProvider struct{}
 
 // GetIntervalStructuresForFile fills in the expected data structure with semi random data.
-func (d *dummyStackDeltaProvider) GetIntervalStructuresForFile(_ host.FileID,
-	_ *pfelf.Reference, result *sdtypes.IntervalData) error {
+func (d *dummyStackDeltaProvider) GetIntervalStructuresForFile(_ *pfelf.Reference,
+	result *sdtypes.IntervalData) error {
 	r := rand.New(rand.NewPCG(42, 42)) //nolint:gosec
 	addr := 0x10
 	for i := 0; i < r.IntN(42); i++ {

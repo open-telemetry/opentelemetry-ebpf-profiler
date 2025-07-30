@@ -185,7 +185,7 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// so we release the lock before doing this.
 	mgr.state.WUnlock(&state)
 
-	if err = mgr.sdp.GetIntervalStructuresForFile(fileID, elfRef, &intervalData); err != nil {
+	if err = mgr.sdp.GetIntervalStructuresForFile(elfRef, &intervalData); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			mgr.deferredFileIDs.Add(fileID, libpf.Void{})
 		}

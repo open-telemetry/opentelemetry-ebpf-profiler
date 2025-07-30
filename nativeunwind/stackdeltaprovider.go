@@ -4,7 +4,6 @@
 package nativeunwind // import "go.opentelemetry.io/ebpf-profiler/nativeunwind"
 
 import (
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 )
@@ -22,8 +21,7 @@ type Statistics struct {
 type StackDeltaProvider interface {
 	// GetIntervalStructuresForFile inspects a single executable and extracts data that is needed
 	// to rebuild the stack for traces of this executable.
-	GetIntervalStructuresForFile(fileID host.FileID, elfRef *pfelf.Reference,
-		interval *sdtypes.IntervalData) error
+	GetIntervalStructuresForFile(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error
 
 	// GetAndResetStatistics returns the internal statistics for this provider and resets all
 	// values to 0.
