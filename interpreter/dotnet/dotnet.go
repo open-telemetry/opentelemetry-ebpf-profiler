@@ -107,7 +107,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 const (
@@ -124,9 +123,6 @@ const (
 var (
 	// regex for the core language runtime
 	dotnetRegex = regexp.MustCompile(`/(\d+)\.(\d+).(\d+)/libcoreclr.so$`)
-
-	// The FileID used for Dotnet stub frames. Same FileID as in other interpreters.
-	stubsFileID = libpf.NewStubFileID(libpf.DotnetFrame)
 
 	// compiler check to make sure the needed interfaces are satisfied
 	_ interpreter.Data     = &dotnetData{}

@@ -23,8 +23,6 @@ import (
 
 const (
 	ExecutableCacheLifetime = 1 * time.Hour
-	FramesCacheLifetime     = 1 * time.Hour
-	FrameMapLifetime        = 1 * time.Hour
 )
 
 // DummyFileID is used as the FileID for a dummy mapping
@@ -154,18 +152,19 @@ func (p *Pdata) setProfile(
 		}
 
 		// Walk every frame of the trace.
-		for i := range traceInfo.FrameTypes {
+		for _, uniqueFrame := range traceInfo.Frames {
+			frame := uniqueFrame.Value()
 			locInfo := locationInfo{
-				address:   uint64(traceInfo.Linenos[i]),
-				frameType: traceInfo.FrameTypes[i].String(),
+				address:   uint64(frame.AddressOrLineno),
+				frameType: frame.Type.String(),
 			}
-			switch frameKind := traceInfo.FrameTypes[i]; frameKind {
+			switch frameKind := frame.Type; frameKind {
 			case libpf.NativeFrame:
 				// As native frames are resolved in the backend, we use Mapping to
 				// report these frames.
-				locationMappingIndex, exists := mappingSet.AddWithCheck(traceInfo.Files[i])
+				locationMappingIndex, exists := mappingSet.AddWithCheck(frame.FileID)
 				if !exists {
-					ei, exists := p.Executables.GetAndRefresh(traceInfo.Files[i],
+					ei, exists := p.Executables.GetAndRefresh(frame.FileID,
 						ExecutableCacheLifetime)
 					// Next step: Select a proper default value,
 					// if the name of the executable is not known yet.
@@ -175,9 +174,9 @@ func (p *Pdata) setProfile(
 					}
 
 					mapping := dic.MappingTable().AppendEmpty()
-					mapping.SetMemoryStart(uint64(traceInfo.MappingStarts[i]))
-					mapping.SetMemoryLimit(uint64(traceInfo.MappingEnds[i]))
-					mapping.SetFileOffset(traceInfo.MappingFileOffsets[i])
+					mapping.SetMemoryStart(uint64(frame.MappingStart))
+					mapping.SetMemoryLimit(uint64(frame.MappingEnd))
+					mapping.SetFileOffset(frame.MappingFileOffset)
 					mapping.SetFilenameStrindex(stringSet.Add(fileName))
 
 					// Once SemConv and its Go package is released with the new
@@ -188,7 +187,7 @@ func (p *Pdata) setProfile(
 						ei.GnuBuildID)
 					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
 						semconv.ProcessExecutableBuildIDHtlhashKey,
-						traceInfo.Files[i].StringNoQuotes())
+						frame.FileID.StringNoQuotes())
 				}
 				locInfo.mappingIndex = locationMappingIndex
 			case libpf.AbortFrame:
@@ -199,27 +198,12 @@ func (p *Pdata) setProfile(
 			default:
 				// Store interpreted frame information as a Line message
 				locInfo.hasLine = true
-				if si, exists := p.Frames.GetAndRefresh(
-					libpf.NewFrameID(traceInfo.Files[i], traceInfo.Linenos[i]),
-					FramesCacheLifetime); exists {
-					locInfo.lineNumber = int64(si.LineNumber)
-					fi := funcInfo{
-						nameIdx:     stringSet.Add(si.FunctionName.String()),
-						fileNameIdx: stringSet.Add(si.FilePath.String()),
-					}
-					locInfo.functionIndex = funcSet.Add(fi)
-				} else {
-					// At this point, we do not have enough information for the frame.
-					// Therefore, we report a dummy entry and use the interpreter as filename.
-					// To differentiate this case from the case where no information about
-					// the file ID is available at all, we use a different name for reported
-					// function.
-					fi := funcInfo{
-						nameIdx:     stringSet.Add("UNRESOLVED"),
-						fileNameIdx: stringSet.Add(frameKind.String()),
-					}
-					locInfo.functionIndex = funcSet.Add(fi)
+				locInfo.lineNumber = int64(frame.SourceLine)
+				fi := funcInfo{
+					nameIdx:     stringSet.Add(frame.FunctionName.String()),
+					fileNameIdx: stringSet.Add(frame.SourceFile.String()),
 				}
+				locInfo.functionIndex = funcSet.Add(fi)
 				// mapping_table[0] is always the dummy mapping
 				locInfo.mappingIndex = 0
 			} // End frame type switch
@@ -273,7 +257,7 @@ func (p *Pdata) setProfile(
 			sample.AttributeIndices().Append(extra...)
 		}
 
-		sample.SetLocationsLength(int32(len(traceInfo.FrameTypes)))
+		sample.SetLocationsLength(int32(len(traceInfo.Frames)))
 		locationIndex += sample.LocationsLength()
 	} // End sample processing
 

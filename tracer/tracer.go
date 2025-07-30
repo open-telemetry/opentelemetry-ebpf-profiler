@@ -13,7 +13,6 @@ import (
 	"math"
 	"math/rand/v2"
 	"strings"
-	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -66,9 +65,6 @@ type Intervals interface {
 // Tracer provides an interface for loading and initializing the eBPF components as
 // well as for monitoring the output maps for new traces and count updates.
 type Tracer struct {
-	fallbackSymbolHit  atomic.Uint64
-	fallbackSymbolMiss atomic.Uint64
-
 	// ebpfMaps holds the currently loaded eBPF maps.
 	ebpfMaps map[string]*cebpf.Map
 	// ebpfProgs holds the currently loaded eBPF programs.
@@ -663,17 +659,15 @@ func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 	return nil
 }
 
-// insertKernelFrames fetches the kernel stack frames for a particular kstackID and populates
-// the trace with these kernel frames. It also allocates the memory for the frames of the trace.
-// It returns the number of kernel frames for kstackID or an error.
-func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
-	kstackID int32) (uint32, error) {
+// readKernelFrames fetches the kernel stack frames for a particular kstackID and
+// returns them as symbolized libpf.Frames.
+func (t *Tracer) readKernelFrames(kstackID int32) (libpf.Frames, error) {
 	cKstackID := kstackID
 	kstackVal := make([]uint64, support.PerfMaxStackDepth)
 
 	if err := t.ebpfMaps["kernel_stackmap"].Lookup(unsafe.Pointer(&cKstackID),
 		unsafe.Pointer(&kstackVal[0])); err != nil {
-		return 0, fmt.Errorf("failed to lookup kernel frames for stackID %d: %v", kstackID, err)
+		return nil, fmt.Errorf("failed to lookup kernel frames for stackID %d: %v", kstackID, err)
 	}
 
 	// The kernel returns absolute addresses in kernel address
@@ -684,63 +678,34 @@ func (t *Tracer) insertKernelFrames(trace *host.Trace, ustackLen uint32,
 		kstackLen++
 	}
 
-	trace.Frames = make([]host.Frame, kstackLen+ustackLen)
-
-	var kernelSymbolCacheHit, kernelSymbolCacheMiss uint64
-
+	frames := make(libpf.Frames, kstackLen)
 	for i := uint32(0); i < kstackLen; i++ {
-		fileID := libpf.UnknownKernelFileID
 		address := libpf.Address(kstackVal[i])
+		frame := libpf.Frame{
+			Type:            libpf.KernelFrame,
+			FileID:          libpf.UnknownKernelFileID,
+			AddressOrLineno: libpf.AddressOrLineno(address - 1),
+		}
+
 		kmod, err := t.kernelSymbolizer.GetModuleByAddress(address)
 		if err == nil {
-			fileID = kmod.FileID()
-			address -= kmod.Start()
-		}
+			frame.FileID = kmod.FileID()
+			frame.AddressOrLineno -= libpf.AddressOrLineno(kmod.Start())
 
-		hostFileID := host.FileIDFromLibpf(fileID)
-		t.processManager.FileIDMapper.Set(hostFileID, fileID)
-
-		trace.Frames[i] = host.Frame{
-			File:   hostFileID,
-			Lineno: libpf.AddressOrLineno(address),
-			Type:   libpf.KernelFrame,
-
-			// For all kernel frames, the kernel unwinder will always produce a
-			// frame in which the RIP is after a call instruction (it hides the
-			// top frames that leads to the unwinder itself).
-			ReturnAddress: true,
+			if funcName, _, err := kmod.LookupSymbolByAddress(address); err == nil {
+				frame.FunctionName = libpf.Intern(funcName)
+				t.reporter.ExecutableMetadata(&reporter.ExecutableMetadataArgs{
+					FileID:     kmod.FileID(),
+					FileName:   kmod.Name(),
+					GnuBuildID: kmod.BuildID(),
+					Interp:     libpf.Kernel,
+				})
+			}
 		}
-
-		// Kernel frame PCs need to be adjusted by -1. This duplicates logic done in the trace
-		// converter. This should be fixed with PF-1042.
-		frameID := libpf.NewFrameID(fileID, trace.Frames[i].Lineno-1)
-		if t.reporter.FrameKnown(frameID) {
-			kernelSymbolCacheHit++
-			continue
-		}
-		kernelSymbolCacheMiss++
-
-		if kmod == nil {
-			continue
-		}
-		if funcName, _, err := kmod.LookupSymbolByAddress(libpf.Address(kstackVal[i])); err == nil {
-			t.reporter.FrameMetadata(&reporter.FrameMetadataArgs{
-				FrameID:      frameID,
-				FunctionName: libpf.Intern(funcName),
-			})
-			t.reporter.ExecutableMetadata(&reporter.ExecutableMetadataArgs{
-				FileID:     kmod.FileID(),
-				FileName:   kmod.Name(),
-				GnuBuildID: kmod.BuildID(),
-				Interp:     libpf.Kernel,
-			})
-		}
+		frames.Append(&frame)
 	}
 
-	t.fallbackSymbolMiss.Add(kernelSymbolCacheMiss)
-	t.fallbackSymbolHit.Add(kernelSymbolCacheHit)
-
-	return kstackLen, nil
+	return frames, nil
 }
 
 // enableEvent removes the entry of given eventType from the inhibitEvents map
@@ -925,15 +890,11 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	ptr.Offtime = 0
 	trace.Hash = host.TraceHash(xxh3.Hash128(raw).Lo)
 
-	userFrameOffs := 0
 	if ptr.Kernel_stack_id >= 0 {
-		kstackLen, err := t.insertKernelFrames(
-			trace, ptr.Stack_len, ptr.Kernel_stack_id)
-
+		var err error
+		trace.KernelFrames, err = t.readKernelFrames(ptr.Kernel_stack_id)
 		if err != nil {
 			log.Errorf("Failed to get kernel stack frames for 0x%x: %v", trace.Hash, err)
-		} else {
-			userFrameOffs = int(kstackLen)
 		}
 	}
 
@@ -947,15 +908,10 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		}
 	}
 
-	// If there are no kernel frames, or reading them failed, we are responsible
-	// for allocating the columnar frame array.
-	if len(trace.Frames) == 0 {
-		trace.Frames = make([]host.Frame, ptr.Stack_len)
-	}
-
+	trace.Frames = make([]host.Frame, ptr.Stack_len)
 	for i := 0; i < int(ptr.Stack_len); i++ {
 		rawFrame := &ptr.Frames[i]
-		trace.Frames[userFrameOffs+i] = host.Frame{
+		trace.Frames[i] = host.Frame{
 			File:          host.FileID(rawFrame.File_id),
 			Lineno:        libpf.AddressOrLineno(rawFrame.Addr_or_line),
 			Type:          libpf.FrameType(rawFrame.Kind),
@@ -1001,17 +957,6 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 		metrics.AddSlice(eventMetricCollector())
 		metrics.AddSlice(traceEventMetricCollector())
 		metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
-
-		metrics.AddSlice([]metrics.Metric{
-			{
-				ID:    metrics.IDKernelFallbackSymbolLRUHit,
-				Value: metrics.MetricValue(t.fallbackSymbolHit.Swap(0)),
-			},
-			{
-				ID:    metrics.IDKernelFallbackSymbolLRUMiss,
-				Value: metrics.MetricValue(t.fallbackSymbolMiss.Swap(0)),
-			},
-		})
 	})
 
 	return nil

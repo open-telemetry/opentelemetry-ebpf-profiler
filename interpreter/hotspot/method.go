@@ -9,7 +9,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 // Constants for the JVM internals that have never changed
@@ -29,31 +28,27 @@ type hotspotMethod struct {
 
 // Symbolize generates symbolization information for given hotspot method and
 // a Byte Code Index (BCI)
-func (m *hotspotMethod) symbolize(symbolReporter reporter.SymbolReporter, bci uint32,
-	ii *hotspotInstance, trace *libpf.Trace) {
+func (m *hotspotMethod) symbolize(bci uint32, ii *hotspotInstance, frames *libpf.Frames) {
 	// Make sure the BCI is within the method range
 	if bci >= uint32(m.bytecodeSize) {
 		bci = 0
 	}
 
-	// Check if this is already known
-	frameID := libpf.NewFrameID(m.objectID, libpf.AddressOrLineno(bci))
-	trace.AppendFrameID(libpf.HotSpotFrame, frameID)
-	if !symbolReporter.FrameKnown(frameID) {
-		dec := ii.d.newUnsigned5Decoder(bytes.NewReader(m.lineTable))
-		lineNo := dec.mapByteCodeIndexToLine(bci)
-		functionOffset := uint32(0)
-		if lineNo > uint32(m.startLineNo) {
-			functionOffset = lineNo - uint32(m.startLineNo)
-		}
-		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-			FrameID:        frameID,
-			FunctionName:   m.methodName,
-			SourceFile:     m.sourceFileName,
-			SourceLine:     libpf.SourceLineno(lineNo),
-			FunctionOffset: functionOffset,
-		})
+	dec := ii.d.newUnsigned5Decoder(bytes.NewReader(m.lineTable))
+	lineNo := dec.mapByteCodeIndexToLine(bci)
+	functionOffset := uint32(0)
+	if lineNo > uint32(m.startLineNo) {
+		functionOffset = lineNo - uint32(m.startLineNo)
 	}
+
+	frames.Append(&libpf.Frame{
+		Type:            libpf.HotSpotFrame,
+		AddressOrLineno: libpf.AddressOrLineno(bci),
+		FunctionName:    m.methodName,
+		SourceFile:      m.sourceFileName,
+		SourceLine:      libpf.SourceLineno(lineNo),
+		FunctionOffset:  functionOffset,
+	})
 }
 
 // hotspotJITInfo contains symbolization and debug information for one JIT compiled
@@ -74,8 +69,8 @@ type hotspotJITInfo struct {
 
 // Symbolize parses JIT method inlining data and fills in symbolization information
 // for each inlined method for given RIP.
-func (ji *hotspotJITInfo) symbolize(symbolReporter reporter.SymbolReporter, ripDelta int32,
-	ii *hotspotInstance, trace *libpf.Trace) error {
+func (ji *hotspotJITInfo) symbolize(ripDelta int32, ii *hotspotInstance,
+	frames *libpf.Frames) error {
 	//nolint:lll
 	// Unfortunately the data structures read here are not well documented in the JVM
 	// source, but for reference implementation you can look:
@@ -110,7 +105,7 @@ func (ji *hotspotJITInfo) symbolize(symbolReporter reporter.SymbolReporter, ripD
 		// It is possible that there is no debug info, or no scope information,
 		// for the given RIP. In this case we can provide the method name
 		// from the metadata.
-		ji.method.symbolize(symbolReporter, 0, ii, trace)
+		ji.method.symbolize(0, ii, frames)
 		return nil
 	}
 
@@ -153,7 +148,7 @@ func (ji *hotspotJITInfo) symbolize(symbolReporter reporter.SymbolReporter, ripD
 			if err != nil {
 				return err
 			}
-			method.symbolize(symbolReporter, byteCodeIndex, ii, trace)
+			method.symbolize(byteCodeIndex, ii, frames)
 		}
 	}
 	return nil

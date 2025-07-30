@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"reflect"
 	"regexp"
@@ -32,7 +31,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
@@ -176,11 +174,6 @@ type pythonCodeObject struct {
 	// ebpfChecksum is the simple hash of few PyCodeObject fields sent from eBPF
 	// to verify that the data we extracted from remote process is still valid
 	ebpfChecksum uint32
-
-	// fileID is a more complete hash of various PyCodeObject fields, which is
-	// used as the global ID of the PyCodeObject. It is stored as the FileID
-	// part of the Frame in the DB.
-	fileID libpf.FileID
 }
 
 // readVarint returns a variable length encoded unsigned integer from a location table entry.
@@ -315,23 +308,6 @@ func mapByteCodeIndexToLine(m *pythonCodeObject, bci uint32) uint32 {
 		}
 	}
 	return lineno
-}
-
-func (m *pythonCodeObject) symbolize(symbolReporter reporter.SymbolReporter, bci uint32,
-	getFuncOffset getFuncOffsetFunc, trace *libpf.Trace) {
-	frameID := libpf.NewFrameID(m.fileID, libpf.AddressOrLineno(bci))
-	trace.AppendFrameID(libpf.PythonFrame, frameID)
-	if !symbolReporter.FrameKnown(frameID) {
-		functionOffset := getFuncOffset(m, bci)
-		lineNo := libpf.SourceLineno(m.firstLineNo + functionOffset)
-		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-			FrameID:        frameID,
-			FunctionName:   m.name,
-			SourceFile:     m.sourceFileName,
-			SourceLine:     lineNo,
-			FunctionOffset: functionOffset,
-		})
-	}
 }
 
 // getFuncOffsetFunc provides functionality to return a function offset from a PyCodeObject
@@ -551,19 +527,6 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 		return nil, fmt.Errorf("failed to read line table: %v", err)
 	}
 
-	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(sourceFileName))
-	_, _ = h.Write([]byte(name))
-	_, _ = h.Write(cobj[vms.PyCodeObject.FirstLineno : vms.PyCodeObject.FirstLineno+4])
-	_, _ = h.Write(cobj[vms.PyCodeObject.ArgCount : vms.PyCodeObject.ArgCount+4])
-	_, _ = h.Write(cobj[vms.PyCodeObject.KwOnlyArgCount : vms.PyCodeObject.KwOnlyArgCount+4])
-	_, _ = h.Write(lineTable)
-	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create a file ID: %v", err)
-	}
-
 	pco := &pythonCodeObject{
 		version:        p.d.version,
 		name:           libpf.Intern(name),
@@ -571,14 +534,12 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 		firstLineNo:    firstLineNo,
 		lineTable:      lineTable,
 		ebpfChecksum:   ebpfChecksum,
-		fileID:         fileID,
 	}
 	p.addrToCodeObject.Add(addr, pco)
 	return pco, nil
 }
 
-func (p *pythonInstance) Symbolize(symbolReporter reporter.SymbolReporter,
-	frame *host.Frame, trace *libpf.Trace) error {
+func (p *pythonInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	if !frame.Type.IsInterpType(libpf.Python) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -592,11 +553,20 @@ func (p *pythonInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	defer sfCounter.DefaultToFailure()
 
 	// Extract and symbolize
-	method, err := p.getCodeObject(ptr, objectID)
+	m, err := p.getCodeObject(ptr, objectID)
 	if err != nil {
 		return fmt.Errorf("failed to get python object %x: %v", objectID, err)
 	}
-	method.symbolize(symbolReporter, lastI, p.getFuncOffset, trace)
+
+	functionOffset := p.getFuncOffset(m, lastI)
+	frames.Append(&libpf.Frame{
+		Type:           libpf.PythonFrame,
+		FunctionName:   m.name,
+		SourceFile:     m.sourceFileName,
+		SourceLine:     libpf.SourceLineno(m.firstLineNo + functionOffset),
+		FunctionOffset: functionOffset,
+	})
+
 	sfCounter.ReportSuccess()
 	return nil
 }

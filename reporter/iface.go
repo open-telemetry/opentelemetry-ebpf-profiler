@@ -59,21 +59,6 @@ type ExecutableMetadataArgs struct {
 	Open ExecutableOpener
 }
 
-// FrameMetadataArgs collects metadata about a single frame in a trace, for
-// reporting it to a SymbolReporter via the FrameMetadata method.
-type FrameMetadataArgs struct {
-	// FrameID is a unique identifier for the frame.
-	FrameID libpf.FrameID
-	// FunctionName is the name of the function for the frame.
-	FunctionName libpf.String
-	// SourceFile is the source code file name for the frame.
-	SourceFile libpf.String
-	// SourceLine is the source code level line number of this frame.
-	SourceLine libpf.SourceLineno
-	// FunctionOffset is the line offset from function start line for the frame.
-	FunctionOffset uint32
-}
-
 type SymbolReporter interface {
 	// ExecutableKnown may be used to query the reporter if the FileID is known.
 	// The callers of ExecutableMetadata can optionally use this method to determine if the data
@@ -91,17 +76,6 @@ type SymbolReporter interface {
 	// wish to upload executables should NOT block this function to do so and instead just
 	// open the file and then enqueue the upload in the background.
 	ExecutableMetadata(args *ExecutableMetadataArgs)
-
-	// FrameKnown may be used to query the reporter if the FrameID is known. The interpreter
-	// modules can optionally use this method to determine if the data is already cached
-	// and avoid extra work resolving the metadata. If the reporter returns false,
-	// the interpreter plugin will resolve the frame metadata and submit it to the reporter
-	// via a subsequent FrameMetadata call.
-	FrameKnown(frameID libpf.FrameID) bool
-
-	// FrameMetadata accepts metadata associated with a frame and caches this information before
-	// a periodic reporting to the backend.
-	FrameMetadata(frameMetadata *FrameMetadataArgs)
 }
 
 type HostMetadataReporter interface {

@@ -3,18 +3,46 @@
 
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
-// Trace represents a stack trace. Each tuple (Files[i], Linenos[i]) represents a
-// stack frame via the file ID and line number at the offset i in the trace. The
-// information for the most recently called function is at offset 0.
+import (
+	"unique"
+)
+
+// Frame represents one frame in a stack trace.
+type Frame struct {
+	// Type is the frame type.
+	Type FrameType
+	// FunctionOffset is the line offset from function start line for the frame.
+	FunctionOffset uint32
+	// FunctionName is the name of the function for the frame.
+	FunctionName String
+	// SourceFile is the source code file name for the frame.
+	SourceFile String
+	// SourceLine is the source code level line number of this frame.
+	SourceLine SourceLineno
+
+	// Calculated executable FileID for the backing mapping file.
+	FileID FileID
+	// An address in ELF VA space (native frame) or line number (interpreted frame).
+	AddressOrLineno AddressOrLineno
+
+	MappingStart      Address
+	MappingEnd        Address
+	MappingFileOffset uint64
+}
+
+// Frames is a list of interned frames.
+type Frames []unique.Handle[Frame]
+
+// Append interns and appends a frame to the slice of frames.
+func (frames *Frames) Append(frame *Frame) {
+	*frames = append(*frames, unique.Make(*frame))
+}
+
+// Trace represents a stack trace.
 type Trace struct {
-	Files              []FileID
-	Linenos            []AddressOrLineno
-	FrameTypes         []FrameType
-	MappingStart       []Address
-	MappingEnd         []Address
-	MappingFileOffsets []uint64
-	Hash               TraceHash
-	CustomLabels       map[string]string
+	Frames       Frames
+	Hash         TraceHash
+	CustomLabels map[string]string
 }
 
 // AppendFrame appends a frame to the columnar frame array without mapping information.
@@ -22,18 +50,15 @@ func (trace *Trace) AppendFrame(ty FrameType, file FileID, addrOrLine AddressOrL
 	trace.AppendFrameFull(ty, file, addrOrLine, 0, 0, 0)
 }
 
-// AppendFrameID appends a frame to the columnar frame array without mapping information.
-func (trace *Trace) AppendFrameID(ty FrameType, frameID FrameID) {
-	trace.AppendFrameFull(ty, frameID.FileID(), frameID.AddressOrLine(), 0, 0, 0)
-}
-
 // AppendFrameFull appends a frame with mapping info to the columnar frame array.
 func (trace *Trace) AppendFrameFull(ty FrameType, file FileID, addrOrLine AddressOrLineno,
 	mappingStart Address, mappingEnd Address, mappingFileOffset uint64) {
-	trace.FrameTypes = append(trace.FrameTypes, ty)
-	trace.Files = append(trace.Files, file)
-	trace.Linenos = append(trace.Linenos, addrOrLine)
-	trace.MappingStart = append(trace.MappingStart, mappingStart)
-	trace.MappingEnd = append(trace.MappingEnd, mappingEnd)
-	trace.MappingFileOffsets = append(trace.MappingFileOffsets, mappingFileOffset)
+	trace.Frames.Append(&Frame{
+		Type:              ty,
+		FileID:            file,
+		AddressOrLineno:   addrOrLine,
+		MappingStart:      mappingStart,
+		MappingEnd:        mappingEnd,
+		MappingFileOffset: mappingFileOffset,
+	})
 }
