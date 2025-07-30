@@ -22,7 +22,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
-	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
@@ -331,14 +330,4 @@ func (pm *ProcessManager) MaybeNotifyAPMAgent(
 	}
 
 	return serviceName
-}
-
-// AddSynthIntervalData adds synthetic stack deltas to the manager. This is useful for cases where
-// populating the information via the stack delta provider isn't viable, for example because the
-// `.eh_frame` section for a binary is broken. If `AddSynthIntervalData` was called for a given
-// file ID, the stack delta provider will not be consulted and the manually added stack deltas take
-// precedence.
-func (pm *ProcessManager) AddSynthIntervalData(fileID host.FileID,
-	data sdtypes.IntervalData) error {
-	return pm.eim.AddSynthIntervalData(fileID, data)
 }

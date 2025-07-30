@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
+package execinfomanager // import "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 
 import (
 	"testing"
