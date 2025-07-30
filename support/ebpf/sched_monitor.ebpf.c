@@ -21,7 +21,7 @@ int tracepoint__sched_process_free(struct sched_process_free_ctx *ctx)
 {
   u32 pid = ctx->pid;
 
-  if (!bpf_map_lookup_elem(&reported_pids, &pid) && !pid_information_exists(ctx, pid)) {
+  if (!bpf_map_lookup_elem(&reported_pids, &pid) && !pid_information_exists(pid)) {
     // Only report PIDs that we explicitly track. This avoids sending kernel worker PIDs
     // to userspace.
     goto exit;

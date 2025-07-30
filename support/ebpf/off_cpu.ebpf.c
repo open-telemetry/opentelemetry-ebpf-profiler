@@ -20,7 +20,7 @@ bpf_map_def SEC("maps") sched_times = {
 
 // tracepoint__sched_switch serves as entry point for off cpu profiling.
 SEC("tracepoint/sched/sched_switch")
-int tracepoint__sched_switch(void *ctx)
+int tracepoint__sched_switch(UNUSED void *ctx)
 {
   u64 pid_tgid = bpf_get_current_pid_tgid();
   u32 pid      = pid_tgid >> 32;

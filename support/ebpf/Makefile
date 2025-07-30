@@ -39,7 +39,6 @@ FLAGS=$(TARGET_FLAGS) -g \
 	-Wall -Wextra -Werror \
 	-Wno-address-of-packed-member \
 	-Wno-unused-label \
-	-Wno-unused-parameter \
 	-Wno-sign-compare \
 	-fno-stack-protector \
 	-D__SOURCE_DATE_EPOCH__=0 \
@@ -81,7 +80,7 @@ bloatcheck: $(TRACER_NAME)
 	python3 bloat-o-meter $(TRACER_NAME).baseline $(TRACER_NAME)
 
 lint:
-	$(CLANG_FORMAT) -Werror --dry-run -style=file *.[ch]
+	$(CLANG_FORMAT) -Werror --dry-run -style=file *.[ch] ../../tools/coredump/*.[ch]
 
 format:
 	$(CLANG_FORMAT) -i -style=file *.[ch]

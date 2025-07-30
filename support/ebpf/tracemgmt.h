@@ -82,7 +82,7 @@ static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event
 struct bpf_perf_event_data;
 
 // pid_information_exists checks if the given pid exists in pid_page_to_mapping_info or not.
-static inline EBPF_INLINE bool pid_information_exists(void *ctx, int pid)
+static inline EBPF_INLINE bool pid_information_exists(int pid)
 {
   PIDPage key   = {};
   key.prefixLen = BIT_WIDTH_PID + BIT_WIDTH_PAGE;
@@ -253,8 +253,8 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   u64 *labels_space        = (u64 *)&trace->custom_labels.labels;
   // I'm not sure this is necessary since we only increment len after
   // we successfully write the label.
-#pragma unroll
-  for (int i = 0; i < sizeof(CustomLabel) * MAX_CUSTOM_LABELS / 8; i++) {
+  UNROLL for (int i = 0; i < sizeof(CustomLabel) * MAX_CUSTOM_LABELS / 8; i++)
+  {
     labels_space[i] = 0;
   }
 
@@ -511,7 +511,7 @@ get_next_unwinder_after_native_frame(PerCPURecord *record, int *unwinder)
 
 // get_next_unwinder_after_interpreter determines the next unwinder program to run
 // after an interpreter (non-native) frame sequence has been unwound.
-static inline EBPF_INLINE int get_next_unwinder_after_interpreter(const PerCPURecord *record)
+static inline EBPF_INLINE int get_next_unwinder_after_interpreter()
 {
   // Since interpreter-only frame decoding is no longer supported, this
   // currently equals to just resuming native unwinding.
@@ -761,7 +761,7 @@ static inline EBPF_INLINE int collect_trace(
     goto exit;
   }
 
-  if (!pid_information_exists(ctx, pid)) {
+  if (!pid_information_exists(pid)) {
     u64 pid_tgid = (u64)pid << 32 | tid;
     if (report_pid(ctx, pid_tgid, RATELIMIT_ACTION_DEFAULT)) {
       increment_metric(metricID_NumProcNew);
