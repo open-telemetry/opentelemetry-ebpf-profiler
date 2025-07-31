@@ -40,7 +40,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
-// Compile time check to make sure config.Times satisfies the interfaces.
+// Compile time check to make sure times.Times satisfies the interfaces.
 var _ Intervals = (*times.Times)(nil)
 
 const (

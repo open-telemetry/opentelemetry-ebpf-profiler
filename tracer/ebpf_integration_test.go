@@ -21,12 +21,23 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"go.opentelemetry.io/ebpf-profiler/testutils"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
+
+type mockIntervals struct{}
+
+func (mockIntervals) MonitorInterval() time.Duration    { return 1 * time.Second }
+func (mockIntervals) TracePollInterval() time.Duration  { return 250 * time.Millisecond }
+func (mockIntervals) PIDCleanupInterval() time.Duration { return 1 * time.Second }
+
+type mockReporter struct{}
+
+func (mockReporter) ExecutableKnown(_ libpf.FileID) bool                   { return true }
+func (mockReporter) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {}
 
 // forceContextSwitch makes sure two Go threads are running concurrently
 // and that there will be a context switch between those two.
@@ -105,8 +116,8 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 	enabledTracers, _ := tracertypes.Parse("")
 	enabledTracers.Enable(tracertypes.PythonTracer)
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
-		Reporter:               &testutils.MockReporter{},
-		Intervals:              &testutils.MockIntervals{},
+		Reporter:               &mockReporter{},
+		Intervals:              &mockIntervals{},
 		IncludeTracers:         enabledTracers,
 		FilterErrorFrames:      false,
 		SamplesPerSecond:       20,
@@ -228,6 +239,15 @@ Loop:
 }
 
 func TestAllTracers(t *testing.T) {
-	_, _ = testutils.StartTracer(context.Background(), t, tracertypes.AllTracers(),
-		&testutils.MockReporter{})
+	_, err := tracer.NewTracer(context.Background(), &tracer.Config{
+		Reporter:               &mockReporter{},
+		Intervals:              &mockIntervals{},
+		IncludeTracers:         tracertypes.AllTracers(),
+		SamplesPerSecond:       20,
+		ProbabilisticInterval:  100,
+		ProbabilisticThreshold: 100,
+		OffCPUThreshold:        uint32(math.MaxUint32 / 100),
+		DebugTracer:            true,
+	})
+	require.NoError(t, err)
 }

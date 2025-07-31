@@ -4,25 +4,75 @@ package main
 
 import (
 	"context"
+	"math"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/ebpf-profiler/testutils"
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
+type mockIntervals struct{}
+
+func (mockIntervals) MonitorInterval() time.Duration    { return 1 * time.Second }
+func (mockIntervals) TracePollInterval() time.Duration  { return 250 * time.Millisecond }
+func (mockIntervals) PIDCleanupInterval() time.Duration { return 1 * time.Second }
+
+type mockReporter struct{}
+
+func (mockReporter) ExecutableKnown(_ libpf.FileID) bool                   { return true }
+func (mockReporter) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {}
+
+func isRoot() bool {
+	return os.Geteuid() == 0
+}
+
 func TestGoLabels(t *testing.T) {
-	if !testutils.IsRoot() {
+	if !isRoot() {
 		t.Skip("root privileges required")
 	}
+	ctx := context.Background()
 
-	r := &testutils.MockReporter{}
 	enabledTracers, _ := tracertypes.Parse("")
 	enabledTracers.Enable(tracertypes.Labels)
-	traceCh, _ := testutils.StartTracer(context.Background(), t, enabledTracers, r)
+
+	trc, err := tracer.NewTracer(ctx, &tracer.Config{
+		Reporter:               &mockReporter{},
+		Intervals:              &mockIntervals{},
+		IncludeTracers:         enabledTracers,
+		SamplesPerSecond:       20,
+		ProbabilisticInterval:  100,
+		ProbabilisticThreshold: 100,
+		OffCPUThreshold:        uint32(math.MaxUint32 / 100),
+		DebugTracer:            true,
+	})
+	require.NoError(t, err)
+
+	trc.StartPIDEventProcessor(ctx)
+
+	err = trc.AttachTracer()
+	require.NoError(t, err)
+
+	t.Log("Attached tracer program")
+
+	err = trc.EnableProfiling()
+	require.NoError(t, err)
+
+	err = trc.AttachSchedMonitor()
+	require.NoError(t, err)
+
+	traceCh := make(chan *host.Trace)
+
+	err = trc.StartMapMonitors(ctx, traceCh)
+	require.NoError(t, err)
+
 	for _, tc := range [][]string{
 		{"./golbls_1_23.test", "123"},
 		{"./golbls_1_24.test", "124"},
