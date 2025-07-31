@@ -141,7 +141,7 @@ support/golbls_1_24.test: ./interpreter/golabels/test/main.go
 support/golbls_cgo.test: ./interpreter/golabels/test/main-cgo.go
 	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.1 go build -ldflags '-extldflags "-static"' -tags $(GO_TAGS),usecgo  -o $@ $<
 
-integration-test-binaries: generate ebpf rust-components support/golbls_1_23.test support/golbls_1_24.test support/golbls_cgo.test
+integration-test-binaries: generate ebpf support/golbls_1_23.test support/golbls_1_24.test support/golbls_cgo.test
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
