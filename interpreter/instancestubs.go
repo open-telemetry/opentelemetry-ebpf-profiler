@@ -12,24 +12,34 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
 )
 
-// InstanceStubs provides empty implementations of Instance hooks that are
-// not mandatory for a Instance implementation.
-type InstanceStubs struct {
+// ObserverStubs provides empty implementations of Observer hooks that are
+// not mandatory for an Observer implementation.
+type ObserverStubs struct {
 }
 
-func (is *InstanceStubs) SynchronizeMappings(EbpfHandler, reporter.SymbolReporter, process.Process,
+func (os *ObserverStubs) Detach(EbpfHandler, libpf.PID) error {
+	return nil
+}
+
+func (os *ObserverStubs) SynchronizeMappings(EbpfHandler, reporter.SymbolReporter, process.Process,
 	[]process.Mapping) error {
 	return nil
 }
 
-func (is *InstanceStubs) UpdateTSDInfo(EbpfHandler, libpf.PID, tpbase.TSDInfo) error {
+func (os *ObserverStubs) UpdateTSDInfo(EbpfHandler, libpf.PID, tpbase.TSDInfo) error {
 	return nil
+}
+
+func (os *ObserverStubs) GetAndResetMetrics() ([]metrics.Metric, error) {
+	return []metrics.Metric{}, nil
+}
+
+// InstanceStubs provides empty implementations of Instance hooks that are
+// not mandatory for a Instance implementation.
+type InstanceStubs struct {
+	ObserverStubs
 }
 
 func (is *InstanceStubs) Symbolize(reporter.SymbolReporter, *host.Frame, *libpf.Trace) error {
 	return ErrMismatchInterpreterType
-}
-
-func (is *InstanceStubs) GetAndResetMetrics() ([]metrics.Metric, error) {
-	return []metrics.Metric{}, nil
 }

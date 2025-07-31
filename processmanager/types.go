@@ -50,6 +50,13 @@ type ProcessManager struct {
 	// the unique on-disk identifier of the interpreter DSO.
 	interpreters map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance
 
+	// observers records the interpreter.Observer interface which contains hooks for
+	// process monitoring without symbolization. Unlike interpreters, multiple observers
+	// can be associated with each executable.
+	// The key of the first map is a process ID, while the key of the second map is
+	// the unique on-disk identifier of the observed DSO.
+	observers map[libpf.PID]map[util.OnDiskFileIdentifier][]interpreter.Observer
+
 	// pidToProcessInfo keeps track of the executable memory mappings.
 	pidToProcessInfo map[libpf.PID]*processInfo
 

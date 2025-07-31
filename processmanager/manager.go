@@ -89,11 +89,13 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 	}
 
 	interpreters := make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance)
+	observers := make(map[libpf.PID]map[util.OnDiskFileIdentifier][]interpreter.Observer)
 
 	pm := &ProcessManager{
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
 		eim:                      em,
 		interpreters:             interpreters,
+		observers:                observers,
 		exitEvents:               make(map[libpf.PID]times.KTime),
 		pidToProcessInfo:         make(map[libpf.PID]*processInfo),
 		ebpf:                     ebpf,
