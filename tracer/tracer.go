@@ -678,7 +678,7 @@ func (t *Tracer) readKernelFrames(kstackID int32) (libpf.Frames, error) {
 		kstackLen++
 	}
 
-	frames := make(libpf.Frames, kstackLen)
+	frames := make(libpf.Frames, 0, kstackLen)
 	for i := uint32(0); i < kstackLen; i++ {
 		address := libpf.Address(kstackVal[i])
 		frame := libpf.Frame{
