@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package traceutil
+package apmint // import "go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 
 import (
 	"testing"
@@ -30,19 +30,23 @@ func newPythonTrace() *libpf.Trace {
 func TestHashTrace(t *testing.T) {
 	tests := map[string]struct {
 		trace  *libpf.Trace
-		result libpf.TraceHash
+		result [16]byte
 	}{
 		"empty trace": {
-			trace:  &libpf.Trace{},
-			result: libpf.NewTraceHash(0x6c62272e07bb0142, 0x62b821756295c58d)},
+			trace: &libpf.Trace{},
+			result: [16]uint8{0x6c, 0x62, 0x27, 0x2e, 0x7, 0xbb, 0x1, 0x42,
+				0x62, 0xb8, 0x21, 0x75, 0x62, 0x95, 0xc5, 0x8d},
+		},
 		"python trace": {
-			trace:  newPythonTrace(),
-			result: libpf.NewTraceHash(0x21c6fe4c62868856, 0xcf510596eab68dc8)},
+			trace: newPythonTrace(),
+			result: [16]byte{0x21, 0xc6, 0xfe, 0x4c, 0x62, 0x86, 0x88, 0x56,
+				0xcf, 0x51, 0x5, 0x96, 0xea, 0xb6, 0x8d, 0xc8},
+		},
 	}
 
 	for name, testcase := range tests {
 		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, testcase.result, HashTrace(testcase.trace))
+			assert.Equal(t, testcase.result, hashTrace(testcase.trace))
 		})
 	}
 }

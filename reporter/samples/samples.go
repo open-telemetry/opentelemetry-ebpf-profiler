@@ -33,7 +33,6 @@ type TraceEvents struct {
 // contain all trace fields that aren't already part of the trace hash to ensure
 // that we don't accidentally merge traces with different fields.
 type TraceAndMetaKey struct {
-	Hash libpf.TraceHash
 	// comm and apmServiceName are provided by the eBPF programs
 	Comm           string
 	ApmServiceName string
