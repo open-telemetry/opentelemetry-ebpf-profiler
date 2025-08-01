@@ -1,9 +1,10 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
+package execinfomanager // import "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 
 import (
+	"debug/elf"
 	"sort"
 
 	aa "golang.org/x/arch/arm64/arm64asm"
@@ -21,9 +22,15 @@ const regFP = 29
 // regLR is the arm64 link register (x30) number
 const regLR = 30
 
-// createVDSOSyntheticRecordNone returns no synthetic deltas when the kernel vDSO
-// is known to have valid unwind information.
-func createVDSOSyntheticRecordNone(_ *pfelf.File) sdtypes.IntervalData {
+// synthesizeIntervalData creates synthetic stack deltas if possible.
+// Currently supported for ARM64 vDSO only.
+func synthesizeIntervalData(ef *pfelf.File) sdtypes.IntervalData {
+	if ef.Machine == elf.EM_AARCH64 {
+		soname, err := ef.DynString(elf.DT_SONAME)
+		if err == nil && soname[0] == "linux-vdso.so.1" {
+			return createVDSOSyntheticRecordArm64(ef)
+		}
+	}
 	return sdtypes.IntervalData{}
 }
 
