@@ -7,6 +7,15 @@ import (
 	"unique"
 )
 
+type FrameMappingFileData struct {
+	FileID FileID
+	// FileName is the base filename of the executable.
+	FileName String
+	// GnuBuildID is the GNU build ID from .note.gnu.build-id, if any.
+	GnuBuildID string
+}
+type FrameMappingFile = unique.Handle[FrameMappingFileData]
+
 // Frame represents one frame in a stack trace.
 type Frame struct {
 	// Type is the frame type.
@@ -20,10 +29,10 @@ type Frame struct {
 	// SourceLine is the source code level line number of this frame.
 	SourceLine SourceLineno
 
-	// Calculated executable FileID for the backing mapping file.
-	FileID FileID
 	// An address in ELF VA space (native frame) or line number (interpreted frame).
 	AddressOrLineno AddressOrLineno
+	// File metadata for the backing file of the mapping (may be nil)
+	MappingFile FrameMappingFile
 
 	MappingStart      Address
 	MappingEnd        Address
@@ -43,22 +52,4 @@ type Trace struct {
 	Frames       Frames
 	Hash         TraceHash
 	CustomLabels map[string]string
-}
-
-// AppendFrame appends a frame to the columnar frame array without mapping information.
-func (trace *Trace) AppendFrame(ty FrameType, file FileID, addrOrLine AddressOrLineno) {
-	trace.AppendFrameFull(ty, file, addrOrLine, 0, 0, 0)
-}
-
-// AppendFrameFull appends a frame with mapping info to the columnar frame array.
-func (trace *Trace) AppendFrameFull(ty FrameType, file FileID, addrOrLine AddressOrLineno,
-	mappingStart Address, mappingEnd Address, mappingFileOffset uint64) {
-	trace.Frames.Append(&Frame{
-		Type:              ty,
-		FileID:            file,
-		AddressOrLineno:   addrOrLine,
-		MappingStart:      mappingStart,
-		MappingEnd:        mappingEnd,
-		MappingFileOffset: mappingFileOffset,
-	})
 }
