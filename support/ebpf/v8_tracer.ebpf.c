@@ -54,10 +54,10 @@ static EBPF_INLINE ErrorCode push_v8(
 // Verify a V8 tagged pointer
 static EBPF_INLINE uintptr_t v8_verify_pointer(uintptr_t maybe_pointer)
 {
-  if ((maybe_pointer & HeapObjectTagMask) != HeapObjectTag) {
+  if ((maybe_pointer & V8_HeapObjectTagMask) != V8_HeapObjectTag) {
     return 0;
   }
-  return maybe_pointer & ~HeapObjectTagMask;
+  return maybe_pointer & ~V8_HeapObjectTagMask;
 }
 
 // Read and verify a V8 tagged pointer from given memory location.
@@ -75,10 +75,10 @@ static EBPF_INLINE uintptr_t v8_read_object_ptr(uintptr_t addr)
 // Returns the SMI value, or def_value in case of errors.
 static EBPF_INLINE uintptr_t v8_parse_smi(uintptr_t maybe_smi, uintptr_t def_value)
 {
-  if ((maybe_smi & SmiTagMask) != SmiTag) {
+  if ((maybe_smi & V8_SmiTagMask) != V8_SmiTag) {
     return def_value;
   }
-  return maybe_smi >> SmiValueShift;
+  return maybe_smi >> V8_SmiValueShift;
 }
 
 // Read the type tag of a Heap Object at given memory location.
@@ -135,10 +135,10 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
 
   // Before V8 5.8.261 the frame marker was a SMI. Now it has the tag, but it's not shifted fully.
   // The special coding was done to reduce the frame marker push <immed64> to <immed32>.
-  if ((fp_marker & SmiTagMask) == SmiTag) {
+  if ((fp_marker & V8_SmiTagMask) == V8_SmiTag) {
     // Shift with the tag length only (shift on normal SMI is different).
     pointer_and_type = V8_FILE_TYPE_MARKER;
-    delta_or_marker  = fp_marker >> SmiTagShift;
+    delta_or_marker  = fp_marker >> V8_SmiTagShift;
     DEBUG_PRINT("v8:  -> stub frame, tag %ld", delta_or_marker);
     goto frame_done;
   }
@@ -237,8 +237,8 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
       }
 
       int i;
-#pragma unroll
-      for (i = sizeof(stk) / sizeof(stk[0]) - 1; i >= 0; i--) {
+      UNROLL for (i = sizeof(stk) / sizeof(stk[0]) - 1; i >= 0; i--)
+      {
         if (stk[i] >= code_start && stk[i] < code_end) {
           break;
         }
@@ -327,8 +327,8 @@ static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
 
   increment_metric(metricID_UnwindV8Attempts);
 
-#pragma unroll
-  for (int i = 0; i < V8_FRAMES_PER_PROGRAM; i++) {
+  UNROLL for (int i = 0; i < V8_FRAMES_PER_PROGRAM; i++)
+  {
     unwinder = PROG_UNWIND_STOP;
 
     error = unwind_one_v8_frame(record, vi, i == 0);

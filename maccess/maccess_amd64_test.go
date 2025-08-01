@@ -105,8 +105,6 @@ var codeblobs = map[string]struct {
 
 func TestGetJumpInCopyFromUserNoFault(t *testing.T) {
 	for name, test := range codeblobs {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			isPatched, err := CopyFromUserNoFaultIsPatched(test.code,
 				test.copyFromUserNofaultAddr, test.nmiUaccessOkayAddr)

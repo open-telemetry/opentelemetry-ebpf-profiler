@@ -20,9 +20,12 @@ type ehtester struct {
 	found int
 }
 
-func (e *ehtester) fdeHook(cie *cieInfo, fde *fdeInfo) bool {
-	e.t.Logf("FDE len %d, ciePos %x, ip %x...%x, ipLen %d (enc %x, cf %d, df %d, ra %d)",
-		fde.len, fde.ciePos, fde.ipStart, fde.ipStart+fde.ipLen, fde.ipLen,
+func (e *ehtester) fdeUnsorted() {
+}
+
+func (e *ehtester) fdeHook(cie *cieInfo, fde *fdeInfo, _ *sdtypes.StackDeltaArray) bool {
+	e.t.Logf("FDE ciePos %x, ip %x...%x, ipLen %d (enc %x, cf %d, df %d, ra %d)",
+		fde.ciePos, fde.ipStart, fde.ipStart+fde.ipLen, fde.ipLen,
 		cie.enc, cie.codeAlign, cie.dataAlign, cie.regRA)
 	e.t.Logf("   LOC           CFA          rbp   ra")
 	return true
@@ -102,8 +105,6 @@ func TestEhFrame(t *testing.T) {
 	}
 
 	for name, test := range tests {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			ef, err := pfelf.Open(test.elfFile)
 			require.NoError(t, err)
@@ -164,8 +165,6 @@ func TestParseCIE(t *testing.T) {
 	}
 
 	for name, tc := range tests {
-		name := name
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			fakeReader := &reader{
 				debugFrame: tc.debugFrame,

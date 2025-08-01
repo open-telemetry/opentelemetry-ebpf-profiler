@@ -23,6 +23,7 @@ const (
 	V8Tracer
 	DotnetTracer
 	GoTracer
+	Labels
 	BEAMTracer
 
 	// maxTracers indicates the max. number of different tracers
@@ -38,6 +39,7 @@ var tracerTypeToName = map[tracerType]string{
 	V8Tracer:      "v8",
 	DotnetTracer:  "dotnet",
 	GoTracer:      "go",
+	Labels:        "labels",
 	BEAMTracer:    "beam",
 }
 

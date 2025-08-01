@@ -9,16 +9,18 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/asm/amd"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 
 	"github.com/elastic/go-freelru"
 
@@ -29,16 +31,11 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
-
-// #include <stdlib.h>
-// #include "../../support/ebpf/types.h"
-import "C"
 
 // The following regexs are intended to match either a path to a Python binary or
 // library.
@@ -133,7 +130,7 @@ func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.A
 	i := &pythonInstance{
 		d:                d,
 		rm:               rm,
-		bias:             C.u64(bias),
+		bias:             bias,
 		addrToCodeObject: addrToCodeObject,
 	}
 
@@ -160,10 +157,10 @@ type pythonCodeObject struct {
 	version uint16
 
 	// name is the extracted co_name (the unqualified method or function name)
-	name string
+	name libpf.String
 
 	// sourceFileName is the extracted co_filename field
-	sourceFileName string
+	sourceFileName libpf.String
 
 	// For Python version < 3.10 lineTable is the extracted co_lnotab, and contains the
 	// "bytecode index" to "line number" mapping data.
@@ -177,11 +174,6 @@ type pythonCodeObject struct {
 	// ebpfChecksum is the simple hash of few PyCodeObject fields sent from eBPF
 	// to verify that the data we extracted from remote process is still valid
 	ebpfChecksum uint32
-
-	// fileID is a more complete hash of various PyCodeObject fields, which is
-	// used as the global ID of the PyCodeObject. It is stored as the FileID
-	// part of the Frame in the DB.
-	fileID libpf.FileID
 }
 
 // readVarint returns a variable length encoded unsigned integer from a location table entry.
@@ -318,23 +310,6 @@ func mapByteCodeIndexToLine(m *pythonCodeObject, bci uint32) uint32 {
 	return lineno
 }
 
-func (m *pythonCodeObject) symbolize(symbolReporter reporter.SymbolReporter, bci uint32,
-	getFuncOffset getFuncOffsetFunc, trace *libpf.Trace) {
-	frameID := libpf.NewFrameID(m.fileID, libpf.AddressOrLineno(bci))
-	trace.AppendFrameID(libpf.PythonFrame, frameID)
-	if !symbolReporter.FrameKnown(frameID) {
-		functionOffset := getFuncOffset(m, bci)
-		lineNo := libpf.SourceLineno(m.firstLineNo + functionOffset)
-		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-			FrameID:        frameID,
-			FunctionName:   m.name,
-			SourceFile:     m.sourceFileName,
-			SourceLine:     lineNo,
-			FunctionOffset: functionOffset,
-		})
-	}
-}
-
 // getFuncOffsetFunc provides functionality to return a function offset from a PyCodeObject
 type getFuncOffsetFunc func(m *pythonCodeObject, bci uint32) uint32
 
@@ -347,7 +322,7 @@ type pythonInstance struct {
 
 	d    *pythonData
 	rm   remotememory.RemoteMemory
-	bias C.u64
+	bias libpf.Address
 
 	// addrToCodeObject maps a Python Code object to a pythonCodeObject which caches
 	// the needed data from it.
@@ -398,28 +373,28 @@ func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.P
 	tsdInfo tpbase.TSDInfo) error {
 	d := p.d
 	vm := &d.vmStructs
-	cdata := C.PyProcInfo{
-		autoTLSKeyAddr: C.u64(d.autoTLSKey) + p.bias,
-		version:        C.u16(d.version),
+	cdata := support.PyProcInfo{
+		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
+		Version:        d.version,
 
-		tsdInfo: C.TSDInfo{
-			offset:     C.s16(tsdInfo.Offset),
-			multiplier: C.u8(tsdInfo.Multiplier),
-			indirect:   C.u8(tsdInfo.Indirect),
+		TsdInfo: support.TSDInfo{
+			Offset:     tsdInfo.Offset,
+			Multiplier: tsdInfo.Multiplier,
+			Indirect:   tsdInfo.Indirect,
 		},
 
-		PyThreadState_frame:            C.u8(vm.PyThreadState.Frame),
-		PyCFrame_current_frame:         C.u8(vm.PyCFrame.CurrentFrame),
-		PyFrameObject_f_back:           C.u8(vm.PyFrameObject.Back),
-		PyFrameObject_f_code:           C.u8(vm.PyFrameObject.Code),
-		PyFrameObject_f_lasti:          C.u8(vm.PyFrameObject.LastI),
-		PyFrameObject_entry_member:     C.u8(vm.PyFrameObject.EntryMember),
-		PyFrameObject_entry_val:        C.u8(vm.PyFrameObject.EntryVal),
-		PyCodeObject_co_argcount:       C.u8(vm.PyCodeObject.ArgCount),
-		PyCodeObject_co_kwonlyargcount: C.u8(vm.PyCodeObject.KwOnlyArgCount),
-		PyCodeObject_co_flags:          C.u8(vm.PyCodeObject.Flags),
-		PyCodeObject_co_firstlineno:    C.u8(vm.PyCodeObject.FirstLineno),
-		PyCodeObject_sizeof:            C.u8(vm.PyCodeObject.Sizeof),
+		PyThreadState_frame:            uint8(vm.PyThreadState.Frame),
+		PyCFrame_current_frame:         uint8(vm.PyCFrame.CurrentFrame),
+		PyFrameObject_f_back:           uint8(vm.PyFrameObject.Back),
+		PyFrameObject_f_code:           uint8(vm.PyFrameObject.Code),
+		PyFrameObject_f_lasti:          uint8(vm.PyFrameObject.LastI),
+		PyFrameObject_entry_member:     uint8(vm.PyFrameObject.EntryMember),
+		PyFrameObject_entry_val:        uint8(vm.PyFrameObject.EntryVal),
+		PyCodeObject_co_argcount:       uint8(vm.PyCodeObject.ArgCount),
+		PyCodeObject_co_kwonlyargcount: uint8(vm.PyCodeObject.KwOnlyArgCount),
+		PyCodeObject_co_flags:          uint8(vm.PyCodeObject.Flags),
+		PyCodeObject_co_firstlineno:    uint8(vm.PyCodeObject.FirstLineno),
+		PyCodeObject_sizeof:            uint8(vm.PyCodeObject.Sizeof),
 	}
 
 	err := ebpf.UpdateProcData(libpf.Python, pid, unsafe.Pointer(&cdata))
@@ -552,34 +527,19 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 		return nil, fmt.Errorf("failed to read line table: %v", err)
 	}
 
-	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(sourceFileName))
-	_, _ = h.Write([]byte(name))
-	_, _ = h.Write(cobj[vms.PyCodeObject.FirstLineno : vms.PyCodeObject.FirstLineno+4])
-	_, _ = h.Write(cobj[vms.PyCodeObject.ArgCount : vms.PyCodeObject.ArgCount+4])
-	_, _ = h.Write(cobj[vms.PyCodeObject.KwOnlyArgCount : vms.PyCodeObject.KwOnlyArgCount+4])
-	_, _ = h.Write(lineTable)
-	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create a file ID: %v", err)
-	}
-
 	pco := &pythonCodeObject{
 		version:        p.d.version,
-		name:           name,
-		sourceFileName: sourceFileName,
+		name:           libpf.Intern(name),
+		sourceFileName: libpf.Intern(sourceFileName),
 		firstLineNo:    firstLineNo,
 		lineTable:      lineTable,
 		ebpfChecksum:   ebpfChecksum,
-		fileID:         fileID,
 	}
 	p.addrToCodeObject.Add(addr, pco)
 	return pco, nil
 }
 
-func (p *pythonInstance) Symbolize(symbolReporter reporter.SymbolReporter,
-	frame *host.Frame, trace *libpf.Trace) error {
+func (p *pythonInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	if !frame.Type.IsInterpType(libpf.Python) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -593,11 +553,20 @@ func (p *pythonInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	defer sfCounter.DefaultToFailure()
 
 	// Extract and symbolize
-	method, err := p.getCodeObject(ptr, objectID)
+	m, err := p.getCodeObject(ptr, objectID)
 	if err != nil {
 		return fmt.Errorf("failed to get python object %x: %v", objectID, err)
 	}
-	method.symbolize(symbolReporter, lastI, p.getFuncOffset, trace)
+
+	functionOffset := p.getFuncOffset(m, lastI)
+	frames.Append(&libpf.Frame{
+		Type:           libpf.PythonFrame,
+		FunctionName:   m.name,
+		SourceFile:     m.sourceFileName,
+		SourceLine:     libpf.SourceLineno(m.firstLineNo + functionOffset),
+		FunctionOffset: functionOffset,
+	})
+
 	sfCounter.ReportSuccess()
 	return nil
 }
@@ -608,10 +577,8 @@ func fieldByPythonName(obj reflect.Value, fieldName string) reflect.Value {
 	for i := 0; i < obj.NumField(); i++ {
 		objField := objType.Field(i)
 		if nameTag, ok := objField.Tag.Lookup("name"); ok {
-			for _, pythonName := range strings.Split(nameTag, ",") {
-				if fieldName == pythonName {
-					return obj.Field(i)
-				}
+			if slices.Contains(strings.Split(nameTag, ","), fieldName) {
+				return obj.Field(i)
 			}
 		}
 		if fieldName == objField.Name {
@@ -659,17 +626,25 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 	symbolName libpf.SymbolName) (libpf.SymbolValue, error) {
 	// Read and decode the code for the symbol
-	addr, code, err := ef.SymbolData(symbolName, 64)
+	sym, code, err := ef.SymbolData(symbolName, 64)
 	if err != nil {
 		return libpf.SymbolValueInvalid, fmt.Errorf("unable to read '%s': %v",
 			symbolName, err)
 	}
-	value, err := decodeStubArgumentWrapper(code, addr, memoryBase)
+	var value libpf.SymbolValue
+	switch ef.Machine {
+	case elf.EM_AARCH64:
+		value, err = decodeStubArgumentARM64(code, memoryBase), nil
+	case elf.EM_X86_64:
+		value, err = decodeStubArgumentAMD64(code, uint64(sym.Address), uint64(memoryBase))
+	default:
+		return libpf.SymbolValueInvalid, fmt.Errorf("unsupported arch %s", ef.Machine.String())
+	}
 
 	// Sanity check the value range and alignment
 	if err != nil || value%4 != 0 {
 		return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x):  %v",
-			symbolName, addr, hex.Dump(code), value, err)
+			symbolName, sym.Address, hex.Dump(code), value, err)
 	}
 	// If base symbol (_PyRuntime) is not provided, accept any found value.
 	if memoryBase == 0 && value != 0 {
@@ -680,7 +655,7 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 		return value, nil
 	}
 	return libpf.SymbolValueInvalid, fmt.Errorf("decode stub %s 0x%x %s failed (0x%x)",
-		symbolName, addr, hex.Dump(code), value)
+		symbolName, sym.Address, hex.Dump(code), value)
 }
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
@@ -705,12 +680,10 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		if err != nil {
 			return nil, err
 		}
-		for _, n := range needed {
-			if libpythonRegex.MatchString(n) {
-				// 'python' linked with 'libpython'. The beef is in the library,
-				// so do not try to inspect the shim main binary.
-				return nil, nil
-			}
+		if slices.ContainsFunc(needed, libpythonRegex.MatchString) {
+			// 'python' linked with 'libpython'. The beef is in the library,
+			// so do not try to inspect the shim main binary.
+			return nil, nil
 		}
 	}
 
@@ -752,7 +725,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		autoTLSKey += 4
 	}
 
-	interpRanges, err := findInterpreterRanges(info)
+	interpRanges, err := findInterpreterRanges(info, ef)
 	if err != nil {
 		return nil, err
 	}
@@ -830,7 +803,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	return pd, nil
 }
 
-func findInterpreterRanges(info *interpreter.LoaderInfo) (interpRanges []util.Range, err error) {
+func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
+) (interpRanges []util.Range, err error) {
 	// The Python main interpreter loop history in CPython git is:
 	//
 	//nolint:lll
@@ -839,14 +813,54 @@ func findInterpreterRanges(info *interpreter.LoaderInfo) (interpRanges []util.Ra
 	// 0b72b23fb0c v3.9  2020-03-12 _PyEval_EvalFrameDefault(PyThreadState*,PyFrameObject*,int)
 	// 3cebf938727 v3.6  2016-09-05 _PyEval_EvalFrameDefault(PyFrameObject*,int)
 	// 49fd7fa4431 v3.0  2006-04-21 PyEval_EvalFrameEx(PyFrameObject*,int)
-	if interpRanges, err = info.GetSymbolAsRanges("_PyEval_EvalFrameDefault"); err != nil {
-		interpRanges, _ = info.GetSymbolAsRanges("PyEval_EvalFrameEx")
+	var interp *libpf.Symbol
+	var code []byte
+	const maxCodeSize = 128 * 1024 // observed ~65k in the wild
+	if interp, code, err = ef.SymbolData("_PyEval_EvalFrameDefault", maxCodeSize); err != nil {
+		interp, code, err = ef.SymbolData("PyEval_EvalFrameEx", maxCodeSize)
 	}
-	if len(interpRanges) == 0 {
+	if err != nil {
 		return nil, errors.New("no _PyEval_EvalFrameDefault/PyEval_EvalFrameEx symbol found")
 	}
-	// TODO(korniltsev): find cold ranges
-	// see tools/coredump/testdata/amd64/python312-alpine320-nobuildid.json
-	// https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
+	interpRanges = make([]util.Range, 0, 2)
+	interpRanges = append(interpRanges, util.Range{
+		Start: uint64(interp.Address),
+		End:   uint64(interp.Address) + interp.Size,
+	})
+	coldRange, err := findColdRange(ef, code, interp)
+	if err != nil {
+		log.WithError(err).Warnf("failed to recover python ranges %s",
+			info.FileName())
+	}
+	if coldRange != (util.Range{}) {
+		interpRanges = append(interpRanges, coldRange)
+	}
 	return interpRanges, nil
+}
+
+// findColdRange finds a relative jump from the _PyEval_EvalFrameDefault outside itself
+// (to _PyEval_EvalFrameDefault.cold symbol) and then recovers the range of the .cold
+// symbol using an instance of elfunwindinfo.EhFrameTable.
+// findColdRange returns the util.Range of the `.cold` symbol or an empty util.Range
+// https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/416
+func findColdRange(ef *pfelf.File, code []byte, interp *libpf.Symbol) (util.Range, error) {
+	if ef.Machine != elf.EM_X86_64 {
+		return util.Range{}, nil
+	}
+	dst, err := amd.FindExternalJump(code, interp)
+	if err != nil || dst == 0 {
+		return util.Range{}, err
+	}
+	t, err := elfunwindinfo.NewEhFrameTable(ef)
+	if err != nil {
+		return util.Range{}, err
+	}
+	fde, err := t.LookupFDE(dst)
+	if err != nil {
+		return util.Range{}, err
+	}
+	return util.Range{
+		Start: uint64(fde.PCBegin),
+		End:   uint64(fde.PCBegin + fde.PCRange),
+	}, nil
 }

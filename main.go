@@ -113,10 +113,7 @@ func mainWithExitCode() exitCode {
 		GRPCConnectionTimeout:    intervals.GRPCConnectionTimeout(),
 		ReportInterval:           intervals.ReportInterval(),
 		ExecutablesCacheElements: 16384,
-		// Next step: Calculate FramesCacheElements from numCores and samplingRate.
-		FramesCacheElements: 131072,
-		CGroupCacheElements: 1024,
-		SamplesPerSecond:    cfg.SamplesPerSecond,
+		SamplesPerSecond:         cfg.SamplesPerSecond,
 	})
 	if err != nil {
 		log.Error(err)
@@ -141,7 +138,7 @@ func mainWithExitCode() exitCode {
 	return exitSuccess
 }
 
-func failure(msg string, args ...interface{}) exitCode {
+func failure(msg string, args ...any) exitCode {
 	log.Errorf(msg, args...)
 	return exitFailure
 }

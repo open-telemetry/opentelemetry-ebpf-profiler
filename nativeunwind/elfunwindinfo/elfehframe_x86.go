@@ -8,11 +8,13 @@ package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/
 // can be taken into account regardless of the target build platform.
 
 import (
+	"bytes"
 	"debug/elf"
 	"fmt"
 
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
+	"golang.org/x/arch/x86/x86asm"
 )
 
 const (
@@ -164,4 +166,35 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 		}
 	}
 	return info
+}
+
+func detectEntryX86(code []byte) int {
+	// Refer to test cases for the actual assembly code seen.
+	// On glibc, the entry has FDE. No fixup is needed.
+	// On musl, the entry has no FDE, or possibly has an FDE covering part of it.
+	// Detect the musl case and return entry.
+
+	// Match the assembly exactly except the LEA call offset
+	if len(code) < 32 ||
+		!bytes.Equal(code[:9], []byte{0x48, 0x31, 0xed, 0x48, 0x89, 0xe7, 0x48, 0x8d, 0x35}) ||
+		!bytes.Equal(code[13:22], []byte{0x48, 0x83, 0xe4, 0xf0, 0xe8, 0x00, 0x00, 0x00, 0x00}) {
+		return 0
+	}
+
+	// Decode the second portion and allow whitelisted opcodes finding the JMP
+	for pos := 22; pos < len(code); {
+		inst, err := x86asm.Decode(code[pos:], 64)
+		if err != nil {
+			return 0
+		}
+		switch inst.Op {
+		case x86asm.MOV, x86asm.LEA, x86asm.XOR:
+			pos += inst.Len
+		case x86asm.JMP:
+			return pos + inst.Len
+		default:
+			return 0
+		}
+	}
+	return 0
 }

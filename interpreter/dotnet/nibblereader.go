@@ -54,7 +54,7 @@ func (nr *nibbleReader) ReadNibble() uint8 {
 // https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/inc/nibblestream.h#L250
 func (nr *nibbleReader) Uint32() uint32 {
 	val := uint32(0)
-	for i := 0; i < 11; i++ {
+	for range 11 {
 		n := nr.ReadNibble()
 		val = (val << 3) + uint32(n&0x7)
 		if n&0x8 == 0 {

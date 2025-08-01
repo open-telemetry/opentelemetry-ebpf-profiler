@@ -19,15 +19,12 @@ type Pdata struct {
 	// Executables stores metadata for executables.
 	Executables *lru.SyncedLRU[libpf.FileID, samples.ExecInfo]
 
-	// Frames maps frame information to its source location.
-	Frames *lru.SyncedLRU[libpf.FrameID, samples.SourceInfo]
-
 	// ExtraSampleAttrProd is an optional hook point for adding custom
 	// attributes to samples.
 	ExtraSampleAttrProd samples.SampleAttrProducer
 }
 
-func New(samplesPerSecond int, executablesCacheElements, framesCacheElements uint32,
+func New(samplesPerSecond int, executablesCacheElements uint32,
 	extra samples.SampleAttrProducer) (*Pdata, error) {
 	executables, err :=
 		lru.NewSynced[libpf.FileID, samples.ExecInfo](executablesCacheElements, libpf.FileID.Hash32)
@@ -36,17 +33,9 @@ func New(samplesPerSecond int, executablesCacheElements, framesCacheElements uin
 	}
 	executables.SetLifetime(ExecutableCacheLifetime) // Allow GC to clean stale items.
 
-	frames, err :=
-		lru.NewSynced[libpf.FrameID, samples.SourceInfo](framesCacheElements, libpf.FrameID.Hash32)
-	if err != nil {
-		return nil, err
-	}
-	frames.SetLifetime(FramesCacheLifetime) // Allow GC to clean stale items.
-
 	return &Pdata{
 		samplesPerSecond:    samplesPerSecond,
 		Executables:         executables,
-		Frames:              frames,
 		ExtraSampleAttrProd: extra,
 	}, nil
 }
@@ -54,5 +43,4 @@ func New(samplesPerSecond int, executablesCacheElements, framesCacheElements uin
 // Purge purges all the expired data
 func (p *Pdata) Purge() {
 	p.Executables.PurgeExpired()
-	p.Frames.PurgeExpired()
 }

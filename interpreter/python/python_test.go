@@ -39,8 +39,6 @@ func TestFrozenNameToFileName(t *testing.T) {
 	}
 
 	for name, testcase := range tests {
-		name := name
-		testcase := testcase
 		t.Run(name, func(t *testing.T) {
 			out, err := frozenNameToFileName(testcase.frozen)
 

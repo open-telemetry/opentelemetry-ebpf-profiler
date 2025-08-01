@@ -17,9 +17,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-// #include "../../support/ebpf/types.h"
-import "C"
-
 type perlData struct {
 	// vmStructs reflects the Perl internal class names and the offsets of named field
 	// The struct names are based on the Perl C "struct name", the alternate typedef seen
@@ -137,8 +134,8 @@ func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Add
 		return nil, err
 	}
 
-	addrToGV, err := freelru.New[libpf.Address, string](interpreter.LruFunctionCacheSize,
-		libpf.Address.Hash32)
+	addrToGV, err := freelru.New[libpf.Address, libpf.String](
+		interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +143,7 @@ func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Add
 	return &perlInstance{
 		d:         d,
 		rm:        rm,
-		bias:      C.u64(bias),
+		bias:      bias,
 		addrToHEK: addrToHEK,
 		addrToCOP: addrToCOP,
 		addrToGV:  addrToGV,
@@ -212,11 +209,7 @@ func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 			return nil, fmt.Errorf("perl %x: PL_curstackinfo not found: %v", version, err)
 		}
 		stateInTSD = false
-		if curcopAddr < cursiAddr {
-			stateAddr = curcopAddr
-		} else {
-			stateAddr = cursiAddr
-		}
+		stateAddr = min(curcopAddr, cursiAddr)
 	}
 
 	// Perl_runops_standard is the main loop since Perl 5.6.0 (1999)

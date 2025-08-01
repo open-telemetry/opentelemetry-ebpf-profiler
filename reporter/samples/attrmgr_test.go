@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 )
 
 type attributeStruct struct {
@@ -98,7 +98,6 @@ func TestAttrTableManager(t *testing.T) {
 	}
 
 	for name, tc := range tests {
-		name := name
 		t.Run(name, func(t *testing.T) {
 			attrTable := pprofile.NewAttributeTableSlice()
 			mgr := NewAttrTableManager(attrTable)

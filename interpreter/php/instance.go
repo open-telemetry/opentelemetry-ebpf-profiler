@@ -6,7 +6,6 @@ package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 import (
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"sync/atomic"
 
 	log "github.com/sirupsen/logrus"
@@ -19,7 +18,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -39,13 +37,10 @@ const (
 // PHP interpreter's zend_function structure.
 type phpFunction struct {
 	// name is the extracted name
-	name string
+	name libpf.String
 
 	// sourceFileName is the extracted filename field
-	sourceFileName string
-
-	// fileID is the synthesized methodID
-	fileID libpf.FileID
+	sourceFileName libpf.String
 
 	// lineStart is the first source code line for this function
 	lineStart uint32
@@ -131,18 +126,18 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 		fname = ""
 	}
 
-	if fname == "" {
+	functionName := libpf.Intern(fname)
+	if functionName == libpf.NullString {
 		// If we're at the top-most scope then we can display that information.
 		if typeInfo&ZEND_CALL_TOP_CODE > 0 {
-			fname = interpreter.TopLevelFunctionName
+			functionName = interpreter.TopLevelFunctionName
 		} else {
-			fname = unknownFunctionName
+			functionName = interpreter.UnknownFunctionName
 		}
 	}
 
 	sourceFileName := ""
 	lineStart := uint32(0)
-	var lineBytes []byte
 	switch ftype {
 	case ZEND_USER_FUNCTION, ZEND_EVAL_CODE:
 		sourceAddr := npsr.Ptr(fobj, vms.zend_function.op_array_filename)
@@ -154,7 +149,7 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 		}
 
 		if ftype == ZEND_EVAL_CODE {
-			fname = evalCodeFunctionName
+			functionName = evalCodeFunctionName
 			// To avoid duplication we get rid of the filename
 			// It'll look something like "eval'd code", so no
 			// information is lost here.
@@ -162,32 +157,18 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 		}
 
 		lineStart = npsr.Uint32(fobj, vms.zend_function.op_array_linestart)
-		//nolint:lll
-		lineBytes = fobj[vms.zend_function.op_array_linestart : vms.zend_function.op_array_linestart+8]
-	}
-
-	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(sourceFileName))
-	_, _ = h.Write([]byte(fname))
-	_, _ = h.Write(lineBytes)
-	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create a file ID: %v", err)
 	}
 
 	pf := &phpFunction{
-		name:           fname,
-		sourceFileName: sourceFileName,
-		fileID:         fileID,
+		name:           functionName,
+		sourceFileName: libpf.Intern(sourceFileName),
 		lineStart:      lineStart,
 	}
 	i.addrToFunction.Add(addr, pf)
 	return pf, nil
 }
 
-func (i *phpInstance) Symbolize(symbolReporter reporter.SymbolReporter,
-	frame *host.Frame, trace *libpf.Trace) error {
+func (i *phpInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	// With Symbolize() in opcacheInstance there is a dedicated function to symbolize JITTed
 	// PHP frames. But as we also attach phpInstance to PHP processes with JITTed frames, we
 	// use this function to symbolize all PHP frames, as the process to do so is the same.
@@ -213,10 +194,9 @@ func (i *phpInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	if f.lineStart != 0 && libpf.AddressOrLineno(f.lineStart) <= line {
 		funcOff = uint32(line) - f.lineStart
 	}
-	frameID := libpf.NewFrameID(f.fileID, line)
-	trace.AppendFrameID(libpf.PHPFrame, frameID)
-	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-		FrameID:        frameID,
+
+	frames.Append(&libpf.Frame{
+		Type:           libpf.PHPFrame,
 		FunctionName:   f.name,
 		SourceFile:     f.sourceFileName,
 		SourceLine:     libpf.SourceLineno(line),

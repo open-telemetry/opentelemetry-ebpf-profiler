@@ -48,6 +48,7 @@ package perl // import "go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 import (
 	"debug/elf"
 	"regexp"
+	"slices"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 )
@@ -97,12 +98,10 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		if err != nil {
 			return nil, err
 		}
-		for _, n := range needed {
-			if libperlRegex.MatchString(n) {
-				// 'perl' linked with 'libperl'. The beef is in the library,
-				// so do not try to inspect the shim main binary.
-				return nil, nil
-			}
+		if slices.ContainsFunc(needed, libperlRegex.MatchString) {
+			// 'perl' linked with 'libperl'. The beef is in the library,
+			// so do not try to inspect the shim main binary.
+			return nil, nil
 		}
 	}
 

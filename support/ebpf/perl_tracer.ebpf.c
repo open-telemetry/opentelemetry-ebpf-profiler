@@ -197,7 +197,7 @@ process_perl_frame(PerCPURecord *record, const PerlProcInfo *perlinfo, const voi
       return unwinder;
     }
 
-    if (get_next_unwinder_after_interpreter(record) != PROG_UNWIND_STOP) {
+    if (get_next_unwinder_after_interpreter() != PROG_UNWIND_STOP) {
       // If generating mixed traces, use 'sub_retop' to detect if this is the
       // C->Perl boundary. This is the value returned as next opcode at
       //   https://github.com/Perl/perl5/blob/v5.32.0/pp_hot.c#L4952-L4955
@@ -209,7 +209,7 @@ process_perl_frame(PerCPURecord *record, const PerlProcInfo *perlinfo, const voi
         goto err;
       }
       if (retop == 0) {
-        unwinder = get_next_unwinder_after_interpreter(record);
+        unwinder = get_next_unwinder_after_interpreter();
       }
     }
 
@@ -286,13 +286,13 @@ static EBPF_INLINE int walk_perl_stack(PerCPURecord *record, const PerlProcInfo 
   // If Perl stackinfo is not available, all frames have been processed, then
   // continue with native unwinding.
   if (!si) {
-    return get_next_unwinder_after_interpreter(record);
+    return get_next_unwinder_after_interpreter();
   }
 
   int unwinder       = PROG_UNWIND_PERL;
   const void *cxbase = record->perlUnwindState.cxbase;
-#pragma unroll
-  for (u32 i = 0; i < PERL_FRAMES_PER_PROGRAM; ++i) {
+  UNROLL for (u32 i = 0; i < PERL_FRAMES_PER_PROGRAM; ++i)
+  {
     // Test first the stack 'cxcur' validity. Some stacks can have 'cxix=-1'
     // when they are being constructed or ran.
     if (record->perlUnwindState.cxcur < cxbase) {
@@ -344,7 +344,7 @@ static EBPF_INLINE int walk_perl_stack(PerCPURecord *record, const PerlProcInfo 
       record->perlUnwindState.stackinfo = si;
       prepare_perl_stack(record, perlinfo);
     }
-    unwinder = get_next_unwinder_after_interpreter(record);
+    unwinder = get_next_unwinder_after_interpreter();
   }
 
   // Stack completed. Prepare the next one.
@@ -376,7 +376,7 @@ static EBPF_INLINE int unwind_perl(struct pt_regs *ctx)
     return 0;
   }
 
-  int unwinder = get_next_unwinder_after_interpreter(record);
+  int unwinder = get_next_unwinder_after_interpreter();
   DEBUG_PRINT("Building Perl stack for 0x%x", perlinfo->version);
 
   if (!record->perlUnwindState.stackinfo) {

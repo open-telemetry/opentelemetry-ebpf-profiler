@@ -26,7 +26,7 @@ func (is *InstanceStubs) UpdateTSDInfo(EbpfHandler, libpf.PID, tpbase.TSDInfo) e
 	return nil
 }
 
-func (is *InstanceStubs) Symbolize(reporter.SymbolReporter, *host.Frame, *libpf.Trace) error {
+func (is *InstanceStubs) Symbolize(*host.Frame, *libpf.Frames) error {
 	return ErrMismatchInterpreterType
 }
 

@@ -207,7 +207,7 @@ Outer:
 					continue
 				}
 
-				spOffs += int64(imm)
+				spOffs += imm
 			}
 		case aa.SUB:
 			for _, arg := range insn.Args[:2] {
@@ -220,7 +220,7 @@ Outer:
 				continue
 			}
 
-			spOffs -= int64(imm)
+			spOffs -= imm
 		}
 	}
 

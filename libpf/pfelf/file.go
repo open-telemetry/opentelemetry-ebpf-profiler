@@ -187,7 +187,7 @@ func (f *File) Close() (err error) {
 		err = f.closer.Close()
 		f.closer = nil
 	}
-	return
+	return err
 }
 
 // NewFile creates a new ELF file object that borrows the given reader.
@@ -347,6 +347,25 @@ func getString(section []byte, start int) (string, bool) {
 	return string(section[start : start+slen]), true
 }
 
+// NoMmapCloser is a no-op io.Closer which is returned from Take() when
+// the File is not memory mapped.
+type NoMmapCloser libpf.Void
+
+// Close implements io.Closer interface.
+func (_ NoMmapCloser) Close() error {
+	return nil
+}
+
+// Take takes a reference on the backing mmapped data. This allows callers to
+// keep slices returned by Section.Data() and Prog.Data() after File has been
+// GCd. The returned Close() will release the reference on data.
+func (f *File) Take() io.Closer {
+	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
+		return mapping.Take()
+	}
+	return NoMmapCloser{}
+}
+
 // LoadSections loads the ELF file sections
 func (f *File) LoadSections() error {
 	if f.InsideCore {
@@ -469,10 +488,10 @@ func (f *File) VirtualMemory(addr int64, sz, maxSize int) ([]byte, error) {
 // SymbolData returns the data associated with given dynamic symbol.
 // The backing mmapped data is returned if possible, otherwise a maximum of
 // maxCopy bytes of the symbol data will read to newly allocated buffer.
-func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (libpf.SymbolValue, []byte, error) {
+func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (*libpf.Symbol, []byte, error) {
 	sym, err := f.LookupSymbol(name)
 	if err != nil {
-		return 0, nil, err
+		return nil, nil, err
 	}
 	symSize := int(sym.Size)
 	if symSize > maxCopy {
@@ -482,7 +501,7 @@ func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (libpf.SymbolValue
 		}
 	}
 	data, err := f.VirtualMemory(int64(sym.Address), symSize, maxCopy)
-	return sym.Address, data, err
+	return sym, data, err
 }
 
 // ReadVirtualMemory reads bytes from given virtual address
@@ -566,6 +585,21 @@ func (f *File) GoVersion() (string, error) {
 	f.goBuildInfo = bi
 
 	return bi.GoVersion, nil
+}
+
+func (f *File) IsCgoEnabled() (bool, error) {
+	_, err := f.GoVersion()
+	if err != nil {
+		return false, err
+	}
+	for _, kv := range f.goBuildInfo.Settings {
+		if kv.Key == "CGO_ENABLED" {
+			return kv.Value == "1", nil
+		}
+	}
+	// On some platforms GCO_ENABLED might be missing b/c they don't support
+	// CGO at all.
+	return false, nil
 }
 
 // DebuglinkFileName returns the debug file linked by .gnu_debuglink if any

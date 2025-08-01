@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/beam"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
@@ -134,6 +135,9 @@ func NewExecutableInfoManager(
 	}
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
+	if includeTracers.Has(types.Labels) {
+		interpreterLoaders = append(interpreterLoaders, golabels.Loader)
+	}
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
 		func(id host.FileID) uint32 { return uint32(id) })
@@ -185,7 +189,7 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// so we release the lock before doing this.
 	mgr.state.WUnlock(&state)
 
-	if err = mgr.sdp.GetIntervalStructuresForFile(fileID, elfRef, &intervalData); err != nil {
+	if err = mgr.sdp.GetIntervalStructuresForFile(elfRef, &intervalData); err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
 			mgr.deferredFileIDs.Add(fileID, libpf.Void{})
 		}

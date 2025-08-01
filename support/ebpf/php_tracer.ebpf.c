@@ -120,18 +120,18 @@ static EBPF_INLINE int process_php_frame(
 static EBPF_INLINE int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo, bool is_jitted)
 {
   const void *execute_data = record->phpUnwindState.zend_execute_data;
-  bool mixed_traces        = get_next_unwinder_after_interpreter(record) != PROG_UNWIND_STOP;
+  bool mixed_traces        = get_next_unwinder_after_interpreter() != PROG_UNWIND_STOP;
 
   // If PHP data is not available, all frames have been processed, then
   // continue with native unwinding.
   if (!execute_data) {
-    return get_next_unwinder_after_interpreter(record);
+    return get_next_unwinder_after_interpreter();
   }
 
   int unwinder  = PROG_UNWIND_PHP;
   u32 type_info = 0;
-#pragma unroll
-  for (u32 i = 0; i < FRAMES_PER_WALK_PHP_STACK; ++i) {
+  UNROLL for (u32 i = 0; i < FRAMES_PER_WALK_PHP_STACK; ++i)
+  {
     int metric = process_php_frame(record, phpinfo, is_jitted, execute_data, &type_info);
     if (metric >= 0) {
       increment_metric(metric);
@@ -178,7 +178,7 @@ static EBPF_INLINE int walk_php_stack(PerCPURecord *record, PHPProcInfo *phpinfo
           unwinder = PROG_UNWIND_STOP;
         }
       } else {
-        unwinder = get_next_unwinder_after_interpreter(record);
+        unwinder = get_next_unwinder_after_interpreter();
       }
       break;
     }
@@ -199,7 +199,7 @@ static EBPF_INLINE int unwind_php(struct pt_regs *ctx)
   if (!record)
     return -1;
 
-  int unwinder         = get_next_unwinder_after_interpreter(record);
+  int unwinder         = get_next_unwinder_after_interpreter();
   u32 pid              = record->trace.pid;
   PHPProcInfo *phpinfo = bpf_map_lookup_elem(&php_procs, &pid);
   if (!phpinfo) {

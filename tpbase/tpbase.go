@@ -9,6 +9,22 @@
 
 package tpbase // import "go.opentelemetry.io/ebpf-profiler/tpbase"
 
+import (
+	"fmt"
+	"runtime"
+)
+
+func GetAnalyzers() ([]Analyzer, error) {
+	switch runtime.GOARCH {
+	case "amd64":
+		return getAnalyzersX86(), nil
+	case "arm64":
+		return getAnalyzersARM(), nil
+	default:
+		return nil, fmt.Errorf("unsupported architecture: %s", runtime.GOARCH)
+	}
+}
+
 type Analyzer struct {
 	// FunctionName is the kernel function which can be analyzed
 	FunctionName string

@@ -115,6 +115,7 @@ package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 //     use the TSRM shouldn't encounter any issues here. There are other uncommon ways to build PHP, but these also shouldn't affect how this code works.
 
 import (
+	"debug/elf"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -313,12 +314,22 @@ func getOpcacheJITInfo(ef *pfelf.File) (dasmBuf, dasmSize libpf.Address, err err
 	// and ARM64.
 
 	// We should only need 64 bytes, since this should be early in the instruction sequence.
-	addr, code, err := ef.SymbolData("zend_jit_unprotect", 64)
+	sym, code, err := ef.SymbolData("zend_jit_unprotect", 64)
 	if err != nil {
 		return 0, 0, fmt.Errorf("unable to read 'zend_jit_unprotect': %w", err)
 	}
-
-	dasmBufPtr, dasmSizePtr, err := retrieveJITBufferPtrWrapper(code, addr)
+	var (
+		dasmBufPtr  libpf.SymbolValue
+		dasmSizePtr libpf.SymbolValue
+	)
+	switch ef.Machine {
+	case elf.EM_AARCH64:
+		dasmBufPtr, dasmSizePtr, err = retrieveJITBufferPtrARM(code, sym.Address)
+	case elf.EM_X86_64:
+		dasmBufPtr, dasmSizePtr, err = retrieveJITBufferPtrx86(code, sym.Address)
+	default:
+		return 0, 0, fmt.Errorf("unsupported machine type: %s", ef.Machine)
+	}
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to extract DASM pointers: %w", err)
 	}

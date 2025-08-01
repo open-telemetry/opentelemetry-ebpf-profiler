@@ -4,13 +4,15 @@
 package elfunwindinfo
 
 import (
+	"bytes"
+	"debug/elf"
 	"encoding/base64"
-	"os"
 	"testing"
 
-	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
-
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 )
 
 // Base64-encoded data from /usr/bin/volname on a stock debian box, the smallest
@@ -134,26 +136,164 @@ var firstDeltas = sdtypes.StackDeltaArray{
 	{Address: 0x8e7, Info: deltaRSP(80, 16)},
 }
 
-func TestExtractStackDeltasFromFilename(t *testing.T) {
+func getUsrBinPfelf() (*pfelf.File, error) {
 	buffer, err := base64.StdEncoding.DecodeString(usrBinVolname)
+	if err != nil {
+		return nil, err
+	}
+	return pfelf.NewFile(bytes.NewReader(buffer), 0, false)
+}
+
+func TestExtractStackDeltasFromFilename(t *testing.T) {
+	elf, err := getUsrBinPfelf()
 	require.NoError(t, err)
-	// Write the executable file to a temporary file, and the symbol
-	// file, too.
-	exeFile, err := os.CreateTemp("/tmp", "dwarf_extract_elf_")
-	require.NoError(t, err)
-	defer exeFile.Close()
-	_, err = exeFile.Write(buffer)
-	require.NoError(t, err)
-	err = exeFile.Sync()
-	require.NoError(t, err)
-	defer os.Remove(exeFile.Name())
-	filename := exeFile.Name()
 
 	var data sdtypes.IntervalData
-	err = Extract(filename, &data)
+	err = extractFile(elf, nil, &data)
 	require.NoError(t, err)
 	for _, delta := range data.Deltas {
 		t.Logf("%#v", delta)
 	}
 	require.Equal(t, data.Deltas[:len(firstDeltas)], firstDeltas)
+}
+
+func TestEntryDetection(t *testing.T) {
+	testCases := map[string]struct {
+		machine elf.Machine
+		code    []byte
+		len     int
+	}{
+		"musl 1.2.5 / x86_64": {
+			machine: elf.EM_X86_64,
+			code: []byte{
+				// 1. assembly code from crt_arch.h (no FDE at all):
+				// 48 31 ed             xor    %rbp,%rbp
+				// 48 89 e7             mov    %rsp,%rdi
+				// 48 8d 35 b2 c2 00 00 lea    0xc2b2(%rip),%rsi
+				// 48 83 e4 f0          and    $0xfffffffffffffff0,%rsp
+				// e8 00 00 00 00       call   0x4587
+				// 2. followed with C code from [r]crt1.c (maybe with FDE):
+				// 8b 37                mov    (%rdi),%esi
+				// 48 8d 57 08          lea    0x8(%rdi),%rdx
+				// 4c 8d 05 d0 62 00 00 lea    0x62d0(%rip),%r8
+				// 45 31 c9             xor    %r9d,%r9d
+				// 48 8d 0d 62 fa ff ff lea    -0x59e(%rip),%rcx
+				// 48 8d 3d 8b fa ff ff lea    -0x575(%rip),%rdi
+				// e9 76 fa ff ff       jmp    0x4020 <__libc_start_main@plt>
+				0x48, 0x31, 0xed, 0x48, 0x89, 0xe7, 0x48, 0x8d,
+				0x35, 0xb2, 0xc2, 0x00, 0x00, 0x48, 0x83, 0xe4,
+				0xf0, 0xe8, 0x00, 0x00, 0x00, 0x00, 0x8b, 0x37,
+				0x48, 0x8d, 0x57, 0x08, 0x4c, 0x8d, 0x05, 0xd0,
+				0x62, 0x00, 0x00, 0x45, 0x31, 0xc9, 0x48, 0x8d,
+				0x0d, 0x62, 0xfa, 0xff, 0xff, 0x48, 0x8d, 0x3d,
+				0x8b, 0xfa, 0xff, 0xff, 0xe9, 0x76, 0xfa, 0xff,
+				0xff,
+			},
+			len: 57,
+		},
+		"musl 1.2.5 / arm64": {
+			machine: elf.EM_AARCH64,
+			code: []byte{
+				// 1. assembly code from crt_arch.h (no FDE):
+				// mov	x29, #0x0
+				// mov	x30, #0x0
+				// mov	x0, sp
+				// adrp	x1, 0x1f000
+				// add	x1, x1, #0x7d0
+				// and	sp, x0, #0xfffffffffffffff0
+				// b	0x413c
+				// 2. followed with C code from [r]crt1.c (no FDE):
+				// mov	x2, x0
+				// mov	x5, #0x0
+				// adrp	x4, 0x1f000
+				// ldr	x4, [x4, #3928]
+				// ldr	x1, [x2], #8
+				// adrp	x3, 0x1f000
+				// ldr	x3, [x3, #4080]
+				// adrp	x0, 0x1f000
+				// ldr	x0, [x0, #4072]
+				// b	0x35a0 <__libc_start_main@plt>
+				0x1d, 0x00, 0x80, 0xd2, 0x1e, 0x00, 0x80, 0xd2,
+				0xe0, 0x03, 0x00, 0x91, 0xc1, 0x00, 0x00, 0xf0,
+				0x21, 0x40, 0x1f, 0x91, 0x1f, 0xec, 0x9c, 0x92,
+				0x01, 0x00, 0x00, 0x14, 0xe2, 0x03, 0x00, 0xaa,
+				0x05, 0x00, 0x80, 0xd2, 0xc3, 0x00, 0x00, 0xf0,
+				0x84, 0xac, 0x47, 0xf9, 0x41, 0x84, 0x40, 0xf8,
+				0xc3, 0x00, 0x00, 0xf0, 0x63, 0xf8, 0x47, 0xf9,
+				0xc0, 0x00, 0x00, 0xf0, 0x00, 0xf4, 0x47, 0xf9,
+				0x10, 0xfd, 0xff, 0x17,
+			},
+			len: 68,
+		},
+		"glibc 2.31 / arm64": {
+			machine: elf.EM_AARCH64,
+			code: []byte{
+				// mov	x29, #0x0
+				// mov	x30, #0x0
+				// mov	x5, x0
+				// ldr	x1, [sp]
+				// add	x2, sp, #0x8
+				// mov	x6, sp
+				// adrp	x0, 0x11000
+				// ldr	x0, [x0, #4064]
+				// adrp	x3, 0x11000
+				// ldr	x3, [x3, #4056]
+				// adrp	x4, 0x11000
+				// ldr	x4, [x4, #4008]
+				// bl	0xa90 <__libc_start_main@plt>
+				// bl	0xae0 <abort@plt>
+				0x1d, 0x00, 0x80, 0xd2, 0x1e, 0x00, 0x80, 0xd2,
+				0xe5, 0x03, 0x00, 0xaa, 0xe1, 0x03, 0x40, 0xf9,
+				0xe2, 0x23, 0x00, 0x91, 0xe6, 0x03, 0x00, 0x91,
+				0x80, 0x00, 0x00, 0xb0, 0x00, 0xf0, 0x47, 0xf9,
+				0x83, 0x00, 0x00, 0xb0, 0x63, 0xec, 0x47, 0xf9,
+				0x84, 0x00, 0x00, 0xb0, 0x84, 0xd4, 0x47, 0xf9,
+				0xab, 0xff, 0xff, 0x97, 0xbe, 0xff, 0xff, 0x97,
+			},
+			len: 56,
+		},
+		"glibc 2.35 / arm64": {
+			machine: elf.EM_AARCH64,
+			code: []byte{
+				// mov	x29, #0x0
+				// mov	x30, #0x0
+				// mov	x5, x0
+				// ldr	x1, [sp]
+				// add	x2, sp, #0x8
+				// mov	x6, sp
+				// movz	x0, #0x0, lsl #48
+				// movk	x0, #0x0, lsl #32
+				// movk	x0, #0xb9, lsl #16
+				// movk	x0, #0x1f90
+				// movz	x3, #0x0, lsl #48
+				// movk	x3, #0x0, lsl #32
+				// movk	x3, #0x236, lsl #16
+				// movk	x3, #0x65d0
+				// movz	x4, #0x0, lsl #48
+				// movk	x4, #0x0, lsl #32
+				// movk	x4, #0x236, lsl #16
+				// movk	x4, #0x6650
+				// bl	0xb614e0 <__libc_start_main@plt>
+				// bl	0xb61460 <abort@plt>
+				0x1d, 0x00, 0x80, 0xd2, 0x1e, 0x00, 0x80, 0xd2,
+				0xe5, 0x03, 0x00, 0xaa, 0xe1, 0x03, 0x40, 0xf9,
+				0xe2, 0x23, 0x00, 0x91, 0xe6, 0x03, 0x00, 0x91,
+				0x00, 0x00, 0xe0, 0xd2, 0x00, 0x00, 0xc0, 0xf2,
+				0x20, 0x17, 0xa0, 0xf2, 0x00, 0xf2, 0x83, 0xf2,
+				0x03, 0x00, 0xe0, 0xd2, 0x03, 0x00, 0xc0, 0xf2,
+				0xc3, 0x46, 0xa0, 0xf2, 0x03, 0xba, 0x8c, 0xf2,
+				0x04, 0x00, 0xe0, 0xd2, 0x04, 0x00, 0xc0, 0xf2,
+				0xc4, 0x46, 0xa0, 0xf2, 0x04, 0xca, 0x8c, 0xf2,
+				0x7d, 0x1c, 0xff, 0x97, 0x5c, 0x1c, 0xff, 0x97,
+			},
+			len: 80,
+		},
+	}
+
+	for name, test := range testCases {
+		t.Run(name, func(t *testing.T) {
+			entryLen := detectEntryCode(test.machine, test.code)
+			assert.Equal(t, test.len, entryLen)
+		})
+	}
 }

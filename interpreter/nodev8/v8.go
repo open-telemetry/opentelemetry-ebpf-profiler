@@ -156,7 +156,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"reflect"
 	"regexp"
@@ -184,29 +183,18 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-// #include "../../support/ebpf/types.h"
-// #include "../../support/ebpf/v8_tracer.h"
-import "C"
-
 const (
 	// Use build-time constants for the HeapObject/SMI Tags for code size and speed.
 	// They are unlikely to change, and likely require larger modifications on change.
-	SmiTag            = C.SmiTag
-	SmiTagMask        = C.SmiTagMask
-	SmiTagShift       = C.SmiTagShift
-	SmiValueShift     = C.SmiValueShift
-	HeapObjectTag     = C.HeapObjectTag
-	HeapObjectTagMask = C.HeapObjectTagMask
+	SmiTag            = support.V8SmiTag
+	SmiTagMask        = support.V8SmiTagMask
+	SmiTagShift       = support.V8SmiTagShift
+	SmiValueShift     = support.V8SmiValueShift
+	HeapObjectTag     = support.V8HeapObjectTag
+	HeapObjectTagMask = support.V8HeapObjectTagMask
 
 	// The largest possible identifier for V8 frame type (marker)
 	MaxFrameType = 64
-
-	// The base address for Trace frame addressOrLine of native code.
-	// This is make sure that if same function gets both bytecode based and
-	// native frames, that we don't end up generating conflicting symbolization
-	// for them as native frames use real line number, and bytecode uses
-	// bytecode offset as the line number.
-	nativeCodeBaseAddress = 0x100000000
 
 	// The maximum fixed table size we accept to read. An arbitrarily selected
 	// value to avoid huge malloc that could cause OOM crash.
@@ -226,9 +214,6 @@ const (
 var (
 	// regex for the interpreter executable or shared library
 	v8Regex = regexp.MustCompile(`^(?:.*/)?(?:node|nsolid)(\d+)?$|^(?:.*/)libnode\.so(\.\d+)?$`)
-
-	// The FileID used for V8 stub frames
-	v8StubsFileID = libpf.NewStubFileID(libpf.V8Frame)
 
 	// the source file entry for unknown code blobs
 	unknownSource = &v8Source{fileName: interpreter.UnknownSourceFile}
@@ -493,8 +478,8 @@ type v8Data struct {
 	// bytecodeCount is the number of bytecode opcodes
 	bytecodeCount uint8
 
-	// frametypeToID caches frametype's to a hash used as its identifier
-	frametypeToID [MaxFrameType]libpf.AddressOrLineno
+	// frametypeToName caches frametype's name
+	frametypeToName [MaxFrameType]libpf.String
 }
 
 type v8Instance struct {
@@ -508,7 +493,7 @@ type v8Instance struct {
 	rm remotememory.RemoteMemory
 
 	// addrToString maps a V8 string object address to a Go string literal
-	addrToString *freelru.LRU[libpf.Address, string]
+	addrToString *freelru.LRU[libpf.Address, libpf.String]
 	addrToSFI    *freelru.LRU[libpf.Address, *v8SFI]
 	addrToCode   *freelru.LRU[libpf.Address, *v8Code]
 	addrToSource *freelru.LRU[libpf.Address, *v8Source]
@@ -525,7 +510,7 @@ type v8Instance struct {
 // v8Source caches the data we need from V8 class Source
 type v8Source struct {
 	lineTable []uint32
-	fileName  string
+	fileName  libpf.String
 }
 
 // v8Code caches the data we need from V8 class Code
@@ -545,8 +530,7 @@ type v8SFI struct {
 	bytecodeDeltaSeen     libpf.Set[uint32]
 	bytecodePositionTable []byte
 	bytecode              []byte
-	funcName              string
-	funcID                libpf.FileID
+	funcName              libpf.String
 	funcStartLine         libpf.SourceLineno
 	funcStartPos          int
 	funcEndPos            int
@@ -734,24 +718,14 @@ func isHeapObject(val libpf.Address) bool {
 	return val&HeapObjectTagMask == HeapObjectTag
 }
 
-// calculateStubID calculates the hash for a given string.
-func calculateStubID(name string) libpf.AddressOrLineno {
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(name))
-	nameHash := h.Sum(nil)
-	return libpf.AddressOrLineno(npsr.Uint64(nameHash, 0))
-}
-
 // symbolizeMarkerFrame symbolizes and adds to trace a V8 stub frame
-func (i *v8Instance) symbolizeMarkerFrame(symbolReporter reporter.SymbolReporter, marker uint64,
-	trace *libpf.Trace) error {
+func (i *v8Instance) symbolizeMarkerFrame(marker uint64, frames *libpf.Frames) error {
 	if marker >= MaxFrameType {
 		return fmt.Errorf("v8 tracer returned invalid marker: %d", marker)
 	}
 
-	stubID := i.d.frametypeToID[marker]
-	frameID := libpf.NewFrameID(v8StubsFileID, stubID)
-	if stubID == 0 || !symbolReporter.FrameKnown(frameID) {
+	stubName := i.d.frametypeToName[marker]
+	if stubName == libpf.NullString {
 		name := "V8::UnknownFrame"
 		frameTypesType := reflect.TypeOf(&i.d.vmStructs.FrameType).Elem()
 		frameTypesValue := reflect.ValueOf(&i.d.vmStructs.FrameType).Elem()
@@ -761,15 +735,14 @@ func (i *v8Instance) symbolizeMarkerFrame(symbolReporter reporter.SymbolReporter
 				break
 			}
 		}
-		stubID = calculateStubID(name)
-		frameID = libpf.NewFrameID(v8StubsFileID, stubID)
-		i.d.frametypeToID[marker] = stubID
-		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-			FrameID:      frameID,
-			FunctionName: name,
-		})
+		stubName = libpf.Intern(name)
+		i.d.frametypeToName[marker] = stubName
 	}
-	trace.AppendFrameID(libpf.V8Frame, frameID)
+
+	frames.Append(&libpf.Frame{
+		Type:         libpf.V8Frame,
+		FunctionName: stubName,
+	})
 	return nil
 }
 
@@ -856,10 +829,7 @@ func (i *v8Instance) extractString(ptr libpf.Address, tag uint16, cb func(string
 		length := i.rm.Uint32(ptr + libpf.Address(vms.String.Length))
 		switch tag & vms.Fixed.StringEncodingMask {
 		case vms.Fixed.OneByteStringTag:
-			bufSz := uint32(16 * 1024)
-			if bufSz > length {
-				bufSz = length
-			}
+			bufSz := min(uint32(16*1024), length)
 			buf := make([]byte, bufSz)
 			for offs := uint32(0); offs < length; offs += bufSz {
 				if length-offs < bufSz {
@@ -903,7 +873,7 @@ func (i *v8Instance) extractStringPtr(ptr libpf.Address, cb func(string) error) 
 }
 
 // getString extracts and caches a small string object from given address.
-func (i *v8Instance) getString(ptr libpf.Address, tag uint16) (string, error) {
+func (i *v8Instance) getString(ptr libpf.Address, tag uint16) (libpf.String, error) {
 	taggedPtr := ptr | HeapObjectTag
 	if value, ok := i.addrToString.Get(taggedPtr); ok {
 		return value, nil
@@ -920,25 +890,26 @@ func (i *v8Instance) getString(ptr libpf.Address, tag uint16) (string, error) {
 		return nil
 	})
 	if err != nil {
-		return "", err
+		return libpf.NullString, err
 	}
 	if str != "" && !util.IsValidString(str) {
-		return "", fmt.Errorf("invalid string at 0x%x", ptr)
+		return libpf.NullString, fmt.Errorf("invalid string at 0x%x", ptr)
 	}
 
-	i.addrToString.Add(taggedPtr, str)
-	return str, nil
+	value := libpf.Intern(str)
+	i.addrToString.Add(taggedPtr, value)
+	return value, nil
 }
 
 // getStringPtr reads a V8 string pointer and dereferences it.
-func (i *v8Instance) getStringPtr(ptr libpf.Address) (string, error) {
+func (i *v8Instance) getStringPtr(ptr libpf.Address) (libpf.String, error) {
 	return i.getString(i.rm.Ptr(ptr), 0)
 }
 
 // analyzeScopeInfo reads and heuristically analyzes V8 ScopeInfo data. It tries to
 // extract the function name, and its start and end line.
-func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name string,
-	startPos, endPos int, err error) {
+func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name libpf.String,
+	startPos, endPos int) {
 	vms := &i.d.vmStructs
 	var data libpf.Address
 	if vms.ScopeInfo.HeapObject {
@@ -958,8 +929,8 @@ func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name string,
 	const numSlots = 16
 	const slotSize = pointerSize
 	slotData := make([]byte, numSlots*slotSize)
-	if err = i.rm.Read(data, slotData); err != nil {
-		return "", 0, 0, nil
+	if err := i.rm.Read(data, slotData); err != nil {
+		return libpf.NullString, 0, 0
 	}
 
 	// Skip reserved slots and the context locals
@@ -967,10 +938,11 @@ func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name string,
 	ndx += 2 * int(decodeSMI(npsr.Uint64(slotData,
 		uint(vms.ScopeInfoIndex.NContextLocals)*slotSize)))
 
+	name = libpf.NullString
 	prev := uint64(HeapObjectTag)
 	for ; ndx < numSlots; ndx++ {
 		cur := npsr.Uint64(slotData, uint(ndx*slotSize))
-		if name == "" && isHeapObject(libpf.Address(cur)) {
+		if name == libpf.NullString && isHeapObject(libpf.Address(cur)) {
 			// Just try getting the string ignoring errors and
 			// assume that first valid string is the function name
 			name, _ = i.getString(libpf.Address(cur), 0)
@@ -982,12 +954,12 @@ func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name string,
 			startPos = int(decodeSMI(prev))
 			endPos = int(decodeSMI(cur))
 			if startPos < endPos {
-				return name, startPos, endPos, nil
+				return name, startPos, endPos
 			}
 		}
 		prev = cur
 	}
-	return name, 0, 0, nil
+	return name, 0, 0
 }
 
 // readFixedTable reads the data of a FixedArray object.
@@ -1024,9 +996,9 @@ func (i *v8Instance) readFixedTablePtr(taggedPtr libpf.Address, tag uint16,
 }
 
 // getSource reads and caches needed V8 Source object data.
-func (i *v8Instance) getSource(addr libpf.Address) (*v8Source, error) {
+func (i *v8Instance) getSource(addr libpf.Address) *v8Source {
 	if value, ok := i.addrToSource.Get(addr); ok {
-		return value, nil
+		return value
 	}
 
 	vms := &i.d.vmStructs
@@ -1043,7 +1015,7 @@ func (i *v8Instance) getSource(addr libpf.Address) (*v8Source, error) {
 		log.Debugf("Reading LineEnds: %d: %v", len(data), err)
 		if err == nil {
 			lines := make([]uint32, len(data)/8)
-			for i := 0; i < len(lines); i++ {
+			for i := range lines {
 				val := npsr.Uint64(data, uint(i*8))
 				lines[i] = decodeSMI(val)
 			}
@@ -1074,7 +1046,7 @@ func (i *v8Instance) getSource(addr libpf.Address) (*v8Source, error) {
 	}
 
 	i.addrToSource.Add(addr, src)
-	return src, nil
+	return src
 }
 
 // getSFI reads and caches needed V8 SharedFunctionInfo object data.
@@ -1101,15 +1073,15 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 	}
 	switch {
 	case nosType == vms.Type.ScopeInfo:
-		sfi.funcName, sfi.funcStartPos, sfi.funcEndPos, err = i.analyzeScopeInfo(nosAddr)
+		sfi.funcName, sfi.funcStartPos, sfi.funcEndPos = i.analyzeScopeInfo(nosAddr)
 	case nosType < vms.Fixed.FirstNonstringType:
 		sfi.funcName, err = i.getString(nosAddr, nosType)
 	}
 	if err != nil {
-		sfi.funcName = fmt.Sprintf("<%s>", err)
+		sfi.funcName = libpf.Intern(fmt.Sprintf("<%s>", err))
 	}
-	if sfi.funcName == "" {
-		sfi.funcName = "<anonymous>"
+	if sfi.funcName == libpf.NullString {
+		sfi.funcName = interpreter.AnonymousFunctionName
 	}
 
 	// Function data
@@ -1146,7 +1118,7 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 	sodiAddr, sodiType, _ := i.readObjectPtr(addr +
 		libpf.Address(vms.SharedFunctionInfo.ScriptOrDebugInfo))
 	if sodiType == vms.Type.Script {
-		sfi.source, _ = i.getSource(sodiAddr)
+		sfi.source = i.getSource(sodiAddr)
 		if sfi.funcStartPos != sfi.funcEndPos {
 			sfi.funcStartLine = mapPositionToLine(sfi.source.lineTable,
 				int32(sfi.funcStartPos))
@@ -1156,17 +1128,6 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 	log.Debugf("SFI %#x: name: %v, start/end: %v/%v, file/line: %v:%v, #sourceLines: %d",
 		taggedPtr, sfi.funcName, sfi.funcStartPos, sfi.funcEndPos,
 		sfi.source.fileName, sfi.funcStartLine, len(sfi.source.lineTable))
-
-	// Synthesize function ID hash
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(sfi.source.fileName))
-	_, _ = h.Write([]byte(sfi.funcName))
-	_, _ = h.Write(sfi.bytecode)
-	_, _ = h.Write(sfi.bytecodePositionTable)
-	sfi.funcID, err = libpf.FileIDFromBytes(h.Sum(nil))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create a function object ID: %v", err)
-	}
 
 	i.addrToSFI.Add(taggedPtr, sfi)
 	return sfi, nil
@@ -1512,15 +1473,14 @@ func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) libpf.SourceLineno
 	return mapPositionToLine(sfi.source.lineTable, scriptOffset-1)
 }
 
-// symbolize symbolizes the raw frame data
-func (i *v8Instance) symbolize(symbolReporter reporter.SymbolReporter, frameID libpf.FrameID,
-	sfi *v8SFI, lineNo libpf.SourceLineno) {
+// appendFrame adds a new frame to frames.
+func (i *v8Instance) appendFrame(frames *libpf.Frames, sfi *v8SFI, lineNo libpf.SourceLineno) {
 	funcOffset := uint32(0)
 	if lineNo > sfi.funcStartLine {
 		funcOffset = uint32(lineNo - sfi.funcStartLine)
 	}
-	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-		FrameID:        frameID,
+	frames.Append(&libpf.Frame{
+		Type:           libpf.V8Frame,
 		FunctionName:   sfi.funcName,
 		SourceFile:     sfi.source.fileName,
 		SourceLine:     lineNo,
@@ -1528,45 +1488,32 @@ func (i *v8Instance) symbolize(symbolReporter reporter.SymbolReporter, frameID l
 	})
 }
 
-const externalFunctionTag = "<external-file>"
-
-var externalStubID = calculateStubID(externalFunctionTag)
+var externalFunctionTag = libpf.Intern("<external-file>")
 
 // generateNativeFrame and conditionally symbolizes a native frame.
-func (i *v8Instance) generateNativeFrame(symbolReporter reporter.SymbolReporter,
-	sourcePos sourcePosition, sfi *v8SFI, trace *libpf.Trace) {
+func (i *v8Instance) generateNativeFrame(sourcePos sourcePosition, sfi *v8SFI,
+	frames *libpf.Frames) {
 	if sourcePos.isExternal() {
-		frameID := libpf.NewFrameID(v8StubsFileID, externalStubID)
-		trace.AppendFrameID(libpf.V8Frame, frameID)
-		symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-			FrameID:      frameID,
+		frames.Append(&libpf.Frame{
+			Type:         libpf.V8Frame,
 			FunctionName: externalFunctionTag,
 		})
 		return
 	}
 
 	lineNo := sfi.scriptOffsetToLine(sourcePos)
-	addressOrLineno := libpf.AddressOrLineno(lineNo) + nativeCodeBaseAddress
-	frameID := libpf.NewFrameID(sfi.funcID, addressOrLineno)
-	trace.AppendFrameID(libpf.V8Frame, frameID)
-	i.symbolize(symbolReporter, frameID, sfi, lineNo)
+	i.appendFrame(frames, sfi, lineNo)
 }
 
-// insertAndSymbolizeBytecodeFrame symbolizes and records to a trace a Bytecode based frame.
-func (i *v8Instance) insertAndSymbolizeBytecodeFrame(symbolReporter reporter.SymbolReporter,
-	sfi *v8SFI, delta uint64, trace *libpf.Trace) {
-	frameID := libpf.NewFrameID(sfi.funcID, libpf.AddressOrLineno(delta))
-	trace.AppendFrameID(libpf.V8Frame, frameID)
-	if !symbolReporter.FrameKnown(frameID) {
-		sourcePos := decodePosition(sfi.bytecodePositionTable, delta)
-		lineNo := sfi.scriptOffsetToLine(sourcePos)
-		i.symbolize(symbolReporter, frameID, sfi, lineNo)
-	}
+// appendBytecodeFrame symbolizes and records to a trace a Bytecode based frame.
+func (i *v8Instance) appendBytecodeFrame(sfi *v8SFI, delta uint64, frames *libpf.Frames) {
+	sourcePos := decodePosition(sfi.bytecodePositionTable, delta)
+	lineNo := sfi.scriptOffsetToLine(sourcePos)
+	i.appendFrame(frames, sfi, lineNo)
 }
 
 // symbolizeSFI symbolizes and records to a trace a SharedFunctionInfo based frame.
-func (i *v8Instance) symbolizeSFI(symbolReporter reporter.SymbolReporter, pointer libpf.Address,
-	delta uint64, trace *libpf.Trace) error {
+func (i *v8Instance) symbolizeSFI(pointer libpf.Address, delta uint64, frames *libpf.Frames) error {
 	vms := &i.d.vmStructs
 	sfi, err := i.getSFI(pointer)
 	if err != nil {
@@ -1576,16 +1523,16 @@ func (i *v8Instance) symbolizeSFI(symbolReporter reporter.SymbolReporter, pointe
 	// Adjust the bytecode pointer as needed
 	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/execution/frames.cc#1793
-	bytecodeDelta := int64(delta & C.V8_LINE_DELTA_MASK)
+	bytecodeDelta := int64(delta & support.V8LineDeltaMask)
 	bytecodeDelta -= int64(vms.BytecodeArray.Data) - HeapObjectTag
 	if bytecodeDelta < 0 {
 		// Should not be happening
 		bytecodeDelta = 0
 	} else if bytecodeDelta >= int64(sfi.bytecodeLength) {
 		// Invalid value
-		bytecodeDelta = nativeCodeBaseAddress - 1
+		bytecodeDelta = 0xffffffff
 	}
-	i.insertAndSymbolizeBytecodeFrame(symbolReporter, sfi, uint64(bytecodeDelta), trace)
+	i.appendBytecodeFrame(sfi, uint64(bytecodeDelta), frames)
 	return nil
 }
 
@@ -1676,32 +1623,31 @@ func (i *v8Instance) mapBaselineCodeOffsetToBytecode(code *v8Code, pcDelta uint3
 }
 
 // symbolizeBaselineCode symbolizes and records to a trace a Baseline Code based frame.
-func (i *v8Instance) symbolizeBaselineCode(symbolReporter reporter.SymbolReporter, code *v8Code,
-	delta uint32, trace *libpf.Trace) {
+func (i *v8Instance) symbolizeBaselineCode(code *v8Code, delta uint32, frames *libpf.Frames) {
 	bytecodeDelta, ok := code.codeDeltaToPosition[delta]
 	if !ok {
 		// Decode bytecode delta and memoize it
 		bytecodeDelta = sourcePosition(i.mapBaselineCodeOffsetToBytecode(code, delta))
 		code.codeDeltaToPosition[delta] = bytecodeDelta
 	}
-	i.insertAndSymbolizeBytecodeFrame(symbolReporter, code.sfi, uint64(bytecodeDelta), trace)
+	i.appendBytecodeFrame(code.sfi, uint64(bytecodeDelta), frames)
 }
 
 // symbolizeCode symbolizes and records to a trace a Code based frame.
-func (i *v8Instance) symbolizeCode(symbolReporter reporter.SymbolReporter, code *v8Code,
-	delta uint64, trace *libpf.Trace) error {
+func (i *v8Instance) symbolizeCode(code *v8Code, delta uint64, returnAddress bool,
+	frames *libpf.Frames) error {
 	var err error
 	sfi := code.sfi
-	delta &= C.V8_LINE_DELTA_MASK
+	delta &= support.V8LineDeltaMask
 
 	// This is a native PC delta and points to the instruction after
 	// the call function. Adjust to get the CALL instruction.
-	if len(trace.FrameTypes) > 0 && delta > 0 {
+	if returnAddress && delta > 0 {
 		delta--
 	}
 
 	if code.isBaseline {
-		i.symbolizeBaselineCode(symbolReporter, code, uint32(delta), trace)
+		i.symbolizeBaselineCode(code, uint32(delta), frames)
 		return nil
 	}
 
@@ -1734,7 +1680,7 @@ func (i *v8Instance) symbolizeCode(symbolReporter reporter.SymbolReporter, code 
 				return fmt.Errorf("failed to get inlined SFI: %w", err)
 			}
 		}
-		i.generateNativeFrame(symbolReporter, sourcePos, inlinedSFI, trace)
+		i.generateNativeFrame(sourcePos, inlinedSFI, frames)
 
 		sourcePos = sourcePosition(npsr.Uint64(code.inliningPositions, itemOff))
 		if sourcePos.inliningID() > inliningID {
@@ -1744,13 +1690,12 @@ func (i *v8Instance) symbolizeCode(symbolReporter reporter.SymbolReporter, code 
 				sourcePos.inliningID(), inliningID)
 		}
 	}
-	i.generateNativeFrame(symbolReporter, sourcePos, sfi, trace)
+	i.generateNativeFrame(sourcePos, sfi, frames)
 
 	return nil
 }
 
-func (i *v8Instance) Symbolize(symbolReporter reporter.SymbolReporter,
-	frame *host.Frame, trace *libpf.Trace) error {
+func (i *v8Instance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	if !frame.Type.IsInterpType(libpf.V8) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -1760,28 +1705,28 @@ func (i *v8Instance) Symbolize(symbolReporter reporter.SymbolReporter,
 
 	pointerAndType := libpf.Address(frame.File)
 	deltaOrMarker := uint64(frame.Lineno)
-	frameType := pointerAndType & C.V8_FILE_TYPE_MASK
-	pointer := pointerAndType&^C.V8_FILE_TYPE_MASK | HeapObjectTag
+	frameType := pointerAndType & support.V8FileTypeMask
+	pointer := pointerAndType&^support.V8FileTypeMask | HeapObjectTag
 
 	var err error
 	switch frameType {
-	case C.V8_FILE_TYPE_MARKER:
+	case support.V8FileTypeMarker:
 		// This is a stub V8 frame, with deltaOrMarker containing the marker.
 		// Convert the V8 build specific marker ID to a static ID and symbolize
 		// that if needed.
-		err = i.symbolizeMarkerFrame(symbolReporter, deltaOrMarker, trace)
-	case C.V8_FILE_TYPE_BYTECODE, C.V8_FILE_TYPE_NATIVE_SFI:
-		err = i.symbolizeSFI(symbolReporter, pointer, deltaOrMarker, trace)
-	case C.V8_FILE_TYPE_NATIVE_CODE, C.V8_FILE_TYPE_NATIVE_JSFUNC:
+		err = i.symbolizeMarkerFrame(deltaOrMarker, frames)
+	case support.V8FileTypeByteCode, support.V8FileTypeNativeSFI:
+		err = i.symbolizeSFI(pointer, deltaOrMarker, frames)
+	case support.V8FileTypeNativeCode, support.V8FileTypeNativeJSFunc:
 		var code *v8Code
-		codeCookie := uint32(deltaOrMarker & C.V8_LINE_COOKIE_MASK >> C.V8_LINE_COOKIE_SHIFT)
-		if frameType == C.V8_FILE_TYPE_NATIVE_CODE {
+		codeCookie := uint32(deltaOrMarker & support.V8LineCookieMask >> support.V8LineCookieShift)
+		if frameType == support.V8FileTypeNativeCode {
 			code, err = i.getCode(pointer, codeCookie)
 		} else {
 			code, err = i.getCodeFromJSFunc(pointer, codeCookie)
 		}
 		if err == nil {
-			err = i.symbolizeCode(symbolReporter, code, deltaOrMarker, trace)
+			err = i.symbolizeCode(code, deltaOrMarker, frame.ReturnAddress, frames)
 		}
 	default:
 		err = fmt.Errorf("unsupported frame type %#x", frameType)
@@ -1802,48 +1747,48 @@ func (d *v8Data) String() string {
 
 // mapFramePointerOffset converts the frame pointer offset in bytes to eBPF used
 // word offset relative to the number of slots read
-func mapFramePointerOffset(relBytes uint8) C.u8 {
-	slotOffset := int(C.V8_FP_CONTEXT_SIZE) + int(int8(relBytes))
-	if slotOffset < 0 || slotOffset > C.V8_FP_CONTEXT_SIZE-pointerSize {
-		return C.V8_FP_CONTEXT_SIZE
+func mapFramePointerOffset(relBytes uint8) uint8 {
+	slotOffset := int(support.V8FpContextSize) + int(int8(relBytes))
+	if slotOffset < 0 || slotOffset > support.V8FpContextSize-pointerSize {
+		return support.V8FpContextSize
 	}
-	return C.u8(slotOffset)
+	return uint8(slotOffset)
 }
 
 func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	vms := &d.vmStructs
-	data := C.V8ProcInfo{
-		version: C.uint(d.version),
+	data := support.V8ProcInfo{
+		Version: d.version,
 
-		fp_marker:          mapFramePointerOffset(vms.FramePointer.Context),
-		fp_function:        mapFramePointerOffset(vms.FramePointer.Function),
-		fp_bytecode_offset: mapFramePointerOffset(vms.FramePointer.BytecodeOffset),
+		Fp_marker:          mapFramePointerOffset(vms.FramePointer.Context),
+		Fp_function:        mapFramePointerOffset(vms.FramePointer.Function),
+		Fp_bytecode_offset: mapFramePointerOffset(vms.FramePointer.BytecodeOffset),
 
-		type_JSFunction_first:   C.u16(vms.Fixed.FirstJSFunctionType),
-		type_JSFunction_last:    C.u16(vms.Fixed.LastJSFunctionType),
-		type_Code:               C.u16(vms.Type.Code),
-		type_SharedFunctionInfo: C.u16(vms.Type.SharedFunctionInfo),
+		Type_JSFunction_first:   vms.Fixed.FirstJSFunctionType,
+		Type_JSFunction_last:    vms.Fixed.LastJSFunctionType,
+		Type_Code:               vms.Type.Code,
+		Type_SharedFunctionInfo: vms.Type.SharedFunctionInfo,
 
-		off_HeapObject_map:    C.u8(vms.HeapObject.Map),
-		off_Map_instancetype:  C.u8(vms.Map.InstanceType),
-		off_JSFunction_code:   C.u8(vms.JSFunction.Code),
-		off_JSFunction_shared: C.u8(vms.JSFunction.SharedFunctionInfo),
+		Off_HeapObject_map:    uint8(vms.HeapObject.Map),
+		Off_Map_instancetype:  uint8(vms.Map.InstanceType),
+		Off_JSFunction_code:   uint8(vms.JSFunction.Code),
+		Off_JSFunction_shared: uint8(vms.JSFunction.SharedFunctionInfo),
 
-		off_Code_instruction_start: C.u8(vms.Code.InstructionStart),
-		off_Code_instruction_size:  C.u8(vms.Code.InstructionSize),
-		off_Code_flags:             C.u8(vms.Code.Flags),
+		Off_Code_instruction_start: uint8(vms.Code.InstructionStart),
+		Off_Code_instruction_size:  uint8(vms.Code.InstructionSize),
+		Off_Code_flags:             uint8(vms.Code.Flags),
 
-		codekind_shift:    C.u8(vms.CodeKind.FieldShift),
-		codekind_mask:     C.u8(vms.CodeKind.FieldMask),
-		codekind_baseline: C.u8(vms.CodeKind.Baseline),
+		Codekind_shift:    vms.CodeKind.FieldShift,
+		Codekind_mask:     uint8(vms.CodeKind.FieldMask),
+		Codekind_baseline: vms.CodeKind.Baseline,
 	}
 	if err := ebpf.UpdateProcData(libpf.V8, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err
 	}
 
-	addrToString, err := freelru.New[libpf.Address, string](interpreter.LruFunctionCacheSize,
-		libpf.Address.Hash32)
+	addrToString, err := freelru.New[libpf.Address, libpf.String](
+		interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
@@ -2215,9 +2160,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, errors.New("incompatible tagging scheme")
 	}
 
-	if mapFramePointerOffset(vms.FramePointer.Context) >= C.V8_FP_CONTEXT_SIZE ||
-		mapFramePointerOffset(vms.FramePointer.Function) >= C.V8_FP_CONTEXT_SIZE ||
-		mapFramePointerOffset(vms.FramePointer.BytecodeOffset) >= C.V8_FP_CONTEXT_SIZE {
+	if mapFramePointerOffset(vms.FramePointer.Context) >= support.V8FpContextSize ||
+		mapFramePointerOffset(vms.FramePointer.Function) >= support.V8FpContextSize ||
+		mapFramePointerOffset(vms.FramePointer.BytecodeOffset) >= support.V8FpContextSize {
 		return nil, fmt.Errorf("incompatible framepointer offsets (%d/%d/%d)",
 			vms.FramePointer.Context, vms.FramePointer.Function,
 			vms.FramePointer.BytecodeOffset)

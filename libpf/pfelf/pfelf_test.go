@@ -135,7 +135,6 @@ func TestGetBuildIDFromNotesFile(t *testing.T) {
 func TestGetKernelVersionBytes(t *testing.T) {
 	files := []string{"testdata/kernel-image", "testdata/ubuntu-kernel-image"}
 	for _, f := range files {
-		f := f
 		t.Run(f, func(t *testing.T) {
 			elfFile := getELF(f, t)
 			defer elfFile.Close()

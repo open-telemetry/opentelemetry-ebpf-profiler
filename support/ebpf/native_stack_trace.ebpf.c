@@ -4,6 +4,9 @@
 #include "tracemgmt.h"
 #include "types.h"
 
+// with_debug_output is set during load time.
+BPF_RODATA_VAR(u32, with_debug_output, 0)
+
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
 // fileID.
@@ -188,8 +191,8 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
     // Do the binary search, up to 16 iterations. Deltas are paged to 64kB pages.
     // They can contain at most 64kB deltas even if everything is single byte opcodes.
     int i;
-#pragma unroll
-    for (i = 0; i < 16; i++) {
+    UNROLL for (i = 0; i < 16; i++)
+    {
       if (!bsearch_step(inner_map, &lo, &hi, page_offset)) {
         break;
       }
@@ -354,8 +357,7 @@ static EBPF_INLINE u64 unwind_register_address(UnwindState *state, u64 cfa, u8 o
 // is marked with UNWIND_COMMAND_STOP which marks entry points (main function,
 // thread spawn function, signal handlers, ...).
 #if defined(__x86_64__)
-static EBPF_INLINE ErrorCode
-unwind_one_frame(u64 pid, u32 frame_idx, UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
 {
   *stop = false;
 
@@ -449,8 +451,7 @@ frame_ok:
   return ERR_OK;
 }
 #elif defined(__aarch64__)
-static EBPF_INLINE ErrorCode
-unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *stop)
 {
   *stop = false;
 
@@ -484,6 +485,7 @@ unwind_one_frame(u64 pid, u32 frame_idx, struct UnwindState *state, bool *stop)
       state->fp             = rt_regs[29];
       state->lr             = normalize_pac_ptr(rt_regs[30]);
       state->r22            = rt_regs[22];
+      state->r28            = rt_regs[28];
       state->return_address = false;
       state->lr_invalid     = false;
       DEBUG_PRINT("signal frame");
@@ -588,8 +590,8 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
   Trace *trace = &record->trace;
   int unwinder;
   ErrorCode error;
-#pragma unroll
-  for (int i = 0; i < NATIVE_FRAMES_PER_PROGRAM; i++) {
+  UNROLL for (int i = 0; i < NATIVE_FRAMES_PER_PROGRAM; i++)
+  {
     unwinder = PROG_UNWIND_STOP;
 
     // Unwind native code
@@ -615,7 +617,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 
     // Unwind the native frame using stack deltas. Stop if no next frame.
     bool stop;
-    error = unwind_one_frame(trace->pid, frame_idx, &record->state, &stop);
+    error = unwind_one_frame(&record->state, &stop);
     if (error || stop) {
       break;
     }

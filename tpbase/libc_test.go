@@ -5,7 +5,6 @@ package tpbase
 
 import (
 	"debug/elf"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -249,19 +248,14 @@ func TestExtractTSDInfo(t *testing.T) {
 	}
 
 	for name, test := range testCases {
-		name := name
-		test := test
 		t.Run(name, func(t *testing.T) {
 			var info TSDInfo
 			var err error
 			switch test.machine {
 			case elf.EM_X86_64:
-				info, err = ExtractTSDInfoX64_64(test.code)
+				info, err = extractTSDInfoX86(test.code)
 			case elf.EM_AARCH64:
-				info, err = ExtractTSDInfoARM64(test.code)
-			}
-			if errors.Is(err, errArchNotImplemented) {
-				t.Skip("tests not available on this platform")
+				info, err = extractTSDInfoARM(test.code)
 			}
 			if assert.NoError(t, err) {
 				assert.Equal(t, test.info, info, "Wrong TSD info extraction")

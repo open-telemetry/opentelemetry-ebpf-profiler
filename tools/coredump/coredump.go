@@ -13,15 +13,12 @@ import (
 	"time"
 	"unsafe"
 
-	cebpf "github.com/cilium/ebpf"
-
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
-	"go.opentelemetry.io/ebpf-profiler/support"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
@@ -38,14 +35,12 @@ func sliceBuffer(buf unsafe.Pointer, sz C.int) []byte {
 // symbolizationCache collects and caches the interpreter manager's symbolization
 // callbacks to be used for trace stringification.
 type symbolizationCache struct {
-	files   map[libpf.FileID]string
-	symbols map[libpf.FrameID]*reporter.FrameMetadataArgs
+	files map[libpf.FileID]string
 }
 
 func newSymbolizationCache() *symbolizationCache {
 	return &symbolizationCache{
-		files:   make(map[libpf.FileID]string),
-		symbols: make(map[libpf.FrameID]*reporter.FrameMetadataArgs),
+		files: make(map[libpf.FileID]string),
 	}
 }
 
@@ -57,17 +52,6 @@ func (c *symbolizationCache) ExecutableKnown(fileID libpf.FileID) bool {
 func (c *symbolizationCache) ExecutableMetadata(args *reporter.ExecutableMetadataArgs) {
 	c.files[args.FileID] = args.FileName
 }
-
-func (c *symbolizationCache) FrameKnown(frameID libpf.FrameID) bool {
-	_, exists := c.symbols[frameID]
-	return exists
-}
-
-func (c *symbolizationCache) FrameMetadata(args *reporter.FrameMetadataArgs) {
-	c.symbols[args.FrameID] = args
-}
-
-func (c *symbolizationCache) ReportFallbackSymbol(libpf.FrameID, string) {}
 
 func generateErrorMap() (map[libpf.AddressOrLineno]string, error) {
 	file, err := os.Open("../errors-codegen/errors.json")
@@ -95,35 +79,35 @@ func generateErrorMap() (map[libpf.AddressOrLineno]string, error) {
 
 var errorMap xsync.Once[map[libpf.AddressOrLineno]string]
 
-func (c *symbolizationCache) symbolize(ty libpf.FrameType, fileID libpf.FileID,
-	lineNumber libpf.AddressOrLineno) (string, error) {
-	if ty.IsError() {
+func (c *symbolizationCache) formatFrame(frame *libpf.Frame) (string, error) {
+	if frame.Type.IsError() {
 		errMap, err := errorMap.GetOrInit(generateErrorMap)
 		if err != nil {
 			return "", fmt.Errorf("unable to construct error map: %v", err)
 		}
-		errName, ok := (*errMap)[lineNumber]
+		errName, ok := (*errMap)[frame.AddressOrLineno]
 		if !ok {
 			return "", fmt.Errorf(
-				"got invalid error code %d. forgot to `make generate`", lineNumber)
+				"got invalid error code %d. forgot to `make generate`",
+				frame.AddressOrLineno)
 		}
-		if ty == libpf.AbortFrame {
+		if frame.Type == libpf.AbortFrame {
 			return fmt.Sprintf("<unwinding aborted due to error %s>", errName), nil
 		}
 		return fmt.Sprintf("<error %s>", errName), nil
 	}
 
-	if data, ok := c.symbols[libpf.NewFrameID(fileID, lineNumber)]; ok {
+	if frame.FunctionName != libpf.NullString {
 		return fmt.Sprintf("%s+%d in %s:%d",
-			data.FunctionName, data.FunctionOffset,
-			data.SourceFile, data.SourceLine), nil
+			frame.FunctionName, frame.FunctionOffset,
+			frame.SourceFile, frame.SourceLine), nil
 	}
 
-	sourceFile, ok := c.files[fileID]
+	sourceFile, ok := c.files[frame.FileID]
 	if !ok {
-		sourceFile = fmt.Sprintf("%08x", fileID)
+		sourceFile = fmt.Sprintf("%08x", frame.FileID)
 	}
-	return fmt.Sprintf("%s+0x%x", sourceFile, lineNumber), nil
+	return fmt.Sprintf("%s+0x%x", sourceFile, frame.AddressOrLineno), nil
 }
 
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
@@ -134,17 +118,6 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	debugFlag := C.int(0)
 	if debug {
 		debugFlag = 1
-	}
-
-	dummyMaps := make(map[string]*cebpf.Map)
-	for _, mapName := range []string{"interpreter_offsets",
-		"pid_page_to_mapping_info", "stack_delta_page_to_info", "pid_page_to_mapping_info",
-		"dotnet_procs", "perl_procs", "py_procs", "hotspot_procs", "ruby_procs",
-		"php_procs", "v8_procs", "beam_procs"} {
-		dummyMaps[mapName] = &cebpf.Map{}
-	}
-	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
-		dummyMaps[fmt.Sprintf("exe_id_to_%d_stack_deltas", i)] = &cebpf.Map{}
 	}
 
 	// In host agent we have set the default value for monitorInterval to 5 seconds. But as coredump
@@ -214,12 +187,13 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 		// Symbolize traces with interpreter manager
 		trace := manager.ConvertTrace(&ebpfCtx.trace)
 		tinfo := ThreadInfo{LWP: thread.LWP}
-		for i := range trace.FrameTypes {
-			frame, err := symCache.symbolize(trace.FrameTypes[i], trace.Files[i], trace.Linenos[i])
+		for _, f := range trace.Frames {
+			frame := f.Value()
+			frameText, err := symCache.formatFrame(&frame)
 			if err != nil {
 				return nil, err
 			}
-			tinfo.Frames = append(tinfo.Frames, frame)
+			tinfo.Frames = append(tinfo.Frames, frameText)
 		}
 		info = append(info, tinfo)
 	}

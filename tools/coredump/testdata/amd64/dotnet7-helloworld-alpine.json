@@ -31,8 +31,7 @@
         "helloworld+0x13db8",
         "helloworld+0x140a1",
         "ld-musl-x86_64.so.1+0x1c6d0",
-        "helloworld+0x73e5",
-        "<unwinding aborted due to error native_exceeded_delta_lookup_iterations>"
+        "helloworld+0x73e5"
       ]
     },
     {
