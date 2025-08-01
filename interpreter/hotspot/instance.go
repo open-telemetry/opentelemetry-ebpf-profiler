@@ -204,9 +204,9 @@ func (d *hotspotInstance) getSymbol(addr libpf.Address) libpf.String {
 			return libpf.NullString
 		}
 	}
-	s := string(tmp)
+	s := unsafe.String(unsafe.SliceData(tmp), len(tmp))
 	if !util.IsValidString(s) {
-		log.Debugf("Extracted Hotspot symbol is invalid at 0x%x '%v'", addr, []byte(s))
+		log.Debugf("Extracted Hotspot symbol is invalid at 0x%x '%v'", addr, tmp)
 		return libpf.NullString
 	}
 	value := libpf.Intern(s)

@@ -5,7 +5,6 @@ package perl // import "go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
@@ -122,7 +121,7 @@ func (d *perlData) String() string {
 
 func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-	addrToHEK, err := freelru.New[libpf.Address, string](interpreter.LruFunctionCacheSize,
+	addrToHEK, err := freelru.New[libpf.Address, libpf.String](interpreter.LruFunctionCacheSize,
 		libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
@@ -147,14 +146,6 @@ func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Add
 		addrToHEK: addrToHEK,
 		addrToCOP: addrToCOP,
 		addrToGV:  addrToGV,
-		memPool: sync.Pool{
-			New: func() any {
-				// To avoid resizing of the returned byte slize we size new
-				// allocations to hekLenLimit.
-				buf := make([]byte, hekLenLimit)
-				return &buf
-			},
-		},
 	}, nil
 }
 
