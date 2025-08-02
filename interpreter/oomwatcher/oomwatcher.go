@@ -101,6 +101,7 @@ func (d *oomWatcherData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 // Detach stops watching the process.
 func (i *oomWatcherInstance) Detach(_ interpreter.EbpfHandler, pid libpf.PID) error {
 	log.Debugf("OOM watcher: stopping watch for PID %d", pid)
+	i.data.state.UnwatchPid(uint32(pid))
 	return nil
 }
 
