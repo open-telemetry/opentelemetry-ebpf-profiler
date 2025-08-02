@@ -114,11 +114,6 @@ test-junit: generate ebpf test-deps
 	go install gotest.tools/gotestsum@latest
 	CGO_ENABLED=1 gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
-# This target isn't called from CI, it doesn't work for cross compile (ie TARGET_ARCH=arm64 on
-# amd64) and the CI kernel tests run them already. Useful for local testing.
-sudo-golabels-test: integration-test-binaries
-	(cd support && sudo ./interpreter_golabels_test.test -test.v)
-
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
 	libpf/pfelf/testdata \
@@ -129,19 +124,25 @@ test-deps:
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
-TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support interpreter/golabels/test
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
 
 # These binaries are named ".test" to get included into bluebox initramfs
-support/golbls_1_23.test: ./interpreter/golabels/test/main.go
-	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go build -tags $(GO_TAGS),nocgo -o $@ $<
+golbls_1_23.test: generate ebpf
+golbls_1_23.test: ./interpreter/golabels/integrationtests
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go test -C $< -c -trimpath -tags $(GO_TAGS),nocgo,integration  -o $@
+	mv $</$@ support/.
 
-support/golbls_1_24.test: ./interpreter/golabels/test/main.go
-	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.1 go build -tags $(GO_TAGS),nocgo -o $@ $<
+golbls_1_24.test: generate ebpf
+golbls_1_24.test: ./interpreter/golabels/integrationtests
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.1 go test -C $< -c -trimpath -tags $(GO_TAGS),nocgo,integration  -o $@
+	mv $</$@ support/.
 
-support/golbls_cgo.test: ./interpreter/golabels/test/main-cgo.go
-	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.1 go build -ldflags '-extldflags "-static"' -tags $(GO_TAGS),usecgo  -o $@ $<
+golbls_cgo.test: generate ebpf
+golbls_cgo.test: ./interpreter/golabels/integrationtests
+	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.1 go test -C $< -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration  -o $@
+	mv $</$@ support/.
 
-integration-test-binaries: generate ebpf support/golbls_1_23.test support/golbls_1_24.test support/golbls_cgo.test
+integration-test-binaries: generate ebpf golbls_1_23.test golbls_1_24.test golbls_cgo.test
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
