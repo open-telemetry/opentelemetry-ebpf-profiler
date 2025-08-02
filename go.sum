@@ -175,6 +175,10 @@ github.com/parca-dev/oomprof v0.1.5-0.20250731130156-2e7baebf4ea6 h1:MqgvCATm7s7
 github.com/parca-dev/oomprof v0.1.5-0.20250731130156-2e7baebf4ea6/go.mod h1:+vw0+rZYq/rTVouF6G+/+Uol758EOkUINi8/8RXPvX0=
 github.com/parca-dev/oomprof v0.1.5-0.20250731155753-0ad8f29d16f7 h1:Xw96a25o3wIFDRv2SFrvQhs4GcqyFyvUEzC+m4G8uiI=
 github.com/parca-dev/oomprof v0.1.5-0.20250731155753-0ad8f29d16f7/go.mod h1:+vw0+rZYq/rTVouF6G+/+Uol758EOkUINi8/8RXPvX0=
+github.com/parca-dev/oomprof v0.1.5-0.20250802153049-42c8c7bd7ed6 h1:o7163E9Bg3QcYAAouJYI0m9+L/oZNE1CPNjkAqTpF68=
+github.com/parca-dev/oomprof v0.1.5-0.20250802153049-42c8c7bd7ed6/go.mod h1:+vw0+rZYq/rTVouF6G+/+Uol758EOkUINi8/8RXPvX0=
+github.com/parca-dev/oomprof v0.1.5-0.20250802154619-7661d52736fc h1:NDzbJIfaxsIF7nyboCsuSAkWjIKgPwhv02OI77cKQJQ=
+github.com/parca-dev/oomprof v0.1.5-0.20250802154619-7661d52736fc/go.mod h1:+vw0+rZYq/rTVouF6G+/+Uol758EOkUINi8/8RXPvX0=
 github.com/peterbourgon/ff/v3 v3.4.0 h1:QBvM/rizZM1cB0p0lGMdmR7HxZeI/ZrBWB4DqLkMUBc=
 github.com/peterbourgon/ff/v3 v3.4.0/go.mod h1:zjJVUhx+twciwfDl0zBcFzl4dW8axCRyXE/eKY9RztQ=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
