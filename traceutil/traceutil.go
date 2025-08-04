@@ -19,8 +19,8 @@ func HashTrace(trace *libpf.Trace) libpf.TraceHash {
 	for _, uniqueFrame := range trace.Frames {
 		frame := uniqueFrame.Value()
 		fileID := libpf.FileID{}
-		if frame.MappingFile.Valid() {
-			fileID = frame.MappingFile.Value().FileID
+		if frame.Mapping.Valid() {
+			fileID = frame.Mapping.Value().File.Value().FileID
 		}
 		_, _ = h.Write(fileID.Bytes())
 		// Using FormatUint() or putting AppendUint() into a function leads

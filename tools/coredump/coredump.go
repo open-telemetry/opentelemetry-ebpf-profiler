@@ -81,9 +81,10 @@ func formatFrame(frame *libpf.Frame) (string, error) {
 			frame.SourceFile, frame.SourceLine), nil
 	}
 
-	if frame.MappingFile.Valid() {
+	if frame.Mapping.Valid() {
+		mf := frame.Mapping.Value().File.Value()
 		return fmt.Sprintf("%s+0x%x",
-			frame.MappingFile.Value().FileName,
+			mf.FileName,
 			frame.AddressOrLineno), nil
 	}
 	return fmt.Sprintf("?+0x%x", frame.AddressOrLineno), nil
@@ -140,8 +141,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	includeTracers, _ := tracertypes.Parse("all")
 
 	manager, err := pm.New(todo, includeTracers, monitorInterval, &coredumpEbpfMaps,
-		pm.NewMapFileIDMapper(), nil, elfunwindinfo.NewStackDeltaProvider(), false,
-		libpf.Set[string]{})
+		nil, elfunwindinfo.NewStackDeltaProvider(), false, libpf.Set[string]{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)
 	}

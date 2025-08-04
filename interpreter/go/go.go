@@ -64,6 +64,10 @@ func (g *goData) unref() {
 	}
 }
 
+func (g *goData) String() string {
+	return "Golang symbolizer"
+}
+
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
 	g.refs.Add(1)

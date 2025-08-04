@@ -195,7 +195,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	hasBatchOperations := ebpfHandler.SupportsGenericBatchOperations()
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
-		ebpfHandler, nil, nil, elfunwindinfo.NewStackDeltaProvider(),
+		ebpfHandler, nil, elfunwindinfo.NewStackDeltaProvider(),
 		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
@@ -706,7 +706,7 @@ func (t *Tracer) readKernelFrames(kstackID int32) (libpf.Frames, error) {
 
 		kmod, err := t.kernelSymbolizer.GetModuleByAddress(address)
 		if err == nil {
-			frame.MappingFile = kmod.MappingFile()
+			frame.Mapping = kmod.Mapping()
 			frame.AddressOrLineno -= libpf.AddressOrLineno(kmod.Start())
 
 			if funcName, _, err := kmod.LookupSymbolByAddress(address); err == nil {
