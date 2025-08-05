@@ -63,4 +63,5 @@ type Trace struct {
 	CPU              int
 	EnvVars          map[string]string
 	CustomLabels     map[string]string
+	KernelFrames     libpf.Frames
 }

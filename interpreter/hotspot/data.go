@@ -361,23 +361,21 @@ func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.
 	}
 	// In total there are about 100 to 200 intrinsics. We don't expect to encounter
 	// everyone single one. So we use a small cache size here than LruFunctionCacheSize.
-	addrToStubNameID, err :=
-		freelru.New[libpf.Address, libpf.AddressOrLineno](128,
-			libpf.Address.Hash32)
+	addrToStubName, err := freelru.New[libpf.Address, libpf.String](128, libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
 
 	return &hotspotInstance{
-		d:                d,
-		rm:               rm,
-		bias:             bias,
-		addrToSymbol:     addrToSymbol,
-		addrToMethod:     addrToMethod,
-		addrToJITInfo:    addrToJITInfo,
-		addrToStubNameID: addrToStubNameID,
-		prefixes:         libpf.Set[lpm.Prefix]{},
-		stubs:            map[libpf.Address]StubRoutine{},
+		d:              d,
+		rm:             rm,
+		bias:           bias,
+		addrToSymbol:   addrToSymbol,
+		addrToMethod:   addrToMethod,
+		addrToJITInfo:  addrToJITInfo,
+		addrToStubName: addrToStubName,
+		prefixes:       libpf.Set[lpm.Prefix]{},
+		stubs:          map[libpf.Address]StubRoutine{},
 	}, nil
 }
 

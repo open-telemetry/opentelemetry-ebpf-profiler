@@ -5,7 +5,6 @@ package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
 import (
 	"fmt"
-	"hash/fnv"
 	"sync/atomic"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -14,7 +13,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 )
 
@@ -94,8 +92,7 @@ func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
 	return nil
 }
 
-func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame,
-	trace *libpf.Trace) error {
+func (g *goInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	if !frame.Type.IsInterpType(libpf.Native) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -107,27 +104,14 @@ func (g *goInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *ho
 		return fmt.Errorf("failed to symbolize 0x%x", frame.Lineno)
 	}
 
-	// The fnv hash Write() method calls cannot fail, so it's safe to ignore the errors.
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(frame.File.StringNoQuotes()))
-	_, _ = h.Write([]byte(fn))
-	_, _ = h.Write([]byte(sourceFile))
-	fileID, err := libpf.FileIDFromBytes(h.Sum(nil))
-	if err != nil {
-		return fmt.Errorf("failed to create a file ID: %v", err)
-	}
-
-	frameID := libpf.NewFrameID(fileID, libpf.AddressOrLineno(lineNo))
-
-	trace.AppendFrameID(libpf.GoFrame, frameID)
-
-	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-		FrameID:      frameID,
-		FunctionName: libpf.Intern(fn),
-		SourceFile:   libpf.Intern(sourceFile),
-		SourceLine:   libpf.SourceLineno(lineNo),
+	frames.Append(&libpf.Frame{
+		Type: libpf.GoFrame,
+		//TODO: File: convert the frame.File (host.FileID) to libpf.FileID here
+		AddressOrLineno: frame.Lineno,
+		FunctionName:    libpf.Intern(fn),
+		SourceFile:      libpf.Intern(sourceFile),
+		SourceLine:      libpf.SourceLineno(lineNo),
 	})
-
 	sfCounter.ReportSuccess()
 	return nil
 }

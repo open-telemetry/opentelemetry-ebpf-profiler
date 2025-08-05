@@ -12,52 +12,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
-
-// mockReporter implements reporter.SymbolReporter for testing
-type mockReporter struct {
-	b             *testing.B
-	frameMetadata map[libpf.FrameID]*reporter.FrameMetadataArgs
-}
-
-func newMockReporter(b *testing.B) *mockReporter {
-	return &mockReporter{
-		b:             b,
-		frameMetadata: make(map[libpf.FrameID]*reporter.FrameMetadataArgs),
-	}
-}
-
-func (m *mockReporter) CompareFunctionName(fn string) {
-	if len(m.frameMetadata) != 1 {
-		m.b.Fatalf("Expected a single entry but got %d", len(m.frameMetadata))
-	}
-	for _, v := range m.frameMetadata {
-		// The returned anonymous function has the suffic 'func1'.
-		// Therefore check only for a matching prefix.
-		if !strings.HasPrefix(v.FunctionName.String(), fn) {
-			m.b.Fatalf("Expected '%s()' but got '%s()'", fn, v.FunctionName)
-		}
-	}
-}
-
-func (m *mockReporter) FrameMetadata(args *reporter.FrameMetadataArgs) {
-	m.frameMetadata[args.FrameID] = args
-}
-
-func (m *mockReporter) ExecutableMetadata(args *reporter.ExecutableMetadataArgs) {
-	// Not used in this test
-}
-
-func (m *mockReporter) FrameKnown(frameID libpf.FrameID) bool {
-	_, exists := m.frameMetadata[frameID]
-	return exists
-}
-
-func (m *mockReporter) ExecutableKnown(fileID libpf.FileID) bool {
-	return false
-}
 
 func BenchmarkGolang(b *testing.B) {
 	pc, _, _, ok := runtime.Caller(1)
@@ -80,7 +36,6 @@ func BenchmarkGolang(b *testing.B) {
 	}
 	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef, []util.Range{})
 	rm := remotememory.NewProcessVirtualMemory(libpfPID)
-	symReporter := newMockReporter(b)
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -95,16 +50,26 @@ func BenchmarkGolang(b *testing.B) {
 			b.Fatalf("Failed to create instance: %v", err)
 		}
 
-		trace := libpf.Trace{}
+		frames := libpf.Frames{}
 
-		if err := gI.Symbolize(symReporter, &host.Frame{
+		if err := gI.Symbolize(&host.Frame{
 			File:   hostFileID,
 			Lineno: libpf.AddressOrLineno(pc),
 			Type:   libpf.FrameType(libpf.Native),
-		}, &trace); err != nil {
+		}, &frames); err != nil {
 			b.Fatalf("Failed to symbolize 0x%x: %v", pc, err)
 		}
 
-		symReporter.CompareFunctionName(fn.Name())
+		if len(frames) != 1 {
+			b.Fatalf("Expected a single entry but got %d", len(frames))
+		}
+		for _, uniqueFrame := range frames {
+			f := uniqueFrame.Value()
+			// The returned anonymous function has the suffic 'func1'.
+			// Therefore check only for a matching prefix.
+			if !strings.HasPrefix(f.FunctionName.String(), fn.Name()) {
+				b.Fatalf("Expected '%s()' but got '%s()'", fn, f.FunctionName)
+			}
+		}
 	}
 }

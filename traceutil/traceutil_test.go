@@ -19,6 +19,14 @@ func TestLibpfEBPFFrameMarkerEquality(t *testing.T) {
 	assert.Equal(t, int(libpf.PHPFrame), support.FrameMarkerPHP)
 }
 
+func newPythonTrace() *libpf.Trace {
+	trace := &libpf.Trace{}
+	trace.AppendFrame(libpf.NativeFrame, libpf.NewFileID(0, 0), 0)
+	trace.AppendFrame(libpf.NativeFrame, libpf.NewFileID(1, 1), 1)
+	trace.AppendFrame(libpf.NativeFrame, libpf.NewFileID(2, 2), 2)
+	return trace
+}
+
 func TestHashTrace(t *testing.T) {
 	tests := map[string]struct {
 		trace  *libpf.Trace
@@ -28,18 +36,7 @@ func TestHashTrace(t *testing.T) {
 			trace:  &libpf.Trace{},
 			result: libpf.NewTraceHash(0x6c62272e07bb0142, 0x62b821756295c58d)},
 		"python trace": {
-			trace: &libpf.Trace{
-				Linenos: []libpf.AddressOrLineno{0, 1, 2},
-				Files: []libpf.FileID{
-					libpf.NewFileID(0, 0),
-					libpf.NewFileID(1, 1),
-					libpf.NewFileID(2, 2),
-				},
-				FrameTypes: []libpf.FrameType{
-					libpf.NativeFrame,
-					libpf.NativeFrame,
-					libpf.NativeFrame,
-				}},
+			trace:  newPythonTrace(),
 			result: libpf.NewTraceHash(0x21c6fe4c62868856, 0xcf510596eab68dc8)},
 	}
 

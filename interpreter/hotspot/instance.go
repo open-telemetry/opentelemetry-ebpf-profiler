@@ -80,8 +80,8 @@ type hotspotInstance struct {
 	// the needed data from it.
 	addrToJITInfo *freelru.LRU[libpf.Address, *hotspotJITInfo]
 
-	// addrToStubNameID maps a stub name to its unique identifier.
-	addrToStubNameID *freelru.LRU[libpf.Address, libpf.AddressOrLineno]
+	// addrToStubName maps a stub address to its name identifier.
+	addrToStubName *freelru.LRU[libpf.Address, libpf.String]
 
 	// mainMappingsInserted stores whether the heap areas and proc data are already populated.
 	mainMappingsInserted bool
@@ -97,7 +97,7 @@ func (d *hotspotInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	addrToSymbolStats := d.addrToSymbol.ResetMetrics()
 	addrToMethodStats := d.addrToMethod.ResetMetrics()
 	addrToJITInfoStats := d.addrToJITInfo.ResetMetrics()
-	addrToStubNameIDStats := d.addrToStubNameID.ResetMetrics()
+	addrToStubNameStats := d.addrToStubName.ResetMetrics()
 
 	return []metrics.Metric{
 		{
@@ -158,19 +158,19 @@ func (d *hotspotInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 		},
 		{
 			ID:    metrics.IDHotspotAddrToStubNameIDHit,
-			Value: metrics.MetricValue(addrToStubNameIDStats.Hits),
+			Value: metrics.MetricValue(addrToStubNameStats.Hits),
 		},
 		{
 			ID:    metrics.IDHotspotAddrToStubNameIDMiss,
-			Value: metrics.MetricValue(addrToStubNameIDStats.Misses),
+			Value: metrics.MetricValue(addrToStubNameStats.Misses),
 		},
 		{
 			ID:    metrics.IDHotspotAddrToStubNameIDAdd,
-			Value: metrics.MetricValue(addrToStubNameIDStats.Inserts),
+			Value: metrics.MetricValue(addrToStubNameStats.Inserts),
 		},
 		{
 			ID:    metrics.IDHotspotAddrToStubNameIDDel,
-			Value: metrics.MetricValue(addrToStubNameIDStats.Removals),
+			Value: metrics.MetricValue(addrToStubNameStats.Removals),
 		},
 	}, nil
 }
@@ -231,10 +231,9 @@ func (d *hotspotInstance) getPoolSymbol(addr libpf.Address, ndx uint16) libpf.St
 	return d.getSymbol(cpoolVal &^ 1)
 }
 
-// getStubNameID read the stub name from the code blob at given address and generates a ID.
-func (d *hotspotInstance) getStubNameID(symbolReporter reporter.SymbolReporter, ripOrBci uint32,
-	addr libpf.Address, _ uint32) libpf.AddressOrLineno {
-	if value, ok := d.addrToStubNameID.Get(addr); ok {
+// getStubName read the stub name from the code blob at given address and generates a ID.
+func (d *hotspotInstance) getStubName(ripOrBci uint32, addr libpf.Address) libpf.String {
+	if value, ok := d.addrToStubName.Get(addr); ok {
 		return value
 	}
 	vms := &d.d.Get().vmStructs
@@ -248,18 +247,9 @@ func (d *hotspotInstance) getStubNameID(symbolReporter reporter.SymbolReporter, 
 			break
 		}
 	}
-
-	h := fnv.New128a()
-	_, _ = h.Write([]byte(stubName))
-	nameHash := h.Sum(nil)
-	stubID := libpf.AddressOrLineno(npsr.Uint64(nameHash, 0))
-	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-		FrameID:      libpf.NewFrameID(hotspotStubsFileID, stubID),
-		FunctionName: libpf.Intern(stubName),
-	})
-	d.addrToStubNameID.Add(addr, stubID)
-
-	return stubID
+	name := libpf.Intern(stubName)
+	d.addrToStubName.Add(addr, name)
+	return name
 }
 
 // getMethod reads and returns the interesting data from "class Method" at given address
@@ -852,11 +842,9 @@ func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 }
 
 // Symbolize interpreters Hotspot eBPF uwinder given data containing target
-// process address and translates it to static IDs expanding any inlined frames
-// to multiple new frames. Associated symbolization metadata is extracted and
-// queued to be sent to collection agent.
-func (d *hotspotInstance) Symbolize(symbolReporter reporter.SymbolReporter,
-	frame *host.Frame, trace *libpf.Trace) error {
+// process address and translates it to decorated frames expanding any inlined
+// frames to multiple new frames.
+func (d *hotspotInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	if !frame.Type.IsInterpType(libpf.HotSpot) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -875,20 +863,23 @@ func (d *hotspotInstance) Symbolize(symbolReporter reporter.SymbolReporter,
 	case support.FrameHotspotStub, support.FrameHotspotVtable:
 		// These are stub frames that may or may not be interesting
 		// to be seen in the trace.
-		stubID := d.getStubNameID(symbolReporter, ripOrBci, ptr, ptrCheck)
-		trace.AppendFrame(libpf.HotSpotFrame, hotspotStubsFileID, stubID)
+		stubName := d.getStubName(ripOrBci, ptr)
+		frames.Append(&libpf.Frame{
+			Type:         libpf.HotSpotFrame,
+			FunctionName: stubName,
+		})
 	case support.FrameHotspotInterpreter:
 		method, err1 := d.getMethod(ptr, ptrCheck)
 		if err1 != nil {
 			return err1
 		}
-		method.symbolize(symbolReporter, ripOrBci, d, trace)
+		method.symbolize(ripOrBci, d, frames)
 	case support.FrameHotspotNative:
 		jitinfo, err1 := d.getJITInfo(ptr, ptrCheck)
 		if err1 != nil {
 			return err1
 		}
-		err = jitinfo.symbolize(symbolReporter, int32(ripOrBci), d, trace)
+		err = jitinfo.symbolize(int32(ripOrBci), d, frames)
 	default:
 		return fmt.Errorf("hotspot frame subtype %v is not supported", subtype)
 	}

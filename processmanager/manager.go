@@ -192,8 +192,7 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 func (pm *ProcessManager) Close() {
 }
 
-func (pm *ProcessManager) symbolizeFrame(frame int, trace *host.Trace,
-	newTrace *libpf.Trace) error {
+func (pm *ProcessManager) symbolizeFrame(frame int, trace *host.Trace, frames *libpf.Frames) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -202,7 +201,7 @@ func (pm *ProcessManager) symbolizeFrame(frame int, trace *host.Trace,
 	}
 
 	for _, instance := range pm.interpreters[trace.PID] {
-		if err := instance.Symbolize(pm.reporter, &trace.Frames[frame], newTrace); err != nil {
+		if err := instance.Symbolize(&trace.Frames[frame], frames); err != nil {
 			if errors.Is(err, interpreter.ErrMismatchInterpreterType) {
 				// The interpreter type of instance did not match the type of frame.
 				// So continue with the next interpreter instance for this PID.
@@ -219,13 +218,12 @@ func (pm *ProcessManager) symbolizeFrame(frame int, trace *host.Trace,
 
 func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace) {
 	traceLen := len(trace.Frames)
-
+	kernelFramesLen := len(trace.KernelFrames)
 	newTrace = &libpf.Trace{
-		Files:        make([]libpf.FileID, 0, traceLen),
-		Linenos:      make([]libpf.AddressOrLineno, 0, traceLen),
-		FrameTypes:   make([]libpf.FrameType, 0, traceLen),
+		Frames:       make(libpf.Frames, kernelFramesLen, kernelFramesLen+traceLen),
 		CustomLabels: trace.CustomLabels,
 	}
+	copy(newTrace.Frames, trace.KernelFrames)
 
 	for i := range traceLen {
 		frame := &trace.Frames[i]
@@ -274,7 +272,7 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 
 			// Attempt symbolization of native frames. It is best effort and
 			// provides non-symbolized frames if no native symbolizer is active.
-			if err := pm.symbolizeFrame(i, trace, newTrace); err == nil {
+			if err := pm.symbolizeFrame(i, trace, &newTrace.Frames); err == nil {
 				continue
 			}
 
@@ -292,7 +290,7 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 			newTrace.AppendFrameFull(frame.Type, fileID,
 				relativeRIP, mappingStart, mappingEnd, fileOffset)
 		default:
-			err := pm.symbolizeFrame(i, trace, newTrace)
+			err := pm.symbolizeFrame(i, trace, &newTrace.Frames)
 			if err != nil {
 				log.Debugf(
 					"symbolization failed for PID %d, frame %d/%d, frame type %d: %v",

@@ -37,15 +37,6 @@ type UnixTime64 uint64
 // a native file.
 type AddressOrLineno uint64
 
-type FrameMetadata struct {
-	FileID         FileID
-	AddressOrLine  AddressOrLineno
-	LineNumber     SourceLineno
-	FunctionOffset uint32
-	FunctionName   string
-	Filename       string
-}
-
 // Void allows to use maps as sets without memory allocation for the values.
 // From the "Go Programming Language":
 //
