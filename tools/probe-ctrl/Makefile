@@ -1,11 +1,11 @@
 .PHONY: build clean lint test vuln-check
 
 build:
-	go build ./cmd/strobelight-ctrl
+	go build ./cmd/probe-ctrl
 
 clean:
 	go clean -cache -i
-	rm strobelight-ctrl
+	rm probe-ctrl
 
 lint:
 	go tool staticcheck -checks=all ./...
