@@ -1,6 +1,6 @@
 .PHONY: all all-common clean ebpf generate test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
-	codespell lint linter-version debug debug-agent ebpf-profiler format-ebpf \
+	codespell lint linter-version ebpf-profiler format-ebpf \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
 SHELL := /usr/bin/env bash
@@ -53,10 +53,6 @@ MAKEFLAGS += -j$(shell nproc)
 JUNIT_OUT_DIR ?= /tmp/testresults
 
 all: ebpf-profiler
-
-debug: GO_TAGS := $(GO_TAGS),debugtracer
-debug: EBPF_FLAGS += debug
-debug: all
 
 # Removes the go build cache and binaries in the current project
 clean:
@@ -155,10 +151,6 @@ docker-image:
 agent:
 	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) otel/opentelemetry-ebpf-profiler-dev:latest \
 	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
-
-debug-agent:
-	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) otel/opentelemetry-ebpf-profiler-dev:latest \
-	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP) debug"
 
 legal:
 	@go install github.com/google/go-licenses@latest
