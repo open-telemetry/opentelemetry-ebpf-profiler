@@ -1,4 +1,4 @@
-//go:build arm64
+//go:build linux && arm64
 
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
@@ -10,8 +10,6 @@ import (
 	"encoding/binary"
 	"fmt"
 )
-
-const currentMachine = elf.EM_AARCH64
 
 func (sp *ptraceProcess) GetMachineData() MachineData {
 	pacMask := make([]byte, 16)
