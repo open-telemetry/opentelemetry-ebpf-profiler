@@ -5,6 +5,7 @@ package traceutil
 
 import (
 	"testing"
+	"unique"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -21,9 +22,21 @@ func TestLibpfEBPFFrameMarkerEquality(t *testing.T) {
 
 func newPythonTrace() *libpf.Trace {
 	trace := &libpf.Trace{}
-	trace.AppendFrame(libpf.NativeFrame, libpf.NewFileID(0, 0), 0)
-	trace.AppendFrame(libpf.NativeFrame, libpf.NewFileID(1, 1), 1)
-	trace.AppendFrame(libpf.NativeFrame, libpf.NewFileID(2, 2), 2)
+	trace.Frames.Append(&libpf.Frame{
+		Type:            libpf.NativeFrame,
+		AddressOrLineno: 0,
+		MappingFile:     unique.Make(libpf.FrameMappingFileData{FileID: libpf.NewFileID(0, 0)}),
+	})
+	trace.Frames.Append(&libpf.Frame{
+		Type:            libpf.NativeFrame,
+		AddressOrLineno: 1,
+		MappingFile:     unique.Make(libpf.FrameMappingFileData{FileID: libpf.NewFileID(1, 1)}),
+	})
+	trace.Frames.Append(&libpf.Frame{
+		Type:            libpf.NativeFrame,
+		AddressOrLineno: 2,
+		MappingFile:     unique.Make(libpf.FrameMappingFileData{FileID: libpf.NewFileID(2, 2)}),
+	})
 	return trace
 }
 

@@ -102,18 +102,17 @@ func mainWithExitCode() exitCode {
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
 	rep, err := reporter.NewOTLP(&reporter.Config{
-		Name:                     os.Args[0],
-		Version:                  vc.Version(),
-		CollAgentAddr:            cfg.CollAgentAddr,
-		DisableTLS:               cfg.DisableTLS,
-		MaxRPCMsgSize:            32 << 20, // 32 MiB
-		MaxGRPCRetries:           5,
-		GRPCOperationTimeout:     intervals.GRPCOperationTimeout(),
-		GRPCStartupBackoffTime:   intervals.GRPCStartupBackoffTime(),
-		GRPCConnectionTimeout:    intervals.GRPCConnectionTimeout(),
-		ReportInterval:           intervals.ReportInterval(),
-		ExecutablesCacheElements: 16384,
-		SamplesPerSecond:         cfg.SamplesPerSecond,
+		Name:                   os.Args[0],
+		Version:                vc.Version(),
+		CollAgentAddr:          cfg.CollAgentAddr,
+		DisableTLS:             cfg.DisableTLS,
+		MaxRPCMsgSize:          32 << 20, // 32 MiB
+		MaxGRPCRetries:         5,
+		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
+		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
+		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
+		ReportInterval:         intervals.ReportInterval(),
+		SamplesPerSecond:       cfg.SamplesPerSecond,
 	})
 	if err != nil {
 		log.Error(err)
