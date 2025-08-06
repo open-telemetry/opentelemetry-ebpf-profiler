@@ -15,6 +15,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
+var (
+	// argUProbeLink is a helper variable, as package flag does not allow to
+	// assign an argument to a []string{}.
+	argUProbeLink string
+)
+
 const (
 	// Default values for CLI flags
 	defaultArgSamplesPerSecond    = 20
@@ -69,6 +75,10 @@ var (
 		defaultOffCPUThreshold)
 	envVarsHelp = "Comma separated list of environment variables that will be reported with the" +
 		"captured profiling samples."
+	probeLinkHelper = "Attach a probe to a symbol of an executable. " +
+		"Expected format: /path/to/executable:symbol"
+	loadProbeHelper = "Load generic eBPF program that can be attached externally to " +
+		"various user or kernel space hooks."
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -126,6 +136,10 @@ func parseArgs() (*controller.Config, error) {
 		defaultOffCPUThreshold, offCPUThresholdHelp)
 
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
+
+	fs.StringVar(&argUProbeLink, "uprobe-link", "", probeLinkHelper)
+
+	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()

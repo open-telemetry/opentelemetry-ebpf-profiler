@@ -51,10 +51,10 @@ int tracepoint__sched_switch(UNUSED void *ctx)
   return 0;
 }
 
-// dummy is never loaded or called. It just makes sure kprobe_progs is
+// kprobe__dummy is never loaded or called. It just makes sure kprobe_progs is
 // referenced and make the compiler and linker happy.
 SEC("kprobe/dummy")
-int dummy(struct pt_regs *ctx)
+int kprobe__dummy(struct pt_regs *ctx)
 {
   bpf_tail_call(ctx, &kprobe_progs, 0);
   return 0;
