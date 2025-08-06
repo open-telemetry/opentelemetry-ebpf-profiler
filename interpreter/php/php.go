@@ -180,7 +180,7 @@ func determinePHPVersion(ef *pfelf.File) (uint, error) {
 		if zeroIdx < 0 {
 			continue
 		}
-		version, err := versionExtract(string(rodata[idx : idx+zeroIdx]))
+		version, err := versionExtract(unsafe.String(unsafe.SliceData(rodata[idx:]), zeroIdx))
 		if err != nil {
 			continue
 		}
