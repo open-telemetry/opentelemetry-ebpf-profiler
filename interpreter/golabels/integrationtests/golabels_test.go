@@ -102,7 +102,7 @@ func Test_Golabels(t *testing.T) {
 			ProbabilisticInterval:  100,
 			ProbabilisticThreshold: 100,
 			OffCPUThreshold:        uint32(math.MaxUint32 / 100),
-			DebugTracer:            true,
+			VerboseMode:            true,
 		})
 		require.NoError(t, err)
 
