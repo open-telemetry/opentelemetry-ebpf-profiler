@@ -16,7 +16,7 @@ var (
 )
 
 var (
-	pinPath = "/sys/fs/bpf/strobelight-ctrl/"
+	pinPath = "/sys/fs/bpf/probe-ctrl/"
 )
 
 func init() {
