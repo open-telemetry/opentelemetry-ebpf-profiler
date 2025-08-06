@@ -20,8 +20,8 @@ var (
 )
 
 func init() {
-	flag.StringVar(&argExec, "exec", "", "Specify an executable to which the probe should be attached to.")
-	flag.StringVar(&argSymbol, "symb", "", "Specify a symbol in the executable to which the probe will be attached to.")
+	flag.StringVar(&argExec, "exec", "", "Executable to which the probe should be attached.")
+	flag.StringVar(&argSymbol, "symb", "", "Symbol in the executable to which the probe will be attached.")
 	flag.BoolVar(&argClear, "clear", false, "Remove probe from all links.")
 }
 
@@ -43,7 +43,7 @@ func run() int {
 	}
 
 	if argExec == "" || argSymbol == "" {
-		fmt.Fprintf(os.Stderr, "-exec <exec_value> and -symb <symb_value> need to be set\n")
+		fmt.Fprintf(os.Stderr, "Both -exec <exec_value> and -symb <symb_value> need to be set\n")
 		return -1
 	}
 
@@ -61,7 +61,7 @@ func run() int {
 
 	probeLink, err := exec.Uprobe(argSymbol, probe, nil)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to attach probe to '%s' in '%s': %v\n", argSymbol, argExec, err)
+		fmt.Fprintf(os.Stderr, "Failed attaching probe to '%s' in '%s': %v\n", argSymbol, argExec, err)
 		return -1
 	}
 
@@ -71,7 +71,7 @@ func run() int {
 	}
 
 	if err := probeLink.Pin(fmt.Sprintf("%s/%d", pinPath, time.Now().Unix())); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to pin link: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to pin link: %v\n", err)
 		return -1
 	}
 
