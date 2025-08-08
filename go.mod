@@ -29,11 +29,11 @@ require (
 	go.opentelemetry.io/collector/receiver/xreceiver v0.131.0
 	go.opentelemetry.io/otel v1.37.0
 	go.opentelemetry.io/otel/metric v1.37.0
-	golang.org/x/arch v0.19.0
-	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792
-	golang.org/x/mod v0.26.0
+	golang.org/x/arch v0.20.0
+	golang.org/x/exp v0.0.0-20250808145144-a408d31f581a
+	golang.org/x/mod v0.27.0
 	golang.org/x/sync v0.16.0
-	golang.org/x/sys v0.34.0
+	golang.org/x/sys v0.35.0
 	google.golang.org/grpc v1.74.2
 )
 
