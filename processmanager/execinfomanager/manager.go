@@ -190,6 +190,13 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 		}
 		return ExecutableInfo{}, fmt.Errorf("failed to extract interval data: %w", err)
 	}
+	if len(intervalData.Deltas) == 0 {
+		ef, errx := elfRef.GetELF()
+		if errx != nil {
+			return ExecutableInfo{}, errx
+		}
+		intervalData = synthesizeIntervalData(ef)
+	}
 
 	// Also gather TSD info if applicable.
 	if tpbase.IsPotentialTSDDSO(elfRef.FileName()) {
@@ -229,33 +236,6 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	state.executables[fileID] = info
 
 	return info.ExecutableInfo, nil
-}
-
-// AddSynthIntervalData should only be called once for a given file ID. It will error if it or
-// AddOrIncRef has been previously called for the same file ID. Interpreter detection is skipped.
-func (mgr *ExecutableInfoManager) AddSynthIntervalData(
-	fileID host.FileID,
-	data sdtypes.IntervalData,
-) error {
-	state := mgr.state.WLock()
-	defer mgr.state.WUnlock(&state)
-
-	if _, exists := state.executables[fileID]; exists {
-		return errors.New("AddSynthIntervalData: mapping already exists")
-	}
-
-	ref, _, err := state.loadDeltas(fileID, data.Deltas)
-	if err != nil {
-		return fmt.Errorf("failed to load deltas: %w", err)
-	}
-
-	state.executables[fileID] = &entry{
-		ExecutableInfo: ExecutableInfo{Data: nil},
-		mapRef:         ref,
-		rc:             1,
-	}
-
-	return nil
 }
 
 // RemoveOrDecRef decrements the reference counter of the executable being tracked. Once the RC

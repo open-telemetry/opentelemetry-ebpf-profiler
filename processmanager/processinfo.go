@@ -352,19 +352,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	hostFileID := host.FileIDFromLibpf(fileID)
 	info.fileID = hostFileID
 	info.addressMapper = ef.GetAddressMapper()
-	if mapping.IsVDSO() {
-		intervals := createVDSOSyntheticRecord(ef)
-		if intervals.Deltas != nil {
-			if err := pm.AddSynthIntervalData(hostFileID, intervals); err != nil {
-				info.err = fmt.Errorf("failed to add synthetic deltas: %w", err)
-			}
-		}
-	}
-	// Do not cache the entry if synthetic stack delta loading failed,
-	// so next encounter of the VDSO will retry loading them.
-	if info.err == nil {
-		pm.elfInfoCache.Add(key, info)
-	}
+	pm.elfInfoCache.Add(key, info)
 	pm.FileIDMapper.Set(hostFileID, fileID)
 
 	if pm.reporter.ExecutableKnown(fileID) {
