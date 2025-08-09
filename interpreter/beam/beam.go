@@ -175,16 +175,6 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, fmt.Errorf("symbol 'erts_atom_table' not found: %v", err)
 	}
 
-	interpRanges, err := info.GetSymbolAsRanges(libpf.SymbolName("process_main"))
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: Do we need this if all the actual code is JITed?
-	if err = ebpf.UpdateInterpreterOffsets(support.ProgUnwindBEAM, info.FileID(), interpRanges); err != nil {
-		return nil, err
-	}
-
 	d := &beamData{
 		version:               otpVersion,
 		the_active_code_index: uint64(codeIndex.Address),
