@@ -23,15 +23,9 @@ static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMPro
   bpf_probe_read_user(&state->pc, sizeof(u64), (void*)(fp+8));
   bpf_probe_read_user(&state->sp, sizeof(u64), (void*)(fp+16));
 
-  if (fp && sp) {
-    unwinder_mark_nonleaf_frame(state);
-  }
+  unwinder_mark_nonleaf_frame(state);
 
   _push_with_return_address(trace, info->active_ranges, pc, FRAME_MARKER_BEAM, state->return_address);
-
-  if (state->fp) {
-    unwinder_mark_nonleaf_frame(state);
-  }
 
   return ERR_OK;
 }
