@@ -48,7 +48,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx) {
   ErrorCode error = ERR_OK;
   BEAMProcInfo *info = bpf_map_lookup_elem(&beam_procs, &pid);
 
-  if (!info || !info->the_active_code_index || !info->r) {
+  if (!info) {
     DEBUG_PRINT("beam: no BEAMProcInfo for this pid");
     goto exit;
   }
