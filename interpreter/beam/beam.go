@@ -108,39 +108,24 @@ type beamInstance struct {
 	mappingGeneration uint32
 }
 
-func readSymbolValue(ef *pfelf.File, name libpf.SymbolName) ([]byte, error) {
-	sym, err := ef.LookupSymbol(name)
+func readReleaseVersion(ef *pfelf.File) (uint32, string, error) {
+	sym, otpRelease, err := ef.SymbolData("etp_otp_release", 4)
 	if err != nil {
-		return nil, fmt.Errorf("symbol not found: %v", err)
-	}
-
-	memory := make([]byte, sym.Size)
-	if _, err := ef.ReadVirtualMemory(memory, int64(sym.Address)); err != nil {
-		return nil, fmt.Errorf("failed to read process memory at 0x%x:%v", sym.Address, err)
-	}
-
-	log.Infof("read symbol value %s: %s", sym.Name, memory)
-	return memory, nil
-}
-
-func readReleaseVersion(ef *pfelf.File) (uint32, []byte, error) {
-	otpRelease, err := readSymbolValue(ef, "etp_otp_release")
-	if err != nil {
-		return 0, nil, fmt.Errorf("failed to read OTP release: %v", err)
+		return 0, "", fmt.Errorf("failed to read OTP release: %v", err)
 	}
 
 	// Slice off the null termination before converting
-	otpMajor, err := strconv.Atoi(string(otpRelease[:len(otpRelease)-1]))
+	otpMajor, err := strconv.Atoi(string(otpRelease[:sym.Size-1]))
 	if err != nil {
-		return 0, nil, fmt.Errorf("failed to parse OTP version: %v", err)
+		return 0, "", fmt.Errorf("failed to parse OTP version: %v", err)
 	}
 
-	ertsVersion, err := readSymbolValue(ef, "etp_erts_version")
+	sym, ertsVersion, err := ef.SymbolData("etp_erts_version", 64)
 	if err != nil {
-		return 0, nil, fmt.Errorf("failed to read erts version: %v", err)
+		return 0, "", fmt.Errorf("failed to read erts version: %v", err)
 	}
 
-	return uint32(otpMajor), ertsVersion, nil
+	return uint32(otpMajor), string(ertsVersion[:sym.Size-1]), nil
 }
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
@@ -154,21 +139,17 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, err
 	}
 
-	symbols, err := ef.ReadSymbols()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read symbols: %v", err)
-	}
-
-	otpVersion, _, err := readReleaseVersion(ef)
+	otpVersion, ertsVersion, err := readReleaseVersion(ef)
 	if err != nil {
 		return nil, err
 	}
 
-	// "the_active_code_index" symbol is from:
-	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.c#L46
-	the_active_code_index, err := ef.LookupSymbolAddress("the_active_code_index")
+	// TODO: We want to avoid reading static symbols to find the address of r here,
+	// because it would be removed if the binary is stripped, but it seems that's the only
+	// way to get it currently. Look into programmatically calculating it by disassembly.
+	symbols, err := ef.ReadSymbols()
 	if err != nil {
-		return nil, fmt.Errorf("symbol 'the_active_code_index' not found: %v", err)
+		return nil, fmt.Errorf("failed to read symbols: %v", err)
 	}
 
 	// "r" symbol is from:
@@ -178,9 +159,18 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, fmt.Errorf("symbol 'r' not found: %v", err)
 	}
 
+	// "the_active_code_index" symbol is from:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.c#L46
+	codeIndex, _, err := ef.SymbolData("the_active_code_index", 4)
+	if err != nil {
+		return nil, fmt.Errorf("symbol 'the_active_code_index' not found: %v", err)
+	}
+
 	// "erts_atom_table" symbol is from:
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/atom.c#L35
-	erts_atom_table, err := ef.LookupSymbolAddress("erts_atom_table")
+	// TODO: I actually don't need to read the whole table - I just need its address.
+	// Maybe there's a more efficient way to get that.
+	atomTable, _, err := ef.SymbolData("erts_atom_table", 128)
 	if err != nil {
 		return nil, fmt.Errorf("symbol 'erts_atom_table' not found: %v", err)
 	}
@@ -197,9 +187,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	d := &beamData{
 		version:               otpVersion,
-		the_active_code_index: uint64(the_active_code_index),
+		the_active_code_index: uint64(codeIndex.Address),
 		r:                     uint64(r),
-		erts_atom_table:       uint64(erts_atom_table),
+		erts_atom_table:       uint64(atomTable.Address),
 	}
 
 	vms := &d.vmStructs
@@ -230,7 +220,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.atom.len = 24
 	vms.atom.name = 32
 
-	log.Infof("BEAM loaded, OTP version %d", otpVersion)
+	log.Infof("BEAM loaded, OTP version: %d, ERTS version: %s", otpVersion, ertsVersion)
 
 	return d, nil
 }
