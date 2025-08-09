@@ -28,10 +28,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-// #include "../../support/ebpf/types.h"
-// #include "../../support/ebpf/v8_tracer.h"
-import "C"
-
 var (
 	// regex for matching the process name
 	beamRegex                      = regexp.MustCompile(`beam.smp`)
@@ -242,11 +238,11 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	log.Infof("BEAM attaching, bias: 0x%x", bias)
 
-	data := C.BEAMProcInfo{
-		version:               C.u32(d.version),
-		bias:                  C.u64(bias),
-		r:                     C.u64(uint64(bias) + d.r),
-		the_active_code_index: C.u64(uint64(bias) + d.the_active_code_index),
+	data := support.BEAMProcInfo{
+		Version:               d.version,
+		Bias:                  uint64(bias),
+		R:                     uint64(bias) + d.r,
+		The_active_code_index: uint64(bias) + d.the_active_code_index,
 	}
 	if err := ebpf.UpdateProcData(libpf.BEAM, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err
@@ -287,7 +283,7 @@ func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ repor
 		}
 
 		for _, prefix := range prefixes {
-			log.Debugf("Enabling BEAM for %#v", prefix)
+			// log.Debugf("Enabling BEAM for %#v", prefix)
 
 			_, exists := i.prefixes[prefix]
 			if !exists {
@@ -318,14 +314,14 @@ func (i *beamInstance) Detach(interpreter.EbpfHandler, libpf.PID) error {
 	return nil
 }
 
-func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *host.Frame, trace *libpf.Trace) error {
+func (i *beamInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	if !frame.Type.IsInterpType(libpf.BEAM) {
 		return interpreter.ErrMismatchInterpreterType
 	}
 	pc := libpf.Address(frame.Lineno)
 	activeRanges := libpf.Address(frame.File)
 
-	log.Infof("BEAM symbolizing pc: 0x%x", pc)
+	// log.Debugf("BEAM symbolizing pc: 0x%x", pc)
 
 	codeHeader, err := i.findCodeHeader(activeRanges, pc)
 	if err != nil {
@@ -360,16 +356,13 @@ func (i *beamInstance) Symbolize(symbolReporter reporter.SymbolReporter, frame *
 		return err
 	}
 
-	log.Warnf("BEAM Found function %s at %s:%d", mfaName, fileName, lineNumber)
-	frameID := libpf.NewFrameID(libpf.NewFileID(0x0, uint64(codeHeader)), libpf.AddressOrLineno(pc))
-
-	symbolReporter.FrameMetadata(&reporter.FrameMetadataArgs{
-		FrameID:      frameID,
-		FunctionName: mfaName,
-		SourceFile:   fileName,
+	log.Debugf("BEAM Found function %s at %s:%d", mfaName, fileName, lineNumber)
+	frames.Append(&libpf.Frame{
+		Type:         libpf.BEAMFrame,
+		FunctionName: libpf.Intern(mfaName),
+		SourceFile:   libpf.Intern(fileName),
 		SourceLine:   libpf.SourceLineno(lineNumber),
 	})
-	trace.AppendFrameID(libpf.BEAMFrame, frameID)
 
 	return nil
 }

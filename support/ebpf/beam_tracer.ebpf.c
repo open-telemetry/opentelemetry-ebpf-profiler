@@ -12,7 +12,7 @@ bpf_map_def SEC("maps") beam_procs = {
   .max_entries = 256,
 };
 
-static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, bool top) {
+static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info) {
   UnwindState *state = &record->state;
   Trace *trace = &record->trace;
   u64 sp = state->sp, fp = state->fp, pc = state->pc;
@@ -77,7 +77,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx) {
       break;
     }
 
-    error = unwind_one_beam_frame(record, info, i == 0);
+    error = unwind_one_beam_frame(record, info);
     if (error) {
       break;
     }

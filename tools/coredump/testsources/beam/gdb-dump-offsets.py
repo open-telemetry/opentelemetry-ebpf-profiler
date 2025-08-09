@@ -46,7 +46,7 @@ fields = {
     'erts_code_mfa.module': offset_of('ErtsCodeMFA', 'module'),
     'erts_code_mfa.function': offset_of('ErtsCodeMFA', 'function'),
     'erts_code_mfa.arity': offset_of('ErtsCodeMFA', 'arity'),
-    
+
     'beam_code_line_tab.size_of': size_of('BeamCodeLineTab'),
     'beam_code_line_tab.fname_ptr': offset_of('BeamCodeLineTab', 'fname_ptr'),
     'beam_code_line_tab.loc_size': offset_of('BeamCodeLineTab', 'loc_size'),

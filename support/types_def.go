@@ -129,6 +129,7 @@ type PerlProcInfo C.PerlProcInfo
 type PyProcInfo C.PyProcInfo
 type RubyProcInfo C.RubyProcInfo
 type V8ProcInfo C.V8ProcInfo
+type BEAMProcInfo C.BEAMProcInfo
 
 const (
 	Sizeof_Frame      = C.sizeof_Frame

@@ -309,6 +309,13 @@ type V8ProcInfo struct {
 	Codekind_baseline          uint8
 	Pad_cgo_0                  [3]byte
 }
+type BEAMProcInfo struct {
+	Version               uint32
+	Bias                  uint64
+	R                     uint64
+	The_active_code_index uint64
+	Active_ranges         uint64
+}
 
 const (
 	Sizeof_Frame      = 0x18
