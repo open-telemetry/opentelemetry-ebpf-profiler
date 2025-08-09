@@ -12,7 +12,7 @@ bpf_map_def SEC("maps") beam_procs = {
   .max_entries = 256,
 };
 
-static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info) {
+static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, u64 active_ranges) {
   UnwindState *state = &record->state;
   Trace *trace = &record->trace;
   u64 sp = state->sp, fp = state->fp, pc = state->pc;
@@ -25,7 +25,7 @@ static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMPro
 
   unwinder_mark_nonleaf_frame(state);
 
-  _push_with_return_address(trace, info->active_ranges, pc, FRAME_MARKER_BEAM, state->return_address);
+  _push_with_return_address(trace, active_ranges, pc, FRAME_MARKER_BEAM, state->return_address);
 
   return ERR_OK;
 }
@@ -58,11 +58,10 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx) {
   u32 the_active_code_index;
   bpf_probe_read_user(&the_active_code_index, sizeof(u32), (void*)info->the_active_code_index);
 
-	// Index into the active static `r` variable using the currently-active code index (the size of the `ranges` struct is 32 bytes)
+	// Index into the active static `r` variable using the currently-active code index
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
-  // bpf_probe_read_user(&info->active_ranges, sizeof(u64), (void*)(info->r + (the_active_code_index * 32)));
-  info->active_ranges=info->r + (the_active_code_index * 32);
-  DEBUG_PRINT("==== unwind_beam active_ranges: %llx, the_active_code_index: %d ====", info->active_ranges, the_active_code_index);
+  u64 active_ranges = info->r + (the_active_code_index * info->ranges_sizeof);
+  DEBUG_PRINT("==== unwind_beam active_ranges: %llx, the_active_code_index: %d ====", active_ranges, the_active_code_index);
 
 #pragma unroll
   for (int i = 0; i < FRAMES_PER_PROGRAM; i++) {
@@ -71,7 +70,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx) {
       break;
     }
 
-    error = unwind_one_beam_frame(record, info);
+    error = unwind_one_beam_frame(record, active_ranges);
     if (error) {
       break;
     }

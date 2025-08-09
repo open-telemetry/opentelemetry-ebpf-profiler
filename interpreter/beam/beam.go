@@ -220,9 +220,9 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 
 	data := support.BEAMProcInfo{
 		Version:               d.version,
-		Bias:                  uint64(bias),
 		R:                     uint64(bias) + d.r,
 		The_active_code_index: uint64(bias) + d.the_active_code_index,
+		Ranges_sizeof:         uint8(d.vmStructs.ranges.size_of),
 	}
 	if err := ebpf.UpdateProcData(libpf.BEAM, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err

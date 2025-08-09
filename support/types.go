@@ -311,10 +311,15 @@ type V8ProcInfo struct {
 }
 type BEAMProcInfo struct {
 	Version               uint32
-	Bias                  uint64
 	R                     uint64
 	The_active_code_index uint64
-	Active_ranges         uint64
+	Ranges_sizeof         uint8
+	Ranges_modules        uint8
+	Ranges_n              uint8
+	Ranges_entry_sizeof   uint8
+	Ranges_entry_start    uint8
+	Ranges_entry_end      uint8
+	Pad_cgo_0             [2]byte
 }
 
 const (
