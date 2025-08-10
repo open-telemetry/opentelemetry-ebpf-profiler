@@ -223,6 +223,8 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		R:                     uint64(bias) + d.r,
 		The_active_code_index: uint64(bias) + d.the_active_code_index,
 		Ranges_sizeof:         uint8(d.vmStructs.ranges.size_of),
+		Ranges_modules:        uint8(d.vmStructs.ranges.modules),
+		Ranges_n:              uint8(d.vmStructs.ranges.n),
 	}
 	if err := ebpf.UpdateProcData(libpf.BEAM, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err
@@ -299,14 +301,14 @@ func (i *beamInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 		return interpreter.ErrMismatchInterpreterType
 	}
 	pc := libpf.Address(frame.Lineno)
-	activeRanges := libpf.Address(frame.File)
+	codeHeader := libpf.Address(frame.File)
 
 	// log.Debugf("BEAM symbolizing pc: 0x%x", pc)
 
-	codeHeader, err := i.findCodeHeader(activeRanges, pc)
-	if err != nil {
-		return err
-	}
+	// codeHeader, err := i.findCodeHeader(activeRanges, pc)
+	// if err != nil {
+	// 	return err
+	// }
 
 	functionIndex, moduleID, functionID, arity, err := i.findMFA(pc, codeHeader)
 	if err != nil {
