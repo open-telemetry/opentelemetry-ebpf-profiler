@@ -92,7 +92,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		SamplesPerSecond:       c.config.SamplesPerSecond,
 		MapScaleFactor:         int(c.config.MapScaleFactor),
 		KernelVersionCheck:     !c.config.NoKernelVersionCheck,
-		DebugTracer:            c.config.VerboseMode,
+		VerboseMode:            c.config.VerboseMode,
 		BPFVerifierLogLevel:    uint32(c.config.BpfVerifierLogLevel),
 		ProbabilisticInterval:  c.config.ProbabilisticInterval,
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,

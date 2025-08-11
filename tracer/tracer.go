@@ -128,8 +128,8 @@ type Config struct {
 	FilterErrorFrames bool
 	// KernelVersionCheck indicates whether the kernel version should be checked.
 	KernelVersionCheck bool
-	// DebugTracer indicates whether to load the debug version of eBPF tracers.
-	DebugTracer bool
+	// VerboseMode indicates whether to enable verbose output of eBPF tracers.
+	VerboseMode bool
 	// BPFVerifierLogLevel is the log level of the eBPF verifier output.
 	BPFVerifierLogLevel uint32
 	// ProbabilisticInterval is the time interval for which probabilistic profiling will be enabled.
@@ -289,7 +289,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		return nil, nil, fmt.Errorf("failed to load specification for tracers: %v", err)
 	}
 
-	if cfg.DebugTracer {
+	if cfg.VerboseMode {
 		if err = coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
 			return nil, nil, fmt.Errorf("failed to set debug output: %v", err)
 		}
