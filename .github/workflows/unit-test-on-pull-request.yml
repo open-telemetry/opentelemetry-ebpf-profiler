@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Clone code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Check for changes in licenses of dependencies
@@ -34,7 +34,7 @@ jobs:
         target_arch: [amd64, arm64]
     steps:
       - name: Clone code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Get linter version
@@ -57,7 +57,7 @@ jobs:
         target_arch: [amd64, arm64]
     steps:
       - name: Clone code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       - name: Set up environment
         uses: ./.github/workflows/env
         with:
@@ -81,7 +81,7 @@ jobs:
         target_arch: [amd64, arm64]
     steps:
       - name: Clone code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Tests
@@ -96,7 +96,7 @@ jobs:
         shell: bash --login {0}
     steps:
       - name: Clone code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       - name: Hash binary blobs
         run: |
           sha256sum support/ebpf/tracer.ebpf.* > binary-blobs.hash
@@ -126,7 +126,7 @@ jobs:
         target_arch: [amd64, arm64]
     steps:
       - name: Clone code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Prepare integration test binaries for qemu tests
@@ -142,7 +142,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Clone code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       - name: Set up Go
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
@@ -187,7 +187,7 @@ jobs:
           - { target_arch: arm64, kernel: 6.12.16 }
     steps:
       - name: Clone code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       - name: Install dependencies
         run: |
           sudo apt-get update -y
