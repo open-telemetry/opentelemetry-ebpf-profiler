@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/ebpf-profiler/asm/arm"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
@@ -44,7 +45,8 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 
 	pclntab, err := elfunwindinfo.NewGopclntab(f)
 	if err != nil {
-		return 0, err
+		log.Debugf("Failed to find symbols (%v) using default TLSG offset", err)
+		return 0, nil
 	}
 	defer pclntab.Close()
 
