@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/parca-dev/oomprof/oomprof"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -35,20 +33,20 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	if err != nil {
 		// oomprof not initialized, OOM prof must be initialized early by the otel container
 		// project so it can be wired up to a TraceReporter instance.
-		log.Debugf("OOM watcher: oomprof not initialized, disabling OOM watching: %v", err)
+		logf("oom: oomprof not initialized, disabling OOM watching: %v", err)
 		return nil, nil
 	}
 
 	file, err := info.GetELF()
 	if err != nil {
-		log.Debugf("OOM watcher: elf err, disabling OOM watching: %v", err)
+		logf("oom: elf err, disabling OOM watching: %v", err)
 		return nil, err
 	}
 
 	// Check if this is a Go binary
 	if !file.IsGolang() {
 		if strings.Contains(info.FileName(), "oomprof") {
-			log.Debugf("OOM watcher: not go, disabling OOM watching: %s", info.FileName())
+			logf("oom: not go, disabling OOM watching: %s", info.FileName())
 		}
 		return nil, nil
 	}
@@ -66,12 +64,12 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	}
 
 	if sym != nil {
-		log.Debugf("OOM watcher: found mbuckets symbol (%v) in %s", sym, info.FileName())
+		logf("oom: found mbuckets symbol (%v) in %s", sym, info.FileName())
 		return &oomWatcherData{
 			state: state,
 		}, nil
 	}
-	log.Debugf("OOM watcher: no mbuckets symbol found %s", info.FileName())
+	logf("oom: no mbuckets symbol found %s", info.FileName())
 
 	return nil, nil
 }
@@ -86,7 +84,7 @@ func (d *oomWatcherData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 
 	// Only watch PIDs for Go processes with mbucket symbol
 	if d.state != nil {
-		log.Debugf("OOM watcher: watching PID %d", pid)
+		logf("oom: watching PID %d", pid)
 		if err := d.state.WatchPid(uint32(pid)); err != nil {
 			if err == oomprof.ErrSelfWatch {
 				return nil, nil
@@ -100,7 +98,7 @@ func (d *oomWatcherData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 
 // Detach stops watching the process.
 func (i *oomWatcherInstance) Detach(_ interpreter.EbpfHandler, pid libpf.PID) error {
-	log.Debugf("OOM watcher: stopping watch for PID %d", pid)
+	logf("oom: stopping watch for PID %d", pid)
 	i.data.state.UnwatchPid(uint32(pid))
 	return nil
 }
