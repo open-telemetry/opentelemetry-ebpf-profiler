@@ -29,7 +29,8 @@ func extractTLSGOffset(f *pfelf.File, path string) (int32, error) {
 
 	syms, err := f.ReadSymbols()
 	if err != nil {
-		return 0, err
+		log.Debugf("Failed to find symbols (%v) using default TLSG offset", err)
+		return 0, nil
 	}
 	sym, err := syms.LookupSymbol("runtime.load_g.abi0")
 	if err != nil {

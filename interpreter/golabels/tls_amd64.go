@@ -18,7 +18,8 @@ import (
 func extractTLSGOffset(f *pfelf.File, path string) (int32, error) {
 	syms, err := f.ReadSymbols()
 	if err != nil {
-		return 0, err
+		log.Debugf("Failed to find symbols (%v) using default TLSG offset", err)
+		return -8, nil
 	}
 	// Dump of assembler code for function runtime.stackcheck:
 	// 0x0000000000470080 <+0>:     mov    %fs:0xfffffffffffffff8,%rax
