@@ -15,7 +15,7 @@ require (
 	github.com/klauspost/compress v1.18.0
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
-	github.com/parca-dev/oomprof v0.1.5-0.20250812163638-9a36e2d4a690
+	github.com/parca-dev/oomprof v0.1.5-0.20250812185216-e44e6c5d4315
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
