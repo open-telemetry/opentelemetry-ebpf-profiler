@@ -4,7 +4,7 @@
 package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
-	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,10 +45,8 @@ func TestExtractContainerID(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.expectedContainerID, func(t *testing.T) {
-			reader := bytes.NewReader([]byte(tc.line))
-
+			reader := strings.NewReader(tc.line)
 			gotContainerID := parseContainerID(reader)
 			assert.Equal(t, tc.expectedContainerID, gotContainerID)
 		})

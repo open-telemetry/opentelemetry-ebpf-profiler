@@ -37,7 +37,7 @@ int tracepoint__sched_switch(void *ctx)
     return ERR_UNREACHABLE;
   }
 
-  if (bpf_get_prandom_u32() % OFF_CPU_THRESHOLD_MAX >= syscfg->off_cpu_threshold) {
+  if (bpf_get_prandom_u32() > syscfg->off_cpu_threshold) {
     return 0;
   }
 
@@ -81,6 +81,10 @@ int finish_task_switch(struct pt_regs *ctx)
     // There is no information from the sched/sched_switch entry hook.
     return 0;
   }
+
+  // Remove entry from the map so the stack for the same pid_tgid does not get unwound and
+  // reported accidentally without the start timestamp updated in tracepoint/sched/sched_switch.
+  bpf_map_delete_elem(&sched_times, &pid_tgid);
 
   u64 diff = ts - *start_ts;
   DEBUG_PRINT("==== finish_task_switch ====");
