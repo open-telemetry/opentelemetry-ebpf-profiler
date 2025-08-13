@@ -31,7 +31,9 @@ type Frame struct {
 
 	// An address in ELF VA space (native frame) or line number (interpreted frame).
 	AddressOrLineno AddressOrLineno
-	// File metadata for the backing file of the mapping (may be nil)
+
+	// File metadata for the backing file of the mapping.
+	// The handle may be invalid and must be validated before dereferencing it.
 	MappingFile FrameMappingFile
 
 	MappingStart      Address
