@@ -418,7 +418,11 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 
 	if len(cfg.UProbeLinks) > 0 || cfg.LoadProbe {
 		uprobeProgs := make([]progLoaderHelper, len(tailCallProgs)+1)
-		copy(uprobeProgs, tailCallProgs)
+		if cfg.OffCPUThreshold == 0 {
+			// If kprobes are not loaded, e.g. if off-CPU profiling is not enabled,
+			// then also load kprobes here. Otherwise kprobes will be reused.
+			copy(uprobeProgs, tailCallProgs)
+		}
 		uprobeProgs = append(uprobeProgs, []progLoaderHelper{
 			{
 				name:             "uprobe__generic",
