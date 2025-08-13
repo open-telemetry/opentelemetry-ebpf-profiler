@@ -15,12 +15,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
-var (
-	// argUProbeLink is a helper variable, as package flag does not allow to
-	// assign an argument to a []string{}.
-	argUProbeLink string
-)
-
 const (
 	// Default values for CLI flags
 	defaultArgSamplesPerSecond    = 20
@@ -137,7 +131,10 @@ func parseArgs() (*controller.Config, error) {
 
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
 
-	fs.StringVar(&argUProbeLink, "uprobe-link", "", probeLinkHelper)
+	fs.Func("uprobe-link", probeLinkHelper, func(link string) error {
+		args.UProbeLinks = append(args.UProbeLinks, link)
+		return nil
+	})
 
 	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
 
