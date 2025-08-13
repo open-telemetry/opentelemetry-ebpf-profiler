@@ -1,4 +1,4 @@
-//go:build amd64
+//go:build linux && amd64
 
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
@@ -10,8 +10,6 @@ import (
 	"encoding/binary"
 	"fmt"
 )
-
-const currentMachine = elf.EM_X86_64
 
 func (sp *ptraceProcess) getThreadInfo(tid int) (ThreadInfo, error) {
 	prStatus := make([]byte, 28*8)
