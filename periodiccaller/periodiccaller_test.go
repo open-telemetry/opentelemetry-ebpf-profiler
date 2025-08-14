@@ -97,7 +97,7 @@ func checkForGoRoutineLeaks(t *testing.T) {
 }
 
 func TestCheckForGoRoutineLeaks(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	var wg sync.WaitGroup
@@ -140,7 +140,7 @@ func TestPeriodicCaller(t *testing.T) {
 
 	for name, testFunc := range tests {
 		t.Run(name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 
 			done := make(chan bool)
 			var counter atomic.Int32
@@ -193,7 +193,7 @@ func TestPeriodicCallerCancellation(t *testing.T) {
 
 	for name, testFunc := range tests {
 		t.Run(name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 
 			executions := make(chan struct{}, 20)
 			stop := testFunc(ctx, func() {
@@ -222,7 +222,7 @@ func TestPeriodicCallerManualTrigger(t *testing.T) {
 	numTrigger := 5
 	// This should be something larger than time taken to execute triggers
 	interval := 10 * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), interval)
+	ctx, cancel := context.WithTimeout(t.Context(), interval)
 	defer cancel()
 
 	var counter atomic.Int32
