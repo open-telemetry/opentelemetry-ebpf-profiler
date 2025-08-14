@@ -26,7 +26,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
-	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -298,12 +297,10 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 			}
 		}
 	}
-	newTrace.Hash = traceutil.HashTrace(newTrace)
 	return newTrace
 }
 
-func (pm *ProcessManager) MaybeNotifyAPMAgent(
-	rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16) string {
+func (pm *ProcessManager) MaybeNotifyAPMAgent(rawTrace *host.Trace, umTrace *libpf.Trace) string {
 	pm.mu.RLock()
 	pidInterp, ok := pm.interpreters[rawTrace.PID]
 	pm.mu.RUnlock()
@@ -314,7 +311,7 @@ func (pm *ProcessManager) MaybeNotifyAPMAgent(
 	var serviceName string
 	for _, mapping := range pidInterp {
 		if apm, ok := mapping.(*apmint.Instance); ok {
-			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, umTraceHash, count)
+			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, umTrace)
 
 			if serviceName != "" {
 				log.Warnf("Overwriting APM service name from '%s' to '%s' for PID %d",
