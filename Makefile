@@ -123,17 +123,17 @@ test-deps:
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
 
 # These binaries are named ".test" to get included into bluebox initramfs
-support/golbls_1_23.test: generate ebpf
+support/golbls_current.test: generate ebpf
 	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.6 go test ./interpreter/golabels/integrationtests -c -trimpath -tags $(GO_TAGS),nocgo,integration  -o $@
 
-support/golbls_1_24.test: generate ebpf
+support/golbls_next.test: generate ebpf
 	CGO_ENABLED=0 GOTOOLCHAIN=go1.25.0 go test ./interpreter/golabels/integrationtests -c -trimpath -tags $(GO_TAGS),nocgo,integration  -o $@
 
-support/golbls_cgo.test: generate ebpf
+support/golbls_next_cgo.test: generate ebpf
 	CGO_ENABLED=1 GOTOOLCHAIN=go1.25.0 go test ./interpreter/golabels/integrationtests -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration  -o $@
 
 
-integration-test-binaries: support/golbls_1_23.test support/golbls_1_24.test support/golbls_cgo.test
+integration-test-binaries: support/golbls_current.test support/golbls_next.test support/golbls_next_cgo.test
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
