@@ -13,7 +13,6 @@ import (
 	"os"
 	"testing"
 	"time"
-	"unique"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -29,7 +28,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
-	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 
 	"github.com/stretchr/testify/assert"
@@ -251,93 +249,6 @@ func (mockup *ebpfMapsMockup) DeletePidPageMappingInfo(_ libpf.PID, prefixes []l
 func (mockup *ebpfMapsMockup) CollectMetrics() []metrics.Metric     { return []metrics.Metric{} }
 func (mockup *ebpfMapsMockup) SupportsGenericBatchOperations() bool { return false }
 func (mockup *ebpfMapsMockup) SupportsLPMTrieBatchOperations() bool { return false }
-
-func TestInterpreterConvertTrace(t *testing.T) {
-	partialNativeFrameFileID := uint64(0xabcdbeef)
-	nativeFrameLineno := libpf.AddressOrLineno(0x1234)
-
-	pythonAndNativeTrace := &host.Trace{
-		Frames: []host.Frame{{
-			// This represents a native frame
-			File:   host.FileID(partialNativeFrameFileID),
-			Lineno: nativeFrameLineno,
-			Type:   libpf.NativeFrame,
-		}, {
-			File:   host.FileID(42),
-			Lineno: libpf.AddressOrLineno(0x13e1bb8e), // same as runForeverTrace
-			Type:   libpf.PythonFrame,
-		}},
-	}
-
-	tests := map[string]struct {
-		trace  *host.Trace
-		expect *libpf.Trace
-	}{
-		"Convert Trace": {
-			trace: pythonAndNativeTrace,
-			expect: getExpectedTrace(pythonAndNativeTrace,
-				[]libpf.AddressOrLineno{0, 1}),
-		},
-	}
-
-	for name, testcase := range tests {
-		t.Run(name, func(t *testing.T) {
-			mapper := NewMapFileIDMapper()
-			for i, f := range testcase.trace.Frames {
-				mapper.Set(f.File, testcase.expect.Frames[i].Value().MappingFile)
-			}
-
-			// For this test do not include interpreters.
-			noIinterpreters, _ := tracertypes.Parse("")
-
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
-			// To test ConvertTrace we do not require all parts of processmanager.
-			manager, err := New(ctx,
-				noIinterpreters,
-				1*time.Second,
-				nil,
-				nil,
-				nil,
-				nil,
-				true,
-				libpf.Set[string]{})
-			require.NoError(t, err)
-
-			newTrace := manager.ConvertTrace(testcase.trace)
-
-			testcase.expect.Hash = traceutil.HashTrace(testcase.expect)
-			if testcase.expect.Hash == newTrace.Hash {
-				assert.Equal(t, testcase.expect, newTrace)
-			}
-		})
-	}
-}
-
-// getExpectedTrace returns a new libpf trace that is based on the provided host trace, but
-// with the linenos replaced by the provided values. This function is for generating an expected
-// trace for tests below.
-func getExpectedTrace(origTrace *host.Trace, linenos []libpf.AddressOrLineno) *libpf.Trace {
-	newTrace := &libpf.Trace{
-		Hash: libpf.NewTraceHash(uint64(origTrace.Hash), uint64(origTrace.Hash)),
-	}
-
-	for i, frame := range origTrace.Frames {
-		lineno := frame.Lineno
-		if linenos != nil {
-			lineno = linenos[i]
-		}
-		newTrace.Frames.Append(&libpf.Frame{
-			Type: frame.Type,
-			MappingFile: unique.Make(libpf.FrameMappingFileData{
-				FileID: libpf.NewFileID(uint64(frame.File), 0),
-			}),
-			AddressOrLineno: lineno,
-		})
-	}
-	return newTrace
-}
 
 func TestNewMapping(t *testing.T) {
 	tests := map[string]struct {
