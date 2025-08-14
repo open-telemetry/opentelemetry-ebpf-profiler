@@ -395,10 +395,16 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		return nil, nil, fmt.Errorf("failed to load perf eBPF programs: %v", err)
 	}
 
+	if cfg.OffCPUThreshold > 0 || len(cfg.UProbeLinks) > 0 || cfg.LoadProbe {
+		// Load the tail call destinations if any kind of event profiling is enabled.
+		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
+			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
+			return nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
+		}
+	}
+
 	if cfg.OffCPUThreshold > 0 {
-		offCPUProgs := make([]progLoaderHelper, len(tailCallProgs)+2)
-		copy(offCPUProgs, tailCallProgs)
-		offCPUProgs = append(offCPUProgs, []progLoaderHelper{
+		offCPUProgs := []progLoaderHelper{
 			{
 				name:             "finish_task_switch",
 				noTailCallTarget: true,
@@ -409,7 +415,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 				noTailCallTarget: true,
 				enable:           true,
 			},
-		}...)
+		}
 		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], offCPUProgs,
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
@@ -417,19 +423,13 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	}
 
 	if len(cfg.UProbeLinks) > 0 || cfg.LoadProbe {
-		uprobeProgs := make([]progLoaderHelper, len(tailCallProgs)+1)
-		if cfg.OffCPUThreshold == 0 {
-			// If kprobes are not loaded, e.g. if off-CPU profiling is not enabled,
-			// then also load kprobes here. Otherwise kprobes will be reused.
-			copy(uprobeProgs, tailCallProgs)
-		}
-		uprobeProgs = append(uprobeProgs, []progLoaderHelper{
+		uprobeProgs := []progLoaderHelper{
 			{
 				name:             "uprobe__generic",
 				noTailCallTarget: true,
 				enable:           true,
 			},
-		}...)
+		}
 		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], uprobeProgs,
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, fmt.Errorf("failed to load uprobe eBPF programs: %v", err)
