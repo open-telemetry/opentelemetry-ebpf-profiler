@@ -504,6 +504,13 @@ func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (*libpf.Symbol, []
 	return sym, data, err
 }
 
+
+// Gets StructData for specific structs from DWARF, without loading and parsing
+// the whole thing
+func (f *File) StructData (names []string) ([]structData, error) {
+	return loadStructData(f.Section(".debug_info"), f.Section(".debug_abbrev"), f.Section(".debug_str"), f.Section(".debug_line_str"), names)
+}
+
 // ReadVirtualMemory reads bytes from given virtual address
 func (f *File) ReadVirtualMemory(p []byte, addr int64) (int, error) {
 	if len(p) == 0 {
