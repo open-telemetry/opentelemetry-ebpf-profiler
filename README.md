@@ -32,9 +32,9 @@ eBPF.
 
 ## Building
 
-We are working towards integrating the profiling agent into the [OTel Collector](https://opentelemetry.io/docs/collector/) as a receiver,
-which will be the supported configuration going forward. In the meantime, we also offer a standalone profiling agent binary,
-to aid with development and debugging. The expectation is that this will go away once the integration with the OTel Collector is complete.
+We are working towards integrating the profiling functionality into the [OTel Collector](https://opentelemetry.io/docs/collector/) as a receiver,
+which will be the supported configuration going forward. In the meantime, we also offer a standalone profiling agent binary named `ebpf-profiler`,
+to aid with development and debugging. The expectation is that this will go away once the integration with the [OTel Collector](https://opentelemetry.io/docs/collector/) is complete.
 
 ## Platform Requirements
 The agent can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
