@@ -46,7 +46,7 @@ func prepareMapInMap(t *testing.T) *ebpf.Map {
 }
 
 func TestAsyncMapUpdaterPool(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	amup := newAsyncMapUpdaterPool(ctx, updatePoolWorkers, updatePoolQueueCap)
@@ -60,7 +60,7 @@ func TestAsyncMapUpdaterPool(t *testing.T) {
 		require.Nil(t, r)
 	}()
 
-	g, _ := errgroup.WithContext(context.Background())
+	g, _ := errgroup.WithContext(ctx)
 	// For every worker start a Go routine that tries to send updates.
 	for i := 0; i < updatePoolWorkers; i++ {
 		g.Go(func() error {

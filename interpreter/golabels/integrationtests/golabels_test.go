@@ -56,7 +56,7 @@ func setPprofLabels(t *testing.T, ctx context.Context, cookie string, busyFunc f
 		"l2"+cookie, "label2"+randomString(24),
 		"l3"+cookie, "label3"+randomString(48))
 	lastUpdate := time.Now()
-	pprof.Do(context.TODO(), labels, func(context.Context) {
+	pprof.Do(t.Context(), labels, func(context.Context) {
 		for time.Since(lastUpdate) < 10*time.Second {
 			// CPU go burr on purpose.
 			busyFunc()
@@ -88,7 +88,7 @@ func Test_Golabels(t *testing.T) {
 	cookie := buildInfo.GoVersion
 
 	t.Run(cookie, func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
 		enabledTracers, _ := tracertypes.Parse("")
