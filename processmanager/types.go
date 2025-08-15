@@ -28,7 +28,7 @@ import (
 type elfInfo struct {
 	err           error
 	lastModified  int64
-	fileID        host.FileID
+	mappingFile   libpf.FrameMappingFile
 	addressMapper pfelf.AddressMapper
 }
 
@@ -85,8 +85,8 @@ type ProcessManager struct {
 	// executable. It caches results based on iNode number and device ID. Locked LRU.
 	elfInfoCache *lru.LRU[util.OnDiskFileIdentifier, elfInfo]
 
-	// reporter is the interface to report symbolization information
-	reporter reporter.SymbolReporter
+	// exeReporter is the interface to report executables
+	exeReporter reporter.ExecutableReporter
 
 	// Reporting function which is used to report information to our backend.
 	metricsAddSlice func([]metrics.Metric)
