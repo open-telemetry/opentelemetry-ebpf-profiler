@@ -16,15 +16,21 @@ import (
 )
 
 const (
-	abiVersionExport = "custom_labels_abi_version"
-	tlsExport        = "custom_labels_current_set"
+	abiVersionExport    = "custom_labels_abi_version"
+	currentSetTlsExport = "custom_labels_current_set"
+	currentHmTlsExport  = "custom_labels_async_hashmap"
 )
 
-var dsoRegex = regexp.MustCompile(`.*/libcustomlabels.*\.so|.*/customlabels\.node`)
+var dsoRegex = regexp.MustCompile(`.*/libcustomlabels.*\.so`)
+var nodeRegex = regexp.MustCompile(`.*/customlabels\.node`)
 
 type data struct {
-	abiVersionElfVA libpf.Address
-	tlsAddr         libpf.Address
+	abiVersionElfVA   libpf.Address
+	currentSetTlsAddr libpf.Address
+
+	hasCurrentHm     bool
+	currentHmTlsAddr libpf.Address
+
 	isSharedLibrary bool
 }
 
@@ -35,7 +41,6 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	if err != nil {
 		return nil, err
 	}
-
 	abiVersionSym, err := ef.LookupSymbol(abiVersionExport)
 	if err != nil {
 		if errors.Is(err, pfelf.ErrSymbolNotFound) {
@@ -53,8 +58,13 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	// global-dynamic TLS model and have to look up the TLS descriptor.
 	// Otherwise, assume we're the main binary and just look up the
 	// symbol.
-	isSharedLibrary := dsoRegex.MatchString(info.FileName())
-	var tlsAddr libpf.Address
+	fn := info.FileName()
+	isNativeSharedLibrary := dsoRegex.MatchString(fn)
+	isNodeExtension := (!isNativeSharedLibrary) && nodeRegex.MatchString(fn)
+	isSharedLibrary := isNativeSharedLibrary || isNodeExtension
+
+	var currentSetTlsAddr, currentHmTlsAddr libpf.Address
+	var hasCurrentHm bool
 	if isSharedLibrary {
 		// Resolve thread info TLS export.
 		tlsDescs, err := ef.TLSDescriptors()
@@ -62,22 +72,27 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 			return nil, errors.New("failed to extract TLS descriptors")
 		}
 		var ok bool
-		tlsAddr, ok = tlsDescs[tlsExport]
+		currentSetTlsAddr, ok = tlsDescs[currentSetTlsExport]
 		if !ok {
 			return nil, errors.New("failed to locate TLS descriptor for custom labels")
 		}
+		if isNodeExtension {
+			currentHmTlsAddr, hasCurrentHm = tlsDescs[currentHmTlsExport]
+		}
 	} else {
-		offset, err := ef.LookupTLSSymbolOffset(tlsExport)
+		offset, err := ef.LookupTLSSymbolOffset(currentSetTlsExport)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get tls symbol offset: %w", err)
 		}
-		tlsAddr = libpf.Address(offset)
+		currentSetTlsAddr = libpf.Address(offset)
 	}
 
 	d := data{
-		abiVersionElfVA: libpf.Address(abiVersionSym.Address),
-		tlsAddr:         tlsAddr,
-		isSharedLibrary: isSharedLibrary,
+		abiVersionElfVA:   libpf.Address(abiVersionSym.Address),
+		currentSetTlsAddr: currentSetTlsAddr,
+		hasCurrentHm:      hasCurrentHm,
+		currentHmTlsAddr:  currentHmTlsAddr,
+		isSharedLibrary:   isSharedLibrary,
 	}
 	return &d, nil
 }
@@ -98,16 +113,25 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 			" (only 1 is supported)", abiVersion)
 	}
 
-	var tlsOffset uint64
+	var currentSetTlsOffset uint64
 	if d.isSharedLibrary {
 		// Read TLS offset from the TLS descriptor
-		tlsOffset = rm.Uint64(bias + d.tlsAddr + 8)
+		currentSetTlsOffset = rm.Uint64(bias + d.currentSetTlsAddr + 8)
 	} else {
 		// We're in the main executable: TLS offset is known statically.
-		tlsOffset = uint64(d.tlsAddr)
+		currentSetTlsOffset = uint64(d.currentSetTlsAddr)
 	}
 
-	procInfo := C.NativeCustomLabelsProcInfo{tls_offset: C.u64(tlsOffset)}
+	var currentHmTlsOffset uint64
+	if d.hasCurrentHm {
+		currentHmTlsOffset = rm.Uint64(bias + d.currentHmTlsAddr + 8)
+	}
+
+	procInfo := C.NativeCustomLabelsProcInfo{
+		current_set_tls_offset: C.u64(currentSetTlsOffset),
+		has_current_hm:         C.bool(d.hasCurrentHm),
+		current_hm_tls_offset:  C.u64(currentHmTlsOffset),
+	}
 	if err := ebpf.UpdateProcData(libpf.CustomLabels, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err
 	}

@@ -22,7 +22,7 @@ func TestGoLabels(t *testing.T) {
 	r := &testutils.MockReporter{}
 	enabledTracers, _ := tracertypes.Parse("")
 	enabledTracers.Enable(tracertypes.Labels)
-	traceCh, _ := testutils.StartTracer(context.Background(), t, enabledTracers, r)
+	traceCh, _ := testutils.StartTracer(context.Background(), t, enabledTracers, r, false)
 	for _, tc := range [][]string{
 		{"./golbls_1_23.test", "123"},
 		{"./golbls_1_24.test", "124"},

@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/vc"
 )
 
@@ -48,7 +49,13 @@ var (
 		metric.WithInstrumentationVersion(vc.Version()))
 	counters = map[MetricID]metric.Int64Counter{}
 	gauges   = map[MetricID]metric.Int64Gauge{}
+
+	reporterImpl reporter.MetricsReporter
 )
+
+func SetReporter(r reporter.MetricsReporter) {
+	reporterImpl = r
+}
 
 func init() {
 	defs := GetDefinitions()
@@ -87,6 +94,16 @@ func init() {
 // Allow for report to be overridden in the test.
 var report = func() {
 	ctx := context.Background()
+	if reporterImpl != nil {
+		ids := make([]uint32, nMetrics)
+		values := make([]int64, nMetrics)
+
+		for i := 0; i < nMetrics; i++ {
+			ids[i] = uint32(metricsBuffer[i].ID)
+			values[i] = int64(metricsBuffer[i].Value)
+		}
+		reporterImpl.ReportMetrics(uint32(prevTimestamp), ids, values)
+	}
 	for i := range nMetrics {
 		metric := metricsBuffer[i]
 		switch typ := metricTypes[metric.ID]; typ {

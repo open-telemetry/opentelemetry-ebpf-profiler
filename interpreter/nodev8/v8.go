@@ -1,3 +1,5 @@
+//go:generate go run ../../tools/csv2go.go ../../tools/complete_offsets.csv node_offsets_generated.go
+
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
@@ -154,6 +156,7 @@ package nodev8 // import "go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -487,6 +490,13 @@ type v8Data struct {
 	// version contains the V8 version
 	version uint32
 
+	// Node.js environment offsets
+	contextHandleOffset      uint32
+	nativeContextOffset      uint32
+	embedderDataOffset       uint32
+	environmentPointerOffset uint32
+	executionAsyncIdOffset   uint32
+
 	// bytecodeSizes contains the V8 bytecode length data
 	bytecodeSizes []byte
 
@@ -495,6 +505,9 @@ type v8Data struct {
 
 	// frametypeToID caches frametype's to a hash used as its identifier
 	frametypeToID [MaxFrameType]libpf.AddressOrLineno
+
+	// isolateSym is the symbol of the v8 thread-local current isolate
+	isolateSym libpf.Address
 }
 
 type v8Instance struct {
@@ -1816,6 +1829,12 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 	data := C.V8ProcInfo{
 		version: C.uint(d.version),
 
+		context_handle_offset:      C.uint(d.contextHandleOffset),
+		native_context_offset:      C.uint(d.nativeContextOffset),
+		embedder_data_offset:       C.uint(d.embedderDataOffset),
+		environment_pointer_offset: C.uint(d.environmentPointerOffset),
+		execution_async_id_offset:  C.uint(d.executionAsyncIdOffset),
+
 		fp_marker:          mapFramePointerOffset(vms.FramePointer.Context),
 		fp_function:        mapFramePointerOffset(vms.FramePointer.Function),
 		fp_bytecode_offset: mapFramePointerOffset(vms.FramePointer.BytecodeOffset),
@@ -1837,6 +1856,8 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 		codekind_shift:    C.u8(vms.CodeKind.FieldShift),
 		codekind_mask:     C.u8(vms.CodeKind.FieldMask),
 		codekind_baseline: C.u8(vms.CodeKind.Baseline),
+
+		isolate_sym: C.u64(d.isolateSym),
 	}
 	if err := ebpf.UpdateProcData(libpf.V8, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err
@@ -2134,6 +2155,56 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 	return nil
 }
 
+// loadNodeClData loads various offsets that are needed for custom labels handling.
+func (d *v8Data) loadNodeClData(ef *pfelf.File) error {
+	offset, err := ef.LookupTLSSymbolOffset("_ZN2v88internal18g_current_isolate_E")
+	if err != nil {
+		return err
+	}
+	d.isolateSym = libpf.Address(offset)
+
+	syms, err := ef.ReadSymbols()
+	if err != nil {
+		return fmt.Errorf("failed to read symbols: %w", err)
+	}
+
+	sym, err := syms.LookupSymbol("_ZZ21napi_get_node_versionE7version")
+	if err != nil {
+		return fmt.Errorf("failed to lookup Node version symbol: %w", err)
+	}
+
+	if sym == nil {
+		return errors.New("Node version symbol not found")
+	}
+
+	if sym.Size < 12 {
+		return fmt.Errorf("Node version symbol size too small: %d", sym.Size)
+	}
+
+	versBuf := make([]byte, 12)
+	if _, err = ef.ReadVirtualMemory(versBuf, int64(sym.Address)); err != nil {
+		return fmt.Errorf("failed to read Node version data: %w", err)
+	}
+
+	major := binary.LittleEndian.Uint32(versBuf[0:4])
+	minor := binary.LittleEndian.Uint32(versBuf[4:8])
+	patch := binary.LittleEndian.Uint32(versBuf[8:12])
+
+	// Construct version string and look up Node.js environment offsets
+	nodeVersion := fmt.Sprintf("v%d.%d.%d", major, minor, patch)
+	if offsets, found := nodeOffsetTable[nodeVersion]; found {
+		d.contextHandleOffset = offsets.contextHandle
+		d.nativeContextOffset = offsets.nativeContext
+		d.embedderDataOffset = offsets.embedderData
+		d.environmentPointerOffset = offsets.environmentPointer
+		d.executionAsyncIdOffset = offsets.executionAsyncId
+	} else {
+		return fmt.Errorf("no offsets found for Node.js version %s", nodeVersion)
+	}
+
+	return nil
+}
+
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	if !v8Regex.MatchString(info.FileName()) {
 		return nil, nil
@@ -2200,6 +2271,10 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 				break
 			}
 		}
+	}
+
+	if err = d.loadNodeClData(ef); err != nil {
+		log.Warnf("Failed to load extra data for Node.js custom labels handling: %v", err)
 	}
 
 	// load introspection data

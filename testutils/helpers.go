@@ -43,7 +43,7 @@ func (f MockReporter) FrameKnown(_ libpf.FrameID) bool {
 func (f MockReporter) FrameMetadata(_ *reporter.FrameMetadataArgs) {}
 
 func StartTracer(ctx context.Context, t *testing.T, et tracertypes.IncludedTracers,
-	r reporter.SymbolReporter) (chan *host.Trace, *tracer.Tracer) {
+	r reporter.SymbolReporter, printBpfLogs bool) (chan *host.Trace, *tracer.Tracer) {
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
 		CollectCustomLabels:    true,
 		Reporter:               r,
@@ -57,7 +57,9 @@ func StartTracer(ctx context.Context, t *testing.T, et tracertypes.IncludedTrace
 	})
 	require.NoError(t, err)
 
-	go readTracePipe(ctx)
+	if printBpfLogs {
+		go readTracePipe(ctx)
+	}
 
 	trc.StartPIDEventProcessor(ctx)
 

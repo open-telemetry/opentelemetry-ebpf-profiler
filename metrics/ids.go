@@ -680,6 +680,57 @@ const (
 	// Number of times we didn't find an entry for this process in the LuaJIT process info array
 	IDUnwindLuaJITErrNoProcInfo = 290
 
+	// Number of failures to read Node.js custom labels hashmap pointer
+	IDUnwindNodeClFailedReadHmPointer = 291
+
+	// Number of failures when no Labelset found in Node.js custom labels hashmap
+	IDUnwindNodeClFailedNoLsInHm = 292
+
+	// Number of failures to read Node.js custom labels hashmap structure
+	IDUnwindNodeClFailedReadHmStruct = 293
+
+	// Number of failures to read Node.js custom labels bucket
+	IDUnwindNodeClFailedReadBucket = 294
+
+	// Number of failures to read Node.js custom labels Labelset address
+	IDUnwindNodeClFailedReadLsAddr = 295
+
+	// Number of times too many buckets encountered in Node.js custom labels hashmap
+	IDUnwindNodeClFailedTooManyBuckets = 296
+
+	// Number of times we failed to get node.js execution async id
+	IDUnwindNodeClFailedGettingId = 297
+
+	// Number of times the node.js execution async id was zero
+	IDUnwindNodeClWarnIdZero = 298
+
+	// Number of failures to get TLS symbol address for Node.js isolate
+	IDUnwindNodeAsyncIdErrGetTlsSymbol = 299
+
+	// Number of failures to read Node.js isolate pointer
+	IDUnwindNodeAsyncIdErrReadIsolate = 300
+
+	// Number of failures to read Node.js context handle
+	IDUnwindNodeAsyncIdErrReadContextHandle = 301
+
+	// Number of failures to read Node.js real context handle
+	IDUnwindNodeAsyncIdErrReadRealContextHandle = 302
+
+	// Number of failures to read Node.js native context
+	IDUnwindNodeAsyncIdErrReadNativeContext = 303
+
+	// Number of failures to read Node.js embedder data
+	IDUnwindNodeAsyncIdErrReadEmbedderData = 304
+
+	// Number of failures to read Node.js environment pointer
+	IDUnwindNodeAsyncIdErrReadEnvPtr = 305
+
+	// Number of failures to read Node.js async ID field
+	IDUnwindNodeAsyncIdErrReadIdField = 306
+
+	// Number of failures to read Node.js async ID double value
+	IDUnwindNodeAsyncIdErrReadIdDouble = 307
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 291
+	IDMax = 308
 )

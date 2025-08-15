@@ -1,0 +1,15 @@
+{
+  "name": "md-render",
+  "version": "1.0.0",
+  "description": "Test program that renders .md files on a web interface",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "The Parca Authors",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@polarsignals/custom-labels": "^0.2.0",
+    "marked": "^16.1.2"
+  }
+}

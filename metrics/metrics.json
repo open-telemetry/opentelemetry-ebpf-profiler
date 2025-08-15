@@ -2092,5 +2092,124 @@
     "name": "UnwindLuaJITErrNoProcInfo",
     "field": "bpf.luajit.errors.no_proc_info",
     "id": 290
+  },
+  {
+    "description": "Number of failures to read Node.js custom labels hashmap pointer",
+    "type": "counter",
+    "name": "UnwindNodeClFailedReadHmPointer",
+    "field": "bpf.nodejs_custom_labels.errors.read_hm_pointer",
+    "id": 291
+  },
+  {
+    "description": "Number of failures when no Labelset found in Node.js custom labels hashmap",
+    "type": "counter",
+    "name": "UnwindNodeClFailedNoLsInHm",
+    "field": "bpf.nodejs_custom_labels.errors.no_ls_in_hm",
+    "id": 292
+  },
+  {
+    "description": "Number of failures to read Node.js custom labels hashmap structure",
+    "type": "counter",
+    "name": "UnwindNodeClFailedReadHmStruct",
+    "field": "bpf.nodejs_custom_labels.errors.read_hm_struct",
+    "id": 293
+  },
+  {
+    "description": "Number of failures to read Node.js custom labels bucket",
+    "type": "counter",
+    "name": "UnwindNodeClFailedReadBucket",
+    "field": "bpf.nodejs_custom_labels.errors.read_bucket",
+    "id": 294
+  },
+  {
+    "description": "Number of failures to read Node.js custom labels Labelset address",
+    "type": "counter",
+    "name": "UnwindNodeClFailedReadLsAddr",
+    "field": "bpf.nodejs_custom_labels.errors.read_ls_addr",
+    "id": 295
+  },
+  {
+    "description": "Number of times too many buckets encountered in Node.js custom labels hashmap",
+    "type": "counter",
+    "name": "UnwindNodeClFailedTooManyBuckets",
+    "field": "bpf.nodejs_custom_labels.errors.too_many_buckets",
+    "id": 296
+  },
+  {
+    "description": "Number of times we failed to get node.js execution async id",
+    "type": "counter",
+    "name": "UnwindNodeClFailedGettingId",
+    "field": "bpf.nodejs_custom_labels.errors.failed_getting_id",
+    "id": 297
+  },
+  {
+    "description": "Number of times the node.js execution async id was zero",
+    "type": "counter",
+    "name": "UnwindNodeClWarnIdZero",
+    "field": "bpf.nodejs_custom_labels.warnings.id_zero",
+    "id": 298
+  },
+  {
+    "description": "Number of failures to get TLS symbol address for Node.js isolate",
+    "type": "counter",
+    "name": "UnwindNodeAsyncIdErrGetTlsSymbol",
+    "field": "bpf.nodejs_async_id.errors.get_tls_symbol",
+    "id": 299
+  },
+  {
+    "description": "Number of failures to read Node.js isolate pointer",
+    "type": "counter",
+    "name": "UnwindNodeAsyncIdErrReadIsolate",
+    "field": "bpf.nodejs_async_id.errors.read_isolate",
+    "id": 300
+  },
+  {
+    "description": "Number of failures to read Node.js context handle",
+    "type": "counter",
+    "name": "UnwindNodeAsyncIdErrReadContextHandle",
+    "field": "bpf.nodejs_async_id.errors.read_context_handle",
+    "id": 301
+  },
+  {
+    "description": "Number of failures to read Node.js real context handle",
+    "type": "counter",
+    "name": "UnwindNodeAsyncIdErrReadRealContextHandle",
+    "field": "bpf.nodejs_async_id.errors.read_real_context_handle",
+    "id": 302
+  },
+  {
+    "description": "Number of failures to read Node.js native context",
+    "type": "counter",
+    "name": "UnwindNodeAsyncIdErrReadNativeContext",
+    "field": "bpf.nodejs_async_id.errors.read_native_context",
+    "id": 303
+  },
+  {
+    "description": "Number of failures to read Node.js embedder data",
+    "type": "counter",
+    "name": "UnwindNodeAsyncIdErrReadEmbedderData",
+    "field": "bpf.nodejs_async_id.errors.read_embedder_data",
+    "id": 304
+  },
+  {
+    "description": "Number of failures to read Node.js environment pointer",
+    "type": "counter",
+    "name": "UnwindNodeAsyncIdErrReadEnvPtr",
+    "field": "bpf.nodejs_async_id.errors.read_env_ptr",
+    "id": 305
+  },
+  {
+    "description": "Number of failures to read Node.js async ID field",
+    "type": "counter",
+    "name": "UnwindNodeAsyncIdErrReadIdField",
+    "field": "bpf.nodejs_async_id.errors.read_id_field",
+    "id": 306
+  },
+  {
+    "description": "Number of failures to read Node.js async ID double value",
+    "type": "counter",
+    "name": "UnwindNodeAsyncIdErrReadIdDouble",
+    "field": "bpf.nodejs_async_id.errors.read_id_double",
+    "id": 307
   }
 ]

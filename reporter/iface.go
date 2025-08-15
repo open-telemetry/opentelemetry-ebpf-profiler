@@ -112,3 +112,7 @@ type HostMetadataReporter interface {
 	ReportHostMetadataBlocking(ctx context.Context, metadataMap map[string]string,
 		maxRetries int, waitRetry time.Duration) error
 }
+
+type MetricsReporter interface {
+	ReportMetrics(timestamp uint32, ids []uint32, values []int64)
+}

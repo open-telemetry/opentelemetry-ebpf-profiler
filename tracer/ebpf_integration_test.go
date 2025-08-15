@@ -234,5 +234,5 @@ Loop:
 
 func TestAllTracers(t *testing.T) {
 	_, _ = testutils.StartTracer(context.Background(), t, tracertypes.AllTracers(),
-		&testutils.MockReporter{})
+		&testutils.MockReporter{}, false)
 }

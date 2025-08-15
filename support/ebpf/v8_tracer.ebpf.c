@@ -39,6 +39,14 @@ bpf_map_def SEC("maps") v8_procs = {
   .max_entries = 1024,
 };
 
+// Map from thread IDs to cached Node.js environment pointers
+bpf_map_def SEC("maps") v8_cached_env_ptrs = {
+  .type        = BPF_MAP_TYPE_LRU_HASH,
+  .key_size    = sizeof(u32), // TID
+  .value_size  = sizeof(u64), // cached environment pointer
+  .max_entries = 4096,        // more threads than processes
+};
+
 // Record a V8 frame
 static EBPF_INLINE ErrorCode push_v8(
   Trace *trace, unsigned long pointer_and_type, unsigned long delta_or_marker, bool return_address)
