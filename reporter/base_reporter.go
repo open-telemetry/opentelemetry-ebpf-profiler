@@ -76,8 +76,11 @@ func (b *baseReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 }
 
 func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
-	if meta.Origin != support.TraceOriginSampling && meta.Origin != support.TraceOriginOffCPU {
-		// At the moment only on-CPU and off-CPU traces are reported.
+	switch meta.Origin {
+	case support.TraceOriginSampling:
+	case support.TraceOriginOffCPU:
+	case support.TraceOriginUProbe:
+	default:
 		return fmt.Errorf("skip reporting trace for %d origin: %w", meta.Origin,
 			errUnknownOrigin)
 	}
