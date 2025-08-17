@@ -7,6 +7,7 @@ import (
 	"fmt"
 )
 
+// /usr/bin/time -v go run test.go /home/dalehamel.linux/.rubies/ruby-3.4.4/bin/ruby rb_execution_context_struct rb_control_frame_struct rb_iseq_struct rb_iseq_constant_body rb_iseq_location_struct iseq_insn_info_entry RString RArray succ_dict_block succ_index_table
 
 func main() {
 	if len(os.Args) < 2 {

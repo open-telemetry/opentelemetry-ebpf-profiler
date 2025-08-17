@@ -9,10 +9,8 @@ package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 import (
 	"debug/dwarf"
-	//"debug/elf"
 	"fmt"
 	"os"
-	//"io"
 	"strings"
 	"slices"
 )
@@ -27,13 +25,8 @@ func (data structData) String() string {
 	
 	str += fmt.Sprintf("\nstruct %s {\n", data.name)
 	
-	// Calculate size based on fields
-	calculatedSize := int64(0)
-	hasFlexibleArray := false
-	var flexArrayOffset int64 = 0
-	
 	// Print field information
-	for i, field := range data.structTypeInfo.Field {
+	for _, field := range data.structTypeInfo.Field {
 		fieldType := field.Type.String()
 		// Clean up the type string a bit
 		fieldType = strings.TrimPrefix(fieldType, "struct ")
@@ -41,49 +34,102 @@ func (data structData) String() string {
 		str += fmt.Sprintf("  %s %s; // offset: %d, size: %d", 
 			fieldType, field.Name, field.ByteOffset, field.Type.Size())
 		
-		// Check if this might be a flexible array member
-		isLastField := i == len(data.structTypeInfo.Field)-1
-		isArrayType := strings.HasSuffix(fieldType, "[]") || 
-					  strings.Contains(fieldType, "[0]") ||
-					  strings.Contains(fieldType, "FLEX_ARY")
-		hasArrayName := strings.HasSuffix(field.Name, "_array") ||
-					   strings.HasSuffix(field.Name, "_part")
-		
-		if isLastField && (isArrayType || hasArrayName) {
-			str += fmt.Sprintf(" (flexible array member)")
-			hasFlexibleArray = true
-			flexArrayOffset = field.ByteOffset
-		}
+		//// Check if this might be a flexible array member
+		//isLastField := i == len(data.structTypeInfo.Field)-1
+		//isArrayType := strings.HasSuffix(fieldType, "[]") || 
+		//			  strings.Contains(fieldType, "[0]") ||
+		//			  strings.Contains(fieldType, "FLEX_ARY")
+		//hasArrayName := strings.HasSuffix(field.Name, "_array") ||
+		//			   strings.HasSuffix(field.Name, "_part")
+		//
+		//if isLastField && (isArrayType || hasArrayName) {
+		//	str += fmt.Sprintf(" (flexible array member)")
+		//	hasFlexibleArray = true
+		//	flexArrayOffset = field.ByteOffset
+		//}
 		str += "\n"
+	}
+	
+	
+	str += fmt.Sprintf("} // total size: %d bytes", (&data).Size())
+	//if hasFlexibleArray {
+	//	str += fmt.Sprintf(" (base size without flexible array)")
+	//}
+	//if dwarfSize != reportedSize {
+	//	str += fmt.Sprintf(" (DWARF: %d, calculated: %d)", dwarfSize, calculatedSize)
+	//}
+	str += "\n"
+
+	return str
+}
+
+
+// TODO refactor the printing function code to actually return these, then use
+// these functions in the String calc
+
+func (data *structData) FieldOffset(name string) (int64, error) {
+	field, err := data.field(name)
+	if err != nil {
+		return -1, err
+	}
+	return field.ByteOffset, nil
+}
+
+func (data *structData) FieldSize(name string) (int64, error) {
+	field, err := data.field(name)
+	if err != nil {
+		return -1, err
+	}
+	return field.Type.Size(), nil
+}
+
+func (data *structData) field(name string) (*dwarf.StructField, error) {
+	var found *dwarf.StructField = nil
+
+	for _, field := range data.structTypeInfo.Field {
+		if field.Name == name {
+			found = field
+			break
+		}
+	}
+
+	if found == nil {
+		return nil, fmt.Errorf("unable to locate struct field %s", name)
+	}
+
+	return found, nil
+}
+
+func (data *structData) Size() int64 {
+	// Calculate size based on fields
+	calculatedSize := int64(0)
 		
+	//hasFlexibleArray := false
+	//var flexArrayOffset int64 = 0
+
+	// Print field information
+	for _, field := range data.structTypeInfo.Field {
 		// Update calculated size
 		fieldEnd := field.ByteOffset + field.Type.Size()
 		if fieldEnd > calculatedSize {
 			calculatedSize = fieldEnd
 		}
 	}
-	
 	// Get the struct size from DWARF
 	dwarfSize := data.structTypeInfo.ByteSize
 	
 	// Use calculated size if DWARF size is 0 or negative
 	reportedSize := dwarfSize
-	if dwarfSize <= 0 || (hasFlexibleArray && dwarfSize < flexArrayOffset) {
+	if dwarfSize <= 0 { //|| (hasFlexibleArray && dwarfSize < flexArrayOffset) { // TODO verify if flex array offset logic actually needed
 		reportedSize = calculatedSize
 	}
-	
-	str += fmt.Sprintf("} // total size: %d bytes", reportedSize)
-	if hasFlexibleArray {
-		str += fmt.Sprintf(" (base size without flexible array)")
-	}
-	if dwarfSize != reportedSize {
-		str += fmt.Sprintf(" (DWARF: %d, calculated: %d)", dwarfSize, calculatedSize)
-	}
-	str += "\n"
 
-	return str
+	return reportedSize
 }
 
+
+// This accepts a list of names to look up, as we want to try and get "everything in one go",
+// since DWARF is inherently O(n) to look up these symbols
 func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, names []string) ([]structData, error) {
 	results := []structData{}
 
