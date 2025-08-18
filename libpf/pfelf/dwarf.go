@@ -135,16 +135,32 @@ func (data *typeData) Size() int64 {
 func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, names []string) ([]typeData, error) {
 	results := []typeData{}
 
+	if debugInfo == nil {
+		return nil, fmt.Errorf("all DWARF sections must be available, %s is missing", ".debug_info")
+	}
+	if debugAbbrev == nil {
+		return nil, fmt.Errorf("all DWARF sections must be available, %s is missing", ".debug_abbrev")
+	}
+	if debugStr == nil {
+		return nil, fmt.Errorf("all DWARF sections must be available, %s is missing", ".debug_str")
+	}
+	if debugStr == nil {
+		return nil, fmt.Errorf("all DWARF sections must be available, %s is missing", ".debug_line_str")
+	}
+
 	// To reduce memory usage, we will use the Section's Data() accessor to
 	// get a memory mapped "subslice" and avoid allocations
 	// This prevents a substantial amount of memory bloat that elf.File's DWARF() accessor
 	// otherwise incurs
-	abbrevData, err := debugAbbrev.Data(maxBytesLargeSection)
+	// For compressed data, we have to allocate the decompressed buffer but it is
+	// still cheaper than doing this through the debug/elf's DWARF() helper
+	// memory usage per section is still bounded to the size of maxBytesLargeSection
+	debugData, err := debugInfo.Data(maxBytesLargeSection)
 	if err != nil {
 		return nil, err
 	}
 
-	debugData, err := debugInfo.Data(maxBytesLargeSection)
+	abbrevData, err := debugAbbrev.Data(maxBytesLargeSection)
 	if err != nil {
 		return nil, err
 	}

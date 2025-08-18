@@ -871,15 +871,18 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 			if elf.CompressionType(chdr64.Type) != elf.COMPRESS_ZLIB {
 				return nil, fmt.Errorf("unsupported compression type %d", elf.CompressionType(chdr64.Type))
 			}
+			if chdr64.Size > uint64(maxSize) {
+				return nil, fmt.Errorf("unable to read full section %s, uncompressed size %d would exceed maximum size %d", sh.Name, chdr64.Size, maxSize)
+			}
 
-			compressed_section := io.NewSectionReader(mapping, int64(sh.Offset + uint64(binary.Size(chdr64))), int64(sh.Size))
+			compressed_section := io.NewSectionReader(mapping, int64(sh.Offset+uint64(binary.Size(chdr64))), int64(chdr64.Size))
 
 			zlibReader, err := zlib.NewReader(compressed_section)
 			if err != nil {
 				return nil, err
 			}
 			defer zlibReader.Close()
-			return io.ReadAll(zlibReader)
+			return io.ReadAll(io.LimitReader(zlibReader, int64(maxSize)))
 		}
 	}
 
