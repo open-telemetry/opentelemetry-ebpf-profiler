@@ -229,6 +229,11 @@ func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, nam
 
 			processedTypes[name] = struct{}{}
 		} else if entry_name, ok := entry.Val(dwarf.AttrName).(string); ok && slices.Contains(names, entry_name) {
+
+			if _, ok := processedTypes[entry_name]; ok {
+				continue
+			}
+
 			// look for anything with the name
 			t, err := dwarfData.Type(entry.Offset)
 			if err != nil {
@@ -239,6 +244,7 @@ func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, nam
 					name: entry_name,
 					size: t.Size(),
 				})
+				processedTypes[entry_name] = struct{}{}
 			}
 		}
 	}
