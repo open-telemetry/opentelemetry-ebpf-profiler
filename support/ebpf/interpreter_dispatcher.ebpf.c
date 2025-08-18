@@ -434,17 +434,17 @@ static EBPF_INLINE bool get_node_env_ptr(V8ProcInfo *proc, u64 *env_ptr_out)
   return true;
 }
 
-static EBPF_INLINE bool get_node_async_id(V8ProcInfo *proc, u32 tid, u64 *out)
+static EBPF_INLINE bool get_node_async_id(V8ProcInfo *proc, u64 pid_tgid, u64 *out)
 {
   int err;
 
   u64 env_ptr;
   // Try to get fresh env_ptr
   if (get_node_env_ptr(proc, &env_ptr)) {
-    bpf_map_update_elem(&v8_cached_env_ptrs, &tid, &env_ptr, BPF_ANY);
+    bpf_map_update_elem(&v8_cached_env_ptrs, &pid_tgid, &env_ptr, BPF_ANY);
   } else {
     // Fallback to cached value from previous successful extraction
-    u64 *cached_env_ptr = bpf_map_lookup_elem(&v8_cached_env_ptrs, &tid);
+    u64 *cached_env_ptr = bpf_map_lookup_elem(&v8_cached_env_ptrs, &pid_tgid);
     if (cached_env_ptr && *cached_env_ptr != 0) {
       // TODO[btv] -- Figure out why the environment is sometimes null.
       // It doesn't seem to matter in practice, since the environment rarely (never?)
@@ -649,7 +649,8 @@ static EBPF_INLINE void maybe_add_node_custom_labels(PerCPURecord *record)
   }
 
   u64 id;
-  bool success = get_node_async_id(v8_proc, record->trace.tid, &id);
+  u64 pid_tgid = (u64)record->trace.pid << 32 | record->trace.tid;
+  bool success = get_node_async_id(v8_proc, pid_tgid, &id);
   if (success) {
     if (id == 0) {
       increment_metric(metricID_UnwindNodeClWarnIdZero);

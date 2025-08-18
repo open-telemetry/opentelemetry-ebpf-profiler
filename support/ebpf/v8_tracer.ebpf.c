@@ -42,7 +42,7 @@ bpf_map_def SEC("maps") v8_procs = {
 // Map from thread IDs to cached Node.js environment pointers
 bpf_map_def SEC("maps") v8_cached_env_ptrs = {
   .type        = BPF_MAP_TYPE_LRU_HASH,
-  .key_size    = sizeof(u32), // TID
+  .key_size    = sizeof(u64), // pid+tid
   .value_size  = sizeof(u64), // cached environment pointer
   .max_entries = 4096,        // more threads than processes
 };
