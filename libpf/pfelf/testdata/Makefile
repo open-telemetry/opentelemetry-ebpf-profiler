@@ -10,12 +10,20 @@ BINARIES=fixed-address \
 	the_notorious_build_id \
 	ubuntu-kernel-image \
 	with-debug-syms \
-	without-debug-syms
+	without-debug-syms \
+	dwarf_structs \
+	ruby_dwarf_structs
 
 all: $(BINARIES)
 
 clean:
 	rm -f $(BINARIES)
+
+dwarf_structs: dwarf_structs.c
+	$(CC) $< -g -o $@
+
+ruby_dwarf_structs: ruby_dwarf_structs.c
+	$(CC) $< -g -o $@
 
 with-debug-syms: test.c
 	$(CC) $< -g -o $@

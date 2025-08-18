@@ -5,3 +5,5 @@ kernel-image
 ubuntu-kernel-image
 go-binary
 separate-debug-file
+dwarf_structs
+ruby_dwarf_structs
