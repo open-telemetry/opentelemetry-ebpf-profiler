@@ -83,13 +83,17 @@ func (r *ReaderAt) Subslice(offset, length int) ([]byte, error) {
 	return unsafe.Slice((*byte)(unsafe.Pointer(&r.data[offset])), length), nil
 }
 
-// Open memory-maps the named file for reading.
 func Open(filename string) (*ReaderAt, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
+	return OpenFromFile(f)
+}
+
+// Open memory-maps the named file for reading.
+func OpenFromFile(f *os.File) (*ReaderAt, error) {
 	fi, err := f.Stat()
 	if err != nil {
 		return nil, err
@@ -107,10 +111,10 @@ func Open(filename string) (*ReaderAt, error) {
 		}, nil
 	}
 	if size < 0 {
-		return nil, fmt.Errorf("mmap: file %q has negative size", filename)
+		return nil, fmt.Errorf("mmap: file %q has negative size", f.Name())
 	}
 	if size != int64(int(size)) {
-		return nil, fmt.Errorf("mmap: file %q is too large", filename)
+		return nil, fmt.Errorf("mmap: file %q is too large", f.Name())
 	}
 
 	data, err := syscall.Mmap(int(f.Fd()), 0, int(size), syscall.PROT_READ, syscall.MAP_SHARED)

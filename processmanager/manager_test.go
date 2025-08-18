@@ -79,6 +79,10 @@ func (d *dummyProcess) ExtractAsFile(name string) (string, error) {
 	return name, nil
 }
 
+func (d *dummyProcess) OpenFile(file string) (process.ProcessFile, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (d *dummyProcess) Close() error {
 	return nil
 }

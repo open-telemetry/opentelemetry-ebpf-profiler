@@ -28,6 +28,8 @@ import (
 // GetMappings returns this error when no mappings can be extracted.
 var ErrNoMappings = errors.New("no mappings")
 
+var selfPid = os.Getpid()
+
 // systemProcess provides an implementation of the Process interface for a
 // process that is currently running on this machine.
 type systemProcess struct {
@@ -369,4 +371,62 @@ func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
 
 func (sp *systemProcess) ExtractAsFile(file string) (string, error) {
 	return path.Join("/proc", strconv.Itoa(int(sp.pid)), "root", file), nil
+}
+
+type memoryFile struct {
+	io.ReaderAt
+}
+
+func (r *memoryFile) Close() error {
+	return nil
+}
+
+func (r *memoryFile) OSFile() (*os.File, error) {
+	return nil, errors.New("no backing file for vdso")
+}
+
+func (r *memoryFile) OpenablePath() string {
+	return ""
+}
+
+type processFile struct {
+	*os.File
+}
+
+func (r *processFile) Close() error {
+	return r.File.Close()
+}
+
+func (r *processFile) OSFile() (*os.File, error) {
+	return r.File, nil
+}
+
+func (r *processFile) OpenablePath() string {
+	return path.Join("/proc", strconv.Itoa(int(selfPid)), "fd", strconv.Itoa(int(r.Fd())))
+}
+
+func newProcessFile(file string) (*processFile, error) {
+	osFile, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	return &processFile{osFile}, nil
+}
+
+func (sp *systemProcess) OpenFile(file string) (ProcessFile, error) {
+	if m, ok := sp.fileToMapping[file]; ok {
+		if m.IsVDSO() {
+			vdso, err := sp.extractMapping(m)
+			if err != nil {
+				return nil, fmt.Errorf("failed to extract VDSO: %v", err)
+			}
+			return &memoryFile{vdso}, nil
+		}
+		return newProcessFile(sp.getMappingFile(m))
+	}
+	rootPath := fmt.Sprintf("/proc/%v/root", sp.pid)
+	if sp.mainThreadExit {
+		rootPath = fmt.Sprintf("/proc/%v/task/%v/root", sp.pid, sp.tid)
+	}
+	return newProcessFile(path.Join(rootPath, file))
 }

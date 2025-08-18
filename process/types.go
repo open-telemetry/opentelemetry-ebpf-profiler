@@ -8,6 +8,7 @@ package process // import "go.opentelemetry.io/ebpf-profiler/process"
 import (
 	"debug/elf"
 	"io"
+	"os"
 	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -89,6 +90,18 @@ type ReadAtCloser interface {
 	io.Closer
 }
 
+// ProcessFile wraps an open file from the process namespace.
+// If the file is backed by a file on disk, OSFile() will return the underlying
+// os.File and OpenablePath() will return a path valid as long as ProcessFile is
+// not closed (/proc/<pid>/root/fd/<fd>).
+// If the file is a VDSO, both OSFile() and OpenablePath() will return errors,
+// but vdso content can be accessed through ReadAtCloser.
+type ProcessFile interface {
+	ReadAtCloser
+	OpenablePath() string
+	OSFile() (*os.File, error)
+}
+
 // Process is the interface to inspect ELF coredump/process.
 // The current implementations do not allow concurrent access to this interface
 // from different goroutines. As an exception the ELFOpener and the returned
@@ -126,6 +139,10 @@ type Process interface {
 	// or deleted.
 	ExtractAsFile(string) (string, error)
 
+	// OpenFile opens the given file from the target process namespace.
+	OpenFile(file string) (ProcessFile, error)
+
+	// Close closes the file.
 	io.Closer
 
 	pfelf.ELFOpener
