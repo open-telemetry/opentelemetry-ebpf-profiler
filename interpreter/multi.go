@@ -114,22 +114,12 @@ func (m *MultiInstance) UpdateTSDInfo(ebpf EbpfHandler, pid libpf.PID, info tpba
 func (m *MultiInstance) Symbolize(ebpfFrame *host.Frame, frames *libpf.Frames) error {
 	// Try each interpreter in order
 	for _, instance := range m.instances {
-		initialLen := len(*frames)
 		err := instance.Symbolize(ebpfFrame, frames)
-		if err == nil && len(*frames) > initialLen {
-			// Successfully symbolized by this interpreter
-			return nil
-		}
-		// If symbolization didn't add any frames, reset and try next interpreter
-		if len(*frames) == initialLen {
-			continue
-		}
-		// If frames were added but there was an error, keep them and return
-		if err != nil {
+		if err != ErrMismatchInterpreterType {
 			return err
 		}
 	}
-	return nil
+	return ErrMismatchInterpreterType
 }
 
 // GetAndResetMetrics collects metrics from all interpreter instances.
