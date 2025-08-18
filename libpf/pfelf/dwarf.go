@@ -123,7 +123,7 @@ func (data *TypeData) Size() int64 {
 
 	// Use calculated size if DWARF size is 0 or negative
 	reportedSize := dwarfSize
-	if dwarfSize <= 0 { //|| (hasFlexibleArray && dwarfSize < flexArrayOffset) { // TODO verify if flex array offset logic actually needed
+	if dwarfSize <= 0 {
 		reportedSize = calculatedSize
 	}
 
