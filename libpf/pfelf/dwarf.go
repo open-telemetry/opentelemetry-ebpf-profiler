@@ -15,17 +15,17 @@ import (
 	"strings"
 )
 
-type typeData struct {
-	name           string
+type TypeData struct {
+	Name           string
 	size           int64
 	structTypeInfo *dwarf.StructType
 }
 
-func (data typeData) String() string {
+func (data TypeData) String() string {
 	var str string = ""
 
 	if data.structTypeInfo != nil {
-		str += fmt.Sprintf("\nstruct %s {\n", data.name)
+		str += fmt.Sprintf("\nstruct %s {\n", data.Name)
 
 		// Print field information
 		for _, field := range data.structTypeInfo.Field {
@@ -41,14 +41,14 @@ func (data typeData) String() string {
 		str += fmt.Sprintf("} // total size: %d bytes", (&data).Size())
 		str += "\n"
 	} else {
-		str += fmt.Sprintf("\n%s ", data.name)
+		str += fmt.Sprintf("\n%s ", data.Name)
 		str += fmt.Sprintf(" // total size: %d bytes", data.size)
 	}
 
 	return str
 }
 
-func (data *typeData) FieldOffset(name string) (int64, error) {
+func (data *TypeData) FieldOffset(name string) (int64, error) {
 	field, err := data.field(name)
 	if err != nil {
 		return -1, err
@@ -56,7 +56,7 @@ func (data *typeData) FieldOffset(name string) (int64, error) {
 	return field.ByteOffset, nil
 }
 
-func (data *typeData) FieldSize(name string) (int64, error) {
+func (data *TypeData) FieldSize(name string) (int64, error) {
 	field, err := data.field(name)
 	if err != nil {
 		return -1, err
@@ -64,7 +64,7 @@ func (data *typeData) FieldSize(name string) (int64, error) {
 	return field.Type.Size(), nil
 }
 
-func (data *typeData) field(name string) (*dwarf.StructField, error) {
+func (data *TypeData) field(name string) (*dwarf.StructField, error) {
 	var found *dwarf.StructField = nil
 
 	parts := strings.Split(name, ".")
@@ -103,7 +103,7 @@ func (data *typeData) field(name string) (*dwarf.StructField, error) {
 	return found, nil
 }
 
-func (data *typeData) Size() int64 {
+func (data *TypeData) Size() int64 {
 	if data.structTypeInfo == nil {
 		return data.size
 	}
@@ -132,8 +132,8 @@ func (data *typeData) Size() int64 {
 
 // This accepts a list of names to look up, as we want to try and get "everything in one go",
 // since DWARF is inherently O(n) to look up these symbols
-func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, names []string) ([]typeData, error) {
-	results := []typeData{}
+func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, names []string) ([]TypeData, error) {
+	results := []TypeData{}
 
 	if debugInfo == nil {
 		return nil, fmt.Errorf("all DWARF sections must be available, %s is missing", ".debug_info")
@@ -238,8 +238,8 @@ func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, nam
 				continue
 			}
 
-			results = append(results, typeData{
-				name:           name,
+			results = append(results, TypeData{
+				Name:           name,
 				structTypeInfo: structTypeInfo,
 			})
 
@@ -256,8 +256,8 @@ func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, nam
 				return nil, err
 			}
 			if t.Size() > 0 {
-				results = append(results, typeData{
-					name: entry_name,
+				results = append(results, TypeData{
+					Name: entry_name,
 					size: t.Size(),
 				})
 				processedTypes[entry_name] = struct{}{}

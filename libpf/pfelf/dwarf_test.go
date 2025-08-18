@@ -88,6 +88,9 @@ func TestDWARFParseStructs(t *testing.T) {
 					"iseq_encoded": int64(8),
 					"location":     int64(64),
 					"insns_info":   int64(112),
+					"insns_info.body":   int64(0),
+					"insns_info.size":   int64(16),
+					"insns_info.succ_index_table":   int64(24),
 				},
 				"iseq_insn_info": map[string]int64{ // substruct of rb_iseq_constant_body, these offsets would be added to the insns_info offset
 					"body":             int64(0),
@@ -156,10 +159,10 @@ func TestDWARFParseStructs(t *testing.T) {
 
 			assert.Equal(len(tt.expectedTypes), len(type_data))
 
-			types_by_name := map[string]typeData{}
+			types_by_name := map[string]TypeData{}
 
 			for _, struct_info := range type_data {
-				types_by_name[struct_info.name] = struct_info
+				types_by_name[struct_info.Name] = struct_info
 			}
 
 			for _, name := range tt.expectedTypes {

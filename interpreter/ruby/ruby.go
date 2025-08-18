@@ -233,49 +233,6 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 func (r *rubyData) Unload(_ interpreter.EbpfHandler) {
 }
 
-func (r *rubyData) calculateStructsFromDWARF(ef *pfelf.File) error {
-	
-		
-		//Vm_stack:      r.vmStructs.execution_context_struct.vm_stack,
-		//Vm_stack_size: r.vmStructs.execution_context_struct.vm_stack_size,
-		//Cfp:           r.vmStructs.execution_context_struct.cfp,
-
-		//Pc:                           r.vmStructs.control_frame_struct.pc,
-		//Iseq:                         r.vmStructs.control_frame_struct.iseq,
-		//Ep:                           r.vmStructs.control_frame_struct.ep,
-		//Size_of_control_frame_struct: r.vmStructs.control_frame_struct.size_of_control_frame_struct,
-
-		//Body: r.vmStructs.iseq_struct.body,
-
-		//Iseq_size:    r.vmStructs.iseq_constant_body.size,
-		//Iseq_encoded: r.vmStructs.iseq_constant_body.encoded,
-
-		//Size_of_value: r.vmStructs.size_of_value,
-
-		//Running_ec: r.vmStructs.rb_ractor_struct.running_ec,
-
-	referenced_ruby_structs := []string{
-		"rb_execution_context_struct",
-		"rb_control_frame_struct",
-		"rb_iseq_struct",
-		"rb_iseq_constant_body",
-		"rb_iseq_location_struct",
-		"iseq_insn_info_entry",
-		"RString",
-		"RArray",
-		"succ_index_table",
-		"succ_dict_block",
-	}
-	struct_info, err := ef.StructData()
-	if err != nil {
-		return err
-	}
-
-	// TODO copy the values to populate vmstructs
-
-	return nil
-}
-
 // rubyIseqBodyPC holds a reported address to a iseq_constant_body and Ruby VM program counter
 // combination and is used as key in the cache.
 type rubyIseqBodyPC struct {
@@ -809,7 +766,6 @@ func determineRubyVersion(ef *pfelf.File) (uint32, error) {
 	return rubyVersion(uint32(major), uint32(minor), uint32(release)), nil
 }
 
-
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	if !rubyRegex.MatchString(info.FileName()) {
 		return nil, nil
@@ -874,7 +830,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	vms := &rid.vmStructs
 
-	if err := calculateStructsFromDWARF(); err != nil {
+	if err := rid.calculateTypesFromDWARF(ef); err != nil {
 		// Ruby does not provide introspection data, hard code the struct field offsets. Some
 		// values can be fairly easily calculated from the struct definitions, but some are
 		// looked up by using gdb and getting the field offset directly from debug data.
