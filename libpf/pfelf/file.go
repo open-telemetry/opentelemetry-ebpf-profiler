@@ -860,6 +860,7 @@ func (sh *Section) ReadAt(p []byte, off int64) (n int, err error) {
 func (sh *Section) Data(maxSize uint) ([]byte, error) {
 	if sh.Flags&elf.SHF_COMPRESSED != 0 {
 		if mapping, ok := sh.elfReader.(*mmap.ReaderAt); ok {
+			// Currently only supported for little endian 64 bit ELF Files
 			var chdr64 elf.Chdr64
 			section := io.NewSectionReader(mapping, int64(sh.Offset), int64(sh.FileSize))
 			err := binary.Read(section, binary.LittleEndian, &chdr64)
@@ -871,7 +872,7 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 				return nil, fmt.Errorf("unsupported compression type %d", elf.CompressionType(chdr64.Type))
 			}
 
-			compressed_section := io.NewSectionReader(mapping, int64(sh.Offset+uint64(binary.Size(chdr64))), int64(chdr64.Size))
+			compressed_section := io.NewSectionReader(mapping, int64(sh.Offset + uint64(binary.Size(chdr64))), int64(sh.Size))
 
 			zlibReader, err := zlib.NewReader(compressed_section)
 			if err != nil {
