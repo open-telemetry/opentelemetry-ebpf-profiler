@@ -11,63 +11,44 @@ import (
 	"debug/dwarf"
 	"fmt"
 	"os"
-	"strings"
 	"slices"
+	"strings"
 )
 
-type structData struct {
-	name string
+type typeData struct {
+	name           string
+	size           int64
 	structTypeInfo *dwarf.StructType
 }
 
-func (data structData) String() string {
+func (data typeData) String() string {
 	var str string = ""
-	
-	str += fmt.Sprintf("\nstruct %s {\n", data.name)
-	
-	// Print field information
-	for _, field := range data.structTypeInfo.Field {
-		fieldType := field.Type.String()
-		// Clean up the type string a bit
-		fieldType = strings.TrimPrefix(fieldType, "struct ")
-		
-		str += fmt.Sprintf("  %s %s; // offset: %d, size: %d", 
-			fieldType, field.Name, field.ByteOffset, field.Type.Size())
-		
-		//// Check if this might be a flexible array member
-		//isLastField := i == len(data.structTypeInfo.Field)-1
-		//isArrayType := strings.HasSuffix(fieldType, "[]") || 
-		//			  strings.Contains(fieldType, "[0]") ||
-		//			  strings.Contains(fieldType, "FLEX_ARY")
-		//hasArrayName := strings.HasSuffix(field.Name, "_array") ||
-		//			   strings.HasSuffix(field.Name, "_part")
-		//
-		//if isLastField && (isArrayType || hasArrayName) {
-		//	str += fmt.Sprintf(" (flexible array member)")
-		//	hasFlexibleArray = true
-		//	flexArrayOffset = field.ByteOffset
-		//}
+
+	if data.structTypeInfo != nil {
+		str += fmt.Sprintf("\nstruct %s {\n", data.name)
+
+		// Print field information
+		for _, field := range data.structTypeInfo.Field {
+			fieldType := field.Type.String()
+			// Clean up the type string a bit
+			fieldType = strings.TrimPrefix(fieldType, "struct ")
+
+			str += fmt.Sprintf("  %s %s; // offset: %d, size: %d",
+				fieldType, field.Name, field.ByteOffset, field.Type.Size())
+			str += "\n"
+		}
+
+		str += fmt.Sprintf("} // total size: %d bytes", (&data).Size())
 		str += "\n"
+	} else {
+		str += fmt.Sprintf("\n%s ", data.name)
+		str += fmt.Sprintf(" // total size: %d bytes", data.size)
 	}
-	
-	
-	str += fmt.Sprintf("} // total size: %d bytes", (&data).Size())
-	//if hasFlexibleArray {
-	//	str += fmt.Sprintf(" (base size without flexible array)")
-	//}
-	//if dwarfSize != reportedSize {
-	//	str += fmt.Sprintf(" (DWARF: %d, calculated: %d)", dwarfSize, calculatedSize)
-	//}
-	str += "\n"
 
 	return str
 }
 
-
-// TODO refactor the printing function code to actually return these, then use
-// these functions in the String calc
-
-func (data *structData) FieldOffset(name string) (int64, error) {
+func (data *typeData) FieldOffset(name string) (int64, error) {
 	field, err := data.field(name)
 	if err != nil {
 		return -1, err
@@ -75,7 +56,7 @@ func (data *structData) FieldOffset(name string) (int64, error) {
 	return field.ByteOffset, nil
 }
 
-func (data *structData) FieldSize(name string) (int64, error) {
+func (data *typeData) FieldSize(name string) (int64, error) {
 	field, err := data.field(name)
 	if err != nil {
 		return -1, err
@@ -83,13 +64,35 @@ func (data *structData) FieldSize(name string) (int64, error) {
 	return field.Type.Size(), nil
 }
 
-func (data *structData) field(name string) (*dwarf.StructField, error) {
+func (data *typeData) field(name string) (*dwarf.StructField, error) {
 	var found *dwarf.StructField = nil
 
-	for _, field := range data.structTypeInfo.Field {
-		if field.Name == name {
-			found = field
-			break
+	parts := strings.Split(name, ".")
+
+	if len(parts) > 1 {
+		var parent *dwarf.StructType = data.structTypeInfo
+		for i, part := range parts {
+			for _, field := range parent.Field {
+				if field.Name == part {
+					if i == len(parts)-1 {
+						found = field
+						break
+					}
+					struct_type, ok := field.Type.(*dwarf.StructType)
+					if ok {
+						parent = struct_type
+					}
+					break
+				}
+			}
+		}
+
+	} else {
+		for _, field := range data.structTypeInfo.Field {
+			if field.Name == name {
+				found = field
+				break
+			}
 		}
 	}
 
@@ -100,12 +103,12 @@ func (data *structData) field(name string) (*dwarf.StructField, error) {
 	return found, nil
 }
 
-func (data *structData) Size() int64 {
+func (data *typeData) Size() int64 {
+	if data.structTypeInfo == nil {
+		return data.size
+	}
 	// Calculate size based on fields
 	calculatedSize := int64(0)
-		
-	//hasFlexibleArray := false
-	//var flexArrayOffset int64 = 0
 
 	// Print field information
 	for _, field := range data.structTypeInfo.Field {
@@ -117,7 +120,7 @@ func (data *structData) Size() int64 {
 	}
 	// Get the struct size from DWARF
 	dwarfSize := data.structTypeInfo.ByteSize
-	
+
 	// Use calculated size if DWARF size is 0 or negative
 	reportedSize := dwarfSize
 	if dwarfSize <= 0 { //|| (hasFlexibleArray && dwarfSize < flexArrayOffset) { // TODO verify if flex array offset logic actually needed
@@ -127,11 +130,10 @@ func (data *structData) Size() int64 {
 	return reportedSize
 }
 
-
 // This accepts a list of names to look up, as we want to try and get "everything in one go",
 // since DWARF is inherently O(n) to look up these symbols
-func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, names []string) ([]structData, error) {
-	results := []structData{}
+func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, names []string) ([]typeData, error) {
+	results := []typeData{}
 
 	// To reduce memory usage, we will use the Section's Data() accessor to
 	// get a memory mapped "subslice" and avoid allocations
@@ -167,13 +169,13 @@ func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, nam
 	if err := dwarfData.AddSection(".debug_line_str", lineStrData); err != nil {
 		return nil, err
 	}
-	
-	processedStructs := make(map[string]struct{})
+
+	processedTypes := make(map[string]struct{})
 
 	reader := dwarfData.Reader()
 	for {
 		// return early if we have all of the structs that were asked for
-		if len(processedStructs) == len(names) {
+		if len(processedTypes) == len(names) {
 			return results, nil
 		}
 
@@ -185,7 +187,6 @@ func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, nam
 		if entry == nil {
 			break
 		}
-
 		// Look for struct type entries
 		if entry.Tag == dwarf.TagStructType {
 			nameVal, ok := entry.Val(dwarf.AttrName).(string)
@@ -194,13 +195,13 @@ func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, nam
 			}
 			name := nameVal
 
-			if _, ok := processedStructs[name]; ok {
+			if _, ok := processedTypes[name]; ok {
 				continue
 			}
 
 			// Ignore structs that weren't asked for
 			if !slices.Contains(names, name) {
-				continue 
+				continue
 			}
 
 			// Get the type information
@@ -209,26 +210,38 @@ func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, nam
 				fmt.Printf("Warning: Error getting type info for %s: %v\n", name, err)
 				continue
 			}
-			
+
 			// Type assertion to get the struct type
 			structTypeInfo, ok := structType.(*dwarf.StructType)
 			if !ok {
 				continue
 			}
-			
+
 			// Skip incomplete structs, try another compilation unit
 			if structTypeInfo.Incomplete {
 				continue
 			}
-		
-			results = append(results, structData{
-				name: name,
+
+			results = append(results, typeData{
+				name:           name,
 				structTypeInfo: structTypeInfo,
 			})
 
-			processedStructs[name] = struct{}{}
+			processedTypes[name] = struct{}{}
+		} else if entry_name, ok := entry.Val(dwarf.AttrName).(string); ok && slices.Contains(names, entry_name) {
+			// look for anything with the name
+			t, err := dwarfData.Type(entry.Offset)
+			if err != nil {
+				return nil, err
+			}
+			if t.Size() > 0 {
+				results = append(results, typeData{
+					name: entry_name,
+					size: t.Size(),
+				})
+			}
 		}
 	}
-	
+
 	return results, nil
 }

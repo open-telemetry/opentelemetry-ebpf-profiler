@@ -14,110 +14,129 @@ func TestDWARFParseStructs(t *testing.T) {
 	tests := []struct {
 		desc                 string
 		test_file            string
-		expectedStructs      []string
-		expectedStructSizes  map[string]int64
+		expectedTypes        []string
+		expectedTypeSizes    map[string]int64
 		expectedFieldOffsets map[string]map[string]int64
 		expectedFieldSizes   map[string]map[string]int64
 	}{
 		{
-			desc:           "it should be able to parse arbitrary structs",
-			test_file:      "testdata/dwarf_structs",
-			expectedStructs : []string {
+			desc:      "it should be able to parse arbitrary structs",
+			test_file: "testdata/dwarf_structs",
+			expectedTypes: []string{
 				"some_struct",
+				"some_typedef",
 			},
-			expectedStructSizes : map[string]int64{
-				"some_struct" : 72,
+			expectedTypeSizes: map[string]int64{
+				"some_struct":  72,
+				"some_typedef": 8,
 			},
-			expectedFieldOffsets : map[string]map[string]int64{
+			expectedFieldOffsets: map[string]map[string]int64{
 				"some_struct": map[string]int64{
 					"some_array": int64(0),
 					"some_int":   int64(64),
 				},
 			},
-			expectedFieldSizes : map[string]map[string]int64{
+			expectedFieldSizes: map[string]map[string]int64{
 				"some_struct": map[string]int64{
 					"some_array": int64(64),
-					"some_int": int64(8),
+					"some_int":   int64(8),
 				},
 			},
 		},
 		{
-/*
-    'execution_context_struct.vm_stack': offset_of('rb_execution_context_struct', 'vm_stack'),
-    'execution_context_struct.vm_stack_size': offset_of('rb_execution_context_struct', 'vm_stack_size'),
-    'execution_context_struct.cfp': offset_of('rb_execution_context_struct', 'cfp'),
-
-    'control_frame_struct.pc': offset_of('rb_control_frame_struct', 'pc'),
-    'control_frame_struct.iseq': offset_of('rb_control_frame_struct', 'iseq'),
-    'control_frame_struct.ep': offset_of('rb_control_frame_struct', 'ep'),
-    'control_frame_struct.size_of_control_frame_struct': size_of('rb_control_frame_struct'),
-
-    'iseq_struct.body': offset_of('rb_iseq_struct', 'body'),
-
-    'iseq_constant_body.iseq_type': offset_of('rb_iseq_constant_body', 'type'),
-    'iseq_constant_body.size': offset_of('rb_iseq_constant_body', 'iseq_size'),
-    'iseq_constant_body.encoded': offset_of('rb_iseq_constant_body', 'iseq_encoded'),
-    'iseq_constant_body.location': offset_of('rb_iseq_constant_body', 'location'),
-    'iseq_constant_body.insn_info_body': offset_of('rb_iseq_constant_body', 'insns_info.body'),
-    'iseq_constant_body.insn_info_size': offset_of('rb_iseq_constant_body', 'insns_info.size'),
-    'iseq_constant_body.succ_index_table': offset_of('rb_iseq_constant_body', 'insns_info.succ_index_table'),
-    'iseq_constant_body.size_of_iseq_constant_body': size_of('rb_iseq_constant_body'),
-
-    'iseq_location_struct.pathobj': offset_of('rb_iseq_location_struct', 'pathobj'),
-    'iseq_location_struct.base_label': offset_of('rb_iseq_location_struct', 'base_label'),
-
-    'iseq_insn_info_entry.position': offset_of('iseq_insn_info_entry', 'position'),
-    'iseq_insn_info_entry.size_of_position': size_of_field('iseq_insn_info_entry', 'position'),
-    'iseq_insn_info_entry.line_no': offset_of('iseq_insn_info_entry', 'line_no'),
-    'iseq_insn_info_entry.size_of_line_no': size_of_field('iseq_insn_info_entry', 'line_no'),
-    'iseq_insn_info_entry.size_of_iseq_insn_info_entry': size_of('iseq_insn_info_entry'),
-
-    'rstring_struct.as_ary': offset_of('RString', 'as.embed.ary'),
-    'rstring_struct.as_heap_ptr': offset_of('RString', 'as.heap.ptr'),
-
-    'rarray_struct.as_ary': offset_of('RArray', 'as.ary'),
-    'rarray_struct.as_heap_ptr': offset_of('RArray', 'as.heap.ptr'),
-
-    'size_of_value': size_of('VALUE', ns=''),
-
-    'rb_ractor_struct.running_ec': offset_of('rb_ractor_struct', 'threads.running_ec'),
-*/
-			desc:           "it should be able to parse complicated ruby structs",
-			test_file:      "testdata/ruby_dwarf_structs",
-			expectedStructs : []string {
-				//"rb_execution_context_struct",
-				//"rb_control_frame_struct",
-				//"rb_iseq_struct",
-				//"rb_iseq_constant_body",
-				//"rb_iseq_location_struct",
-				//"iseq_insn_info_entry",
-				//"RString",
-				//"RArray",
+			desc:      "it should be able to parse complicated ruby structs",
+			test_file: "testdata/ruby_dwarf_structs",
+			expectedTypes: []string{
+				"rb_execution_context_struct",
+				"rb_control_frame_struct",
+				"rb_iseq_struct",
+				"rb_iseq_constant_body",
+				"iseq_insn_info", // sub-struct of rb_iseq_constant_body
+				"rb_iseq_location_struct",
+				"iseq_insn_info_entry",
+				"RString",
+				"RArray",
 				"succ_index_table",
 				"succ_dict_block",
+				"rb_ractor_struct",
+				"VALUE",
 			},
-			expectedStructSizes : map[string]int64{
-				"succ_dict_block" : 80,
+			expectedTypeSizes: map[string]int64{
+				"rb_control_frame_struct": 56,
+				"rb_iseq_constant_body":   320,
+				"iseq_insn_info_entry":    8,
+				"succ_dict_block":         80,
+				"VALUE":                   8,
 			},
-			expectedFieldOffsets : map[string]map[string]int64{
-				//"rb_execution_context_struct": map[string]int64{
-				//	"vm_stack": int64(0),
-				//	"cfp": int64(16),
-				//},
+			expectedFieldOffsets: map[string]map[string]int64{
+				"rb_execution_context_struct": map[string]int64{
+					"vm_stack":      int64(0),
+					"vm_stack_size": int64(8),
+					"cfp":           int64(16),
+				},
+				"rb_control_frame_struct": map[string]int64{
+					"pc":   int64(0),
+					"iseq": int64(16),
+					"ep":   int64(32),
+				},
+				"rb_iseq_struct": map[string]int64{
+					"body": int64(16),
+				},
+				"rb_iseq_constant_body": map[string]int64{
+					"type":         int64(0),
+					"iseq_size":    int64(4),
+					"iseq_encoded": int64(8),
+					"location":     int64(64),
+					"insns_info":   int64(112),
+				},
+				"iseq_insn_info": map[string]int64{ // substruct of rb_iseq_constant_body, these offsets would be added to the insns_info offset
+					"body":             int64(0),
+					"size":             int64(16),
+					"succ_index_table": int64(24),
+				},
+				"rb_iseq_location_struct": map[string]int64{
+					"pathobj":    int64(0),
+					"base_label": int64(8),
+				},
+				"iseq_insn_info_entry": map[string]int64{
+					// position was removed in 3.1
+					"line_no": int64(0),
+				},
+				"RString": map[string]int64{
+					"as":           int64(24),
+					"as.embed":     int64(0),
+					"as.embed.ary": int64(0),
+					"as.heap":      int64(0),
+					"as.heap.ptr":  int64(0),
+				},
+				"RArray": map[string]int64{
+					"as":          int64(16),
+					"as.ary":      int64(0),
+					"as.heap":     int64(0),
+					"as.heap.ptr": int64(16),
+				},
 				"succ_index_table": map[string]int64{
 					"succ_part": int64(48),
 				},
 				"succ_dict_block": map[string]int64{
 					"small_block_ranks": int64(8),
-					"bits": int64(16),
+					"bits":              int64(16),
+				},
+				"rb_ractor_struct": map[string]int64{
+					"threads":            int64(264),
+					"threads.running_ec": int64(136),
 				},
 			},
-			expectedFieldSizes : map[string]map[string]int64{
-				//"rb_execution_context_struct": map[string]int64{
-				//	"vm_stack": int64(8),
-				//},
+			expectedFieldSizes: map[string]map[string]int64{
+				"rb_execution_context_struct": map[string]int64{
+					"vm_stack": int64(8),
+				},
+				"iseq_insn_info_entry": map[string]int64{
+					// position was removed in 3.1
+					"line_no": int64(4),
+				},
 				"succ_index_table": map[string]int64{
-					"imm_part": int64(48), // note that in python they multiple this by 9, then divide by 8 https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/078ae4d6ded761b513038440bc8525014fa6c016/tools/coredump/testsources/ruby/gdb-dump-offsets.py#L69 because of https://github.com/Shopify/ruby/blob/70b4b6fea0eeb66647539bcb3b9a50d027d92e51/iseq.c#L4265
+					"imm_part":  int64(48), // note that in python they multiple this by 9, then divide by 8 https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/078ae4d6ded761b513038440bc8525014fa6c016/tools/coredump/testsources/ruby/gdb-dump-offsets.py#L69 because of https://github.com/Shopify/ruby/blob/70b4b6fea0eeb66647539bcb3b9a50d027d92e51/iseq.c#L4265
 					"succ_part": int64(0),
 				},
 			},
@@ -132,31 +151,31 @@ func TestDWARFParseStructs(t *testing.T) {
 			require.NoError(err)
 			defer elfFile.Close()
 
-			struct_data, err := elfFile.StructData(tt.expectedStructs)
+			type_data, err := elfFile.TypeData(tt.expectedTypes)
 			require.NoError(err)
 
-			assert.Equal(len(tt.expectedStructs), len(struct_data))
+			assert.Equal(len(tt.expectedTypes), len(type_data))
 
-			structs_by_name := map[string]structData{}
+			types_by_name := map[string]typeData{}
 
-			for _, struct_info := range struct_data {
-				structs_by_name[struct_info.name] = struct_info
+			for _, struct_info := range type_data {
+				types_by_name[struct_info.name] = struct_info
 			}
 
-			for _, name := range tt.expectedStructs {
-				_, ok := structs_by_name[name]
+			for _, name := range tt.expectedTypes {
+				_, ok := types_by_name[name]
 				assert.True(ok)
 			}
 
-			for name, expected_size := range tt.expectedStructSizes {
-				struct_info, ok := structs_by_name[name]
+			for name, expected_size := range tt.expectedTypeSizes {
+				struct_info, ok := types_by_name[name]
 				require.True(ok)
 
 				assert.Equal(expected_size, struct_info.Size())
 			}
 
 			for name, fields := range tt.expectedFieldOffsets {
-				struct_info, ok := structs_by_name[name]
+				struct_info, ok := types_by_name[name]
 				require.True(ok)
 
 				for field, expected_offset := range fields {
@@ -168,7 +187,7 @@ func TestDWARFParseStructs(t *testing.T) {
 			}
 
 			for name, fields := range tt.expectedFieldSizes {
-				struct_info, ok := structs_by_name[name]
+				struct_info, ok := types_by_name[name]
 				require.True(ok)
 
 				for field, expected_size := range fields {

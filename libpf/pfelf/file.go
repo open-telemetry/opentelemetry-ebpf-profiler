@@ -504,10 +504,9 @@ func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (*libpf.Symbol, []
 	return sym, data, err
 }
 
-
-// Gets StructData for specific structs from DWARF, without loading and parsing
+// Gets TypeData for specific types from DWARF, without loading and parsing
 // the whole thing
-func (f *File) StructData (names []string) ([]structData, error) {
+func (f *File) TypeData(names []string) ([]typeData, error) {
 	return loadStructData(f.Section(".debug_info"), f.Section(".debug_abbrev"), f.Section(".debug_str"), f.Section(".debug_line_str"), names)
 }
 
