@@ -21,8 +21,10 @@ package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 import (
 	"bytes"
+	"compress/zlib"
 	"debug/buildinfo"
 	"debug/elf"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -857,7 +859,27 @@ func (sh *Section) ReadAt(p []byte, off int64) (n int, err error) {
 // Data loads the whole section header referenced data, and returns it as a slice.
 func (sh *Section) Data(maxSize uint) ([]byte, error) {
 	if sh.Flags&elf.SHF_COMPRESSED != 0 {
-		return nil, errors.New("compressed sections not supported")
+		if mapping, ok := sh.elfReader.(*mmap.ReaderAt); ok {
+			var chdr64 elf.Chdr64
+			section := io.NewSectionReader(mapping, int64(sh.Offset), int64(sh.FileSize))
+			err := binary.Read(section, binary.LittleEndian, &chdr64)
+			if err != nil {
+				return nil, err
+			}
+
+			if elf.CompressionType(chdr64.Type) != elf.COMPRESS_ZLIB {
+				return nil, fmt.Errorf("unsupported compression type %d", elf.CompressionType(chdr64.Type))
+			}
+
+			compressed_section := io.NewSectionReader(mapping, int64(sh.Offset+uint64(binary.Size(chdr64))), int64(chdr64.Size))
+
+			zlibReader, err := zlib.NewReader(compressed_section)
+			if err != nil {
+				return nil, err
+			}
+			defer zlibReader.Close()
+			return io.ReadAll(zlibReader)
+		}
 	}
 
 	if mapping, ok := sh.elfReader.(*mmap.ReaderAt); ok {
