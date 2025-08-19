@@ -1,6 +1,6 @@
 .PHONY: all all-common clean ebpf generate test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
-	codespell lint linter-version ebpf-profiler format-ebpf \
+	codespell lint linter-version ebpf-profiler format-ebpf pprof-execs \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
 SHELL := /usr/bin/env bash
@@ -59,6 +59,7 @@ clean:
 	@go clean -cache -i
 	@$(MAKE) -s -C support/ebpf clean
 	@rm -f support/*.test
+	@rm -rf interpreter/golabels/integrationtests/pprof_1_*
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache
 	@cargo clean
@@ -83,7 +84,7 @@ rust-tests: rust-targets
 	cargo test
 
 GOLANGCI_LINT_VERSION = "v2.1.6"
-lint: generate vanity-import-check
+lint: generate vanity-import-check pprof-execs
 	$(MAKE) lint -C support/ebpf
 	docker run --rm -t -v $$(pwd):/app -w /app golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) sh -c "golangci-lint version && golangci-lint config verify && golangci-lint run --max-issues-per-linter -1 --max-same-issues -1"
 
@@ -122,7 +123,18 @@ test-deps:
 
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support interpreter/golabels/integrationtests
 
-integration-test-binaries: generate ebpf
+pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo
+
+pprof_1_23:
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo -o ./../$@
+
+pprof_1_24:
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo -o ./../$@
+
+pprof_1_24_cgo:
+	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo -o ./../$@
+
+integration-test-binaries: generate ebpf pprof-execs
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
