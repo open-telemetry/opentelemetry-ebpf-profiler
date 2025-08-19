@@ -1,3 +1,4 @@
+// with all offsetts
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
@@ -786,10 +787,10 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// Reason for lowest supported version:
 	// - Ruby 2.5 is still commonly used at time of writing this code.
 	//   https://www.jetbrains.com/lp/devecosystem-2020/ruby/
-	// Reason for maximum supported version 3.2.x:
+	// Reason for maximum supported version 3.5.x:
 	// - this is currently the newest stable version
 
-	minVer, maxVer := rubyVersion(2, 5, 0), rubyVersion(3, 3, 0)
+	minVer, maxVer := rubyVersion(2, 5, 0), rubyVersion(3, 6, 0)
 	if version < minVer || version >= maxVer {
 		return nil, fmt.Errorf("unsupported Ruby %d.%d.%d (need >= %d.%d.%d and <= %d.%d.%d)",
 			(version>>16)&0xff, (version>>8)&0xff, version&0xff,
@@ -797,6 +798,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			(maxVer>>16)&0xff, (maxVer>>8)&0xff, maxVer&0xff)
 	}
 
+	log.Debugf("Ruby %d.%d.%d detected", (version>>16)&0xff, (version>>8)&0xff, version&0xff)
+
+	var symMap *libpf.SymbolMap
 	// Before Ruby 2.5 the symbol ruby_current_thread was used for the current execution
 	// context but got replaced in [0] with ruby_current_execution_context_ptr.
 	// With [1] the Ruby internal execution model changed and the symbol
@@ -810,19 +814,43 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 	currentCtxPtr, err := ef.LookupSymbolAddress(currentCtxSymbol)
 	if err != nil {
-		return nil, fmt.Errorf("%v not found: %v", currentCtxSymbol, err)
+		// Ruby 3.3+: ruby_single_main_ractor is hidden, try to find it in the symbol table
+		log.Warnf("Ruby %d.%d.%d detected, looking for ruby_single_main_ractor in symbol table",
+			(version>>16)&0xff, (version>>8)&0xff, version&0xff)
+
+		symMap, err = ef.ReadSymbols()
+		if err != nil {
+			log.Debugf("Failed to read symbols: %v", err)
+			return nil, err
+		}
+		currentCtxPtr, err = symMap.LookupSymbolAddress(currentCtxSymbol)
+		if err != nil {
+			log.Debugf("Failed to lookup symbol in symbol table: %v", err)
+			return nil, fmt.Errorf("%v not found: %v", currentCtxSymbol, err)
+		}
 	}
 
 	// rb_vm_exec is used to execute the Ruby frames in the Ruby VM and is called within
 	// ruby_run_node  which is the main executor function since Ruby v1.9.0
 	// https://github.com/ruby/ruby/blob/587e6800086764a1b7c959976acef33e230dccc2/main.c#L47
+	var interpRanges []util.Range
 	symbolName := libpf.SymbolName("rb_vm_exec")
 	if version < rubyVersion(2, 6, 0) {
 		symbolName = libpf.SymbolName("ruby_exec_node")
 	}
-	interpRanges, err := info.GetSymbolAsRanges(symbolName)
-	if err != nil {
-		return nil, err
+	// if we already have a map of symbols, use it to lookup the symbol
+	if symMap != nil {
+		sym, err := symMap.LookupSymbol(symbolName)
+		if err != nil {
+			log.Warnf("Failed to lookup symbol %s in symbol table: %v", currentCtxSymbol, err)
+			return nil, err
+		}
+		interpRanges = info.SymbolAsRanges(sym)
+	} else {
+		interpRanges, err = info.GetSymbolAsRanges(symbolName)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	rid := &rubyData{
@@ -849,10 +877,14 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		// With Ruby 2.6 the field bp was added to rb_control_frame_t
 		// https://github.com/ruby/ruby/commit/ed935aa5be0e5e6b8d53c3e7d76a9ce395dfa18b
 		vms.control_frame_struct.size_of_control_frame_struct = 56
-	default:
+	case version < rubyVersion(3, 3, 0):
 		// 3.1 adds new jit_return field at the end.
 		// https://github.com/ruby/ruby/commit/9d8cc01b758f9385bd4c806f3daff9719e07faa0
 		vms.control_frame_struct.size_of_control_frame_struct = 64
+	default:
+		// 3.3+ size changed after re-ordering fields
+		// https://github.com/ruby/ruby/commit/7740526b1ccf62a027984e35375bb30ccbc0a000
+		vms.control_frame_struct.size_of_control_frame_struct = 56
 	}
 	vms.iseq_struct.body = 16
 
@@ -871,11 +903,21 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.iseq_constant_body.insn_info_size = 136
 		vms.iseq_constant_body.succ_index_table = 144
 		vms.iseq_constant_body.size_of_iseq_constant_body = 312
-	default:
+	case version < rubyVersion(3, 3, 0):
 		vms.iseq_constant_body.insn_info_body = 112
 		vms.iseq_constant_body.insn_info_size = 128
 		vms.iseq_constant_body.succ_index_table = 136
 		vms.iseq_constant_body.size_of_iseq_constant_body = 320
+	case version >= rubyVersion(3, 4, 0) && version < rubyVersion(3, 5, 0):
+		vms.iseq_constant_body.insn_info_body = 112
+		vms.iseq_constant_body.insn_info_size = 128
+		vms.iseq_constant_body.succ_index_table = 136
+		vms.iseq_constant_body.size_of_iseq_constant_body = 352
+	default: // 3.3.x and 3.5.x have the same values
+		vms.iseq_constant_body.insn_info_body = 112
+		vms.iseq_constant_body.insn_info_size = 128
+		vms.iseq_constant_body.succ_index_table = 136
+		vms.iseq_constant_body.size_of_iseq_constant_body = 344
 	}
 	vms.iseq_location_struct.pathobj = 0
 	vms.iseq_location_struct.base_label = 8
@@ -922,10 +964,18 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.size_of_value = 8
 
 	if version >= rubyVersion(3, 0, 0) {
-		if runtime.GOARCH == "amd64" {
-			vms.rb_ractor_struct.running_ec = 0x208
+		if version >= rubyVersion(3, 3, 0) {
+			if runtime.GOARCH == "amd64" {
+				vms.rb_ractor_struct.running_ec = 0x180
+			} else {
+				vms.rb_ractor_struct.running_ec = 0x190
+			}
 		} else {
-			vms.rb_ractor_struct.running_ec = 0x218
+			if runtime.GOARCH == "amd64" {
+				vms.rb_ractor_struct.running_ec = 0x208
+			} else {
+				vms.rb_ractor_struct.running_ec = 0x218
+			}
 		}
 	}
 
