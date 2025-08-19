@@ -1,6 +1,16 @@
 .PHONY: pprof pprof_1_23 pprof_1_24 pprof_1_24_cgo clean
 
-SHELL := /usr/bin/env bash
+# Valid values are: amd64, arm64.
+TARGET_ARCH ?= $(GOARCH)
+ifeq ($(TARGET_ARCH),arm64)
+ARCH_PREFIX := aarch64
+else ifeq ($(TARGET_ARCH),amd64)
+ARCH_PREFIX := x86_64
+else
+$(error Unsupported architecture: $(TARGET_ARCH))
+endif
+
+export CC = $(TARGET_ARCH)-linux-gnu-gcc
 
 pprof: pprof_1_23 pprof_1_24 pprof_1_24_cgo 
 
