@@ -45,14 +45,11 @@ func (m *MultiData) Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Address,
 		}
 	}
 
+	err := errors.Join(errs...)
 	if len(instances) == 0 {
-		// If all interpreters failed with errors, return the combined error
-		if len(errs) > 0 {
-			return nil, errors.Join(errs...)
-		}
-		// All interpreters returned nil instances without error (e.g., not ready yet)
-		// This is a valid state - return nil, nil
-		return nil, nil
+		// Either all interpreters returned nil instances without error (e.g., not ready yet)
+		// in which case return nil, nil (valid state) otherwise return combined error.
+		return nil, err
 	}
 
 	// We got at least one valid instance, log any errors that occurred
