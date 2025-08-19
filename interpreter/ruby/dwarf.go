@@ -5,6 +5,7 @@ package ruby // import "go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
 
 import (
 	"fmt"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
@@ -33,7 +34,8 @@ func (r *rubyData) calculateTypesFromDWARF(ef *pfelf.File) error {
 	}
 
 	if len(referenced_ruby_types) != len(type_info) {
-		return fmt.Errorf("unexpected number of returned types, expected %d, got %d", len(referenced_ruby_types), len(type_info))
+		return fmt.Errorf("unexpected number of returned types, expected %d, got %d",
+			len(referenced_ruby_types), len(type_info))
 	}
 
 	types_by_name := map[string]pfelf.TypeData{}
@@ -88,7 +90,8 @@ func (r *rubyData) calculateTypesFromDWARF(ef *pfelf.File) error {
 		return err
 	}
 	r.vmStructs.control_frame_struct.ep = uint8(ep_offset)
-	r.vmStructs.control_frame_struct.size_of_control_frame_struct = uint8(rb_control_frame_struct.Size())
+	r.vmStructs.control_frame_struct.
+		size_of_control_frame_struct = uint8(rb_control_frame_struct.Size())
 
 	// rb_iseq_struct fields
 	rb_iseq_struct, ok := types_by_name["rb_iseq_struct"]
@@ -140,19 +143,23 @@ func (r *rubyData) calculateTypesFromDWARF(ef *pfelf.File) error {
 	if err != nil {
 		return err
 	}
-	r.vmStructs.iseq_constant_body.insn_info_body = uint8(iseq_body_insns_info) + uint8(iseq_body_insns_info_body)
+	r.vmStructs.iseq_constant_body.insn_info_body = uint8(iseq_body_insns_info) +
+		uint8(iseq_body_insns_info_body)
 
 	iseq_body_insns_info_size, err := rb_iseq_constant_body.FieldOffset("insns_info.size")
 	if err != nil {
 		return err
 	}
-	r.vmStructs.iseq_constant_body.insn_info_size = uint8(iseq_body_insns_info) + uint8(iseq_body_insns_info_size)
+	r.vmStructs.iseq_constant_body.insn_info_size = uint8(iseq_body_insns_info) +
+		uint8(iseq_body_insns_info_size)
 
-	iseq_body_insns_info_succ_index_table, err := rb_iseq_constant_body.FieldOffset("insns_info.succ_index_table")
+	iseq_body_insns_info_succ_index_table, err := rb_iseq_constant_body.
+		FieldOffset("insns_info.succ_index_table")
 	if err != nil {
 		return err
 	}
-	r.vmStructs.iseq_constant_body.succ_index_table = uint8(iseq_body_insns_info) + uint8(iseq_body_insns_info_succ_index_table)
+	r.vmStructs.iseq_constant_body.succ_index_table = uint8(iseq_body_insns_info) +
+		uint8(iseq_body_insns_info_succ_index_table)
 
 	r.vmStructs.iseq_constant_body.size_of_iseq_constant_body = uint16(rb_iseq_constant_body.Size())
 
@@ -209,7 +216,8 @@ func (r *rubyData) calculateTypesFromDWARF(ef *pfelf.File) error {
 	}
 	r.vmStructs.iseq_insn_info_entry.size_of_line_no = uint8(lineno_size)
 
-	r.vmStructs.iseq_insn_info_entry.size_of_iseq_insn_info_entry = uint8(iseq_insn_info_entry.Size())
+	r.vmStructs.iseq_insn_info_entry.
+		size_of_iseq_insn_info_entry = uint8(iseq_insn_info_entry.Size())
 
 	// RString fields
 	rstring, ok := types_by_name["RString"]
@@ -230,7 +238,8 @@ func (r *rubyData) calculateTypesFromDWARF(ef *pfelf.File) error {
 	if err != nil {
 		return err
 	}
-	r.vmStructs.rstring_struct.as_ary = uint8(rstring_as_offset) + uint8(rstring_as_embed_offset) + uint8(rstring_as_embed_ary_offset)
+	r.vmStructs.rstring_struct.as_ary = uint8(rstring_as_offset) +
+		uint8(rstring_as_embed_offset) + uint8(rstring_as_embed_ary_offset)
 
 	rstring_as_heap_offset, err := rstring.FieldOffset("as.heap")
 	if err != nil {
@@ -241,7 +250,8 @@ func (r *rubyData) calculateTypesFromDWARF(ef *pfelf.File) error {
 	if err != nil {
 		return err
 	}
-	r.vmStructs.rstring_struct.as_heap_ptr = uint8(rstring_as_offset) + uint8(rstring_as_heap_offset) + uint8(rstring_as_heap_ptr_offset)
+	r.vmStructs.rstring_struct.as_heap_ptr = uint8(rstring_as_offset) +
+		uint8(rstring_as_heap_offset) + uint8(rstring_as_heap_ptr_offset)
 
 	// RArray fields
 	rarray, ok := types_by_name["RArray"]
@@ -269,7 +279,8 @@ func (r *rubyData) calculateTypesFromDWARF(ef *pfelf.File) error {
 	if err != nil {
 		return err
 	}
-	r.vmStructs.rarray_struct.as_heap_ptr = uint8(rarray_as_offset) + uint8(rarray_as_heap_offset) + uint8(rarray_as_heap_ptr_offset)
+	r.vmStructs.rarray_struct.as_heap_ptr = uint8(rarray_as_offset) +
+		uint8(rarray_as_heap_offset) + uint8(rarray_as_heap_ptr_offset)
 
 	// succ_dict_block fields
 	succ_dict_block, ok := types_by_name["succ_dict_block"]
@@ -306,12 +317,15 @@ func (r *rubyData) calculateTypesFromDWARF(ef *pfelf.File) error {
 	if err != nil {
 		return err
 	}
-	r.vmStructs.size_of_immediate_table = uint8((imm_part_size * 9) / 8) // equivalent of "floor division" by 8 after multiplying by 9
+
+	// equivalent of "floor division" by 8 after multiplying by 9
+	r.vmStructs.size_of_immediate_table = uint8((imm_part_size * 9) / 8)
 
 	// rb_ractor_struct not added until ruby 3.0.0+
 	if r.version >= rubyVersion(3, 0, 0) {
+		var rb_ractor_struct pfelf.TypeData
 		// rb_ractor_struct fields
-		rb_ractor_struct, ok := types_by_name["rb_ractor_struct"]
+		rb_ractor_struct, ok = types_by_name["rb_ractor_struct"]
 		if !ok {
 			return fmt.Errorf("unable to locate struct %s", "rb_ractor_struct")
 		}

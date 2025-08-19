@@ -830,7 +830,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	vms := &rid.vmStructs
 
-	if err := rid.calculateTypesFromDWARF(ef); err != nil {
+	if err = rid.calculateTypesFromDWARF(ef); err != nil {
 		// Ruby does not provide introspection data, hard code the struct field offsets. Some
 		// values can be fairly easily calculated from the struct definitions, but some are
 		// looked up by using gdb and getting the field offset directly from debug data.
