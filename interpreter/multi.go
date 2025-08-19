@@ -53,8 +53,8 @@ func (m *MultiData) Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Address,
 	}
 
 	// We got at least one valid instance, log any errors that occurred
-	if len(errs) > 0 {
-		log.Errorf("Errors occurred while attaching interpreters: %v", errs)
+	if err != nil {
+		log.Errorf("Errors occurred while attaching interpreters: %v", err)
 	}
 
 	return NewMultiInstance(instances), nil
