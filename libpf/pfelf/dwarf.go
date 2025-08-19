@@ -144,7 +144,7 @@ func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, nam
 	if debugStr == nil {
 		return nil, fmt.Errorf("all DWARF sections must be available, %s is missing", ".debug_str")
 	}
-	if debugStr == nil {
+	if debugLineStr == nil {
 		return nil, fmt.Errorf("all DWARF sections must be available, %s is missing", ".debug_line_str")
 	}
 
