@@ -1,5 +1,7 @@
 .PHONY: pprof pprof_1_23 pprof_1_24 pprof_1_24_cgo clean
 
+SHELL := /usr/bin/env bash
+
 pprof: pprof_1_23 pprof_1_24 pprof_1_24_cgo 
 
 pprof_1_23:
