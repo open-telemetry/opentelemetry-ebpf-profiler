@@ -1,0 +1,52 @@
+{
+  "coredump-ref": "96e1cb7a34e425c67af9067bfb7d0b82abd6f5f5df5042bd54587080ae96f71b",
+  "threads": [
+    {
+      "lwp": 35312,
+      "frames": [
+        "is_prime+0 in /app/loop.rb:10",
+        "is_prime+0 in /app/loop.rb:10",
+        "sum_of_primes+0 in /app/loop.rb:20",
+        "ffffffffffffffffffffffffffffffff+0x0",
+        "libruby.so.3.4.5+0x346a40",
+        "libruby.so.3.4.5+0x34bb17",
+        "libruby.so.3.4.5+0x24a095",
+        "libruby.so.3.4.5+0x32ae6a",
+        "libruby.so.3.4.5+0x331df0",
+        "libruby.so.3.4.5+0x3409bc",
+        "00000000000000000+0x0",
+        "ffffffffffffffffffffffffffffffff+0x0",
+        "00000000000000000+0x0",
+        "libruby.so.3.4.5+0x346da5",
+        "libruby.so.3.4.5+0x34bb17",
+        "libruby.so.3.4.5+0x24a2dd",
+        "libruby.so.3.4.5+0x329a00",
+        "libruby.so.3.4.5+0x331df0",
+        "libruby.so.3.4.5+0x3409bc",
+        "00000000000000000+0x0",
+        "ffffffffffffffffffffffffffffffff+0x0",
+        "00000000000000000+0x0",
+        "libruby.so.3.4.5+0x346ca8",
+        "libruby.so.3.4.5+0x13d25a",
+        "libruby.so.3.4.5+0x1434fa",
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 35338,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "582f2d3d4edab86d601c54b37f04bd18fa2cda28be30e9f8c87df73c1c581354",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "1cc1af955ac32bfbfb6368a9af8eb0c4972cff323ae9b0e42f66a9723f780595",
+      "local-path": "/usr/local/lib/libruby.so.3.4.5"
+    }
+  ]
+}
