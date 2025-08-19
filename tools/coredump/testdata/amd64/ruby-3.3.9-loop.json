@@ -1,0 +1,87 @@
+{
+  "coredump-ref": "b30adc830b2f54cb27f8f35a1ac20c7c5b4fb6a81c9c272d62368f5194b3162e",
+  "threads": [
+    {
+      "lwp": 7397,
+      "frames": [
+        "is_prime+0 in /app/loop.rb:10",
+        "is_prime+0 in /app/loop.rb:10",
+        "sum_of_primes+0 in /app/loop.rb:20",
+        "<main>+0 in /app/loop.rb:30",
+        "libruby.so.3.3.9+0x31ba80",
+        "libruby.so.3.3.9+0x321007",
+        "libruby.so.3.3.9+0x22912d",
+        "libruby.so.3.3.9+0x303ada",
+        "libruby.so.3.3.9+0x30a691",
+        "libruby.so.3.3.9+0x317d3f",
+        "<main>+0 in /app/loop.rb:29",
+        "ffffffffffffffffffffffffffffffff+0x0",
+        "<main>+0 in /app/loop.rb:28",
+        "libruby.so.3.3.9+0x31bde5",
+        "libruby.so.3.3.9+0x321007",
+        "libruby.so.3.3.9+0x22946d",
+        "libruby.so.3.3.9+0x303e48",
+        "libruby.so.3.3.9+0x30a691",
+        "libruby.so.3.3.9+0x317d3f",
+        "<main>+0 in /app/loop.rb:29",
+        "ffffffffffffffffffffffffffffffff+0x0",
+        "<main>+0 in /app/loop.rb:28",
+        "libruby.so.3.3.9+0x31bce8",
+        "libruby.so.3.3.9+0x120238",
+        "libruby.so.3.3.9+0x1267aa",
+        "ruby+0x110f",
+        "libc.so.6+0x29ca7",
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 7424,
+      "frames": [
+        "libc.so.6+0x9a9ee",
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "33c913cea616d1881350ee6d3ef784eda4b2f1de3036c4a437b4b612a121cf13",
+      "local-path": "/usr/local/lib/ruby/3.3.0/x86_64-linux/monitor.so"
+    },
+    {
+      "ref": "a778cb0514fb431a6ef92ad1f02318aa8c3b6218e9b8dd6acb9544ec10f91269",
+      "local-path": "/usr/local/lib/libruby.so.3.3.9"
+    },
+    {
+      "ref": "1d25fd63234b59e4c581564c7a6d8f5c6cf36eee757e3d26f4b0808dd36a4896",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "2bd1552c47799ef67e701e81d4383061fd76059868e446e63560f0dd0d5ec14e",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "067650d84b8f554cedf0b9ff26137bdd10cd03d4bbcdba1029a543c59d1798e5",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "c608c52e4edb3886910125a89beba619c3211b27affd7db1140da29c5a485aaf",
+      "local-path": "/usr/local/lib/ruby/3.3.0/x86_64-linux/enc/encdb.so"
+    },
+    {
+      "ref": "582f2d3d4edab86d601c54b37f04bd18fa2cda28be30e9f8c87df73c1c581354",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "5db18e8a8894ef4746eb8230855b638a5e52e782b2f10deede5f1dad846178bb",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcrypt.so.1.1.0"
+    },
+    {
+      "ref": "72733e395b91ba6c86adb6d1e711059b422752d7c2ef64e55d8286c011f866a5",
+      "local-path": "/usr/local/bin/ruby"
+    },
+    {
+      "ref": "8e3f1eb7bab7921c8dec8c86fcbea681d33f3b269647be8c358e331f4d8e75db",
+      "local-path": "/usr/local/lib/ruby/3.3.0/x86_64-linux/enc/trans/transdb.so"
+    }
+  ]
+}
