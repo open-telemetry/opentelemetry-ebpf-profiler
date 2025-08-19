@@ -509,7 +509,11 @@ func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (*libpf.Symbol, []
 // Gets TypeData for specific types from DWARF, without loading and parsing
 // the whole thing
 func (f *File) TypeData(names []string) ([]TypeData, error) {
-	return loadStructData(f.Section(".debug_info"), f.Section(".debug_abbrev"), f.Section(".debug_str"), f.Section(".debug_line_str"), names)
+	return loadStructData(f.Section(".debug_info"),
+		f.Section(".debug_abbrev"),
+		f.Section(".debug_str"),
+		f.Section(".debug_line_str"),
+		names)
 }
 
 // ReadVirtualMemory reads bytes from given virtual address
@@ -869,13 +873,17 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 			}
 
 			if elf.CompressionType(chdr64.Type) != elf.COMPRESS_ZLIB {
-				return nil, fmt.Errorf("unsupported compression type %d", elf.CompressionType(chdr64.Type))
+				return nil, fmt.Errorf("unsupported compression type %d",
+					elf.CompressionType(chdr64.Type))
 			}
 			if chdr64.Size > uint64(maxSize) {
-				return nil, fmt.Errorf("unable to read full section %s, uncompressed size %d would exceed maximum size %d", sh.Name, chdr64.Size, maxSize)
+				return nil, fmt.Errorf("unable to read full section %s,"+
+					"uncompressed size %d would exceed maximum size %d",
+					sh.Name, chdr64.Size, maxSize)
 			}
 
-			compressed_section := io.NewSectionReader(mapping, int64(sh.Offset+uint64(binary.Size(chdr64))), int64(chdr64.Size))
+			compressed_section := io.NewSectionReader(mapping,
+				int64(sh.Offset+uint64(binary.Size(chdr64))), int64(chdr64.Size))
 
 			zlibReader, err := zlib.NewReader(compressed_section)
 			if err != nil {

@@ -15,6 +15,8 @@ import (
 	"strings"
 )
 
+const missingSectionError string = "all DWARF sections must be available, %s is missing"
+
 type TypeData struct {
 	Name           string
 	size           int64
@@ -48,7 +50,7 @@ func (data TypeData) String() string {
 	return str
 }
 
-func (data *TypeData) FieldOffset(name string) (int64, error) {
+func (data TypeData) FieldOffset(name string) (int64, error) {
 	field, err := data.field(name)
 	if err != nil {
 		return -1, err
@@ -56,7 +58,7 @@ func (data *TypeData) FieldOffset(name string) (int64, error) {
 	return field.ByteOffset, nil
 }
 
-func (data *TypeData) FieldSize(name string) (int64, error) {
+func (data TypeData) FieldSize(name string) (int64, error) {
 	field, err := data.field(name)
 	if err != nil {
 		return -1, err
@@ -64,7 +66,7 @@ func (data *TypeData) FieldSize(name string) (int64, error) {
 	return field.Type.Size(), nil
 }
 
-func (data *TypeData) field(name string) (*dwarf.StructField, error) {
+func (data TypeData) field(name string) (*dwarf.StructField, error) {
 	var found *dwarf.StructField = nil
 
 	parts := strings.Split(name, ".")
@@ -86,7 +88,6 @@ func (data *TypeData) field(name string) (*dwarf.StructField, error) {
 				}
 			}
 		}
-
 	} else {
 		for _, field := range data.structTypeInfo.Field {
 			if field.Name == name {
@@ -103,7 +104,7 @@ func (data *TypeData) field(name string) (*dwarf.StructField, error) {
 	return found, nil
 }
 
-func (data *TypeData) Size() int64 {
+func (data TypeData) Size() int64 {
 	if data.structTypeInfo == nil {
 		return data.size
 	}
@@ -132,20 +133,21 @@ func (data *TypeData) Size() int64 {
 
 // This accepts a list of names to look up, as we want to try and get "everything in one go",
 // since DWARF is inherently O(n) to look up these symbols
-func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, names []string) ([]TypeData, error) {
+func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section,
+	names []string) ([]TypeData, error) {
 	results := []TypeData{}
 
 	if debugInfo == nil {
-		return nil, fmt.Errorf("all DWARF sections must be available, %s is missing", ".debug_info")
+		return nil, fmt.Errorf(missingSectionError, ".debug_info")
 	}
 	if debugAbbrev == nil {
-		return nil, fmt.Errorf("all DWARF sections must be available, %s is missing", ".debug_abbrev")
+		return nil, fmt.Errorf(missingSectionError, ".debug_abbrev")
 	}
 	if debugStr == nil {
-		return nil, fmt.Errorf("all DWARF sections must be available, %s is missing", ".debug_str")
+		return nil, fmt.Errorf(missingSectionError, ".debug_str")
 	}
 	if debugLineStr == nil {
-		return nil, fmt.Errorf("all DWARF sections must be available, %s is missing", ".debug_line_str")
+		return nil, fmt.Errorf(missingSectionError, ".debug_line_str")
 	}
 
 	// To reduce memory usage, we will use the Section's Data() accessor to
@@ -211,7 +213,7 @@ func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, nam
 			}
 			name := nameVal
 
-			if _, ok := processedTypes[name]; ok {
+			if _, ok = processedTypes[name]; ok {
 				continue
 			}
 
@@ -244,8 +246,8 @@ func loadStructData(debugInfo, debugAbbrev, debugStr, debugLineStr *Section, nam
 			})
 
 			processedTypes[name] = struct{}{}
-		} else if entry_name, ok := entry.Val(dwarf.AttrName).(string); ok && slices.Contains(names, entry_name) {
-
+		} else if entry_name, ok := entry.Val(dwarf.AttrName).(string); ok &&
+			slices.Contains(names, entry_name) {
 			if _, ok := processedTypes[entry_name]; ok {
 				continue
 			}

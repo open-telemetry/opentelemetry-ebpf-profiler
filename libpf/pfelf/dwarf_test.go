@@ -31,13 +31,13 @@ func TestDWARFParseStructs(t *testing.T) {
 				"some_typedef": 8,
 			},
 			expectedFieldOffsets: map[string]map[string]int64{
-				"some_struct": map[string]int64{
+				"some_struct": {
 					"some_array": int64(0),
 					"some_int":   int64(64),
 				},
 			},
 			expectedFieldSizes: map[string]map[string]int64{
-				"some_struct": map[string]int64{
+				"some_struct": {
 					"some_array": int64(64),
 					"some_int":   int64(8),
 				},
@@ -69,20 +69,20 @@ func TestDWARFParseStructs(t *testing.T) {
 				"VALUE":                   8,
 			},
 			expectedFieldOffsets: map[string]map[string]int64{
-				"rb_execution_context_struct": map[string]int64{
+				"rb_execution_context_struct": {
 					"vm_stack":      int64(0),
 					"vm_stack_size": int64(8),
 					"cfp":           int64(16),
 				},
-				"rb_control_frame_struct": map[string]int64{
+				"rb_control_frame_struct": {
 					"pc":   int64(0),
 					"iseq": int64(16),
 					"ep":   int64(32),
 				},
-				"rb_iseq_struct": map[string]int64{
+				"rb_iseq_struct": {
 					"body": int64(16),
 				},
-				"rb_iseq_constant_body": map[string]int64{
+				"rb_iseq_constant_body": {
 					"type":                        int64(0),
 					"iseq_size":                   int64(4),
 					"iseq_encoded":                int64(8),
@@ -92,54 +92,57 @@ func TestDWARFParseStructs(t *testing.T) {
 					"insns_info.size":             int64(16),
 					"insns_info.succ_index_table": int64(24),
 				},
-				"iseq_insn_info": map[string]int64{ // substruct of rb_iseq_constant_body, these offsets would be added to the insns_info offset
+				// substruct of rb_iseq_constant_body
+				// these offsets would be added to the insns_info offset
+				"iseq_insn_info": {
 					"body":             int64(0),
 					"size":             int64(16),
 					"succ_index_table": int64(24),
 				},
-				"rb_iseq_location_struct": map[string]int64{
+				"rb_iseq_location_struct": {
 					"pathobj":    int64(0),
 					"base_label": int64(8),
 				},
-				"iseq_insn_info_entry": map[string]int64{
+				"iseq_insn_info_entry": {
 					// position was removed in 3.1
 					"line_no": int64(0),
 				},
-				"RString": map[string]int64{
+				"RString": {
 					"as":           int64(24),
 					"as.embed":     int64(0),
 					"as.embed.ary": int64(0),
 					"as.heap":      int64(0),
 					"as.heap.ptr":  int64(0),
 				},
-				"RArray": map[string]int64{
+				"RArray": {
 					"as":          int64(16),
 					"as.ary":      int64(0),
 					"as.heap":     int64(0),
 					"as.heap.ptr": int64(16),
 				},
-				"succ_index_table": map[string]int64{
+				"succ_index_table": {
 					"succ_part": int64(48),
 				},
-				"succ_dict_block": map[string]int64{
+				"succ_dict_block": {
 					"small_block_ranks": int64(8),
 					"bits":              int64(16),
 				},
-				"rb_ractor_struct": map[string]int64{
+				"rb_ractor_struct": {
 					"threads":            int64(264),
 					"threads.running_ec": int64(136),
 				},
 			},
 			expectedFieldSizes: map[string]map[string]int64{
-				"rb_execution_context_struct": map[string]int64{
+				"rb_execution_context_struct": {
 					"vm_stack": int64(8),
 				},
-				"iseq_insn_info_entry": map[string]int64{
+				"iseq_insn_info_entry": {
 					// position was removed in 3.1
 					"line_no": int64(4),
 				},
-				"succ_index_table": map[string]int64{
-					"imm_part":  int64(48), // note that in python they multiple this by 9, then divide by 8 https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/078ae4d6ded761b513038440bc8525014fa6c016/tools/coredump/testsources/ruby/gdb-dump-offsets.py#L69 because of https://github.com/Shopify/ruby/blob/70b4b6fea0eeb66647539bcb3b9a50d027d92e51/iseq.c#L4265
+				"succ_index_table": {
+					// note that in python they multiple this by 9, then divide by 8
+					"imm_part":  int64(48),
 					"succ_part": int64(0),
 				},
 			},
@@ -157,7 +160,7 @@ func TestDWARFParseStructs(t *testing.T) {
 			type_data, err := elfFile.TypeData(tt.expectedTypes)
 			require.NoError(err)
 
-			assert.Equal(len(tt.expectedTypes), len(type_data))
+			assert.Len(type_data, len(tt.expectedTypes))
 
 			types_by_name := map[string]TypeData{}
 
@@ -183,7 +186,7 @@ func TestDWARFParseStructs(t *testing.T) {
 
 				for field, expected_offset := range fields {
 					actual_offset, err := struct_info.FieldOffset(field)
-					assert.NoError(err)
+					require.NoError(err)
 
 					assert.Equal(expected_offset, actual_offset)
 				}
@@ -195,7 +198,7 @@ func TestDWARFParseStructs(t *testing.T) {
 
 				for field, expected_size := range fields {
 					actual_size, err := struct_info.FieldSize(field)
-					assert.NoError(err)
+					require.NoError(err)
 
 					assert.Equal(expected_size, actual_size)
 				}
