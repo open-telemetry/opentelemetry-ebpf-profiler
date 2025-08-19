@@ -6,6 +6,7 @@ package interpreter // import "go.opentelemetry.io/ebpf-profiler/interpreter"
 import (
 	"errors"
 
+	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -52,6 +53,11 @@ func (m *MultiData) Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Address,
 		// All interpreters returned nil instances without error (e.g., not ready yet)
 		// This is a valid state - return nil, nil
 		return nil, nil
+	}
+
+	// We got at least one valid instance, log any errors that occurred
+	if len(errs) > 0 {
+		log.Errorf("Errors occurred while attaching interpreters: %v", errs)
 	}
 
 	return NewMultiInstance(instances), nil

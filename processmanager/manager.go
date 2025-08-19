@@ -118,20 +118,18 @@ func metricSummaryToSlice(summary metrics.Summary) []metrics.Metric {
 	return result
 }
 
-// updateMetricSummary gets the metrics from the provided interpreter instance and updaates the
+// updateMetricSummary gets the metrics from the provided interpreter instance and updates the
 // provided summary by aggregating the new metrics into the summary.
 // The caller is responsible to hold the lock on the interpreter.Instance to avoid race conditions.
 func updateMetricSummary(ii interpreter.Instance, summary metrics.Summary) error {
 	instanceMetrics, err := ii.GetAndResetMetrics()
-	if err != nil {
-		return err
-	}
-
+	// Update metrics even if there was an error, because its possible ii is a multi-instance
+	// and some of the instances may have returned metrics.
 	for _, metric := range instanceMetrics {
 		summary[metric.ID] += metric.Value
 	}
 
-	return nil
+	return err
 }
 
 // collectInterpreterMetrics starts a goroutine that periodically fetches and reports interpreter
@@ -145,8 +143,8 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 		summary := make(map[metrics.MetricID]metrics.MetricValue)
 
 		for pid := range pm.interpreters {
-			for addr := range pm.interpreters[pid] {
-				if err := updateMetricSummary(pm.interpreters[pid][addr], summary); err != nil {
+			for addr, ii := range pm.interpreters[pid] {
+				if err := updateMetricSummary(ii, summary); err != nil {
 					log.Errorf("Failed to get/reset metrics for PID %d at 0x%x: %v",
 						pid, addr, err)
 				}
