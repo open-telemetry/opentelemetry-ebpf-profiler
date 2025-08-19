@@ -123,7 +123,7 @@ func metricSummaryToSlice(summary metrics.Summary) []metrics.Metric {
 // The caller is responsible to hold the lock on the interpreter.Instance to avoid race conditions.
 func updateMetricSummary(ii interpreter.Instance, summary metrics.Summary) error {
 	instanceMetrics, err := ii.GetAndResetMetrics()
-	// Update metrics even if there was an error, because its possible ii is a multi-instance
+	// Update metrics even if there was an error, because it's possible ii is a MultiInstance
 	// and some of the instances may have returned metrics.
 	for _, metric := range instanceMetrics {
 		summary[metric.ID] += metric.Value
