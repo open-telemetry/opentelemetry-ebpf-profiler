@@ -59,8 +59,8 @@ all: ebpf-profiler
 clean:
 	@go clean -cache -i
 	@$(MAKE) -s -C support/ebpf clean
-	@rm -rf go .cache support/*.test interpreter/golabels/integrationtests/pprof_1_*
 	@chmod -Rf u+w go/ || true
+	@rm -rf go .cache support/*.test interpreter/golabels/integrationtests/pprof_1_*
 	@cargo clean
 
 generate:
