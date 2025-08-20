@@ -95,3 +95,12 @@ func TestGoVersion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, runtime.Version(), testVersion)
 }
+
+func TestGetGoBuildID(t *testing.T) {
+	ef := getPFELF("testdata/go-binary", t)
+	defer ef.Close()
+
+	buildID, err := ef.GetGoBuildID()
+	require.NoError(t, err)
+	assert.Equal(t, "mSjQUF9aNISAGKgEYWYW/gl-SZRNsumthfUYcrRMu/ZUVOFxTtTC1hQVpcWljU/zS1BVEqI6Vz71640f9wn", buildID)
+}

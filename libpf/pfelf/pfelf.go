@@ -165,6 +165,38 @@ func GetBuildID(elfFile *elf.File) (string, error) {
 	return getBuildIDFromNotes(sectionData)
 }
 
+// GetBuildID extracts the Go build ID from the provided ELF file. This is read from
+// the .note.go.buildid or .notes section of the ELF, and may not exist. If no build ID is present
+// an ErrNoBuildID is returned.
+func GetGoBuildID(elfFile *elf.File) (string, error) {
+	sectionData, err := getSectionData(elfFile, ".note.go.buildid")
+	if err != nil {
+		sectionData, err = getSectionData(elfFile, ".notes")
+		if err != nil {
+			return "", ErrNoBuildID
+		}
+	}
+
+	return getGoBuildIDFromNotes(sectionData)
+}
+
+// getGoBuildIDFromNotes returns the Go build ID from an ELF notes section data.
+func getGoBuildIDFromNotes(notes []byte) (string, error) {
+	// 0x4 is the "Go Build ID" type. Not sure where this is standardized.
+	buildID, found, err := getNoteString(notes, "Go", 0x4)
+	if err != nil {
+		return "", fmt.Errorf("could not determine BuildID: %v", err)
+	}
+	//nolint:lll
+	// When building Go binaries, Bazel explicitly sets their build ID to "redacted"
+	// see https://github.com/bazelbuild/rules_go/blob/199d8e4827f87d382a85febd0148c1b42fa949cc/go/private/actions/link.bzl#L174.
+	// In that case, we don't want to associate the build ID with the binary in the mapping.
+	if !found {
+		return "", ErrNoBuildID
+	}
+	return buildID, nil
+}
+
 // GetBuildIDFromNotesFile returns the build ID contained in a file with the format of an ELF notes
 // section.
 func GetBuildIDFromNotesFile(filePath string) (string, error) {
@@ -205,10 +237,10 @@ func GetSectionAddress(e *elf.File, sectionName string) (
 	return section.Addr, true, nil
 }
 
-// getNoteHexString returns the hex string contents of an ELF note from a note section, as described
+// getNoteDescBytes returns the bytes contents of an ELF note from a note section, as described
 // in the ELF standard in Figure 2-3.
-func getNoteHexString(sectionBytes []byte, name string, noteType uint32) (
-	noteHexString string, found bool, err error) {
+func getNoteDescBytes(sectionBytes []byte, name string, noteType uint32) (
+	noteBytes []byte, found bool, err error) {
 	// The data stored inside ELF notes is made of one or multiple structs, containing the
 	// following fields:
 	// 	- namesz	// 32-bit, size of "name"
@@ -228,10 +260,10 @@ func getNoteHexString(sectionBytes []byte, name string, noteType uint32) (
 	// Try to find the note in the section
 	idx := bytes.Index(sectionBytes, noteHeader)
 	if idx == -1 {
-		return "", false, nil
+		return nil, false, nil
 	}
 	if idx < 4 { // there needs to be room for descsz
-		return "", false, errors.New("could not read note data size")
+		return nil, false, errors.New("could not read note data size")
 	}
 
 	idxDataStart := idx + len(noteHeader)
@@ -241,13 +273,39 @@ func getNoteHexString(sectionBytes []byte, name string, noteType uint32) (
 	dataSize := binary.LittleEndian.Uint32(sectionBytes[idx-4 : idx])
 	idxDataEnd := uint64(idxDataStart) + uint64(dataSize)
 
-	// Check sanity (64 is totally arbitrary, as we only use it for Linux ID and Build ID)
-	if idxDataEnd > uint64(len(sectionBytes)) || dataSize > 64 {
-		return "", false, fmt.Errorf(
+	// Check sanity (84 is totally arbitrary, as we only use it for Linux ID and (Go) Build ID)
+	if idxDataEnd > uint64(len(sectionBytes)) || dataSize > 84 {
+		return nil, false, fmt.Errorf(
 			"non-sensical note: %d start index: %d, %v end index %d, size %d, section size %d",
 			idx, idxDataStart, noteHeader, idxDataEnd, dataSize, len(sectionBytes))
 	}
-	return hex.EncodeToString(sectionBytes[idxDataStart:idxDataEnd]), true, nil
+	return sectionBytes[idxDataStart:idxDataEnd], true, nil
+}
+
+// getNoteHexString returns the hex string contents of an ELF note from a note section, as described
+// in the ELF standard in Figure 2-3.
+func getNoteHexString(sectionBytes []byte, name string, noteType uint32) (
+	noteHexString string, found bool, err error) {
+	noteBytes, found, err := getNoteDescBytes(sectionBytes, name, noteType)
+	if err != nil {
+		return "", false, err
+	}
+	if !found {
+		return "", false, nil
+	}
+	return hex.EncodeToString(noteBytes), true, nil
+}
+
+func getNoteString(sectionBytes []byte, name string, noteType uint32) (
+	noteString string, found bool, err error) {
+	noteBytes, found, err := getNoteDescBytes(sectionBytes, name, noteType)
+	if err != nil {
+		return "", false, err
+	}
+	if !found {
+		return "", false, nil
+	}
+	return string(noteBytes), true, nil
 }
 
 func symbolMapFromELFSymbols(syms []elf.Symbol) *libpf.SymbolMap {
