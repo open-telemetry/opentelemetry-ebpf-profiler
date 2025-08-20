@@ -87,6 +87,7 @@ func Test_Golabels(t *testing.T) {
 
 			enabledTracers, _ := tracertypes.Parse("")
 			enabledTracers.Enable(tracertypes.Labels)
+			enabledTracers.Enable(tracertypes.GoTracer)
 
 			trc, err := tracer.NewTracer(ctx, &tracer.Config{
 				Reporter:               &mockReporter{},
