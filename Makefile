@@ -1,6 +1,7 @@
 .PHONY: all all-common clean ebpf generate test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
-	codespell lint linter-version ebpf-profiler format-ebpf \
+	codespell lint linter-version ebpf-profiler format-ebpf pprof-execs \
+	pprof_1_23 pprof_1_24 pprof_1_24_cgo \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
 SHELL := /usr/bin/env bash
@@ -58,9 +59,8 @@ all: ebpf-profiler
 clean:
 	@go clean -cache -i
 	@$(MAKE) -s -C support/ebpf clean
-	@rm -f support/*.test
 	@chmod -Rf u+w go/ || true
-	@rm -rf go .cache
+	@rm -rf go .cache support/*.test interpreter/golabels/integrationtests/pprof_1_*
 	@cargo clean
 
 generate:
@@ -83,7 +83,7 @@ rust-tests: rust-targets
 	cargo test
 
 GOLANGCI_LINT_VERSION = "v2.1.6"
-lint: generate vanity-import-check
+lint: generate vanity-import-check pprof-execs
 	$(MAKE) lint -C support/ebpf
 	docker run --rm -t -v $$(pwd):/app -w /app golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) sh -c "golangci-lint version && golangci-lint config verify && golangci-lint run --max-issues-per-linter -1 --max-same-issues -1"
 
@@ -120,19 +120,20 @@ test-deps:
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
-TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support interpreter/golabels/integrationtests
 
-# These binaries are named ".test" to get included into bluebox initramfs
-support/golbls_1_23.test: generate ebpf
-	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go test ./interpreter/golabels/integrationtests -c -trimpath -tags $(GO_TAGS),nocgo,integration  -o $@
+pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo
 
-support/golbls_1_24.test: generate ebpf
-	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.1 go test ./interpreter/golabels/integrationtests -c -trimpath -tags $(GO_TAGS),nocgo,integration  -o $@
+pprof_1_23:
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
 
-support/golbls_cgo.test: generate ebpf
-	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.1 go test ./interpreter/golabels/integrationtests -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration  -o $@
+pprof_1_24:
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
 
-integration-test-binaries: support/golbls_1_23.test support/golbls_1_24.test support/golbls_cgo.test
+pprof_1_24_cgo:
+	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
+
+integration-test-binaries: generate ebpf pprof-execs
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \

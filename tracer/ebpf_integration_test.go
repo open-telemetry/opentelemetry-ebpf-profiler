@@ -6,7 +6,6 @@
 package tracer_test
 
 import (
-	"context"
 	"math"
 	"runtime"
 	"sync"
@@ -111,7 +110,7 @@ func generateMaxLengthTrace() host.Trace {
 }
 
 func TestTraceTransmissionAndParsing(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	enabledTracers, _ := tracertypes.Parse("")
 	enabledTracers.Enable(tracertypes.PythonTracer)
@@ -239,7 +238,7 @@ Loop:
 }
 
 func TestAllTracers(t *testing.T) {
-	_, err := tracer.NewTracer(context.Background(), &tracer.Config{
+	_, err := tracer.NewTracer(t.Context(), &tracer.Config{
 		Reporter:               &mockReporter{},
 		Intervals:              &mockIntervals{},
 		IncludeTracers:         tracertypes.AllTracers(),

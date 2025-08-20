@@ -4,7 +4,6 @@
 package main
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -31,13 +30,11 @@ func TestCoreDumps(t *testing.T) {
 				t.Skip(testCase.Skip)
 			}
 
-			ctx := context.Background()
-
 			core, err := OpenStoreCoredump(store, testCase.CoredumpRef, testCase.Modules)
 			require.NoError(t, err)
 			defer core.Close()
 
-			data, err := ExtractTraces(ctx, core, false, nil)
+			data, err := ExtractTraces(t.Context(), core, false, nil)
 
 			require.NoError(t, err)
 			require.Equal(t, testCase.Threads, data)

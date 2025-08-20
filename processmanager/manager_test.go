@@ -299,7 +299,7 @@ func TestNewMapping(t *testing.T) {
 			// For this test do not include interpreters.
 			noInterpreters, _ := tracertypes.Parse("")
 
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 
 			manager, err := New(ctx,
@@ -485,7 +485,7 @@ func TestProcExit(t *testing.T) {
 			// For this test do not include interpreters.
 			noInterpreters, _ := tracertypes.Parse("")
 
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 
 			manager, err := New(ctx,
 				noInterpreters,
