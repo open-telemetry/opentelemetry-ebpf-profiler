@@ -138,7 +138,7 @@ func (store *Store) OpenReadAt(id ID) (*ModuleReader, error) {
 
 	file, err := zstpak.Open(localPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open local file: %w", err)
+		return nil, fmt.Errorf("failed to open local file %s: %w", localPath, err)
 	}
 
 	reader := &ModuleReader{

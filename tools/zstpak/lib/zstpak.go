@@ -183,7 +183,7 @@ func Open(path string) (*Reader, error) {
 
 	hdr, err := readFooter(file, uint64(fileInfo.Size()))
 	if err != nil {
-		return nil, fmt.Errorf("%s: %v,", path, err)
+		return nil, err
 	}
 
 	return &Reader{
