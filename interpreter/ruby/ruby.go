@@ -880,8 +880,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		// https://github.com/ruby/ruby/commit/9d8cc01b758f9385bd4c806f3daff9719e07faa0
 		vms.control_frame_struct.size_of_control_frame_struct = 64
 	default:
-		// 3.3+ size changed after re-ordering fields
-		// https://github.com/ruby/ruby/commit/7740526b1ccf62a027984e35375bb30ccbc0a000
+		// 3.3+ bp field was removed
+		// https://github.com/ruby/ruby/commit/f302e725e10ae05e613e2c24cae0741f65f2db91
 		vms.control_frame_struct.size_of_control_frame_struct = 56
 	}
 	vms.iseq_struct.body = 16
