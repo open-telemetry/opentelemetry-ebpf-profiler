@@ -123,6 +123,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		Timestamps: []uint64{uint64(meta.Timestamp)},
 		OffTimes:   []int64{meta.OffTime},
 		EnvVars:    meta.EnvVars,
+		Labels:     trace.CustomLabels,
 	}
 	return nil
 }
