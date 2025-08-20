@@ -1,6 +1,7 @@
 .PHONY: all all-common clean ebpf generate test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
 	codespell lint linter-version ebpf-profiler format-ebpf pprof-execs \
+	pprof_1_23 pprof_1_24 pprof_1_24_cgo \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
 SHELL := /usr/bin/env bash
@@ -58,10 +59,8 @@ all: ebpf-profiler
 clean:
 	@go clean -cache -i
 	@$(MAKE) -s -C support/ebpf clean
-	@rm -f support/*.test
-	@rm -rf interpreter/golabels/integrationtests/pprof_1_*
+	@rm -rf go .cache support/*.test interpreter/golabels/integrationtests/pprof_1_*
 	@chmod -Rf u+w go/ || true
-	@rm -rf go .cache
 	@cargo clean
 
 generate:
