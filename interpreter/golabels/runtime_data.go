@@ -30,7 +30,11 @@ func getOffsets(vers string) support.GoLabelsOffsets {
 	}
 
 	// Version enforcement takes place in the Loader function.
-	if version.Compare(vers, "go1.24") >= 0 {
+	if version.Compare(vers, "go1.25") >= 0 {
+		offsets.Curg = 184
+		offsets.Labels = 344
+		return offsets
+	} else if version.Compare(vers, "go1.24") >= 0 {
 		offsets.Labels = 352
 		return offsets
 	}

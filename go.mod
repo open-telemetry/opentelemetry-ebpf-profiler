@@ -1,6 +1,6 @@
 module go.opentelemetry.io/ebpf-profiler
 
-go 1.23.6
+go 1.24.6
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.38.0
