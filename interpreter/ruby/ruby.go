@@ -379,7 +379,8 @@ func (r *rubyInstance) getStringCached(addr libpf.Address, reader StringReader) 
 		return libpf.NullString, err
 	}
 	if !util.IsValidString(str) {
-		log.Debugf("Extracted invalid string from Ruby at 0x%x, len=%d, bytes=%x", addr, len(str), []byte(str))
+		log.Debugf("Extracted invalid string from Ruby at 0x%x, len=%d, bytes=%x",
+			addr, len(str), []byte(str))
 		return libpf.NullString, fmt.Errorf("extracted invalid Ruby string from address 0x%x", addr)
 	}
 
@@ -838,7 +839,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 	// if we already have a map of symbols, use it to lookup the symbol
 	if symMap != nil {
-		sym, err := symMap.LookupSymbol(symbolName)
+		var sym *libpf.Symbol
+		sym, err = symMap.LookupSymbol(symbolName)
 		if err != nil {
 			log.Warnf("Failed to lookup symbol %s in symbol table: %v", currentCtxSymbol, err)
 			return nil, err
