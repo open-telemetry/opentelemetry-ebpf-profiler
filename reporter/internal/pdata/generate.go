@@ -170,7 +170,7 @@ func (p *Pdata) setProfile(
 				frameType: frame.Type.String(),
 			}
 
-			if frame.MappingFile != (libpf.FrameMappingFile{}) {
+			if frame.MappingFile.Valid() {
 				index, ok := mappingSet.AddWithCheck(uniqueMapping{
 					Start: frame.MappingStart,
 					File:  frame.MappingFile,
@@ -207,7 +207,7 @@ func (p *Pdata) setProfile(
 					fileNameIdx: stringSet.Add(frame.SourceFile.String()),
 				}
 				locInfo.functionIndex = funcSet.Add(fi)
-			} // End frame type switch
+			}
 
 			idx, exists := locationSet.AddWithCheck(locInfo)
 			if !exists {
