@@ -27,6 +27,7 @@ type TraceEvents struct {
 	Timestamps []uint64 // in nanoseconds
 	OffTimes   []int64  // in nanoseconds
 	EnvVars    map[string]string
+	Labels     map[string]string
 }
 
 // TraceAndMetaKey is the deduplication key for samples. This **must always**

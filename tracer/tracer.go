@@ -135,6 +135,12 @@ type Config struct {
 	// IncludeEnvVars holds a list of environment variables that should be captured and reported
 	// from processes
 	IncludeEnvVars libpf.Set[string]
+	// UProbes holds a list of executable:symbol elements to which
+	// a uprobe will be attached.
+	UProbeLinks []string
+	// LoadProbe inidicates whether the generic eBPF program should be loaded
+	// without being attached to something.
+	LoadProbe bool
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -382,10 +388,44 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		return nil, nil, fmt.Errorf("failed to load perf eBPF programs: %v", err)
 	}
 
-	if cfg.OffCPUThreshold > 0 {
-		if err = loadKProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
+	if cfg.OffCPUThreshold > 0 || len(cfg.UProbeLinks) > 0 || cfg.LoadProbe {
+		// Load the tail call destinations if any kind of event profiling is enabled.
+		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
+		}
+	}
+
+	if cfg.OffCPUThreshold > 0 {
+		offCPUProgs := []progLoaderHelper{
+			{
+				name:             "finish_task_switch",
+				noTailCallTarget: true,
+				enable:           true,
+			},
+			{
+				name:             "tracepoint__sched_switch",
+				noTailCallTarget: true,
+				enable:           true,
+			},
+		}
+		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], offCPUProgs,
+			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
+			return nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
+		}
+	}
+
+	if len(cfg.UProbeLinks) > 0 || cfg.LoadProbe {
+		uprobeProgs := []progLoaderHelper{
+			{
+				name:             "uprobe__generic",
+				noTailCallTarget: true,
+				enable:           true,
+			},
+		}
+		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], uprobeProgs,
+			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
+			return nil, nil, fmt.Errorf("failed to load uprobe eBPF programs: %v", err)
 		}
 	}
 
@@ -551,30 +591,15 @@ func progArrayReferences(perfTailCallMapFD int, insns asm.Instructions) []int {
 	return insNos
 }
 
-// loadKProbeUnwinders reuses large parts of loadPerfUnwinders. By default all eBPF programs
-// are written as perf event eBPF programs. loadKProbeUnwinders dynamically rewrites the
-// specification of these programs to kprobe eBPF programs and adjusts tail call maps.
-func loadKProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
-	tailcallMap *cebpf.Map, tailCallProgs []progLoaderHelper,
+// loadProbeUnwinders reuses large parts of loadPerfUnwinders. By default all eBPF programs
+// are written as perf event eBPF programs. loadProbeUnwinders dynamically rewrites the
+// specification of these programs to xProbe eBPF programs and adjusts tail call maps.
+func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
+	tailcallMap *cebpf.Map, progs []progLoaderHelper,
 	bpfVerifierLogLevel uint32, perfTailCallMapFD int) error {
 	programOptions := cebpf.ProgramOptions{
 		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
 	}
-
-	progs := make([]progLoaderHelper, len(tailCallProgs)+2)
-	copy(progs, tailCallProgs)
-	progs = append(progs,
-		progLoaderHelper{
-			name:             "finish_task_switch",
-			noTailCallTarget: true,
-			enable:           true,
-		},
-		progLoaderHelper{
-			name:             "tracepoint__sched_switch",
-			noTailCallTarget: true,
-			enable:           true,
-		},
-	)
 
 	for _, unwindProg := range progs {
 		if !unwindProg.enable {
@@ -859,7 +884,11 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		EnvVars:          procMeta.EnvVariables,
 	}
 
-	if trace.Origin != support.TraceOriginSampling && trace.Origin != support.TraceOriginOffCPU {
+	switch trace.Origin {
+	case support.TraceOriginSampling:
+	case support.TraceOriginOffCPU:
+	case support.TraceOriginUProbe:
+	default:
 		log.Warnf("Skip handling trace from unexpected %d origin", trace.Origin)
 		return nil
 	}
@@ -1103,6 +1132,27 @@ func (t *Tracer) StartOffCPUProfiling() error {
 	}
 	t.hooks[hookPoint{group: "sched", name: "sched_switch"}] = tpLink
 
+	return nil
+}
+
+func (t *Tracer) AttachUProbes(uprobes []string) error {
+	uProbeProg, ok := t.ebpfProgs["uprobe__generic"]
+	if !ok {
+		return errors.New("uprobe__generic is not available")
+	}
+	for _, uprobeStr := range uprobes {
+		split := strings.SplitN(uprobeStr, ":", 2)
+
+		exec, err := link.OpenExecutable(split[0])
+		if err != nil {
+			return err
+		}
+		uprobeLink, err := exec.Uprobe(split[1], uProbeProg, nil)
+		if err != nil {
+			return err
+		}
+		t.hooks[hookPoint{group: "uprobe", name: uprobeStr}] = uprobeLink
+	}
 	return nil
 }
 

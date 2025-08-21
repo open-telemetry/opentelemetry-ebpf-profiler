@@ -5,7 +5,6 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
-	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -15,7 +14,6 @@ import (
 // Reporter is the top-level interface implemented by a full reporter.
 type Reporter interface {
 	TraceReporter
-	HostMetadataReporter
 
 	// Start starts the reporter in the background.
 	//
@@ -57,13 +55,4 @@ type ExecutableMetadata struct {
 // support this functionality in other (non-tree) protocol implementations.
 type ExecutableReporter interface {
 	ReportExecutable(args *ExecutableMetadata)
-}
-
-type HostMetadataReporter interface {
-	// ReportHostMetadata enqueues host metadata for sending (to the collection agent).
-	ReportHostMetadata(metadataMap map[string]string)
-
-	// ReportHostMetadataBlocking sends host metadata to the collection agent.
-	ReportHostMetadataBlocking(ctx context.Context, metadataMap map[string]string,
-		maxRetries int, waitRetry time.Duration) error
 }

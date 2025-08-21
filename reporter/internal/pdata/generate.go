@@ -69,6 +69,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		for _, origin := range []libpf.Origin{
 			support.TraceOriginSampling,
 			support.TraceOriginOffCPU,
+			support.TraceOriginUProbe,
 		} {
 			if len(originToEvents[origin]) == 0 {
 				// Do not append empty profiles.
@@ -130,6 +131,9 @@ func (p *Pdata) setProfile(
 	case support.TraceOriginOffCPU:
 		st.SetTypeStrindex(stringSet.Add("events"))
 		st.SetUnitStrindex(stringSet.Add("nanoseconds"))
+	case support.TraceOriginUProbe:
+		st.SetTypeStrindex(stringSet.Add("events"))
+		st.SetUnitStrindex(stringSet.Add("count"))
 	default:
 		// Should never happen
 		return fmt.Errorf("generating profile for unsupported origin %d", origin)
@@ -154,6 +158,8 @@ func (p *Pdata) setProfile(
 			sample.Value().Append(1)
 		case support.TraceOriginOffCPU:
 			sample.Value().Append(traceInfo.OffTimes...)
+		case support.TraceOriginUProbe:
+			sample.Value().Append(1)
 		}
 
 		// Walk every frame of the trace.
@@ -244,6 +250,14 @@ func (p *Pdata) setProfile(
 			attrMgr.AppendOptionalString(
 				sample.AttributeIndices(),
 				attribute.Key("process.environment_variable."+key),
+				value)
+		}
+		for key, value := range traceInfo.Labels {
+			// Once https://github.com/open-telemetry/semantic-conventions/issues/2561
+			// reached an agreement, use the actual OTel SemConv attribute.
+			attrMgr.AppendOptionalString(
+				sample.AttributeIndices(),
+				attribute.Key("process.context.label."+key),
 				value)
 		}
 
