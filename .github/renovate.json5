@@ -4,6 +4,9 @@
     "config:best-practices",
     "helpers:pinGitHubActionDigestsToSemver"
   ],
+  "postUpdateOptions" : [
+    "gomodTidy"
+  ],
   "packageRules": [
     {
       "groupName": "Go dependencies",

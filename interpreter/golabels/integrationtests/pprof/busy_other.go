@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //nolint:lll
-package integrationtests // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels/integrationtests"
+package pprof // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels/integrationtests/pprof"
 
 //go:noinline
 func busyFunc() {
