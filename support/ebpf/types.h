@@ -335,6 +335,7 @@ typedef enum TracePrograms {
   PROG_UNWIND_V8,
   PROG_UNWIND_DOTNET,
   PROG_GO_LABELS,
+  PROG_UNWIND_BEAM,
   NUM_TRACER_PROGS,
 } TracePrograms;
 
@@ -491,6 +492,16 @@ typedef struct V8ProcInfo {
   u8 fp_marker, fp_function, fp_bytecode_offset;
   u8 codekind_shift, codekind_mask, codekind_baseline;
 } V8ProcInfo;
+
+// BEAMProcInfo is a container for the data needed to build a stack trace for a BEAM process.
+typedef struct BEAMProcInfo {
+  u32 version;
+  u64 r;
+  u64 the_active_code_index;
+  // Introspection Struct Offsets
+  u8 ranges_sizeof, ranges_modules, ranges_n;
+  u8 ranges_entry_sizeof, ranges_entry_start, ranges_entry_end;
+} BEAMProcInfo;
 
 // COMM_LEN defines the maximum length we will receive for the comm of a task.
 #define COMM_LEN 16
