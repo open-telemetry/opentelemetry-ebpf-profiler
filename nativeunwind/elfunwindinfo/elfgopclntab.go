@@ -10,6 +10,7 @@ package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/
 import (
 	"bytes"
 	"debug/elf"
+	"errors"
 	"fmt"
 	"go/version"
 	"io"
@@ -496,6 +497,17 @@ func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
 		}
 	}
 	return p.val, true
+}
+
+func (g *Gopclntab) LookupFunction(funcName string) (uintptr, error) {
+	for i := 0; i < g.numFuncs; i++ {
+		mapPc, funcOff := g.getFuncMapEntry(i)
+		funcPc, fun := g.getFunc(funcOff)
+		if fun != nil && mapPc == funcPc && getString(g.funcnametab, int(fun.nameOff)) == funcName {
+			return funcPc, nil
+		}
+	}
+	return 0, errors.New("function not found")
 }
 
 // Symbolize returns the file, line and function information for given PC
