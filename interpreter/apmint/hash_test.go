@@ -5,7 +5,6 @@ package apmint // import "go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 
 import (
 	"testing"
-	"unique"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -25,17 +24,20 @@ func newPythonTrace() *libpf.Trace {
 	trace.Frames.Append(&libpf.Frame{
 		Type:            libpf.NativeFrame,
 		AddressOrLineno: 0,
-		MappingFile:     unique.Make(libpf.FrameMappingFileData{FileID: libpf.NewFileID(0, 0)}),
+		MappingFile: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID: libpf.NewFileID(0, 0)}),
 	})
 	trace.Frames.Append(&libpf.Frame{
 		Type:            libpf.NativeFrame,
 		AddressOrLineno: 1,
-		MappingFile:     unique.Make(libpf.FrameMappingFileData{FileID: libpf.NewFileID(1, 1)}),
+		MappingFile: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID: libpf.NewFileID(1, 1)}),
 	})
 	trace.Frames.Append(&libpf.Frame{
 		Type:            libpf.NativeFrame,
 		AddressOrLineno: 2,
-		MappingFile:     unique.Make(libpf.FrameMappingFileData{FileID: libpf.NewFileID(2, 2)}),
+		MappingFile: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID: libpf.NewFileID(2, 2)}),
 	})
 	return trace
 }

@@ -19,7 +19,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-	"unique"
 
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
@@ -360,7 +359,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	}
 	gnuBuildID, _ := ef.GetBuildID()
 
-	info.mappingFile = unique.Make(libpf.FrameMappingFileData{
+	info.mappingFile = libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 		FileID:     fileID,
 		FileName:   libpf.Intern(baseName),
 		GnuBuildID: gnuBuildID,

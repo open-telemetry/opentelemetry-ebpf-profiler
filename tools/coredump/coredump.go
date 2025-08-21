@@ -81,7 +81,7 @@ func formatFrame(frame *libpf.Frame) (string, error) {
 			frame.SourceFile, frame.SourceLine), nil
 	}
 
-	if frame.MappingFile != (libpf.FrameMappingFile{}) {
+	if frame.MappingFile.Valid() {
 		return fmt.Sprintf("%s+0x%x",
 			frame.MappingFile.Value().FileName,
 			frame.AddressOrLineno), nil

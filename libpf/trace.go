@@ -7,14 +7,36 @@ import (
 	"unique"
 )
 
+// FrameMappingFileData represents a backing file for a memory mapping.
 type FrameMappingFileData struct {
+	// FileID is the hash of the file.
 	FileID FileID
 	// FileName is the base filename of the executable.
 	FileName String
 	// GnuBuildID is the GNU build ID from .note.gnu.build-id, if any.
 	GnuBuildID string
 }
-type FrameMappingFile = unique.Handle[FrameMappingFileData]
+
+// FrameMappingFile is an interned FrameMappingFileData reference.
+type FrameMappingFile struct {
+	value unique.Handle[FrameMappingFileData]
+}
+
+// NewFrameMappingFile interns given FrameMappingFileData.
+func NewFrameMappingFile(data FrameMappingFileData) FrameMappingFile {
+	return FrameMappingFile{value: unique.Make(data)}
+}
+
+// Valid determines if the FrameMappingFile is valid.
+func (fmf FrameMappingFile) Valid() bool {
+	return fmf != FrameMappingFile{}
+}
+
+// Value returns the dereferences FrameMappingFileData.
+// This can be done only if it the FrameMappingFile is Valid.
+func (fmf FrameMappingFile) Value() FrameMappingFileData {
+	return fmf.value.Value()
+}
 
 // Frame represents one frame in a stack trace.
 type Frame struct {
@@ -33,7 +55,6 @@ type Frame struct {
 	AddressOrLineno AddressOrLineno
 
 	// File metadata for the backing file of the mapping.
-	// The handle may be invalid and must be validated before dereferencing it.
 	MappingFile FrameMappingFile
 
 	MappingStart      Address

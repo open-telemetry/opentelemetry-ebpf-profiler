@@ -154,7 +154,7 @@ func hashTrace(trace *libpf.Trace) (hash [16]byte) {
 	for _, uniqueFrame := range trace.Frames {
 		frame := uniqueFrame.Value()
 		fileID := libpf.FileID{}
-		if frame.MappingFile != (libpf.FrameMappingFile{}) {
+		if frame.MappingFile.Valid() {
 			fileID = frame.MappingFile.Value().FileID
 		}
 		_, _ = h.Write(fileID.Bytes())

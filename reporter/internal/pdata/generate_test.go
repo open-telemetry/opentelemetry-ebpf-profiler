@@ -2,8 +2,6 @@ package pdata
 
 import (
 	"testing"
-	"unique"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -97,7 +95,7 @@ func TestGetDummyMappingIndex(t *testing.T) {
 }
 
 func newTestFrames() libpf.Frames {
-	mappingFile := unique.Make(libpf.FrameMappingFileData{
+	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 		FileID: libpf.NewFileID(2, 3),
 	})
 	frames := make(libpf.Frames, 0, 5)
@@ -241,8 +239,8 @@ func TestGenerate_EmptyTree(t *testing.T) {
 func singleFrameTrace(ty libpf.FrameType, mappingFile libpf.FrameMappingFile,
 	lineno libpf.AddressOrLineno, funcName, sourceFile string,
 	sourceLine libpf.SourceLineno) libpf.Frames {
-	frames := make(libpf.Frames, 1)
-	frames[0] = unique.Make(libpf.Frame{
+	frames := make(libpf.Frames, 0, 1)
+	frames.Append(&libpf.Frame{
 		Type:            ty,
 		AddressOrLineno: lineno,
 		FunctionName:    libpf.Intern(funcName),
@@ -259,7 +257,7 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 
 	funcName := "main"
 	filePath := "/bin/test"
-	mappingFile := unique.Make(libpf.FrameMappingFileData{
+	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 		FileID:   libpf.NewFileID(1, 2),
 		FileName: libpf.Intern(filePath),
 	})
@@ -328,7 +326,7 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 	d, err := New(100, nil)
 	require.NoError(t, err)
 
-	mappingFile := unique.Make(libpf.FrameMappingFileData{
+	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 		FileID:   libpf.NewFileID(5, 6),
 		FileName: libpf.Intern("/bin/foo"),
 	})
@@ -390,7 +388,7 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 
 	funcName := "myfunc"
 	filePath := "/bin/bar"
-	mappingFile := unique.Make(libpf.FrameMappingFileData{
+	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 		FileID:   libpf.NewFileID(7, 8),
 		FileName: libpf.Intern(filePath),
 	})
@@ -431,8 +429,8 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 
 func singleFrameNative(mappingFile libpf.FrameMappingFile, lineno libpf.AddressOrLineno,
 	mappingStart, mappingEnd libpf.Address, mappingFileOffset uint64) libpf.Frames {
-	frames := make(libpf.Frames, 1)
-	frames[0] = unique.Make(libpf.Frame{
+	frames := make(libpf.Frames, 0, 1)
+	frames.Append(&libpf.Frame{
 		Type:              libpf.NativeFrame,
 		AddressOrLineno:   lineno,
 		MappingStart:      mappingStart,
@@ -448,7 +446,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	require.NoError(t, err)
 
 	filePath := "/usr/lib/libexample.so"
-	mappingFile := unique.Make(libpf.FrameMappingFileData{
+	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 		FileID:   libpf.NewFileID(9, 10),
 		FileName: libpf.Intern(filePath),
 	})

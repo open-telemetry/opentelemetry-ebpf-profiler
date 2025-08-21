@@ -15,7 +15,6 @@ import (
 	"slices"
 	"sync/atomic"
 	"time"
-	"unique"
 	"unsafe"
 
 	"github.com/elastic/go-freelru"
@@ -1252,7 +1251,7 @@ func (pc *peCache) Get(pr process.Process, mapping *process.Mapping) *peInfo {
 	}
 	info.err = info.parse(file)
 	if info.err == nil {
-		info.file = unique.Make(libpf.FrameMappingFileData{
+		info.file = libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 			FileID:     fileID,
 			FileName:   libpf.Intern(path.Base(mapping.Path.String())),
 			GnuBuildID: info.guid,

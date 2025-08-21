@@ -20,7 +20,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"unique"
 	"unsafe"
 
 	"github.com/mdlayher/kobject"
@@ -181,7 +180,7 @@ var loadModuleMetadata = func(m *Module, name string, oldMtime int64) bool {
 	if err == nil && len(buildID) >= 16 {
 		fileID = libpf.FileIDFromKernelBuildID(buildID)
 	}
-	m.mappingFile = unique.Make(libpf.FrameMappingFileData{
+	m.mappingFile = libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 		FileID:     fileID,
 		FileName:   libpf.Intern(name),
 		GnuBuildID: buildID,
