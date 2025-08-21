@@ -251,6 +251,14 @@ func (p *Pdata) setProfile(
 				attribute.Key("process.environment_variable."+key),
 				value)
 		}
+		for key, value := range traceInfo.Labels {
+			// Once https://github.com/open-telemetry/semantic-conventions/issues/2561
+			// reached an agreement, use the actual OTel SemConv attribute.
+			attrMgr.AppendOptionalString(
+				sample.AttributeIndices(),
+				attribute.Key("process.context.label."+key),
+				value)
+		}
 
 		if p.ExtraSampleAttrProd != nil {
 			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, traceKey.ExtraMeta)
