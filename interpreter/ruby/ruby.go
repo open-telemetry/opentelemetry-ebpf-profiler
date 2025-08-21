@@ -840,7 +840,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 	// if we already have a map of symbols, use it to lookup the symbol
 	if symMap != nil {
-		sym, err := symMap.LookupSymbol(symbolName)
+		var sym *libpf.Symbol
+		sym, err = symMap.LookupSymbol(symbolName)
 		if err != nil {
 			log.Warnf("Failed to lookup symbol %s in symbol table: %v", currentCtxSymbol, err)
 			return nil, err
