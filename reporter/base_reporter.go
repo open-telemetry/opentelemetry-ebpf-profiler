@@ -4,12 +4,9 @@
 package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
-	"context"
 	"errors"
 	"fmt"
-	"time"
 
-	lru "github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
@@ -35,32 +32,12 @@ type baseReporter struct {
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
 	traceEvents xsync.RWMutex[samples.TraceEventsTree]
-
-	// hostmetadata stores metadata that is sent out with every request.
-	hostmetadata *lru.SyncedLRU[string, string]
 }
 
 var errUnknownOrigin = errors.New("unknown trace origin")
 
 func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
-}
-
-func (b *baseReporter) ReportHostMetadata(metadataMap map[string]string) {
-	b.addHostmetadata(metadataMap)
-}
-
-func (b *baseReporter) ReportHostMetadataBlocking(_ context.Context,
-	metadataMap map[string]string, _ int, _ time.Duration) error {
-	b.addHostmetadata(metadataMap)
-	return nil
-}
-
-// addHostmetadata adds to and overwrites host metadata.
-func (b *baseReporter) addHostmetadata(metadataMap map[string]string) {
-	for k, v := range metadataMap {
-		b.hostmetadata.Add(k, v)
-	}
 }
 
 func (b *baseReporter) ExecutableKnown(fileID libpf.FileID) bool {

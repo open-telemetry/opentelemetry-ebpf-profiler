@@ -8,7 +8,6 @@ import (
 	"crypto/tls"
 	"time"
 
-	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
 	"google.golang.org/grpc"
@@ -44,14 +43,6 @@ type OTLPReporter struct {
 
 // NewOTLP returns a new instance of OTLPReporter
 func NewOTLP(cfg *Config) (*OTLPReporter, error) {
-	// Next step: Dynamically configure the size of this LRU.
-	// Currently, we use the length of the JSON array in
-	// hostmetadata/hostmetadata.json.
-	hostmetadata, err := lru.NewSynced[string, string](115, hashString)
-	if err != nil {
-		return nil, err
-	}
-
 	data, err := pdata.New(
 		cfg.SamplesPerSecond,
 		cfg.ExecutablesCacheElements,
@@ -65,12 +56,11 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 
 	return &OTLPReporter{
 		baseReporter: &baseReporter{
-			cfg:          cfg,
-			name:         cfg.Name,
-			version:      cfg.Version,
-			pdata:        data,
-			traceEvents:  xsync.NewRWMutex(eventsTree),
-			hostmetadata: hostmetadata,
+			cfg:         cfg,
+			name:        cfg.Name,
+			version:     cfg.Version,
+			pdata:       data,
+			traceEvents: xsync.NewRWMutex(eventsTree),
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),
 			},
