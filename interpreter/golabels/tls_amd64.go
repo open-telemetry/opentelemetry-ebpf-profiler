@@ -6,6 +6,8 @@
 package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
+	"fmt"
+
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"golang.org/x/arch/x86/x86asm"
@@ -18,7 +20,12 @@ import (
 func extractTLSGOffset(f *pfelf.File) (int32, error) {
 	syms, err := f.ReadSymbols()
 	if err != nil {
-		return 0, err
+		// Fallback to check .dynsym if .symtab lookup fails.
+		dynSyms, err2 := f.ReadDynamicSymbols()
+		if err2 != nil {
+			return 0, fmt.Errorf("%w: %w", err, err2)
+		}
+		syms = dynSyms
 	}
 	// Dump of assembler code for function runtime.stackcheck:
 	// 0x0000000000470080 <+0>:     mov    %fs:0xfffffffffffffff8,%rax
