@@ -20,6 +20,7 @@ const (
 	FrameMarkerKernel   = 0x4
 	FrameMarkerHotSpot  = 0x5
 	FrameMarkerRuby     = 0x6
+	FrameMarkerRubyCME  = 0xc
 	FrameMarkerPerl     = 0x7
 	FrameMarkerV8       = 0x8
 	FrameMarkerDotnet   = 0xa

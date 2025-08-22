@@ -23,8 +23,10 @@ const (
 	Kernel InterpreterType = support.FrameMarkerKernel
 	// HotSpot identifies the Java HotSpot VM.
 	HotSpot InterpreterType = support.FrameMarkerHotSpot
-	// Ruby identifies the Ruby interpreter.
+	// Ruby identifies the Ruby interpreter for iseq frames.
 	Ruby InterpreterType = support.FrameMarkerRuby
+	// RubyCME identifies the Ruby interpreter for CME frames.
+	RubyCME InterpreterType = support.FrameMarkerRubyCME
 	// Perl identifies the Perl interpreter.
 	Perl InterpreterType = support.FrameMarkerPerl
 	// V8 identifies the V8 interpreter.
@@ -66,6 +68,7 @@ var interpreterTypeToString = map[InterpreterType]string{
 	Kernel:  "kernel",
 	HotSpot: "jvm",
 	Ruby:    "ruby",
+	RubyCME: "ruby",
 	Perl:    "perl",
 	V8:      "v8js",
 	Dotnet:  "dotnet",
@@ -77,7 +80,7 @@ var stringToInterpreterType = make(map[string]InterpreterType, len(interpreterTy
 
 func init() {
 	for k, v := range interpreterTypeToString {
-		if k == PHPJIT {
+		if k == PHPJIT || k == RubyCME {
 			continue
 		}
 		stringToInterpreterType[v] = k

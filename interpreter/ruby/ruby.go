@@ -631,7 +631,7 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 }
 
 func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
-	if !frame.Type.IsInterpType(libpf.Ruby) {
+	if !frame.Type.IsInterpType(libpf.Ruby) || !frame.Type.IsInterpType(libpf.RubyCME){
 		return interpreter.ErrMismatchInterpreterType
 	}
 	vms := &r.r.vmStructs
@@ -639,12 +639,20 @@ func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 	sfCounter := successfailurecounter.New(&r.successCount, &r.failCount)
 	defer sfCounter.DefaultToFailure()
 
-	// From the eBPF Ruby unwinder we receive the address to the instruction sequence body in
-	// the Files field.
-	//
-	// rb_iseq_constant_body
-	// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L311
-	iseqBody := libpf.Address(frame.File)
+	var iseqBody libpf.Address;
+	var classPath libpf.String;
+
+	if frame.Type.IsInterpType(libpf.RubyCME) {
+		// Get the classpath, and figure out the iseq body offset from the definition
+		// so that we can get the name and line number as below
+	} else {
+		// If the frame type from the eBPF Ruby unwinder is iseq type, we receive
+		// the address to the instruction sequence body in the Files field.
+		//
+		// rb_iseq_constant_body
+		// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L311
+		iseqBody = libpf.Address(frame.File)
+	}
 	// The Ruby VM program counter that was extracted from the current call frame is embedded in
 	// the Linenos field.
 	pc := frame.Lineno
@@ -673,6 +681,11 @@ func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 		functionName, err := r.getStringCached(funcNamePtr, r.readRubyString)
 		if err != nil {
 			return err
+		}
+
+		if classPath != libpf.NullString {
+			// TODO we should properly use a `.` not `#` if it is a singleton class
+			functionName = libpf.Intern(fmt.Sprintf("%s#%", classPath, functionName))
 		}
 
 		iseq = &rubyIseq{
