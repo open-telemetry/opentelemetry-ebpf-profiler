@@ -9,7 +9,7 @@
   "author": "The Parca Authors",
   "license": "Apache-2.0",
   "dependencies": {
-    "@polarsignals/custom-labels": "^0.2.0",
+    "@polarsignals/custom-labels": "^0.2.4",
     "marked": "^16.1.2"
   }
 }
