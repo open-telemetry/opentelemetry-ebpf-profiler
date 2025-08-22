@@ -350,19 +350,25 @@ static inline EBPF_INLINE ErrorCode
 _push_with_return_address(Trace *trace, u64 file, u64 line, u8 frame_type, bool return_address)
 {
   return _push_with_max_frames(
-    trace, file, line, frame_type, return_address, MAX_NON_ERROR_FRAME_UNWINDS);
+    trace, file, line, frame_type, return_address, MAX_GENERIC_NON_ERROR_FRAME_UNWINDS);
+}
+
+// Push the file ID, line number and frame type into FrameList
+static inline EBPF_INLINE ErrorCode _push_ruby(Trace *trace, u64 file, u64 line, u8 frame_type)
+{
+  return _push_with_max_frames(trace, file, line, frame_type, 0, MAX_RUBY_NON_ERROR_FRAME_UNWINDS);
 }
 
 // Push the file ID, line number and frame type into FrameList
 static inline EBPF_INLINE ErrorCode _push(Trace *trace, u64 file, u64 line, u8 frame_type)
 {
-  return _push_with_max_frames(trace, file, line, frame_type, 0, MAX_NON_ERROR_FRAME_UNWINDS);
+  return _push_with_max_frames(trace, file, line, frame_type, 0, MAX_GENERIC_NON_ERROR_FRAME_UNWINDS);
 }
 
 // Push a critical error frame.
 static inline EBPF_INLINE ErrorCode push_error(Trace *trace, ErrorCode error)
 {
-  return _push_with_max_frames(trace, 0, error, FRAME_MARKER_ABORT, 0, MAX_FRAME_UNWINDS);
+  return _push_with_max_frames(trace, 0, error, FRAME_MARKER_ABORT, 0, MAX_GENERIC_FRAME_UNWINDS);
 }
 
 // Send a trace to user-land via the `trace_events` perf event buffer.

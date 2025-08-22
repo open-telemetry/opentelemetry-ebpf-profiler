@@ -88,6 +88,12 @@ typedef enum ErrorCode {
   // Ruby: Unable to read the instruction sequence size
   ERR_RUBY_READ_ISEQ_SIZE = 3007,
 
+  // Ruby: Unable to locate a local frame to find CME
+  ERR_RUBY_FIND_LOCAL_FRAME = 3008,
+
+  // Ruby: Unable to locate a valid CME
+  ERR_RUBY_FIND_CME = 3009,
+
   // Native: Unable to find the code section in the stack delta page info map
   ERR_NATIVE_LOOKUP_TEXT_SECTION = 4000,
 

@@ -551,6 +551,18 @@ const (
 	// Number of failures to read the instruction sequence size
 	IDUnwindRubyErrReadIseqSize = 245
 
+	// Number of failures to read callable method entry flags
+	IDUnwindRubyErrReadCMEFlags = 280
+
+	// Number of failures to read the method entry from an SVAR imemo
+	IDUnwindRubyErrReadMethodEntryFromSvar = 281
+
+	// Number of failures to read the env_specval
+	IDUnwindRubyErrReadEnvSpecval = 282
+
+	// Number of failures to read the env_me_cref
+	IDUnwindRubyErrReadEnvMeCref = 283
+
 	// Number of times the unwind instructions requested LR unwinding mid-trace
 	IDUnwindNativeErrLrUnwindingMidTrace = 246
 
@@ -648,5 +660,5 @@ const (
 	IDUnwindGoLabelsFailures = 279
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 280
+	IDMax = 284
 )

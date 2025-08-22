@@ -49,6 +49,7 @@ fields = {
 
     'iseq_location_struct.pathobj': offset_of('rb_iseq_location_struct', 'pathobj'),
     'iseq_location_struct.base_label': offset_of('rb_iseq_location_struct', 'base_label'),
+    'iseq_location_struct.label': offset_of('rb_iseq_location_struct', 'label'),
 
     'iseq_insn_info_entry.position': offset_of('iseq_insn_info_entry', 'position'),
     'iseq_insn_info_entry.size_of_position': size_of_field('iseq_insn_info_entry', 'position'),
@@ -71,6 +72,18 @@ fields = {
     'size_of_value': size_of('VALUE', ns=''),
 
     'rb_ractor_struct.running_ec': offset_of('rb_ractor_struct', 'threads.running_ec'),
+
+    'rb_method_entry_struct.flags': offset_of('rb_method_entry_struct', 'flags'),
+    'rb_method_entry_struct.defined_class': offset_of('rb_method_entry_struct', 'defined_class'),
+    'rb_method_entry_struct.def': offset_of('rb_method_entry_struct', 'def'),
+
+    'rclass_and_rb_classext_t.classext': offset_of('RClass_and_rb_classext_t', 'classext'),
+    'rb_classext_struct.classpath': offset_of('rb_classext_struct', 'classpath'),
+
+    'rb_method_definition_struct.method_type': offset_of('rb_method_definition_struct', 'type'),
+    'rb_method_definition_struct.body': offset_of('rb_method_definition_struct', 'body'),
+
+    'rb_method_iseq_struct.iseqptr': offset_of('rb_method_iseq_struct', 'iseqptr'),
 }
 
 

@@ -20,6 +20,7 @@ const (
 	FrameMarkerKernel   = 0x4
 	FrameMarkerHotSpot  = 0x5
 	FrameMarkerRuby     = 0x6
+	FrameMarkerRubyCME  = 0xc
 	FrameMarkerPerl     = 0x7
 	FrameMarkerV8       = 0x8
 	FrameMarkerDotnet   = 0xa
@@ -50,10 +51,10 @@ const (
 	EventTypeGenericPID = 0x1
 )
 
-const MaxFrameUnwinds = 0x80
+const MaxFrameUnwinds = 0x800
 
 const (
-	MetricIDBeginCumulative = 0x62
+	MetricIDBeginCumulative = 0x66
 )
 
 const (
@@ -172,7 +173,7 @@ type Trace struct {
 	Stack_len          uint32
 	Origin             uint32
 	Offtime            uint64
-	Frames             [128]Frame
+	Frames             [2048]Frame
 }
 type UnwindInfo struct {
 	Opcode      uint8
@@ -313,7 +314,7 @@ type V8ProcInfo struct {
 const (
 	Sizeof_Frame      = 0x18
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0xed0
+	Sizeof_Trace      = 0xc2d0
 
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
@@ -443,19 +444,23 @@ var MetricsTranslation = []metrics.MetricID{
 	0x4e: metrics.IDUnwindRubyErrReadIseqBody,
 	0x4f: metrics.IDUnwindRubyErrReadIseqEncoded,
 	0x50: metrics.IDUnwindRubyErrReadIseqSize,
-	0x51: metrics.IDUnwindNativeErrLrUnwindingMidTrace,
-	0x52: metrics.IDUnwindNativeErrReadKernelModeRegs,
-	0x53: metrics.IDUnwindNativeErrChaseIrqStackLink,
-	0x54: metrics.IDUnwindV8ErrNoProcInfo,
-	0x55: metrics.IDUnwindNativeErrBadUnwindInfoIndex,
-	0x56: metrics.IDUnwindApmIntErrReadTsdBase,
-	0x57: metrics.IDUnwindApmIntErrReadCorrBufPtr,
-	0x58: metrics.IDUnwindApmIntErrReadCorrBuf,
-	0x59: metrics.IDUnwindApmIntReadSuccesses,
-	0x5a: metrics.IDUnwindDotnetAttempts,
-	0x5b: metrics.IDUnwindDotnetFrames,
-	0x5c: metrics.IDUnwindDotnetErrNoProcInfo,
-	0x5d: metrics.IDUnwindDotnetErrBadFP,
-	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
-	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,
+	0x51: metrics.IDUnwindRubyErrReadCMEFlags,
+	0x52: metrics.IDUnwindRubyErrReadMethodEntryFromSvar,
+	0x53: metrics.IDUnwindRubyErrReadEnvSpecval,
+	0x54: metrics.IDUnwindRubyErrReadEnvMeCref,
+	0x55: metrics.IDUnwindNativeErrLrUnwindingMidTrace,
+	0x56: metrics.IDUnwindNativeErrReadKernelModeRegs,
+	0x57: metrics.IDUnwindNativeErrChaseIrqStackLink,
+	0x58: metrics.IDUnwindV8ErrNoProcInfo,
+	0x59: metrics.IDUnwindNativeErrBadUnwindInfoIndex,
+	0x5a: metrics.IDUnwindApmIntErrReadTsdBase,
+	0x5b: metrics.IDUnwindApmIntErrReadCorrBufPtr,
+	0x5c: metrics.IDUnwindApmIntErrReadCorrBuf,
+	0x5d: metrics.IDUnwindApmIntReadSuccesses,
+	0x5e: metrics.IDUnwindDotnetAttempts,
+	0x5f: metrics.IDUnwindDotnetFrames,
+	0x60: metrics.IDUnwindDotnetErrNoProcInfo,
+	0x61: metrics.IDUnwindDotnetErrBadFP,
+	0x62: metrics.IDUnwindDotnetErrCodeHeader,
+	0x63: metrics.IDUnwindDotnetErrCodeTooLarge,
 }

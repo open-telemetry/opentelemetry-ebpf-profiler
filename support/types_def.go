@@ -27,6 +27,7 @@ const (
 	FrameMarkerKernel   = C.FRAME_MARKER_KERNEL
 	FrameMarkerHotSpot  = C.FRAME_MARKER_HOTSPOT
 	FrameMarkerRuby     = C.FRAME_MARKER_RUBY
+	FrameMarkerRubyCME  = C.FRAME_MARKER_RUBY_CME
 	FrameMarkerPerl     = C.FRAME_MARKER_PERL
 	FrameMarkerV8       = C.FRAME_MARKER_V8
 	FrameMarkerDotnet   = C.FRAME_MARKER_DOTNET
@@ -267,6 +268,10 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindRubyErrReadIseqBody:                  metrics.IDUnwindRubyErrReadIseqBody,
 	C.metricID_UnwindRubyErrReadIseqEncoded:               metrics.IDUnwindRubyErrReadIseqEncoded,
 	C.metricID_UnwindRubyErrReadIseqSize:                  metrics.IDUnwindRubyErrReadIseqSize,
+	C.metricID_UnwindRubyErrReadCMEFlags:                  metrics.IDUnwindRubyErrReadCMEFlags,
+	C.metricID_UnwindRubyErrReadMethodEntryFromSvar:       metrics.IDUnwindRubyErrReadMethodEntryFromSvar,
+	C.metricID_UnwindRubyErrReadEnvSpecval:                metrics.IDUnwindRubyErrReadEnvSpecval,
+	C.metricID_UnwindRubyErrReadEnvMeCref:                 metrics.IDUnwindRubyErrReadEnvMeCref,
 	C.metricID_UnwindNativeErrLrUnwindingMidTrace:         metrics.IDUnwindNativeErrLrUnwindingMidTrace,
 	C.metricID_UnwindNativeErrReadKernelModeRegs:          metrics.IDUnwindNativeErrReadKernelModeRegs,
 	C.metricID_UnwindNativeErrChaseIrqStackLink:           metrics.IDUnwindNativeErrChaseIrqStackLink,

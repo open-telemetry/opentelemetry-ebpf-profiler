@@ -1775,6 +1775,34 @@
     "id": 245
   },
   {
+    "description": "Number of failures to read callable method entry flags",
+    "type": "counter",
+    "name": "UnwindRubyErrReadCMEFlags",
+    "field": "bpf.ruby.errors.read_cme_flags",
+    "id": 280
+  },
+  {
+    "description": "Number of failures to read the method entry from an SVAR imemo",
+    "type": "counter",
+    "name": "UnwindRubyErrReadMethodEntryFromSvar",
+    "field": "bpf.ruby.errors.read_cme_from_svar",
+    "id": 281
+  },
+  {
+    "description": "Number of failures to read the env_specval",
+    "type": "counter",
+    "name": "UnwindRubyErrReadEnvSpecval",
+    "field": "bpf.ruby.errors.read_env_specval",
+    "id": 282
+  },
+  {
+    "description": "Number of failures to read the env_me_cref",
+    "type": "counter",
+    "name": "UnwindRubyErrReadEnvMeCref",
+    "field": "bpf.ruby.errors.read_env_me_cref",
+    "id": 283
+  },
+  {
     "description": "Number of times the unwind instructions requested LR unwinding mid-trace",
     "type": "counter",
     "name": "UnwindNativeErrLrUnwindingMidTrace",

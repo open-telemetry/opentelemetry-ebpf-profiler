@@ -41,8 +41,10 @@ const (
 	KernelFrame FrameType = support.FrameMarkerKernel
 	// HotSpotFrame identifies Java HotSpot VM frames.
 	HotSpotFrame FrameType = support.FrameMarkerHotSpot
-	// RubyFrame identifies the Ruby interpreter frames.
+	// RubyFrame identifies the Ruby interpreter iseq frames.
 	RubyFrame FrameType = support.FrameMarkerRuby
+	// RubyFrame identifies the Ruby interpreter CME frames.
+	RubyCMEFrame FrameType = support.FrameMarkerRubyCME
 	// PerlFrame identifies the Perl interpreter frames.
 	PerlFrame FrameType = support.FrameMarkerPerl
 	// V8Frame identifies the V8 interpreter frames.

@@ -12,29 +12,31 @@
 #define FRAME_MARKER_ERROR_BIT 0x80
 
 // Indicates that the interpreter/runtime this frame belongs to is unknown.
-#define FRAME_MARKER_UNKNOWN 0x0
+#define FRAME_MARKER_UNKNOWN  0x0
 // Indicates a Python frame
-#define FRAME_MARKER_PYTHON  0x1
+#define FRAME_MARKER_PYTHON   0x1
 // Indicates a PHP frame
-#define FRAME_MARKER_PHP     0x2
+#define FRAME_MARKER_PHP      0x2
 // Indicates a native frame
-#define FRAME_MARKER_NATIVE  0x3
+#define FRAME_MARKER_NATIVE   0x3
 // Indicates a kernel frame
-#define FRAME_MARKER_KERNEL  0x4
+#define FRAME_MARKER_KERNEL   0x4
 // Indicates a HotSpot frame
-#define FRAME_MARKER_HOTSPOT 0x5
-// Indicates a Ruby frame
-#define FRAME_MARKER_RUBY    0x6
+#define FRAME_MARKER_HOTSPOT  0x5
+// Indicates a Ruby iseq frame
+#define FRAME_MARKER_RUBY     0x6
 // Indicates a Perl frame
-#define FRAME_MARKER_PERL    0x7
+#define FRAME_MARKER_PERL     0x7
 // Indicates a V8 frame
-#define FRAME_MARKER_V8      0x8
+#define FRAME_MARKER_V8       0x8
 // Indicates a PHP JIT frame
-#define FRAME_MARKER_PHP_JIT 0x9
+#define FRAME_MARKER_PHP_JIT  0x9
 // Indicates a Dotnet frame
-#define FRAME_MARKER_DOTNET  0xA
+#define FRAME_MARKER_DOTNET   0xA
 // Indicates a Go frame
-#define FRAME_MARKER_GO      0xB
+#define FRAME_MARKER_GO       0xB
+// Indicates a Ruby CME frame
+#define FRAME_MARKER_RUBY_CME 0xC
 
 // Indicates a frame containing information about a critical unwinding error
 // that caused further unwinding to be aborted.

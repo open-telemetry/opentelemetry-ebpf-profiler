@@ -256,6 +256,18 @@ enum {
   // number of failures to read the instruction sequence size
   metricID_UnwindRubyErrReadIseqSize,
 
+  // number of failures to read callable method entry flags
+  metricID_UnwindRubyErrReadCMEFlags,
+
+  // number of failures to read the method entry from an SVAR imemo
+  metricID_UnwindRubyErrReadMethodEntryFromSvar,
+
+  // number of failures to read the env_specval
+  metricID_UnwindRubyErrReadEnvSpecval,
+
+  // number of failures to read the env_me_cref
+  metricID_UnwindRubyErrReadEnvMeCref,
+
   // number of times the unwind instructions requested LR unwinding mid-trace
   metricID_UnwindNativeErrLrUnwindingMidTrace,
 
@@ -350,13 +362,27 @@ typedef enum TraceOrigin {
 // MAX_FRAME_UNWINDS defines the maximum number of frames per
 // Trace we can unwind and respect the limit of eBPF instructions,
 // limit of tail calls and limit of stack size per eBPF program.
-#define MAX_FRAME_UNWINDS 128
+#define MAX_FRAME_UNWINDS 2048
+
+// MAX_FRAME_UNWINDS defines the maximum number of frames per
+// Trace we can unwind and respect the limit of eBPF instructions,
+// limit of tail calls and limit of stack size per eBPF program.
+#define MAX_GENERIC_FRAME_UNWINDS 128
+
 
 // MAX_NON_ERROR_FRAME_UNWINDS defines the maximum number of frames
 // to be pushed by unwinders while still leaving space for an error frame.
 // This is used to make sure that there is always space for an error
 // frame reporting that we ran out of stack space.
-#define MAX_NON_ERROR_FRAME_UNWINDS (MAX_FRAME_UNWINDS - 1)
+#define MAX_RUBY_NON_ERROR_FRAME_UNWINDS (MAX_FRAME_UNWINDS - 1)
+
+
+// MAX_GENERIC_NON_ERROR_FRAME_UNWINDS defines the maximum number of frames
+// to be pushed by unwinders while still leaving space for an error frame.
+// This is used to make sure that there is always space for an error
+// frame reporting that we ran out of stack space.
+#define MAX_GENERIC_NON_ERROR_FRAME_UNWINDS (MAX_GENERIC_FRAME_UNWINDS - 1)
+
 
 // Type to represent a globally-unique file id to be used as key for a BPF hash map
 typedef u64 FileID;

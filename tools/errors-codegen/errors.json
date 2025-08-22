@@ -141,6 +141,16 @@
     "description": "Ruby: Unable to read the instruction sequence size"
   },
   {
+    "id": 3008,
+    "name": "ruby_find_local_frame",
+    "description": "Ruby: Unable to locate a local frame to find CME"
+  },
+  {
+    "id": 3009,
+    "name": "ruby_find_cme",
+    "description": "Ruby: Unable to locate a valid CME"
+  },
+  {
     "id": 4000,
     "name": "native_lookup_text_section",
     "description": "Native: Unable to find the code section in the stack delta page info map"
