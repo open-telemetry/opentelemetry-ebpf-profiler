@@ -25,8 +25,13 @@ const (
 	ExecutableCacheLifetime = 1 * time.Hour
 )
 
-// DummyFileID is used as the FileID for a dummy mapping
-var dummyFileID = libpf.NewFileID(0, 0)
+// uniqueMapping defines an unique mapping in a process.
+type uniqueMapping struct {
+	// mapping start in the ELF virtual address space
+	Start libpf.Address
+	// mapping file
+	File libpf.FrameMappingFile
+}
 
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
@@ -38,12 +43,12 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	// Temporary helpers that will build the various tables in ProfilesDictionary.
 	stringSet := make(OrderedSet[string], 64)
 	funcSet := make(OrderedSet[funcInfo], 64)
-	mappingSet := make(OrderedSet[libpf.FileID], 64)
+	mappingSet := make(OrderedSet[uniqueMapping], 64)
 	locationSet := make(OrderedSet[locationInfo], 64)
 
 	// By specification, the first element should be empty.
 	stringSet.Add("")
-	mappingSet.Add(dummyFileID)
+	mappingSet.Add(uniqueMapping{})
 	dic.MappingTable().AppendEmpty()
 
 	for containerID, originToEvents := range tree {
@@ -107,7 +112,7 @@ func (p *Pdata) setProfile(
 	dic pprofile.ProfilesDictionary,
 	stringSet OrderedSet[string],
 	funcSet OrderedSet[funcInfo],
-	mappingSet OrderedSet[libpf.FileID],
+	mappingSet OrderedSet[uniqueMapping],
 	locationSet OrderedSet[locationInfo],
 	origin libpf.Origin,
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
@@ -164,44 +169,36 @@ func (p *Pdata) setProfile(
 				address:   uint64(frame.AddressOrLineno),
 				frameType: frame.Type.String(),
 			}
-			switch frameKind := frame.Type; frameKind {
-			case libpf.NativeFrame:
-				// As native frames are resolved in the backend, we use Mapping to
-				// report these frames.
-				locationMappingIndex, exists := mappingSet.AddWithCheck(frame.FileID)
-				if !exists {
-					ei, exists := p.Executables.GetAndRefresh(frame.FileID,
-						ExecutableCacheLifetime)
-					// Next step: Select a proper default value,
-					// if the name of the executable is not known yet.
-					fileName := "UNKNOWN"
-					if exists {
-						fileName = ei.FileName
-					}
 
+			if frame.MappingFile.Valid() {
+				index, ok := mappingSet.AddWithCheck(uniqueMapping{
+					Start: frame.MappingStart,
+					File:  frame.MappingFile,
+				})
+				if !ok {
+					mf := frame.MappingFile.Value()
 					mapping := dic.MappingTable().AppendEmpty()
 					mapping.SetMemoryStart(uint64(frame.MappingStart))
 					mapping.SetMemoryLimit(uint64(frame.MappingEnd))
 					mapping.SetFileOffset(frame.MappingFileOffset)
-					mapping.SetFilenameStrindex(stringSet.Add(fileName))
+					mapping.SetFilenameStrindex(stringSet.Add(mf.FileName.String()))
 
 					// Once SemConv and its Go package is released with the new
 					// semantic convention for build_id, replace these hard coded
 					// strings.
 					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
 						semconv.ProcessExecutableBuildIDGNUKey,
-						ei.GnuBuildID)
+						mf.GnuBuildID)
 					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
 						semconv.ProcessExecutableBuildIDHtlhashKey,
-						frame.FileID.StringNoQuotes())
+						mf.FileID.StringNoQuotes())
 				}
-				locInfo.mappingIndex = locationMappingIndex
-			case libpf.AbortFrame:
-				// Next step: Figure out how the OTLP protocol
-				// could handle artificial frames, like AbortFrame,
-				// that are not originated from a native or interpreted
-				// program.
-			default:
+				locInfo.mappingIndex = index
+			} else {
+				locInfo.mappingIndex = 0
+			}
+
+			if frame.FunctionName != libpf.NullString || frame.SourceFile != libpf.NullString {
 				// Store interpreted frame information as a Line message
 				locInfo.hasLine = true
 				locInfo.lineNumber = int64(frame.SourceLine)
@@ -210,9 +207,7 @@ func (p *Pdata) setProfile(
 					fileNameIdx: stringSet.Add(frame.SourceFile.String()),
 				}
 				locInfo.functionIndex = funcSet.Add(fi)
-				// mapping_table[0] is always the dummy mapping
-				locInfo.mappingIndex = 0
-			} // End frame type switch
+			}
 
 			idx, exists := locationSet.AddWithCheck(locInfo)
 			if !exists {

@@ -26,8 +26,6 @@ type Config struct {
 
 	// Disable secure communication with Collection Agent.
 	DisableTLS bool
-	// ExecutablesCacheElements defines item capacity of the executables cache.
-	ExecutablesCacheElements uint32
 	// samplesPerSecond defines the number of samples per second.
 	SamplesPerSecond int
 

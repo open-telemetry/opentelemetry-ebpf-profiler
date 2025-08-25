@@ -153,7 +153,11 @@ func hashTrace(trace *libpf.Trace) (hash [16]byte) {
 	h := fnv.New128a()
 	for _, uniqueFrame := range trace.Frames {
 		frame := uniqueFrame.Value()
-		_, _ = h.Write(frame.FileID.Bytes())
+		fileID := libpf.FileID{}
+		if frame.MappingFile.Valid() {
+			fileID = frame.MappingFile.Value().FileID
+		}
+		_, _ = h.Write(fileID.Bytes())
 		// Using FormatUint() or putting AppendUint() into a function leads
 		// to escaping to heap (allocation).
 		_, _ = h.Write(strconv.AppendUint(buf[:0], uint64(frame.AddressOrLineno), 10))

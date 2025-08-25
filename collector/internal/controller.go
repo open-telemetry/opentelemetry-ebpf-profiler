@@ -27,16 +27,15 @@ func NewController(cfg *controller.Config,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
 	rep, err := reporter.NewCollector(&reporter.Config{
-		Name:                     "otelcol-ebpf-profiler",
-		Version:                  vc.Version(),
-		MaxRPCMsgSize:            32 << 20, // 32 MiB
-		MaxGRPCRetries:           5,
-		GRPCOperationTimeout:     intervals.GRPCOperationTimeout(),
-		GRPCStartupBackoffTime:   intervals.GRPCStartupBackoffTime(),
-		GRPCConnectionTimeout:    intervals.GRPCConnectionTimeout(),
-		ReportInterval:           intervals.ReportInterval(),
-		ExecutablesCacheElements: 16384,
-		SamplesPerSecond:         cfg.SamplesPerSecond,
+		Name:                   "otelcol-ebpf-profiler",
+		Version:                vc.Version(),
+		MaxRPCMsgSize:          32 << 20, // 32 MiB
+		MaxGRPCRetries:         5,
+		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
+		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
+		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
+		ReportInterval:         intervals.ReportInterval(),
+		SamplesPerSecond:       cfg.SamplesPerSecond,
 	}, nextConsumer)
 	if err != nil {
 		return nil, err

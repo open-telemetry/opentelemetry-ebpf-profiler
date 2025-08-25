@@ -92,10 +92,10 @@ func (m *MultiInstance) Detach(ebpf EbpfHandler, pid libpf.PID) error {
 
 // SynchronizeMappings synchronizes mappings for all interpreter instances.
 func (m *MultiInstance) SynchronizeMappings(ebpf EbpfHandler,
-	symbolReporter reporter.SymbolReporter, pr process.Process, mappings []process.Mapping) error {
+	exeReporter reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping) error {
 	var errs []error
 	for _, instance := range m.instances {
-		if err := instance.SynchronizeMappings(ebpf, symbolReporter, pr, mappings); err != nil {
+		if err := instance.SynchronizeMappings(ebpf, exeReporter, pr, mappings); err != nil {
 			errs = append(errs, err)
 		}
 	}

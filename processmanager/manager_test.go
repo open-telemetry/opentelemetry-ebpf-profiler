@@ -26,7 +26,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -251,17 +250,6 @@ func (mockup *ebpfMapsMockup) CollectMetrics() []metrics.Metric     { return []m
 func (mockup *ebpfMapsMockup) SupportsGenericBatchOperations() bool { return false }
 func (mockup *ebpfMapsMockup) SupportsLPMTrieBatchOperations() bool { return false }
 
-type symbolReporterMockup struct{}
-
-func (s *symbolReporterMockup) ExecutableKnown(_ libpf.FileID) bool {
-	return true
-}
-
-func (s *symbolReporterMockup) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
-}
-
-var _ reporter.SymbolReporter = (*symbolReporterMockup)(nil)
-
 func TestNewMapping(t *testing.T) {
 	tests := map[string]struct {
 		// newMapping holds the arguments that are passed to NewMapping() in the test.
@@ -294,7 +282,6 @@ func TestNewMapping(t *testing.T) {
 			// so we replace the stack delta provider.
 			dummyProvider := dummyStackDeltaProvider{}
 			ebpfMockup := &ebpfMapsMockup{}
-			symRepMockup := &symbolReporterMockup{}
 
 			// For this test do not include interpreters.
 			noInterpreters, _ := tracertypes.Parse("")
@@ -307,7 +294,7 @@ func TestNewMapping(t *testing.T) {
 				1*time.Second,
 				ebpfMockup,
 				NewMapFileIDMapper(),
-				symRepMockup,
+				nil,
 				&dummyProvider,
 				true,
 				libpf.Set[string]{})
@@ -480,7 +467,6 @@ func TestProcExit(t *testing.T) {
 			// so we replace the stack delta provider.
 			dummyProvider := dummyStackDeltaProvider{}
 			ebpfMockup := &ebpfMapsMockup{}
-			repMockup := &symbolReporterMockup{}
 
 			// For this test do not include interpreters.
 			noInterpreters, _ := tracertypes.Parse("")
@@ -492,7 +478,7 @@ func TestProcExit(t *testing.T) {
 				1*time.Second,
 				ebpfMockup,
 				NewMapFileIDMapper(),
-				repMockup,
+				nil,
 				&dummyProvider,
 				true,
 				libpf.Set[string]{})

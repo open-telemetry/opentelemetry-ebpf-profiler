@@ -11,7 +11,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"os"
 	"path"
@@ -65,8 +64,8 @@ type Module struct {
 	mtime int64
 	stub  bool
 
-	buildID string
-	fileID  libpf.FileID
+	mappingFile libpf.FrameMappingFile
+
 	names   []byte
 	symbols []symbol
 }
@@ -176,11 +175,16 @@ var loadModuleMetadata = func(m *Module, name string, oldMtime int64) bool {
 	// Require at least 16 bytes of BuildID to ensure there is enough entropy for a FileID.
 	// 16 bytes could happen when --build-id=md5 is passed to `ld`. This would imply a custom
 	// kernel.
-	var err error
-	m.buildID, err = pfelf.GetBuildIDFromNotesFile(notesFile)
-	if err == nil && len(m.buildID) >= 16 {
-		m.fileID = libpf.FileIDFromKernelBuildID(m.buildID)
+	fileID := libpf.UnknownKernelFileID
+	buildID, err := pfelf.GetBuildIDFromNotesFile(notesFile)
+	if err == nil && len(buildID) >= 16 {
+		fileID = libpf.FileIDFromKernelBuildID(buildID)
 	}
+	m.mappingFile = libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+		FileID:     fileID,
+		FileName:   libpf.Intern(name),
+		GnuBuildID: buildID,
+	})
 	return true
 }
 
@@ -197,31 +201,6 @@ func (m *Module) finish() {
 	sort.Slice(m.symbols, func(i, j int) bool {
 		return m.symbols[i].offset >= m.symbols[j].offset
 	})
-
-	// Synthesize fileID if it was not available via /sys
-	if m.fileID.Compare(libpf.FileID{}) == 0 && len(m.symbols) > 0 {
-		// Hash exports and their normalized addresses.
-		h := fnv.New128a()
-
-		h.Write(m.bytesAt(0)) // module name
-		size := uint64(m.end - m.start)
-		h.Write(libpf.SliceFrom(&size))
-
-		for _, sym := range m.symbols {
-			h.Write(m.bytesAt(sym.index))
-			addr := uint64(sym.offset)
-			h.Write(libpf.SliceFrom(&addr))
-		}
-
-		var hash [16]byte
-		fileID, err := libpf.FileIDFromBytes(h.Sum(hash[:0]))
-		if err != nil {
-			panic("kernel module fallback fileID construction is broken")
-		}
-
-		log.Debugf("Fallback module ID for module %s is '%s' (num syms: %d)",
-			m.Name(), fileID.Base64(), len(m.symbols))
-	}
 }
 
 func (m *Module) Name() string {
@@ -236,12 +215,8 @@ func (m *Module) End() libpf.Address {
 	return m.end
 }
 
-func (m *Module) BuildID() string {
-	return m.buildID
-}
-
-func (m *Module) FileID() libpf.FileID {
-	return m.fileID
+func (m *Module) MappingFile() libpf.FrameMappingFile {
+	return m.mappingFile
 }
 
 // LookupSymbolByAddress resolves the `pc` address to the function and offset from it.
