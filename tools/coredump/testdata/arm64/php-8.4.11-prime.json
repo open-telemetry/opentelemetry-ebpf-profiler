@@ -1,0 +1,183 @@
+{
+  "coredump-ref": "bd6e05931637d563829df0c44747a5a94df472b2aaccd417c011ad2f2ac33580",
+  "threads": [
+    {
+      "lwp": 8038,
+      "frames": [
+        "is_prime+11 in /Users/dpacak/go/src/github.com/danielpacak/opentelemetry-ebpf-profiler/tools/coredump/testsources/php/prime.php:14",
+        "<top-level>+33 in /Users/dpacak/go/src/github.com/danielpacak/opentelemetry-ebpf-profiler/tools/coredump/testsources/php/prime.php:34",
+        "php8.4+0x3aaae0",
+        "php8.4+0x3a320b",
+        "php8.4+0x40dd13",
+        "php8.4+0x299773",
+        "php8.4+0x40faa3",
+        "php8.4+0x113ddf",
+        "libc.so.6+0x273fb",
+        "libc.so.6+0x274cb",
+        "php8.4+0x113eaf"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "2746ef5c998216b6151eba5111d4e67ffa9c8c19f423987e7287b6008576eceb",
+      "local-path": "/usr/lib/php/20240924/gettext.so"
+    },
+    {
+      "ref": "fa6ab53d23027ff70c1b7ce0f4ee5447b3bf58956bae0e6f38be462ae94cb5b5",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libcrypto.so.3"
+    },
+    {
+      "ref": "a729f066a97afdd76d3928440d9ce21bf0a075b513cc1a0e90fd9ac3e9edad40",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libargon2.so.1"
+    },
+    {
+      "ref": "79fe52a019e2bbd44531cc625e8d65a57bfe23d4be3612cad1a7bc34d32197ce",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "71d59d1c5daf452f3b8c44c7000507aa2e0dbc1d48e354781d4d25be041c716b",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libbsd.so.0.11.5"
+    },
+    {
+      "ref": "0ac51198e240a265f7ff3e12a5815912c96862bea24aa6d3c8b0cd93f1e72850",
+      "local-path": "/usr/lib/php/20240924/sysvshm.so"
+    },
+    {
+      "ref": "753fa3b3475798ffb89f6dc7154733fb5047be4cacf3acd383d9ef45946b6fec",
+      "local-path": "/usr/lib/php/20240924/fileinfo.so"
+    },
+    {
+      "ref": "852d6d5ee1fe6f375911baa68cdab8c98c4cc51c816eae8790c2f6830e297187",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libmd.so.0.0.5"
+    },
+    {
+      "ref": "acfe23cf0f5f4ac35b4c314415bb31d6f52a9bd39df8be04dfb2818a571533fd",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "ff2566def59fc89875d459d88afa20c8b632eacec7f53ff423da5a9bef0e60bb",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libssl.so.3"
+    },
+    {
+      "ref": "b8807654f0b0b43e014f0fbb5fe2e9325b739e34d2ffdeb5d027af5d0738b930",
+      "local-path": "/usr/lib/php/20240924/ctype.so"
+    },
+    {
+      "ref": "8a67df6df8a21315771719f2da9f8abd07a8b172da3ace213ef2ec340bddaa1f",
+      "local-path": "/usr/lib/php/20240924/exif.so"
+    },
+    {
+      "ref": "3da8981d9ab934354b74e904baf787ee2211a97a163183b3655efe4a59008f91",
+      "local-path": "/usr/lib/aarch64-linux-gnu/liblzma.so.5.2.5"
+    },
+    {
+      "ref": "2ed5b950ca4619538b571ab7277260776ae3df63ccdfbc82c17606912c2e615f",
+      "local-path": "/usr/lib/php/20240924/posix.so"
+    },
+    {
+      "ref": "54cbb6427827e5b60aa95e98d2df6d2b3e89e8cd6fe5f009b862acfbc0a90b44",
+      "local-path": "/usr/bin/php8.4"
+    },
+    {
+      "ref": "8d33c8679299894117cb034d3498a8f917540d46ecf9e2f6e04775682d4dd4c8",
+      "local-path": "/usr/lib/php/20240924/calendar.so"
+    },
+    {
+      "ref": "0958c7d2d7c49feaf84e322153565be9b381af1c03456d8e91385e5bc603e01a",
+      "local-path": "/usr/lib/php/20240924/sockets.so"
+    },
+    {
+      "ref": "631a67c8969bf7a9a3c739db4faa7a16bf4d713b0b5195131e8644656a91289d",
+      "local-path": "/usr/lib/php/20240924/phar.so"
+    },
+    {
+      "ref": "fcdfbe1bfbb8f1378707af2df2b1788633c1ae6db87a1a6e602574786eb46ca4",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libxml2.so.2.9.14"
+    },
+    {
+      "ref": "c4834bd79254443665af96b6d5e71d124b7f92f2eea121e61f9fff5204fc594d",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.30"
+    },
+    {
+      "ref": "8cd4dd1e893bc67102bbe7d2f0e895a98dd142857228c70bef7878a55eb58bb6",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libz.so.1.2.11"
+    },
+    {
+      "ref": "6c46b8aaec410de77fc7308d685b569f9491d1a88bb2a254dccfa5d238607154",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "1e9c3d4623a9b2b0bb33243ca0a4d119528fa57524b2e1bfb8900a227497aac4",
+      "local-path": "/usr/lib/php/20240924/ffi.so"
+    },
+    {
+      "ref": "24d29520ed94781e72aa4dc54b92066db7244d0a11a8f5ad1504dbc37b546d17",
+      "local-path": "/usr/lib/php/20240924/opcache.so"
+    },
+    {
+      "ref": "5a7d201f78b8083100c29521abc679037949b6c60a0c5989959b5b159a5981cd",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libpcre2-8.so.0.11.2"
+    },
+    {
+      "ref": "18de997ab0c3c2a22f0a3ea44129167c79131ec06e4ffbfa44493515b29d7c3b",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libedit.so.2.0.68"
+    },
+    {
+      "ref": "c7b07a9aaf213cb26b46e87322517330bdcda0f2bd8dc3b43e9137401a45fde9",
+      "local-path": "/usr/lib/php/20240924/shmop.so"
+    },
+    {
+      "ref": "6ab538560fba1f82e80459e3d5eac8ba258ac18fa29f974ac1e2a532db150488",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libicuuc.so.70.1"
+    },
+    {
+      "ref": "fab051e5a9d83a40efa4bad3867d5714e9c68d8c425e981c931068c827054491",
+      "local-path": "/usr/lib/php/20240924/readline.so"
+    },
+    {
+      "ref": "89bf1c29c548f4f8cec8f60afb179d34eebaee2fe5945812271f0c66453d6f53",
+      "local-path": "/usr/lib/php/20240924/pdo.so"
+    },
+    {
+      "ref": "ef03ec857c3f494ca792bf4084538ef674e63ed485580f60a03b814b92d5165c",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "004c33b7e33c9f5c8bdd73a71be95f016a41a14febc9c359b23e5108bd08779e",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libtinfo.so.6.3"
+    },
+    {
+      "ref": "2d988cd277c039e7f1d9a4a98429ae566b3572ee8b5d31eff5912c67b7024741",
+      "local-path": "/usr/lib/php/20240924/ftp.so"
+    },
+    {
+      "ref": "707ae65e2fee66034ee3bd7ec1cbe200033221c39f9ed5cc854270ece2c72a04",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libsodium.so.23.3.0"
+    },
+    {
+      "ref": "6694980dd63ed979d7aafadc141ff1d45f5a2e714431e69bd2e08718827805b4",
+      "local-path": "/usr/lib/php/20240924/tokenizer.so"
+    },
+    {
+      "ref": "540b1462b3e662f7e5c79cdd24507210e81631c0783d72e7509a30c53e328c06",
+      "local-path": "/usr/lib/php/20240924/iconv.so"
+    },
+    {
+      "ref": "819f2932a258a77960818f964773ebe523c9e44f12f29647f1964d77e786d891",
+      "local-path": "/usr/lib/php/20240924/sysvsem.so"
+    },
+    {
+      "ref": "727b7186c2197c7f354b0131792a37922b52760e6bb1d6fbe765c5357b2faf31",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libicudata.so.70.1"
+    },
+    {
+      "ref": "b0c75d5a51c7ee793f7b8ac587a32fcf6d7c6ae08864581b6577478f75ff61f0",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libffi.so.8.1.0"
+    },
+    {
+      "ref": "b2d68868b02712106d2b666195db31bf2beb5564bba75a9fb8d4a979d606cbe5",
+      "local-path": "/usr/lib/php/20240924/sysvmsg.so"
+    }
+  ]
+}
