@@ -550,6 +550,23 @@ func (f *File) EHFrame() (*Prog, error) {
 	return nil, errors.New("no PT_LOAD segment for PT_GNU_EH_FRAME found")
 }
 
+// GetGoBuildID returns the Go BuildID if present
+func (f *File) GetGoBuildID() (string, error) {
+	s := f.Section(".note.go.buildid")
+	if s == nil {
+		s = f.Section(".notes")
+	}
+	if s == nil {
+		return "", ErrNoBuildID
+	}
+	data, err := s.Data(maxBytesSmallSection)
+	if err != nil {
+		return "", err
+	}
+
+	return getGoBuildIDFromNotes(data)
+}
+
 // GetBuildID returns the ELF BuildID if present
 func (f *File) GetBuildID() (string, error) {
 	s := f.Section(".note.gnu.build-id")
