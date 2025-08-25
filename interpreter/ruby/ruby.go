@@ -378,7 +378,7 @@ func (r *rubyInstance) getStringCached(addr libpf.Address, reader StringReader) 
 		return libpf.NullString, err
 	}
 	if !util.IsValidString(str) {
-		log.Debugf("Extracted invalid string from Ruby at 0x%x '%v'", addr, libpf.SliceFrom(str))
+		log.Debugf("Extracted invalid string from Ruby at 0x%x '%v'", addr, []byte(str))
 		return libpf.NullString, fmt.Errorf("extracted invalid Ruby string from address 0x%x", addr)
 	}
 
