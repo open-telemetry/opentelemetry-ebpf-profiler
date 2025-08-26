@@ -39,8 +39,8 @@ bpf_map_def SEC("maps") ruby_procs = {
 #define VM_FRAME_MAGIC_MASK     0x7fff0001
 
 // https://github.com/ruby/ruby/blob/2083fa89fc29005035c1a098185c4b707686a437/vm_core.h#L1415-L1416
-#define VM_ENV_DATA_INDEX_ME_CREF    (-2) /* ep[-2] */
-#define VM_ENV_DATA_INDEX_SPECVAL    (-1) /* ep[-1] */
+#define VM_ENV_DATA_INDEX_ME_CREF    (-2 * sizeof(size_t)) /* ep[-2] */ // NOTE - we do byte-indexing in kernel space, but array in userspace is usize
+#define VM_ENV_DATA_INDEX_SPECVAL    (-1 * sizeof(size_t)) /* ep[-1] */
 
 
 // Record a Ruby iseq frame
@@ -63,7 +63,7 @@ static EBPF_INLINE u64 check_method_entry(u64 env_me_cref, int can_be_svar)
   u64 env_cme_cref = 0;
   u64 rbasic_flags = 0; // should be at offset 0 on the struct, and size of VALUE, so u64 should fit it
 
-  if (bpf_probe_read_user(&rbasic_flags, sizeof(rbasic_flags), (void *)(env_cme_cref))) {
+  if (bpf_probe_read_user(&rbasic_flags, sizeof(rbasic_flags), (void *)(env_me_cref))) {
     DEBUG_PRINT("ruby: failed to read flags to check method entry");
     //increment_metric(metricID_UnwindRubyErrReadEp);
     return 0;
@@ -74,6 +74,7 @@ static EBPF_INLINE u64 check_method_entry(u64 env_me_cref, int can_be_svar)
 
   switch(imemo_type) {
     case IMEMO_MENT:
+      DEBUG_PRINT("ruby: imemo type is method entry");
       return env_me_cref;
     case IMEMO_CREF:
       return 0;
@@ -195,8 +196,10 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
   u32 iseq_size;
   s64 n;
 
+  DEBUG_PRINT("ruby: HERE UNWIND");
   UNROLL for (u32 i = 0; i < FRAMES_PER_WALK_RUBY_STACK; ++i)
   {
+    DEBUG_PRINT("ruby: unwinding frame %d", i);
     ErrorCode error;
     pc        = 0;
     iseq_addr = NULL;
@@ -240,24 +243,35 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
       goto save_state;
     }
 
-    if ((ep & VM_FRAME_MAGIC_MASK) != VM_FRAME_MAGIC_METHOD) {
+    u64 flags = 0;
+
+    if (bpf_probe_read_user(&flags, sizeof(flags), (void *)(ep))) {
+      DEBUG_PRINT("ruby: failed to get flags");
+      increment_metric(metricID_UnwindRubyErrReadEp);
+      return ERR_RUBY_READ_EP;
+    }
+
+    DEBUG_PRINT("ruby: mask %x", (flags & VM_FRAME_MAGIC_MASK));
+
+    if ((flags & VM_FRAME_MAGIC_MASK) != VM_FRAME_MAGIC_METHOD) {
       // If the magic frame type is not method there is no class to read
       // so just skip to just checking the iseq for the method name
       goto read_iseq_body;
     }
 
+    DEBUG_PRINT("ruby: frame %d method mask matched", i);
 
     u64 env_specval = 0;
     u64 env_me_cref = 0;
     u64 method_entry = 0;
 
-    if (bpf_probe_read_user(&env_specval, sizeof(env_specval), (void *)(stack_ptr + (ep + VM_ENV_DATA_INDEX_SPECVAL)))) {
+    if (bpf_probe_read_user(&env_specval, sizeof(env_specval), (void *)(ep + VM_ENV_DATA_INDEX_SPECVAL))) {
       DEBUG_PRINT("ruby: failed to get specval");
       //increment_metric(metricID_UnwindRubyErrReadEp);
       goto read_iseq_body;
     }
 
-    if (bpf_probe_read_user(&env_me_cref, sizeof(env_me_cref), (void *)(stack_ptr + (ep + VM_ENV_DATA_INDEX_ME_CREF)))) {
+    if (bpf_probe_read_user(&env_me_cref, sizeof(env_me_cref), (void *)(ep + VM_ENV_DATA_INDEX_ME_CREF))) {
       DEBUG_PRINT("ruby: failed to get me_cref");
       //increment_metric(metricID_UnwindRubyErrReadEp);
       goto read_iseq_body;
@@ -265,7 +279,7 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
 
     UNROLL for (u32 i = 0; i < CME_MAX_CHECK_FRAMES; ++i)
     {
-      if ((ep & VM_ENV_FLAG_LOCAL) != 0) {
+      if ((env_specval & VM_ENV_FLAG_LOCAL) != 0) {
         method_entry = check_method_entry(env_me_cref, 0);
         if (method_entry != 0) {
           goto emit_cme;
@@ -282,9 +296,14 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
           //increment_metric(metricID_UnwindRubyErrReadEp);
           goto read_iseq_body;
         }
+      } else {
+        DEBUG_PRINT("ruby: %x is local me is %x, %x", env_specval, method_entry, env_me_cref);
+        break;
       }
     }
+    DEBUG_PRINT("ruby: DONE CHECKING FRAMES");
     method_entry = check_method_entry(env_me_cref, 1);
+    DEBUG_PRINT("ruby: method_entry %x", method_entry);
     if (method_entry != 0) {
       goto emit_cme;
     }
@@ -297,6 +316,7 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
       DEBUG_PRINT("ruby: failed to push frame");
       return error;
     }
+    DEBUG_PRINT("ruby: Pushed CME frame %x %x ", env_me_cref, pc);
     increment_metric(metricID_UnwindRubyFrames);
 
     // We may need to perform the iseq body checking here with some struct navigation
@@ -370,6 +390,8 @@ save_state:
 // unwind_ruby is the tail call destination for PROG_UNWIND_RUBY.
 static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
 {
+  DEBUG_PRINT("UNWINDING RUBY");
+
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
     return -1;
@@ -422,6 +444,7 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
   error = walk_ruby_stack(record, rubyinfo, current_ctx_addr, &unwinder);
 
 exit:
+  DEBUG_PRINT("RUBY: exit called");
   record->state.unwind_error = error;
   tail_call(ctx, unwinder);
   return -1;

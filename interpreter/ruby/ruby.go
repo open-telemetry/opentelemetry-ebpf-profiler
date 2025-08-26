@@ -47,6 +47,9 @@ const (
 
 //nolint:lll
 const (
+
+	//RUBY_T_CLASS    = 0x02,
+	rubyTClass = 0x2
 	// RUBY_T_STRING
 	// https://github.com/ruby/ruby/blob/c149708018135595b2c19c5f74baf9475674f394/include/ruby/internal/value_type.h#L117
 	rubyTString = 0x5
@@ -748,7 +751,9 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 }
 
 func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
-	if !frame.Type.IsInterpType(libpf.Ruby) || !frame.Type.IsInterpType(libpf.RubyCME){
+	log.Warnf("HERE2 %+v", frame)
+	if !frame.Type.IsInterpType(libpf.Ruby) && !frame.Type.IsInterpType(libpf.RubyCME){
+		log.Warnf("NOT RUBY FRAME %+v", frame)
 		return interpreter.ErrMismatchInterpreterType
 	}
 	vms := &r.r.vmStructs
@@ -762,6 +767,57 @@ func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 	if frame.Type.IsInterpType(libpf.RubyCME) {
 		// Get the classpath, and figure out the iseq body offset from the definition
 		// so that we can get the name and line number as below
+
+		var classname libpf.String
+		var err error
+		cmeAddr := libpf.Address(frame.File)
+		log.Warnf("GOT Ruby CME frame %X, %X", cmeAddr, frame.File)
+		//cmeFlags := r.rm.Ptr(cmeAddr) // TODO Check imemo
+
+		definedClassOffset := 8
+		classDefinition := r.rm.Ptr(cmeAddr + libpf.Address(definedClassOffset))
+		log.Warnf("Class def %x", classDefinition)
+
+		classFlags := r.rm.Ptr(classDefinition)
+		classMask := classFlags & rubyTMask 
+
+		if classMask == rubyTClass { // note we can also get iclass here (0x1c) but we don't seem to be able to read those
+			classExtOffset := 32 // TODO update vmstructs with these offsets
+			classpathOffset := 120
+
+			classnameAddr := classDefinition + libpf.Address(classExtOffset + classpathOffset)
+			log.Warnf("Class classnameAddr %x", classnameAddr)
+			classnamePtr := r.rm.Ptr(classnameAddr)
+			log.Warnf("Class classnameAddr %x %x %x", classDefinition, classnameAddr, classnamePtr)
+			classname, err = r.getStringCached(classnamePtr, r.readRubyString)
+			if err != nil {
+				log.Errorf("ERROR %x %v", classnamePtr, err)
+			} else {
+				log.Warnf("GOT CLASSNAME %s", classname)
+				classPath = classname
+			}
+		}
+
+		// VM_METHOD_TYPE_ISEQ = 0
+		vmMethodTypeIseq := uint32(0)
+		methodDefOffset := 16
+		methodDefinition := r.rm.Ptr(cmeAddr + libpf.Address(methodDefOffset))
+		log.Warnf("Method def %x", methodDefinition)
+
+		methodType := r.rm.Uint32(methodDefinition)
+		log.Warnf("Method type %x", methodType)
+
+		if methodType == vmMethodTypeIseq {
+
+			methodBodyOffset := 8
+			methodBody := r.rm.Ptr(methodDefinition + libpf.Address(methodBodyOffset))
+			log.Warnf("Method body %x", methodBody)
+
+			iseqConstantBodyOffset := 16
+			iseqBody = r.rm.Ptr(methodBody + libpf.Address(iseqConstantBodyOffset))
+
+			log.Warnf("iseq constant body %x", iseqBody)
+		}
 	} else {
 		// If the frame type from the eBPF Ruby unwinder is iseq type, we receive
 		// the address to the instruction sequence body in the Files field.
@@ -802,7 +858,7 @@ func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 
 		if classPath != libpf.NullString {
 			// TODO we should properly use a `.` not `#` if it is a singleton class
-			functionName = libpf.Intern(fmt.Sprintf("%s#%", classPath, functionName))
+			functionName = libpf.Intern(fmt.Sprintf("%s#%s", classPath, functionName))
 		}
 
 		iseq = &rubyIseq{
