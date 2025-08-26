@@ -1,6 +1,7 @@
 name: "Update builder docker image"
 
 on:
+  workflow_dispatch: # Allows manual triggering of the workflow
   push:
     branches: ["main"]
     paths:
