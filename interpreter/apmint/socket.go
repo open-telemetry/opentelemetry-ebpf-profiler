@@ -103,7 +103,7 @@ type traceCorrMsg struct {
 	MinorVersion     uint16
 	APMTraceID       libpf.APMTraceID
 	APMTransactionID libpf.APMTransactionID
-	StackTraceID     [16]byte
+	StackTraceID     libpf.TraceHash
 	Count            uint16
 }
 
@@ -113,7 +113,7 @@ func (m *traceCorrMsg) Serialize() []byte {
 	_ = binary.Write(&buf, binary.LittleEndian, m.MinorVersion)
 	_, _ = buf.Write(m.APMTraceID[:])
 	_, _ = buf.Write(m.APMTransactionID[:])
-	_, _ = buf.Write(m.StackTraceID[:])
+	_, _ = buf.Write(m.StackTraceID.Bytes())
 	_ = binary.Write(&buf, binary.LittleEndian, m.Count)
 	return buf.Bytes()
 }

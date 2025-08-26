@@ -8,11 +8,10 @@
 package apmint // import "go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"regexp"
-	"strconv"
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
@@ -145,45 +144,30 @@ type Instance struct {
 
 var _ interpreter.Instance = &Instance{}
 
-// hashTrace calculates the hash of a trace and returns it.
-// Be aware that changes to this calculation will break the ability to
-// look backwards for the same TraceHash in our backend.
-func hashTrace(trace *libpf.Trace) (hash [16]byte) {
-	var buf [24]byte
-	h := fnv.New128a()
-	for _, uniqueFrame := range trace.Frames {
-		frame := uniqueFrame.Value()
-		_, _ = h.Write(frame.FileID.Bytes())
-		// Using FormatUint() or putting AppendUint() into a function leads
-		// to escaping to heap (allocation).
-		_, _ = h.Write(strconv.AppendUint(buf[:0], uint64(frame.AddressOrLineno), 10))
-	}
-	h.Sum(hash[:0])
-	return
-}
-
 // Detach implements the interpreter.Instance interface.
 func (i *Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	return ebpf.DeleteProcData(libpf.APMInt, pid)
 }
 
 // NotifyAPMAgent sends out collected traces to the connected APM agent.
-func (i *Instance) NotifyAPMAgent(pid libpf.PID, rawTrace *host.Trace, umTrace *libpf.Trace) {
+func (i *Instance) NotifyAPMAgent(
+	pid libpf.PID, rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16) {
 	if rawTrace.APMTransactionID == libpf.InvalidAPMSpanID || i.socket == nil {
 		return
 	}
+
+	log.Debugf("Reporting %dx trace hash %s -> TX %s for PID %d",
+		count, umTraceHash.StringNoQuotes(),
+		hex.EncodeToString(rawTrace.APMTransactionID[:]), pid)
 
 	msg := traceCorrMsg{
 		MessageType:      1,
 		MinorVersion:     1,
 		APMTraceID:       rawTrace.APMTraceID,
 		APMTransactionID: rawTrace.APMTransactionID,
-		StackTraceID:     hashTrace(umTrace),
-		Count:            1,
+		StackTraceID:     umTraceHash,
+		Count:            count,
 	}
-
-	log.Debugf("Reporting a trace hash %x -> TX %x for PID %d",
-		msg.StackTraceID[:], rawTrace.APMTransactionID[:], pid)
 
 	if err := i.socket.SendMessage(msg.Serialize()); err != nil {
 		log.Debugf("Failed to send trace mappings to APM agent: %v", err)
