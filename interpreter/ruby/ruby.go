@@ -168,6 +168,123 @@ type rubyData struct {
 		rb_ractor_struct struct {
 			running_ec uint16
 		}
+
+//struct rb_method_definition_struct {
+//        rb_method_type_t           type:4;               /*     0: 0  4 */
+//        unsigned int               iseq_overload:1;      /*     0: 4  4 */
+//        unsigned int               no_redef_warning:1;   /*     0: 5  4 */
+//        unsigned int               aliased:1;            /*     0: 6  4 */
+//
+//        /* XXX 25 bits hole, try to pack */
+//
+//        /* Force alignment to the next boundary: */
+//        int                        :0;
+//
+//        int                        reference_count:28;   /*     4: 0  4 */
+//
+//        /* XXX 4 bits hole, try to pack */
+//
+//        union {
+//                rb_method_iseq_t   iseq;                 /*     8    16 */
+//                rb_method_cfunc_t  cfunc;                /*     8    24 */
+//                rb_method_attr_t   attr;                 /*     8    16 */
+//                rb_method_alias_t  alias;                /*     8     8 */
+//                rb_method_refined_t refined;             /*     8     8 */
+//                rb_method_bmethod_t bmethod;             /*     8    24 */
+//                rb_method_optimized_t optimized;         /*     8     8 */
+//        } body;                                          /*     8    24 */
+//        ID                         original_id;          /*    32     8 */
+//        uintptr_t                  method_serial;        /*    40     8 */
+//
+//        /* size: 48, cachelines: 1, members: 8 */
+//        /* sum members: 40 */
+//        /* sum bitfield members: 35 bits, bit holes: 2, sum bit holes: 29 bits */
+//        /* last cacheline: 48 bytes */
+//};
+
+//struct rb_method_iseq_struct {
+//        const rb_iseq_t  *         iseqptr;              /*     0     8 */
+//        rb_cref_t *                cref;                 /*     8     8 */
+//
+//        /* size: 16, cachelines: 1, members: 2 */
+//        /* last cacheline: 16 bytes */
+//};
+
+//struct rb_iseq_struct {
+//        VALUE                      flags;                /*     0     8 */
+//        VALUE                      wrapper;              /*     8     8 */
+//        struct rb_iseq_constant_body * body;             /*    16     8 */                                                                                                               union {
+//                struct iseq_compile_data * compile_data; /*    24     8 */
+//                struct {
+//                        VALUE      obj;                  /*    24     8 */                                                                                                                               int        index;                /*    32     4 */
+//                } loader;                                /*    24    16 */
+//                struct {
+//                        struct rb_hook_list_struct * local_hooks; /*    24     8 */
+//                        rb_event_flag_t global_trace_events; /*    32     4 */
+//                } exec;                                  /*    24    16 */
+//        } aux;                                           /*    24    16 */
+//
+//        /* size: 40, cachelines: 1, members: 4 */
+//        /* last cacheline: 40 bytes */
+//};
+
+
+//		struct rb_method_entry_struct {
+//        VALUE                      flags;                /*     0     8 */
+//        VALUE                      defined_class;        /*     8     8 */
+//        const struct rb_method_definition_struct * def;  /*    16     8 */                                                                                                               ID                         called_id;            /*    24     8 */
+//        VALUE                      owner;                /*    32     8 */
+//
+//        /* size: 40, cachelines: 1, members: 5 */                                                                                                                                        /* last cacheline: 40 bytes */
+//};
+
+//struct RClass_and_rb_classext_t {
+//        struct RClass              rclass __attribute__((__aligned__(8))); /*     0    32 */
+//        rb_classext_t              classext;             /*    32   128 */
+//                                                                                                                                                                                         /* size: 160, cachelines: 3, members: 2 */
+//        /* forced alignments: 1 */
+//        /* last cacheline: 32 bytes */
+//} __attribute__((__aligned__(8)));
+
+//struct rb_classext_struct {
+//        VALUE *                    iv_ptr;               /*     0     8 */
+//        struct rb_id_table *       const_tbl;            /*     8     8 */
+//        struct rb_id_table *       callable_m_tbl;       /*    16     8 */
+//        struct rb_id_table *       cc_tbl;               /*    24     8 */
+//        struct rb_id_table *       cvc_tbl;              /*    32     8 */
+//        size_t                     superclass_depth;     /*    40     8 */
+//        VALUE *                    superclasses;         /*    48     8 */                                                                                                               struct rb_subclass_entry * subclasses;           /*    56     8 */
+//        /* --- cacheline 1 boundary (64 bytes) --- */
+//        struct rb_subclass_entry * subclass_entry;       /*    64     8 */
+//        struct rb_subclass_entry * module_subclass_entry; /*    72     8 */
+//        const VALUE                origin_;              /*    80     8 */
+//        const VALUE                refined_class;        /*    88     8 */
+//        union {
+//                struct {
+//                        rb_alloc_func_t allocator;       /*    96     8 */
+//                } class;                                 /*    96     8 */
+//                struct {
+//                        VALUE      attached_object;      /*    96     8 */
+//                } singleton_class;                       /*    96     8 */
+//        } as;                                            /*    96     8 */
+//        const VALUE                includer;             /*   104     8 */
+//        attr_index_t               max_iv_count;         /*   112     4 */
+//        unsigned char              variation_count;      /*   116     1 */
+//        _Bool                      permanent_classpath:1; /*   117: 0  1 */
+//        _Bool                      cloned:1;             /*   117: 1  1 */
+//
+//        /* XXX 6 bits hole, try to pack */
+//        /* XXX 2 bytes hole, try to pack */
+//
+//        VALUE                      classpath;            /*   120     8 */
+//
+//        /* size: 128, cachelines: 2, members: 19 */
+//        /* sum members: 125, holes: 1, sum holes: 2 */
+//        /* sum bitfield members: 2 bits, bit holes: 1, sum bit holes: 6 bits */
+//};
+
+
+
 	}
 }
 
