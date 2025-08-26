@@ -31,7 +31,7 @@ func (rl *runLoop) Start(ctx context.Context, reportInterval time.Duration, run,
 				return
 			case <-tick.C:
 				run()
-				tick.Reset(libpf.AddJitter(reportInterval, 0.2))
+				// tick.Reset(libpf.AddJitter(reportInterval, 0.2)) 这里注释掉，避免消费堆积
 			case <-purgeTick.C:
 				purge()
 			}
