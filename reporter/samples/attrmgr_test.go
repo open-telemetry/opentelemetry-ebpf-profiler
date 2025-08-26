@@ -11,6 +11,7 @@ import (
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 )
 
@@ -28,6 +29,7 @@ func TestAttrTableManager(t *testing.T) {
 		"empty": {
 			k: []TraceAndMetaKey{
 				{
+					Hash:           libpf.TraceHash{},
 					Comm:           "",
 					ApmServiceName: "",
 					ContainerID:    "",
@@ -42,12 +44,14 @@ func TestAttrTableManager(t *testing.T) {
 		"duplicate": {
 			k: []TraceAndMetaKey{
 				{
+					Hash:           libpf.TraceHash{},
 					Comm:           "comm1",
 					ApmServiceName: "apmServiceName1",
 					ContainerID:    "containerID1",
 					Pid:            1234,
 				},
 				{
+					Hash:           libpf.TraceHash{},
 					Comm:           "comm1",
 					ApmServiceName: "apmServiceName1",
 					ContainerID:    "containerID1",
@@ -65,12 +69,14 @@ func TestAttrTableManager(t *testing.T) {
 		"different": {
 			k: []TraceAndMetaKey{
 				{
+					Hash:           libpf.TraceHash{},
 					Comm:           "comm1",
 					ApmServiceName: "apmServiceName1",
 					ContainerID:    "containerID1",
 					Pid:            1234,
 				},
 				{
+					Hash:           libpf.TraceHash{},
 					Comm:           "comm2",
 					ApmServiceName: "apmServiceName2",
 					ContainerID:    "containerID2",

@@ -41,6 +41,7 @@ func (frames *Frames) Append(frame *Frame) {
 // Trace represents a stack trace.
 type Trace struct {
 	Frames       Frames
+	Hash         TraceHash
 	CustomLabels map[string]string
 }
 
