@@ -87,7 +87,7 @@ linters:
     paths:
       - design-docs
       - doc
-      - legal
+      - LICENSES 
       - target
 
   settings:
