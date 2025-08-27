@@ -6,16 +6,10 @@
 package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
-	"errors"
-
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"golang.org/x/arch/x86/x86asm"
-)
-
-var (
-	errMissingSymbol = errors.New("failed to find runtime.stackcheck")
 )
 
 // Most normal amd64 Go binaries use -8 as offset into TLS space for
@@ -31,11 +25,11 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 
 	// Dump of assembler code for function runtime.stackcheck:
 	// 0x0000000000470080 <+0>:     mov    %fs:0xfffffffffffffff8,%rax
-	pc, ok := pclntab.PCForSymbol("runtime.stackcheck")
-	if !ok {
-		return 0, errMissingSymbol
+	sym, err := pclntab.LookupSymbol("runtime.stackcheck")
+	if err != nil {
+		return 0, err
 	}
-	b, err := f.VirtualMemory(int64(pc), 10, 10)
+	b, err := f.VirtualMemory(int64(sym.Address), 10, 10)
 	if err != nil {
 		return 0, err
 	}
