@@ -89,6 +89,7 @@ linters:
       - doc
       - LICENSES 
       - target
+      - go
 
   settings:
     goconst:
