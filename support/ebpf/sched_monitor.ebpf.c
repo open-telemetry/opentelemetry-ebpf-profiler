@@ -39,13 +39,13 @@ exit:
 
 // tracepoint__sched_process_free is a tracepoint attached to the scheduler that frees processes.
 // Every time a processes exits this hook is triggered.
-SEC("tracepoint/sched/sched_process_free")
+SEC("tracepoint/sched/sched_process_free/v2")
 int tracepoint__sched_process_free(struct sched_process_free_ctx *ctx)
 {
   return do_process_free(ctx, ctx->pid);
 }
 
-SEC("tracepoint/sched/sched_process_free")
+SEC("tracepoint/sched/sched_process_free/v1")
 int tracepoint__sched_process_free_old(struct sched_process_free_ctx_old *ctx)
 {
   return do_process_free(ctx, ctx->pid);
