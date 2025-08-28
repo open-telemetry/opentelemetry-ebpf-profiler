@@ -363,9 +363,19 @@ func (g *Gopclntab) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error)
 		}
 		name := getString(g.funcnametab, int(fun.nameOff))
 		if name == symString {
+			var size uint64
+			if i < g.numFuncs-1 {
+				nextPc, _ := g.getFuncMapEntry(i + 1)
+				size = uint64(nextPc - pc)
+			} else {
+				// Last symbol: size unknown, set to 0.
+				size = 0
+			}
+
 			return &libpf.Symbol{
 				Name:    symbol,
 				Address: libpf.SymbolValue(pc),
+				Size:    size,
 			}, nil
 		}
 	}
