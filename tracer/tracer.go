@@ -284,9 +284,22 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	// References to eBPF maps in the eBPF programs are just placeholders that need to be
 	// replaced by the actual loaded maps later on with RewriteMaps before loading the
 	// programs into the kernel.
+	major, minor, patch, err := GetCurrentKernelVersion()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get kernel version: %v", err)
+	}
+
 	coll, err := support.LoadCollectionSpec()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load specification for tracers: %v", err)
+	}
+
+	if major >= 6 && minor >= 16 {
+		// Tracepoint format for sched_process_free has changed in v6.16+.
+		// We therefore use two different hooks and decide which to load at runtime.
+		delete(coll.Programs, "tracepoint__sched_process_free_old")
+	} else {
+		delete(coll.Programs, "tracepoint__sched_process_free")
 	}
 
 	if cfg.VerboseMode {
@@ -318,11 +331,6 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	}
 
 	if cfg.KernelVersionCheck {
-		var major, minor, patch uint32
-		major, minor, patch, err = GetCurrentKernelVersion()
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get kernel version: %v", err)
-		}
 		if hasProbeReadBug(major, minor, patch) {
 			if err = checkForMaccessPatch(coll, ebpfMaps, kmod); err != nil {
 				return nil, nil, fmt.Errorf("your kernel version %d.%d.%d may be "+
@@ -542,9 +550,15 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 
 	progs := make([]progLoaderHelper, len(tailCallProgs)+2)
 	copy(progs, tailCallProgs)
+
+	sched_process_free := "tracepoint__sched_process_free"
+	if _, ok := coll.Programs["tracepoint__sched_process_free_old"]; ok {
+		sched_process_free = "tracepoint__sched_process_free_old"
+	}
+
 	progs = append(progs,
 		progLoaderHelper{
-			name:             "tracepoint__sched_process_free",
+			name:             sched_process_free,
 			noTailCallTarget: true,
 			enable:           true,
 		},
