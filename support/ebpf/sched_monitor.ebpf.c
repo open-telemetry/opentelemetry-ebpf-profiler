@@ -9,7 +9,7 @@
 // See /sys/kernel/debug/tracing/events/sched/sched_process_free/format
 // for struct layout. This is pre-6.16 format which uses a fixed-size
 // (TASK_COMM_LEN) array for comm.
-struct sched_process_free_ctx_old {
+struct sched_process_free_ctx_pre616 {
   unsigned char skip[24];
   pid_t pid;
   int prio;
