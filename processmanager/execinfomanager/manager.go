@@ -190,6 +190,13 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 		}
 		return ExecutableInfo{}, fmt.Errorf("failed to extract interval data: %w", err)
 	}
+	if len(intervalData.Deltas) == 0 {
+		ef, errx := elfRef.GetELF()
+		if errx != nil {
+			return ExecutableInfo{}, errx
+		}
+		intervalData = synthesizeIntervalData(ef)
+	}
 
 	// Also gather TSD info if applicable.
 	if tpbase.IsPotentialTSDDSO(elfRef.FileName()) {
@@ -229,33 +236,6 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	state.executables[fileID] = info
 
 	return info.ExecutableInfo, nil
-}
-
-// AddSynthIntervalData should only be called once for a given file ID. It will error if it or
-// AddOrIncRef has been previously called for the same file ID. Interpreter detection is skipped.
-func (mgr *ExecutableInfoManager) AddSynthIntervalData(
-	fileID host.FileID,
-	data sdtypes.IntervalData,
-) error {
-	state := mgr.state.WLock()
-	defer mgr.state.WUnlock(&state)
-
-	if _, exists := state.executables[fileID]; exists {
-		return errors.New("AddSynthIntervalData: mapping already exists")
-	}
-
-	ref, _, err := state.loadDeltas(fileID, data.Deltas)
-	if err != nil {
-		return fmt.Errorf("failed to load deltas: %w", err)
-	}
-
-	state.executables[fileID] = &entry{
-		ExecutableInfo: ExecutableInfo{Data: nil},
-		mapRef:         ref,
-		rc:             1,
-	}
-
-	return nil
 }
 
 // RemoveOrDecRef decrements the reference counter of the executable being tracked. Once the RC
@@ -341,9 +321,11 @@ type executableInfoManagerState struct {
 
 // detectAndLoadInterpData attempts to detect the given executable as an interpreter. If detection
 // succeeds, it then loads additional per-interpreter data into the BPF maps and returns the
-// interpreter data.
+// interpreter data. If multiple loaders recognize the executable, it returns a MultiData instance.
 func (state *executableInfoManagerState) detectAndLoadInterpData(
 	loaderInfo *interpreter.LoaderInfo) interpreter.Data {
+	var interpreterDatas []interpreter.Data //nolint:prealloc
+
 	// Ask all interpreter loaders whether they want to handle this executable.
 	for _, loader := range state.interpreterLoaders {
 		data, err := loader(state.ebpf, loaderInfo)
@@ -356,7 +338,8 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 				log.Errorf("Failed to load %v (%#016x): %v",
 					loaderInfo.FileName(), loaderInfo.FileID(), err)
 			}
-			return nil
+			// Continue checking other loaders even if one fails
+			continue
 		}
 		if data == nil {
 			continue
@@ -364,10 +347,21 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 
 		log.Debugf("Interpreter data %v for %v (%#016x)",
 			data, loaderInfo.FileName(), loaderInfo.FileID())
-		return data
+		interpreterDatas = append(interpreterDatas, data)
 	}
 
-	return nil
+	// Return based on how many interpreters matched
+	switch len(interpreterDatas) {
+	case 0:
+		return nil
+	case 1:
+		return interpreterDatas[0]
+	default:
+		// Multiple interpreters matched, create a MultiData
+		log.Debugf("Multiple interpreters (%d) matched for %v (%#016x)",
+			len(interpreterDatas), loaderInfo.FileName(), loaderInfo.FileID())
+		return interpreter.NewMultiData(interpreterDatas)
+	}
 }
 
 // loadDeltas converts the sdtypes.StackDelta to StackDeltaEBPF and passes that to

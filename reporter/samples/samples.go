@@ -27,12 +27,15 @@ type TraceEvents struct {
 	Timestamps []uint64 // in nanoseconds
 	OffTimes   []int64  // in nanoseconds
 	EnvVars    map[string]string
+	Labels     map[string]string
 }
 
 // TraceAndMetaKey is the deduplication key for samples. This **must always**
 // contain all trace fields that aren't already part of the trace hash to ensure
 // that we don't accidentally merge traces with different fields.
 type TraceAndMetaKey struct {
+	// Hash is not sent forward, but it is used as the primary key
+	// to not aggregate difference traces.
 	Hash libpf.TraceHash
 	// comm and apmServiceName are provided by the eBPF programs
 	Comm           string

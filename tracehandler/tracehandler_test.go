@@ -105,7 +105,7 @@ func TestTraceHandler(t *testing.T) {
 			}
 
 			traceChan := make(chan *host.Trace)
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			exitNotify, err := tracehandler.Start(ctx, r, &fakeTraceProcessor{},
 				traceChan, defaultTimes(), 128)

@@ -5,7 +5,6 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
-	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -16,7 +15,6 @@ import (
 type Reporter interface {
 	TraceReporter
 	SymbolReporter
-	HostMetadataReporter
 
 	// Start starts the reporter in the background.
 	//
@@ -76,13 +74,4 @@ type SymbolReporter interface {
 	// wish to upload executables should NOT block this function to do so and instead just
 	// open the file and then enqueue the upload in the background.
 	ExecutableMetadata(args *ExecutableMetadataArgs)
-}
-
-type HostMetadataReporter interface {
-	// ReportHostMetadata enqueues host metadata for sending (to the collection agent).
-	ReportHostMetadata(metadataMap map[string]string)
-
-	// ReportHostMetadataBlocking sends host metadata to the collection agent.
-	ReportHostMetadataBlocking(ctx context.Context, metadataMap map[string]string,
-		maxRetries int, waitRetry time.Duration) error
 }
