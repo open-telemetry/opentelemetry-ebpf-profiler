@@ -369,6 +369,11 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	}
 
 	gnuBuildID, _ := ef.GetBuildID()
+	goBuildID := ""
+	if ef.IsGolang() {
+		goBuildID, _ = ef.GetGoBuildID()
+	}
+
 	mapping2 := *mapping // copy to avoid races if callee saves the closure
 	open := func() (process.ReadAtCloser, error) {
 		return pr.OpenMappingFile(&mapping2)
@@ -377,10 +382,12 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		FileID:            fileID,
 		FileName:          baseName,
 		GnuBuildID:        gnuBuildID,
+		GoBuildID:         goBuildID,
 		DebuglinkFileName: ef.DebuglinkFileName(elfRef.FileName(), elfRef),
 		Interp:            libpf.Native,
 		Open:              open,
 	})
+
 	return info
 }
 
