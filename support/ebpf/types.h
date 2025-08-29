@@ -457,6 +457,9 @@ typedef struct RubyProcInfo {
   u32 version;
 
   // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
+  u64 current_ec_tls_offset;
+
+  // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
   u64 current_ctx_ptr;
 
   // Offsets and sizes of Ruby internal structs
