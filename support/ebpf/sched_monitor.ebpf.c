@@ -16,6 +16,8 @@ struct sched_process_free_ctx_pre616 {
 };
 
 // This is the newer kernel version 6.16+ format.
+// The change was introduced upstream with
+// https://github.com/torvalds/linux/commit/155fd6c3e2f02efdc71a9b62888942efc217aff0
 struct sched_process_free_ctx {
   unsigned char skip[12];
   pid_t pid;
