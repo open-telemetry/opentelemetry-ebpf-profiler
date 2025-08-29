@@ -35,14 +35,14 @@ type fakeTraceProcessor struct{}
 var _ tracehandler.TraceProcessor = (*fakeTraceProcessor)(nil)
 
 func (f *fakeTraceProcessor) ConvertTrace(trace *host.Trace) *libpf.Trace {
-	converted := &libpf.Trace{}
-	converted.Frames.Append(&libpf.Frame{AddressOrLineno: libpf.AddressOrLineno(trace.Hash)})
-	return converted
+	var newTrace libpf.Trace
+	newTrace.Hash = libpf.NewTraceHash(uint64(trace.Hash), uint64(trace.Hash))
+	return &newTrace
 }
 
 func (f *fakeTraceProcessor) ProcessedUntil(times.KTime) {}
 
-func (f *fakeTraceProcessor) MaybeNotifyAPMAgent(*host.Trace, *libpf.Trace) string {
+func (f *fakeTraceProcessor) MaybeNotifyAPMAgent(*host.Trace, libpf.TraceHash, uint16) string {
 	return ""
 }
 
@@ -54,16 +54,15 @@ type arguments struct {
 
 type mockReporter struct {
 	t       *testing.T
-	reports map[host.TraceHash]uint16
+	reports map[libpf.TraceHash]uint16
 }
 
 func (m *mockReporter) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEventMeta) error {
-	hash := host.TraceHash(trace.Frames[0].Value().AddressOrLineno)
-	if _, exists := m.reports[hash]; exists {
-		m.reports[hash]++
+	if _, exists := m.reports[trace.Hash]; exists {
+		m.reports[trace.Hash]++
 		return nil
 	}
-	m.reports[hash] = 1
+	m.reports[trace.Hash] = 1
 
 	return nil
 }
@@ -72,7 +71,7 @@ func TestTraceHandler(t *testing.T) {
 	tests := map[string]struct {
 		input          []arguments
 		expireTimeout  time.Duration
-		expectedEvents map[host.TraceHash]uint16
+		expectedEvents map[libpf.TraceHash]uint16
 	}{
 		// no input simulates a case where no data is provided as input
 		// to the functions of traceHandler.
@@ -82,8 +81,8 @@ func TestTraceHandler(t *testing.T) {
 		"single trace": {input: []arguments{
 			{trace: &host.Trace{Hash: host.TraceHash(0x1234)}},
 		},
-			expectedEvents: map[host.TraceHash]uint16{
-				0x1234: 1,
+			expectedEvents: map[libpf.TraceHash]uint16{
+				libpf.NewTraceHash(0x1234, 0x1234): 1,
 			},
 		},
 
@@ -92,8 +91,8 @@ func TestTraceHandler(t *testing.T) {
 			{trace: &host.Trace{Hash: host.TraceHash(4)}},
 			{trace: &host.Trace{Hash: host.TraceHash(4)}},
 		},
-			expectedEvents: map[host.TraceHash]uint16{
-				4: 2,
+			expectedEvents: map[libpf.TraceHash]uint16{
+				libpf.NewTraceHash(4, 4): 2,
 			},
 		},
 	}
@@ -102,7 +101,7 @@ func TestTraceHandler(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			r := &mockReporter{
 				t:       t,
-				reports: make(map[host.TraceHash]uint16),
+				reports: make(map[libpf.TraceHash]uint16),
 			}
 
 			traceChan := make(chan *host.Trace)

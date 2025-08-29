@@ -95,11 +95,11 @@ linter-version:
 
 vanity-import-check:
 	@go install github.com/jcchavezs/porto/cmd/porto@latest
-	@porto --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
+	@porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 
 vanity-import-fix: $(PORTO)
 	@go install github.com/jcchavezs/porto/cmd/porto@latest
-	@porto --include-internal -w .
+	@porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
 
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps

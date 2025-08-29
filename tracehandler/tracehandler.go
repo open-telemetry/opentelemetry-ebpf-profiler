@@ -41,7 +41,7 @@ type TraceProcessor interface {
 	// MaybeNotifyAPMAgent notifies a potentially existing connected APM agent
 	// that a stack trace was collected in their process. If an APM agent is
 	// listening, the service name is returned.
-	MaybeNotifyAPMAgent(rawTrace *host.Trace, umTrace *libpf.Trace) string
+	MaybeNotifyAPMAgent(rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16) string
 
 	// ConvertTrace converts a trace from eBPF into the form we want to send to
 	// the collection agent. Depending on the frame type it will attempt to symbolize
@@ -135,7 +135,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		traceCacheLifetime); exists {
 		m.traceCacheHit++
 		// Fast path
-		meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, &trace)
+		meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
 		if err := m.reporter.ReportTraceEvent(&trace, meta); err != nil {
 			log.Errorf("Failed to report trace event: %v", err)
 		}
@@ -147,7 +147,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	umTrace := m.traceProcessor.ConvertTrace(bpfTrace)
 	m.traceCache.Add(bpfTrace.Hash, *umTrace)
 
-	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace)
+	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
 	if err := m.reporter.ReportTraceEvent(umTrace, meta); err != nil {
 		log.Errorf("Failed to report trace event: %v", err)
 	}
