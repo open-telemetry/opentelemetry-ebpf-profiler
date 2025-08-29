@@ -1034,7 +1034,7 @@ func (f *File) LookupSymbolAddress(symbol libpf.SymbolName) (libpf.SymbolValue, 
 }
 
 // visitSymbolTable visits all symbols in the given symbol table.
-func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol)) error {
+func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool ) error {
 	symTab := f.Section(name)
 	if symTab == nil {
 		return fmt.Errorf("failed to read %v: section not present", name)
@@ -1057,11 +1057,15 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol)) error {
 	for i := 0; i < len(syms); i += symSz {
 		sym := (*elf.Sym64)(unsafe.Pointer(&syms[i]))
 		if name, ok := getString(strs, int(sym.Name)); ok {
-			visitor(libpf.Symbol{
+			cont := visitor(libpf.Symbol{
 				Name:    libpf.SymbolName(name),
 				Address: libpf.SymbolValue(sym.Value),
 				Size:    sym.Size,
 			})
+
+			if !cont {
+				break
+			}
 		}
 	}
 	return nil
@@ -1070,7 +1074,7 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol)) error {
 // loadSymbolTable reads given symbol table
 func (f *File) loadSymbolTable(name string) (*libpf.SymbolMap, error) {
 	symMap := &libpf.SymbolMap{}
-	if err := f.visitSymbolTable(name, func(s libpf.Symbol) { symMap.Add(s) }); err != nil {
+	if err := f.visitSymbolTable(name, func(s libpf.Symbol) bool { symMap.Add(s); return true }); err != nil {
 		return nil, err
 	}
 	symMap.Finalize()
@@ -1087,9 +1091,19 @@ func (f *File) ReadDynamicSymbols() (*libpf.SymbolMap, error) {
 	return f.loadSymbolTable(".dynsym")
 }
 
+// VisitSymbols iterates through the symbol table until a condition is met
+func (f *File) VisitUntilSymbol(visitor func(libpf.Symbol) bool) error {
+	return f.visitSymbolTable(".symtab", visitor)
+}
+
+// VisitSymbols iterates through the symbol table
+func (f *File) VisitSymbols(visitor func(libpf.Symbol)) error {
+	return f.visitSymbolTable(".symtab", func(s libpf.Symbol) bool {visitor(s); return true} )
+}
+
 // VisitDynamicSymbols iterates through the dynamic symbol table
 func (f *File) VisitDynamicSymbols(visitor func(libpf.Symbol)) error {
-	return f.visitSymbolTable(".dynsym", visitor)
+	return f.visitSymbolTable(".dynsym", func(s libpf.Symbol) bool {visitor(s); return true})
 }
 
 // DynString returns the strings listed for the given tag in the file's dynamic

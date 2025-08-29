@@ -872,7 +872,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		currentEcTlsOffset = currentEcSymbol.Address
 	}
 
-	log.Debugf("Discovered EC %x, interp ranges: %v", currentEcTlsOffset, interpRanges)
+	log.Infof("Discovered EC %x, interp ranges: %v", currentEcTlsOffset, interpRanges)
 
 	rid := &rubyData{
 		version:            version,
