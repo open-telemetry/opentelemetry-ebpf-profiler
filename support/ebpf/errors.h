@@ -121,8 +121,7 @@ typedef enum ErrorCode {
   // Native: Unable to read the IRQ stack link
   ERR_NATIVE_CHASE_IRQ_STACK_LINK = 4010,
 
-  // Native: Unexpectedly encountered a kernel mode pointer while attempting to unwind user-mode
-  // stack
+  // Native: Unexpectedly encountered a kernel mode pointer while attempting to unwind user-mode stack
   ERR_NATIVE_UNEXPECTED_KERNEL_ADDRESS = 4011,
 
   // Native: Unable to locate the PID page mapping for the current instruction pointer
