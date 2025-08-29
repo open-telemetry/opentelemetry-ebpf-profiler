@@ -6,7 +6,6 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.38.1
 	github.com/aws/aws-sdk-go-v2/config v1.31.3
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.87.1
-	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cilium/ebpf v0.19.0
 	github.com/elastic/go-freelru v0.16.0
 	github.com/elastic/go-perf v0.0.0-20241029065020-30bec95324b8
