@@ -51,9 +51,6 @@ const (
 
 // List of public errors.
 var (
-	// ErrSymbolNotFound is returned when the requested symbol was not found.
-	ErrSymbolNotFound = errors.New("symbol not found")
-
 	// ErrNotELF is returned when the file is not an ELF file.
 	ErrNotELF = errors.New("not an ELF file")
 )
@@ -955,7 +952,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 		mask := uint(1)<<(h%ptrSizeBits) |
 			uint(1)<<((h>>hdr.bloomShift)%ptrSizeBits)
 		if bloom&mask != mask {
-			return nil, ErrSymbolNotFound
+			return nil, libpf.ErrSymbolNotFound
 		}
 
 		// Read the initial symbol index to start looking from
@@ -966,7 +963,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 			return nil, err
 		}
 		if i == 0 {
-			return nil, ErrSymbolNotFound
+			return nil, libpf.ErrSymbolNotFound
 		}
 
 		// Search the hash bucket
@@ -1021,7 +1018,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 		return nil, errors.New("symbol hash not present")
 	}
 
-	return nil, ErrSymbolNotFound
+	return nil, libpf.ErrSymbolNotFound
 }
 
 // LookupSymbol searches for a given symbol in the ELF

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -349,6 +350,30 @@ type Gopclntab struct {
 	// and GC stress minimal the returned strings (symbol and file names) refer
 	// to this data directly (via unsafe.String).
 	functab, funcdata, funcnametab, filetab, pctab, cutab []byte
+}
+
+// LookupSymbol searches for a given symbol in .gopclntab.
+func (g *Gopclntab) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
+	symString := string(symbol)
+	for i := 0; i < g.numFuncs; i++ {
+		_, funcOff := g.getFuncMapEntry(i)
+		pc, fun := g.getFunc(funcOff)
+		if fun == nil {
+			continue
+		}
+		name := getString(g.funcnametab, int(fun.nameOff))
+		if name == symString {
+			nextPc, _ := g.getFuncMapEntry(i + 1)
+			size := uint64(nextPc - pc)
+
+			return &libpf.Symbol{
+				Name:    symbol,
+				Address: libpf.SymbolValue(pc),
+				Size:    size,
+			}, nil
+		}
+	}
+	return nil, libpf.ErrSymbolNotFound
 }
 
 // NewGopclntab parses and returns the parsed data for further operations.
