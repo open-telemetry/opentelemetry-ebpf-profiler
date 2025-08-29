@@ -14,7 +14,6 @@ import (
 // Reporter is the top-level interface implemented by a full reporter.
 type Reporter interface {
 	TraceReporter
-	SymbolReporter
 
 	// Start starts the reporter in the background.
 	//
@@ -34,44 +33,26 @@ type TraceReporter interface {
 	ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error
 }
 
-// ExecutableOpener is a function that attempts to open an executable.
-type ExecutableOpener = func() (process.ReadAtCloser, error)
+type ExecutableMetadata struct {
+	// MappingFile is the reference to mapping file data.
+	MappingFile libpf.FrameMappingFile
 
-// ExecutableMetadataArgs collects metadata about a discovered
-// executable, for reporting to a SymbolReporter via the ExecutableMetadata function.
-type ExecutableMetadataArgs struct {
-	// FileID is a unique identifier of the executable.
-	FileID libpf.FileID
-	// FileName is the base filename of the executable.
-	FileName string
-	// GnuBuildID is the GNU build ID from .note.gnu.build-id, if any.
-	GnuBuildID string
+	// Process is the interface to the process holding the file.
+	Process process.Process
+
+	// Mapping is the process.Mapping file. Process.OpenMappingFile can be used
+	// to open the file if needed.
+	Mapping *process.Mapping
+
 	// DebuglinkFileName is the path to the matching debug file
 	// from the .gnu.debuglink, if any. The caller should
-	// verify that the file in question matches the GnuBuildID of this executable..
+	// verify that the file in question matches the GnuBuildID of this executable.
 	DebuglinkFileName string
-	// Interp is the discovered interpreter type of this executable, if any.
-	Interp libpf.InterpreterType
-	// Open is a function that can be used to open the executable for reading,
-	// or nil for interpreters that don't support this.
-	Open ExecutableOpener
 }
 
-type SymbolReporter interface {
-	// ExecutableKnown may be used to query the reporter if the FileID is known.
-	// The callers of ExecutableMetadata can optionally use this method to determine if the data
-	// is already cached and avoid extra work resolving the metadata. If the reporter returns false,
-	// the caller will resolve the executable metadata and submit it to the reporter
-	// via a subsequent ExecutableMetadata call.
-	ExecutableKnown(fileID libpf.FileID) bool
-
-	// ExecutableMetadata accepts a FileID with the corresponding filename
-	// and takes some action with it (for example, it might cache it for
-	// periodic reporting to a backend).
-	//
-	// The `Open` argument can be used to open the executable for reading. Interpreters
-	// that don't support this may pass a `nil` function pointer. Implementations that
-	// wish to upload executables should NOT block this function to do so and instead just
-	// open the file and then enqueue the upload in the background.
-	ExecutableMetadata(args *ExecutableMetadataArgs)
+// ExecutableReporter is an optional interface to allow uploading files. There is
+// no implementation in opentelemetry-ebpf-profiler for this, but it is kept to
+// support this functionality in other (non-tree) protocol implementations.
+type ExecutableReporter interface {
+	ReportExecutable(args *ExecutableMetadata)
 }

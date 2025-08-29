@@ -17,8 +17,8 @@ import (
 type InstanceStubs struct {
 }
 
-func (is *InstanceStubs) SynchronizeMappings(EbpfHandler, reporter.SymbolReporter, process.Process,
-	[]process.Mapping) error {
+func (is *InstanceStubs) SynchronizeMappings(EbpfHandler, reporter.ExecutableReporter,
+	process.Process, []process.Mapping) error {
 	return nil
 }
 

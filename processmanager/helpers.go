@@ -16,6 +16,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 //nolint:lll
@@ -24,7 +25,7 @@ var (
 )
 
 type lruFileIDMapper struct {
-	cache *lru.SyncedLRU[host.FileID, libpf.FileID]
+	cache *lru.SyncedLRU[host.FileID, libpf.FrameMappingFile]
 }
 
 // identityHash maps the host.FileID to a 32bit value.
@@ -34,63 +35,71 @@ func identityHash(key host.FileID) uint32 {
 }
 
 func newFileIDMapper(size int) (*lruFileIDMapper, error) {
-	cache, err := lru.NewSynced[host.FileID, libpf.FileID](uint32(size), identityHash)
+	cache, err := lru.NewSynced[host.FileID, libpf.FrameMappingFile](uint32(size), identityHash)
 	if err != nil {
 		return nil, err
 	}
 	return &lruFileIDMapper{cache}, nil
 }
 
-func (fm *lruFileIDMapper) Get(key host.FileID) (libpf.FileID, bool) {
-	if fileID, ok := fm.cache.Get(key); ok {
-		return fileID, true
+func (fm *lruFileIDMapper) Get(key host.FileID) (libpf.FrameMappingFile, bool) {
+	if mappingFile, ok := fm.cache.Get(key); ok {
+		return mappingFile, true
 	}
 
 	log.Warnf("Failed to lookup file ID %#x", key)
-	return libpf.FileID{}, false
+	return libpf.FrameMappingFile{}, false
 }
 
-func (fm *lruFileIDMapper) Set(key host.FileID, val libpf.FileID) {
+func (fm *lruFileIDMapper) Set(key host.FileID, val libpf.FrameMappingFile) {
 	fm.cache.Add(key, val)
-	log.Debugf("Stored file ID mapping %#x -> %#x", key, val)
+	log.Debugf("Stored file ID mapping %#x -> %#x", key, val.Value())
 }
 
 var _ FileIDMapper = (*lruFileIDMapper)(nil)
 
 // MapFileIDMapper implements the FileIDMApper using a map (for testing)
 type MapFileIDMapper struct {
-	fileMap map[host.FileID]libpf.FileID
+	fileMap map[host.FileID]libpf.FrameMappingFile
 }
 
 func NewMapFileIDMapper() *MapFileIDMapper {
 	return &MapFileIDMapper{
-		fileMap: make(map[host.FileID]libpf.FileID),
+		fileMap: make(map[host.FileID]libpf.FrameMappingFile),
 	}
 }
 
-func (fm *MapFileIDMapper) Get(key host.FileID) (libpf.FileID, bool) {
+func (fm *MapFileIDMapper) Get(key host.FileID) (libpf.FrameMappingFile, bool) {
 	if value, ok := fm.fileMap[key]; ok {
 		return value, true
 	}
-	return libpf.FileID{}, true
+	return libpf.FrameMappingFile{}, true
 }
 
-func (fm *MapFileIDMapper) Set(key host.FileID, value libpf.FileID) {
+func (fm *MapFileIDMapper) Set(key host.FileID, value libpf.FrameMappingFile) {
 	fm.fileMap[key] = value
 }
 
 var _ FileIDMapper = (*MapFileIDMapper)(nil)
 
-// FileIDMapper is responsible for mapping between 64-bit file IDs to 128-bit file IDs. The file ID
-// mappings are inserted typically at the same time the files are hashed. The 128-bit file IDs
-// are retrieved prior to reporting requests to the collection agent.
+// FileIDMapper is responsible for mapping between 64-bit file IDs to the frame mapping metadata.
 type FileIDMapper interface {
-	// Get retrieves the 128-bit file ID for the provided 64-bit file ID. Otherwise,
-	// the second return value is false.
-	Get(pre host.FileID) (libpf.FileID, bool)
-	// Set adds a mapping from the 64-bit file ID to the 128-bit file ID.
-	Set(pre host.FileID, post libpf.FileID)
+	// Retrieve the metadata for given 64-bit file ID.
+	Get(fileID host.FileID) (libpf.FrameMappingFile, bool)
+	// Associate the metadata for given 64-bit file ID.
+	Set(fileID host.FileID, metadata libpf.FrameMappingFile)
 }
+
+// executableReporterStub is a stub to implement reporter.ExecutableReporter which is used
+// as the reporter by default. This can be overridden on at processmanager creation time.
+type executableReporterStub struct {
+}
+
+// ReportExecutable satisfies the reporter.ExecutableReporter interface.
+func (er executableReporterStub) ReportExecutable(args *reporter.ExecutableMetadata) {
+}
+
+var _ reporter.ExecutableReporter = executableReporterStub{}
 
 // parseContainerID parses cgroup v2 container IDs
 func parseContainerID(cgroupFile io.Reader) string {

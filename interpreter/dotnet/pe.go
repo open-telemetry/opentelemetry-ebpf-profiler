@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -257,7 +258,7 @@ const (
 type peInfo struct {
 	err          error
 	lastModified int64
-	fileID       libpf.FileID
+	file         libpf.FrameMappingFile
 	simpleName   libpf.String
 	guid         string
 	typeSpecs    []peTypeSpec
@@ -1240,18 +1241,22 @@ func (pc *peCache) Get(pr process.Process, mapping *process.Mapping) *peInfo {
 	}
 	defer file.Close()
 
-	info := &peInfo{
-		err:          err,
-		lastModified: lastModified,
-	}
-	err = info.parse(file)
-	if err == nil {
-		info.fileID, err = pr.CalculateMappingFileID(mapping)
-	}
+	fileID, err := pr.CalculateMappingFileID(mapping)
 	if err != nil {
-		info.err = err
+		return &peInfo{err: err}
 	}
 
+	info := &peInfo{
+		lastModified: lastModified,
+	}
+	info.err = info.parse(file)
+	if info.err == nil {
+		info.file = libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:     fileID,
+			FileName:   libpf.Intern(path.Base(mapping.Path.String())),
+			GnuBuildID: info.guid,
+		})
+	}
 	pc.peInfoCache.Add(key, info)
 	return info
 }

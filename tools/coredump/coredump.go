@@ -18,7 +18,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
@@ -30,27 +29,6 @@ import "C"
 // sliceBuffer creates a Go slice from C buffer
 func sliceBuffer(buf unsafe.Pointer, sz C.int) []byte {
 	return unsafe.Slice((*byte)(buf), int(sz))
-}
-
-// symbolizationCache collects and caches the interpreter manager's symbolization
-// callbacks to be used for trace stringification.
-type symbolizationCache struct {
-	files map[libpf.FileID]string
-}
-
-func newSymbolizationCache() *symbolizationCache {
-	return &symbolizationCache{
-		files: make(map[libpf.FileID]string),
-	}
-}
-
-func (c *symbolizationCache) ExecutableKnown(fileID libpf.FileID) bool {
-	_, exists := c.files[fileID]
-	return exists
-}
-
-func (c *symbolizationCache) ExecutableMetadata(args *reporter.ExecutableMetadataArgs) {
-	c.files[args.FileID] = args.FileName
 }
 
 func generateErrorMap() (map[libpf.AddressOrLineno]string, error) {
@@ -79,7 +57,7 @@ func generateErrorMap() (map[libpf.AddressOrLineno]string, error) {
 
 var errorMap xsync.Once[map[libpf.AddressOrLineno]string]
 
-func (c *symbolizationCache) formatFrame(frame *libpf.Frame) (string, error) {
+func formatFrame(frame *libpf.Frame) (string, error) {
 	if frame.Type.IsError() {
 		errMap, err := errorMap.GetOrInit(generateErrorMap)
 		if err != nil {
@@ -103,11 +81,12 @@ func (c *symbolizationCache) formatFrame(frame *libpf.Frame) (string, error) {
 			frame.SourceFile, frame.SourceLine), nil
 	}
 
-	sourceFile, ok := c.files[frame.FileID]
-	if !ok {
-		sourceFile = fmt.Sprintf("%08x", frame.FileID)
+	if frame.MappingFile.Valid() {
+		return fmt.Sprintf("%s+0x%x",
+			frame.MappingFile.Value().FileName,
+			frame.AddressOrLineno), nil
 	}
-	return fmt.Sprintf("%s+0x%x", sourceFile, frame.AddressOrLineno), nil
+	return fmt.Sprintf("?+0x%x", frame.AddressOrLineno), nil
 }
 
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
@@ -156,13 +135,12 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	defer ebpfCtx.release()
 
 	coredumpEbpfMaps := ebpfMapsCoredump{ctx: ebpfCtx}
-	symCache := newSymbolizationCache()
 
 	// Instantiate managers and enable all tracers by default
 	includeTracers, _ := tracertypes.Parse("all")
 
 	manager, err := pm.New(todo, includeTracers, monitorInterval, &coredumpEbpfMaps,
-		pm.NewMapFileIDMapper(), symCache, elfunwindinfo.NewStackDeltaProvider(), false,
+		pm.NewMapFileIDMapper(), nil, elfunwindinfo.NewStackDeltaProvider(), false,
 		libpf.Set[string]{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)
@@ -189,7 +167,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 		tinfo := ThreadInfo{LWP: thread.LWP}
 		for _, f := range trace.Frames {
 			frame := f.Value()
-			frameText, err := symCache.formatFrame(&frame)
+			frameText, err := formatFrame(&frame)
 			if err != nil {
 				return nil, err
 			}

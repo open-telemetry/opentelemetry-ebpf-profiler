@@ -85,7 +85,6 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
-		Reporter:               c.reporter,
 		Intervals:              intervals,
 		IncludeTracers:         includeTracers,
 		FilterErrorFrames:      !c.config.SendErrorFrames,
