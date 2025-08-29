@@ -370,14 +370,12 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	pm.elfInfoCache.Add(key, info)
 	pm.FileIDMapper.Set(hostFileID, info.mappingFile)
 
-	if pm.exeReporter != nil {
-		pm.exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
-			MappingFile:       info.mappingFile,
-			Process:           pr,
-			Mapping:           mapping,
-			DebuglinkFileName: ef.DebuglinkFileName(elfRef.FileName(), elfRef),
-		})
-	}
+	pm.exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
+		MappingFile:       info.mappingFile,
+		Process:           pr,
+		Mapping:           mapping,
+		DebuglinkFileName: ef.DebuglinkFileName(elfRef.FileName(), elfRef),
+	})
 	return info
 }
 

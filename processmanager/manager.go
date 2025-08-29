@@ -75,6 +75,9 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 			return nil, fmt.Errorf("failed to initialize file ID mapping: %v", err)
 		}
 	}
+	if exeReporter == nil {
+		exeReporter = executableReporterStub{}
+	}
 
 	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,
 		util.OnDiskFileIdentifier.Hash32)

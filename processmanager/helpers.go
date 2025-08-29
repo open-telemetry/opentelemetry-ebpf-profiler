@@ -16,6 +16,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 //nolint:lll
@@ -88,6 +89,17 @@ type FileIDMapper interface {
 	// Associate the metadata for given 64-bit file ID.
 	Set(fileID host.FileID, metadata libpf.FrameMappingFile)
 }
+
+// executableReporterStub is a stub to implement reporter.ExecutableReporter which is used
+// as the reporter by default. This can be overridden on at processmanager creation time.
+type executableReporterStub struct {
+}
+
+// ReportExecutable satisfies the reporter.ExecutableReporter interface.
+func (er executableReporterStub) ReportExecutable(args *reporter.ExecutableMetadata) {
+}
+
+var _ reporter.ExecutableReporter = executableReporterStub{}
 
 // parseContainerID parses cgroup v2 container IDs
 func parseContainerID(cgroupFile io.Reader) string {

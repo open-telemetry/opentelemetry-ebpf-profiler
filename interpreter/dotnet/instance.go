@@ -602,13 +602,11 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 
 		log.Debugf("%v -> %v guid %v", m.Path, info.simpleName, info.guid)
 
-		if exeReporter != nil {
-			exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
-				MappingFile: info.file,
-				Process:     pr,
-				Mapping:     m,
-			})
-		}
+		exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
+			MappingFile: info.file,
+			Process:     pr,
+			Mapping:     m,
+		})
 
 		dotnetMappings = append(dotnetMappings, dotnetMapping{
 			start: m.Vaddr,
