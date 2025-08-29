@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"github.com/cespare/xxhash/v2"
 	"github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
+	"github.com/zeebo/xxh3"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -69,7 +69,7 @@ type copKey struct {
 // It's main purpose is to hash keys for caching perlCOP values.
 func hashCOPKey(k copKey) uint32 {
 	h := k.copAddr.Hash()
-	return uint32(h ^ xxhash.Sum64String(k.funcName.String()))
+	return uint32(h ^ xxh3.HashString128(k.funcName.String()).Lo)
 }
 
 func (i *perlInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
