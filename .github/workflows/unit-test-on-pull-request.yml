@@ -179,12 +179,16 @@ jobs:
           - { target_arch: amd64, kernel: 6.8.10 }
           - { target_arch: amd64, kernel: 6.9.1 }
           - { target_arch: amd64, kernel: 6.12.16 }
+          - { target_arch: amd64, kernel: 6.16 }
 
           # ARM64 (NOTE: older ARM64 kernels are not available in Cilium repos)
           - { target_arch: arm64, kernel: 6.6.31 }
           - { target_arch: arm64, kernel: 6.8.4 }
           - { target_arch: arm64, kernel: 6.9.1 }
           - { target_arch: arm64, kernel: 6.12.16 }
+          # qemu has a bug that prevents booting the following kernel on ARM,
+          # fixed in qemu 9.2
+          #- { target_arch: arm64, kernel: 6.16 }
     steps:
       - name: Clone code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
