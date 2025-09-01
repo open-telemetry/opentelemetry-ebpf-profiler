@@ -305,11 +305,6 @@ func (i *beamInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 
 	// log.Debugf("BEAM symbolizing pc: 0x%x", pc)
 
-	// codeHeader, err := i.findCodeHeader(activeRanges, pc)
-	// if err != nil {
-	// 	return err
-	// }
-
 	functionIndex, moduleID, functionID, arity, err := i.findMFA(pc, codeHeader)
 	if err != nil {
 		return err
@@ -347,43 +342,6 @@ func (i *beamInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 	})
 
 	return nil
-}
-
-func (i *beamInstance) findCodeHeader(activeRanges libpf.Address, pc libpf.Address) (codeHeader libpf.Address, err error) {
-	vms := i.data.vmStructs
-
-	modules := i.rm.Ptr(activeRanges + libpf.Address(vms.ranges.modules))
-	n := i.rm.Uint64(activeRanges + libpf.Address(vms.ranges.n))
-
-	firstRange := modules
-	lastRange := modules + libpf.Address((n-1)*uint64(vms.ranges_entry.size_of))
-
-	low := i.rm.Ptr(firstRange + libpf.Address(vms.ranges_entry.start))
-	high := i.rm.Ptr(lastRange + libpf.Address(vms.ranges_entry.end))
-
-	if pc >= low && pc <= high {
-		lowIdx := uint64(0)
-		midIdx := uint64(0)
-		highIdx := n - 1
-		for lowIdx < highIdx {
-			midIdx = lowIdx + (highIdx-lowIdx)/2
-			midRange := modules + libpf.Address(midIdx*uint64(vms.ranges_entry.size_of))
-			midStart := i.rm.Ptr(midRange + libpf.Address(vms.ranges_entry.start))
-			midEnd := i.rm.Ptr(midRange + libpf.Address(vms.ranges_entry.end))
-			if pc < midStart {
-				highIdx = midIdx
-			} else if pc >= midEnd {
-				lowIdx = midIdx + 1
-			} else {
-				codeHeader = midStart
-				break
-			}
-		}
-	} else {
-		return codeHeader, fmt.Errorf("PC 0x%x not in valid address ranges (0x%x - 0x%x)", pc, low, high)
-	}
-
-	return codeHeader, nil
 }
 
 func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (functionIndex uint64, moduleID uint32, functionID uint32, arity uint32, err error) {
