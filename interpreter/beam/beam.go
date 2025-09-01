@@ -101,6 +101,7 @@ type beamInstance struct {
 	rm        remotememory.RemoteMemory
 	rangesPtr libpf.Address
 	atomTable libpf.Address
+	atomCache map[uint32]string
 
 	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
 	prefixes map[lpm.Prefix]uint32
@@ -237,6 +238,7 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		rangesPtr: bias + libpf.Address(d.r),
 		atomTable: bias + libpf.Address(d.erts_atom_table),
 		prefixes:  make(map[lpm.Prefix]uint32),
+		atomCache: make(map[uint32]string),
 	}, nil
 }
 
@@ -419,6 +421,10 @@ func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex 
 }
 
 func (i *beamInstance) lookupAtom(index uint32) (string, error) {
+	if value, ok := i.atomCache[index]; ok {
+		return value, nil
+	}
+
 	vms := i.data.vmStructs
 
 	segTable := i.rm.Ptr(i.atomTable + libpf.Address(vms.index_table.seg_table))
@@ -433,6 +439,7 @@ func (i *beamInstance) lookupAtom(index uint32) (string, error) {
 		return "", fmt.Errorf("BEAM Unable to lookup atom with index %d: %v", index, err)
 	}
 
+	i.atomCache[index] = string(name)
 	return string(name), nil
 }
 
