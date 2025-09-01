@@ -113,7 +113,12 @@ func Test_Golabels(t *testing.T) {
 
 			go func() {
 				if err := exec.CommandContext(ctx, exe.Name()).Run(); err != nil {
-					t.Log(err)
+					select {
+					case <-ctx.Done():
+						// Context is canceled, meaning the test is done.
+					default:
+						t.Log(err)
+					}
 				}
 			}()
 
