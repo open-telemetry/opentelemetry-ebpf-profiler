@@ -15,6 +15,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -98,12 +99,13 @@ type beamData struct {
 type beamInstance struct {
 	interpreter.InstanceStubs
 
-	pid       libpf.PID
-	data      *beamData
-	rm        remotememory.RemoteMemory
-	rangesPtr libpf.Address
-	atomTable libpf.Address
-	atomCache map[uint32]string
+	pid         libpf.PID
+	data        *beamData
+	rm          remotememory.RemoteMemory
+	rangesPtr   libpf.Address
+	atomTable   libpf.Address
+	atomCache   map[uint32]string
+	stringCache *freelru.LRU[libpf.Address, libpf.String]
 
 	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
 	prefixes map[lpm.Prefix]uint32
@@ -240,14 +242,21 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		return nil, err
 	}
 
+	stringCache, err := freelru.New[libpf.Address, libpf.String](
+		interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
+	if err != nil {
+		return nil, err
+	}
+
 	return &beamInstance{
-		pid:       pid,
-		data:      d,
-		rm:        rm,
-		rangesPtr: bias + libpf.Address(d.r),
-		atomTable: bias + libpf.Address(d.erts_atom_table),
-		prefixes:  make(map[lpm.Prefix]uint32),
-		atomCache: make(map[uint32]string),
+		pid:         pid,
+		data:        d,
+		rm:          rm,
+		rangesPtr:   bias + libpf.Address(d.r),
+		atomTable:   bias + libpf.Address(d.erts_atom_table),
+		prefixes:    make(map[lpm.Prefix]uint32),
+		atomCache:   make(map[uint32]string),
+		stringCache: stringCache,
 	}, nil
 }
 
@@ -348,7 +357,7 @@ func (i *beamInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 	frames.Append(&libpf.Frame{
 		Type:         libpf.BEAMFrame,
 		FunctionName: libpf.Intern(mfaName),
-		SourceFile:   libpf.Intern(fileName),
+		SourceFile:   fileName,
 		SourceLine:   libpf.SourceLineno(lineNumber),
 	})
 
@@ -388,7 +397,7 @@ func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (func
 	return 0, 0, 0, 0, fmt.Errorf("BEAM unable to find the MFA for PC 0x%x in expected code range", pc)
 }
 
-func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex uint64, pc libpf.Address) (fileName string, lineNumber uint64, err error) {
+func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex uint64, pc libpf.Address) (fileName libpf.String, lineNumber uint64, err error) {
 	vms := i.data.vmStructs
 
 	lineTable := i.rm.Ptr(codeHeader + libpf.Address(vms.beam_code_header.line_table))
@@ -426,7 +435,7 @@ func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex 
 		}
 	}
 
-	return "", 0, fmt.Errorf("BEAM unable to find file and line number")
+	return libpf.NullString, 0, fmt.Errorf("BEAM unable to find file and line number")
 }
 
 func (i *beamInstance) lookupAtom(index uint32) (string, error) {
@@ -452,7 +461,11 @@ func (i *beamInstance) lookupAtom(index uint32) (string, error) {
 	return string(name), nil
 }
 
-func (i *beamInstance) readErlangString(eterm libpf.Address, maxLength uint64) string {
+func (i *beamInstance) readErlangString(eterm libpf.Address, maxLength uint64) libpf.String {
+	if value, ok := i.stringCache.Get(eterm); ok {
+		return value
+	}
+
 	result := strings.Builder{}
 	length := uint64(0)
 
@@ -471,8 +484,11 @@ func (i *beamInstance) readErlangString(eterm libpf.Address, maxLength uint64) s
 	}
 
 	if length > maxLength {
-		return result.String() + "..."
+		result.WriteString("...")
 	}
 
-	return result.String()
+	value := libpf.Intern(result.String())
+	i.stringCache.Add(eterm, value)
+
+	return value
 }
