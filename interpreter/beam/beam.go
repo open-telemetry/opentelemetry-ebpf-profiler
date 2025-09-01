@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
+	"go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -40,6 +41,7 @@ type beamData struct {
 	the_active_code_index uint64
 	r                     uint64
 	erts_atom_table       uint64
+	etp_ptr_mask          uint64
 
 	// Sizes and offsets BEAM internal structs we need to traverse
 	vmStructs struct {
@@ -148,6 +150,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// TODO: We want to avoid reading static symbols to find the address of r here,
 	// because it would be removed if the binary is stripped, but it seems that's the only
 	// way to get it currently. Look into programmatically calculating it by disassembly.
+	// If possible, get it exported in erl_etp.c
 	symbols, err := ef.ReadSymbols()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read symbols: %v", err)
@@ -169,11 +172,16 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	// "erts_atom_table" symbol is from:
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/atom.c#L35
-	// TODO: I actually don't need to read the whole table - I just need its address.
-	// Maybe there's a more efficient way to get that.
 	atomTable, _, err := ef.SymbolData("erts_atom_table", 128)
 	if err != nil {
 		return nil, fmt.Errorf("symbol 'erts_atom_table' not found: %v", err)
+	}
+
+	// "etp_ptr_mask" symbol is from:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L82-L85
+	_, etp_ptr_mask, err := ef.SymbolData("etp_ptr_mask", 8)
+	if err != nil {
+		return nil, fmt.Errorf("symbol 'etp_ptr_mask' not found: %v", err)
 	}
 
 	d := &beamData{
@@ -181,6 +189,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		the_active_code_index: uint64(codeIndex.Address),
 		r:                     uint64(r),
 		erts_atom_table:       uint64(atomTable.Address),
+		etp_ptr_mask:          nopanicslicereader.Uint64(etp_ptr_mask, 0),
 	}
 
 	vms := &d.vmStructs
@@ -443,23 +452,21 @@ func (i *beamInstance) lookupAtom(index uint32) (string, error) {
 	return string(name), nil
 }
 
-// TODO: read these values from the symbol table
-const (
-	ETP_NIL      = libpf.Address(0x3B)
-	ETP_PTR_MASK = ^libpf.Address(0x3)
-)
-
 func (i *beamInstance) readErlangString(eterm libpf.Address, maxLength uint64) string {
 	result := strings.Builder{}
 	length := uint64(0)
 
-	for eterm != ETP_NIL && length < maxLength {
-		charAddr := eterm & ETP_PTR_MASK
+	// TODO: Get this exported if possible in erl_etp.c
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/etc/unix/etp-commands.in#L5326
+	etp_nil := libpf.Address(0x3B)
+
+	for eterm != etp_nil && length < maxLength {
+		charAddr := eterm & libpf.Address(i.data.etp_ptr_mask)
 		charValue := i.rm.Uint64(charAddr)
 		char := uint8(charValue >> 4)
 		result.WriteByte(char)
 		length++
-		nextAddr := libpf.Address((eterm & ETP_PTR_MASK) + 8)
+		nextAddr := libpf.Address((eterm & libpf.Address(i.data.etp_ptr_mask)) + 8)
 		eterm = libpf.Address(i.rm.Uint64(nextAddr))
 	}
 
