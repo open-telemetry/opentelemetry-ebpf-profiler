@@ -33,12 +33,17 @@ type TraceReporter interface {
 	ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error
 }
 
+type FileOpener interface {
+	// OpenFile opens the given file from the process namespace.
+	OpenFile(file string) (process.ProcessFile, error)
+}
+
 type ExecutableMetadata struct {
 	// MappingFile is the reference to mapping file data.
 	MappingFile libpf.FrameMappingFile
 
 	// Process is the interface to the process holding the file.
-	Process process.Process
+	Opener FileOpener
 
 	// Mapping is the process.Mapping file. Process.OpenMappingFile can be used
 	// to open the file if needed.

@@ -604,7 +604,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 
 		exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
 			MappingFile: info.file,
-			Process:     pr,
+			Opener:      pr,
 			Mapping:     m,
 		})
 

@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"os"
 	"path/filepath"
 	"runtime/debug"
 	"sort"
@@ -161,6 +162,20 @@ type Section struct {
 
 	// elfReader is the same ReadAt as used for the File
 	elfReader io.ReaderAt
+}
+
+func OpenFromFile(osFile *os.File) (*File, error) {
+	f, err := mmap.OpenFromFile(osFile)
+	if err != nil {
+		return nil, err
+	}
+
+	ff, err := newFile(f, f, 0, false)
+	if err != nil {
+		_ = ff.Close()
+		return nil, err
+	}
+	return ff, nil
 }
 
 // Open opens the named file using os.Open and prepares it for use as an ELF binary.
