@@ -18,7 +18,7 @@
         "libruby.so.3.5.0+0x30a927",
         "libruby.so.3.5.0+0x316b6b",
         "<main>+0 in /app/loop.rb:29",
-        "ffffffffffffffffffffffffffffffff+0x0",
+        "loop+0 in <internal:kernel>:168",
         "<main>+0 in /app/loop.rb:28",
         "libruby.so.3.5.0+0x31c543",
         "libruby.so.3.5.0+0x127b5f",
