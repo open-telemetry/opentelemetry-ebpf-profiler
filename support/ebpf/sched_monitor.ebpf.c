@@ -48,7 +48,7 @@ int tracepoint__sched_process_free(struct sched_process_free_ctx *ctx)
 }
 
 SEC("tracepoint/sched/sched_process_free/v1")
-int tracepoint__sched_process_free_old(struct sched_process_free_ctx_pre616 *ctx)
+int tracepoint__sched_process_free_pre616(struct sched_process_free_ctx_pre616 *ctx)
 {
   return do_process_free(ctx, ctx->pid);
 }
