@@ -294,7 +294,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		return nil, nil, fmt.Errorf("failed to load specification for tracers: %v", err)
 	}
 
-	if major >= 6 && minor >= 16 {
+	if major > 6 || (major == 6 && minor >= 16) {
 		// Tracepoint format for sched_process_free has changed in v6.16+.
 		// We therefore use two different hooks and decide which to load at runtime.
 		delete(coll.Programs, "tracepoint__sched_process_free_old")
