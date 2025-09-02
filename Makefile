@@ -134,7 +134,7 @@ pprof_1_24_cgo:
 	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
 pprof_1_24_cgo_pie:
-	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
+	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
 integration-test-binaries: generate ebpf pprof-execs
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
