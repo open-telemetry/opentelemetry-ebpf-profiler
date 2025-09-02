@@ -1,0 +1,119 @@
+{
+  "coredump-ref": "8777ff0457917a17b18bb0ed18adf60f0a185eaf6f1f043187711a99c7bc5b1b",
+  "threads": [
+    {
+      "lwp": 912010,
+      "frames": [
+        "libc.so.6+0x8efa8",
+        "libc.so.6+0x82657",
+        "libc.so.6+0x8269b",
+        "libc.so.6+0xeb443",
+        "libruby.so.3.3.9+0x2ae9b3",
+        "libruby.so.3.3.9+0x1145cb",
+        "libruby.so.3.3.9+0x2aee9b",
+        "libruby.so.3.3.9+0x153237",
+        "libruby.so.3.3.9+0x1145cb",
+        "libruby.so.3.3.9+0x14dee7",
+        "libruby.so.3.3.9+0x2eb4bf",
+        "libruby.so.3.3.9+0x2f8cb7",
+        "libruby.so.3.3.9+0x2feedb",
+        "libruby.so.3.3.9+0x10faab",
+        "libruby.so.3.3.9+0x11628f",
+        "ruby+0xbaf",
+        "libc.so.6+0x2229b",
+        "libc.so.6+0x2237b",
+        "ruby+0xc2f"
+      ]
+    },
+    {
+      "lwp": 912031,
+      "frames": [
+        "libruby.so.3.3.9+0x30306c",
+        "libruby.so.3.3.9+0x307d87",
+        "libruby.so.3.3.9+0x214a8f",
+        "libruby.so.3.3.9+0x2ea1e7",
+        "libruby.so.3.3.9+0x2efa4f",
+        "libruby.so.3.3.9+0x2f97af",
+        "is_prime+0 in /app/loop-with-ractors.rb:10",
+        "sum_of_primes+0 in /app/loop-with-ractors.rb:20",
+        "<main>+0 in /app/loop-with-ractors.rb:31",
+        "libruby.so.3.3.9+0x2fef9f",
+        "libruby.so.3.3.9+0x30f0ff",
+        "libruby.so.3.3.9+0x214db7",
+        "libruby.so.3.3.9+0x2eb4bf",
+        "libruby.so.3.3.9+0x2efa4f",
+        "libruby.so.3.3.9+0x2f97af",
+        "<main>+0 in /app/loop-with-ractors.rb:30",
+        "loop+0 in <internal:kernel>:187",
+        "<main>+0 in /app/loop-with-ractors.rb:29",
+        "libruby.so.3.3.9+0x2feedb",
+        "libruby.so.3.3.9+0x2abdaf",
+        "libruby.so.3.3.9+0x307d87",
+        "<unwinding aborted due to error native_small_pc>"
+      ]
+    },
+    {
+      "lwp": 912030,
+      "frames": [
+        "libc.so.6+0x8efac",
+        "libc.so.6+0x82657",
+        "libc.so.6+0x8269b",
+        "libc.so.6+0xee143",
+        "libruby.so.3.3.9+0x2a78f3",
+        "libc.so.6+0x85f77",
+        "libc.so.6+0x85f77",
+        "libc.so.6+0xedc1b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "bcc27e0424977640c5647c34758bb443e99ea88edde45a0896a1dc5b7713cb0b",
+      "local-path": "/usr/local/lib/libruby.so.3.3.9"
+    },
+    {
+      "ref": "2dd059935f68b71efc53b6915cd77d12b1133af3d66d7872660b737e5f393015",
+      "local-path": "/usr/local/bin/ruby"
+    },
+    {
+      "ref": "6025f191bab010ad585ca2044f0b3436a376572c0487bbd57848521f7669f46b",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "0b6ffd0ad6851333bc20e4723d58e879b81b009a06e3df9f61f6dde6091cb901",
+      "local-path": "/usr/local/lib/ruby/3.3.0/aarch64-linux/enc/encdb.so"
+    },
+    {
+      "ref": "8858b931d041b74a8ce9dcb16d9912eb431c4f55b97ca2e58646a1c1bd991852",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgmp.so.10.5.0"
+    },
+    {
+      "ref": "fc0165e3cbff299baa266b5531ac9054fff35786bf3ffa46f6eae5650d9bd8c8",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libcrypt.so.1.1.0"
+    },
+    {
+      "ref": "6fe00acadf8119ff245855e5dcc7f26c6c0ffaf4bfa2baa88feab58f23727d65",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libz.so.1.3.1"
+    },
+    {
+      "ref": "a8afb2d1f4a0c5e14c0fc82f794ec839eafe29738907aa92895410f57630bbe2",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "aa58dc4b16a6f9aed418c8447fc5d36a68672c09fd1729361d1df37792ad7a03",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "cd5f308744716b6acb96c50f904fed47170601cbded03cc399e611221c89ce24",
+      "local-path": "/usr/local/lib/ruby/3.3.0/aarch64-linux/monitor.so"
+    },
+    {
+      "ref": "9a146967dc38c3820c5dc21c3209812655f66b6551264072b187bd0e787947e0",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "c0c1ecaff337aea6062f616aa4a05520180201ef7b8ac9afb99bd133cd5feae7",
+      "local-path": "/usr/local/lib/ruby/3.3.0/aarch64-linux/enc/trans/transdb.so"
+    }
+  ]
+}
