@@ -8,6 +8,8 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/xconsumer"
+	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/otel"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -21,7 +23,7 @@ type Controller struct {
 	ctlr *controller.Controller
 }
 
-func NewController(cfg *controller.Config,
+func NewController(cfg *controller.Config, rs receiver.Settings,
 	nextConsumer xconsumer.Profiles) (*Controller, error) {
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
@@ -41,6 +43,9 @@ func NewController(cfg *controller.Config,
 		return nil, err
 	}
 	cfg.Reporter = rep
+
+	// Provide internal metrics via the collectors telemetry.
+	otel.SetMeterProvider(rs.MeterProvider)
 
 	return &Controller{
 		ctlr: controller.New(cfg),

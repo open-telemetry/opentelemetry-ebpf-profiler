@@ -33,7 +33,7 @@ func NewFactory() receiver.Factory {
 
 func createProfilesReceiver(
 	_ context.Context,
-	_ receiver.Settings, //nolint:gocritic // we must respect the collector API
+	rs receiver.Settings,
 	baseCfg component.Config,
 	nextConsumer xconsumer.Profiles) (xreceiver.Profiles, error) {
 	cfg, ok := baseCfg.(*controller.Config)
@@ -41,7 +41,7 @@ func createProfilesReceiver(
 		return nil, errInvalidConfig
 	}
 
-	return internal.NewController(cfg, nextConsumer)
+	return internal.NewController(cfg, rs, nextConsumer)
 }
 
 func defaultConfig() component.Config {
