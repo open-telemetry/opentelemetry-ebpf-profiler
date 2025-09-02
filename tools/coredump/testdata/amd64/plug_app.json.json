@@ -1,0 +1,166 @@
+{
+  "coredump-ref": "ffdc670cf6708f0a070d6a612c581cc88a507ca2aa05cad996e582e755da0e2d",
+  "threads": [
+    {
+      "lwp": 1121595,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121644,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121643,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121642,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121641,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121640,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121639,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121638,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121637,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121636,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121635,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121634,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121633,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121632,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121631,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121630,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121629,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121628,
+      "frames": [
+        "ffffffffffffffffffffffffffffffff+0x0",
+        "ffffffffffffffffffffffffffffffff+0x0",
+        "Bandit.HTTP1.Handler.handle_data/3+0 in lib/bandit/http1/handler.ex:13",
+        "Bandit.DelegatingHandler.handle_data/3+0 in lib/bandit/delegating_handler.ex:18",
+        "Bandit.DelegatingHandler.handle_info/2+0 in lib/bandit/delegating_handler.ex:8",
+        "gen_server:try_handle_info/3+0 in gen_server.erl:2345",
+        "gen_server:handle_msg/6+0 in gen_server.erl:2433",
+        "proc_lib:init_p_do_apply/3+0 in proc_lib.erl:329"
+      ]
+    },
+    {
+      "lwp": 1121627,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121626,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121625,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121623,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121622,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    },
+    {
+      "lwp": 1121621,
+      "frames": [
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "4f961aefd1ecbc91b6de5980623aa389ca56e8bfb5f2a1d2a0b94b54b0fde894",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "53180b32e9533f2ccf64ef81c731ceda8a60d53e265100df3b8cec3d4057a265",
+      "local-path": "/home/greg/.asdf/installs/erlang/27.2.4/erts-15.2.2/bin/beam.smp"
+    }
+  ]
+}

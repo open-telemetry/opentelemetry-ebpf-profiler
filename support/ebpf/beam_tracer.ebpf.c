@@ -44,8 +44,7 @@ static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMRan
   current_range.start = ranges->mid.start;
   current_range.end = ranges->mid.end;
 
-#pragma unroll
-  for (int i = 0; i < CODE_HEADER_SEARCH_ITERATIONS; i++) {
+  UNROLL for (int i = 0; i < CODE_HEADER_SEARCH_ITERATIONS; i++) {
     if (pc < current_range.start) {
       high = current;
     } else if (pc >= current_range.end) {
@@ -138,8 +137,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx) {
 
   int unwinder = PROG_UNWIND_STOP;
   ErrorCode error = ERR_OK;
-#pragma unroll
-  for (int i = 0; i < FRAMES_PER_PROGRAM; i++) {
+  UNROLL for (int i = 0; i < FRAMES_PER_PROGRAM; i++) {
     if (record->state.fp & 0x3) {
       unwinder = PROG_UNWIND_NATIVE;
       break;
