@@ -1,52 +1,101 @@
 {
-  "coredump-ref": "96e1cb7a34e425c67af9067bfb7d0b82abd6f5f5df5042bd54587080ae96f71b",
+  "coredump-ref": "ac470437f4277657b1eba649278a25a9af5dae293f1f3b30909b0ecf33da2180",
   "threads": [
     {
-      "lwp": 35312,
+      "lwp": 1177439,
       "frames": [
         "is_prime+0 in /app/loop.rb:10",
         "is_prime+0 in /app/loop.rb:10",
         "sum_of_primes+0 in /app/loop.rb:20",
-        "ffffffffffffffffffffffffffffffff+0x0",
+        "<main>+0 in /app/loop.rb:30",
         "libruby.so.3.4.5+0x346a40",
         "libruby.so.3.4.5+0x34bb17",
         "libruby.so.3.4.5+0x24a095",
         "libruby.so.3.4.5+0x32ae6a",
         "libruby.so.3.4.5+0x331df0",
         "libruby.so.3.4.5+0x3409bc",
-        "00000000000000000+0x0",
-        "ffffffffffffffffffffffffffffffff+0x0",
-        "00000000000000000+0x0",
+        "<main>+0 in /app/loop.rb:29",
+        "loop+0 in <internal:kernel>:168",
+        "<main>+0 in /app/loop.rb:28",
         "libruby.so.3.4.5+0x346da5",
         "libruby.so.3.4.5+0x34bb17",
         "libruby.so.3.4.5+0x24a2dd",
         "libruby.so.3.4.5+0x329a00",
         "libruby.so.3.4.5+0x331df0",
         "libruby.so.3.4.5+0x3409bc",
-        "00000000000000000+0x0",
-        "ffffffffffffffffffffffffffffffff+0x0",
-        "00000000000000000+0x0",
+        "<main>+0 in /app/loop.rb:29",
+        "loop+0 in <internal:kernel>:168",
+        "<main>+0 in /app/loop.rb:28",
         "libruby.so.3.4.5+0x346ca8",
         "libruby.so.3.4.5+0x13d25a",
         "libruby.so.3.4.5+0x1434fa",
-        "<unwinding aborted due to error native_no_pid_page_mapping>"
+        "ruby+0x110f",
+        "libc.so.6+0x29ca7",
+        "libc.so.6+0x29d64",
+        "ruby+0x1150"
       ]
     },
     {
-      "lwp": 35338,
+      "lwp": 1177466,
       "frames": [
-        "<unwinding aborted due to error native_no_pid_page_mapping>"
+        "libc.so.6+0x9a9ee",
+        "libc.so.6+0x8f667",
+        "libc.so.6+0x8f6ac",
+        "libc.so.6+0x110a6c",
+        "libruby.so.3.4.5+0x2e8504",
+        "libc.so.6+0x92b7a",
+        "libc.so.6+0x1105ef"
       ]
     }
   ],
   "modules": [
     {
-      "ref": "582f2d3d4edab86d601c54b37f04bd18fa2cda28be30e9f8c87df73c1c581354",
-      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+      "ref": "574bcfb61d74937606a9b34507006b958950b6fac0fc8a15a8d4225f64c442e3",
+      "local-path": "/usr/local/lib/ruby/3.4.0/x86_64-linux/enc/trans/transdb.so"
+    },
+    {
+      "ref": "414edb8fccc4198d87a19ddc6a57f4e55a8691981796cb08a02fd4fb45e87d75",
+      "local-path": "/usr/local/lib/ruby/3.4.0/x86_64-linux/monitor.so"
+    },
+    {
+      "ref": "85590dd58edf5445e18bc7193e5ebc01ac5841f1ae187e97705a662e90c6421e",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libz.so.1.3.1"
+    },
+    {
+      "ref": "d15e1585c6c267296459570c8ac217ca9123044bcd4e896d2f686b32333445d2",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgmp.so.10.5.0"
+    },
+    {
+      "ref": "2aecdfd31127284d37ed98e85ffc49eb4debc0e751c32e706c78c78b975be0a4",
+      "local-path": "/usr/local/lib/ruby/3.4.0/x86_64-linux/enc/encdb.so"
     },
     {
       "ref": "1cc1af955ac32bfbfb6368a9af8eb0c4972cff323ae9b0e42f66a9723f780595",
       "local-path": "/usr/local/lib/libruby.so.3.4.5"
+    },
+    {
+      "ref": "56e42210fbaee005355b622121fec8b0c16ca80837eddce3e3557075103dda78",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "30c61ab012a4241bed033725a09b61f5fdd3bb7df95ee852d0b096520524c7af",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "436788729ab71d794a66954d62e930c723e624587f39beb2f4f86ff1000b1d29",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcrypt.so.1.1.0"
+    },
+    {
+      "ref": "daa5744b852336bc1ede78a80da7ba555ec92f92ee5b22d36c29b1684f885b9b",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "32e2a24d2f0b551eb2f297608b9f72e436e821712e81cb8b60911f1561759684",
+      "local-path": "/usr/local/bin/ruby"
+    },
+    {
+      "ref": "759506ba4ed410f7b926704547db1bd31896ffb4f1a79d6b75884af239bcf21b",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
     }
   ]
 }
