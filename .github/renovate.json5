@@ -7,6 +7,7 @@
   "postUpdateOptions" : [
     "gomodTidy"
   ],
+  "ignorePaths": ["LICENSES/**"],
   "packageRules": [
     {
       "groupName": "Go dependencies",
@@ -24,7 +25,6 @@
       "groupName": "GitHub Actions",
       "matchManagers": ["github-actions"],
       "schedule": ["before 8am every weekday"],
-      "ignorePaths": ["**/LICENSES/**"],
       "automerge": true
     },
     {
