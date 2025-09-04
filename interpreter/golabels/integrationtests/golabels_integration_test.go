@@ -31,6 +31,9 @@ var (
 
 	//go:embed pprof_1_24_cgo
 	pprof_1_24_cgo []byte
+
+	//go:embed pprof_1_24_cgo_pie
+	pprof_1_24_cgo_pie []byte
 )
 
 type mockIntervals struct{}
@@ -51,9 +54,10 @@ func Test_Golabels(t *testing.T) {
 	tests := map[string]struct {
 		bin []byte
 	}{
-		"pprof_1_23":     {bin: pprof_1_23},
-		"pprof_1_24":     {bin: pprof_1_24},
-		"pprof_1_24_cgo": {bin: pprof_1_24_cgo},
+		"pprof_1_23":         {bin: pprof_1_23},
+		"pprof_1_24":         {bin: pprof_1_24},
+		"pprof_1_24_cgo":     {bin: pprof_1_24_cgo},
+		"pprof_1_24_cgo_pie": {bin: pprof_1_24_cgo_pie},
 	}
 
 	for name, tc := range tests {
