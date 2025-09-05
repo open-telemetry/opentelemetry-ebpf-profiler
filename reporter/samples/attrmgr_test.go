@@ -32,7 +32,6 @@ func TestAttrTableManager(t *testing.T) {
 					Hash:           libpf.TraceHash{},
 					Comm:           "",
 					ApmServiceName: "",
-					ContainerID:    "",
 					Pid:            0,
 				},
 			},
@@ -47,20 +46,17 @@ func TestAttrTableManager(t *testing.T) {
 					Hash:           libpf.TraceHash{},
 					Comm:           "comm1",
 					ApmServiceName: "apmServiceName1",
-					ContainerID:    "containerID1",
 					Pid:            1234,
 				},
 				{
 					Hash:           libpf.TraceHash{},
 					Comm:           "comm1",
 					ApmServiceName: "apmServiceName1",
-					ContainerID:    "containerID1",
 					Pid:            1234,
 				},
 			},
-			expectedIndices: [][]int32{{0, 1, 2, 3}, {0, 1, 2, 3}},
+			expectedIndices: [][]int32{{0, 1, 2}, {0, 1, 2}},
 			expectedAttributeTable: []attributeStruct{
-				{Key: "container.id", Value: "containerID1"},
 				{Key: "thread.name", Value: "comm1"},
 				{Key: "service.name", Value: "apmServiceName1"},
 				{Key: "process.pid", Value: int64(1234)},
@@ -72,24 +68,20 @@ func TestAttrTableManager(t *testing.T) {
 					Hash:           libpf.TraceHash{},
 					Comm:           "comm1",
 					ApmServiceName: "apmServiceName1",
-					ContainerID:    "containerID1",
 					Pid:            1234,
 				},
 				{
 					Hash:           libpf.TraceHash{},
 					Comm:           "comm2",
 					ApmServiceName: "apmServiceName2",
-					ContainerID:    "containerID2",
 					Pid:            6789,
 				},
 			},
-			expectedIndices: [][]int32{{0, 1, 2, 3}, {4, 5, 6, 7}},
+			expectedIndices: [][]int32{{0, 1, 2}, {3, 4, 5}},
 			expectedAttributeTable: []attributeStruct{
-				{Key: "container.id", Value: "containerID1"},
 				{Key: "thread.name", Value: "comm1"},
 				{Key: "service.name", Value: "apmServiceName1"},
 				{Key: "process.pid", Value: int64(1234)},
-				{Key: "container.id", Value: "containerID2"},
 				{Key: "thread.name", Value: "comm2"},
 				{Key: "service.name", Value: "apmServiceName2"},
 				{Key: "process.pid", Value: int64(6789)},
@@ -104,7 +96,6 @@ func TestAttrTableManager(t *testing.T) {
 			indices := make([][]int32, 0)
 			for _, k := range tc.k {
 				inner := pcommon.NewInt32Slice()
-				mgr.AppendOptionalString(inner, semconv.ContainerIDKey, k.ContainerID)
 				mgr.AppendOptionalString(inner, semconv.ThreadNameKey, k.Comm)
 				mgr.AppendOptionalString(inner, semconv.ServiceNameKey, k.ApmServiceName)
 				mgr.AppendInt(inner, semconv.ProcessPIDKey, k.Pid)

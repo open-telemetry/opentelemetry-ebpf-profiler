@@ -136,7 +136,6 @@ func newTestFrames() libpf.Frames {
 func TestFunctionTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
-		frames map[libpf.FileID]map[libpf.AddressOrLineno]samples.SourceInfo
 		events map[libpf.Origin]samples.KeyToEventMapping
 
 		wantFunctionTable        []string

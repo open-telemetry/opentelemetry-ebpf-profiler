@@ -62,7 +62,6 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		ProcessName:    meta.ProcessName,
 		ExecutablePath: meta.ExecutablePath,
 		ApmServiceName: meta.APMServiceName,
-		ContainerID:    containerID,
 		Pid:            int64(meta.PID),
 		Tid:            int64(meta.TID),
 		ExtraMeta:      extraMeta,
