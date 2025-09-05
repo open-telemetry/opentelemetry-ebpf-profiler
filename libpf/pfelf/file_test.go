@@ -6,7 +6,9 @@ package pfelf
 import (
 	"go/version"
 	"os"
+	"os/exec"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -102,5 +104,8 @@ func TestGetGoBuildID(t *testing.T) {
 
 	buildID, err := ef.GetGoBuildID()
 	require.NoError(t, err)
-	assert.Equal(t, "mSjQUF9aNISAGKgEYWYW/gl-SZRNsumthfUYcrRMu/ZUVOFxTtTC1hQVpcWljU/zS1BVEqI6Vz71640f9wn", buildID)
+	out, err := exec.Command("go", "tool", "buildid", "testdata/go-binary").Output()
+	require.NoError(t, err)
+	expectedBuildID := strings.TrimRight(string(out), "\n")
+	assert.Equal(t, expectedBuildID, buildID)
 }
