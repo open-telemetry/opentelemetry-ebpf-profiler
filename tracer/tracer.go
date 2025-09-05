@@ -55,6 +55,13 @@ const (
 	probProfilingDisable = -1
 )
 
+// Names of tracepoint hooks for sched_process_free. There are two hooks
+// as the tracepoint format has changed for kernel versions 6.16+.
+const (
+	sched_process_free_v1 = "tracepoint__sched_process_free_pre616"
+	sched_process_free_v2 = "tracepoint__sched_process_free"
+)
+
 // Intervals is a subset of config.IntervalsAndTimers.
 type Intervals interface {
 	MonitorInterval() time.Duration
@@ -296,10 +303,9 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 
 	if major > 6 || (major == 6 && minor >= 16) {
 		// Tracepoint format for sched_process_free has changed in v6.16+.
-		// We therefore use two different hooks and decide which to load at runtime.
-		delete(coll.Programs, "tracepoint__sched_process_free_old")
+		delete(coll.Programs, sched_process_free_v1)
 	} else {
-		delete(coll.Programs, "tracepoint__sched_process_free")
+		delete(coll.Programs, sched_process_free_v2)
 	}
 
 	if cfg.VerboseMode {
@@ -551,9 +557,9 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 	progs := make([]progLoaderHelper, len(tailCallProgs)+2)
 	copy(progs, tailCallProgs)
 
-	sched_process_free := "tracepoint__sched_process_free"
-	if _, ok := coll.Programs["tracepoint__sched_process_free_old"]; ok {
-		sched_process_free = "tracepoint__sched_process_free_old"
+	sched_process_free := sched_process_free_v2
+	if _, ok := coll.Programs[sched_process_free_v1]; ok {
+		sched_process_free = sched_process_free_v1
 	}
 
 	progs = append(progs,
