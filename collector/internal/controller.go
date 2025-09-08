@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	ctrlName = "otelcol-ebpf-profiler"
+	ctrlName = "go.opentelemetry.io/ebpf-profiler"
 )
 
 // Controller is a bridge between the Collector's [receiverprofiles.Profiles]
