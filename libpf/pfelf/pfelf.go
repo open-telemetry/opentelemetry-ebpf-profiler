@@ -167,7 +167,7 @@ func GetBuildID(elfFile *elf.File) (string, error) {
 
 // getGoBuildIDFromNotes returns the Go build ID from an ELF notes section data.
 func getGoBuildIDFromNotes(notes []byte) (string, error) {
-	// 0x4 is the "Go Build ID" type. Not sure where this is standardized.
+	// Identify the Go Build ID with ELF_NOTE_GOBUILDID_TAG (0x4).
 	buildID, found, err := getNoteString(notes, "Go", 0x4)
 	if err != nil {
 		return "", fmt.Errorf("could not determine BuildID: %v", err)
