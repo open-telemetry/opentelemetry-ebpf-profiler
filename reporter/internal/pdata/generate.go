@@ -190,6 +190,9 @@ func (p *Pdata) setProfile(
 						semconv.ProcessExecutableBuildIDGNUKey,
 						mf.GnuBuildID)
 					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+						semconv.ProcessExecutableBuildIDGoKey,
+						mf.GoBuildID)
+					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
 						semconv.ProcessExecutableBuildIDHtlhashKey,
 						mf.FileID.StringNoQuotes())
 				}
