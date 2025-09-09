@@ -6,7 +6,9 @@ package pfelf
 import (
 	"go/version"
 	"os"
+	"os/exec"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -94,4 +96,16 @@ func TestGoVersion(t *testing.T) {
 	testVersion, err := testEF.GoVersion()
 	require.NoError(t, err)
 	assert.Equal(t, runtime.Version(), testVersion)
+}
+
+func TestGetGoBuildID(t *testing.T) {
+	ef := getPFELF("testdata/go-binary", t)
+	defer ef.Close()
+
+	buildID, err := ef.GetGoBuildID()
+	require.NoError(t, err)
+	out, err := exec.Command("go", "tool", "buildid", "testdata/go-binary").Output()
+	require.NoError(t, err)
+	expectedBuildID := strings.TrimRight(string(out), "\n")
+	assert.Equal(t, expectedBuildID, buildID)
 }
