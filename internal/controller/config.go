@@ -37,6 +37,10 @@ type Config struct {
 
 	Reporter reporter.Reporter
 
+	// ExecutableReporter allows to configure a ExecutableReporter to hook seen executables.
+	// NOTE: This is used by external implementations.
+	ExecutableReporter reporter.ExecutableReporter
+
 	Fs *flag.FlagSet
 
 	IncludeEnvVars string
