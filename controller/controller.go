@@ -1,4 +1,4 @@
-package controller // import "go.opentelemetry.io/ebpf-profiler/internal/controller"
+package controller // import "go.opentelemetry.io/ebpf-profiler/controller"
 
 import (
 	"context"
