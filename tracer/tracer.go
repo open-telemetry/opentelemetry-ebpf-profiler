@@ -55,6 +55,13 @@ const (
 	probProfilingDisable = -1
 )
 
+// Names of tracepoint hooks for sched_process_free. There are two hooks
+// as the tracepoint format has changed for kernel versions 6.16+.
+const (
+	sched_process_free_v1 = "tracepoint__sched_process_free_pre616"
+	sched_process_free_v2 = "tracepoint__sched_process_free"
+)
+
 // Intervals is a subset of config.IntervalsAndTimers.
 type Intervals interface {
 	MonitorInterval() time.Duration
@@ -281,9 +288,21 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	// References to eBPF maps in the eBPF programs are just placeholders that need to be
 	// replaced by the actual loaded maps later on with RewriteMaps before loading the
 	// programs into the kernel.
+	major, minor, patch, err := GetCurrentKernelVersion()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get kernel version: %v", err)
+	}
+
 	coll, err := support.LoadCollectionSpec()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load specification for tracers: %v", err)
+	}
+
+	if major > 6 || (major == 6 && minor >= 16) {
+		// Tracepoint format for sched_process_free has changed in v6.16+.
+		delete(coll.Programs, sched_process_free_v1)
+	} else {
+		delete(coll.Programs, sched_process_free_v2)
 	}
 
 	if cfg.VerboseMode {
@@ -315,11 +334,6 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	}
 
 	if cfg.KernelVersionCheck {
-		var major, minor, patch uint32
-		major, minor, patch, err = GetCurrentKernelVersion()
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get kernel version: %v", err)
-		}
 		if hasProbeReadBug(major, minor, patch) {
 			if err = checkForMaccessPatch(coll, ebpfMaps, kmod); err != nil {
 				return nil, nil, fmt.Errorf("your kernel version %d.%d.%d may be "+
@@ -539,9 +553,15 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 
 	progs := make([]progLoaderHelper, len(tailCallProgs)+2)
 	copy(progs, tailCallProgs)
+
+	sched_process_free := sched_process_free_v2
+	if _, ok := coll.Programs[sched_process_free_v1]; ok {
+		sched_process_free = sched_process_free_v1
+	}
+
 	progs = append(progs,
 		progLoaderHelper{
-			name:             "tracepoint__sched_process_free",
+			name:             sched_process_free,
 			noTailCallTarget: true,
 			enable:           true,
 		},
