@@ -37,7 +37,7 @@ type Config struct {
 
 	Reporter reporter.Reporter
 
-	// ExecutableReporter allows to configure a ExecutableReporter to hook seen executables.
+	// ExecutableReporter allows to configure a ExecutableReporter to report seen executables.
 	// NOTE: This is used by external implementations.
 	ExecutableReporter reporter.ExecutableReporter
 
