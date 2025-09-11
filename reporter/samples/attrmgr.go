@@ -35,20 +35,25 @@ type AttrTableManager struct {
 	// indices maps compound keys to the indices in the attribute table.
 	indices map[string]int32
 
+	// strTable to read and write keys
+	strTable pcommon.StringSlice
+
 	// attrTable being populated.
-	attrTable pprofile.AttributeTableSlice
+	attrTable pprofile.KeyValueAndUnitSlice
 }
 
-func NewAttrTableManager(attrTable pprofile.AttributeTableSlice) *AttrTableManager {
+func NewAttrTableManager(strTable pcommon.StringSlice, attrTable pprofile.KeyValueAndUnitSlice) *AttrTableManager {
 	return &AttrTableManager{
 		indices:   make(map[string]int32),
+		strTable:  strTable,
 		attrTable: attrTable,
 	}
 }
 
 // AppendInt adds the index for the given integer attribute to an attribute index slice.
 func (m *AttrTableManager) AppendInt(
-	attrs pcommon.Int32Slice, key attribute.Key, value int64) {
+	attrs pcommon.Int32Slice, key attribute.Key, value int64,
+) {
 	compound := fmt.Sprintf("%v_%d", key, value)
 	m.appendAny(attrs, key, compound, value)
 }
@@ -56,7 +61,8 @@ func (m *AttrTableManager) AppendInt(
 // AppendOptionalString adds the index for the given string attribute to an
 // attribute index slice if it is non-empty.
 func (m *AttrTableManager) AppendOptionalString(
-	attrs pcommon.Int32Slice, key attribute.Key, value string) {
+	attrs pcommon.Int32Slice, key attribute.Key, value string,
+) {
 	if value == "" {
 		return
 	}
@@ -78,8 +84,13 @@ func (m *AttrTableManager) appendAny(
 
 	newIndex := int32(m.attrTable.Len())
 
+	idx, err := pprofile.SetString(m.strTable, string(key))
+	if err != nil {
+		return
+	}
+
 	a := m.attrTable.AppendEmpty()
-	a.SetKey(string(key))
+	a.SetKeyStrindex(idx)
 
 	switch v := value.(type) {
 	case int64:

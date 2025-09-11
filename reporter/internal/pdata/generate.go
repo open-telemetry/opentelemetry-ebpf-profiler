@@ -36,7 +36,8 @@ type uniqueMapping struct {
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
 func (p *Pdata) Generate(tree samples.TraceEventsTree,
-	agentName, agentVersion string) (pprofile.Profiles, error) {
+	agentName, agentVersion string,
+) (pprofile.Profiles, error) {
 	profiles := pprofile.NewProfiles()
 	dic := profiles.ProfilesDictionary()
 
@@ -118,7 +119,7 @@ func (p *Pdata) setProfile(
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
 ) error {
-	st := profile.SampleType().AppendEmpty()
+	st := profile.SampleType()
 	switch origin {
 	case support.TraceOriginSampling:
 		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
@@ -139,13 +140,13 @@ func (p *Pdata) setProfile(
 		return fmt.Errorf("generating profile for unsupported origin %d", origin)
 	}
 
-	attrMgr := samples.NewAttrTableManager(dic.AttributeTable())
+	attrMgr := samples.NewAttrTableManager(dic.StringTable(), dic.AttributeTable())
 
-	locationIndex := int32(profile.LocationIndices().Len())
 	startTS, endTS := uint64(math.MaxUint64), uint64(0)
 	for traceKey, traceInfo := range events {
 		sample := profile.Sample().AppendEmpty()
-		sample.SetLocationsStartIndex(locationIndex)
+		sample.SetStackIndex(int32(dic.StackTable().Len()))
+		stack := dic.StackTable().AppendEmpty()
 
 		for _, ts := range traceInfo.Timestamps {
 			startTS = min(startTS, ts)
@@ -155,11 +156,11 @@ func (p *Pdata) setProfile(
 
 		switch origin {
 		case support.TraceOriginSampling:
-			sample.Value().Append(1)
+			sample.Values().Append(1)
 		case support.TraceOriginOffCPU:
-			sample.Value().Append(traceInfo.OffTimes...)
+			sample.Values().Append(traceInfo.OffTimes...)
 		case support.TraceOriginUProbe:
-			sample.Value().Append(1)
+			sample.Values().Append(1)
 		}
 
 		// Walk every frame of the trace.
@@ -226,7 +227,7 @@ func (p *Pdata) setProfile(
 				attrMgr.AppendOptionalString(loc.AttributeIndices(),
 					semconv.ProfileFrameTypeKey, locInfo.frameType)
 			}
-			profile.LocationIndices().Append(idx)
+			stack.LocationIndices().Append(idx)
 		} // End per-frame processing
 
 		exeName := traceKey.ExecutablePath
@@ -268,9 +269,6 @@ func (p *Pdata) setProfile(
 			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, traceKey.ExtraMeta)
 			sample.AttributeIndices().Append(extra...)
 		}
-
-		sample.SetLocationsLength(int32(len(traceInfo.Frames)))
-		locationIndex += sample.LocationsLength()
 	} // End sample processing
 
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())

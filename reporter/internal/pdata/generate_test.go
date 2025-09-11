@@ -71,7 +71,7 @@ func TestGetDummyMappingIndex(t *testing.T) {
 			mappingSet := tt.mappingSet
 			stringSet := tt.stringSet
 			dic := pprofile.NewProfilesDictionary()
-			mgr := samples.NewAttrTableManager(dic.AttributeTable())
+			mgr := samples.NewAttrTableManager(dic.StringTable(), dic.AttributeTable())
 
 			idx, exists := mappingSet.AddWithCheck(tt.fileID)
 			if !exists {
@@ -226,6 +226,7 @@ func TestProfileDuration(t *testing.T) {
 		})
 	}
 }
+
 func TestGenerate_EmptyTree(t *testing.T) {
 	d, err := New(100, nil)
 	require.NoError(t, err)
@@ -238,7 +239,8 @@ func TestGenerate_EmptyTree(t *testing.T) {
 
 func singleFrameTrace(ty libpf.FrameType, mappingFile libpf.FrameMappingFile,
 	lineno libpf.AddressOrLineno, funcName, sourceFile string,
-	sourceLine libpf.SourceLineno) libpf.Frames {
+	sourceLine libpf.SourceLineno,
+) libpf.Frames {
 	frames := make(libpf.Frames, 0, 1)
 	frames.Append(&libpf.Frame{
 		Type:            ty,
@@ -304,8 +306,9 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 		foundFOOKey := false
 		foundBarValue := false
 
-		for _, attr := range profiles.ProfilesDictionary().AttributeTable().All() {
-			key := attr.Key()
+		dic := profiles.ProfilesDictionary()
+		for _, attr := range dic.AttributeTable().All() {
+			key := dic.StringTable().At(int(attr.KeyStrindex()))
 			value := attr.Value()
 			// Check if this is an environment variable attribute
 			if key == "process.environment_variable.FOO" {
@@ -428,7 +431,8 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 }
 
 func singleFrameNative(mappingFile libpf.FrameMappingFile, lineno libpf.AddressOrLineno,
-	mappingStart, mappingEnd libpf.Address, mappingFileOffset uint64) libpf.Frames {
+	mappingStart, mappingEnd libpf.Address, mappingFileOffset uint64,
+) libpf.Frames {
 	frames := make(libpf.Frames, 0, 1)
 	frames.Append(&libpf.Frame{
 		Type:              libpf.NativeFrame,
@@ -494,8 +498,8 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	// Verify profile contains one sample
 	assert.Equal(t, 1, prof.Sample().Len())
 	sample := prof.Sample().At(0)
-	assert.Len(t, sample.Value().AsRaw(), 1)
-	assert.Equal(t, int64(1), sample.Value().At(0)) // sampling count
+	assert.Len(t, sample.Values().AsRaw(), 1)
+	assert.Equal(t, int64(1), sample.Values().At(0)) // sampling count
 
 	// Check that the mapping table contains our native frame mapping
 	// (plus the dummy mapping at index 0)

@@ -91,8 +91,9 @@ func TestAttrTableManager(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			attrTable := pprofile.NewAttributeTableSlice()
-			mgr := NewAttrTableManager(attrTable)
+			strTable := pcommon.NewStringSlice()
+			attrTable := pprofile.NewKeyValueAndUnitSlice()
+			mgr := NewAttrTableManager(strTable, attrTable)
 			indices := make([][]int32, 0)
 			for _, k := range tc.k {
 				inner := pcommon.NewInt32Slice()
@@ -106,7 +107,7 @@ func TestAttrTableManager(t *testing.T) {
 			require.Equal(t, len(tc.expectedAttributeTable), attrTable.Len())
 			for i, v := range tc.expectedAttributeTable {
 				attr := attrTable.At(i)
-				assert.Equal(t, v.Key, attr.Key())
+				assert.Equal(t, v.Key, strTable.At(int(attr.KeyStrindex())))
 				assert.Equal(t, v.Value, attr.Value().AsRaw())
 			}
 		})
