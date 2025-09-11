@@ -17,6 +17,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -36,15 +37,16 @@ type uniqueMapping struct {
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
 func (p *Pdata) Generate(tree samples.TraceEventsTree,
-	agentName, agentVersion string) (pprofile.Profiles, error) {
+	agentName, agentVersion string,
+) (pprofile.Profiles, error) {
 	profiles := pprofile.NewProfiles()
 	dic := profiles.ProfilesDictionary()
 
 	// Temporary helpers that will build the various tables in ProfilesDictionary.
-	stringSet := make(OrderedSet[string], 64)
-	funcSet := make(OrderedSet[funcInfo], 64)
-	mappingSet := make(OrderedSet[uniqueMapping], 64)
-	locationSet := make(OrderedSet[locationInfo], 64)
+	stringSet := make(orderedset.OrderedSet[string], 64)
+	funcSet := make(orderedset.OrderedSet[funcInfo], 64)
+	mappingSet := make(orderedset.OrderedSet[uniqueMapping], 64)
+	locationSet := make(orderedset.OrderedSet[locationInfo], 64)
 
 	// By specification, the first element should be empty.
 	stringSet.Add("")
@@ -110,15 +112,15 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 // this moment.
 func (p *Pdata) setProfile(
 	dic pprofile.ProfilesDictionary,
-	stringSet OrderedSet[string],
-	funcSet OrderedSet[funcInfo],
-	mappingSet OrderedSet[uniqueMapping],
-	locationSet OrderedSet[locationInfo],
+	stringSet orderedset.OrderedSet[string],
+	funcSet orderedset.OrderedSet[funcInfo],
+	mappingSet orderedset.OrderedSet[uniqueMapping],
+	locationSet orderedset.OrderedSet[locationInfo],
 	origin libpf.Origin,
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
 ) error {
-	st := profile.SampleType().AppendEmpty()
+	st := profile.SampleType()
 	switch origin {
 	case support.TraceOriginSampling:
 		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
@@ -139,13 +141,13 @@ func (p *Pdata) setProfile(
 		return fmt.Errorf("generating profile for unsupported origin %d", origin)
 	}
 
-	attrMgr := samples.NewAttrTableManager(dic.AttributeTable())
+	attrMgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
 
-	locationIndex := int32(profile.LocationIndices().Len())
 	startTS, endTS := uint64(math.MaxUint64), uint64(0)
 	for traceKey, traceInfo := range events {
 		sample := profile.Sample().AppendEmpty()
-		sample.SetLocationsStartIndex(locationIndex)
+		sample.SetStackIndex(int32(dic.StackTable().Len()))
+		stack := dic.StackTable().AppendEmpty()
 
 		for _, ts := range traceInfo.Timestamps {
 			startTS = min(startTS, ts)
@@ -155,11 +157,11 @@ func (p *Pdata) setProfile(
 
 		switch origin {
 		case support.TraceOriginSampling:
-			sample.Value().Append(1)
+			sample.Values().Append(1)
 		case support.TraceOriginOffCPU:
-			sample.Value().Append(traceInfo.OffTimes...)
+			sample.Values().Append(traceInfo.OffTimes...)
 		case support.TraceOriginUProbe:
-			sample.Value().Append(1)
+			sample.Values().Append(1)
 		}
 
 		// Walk every frame of the trace.
@@ -226,7 +228,7 @@ func (p *Pdata) setProfile(
 				attrMgr.AppendOptionalString(loc.AttributeIndices(),
 					semconv.ProfileFrameTypeKey, locInfo.frameType)
 			}
-			profile.LocationIndices().Append(idx)
+			stack.LocationIndices().Append(idx)
 		} // End per-frame processing
 
 		exeName := traceKey.ExecutablePath
@@ -268,9 +270,6 @@ func (p *Pdata) setProfile(
 			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, traceKey.ExtraMeta)
 			sample.AttributeIndices().Append(extra...)
 		}
-
-		sample.SetLocationsLength(int32(len(traceInfo.Frames)))
-		locationIndex += sample.LocationsLength()
 	} // End sample processing
 
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())
