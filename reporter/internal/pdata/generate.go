@@ -17,6 +17,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -42,10 +43,10 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	dic := profiles.ProfilesDictionary()
 
 	// Temporary helpers that will build the various tables in ProfilesDictionary.
-	stringSet := make(OrderedSet[string], 64)
-	funcSet := make(OrderedSet[funcInfo], 64)
-	mappingSet := make(OrderedSet[uniqueMapping], 64)
-	locationSet := make(OrderedSet[locationInfo], 64)
+	stringSet := make(orderedset.OrderedSet[string], 64)
+	funcSet := make(orderedset.OrderedSet[funcInfo], 64)
+	mappingSet := make(orderedset.OrderedSet[uniqueMapping], 64)
+	locationSet := make(orderedset.OrderedSet[locationInfo], 64)
 
 	// By specification, the first element should be empty.
 	stringSet.Add("")
@@ -111,10 +112,10 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 // this moment.
 func (p *Pdata) setProfile(
 	dic pprofile.ProfilesDictionary,
-	stringSet OrderedSet[string],
-	funcSet OrderedSet[funcInfo],
-	mappingSet OrderedSet[uniqueMapping],
-	locationSet OrderedSet[locationInfo],
+	stringSet orderedset.OrderedSet[string],
+	funcSet orderedset.OrderedSet[funcInfo],
+	mappingSet orderedset.OrderedSet[uniqueMapping],
+	locationSet orderedset.OrderedSet[locationInfo],
 	origin libpf.Origin,
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
@@ -140,7 +141,7 @@ func (p *Pdata) setProfile(
 		return fmt.Errorf("generating profile for unsupported origin %d", origin)
 	}
 
-	attrMgr := samples.NewAttrTableManager(dic.StringTable(), dic.AttributeTable())
+	attrMgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
 
 	startTS, endTS := uint64(math.MaxUint64), uint64(0)
 	for traceKey, traceInfo := range events {

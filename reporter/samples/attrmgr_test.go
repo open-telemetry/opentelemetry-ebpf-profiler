@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 )
 
@@ -91,9 +92,9 @@ func TestAttrTableManager(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			strTable := pcommon.NewStringSlice()
+			strSet := orderedset.OrderedSet[string]{}
 			attrTable := pprofile.NewKeyValueAndUnitSlice()
-			mgr := NewAttrTableManager(strTable, attrTable)
+			mgr := NewAttrTableManager(strSet, attrTable)
 			indices := make([][]int32, 0)
 			for _, k := range tc.k {
 				inner := pcommon.NewInt32Slice()
@@ -105,9 +106,11 @@ func TestAttrTableManager(t *testing.T) {
 
 			require.Equal(t, tc.expectedIndices, indices)
 			require.Equal(t, len(tc.expectedAttributeTable), attrTable.Len())
+			strSlice := strSet.ToSlice()
+
 			for i, v := range tc.expectedAttributeTable {
 				attr := attrTable.At(i)
-				assert.Equal(t, v.Key, strTable.At(int(attr.KeyStrindex())))
+				assert.Equal(t, v.Key, strSlice[int(attr.KeyStrindex())])
 				assert.Equal(t, v.Value, attr.Value().AsRaw())
 			}
 		})

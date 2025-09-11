@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 )
 
 // SampleAttrProducer provides a hook point to:
@@ -35,17 +36,17 @@ type AttrTableManager struct {
 	// indices maps compound keys to the indices in the attribute table.
 	indices map[string]int32
 
-	// strTable to read and write keys
-	strTable pcommon.StringSlice
+	// strSet to read and write strings from the string table
+	strSet orderedset.OrderedSet[string]
 
 	// attrTable being populated.
 	attrTable pprofile.KeyValueAndUnitSlice
 }
 
-func NewAttrTableManager(strTable pcommon.StringSlice, attrTable pprofile.KeyValueAndUnitSlice) *AttrTableManager {
+func NewAttrTableManager(strSet orderedset.OrderedSet[string], attrTable pprofile.KeyValueAndUnitSlice) *AttrTableManager {
 	return &AttrTableManager{
 		indices:   make(map[string]int32),
-		strTable:  strTable,
+		strSet:    strSet,
 		attrTable: attrTable,
 	}
 }
@@ -84,13 +85,8 @@ func (m *AttrTableManager) appendAny(
 
 	newIndex := int32(m.attrTable.Len())
 
-	idx, err := pprofile.SetString(m.strTable, string(key))
-	if err != nil {
-		return
-	}
-
 	a := m.attrTable.AppendEmpty()
-	a.SetKeyStrindex(idx)
+	a.SetKeyStrindex(m.strSet.Add(string(key)))
 
 	switch v := value.(type) {
 	case int64:

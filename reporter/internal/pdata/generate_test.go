@@ -11,6 +11,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -19,59 +20,59 @@ func TestGetDummyMappingIndex(t *testing.T) {
 	fileID := libpf.NewFileID(12345678, 12345678)
 	for _, tt := range []struct {
 		name       string
-		mappingSet OrderedSet[libpf.FileID]
-		stringSet  OrderedSet[string]
+		mappingSet orderedset.OrderedSet[libpf.FileID]
+		stringSet  orderedset.OrderedSet[string]
 		fileID     libpf.FileID
 
 		wantIndex        int32
-		wantMappingSet   OrderedSet[libpf.FileID]
+		wantMappingSet   orderedset.OrderedSet[libpf.FileID]
 		wantMappingTable []int32
-		wantStringSet    OrderedSet[string]
+		wantStringSet    orderedset.OrderedSet[string]
 	}{
 		{
 			name: "with an index already in the file id mapping",
-			mappingSet: OrderedSet[libpf.FileID]{
+			mappingSet: orderedset.OrderedSet[libpf.FileID]{
 				fileID: 42,
 			},
 			fileID:    fileID,
 			wantIndex: 42,
-			wantMappingSet: OrderedSet[libpf.FileID]{
+			wantMappingSet: orderedset.OrderedSet[libpf.FileID]{
 				fileID: 42,
 			},
 		},
 		{
 			name:       "with an index not yet in the file id mapping",
-			mappingSet: OrderedSet[libpf.FileID]{},
-			stringSet:  OrderedSet[string]{},
+			mappingSet: orderedset.OrderedSet[libpf.FileID]{},
+			stringSet:  orderedset.OrderedSet[string]{},
 			fileID:     fileID,
 
 			wantIndex: 0,
-			wantMappingSet: OrderedSet[libpf.FileID]{
+			wantMappingSet: orderedset.OrderedSet[libpf.FileID]{
 				fileID: 0,
 			},
 			wantMappingTable: []int32{0},
-			wantStringSet:    OrderedSet[string]{"": 0},
+			wantStringSet:    orderedset.OrderedSet[string]{"": 0, "process.executable.build_id.htlhash": 1},
 		},
 		{
 			name: "with an index not yet in the file id mapping and a filename in the string table",
 
-			mappingSet: OrderedSet[libpf.FileID]{},
-			stringSet:  OrderedSet[string]{"": 42},
+			mappingSet: orderedset.OrderedSet[libpf.FileID]{},
+			stringSet:  orderedset.OrderedSet[string]{"": 42},
 			fileID:     fileID,
 
 			wantIndex: 0,
-			wantMappingSet: OrderedSet[libpf.FileID]{
+			wantMappingSet: orderedset.OrderedSet[libpf.FileID]{
 				fileID: 0,
 			},
 			wantMappingTable: []int32{42},
-			wantStringSet:    OrderedSet[string]{"": 42},
+			wantStringSet:    orderedset.OrderedSet[string]{"": 42, "process.executable.build_id.htlhash": 1},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			mappingSet := tt.mappingSet
 			stringSet := tt.stringSet
 			dic := pprofile.NewProfilesDictionary()
-			mgr := samples.NewAttrTableManager(dic.StringTable(), dic.AttributeTable())
+			mgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
 
 			idx, exists := mappingSet.AddWithCheck(tt.fileID)
 			if !exists {
