@@ -15,7 +15,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/controller"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/vc"

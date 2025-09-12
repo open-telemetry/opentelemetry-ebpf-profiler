@@ -9,10 +9,9 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/controller"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/vc"
 )
 
 // Controller is a bridge between the Collector's [receiverprofiles.Profiles]
@@ -25,18 +24,8 @@ func NewController(cfg *controller.Config,
 	nextConsumer xconsumer.Profiles) (*Controller, error) {
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
-
-	rep, err := reporter.NewCollector(&reporter.Config{
-		Name:                   "otelcol-ebpf-profiler",
-		Version:                vc.Version(),
-		MaxRPCMsgSize:          32 << 20, // 32 MiB
-		MaxGRPCRetries:         5,
-		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
-		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
-		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
-		ReportInterval:         intervals.ReportInterval(),
-		SamplesPerSecond:       cfg.SamplesPerSecond,
-	}, nextConsumer)
+	reporterConfig := cfg.ReporterConfigFactory(intervals, cfg.SamplesPerSecond)
+	rep, err := reporter.NewCollector(reporterConfig, nextConsumer)
 	if err != nil {
 		return nil, err
 	}
