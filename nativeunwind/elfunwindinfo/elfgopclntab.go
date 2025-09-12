@@ -264,6 +264,7 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, error) {
 		if data, err = p.Data(maxBytesGoPclntab); err != nil {
 			return nil, err
 		}
+		defer p.SetDontNeed()
 
 		for i := 1; i < len(data)-PclntabHeaderSize(); i += 8 {
 			// Search for something looking like a valid pclntabHeader header
@@ -298,6 +299,7 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, err error) {
 		if data, err = s.Data(maxBytesGoPclntab); err != nil {
 			return nil, fmt.Errorf("failed to load .gopclntab section: %v", err)
 		}
+		defer s.SetDontNeed()
 	} else if s := ef.Section(".go.buildinfo"); s != nil {
 		// This looks like Go binary. Lookup the runtime.pclntab symbols,
 		// as the .gopclntab section is not available on PIE binaries.
@@ -333,7 +335,9 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, err error) {
 
 // Gopclntab is the API for extracting data from .gopclntab
 type Gopclntab struct {
-	dataRef   io.Closer
+	dataRef     io.Closer
+	setDontNeed func()
+
 	data      []byte
 	textStart uintptr
 	numFuncs  int
@@ -468,6 +472,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.funSize = 4 + uint8(unsafe.Sizeof(pclntabFunc{}))
 	}
 	g.dataRef = ef.Take()
+	g.setDontNeed = ef.SetDontNeed
 
 	return g, nil
 }
@@ -525,6 +530,7 @@ func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
 
 // Symbolize returns the file, line and function information for given PC
 func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
+	defer g.setDontNeed()
 	index := sort.Search(g.numFuncs, func(i int) bool {
 		funcPc, _ := g.getFuncMapEntry(i)
 		return funcPc > pc
