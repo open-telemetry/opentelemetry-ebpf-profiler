@@ -2015,5 +2015,19 @@
     "name": "UnwindGoLabelsFailures",
     "field": "bpf.golabels.errors",
     "id": 279
+  },
+  {
+   "description": "Number of cache hits for Go symbols",
+   "type": "counter",
+   "name": "GoSymbolCacheHit",
+   "field": "agent.go.symbol_cache.hits",
+   "id": 280
+  },
+  {
+   "description": "Number of cache misses for Go symbols",
+   "type": "counter",
+   "name": "GoSymbolCacheMiss",
+   "field": "agent.go.symbol_cache.misses",
+   "id": 281
   }
 ]

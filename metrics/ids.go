@@ -647,6 +647,12 @@ const (
 	// Number of failures reading Go custom labels
 	IDUnwindGoLabelsFailures = 279
 
+	// Number of cache hits for Go symbols
+	IDGoSymbolCacheHit = 280
+
+	// Number of cache misses for Go symbols
+	IDGoSymbolCacheMiss = 281
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 280
+	IDMax = 282
 )

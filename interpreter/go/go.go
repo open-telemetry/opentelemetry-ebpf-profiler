@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/elastic/go-freelru"
+
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -23,9 +26,7 @@ var (
 )
 
 type goData struct {
-	refs atomic.Int32
-
-	pclntab *elfunwindinfo.Gopclntab
+	exec string
 }
 
 type goInstance struct {
@@ -34,6 +35,8 @@ type goInstance struct {
 	// Go symbolization metrics
 	successCount atomic.Uint64
 	failCount    atomic.Uint64
+
+	symbCache *freelru.LRU[libpf.AddressOrLineno, libpf.Frame]
 
 	d *goData
 }
@@ -48,33 +51,37 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 		return nil, nil
 	}
 
-	pclntab, err := elfunwindinfo.NewGopclntab(ef)
-	if pclntab == nil {
+	exec, err := info.ExtractAsFile()
+	if err != nil {
 		return nil, err
 	}
 
-	g := &goData{pclntab: pclntab}
-	g.refs.Store(1)
-	return g, nil
-}
-
-func (g *goData) unref() {
-	if g.refs.Add(-1) == 0 {
-		_ = g.pclntab.Close()
+	g := &goData{
+		exec: exec,
 	}
+	return g, nil
 }
 
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
-	g.refs.Add(1)
-	return &goInstance{d: g}, nil
+	symbCache, err := freelru.New[libpf.AddressOrLineno, libpf.Frame](
+		interpreter.LruFunctionCacheSize,
+		func(aol libpf.AddressOrLineno) uint32 { return uint32(aol) })
+	if err != nil {
+		return nil, err
+	}
+
+	return &goInstance{
+		symbCache: symbCache,
+		d:         g}, nil
 }
 
 func (g *goData) Unload(_ interpreter.EbpfHandler) {
-	g.unref()
 }
 
 func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
+	symbCacheStats := g.symbCache.ResetMetrics()
+
 	return []metrics.Metric{
 		{
 			ID:    metrics.IDGoSymbolizationSuccess,
@@ -84,11 +91,18 @@ func (g *goInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 			ID:    metrics.IDGoSymbolizationFailure,
 			Value: metrics.MetricValue(g.failCount.Swap(0)),
 		},
+		{
+			ID:    metrics.IDGoSymbolCacheHit,
+			Value: metrics.MetricValue(symbCacheStats.Hits),
+		},
+		{
+			ID:    metrics.IDGoSymbolCacheMiss,
+			Value: metrics.MetricValue(symbCacheStats.Misses),
+		},
 	}, nil
 }
 
 func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
-	g.d.unref()
 	return nil
 }
 
@@ -99,19 +113,40 @@ func (g *goInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	sfCounter := successfailurecounter.New(&g.successCount, &g.failCount)
 	defer sfCounter.DefaultToFailure()
 
-	sourceFile, lineNo, fn := g.d.pclntab.Symbolize(uintptr(frame.Lineno))
+	if cachedFrame, ok := g.symbCache.Get(frame.Lineno); ok {
+		frames.Append(&cachedFrame)
+		return nil
+	}
+
+	ef, err := pfelf.Open(g.d.exec)
+	if err != nil {
+		return err
+	}
+	defer ef.Close()
+
+	pclntab, err := elfunwindinfo.NewGopclntab(ef)
+	if err != nil {
+		return err
+	}
+	defer pclntab.Close()
+
+	sourceFile, lineNo, fn := pclntab.Symbolize(uintptr(frame.Lineno))
 	if fn == "" {
 		return fmt.Errorf("failed to symbolize 0x%x", frame.Lineno)
 	}
 
-	frames.Append(&libpf.Frame{
+	newFrame := libpf.Frame{
 		Type: libpf.GoFrame,
 		//TODO: File: convert the frame.File (host.FileID) to libpf.FileID here
 		AddressOrLineno: frame.Lineno,
 		FunctionName:    libpf.Intern(fn),
 		SourceFile:      libpf.Intern(sourceFile),
 		SourceLine:      libpf.SourceLineno(lineNo),
-	})
+	}
+
+	g.symbCache.Add(frame.Lineno, newFrame)
+	frames.Append(&newFrame)
 	sfCounter.ReportSuccess()
+
 	return nil
 }
