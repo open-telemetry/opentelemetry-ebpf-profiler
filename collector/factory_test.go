@@ -26,7 +26,7 @@ func TestCreateProfilesReceiver(t *testing.T) {
 	}{
 		{
 			name:   "Default config",
-			config: DefaultConfig(),
+			config: defaultConfig(),
 		},
 		{
 			name:      "Nil config",

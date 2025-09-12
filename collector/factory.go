@@ -26,7 +26,7 @@ var (
 func NewFactory() receiver.Factory {
 	return xreceiver.NewFactory(
 		typeStr,
-		DefaultConfig,
+		defaultConfig,
 		xreceiver.WithProfiles(createProfilesReceiver, component.StabilityLevelAlpha))
 }
 
@@ -43,7 +43,7 @@ func createProfilesReceiver(
 	return NewController(cfg, nextConsumer)
 }
 
-func DefaultConfig() component.Config {
+func defaultConfig() component.Config {
 	return &controller.Config{
 		ReporterInterval:       5 * time.Second,
 		MonitorInterval:        5 * time.Second,
