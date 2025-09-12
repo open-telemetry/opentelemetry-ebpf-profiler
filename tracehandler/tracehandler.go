@@ -119,6 +119,23 @@ func newTraceHandler(ctx context.Context, rep reporter.TraceReporter,
 	}, nil
 }
 
+func (m *traceHandler) getOrConvertTrace(bpfTrace *host.Trace) *libpf.Trace {
+	if m.traceCache != nil {
+		if trace, exists := m.traceCache.GetAndRefresh(bpfTrace.Hash,
+			traceCacheLifetime); exists {
+			m.traceCacheHit++
+			return &trace
+		}
+		m.traceCacheMiss++
+	}
+
+	trace := m.traceProcessor.ConvertTrace(bpfTrace)
+	if m.traceCache != nil {
+		m.traceCache.Add(bpfTrace.Hash, *trace)
+	}
+	return trace
+}
+
 func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(bpfTrace.KTime.UnixNano()),
@@ -135,28 +152,9 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		EnvVars:        bpfTrace.EnvVars,
 	}
 
-	if m.traceCache != nil {
-		if trace, exists := m.traceCache.GetAndRefresh(bpfTrace.Hash,
-			traceCacheLifetime); exists {
-			m.traceCacheHit++
-			// Fast path
-			meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
-			if err := m.reporter.ReportTraceEvent(&trace, meta); err != nil {
-				log.Errorf("Failed to report trace event: %v", err)
-			}
-			return
-		}
-		m.traceCacheMiss++
-	}
-
-	// Slow path: convert trace.
-	umTrace := m.traceProcessor.ConvertTrace(bpfTrace)
-	if m.traceCache != nil {
-		m.traceCache.Add(bpfTrace.Hash, *umTrace)
-	}
-
-	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
-	if err := m.reporter.ReportTraceEvent(umTrace, meta); err != nil {
+	trace := m.getOrConvertTrace(bpfTrace)
+	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
+	if err := m.reporter.ReportTraceEvent(trace, meta); err != nil {
 		log.Errorf("Failed to report trace event: %v", err)
 	}
 }
