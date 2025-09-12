@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"unsafe"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // ReaderAt reads a memory-mapped file.
@@ -117,6 +119,12 @@ func Open(filename string) (*ReaderAt, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if err := syscall.Madvise(data, syscall.MADV_DONTNEED); err != nil {
+		log.Errorf("Failed to set MADV_DONTNEED on %s: %v",
+			filename, err)
+	}
+
 	r := &ReaderAt{data: data}
 	r.refCount.Store(1)
 	runtime.SetFinalizer(r, (*ReaderAt).Close)
