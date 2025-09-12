@@ -8,11 +8,17 @@ import (
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/xconsumer"
+	"go.opentelemetry.io/collector/receiver"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/vc"
+)
+
+const (
+	ctrlName = "go.opentelemetry.io/ebpf-profiler"
 )
 
 // Controller is a bridge between the Collector's [receiverprofiles.Profiles]
@@ -21,13 +27,13 @@ type Controller struct {
 	ctlr *controller.Controller
 }
 
-func NewController(cfg *controller.Config,
+func NewController(cfg *controller.Config, rs receiver.Settings,
 	nextConsumer xconsumer.Profiles) (*Controller, error) {
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
 	rep, err := reporter.NewCollector(&reporter.Config{
-		Name:                   "otelcol-ebpf-profiler",
+		Name:                   ctrlName,
 		Version:                vc.Version(),
 		MaxRPCMsgSize:          32 << 20, // 32 MiB
 		MaxGRPCRetries:         5,
@@ -41,6 +47,10 @@ func NewController(cfg *controller.Config,
 		return nil, err
 	}
 	cfg.Reporter = rep
+
+	// Provide internal metrics via the collectors telemetry.
+	meter := rs.MeterProvider.Meter(ctrlName)
+	metrics.Start(meter)
 
 	return &Controller{
 		ctlr: controller.New(cfg),
