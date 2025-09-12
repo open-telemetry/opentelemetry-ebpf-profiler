@@ -4,6 +4,6 @@
 // additional functionality.
 package mmap // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
 
-func setMadvDontNeed(data []byte) error {
+func (r *ReaderAt) SetMadvDontNeed() error {
 	return nil
 }

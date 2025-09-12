@@ -6,6 +6,6 @@ package mmap // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/m
 
 import "syscall"
 
-func setMadvDontNeed(data []byte) error {
-	return syscall.Madvise(data, syscall.MADV_DONTNEED)
+func (r *ReaderAt) SetMadvDontNeed() error {
+	return syscall.Madvise(r.data, syscall.MADV_DONTNEED)
 }
