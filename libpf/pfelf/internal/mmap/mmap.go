@@ -120,7 +120,7 @@ func Open(filename string) (*ReaderAt, error) {
 		return nil, err
 	}
 
-	if err := syscall.Madvise(data, syscall.MADV_DONTNEED); err != nil {
+	if err := setMadvDontNeed(data); err != nil {
 		log.Errorf("Failed to set MADV_DONTNEED on %s: %v",
 			filename, err)
 	}
