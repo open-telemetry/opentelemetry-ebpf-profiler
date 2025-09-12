@@ -907,6 +907,14 @@ func (sh *Section) SetDontNeed() {
 	}
 }
 
+func (f *File) SetDontNeed() {
+	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
+		if err := mapping.SetMadvDontNeed(); err != nil {
+			log.Errorf("Failed to set MADV_DONTNEED: %v", err)
+		}
+	}
+}
+
 // ReadAt reads bytes from given virtual address
 func (f *File) ReadAt(p []byte, addr int64) (int, error) {
 	return f.ReadVirtualMemory(p, addr)
