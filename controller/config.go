@@ -10,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -35,7 +36,8 @@ type Config struct {
 	UProbeLinks            []string
 	LoadProbe              bool
 
-	Reporter reporter.Reporter
+	Reporter              reporter.Reporter
+	ReporterConfigFactory func(intervals *times.Times, samplesPerSecond int) *reporter.Config
 
 	// ExecutableReporter allows to configure a ExecutableReporter to report seen executables.
 	// NOTE: This is used by external implementations.

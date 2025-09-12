@@ -13,7 +13,11 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/xreceiver"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 	"go.opentelemetry.io/ebpf-profiler/controller"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/times"
+	"go.opentelemetry.io/ebpf-profiler/vc"
 )
 
 var (
@@ -40,7 +44,7 @@ func createProfilesReceiver(
 		return nil, errInvalidConfig
 	}
 
-	return NewController(cfg, nextConsumer)
+	return internal.NewController(cfg, nextConsumer)
 }
 
 func defaultConfig() component.Config {
@@ -52,5 +56,18 @@ func defaultConfig() component.Config {
 		ProbabilisticThreshold: 100,
 		Tracers:                "all",
 		ClockSyncInterval:      3 * time.Minute,
+		ReporterConfigFactory: func(intervals *times.Times, samplesPerSecond int) *reporter.Config {
+			return &reporter.Config{
+				Name:                   "otelcol-ebpf-profiler",
+				Version:                vc.Version(),
+				MaxRPCMsgSize:          32 << 20, // 32 MiB
+				MaxGRPCRetries:         5,
+				GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
+				GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
+				GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
+				ReportInterval:         intervals.ReportInterval(),
+				SamplesPerSecond:       samplesPerSecond,
+			}
+		},
 	}
 }
