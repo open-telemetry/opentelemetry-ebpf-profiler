@@ -426,7 +426,7 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 	assert.Contains(t, stringTableSlice, filePath)
 	// The function table should have the function name and file path indices set
 	require.Equal(t, 2, dic.FunctionTable().Len())
-	fn := dic.FunctionTable().At(0)
+	fn := dic.FunctionTable().At(1)
 	assert.Equal(t, funcName, dic.StringTable().At(int(fn.NameStrindex())))
 	assert.Equal(t, filePath, dic.StringTable().At(int(fn.FilenameStrindex())))
 }
