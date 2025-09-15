@@ -57,7 +57,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	dic.MappingTable().AppendEmpty()
 	dic.StackTable().AppendEmpty()
 	dic.AttributeTable().AppendEmpty()
-
+dic.LocationTable().AppendEmpty()
 	attrMgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
 
 	for containerID, originToEvents := range tree {
