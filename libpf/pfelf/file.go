@@ -418,7 +418,6 @@ func (f *File) LoadSections() error {
 	if err != nil {
 		return err
 	}
-	defer strsh.SetDontNeed()
 	for i := range f.Sections {
 		sh := &f.Sections[i]
 		var ok bool
@@ -563,7 +562,6 @@ func (f *File) GetGoBuildID() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer s.SetDontNeed()
 
 	return getGoBuildIDFromNotes(data)
 }
@@ -581,7 +579,6 @@ func (f *File) GetBuildID() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer s.SetDontNeed()
 
 	return getBuildIDFromNotes(data)
 }
@@ -687,13 +684,11 @@ func (f *File) insertTLSDescriptorsForSection(descs map[string]libpf.Address,
 	if err != nil {
 		return fmt.Errorf("failed to read string table: %w", err)
 	}
-	defer strtabSection.SetDontNeed()
 
 	relaData, err := relaSection.Data(uint(relaSection.Size))
 	if err != nil {
 		return fmt.Errorf("failed to read relocation section: %w", err)
 	}
-	defer relaSection.SetDontNeed()
 
 	relaSz := int(unsafe.Sizeof(elf.Rela64{}))
 	for i := 0; i < len(relaData); i += relaSz {
@@ -736,7 +731,6 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 	if err != nil {
 		return "", 0, fmt.Errorf("could not read link: %w", ErrNoDebugLink)
 	}
-	defer note.SetDontNeed()
 
 	return ParseDebugLink(d)
 }
@@ -859,7 +853,6 @@ func (ph *Prog) DataReader(maxSize uint) (io.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer ph.SetDontNeed()
 	return bytes.NewReader(p), nil
 }
 
@@ -907,6 +900,7 @@ func (sh *Section) SetDontNeed() {
 	}
 }
 
+// SetDontNeed sets the flag MADV_DONTNEED on the mmaped data.
 func (f *File) SetDontNeed() {
 	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
 		if err := mapping.SetMadvDontNeed(); err != nil {
@@ -1096,13 +1090,11 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol)) error {
 	if err != nil {
 		return fmt.Errorf("failed to read %v: %v", strTab.Name, err)
 	}
-	defer strTab.SetDontNeed()
 
 	syms, err := symTab.Data(maxBytesLargeSection)
 	if err != nil {
 		return fmt.Errorf("failed to read %v: %v", name, err)
 	}
-	defer symTab.SetDontNeed()
 
 	symSz := int(unsafe.Sizeof(elf.Sym64{}))
 	for i := 0; i < len(syms); i += symSz {

@@ -264,7 +264,6 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, error) {
 		if data, err = p.Data(maxBytesGoPclntab); err != nil {
 			return nil, err
 		}
-		defer p.SetDontNeed()
 
 		for i := 1; i < len(data)-PclntabHeaderSize(); i += 8 {
 			// Search for something looking like a valid pclntabHeader header
@@ -299,7 +298,6 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, err error) {
 		if data, err = s.Data(maxBytesGoPclntab); err != nil {
 			return nil, fmt.Errorf("failed to load .gopclntab section: %v", err)
 		}
-		defer s.SetDontNeed()
 	} else if s := ef.Section(".go.buildinfo"); s != nil {
 		// This looks like Go binary. Lookup the runtime.pclntab symbols,
 		// as the .gopclntab section is not available on PIE binaries.
@@ -386,6 +384,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	if data == nil {
 		return nil, err
 	}
+	defer ef.SetDontNeed()
 
 	hdrSize := uintptr(PclntabHeaderSize())
 	dataLen := uintptr(len(data))
