@@ -731,7 +731,6 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 	if err != nil {
 		return "", 0, fmt.Errorf("could not read link: %w", ErrNoDebugLink)
 	}
-
 	return ParseDebugLink(d)
 }
 
@@ -1090,7 +1089,6 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol)) error {
 	if err != nil {
 		return fmt.Errorf("failed to read %v: %v", strTab.Name, err)
 	}
-
 	syms, err := symTab.Data(maxBytesLargeSection)
 	if err != nil {
 		return fmt.Errorf("failed to read %v: %v", name, err)
