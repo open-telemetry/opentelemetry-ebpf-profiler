@@ -50,9 +50,12 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 	// By specification, the first element should be empty.
 	stringSet.Add("")
+	funcSet.Add(funcInfo{})
 	mappingSet.Add(uniqueMapping{})
+	locationSet.Add(locationInfo{})
 	dic.MappingTable().AppendEmpty()
 	dic.StackTable().AppendEmpty()
+	dic.AttributeTable().AppendEmpty()
 
 	for containerID, originToEvents := range tree {
 		if len(originToEvents) == 0 {
