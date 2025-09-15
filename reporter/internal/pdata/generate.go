@@ -118,7 +118,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 // this moment.
 func (p *Pdata) setProfile(
 	dic pprofile.ProfilesDictionary,
-	attrMgr samples.AttrTableManager,
+	attrMgr *samples.AttrTableManager,
 	stringSet orderedset.OrderedSet[string],
 	funcSet orderedset.OrderedSet[funcInfo],
 	mappingSet orderedset.OrderedSet[uniqueMapping],
