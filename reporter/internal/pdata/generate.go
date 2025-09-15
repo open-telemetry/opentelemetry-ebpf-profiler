@@ -57,6 +57,8 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	dic.StackTable().AppendEmpty()
 	dic.AttributeTable().AppendEmpty()
 
+	attrMgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
+
 	for containerID, originToEvents := range tree {
 		if len(originToEvents) == 0 {
 			continue
@@ -84,7 +86,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic,
-				stringSet, funcSet, mappingSet, locationSet,
+				attrMgr, stringSet, funcSet, mappingSet, locationSet,
 				origin, originToEvents[origin], prof); err != nil {
 				return profiles, err
 			}
@@ -116,6 +118,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 // this moment.
 func (p *Pdata) setProfile(
 	dic pprofile.ProfilesDictionary,
+	attrMgr samples.AttrTableManager,
 	stringSet orderedset.OrderedSet[string],
 	funcSet orderedset.OrderedSet[funcInfo],
 	mappingSet orderedset.OrderedSet[uniqueMapping],
@@ -144,8 +147,6 @@ func (p *Pdata) setProfile(
 		// Should never happen
 		return fmt.Errorf("generating profile for unsupported origin %d", origin)
 	}
-
-	attrMgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
 
 	startTS, endTS := uint64(math.MaxUint64), uint64(0)
 	for traceKey, traceInfo := range events {
