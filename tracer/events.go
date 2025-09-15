@@ -249,10 +249,10 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				if minKTime > 0 && minKTime <= oldKTime {
 					// If minKTime is smaller than oldKTime, use it and reset it
 					// to avoid a repeat during next iteration.
-					t.TraceProcessor().ProcessedUntil(minKTime)
+					t.processManager.ProcessedUntil(minKTime)
 					minKTime = 0
 				} else {
-					t.TraceProcessor().ProcessedUntil(oldKTime)
+					t.processManager.ProcessedUntil(oldKTime)
 				}
 			}
 			oldKTime = minKTime
