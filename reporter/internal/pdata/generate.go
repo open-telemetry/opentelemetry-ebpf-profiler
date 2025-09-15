@@ -53,6 +53,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	funcSet.Add(funcInfo{})
 	mappingSet.Add(uniqueMapping{})
 	locationSet.Add(locationInfo{})
+	dic.LinkTable().AppendEmpty()
 	dic.MappingTable().AppendEmpty()
 	dic.StackTable().AppendEmpty()
 	dic.AttributeTable().AppendEmpty()
