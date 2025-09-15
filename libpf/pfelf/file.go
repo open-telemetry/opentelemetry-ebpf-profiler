@@ -838,14 +838,6 @@ func (ph *Prog) Data(maxSize uint) ([]byte, error) {
 	return p, err
 }
 
-func (ph *Prog) SetDontNeed() {
-	if mapping, ok := ph.elfReader.(*mmap.ReaderAt); ok {
-		if err := mapping.SetMadvDontNeed(); err != nil {
-			log.Errorf("Failed to set MADV_DONTNEED: %v", err)
-		}
-	}
-}
-
 // DataReader loads the whole program header referenced data, and returns reader to it.
 func (ph *Prog) DataReader(maxSize uint) (io.Reader, error) {
 	p, err := ph.Data(maxSize)
@@ -889,14 +881,6 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 	p := make([]byte, sh.FileSize)
 	_, err := sh.ReadAt(p, 0)
 	return p, err
-}
-
-func (sh *Section) SetDontNeed() {
-	if mapping, ok := sh.elfReader.(*mmap.ReaderAt); ok {
-		if err := mapping.SetMadvDontNeed(); err != nil {
-			log.Errorf("Failed to set MADV_DONTNEED: %v", err)
-		}
-	}
 }
 
 // SetDontNeed sets the flag MADV_DONTNEED on the mmaped data.

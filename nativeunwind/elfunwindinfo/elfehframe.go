@@ -1061,7 +1061,6 @@ func elfRegionFromSection(sec *pfelf.Section) *elfRegion {
 	if err != nil {
 		return nil
 	}
-	defer sec.SetDontNeed()
 
 	return &elfRegion{
 		data:  data,
@@ -1131,7 +1130,6 @@ func findEhSections(ef *pfelf.File) (
 	if err != nil {
 		return nil, nil, err
 	}
-	defer prog.SetDontNeed()
 
 	if uintptr(len(data)) < ehFrameHdrSize {
 		return nil, nil, fmt.Errorf(
