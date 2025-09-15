@@ -121,5 +121,5 @@ func Open(filename string) (*ReaderAt, error) {
 	r := &ReaderAt{data: data}
 	r.refCount.Store(1)
 	runtime.SetFinalizer(r, (*ReaderAt).Close)
-	return r, r.SetMadvDontNeed()
+	return r, nil
 }
