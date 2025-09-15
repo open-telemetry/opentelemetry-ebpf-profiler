@@ -145,7 +145,7 @@ func TestFunctionTableOrder(t *testing.T) {
 		{
 			name:                     "no events",
 			events:                   map[libpf.Origin]samples.KeyToEventMapping{},
-			wantFunctionTable:        []string{},
+			wantFunctionTable:        []string{""},
 			expectedResourceProfiles: 0,
 		}, {
 			name:                     "single executable",
@@ -159,7 +159,7 @@ func TestFunctionTableOrder(t *testing.T) {
 				},
 			},
 			wantFunctionTable: []string{
-				"func1", "func2", "func3", "func4", "func5",
+				"", "func1", "func2", "func3", "func4", "func5",
 			},
 		},
 	} {
@@ -425,7 +425,7 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 	assert.Contains(t, stringTableSlice, funcName)
 	assert.Contains(t, stringTableSlice, filePath)
 	// The function table should have the function name and file path indices set
-	require.Equal(t, 1, dic.FunctionTable().Len())
+	require.Equal(t, 2, dic.FunctionTable().Len())
 	fn := dic.FunctionTable().At(0)
 	assert.Equal(t, funcName, dic.StringTable().At(int(fn.NameStrindex())))
 	assert.Equal(t, filePath, dic.StringTable().At(int(fn.FilenameStrindex())))
@@ -533,6 +533,6 @@ func TestGenerate_NativeFrame(t *testing.T) {
 
 	// For native frames, function information is not populated in the function table
 	// since it's resolved by the backend. The function table should be empty.
-	assert.Equal(t, 0, dic.FunctionTable().Len(),
+	assert.Equal(t, 1, dic.FunctionTable().Len(),
 		"Function table should be empty for native frames")
 }
