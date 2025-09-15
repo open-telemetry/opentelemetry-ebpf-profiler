@@ -52,6 +52,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	stringSet.Add("")
 	mappingSet.Add(uniqueMapping{})
 	dic.MappingTable().AppendEmpty()
+	dic.StackTable().AppendEmpty()
 
 	for containerID, originToEvents := range tree {
 		if len(originToEvents) == 0 {
