@@ -7,3 +7,7 @@ package mmap // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/m
 func (r *ReaderAt) SetMadvDontNeed() error {
 	return nil
 }
+
+func (r *ReaderAt) setRandom() error {
+	return nil
+}
