@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 )
 
 // SampleAttrProducer provides a hook point to:
@@ -35,20 +36,25 @@ type AttrTableManager struct {
 	// indices maps compound keys to the indices in the attribute table.
 	indices map[string]int32
 
+	// strSet to read and write strings from the string table
+	strSet orderedset.OrderedSet[string]
+
 	// attrTable being populated.
-	attrTable pprofile.AttributeTableSlice
+	attrTable pprofile.KeyValueAndUnitSlice
 }
 
-func NewAttrTableManager(attrTable pprofile.AttributeTableSlice) *AttrTableManager {
+func NewAttrTableManager(strSet orderedset.OrderedSet[string], attrTable pprofile.KeyValueAndUnitSlice) *AttrTableManager {
 	return &AttrTableManager{
 		indices:   make(map[string]int32),
+		strSet:    strSet,
 		attrTable: attrTable,
 	}
 }
 
 // AppendInt adds the index for the given integer attribute to an attribute index slice.
 func (m *AttrTableManager) AppendInt(
-	attrs pcommon.Int32Slice, key attribute.Key, value int64) {
+	attrs pcommon.Int32Slice, key attribute.Key, value int64,
+) {
 	compound := fmt.Sprintf("%v_%d", key, value)
 	m.appendAny(attrs, key, compound, value)
 }
@@ -56,7 +62,8 @@ func (m *AttrTableManager) AppendInt(
 // AppendOptionalString adds the index for the given string attribute to an
 // attribute index slice if it is non-empty.
 func (m *AttrTableManager) AppendOptionalString(
-	attrs pcommon.Int32Slice, key attribute.Key, value string) {
+	attrs pcommon.Int32Slice, key attribute.Key, value string,
+) {
 	if value == "" {
 		return
 	}
@@ -79,7 +86,7 @@ func (m *AttrTableManager) appendAny(
 	newIndex := int32(m.attrTable.Len())
 
 	a := m.attrTable.AppendEmpty()
-	a.SetKey(string(key))
+	a.SetKeyStrindex(m.strSet.Add(string(key)))
 
 	switch v := value.(type) {
 	case int64:

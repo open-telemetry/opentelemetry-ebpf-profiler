@@ -11,6 +11,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -19,59 +20,59 @@ func TestGetDummyMappingIndex(t *testing.T) {
 	fileID := libpf.NewFileID(12345678, 12345678)
 	for _, tt := range []struct {
 		name       string
-		mappingSet OrderedSet[libpf.FileID]
-		stringSet  OrderedSet[string]
+		mappingSet orderedset.OrderedSet[libpf.FileID]
+		stringSet  orderedset.OrderedSet[string]
 		fileID     libpf.FileID
 
 		wantIndex        int32
-		wantMappingSet   OrderedSet[libpf.FileID]
+		wantMappingSet   orderedset.OrderedSet[libpf.FileID]
 		wantMappingTable []int32
-		wantStringSet    OrderedSet[string]
+		wantStringSet    orderedset.OrderedSet[string]
 	}{
 		{
 			name: "with an index already in the file id mapping",
-			mappingSet: OrderedSet[libpf.FileID]{
+			mappingSet: orderedset.OrderedSet[libpf.FileID]{
 				fileID: 42,
 			},
 			fileID:    fileID,
 			wantIndex: 42,
-			wantMappingSet: OrderedSet[libpf.FileID]{
+			wantMappingSet: orderedset.OrderedSet[libpf.FileID]{
 				fileID: 42,
 			},
 		},
 		{
 			name:       "with an index not yet in the file id mapping",
-			mappingSet: OrderedSet[libpf.FileID]{},
-			stringSet:  OrderedSet[string]{},
+			mappingSet: orderedset.OrderedSet[libpf.FileID]{},
+			stringSet:  orderedset.OrderedSet[string]{},
 			fileID:     fileID,
 
 			wantIndex: 0,
-			wantMappingSet: OrderedSet[libpf.FileID]{
+			wantMappingSet: orderedset.OrderedSet[libpf.FileID]{
 				fileID: 0,
 			},
 			wantMappingTable: []int32{0},
-			wantStringSet:    OrderedSet[string]{"": 0},
+			wantStringSet:    orderedset.OrderedSet[string]{"": 0, "process.executable.build_id.htlhash": 1},
 		},
 		{
 			name: "with an index not yet in the file id mapping and a filename in the string table",
 
-			mappingSet: OrderedSet[libpf.FileID]{},
-			stringSet:  OrderedSet[string]{"": 42},
+			mappingSet: orderedset.OrderedSet[libpf.FileID]{},
+			stringSet:  orderedset.OrderedSet[string]{"": 42},
 			fileID:     fileID,
 
 			wantIndex: 0,
-			wantMappingSet: OrderedSet[libpf.FileID]{
+			wantMappingSet: orderedset.OrderedSet[libpf.FileID]{
 				fileID: 0,
 			},
 			wantMappingTable: []int32{42},
-			wantStringSet:    OrderedSet[string]{"": 42},
+			wantStringSet:    orderedset.OrderedSet[string]{"": 42, "process.executable.build_id.htlhash": 1},
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			mappingSet := tt.mappingSet
 			stringSet := tt.stringSet
 			dic := pprofile.NewProfilesDictionary()
-			mgr := samples.NewAttrTableManager(dic.AttributeTable())
+			mgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
 
 			idx, exists := mappingSet.AddWithCheck(tt.fileID)
 			if !exists {
@@ -144,7 +145,7 @@ func TestFunctionTableOrder(t *testing.T) {
 		{
 			name:                     "no events",
 			events:                   map[libpf.Origin]samples.KeyToEventMapping{},
-			wantFunctionTable:        []string{},
+			wantFunctionTable:        []string{""},
 			expectedResourceProfiles: 0,
 		}, {
 			name:                     "single executable",
@@ -158,7 +159,7 @@ func TestFunctionTableOrder(t *testing.T) {
 				},
 			},
 			wantFunctionTable: []string{
-				"func1", "func2", "func3", "func4", "func5",
+				"", "func1", "func2", "func3", "func4", "func5",
 			},
 		},
 	} {
@@ -226,6 +227,7 @@ func TestProfileDuration(t *testing.T) {
 		})
 	}
 }
+
 func TestGenerate_EmptyTree(t *testing.T) {
 	d, err := New(100, nil)
 	require.NoError(t, err)
@@ -238,7 +240,8 @@ func TestGenerate_EmptyTree(t *testing.T) {
 
 func singleFrameTrace(ty libpf.FrameType, mappingFile libpf.FrameMappingFile,
 	lineno libpf.AddressOrLineno, funcName, sourceFile string,
-	sourceLine libpf.SourceLineno) libpf.Frames {
+	sourceLine libpf.SourceLineno,
+) libpf.Frames {
 	frames := make(libpf.Frames, 0, 1)
 	frames.Append(&libpf.Frame{
 		Type:            ty,
@@ -304,8 +307,9 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 		foundFOOKey := false
 		foundBarValue := false
 
-		for _, attr := range profiles.ProfilesDictionary().AttributeTable().All() {
-			key := attr.Key()
+		dic := profiles.ProfilesDictionary()
+		for _, attr := range dic.AttributeTable().All() {
+			key := dic.StringTable().At(int(attr.KeyStrindex()))
 			value := attr.Value()
 			// Check if this is an environment variable attribute
 			if key == "process.environment_variable.FOO" {
@@ -421,14 +425,15 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 	assert.Contains(t, stringTableSlice, funcName)
 	assert.Contains(t, stringTableSlice, filePath)
 	// The function table should have the function name and file path indices set
-	require.Equal(t, 1, dic.FunctionTable().Len())
-	fn := dic.FunctionTable().At(0)
+	require.Equal(t, 2, dic.FunctionTable().Len())
+	fn := dic.FunctionTable().At(1)
 	assert.Equal(t, funcName, dic.StringTable().At(int(fn.NameStrindex())))
 	assert.Equal(t, filePath, dic.StringTable().At(int(fn.FilenameStrindex())))
 }
 
 func singleFrameNative(mappingFile libpf.FrameMappingFile, lineno libpf.AddressOrLineno,
-	mappingStart, mappingEnd libpf.Address, mappingFileOffset uint64) libpf.Frames {
+	mappingStart, mappingEnd libpf.Address, mappingFileOffset uint64,
+) libpf.Frames {
 	frames := make(libpf.Frames, 0, 1)
 	frames.Append(&libpf.Frame{
 		Type:              libpf.NativeFrame,
@@ -494,8 +499,8 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	// Verify profile contains one sample
 	assert.Equal(t, 1, prof.Sample().Len())
 	sample := prof.Sample().At(0)
-	assert.Len(t, sample.Value().AsRaw(), 1)
-	assert.Equal(t, int64(1), sample.Value().At(0)) // sampling count
+	assert.Len(t, sample.Values().AsRaw(), 1)
+	assert.Equal(t, int64(1), sample.Values().At(0)) // sampling count
 
 	// Check that the mapping table contains our native frame mapping
 	// (plus the dummy mapping at index 0)
@@ -528,6 +533,6 @@ func TestGenerate_NativeFrame(t *testing.T) {
 
 	// For native frames, function information is not populated in the function table
 	// since it's resolved by the backend. The function table should be empty.
-	assert.Equal(t, 0, dic.FunctionTable().Len(),
+	assert.Equal(t, 1, dic.FunctionTable().Len(),
 		"Function table should be empty for native frames")
 }
