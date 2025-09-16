@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/otel/metric/noop"
 )
 
 // TestMetrics
@@ -21,6 +22,9 @@ func TestMetrics(t *testing.T) {
 		{IDErrProcNotExist, MetricValue(20)},
 		{IDUnwindCallInterpreter, MetricValue(0)},
 	}
+
+	meter := noop.NewMeterProvider().Meter("test")
+	Start(meter)
 
 	AddSlice(inputMetrics[0:2])                    // 33, 55
 	Add(inputMetrics[1].ID, inputMetrics[1].Value) // 55, dropped
