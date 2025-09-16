@@ -264,11 +264,11 @@ static EBPF_INLINE u64 addr_for_tls_symbol(u64 symbol, bool dtv, u32 module_id)
 
     // DTV layout is the same across architectures:
     // DTV[0] = generation counter
-    // DTV[1] = reserved
-    // DTV[2] = module 1's TLS block
-    // DTV[3] = module 2's TLS block
+    // DTV[1] = module 1's TLS block
+    // DTV[2] = module 2's TLS block
     // ...
-    u64 dtv_offset = (module_id + 1) * sizeof(void *);
+    // size is 16, https://sourceware.org/git/?p=glibc.git;a=blob;f=sysdeps/generic/dl-dtv.h#l22
+    u64 dtv_offset = (module_id) * 16;
 
     if ((err = bpf_probe_read_user(&addr, sizeof(void *), (void *)(dtv_addr + dtv_offset)))) {
       DEBUG_PRINT(
