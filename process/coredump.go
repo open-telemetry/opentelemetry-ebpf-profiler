@@ -182,7 +182,7 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 			// Read the note header (name and size lengths), followed by reading
 			// their contents. This code advances the position in 'rdr' and should
 			// be kept together to parse the notes correctly.
-			if _, err = rdr.Read(libpf.SliceFrom(&note)); err != nil {
+			if _, err = rdr.Read(libpf.SliceFromPointer(&note)); err != nil {
 				break
 			}
 			var nameBytes, desc []byte

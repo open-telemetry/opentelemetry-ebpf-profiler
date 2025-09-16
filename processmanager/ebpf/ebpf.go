@@ -680,7 +680,7 @@ func (impl *ebpfMapsImpl) SupportsLPMTrieBatchOperations() bool {
 type ptrCastMarshaler[T any] []T
 
 func (r ptrCastMarshaler[T]) MarshalBinary() (data []byte, err error) {
-	return libpf.SliceFrom(r), nil
+	return libpf.SliceFromSlice(r), nil
 }
 
 // generateSlice returns a slice of type T and populates every value with its index.

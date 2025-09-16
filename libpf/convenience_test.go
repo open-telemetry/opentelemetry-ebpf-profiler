@@ -38,3 +38,33 @@ func TestIsValidString(t *testing.T) {
 		})
 	}
 }
+
+func TestSliceFromPointer(t *testing.T) {
+	s := 0xcafebabe
+	p := &s
+	actual := SliceFromPointer(p)
+	assert.Equal(t, []byte{0xbe, 0xba, 0xfe, 0xca, 0x0, 0x0, 0x0, 0x0}, actual)
+	assert.Panics(t, func() {
+		p = nil
+		SliceFromPointer(p)
+	})
+}
+
+func TestSliceFromSlice(t *testing.T) {
+	s := []uint64{0xcafebabe, 0xdeadbeef}
+	actual := SliceFromSlice(s)
+	expected := []byte{
+		0xbe, 0xba, 0xfe, 0xca, 0x0, 0x0, 0x0, 0x0,
+		0xef, 0xbe, 0xad, 0xde, 0x0, 0x0, 0x0, 0x0,
+	}
+	assert.Equal(t, expected, actual)
+	assert.NotPanics(t, func() {
+		s = nil
+		actual = SliceFromSlice(s)
+		expected = nil
+		assert.Equal(t, expected, actual)
+		s = []uint64{}
+		actual = SliceFromSlice(s)
+		assert.Equal(t, expected, actual)
+	})
+}

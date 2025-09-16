@@ -5,7 +5,6 @@ package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
 	"math/rand/v2"
-	"reflect"
 	"time"
 	"unsafe"
 
@@ -22,25 +21,22 @@ func AddJitter(baseDuration time.Duration, jitter float64) time.Duration {
 	return time.Duration((1 + jitter - 2*jitter*rand.Float64()) * float64(baseDuration))
 }
 
-// SliceFrom converts a Go struct pointer or slice to []byte to read data into
-func SliceFrom(data any) []byte {
-	var s []byte
-	val := reflect.ValueOf(data)
-	switch val.Kind() {
-	case reflect.Slice:
-		if val.Len() != 0 {
-			e := val.Index(0)
-			addr := e.Addr().UnsafePointer()
-			l := val.Len() * int(e.Type().Size())
-			s = unsafe.Slice((*byte)(addr), l)
-		}
-	case reflect.Ptr:
-		e := val.Elem()
-		addr := e.Addr().UnsafePointer()
-		l := int(e.Type().Size())
-		s = unsafe.Slice((*byte)(addr), l)
-	default:
-		panic("invalid type")
+// SliceFromPointer converts a Go struct pointer to []byte to read data into
+// data must be a non-nil pointer to a struct
+func SliceFromPointer[T any](data *T) []byte {
+	return unsafe.Slice(
+		(*byte)(unsafe.Pointer(data)),
+		int(unsafe.Sizeof(*data)),
+	)
+}
+
+// SliceFromSlice converts a Go slice to []byte to read data into
+func SliceFromSlice[T any](data []T) []byte {
+	if len(data) == 0 {
+		return nil
 	}
-	return s
+	return unsafe.Slice(
+		(*byte)(unsafe.Pointer(&data[0])),
+		len(data)*int(unsafe.Sizeof(data[0])),
+	)
 }
