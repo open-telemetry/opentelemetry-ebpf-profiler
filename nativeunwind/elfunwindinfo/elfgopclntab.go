@@ -476,6 +476,12 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	return g, nil
 }
 
+// SetDontNeed gives advice about further use of memory.
+func (g *Gopclntab) SetDontNeed() error {
+	g.setDontNeed()
+	return nil
+}
+
 // Close releases the pfelf Data reference taken.
 func (g *Gopclntab) Close() error {
 	return g.dataRef.Close()
@@ -529,7 +535,6 @@ func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
 
 // Symbolize returns the file, line and function information for given PC
 func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
-	defer g.setDontNeed()
 	index := sort.Search(g.numFuncs, func(i int) bool {
 		funcPc, _ := g.getFuncMapEntry(i)
 		return funcPc > pc
