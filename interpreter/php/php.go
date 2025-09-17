@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
 	"github.com/elastic/go-freelru"
 
@@ -180,7 +181,7 @@ func determinePHPVersion(ef *pfelf.File) (uint, error) {
 		if zeroIdx < 0 {
 			continue
 		}
-		version, err := versionExtract(unsafe.String(unsafe.SliceData(rodata[idx:]), zeroIdx))
+		version, err := versionExtract(pfunsafe.ByteSlice2String(rodata[idx : idx+zeroIdx]))
 		if err != nil {
 			continue
 		}
