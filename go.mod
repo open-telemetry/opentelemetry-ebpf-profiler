@@ -18,14 +18,14 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tklauser/numcpus v0.10.0
 	github.com/zeebo/xxh3 v1.0.2
-	go.opentelemetry.io/collector/component v1.41.1-0.20250915160638-4b4e557b86cb
-	go.opentelemetry.io/collector/consumer/consumertest v0.135.1-0.20250915160638-4b4e557b86cb
-	go.opentelemetry.io/collector/consumer/xconsumer v0.135.1-0.20250915160638-4b4e557b86cb
-	go.opentelemetry.io/collector/pdata v1.41.1-0.20250915160638-4b4e557b86cb
-	go.opentelemetry.io/collector/pdata/pprofile v0.135.1-0.20250915160638-4b4e557b86cb
-	go.opentelemetry.io/collector/receiver v1.41.1-0.20250915160638-4b4e557b86cb
-	go.opentelemetry.io/collector/receiver/receivertest v0.135.1-0.20250915160638-4b4e557b86cb
-	go.opentelemetry.io/collector/receiver/xreceiver v0.135.1-0.20250915160638-4b4e557b86cb
+	go.opentelemetry.io/collector/component v1.41.1-0.20250916174658-67147711bfd4
+	go.opentelemetry.io/collector/consumer/consumertest v0.135.1-0.20250916174658-67147711bfd4
+	go.opentelemetry.io/collector/consumer/xconsumer v0.135.1-0.20250916174658-67147711bfd4
+	go.opentelemetry.io/collector/pdata v1.41.1-0.20250916174658-67147711bfd4
+	go.opentelemetry.io/collector/pdata/pprofile v0.135.1-0.20250916174658-67147711bfd4
+	go.opentelemetry.io/collector/receiver v1.41.1-0.20250916174658-67147711bfd4
+	go.opentelemetry.io/collector/receiver/receivertest v0.135.1-0.20250916174658-67147711bfd4
+	go.opentelemetry.io/collector/receiver/xreceiver v0.135.1-0.20250916174658-67147711bfd4
 	go.opentelemetry.io/otel v1.38.0
 	go.opentelemetry.io/otel/metric v1.38.0
 	golang.org/x/arch v0.21.0
