@@ -154,4 +154,7 @@ type Instance interface {
 	// GetAndResetMetrics collects the metrics from the Instance and resets
 	// the counters to their initial value.
 	GetAndResetMetrics() ([]metrics.Metric, error)
+
+	// Release resources that are used to symbolize a stack.
+	ReleaseResources() error
 }

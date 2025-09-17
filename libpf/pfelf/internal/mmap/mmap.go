@@ -117,8 +117,10 @@ func Open(filename string) (*ReaderAt, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	r := &ReaderAt{data: data}
 	r.refCount.Store(1)
 	runtime.SetFinalizer(r, (*ReaderAt).Close)
+	r.setRandom()
 	return r, nil
 }

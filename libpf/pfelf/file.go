@@ -33,6 +33,8 @@ import (
 	"syscall"
 	"unsafe"
 
+	log "github.com/sirupsen/logrus"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -879,6 +881,15 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 	p := make([]byte, sh.FileSize)
 	_, err := sh.ReadAt(p, 0)
 	return p, err
+}
+
+// SetDontNeed sets the flag MADV_DONTNEED on the mmaped data.
+func (f *File) SetDontNeed() {
+	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
+		if err := mapping.SetMadvDontNeed(); err != nil {
+			log.Errorf("Failed to set MADV_DONTNEED: %v", err)
+		}
+	}
 }
 
 // ReadAt reads bytes from given virtual address

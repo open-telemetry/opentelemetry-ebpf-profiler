@@ -33,3 +33,7 @@ func (is *InstanceStubs) Symbolize(*host.Frame, *libpf.Frames) error {
 func (is *InstanceStubs) GetAndResetMetrics() ([]metrics.Metric, error) {
 	return []metrics.Metric{}, nil
 }
+
+func (is *InstanceStubs) ReleaseResources() error {
+	return nil
+}
