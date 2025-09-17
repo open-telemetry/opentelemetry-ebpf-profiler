@@ -1,4 +1,4 @@
-package pfunsafe
+package pfunsafe // import "go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
 import "unsafe"
 
