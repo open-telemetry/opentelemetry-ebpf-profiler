@@ -236,16 +236,9 @@ func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, bpfFrame *host.Frame, fr
 		len(pm.interpreters[pid]), errSymbolizationNotSupported)
 }
 
-func (pm *ProcessManager) ConvertFrame(pid libpf.PID, frame *host.Frame, dst *libpf.Frames) {
-	if frame.Type.IsError() {
-		if !pm.filterErrorFrames {
-			dst.Append(&libpf.Frame{
-				Type:            frame.Type,
-				AddressOrLineno: frame.Lineno,
-			})
-		}
-	}
-
+// convertFrame converts one host Frame to one or more libpf.Frames. It returns true
+// if non-trivial cacheable conversion was done.
+func (pm *ProcessManager) convertFrame(pid libpf.PID, frame *host.Frame, dst *libpf.Frames) bool {
 	switch frame.Type.Interpreter() {
 	case libpf.UnknownInterp:
 		log.Errorf("Unexpected frame type 0x%02X (neither error nor interpreter frame)",
@@ -284,11 +277,19 @@ func (pm *ProcessManager) ConvertFrame(pid libpf.PID, frame *host.Frame, dst *li
 		// Attempt symbolization of native frames. It is best effort and
 		// provides non-symbolized frames if no native symbolizer is active.
 		if err := pm.symbolizeFrame(pid, frame, dst); err == nil {
-			return
+			return true
 		}
 
-		mappingFile, ok := pm.FileIDMapper.Get(frame.File)
-		if !ok {
+		if mappingFile, ok := pm.FileIDMapper.Get(frame.File); ok {
+			dst.Append(&libpf.Frame{
+				Type:              frame.Type,
+				AddressOrLineno:   relativeRIP,
+				MappingStart:      mappingStart,
+				MappingEnd:        mappingEnd,
+				MappingFileOffset: fileOffset,
+				MappingFile:       mappingFile,
+			})
+		} else {
 			log.Debugf(
 				"file ID lookup failed for PID %d, frame type %d",
 				pid, frame.Type)
@@ -299,26 +300,17 @@ func (pm *ProcessManager) ConvertFrame(pid libpf.PID, frame *host.Frame, dst *li
 				MappingEnd:        mappingEnd,
 				MappingFileOffset: fileOffset,
 			})
-			return
 		}
-
-		dst.Append(&libpf.Frame{
-			Type:              frame.Type,
-			AddressOrLineno:   relativeRIP,
-			MappingStart:      mappingStart,
-			MappingEnd:        mappingEnd,
-			MappingFileOffset: fileOffset,
-			MappingFile:       mappingFile,
-		})
 	default:
 		err := pm.symbolizeFrame(pid, frame, dst)
-		if err != nil {
-			log.Debugf(
-				"symbolization failed for PID %d, frame type %d: %v",
-				pid, frame.Type, err)
-			dst.Append(&libpf.Frame{Type: frame.Type})
+		if err == nil {
+			return true
 		}
+		log.Debugf("symbolization failed for PID %d, frame type %d: %v",
+			pid, frame.Type, err)
+		dst.Append(&libpf.Frame{Type: frame.Type})
 	}
+	return false
 }
 
 func (pm *ProcessManager) maybeNotifyAPMAgent(
@@ -378,8 +370,21 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *host.Trace) {
 	}
 	copy(trace.Frames, bpfTrace.KernelFrames)
 
+	cacheMiss := uint64(0)
+	cacheHit := uint64(0)
+
 	for i := range bpfTrace.Frames {
 		frame := &bpfTrace.Frames[i]
+		if frame.Type.IsError() {
+			if !pm.filterErrorFrames {
+				trace.Frames.Append(&libpf.Frame{
+					Type:            frame.Type,
+					AddressOrLineno: frame.Lineno,
+				})
+			}
+			continue
+		}
+
 		oldLen := len(trace.Frames)
 		key := frameCacheKey{Frame: *frame}
 		switch frame.Type {
@@ -392,16 +397,24 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *host.Trace) {
 		}
 		if cached, ok := pm.frameCache.GetAndRefresh(key, frameCacheLifetime); ok {
 			// Fast path
+			cacheHit++
 			pm.frameCacheHit.Add(1)
 			for _, val := range cached {
 				trace.Frames = append(trace.Frames, val)
 			}
 		} else {
 			// Slow path: convert trace.
-			pm.frameCacheMiss.Add(1)
-			pm.ConvertFrame(pid, frame, &trace.Frames)
-			pm.frameCache.Add(key, slices.Clone(trace.Frames[oldLen:len(trace.Frames)]))
+			if pm.convertFrame(pid, frame, &trace.Frames) {
+				cacheMiss++
+				pm.frameCache.Add(key, slices.Clone(trace.Frames[oldLen:len(trace.Frames)]))
+			}
 		}
+	}
+	if cacheMiss != 0 {
+		pm.frameCacheMiss.Add(cacheMiss)
+	}
+	if cacheHit != 0 {
+		pm.frameCacheHit.Add(cacheHit)
 	}
 
 	// Release resources that were used to symbolize this stack.
