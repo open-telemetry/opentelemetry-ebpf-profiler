@@ -10,8 +10,13 @@ type locationInfo struct {
 	functionIndex int32
 }
 
-// funcInfo is a helper to construct profile.Function messages.
+// funcInfo is a helper used to deduplicate Functions.
 type funcInfo struct {
 	nameIdx     int32
 	fileNameIdx int32
+}
+
+// stackInfo is a helper used to deduplicate Stacks.
+type stackInfo struct {
+	locationIndices string
 }

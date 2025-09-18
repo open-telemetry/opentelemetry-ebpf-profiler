@@ -46,18 +46,22 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	stringSet := make(orderedset.OrderedSet[string], 64)
 	funcSet := make(orderedset.OrderedSet[funcInfo], 64)
 	mappingSet := make(orderedset.OrderedSet[uniqueMapping], 64)
+	stackSet := make(orderedset.OrderedSet[stackInfo], 64)
 	locationSet := make(orderedset.OrderedSet[locationInfo], 64)
 
 	// By specification, the first element should be empty.
 	stringSet.Add("")
 	funcSet.Add(funcInfo{})
 	mappingSet.Add(uniqueMapping{})
+	stackSet.Add(stackInfo{})
 	locationSet.Add(locationInfo{})
+
 	dic.LinkTable().AppendEmpty()
 	dic.MappingTable().AppendEmpty()
 	dic.StackTable().AppendEmpty()
 	dic.AttributeTable().AppendEmpty()
 	dic.LocationTable().AppendEmpty()
+
 	attrMgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
 
 	for containerID, originToEvents := range tree {
@@ -87,7 +91,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic,
-				attrMgr, stringSet, funcSet, mappingSet, locationSet,
+				attrMgr, stringSet, funcSet, mappingSet, stackSet, locationSet,
 				origin, originToEvents[origin], prof); err != nil {
 				return profiles, err
 			}
@@ -123,6 +127,7 @@ func (p *Pdata) setProfile(
 	stringSet orderedset.OrderedSet[string],
 	funcSet orderedset.OrderedSet[funcInfo],
 	mappingSet orderedset.OrderedSet[uniqueMapping],
+	stackSet orderedset.OrderedSet[stackInfo],
 	locationSet orderedset.OrderedSet[locationInfo],
 	origin libpf.Origin,
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
@@ -152,8 +157,6 @@ func (p *Pdata) setProfile(
 	startTS, endTS := uint64(math.MaxUint64), uint64(0)
 	for traceKey, traceInfo := range events {
 		sample := profile.Sample().AppendEmpty()
-		sample.SetStackIndex(int32(dic.StackTable().Len()))
-		stack := dic.StackTable().AppendEmpty()
 
 		for _, ts := range traceInfo.Timestamps {
 			startTS = min(startTS, ts)
@@ -165,6 +168,7 @@ func (p *Pdata) setProfile(
 			sample.Values().Append(traceInfo.OffTimes...)
 		}
 
+		locationIndices := make([]int32, 0, len(traceInfo.Frames))
 		// Walk every frame of the trace.
 		for _, uniqueFrame := range traceInfo.Frames {
 			frame := uniqueFrame.Value()
@@ -229,8 +233,19 @@ func (p *Pdata) setProfile(
 				attrMgr.AppendOptionalString(loc.AttributeIndices(),
 					semconv.ProfileFrameTypeKey, locInfo.frameType)
 			}
-			stack.LocationIndices().Append(idx)
+			locationIndices = append(locationIndices, idx)
 		} // End per-frame processing
+
+		stackIdx, exists := stackSet.AddWithCheck(stackInfo{
+			locationIndices: fmt.Sprintf("%v", locationIndices)})
+		if !exists {
+			// Add a new Stack to the dictionary
+			stack := dic.StackTable().AppendEmpty()
+			for _, locIdx := range locationIndices {
+				stack.LocationIndices().Append(locIdx)
+			}
+		}
+		sample.SetStackIndex(stackIdx)
 
 		exeName := traceKey.ExecutablePath
 		if exeName != "" {
