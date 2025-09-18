@@ -159,15 +159,10 @@ func (p *Pdata) setProfile(
 			startTS = min(startTS, ts)
 			endTS = max(endTS, ts)
 		}
-		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
 
-		switch origin {
-		case support.TraceOriginSampling:
-			sample.Values().Append(1)
-		case support.TraceOriginOffCPU:
+		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
+		if origin == support.TraceOriginOffCPU {
 			sample.Values().Append(traceInfo.OffTimes...)
-		case support.TraceOriginUProbe:
-			sample.Values().Append(1)
 		}
 
 		// Walk every frame of the trace.

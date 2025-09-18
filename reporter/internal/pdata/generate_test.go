@@ -466,7 +466,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 		support.TraceOriginSampling: {
 			traceKey: &samples.TraceEvents{
 				Frames:     singleFrameNative(mappingFile, 0x1000, 0x1000, 0x2000, 0x100),
-				Timestamps: []uint64{789},
+				Timestamps: []uint64{123, 456, 789},
 			},
 		},
 	}
@@ -493,14 +493,14 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	// Check profile
 	require.Equal(t, 1, sp.Profiles().Len())
 	prof := sp.Profiles().At(0)
-	assert.Equal(t, pcommon.Timestamp(789), prof.Time())
-	assert.Equal(t, pcommon.Timestamp(0), prof.Duration())
+	assert.Equal(t, pcommon.Timestamp(123), prof.Time())
+	assert.Equal(t, pcommon.Timestamp(666), prof.Duration())
 
 	// Verify profile contains one sample
 	assert.Equal(t, 1, prof.Sample().Len())
 	sample := prof.Sample().At(0)
-	assert.Len(t, sample.Values().AsRaw(), 1)
-	assert.Equal(t, int64(1), sample.Values().At(0)) // sampling count
+	assert.Len(t, sample.Values().AsRaw(), 0)
+	assert.Len(t, sample.TimestampsUnixNano().AsRaw(), 3)
 
 	// Check that the mapping table contains our native frame mapping
 	// (plus the dummy mapping at index 0)
