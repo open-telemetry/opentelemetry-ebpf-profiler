@@ -94,7 +94,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 	}
 	elfInfoCache.SetLifetime(elfInfoCacheTTL)
 
-	frameCache, err := lru.NewSynced[frameCacheKey, libpf.Frames](frameCacheSize, hashFrameCacheKey)
+	frameCache, err := lru.New[frameCacheKey, libpf.Frames](frameCacheSize, hashFrameCacheKey)
 	if err != nil {
 		return nil, err
 	}
@@ -346,6 +346,10 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 	return uint32(uint64(fk.Frame.File) + uint64(fk.Frame.Lineno))
 }
 
+// HandleTrace processes and reports the given host.Trace. This is function
+// is not re-entrant due to frameCache not being synced. If the tracer is
+// later updated to distribute trace handling to goroutine pool, the caching
+// strategy needs to be updated accordingly.
 func (pm *ProcessManager) HandleTrace(bpfTrace *host.Trace) {
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(bpfTrace.KTime.UnixNano()),

@@ -98,7 +98,7 @@ type ProcessManager struct {
 	// frameCache stores mappings from BPF frame to the symbolized frames.
 	// This allows avoiding the overhead of re-doing user-mode symbolization
 	// of frames that we have recently seen already.
-	frameCache *lru.SyncedLRU[frameCacheKey, libpf.Frames]
+	frameCache *lru.LRU[frameCacheKey, libpf.Frames]
 
 	// traceReporter is the interface to report traces
 	traceReporter reporter.TraceReporter
