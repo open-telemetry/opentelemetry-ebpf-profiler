@@ -35,18 +35,22 @@ type Option func(*ControllerOption)
 type ControllerOption struct {
 	ExecutableReporter reporter.ExecutableReporter
 	OnShutdown         func()
+	ReporterFactory    func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
 	nextConsumer xconsumer.Profiles, opts ...Option) (*Controller, error) {
 	controllerOption := ControllerOption{}
+	controllerOption.ReporterFactory = func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error) {
+		return reporter.NewCollector(cfg, nextConsumer)
+	}
 	for _, opt := range opts {
 		opt(&controllerOption)
 	}
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
-	rep, err := reporter.NewCollector(&reporter.Config{
+	reporterConfig := &reporter.Config{
 		Name:                   ctrlName,
 		Version:                vc.Version(),
 		MaxRPCMsgSize:          32 << 20, // 32 MiB
@@ -56,7 +60,9 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
 		ReportInterval:         intervals.ReportInterval(),
 		SamplesPerSecond:       cfg.SamplesPerSecond,
-	}, nextConsumer)
+	}
+
+	rep, err := controllerOption.ReporterFactory(reporterConfig, nextConsumer)
 	if err != nil {
 		return nil, err
 	}
