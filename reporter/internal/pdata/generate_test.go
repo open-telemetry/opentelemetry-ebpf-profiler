@@ -96,7 +96,7 @@ func TestGetDummyMappingIndex(t *testing.T) {
 	}
 }
 
-func newTestFrames() libpf.Frames {
+func newTestFrames(extraFrame bool) libpf.Frames {
 	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 		FileID: libpf.NewFileID(2, 3),
 	})
@@ -131,6 +131,15 @@ func newTestFrames() libpf.Frames {
 		FunctionName:    libpf.Intern("func5"),
 		MappingFile:     mappingFile,
 	})
+
+	if extraFrame {
+		frames.Append(&libpf.Frame{
+			Type:            libpf.KernelFrame,
+			AddressOrLineno: 0x5ef,
+			FunctionName:    libpf.Intern("func6"),
+			MappingFile:     mappingFile,
+		})
+	}
 	return frames
 }
 
@@ -152,14 +161,19 @@ func TestFunctionTableOrder(t *testing.T) {
 			expectedResourceProfiles: 1,
 			events: map[libpf.Origin]samples.KeyToEventMapping{
 				support.TraceOriginSampling: map[samples.TraceAndMetaKey]*samples.TraceEvents{
-					{}: {
-						Frames:     newTestFrames(),
+					{Pid: 1}: {
+						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
+					},
+					// Test Function deduplication
+					{Pid: 2}: {
+						Frames:     newTestFrames(true),
+						Timestamps: []uint64{6, 7, 8, 9, 10, 11},
 					},
 				},
 			},
 			wantFunctionTable: []string{
-				"", "func1", "func2", "func3", "func4", "func5",
+				"", "func1", "func2", "func3", "func4", "func5", "func6",
 			},
 		},
 	} {
@@ -535,4 +549,72 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	// since it's resolved by the backend. The function table should be empty.
 	assert.Equal(t, 1, dic.FunctionTable().Len(),
 		"Function table should be empty for native frames")
+}
+
+func TestStackTableOrder(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		events map[libpf.Origin]samples.KeyToEventMapping
+
+		wantStackTable           [][]int32
+		expectedLocationTableLen int
+	}{
+		{
+			name: "single stack",
+			events: map[libpf.Origin]samples.KeyToEventMapping{
+				support.TraceOriginSampling: map[samples.TraceAndMetaKey]*samples.TraceEvents{
+					{}: {
+						Frames:     newTestFrames(false),
+						Timestamps: []uint64{1, 2, 3, 4, 5},
+					},
+				},
+			},
+			wantStackTable: [][]int32{
+				nil, {1, 2, 3, 4, 5},
+			},
+			expectedLocationTableLen: 6,
+		},
+		{
+			name: "multiple stacks",
+			events: map[libpf.Origin]samples.KeyToEventMapping{
+				support.TraceOriginSampling: map[samples.TraceAndMetaKey]*samples.TraceEvents{
+					{Pid: 1}: {
+						Frames:     newTestFrames(false),
+						Timestamps: []uint64{1, 2, 3, 4, 5},
+					},
+					{Pid: 2}: {
+						Frames:     newTestFrames(true),
+						Timestamps: []uint64{7, 8, 9, 10, 11, 12},
+					},
+					{Pid: 3}: {
+						Frames:     newTestFrames(false),
+						Timestamps: []uint64{13, 14, 15, 16, 17},
+					},
+				},
+			},
+			wantStackTable: [][]int32{
+				nil,
+				{1, 2, 3, 4, 5},
+				{1, 2, 3, 4, 5, 6},
+			},
+			expectedLocationTableLen: 7,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			d, err := New(100, nil)
+			require.NoError(t, err)
+			tree := make(samples.TraceEventsTree)
+			tree[""] = tt.events
+			res, _ := d.Generate(tree, tt.name, "version")
+
+			dic := res.ProfilesDictionary()
+
+			require.Equal(t, tt.expectedLocationTableLen, dic.LocationTable().Len())
+			require.Equal(t, len(tt.wantStackTable), dic.StackTable().Len())
+			for i := 0; i < dic.StackTable().Len(); i++ {
+				locationIndices := dic.StackTable().At(i).LocationIndices().AsRaw()
+				assert.Equal(t, tt.wantStackTable[i], locationIndices)
+			}
+		})
+	}
 }
