@@ -18,17 +18,21 @@ import (
 )
 
 var (
-	errInvalidConfig = errors.New("invalid config")
+	// ErrInvalidConfig is returned when the config is invalid.
+	ErrInvalidConfig = errors.New("invalid config")
 )
 
-func CreateProfilesReceiver(
+// BuildProfilesReceiver builds a profiles receiver.
+// It creates a controller with the provided config and options.
+func BuildProfilesReceiver(
 	_ context.Context,
 	rs receiver.Settings,
 	baseCfg component.Config,
-	nextConsumer xconsumer.Profiles) (xreceiver.Profiles, error) {
+	nextConsumer xconsumer.Profiles,
+	opts ...internal.Option) (xreceiver.Profiles, error) {
 	cfg, ok := baseCfg.(*Config)
 	if !ok {
-		return nil, errInvalidConfig
+		return nil, ErrInvalidConfig
 	}
 
 	controlerCfg := controller.Config{
@@ -44,9 +48,10 @@ func CreateProfilesReceiver(
 		OffCPUThreshold:        cfg.OffCPUThreshold,
 		IncludeEnvVars:         cfg.IncludeEnvVars,
 	}
-	return internal.NewController(&controlerCfg, rs, nextConsumer)
+	return internal.NewController(&controlerCfg, rs, nextConsumer, opts...)
 }
 
+// Config is the configuration for the profiles receiver.
 type Config struct {
 	ReporterInterval       time.Duration `mapstructure:"reporter_interval"`
 	MonitorInterval        time.Duration `mapstructure:"monitor_interval"`

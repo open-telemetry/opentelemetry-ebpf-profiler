@@ -27,8 +27,20 @@ type Controller struct {
 	ctlr *controller.Controller
 }
 
+// Option is a function that allows to configure a ControllerOption.
+type Option func(*ControllerOption)
+
+// ControllerOption is the extra configuration for the controller.
+type ControllerOption struct {
+	ExecutableReporter reporter.ExecutableReporter
+}
+
 func NewController(cfg *controller.Config, rs receiver.Settings,
-	nextConsumer xconsumer.Profiles) (*Controller, error) {
+	nextConsumer xconsumer.Profiles, opts ...Option) (*Controller, error) {
+	controllerOption := ControllerOption{}
+	for _, opt := range opts {
+		opt(&controllerOption)
+	}
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
@@ -47,6 +59,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 		return nil, err
 	}
 	cfg.Reporter = rep
+	cfg.ExecutableReporter = controllerOption.ExecutableReporter
 
 	// Provide internal metrics via the collectors telemetry.
 	meter := rs.MeterProvider.Meter(ctrlName)

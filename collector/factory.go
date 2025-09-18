@@ -4,9 +4,11 @@
 package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 
 import (
+	"context"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/xreceiver"
 	"go.opentelemetry.io/ebpf-profiler/collector/receiverhelper"
@@ -21,7 +23,20 @@ func NewFactory() receiver.Factory {
 	return xreceiver.NewFactory(
 		typeStr,
 		defaultConfig,
-		xreceiver.WithProfiles(receiverhelper.CreateProfilesReceiver, component.StabilityLevelAlpha))
+		xreceiver.WithProfiles(createProfilesReceiver, component.StabilityLevelAlpha))
+}
+
+func createProfilesReceiver(
+	ctx context.Context,
+	rs receiver.Settings,
+	baseCfg component.Config,
+	nextConsumer xconsumer.Profiles) (xreceiver.Profiles, error) {
+	return receiverhelper.BuildProfilesReceiver(
+		ctx,
+		rs,
+		baseCfg,
+		nextConsumer,
+	)
 }
 
 func defaultConfig() component.Config {
