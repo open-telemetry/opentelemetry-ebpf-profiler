@@ -24,7 +24,8 @@ const (
 // Controller is a bridge between the Collector's [receiverprofiles.Profiles]
 // interface and our [internal.Controller]
 type Controller struct {
-	ctlr *controller.Controller
+	ctlr       *controller.Controller
+	onShutdown func()
 }
 
 // Option is a function that allows to configure a ControllerOption.
@@ -33,6 +34,7 @@ type Option func(*ControllerOption)
 // ControllerOption is the extra configuration for the controller.
 type ControllerOption struct {
 	ExecutableReporter reporter.ExecutableReporter
+	OnShutdown         func()
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
@@ -66,7 +68,8 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	metrics.Start(meter)
 
 	return &Controller{
-		ctlr: controller.New(cfg),
+		ctlr:       controller.New(cfg),
+		onShutdown: controllerOption.OnShutdown,
 	}, nil
 }
 
@@ -77,6 +80,9 @@ func (c *Controller) Start(ctx context.Context, _ component.Host) error {
 
 // Shutdown stops the receiver.
 func (c *Controller) Shutdown(_ context.Context) error {
+	if c.onShutdown != nil {
+		c.onShutdown()
+	}
 	c.ctlr.Shutdown()
 	return nil
 }

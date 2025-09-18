@@ -14,3 +14,10 @@ func WithExecutableReporter(executableReporter reporter.ExecutableReporter) inte
 		option.ExecutableReporter = executableReporter
 	}
 }
+
+// WithOnShutdown is a function that allows to define a callback to be called when the controller is shutdown.
+func WithOnShutdown(onShutdown func()) internal.Option {
+	return func(option *internal.ControllerOption) {
+		option.OnShutdown = onShutdown
+	}
+}
