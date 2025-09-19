@@ -582,6 +582,10 @@ func TestStackTableOrder(t *testing.T) {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
 					},
+				},
+				// This test relies on an implementation detail for ordering of results:
+				// it assumes that support.TraceOriginSampling events are processed first
+				support.TraceOriginOffCPU: map[samples.TraceAndMetaKey]*samples.TraceEvents{
 					{Pid: 2}: {
 						Frames:     newTestFrames(true),
 						Timestamps: []uint64{7, 8, 9, 10, 11, 12},
