@@ -7,6 +7,7 @@
 package modulestore // import "go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 
 import (
+	"archive/tar"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -330,6 +331,36 @@ func (store *Store) UnpackModule(id ID, out io.Writer) error {
 	}
 
 	return nil
+}
+
+// ExportModule exports a compressed module from the store, writing it to the given writer.
+func (store *Store) ExportModule(id ID, tw *tar.Writer) error {
+	localPath, err := store.ensurePresentLocally(id)
+	if err != nil {
+		return err
+	}
+	file, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	fi, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	hdr := &tar.Header{
+		Name:    localPath,
+		Mode:    0644,
+		Size:    int64(fi.Size()),
+		ModTime: fi.ModTime(),
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		return err
+	}
+	_, err = io.Copy(tw, file)
+	return err
 }
 
 // IsPresentRemotely checks whether a module is present in the remote data-store.
