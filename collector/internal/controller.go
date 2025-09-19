@@ -29,7 +29,9 @@ type Controller struct {
 }
 
 // Option is a function that allows to configure a ControllerOption.
-type Option func(*ControllerOption)
+type Option interface {
+	Apply(*ControllerOption) *ControllerOption
+}
 
 // ControllerOption is the extra configuration for the controller.
 type ControllerOption struct {
@@ -40,12 +42,12 @@ type ControllerOption struct {
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
 	nextConsumer xconsumer.Profiles, opts ...Option) (*Controller, error) {
-	controllerOption := ControllerOption{}
+	controllerOption := &ControllerOption{}
 	controllerOption.ReporterFactory = func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error) {
 		return reporter.NewCollector(cfg, nextConsumer)
 	}
 	for _, opt := range opts {
-		opt(&controllerOption)
+		controllerOption = opt.Apply(controllerOption)
 	}
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
