@@ -14,7 +14,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"go.opentelemetry.io/otel/attribute"
 
-	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.36.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
@@ -268,10 +268,10 @@ func (p *Pdata) setProfile(
 			semconv.ThreadIDKey, traceKey.Tid)
 
 		for key, value := range traceInfo.EnvVars {
+			env := semconv.ProcessEnvironmentVariable(key, value)
 			attrMgr.AppendOptionalString(
 				sample.AttributeIndices(),
-				attribute.Key("process.environment_variable."+key),
-				value)
+				env.Key, env.Value.AsString())
 		}
 		for key, value := range traceInfo.Labels {
 			// Once https://github.com/open-telemetry/semantic-conventions/issues/2561
