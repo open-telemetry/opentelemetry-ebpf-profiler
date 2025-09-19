@@ -78,34 +78,38 @@ type traceHandler struct {
 // newTraceHandler creates a new traceHandler
 func newTraceHandler(ctx context.Context, rep reporter.TraceReporter,
 	traceProcessor TraceProcessor, intervals Times, cacheSize uint32) (*traceHandler, error) {
-	traceCache, err := lru.NewSynced[host.TraceHash, libpf.Trace](
-		cacheSize, func(k host.TraceHash) uint32 { return uint32(k) })
-	if err != nil {
-		return nil, err
-	}
-	// Do not hold elements indefinitely in the cache.
-	traceCache.SetLifetime(traceCacheLifetime)
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		wg.Done()
-		ticker := time.NewTicker(traceCacheLifetime)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				traceCache.PurgeExpired()
-			}
+	var traceCache *lru.SyncedLRU[host.TraceHash, libpf.Trace]
+	var err error
+	if cacheSize > 0 {
+		traceCache, err = lru.NewSynced[host.TraceHash, libpf.Trace](
+			cacheSize, func(k host.TraceHash) uint32 { return uint32(k) })
+		if err != nil {
+			return nil, err
 		}
-	}()
+		// Do not hold elements indefinitely in the cache.
+		traceCache.SetLifetime(traceCacheLifetime)
 
-	// Wait to make sure the purge routine did start.
-	wg.Wait()
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		go func() {
+			wg.Done()
+			ticker := time.NewTicker(traceCacheLifetime)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					traceCache.PurgeExpired()
+				}
+			}
+		}()
+
+		// Wait to make sure the purge routine did start.
+		wg.Wait()
+	}
 
 	return &traceHandler{
 		traceProcessor: traceProcessor,
@@ -113,6 +117,23 @@ func newTraceHandler(ctx context.Context, rep reporter.TraceReporter,
 		reporter:       rep,
 		times:          intervals,
 	}, nil
+}
+
+func (m *traceHandler) getOrConvertTrace(bpfTrace *host.Trace) *libpf.Trace {
+	if m.traceCache != nil {
+		if trace, exists := m.traceCache.GetAndRefresh(bpfTrace.Hash,
+			traceCacheLifetime); exists {
+			m.traceCacheHit++
+			return &trace
+		}
+		m.traceCacheMiss++
+	}
+
+	trace := m.traceProcessor.ConvertTrace(bpfTrace)
+	if m.traceCache != nil {
+		m.traceCache.Add(bpfTrace.Hash, *trace)
+	}
+	return trace
 }
 
 func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
@@ -131,24 +152,9 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		EnvVars:        bpfTrace.EnvVars,
 	}
 
-	if trace, exists := m.traceCache.GetAndRefresh(bpfTrace.Hash,
-		traceCacheLifetime); exists {
-		m.traceCacheHit++
-		// Fast path
-		meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
-		if err := m.reporter.ReportTraceEvent(&trace, meta); err != nil {
-			log.Errorf("Failed to report trace event: %v", err)
-		}
-		return
-	}
-	m.traceCacheMiss++
-
-	// Slow path: convert trace.
-	umTrace := m.traceProcessor.ConvertTrace(bpfTrace)
-	m.traceCache.Add(bpfTrace.Hash, *umTrace)
-
-	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
-	if err := m.reporter.ReportTraceEvent(umTrace, meta); err != nil {
+	trace := m.getOrConvertTrace(bpfTrace)
+	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
+	if err := m.reporter.ReportTraceEvent(trace, meta); err != nil {
 		log.Errorf("Failed to report trace event: %v", err)
 	}
 }
