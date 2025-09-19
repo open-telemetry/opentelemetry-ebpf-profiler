@@ -54,8 +54,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to read CPU file: %w", err)
 	}
 
-	traceHandlerCacheSize :=
-		traceCacheSize(c.config.MonitorInterval, c.config.SamplesPerSecond, uint16(presentCores))
+	traceHandlerCacheSize := traceCacheSize(c.config.MonitorInterval, c.config.SamplesPerSecond, uint16(presentCores))
 
 	intervals := times.New(c.config.ReporterInterval, c.config.MonitorInterval,
 		c.config.ProbabilisticInterval)
@@ -99,6 +98,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		IncludeEnvVars:         envVars,
 		UProbeLinks:            c.config.UProbeLinks,
 		LoadProbe:              c.config.LoadProbe,
+		ExecutableReporter:     c.config.ExecutableReporter,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
@@ -171,7 +171,8 @@ func (c *Controller) Shutdown() {
 }
 
 func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
-	intervals *times.Times, trc *tracer.Tracer, cacheSize uint32) error {
+	intervals *times.Times, trc *tracer.Tracer, cacheSize uint32,
+) error {
 	// Spawn monitors for the various result maps
 	traceCh := make(chan *host.Trace)
 
@@ -195,7 +196,8 @@ func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
 // (e.g. too many CPU cores present) as we end up using too much memory. A minimum size is
 // therefore used here.
 func traceCacheSize(monitorInterval time.Duration, samplesPerSecond int,
-	presentCPUCores uint16) uint32 {
+	presentCPUCores uint16,
+) uint32 {
 	const (
 		traceCacheIntervals = 6
 		traceCacheMinSize   = 65536
@@ -208,6 +210,7 @@ func traceCacheSize(monitorInterval time.Duration, samplesPerSecond int,
 }
 
 func maxElementsPerInterval(monitorInterval time.Duration, samplesPerSecond int,
-	presentCPUCores uint16) uint32 {
+	presentCPUCores uint16,
+) uint32 {
 	return uint32(uint16(samplesPerSecond) * uint16(monitorInterval.Seconds()) * presentCPUCores)
 }
