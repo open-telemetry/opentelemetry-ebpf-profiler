@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
@@ -204,7 +205,7 @@ func (d *hotspotInstance) getSymbol(addr libpf.Address) libpf.String {
 			return libpf.NullString
 		}
 	}
-	s := unsafe.String(unsafe.SliceData(tmp), len(tmp))
+	s := pfunsafe.ToString(tmp)
 	if !util.IsValidString(s) {
 		log.Debugf("Extracted Hotspot symbol is invalid at 0x%x '%v'", addr, tmp)
 		return libpf.NullString

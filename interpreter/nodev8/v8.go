@@ -172,6 +172,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
@@ -842,7 +843,7 @@ func (i *v8Instance) extractString(ptr libpf.Address, tag uint16, cb func(string
 				if err != nil {
 					return err
 				}
-				if err = cb(unsafe.String(unsafe.SliceData(buf), len(buf))); err != nil {
+				if err = cb(pfunsafe.ToString(buf)); err != nil {
 					return err
 				}
 			}

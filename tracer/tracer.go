@@ -22,6 +22,7 @@ import (
 	"github.com/elastic/go-perf"
 	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -170,7 +171,7 @@ func goString(cstr []byte) string {
 	if index < 0 {
 		index = len(cstr)
 	}
-	return strings.Clone(unsafe.String(unsafe.SliceData(cstr), index))
+	return strings.Clone(pfunsafe.ToString(cstr[:index]))
 }
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.

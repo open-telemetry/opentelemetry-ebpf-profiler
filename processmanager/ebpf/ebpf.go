@@ -19,6 +19,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
@@ -680,7 +681,7 @@ func (impl *ebpfMapsImpl) SupportsLPMTrieBatchOperations() bool {
 type ptrCastMarshaler[T any] []T
 
 func (r ptrCastMarshaler[T]) MarshalBinary() (data []byte, err error) {
-	return libpf.SliceFrom(r), nil
+	return pfunsafe.FromSlice(r), nil
 }
 
 // generateSlice returns a slice of type T and populates every value with its index.

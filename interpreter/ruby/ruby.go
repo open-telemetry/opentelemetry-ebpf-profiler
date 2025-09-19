@@ -25,6 +25,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
@@ -755,7 +756,7 @@ func determineRubyVersion(ef *pfelf.File) (uint32, error) {
 		return 0, fmt.Errorf("unable to read 'ruby_version': %v", err)
 	}
 
-	versionString := strings.TrimRight(unsafe.String(unsafe.SliceData(memory), len(memory)), "\x00")
+	versionString := strings.TrimRight(pfunsafe.ToString(memory), "\x00")
 	matches := rubyVersionRegex.FindStringSubmatch(versionString)
 	if len(matches) < 3 {
 		return 0, fmt.Errorf("failed to parse version string: '%s'", versionString)

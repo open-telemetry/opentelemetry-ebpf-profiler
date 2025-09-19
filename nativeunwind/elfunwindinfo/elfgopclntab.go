@@ -19,6 +19,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -230,7 +231,7 @@ func getString(data []byte, offset int) string {
 	if zeroIdx < 0 {
 		return ""
 	}
-	return unsafe.String(unsafe.SliceData(data[offset:]), zeroIdx)
+	return pfunsafe.ToString(data[offset : offset+zeroIdx])
 }
 
 // searchGoPclntab uses heuristic to find the gopclntab from RO data.
