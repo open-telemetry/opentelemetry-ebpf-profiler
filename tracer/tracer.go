@@ -37,7 +37,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
@@ -122,6 +121,8 @@ type Config struct {
 	// ExecutableReporter allows to configure a ExecutableReporter to hook seen executables.
 	// NOTE: This is used by external implementations embedding opentelemtry-ebpf-profiler.
 	ExecutableReporter reporter.ExecutableReporter
+	// TraceReporter is the interface to report traces with.
+	TraceReporter reporter.TraceReporter
 	// Intervals provides access to globally configured timers and counters.
 	Intervals Intervals
 	// IncludeTracers holds information about which tracers are enabled.
@@ -217,7 +218,8 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	hasBatchOperations := ebpfHandler.SupportsGenericBatchOperations()
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
-		ebpfHandler, nil, cfg.ExecutableReporter, elfunwindinfo.NewStackDeltaProvider(),
+		ebpfHandler, nil, cfg.TraceReporter, cfg.ExecutableReporter,
+		elfunwindinfo.NewStackDeltaProvider(),
 		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
@@ -1187,7 +1189,6 @@ func (t *Tracer) AttachUProbes(uprobes []string) error {
 	return nil
 }
 
-// TraceProcessor gets the trace processor.
-func (t *Tracer) TraceProcessor() tracehandler.TraceProcessor {
-	return t.processManager
+func (t *Tracer) HandleTrace(bpfTrace *host.Trace) {
+	t.processManager.HandleTrace(bpfTrace)
 }

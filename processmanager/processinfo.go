@@ -33,7 +33,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
-	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -780,6 +779,3 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
 }
-
-// Compile time check to make sure we satisfy the interface.
-var _ tracehandler.TraceProcessor = (*ProcessManager)(nil)
