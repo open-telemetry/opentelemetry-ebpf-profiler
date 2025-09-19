@@ -21,14 +21,6 @@ func WithExecutableReporter(executableReporter reporter.ExecutableReporter) inte
 	})
 }
 
-// WithOnShutdown is a function that allows to define a callback to be called when the controller is shutdown.
-func WithOnShutdown(onShutdown func()) internal.Option {
-	return optFunc(func(option *internal.ControllerOption) *internal.ControllerOption {
-		option.OnShutdown = onShutdown
-		return option
-	})
-}
-
 // WithReporterFactory is a function that allows to define a custom collector reporter factory.
 func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)) internal.Option {
 	return optFunc(func(option *internal.ControllerOption) *internal.ControllerOption {
