@@ -8,6 +8,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 )
 
@@ -34,13 +35,8 @@ func (t *Tracer) AttachSchedMonitor() error {
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
 	}
-	defer restoreRlimit()
 
-	var prog *ebpf.Program
-	if _, ok := t.ebpfProgs[sched_process_free_v2]; ok {
-		prog = t.ebpfProgs[sched_process_free_v2]
-	} else {
-		prog = t.ebpfProgs[sched_process_free_v1]
-	}
-	return t.attachToTracepoint("sched", "sched_process_free", prog)
+	defer restoreRlimit()
+	name := schedProcessFreeHookName(libpf.MapKeysToSet(t.ebpfProgs))
+	return t.attachToTracepoint("sched", "sched_process_free", t.ebpfProgs[name])
 }

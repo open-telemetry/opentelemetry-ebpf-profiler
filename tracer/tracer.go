@@ -58,8 +58,8 @@ const (
 // Names of tracepoint hooks for sched_process_free. There are two hooks
 // as the tracepoint format has changed for kernel versions 6.16+.
 const (
-	sched_process_free_v1 = "tracepoint__sched_process_free_pre616"
-	sched_process_free_v2 = "tracepoint__sched_process_free"
+	schedProcessFreeV1 = "tracepoint__sched_process_free_pre616"
+	schedProcessFreeV2 = "tracepoint__sched_process_free"
 )
 
 // Intervals is a subset of config.IntervalsAndTimers.
@@ -180,6 +180,16 @@ func goString(cstr []byte) string {
 		index = len(cstr)
 	}
 	return strings.Clone(unsafe.String(unsafe.SliceData(cstr), index))
+}
+
+// schedProcessFreeHookName returns the name of the tracepoint hook to use.
+// This function requires that only one of (schedProcessFreeV1, schedProcessFreeV2)
+// be present in progNames.
+func schedProcessFreeHookName(progNames libpf.Set[string]) string {
+	if _, ok := progNames[schedProcessFreeV1]; ok {
+		return schedProcessFreeV1
+	}
+	return schedProcessFreeV2
 }
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
@@ -303,9 +313,9 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 
 	if major > 6 || (major == 6 && minor >= 16) {
 		// Tracepoint format for sched_process_free has changed in v6.16+.
-		delete(coll.Programs, sched_process_free_v1)
+		delete(coll.Programs, schedProcessFreeV1)
 	} else {
-		delete(coll.Programs, sched_process_free_v2)
+		delete(coll.Programs, schedProcessFreeV2)
 	}
 
 	if cfg.VerboseMode {
@@ -557,14 +567,10 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 	progs := make([]progLoaderHelper, len(tailCallProgs)+2)
 	copy(progs, tailCallProgs)
 
-	sched_process_free := sched_process_free_v2
-	if _, ok := coll.Programs[sched_process_free_v1]; ok {
-		sched_process_free = sched_process_free_v1
-	}
-
+	schedProcessFree := schedProcessFreeHookName(libpf.MapKeysToSet(coll.Programs))
 	progs = append(progs,
 		progLoaderHelper{
-			name:             sched_process_free,
+			name:             schedProcessFree,
 			noTailCallTarget: true,
 			enable:           true,
 		},
