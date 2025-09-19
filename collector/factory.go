@@ -15,6 +15,7 @@ import (
 
 	cController "go.opentelemetry.io/ebpf-profiler/collector/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 var (
@@ -32,7 +33,7 @@ func NewFactory() receiver.Factory {
 }
 
 // BuildProfilesReceiver builds a profiles receiver.
-func BuildProfilesReceiver() xreceiver.CreateProfilesFunc {
+func BuildProfilesReceiver(options ...cController.Option) xreceiver.CreateProfilesFunc {
 	return func(_ context.Context,
 		rs receiver.Settings,
 		baseCfg component.Config,
@@ -43,8 +44,16 @@ func BuildProfilesReceiver() xreceiver.CreateProfilesFunc {
 			return nil, errInvalidConfig
 		}
 
-		return cController.NewController(cfg, rs, nextConsumer)
+		return cController.NewController(cfg, rs, nextConsumer, options...)
 	}
+}
+
+// WithExecutableReporter allows setting a custon ExecutableReporter in the profiles receiver.
+func WithExecutableReporter(executableReporter reporter.ExecutableReporter) cController.Option {
+	return cController.OptFunc(func(cfg cController.Config) cController.Config {
+		cfg.ExecutableReporter = executableReporter
+		return cfg
+	})
 }
 
 func defaultConfig() component.Config {

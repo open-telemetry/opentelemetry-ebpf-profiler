@@ -35,7 +35,8 @@ type Config struct {
 	UProbeLinks            []string
 	LoadProbe              bool
 
-	Reporter reporter.Reporter
+	Reporter           reporter.Reporter
+	ExecutableReporter reporter.ExecutableReporter
 
 	Fs *flag.FlagSet
 

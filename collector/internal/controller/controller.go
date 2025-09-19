@@ -24,12 +24,18 @@ const (
 // Controller is a bridge between the Collector's [receiverprofiles.Profiles]
 // interface and our [internal.Controller]
 type Controller struct {
-	ctlr *controller.Controller
+	Ctlr *controller.Controller
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
 	nextConsumer xconsumer.Profiles,
+	options ...Option,
 ) (*Controller, error) {
+	cConfig := Config{}
+	for _, opt := range options {
+		cConfig = opt.apply(cConfig)
+	}
+
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
@@ -48,23 +54,26 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 		return nil, err
 	}
 	cfg.Reporter = rep
+	cfg.ExecutableReporter = cConfig.ExecutableReporter
 
 	// Provide internal metrics via the collectors telemetry.
 	meter := rs.MeterProvider.Meter(ctrlName)
 	metrics.Start(meter)
 
-	return &Controller{
-		ctlr: controller.New(cfg),
-	}, nil
+	ctlr := &Controller{
+		Ctlr: controller.New(cfg),
+	}
+
+	return ctlr, nil
 }
 
 // Start starts the receiver.
 func (c *Controller) Start(ctx context.Context, _ component.Host) error {
-	return c.ctlr.Start(ctx)
+	return c.Ctlr.Start(ctx)
 }
 
 // Shutdown stops the receiver.
 func (c *Controller) Shutdown(_ context.Context) error {
-	c.ctlr.Shutdown()
+	c.Ctlr.Shutdown()
 	return nil
 }
