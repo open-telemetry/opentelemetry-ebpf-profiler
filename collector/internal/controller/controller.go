@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package internal // import "go.opentelemetry.io/ebpf-profiler/collector/internal"
+package controller // import "go.opentelemetry.io/ebpf-profiler/collector/internal/controller"
 
 import (
 	"context"
@@ -28,7 +28,8 @@ type Controller struct {
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
-	nextConsumer xconsumer.Profiles) (*Controller, error) {
+	nextConsumer xconsumer.Profiles,
+) (*Controller, error) {
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 

@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/xreceiver"
 
-	"go.opentelemetry.io/ebpf-profiler/collector/internal"
+	cController "go.opentelemetry.io/ebpf-profiler/collector/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 )
 
@@ -43,7 +43,7 @@ func BuildProfilesReceiver() xreceiver.CreateProfilesFunc {
 			return nil, errInvalidConfig
 		}
 
-		return internal.NewController(cfg, rs, nextConsumer)
+		return cController.NewController(cfg, rs, nextConsumer)
 	}
 }
 
