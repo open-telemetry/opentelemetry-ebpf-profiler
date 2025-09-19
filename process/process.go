@@ -110,7 +110,7 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 		var addrs [2]string
 		var devs [2]string
 
-		line := pfunsafe.ByteSlice2String(scanner.Bytes())
+		line := pfunsafe.ToString(scanner.Bytes())
 		if stringutil.FieldsN(line, fields[:]) < 5 {
 			numParseErrors++
 			continue

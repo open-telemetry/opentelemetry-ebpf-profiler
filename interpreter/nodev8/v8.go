@@ -843,7 +843,7 @@ func (i *v8Instance) extractString(ptr libpf.Address, tag uint16, cb func(string
 				if err != nil {
 					return err
 				}
-				if err = cb(pfunsafe.ByteSlice2String(buf)); err != nil {
+				if err = cb(pfunsafe.ToString(buf)); err != nil {
 					return err
 				}
 			}

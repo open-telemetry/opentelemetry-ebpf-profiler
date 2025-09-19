@@ -49,7 +49,7 @@ func (emc *ebpfMapsCoredump) UpdateInterpreterOffsets(ebpfProgIndex uint16,
 	if err != nil {
 		return err
 	}
-	emc.ctx.addMap(&C.interpreter_offsets, C.u64(key), pfunsafe.ByteSliceFromPointer(&value))
+	emc.ctx.addMap(&C.interpreter_offsets, C.u64(key), pfunsafe.FromPointer(&value))
 	return nil
 }
 

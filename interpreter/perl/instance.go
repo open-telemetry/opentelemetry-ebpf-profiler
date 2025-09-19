@@ -233,7 +233,7 @@ func (i *perlInstance) getHEK(addr libpf.Address) (libpf.String, error) {
 		}
 	}
 
-	s := pfunsafe.ByteSlice2String(buf[vms.hek.hek_key : vms.hek.hek_key+uint(hekLen)])
+	s := pfunsafe.ToString(buf[vms.hek.hek_key : vms.hek.hek_key+uint(hekLen)])
 	if !util.IsValidString(s) {
 		log.Debugf("Extracted invalid hek string at 0x%x '%v'", addr, []byte(s))
 		return libpf.NullString, fmt.Errorf("extracted invalid hek string at 0x%x", addr)

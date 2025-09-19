@@ -231,7 +231,7 @@ func getString(data []byte, offset int) string {
 	if zeroIdx < 0 {
 		return ""
 	}
-	return pfunsafe.ByteSlice2String(data[offset : offset+zeroIdx])
+	return pfunsafe.ToString(data[offset : offset+zeroIdx])
 }
 
 // searchGoPclntab uses heuristic to find the gopclntab from RO data.

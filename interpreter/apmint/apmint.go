@@ -207,7 +207,7 @@ func nextString(rm remotememory.RemoteMemory, addr *libpf.Address, maxLen int) (
 	}
 
 	*addr += libpf.Address(length)
-	return pfunsafe.ByteSlice2String(raw), nil
+	return pfunsafe.ToString(raw), nil
 }
 
 // readProcStorage reads the APM process storage from memory.

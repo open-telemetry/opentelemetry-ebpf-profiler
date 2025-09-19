@@ -570,7 +570,7 @@ func (pp *peParser) parseCLI() error {
 				break
 			}
 		}
-		switch pfunsafe.ByteSlice2String(name) {
+		switch pfunsafe.ToString(name) {
 		case "#Strings":
 			// ECMA-335 II.24.2.3 #Strings heap
 			pp.dotnetStrings = io.NewSectionReader(r, int64(hdr.Offset), int64(hdr.Size))
@@ -616,7 +616,7 @@ func (pp *peParser) readDotnetString(offs uint32) libpf.String {
 
 		zeroIdx := bytes.IndexByte(chunk[:n], 0)
 		if zeroIdx >= 0 {
-			return libpf.Intern(pfunsafe.ByteSlice2String(str[:i+zeroIdx]))
+			return libpf.Intern(pfunsafe.ToString(str[:i+zeroIdx]))
 		}
 	}
 
