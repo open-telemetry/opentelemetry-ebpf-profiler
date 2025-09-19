@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
+	"go.opentelemetry.io/ebpf-profiler/collector/receiverhelper"
 )
 
 func TestNewFactory(t *testing.T) {
@@ -30,7 +31,7 @@ func TestCreateProfilesReceiver(t *testing.T) {
 		},
 		{
 			name:      "Nil config",
-			wantError: errInvalidConfig,
+			wantError: receiverhelper.ErrInvalidConfig,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

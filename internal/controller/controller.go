@@ -99,6 +99,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		IncludeEnvVars:         envVars,
 		UProbeLinks:            c.config.UProbeLinks,
 		LoadProbe:              c.config.LoadProbe,
+		ExecutableReporter:     c.config.ExecutableReporter,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)

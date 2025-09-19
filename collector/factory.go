@@ -5,22 +5,17 @@ package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/xreceiver"
-
-	"go.opentelemetry.io/ebpf-profiler/collector/internal"
-	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/collector/receiverhelper"
 )
 
 var (
 	typeStr = component.MustNewType("profiling")
-
-	errInvalidConfig = errors.New("invalid config")
 )
 
 // NewFactory creates a factory for the receiver.
@@ -32,20 +27,20 @@ func NewFactory() receiver.Factory {
 }
 
 func createProfilesReceiver(
-	_ context.Context,
+	ctx context.Context,
 	rs receiver.Settings,
 	baseCfg component.Config,
 	nextConsumer xconsumer.Profiles) (xreceiver.Profiles, error) {
-	cfg, ok := baseCfg.(*controller.Config)
-	if !ok {
-		return nil, errInvalidConfig
-	}
-
-	return internal.NewController(cfg, rs, nextConsumer)
+	return receiverhelper.BuildProfilesReceiver(
+		ctx,
+		rs,
+		baseCfg,
+		nextConsumer,
+	)
 }
 
 func defaultConfig() component.Config {
-	return &controller.Config{
+	return &receiverhelper.Config{
 		ReporterInterval:       5 * time.Second,
 		MonitorInterval:        5 * time.Second,
 		SamplesPerSecond:       20,
