@@ -28,20 +28,23 @@ func NewFactory() receiver.Factory {
 	return xreceiver.NewFactory(
 		typeStr,
 		defaultConfig,
-		xreceiver.WithProfiles(createProfilesReceiver, component.StabilityLevelAlpha))
+		xreceiver.WithProfiles(BuildProfilesReceiver(), component.StabilityLevelAlpha))
 }
 
-func createProfilesReceiver(
-	_ context.Context,
-	rs receiver.Settings,
-	baseCfg component.Config,
-	nextConsumer xconsumer.Profiles) (xreceiver.Profiles, error) {
-	cfg, ok := baseCfg.(*controller.Config)
-	if !ok {
-		return nil, errInvalidConfig
-	}
+// BuildProfilesReceiver builds a profiles receiver.
+func BuildProfilesReceiver() xreceiver.CreateProfilesFunc {
+	return func(_ context.Context,
+		rs receiver.Settings,
+		baseCfg component.Config,
+		nextConsumer xconsumer.Profiles,
+	) (xreceiver.Profiles, error) {
+		cfg, ok := baseCfg.(*controller.Config)
+		if !ok {
+			return nil, errInvalidConfig
+		}
 
-	return internal.NewController(cfg, rs, nextConsumer)
+		return internal.NewController(cfg, rs, nextConsumer)
+	}
 }
 
 func defaultConfig() component.Config {
