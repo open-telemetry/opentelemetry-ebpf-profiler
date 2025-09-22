@@ -48,7 +48,7 @@ func BuildProfilesReceiver(options ...cController.Option) xreceiver.CreateProfil
 	}
 }
 
-// WithExecutableReporter allows setting a custon ExecutableReporter in the profiles receiver.
+// WithExecutableReporter allows setting a custom ExecutableReporter in the profiles receiver.
 func WithExecutableReporter(executableReporter reporter.ExecutableReporter) cController.Option {
 	return cController.OptFunc(func(cfg cController.Config) cController.Config {
 		cfg.ExecutableReporter = executableReporter
