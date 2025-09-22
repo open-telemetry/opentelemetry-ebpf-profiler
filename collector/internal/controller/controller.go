@@ -24,7 +24,7 @@ const (
 // Controller is a bridge between the Collector's [receiverprofiles.Profiles]
 // interface and our [internal.Controller]
 type Controller struct {
-	Ctlr *controller.Controller
+	ctlr *controller.Controller
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
@@ -61,7 +61,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	metrics.Start(meter)
 
 	ctlr := &Controller{
-		Ctlr: controller.New(cfg),
+		ctlr: controller.New(cfg),
 	}
 
 	return ctlr, nil
@@ -69,11 +69,11 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 
 // Start starts the receiver.
 func (c *Controller) Start(ctx context.Context, _ component.Host) error {
-	return c.Ctlr.Start(ctx)
+	return c.ctlr.Start(ctx)
 }
 
 // Shutdown stops the receiver.
 func (c *Controller) Shutdown(_ context.Context) error {
-	c.Ctlr.Shutdown()
+	c.ctlr.Shutdown()
 	return nil
 }
