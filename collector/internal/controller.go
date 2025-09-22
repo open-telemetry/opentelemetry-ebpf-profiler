@@ -28,15 +28,16 @@ type Controller struct {
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
-	nextConsumer xconsumer.Profiles) (*Controller, error) {
+	nextConsumer xconsumer.Profiles,
+) (*Controller, error) {
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
 	rep, err := reporter.NewCollector(&reporter.Config{
 		Name:                   ctrlName,
 		Version:                vc.Version(),
-		MaxRPCMsgSize:          32 << 20, // 32 MiB
-		MaxGRPCRetries:         5,
+		MaxRPCMsgSize:          cfg.MaxRPCMsgSize,
+		MaxGRPCRetries:         cfg.MaxGRPCRetries,
 		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
 		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
 		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
