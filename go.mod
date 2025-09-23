@@ -4,7 +4,7 @@ go 1.24.6
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.39.0
-	github.com/aws/aws-sdk-go-v2/config v1.31.8
+	github.com/aws/aws-sdk-go-v2/config v1.31.9
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.88.1
 	github.com/cilium/ebpf v0.19.0
 	github.com/elastic/go-freelru v0.16.0
@@ -18,14 +18,14 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tklauser/numcpus v0.10.0
 	github.com/zeebo/xxh3 v1.0.2
-	go.opentelemetry.io/collector/component v1.41.1-0.20250918163459-ba0b327d5fe9
-	go.opentelemetry.io/collector/consumer/consumertest v0.135.1-0.20250918163459-ba0b327d5fe9
-	go.opentelemetry.io/collector/consumer/xconsumer v0.135.1-0.20250918163459-ba0b327d5fe9
-	go.opentelemetry.io/collector/pdata v1.41.1-0.20250918163459-ba0b327d5fe9
-	go.opentelemetry.io/collector/pdata/pprofile v0.135.1-0.20250918163459-ba0b327d5fe9
-	go.opentelemetry.io/collector/receiver v1.41.1-0.20250918163459-ba0b327d5fe9
-	go.opentelemetry.io/collector/receiver/receivertest v0.135.1-0.20250918163459-ba0b327d5fe9
-	go.opentelemetry.io/collector/receiver/xreceiver v0.135.1-0.20250918163459-ba0b327d5fe9
+	go.opentelemetry.io/collector/component v1.42.0
+	go.opentelemetry.io/collector/consumer/consumertest v0.136.0
+	go.opentelemetry.io/collector/consumer/xconsumer v0.136.0
+	go.opentelemetry.io/collector/pdata v1.42.0
+	go.opentelemetry.io/collector/pdata/pprofile v0.136.0
+	go.opentelemetry.io/collector/receiver v1.42.0
+	go.opentelemetry.io/collector/receiver/receivertest v0.136.0
+	go.opentelemetry.io/collector/receiver/xreceiver v0.136.0
 	go.opentelemetry.io/otel v1.38.0
 	go.opentelemetry.io/otel/metric v1.38.0
 	golang.org/x/arch v0.21.0
@@ -38,7 +38,7 @@ require (
 
 require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.1 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.18.12 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.18.13 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.7 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.7 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.7 // indirect
@@ -49,7 +49,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.29.3 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.34.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.34.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.38.4 // indirect
 	github.com/aws/smithy-go v1.23.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -68,13 +68,12 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
-	go.opentelemetry.io/collector/component/componenttest v0.135.1-0.20250915160638-4b4e557b86cb // indirect
-	go.opentelemetry.io/collector/consumer v1.41.1-0.20250915160638-4b4e557b86cb // indirect
-	go.opentelemetry.io/collector/consumer/consumererror v0.135.1-0.20250915160638-4b4e557b86cb // indirect
-	go.opentelemetry.io/collector/featuregate v1.41.1-0.20250915160638-4b4e557b86cb // indirect
-	go.opentelemetry.io/collector/internal/telemetry v0.135.1-0.20250915160638-4b4e557b86cb // indirect
-	go.opentelemetry.io/collector/pdata/testdata v0.135.1-0.20250915160638-4b4e557b86cb // indirect
-	go.opentelemetry.io/collector/pipeline v1.41.1-0.20250915160638-4b4e557b86cb // indirect
+	go.opentelemetry.io/collector/component/componenttest v0.136.0 // indirect
+	go.opentelemetry.io/collector/consumer v1.42.0 // indirect
+	go.opentelemetry.io/collector/consumer/consumererror v0.136.0 // indirect
+	go.opentelemetry.io/collector/featuregate v1.42.0 // indirect
+	go.opentelemetry.io/collector/internal/telemetry v0.136.0 // indirect
+	go.opentelemetry.io/collector/pipeline v1.42.0 // indirect
 	go.opentelemetry.io/contrib/bridges/otelzap v0.12.0 // indirect
 	go.opentelemetry.io/otel/log v0.14.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.38.0 // indirect
