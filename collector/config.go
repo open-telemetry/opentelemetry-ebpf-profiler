@@ -1,0 +1,21 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
+
+import "time"
+
+// Config is the configuration for the collector.
+type Config struct {
+	ReporterInterval       time.Duration `mapstructure:"reporter_interval"`
+	MonitorInterval        time.Duration `mapstructure:"monitor_interval"`
+	SamplesPerSecond       int           `mapstructure:"samples_per_second"`
+	ProbabilisticInterval  time.Duration `mapstructure:"probabilistic_interval"`
+	ProbabilisticThreshold uint          `mapstructure:"probabilistic_threshold"`
+	Tracers                string        `mapstructure:"tracers"`
+	ClockSyncInterval      time.Duration `mapstructure:"clock_sync_interval"`
+	SendErrorFrames        bool          `mapstructure:"send_error_frames"`
+	VerboseMode            bool          `mapstructure:"verbose_mode"`
+	OffCPUThreshold        float64       `mapstructure:"off_cpu_threshold"`
+	IncludeEnvVars         string        `mapstructure:"include_env_vars"`
+}

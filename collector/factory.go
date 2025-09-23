@@ -36,16 +36,30 @@ func createProfilesReceiver(
 	rs receiver.Settings,
 	baseCfg component.Config,
 	nextConsumer xconsumer.Profiles) (xreceiver.Profiles, error) {
-	cfg, ok := baseCfg.(*controller.Config)
+	cfg, ok := baseCfg.(*Config)
 	if !ok {
 		return nil, errInvalidConfig
 	}
 
-	return internal.NewController(cfg, rs, nextConsumer)
+	controlerCfg := &controller.Config{
+		ReporterInterval:       cfg.ReporterInterval,
+		MonitorInterval:        cfg.MonitorInterval,
+		SamplesPerSecond:       cfg.SamplesPerSecond,
+		ProbabilisticInterval:  cfg.ProbabilisticInterval,
+		ProbabilisticThreshold: cfg.ProbabilisticThreshold,
+		Tracers:                cfg.Tracers,
+		ClockSyncInterval:      cfg.ClockSyncInterval,
+		SendErrorFrames:        cfg.SendErrorFrames,
+		VerboseMode:            cfg.VerboseMode,
+		OffCPUThreshold:        cfg.OffCPUThreshold,
+		IncludeEnvVars:         cfg.IncludeEnvVars,
+	}
+
+	return internal.NewController(controlerCfg, rs, nextConsumer)
 }
 
 func defaultConfig() component.Config {
-	return &controller.Config{
+	return &Config{
 		ReporterInterval:       5 * time.Second,
 		MonitorInterval:        5 * time.Second,
 		SamplesPerSecond:       20,
