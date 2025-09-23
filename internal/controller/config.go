@@ -11,6 +11,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
+	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 type Config struct {
@@ -32,7 +33,7 @@ type Config struct {
 	VerboseMode            bool
 	Version                bool
 	OffCPUThreshold        float64
-	UProbeLinks            []string
+	UProbeLinks            []types.UProbeLink
 	LoadProbe              bool
 
 	Reporter reporter.Reporter

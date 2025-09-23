@@ -13,6 +13,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
+	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 const (
@@ -131,7 +132,11 @@ func parseArgs() (*controller.Config, error) {
 
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
 
-	fs.Func("uprobe-link", probeLinkHelper, func(link string) error {
+	fs.Func("uprobe-link", probeLinkHelper, func(linkStr string) error {
+		link, err := types.ParseUProbeLink(linkStr)
+		if err != nil {
+			return err
+		}
 		args.UProbeLinks = append(args.UProbeLinks, link)
 		return nil
 	})

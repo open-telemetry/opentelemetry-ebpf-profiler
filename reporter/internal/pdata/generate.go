@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -79,11 +81,19 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		sp.Scope().SetVersion(agentVersion)
 		sp.SetSchemaUrl(semconv.SchemaURL)
 
-		for _, origin := range []libpf.Origin{
-			support.TraceOriginSampling,
-			support.TraceOriginOffCPU,
-			support.TraceOriginUProbe,
-		} {
+		origins := make([]samples.Origin, len(originToEvents))
+		for o := range originToEvents {
+			origins = append(origins, o)
+		}
+		slices.SortFunc(origins, func(a, b samples.Origin) int {
+			if v := a.Origin - b.Origin; v != 0 {
+				return int(v)
+			}
+
+			return strings.Compare(a.ProbeLinkName, b.ProbeLinkName)
+		})
+
+		for _, origin := range origins {
 			if len(originToEvents[origin]) == 0 {
 				// Do not append empty profiles.
 				continue
@@ -129,12 +139,12 @@ func (p *Pdata) setProfile(
 	mappingSet orderedset.OrderedSet[uniqueMapping],
 	stackSet orderedset.OrderedSet[stackInfo],
 	locationSet orderedset.OrderedSet[locationInfo],
-	origin libpf.Origin,
+	origin samples.Origin,
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
 ) error {
 	st := profile.SampleType()
-	switch origin {
+	switch origin.Origin {
 	case support.TraceOriginSampling:
 		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
 		pt := profile.PeriodType()
@@ -147,11 +157,15 @@ func (p *Pdata) setProfile(
 		st.SetTypeStrindex(stringSet.Add("events"))
 		st.SetUnitStrindex(stringSet.Add("nanoseconds"))
 	case support.TraceOriginUProbe:
-		st.SetTypeStrindex(stringSet.Add("events"))
+		if origin.ProbeLinkName != "" {
+			st.SetTypeStrindex(stringSet.Add(fmt.Sprintf("uprobe_%s_events", origin.ProbeLinkName)))
+		} else {
+			st.SetTypeStrindex(stringSet.Add("uprobe_events"))
+		}
 		st.SetUnitStrindex(stringSet.Add("count"))
 	default:
 		// Should never happen
-		return fmt.Errorf("generating profile for unsupported origin %d", origin)
+		return fmt.Errorf("generating profile for unsupported origin %d", origin.Origin)
 	}
 
 	startTS, endTS := uint64(math.MaxUint64), uint64(0)
@@ -164,7 +178,7 @@ func (p *Pdata) setProfile(
 		}
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
-		if origin == support.TraceOriginOffCPU {
+		if origin.Origin == support.TraceOriginOffCPU {
 			sample.Values().Append(traceInfo.OffTimes...)
 		}
 

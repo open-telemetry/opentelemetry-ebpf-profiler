@@ -149,7 +149,7 @@ type Config struct {
 	IncludeEnvVars libpf.Set[string]
 	// UProbes holds a list of executable:symbol elements to which
 	// a uprobe will be attached.
-	UProbeLinks []string
+	UProbeLinks []types.UProbeLink
 	// LoadProbe inidicates whether the generic eBPF program should be loaded
 	// without being attached to something.
 	LoadProbe bool
@@ -1166,23 +1166,21 @@ func (t *Tracer) StartOffCPUProfiling() error {
 	return nil
 }
 
-func (t *Tracer) AttachUProbes(uprobes []string) error {
+func (t *Tracer) AttachUProbes(uprobes []types.UProbeLink) error {
 	uProbeProg, ok := t.ebpfProgs["uprobe__generic"]
 	if !ok {
 		return errors.New("uprobe__generic is not available")
 	}
-	for _, uprobeStr := range uprobes {
-		split := strings.SplitN(uprobeStr, ":", 2)
-
-		exec, err := link.OpenExecutable(split[0])
+	for idx, uprobe := range uprobes {
+		exec, err := link.OpenExecutable(uprobe.Executable)
 		if err != nil {
 			return err
 		}
-		uprobeLink, err := exec.Uprobe(split[1], uProbeProg, nil)
+		uprobeLink, err := exec.Uprobe(uprobe.Symbol, uProbeProg, &link.UprobeOptions{Cookie: uint64(idx + 1)})
 		if err != nil {
 			return err
 		}
-		t.hooks[hookPoint{group: "uprobe", name: uprobeStr}] = uprobeLink
+		t.hooks[hookPoint{group: "uprobe", name: uprobe.String()}] = uprobeLink
 	}
 	return nil
 }
