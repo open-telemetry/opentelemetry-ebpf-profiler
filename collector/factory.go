@@ -58,7 +58,7 @@ func createProfilesReceiver(
 		LoadProbe:              cfg.LoadProbe,
 		MapScaleFactor:         cfg.MapScaleFactor,
 		BpfVerifierLogLevel:    cfg.BPFVerifierLogLevel,
-		NoKernelVersionCheck:   !cfg.KernelVersionCheck,
+		NoKernelVersionCheck:   cfg.NoKernelVersionCheck,
 		MaxGRPCRetries:         cfg.MaxGRPCRetries,
 		MaxRPCMsgSize:          cfg.MaxRPCMsgSize,
 	}
@@ -75,7 +75,6 @@ func defaultConfig() component.Config {
 		ProbabilisticThreshold: 100,
 		Tracers:                "all",
 		ClockSyncInterval:      3 * time.Minute,
-		KernelVersionCheck:     true,
 		MaxGRPCRetries:         5,
 		MaxRPCMsgSize:          32 << 20, // 32 MiB,
 	}
