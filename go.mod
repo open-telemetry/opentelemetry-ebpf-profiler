@@ -1,5 +1,13 @@
 module go.opentelemetry.io/ebpf-profiler
 
+// NOTE:
+// This go.mod is NOT used to build any official binary.
+// To see the builder manifests used for official binaries,
+// check https://github.com/open-telemetry/opentelemetry-collector-releases
+//
+// For the OpenTelemetry eBPF Profiler distribution specifically, see
+// https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-ebpf-profiler
+
 go 1.24.0
 
 require (
