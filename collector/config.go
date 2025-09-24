@@ -23,4 +23,6 @@ type Config struct {
 	MapScaleFactor         uint          `mapstructure:"map_scale_factor"`
 	BPFVerifierLogLevel    uint          `mapstructure:"bpf_verifier_log_level"`
 	KernelVersionCheck     bool          `mapstructure:"kernel_version_check"`
+	MaxGRPCRetries         uint32        `mapstructure:"max_grpc_retries"`
+	MaxRPCMsgSize          int           `mapstructure:"max_rpc_msg_size"`
 }

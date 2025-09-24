@@ -144,7 +144,7 @@ func (p *Pdata) setProfile(
 		st.SetTypeStrindex(stringSet.Add("samples"))
 		st.SetUnitStrindex(stringSet.Add("count"))
 	case support.TraceOriginOffCPU:
-		st.SetTypeStrindex(stringSet.Add("events"))
+		st.SetTypeStrindex(stringSet.Add("off_cpu"))
 		st.SetUnitStrindex(stringSet.Add("nanoseconds"))
 	case support.TraceOriginUProbe:
 		st.SetTypeStrindex(stringSet.Add("events"))

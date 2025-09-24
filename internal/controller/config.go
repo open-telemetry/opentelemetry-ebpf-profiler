@@ -34,6 +34,8 @@ type Config struct {
 	OffCPUThreshold        float64
 	UProbeLinks            []string
 	LoadProbe              bool
+	MaxGRPCRetries         uint32
+	MaxRPCMsgSize          int
 
 	Reporter reporter.Reporter
 

@@ -35,7 +35,8 @@ func createProfilesReceiver(
 	_ context.Context,
 	rs receiver.Settings,
 	baseCfg component.Config,
-	nextConsumer xconsumer.Profiles) (xreceiver.Profiles, error) {
+	nextConsumer xconsumer.Profiles,
+) (xreceiver.Profiles, error) {
 	cfg, ok := baseCfg.(*Config)
 	if !ok {
 		return nil, errInvalidConfig
@@ -58,6 +59,8 @@ func createProfilesReceiver(
 		MapScaleFactor:         cfg.MapScaleFactor,
 		BpfVerifierLogLevel:    cfg.BPFVerifierLogLevel,
 		NoKernelVersionCheck:   !cfg.KernelVersionCheck,
+		MaxGRPCRetries:         cfg.MaxGRPCRetries,
+		MaxRPCMsgSize:          cfg.MaxRPCMsgSize,
 	}
 
 	return internal.NewController(controlerCfg, rs, nextConsumer)
@@ -73,5 +76,7 @@ func defaultConfig() component.Config {
 		Tracers:                "all",
 		ClockSyncInterval:      3 * time.Minute,
 		KernelVersionCheck:     true,
+		MaxGRPCRetries:         5,
+		MaxRPCMsgSize:          32 << 20, // 32 MiB,
 	}
 }
