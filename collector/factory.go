@@ -53,6 +53,11 @@ func createProfilesReceiver(
 		VerboseMode:            cfg.VerboseMode,
 		OffCPUThreshold:        cfg.OffCPUThreshold,
 		IncludeEnvVars:         cfg.IncludeEnvVars,
+		UProbeLinks:            cfg.UProbeLinks,
+		LoadProbe:              cfg.LoadProbe,
+		MapScaleFactor:         cfg.MapScaleFactor,
+		BpfVerifierLogLevel:    cfg.BPFVerifierLogLevel,
+		NoKernelVersionCheck:   !cfg.KernelVersionCheck,
 	}
 
 	return internal.NewController(controlerCfg, rs, nextConsumer)
@@ -67,5 +72,6 @@ func defaultConfig() component.Config {
 		ProbabilisticThreshold: 100,
 		Tracers:                "all",
 		ClockSyncInterval:      3 * time.Minute,
+		KernelVersionCheck:     true,
 	}
 }
