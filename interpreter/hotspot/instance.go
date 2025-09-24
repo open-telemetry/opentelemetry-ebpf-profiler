@@ -471,7 +471,7 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		metadataSize := depsOff - metadataOff
 		if metadataSize >= maxMetadataSize {
 			return nil, fmt.Errorf("unreasonably large metadata data region: %d bytes",
-				depsOff)
+				metadataSize)
 		}
 		scopesData := make([]byte, metadataSize)
 		if err := d.rm.Read(addr+metadataOff, scopesData); err != nil {
