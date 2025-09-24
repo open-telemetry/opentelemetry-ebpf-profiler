@@ -73,6 +73,11 @@ package hotspot // import "go.opentelemetry.io/ebpf-profiler/interpreter/hotspot
 //  JDK21 - Tested ok
 //   - JDK_Version removed from introspection data
 //  JDK22 - Tested ok
+//   - nmethod scopes etc. immutable data split to separate data area
+//  JDK23 - Tested ok
+//  JDK24 - Tested ok
+//   - nmethod metadata moved to codeblob mutable data area
+//  JDK25 - Tested ok
 //
 // NOTE: Ahead-Of-Time compilation (AOT) is NOT SUPPORTED. The main complication is that, the AOT
 // ELF files are mapped directly to the program virtual space, and contain the code to execute.
