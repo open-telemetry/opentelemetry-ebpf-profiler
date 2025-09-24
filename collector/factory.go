@@ -35,7 +35,8 @@ func createProfilesReceiver(
 	_ context.Context,
 	rs receiver.Settings,
 	baseCfg component.Config,
-	nextConsumer xconsumer.Profiles) (xreceiver.Profiles, error) {
+	nextConsumer xconsumer.Profiles,
+) (xreceiver.Profiles, error) {
 	cfg, ok := baseCfg.(*controller.Config)
 	if !ok {
 		return nil, errInvalidConfig
@@ -53,5 +54,7 @@ func defaultConfig() component.Config {
 		ProbabilisticThreshold: 100,
 		Tracers:                "all",
 		ClockSyncInterval:      3 * time.Minute,
+		MaxGRPCRetries:         5,
+		MaxRPCMsgSize:          32 << 20, // 32 MiB,
 	}
 }
