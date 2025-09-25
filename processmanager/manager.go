@@ -402,7 +402,6 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *host.Trace) {
 		if cached, ok := pm.frameCache.GetAndRefresh(key, frameCacheLifetime); ok {
 			// Fast path
 			cacheHit++
-			pm.frameCacheHit.Add(1)
 			for _, val := range cached {
 				trace.Frames = append(trace.Frames, val)
 			}
