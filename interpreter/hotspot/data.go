@@ -104,7 +104,12 @@ type hotspotVMData struct {
 			// JDK -8: offset, JDK 9+: pointers, JDK 23+: offset
 			CodeBegin uint `name:"_code_begin,_code_offset"`
 			CodeEnd   uint `name:"_code_end,_data_offset"`
-			Size      uint `name:"_size"` // Only needed for JDK23+
+			// Needed for JDK23+ for layout calculation
+			Size uint `name:"_size"`
+			// JDK25+: the metadata is inside mutable data
+			RelocationSize  uint `name:"_relocation_size"`
+			MutableDataSize uint `name:"_mutable_data_size"`
+			MutableData     uint `name:"_mutable_data"`
 		}
 		CodeCache struct {
 			Heap      libpf.Address `name:"_heap"`
@@ -585,6 +590,15 @@ func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address
 	} else if vms.Nmethod.DependenciesOffset != ^uint(0) {
 		vms.Nmethod.ImmutableData = 0
 		vms.Nmethod.ImmutableDataSize = 0
+	}
+
+	// JDK25+: metadata is inside mutable data
+	if vms.CodeBlob.MutableData != ^uint(0) {
+		vms.Nmethod.MetadataOffset = 0
+	} else if vms.Nmethod.MetadataOffset != ^uint(0) {
+		vms.CodeBlob.MutableData = 0
+		vms.CodeBlob.MutableDataSize = 0
+		vms.CodeBlob.RelocationSize = 0
 	}
 
 	// Check that all symbols got loaded from JVM introspection data
