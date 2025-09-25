@@ -13,7 +13,7 @@ import (
 func TestWithExecutableReporter(t *testing.T) {
 	executableReporter := &executableReporterTest{}
 	option := WithExecutableReporter(executableReporter)
-	require.Equal(t, executableReporter, option.Apply(&controllerOption{}).executableReporter)
+	require.Equal(t, executableReporter, option.apply(&controllerOption{}).executableReporter)
 }
 
 // empty struct that implements the ExecutableReporter interface

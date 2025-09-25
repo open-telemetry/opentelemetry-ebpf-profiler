@@ -8,7 +8,7 @@ import (
 )
 
 type option interface {
-	Apply(*controllerOption) *controllerOption
+	apply(*controllerOption) *controllerOption
 }
 
 type controllerOption struct {
@@ -17,7 +17,7 @@ type controllerOption struct {
 
 type optFunc func(*controllerOption) *controllerOption
 
-func (f optFunc) Apply(c *controllerOption) *controllerOption { return f(c) }
+func (f optFunc) apply(c *controllerOption) *controllerOption { return f(c) }
 
 // WithExecutableReporter is a function that allows to configure a ExecutableReporter.
 func WithExecutableReporter(executableReporter reporter.ExecutableReporter) option {

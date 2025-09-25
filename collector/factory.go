@@ -44,7 +44,7 @@ func BuildProfilesReceiver(options ...option) xreceiver.CreateProfilesFunc {
 
 		controllerOption := &controllerOption{}
 		for _, option := range options {
-			controllerOption = option.Apply(controllerOption)
+			controllerOption = option.apply(controllerOption)
 		}
 
 		controlerCfg := &controller.Config{
