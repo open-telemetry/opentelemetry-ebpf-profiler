@@ -41,10 +41,18 @@ func (b *baseReporter) Stop() {
 }
 
 func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
-	switch meta.Origin {
+	origin := samples.Origin{
+		Origin: meta.Origin,
+	}
+	switch origin.Origin {
 	case support.TraceOriginSampling:
 	case support.TraceOriginOffCPU:
 	case support.TraceOriginUProbe:
+		uprobeIdx := int(meta.OffTime - 1)
+		meta.OffTime = 0
+		if uprobeIdx >= 0 && uprobeIdx < len(b.cfg.UProbeLinks) {
+			origin.ProbeLinkName = b.cfg.UProbeLinks[uprobeIdx].Symbol
+		}
 	default:
 		return fmt.Errorf("skip reporting trace for %d origin: %w", meta.Origin,
 			errUnknownOrigin)
@@ -72,21 +80,21 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 
 	if _, exists := (*eventsTree)[samples.ContainerID(containerID)]; !exists {
 		(*eventsTree)[samples.ContainerID(containerID)] =
-			make(map[libpf.Origin]samples.KeyToEventMapping)
+			make(map[samples.Origin]samples.KeyToEventMapping)
 	}
 
-	if _, exists := (*eventsTree)[samples.ContainerID(containerID)][meta.Origin]; !exists {
-		(*eventsTree)[samples.ContainerID(containerID)][meta.Origin] =
+	if _, exists := (*eventsTree)[samples.ContainerID(containerID)][origin]; !exists {
+		(*eventsTree)[samples.ContainerID(containerID)][origin] =
 			make(samples.KeyToEventMapping)
 	}
 
-	if events, exists := (*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key]; exists {
+	if events, exists := (*eventsTree)[samples.ContainerID(containerID)][origin][key]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
 		events.OffTimes = append(events.OffTimes, meta.OffTime)
-		(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = events
+		(*eventsTree)[samples.ContainerID(containerID)][origin][key] = events
 		return nil
 	}
-	(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = &samples.TraceEvents{
+	(*eventsTree)[samples.ContainerID(containerID)][origin][key] = &samples.TraceEvents{
 		Frames:     trace.Frames,
 		Timestamps: []uint64{uint64(meta.Timestamp)},
 		OffTimes:   []int64{meta.OffTime},

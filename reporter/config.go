@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 type Config struct {
@@ -47,4 +48,6 @@ type Config struct {
 	// GRPCDialOptions allows passing additional gRPC dial options when establishing
 	// the connection to the collector. These options are appended after the default options.
 	GRPCDialOptions []grpc.DialOption
+
+	UProbeLinks []types.UProbeLink
 }
