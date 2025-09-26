@@ -70,6 +70,13 @@ static EBPF_INLINE ErrorCode process_python_frame(
   void *py_codeobject = *(void **)(&pss->frame[pyinfo->PyFrameObject_f_code]);
   *py_frameobjectptr  = *(void **)(&pss->frame[pyinfo->PyFrameObject_f_back]);
 
+  // Stop unwinding if `f_executable` is None. See comment when getting the
+  // ´noneStruct´ address in python.go for details.
+  if (pyinfo->version >= 0x30d && py_codeobject == (void *)pyinfo->noneStructAddr) {
+    *continue_with_next = true;
+    return ERR_OK;
+  }
+
   // See experiments/python/README.md for a longer version of this. In short, we
   // cannot directly obtain the correct Python line number. It has to be calculated
   // using information found in the PyCodeObject for the current frame. This
@@ -253,13 +260,20 @@ static EBPF_INLINE ErrorCode get_PyFrame(const PyProcInfo *pyinfo, void **frame)
       return ERR_PYTHON_BAD_THREAD_STATE_FRAME_ADDR;
     }
 
-    // Get _PyCFrame.current_frame
-    if (bpf_probe_read_user(frame, sizeof(void *), cframe_ptr + pyinfo->PyCFrame_current_frame)) {
-      DEBUG_PRINT(
-        "Failed to read _PyCFrame.current_frame at 0x%lx",
-        (unsigned long)(cframe_ptr + pyinfo->PyCFrame_current_frame));
-      increment_metric(metricID_UnwindPythonErrBadCFrameFrameAddr);
-      return ERR_PYTHON_BAD_CFRAME_CURRENT_FRAME_ADDR;
+    // Get _PyCFrame.current_frame.
+    //
+    // Starting with Python 3.13, the indirection through _PyCFrame is removed.
+    // See commit 006e44f9 in the CPython repo.
+    if (pyinfo->version < 0x30d) {
+      if (bpf_probe_read_user(frame, sizeof(void *), cframe_ptr + pyinfo->PyCFrame_current_frame)) {
+        DEBUG_PRINT(
+          "Failed to read _PyCFrame.current_frame at 0x%lx",
+          (unsigned long)(cframe_ptr + pyinfo->PyCFrame_current_frame));
+        increment_metric(metricID_UnwindPythonErrBadCFrameFrameAddr);
+        return ERR_PYTHON_BAD_CFRAME_CURRENT_FRAME_ADDR;
+      }
+    } else {
+      *frame = cframe_ptr;
     }
   } else {
     // Get PyThreadState.frame
