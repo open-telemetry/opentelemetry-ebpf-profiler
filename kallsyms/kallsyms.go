@@ -27,6 +27,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
@@ -119,7 +120,7 @@ func (m *Module) bytesAt(index uint32) []byte {
 
 // stringAt recovers the string at `index` received from previous `addName` call.
 func (m *Module) stringAt(index uint32) string {
-	return stringutil.ByteSlice2String(m.bytesAt(index))
+	return pfunsafe.ToString(m.bytesAt(index))
 }
 
 // parseSysfsUint reads a kernel module specific attribute from sysfs.
@@ -128,7 +129,7 @@ func parseSysfsUint(mod, knob string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return strconv.ParseUint(strings.Trim(stringutil.ByteSlice2String(text), "\n"), 0, pointerBits)
+	return strconv.ParseUint(strings.Trim(pfunsafe.ToString(text), "\n"), 0, pointerBits)
 }
 
 // loadModuleMetadata is the function to load module bounds and fileID data.
@@ -334,7 +335,7 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 		// Avoid heap allocation by not using scanner.Text().
 		// NOTE: The underlying bytes will change with the next call to scanner.Scan(),
 		// so make sure to not keep any references after the end of the loop iteration.
-		line := stringutil.ByteSlice2String(scanner.Bytes())
+		line := pfunsafe.ToString(scanner.Bytes())
 
 		// Avoid heap allocations here - do not use strings.FieldsN()
 		var fields [4]string

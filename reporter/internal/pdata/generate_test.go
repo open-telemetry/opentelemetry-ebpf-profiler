@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 
-	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
@@ -197,7 +197,7 @@ func TestFunctionTableOrder(t *testing.T) {
 			if expectedProfiles == 0 {
 				return
 			}
-			dic := res.ProfilesDictionary()
+			dic := res.Dictionary()
 			require.Equal(t, len(tt.wantFunctionTable), dic.FunctionTable().Len())
 			for i := 0; i < dic.FunctionTable().Len(); i++ {
 				funcName := dic.StringTable().At(int(dic.FunctionTable().At(i).NameStrindex()))
@@ -321,7 +321,7 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 		foundFOOKey := false
 		foundBarValue := false
 
-		dic := profiles.ProfilesDictionary()
+		dic := profiles.Dictionary()
 		for _, attr := range dic.AttributeTable().All() {
 			key := dic.StringTable().At(int(attr.KeyStrindex()))
 			value := attr.Value()
@@ -427,7 +427,7 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 
 	profiles, err := d.Generate(tree, "agent", "v3")
 	require.NoError(t, err)
-	dic := profiles.ProfilesDictionary()
+	dic := profiles.Dictionary()
 	// The string table should contain "" as first element, then function name and file path
 	strs := dic.StringTable().At(0)
 	assert.Contains(t, strs, "")
@@ -518,7 +518,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 
 	// Check that the mapping table contains our native frame mapping
 	// (plus the dummy mapping at index 0)
-	dic := profiles.ProfilesDictionary()
+	dic := profiles.Dictionary()
 	assert.GreaterOrEqual(t, dic.MappingTable().Len(), 2,
 		"Mapping table should have dummy mapping + native frame mapping")
 
@@ -582,6 +582,10 @@ func TestStackTableOrder(t *testing.T) {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
 					},
+				},
+				// This test relies on an implementation detail for ordering of results:
+				// it assumes that support.TraceOriginSampling events are processed first
+				support.TraceOriginOffCPU: map[samples.TraceAndMetaKey]*samples.TraceEvents{
 					{Pid: 2}: {
 						Frames:     newTestFrames(true),
 						Timestamps: []uint64{7, 8, 9, 10, 11, 12},
@@ -607,7 +611,7 @@ func TestStackTableOrder(t *testing.T) {
 			tree[""] = tt.events
 			res, _ := d.Generate(tree, tt.name, "version")
 
-			dic := res.ProfilesDictionary()
+			dic := res.Dictionary()
 
 			require.Equal(t, tt.expectedLocationTableLen, dic.LocationTable().Len())
 			require.Equal(t, len(tt.wantStackTable), dic.StackTable().Len())

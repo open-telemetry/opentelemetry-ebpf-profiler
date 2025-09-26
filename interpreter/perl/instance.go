@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -232,7 +233,7 @@ func (i *perlInstance) getHEK(addr libpf.Address) (libpf.String, error) {
 		}
 	}
 
-	s := unsafe.String(unsafe.SliceData(buf[vms.hek.hek_key:]), hekLen)
+	s := pfunsafe.ToString(buf[vms.hek.hek_key : vms.hek.hek_key+uint(hekLen)])
 	if !util.IsValidString(s) {
 		log.Debugf("Extracted invalid hek string at 0x%x '%v'", addr, []byte(s))
 		return libpf.NullString, fmt.Errorf("extracted invalid hek string at 0x%x", addr)
