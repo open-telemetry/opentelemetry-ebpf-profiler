@@ -55,6 +55,8 @@ type pythonData struct {
 
 	autoTLSKey libpf.SymbolValue
 
+	noneStruct libpf.SymbolValue
+
 	// vmStructs reflects the Python Interpreter introspection data we want
 	// need to extract data from the runtime. The fields are named as they are
 	// in the Python code. Eventually some of these fields will be read from
@@ -375,6 +377,7 @@ func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.P
 	vm := &d.vmStructs
 	cdata := support.PyProcInfo{
 		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
+		NoneStructAddr: uint64(d.noneStruct) + uint64(p.bias),
 		Version:        d.version,
 
 		TsdInfo: support.TSDInfo{
@@ -736,6 +739,25 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 	vms := &pd.vmStructs
 
+	if version >= pythonVer(3, 13) {
+		// CPython commit 7199584ac8632eab57612f595a7162ab8d2ebbc0 makes
+		// `f_executable` (referred to here as `f_code` in most places) point to
+		// `Py_None` for the top level frame that's entered from the C side,
+		// while before it was pointing to the trampoline, which was a valid
+		// code object.
+		//
+		// `Py_None` obviously is not a valid code object, and if we try to
+		// decode it we get bad names / lines tables, so we need to identify
+		// this case, and stop unwinding on the eBPF side.
+		//
+		// Detecting `Py_None` is quite simple, it's the address of the exported
+		// `_Py_NoneStruct` symbol, so we get that address here and pass it to
+		// eBPF, so it knows when to stop.
+		if pd.noneStruct, err = ef.LookupSymbolAddress("_Py_NoneStruct"); err != nil {
+			return nil, fmt.Errorf("_Py_NoneStruct not defined: %v", err)
+		}
+	}
+
 	// Introspection data not available for these structures
 	vms.PyTypeObject.BasicSize = 32
 	vms.PyTypeObject.Members = 240
@@ -780,7 +802,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.PyFrameObject.EntryMember = 70 // char owner
 		vms.PyFrameObject.EntryVal = 3     // enum _frameowner, FRAME_OWNED_BY_CSTACK
 		vms.PyThreadState.Frame = 72
-		vms.PyCFrame.CurrentFrame = 8
+		// Current frame is not used anymore, see commit 006e44f9 in the CPython repo:
+		// they removed one level of indirection.
+		vms.PyCFrame.CurrentFrame = 0
 		vms.PyASCIIObject.Data = 40
 	}
 
