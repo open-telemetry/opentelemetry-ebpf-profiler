@@ -6,6 +6,7 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -87,7 +88,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		return nil
 	}
 	(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = &samples.TraceEvents{
-		Frames:     trace.Frames,
+		Frames:     slices.Clone(trace.Frames),
 		Timestamps: []uint64{uint64(meta.Timestamp)},
 		OffTimes:   []int64{meta.OffTime},
 		EnvVars:    meta.EnvVars,
