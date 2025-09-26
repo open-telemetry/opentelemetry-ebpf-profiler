@@ -38,11 +38,13 @@ var (
 )
 
 type beamData struct {
-	version               uint32
-	the_active_code_index uint64
-	r                     uint64
-	erts_atom_table       uint64
-	etp_ptr_mask          uint64
+	version                uint32
+	the_active_code_index  uint64
+	r                      uint64
+	erts_atom_table        uint64
+	etp_ptr_mask           uint64
+	etp_header_subtag_mask uint64
+	etp_heap_bits_subtag   uint64
 
 	// Sizes and offsets BEAM internal structs we need to traverse
 	vmStructs struct {
@@ -90,8 +92,19 @@ type beamData struct {
 
 		// Atom
 		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/atom.h#L48-L54
+		// In OTP 28, we need to look it up as a binary:
+		// https://github.com/erlang/otp/blob/OTP-28.0.2/erts/emulator/beam/atom.h#L50-L59
 		atom struct {
 			len, name uint8
+			u         struct {
+				bin uint8
+			}
+		}
+
+		// ErlHeapBits
+		// https://github.com/erlang/otp/blob/OTP-28.0.2/erts/emulator/beam/erl_bits.h#L149-L154
+		erl_heap_bits struct {
+			data uint8
 		}
 	}
 }
@@ -186,17 +199,33 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, fmt.Errorf("symbol 'etp_ptr_mask' not found: %v", err)
 	}
 
+	// "etp_header_subtag_mask" is from:
+	// https://github.com/erlang/otp/blob/OTP-28.0.2/erts/emulator/beam/erl_etp.c#L132
+	_, etp_header_subtag_mask, err := ef.SymbolData("etp_header_subtag_mask", 8)
+	if err != nil {
+		return nil, fmt.Errorf("symbol 'etp_header_subtag_mask' not found: %v", err)
+	}
+
+	// "etp_heap_bits_subtag" is from:
+	// https://github.com/erlang/otp/blob/OTP-28.0.2/erts/emulator/beam/erl_etp.c#L108
+	_, etp_heap_bits_subtag, err := ef.SymbolData("etp_heap_bits_subtag", 8)
+	if err != nil {
+		return nil, fmt.Errorf("symbol 'etp_heap_bits_subtag' not found: %v", err)
+	}
+
 	d := &beamData{
-		version:               otpVersion,
-		the_active_code_index: uint64(codeIndex.Address),
-		r:                     uint64(r),
-		erts_atom_table:       uint64(atomTable.Address),
-		etp_ptr_mask:          nopanicslicereader.Uint64(etp_ptr_mask, 0),
+		version:                otpVersion,
+		the_active_code_index:  uint64(codeIndex.Address),
+		r:                      uint64(r),
+		erts_atom_table:        uint64(atomTable.Address),
+		etp_ptr_mask:           nopanicslicereader.Uint64(etp_ptr_mask, 0),
+		etp_header_subtag_mask: nopanicslicereader.Uint64(etp_header_subtag_mask, 0),
+		etp_heap_bits_subtag:   nopanicslicereader.Uint64(etp_heap_bits_subtag, 0),
 	}
 
 	vms := &d.vmStructs
 
-	// These values are based on OTP release 27.2.4.
+	// These values are the same on OTP releases 27.2.4 and 28.0.2.
 	// We'll see what varies by version.
 	vms.ranges.size_of = 32
 	vms.ranges.modules = 0
@@ -204,10 +233,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.ranges_entry.size_of = 16
 	vms.ranges_entry.start = 0
 	vms.ranges_entry.end = 8
-	vms.beam_code_header.size_of = 144
 	vms.beam_code_header.num_functions = 0
 	vms.beam_code_header.line_table = 72
-	vms.beam_code_header.functions = 136
 	vms.erts_code_info.size_of = 40
 	vms.erts_code_info.mfa = 16
 	vms.erts_code_mfa.module = 0
@@ -220,7 +247,20 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.beam_code_line_tab.func_tab = 24
 	vms.index_table.seg_table = 120
 	vms.atom.len = 24
-	vms.atom.name = 32
+	vms.erl_heap_bits.data = 16
+
+	switch otpVersion {
+	case 27:
+		vms.beam_code_header.size_of = 144
+		vms.beam_code_header.functions = 136
+		vms.atom.name = 32
+	case 28:
+		vms.beam_code_header.size_of = 160
+		vms.beam_code_header.functions = 152
+		vms.atom.u.bin = 32
+	default:
+		return d, fmt.Errorf("unsupported OTP version for BEAM interpreter: %d", otpVersion)
+	}
 
 	log.Infof("BEAM loaded, OTP version: %d, ERTS version: %s", otpVersion, ertsVersion)
 
@@ -452,9 +492,25 @@ func (i *beamInstance) lookupAtom(index uint32) (string, error) {
 	len := i.rm.Uint16(entry + libpf.Address(vms.atom.len))
 
 	name := make([]byte, len)
-	err := i.rm.Read(i.rm.Ptr(entry+libpf.Address(vms.atom.name)), name)
-	if err != nil {
-		return "", fmt.Errorf("BEAM Unable to lookup atom with index %d: %v", index, err)
+	switch i.data.version {
+	case 27:
+		err := i.rm.Read(i.rm.Ptr(entry+libpf.Address(vms.atom.name)), name)
+		if err != nil {
+			return "", fmt.Errorf("BEAM Unable to lookup atom with index %d: %v", index, err)
+		}
+	case 28:
+		// Implementation based on https://github.com/erlang/otp/blob/OTP-28.0.2/erts/etc/unix/etp-commands.in#L657-L674
+		unboxed := i.rm.Ptr(entry+libpf.Address(vms.atom.u.bin)) & libpf.Address(i.data.etp_ptr_mask)
+
+		subtag := i.rm.Uint64(unboxed) & uint64(i.data.etp_header_subtag_mask)
+		if subtag == uint64(i.data.etp_heap_bits_subtag) {
+			err := i.rm.Read(unboxed+libpf.Address(vms.erl_heap_bits.data), name)
+			if err != nil {
+				return "", fmt.Errorf("BEAM Unable to lookup atom with index %d (ErlHeapBits tag): %v", index, err)
+			}
+		} else {
+			return "", fmt.Errorf("BEAM Unable to lookup atom with index %d: expected boxed value subtag 0x%x, found 0x%x", index, i.data.etp_heap_bits_subtag, subtag)
+		}
 	}
 
 	i.atomCache[index] = string(name)

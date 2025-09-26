@@ -57,6 +57,9 @@ fields = {
 
     'atom.len': offset_of('Atom', 'len'),
     'atom.name': offset_of('Atom', 'name'),
+    'atom.u.bin': offset_of('Atom', 'u.bin'),
+    
+    'erl_heap_bits.data': offset_of('ErlHeapBits', 'data'),
 }
 
 
