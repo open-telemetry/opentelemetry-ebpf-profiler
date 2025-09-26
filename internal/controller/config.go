@@ -37,7 +37,8 @@ type Config struct {
 	MaxGRPCRetries         uint32
 	MaxRPCMsgSize          int
 
-	Reporter reporter.Reporter
+	Reporter           reporter.Reporter
+	ExecutableReporter reporter.ExecutableReporter
 
 	Fs *flag.FlagSet
 
