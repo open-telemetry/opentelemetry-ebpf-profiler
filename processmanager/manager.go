@@ -402,9 +402,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *host.Trace) {
 		if cached, ok := pm.frameCache.GetAndRefresh(key, frameCacheLifetime); ok {
 			// Fast path
 			cacheHit++
-			for _, val := range cached {
-				trace.Frames = append(trace.Frames, val)
-			}
+			trace.Frames = append(trace.Frames, cached...)
 		} else {
 			// Slow path: convert trace.
 			if pm.convertFrame(pid, frame, &trace.Frames) {
