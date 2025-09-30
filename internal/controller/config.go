@@ -34,12 +34,16 @@ type Config struct {
 	OffCPUThreshold        float64
 	UProbeLinks            []string
 	LoadProbe              bool
+	MaxGRPCRetries         uint32
+	MaxRPCMsgSize          int
 
-	Reporter reporter.Reporter
+	Reporter           reporter.Reporter
+	ExecutableReporter reporter.ExecutableReporter
 
 	Fs *flag.FlagSet
 
 	IncludeEnvVars string
+	OnShutdown     func() error
 }
 
 const (

@@ -19,6 +19,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -230,7 +231,7 @@ func getString(data []byte, offset int) string {
 	if zeroIdx < 0 {
 		return ""
 	}
-	return unsafe.String(unsafe.SliceData(data[offset:]), zeroIdx)
+	return pfunsafe.ToString(data[offset : offset+zeroIdx])
 }
 
 // searchGoPclntab uses heuristic to find the gopclntab from RO data.
@@ -333,7 +334,9 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, err error) {
 
 // Gopclntab is the API for extracting data from .gopclntab
 type Gopclntab struct {
-	dataRef   io.Closer
+	dataRef     io.Closer
+	setDontNeed func()
+
 	data      []byte
 	textStart uintptr
 	numFuncs  int
@@ -382,6 +385,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	if data == nil {
 		return nil, err
 	}
+	defer ef.SetDontNeed()
 
 	hdrSize := uintptr(PclntabHeaderSize())
 	dataLen := uintptr(len(data))
@@ -468,8 +472,15 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.funSize = 4 + uint8(unsafe.Sizeof(pclntabFunc{}))
 	}
 	g.dataRef = ef.Take()
+	g.setDontNeed = ef.SetDontNeed
 
 	return g, nil
+}
+
+// SetDontNeed gives advice about further use of memory.
+func (g *Gopclntab) SetDontNeed() error {
+	g.setDontNeed()
+	return nil
 }
 
 // Close releases the pfelf Data reference taken.

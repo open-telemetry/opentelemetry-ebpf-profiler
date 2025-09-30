@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -180,7 +181,7 @@ func determinePHPVersion(ef *pfelf.File) (uint, error) {
 		if zeroIdx < 0 {
 			continue
 		}
-		version, err := versionExtract(unsafe.String(unsafe.SliceData(rodata[idx:]), zeroIdx))
+		version, err := versionExtract(pfunsafe.ToString(rodata[idx : idx+zeroIdx]))
 		if err != nil {
 			continue
 		}

@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -206,7 +207,7 @@ func nextString(rm remotememory.RemoteMemory, addr *libpf.Address, maxLen int) (
 	}
 
 	*addr += libpf.Address(length)
-	return unsafe.String(unsafe.SliceData(raw), len(raw)), nil
+	return pfunsafe.ToString(raw), nil
 }
 
 // readProcStorage reads the APM process storage from memory.

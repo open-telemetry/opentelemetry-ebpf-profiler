@@ -33,7 +33,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
-	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -262,11 +261,16 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		baseName = "<anonymous-blob>"
 	}
 	gnuBuildID, _ := ef.GetBuildID()
+	goBuildID := ""
+	if ef.IsGolang() {
+		goBuildID, _ = ef.GetGoBuildID()
+	}
 
 	info.mappingFile = libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 		FileID:     fileID,
 		FileName:   libpf.Intern(baseName),
 		GnuBuildID: gnuBuildID,
+		GoBuildID:  goBuildID,
 	})
 
 	info.addressMapper = ef.GetAddressMapper()
@@ -278,6 +282,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		Mapping:           mapping,
 		DebuglinkFileName: ef.DebuglinkFileName(elfRef.FileName(), elfRef),
 	})
+
 	return info
 }
 
@@ -764,6 +769,3 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
 }
-
-// Compile time check to make sure we satisfy the interface.
-var _ tracehandler.TraceProcessor = (*ProcessManager)(nil)

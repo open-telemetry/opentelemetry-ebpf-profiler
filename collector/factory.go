@@ -28,24 +28,54 @@ func NewFactory() receiver.Factory {
 	return xreceiver.NewFactory(
 		typeStr,
 		defaultConfig,
-		xreceiver.WithProfiles(createProfilesReceiver, component.StabilityLevelAlpha))
+		xreceiver.WithProfiles(BuildProfilesReceiver(), component.StabilityLevelAlpha))
 }
 
-func createProfilesReceiver(
-	_ context.Context,
-	_ receiver.Settings, //nolint:gocritic // we must respect the collector API
-	baseCfg component.Config,
-	nextConsumer xconsumer.Profiles) (xreceiver.Profiles, error) {
-	cfg, ok := baseCfg.(*controller.Config)
-	if !ok {
-		return nil, errInvalidConfig
-	}
+func BuildProfilesReceiver(options ...option) xreceiver.CreateProfilesFunc {
+	return func(ctx context.Context,
+		rs receiver.Settings,
+		baseCfg component.Config,
+		nextConsumer xconsumer.Profiles,
+	) (xreceiver.Profiles, error) {
+		cfg, ok := baseCfg.(*Config)
+		if !ok {
+			return nil, errInvalidConfig
+		}
 
-	return internal.NewController(cfg, nextConsumer)
+		controllerOption := &controllerOption{}
+		for _, option := range options {
+			controllerOption = option.apply(controllerOption)
+		}
+
+		controlerCfg := &controller.Config{
+			ReporterInterval:       cfg.ReporterInterval,
+			MonitorInterval:        cfg.MonitorInterval,
+			SamplesPerSecond:       cfg.SamplesPerSecond,
+			ProbabilisticInterval:  cfg.ProbabilisticInterval,
+			ProbabilisticThreshold: cfg.ProbabilisticThreshold,
+			Tracers:                cfg.Tracers,
+			ClockSyncInterval:      cfg.ClockSyncInterval,
+			SendErrorFrames:        cfg.SendErrorFrames,
+			VerboseMode:            cfg.VerboseMode,
+			OffCPUThreshold:        cfg.OffCPUThreshold,
+			IncludeEnvVars:         cfg.IncludeEnvVars,
+			UProbeLinks:            cfg.UProbeLinks,
+			LoadProbe:              cfg.LoadProbe,
+			MapScaleFactor:         cfg.MapScaleFactor,
+			BpfVerifierLogLevel:    cfg.BPFVerifierLogLevel,
+			NoKernelVersionCheck:   cfg.NoKernelVersionCheck,
+			MaxGRPCRetries:         cfg.MaxGRPCRetries,
+			MaxRPCMsgSize:          cfg.MaxRPCMsgSize,
+			ExecutableReporter:     controllerOption.executableReporter,
+			OnShutdown:             controllerOption.onShutdown,
+		}
+
+		return internal.NewController(controlerCfg, rs, nextConsumer)
+	}
 }
 
 func defaultConfig() component.Config {
-	return &controller.Config{
+	return &Config{
 		ReporterInterval:       5 * time.Second,
 		MonitorInterval:        5 * time.Second,
 		SamplesPerSecond:       20,
@@ -53,5 +83,7 @@ func defaultConfig() component.Config {
 		ProbabilisticThreshold: 100,
 		Tracers:                "all",
 		ClockSyncInterval:      3 * time.Minute,
+		MaxGRPCRetries:         5,
+		MaxRPCMsgSize:          32 << 20, // 32 MiB,
 	}
 }

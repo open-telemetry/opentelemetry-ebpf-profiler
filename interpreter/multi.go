@@ -141,3 +141,14 @@ func (m *MultiInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 
 	return allMetrics, errors.Join(errs...)
 }
+
+func (m *MultiInstance) ReleaseResources() error {
+	var errs []error
+	for _, instance := range m.instances {
+		err := instance.ReleaseResources()
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}

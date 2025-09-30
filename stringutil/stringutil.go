@@ -5,7 +5,6 @@ package stringutil // import "go.opentelemetry.io/ebpf-profiler/stringutil"
 
 import (
 	"strings"
-	"unsafe"
 )
 
 var asciiSpace = [256]uint8{'\t': 1, '\n': 1, '\v': 1, '\f': 1, '\r': 1, ' ': 1}
@@ -76,11 +75,4 @@ func SplitN(s, sep string, f []string) int {
 	// Put the remainder of s as last element of f.
 	f[i] = s
 	return i + 1
-}
-
-// ByteSlice2String converts a byte slice into a string without a heap allocation.
-// Be aware that the byte slice and the string share the same memory - which makes
-// the string mutable.
-func ByteSlice2String(b []byte) string {
-	return unsafe.String(unsafe.SliceData(b), len(b))
 }

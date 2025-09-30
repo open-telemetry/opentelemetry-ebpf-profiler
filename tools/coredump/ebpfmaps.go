@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
@@ -48,7 +49,7 @@ func (emc *ebpfMapsCoredump) UpdateInterpreterOffsets(ebpfProgIndex uint16,
 	if err != nil {
 		return err
 	}
-	emc.ctx.addMap(&C.interpreter_offsets, C.u64(key), libpf.SliceFrom(&value))
+	emc.ctx.addMap(&C.interpreter_offsets, C.u64(key), pfunsafe.FromPointer(&value))
 	return nil
 }
 

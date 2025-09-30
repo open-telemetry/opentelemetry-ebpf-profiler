@@ -15,6 +15,8 @@ type FrameMappingFileData struct {
 	FileName String
 	// GnuBuildID is the GNU build ID from .note.gnu.build-id, if any.
 	GnuBuildID string
+	// GoBuildID is the Go build ID from .note.go.buildid, if any.
+	GoBuildID string
 }
 
 // FrameMappingFile is an interned FrameMappingFileData reference.
@@ -80,7 +82,7 @@ type Frame struct {
 	// An address in ELF VA space (native frame) or line number (interpreted frame).
 	AddressOrLineno AddressOrLineno
 	// Mapping is a reference to the mapping data to which this Frame coresspends to.
-	// Available only for frames executing on a file backed memory mapping. 
+	// Available only for frames executing on a file backed memory mapping.
 	Mapping FrameMapping
 }
 

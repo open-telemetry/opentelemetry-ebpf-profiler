@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
@@ -204,7 +205,7 @@ func (d *hotspotInstance) getSymbol(addr libpf.Address) libpf.String {
 			return libpf.NullString
 		}
 	}
-	s := unsafe.String(unsafe.SliceData(tmp), len(tmp))
+	s := pfunsafe.ToString(tmp)
 	if !util.IsValidString(s) {
 		log.Debugf("Extracted Hotspot symbol is invalid at 0x%x '%v'", addr, tmp)
 		return libpf.NullString
@@ -408,7 +409,7 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 	// scopes_pcs is a look up table to map RIP to scope_data
 	// metadata is the array that maps scope_data method indices to "class Method"
 
-	const maxMetadataSize = 4 * 1024 * 1024
+	const maxMetadataSize = 1024 * 1024
 
 	if jit, ok := d.addrToJITInfo.Get(addr); ok {
 		if jit.compileID == addrCheck {
@@ -463,16 +464,16 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
 		depsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.DependenciesOffset)
 
-		if depsOff >= maxMetadataSize {
-			return nil, fmt.Errorf("unreasonably large metadata data region: %d bytes",
-				depsOff)
-		}
 		if metadataOff > scopesDataOff || scopesDataOff > scopesPcsOff || scopesPcsOff > depsOff {
 			return nil, fmt.Errorf("unexpected nmethod layout: %v <= %v <= %v <= %v",
 				metadataOff, scopesDataOff, scopesPcsOff, depsOff)
 		}
-
-		scopesData := make([]byte, depsOff-metadataOff)
+		metadataSize := depsOff - metadataOff
+		if metadataSize >= maxMetadataSize {
+			return nil, fmt.Errorf("unreasonably large metadata data region: %d bytes",
+				metadataSize)
+		}
+		scopesData := make([]byte, metadataSize)
 		if err := d.rm.Read(addr+metadataOff, scopesData); err != nil {
 			return nil, fmt.Errorf("invalid nmethod metadata: %v", err)
 		}
@@ -500,7 +501,8 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		// ...
 		// [JIT_code]		@ this + CodeBlob._code_start
 		// ...
-		// [metadata]		@ this + CodeBlob._code_end + nmethod._metadata_offset
+		// [metadata]		@ this + CodeBlob._code_end + nmethod._metadata_offset (JDK -24)
+		// [metadata]		@ CodeBlob._mutable_data + CodeBlob._relocation_size   (JDK 25+)
 		//
 		// [scopes_data]	@ _immutable_data + nmethod._scopes_data_begin	\ arrays we need
 		// [scopes_pcs]		@ _immutable_data + nmethod._scopes_pcs_offset	/ for inlining info
@@ -509,9 +511,22 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		// ...
 		// speculations presence depends on JDK build, and is not used. Instead the scopes
 		// end is determined from immutable data size.
-		metadataOff := npsr.PtrDiff32(nmethod, vms.CodeBlob.CodeEnd) +
-			npsr.PtrDiff16(nmethod, vms.Nmethod.MetadataOffset)
-		codeBlobSize := npsr.Uint32(nmethod, vms.CodeBlob.Size)
+
+		var metadataPtr, metadataSize libpf.Address
+		if vms.CodeBlob.MutableData != 0 {
+			relocationSize := npsr.PtrDiff32(nmethod, vms.CodeBlob.RelocationSize)
+			mutableDataSize := npsr.PtrDiff32(nmethod, vms.CodeBlob.MutableDataSize)
+			metadataPtr = npsr.Ptr(nmethod, vms.CodeBlob.MutableData) + relocationSize
+			metadataSize = mutableDataSize - relocationSize
+		} else {
+			metadataOff := npsr.PtrDiff32(nmethod, vms.CodeBlob.CodeEnd) +
+				npsr.PtrDiff16(nmethod, vms.Nmethod.MetadataOffset)
+			metadataPtr = addr + metadataOff
+			// Actually the metadata only spans to `_jvmci_data_offset`, but that field isn't exposed
+			// through VMstructs, and the codeblob size is the next boundary after that.
+			metadataSize = npsr.PtrDiff32(nmethod, vms.CodeBlob.Size) - metadataOff
+		}
+
 		scopesPcsOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesPcsOffset)
 		scopesDataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
 		immutableDataPtr := npsr.Ptr(nmethod, vms.Nmethod.ImmutableData)
@@ -524,17 +539,13 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 			return nil, fmt.Errorf("unexpected immutable data layout: %v, %v, %v",
 				scopesDataOff, scopesPcsOff, immutableDataSize)
 		}
-
-		// Actually the metadata only spans to `_jvmci_data_offset`, but that field isn't exposed
-		// through VMstructs, and the codeblob size is the next boundary after that.
-		metadataSize := libpf.Address(codeBlobSize) - metadataOff
-		if metadataOff >= maxMetadataSize {
+		if metadataSize >= maxMetadataSize {
 			return nil, fmt.Errorf("unreasonably large nmethod metadata: %v",
 				metadataSize)
 		}
 
 		metadata := make([]byte, metadataSize)
-		if err := d.rm.Read(addr+metadataOff, metadata); err != nil {
+		if err := d.rm.Read(metadataPtr, metadata); err != nil {
 			return nil, fmt.Errorf("invalid nmethod metadata ptr: %v", err)
 		}
 

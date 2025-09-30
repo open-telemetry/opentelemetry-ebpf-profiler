@@ -25,6 +25,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
@@ -378,7 +379,8 @@ func (r *rubyInstance) getStringCached(addr libpf.Address, reader StringReader) 
 		return libpf.NullString, err
 	}
 	if !util.IsValidString(str) {
-		log.Debugf("Extracted invalid string from Ruby at 0x%x '%v'", addr, libpf.SliceFrom(str))
+		log.Debugf("Extracted invalid string from Ruby at 0x%x '%v'[len=%d]",
+			addr, unsafe.Slice(unsafe.StringData(str), min(len(str), 128)), len(str))
 		return libpf.NullString, fmt.Errorf("extracted invalid Ruby string from address 0x%x", addr)
 	}
 
@@ -754,7 +756,7 @@ func determineRubyVersion(ef *pfelf.File) (uint32, error) {
 		return 0, fmt.Errorf("unable to read 'ruby_version': %v", err)
 	}
 
-	versionString := strings.TrimRight(unsafe.String(unsafe.SliceData(memory), len(memory)), "\x00")
+	versionString := strings.TrimRight(pfunsafe.ToString(memory), "\x00")
 	matches := rubyVersionRegex.FindStringSubmatch(versionString)
 	if len(matches) < 3 {
 		return 0, fmt.Errorf("failed to parse version string: '%s'", versionString)

@@ -9,6 +9,7 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 
+	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -29,6 +30,12 @@ type elfInfo struct {
 	lastModified  int64
 	mappingFile   libpf.FrameMappingFile
 	addressMapper pfelf.AddressMapper
+}
+
+// frameCacheKey is the LRU cache key for caching frames.
+type frameCacheKey struct {
+	host.Frame
+	libpf.PID
 }
 
 // ProcessManager is responsible for managing the events happening throughout the lifespan of a
@@ -62,6 +69,10 @@ type ProcessManager struct {
 	elfInfoCacheHit  atomic.Uint64
 	elfInfoCacheMiss atomic.Uint64
 
+	// frame conversion
+	frameCacheHit  atomic.Uint64
+	frameCacheMiss atomic.Uint64
+
 	// mappingStats are statistics for parsing process mappings
 	mappingStats struct {
 		errProcNotExist    atomic.Uint32
@@ -76,6 +87,14 @@ type ProcessManager struct {
 	// elfInfoCache provides a cache to quickly retrieve the ELF info and fileID for a particular
 	// executable. It caches results based on iNode number and device ID. Locked LRU.
 	elfInfoCache *lru.LRU[util.OnDiskFileIdentifier, elfInfo]
+
+	// frameCache stores mappings from BPF frame to the symbolized frames.
+	// This allows avoiding the overhead of re-doing user-mode symbolization
+	// of frames that we have recently seen already.
+	frameCache *lru.LRU[frameCacheKey, libpf.Frames]
+
+	// traceReporter is the interface to report traces
+	traceReporter reporter.TraceReporter
 
 	// exeReporter is the interface to report executables
 	exeReporter reporter.ExecutableReporter
@@ -105,7 +124,7 @@ type Mapping struct {
 	// Inode number of the backing file
 	Inode uint64
 
-	//
+	// FrameMapping data for this mapping.
 	FrameMapping libpf.FrameMapping
 }
 

@@ -1,4 +1,4 @@
-package pdata
+package orderedset
 
 import (
 	"testing"
