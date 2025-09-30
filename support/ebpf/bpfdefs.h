@@ -129,6 +129,8 @@ static long (*bpf_probe_read_user)(void *dst, int size, const void *unsafe_ptr) 
 static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr) = (void *)
   BPF_FUNC_probe_read_kernel;
 
+static long (*const bpf_get_attach_cookie)(void *ctx) = (void *)BPF_FUNC_get_attach_cookie;
+
   // The sizeof in bpf_trace_printk() must include \0, else no output
   // is generated. The \n is not needed on 5.8+ kernels, but definitely on
   // 5.4 kernels.

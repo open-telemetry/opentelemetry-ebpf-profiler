@@ -146,21 +146,21 @@ func newTestFrames(extraFrame bool) libpf.Frames {
 func TestFunctionTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
-		events map[libpf.Origin]samples.KeyToEventMapping
+		events map[samples.Origin]samples.KeyToEventMapping
 
 		wantFunctionTable        []string
 		expectedResourceProfiles int
 	}{
 		{
 			name:                     "no events",
-			events:                   map[libpf.Origin]samples.KeyToEventMapping{},
+			events:                   map[samples.Origin]samples.KeyToEventMapping{},
 			wantFunctionTable:        []string{""},
 			expectedResourceProfiles: 0,
 		}, {
 			name:                     "single executable",
 			expectedResourceProfiles: 1,
-			events: map[libpf.Origin]samples.KeyToEventMapping{
-				support.TraceOriginSampling: map[samples.TraceAndMetaKey]*samples.TraceEvents{
+			events: map[samples.Origin]samples.KeyToEventMapping{
+				samples.Origin{Origin: support.TraceOriginSampling}: map[samples.TraceAndMetaKey]*samples.TraceEvents{
 					{Pid: 1}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
@@ -210,12 +210,12 @@ func TestFunctionTableOrder(t *testing.T) {
 func TestProfileDuration(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
-		events map[libpf.Origin]samples.KeyToEventMapping
+		events map[samples.Origin]samples.KeyToEventMapping
 	}{
 		{
 			name: "profile duration",
-			events: map[libpf.Origin]samples.KeyToEventMapping{
-				support.TraceOriginSampling: map[samples.TraceAndMetaKey]*samples.TraceEvents{
+			events: map[samples.Origin]samples.KeyToEventMapping{
+				samples.Origin{Origin: support.TraceOriginSampling}: map[samples.TraceAndMetaKey]*samples.TraceEvents{
 					{Pid: 1}: {
 						Timestamps: []uint64{2, 1, 3, 4, 7},
 					},
@@ -286,8 +286,8 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 		Tid:            456,
 		ApmServiceName: "svc",
 	}
-	events := map[libpf.Origin]samples.KeyToEventMapping{
-		support.TraceOriginSampling: {
+	events := map[samples.Origin]samples.KeyToEventMapping{
+		samples.Origin{Origin: support.TraceOriginSampling}: {
 			traceKey: &samples.TraceEvents{
 				Frames: singleFrameTrace(libpf.GoFrame, mappingFile,
 					0x10, funcName, filePath, 42),
@@ -351,14 +351,14 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 	traceKey := samples.TraceAndMetaKey{ExecutablePath: "/bin/foo"}
 	frames := singleFrameTrace(libpf.PythonFrame, mappingFile, 0x20, "f", "/bin/foo", 1)
 
-	events1 := map[libpf.Origin]samples.KeyToEventMapping{
-		support.TraceOriginSampling: {
+	events1 := map[samples.Origin]samples.KeyToEventMapping{
+		samples.Origin{Origin: support.TraceOriginSampling}: {
 			traceKey: &samples.TraceEvents{
 				Frames:     frames,
 				Timestamps: []uint64{1, 2},
 			},
 		},
-		support.TraceOriginOffCPU: {
+		samples.Origin{Origin: support.TraceOriginOffCPU}: {
 			traceKey: &samples.TraceEvents{
 				Frames:     frames,
 				Timestamps: []uint64{3, 4},
@@ -366,8 +366,8 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 			},
 		},
 	}
-	events2 := map[libpf.Origin]samples.KeyToEventMapping{
-		support.TraceOriginSampling: {
+	events2 := map[samples.Origin]samples.KeyToEventMapping{
+		samples.Origin{Origin: support.TraceOriginSampling}: {
 			traceKey: &samples.TraceEvents{
 				Frames:     frames,
 				Timestamps: []uint64{5},
@@ -412,8 +412,8 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 	})
 
 	traceKey := samples.TraceAndMetaKey{ExecutablePath: filePath}
-	events := map[libpf.Origin]samples.KeyToEventMapping{
-		support.TraceOriginSampling: {
+	events := map[samples.Origin]samples.KeyToEventMapping{
+		samples.Origin{Origin: support.TraceOriginSampling}: {
 			traceKey: &samples.TraceEvents{
 				Frames: singleFrameTrace(libpf.PythonFrame, mappingFile, 0x30,
 					funcName, filePath, 123),
@@ -476,8 +476,8 @@ func TestGenerate_NativeFrame(t *testing.T) {
 		Pid:            789,
 		Tid:            1011,
 	}
-	events := map[libpf.Origin]samples.KeyToEventMapping{
-		support.TraceOriginSampling: {
+	events := map[samples.Origin]samples.KeyToEventMapping{
+		samples.Origin{Origin: support.TraceOriginSampling}: {
 			traceKey: &samples.TraceEvents{
 				Frames:     singleFrameNative(mappingFile, 0x1000, 0x1000, 0x2000, 0x100),
 				Timestamps: []uint64{123, 456, 789},
@@ -554,15 +554,15 @@ func TestGenerate_NativeFrame(t *testing.T) {
 func TestStackTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
-		events map[libpf.Origin]samples.KeyToEventMapping
+		events map[samples.Origin]samples.KeyToEventMapping
 
 		wantStackTable           [][]int32
 		expectedLocationTableLen int
 	}{
 		{
 			name: "single stack",
-			events: map[libpf.Origin]samples.KeyToEventMapping{
-				support.TraceOriginSampling: map[samples.TraceAndMetaKey]*samples.TraceEvents{
+			events: map[samples.Origin]samples.KeyToEventMapping{
+				samples.Origin{Origin: support.TraceOriginSampling}: map[samples.TraceAndMetaKey]*samples.TraceEvents{
 					{}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
@@ -576,8 +576,8 @@ func TestStackTableOrder(t *testing.T) {
 		},
 		{
 			name: "multiple stacks",
-			events: map[libpf.Origin]samples.KeyToEventMapping{
-				support.TraceOriginSampling: map[samples.TraceAndMetaKey]*samples.TraceEvents{
+			events: map[samples.Origin]samples.KeyToEventMapping{
+				samples.Origin{Origin: support.TraceOriginSampling}: map[samples.TraceAndMetaKey]*samples.TraceEvents{
 					{Pid: 1}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
@@ -585,7 +585,7 @@ func TestStackTableOrder(t *testing.T) {
 				},
 				// This test relies on an implementation detail for ordering of results:
 				// it assumes that support.TraceOriginSampling events are processed first
-				support.TraceOriginOffCPU: map[samples.TraceAndMetaKey]*samples.TraceEvents{
+				samples.Origin{Origin: support.TraceOriginOffCPU}: map[samples.TraceAndMetaKey]*samples.TraceEvents{
 					{Pid: 2}: {
 						Frames:     newTestFrames(true),
 						Timestamps: []uint64{7, 8, 9, 10, 11, 12},
