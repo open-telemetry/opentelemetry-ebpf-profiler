@@ -73,16 +73,9 @@ var (
 // fileIDMapper and symbolReporter. Specify nil for fileIDMapper to use the default
 // implementation.
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
-	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, traceReporter reporter.TraceReporter,
+	ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
 	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
 	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
-	if fileIDMapper == nil {
-		var err error
-		fileIDMapper, err = newFileIDMapper(lruFileIDCacheSize)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize file ID mapping: %v", err)
-		}
-	}
 	if exeReporter == nil {
 		exeReporter = executableReporterStub{}
 	}
@@ -114,7 +107,6 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		exitEvents:               make(map[libpf.PID]times.KTime),
 		pidToProcessInfo:         make(map[libpf.PID]*processInfo),
 		ebpf:                     ebpf,
-		FileIDMapper:             fileIDMapper,
 		elfInfoCache:             elfInfoCache,
 		frameCache:               frameCache,
 		traceReporter:            traceReporter,
@@ -240,10 +232,16 @@ func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, bpfFrame *host.Frame, fr
 // if non-trivial cacheable conversion was done.
 func (pm *ProcessManager) convertFrame(pid libpf.PID, frame *host.Frame, dst *libpf.Frames) bool {
 	switch frame.Type.Interpreter() {
-	case libpf.UnknownInterp:
-		log.Errorf("Unexpected frame type 0x%02X (neither error nor interpreter frame)",
+	case libpf.UnknownInterp, libpf.Kernel:
+		log.Errorf("Unexpected frame type 0x%02X (neither error nor usermode frame)",
 			uint8(frame.Type))
-	case libpf.Native, libpf.Kernel:
+	case libpf.Native:
+		// Attempt symbolization of native frames. It is best effort and
+		// provides non-symbolized frames if no native symbolizer is active.
+		if err := pm.symbolizeFrame(pid, frame, dst); err == nil {
+			return true
+		}
+
 		// The BPF code classifies whether an address is a return address or not.
 		// Return addresses are where execution resumes when returning to the stack
 		// frame and point to the **next instruction** after the call instruction
@@ -264,43 +262,13 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, frame *host.Frame, dst *li
 		}
 
 		// Locate mapping info for the frame.
-		var mappingStart, mappingEnd libpf.Address
-		var fileOffset uint64
-		if frame.Type.Interpreter() == libpf.Native {
-			if mapping, ok := pm.findMappingForTrace(pid, frame.File, frame.Lineno); ok {
-				mappingStart = mapping.Vaddr - libpf.Address(mapping.Bias)
-				mappingEnd = mappingStart + libpf.Address(mapping.Length)
-				fileOffset = mapping.FileOffset
-			}
-		}
-
-		// Attempt symbolization of native frames. It is best effort and
-		// provides non-symbolized frames if no native symbolizer is active.
-		if err := pm.symbolizeFrame(pid, frame, dst); err == nil {
-			return true
-		}
-
-		if mappingFile, ok := pm.FileIDMapper.Get(frame.File); ok {
-			dst.Append(&libpf.Frame{
-				Type:              frame.Type,
-				AddressOrLineno:   relativeRIP,
-				MappingStart:      mappingStart,
-				MappingEnd:        mappingEnd,
-				MappingFileOffset: fileOffset,
-				MappingFile:       mappingFile,
+		mapping := pm.findMappingForTrace(pid, frame.File,
+			libpf.Address(frame.Lineno))
+		dst.Append(&libpf.Frame{
+			Type:            frame.Type,
+			AddressOrLineno: relativeRIP,
+			Mapping:         mapping,
 			})
-		} else {
-			log.Debugf(
-				"file ID lookup failed for PID %d, frame type %d",
-				pid, frame.Type)
-
-			dst.Append(&libpf.Frame{
-				Type:              frame.Type,
-				MappingStart:      mappingStart,
-				MappingEnd:        mappingEnd,
-				MappingFileOffset: fileOffset,
-			})
-		}
 	default:
 		err := pm.symbolizeFrame(pid, frame, dst)
 		if err == nil {
