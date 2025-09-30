@@ -25,7 +25,7 @@ const (
 // interface and our [internal.Controller]
 type Controller struct {
 	ctlr       *controller.Controller
-	onShutdown func()
+	onShutdown func() error
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
@@ -69,7 +69,7 @@ func (c *Controller) Start(ctx context.Context, _ component.Host) error {
 func (c *Controller) Shutdown(_ context.Context) error {
 	c.ctlr.Shutdown()
 	if c.onShutdown != nil {
-		c.onShutdown()
+		return c.onShutdown()
 	}
 	return nil
 }

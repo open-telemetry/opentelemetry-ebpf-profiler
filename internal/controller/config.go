@@ -43,7 +43,7 @@ type Config struct {
 	Fs *flag.FlagSet
 
 	IncludeEnvVars string
-	OnShutdown     func()
+	OnShutdown     func() error
 }
 
 const (

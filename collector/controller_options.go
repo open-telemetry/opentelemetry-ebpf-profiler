@@ -13,7 +13,7 @@ type option interface {
 
 type controllerOption struct {
 	executableReporter reporter.ExecutableReporter
-	onShutdown         func()
+	onShutdown         func() error
 }
 
 type optFunc func(*controllerOption) *controllerOption
@@ -29,7 +29,7 @@ func WithExecutableReporter(executableReporter reporter.ExecutableReporter) opti
 }
 
 // WithOnShutdown is a function that allows to configure a function to be called when the controller is shutdown.
-func WithOnShutdown(onShutdown func()) option {
+func WithOnShutdown(onShutdown func() error) option {
 	return optFunc(func(option *controllerOption) *controllerOption {
 		option.onShutdown = onShutdown
 		return option

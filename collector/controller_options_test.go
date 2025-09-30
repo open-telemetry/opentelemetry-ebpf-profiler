@@ -23,7 +23,7 @@ type executableReporterTest struct{}
 func (e *executableReporterTest) ReportExecutable(args *reporter.ExecutableMetadata) {}
 
 func TestWithOnShutdown(t *testing.T) {
-	onShutdown := func() {}
+	onShutdown := func() error { return nil }
 	option := WithOnShutdown(onShutdown)
 	require.Equal(
 		t,
