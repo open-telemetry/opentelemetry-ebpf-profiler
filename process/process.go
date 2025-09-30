@@ -263,7 +263,7 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 		}
 	}
 
-	sp.fileToMapping = make(map[string]*Mapping)
+	fileToMapping := make(map[string]*Mapping)
 	for idx, m := range mappings {
 		path := m.Path.String()
 		if path != "" {
