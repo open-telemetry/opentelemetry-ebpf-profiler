@@ -346,7 +346,7 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 	return uint32(uint64(fk.Frame.File) + uint64(fk.Frame.Lineno))
 }
 
-// HandleTrace processes and reports the given host.Trace. This is function
+// HandleTrace processes and reports the given host.Trace. This function
 // is not re-entrant due to frameCache not being synced. If the tracer is
 // later updated to distribute trace handling to goroutine pool, the caching
 // strategy needs to be updated accordingly.
