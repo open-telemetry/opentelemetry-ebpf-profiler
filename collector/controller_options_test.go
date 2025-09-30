@@ -4,6 +4,7 @@
 package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,3 +21,12 @@ func TestWithExecutableReporter(t *testing.T) {
 type executableReporterTest struct{}
 
 func (e *executableReporterTest) ReportExecutable(args *reporter.ExecutableMetadata) {}
+
+func TestWithOnShutdown(t *testing.T) {
+	onShutdown := func() {}
+	option := WithOnShutdown(onShutdown)
+	require.Equal(
+		t,
+		reflect.ValueOf(onShutdown).Pointer(),
+		reflect.ValueOf(option.apply(&controllerOption{}).onShutdown).Pointer())
+}
