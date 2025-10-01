@@ -904,10 +904,6 @@ typedef struct PIDPageMappingInfo {
 // Struct of the `system_config` map. Contains various configuration variables
 // determined and set by the host agent.
 typedef struct SystemConfig {
-  // PAC mask that is determined by user-space and used in `normalize_pac_ptr`.
-  // ARM64 specific, `MAX_U64` otherwise.
-  u64 inverse_pac_mask;
-
   // The offset of the Thread Pointer Base variable in `task_struct`. It is
   // populated by the host agent based on kernel code analysis.
   u64 tpbase_offset;
@@ -917,12 +913,6 @@ typedef struct SystemConfig {
 
   // The offset of struct pt_regs within the kernel entry stack.
   u32 stack_ptregs_offset;
-
-  // User defined threshold for off-cpu profiling.
-  u32 off_cpu_threshold;
-
-  // Enables the temporary hack that drops pure errors frames in unwind_stop.
-  bool drop_error_only_traces;
 } SystemConfig;
 
 // Avoid including all of arch/arm64/include/uapi/asm/ptrace.h by copying the

@@ -80,25 +80,11 @@ func newEBPFContext(pr process.Process) *ebpfContext {
 		stackDeltaPageToInfo:  make(map[C.StackDeltaPageKey]unsafe.Pointer),
 		exeIDToStackDeltaMaps: make(map[C.u64]unsafe.Pointer),
 		maps:                  make(map[*C.bpf_map_def]map[any]unsafe.Pointer),
-		systemConfig:          initSystemConfig(pr.GetMachineData()),
 		perCPURecord:          C.malloc(C.sizeof_PerCPURecord),
 		unwindInfoArray:       C.malloc(C.sizeof_UnwindInfo * C.ulong(unwindInfoArray.max_entries)),
 	}
 	ebpfContextMap[ctx.PIDandTGID] = ctx
 	return ctx
-}
-
-func initSystemConfig(md process.MachineData) unsafe.Pointer {
-	rawPtr := C.malloc(C.sizeof_SystemConfig)
-	sv := (*C.SystemConfig)(rawPtr)
-
-	sv.inverse_pac_mask = ^C.u64(md.CodePACMask)
-	// `tsd_get_base`, the function reading this field, is special-cased
-	// for coredump tests via `ifdefs`, so the value we set here doesn't matter.
-	sv.tpbase_offset = 0
-	sv.drop_error_only_traces = C.bool(false)
-
-	return rawPtr
 }
 
 func (ec *ebpfContext) addMap(mapPtr *C.bpf_map_def, key any, value []byte) {

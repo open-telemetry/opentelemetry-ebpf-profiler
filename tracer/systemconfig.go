@@ -222,19 +222,8 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 }
 
 func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kmod *kallsyms.Module, includeTracers types.IncludedTracers,
-	offCPUThreshold uint32, filterErrorFrames bool) error {
-	pacMask := pacmask.GetPACMask()
-	if pacMask != 0 {
-		log.Infof("Determined PAC mask to be 0x%016X", pacMask)
-	} else {
-		log.Debug("PAC is not enabled on the system.")
-	}
-	syscfg := support.SystemConfig{
-		Inverse_pac_mask:       ^pacMask,
-		Drop_error_only_traces: filterErrorFrames,
-		Off_cpu_threshold:      offCPUThreshold,
-	}
+	kmod *kallsyms.Module, includeTracers types.IncludedTracers) error {
+	syscfg := support.SystemConfig{}
 
 	if err := parseBTF(&syscfg); err != nil {
 		log.Infof("Using binary analysis (BTF not available: %s)", err)
@@ -270,4 +259,33 @@ func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	key0 := uint32(0)
 	return maps["system_config"].Update(unsafe.Pointer(&key0), unsafe.Pointer(&syscfg),
 		cebpf.UpdateAny)
+}
+
+// loadRodataVars initalizes RODATA variables for the eBPF programs.
+func loadRodataVars(coll *cebpf.CollectionSpec, cfg *Config) error {
+	if cfg.VerboseMode {
+		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
+			return fmt.Errorf("failed to set debug output: %v", err)
+		}
+	}
+
+	if err := coll.Variables["off_cpu_threshold"].Set(cfg.OffCPUThreshold); err != nil {
+		return fmt.Errorf("failed to set off_cpu_threshold: %v", err)
+	}
+
+	if err := coll.Variables["drop_error_only_traces"].Set(cfg.FilterErrorFrames); err != nil {
+		return fmt.Errorf("failed to set drop_error_only_traces: %v", err)
+	}
+
+	pacMask := pacmask.GetPACMask()
+	if pacMask != 0 {
+		log.Infof("Determined PAC mask to be 0x%016X", pacMask)
+	} else {
+		log.Debug("PAC is not enabled on the system.")
+	}
+	if err := coll.Variables["inverse_pac_mask"].Set(^pacMask); err != nil {
+		return fmt.Errorf("failed to set inverse_pac_mask: %v", err)
+	}
+
+	return nil
 }
