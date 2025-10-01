@@ -9,6 +9,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
@@ -40,7 +41,9 @@ type Config struct {
 	Reporter           reporter.Reporter
 	ExecutableReporter reporter.ExecutableReporter
 
-	Fs *flag.FlagSet
+	// If ReporterFactory is set, it will be used to create a Reporter and set it as the Reporter field.
+	ReporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
+	Fs              *flag.FlagSet
 
 	IncludeEnvVars string
 	OnShutdown     func() error

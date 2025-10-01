@@ -67,6 +67,7 @@ func BuildProfilesReceiver(options ...option) xreceiver.CreateProfilesFunc {
 			MaxGRPCRetries:         cfg.MaxGRPCRetries,
 			MaxRPCMsgSize:          cfg.MaxRPCMsgSize,
 			ExecutableReporter:     controllerOption.executableReporter,
+			ReporterFactory:        controllerOption.reporterFactory,
 			OnShutdown:             controllerOption.onShutdown,
 		}
 
