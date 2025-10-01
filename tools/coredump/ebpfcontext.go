@@ -58,8 +58,17 @@ type ebpfContext struct {
 	// for storing configuration that is populated by the host-agent.
 	systemConfig unsafe.Pointer
 
+	// vars holds the global variables that are initialized before
+	// the load of the eBPF programs.
+	vars rodataVars
+
 	// stackDeltaFileID is context variable for nested map lookups
 	stackDeltaFileID C.u64
+}
+
+// rodataVars holds the variables that are set via the rodata section.
+type rodataVars struct {
+	inverse_pac_mask uint64
 }
 
 // ebpfContextMap is global mapping of EBPFContext id (PIDandTGID) to the actual data.
@@ -80,11 +89,26 @@ func newEBPFContext(pr process.Process) *ebpfContext {
 		stackDeltaPageToInfo:  make(map[C.StackDeltaPageKey]unsafe.Pointer),
 		exeIDToStackDeltaMaps: make(map[C.u64]unsafe.Pointer),
 		maps:                  make(map[*C.bpf_map_def]map[any]unsafe.Pointer),
-		perCPURecord:          C.malloc(C.sizeof_PerCPURecord),
-		unwindInfoArray:       C.malloc(C.sizeof_UnwindInfo * C.ulong(unwindInfoArray.max_entries)),
+		systemConfig:          initSystemConfig(pr.GetMachineData()),
+		vars: rodataVars{
+			inverse_pac_mask: ^(pr.GetMachineData().CodePACMask),
+		},
+		perCPURecord:    C.malloc(C.sizeof_PerCPURecord),
+		unwindInfoArray: C.malloc(C.sizeof_UnwindInfo * C.ulong(unwindInfoArray.max_entries)),
 	}
 	ebpfContextMap[ctx.PIDandTGID] = ctx
 	return ctx
+}
+
+func initSystemConfig(md process.MachineData) unsafe.Pointer {
+	rawPtr := C.malloc(C.sizeof_SystemConfig)
+	sv := (*C.SystemConfig)(rawPtr)
+
+	// `tsd_get_base`, the function reading this field, is special-cased
+	// for coredump tests via `ifdefs`, so the value we set here doesn't matter.
+	sv.tpbase_offset = 0
+
+	return rawPtr
 }
 
 func (ec *ebpfContext) addMap(mapPtr *C.bpf_map_def, key any, value []byte) {

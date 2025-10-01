@@ -24,7 +24,7 @@ import (
 
 // #include <stdlib.h>
 // #include "../../support/ebpf/types.h"
-// int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx);
+// int unwind_traces(u64 id, int debug, u64 tp_base, u64 new_inv_pac_mask, void *ctx);
 import "C"
 
 // sliceBuffer creates a Go slice from C buffer
@@ -180,6 +180,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 		// Get traces by calling ebpf code via CGO
 		ebpfCtx.resetTrace()
 		if rc := C.unwind_traces(ebpfCtx.PIDandTGID, debugFlag, C.u64(thread.TPBase),
+			C.u64(ebpfCtx.vars.inverse_pac_mask),
 			unsafe.Pointer(&thread.GPRegs[0])); rc != 0 {
 			return nil, fmt.Errorf("failed to unwind lwp %v: %v", thread.LWP, rc)
 		}
