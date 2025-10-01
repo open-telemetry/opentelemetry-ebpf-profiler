@@ -318,10 +318,9 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		delete(coll.Programs, schedProcessFreeV2)
 	}
 
-	if cfg.VerboseMode {
-		if err = coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
-			return nil, nil, fmt.Errorf("failed to set debug output: %v", err)
-		}
+	// Initialize eBPF variables before loading maps and programs.
+	if err = loadRodataVars(coll, cfg); err != nil {
+		return nil, nil, fmt.Errorf("failed to set RODATA variables: %v", err)
 	}
 
 	err = buildStackDeltaTemplates(coll)
@@ -460,8 +459,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		}
 	}
 
-	if err = loadSystemConfig(coll, ebpfMaps, kmod, cfg.IncludeTracers,
-		cfg.OffCPUThreshold, cfg.FilterErrorFrames); err != nil {
+	if err = loadSystemConfig(coll, ebpfMaps, kmod, cfg.IncludeTracers); err != nil {
 		return nil, nil, fmt.Errorf("failed to load system config: %v", err)
 	}
 

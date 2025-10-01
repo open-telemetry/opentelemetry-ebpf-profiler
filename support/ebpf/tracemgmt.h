@@ -32,6 +32,9 @@
 
 #endif // TESTING_COREDUMP
 
+// inverse_pac_mask is declared in native_stack_trace.ebpf.c
+extern u64 inverse_pac_mask;
+
 // increment_metric increments the value of the given metricID by 1
 static inline EBPF_INLINE void increment_metric(u32 metricID)
 {
@@ -562,18 +565,10 @@ static inline EBPF_INLINE void tail_call(void *ctx, int next)
 // from the mask for code pointers.
 static inline EBPF_INLINE u64 normalize_pac_ptr(u64 ptr)
 {
-  // Retrieve PAC mask from the system config.
-  u32 key              = 0;
-  SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &key);
-  if (!syscfg) {
-    // Unreachable: array maps are always fully initialized.
-    return ptr;
-  }
-
   // Mask off PAC bits. Since we're always applying this to usermode pointers that should have all
   // the high bits set to 0, we don't need to consider the case of having to fill up the resulting
   // hole with 1s (like we'd have to for kernel ptrs).
-  ptr &= syscfg->inverse_pac_mask;
+  ptr &= inverse_pac_mask;
   return ptr;
 }
 #endif
