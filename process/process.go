@@ -264,10 +264,12 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 		}
 	}
 
-	fileToMapping := make(map[string]*Mapping, len(mappings))
+	fileToMapping := make(map[string]*Mapping)
 	for idx := range mappings {
 		m := &mappings[idx]
-		fileToMapping[m.Path.String()] = m
+		if m.Path != libpf.NullString {
+			fileToMapping[m.Path.String()] = m
+		}
 	}
 	sp.fileToMapping = fileToMapping
 	return mappings, numParseErrors, nil
