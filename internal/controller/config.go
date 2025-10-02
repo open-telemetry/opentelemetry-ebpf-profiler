@@ -40,13 +40,13 @@ type Config struct {
 
 	Reporter           reporter.Reporter
 	ExecutableReporter reporter.ExecutableReporter
-
 	// If ReporterFactory is set, it will be used to create a Reporter and set it as the Reporter field.
 	ReporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
-	Fs              *flag.FlagSet
+	OnShutdown      func() error
+
+	Fs *flag.FlagSet
 
 	IncludeEnvVars string
-	OnShutdown     func() error
 }
 
 const (
