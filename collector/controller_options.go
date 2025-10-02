@@ -37,10 +37,10 @@ func WithOnShutdown(onShutdown func() error) option {
 	})
 }
 
-// WithConfigValidation is a function that enables the validation of the config.
-func WithConfigValidation() option {
+// WithConfigValidation is a function that allows to configure if the config should be validated.
+func WithConfigValidation(validation bool) option {
 	return optFunc(func(option *controllerOption) *controllerOption {
-		option.configValidation = true
+		option.configValidation = validation
 		return option
 	})
 }
