@@ -38,11 +38,13 @@ type Config struct {
 	MaxGRPCRetries         uint32
 	MaxRPCMsgSize          int
 
-	Reporter           reporter.Reporter
 	ExecutableReporter reporter.ExecutableReporter
+	OnShutdown         func() error
+
 	// If ReporterFactory is set, it will be used to create a Reporter and set it as the Reporter field.
+	// Either ReporterFactory or Reporter must be set. If both are set, ReporterFactory will be used.
 	ReporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
-	OnShutdown      func() error
+	Reporter        reporter.Reporter
 
 	Fs *flag.FlagSet
 
