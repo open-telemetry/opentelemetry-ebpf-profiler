@@ -69,7 +69,12 @@ func BuildProfilesReceiver(options ...option) xreceiver.CreateProfilesFunc {
 			ExecutableReporter:     controllerOption.executableReporter,
 			OnShutdown:             controllerOption.onShutdown,
 		}
-
+		if controllerOption.configValidation {
+			err := controlerCfg.Validate()
+			if err != nil {
+				return nil, err
+			}
+		}
 		return internal.NewController(controlerCfg, rs, nextConsumer)
 	}
 }
