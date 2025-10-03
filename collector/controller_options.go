@@ -14,7 +14,6 @@ type option interface {
 type controllerOption struct {
 	executableReporter reporter.ExecutableReporter
 	onShutdown         func() error
-	configValidation   bool
 }
 
 type optFunc func(*controllerOption) *controllerOption
@@ -33,14 +32,6 @@ func WithExecutableReporter(executableReporter reporter.ExecutableReporter) opti
 func WithOnShutdown(onShutdown func() error) option {
 	return optFunc(func(option *controllerOption) *controllerOption {
 		option.onShutdown = onShutdown
-		return option
-	})
-}
-
-// WithConfigValidation is a function that allows to configure if the config should be validated.
-func WithConfigValidation(validation bool) option {
-	return optFunc(func(option *controllerOption) *controllerOption {
-		option.configValidation = validation
 		return option
 	})
 }
