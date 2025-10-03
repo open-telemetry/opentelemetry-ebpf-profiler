@@ -1,0 +1,115 @@
+{
+  "coredump-ref": "736aee6ce79da1728bd948723657d9fa1532192f61c64801991c6b3e9c6587d3",
+  "threads": [
+    {
+      "lwp": 913932,
+      "frames": [
+        "libc.so.6+0xe0b48",
+        "libruby.so.3.2.2+0x2ef843",
+        "libruby.so.3.2.2+0x15ae4f",
+        "libruby.so.3.2.2+0x2efd03",
+        "libruby.so.3.2.2+0x198473",
+        "libruby.so.3.2.2+0x15ae4f",
+        "libruby.so.3.2.2+0x1935ab",
+        "libruby.so.3.2.2+0x32357f",
+        "libruby.so.3.2.2+0x332b73",
+        "libruby.so.3.2.2+0x3382d7",
+        "libruby.so.3.2.2+0x1564c3",
+        "libruby.so.3.2.2+0x15cb37",
+        "ruby+0xb2b",
+        "libc.so.6+0x2777f",
+        "libc.so.6+0x27857",
+        "ruby+0xbaf"
+      ]
+    },
+    {
+      "lwp": 913951,
+      "frames": [
+        "libruby.so.3.2.2+0x332dbc",
+        "is_prime+0 in /app/loop-with-ractors.rb:11",
+        "libruby.so.3.2.2+0x3382d7",
+        "libruby.so.3.2.2+0x33c697",
+        "libruby.so.3.2.2+0x25e243",
+        "libruby.so.3.2.2+0x32357f",
+        "libruby.so.3.2.2+0x3295bb",
+        "libruby.so.3.2.2+0x333587",
+        "is_prime+0 in /app/loop-with-ractors.rb:10",
+        "sum_of_primes+0 in /app/loop-with-ractors.rb:20",
+        "<main>+0 in /app/loop-with-ractors.rb:31",
+        "libruby.so.3.2.2+0x33864f",
+        "libruby.so.3.2.2+0x33c697",
+        "libruby.so.3.2.2+0x25e053",
+        "libruby.so.3.2.2+0x32357f",
+        "libruby.so.3.2.2+0x3295bb",
+        "libruby.so.3.2.2+0x333587",
+        "<main>+0 in /app/loop-with-ractors.rb:30",
+        "<main>+0 in /app/loop-with-ractors.rb:29",
+        "libruby.so.3.2.2+0x3382d7",
+        "libruby.so.3.2.2+0x339737",
+        "libruby.so.3.2.2+0x15a933",
+        "libruby.so.3.2.2+0x15ab6b",
+        "libruby.so.3.2.2+0x32357f",
+        "libruby.so.3.2.2+0x3295bb",
+        "libruby.so.3.2.2+0x333587",
+        "<main>+0 in /app/loop-with-ractors.rb:30",
+        "<main>+0 in /app/loop-with-ractors.rb:29",
+        "libruby.so.3.2.2+0x3382d7",
+        "libruby.so.3.2.2+0x2edb13",
+        "<main>+0 in /app/loop-with-ractors.rb:30",
+        "<main>+0 in /app/loop-with-ractors.rb:29",
+        "libruby.so.3.2.2+0x3382d7",
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "3c70a152ded3b0eab8f2f3b3d2a80e2ce0808909e8c6828a8dcfc6b883ff30fb",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libcrypt.so.1.1.0"
+    },
+    {
+      "ref": "826de3e1321ad44fdfec4bcb8a3c81814b7b1d32be8708089647e4c6ec1de729",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "ffb1ab496e6eced03ab679075f9f2c415c7728a145cc7f63d614497102d73822",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libz.so.1.2.13"
+    },
+    {
+      "ref": "a76dcec084a53b39ea12552f1c63919b7332ca87c04d4dc46e0dd40ea368c7be",
+      "local-path": "/usr/local/bin/ruby"
+    },
+    {
+      "ref": "8526cf244c909542d584aa8454212341290a4537020b9bd30c7f2d3f7c1bc308",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "ae6bd25b1f9616e37fb652d1052af984576d22adacfd3bced9df82d075ad92c7",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "391b336ee37cd47a1d4748ba2d15bd125c1a082864f7bca9c92612f8a0ac305e",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgmp.so.10.4.1"
+    },
+    {
+      "ref": "2255d216527853230c9d2e970a84463805859efe02263006d8ff2508048125a8",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "64ccbcd48e8e98828afa0762d965e8c3c58620c626100c182be8131cc4e37b57",
+      "local-path": "/usr/local/lib/ruby/3.2.0/aarch64-linux/monitor.so"
+    },
+    {
+      "ref": "269e31bc8365d6e435e64b28aed13f18df72780bd79731a008eb373cac4dd881",
+      "local-path": "/usr/local/lib/ruby/3.2.0/aarch64-linux/enc/trans/transdb.so"
+    },
+    {
+      "ref": "88cb86880cc64ceb0977a7a029bbea89f05bea1556c4eb56abd2035aa0378840",
+      "local-path": "/usr/local/lib/libruby.so.3.2.2"
+    },
+    {
+      "ref": "4319521832511be5a2e745ad3d9acf3bc1b8d40da821ec4858114e1b435586a4",
+      "local-path": "/usr/local/lib/ruby/3.2.0/aarch64-linux/enc/encdb.so"
+    }
+  ]
+}
