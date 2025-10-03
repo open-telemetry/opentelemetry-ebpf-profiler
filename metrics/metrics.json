@@ -805,6 +805,7 @@
     "id": 109
   },
   {
+    "obsolete": true,
     "description": "Number of cache hits for Ruby IseqBodyPCToFunction",
     "type": "counter",
     "name": "RubyIseqBodyPCHit",
@@ -812,6 +813,7 @@
     "id": 110
   },
   {
+    "obsolete": true,
     "description": "Number of cache misses for Ruby IseqBodyPCToFunction",
     "type": "counter",
     "name": "RubyIseqBodyPCMiss",
@@ -1297,6 +1299,7 @@
     "id": 178
   },
   {
+    "obsolete": true,
     "description": "Number of added cache elements for Ruby IseqBodyPCToFunction",
     "type": "counter",
     "name": "RubyIseqBodyPCAdd",
@@ -1304,6 +1307,7 @@
     "id": 179
   },
   {
+    "obsolete": true,
     "description": "Number of deleted cache elements for Ruby IseqBodyPCToFunction",
     "type": "counter",
     "name": "RubyIseqBodyPCDel",
