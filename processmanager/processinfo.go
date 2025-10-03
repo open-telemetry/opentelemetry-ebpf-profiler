@@ -709,6 +709,10 @@ func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
 		return libpf.FrameMapping{}
 	}
 
+	// Binary search for the potentially matching 'maps' entry. The search
+	// lambda makes 'sort.Search' return the first entry that is larger
+	// than the fid/addr pair. Thus -1 is needed to get index for the first
+	// entry whchi is equal or less than fid/addr pair.
 	i := sort.Search(len(maps), func(i int) bool {
 		entry := &maps[i]
 		fm := entry.FrameMapping.Value()
@@ -725,13 +729,11 @@ func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
 		fm := entry.FrameMapping.Value()
 		f := fm.File.Value()
 		entryFid := host.FileIDFromLibpf(f.FileID)
+		// Validate that the candidate 'maps' entry is a true match.
 		if entryFid == fid && fm.Start <= addr && addr < fm.End {
 			return entry.FrameMapping
 		}
-		log.Infof("fid %x=%x, %x < %x < %x", entryFid, fid, fm.Start, addr, fm.End)
 	}
-	log.Infof("finding %x:%x from %x maps -> %d", fid, addr, len(maps), i)
-
 	return libpf.FrameMapping{}
 }
 
