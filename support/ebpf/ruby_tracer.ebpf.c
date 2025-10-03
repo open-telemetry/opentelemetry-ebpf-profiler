@@ -317,7 +317,8 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
     u64 tls_symbol = rubyinfo->current_ec_tls_offset;
     DEBUG_PRINT("ruby: got TLS offset %llu", tls_symbol);
     // assume libruby.so is the first module, which is usually the case.
-    // ruby interpreter also only triggers on libruby.so matches, so no need to check for static case.
+    // ruby interpreter also only triggers on libruby.so matches, so no need to check for static
+    // case.
     u64 tls_current_ec_addr = addr_for_tls_symbol(tls_symbol, true, 1);
     DEBUG_PRINT("ruby: got TLS addr 0x%llx", (u64)tls_current_ec_addr);
 
@@ -327,8 +328,7 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
     }
 
     DEBUG_PRINT("ruby: EC from TLS: 0x%llx", (u64)current_ctx_addr);
-  }
-  else if (rubyinfo->version >= 0x30000) {
+  } else if (rubyinfo->version >= 0x30000) {
     // https://github.com/ruby/ruby/commit/7b3948750e1b1dd8cb271c0a7377b911bb3b8f1b
     // there is no guarantee than an EC exists before 3.0.3
     // ruby versions 3.0.0 - 3.0.3 will use a maybe invalid EC if multiple ractors / threads
@@ -344,8 +344,7 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
           (void *)(single_main_ractor + rubyinfo->running_ec))) {
       goto exit;
     }
-  }
-  else {
+  } else {
     if (bpf_probe_read_user(
           &current_ctx_addr, sizeof(current_ctx_addr), (void *)rubyinfo->current_ctx_ptr)) {
       goto exit;
