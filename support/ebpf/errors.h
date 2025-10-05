@@ -165,7 +165,10 @@ typedef enum ErrorCode {
   ERR_DOTNET_CODE_TOO_LARGE = 6003,
 
   // BEAM: PC was outside the expected address range
-  ERR_BEAM_PC_INVALID = 7000
+  ERR_BEAM_PC_INVALID = 7000,
+
+  // BEAM: Hit the stack frame scan iteration limit looking for the next stack frame
+  ERR_BEAM_STACK_SCAN_EXHAUSTED = 7001
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H

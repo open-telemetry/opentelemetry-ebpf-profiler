@@ -3,11 +3,14 @@
 #include "types.h"
 
 // The number of frames to unwind per frame-unwinding eBPF program.
-#define FRAMES_PER_PROGRAM   16
+#define FRAMES_PER_PROGRAM 8
 
 // The max number of loops to unroll when searching for the correct CodeHeader.
 // Should be log base 2 of a reasonable number of modules to binary-search through.
 #define CODE_HEADER_SEARCH_ITERATIONS 16
+
+// The max number of loops to unroll when scanning the stack from for continuation pointers
+#define STACK_FRAME_SCAN_ITERATIONS 16
 
 bpf_map_def SEC("maps") beam_procs = {
   .type = BPF_MAP_TYPE_HASH,
@@ -27,7 +30,7 @@ typedef struct BEAMRangesInfo {
   BEAMRangeEntry first, mid, last;
 } BEAMRangesInfo; 
 
-static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMRangesInfo *ranges) {
+static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMRangesInfo *ranges, bool frame_pointers_enabled) {
   UnwindState *state = &record->state;
   Trace *trace = &record->trace;
   u64 pc = state->pc;
@@ -63,9 +66,24 @@ static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMRan
     }
   }
 
-  u64 fp = state->fp;
-  bpf_probe_read_user(&state->fp, sizeof(u64), (void*)fp);
-  bpf_probe_read_user(&state->pc, sizeof(u64), (void*)(fp+8));
+  if (frame_pointers_enabled) {
+    u64 fp = state->fp;
+    bpf_probe_read_user(&state->fp, sizeof(u64), (void*)fp);
+    bpf_probe_read_user(&state->pc, sizeof(u64), (void*)(fp+8));
+  } else {
+    UNROLL for (int i = 0; i < STACK_FRAME_SCAN_ITERATIONS; i++) {
+      bpf_probe_read_user(&state->pc, sizeof(u64), (void*)state->sp);
+      state->sp += 8;
+      // 
+      if ((state->pc & 0x03) == 0) {
+        break;
+      }
+    }
+
+    if ((state->pc & 0x03) != 0) {
+      return ERR_BEAM_STACK_SCAN_EXHAUSTED;
+    }
+  }
 
   return ERR_OK;
 }
@@ -90,7 +108,10 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx) {
     return -1;
   }
 
-  DEBUG_PRINT("==== unwind_beam %d ====", trace->stack_len);
+  // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_vm.h#L68-L73
+  bool frame_pointers_enabled = info->erts_frame_layout == 1;
+
+  DEBUG_PRINT("==== unwind_beam %d (frame_pointers: %d)====", trace->stack_len, frame_pointers_enabled);
 
 	// "the_active_code_index" symbol is from:
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.c#L46
@@ -144,7 +165,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx) {
     }
 
     unwinder_mark_nonleaf_frame(&record->state);
-    error = unwind_one_beam_frame(record, &ranges);
+    error = unwind_one_beam_frame(record, &ranges, frame_pointers_enabled);
     if (error) {
       break;
     }
