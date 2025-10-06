@@ -60,11 +60,16 @@ func (cfg *Config) Dump() {
 	})
 }
 
+// InvalidSamplingFrequencyError returns an error for an invalid sampling frequency
+func InvalidSamplingFrequencyError(samplesPerSecond int) error {
+	return fmt.Errorf("invalid sampling frequency: %d", samplesPerSecond)
+}
+
 // Validate runs validations on the provided configuration, and returns errors
 // if invalid values were provided.
 func (cfg *Config) Validate() error {
 	if cfg.SamplesPerSecond < 1 {
-		return fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond)
+		return InvalidSamplingFrequencyError(cfg.SamplesPerSecond)
 	}
 
 	if cfg.MapScaleFactor > 8 {

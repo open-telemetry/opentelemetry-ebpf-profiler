@@ -10,7 +10,10 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
+	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 )
+
+const invalidSamplesPerSecond = 0
 
 func TestNewFactory(t *testing.T) {
 	f := NewFactory()
@@ -32,6 +35,11 @@ func TestCreateProfilesReceiver(t *testing.T) {
 			name:      "Nil config",
 			wantError: errInvalidConfig,
 		},
+		{
+			name:      "Invalid config",
+			config:    Config{SamplesPerSecond: invalidSamplesPerSecond},
+			wantError: controller.InvalidSamplingFrequencyError(invalidSamplesPerSecond),
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -43,7 +51,11 @@ func TestCreateProfilesReceiver(t *testing.T) {
 				tt.config,
 				consumertest.NewNop(),
 			)
-			require.ErrorIs(t, err, tt.wantError)
+
+			// Handle nil errors
+			if err != nil || tt.wantError != nil {
+				require.ErrorAs(t, err, &tt.wantError)
+			}
 		})
 	}
 }
