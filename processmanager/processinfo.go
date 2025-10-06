@@ -469,8 +469,15 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	// Generate the list of added and removed mappings.
 	pm.mu.RLock()
 	if info, ok := pm.pidToProcessInfo[pid]; ok {
-		// Update metadata of the process.
-		info.meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
+		exe, err := pr.GetExe()
+		if err != nil {
+			log.Warnf("Failed to get executable of process %d: %v", pid, err)
+		} else {
+			if exe != info.meta.Executable {
+				// Update metadata of the process.
+				info.meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
+			}
+		}
 
 		// Iterate over cached executable mappings, if any, and collect mappings
 		// that have changed so that they are later batch-removed.

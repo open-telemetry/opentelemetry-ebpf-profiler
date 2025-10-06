@@ -82,6 +82,10 @@ func (sp *systemProcess) GetMachineData() MachineData {
 	return MachineData{Machine: pfelf.CurrentMachine}
 }
 
+func (sp *systemProcess) GetExe() (string, error) {
+	return os.Readlink(fmt.Sprintf("/proc/%d/exe", sp.pid))
+}
+
 func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 	var processName string
 	exePath, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", sp.pid))

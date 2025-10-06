@@ -121,6 +121,9 @@ type Process interface {
 	// GetProcessMeta returns process specific metadata.
 	GetProcessMeta(MetaConfig) ProcessMeta
 
+	// GetExe returns the pathname of the executed command.
+	GetExe() (string, error)
+
 	// GetMappings reads and parses process memory mappings.
 	GetMappings() ([]Mapping, uint32, error)
 
