@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"strings"
 	"syscall"
 	"time"
 
@@ -106,60 +105,20 @@ func (pm *ProcessManager) getTSDInfo(pid libpf.PID) *tpbase.TSDInfo {
 	return nil
 }
 
-// fetchProcessMeta returns metadata related to the PID.
-func (pm *ProcessManager) fetchProcessMeta(pid libpf.PID) ProcessMeta {
-	var processName string
-	exePath, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
-	if name, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid)); err == nil {
-		processName = string(name)
-	}
-
-	envVarMap := make(map[string]string, len(pm.includeEnvVars))
-	if len(pm.includeEnvVars) > 0 {
-		if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid)); err == nil {
-			// environ has environment variables separated by a null byte (hex: 00)
-			splittedVars := strings.Split(string(envVars), "\000")
-			for _, envVar := range splittedVars {
-				keyValuePair := strings.SplitN(envVar, "=", 2)
-
-				// If the entry could not be split at a '=', ignore it
-				// (last entry of environ might be empty)
-				if len(keyValuePair) != 2 {
-					continue
-				}
-
-				if _, ok := pm.includeEnvVars[keyValuePair[0]]; ok {
-					envVarMap[keyValuePair[0]] = keyValuePair[1]
-				}
-			}
-		}
-	}
-
-	containerID, err := extractContainerID(pid)
-	if err != nil {
-		log.Debugf("Failed extracting containerID for %d: %v", pid, err)
-	}
-	return ProcessMeta{
-		Name:         processName,
-		Executable:   exePath,
-		ContainerID:  containerID,
-		EnvVariables: envVarMap,
-	}
-}
-
 // updatePidInformation updates pidToProcessInfo with the new information about
 // vaddr, offset, fileID and length for the given pid. If we don't know about the pid yet, it also
 // allocates the embedded map. If the mapping for pid at vaddr with requestedLength and fileID
 // already exists, it returns true. Otherwise false or an error.
 //
 // Caller must hold pm.mu write lock.
-func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool, error) {
+func (pm *ProcessManager) updatePidInformation(pr process.Process, m *Mapping) (bool, error) {
+	pid := pr.PID()
 	info, ok := pm.pidToProcessInfo[pid]
 	if !ok {
 		// We don't have information for this pid, so we first need to
 		// allocate the embedded map for this process.
 		info = &processInfo{
-			meta:             pm.fetchProcessMeta(pid),
+			meta:             pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars}),
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
 			tsdInfo:          nil,
@@ -296,8 +255,6 @@ func (pm *ProcessManager) handleNewMapping(pr process.Process, m *Mapping,
 		return err
 	}
 
-	pid := pr.PID()
-
 	// We intentionally don't take the lock immediately when entering this function and instead
 	// rely on EIM's internal locking for the `AddOrIncRef` call. The reasoning here is that
 	// the `AddOrIncRef` call can take a while, and we don't want to block the whole PM for that.
@@ -305,12 +262,12 @@ func (pm *ProcessManager) handleNewMapping(pr process.Process, m *Mapping,
 	defer pm.mu.Unlock()
 
 	// Update the eBPF maps with information about this mapping.
-	_, err = pm.updatePidInformation(pid, m)
+	_, err = pm.updatePidInformation(pr, m)
 	if err != nil {
 		return err
 	}
 
-	pm.assignTSDInfo(pid, ei.TSDInfo)
+	pm.assignTSDInfo(pr.PID(), ei.TSDInfo)
 
 	if ei.Data != nil {
 		return pm.handleNewInterpreter(pr, m, &ei)
@@ -513,7 +470,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	pm.mu.RLock()
 	if info, ok := pm.pidToProcessInfo[pid]; ok {
 		// Update metadata of the process.
-		info.meta = pm.fetchProcessMeta(pid)
+		info.meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
 
 		// Iterate over cached executable mappings, if any, and collect mappings
 		// that have changed so that they are later batch-removed.
@@ -717,13 +674,13 @@ func (pm *ProcessManager) CleanupPIDs() {
 }
 
 // MetaForPID returns the process metadata for given PID.
-func (pm *ProcessManager) MetaForPID(pid libpf.PID) ProcessMeta {
+func (pm *ProcessManager) MetaForPID(pid libpf.PID) process.ProcessMeta {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
 		return procInfo.meta
 	}
-	return ProcessMeta{}
+	return process.ProcessMeta{}
 }
 
 // findMappingForTrace locates the mapping for a given host trace.
