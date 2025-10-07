@@ -4,6 +4,7 @@
 package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 
 import (
+	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
@@ -13,6 +14,7 @@ type Option interface {
 
 type controllerOption struct {
 	executableReporter reporter.ExecutableReporter
+	reporterFactory    func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
 	onShutdown         func() error
 }
 
@@ -32,6 +34,15 @@ func WithExecutableReporter(executableReporter reporter.ExecutableReporter) Opti
 func WithOnShutdown(onShutdown func() error) Option {
 	return optFunc(func(option *controllerOption) *controllerOption {
 		option.onShutdown = onShutdown
+		return option
+	})
+}
+
+// WithReporterFactory is a function that allows to define a custom collector reporter factory.
+// If reporterFactory is not set, the default reporter will be used (reporter.NewCollector).
+func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)) option {
+	return optFunc(func(option *controllerOption) *controllerOption {
+		option.reporterFactory = reporterFactory
 		return option
 	})
 }
