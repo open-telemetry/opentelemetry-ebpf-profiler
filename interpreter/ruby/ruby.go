@@ -793,7 +793,10 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			currentEcSymbol = &s
 		}
 		if len(interpRanges) == 0 && s.Name == interpSymbolName {
-			interpRanges = info.SymbolAsRanges(&s)
+			interpRanges = []util.Range{{
+				Start: uint64(s.Address),
+				End:   uint64(s.Address) + s.Size,
+			}}
 		}
 		if len(interpRanges) > 0 && currentEcSymbol != nil {
 			return false

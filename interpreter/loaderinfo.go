@@ -48,15 +48,11 @@ func (i *LoaderInfo) GetSymbolAsRanges(symbol libpf.SymbolName) ([]util.Range, e
 	if err != nil {
 		return nil, fmt.Errorf("symbol '%v' not found: %w", symbol, err)
 	}
-	return i.SymbolAsRanges(sym), nil
-}
-
-// SymbolAsRanges returns the normalized virtual address ranges for the named symbol
-func (i *LoaderInfo) SymbolAsRanges(symbol *libpf.Symbol) []util.Range {
+	start := uint64(sym.Address)
 	return []util.Range{{
-		Start: uint64(symbol.Address),
-		End:   uint64(symbol.Address) + symbol.Size,
-	}}
+		Start: start,
+		End:   start + sym.Size},
+	}, nil
 }
 
 // FileID returns the fileID  element of the LoaderInfo struct.
