@@ -44,7 +44,7 @@ func synthesizeIntervalData(ef *pfelf.File) sdtypes.IntervalData {
 func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 	deltas := sdtypes.StackDeltaArray{}
 	deltas = append(deltas, sdtypes.StackDelta{Address: 0, Info: sdtypes.UnwindInfoLR})
-	_ = ef.VisitDynamicSymbols(func(sym libpf.Symbol) {
+	_ = ef.VisitDynamicSymbols(func(sym libpf.Symbol) bool {
 		addr := uint64(sym.Address)
 		if sym.Name == "__kernel_rt_sigreturn" {
 			deltas = append(
@@ -52,12 +52,12 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 				sdtypes.StackDelta{Address: addr, Info: sdtypes.UnwindInfoSignal},
 				sdtypes.StackDelta{Address: addr + sym.Size, Info: sdtypes.UnwindInfoLR},
 			)
-			return
+			return true
 		}
 		// Determine if LR is on stack
 		code := make([]byte, sym.Size)
 		if _, err := ef.ReadVirtualMemory(code, int64(sym.Address)); err != nil {
-			return
+			return true
 		}
 
 		var frameStart uint64
@@ -69,7 +69,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 			}
 			switch inst.Op {
 			case aa.RET:
-				return
+				return true
 			case aa.STP:
 				if reg, ok := ah.Xreg2num(inst.Args[0]); !ok || reg != regFP {
 					continue
@@ -94,7 +94,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 					continue
 				}
 				if frameStart == 0 {
-					return
+					return true
 				}
 				deltas = append(
 					deltas,
@@ -112,6 +112,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 				frameStart = 0
 			}
 		}
+		return true
 	})
 	sort.Slice(deltas, func(i, j int) bool {
 		return deltas[i].Address < deltas[j].Address

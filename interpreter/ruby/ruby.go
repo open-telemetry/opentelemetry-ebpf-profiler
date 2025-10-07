@@ -788,7 +788,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		log.Debugf("Direct lookup of %v failed: %v, will try fallback", interpSymbolName, err)
 	}
 
-	err = ef.VisitUntilSymbol(func(s libpf.Symbol) bool {
+	err = ef.VisitSymbols(func(s libpf.Symbol) bool {
 		if s.Name == currentEcSymbolName {
 			currentEcSymbol = &s
 		}
