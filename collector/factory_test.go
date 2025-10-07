@@ -4,13 +4,13 @@
 package collector
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/consumertest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
-	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 )
 
 const invalidSamplesPerSecond = 0
@@ -38,7 +38,7 @@ func TestCreateProfilesReceiver(t *testing.T) {
 		{
 			name:      "Invalid config",
 			config:    Config{SamplesPerSecond: invalidSamplesPerSecond},
-			wantError: controller.InvalidSamplingFrequencyError(invalidSamplesPerSecond),
+			wantError: fmt.Errorf("invalid sampling frequency: %d", invalidSamplesPerSecond),
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
