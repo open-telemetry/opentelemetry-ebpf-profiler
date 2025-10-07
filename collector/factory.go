@@ -31,7 +31,7 @@ func NewFactory() receiver.Factory {
 		xreceiver.WithProfiles(BuildProfilesReceiver(), component.StabilityLevelAlpha))
 }
 
-func BuildProfilesReceiver(options ...option) xreceiver.CreateProfilesFunc {
+func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 	return func(ctx context.Context,
 		rs receiver.Settings,
 		baseCfg component.Config,
