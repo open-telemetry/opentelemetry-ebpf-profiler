@@ -299,8 +299,8 @@ func (r *rubyInstance) readPathObjRealPath(addr libpf.Address) (string, error) {
 		if e != nil {
 			return "", e
 		}
-		relVal := r.rm.Ptr(arrData + 0*libpf.Address(vms.size_of_value))
-		absVal := r.rm.Ptr(arrData + 1*libpf.Address(vms.size_of_value))
+		relVal := r.rm.Ptr(arrData)
+		absVal := r.rm.Ptr(arrData + libpf.Address(vms.size_of_value))
 		var relTag, absTag uint64
 		if relVal != 0 {
 			relTag = uint64(r.rm.Ptr(relVal)) & uint64(rubyTMask)
@@ -775,7 +775,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	var currentEcSymbol *libpf.Symbol
 	currentEcSymbolName := libpf.SymbolName("ruby_current_ec")
 
-	log.Infof("Ruby %d.%d.%d detected, looking for currentCtxPtr=%q, currentEcSymbol=%q",
+	log.Debugf("Ruby %d.%d.%d detected, looking for currentCtxPtr=%q, currentEcSymbol=%q",
 		(version>>16)&0xff, (version>>8)&0xff, version&0xff, currentCtxSymbol, currentEcSymbolName)
 
 	currentCtxPtr, err := ef.LookupSymbolAddress(currentCtxSymbol)
@@ -805,7 +805,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		currentEcTlsOffset = currentEcSymbol.Address
 	}
 
-	log.Infof("Discovered EC %x, interp ranges: %v", currentEcTlsOffset, interpRanges)
+	log.Debugf("Discovered EC %x, interp ranges: %v", currentEcTlsOffset, interpRanges)
 
 	rid := &rubyData{
 		version:            version,
