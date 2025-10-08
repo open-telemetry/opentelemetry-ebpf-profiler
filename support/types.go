@@ -147,7 +147,6 @@ type SystemAnalysis struct {
 	Pad_cgo_0 [4]byte
 }
 type SystemConfig struct {
-	Tpbase_offset       uint64
 	Task_stack_offset   uint32
 	Stack_ptregs_offset uint32
 }

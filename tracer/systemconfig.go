@@ -295,7 +295,9 @@ func loadRodataVars(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	if err := determineSysConfig(coll, maps, kmod, cfg.IncludeTracers, &rodataVars); err != nil {
 		return fmt.Errorf("failed to determine system configs: %v", err)
 	}
-	_ = rodataVars
+	if err := coll.Variables["tpbase_offset"].Set(rodataVars.tpbase_offset); err != nil {
+		return fmt.Errorf("failed to set tpbase_offset: %v", err)
+	}
 
 	return nil
 }

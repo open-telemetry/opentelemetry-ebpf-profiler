@@ -904,10 +904,6 @@ typedef struct PIDPageMappingInfo {
 // Struct of the `system_config` map. Contains various configuration variables
 // determined and set by the host agent.
 typedef struct SystemConfig {
-  // The offset of the Thread Pointer Base variable in `task_struct`. It is
-  // populated by the host agent based on kernel code analysis.
-  u64 tpbase_offset;
-
   // The offset of stack base within `task_struct`.
   u32 task_stack_offset;
 
