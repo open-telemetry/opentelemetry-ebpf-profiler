@@ -318,11 +318,6 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		delete(coll.Programs, schedProcessFreeV2)
 	}
 
-	// Initialize eBPF variables before loading maps and programs.
-	if err = loadRodataVars(coll, cfg); err != nil {
-		return nil, nil, fmt.Errorf("failed to set RODATA variables: %v", err)
-	}
-
 	err = buildStackDeltaTemplates(coll)
 	if err != nil {
 		return nil, nil, err
@@ -358,6 +353,11 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 					"Error: %v", major, minor, patch, err)
 			}
 		}
+	}
+
+	// Initialize eBPF variables before loading programs.
+	if err = loadRodataVars(coll, ebpfMaps, kmod, cfg); err != nil {
+		return nil, nil, fmt.Errorf("failed to set RODATA variables: %v", err)
 	}
 
 	tailCallProgs := []progLoaderHelper{
@@ -457,10 +457,6 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, fmt.Errorf("failed to load uprobe eBPF programs: %v", err)
 		}
-	}
-
-	if err = loadSystemConfig(coll, ebpfMaps, kmod, cfg.IncludeTracers); err != nil {
-		return nil, nil, fmt.Errorf("failed to load system config: %v", err)
 	}
 
 	if err = removeTemporaryMaps(ebpfMaps); err != nil {
