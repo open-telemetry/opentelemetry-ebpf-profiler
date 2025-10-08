@@ -11,6 +11,7 @@ import (
 
 	"github.com/peterbourgon/ff/v3"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
@@ -42,7 +43,7 @@ var (
 	mapScaleFactorHelp = fmt.Sprintf("Scaling factor for eBPF map sizes. "+
 		"Every increase by 1 doubles the map size. Increase if you see eBPF map size errors. "+
 		"Default is %d corresponding to 4GB of executable address space, max is %d.",
-		defaultArgMapScaleFactor, controller.MaxArgMapScaleFactor)
+		defaultArgMapScaleFactor, config.MaxArgMapScaleFactor)
 	disableTLSHelp             = "Disable encryption for data in transit."
 	bpfVerifierLogLevelHelp    = "Log level of the eBPF verifier output (0,1,2). Default is 0."
 	versionHelp                = "Show version."
@@ -84,7 +85,7 @@ func parseArgs() (*controller.Config, error) {
 	fs := flag.NewFlagSet("ebpf-profiler", flag.ExitOnError)
 
 	// Please keep the parameters ordered alphabetically in the source-code.
-	fs.UintVar(&args.BpfVerifierLogLevel, "bpf-log-level", 0, bpfVerifierLogLevelHelp)
+	fs.UintVar(&args.BPFVerifierLogLevel, "bpf-log-level", 0, bpfVerifierLogLevelHelp)
 
 	fs.StringVar(&args.CollAgentAddr, "collection-agent", "", collAgentAddrHelp)
 	fs.BoolVar(&args.Copyright, "copyright", false, copyrightHelp)

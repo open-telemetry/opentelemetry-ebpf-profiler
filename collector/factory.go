@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/xreceiver"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 )
@@ -37,7 +38,7 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 		baseCfg component.Config,
 		nextConsumer xconsumer.Profiles,
 	) (xreceiver.Profiles, error) {
-		cfg, ok := baseCfg.(*Config)
+		cfg, ok := baseCfg.(*config.Config)
 		if !ok {
 			return nil, errInvalidConfig
 		}
@@ -48,27 +49,10 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 		}
 
 		controlerCfg := &controller.Config{
-			ReporterInterval:       cfg.ReporterInterval,
-			MonitorInterval:        cfg.MonitorInterval,
-			SamplesPerSecond:       cfg.SamplesPerSecond,
-			ProbabilisticInterval:  cfg.ProbabilisticInterval,
-			ProbabilisticThreshold: cfg.ProbabilisticThreshold,
-			Tracers:                cfg.Tracers,
-			ClockSyncInterval:      cfg.ClockSyncInterval,
-			SendErrorFrames:        cfg.SendErrorFrames,
-			VerboseMode:            cfg.VerboseMode,
-			OffCPUThreshold:        cfg.OffCPUThreshold,
-			IncludeEnvVars:         cfg.IncludeEnvVars,
-			UProbeLinks:            cfg.UProbeLinks,
-			LoadProbe:              cfg.LoadProbe,
-			MapScaleFactor:         cfg.MapScaleFactor,
-			BpfVerifierLogLevel:    cfg.BPFVerifierLogLevel,
-			NoKernelVersionCheck:   cfg.NoKernelVersionCheck,
-			MaxGRPCRetries:         cfg.MaxGRPCRetries,
-			MaxRPCMsgSize:          cfg.MaxRPCMsgSize,
-			ExecutableReporter:     controllerOption.executableReporter,
-			ReporterFactory:        controllerOption.reporterFactory,
-			OnShutdown:             controllerOption.onShutdown,
+			Config:             *cfg,
+			ExecutableReporter: controllerOption.executableReporter,
+			ReporterFactory:    controllerOption.reporterFactory,
+			OnShutdown:         controllerOption.onShutdown,
 		}
 
 		return internal.NewController(controlerCfg, rs, nextConsumer)
@@ -76,7 +60,7 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 }
 
 func defaultConfig() component.Config {
-	return &Config{
+	return &config.Config{
 		ReporterInterval:       5 * time.Second,
 		MonitorInterval:        5 * time.Second,
 		SamplesPerSecond:       20,

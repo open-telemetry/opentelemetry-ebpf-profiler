@@ -82,7 +82,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		MapScaleFactor:         int(c.config.MapScaleFactor),
 		KernelVersionCheck:     !c.config.NoKernelVersionCheck,
 		VerboseMode:            c.config.VerboseMode,
-		BPFVerifierLogLevel:    uint32(c.config.BpfVerifierLogLevel),
+		BPFVerifierLogLevel:    uint32(c.config.BPFVerifierLogLevel),
 		ProbabilisticInterval:  c.config.ProbabilisticInterval,
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
 		OffCPUThreshold:        uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
