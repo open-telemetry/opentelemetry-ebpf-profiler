@@ -778,6 +778,11 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	log.Debugf("Ruby %d.%d.%d detected, looking for currentCtxPtr=%q, currentEcSymbol=%q",
 		(version>>16)&0xff, (version>>8)&0xff, version&0xff, currentCtxSymbol, currentEcSymbolName)
 
+	// Symbol discovery strategy:
+	// - Ruby < 3.0.4: Uses currentCtxPtr (global/ractor-based execution context)
+	// - Ruby >= 3.0.4: Uses currentEcSymbol (TLS-based execution context via ruby_current_ec)
+	// When direct lookup fails, VisitSymbols scans all symbols as fallback.
+	// eBPF selects the appropriate method based on version at runtime.
 	currentCtxPtr, err := ef.LookupSymbolAddress(currentCtxSymbol)
 	if err != nil {
 		log.Debugf("Direct lookup of %v failed: %v, will try fallback", currentCtxSymbol, err)
