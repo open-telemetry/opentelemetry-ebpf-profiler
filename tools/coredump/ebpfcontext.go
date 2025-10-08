@@ -58,10 +58,6 @@ type ebpfContext struct {
 	// for storing configuration that is populated by the host-agent.
 	systemConfig unsafe.Pointer
 
-	// vars holds the global variables that are initialized before
-	// the load of the eBPF programs.
-	vars rodataVars
-
 	// stackDeltaFileID is context variable for nested map lookups
 	stackDeltaFileID C.u64
 }
@@ -90,11 +86,8 @@ func newEBPFContext(pr process.Process) *ebpfContext {
 		exeIDToStackDeltaMaps: make(map[C.u64]unsafe.Pointer),
 		maps:                  make(map[*C.bpf_map_def]map[any]unsafe.Pointer),
 		systemConfig:          initSystemConfig(pr.GetMachineData()),
-		vars: rodataVars{
-			inverse_pac_mask: ^(pr.GetMachineData().CodePACMask),
-		},
-		perCPURecord:    C.malloc(C.sizeof_PerCPURecord),
-		unwindInfoArray: C.malloc(C.sizeof_UnwindInfo * C.ulong(unwindInfoArray.max_entries)),
+		perCPURecord:          C.malloc(C.sizeof_PerCPURecord),
+		unwindInfoArray:       C.malloc(C.sizeof_UnwindInfo * C.ulong(unwindInfoArray.max_entries)),
 	}
 	ebpfContextMap[ctx.PIDandTGID] = ctx
 	return ctx

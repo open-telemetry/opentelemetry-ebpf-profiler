@@ -43,12 +43,17 @@ void bpf_log(const char *fmt, ...)
 #include "../../support/ebpf/system_config.ebpf.c"
 #include "../../support/ebpf/v8_tracer.ebpf.c"
 
-int unwind_traces(u64 id, int debug, u64 tp_base, u64 new_inv_pac_mask, void *ctx)
+int initialize_rodata_variables(u64 new_inv_pac_mask)
 {
-  struct cgo_ctx cgoctx;
-
   // Initialize variables set via RODATA.
   inverse_pac_mask = new_inv_pac_mask;
+
+  return 0;
+}
+
+int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx)
+{
+  struct cgo_ctx cgoctx;
 
   cgoctx.id      = id;
   cgoctx.ret     = 0;
