@@ -62,11 +62,6 @@ type ebpfContext struct {
 	stackDeltaFileID C.u64
 }
 
-// rodataVars holds the variables that are set via the rodata section.
-type rodataVars struct {
-	inverse_pac_mask uint64
-}
-
 // ebpfContextMap is global mapping of EBPFContext id (PIDandTGID) to the actual data.
 // This is needed to have the ebpf helpers written in Go to get access to the EBPFContext
 // via given numeric ID (as Go pointers referring to memory with Go pointers cannot be
