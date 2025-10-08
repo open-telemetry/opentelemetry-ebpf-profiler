@@ -901,16 +901,6 @@ typedef struct PIDPageMappingInfo {
 // Largest stack delta bucket that holds up to 2^23 entries
 #define STACK_DELTA_BUCKET_LARGEST  23
 
-// Struct of the `system_config` map. Contains various configuration variables
-// determined and set by the host agent.
-typedef struct SystemConfig {
-  // The offset of stack base within `task_struct`.
-  u32 task_stack_offset;
-
-  // The offset of struct pt_regs within the kernel entry stack.
-  u32 stack_ptregs_offset;
-} SystemConfig;
-
 // Avoid including all of arch/arm64/include/uapi/asm/ptrace.h by copying the
 // actually used values.
 #define PSR_MODE32_BIT 0x00000010

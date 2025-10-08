@@ -146,10 +146,6 @@ type SystemAnalysis struct {
 	Code      [128]uint8
 	Pad_cgo_0 [4]byte
 }
-type SystemConfig struct {
-	Task_stack_offset   uint32
-	Stack_ptregs_offset uint32
-}
 type TSDInfo struct {
 	Offset     int16
 	Multiplier uint8

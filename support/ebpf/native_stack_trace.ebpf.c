@@ -15,6 +15,14 @@ BPF_RODATA_VAR(u64, inverse_pac_mask, 0)
 // populated by the host agent based on kernel code analysis.
 BPF_RODATA_VAR(u64, tpbase_offset, 0)
 
+// task_stack_offset is set during load time.
+// The offset of stack base within `task_struct`.
+BPF_RODATA_VAR(u32, task_stack_offset, 0)
+
+// stack_ptregs_offset is set during load time.
+// The offset of struct pt_regs within the kernel entry stack.
+BPF_RODATA_VAR(u32, stack_ptregs_offset, 0)
+
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
 // fileID.

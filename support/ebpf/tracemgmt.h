@@ -35,6 +35,12 @@
 // inverse_pac_mask is declared in native_stack_trace.ebpf.c
 extern u64 inverse_pac_mask;
 
+// task_stack_offset is declared in native_stack_trace.ebpf.c
+extern u32 task_stack_offset;
+
+// stack_ptregs_offset is declared in native_stack_trace.ebpf.c
+extern u32 stack_ptregs_offset;
+
 // increment_metric increments the value of the given metricID by 1
 static inline EBPF_INLINE void increment_metric(u32 metricID)
 {
@@ -630,14 +636,14 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
 // to bpf_task_pt_regs which is emulated to support older kernels.
 // Once kernel requirement is increased to 5.15 this can be replaced with
 // the bpf_task_pt_regs() helper.
-static inline EBPF_INLINE long get_task_pt_regs(struct task_struct *task, SystemConfig *syscfg)
+static inline EBPF_INLINE long get_task_pt_regs(struct task_struct *task)
 {
-  u64 stack_ptr = (u64)task + syscfg->task_stack_offset;
+  u64 stack_ptr = (u64)task + task_stack_offset;
   long stack_base;
   if (bpf_probe_read_kernel(&stack_base, sizeof(stack_base), (void *)stack_ptr)) {
     return 0;
   }
-  return stack_base + syscfg->stack_ptregs_offset;
+  return stack_base + stack_ptregs_offset;
 }
 
 // Determine whether the given pt_regs are from user-mode register context.
@@ -675,16 +681,9 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
   ErrorCode error;
 
   if (!ptregs_is_usermode(ctx)) {
-    u32 key              = 0;
-    SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &key);
-    if (!syscfg) {
-      // Unreachable: array maps are always fully initialized.
-      return ERR_UNREACHABLE;
-    }
-
     // Use the current task's entry pt_regs
     struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-    long ptregs_addr         = get_task_pt_regs(task, syscfg);
+    long ptregs_addr         = get_task_pt_regs(task);
 
     struct pt_regs regs;
     if (!ptregs_addr || bpf_probe_read_kernel(&regs, sizeof(regs), (void *)ptregs_addr)) {
