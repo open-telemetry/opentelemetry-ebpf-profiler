@@ -40,7 +40,7 @@ func WithOnShutdown(onShutdown func() error) Option {
 
 // WithReporterFactory is a function that allows to define a custom collector reporter factory.
 // If reporterFactory is not set, the default reporter will be used (reporter.NewCollector).
-func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)) option {
+func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)) Option {
 	return optFunc(func(option *controllerOption) *controllerOption {
 		option.reporterFactory = reporterFactory
 		return option
