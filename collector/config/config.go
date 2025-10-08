@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
+package config // import "go.opentelemetry.io/ebpf-profiler/collector/config"
 
 import "time"
 
