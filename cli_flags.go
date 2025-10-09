@@ -73,6 +73,7 @@ var (
 		"Expected format: /path/to/executable:symbol"
 	loadProbeHelper = "Load generic eBPF program that can be attached externally to " +
 		"various user or kernel space hooks."
+	includeIdleHelper = "Unwind and report idle states of the Linux kernel."
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -137,6 +138,7 @@ func parseArgs() (*controller.Config, error) {
 	})
 
 	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
+	fs.BoolVar(&args.IncludeIdle, "include-idle", false, includeIdleHelper)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()

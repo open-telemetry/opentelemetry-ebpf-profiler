@@ -115,6 +115,9 @@ type Tracer struct {
 
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
+
+	// includeIdle instructs the eBPF programs to unwind and report idle states of the Linux kernel.
+	includeIdle bool
 }
 
 type Config struct {
@@ -154,6 +157,8 @@ type Config struct {
 	// LoadProbe inidicates whether the generic eBPF program should be loaded
 	// without being attached to something.
 	LoadProbe bool
+	// IncludeIdle instructs the eBPF programs to unwind and report idle states of the Linux kernel.
+	IncludeIdle bool
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -1017,6 +1022,9 @@ func (t *Tracer) AttachTracer() error {
 	perfAttribute.SetSampleFreq(uint64(t.samplesPerSecond))
 	if err := perf.CPUClock.Configure(perfAttribute); err != nil {
 		return fmt.Errorf("failed to configure software perf event: %v", err)
+	}
+	if t.includeIdle {
+		perfAttribute.Options.ExcludeIdle = false
 	}
 
 	onlineCPUIDs, err := getOnlineCPUIDs()

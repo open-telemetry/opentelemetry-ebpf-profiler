@@ -7,6 +7,9 @@
 // with_debug_output is set during load time.
 BPF_RODATA_VAR(u32, with_debug_output, 0)
 
+// include_idle is set during load time.
+BPF_RODATA_VAR(u32, include_idle, 0)
+
 // inverse_pac_mask is set during load time.
 BPF_RODATA_VAR(u64, inverse_pac_mask, 0)
 
@@ -660,7 +663,7 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx)
   u32 pid = id >> 32;
   u32 tid = id & 0xFFFFFFFF;
 
-  if (pid == 0) {
+  if (pid == 0 && include_idle == 0) {
     return 0;
   }
 

@@ -298,6 +298,12 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		}
 	}
 
+	if cfg.IncludeIdle {
+		if err := coll.Variables["include_idle"].Set(uint32(1)); err != nil {
+			return fmt.Errorf("failed to set debug output: %v", err)
+		}
+	}
+
 	if err := coll.Variables["off_cpu_threshold"].Set(cfg.OffCPUThreshold); err != nil {
 		return fmt.Errorf("failed to set off_cpu_threshold: %v", err)
 	}
