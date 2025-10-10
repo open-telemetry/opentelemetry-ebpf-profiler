@@ -14,6 +14,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -157,23 +158,11 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 	}
 }
 
-// ProcessMeta contains metadata about a tracked process.
-type ProcessMeta struct {
-	// process name retrieved from /proc/PID/comm
-	Name string
-	// executable path retrieved from /proc/PID/exe
-	Executable string
-	// process env vars from /proc/PID/environ
-	EnvVariables map[string]string
-	// container ID retrieved from /proc/PID/cgroup
-	ContainerID string
-}
-
 // processInfo contains information about the executable mappings
 // and Thread Specific Data of a process.
 type processInfo struct {
 	// process metadata, fixed for process lifetime (read-only)
-	meta ProcessMeta
+	meta process.ProcessMeta
 	// executable mappings keyed by start address.
 	mappings map[libpf.Address]*Mapping
 	// executable mappings keyed by host file ID.

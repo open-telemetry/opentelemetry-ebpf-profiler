@@ -257,6 +257,14 @@ func (cd *CoredumpProcess) GetMachineData() MachineData {
 	return cd.machineData
 }
 
+func (cd *CoredumpProcess) GetProcessMeta(_ MetaConfig) ProcessMeta {
+	return ProcessMeta{}
+}
+
+func (cd *CoredumpProcess) GetExe() (string, error) {
+	return "<coredump-exe>", nil
+}
+
 // GetMappings implements the Process interface.
 func (cd *CoredumpProcess) GetMappings() ([]Mapping, uint32, error) {
 	return cd.mappings, 0, nil
