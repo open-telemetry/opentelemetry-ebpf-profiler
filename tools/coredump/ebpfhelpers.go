@@ -128,8 +128,6 @@ func __bpf_map_lookup_elem(id C.u64, mapdef *C.bpf_map_def, keyptr unsafe.Pointe
 		}
 	case &C.metrics:
 		return unsafe.Pointer(uintptr(0))
-	case &C.system_config:
-		return ctx.systemConfig
 	default:
 		log.Errorf("Map at 0x%x not found (looking up key '%v')",
 			mapdef, hex.Dump(sliceBuffer(keyptr, C.int(mapdef.key_size))))
