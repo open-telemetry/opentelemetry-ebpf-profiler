@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/xreceiver"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 )
@@ -37,7 +38,7 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 		baseCfg component.Config,
 		nextConsumer xconsumer.Profiles,
 	) (xreceiver.Profiles, error) {
-		cfg, ok := baseCfg.(*Config)
+		cfg, ok := baseCfg.(*config.Config)
 		if !ok {
 			return nil, errInvalidConfig
 		}
@@ -76,7 +77,7 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 }
 
 func defaultConfig() component.Config {
-	return &Config{
+	return &config.Config{
 		ReporterInterval:       5 * time.Second,
 		MonitorInterval:        5 * time.Second,
 		SamplesPerSecond:       20,
