@@ -318,6 +318,11 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		delete(coll.Programs, schedProcessFreeV2)
 	}
 
+	// Initialize eBPF variables before loading programs and maps.
+	if err = loadRodataVars(coll, kmod, cfg); err != nil {
+		return nil, nil, fmt.Errorf("failed to set RODATA variables: %v", err)
+	}
+
 	err = buildStackDeltaTemplates(coll)
 	if err != nil {
 		return nil, nil, err
@@ -353,11 +358,6 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 					"Error: %v", major, minor, patch, err)
 			}
 		}
-	}
-
-	// Initialize eBPF variables before loading programs.
-	if err = loadRodataVars(coll, ebpfMaps, kmod, cfg); err != nil {
-		return nil, nil, fmt.Errorf("failed to set RODATA variables: %v", err)
 	}
 
 	tailCallProgs := []progLoaderHelper{

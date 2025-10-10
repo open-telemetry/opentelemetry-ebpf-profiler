@@ -228,6 +228,32 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 	return errors.New("unable to find task stack offset")
 }
 
+// prepareAnalysis creates a new CollectionSpec for the system analysis.
+func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[string]*cebpf.Map, error) {
+	new := &cebpf.CollectionSpec{
+		Maps:     make(map[string]*cebpf.MapSpec),
+		Programs: make(map[string]*cebpf.ProgramSpec),
+	}
+	new.Maps["system_analysis"] = orig.Maps["system_analysis"].Copy()
+	new.Maps[".rodata.var"] = orig.Maps[".rodata.var"].Copy()
+
+	new.Programs["read_kernel_memory"] = orig.Programs["read_kernel_memory"].Copy()
+	new.Programs["read_task_struct"] = orig.Programs["read_task_struct"].Copy()
+
+	maps := make(map[string]*cebpf.Map)
+
+	if err := loadAllMaps(new, &Config{}, maps); err != nil {
+		return nil, nil, err
+	}
+
+	//nolint:staticcheck
+	if err := new.RewriteMaps(maps); err != nil {
+		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
+	}
+
+	return new, maps, nil
+}
+
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	kmod *kallsyms.Module, includeTracers types.IncludedTracers, vars *sysConfigVars) error {
 	if err := parseBTF(vars); err != nil {
@@ -265,8 +291,7 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 }
 
 // loadRodataVars initalizes RODATA variables for the eBPF programs.
-func loadRodataVars(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kmod *kallsyms.Module, cfg *Config) error {
+func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config) error {
 	if cfg.VerboseMode {
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
 			return fmt.Errorf("failed to set debug output: %v", err)
@@ -292,11 +317,23 @@ func loadRodataVars(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	}
 
 	rodataVars := sysConfigVars{}
-	if err := determineSysConfig(coll, maps, kmod, cfg.IncludeTracers, &rodataVars); err != nil {
+
+	systemAnalysisColl, maps, err := prepareAnalysis(coll)
+	if err != nil {
+		return fmt.Errorf("failed to prepare programs and maps for system analysis: %v", err)
+	}
+
+	if err := determineSysConfig(systemAnalysisColl, maps, kmod, cfg.IncludeTracers, &rodataVars); err != nil {
 		return fmt.Errorf("failed to determine system configs: %v", err)
 	}
 	if err := coll.Variables["tpbase_offset"].Set(rodataVars.tpbase_offset); err != nil {
 		return fmt.Errorf("failed to set tpbase_offset: %v", err)
+	}
+	if err := coll.Variables["task_stack_offset"].Set(rodataVars.task_stack_offset); err != nil {
+		return fmt.Errorf("failed to set task_stack_offset: %v", err)
+	}
+	if err := coll.Variables["stack_ptregs_offset"].Set(rodataVars.stack_ptregs_offset); err != nil {
+		return fmt.Errorf("failed to set stack_ptregs_offset: %v", err)
 	}
 
 	return nil
