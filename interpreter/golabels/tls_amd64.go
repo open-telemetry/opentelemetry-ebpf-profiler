@@ -6,7 +6,6 @@
 package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	e "go.opentelemetry.io/ebpf-profiler/asm/expression"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -70,6 +69,5 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 			return int32(offset.CapturedValue()), nil
 		}
 	}
-	log.Warnf("Failed to decode stackcheck symbol, Go label collection might not work")
-	return -8, nil
+	return -8, errDecodeSymbol
 }
