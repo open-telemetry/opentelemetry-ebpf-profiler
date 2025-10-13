@@ -214,20 +214,23 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, fmt.Errorf("symbol 'etp_heap_bits_subtag' not found: %v", err)
 	}
 
-	erts_frame_layout, _, err := ef.SymbolData("erts_frame_layout", 8)
-	if err != nil {
-		return nil, fmt.Errorf("symbol 'erts_frame_layout' not found: %v", err)
-	}
-
 	d := &beamData{
 		version:                otpVersion,
 		the_active_code_index:  uint64(codeIndex.Address),
 		r:                      uint64(r),
 		erts_atom_table:        uint64(atomTable.Address),
-		erts_frame_layout:      uint64(erts_frame_layout.Address),
 		etp_ptr_mask:           nopanicslicereader.Uint64(etp_ptr_mask, 0),
 		etp_header_subtag_mask: nopanicslicereader.Uint64(etp_header_subtag_mask, 0),
 		etp_heap_bits_subtag:   nopanicslicereader.Uint64(etp_heap_bits_subtag, 0),
+	}
+
+	// If erts_frame_layout is not defined, it means that frame pointers are not supported,
+	// so we use a special address value to signify that they're not enabled.
+	erts_frame_layout_symbol, _, err := ef.SymbolData("erts_frame_layout", 8)
+	if err == nil {
+		d.erts_frame_layout = uint64(erts_frame_layout_symbol.Address)
+	} else {
+		d.erts_frame_layout = ^uint64(0)
 	}
 
 	vms := &d.vmStructs
@@ -281,11 +284,18 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		Version:               d.version,
 		R:                     uint64(bias) + d.r,
 		The_active_code_index: uint64(bias) + d.the_active_code_index,
-		Erts_frame_layout:     rm.Uint64(bias + libpf.Address(d.erts_frame_layout)),
 		Ranges_sizeof:         uint8(d.vmStructs.ranges.size_of),
 		Ranges_modules:        uint8(d.vmStructs.ranges.modules),
 		Ranges_n:              uint8(d.vmStructs.ranges.n),
 	}
+
+	if d.erts_frame_layout == ^uint64(0) {
+		// If frame pointers are not supported, they will not be used
+		data.Erts_frame_layout = uint64(0)
+	} else {
+		data.Erts_frame_layout = rm.Uint64(bias + libpf.Address(d.erts_frame_layout))
+	}
+
 	if err := ebpf.UpdateProcData(libpf.BEAM, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err
 	}
