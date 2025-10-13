@@ -72,7 +72,7 @@ func (cfg *Config) Validate() error {
 		return fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond)
 	}
 
-	if cfg.MapScaleFactor > 8 {
+	if cfg.MapScaleFactor > MaxArgMapScaleFactor {
 		return fmt.Errorf(
 			"eBPF map scaling factor %d exceeds limit (max: %d)",
 			cfg.MapScaleFactor, MaxArgMapScaleFactor,
@@ -103,6 +103,10 @@ func (cfg *Config) Validate() error {
 		return errors.New(
 			"invalid argument for off-cpu-threshold. The value " +
 				"should be in the range [0..1]. 0 disables off-cpu profiling")
+	}
+
+	if cfg.MaxRPCMsgSize <= 0 {
+		return fmt.Errorf("invalid max-rpc-msg-size: got %d, must be greater than 0", cfg.MaxRPCMsgSize)
 	}
 
 	if !cfg.NoKernelVersionCheck {
