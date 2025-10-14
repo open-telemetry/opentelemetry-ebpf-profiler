@@ -8,17 +8,14 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/tklauser/numcpus"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
-	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 const MiB = 1 << 20
@@ -49,14 +46,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to probe eBPF syscall: %w", err)
 	}
 
-	presentCores, err := numcpus.GetPresent()
-	if err != nil {
-		return fmt.Errorf("failed to read CPU file: %w", err)
-	}
-
-	traceHandlerCacheSize :=
-		traceCacheSize(c.config.MonitorInterval, c.config.SamplesPerSecond, uint16(presentCores))
-
 	intervals := times.New(c.config.ReporterInterval, c.config.MonitorInterval,
 		c.config.ProbabilisticInterval)
 
@@ -85,6 +74,7 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
+		TraceReporter:          c.reporter,
 		Intervals:              intervals,
 		IncludeTracers:         includeTracers,
 		FilterErrorFrames:      !c.config.SendErrorFrames,
@@ -151,8 +141,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	// So if you change this log line update also the system test.
 	log.Printf("Attached sched monitor")
 
-	if err := startTraceHandling(ctx, c.reporter, intervals, trc,
-		traceHandlerCacheSize); err != nil {
+	if err := startTraceHandling(ctx, trc); err != nil {
 		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
@@ -171,8 +160,7 @@ func (c *Controller) Shutdown() {
 	}
 }
 
-func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
-	intervals *times.Times, trc *tracer.Tracer, cacheSize uint32) error {
+func startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
 	// Spawn monitors for the various result maps
 	traceCh := make(chan *host.Trace)
 
@@ -180,35 +168,19 @@ func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
 		return fmt.Errorf("failed to start map monitors: %v", err)
 	}
 
-	_, err := tracehandler.Start(ctx, rep, trc.TraceProcessor(),
-		traceCh, intervals, cacheSize)
-	return err
-}
+	go func() {
+		// Poll the output channels
+		for {
+			select {
+			case trace := <-traceCh:
+				if trace != nil {
+					trc.HandleTrace(trace)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
-// traceCacheSize defines the maximum number of elements for the caches in tracehandler.
-//
-// The caches in tracehandler have a size-"processing overhead" trade-off: Every cache miss will
-// trigger additional processing for that trace in userspace (Go). For most maps, we use
-// maxElementsPerInterval as a base sizing factor. For the tracehandler caches, we also multiply
-// with traceCacheIntervals. For typical/small values of maxElementsPerInterval, this can lead to
-// non-optimal map sizing (reduced cache_hit:cache_miss ratio and increased processing overhead).
-// Simply increasing traceCacheIntervals is problematic when maxElementsPerInterval is large
-// (e.g. too many CPU cores present) as we end up using too much memory. A minimum size is
-// therefore used here.
-func traceCacheSize(monitorInterval time.Duration, samplesPerSecond int,
-	presentCPUCores uint16) uint32 {
-	const (
-		traceCacheIntervals = 6
-		traceCacheMinSize   = 65536
-	)
-
-	maxElements := maxElementsPerInterval(monitorInterval, samplesPerSecond, presentCPUCores)
-
-	size := max(maxElements*uint32(traceCacheIntervals), traceCacheMinSize)
-	return util.NextPowerOfTwo(size)
-}
-
-func maxElementsPerInterval(monitorInterval time.Duration, samplesPerSecond int,
-	presentCPUCores uint16) uint32 {
-	return uint32(uint16(samplesPerSecond) * uint16(monitorInterval.Seconds()) * presentCPUCores)
+	return nil
 }

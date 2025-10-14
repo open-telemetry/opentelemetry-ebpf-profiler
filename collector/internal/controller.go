@@ -24,7 +24,8 @@ const (
 // Controller is a bridge between the Collector's [receiverprofiles.Profiles]
 // interface and our [internal.Controller]
 type Controller struct {
-	ctlr *controller.Controller
+	ctlr       *controller.Controller
+	onShutdown func() error
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
@@ -33,7 +34,13 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
-	rep, err := reporter.NewCollector(&reporter.Config{
+	if cfg.ReporterFactory == nil {
+		cfg.ReporterFactory = func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error) {
+			return reporter.NewCollector(cfg, nextConsumer)
+		}
+	}
+
+	rep, err := cfg.ReporterFactory(&reporter.Config{
 		Name:                   ctrlName,
 		Version:                vc.Version(),
 		MaxRPCMsgSize:          cfg.MaxRPCMsgSize,
@@ -54,7 +61,8 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	metrics.Start(meter)
 
 	return &Controller{
-		ctlr: controller.New(cfg),
+		onShutdown: cfg.OnShutdown,
+		ctlr:       controller.New(cfg),
 	}, nil
 }
 
@@ -66,5 +74,8 @@ func (c *Controller) Start(ctx context.Context, _ component.Host) error {
 // Shutdown stops the receiver.
 func (c *Controller) Shutdown(_ context.Context) error {
 	c.ctlr.Shutdown()
+	if c.onShutdown != nil {
+		return c.onShutdown()
+	}
 	return nil
 }

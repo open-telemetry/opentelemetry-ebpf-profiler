@@ -23,7 +23,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -205,12 +204,6 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		return nil, err
 	}
 
-	iseqBodyPCToFunction, err := freelru.New[rubyIseqBodyPC, *rubyIseq](iseqCacheSize,
-		hashRubyIseqBodyPC)
-	if err != nil {
-		return nil, err
-	}
-
 	addrToString, err := freelru.New[libpf.Address, libpf.String](addrToStringSize,
 		libpf.Address.Hash32)
 	if err != nil {
@@ -218,10 +211,9 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	}
 
 	return &rubyInstance{
-		r:                    r,
-		rm:                   rm,
-		iseqBodyPCToFunction: iseqBodyPCToFunction,
-		addrToString:         addrToString,
+		r:            r,
+		rm:           rm,
+		addrToString: addrToString,
 		memPool: sync.Pool{
 			New: func() any {
 				buf := make([]byte, 512)
@@ -234,31 +226,6 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 func (r *rubyData) Unload(_ interpreter.EbpfHandler) {
 }
 
-// rubyIseqBodyPC holds a reported address to a iseq_constant_body and Ruby VM program counter
-// combination and is used as key in the cache.
-type rubyIseqBodyPC struct {
-	addr libpf.Address
-	pc   uint64
-}
-
-func hashRubyIseqBodyPC(iseq rubyIseqBodyPC) uint32 {
-	h := iseq.addr.Hash()
-	h ^= hash.Uint64(iseq.pc)
-	return uint32(h)
-}
-
-// rubyIseq stores information extracted from a iseq_constant_body struct.
-type rubyIseq struct {
-	// sourceFileName is the extracted filename field
-	sourceFileName libpf.String
-
-	// functionName is the function name for this sequence
-	functionName libpf.String
-
-	// line of code in source file for this instruction sequence
-	line libpf.SourceLineno
-}
-
 type rubyInstance struct {
 	interpreter.InstanceStubs
 
@@ -268,10 +235,6 @@ type rubyInstance struct {
 
 	r  *rubyData
 	rm remotememory.RemoteMemory
-
-	// iseqBodyPCToFunction maps an address and Ruby VM program counter combination to extracted
-	// information from a Ruby instruction sequence object.
-	iseqBodyPCToFunction *freelru.LRU[rubyIseqBodyPC, *rubyIseq]
 
 	// addrToString maps an address to an extracted Ruby String from this address.
 	addrToString *freelru.LRU[libpf.Address, libpf.String]
@@ -646,58 +609,43 @@ func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 	// rb_iseq_constant_body
 	// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L311
 	iseqBody := libpf.Address(frame.File)
+
 	// The Ruby VM program counter that was extracted from the current call frame is embedded in
 	// the Linenos field.
 	pc := frame.Lineno
 
-	key := rubyIseqBodyPC{
-		addr: iseqBody,
-		pc:   uint64(pc),
+	lineNo, err := r.getRubyLineNo(iseqBody, uint64(pc))
+	if err != nil {
+		return err
 	}
 
-	iseq, ok := r.iseqBodyPCToFunction.Get(key)
-	if !ok {
-		lineNo, err := r.getRubyLineNo(iseqBody, uint64(pc))
-		if err != nil {
-			return err
-		}
+	sourceFileNamePtr := r.rm.Ptr(iseqBody +
+		libpf.Address(vms.iseq_constant_body.location+vms.iseq_location_struct.pathobj))
+	sourceFileName, err := r.getStringCached(sourceFileNamePtr, r.readPathObjRealPath)
+	if err != nil {
+		return err
+	}
 
-		sourceFileNamePtr := r.rm.Ptr(iseqBody +
-			libpf.Address(vms.iseq_constant_body.location+vms.iseq_location_struct.pathobj))
-		sourceFileName, err := r.getStringCached(sourceFileNamePtr, r.readPathObjRealPath)
-		if err != nil {
-			return err
-		}
-
-		funcNamePtr := r.rm.Ptr(iseqBody +
-			libpf.Address(vms.iseq_constant_body.location+vms.iseq_location_struct.base_label))
-		functionName, err := r.getStringCached(funcNamePtr, r.readRubyString)
-		if err != nil {
-			return err
-		}
-
-		iseq = &rubyIseq{
-			functionName:   functionName,
-			sourceFileName: sourceFileName,
-			line:           libpf.SourceLineno(lineNo),
-		}
-		r.iseqBodyPCToFunction.Add(key, iseq)
+	funcNamePtr := r.rm.Ptr(iseqBody +
+		libpf.Address(vms.iseq_constant_body.location+vms.iseq_location_struct.base_label))
+	functionName, err := r.getStringCached(funcNamePtr, r.readRubyString)
+	if err != nil {
+		return err
 	}
 
 	// Ruby doesn't provide the information about the function offset for the
 	// particular line. So we report 0 for this to our backend.
 	frames.Append(&libpf.Frame{
 		Type:         libpf.RubyFrame,
-		FunctionName: iseq.functionName,
-		SourceFile:   iseq.sourceFileName,
-		SourceLine:   iseq.line,
+		FunctionName: functionName,
+		SourceFile:   sourceFileName,
+		SourceLine:   libpf.SourceLineno(lineNo),
 	})
 	sfCounter.ReportSuccess()
 	return nil
 }
 
 func (r *rubyInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
-	rubyIseqBodyPCStats := r.iseqBodyPCToFunction.ResetMetrics()
 	addrToStringStats := r.addrToString.ResetMetrics()
 
 	return []metrics.Metric{
@@ -708,22 +656,6 @@ func (r *rubyInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 		{
 			ID:    metrics.IDRubySymbolizationFailure,
 			Value: metrics.MetricValue(r.failCount.Swap(0)),
-		},
-		{
-			ID:    metrics.IDRubyIseqBodyPCHit,
-			Value: metrics.MetricValue(rubyIseqBodyPCStats.Hits),
-		},
-		{
-			ID:    metrics.IDRubyIseqBodyPCMiss,
-			Value: metrics.MetricValue(rubyIseqBodyPCStats.Misses),
-		},
-		{
-			ID:    metrics.IDRubyIseqBodyPCAdd,
-			Value: metrics.MetricValue(rubyIseqBodyPCStats.Inserts),
-		},
-		{
-			ID:    metrics.IDRubyIseqBodyPCDel,
-			Value: metrics.MetricValue(rubyIseqBodyPCStats.Removals),
 		},
 		{
 			ID:    metrics.IDRubyAddrToStringHit,

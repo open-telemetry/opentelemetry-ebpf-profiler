@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/xreceiver"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 )
@@ -31,13 +32,13 @@ func NewFactory() receiver.Factory {
 		xreceiver.WithProfiles(BuildProfilesReceiver(), component.StabilityLevelAlpha))
 }
 
-func BuildProfilesReceiver(options ...option) xreceiver.CreateProfilesFunc {
+func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 	return func(ctx context.Context,
 		rs receiver.Settings,
 		baseCfg component.Config,
 		nextConsumer xconsumer.Profiles,
 	) (xreceiver.Profiles, error) {
-		cfg, ok := baseCfg.(*Config)
+		cfg, ok := baseCfg.(*config.Config)
 		if !ok {
 			return nil, errInvalidConfig
 		}
@@ -67,6 +68,8 @@ func BuildProfilesReceiver(options ...option) xreceiver.CreateProfilesFunc {
 			MaxGRPCRetries:         cfg.MaxGRPCRetries,
 			MaxRPCMsgSize:          cfg.MaxRPCMsgSize,
 			ExecutableReporter:     controllerOption.executableReporter,
+			ReporterFactory:        controllerOption.reporterFactory,
+			OnShutdown:             controllerOption.onShutdown,
 		}
 
 		return internal.NewController(controlerCfg, rs, nextConsumer)
@@ -74,7 +77,7 @@ func BuildProfilesReceiver(options ...option) xreceiver.CreateProfilesFunc {
 }
 
 func defaultConfig() component.Config {
-	return &Config{
+	return &config.Config{
 		ReporterInterval:       5 * time.Second,
 		MonitorInterval:        5 * time.Second,
 		SamplesPerSecond:       20,

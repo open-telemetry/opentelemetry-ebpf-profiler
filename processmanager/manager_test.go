@@ -295,6 +295,7 @@ func TestNewMapping(t *testing.T) {
 				ebpfMockup,
 				NewMapFileIDMapper(),
 				nil,
+				nil,
 				&dummyProvider,
 				true,
 				libpf.Set[string]{})
@@ -478,6 +479,7 @@ func TestProcExit(t *testing.T) {
 				1*time.Second,
 				ebpfMockup,
 				NewMapFileIDMapper(),
+				nil,
 				nil,
 				&dummyProvider,
 				true,
