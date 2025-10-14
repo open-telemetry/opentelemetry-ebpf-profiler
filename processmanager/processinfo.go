@@ -472,11 +472,9 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		exe, err := pr.GetExe()
 		if err != nil {
 			log.Warnf("Failed to get executable of process %d: %v", pid, err)
-		} else {
-			if exe != info.meta.Executable {
-				// Update metadata of the process.
-				info.meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
-			}
+		} else if exe != info.meta.Executable {
+			// Update metadata of the process.
+			info.meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
 		}
 
 		// Iterate over cached executable mappings, if any, and collect mappings
