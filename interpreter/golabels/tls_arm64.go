@@ -8,6 +8,7 @@ package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabe
 import (
 	"go.opentelemetry.io/ebpf-profiler/armhelpers"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"golang.org/x/arch/arm64/arm64asm"
 )
 
@@ -38,11 +39,13 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 		return 0, err
 	}
 
-	syms, err := f.ReadSymbols()
+	pclntab, err := elfunwindinfo.NewGopclntab(f)
 	if err != nil {
 		return 0, err
 	}
-	sym, err := syms.LookupSymbol("runtime.load_g.abi0")
+	defer pclntab.Close()
+
+	sym, err := pclntab.LookupSymbol("runtime.load_g.abi0")
 	if err != nil {
 		return 0, err
 	}
