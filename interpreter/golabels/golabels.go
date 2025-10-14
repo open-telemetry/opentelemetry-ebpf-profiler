@@ -62,12 +62,12 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 
 	offsets := getOffsets(goVersion)
 	tlsOffset, err := extractTLSGOffset(file)
-	switch err {
-	case libpf.ErrSymbolNotFound:
+	switch {
+	case errors.Is(err, libpf.ErrSymbolNotFound):
 		return nil, fmt.Errorf("failed to lookup symbol in %s: %v", info.FileName(), err)
-	case errDecodeSymbol:
-		log.Warnf("Failed to decode symbol in %s for Go label extraction", info.FileName())
-	case nil:
+	case errors.Is(err, errDecodeSymbol):
+		log.Warnf("In %s: %v", info.FileName(), err)
+	case errors.Is(err, nil):
 		// Nothing to do - just continue
 	default:
 		return nil, fmt.Errorf("failed to extract TLS offset: %w", err)
