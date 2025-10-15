@@ -1487,6 +1487,8 @@ func mapPositionToLine(lineEnds []uint32, pos int32) (libpf.SourceLineno, libpf.
 	var lineStart uint32
 	if index > 0 {
 		lineStart = lineEnds[index-1] + 1
+	} else {
+		lineStart = 0
 	}
 
 	column := uint32(pos) - lineStart
