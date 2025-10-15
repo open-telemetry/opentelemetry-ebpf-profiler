@@ -51,7 +51,14 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 	symbolName := "runtime.load_g.abi0"
 	sym, err := pclntab.LookupSymbol(libpf.SymbolName(symbolName))
 	if err != nil {
-		return 0, err
+		// Use runtime.load_g as backup, if we can not identify
+		// runtime.load_g.abi0. This can happen, if runtime.load_g.abi0
+		// is inlined into runtime.load_g.
+		symbolName := "runtime.load_g"
+		sym, err = pclntab.LookupSymbol(libpf.SymbolName(symbolName))
+		if err != nil {
+			return 0, err
+		}
 	}
 	b, err := f.VirtualMemory(int64(sym.Address), 32, 32)
 	if err != nil {
