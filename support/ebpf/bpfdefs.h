@@ -34,7 +34,7 @@ extern u32 with_debug_output;
   #define UNROLL
 
 // BPF helpers. Mostly stubs to dispatch the call to Go code with the context ID.
-int bpf_tail_call(void *ctx, bpf_map_def *map, int index);
+int bpf_tail_call(void *ctx, void *map, int index);
 unsigned long long bpf_ktime_get_ns(void);
 int bpf_get_current_comm(void *, int);
 
@@ -54,26 +54,26 @@ static inline u64 bpf_get_current_pid_tgid(void)
   return __cgo_ctx->id;
 }
 
-static inline void *bpf_map_lookup_elem(bpf_map_def *map, const void *key)
+static inline void *bpf_map_lookup_elem(void *map, const void *key)
 {
-  void *__bpf_map_lookup_elem(u64, bpf_map_def *, const void *);
+  void *__bpf_map_lookup_elem(u64, void *, const void *);
   return __bpf_map_lookup_elem(__cgo_ctx->id, map, key);
 }
 
 static inline int bpf_map_update_elem(
-  UNUSED bpf_map_def *map, UNUSED const void *key, UNUSED const void *val, UNUSED u64 flags)
+  UNUSED void *map, UNUSED const void *key, UNUSED const void *val, UNUSED u64 flags)
 {
   return -1;
 }
 
-static inline int bpf_map_delete_elem(UNUSED bpf_map_def *map, UNUSED const void *key)
+static inline int bpf_map_delete_elem(UNUSED void *map, UNUSED const void *key)
 {
   return -1;
 }
 
 static inline int bpf_perf_event_output(
   UNUSED void *ctx,
-  UNUSED bpf_map_def *mapdef,
+  UNUSED void *map,
   UNUSED unsigned long long flags,
   UNUSED void *data,
   UNUSED int size)
@@ -82,7 +82,7 @@ static inline int bpf_perf_event_output(
   return 0;
 }
 
-static inline int bpf_get_stackid(UNUSED void *ctx, UNUSED bpf_map_def *map, UNUSED u64 flags)
+static inline int bpf_get_stackid(UNUSED void *ctx, UNUSED void *map, UNUSED u64 flags)
 {
   return -1;
 }

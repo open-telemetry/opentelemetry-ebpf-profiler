@@ -52,7 +52,7 @@ type ebpfContext struct {
 
 	// maps is the generic ebpf map implementation and implements all the
 	// ebpf maps that do not need special handling (maps defined above)
-	maps map[*C.bpf_map_def]map[any]unsafe.Pointer
+	maps map[unsafe.Pointer]map[any]unsafe.Pointer
 
 	// systemConfig holds an instance of `SystemConfig`, the common map
 	// for storing configuration that is populated by the host-agent.
@@ -71,7 +71,6 @@ var ebpfContextMap = map[C.u64]*ebpfContext{}
 // newEBPFContext creates new EBPF Context from given core dump image
 func newEBPFContext(pr process.Process) *ebpfContext {
 	pid := pr.PID()
-	unwindInfoArray := C.unwind_info_array
 	ctx := &ebpfContext{
 		trace:                 host.Trace{PID: pid},
 		remoteMemory:          pr.GetRemoteMemory(),
@@ -79,10 +78,10 @@ func newEBPFContext(pr process.Process) *ebpfContext {
 		pidToPageMapping:      make(map[C.PIDPage]unsafe.Pointer),
 		stackDeltaPageToInfo:  make(map[C.StackDeltaPageKey]unsafe.Pointer),
 		exeIDToStackDeltaMaps: make(map[C.u64]unsafe.Pointer),
-		maps:                  make(map[*C.bpf_map_def]map[any]unsafe.Pointer),
+		maps:                  make(map[unsafe.Pointer]map[any]unsafe.Pointer),
 		systemConfig:          initSystemConfig(pr.GetMachineData()),
 		perCPURecord:          C.malloc(C.sizeof_PerCPURecord),
-		unwindInfoArray:       C.malloc(C.sizeof_UnwindInfo * C.ulong(unwindInfoArray.max_entries)),
+		unwindInfoArray:       C.malloc(C.sizeof_UnwindInfo * C.ulong(C.unwind_info_max_entries)),
 	}
 	ebpfContextMap[ctx.PIDandTGID] = ctx
 	return ctx
@@ -101,7 +100,7 @@ func initSystemConfig(md process.MachineData) unsafe.Pointer {
 	return rawPtr
 }
 
-func (ec *ebpfContext) addMap(mapPtr *C.bpf_map_def, key any, value []byte) {
+func (ec *ebpfContext) addMap(mapPtr unsafe.Pointer, key any, value []byte) {
 	innerMap, ok := ec.maps[mapPtr]
 	if !ok {
 		innerMap = make(map[any]unsafe.Pointer)
@@ -110,7 +109,7 @@ func (ec *ebpfContext) addMap(mapPtr *C.bpf_map_def, key any, value []byte) {
 	innerMap[key] = C.CBytes(value)
 }
 
-func (ec *ebpfContext) delMap(mapPtr *C.bpf_map_def, key any) {
+func (ec *ebpfContext) delMap(mapPtr unsafe.Pointer, key any) {
 	if innerMap, ok := ec.maps[mapPtr]; ok {
 		if value, ok2 := innerMap[key]; ok2 {
 			C.free(value)

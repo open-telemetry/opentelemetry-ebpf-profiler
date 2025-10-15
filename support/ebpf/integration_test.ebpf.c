@@ -6,7 +6,7 @@
 #include "tracemgmt.h"
 #include "types.h"
 
-extern bpf_map_def kernel_stackmap;
+extern struct kernel_stackmap_t kernel_stackmap;
 
 static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, s32 kstack)
 {

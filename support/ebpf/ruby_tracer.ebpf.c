@@ -6,12 +6,12 @@
 
 // Map from Ruby process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
-bpf_map_def SEC("maps") ruby_procs = {
-  .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(pid_t),
-  .value_size  = sizeof(RubyProcInfo),
-  .max_entries = 1024,
-};
+struct ruby_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, RubyProcInfo);
+  __uint(max_entries, 1024);
+} ruby_procs SEC(".maps");
 
 // The number of Ruby frames to unwind per frame-unwinding eBPF program. If
 // we start running out of instructions in the walk_ruby_stack program, one
