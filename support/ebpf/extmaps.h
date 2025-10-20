@@ -3,8 +3,6 @@
 #ifndef OPTI_EXTMAPS_H
 #define OPTI_EXTMAPS_H
 
-#include "bpf_map.h"
-
 // References to map definitions in *.ebpf.c.
 extern struct perf_progs_t perf_progs;
 extern struct per_cpu_records_t per_cpu_records;

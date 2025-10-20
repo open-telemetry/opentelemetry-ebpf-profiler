@@ -1,7 +1,6 @@
 #ifndef OPTI_BPFDEFS_H
 #define OPTI_BPFDEFS_H
 
-#include "bpf_map.h"
 #include "kernel.h"
 
 // with_debug_output is declared in native_stack_trace.ebpf.c
@@ -10,6 +9,11 @@ extern u32 with_debug_output;
 // UNUSED is a macro that marks a parameter or variable as intentionally unused.
 // It prevents compiler warnings about unused variables while keeping them in the code.
 #define UNUSED __attribute__((unused))
+
+// BTF-style map definition macros from tools/lib/bpf/bpf_helpers.h
+#define __uint(name, val)  int(*name)[val]
+#define __type(name, val)  typeof(val) *name
+#define __array(name, val) typeof(val) *name[]
 
 #if defined(TESTING_COREDUMP)
 
