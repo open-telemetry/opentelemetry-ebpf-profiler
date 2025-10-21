@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 /*
@@ -81,7 +82,7 @@ func newEBPFContext(pr process.Process) *ebpfContext {
 		maps:                  make(map[unsafe.Pointer]map[any]unsafe.Pointer),
 		systemConfig:          initSystemConfig(pr.GetMachineData()),
 		perCPURecord:          C.malloc(C.sizeof_PerCPURecord),
-		unwindInfoArray:       C.malloc(C.sizeof_UnwindInfo * C.ulong(C.unwind_info_max_entries)),
+		unwindInfoArray:       C.malloc(C.sizeof_UnwindInfo * C.ulong(support.UnwindInfoMaxEntries)),
 	}
 	ebpfContextMap[ctx.PIDandTGID] = ctx
 	return ctx

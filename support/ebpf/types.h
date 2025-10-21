@@ -358,6 +358,11 @@ typedef enum TraceOrigin {
 // frame reporting that we ran out of stack space.
 #define MAX_NON_ERROR_FRAME_UNWINDS (MAX_FRAME_UNWINDS - 1)
 
+// Maximum number of unique stack deltas needed on a system. This is based on
+// normal desktop /usr/bin/* and /usr/lib/*.so having about 9700 unique deltas.
+// Can be increased up to 2^15, see also STACK_DELTA_COMMAND_FLAG.
+#define UNWIND_INFO_MAX_ENTRIES 16384
+
 // Type to represent a globally-unique file id to be used as key for a BPF hash map
 typedef u64 FileID;
 

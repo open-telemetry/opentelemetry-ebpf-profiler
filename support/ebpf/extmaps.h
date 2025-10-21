@@ -49,7 +49,6 @@ extern struct ruby_procs_t ruby_procs;
 extern struct stack_delta_page_to_info_t stack_delta_page_to_info;
 extern struct unwind_info_array_t unwind_info_array;
 extern struct v8_procs_t v8_procs;
-extern unsigned int unwind_info_max_entries;
 #endif // TESTING_COREDUMP
 
 #endif // OPTI_EXTMAPS_H
