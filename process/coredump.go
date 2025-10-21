@@ -38,7 +38,7 @@ type CoredumpProcess struct {
 	// pid is the original PID from which the coredump was generated.
 	pid libpf.PID
 
-	// fname is the original filename of executable.
+	// fname is the the short name of the executable file that was running when the coredump was generated.
 	fname string
 
 	// machineData contains the parsed machine data.
