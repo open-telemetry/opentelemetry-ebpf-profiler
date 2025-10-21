@@ -40,19 +40,13 @@ STACK_DELTA_BUCKET(23);
 #define STACK_DELTA_INVALID (STACK_DELTA_COMMAND_FLAG | UNWIND_COMMAND_INVALID)
 #define STACK_DELTA_STOP    (STACK_DELTA_COMMAND_FLAG | UNWIND_COMMAND_STOP)
 
-#if defined(TESTING_COREDUMP)
-unsigned int unwind_info_max_entries = 16384;
-#endif
 // An array of unwind info contains the all the different UnwindInfo instances
 // needed system wide. Individual stack delta entries refer to this array.
 struct unwind_info_array_t {
   __uint(type, BPF_MAP_TYPE_ARRAY);
   __type(key, u32);
   __type(value, UnwindInfo);
-  // Maximum number of unique stack deltas needed on a system. This is based on
-  // normal desktop /usr/bin/* and /usr/lib/*.so having about 9700 unique deltas.
-  // Can be increased up to 2^15, see also STACK_DELTA_COMMAND_FLAG.
-  __uint(max_entries, 16384);
+  __uint(max_entries, UNWIND_INFO_MAX_ENTRIES);
 } unwind_info_array SEC(".maps");
 
 // The number of native frames to unwind per frame-unwinding eBPF program.

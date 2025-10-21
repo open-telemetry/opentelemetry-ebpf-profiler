@@ -147,9 +147,9 @@ func (emc *ebpfMapsCoredump) DeletePidInterpreterMapping(pid libpf.PID,
 
 // Stack delta management
 func (emc *ebpfMapsCoredump) UpdateUnwindInfo(index uint16, info sdtypes.UnwindInfo) error {
-	if C.uint(index) >= C.unwind_info_max_entries {
+	if index >= support.UnwindInfoMaxEntries {
 		return fmt.Errorf("unwind info array full (%d/%d items)",
-			index, C.unwind_info_max_entries)
+			index, support.UnwindInfoMaxEntries)
 	}
 
 	cmd := (*C.UnwindInfo)(unsafe.Pointer(uintptr(emc.ctx.unwindInfoArray) +
