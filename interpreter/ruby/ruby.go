@@ -71,6 +71,10 @@ const (
 	pathObjRealPathIdx = 1
 )
 
+const (
+	rubyCurrentEcTlsSymbol = "ruby_current_ec"
+)
+
 var (
 	// regex to identify the Ruby interpreter executable
 	rubyRegex = regexp.MustCompile(`^(?:.*/)?libruby(?:-.*)?\.so\.(\d)\.(\d)\.(\d)$`)
@@ -88,7 +92,8 @@ type rubyData struct {
 	// eBPF program to build ruby backtraces.
 	currentCtxPtr libpf.Address
 
-	currentEcTlsOffset uint64
+	// Address to the ruby_current_ec variable in TLS, as an offset from tpbase
+	currentEcTpBaseTlsOffset libpf.Address
 
 	// version of the currently used Ruby interpreter.
 	// major*0x10000 + minor*0x100 + release (e.g. 3.0.1 -> 0x30001)
@@ -178,11 +183,15 @@ func rubyVersion(major, minor, release uint32) uint32 {
 
 func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
+
+	// Read TLS offset from the TLS descriptor.
+	tlsOffset := rm.Uint64(bias + r.currentEcTpBaseTlsOffset + 8)
+
 	cdata := support.RubyProcInfo{
 		Version: r.version,
 
-		Current_ctx_ptr:       uint64(r.currentCtxPtr + bias),
-		Current_ec_tls_offset: r.currentEcTlsOffset,
+		Current_ctx_ptr:              uint64(r.currentCtxPtr + bias),
+		Current_ec_tpbase_tls_offset: tlsOffset,
 
 		Vm_stack:      r.vmStructs.execution_context_struct.vm_stack,
 		Vm_stack_size: r.vmStructs.execution_context_struct.vm_stack_size,
@@ -761,7 +770,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		currentCtxSymbol = "ruby_current_execution_context_ptr"
 	}
 
-	var currentEcTlsOffset libpf.SymbolValue
+	var currentEcTpBaseTlsOffset libpf.Address
 	var interpRanges []util.Range
 
 	// rb_vm_exec is used to execute the Ruby frames in the Ruby VM and is called within
@@ -773,7 +782,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	var currentEcSymbol *libpf.Symbol
-	currentEcSymbolName := libpf.SymbolName("ruby_current_ec")
+	currentEcSymbolName := libpf.SymbolName(rubyCurrentEcTlsSymbol)
 
 	log.Debugf("Ruby %d.%d.%d detected, looking for currentCtxPtr=%q, currentEcSymbol=%q",
 		(version>>16)&0xff, (version>>8)&0xff, version&0xff, currentCtxSymbol, currentEcSymbolName)
@@ -793,7 +802,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		log.Debugf("Direct lookup of %v failed: %v, will try fallback", interpSymbolName, err)
 	}
 
-	err = ef.VisitSymbols(func(s libpf.Symbol) bool {
+	if err = ef.VisitSymbols(func(s libpf.Symbol) bool {
 		if s.Name == currentEcSymbolName {
 			currentEcSymbol = &s
 		}
@@ -807,18 +816,31 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			return false
 		}
 		return true
-	})
-
-	if currentEcSymbol != nil {
-		currentEcTlsOffset = currentEcSymbol.Address
+	}); err != nil {
+		log.Warnf("failed to visit symbols: %v", err)
 	}
 
-	log.Debugf("Discovered EC %x, interp ranges: %v", currentEcTlsOffset, interpRanges)
+	// NOTE for ruby 3.3.0+, if ruby is stripped, we have no way of locating
+	// ruby_current_ec TLS symbol.
+	// We could potentially add a fallback for this in the future, but for now
+	// only unstripped ruby is supported. Many distro supplied rubies are stripped.
+	if err = ef.VisitTLSRelocations(func(r pfelf.ElfReloc, symName string) bool {
+		if symName == rubyCurrentEcTlsSymbol ||
+			currentEcSymbol != nil && libpf.SymbolValue(r.Addend) == currentEcSymbol.Address {
+			currentEcTpBaseTlsOffset = libpf.Address(r.Off)
+			return false
+		}
+		return true
+	}); err != nil {
+		log.Warnf("failed to locate TLS descriptor: %v", err)
+	}
+
+	log.Debugf("Discovered EC tls tpbase offset %x, interp ranges: %v", currentEcTpBaseTlsOffset, interpRanges)
 
 	rid := &rubyData{
 		version:            version,
+		currentEcTpBaseTlsOffset:     libpf.Address(currentEcTpBaseTlsOffset),
 		currentCtxPtr:      libpf.Address(currentCtxPtr),
-		currentEcTlsOffset: uint64(currentEcTlsOffset),
 	}
 
 	vms := &rid.vmStructs

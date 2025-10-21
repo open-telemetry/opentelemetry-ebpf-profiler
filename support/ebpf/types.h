@@ -462,8 +462,8 @@ typedef struct RubyProcInfo {
   // version of the Ruby interpreter.
   u32 version;
 
-  // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
-  u64 current_ec_tls_offset;
+  // tls_offset holds TLS base + ruby_current_ec tls symbol, as an offset from tpbase
+  u64 current_ec_tpbase_tls_offset;
 
   // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
   u64 current_ctx_ptr;
