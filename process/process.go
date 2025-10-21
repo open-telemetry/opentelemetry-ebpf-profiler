@@ -88,7 +88,7 @@ func (sp *systemProcess) GetExe() (string, error) {
 
 func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 	var processName string
-	exePath, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", sp.pid))
+	exePath, _ := sp.GetExe()
 	if name, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", sp.pid)); err == nil {
 		processName = string(name)
 	}
