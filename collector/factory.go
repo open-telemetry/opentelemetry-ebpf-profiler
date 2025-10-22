@@ -49,27 +49,10 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 		}
 
 		controlerCfg := &controller.Config{
-			ReporterInterval:       cfg.ReporterInterval,
-			MonitorInterval:        cfg.MonitorInterval,
-			SamplesPerSecond:       cfg.SamplesPerSecond,
-			ProbabilisticInterval:  cfg.ProbabilisticInterval,
-			ProbabilisticThreshold: cfg.ProbabilisticThreshold,
-			Tracers:                cfg.Tracers,
-			ClockSyncInterval:      cfg.ClockSyncInterval,
-			SendErrorFrames:        cfg.SendErrorFrames,
-			VerboseMode:            cfg.VerboseMode,
-			OffCPUThreshold:        cfg.OffCPUThreshold,
-			IncludeEnvVars:         cfg.IncludeEnvVars,
-			UProbeLinks:            cfg.UProbeLinks,
-			LoadProbe:              cfg.LoadProbe,
-			MapScaleFactor:         cfg.MapScaleFactor,
-			BpfVerifierLogLevel:    cfg.BPFVerifierLogLevel,
-			NoKernelVersionCheck:   cfg.NoKernelVersionCheck,
-			MaxGRPCRetries:         cfg.MaxGRPCRetries,
-			MaxRPCMsgSize:          cfg.MaxRPCMsgSize,
-			ExecutableReporter:     controllerOption.executableReporter,
-			ReporterFactory:        controllerOption.reporterFactory,
-			OnShutdown:             controllerOption.onShutdown,
+			Config:             *cfg,
+			ExecutableReporter: controllerOption.executableReporter,
+			ReporterFactory:    controllerOption.reporterFactory,
+			OnShutdown:         controllerOption.onShutdown,
 		}
 
 		return internal.NewController(controlerCfg, rs, nextConsumer)
