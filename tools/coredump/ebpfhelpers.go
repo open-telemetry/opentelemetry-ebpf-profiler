@@ -72,7 +72,7 @@ func __bpf_probe_read_user(id C.u64, buf unsafe.Pointer, sz C.int, ptr unsafe.Po
 
 // stackDeltaInnerMap is a special map returned to C code to indicate that
 // we are accessing one of nested maps in the exe_id_to_X_stack_deltas maps
-var stackDeltaInnerMap = unsafe.Pointer(C.malloc(1))
+var stackDeltaInnerMap = C.malloc(1)
 
 //export __bpf_map_lookup_elem
 func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointer) unsafe.Pointer {
@@ -117,11 +117,11 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 		unsafe.Pointer(&C.exe_id_to_20_stack_deltas), unsafe.Pointer(&C.exe_id_to_21_stack_deltas),
 		unsafe.Pointer(&C.exe_id_to_22_stack_deltas), unsafe.Pointer(&C.exe_id_to_23_stack_deltas):
 		ctx.stackDeltaFileID = *(*C.u64)(keyptr)
-		return unsafe.Pointer(stackDeltaInnerMap)
+		return stackDeltaInnerMap
 	case unsafe.Pointer(&C.unwind_info_array):
 		key := uintptr(*(*C.u32)(keyptr))
 		return unsafe.Pointer(uintptr(ctx.unwindInfoArray) + key*C.sizeof_UnwindInfo)
-	case unsafe.Pointer(stackDeltaInnerMap):
+	case stackDeltaInnerMap:
 		key := uintptr(*(*C.u32)(keyptr))
 		if deltas, ok := ctx.exeIDToStackDeltaMaps[ctx.stackDeltaFileID]; ok {
 			return unsafe.Pointer(uintptr(deltas) + key*C.sizeof_StackDelta)
