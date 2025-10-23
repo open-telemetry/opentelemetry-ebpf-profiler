@@ -6,9 +6,12 @@
 package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
-	log "github.com/sirupsen/logrus"
+	"fmt"
+
 	"go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"golang.org/x/arch/arm64/arm64asm"
 )
 
@@ -39,16 +42,23 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 		return 0, err
 	}
 
-	syms, err := f.ReadSymbols()
+	pclntab, err := elfunwindinfo.NewGopclntab(f)
 	if err != nil {
 		return 0, err
 	}
-	sym, err := syms.LookupSymbol("runtime.load_g.abi0")
+	defer pclntab.Close()
+
+	symbolName := "runtime.load_g.abi0"
+	sym, err := pclntab.LookupSymbol(libpf.SymbolName(symbolName))
 	if err != nil {
-		// Binary must be stripped, just warn and return 0 and we'll rely on r28.
-		log.Warnf("Failed to find load_g symbol in cgo enabled Go binary "+
-			"label collection in CGO frames may not work: %v", err)
-		return 0, nil
+		// Use runtime.load_g as backup, if we can not identify
+		// runtime.load_g.abi0. This can happen, if runtime.load_g.abi0
+		// is inlined into runtime.load_g.
+		symbolName := "runtime.load_g"
+		sym, err = pclntab.LookupSymbol(libpf.SymbolName(symbolName))
+		if err != nil {
+			return 0, err
+		}
 	}
 	b, err := f.VirtualMemory(int64(sym.Address), 32, 32)
 	if err != nil {
@@ -78,6 +88,5 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 			}
 		}
 	}
-	log.Warnf("Failed to decode load_g symbol, Go label collection might not work with CGO frames")
-	return 0, nil
+	return 0, fmt.Errorf("symbol '%s': %w", symbolName, errDecodeSymbol)
 }

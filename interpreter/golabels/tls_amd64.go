@@ -6,9 +6,11 @@
 package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
-	log "github.com/sirupsen/logrus"
+	"fmt"
+
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	e "go.opentelemetry.io/ebpf-profiler/asm/expression"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"golang.org/x/arch/x86/x86asm"
@@ -25,12 +27,14 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 	}
 	defer pclntab.Close()
 
+	symbolName := "runtime.stackcheck"
+
 	// Dump of assembler code for function runtime.stackcheck:
 	// 0x0000000000470080 <+0>:     mov    %fs:0xfffffffffffffff8,%rax
 	// Binaries built with -buildmode=pie have a different assembly code for stackcheck with 2 movs:
 	//  0x00000000007ec320 <+0>:	mov    $0xfffffffffffffff8,%rcx
 	//  0x00000000007ec327 <+7>:	mov    %fs:(%rcx),%rax
-	sym, err := pclntab.LookupSymbol("runtime.stackcheck")
+	sym, err := pclntab.LookupSymbol(libpf.SymbolName(symbolName))
 	if err != nil {
 		return 0, err
 	}
@@ -70,6 +74,5 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 			return int32(offset.CapturedValue()), nil
 		}
 	}
-	log.Warnf("Failed to decode stackcheck symbol, Go label collection might not work")
-	return -8, nil
+	return -8, fmt.Errorf("symbol '%s': %w", symbolName, errDecodeSymbol)
 }
