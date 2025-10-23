@@ -265,7 +265,6 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, error) {
 			continue
 		}
 
-
 		var data []byte
 		var err error
 		if data, err = p.Data(maxBytesGoPclntab); err != nil {
