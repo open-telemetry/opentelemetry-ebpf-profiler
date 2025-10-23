@@ -21,12 +21,12 @@
 
 // Map from dotnet process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
-bpf_map_def SEC("maps") dotnet_procs = {
-  .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(pid_t),
-  .value_size  = sizeof(DotnetProcInfo),
-  .max_entries = 1024,
-};
+struct dotnet_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, DotnetProcInfo);
+  __uint(max_entries, 1024);
+} dotnet_procs SEC(".maps");
 
 // Nibble map tunables
 // https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/inc/nibblemapmacros.h
