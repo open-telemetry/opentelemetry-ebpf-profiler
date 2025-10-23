@@ -25,6 +25,7 @@ import (
 // #include <stdlib.h>
 // #include "../../support/ebpf/types.h"
 // int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx);
+// void initialize_rodata_variables(u64 new_inv_pac_mask);
 import "C"
 
 // sliceBuffer creates a Go slice from C buffer
@@ -153,6 +154,9 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	// Interfaces for the managers
 	ebpfCtx := newEBPFContext(pr)
 	defer ebpfCtx.release()
+
+	inverse_pac_mask := ^(pr.GetMachineData().CodePACMask)
+	C.initialize_rodata_variables(C.u64(inverse_pac_mask))
 
 	coredumpEbpfMaps := ebpfMapsCoredump{ctx: ebpfCtx}
 	traceReporter := traceReporter{}

@@ -906,30 +906,6 @@ typedef struct PIDPageMappingInfo {
 // Largest stack delta bucket that holds up to 2^23 entries
 #define STACK_DELTA_BUCKET_LARGEST  23
 
-// Struct of the `system_config` map. Contains various configuration variables
-// determined and set by the host agent.
-typedef struct SystemConfig {
-  // PAC mask that is determined by user-space and used in `normalize_pac_ptr`.
-  // ARM64 specific, `MAX_U64` otherwise.
-  u64 inverse_pac_mask;
-
-  // The offset of the Thread Pointer Base variable in `task_struct`. It is
-  // populated by the host agent based on kernel code analysis.
-  u64 tpbase_offset;
-
-  // The offset of stack base within `task_struct`.
-  u32 task_stack_offset;
-
-  // The offset of struct pt_regs within the kernel entry stack.
-  u32 stack_ptregs_offset;
-
-  // User defined threshold for off-cpu profiling.
-  u32 off_cpu_threshold;
-
-  // Enables the temporary hack that drops pure errors frames in unwind_stop.
-  bool drop_error_only_traces;
-} SystemConfig;
-
 // Avoid including all of arch/arm64/include/uapi/asm/ptrace.h by copying the
 // actually used values.
 #define PSR_MODE32_BIT 0x00000010

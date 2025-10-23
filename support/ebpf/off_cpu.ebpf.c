@@ -18,6 +18,9 @@ struct sched_times_t {
   __uint(max_entries, 256); // value is adjusted at load time in loadAllMaps.
 } sched_times SEC(".maps");
 
+// off_cpu_threshold is set during load time.
+BPF_RODATA_VAR(u32, off_cpu_threshold, 0)
+
 // tracepoint__sched_switch serves as entry point for off cpu profiling.
 SEC("tracepoint/sched/sched_switch")
 int tracepoint__sched_switch(UNUSED void *ctx)
@@ -30,14 +33,7 @@ int tracepoint__sched_switch(UNUSED void *ctx)
     return 0;
   }
 
-  u32 key              = 0;
-  SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &key);
-  if (!syscfg) {
-    // Unreachable: array maps are always fully initialized.
-    return ERR_UNREACHABLE;
-  }
-
-  if (bpf_get_prandom_u32() > syscfg->off_cpu_threshold) {
+  if (bpf_get_prandom_u32() > off_cpu_threshold) {
     return 0;
   }
 
