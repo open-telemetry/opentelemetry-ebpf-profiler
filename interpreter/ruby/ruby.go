@@ -26,6 +26,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -308,9 +309,16 @@ func (r *rubyInstance) readPathObjRealPath(addr libpf.Address) (string, error) {
 		if e != nil {
 			return "", e
 		}
-		relVal := r.rm.Ptr(arrData)
-		absVal := r.rm.Ptr(arrData + libpf.Address(vms.size_of_value))
+
+		// Read contiguous pointer values into a buffer to be more efficient
+		dataBytes := make([]byte, 2 * vms.size_of_value)
+		if err := r.rm.Read(arrData, dataBytes); err != nil {
+			return "", fmt.Errorf("failed to read array data bytes: %v", err)
+		}
+
 		var relTag, absTag uint64
+		relVal := npsr.Ptr(dataBytes, 0)
+		absVal := npsr.Ptr(dataBytes, uint(vms.size_of_value))
 		if relVal != 0 {
 			relTag = uint64(r.rm.Ptr(relVal)) & uint64(rubyTMask)
 		}
