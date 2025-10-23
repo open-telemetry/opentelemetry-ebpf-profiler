@@ -67,12 +67,12 @@
 
 // Map from Perl process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
-bpf_map_def SEC("maps") perl_procs = {
-  .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(pid_t),
-  .value_size  = sizeof(PerlProcInfo),
-  .max_entries = 1024,
-};
+struct perl_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, PerlProcInfo);
+  __uint(max_entries, 1024);
+} perl_procs SEC(".maps");
 
 // Record a Perl frame
 static EBPF_INLINE ErrorCode push_perl(Trace *trace, u64 file, u64 line)

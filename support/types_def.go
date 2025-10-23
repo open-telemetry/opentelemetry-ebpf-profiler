@@ -59,6 +59,8 @@ const (
 
 const MaxFrameUnwinds = C.MAX_FRAME_UNWINDS
 
+const UnwindInfoMaxEntries = C.UNWIND_INFO_MAX_ENTRIES
+
 const (
 	MetricIDBeginCumulative = C.metricID_BeginCumulative
 )

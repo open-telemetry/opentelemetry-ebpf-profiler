@@ -82,7 +82,7 @@ int coredump_unwind_stop(UNUSED struct bpf_perf_event_data *ctx)
   return 0;
 }
 
-int bpf_tail_call(void *ctx, UNUSED bpf_map_def *map, int index)
+int bpf_tail_call(void *ctx, UNUSED void *map, int index)
 {
   int rc = 0;
   switch (index) {

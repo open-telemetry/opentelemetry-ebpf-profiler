@@ -9,41 +9,29 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"go.opentelemetry.io/collector/consumer/xconsumer"
+	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
 type Config struct {
-	BpfVerifierLogLevel    uint
-	CollAgentAddr          string
-	Copyright              bool
-	DisableTLS             bool
-	MapScaleFactor         uint
-	MonitorInterval        time.Duration
-	ClockSyncInterval      time.Duration
-	NoKernelVersionCheck   bool
-	PprofAddr              string
-	ProbabilisticInterval  time.Duration
-	ProbabilisticThreshold uint
-	ReporterInterval       time.Duration
-	SamplesPerSecond       int
-	SendErrorFrames        bool
-	Tracers                string
-	VerboseMode            bool
-	Version                bool
-	OffCPUThreshold        float64
-	UProbeLinks            []string
-	LoadProbe              bool
-	MaxGRPCRetries         uint32
-	MaxRPCMsgSize          int
+	config.Config
+	CollAgentAddr string
+	Copyright     bool
+	DisableTLS    bool
+	PprofAddr     string
+	Version       bool
 
-	Reporter           reporter.Reporter
 	ExecutableReporter reporter.ExecutableReporter
+	OnShutdown         func() error
+
+	// If ReporterFactory is set, it will be used to create a Reporter and set it as the Reporter field.
+	// Either ReporterFactory or Reporter must be set. If both are set, ReporterFactory will be used.
+	ReporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
+	Reporter        reporter.Reporter
 
 	Fs *flag.FlagSet
-
-	IncludeEnvVars string
-	OnShutdown     func() error
 }
 
 const (
@@ -74,8 +62,8 @@ func (cfg *Config) Validate() error {
 		)
 	}
 
-	if cfg.BpfVerifierLogLevel > 2 {
-		return fmt.Errorf("invalid eBPF verifier log level: %d", cfg.BpfVerifierLogLevel)
+	if cfg.BPFVerifierLogLevel > 2 {
+		return fmt.Errorf("invalid eBPF verifier log level: %d", cfg.BPFVerifierLogLevel)
 	}
 
 	if cfg.ProbabilisticInterval < 1*time.Minute || cfg.ProbabilisticInterval > 5*time.Minute {

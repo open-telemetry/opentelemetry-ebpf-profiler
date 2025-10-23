@@ -84,7 +84,7 @@ func parseArgs() (*controller.Config, error) {
 	fs := flag.NewFlagSet("ebpf-profiler", flag.ExitOnError)
 
 	// Please keep the parameters ordered alphabetically in the source-code.
-	fs.UintVar(&args.BpfVerifierLogLevel, "bpf-log-level", 0, bpfVerifierLogLevelHelp)
+	fs.UintVar(&args.BPFVerifierLogLevel, "bpf-log-level", 0, bpfVerifierLogLevelHelp)
 
 	fs.StringVar(&args.CollAgentAddr, "collection-agent", "", collAgentAddrHelp)
 	fs.BoolVar(&args.Copyright, "copyright", false, copyrightHelp)

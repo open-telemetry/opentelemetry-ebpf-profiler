@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
@@ -29,4 +30,15 @@ func TestWithOnShutdown(t *testing.T) {
 		t,
 		reflect.ValueOf(onShutdown).Pointer(),
 		reflect.ValueOf(option.apply(&controllerOption{}).onShutdown).Pointer())
+}
+
+func TestWithReporterFactory(t *testing.T) {
+	reporterFactory := func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error) {
+		return nil, nil
+	}
+	option := WithReporterFactory(reporterFactory)
+	require.Equal(
+		t,
+		reflect.ValueOf(reporterFactory).Pointer(),
+		reflect.ValueOf(option.apply(&controllerOption{}).reporterFactory).Pointer())
 }
