@@ -747,7 +747,6 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	//   https://www.jetbrains.com/lp/devecosystem-2020/ruby/
 	// Reason for maximum supported version 3.5.x:
 	// - this is currently the newest stable version
-
 	minVer, maxVer := rubyVersion(2, 5, 0), rubyVersion(3, 6, 0)
 	if version < minVer || version >= maxVer {
 		return nil, fmt.Errorf("unsupported Ruby %d.%d.%d (need >= %d.%d.%d and <= %d.%d.%d)",
@@ -806,13 +805,16 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		if s.Name == currentEcSymbolName {
 			currentEcSymbol = &s
 		}
+		if s.Name == currentCtxSymbol {
+			currentCtxPtr = s.Address
+		}
 		if len(interpRanges) == 0 && s.Name == interpSymbolName {
 			interpRanges = []util.Range{{
 				Start: uint64(s.Address),
 				End:   uint64(s.Address) + s.Size,
 			}}
 		}
-		if len(interpRanges) > 0 && currentEcSymbol != nil {
+		if len(interpRanges) > 0 && currentEcSymbol != nil && currentCtxPtr != 0 {
 			return false
 		}
 		return true
@@ -835,7 +837,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		log.Warnf("failed to locate TLS descriptor: %v", err)
 	}
 
-	log.Debugf("Discovered EC tls tpbase offset %x, interp ranges: %v", currentEcTpBaseTlsOffset, interpRanges)
+	log.Debugf("Discovered EC tls tpbase offset %x, fallback ctx %x, interp ranges: %v", currentEcTpBaseTlsOffset, currentCtxPtr, interpRanges)
 
 	rid := &rubyData{
 		version:            version,
