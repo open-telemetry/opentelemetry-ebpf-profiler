@@ -14,7 +14,7 @@ import (
 // interface. This logger will show messages at the Info Level.
 var globalLogger = func() *atomic.Pointer[slog.Logger] {
 	l := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		AddSource: true,
+		Level: slog.LevelInfo,
 	}))
 
 	p := new(atomic.Pointer[slog.Logger])
