@@ -261,7 +261,7 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, error) {
 		}
 
 		// Skip segments that are too small anyway.
-		if p.Memsz < uint64(PclntabHeaderSize()) {
+		if p.Filesz < uint64(PclntabHeaderSize()) {
 			continue
 		}
 
