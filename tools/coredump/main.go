@@ -20,9 +20,6 @@ import (
 )
 
 func main() {
-	log.SetReportCaller(false)
-	log.SetFormatter(&log.TextFormatter{})
-
 	cloudClient, err := cloudstore.Client()
 	if err != nil {
 		log.Fatalf("%v", err)
