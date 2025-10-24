@@ -1192,3 +1192,39 @@ func (t *Tracer) AttachUProbes(uprobes []string) error {
 func (t *Tracer) HandleTrace(bpfTrace *host.Trace) {
 	t.processManager.HandleTrace(bpfTrace)
 }
+
+// UpdateSamplingFrequency dynamically updates the sampling frequency for all perf events.
+// Internally converts frequency (Hz) to period (nanoseconds) and calls UpdatePeriod on each event.
+func (t *Tracer) UpdateSamplingFrequency(newSamplesPerSecond int) error {
+	if newSamplesPerSecond <= 0 {
+		return fmt.Errorf("invalid sampling frequency: %d", newSamplesPerSecond)
+	}
+
+	events := t.perfEntrypoints.WLock()
+	defer t.perfEntrypoints.WUnlock(&events)
+
+	if len(*events) == 0 {
+		return errors.New("no perf events available to update")
+	}
+
+	// Calculate the new sampling period in nanoseconds
+	// period = 1 second / frequency
+	period := uint64(time.Second.Nanoseconds() / int64(newSamplesPerSecond))
+
+	var updateErrors []error
+	for i, event := range *events {
+		if err := event.UpdatePeriod(period); err != nil {
+			updateErrors = append(updateErrors, fmt.Errorf("failed to update sampling period on CPU %d: %v", i, err))
+		}
+	}
+
+	if len(updateErrors) > 0 {
+		return fmt.Errorf("failed to update sampling frequency on %d CPUs: %v", len(updateErrors), updateErrors)
+	}
+
+	// Update the internal samplesPerSecond field
+	t.samplesPerSecond = newSamplesPerSecond
+	log.Infof("Sampling frequency updated to %d Hz", newSamplesPerSecond)
+
+	return nil
+}
