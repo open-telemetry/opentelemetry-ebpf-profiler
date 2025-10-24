@@ -788,7 +788,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		interpSymbolName = libpf.SymbolName("ruby_exec_node")
 	}
 
-	var currentEcSymbol *libpf.Symbol
+	var currentEcSymbolAddress libpf.SymbolValue
 	currentEcSymbolName := libpf.SymbolName(rubyCurrentEcTlsSymbol)
 
 	log.Debugf("Ruby %d.%d.%d detected, looking for currentCtxPtr=%q, currentEcSymbol=%q",
@@ -811,7 +811,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	if err = ef.VisitSymbols(func(s libpf.Symbol) bool {
 		if s.Name == currentEcSymbolName {
-			currentEcSymbol = &s
+			currentEcSymbolAddress = s.Address
 		}
 		if s.Name == currentCtxSymbol {
 			currentCtxPtr = s.Address
@@ -822,7 +822,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 				End:   uint64(s.Address) + s.Size,
 			}}
 		}
-		if len(interpRanges) > 0 && currentEcSymbol != nil && currentCtxPtr != 0 {
+		if len(interpRanges) > 0 && currentEcSymbolAddress != 0 && currentCtxPtr != 0 {
 			return false
 		}
 		return true
@@ -836,7 +836,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// only unstripped ruby is supported. Many distro supplied rubies are stripped.
 	if err = ef.VisitTLSRelocations(func(r pfelf.ElfReloc, symName string) bool {
 		if symName == rubyCurrentEcTlsSymbol ||
-			currentEcSymbol != nil && libpf.SymbolValue(r.Addend) == currentEcSymbol.Address {
+			libpf.SymbolValue(r.Addend) == currentEcSymbolAddress {
 			currentEcTpBaseTlsOffset = libpf.Address(r.Off)
 			return false
 		}
