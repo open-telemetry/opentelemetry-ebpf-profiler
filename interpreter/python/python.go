@@ -833,7 +833,7 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 	})
 	coldRange, err := findColdRange(ef, code, interp)
 	if err != nil {
-		log.Errorf(fmt.Sprintf("%w: failed to recover python ranges %s", err, info.FileName()))
+		log.Errorf("failed to recover python ranges %s: %s", info.FileName(), err.Error())
 	}
 	if coldRange != (util.Range{}) {
 		interpRanges = append(interpRanges, coldRange)

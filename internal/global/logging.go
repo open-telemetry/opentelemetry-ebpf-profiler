@@ -43,7 +43,7 @@ func Infof(msg string, keysAndValues ...any) {
 // Info logs informational messages about the general state of the profiler.
 // This is a wrapper around Infof for convenience.
 func Info(msg string) {
-	Infof(msg)
+	GetLogger().Info(msg)
 }
 
 // Errorf logs error messages about exceptional states of the profiler.
@@ -56,7 +56,7 @@ func Errorf(msg string, keysAndValues ...any) {
 // Error logs error messages about exceptional states of the profiler.
 // This is a wrapper around Errorf for convenience.
 func Error(msg error) {
-	Errorf(msg.Error())
+	GetLogger().Error(msg.Error())
 }
 
 // Debugf logs detailed debugging information about internal profiler behavior.
@@ -69,7 +69,7 @@ func Debugf(msg string, keysAndValues ...any) {
 // Debug logs detailed debugging information about internal profiler behavior.
 // This is a wrapper around Debugf for convenience.
 func Debug(msg string) {
-	Debugf(msg)
+	GetLogger().Debug(msg)
 }
 
 // Warnf logs warnings in the profiler — not errors, but likely more important
@@ -82,7 +82,7 @@ func Warnf(msg string, keysAndValues ...any) {
 // Warn logs warnings in the profiler — not errors, but likely more important
 // than informational messages. This is a wrapper around Warnf for convenience.
 func Warn(msg string) {
-	Warnf(msg)
+	GetLogger().Warn(msg)
 }
 
 // Fatalf logs a fatal error message and exits the program.
