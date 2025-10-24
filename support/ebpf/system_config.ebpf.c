@@ -5,14 +5,6 @@
 #include "extmaps.h"
 #include "types.h"
 
-// system config is the bpf map containing HA provided system configuration
-struct system_config_t {
-  __uint(type, BPF_MAP_TYPE_ARRAY);
-  __type(key, u32);
-  __type(value, struct SystemConfig);
-  __uint(max_entries, 1);
-} system_config SEC(".maps");
-
 #ifndef TESTING_COREDUMP
 
 // system_analysis is the bpf map the HA and this module uses to communicate

@@ -148,15 +148,6 @@ type SystemAnalysis struct {
 	Code      [128]uint8
 	Pad_cgo_0 [4]byte
 }
-type SystemConfig struct {
-	Inverse_pac_mask       uint64
-	Tpbase_offset          uint64
-	Task_stack_offset      uint32
-	Stack_ptregs_offset    uint32
-	Off_cpu_threshold      uint32
-	Drop_error_only_traces bool
-	Pad_cgo_0              [3]byte
-}
 type TSDInfo struct {
 	Offset     int16
 	Multiplier uint8

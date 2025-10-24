@@ -116,7 +116,6 @@ type StackDelta C.StackDelta
 type StackDeltaPageInfo C.StackDeltaPageInfo
 type StackDeltaPageKey C.StackDeltaPageKey
 type SystemAnalysis C.SystemAnalysis
-type SystemConfig C.SystemConfig
 type TSDInfo C.TSDInfo
 type Trace C.Trace
 type UnwindInfo C.UnwindInfo

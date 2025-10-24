@@ -4,6 +4,7 @@
 package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
+	"errors"
 	"fmt"
 	"go/version"
 	"unsafe"
@@ -21,6 +22,8 @@ type data struct {
 	offsets   support.GoLabelsOffsets
 	interpreter.InstanceStubs
 }
+
+var errDecodeSymbol = errors.New("failed to decode symbol")
 
 func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
@@ -59,7 +62,14 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 
 	offsets := getOffsets(goVersion)
 	tlsOffset, err := extractTLSGOffset(file)
-	if err != nil {
+	switch {
+	case errors.Is(err, libpf.ErrSymbolNotFound):
+		return nil, fmt.Errorf("failed to lookup symbol in %s: %v", info.FileName(), err)
+	case errors.Is(err, errDecodeSymbol):
+		log.Warnf("In %s: %v", info.FileName(), err)
+	case errors.Is(err, nil):
+		// Nothing to do - just continue
+	default:
 		return nil, fmt.Errorf("failed to extract TLS offset: %w", err)
 	}
 	offsets.Tls_offset = tlsOffset
