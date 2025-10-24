@@ -89,6 +89,24 @@ type ReadAtCloser interface {
 	io.Closer
 }
 
+// MetaConfig provides options that influences gathering ProcessMeta.
+type MetaConfig struct {
+	// IncludeEnvVars holds a list of env vars that should be captured from the process.
+	IncludeEnvVars libpf.Set[string]
+}
+
+// ProcessMeta contains metadata about a tracked process.
+type ProcessMeta struct {
+	// process name retrieved from /proc/PID/comm
+	Name string
+	// executable path retrieved from /proc/PID/exe
+	Executable string
+	// process env vars from /proc/PID/environ
+	EnvVariables map[string]string
+	// container ID retrieved from /proc/PID/cgroup
+	ContainerID string
+}
+
 // Process is the interface to inspect ELF coredump/process.
 // The current implementations do not allow concurrent access to this interface
 // from different goroutines. As an exception the ELFOpener and the returned
@@ -99,6 +117,12 @@ type Process interface {
 
 	// GetMachineData reads machine specific data from the target process.
 	GetMachineData() MachineData
+
+	// GetProcessMeta returns process specific metadata.
+	GetProcessMeta(MetaConfig) ProcessMeta
+
+	// GetExe returns the executable path of the process.
+	GetExe() (string, error)
 
 	// GetMappings reads and parses process memory mappings.
 	GetMappings() ([]Mapping, uint32, error)
