@@ -5,23 +5,15 @@
 #include "extmaps.h"
 #include "types.h"
 
-// system config is the bpf map containing HA provided system configuration
-bpf_map_def SEC("maps") system_config = {
-  .type        = BPF_MAP_TYPE_ARRAY,
-  .key_size    = sizeof(u32),
-  .value_size  = sizeof(struct SystemConfig),
-  .max_entries = 1,
-};
-
 #ifndef TESTING_COREDUMP
 
 // system_analysis is the bpf map the HA and this module uses to communicate
-bpf_map_def SEC("maps") system_analysis = {
-  .type        = BPF_MAP_TYPE_ARRAY,
-  .key_size    = sizeof(u32),
-  .value_size  = sizeof(struct SystemAnalysis),
-  .max_entries = 1,
-};
+struct system_analysis_t {
+  __uint(type, BPF_MAP_TYPE_ARRAY);
+  __type(key, u32);
+  __type(value, struct SystemAnalysis);
+  __uint(max_entries, 1);
+} system_analysis SEC(".maps");
 
 // read_kernel_memory reads data from given kernel address. This is
 // invoked once on entry to bpf() syscall on the given pid context.

@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,6 +29,11 @@ import (
 
 // GetMappings returns this error when no mappings can be extracted.
 var ErrNoMappings = errors.New("no mappings")
+
+//nolint:lll
+var (
+	cgroupv2ContainerIDPattern = regexp.MustCompile(`0:.*?:.*?([0-9a-fA-F]{64})(?:\.scope)?(?:/[a-z]+)?$`)
+)
 
 // systemProcess provides an implementation of the Process interface for a
 // process that is currently running on this machine.
@@ -74,6 +80,88 @@ func (sp *systemProcess) PID() libpf.PID {
 
 func (sp *systemProcess) GetMachineData() MachineData {
 	return MachineData{Machine: pfelf.CurrentMachine}
+}
+
+func (sp *systemProcess) GetExe() (string, error) {
+	return os.Readlink(fmt.Sprintf("/proc/%d/exe", sp.pid))
+}
+
+func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
+	var processName string
+	exePath, _ := sp.GetExe()
+	if name, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", sp.pid)); err == nil {
+		processName = string(name)
+	}
+
+	envVarMap := make(map[string]string, len(cfg.IncludeEnvVars))
+	if len(cfg.IncludeEnvVars) > 0 {
+		if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", sp.pid)); err == nil {
+			// environ has environment variables separated by a null byte (hex: 00)
+			splittedVars := strings.Split(string(envVars), "\000")
+			for _, envVar := range splittedVars {
+				keyValuePair := strings.SplitN(envVar, "=", 2)
+
+				// If the entry could not be split at a '=', ignore it
+				// (last entry of environ might be empty)
+				if len(keyValuePair) != 2 {
+					continue
+				}
+
+				if _, ok := cfg.IncludeEnvVars[keyValuePair[0]]; ok {
+					envVarMap[keyValuePair[0]] = keyValuePair[1]
+				}
+			}
+		}
+	}
+
+	containerID, err := extractContainerID(sp.pid)
+	if err != nil {
+		log.Debugf("Failed extracting containerID for %d: %v", sp.pid, err)
+	}
+	return ProcessMeta{
+		Name:         processName,
+		Executable:   exePath,
+		ContainerID:  containerID,
+		EnvVariables: envVarMap,
+	}
+}
+
+// parseContainerID parses cgroup v2 container IDs
+func parseContainerID(cgroupFile io.Reader) string {
+	scanner := bufio.NewScanner(cgroupFile)
+	buf := make([]byte, 512)
+	// Providing a predefined buffer overrides the internal buffer that Scanner uses (4096 bytes).
+	// We can do that and also set a maximum allocation size on the following call.
+	// With a maximum of 4096 characters path in the kernel, 8192 should be fine here. We don't
+	// expect lines in /proc/<PID>/cgroup to be longer than that.
+	scanner.Buffer(buf, 8192)
+	var pathParts []string
+	for scanner.Scan() {
+		b := scanner.Bytes()
+		if bytes.Equal(b, []byte("0::/")) {
+			continue // Skip a common case
+		}
+		line := string(b)
+		pathParts = cgroupv2ContainerIDPattern.FindStringSubmatch(line)
+		if pathParts == nil {
+			log.Debugf("Could not extract cgroupv2 path from line: %s", line)
+			continue
+		}
+		return pathParts[1]
+	}
+
+	// No containerID could be extracted
+	return ""
+}
+
+// extractContainerID returns the containerID for pid if cgroup v2 is used.
+func extractContainerID(pid libpf.PID) (string, error) {
+	cgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
+	if err != nil {
+		return "", err
+	}
+
+	return parseContainerID(cgroupFile), nil
 }
 
 func trimMappingPath(path string) string {

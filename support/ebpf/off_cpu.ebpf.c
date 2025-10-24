@@ -3,20 +3,23 @@
 #include "types.h"
 
 // kprobe_progs maps from a program ID to a kprobe eBPF program
-bpf_map_def SEC("maps") kprobe_progs = {
-  .type        = BPF_MAP_TYPE_PROG_ARRAY,
-  .key_size    = sizeof(u32),
-  .value_size  = sizeof(u32),
-  .max_entries = NUM_TRACER_PROGS,
-};
+struct kprobe_progs_t {
+  __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
+  __type(key, u32);
+  __type(value, u32);
+  __uint(max_entries, NUM_TRACER_PROGS);
+} kprobe_progs SEC(".maps");
 
 // sched_times keeps track of sched_switch call times.
-bpf_map_def SEC("maps") sched_times = {
-  .type        = BPF_MAP_TYPE_LRU_PERCPU_HASH,
-  .key_size    = sizeof(u64), // pid_tgid
-  .value_size  = sizeof(u64), // time in ns
-  .max_entries = 256,         // value is adjusted at load time in loadAllMaps.
-};
+struct sched_times_t {
+  __uint(type, BPF_MAP_TYPE_LRU_PERCPU_HASH);
+  __type(key, u64);         // pid_tgid
+  __type(value, u64);       // time in ns
+  __uint(max_entries, 256); // value is adjusted at load time in loadAllMaps.
+} sched_times SEC(".maps");
+
+// off_cpu_threshold is set during load time.
+BPF_RODATA_VAR(u32, off_cpu_threshold, 0)
 
 // tracepoint__sched_switch serves as entry point for off cpu profiling.
 SEC("tracepoint/sched/sched_switch")
@@ -30,14 +33,7 @@ int tracepoint__sched_switch(UNUSED void *ctx)
     return 0;
   }
 
-  u32 key              = 0;
-  SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &key);
-  if (!syscfg) {
-    // Unreachable: array maps are always fully initialized.
-    return ERR_UNREACHABLE;
-  }
-
-  if (bpf_get_prandom_u32() > syscfg->off_cpu_threshold) {
+  if (bpf_get_prandom_u32() > off_cpu_threshold) {
     return 0;
   }
 

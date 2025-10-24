@@ -12,7 +12,6 @@ package main
 // this, definitions must be placed in preambles in other files, or in C source files.
 
 import (
-	"encoding/hex"
 	"math/bits"
 	"unsafe"
 
@@ -73,15 +72,13 @@ func __bpf_probe_read_user(id C.u64, buf unsafe.Pointer, sz C.int, ptr unsafe.Po
 
 // stackDeltaInnerMap is a special map returned to C code to indicate that
 // we are accessing one of nested maps in the exe_id_to_X_stack_deltas maps
-var stackDeltaInnerMap = &C.bpf_map_def{
-	key_size: 8,
-}
+var stackDeltaInnerMap = C.malloc(1)
 
 //export __bpf_map_lookup_elem
-func __bpf_map_lookup_elem(id C.u64, mapdef *C.bpf_map_def, keyptr unsafe.Pointer) unsafe.Pointer {
+func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointer) unsafe.Pointer {
 	ctx := ebpfContextMap[id]
 	switch mapdef {
-	case &C.pid_page_to_mapping_info:
+	case unsafe.Pointer(&C.pid_page_to_mapping_info):
 		key := (*C.PIDPage)(keyptr)
 		for key.prefixLen >= support.BitWidthPID {
 			if val, ok := ctx.pidToPageMapping[*key]; ok {
@@ -92,33 +89,36 @@ func __bpf_map_lookup_elem(id C.u64, mapdef *C.bpf_map_def, keyptr unsafe.Pointe
 			mask := uint64(0xffffffffffffffff) << shiftBits
 			key.page &= C.ulonglong(bits.ReverseBytes64(mask))
 		}
-	case &C.per_cpu_records:
+	case unsafe.Pointer(&C.per_cpu_records):
 		return ctx.perCPURecord
-	case &C.interpreter_offsets, &C.dotnet_procs, &C.perl_procs, &C.php_procs, &C.py_procs,
-		&C.hotspot_procs, &C.ruby_procs, &C.v8_procs:
-		var key any
-		switch mapdef.key_size {
-		case 8:
-			key = *(*C.u64)(keyptr)
-		case 4:
-			key = *(*C.u32)(keyptr)
-		}
+	case unsafe.Pointer(&C.interpreter_offsets):
 		if innerMap, ok := ctx.maps[mapdef]; ok {
-			if val, ok := innerMap[key]; ok {
+			if val, ok := innerMap[*(*C.u64)(keyptr)]; ok {
 				return val
 			}
 		}
-	case &C.stack_delta_page_to_info:
+	case unsafe.Pointer(&C.dotnet_procs), unsafe.Pointer(&C.perl_procs),
+		unsafe.Pointer(&C.php_procs), unsafe.Pointer(&C.py_procs),
+		unsafe.Pointer(&C.hotspot_procs), unsafe.Pointer(&C.ruby_procs),
+		unsafe.Pointer(&C.v8_procs):
+		if innerMap, ok := ctx.maps[mapdef]; ok {
+			if val, ok := innerMap[*(*C.u32)(keyptr)]; ok {
+				return val
+			}
+		}
+	case unsafe.Pointer(&C.stack_delta_page_to_info):
 		return ctx.stackDeltaPageToInfo[*(*C.StackDeltaPageKey)(keyptr)]
-	case &C.exe_id_to_8_stack_deltas, &C.exe_id_to_9_stack_deltas, &C.exe_id_to_10_stack_deltas,
-		&C.exe_id_to_11_stack_deltas, &C.exe_id_to_12_stack_deltas, &C.exe_id_to_13_stack_deltas,
-		&C.exe_id_to_14_stack_deltas, &C.exe_id_to_15_stack_deltas, &C.exe_id_to_16_stack_deltas,
-		&C.exe_id_to_17_stack_deltas, &C.exe_id_to_18_stack_deltas, &C.exe_id_to_19_stack_deltas,
-		&C.exe_id_to_20_stack_deltas, &C.exe_id_to_21_stack_deltas, &C.exe_id_to_22_stack_deltas,
-		&C.exe_id_to_23_stack_deltas:
+	case unsafe.Pointer(&C.exe_id_to_8_stack_deltas), unsafe.Pointer(&C.exe_id_to_9_stack_deltas),
+		unsafe.Pointer(&C.exe_id_to_10_stack_deltas), unsafe.Pointer(&C.exe_id_to_11_stack_deltas),
+		unsafe.Pointer(&C.exe_id_to_12_stack_deltas), unsafe.Pointer(&C.exe_id_to_13_stack_deltas),
+		unsafe.Pointer(&C.exe_id_to_14_stack_deltas), unsafe.Pointer(&C.exe_id_to_15_stack_deltas),
+		unsafe.Pointer(&C.exe_id_to_16_stack_deltas), unsafe.Pointer(&C.exe_id_to_17_stack_deltas),
+		unsafe.Pointer(&C.exe_id_to_18_stack_deltas), unsafe.Pointer(&C.exe_id_to_19_stack_deltas),
+		unsafe.Pointer(&C.exe_id_to_20_stack_deltas), unsafe.Pointer(&C.exe_id_to_21_stack_deltas),
+		unsafe.Pointer(&C.exe_id_to_22_stack_deltas), unsafe.Pointer(&C.exe_id_to_23_stack_deltas):
 		ctx.stackDeltaFileID = *(*C.u64)(keyptr)
-		return unsafe.Pointer(stackDeltaInnerMap)
-	case &C.unwind_info_array:
+		return stackDeltaInnerMap
+	case unsafe.Pointer(&C.unwind_info_array):
 		key := uintptr(*(*C.u32)(keyptr))
 		return unsafe.Pointer(uintptr(ctx.unwindInfoArray) + key*C.sizeof_UnwindInfo)
 	case stackDeltaInnerMap:
@@ -126,13 +126,10 @@ func __bpf_map_lookup_elem(id C.u64, mapdef *C.bpf_map_def, keyptr unsafe.Pointe
 		if deltas, ok := ctx.exeIDToStackDeltaMaps[ctx.stackDeltaFileID]; ok {
 			return unsafe.Pointer(uintptr(deltas) + key*C.sizeof_StackDelta)
 		}
-	case &C.metrics:
+	case unsafe.Pointer(&C.metrics):
 		return unsafe.Pointer(uintptr(0))
-	case &C.system_config:
-		return ctx.systemConfig
 	default:
-		log.Errorf("Map at 0x%x not found (looking up key '%v')",
-			mapdef, hex.Dump(sliceBuffer(keyptr, C.int(mapdef.key_size))))
+		log.Errorf("Map at 0x%x not found", mapdef)
 	}
 	return unsafe.Pointer(uintptr(0))
 }

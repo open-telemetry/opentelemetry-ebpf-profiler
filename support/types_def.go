@@ -59,6 +59,8 @@ const (
 
 const MaxFrameUnwinds = C.MAX_FRAME_UNWINDS
 
+const UnwindInfoMaxEntries = C.UNWIND_INFO_MAX_ENTRIES
+
 const (
 	MetricIDBeginCumulative = C.metricID_BeginCumulative
 )
@@ -114,7 +116,6 @@ type StackDelta C.StackDelta
 type StackDeltaPageInfo C.StackDeltaPageInfo
 type StackDeltaPageKey C.StackDeltaPageKey
 type SystemAnalysis C.SystemAnalysis
-type SystemConfig C.SystemConfig
 type TSDInfo C.TSDInfo
 type Trace C.Trace
 type UnwindInfo C.UnwindInfo

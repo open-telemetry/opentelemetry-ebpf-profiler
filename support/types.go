@@ -52,6 +52,8 @@ const (
 
 const MaxFrameUnwinds = 0x80
 
+const UnwindInfoMaxEntries = 0x4000
+
 const (
 	MetricIDBeginCumulative = 0x62
 )
@@ -145,15 +147,6 @@ type SystemAnalysis struct {
 	Pid       uint32
 	Code      [128]uint8
 	Pad_cgo_0 [4]byte
-}
-type SystemConfig struct {
-	Inverse_pac_mask       uint64
-	Tpbase_offset          uint64
-	Task_stack_offset      uint32
-	Stack_ptregs_offset    uint32
-	Off_cpu_threshold      uint32
-	Drop_error_only_traces bool
-	Pad_cgo_0              [3]byte
 }
 type TSDInfo struct {
 	Offset     int16

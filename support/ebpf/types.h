@@ -358,6 +358,11 @@ typedef enum TraceOrigin {
 // frame reporting that we ran out of stack space.
 #define MAX_NON_ERROR_FRAME_UNWINDS (MAX_FRAME_UNWINDS - 1)
 
+// Maximum number of unique stack deltas needed on a system. This is based on
+// normal desktop /usr/bin/* and /usr/lib/*.so having about 9700 unique deltas.
+// Can be increased up to 2^15, see also STACK_DELTA_COMMAND_FLAG.
+#define UNWIND_INFO_MAX_ENTRIES 16384
+
 // Type to represent a globally-unique file id to be used as key for a BPF hash map
 typedef u64 FileID;
 
@@ -900,30 +905,6 @@ typedef struct PIDPageMappingInfo {
 #define STACK_DELTA_BUCKET_SMALLEST 8
 // Largest stack delta bucket that holds up to 2^23 entries
 #define STACK_DELTA_BUCKET_LARGEST  23
-
-// Struct of the `system_config` map. Contains various configuration variables
-// determined and set by the host agent.
-typedef struct SystemConfig {
-  // PAC mask that is determined by user-space and used in `normalize_pac_ptr`.
-  // ARM64 specific, `MAX_U64` otherwise.
-  u64 inverse_pac_mask;
-
-  // The offset of the Thread Pointer Base variable in `task_struct`. It is
-  // populated by the host agent based on kernel code analysis.
-  u64 tpbase_offset;
-
-  // The offset of stack base within `task_struct`.
-  u32 task_stack_offset;
-
-  // The offset of struct pt_regs within the kernel entry stack.
-  u32 stack_ptregs_offset;
-
-  // User defined threshold for off-cpu profiling.
-  u32 off_cpu_threshold;
-
-  // Enables the temporary hack that drops pure errors frames in unwind_stop.
-  bool drop_error_only_traces;
-} SystemConfig;
 
 // Avoid including all of arch/arm64/include/uapi/asm/ptrace.h by copying the
 // actually used values.

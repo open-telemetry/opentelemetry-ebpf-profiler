@@ -11,28 +11,28 @@
 // Begin shared maps
 
 // Per-CPU record of the stack being built and meta-data on the building process
-bpf_map_def SEC("maps") per_cpu_records = {
-  .type        = BPF_MAP_TYPE_PERCPU_ARRAY,
-  .key_size    = sizeof(int),
-  .value_size  = sizeof(PerCPURecord),
-  .max_entries = 1,
-};
+struct per_cpu_records_t {
+  __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+  __type(key, int);
+  __type(value, PerCPURecord);
+  __uint(max_entries, 1);
+} per_cpu_records SEC(".maps");
 
 // metrics maps metric ID to a value
-bpf_map_def SEC("maps") metrics = {
-  .type        = BPF_MAP_TYPE_PERCPU_ARRAY,
-  .key_size    = sizeof(u32),
-  .value_size  = sizeof(u64),
-  .max_entries = metricID_Max,
-};
+struct metrics_t {
+  __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+  __type(key, u32);
+  __type(value, u64);
+  __uint(max_entries, metricID_Max);
+} metrics SEC(".maps");
 
 // perf_progs maps from a program ID to a perf eBPF program
-bpf_map_def SEC("maps") perf_progs = {
-  .type        = BPF_MAP_TYPE_PROG_ARRAY,
-  .key_size    = sizeof(u32),
-  .value_size  = sizeof(u32),
-  .max_entries = NUM_TRACER_PROGS,
-};
+struct perf_progs_t {
+  __uint(type, BPF_MAP_TYPE_PROG_ARRAY);
+  __type(key, u32);
+  __type(value, u32);
+  __uint(max_entries, NUM_TRACER_PROGS);
+} perf_progs SEC(".maps");
 
 // report_events notifies user space about events (GENERIC_PID and TRACES_FOR_SYMBOLIZATION).
 //
@@ -41,12 +41,12 @@ bpf_map_def SEC("maps") perf_progs = {
 // for this map as at load time it will be replaced by the number of possible CPUs. At
 // the same time this will then also define the number of perf event rings that are
 // used for this map.
-bpf_map_def SEC("maps") report_events = {
-  .type        = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-  .key_size    = sizeof(int),
-  .value_size  = sizeof(u32),
-  .max_entries = 0,
-};
+struct report_events_t {
+  __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+  __type(key, int);
+  __type(value, u32);
+  __uint(max_entries, 0);
+} report_events SEC(".maps");
 
 // reported_pids is a map that holds PIDs recently reported to user space.
 //
@@ -56,12 +56,12 @@ bpf_map_def SEC("maps") report_events = {
 // be stored, without immediately being removed, that we would like to support. PIDs are
 // either left to expire from the LRU or updated based on the rate limit token. Note that
 // timeout checks are done lazily on access, so this map may contain multiple expired PIDs.
-bpf_map_def SEC("maps") reported_pids = {
-  .type        = BPF_MAP_TYPE_LRU_HASH,
-  .key_size    = sizeof(u32),
-  .value_size  = sizeof(u64),
-  .max_entries = 65536,
-};
+struct reported_pids_t {
+  __uint(type, BPF_MAP_TYPE_LRU_HASH);
+  __type(key, u32);
+  __type(value, u64);
+  __uint(max_entries, 65536);
+} reported_pids SEC(".maps");
 
 // pid_events is a map that holds PIDs that should be processed in user space.
 //
@@ -72,25 +72,25 @@ bpf_map_def SEC("maps") reported_pids = {
 // about the maximum number of unique PIDs that could generate events we're interested in
 // (process new, thread group exit, unknown PC) within a map monitor/processing interval,
 // that we would like to support.
-bpf_map_def SEC("maps") pid_events = {
-  .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(u64),
-  .value_size  = sizeof(bool),
-  .max_entries = 65536,
-};
+struct pid_events_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, u64);
+  __type(value, bool);
+  __uint(max_entries, 65536);
+} pid_events SEC(".maps");
 
 // The native unwinder needs to be able to determine how each mapping should be unwound.
 //
 // This map contains data to help the native unwinder translate from a virtual address in a given
 // process. It contains information of the unwinder program to use, how to convert the virtual
 // address to relative address, and what executable file is in question.
-bpf_map_def SEC("maps") pid_page_to_mapping_info = {
-  .type        = BPF_MAP_TYPE_LPM_TRIE,
-  .key_size    = sizeof(PIDPage),
-  .value_size  = sizeof(PIDPageMappingInfo),
-  .max_entries = 524288, // 2^19
-  .map_flags   = BPF_F_NO_PREALLOC,
-};
+struct pid_page_to_mapping_info_t {
+  __uint(type, BPF_MAP_TYPE_LPM_TRIE);
+  __type(key, PIDPage);
+  __type(value, PIDPageMappingInfo);
+  __uint(max_entries, 524288); // 2^19
+  __uint(map_flags, BPF_F_NO_PREALLOC);
+} pid_page_to_mapping_info SEC(".maps");
 
 // inhibit_events map is used to inhibit sending events to user space.
 //
@@ -99,38 +99,41 @@ bpf_map_def SEC("maps") pid_page_to_mapping_info = {
 // trigger, so next event is sent when needed.
 // NOTE: Update .max_entries if additional event types are added. The value should
 // equal the number of different event types using this mechanism.
-bpf_map_def SEC("maps") inhibit_events = {
-  .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(u32),
-  .value_size  = sizeof(bool),
-  .max_entries = 2,
-};
+struct inhibit_events_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, u32);
+  __type(value, bool);
+  __uint(max_entries, 2);
+} inhibit_events SEC(".maps");
 
 // Perf event ring buffer for sending completed traces to user-mode.
 //
 // The map is periodically polled and read from in `tracer`.
-bpf_map_def SEC("maps") trace_events = {
-  .type        = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
-  .key_size    = sizeof(int),
-  .value_size  = 0,
-  .max_entries = 0,
-};
+struct trace_events_t {
+  __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
+  __type(key, int);
+  __type(value, u32);
+  __uint(max_entries, 0);
+} trace_events SEC(".maps");
 
 // End shared maps
 
-bpf_map_def SEC("maps") apm_int_procs = {
-  .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(pid_t),
-  .value_size  = sizeof(ApmIntProcInfo),
-  .max_entries = 128,
-};
+struct apm_int_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, ApmIntProcInfo);
+  __uint(max_entries, 128);
+} apm_int_procs SEC(".maps");
 
-bpf_map_def SEC("maps") go_labels_procs = {
-  .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(pid_t),
-  .value_size  = sizeof(GoLabelsOffsets),
-  .max_entries = 128,
-};
+struct go_labels_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, GoLabelsOffsets);
+  __uint(max_entries, 128);
+} go_labels_procs SEC(".maps");
+
+// drop_error_only_traces is set during load time.
+BPF_RODATA_VAR(bool, drop_error_only_traces, false)
 
 static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UNUSED UnwindState *state)
 {
@@ -292,13 +295,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   // also prevent the corresponding trace counts to be sent out. OTOH, if we do it here,
   // this is trivial.
   if (trace->stack_len == 1 && trace->kernel_stack_id < 0 && state->unwind_error) {
-    u32 syscfg_key       = 0;
-    SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &syscfg_key);
-    if (!syscfg) {
-      return -1; // unreachable
-    }
-
-    if (syscfg->drop_error_only_traces) {
+    if (drop_error_only_traces) {
       return 0;
     }
   }
