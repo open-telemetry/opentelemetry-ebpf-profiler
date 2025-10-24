@@ -1,6 +1,7 @@
 package global // import "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -37,52 +38,68 @@ func GetLogger() *slog.Logger {
 // formatting the message as a string for backward compatibility with
 // previous unstructured logging.
 func Infof(msg string, keysAndValues ...any) {
-	GetLogger().Info(fmt.Sprintf(msg, keysAndValues...))
+	if GetLogger().Enabled(context.Background(), slog.LevelInfo) {
+		GetLogger().Info(fmt.Sprintf(msg, keysAndValues...))
+	}
 }
 
 // Info logs informational messages about the general state of the profiler.
 // This is a wrapper around Infof for convenience.
 func Info(msg string) {
-	GetLogger().Info(msg)
+	if GetLogger().Enabled(context.Background(), slog.LevelInfo) {
+		GetLogger().Info(msg)
+	}
 }
 
 // Errorf logs error messages about exceptional states of the profiler.
 // This wrapper formats structured log data into a string message for
 // backward compatibility with older unstructured logs.
 func Errorf(msg string, keysAndValues ...any) {
-	GetLogger().Error(fmt.Sprintf(msg, keysAndValues...))
+	if GetLogger().Enabled(context.Background(), slog.LevelError) {
+		GetLogger().Error(fmt.Sprintf(msg, keysAndValues...))
+	}
 }
 
 // Error logs error messages about exceptional states of the profiler.
 // This is a wrapper around Errorf for convenience.
 func Error(msg error) {
-	GetLogger().Error(msg.Error())
+	if GetLogger().Enabled(context.Background(), slog.LevelError) {
+		GetLogger().Error(msg.Error())
+	}
 }
 
 // Debugf logs detailed debugging information about internal profiler behavior.
 // This wrapper converts structured log data into a string message for
 // backward compatibility with older unstructured logs.
 func Debugf(msg string, keysAndValues ...any) {
-	GetLogger().Debug(fmt.Sprintf(msg, keysAndValues...))
+	if GetLogger().Enabled(context.Background(), slog.LevelDebug) {
+		GetLogger().Debug(fmt.Sprintf(msg, keysAndValues...))
+	}
 }
 
 // Debug logs detailed debugging information about internal profiler behavior.
 // This is a wrapper around Debugf for convenience.
 func Debug(msg string) {
-	GetLogger().Debug(msg)
+	if GetLogger().Enabled(context.Background(), slog.LevelDebug) {
+		GetLogger().Debug(msg)
+	}
 }
 
 // Warnf logs warnings in the profiler — not errors, but likely more important
 // than informational messages. This wrapper preserves backward compatibility
 // by string-formatting structured log data.
 func Warnf(msg string, keysAndValues ...any) {
-	GetLogger().Warn(fmt.Sprintf(msg, keysAndValues...))
+	if GetLogger().Enabled(context.Background(), slog.LevelWarn) {
+		GetLogger().Warn(fmt.Sprintf(msg, keysAndValues...))
+	}
 }
 
 // Warn logs warnings in the profiler — not errors, but likely more important
 // than informational messages. This is a wrapper around Warnf for convenience.
 func Warn(msg string) {
-	GetLogger().Warn(msg)
+	if GetLogger().Enabled(context.Background(), slog.LevelWarn) {
+		GetLogger().Warn(msg)
+	}
 }
 
 // Fatalf logs a fatal error message and exits the program.
