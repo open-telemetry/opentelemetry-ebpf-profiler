@@ -249,7 +249,7 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
   // Pointer for an address to a rb_execution_context_struct struct.
   void *current_ctx_addr = NULL;
 
-  if (rubyinfo->version >= 0x30004 && rubyinfo->current_ec_tpbase_tls_offset != 0) {
+  if (rubyinfo->current_ec_tpbase_tls_offset != 0) {
     // With Ruby 3.x and its internal change of the execution model, we can no longer
     // access rb_execution_context_struct directly. We will look up the
     // ruby_current_ec from thread local storage, analogous to how it is done
@@ -275,9 +275,6 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
 
     DEBUG_PRINT("ruby: EC from TLS: 0x%llx", (u64)current_ctx_addr);
   } else if (rubyinfo->version >= 0x30000) {
-    // https://github.com/ruby/ruby/commit/7b3948750e1b1dd8cb271c0a7377b911bb3b8f1b
-    // there is no guarantee than an EC exists before 3.0.3
-    // ruby versions 3.0.0 - 3.0.3 will use a maybe invalid EC if multiple ractors / threads
     void *single_main_ractor = NULL;
     if (bpf_probe_read_user(
           &single_main_ractor, sizeof(single_main_ractor), (void *)rubyinfo->current_ctx_ptr)) {
