@@ -14,7 +14,7 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/features"
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 	"golang.org/x/exp/constraints"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -121,7 +121,8 @@ func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map) (ebpfapi.EbpfHand
 
 // UpdateInterpreterOffsets adds the given moduleRanges to the eBPF map interpreterOffsets.
 func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID host.FileID,
-	offsetRanges []util.Range) error {
+	offsetRanges []util.Range,
+) error {
 	key, value, err := ebpfapi.InterpreterOffsetKeyValue(ebpfProgIndex, fileID, offsetRanges)
 	if err != nil {
 		return err
@@ -163,7 +164,8 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 
 // UpdateProcData adds the given PID specific data to the specified interpreter data eBPF map.
 func (impl *ebpfMapsImpl) UpdateProcData(typ libpf.InterpreterType, pid libpf.PID,
-	data unsafe.Pointer) error {
+	data unsafe.Pointer,
+) error {
 	log.Debugf("Loading symbol addresses into eBPF map for PID %d type %d",
 		pid, typ)
 	ebpfMap, err := impl.getInterpreterTypeMap(typ)
@@ -213,7 +215,8 @@ func getPIDPageFromPrefix(pid libpf.PID, prefix lpm.Prefix) support.PIDPage {
 // UpdatePidInterpreterMapping updates the eBPF map pidPageToMappingInfo with the
 // data required to call the correct interpreter unwinder for that memory region.
 func (impl *ebpfMapsImpl) UpdatePidInterpreterMapping(pid libpf.PID, prefix lpm.Prefix,
-	interpreterProgram uint8, fileID host.FileID, bias uint64) error {
+	interpreterProgram uint8, fileID host.FileID, bias uint64,
+) error {
 	cKey := getPIDPageFromPrefix(pid, prefix)
 	biasAndUnwindProgram, err := support.EncodeBiasAndUnwindProgram(bias, interpreterProgram)
 	if err != nil {
@@ -418,7 +421,8 @@ func (impl *ebpfMapsImpl) UpdateUnwindInfo(index uint16, info sdtypes.UnwindInfo
 // and inserts the elements of the deltas array in this nested map. Returns mapID or error.
 func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 	deltas []ebpfapi.StackDeltaEBPF) (
-	uint16, error) {
+	uint16, error,
+) {
 	numDeltas := len(deltas)
 	mapID, err := getMapID(uint32(numDeltas))
 	if err != nil {
@@ -517,7 +521,8 @@ func (impl *ebpfMapsImpl) DeleteExeIDToStackDeltas(fileID host.FileID, mapID uin
 // UpdateStackDeltaPages adds fileID/page with given information to eBPF map. If the entry exists,
 // it will return an error. Otherwise the key/value pairs will be appended to the hash.
 func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPerPage []uint16,
-	mapID uint16, firstPageAddr uint64) error {
+	mapID uint16, firstPageAddr uint64,
+) error {
 	firstDelta := uint32(0)
 	keys := make([]support.StackDeltaPageKey, len(numDeltasPerPage))
 	values := make([]support.StackDeltaPageInfo, len(numDeltasPerPage))
@@ -572,7 +577,8 @@ func (impl *ebpfMapsImpl) DeleteStackDeltaPage(fileID host.FileID, page uint64) 
 // text section that this page can be found at on disk.
 // If the key/value pair already exists it will return an error.
 func (impl *ebpfMapsImpl) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Prefix,
-	fileID, bias uint64) error {
+	fileID, bias uint64,
+) error {
 	biasAndUnwindProgram, err := support.EncodeBiasAndUnwindProgram(bias, support.ProgUnwindNative)
 	if err != nil {
 		return err
@@ -592,7 +598,8 @@ func (impl *ebpfMapsImpl) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Pre
 // DeletePidPageMappingInfo removes the elements specified by prefixes from eBPF map
 // pid_page_to_mapping_info and returns the number of elements removed.
 func (impl *ebpfMapsImpl) DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm.Prefix) (int,
-	error) {
+	error,
+) {
 	if impl.hasLPMTrieBatchOperations {
 		deleted, err := impl.DeletePidPageMappingInfoBatch(pid, prefixes)
 		if err != nil {
@@ -607,8 +614,9 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm
 }
 
 func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid libpf.PID, prefixes []lpm.Prefix) (int,
-	error) {
-	var cKey = &support.PIDPage{}
+	error,
+) {
+	cKey := &support.PIDPage{}
 	var deleted int
 	var combinedErrors error
 	for _, prefix := range prefixes {
@@ -624,7 +632,8 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoSingle(pid libpf.PID, prefixes
 }
 
 func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid libpf.PID, prefixes []lpm.Prefix) (int,
-	error) {
+	error,
+) {
 	// Prepare all keys based on the given prefixes.
 	cKeys := make([]support.PIDPage, 0, len(prefixes))
 	for _, prefix := range prefixes {
@@ -640,7 +649,8 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid libpf.PID, prefixes 
 // the eBPF map pid_page_to_mapping_info.
 // So far this function is used only in tests.
 func (impl *ebpfMapsImpl) LookupPidPageInformation(pid libpf.PID, page uint64) (host.FileID,
-	uint64, error) {
+	uint64, error,
+) {
 	cKey := getPIDPage(pid, page, support.BitWidthPage)
 	cValue := support.PIDPageMappingInfo{}
 	if err := impl.PidPageToMappingInfo.Lookup(unsafe.Pointer(&cKey),

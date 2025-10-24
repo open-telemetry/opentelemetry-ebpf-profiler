@@ -9,12 +9,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -81,7 +82,9 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 	}
 
 	if cmd.debugLog {
-		log.SetLevel(log.DebugLevel)
+		log.SetLogger(*slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		})))
 	}
 
 	var proc process.Process

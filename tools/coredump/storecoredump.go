@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 )
 
 type StoreCoredump struct {

@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"unsafe"
 
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 	"github.com/elastic/go-freelru"
 
@@ -103,10 +103,10 @@ func (d *phpData) String() string {
 }
 
 func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-	addrToFunction, err :=
-		freelru.New[libpf.Address, *phpFunction](interpreter.LruFunctionCacheSize,
-			libpf.Address.Hash32)
+	rm remotememory.RemoteMemory,
+) (interpreter.Instance, error) {
+	addrToFunction, err := freelru.New[libpf.Address, *phpFunction](interpreter.LruFunctionCacheSize,
+		libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +273,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	// Only tested on PHP7.3-PHP8.3. Other similar versions probably only require
 	// tweaking the offsets.
-	var minVer, maxVer = phpVersion(7, 3, 0), phpVersion(8, 4, 0)
+	minVer, maxVer := phpVersion(7, 3, 0), phpVersion(8, 4, 0)
 	if version < minVer || version >= maxVer {
 		return nil, fmt.Errorf("PHP version %d.%d.%d (need >= %d.%d and < %d.%d)",
 			(version>>16)&0xff, (version>>8)&0xff, version&0xff,

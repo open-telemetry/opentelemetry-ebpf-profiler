@@ -10,8 +10,8 @@ import (
 	"unsafe"
 
 	"github.com/elastic/go-freelru"
-	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"

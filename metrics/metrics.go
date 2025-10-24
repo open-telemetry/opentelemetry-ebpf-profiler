@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 	"go.opentelemetry.io/otel/metric"
 )

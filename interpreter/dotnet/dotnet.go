@@ -104,7 +104,7 @@ import (
 	"regexp"
 	"strconv"
 
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 )

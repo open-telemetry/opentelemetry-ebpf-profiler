@@ -20,8 +20,8 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
-	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/xxh3"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -294,7 +294,8 @@ func buildStackDeltaTemplates(coll *cebpf.CollectionSpec) error {
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
 // by the embedded elf file and loads these into the kernel.
 func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
-	ebpfMaps map[string]*cebpf.Map, ebpfProgs map[string]*cebpf.Program, err error) {
+	ebpfMaps map[string]*cebpf.Map, ebpfProgs map[string]*cebpf.Program, err error,
+) {
 	// Loading specifications about eBPF programs and maps from the embedded elf file
 	// does not load them into the kernel.
 	// A collection specification holds the information about eBPF programs and maps.
@@ -481,7 +482,8 @@ func removeTemporaryMaps(ebpfMaps map[string]*cebpf.Map) error {
 
 // loadAllMaps loads all eBPF maps that are used in our eBPF programs.
 func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
-	ebpfMaps map[string]*cebpf.Map) error {
+	ebpfMaps map[string]*cebpf.Map,
+) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
@@ -499,11 +501,9 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 		exeIDToStackDeltasSize   = 16
 	)
 
-	adaption["pid_page_to_mapping_info"] =
-		1 << uint32(pidPageMappingInfoSize+cfg.MapScaleFactor)
+	adaption["pid_page_to_mapping_info"] = 1 << uint32(pidPageMappingInfoSize+cfg.MapScaleFactor)
 
-	adaption["stack_delta_page_to_info"] =
-		1 << uint32(stackDeltaPageToInfoSize+cfg.MapScaleFactor)
+	adaption["stack_delta_page_to_info"] = 1 << uint32(stackDeltaPageToInfoSize+cfg.MapScaleFactor)
 
 	adaption["sched_times"] = schedTimesSize(cfg.OffCPUThreshold)
 
@@ -553,7 +553,8 @@ func schedTimesSize(threshold uint32) uint32 {
 // loadPerfUnwinders loads all perf eBPF Programs and their tail call targets.
 func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
 	tailcallMap *cebpf.Map, tailCallProgs []progLoaderHelper,
-	bpfVerifierLogLevel uint32) error {
+	bpfVerifierLogLevel uint32,
+) error {
 	programOptions := cebpf.ProgramOptions{
 		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
 	}
@@ -623,7 +624,8 @@ func progArrayReferences(perfTailCallMapFD int, insns asm.Instructions) []int {
 // specification of these programs to xProbe eBPF programs and adjusts tail call maps.
 func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
 	tailcallMap *cebpf.Map, progs []progLoaderHelper,
-	bpfVerifierLogLevel uint32, perfTailCallMapFD int) error {
+	bpfVerifierLogLevel uint32, perfTailCallMapFD int,
+) error {
 	programOptions := cebpf.ProgramOptions{
 		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
 	}
@@ -663,7 +665,8 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 // loadProgram loads an eBPF program from progSpec and populates the related maps.
 func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 	progID uint32, progSpec *cebpf.ProgramSpec, programOptions cebpf.ProgramOptions,
-	noTailCallTarget bool) error {
+	noTailCallTarget bool,
+) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
@@ -678,12 +681,12 @@ func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 		// so we print each line individually.
 		if ve, ok := err.(*cebpf.VerifierError); ok {
 			for _, line := range ve.Log {
-				log.Error(line)
+				log.Error(fmt.Errorf("%s", line))
 			}
 		} else {
 			scanner := bufio.NewScanner(strings.NewReader(err.Error()))
 			for scanner.Scan() {
-				log.Error(scanner.Text())
+				log.Error(fmt.Errorf("%s", scanner.Text()))
 			}
 		}
 		return fmt.Errorf("failed to load %s", progSpec.Name)
@@ -824,7 +827,8 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) {
 // Returns a slice of Metric ID/Value pairs.
 func (t *Tracer) eBPFMetricsCollector(
 	translateIDs []metrics.MetricID,
-	previousMetricValue []metrics.MetricValue) []metrics.Metric {
+	previousMetricValue []metrics.MetricValue,
+) []metrics.Metric {
 	metricsMap := t.ebpfMaps["metrics"]
 	metricsUpdates := make([]metrics.Metric, 0, len(translateIDs))
 
@@ -1060,7 +1064,7 @@ func (t *Tracer) EnableProfiling() error {
 // time interval. Otherwise the frequency based sampling events are disabled.
 func (t *Tracer) probabilisticProfile(interval time.Duration, threshold uint) {
 	enableSampling := false
-	var probProfilingStatus = probProfilingDisable
+	probProfilingStatus := probProfilingDisable
 
 	//nolint:gosec
 	if rand.UintN(ProbabilisticThresholdMax) < threshold {

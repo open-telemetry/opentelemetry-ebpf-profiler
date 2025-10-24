@@ -113,7 +113,7 @@ package hotspot // import "go.opentelemetry.io/ebpf-profiler/interpreter/hotspot
 import (
 	"regexp"
 
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 )

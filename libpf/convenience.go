@@ -7,7 +7,7 @@ import (
 	"math/rand/v2"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 )
 
 // AddJitter adds +/- jitter (jitter is [0..1]) to baseDuration

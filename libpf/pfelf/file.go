@@ -33,7 +33,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
@@ -131,10 +131,12 @@ type File struct {
 	goBuildInfo *debug.BuildInfo
 }
 
-var _ libpf.SymbolFinder = &File{}
-var _ io.ReaderAt = &File{}
-var _ io.ReaderAt = &Section{}
-var _ io.ReaderAt = &Prog{}
+var (
+	_ libpf.SymbolFinder = &File{}
+	_ io.ReaderAt        = &File{}
+	_ io.ReaderAt        = &Section{}
+	_ io.ReaderAt        = &Prog{}
+)
 
 // sysvHashHeader is the ELF DT_HASH section header
 type sysvHashHeader struct {
@@ -196,7 +198,8 @@ func NewFile(r io.ReaderAt, loadAddress uint64, hasMusl bool) (*File, error) {
 }
 
 func newFile(r io.ReaderAt, closer io.Closer,
-	loadAddress uint64, hasMusl bool) (*File, error) {
+	loadAddress uint64, hasMusl bool,
+) (*File, error) {
 	f := &File{
 		elfReader:  r,
 		InsideCore: loadAddress != 0,
@@ -654,7 +657,8 @@ func (f *File) TLSDescriptors() (map[string]libpf.Address, error) {
 }
 
 func (f *File) insertTLSDescriptorsForSection(descs map[string]libpf.Address,
-	relaSection *Section) error {
+	relaSection *Section,
+) error {
 	if relaSection.Link > uint32(len(f.Sections)) {
 		return errors.New("rela section link is out-of-bounds")
 	}
@@ -737,7 +741,8 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 
 // OpenDebugLink tries to locate and open the corresponding debug ELF for this DSO.
 func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
-	debugELF *File, debugFile string) {
+	debugELF *File, debugFile string,
+) {
 	f.debuglinkChecked = true
 	// Get the debug link
 	linkName, linkCRC32, err := f.GetDebugLink()
