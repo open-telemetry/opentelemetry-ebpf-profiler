@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -76,13 +77,18 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, fmt.Errorf("process storage export has wrong size %d", procStorageSym.Size)
 	}
 
-	// Resolve thread info TLS export.
-	tlsDescs, err := ef.TLSDescriptors()
-	if err != nil {
-		return nil, errors.New("failed to extract TLS descriptors")
+	var tlsDescElfAddr libpf.Address
+	if err = ef.VisitTLSRelocations(func(r pfelf.ElfReloc, symName string) bool {
+		if symName == tlsExport {
+			tlsDescElfAddr = libpf.Address(r.Off)
+			return false
+		}
+		return true
+	}); err != nil {
+		return nil, errors.New(fmt.Sprintf("failed to visit TLS descriptor: %v", err))
 	}
-	tlsDescElfAddr, ok := tlsDescs[tlsExport]
-	if !ok {
+
+	if tlsDescElfAddr == 0 {
 		return nil, errors.New("failed to locate TLS descriptor")
 	}
 

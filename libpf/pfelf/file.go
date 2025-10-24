@@ -631,64 +631,70 @@ func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string
 	return path
 }
 
-// TLSDescriptors returns a map of all TLS descriptor symbol -> address
-// mappings in the executable.
-func (f *File) TLSDescriptors() (map[string]libpf.Address, error) {
+type ElfReloc *elf.Rela64
+
+// VisitTLSDescriptors visits all TLS relocations and provides the relocation
+// for the TLS symbol, as well as a best-effort string for the symbol's name
+// it continues until the visitor returns false
+func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
 	var err error
 	if err = f.LoadSections(); err != nil {
-		return nil, err
+		return err
 	}
 
-	descs := make(map[string]libpf.Address)
 	for i := range f.Sections {
 		section := &f.Sections[i]
 		// NOTE: SHT_REL is not relevant for the archs that we care about
 		if section.Type == elf.SHT_RELA {
-			if err = f.insertTLSDescriptorsForSection(descs, section); err != nil {
-				return nil, err
+			cont, err := f.visitTLSDescriptorsForSection(visitor, section)
+			if err != nil {
+				return err
+			}
+			if !cont {
+				return nil
 			}
 		}
 	}
 
-	return descs, nil
+	return nil
 }
 
-func (f *File) insertTLSDescriptorsForSection(descs map[string]libpf.Address,
-	relaSection *Section) error {
+func (f *File) visitTLSDescriptorsForSection(visitor func(ElfReloc, string) bool,
+	relaSection *Section) (bool, error) {
 	if relaSection.Link > uint32(len(f.Sections)) {
-		return errors.New("rela section link is out-of-bounds")
+		return false, errors.New("rela section link is out-of-bounds")
 	}
 	if relaSection.Link == 0 {
-		return errors.New("rela section link is empty")
+		return false, errors.New("rela section link is empty")
 	}
 	if relaSection.Size > maxBytesLargeSection {
-		return fmt.Errorf("relocation section too big (%d bytes)", relaSection.Size)
+		return false, fmt.Errorf("relocation section too big (%d bytes)", relaSection.Size)
 	}
 	if relaSection.Size%uint64(unsafe.Sizeof(elf.Rela64{})) != 0 {
-		return errors.New("relocation section size isn't multiple of rela64 struct")
+		return false, errors.New("relocation section size isn't multiple of rela64 struct")
 	}
 
 	symtabSection := &f.Sections[relaSection.Link]
 	if symtabSection.Link > uint32(len(f.Sections)) {
-		return errors.New("symtab link is out-of-bounds")
+		return false, errors.New("symtab link is out-of-bounds")
 	}
 	if symtabSection.Size%uint64(unsafe.Sizeof(elf.Sym64{})) != 0 {
-		return errors.New("symbol section size isn't multiple of sym64 struct")
+		return false, errors.New("symbol section size isn't multiple of sym64 struct")
 	}
 
 	strtabSection := &f.Sections[symtabSection.Link]
 	if strtabSection.Size > maxBytesLargeSection {
-		return fmt.Errorf("string table too big (%d bytes)", strtabSection.Size)
+		return false, fmt.Errorf("string table too big (%d bytes)", strtabSection.Size)
 	}
 
 	strtabData, err := strtabSection.Data(uint(strtabSection.Size))
 	if err != nil {
-		return fmt.Errorf("failed to read string table: %w", err)
+		return false, fmt.Errorf("failed to read string table: %w", err)
 	}
 
 	relaData, err := relaSection.Data(uint(relaSection.Size))
 	if err != nil {
-		return fmt.Errorf("failed to read relocation section: %w", err)
+		return false, fmt.Errorf("failed to read relocation section: %w", err)
 	}
 
 	relaSz := int(unsafe.Sizeof(elf.Rela64{}))
@@ -706,18 +712,20 @@ func (f *File) insertTLSDescriptorsForSection(descs map[string]libpf.Address,
 		symNo := int64(rela.Info >> 32)
 		n, err := symtabSection.ReadAt(pfunsafe.FromPointer(&sym), symNo*symSz)
 		if err != nil || n != int(symSz) {
-			return fmt.Errorf("failed to read relocation symbol: %w", err)
+			return false, fmt.Errorf("failed to read relocation symbol: %w", err)
 		}
 
 		symStr, ok := getString(strtabData, int(sym.Name))
 		if !ok {
-			return errors.New("failed to get relocation name string")
+			return false, errors.New("failed to get relocation name string")
 		}
 
-		descs[symStr] = libpf.Address(rela.Off)
+		if !visitor(rela, symStr) {
+			return false, nil
+		}
 	}
 
-	return nil
+	return true, nil
 }
 
 // GetDebugLink reads and parses the .gnu_debuglink section.
@@ -1060,7 +1068,7 @@ func (f *File) LookupSymbolAddress(symbol libpf.SymbolName) (libpf.SymbolValue, 
 }
 
 // visitSymbolTable visits all symbols in the given symbol table.
-func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol)) error {
+func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) error {
 	symTab := f.Section(name)
 	if symTab == nil {
 		return fmt.Errorf("failed to read %v: section not present", name)
@@ -1083,11 +1091,13 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol)) error {
 	for i := 0; i < len(syms); i += symSz {
 		sym := (*elf.Sym64)(unsafe.Pointer(&syms[i]))
 		if name, ok := getString(strs, int(sym.Name)); ok {
-			visitor(libpf.Symbol{
+			if !visitor(libpf.Symbol{
 				Name:    libpf.SymbolName(name),
 				Address: libpf.SymbolValue(sym.Value),
 				Size:    sym.Size,
-			})
+			}) {
+				break
+			}
 		}
 	}
 	return nil
@@ -1096,7 +1106,7 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol)) error {
 // loadSymbolTable reads given symbol table
 func (f *File) loadSymbolTable(name string) (*libpf.SymbolMap, error) {
 	symMap := &libpf.SymbolMap{}
-	if err := f.visitSymbolTable(name, func(s libpf.Symbol) { symMap.Add(s) }); err != nil {
+	if err := f.visitSymbolTable(name, func(s libpf.Symbol) bool { symMap.Add(s); return true }); err != nil {
 		return nil, err
 	}
 	symMap.Finalize()
@@ -1113,8 +1123,13 @@ func (f *File) ReadDynamicSymbols() (*libpf.SymbolMap, error) {
 	return f.loadSymbolTable(".dynsym")
 }
 
-// VisitDynamicSymbols iterates through the dynamic symbol table
-func (f *File) VisitDynamicSymbols(visitor func(libpf.Symbol)) error {
+// VisitSymbols iterates through the symbol table until visitor returns false.
+func (f *File) VisitSymbols(visitor func(libpf.Symbol) bool) error {
+	return f.visitSymbolTable(".symtab", visitor)
+}
+
+// VisitDynamicSymbols iterates through the dynamic symbol table until visitor returns false.
+func (f *File) VisitDynamicSymbols(visitor func(libpf.Symbol) bool) error {
 	return f.visitSymbolTable(".dynsym", visitor)
 }
 
