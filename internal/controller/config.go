@@ -88,10 +88,6 @@ func (cfg *Config) Validate() error {
 				"should be in the range [0..1]. 0 disables off-cpu profiling")
 	}
 
-	if cfg.MaxRPCMsgSize <= 0 {
-		return fmt.Errorf("invalid max-rpc-msg-size: got %d, must be greater than 0", cfg.MaxRPCMsgSize)
-	}
-
 	if !cfg.NoKernelVersionCheck {
 		major, minor, patch, err := tracer.GetCurrentKernelVersion()
 		if err != nil {
