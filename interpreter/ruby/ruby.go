@@ -319,9 +319,6 @@ func (r *rubyInstance) readPathObjRealPath(addr libpf.Address) (string, error) {
 		var relTag, absTag uint64
 		relVal := npsr.Ptr(dataBytes, 0)
 		absVal := npsr.Ptr(dataBytes, uint(vms.size_of_value))
-		if relVal != 0 {
-			relTag = uint64(r.rm.Ptr(relVal)) & uint64(rubyTMask)
-		}
 		if absVal != 0 {
 			absTag = uint64(r.rm.Ptr(absVal)) & uint64(rubyTMask)
 		}
@@ -329,8 +326,11 @@ func (r *rubyInstance) readPathObjRealPath(addr libpf.Address) (string, error) {
 		var candidate libpf.Address
 		if absVal != 0 && absTag == uint64(rubyTString) {
 			candidate = absVal
-		} else if relVal != 0 && relTag == uint64(rubyTString) {
-			candidate = relVal
+		} else if relVal != 0 {
+			relTag = uint64(r.rm.Ptr(relVal)) & uint64(rubyTMask)
+			if relTag == uint64(rubyTString) {
+				candidate = relVal
+			}
 		} else {
 			return "", fmt.Errorf("pathobj array has no string entries: relTag=0x%x absTag=0x%x", relTag, absTag)
 		}
