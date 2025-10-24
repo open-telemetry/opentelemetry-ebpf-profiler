@@ -263,6 +263,8 @@ func (p *Pdata) setProfile(
 			semconv.ProcessPIDKey, traceKey.Pid)
 		attrMgr.AppendInt(sample.AttributeIndices(),
 			semconv.ThreadIDKey, traceKey.Tid)
+		attrMgr.AppendInt(sample.AttributeIndices(),
+			semconv.CPULogicalNumberKey, int64(traceKey.CPU))
 
 		for key, value := range traceInfo.EnvVars {
 			env := semconv.ProcessEnvironmentVariable(key, value)

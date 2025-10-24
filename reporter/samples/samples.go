@@ -42,6 +42,7 @@ type TraceAndMetaKey struct {
 	ApmServiceName string
 	Pid            int64
 	Tid            int64
+	CPU            int64
 	// Process name is retrieved from /proc/PID/comm
 	ProcessName string
 	// Executable path is retrieved from /proc/PID/exe
