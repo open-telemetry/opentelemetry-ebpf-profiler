@@ -533,10 +533,10 @@ const (
 	// Number of failures to read the instruction sequence body
 	IDUnwindRubyErrReadIseqBody = 243
 
-	// Number of failures to read the instruction sequence encoded size
+	// Number of failures to read the instruction sequence encoded size (deprecated)
 	IDUnwindRubyErrReadIseqEncoded = 244
 
-	// Number of failures to read the instruction sequence size
+	// Number of failures to read the instruction sequence size (deprecated)
 	IDUnwindRubyErrReadIseqSize = 245
 
 	// Number of times the unwind instructions requested LR unwinding mid-trace
@@ -635,6 +635,24 @@ const (
 	// Number of failures reading Go custom labels
 	IDUnwindGoLabelsFailures = 279
 
+	// Number of invalid instruction sequences sequence
+	IDUnwindRubyErrInvalidIseq = 280
+
+	// Number of failures to read the Ruby method definition
+	IDUnwindRubyErrReadMethodDef = 281
+
+	// Number of failures to read the Ruby method type
+	IDUnwindRubyErrReadMethodType = 282
+
+	// Number of failures to read the Ruby svar while finding CME
+	IDUnwindRubyErrReadSvar = 283
+
+	// Number of failures to read the Ruby rbasic flags
+	IDUnwindRubyErrReadRbasicFlags = 284
+
+	// Number of failed attempts to read a CME by exceeding max EP checks
+	IDUnwindRubyErrCmeMaxEp = 285
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 280
+	IDMax = 286
 )
