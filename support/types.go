@@ -50,7 +50,7 @@ const (
 	EventTypeGenericPID = 0x1
 )
 
-const MaxFrameUnwinds = 0x80
+const MaxFrameUnwinds = 0x400
 
 const UnwindInfoMaxEntries = 0x4000
 
@@ -165,7 +165,7 @@ type Trace struct {
 	Stack_len          uint32
 	Origin             uint32
 	Offtime            uint64
-	Frames             [128]Frame
+	Frames             [1024]Frame
 }
 type UnwindInfo struct {
 	Opcode      uint8
@@ -278,12 +278,10 @@ type RubyProcInfo struct {
 	Ep                           uint8
 	Size_of_control_frame_struct uint8
 	Body                         uint8
-	Iseq_type                    uint8
-	Iseq_encoded                 uint8
-	Iseq_size                    uint8
+	Cme_method_def               uint8
 	Size_of_value                uint8
 	Running_ec                   uint16
-	Pad_cgo_0                    [2]byte
+	Pad_cgo_0                    [4]byte
 }
 type V8ProcInfo struct {
 	Version                      uint32
@@ -311,7 +309,7 @@ type V8ProcInfo struct {
 const (
 	Sizeof_Frame      = 0x18
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0xed0
+	Sizeof_Trace      = 0x62d0
 
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
@@ -363,6 +361,14 @@ const (
 	V8LineCookieShift = 0x20
 	V8LineCookieMask  = 0xffffffff00000000
 	V8LineDeltaMask   = 0xffffffff
+
+	RubyAddrMask48Bit     = 0xffffffffffff
+	RubyExtraAddrTypeMask = 0xff000000000000
+
+	RubyFrameTypeNone     = 0x0
+	RubyFrameTypeCmeIseq  = 0x1
+	RubyFrameTypeCmeCfunc = 0x2
+	RubyFrameTypeIseq     = 0x3
 )
 
 var MetricsTranslation = []metrics.MetricID{

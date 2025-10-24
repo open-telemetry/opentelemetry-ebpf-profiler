@@ -234,19 +234,20 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->state.r28        = 0;
   record->state.lr_invalid = false;
 #endif
-  record->state.return_address             = false;
-  record->state.error_metric               = -1;
-  record->state.unwind_error               = ERR_OK;
-  record->perlUnwindState.stackinfo        = 0;
-  record->perlUnwindState.cop              = 0;
-  record->pythonUnwindState.py_frame       = 0;
-  record->phpUnwindState.zend_execute_data = 0;
-  record->rubyUnwindState.stack_ptr        = 0;
-  record->rubyUnwindState.last_stack_frame = 0;
-  record->unwindersDone                    = 0;
-  record->tailCalls                        = 0;
-  record->ratelimitAction                  = RATELIMIT_ACTION_DEFAULT;
-  record->customLabelsState.go_m_ptr       = NULL;
+  record->state.return_address              = false;
+  record->state.error_metric                = -1;
+  record->state.unwind_error                = ERR_OK;
+  record->perlUnwindState.stackinfo         = 0;
+  record->perlUnwindState.cop               = 0;
+  record->pythonUnwindState.py_frame        = 0;
+  record->phpUnwindState.zend_execute_data  = 0;
+  record->rubyUnwindState.stack_ptr         = 0;
+  record->rubyUnwindState.last_stack_frame  = 0;
+  record->rubyUnwindState.cfunc_saved_frame = 0;
+  record->unwindersDone                     = 0;
+  record->tailCalls                         = 0;
+  record->ratelimitAction                   = RATELIMIT_ACTION_DEFAULT;
+  record->customLabelsState.go_m_ptr        = NULL;
 
   Trace *trace           = &record->trace;
   trace->kernel_stack_id = -1;

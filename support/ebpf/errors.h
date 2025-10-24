@@ -82,11 +82,29 @@ typedef enum ErrorCode {
   // Ruby: Unable to read instruction sequence body
   ERR_RUBY_READ_ISEQ_BODY = 3005,
 
-  // Ruby: Unable to read the instruction sequence encoded size
+  // Ruby: Unable to read the instruction sequence encoded size (deprecated)
   ERR_RUBY_READ_ISEQ_ENCODED = 3006,
 
-  // Ruby: Unable to read the instruction sequence size
+  // Ruby: Unable to read the instruction sequence size (deprecated)
   ERR_RUBY_READ_ISEQ_SIZE = 3007,
+
+  // Ruby: Invalid instruction sequence
+  ERR_RUBY_INVALID_ISEQ = 3008,
+
+  // Ruby: Unable to read the method definition
+  ERR_RUBY_READ_METHOD_DEF = 3010,
+
+  // Ruby: Unable to read the method type
+  ERR_RUBY_READ_METHOD_TYPE = 3011,
+
+  // Ruby: Unable to read svar while locating CME from EP
+  ERR_RUBY_READ_SVAR = 3012,
+
+  // Ruby: Unable to read rbasic flags
+  ERR_RUBY_READ_RBASIC_FLAGS = 3013,
+
+  // Ruby: Exceeded maximum EP checks while locating CME
+  ERR_RUBY_READ_CME_MAX_EP = 3020,
 
   // Native: Unable to find the code section in the stack delta page info map
   ERR_NATIVE_LOOKUP_TEXT_SECTION = 4000,

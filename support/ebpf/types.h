@@ -350,7 +350,9 @@ typedef enum TraceOrigin {
 // MAX_FRAME_UNWINDS defines the maximum number of frames per
 // Trace we can unwind and respect the limit of eBPF instructions,
 // limit of tail calls and limit of stack size per eBPF program.
-#define MAX_FRAME_UNWINDS 128
+// 1024 is the maximum power of 2 we can fit in a single perf event, and
+// in a single per CPU array entry
+#define MAX_FRAME_UNWINDS 1024
 
 // MAX_NON_ERROR_FRAME_UNWINDS defines the maximum number of frames
 // to be pushed by unwinders while still leaving space for an error frame.
@@ -480,8 +482,8 @@ typedef struct RubyProcInfo {
   // rb_iseq_struct offsets:
   u8 body;
 
-  // rb_iseq_constant_body:
-  u8 iseq_type, iseq_encoded, iseq_size;
+  // rb_callable_method_entry_struct
+  u8 cme_method_def;
 
   // size_of_value holds the size of the macro VALUE as defined in
   // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L1136
@@ -672,6 +674,8 @@ typedef struct RubyUnwindState {
   void *stack_ptr;
   // Pointer to the last control frame struct in the Ruby VM stack we want to handle.
   void *last_stack_frame;
+  // Framefor last cfunc before we switched to native unwinder
+  u64 cfunc_saved_frame;
 } RubyUnwindState;
 
 // Container for additional scratch space needed by the HotSpot unwinder.
