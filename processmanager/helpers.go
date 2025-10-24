@@ -12,7 +12,7 @@ import (
 	"regexp"
 
 	lru "github.com/elastic/go-freelru"
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -92,8 +92,7 @@ type FileIDMapper interface {
 
 // executableReporterStub is a stub to implement reporter.ExecutableReporter which is used
 // as the reporter by default. This can be overridden on at processmanager creation time.
-type executableReporterStub struct {
-}
+type executableReporterStub struct{}
 
 // ReportExecutable satisfies the reporter.ExecutableReporter interface.
 func (er executableReporterStub) ReportExecutable(args *reporter.ExecutableMetadata) {

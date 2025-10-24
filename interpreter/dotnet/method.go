@@ -8,7 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 )

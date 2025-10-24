@@ -6,8 +6,8 @@
 package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/armhelpers"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"golang.org/x/arch/arm64/arm64asm"
 )

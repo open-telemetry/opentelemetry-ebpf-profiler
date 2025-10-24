@@ -8,8 +8,8 @@ import (
 	"crypto/tls"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"

@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/elastic/go-freelru"
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"

@@ -13,7 +13,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -88,7 +88,8 @@ func (t *Tracer) triggerPidEvent(data []byte) {
 // calls. Returns a function that can be called to retrieve perf event array
 // error counts.
 func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
-	triggerFunc func([]byte), perCPUBufferSize int) func() (lost, noData, readError uint64) {
+	triggerFunc func([]byte), perCPUBufferSize int,
+) func() (lost, noData, readError uint64) {
 	eventReader, err := perf.NewReader(perfEventMap, perCPUBufferSize)
 	if err != nil {
 		log.Fatalf("Failed to setup perf reporting via %s: %v", perfEventMap, err)
@@ -134,7 +135,8 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 // Returns a function that can be called to retrieve perf event array
 // error counts.
 func (t *Tracer) startTraceEventMonitor(ctx context.Context,
-	traceOutChan chan<- *host.Trace) func() []metrics.Metric {
+	traceOutChan chan<- *host.Trace,
+) func() []metrics.Metric {
 	eventsMap := t.ebpfMaps["trace_events"]
 	eventReader, err := perf.NewReader(eventsMap,
 		t.samplesPerSecond*support.Sizeof_Trace)

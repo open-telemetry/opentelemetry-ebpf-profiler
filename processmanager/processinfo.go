@@ -20,7 +20,7 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -154,7 +154,8 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 				Name:         processName,
 				Executable:   exePath,
 				ContainerID:  containerID,
-				EnvVariables: envVarMap},
+				EnvVariables: envVarMap,
+			},
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
 			tsdInfo:          nil,
@@ -232,7 +233,8 @@ func (pm *ProcessManager) deletePIDAddress(pid libpf.PID, addr libpf.Address) er
 
 // assignInterpreter will update the interpreters maps with given interpreter.Instance.
 func (pm *ProcessManager) assignInterpreter(pid libpf.PID, key util.OnDiskFileIdentifier,
-	instance interpreter.Instance) {
+	instance interpreter.Instance,
+) {
 	if _, ok := pm.interpreters[pid]; !ok {
 		// This is the very first interpreter entry for this process.
 		// So we need to initialize the structure first.
@@ -252,7 +254,8 @@ func (pm *ProcessManager) assignInterpreter(pid libpf.PID, key util.OnDiskFileId
 //
 // The caller is responsible to hold the ProcessManager lock to avoid race conditions.
 func (pm *ProcessManager) handleNewInterpreter(pr process.Process, m *Mapping,
-	ei *eim.ExecutableInfo) error {
+	ei *eim.ExecutableInfo,
+) error {
 	// The same interpreter can be found multiple times under various different
 	// circumstances. Check if this is already handled.
 	pid := pr.PID()
@@ -284,7 +287,8 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, m *Mapping,
 
 // handleNewMapping processes new file backed mappings
 func (pm *ProcessManager) handleNewMapping(pr process.Process, m *Mapping,
-	elfRef *pfelf.Reference) error {
+	elfRef *pfelf.Reference,
+) error {
 	// Resolve executable info first
 	ei, err := pm.eim.AddOrIncRef(m.FileID, elfRef)
 	if err != nil {
@@ -315,7 +319,8 @@ func (pm *ProcessManager) handleNewMapping(pr process.Process, m *Mapping,
 }
 
 func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mapping,
-	elfRef *pfelf.Reference) elfInfo {
+	elfRef *pfelf.Reference,
+) elfInfo {
 	key := mapping.GetOnDiskFileIdentifier()
 	lastModified := pr.GetMappingFileLastModified(mapping)
 	if info, ok := pm.elfInfoCache.Get(key); ok && info.lastModified == lastModified {
@@ -437,7 +442,8 @@ func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *pro
 // processRemovedMappings removes listed memory mappings and loaded interpreters from
 // the internal structures and eBPF maps.
 func (pm *ProcessManager) processRemovedMappings(pid libpf.PID, mappings []libpf.Address,
-	interpretersValid libpf.Set[util.OnDiskFileIdentifier]) {
+	interpretersValid libpf.Set[util.OnDiskFileIdentifier],
+) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -487,7 +493,8 @@ func (pm *ProcessManager) processRemovedMappings(pid libpf.PID, mappings []libpf
 //
 // TODO: Periodic synchronization of mappings for every tracked PID.
 func (pm *ProcessManager) synchronizeMappings(pr process.Process,
-	mappings []process.Mapping) bool {
+	mappings []process.Mapping,
+) bool {
 	newProcess := true
 	pid := pr.PID()
 	mpAdd := make(map[libpf.Address]*process.Mapping, len(mappings))
@@ -720,7 +727,8 @@ func (pm *ProcessManager) MetaForPID(pid libpf.PID) ProcessMeta {
 
 // findMappingForTrace locates the mapping for a given host trace.
 func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
-	addr libpf.AddressOrLineno) (m Mapping, found bool) {
+	addr libpf.AddressOrLineno,
+) (m Mapping, found bool) {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 

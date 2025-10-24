@@ -121,7 +121,7 @@ import (
 	"fmt"
 	"regexp"
 
-	log "github.com/sirupsen/logrus"
+	log "go.opentelemetry.io/ebpf-profiler/internal/global"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -193,7 +193,8 @@ func (i *opcacheInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) er
 }
 
 func (i *opcacheInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
-	_ reporter.ExecutableReporter, pr process.Process, _ []process.Mapping) error {
+	_ reporter.ExecutableReporter, pr process.Process, _ []process.Mapping,
+) error {
 	if i.prefixes != nil {
 		// Already attached
 		return nil
@@ -239,7 +240,8 @@ func (d *opcacheData) String() string {
 }
 
 func (d *opcacheData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
+	rm remotememory.RemoteMemory,
+) (interpreter.Instance, error) {
 	return &opcacheInstance{
 		d:    d,
 		rm:   rm,
@@ -343,7 +345,8 @@ func getOpcacheJITInfo(ef *pfelf.File) (dasmBuf, dasmSize libpf.Address, err err
 }
 
 func OpcacheLoader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
-	interpreter.Data, error) {
+	interpreter.Data, error,
+) {
 	if !opcacheRegex.MatchString(info.FileName()) {
 		return nil, nil
 	}
