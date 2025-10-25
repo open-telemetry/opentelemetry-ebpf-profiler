@@ -27,20 +27,21 @@ type TraceEvents struct {
 	Timestamps []uint64 // in nanoseconds
 	OffTimes   []int64  // in nanoseconds
 	EnvVars    map[string]string
+	Labels     map[string]string
 }
 
 // TraceAndMetaKey is the deduplication key for samples. This **must always**
 // contain all trace fields that aren't already part of the trace hash to ensure
 // that we don't accidentally merge traces with different fields.
 type TraceAndMetaKey struct {
+	// Hash is not sent forward, but it is used as the primary key
+	// to not aggregate difference traces.
 	Hash libpf.TraceHash
 	// comm and apmServiceName are provided by the eBPF programs
 	Comm           string
 	ApmServiceName string
-	// ContainerID is annotated based on PID information
-	ContainerID string
-	Pid         int64
-	Tid         int64
+	Pid            int64
+	Tid            int64
 	// Process name is retrieved from /proc/PID/comm
 	ProcessName string
 	// Executable path is retrieved from /proc/PID/exe
@@ -60,25 +61,3 @@ type ContainerID string
 
 // KeyToEventMapping supports temporary mapping traces to additional information.
 type KeyToEventMapping map[TraceAndMetaKey]*TraceEvents
-
-// AttrKeyValue is a helper to populate Profile.attribute_table.
-type AttrKeyValue[T string | int64] struct {
-	Key string
-	// Set to true for OTel SemConv attributes with requirement level: Required
-	Required bool
-	Value    T
-}
-
-// ExecInfo enriches an executable with additional metadata.
-type ExecInfo struct {
-	FileName   string
-	GnuBuildID string
-}
-
-// SourceInfo allows mapping a frame to its source origin.
-type SourceInfo struct {
-	LineNumber     libpf.SourceLineno
-	FunctionOffset uint32
-	FunctionName   libpf.String
-	FilePath       libpf.String
-}

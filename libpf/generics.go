@@ -24,6 +24,15 @@ func MapKeysToSlice[K comparable, V any](m map[K]V) []K {
 	return slice
 }
 
+// MapKeysToSet creates a set from a map's keys.
+func MapKeysToSet[K comparable, V any](m map[K]V) Set[K] {
+	set := make(Set[K], len(m))
+	for key := range m {
+		set[key] = Void{}
+	}
+	return set
+}
+
 // SliceAllEqual checks whether all items in a slice have a given value.
 func SliceAllEqual[T comparable](s []T, value T) bool {
 	for _, item := range s {

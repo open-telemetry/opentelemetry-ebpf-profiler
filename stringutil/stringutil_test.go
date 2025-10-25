@@ -6,7 +6,6 @@ package stringutil
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,13 +61,4 @@ func TestSplitN(t *testing.T) {
 			require.Equal(t, testcase.expected, fields[:n])
 		})
 	}
-}
-
-func TestByteSlice2String(t *testing.T) {
-	var b [4]byte
-	s := ByteSlice2String(b[:1]) // create s with length 1 and a 0 byte inside
-	assert.Equal(t, "\x00", s)
-
-	b[0] = 'a'
-	assert.Equal(t, "a", s)
 }

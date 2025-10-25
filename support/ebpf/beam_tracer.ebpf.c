@@ -19,12 +19,12 @@
   #define SP_REGISTER r20
 #endif
 
-bpf_map_def SEC("maps") beam_procs = {
-  .type = BPF_MAP_TYPE_HASH,
-  .key_size = sizeof(pid_t),
-  .value_size = sizeof(BEAMProcInfo),
-  .max_entries = 256,
-};
+struct beam_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, BEAMProcInfo);
+  __uint(max_entries, 256);
+} beam_procs SEC(".maps");
 
 typedef struct BEAMRangeEntry {
   u64 start;

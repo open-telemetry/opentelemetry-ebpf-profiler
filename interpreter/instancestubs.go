@@ -17,8 +17,8 @@ import (
 type InstanceStubs struct {
 }
 
-func (is *InstanceStubs) SynchronizeMappings(EbpfHandler, reporter.SymbolReporter, process.Process,
-	[]process.Mapping) error {
+func (is *InstanceStubs) SynchronizeMappings(EbpfHandler, reporter.ExecutableReporter,
+	process.Process, []process.Mapping) error {
 	return nil
 }
 
@@ -32,4 +32,8 @@ func (is *InstanceStubs) Symbolize(*host.Frame, *libpf.Frames) error {
 
 func (is *InstanceStubs) GetAndResetMetrics() ([]metrics.Metric, error) {
 	return []metrics.Metric{}, nil
+}
+
+func (is *InstanceStubs) ReleaseResources() error {
+	return nil
 }

@@ -4,9 +4,16 @@
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
+)
+
+// List of public errors.
+var (
+	// ErrSymbolNotFound is returned when the requested symbol was not found.
+	ErrSymbolNotFound = errors.New("symbol not found")
 )
 
 // SymbolValue represents the value associated with a symbol, e.g. either an

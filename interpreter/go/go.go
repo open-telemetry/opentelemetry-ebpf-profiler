@@ -115,3 +115,7 @@ func (g *goInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	sfCounter.ReportSuccess()
 	return nil
 }
+
+func (g *goInstance) ReleaseResources() error {
+	return g.d.pclntab.SetDontNeed()
+}

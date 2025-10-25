@@ -3,6 +3,9 @@
 
 #include "bpfdefs.h"
 
+// tpbase_offset is declared in native_stack_trace.ebpf.c
+extern u64 tpbase_offset;
+
 // tsd_read reads from the Thread Specific Data location associated with the provided key.
 static inline EBPF_INLINE int
 tsd_read(const TSDInfo *tsi, const void *tsd_base, int key, void **out)
@@ -36,21 +39,14 @@ static inline EBPF_INLINE int tsd_get_base(void **tsd_base)
   *tsd_base = (void *)__cgo_ctx->tp_base;
   return 0;
 #else
-  u32 key              = 0;
-  SystemConfig *syscfg = bpf_map_lookup_elem(&system_config, &key);
-  if (!syscfg) {
-    // Unreachable: array maps are always fully initialized.
-    return -1;
-  }
-
   struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 
   // We need to read task->thread.fsbase (on x86_64), but we can't do so because
   // we might have been compiled with different kernel headers, so the struct layout
   // is likely to be different.
-  // syscfg->tpbase_offset is populated with the offset of `fsbase` or equivalent field
+  // tpbase_offset is populated with the offset of `fsbase` or equivalent field
   // relative to a `task_struct`, so we use that instead.
-  void *tpbase_ptr = ((char *)task) + syscfg->tpbase_offset;
+  void *tpbase_ptr = ((char *)task) + tpbase_offset;
   if (bpf_probe_read_kernel(tsd_base, sizeof(void *), tpbase_ptr)) {
     DEBUG_PRINT("Failed to read tpbase value");
     increment_metric(metricID_UnwindErrBadTPBaseAddr);

@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"strings"
 	"syscall"
 	"time"
 
@@ -33,7 +32,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tpbase"
-	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -113,49 +111,14 @@ func (pm *ProcessManager) getTSDInfo(pid libpf.PID) *tpbase.TSDInfo {
 // already exists, it returns true. Otherwise false or an error.
 //
 // Caller must hold pm.mu write lock.
-func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool, error) {
+func (pm *ProcessManager) updatePidInformation(pr process.Process, m *Mapping) (bool, error) {
+	pid := pr.PID()
 	info, ok := pm.pidToProcessInfo[pid]
 	if !ok {
 		// We don't have information for this pid, so we first need to
 		// allocate the embedded map for this process.
-		var processName string
-		exePath, _ := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
-		if name, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid)); err == nil {
-			processName = string(name)
-		}
-
-		envVarMap := make(map[string]string, len(pm.includeEnvVars))
-		if len(pm.includeEnvVars) > 0 {
-			if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid)); err == nil {
-				// environ has environment variables separated by a null byte (hex: 00)
-				splittedVars := strings.Split(string(envVars), "\000")
-				for _, envVar := range splittedVars {
-					keyValuePair := strings.SplitN(envVar, "=", 2)
-
-					// If the entry could not be split at a '=', ignore it
-					// (last entry of environ might be empty)
-					if len(keyValuePair) != 2 {
-						continue
-					}
-
-					if _, ok := pm.includeEnvVars[keyValuePair[0]]; ok {
-						envVarMap[keyValuePair[0]] = keyValuePair[1]
-					}
-				}
-			}
-		}
-
-		containerID, err := extractContainerID(pid)
-		if err != nil {
-			log.Debugf("Failed extracting containerID for %d: %v", pid, err)
-		}
-
 		info = &processInfo{
-			meta: ProcessMeta{
-				Name:         processName,
-				Executable:   exePath,
-				ContainerID:  containerID,
-				EnvVariables: envVarMap},
+			meta:             pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars}),
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
 			tsdInfo:          nil,
@@ -292,8 +255,6 @@ func (pm *ProcessManager) handleNewMapping(pr process.Process, m *Mapping,
 		return err
 	}
 
-	pid := pr.PID()
-
 	// We intentionally don't take the lock immediately when entering this function and instead
 	// rely on EIM's internal locking for the `AddOrIncRef` call. The reasoning here is that
 	// the `AddOrIncRef` call can take a while, and we don't want to block the whole PM for that.
@@ -301,12 +262,12 @@ func (pm *ProcessManager) handleNewMapping(pr process.Process, m *Mapping,
 	defer pm.mu.Unlock()
 
 	// Update the eBPF maps with information about this mapping.
-	_, err = pm.updatePidInformation(pid, m)
+	_, err = pm.updatePidInformation(pr, m)
 	if err != nil {
 		return err
 	}
 
-	pm.assignTSDInfo(pid, ei.TSDInfo)
+	pm.assignTSDInfo(pr.PID(), ei.TSDInfo)
 
 	if ei.Data != nil {
 		return pm.handleNewInterpreter(pr, m, &ei)
@@ -349,28 +310,6 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		return info
 	}
 
-	hostFileID := host.FileIDFromLibpf(fileID)
-	info.fileID = hostFileID
-	info.addressMapper = ef.GetAddressMapper()
-	if mapping.IsVDSO() {
-		intervals := createVDSOSyntheticRecord(ef)
-		if intervals.Deltas != nil {
-			if err := pm.AddSynthIntervalData(hostFileID, intervals); err != nil {
-				info.err = fmt.Errorf("failed to add synthetic deltas: %w", err)
-			}
-		}
-	}
-	// Do not cache the entry if synthetic stack delta loading failed,
-	// so next encounter of the VDSO will retry loading them.
-	if info.err == nil {
-		pm.elfInfoCache.Add(key, info)
-	}
-	pm.FileIDMapper.Set(hostFileID, fileID)
-
-	if pm.reporter.ExecutableKnown(fileID) {
-		return info
-	}
-
 	baseName := path.Base(mapping.Path.String())
 	if baseName == "/" {
 		// There are circumstances where there is no filename.
@@ -379,20 +318,31 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		// filename mapped in as the executable.
 		baseName = "<anonymous-blob>"
 	}
-
 	gnuBuildID, _ := ef.GetBuildID()
-	mapping2 := *mapping // copy to avoid races if callee saves the closure
-	open := func() (process.ReadAtCloser, error) {
-		return pr.OpenMappingFile(&mapping2)
+	goBuildID := ""
+	if ef.IsGolang() {
+		goBuildID, _ = ef.GetGoBuildID()
 	}
-	pm.reporter.ExecutableMetadata(&reporter.ExecutableMetadataArgs{
-		FileID:            fileID,
-		FileName:          baseName,
-		GnuBuildID:        gnuBuildID,
-		DebuglinkFileName: ef.DebuglinkFileName(elfRef.FileName(), elfRef),
-		Interp:            libpf.Native,
-		Open:              open,
+
+	info.mappingFile = libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+		FileID:     fileID,
+		FileName:   libpf.Intern(baseName),
+		GnuBuildID: gnuBuildID,
+		GoBuildID:  goBuildID,
 	})
+
+	hostFileID := host.FileIDFromLibpf(fileID)
+	info.addressMapper = ef.GetAddressMapper()
+	pm.elfInfoCache.Add(key, info)
+	pm.FileIDMapper.Set(hostFileID, info.mappingFile)
+
+	pm.exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
+		MappingFile:       info.mappingFile,
+		Process:           pr,
+		Mapping:           mapping,
+		DebuglinkFileName: ef.DebuglinkFileName(elfRef.FileName(), elfRef),
+	})
+
 	return info
 }
 
@@ -429,7 +379,7 @@ func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *pro
 
 	if err := pm.handleNewMapping(pr,
 		&Mapping{
-			FileID:     info.fileID,
+			FileID:     host.FileIDFromLibpf(info.mappingFile.Value().FileID),
 			Vaddr:      libpf.Address(mapping.Vaddr),
 			Bias:       mapping.Vaddr - elfSpaceVA,
 			Length:     mapping.Length,
@@ -519,6 +469,14 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	// Generate the list of added and removed mappings.
 	pm.mu.RLock()
 	if info, ok := pm.pidToProcessInfo[pid]; ok {
+		exe, err := pr.GetExe()
+		if err != nil {
+			log.Warnf("Failed to get executable of process %d: %v", pid, err)
+		} else if exe != info.meta.Executable {
+			// Update metadata of the process.
+			info.meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
+		}
+
 		// Iterate over cached executable mappings, if any, and collect mappings
 		// that have changed so that they are later batch-removed.
 		for addr, existingMapping := range info.mappings {
@@ -552,7 +510,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	if pm.interpreterTracerEnabled {
 		pm.mu.Lock()
 		for _, instance := range pm.interpreters[pid] {
-			err := instance.SynchronizeMappings(pm.ebpf, pm.reporter, pr, mappings)
+			err := instance.SynchronizeMappings(pm.ebpf, pm.exeReporter, pr, mappings)
 			if err != nil {
 				if alive, _ := isPIDLive(pid); alive {
 					log.Errorf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
@@ -721,13 +679,13 @@ func (pm *ProcessManager) CleanupPIDs() {
 }
 
 // MetaForPID returns the process metadata for given PID.
-func (pm *ProcessManager) MetaForPID(pid libpf.PID) ProcessMeta {
+func (pm *ProcessManager) MetaForPID(pid libpf.PID) process.ProcessMeta {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 	if procInfo, ok := pm.pidToProcessInfo[pid]; ok {
 		return procInfo.meta
 	}
-	return ProcessMeta{}
+	return process.ProcessMeta{}
 }
 
 // findMappingForTrace locates the mapping for a given host trace.
@@ -791,6 +749,3 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
 }
-
-// Compile time check to make sure we satisfy the interface.
-var _ tracehandler.TraceProcessor = (*ProcessManager)(nil)

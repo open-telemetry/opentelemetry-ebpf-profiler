@@ -32,12 +32,12 @@
 
 // Map from V8 process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
-bpf_map_def SEC("maps") v8_procs = {
-  .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(pid_t),
-  .value_size  = sizeof(V8ProcInfo),
-  .max_entries = 1024,
-};
+struct v8_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, V8ProcInfo);
+  __uint(max_entries, 1024);
+} v8_procs SEC(".maps");
 
 // Record a V8 frame
 static EBPF_INLINE ErrorCode push_v8(

@@ -37,7 +37,7 @@ opt-level = 1 # default of 0 is annoyingly slow
 [workspace.dependencies]
 argh = "0.1"
 base64 = "0.22.0"
-cpp_demangle = "0.4"
+cpp_demangle = "0.5"
 fallible-iterator = "0.3"
 flate2 = "1"
 memmap2 = "0.9.0"

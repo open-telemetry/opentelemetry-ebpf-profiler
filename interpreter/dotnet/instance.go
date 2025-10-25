@@ -5,7 +5,6 @@ package dotnet // import "go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 
 import (
 	"fmt"
-	"path"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -543,7 +542,7 @@ func (i *dotnetInstance) getDacSlotPtr(slot uint) libpf.Address {
 }
 
 func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
-	symbolReporter reporter.SymbolReporter, pr process.Process,
+	exeReporter reporter.ExecutableReporter, pr process.Process,
 	mappings []process.Mapping) error {
 	// find pointer to codeRangeList if needed
 	vms := &i.d.vmStructs
@@ -601,25 +600,13 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			return info.err
 		}
 
-		log.Debugf("%x = %v -> %v guid %v",
-			info.fileID, m.Path,
-			info.simpleName, info.guid)
+		log.Debugf("%v -> %v guid %v", m.Path, info.simpleName, info.guid)
 
-		if !symbolReporter.ExecutableKnown(info.fileID) {
-			open := func() (process.ReadAtCloser, error) {
-				return pr.OpenMappingFile(m)
-			}
-			symbolReporter.ExecutableMetadata(
-				&reporter.ExecutableMetadataArgs{
-					FileID:            info.fileID,
-					FileName:          path.Base(m.Path.String()),
-					GnuBuildID:        info.guid,
-					DebuglinkFileName: "",
-					Interp:            libpf.Dotnet,
-					Open:              open,
-				},
-			)
-		}
+		exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
+			MappingFile: info.file,
+			Process:     pr,
+			Mapping:     m,
+		})
 
 		dotnetMappings = append(dotnetMappings, dotnetMapping{
 			start: m.Vaddr,
@@ -746,10 +733,10 @@ func (i *dotnetInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) erro
 		// - on leaf frames, it is the address after the CALL machine opcode
 		frames.Append(&libpf.Frame{
 			Type:            libpf.DotnetFrame,
-			FileID:          module.fileID,
 			AddressOrLineno: libpf.AddressOrLineno(pcOffset),
 			FunctionName:    module.resolveR2RMethodName(pcOffset),
 			SourceFile:      module.simpleName,
+			MappingFile:     module.file,
 		})
 	case codeJIT:
 		// JITted frame in anonymous mapping
@@ -774,11 +761,11 @@ func (i *dotnetInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) erro
 		methodName := method.module.resolveMethodName(method.index)
 		frames.Append(&libpf.Frame{
 			Type:            libpf.DotnetFrame,
-			FileID:          method.module.fileID,
 			AddressOrLineno: lineID,
 			SourceFile:      method.module.simpleName,
 			FunctionName:    methodName,
 			FunctionOffset:  ilOffset,
+			MappingFile:     method.module.file,
 		})
 	default:
 		// Stub code

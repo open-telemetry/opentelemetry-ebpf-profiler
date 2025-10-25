@@ -17,7 +17,9 @@ import (
 	"strings"
 	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -229,7 +231,7 @@ func getString(data []byte, offset int) string {
 	if zeroIdx < 0 {
 		return ""
 	}
-	return unsafe.String(unsafe.SliceData(data[offset:]), zeroIdx)
+	return pfunsafe.ToString(data[offset : offset+zeroIdx])
 }
 
 // searchGoPclntab uses heuristic to find the gopclntab from RO data.
@@ -332,7 +334,9 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, err error) {
 
 // Gopclntab is the API for extracting data from .gopclntab
 type Gopclntab struct {
-	dataRef   io.Closer
+	dataRef     io.Closer
+	setDontNeed func()
+
 	data      []byte
 	textStart uintptr
 	numFuncs  int
@@ -351,12 +355,37 @@ type Gopclntab struct {
 	functab, funcdata, funcnametab, filetab, pctab, cutab []byte
 }
 
+// LookupSymbol searches for a given symbol in .gopclntab.
+func (g *Gopclntab) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
+	symString := string(symbol)
+	for i := 0; i < g.numFuncs; i++ {
+		_, funcOff := g.getFuncMapEntry(i)
+		pc, fun := g.getFunc(funcOff)
+		if fun == nil {
+			continue
+		}
+		name := getString(g.funcnametab, int(fun.nameOff))
+		if name == symString {
+			nextPc, _ := g.getFuncMapEntry(i + 1)
+			size := uint64(nextPc - pc)
+
+			return &libpf.Symbol{
+				Name:    symbol,
+				Address: libpf.SymbolValue(pc),
+				Size:    size,
+			}, nil
+		}
+	}
+	return nil, libpf.ErrSymbolNotFound
+}
+
 // NewGopclntab parses and returns the parsed data for further operations.
 func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	data, err := extractGoPclntab(ef)
 	if data == nil {
 		return nil, err
 	}
+	defer ef.SetDontNeed()
 
 	hdrSize := uintptr(PclntabHeaderSize())
 	dataLen := uintptr(len(data))
@@ -443,8 +472,15 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.funSize = 4 + uint8(unsafe.Sizeof(pclntabFunc{}))
 	}
 	g.dataRef = ef.Take()
+	g.setDontNeed = ef.SetDontNeed
 
 	return g, nil
+}
+
+// SetDontNeed gives advice about further use of memory.
+func (g *Gopclntab) SetDontNeed() error {
+	g.setDontNeed()
+	return nil
 }
 
 // Close releases the pfelf Data reference taken.

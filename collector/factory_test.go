@@ -4,7 +4,6 @@
 package collector
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -38,8 +37,8 @@ func TestCreateProfilesReceiver(t *testing.T) {
 			t.Parallel()
 			typ, err := component.NewType("ProfilesReceiver")
 			require.NoError(t, err)
-			_, err = createProfilesReceiver(
-				context.Background(),
+			_, err = BuildProfilesReceiver()(
+				t.Context(),
 				receivertest.NewNopSettings(typ),
 				tt.config,
 				consumertest.NewNop(),

@@ -24,12 +24,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/process"
-	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
+	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
-	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 
 	"github.com/stretchr/testify/assert"
@@ -47,6 +45,14 @@ func (d *dummyProcess) PID() libpf.PID {
 
 func (d *dummyProcess) GetMachineData() process.MachineData {
 	return process.MachineData{}
+}
+
+func (d *dummyProcess) GetProcessMeta(_ process.MetaConfig) process.ProcessMeta {
+	return process.ProcessMeta{}
+}
+
+func (d *dummyProcess) GetExe() (string, error) {
+	return "", errors.New("not implemented")
 }
 
 func (d *dummyProcess) GetMappings() ([]process.Mapping, uint32, error) {
@@ -252,98 +258,6 @@ func (mockup *ebpfMapsMockup) CollectMetrics() []metrics.Metric     { return []m
 func (mockup *ebpfMapsMockup) SupportsGenericBatchOperations() bool { return false }
 func (mockup *ebpfMapsMockup) SupportsLPMTrieBatchOperations() bool { return false }
 
-type symbolReporterMockup struct{}
-
-func (s *symbolReporterMockup) ExecutableKnown(_ libpf.FileID) bool {
-	return true
-}
-
-func (s *symbolReporterMockup) ExecutableMetadata(_ *reporter.ExecutableMetadataArgs) {
-}
-
-var _ reporter.SymbolReporter = (*symbolReporterMockup)(nil)
-
-func TestInterpreterConvertTrace(t *testing.T) {
-	partialNativeFrameFileID := uint64(0xabcdbeef)
-	nativeFrameLineno := libpf.AddressOrLineno(0x1234)
-
-	pythonAndNativeTrace := &host.Trace{
-		Frames: []host.Frame{{
-			// This represents a native frame
-			File:   host.FileID(partialNativeFrameFileID),
-			Lineno: nativeFrameLineno,
-			Type:   libpf.NativeFrame,
-		}, {
-			File:   host.FileID(42),
-			Lineno: libpf.AddressOrLineno(0x13e1bb8e), // same as runForeverTrace
-			Type:   libpf.PythonFrame,
-		}},
-	}
-
-	tests := map[string]struct {
-		trace  *host.Trace
-		expect *libpf.Trace
-	}{
-		"Convert Trace": {
-			trace: pythonAndNativeTrace,
-			expect: getExpectedTrace(pythonAndNativeTrace,
-				[]libpf.AddressOrLineno{0, 1}),
-		},
-	}
-
-	for name, testcase := range tests {
-		t.Run(name, func(t *testing.T) {
-			mapper := NewMapFileIDMapper()
-			for i, f := range testcase.trace.Frames {
-				mapper.Set(f.File, testcase.expect.Frames[i].Value().FileID)
-			}
-
-			// For this test do not include interpreters.
-			noIinterpreters, _ := tracertypes.Parse("")
-
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
-			// To test ConvertTrace we do not require all parts of processmanager.
-			manager, err := New(ctx,
-				noIinterpreters,
-				1*time.Second,
-				nil,
-				nil,
-				&symbolReporterMockup{},
-				nil,
-				true,
-				libpf.Set[string]{})
-			require.NoError(t, err)
-
-			newTrace := manager.ConvertTrace(testcase.trace)
-
-			testcase.expect.Hash = traceutil.HashTrace(testcase.expect)
-			if testcase.expect.Hash == newTrace.Hash {
-				assert.Equal(t, testcase.expect, newTrace)
-			}
-		})
-	}
-}
-
-// getExpectedTrace returns a new libpf trace that is based on the provided host trace, but
-// with the linenos replaced by the provided values. This function is for generating an expected
-// trace for tests below.
-func getExpectedTrace(origTrace *host.Trace, linenos []libpf.AddressOrLineno) *libpf.Trace {
-	newTrace := &libpf.Trace{
-		Hash: libpf.NewTraceHash(uint64(origTrace.Hash), uint64(origTrace.Hash)),
-	}
-
-	for i, frame := range origTrace.Frames {
-		lineno := frame.Lineno
-		if linenos != nil {
-			lineno = linenos[i]
-		}
-		newTrace.AppendFrame(frame.Type, libpf.NewFileID(uint64(frame.File), 0), lineno)
-	}
-	return newTrace
-}
-
 func TestNewMapping(t *testing.T) {
 	tests := map[string]struct {
 		// newMapping holds the arguments that are passed to NewMapping() in the test.
@@ -376,12 +290,11 @@ func TestNewMapping(t *testing.T) {
 			// so we replace the stack delta provider.
 			dummyProvider := dummyStackDeltaProvider{}
 			ebpfMockup := &ebpfMapsMockup{}
-			symRepMockup := &symbolReporterMockup{}
 
 			// For this test do not include interpreters.
 			noInterpreters, _ := tracertypes.Parse("")
 
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 
 			manager, err := New(ctx,
@@ -389,7 +302,8 @@ func TestNewMapping(t *testing.T) {
 				1*time.Second,
 				ebpfMockup,
 				NewMapFileIDMapper(),
-				symRepMockup,
+				nil,
+				nil,
 				&dummyProvider,
 				true,
 				libpf.Set[string]{})
@@ -562,19 +476,19 @@ func TestProcExit(t *testing.T) {
 			// so we replace the stack delta provider.
 			dummyProvider := dummyStackDeltaProvider{}
 			ebpfMockup := &ebpfMapsMockup{}
-			repMockup := &symbolReporterMockup{}
 
 			// For this test do not include interpreters.
 			noInterpreters, _ := tracertypes.Parse("")
 
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 
 			manager, err := New(ctx,
 				noInterpreters,
 				1*time.Second,
 				ebpfMockup,
 				NewMapFileIDMapper(),
-				repMockup,
+				nil,
+				nil,
 				&dummyProvider,
 				true,
 				libpf.Set[string]{})

@@ -17,12 +17,12 @@ struct pt_regs;
 
 // Map from Python process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
-bpf_map_def SEC("maps") py_procs = {
-  .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(pid_t),
-  .value_size  = sizeof(PyProcInfo),
-  .max_entries = 1024,
-};
+struct py_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, PyProcInfo);
+  __uint(max_entries, 1024);
+} py_procs SEC(".maps");
 
 // Record a Python frame
 static EBPF_INLINE ErrorCode push_python(Trace *trace, u64 file, u64 line)

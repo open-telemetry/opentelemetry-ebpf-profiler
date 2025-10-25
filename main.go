@@ -16,9 +16,11 @@ import (
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/vc"
+	"go.opentelemetry.io/otel/metric/noop"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -101,19 +103,20 @@ func mainWithExitCode() exitCode {
 	intervals := times.New(cfg.ReporterInterval,
 		cfg.MonitorInterval, cfg.ProbabilisticInterval)
 
+	metrics.Start(noop.Meter{})
+
 	rep, err := reporter.NewOTLP(&reporter.Config{
-		Name:                     os.Args[0],
-		Version:                  vc.Version(),
-		CollAgentAddr:            cfg.CollAgentAddr,
-		DisableTLS:               cfg.DisableTLS,
-		MaxRPCMsgSize:            32 << 20, // 32 MiB
-		MaxGRPCRetries:           5,
-		GRPCOperationTimeout:     intervals.GRPCOperationTimeout(),
-		GRPCStartupBackoffTime:   intervals.GRPCStartupBackoffTime(),
-		GRPCConnectionTimeout:    intervals.GRPCConnectionTimeout(),
-		ReportInterval:           intervals.ReportInterval(),
-		ExecutablesCacheElements: 16384,
-		SamplesPerSecond:         cfg.SamplesPerSecond,
+		Name:                   os.Args[0],
+		Version:                vc.Version(),
+		CollAgentAddr:          cfg.CollAgentAddr,
+		DisableTLS:             cfg.DisableTLS,
+		MaxRPCMsgSize:          32 << 20, // 32 MiB
+		MaxGRPCRetries:         5,
+		GRPCOperationTimeout:   intervals.GRPCOperationTimeout(),
+		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
+		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
+		ReportInterval:         intervals.ReportInterval(),
+		SamplesPerSecond:       cfg.SamplesPerSecond,
 	})
 	if err != nil {
 		log.Error(err)

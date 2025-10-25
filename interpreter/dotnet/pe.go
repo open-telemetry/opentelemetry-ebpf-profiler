@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/elastic/go-freelru"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -256,7 +258,7 @@ const (
 type peInfo struct {
 	err          error
 	lastModified int64
-	fileID       libpf.FileID
+	file         libpf.FrameMappingFile
 	simpleName   libpf.String
 	guid         string
 	typeSpecs    []peTypeSpec
@@ -266,7 +268,7 @@ type peInfo struct {
 	// strings contains the preloaded strings from dotnet string heap.
 	// If this consumes too much memory, this could be converted to LRU and on-demand
 	// populated by reading the strings from attached process memory.
-	strings map[uint32]string
+	strings map[uint32]libpf.String
 }
 
 // peParser contains the needed data when reading and parsing the dotnet data from a PE file.
@@ -568,7 +570,7 @@ func (pp *peParser) parseCLI() error {
 				break
 			}
 		}
-		switch string(name) {
+		switch pfunsafe.ToString(name) {
 		case "#Strings":
 			// ECMA-335 II.24.2.3 #Strings heap
 			pp.dotnetStrings = io.NewSectionReader(r, int64(hdr.Offset), int64(hdr.Size))
@@ -595,10 +597,10 @@ func (pp *peParser) parseCLI() error {
 	return nil
 }
 
-func (pp *peParser) readDotnetString(offs uint32) string {
+func (pp *peParser) readDotnetString(offs uint32) libpf.String {
 	// Read a string from the ECMA-335 II.24.2.3 #Strings heap
 	if offs == 0 {
-		return ""
+		return libpf.NullString
 	}
 
 	// Zero terminated string. Assume maximum length of 1024 bytes.
@@ -609,17 +611,17 @@ func (pp *peParser) readDotnetString(offs uint32) string {
 		chunk := str[i : i+chunkSize]
 		n, err := pp.dotnetStrings.ReadAt(chunk, int64(offs)+int64(i))
 		if n == 0 && err != nil {
-			return ""
+			return libpf.NullString
 		}
 
 		zeroIdx := bytes.IndexByte(chunk[:n], 0)
 		if zeroIdx >= 0 {
-			return string(str[:i+zeroIdx])
+			return libpf.Intern(pfunsafe.ToString(str[:i+zeroIdx]))
 		}
 	}
 
 	// Likely broken string.
-	return ""
+	return libpf.NullString
 }
 
 func (pp *peParser) readDotnetGUID(offs uint32) string {
@@ -697,7 +699,7 @@ func (pp *peParser) parseModuleTable() {
 		guidIdx := pp.readDotnetIndex(indexGUID)
 		pp.skipDotnetBytes(2 * pp.indexSizes[indexGUID])
 
-		pp.info.simpleName = libpf.Intern(pp.readDotnetString(nameIdx))
+		pp.info.simpleName = pp.readDotnetString(nameIdx)
 		pp.info.guid = pp.readDotnetGUID(guidIdx)
 	}
 }
@@ -847,7 +849,7 @@ func (pp *peParser) parseTables() error {
 		return fmt.Errorf("number of Modules (%d) is unexpected", pp.tableRows[0])
 	}
 
-	pp.info.strings = map[uint32]string{}
+	pp.info.strings = map[uint32]libpf.String{}
 
 	// Precalculate the column sizes we need to know
 	pp.indexSizes[indexString] = getHeapSize(tablesHeader.HeapSizes&0x1 != 0)
@@ -1153,7 +1155,7 @@ func (pi *peInfo) resolveMethodName(methodIdx uint32) libpf.String {
 	}
 
 	typeSpec := &pi.typeSpecs[idx]
-	typeName := pi.strings[typeSpec.typeNameIdx]
+	typeName := pi.strings[typeSpec.typeNameIdx].String()
 	for typeSpec.enclosingClass != 0 {
 		enclosingSpec := &pi.typeSpecs[typeSpec.enclosingClass-1]
 		typeName = fmt.Sprintf("%s/%s", pi.strings[enclosingSpec.typeNameIdx], typeName)
@@ -1239,18 +1241,22 @@ func (pc *peCache) Get(pr process.Process, mapping *process.Mapping) *peInfo {
 	}
 	defer file.Close()
 
-	info := &peInfo{
-		err:          err,
-		lastModified: lastModified,
-	}
-	err = info.parse(file)
-	if err == nil {
-		info.fileID, err = pr.CalculateMappingFileID(mapping)
-	}
+	fileID, err := pr.CalculateMappingFileID(mapping)
 	if err != nil {
-		info.err = err
+		return &peInfo{err: err}
 	}
 
+	info := &peInfo{
+		lastModified: lastModified,
+	}
+	info.err = info.parse(file)
+	if info.err == nil {
+		info.file = libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:     fileID,
+			FileName:   libpf.Intern(path.Base(mapping.Path.String())),
+			GnuBuildID: info.guid,
+		})
+	}
 	pc.peInfoCache.Add(key, info)
 	return info
 }

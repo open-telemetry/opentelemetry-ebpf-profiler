@@ -5,7 +5,6 @@ package perl // import "go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
@@ -122,7 +121,7 @@ func (d *perlData) String() string {
 
 func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-	addrToHEK, err := freelru.New[libpf.Address, string](interpreter.LruFunctionCacheSize,
+	addrToHEK, err := freelru.New[libpf.Address, libpf.String](interpreter.LruFunctionCacheSize,
 		libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
@@ -147,14 +146,6 @@ func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Add
 		addrToHEK: addrToHEK,
 		addrToCOP: addrToCOP,
 		addrToGV:  addrToGV,
-		memPool: sync.Pool{
-			New: func() any {
-				// To avoid resizing of the returned byte slize we size new
-				// allocations to hekLenLimit.
-				buf := make([]byte, hekLenLimit)
-				return &buf
-			},
-		},
 	}, nil
 }
 
@@ -179,12 +170,12 @@ func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 	version := perlVersion(verBytes[0], verBytes[1], verBytes[2])
 	log.Debugf("Perl version %v.%v.%v", verBytes[0], verBytes[1], verBytes[2])
 
-	// Currently tested and supported 5.28.x - 5.40.x.
+	// Currently tested and supported 5.28.x - 5.42.x.
 	// Could possibly support older Perl versions somewhere back to 5.14-5.20, by just
 	// checking the introspection offset validity. 5.14 had major rework for internals.
 	// And 5.18 had some HV related changes.
 	minVer := perlVersion(5, 28, 0)
-	maxVer := perlVersion(5, 41, 0)
+	maxVer := perlVersion(5, 43, 0)
 	if version < minVer || version >= maxVer {
 		return nil, fmt.Errorf("unsupported Perl %d.%d.%d (need >= %d.%d and < %d.%d)",
 			verBytes[0], verBytes[1], verBytes[2],
@@ -270,10 +261,10 @@ func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 	vms.xpvhv_aux.xhv_name_u = 0x0
 	vms.xpvhv_aux.xhv_name_count = 0x1c
 	vms.xpvhv_aux.sizeof = 0x38
-	vms.xpvhv_aux.pointer_size = 8
+	vms.xpvhv_aux.pointer_size = 0x8
 	vms.gp.gp_egv = 0x38
-	vms.hek.hek_len = 4
-	vms.hek.hek_key = 8
+	vms.hek.hek_len = 0x4
+	vms.hek.hek_key = 0x8
 
 	if version >= perlVersion(5, 32, 0) {
 		vms.stackinfo.si_type = 0x2c
@@ -284,6 +275,10 @@ func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 
 	if version >= perlVersion(5, 35, 0) {
 		vms.xpvhv_with_aux.xpvhv_aux = 0x20
+	}
+
+	if version >= perlVersion(5, 40, 0) {
+		vms.xpvhv_aux.sizeof = 0x70
 	}
 
 	if err = ebpf.UpdateInterpreterOffsets(support.ProgUnwindPerl,

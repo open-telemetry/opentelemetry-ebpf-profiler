@@ -19,7 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -65,7 +65,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	// Resolve process storage symbol.
 	procStorageSym, err := ef.LookupSymbol(procStorageExport)
 	if err != nil {
-		if errors.Is(err, pfelf.ErrSymbolNotFound) {
+		if errors.Is(err, libpf.ErrSymbolNotFound) {
 			// APM<->profiling integration not supported by agent.
 			return nil, nil
 		}
@@ -207,7 +207,7 @@ func nextString(rm remotememory.RemoteMemory, addr *libpf.Address, maxLen int) (
 	}
 
 	*addr += libpf.Address(length)
-	return string(raw), nil
+	return pfunsafe.ToString(raw), nil
 }
 
 // readProcStorage reads the APM process storage from memory.

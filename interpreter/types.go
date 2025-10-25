@@ -140,7 +140,7 @@ type Instance interface {
 	// SynchronizeMappings is called when the processmanager has reread process memory
 	// mappings. Interpreters not needing to process these events can simply ignore them
 	// by just returning a nil.
-	SynchronizeMappings(ebpf EbpfHandler, symbolReporter reporter.SymbolReporter,
+	SynchronizeMappings(ebpf EbpfHandler, exeReporter reporter.ExecutableReporter,
 		pr process.Process, mappings []process.Mapping) error
 
 	// UpdateTSDInfo is called when the process C-library Thread Specific Data related
@@ -154,4 +154,7 @@ type Instance interface {
 	// GetAndResetMetrics collects the metrics from the Instance and resets
 	// the counters to their initial value.
 	GetAndResetMetrics() ([]metrics.Metric, error)
+
+	// Release resources that are used to symbolize a stack.
+	ReleaseResources() error
 }

@@ -91,14 +91,14 @@ typedef enum HotspotUnwindAction {
 #define FRAMETYPE_Interpreter    0x65746e49 // "Interpreter"
 #define FRAMETYPE_vtable_chunks  0x62617476 // "vtable chunks"
 
-bpf_map_def SEC("maps") hotspot_procs = {
-  .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(pid_t),
-  .value_size  = sizeof(HotspotProcInfo),
+struct hotspot_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, HotspotProcInfo);
   // This is the maximum number of JVM processes. Few machines should ever exceed 256 simultaneous
   // JVMs running. Increase this value if 256 turns out to be insufficient.
-  .max_entries = 256,
-};
+  __uint(max_entries, 256);
+} hotspot_procs SEC(".maps");
 
 // Record a HotSpot frame
 static EBPF_INLINE ErrorCode push_hotspot(Trace *trace, u64 file, u64 line, bool return_address)

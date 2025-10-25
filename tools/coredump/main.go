@@ -40,6 +40,7 @@ func main() {
 		Subcommands: []*ffcli.Command{
 			newAnalyzeCmd(store),
 			newCleanCmd(store),
+			newExportCmd(store),
 			newExportModuleCmd(store),
 			newNewCmd(store),
 			newRebaseCmd(store),

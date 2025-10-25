@@ -20,6 +20,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 )
 
 const (
@@ -36,6 +37,9 @@ type CoredumpProcess struct {
 
 	// pid is the original PID from which the coredump was generated.
 	pid libpf.PID
+
+	// fname is the the short name of the executable file that was running when the coredump was generated.
+	fname string
 
 	// machineData contains the parsed machine data.
 	machineData MachineData
@@ -182,7 +186,7 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 			// Read the note header (name and size lengths), followed by reading
 			// their contents. This code advances the position in 'rdr' and should
 			// be kept together to parse the notes correctly.
-			if _, err = rdr.Read(libpf.SliceFrom(&note)); err != nil {
+			if _, err = rdr.Read(pfunsafe.FromPointer(&note)); err != nil {
 				break
 			}
 			var nameBytes, desc []byte
@@ -254,6 +258,14 @@ func (cd *CoredumpProcess) PID() libpf.PID {
 // GetMachineData implements the Process interface.
 func (cd *CoredumpProcess) GetMachineData() MachineData {
 	return cd.machineData
+}
+
+func (cd *CoredumpProcess) GetProcessMeta(_ MetaConfig) ProcessMeta {
+	return ProcessMeta{}
+}
+
+func (cd *CoredumpProcess) GetExe() (string, error) {
+	return cd.fname, nil
 }
 
 // GetMappings implements the Process interface.
@@ -451,6 +463,7 @@ func (cd *CoredumpProcess) parseProcessInfo(desc []byte) error {
 	if len(desc) == int(unsafe.Sizeof(PrpsInfo64{})) {
 		info := (*PrpsInfo64)(unsafe.Pointer(&desc[0]))
 		cd.pid = libpf.PID(info.PID)
+		cd.fname = string(info.FName[:])
 		return nil
 	}
 	return fmt.Errorf("unsupported NT_PRPSINFO size: %d", len(desc))

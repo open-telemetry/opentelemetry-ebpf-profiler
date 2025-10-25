@@ -212,12 +212,6 @@ const (
 	// Number of unwound Ruby frames
 	IDUnwindRubyFrames = 109
 
-	// Number of cache hits for Ruby IseqBodyPCToFunction
-	IDRubyIseqBodyPCHit = 110
-
-	// Number of cache misses for Ruby IseqBodyPCToFunction
-	IDRubyIseqBodyPCMiss = 111
-
 	// Number of cache hits for Ruby AddrToString
 	IDRubyAddrToStringHit = 112
 
@@ -388,12 +382,6 @@ const (
 
 	// Number of deleted cache elements for Python AddrToCodeObject
 	IDPythonAddrToCodeObjectDel = 178
-
-	// Number of added cache elements for Ruby IseqBodyPCToFunction
-	IDRubyIseqBodyPCAdd = 179
-
-	// Number of deleted cache elements for Ruby IseqBodyPCToFunction
-	IDRubyIseqBodyPCDel = 180
 
 	// Number of added cache elements for Ruby AddrToString
 	IDRubyAddrToStringAdd = 181

@@ -20,7 +20,7 @@
         "fib+3 in /home/korniltsev/trash/fib.py:4",
         "fib+3 in /home/korniltsev/trash/fib.py:4",
         "<module>+6 in /home/korniltsev/trash/fib.py:7",
-        "ffffffffffffffffffffffffffffffff+0x0",
+        "?+0x0",
         "libpython3.13.so.1.0+0x1f9740",
         "libpython3.13.so.1.0+0x1f450c",
         "libpython3.13.so.1.0+0x260fdc",

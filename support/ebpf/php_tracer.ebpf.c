@@ -18,12 +18,12 @@
 #define ZEND_EVAL_CODE     4
 
 // Map from PHP process IDs to the address of the `executor_globals` for that process
-bpf_map_def SEC("maps") php_procs = {
-  .type        = BPF_MAP_TYPE_HASH,
-  .key_size    = sizeof(pid_t),
-  .value_size  = sizeof(PHPProcInfo),
-  .max_entries = 1024,
-};
+struct php_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, PHPProcInfo);
+  __uint(max_entries, 1024);
+} php_procs SEC(".maps");
 
 // Record a PHP frame
 static EBPF_INLINE ErrorCode push_php(Trace *trace, u64 file, u64 line, bool is_jitted)
