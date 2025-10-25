@@ -314,6 +314,7 @@ type BEAMProcInfo struct {
 	R                     uint64
 	The_active_code_index uint64
 	Erts_frame_layout     uint64
+	Beam_normal_exit      uint64
 	Ranges_sizeof         uint8
 	Ranges_modules        uint8
 	Ranges_n              uint8

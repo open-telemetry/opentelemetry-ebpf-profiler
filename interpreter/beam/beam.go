@@ -41,6 +41,7 @@ type beamData struct {
 	version                uint32
 	the_active_code_index  uint64
 	r                      uint64
+	beam_normal_exit       uint64
 	erts_atom_table        uint64
 	erts_frame_layout      uint64
 	etp_ptr_mask           uint64
@@ -214,10 +215,18 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, fmt.Errorf("symbol 'etp_heap_bits_subtag' not found: %v", err)
 	}
 
+	// "beam_normal_exit" symbol is from:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/jit/beam_jit_main.cpp#L54
+	beam_normal_exit, _, err := ef.SymbolData("beam_normal_exit", 8)
+	if err != nil {
+		return nil, fmt.Errorf("symbol 'beam_normal_exit' not found: %v", err)
+	}
+
 	d := &beamData{
 		version:                otpVersion,
 		the_active_code_index:  uint64(codeIndex.Address),
 		r:                      uint64(r),
+		beam_normal_exit:       uint64(beam_normal_exit.Address),
 		erts_atom_table:        uint64(atomTable.Address),
 		etp_ptr_mask:           nopanicslicereader.Uint64(etp_ptr_mask, 0),
 		etp_header_subtag_mask: nopanicslicereader.Uint64(etp_header_subtag_mask, 0),
@@ -284,10 +293,13 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		Version:               d.version,
 		R:                     uint64(bias) + d.r,
 		The_active_code_index: uint64(bias) + d.the_active_code_index,
+		Beam_normal_exit:      uint64(bias) + d.beam_normal_exit,
 		Ranges_sizeof:         uint8(d.vmStructs.ranges.size_of),
 		Ranges_modules:        uint8(d.vmStructs.ranges.modules),
 		Ranges_n:              uint8(d.vmStructs.ranges.n),
 	}
+
+	log.Infof("BEAM beam_normal_exit: 0x%x", data.Beam_normal_exit)
 
 	if d.erts_frame_layout == ^uint64(0) {
 		// If frame pointers are not supported, they will not be used
