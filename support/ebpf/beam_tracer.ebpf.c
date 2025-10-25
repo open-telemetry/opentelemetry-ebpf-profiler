@@ -12,6 +12,13 @@
 // The max number of loops to unroll when scanning the stack from for continuation pointers
 #define STACK_FRAME_SCAN_ITERATIONS 16
 
+#if defined(__x86_64__)
+  #define SP_REGISTER sp
+#elif defined(__aarch64__)
+  // Native stack is not supported on ARM due to 16-byte stack alignment hassle
+  #define SP_REGISTER r20
+#endif
+
 bpf_map_def SEC("maps") beam_procs = {
   .type = BPF_MAP_TYPE_HASH,
   .key_size = sizeof(pid_t),
@@ -72,9 +79,9 @@ static EBPF_INLINE ErrorCode unwind_one_beam_frame(PerCPURecord *record, BEAMRan
     bpf_probe_read_user(&state->pc, sizeof(u64), (void*)(fp+8));
   } else {
     UNROLL for (int i = 0; i < STACK_FRAME_SCAN_ITERATIONS; i++) {
-      bpf_probe_read_user(&state->pc, sizeof(u64), (void*)state->sp);
-      state->sp += 8;
-      // 
+      state->SP_REGISTER += 8;
+      bpf_probe_read_user(&state->pc, sizeof(u64), (void*)state->SP_REGISTER);
+      DEBUG_PRINT("beam: scanning stack for next CP. sp=%llx, pc=%llx", state->SP_REGISTER, state->pc);
       if ((state->pc & 0x03) == 0) {
         break;
       }
@@ -159,19 +166,9 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx) {
   int unwinder = PROG_UNWIND_STOP;
   ErrorCode error = ERR_OK;
   UNROLL for (int i = 0; i < FRAMES_PER_PROGRAM; i++) {
-    if (record->state.fp & 0x3) {
-      unwinder = PROG_UNWIND_NATIVE;
-      break;
-    }
-
     unwinder_mark_nonleaf_frame(&record->state);
     error = unwind_one_beam_frame(record, &ranges, frame_pointers_enabled);
     if (error) {
-      break;
-    }
-
-    if (record->state.fp == 0) {
-      unwinder = PROG_UNWIND_STOP;
       break;
     }
 
