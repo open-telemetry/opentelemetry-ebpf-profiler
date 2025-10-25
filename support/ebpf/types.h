@@ -335,6 +335,7 @@ typedef enum TracePrograms {
   PROG_UNWIND_V8,
   PROG_UNWIND_DOTNET,
   PROG_GO_LABELS,
+  PROG_UNWIND_BEAM,
   NUM_TRACER_PROGS,
 } TracePrograms;
 
@@ -498,6 +499,18 @@ typedef struct V8ProcInfo {
   u8 codekind_shift, codekind_mask, codekind_baseline;
 } V8ProcInfo;
 
+// BEAMProcInfo is a container for the data needed to build a stack trace for a BEAM process.
+typedef struct BEAMProcInfo {
+  u32 version;
+  u64 r;
+  u64 the_active_code_index;
+  u64 erts_frame_layout;
+  u64 beam_normal_exit;
+  // Introspection Struct Offsets
+  u8 ranges_sizeof, ranges_modules, ranges_n;
+  u8 ranges_entry_sizeof, ranges_entry_start, ranges_entry_end;
+} BEAMProcInfo;
+
 // COMM_LEN defines the maximum length we will receive for the comm of a task.
 #define COMM_LEN 16
 
@@ -601,7 +614,7 @@ typedef struct UnwindState {
   u64 rax, r9, r11, r13, r15;
 #elif defined(__aarch64__)
   // Current register values for named registers
-  u64 lr, r22, r28;
+  u64 lr, r20, r22, r28;
 #endif
 
   // The executable ID/hash associated with PC
