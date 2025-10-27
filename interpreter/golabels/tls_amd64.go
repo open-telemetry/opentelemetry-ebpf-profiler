@@ -34,7 +34,7 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 	// Binaries built with -buildmode=pie have a different assembly code for stackcheck with 2 movs:
 	//  0x00000000007ec320 <+0>:	mov    $0xfffffffffffffff8,%rcx
 	//  0x00000000007ec327 <+7>:	mov    %fs:(%rcx),%rax
-	// Offset is stored relative to RIP:
+	// In some binaries offset is stored relative to RIP:
 	// 0x000000000017e34c0 <+0>: 	mov    0x40b9af9(%rip),%rcx        # 589cfc0 <runtime.tlsg@@Base+0x589cfc0>
 	// 0x000000000017e34c7 <+7>:	mov    %fs:(%rcx),%rax
 	sym, err := pclntab.LookupSymbol(libpf.SymbolName(symbolName))
