@@ -417,6 +417,7 @@ typedef struct PerlProcInfo {
 typedef struct PyProcInfo {
   // The address of the autoTLSkey variable
   u64 autoTLSKeyAddr;
+  u64 noneStructAddr;
   u16 version;
   TSDInfo tsdInfo;
   // The Python object member offsets
