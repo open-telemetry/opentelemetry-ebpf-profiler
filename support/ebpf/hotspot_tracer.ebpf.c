@@ -27,11 +27,11 @@ typedef struct CodeBlobInfo {
   u32 orig_pc_offset;
   // Value of the `CodeBlob::_frame_size` field.
   u32 frame_size;
-  // Value of the `CodeBlob::_frame_complete_offset` field.
-  u32 frame_comp;
   // Value of the `nmethod::compile_id` field.
   // Only contains valid data if this CodeBlob is of `nmethod` type.
   u32 compile_id;
+  // Value of the `CodeBlob::_frame_complete_offset` field.
+  u16 frame_comp;
 } CodeBlobInfo;
 
 // Context structure for information shared between all handlers in the HotSpot unwinder.
@@ -248,11 +248,10 @@ static EBPF_INLINE ErrorCode hotspot_handle_interpreter(
   u64 bcp;
   if (trace->stack_len) {
     // Interpreter frame has the BCP value stored
-    if (ji->jvm_version >= 9) {
-      // JDK9+ frame has new 'mirror' slot which offsets the BCP slot by one
+    if (ji->new_bcp_slot) {
+      // JDK9+ frame has new 'mirror' slot which offsets the BCP slot
       bcp = regs[FP_OFFS - BCP_SLOT_JVM9];
     } else {
-      // JDK8 and earlier
       bcp = regs[FP_OFFS - BCP_SLOT_JVM8];
     }
   } else {
@@ -830,7 +829,7 @@ static EBPF_INLINE ErrorCode hotspot_read_codeblob(
   cbi->code_start     = *(u64 *)(scratch->codeblob + ji->codeblob_codestart);
   cbi->code_end       = *(u64 *)(scratch->codeblob + ji->codeblob_codeend);
   cbi->frame_size     = *(u32 *)(scratch->codeblob + ji->codeblob_framesize) * 8;
-  cbi->frame_comp     = *(u32 *)(scratch->codeblob + ji->codeblob_framecomplete);
+  cbi->frame_comp     = *(u16 *)(scratch->codeblob + ji->codeblob_framecomplete);
   cbi->compile_id     = *(u32 *)(scratch->codeblob + ji->nmethod_compileid);
   cbi->orig_pc_offset = *(u32 *)(scratch->codeblob + ji->nmethod_orig_pc_offset);
   cbi->deopt_handler  = *(u64 *)(scratch->codeblob + ji->nmethod_deopt_offset);
@@ -845,12 +844,6 @@ static EBPF_INLINE ErrorCode hotspot_read_codeblob(
   if (ji->nmethod_uses_offsets) {
     cbi->code_start = cbi->address + (cbi->code_start & 0xffffffff);
     cbi->code_end   = cbi->address + (cbi->code_end & 0xffffffff);
-  }
-
-  // JDK23+20+: frame_comp is uint16_t now.
-  // https://github.com/openjdk/jdk/commit/b704e91241b0
-  if (ji->jvm_version >= 23) {
-    cbi->frame_comp &= 0xffff;
   }
 
   DEBUG_PRINT(

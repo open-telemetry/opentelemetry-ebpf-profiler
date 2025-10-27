@@ -428,6 +428,7 @@ typedef struct PyProcInfo {
   u8 PyCodeObject_co_argcount, PyCodeObject_co_kwonlyargcount;
   u8 PyCodeObject_co_flags, PyCodeObject_co_firstlineno;
   u8 PyCodeObject_sizeof;
+  u8 lasti_is_codeunit, frame_is_cframe;
 } PyProcInfo;
 
 // PHPProcInfo is a container for the data needed to build a stack trace for a PHP process.
@@ -454,7 +455,7 @@ typedef struct HotspotProcInfo {
   u8 codeblob_codestart, codeblob_codeend;
   u8 codeblob_framecomplete, codeblob_framesize;
   u8 heapblock_size, method_constmethod, cmethod_size;
-  u8 jvm_version, segment_shift, nmethod_uses_offsets;
+  u8 jvm_version, new_bcp_slot, segment_shift, nmethod_uses_offsets;
 } HotspotProcInfo;
 
 // RubyProcInfo is a container for the data needed to build a stack trace for a Ruby process.
@@ -494,6 +495,7 @@ typedef struct V8ProcInfo {
   // Introspection data
   u16 type_JSFunction_first, type_JSFunction_last, type_Code, type_SharedFunctionInfo;
   u8 off_HeapObject_map, off_Map_instancetype, off_JSFunction_code, off_JSFunction_shared;
+  u8 code_instructions_is_pointer;
   u8 off_Code_instruction_start, off_Code_instruction_size, off_Code_flags;
   u8 fp_marker, fp_function, fp_bytecode_offset;
   u8 codekind_shift, codekind_mask, codekind_baseline;
