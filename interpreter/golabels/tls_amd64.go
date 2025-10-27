@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
+	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"golang.org/x/arch/x86/x86asm"
 )
 
@@ -88,15 +89,7 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 					// Read 8-byte TLS value from target address
 					b, err := f.VirtualMemory(target, 8, 8)
 					if err == nil && len(b) >= 8 {
-						u := uint64(b[0]) |
-							uint64(b[1])<<8 |
-							uint64(b[2])<<16 |
-							uint64(b[3])<<24 |
-							uint64(b[4])<<32 |
-							uint64(b[5])<<40 |
-							uint64(b[6])<<48 |
-							uint64(b[7])<<56
-						ripRelLoads[dst] = int64(u)
+						ripRelLoads[dst] = int64(npsr.Uint64(b, 0))
 					}
 				}
 			}
