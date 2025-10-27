@@ -6,6 +6,7 @@ package ebpf // import "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 import (
 	"context"
 	"errors"
+	"sync"
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
@@ -43,6 +44,7 @@ import (
 // versa.
 type asyncMapUpdaterPool struct {
 	workers []*asyncUpdateWorker
+	wg      sync.WaitGroup
 }
 
 // newAsyncMapUpdaterPool creates a new worker pool
@@ -52,7 +54,11 @@ func newAsyncMapUpdaterPool(ctx context.Context,
 	for range numWorkers {
 		queue := make(chan asyncMapInMapUpdate, workerQueueCapacity)
 		worker := &asyncUpdateWorker{ctx: ctx, queue: queue}
-		go worker.serve()
+		pool.wg.Add(1)
+		go func() {
+			defer pool.wg.Done()
+			worker.serve()
+		}()
 		pool.workers = append(pool.workers, worker)
 	}
 	return pool

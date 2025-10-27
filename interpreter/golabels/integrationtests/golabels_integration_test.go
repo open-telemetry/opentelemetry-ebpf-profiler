@@ -112,7 +112,7 @@ func Test_Golabels(t *testing.T) {
 
 			traceCh := make(chan *host.Trace)
 
-			err = trc.StartMapMonitors(ctx, traceCh)
+			err = trc.StartMapMonitors(traceCh)
 			require.NoError(t, err)
 
 			go func() {

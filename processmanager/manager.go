@@ -210,6 +210,12 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 }
 
 func (pm *ProcessManager) Close() {
+	// If the underlying ebpf handler provides a way to wait for background
+	// async update workers to exit, wait here to avoid EBADF on closing maps.
+	type ebpfWaiter interface{ WaitAsyncUpdates() }
+	if w, ok := any(pm.ebpf).(ebpfWaiter); ok {
+		w.WaitAsyncUpdates()
+	}
 }
 
 func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, bpfFrame *host.Frame, frames *libpf.Frames) error {

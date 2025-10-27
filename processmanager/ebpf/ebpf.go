@@ -119,6 +119,14 @@ func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map) (ebpfapi.EbpfHand
 	return impl, nil
 }
 
+// WaitAsyncUpdates waits for all background async map update workers to exit.
+// This should be called during shutdown before closing eBPF maps.
+func (impl *ebpfMapsImpl) WaitAsyncUpdates() {
+	if impl.updateWorkers != nil {
+		impl.updateWorkers.wg.Wait()
+	}
+}
+
 // UpdateInterpreterOffsets adds the given moduleRanges to the eBPF map interpreterOffsets.
 func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID host.FileID,
 	offsetRanges []util.Range) error {

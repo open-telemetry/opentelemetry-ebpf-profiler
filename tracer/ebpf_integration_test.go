@@ -124,7 +124,7 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 	require.NoError(t, err)
 
 	traceChan := make(chan *host.Trace, 16)
-	err = tr.StartMapMonitors(ctx, traceChan)
+	err = tr.StartMapMonitors(traceChan)
 	require.NoError(t, err)
 
 	runKernelFrameProbe(t, tr)

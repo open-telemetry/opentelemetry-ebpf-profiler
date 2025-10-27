@@ -38,7 +38,11 @@ const (
 
 // StartPIDEventProcessor spawns a goroutine to process PID events.
 func (t *Tracer) StartPIDEventProcessor(ctx context.Context) {
-	go t.processPIDEvents(ctx)
+	t.wg.Add(1)
+	go func() {
+		defer t.wg.Done()
+		t.processPIDEvents(t.ctx)
+	}()
 }
 
 // Process the PID events that are incoming in the Tracer channel.
@@ -88,10 +92,13 @@ func (t *Tracer) triggerPidEvent(data []byte) {
 // calls. Returns a function that can be called to retrieve perf event array
 // error counts.
 func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
-	triggerFunc func([]byte), perCPUBufferSize int) func() (lost, noData, readError uint64) {
+	triggerFunc func([]byte), perCPUBufferSize int, registerCloser func(func())) func() (lost, noData, readError uint64) {
 	eventReader, err := perf.NewReader(perfEventMap, perCPUBufferSize)
 	if err != nil {
 		log.Fatalf("Failed to setup perf reporting via %s: %v", perfEventMap, err)
+	}
+	if registerCloser != nil {
+		registerCloser(func() { _ = eventReader.Close() })
 	}
 
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
@@ -100,6 +107,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 		for {
 			select {
 			case <-ctx.Done():
+				_ = eventReader.Close()
 				return
 			default:
 				if err := eventReader.ReadInto(&data); err != nil {
@@ -148,7 +156,12 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	eventReader.SetDeadline(time.Unix(1, 0))
 
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
+	// Ensure the reader can be closed from Tracer.Close to unblock goroutines.
+	t.registerCloser(func() { _ = eventReader.Close() })
+
+	t.wg.Add(1)
 	go func() {
+		defer t.wg.Done()
 		var data perf.Record
 		var oldKTime, minKTime times.KTime
 		var eventCount int
@@ -162,6 +175,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			select {
 			// Always check for context cancellation in each iteration
 			case <-ctx.Done():
+				_ = eventReader.Close()
 				break PollLoop
 			default:
 				// Continue below
@@ -170,6 +184,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			select {
 			// This context cancellation check may not execute in timely manner
 			case <-ctx.Done():
+				_ = eventReader.Close()
 				break PollLoop
 			case <-pollTicker.C:
 				// Continue execution below
@@ -216,9 +231,12 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				if minKTime == 0 || trace.KTime < minKTime {
 					minKTime = trace.KTime
 				}
-				// TODO: This per-event channel send couples event processing in the rest of
-				// the agent with event reading from the perf buffers slowing down the latter.
-				traceOutChan <- trace
+				select {
+				case traceOutChan <- trace:
+				case <-ctx.Done():
+					_ = eventReader.Close()
+					break PollLoop
+				}
 				if eventCount == maxEvents {
 					// Break this inner loop to ensure ProcessedUntil logic executes
 					break
@@ -244,7 +262,12 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			// ProcessedUntil(t1) first and t0 next, with t0 < t1.
 			if oldKTime > 0 {
 				// Ensure that all previously sent trace events have been processed
-				traceOutChan <- nil
+				select {
+				case traceOutChan <- nil:
+				case <-ctx.Done():
+					_ = eventReader.Close()
+					break PollLoop
+				}
 
 				if minKTime > 0 && minKTime <= oldKTime {
 					// If minKTime is smaller than oldKTime, use it and reset it
@@ -280,7 +303,7 @@ func (t *Tracer) startEventMonitor(ctx context.Context) func() []metrics.Metric 
 		log.Fatalf("Map report_events is not available")
 	}
 
-	getPerfErrorCounts := startPerfEventMonitor(ctx, eventMap, t.triggerPidEvent, os.Getpagesize())
+	getPerfErrorCounts := startPerfEventMonitor(ctx, eventMap, t.triggerPidEvent, os.Getpagesize(), t.registerCloser)
 	return func() []metrics.Metric {
 		lost, noData, readError := getPerfErrorCounts()
 
