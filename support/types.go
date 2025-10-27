@@ -246,6 +246,7 @@ type PerlProcInfo struct {
 }
 type PyProcInfo struct {
 	AutoTLSKeyAddr                 uint64
+	NoneStructAddr                 uint64
 	Version                        uint16
 	TsdInfo                        TSDInfo
 	PyThreadState_frame            uint8
