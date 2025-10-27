@@ -60,45 +60,41 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 		if err != nil {
 			break
 		}
-		curAddr := int64(sym.Address) + int64(pc)
+		pc += op.Len
+		if op.Op != x86asm.MOV {
+			continue
+		}
 
-		if op.Op == x86asm.MOV {
-			// Handle FS:... cases
-			if mem, ok := op.Args[1].(x86asm.Mem); ok && mem.Segment == x86asm.FS {
-				// Direct offset in instruction
-				if mem.Base == 0 {
-					return int32(mem.Disp), nil
-				}
-				// Offset previously set via immediate into the base register
-				actual := it.Regs.GetX86(mem.Base)
-				if actual.Match(offset) {
-					return int32(offset.CapturedValue()), nil
-				}
-				// RIP-relative case: previous MOV loaded the TLS offset into this register
-				if v, ok := ripRelLoads[mem.Base]; ok {
-					return int32(v), nil
-				}
+		// Handle FS:... cases
+		if mem, ok := op.Args[1].(x86asm.Mem); ok && mem.Segment == x86asm.FS {
+			// Direct offset in instruction
+			if mem.Base == 0 {
+				return int32(mem.Disp), nil
 			}
-
-			// RIP-relative load: mov disp(%rip), %reg
-			if mem, ok := op.Args[1].(x86asm.Mem); ok && mem.Base == x86asm.RIP {
-				if dst, ok := op.Args[0].(x86asm.Reg); ok {
-					instrLen := op.Len
-					target := curAddr + int64(mem.Disp) + int64(instrLen)
-
-					// Read 8-byte TLS value from target address
-					b, err := f.VirtualMemory(target, 8, 8)
-					if err == nil && len(b) >= 8 {
-						ripRelLoads[dst] = int64(npsr.Uint64(b, 0))
-					}
-				}
+			// Offset previously set via immediate into the base register
+			actual := it.Regs.GetX86(mem.Base)
+			if actual.Match(offset) {
+				return int32(offset.CapturedValue()), nil
+			}
+			// RIP-relative case: previous MOV loaded the TLS offset into this register
+			if v, ok := ripRelLoads[mem.Base]; ok {
+				return int32(v), nil
 			}
 		}
 
-		if op.Len != 0 {
-			pc += op.Len
-		} else {
-			pc += 7 // avoid infinite loop
+		// RIP-relative load: mov disp(%rip), %reg
+		if mem, ok := op.Args[1].(x86asm.Mem); ok && mem.Base == x86asm.RIP {
+			curAddr := int64(sym.Address) + int64(pc)
+			if dst, ok := op.Args[0].(x86asm.Reg); ok {
+				instrLen := op.Len
+				target := curAddr + int64(mem.Disp) + int64(instrLen)
+
+				// Read 8-byte TLS value from target address
+				b, err := f.VirtualMemory(target, 8, 8)
+				if err == nil && len(b) >= 8 {
+					ripRelLoads[dst] = int64(npsr.Uint64(b, 0))
+				}
+			}
 		}
 	}
 	return -8, fmt.Errorf("symbol '%s': %w", symbolName, errDecodeSymbol)
