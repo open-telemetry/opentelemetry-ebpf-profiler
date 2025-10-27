@@ -80,6 +80,7 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 			if v, ok := ripRelLoads[mem.Base]; ok {
 				return int32(v), nil
 			}
+			return -8, fmt.Errorf("symbol '%s': mov \%fs: %w", symbolName, errDecodeSymbol)
 		}
 
 		// RIP-relative load: mov disp(%rip), %reg
