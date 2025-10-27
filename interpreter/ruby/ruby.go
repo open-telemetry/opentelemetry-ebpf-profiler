@@ -72,10 +72,6 @@ const (
 	pathObjRealPathIdx = 1
 )
 
-const (
-	rubyCurrentEcTlsSymbol = "ruby_current_ec"
-)
-
 var (
 	// regex to identify the Ruby interpreter executable
 	rubyRegex = regexp.MustCompile(`^(?:.*/)?libruby(?:-.*)?\.so\.(\d)\.(\d)\.(\d)$`)
@@ -185,8 +181,11 @@ func rubyVersion(major, minor, release uint32) uint32 {
 func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 
-	// Read TLS offset from the TLS descriptor.
-	tlsOffset := rm.Uint64(bias + r.currentEcTpBaseTlsOffset + 8)
+	var tlsOffset uint64
+	if r.currentEcTpBaseTlsOffset != 0 {
+		// Read TLS offset from the TLS descriptor.
+		tlsOffset = rm.Uint64(bias + r.currentEcTpBaseTlsOffset + 8)
+	}
 
 	cdata := support.RubyProcInfo{
 		Version: r.version,
@@ -788,7 +787,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		interpSymbolName = libpf.SymbolName("ruby_exec_node")
 	}
 
+	var rubyCurrentEcTlsSymbol = "ruby_current_ec"
 	var currentEcSymbolAddress libpf.SymbolValue
+
 	currentEcSymbolName := libpf.SymbolName(rubyCurrentEcTlsSymbol)
 
 	log.Debugf("Ruby %d.%d.%d detected, looking for currentCtxPtr=%q, currentEcSymbol=%q",
