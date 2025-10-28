@@ -7,7 +7,7 @@ import (
 	"errors"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
-	log "go.opentelemetry.io/ebpf-profiler/internal/global"
+	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"

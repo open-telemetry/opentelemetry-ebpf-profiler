@@ -7,7 +7,7 @@ import (
 	"context"
 
 	"go.opentelemetry.io/collector/consumer/xconsumer"
-	log "go.opentelemetry.io/ebpf-profiler/internal/global"
+	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"

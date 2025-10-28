@@ -14,7 +14,7 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/features"
-	log "go.opentelemetry.io/ebpf-profiler/internal/global"
+	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
 	"golang.org/x/exp/constraints"
 
 	"go.opentelemetry.io/ebpf-profiler/host"

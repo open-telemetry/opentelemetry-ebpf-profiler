@@ -12,7 +12,7 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
-	log "go.opentelemetry.io/ebpf-profiler/internal/global"
+	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -50,10 +50,8 @@ const (
 	frameCacheLifetime = 5 * time.Minute
 )
 
-var (
-	// dummyPrefix is the LPM prefix installed to indicate the process is known
-	dummyPrefix = lpm.Prefix{Key: 0, Length: 64}
-)
+// dummyPrefix is the LPM prefix installed to indicate the process is known
+var dummyPrefix = lpm.Prefix{Key: 0, Length: 64}
 
 var (
 	errSymbolizationNotSupported = errors.New("symbolization not supported")
@@ -75,7 +73,8 @@ var (
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
 	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, traceReporter reporter.TraceReporter,
 	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
-	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
+	filterErrorFrames bool, includeEnvVars libpf.Set[string],
+) (*ProcessManager, error) {
 	if fileIDMapper == nil {
 		var err error
 		fileIDMapper, err = newFileIDMapper(lruFileIDCacheSize)
@@ -155,7 +154,8 @@ func updateMetricSummary(ii interpreter.Instance, summary metrics.Summary) error
 // collectInterpreterMetrics starts a goroutine that periodically fetches and reports interpreter
 // metrics.
 func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
-	monitorInterval time.Duration) {
+	monitorInterval time.Duration,
+) {
 	periodiccaller.Start(ctx, monitorInterval, func() {
 		pm.mu.RLock()
 		defer pm.mu.RUnlock()
@@ -171,33 +171,21 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 			}
 		}
 
-		summary[metrics.IDHashmapPidPageToMappingInfo] =
-			metrics.MetricValue(pm.pidPageToMappingInfoSize)
+		summary[metrics.IDHashmapPidPageToMappingInfo] = metrics.MetricValue(pm.pidPageToMappingInfoSize)
 
-		summary[metrics.IDELFInfoCacheHit] =
-			metrics.MetricValue(pm.elfInfoCacheHit.Swap(0))
-		summary[metrics.IDELFInfoCacheMiss] =
-			metrics.MetricValue(pm.elfInfoCacheMiss.Swap(0))
+		summary[metrics.IDELFInfoCacheHit] = metrics.MetricValue(pm.elfInfoCacheHit.Swap(0))
+		summary[metrics.IDELFInfoCacheMiss] = metrics.MetricValue(pm.elfInfoCacheMiss.Swap(0))
 
-		summary[metrics.IDTraceCacheHit] =
-			metrics.MetricValue(pm.frameCacheHit.Swap(0))
-		summary[metrics.IDTraceCacheMiss] =
-			metrics.MetricValue(pm.frameCacheMiss.Swap(0))
+		summary[metrics.IDTraceCacheHit] = metrics.MetricValue(pm.frameCacheHit.Swap(0))
+		summary[metrics.IDTraceCacheMiss] = metrics.MetricValue(pm.frameCacheMiss.Swap(0))
 
-		summary[metrics.IDErrProcNotExist] =
-			metrics.MetricValue(pm.mappingStats.errProcNotExist.Swap(0))
-		summary[metrics.IDErrProcESRCH] =
-			metrics.MetricValue(pm.mappingStats.errProcESRCH.Swap(0))
-		summary[metrics.IDErrProcPerm] =
-			metrics.MetricValue(pm.mappingStats.errProcPerm.Swap(0))
-		summary[metrics.IDNumProcAttempts] =
-			metrics.MetricValue(pm.mappingStats.numProcAttempts.Swap(0))
-		summary[metrics.IDMaxProcParseUsec] =
-			metrics.MetricValue(pm.mappingStats.maxProcParseUsec.Swap(0))
-		summary[metrics.IDTotalProcParseUsec] =
-			metrics.MetricValue(pm.mappingStats.totalProcParseUsec.Swap(0))
-		summary[metrics.IDErrProcParse] =
-			metrics.MetricValue(pm.mappingStats.numProcParseErrors.Swap(0))
+		summary[metrics.IDErrProcNotExist] = metrics.MetricValue(pm.mappingStats.errProcNotExist.Swap(0))
+		summary[metrics.IDErrProcESRCH] = metrics.MetricValue(pm.mappingStats.errProcESRCH.Swap(0))
+		summary[metrics.IDErrProcPerm] = metrics.MetricValue(pm.mappingStats.errProcPerm.Swap(0))
+		summary[metrics.IDNumProcAttempts] = metrics.MetricValue(pm.mappingStats.numProcAttempts.Swap(0))
+		summary[metrics.IDMaxProcParseUsec] = metrics.MetricValue(pm.mappingStats.maxProcParseUsec.Swap(0))
+		summary[metrics.IDTotalProcParseUsec] = metrics.MetricValue(pm.mappingStats.totalProcParseUsec.Swap(0))
+		summary[metrics.IDErrProcParse] = metrics.MetricValue(pm.mappingStats.numProcParseErrors.Swap(0))
 
 		mapsMetrics := pm.ebpf.CollectMetrics()
 		for _, metric := range mapsMetrics {
@@ -314,7 +302,8 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, frame *host.Frame, dst *li
 }
 
 func (pm *ProcessManager) maybeNotifyAPMAgent(
-	rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16) string {
+	rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16,
+) string {
 	pm.mu.RLock()
 	pidInterp, ok := pm.interpreters[rawTrace.PID]
 	pm.mu.RUnlock()

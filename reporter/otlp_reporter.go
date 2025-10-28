@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
-	log "go.opentelemetry.io/ebpf-profiler/internal/global"
+	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -169,7 +169,8 @@ func waitGrpcEndpoint(ctx context.Context, cfg *Config) (*grpc.ClientConn, error
 // setupGrpcConnection sets up a gRPC connection instrumented with our auth interceptor
 func setupGrpcConnection(parent context.Context, cfg *Config) (*grpc.ClientConn, error) {
 	//nolint:staticcheck
-	opts := []grpc.DialOption{grpc.WithBlock(),
+	opts := []grpc.DialOption{
+		grpc.WithBlock(),
 		grpc.WithUnaryInterceptor(cfg.GRPCClientInterceptor),
 		grpc.WithDefaultCallOptions(
 			grpc.MaxCallRecvMsgSize(cfg.MaxRPCMsgSize),

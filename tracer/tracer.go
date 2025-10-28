@@ -21,7 +21,7 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
 	"github.com/zeebo/xxh3"
-	log "go.opentelemetry.io/ebpf-profiler/internal/global"
+	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/host"

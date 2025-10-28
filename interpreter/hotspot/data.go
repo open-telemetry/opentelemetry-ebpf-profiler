@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"strings"
 
-	log "go.opentelemetry.io/ebpf-profiler/internal/global"
+	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
 
 	"github.com/elastic/go-freelru"
 
@@ -232,7 +232,8 @@ func fieldByJavaName(obj reflect.Value, fieldName string) reflect.Value {
 // hotspotData.vmStructs using reflection to gather the offsets and sizes
 // we are interested about.
 func (vmd *hotspotVMData) parseIntrospection(it *hotspotIntrospectionTable,
-	rm remotememory.RemoteMemory, loadBias libpf.Address) error {
+	rm remotememory.RemoteMemory, loadBias libpf.Address,
+) error {
 	stride := libpf.Address(rm.Uint64(it.stride + loadBias))
 	typeOffs := uint(rm.Uint64(it.typeOffset + loadBias))
 	addrOffs := uint(rm.Uint64(it.addressOffset + loadBias))
@@ -342,25 +343,23 @@ func (d *hotspotData) String() string {
 // As the hotspot unwinder depends on the native unwinder, a part of the cleanup is done by the
 // process manager and not the corresponding Detach() function of hotspot objects.
 func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory) (ii interpreter.Instance, err error) {
+	rm remotememory.RemoteMemory,
+) (ii interpreter.Instance, err error) {
 	// Each function has four symbols: source filename, class name,
 	// method name and signature. However, most of them are shared across
 	// different methods, so assume about 2 unique symbols per function.
-	addrToSymbol, err :=
-		freelru.New[libpf.Address, libpf.String](2*interpreter.LruFunctionCacheSize,
-			libpf.Address.Hash32)
+	addrToSymbol, err := freelru.New[libpf.Address, libpf.String](2*interpreter.LruFunctionCacheSize,
+		libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
-	addrToMethod, err :=
-		freelru.New[libpf.Address, *hotspotMethod](interpreter.LruFunctionCacheSize,
-			libpf.Address.Hash32)
+	addrToMethod, err := freelru.New[libpf.Address, *hotspotMethod](interpreter.LruFunctionCacheSize,
+		libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
-	addrToJITInfo, err :=
-		freelru.New[libpf.Address, *hotspotJITInfo](interpreter.LruFunctionCacheSize,
-			libpf.Address.Hash32)
+	addrToJITInfo, err := freelru.New[libpf.Address, *hotspotJITInfo](interpreter.LruFunctionCacheSize,
+		libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +470,8 @@ func forEachItem(prefix string, t reflect.Value, visitor func(reflect.Value, str
 
 // newVMData will read introspection data from remote process and return hotspotVMData
 func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address) (
-	hotspotVMData, error) {
+	hotspotVMData, error,
+) {
 	// Initialize the data with non-zero values so it's easy to check that
 	// everything got loaded (some fields will get zero values)
 	vmd := hotspotVMData{}

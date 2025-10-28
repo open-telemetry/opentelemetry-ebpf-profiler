@@ -9,7 +9,7 @@ import (
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
-	log "go.opentelemetry.io/ebpf-profiler/internal/global"
+	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 )

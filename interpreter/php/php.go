@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"unsafe"
 
-	log "go.opentelemetry.io/ebpf-profiler/internal/global"
+	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
 
 	"github.com/elastic/go-freelru"
 

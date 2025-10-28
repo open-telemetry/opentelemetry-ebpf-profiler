@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/elastic/go-freelru"
-	log "go.opentelemetry.io/ebpf-profiler/internal/global"
+	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -120,7 +120,8 @@ func (d *perlData) String() string {
 }
 
 func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
+	rm remotememory.RemoteMemory,
+) (interpreter.Instance, error) {
 	addrToHEK, err := freelru.New[libpf.Address, libpf.String](interpreter.LruFunctionCacheSize,
 		libpf.Address.Hash32)
 	if err != nil {
@@ -153,7 +154,8 @@ func (d *perlData) Unload(_ interpreter.EbpfHandler) {
 }
 
 func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
-	ef *pfelf.File) (*perlData, error) {
+	ef *pfelf.File,
+) (*perlData, error) {
 	// The version is encoded in these globals since Perl 5.15.0.
 	// https://github.com/Perl/perl5/blob/v5.32.0/perl.h#L4745-L4754
 	var verBytes [3]byte

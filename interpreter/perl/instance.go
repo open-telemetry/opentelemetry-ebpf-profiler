@@ -11,7 +11,7 @@ import (
 
 	"github.com/elastic/go-freelru"
 	"github.com/zeebo/xxh3"
-	log "go.opentelemetry.io/ebpf-profiler/internal/global"
+	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -74,7 +74,8 @@ func hashCOPKey(k copKey) uint32 {
 }
 
 func (i *perlInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	tsdInfo tpbase.TSDInfo) error {
+	tsdInfo tpbase.TSDInfo,
+) error {
 	d := i.d
 	stateInTSD := uint8(0)
 	if d.stateInTSD {
@@ -342,7 +343,8 @@ func (i *perlInstance) getGV(gvAddr libpf.Address, nameOnly bool) (libpf.String,
 // getCOP reads and caches a Control OP from remote interpreter.
 // On success, the COP is returned. On error, the error.
 func (i *perlInstance) getCOP(copAddr libpf.Address, funcName libpf.String) (
-	*perlCOP, error) {
+	*perlCOP, error,
+) {
 	key := copKey{
 		copAddr:  copAddr,
 		funcName: funcName,
