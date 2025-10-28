@@ -136,8 +136,12 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	traceOutChan chan<- *host.Trace) func() []metrics.Metric {
 	eventsMap := t.ebpfMaps["trace_events"]
+	effectiveMaxSPS := t.samplesPerSecond
+	if t.maxSamplesPerSecond > 0 && t.maxSamplesPerSecond > effectiveMaxSPS {
+		effectiveMaxSPS = t.maxSamplesPerSecond
+	}
 	eventReader, err := perf.NewReader(eventsMap,
-		t.samplesPerSecond*support.Sizeof_Trace)
+		effectiveMaxSPS*support.Sizeof_Trace)
 	if err != nil {
 		log.Fatalf("Failed to setup perf reporting via %s: %v", eventsMap, err)
 	}
