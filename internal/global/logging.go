@@ -9,7 +9,7 @@ import (
 )
 
 // globalLogger holds a reference to the [slog.Logger] used within
-// go.opentelemetry.io/otel.
+// go.opentelemetry.io/ebpf-profiler.
 //
 // The default logger logs to stderr which is backed by the standard `log.Logger`
 // interface. This logger will show messages at the Info Level.
