@@ -114,19 +114,19 @@ func (c *Controller) Start(ctx context.Context) error {
 		if err := trc.StartOffCPUProfiling(); err != nil {
 			return fmt.Errorf("failed to start off-cpu profiling: %v", err)
 		}
-		log.Debugf("Enabled off-cpu profiling with p=%f", c.config.OffCPUThreshold)
+		log.Infof("Enabled off-cpu profiling with p=%f", c.config.OffCPUThreshold)
 	}
 
 	if len(c.config.UProbeLinks) > 0 {
 		if err := trc.AttachUProbes(c.config.UProbeLinks); err != nil {
 			return fmt.Errorf("failed to attach uprobes: %v", err)
 		}
-		log.Debug("Attached uprobes")
+		log.Info("Attached uprobes")
 	}
 
 	if c.config.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
 		trc.StartProbabilisticProfiling(ctx)
-		log.Debug("Enabled probabilistic profiling")
+		log.Info("Enabled probabilistic profiling")
 	} else {
 		if err := trc.EnableProfiling(); err != nil {
 			return fmt.Errorf("failed to enable perf events: %w", err)
@@ -139,7 +139,7 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	// This log line is used in our system tests to verify if that the agent has started.
 	// So if you change this log line update also the system test.
-	log.Debug("Attached sched monitor")
+	log.Info("Attached sched monitor")
 
 	if err := startTraceHandling(ctx, trc); err != nil {
 		return fmt.Errorf("failed to start trace handling: %w", err)
