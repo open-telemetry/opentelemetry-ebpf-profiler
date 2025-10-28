@@ -1226,7 +1226,7 @@ func (t *Tracer) UpdateSamplingFrequency(newSamplesPerSecond int) error {
 	}
 
 	if len(updateErrors) > 0 {
-		return fmt.Errorf("failed to update sampling frequency on %d CPUs: %v", len(updateErrors), updateErrors)
+		return fmt.Errorf("failed to update sampling frequency on %d CPUs: %v", len(updateErrors), errors.Join(updateErrors...))
 	}
 
 	// Update the internal samplesPerSecond field
