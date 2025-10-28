@@ -13,8 +13,6 @@
 #include "tracemgmt.h"
 #include "types.h"
 
-#define v8Ver(x, y, z) (((x) << 24) + ((y) << 16) + (z))
-
 // The number of V8 frames to unwind per frame-unwinding eBPF program.
 #define V8_FRAMES_PER_PROGRAM 8
 
@@ -206,9 +204,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   }
 
   uintptr_t code_start;
-  if (vi->version >= v8Ver(11, 1, 204)) {
-    // Starting V8 11.1.204 the instruction/code start is a pointer field instead
-    // of offset where the code starts.
+  if (vi->code_instructions_is_pointer) {
     code_start = *(uintptr_t *)(scratch->code + vi->off_Code_instruction_start);
   } else {
     code_start = code + vi->off_Code_instruction_start;

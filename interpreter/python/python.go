@@ -377,7 +377,6 @@ func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.P
 	vm := &d.vmStructs
 	cdata := support.PyProcInfo{
 		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
-		NoneStructAddr: uint64(d.noneStruct) + uint64(p.bias),
 		Version:        d.version,
 
 		TsdInfo: support.TSDInfo{
@@ -398,6 +397,18 @@ func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.P
 		PyCodeObject_co_flags:          uint8(vm.PyCodeObject.Flags),
 		PyCodeObject_co_firstlineno:    uint8(vm.PyCodeObject.FirstLineno),
 		PyCodeObject_sizeof:            uint8(vm.PyCodeObject.Sizeof),
+	}
+	if d.noneStruct != libpf.SymbolValue(0) {
+		cdata.NoneStructAddr = uint64(d.noneStruct) + uint64(p.bias)
+	}
+	if d.version >= pythonVer(3, 11) && d.version < pythonVer(3, 13) {
+		// During python 3.11 and 3.12 the PyThreadState.frame points to a _PyCFrame object:
+		// from https://github.com/python/cpython/commit/f291404a802d6a1bc50f817c7a26ff3ac9a199ff
+		// to   https://github.com/python/cpython/commit/006e44f9502308ec3d14424ad8bd774046f2be8e
+		cdata.Frame_is_cframe = 1
+	}
+	if d.version >= pythonVer(3, 11) {
+		cdata.Lasti_is_codeunit = 1
 	}
 
 	err := ebpf.UpdateProcData(libpf.Python, pid, unsafe.Pointer(&cdata))
