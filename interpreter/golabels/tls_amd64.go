@@ -17,6 +17,9 @@ import (
 	"golang.org/x/arch/x86/x86asm"
 )
 
+// readMemory is a helper that can be mocked for testing.
+type readMemory func(addr int64, sz, maxSize int) ([]byte, error)
+
 // Most normal amd64 Go binaries use -8 as offset into TLS space for
 // storing the current g but "static" binaries it ends up as -80. There
 // may be dynamic relocating going on so just read it from a known
@@ -48,7 +51,10 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 	if err != nil {
 		return 0, err
 	}
+	return inspectCode(sym, f.VirtualMemory, code)
+}
 
+func inspectCode(sym *libpf.Symbol, extract readMemory, code []byte) (int32, error) {
 	offset := e.NewImmediateCapture("offset")
 	it := amd.NewInterpreterWithCode(code)
 	pc := 0
@@ -80,7 +86,7 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 			if v, ok := ripRelLoads[mem.Base]; ok {
 				return int32(v), nil
 			}
-			return -8, fmt.Errorf("symbol '%s': mov fs: %w", symbolName, errDecodeSymbol)
+			return -8, fmt.Errorf("symbol '%s': mov fs: %w", sym.Name, errDecodeSymbol)
 		}
 
 		// RIP-relative load: mov disp(%rip), %reg
@@ -91,12 +97,12 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 				target := curAddr + int64(mem.Disp) + int64(instrLen)
 
 				// Read 8-byte TLS value from target address
-				b, err := f.VirtualMemory(target, 8, 8)
+				b, err := extract(target, 8, 8)
 				if err == nil && len(b) >= 8 {
 					ripRelLoads[dst] = int64(npsr.Uint64(b, 0))
 				}
 			}
 		}
 	}
-	return -8, fmt.Errorf("symbol '%s': %w", symbolName, errDecodeSymbol)
+	return -8, fmt.Errorf("symbol '%s': %w", sym.Name, errDecodeSymbol)
 }

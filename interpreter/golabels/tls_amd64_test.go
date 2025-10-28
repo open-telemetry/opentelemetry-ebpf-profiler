@@ -1,0 +1,43 @@
+//go:build amd64
+
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
+
+import (
+	"fmt"
+	"testing"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+)
+
+func TestInspectCode(t *testing.T) {
+	extract := func(addr int64, sz, maxSize int) ([]byte, error) {
+		if addr != 0x16561faf {
+			return []byte{}, fmt.Errorf("unexpected target address: 0x%x", addr)
+		}
+		return []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}, nil
+	}
+	var code = []byte{
+		0x48, 0x8b, 0xd, 0x21, 0x21, 0x51, 0x10, // mov    0x10512121(%rip),%rcx        # 16561fa8 <runtime.tlsg@@Base+0x16561fa8>
+		0x64, 0x48, 0x8b, 0x1, // mov    %fs:(%rcx),%rax
+		0x48, 0x39, 0x60, 0x8, // cmp    %rsp,0x8(%rax)
+		0x77, 0x5, // ja     604fe96 <runtime.stackcheck.abi0@@Base+0x16>
+		0xe8, 0xca, 0xff, 0xff, 0xff, // call   604fe60 <runtime.abort.abi0@@Base>
+		0x48, 0x3b, 0x20, // cmp    (%rax),%rsp
+		0x77, 0x5, // ja     604fea0 <runtime.stackcheck.abi0@@Base+0x20>
+		0xe8, 0xc0, 0xff, 0xff, 0xff, // call   604fe60 <runtime.abort.abi0@@Base>
+		0xc3, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
+		0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
+		0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc}
+	offset, err := inspectCode(&libpf.Symbol{
+		Name:    libpf.SymbolName("TestSymbol"),
+		Address: libpf.SymbolValue(0x604fe80)}, extract, code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if offset != 0 {
+		t.Fatalf("Expected offset '0' got '%d'", offset)
+	}
+}
