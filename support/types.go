@@ -205,9 +205,10 @@ type HotspotProcInfo struct {
 	Method_constmethod     uint8
 	Cmethod_size           uint8
 	Jvm_version            uint8
+	New_bcp_slot           uint8
 	Segment_shift          uint8
 	Nmethod_uses_offsets   uint8
-	Pad_cgo_0              [7]byte
+	Pad_cgo_0              [6]byte
 }
 type PHPProcInfo struct {
 	Current_execute_data                uint64
@@ -246,6 +247,7 @@ type PerlProcInfo struct {
 }
 type PyProcInfo struct {
 	AutoTLSKeyAddr                 uint64
+	NoneStructAddr                 uint64
 	Version                        uint16
 	TsdInfo                        TSDInfo
 	PyThreadState_frame            uint8
@@ -260,10 +262,13 @@ type PyProcInfo struct {
 	PyCodeObject_co_flags          uint8
 	PyCodeObject_co_firstlineno    uint8
 	PyCodeObject_sizeof            uint8
-	Pad_cgo_0                      [6]byte
+	Lasti_is_codeunit              uint8
+	Frame_is_cframe                uint8
+	Pad_cgo_0                      [4]byte
 }
 type RubyProcInfo struct {
 	Version                      uint32
+	Current_ec_tpbase_tls_offset uint64
 	Current_ctx_ptr              uint64
 	Vm_stack                     uint8
 	Vm_stack_size                uint8
@@ -281,25 +286,26 @@ type RubyProcInfo struct {
 	Pad_cgo_0                    [2]byte
 }
 type V8ProcInfo struct {
-	Version                    uint32
-	Type_JSFunction_first      uint16
-	Type_JSFunction_last       uint16
-	Type_Code                  uint16
-	Type_SharedFunctionInfo    uint16
-	Off_HeapObject_map         uint8
-	Off_Map_instancetype       uint8
-	Off_JSFunction_code        uint8
-	Off_JSFunction_shared      uint8
-	Off_Code_instruction_start uint8
-	Off_Code_instruction_size  uint8
-	Off_Code_flags             uint8
-	Fp_marker                  uint8
-	Fp_function                uint8
-	Fp_bytecode_offset         uint8
-	Codekind_shift             uint8
-	Codekind_mask              uint8
-	Codekind_baseline          uint8
-	Pad_cgo_0                  [3]byte
+	Version                      uint32
+	Type_JSFunction_first        uint16
+	Type_JSFunction_last         uint16
+	Type_Code                    uint16
+	Type_SharedFunctionInfo      uint16
+	Off_HeapObject_map           uint8
+	Off_Map_instancetype         uint8
+	Off_JSFunction_code          uint8
+	Off_JSFunction_shared        uint8
+	Code_instructions_is_pointer uint8
+	Off_Code_instruction_start   uint8
+	Off_Code_instruction_size    uint8
+	Off_Code_flags               uint8
+	Fp_marker                    uint8
+	Fp_function                  uint8
+	Fp_bytecode_offset           uint8
+	Codekind_shift               uint8
+	Codekind_mask                uint8
+	Codekind_baseline            uint8
+	Pad_cgo_0                    [2]byte
 }
 
 const (
@@ -310,7 +316,7 @@ const (
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
 	sizeof_PHPProcInfo    = 0x18
-	sizeof_RubyProcInfo   = 0x20
+	sizeof_RubyProcInfo   = 0x28
 )
 
 const (

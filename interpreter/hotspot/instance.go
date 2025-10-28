@@ -740,6 +740,12 @@ func (d *hotspotInstance) populateMainMappings(vmd *hotspotVMData,
 		d.heapAreas = append(d.heapAreas, area)
 	}
 
+	// JDK9+ frame has new 'mirror' slot which offsets the BCP slot
+	newBcpSlot := uint8(0)
+	if vmd.version >= 0x09000000 {
+		newBcpSlot = 1
+	}
+
 	// Set up the main eBPF info structure.
 	vms := &vmd.vmStructs
 	procInfo := support.HotspotProcInfo{
@@ -757,6 +763,7 @@ func (d *hotspotInstance) populateMainMappings(vmd *hotspotVMData,
 		Jvm_version:            uint8(vmd.version >> 24),
 		Segment_shift:          uint8(heap.segmentShift),
 		Nmethod_uses_offsets:   vmd.nmethodUsesOffsets,
+		New_bcp_slot:           newBcpSlot,
 	}
 
 	if vms.CodeCache.LowBound == 0 {

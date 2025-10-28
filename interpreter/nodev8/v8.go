@@ -1759,6 +1759,14 @@ func mapFramePointerOffset(relBytes uint8) uint8 {
 func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	vms := &d.vmStructs
+
+	// Starting V8 11.1.204 the instruction/code start is a pointer field instead
+	// of offset where the code starts.
+	codeInstructionsIsPointer := uint8(0)
+	if d.version >= v8Ver(11, 1, 204) {
+		codeInstructionsIsPointer = 1
+	}
+
 	data := support.V8ProcInfo{
 		Version: d.version,
 
@@ -1776,9 +1784,10 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 		Off_JSFunction_code:   uint8(vms.JSFunction.Code),
 		Off_JSFunction_shared: uint8(vms.JSFunction.SharedFunctionInfo),
 
-		Off_Code_instruction_start: uint8(vms.Code.InstructionStart),
-		Off_Code_instruction_size:  uint8(vms.Code.InstructionSize),
-		Off_Code_flags:             uint8(vms.Code.Flags),
+		Code_instructions_is_pointer: codeInstructionsIsPointer,
+		Off_Code_instruction_start:   uint8(vms.Code.InstructionStart),
+		Off_Code_instruction_size:    uint8(vms.Code.InstructionSize),
+		Off_Code_flags:               uint8(vms.Code.Flags),
 
 		Codekind_shift:    vms.CodeKind.FieldShift,
 		Codekind_mask:     uint8(vms.CodeKind.FieldMask),

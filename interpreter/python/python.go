@@ -55,6 +55,8 @@ type pythonData struct {
 
 	autoTLSKey libpf.SymbolValue
 
+	noneStruct libpf.SymbolValue
+
 	// vmStructs reflects the Python Interpreter introspection data we want
 	// need to extract data from the runtime. The fields are named as they are
 	// in the Python code. Eventually some of these fields will be read from
@@ -396,6 +398,18 @@ func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.P
 		PyCodeObject_co_flags:          uint8(vm.PyCodeObject.Flags),
 		PyCodeObject_co_firstlineno:    uint8(vm.PyCodeObject.FirstLineno),
 		PyCodeObject_sizeof:            uint8(vm.PyCodeObject.Sizeof),
+	}
+	if d.noneStruct != libpf.SymbolValue(0) {
+		cdata.NoneStructAddr = uint64(d.noneStruct) + uint64(p.bias)
+	}
+	if d.version >= pythonVer(3, 11) && d.version < pythonVer(3, 13) {
+		// During python 3.11 and 3.12 the PyThreadState.frame points to a _PyCFrame object:
+		// from https://github.com/python/cpython/commit/f291404a802d6a1bc50f817c7a26ff3ac9a199ff
+		// to   https://github.com/python/cpython/commit/006e44f9502308ec3d14424ad8bd774046f2be8e
+		cdata.Frame_is_cframe = 1
+	}
+	if d.version >= pythonVer(3, 11) {
+		cdata.Lasti_is_codeunit = 1
 	}
 
 	err := ebpf.UpdateProcData(libpf.Python, pid, unsafe.Pointer(&cdata))
@@ -740,6 +754,25 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 	vms := &pd.vmStructs
 
+	if version >= pythonVer(3, 13) {
+		// CPython commit 7199584ac8632eab57612f595a7162ab8d2ebbc0 makes
+		// `f_executable` (referred to here as `f_code` in most places) point to
+		// `Py_None` for the top level frame that's entered from the C side,
+		// while before it was pointing to the trampoline, which was a valid
+		// code object.
+		//
+		// `Py_None` obviously is not a valid code object, and if we try to
+		// decode it we get bad names / lines tables, so we need to identify
+		// this case, and stop unwinding on the eBPF side.
+		//
+		// Detecting `Py_None` is quite simple, it's the address of the exported
+		// `_Py_NoneStruct` symbol, so we get that address here and pass it to
+		// eBPF, so it knows when to stop.
+		if pd.noneStruct, err = ef.LookupSymbolAddress("_Py_NoneStruct"); err != nil {
+			return nil, fmt.Errorf("_Py_NoneStruct not defined: %v", err)
+		}
+	}
+
 	// Introspection data not available for these structures
 	vms.PyTypeObject.BasicSize = 32
 	vms.PyTypeObject.Members = 240
@@ -784,7 +817,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.PyFrameObject.EntryMember = 70 // char owner
 		vms.PyFrameObject.EntryVal = 3     // enum _frameowner, FRAME_OWNED_BY_CSTACK
 		vms.PyThreadState.Frame = 72
-		vms.PyCFrame.CurrentFrame = 8
+		// Current frame is not used anymore, see commit 006e44f9 in the CPython repo:
+		// they removed one level of indirection.
+		vms.PyCFrame.CurrentFrame = 0
 		vms.PyASCIIObject.Data = 40
 	}
 
