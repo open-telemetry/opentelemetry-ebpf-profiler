@@ -11,7 +11,7 @@ import (
 // globalLogger holds a reference to the [slog.Logger] used within
 // go.opentelemetry.io/otel.
 //
-// The default logger uses stdr which is backed by the standard `log.Logger`
+// The default logger logs to stderr which is backed by the standard `log.Logger`
 // interface. This logger will show messages at the Info Level.
 var globalLogger = func() *atomic.Pointer[slog.Logger] {
 	l := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
