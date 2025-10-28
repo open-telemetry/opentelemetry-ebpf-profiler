@@ -681,12 +681,12 @@ func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 		// so we print each line individually.
 		if ve, ok := err.(*cebpf.VerifierError); ok {
 			for _, line := range ve.Log {
-				log.Errorf(line)
+				log.Errorf("%s", line)
 			}
 		} else {
 			scanner := bufio.NewScanner(strings.NewReader(err.Error()))
 			for scanner.Scan() {
-				log.Errorf(scanner.Text())
+				log.Errorf("%s", scanner.Text())
 			}
 		}
 		return fmt.Errorf("failed to load %s", progSpec.Name)
