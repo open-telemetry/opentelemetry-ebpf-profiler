@@ -28,6 +28,13 @@ func SetLogger(l slog.Logger) {
 	globalLogger.Store(&l)
 }
 
+// SetDebugLogger configures the global logger to write debug-level logs to stderr.
+func SetDebugLogger() {
+	SetLogger(*slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})))
+}
+
 // GetLogger returns the global logger.
 func GetLogger() *slog.Logger {
 	return globalLogger.Load()

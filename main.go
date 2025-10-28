@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 
 	//nolint:gosec
@@ -77,9 +76,7 @@ func mainWithExitCode() exitCode {
 	}
 
 	if cfg.VerboseMode {
-		log.SetLogger(*slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			Level: slog.LevelDebug,
-		})))
+		log.SetDebugLogger()
 		// Dump the arguments in debug mode.
 		cfg.Dump()
 	}
