@@ -52,7 +52,6 @@ type Trace struct {
 	ExecutablePath   string
 	ContainerID      string
 	Frames           []Frame
-	Hash             TraceHash
 	KTime            times.KTime
 	PID              libpf.PID
 	TID              libpf.PID
