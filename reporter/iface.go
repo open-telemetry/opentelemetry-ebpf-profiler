@@ -33,6 +33,12 @@ type TraceReporter interface {
 	ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error
 }
 
+type TraceReporterFunc func(trace *libpf.Trace, meta *samples.TraceEventMeta) error
+
+func (f TraceReporterFunc) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
+	return f(trace, meta)
+}
+
 type ExecutableMetadata struct {
 	// MappingFile is the reference to mapping file data.
 	MappingFile libpf.FrameMappingFile

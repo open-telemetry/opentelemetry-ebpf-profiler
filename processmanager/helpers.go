@@ -4,6 +4,8 @@
 package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 import (
+	"sync"
+
 	lru "github.com/elastic/go-freelru"
 	log "github.com/sirupsen/logrus"
 
@@ -49,6 +51,7 @@ var _ FileIDMapper = (*lruFileIDMapper)(nil)
 // MapFileIDMapper implements the FileIDMApper using a map (for testing)
 type MapFileIDMapper struct {
 	fileMap map[host.FileID]libpf.FrameMappingFile
+	mu      sync.Mutex
 }
 
 func NewMapFileIDMapper() *MapFileIDMapper {
@@ -58,6 +61,8 @@ func NewMapFileIDMapper() *MapFileIDMapper {
 }
 
 func (fm *MapFileIDMapper) Get(key host.FileID) (libpf.FrameMappingFile, bool) {
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
 	if value, ok := fm.fileMap[key]; ok {
 		return value, true
 	}
@@ -65,6 +70,8 @@ func (fm *MapFileIDMapper) Get(key host.FileID) (libpf.FrameMappingFile, bool) {
 }
 
 func (fm *MapFileIDMapper) Set(key host.FileID, value libpf.FrameMappingFile) {
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
 	fm.fileMap[key] = value
 }
 

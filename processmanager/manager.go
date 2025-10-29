@@ -418,17 +418,22 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *host.Trace) {
 		pm.frameCacheHit.Add(cacheHit)
 	}
 
-	// Release resources that were used to symbolize this stack.
-	for _, instance := range pm.interpreters[pid] {
-		if err := instance.ReleaseResources(); err != nil {
-			log.Warnf("Failed to release resources for %d: %v", pid, err)
-		}
-	}
+	pm.releaseResources(pid)
 
 	trace.Hash = traceutil.HashTrace(trace)
 	meta.APMServiceName = pm.maybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
 
 	if err := pm.traceReporter.ReportTraceEvent(trace, meta); err != nil {
 		log.Errorf("Failed to report trace event: %v", err)
+	}
+}
+
+func (pm *ProcessManager) releaseResources(pid libpf.PID) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	for _, instance := range pm.interpreters[pid] {
+		if err := instance.ReleaseResources(); err != nil {
+			log.Warnf("Failed to release resources for %d: %v", pid, err)
+		}
 	}
 }

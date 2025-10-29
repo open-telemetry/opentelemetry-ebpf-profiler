@@ -7,6 +7,7 @@ package processmanager
 
 import (
 	"context"
+	"debug/elf"
 	"errors"
 	"fmt"
 	"math/rand/v2"
@@ -26,6 +27,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -36,7 +39,8 @@ import (
 
 // dummyProcess implements pfelf.Process for testing purposes
 type dummyProcess struct {
-	pid libpf.PID
+	pid         libpf.PID
+	getMappings func() ([]process.Mapping, uint32, error)
 }
 
 func (d *dummyProcess) PID() libpf.PID {
@@ -56,7 +60,10 @@ func (d *dummyProcess) GetExe() (string, error) {
 }
 
 func (d *dummyProcess) GetMappings() ([]process.Mapping, uint32, error) {
-	return nil, 0, errors.New("not implemented")
+	if d.getMappings == nil {
+		return nil, 0, errors.New("not implemented")
+	}
+	return d.getMappings()
 }
 
 func (d *dummyProcess) GetThreads() ([]process.ThreadInfo, error) {
@@ -173,6 +180,8 @@ type ebpfMapsMockup struct {
 	deletePidPageMappingCount uint8
 	// expectedBias value for updatedPidPageToExeIDOffset calls
 	expectedBias uint64
+	// updatePidPageMappingInfo allows to completely mock UpdatePidPageMappingInfo
+	updatePidPageMappingInfo func(pid libpf.PID, prefix lpm.Prefix, fileID uint64, bias uint64) error
 }
 
 var _ interpreter.EbpfHandler = &ebpfMapsMockup{}
@@ -232,6 +241,9 @@ func (mockup *ebpfMapsMockup) DeleteStackDeltaPage(host.FileID, uint64) error {
 
 func (mockup *ebpfMapsMockup) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Prefix,
 	fileID uint64, bias uint64) error {
+	if mockup.updatePidPageMappingInfo != nil {
+		return mockup.updatePidPageMappingInfo(pid, prefix, fileID, bias)
+	}
 	if prefix.Key == 0 && fileID == 0 && bias == 0 {
 		// If all provided values are 0 the hook was called to create
 		// a dummy entry.
@@ -514,4 +526,85 @@ func TestProcExit(t *testing.T) {
 				ebpfMockup.deleteStackDeltaRangesCount)
 		})
 	}
+}
+
+func TestConcurrentSyncTraceHandling(t *testing.T) {
+	const exe = "/proc/self/exe"
+	fid, err := libpf.FileIDFromExecutableFile(exe)
+	require.NoError(t, err)
+
+	nextProcess := func(pid int, exe string) *dummyProcess {
+		return &dummyProcess{
+			pid: libpf.PID(pid),
+			getMappings: func() ([]process.Mapping, uint32, error) {
+				return []process.Mapping{
+					{
+						Vaddr:      0xcafe00000,
+						Length:     0x3445c0,
+						Flags:      elf.PF_X | elf.PF_R,
+						FileOffset: 0,
+						Device:     1,
+						Inode:      2,
+						Path:       libpf.Intern(exe),
+					},
+				}, 0, nil
+			},
+		}
+	}
+
+	dummyProvider := &dummyStackDeltaProvider{}
+	ebpfMockup := &ebpfMapsMockup{}
+	ebpfMockup.updatePidPageMappingInfo = func(pid libpf.PID, prefix lpm.Prefix, fileID uint64, bias uint64) error {
+		return nil
+	}
+
+	interpreters, err := tracertypes.Parse("go")
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	manager, err := New(ctx,
+		interpreters,
+		1*time.Second,
+		ebpfMockup,
+		NewMapFileIDMapper(),
+		reporter.TraceReporterFunc(func(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
+			return nil
+		}),
+		nil,
+		dummyProvider,
+		true,
+		libpf.Set[string]{})
+	require.NoError(t, err)
+
+	manager.metricsAddSlice = func(m []metrics.Metric) {}
+
+	ctx, cancel = context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	go func() {
+		pid := 0
+		for ctx.Err() == nil {
+			pid++
+			manager.SynchronizeProcess(nextProcess(pid, exe))
+		}
+	}()
+	go func() {
+		pid := 0
+		for ctx.Err() == nil {
+			pid++
+			pid &= 0xff
+			trace := &host.Trace{
+				Frames: []host.Frame{{
+					File: host.FileIDFromLibpf(fid),
+					Type: libpf.NativeFrame,
+				}},
+				PID: libpf.PID(pid),
+				TID: libpf.PID(pid),
+			}
+			manager.HandleTrace(trace)
+		}
+	}()
+
+	<-ctx.Done()
 }
