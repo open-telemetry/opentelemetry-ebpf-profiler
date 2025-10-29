@@ -41,6 +41,10 @@ func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
 }
 
+func (b *baseReporter) UpdateSamplingFrequency(samplesPerSecond int) {
+	b.pdata.UpdateSamplingFrequency(samplesPerSecond)
+}
+
 func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
 	switch meta.Origin {
 	case support.TraceOriginSampling:

@@ -24,6 +24,9 @@ type Reporter interface {
 
 	// Stop triggers a graceful shutdown of the reporter.
 	Stop()
+
+	// UpdateSamplingFrequency updates the sampling frequency used in profile generation.
+	UpdateSamplingFrequency(samplesPerSecond int)
 }
 
 type TraceReporter interface {

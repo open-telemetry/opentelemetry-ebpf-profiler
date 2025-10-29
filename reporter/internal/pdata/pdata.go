@@ -28,3 +28,8 @@ func New(samplesPerSecond int, extra samples.SampleAttrProducer) (*Pdata, error)
 // Purge purges all the expired data
 func (p *Pdata) Purge() {
 }
+
+// UpdateSamplingFrequency updates the sampling frequency used in profile generation.
+func (p *Pdata) UpdateSamplingFrequency(samplesPerSecond int) {
+	p.samplesPerSecond = samplesPerSecond
+}

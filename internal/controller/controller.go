@@ -161,6 +161,27 @@ func (c *Controller) Shutdown() {
 	}
 }
 
+// UpdateSamplingFrequency dynamically updates the sampling frequency for both the tracer
+// and reporter.
+func (c *Controller) UpdateSamplingFrequency(newSamplesPerSecond int) error {
+	if c.tracer == nil {
+		return fmt.Errorf("tracer is not initialized")
+	}
+
+	// Update the tracer's sampling frequency
+	if err := c.tracer.UpdateSamplingFrequency(newSamplesPerSecond); err != nil {
+		return fmt.Errorf("failed to update tracer sampling frequency: %w", err)
+	}
+
+	// Update the reporter's sampling frequency for profile metadata
+	if c.reporter != nil {
+		c.reporter.UpdateSamplingFrequency(newSamplesPerSecond)
+		log.Infof("Updated reporter sampling frequency to %d Hz", newSamplesPerSecond)
+	}
+
+	return nil
+}
+
 func startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
 	// Spawn monitors for the various result maps
 	traceCh := make(chan *host.Trace)
