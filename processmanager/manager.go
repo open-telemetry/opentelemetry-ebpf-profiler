@@ -429,8 +429,8 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *host.Trace) {
 }
 
 func (pm *ProcessManager) releaseResources(pid libpf.PID) {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
 	for _, instance := range pm.interpreters[pid] {
 		if err := instance.ReleaseResources(); err != nil {
 			log.Warnf("Failed to release resources for %d: %v", pid, err)
