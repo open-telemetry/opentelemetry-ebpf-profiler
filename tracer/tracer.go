@@ -20,7 +20,6 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
-	"github.com/zeebo/xxh3"
 	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
@@ -924,23 +923,11 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		return nil
 	}
 
-	// Trace fields included in the hash:
-	//  - PID, kernel stack ID, length & frame array
-	// Intentionally excluded:
-	//  - ktime, COMM, APM trace, APM transaction ID, Origin and Off Time
-	ptr.Comm = [16]byte{}
-	ptr.Apm_trace_id = support.ApmTraceID{}
-	ptr.Apm_transaction_id = support.ApmSpanID{}
-	ptr.Ktime = 0
-	ptr.Origin = 0
-	ptr.Offtime = 0
-	trace.Hash = host.TraceHash(xxh3.Hash128(raw).Lo)
-
 	if ptr.Kernel_stack_id >= 0 {
 		var err error
 		trace.KernelFrames, err = t.readKernelFrames(ptr.Kernel_stack_id)
 		if err != nil {
-			log.Errorf("Failed to get kernel stack frames for 0x%x: %v", trace.Hash, err)
+			log.Errorf("Failed to get kernel stack frames: %v", err)
 		}
 	}
 
