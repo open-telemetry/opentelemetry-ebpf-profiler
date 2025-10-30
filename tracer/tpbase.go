@@ -9,7 +9,7 @@ import (
 	"fmt"
 
 	cebpf "github.com/cilium/ebpf"
-	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"

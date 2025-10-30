@@ -22,7 +22,7 @@ import (
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
-	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 // sysConfigVars supports collecting system configuration information.

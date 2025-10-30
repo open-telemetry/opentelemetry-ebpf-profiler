@@ -121,7 +121,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"

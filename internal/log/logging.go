@@ -1,4 +1,4 @@
-package log // import "go.opentelemetry.io/ebpf-profiler/internal/global/log"
+package log // import "go.opentelemetry.io/ebpf-profiler/internal/log"
 
 import (
 	"context"

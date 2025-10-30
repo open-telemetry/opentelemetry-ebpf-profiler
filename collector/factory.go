@@ -18,7 +18,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
-	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 var (

@@ -10,7 +10,7 @@ package successfailurecounter // import "go.opentelemetry.io/ebpf-profiler/succe
 import (
 	"sync/atomic"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 // SuccessFailureCounter implements a wrapper to increment success or failure counters exactly once.

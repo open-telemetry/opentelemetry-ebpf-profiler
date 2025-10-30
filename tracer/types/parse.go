@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"strings"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 // tracerType values identify tracers, such as the native code tracer, or PHP tracer

@@ -22,7 +22,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/vc"
 	"go.opentelemetry.io/otel/metric/noop"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 // Short copyright / license text for eBPF code

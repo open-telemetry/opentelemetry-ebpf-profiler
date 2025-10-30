@@ -16,7 +16,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 	aa "golang.org/x/arch/arm64/arm64asm"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 // nextAligned aligns a pointer up, to the next multiple of align.

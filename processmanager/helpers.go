@@ -5,7 +5,7 @@ package processmanager // import "go.opentelemetry.io/ebpf-profiler/processmanag
 
 import (
 	lru "github.com/elastic/go-freelru"
-	"go.opentelemetry.io/ebpf-profiler/internal/global/log"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
