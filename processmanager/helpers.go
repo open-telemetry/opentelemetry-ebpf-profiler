@@ -13,7 +13,7 @@ import (
 )
 
 type lruFileIDMapper struct {
-	cache *lru.SyncedLRU[host.FileID, libpf.FrameMappingFile]
+	cache *lru.ShardedLRU[host.FileID, libpf.FrameMappingFile]
 }
 
 // identityHash maps the host.FileID to a 32bit value.
@@ -23,7 +23,7 @@ func identityHash(key host.FileID) uint32 {
 }
 
 func newFileIDMapper(size int) (*lruFileIDMapper, error) {
-	cache, err := lru.NewSynced[host.FileID, libpf.FrameMappingFile](uint32(size), identityHash)
+	cache, err := lru.NewSharded[host.FileID, libpf.FrameMappingFile](uint32(size), identityHash)
 	if err != nil {
 		return nil, err
 	}
