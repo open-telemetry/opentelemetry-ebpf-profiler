@@ -137,8 +137,9 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	traceOutChan chan<- *host.Trace) func() []metrics.Metric {
 	eventsMap := t.ebpfMaps["trace_events"]
 	effectiveMaxSPS := t.samplesPerSecond
-	if t.maxSamplesPerSecond > 0 && t.maxSamplesPerSecond > effectiveMaxSPS {
+	if t.maxSamplesPerSecond > t.samplesPerSecond {
 		effectiveMaxSPS = t.maxSamplesPerSecond
+	}
 	}
 	eventReader, err := perf.NewReader(eventsMap,
 		effectiveMaxSPS*support.Sizeof_Trace)
