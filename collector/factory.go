@@ -41,7 +41,6 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 		baseCfg component.Config,
 		nextConsumer xconsumer.Profiles,
 	) (xreceiver.Profiles, error) {
-		// set the global logger
 		log.SetLogger(*slog.New(zapslog.NewHandler(rs.Logger.Core())))
 
 		cfg, ok := baseCfg.(*config.Config)
