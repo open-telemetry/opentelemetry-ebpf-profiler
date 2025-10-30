@@ -334,7 +334,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	hostFileID := host.FileIDFromLibpf(fileID)
 	info.addressMapper = ef.GetAddressMapper()
 	pm.elfInfoCache.Add(key, info)
-	pm.FileIDMapper.Set(hostFileID, info.mappingFile)
+	pm.FileIDMapper.set(hostFileID, info.mappingFile)
 
 	pm.exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
 		MappingFile:       info.mappingFile,

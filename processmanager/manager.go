@@ -280,7 +280,7 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, frame *host.Frame, dst *li
 			return true
 		}
 
-		if mappingFile, ok := pm.FileIDMapper.Get(frame.File); ok {
+		if mappingFile, ok := pm.FileIDMapper.get(frame.File); ok {
 			dst.Append(&libpf.Frame{
 				Type:              frame.Type,
 				AddressOrLineno:   relativeRIP,

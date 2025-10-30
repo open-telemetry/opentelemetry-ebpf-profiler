@@ -30,7 +30,7 @@ func newFileIDMapper(size int) (*lruFileIDMapper, error) {
 	return &lruFileIDMapper{cache}, nil
 }
 
-func (fm *lruFileIDMapper) Get(key host.FileID) (libpf.FrameMappingFile, bool) {
+func (fm *lruFileIDMapper) get(key host.FileID) (libpf.FrameMappingFile, bool) {
 	if mappingFile, ok := fm.cache.Get(key); ok {
 		return mappingFile, true
 	}
@@ -39,7 +39,7 @@ func (fm *lruFileIDMapper) Get(key host.FileID) (libpf.FrameMappingFile, bool) {
 	return libpf.FrameMappingFile{}, false
 }
 
-func (fm *lruFileIDMapper) Set(key host.FileID, val libpf.FrameMappingFile) {
+func (fm *lruFileIDMapper) set(key host.FileID, val libpf.FrameMappingFile) {
 	fm.cache.Add(key, val)
 	log.Debugf("Stored file ID mapping %#x -> %#x", key, val.Value())
 }
@@ -57,14 +57,14 @@ func NewMapFileIDMapper() *MapFileIDMapper {
 	}
 }
 
-func (fm *MapFileIDMapper) Get(key host.FileID) (libpf.FrameMappingFile, bool) {
+func (fm *MapFileIDMapper) get(key host.FileID) (libpf.FrameMappingFile, bool) {
 	if value, ok := fm.fileMap[key]; ok {
 		return value, true
 	}
 	return libpf.FrameMappingFile{}, true
 }
 
-func (fm *MapFileIDMapper) Set(key host.FileID, value libpf.FrameMappingFile) {
+func (fm *MapFileIDMapper) set(key host.FileID, value libpf.FrameMappingFile) {
 	fm.fileMap[key] = value
 }
 
@@ -73,9 +73,9 @@ var _ FileIDMapper = (*MapFileIDMapper)(nil)
 // FileIDMapper is responsible for mapping between 64-bit file IDs to the frame mapping metadata.
 type FileIDMapper interface {
 	// Retrieve the metadata for given 64-bit file ID.
-	Get(fileID host.FileID) (libpf.FrameMappingFile, bool)
+	get(fileID host.FileID) (libpf.FrameMappingFile, bool)
 	// Associate the metadata for given 64-bit file ID.
-	Set(fileID host.FileID, metadata libpf.FrameMappingFile)
+	set(fileID host.FileID, metadata libpf.FrameMappingFile)
 }
 
 // executableReporterStub is a stub to implement reporter.ExecutableReporter which is used
