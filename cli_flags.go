@@ -58,7 +58,7 @@ var (
 		"enabled or disabled."
 	pprofHelp               = "Listening address (e.g. localhost:6060) to serve pprof information."
 	samplesPerSecondHelp    = "Set the frequency (in Hz) of stack trace sampling."
-	maxSamplesPerSecondHelp = "Set the upper bound for sampling frequency to cap runtime updates. 0 disables the cap."
+	maxSamplesPerSecondHelp = "Set the upper bound for sampling frequency to cap runtime changes. Default (0) disables runtime sampling frequency changes. Must be greater or equal to samples-per-second."
 	reporterIntervalHelp    = "Set the reporter's interval in seconds."
 	monitorIntervalHelp     = "Set the monitor interval in seconds."
 	clockSyncIntervalHelp   = "Set the sync interval with the realtime clock. " +
