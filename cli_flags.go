@@ -18,7 +18,6 @@ import (
 const (
 	// Default values for CLI flags
 	defaultArgSamplesPerSecond    = 20
-	defaultArgMaxSamplesPerSecond = 40
 	defaultArgReporterInterval    = 5.0 * time.Second
 	defaultArgMonitorInterval     = 5.0 * time.Second
 	defaultClockSyncInterval      = 3 * time.Minute
