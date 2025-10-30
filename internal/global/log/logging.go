@@ -35,8 +35,8 @@ func SetDebugLogger() {
 	})))
 }
 
-// GetLogger returns the global logger.
-func GetLogger() *slog.Logger {
+// getLogger returns the global logger.
+func getLogger() *slog.Logger {
 	return globalLogger.Load()
 }
 
@@ -45,16 +45,16 @@ func GetLogger() *slog.Logger {
 // formatting the message as a string for backward compatibility with
 // previous unstructured logging.
 func Infof(msg string, keysAndValues ...any) {
-	if GetLogger().Enabled(context.Background(), slog.LevelInfo) {
-		GetLogger().Info(fmt.Sprintf(msg, keysAndValues...))
+	if getLogger().Enabled(context.Background(), slog.LevelInfo) {
+		getLogger().Info(fmt.Sprintf(msg, keysAndValues...))
 	}
 }
 
 // Info logs informational messages about the general state of the profiler.
 // This is a wrapper around Infof for convenience.
 func Info(msg string) {
-	if GetLogger().Enabled(context.Background(), slog.LevelInfo) {
-		GetLogger().Info(msg)
+	if getLogger().Enabled(context.Background(), slog.LevelInfo) {
+		getLogger().Info(msg)
 	}
 }
 
@@ -62,16 +62,16 @@ func Info(msg string) {
 // This wrapper formats structured log data into a string message for
 // backward compatibility with older unstructured logs.
 func Errorf(msg string, keysAndValues ...any) {
-	if GetLogger().Enabled(context.Background(), slog.LevelError) {
-		GetLogger().Error(fmt.Sprintf(msg, keysAndValues...))
+	if getLogger().Enabled(context.Background(), slog.LevelError) {
+		getLogger().Error(fmt.Sprintf(msg, keysAndValues...))
 	}
 }
 
 // Error logs error messages about exceptional states of the profiler.
 // This is a wrapper around Errorf for convenience.
 func Error(msg error) {
-	if GetLogger().Enabled(context.Background(), slog.LevelError) {
-		GetLogger().Error(msg.Error())
+	if getLogger().Enabled(context.Background(), slog.LevelError) {
+		getLogger().Error(msg.Error())
 	}
 }
 
@@ -79,16 +79,16 @@ func Error(msg error) {
 // This wrapper converts structured log data into a string message for
 // backward compatibility with older unstructured logs.
 func Debugf(msg string, keysAndValues ...any) {
-	if GetLogger().Enabled(context.Background(), slog.LevelDebug) {
-		GetLogger().Debug(fmt.Sprintf(msg, keysAndValues...))
+	if getLogger().Enabled(context.Background(), slog.LevelDebug) {
+		getLogger().Debug(fmt.Sprintf(msg, keysAndValues...))
 	}
 }
 
 // Debug logs detailed debugging information about internal profiler behavior.
 // This is a wrapper around Debugf for convenience.
 func Debug(msg string) {
-	if GetLogger().Enabled(context.Background(), slog.LevelDebug) {
-		GetLogger().Debug(msg)
+	if getLogger().Enabled(context.Background(), slog.LevelDebug) {
+		getLogger().Debug(msg)
 	}
 }
 
@@ -96,16 +96,16 @@ func Debug(msg string) {
 // than informational messages. This wrapper preserves backward compatibility
 // by string-formatting structured log data.
 func Warnf(msg string, keysAndValues ...any) {
-	if GetLogger().Enabled(context.Background(), slog.LevelWarn) {
-		GetLogger().Warn(fmt.Sprintf(msg, keysAndValues...))
+	if getLogger().Enabled(context.Background(), slog.LevelWarn) {
+		getLogger().Warn(fmt.Sprintf(msg, keysAndValues...))
 	}
 }
 
 // Warn logs warnings in the profiler — not errors, but likely more important
 // than informational messages. This is a wrapper around Warnf for convenience.
 func Warn(msg string) {
-	if GetLogger().Enabled(context.Background(), slog.LevelWarn) {
-		GetLogger().Warn(msg)
+	if getLogger().Enabled(context.Background(), slog.LevelWarn) {
+		getLogger().Warn(msg)
 	}
 }
 
