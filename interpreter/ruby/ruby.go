@@ -1046,19 +1046,32 @@ func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 
 // qualified_method_name, translated into golang
 // https://github.com/ruby/ruby/blob/v3_4_7/vm_backtrace.c#L1947
+// qualified_method_name, translated into golang
+// https://github.com/ruby/ruby/blob/v3_4_7/vm_backtrace.c#L1947
 func qualifiedMethodName(classPath, methodName libpf.String, singleton bool) libpf.String {
 	if methodName == libpf.NullString {
 		return methodName
 	}
-	if classPath != libpf.NullString {
-		joinChar := "#"
-		if singleton {
-			joinChar = "."
-		}
-		methodName = libpf.Intern(fmt.Sprintf("%s%s%s", classPath, joinChar, methodName))
+
+	if classPath == libpf.NullString {
+		return methodName
 	}
 
-	return methodName
+	classPathStr := classPath.String()
+	methodNameStr := methodName.String()
+
+	var joinByte byte = '#'
+	if singleton {
+		joinByte = '.'
+	}
+
+	var builder strings.Builder
+	builder.Grow(len(classPathStr) + 1 + len(methodNameStr))
+	builder.WriteString(classPathStr)
+	builder.WriteByte(joinByte)
+	builder.WriteString(methodNameStr)
+
+	return libpf.Intern(builder.String())
 }
 
 // rb_profile_frame_full_label, translated into golang
