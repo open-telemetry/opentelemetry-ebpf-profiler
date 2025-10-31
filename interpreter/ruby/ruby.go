@@ -1087,8 +1087,10 @@ func profileFrameFullLabel(classPath, label, baseLabel, methodName libpf.String,
 		return label
 	}
 
-	labelLength := len(label.String())
-	baseLabelLength := len(baseLabel.String())
+	labelStr := label.String()
+	baseLabelStr := baseLabel.String()
+	labelLength := len(labelStr)
+	baseLabelLength := len(baseLabelStr)
 	prefixLen := labelLength - baseLabelLength
 
 	// Ensure prefixLen doesn't exceed label length (defensive programming)
@@ -1100,7 +1102,19 @@ func profileFrameFullLabel(classPath, label, baseLabel, methodName libpf.String,
 		prefixLen = labelLength
 	}
 
-	profileLabel := label.String()[:prefixLen] + qualified.String()
+	qualifiedStr := qualified.String()
+
+	if prefixLen == 0 && qualifiedStr == "" {
+		return libpf.NullString
+	}
+
+	var builder strings.Builder
+	builder.Grow(prefixLen + len(qualifiedStr))
+	if prefixLen > 0 {
+		builder.WriteString(labelStr[:prefixLen])
+	}
+	builder.WriteString(qualifiedStr)
+	profileLabel := builder.String()
 
 	if len(profileLabel) == 0 {
 		return libpf.NullString
