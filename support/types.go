@@ -50,7 +50,7 @@ const (
 	EventTypeGenericPID = 0x1
 )
 
-const MaxFrameUnwinds = 0x400
+const MaxFrameUnwinds = 0x80
 
 const UnwindInfoMaxEntries = 0x4000
 
@@ -165,7 +165,7 @@ type Trace struct {
 	Stack_len          uint32
 	Origin             uint32
 	Offtime            uint64
-	Frames             [1024]Frame
+	Frames             [128]Frame
 }
 type UnwindInfo struct {
 	Opcode      uint8
@@ -309,7 +309,7 @@ type V8ProcInfo struct {
 const (
 	Sizeof_Frame      = 0x18
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0x62d0
+	Sizeof_Trace      = 0xed0
 
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
