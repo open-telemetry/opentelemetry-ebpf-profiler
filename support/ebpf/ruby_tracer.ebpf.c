@@ -22,12 +22,13 @@ struct ruby_procs_t {
 #define FRAMES_PER_WALK_RUBY_STACK 32
 // When resolving a CME, we need to traverse environment pointers until we
 // find IMEMO_MENT. Since we can't do a while loop, we have to bound this
-// the max encountered in experimentation on a production rails app is 6, so 10
-// should give some wiggle room. This increases insn for the kernel verifier
-// and code in the ep check "loop" is M*N for instruction checks
+// the max encountered in experimentation on a production rails app is 6.
+// This increases insn for the kernel verifier all code in the ep check "loop"
+// is M*N for instruction checks, so be extra sensitive about additions there.
 // If we get ERR_RUBY_READ_CME_MAX_EP regularly, we may need to raise it.
 #define MAX_EP_CHECKS              6
 
+// Constants related to reading a method entry
 #define VM_METHOD_TYPE_ISEQ 0
 #define VM_ENV_FLAG_LOCAL   0x2
 #define RUBY_FL_USHIFT      12
@@ -39,7 +40,32 @@ struct ruby_procs_t {
 #define VM_FRAME_MAGIC_MASK  0x7fff0001
 #define VM_FRAME_MAGIC_CFUNC 0x55550001
 
+// Save on read ops by reading the whole control frame struct
+// as technically this reads too much memory
+typedef struct rb_control_frame_struct {
+  const void *pc;         // cfp[0]
+  void *sp;               // cfp[1]
+  const void *iseq;       // cfp[2]
+  void *self;             // cfp[3] / block[0]
+  const void *ep;         // cfp[4] / block[1]
+  const void *block_code; // cfp[5] / block[2] -- iseq, ifunc, or forwarded block handler
+  void *jit_return;       // cfp[6] -- return address for JIT code
+} rb_control_frame_t;
+
+// Save on reads by putting all of these variables into one struct:
+// #define VM_ENV_DATA_INDEX_ME_CREF    (-2) /* ep[-2] */
+// #define VM_ENV_DATA_INDEX_SPECVAL    (-1) /* ep[-1] */
+// #define VM_ENV_DATA_INDEX_FLAGS      ( 0) /* ep[ 0] */
+typedef struct vm_env_struct {
+  const void *me_cref;
+  const void *specval;
+  const void *flags;
+} vm_env_t;
+
 // Record a Ruby cfp frame
+// frame_type is encoded into the "file" attribute of frame in the spare bits
+// frame flags are encoded in the upper bits of "line" for debugging purposes, but this
+// is may change in the future.
 static EBPF_INLINE ErrorCode push_ruby(Trace *trace, u16 flags, u8 frame_type, u64 file, u64 line)
 {
   if (frame_type != FRAME_TYPE_NONE) {
@@ -64,29 +90,15 @@ static EBPF_INLINE ErrorCode push_ruby(Trace *trace, u16 flags, u8 frame_type, u
       line       = packed;
     }
   }
-  // DEBUG_PRINT("%llx", iseq_addr);
   return _push(trace, file, line, FRAME_MARKER_RUBY);
 }
 
-typedef struct rb_control_frame_struct {
-  const void *pc;         // cfp[0]
-  void *sp;               // cfp[1]
-  const void *iseq;       // cfp[2]
-  void *self;             // cfp[3] / block[0]
-  const void *ep;         // cfp[4] / block[1]
-  const void *block_code; // cfp[5] / block[2] -- iseq, ifunc, or forwarded block handler
-  void *jit_return;       // cfp[6] -- return address for JIT code
-} rb_control_frame_t;
-
-// #define VM_ENV_DATA_INDEX_ME_CREF    (-2) /* ep[-2] */
-// #define VM_ENV_DATA_INDEX_SPECVAL    (-1) /* ep[-1] */
-// #define VM_ENV_DATA_INDEX_FLAGS      ( 0) /* ep[ 0] */
-typedef struct vm_env_struct {
-  const void *me_cref;
-  const void *specval;
-  const void *flags;
-} vm_env_t;
-
+// Read a single Ruby frame
+// This code is based on ruby's own rb_profile_frames, which internally calls
+// thread_profile_frames once it has the execution context.
+// https://github.com/ruby/ruby/blob/v3_4_7/vm_backtrace.c#L1728-L1770
+// It checks if it is a cframe, looks for a callable method entry, or else
+// pushes a bare iseq.
 static EBPF_INLINE ErrorCode read_ruby_frame(
   PerCPURecord *record, const RubyProcInfo *rubyinfo, void *stack_ptr, int *next_unwinder)
 {
@@ -98,7 +110,6 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
   u64 pc;
 
   Trace *trace     = &record->trace;
-  // should be at offset 0 on the struct, and size of VALUE, so u64 should fit it
   u64 rbasic_flags = 0;
   u64 imemo_mask   = 0;
   u64 me_or_cref   = 0;
@@ -109,21 +120,31 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
 
   u64 ep_check = 0;
 
-  rb_control_frame_t control_frame;
   vm_env_t vm_env;
+  rb_control_frame_t control_frame;
+  u64 cf_size = sizeof(rb_control_frame_t);
+
+  // Ruby prior to 3.1.0 control frame did not have jit_return
+  if (rubyinfo->version < 0x30100)
+    cf_size -= sizeof(control_frame.jit_return);
 
 read_cfp:
   pc          = 0;
   ep_check    = 0;
   frame_flags = 0;
-
-  if (bpf_probe_read_user(&control_frame, sizeof(rb_control_frame_t), (void *)(stack_ptr))) {
-    // TODO increment metric
+  if (bpf_probe_read_user(&control_frame, cf_size, (void *)(stack_ptr))) {
+    increment_metric(metricID_UnwindRubyErrReadStackPtr);
     return ERR_RUBY_READ_STACK_PTR;
   }
   current_ep = (void *)control_frame.ep;
   pc         = (u64)control_frame.pc;
 
+// this code emulates ruby's rb_vm_frame_method_entry, which is called by
+// rb_vm_frame_method_entry to check the frame for a callable method entry, CME
+// https://github.com/ruby/ruby/blob/v3_4_7/vm_insnhelper.c#L769
+//
+// It uses labels and gotos to cut back on the instructions executed, while also
+// trying to emulate a "while" loop.
 read_ep:
 
   frame_addr = 0;
@@ -138,26 +159,31 @@ read_ep:
   }
 
   me_or_cref = (u64)vm_env.me_cref;
-  // Only want to check the first env for flags
+  // Only check the flags from the "root" env
   if (frame_flags == 0) {
     frame_flags = (u64)vm_env.flags;
   }
   cfunc = (((frame_flags & VM_FRAME_MAGIC_MASK) == VM_FRAME_MAGIC_CFUNC) || pc == 0);
 
+  // Pack the frame flags into 16 bits for debugging purposes
   // Extract high byte (nibbles 6-7)
   u16 high_byte    = (frame_flags >> 24) & 0xFF;
   u16 low_byte     = (frame_flags >> 4) & 0xFF;
   // Extract nibbles 1-2 (middle of lower 16 bits)
   u16 packed_flags = (high_byte << 8) | low_byte;
 
+// this code emulate's ruby's check_method_entry to traverse the environment
+// until it finds a method entry. Since the function calls itself, the code
+// is a bit out of order to try and optimize running as few instructions as
+// possible, since this is in the M * N part of the loop and we want the code
+// to pass the kernel verifier.
+// https://github.com/ruby/ruby/blob/v3_4_7/vm_insnhelper.c#L743
 check_me:
-  // DEBUG_PRINT("ruby: checking %llx", me_or_cref);
   if (me_or_cref == 0)
     goto next_ep;
 
   if (bpf_probe_read_user(&rbasic_flags, sizeof(rbasic_flags), (void *)(me_or_cref))) {
-    // DEBUG_PRINT("ruby: failed to read flags to check method entry %llx", (u64)me_or_cref);
-    //  TODO increment metric
+    increment_metric(metricID_UnwindRubyErrReadRbasicFlags);
     return ERR_RUBY_READ_RBASIC_FLAGS;
   }
 
@@ -167,15 +193,13 @@ check_me:
   if ((u64)vm_env.flags & VM_ENV_FLAG_LOCAL) {
     if (imemo_mask == IMEMO_SVAR) {
       if (bpf_probe_read_user(&svar_cref, sizeof(svar_cref), (void *)(me_or_cref + 8))) {
-        // DEBUG_PRINT("ruby: failed to dereference svar %llx", (u64)me_or_cref);
-        //  TODO increment metric
+        increment_metric(metricID_UnwindRubyErrReadSvar);
         return ERR_RUBY_READ_SVAR;
       }
       me_or_cref = svar_cref;
 
       if (bpf_probe_read_user(&rbasic_flags, sizeof(rbasic_flags), (void *)(me_or_cref))) {
-        // DEBUG_PRINT("ruby: failed to read flags to check method entry %llx", (u64)me_or_cref);
-        //  TODO increment metric
+        increment_metric(metricID_UnwindRubyErrReadRbasicFlags);
         return ERR_RUBY_READ_RBASIC_FLAGS;
       }
       imemo_mask = (rbasic_flags >> RUBY_FL_USHIFT) & IMEMO_MASK;
@@ -185,6 +209,8 @@ check_me:
   if (imemo_mask == IMEMO_MENT)
     goto done_check;
 
+// Next iteration of the loop, or error out if we have hit the maximum as we
+// couldn't find the method entry
 next_ep:
   if (ep_check++ < MAX_EP_CHECKS && (!((u64)vm_env.flags & VM_ENV_FLAG_LOCAL))) {
     // https://github.com/ruby/ruby/blob/v3_4_5/vm_core.h#L1355
@@ -192,15 +218,12 @@ next_ep:
     goto read_ep;
   }
 
-  // TODO have a named error for this
-  // TODO fallback to checking in userspace from EP pointer
   if (ep_check >= MAX_EP_CHECKS)
     return ERR_RUBY_READ_CME_MAX_EP;
 
 done_check:
 
   if (imemo_mask == IMEMO_MENT) {
-    // DEBUG_PRINT("ruby: imemo type is method entry");
     frame_addr = me_or_cref;
 
     if (cfunc) {
@@ -229,14 +252,12 @@ done_check:
 
       if (bpf_probe_read_user(
             &method_def, sizeof(method_def), (void *)(frame_addr + rubyinfo->cme_method_def))) {
-        // DEBUG_PRINT("ruby: failed to get method def");
-        //  increment_metric(metricID_UnwindRubyErrReadIseqBody);
+        increment_metric(metricID_UnwindRubyErrReadMethodDef);
         return ERR_RUBY_READ_METHOD_DEF;
       }
 
       if (bpf_probe_read_user(&method_type, sizeof(method_type), (void *)(method_def))) {
-        // DEBUG_PRINT("ruby: failed to get method def type body");
-        //  increment_metric(metricID_UnwindRubyErrReadIseqBody);
+        increment_metric(metricID_UnwindRubyErrReadMethodType);
         return ERR_RUBY_READ_METHOD_TYPE;
       }
 
@@ -250,14 +271,13 @@ done_check:
   // Fallback to just reading the iseq if we couldn't detect a supported CME type
   if (frame_type == FRAME_TYPE_NONE) {
     if (control_frame.iseq == NULL) {
-      // DEBUG_PRINT("ruby: NULL iseq entry");
+      increment_metric(metricID_UnwindRubyErrInvalidIseq);
       return ERR_RUBY_INVALID_ISEQ;
     }
 
     if (control_frame.iseq != NULL) {
       if (bpf_probe_read_user(
             &frame_addr, sizeof(frame_addr), (void *)(control_frame.iseq + rubyinfo->body))) {
-        // DEBUG_PRINT("ruby: failed to get iseq body");
         increment_metric(metricID_UnwindRubyErrReadIseqBody);
         return ERR_RUBY_READ_ISEQ_BODY;
       }
@@ -265,8 +285,8 @@ done_check:
     }
   }
 
-  // For symbolization of the frame we forward the information about the instruction sequence
-  // and program counter to user space.
+  // For symbolization of the frame we forward the information about the CME,
+  // or plain iseq to userspace, along with the pc so we can get line information.
   // From this we can then extract information like file or function name and line number.
   ErrorCode error = push_ruby(trace, packed_flags, frame_type, frame_addr, pc);
   if (error) {
@@ -291,7 +311,7 @@ done_check:
 // may store either of these [4]. In the case of a cme, since ruby 3.3.0 [5] class names
 // have been stored as an easily accessible struct member on the classext, accessible
 // through the cme. We will check the frame for IMEMO_MENT to see if it is a cme frame,
-// and if so we will try to get the classname. The iseq body is accessible through
+// which makes it possible to determine the classname. The iseq body is accessible through
 // additional indirection of the cme, so we can still get the file and function names
 // through the existing method.
 //
@@ -299,8 +319,8 @@ done_check:
 // so that the Symbolizer will know what type of pointer we have given it, and
 // can search the struct at the right offsets for the classpath and iseq body.
 //
-// If the frame is the iseq type, the original logic of just extracting the function
-// and file names and line numbers is executed.
+// If the frame is the plain iseq type, the original logic of just extracting the
+// function and file names and line numbers is executed.
 //
 // [0] rb_execution_context_struct
 // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L843
@@ -316,7 +336,6 @@ done_check:
 //
 // [5] classpath stored as struct member instead of ivar
 // https://github.com/ruby/ruby/commit/abff5f62037284024aaf469fc46a6e8de98fa1e3
-
 static EBPF_INLINE ErrorCode walk_ruby_stack(
   PerCPURecord *record,
   const RubyProcInfo *rubyinfo,
@@ -387,31 +406,25 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
     record->rubyUnwindState.cfunc_saved_frame = 0;
   }
 
-  // TODO probably just unroll this loop so upstream will be happy
-  u32 i = 0;
+  UNROLL for (u32 i = 0; i < FRAMES_PER_WALK_RUBY_STACK; ++i)
+  {
+    error = read_ruby_frame(record, rubyinfo, stack_ptr, next_unwinder);
+    if (error != ERR_OK)
+      return error;
 
-read_frame:
-  error = read_ruby_frame(record, rubyinfo, stack_ptr, next_unwinder);
-  if (error != ERR_OK)
-    return error;
-
-  if (last_stack_frame <= stack_ptr) {
-    // We have processed all frames in the Ruby VM and can stop here.
-    *next_unwinder = PROG_UNWIND_NATIVE;
-  } else {
-    // If we aren't at the end, advance the stack pointer to continue from the next frame
-    stack_ptr += rubyinfo->size_of_control_frame_struct;
+    if (last_stack_frame <= stack_ptr) {
+      // We have processed all frames in the Ruby VM and can stop here.
+      *next_unwinder = PROG_UNWIND_NATIVE;
+    } else {
+      // If we aren't at the end, advance the stack pointer to continue from the next frame
+      stack_ptr += rubyinfo->size_of_control_frame_struct;
+    }
+    // If the next winder is native, save state and move to next unwinder
+    if (*next_unwinder == PROG_UNWIND_NATIVE)
+      goto save_state;
   }
 
-  if (*next_unwinder != PROG_UNWIND_NATIVE) {
-    // jumping read_cfp label implements a much cheaper loop than using UNROLL macro
-    i += 1;
-    if (i < FRAMES_PER_WALK_RUBY_STACK)
-      goto read_frame;
-
-    *next_unwinder = PROG_UNWIND_RUBY;
-  }
-
+  *next_unwinder = PROG_UNWIND_RUBY;
 save_state:
   // Store the current progress in the Ruby unwind state so we can continue walking the stack
   // after the tail call.
@@ -450,7 +463,6 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
     // ruby_current_ec from thread local storage, analogous to how it is done
     // in ruby itself
     // https://github.com/ruby/ruby/blob/6c0315d99a93bdea947f821bd337000420ab41d1/vm_core.h#L2024
-
     u64 tsd_base;
     if (tsd_get_base((void **)&tsd_base) != 0) {
       DEBUG_PRINT("ruby: failed to get TSD base for TLS symbol lookup");

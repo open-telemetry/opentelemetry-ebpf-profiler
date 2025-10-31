@@ -292,4 +292,10 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindDotnetErrBadFP:                       metrics.IDUnwindDotnetErrBadFP,
 	C.metricID_UnwindDotnetErrCodeHeader:                  metrics.IDUnwindDotnetErrCodeHeader,
 	C.metricID_UnwindDotnetErrCodeTooLarge:                metrics.IDUnwindDotnetErrCodeTooLarge,
+	C.metricID_UnwindRubyErrInvalidIseq:                   metrics.IDUnwindRubyErrInvalidIseq,
+	C.metricID_UnwindRubyErrReadMethodDef:                 metrics.IDUnwindRubyErrReadMethodDef,
+	C.metricID_UnwindRubyErrReadMethodType:                metrics.IDUnwindRubyErrReadMethodType,
+	C.metricID_UnwindRubyErrReadSvar:                      metrics.IDUnwindRubyErrReadSvar,
+	C.metricID_UnwindRubyErrReadRbasicFlags:               metrics.IDUnwindRubyErrReadRbasicFlags,
+	C.metricID_UnwindRubyErrCmeMaxEp:                      metrics.IDUnwindRubyErrCmeMaxEp,
 }

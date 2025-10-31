@@ -55,7 +55,7 @@ const MaxFrameUnwinds = 0x400
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x62
+	MetricIDBeginCumulative = 0x68
 )
 
 const (
@@ -462,4 +462,10 @@ var MetricsTranslation = []metrics.MetricID{
 	0x5d: metrics.IDUnwindDotnetErrBadFP,
 	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
 	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,
+	0x62: metrics.IDUnwindRubyErrInvalidIseq,
+	0x63: metrics.IDUnwindRubyErrReadMethodDef,
+	0x64: metrics.IDUnwindRubyErrReadMethodType,
+	0x65: metrics.IDUnwindRubyErrReadSvar,
+	0x66: metrics.IDUnwindRubyErrReadRbasicFlags,
+	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
 }

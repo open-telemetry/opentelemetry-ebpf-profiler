@@ -307,6 +307,24 @@ enum {
   // number of failures to read Go custom labels
   metricID_UnwindGoLabelsFailures,
 
+  // number of invalid instruction sequences sequence
+  metricID_UnwindRubyErrInvalidIseq,
+
+  // number of failures to read the Ruby method definition
+  metricID_UnwindRubyErrReadMethodDef,
+
+  // number of failures to read the Ruby method type
+  metricID_UnwindRubyErrReadMethodType,
+
+  // number of failures to read the Ruby svar while finding CME
+  metricID_UnwindRubyErrReadSvar,
+
+  // number of failures to read the Ruby rbasic flags
+  metricID_UnwindRubyErrReadRbasicFlags,
+
+  // number of failed attempts to read a CME by exceeding max EP checks
+  metricID_UnwindRubyErrCmeMaxEp,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -674,7 +692,7 @@ typedef struct RubyUnwindState {
   void *stack_ptr;
   // Pointer to the last control frame struct in the Ruby VM stack we want to handle.
   void *last_stack_frame;
-  // Framefor last cfunc before we switched to native unwinder
+  // Frame for last cfunc before we switched to native unwinder
   u64 cfunc_saved_frame;
 } RubyUnwindState;
 
