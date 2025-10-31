@@ -47,14 +47,6 @@ const (
 
 //nolint:lll
 const (
-	// RUBY_T_CLASS
-	// https://github.com/ruby/ruby/blob/c149708018135595b2c19c5f74baf9475674f394/include/ruby/internal/value_type.h#L114
-	rubyTClass = 0x2
-
-	// RUBY_T_MODULE
-	// https://github.com/ruby/ruby/blob/c149708018135595b2c19c5f74baf9475674f394/include/ruby/internal/value_type.h#L115C5-L115C74
-	rubyTModule = 0x3
-
 	// RUBY_T_ICLASS
 	// https://github.com/ruby/ruby/blob/c149708018135595b2c19c5f74baf9475674f394/include/ruby/internal/value_type.h#L138
 	rubyTIClass = 0x1c
@@ -750,8 +742,8 @@ func (r *rubyInstance) readClassName(classAddr libpf.Address) (libpf.String, boo
 			classpathPtr = r.rm.Ptr(klassAddr + libpf.Address(r.r.vmStructs.rclass_and_rb_classext_t.classext+r.r.vmStructs.rb_classext_struct.classpath))
 		}
 	} else if classFlags&r.r.rubyFlSingleton != 0 {
-		// https://github.com/ruby/ruby/blob/b627532/internal/class.h#L528
-		// https://github.com/ruby/ruby/blob/b627532/vm_backtrace.c#L1934-L1937
+		// https://github.com/ruby/ruby/blob/b62753246eba4940f82a81736fc09b6517fa3965/internal/class.h#L528%C2%AC
+		// https://github.com/ruby/ruby/blob/b62753246eba4940f82a81736fc09b6517fa3965/vm_backtrace.c#L1934-L1937%C2%AC
 		singleton = true
 		// From these ruby macros:
 		// #define RCLASS_ATTACHED_OBJECT(c) (RCLASS_EXT_PRIME(c)->as.singleton_class.attached_object)
@@ -788,16 +780,21 @@ func (r *rubyInstance) id2str(originalId uint64) (libpf.String, error) {
 
 	// RUBY_ID_SCOPE_SHIFT = 4
 	// https://github.com/ruby/ruby/blob/797a4115bbb249c4f5f11e1b4bacba7781c68cee/template/id.h.tmpl#L30
-	RUBY_ID_SCOPE_SHIFT := 4
+	rubyIdScopeShift := 4
 
+	// ID_ENTRY_UNIT
 	// https://github.com/ruby/ruby/blob/v3_4_5/symbol.c#L77
-	ID_ENTRY_UNIT := uint64(512)
+	idEntryUnit := uint64(512)
+
+	// ID_ENTRY_SIZE
+	// https://github.com/ruby/ruby/blob/980e18496e1aafc642b199d24c81ab4a8afb3abb/symbol.c#L93
+	idEntrySize := uint64(2)
 
 	vms := &r.r.vmStructs
 
 	serial := originalId
 	if originalId > r.r.lastOpId {
-		serial = originalId >> RUBY_ID_SCOPE_SHIFT
+		serial = originalId >> rubyIdScopeShift
 	}
 
 	lastId := r.rm.Uint32(r.globalSymbolsAddr)
@@ -807,9 +804,8 @@ func (r *rubyInstance) id2str(originalId uint64) (libpf.String, error) {
 	}
 
 	ids := r.rm.Ptr(r.globalSymbolsAddr + libpf.Address(vms.rb_symbols_t.ids))
-	idx := serial / ID_ENTRY_UNIT
+	idx := serial / idEntryUnit
 
-	// string2cstring
 	flags := r.rm.Ptr(ids)
 
 	var idsPtr libpf.Address
@@ -842,7 +838,7 @@ func (r *rubyInstance) id2str(originalId uint64) (libpf.String, error) {
 		log.Debugf("Handling embedded array (2 levels) with shift")
 		arrayPtr = r.rm.Ptr(array + libpf.Address(vms.rarray_struct.as_ary))
 	}
-	offset := (serial % ID_ENTRY_UNIT) * 2
+	offset := (serial % idEntryUnit) * idEntrySize
 	stringPtr := r.rm.Ptr(arrayPtr + libpf.Address(offset*uint64(vms.size_of_value)))
 
 	symbolName, err = r.getStringCached(stringPtr, r.readRubyString)
@@ -964,8 +960,8 @@ func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 		cme = true
 		cframe = true
 		methodDefinition := r.rm.Ptr(frameAddr + libpf.Address(vms.rb_method_entry_struct.def))
-		if err != nil {
-			return err
+		if methodDefinition == 0 {
+			return fmt.Errorf("Unable to read method definition for cfunc (%04x)", frameFlags)
 		}
 
 		originalId := r.rm.Uint64(methodDefinition + libpf.Address(vms.rb_method_definition_struct.original_id))
