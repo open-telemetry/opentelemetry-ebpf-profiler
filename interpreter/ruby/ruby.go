@@ -1194,6 +1194,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		currentCtxSymbol = "ruby_current_execution_context_ptr"
 	}
 
+	var globalSymbols libpf.SymbolValue
 	var currentEcTpBaseTlsOffset libpf.Address
 	var interpRanges []util.Range
 
@@ -1233,12 +1234,16 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		log.Debugf("Direct lookup of %v failed: %v, will try fallback", interpSymbolName, err)
 	}
 
-	globalSymbolsAddr, err := ef.LookupSymbolAddress(globalSymbolsName)
+	globalSymbols, err = ef.LookupSymbolAddress(globalSymbolsName)
 	if err != nil {
 		log.Debugf("Direct lookup of %v failed: %v, will try fallback", globalSymbolsName, err)
+	} else {
 	}
 
 	if err = ef.VisitSymbols(func(s libpf.Symbol) bool {
+		if len(interpRanges) > 0 && currentEcSymbolAddress != 0 && currentCtxPtr != 0 && globalSymbols != libpf.SymbolValueInvalid {
+			return false
+		}
 		if s.Name == currentEcSymbolName {
 			currentEcSymbolAddress = s.Address
 		}
@@ -1246,16 +1251,13 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			currentCtxPtr = s.Address
 		}
 		if s.Name == globalSymbolsName {
-			globalSymbolsAddr = s.Address
+			globalSymbols = s.Address
 		}
 		if len(interpRanges) == 0 && s.Name == interpSymbolName {
 			interpRanges = []util.Range{{
 				Start: uint64(s.Address),
 				End:   uint64(s.Address) + s.Size,
 			}}
-		}
-		if len(interpRanges) > 0 && currentEcSymbolAddress != 0 && currentCtxPtr != 0 && globalSymbolsAddr != libpf.SymbolValueInvalid {
-			return false
 		}
 		return true
 	}); err != nil {
@@ -1277,16 +1279,15 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		log.Warnf("failed to locate TLS descriptor: %v", err)
 	}
 
-	log.Debugf("Discovered EC tls tpbase offset %x, fallback ctx %x, interp ranges: %v, global symbols: %x", currentEcTpBaseTlsOffset, currentCtxPtr, interpRanges, globalSymbolsAddr)
+	log.Debugf("Discovered EC tls tpbase offset %x, fallback ctx %x, interp ranges: %v, global symbols: %x", currentEcTpBaseTlsOffset, currentCtxPtr, interpRanges, globalSymbols)
 
 	rid := &rubyData{
 		version:                  version,
 		currentEcTpBaseTlsOffset: libpf.Address(currentEcTpBaseTlsOffset),
 		currentCtxPtr:            libpf.Address(currentCtxPtr),
-		globalSymbolsAddr:        libpf.Address(globalSymbolsAddr),
+		hasGlobalSymbols:         globalSymbols != 0,
+		globalSymbolsAddr:        libpf.Address(globalSymbols),
 	}
-
-	rid.hasGlobalSymbols = globalSymbolsAddr != 0
 
 	vms := &rid.vmStructs
 	switch {
