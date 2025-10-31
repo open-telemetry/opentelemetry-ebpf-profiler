@@ -4,9 +4,10 @@
 package elfunwindinfo
 
 import (
-	"debug/elf"
+	"bytes"
 	"testing"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfatbuf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 
@@ -31,7 +32,9 @@ func TestPcval(t *testing.T) {
 	data := []byte{
 		0x02, 0x19, 0x40, 0x52, 0x10, 0x02, 0x10, 0x06,
 		0x0f, 0x01, 0x0f, 0x27, 0x3f, 0x01, 0x00}
-	p := newPcval(data, 0x2000, 1)
+	rdr := pfatbuf.Cache{}
+	rdr.Init(bytes.NewReader(data))
+	p := newPcval(&rdr, 0, 0x2000, 1)
 	i := 0
 	for ok := true; ok; ok = p.step() {
 		t.Logf("Pcval %d, %x", p.val, p.pcEnd)
@@ -45,7 +48,9 @@ func TestPcval(t *testing.T) {
 // Pcval with sequence that would result in out-of-bound read
 func TestPcvalInvalid(_ *testing.T) {
 	data := []byte{0x81}
-	p := newPcval(data, 0x2000, 1)
+	rdr := pfatbuf.Cache{}
+	rdr.Init(bytes.NewReader(data))
+	p := newPcval(&rdr, 0, 0x2000, 1)
 	for p.step() {
 	}
 }
@@ -61,7 +66,7 @@ func TestGoStrategy(t *testing.T) {
 		{"go/src/crypto/elliptic/p256_asm.go", strategyDeltasWithFrame},
 	}
 	for _, x := range res {
-		s := getSourceFileStrategy(elf.EM_X86_64, x.file, strategyFramePointer)
+		s := getSourceFileStrategyAmd64(x.file, strategyFramePointer)
 		assert.Equal(t, x.result, s)
 	}
 }
