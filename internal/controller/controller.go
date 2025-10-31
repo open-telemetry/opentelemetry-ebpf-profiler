@@ -164,7 +164,7 @@ func startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
 	// Spawn monitors for the various result maps
 	traceCh := make(chan *host.Trace)
 
-	if err := trc.StartMapMonitors(ctx, traceCh); err != nil {
+	if err := trc.StartMapMonitors(traceCh); err != nil {
 		return fmt.Errorf("failed to start map monitors: %v", err)
 	}
 
