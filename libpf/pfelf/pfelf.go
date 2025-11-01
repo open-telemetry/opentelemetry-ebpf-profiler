@@ -16,8 +16,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
 // HasDWARFData returns true if the provided ELF file contains actionable DWARF debugging
@@ -287,29 +285,6 @@ func getNoteString(sectionBytes []byte, name string, noteType uint32) (
 		return "", false, nil
 	}
 	return string(noteBytes), true, nil
-}
-
-func symbolMapFromELFSymbols(syms []elf.Symbol) *libpf.SymbolMap {
-	symmap := &libpf.SymbolMap{}
-	for _, sym := range syms {
-		symmap.Add(libpf.Symbol{
-			Name:    libpf.SymbolName(sym.Name),
-			Address: libpf.SymbolValue(sym.Value),
-			Size:    sym.Size,
-		})
-	}
-	symmap.Finalize()
-	return symmap
-}
-
-// GetDynamicSymbols gets the dynamic symbols of elf.File and returns them as libpf.SymbolMap for
-// fast lookup by address and name.
-func GetDynamicSymbols(elfFile *elf.File) (*libpf.SymbolMap, error) {
-	syms, err := elfFile.DynamicSymbols()
-	if err != nil {
-		return nil, err
-	}
-	return symbolMapFromELFSymbols(syms), nil
 }
 
 // IsGoBinary returns true if the provided file is a Go binary (= an ELF file with

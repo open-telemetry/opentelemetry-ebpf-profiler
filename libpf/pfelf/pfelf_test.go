@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/ebpf-profiler/testsupport"
 
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
@@ -143,32 +142,6 @@ func TestGetKernelVersionBytes(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "Linux version 1.2.3\n", string(ver))
 		})
-	}
-}
-
-func TestSymbols(t *testing.T) {
-	exePath, err := testsupport.WriteSharedLibrary()
-	require.NoError(t, err)
-	defer os.Remove(exePath)
-
-	ef, err := elf.Open(exePath)
-	require.NoError(t, err)
-	defer ef.Close()
-
-	symmap, err := pfelf.GetDynamicSymbols(ef)
-	require.NoError(t, err)
-
-	sym, _ := symmap.LookupSymbol("func")
-	if assert.NotNil(t, sym) {
-		assert.Equal(t, libpf.SymbolValue(0x1000), sym.Address)
-	}
-	sym, _ = symmap.LookupSymbol("not_existent")
-	assert.Nil(t, sym)
-
-	name, offs, ok := symmap.LookupByAddress(0x1002)
-	if assert.True(t, ok) {
-		assert.Equal(t, libpf.SymbolName("func"), name)
-		assert.Equal(t, libpf.Address(2), offs)
 	}
 }
 
