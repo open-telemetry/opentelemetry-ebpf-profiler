@@ -9,6 +9,11 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Disable man-db
+      shell: bash
+      run: |
+        echo "set man-db/auto-update false" | sudo debconf-communicate
+        sudo dpkg-reconfigure man-db
     - name: Install dependencies (arm64)
       if: ${{ inputs.target_arch == 'arm64' }}
       shell: bash
