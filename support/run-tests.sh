@@ -57,10 +57,6 @@ case "$qemu_arch" in
         ;;
 esac
 
-if [ "$qemu_arch" = "aarch64" ]; then
-    additionalQemuArgs+=" -machine virt -cpu max"
-fi
-
 bluebox "${bb_args[@]}" || (echo "failed to generate initramfs"; exit 1)
 
 echo Testing on "${kernel_version}"
