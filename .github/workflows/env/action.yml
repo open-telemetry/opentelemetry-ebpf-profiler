@@ -1,9 +1,16 @@
 name: Common environment setup
 
+inputs:
+  target_arch:
+    description: 'Target architecture'
+    required: false
+    default: amd64
+
 runs:
   using: composite
   steps:
-    - name: Install dependencies
+    - name: Install dependencies (arm64)
+      if: ${{ inputs.target_arch == 'arm64' }}
       shell: bash
       run: |
         # Ubuntu has ARM64 packages in an entirely different repo, so we can't just
@@ -26,10 +33,9 @@ runs:
 
         sudo dpkg --add-architecture arm64
         sudo apt-get update -y
-
-        sudo apt-get install -y curl unzip gcc-aarch64-linux-gnu \
+        sudo apt-get install -y gcc-aarch64-linux-gnu \
           libc6-arm64-cross qemu-user-binfmt libc6:arm64 \
-          musl-dev:amd64 musl-dev:arm64 musl-tools binutils-aarch64-linux-gnu
+          binutils-aarch64-linux-gnu
     - name: Set up Go
       uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
       with:
