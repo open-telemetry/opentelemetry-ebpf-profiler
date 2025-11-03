@@ -78,6 +78,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		Intervals:              intervals,
 		IncludeTracers:         includeTracers,
 		FilterErrorFrames:      !c.config.SendErrorFrames,
+		FilterIdleFrames:       !c.config.SendIdleFrames,
 		SamplesPerSecond:       c.config.SamplesPerSecond,
 		MapScaleFactor:         int(c.config.MapScaleFactor),
 		KernelVersionCheck:     !c.config.NoKernelVersionCheck,
@@ -90,7 +91,6 @@ func (c *Controller) Start(ctx context.Context) error {
 		UProbeLinks:            c.config.UProbeLinks,
 		LoadProbe:              c.config.LoadProbe,
 		ExecutableReporter:     c.config.ExecutableReporter,
-		IncludeIdle:            c.config.IncludeIdle,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)

@@ -298,18 +298,16 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		}
 	}
 
-	if cfg.IncludeIdle {
-		if err := coll.Variables["include_idle"].Set(uint32(1)); err != nil {
-			return fmt.Errorf("failed to set debug output: %v", err)
-		}
-	}
-
 	if err := coll.Variables["off_cpu_threshold"].Set(cfg.OffCPUThreshold); err != nil {
 		return fmt.Errorf("failed to set off_cpu_threshold: %v", err)
 	}
 
-	if err := coll.Variables["drop_error_only_traces"].Set(cfg.FilterErrorFrames); err != nil {
+	if err := coll.Variables["filter_error_frames"].Set(cfg.FilterErrorFrames); err != nil {
 		return fmt.Errorf("failed to set drop_error_only_traces: %v", err)
+	}
+
+	if err := coll.Variables["filter_idle_frames"].Set(cfg.FilterIdleFrames); err != nil {
+		return fmt.Errorf("failed to set debug output: %v", err)
 	}
 
 	pacMask := pacmask.GetPACMask()

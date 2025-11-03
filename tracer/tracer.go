@@ -116,8 +116,8 @@ type Tracer struct {
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
 
-	// includeIdle instructs the eBPF programs to unwind and report idle states of the Linux kernel.
-	includeIdle bool
+	// filterIdleFrames indicates whether idle frames should be filtered.
+	filterIdleFrames bool
 }
 
 type Config struct {
@@ -136,6 +136,8 @@ type Config struct {
 	MapScaleFactor int
 	// FilterErrorFrames indicates whether error frames should be filtered.
 	FilterErrorFrames bool
+	// FilterIdleFrames indicates whether idle frames should be filtered.
+	FilterIdleFrames bool
 	// KernelVersionCheck indicates whether the kernel version should be checked.
 	KernelVersionCheck bool
 	// VerboseMode indicates whether to enable verbose output of eBPF tracers.
@@ -157,8 +159,6 @@ type Config struct {
 	// LoadProbe inidicates whether the generic eBPF program should be loaded
 	// without being attached to something.
 	LoadProbe bool
-	// IncludeIdle instructs the eBPF programs to unwind and report idle states of the Linux kernel.
-	IncludeIdle bool
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -1023,7 +1023,7 @@ func (t *Tracer) AttachTracer() error {
 	if err := perf.CPUClock.Configure(perfAttribute); err != nil {
 		return fmt.Errorf("failed to configure software perf event: %v", err)
 	}
-	if t.includeIdle {
+	if !t.filterIdleFrames {
 		perfAttribute.Options.ExcludeIdle = false
 	}
 
