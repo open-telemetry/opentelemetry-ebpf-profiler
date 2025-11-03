@@ -22,7 +22,6 @@ type Config struct {
 	DisableTLS    bool
 	PprofAddr     string
 	Version       bool
-	IncludeIdle   bool
 
 	ExecutableReporter reporter.ExecutableReporter
 	OnShutdown         func() error
