@@ -171,6 +171,11 @@
     "description": "Ruby: Exceeded maximum EP checks while locating CME"
   },
   {
+    "id": 3021,
+    "name": "ruby_pack_frame",
+    "description": "Ruby: Failed to pack additional into spare bytes of Frame field"
+  },
+  {
     "id": 4000,
     "name": "native_lookup_text_section",
     "description": "Native: Unable to find the code section in the stack delta page info map"

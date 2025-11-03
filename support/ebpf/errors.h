@@ -106,6 +106,9 @@ typedef enum ErrorCode {
   // Ruby: Exceeded maximum EP checks while locating CME
   ERR_RUBY_READ_CME_MAX_EP = 3020,
 
+  // Ruby: Failed to pack additional into spare bytes of Frame field
+  ERR_RUBY_PACK_FRAME = 3021,
+
   // Native: Unable to find the code section in the stack delta page info map
   ERR_NATIVE_LOOKUP_TEXT_SECTION = 4000,
 

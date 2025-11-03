@@ -71,24 +71,20 @@ static EBPF_INLINE ErrorCode push_ruby(Trace *trace, u16 flags, u8 frame_type, u
   if (frame_type != FRAME_TYPE_NONE) {
     // Ensure address is actually no more than 48-bits
     u64 addr = file & ADDR_MASK_48_BIT;
-    if (addr != file) {
-      DEBUG_PRINT("ruby: error pushing extra addr, file data was more than 48 bits");
-    } else {
-      // Shift data to bits 48-55
-      u64 packed = addr | ((u64)frame_type << 48);
-      file       = packed;
-    }
+    if (addr != file)
+      return ERR_RUBY_PACK_FRAME;
+    // Shift data to bits 48-55
+    u64 packed = addr | ((u64)frame_type << 48);
+    file       = packed;
   }
 
   if (flags != 0) {
     u64 pc_addr = line & ADDR_MASK_48_BIT;
-    if (pc_addr != line) {
-      DEBUG_PRINT("ruby: error pushing extra addr, line data was more than 48 bits");
-    } else {
-      // Shift data to bits 48-55
-      u64 packed = pc_addr | ((u64)flags << 48);
-      line       = packed;
-    }
+    if (pc_addr != line)
+      return ERR_RUBY_PACK_FRAME;
+    // Shift data to bits 48-55
+    u64 packed = pc_addr | ((u64)flags << 48);
+    line       = packed;
   }
   return _push(trace, file, line, FRAME_MARKER_RUBY);
 }
@@ -368,14 +364,12 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
           &stack_ptr_current,
           sizeof(stack_ptr_current),
           (void *)(current_ctx_addr + rubyinfo->vm_stack))) {
-      DEBUG_PRINT("ruby: failed to read current stack pointer");
       increment_metric(metricID_UnwindRubyErrReadStackPtr);
       return ERR_RUBY_READ_STACK_PTR;
     }
 
     if (bpf_probe_read_user(
           &stack_size, sizeof(stack_size), (void *)(current_ctx_addr + rubyinfo->vm_stack_size))) {
-      DEBUG_PRINT("ruby: failed to get stack size");
       increment_metric(metricID_UnwindRubyErrReadStackSize);
       return ERR_RUBY_READ_STACK_SIZE;
     }
@@ -388,7 +382,6 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
 
     if (bpf_probe_read_user(
           &stack_ptr, sizeof(stack_ptr), (void *)(current_ctx_addr + rubyinfo->cfp))) {
-      DEBUG_PRINT("ruby: failed to get cfp");
       increment_metric(metricID_UnwindRubyErrReadCfp);
       return ERR_RUBY_READ_CFP;
     }
@@ -400,7 +393,6 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
   if (record->rubyUnwindState.cfunc_saved_frame != 0) {
     error = push_ruby(trace, 0, FRAME_TYPE_CME_CFUNC, record->rubyUnwindState.cfunc_saved_frame, 0);
     if (error) {
-      DEBUG_PRINT("ruby: failed to push cframe");
       return error;
     }
     record->rubyUnwindState.cfunc_saved_frame = 0;
@@ -470,17 +462,11 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
     }
 
     u64 tls_current_ec_addr = tsd_base + rubyinfo->current_ec_tpbase_tls_offset;
-    DEBUG_PRINT(
-      "ruby: got TLS EC symbol addr 0x%llx from 0x%llx",
-      (u64)tls_current_ec_addr,
-      tls_current_ec_addr);
 
     if (bpf_probe_read_user(
           &current_ctx_addr, sizeof(current_ctx_addr), (void *)(tls_current_ec_addr))) {
       goto exit;
     }
-
-    DEBUG_PRINT("ruby: EC from TLS: 0x%llx", (u64)current_ctx_addr);
   } else if (rubyinfo->version >= 0x30000) {
     void *single_main_ractor = NULL;
     if (bpf_probe_read_user(
