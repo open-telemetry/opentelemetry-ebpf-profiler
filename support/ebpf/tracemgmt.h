@@ -329,7 +329,7 @@ static inline EBPF_INLINE bool unwinder_unwind_frame_pointer(UnwindState *state)
 //       calc_line). This should probably be renamed to something like "frame type
 //       specific data".
 static inline EBPF_INLINE ErrorCode _push_with_max_frames(
-  Trace *trace, u64 file, u64 line, u8 frame_type, u8 return_address, u32 max_frames)
+  Trace *trace, u64 file, u64 line, u64 extra, u8 frame_type, u8 return_address, u32 max_frames)
 {
   if (trace->stack_len >= max_frames) {
     DEBUG_PRINT("unable to push frame: stack is full");
@@ -337,19 +337,24 @@ static inline EBPF_INLINE ErrorCode _push_with_max_frames(
     return ERR_STACK_LENGTH_EXCEEDED;
   }
 
+  u64 extra_addr = (u64)extra & 0x0000FFFFFFFFFFFFULL;
 #ifdef TESTING_COREDUMP
   // tools/coredump uses CGO to build the eBPF code. This dispatches
   // the frame information directly to helper implemented in ebpfhelpers.go.
-  int __push_frame(u64, u64, u64, u8, u8);
+  int __push_frame(u64, u64, u64, u64, u8, u8);
   trace->stack_len++;
-  return __push_frame(__cgo_ctx->id, file, line, frame_type, return_address);
+  return __push_frame(__cgo_ctx->id, file, line, extra_addr, frame_type, return_address);
 #else
-  trace->frames[trace->stack_len++] = (Frame){
+  Frame frame = {
     .file_id        = file,
     .addr_or_line   = line,
     .kind           = frame_type,
     .return_address = return_address,
   };
+  if (extra_addr != 0) {
+    __builtin_memcpy(frame.pad, &extra_addr, 6);
+  }
+  trace->frames[trace->stack_len++] = frame;
 
   return ERR_OK;
 #endif
@@ -360,19 +365,27 @@ static inline EBPF_INLINE ErrorCode
 _push_with_return_address(Trace *trace, u64 file, u64 line, u8 frame_type, bool return_address)
 {
   return _push_with_max_frames(
-    trace, file, line, frame_type, return_address, MAX_NON_ERROR_FRAME_UNWINDS);
+    trace, file, line, 0, frame_type, return_address, MAX_NON_ERROR_FRAME_UNWINDS);
 }
 
 // Push the file ID, line number and frame type into FrameList
 static inline EBPF_INLINE ErrorCode _push(Trace *trace, u64 file, u64 line, u8 frame_type)
 {
-  return _push_with_max_frames(trace, file, line, frame_type, 0, MAX_NON_ERROR_FRAME_UNWINDS);
+  return _push_with_max_frames(trace, file, line, 0, frame_type, 0, MAX_NON_ERROR_FRAME_UNWINDS);
+}
+
+// Push the file ID, line number and frame type with an extra address into FrameList
+static inline EBPF_INLINE ErrorCode
+_push_with_extra(Trace *trace, u64 file, u64 line, u64 extra, u8 frame_type)
+{
+  return _push_with_max_frames(
+    trace, file, line, extra, frame_type, 0, MAX_NON_ERROR_FRAME_UNWINDS);
 }
 
 // Push a critical error frame.
 static inline EBPF_INLINE ErrorCode push_error(Trace *trace, ErrorCode error)
 {
-  return _push_with_max_frames(trace, 0, error, FRAME_MARKER_ABORT, 0, MAX_FRAME_UNWINDS);
+  return _push_with_max_frames(trace, 0, error, 0, FRAME_MARKER_ABORT, 0, MAX_FRAME_UNWINDS);
 }
 
 // Send a trace to user-land via the `trace_events` perf event buffer.

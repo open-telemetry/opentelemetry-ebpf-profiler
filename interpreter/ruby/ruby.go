@@ -323,9 +323,6 @@ type rubyIseq struct {
 	// methodName is the optional method name for this iseq
 	// only present on CME-based iseq
 	methodName libpf.String
-
-	// line of code in source file for this instruction sequence
-	line libpf.SourceLineno
 }
 
 type rubyInstance struct {
@@ -869,11 +866,6 @@ func unpackEnvFlags(packed uint16) uint32 {
 
 func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType uint8, frameFlags uint32) (*rubyIseq, error) {
 	vms := &r.r.vmStructs
-	lineNo, err := r.getRubyLineNo(iseqBody, uint64(pc))
-	if err != nil {
-		lineNo = 0
-		log.Warnf("RubySymbolizer: Failed to get line number (%d) %v", frameAddrType, err)
-	}
 
 	// Read contiguous pointer values into a buffer to be more efficient
 	dataBytes := make([]byte, 3*vms.size_of_value)
@@ -926,7 +918,6 @@ func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType ui
 		baseLabel:      iseqBaseLabel,
 		methodName:     methodName,
 		sourceFileName: sourceFileName,
-		line:           libpf.SourceLineno(lineNo),
 	}, nil
 }
 
@@ -1016,14 +1007,22 @@ func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 		fullLabel = qualifiedMethodName(classPath, methodName, singleton)
 		sourceFile = cfuncDummyFile
 	} else {
+
 		// The Ruby VM program counter that was extracted from the current call frame is embedded in
-		// the Linenos field.
+		// the Linenos field, and we use the iseq address passed in frame.Extra to decode it
+
+		lineNo, err := r.getRubyLineNo(libpf.Address(frame.Extra), uint64(pc))
+		if err != nil {
+			lineNo = 0
+			log.Warnf("RubySymbolizer: Failed to get line number (%d) %v", frameAddrType, err)
+		}
+
 		iseq, err := r.readIseqBody(iseqBody, pc, frameAddrType, frameFlags)
 		if err != nil {
 			return err
 		}
 		sourceFile = iseq.sourceFileName
-		sourceLine = iseq.line
+		sourceLine = libpf.SourceLineno(lineNo)
 
 		fullLabel = profileFrameFullLabel(classPath, iseq.label, iseq.baseLabel, iseq.methodName, singleton, cframe)
 

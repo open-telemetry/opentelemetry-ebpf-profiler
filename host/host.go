@@ -38,6 +38,7 @@ type Frame struct {
 	File          FileID
 	Lineno        libpf.AddressOrLineno
 	Type          libpf.FrameType
+	Extra         libpf.AddressOrLineno
 	ReturnAddress bool
 }
 

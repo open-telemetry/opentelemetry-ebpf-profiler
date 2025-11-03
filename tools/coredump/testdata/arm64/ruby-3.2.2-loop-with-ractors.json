@@ -26,7 +26,7 @@
       "lwp": 913951,
       "frames": [
         "libruby.so.3.2.2+0x332dbc",
-        "is_prime+0 in /app/loop-with-ractors.rb:0",
+        "is_prime+0 in /app/loop-with-ractors.rb:11",
         "libruby.so.3.2.2+0x3382d7",
         "libruby.so.3.2.2+0x33c697",
         "libruby.so.3.2.2+0x25e243",
