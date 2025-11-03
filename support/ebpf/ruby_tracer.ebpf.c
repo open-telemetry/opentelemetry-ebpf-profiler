@@ -275,8 +275,9 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
         // continue unwinding Ruby VM frames. Due to this issue, the ordering of Ruby and native
         // frames will almost certainly be incorrect for Ruby versions < 2.6.
         frame_type = RUBY_FRAME_TYPE_CME_CFUNC;
-      } else if (ruby_skip_native_resume) {
-        // Push cfunc inline without transitioning to the native unwinder.
+      } else if (ruby_skip_native_resume || record->rubyUnwindState.jit_detected) {
+        // Push cfunc inline when native resume is disabled or when a JIT frame
+        // makes the native PC invalid for further unwinding.
         frame_type = RUBY_FRAME_TYPE_CME_CFUNC;
       } else {
         // We save this cfp on in the "Record" entry, and when we start the unwinder
@@ -454,6 +455,23 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
     record->rubyUnwindState.cfunc_saved_frame = 0;
   }
 
+  if (
+    rubyinfo->jit_start > 0 && record->state.pc > rubyinfo->jit_start &&
+    record->state.pc < rubyinfo->jit_end) {
+    record->rubyUnwindState.jit_detected = true;
+
+    // If the first frame is a jit PC, the leaf ruby frame should be the jit "owner"
+    // the cpu PC is also pushed as the address,
+    // as in theory this can be used to symbolize the JIT frame later
+    if (trace->num_frames == 0) {
+      ErrorCode error =
+        push_ruby(&record->state, trace, RUBY_FRAME_TYPE_JIT, (u64)record->state.pc, 0, 0);
+      if (error) {
+        return error;
+      }
+    }
+  }
+
   for (u32 i = 0; i < FRAMES_PER_WALK_RUBY_STACK; ++i) {
     error = read_ruby_frame(record, rubyinfo, stack_ptr, next_unwinder);
     if (error != ERR_OK)
@@ -461,8 +479,11 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
 
     if (last_stack_frame <= stack_ptr) {
       // We have processed all frames in the Ruby VM and can stop here.
-      // If ruby_skip_native_resume is set, stop instead of resuming native unwinding.
-      *next_unwinder = ruby_skip_native_resume ? PROG_UNWIND_STOP : PROG_UNWIND_NATIVE;
+      // Stop instead of resuming native unwinding when native resume is disabled
+      // or when a JIT frame makes the native PC invalid for further unwinding.
+      *next_unwinder = (ruby_skip_native_resume || record->rubyUnwindState.jit_detected)
+                         ? PROG_UNWIND_STOP
+                         : PROG_UNWIND_NATIVE;
       goto save_state;
     } else {
       // If we aren't at the end, advance the stack pointer to continue from the next frame
