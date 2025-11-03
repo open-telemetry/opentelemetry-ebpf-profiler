@@ -24,9 +24,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -95,8 +98,10 @@ var (
 	// regex to extract a version from a string
 	rubyVersionRegex = regexp.MustCompile(`^(\d)\.(\d)\.(\d)$`)
 
-	unknownCfunc   = libpf.Intern("<unknown cfunc>")
-	cfuncDummyFile = libpf.Intern("<cfunc>")
+	unknownCfunc      = libpf.Intern("<unknown cfunc>")
+	cfuncDummyFile    = libpf.Intern("<cfunc>")
+	rubyJitDummyFrame = libpf.Intern("<unknown jit code>")
+	rubyJitDummyFile  = libpf.Intern("<jitted code>")
 	// compiler check to make sure the needed interfaces are satisfied
 	_ interpreter.Data     = &rubyData{}
 	_ interpreter.Instance = &rubyInstance{}
@@ -306,8 +311,11 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	return &rubyInstance{
 		r:                 r,
 		rm:                rm,
+		procInfo:          &cdata,
 		globalSymbolsAddr: r.globalSymbolsAddr + bias,
 		addrToString:      addrToString,
+		mappings:          make(map[process.Mapping]*uint32),
+		prefixes:          make(map[lpm.Prefix]*uint32),
 		memPool: sync.Pool{
 			New: func() any {
 				buf := make([]byte, 512)
@@ -351,6 +359,9 @@ type rubyInstance struct {
 
 	// lastId is a cached copy index of the final entry in the global symbol table
 	lastId uint32
+	// Store the procinfo so we can update it if mappings are updated
+	procInfo *support.RubyProcInfo
+
 	// globalSymbolsAddr is the offset of the global symbol table, for looking up ruby symbolic ids
 	globalSymbolsAddr libpf.Address
 
@@ -363,6 +374,13 @@ type rubyInstance struct {
 	// maxSize is the largest number we did see in the last reporting interval for size
 	// in getRubyLineNo.
 	maxSize atomic.Uint32
+
+	// mappings is indexed by the Mapping to its generation
+	mappings map[process.Mapping]*uint32
+	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
+	prefixes map[lpm.Prefix]*uint32
+	// mappingGeneration is the current generation (so old entries can be pruned)
+	mappingGeneration uint32
 }
 
 func (r *rubyInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
@@ -982,6 +1000,15 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 
 	case support.RubyFrameTypeIseq:
 		iseqBody = libpf.Address(frameAddr)
+	case support.RubyFrameTypeJit:
+		label := rubyJitDummyFrame
+		frames.Append(&libpf.Frame{
+			Type:         libpf.RubyFrame,
+			FunctionName: label,
+			SourceFile:   rubyJitDummyFile,
+			SourceLine:   0,
+		})
+		return nil
 	default:
 		return fmt.Errorf("Unable to get CME or ISEQ from frame address (%d)", frameAddrType)
 	}
@@ -1112,6 +1139,92 @@ func profileFrameFullLabel(classPath, label, baseLabel, methodName libpf.String,
 
 	// Get the prefix from label and concatenate with qualifiedMethodName
 	return libpf.Intern(profileLabel)
+}
+
+func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
+	_ reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping) error {
+	var jitMapping *process.Mapping
+
+	pid := pr.PID()
+	jitFound := false
+	r.mappingGeneration++
+
+	log.Debugf("Synchronizing ruby mappings")
+
+	for idx := range mappings {
+		m := &mappings[idx]
+		if !m.IsExecutable() || !m.IsAnonymous() {
+			continue
+		}
+		// If prctl is allowed, ruby should label the memory region
+		// always prefer that
+		if strings.Contains(m.Path.String(), "jit_reserve_addr_space") {
+			jitMapping = m
+			jitFound = true
+		}
+		// Use the first executable anon region we find if it isn't labeled
+		// If we find more, prefer ones earlier in memory or larger in size
+		if !jitFound && (jitMapping == nil || m.Vaddr < jitMapping.Vaddr || m.Length > jitMapping.Length) {
+			// Don't set jitFound here as it is a heuristic, we aren't sure
+			// could be on a system without linux config flag to allow prctl to label memoy
+			jitMapping = m
+		}
+
+		if _, exists := r.mappings[*m]; exists {
+			*r.mappings[*m] = r.mappingGeneration
+			continue
+		}
+
+		// Generate a new uint32 pointer which is shared for mapping and the prefixes it owns
+		// so updating the mapping above will reflect to prefixes also.
+		mappingGeneration := r.mappingGeneration
+		r.mappings[*m] = &mappingGeneration
+
+		// Just assume all anonymous and executable mappings are Ruby for now
+		log.Debugf("Enabling Ruby interpreter for %#x/%#x", m.Vaddr, m.Length)
+
+		prefixes, err := lpm.CalculatePrefixList(m.Vaddr, m.Vaddr+m.Length)
+		if err != nil {
+			return fmt.Errorf("new anonymous mapping lpm failure %#x/%#x", m.Vaddr, m.Length)
+		}
+
+		for _, prefix := range prefixes {
+			_, exists := r.prefixes[prefix]
+			if !exists {
+				err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindRuby, 0, 0)
+				if err != nil {
+					return err
+				}
+			}
+			r.prefixes[prefix] = &mappingGeneration
+		}
+	}
+	if jitMapping != nil && (r.procInfo.Jit_start != jitMapping.Vaddr || r.procInfo.Jit_end != jitMapping.Vaddr+jitMapping.Length) {
+		r.procInfo.Jit_start = jitMapping.Vaddr
+		r.procInfo.Jit_end = jitMapping.Vaddr + jitMapping.Length
+		if err := ebpf.UpdateProcData(libpf.Ruby, pr.PID(), unsafe.Pointer(r.procInfo)); err != nil {
+			return err
+		}
+		log.Debugf("Added jit mapping %08x ruby proc info, %08x", r.procInfo.Jit_start, r.procInfo.Jit_end)
+	}
+	// Remove prefixes not seen
+	for prefix, generationPtr := range r.prefixes {
+		if *generationPtr == r.mappingGeneration {
+			continue
+		}
+		log.Debugf("Delete Ruby prefix %#v", prefix)
+		_ = ebpf.DeletePidInterpreterMapping(pid, prefix)
+		delete(r.prefixes, prefix)
+	}
+	for m, generationPtr := range r.mappings {
+		if *generationPtr == r.mappingGeneration {
+			continue
+		}
+		log.Debugf("Disabling Ruby for %#x/%#x", m.Vaddr, m.Length)
+		delete(r.mappings, m)
+	}
+
+	return nil
 }
 
 func (r *rubyInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
