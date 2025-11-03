@@ -115,6 +115,18 @@ typedef enum ErrorCode {
   // Ruby: Failed to pack additional into spare bytes of Frame field
   ERR_RUBY_PACK_FRAME = 3021,
 
+  // Ruby: Unable to read current thread
+  ERR_RUBY_READ_CURRENT_THREAD = 3030,
+
+  // Ruby: Unable to read current vm
+  ERR_RUBY_READ_CURRENT_VM = 3031,
+
+  // Ruby: Unable to read objspace handle
+  ERR_RUBY_READ_OBJSPACE = 3032,
+
+  // Ruby: Unable to read objspace flags
+  ERR_RUBY_READ_OBJSPACE_FLAGS = 3033,
+
   // Native: Unable to find the code section in the stack delta page info map
   ERR_NATIVE_LOOKUP_TEXT_SECTION = 4000,
 
