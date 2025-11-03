@@ -25,6 +25,8 @@ var (
 type goData struct {
 	refs atomic.Int32
 
+	version string
+
 	pclntab *elfunwindinfo.Gopclntab
 }
 
@@ -44,8 +46,9 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	if err != nil {
 		return nil, err
 	}
-	if !ef.IsGolang() {
-		return nil, nil
+	goVersion, err := ef.GoVersion()
+	if goVersion == "" || err != nil {
+		return nil, err
 	}
 
 	pclntab, err := elfunwindinfo.NewGopclntab(ef)
@@ -53,7 +56,10 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 		return nil, err
 	}
 
-	g := &goData{pclntab: pclntab}
+	g := &goData{
+		version: goVersion,
+		pclntab: pclntab,
+	}
 	g.refs.Store(1)
 	return g, nil
 }
@@ -62,6 +68,10 @@ func (g *goData) unref() {
 	if g.refs.Add(-1) == 0 {
 		_ = g.pclntab.Close()
 	}
+}
+
+func (g *goData) String() string {
+	return "Golang symbolizer " + g.version
 }
 
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
