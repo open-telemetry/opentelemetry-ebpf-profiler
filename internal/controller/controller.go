@@ -168,15 +168,14 @@ func (c *Controller) UpdateSamplingFrequency(newSamplesPerSecond int) error {
 		return fmt.Errorf("tracer is not initialized")
 	}
 
-	// Update the tracer's sampling frequency
-	if err := c.tracer.UpdateSamplingFrequency(newSamplesPerSecond); err != nil {
-		return fmt.Errorf("failed to update tracer sampling frequency: %w", err)
+	if c.reporter != nil {
+		if err := c.reporter.UpdateSamplingFrequency(newSamplesPerSecond); err != nil {
+			log.Warnf("Failed to update reporter sampling frequency: %v", err)
+		}
 	}
 
-	// Update the reporter's sampling frequency for profile metadata
-	if c.reporter != nil {
-		c.reporter.UpdateSamplingFrequency(newSamplesPerSecond)
-		log.Infof("Updated reporter sampling frequency to %d Hz", newSamplesPerSecond)
+	if err := c.tracer.UpdateSamplingFrequency(newSamplesPerSecond); err != nil {
+		return fmt.Errorf("failed to update tracer sampling frequency: %w", err)
 	}
 
 	return nil

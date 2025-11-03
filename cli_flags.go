@@ -17,15 +17,16 @@ import (
 
 const (
 	// Default values for CLI flags
-	defaultArgSamplesPerSecond    = 20
-	defaultArgReporterInterval    = 5.0 * time.Second
-	defaultArgMonitorInterval     = 5.0 * time.Second
-	defaultClockSyncInterval      = 3 * time.Minute
-	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
-	defaultProbabilisticInterval  = 1 * time.Minute
-	defaultArgSendErrorFrames     = false
-	defaultOffCPUThreshold        = 0
-	defaultEnvVarsValue           = ""
+	defaultArgSamplesPerSecond     = 20
+	defaultArgMaxSamplesPerSecond  = 0 // 0 means disabled
+	defaultArgReporterInterval     = 5.0 * time.Second
+	defaultArgMonitorInterval      = 5.0 * time.Second
+	defaultClockSyncInterval       = 3 * time.Minute
+	defaultProbabilisticThreshold  = tracer.ProbabilisticThresholdMax
+	defaultProbabilisticInterval   = 1 * time.Minute
+	defaultArgSendErrorFrames      = false
+	defaultOffCPUThreshold         = 0
+	defaultEnvVarsValue            = ""
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0

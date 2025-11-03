@@ -5,6 +5,7 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
+	"fmt"
 
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/consumer/xconsumer"
@@ -96,4 +97,17 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	}
 
 	return r.nextConsumer.ConsumeProfiles(ctx, profiles)
+}
+
+// Flush immediately reports all currently accumulated trace events.
+func (r *CollectorReporter) Flush(ctx context.Context) error {
+	return r.reportProfile(ctx)
+}
+
+// UpdateSamplingFrequency updates the sampling frequency used in profile generation.
+func (r *CollectorReporter) UpdateSamplingFrequency(samplesPerSecond int) error {
+	if err := r.Flush(context.Background()); err != nil {
+		return fmt.Errorf("failed to flush reporter before updating sampling frequency: %w", err)
+	}
+	return r.baseReporter.UpdateSamplingFrequency(samplesPerSecond)
 }

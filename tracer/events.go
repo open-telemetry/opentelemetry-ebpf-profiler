@@ -140,7 +140,6 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	if t.maxSamplesPerSecond > t.samplesPerSecond {
 		effectiveMaxSPS = t.maxSamplesPerSecond
 	}
-	}
 	eventReader, err := perf.NewReader(eventsMap,
 		effectiveMaxSPS*support.Sizeof_Trace)
 	if err != nil {
