@@ -107,6 +107,10 @@ type data struct {
 
 var _ interpreter.Data = &data{}
 
+func (d data) String() string {
+	return "APM integration"
+}
+
 func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	procStorage, err := readProcStorage(rm, bias+d.procStorageElfVA)
