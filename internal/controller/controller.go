@@ -164,6 +164,10 @@ func (c *Controller) Shutdown() {
 // UpdateSamplingFrequency dynamically updates the sampling frequency for both the tracer
 // and reporter.
 func (c *Controller) UpdateSamplingFrequency(newSamplesPerSecond int) error {
+	if newSamplesPerSecond < 1 {
+		return fmt.Errorf("invalid sampling frequency: %d (must be >= 1)", newSamplesPerSecond)
+	}
+
 	if c.tracer == nil {
 		return fmt.Errorf("tracer is not initialized")
 	}

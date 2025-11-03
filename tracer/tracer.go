@@ -1199,10 +1199,6 @@ func (t *Tracer) HandleTrace(bpfTrace *host.Trace) {
 // UpdateSamplingFrequency dynamically updates the sampling frequency for all perf events.
 // Internally converts frequency (Hz) to period (nanoseconds) and calls UpdatePeriod on each event.
 func (t *Tracer) UpdateSamplingFrequency(newSamplesPerSecond int) error {
-	if newSamplesPerSecond <= 0 {
-		return fmt.Errorf("invalid sampling frequency: %d", newSamplesPerSecond)
-	}
-
 	if t.maxSamplesPerSecond > 0 && newSamplesPerSecond > t.maxSamplesPerSecond {
 		return fmt.Errorf("requested sampling frequency %d exceeds max limit %d", newSamplesPerSecond, t.maxSamplesPerSecond)
 	}
