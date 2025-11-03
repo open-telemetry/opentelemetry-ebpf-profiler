@@ -86,8 +86,16 @@ var (
 	// regex to extract a version from a string
 	rubyVersionRegex = regexp.MustCompile(`^(\d)\.(\d)\.(\d)$`)
 
-	unknownCfunc   = libpf.Intern("UNKNOWN CFUNC")
-	cfuncDummyFile = libpf.Intern("<cfunc>")
+	unknownCfunc      = libpf.Intern("UNKNOWN CFUNC")
+	cfuncDummyFile    = libpf.Intern("<cfunc>")
+	rubyGcFrame       = libpf.Intern("(garbage collection)")
+	rubyGcRunning     = libpf.Intern("(running)")
+	rubyGcMarking     = libpf.Intern("(marking)")
+	rubyGcSweeping    = libpf.Intern("(sweeping)")
+	rubyGcCompacting  = libpf.Intern("(compacting)")
+	rubyGcDummyFile   = libpf.Intern("<gc>")
+	rubyJitDummyFrame = libpf.Intern("UNKNOWN JIT CODE")
+	rubyJitDummyFile  = libpf.Intern("<jitted code>")
 	// compiler check to make sure the needed interfaces are satisfied
 	_ interpreter.Data     = &rubyData{}
 	_ interpreter.Instance = &rubyInstance{}
@@ -118,6 +126,9 @@ type rubyData struct {
 	// Is it possible to read the classpath
 	hasClassPath bool
 
+	// Is it possible to objspace information
+	hasObjspace bool
+
 	// Is it possible to read the global symbol table (to symbolize cfuncs)
 	hasGlobalSymbols bool
 
@@ -126,7 +137,23 @@ type rubyData struct {
 		// rb_execution_context_struct
 		// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L843
 		execution_context_struct struct {
-			vm_stack, vm_stack_size, cfp uint8
+			vm_stack, vm_stack_size, cfp, thread_ptr uint8
+		}
+
+		// https://github.com/ruby/ruby/blob/v3_4_5/vm_core.h#L1108
+		thread_struct struct {
+			vm uint8
+		}
+
+		// https://github.com/ruby/ruby/blob/v3_4_5/vm_core.h#L666
+		vm_struct struct {
+			gc_objspace uint16
+		}
+
+		// https://github.com/ruby/ruby/blob/v3_4_5/gc/default/default.c#L445
+		objspace struct {
+			flags         uint8
+			size_of_flags uint8
 		}
 
 		// rb_control_frame_struct
@@ -273,6 +300,14 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		Iseq:                         r.vmStructs.control_frame_struct.iseq,
 		Ep:                           r.vmStructs.control_frame_struct.ep,
 		Size_of_control_frame_struct: r.vmStructs.control_frame_struct.size_of_control_frame_struct,
+		Thread_ptr:                   r.vmStructs.execution_context_struct.thread_ptr,
+
+		Thread_vm:    r.vmStructs.thread_struct.vm,
+		Has_objspace: r.hasObjspace,
+		Vm_objspace:  r.vmStructs.vm_struct.gc_objspace,
+
+		Objspace_flags:         r.vmStructs.objspace.flags,
+		Objspace_size_of_flags: r.vmStructs.objspace.size_of_flags,
 
 		Body:           r.vmStructs.iseq_struct.body,
 		Cme_method_def: r.vmStructs.rb_method_entry_struct.def,
@@ -986,6 +1021,36 @@ func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 
 	case support.RubyFrameTypeIseq:
 		iseqBody = libpf.Address(frameAddr)
+	case support.RubyFrameTypeGc:
+		gcMode := frameAddr
+		var gcModeStr libpf.String
+		switch gcMode {
+		case support.RubyGcModeNone:
+			gcModeStr = rubyGcRunning
+		case support.RubyGcModeMarking:
+			gcModeStr = rubyGcMarking
+		case support.RubyGcModeSweeping:
+			gcModeStr = rubyGcSweeping
+		case support.RubyGcModeCompacting:
+			gcModeStr = rubyGcCompacting
+		}
+
+		frames.Append(&libpf.Frame{
+			Type:         libpf.RubyFrame,
+			FunctionName: gcModeStr,
+			SourceFile:   rubyGcDummyFile,
+			SourceLine:   0,
+		})
+
+		// Push a common "garbage collection" frame to nest
+		// different GC modes under
+		frames.Append(&libpf.Frame{
+			Type:         libpf.RubyFrame,
+			FunctionName: rubyGcFrame,
+			SourceFile:   rubyGcDummyFile,
+			SourceLine:   0,
+		})
+		return nil
 	default:
 		return fmt.Errorf("Unable to get CME or ISEQ from frame address (%d : %04x)", frameAddrType, frameFlags)
 	}
@@ -1356,6 +1421,52 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.execution_context_struct.vm_stack = 0
 	vms.execution_context_struct.vm_stack_size = 8
 	vms.execution_context_struct.cfp = 16
+	vms.execution_context_struct.thread_ptr = 48
+
+	vms.thread_struct.vm = 32
+
+	// objspace address varies a lot by version since it is deep in the vm struct
+	// here only specific versions are supported for ruby 3.1.0+, as rubies older
+	// than this fail to compile in modern toolchains making it difficult to
+	// verify their offsets.
+	rid.hasObjspace = false
+	switch {
+	case version < rubyVersion(3, 1, 0):
+	case version < rubyVersion(3, 2, 0):
+		rid.hasObjspace = true
+		if runtime.GOARCH == "amd64" {
+			vms.vm_struct.gc_objspace = 1104
+		} else {
+			vms.vm_struct.gc_objspace = 1128
+		}
+		vms.objspace.flags = 16
+	case version < rubyVersion(3, 3, 0):
+		rid.hasObjspace = true
+		if runtime.GOARCH == "amd64" {
+			vms.vm_struct.gc_objspace = 1128
+		} else {
+			vms.vm_struct.gc_objspace = 1152
+		}
+		vms.objspace.flags = 16
+	case version < rubyVersion(3, 4, 0):
+		rid.hasObjspace = true
+		if runtime.GOARCH == "amd64" {
+			vms.vm_struct.gc_objspace = 1304
+		} else {
+			vms.vm_struct.gc_objspace = 1320
+		}
+		vms.objspace.flags = 16
+	default:
+		rid.hasObjspace = true
+		vms.objspace.flags = 20
+		if runtime.GOARCH == "amd64" {
+			vms.vm_struct.gc_objspace = 1296
+		} else {
+			vms.vm_struct.gc_objspace = 1320
+		}
+	}
+
+	vms.objspace.size_of_flags = 4
 
 	vms.control_frame_struct.pc = 0
 	vms.control_frame_struct.iseq = 16

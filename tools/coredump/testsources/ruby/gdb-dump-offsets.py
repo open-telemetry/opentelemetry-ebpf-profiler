@@ -3,12 +3,14 @@ gdb python script for dumping the Ruby vmStruct offsets.
 """
 
 def no_member_to_none(fn):
-    """Decorator translating errors about missing field to `None`."""
+    """Decorator translating errors about missing field or structs to `None`."""
     def wrap(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
         except gdb.error as e:
             if 'no member named' in str(e):
+                return None
+            if 'struct type named' in str(e):
                 return None
             raise
     return wrap
@@ -31,6 +33,14 @@ fields = {
     'execution_context_struct.vm_stack_size': offset_of('rb_execution_context_struct', 'vm_stack_size'),
     'execution_context_struct.cfp': offset_of('rb_execution_context_struct', 'cfp'),
     'execution_context_struct.thread_ptr': offset_of('rb_execution_context_struct', 'thread_ptr'),
+
+    # For determining if we are in GC
+    'thread_struct.vm': offset_of('rb_thread_struct', 'vm'),
+    # objspace was namespaced under gc in 3.4.0, check both locations
+    'vm_struct.objspace': offset_of('rb_vm_struct', 'objspace'),
+    'vm_struct.gc_objspace': offset_of('rb_vm_struct', 'gc.objspace'),
+    'objspace.flags': offset_of('rb_objspace', 'flags'),
+    'objspace.size_of_flags': size_of_field('rb_objspace', 'flags'),
 
     'control_frame_struct.pc': offset_of('rb_control_frame_struct', 'pc'),
     'control_frame_struct.iseq': offset_of('rb_control_frame_struct', 'iseq'),

@@ -176,6 +176,26 @@
     "description": "Ruby: Failed to pack additional into spare bytes of Frame field"
   },
   {
+    "id": 3030,
+    "name": "ruby_read_current_thread",
+    "description": "Ruby: Unable to read current thread"
+  },
+  {
+    "id": 3031,
+    "name": "ruby_read_current_vm",
+    "description": "Ruby: Unable to read current vm"
+  },
+  {
+    "id": 3032,
+    "name": "ruby_read_objspace",
+    "description": "Ruby: Unable to read objspace handle"
+  },
+  {
+    "id": 3033,
+    "name": "ruby_read_objspace_flags",
+    "description": "Ruby: Unable to read objspace flags"
+  },
+  {
     "id": 4000,
     "name": "native_lookup_text_section",
     "description": "Native: Unable to find the code section in the stack delta page info map"

@@ -40,6 +40,10 @@ struct ruby_procs_t {
 #define VM_FRAME_MAGIC_MASK  0x7fff0001
 #define VM_FRAME_MAGIC_CFUNC 0x55550001
 
+// https://github.com/ruby/ruby/blob/v3_4_5/gc/default/default.c#L459-L464
+#define GC_MODE_MASK 0x00000003 // bits 0-1 (2 bits for mode)
+#define GC_DURING_GC (1 << 5)   // bit 5
+
 // Save on read ops by reading the whole control frame struct
 // as technically this reads too much memory
 typedef struct rb_control_frame_struct {
@@ -61,6 +65,41 @@ typedef struct vm_env_struct {
   const void *specval;
   const void *flags;
 } vm_env_t;
+
+static EBPF_INLINE ErrorCode
+gc_check(const RubyProcInfo *rubyinfo, const void *current_ctx_addr, bool *is_gc, u8 *gc_mode)
+{
+  void *thread_ptr;
+  void *vm;
+  void *objspace;
+  u32 gc_flags;
+
+  if (bpf_probe_read_user(
+        &thread_ptr, sizeof(thread_ptr), (void *)(current_ctx_addr + rubyinfo->thread_ptr))) {
+    return ERR_RUBY_READ_CURRENT_THREAD;
+  }
+
+  if (bpf_probe_read_user(&vm, sizeof(vm), (void *)(thread_ptr + rubyinfo->thread_vm))) {
+    return ERR_RUBY_READ_CURRENT_VM;
+  }
+
+  if (bpf_probe_read_user(&objspace, sizeof(objspace), (void *)(vm + rubyinfo->vm_objspace))) {
+    return ERR_RUBY_READ_OBJSPACE;
+  }
+
+  if (bpf_probe_read_user(
+        &gc_flags, sizeof(gc_flags), (void *)(objspace + rubyinfo->objspace_flags))) {
+    return ERR_RUBY_READ_OBJSPACE_FLAGS;
+  }
+
+  if (gc_flags & GC_DURING_GC) {
+    *is_gc   = true;
+    *gc_mode = (u8)gc_flags & GC_MODE_MASK;
+  } else {
+    *is_gc = false;
+  }
+  return ERR_OK;
+}
 
 // Record a Ruby cfp frame
 // frame_type is encoded into the "file" attribute of frame in the spare bits
@@ -495,6 +534,21 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
 
   if (!current_ctx_addr) {
     goto exit;
+  }
+  if (rubyinfo->has_objspace) {
+    bool is_gc = false;
+    u8 gc_mode = 0;
+
+    error = gc_check(rubyinfo, current_ctx_addr, &is_gc, &gc_mode);
+    if (error)
+      goto exit;
+
+    if (is_gc) {
+      // GC is active - skip profiling
+      unwinder = PROG_UNWIND_STOP;
+      error    = push_ruby(&record->trace, 0, FRAME_TYPE_GC, gc_mode, 0, 0);
+      goto exit;
+    }
   }
 
   error = walk_ruby_stack(record, rubyinfo, current_ctx_addr, &unwinder);
