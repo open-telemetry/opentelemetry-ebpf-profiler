@@ -147,6 +147,11 @@
   },
   {
     "id": 3008,
+    "name": "ruby_read_tsd_base",
+    "description": "Ruby: Unable to determine the base address for thread-specific data"
+  },
+  {
+    "id": 3009,
     "name": "ruby_invalid_iseq",
     "description": "Ruby: Invalid instruction sequence"
   },
@@ -176,9 +181,9 @@
     "description": "Ruby: Exceeded maximum EP checks while locating CME"
   },
   {
-    "id": 3008,
-    "name": "ruby_read_tsd_base",
-    "description": "Ruby: Unable to determine the base address for thread-specific data"
+    "id": 3021,
+    "name": "ruby_pack_frame",
+    "description": "Ruby: Failed to pack additional into spare bytes of Frame field"
   },
   {
     "id": 4000,
