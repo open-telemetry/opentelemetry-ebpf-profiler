@@ -113,6 +113,7 @@ func Test_Golabels(t *testing.T) {
 			wg := sync.WaitGroup{}
 			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				err := exec.CommandContext(ctx, exe.Name()).Run()
 				select {
 				case <-ctx.Done():
@@ -125,7 +126,6 @@ func Test_Golabels(t *testing.T) {
 					// the backtrace what the tracer is doing.
 					panic("failed to capture golabel frames")
 				}
-				wg.Done()
 			}()
 
 			ok := false
