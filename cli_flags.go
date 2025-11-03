@@ -138,7 +138,7 @@ func parseArgs() (*controller.Config, error) {
 	})
 
 	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
-	fs.BoolVar(&args.IncludeIdle, "include-idle", false, includeIdleHelper)
+	fs.BoolVar(&args.IncludeIdle, "send-idle-frames", false, includeIdleHelper)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()
