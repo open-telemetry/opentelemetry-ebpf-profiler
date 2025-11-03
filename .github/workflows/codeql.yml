@@ -26,6 +26,8 @@ jobs:
 
       - name: Set up environment
         uses: ./.github/workflows/env
+        with:
+          target_arch: ${{ matrix.target_arch }}
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@0499de31b99561a6d14a36a5f662c2a54f91beee # v4.31.2
