@@ -20,10 +20,12 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
+	"go.opentelemetry.io/otel/metric/noop"
 )
 
 type mockIntervals struct{}
@@ -106,6 +108,8 @@ func generateMaxLengthTrace() host.Trace {
 func TestTraceTransmissionAndParsing(t *testing.T) {
 	ctx := t.Context()
 
+	metrics.Start(noop.Meter{})
+
 	enabledTracers, _ := tracertypes.Parse("")
 	enabledTracers.Enable(tracertypes.PythonTracer)
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
@@ -122,6 +126,7 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		VerboseMode:            true,
 	})
 	require.NoError(t, err)
+	defer tr.Close()
 
 	traceChan := make(chan *host.Trace, 16)
 	err = tr.StartMapMonitors(ctx, traceChan)
@@ -231,7 +236,7 @@ Loop:
 }
 
 func TestAllTracers(t *testing.T) {
-	_, err := tracer.NewTracer(t.Context(), &tracer.Config{
+	tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
 		Intervals:              &mockIntervals{},
 		IncludeTracers:         tracertypes.AllTracers(),
 		SamplesPerSecond:       20,
@@ -242,4 +247,5 @@ func TestAllTracers(t *testing.T) {
 		LoadProbe:              true,
 	})
 	require.NoError(t, err)
+	defer tr.Close()
 }
