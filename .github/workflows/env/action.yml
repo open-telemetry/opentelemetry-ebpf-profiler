@@ -1,16 +1,21 @@
 name: Common environment setup
 
 inputs:
-  skip_rust:
-    description: 'Set to true to skip installing Rust toolchains'
+  target_arch:
+    description: 'Target architecture'
     required: false
-    type: boolean
-    default: false
+    default: amd64
 
 runs:
   using: composite
   steps:
-    - name: Install dependencies
+    - name: Disable man-db
+      shell: bash
+      run: |
+        echo "set man-db/auto-update false" | sudo debconf-communicate
+        sudo dpkg-reconfigure man-db
+    - name: Install dependencies (arm64)
+      if: ${{ inputs.target_arch == 'arm64' }}
       shell: bash
       run: |
         # Ubuntu has ARM64 packages in an entirely different repo, so we can't just
@@ -33,32 +38,14 @@ runs:
 
         sudo dpkg --add-architecture arm64
         sudo apt-get update -y
-
-        sudo apt-get install -y curl unzip gcc-aarch64-linux-gnu \
+        sudo apt-get install -y gcc-aarch64-linux-gnu \
           libc6-arm64-cross qemu-user-binfmt libc6:arm64 \
-          musl-dev:amd64 musl-dev:arm64 musl-tools binutils-aarch64-linux-gnu
+          binutils-aarch64-linux-gnu
     - name: Set up Go
       uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
       with:
         go-version-file: go.mod
         cache-dependency-path: go.sum
       id: go
-    - name: Install Rust
-      if: ${{ inputs.skip_rust == false }}
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
-        toolchain: 1.77
     - name: Install protoc
-      shell: bash
-      env:
-        PB_URL: "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/"
-        PB_FILE: "protoc-24.4-linux-x86_64.zip"
-        INSTALL_DIR: "/usr/local"
-      run: |
-        wget -nv "$PB_URL/$PB_FILE"
-        sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
-        sudo chmod +xr "$INSTALL_DIR/bin/protoc"
-        sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
-        sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
-        rm "$PB_FILE"
+      uses: ./.github/workflows/protoc
