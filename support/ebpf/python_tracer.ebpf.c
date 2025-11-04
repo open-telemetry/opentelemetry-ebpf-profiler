@@ -289,7 +289,8 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
     // Not a Python process that we have info on
     DEBUG_PRINT("Can't build Python stack, no address info");
     increment_metric(metricID_UnwindPythonErrNoProcInfo);
-    return ERR_PYTHON_NO_PROC_INFO;
+    error = ERR_PYTHON_NO_PROC_INFO;
+    goto exit;
   }
 
   DEBUG_PRINT("Building Python stack for 0x%x", pyinfo->version);
