@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"slices"
 	"sort"
 	"syscall"
 	"time"
@@ -364,6 +365,24 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.Mapping
 	}), nil
 }
 
+func compareMapping(a, b Mapping) int {
+	aFid := host.FileIDFromLibpf(a.FrameMapping.Value().File.Value().FileID)
+	bFid := host.FileIDFromLibpf(b.FrameMapping.Value().File.Value().FileID)
+	if aFid != bFid {
+		if aFid < bFid {
+			return -1
+		}
+		return 1
+	}
+	if a.Vaddr < b.Vaddr {
+		return -1
+	}
+	if a.Vaddr > b.Vaddr {
+		return 1
+	}
+	return 0
+}
+
 // synchronizeMappings synchronizes executable mappings for the given PID.
 // This method will be called when a PID is first encountered or when the eBPF
 // code encounters an address in an executable mapping that HA has no information
@@ -429,7 +448,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 
 		var fm libpf.FrameMapping
 		if oldm, ok := mpRemove[m.Vaddr]; ok {
-			if oldm.Device == m.Device && oldm.Inode == m.Inode {
+			if oldm.Length == m.Length && oldm.Device == m.Device && oldm.Inode == m.Inode {
 				delete(mpRemove, m.Vaddr)
 				fm = oldm.FrameMapping
 			}
@@ -450,6 +469,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 
 		mappings = append(mappings, Mapping{
 			Vaddr:        libpf.Address(m.Vaddr),
+			Length:       m.Length,
 			Device:       m.Device,
 			Inode:        m.Inode,
 			FrameMapping: fm,
@@ -458,23 +478,6 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 			mpAdd = append(mpAdd, &mappings[len(mappings)-1])
 		}
 	}
-
-	sort.Slice(mappings, func(i, j int) bool {
-		a := &mappings[i]
-		b := &mappings[j]
-		aFid := host.FileIDFromLibpf(a.FrameMapping.Value().File.Value().FileID)
-		bFid := host.FileIDFromLibpf(b.FrameMapping.Value().File.Value().FileID)
-		if aFid != bFid {
-			return aFid <= bFid
-		}
-		return a.Vaddr <= b.Vaddr
-	})
-
-	// Publish the new mappings
-	pm.mu.Lock()
-	pidInfo := pm.getPidInformation(pid, pr)
-	pidInfo.mappings = mappings
-	pm.mu.Unlock()
 
 	// Detach removed interpreters and remove old mappings
 	numChanges := uint64(0)
@@ -491,27 +494,30 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	}
 	pm.pidPageToMappingInfoSize += numChanges
 
+	// Sort and publish the new mappings
+	slices.SortFunc(mappings, compareMapping)
+	pm.mu.Lock()
+	pidInfo := pm.getPidInformation(pid, pr)
+	pidInfo.mappings = mappings
+	interpreters := pm.interpreters[pid]
+	pm.mu.Unlock()
+
 	// Synchronize all interpreters with updated mappings
-	if pm.interpreterTracerEnabled {
-		pm.mu.Lock()
-		numInterpreters = len(pm.interpreters[pid])
-		for _, instance := range pm.interpreters[pid] {
-			err := instance.SynchronizeMappings(pm.ebpf, pm.exeReporter, pr, processMappings)
-			if err != nil {
-				if alive, _ := isPIDLive(pid); alive {
-					log.Errorf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
-				} else {
-					log.Debugf("Failed to handle new anonymous mapping for PID %d: process exited",
-						pid)
-				}
+	for _, instance := range interpreters {
+		err := instance.SynchronizeMappings(pm.ebpf, pm.exeReporter, pr, processMappings)
+		if err != nil {
+			if alive, _ := isPIDLive(pid); alive {
+				log.Errorf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
+			} else {
+				log.Debugf("Failed to handle new anonymous mapping for PID %d: process exited",
+					pid)
 			}
 		}
-		pm.mu.Unlock()
 	}
 
-	if len(mpAdd) > 0 || len(mpRemove) > 0 || numInterpreters > 0 {
+	if len(mpAdd) > 0 || len(mpRemove) > 0 || len(interpreters) > 0 {
 		log.Debugf("Added %v mappings, removed %v mappings for PID %v with %d interpreters",
-			len(mpAdd), len(mpRemove), pid, numInterpreters)
+			len(mpAdd), len(mpRemove), pid, len(interpreters))
 	}
 	return newProcess
 }
