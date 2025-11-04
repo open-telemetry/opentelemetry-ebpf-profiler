@@ -28,13 +28,25 @@ func setPprofLabels(t *testing.T, ctx context.Context, cookie string, busyFunc f
 		"l1"+cookie, "label1"+randomString(16),
 		"l2"+cookie, "label2"+randomString(24),
 		"l3"+cookie, "label3"+randomString(48))
-	lastUpdate := time.Now()
+
+	ctx, _ = context.WithTimeout(ctx, 10 * time.Second)
 	pprof.Do(ctx, labels, func(context.Context) {
-		for time.Since(lastUpdate) < 10*time.Second {
-			// CPU go burr on purpose.
-			busyFunc()
-			if ctx.Err() != nil {
+		// To not completely saturate CPU and keep profiler starved,
+		// burn CPU in cycles of about 500ms busy, 1 second sleep.
+		for {
+			for startTime := time.Now(); time.Since(startTime) < 500*time.Millisecond; {
+				// CPU go burr on purpose.
+				busyFunc()
+				if ctx.Err() != nil {
+					return
+				}
+			}
+
+			select {
+			case <- ctx.Done():
 				return
+			case <-time.After(time.Second):
+				break
 			}
 		}
 	})
