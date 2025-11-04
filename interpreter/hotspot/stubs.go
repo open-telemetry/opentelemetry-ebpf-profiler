@@ -16,7 +16,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 	aa "golang.org/x/arch/arm64/arm64asm"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 // nextAligned aligns a pointer up, to the next multiple of align.
@@ -47,7 +47,8 @@ type StubRoutine struct {
 // not need alignment. Also in some cases the JVM devs omitted/forgot to insert
 // the padding. The two heuristics combined, however, yield reliable results.
 func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
-	rm remotememory.RemoteMemory) []StubRoutine {
+	rm remotememory.RemoteMemory,
+) []StubRoutine {
 	const CodeAlign = 64
 	const MaxStubLen = 8 * 1024
 
@@ -173,7 +174,8 @@ func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
 // >>> B.LT  loc_4600
 // >>> SUB   SP, SP, #0x40
 func analyzeStubArm64(rm remotememory.RemoteMemory, addr libpf.Address) (
-	hasFrame bool, spOffs int64, err error) {
+	hasFrame bool, spOffs int64, err error,
+) {
 	code := make([]byte, 64)
 	if err := rm.Read(addr, code); err != nil {
 		return false, 0, err
@@ -235,7 +237,8 @@ Outer:
 // that sampling catches the pro/epilogues that it isn't really worth special
 // casing this any further.
 func jitAreaForStubArm64(stub *StubRoutine, heap *jitArea,
-	rm remotememory.RemoteMemory) (jitArea, error) {
+	rm remotememory.RemoteMemory,
+) (jitArea, error) {
 	var hasFrame bool
 	var spOffs int64
 	if stub.name == "call_stub_return_address" {

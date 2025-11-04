@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"github.com/elastic/go-freelru"
 

@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"github.com/elastic/go-freelru"
 
@@ -397,7 +397,8 @@ func (d *hotspotInstance) getMethod(addr libpf.Address, _ uint32) (*hotspotMetho
 
 // getJITInfo reads and returns the interesting data from "class nmethod" at given address
 func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
-	*hotspotJITInfo, error) {
+	*hotspotJITInfo, error,
+) {
 	// Each JIT-ted function is contained in a "class nmethod" (derived from CodeBlob,
 	// and CompiledMethod [JDK22 and earlier]).
 	//
@@ -675,7 +676,8 @@ func (d *hotspotInstance) gatherHeapInfo(vmd *hotspotVMData) (*heapInfo, error) 
 
 // addJitArea inserts an entry into the PID<->interpreter BPF map.
 func (d *hotspotInstance) addJitArea(ebpf interpreter.EbpfHandler,
-	pid libpf.PID, area jitArea) error {
+	pid libpf.PID, area jitArea,
+) error {
 	prefixes, err := lpm.CalculatePrefixList(uint64(area.start), uint64(area.end))
 	if err != nil {
 		return fmt.Errorf("LPM prefix calculation error for %x-%x", area.start, area.end)
@@ -708,7 +710,8 @@ func (d *hotspotInstance) addJitArea(ebpf interpreter.EbpfHandler,
 // allows the BPF code to start unwinding even if some more detailed information
 // about e.g. stub routines is not yet available.
 func (d *hotspotInstance) populateMainMappings(vmd *hotspotVMData,
-	ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	ebpf interpreter.EbpfHandler, pid libpf.PID,
+) error {
 	if d.mainMappingsInserted {
 		// Already populated: nothing to do here.
 		return nil
@@ -788,7 +791,8 @@ func (d *hotspotInstance) populateMainMappings(vmd *hotspotVMData,
 // stubs map and, if necessary on the architecture, inserts unwinding instructions
 // for them in the PID mappings BPF map.
 func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
-	ebpf interpreter.EbpfHandler, pid libpf.PID) {
+	ebpf interpreter.EbpfHandler, pid libpf.PID,
+) {
 	for _, stub := range findStubBounds(vmd, d.bias, d.rm) {
 		if _, exists := d.stubs[stub.start]; exists {
 			continue
@@ -832,7 +836,8 @@ func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
 }
 
 func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
-	_ reporter.ExecutableReporter, pr process.Process, _ []process.Mapping) error {
+	_ reporter.ExecutableReporter, pr process.Process, _ []process.Mapping,
+) error {
 	vmd, err := d.d.GetOrInit(func() (hotspotVMData, error) { return d.d.newVMData(d.rm, d.bias) })
 	if err != nil {
 		return err

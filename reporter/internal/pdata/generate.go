@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/otel/attribute"
 
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
@@ -234,7 +234,8 @@ func (p *Pdata) setProfile(
 		} // End per-frame processing
 
 		stackIdx, exists := stackSet.AddWithCheck(stackInfo{
-			locationIndices: fmt.Sprintf("%v", locationIndices)})
+			locationIndices: fmt.Sprintf("%v", locationIndices),
+		})
 		if !exists {
 			// Add a new Stack to the dictionary
 			stack := dic.StackTable().AppendEmpty()

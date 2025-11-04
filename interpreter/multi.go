@@ -6,8 +6,8 @@ package interpreter // import "go.opentelemetry.io/ebpf-profiler/interpreter"
 import (
 	"errors"
 
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -30,7 +30,8 @@ func NewMultiData(interpreters []Data) *MultiData {
 
 // Attach attaches all interpreters and returns a MultiInstance.
 func (m *MultiData) Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory) (Instance, error) {
+	rm remotememory.RemoteMemory,
+) (Instance, error) {
 	var instances []Instance
 	var errs []error
 
@@ -92,7 +93,8 @@ func (m *MultiInstance) Detach(ebpf EbpfHandler, pid libpf.PID) error {
 
 // SynchronizeMappings synchronizes mappings for all interpreter instances.
 func (m *MultiInstance) SynchronizeMappings(ebpf EbpfHandler,
-	exeReporter reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping) error {
+	exeReporter reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping,
+) error {
 	var errs []error
 	for _, instance := range m.instances {
 		if err := instance.SynchronizeMappings(ebpf, exeReporter, pr, mappings); err != nil {

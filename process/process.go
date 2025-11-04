@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
