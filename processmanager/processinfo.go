@@ -381,8 +381,27 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 
 	// Grab copy of current mappings.
 	var numInterpreters int
+
 	pm.mu.Lock()
+
 	info := pm.getPidInformation(pid, pr)
+	if info == nil {
+		pm.mu.Unlock()
+		return false
+	}
+	// Update metadata
+	exe, err := pr.GetExe()
+	if err != nil {
+		if os.IsNotExist(err) {
+			pm.mu.Unlock()
+			return false
+		}
+		log.Warnf("Failed to get executable of process %d: %v", pid, err)
+	} else if exe != info.meta.Executable {
+		// Update metadata of the process.
+		info.meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
+	}
+	// Get existing info
 	oldMappings := info.mappings
 	newProcess := len(info.mappings) == 0
 	if intrp, ok := pm.interpreters[pid]; ok {
@@ -455,14 +474,6 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	pm.mu.Lock()
 	pidInfo := pm.getPidInformation(pid, pr)
 	pidInfo.mappings = mappings
-	// Update metadata
-	exe, err := pr.GetExe()
-	if err != nil {
-		log.Warnf("Failed to get executable of process %d: %v", pid, err)
-	} else if exe != info.meta.Executable {
-		// Update metadata of the process.
-		info.meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
-	}
 	pm.mu.Unlock()
 
 	// Detach removed interpreters and remove old mappings
