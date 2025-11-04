@@ -401,25 +401,24 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	// Grab copy of current mappings.
 	var numInterpreters int
 
-	pm.mu.Lock()
+	// Get current executable name
+	exe, err := pr.GetExe()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
+		log.Warnf("Failed to get executable of process %d: %v", pid, err)
+	}
 
+	pm.mu.Lock()
 	info := pm.getPidInformation(pid, pr)
 	if info == nil {
 		pm.mu.Unlock()
 		return false
 	}
-	// Update metadata
-	exe, err := pr.GetExe()
-	if err != nil {
-		if os.IsNotExist(err) {
-			pm.mu.Unlock()
-			return false
-		}
-		log.Warnf("Failed to get executable of process %d: %v", pid, err)
-	} else if exe != info.meta.Executable {
-		// Update metadata of the process.
-		info.meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
-	}
+	// Check if process meta needs an update
+	updateProcessMeta := exe != "" && exe != info.meta.Executable
+
 	// Get existing info
 	oldMappings := info.mappings
 	newProcess := len(info.mappings) == 0
@@ -494,11 +493,22 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	}
 	pm.pidPageToMappingInfoSize += numChanges
 
-	// Sort and publish the new mappings
+	// Update metadata of the process.
+	var meta process.ProcessMeta
+	if updateProcessMeta {
+		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
+	}
+
+	// Sort and publish the new mappings and meta
 	slices.SortFunc(mappings, compareMapping)
 	pm.mu.Lock()
-	pidInfo := pm.getPidInformation(pid, pr)
-	pidInfo.mappings = mappings
+	info = pm.getPidInformation(pid, pr)
+	if info != nil {
+		info.mappings = mappings
+		if updateProcessMeta {
+			info.meta = meta
+		}
+	}
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()
 
