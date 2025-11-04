@@ -420,7 +420,6 @@ func (pm *ProcessManager) processRemovedMappings(pid libpf.PID, mappings []libpf
 	}
 
 	if _, ok := pm.interpreters[pid]; !ok {
-		log.Debugf("ProcessManager doesn't know about PID %d", pid)
 		return
 	}
 
@@ -638,6 +637,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			pm.mappingStats.errProcESRCH.Add(1)
 		}
 		// Clean up, and notify eBPF.
+		log.Debugf("removing pid due to mappings read error: %v", err)
 		pm.processPIDExit(pid)
 		return
 	}

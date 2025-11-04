@@ -70,7 +70,8 @@ func (p *asyncMapUpdaterPool) EnqueueUpdate(
 ) {
 	workerIdx := uint64(fileID) % uint64(len(p.workers))
 	if err := p.workers[workerIdx].ctx.Err(); err != nil {
-		log.Warnf("Skipping handling of %v: %v", fileID, err)
+		// This spams integration tests
+		log.Debugf("Skipping handling of %v: %v", fileID, err)
 		return
 	}
 	p.workers[workerIdx].queue <- asyncMapInMapUpdate{

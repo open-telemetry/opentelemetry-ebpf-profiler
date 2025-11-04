@@ -271,25 +271,6 @@ func (t *Tracer) Close() {
 	t.processManager.Close()
 }
 
-func buildStackDeltaTemplates(coll *cebpf.CollectionSpec) error {
-	// Prepare the inner map template of the stack deltas map-of-maps.
-	// This cannot be provided from the eBPF C code, and needs to be done here.
-	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
-		mapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)
-		def := coll.Maps[mapName]
-		if def == nil {
-			return fmt.Errorf("ebpf map '%s' not found", mapName)
-		}
-		def.InnerMap = &cebpf.MapSpec{
-			Type:       cebpf.Array,
-			KeySize:    4,
-			ValueSize:  support.Sizeof_StackDelta,
-			MaxEntries: 1 << i,
-		}
-	}
-	return nil
-}
-
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
 // by the embedded elf file and loads these into the kernel.
 func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
@@ -321,11 +302,6 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	// Initialize eBPF variables before loading programs and maps.
 	if err = loadRodataVars(coll, kmod, cfg); err != nil {
 		return nil, nil, fmt.Errorf("failed to set RODATA variables: %v", err)
-	}
-
-	err = buildStackDeltaTemplates(coll)
-	if err != nil {
-		return nil, nil, err
 	}
 
 	ebpfMaps = make(map[string]*cebpf.Map)
@@ -772,7 +748,6 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) {
 	key = 0
 	if err := eventsMap.NextKey(unsafe.Pointer(&key), unsafe.Pointer(&nextKey)); err != nil {
 		if errors.Is(err, cebpf.ErrKeyNotExist) {
-			log.Debugf("Empty pid_events map")
 			return
 		}
 		log.Fatalf("Failed to read from pid_events map: %v", err)
@@ -889,7 +864,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	}
 
 	frameSize := support.Sizeof_Frame
-	ptr := (*support.Trace)(unsafe.Pointer(unsafe.SliceData(raw)))
+	ptr := traceFromRaw(raw)
 
 	// NOTE: can't do exact check here: kernel adds a few padding bytes to messages.
 	if len(raw) < frameListOffs+int(ptr.Stack_len)*frameSize {

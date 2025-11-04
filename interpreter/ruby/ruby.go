@@ -178,6 +178,11 @@ func rubyVersion(major, minor, release uint32) uint32 {
 	return major*0x10000 + minor*0x100 + release
 }
 
+func (r *rubyData) String() string {
+	ver := r.version
+	return fmt.Sprintf("Ruby %d.%d.%d", (ver>>16)&0xff, (ver>>8)&0xff, ver&0xff)
+}
+
 func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
