@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"regexp"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
+
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -18,6 +20,19 @@ type TSDInfo = support.TSDInfo
 type LibcInfo struct {
 	// TSDInfo is the TSDInfo extracted for this C-library
 	TSDInfo TSDInfo
+	// TODO comment
+	DTVInfo DTVInfo
+}
+
+
+// TODO comment
+type DTVInfo struct {
+	// Offset is the offset of DTV from FS base (or from thread pointer)
+	Offset     int64
+	// EntryWidth is the size of each DTV entry in bytes
+	EntryWidth uint32 
+	// Indirect is 0 if DTV is at FS+offset, 1 if at [FS+0]+offset
+	Indirect   uint8
 }
 
 // This code analyzes the C-library provided POSIX defined function which is used
@@ -81,8 +96,14 @@ func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
 		return nil, err
 	}
 
+	dtvinfo, err := extractDTVInfo(ef)
+	if err != nil {
+		return &LibcInfo{}, err
+	}
+
 	return &LibcInfo{
 		TSDInfo: tsdinfo,
+		DTVInfo: dtvinfo,
 	}, nil
 }
 
@@ -110,6 +131,36 @@ func extractTSDInfo(ef *pfelf.File) (TSDInfo, error) {
 	}
 	if err != nil {
 		return TSDInfo{}, fmt.Errorf("failed to extract getspecific data: %s", err)
+	}
+	return info, nil
+}
+
+// extractDTVInfo extracts the introspection data for the DTV to access TLS vars
+func extractDTVInfo(ef *pfelf.File) (DTVInfo, error) {
+	var info DTVInfo
+	_, code, err := ef.SymbolData("__tls_get_addr", 2048)
+	if err != nil {
+		// Only error out reading DTV if we have the symbol, but fail to parse it
+		// if the symbol is not exported, failing to read it is not a critical error
+		// and empty DTV introspection data is returned
+		log.Warnf("unable to read '__tls_get_addr': %s, libc DTV introspection data is unavailable", err)
+		return info, nil
+	}
+
+	if len(code) < 8 {
+		return info, fmt.Errorf("__tls_get_addr function size is %d", len(code))
+	}
+
+	switch ef.Machine {
+	case elf.EM_AARCH64:
+		info, err = extractDTVInfoARM(code)
+	case elf.EM_X86_64:
+		info, err = extractDTVInfoX86(code)
+	default:
+		return info, fmt.Errorf("unsupported arch %s", ef.Machine.String())
+	}
+	if err != nil {
+		return info, fmt.Errorf("failed to extract DTV data: %s", err)
 	}
 	return info, nil
 }
