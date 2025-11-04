@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"github.com/elastic/go-freelru"
 
@@ -184,8 +184,8 @@ func (r *rubyData) String() string {
 }
 
 func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-
+	rm remotememory.RemoteMemory,
+) (interpreter.Instance, error) {
 	var tlsOffset uint64
 	if r.currentEcTpBaseTlsOffset != 0 {
 		// Read TLS offset from the TLS descriptor.
@@ -315,7 +315,7 @@ func (r *rubyInstance) readPathObjRealPath(addr libpf.Address) (string, error) {
 		}
 
 		// Read contiguous pointer values into a buffer to be more efficient
-		dataBytes := make([]byte, 2 * vms.size_of_value)
+		dataBytes := make([]byte, 2*vms.size_of_value)
 		if err := r.rm.Read(arrData, dataBytes); err != nil {
 			return "", fmt.Errorf("failed to read array data bytes: %v", err)
 		}
@@ -371,7 +371,8 @@ type StringReader = func(address libpf.Address) (string, error)
 
 // getStringCached retrieves a string from cache or reads and inserts it if it's missing.
 func (r *rubyInstance) getStringCached(addr libpf.Address, reader StringReader) (
-	libpf.String, error) {
+	libpf.String, error,
+) {
 	if value, ok := r.addrToString.Get(addr); ok {
 		return value, nil
 	}
@@ -420,7 +421,8 @@ func immBlockRankGet(v uint64, i uint32) uint32 {
 // Implementation according to Ruby:
 // https://github.com/ruby/ruby/blob/4e0a512972cdcbfcd5279f1a2a81ba342ed75b6e/iseq.c#L1254-L1295
 func (r *rubyInstance) getObsoleteRubyLineNo(iseqBody libpf.Address,
-	pos, size uint32) (uint32, error) {
+	pos, size uint32,
+) (uint32, error) {
 	vms := &r.r.vmStructs
 	sizeOfEntry := uint32(vms.iseq_insn_info_entry.size_of_iseq_insn_info_entry)
 
@@ -792,7 +794,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		interpSymbolName = libpf.SymbolName("ruby_exec_node")
 	}
 
-	var rubyCurrentEcTlsSymbol = "ruby_current_ec"
+	rubyCurrentEcTlsSymbol := "ruby_current_ec"
 	var currentEcSymbolAddress libpf.SymbolValue
 
 	currentEcSymbolName := libpf.SymbolName(rubyCurrentEcTlsSymbol)
@@ -854,9 +856,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	log.Debugf("Discovered EC tls tpbase offset %x, fallback ctx %x, interp ranges: %v", currentEcTpBaseTlsOffset, currentCtxPtr, interpRanges)
 
 	rid := &rubyData{
-		version:            version,
-		currentEcTpBaseTlsOffset:     libpf.Address(currentEcTpBaseTlsOffset),
-		currentCtxPtr:      libpf.Address(currentCtxPtr),
+		version:                  version,
+		currentEcTpBaseTlsOffset: libpf.Address(currentEcTpBaseTlsOffset),
+		currentCtxPtr:            libpf.Address(currentCtxPtr),
 	}
 
 	vms := &rid.vmStructs
