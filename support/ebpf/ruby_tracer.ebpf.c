@@ -259,7 +259,8 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
     u64 tsd_base;
     if (tsd_get_base((void **)&tsd_base) != 0) {
       DEBUG_PRINT("ruby: failed to get TSD base for TLS symbol lookup");
-      return 0;
+      error = ERR_RUBY_READ_TSD_BASE;
+      goto exit;
     }
 
     u64 tls_current_ec_addr = tsd_base + rubyinfo->current_ec_tpbase_tls_offset;
