@@ -41,6 +41,12 @@ func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
 }
 
+// UpdateSamplingFrequency updates the sampling frequency used in profile generation.
+func (b *baseReporter) UpdateSamplingFrequency(samplesPerSecond int) error {
+	b.pdata.UpdateSamplingFrequency(samplesPerSecond)
+	return nil
+}
+
 func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
 	switch meta.Origin {
 	case support.TraceOriginSampling:

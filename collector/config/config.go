@@ -10,6 +10,7 @@ type Config struct {
 	ReporterInterval       time.Duration `mapstructure:"reporter_interval"`
 	MonitorInterval        time.Duration `mapstructure:"monitor_interval"`
 	SamplesPerSecond       int           `mapstructure:"samples_per_second"`
+	MaxSamplesPerSecond    int           `mapstructure:"max_samples_per_second"`
 	ProbabilisticInterval  time.Duration `mapstructure:"probabilistic_interval"`
 	ProbabilisticThreshold uint          `mapstructure:"probabilistic_threshold"`
 	Tracers                string        `mapstructure:"tracers"`

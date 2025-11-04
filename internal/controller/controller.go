@@ -79,6 +79,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		IncludeTracers:         includeTracers,
 		FilterErrorFrames:      !c.config.SendErrorFrames,
 		SamplesPerSecond:       c.config.SamplesPerSecond,
+		MaxSamplesPerSecond:    c.config.MaxSamplesPerSecond,
 		MapScaleFactor:         int(c.config.MapScaleFactor),
 		KernelVersionCheck:     !c.config.NoKernelVersionCheck,
 		VerboseMode:            c.config.VerboseMode,
@@ -158,6 +159,30 @@ func (c *Controller) Shutdown() {
 	if c.tracer != nil {
 		c.tracer.Close()
 	}
+}
+
+// UpdateSamplingFrequency dynamically updates the sampling frequency for both the tracer
+// and reporter.
+func (c *Controller) UpdateSamplingFrequency(newSamplesPerSecond int) error {
+	if newSamplesPerSecond < 1 {
+		return fmt.Errorf("invalid sampling frequency: %d (must be >= 1)", newSamplesPerSecond)
+	}
+
+	if c.tracer == nil {
+		return fmt.Errorf("tracer is not initialized")
+	}
+
+	if c.reporter != nil {
+		if err := c.reporter.UpdateSamplingFrequency(newSamplesPerSecond); err != nil {
+			log.Warnf("Failed to update reporter sampling frequency: %v", err)
+		}
+	}
+
+	if err := c.tracer.UpdateSamplingFrequency(newSamplesPerSecond); err != nil {
+		return fmt.Errorf("failed to update tracer sampling frequency: %w", err)
+	}
+
+	return nil
 }
 
 func startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {

@@ -55,6 +55,13 @@ func (cfg *Config) Validate() error {
 		return fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond)
 	}
 
+	if cfg.MaxSamplesPerSecond < 0 {
+		return fmt.Errorf("invalid max sampling frequency: %d", cfg.MaxSamplesPerSecond)
+	}
+	if cfg.MaxSamplesPerSecond > 0 && cfg.SamplesPerSecond > cfg.MaxSamplesPerSecond {
+		return fmt.Errorf("sampling frequency %d exceeds max limit %d", cfg.SamplesPerSecond, cfg.MaxSamplesPerSecond)
+	}
+
 	if cfg.MapScaleFactor > MaxArgMapScaleFactor {
 		return fmt.Errorf(
 			"eBPF map scaling factor %d exceeds limit (max: %d)",

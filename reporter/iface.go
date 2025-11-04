@@ -24,6 +24,12 @@ type Reporter interface {
 
 	// Stop triggers a graceful shutdown of the reporter.
 	Stop()
+
+	// UpdateSamplingFrequency updates the sampling frequency used in profile generation.
+	UpdateSamplingFrequency(samplesPerSecond int) error
+
+	// Flush immediately reports all currently accumulated trace events.
+	Flush(ctx context.Context) error
 }
 
 type TraceReporter interface {

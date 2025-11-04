@@ -17,15 +17,16 @@ import (
 
 const (
 	// Default values for CLI flags
-	defaultArgSamplesPerSecond    = 20
-	defaultArgReporterInterval    = 5.0 * time.Second
-	defaultArgMonitorInterval     = 5.0 * time.Second
-	defaultClockSyncInterval      = 3 * time.Minute
-	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
-	defaultProbabilisticInterval  = 1 * time.Minute
-	defaultArgSendErrorFrames     = false
-	defaultOffCPUThreshold        = 0
-	defaultEnvVarsValue           = ""
+	defaultArgSamplesPerSecond     = 20
+	defaultArgMaxSamplesPerSecond  = 0 // 0 means disabled
+	defaultArgReporterInterval     = 5.0 * time.Second
+	defaultArgMonitorInterval      = 5.0 * time.Second
+	defaultClockSyncInterval       = 3 * time.Minute
+	defaultProbabilisticThreshold  = tracer.ProbabilisticThresholdMax
+	defaultProbabilisticInterval   = 1 * time.Minute
+	defaultArgSendErrorFrames      = false
+	defaultOffCPUThreshold         = 0
+	defaultEnvVarsValue            = ""
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -55,11 +56,12 @@ var (
 		tracer.ProbabilisticThresholdMax-1, tracer.ProbabilisticThresholdMax-1)
 	probabilisticIntervalHelp = "Time interval for which probabilistic profiling will be " +
 		"enabled or disabled."
-	pprofHelp             = "Listening address (e.g. localhost:6060) to serve pprof information."
-	samplesPerSecondHelp  = "Set the frequency (in Hz) of stack trace sampling."
-	reporterIntervalHelp  = "Set the reporter's interval in seconds."
-	monitorIntervalHelp   = "Set the monitor interval in seconds."
-	clockSyncIntervalHelp = "Set the sync interval with the realtime clock. " +
+	pprofHelp               = "Listening address (e.g. localhost:6060) to serve pprof information."
+	samplesPerSecondHelp    = "Set the frequency (in Hz) of stack trace sampling."
+	maxSamplesPerSecondHelp = "Set the upper bound for sampling frequency to cap runtime changes. Default (0) disables runtime sampling frequency changes. Must be greater or equal to samples-per-second."
+	reporterIntervalHelp    = "Set the reporter's interval in seconds."
+	monitorIntervalHelp     = "Set the monitor interval in seconds."
+	clockSyncIntervalHelp   = "Set the sync interval with the realtime clock. " +
 		"If zero, monotonic-realtime clock sync will be performed once, " +
 		"on agent startup, but not periodically."
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
@@ -115,6 +117,8 @@ func parseArgs() (*controller.Config, error) {
 
 	fs.IntVar(&args.SamplesPerSecond, "samples-per-second", defaultArgSamplesPerSecond,
 		samplesPerSecondHelp)
+
+	fs.IntVar(&args.MaxSamplesPerSecond, "max-samples-per-second", defaultArgMaxSamplesPerSecond, maxSamplesPerSecondHelp)
 
 	fs.BoolVar(&args.SendErrorFrames, "send-error-frames", defaultArgSendErrorFrames,
 		sendErrorFramesHelp)
