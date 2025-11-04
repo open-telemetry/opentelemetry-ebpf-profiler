@@ -250,10 +250,10 @@ enum {
   // number of failures to read the instruction sequence body
   metricID_UnwindRubyErrReadIseqBody,
 
-  // number of failures to read the instruction sequence encoded size
+  // number of failures to read the instruction sequence encoded size (deprecated)
   metricID_UnwindRubyErrReadIseqEncoded,
 
-  // number of failures to read the instruction sequence size
+  // number of failures to read the instruction sequence size (deprecated)
   metricID_UnwindRubyErrReadIseqSize,
 
   // number of times the unwind instructions requested LR unwinding mid-trace
