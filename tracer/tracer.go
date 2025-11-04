@@ -860,7 +860,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	}
 
 	frameSize := support.Sizeof_Frame
-	ptr := (*support.Trace)(unsafe.Pointer(unsafe.SliceData(raw)))
+	ptr := traceFromRaw(raw)
 
 	// NOTE: can't do exact check here: kernel adds a few padding bytes to messages.
 	if len(raw) < frameListOffs+int(ptr.Stack_len)*frameSize {
