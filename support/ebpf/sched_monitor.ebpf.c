@@ -6,7 +6,7 @@
 
 #include "types.h"
 
-// See /sys/kernel/debug/tracing/events/sched/sched_process_free/format
+// See /sys/kernel/tracing/events/sched/sched_process_free/format
 // for struct layout. This is pre-6.16 format which uses a fixed-size
 // (TASK_COMM_LEN) array for comm.
 struct sched_process_free_ctx_pre616 {
