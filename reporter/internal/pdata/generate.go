@@ -71,7 +71,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 		rp := profiles.ResourceProfiles().AppendEmpty()
 		rp.Resource().Attributes().PutStr(string(semconv.ContainerIDKey),
-			string(containerID))
+			containerID.String())
 		rp.SetSchemaUrl(semconv.SchemaURL)
 
 		sp := rp.ScopeProfiles().AppendEmpty()
@@ -244,9 +244,9 @@ func (p *Pdata) setProfile(
 		}
 		sample.SetStackIndex(stackIdx)
 
-		exeName := traceKey.ExecutablePath
-		if exeName != "" {
-			_, exeName = filepath.Split(exeName)
+		exeName := ""
+		if traceKey.ExecutablePath != libpf.NullString {
+			_, exeName = filepath.Split(traceKey.ExecutablePath.String())
 		}
 
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
@@ -255,7 +255,7 @@ func (p *Pdata) setProfile(
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ProcessExecutableNameKey, exeName)
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
-			semconv.ProcessExecutablePathKey, traceKey.ExecutablePath)
+			semconv.ProcessExecutablePathKey, traceKey.ExecutablePath.String())
 
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ServiceNameKey, traceKey.ApmServiceName)
@@ -267,7 +267,7 @@ func (p *Pdata) setProfile(
 			semconv.CPULogicalNumberKey, int64(traceKey.CPU))
 
 		for key, value := range traceInfo.EnvVars {
-			env := semconv.ProcessEnvironmentVariable(key, value)
+			env := semconv.ProcessEnvironmentVariable(key.String(), value.String())
 			attrMgr.AppendOptionalString(
 				sample.AttributeIndices(),
 				env.Key, env.Value.AsString())

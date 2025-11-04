@@ -43,9 +43,9 @@ type Frame struct {
 
 type Trace struct {
 	Comm             string
-	ProcessName      string
-	ExecutablePath   string
-	ContainerID      string
+	ProcessName      libpf.String
+	ExecutablePath   libpf.String
+	ContainerID      libpf.String
 	Frames           []Frame
 	KTime            times.KTime
 	PID              libpf.PID
@@ -55,7 +55,7 @@ type Trace struct {
 	APMTraceID       libpf.APMTraceID
 	APMTransactionID libpf.APMTransactionID
 	CPU              int
-	EnvVars          map[string]string
+	EnvVars          map[libpf.String]libpf.String
 	CustomLabels     map[string]string
 	KernelFrames     libpf.Frames
 }

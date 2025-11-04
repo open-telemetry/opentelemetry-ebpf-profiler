@@ -98,13 +98,13 @@ type MetaConfig struct {
 // ProcessMeta contains metadata about a tracked process.
 type ProcessMeta struct {
 	// process name retrieved from /proc/PID/comm
-	Name string
+	Name libpf.String
 	// executable path retrieved from /proc/PID/exe
-	Executable string
+	Executable libpf.String
 	// process env vars from /proc/PID/environ
-	EnvVariables map[string]string
+	EnvVariables map[libpf.String]libpf.String
 	// container ID retrieved from /proc/PID/cgroup
-	ContainerID string
+	ContainerID libpf.String
 }
 
 // Process is the interface to inspect ELF coredump/process.
@@ -122,7 +122,7 @@ type Process interface {
 	GetProcessMeta(MetaConfig) ProcessMeta
 
 	// GetExe returns the executable path of the process.
-	GetExe() (string, error)
+	GetExe() (libpf.String, error)
 
 	// GetMappings reads and parses process memory mappings.
 	GetMappings() ([]Mapping, uint32, error)
