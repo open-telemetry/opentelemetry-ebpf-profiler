@@ -187,7 +187,7 @@ jobs:
       - name: Test on kernel ${{ matrix.kernel }}
         run: |
           if [[ "${{ matrix.race }}" == "true" ]]; then
-            find support -maxdepth 1 -name "*.test" ! -name "*.race.test" -delete
+            find support -maxdepth 1 -name "*.norace.test" -delete
           else
             find support -maxdepth 1 -name "*.race.test" -delete
           fi

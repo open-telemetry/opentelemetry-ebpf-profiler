@@ -141,7 +141,7 @@ integration-test-binaries: generate ebpf pprof-execs
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
-			-o ./support/$(subst /,_,$(test_name)).test \
+			-o ./support/$(subst /,_,$(test_name)).norace.test \
 			./$(test_name)) || exit ; \
 	)
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
