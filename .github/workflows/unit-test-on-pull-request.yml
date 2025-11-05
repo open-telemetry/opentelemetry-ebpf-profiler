@@ -186,10 +186,11 @@ jobs:
           mv ci-kernels/boot/ ci-kernels/${{ matrix.kernel }}/
       - name: Test on kernel ${{ matrix.kernel }}
         run: |
+          set -ex
           if [[ "${{ matrix.race }}" == "true" ]]; then
-            find support -maxdepth 1 -name "*.norace.test" -delete
+            find . -maxdepth 1 -name "*.norace.test" -delete
           else
-            find support -maxdepth 1 -name "*.race.test" -delete
+            find . -maxdepth 1 -name "*.race.test" -delete
           fi
           chmod a+rx *.test
           case "${{ matrix.target_arch }}" in
