@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"math"
@@ -857,6 +858,13 @@ func (t *Tracer) eBPFMetricsCollector(
 	return metricsUpdates
 }
 
+func reconstruct48BitAddress(bytes [6]uint8) uint64 {
+	// Pad to 8 bytes for binary.LittleEndian
+	padded := [8]uint8{}
+	copy(padded[:], bytes[:])
+	return binary.LittleEndian.Uint64(padded[:])
+}
+
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
 //
 // If the raw trace contains a kernel stack ID, the kernel stack is also
@@ -929,6 +937,10 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 			Lineno:        libpf.AddressOrLineno(rawFrame.Addr_or_line),
 			Type:          libpf.FrameType(rawFrame.Kind),
 			ReturnAddress: rawFrame.Return_address != 0,
+		}
+		// If there is additional data in the padding, append it as an extra value
+		if rawFrame.Pad[0] != 0 {
+			trace.Frames[i].Extra = libpf.AddressOrLineno(reconstruct48BitAddress(rawFrame.Pad))
 		}
 	}
 	return trace
