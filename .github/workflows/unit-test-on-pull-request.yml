@@ -124,7 +124,7 @@ jobs:
         run: GODEBUG=asyncpreemptoff=1 go test -v ./tools/coredump/
 
   integration-tests:
-    name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }})
+    name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }}${{ matrix.race && ' race' || '' }})
     runs-on: ubuntu-24.04
     needs: build-integration-test-binaries
     timeout-minutes: 10
@@ -153,6 +153,10 @@ jobs:
           # qemu has a bug that prevents booting the following kernel on ARM,
           # fixed in qemu 9.2
           #- { target_arch: arm64, kernel: 6.16 }
+
+          # Race detector tests (one per architecture)
+          - { target_arch: amd64, kernel: 6.6.31, race: true }
+          - { target_arch: arm64, kernel: 6.6.31, race: true }
     steps:
       - name: Disable man-db
         run: |
@@ -182,6 +186,11 @@ jobs:
           mv ci-kernels/boot/ ci-kernels/${{ matrix.kernel }}/
       - name: Test on kernel ${{ matrix.kernel }}
         run: |
+          if [[ "${{ matrix.race }}" == "true" ]]; then
+            rm -f support/*.test
+          else
+            rm -f support/*.race.test
+          fi
           chmod a+rx *.test
           case "${{ matrix.target_arch }}" in
             amd64) export QEMU_ARCH=x86_64;;
