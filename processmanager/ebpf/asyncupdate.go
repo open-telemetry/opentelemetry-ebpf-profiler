@@ -9,7 +9,7 @@ import (
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 )
@@ -47,7 +47,8 @@ type asyncMapUpdaterPool struct {
 
 // newAsyncMapUpdaterPool creates a new worker pool
 func newAsyncMapUpdaterPool(ctx context.Context,
-	numWorkers, workerQueueCapacity int) *asyncMapUpdaterPool {
+	numWorkers, workerQueueCapacity int,
+) *asyncMapUpdaterPool {
 	pool := &asyncMapUpdaterPool{}
 	for range numWorkers {
 		queue := make(chan asyncMapInMapUpdate, workerQueueCapacity)
@@ -65,10 +66,12 @@ func newAsyncMapUpdaterPool(ctx context.Context,
 // the given `inner` map is transferred to the worker pool and `inner` is closed
 // by the background worker after the update was executed.
 func (p *asyncMapUpdaterPool) EnqueueUpdate(
-	outer *cebpf.Map, fileID host.FileID, inner *cebpf.Map) {
+	outer *cebpf.Map, fileID host.FileID, inner *cebpf.Map,
+) {
 	workerIdx := uint64(fileID) % uint64(len(p.workers))
 	if err := p.workers[workerIdx].ctx.Err(); err != nil {
-		log.Warnf("Skipping handling of %v: %v", fileID, err)
+		// This spams integration tests
+		log.Debugf("Skipping handling of %v: %v", fileID, err)
 		return
 	}
 	p.workers[workerIdx].queue <- asyncMapInMapUpdate{

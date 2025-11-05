@@ -1,0 +1,18 @@
+name: Setup protoc
+
+runs:
+  using: composite
+  steps:
+    - name: Install protoc
+      shell: bash
+      env:
+        PB_URL: "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/"
+        PB_FILE: "protoc-24.4-linux-x86_64.zip"
+        INSTALL_DIR: "/usr/local"
+      run: |
+        wget -nv "$PB_URL/$PB_FILE"
+        sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
+        sudo chmod +xr "$INSTALL_DIR/bin/protoc"
+        sudo find "$INSTALL_DIR/include" -type d -exec chmod +x {} \;
+        sudo find "$INSTALL_DIR/include" -type f -exec chmod +r {} \;
+        rm "$PB_FILE"

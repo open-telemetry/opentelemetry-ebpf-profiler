@@ -33,7 +33,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
@@ -131,10 +131,11 @@ type File struct {
 	goBuildInfo *debug.BuildInfo
 }
 
-var _ libpf.SymbolFinder = &File{}
-var _ io.ReaderAt = &File{}
-var _ io.ReaderAt = &Section{}
-var _ io.ReaderAt = &Prog{}
+var (
+	_ io.ReaderAt = &File{}
+	_ io.ReaderAt = &Section{}
+	_ io.ReaderAt = &Prog{}
+)
 
 // sysvHashHeader is the ELF DT_HASH section header
 type sysvHashHeader struct {
@@ -196,7 +197,8 @@ func NewFile(r io.ReaderAt, loadAddress uint64, hasMusl bool) (*File, error) {
 }
 
 func newFile(r io.ReaderAt, closer io.Closer,
-	loadAddress uint64, hasMusl bool) (*File, error) {
+	loadAddress uint64, hasMusl bool,
+) (*File, error) {
 	f := &File{
 		elfReader:  r,
 		InsideCore: loadAddress != 0,
@@ -660,7 +662,8 @@ func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
 }
 
 func (f *File) visitTLSDescriptorsForSection(visitor func(ElfReloc, string) bool,
-	relaSection *Section) (bool, error) {
+	relaSection *Section,
+) (bool, error) {
 	if relaSection.Link > uint32(len(f.Sections)) {
 		return false, errors.New("rela section link is out-of-bounds")
 	}
@@ -745,7 +748,8 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 
 // OpenDebugLink tries to locate and open the corresponding debug ELF for this DSO.
 func (f *File) OpenDebugLink(elfFilePath string, elfOpener ELFOpener) (
-	debugELF *File, debugFile string) {
+	debugELF *File, debugFile string,
+) {
 	f.debuglinkChecked = true
 	// Get the debug link
 	linkName, linkCRC32, err := f.GetDebugLink()
@@ -1101,26 +1105,6 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 		}
 	}
 	return nil
-}
-
-// loadSymbolTable reads given symbol table
-func (f *File) loadSymbolTable(name string) (*libpf.SymbolMap, error) {
-	symMap := &libpf.SymbolMap{}
-	if err := f.visitSymbolTable(name, func(s libpf.Symbol) bool { symMap.Add(s); return true }); err != nil {
-		return nil, err
-	}
-	symMap.Finalize()
-	return symMap, nil
-}
-
-// ReadSymbols reads the full dynamic symbol table from the ELF
-func (f *File) ReadSymbols() (*libpf.SymbolMap, error) {
-	return f.loadSymbolTable(".symtab")
-}
-
-// ReadDynamicSymbols reads the full dynamic symbol table from the ELF
-func (f *File) ReadDynamicSymbols() (*libpf.SymbolMap, error) {
-	return f.loadSymbolTable(".dynsym")
 }
 
 // VisitSymbols iterates through the symbol table until visitor returns false.

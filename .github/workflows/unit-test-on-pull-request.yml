@@ -16,8 +16,11 @@ jobs:
     steps:
       - name: Clone code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - name: Set up environment
-        uses: ./.github/workflows/env
+      - name: Set up Go
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
       - name: Check for changes in licenses of dependencies
         run: |
           make legal
@@ -37,6 +40,8 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - name: Set up environment
         uses: ./.github/workflows/env
+        with:
+          target_arch: ${{ matrix.target_arch }}
       - name: Get linter version
         id: linter-version
         run: (echo -n "version="; make linter-version) >> "$GITHUB_OUTPUT"
@@ -44,10 +49,7 @@ jobs:
         env:
           GOARCH: ${{ matrix.target-arch }}
           CGO_ENABLED: 1
-        run: |
-          sudo apt update
-          sudo apt install -y clang-format-17
-          make lint
+        run: make lint
 
   test:
     name: Test (${{ matrix.target_arch }}${{ matrix.go_flags }})
@@ -65,7 +67,7 @@ jobs:
       - name: Set up environment
         uses: ./.github/workflows/env
         with:
-          skip_rust: true
+          target_arch: ${{ matrix.target_arch }}
       - name: Cache coredump modules
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -76,50 +78,6 @@ jobs:
             coredumps-
       - name: Tests
         run: make test TARGET_ARCH=${{ matrix.target_arch }} GO_FLAGS="${{ matrix.go_flags }}"
-
-  rust-test:
-    name: Rust Tests (${{ matrix.target_arch }})
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        target_arch: [amd64, arm64]
-    steps:
-      - name: Clone code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - name: Set up environment
-        uses: ./.github/workflows/env
-      - name: Tests
-        run: make rust-tests
-
-  check-binary-blobs:
-    name: Check for differences in the eBPF binary blobs
-    runs-on: ubuntu-24.04
-    container: otel/opentelemetry-ebpf-profiler-dev:latest@sha256:6ab9b5ff6c2a457be97a389887caf9f3cd5344f760fdab0101b9965236bbb2db
-    defaults:
-      run:
-        shell: bash --login {0}
-    steps:
-      - name: Clone code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-      - name: Hash binary blobs
-        run: |
-          sha256sum support/ebpf/tracer.ebpf.* > binary-blobs.hash
-      - name: Rebuild eBPF blobs
-        run: |
-          rm support/ebpf/tracer.ebpf.*
-          make amd64 -C support/ebpf
-          make arm64 -C support/ebpf
-      - name: Check for differences
-        run: |
-          if ! sha256sum --check binary-blobs.hash; then
-            echo "Please rebuild and commit the updated binary blobs."
-            exit 1
-          fi
-      - if: failure()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
-        with:
-          name: binary-blobs
-          path: support/ebpf/tracer.ebpf.*
 
   build-integration-test-binaries:
     name: Build integration test binaries (${{ matrix.target_arch }})
@@ -133,6 +91,8 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - name: Set up environment
         uses: ./.github/workflows/env
+        with:
+          target_arch: ${{ matrix.target_arch }}
       - name: Prepare integration test binaries for qemu tests
         run: make integration-test-binaries TARGET_ARCH=${{ matrix.target_arch }}
       - name: Upload integration test binaries
@@ -194,14 +154,18 @@ jobs:
           # fixed in qemu 9.2
           #- { target_arch: arm64, kernel: 6.16 }
     steps:
+      - name: Disable man-db
+        run: |
+          echo "set man-db/auto-update false" | sudo debconf-communicate
+          sudo dpkg-reconfigure man-db
       - name: Clone code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
       - name: Install dependencies
         run: |
           sudo apt-get update -y
           case "${{ matrix.target_arch }}" in
-            amd64) sudo apt-get -y install qemu-system-x86;;
-            arm64) sudo apt-get -y install qemu-system-arm;;
+            amd64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-x86 ;;
+            arm64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-arm ipxe-qemu ;;
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           go install github.com/florianl/bluebox@v0.0.1

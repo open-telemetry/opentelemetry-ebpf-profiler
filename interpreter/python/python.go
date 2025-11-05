@@ -18,8 +18,8 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 
 	"github.com/elastic/go-freelru"
@@ -121,10 +121,10 @@ func (d *pythonData) String() string {
 }
 
 func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-	addrToCodeObject, err :=
-		freelru.New[libpf.Address, *pythonCodeObject](interpreter.LruFunctionCacheSize,
-			libpf.Address.Hash32)
+	rm remotememory.RemoteMemory,
+) (interpreter.Instance, error) {
+	addrToCodeObject, err := freelru.New[libpf.Address, *pythonCodeObject](interpreter.LruFunctionCacheSize,
+		libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
@@ -372,7 +372,8 @@ func (p *pythonInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 }
 
 func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	tsdInfo tpbase.TSDInfo) error {
+	tsdInfo tpbase.TSDInfo,
+) error {
 	d := p.d
 	vm := &d.vmStructs
 	cdata := support.PyProcInfo{
@@ -464,7 +465,8 @@ func frozenNameToFileName(sourceFileName string) (string, error) {
 }
 
 func (p *pythonInstance) getCodeObject(addr libpf.Address,
-	ebpfChecksum uint32) (*pythonCodeObject, error) {
+	ebpfChecksum uint32,
+) (*pythonCodeObject, error) {
 	if addr == 0 {
 		return nil, errors.New("failed to read code object: null pointer")
 	}
@@ -603,7 +605,8 @@ func fieldByPythonName(obj reflect.Value, fieldName string) reflect.Value {
 }
 
 func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolName,
-	vmObj any) error {
+	vmObj any,
+) error {
 	typeData, err := ef.LookupSymbolAddress(symbol)
 	if err != nil {
 		return fmt.Errorf("symbol '%s' not found", symbol)
@@ -638,7 +641,8 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
 // the code to resolve specified argument parameter to the first jump/call.
 func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
-	symbolName libpf.SymbolName) (libpf.SymbolValue, error) {
+	symbolName libpf.SymbolName,
+) (libpf.SymbolValue, error) {
 	// Read and decode the code for the symbol
 	sym, code, err := ef.SymbolData(symbolName, 64)
 	if err != nil {
@@ -864,8 +868,7 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 	})
 	coldRange, err := findColdRange(ef, code, interp)
 	if err != nil {
-		log.WithError(err).Warnf("failed to recover python ranges %s",
-			info.FileName())
+		log.Errorf("failed to recover python ranges %s: %s", info.FileName(), err.Error())
 	}
 	if coldRange != (util.Range{}) {
 		interpRanges = append(interpRanges, coldRange)

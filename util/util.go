@@ -4,7 +4,6 @@
 package util // import "go.opentelemetry.io/ebpf-profiler/util"
 
 import (
-	"math/bits"
 	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
@@ -28,15 +27,6 @@ func IsValidString(s string) bool {
 	return true
 }
 
-// NextPowerOfTwo returns input value if it's a power of two,
-// otherwise it returns the next power of two.
-func NextPowerOfTwo(v uint32) uint32 {
-	if v == 0 {
-		return 1
-	}
-	return 1 << bits.Len32(v-1)
-}
-
 // AtomicUpdateMaxUint32 updates the value in store using atomic memory primitives. newValue will
 // only be placed in store if newValue is larger than the current value in store.
 // To avoid inconsistency parallel updates to store should be avoided.
@@ -55,11 +45,6 @@ func AtomicUpdateMaxUint32(store *atomic.Uint32, newValue uint32) {
 		// The value changed between load and update attempt.
 		// Retry with the new value.
 	}
-}
-
-// VersionUint returns a single integer composed of major, minor, patch.
-func VersionUint(major, minor, patch uint32) uint32 {
-	return (major << 16) + (minor << 8) + patch
 }
 
 // Range describes a range with Start and End values.

@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 type StoreCoredump struct {
@@ -90,7 +90,8 @@ func (scd *StoreCoredump) Close() error {
 }
 
 func OpenStoreCoredump(store *modulestore.Store, coreFileRef modulestore.ID, modules []ModuleInfo) (
-	process.Process, error) {
+	process.Process, error,
+) {
 	// Open the coredump from the module store.
 	reader, err := store.OpenBufferedReadAt(coreFileRef, 16*1024*1024)
 	if err != nil {
