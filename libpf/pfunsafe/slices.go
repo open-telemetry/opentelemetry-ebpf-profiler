@@ -5,6 +5,11 @@ import "unsafe"
 // FromPointer converts a Go struct pointer to []byte to read data into
 // data must be a non-nil pointer to a struct
 func FromPointer[T any](data *T) []byte {
+	if data == nil {
+		// unsafe.Slice panics anyway, but, under race sanitizer it fails to panic
+		// and throws instead of panic, which fails unit tests, so we panic explicitly
+		panic("data must not be nil")
+	}
 	return unsafe.Slice(
 		(*byte)(unsafe.Pointer(data)),
 		int(unsafe.Sizeof(*data)),
