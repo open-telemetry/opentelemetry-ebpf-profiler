@@ -193,6 +193,7 @@ jobs:
             find . -maxdepth 1 -name "*.race.test" -delete
           fi
           chmod a+rx *.test
+          file *.test
           case "${{ matrix.target_arch }}" in
             amd64) export QEMU_ARCH=x86_64;;
             arm64) export QEMU_ARCH=aarch64;;
