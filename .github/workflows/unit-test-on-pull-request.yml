@@ -187,9 +187,9 @@ jobs:
       - name: Test on kernel ${{ matrix.kernel }}
         run: |
           if [[ "${{ matrix.race }}" == "true" ]]; then
-            rm -f support/*.test
+            find support -maxdepth 1 -name "*.test" ! -name "*.race.test" -delete
           else
-            rm -f support/*.race.test
+            find support -maxdepth 1 -name "*.race.test" -delete
           fi
           chmod a+rx *.test
           case "${{ matrix.target_arch }}" in
