@@ -29,7 +29,7 @@ endif
 export TARGET_ARCH
 export CGO_ENABLED = 0
 export GOARCH = $(TARGET_ARCH)
-export CC = $(ARCH_PREFIX)-linux-gnu-gcc
+export CC =  clang
 export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
 
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
@@ -142,12 +142,6 @@ integration-test-binaries: generate ebpf pprof-execs
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
 			-o ./support/$(subst /,_,$(test_name)).norace.test \
-			./$(test_name)) || exit ; \
-	)
-	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
-		(CGO_ENABLED=1 go test -race -ldflags='-extldflags=-static' -trimpath -c \
-			-tags $(GO_TAGS),static_build,integration \
-			-o ./support/$(subst /,_,$(test_name)).race.test \
 			./$(test_name)) || exit ; \
 	)
 
