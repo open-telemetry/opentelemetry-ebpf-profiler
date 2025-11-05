@@ -131,11 +131,10 @@ type File struct {
 	goBuildInfo *debug.BuildInfo
 }
 
-var (
-	_ io.ReaderAt = &File{}
-	_ io.ReaderAt = &Section{}
-	_ io.ReaderAt = &Prog{}
-)
+var _ libpf.SymbolFinder = &File{}
+var _ io.ReaderAt = &File{}
+var _ io.ReaderAt = &Section{}
+var _ io.ReaderAt = &Prog{}
 
 // sysvHashHeader is the ELF DT_HASH section header
 type sysvHashHeader struct {
@@ -1114,6 +1113,26 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 		}
 	}
 	return nil
+}
+
+// loadSymbolTable reads given symbol table
+func (f *File) loadSymbolTable(name string) (*libpf.SymbolMap, error) {
+	symMap := &libpf.SymbolMap{}
+	if err := f.visitSymbolTable(name, func(s libpf.Symbol) bool { symMap.Add(s); return true }); err != nil {
+		return nil, err
+	}
+	symMap.Finalize()
+	return symMap, nil
+}
+
+// ReadSymbols reads the full dynamic symbol table from the ELF
+func (f *File) ReadSymbols() (*libpf.SymbolMap, error) {
+	return f.loadSymbolTable(".symtab")
+}
+
+// ReadDynamicSymbols reads the full dynamic symbol table from the ELF
+func (f *File) ReadDynamicSymbols() (*libpf.SymbolMap, error) {
+	return f.loadSymbolTable(".dynsym")
 }
 
 // VisitSymbols iterates through the symbol table until visitor returns false.

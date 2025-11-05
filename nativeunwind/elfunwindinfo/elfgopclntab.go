@@ -309,22 +309,22 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, err error) {
 		// as the .gopclntab section is not available on PIE binaries.
 		// A full symbol table read is needed as these are not dynamic symbols.
 		// Consequently these symbols might be unavailable on a stripped binary.
-		var start, end libpf.SymbolValue
-		ef.VisitSymbols(func (sym libpf.Symbol) bool {
-			if sym.Name == "runtime.pclntab" {
-				start = sym.Address
-			} else if sym.Name == "runtime.epclntab" {
-				end = sym.Address
-			}
-			return start == 0 || end == 0
-		})
-		if start == 0 || end == 0 {
+		symtab, err := ef.ReadSymbols()
+		if err != nil {
 			// It seems the Go binary was stripped. So we use the heuristic approach
 			// to get the stack deltas.
 			if data, err = searchGoPclntab(ef); err != nil {
 				return nil, fmt.Errorf("failed to search .gopclntab: %v", err)
 			}
 		} else {
+			start, err := symtab.LookupSymbolAddress("runtime.pclntab")
+			if err != nil {
+				return nil, fmt.Errorf("failed to load .gopclntab via symbols: %v", err)
+			}
+			end, err := symtab.LookupSymbolAddress("runtime.epclntab")
+			if err != nil {
+				return nil, fmt.Errorf("failed to load .gopclntab via symbols: %v", err)
+			}
 			if start >= end {
 				return nil, fmt.Errorf("invalid .gopclntab symbols: %v-%v", start, end)
 			}
