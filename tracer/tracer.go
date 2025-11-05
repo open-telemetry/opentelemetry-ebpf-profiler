@@ -114,6 +114,9 @@ type Tracer struct {
 
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
+
+	// filterIdleFrames indicates whether idle frames should be filtered.
+	filterIdleFrames bool
 }
 
 type Config struct {
@@ -132,6 +135,8 @@ type Config struct {
 	MapScaleFactor int
 	// FilterErrorFrames indicates whether error frames should be filtered.
 	FilterErrorFrames bool
+	// FilterIdleFrames indicates whether idle frames should be filtered.
+	FilterIdleFrames bool
 	// KernelVersionCheck indicates whether the kernel version should be checked.
 	KernelVersionCheck bool
 	// VerboseMode indicates whether to enable verbose output of eBPF tracers.
@@ -983,6 +988,9 @@ func (t *Tracer) AttachTracer() error {
 	perfAttribute.SetSampleFreq(uint64(t.samplesPerSecond))
 	if err := perf.CPUClock.Configure(perfAttribute); err != nil {
 		return fmt.Errorf("failed to configure software perf event: %v", err)
+	}
+	if !t.filterIdleFrames {
+		perfAttribute.Options.ExcludeIdle = false
 	}
 
 	onlineCPUIDs, err := getOnlineCPUIDs()
