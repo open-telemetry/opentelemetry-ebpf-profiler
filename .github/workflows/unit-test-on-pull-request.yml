@@ -50,7 +50,7 @@ jobs:
           make lint
 
   test:
-    name: Test (${{ matrix.target_arch }})
+    name: Test (${{ matrix.target_arch }}${{ matrix.go_flags }})
     runs-on: ubuntu-24.04
     strategy:
       matrix:
