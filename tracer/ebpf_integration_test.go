@@ -144,9 +144,10 @@ Loop:
 		case <-timeout.C:
 			break Loop
 		case trace := <-traceChan:
-			require.GreaterOrEqual(t, len(trace.Comm), 4)
-			require.Equal(t, "\xAA\xBB\xCC", trace.Comm[0:3])
-			traces[trace.Comm[3]] = trace
+			comm := trace.Comm.String()
+			require.GreaterOrEqual(t, len(comm), 4)
+			require.Equal(t, "\xAA\xBB\xCC", comm[0:3])
+			traces[comm[3]] = trace
 		}
 	}
 

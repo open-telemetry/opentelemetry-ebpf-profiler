@@ -9,7 +9,7 @@ import (
 
 type TraceEventMeta struct {
 	Timestamp      libpf.UnixTime64
-	Comm           string
+	Comm           libpf.String
 	ProcessName    libpf.String
 	ExecutablePath libpf.String
 	APMServiceName string
@@ -27,7 +27,7 @@ type TraceEvents struct {
 	Timestamps []uint64 // in nanoseconds
 	OffTimes   []int64  // in nanoseconds
 	EnvVars    map[libpf.String]libpf.String
-	Labels     map[string]string
+	Labels     map[libpf.String]libpf.String
 }
 
 // TraceAndMetaKey is the deduplication key for samples. This **must always**
@@ -38,7 +38,7 @@ type TraceAndMetaKey struct {
 	// to not aggregate difference traces.
 	Hash libpf.TraceHash
 	// comm and apmServiceName are provided by the eBPF programs
-	Comm           string
+	Comm           libpf.String
 	ApmServiceName string
 	Pid            int64
 	Tid            int64

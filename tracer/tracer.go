@@ -178,12 +178,12 @@ type progLoaderHelper struct {
 }
 
 // Convert a C-string to Go string.
-func goString(cstr []byte) string {
+func goString(cstr []byte) libpf.String {
 	index := bytes.IndexByte(cstr, byte(0))
 	if index < 0 {
 		index = len(cstr)
 	}
-	return strings.Clone(pfunsafe.ToString(cstr[:index]))
+	return libpf.Intern(pfunsafe.ToString(cstr[:index]))
 }
 
 // schedProcessFreeHookName returns the name of the tracepoint hook to use.
@@ -912,7 +912,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	}
 
 	if ptr.Custom_labels.Len > 0 {
-		trace.CustomLabels = make(map[string]string, int(ptr.Custom_labels.Len))
+		trace.CustomLabels = make(map[libpf.String]libpf.String, int(ptr.Custom_labels.Len))
 		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
 			lbl := ptr.Custom_labels.Labels[i]
 			key := goString(lbl.Key[:])

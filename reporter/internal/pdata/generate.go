@@ -251,7 +251,7 @@ func (p *Pdata) setProfile(
 		}
 
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
-			semconv.ThreadNameKey, traceKey.Comm)
+			semconv.ThreadNameKey, traceKey.Comm.String())
 
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ProcessExecutableNameKey, exeName)
@@ -278,8 +278,8 @@ func (p *Pdata) setProfile(
 			// reached an agreement, use the actual OTel SemConv attribute.
 			attrMgr.AppendOptionalString(
 				sample.AttributeIndices(),
-				attribute.Key("process.context.label."+key),
-				value)
+				attribute.Key("process.context.label."+key.String()),
+				value.String())
 		}
 
 		if p.ExtraSampleAttrProd != nil {

@@ -281,7 +281,7 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 
 	traceKey := samples.TraceAndMetaKey{
 		ExecutablePath: filePath,
-		Comm:           "testproc",
+		Comm:           libpf.Intern("testproc"),
 		Pid:            123,
 		Tid:            456,
 		ApmServiceName: "svc",
@@ -475,7 +475,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 
 	traceKey := samples.TraceAndMetaKey{
 		ExecutablePath: filePath,
-		Comm:           "native_app",
+		Comm:           libpf.Intern("native_app"),
 		Pid:            789,
 		Tid:            1011,
 	}
