@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"time"
 
-	"go.opentelemetry.io/collector/confmap/xconfmap"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -39,8 +38,6 @@ type Config struct {
 	MaxGRPCRetries         uint32        `mapstructure:"max_grpc_retries"`
 	MaxRPCMsgSize          int           `mapstructure:"max_rpc_msg_size"`
 }
-
-var _ xconfmap.Validator = (*Config)(nil)
 
 // Validate validates the config.
 // This is automatically called by the config parser as it implements the xconfmap.Validator interface.
