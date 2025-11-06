@@ -68,10 +68,6 @@ var (
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
-//
-// Three external interfaces are used to access the processes and related resources: ebpf,
-// fileIDMapper and symbolReporter. Specify nil for fileIDMapper to use the default
-// implementation.
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
 	ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
 	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,

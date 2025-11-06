@@ -398,9 +398,6 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	processMappings []process.Mapping) bool {
 	pid := pr.PID()
 
-	// Grab copy of current mappings.
-	var numInterpreters int
-
 	// Get current executable name
 	exe, err := pr.GetExe()
 	if err != nil {
@@ -422,6 +419,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	// Get existing info
 	oldMappings := info.mappings
 	newProcess := len(info.mappings) == 0
+	var numInterpreters int
 	if intrp, ok := pm.interpreters[pid]; ok {
 		numInterpreters = len(intrp)
 	}
@@ -705,7 +703,7 @@ func (pm *ProcessManager) findMappingForTrace(pid libpf.PID, fid host.FileID,
 	// Binary search for the potentially matching 'maps' entry. The search
 	// lambda makes 'sort.Search' return the first entry that is larger
 	// than the fid/addr pair. Thus -1 is needed to get index for the first
-	// entry whchi is equal or less than fid/addr pair.
+	// entry which is equal or less than fid/addr pair.
 	i := sort.Search(len(maps), func(i int) bool {
 		entry := &maps[i]
 		fm := entry.FrameMapping.Value()

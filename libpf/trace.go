@@ -34,7 +34,7 @@ func (fmf FrameMappingFile) Value() FrameMappingFileData {
 	return fmf.value.Value()
 }
 
-// FrameMappingData contains data regarding file backed mapping.
+// FrameMappingData contains file backed mapping data.
 type FrameMappingData struct {
 	// File is a reference to data about the backing file.
 	File FrameMappingFile
@@ -61,7 +61,7 @@ func (fmf FrameMapping) Valid() bool {
 	return fmf != FrameMapping{}
 }
 
-// Value returns the dereferences FrameMappingData.
+// Value returns the dereferenced FrameMappingData.
 // This can be done only if it the FrameMapping is Valid.
 func (fmf FrameMapping) Value() FrameMappingData {
 	return fmf.value.Value()
@@ -81,7 +81,7 @@ type Frame struct {
 	SourceLine SourceLineno
 	// An address in ELF VA space (native frame) or line number (interpreted frame).
 	AddressOrLineno AddressOrLineno
-	// Mapping is a reference to the mapping data to which this Frame coresspends to.
+	// Mapping is a reference to the mapping data to which this Frame corresponds to.
 	// Available only for frames executing on a file backed memory mapping.
 	Mapping FrameMapping
 }
