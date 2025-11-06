@@ -234,7 +234,7 @@ func (p *Pdata) setProfile(
 		} // End per-frame processing
 
 		stackIdx, exists := stackSet.AddWithCheck(stackInfo{
-			locationIndices: fmt.Sprintf("%v", locationIndices),
+			locationIndicesHash: hashLocationIndices(locationIndices),
 		})
 		if !exists {
 			// Add a new Stack to the dictionary
