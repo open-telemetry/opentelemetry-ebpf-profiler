@@ -27,6 +27,7 @@ type Config struct {
 	Tracers                string        `mapstructure:"tracers"`
 	ClockSyncInterval      time.Duration `mapstructure:"clock_sync_interval"`
 	SendErrorFrames        bool          `mapstructure:"send_error_frames"`
+	SendIdleFrames         bool          `mapstructure:"send_idle_frames"`
 	VerboseMode            bool          `mapstructure:"verbose_mode"`
 	OffCPUThreshold        float64       `mapstructure:"off_cpu_threshold"`
 	IncludeEnvVars         string        `mapstructure:"include_env_vars"`

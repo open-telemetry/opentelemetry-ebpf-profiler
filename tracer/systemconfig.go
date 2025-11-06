@@ -22,7 +22,7 @@ import (
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 // sysConfigVars supports collecting system configuration information.
@@ -112,7 +112,8 @@ func parseBTF(vars *sysConfigVars) error {
 
 // executeSystemAnalysisBpfCode will execute given analysis program with the address argument.
 func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*cebpf.Map,
-	address libpf.SymbolValue) (code []byte, addr uint64, err error) {
+	address libpf.SymbolValue,
+) (code []byte, addr uint64, err error) {
 	systemAnalysis := maps["system_analysis"]
 
 	key0 := uint32(0)
@@ -147,7 +148,8 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 	case cebpf.RawTracepoint:
 		progLink, err = link.AttachRawTracepoint(link.RawTracepointOptions{
 			Name:    "sys_enter",
-			Program: prog})
+			Program: prog,
+		})
 	case cebpf.TracePoint:
 		progLink, err = link.Tracepoint("syscalls", "sys_enter_bpf", prog, nil)
 	default:
@@ -167,7 +169,8 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 
 // loadKernelCode will request the ebpf code to read the first X bytes from given address.
 func loadKernelCode(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	address libpf.SymbolValue) ([]byte, error) {
+	address libpf.SymbolValue,
+) ([]byte, error) {
 	code, _, err := executeSystemAnalysisBpfCode(coll.Programs["read_kernel_memory"], maps, address)
 	if err != nil {
 		log.Warnf("Failed to load code: %v.\n"+
@@ -179,14 +182,16 @@ func loadKernelCode(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 // readTaskStruct will request the ebpf code to read bytes from the given offset from
 // the current task_struct.
 func readTaskStruct(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	address libpf.SymbolValue) (code []byte, addr uint64, err error) {
+	address libpf.SymbolValue,
+) (code []byte, addr uint64, err error) {
 	return executeSystemAnalysisBpfCode(coll.Programs["read_task_struct"], maps, address)
 }
 
 // determineStackPtregs determines the offset of `struct pt_regs` within the entry stack
 // when the `stack` field offset within `task_struct` is already known.
 func determineStackPtregs(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	vars *sysConfigVars) error {
+	vars *sysConfigVars,
+) error {
 	data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(vars.task_stack_offset))
 	if err != nil {
 		return err
@@ -199,7 +204,8 @@ func determineStackPtregs(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 // determineStackLayout scans `task_struct` for offset of the `stack` field, and using
 // its value determines the offset of `struct pt_regs` within the entry stack.
 func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	vars *sysConfigVars) error {
+	vars *sysConfigVars,
+) error {
 	const maxTaskStructSize = 8 * 1024
 	const maxStackSize = 64 * 1024
 
@@ -255,7 +261,8 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 }
 
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kmod *kallsyms.Module, includeTracers types.IncludedTracers, vars *sysConfigVars) error {
+	kmod *kallsyms.Module, includeTracers types.IncludedTracers, vars *sysConfigVars,
+) error {
 	if err := parseBTF(vars); err != nil {
 		log.Infof("Using binary analysis (BTF not available: %s)", err)
 
@@ -302,8 +309,12 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set off_cpu_threshold: %v", err)
 	}
 
-	if err := coll.Variables["drop_error_only_traces"].Set(cfg.FilterErrorFrames); err != nil {
+	if err := coll.Variables["filter_error_frames"].Set(cfg.FilterErrorFrames); err != nil {
 		return fmt.Errorf("failed to set drop_error_only_traces: %v", err)
+	}
+
+	if err := coll.Variables["filter_idle_frames"].Set(cfg.FilterIdleFrames); err != nil {
+		return fmt.Errorf("failed to set debug output: %v", err)
 	}
 
 	pacMask := pacmask.GetPACMask()

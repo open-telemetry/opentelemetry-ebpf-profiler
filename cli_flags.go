@@ -64,6 +64,7 @@ var (
 		"If zero, monotonic-realtime clock sync will be performed once, " +
 		"on agent startup, but not periodically."
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
+	sendIdleFramesHelp  = "Unwind and report idle states of the Linux kernel."
 	offCPUThresholdHelp = fmt.Sprintf("The probability for an off-cpu event being recorded. "+
 		"Valid values are in the range [0..1]. 0 disables off-cpu profiling. "+
 		"Default is %d.",
@@ -119,6 +120,7 @@ func parseArgs() (*controller.Config, error) {
 
 	fs.BoolVar(&args.SendErrorFrames, "send-error-frames", defaultArgSendErrorFrames,
 		sendErrorFramesHelp)
+	fs.BoolVar(&args.SendIdleFrames, "send-idle-frames", false, sendIdleFramesHelp)
 
 	fs.StringVar(&args.Tracers, "t", "all", "Shorthand for -tracers.")
 	fs.StringVar(&args.Tracers, "tracers", "all", tracersHelp)

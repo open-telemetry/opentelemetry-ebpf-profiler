@@ -132,8 +132,8 @@ struct go_labels_procs_t {
   __uint(max_entries, 128);
 } go_labels_procs SEC(".maps");
 
-// drop_error_only_traces is set during load time.
-BPF_RODATA_VAR(bool, drop_error_only_traces, false)
+// filter_error_frames is set during load time.
+BPF_RODATA_VAR(bool, filter_error_frames, false)
 
 static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UNUSED UnwindState *state)
 {
@@ -295,7 +295,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   // also prevent the corresponding trace counts to be sent out. OTOH, if we do it here,
   // this is trivial.
   if (trace->stack_len == 1 && trace->kernel_stack_id < 0 && state->unwind_error) {
-    if (drop_error_only_traces) {
+    if (filter_error_frames) {
       return 0;
     }
   }
