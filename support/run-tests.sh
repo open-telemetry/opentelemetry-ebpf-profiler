@@ -57,28 +57,24 @@ case "$qemu_arch" in
         ;;
 esac
 
-if [ "$qemu_arch" = "aarch64" ]; then
-    additionalQemuArgs+=" -machine virt -cpu max"
-fi
-
 bluebox "${bb_args[@]}" || (echo "failed to generate initramfs"; exit 1)
 
 echo Testing on "${kernel_version}"
 $sudo qemu-system-${qemu_arch} ${additionalQemuArgs} \
 	-nographic \
 	-monitor none \
-	-serial file:"${output}/test.log" \
+	-chardev stdio,id=char0,logfile="${output}/test.log",signal=off \
+	-serial chardev:char0 \
 	-no-user-config \
 	-m 4G \
 	-kernel "${kern_dir}/${kernel_version}/vmlinuz" \
 	-initrd "${output}/initramfs.cpio"
 
-# Dump the output of the VM run.
-cat "${output}/test.log"
-
 # Qemu will produce an escape sequence that disables line-wrapping in the terminal,
 # end result being truncated output. This restores line-wrapping after the fact.
-tput smam || true
+if [ "$TERM" ]; then
+  tput smam || true
+fi
 
 passes=$(grep -c "stdout: PASS" "${output}/test.log")
 

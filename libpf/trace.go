@@ -98,5 +98,5 @@ func (frames *Frames) Append(frame *Frame) {
 type Trace struct {
 	Frames       Frames
 	Hash         TraceHash
-	CustomLabels map[string]string
+	CustomLabels map[String]String
 }

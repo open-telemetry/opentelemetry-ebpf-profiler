@@ -22,6 +22,8 @@ type attributeStruct struct {
 }
 
 func TestAttrTableManager(t *testing.T) {
+	comm1 := libpf.Intern("comm1")
+	comm2 := libpf.Intern("comm2")
 	tests := map[string]struct {
 		k                      []TraceAndMetaKey
 		expectedIndices        [][]int32
@@ -31,7 +33,6 @@ func TestAttrTableManager(t *testing.T) {
 			k: []TraceAndMetaKey{
 				{
 					Hash:           libpf.TraceHash{},
-					Comm:           "",
 					ApmServiceName: "",
 					Pid:            0,
 				},
@@ -45,13 +46,13 @@ func TestAttrTableManager(t *testing.T) {
 			k: []TraceAndMetaKey{
 				{
 					Hash:           libpf.TraceHash{},
-					Comm:           "comm1",
+					Comm:           comm1,
 					ApmServiceName: "apmServiceName1",
 					Pid:            1234,
 				},
 				{
 					Hash:           libpf.TraceHash{},
-					Comm:           "comm1",
+					Comm:           comm1,
 					ApmServiceName: "apmServiceName1",
 					Pid:            1234,
 				},
@@ -67,13 +68,13 @@ func TestAttrTableManager(t *testing.T) {
 			k: []TraceAndMetaKey{
 				{
 					Hash:           libpf.TraceHash{},
-					Comm:           "comm1",
+					Comm:           comm1,
 					ApmServiceName: "apmServiceName1",
 					Pid:            1234,
 				},
 				{
 					Hash:           libpf.TraceHash{},
-					Comm:           "comm2",
+					Comm:           comm2,
 					ApmServiceName: "apmServiceName2",
 					Pid:            6789,
 				},
@@ -98,7 +99,7 @@ func TestAttrTableManager(t *testing.T) {
 			indices := make([][]int32, 0)
 			for _, k := range tc.k {
 				inner := pcommon.NewInt32Slice()
-				mgr.AppendOptionalString(inner, semconv.ThreadNameKey, k.Comm)
+				mgr.AppendOptionalString(inner, semconv.ThreadNameKey, k.Comm.String())
 				mgr.AppendOptionalString(inner, semconv.ServiceNameKey, k.ApmServiceName)
 				mgr.AppendInt(inner, semconv.ProcessPIDKey, k.Pid)
 				indices = append(indices, inner.AsRaw())

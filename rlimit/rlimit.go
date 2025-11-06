@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 // MaximizeMemlock updates the memlock resource limit to RLIM_INFINITY.

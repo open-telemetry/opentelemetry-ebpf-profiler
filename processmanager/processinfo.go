@@ -21,7 +21,7 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -132,7 +132,8 @@ func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
 
 // assignInterpreter will update the interpreters maps with given interpreter.Instance.
 func (pm *ProcessManager) assignInterpreter(pid libpf.PID, key util.OnDiskFileIdentifier,
-	instance interpreter.Instance) {
+	instance interpreter.Instance,
+) {
 	if _, ok := pm.interpreters[pid]; !ok {
 		// This is the very first interpreter entry for this process.
 		// So we need to initialize the structure first.
@@ -152,7 +153,7 @@ func (pm *ProcessManager) assignInterpreter(pid libpf.PID, key util.OnDiskFileId
 //
 // The caller is responsible to hold the ProcessManager lock to avoid race conditions.
 func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Address,
-	oid util.OnDiskFileIdentifier, data interpreter.Data) error {
+       oid util.OnDiskFileIdentifier, data interpreter.Data) error {
 	// The same interpreter can be found multiple times under various different
 	// circumstances. Check if this is already handled.
 	pid := pr.PID()
@@ -182,7 +183,8 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 }
 
 func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mapping,
-	elfRef *pfelf.Reference) elfInfo {
+	elfRef *pfelf.Reference,
+) elfInfo {
 	key := mapping.GetOnDiskFileIdentifier()
 	lastModified := pr.GetMappingFileLastModified(mapping)
 	if info, ok := pm.elfInfoCache.Get(key); ok && info.lastModified == lastModified {
@@ -298,7 +300,6 @@ func (pm *ProcessManager) processRemovedInterpreters(pid libpf.PID,
 	}
 
 	if _, ok := pm.interpreters[pid]; !ok {
-		log.Debugf("ProcessManager doesn't know about PID %d", pid)
 		return
 	}
 
@@ -414,7 +415,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		return false
 	}
 	// Check if process meta needs an update
-	updateProcessMeta := exe != "" && exe != info.meta.Executable
+	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
 
 	// Get existing info
 	oldMappings := info.mappings
@@ -630,6 +631,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			pm.mappingStats.errProcESRCH.Add(1)
 		}
 		// Clean up, and notify eBPF.
+		log.Debugf("removing pid due to mappings read error: %v", err)
 		pm.processPIDExit(pid)
 		return
 	}

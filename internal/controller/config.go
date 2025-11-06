@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/ebpf-profiler/collector/config"

@@ -39,7 +39,7 @@ type CoredumpProcess struct {
 	pid libpf.PID
 
 	// fname is the the short name of the executable file that was running when the coredump was generated.
-	fname string
+	fname libpf.String
 
 	// machineData contains the parsed machine data.
 	machineData MachineData
@@ -264,7 +264,7 @@ func (cd *CoredumpProcess) GetProcessMeta(_ MetaConfig) ProcessMeta {
 	return ProcessMeta{}
 }
 
-func (cd *CoredumpProcess) GetExe() (string, error) {
+func (cd *CoredumpProcess) GetExe() (libpf.String, error) {
 	return cd.fname, nil
 }
 
@@ -463,7 +463,7 @@ func (cd *CoredumpProcess) parseProcessInfo(desc []byte) error {
 	if len(desc) == int(unsafe.Sizeof(PrpsInfo64{})) {
 		info := (*PrpsInfo64)(unsafe.Pointer(&desc[0]))
 		cd.pid = libpf.PID(info.PID)
-		cd.fname = string(info.FName[:])
+		cd.fname = libpf.Intern(pfunsafe.ToString(info.FName[:]))
 		return nil
 	}
 	return fmt.Errorf("unsupported NT_PRPSINFO size: %d", len(desc))

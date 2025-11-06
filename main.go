@@ -22,7 +22,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/vc"
 	"go.opentelemetry.io/otel/metric/noop"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 // Short copyright / license text for eBPF code
@@ -76,7 +76,7 @@ func mainWithExitCode() exitCode {
 	}
 
 	if cfg.VerboseMode {
-		log.SetLevel(log.DebugLevel)
+		log.SetDebugLogger()
 		// Dump the arguments in debug mode.
 		cfg.Dump()
 	}
