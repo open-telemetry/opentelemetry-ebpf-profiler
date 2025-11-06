@@ -14,7 +14,7 @@ import (
 	"regexp"
 	"unsafe"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -112,7 +112,8 @@ func (d data) String() string {
 }
 
 func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
+	bias libpf.Address, rm remotememory.RemoteMemory,
+) (interpreter.Instance, error) {
 	procStorage, err := readProcStorage(rm, bias+d.procStorageElfVA)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read APM correlation process storage: %s", err)
@@ -161,7 +162,8 @@ func (i *Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 
 // NotifyAPMAgent sends out collected traces to the connected APM agent.
 func (i *Instance) NotifyAPMAgent(
-	pid libpf.PID, rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16) {
+	pid libpf.PID, rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16,
+) {
 	if rawTrace.APMTransactionID == libpf.InvalidAPMSpanID || i.socket == nil {
 		return
 	}

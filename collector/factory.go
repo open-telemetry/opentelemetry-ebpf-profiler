@@ -6,16 +6,19 @@ package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/xreceiver"
+	"go.uber.org/zap/exp/zapslog"
 
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/collector/internal"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 var (
@@ -38,6 +41,8 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 		baseCfg component.Config,
 		nextConsumer xconsumer.Profiles,
 	) (xreceiver.Profiles, error) {
+		log.SetLogger(*slog.New(zapslog.NewHandler(rs.Logger.Core())))
+
 		cfg, ok := baseCfg.(*config.Config)
 		if !ok {
 			return nil, errInvalidConfig

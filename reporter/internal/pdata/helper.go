@@ -1,5 +1,11 @@
 package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 
+import (
+	"hash/fnv"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+)
+
 // locationInfo is a helper used to deduplicate Locations.
 type locationInfo struct {
 	address       uint64
@@ -18,5 +24,12 @@ type funcInfo struct {
 
 // stackInfo is a helper used to deduplicate Stacks.
 type stackInfo struct {
-	locationIndices string
+	locationIndicesHash uint64
+}
+
+// hashLocationIndices computes a hash for a slice of location indices.
+func hashLocationIndices(locationIndices []int32) uint64 {
+	h := fnv.New64a()
+	h.Write(pfunsafe.FromSlice(locationIndices))
+	return h.Sum64()
 }

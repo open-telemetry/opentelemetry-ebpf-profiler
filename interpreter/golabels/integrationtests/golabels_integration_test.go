@@ -6,9 +6,8 @@
 package integrationtests
 
 import (
-	_ "embed"
-
 	"context"
+	_ "embed"
 	"math"
 	"os"
 	"os/exec"
@@ -25,7 +24,7 @@ import (
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/otel/metric/noop"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 var (
@@ -87,7 +86,7 @@ func Test_Golabels(t *testing.T) {
 			enabledTracers.Enable(tracertypes.Labels)
 			enabledTracers.Enable(tracertypes.GoTracer)
 
-			log.SetLevel(log.DebugLevel)
+			log.SetDebugLogger()
 			trc, err := tracer.NewTracer(ctx, &tracer.Config{
 				Intervals:              &mockIntervals{},
 				IncludeTracers:         enabledTracers,

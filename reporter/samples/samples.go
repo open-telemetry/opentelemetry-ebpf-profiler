@@ -10,15 +10,15 @@ import (
 type TraceEventMeta struct {
 	Timestamp      libpf.UnixTime64
 	Comm           libpf.String
-	ProcessName    string
-	ExecutablePath string
+	ProcessName    libpf.String
+	ExecutablePath libpf.String
 	APMServiceName string
-	ContainerID    string
+	ContainerID    libpf.String
 	PID, TID       libpf.PID
 	CPU            int
 	Origin         libpf.Origin
 	OffTime        int64
-	EnvVars        map[string]string
+	EnvVars        map[libpf.String]libpf.String
 }
 
 // TraceEvents holds known information about a trace.
@@ -26,7 +26,7 @@ type TraceEvents struct {
 	Frames     libpf.Frames
 	Timestamps []uint64 // in nanoseconds
 	OffTimes   []int64  // in nanoseconds
-	EnvVars    map[string]string
+	EnvVars    map[libpf.String]libpf.String
 	Labels     map[libpf.String]libpf.String
 }
 
@@ -44,9 +44,9 @@ type TraceAndMetaKey struct {
 	Tid            int64
 	CPU            int64
 	// Process name is retrieved from /proc/PID/comm
-	ProcessName string
+	ProcessName libpf.String
 	// Executable path is retrieved from /proc/PID/exe
-	ExecutablePath string
+	ExecutablePath libpf.String
 
 	// ExtraMeta stores extra meta info that may have been produced by a
 	// `SampleAttrProducer` instance. May be nil.
@@ -58,7 +58,7 @@ type TraceAndMetaKey struct {
 type TraceEventsTree map[ContainerID]map[libpf.Origin]KeyToEventMapping
 
 // ContainerID represents an extracted key from /proc/<PID>/cgroup.
-type ContainerID string
+type ContainerID = libpf.String
 
 // KeyToEventMapping supports temporary mapping traces to additional information.
 type KeyToEventMapping map[TraceAndMetaKey]*TraceEvents
