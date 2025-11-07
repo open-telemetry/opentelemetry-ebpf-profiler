@@ -401,10 +401,9 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 
 	// Get current executable name
 	exe, err := pr.GetExe()
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false
-		}
+	if err != nil && !os.IsNotExist(err) {
+		// The /proc/PID/exe returns "not exists" error also in
+		// the case of main thread exit. Ignore it.
 		log.Warnf("Failed to get executable of process %d: %v", pid, err)
 	}
 
