@@ -82,7 +82,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		for _, origin := range []libpf.Origin{
 			support.TraceOriginSampling,
 			support.TraceOriginOffCPU,
-			support.TraceOriginUProbe,
+			support.TraceOriginProbe,
 		} {
 			if len(originToEvents[origin]) == 0 {
 				// Do not append empty profiles.
@@ -146,7 +146,7 @@ func (p *Pdata) setProfile(
 	case support.TraceOriginOffCPU:
 		st.SetTypeStrindex(stringSet.Add("off_cpu"))
 		st.SetUnitStrindex(stringSet.Add("nanoseconds"))
-	case support.TraceOriginUProbe:
+	case support.TraceOriginProbe:
 		st.SetTypeStrindex(stringSet.Add("events"))
 		st.SetUnitStrindex(stringSet.Add("count"))
 	default:
