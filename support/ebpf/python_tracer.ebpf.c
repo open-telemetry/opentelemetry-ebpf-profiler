@@ -25,9 +25,16 @@ struct py_procs_t {
 } py_procs SEC(".maps");
 
 // Record a Python frame
-static EBPF_INLINE ErrorCode push_python(Trace *trace, u64 file, u64 line)
+static EBPF_INLINE ErrorCode push_python(UnwindState *state, Trace *trace, u64 file, u64 line)
 {
-  return _push(trace, file, line, FRAME_MARKER_PYTHON);
+  u64 *data = push_frame(state, trace, 3);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = frame_header(FRAME_MARKER_PYTHON, FRAME_FLAG_PID_SPECIFIC, 3, 0);
+  data[1] = file;
+  data[2] = line;
+  return ERR_OK;
 }
 
 static EBPF_INLINE u64 py_encode_lineno(u32 object_id, u32 f_lasti)
@@ -154,7 +161,7 @@ static EBPF_INLINE ErrorCode process_python_frame(
 
 push_frame:
   DEBUG_PRINT("Pushing Python %lx %lu", (unsigned long)file_id, (unsigned long)lineno);
-  ErrorCode error = push_python(trace, file_id, lineno);
+  ErrorCode error = push_python(&record->state, trace, file_id, lineno);
   if (error) {
     DEBUG_PRINT("failed to push python frame");
     return error;

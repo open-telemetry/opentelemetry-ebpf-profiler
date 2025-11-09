@@ -296,7 +296,7 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 				Frames: singleFrameTrace(libpf.GoFrame, mapping,
 					0x10, funcName, filePath, 42),
 				Timestamps: []uint64{100},
-				EnvVars:    map[libpf.String]libpf.String{
+				EnvVars: map[libpf.String]libpf.String{
 					libpf.Intern("FOO"): libpf.Intern("BAR"),
 				},
 			},

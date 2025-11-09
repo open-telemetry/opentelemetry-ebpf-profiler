@@ -4,7 +4,6 @@
 package interpreter // import "go.opentelemetry.io/ebpf-profiler/interpreter"
 
 import (
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -26,7 +25,7 @@ func (is *InstanceStubs) UpdateTSDInfo(EbpfHandler, libpf.PID, tpbase.TSDInfo) e
 	return nil
 }
 
-func (is *InstanceStubs) Symbolize(*host.Frame, *libpf.Frames) error {
+func (is *InstanceStubs) Symbolize(libpf.EbpfFrame, *libpf.Frames) error {
 	return ErrMismatchInterpreterType
 }
 

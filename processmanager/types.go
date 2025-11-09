@@ -9,7 +9,6 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -35,8 +34,7 @@ type elfInfo struct {
 
 // frameCacheKey is the LRU cache key for caching frames.
 type frameCacheKey struct {
-	host.Frame
-	libpf.PID
+	data [4]uint64
 }
 
 // ProcessManager is responsible for managing the events happening throughout the lifespan of a

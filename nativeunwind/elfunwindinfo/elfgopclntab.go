@@ -310,7 +310,7 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, err error) {
 		// A full symbol table read is needed as these are not dynamic symbols.
 		// Consequently these symbols might be unavailable on a stripped binary.
 		var start, end libpf.SymbolValue
-		ef.VisitSymbols(func (sym libpf.Symbol) bool {
+		ef.VisitSymbols(func(sym libpf.Symbol) bool {
 			if sym.Name == "runtime.pclntab" {
 				start = sym.Address
 			} else if sym.Name == "runtime.epclntab" {

@@ -20,7 +20,6 @@ import (
 
 	"github.com/elastic/go-freelru"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -635,8 +634,8 @@ func (r *rubyInstance) getRubyLineNo(iseqBody libpf.Address, pc uint64) (uint32,
 	return lineNo, nil
 }
 
-func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
-	if !frame.Type.IsInterpType(libpf.Ruby) {
+func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+	if !ef.Type().IsInterpType(libpf.Ruby) {
 		return interpreter.ErrMismatchInterpreterType
 	}
 	vms := &r.r.vmStructs
@@ -649,11 +648,11 @@ func (r *rubyInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 	//
 	// rb_iseq_constant_body
 	// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L311
-	iseqBody := libpf.Address(frame.File)
+	iseqBody := libpf.Address(ef.Variable(0))
 
 	// The Ruby VM program counter that was extracted from the current call frame is embedded in
 	// the Linenos field.
-	pc := frame.Lineno
+	pc := ef.Variable(1)
 
 	lineNo, err := r.getRubyLineNo(iseqBody, uint64(pc))
 	if err != nil {
