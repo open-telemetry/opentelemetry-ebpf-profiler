@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 func BenchmarkGolang(b *testing.B) {
@@ -34,7 +33,7 @@ func BenchmarkGolang(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create hostID: %v", err)
 	}
-	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef, []util.Range{})
+	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef)
 	rm := remotememory.NewProcessVirtualMemory(libpfPID)
 
 	b.ResetTimer()
