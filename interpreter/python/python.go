@@ -24,7 +24,6 @@ import (
 
 	"github.com/elastic/go-freelru"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -549,15 +548,15 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	return pco, nil
 }
 
-func (p *pythonInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
-	if !frame.Type.IsInterpType(libpf.Python) {
+func (p *pythonInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+	if !ef.Type().IsInterpType(libpf.Python) {
 		return interpreter.ErrMismatchInterpreterType
 	}
 
 	// Extract the Python frame bitfields from the file and line variables
-	ptr := libpf.Address(frame.File)
-	lastI := uint32(frame.Lineno>>32) & 0x0fffffff
-	objectID := uint32(frame.Lineno)
+	ptr := libpf.Address(ef.Variable(0))
+	lastI := uint32(ef.Variable(1)>>32) & 0x0fffffff
+	objectID := uint32(ef.Variable(1))
 
 	sfCounter := successfailurecounter.New(&p.successCount, &p.failCount)
 	defer sfCounter.DefaultToFailure()

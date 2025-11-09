@@ -11,20 +11,24 @@ import (
 )
 
 const (
-	FrameMarkerUnknown  = 0x0
-	FrameMarkerErrorBit = 0x80
-	FrameMarkerPython   = 0x1
-	FrameMarkerNative   = 0x3
-	FrameMarkerPHP      = 0x2
-	FrameMarkerPHPJIT   = 0x9
-	FrameMarkerKernel   = 0x4
-	FrameMarkerHotSpot  = 0x5
-	FrameMarkerRuby     = 0x6
-	FrameMarkerPerl     = 0x7
-	FrameMarkerV8       = 0x8
-	FrameMarkerDotnet   = 0xa
-	FrameMarkerGo       = 0xb
-	FrameMarkerAbort    = 0xff
+	FrameMarkerUnknown = 0x0
+	FrameMarkerPython  = 0x1
+	FrameMarkerNative  = 0x3
+	FrameMarkerPHP     = 0x2
+	FrameMarkerPHPJIT  = 0x9
+	FrameMarkerKernel  = 0x4
+	FrameMarkerHotSpot = 0x5
+	FrameMarkerRuby    = 0x6
+	FrameMarkerPerl    = 0x7
+	FrameMarkerV8      = 0x8
+	FrameMarkerDotnet  = 0xa
+	FrameMarkerGo      = 0xb
+)
+
+const (
+	FrameFlagError         = 0x1
+	FrameFlagReturnAddress = 0x2
+	FrameFlagPidSpecific   = 0x4
 )
 
 const (
@@ -49,8 +53,6 @@ const (
 const (
 	EventTypeGenericPID = 0x1
 )
-
-const MaxFrameUnwinds = 0x80
 
 const UnwindInfoMaxEntries = 0x4000
 
@@ -105,13 +107,6 @@ type CustomLabelsArray struct {
 type Event struct {
 	Type uint32
 }
-type Frame struct {
-	File_id        uint64
-	Addr_or_line   uint64
-	Kind           uint8
-	Return_address uint8
-	Pad            [6]uint8
-}
 type OffsetRange struct {
 	Lower_offset1 uint64
 	Upper_offset1 uint64
@@ -162,10 +157,10 @@ type Trace struct {
 	Apm_trace_id       [16]byte
 	Custom_labels      CustomLabelsArray
 	Kernel_stack_id    int32
-	Stack_len          uint32
+	Frame_data_len     uint32
 	Origin             uint32
 	Offtime            uint64
-	Frames             [128]Frame
+	Frame_data         [3072]uint64
 }
 type UnwindInfo struct {
 	Opcode      uint8
@@ -309,9 +304,8 @@ type V8ProcInfo struct {
 }
 
 const (
-	Sizeof_Frame      = 0x18
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0xed0
+	Sizeof_Trace      = 0x62d0
 
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4

@@ -15,8 +15,7 @@ import (
 	"math/bits"
 	"unsafe"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
 
@@ -33,20 +32,6 @@ import "C"
 //export __bpf_log
 func __bpf_log(buf unsafe.Pointer, sz C.int) {
 	log.Info(string(sliceBuffer(buf, sz)))
-}
-
-//export __push_frame
-func __push_frame(id, file, line C.u64, frameType, returnAddress C.uchar) C.int {
-	ctx := ebpfContextMap[id]
-
-	ctx.trace.Frames = append(ctx.trace.Frames, host.Frame{
-		File:          host.FileID(file),
-		Lineno:        libpf.AddressOrLineno(line),
-		Type:          libpf.FrameType(frameType),
-		ReturnAddress: returnAddress != 0,
-	})
-
-	return C.ERR_OK
 }
 
 //export bpf_ktime_get_ns
@@ -126,10 +111,20 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 		if deltas, ok := ctx.exeIDToStackDeltaMaps[ctx.stackDeltaFileID]; ok {
 			return unsafe.Pointer(uintptr(deltas) + key*C.sizeof_StackDelta)
 		}
-	case unsafe.Pointer(&C.metrics):
+	case unsafe.Pointer(&C.metrics), unsafe.Pointer(&C.report_events),
+		unsafe.Pointer(&C.reported_pids), unsafe.Pointer(&C.pid_events), unsafe.Pointer(&C.inhibit_events),
+		unsafe.Pointer(&C.apm_int_procs), unsafe.Pointer(&C.go_labels_procs):
 		return unsafe.Pointer(uintptr(0))
 	default:
 		log.Errorf("Map at 0x%x not found", mapdef)
 	}
 	return unsafe.Pointer(uintptr(0))
+}
+
+//export __bpf_copy_frame
+func __bpf_copy_frame(id C.u64, trace *C.Trace) {
+	ctx := ebpfContextMap[id]
+	sz := trace.frame_data_len
+	copy(pfunsafe.FromSlice(ctx.trace.FrameDataBuf[:sz]), pfunsafe.FromSlice(trace.frame_data[:sz]))
+	ctx.trace.FrameData = ctx.trace.FrameDataBuf[:sz]
 }

@@ -169,11 +169,17 @@ bad_code_header:
 }
 
 // Record a Dotnet frame
-static EBPF_INLINE ErrorCode
-push_dotnet(Trace *trace, u64 code_header_ptr, u64 pc_offset, bool return_address)
+static EBPF_INLINE ErrorCode push_dotnet(
+  UnwindState *state, Trace *trace, u64 code_header_ptr, u64 pc_offset, bool return_address)
 {
-  return _push_with_return_address(
-    trace, code_header_ptr, pc_offset, FRAME_MARKER_DOTNET, return_address);
+  const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
+  u64 *data        = push_frame(state, trace, 2);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = frame_header(FRAME_MARKER_DOTNET, FRAME_FLAG_PID_SPECIFIC | ra_flag, 2, pc_offset);
+  data[1] = code_header_ptr;
+  return ERR_OK;
 }
 
 // Unwind one dotnet frame
@@ -247,7 +253,7 @@ static EBPF_INLINE ErrorCode unwind_one_dotnet_frame(PerCPURecord *record)
     if (error != ERR_DOTNET_CODE_TOO_LARGE) {
       return error;
     }
-    return _push(trace, 0, ERR_DOTNET_CODE_TOO_LARGE, FRAME_MARKER_DOTNET | FRAME_MARKER_ERROR_BIT);
+    return push_error(state, trace, FRAME_MARKER_DOTNET, ERR_DOTNET_CODE_TOO_LARGE);
   }
 
   // code_start points to beginning of the JIT generated code. This is preceded by a CodeHeader
@@ -268,7 +274,7 @@ push_frame:
     (unsigned long)code_start,
     (unsigned long)code_header_ptr,
     (unsigned long)(pc - code_start));
-  error = push_dotnet(trace, (code_header_ptr << 5) + type, pc - code_start, return_address);
+  error = push_dotnet(state, trace, (code_header_ptr << 5) + type, pc - code_start, return_address);
   if (error) {
     return error;
   }
@@ -289,7 +295,7 @@ static EBPF_INLINE int unwind_dotnet(struct pt_regs *ctx)
 
   Trace *trace = &record->trace;
   u32 pid      = trace->pid;
-  DEBUG_PRINT("==== unwind_dotnet %d ====", trace->stack_len);
+  DEBUG_PRINT("==== unwind_dotnet %d ====", trace->frame_data_len);
 
   int unwinder       = PROG_UNWIND_STOP;
   ErrorCode error    = ERR_OK;

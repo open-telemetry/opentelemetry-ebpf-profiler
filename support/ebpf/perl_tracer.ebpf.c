@@ -75,10 +75,18 @@ struct perl_procs_t {
 } perl_procs SEC(".maps");
 
 // Record a Perl frame
-static EBPF_INLINE ErrorCode push_perl(Trace *trace, u64 file, u64 line)
+static EBPF_INLINE ErrorCode push_perl(UnwindState *state, Trace *trace, u64 file, u64 line)
 {
   DEBUG_PRINT("Pushing perl frame cop=0x%lx, cv=0x%lx", (unsigned long)file, (unsigned long)line);
-  return _push(trace, file, line, FRAME_MARKER_PERL);
+
+  u64 *data = push_frame(state, trace, 3);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = frame_header(FRAME_MARKER_PERL, FRAME_FLAG_PID_SPECIFIC, 3, 0);
+  data[1] = file;
+  data[2] = line;
+  return ERR_OK;
 }
 
 // resolve_cv_egv() takes in a CV* and follows the pointers to resolve this CV's
@@ -223,7 +231,7 @@ process_perl_frame(PerCPURecord *record, const PerlProcInfo *perlinfo, const voi
     if (!egv) {
       goto err;
     }
-    if (push_perl(trace, (u64)egv, (u64)record->perlUnwindState.cop) != ERR_OK) {
+    if (push_perl(&record->state, trace, (u64)egv, (u64)record->perlUnwindState.cop) != ERR_OK) {
       return PROG_UNWIND_STOP;
     }
     record->perlUnwindState.cop = 0;
@@ -323,7 +331,7 @@ static EBPF_INLINE int walk_perl_stack(PerCPURecord *record, const PerlProcInfo 
     u64 cop = (u64)record->perlUnwindState.cop;
     if (cop) {
       DEBUG_PRINT("End of perl stack - pushing main 0x%lx", (unsigned long)cop);
-      if (push_perl(trace, 0, cop) != ERR_OK) {
+      if (push_perl(&record->state, trace, 0, cop) != ERR_OK) {
         return PROG_UNWIND_STOP;
       }
       record->perlUnwindState.cop = 0;

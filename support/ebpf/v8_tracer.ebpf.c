@@ -39,14 +39,22 @@ struct v8_procs_t {
 
 // Record a V8 frame
 static EBPF_INLINE ErrorCode push_v8(
-  Trace *trace, unsigned long pointer_and_type, unsigned long delta_or_marker, bool return_address)
+  UnwindState *state, Trace *trace, u64 pointer_and_type, u64 delta_or_marker, bool return_address)
 {
   DEBUG_PRINT(
-    "Pushing v8 frame delta_or_marker=%lx, pointer_and_type=%lx",
+    "Pushing v8 frame delta_or_marker=%llx, pointer_and_type=%llx",
     delta_or_marker,
     pointer_and_type);
-  return _push_with_return_address(
-    trace, pointer_and_type, delta_or_marker, FRAME_MARKER_V8, return_address);
+
+  const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
+  u64 *data        = push_frame(state, trace, 3);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = frame_header(FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, 3, 0);
+  data[1] = pointer_and_type;
+  data[2] = delta_or_marker;
+  return ERR_OK;
 }
 
 // Verify a V8 tagged pointer
@@ -224,7 +232,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     // - the JSFunction's Code object was changed due to On-Stack-Replacement or
     //   or other deoptimization reasons. This case is currently not handled.
 
-    if (top && trace->stack_len == 0) {
+    if (top && !state->return_address) {
       unsigned long stk[3];
       if (bpf_probe_read_user(stk, sizeof(stk), (void *)(sp - sizeof(stk)))) {
         DEBUG_PRINT("v8:  --> bad stack pointer");
@@ -268,7 +276,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   delta_or_marker = (pc - code_start) | ((uintptr_t)cookie << V8_LINE_COOKIE_SHIFT);
 
 frame_done:;
-  ErrorCode error = push_v8(trace, pointer_and_type, delta_or_marker, state->return_address);
+  ErrorCode error = push_v8(state, trace, pointer_and_type, delta_or_marker, state->return_address);
   if (error) {
     return error;
   }
@@ -309,7 +317,7 @@ static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
 
   Trace *trace = &record->trace;
   u32 pid      = trace->pid;
-  DEBUG_PRINT("==== unwind_v8 %d ====", trace->stack_len);
+  DEBUG_PRINT("==== unwind_v8 %d ====", trace->frame_data_len);
 
   int unwinder    = PROG_UNWIND_STOP;
   ErrorCode error = ERR_OK;

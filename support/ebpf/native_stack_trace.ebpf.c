@@ -108,9 +108,17 @@ struct kernel_stackmap_t {
 } kernel_stackmap SEC(".maps");
 
 // Record a native frame
-static EBPF_INLINE ErrorCode push_native(Trace *trace, u64 file, u64 line, bool return_address)
+static EBPF_INLINE ErrorCode
+push_native(UnwindState *state, Trace *trace, u64 file, u64 line, bool return_address)
 {
-  return _push_with_return_address(trace, file, line, FRAME_MARKER_NATIVE, return_address);
+  const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
+  u64 *data        = push_frame(state, trace, 2);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = frame_header(FRAME_MARKER_NATIVE, ra_flag, 2, line);
+  data[1] = file;
+  return ERR_OK;
 }
 
 // A single step for the bsearch into the big_stack_deltas array. This is really a textbook bsearch
@@ -618,8 +626,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
     unwinder = PROG_UNWIND_STOP;
 
     // Unwind native code
-    u32 frame_idx = trace->stack_len;
-    DEBUG_PRINT("==== unwind_native %d ====", frame_idx);
+    DEBUG_PRINT("==== unwind_native %d ====", trace->frame_data_len);
     increment_metric(metricID_UnwindNativeAttempts);
 
     // Push frame first. The PC is valid because a text section mapping was found.
@@ -627,8 +634,9 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
       "Pushing %llx %llx to position %u on stack",
       record->state.text_section_id,
       record->state.text_section_offset,
-      trace->stack_len);
+      trace->frame_data_len);
     error = push_native(
+      &record->state,
       trace,
       record->state.text_section_id,
       record->state.text_section_offset,

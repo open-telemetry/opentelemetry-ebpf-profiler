@@ -101,9 +101,18 @@ struct hotspot_procs_t {
 } hotspot_procs SEC(".maps");
 
 // Record a HotSpot frame
-static EBPF_INLINE ErrorCode push_hotspot(Trace *trace, u64 file, u64 line, bool return_address)
+static EBPF_INLINE ErrorCode
+push_hotspot(UnwindState *state, Trace *trace, u64 file, u64 line, bool return_address)
 {
-  return _push_with_return_address(trace, file, line, FRAME_MARKER_HOTSPOT, return_address);
+  const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
+  u64 *data        = push_frame(state, trace, 3);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = frame_header(FRAME_MARKER_HOTSPOT, FRAME_FLAG_PID_SPECIFIC | ra_flag, 3, 0);
+  data[1] = file;
+  data[2] = line;
+  return ERR_OK;
 }
 
 // calc_line merges the three values to be encoded in a frame 'line'
@@ -207,11 +216,7 @@ hotspot_handle_vtable_chunks(HotspotUnwindInfo *ui, HotspotUnwindAction *action)
 }
 
 static EBPF_INLINE ErrorCode hotspot_handle_interpreter(
-  UnwindState *state,
-  Trace *trace,
-  HotspotUnwindInfo *ui,
-  HotspotProcInfo *ji,
-  HotspotUnwindAction *action)
+  UnwindState *state, HotspotUnwindInfo *ui, HotspotProcInfo *ji, HotspotUnwindAction *action)
 {
   // Hotspot Interpreter has it's custom stack layout, and the unwinding is done based
   // on frame pointer. No frame information is in the CodeBlob header.
@@ -246,7 +251,7 @@ static EBPF_INLINE ErrorCode hotspot_handle_interpreter(
   }
 
   u64 bcp;
-  if (trace->stack_len) {
+  if (state->return_address) {
     // Interpreter frame has the BCP value stored
     if (ji->new_bcp_slot) {
       // JDK9+ frame has new 'mirror' slot which offsets the BCP slot
@@ -770,7 +775,7 @@ static EBPF_INLINE ErrorCode hotspot_execute_unwind_action(
   case UA_UNWIND_COMPLETE: {
   unwind_complete:;
     u64 line        = calc_line(ui->line.subtype, ui->line.pc_delta_or_bci, ui->line.ptr_check);
-    ErrorCode error = push_hotspot(trace, ui->file, line, state->return_address);
+    ErrorCode error = push_hotspot(state, trace, ui->file, line, state->return_address);
     if (error) {
       return error;
     }
@@ -896,7 +901,7 @@ hotspot_unwind_one_frame(PerCPURecord *record, HotspotProcInfo *ji, bool maybe_t
       &cbi, trace, &ui, ji, &action, maybe_topmost && !state->return_address);
     break;
   case FRAMETYPE_Interpreter: // main Interpreter program running byte code
-    err = hotspot_handle_interpreter(state, trace, &ui, ji, &action);
+    err = hotspot_handle_interpreter(state, &ui, ji, &action);
     break;
   case FRAMETYPE_vtable_chunks: // megamorphic interface call site
     err = hotspot_handle_vtable_chunks(&ui, &action);
@@ -923,7 +928,7 @@ static EBPF_INLINE int unwind_hotspot(struct pt_regs *ctx)
 
   Trace *trace = &record->trace;
   pid_t pid    = trace->pid;
-  DEBUG_PRINT("==== jvm: unwind %d ====", trace->stack_len);
+  DEBUG_PRINT("==== jvm: unwind %d ====", trace->frame_data_len);
 
   int unwinder    = PROG_UNWIND_STOP;
   ErrorCode error = ERR_OK;

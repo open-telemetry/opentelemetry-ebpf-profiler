@@ -26,16 +26,24 @@ struct php_procs_t {
 } php_procs SEC(".maps");
 
 // Record a PHP frame
-static EBPF_INLINE ErrorCode push_php(Trace *trace, u64 file, u64 line, bool is_jitted)
+static EBPF_INLINE ErrorCode
+push_php(UnwindState *state, Trace *trace, u64 file, u64 line, bool is_jitted)
 {
-  int frame_type = is_jitted ? FRAME_MARKER_PHP_JIT : FRAME_MARKER_PHP;
-  return _push(trace, file, line, frame_type);
+  u8 frame_type = is_jitted ? FRAME_MARKER_PHP_JIT : FRAME_MARKER_PHP;
+  u64 *data     = push_frame(state, trace, 3);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = frame_header(frame_type, FRAME_FLAG_PID_SPECIFIC, 3, 0);
+  data[1] = file;
+  data[2] = line;
+  return ERR_OK;
 }
 
 // Record a PHP call for which no function object is available
-static EBPF_INLINE ErrorCode push_unknown_php(Trace *trace)
+static EBPF_INLINE ErrorCode push_unknown_php(UnwindState *state, Trace *trace)
 {
-  return _push(trace, UNKNOWN_FILE, FUNC_TYPE_UNKNOWN, FRAME_MARKER_PHP);
+  return push_php(state, trace, UNKNOWN_FILE, FUNC_TYPE_UNKNOWN, false);
 }
 
 static EBPF_INLINE int process_php_frame(
@@ -59,7 +67,7 @@ static EBPF_INLINE int process_php_frame(
 
   // It is possible there is no function object.
   if (!zend_function) {
-    if (push_unknown_php(trace) != ERR_OK) {
+    if (push_unknown_php(&record->state, trace) != ERR_OK) {
       DEBUG_PRINT("failed to push unknown php frame");
       return -1;
     }
@@ -109,7 +117,9 @@ static EBPF_INLINE int process_php_frame(
   u64 lineno_and_type_info = ((u64)*type_info) << 32 | lineno;
 
   DEBUG_PRINT("Pushing PHP 0x%lx %u", (unsigned long)zend_function, lineno);
-  if (push_php(trace, (u64)zend_function, lineno_and_type_info, is_jitted) != ERR_OK) {
+  if (
+    push_php(&record->state, trace, (u64)zend_function, lineno_and_type_info, is_jitted) !=
+    ERR_OK) {
     DEBUG_PRINT("failed to push php frame");
     return -1;
   }

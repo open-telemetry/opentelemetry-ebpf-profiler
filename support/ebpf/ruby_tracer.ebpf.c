@@ -26,9 +26,16 @@ struct ruby_procs_t {
 #define RUBY_FRAME_FLAG_LAMBDA  0x0100
 
 // Record a Ruby frame
-static EBPF_INLINE ErrorCode push_ruby(Trace *trace, u64 file, u64 line)
+static EBPF_INLINE ErrorCode push_ruby(UnwindState *state, Trace *trace, u64 file, u64 line)
 {
-  return _push(trace, file, line, FRAME_MARKER_RUBY);
+  u64 *data = push_frame(state, trace, 3);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = frame_header(FRAME_MARKER_RUBY, FRAME_FLAG_PID_SPECIFIC, 3, 0);
+  data[1] = file;
+  data[2] = line;
+  return ERR_OK;
 }
 
 // walk_ruby_stack processes a Ruby VM stack, extracts information from the individual frames and
@@ -200,7 +207,7 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
     // For symbolization of the frame we forward the information about the instruction sequence
     // and program counter to user space.
     // From this we can then extract information like file or function name and line number.
-    ErrorCode error = push_ruby(trace, (u64)iseq_body, pc);
+    ErrorCode error = push_ruby(&record->state, trace, (u64)iseq_body, pc);
     if (error) {
       DEBUG_PRINT("ruby: failed to push frame");
       return error;

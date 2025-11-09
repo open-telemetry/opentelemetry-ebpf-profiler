@@ -28,55 +28,17 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, s32 kstack)
   trace->pid             = pid;
   trace->tid             = pid;
   trace->kernel_stack_id = -1;
-  trace->stack_len       = 1;
-  trace->frames[0]       = (Frame){
-          .kind         = FRAME_MARKER_NATIVE,
-          .file_id      = 1337,
-          .addr_or_line = 21,
-  };
+
+  u64 *data = push_frame(&record->state, trace, 2);
+  if (data) {
+    data[0] = frame_header(FRAME_MARKER_NATIVE, 0, 2, 21);
+    data[1] = 1337;
+  }
   send_trace(ctx, trace);
 
   // Single native frame, with kernel trace.
   trace->comm[3]         = 2;
   trace->kernel_stack_id = kstack;
-  send_trace(ctx, trace);
-
-  // Single Python frame.
-  trace->comm[3]         = 3;
-  trace->kernel_stack_id = -1;
-  trace->stack_len       = 3;
-  trace->frames[0]       = (Frame){
-          .kind         = FRAME_MARKER_NATIVE,
-          .file_id      = 1337,
-          .addr_or_line = 42,
-  };
-  trace->frames[1] = (Frame){
-    .kind         = FRAME_MARKER_NATIVE,
-    .file_id      = 1338,
-    .addr_or_line = 21,
-  };
-  trace->frames[2] = (Frame){
-    .kind         = FRAME_MARKER_PYTHON,
-    .file_id      = 1339,
-    .addr_or_line = 22,
-  };
-  send_trace(ctx, trace);
-
-  // Maximum length native trace.
-  trace->comm[3]         = 4;
-  trace->stack_len       = MAX_FRAME_UNWINDS;
-  trace->kernel_stack_id = kstack;
-  UNROLL for (u64 i = 0; i < MAX_FRAME_UNWINDS; ++i)
-  {
-    // NOTE: this init schema eats up a lot of instructions. If we need more
-    // space later, we can instead just init `.kind` and a few fields in the
-    // start, middle, and end of the trace.
-    trace->frames[i] = (Frame){
-      .kind         = FRAME_MARKER_NATIVE,
-      .file_id      = ~i,
-      .addr_or_line = i,
-    };
-  }
   send_trace(ctx, trace);
 }
 
