@@ -610,7 +610,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		log.Debugf("%v -> %v guid %v", m.Path, info.simpleName, info.guid)
 
 		exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
-			MappingFile: info.file,
+			MappingFile: info.mapping.Value().File,
 			Process:     pr,
 			Mapping:     m,
 		})
@@ -714,20 +714,20 @@ func (i *dotnetInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
-func (i *dotnetInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
-	if !frame.Type.IsInterpType(libpf.Dotnet) {
+func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+	if !ef.Type().IsInterpType(libpf.Dotnet) {
 		return interpreter.ErrMismatchInterpreterType
 	}
 
 	sfCounter := successfailurecounter.New(&i.successCount, &i.failCount)
 	defer sfCounter.DefaultToFailure()
 
-	codeHeaderAndType := frame.File
-	frameType := uint(codeHeaderAndType & 0x1f)
+	codeHeaderAndType := ef.Variable(0)
+	subframeType := uint(codeHeaderAndType & 0x1f)
 	codeHeaderPtr := libpf.Address(codeHeaderAndType >> 5)
-	pcOffset := uint32(frame.Lineno)
+	pcOffset := uint32(ef.Data())
 
-	switch frameType {
+	switch subframeType {
 	case codeReadyToRun:
 		// Ready to Run (Non-JIT) frame running directly code from a PE file
 		module, err := i.getPEInfoByAddress(uint64(codeHeaderPtr))
@@ -743,7 +743,7 @@ func (i *dotnetInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) erro
 			AddressOrLineno: libpf.AddressOrLineno(pcOffset),
 			FunctionName:    module.resolveR2RMethodName(pcOffset),
 			SourceFile:      module.simpleName,
-			MappingFile:     module.file,
+			Mapping:         module.mapping,
 		})
 	case codeJIT:
 		// JITted frame in anonymous mapping
@@ -756,7 +756,7 @@ func (i *dotnetInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) erro
 			break
 		}
 
-		ilOffset := method.mapPCOffsetToILOffset(pcOffset, frame.ReturnAddress)
+		ilOffset := method.mapPCOffsetToILOffset(pcOffset, ef.Flags().ReturnAddress())
 
 		// The Line ID format is:
 		//  4 bits  Set to 0xf to indicate JIT frame.
@@ -772,11 +772,11 @@ func (i *dotnetInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) erro
 			SourceFile:      method.module.simpleName,
 			FunctionName:    methodName,
 			FunctionOffset:  ilOffset,
-			MappingFile:     method.module.file,
+			Mapping:         method.module.mapping,
 		})
 	default:
 		// Stub code
-		i.appendStubFrame(frames, frameType)
+		i.appendStubFrame(frames, subframeType)
 	}
 
 	sfCounter.ReportSuccess()

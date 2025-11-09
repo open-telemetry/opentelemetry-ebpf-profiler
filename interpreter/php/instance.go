@@ -12,7 +12,6 @@ import (
 
 	"github.com/elastic/go-freelru"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -168,22 +167,22 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 	return pf, nil
 }
 
-func (i *phpInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
+func (i *phpInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
 	// With Symbolize() in opcacheInstance there is a dedicated function to symbolize JITTed
 	// PHP frames. But as we also attach phpInstance to PHP processes with JITTed frames, we
 	// use this function to symbolize all PHP frames, as the process to do so is the same.
-	if !frame.Type.IsInterpType(libpf.PHP) &&
-		!frame.Type.IsInterpType(libpf.PHPJIT) {
+	if !ef.Type().IsInterpType(libpf.PHP) &&
+		!ef.Type().IsInterpType(libpf.PHPJIT) {
 		return interpreter.ErrMismatchInterpreterType
 	}
 
 	sfCounter := successfailurecounter.New(&i.successCount, &i.failCount)
 	defer sfCounter.DefaultToFailure()
 
-	funcPtr := libpf.Address(frame.File)
+	funcPtr := libpf.Address(ef.Variable(0))
 	// We pack type info and the line number into linenos
-	typeInfo := uint32(frame.Lineno >> 32)
-	line := frame.Lineno & 0xffffffff
+	typeInfo := uint32(ef.Variable(1) >> 32)
+	line := uint32(ef.Variable(1))
 
 	f, err := i.getFunction(funcPtr, typeInfo)
 	if err != nil {
@@ -191,8 +190,8 @@ func (i *phpInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	}
 
 	funcOff := uint32(0)
-	if f.lineStart != 0 && libpf.AddressOrLineno(f.lineStart) <= line {
-		funcOff = uint32(line) - f.lineStart
+	if f.lineStart != 0 && f.lineStart <= line {
+		funcOff = line - f.lineStart
 	}
 
 	frames.Append(&libpf.Frame{

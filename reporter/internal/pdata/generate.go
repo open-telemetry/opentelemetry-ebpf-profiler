@@ -26,14 +26,6 @@ const (
 	ExecutableCacheLifetime = 1 * time.Hour
 )
 
-// uniqueMapping defines an unique mapping in a process.
-type uniqueMapping struct {
-	// mapping start in the ELF virtual address space
-	Start libpf.Address
-	// mapping file
-	File libpf.FrameMappingFile
-}
-
 // Generate generates a pdata request out of internal profiles data, to be
 // exported.
 func (p *Pdata) Generate(tree samples.TraceEventsTree,
@@ -45,14 +37,14 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	// Temporary helpers that will build the various tables in ProfilesDictionary.
 	stringSet := make(orderedset.OrderedSet[string], 64)
 	funcSet := make(orderedset.OrderedSet[funcInfo], 64)
-	mappingSet := make(orderedset.OrderedSet[uniqueMapping], 64)
+	mappingSet := make(orderedset.OrderedSet[libpf.FrameMapping], 64)
 	stackSet := make(orderedset.OrderedSet[stackInfo], 64)
 	locationSet := make(orderedset.OrderedSet[locationInfo], 64)
 
 	// By specification, the first element should be empty.
 	stringSet.Add("")
 	funcSet.Add(funcInfo{})
-	mappingSet.Add(uniqueMapping{})
+	mappingSet.Add(libpf.FrameMapping{})
 	stackSet.Add(stackInfo{})
 	locationSet.Add(locationInfo{})
 
@@ -126,7 +118,7 @@ func (p *Pdata) setProfile(
 	attrMgr *samples.AttrTableManager,
 	stringSet orderedset.OrderedSet[string],
 	funcSet orderedset.OrderedSet[funcInfo],
-	mappingSet orderedset.OrderedSet[uniqueMapping],
+	mappingSet orderedset.OrderedSet[libpf.FrameMapping],
 	stackSet orderedset.OrderedSet[stackInfo],
 	locationSet orderedset.OrderedSet[locationInfo],
 	origin libpf.Origin,
@@ -177,33 +169,31 @@ func (p *Pdata) setProfile(
 				frameType: frame.Type.String(),
 			}
 
-			if frame.MappingFile.Valid() {
-				index, ok := mappingSet.AddWithCheck(uniqueMapping{
-					Start: frame.MappingStart,
-					File:  frame.MappingFile,
-				})
-				if !ok {
-					mf := frame.MappingFile.Value()
-					mapping := dic.MappingTable().AppendEmpty()
-					mapping.SetMemoryStart(uint64(frame.MappingStart))
-					mapping.SetMemoryLimit(uint64(frame.MappingEnd))
-					mapping.SetFileOffset(frame.MappingFileOffset)
-					mapping.SetFilenameStrindex(stringSet.Add(mf.FileName.String()))
+			index, ok := mappingSet.AddWithCheck(frame.Mapping)
+			if !ok {
+				m := frame.Mapping.Value()
+				mf := m.File.Value()
 
-					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-						semconv.ProcessExecutableBuildIDGNUKey,
-						mf.GnuBuildID)
-					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-						semconv.ProcessExecutableBuildIDGoKey,
-						mf.GoBuildID)
-					attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-						semconv.ProcessExecutableBuildIDHtlhashKey,
-						mf.FileID.StringNoQuotes())
-				}
-				locInfo.mappingIndex = index
-			} else {
-				locInfo.mappingIndex = 0
+				mapping := dic.MappingTable().AppendEmpty()
+				mapping.SetMemoryStart(uint64(m.Start))
+				mapping.SetMemoryLimit(uint64(m.End))
+				mapping.SetFileOffset(m.FileOffset)
+				mapping.SetFilenameStrindex(stringSet.Add(mf.FileName.String()))
+
+				// Once SemConv and its Go package is released with the new
+				// semantic convention for build_id, replace these hard coded
+				// strings.
+				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+					semconv.ProcessExecutableBuildIDGNUKey,
+					mf.GnuBuildID)
+				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+					semconv.ProcessExecutableBuildIDGoKey,
+					mf.GoBuildID)
+				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+					semconv.ProcessExecutableBuildIDHtlhashKey,
+					mf.FileID.StringNoQuotes())
 			}
+			locInfo.mappingIndex = index
 
 			if frame.FunctionName != libpf.NullString || frame.SourceFile != libpf.NullString {
 				// Store interpreted frame information as a Line message

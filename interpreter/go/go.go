@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -102,22 +101,24 @@ func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
 	return nil
 }
 
-func (g *goInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
-	if !frame.Type.IsInterpType(libpf.Native) {
+func (g *goInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+	if !ef.Type().IsInterpType(libpf.Native) {
 		return interpreter.ErrMismatchInterpreterType
 	}
+
 	sfCounter := successfailurecounter.New(&g.successCount, &g.failCount)
 	defer sfCounter.DefaultToFailure()
 
-	sourceFile, lineNo, fn := g.d.pclntab.Symbolize(uintptr(frame.Lineno))
+	address := ef.Data()
+	sourceFile, lineNo, fn := g.d.pclntab.Symbolize(uintptr(address))
 	if fn == "" {
-		return fmt.Errorf("failed to symbolize 0x%x", frame.Lineno)
+		return fmt.Errorf("failed to symbolize 0x%x", address)
 	}
 
 	frames.Append(&libpf.Frame{
 		Type: libpf.GoFrame,
 		//TODO: File: convert the frame.File (host.FileID) to libpf.FileID here
-		AddressOrLineno: frame.Lineno,
+		AddressOrLineno: libpf.AddressOrLineno(address),
 		FunctionName:    libpf.Intern(fn),
 		SourceFile:      libpf.Intern(sourceFile),
 		SourceLine:      libpf.SourceLineno(lineNo),

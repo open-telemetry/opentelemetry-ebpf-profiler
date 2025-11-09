@@ -258,7 +258,7 @@ const (
 type peInfo struct {
 	err          error
 	lastModified int64
-	file         libpf.FrameMappingFile
+	mapping      libpf.FrameMapping
 	simpleName   libpf.String
 	guid         string
 	typeSpecs    []peTypeSpec
@@ -1251,10 +1251,13 @@ func (pc *peCache) Get(pr process.Process, mapping *process.Mapping) *peInfo {
 	}
 	info.err = info.parse(file)
 	if info.err == nil {
-		info.file = libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+		mf := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 			FileID:     fileID,
 			FileName:   libpf.Intern(path.Base(mapping.Path.String())),
 			GnuBuildID: info.guid,
+		})
+		info.mapping = libpf.NewFrameMapping(libpf.FrameMappingData{
+			File: mf,
 		})
 	}
 	pc.peInfoCache.Add(key, info)

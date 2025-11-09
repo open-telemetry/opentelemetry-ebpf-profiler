@@ -82,6 +82,7 @@ int main()
   sleep(2);
 
   printf("Press ENTER to exit main thread: ");
+  fflush(stdout);
   getchar();
 
   // Stop CPU burn thread to reduce noise while hash thread is running
