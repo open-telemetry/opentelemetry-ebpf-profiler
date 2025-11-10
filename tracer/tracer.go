@@ -440,6 +440,25 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		}
 	}
 
+	// Load custom trace program using loadProbeUnwinders (same as uprobe__generic)
+	// This ensures proper map rewrites and program loading for tail call support
+	customProgs := []progLoaderHelper{
+		{
+			name:             "custom__generic",
+			noTailCallTarget: true, // Not added to perf_progs, users manage their own prog_array
+			enable:           true,
+		},
+	}
+	if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], customProgs,
+		cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
+		// Don't fail if custom__generic is not present - it's optional
+		log.Debugf("custom trace program not loaded (optional): %v", err)
+	} else {
+		if prog, ok := ebpfProgs["custom__generic"]; ok {
+			log.Infof("Loaded custom__generic program (FD: %d)", prog.FD())
+		}
+	}
+
 	if err = removeTemporaryMaps(ebpfMaps); err != nil {
 		return nil, nil, fmt.Errorf("failed to remove temporary maps: %v", err)
 	}
@@ -888,7 +907,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		PID:              pid,
 		TID:              libpf.PID(ptr.Tid),
 		Origin:           libpf.Origin(ptr.Origin),
-		OffTime:          int64(ptr.Offtime),
+		OffTime:          int64(ptr.Context_value),
 		KTime:            times.KTime(ptr.Ktime),
 		CPU:              cpu,
 		EnvVars:          procMeta.EnvVariables,
@@ -898,6 +917,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	case support.TraceOriginSampling:
 	case support.TraceOriginOffCPU:
 	case support.TraceOriginUProbe:
+	case support.TraceOriginCustom:
 	default:
 		log.Warnf("Skip handling trace from unexpected %d origin", trace.Origin)
 		return nil
@@ -1159,4 +1179,25 @@ func (t *Tracer) AttachUProbes(uprobes []string) error {
 
 func (t *Tracer) HandleTrace(bpfTrace *host.Trace) {
 	t.processManager.HandleTrace(bpfTrace)
+}
+
+// GetCustomTraceProgramFD returns the file descriptor of the custom__generic eBPF program.
+// Returns -1 if the program is not loaded.
+// Users can use this FD to add the program to their own prog_array maps for tail call support.
+func (t *Tracer) GetCustomTraceProgramFD() int {
+	if prog, ok := t.ebpfProgs["custom__generic"]; ok {
+		return prog.FD()
+	}
+	return -1
+}
+
+// GetCustomContextMapFD returns the file descriptor of the custom_context_map.
+// Returns -1 if the map is not loaded.
+// External programs must store context_value in this map before tail calling to custom__generic.
+// Usage: bpf_map_update_elem(map_fd, &key0, &context_value, BPF_ANY) where key0=0.
+func (t *Tracer) GetCustomContextMapFD() int {
+	if m, ok := t.ebpfMaps["custom_context_map"]; ok {
+		return m.FD()
+	}
+	return -1
 }

@@ -90,6 +90,7 @@ const (
 	TraceOriginSampling = 0x1
 	TraceOriginOffCPU   = 0x2
 	TraceOriginUProbe   = 0x3
+	TraceOriginCustom   = 0x4
 )
 
 type ApmSpanID [8]byte
@@ -164,7 +165,7 @@ type Trace struct {
 	Kernel_stack_id    int32
 	Stack_len          uint32
 	Origin             uint32
-	Offtime            uint64
+	Context_value      uint64
 	Frames             [128]Frame
 }
 type UnwindInfo struct {

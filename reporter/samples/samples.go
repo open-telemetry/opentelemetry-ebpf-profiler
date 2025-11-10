@@ -17,7 +17,7 @@ type TraceEventMeta struct {
 	PID, TID       libpf.PID
 	CPU            int
 	Origin         libpf.Origin
-	OffTime        int64
+	OffTime        int64 // Context value: off-cpu time (ns) or custom context ID
 	EnvVars        map[libpf.String]libpf.String
 }
 

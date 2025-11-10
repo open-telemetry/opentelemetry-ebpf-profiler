@@ -345,6 +345,7 @@ typedef enum TraceOrigin {
   TRACE_SAMPLING,
   TRACE_OFF_CPU,
   TRACE_UPROBE,
+  TRACE_CUSTOM,
 } TraceOrigin;
 
 // MAX_FRAME_UNWINDS defines the maximum number of frames per
@@ -582,8 +583,11 @@ typedef struct Trace {
   // origin indicates the source of the trace.
   TraceOrigin origin;
 
-  // offtime stores the nanoseconds that the trace was off-cpu for.
-  u64 offtime;
+  // context_value stores contextual data for the trace.
+  // For TRACE_OFF_CPU: nanoseconds the trace was off-cpu.
+  // For TRACE_CUSTOM: custom context identifier for trace correlation.
+  // For other origins: typically 0.
+  u64 context_value;
 
   // The frames of the stack trace.
   Frame frames[MAX_FRAME_UNWINDS];
