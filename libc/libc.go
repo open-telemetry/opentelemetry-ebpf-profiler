@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package tpbase // import "go.opentelemetry.io/ebpf-profiler/tpbase"
+package libc // import "go.opentelemetry.io/ebpf-profiler/libc"
 
 import (
 	"debug/elf"
@@ -10,6 +10,12 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
+
+// LibcInfo contains introspection information extracted from the C-library
+type LibcInfo struct {
+	// TSDInfo is the TSDInfo extracted for this C-library
+	TSDInfo TSDInfo
+}
 
 // TSDInfo contains information to access C-library's Thread Specific Data from eBPF
 type TSDInfo struct {
@@ -84,8 +90,19 @@ func IsPotentialTSDDSO(filename string) bool {
 	return libcRegex.MatchString(filename)
 }
 
+func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
+	tsdinfo, err := extractTSDInfo(ef)
+	if err != nil {
+		return nil, err
+	}
+
+	return &LibcInfo{
+		TSDInfo: *tsdinfo,
+	}, nil
+}
+
 // ExtractTSDInfo extracts the introspection data for pthread thread specific data.
-func ExtractTSDInfo(ef *pfelf.File) (*TSDInfo, error) {
+func extractTSDInfo(ef *pfelf.File) (*TSDInfo, error) {
 	_, code, err := ef.SymbolData("__pthread_getspecific", 2048)
 	if err != nil {
 		_, code, err = ef.SymbolData("pthread_getspecific", 2048)

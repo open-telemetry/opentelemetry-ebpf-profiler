@@ -15,6 +15,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -22,7 +23,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -73,9 +73,8 @@ func hashCOPKey(k copKey) uint32 {
 	return uint32(h ^ xxh3.HashString128(k.funcName.String()).Lo)
 }
 
-func (i *perlInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	tsdInfo tpbase.TSDInfo,
-) error {
+func (i *perlInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
+	libcInfo libc.LibcInfo) error {
 	d := i.d
 	stateInTSD := uint8(0)
 	if d.stateInTSD {
@@ -88,9 +87,9 @@ func (i *perlInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.PID
 		StateInTSD: stateInTSD,
 
 		TsdInfo: support.TSDInfo{
-			Offset:     tsdInfo.Offset,
-			Multiplier: tsdInfo.Multiplier,
-			Indirect:   tsdInfo.Indirect,
+			Offset:     libcInfo.TSDInfo.Offset,
+			Multiplier: libcInfo.TSDInfo.Multiplier,
+			Indirect:   libcInfo.TSDInfo.Indirect,
 		},
 
 		Interpreter_curcop:       uint16(vms.interpreter.curcop),
