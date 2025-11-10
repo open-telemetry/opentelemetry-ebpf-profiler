@@ -545,9 +545,11 @@ func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcNam
 		funcPc, _ := g.getFuncMapEntry(i)
 		return funcPc > pc
 	})
-	if index == g.numFuncs {
+	if index == g.numFuncs || index == 0 {
 		return "", 0, ""
 	}
+
+	index -= 1
 
 	mapPc, funcOff := g.getFuncMapEntry(index)
 	funcPc, fun := g.getFunc(funcOff)
