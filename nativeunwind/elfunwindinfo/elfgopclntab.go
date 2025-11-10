@@ -541,15 +541,13 @@ func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
 
 // Symbolize returns the file, line and function information for given PC
 func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
-	index := sort.Search(g.numFuncs, func(i int) bool {
+	index := sort.Search(g.numFuncs+1, func(i int) bool {
 		funcPc, _ := g.getFuncMapEntry(i)
 		return funcPc > pc
-	})
-	if index == g.numFuncs || index == 0 {
+	}) - 1
+	if index >= g.numFuncs || index < 0 {
 		return "", 0, ""
 	}
-
-	index -= 1
 
 	mapPc, funcOff := g.getFuncMapEntry(index)
 	funcPc, fun := g.getFunc(funcOff)
