@@ -363,9 +363,9 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 		},
 		support.TraceOriginOffCPU: {
 			traceKey: &samples.TraceEvents{
-				Frames:     frames,
-				Timestamps: []uint64{3, 4},
-				OffTimes:   []int64{10, 20},
+				Frames:        frames,
+				Timestamps:    []uint64{3, 4},
+				ContextValues: []int64{10, 20},
 			},
 		},
 	}

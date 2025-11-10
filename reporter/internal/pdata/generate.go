@@ -165,7 +165,7 @@ func (p *Pdata) setProfile(
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
 		if origin == support.TraceOriginOffCPU {
-			sample.Values().Append(traceInfo.OffTimes...)
+			sample.Values().Append(traceInfo.ContextValues...)
 		}
 
 		locationIndices := make([]int32, 0, len(traceInfo.Frames))

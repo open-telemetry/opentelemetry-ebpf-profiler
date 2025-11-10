@@ -37,6 +37,11 @@ int custom__generic(struct pt_regs *ctx)
   u64 *context_value_ptr = bpf_map_lookup_elem(&custom_context_map, &key0);
   u64 context_value = context_value_ptr ? *context_value_ptr : 0;
 
+  PerCPURecord *record = get_per_cpu_record();
+  if (record) {
+    record->tailCalls += 1;
+  }
+
   // Collect trace with TRACE_CUSTOM origin
   // Pass context_value as the last parameter (similar to off_cpu_time for TRACE_OFF_CPU)
   return collect_trace(ctx, TRACE_CUSTOM, pid, tid, ts, context_value);

@@ -84,14 +84,14 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 
 	if events, exists := (*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
-		events.OffTimes = append(events.OffTimes, meta.OffTime)
+		events.ContextValues = append(events.ContextValues, meta.ContextValue)
 		(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = events
 		return nil
 	}
 	(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = &samples.TraceEvents{
-		Frames:     slices.Clone(trace.Frames),
-		Timestamps: []uint64{uint64(meta.Timestamp)},
-		OffTimes:   []int64{meta.OffTime},
+		Frames:        slices.Clone(trace.Frames),
+		Timestamps:    []uint64{uint64(meta.Timestamp)},
+		ContextValues: []int64{meta.ContextValue},
 		EnvVars:    meta.EnvVars,
 		Labels:     trace.CustomLabels,
 	}

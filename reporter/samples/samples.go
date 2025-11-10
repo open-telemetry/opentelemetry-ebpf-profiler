@@ -17,16 +17,16 @@ type TraceEventMeta struct {
 	PID, TID       libpf.PID
 	CPU            int
 	Origin         libpf.Origin
-	OffTime        int64 // Context value: off-cpu time (ns) or custom context ID
+	ContextValue   int64 // Context value: off-cpu time (ns) or custom context ID
 	EnvVars        map[libpf.String]libpf.String
 }
 
 // TraceEvents holds known information about a trace.
 type TraceEvents struct {
-	Frames     libpf.Frames
-	Timestamps []uint64 // in nanoseconds
-	OffTimes   []int64  // in nanoseconds
-	EnvVars    map[libpf.String]libpf.String
+	Frames        libpf.Frames
+	Timestamps    []uint64 // in nanoseconds
+	ContextValues []int64  // in nanoseconds
+	EnvVars       map[libpf.String]libpf.String
 	Labels     map[libpf.String]libpf.String
 }
 

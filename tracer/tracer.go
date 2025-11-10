@@ -907,7 +907,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		PID:              pid,
 		TID:              libpf.PID(ptr.Tid),
 		Origin:           libpf.Origin(ptr.Origin),
-		OffTime:          int64(ptr.Context_value),
+		ContextValue:     int64(ptr.Context_value),
 		KTime:            times.KTime(ptr.Ktime),
 		CPU:              cpu,
 		EnvVars:          procMeta.EnvVariables,

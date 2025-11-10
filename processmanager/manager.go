@@ -351,7 +351,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *host.Trace) {
 		ExecutablePath: bpfTrace.ExecutablePath,
 		ContainerID:    bpfTrace.ContainerID,
 		Origin:         bpfTrace.Origin,
-		OffTime:        bpfTrace.OffTime,
+		ContextValue:   bpfTrace.ContextValue,
 		EnvVars:        bpfTrace.EnvVars,
 	}
 
