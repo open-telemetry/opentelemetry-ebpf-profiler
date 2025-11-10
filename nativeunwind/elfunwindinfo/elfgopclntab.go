@@ -544,8 +544,8 @@ func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcNam
 	index := sort.Search(g.numFuncs, func(i int) bool {
 		funcPc, _ := g.getFuncMapEntry(i)
 		return funcPc > pc
-	}) - 1
-	if index < 0 {
+	})
+	if index == g.numFuncs {
 		return "", 0, ""
 	}
 
