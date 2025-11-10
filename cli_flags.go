@@ -71,6 +71,9 @@ var (
 		defaultOffCPUThreshold)
 	envVarsHelp = "Comma separated list of environment variables that will be reported with the" +
 		"captured profiling samples."
+	profileProcessesHelp = "Comma-separated list of process name patterns to profile. " +
+		"If specified, only processes matching these patterns will be profiled (allowlist mode). " +
+		"Patterns are matched against the process executable path."
 	probeLinkHelper = "Attach a probe to a symbol of an executable. " +
 		"Expected format: /path/to/executable:symbol"
 	loadProbeHelper = "Load generic eBPF program that can be attached externally to " +
@@ -133,6 +136,8 @@ func parseArgs() (*controller.Config, error) {
 		defaultOffCPUThreshold, offCPUThresholdHelp)
 
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
+
+	fs.StringVar(&args.ProfileProcesses, "profile-processes", "", profileProcessesHelp)
 
 	fs.Func("uprobe-link", probeLinkHelper, func(link string) error {
 		args.UProbeLinks = append(args.UProbeLinks, link)

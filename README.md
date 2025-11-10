@@ -83,6 +83,12 @@ of the recently released OTel profiling [signal](https://github.com/open-telemet
 The agent loads the eBPF program and its maps, starts unwinding and reports
 captured traces to the backend.
 
+### Options
+
+```
+-profile-processes    Allowlist for profiling specific processes 
+```
+
 ## Development
 
 To understand how this project works and learn more about profiling, check out [Profiling internals](doc/internals.md)

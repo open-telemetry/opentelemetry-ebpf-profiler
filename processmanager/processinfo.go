@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 	"syscall"
 	"time"
 
@@ -590,6 +591,13 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pid := pr.PID()
 	log.Debugf("= PID: %v", pid)
 
+	// Check if this process should be profiled based on allowlist
+	if !pm.shouldProfileProcess(pid, pr) {
+		log.Debugf("PID %v not in allowlist, skipping", pid)
+		pm.ebpf.RemoveReportedPID(pid)
+		return
+	}
+
 	// Abort early if process is waiting for cleanup in ProcessedUntil
 	pm.mu.Lock()
 	_, ok := pm.exitEvents[pid]
@@ -660,6 +668,34 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		// Also see: Unified PID Events design doc
 		pm.ebpf.RemoveReportedPID(pid)
 	}
+}
+
+// shouldProfileProcess checks if a process should be profiled based on allowlist settings.
+// If no allowlist is configured, all processes are profiled.
+func (pm *ProcessManager) shouldProfileProcess(pid libpf.PID, pr process.Process) bool {
+	// If no allowlist is configured, profile all processes
+	if len(pm.profileProcessPatterns) == 0 {
+		return true
+	}
+
+	// Check process name patterns allowlist
+	if len(pm.profileProcessPatterns) > 0 {
+		exe, err := pr.GetExe()
+		if err != nil {
+			log.Debugf("Failed to get executable for PID %d: %v", pid, err)
+			return false
+		}
+
+		exePath := exe.String()
+		for _, pattern := range pm.profileProcessPatterns {
+			if strings.Contains(exePath, pattern) {
+				return true
+			}
+		}
+	}
+
+	// Process not in any allowlist
+	return false
 }
 
 // CleanupPIDs executes a periodic synchronization of pidToProcessInfo table with system processes.

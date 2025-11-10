@@ -119,6 +119,10 @@ type ProcessManager struct {
 
 	// includeEnvVars holds a list of env vars that should be captured from processes
 	includeEnvVars libpf.Set[string]
+
+	// profileProcessPatterns is an allowlist of process name patterns to profile.
+	// If empty, all processes are profiled. Patterns are matched against the executable path.
+	profileProcessPatterns []string
 }
 
 // Mapping represents an executable memory mapping of a process.

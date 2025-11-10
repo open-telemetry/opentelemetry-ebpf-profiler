@@ -72,6 +72,18 @@ func (c *Controller) Start(ctx context.Context) error {
 		}
 	}
 
+	// Parse profile process patterns allowlist
+	var profileProcessPatterns []string
+	if c.config.ProfileProcesses != "" {
+		splittedPatterns := strings.Split(c.config.ProfileProcesses, ",")
+		for _, pattern := range splittedPatterns {
+			pattern = strings.TrimSpace(pattern)
+			if pattern != "" {
+				profileProcessPatterns = append(profileProcessPatterns, pattern)
+			}
+		}
+	}
+
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
 		TraceReporter:          c.reporter,
@@ -91,6 +103,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		UProbeLinks:            c.config.UProbeLinks,
 		LoadProbe:              c.config.LoadProbe,
 		ExecutableReporter:     c.config.ExecutableReporter,
+		ProfileProcessPatterns: profileProcessPatterns,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)

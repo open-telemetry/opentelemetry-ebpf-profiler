@@ -74,6 +74,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, traceReporter reporter.TraceReporter,
 	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
 	filterErrorFrames bool, includeEnvVars libpf.Set[string],
+	profileProcessPatterns []string,
 ) (*ProcessManager, error) {
 	if fileIDMapper == nil {
 		var err error
@@ -121,6 +122,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        filterErrorFrames,
 		includeEnvVars:           includeEnvVars,
+		profileProcessPatterns:   profileProcessPatterns,
 	}
 
 	collectInterpreterMetrics(ctx, pm, monitorInterval)

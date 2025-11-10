@@ -13,11 +13,12 @@ import (
 
 type Config struct {
 	config.Config
-	CollAgentAddr string
-	Copyright     bool
-	DisableTLS    bool
-	PprofAddr     string
-	Version       bool
+	CollAgentAddr    string
+	Copyright        bool
+	DisableTLS       bool
+	PprofAddr        string
+	Version          bool
+	ProfileProcesses string
 
 	ExecutableReporter reporter.ExecutableReporter
 	OnShutdown         func() error

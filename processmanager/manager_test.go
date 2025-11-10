@@ -306,7 +306,9 @@ func TestNewMapping(t *testing.T) {
 				nil,
 				&dummyProvider,
 				true,
-				libpf.Set[string]{})
+				libpf.Set[string]{},
+				[]string{},
+			)
 			require.NoError(t, err)
 
 			// Replace the internal hooks for the tests. These hooks catch the
@@ -491,7 +493,9 @@ func TestProcExit(t *testing.T) {
 				nil,
 				&dummyProvider,
 				true,
-				libpf.Set[string]{})
+				libpf.Set[string]{},
+				[]string{},
+			)
 			require.NoError(t, err)
 			defer cancel()
 
