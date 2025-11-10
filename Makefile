@@ -1,6 +1,6 @@
 .PHONY: all all-common clean ebpf generate test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
-	codespell lint linter-version ebpf-profiler format-ebpf pprof-execs \
+	codespell lint linter-version ebpf-profiler format format-ebpf pprof-execs \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
@@ -86,6 +86,10 @@ GOLANGCI_LINT_VERSION = "v2.1.6"
 lint: generate vanity-import-check pprof-execs
 	$(MAKE) lint -C support/ebpf
 	docker run --rm -t -v $$(pwd):/app -w /app golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) sh -c "golangci-lint version && golangci-lint config verify && golangci-lint run --max-issues-per-linter -1 --max-same-issues -1"
+
+format: format-ebpf
+	gofmt -w -s ./
+	go tool goimports -w ./
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf
