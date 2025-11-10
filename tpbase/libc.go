@@ -74,10 +74,8 @@ type TSDInfo struct {
 //
 // Reading the value is basically "return self->specific_1stblock[key].data;"
 
-var (
-	// regex for the libc
-	libcRegex = regexp.MustCompile(`.*/(ld-musl|libc|libpthread)([-.].*)?\.so`)
-)
+// regex for the libc
+var libcRegex = regexp.MustCompile(`.*/(ld-musl|libc|libpthread)([-.].*)?\.so`)
 
 // IsPotentialTSDDSO determines if the DSO filename potentially contains pthread code
 func IsPotentialTSDDSO(filename string) bool {

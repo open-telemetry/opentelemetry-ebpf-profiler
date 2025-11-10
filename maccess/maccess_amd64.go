@@ -14,7 +14,8 @@ import (
 // CopyFromUserNoFaultIsPatched tries to find a relative jump instruction in codeblob
 // and returns true if this jump based on faultyFuncAddr points to newCheckFuncAddr.
 func CopyFromUserNoFaultIsPatched(codeblob []byte,
-	faultyFuncAddr uint64, newCheckFuncAddr uint64) (bool, error) {
+	faultyFuncAddr uint64, newCheckFuncAddr uint64,
+) (bool, error) {
 	if len(codeblob) == 0 {
 		return false, errors.New("empty code blob")
 	}

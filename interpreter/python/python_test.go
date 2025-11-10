@@ -57,14 +57,16 @@ func TestPythonRegexs(t *testing.T) {
 	shouldMatch := map[*regexp.Regexp][]string{
 		pythonRegex: {
 			"python3.6", "./python3.6", "/foo/bar/python3.6", "./foo/bar/python3.6",
-			"python3.7", "./python3.7", "/foo/bar/python3.7", "./foo/bar/python3.7"},
+			"python3.7", "./python3.7", "/foo/bar/python3.7", "./foo/bar/python3.7",
+		},
 		libpythonRegex: {
 			"libpython3.6", "./libpython3.6", "/foo/bar/libpython3.6",
 			"./foo/bar/libpython3.6", "/foo/bar/libpython3.6.so.1",
 			"/usr/lib64/libpython3.6m.so.1.0",
 			"libpython3.7", "./libpython3.7", "/foo/bar/libpython3.7",
 			"./foo/bar/libpython3.7", "/foo/bar/libpython3.7.so.1",
-			"/foo/bar/libpython3.7m.so.1"},
+			"/foo/bar/libpython3.7m.so.1",
+		},
 	}
 
 	for regex, strings := range shouldMatch {
@@ -77,10 +79,12 @@ func TestPythonRegexs(t *testing.T) {
 	shouldNotMatch := map[*regexp.Regexp][]string{
 		pythonRegex: {
 			"foopython3.6", "pyt hon3.6", "pyth/on3.6", "python",
-			"foopython3.7", "pyt hon3.7", "pyth/on3.7", "python"},
+			"foopython3.7", "pyt hon3.7", "pyth/on3.7", "python",
+		},
 		libpythonRegex: {
 			"foolibpython3.6", "lib python3.6", "lib/python3.6",
-			"foolibpython3.7", "lib python3.7", "lib/python3.7"},
+			"foolibpython3.7", "lib python3.7", "lib/python3.7",
+		},
 	}
 
 	for regex, strings := range shouldNotMatch {

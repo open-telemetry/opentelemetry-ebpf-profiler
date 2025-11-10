@@ -25,19 +25,22 @@ func newTrace() *libpf.Trace {
 		Type:            libpf.NativeFrame,
 		AddressOrLineno: 0,
 		MappingFile: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-			FileID: libpf.NewFileID(0, 0)}),
+			FileID: libpf.NewFileID(0, 0),
+		}),
 	})
 	trace.Frames.Append(&libpf.Frame{
 		Type:            libpf.NativeFrame,
 		AddressOrLineno: 1,
 		MappingFile: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-			FileID: libpf.NewFileID(1, 1)}),
+			FileID: libpf.NewFileID(1, 1),
+		}),
 	})
 	trace.Frames.Append(&libpf.Frame{
 		Type:            libpf.NativeFrame,
 		AddressOrLineno: 2,
 		MappingFile: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-			FileID: libpf.NewFileID(2, 2)}),
+			FileID: libpf.NewFileID(2, 2),
+		}),
 	})
 	return trace
 }
@@ -49,10 +52,12 @@ func TestHashTrace(t *testing.T) {
 	}{
 		"empty trace": {
 			trace:  &libpf.Trace{},
-			result: libpf.NewTraceHash(0x6c62272e07bb0142, 0x62b821756295c58d)},
+			result: libpf.NewTraceHash(0x6c62272e07bb0142, 0x62b821756295c58d),
+		},
 		"python trace": {
 			trace:  newTrace(),
-			result: libpf.NewTraceHash(0x21c6fe4c62868856, 0xcf510596eab68dc8)},
+			result: libpf.NewTraceHash(0x21c6fe4c62868856, 0xcf510596eab68dc8),
+		},
 	}
 
 	for name, testcase := range tests {

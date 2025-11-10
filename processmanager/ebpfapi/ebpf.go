@@ -66,7 +66,8 @@ type EbpfHandler interface {
 }
 
 func InterpreterOffsetKeyValue(ebpfProgIndex uint16, fileID host.FileID,
-	offsetRanges []util.Range) (key uint64, value support.OffsetRange, err error) {
+	offsetRanges []util.Range,
+) (key uint64, value support.OffsetRange, err error) {
 	rLen := len(offsetRanges)
 	if rLen < 1 || rLen > 2 {
 		return 0, support.OffsetRange{}, fmt.Errorf("invalid ranges %v", offsetRanges)

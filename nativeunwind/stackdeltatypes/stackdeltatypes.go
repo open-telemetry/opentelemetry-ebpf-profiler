@@ -37,16 +37,22 @@ type UnwindInfo struct {
 }
 
 // UnwindInfoInvalid is the stack delta info indicating invalid or unsupported PC.
-var UnwindInfoInvalid = UnwindInfo{Opcode: support.UnwindOpcodeCommand,
-	Param: support.UnwindCommandInvalid}
+var UnwindInfoInvalid = UnwindInfo{
+	Opcode: support.UnwindOpcodeCommand,
+	Param:  support.UnwindCommandInvalid,
+}
 
 // UnwindInfoStop is the stack delta info indicating root function of a stack.
-var UnwindInfoStop = UnwindInfo{Opcode: support.UnwindOpcodeCommand,
-	Param: support.UnwindCommandStop}
+var UnwindInfoStop = UnwindInfo{
+	Opcode: support.UnwindOpcodeCommand,
+	Param:  support.UnwindCommandStop,
+}
 
 // UnwindInfoSignal is the stack delta info indicating signal return frame.
-var UnwindInfoSignal = UnwindInfo{Opcode: support.UnwindOpcodeCommand,
-	Param: support.UnwindCommandSignal}
+var UnwindInfoSignal = UnwindInfo{
+	Opcode: support.UnwindOpcodeCommand,
+	Param:  support.UnwindCommandSignal,
+}
 
 // UnwindInfoFramePointer contains the description to unwind a frame pointer frame.
 var UnwindInfoFramePointer = UnwindInfo{

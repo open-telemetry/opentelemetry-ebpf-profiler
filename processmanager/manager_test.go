@@ -101,7 +101,8 @@ type dummyStackDeltaProvider struct{}
 
 // GetIntervalStructuresForFile fills in the expected data structure with semi random data.
 func (d *dummyStackDeltaProvider) GetIntervalStructuresForFile(_ *pfelf.Reference,
-	result *sdtypes.IntervalData) error {
+	result *sdtypes.IntervalData,
+) error {
 	r := rand.New(rand.NewPCG(42, 42)) //nolint:gosec
 	addr := 0x10
 	for i := 0; i < r.IntN(42); i++ {
@@ -181,12 +182,14 @@ func (mockup *ebpfMapsMockup) RemoveReportedPID(libpf.PID) {
 }
 
 func (mockup *ebpfMapsMockup) UpdateInterpreterOffsets(uint16, host.FileID,
-	[]util.Range) error {
+	[]util.Range,
+) error {
 	return nil
 }
 
 func (mockup *ebpfMapsMockup) UpdateProcData(libpf.InterpreterType, libpf.PID,
-	unsafe.Pointer) error {
+	unsafe.Pointer,
+) error {
 	mockup.updateProcCount++
 	return nil
 }
@@ -197,7 +200,8 @@ func (mockup *ebpfMapsMockup) DeleteProcData(libpf.InterpreterType, libpf.PID) e
 }
 
 func (mockup *ebpfMapsMockup) UpdatePidInterpreterMapping(libpf.PID,
-	lpm.Prefix, uint8, host.FileID, uint64) error {
+	lpm.Prefix, uint8, host.FileID, uint64,
+) error {
 	return nil
 }
 
@@ -208,7 +212,8 @@ func (mockup *ebpfMapsMockup) DeletePidInterpreterMapping(libpf.PID, lpm.Prefix)
 func (mockup *ebpfMapsMockup) UpdateUnwindInfo(uint16, sdtypes.UnwindInfo) error { return nil }
 
 func (mockup *ebpfMapsMockup) UpdateExeIDToStackDeltas(fileID host.FileID,
-	deltaArrays []pmebpf.StackDeltaEBPF) (uint16, error) {
+	deltaArrays []pmebpf.StackDeltaEBPF,
+) (uint16, error) {
 	mockup.stackDeltaMemory = append(mockup.stackDeltaMemory, deltaArrays...)
 	// execinfomanager expects a mapID >0. So to fake this behavior, we return
 	// parts of the fileID.
@@ -221,7 +226,8 @@ func (mockup *ebpfMapsMockup) DeleteExeIDToStackDeltas(host.FileID, uint16) erro
 }
 
 func (mockup *ebpfMapsMockup) UpdateStackDeltaPages(host.FileID, []uint16,
-	uint16, uint64) error {
+	uint16, uint64,
+) error {
 	return nil
 }
 
@@ -231,7 +237,8 @@ func (mockup *ebpfMapsMockup) DeleteStackDeltaPage(host.FileID, uint64) error {
 }
 
 func (mockup *ebpfMapsMockup) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Prefix,
-	fileID uint64, bias uint64) error {
+	fileID uint64, bias uint64,
+) error {
 	if prefix.Key == 0 && fileID == 0 && bias == 0 {
 		// If all provided values are 0 the hook was called to create
 		// a dummy entry.
@@ -249,7 +256,8 @@ func (mockup *ebpfMapsMockup) setExpectedBias(expected uint64) {
 }
 
 func (mockup *ebpfMapsMockup) DeletePidPageMappingInfo(_ libpf.PID, prefixes []lpm.Prefix) (int,
-	error) {
+	error,
+) {
 	mockup.deletePidPageMappingCount += uint8(len(prefixes))
 	return len(prefixes), nil
 }
@@ -270,18 +278,24 @@ func TestNewMapping(t *testing.T) {
 		// expected after loading all temporary files with the arguments from newMapping.
 		expectedStackDeltas int
 	}{
-		"regular load": {newMapping: []mappingArgs{
-			{pid: 1, vaddr: 0x10000, bias: 0x0000},
-			{pid: 2, vaddr: 0x40000, bias: 0x2000},
-			{pid: 3, vaddr: 0x60000, bias: 0x3000},
-			{pid: 4, vaddr: 0x40000, bias: 0x4000}},
-			expectedStackDeltas: 36},
-		"duplicate load": {newMapping: []mappingArgs{
-			{pid: 123, vaddr: 0x0F000, bias: 0x1000},
-			{pid: 456, vaddr: 0x50000, bias: 0x4000},
-			{pid: 789, vaddr: 0x40000, bias: 0}},
+		"regular load": {
+			newMapping: []mappingArgs{
+				{pid: 1, vaddr: 0x10000, bias: 0x0000},
+				{pid: 2, vaddr: 0x40000, bias: 0x2000},
+				{pid: 3, vaddr: 0x60000, bias: 0x3000},
+				{pid: 4, vaddr: 0x40000, bias: 0x4000},
+			},
+			expectedStackDeltas: 36,
+		},
+		"duplicate load": {
+			newMapping: []mappingArgs{
+				{pid: 123, vaddr: 0x0F000, bias: 0x1000},
+				{pid: 456, vaddr: 0x50000, bias: 0x4000},
+				{pid: 789, vaddr: 0x40000, bias: 0},
+			},
 			duplicate:           true,
-			expectedStackDeltas: 27},
+			expectedStackDeltas: 27,
+		},
 	}
 
 	for name, testcase := range tests {
@@ -452,22 +466,28 @@ func TestProcExit(t *testing.T) {
 		"unknown process": {pid: 512},
 		// process with single mapping simulates a test case where a process with a single
 		// memory mapping exits and this was the last mapping for the loaded executables.
-		"process with single mapping": {pid: 1,
+		"process with single mapping": {
+			pid:                         1,
 			deletePidPageMappingCount:   8,
 			deleteExeIDToIndicesCount:   1,
-			deleteStackDeltaRangesCount: 1},
+			deleteStackDeltaRangesCount: 1,
+		},
 		// process with multiple mapped mappings simulates a test case where a process with
 		// multiple memory mappings exits but the mappings are still referenced else where.
-		"process with multiple mapped mappings": {pid: 2,
+		"process with multiple mapped mappings": {
+			pid:                         2,
 			deletePidPageMappingCount:   3,
 			deleteExeIDToIndicesCount:   0,
-			deleteStackDeltaRangesCount: 0},
+			deleteStackDeltaRangesCount: 0,
+		},
 		// process with multiple one-time mappings simulates a test case where a process with
 		// multiple one-time memory mappings exits and these mappings need to be removed.
-		"process with multiple one-time mappings": {pid: 3,
+		"process with multiple one-time mappings": {
+			pid:                         3,
 			deletePidPageMappingCount:   6,
 			deleteExeIDToIndicesCount:   2,
-			deleteStackDeltaRangesCount: 2},
+			deleteStackDeltaRangesCount: 2,
+		},
 	}
 
 	for name, testcase := range tests {

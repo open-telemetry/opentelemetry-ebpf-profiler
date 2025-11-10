@@ -41,8 +41,10 @@ func ParseDebugLink(data []byte) (linkName string, crc32 int32, err error) {
 	return linkName, int32(linkCRC32), nil
 }
 
-var ErrNoBuildID = errors.New("no build ID")
-var ubuntuKernelSignature = regexp.MustCompile(` \(Ubuntu[^)]*\)\n$`)
+var (
+	ErrNoBuildID          = errors.New("no build ID")
+	ubuntuKernelSignature = regexp.MustCompile(` \(Ubuntu[^)]*\)\n$`)
+)
 
 // getGoBuildIDFromNotes returns the Go build ID from an ELF notes section data.
 func getGoBuildIDFromNotes(notes []byte) (string, error) {
@@ -88,7 +90,8 @@ func getBuildIDFromNotes(notes []byte) (string, error) {
 // getNoteDescBytes returns the bytes contents of an ELF note from a note section, as described
 // in the ELF standard in Figure 2-3.
 func getNoteDescBytes(sectionBytes []byte, name string, noteType uint32) (
-	noteBytes []byte, found bool, err error) {
+	noteBytes []byte, found bool, err error,
+) {
 	// The data stored inside ELF notes is made of one or multiple structs, containing the
 	// following fields:
 	// 	- namesz	// 32-bit, size of "name"
@@ -133,7 +136,8 @@ func getNoteDescBytes(sectionBytes []byte, name string, noteType uint32) (
 // getNoteHexString returns the hex string contents of an ELF note from a note section, as described
 // in the ELF standard in Figure 2-3.
 func getNoteHexString(sectionBytes []byte, name string, noteType uint32) (
-	noteHexString string, found bool, err error) {
+	noteHexString string, found bool, err error,
+) {
 	noteBytes, found, err := getNoteDescBytes(sectionBytes, name, noteType)
 	if err != nil {
 		return "", false, err
@@ -145,7 +149,8 @@ func getNoteHexString(sectionBytes []byte, name string, noteType uint32) (
 }
 
 func getNoteString(sectionBytes []byte, name string, noteType uint32) (
-	noteString string, found bool, err error) {
+	noteString string, found bool, err error,
+) {
 	noteBytes, found, err := getNoteDescBytes(sectionBytes, name, noteType)
 	if err != nil {
 		return "", false, err

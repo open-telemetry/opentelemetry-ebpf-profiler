@@ -32,7 +32,8 @@ func NewStackDeltaProvider() nativeunwind.StackDeltaProvider {
 
 // GetIntervalStructuresForFile builds the stack delta information for a single executable.
 func (provider *ELFStackDeltaProvider) GetIntervalStructuresForFile(elfRef *pfelf.Reference,
-	interval *sdtypes.IntervalData) error {
+	interval *sdtypes.IntervalData,
+) error {
 	err := ExtractELF(elfRef, interval)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {

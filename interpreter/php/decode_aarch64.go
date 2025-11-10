@@ -60,7 +60,8 @@ func retrieveZendVMKindARM(code []byte) (uint, error) {
 // code is ultimately called from execute_ex, this is the same as returning the return address
 // for all JIT code.
 func retrieveExecuteExJumpLabelAddressARM(
-	code []byte, addrBase libpf.SymbolValue) (libpf.SymbolValue, error) {
+	code []byte, addrBase libpf.SymbolValue,
+) (libpf.SymbolValue, error) {
 	// Here we're looking for the first unrestricted jump in the execute_ex function
 	// The reasons for this are given in the php8 unwinding document, but essentially we
 	// heuristically found out that the php JIT code gets jumped into using GCC's "labels as
@@ -100,7 +101,8 @@ func retrieveExecuteExJumpLabelAddressARM(
 // retrieveJITBufferPtrARM reads the code blob and returns a pointer to the JIT buffer used by
 // PHP (called "dasm_buf" in the PHP source).
 func retrieveJITBufferPtrARM(code []byte, addrBase libpf.SymbolValue) (
-	dasmBuf libpf.SymbolValue, dasmSize libpf.SymbolValue, err error) {
+	dasmBuf libpf.SymbolValue, dasmSize libpf.SymbolValue, err error,
+) {
 	// The code for recovering the JIT buffer is a little bit more involved on ARM than on x86.
 	//
 	// The idea is still the same: we're looking for a ldr into x0 in preparation for a function

@@ -56,5 +56,7 @@ func (h TraceHash) Hash32() uint32 {
 }
 
 // Compile-time interface checks
-var _ encoding.TextUnmarshaler = (*TraceHash)(nil)
-var _ encoding.TextMarshaler = (*TraceHash)(nil)
+var (
+	_ encoding.TextUnmarshaler = (*TraceHash)(nil)
+	_ encoding.TextMarshaler   = (*TraceHash)(nil)
+)

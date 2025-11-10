@@ -90,6 +90,7 @@ lint: generate vanity-import-check pprof-execs
 format: format-ebpf
 	gofmt -w -s ./
 	go tool goimports -w ./
+	go tool gofumpt -w ./
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf

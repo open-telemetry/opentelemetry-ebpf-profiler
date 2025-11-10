@@ -48,9 +48,9 @@ func CopyFromUserNoFaultIsPatched(codeblob []byte, _, _ uint64) (bool, error) {
 	// [2] https://github.com/torvalds/linux/blob/1c41041124bd14dd6610da256a3da4e5b74ce6b1/include/asm-generic/access_ok.h#L40
 
 	// In the set of expected assembly instructions, one argument register is used by all instructions.
-	var trackedReg = -1
+	trackedReg := -1
 	// Statemachine to keep track of the previously encountered and expected instructions.
-	var expectedInstructionTracker = stepNone
+	expectedInstructionTracker := stepNone
 
 	for offs := 0; offs < len(codeblob); offs += 4 {
 		inst, err := aa.Decode(codeblob[offs:])

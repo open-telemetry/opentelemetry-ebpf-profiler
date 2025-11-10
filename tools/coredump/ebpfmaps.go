@@ -44,7 +44,8 @@ func (emc *ebpfMapsCoredump) CollectMetrics() []metrics.Metric {
 }
 
 func (emc *ebpfMapsCoredump) UpdateInterpreterOffsets(ebpfProgIndex uint16,
-	fileID host.FileID, offsetRanges []util.Range) error {
+	fileID host.FileID, offsetRanges []util.Range,
+) error {
 	key, value, err := pmebpf.InterpreterOffsetKeyValue(ebpfProgIndex, fileID, offsetRanges)
 	if err != nil {
 		return err
@@ -54,7 +55,8 @@ func (emc *ebpfMapsCoredump) UpdateInterpreterOffsets(ebpfProgIndex uint16,
 }
 
 func (emc *ebpfMapsCoredump) UpdateProcData(t libpf.InterpreterType, pid libpf.PID,
-	ptr unsafe.Pointer) error {
+	ptr unsafe.Pointer,
+) error {
 	switch t {
 	case libpf.Dotnet:
 		emc.ctx.addMap(unsafe.Pointer(&C.dotnet_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_DotnetProcInfo))
@@ -95,7 +97,8 @@ func (emc *ebpfMapsCoredump) DeleteProcData(t libpf.InterpreterType, pid libpf.P
 }
 
 func (emc *ebpfMapsCoredump) UpdatePidInterpreterMapping(pid libpf.PID,
-	prefix lpm.Prefix, interpreterProgram uint8, fileID host.FileID, bias uint64) error {
+	prefix lpm.Prefix, interpreterProgram uint8, fileID host.FileID, bias uint64,
+) error {
 	ctx := emc.ctx
 	// pid_page_to_mapping_info is a LPM trie and expects the pid and page
 	// to be in big endian format.
@@ -124,7 +127,8 @@ func (emc *ebpfMapsCoredump) UpdatePidInterpreterMapping(pid libpf.PID,
 }
 
 func (emc *ebpfMapsCoredump) DeletePidInterpreterMapping(pid libpf.PID,
-	prefix lpm.Prefix) error {
+	prefix lpm.Prefix,
+) error {
 	ctx := emc.ctx
 	// pid_page_to_mapping_info is a LPM trie and expects the pid and page
 	// to be in big endian format.
@@ -166,7 +170,8 @@ func (emc *ebpfMapsCoredump) UpdateUnwindInfo(index uint16, info sdtypes.UnwindI
 
 // Stack delta management
 func (emc *ebpfMapsCoredump) UpdateExeIDToStackDeltas(fileID host.FileID,
-	deltaArrays []pmebpf.StackDeltaEBPF) (uint16, error) {
+	deltaArrays []pmebpf.StackDeltaEBPF,
+) (uint16, error) {
 	entSize := C.sizeof_StackDelta
 	deltas := C.malloc(C.size_t(len(deltaArrays) * entSize))
 	for index, delta := range deltaArrays {
@@ -184,7 +189,8 @@ func (emc *ebpfMapsCoredump) UpdateExeIDToStackDeltas(fileID host.FileID,
 }
 
 func (emc *ebpfMapsCoredump) DeleteExeIDToStackDeltas(fileID host.FileID,
-	_ uint16) error {
+	_ uint16,
+) error {
 	ctx := emc.ctx
 	key := C.u64(fileID)
 	if value, ok := ctx.exeIDToStackDeltaMaps[key]; ok {
@@ -231,13 +237,15 @@ func (emc *ebpfMapsCoredump) DeleteStackDeltaPage(fileID host.FileID, page uint6
 }
 
 func (emc *ebpfMapsCoredump) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Prefix,
-	fileID, bias uint64) error {
+	fileID, bias uint64,
+) error {
 	return emc.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindNative,
 		host.FileID(fileID), bias)
 }
 
 func (emc *ebpfMapsCoredump) DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm.Prefix) (int,
-	error) {
+	error,
+) {
 	var deleted int
 	for _, prefix := range prefixes {
 		if err := emc.DeletePidInterpreterMapping(pid, prefix); err != nil {
