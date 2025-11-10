@@ -73,13 +73,11 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	defer b.traceEvents.WUnlock(&eventsTree)
 
 	if _, exists := (*eventsTree)[samples.ContainerID(containerID)]; !exists {
-		(*eventsTree)[samples.ContainerID(containerID)] =
-			make(map[libpf.Origin]samples.KeyToEventMapping)
+		(*eventsTree)[samples.ContainerID(containerID)] = make(map[libpf.Origin]samples.KeyToEventMapping)
 	}
 
 	if _, exists := (*eventsTree)[samples.ContainerID(containerID)][meta.Origin]; !exists {
-		(*eventsTree)[samples.ContainerID(containerID)][meta.Origin] =
-			make(samples.KeyToEventMapping)
+		(*eventsTree)[samples.ContainerID(containerID)][meta.Origin] = make(samples.KeyToEventMapping)
 	}
 
 	if events, exists := (*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key]; exists {

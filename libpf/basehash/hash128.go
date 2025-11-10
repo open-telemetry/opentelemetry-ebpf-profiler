@@ -238,8 +238,12 @@ func (h Hash128) PutBytes16(b *[16]byte) {
 // Compile-time interface checks
 var _ fmt.Formatter = (*Hash128)(nil)
 
-var _ encoding.TextUnmarshaler = (*Hash128)(nil)
-var _ encoding.TextMarshaler = (*Hash128)(nil)
+var (
+	_ encoding.TextUnmarshaler = (*Hash128)(nil)
+	_ encoding.TextMarshaler   = (*Hash128)(nil)
+)
 
-var _ json.Marshaler = (*Hash128)(nil)
-var _ json.Unmarshaler = (*Hash128)(nil)
+var (
+	_ json.Marshaler   = (*Hash128)(nil)
+	_ json.Unmarshaler = (*Hash128)(nil)
+)

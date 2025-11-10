@@ -35,7 +35,8 @@ func retrieveZendVMKindX86(code []byte) (uint, error) {
 // code is ultimately called from execute_ex, this is the same as returning the return address
 // for all JIT code.
 func retrieveExecuteExJumpLabelAddressX86(code []byte, addrBase libpf.SymbolValue) (
-	libpf.SymbolValue, error) {
+	libpf.SymbolValue, error,
+) {
 	it := amd.NewInterpreterWithCode(code)
 	it.CodeAddress = e.Imm(uint64(addrBase))
 	_, err := it.LoopWithBreak(func(op x86asm.Inst) bool {
@@ -55,7 +56,8 @@ func retrieveExecuteExJumpLabelAddressX86(code []byte, addrBase libpf.SymbolValu
 // retrieveJITBufferPtrx86 reads the code blob and returns a pointer
 // to the JIT buffer used by PHP (called "dasm_buf" in the PHP source).
 func retrieveJITBufferPtrx86(code []byte, addrBase libpf.SymbolValue) (
-	dasmBuf libpf.SymbolValue, dasmSize libpf.SymbolValue, err error) {
+	dasmBuf libpf.SymbolValue, dasmSize libpf.SymbolValue, err error,
+) {
 	it := amd.NewInterpreterWithCode(code)
 	it.CodeAddress = e.Imm(uint64(addrBase))
 	_, err = it.LoopWithBreak(func(op x86asm.Inst) bool {

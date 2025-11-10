@@ -70,7 +70,8 @@ type hotspotJITInfo struct {
 // Symbolize parses JIT method inlining data and fills in symbolization information
 // for each inlined method for given RIP.
 func (ji *hotspotJITInfo) symbolize(ripDelta int32, ii *hotspotInstance,
-	frames *libpf.Frames) error {
+	frames *libpf.Frames,
+) error {
 	//nolint:lll
 	// Unfortunately the data structures read here are not well documented in the JVM
 	// source, but for reference implementation you can look:

@@ -14,7 +14,8 @@ import (
 
 // getS3ObjectList gets all matching objects in an S3 bucket.
 func getS3ObjectList(client *s3.Client, bucket, prefix string,
-	itemLimit int) ([]s3types.Object, error) {
+	itemLimit int,
+) ([]s3types.Object, error) {
 	var objects []s3types.Object
 	var contToken *string
 	var batchSize int32 = s3ResultsPerPage
@@ -26,7 +27,6 @@ func getS3ObjectList(client *s3.Client, bucket, prefix string,
 			MaxKeys:           &batchSize,
 			ContinuationToken: contToken,
 		})
-
 		if err != nil {
 			return nil, fmt.Errorf("s3 request failed: %w", err)
 		}

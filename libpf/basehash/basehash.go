@@ -24,8 +24,10 @@ import (
 // Hopefully, when the rest of the code is ready, upgrading the types here to
 // a struct that contains two uint64s should be easy.
 
-const lowerHex = "0123456789abcdef"
-const upperHex = "0123456789ABCDEF"
+const (
+	lowerHex = "0123456789abcdef"
+	upperHex = "0123456789ABCDEF"
+)
 
 func putUint64AsHex(n uint64, b []byte, mapping string) {
 	b[0] = mapping[(n>>60)&0x0F]

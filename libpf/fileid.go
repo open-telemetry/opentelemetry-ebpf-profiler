@@ -108,8 +108,10 @@ func (f FileID) Swapped() FileID {
 }
 
 // Compile-time interface checks
-var _ encoding.TextUnmarshaler = (*FileID)(nil)
-var _ encoding.TextMarshaler = (*FileID)(nil)
+var (
+	_ encoding.TextUnmarshaler = (*FileID)(nil)
+	_ encoding.TextMarshaler   = (*FileID)(nil)
+)
 
 // FileIDFromExecutableReader hashes portions of the contents of the reader in order to
 // generate a system-independent identifier. The file is expected to be an executable

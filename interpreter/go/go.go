@@ -41,7 +41,8 @@ type goInstance struct {
 }
 
 func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
-	interpreter.Data, error) {
+	interpreter.Data, error,
+) {
 	ef, err := info.GetELF()
 	if err != nil {
 		return nil, err
@@ -75,7 +76,8 @@ func (g *goData) String() string {
 }
 
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
-	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
+	_ libpf.Address, _ remotememory.RemoteMemory,
+) (interpreter.Instance, error) {
 	g.refs.Add(1)
 	return &goInstance{d: g}, nil
 }
@@ -116,7 +118,7 @@ func (g *goInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 
 	frames.Append(&libpf.Frame{
 		Type: libpf.GoFrame,
-		//TODO: File: convert the frame.File (host.FileID) to libpf.FileID here
+		// TODO: File: convert the frame.File (host.FileID) to libpf.FileID here
 		AddressOrLineno: frame.Lineno,
 		FunctionName:    libpf.Intern(fn),
 		SourceFile:      libpf.Intern(sourceFile),

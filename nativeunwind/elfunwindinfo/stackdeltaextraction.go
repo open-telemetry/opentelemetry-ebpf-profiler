@@ -216,7 +216,8 @@ func compareStackDelta(a, b sdtypes.StackDelta) int {
 // extractFile extracts the elfFile stack deltas and uses the optional elfRef to resolve
 // debug link references if needed.
 func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference,
-	interval *sdtypes.IntervalData) (err error) {
+	interval *sdtypes.IntervalData,
+) (err error) {
 	// Parse the stack deltas from the ELF
 	filter := extractionFilter{}
 	deltas := sdtypes.StackDeltaArray{}

@@ -15,9 +15,7 @@ var (
 	argClear  bool
 )
 
-var (
-	pinPath = "/sys/fs/bpf/probe-ctrl/"
-)
+var pinPath = "/sys/fs/bpf/probe-ctrl/"
 
 func init() {
 	flag.StringVar(&argExec, "exec", "", "Executable to which the probe should be attached.")
@@ -65,7 +63,7 @@ func run() int {
 		return -1
 	}
 
-	if err := os.MkdirAll(pinPath, 0700); err != nil {
+	if err := os.MkdirAll(pinPath, 0o700); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		return -1
 	}

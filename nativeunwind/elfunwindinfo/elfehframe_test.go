@@ -77,7 +77,8 @@ func TestEhFrame(t *testing.T) {
 		// .eh_frame_hdr. The current ELF is imported from Alpine Linux
 		// openssl-1.1.1g-r0 package's libcrypto.so.1.1:
 		//   objcopy -j .eh_frame -j .eh_frame_hdr /lib/libcrypto.so.1.1 test.so
-		"libcrypto": {elfFile: "testdata/test.so",
+		"libcrypto": {
+			elfFile: "testdata/test.so",
 			res: map[uintptr]sdtypes.UnwindInfo{
 				0x07631f: deltaRSP(8, 0),
 				0x07a0d4: deltaRSP(160, 24),
@@ -86,11 +87,13 @@ func TestEhFrame(t *testing.T) {
 				0x0a89d9: deltaRBP(16, 16),
 				0x0b2ad4: deltaRBP(8, 24),
 				0x1c561f: deltaRSP(2160, 48),
-			}},
+			},
+		},
 		// schrodinger-libpython3.8.so.1.0 is a stripped version containing only .eh_frame and
 		// .eh_frame_hdr from /exports/schrodinger/internal/lib/libpython3.8.so.1.0 - see PF-1538.
 		//   objcopy -j .eh_frame -j .eh_frame_hdr /lib/libcrypto.so.1.1 test.so
-		"schrodinger-libpython": {elfFile: "testdata/schrodinger-libpython3.8.so.1.0",
+		"schrodinger-libpython": {
+			elfFile: "testdata/schrodinger-libpython3.8.so.1.0",
 			res: map[uintptr]sdtypes.UnwindInfo{
 				0x6f805:  deltaRSP(80, 48),
 				0x7077c:  deltaRSP(24, 0),
@@ -101,7 +104,8 @@ func TestEhFrame(t *testing.T) {
 				0xf01cf:  deltaRSP(24, 24),
 				0x1a87b2: deltaRSP(40, 40),
 				0x23f555: deltaRSP(56, 48),
-			}},
+			},
+		},
 	}
 
 	for name, test := range tests {
@@ -138,7 +142,8 @@ func TestParseCIE(t *testing.T) {
 				codeAlign: uleb128(4),
 				regRA:     uleb128(8),
 			},
-			data: []byte{36, 0, 0, 0, // length
+			data: []byte{
+				36, 0, 0, 0, // length
 				255, 255, 255, 255, // CIE_id
 				4,        // version
 				0,        // augmentation

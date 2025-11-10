@@ -130,7 +130,8 @@ func TestHash128Format(t *testing.T) {
 		0x00, 0x11, 0x22, 0x33,
 		0x44, 0x55, 0x66, 0x77,
 		0x88, 0x99, 0xAA, 0xBB,
-		0xCC, 0xDD, 0xEE, 0xFF})
+		0xCC, 0xDD, 0xEE, 0xFF,
+	})
 
 	tests := map[string]struct {
 		formatter string
@@ -164,12 +165,18 @@ func TestNew128FromString(t *testing.T) {
 		expected             Hash128
 		err                  error
 	}{
-		"hex": {stringRepresentation: "97b7371e9fc83bc7b9ab5ee193a98020",
-			expected: Hash128{hi: 10932267225134414791, lo: 13378891440972202016}},
-		"hex with prefix": {stringRepresentation: "0x97b7371e9fc83bc7b9ab5ee193a98020",
-			expected: Hash128{hi: 10932267225134414791, lo: 13378891440972202016}},
-		"uuid": {stringRepresentation: "97b7371e-9fc8-3bc7-b9ab-5ee193a98020",
-			expected: Hash128{hi: 10932267225134414791, lo: 13378891440972202016}},
+		"hex": {
+			stringRepresentation: "97b7371e9fc83bc7b9ab5ee193a98020",
+			expected:             Hash128{hi: 10932267225134414791, lo: 13378891440972202016},
+		},
+		"hex with prefix": {
+			stringRepresentation: "0x97b7371e9fc83bc7b9ab5ee193a98020",
+			expected:             Hash128{hi: 10932267225134414791, lo: 13378891440972202016},
+		},
+		"uuid": {
+			stringRepresentation: "97b7371e-9fc8-3bc7-b9ab-5ee193a98020",
+			expected:             Hash128{hi: 10932267225134414791, lo: 13378891440972202016},
+		},
 	}
 
 	for name, tc := range tests {

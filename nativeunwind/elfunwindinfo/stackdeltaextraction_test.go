@@ -127,8 +127,10 @@ AAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAMAAAAAAAAAAAAAAAAAAAAAAAAARBAA
 AAAAAAD0AAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAA==`
 
 var firstDeltas = sdtypes.StackDeltaArray{
-	{Address: 0x850, Hints: sdtypes.UnwindHintKeep,
-		Info: deltaRSP(16, 0)},
+	{
+		Address: 0x850, Hints: sdtypes.UnwindHintKeep,
+		Info: deltaRSP(16, 0),
+	},
 	{Address: 0x856, Info: deltaRSP(24, 0)},
 	{Address: 0x860, Hints: sdtypes.UnwindHintKeep, Info: deltaRSP(8, 0)},
 	{Address: 0x8d1, Info: deltaRSP(16, 16)},

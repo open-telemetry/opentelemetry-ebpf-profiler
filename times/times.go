@@ -31,11 +31,9 @@ const (
 // Compile time check for interface adherence
 var _ IntervalsAndTimers = (*Times)(nil)
 
-var (
-	// Monotonic-to-unixtime delta that can be added to a monotonic (CLOCK_MONOTONIC)
-	// timestamp to convert it to time-since-epoch.
-	bootTimeUnixNano atomic.Int64
-)
+// Monotonic-to-unixtime delta that can be added to a monotonic (CLOCK_MONOTONIC)
+// timestamp to convert it to time-since-epoch.
+var bootTimeUnixNano atomic.Int64
 
 // Times hold all the intervals and timeouts that are used across the host agent in a central place
 // and comes with Getters to read them.

@@ -92,221 +92,225 @@ const (
 	TraceOriginUProbe   = 0x3
 )
 
-type ApmSpanID [8]byte
-type ApmTraceID [16]byte
-type CustomLabel struct {
-	Key [16]uint8
-	Val [48]uint8
-}
-type CustomLabelsArray struct {
-	Len    uint32
-	Labels [10]CustomLabel
-}
-type Event struct {
-	Type uint32
-}
-type Frame struct {
-	File_id        uint64
-	Addr_or_line   uint64
-	Kind           uint8
-	Return_address uint8
-	Pad            [6]uint8
-}
-type OffsetRange struct {
-	Lower_offset1 uint64
-	Upper_offset1 uint64
-	Lower_offset2 uint64
-	Upper_offset2 uint64
-	Program_index uint16
-	Pad_cgo_0     [6]byte
-}
-type PIDPage struct {
-	PrefixLen uint32
-	Pid       uint32
-	Page      uint64
-}
-type PIDPageMappingInfo struct {
-	File_id                 uint64
-	Bias_and_unwind_program uint64
-}
-type StackDelta struct {
-	AddrLow    uint16
-	UnwindInfo uint16
-}
-type StackDeltaPageInfo struct {
-	FirstDelta uint32
-	NumDeltas  uint16
-	MapID      uint16
-}
-type StackDeltaPageKey struct {
-	FileID uint64
-	Page   uint64
-}
-type SystemAnalysis struct {
-	Address   uint64
-	Pid       uint32
-	Code      [128]uint8
-	Pad_cgo_0 [4]byte
-}
-type TSDInfo struct {
-	Offset     int16
-	Multiplier uint8
-	Indirect   uint8
-}
-type Trace struct {
-	Pid                uint32
-	Tid                uint32
-	Ktime              uint64
-	Comm               [16]uint8
-	Apm_transaction_id [8]byte
-	Apm_trace_id       [16]byte
-	Custom_labels      CustomLabelsArray
-	Kernel_stack_id    int32
-	Stack_len          uint32
-	Origin             uint32
-	Offtime            uint64
-	Frames             [128]Frame
-}
-type UnwindInfo struct {
-	Opcode      uint8
-	FpOpcode    uint8
-	MergeOpcode uint8
-	Param       int32
-	FpParam     int32
-}
+type (
+	ApmSpanID   [8]byte
+	ApmTraceID  [16]byte
+	CustomLabel struct {
+		Key [16]uint8
+		Val [48]uint8
+	}
+	CustomLabelsArray struct {
+		Len    uint32
+		Labels [10]CustomLabel
+	}
+	Event struct {
+		Type uint32
+	}
+	Frame struct {
+		File_id        uint64
+		Addr_or_line   uint64
+		Kind           uint8
+		Return_address uint8
+		Pad            [6]uint8
+	}
+	OffsetRange struct {
+		Lower_offset1 uint64
+		Upper_offset1 uint64
+		Lower_offset2 uint64
+		Upper_offset2 uint64
+		Program_index uint16
+		Pad_cgo_0     [6]byte
+	}
+	PIDPage struct {
+		PrefixLen uint32
+		Pid       uint32
+		Page      uint64
+	}
+	PIDPageMappingInfo struct {
+		File_id                 uint64
+		Bias_and_unwind_program uint64
+	}
+	StackDelta struct {
+		AddrLow    uint16
+		UnwindInfo uint16
+	}
+	StackDeltaPageInfo struct {
+		FirstDelta uint32
+		NumDeltas  uint16
+		MapID      uint16
+	}
+	StackDeltaPageKey struct {
+		FileID uint64
+		Page   uint64
+	}
+	SystemAnalysis struct {
+		Address   uint64
+		Pid       uint32
+		Code      [128]uint8
+		Pad_cgo_0 [4]byte
+	}
+	TSDInfo struct {
+		Offset     int16
+		Multiplier uint8
+		Indirect   uint8
+	}
+	Trace struct {
+		Pid                uint32
+		Tid                uint32
+		Ktime              uint64
+		Comm               [16]uint8
+		Apm_transaction_id [8]byte
+		Apm_trace_id       [16]byte
+		Custom_labels      CustomLabelsArray
+		Kernel_stack_id    int32
+		Stack_len          uint32
+		Origin             uint32
+		Offtime            uint64
+		Frames             [128]Frame
+	}
+	UnwindInfo struct {
+		Opcode      uint8
+		FpOpcode    uint8
+		MergeOpcode uint8
+		Param       int32
+		FpParam     int32
+	}
+)
 
-type ApmIntProcInfo struct {
-	Offset uint64
-}
-type DotnetProcInfo struct {
-	Version uint32
-}
-type GoLabelsOffsets struct {
-	M_offset               uint32
-	Curg                   uint32
-	Labels                 uint32
-	Hmap_count             uint32
-	Hmap_log2_bucket_count uint32
-	Hmap_buckets           uint32
-	Tls_offset             int32
-}
-type HotspotProcInfo struct {
-	Codecache_start        uint64
-	Codecache_end          uint64
-	Nmethod_deopt_offset   uint16
-	Nmethod_compileid      uint16
-	Nmethod_orig_pc_offset uint16
-	Codeblob_name          uint8
-	Codeblob_codestart     uint8
-	Codeblob_codeend       uint8
-	Codeblob_framecomplete uint8
-	Codeblob_framesize     uint8
-	Heapblock_size         uint8
-	Method_constmethod     uint8
-	Cmethod_size           uint8
-	Jvm_version            uint8
-	New_bcp_slot           uint8
-	Segment_shift          uint8
-	Nmethod_uses_offsets   uint8
-	Pad_cgo_0              [6]byte
-}
-type PHPProcInfo struct {
-	Current_execute_data                uint64
-	Jit_return_address                  uint64
-	Zend_execute_data_function          uint8
-	Zend_execute_data_opline            uint8
-	Zend_execute_data_prev_execute_data uint8
-	Zend_execute_data_this_type_info    uint8
-	Zend_function_type                  uint8
-	Zend_op_lineno                      uint8
-	Pad_cgo_0                           [2]byte
-}
-type PerlProcInfo struct {
-	StateAddr                uint64
-	Version                  uint32
-	TsdInfo                  TSDInfo
-	Interpreter_curcop       uint16
-	Interpreter_curstackinfo uint16
-	StateInTSD               uint8
-	Si_cxstack               uint8
-	Si_next                  uint8
-	Si_cxix                  uint8
-	Si_type                  uint8
-	Context_type             uint8
-	Context_blk_oldcop       uint8
-	Context_blk_sub_retop    uint8
-	Context_blk_sub_cv       uint8
-	Context_sizeof           uint8
-	Sv_flags                 uint8
-	Sv_any                   uint8
-	Svu_gp                   uint8
-	Xcv_flags                uint8
-	Xcv_gv                   uint8
-	Gp_egv                   uint8
-	Pad_cgo_0                [4]byte
-}
-type PyProcInfo struct {
-	AutoTLSKeyAddr                 uint64
-	NoneStructAddr                 uint64
-	Version                        uint16
-	TsdInfo                        TSDInfo
-	PyThreadState_frame            uint8
-	PyCFrame_current_frame         uint8
-	PyFrameObject_f_back           uint8
-	PyFrameObject_f_code           uint8
-	PyFrameObject_f_lasti          uint8
-	PyFrameObject_entry_member     uint8
-	PyFrameObject_entry_val        uint8
-	PyCodeObject_co_argcount       uint8
-	PyCodeObject_co_kwonlyargcount uint8
-	PyCodeObject_co_flags          uint8
-	PyCodeObject_co_firstlineno    uint8
-	PyCodeObject_sizeof            uint8
-	Lasti_is_codeunit              uint8
-	Frame_is_cframe                uint8
-	Pad_cgo_0                      [4]byte
-}
-type RubyProcInfo struct {
-	Version                      uint32
-	Current_ec_tpbase_tls_offset uint64
-	Current_ctx_ptr              uint64
-	Vm_stack                     uint8
-	Vm_stack_size                uint8
-	Cfp                          uint8
-	Pc                           uint8
-	Iseq                         uint8
-	Ep                           uint8
-	Size_of_control_frame_struct uint8
-	Body                         uint8
-	Iseq_type                    uint8
-	Iseq_encoded                 uint8
-	Iseq_size                    uint8
-	Size_of_value                uint8
-	Running_ec                   uint16
-	Pad_cgo_0                    [2]byte
-}
-type V8ProcInfo struct {
-	Version                      uint32
-	Type_JSFunction_first        uint16
-	Type_JSFunction_last         uint16
-	Type_Code                    uint16
-	Type_SharedFunctionInfo      uint16
-	Off_HeapObject_map           uint8
-	Off_Map_instancetype         uint8
-	Off_JSFunction_code          uint8
-	Off_JSFunction_shared        uint8
-	Code_instructions_is_pointer uint8
-	Off_Code_instruction_start   uint8
-	Off_Code_instruction_size    uint8
-	Off_Code_flags               uint8
-	Fp_marker                    uint8
-	Fp_function                  uint8
-	Fp_bytecode_offset           uint8
-	Codekind_shift               uint8
-	Codekind_mask                uint8
-	Codekind_baseline            uint8
-	Pad_cgo_0                    [2]byte
-}
+type (
+	ApmIntProcInfo struct {
+		Offset uint64
+	}
+	DotnetProcInfo struct {
+		Version uint32
+	}
+	GoLabelsOffsets struct {
+		M_offset               uint32
+		Curg                   uint32
+		Labels                 uint32
+		Hmap_count             uint32
+		Hmap_log2_bucket_count uint32
+		Hmap_buckets           uint32
+		Tls_offset             int32
+	}
+	HotspotProcInfo struct {
+		Codecache_start        uint64
+		Codecache_end          uint64
+		Nmethod_deopt_offset   uint16
+		Nmethod_compileid      uint16
+		Nmethod_orig_pc_offset uint16
+		Codeblob_name          uint8
+		Codeblob_codestart     uint8
+		Codeblob_codeend       uint8
+		Codeblob_framecomplete uint8
+		Codeblob_framesize     uint8
+		Heapblock_size         uint8
+		Method_constmethod     uint8
+		Cmethod_size           uint8
+		Jvm_version            uint8
+		New_bcp_slot           uint8
+		Segment_shift          uint8
+		Nmethod_uses_offsets   uint8
+		Pad_cgo_0              [6]byte
+	}
+	PHPProcInfo struct {
+		Current_execute_data                uint64
+		Jit_return_address                  uint64
+		Zend_execute_data_function          uint8
+		Zend_execute_data_opline            uint8
+		Zend_execute_data_prev_execute_data uint8
+		Zend_execute_data_this_type_info    uint8
+		Zend_function_type                  uint8
+		Zend_op_lineno                      uint8
+		Pad_cgo_0                           [2]byte
+	}
+	PerlProcInfo struct {
+		StateAddr                uint64
+		Version                  uint32
+		TsdInfo                  TSDInfo
+		Interpreter_curcop       uint16
+		Interpreter_curstackinfo uint16
+		StateInTSD               uint8
+		Si_cxstack               uint8
+		Si_next                  uint8
+		Si_cxix                  uint8
+		Si_type                  uint8
+		Context_type             uint8
+		Context_blk_oldcop       uint8
+		Context_blk_sub_retop    uint8
+		Context_blk_sub_cv       uint8
+		Context_sizeof           uint8
+		Sv_flags                 uint8
+		Sv_any                   uint8
+		Svu_gp                   uint8
+		Xcv_flags                uint8
+		Xcv_gv                   uint8
+		Gp_egv                   uint8
+		Pad_cgo_0                [4]byte
+	}
+	PyProcInfo struct {
+		AutoTLSKeyAddr                 uint64
+		NoneStructAddr                 uint64
+		Version                        uint16
+		TsdInfo                        TSDInfo
+		PyThreadState_frame            uint8
+		PyCFrame_current_frame         uint8
+		PyFrameObject_f_back           uint8
+		PyFrameObject_f_code           uint8
+		PyFrameObject_f_lasti          uint8
+		PyFrameObject_entry_member     uint8
+		PyFrameObject_entry_val        uint8
+		PyCodeObject_co_argcount       uint8
+		PyCodeObject_co_kwonlyargcount uint8
+		PyCodeObject_co_flags          uint8
+		PyCodeObject_co_firstlineno    uint8
+		PyCodeObject_sizeof            uint8
+		Lasti_is_codeunit              uint8
+		Frame_is_cframe                uint8
+		Pad_cgo_0                      [4]byte
+	}
+	RubyProcInfo struct {
+		Version                      uint32
+		Current_ec_tpbase_tls_offset uint64
+		Current_ctx_ptr              uint64
+		Vm_stack                     uint8
+		Vm_stack_size                uint8
+		Cfp                          uint8
+		Pc                           uint8
+		Iseq                         uint8
+		Ep                           uint8
+		Size_of_control_frame_struct uint8
+		Body                         uint8
+		Iseq_type                    uint8
+		Iseq_encoded                 uint8
+		Iseq_size                    uint8
+		Size_of_value                uint8
+		Running_ec                   uint16
+		Pad_cgo_0                    [2]byte
+	}
+	V8ProcInfo struct {
+		Version                      uint32
+		Type_JSFunction_first        uint16
+		Type_JSFunction_last         uint16
+		Type_Code                    uint16
+		Type_SharedFunctionInfo      uint16
+		Off_HeapObject_map           uint8
+		Off_Map_instancetype         uint8
+		Off_JSFunction_code          uint8
+		Off_JSFunction_shared        uint8
+		Code_instructions_is_pointer uint8
+		Off_Code_instruction_start   uint8
+		Off_Code_instruction_size    uint8
+		Off_Code_flags               uint8
+		Fp_marker                    uint8
+		Fp_function                  uint8
+		Fp_bytecode_offset           uint8
+		Codekind_shift               uint8
+		Codekind_mask                uint8
+		Codekind_baseline            uint8
+		Pad_cgo_0                    [2]byte
+	}
+)
 
 const (
 	Sizeof_Frame      = 0x18

@@ -40,18 +40,39 @@ func TestCalculatePrefixList(t *testing.T) {
 		expect []Prefix
 	}{
 		"4k to 0": {start: 4096, end: 0, err: true},
-		"10 to 22": {start: 0b1010, end: 0b10110,
-			expect: []Prefix{{0b1010, 63}, {0b1100, 62}, {0b10000, 62},
-				{0b10100, 63}}},
-		"4k to 16k": {start: 4096, end: 16384,
-			expect: []Prefix{{0x1000, 52}, {0x2000, 51}}},
-		"0x55ff3f68a000 to 0x55ff3f740000": {start: 0x55ff3f68a000, end: 0x55ff3f740000,
-			expect: []Prefix{{0x55ff3f68a000, 51}, {0x55ff3f68c000, 50},
-				{0x55ff3f690000, 48}, {0x55ff3f6a0000, 47},
-				{0x55ff3f6c0000, 46}, {0x55ff3f700000, 46}}},
-		"0x7f5b6ef4f000 to 0x7f5b6ef5d000": {start: 0x7f5b6ef4f000, end: 0x7f5b6ef5d000,
-			expect: []Prefix{{0x7f5b6ef4f000, 52}, {0x7f5b6ef50000, 49},
-				{0x7f5b6ef58000, 50}, {0x7f5b6ef5c000, 52}}},
+		"10 to 22": {
+			start: 0b1010, end: 0b10110,
+			expect: []Prefix{
+				{0b1010, 63},
+				{0b1100, 62},
+				{0b10000, 62},
+				{0b10100, 63},
+			},
+		},
+		"4k to 16k": {
+			start: 4096, end: 16384,
+			expect: []Prefix{{0x1000, 52}, {0x2000, 51}},
+		},
+		"0x55ff3f68a000 to 0x55ff3f740000": {
+			start: 0x55ff3f68a000, end: 0x55ff3f740000,
+			expect: []Prefix{
+				{0x55ff3f68a000, 51},
+				{0x55ff3f68c000, 50},
+				{0x55ff3f690000, 48},
+				{0x55ff3f6a0000, 47},
+				{0x55ff3f6c0000, 46},
+				{0x55ff3f700000, 46},
+			},
+		},
+		"0x7f5b6ef4f000 to 0x7f5b6ef5d000": {
+			start: 0x7f5b6ef4f000, end: 0x7f5b6ef5d000,
+			expect: []Prefix{
+				{0x7f5b6ef4f000, 52},
+				{0x7f5b6ef50000, 49},
+				{0x7f5b6ef58000, 50},
+				{0x7f5b6ef5c000, 52},
+			},
+		},
 	}
 
 	for name, test := range tests {

@@ -24,7 +24,8 @@ func generateInputFile(seqLen uint8, outputSize uint64) []byte {
 }
 
 func testRandomAccesses(t *testing.T, seqLen uint8, fileSize uint64,
-	chunkSize uint64) {
+	chunkSize uint64,
+) {
 	file := generateInputFile(seqLen, fileSize)
 	reader := bytes.NewReader(file)
 

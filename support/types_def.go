@@ -103,32 +103,36 @@ const (
 	TraceOriginUProbe   = C.TRACE_UPROBE
 )
 
-type ApmSpanID C.ApmSpanID
-type ApmTraceID C.ApmTraceID
-type CustomLabel C.CustomLabel
-type CustomLabelsArray C.CustomLabelsArray
-type Event C.Event
-type Frame C.Frame
-type OffsetRange C.OffsetRange
-type PIDPage C.PIDPage
-type PIDPageMappingInfo C.PIDPageMappingInfo
-type StackDelta C.StackDelta
-type StackDeltaPageInfo C.StackDeltaPageInfo
-type StackDeltaPageKey C.StackDeltaPageKey
-type SystemAnalysis C.SystemAnalysis
-type TSDInfo C.TSDInfo
-type Trace C.Trace
-type UnwindInfo C.UnwindInfo
+type (
+	ApmSpanID          C.ApmSpanID
+	ApmTraceID         C.ApmTraceID
+	CustomLabel        C.CustomLabel
+	CustomLabelsArray  C.CustomLabelsArray
+	Event              C.Event
+	Frame              C.Frame
+	OffsetRange        C.OffsetRange
+	PIDPage            C.PIDPage
+	PIDPageMappingInfo C.PIDPageMappingInfo
+	StackDelta         C.StackDelta
+	StackDeltaPageInfo C.StackDeltaPageInfo
+	StackDeltaPageKey  C.StackDeltaPageKey
+	SystemAnalysis     C.SystemAnalysis
+	TSDInfo            C.TSDInfo
+	Trace              C.Trace
+	UnwindInfo         C.UnwindInfo
+)
 
-type ApmIntProcInfo C.ApmIntProcInfo
-type DotnetProcInfo C.DotnetProcInfo
-type GoLabelsOffsets C.GoLabelsOffsets
-type HotspotProcInfo C.HotspotProcInfo
-type PHPProcInfo C.PHPProcInfo
-type PerlProcInfo C.PerlProcInfo
-type PyProcInfo C.PyProcInfo
-type RubyProcInfo C.RubyProcInfo
-type V8ProcInfo C.V8ProcInfo
+type (
+	ApmIntProcInfo  C.ApmIntProcInfo
+	DotnetProcInfo  C.DotnetProcInfo
+	GoLabelsOffsets C.GoLabelsOffsets
+	HotspotProcInfo C.HotspotProcInfo
+	PHPProcInfo     C.PHPProcInfo
+	PerlProcInfo    C.PerlProcInfo
+	PyProcInfo      C.PyProcInfo
+	RubyProcInfo    C.RubyProcInfo
+	V8ProcInfo      C.V8ProcInfo
+)
 
 const (
 	Sizeof_Frame      = C.sizeof_Frame

@@ -13,7 +13,8 @@ import (
 // ValidateReadAtWrapperTransparency validates that a `ReadAt` implementation provides a
 // transparent view into the given reference buffer.
 func ValidateReadAtWrapperTransparency(
-	t *testing.T, iterations uint, reference []byte, testee io.ReaderAt) {
+	t *testing.T, iterations uint, reference []byte, testee io.ReaderAt,
+) {
 	bufferSize := uint64(len(reference))
 
 	// Samples random slices to validate within the file.

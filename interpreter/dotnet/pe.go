@@ -866,21 +866,27 @@ func (pp *peParser) parseTables() error {
 	pp.indexSizes[indexHasConstant] = pp.getIndexSize(2,
 		[]uint{tableField, tableParam, tableProperty})
 	pp.indexSizes[indexHasCustomAttribute] = pp.getIndexSize(5,
-		[]uint{tableMethodDef, tableField, tableTypeRef, tableTypeDef, tableParam,
+		[]uint{
+			tableMethodDef, tableField, tableTypeRef, tableTypeDef, tableParam,
 			tableInterfaceImpl, tableMemberRef, tableModule, tableDeclSecurity,
 			tableProperty, tableEvent, tableStandAloneSig, tableModuleRef,
 			tableTypeSpec, tableAssembly, tableAssemblyRef, tableFile, tableExportedType,
 			tableManifestResource, tableGenericParam, tableGenericParamConstraint,
-			tableMethodSpec})
+			tableMethodSpec,
+		})
 	pp.indexSizes[indexCustomAttributeType] = pp.getIndexSize(3,
 		[]uint{tableMethodDef, tableMemberRef})
 	pp.indexSizes[indexHasFieldMarshal] = pp.getIndexSize(1, []uint{tableField, tableParam})
-	pp.indexSizes[indexHasDeclSecurity] = pp.getIndexSize(2, []uint{tableTypeDef, tableMethodDef,
-		tableAssembly})
+	pp.indexSizes[indexHasDeclSecurity] = pp.getIndexSize(2, []uint{
+		tableTypeDef, tableMethodDef,
+		tableAssembly,
+	})
 	pp.indexSizes[indexHasSemantics] = pp.getIndexSize(1, []uint{tableEvent, tableProperty})
 	pp.indexSizes[indexMemberForwarded] = pp.getIndexSize(1, []uint{tableField, tableMethodDef})
-	pp.indexSizes[indexImplementation] = pp.getIndexSize(2, []uint{tableFile, tableAssemblyRef,
-		tableExportedType})
+	pp.indexSizes[indexImplementation] = pp.getIndexSize(2, []uint{
+		tableFile, tableAssemblyRef,
+		tableExportedType,
+	})
 
 	pp.indexSizes[indexTypeDef] = pp.getIndexSize(0, []uint{tableTypeDef})
 	pp.indexSizes[indexField] = pp.getIndexSize(0, []uint{tableField})
