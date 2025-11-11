@@ -42,6 +42,7 @@ void bpf_log(const char *fmt, ...)
 #include "../../support/ebpf/ruby_tracer.ebpf.c"
 #include "../../support/ebpf/system_config.ebpf.c"
 #include "../../support/ebpf/v8_tracer.ebpf.c"
+#include "../../support/ebpf/beam_tracer.ebpf.c"
 
 void initialize_rodata_variables(u64 new_inv_pac_mask)
 {
@@ -95,6 +96,7 @@ int bpf_tail_call(void *ctx, UNUSED void *map, int index)
   case PROG_UNWIND_RUBY: rc = unwind_ruby(ctx); break;
   case PROG_UNWIND_V8: rc = unwind_v8(ctx); break;
   case PROG_UNWIND_DOTNET: rc = unwind_dotnet(ctx); break;
+  case PROG_UNWIND_BEAM: rc = unwind_beam(ctx); break;
   case PROG_GO_LABELS: rc = go_labels(ctx); break;
   default: return -1;
   }

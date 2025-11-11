@@ -168,7 +168,10 @@ typedef enum ErrorCode {
   ERR_DOTNET_CODE_HEADER = 6002,
 
   // Dotnet: Code object was too large to unwind in eBPF
-  ERR_DOTNET_CODE_TOO_LARGE = 6003
+  ERR_DOTNET_CODE_TOO_LARGE = 6003,
+
+  // BEAM: PC was outside the expected address range
+  ERR_BEAM_PC_INVALID = 7000
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H

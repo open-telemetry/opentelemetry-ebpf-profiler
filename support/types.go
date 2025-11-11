@@ -24,6 +24,7 @@ const (
 	FrameMarkerV8       = 0x8
 	FrameMarkerDotnet   = 0xa
 	FrameMarkerGo       = 0xb
+	FrameMarkerBEAM     = 0xc
 	FrameMarkerAbort    = 0xff
 )
 
@@ -38,6 +39,7 @@ const (
 	ProgUnwindV8      = 0x7
 	ProgUnwindDotnet  = 0x8
 	ProgGoLabels      = 0x9
+	ProgUnwindBEAM    = 0xa
 )
 
 const (
@@ -306,6 +308,9 @@ type V8ProcInfo struct {
 	Codekind_mask                uint8
 	Codekind_baseline            uint8
 	Pad_cgo_0                    [2]byte
+}
+type BEAMProcInfo struct {
+	Bias uint64
 }
 
 const (

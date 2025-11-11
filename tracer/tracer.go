@@ -392,6 +392,11 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 			name:   "go_labels",
 			enable: cfg.IncludeTracers.Has(types.Labels),
 		},
+		{
+			progID: uint32(support.ProgUnwindBEAM),
+			name:   "unwind_beam",
+			enable: cfg.IncludeTracers.Has(types.BEAMTracer),
+		},
 	}
 
 	if err = loadPerfUnwinders(coll, ebpfProgs, ebpfMaps["perf_progs"], tailCallProgs,
