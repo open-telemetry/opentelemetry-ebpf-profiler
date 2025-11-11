@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/python"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -32,7 +33,6 @@ import (
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -61,8 +61,8 @@ type ExecutableInfo struct {
 	// instance belongs to was previously identified as an interpreter. Otherwise,
 	// this field is nil.
 	Data interpreter.Data
-	// TSDInfo stores TSD information if the executable is libc, otherwise nil.
-	TSDInfo *tpbase.TSDInfo
+	// LibcInfo stores libc information if the executable is libc, otherwise nil.
+	LibcInfo *libc.LibcInfo
 }
 
 // ExecutableInfoManager manages all per-executable (FileID) information that we require to
@@ -164,7 +164,7 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	}
 	var (
 		intervalData sdtypes.IntervalData
-		tsdInfo      *tpbase.TSDInfo
+		libcInfo     *libc.LibcInfo
 		ref          mapRef
 		gaps         []util.Range
 		err          error
@@ -198,9 +198,9 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	}
 
 	// Also gather TSD info if applicable.
-	if tpbase.IsPotentialTSDDSO(elfRef.FileName()) {
+	if libc.IsPotentialTSDDSO(elfRef.FileName()) {
 		if ef, errx := elfRef.GetELF(); errx == nil {
-			tsdInfo, _ = tpbase.ExtractTSDInfo(ef)
+			libcInfo, _ = libc.ExtractLibcInfo(ef)
 		}
 	}
 
@@ -226,8 +226,8 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// Insert a corresponding record into our map.
 	info = &entry{
 		ExecutableInfo: ExecutableInfo{
-			Data:    state.detectAndLoadInterpData(loaderInfo),
-			TSDInfo: tsdInfo,
+			Data:     state.detectAndLoadInterpData(loaderInfo),
+			LibcInfo: libcInfo,
 		},
 		mapRef: ref,
 		rc:     1,
