@@ -11,6 +11,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -19,7 +20,6 @@ import (
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -168,7 +168,7 @@ type processInfo struct {
 	// executable mappings keyed by host file ID.
 	mappingsByFileID map[host.FileID]map[libpf.Address]*Mapping
 	// C-library Thread Specific Data information
-	tsdInfo *tpbase.TSDInfo
+	libcInfo *libc.LibcInfo
 }
 
 // addMapping adds a mapping to the internal indices.

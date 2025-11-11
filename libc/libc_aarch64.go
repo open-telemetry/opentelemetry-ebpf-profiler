@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package tpbase // import "go.opentelemetry.io/ebpf-profiler/tpbase"
+package libc // import "go.opentelemetry.io/ebpf-profiler/libc"
 
 import (
 	"errors"
