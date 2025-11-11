@@ -85,12 +85,7 @@ func (i *perlInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PI
 		Version:    d.version,
 		StateAddr:  uint64(d.stateAddr) + uint64(i.bias),
 		StateInTSD: stateInTSD,
-
-		TsdInfo: support.TSDInfo{
-			Offset:     libcInfo.TSDInfo.Offset,
-			Multiplier: libcInfo.TSDInfo.Multiplier,
-			Indirect:   libcInfo.TSDInfo.Indirect,
-		},
+		TsdInfo:    libcInfo.TSDInfo,
 
 		Interpreter_curcop:       uint16(vms.interpreter.curcop),
 		Interpreter_curstackinfo: uint16(vms.interpreter.curstackinfo),
