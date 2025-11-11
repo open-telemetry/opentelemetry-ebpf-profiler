@@ -541,6 +541,12 @@ func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
 
 // Symbolize returns the file, line and function information for given PC
 func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
+	// Binary search for the matching go function maps entry. The search
+	// lambda makes 'sort.Search' return the first entry that is larger
+	// than the pc. Thus -1 is needed to get index for the first entry
+	// which is equal or less than pc. The gopclntab has an extra entry in
+	// the end to indicate the end of Go code, use that to determine
+	// if the pc is higher than any Go function address.
 	index := sort.Search(g.numFuncs+1, func(i int) bool {
 		funcPc, _ := g.getFuncMapEntry(i)
 		return funcPc > pc
