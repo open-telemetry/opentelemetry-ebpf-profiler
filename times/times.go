@@ -143,7 +143,7 @@ func getBootTimeUnixNano() int64 {
 	}
 
 	// Find the index with minimal time delta
-	md := int64(^uint64(0) >> 1)
+	md := int64(^uint64(0) >> 1) // same as math.MaxInt64
 	mi := 0
 	for i := range samples {
 		delta := samples[i].t2.UnixNano() - samples[i].t1.UnixNano()
