@@ -149,7 +149,7 @@ func getBootTimeUnixNano() int64 {
 		delta := samples[i].t2.UnixNano() - samples[i].t1.UnixNano()
 		if delta < md {
 			md = delta
-			mi = 0
+			mi = i
 		}
 	}
 	// This should never be negative, as t1.UnixNano() >> ktime
