@@ -47,6 +47,7 @@ type ebpfMapsImpl struct {
 	PhpProcs           *cebpf.Map `name:"php_procs"`
 	RubyProcs          *cebpf.Map `name:"ruby_procs"`
 	V8Procs            *cebpf.Map `name:"v8_procs"`
+	BeamProcs          *cebpf.Map `name:"beam_procs"`
 	ApmIntProcs        *cebpf.Map `name:"apm_int_procs"`
 	GoLabelsProcs      *cebpf.Map `name:"go_labels_procs"`
 
@@ -153,6 +154,8 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.RubyProcs, nil
 	case libpf.V8:
 		return impl.V8Procs, nil
+	case libpf.BEAM:
+		return impl.BeamProcs, nil
 	case libpf.APMInt:
 		return impl.ApmIntProcs, nil
 	case libpf.GoLabels:

@@ -35,6 +35,8 @@
 #define FRAME_MARKER_DOTNET  0xA
 // Indicates a Go frame
 #define FRAME_MARKER_GO      0xB
+// Indicates a BEAM frame
+#define FRAME_MARKER_BEAM    0xC
 
 // Indicates a frame containing information about a critical unwinding error
 // that caused further unwinding to be aborted.
