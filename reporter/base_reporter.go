@@ -29,6 +29,9 @@ type baseReporter struct {
 	// runLoop handles the run loop
 	runLoop *runLoop
 
+	// memRunLoop handles the mem run loop
+	memRunLoop *runLoop
+
 	// pdata holds the generator for the data being exported.
 	pdata *pdata.Pdata
 
@@ -38,12 +41,18 @@ type baseReporter struct {
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
 	traceEvents xsync.RWMutex[map[libpf.Origin]samples.KeyToEventMapping]
 
+	memTraceEvents xsync.RWMutex[map[libpf.Origin]samples.KeyToEventMapping]
+
 	// hostmetadata stores metadata that is sent out with every request.
 	hostmetadata *lru.SyncedLRU[string, string]
+
+	// memAddr-hash
+	addrHashMap map[int64]libpf.TraceHash
 }
 
 func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
+	b.memRunLoop.Stop()
 }
 
 func (b *baseReporter) ReportHostMetadata(metadataMap map[string]string) {
@@ -96,7 +105,7 @@ func (b *baseReporter) ExecutableMetadata(args *ExecutableMetadataArgs) {
 func (*baseReporter) SupportsReportTraceEvent() bool { return true }
 
 func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) {
-	if meta.Origin != support.TraceOriginSampling && meta.Origin != support.TraceOriginOffCPU {
+	if meta.Origin != support.TraceOriginSampling && meta.Origin != support.TraceOriginOffCPU && meta.Origin != support.TraceOriginHeap {
 		// At the moment only on-CPU and off-CPU traces are reported.
 		log.Errorf("Skip reporting trace for unexpected %d origin", meta.Origin)
 		return
@@ -106,15 +115,30 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	if b.cfg.ExtraSampleAttrProd != nil {
 		extraMeta = b.cfg.ExtraSampleAttrProd.CollectExtraSampleMeta(trace, meta)
 	}
+	keyHash := trace.Hash
+	if meta.MemAlloc > 0 && meta.MemAddr > 0 {
+		if meta.OffTime == 1 { // mem-alloc
+			b.addrHashMap[meta.MemAddr] = keyHash
+		}
+		if meta.OffTime == 0 { // mem-free需要在这里找到分配内存的调用栈后续才能关联
+			hash, ok := b.addrHashMap[meta.MemAddr]
+			if !ok {
+				return
+			}
+			delete(b.addrHashMap, meta.MemAddr)
+			keyHash = hash
+			extraMeta = uint64(meta.PID.Hash32())<<32 | uint64(meta.TID.Hash32()) // NOTE this logic is from cloudcapture
+			//extraMeta = hash FIXME when you debug locally, use this，extraMeta just set tp hash
+		}
+	}
 
 	containerID, err := libpf.LookupCgroupv2(b.cgroupv2ID, meta.PID)
 	if err != nil {
 		log.Tracef("Failed to get a cgroupv2 ID as container ID for PID %d: %v",
 			meta.PID, err)
 	}
-
 	key := samples.TraceAndMetaKey{
-		Hash:           trace.Hash,
+		Hash:           keyHash,
 		Comm:           meta.Comm,
 		ProcessName:    meta.ProcessName,
 		ExecutablePath: meta.ExecutablePath,
@@ -122,6 +146,42 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		ContainerID:    containerID,
 		Pid:            int64(meta.PID),
 		ExtraMeta:      extraMeta,
+	}
+	if meta.Origin == support.TraceOriginHeap {
+		traceEventsMap := b.memTraceEvents.WLock()
+		defer b.memTraceEvents.WUnlock(&traceEventsMap)
+		var allocSpaces, allocs, inuseSpaces int64
+		if meta.OffTime == 0 { // free
+			inuseSpaces = -meta.MemAlloc
+		} else { // alloc
+			allocSpaces = meta.MemAlloc
+			allocs = 1
+			inuseSpaces = meta.MemAlloc
+		}
+		events, exists := (*traceEventsMap)[meta.Origin][key]
+		// 只有申请内存的时候才新创建event,如果是释放内存但是没有event说明这个地址是开启profile之前申请的，忽略掉
+		if !exists {
+			if meta.OffTime != 0 {
+				events = &samples.TraceEvents{
+					Files:              trace.Files,
+					Linenos:            trace.Linenos,
+					FrameTypes:         trace.FrameTypes,
+					MappingStarts:      trace.MappingStart,
+					MappingEnds:        trace.MappingEnd,
+					MappingFileOffsets: trace.MappingFileOffsets,
+					Timestamps:         []uint64{0},      // 只记录最新的时间
+					MemAlloc:           []int64{0, 0, 0}, // 记录最新的内存状态
+				}
+			} else {
+				return
+			}
+		}
+		events.Timestamps[0] = uint64(meta.Timestamp)
+		events.MemAlloc[0] += allocSpaces
+		events.MemAlloc[1] += allocs
+		events.MemAlloc[2] += inuseSpaces
+		(*traceEventsMap)[meta.Origin][key] = events
+		return
 	}
 
 	traceEventsMap := b.traceEvents.WLock()

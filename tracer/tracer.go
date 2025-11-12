@@ -129,6 +129,9 @@ type Tracer struct {
 
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
+
+	memProfileHooks map[libpf.PID][]link.Link
+	memProfileBlock uint64
 }
 
 type Config struct {
@@ -156,8 +159,11 @@ type Config struct {
 	ProbabilisticThreshold uint
 	// OffCPUThreshold is the user defined threshold for off-cpu profiling.
 	OffCPUThreshold uint32
+	// MemProfile switch memprofile
+	MemProfile bool
 	// TargetPIDs is a list of PIDs to target for profiling.
-	TargetPIDs []libpf.PID
+	TargetPIDs      []libpf.PID
+	MemProfileBlock uint64
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -337,6 +343,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		samplesPerSecond:       cfg.SamplesPerSecond,
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
+		memProfileHooks:        make(map[libpf.PID][]link.Link),
 	}, nil
 }
 
@@ -497,6 +504,32 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 
 	if cfg.OffCPUThreshold > 0 {
 		if err = loadKProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
+			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
+			return nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
+		}
+	}
+
+	if cfg.MemProfile {
+		var progs []progLoaderHelper
+		cprogss := []string{"malloc_enter", "malloc_exit", "free_enter",
+			"calloc_enter", "calloc_exit", "realloc_enter", "realloc_exit", "mmap_enter", "mmap_exit", "munmap_enter",
+			"posix_memalign_enter", "posix_memalign_exit", "aligned_alloc_enter", "aligned_alloc_exit", "valloc_enter", "valloc_exit",
+			"memalign_enter", "memalign_exit", "pvalloc_enter", "pvalloc_exit"}
+
+		//var uProgs []progLoaderHelper
+		uProgs := make([]progLoaderHelper, len(cprogss))
+		for _, p := range cprogss {
+			uProgs = append(uProgs, progLoaderHelper{name: p, noTailCallTarget: true, enable: true})
+		}
+
+		if cfg.OffCPUThreshold > 0 {
+			progs = uProgs
+		} else {
+			progs = make([]progLoaderHelper, len(tailCallProgs)+len(uProgs))
+			progs = append(progs, tailCallProgs...)
+			progs = append(progs, uProgs...)
+		}
+		if err = loadUProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], progs,
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
 		}
@@ -997,11 +1030,13 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		TID:              libpf.PID(ptr.tid),
 		Origin:           libpf.Origin(ptr.origin),
 		OffTime:          int64(ptr.offtime),
+		MemAlloc:         uint64(ptr.mem_alloc),
+		MemAddr:          uint64(ptr.mem_addr),
 		KTime:            times.KTime(ptr.ktime),
 		CPU:              cpu,
 	}
 
-	if trace.Origin != support.TraceOriginSampling && trace.Origin != support.TraceOriginOffCPU {
+	if trace.Origin != support.TraceOriginSampling && trace.Origin != support.TraceOriginOffCPU && trace.Origin != support.TraceOriginHeap {
 		log.Warnf("Skip handling trace from unexpected %d origin", trace.Origin)
 		return nil
 	}
@@ -1228,7 +1263,7 @@ func (t *Tracer) AttachTracer() error {
 func (t *Tracer) EnableProfiling() error {
 	events := t.perfEntrypoints.WLock()
 	defer t.perfEntrypoints.WUnlock(&events)
-	if len(*events) == 0 {
+	if len(*events) == 0 && len(t.memProfileHooks) == 0 {
 		return errors.New("no perf events available to enable for profiling")
 	}
 	for id, event := range *events {

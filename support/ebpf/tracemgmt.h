@@ -692,12 +692,22 @@ static inline __attribute__((__always_inline__)) bool should_trace_pid(u32 pid)
   return false;
 }
 
-static inline int collect_trace(
-  struct pt_regs *ctx, TraceOrigin origin, u32 pid, u32 tid, u64 trace_timestamp, u64 off_cpu_time)
+static inline __attribute__((__always_inline__)) int handle_mem_free(struct pt_regs *ctx)
 {
-  if (!should_trace_pid(pid)) {
-      return 0;
+  PerCPURecord *record = get_per_cpu_record();
+  if (record) {
+    Trace *trace = &record->trace;
+    if (trace) {
+      send_trace(ctx, trace);
+    }
   }
+  return 0;
+}
+
+
+static inline __attribute__((__always_inline__)) int collect_trace(
+  struct pt_regs *ctx, TraceOrigin origin, u32 pid, u32 tid, u64 trace_timestamp, u64 off_cpu_time, u64 bytes_alloc, u64 mem_addr)
+{
   // The trace is reused on each call to this function so we have to reset the
   // variables used to maintain state.
   DEBUG_PRINT("Resetting CPU record");
@@ -712,6 +722,8 @@ static inline int collect_trace(
   trace->tid     = tid;
   trace->ktime   = trace_timestamp;
   trace->offtime = off_cpu_time;
+  trace->mem_alloc = bytes_alloc;
+  trace->mem_addr = mem_addr;
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);
   }
@@ -719,6 +731,10 @@ static inline int collect_trace(
   // Get the kernel mode stack trace first
   trace->kernel_stack_id = bpf_get_stackid(ctx, &kernel_stackmap, BPF_F_REUSE_STACKID);
   DEBUG_PRINT("kernel stack id = %d", trace->kernel_stack_id);
+  // this indicates mem free, we just send trace without unwinding stack
+  if (bytes_alloc > 0 && off_cpu_time == 0) {
+    return handle_mem_free(ctx);
+  }
 
   // Recursive unwind frames
   int unwinder           = PROG_UNWIND_STOP;

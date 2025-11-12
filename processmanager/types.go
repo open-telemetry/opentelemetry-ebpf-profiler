@@ -145,6 +145,14 @@ type ProcessMeta struct {
 	Executable string
 }
 
+type MemProfileMeta struct {
+	Lang         libpf.InterpreterType
+	MajorVersion int
+	MinorVersion int
+	LibcPath     string
+	ExecAbsPath  string
+}
+
 // processInfo contains information about the executable mappings
 // and Thread Specific Data of a process.
 type processInfo struct {
@@ -156,6 +164,8 @@ type processInfo struct {
 	mappingsByFileID map[host.FileID]map[libpf.Address]*Mapping
 	// C-library Thread Specific Data information
 	tsdInfo *tpbase.TSDInfo
+	// memProfileMeta indicate go version
+	memProfileMeta *MemProfileMeta
 }
 
 // addMapping adds a mapping to the internal indices.

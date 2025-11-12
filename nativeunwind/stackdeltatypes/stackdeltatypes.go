@@ -95,6 +95,8 @@ type IntervalData struct {
 	// Deltas contains all stack deltas for a single binary.
 	// Two consecutive entries describe an interval.
 	Deltas StackDeltaArray
+	//LanVer indicates the no interpreter language and version, now just golang, in format go1.22.1
+	LanVer string
 }
 
 // AddEx adds a new stack delta to the array.

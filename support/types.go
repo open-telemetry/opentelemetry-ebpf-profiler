@@ -20,6 +20,7 @@ const (
 	FrameMarkerV8       = 0x8
 	FrameMarkerDotnet   = 0xa
 	FrameMarkerAbort    = 0xff
+	FrameMarkerGolang   = 0xfe
 )
 
 const (
@@ -81,6 +82,7 @@ const (
 	TraceOriginUnknown  = 0x0
 	TraceOriginSampling = 0x1
 	TraceOriginOffCPU   = 0x2
+	TraceOriginHeap     = 0x3
 )
 
 const OffCPUThresholdMax = 0x3e8

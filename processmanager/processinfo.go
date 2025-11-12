@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -93,6 +95,7 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
 			tsdInfo:          nil,
+			memProfileMeta:   &MemProfileMeta{ExecAbsPath: getAbsPath(pid, exePath)},
 		}
 		pm.pidToProcessInfo[pid] = info
 
@@ -132,6 +135,54 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 	pm.pidPageToMappingInfoSize += numUpdates
 
 	return false, err
+}
+
+func (pm *ProcessManager) setProcessMemProfileMeta(lanVer string, pid libpf.PID) {
+	info, ok := pm.pidToProcessInfo[pid]
+	if !ok {
+		return
+	}
+	// lanVer
+	// c/c++/rust如下字段为空，只需要执行c相关的挂载即可
+	// go1.22.1
+	// Python 3.10
+	// Java HotSpot VM major.minor.security+build (versionStr)
+	// 当前仅考虑上述的语言，其他语言暂不考虑
+	// dotnet major.minor.release
+	var lan = libpf.Native
+	var major, minor int
+	if lanV := strings.Split(lanVer, " "); len(lanV) > 1 {
+		lanStr := lanV[0]
+		for _, s := range lanV[1:] {
+			if ver := strings.Split(s, "."); len(ver) > 1 {
+				major, _ = strconv.Atoi(ver[0])
+				minor, _ = strconv.Atoi(ver[1])
+			}
+		}
+		switch lanStr {
+		case "Python":
+			lan = libpf.Python
+		case "Java":
+			lan = libpf.HotSpot
+		default:
+			lan = libpf.UnknownInterp
+		}
+	} else {
+		if strings.HasPrefix(lanVer, "go") {
+			lan = libpf.Golang
+			verStr := strings.TrimPrefix(lanVer, "go")
+			if ver := strings.Split(verStr, "."); len(ver) > 1 {
+				major, _ = strconv.Atoi(ver[0])
+				minor, _ = strconv.Atoi(ver[1])
+			}
+		}
+	}
+	if info.memProfileMeta == nil {
+		info.memProfileMeta = &MemProfileMeta{}
+	}
+	info.memProfileMeta.Lang = lan
+	info.memProfileMeta.MinorVersion = minor
+	info.memProfileMeta.MajorVersion = major
 }
 
 // deletePIDAddress removes the mapping at addr from pid from the internal structure of the
@@ -240,6 +291,14 @@ func (pm *ProcessManager) handleNewMapping(pr process.Process, m *Mapping,
 		return err
 	}
 
+	// handle memprofile, if
+	lanVer := ei.LanVer
+	if ei.Data != nil {
+		lanVer = fmt.Sprintf("%s", ei.Data)
+	}
+	if lanVer != "" {
+		pm.setProcessMemProfileMeta(lanVer, pid)
+	}
 	pm.assignTSDInfo(pid, ei.TSDInfo)
 
 	if ei.Data != nil {
@@ -378,6 +437,23 @@ func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *pro
 				pr.PID(), mapping.Path, err)
 		}
 	}
+
+	if isCLibrary(mapping.Path) {
+		libcPath := getAbsPath(pr.PID(), mapping.Path)
+		if _info, ok := pm.pidToProcessInfo[pr.PID()]; ok {
+			if _info.memProfileMeta == nil {
+				_info.memProfileMeta = &MemProfileMeta{}
+			}
+			_info.memProfileMeta.LibcPath = libcPath
+		}
+	}
+}
+
+func isCLibrary(path string) bool {
+	return strings.Contains(path, "libc.so") || strings.Contains(path, "libc.musl") ||
+		strings.Contains(path, "libjemalloc.so") || strings.Contains(path, "libtcmalloc") ||
+		strings.Contains(path, "libmimalloc.so") || strings.Contains(path, "libefence.so") ||
+		strings.Contains(path, "libdlmalloc.so")
 }
 
 // processRemovedMappings removes listed memory mappings and loaded interpreters from
@@ -719,6 +795,22 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		delete(pm.exitEvents, pid)
 		log.Tracef("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
+}
+
+func (pm *ProcessManager) GetMemProfileInfo(pid libpf.PID) *MemProfileMeta {
+	if info, ok := pm.pidToProcessInfo[pid]; ok {
+		return info.memProfileMeta
+	}
+	return nil
+}
+
+func getAbsPath(pid libpf.PID, path string) string {
+	procRoot := fmt.Sprintf("/proc/%d/root", pid)
+	target, _ := os.Readlink(procRoot)
+	if target != "/" {
+		return fmt.Sprintf("/proc/%d/root%s", pid, path)
+	}
+	return path
 }
 
 // Compile time check to make sure we satisfy the interface.

@@ -654,7 +654,11 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx)
     return 0;
   }
 
+  if (!should_trace_pid(pid)) {
+        return 0;
+  }
+
   u64 ts = bpf_ktime_get_ns();
-  return collect_trace((struct pt_regs *)&ctx->regs, TRACE_SAMPLING, pid, tid, ts, 0);
+  return collect_trace((struct pt_regs *)&ctx->regs, TRACE_SAMPLING, pid, tid, ts, 0, 0, 0);
 }
 MULTI_USE_FUNC(unwind_native)

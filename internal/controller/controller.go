@@ -87,6 +87,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
 		OffCPUThreshold:        uint32(c.config.OffCPUThreshold),
 		TargetPIDs:             c.config.TargetPIDs,
+		MemProfile:             c.config.MemProfile,
 	})
 	if err != nil {
 		c.reporter.Stop()
@@ -102,18 +103,23 @@ func (c *Controller) Start(ctx context.Context) error {
 	metrics.Add(metrics.IDProcPIDStartupMs, metrics.MetricValue(time.Since(now).Milliseconds()))
 	log.Trace("Completed initial PID listing")
 
-	// Attach our tracer to the perf event
-	if err := trc.AttachTracer(); err != nil {
-		return fmt.Errorf("failed to attach to perf event: %w", err)
-	}
-	log.Trace("Attached tracer program")
-
-	if c.config.OffCPUThreshold > 0 {
-		if err := trc.StartOffCPUProfiling(); err != nil {
-			c.reporter.Stop()
-			return fmt.Errorf("failed to start off-cpu profiling: %v", err)
+	if c.config.CpuProfile {
+		// Attach our tracer to the perf event
+		if err := trc.AttachTracer(); err != nil {
+			return fmt.Errorf("failed to attach to perf event: %w", err)
 		}
-		log.Printf("Enabled off-cpu profiling")
+		log.Trace("Attached tracer program")
+		if c.config.OffCPUThreshold > 0 {
+			if err := trc.StartOffCPUProfiling(); err != nil {
+				c.reporter.Stop()
+				return fmt.Errorf("failed to start off-cpu profiling: %v", err)
+			}
+			log.Printf("Enabled off-cpu profiling")
+		}
+	}
+
+	if c.config.MemProfile {
+		trc.SyncMemProfile(c.config.MemProfilePIDs, c.config.MemProfileBlock)
 	}
 
 	if c.config.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
@@ -157,6 +163,13 @@ func (c *Controller) Shutdown() {
 
 func (c *Controller) SyncTargetPIDs(targetPids []libpf.PID) error {
 	return c.tracer.SyncTargetPIDs(targetPids)
+}
+
+func (c *Controller) SyncMemProfileTargetPIDs(targetPids []libpf.PID) error {
+	return c.tracer.SyncMemProfileTargetPids(targetPids)
+}
+func (c *Controller) SyncMemProfileBlock(memProfileBlock uint64) error {
+	return c.tracer.SyncMemProfileBlock(memProfileBlock)
 }
 
 func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
