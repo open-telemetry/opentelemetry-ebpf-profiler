@@ -14,7 +14,7 @@ import (
 
 func TestInspectCode(t *testing.T) {
 	extract := func(addr int64, sz, maxSize int) ([]byte, error) {
-		if addr != 0x16561faf {
+		if addr != 0x16561fa8 {
 			return []byte{}, fmt.Errorf("unexpected target address: 0x%x", addr)
 		}
 		return []byte{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}, nil

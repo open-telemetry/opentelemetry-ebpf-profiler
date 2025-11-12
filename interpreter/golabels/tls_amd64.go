@@ -93,8 +93,7 @@ func inspectCode(sym *libpf.Symbol, extract readMemory, code []byte) (int32, err
 		if mem, ok := op.Args[1].(x86asm.Mem); ok && mem.Base == x86asm.RIP {
 			curAddr := int64(sym.Address) + int64(pc)
 			if dst, ok := op.Args[0].(x86asm.Reg); ok {
-				instrLen := op.Len
-				target := curAddr + int64(mem.Disp) + int64(instrLen)
+				target := curAddr + int64(mem.Disp)
 
 				// Read 8-byte TLS value from target address
 				b, err := extract(target, 8, 8)
