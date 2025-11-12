@@ -153,7 +153,7 @@ func (pm *ProcessManager) assignInterpreter(pid libpf.PID, key util.OnDiskFileId
 //
 // The caller is responsible to hold the ProcessManager lock to avoid race conditions.
 func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Address,
-       oid util.OnDiskFileIdentifier, data interpreter.Data) error {
+	oid util.OnDiskFileIdentifier, data interpreter.Data) error {
 	// The same interpreter can be found multiple times under various different
 	// circumstances. Check if this is already handled.
 	pid := pr.PID()

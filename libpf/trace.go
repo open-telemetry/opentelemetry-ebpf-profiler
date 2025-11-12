@@ -39,9 +39,9 @@ type FrameMappingData struct {
 	// File is a reference to data about the backing file.
 	File FrameMappingFile
 	// Start contains the mapping start address (file virtual address).
-	Start      Address
+	Start Address
 	// End contains the mapping end address (file virtual address).
-	End        Address
+	End Address
 	// FileOffset is the offset within the file for this mapping.
 	FileOffset uint64
 }

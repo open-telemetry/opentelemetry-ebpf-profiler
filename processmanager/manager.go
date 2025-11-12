@@ -251,7 +251,7 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, frame *host.Frame, dst *li
 			Type:            frame.Type,
 			AddressOrLineno: relativeRIP,
 			Mapping:         mapping,
-			})
+		})
 	default:
 		err := pm.symbolizeFrame(pid, frame, dst)
 		if err == nil {
