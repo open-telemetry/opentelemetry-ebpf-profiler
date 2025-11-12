@@ -6,14 +6,14 @@ package interpreter // import "go.opentelemetry.io/ebpf-profiler/interpreter"
 import (
 	"errors"
 
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
-	"go.opentelemetry.io/ebpf-profiler/tpbase"
 )
 
 // MultiData implements the Data interface for multiple interpreters.
@@ -30,7 +30,8 @@ func NewMultiData(interpreters []Data) *MultiData {
 
 // Attach attaches all interpreters and returns a MultiInstance.
 func (m *MultiData) Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory) (Instance, error) {
+	rm remotememory.RemoteMemory,
+) (Instance, error) {
 	var instances []Instance
 	var errs []error
 
@@ -92,7 +93,8 @@ func (m *MultiInstance) Detach(ebpf EbpfHandler, pid libpf.PID) error {
 
 // SynchronizeMappings synchronizes mappings for all interpreter instances.
 func (m *MultiInstance) SynchronizeMappings(ebpf EbpfHandler,
-	exeReporter reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping) error {
+	exeReporter reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping,
+) error {
 	var errs []error
 	for _, instance := range m.instances {
 		if err := instance.SynchronizeMappings(ebpf, exeReporter, pr, mappings); err != nil {
@@ -102,11 +104,11 @@ func (m *MultiInstance) SynchronizeMappings(ebpf EbpfHandler,
 	return errors.Join(errs...)
 }
 
-// UpdateTSDInfo updates TSD info for all interpreter instances.
-func (m *MultiInstance) UpdateTSDInfo(ebpf EbpfHandler, pid libpf.PID, info tpbase.TSDInfo) error {
+// UpdateLibcInfo updates libc info for all interpreter instances.
+func (m *MultiInstance) UpdateLibcInfo(ebpf EbpfHandler, pid libpf.PID, info libc.LibcInfo) error {
 	var errs []error
 	for _, instance := range m.instances {
-		if err := instance.UpdateTSDInfo(ebpf, pid, info); err != nil {
+		if err := instance.UpdateLibcInfo(ebpf, pid, info); err != nil {
 			errs = append(errs, err)
 		}
 	}

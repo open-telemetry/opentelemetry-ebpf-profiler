@@ -7,6 +7,9 @@
 // with_debug_output is set during load time.
 BPF_RODATA_VAR(u32, with_debug_output, 0)
 
+// filter_idle_frames is set during load time.
+BPF_RODATA_VAR(bool, filter_idle_frames, false)
+
 // inverse_pac_mask is set during load time.
 BPF_RODATA_VAR(u64, inverse_pac_mask, 0)
 
@@ -27,11 +30,18 @@ BPF_RODATA_VAR(u32, stack_ptregs_offset, 0)
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
 // fileID.
 #define STACK_DELTA_BUCKET(X)                                                                      \
+  struct inner_map_##X {                                                                           \
+    __uint(type, BPF_MAP_TYPE_ARRAY);                                                              \
+    __uint(max_entries, 1 << X);                                                                   \
+    __type(key, u32);                                                                              \
+    __type(value, StackDelta);                                                                     \
+  };                                                                                               \
   struct exe_id_to_##X##_stack_deltas_t {                                                          \
     __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);                                                       \
     __type(key, u64);                                                                              \
     __type(value, u32);                                                                            \
     __uint(max_entries, 4096);                                                                     \
+    __array(values, struct inner_map_##X);                                                         \
   } exe_id_to_##X##_stack_deltas SEC(".maps");
 
 // Create buckets to hold the stack delta information for the executables.
@@ -660,7 +670,7 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx)
   u32 pid = id >> 32;
   u32 tid = id & 0xFFFFFFFF;
 
-  if (pid == 0) {
+  if (pid == 0 && filter_idle_frames) {
     return 0;
   }
 

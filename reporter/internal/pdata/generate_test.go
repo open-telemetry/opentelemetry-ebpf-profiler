@@ -181,7 +181,7 @@ func TestFunctionTableOrder(t *testing.T) {
 			d, err := New(100, nil)
 			require.NoError(t, err)
 			tree := make(samples.TraceEventsTree)
-			tree[""] = tt.events
+			tree[libpf.NullString] = tt.events
 			res, _ := d.Generate(tree, tt.name, "version")
 			require.Equal(t, tt.expectedResourceProfiles, res.ResourceProfiles().Len())
 			if tt.expectedResourceProfiles == 0 {
@@ -231,7 +231,7 @@ func TestProfileDuration(t *testing.T) {
 			require.NoError(t, err)
 
 			tree := make(samples.TraceEventsTree)
-			tree[""] = tt.events
+			tree[libpf.NullString] = tt.events
 			res, err := d.Generate(tree, tt.name, "version")
 			require.NoError(t, err)
 
@@ -253,7 +253,7 @@ func TestGenerate_EmptyTree(t *testing.T) {
 }
 
 func singleFrameTrace(ty libpf.FrameType, mappingFile libpf.FrameMappingFile,
-	lineno libpf.AddressOrLineno, funcName, sourceFile string,
+	lineno libpf.AddressOrLineno, funcName string, sourceFile libpf.String,
 	sourceLine libpf.SourceLineno,
 ) libpf.Frames {
 	frames := make(libpf.Frames, 0, 1)
@@ -261,7 +261,7 @@ func singleFrameTrace(ty libpf.FrameType, mappingFile libpf.FrameMappingFile,
 		Type:            ty,
 		AddressOrLineno: lineno,
 		FunctionName:    libpf.Intern(funcName),
-		SourceFile:      libpf.Intern(sourceFile),
+		SourceFile:      sourceFile,
 		SourceLine:      sourceLine,
 		MappingFile:     mappingFile,
 	})
@@ -273,15 +273,15 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 	require.NoError(t, err)
 
 	funcName := "main"
-	filePath := "/bin/test"
+	filePath := libpf.Intern("/bin/test")
 	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 		FileID:   libpf.NewFileID(1, 2),
-		FileName: libpf.Intern(filePath),
+		FileName: filePath,
 	})
 
 	traceKey := samples.TraceAndMetaKey{
 		ExecutablePath: filePath,
-		Comm:           "testproc",
+		Comm:           libpf.Intern("testproc"),
 		Pid:            123,
 		Tid:            456,
 		ApmServiceName: "svc",
@@ -292,12 +292,14 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 				Frames: singleFrameTrace(libpf.GoFrame, mappingFile,
 					0x10, funcName, filePath, 42),
 				Timestamps: []uint64{100},
-				EnvVars:    map[string]string{"FOO": "BAR"},
+				EnvVars:    map[libpf.String]libpf.String{
+					libpf.Intern("FOO"): libpf.Intern("BAR"),
+				},
 			},
 		},
 	}
 	tree := samples.TraceEventsTree{
-		"container1": events,
+		libpf.Intern("container1"): events,
 	}
 
 	profiles, err := d.Generate(tree, "agent", "v1")
@@ -348,8 +350,9 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 		FileID:   libpf.NewFileID(5, 6),
 		FileName: libpf.Intern("/bin/foo"),
 	})
-	traceKey := samples.TraceAndMetaKey{ExecutablePath: "/bin/foo"}
-	frames := singleFrameTrace(libpf.PythonFrame, mappingFile, 0x20, "f", "/bin/foo", 1)
+	exec := libpf.Intern("/bin/foo")
+	traceKey := samples.TraceAndMetaKey{ExecutablePath: exec}
+	frames := singleFrameTrace(libpf.PythonFrame, mappingFile, 0x20, "f", exec, 1)
 
 	events1 := map[libpf.Origin]samples.KeyToEventMapping{
 		support.TraceOriginSampling: {
@@ -375,8 +378,8 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 		},
 	}
 	tree := samples.TraceEventsTree{
-		"c1": events1,
-		"c2": events2,
+		libpf.Intern("c1"): events1,
+		libpf.Intern("c2"): events2,
 	}
 
 	profiles, err := d.Generate(tree, "agent", "v2")
@@ -405,10 +408,10 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 	require.NoError(t, err)
 
 	funcName := "myfunc"
-	filePath := "/bin/bar"
+	filePath := libpf.Intern("/bin/bar")
 	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 		FileID:   libpf.NewFileID(7, 8),
-		FileName: libpf.Intern(filePath),
+		FileName: filePath,
 	})
 
 	traceKey := samples.TraceAndMetaKey{ExecutablePath: filePath}
@@ -422,7 +425,7 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 		},
 	}
 	tree := samples.TraceEventsTree{
-		"c": events,
+		libpf.Intern("c"): events,
 	}
 
 	profiles, err := d.Generate(tree, "agent", "v3")
@@ -437,12 +440,12 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 		stringTableSlice = append(stringTableSlice, dic.StringTable().At(i))
 	}
 	assert.Contains(t, stringTableSlice, funcName)
-	assert.Contains(t, stringTableSlice, filePath)
+	assert.Contains(t, stringTableSlice, filePath.String())
 	// The function table should have the function name and file path indices set
 	require.Equal(t, 2, dic.FunctionTable().Len())
 	fn := dic.FunctionTable().At(1)
 	assert.Equal(t, funcName, dic.StringTable().At(int(fn.NameStrindex())))
-	assert.Equal(t, filePath, dic.StringTable().At(int(fn.FilenameStrindex())))
+	assert.Equal(t, filePath.String(), dic.StringTable().At(int(fn.FilenameStrindex())))
 }
 
 func singleFrameNative(mappingFile libpf.FrameMappingFile, lineno libpf.AddressOrLineno,
@@ -464,15 +467,15 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	d, err := New(100, nil)
 	require.NoError(t, err)
 
-	filePath := "/usr/lib/libexample.so"
+	filePath := libpf.Intern("/usr/lib/libexample.so")
 	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 		FileID:   libpf.NewFileID(9, 10),
-		FileName: libpf.Intern(filePath),
+		FileName: filePath,
 	})
 
 	traceKey := samples.TraceAndMetaKey{
 		ExecutablePath: filePath,
-		Comm:           "native_app",
+		Comm:           libpf.Intern("native_app"),
 		Pid:            789,
 		Tid:            1011,
 	}
@@ -485,7 +488,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 		},
 	}
 	tree := samples.TraceEventsTree{
-		"native_container": events,
+		libpf.Intern("native_container"): events,
 	}
 
 	profiles, err := d.Generate(tree, "agent", "v1")
@@ -543,7 +546,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	// Verify the filename is correctly set in the mapping
 	filenameStrIndex := nativeMapping.FilenameStrindex()
 	filename := dic.StringTable().At(int(filenameStrIndex))
-	assert.Equal(t, filePath, filename)
+	assert.Equal(t, filePath.String(), filename)
 
 	// For native frames, function information is not populated in the function table
 	// since it's resolved by the backend. The function table should be empty.
@@ -608,7 +611,7 @@ func TestStackTableOrder(t *testing.T) {
 			d, err := New(100, nil)
 			require.NoError(t, err)
 			tree := make(samples.TraceEventsTree)
-			tree[""] = tt.events
+			tree[libpf.NullString] = tt.events
 			res, _ := d.Generate(tree, tt.name, "version")
 
 			dic := res.Dictionary()

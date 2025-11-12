@@ -391,8 +391,17 @@ _Static_assert(sizeof(Frame) == 3 * 8, "frame padding not working as expected");
 
 // TSDInfo contains data needed to extract Thread Specific Data (TSD) values
 typedef struct TSDInfo {
+  // Offset is the pointer difference from "tpbase" pointer to the C-library
+  // specific struct pthread's member containing the thread specific data:
+  // .tsd (musl) or .specific (glibc).
+  // Note: on x86_64 it's positive value, and arm64 it is negative value as
+  // "tpbase" register has different purpose and pointer value per platform ABI.
   s16 offset;
+  // Multiplier is the TSD specific value array element size.
+  // Typically 8 bytes on 64bit musl and 16 bytes on 64bit glibc
   u8 multiplier;
+  // Indirect is a flag indicating if the "tpbase + Offset" points to a member
+  // which is a pointer the array (musl) and not the array itself (glibc).
   u8 indirect;
 } TSDInfo;
 
@@ -428,6 +437,7 @@ typedef struct PyProcInfo {
   u8 PyCodeObject_co_argcount, PyCodeObject_co_kwonlyargcount;
   u8 PyCodeObject_co_flags, PyCodeObject_co_firstlineno;
   u8 PyCodeObject_sizeof;
+  u8 lasti_is_codeunit, frame_is_cframe;
 } PyProcInfo;
 
 // PHPProcInfo is a container for the data needed to build a stack trace for a PHP process.
@@ -454,13 +464,16 @@ typedef struct HotspotProcInfo {
   u8 codeblob_codestart, codeblob_codeend;
   u8 codeblob_framecomplete, codeblob_framesize;
   u8 heapblock_size, method_constmethod, cmethod_size;
-  u8 jvm_version, segment_shift, nmethod_uses_offsets;
+  u8 jvm_version, new_bcp_slot, segment_shift, nmethod_uses_offsets;
 } HotspotProcInfo;
 
 // RubyProcInfo is a container for the data needed to build a stack trace for a Ruby process.
 typedef struct RubyProcInfo {
   // version of the Ruby interpreter.
   u32 version;
+
+  // tls_offset holds TLS base + ruby_current_ec tls symbol, as an offset from tpbase
+  u64 current_ec_tpbase_tls_offset;
 
   // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
   u64 current_ctx_ptr;
@@ -494,6 +507,7 @@ typedef struct V8ProcInfo {
   // Introspection data
   u16 type_JSFunction_first, type_JSFunction_last, type_Code, type_SharedFunctionInfo;
   u8 off_HeapObject_map, off_Map_instancetype, off_JSFunction_code, off_JSFunction_shared;
+  u8 code_instructions_is_pointer;
   u8 off_Code_instruction_start, off_Code_instruction_size, off_Code_flags;
   u8 fp_marker, fp_function, fp_bytecode_offset;
   u8 codekind_shift, codekind_mask, codekind_baseline;

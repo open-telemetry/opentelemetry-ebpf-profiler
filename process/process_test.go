@@ -165,7 +165,7 @@ func TestExtractContainerID(t *testing.T) {
 		t.Run(tc.expectedContainerID, func(t *testing.T) {
 			reader := strings.NewReader(tc.line)
 			gotContainerID := parseContainerID(reader)
-			assert.Equal(t, tc.expectedContainerID, gotContainerID)
+			assert.Equal(t, tc.expectedContainerID, gotContainerID.String())
 		})
 	}
 }

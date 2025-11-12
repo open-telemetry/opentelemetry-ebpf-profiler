@@ -18,14 +18,15 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 
 	"github.com/elastic/go-freelru"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -33,7 +34,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -121,10 +121,10 @@ func (d *pythonData) String() string {
 }
 
 func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-	addrToCodeObject, err :=
-		freelru.New[libpf.Address, *pythonCodeObject](interpreter.LruFunctionCacheSize,
-			libpf.Address.Hash32)
+	rm remotememory.RemoteMemory,
+) (interpreter.Instance, error) {
+	addrToCodeObject, err := freelru.New[libpf.Address, *pythonCodeObject](interpreter.LruFunctionCacheSize,
+		libpf.Address.Hash32)
 	if err != nil {
 		return nil, err
 	}
@@ -371,20 +371,14 @@ func (p *pythonInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
-func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	tsdInfo tpbase.TSDInfo) error {
+func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
+	libcInfo libc.LibcInfo) error {
 	d := p.d
 	vm := &d.vmStructs
 	cdata := support.PyProcInfo{
 		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
-		NoneStructAddr: uint64(d.noneStruct) + uint64(p.bias),
 		Version:        d.version,
-
-		TsdInfo: support.TSDInfo{
-			Offset:     tsdInfo.Offset,
-			Multiplier: tsdInfo.Multiplier,
-			Indirect:   tsdInfo.Indirect,
-		},
+		TsdInfo:        libcInfo.TSDInfo,
 
 		PyThreadState_frame:            uint8(vm.PyThreadState.Frame),
 		PyCFrame_current_frame:         uint8(vm.PyCFrame.CurrentFrame),
@@ -398,6 +392,18 @@ func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.P
 		PyCodeObject_co_flags:          uint8(vm.PyCodeObject.Flags),
 		PyCodeObject_co_firstlineno:    uint8(vm.PyCodeObject.FirstLineno),
 		PyCodeObject_sizeof:            uint8(vm.PyCodeObject.Sizeof),
+	}
+	if d.noneStruct != libpf.SymbolValue(0) {
+		cdata.NoneStructAddr = uint64(d.noneStruct) + uint64(p.bias)
+	}
+	if d.version >= pythonVer(3, 11) && d.version < pythonVer(3, 13) {
+		// During python 3.11 and 3.12 the PyThreadState.frame points to a _PyCFrame object:
+		// from https://github.com/python/cpython/commit/f291404a802d6a1bc50f817c7a26ff3ac9a199ff
+		// to   https://github.com/python/cpython/commit/006e44f9502308ec3d14424ad8bd774046f2be8e
+		cdata.Frame_is_cframe = 1
+	}
+	if d.version >= pythonVer(3, 11) {
+		cdata.Lasti_is_codeunit = 1
 	}
 
 	err := ebpf.UpdateProcData(libpf.Python, pid, unsafe.Pointer(&cdata))
@@ -453,7 +459,8 @@ func frozenNameToFileName(sourceFileName string) (string, error) {
 }
 
 func (p *pythonInstance) getCodeObject(addr libpf.Address,
-	ebpfChecksum uint32) (*pythonCodeObject, error) {
+	ebpfChecksum uint32,
+) (*pythonCodeObject, error) {
 	if addr == 0 {
 		return nil, errors.New("failed to read code object: null pointer")
 	}
@@ -592,7 +599,8 @@ func fieldByPythonName(obj reflect.Value, fieldName string) reflect.Value {
 }
 
 func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolName,
-	vmObj any) error {
+	vmObj any,
+) error {
 	typeData, err := ef.LookupSymbolAddress(symbol)
 	if err != nil {
 		return fmt.Errorf("symbol '%s' not found", symbol)
@@ -627,7 +635,8 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
 // the code to resolve specified argument parameter to the first jump/call.
 func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
-	symbolName libpf.SymbolName) (libpf.SymbolValue, error) {
+	symbolName libpf.SymbolName,
+) (libpf.SymbolValue, error) {
 	// Read and decode the code for the symbol
 	sym, code, err := ef.SymbolData(symbolName, 64)
 	if err != nil {
@@ -853,8 +862,7 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 	})
 	coldRange, err := findColdRange(ef, code, interp)
 	if err != nil {
-		log.WithError(err).Warnf("failed to recover python ranges %s",
-			info.FileName())
+		log.Errorf("failed to recover python ranges %s: %s", info.FileName(), err.Error())
 	}
 	if coldRange != (util.Range{}) {
 		interpRanges = append(interpRanges, coldRange)

@@ -747,6 +747,11 @@ static inline EBPF_INLINE int collect_trace(
   trace->kernel_stack_id = bpf_get_stackid(ctx, &kernel_stackmap, BPF_F_REUSE_STACKID);
   DEBUG_PRINT("kernel stack id = %d", trace->kernel_stack_id);
 
+  if (pid == 0) {
+    tail_call(ctx, PROG_UNWIND_STOP);
+    return 0;
+  }
+
   // Recursive unwind frames
   int unwinder           = PROG_UNWIND_STOP;
   bool has_usermode_regs = false;

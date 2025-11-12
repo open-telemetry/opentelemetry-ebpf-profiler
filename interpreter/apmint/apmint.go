@@ -14,11 +14,12 @@ import (
 	"regexp"
 	"unsafe"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -76,13 +77,18 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, fmt.Errorf("process storage export has wrong size %d", procStorageSym.Size)
 	}
 
-	// Resolve thread info TLS export.
-	tlsDescs, err := ef.TLSDescriptors()
-	if err != nil {
-		return nil, errors.New("failed to extract TLS descriptors")
+	var tlsDescElfAddr libpf.Address
+	if err = ef.VisitTLSRelocations(func(r pfelf.ElfReloc, symName string) bool {
+		if symName == tlsExport {
+			tlsDescElfAddr = libpf.Address(r.Off)
+			return false
+		}
+		return true
+	}); err != nil {
+		return nil, errors.New(fmt.Sprintf("failed to visit TLS descriptor: %v", err))
 	}
-	tlsDescElfAddr, ok := tlsDescs[tlsExport]
-	if !ok {
+
+	if tlsDescElfAddr == 0 {
 		return nil, errors.New("failed to locate TLS descriptor")
 	}
 
@@ -101,8 +107,13 @@ type data struct {
 
 var _ interpreter.Data = &data{}
 
+func (d data) String() string {
+	return "APM integration"
+}
+
 func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
+	bias libpf.Address, rm remotememory.RemoteMemory,
+) (interpreter.Instance, error) {
 	procStorage, err := readProcStorage(rm, bias+d.procStorageElfVA)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read APM correlation process storage: %s", err)
@@ -151,7 +162,8 @@ func (i *Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 
 // NotifyAPMAgent sends out collected traces to the connected APM agent.
 func (i *Instance) NotifyAPMAgent(
-	pid libpf.PID, rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16) {
+	pid libpf.PID, rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16,
+) {
 	if rawTrace.APMTransactionID == libpf.InvalidAPMSpanID || i.socket == nil {
 		return
 	}

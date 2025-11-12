@@ -17,7 +17,7 @@ import (
 	"strings"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -82,33 +82,34 @@ func (sp *systemProcess) GetMachineData() MachineData {
 	return MachineData{Machine: pfelf.CurrentMachine}
 }
 
-func (sp *systemProcess) GetExe() (string, error) {
-	return os.Readlink(fmt.Sprintf("/proc/%d/exe", sp.pid))
+func (sp *systemProcess) GetExe() (libpf.String, error) {
+	str, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", sp.pid))
+	if err != nil {
+		return libpf.NullString, err
+	}
+	return libpf.Intern(str), nil
 }
 
 func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
-	var processName string
+	var processName libpf.String
 	exePath, _ := sp.GetExe()
 	if name, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", sp.pid)); err == nil {
-		processName = string(name)
+		processName = libpf.Intern(pfunsafe.ToString(name))
 	}
 
-	envVarMap := make(map[string]string, len(cfg.IncludeEnvVars))
+	var envVarMap map[libpf.String]libpf.String
 	if len(cfg.IncludeEnvVars) > 0 {
 		if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", sp.pid)); err == nil {
+			envVarMap = make(map[libpf.String]libpf.String, len(cfg.IncludeEnvVars))
 			// environ has environment variables separated by a null byte (hex: 00)
-			splittedVars := strings.Split(string(envVars), "\000")
+			splittedVars := strings.Split(pfunsafe.ToString(envVars), "\000")
 			for _, envVar := range splittedVars {
-				keyValuePair := strings.SplitN(envVar, "=", 2)
-
-				// If the entry could not be split at a '=', ignore it
-				// (last entry of environ might be empty)
-				if len(keyValuePair) != 2 {
+				var fields [2]string
+				if stringutil.SplitN(envVar, "=", fields[:]) < 2 {
 					continue
 				}
-
-				if _, ok := cfg.IncludeEnvVars[keyValuePair[0]]; ok {
-					envVarMap[keyValuePair[0]] = keyValuePair[1]
+				if _, ok := cfg.IncludeEnvVars[fields[0]]; ok {
+					envVarMap[libpf.Intern(fields[0])] = libpf.Intern(fields[1])
 				}
 			}
 		}
@@ -127,7 +128,7 @@ func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 }
 
 // parseContainerID parses cgroup v2 container IDs
-func parseContainerID(cgroupFile io.Reader) string {
+func parseContainerID(cgroupFile io.Reader) libpf.String {
 	scanner := bufio.NewScanner(cgroupFile)
 	buf := make([]byte, 512)
 	// Providing a predefined buffer overrides the internal buffer that Scanner uses (4096 bytes).
@@ -141,24 +142,24 @@ func parseContainerID(cgroupFile io.Reader) string {
 		if bytes.Equal(b, []byte("0::/")) {
 			continue // Skip a common case
 		}
-		line := string(b)
+		line := pfunsafe.ToString(b)
 		pathParts = cgroupv2ContainerIDPattern.FindStringSubmatch(line)
 		if pathParts == nil {
 			log.Debugf("Could not extract cgroupv2 path from line: %s", line)
 			continue
 		}
-		return pathParts[1]
+		return libpf.Intern(pathParts[1])
 	}
 
 	// No containerID could be extracted
-	return ""
+	return libpf.NullString
 }
 
 // extractContainerID returns the containerID for pid if cgroup v2 is used.
-func extractContainerID(pid libpf.PID) (string, error) {
+func extractContainerID(pid libpf.PID) (libpf.String, error) {
 	cgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
 	if err != nil {
-		return "", err
+		return libpf.NullString, err
 	}
 
 	return parseContainerID(cgroupFile), nil
@@ -456,8 +457,4 @@ func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
 
 	// Fall back to opening the file using the process specific root
 	return pfelf.Open(path.Join("/proc", strconv.Itoa(int(sp.pid)), "root", file))
-}
-
-func (sp *systemProcess) ExtractAsFile(file string) (string, error) {
-	return path.Join("/proc", strconv.Itoa(int(sp.pid)), "root", file), nil
 }

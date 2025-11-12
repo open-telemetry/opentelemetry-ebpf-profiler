@@ -260,6 +260,11 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, error) {
 			continue
 		}
 
+		// Skip segments that are too small anyway.
+		if p.Filesz < uint64(PclntabHeaderSize()) {
+			continue
+		}
+
 		var data []byte
 		var err error
 		if data, err = p.Data(maxBytesGoPclntab); err != nil {
@@ -304,22 +309,22 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, err error) {
 		// as the .gopclntab section is not available on PIE binaries.
 		// A full symbol table read is needed as these are not dynamic symbols.
 		// Consequently these symbols might be unavailable on a stripped binary.
-		symtab, err := ef.ReadSymbols()
-		if err != nil {
+		var start, end libpf.SymbolValue
+		ef.VisitSymbols(func (sym libpf.Symbol) bool {
+			if sym.Name == "runtime.pclntab" {
+				start = sym.Address
+			} else if sym.Name == "runtime.epclntab" {
+				end = sym.Address
+			}
+			return start == 0 || end == 0
+		})
+		if start == 0 || end == 0 {
 			// It seems the Go binary was stripped. So we use the heuristic approach
 			// to get the stack deltas.
 			if data, err = searchGoPclntab(ef); err != nil {
 				return nil, fmt.Errorf("failed to search .gopclntab: %v", err)
 			}
 		} else {
-			start, err := symtab.LookupSymbolAddress("runtime.pclntab")
-			if err != nil {
-				return nil, fmt.Errorf("failed to load .gopclntab via symbols: %v", err)
-			}
-			end, err := symtab.LookupSymbolAddress("runtime.epclntab")
-			if err != nil {
-				return nil, fmt.Errorf("failed to load .gopclntab via symbols: %v", err)
-			}
 			if start >= end {
 				return nil, fmt.Errorf("invalid .gopclntab symbols: %v-%v", start, end)
 			}
@@ -536,11 +541,17 @@ func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
 
 // Symbolize returns the file, line and function information for given PC
 func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
-	index := sort.Search(g.numFuncs, func(i int) bool {
+	// Binary search for the matching go function maps entry. The search
+	// lambda makes 'sort.Search' return the first entry that is larger
+	// than the pc. Thus -1 is needed to get index for the first entry
+	// which is equal or less than pc. The gopclntab has an extra entry in
+	// the end to indicate the end of Go code, use that to determine
+	// if the pc is higher than any Go function address.
+	index := sort.Search(g.numFuncs+1, func(i int) bool {
 		funcPc, _ := g.getFuncMapEntry(i)
 		return funcPc > pc
 	}) - 1
-	if index < 0 {
+	if index >= g.numFuncs || index < 0 {
 		return "", 0, ""
 	}
 

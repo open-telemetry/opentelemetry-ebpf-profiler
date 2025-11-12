@@ -24,7 +24,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -154,7 +154,8 @@ func (store *Store) OpenReadAt(id ID) (*ModuleReader, error) {
 
 // OpenBufferedReadAt is a buffered version of `OpenReadAt`.
 func (store *Store) OpenBufferedReadAt(id ID, cacheSizeBytes uint) (
-	*ModuleReader, error) {
+	*ModuleReader, error,
+) {
 	reader, err := store.OpenReadAt(id)
 	if err != nil {
 		return nil, err
@@ -352,7 +353,7 @@ func (store *Store) ExportModule(id ID, tw *tar.Writer) error {
 
 	hdr := &tar.Header{
 		Name:    localPath,
-		Mode:    0644,
+		Mode:    0o644,
 		Size:    int64(fi.Size()),
 		ModTime: fi.ModTime(),
 	}
@@ -370,7 +371,6 @@ func (store *Store) IsPresentRemotely(id ID) (bool, error) {
 		Bucket: &store.bucket,
 		Key:    &moduleKey,
 	})
-
 	if err != nil {
 		if isErrNoSuchKey(err) {
 			return false, nil
@@ -507,7 +507,8 @@ func (store *Store) makeLocalPath(id ID) string {
 // file recognized as a valid module ID, `unkVisitor` is called with the full path of all other
 // files in the path.
 func (store *Store) visitLocalModules(moduleVisitor func(ID) error,
-	unkVisitor func(string) error) error {
+	unkVisitor func(string) error,
+) error {
 	files, err := os.ReadDir(store.localCachePath)
 	if err != nil {
 		return fmt.Errorf("failed to read files in local cache: %w", err)
