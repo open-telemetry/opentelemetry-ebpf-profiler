@@ -26,13 +26,13 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -70,38 +70,38 @@ func isPIDLive(pid libpf.PID) (bool, error) {
 	return true, err
 }
 
-// assignTSDInfo updates the TSDInfo for the Interpreters on given PID.
+// assignLibcInfo updates the LibcInfo for the Interpreters on given PID.
 // Caller must hold pm.mu write lock.
-func (pm *ProcessManager) assignTSDInfo(pid libpf.PID, tsdInfo *tpbase.TSDInfo) {
-	if tsdInfo == nil {
+func (pm *ProcessManager) assignLibcInfo(pid libpf.PID, libcInfo *libc.LibcInfo) {
+	if libcInfo == nil {
 		return
 	}
 
 	info, ok := pm.pidToProcessInfo[pid]
 	if !ok {
-		// This is guaranteed not to happen since assignTSDInfo is always called after
+		// This is guaranteed not to happen since assignLibcInfo is always called after
 		// pm.updatePidInformation - but to avoid a possible panic we just return here.
 		return
-	} else if info.tsdInfo != nil {
+	} else if info.libcInfo != nil {
 		return
 	}
 
-	info.tsdInfo = tsdInfo
+	info.libcInfo = libcInfo
 
 	// Update the tsdInfo to interpreters that are already attached
 	for _, instance := range pm.interpreters[pid] {
-		if err := instance.UpdateTSDInfo(pm.ebpf, pid, *tsdInfo); err != nil {
-			log.Errorf("Failed to update PID %v TSDInfo: %v",
+		if err := instance.UpdateLibcInfo(pm.ebpf, pid, *libcInfo); err != nil {
+			log.Errorf("Failed to update PID %v LibcInfo: %v",
 				pid, err)
 		}
 	}
 }
 
-// getTSDInfo retrieves the TSDInfo of given PID
+// getLibcInfo retrieves the LibcInfo of given PID
 // Caller must hold pm.mu read lock.
-func (pm *ProcessManager) getTSDInfo(pid libpf.PID) *tpbase.TSDInfo {
+func (pm *ProcessManager) getLibcInfo(pid libpf.PID) *libc.LibcInfo {
 	if info, ok := pm.pidToProcessInfo[pid]; ok {
-		return info.tsdInfo
+		return info.libcInfo
 	}
 	return nil
 }
@@ -110,7 +110,7 @@ func (pm *ProcessManager) getTSDInfo(pid libpf.PID) *tpbase.TSDInfo {
 //
 // Caller must hold pm.mu write lock.
 func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
-	) *processInfo {
+) *processInfo {
 	if info, ok := pm.pidToProcessInfo[pid]; ok {
 		return info
 	}
@@ -122,8 +122,8 @@ func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
 	}
 
 	info := &processInfo{
-		meta:    pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars}),
-		tsdInfo: nil,
+		meta:     pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars}),
+		libcInfo: nil,
 	}
 	pm.pidToProcessInfo[pid] = info
 	pm.pidPageToMappingInfoSize++
@@ -172,10 +172,10 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 	log.Debugf("Attached to %v interpreter in PID %v", data, pid)
 	pm.assignInterpreter(pid, oid, instance)
 
-	if tsdInfo := pm.getTSDInfo(pid); tsdInfo != nil {
-		err = instance.UpdateTSDInfo(pm.ebpf, pid, *tsdInfo)
+	if libcInfo := pm.getLibcInfo(pid); libcInfo != nil {
+		err = instance.UpdateLibcInfo(pm.ebpf, pid, *libcInfo)
 		if err != nil {
-			log.Errorf("Failed to update PID %v TSDInfo: %v", pid, err)
+			log.Errorf("Failed to update PID %v LibcInfo: %v", pid, err)
 		}
 	}
 
@@ -352,7 +352,7 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.Mapping
 		return libpf.FrameMapping{}, err
 	}
 
-	pm.assignTSDInfo(pr.PID(), ei.TSDInfo)
+	pm.assignLibcInfo(pr.PID(), ei.LibcInfo)
 	if ei.Data != nil {
 		bias := libpf.Address(m.Vaddr - elfSpaceVA)
 		pm.handleNewInterpreter(pr, bias, m.GetOnDiskFileIdentifier(), ei.Data)

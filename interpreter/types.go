@@ -8,13 +8,13 @@ import (
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
-	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -143,9 +143,9 @@ type Instance interface {
 	SynchronizeMappings(ebpf EbpfHandler, exeReporter reporter.ExecutableReporter,
 		pr process.Process, mappings []process.Mapping) error
 
-	// UpdateTSDInfo is called when the process C-library Thread Specific Data related
+	// UpdateLibcInfo is called when the process C-library related
 	// introspection data has been updated.
-	UpdateTSDInfo(ebpf EbpfHandler, pid libpf.PID, info tpbase.TSDInfo) error
+	UpdateLibcInfo(ebpf EbpfHandler, pid libpf.PID, info libc.LibcInfo) error
 
 	// Symbolize converts one ebpf frame to one or more (if inlining was expanded) libpf.Frame.
 	// The resulting libpf.Frame values are appended to frames.

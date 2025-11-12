@@ -12,8 +12,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/tpbase"
 )
 
 // This file contains code to extract the offset of the thread pointer base variable in
@@ -39,7 +39,7 @@ func loadTPBaseOffset(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	kmod *kallsyms.Module,
 ) (uint64, error) {
 	var tpbaseOffset uint32
-	analyzers, err := tpbase.GetAnalyzers()
+	analyzers, err := libc.GetTpBaseAnalyzers()
 	if err != nil {
 		return 0, err
 	}
