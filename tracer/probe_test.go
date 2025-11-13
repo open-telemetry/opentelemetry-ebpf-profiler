@@ -103,7 +103,7 @@ func TestParseProbe(t *testing.T) {
 		"empty_string": {
 			input:   "",
 			wantErr: true,
-			errMsg:  "unknown probe type",
+			errMsg:  "invalid format",
 		},
 		"no_colon": {
 			input:   "kprobe",
