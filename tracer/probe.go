@@ -18,24 +18,23 @@ type ProbeSpec struct {
 	ProgName string
 }
 
+const genericProgName = "kprobe__generic"
+
 func ParseProbe(spec string) (*ProbeSpec, error) {
 	parts := strings.SplitN(spec, ":", 3)
-	var progName string
 
 	switch parts[0] {
 	case "kprobe", "kretprobe":
-		progName = "kprobe__generic"
 		if len(parts) != 2 || parts[1] == "" {
 			return nil, fmt.Errorf("invalid format: %s", spec)
 		}
 		return &ProbeSpec{
 			Type:     parts[0],
 			Symbol:   parts[1],
-			ProgName: progName,
+			ProgName: genericProgName,
 		}, nil
 
 	case "uprobe", "uretprobe":
-		progName = "uprobe__generic"
 		if len(parts) != 3 || parts[2] == "" {
 			return nil, fmt.Errorf("invalid format: %s", spec)
 		}
@@ -43,7 +42,7 @@ func ParseProbe(spec string) (*ProbeSpec, error) {
 			Type:     parts[0],
 			Target:   parts[1],
 			Symbol:   parts[2],
-			ProgName: progName,
+			ProgName: genericProgName,
 		}, nil
 
 	default:

@@ -431,19 +431,14 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	}
 
 	if len(cfg.ProbeLinks) > 0 || cfg.LoadProbe {
-		uprobeProgs := []progLoaderHelper{
+		probeProgs := []progLoaderHelper{
 			{
-				name:             "uprobe__generic",
-				noTailCallTarget: true,
-				enable:           true,
-			},
-			{
-				name:             "kprobe__generic",
+				name:             genericProgName,
 				noTailCallTarget: true,
 				enable:           true,
 			},
 		}
-		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], uprobeProgs,
+		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], probeProgs,
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, fmt.Errorf("failed to load uprobe eBPF programs: %v", err)
 		}

@@ -17,13 +17,6 @@ static EBPF_INLINE int probe__generic(struct pt_regs *ctx)
   return collect_trace(ctx, TRACE_PROBE, pid, tid, ts, 0);
 }
 
-// uprobe__generic serves as entry point for uprobe based profiling.
-SEC("uprobe/generic")
-int uprobe__generic(void *ctx)
-{
-  return probe__generic((struct pt_regs *)ctx);
-}
-
 // kprobe__generic serves as entry point for kprobe based profiling.
 SEC("kprobe/generic")
 int kprobe__generic(struct pt_regs *ctx)
