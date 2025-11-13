@@ -5,7 +5,6 @@ package execinfomanager // import "go.opentelemetry.io/ebpf-profiler/processmana
 
 import (
 	"debug/elf"
-	"sort"
 
 	aa "golang.org/x/arch/arm64/arm64asm"
 
@@ -114,9 +113,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 		}
 		return true
 	})
-	sort.Slice(deltas, func(i, j int) bool {
-		return deltas[i].Address < deltas[j].Address
-	})
+	deltas.Sort()
 
 	return sdtypes.IntervalData{Deltas: deltas}
 }

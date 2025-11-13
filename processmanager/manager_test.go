@@ -83,10 +83,6 @@ func (d *dummyProcess) OpenELF(name string) (*pfelf.File, error) {
 	return pfelf.Open(name)
 }
 
-func (d *dummyProcess) ExtractAsFile(name string) (string, error) {
-	return name, nil
-}
-
 func (d *dummyProcess) Close() error {
 	return nil
 }

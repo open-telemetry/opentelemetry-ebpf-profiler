@@ -6,7 +6,6 @@ package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/
 import (
 	"debug/elf"
 	"fmt"
-	"slices"
 	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -180,38 +179,6 @@ func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
 	return extractFile(elfFile, elfRef, interval)
 }
 
-// compareStackDelta implements the comparison logic for slices.SortFunc.
-// It must return:
-// -1 if a should come before b (a < b)
-// 0 if a and b are considered equal
-// 1 if a should come after b (a > b)
-func compareStackDelta(a, b sdtypes.StackDelta) int {
-	// 1. Primary Key: Address (uint64)
-	if a.Address < b.Address {
-		return -1
-	}
-	if a.Address > b.Address {
-		return 1
-	}
-
-	if a.Info.Opcode != b.Info.Opcode {
-		if a.Info.Opcode < b.Info.Opcode {
-			return -1
-		}
-		if a.Info.Opcode > b.Info.Opcode {
-			return 1
-		}
-	}
-
-	if a.Info.Param < b.Info.Param {
-		return -1
-	}
-	if a.Info.Param > b.Info.Param {
-		return 1
-	}
-
-	return 0
-}
 
 // extractFile extracts the elfFile stack deltas and uses the optional elfRef to resolve
 // debug link references if needed.
@@ -256,7 +223,7 @@ func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference,
 
 	// If multiple sources were merged, sort them.
 	if filter.unsortedFrames || (filter.ehFrames && filter.golangFrames) {
-		slices.SortFunc(deltas, compareStackDelta)
+		deltas.Sort()
 
 		dedup := deltas[0:0]
 		for i := 0; i < len(deltas); i++ {

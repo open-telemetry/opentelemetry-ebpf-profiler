@@ -61,27 +61,6 @@ func (scd *StoreCoredump) OpenELF(path string) (*pfelf.File, error) {
 	return scd.CoredumpProcess.OpenELF(path)
 }
 
-func (scd *StoreCoredump) ExtractAsFile(file string) (string, error) {
-	info, ok := scd.modules[file]
-	if !ok {
-		return "", os.ErrNotExist
-	}
-
-	f, err := os.CreateTemp("", "ebpf-profiler-coredump.*")
-	if err != nil {
-		return "", err
-	}
-	tmpFile := f.Name()
-	_ = f.Close()
-
-	if err := scd.store.UnpackModuleToPath(info.Ref, tmpFile); err != nil {
-		_ = os.Remove(tmpFile)
-		return "", err
-	}
-	scd.tempFiles[file] = tmpFile
-	return tmpFile, nil
-}
-
 func (scd *StoreCoredump) Close() error {
 	for _, tmpFile := range scd.tempFiles {
 		_ = os.Remove(tmpFile)

@@ -29,7 +29,7 @@ import (
 	"io"
 	"path/filepath"
 	"runtime/debug"
-	"sort"
+	"slices"
 	"syscall"
 	"unsafe"
 
@@ -281,10 +281,9 @@ func newFile(r io.ReaderAt, closer io.Closer,
 
 	// We sort the ROData so that we preferentially access those that are marked
 	// as "read" before we access those that are written as "read-execute"
-	sort.Slice(f.ROData, func(i, j int) bool {
+	slices.SortFunc(f.ROData, func(a, b *Prog) int {
 		// The &'s here are just in case one segment has PF_MASK_PROC set
-		return f.ROData[i].Flags&(elf.PF_R|elf.PF_X) <
-			f.ROData[j].Flags&(elf.PF_R|elf.PF_X)
+		return int(a.Flags&(elf.PF_R|elf.PF_X)) - int(b.Flags&(elf.PF_R|elf.PF_X))
 	})
 
 	for i := range f.Progs {
