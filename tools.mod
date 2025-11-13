@@ -1,6 +1,6 @@
 module go.opentelemetry.io/ebpf-profiler
 
-go 1.25.3
+go 1.24.0
 
 tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 
