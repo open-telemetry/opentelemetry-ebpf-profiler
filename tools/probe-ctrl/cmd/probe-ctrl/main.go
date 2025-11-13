@@ -24,7 +24,6 @@ var (
 func init() {
 	flag.StringVar(&argProbeLink, "probe-link", "", "kprobe|kretprobe|uprobe|uretprobe:<target>[:<symbol>]")
 	flag.BoolVar(&argClear, "clear", false, "Remove probe from all links.")
-	flag.BoolVar(&argListProgs, "list", false, "List all loaded eBPF programs and exit.")
 	flag.StringVar(&argBPFFS, "bpffs", defaultBPFFSPath, "Path to BPF filesystem mount point.")
 }
 
@@ -34,10 +33,6 @@ func main() {
 
 func run() int {
 	flag.Parse()
-
-	if argListProgs {
-		return listAllPrograms()
-	}
 
 	pinPath := fmt.Sprintf("%s/probe-ctrl/", argBPFFS)
 
@@ -55,7 +50,7 @@ func run() int {
 		return -1
 	}
 
-	tracerProg, err := getProbe(probeSpec.ProgName)
+	tracerProg, err := getProbe()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to get probe %q: %v\n", probeSpec.ProgName, err)
 		return -1
