@@ -7,7 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/armhelpers"
@@ -28,6 +28,18 @@ func nextAligned(ptr libpf.Address, align uint64) libpf.Address {
 type StubRoutine struct {
 	name       string
 	start, end libpf.Address
+}
+
+func compareStubRoutine(a, b StubRoutine) int {
+	if a.start < b.start {
+		return -1
+	}
+	if a.start > b.start {
+		return 1
+	}
+	// Secondary ordering by name to ensure that we produce deterministic
+	// results even in the presence of stub aliases (same start address).
+	return strings.Compare(a.name, b.name)
 }
 
 // findStubBounds heuristically determines the bounds of individual functions
@@ -71,15 +83,7 @@ func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
 		})
 	}
 
-	sort.Slice(stubs, func(i, j int) bool {
-		if stubs[i].start != stubs[j].start {
-			return stubs[i].start < stubs[j].start
-		}
-
-		// Secondary ordering by name to ensure that we produce deterministic
-		// results even in the presence of stub aliases (same start address).
-		return stubs[i].name < stubs[j].name
-	})
+	slices.SortFunc(stubs, compareStubRoutine)
 
 	filtered := make([]StubRoutine, 0, len(stubs))
 	for i := 0; i < len(stubs); i++ {

@@ -7,6 +7,8 @@
 package stackdeltatypes // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 
 import (
+	"slices"
+
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
@@ -119,6 +121,39 @@ func (deltas *StackDeltaArray) AddEx(delta StackDelta, sorted bool) {
 // Add adds a new stack delta from a sorted source.
 func (deltas *StackDeltaArray) Add(delta StackDelta) {
 	deltas.AddEx(delta, true)
+}
+
+// compareStackDelta implements the comparison logic for slices.SortFunc.
+// It must return:
+// -1 if a should come before b (a < b)
+// 0 if a and b are considered equal
+// 1 if a should come after b (a > b)
+func compareStackDelta(a, b StackDelta) int {
+	// 1. Primary Key: Address (uint64)
+	if a.Address < b.Address {
+		return -1
+	}
+	if a.Address > b.Address {
+		return 1
+	}
+	if a.Info.Opcode < b.Info.Opcode {
+		return -1
+	}
+	if a.Info.Opcode > b.Info.Opcode {
+		return 1
+	}
+	if a.Info.Param < b.Info.Param {
+		return -1
+	}
+	if a.Info.Param > b.Info.Param {
+		return 1
+	}
+	return 0
+}
+
+// Sort sorts the stack deltas.
+func (deltas *StackDeltaArray) Sort() {
+	slices.SortFunc(*deltas, compareStackDelta)
 }
 
 // PackDerefParam compresses pre- and post-dereference parameters to single value
