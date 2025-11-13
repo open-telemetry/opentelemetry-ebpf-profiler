@@ -48,6 +48,7 @@ GO_TAGS := osusergo,netgo
 EBPF_FLAGS :=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
+GO_TOOLS := -modfile=tools.mod
 
 MAKEFLAGS += -j$(shell nproc)
 
@@ -82,10 +83,12 @@ rust-components: rust-targets
 rust-tests: rust-targets
 	cargo test
 
-GOLANGCI_LINT_VERSION = "v2.1.6"
 lint: generate vanity-import-check pprof-execs
 	$(MAKE) lint -C support/ebpf
-	docker run --rm -t -v $$(pwd):/app -w /app golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) sh -c "golangci-lint version && golangci-lint config verify && golangci-lint run --max-issues-per-linter -1 --max-same-issues -1 && golangci-lint fmt"
+	go tool $(GO_TOOLS) golangci-lint config verify
+	# tools/coredump tests require CGO_ENABLED
+	CGO_ENABLED=1 go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
+	go tool $(GO_TOOLS) golangci-lint fmt
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf
