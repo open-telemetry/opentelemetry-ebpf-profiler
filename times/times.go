@@ -147,6 +147,9 @@ func getBootTimeUnixNano() int64 {
 	mi := 0
 	for i := range samples {
 		delta := samples[i].t2.UnixNano() - samples[i].t1.UnixNano()
+		if delta < 0 {
+			delta = -delta
+		}
 		if delta < md {
 			md = delta
 			mi = i
