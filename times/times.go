@@ -156,5 +156,5 @@ func getBootTimeUnixNano() int64 {
 		}
 	}
 	// This should never be negative, as t1.UnixNano() >> ktime
-	return samples[mi].t2.UnixNano() - samples[mi].ktime
+	return samples[mi].t1.UnixNano() - samples[mi].ktime
 }
