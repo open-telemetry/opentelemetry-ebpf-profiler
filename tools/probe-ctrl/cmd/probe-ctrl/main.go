@@ -16,8 +16,9 @@ var (
 	argBPFFS     string
 )
 
-var (
+const (
 	defaultBPFFSPath = "/sys/fs/bpf"
+	probePinName     = "probe-ctrl"
 )
 
 func init() {
@@ -33,7 +34,7 @@ func main() {
 func run() int {
 	flag.Parse()
 
-	pinPath := fmt.Sprintf("%s/probe-ctrl/", argBPFFS)
+	pinPath := fmt.Sprintf("%s/%s/", argBPFFS, probePinName)
 
 	if argClear {
 		if err := os.RemoveAll(pinPath); err != nil {
@@ -66,7 +67,7 @@ func run() int {
 		return -1
 	}
 
-	pinFile := filepath.Join(pinPath, fmt.Sprintf("%d", time.Now().Unix()))
+	pinFile := filepath.Join(pinPath, fmt.Sprintf("%d", time.Now().UnixMicro()))
 	if err := probeLink.Pin(pinFile); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to pin link: %v\n", err)
 		return -1
