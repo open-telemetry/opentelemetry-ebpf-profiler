@@ -52,11 +52,15 @@ jobs:
         run: make lint
 
   test:
-    name: Test (${{ matrix.target_arch }})
+    name: Test (${{ matrix.target_arch }}${{ matrix.go_flags }})
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        target_arch: [amd64, arm64]
+        include:
+          - { target_arch: amd64, go_flags: "" }
+          - { target_arch: amd64, go_flags: "-race" }
+          - { target_arch: arm64, go_flags: "" }
+          # - { target_arch: arm64, go_flags: "-race" } # seem to not work under qemu
     steps:
       - name: Clone code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -73,7 +77,7 @@ jobs:
             coredumps-${{ matrix.target_arch }}
             coredumps-
       - name: Tests
-        run: make test TARGET_ARCH=${{ matrix.target_arch }}
+        run: make test TARGET_ARCH=${{ matrix.target_arch }} GO_FLAGS="${{ matrix.go_flags }}"
 
   build-integration-test-binaries:
     name: Build integration test binaries (${{ matrix.target_arch }})
