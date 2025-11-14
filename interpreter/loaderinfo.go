@@ -19,16 +19,13 @@ type LoaderInfo struct {
 	fileID host.FileID
 	// elfRef provides a cached access to the ELF file.
 	elfRef *pfelf.Reference
-	// gaps represents holes in the stack deltas of the executable.
-	gaps []util.Range
 }
 
 // NewLoaderInfo returns a populated LoaderInfo struct.
-func NewLoaderInfo(fileID host.FileID, elfRef *pfelf.Reference, gaps []util.Range) *LoaderInfo {
+func NewLoaderInfo(fileID host.FileID, elfRef *pfelf.Reference) *LoaderInfo {
 	return &LoaderInfo{
 		fileID: fileID,
 		elfRef: elfRef,
-		gaps:   gaps,
 	}
 }
 
@@ -62,9 +59,4 @@ func (i *LoaderInfo) FileID() host.FileID {
 // FileName returns the fileName  element of the LoaderInfo struct.
 func (i *LoaderInfo) FileName() string {
 	return i.elfRef.FileName()
-}
-
-// Gaps returns the gaps for the executable of this LoaderInfo.
-func (i *LoaderInfo) Gaps() []util.Range {
-	return i.gaps
 }

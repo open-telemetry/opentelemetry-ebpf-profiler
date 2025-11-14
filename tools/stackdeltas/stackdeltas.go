@@ -111,8 +111,8 @@ func analyzeFile(filename string, s *stats, dump bool) error {
 			if delta.Hints&sdtypes.UnwindHintKeep != 0 {
 				comment += " keep"
 			}
-			if delta.Hints&sdtypes.UnwindHintGap != 0 {
-				comment += " gap"
+			if delta.Hints&sdtypes.UnwindHintEnd != 0 {
+				comment += " end"
 			}
 			if merged {
 				comment += " merged"

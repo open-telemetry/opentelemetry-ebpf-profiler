@@ -225,39 +225,11 @@ func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference,
 	if filter.unsortedFrames || (filter.ehFrames && filter.golangFrames) {
 		deltas.Sort()
 
-		maxDelta := 0
+		dedup := deltas[0:0]
 		for i := 0; i < len(deltas); i++ {
-			delta := &deltas[i]
-			if maxDelta > 0 {
-				// This duplicates the logic from StackDeltaArray.Add()
-				// to remove duplicate and redundant stack deltas.
-				prev := &deltas[maxDelta-1]
-				if prev.Hints&sdtypes.UnwindHintGap != 0 &&
-					prev.Address+sdtypes.MinimumGap >= delta.Address {
-					// The previous opcode is end-of-function marker, and
-					// the gap is not large. Reduce deltas by overwriting it.
-					if maxDelta <= 1 || deltas[maxDelta-2].Info != delta.Info {
-						*prev = *delta
-						continue
-					}
-					// The delta before end-of-function marker is same as
-					// what is being inserted now. Overwrite that.
-					prev = &deltas[maxDelta-2]
-					maxDelta--
-				}
-				if prev.Info == delta.Info {
-					prev.Hints |= delta.Hints & sdtypes.UnwindHintKeep
-					continue
-				}
-				if prev.Address == delta.Address {
-					*prev = *delta
-					continue
-				}
-			}
-			deltas[maxDelta] = *delta
-			maxDelta++
+			dedup.Add(deltas[i])
 		}
-		deltas = deltas[:maxDelta]
+		deltas = dedup
 	}
 
 	*interval = sdtypes.IntervalData{

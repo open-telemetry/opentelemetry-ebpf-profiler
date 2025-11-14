@@ -13,11 +13,6 @@ import (
 )
 
 const (
-	// ABI is the current binary compatibility version. It is incremented
-	// if struct IntervalData, struct StackDelta or the meaning of their contents
-	// changes, and can be used to determine if the data is compatible
-	ABI = 15
-
 	// MinimumGap determines the minimum number of alignment bytes needed
 	// in order to keep the created STOP stack delta between functions
 	MinimumGap = 15
@@ -27,8 +22,8 @@ const (
 	// UnwindHintKeep flags important intervals that should not be removed
 	// (e.g. has CALL/SYSCALL assembly opcode, or is part of function prologue)
 	UnwindHintKeep uint8 = 1
-	// UnwindHintGap indicates that the delta marks function end
-	UnwindHintGap uint8 = 4
+	// UnwindHintEnd indicates end-of-function delta.
+	UnwindHintEnd uint8 = 2
 )
 
 // UnwindInfo contains the data needed to unwind PC, SP and FP
@@ -94,7 +89,7 @@ func (deltas *StackDeltaArray) AddEx(delta StackDelta, sorted bool) {
 	}
 	if num > 0 && sorted {
 		prev := &(*deltas)[num-1]
-		if prev.Hints&UnwindHintGap != 0 && prev.Address+MinimumGap >= delta.Address {
+		if prev.Hints&UnwindHintEnd != 0 && prev.Address+MinimumGap >= delta.Address {
 			// The previous opcode is end-of-function marker, and
 			// the gap is not large. Reduce deltas by overwriting it.
 			if num <= 1 || (*deltas)[num-2].Info != delta.Info {

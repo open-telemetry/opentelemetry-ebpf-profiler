@@ -51,16 +51,21 @@ func NewEhFrameTable(ef *pfelf.File) (*EhFrameTable, error) {
 }
 
 // LookupFDE performs a binary search in .eh_frame_hdr for an FDE covering the given addr.
-func (e *EhFrameTable) LookupFDE(addr libpf.Address) (FDE, error) {
+func (e *EhFrameTable) LookupIndex(addr libpf.Address) (int, error) {
 	idx := sort.Search(e.count(), func(idx int) bool {
 		r := e.entryAt(idx)
 		ipStart, _ := r.ptr(e.tableEnc) // ignoring error, check bounds later
 		return ipStart > uintptr(addr)
 	})
 	if idx <= 0 {
-		return FDE{}, errors.New("FDE not found")
+		return -1, errors.New("FDE not found")
 	}
-	ipStart, fr, entryErr := e.decodeEntryAt(idx - 1)
+	return idx - 1, nil
+}
+
+// DecodeIndex decodes an FDE based on the search table index.
+func (e *EhFrameTable) DecodeIndex(idx int) (FDE, error) {
+	ipStart, fr, entryErr := e.decodeEntryAt(idx)
 	if entryErr != nil {
 		return FDE{}, entryErr
 	}
@@ -68,14 +73,26 @@ func (e *EhFrameTable) LookupFDE(addr libpf.Address) (FDE, error) {
 	if err != nil {
 		return FDE{}, err
 	}
-	if uintptr(addr) < fde.ipStart || uintptr(addr) >= fde.ipStart+fde.ipLen {
-		return FDE{}, errors.New("FDE not found")
-	}
-
 	return FDE{
 		PCBegin: fde.ipStart,
 		PCRange: fde.ipLen,
 	}, nil
+}
+
+// LookupFDE performs a binary search in .eh_frame_hdr for an FDE covering the given addr.
+func (e *EhFrameTable) LookupFDE(addr libpf.Address) (FDE, error) {
+	idx, err := e.LookupIndex(addr)
+	if err != nil {
+		return FDE{}, err
+	}
+	fde, err := e.DecodeIndex(idx)
+	if err != nil {
+		return FDE{}, err
+	}
+	if uintptr(addr) < fde.PCBegin || uintptr(addr) >= fde.PCBegin+fde.PCRange {
+		return FDE{}, errors.New("FDE not found")
+	}
+	return fde, nil
 }
 
 func newEhFrameTableFromSections(ehFrameHdrSec *elfRegion,

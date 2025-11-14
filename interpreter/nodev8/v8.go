@@ -175,6 +175,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -2094,6 +2095,41 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 	return nil
 }
 
+func locateSnapshotArea(ef *pfelf.File) util.Range {
+	addr, err := ef.LookupSymbolAddress("_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv")
+	if err != nil {
+		return util.Range{}
+	}
+
+	// If there is a big stack delta soon after v8::internal::Snapshot::DefaultSnapshotBlob()
+	// assume it is the V8 snapshot data.
+	eft, err := elfunwindinfo.NewEhFrameTable(ef)
+	if err != nil {
+		return util.Range{}
+	}
+	ndx, err := eft.LookupIndex(libpf.Address(addr))
+	if err != nil {
+		return util.Range{}
+	}
+
+	for prevEnd := uintptr(addr); prevEnd - uintptr(addr) < 1024; ndx++ {
+		fde, err := eft.DecodeIndex(ndx)
+		if err != nil {
+			return util.Range{}
+		}
+		// Check that there is a large gap.
+		if fde.PCBegin - prevEnd > 512 * 1024 {
+			log.Debugf("located snapshot area: %#x - %#x", prevEnd, fde.PCBegin)
+			return util.Range{
+				Start: uint64(prevEnd),
+				End:   uint64(fde.PCBegin),
+			}
+		}
+		prevEnd = fde.PCBegin + fde.PCRange
+	}
+	return util.Range{}
+}
+
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	if !v8Regex.MatchString(info.FileName()) {
 		return nil, nil
@@ -2124,20 +2160,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	d := &v8Data{
-		version: version,
-	}
-
-	addr, err := ef.LookupSymbolAddress("_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv")
-	if err == nil {
-		// If there is a big stack delta soon after v8::internal::Snapshot::DefaultSnapshotBlob()
-		// assume it is the V8 snapshot data.
-		for _, gap := range info.Gaps() {
-			if gap.Start-uint64(addr) < 1024 {
-				d.snapshotRange = gap
-				log.Debugf("V8 JIT Area: %#v", d.snapshotRange)
-				break
-			}
-		}
+		version:       version,
+		snapshotRange: locateSnapshotArea(ef),
 	}
 
 	sym, err := ef.LookupSymbol("_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE")
