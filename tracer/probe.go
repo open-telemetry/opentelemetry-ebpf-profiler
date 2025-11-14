@@ -69,7 +69,7 @@ const genericProgName = "kprobe__generic"
 func ParseProbe(spec string) (*ProbeSpec, error) {
 	parts := strings.SplitN(spec, ":", 3)
 	if len(parts) < 2 {
-		return nil, fmt.Errorf("invalid format: %s. Expected format: <probe_type>:<symbol>", spec)
+		return nil, fmt.Errorf("invalid format: %s, expected: <probe_type>:<symbol>", spec)
 	}
 
 	probeTypeStr := strings.ToLower(parts[0])
@@ -91,7 +91,7 @@ func ParseProbe(spec string) (*ProbeSpec, error) {
 	switch probeType {
 	case ProbeTypeKprobe, ProbeTypeKretprobe:
 		if len(parts) != 2 || parts[1] == "" {
-			return nil, fmt.Errorf("invalid format: %s. Expected format: <probe_type>:<symbol>", spec)
+			return nil, fmt.Errorf("invalid format: %s, expected: <probe_type>:<symbol>", spec)
 		}
 		return &ProbeSpec{
 			Type:     probeType,
@@ -101,7 +101,7 @@ func ParseProbe(spec string) (*ProbeSpec, error) {
 
 	case ProbeTypeUprobe, ProbeTypeUretprobe:
 		if len(parts) != 3 || parts[2] == "" {
-			return nil, fmt.Errorf("invalid format: %s. Expected format: <probe_type>:<target>:<symbol>", spec)
+			return nil, fmt.Errorf("invalid format: %s, expected: <probe_type>:<target>:<symbol>", spec)
 		}
 		return &ProbeSpec{
 			Type:     probeType,
