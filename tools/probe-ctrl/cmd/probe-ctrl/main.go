@@ -13,7 +13,6 @@ import (
 var (
 	argProbeLink string
 	argClear     bool
-	argListProgs bool
 	argBPFFS     string
 )
 
