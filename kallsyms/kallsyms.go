@@ -69,7 +69,7 @@ type Module struct {
 	mtime int64
 	stub  bool
 
-	mappingFile libpf.FrameMappingFile
+	mapping libpf.FrameMapping
 
 	names   []byte
 	symbols []symbol
@@ -195,10 +195,12 @@ var loadModuleMetadata = func(m *Module, name string, oldMtime int64) bool {
 	if err == nil && len(buildID) >= 16 {
 		fileID = libpf.FileIDFromKernelBuildID(buildID)
 	}
-	m.mappingFile = libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-		FileID:     fileID,
-		FileName:   libpf.Intern(name),
-		GnuBuildID: buildID,
+	m.mapping = libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:     fileID,
+			FileName:   libpf.Intern(name),
+			GnuBuildID: buildID,
+		}),
 	})
 	return true
 }
@@ -227,8 +229,8 @@ func (m *Module) End() libpf.Address {
 	return m.end
 }
 
-func (m *Module) MappingFile() libpf.FrameMappingFile {
-	return m.mappingFile
+func (m *Module) Mapping() libpf.FrameMapping {
+	return m.mapping
 }
 
 // LookupSymbolByAddress resolves the `pc` address to the function and offset from it.
