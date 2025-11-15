@@ -274,5 +274,10 @@
     "id": 6003,
     "name": "dotnet_code_too_large",
     "description": "Dotnet: Code object was too large to unwind in eBPF"
+  },
+  {
+    "id": 7000,
+    "name": "beam_pc_invalid",
+    "description": "BEAM: PC was outside the expected address range"
   }
 ]
