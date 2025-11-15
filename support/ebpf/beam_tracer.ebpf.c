@@ -12,16 +12,17 @@ struct beam_procs_t {
 // unwind_beam is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // BEAM stack frames to the trace object for the current CPU.
-static EBPF_INLINE int unwind_beam(struct pt_regs *ctx) {
+static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
+{
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
     DEBUG_PRINT("beam: no PerCPURecord found");
     return -1;
   }
 
-  Trace *trace = &record->trace;
+  Trace *trace       = &record->trace;
   UnwindState *state = &record->state;
-  u32 pid = trace->pid;
+  u32 pid            = trace->pid;
 
   BEAMProcInfo *info = bpf_map_lookup_elem(&beam_procs, &pid);
 
