@@ -77,8 +77,6 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		ertsVersion: string(ertsVersion),
 	}
 
-	log.Infof("BEAM loaded, OTP Release: %s, ERTS version: %s", otpRelease, ertsVersion)
-
 	return d, nil
 }
 
@@ -148,7 +146,6 @@ func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ repor
 }
 
 func (i *beamInstance) Detach(interpreter.EbpfHandler, libpf.PID) error {
-	log.Infof("BEAM interpreter detaching")
 	return nil
 }
 
