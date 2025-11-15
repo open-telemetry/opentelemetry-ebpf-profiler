@@ -30,6 +30,7 @@ fields = {
     'execution_context_struct.vm_stack': offset_of('rb_execution_context_struct', 'vm_stack'),
     'execution_context_struct.vm_stack_size': offset_of('rb_execution_context_struct', 'vm_stack_size'),
     'execution_context_struct.cfp': offset_of('rb_execution_context_struct', 'cfp'),
+    'execution_context_struct.thread_ptr': offset_of('rb_execution_context_struct', 'thread_ptr'),
 
     'control_frame_struct.pc': offset_of('rb_control_frame_struct', 'pc'),
     'control_frame_struct.iseq': offset_of('rb_control_frame_struct', 'iseq'),
@@ -41,6 +42,7 @@ fields = {
     'iseq_constant_body.iseq_type': offset_of('rb_iseq_constant_body', 'type'),
     'iseq_constant_body.size': offset_of('rb_iseq_constant_body', 'iseq_size'),
     'iseq_constant_body.encoded': offset_of('rb_iseq_constant_body', 'iseq_encoded'),
+    'iseq_constant_body.local_iseq': offset_of('rb_iseq_constant_body', 'local_iseq'),
     'iseq_constant_body.location': offset_of('rb_iseq_constant_body', 'location'),
     'iseq_constant_body.insn_info_body': offset_of('rb_iseq_constant_body', 'insns_info.body'),
     'iseq_constant_body.insn_info_size': offset_of('rb_iseq_constant_body', 'insns_info.size'),
@@ -49,12 +51,15 @@ fields = {
 
     'iseq_location_struct.pathobj': offset_of('rb_iseq_location_struct', 'pathobj'),
     'iseq_location_struct.base_label': offset_of('rb_iseq_location_struct', 'base_label'),
+    'iseq_location_struct.label': offset_of('rb_iseq_location_struct', 'label'),
 
     'iseq_insn_info_entry.position': offset_of('iseq_insn_info_entry', 'position'),
     'iseq_insn_info_entry.size_of_position': size_of_field('iseq_insn_info_entry', 'position'),
     'iseq_insn_info_entry.line_no': offset_of('iseq_insn_info_entry', 'line_no'),
     'iseq_insn_info_entry.size_of_line_no': size_of_field('iseq_insn_info_entry', 'line_no'),
     'iseq_insn_info_entry.size_of_iseq_insn_info_entry': size_of('iseq_insn_info_entry'),
+
+    'rbasic_struct.klass': offset_of('RBasic', 'klass'),
 
     'rstring_struct.as_ary': offset_of('RString', 'as.embed.ary'),
     'rstring_struct.as_heap_ptr': offset_of('RString', 'as.heap.ptr'),
@@ -71,8 +76,23 @@ fields = {
     'size_of_value': size_of('VALUE', ns=''),
 
     'rb_ractor_struct.running_ec': offset_of('rb_ractor_struct', 'threads.running_ec'),
-}
 
+    'rb_method_entry_struct.flags': offset_of('rb_method_entry_struct', 'flags'),
+    'rb_method_entry_struct.defined_class': offset_of('rb_method_entry_struct', 'defined_class'),
+    'rb_method_entry_struct.def': offset_of('rb_method_entry_struct', 'def'),
+    'rb_method_entry_struct.owner': offset_of('rb_method_entry_struct', 'owner'),
+
+    'rclass_and_rb_classext_t.classext': offset_of('RClass_and_rb_classext_t', 'classext'),
+    'rb_classext_struct.classpath': offset_of('rb_classext_struct', 'classpath'),
+    'rb_classext_struct.as.singleton_class.attached_object': offset_of('rb_classext_struct', 'as.singleton_class.attached_object'),
+
+    'rb_method_definition_struct.method_type': offset_of('rb_method_definition_struct', 'type'),
+    'rb_method_definition_struct.body': offset_of('rb_method_definition_struct', 'body'),
+    'rb_method_definition_struct.original_id': offset_of('rb_method_definition_struct', 'original_id'),
+
+    'rb_method_iseq_struct.iseqptr': offset_of('rb_method_iseq_struct', 'iseqptr'),
+    'last_op_id': int(gdb.parse_and_eval(f'(int)tLAST_OP_ID'))
+}
 
 for field, value in fields.items():
     if value is None:

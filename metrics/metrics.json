@@ -1765,14 +1765,14 @@
     "id": 243
   },
   {
-    "description": "Number of failures to read the instruction sequence encoded size",
+    "description": "Number of failures to read the instruction sequence encoded size (deprecated)",
     "type": "counter",
     "name": "UnwindRubyErrReadIseqEncoded",
     "field": "bpf.ruby.errors.read_iseq_encoded",
     "id": 244
   },
   {
-    "description": "Number of failures to read the instruction sequence size",
+    "description": "Number of failures to read the instruction sequence size (deprecated)",
     "type": "counter",
     "name": "UnwindRubyErrReadIseqSize",
     "field": "bpf.ruby.errors.read_iseq_size",
@@ -2019,5 +2019,47 @@
     "name": "UnwindGoLabelsFailures",
     "field": "bpf.golabels.errors",
     "id": 279
+  },
+  {
+    "description": "Number of invalid instruction sequences sequence",
+    "type": "counter",
+    "name": "UnwindRubyErrInvalidIseq",
+    "field": "bpf.ruby.errors.invalid_iseq",
+    "id": 280
+  },
+  {
+    "description": "Number of failures to read the Ruby method definition",
+    "type": "counter",
+    "name": "UnwindRubyErrReadMethodDef",
+    "field": "bpf.ruby.errors.read_method_def",
+    "id": 281
+  },
+  {
+    "description": "Number of failures to read the Ruby method type",
+    "type": "counter",
+    "name": "UnwindRubyErrReadMethodType",
+    "field": "bpf.ruby.errors.read_method_type",
+    "id": 282
+  },
+  {
+    "description": "Number of failures to read the Ruby svar while finding CME",
+    "type": "counter",
+    "name": "UnwindRubyErrReadSvar",
+    "field": "bpf.ruby.errors.read_svar",
+    "id": 283
+  },
+  {
+    "description": "Number of failures to read the Ruby rbasic flags",
+    "type": "counter",
+    "name": "UnwindRubyErrReadRbasicFlags",
+    "field": "bpf.ruby.errors.read_rbasic_flags",
+    "id": 284
+  },
+  {
+    "description": "Number of failed attempts to read a CME by exceeding max EP checks",
+    "type": "counter",
+    "name": "UnwindRubyErrCmeMaxEp",
+    "field": "bpf.ruby.errors.read_cme_max_ep",
+    "id": 285
   }
 ]

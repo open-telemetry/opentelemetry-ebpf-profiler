@@ -55,7 +55,7 @@ const MaxFrameUnwinds = 0x80
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x62
+	MetricIDBeginCumulative = 0x68
 )
 
 const (
@@ -278,12 +278,10 @@ type RubyProcInfo struct {
 	Ep                           uint8
 	Size_of_control_frame_struct uint8
 	Body                         uint8
-	Iseq_type                    uint8
-	Iseq_encoded                 uint8
-	Iseq_size                    uint8
+	Cme_method_def               uint8
 	Size_of_value                uint8
 	Running_ec                   uint16
-	Pad_cgo_0                    [2]byte
+	Pad_cgo_0                    [4]byte
 }
 type V8ProcInfo struct {
 	Version                      uint32
@@ -363,6 +361,14 @@ const (
 	V8LineCookieShift = 0x20
 	V8LineCookieMask  = 0xffffffff00000000
 	V8LineDeltaMask   = 0xffffffff
+
+	RubyAddrMask48Bit     = 0xffffffffffff
+	RubyExtraAddrTypeMask = 0xff000000000000
+
+	RubyFrameTypeNone     = 0x0
+	RubyFrameTypeCmeIseq  = 0x1
+	RubyFrameTypeCmeCfunc = 0x2
+	RubyFrameTypeIseq     = 0x3
 )
 
 var MetricsTranslation = []metrics.MetricID{
@@ -456,4 +462,10 @@ var MetricsTranslation = []metrics.MetricID{
 	0x5d: metrics.IDUnwindDotnetErrBadFP,
 	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
 	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,
+	0x62: metrics.IDUnwindRubyErrInvalidIseq,
+	0x63: metrics.IDUnwindRubyErrReadMethodDef,
+	0x64: metrics.IDUnwindRubyErrReadMethodType,
+	0x65: metrics.IDUnwindRubyErrReadSvar,
+	0x66: metrics.IDUnwindRubyErrReadRbasicFlags,
+	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
 }
