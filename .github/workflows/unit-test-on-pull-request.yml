@@ -49,7 +49,9 @@ jobs:
         env:
           GOARCH: ${{ matrix.target-arch }}
           CGO_ENABLED: 1
-        run: make lint
+        run: |
+          make lint
+          git diff --exit-code || (echo 'Code base is not Go formatted, please run "make lint" and commit the changes in this PR.' && exit 1)
 
   test:
     name: Test (${{ matrix.target_arch }})
