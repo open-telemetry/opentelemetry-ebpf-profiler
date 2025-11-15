@@ -738,7 +738,7 @@ static inline EBPF_INLINE int collect_trace(
   trace->pid     = pid;
   trace->tid     = tid;
   trace->ktime   = trace_timestamp;
-  trace->offtime = off_cpu_time;
+  trace->context_value = off_cpu_time;
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);
   }

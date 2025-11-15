@@ -1,8 +1,8 @@
 SHELL ?= bash
-BPF_CLANG ?= clang-17
-BPF_LINK ?= llvm-link-17
-STRIP ?= llvm-strip-17
-LLC ?= llc-17
+BPF_CLANG ?= clang-18
+BPF_LINK ?= llvm-link-18
+STRIP ?= llvm-strip-18
+LLC ?= llc-18
 CLANG_FORMAT ?= clang-format-17
 
 # Detect native architecture and translate to GOARCH.
