@@ -27,7 +27,7 @@ import (
 
 var (
 	// regex for matching the process name
-	beamRegex                      = regexp.MustCompile(`beam.smp`)
+	beamRegex                      = regexp.MustCompile(`(^|\/)beam\.smp`)
 	_         interpreter.Data     = &beamData{}
 	_         interpreter.Instance = &beamInstance{}
 )
