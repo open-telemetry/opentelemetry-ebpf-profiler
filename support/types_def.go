@@ -123,6 +123,7 @@ type Trace C.Trace
 type UnwindInfo C.UnwindInfo
 
 type ApmIntProcInfo C.ApmIntProcInfo
+type BEAMProcInfo C.BEAMProcInfo
 type DotnetProcInfo C.DotnetProcInfo
 type GoLabelsOffsets C.GoLabelsOffsets
 type HotspotProcInfo C.HotspotProcInfo
@@ -131,7 +132,6 @@ type PerlProcInfo C.PerlProcInfo
 type PyProcInfo C.PyProcInfo
 type RubyProcInfo C.RubyProcInfo
 type V8ProcInfo C.V8ProcInfo
-type BEAMProcInfo C.BEAMProcInfo
 
 const (
 	Sizeof_Frame      = C.sizeof_Frame

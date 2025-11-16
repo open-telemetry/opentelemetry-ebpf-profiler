@@ -180,6 +180,9 @@ type UnwindInfo struct {
 type ApmIntProcInfo struct {
 	Offset uint64
 }
+type BEAMProcInfo struct {
+	Bias uint64
+}
 type DotnetProcInfo struct {
 	Version uint32
 }
@@ -308,9 +311,6 @@ type V8ProcInfo struct {
 	Codekind_mask                uint8
 	Codekind_baseline            uint8
 	Pad_cgo_0                    [2]byte
-}
-type BEAMProcInfo struct {
-	Bias uint64
 }
 
 const (

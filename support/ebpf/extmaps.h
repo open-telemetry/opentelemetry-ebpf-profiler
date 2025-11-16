@@ -24,6 +24,7 @@ extern struct go_labels_procs_t go_labels_procs;
 // are needed only for testing.
 
 extern struct apm_int_procs_t apm_int_procs;
+extern struct beam_procs_t beam_procs;
 extern struct exe_id_to_8_stack_deltas_t exe_id_to_8_stack_deltas;
 extern struct exe_id_to_9_stack_deltas_t exe_id_to_9_stack_deltas;
 extern struct exe_id_to_10_stack_deltas_t exe_id_to_10_stack_deltas;
@@ -49,7 +50,6 @@ extern struct ruby_procs_t ruby_procs;
 extern struct stack_delta_page_to_info_t stack_delta_page_to_info;
 extern struct unwind_info_array_t unwind_info_array;
 extern struct v8_procs_t v8_procs;
-extern struct beam_procs_t beam_procs;
 #endif // TESTING_COREDUMP
 
 #endif // OPTI_EXTMAPS_H
