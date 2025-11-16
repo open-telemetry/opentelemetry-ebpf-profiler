@@ -25,7 +25,7 @@ func getProbe() (*ebpf.Program, error) {
 			return nil, err
 		}
 
-		if info.Name == "uprobe__generic" {
+		if info.Name == "kprobe__generic" {
 			return prog.Clone()
 		}
 	}

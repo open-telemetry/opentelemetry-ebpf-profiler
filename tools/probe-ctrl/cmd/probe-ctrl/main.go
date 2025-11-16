@@ -4,25 +4,27 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
-	"github.com/cilium/ebpf/link"
+	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
 var (
-	argExec   string
-	argSymbol string
-	argClear  bool
+	argProbeLink string
+	argClear     bool
+	argBPFFS     string
 )
 
-var (
-	pinPath = "/sys/fs/bpf/probe-ctrl/"
+const (
+	defaultBPFFSPath = "/sys/fs/bpf"
+	probePinName     = "probe-ctrl"
 )
 
 func init() {
-	flag.StringVar(&argExec, "exec", "", "Executable to which the probe should be attached.")
-	flag.StringVar(&argSymbol, "symb", "", "Symbol in the executable to which the probe will be attached.")
+	flag.StringVar(&argProbeLink, "probe-link", "", "kprobe|kretprobe|uprobe|uretprobe:<target>[:<symbol>]")
 	flag.BoolVar(&argClear, "clear", false, "Remove probe from all links.")
+	flag.StringVar(&argBPFFS, "bpffs", defaultBPFFSPath, "Path to BPF filesystem mount point.")
 }
 
 func main() {
@@ -32,48 +34,47 @@ func main() {
 func run() int {
 	flag.Parse()
 
+	pinPath := fmt.Sprintf("%s/%s/", argBPFFS, probePinName)
+
 	if argClear {
-		// bpf_link_detach does not exist for uprobes. So just remove
-		// the pinned path to deactivate uprobes as a work around.
 		if err := os.RemoveAll(pinPath); err != nil {
-			fmt.Fprintf(os.Stderr, "%v\n", err)
+			fmt.Fprintf(os.Stderr, "Failed to remove pin path: %v\n", err)
 			return -1
 		}
 		return 0
 	}
 
-	if argExec == "" || argSymbol == "" {
-		fmt.Fprintf(os.Stderr, "Both -exec <exec_value> and -symb <symb_value> need to be set\n")
+	probeSpec, err := tracer.ParseProbe(argProbeLink)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to parse probe: %v\n", err)
 		return -1
 	}
 
-	exec, err := link.OpenExecutable(argExec)
+	tracerProg, err := getProbe()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to get probe %q: %v\n", probeSpec.ProgName, err)
 		return -1
 	}
 
-	probe, err := getProbe()
+	probeLink, err := tracer.AttachProbe(tracerProg, probeSpec)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		return -1
-	}
-
-	probeLink, err := exec.Uprobe(argSymbol, probe, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed attaching probe to '%s' in '%s': %v\n", argSymbol, argExec, err)
+		fmt.Fprintf(os.Stderr, "Failed to attach probe: %v\n", err)
 		return -1
 	}
 
 	if err := os.MkdirAll(pinPath, 0700); err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to create pin path: %v\n", err)
 		return -1
 	}
 
-	if err := probeLink.Pin(fmt.Sprintf("%s/%d", pinPath, time.Now().Unix())); err != nil {
+	pinFile := filepath.Join(pinPath, fmt.Sprintf("%d", time.Now().UnixMicro()))
+	if err := probeLink.Pin(pinFile); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to pin link: %v\n", err)
 		return -1
 	}
+
+	fmt.Printf("Attached probe %s to %s:%s\n", probeSpec.ProgName, probeSpec.Target, probeSpec.Symbol)
+	fmt.Printf("Pinned to: %s\n", pinFile)
 
 	return 0
 }
