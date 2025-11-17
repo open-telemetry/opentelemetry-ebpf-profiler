@@ -81,7 +81,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 }
 
 func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-	log.Infof("BEAM attaching, bias: 0x%x", bias)
+	log.Debugf("BEAM attaching, bias: 0x%x", bias)
 
 	data := support.BEAMProcInfo{
 		Bias: uint64(bias),
