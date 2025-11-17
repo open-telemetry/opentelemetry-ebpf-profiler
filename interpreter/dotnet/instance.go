@@ -610,7 +610,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		log.Debugf("%v -> %v guid %v", m.Path, info.simpleName, info.guid)
 
 		exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
-			MappingFile: info.file,
+			MappingFile: info.mapping.Value().File,
 			Process:     pr,
 			Mapping:     m,
 		})
@@ -743,7 +743,7 @@ func (i *dotnetInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) erro
 			AddressOrLineno: libpf.AddressOrLineno(pcOffset),
 			FunctionName:    module.resolveR2RMethodName(pcOffset),
 			SourceFile:      module.simpleName,
-			MappingFile:     module.file,
+			Mapping:         module.mapping,
 		})
 	case codeJIT:
 		// JITted frame in anonymous mapping
@@ -772,7 +772,7 @@ func (i *dotnetInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) erro
 			SourceFile:      method.module.simpleName,
 			FunctionName:    methodName,
 			FunctionOffset:  ilOffset,
-			MappingFile:     method.module.file,
+			Mapping:         method.module.mapping,
 		})
 	default:
 		// Stub code

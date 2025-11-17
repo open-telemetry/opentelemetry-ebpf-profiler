@@ -1031,7 +1031,7 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 	// another function starting on this address.
 	ee.deltas.AddEx(sdtypes.StackDelta{
 		Address: uint64(fde.ipStart + fde.ipLen),
-		Hints:   sdtypes.UnwindHintGap,
+		Hints:   sdtypes.UnwindHintEnd,
 		Info:    sdtypes.UnwindInfoInvalid,
 	}, sorted)
 
