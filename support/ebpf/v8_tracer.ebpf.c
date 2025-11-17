@@ -47,13 +47,13 @@ static EBPF_INLINE ErrorCode push_v8(
     pointer_and_type);
 
   const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
-  u64 *data        = push_frame(state, trace, 3);
+
+  u64 *data = push_frame(state, trace, FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, 0, 2);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }
-  data[0] = frame_header(FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, 3, 0);
-  data[1] = pointer_and_type;
-  data[2] = delta_or_marker;
+  data[0] = pointer_and_type;
+  data[1] = delta_or_marker;
   return ERR_OK;
 }
 

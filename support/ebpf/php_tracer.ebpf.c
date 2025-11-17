@@ -30,13 +30,13 @@ static EBPF_INLINE ErrorCode
 push_php(UnwindState *state, Trace *trace, u64 file, u64 line, bool is_jitted)
 {
   u8 frame_type = is_jitted ? FRAME_MARKER_PHP_JIT : FRAME_MARKER_PHP;
-  u64 *data     = push_frame(state, trace, 3);
+
+  u64 *data = push_frame(state, trace, frame_type, FRAME_FLAG_PID_SPECIFIC, 0, 2);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }
-  data[0] = frame_header(frame_type, FRAME_FLAG_PID_SPECIFIC, 3, 0);
-  data[1] = file;
-  data[2] = line;
+  data[0] = file;
+  data[1] = line;
   return ERR_OK;
 }
 

@@ -29,10 +29,9 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, s32 kstack)
   trace->tid             = pid;
   trace->kernel_stack_id = -1;
 
-  u64 *data = push_frame(&record->state, trace, 2);
+  u64 *data = push_frame(&record->state, trace, FRAME_MARKER_NATIVE, 0, 21, 1);
   if (data) {
-    data[0] = frame_header(FRAME_MARKER_NATIVE, 0, 2, 21);
-    data[1] = 1337;
+    data[0] = 1337;
   }
   send_trace(ctx, trace);
 

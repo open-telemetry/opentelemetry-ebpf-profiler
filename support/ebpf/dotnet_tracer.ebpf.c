@@ -173,12 +173,13 @@ static EBPF_INLINE ErrorCode push_dotnet(
   UnwindState *state, Trace *trace, u64 code_header_ptr, u64 pc_offset, bool return_address)
 {
   const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
-  u64 *data        = push_frame(state, trace, 2);
+
+  u64 *data =
+    push_frame(state, trace, FRAME_MARKER_DOTNET, FRAME_FLAG_PID_SPECIFIC | ra_flag, pc_offset, 1);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }
-  data[0] = frame_header(FRAME_MARKER_DOTNET, FRAME_FLAG_PID_SPECIFIC | ra_flag, 2, pc_offset);
-  data[1] = code_header_ptr;
+  data[0] = code_header_ptr;
   return ERR_OK;
 }
 

@@ -331,28 +331,36 @@ static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u
 }
 
 // Determine if the trace has still spave to unwind frames.
-static inline EBPF_INLINE u64 *push_frame(UnwindState *state, Trace *trace, int frame_size)
+static inline EBPF_INLINE u64 *push_frame(
+  UnwindState *state, Trace *trace, u8 frame_type, u8 frame_flags, u64 frame_data, u8 frame_varlen)
 {
   const int max_frame_size   = sizeof trace->frame_data / sizeof trace->frame_data[0];
   const int error_frame_size = 1;
 
   // Check that there is enough space for this frame and at least one error frame.
-  u64 *pos = &trace->frame_data[trace->frame_data_len];
+  u64 *pos      = &trace->frame_data[trace->frame_data_len];
+  u8 frame_size = frame_varlen + 1;
   if (pos >= &trace->frame_data[max_frame_size - error_frame_size - frame_size]) {
     state->error_metric = metricID_UnwindErrStackLengthExceeded;
     return NULL;
   }
   trace->frame_data_len += frame_size;
-  return pos;
+  // frame format:
+  //  #bits   usage
+  //      4   frame type
+  //      4   frame flags
+  //      4   number of 64-bit data entries
+  //     52   type specific data
+  pos[0] = frame_header(frame_type, frame_flags, frame_size, frame_data);
+  return &pos[1];
 }
 
 // Push an interpreter specific error frame.
 static inline EBPF_INLINE ErrorCode
 push_error(UnwindState *state, Trace *trace, u8 frame_type, ErrorCode error)
 {
-  u64 *data = push_frame(state, trace, 1);
+  u64 *data = push_frame(state, trace, frame_type, FRAME_FLAG_ERROR, error, 0);
   if (data) {
-    data[0] = frame_header(frame_type, FRAME_FLAG_ERROR, 1, error);
     return ERR_OK;
   }
   return ERR_STACK_LENGTH_EXCEEDED;

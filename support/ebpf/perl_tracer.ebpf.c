@@ -79,13 +79,12 @@ static EBPF_INLINE ErrorCode push_perl(UnwindState *state, Trace *trace, u64 fil
 {
   DEBUG_PRINT("Pushing perl frame cop=0x%lx, cv=0x%lx", (unsigned long)file, (unsigned long)line);
 
-  u64 *data = push_frame(state, trace, 3);
+  u64 *data = push_frame(state, trace, FRAME_MARKER_PERL, FRAME_FLAG_PID_SPECIFIC, 0, 2);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }
-  data[0] = frame_header(FRAME_MARKER_PERL, FRAME_FLAG_PID_SPECIFIC, 3, 0);
-  data[1] = file;
-  data[2] = line;
+  data[0] = file;
+  data[1] = line;
   return ERR_OK;
 }
 

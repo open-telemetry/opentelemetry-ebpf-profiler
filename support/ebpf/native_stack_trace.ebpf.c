@@ -112,12 +112,12 @@ static EBPF_INLINE ErrorCode
 push_native(UnwindState *state, Trace *trace, u64 file, u64 line, bool return_address)
 {
   const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
-  u64 *data        = push_frame(state, trace, 2);
+
+  u64 *data = push_frame(state, trace, FRAME_MARKER_NATIVE, ra_flag, line, 1);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }
-  data[0] = frame_header(FRAME_MARKER_NATIVE, ra_flag, 2, line);
-  data[1] = file;
+  data[0] = file;
   return ERR_OK;
 }
 
