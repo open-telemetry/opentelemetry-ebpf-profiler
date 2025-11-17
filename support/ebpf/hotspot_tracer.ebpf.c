@@ -925,14 +925,16 @@ static EBPF_INLINE int unwind_hotspot(struct pt_regs *ctx)
   pid_t pid    = trace->pid;
   DEBUG_PRINT("==== jvm: unwind %d ====", trace->stack_len);
 
+  int unwinder    = PROG_UNWIND_STOP;
+  ErrorCode error = ERR_OK;
+
   HotspotProcInfo *ji = bpf_map_lookup_elem(&hotspot_procs, &pid);
   if (!ji) {
     DEBUG_PRINT("jvm: no HotspotProcInfo for this pid");
-    return 0;
+    error = ERR_HOTSPOT_NO_PROC_INFO;
+    goto exit;
   }
 
-  int unwinder    = PROG_UNWIND_STOP;
-  ErrorCode error = ERR_OK;
   UNROLL for (int i = 0; i < HOTSPOT_FRAMES_PER_PROGRAM; i++)
   {
     unwinder = PROG_UNWIND_STOP;
@@ -947,6 +949,7 @@ static EBPF_INLINE int unwind_hotspot(struct pt_regs *ctx)
     }
   }
 
+exit:
   record->state.unwind_error = error;
   tail_call(ctx, unwinder);
   DEBUG_PRINT("jvm: tail call for next frame unwinder (%d) failed", unwinder);
