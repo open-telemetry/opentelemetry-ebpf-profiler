@@ -1,6 +1,6 @@
 .PHONY: all all-common clean ebpf generate test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
-	codespell lint linter-version ebpf-profiler format-ebpf pprof-execs \
+	codespell lint ebpf-profiler format-ebpf pprof-execs \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
@@ -92,9 +92,6 @@ lint: generate vanity-import-check pprof-execs
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf
-
-linter-version:
-	@echo $(GOLANGCI_LINT_VERSION)
 
 vanity-import-check:
 	@go install github.com/jcchavezs/porto/cmd/porto@latest

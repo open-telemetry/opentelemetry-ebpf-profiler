@@ -42,9 +42,6 @@ jobs:
         uses: ./.github/workflows/env
         with:
           target_arch: ${{ matrix.target_arch }}
-      - name: Get linter version
-        id: linter-version
-        run: (echo -n "version="; make linter-version) >> "$GITHUB_OUTPUT"
       - name: linter
         env:
           GOARCH: ${{ matrix.target-arch }}
