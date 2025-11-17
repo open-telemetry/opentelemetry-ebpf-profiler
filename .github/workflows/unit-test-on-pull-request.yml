@@ -46,9 +46,27 @@ jobs:
         env:
           GOARCH: ${{ matrix.target-arch }}
           CGO_ENABLED: 1
+        run: make lint
+
+  format:
+    name: Format Go and C code
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target_arch: [amd64]
+    steps:
+      - name: Clone code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - name: Set up environment
+        uses: ./.github/workflows/env
+        with:
+          target_arch: ${{ matrix.target_arch }}
+      - name: formatter
+        env:
+          CGO_ENABLED: 1
         run: |
-          make lint
-          git diff --exit-code || (echo 'Code base is not Go formatted, please run "make lint" and commit the changes in this PR.'; exit 1)
+          make format
+          git diff --exit-code || (echo 'Code base is not Go or C formatted, please run "make format" and commit the changes in this PR.'; exit 1)
 
   test:
     name: Test (${{ matrix.target_arch }})

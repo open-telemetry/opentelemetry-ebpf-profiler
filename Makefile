@@ -1,6 +1,6 @@
 .PHONY: all all-common clean ebpf generate test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
-	codespell lint ebpf-profiler format-ebpf pprof-execs \
+	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
@@ -88,8 +88,9 @@ lint: generate vanity-import-check pprof-execs
 	go tool $(GO_TOOLS) golangci-lint config verify
 	# tools/coredump tests require CGO_ENABLED
 	CGO_ENABLED=1 go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
+
 format: format-go format-ebpf
-	
+
 format-go:
 	go tool $(GO_TOOLS) golangci-lint fmt
 
