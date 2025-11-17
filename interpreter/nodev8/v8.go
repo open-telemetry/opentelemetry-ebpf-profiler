@@ -2112,13 +2112,13 @@ func locateSnapshotArea(ef *pfelf.File) util.Range {
 		return util.Range{}
 	}
 
-	for prevEnd := uintptr(addr); prevEnd - uintptr(addr) < 1024; ndx++ {
+	for prevEnd := uintptr(addr); prevEnd-uintptr(addr) < 1024; ndx++ {
 		fde, err := eft.DecodeIndex(ndx)
 		if err != nil {
 			return util.Range{}
 		}
 		// Check that there is a large gap.
-		if fde.PCBegin - prevEnd > 512 * 1024 {
+		if fde.PCBegin-prevEnd > 512*1024 {
 			log.Debugf("located snapshot area: %#x - %#x", prevEnd, fde.PCBegin)
 			return util.Range{
 				Start: uint64(prevEnd),
