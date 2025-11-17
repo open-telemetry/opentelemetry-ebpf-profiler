@@ -277,6 +277,11 @@
   },
   {
     "id": 7000,
+    "name": "beam_no_proc_info",
+    "description": "BEAM: No entry for this process exists in the BEAM process info array"
+  },
+  {
+    "id": 7001,
     "name": "beam_pc_invalid",
     "description": "BEAM: PC was outside the expected address range"
   }

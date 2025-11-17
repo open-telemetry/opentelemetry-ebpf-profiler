@@ -14,6 +14,10 @@ struct beam_procs_t {
 // BEAM stack frames to the trace object for the current CPU.
 static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
 {
+
+  int unwinder    = PROG_UNWIND_STOP;
+  ErrorCode error = ERR_OK;
+
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
     DEBUG_PRINT("beam: no PerCPURecord found");
@@ -28,15 +32,19 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
 
   if (!info) {
     DEBUG_PRINT("beam: no BEAMProcInfo for this pid");
-    return -1;
+    error = ERR_BEAM_NO_PROC_INFO;
+    goto exit;
   }
 
-  int unwinder = PROG_UNWIND_STOP;
   unwinder_mark_nonleaf_frame(state);
   _push_with_return_address(trace, 0LL, state->pc, FRAME_MARKER_BEAM, state->return_address);
+  // Pretend that there was an error unwinding for now,
+  // so that we don't have an infinite loop,
+  // since we're not actually unwinding / updating the state.
+  error = ERR_BEAM_PC_INVALID;
 
 exit:
-  record->state.unwind_error = ERR_BEAM_PC_INVALID;
+  record->state.unwind_error = error;
   tail_call(ctx, unwinder);
   DEBUG_PRINT("beam: tail call for next frame unwinder (%d) failed", unwinder);
   return -1;

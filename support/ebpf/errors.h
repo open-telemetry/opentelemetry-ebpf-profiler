@@ -170,8 +170,11 @@ typedef enum ErrorCode {
   // Dotnet: Code object was too large to unwind in eBPF
   ERR_DOTNET_CODE_TOO_LARGE = 6003,
 
+  // BEAM: No entry for this process exists in the BEAM process info array
+  ERR_BEAM_NO_PROC_INFO = 7000,
+
   // BEAM: PC was outside the expected address range
-  ERR_BEAM_PC_INVALID = 7000
+  ERR_BEAM_PC_INVALID = 7001
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H

@@ -73,8 +73,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	d := &beamData{
-		otpRelease:  string(otpRelease),
-		ertsVersion: string(ertsVersion),
+		otpRelease:  string(otpRelease[:len(otpRelease)-1]),
+		ertsVersion: string(ertsVersion[:len(ertsVersion)-1]),
 	}
 
 	return d, nil
