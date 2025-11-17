@@ -80,8 +80,12 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	return d, nil
 }
 
+func (d *beamData) String() string {
+	return fmt.Sprintf("BEAM OTP %s, ERTS %s", d.otpRelease, d.ertsVersion)
+}
+
 func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-	log.Debugf("BEAM attaching, bias: 0x%x", bias)
+	log.Debugf("BEAM attaching, OTP %s, ERTS %s, bias: 0x%x", d.otpRelease, d.ertsVersion, bias)
 
 	data := support.BEAMProcInfo{
 		Bias: uint64(bias),
