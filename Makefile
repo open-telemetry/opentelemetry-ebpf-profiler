@@ -1,6 +1,6 @@
 .PHONY: all all-common clean ebpf generate test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
-	codespell lint linter-version ebpf-profiler format-ebpf pprof-execs \
+	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
@@ -48,6 +48,7 @@ GO_TAGS := osusergo,netgo
 EBPF_FLAGS :=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
+GO_TOOLS := -modfile=tools.mod
 
 MAKEFLAGS += -j$(shell nproc)
 
@@ -82,24 +83,25 @@ rust-components: rust-targets
 rust-tests: rust-targets
 	cargo test
 
-GOLANGCI_LINT_VERSION = "v2.1.6"
 lint: generate vanity-import-check pprof-execs
 	$(MAKE) lint -C support/ebpf
-	docker run --rm -t -v $$(pwd):/app -w /app golangci/golangci-lint:$(GOLANGCI_LINT_VERSION) sh -c "golangci-lint version && golangci-lint config verify && golangci-lint run --max-issues-per-linter -1 --max-same-issues -1"
+	go tool $(GO_TOOLS) golangci-lint config verify
+	# tools/coredump tests require CGO_ENABLED
+	CGO_ENABLED=1 go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
+
+format: format-go format-ebpf
+
+format-go:
+	go tool $(GO_TOOLS) golangci-lint fmt
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf
 
-linter-version:
-	@echo $(GOLANGCI_LINT_VERSION)
-
 vanity-import-check:
-	@go install github.com/jcchavezs/porto/cmd/porto@latest
-	@porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 
 vanity-import-fix: $(PORTO)
-	@go install github.com/jcchavezs/porto/cmd/porto@latest
-	@porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
 
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
@@ -107,8 +109,7 @@ test: generate ebpf test-deps
 
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
-	go install gotest.tools/gotestsum@latest
-	CGO_ENABLED=1 gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
@@ -152,8 +153,7 @@ agent:
 	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
 
 legal:
-	@go install github.com/google/go-licenses@latest
-	@go-licenses save --force . --save_path=LICENSES
+	go tool $(GO_TOOLS) go-licenses save --force . --save_path=LICENSES
 
 codespell:
 	@codespell

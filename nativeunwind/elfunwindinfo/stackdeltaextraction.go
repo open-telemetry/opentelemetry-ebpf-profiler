@@ -179,7 +179,6 @@ func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
 	return extractFile(elfFile, elfRef, interval)
 }
 
-
 // extractFile extracts the elfFile stack deltas and uses the optional elfRef to resolve
 // debug link references if needed.
 func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference,
