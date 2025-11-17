@@ -94,12 +94,10 @@ format-ebpf:
 	$(MAKE) format -C support/ebpf
 
 vanity-import-check:
-	@go install github.com/jcchavezs/porto/cmd/porto@latest
-	@porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 
 vanity-import-fix: $(PORTO)
-	@go install github.com/jcchavezs/porto/cmd/porto@latest
-	@porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
 
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
@@ -107,8 +105,7 @@ test: generate ebpf test-deps
 
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
-	go install gotest.tools/gotestsum@latest
-	CGO_ENABLED=1 gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
@@ -152,8 +149,7 @@ agent:
 	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
 
 legal:
-	@go install github.com/google/go-licenses@latest
-	@go-licenses save --force . --save_path=LICENSES
+	go tool $(GO_TOOLS) go-licenses save --force . --save_path=LICENSES
 
 codespell:
 	@codespell
