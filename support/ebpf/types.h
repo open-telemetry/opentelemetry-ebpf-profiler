@@ -756,6 +756,9 @@ typedef struct PerCPURecord {
   u8 ratelimitAction;
 } PerCPURecord;
 
+// https://github.com/torvalds/linux/blob/e9a6fb0bcdd7609be6969112f3fbfcce3b1d4a7c/include/linux/percpu.h#L24C39-L24C47
+_Static_assert(sizeof(struct PerCPURecord) <= (32 << 10), "Per CPU record too large");
+
 // UnwindInfo contains the unwind information needed to unwind one frame
 // from a specific address.
 typedef struct UnwindInfo {
