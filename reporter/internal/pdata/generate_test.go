@@ -524,8 +524,8 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	assert.Equal(t, pcommon.Timestamp(666), prof.Duration())
 
 	// Verify profile contains one sample
-	assert.Equal(t, 1, prof.Sample().Len())
-	sample := prof.Sample().At(0)
+	assert.Equal(t, 1, prof.Samples().Len())
+	sample := prof.Samples().At(0)
 	assert.Len(t, sample.Values().AsRaw(), 0)
 	assert.Len(t, sample.TimestampsUnixNano().AsRaw(), 3)
 

@@ -148,7 +148,7 @@ func (p *Pdata) setProfile(
 
 	startTS, endTS := uint64(math.MaxUint64), uint64(0)
 	for traceKey, traceInfo := range events {
-		sample := profile.Sample().AppendEmpty()
+		sample := profile.Samples().AppendEmpty()
 
 		for _, ts := range traceInfo.Timestamps {
 			startTS = min(startTS, ts)
@@ -213,7 +213,7 @@ func (p *Pdata) setProfile(
 				loc.SetAddress(locInfo.address)
 				loc.SetMappingIndex(locInfo.mappingIndex)
 				if locInfo.hasLine {
-					line := loc.Line().AppendEmpty()
+					line := loc.Lines().AppendEmpty()
 					line.SetLine(locInfo.lineNumber)
 					line.SetFunctionIndex(locInfo.functionIndex)
 				}
@@ -278,7 +278,7 @@ func (p *Pdata) setProfile(
 		}
 	} // End sample processing
 
-	log.Debugf("Reporting OTLP profile with %d samples", profile.Sample().Len())
+	log.Debugf("Reporting OTLP profile with %d samples", profile.Samples().Len())
 
 	profile.SetDuration(pcommon.Timestamp(endTS - startTS))
 	profile.SetTime(pcommon.Timestamp(startTS))
