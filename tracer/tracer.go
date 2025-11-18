@@ -464,12 +464,11 @@ func removeTemporaryMaps(ebpfMaps map[string]*cebpf.Map) error {
 	return nil
 }
 
-// RewriteMaps replaces all references to specific maps.
+// rewriteMaps replaces all references to named eBPF maps.
+// This means that pre-existing maps are used, instead of new ones created
+// when calling NewCollection. Any named eBPF maps are removed from CollectionSpec.Maps.
 //
-// Use this function to use pre-existing maps instead of creating new ones
-// when calling NewCollection. Any named maps are removed from CollectionSpec.Maps.
-//
-// Returns an error if a named map isn't used in at least one program.
+// Returns an error if a named eBPF map isn't used in at least one program.
 func rewriteMaps(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map) error {
 	for symbol, m := range maps {
 		// have we seen a program that uses this symbol / map
