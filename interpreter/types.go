@@ -149,7 +149,7 @@ type Instance interface {
 
 	// Symbolize converts one ebpf frame to one or more (if inlining was expanded) libpf.Frame.
 	// The resulting libpf.Frame values are appended to frames.
-	Symbolize(ebpfFrame *host.Frame, frames *libpf.Frames) error
+	Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 
 	// GetAndResetMetrics collects the metrics from the Instance and resets
 	// the counters to their initial value.
