@@ -285,7 +285,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	// does not load them into the kernel.
 	// A collection specification holds the information about eBPF programs and maps.
 	// References to eBPF maps in the eBPF programs are just placeholders that need to be
-	// replaced by the actual loaded maps later on with RewriteMaps before loading the
+	// replaced by the actual loaded maps later on with rewriteMaps before loading the
 	// programs into the kernel.
 	major, minor, patch, err := GetCurrentKernelVersion()
 	if err != nil {
@@ -321,8 +321,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 
 	// Replace the place holders for map access in the eBPF programs with
 	// the file descriptors of the loaded maps.
-	//nolint:staticcheck
-	if err = coll.RewriteMaps(ebpfMaps); err != nil {
+	if err = rewriteMaps(coll, ebpfMaps); err != nil {
 		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
 
@@ -462,6 +461,42 @@ func removeTemporaryMaps(ebpfMaps map[string]*cebpf.Map) error {
 		}
 		delete(ebpfMaps, mapName)
 	}
+	return nil
+}
+
+// RewriteMaps replaces all references to specific maps.
+//
+// Use this function to use pre-existing maps instead of creating new ones
+// when calling NewCollection. Any named maps are removed from CollectionSpec.Maps.
+//
+// Returns an error if a named map isn't used in at least one program.
+func rewriteMaps(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map) error {
+	for symbol, m := range maps {
+		// have we seen a program that uses this symbol / map
+		seen := false
+		for progName, progSpec := range coll.Programs {
+			err := progSpec.Instructions.AssociateMap(symbol, m)
+
+			switch {
+			case err == nil:
+				seen = true
+
+			case errors.Is(err, asm.ErrUnreferencedSymbol):
+				// Not all programs need to use the map
+
+			default:
+				return fmt.Errorf("program %s: %w", progName, err)
+			}
+		}
+
+		if !seen {
+			return fmt.Errorf("map %s not referenced by any programs", symbol)
+		}
+
+		// Prevent NewCollection from creating rewritten maps
+		delete(coll.Maps, symbol)
+	}
+
 	return nil
 }
 

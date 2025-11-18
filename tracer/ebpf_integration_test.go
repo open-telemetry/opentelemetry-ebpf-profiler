@@ -56,8 +56,7 @@ func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
 	coll, err := support.LoadCollectionSpec()
 	require.NoError(t, err)
 
-	//nolint:staticcheck
-	err = coll.RewriteMaps(tr.GetEbpfMaps())
+	err = tracer.RewriteMaps(coll, tr.GetEbpfMaps())
 	require.NoError(t, err)
 
 	restoreRlimit, err := rlimit.MaximizeMemlock()
