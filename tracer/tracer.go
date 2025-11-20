@@ -468,6 +468,12 @@ func removeTemporaryMaps(ebpfMaps map[string]*cebpf.Map) error {
 // This means that pre-existing maps are used, instead of new ones created
 // when calling NewCollection. Any named eBPF maps are removed from CollectionSpec.Maps.
 //
+// This function used to be part of cilium/ebpf before it got deprecated and finally removed.
+// As we require to resize maps in loadAllMaps() we still need this functionality.
+// cilium/ebpf deprecated this function as FDs from *cebpf.Map are taken, but no references to
+// the Map entries are kept. If no one else holds a reference to these Map entries, they can
+// get GCd, the FD closed and the program load fails.
+//
 // Returns an error if a named eBPF map isn't used in at least one program.
 func rewriteMaps(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map) error {
 	for symbol, m := range maps {
