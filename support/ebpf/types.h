@@ -622,7 +622,7 @@ typedef struct UnwindState {
   u64 rax, r9, r11, r13, r15;
 #elif defined(__aarch64__)
   // Current register values for named registers
-  u64 lr, r22, r28;
+  u64 lr, r20, r22, r28;
 #endif
 
   // The executable ID/hash associated with PC
