@@ -33,8 +33,27 @@ var (
 )
 
 type beamData struct {
-	otpRelease  string
-	ertsVersion string
+	otpRelease            string
+	ertsVersion           string
+	the_active_code_index uint64
+	r                     uint64
+	beam_normal_exit      uint64
+	erts_frame_layout     uint64
+
+	// Sizes and offsets BEAM internal structs we need to traverse
+	vmStructs struct {
+		// ranges
+		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L56-L61
+		ranges struct {
+			size_of, modules, n uint8
+		}
+
+		// Range
+		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L31-L34
+		ranges_entry struct {
+			size_of, start, end uint8
+		}
+	}
 }
 
 type beamInstance struct {
@@ -43,7 +62,6 @@ type beamInstance struct {
 	pid  libpf.PID
 	data *beamData
 	rm   remotememory.RemoteMemory
-	bias libpf.Address
 
 	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
 	prefixes map[lpm.Prefix]uint32
@@ -72,9 +90,68 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, fmt.Errorf("failed to read ERTS version: %v", err)
 	}
 
+	// "r" symbol is from:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
+	// TODO: We want to avoid reading static symbols to find the address of r here,
+	// because it would be removed if the binary is stripped, but it seems that's the only
+	// way to get it currently. If possible, we should get it exported in erl_etp.c
+	var r libpf.Symbol
+	ef.VisitSymbols(func(sym libpf.Symbol) bool {
+		if sym.Name == "r" {
+			r = sym
+			return false
+		} else {
+			return true
+		}
+	})
+	if r.Name != "r" {
+		return nil, fmt.Errorf("symbol 'r' not found")
+	}
+
+	// "the_active_code_index" symbol is from:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.c#L46
+	codeIndex, _, err := ef.SymbolData("the_active_code_index", 4)
+	if err != nil {
+		return nil, fmt.Errorf("symbol 'the_active_code_index' not found: %v", err)
+	}
+
+	// "beam_normal_exit" symbol is from:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/jit/beam_jit_main.cpp#L54
+	beam_normal_exit, _, err := ef.SymbolData("beam_normal_exit", 8)
+	if err != nil {
+		return nil, fmt.Errorf("symbol 'beam_normal_exit' not found: %v", err)
+	}
+
 	d := &beamData{
-		otpRelease:  string(otpRelease[:len(otpRelease)-1]),
-		ertsVersion: string(ertsVersion[:len(ertsVersion)-1]),
+		otpRelease:            string(otpRelease[:len(otpRelease)-1]),
+		ertsVersion:           string(ertsVersion[:len(ertsVersion)-1]),
+		the_active_code_index: uint64(codeIndex.Address),
+		r:                     uint64(r.Address),
+		beam_normal_exit:      uint64(beam_normal_exit.Address),
+	}
+
+	// If erts_frame_layout is not defined, it means that frame pointers are not supported,
+	// so we use a null pointer to signify that they're not enabled.
+	erts_frame_layout_symbol, _, err := ef.SymbolData("erts_frame_layout", 8)
+	if err == nil {
+		d.erts_frame_layout = uint64(erts_frame_layout_symbol.Address)
+	} else {
+		d.erts_frame_layout = ^uint64(0)
+	}
+
+	vms := &d.vmStructs
+
+	// These values are the same on OTP releases 27.2.4 and 28.0.2.
+	// We'll see what varies by version.
+	vms.ranges.size_of = 32
+	vms.ranges.modules = 0
+	vms.ranges.n = 8
+	vms.ranges_entry.size_of = 16
+	vms.ranges_entry.start = 0
+	vms.ranges_entry.end = 8
+
+	if d.otpRelease != "27" && d.otpRelease != "28" {
+		return d, fmt.Errorf("unsupported OTP version for BEAM interpreter: %s", d.otpRelease)
 	}
 
 	return d, nil
@@ -88,7 +165,22 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	log.Debugf("BEAM attaching, OTP %s, ERTS %s, bias: 0x%x", d.otpRelease, d.ertsVersion, bias)
 
 	data := support.BEAMProcInfo{
-		Bias: uint64(bias),
+		R:                     uint64(bias) + d.r,
+		The_active_code_index: uint64(bias) + d.the_active_code_index,
+		Beam_normal_exit:      uint64(bias) + d.beam_normal_exit,
+		Ranges_sizeof:         uint8(d.vmStructs.ranges.size_of),
+		Ranges_modules:        uint8(d.vmStructs.ranges.modules),
+		Ranges_n:              uint8(d.vmStructs.ranges.n),
+		Ranges_entry_sizeof:   uint8(d.vmStructs.ranges_entry.size_of),
+		Ranges_entry_start:    uint8(d.vmStructs.ranges_entry.start),
+		Ranges_entry_end:      uint8(d.vmStructs.ranges_entry.end),
+	}
+
+	if d.erts_frame_layout == ^uint64(0) {
+		// If frame pointers are not supported, they will not be used
+		data.Erts_frame_layout = uint64(0)
+	} else {
+		data.Erts_frame_layout = rm.Uint64(bias + libpf.Address(d.erts_frame_layout))
 	}
 
 	if err := ebpf.UpdateProcData(libpf.BEAM, pid, unsafe.Pointer(&data)); err != nil {
@@ -99,7 +191,6 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		pid:      pid,
 		data:     d,
 		rm:       rm,
-		bias:     bias,
 		prefixes: make(map[lpm.Prefix]uint32),
 	}, nil
 }
@@ -159,9 +250,8 @@ func (i *beamInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 	}
 
 	frames.Append(&libpf.Frame{
-		Type:       libpf.BEAMFrame,
-		SourceFile: libpf.Intern("Unknown File"),
-		SourceLine: libpf.SourceLineno(frame.Lineno),
+		Type:            libpf.BEAMFrame,
+		AddressOrLineno: frame.Lineno,
 	})
 
 	return nil
