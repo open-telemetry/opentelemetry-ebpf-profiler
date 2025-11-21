@@ -513,7 +513,7 @@ func TestExtractDTVOffset(t *testing.T) {
 				0x7e, 0xfc, 0xff, 0x17, //b       0xf58e5fc913e0 <tls_get_addr_tail>
 			},
 			info: DTVInfo{
-				Offset:     192,
+				Offset:     0,
 				Multiplier: 16,
 				Indirect:   1,
 			},
