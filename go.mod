@@ -13,7 +13,7 @@ go 1.24.0
 require (
 	github.com/aws/aws-sdk-go-v2 v1.40.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.0
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.91.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.92.0
 	github.com/cilium/ebpf v0.20.0
 	github.com/elastic/go-freelru v0.16.0
 	github.com/elastic/go-perf v0.0.0-20241029065020-30bec95324b8
