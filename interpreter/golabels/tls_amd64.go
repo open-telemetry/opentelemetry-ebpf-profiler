@@ -13,8 +13,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
+	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"golang.org/x/arch/x86/x86asm"
 )
+
+// readMemory is a helper that can be mocked for testing.
+type readMemory func(addr int64, sz, maxSize int) ([]byte, error)
 
 // Most normal amd64 Go binaries use -8 as offset into TLS space for
 // storing the current g but "static" binaries it ends up as -80. There
@@ -34,6 +38,9 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 	// Binaries built with -buildmode=pie have a different assembly code for stackcheck with 2 movs:
 	//  0x00000000007ec320 <+0>:	mov    $0xfffffffffffffff8,%rcx
 	//  0x00000000007ec327 <+7>:	mov    %fs:(%rcx),%rax
+	// In some binaries offset is stored relative to RIP:
+	// 0x000000000017e34c0 <+0>: 	mov    0x40b9af9(%rip),%rcx        # 589cfc0 <runtime.tlsg@@Base+0x589cfc0>
+	// 0x000000000017e34c7 <+7>:	mov    %fs:(%rcx),%rax
 	sym, err := pclntab.LookupSymbol(libpf.SymbolName(symbolName))
 	if err != nil {
 		return 0, err
@@ -44,35 +51,57 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 	if err != nil {
 		return 0, err
 	}
+	return inspectCode(sym, f.VirtualMemory, code)
+}
 
+func inspectCode(sym *libpf.Symbol, extract readMemory, code []byte) (int32, error) {
 	offset := e.NewImmediateCapture("offset")
 	it := amd.NewInterpreterWithCode(code)
+	pc := 0
+	// Register -> loaded TLS offset from RIP-relative memory
+	ripRelLoads := make(map[x86asm.Reg]int64)
+
 	for {
 		op, err := it.Step()
 		if err != nil {
 			break
 		}
+		pc += op.Len
 		if op.Op != x86asm.MOV {
 			continue
 		}
-		mem, ok := op.Args[1].(x86asm.Mem)
-		if !ok || mem.Segment != x86asm.FS {
-			continue
+
+		// Handle FS:... cases
+		if mem, ok := op.Args[1].(x86asm.Mem); ok && mem.Segment == x86asm.FS {
+			// Direct offset in instruction
+			if mem.Base == 0 {
+				return int32(mem.Disp), nil
+			}
+			// Offset previously set via immediate into the base register
+			actual := it.Regs.GetX86(mem.Base)
+			if actual.Match(offset) {
+				return int32(offset.CapturedValue()), nil
+			}
+			// RIP-relative case: previous MOV loaded the TLS offset into this register
+			if v, ok := ripRelLoads[mem.Base]; ok {
+				return int32(v), nil
+			}
+			return -8, fmt.Errorf("symbol '%s': mov fs: %w", sym.Name, errDecodeSymbol)
 		}
-		// If the base is 0, it means the offset is directly in the register:
-		// 0x0000000000470080 <+0>:     mov    %fs:0xfffffffffffffff8,%rax
-		if mem.Base == 0 {
-			return int32(mem.Disp), nil
-		}
-		// Otherwise, the offset is in the register:
-		// 0x00000000007ec320 <+0>:	mov    $0xfffffffffffffff8,%rcx
-		// 0x00000000007ec327 <+7>:	mov    %fs:(%rcx),%rax
-		// Check if the register value was set with an immediate value in a previous instruction
-		// and if so, use that value as the offset.
-		actual := it.Regs.GetX86(mem.Base)
-		if actual.Match(offset) {
-			return int32(offset.CapturedValue()), nil
+
+		// RIP-relative load: mov disp(%rip), %reg
+		if mem, ok := op.Args[1].(x86asm.Mem); ok && mem.Base == x86asm.RIP {
+			curAddr := int64(sym.Address) + int64(pc)
+			if dst, ok := op.Args[0].(x86asm.Reg); ok {
+				target := curAddr + int64(mem.Disp)
+
+				// Read 8-byte TLS value from target address
+				b, err := extract(target, 8, 8)
+				if err == nil && len(b) >= 8 {
+					ripRelLoads[dst] = int64(npsr.Uint64(b, 0))
+				}
+			}
 		}
 	}
-	return -8, fmt.Errorf("symbol '%s': %w", symbolName, errDecodeSymbol)
+	return -8, fmt.Errorf("symbol '%s': %w", sym.Name, errDecodeSymbol)
 }
