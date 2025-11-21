@@ -25,6 +25,25 @@ type LibcInfo struct {
 	DTVInfo DTVInfo
 }
 
+// IsEqual checks if two LibcInfo instances are equal
+func (l LibcInfo) IsEqual(other LibcInfo) bool {
+	return l.TSDInfo == other.TSDInfo && l.DTVInfo == other.DTVInfo
+}
+
+// Merge merges another LibcInfo into this one.
+// Non-empty values from other override values in the receiver.
+func (l *LibcInfo) Merge(other LibcInfo) {
+	// If other has TSDInfo, take it
+	if other.TSDInfo != (TSDInfo{}) {
+		l.TSDInfo = other.TSDInfo
+	}
+
+	// If other has DTVInfo, take it
+	if other.DTVInfo != (DTVInfo{}) {
+		l.DTVInfo = other.DTVInfo
+	}
+}
+
 var (
 	// regex for the libc
 	libcRegex = regexp.MustCompile(`.*/(ld-musl|ld-linux|libc|libpthread)([-.].*)?\.so`)
