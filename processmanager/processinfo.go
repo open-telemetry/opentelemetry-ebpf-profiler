@@ -77,20 +77,25 @@ func (pm *ProcessManager) assignLibcInfo(pid libpf.PID, libcInfo *libc.LibcInfo)
 		return
 	}
 
+	var newLibcInfo = *libcInfo
 	info, ok := pm.pidToProcessInfo[pid]
 	if !ok {
 		// This is guaranteed not to happen since assignLibcInfo is always called after
 		// pm.updatePidInformation - but to avoid a possible panic we just return here.
 		return
 	} else if info.libcInfo != nil {
-		return
+		if info.libcInfo.IsEqual(newLibcInfo) {
+			return
+		} else {
+			newLibcInfo.Merge(*info.libcInfo)
+		}
 	}
 
-	info.libcInfo = libcInfo
+	info.libcInfo = &newLibcInfo
 
 	// Update the tsdInfo to interpreters that are already attached
 	for _, instance := range pm.interpreters[pid] {
-		if err := instance.UpdateLibcInfo(pm.ebpf, pid, *libcInfo); err != nil {
+		if err := instance.UpdateLibcInfo(pm.ebpf, pid, newLibcInfo); err != nil {
 			log.Errorf("Failed to update PID %v LibcInfo: %v",
 				pid, err)
 		}
