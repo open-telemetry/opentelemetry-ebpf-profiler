@@ -87,7 +87,8 @@ func (pm *ProcessManager) assignLibcInfo(pid libpf.PID, libcInfo *libc.LibcInfo)
 		if info.libcInfo.IsEqual(newLibcInfo) {
 			return
 		} else {
-			newLibcInfo.Merge(*info.libcInfo)
+			info.libcInfo.Merge(newLibcInfo)
+			newLibcInfo = *info.libcInfo
 		}
 	}
 
