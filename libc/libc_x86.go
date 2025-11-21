@@ -86,10 +86,10 @@ func extractTSDInfoX86(code []byte) (TSDInfo, error) {
 func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 	it := amd.NewInterpreterWithCode(code)
 
-	// __tls_get_addr takes a tls_index struct in RDI
-	tls_index := it.Regs.Get(amd.RDI)
-	module_id := e.Mem8(tls_index)
-	tls_offset := e.Mem8(e.Add(tls_index, e.Imm(8)))
+	// __tls_get_addr takes a tlsIndex struct in RDI
+	tlsIndex := it.Regs.Get(amd.RDI)
+	moduleId := e.Mem8(tlsIndex)
+	tlsOffset := e.Mem8(e.Add(tlsIndex, e.Imm(8)))
 
 	// Execute until RET
 	_, err := it.LoopWithBreak(func(op x86asm.Inst) bool {
@@ -112,10 +112,10 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 		e.Mem8(
 			e.Add(
 				e.MemWithSegment8(x86asm.FS, dtvOffset),
-				e.Multiply(module_id, entryWidth),
+				e.Multiply(moduleId, entryWidth),
 			),
 		),
-		tls_offset,
+		tlsOffset,
 	)
 
 	if result.Match(expected) {
@@ -128,15 +128,15 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 
 	// Pattern 2: musl - The thread pointer itself might be represented differently
 	// Since FS:0 is the thread pointer, and DTV is at offset from it
-	thread_ptr := e.MemWithSegment8(x86asm.FS, e.Imm(0))
-	dtv_ptr := e.Mem8(e.Add(thread_ptr, dtvOffset))
+	threadPtr := e.MemWithSegment8(x86asm.FS, e.Imm(0))
+	dtvPtr := e.Mem8(e.Add(threadPtr, dtvOffset))
 
 	expected = e.Add(
-		tls_offset,
+		tlsOffset,
 		e.Mem8(
 			e.Add(
-				dtv_ptr,
-				e.Multiply(module_id, entryWidth),
+				dtvPtr,
+				e.Multiply(moduleId, entryWidth),
 			),
 		),
 	)
@@ -153,11 +153,11 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 	expected = e.Add(
 		e.Mem8(
 			e.Add(
-				dtv_ptr,
-				e.Multiply(module_id, entryWidth),
+				dtvPtr,
+				e.Multiply(moduleId, entryWidth),
 			),
 		),
-		tls_offset,
+		tlsOffset,
 	)
 
 	if result.Match(expected) {
@@ -171,11 +171,11 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 	// Pattern 4: Maybe the scale is encoded in the memory operand differently
 	// Try without explicit multiply
 	expected = e.Add(
-		tls_offset,
+		tlsOffset,
 		e.Mem8(
 			e.Add(
-				e.Mem8(e.Add(thread_ptr, dtvOffset)),
-				e.Multiply(e.ZeroExtend32(module_id), entryWidth),
+				e.Mem8(e.Add(threadPtr, dtvOffset)),
+				e.Multiply(e.ZeroExtend32(moduleId), entryWidth),
 			),
 		),
 	)
