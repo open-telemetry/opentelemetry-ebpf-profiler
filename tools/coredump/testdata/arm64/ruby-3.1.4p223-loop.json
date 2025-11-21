@@ -5,7 +5,7 @@
       "lwp": 40655,
       "frames": [
         "libruby.so.3.1.4+0x297464",
-        "is_prime+0 in /pwd/testsources/ruby/loop.rb:0",
+        "is_prime+0 in /pwd/testsources/ruby/loop.rb:12",
         "libruby.so.3.1.4+0x29b6ff",
         "libruby.so.3.1.4+0x2a018b",
         "libruby.so.3.1.4+0x1d0fbf",

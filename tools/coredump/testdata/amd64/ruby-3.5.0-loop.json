@@ -4,7 +4,7 @@
     {
       "lwp": 1844728,
       "frames": [
-        "Object#is_prime+0 in /app/loop.rb:0",
+        "Object#is_prime+0 in /app/loop.rb:10",
         "libruby.so.3.5.0+0x3399b0",
         "libruby.so.3.5.0+0x33e9d7",
         "libruby.so.3.5.0+0x23e175",

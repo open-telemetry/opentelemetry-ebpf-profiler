@@ -369,7 +369,7 @@ const (
 	V8LineDeltaMask   = 0xffffffff
 
 	RubyAddrMask48Bit     = 0xffffffffffff
-	RubyExtraAddrTypeMask = 0xff000000000000
+	RubyExtraAddrTypeMask = 0xf000000000000
 
 	RubyFrameTypeNone     = 0x0
 	RubyFrameTypeCmeIseq  = 0x1
