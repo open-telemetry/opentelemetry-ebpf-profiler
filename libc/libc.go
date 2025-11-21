@@ -15,6 +15,7 @@ import (
 )
 
 type TSDInfo = support.TSDInfo
+type DTVInfo = support.DTVInfo
 
 // LibcInfo contains introspection information extracted from the C-library
 type LibcInfo struct {
@@ -24,15 +25,31 @@ type LibcInfo struct {
 	DTVInfo DTVInfo
 }
 
+var (
+	// regex for the libc
+	libcRegex = regexp.MustCompile(`.*/(ld-musl|ld-linux|libc|libpthread)([-.].*)?\.so`)
+)
 
-// TODO comment
-type DTVInfo struct {
-	// Offset is the offset of DTV from FS base (or from thread pointer)
-	Offset     int64
-	// EntryWidth is the size of each DTV entry in bytes
-	EntryWidth uint32 
-	// Indirect is 0 if DTV is at FS+offset, 1 if at [FS+0]+offset
-	Indirect   uint8
+// IsPotentialLibcDSO determines if the DSO filename potentially contains libc code
+func IsPotentialLibcDSO(filename string) bool {
+	return libcRegex.MatchString(filename)
+}
+
+func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
+	tsdinfo, err := extractTSDInfo(ef)
+	if err != nil {
+		return nil, err
+	}
+
+	dtvinfo, err := extractDTVInfo(ef)
+	if err != nil {
+		return &LibcInfo{}, err
+	}
+
+	return &LibcInfo{
+		TSDInfo: tsdinfo,
+		DTVInfo: dtvinfo,
+	}, nil
 }
 
 // This code analyzes the C-library provided POSIX defined function which is used
@@ -79,33 +96,6 @@ type DTVInfo struct {
 // main code flow (as in, any conditional jumps are not followed).
 //
 // Reading the value is basically "return self->specific_1stblock[key].data;"
-
-var (
-	// regex for the libc
-	libcRegex = regexp.MustCompile(`.*/(ld-musl|libc|libpthread)([-.].*)?\.so`)
-)
-
-// IsPotentialTSDDSO determines if the DSO filename potentially contains pthread code
-func IsPotentialTSDDSO(filename string) bool {
-	return libcRegex.MatchString(filename)
-}
-
-func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
-	tsdinfo, err := extractTSDInfo(ef)
-	if err != nil {
-		return nil, err
-	}
-
-	dtvinfo, err := extractDTVInfo(ef)
-	if err != nil {
-		return &LibcInfo{}, err
-	}
-
-	return &LibcInfo{
-		TSDInfo: tsdinfo,
-		DTVInfo: dtvinfo,
-	}, nil
-}
 
 // extractTSDInfo extracts the introspection data for pthread thread specific data.
 func extractTSDInfo(ef *pfelf.File) (TSDInfo, error) {

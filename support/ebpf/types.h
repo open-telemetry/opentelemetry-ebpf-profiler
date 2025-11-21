@@ -388,6 +388,18 @@ typedef struct TSDInfo {
   u8 indirect;
 } TSDInfo;
 
+// DTVInfo contains data needed to read Thread Local Storage (TLS) values, which
+// are located using the Dynamic Thread Vector (DTV)
+typedef struct DTVInfo {
+  // Offset is the offset of DTV from FS base (or from thread pointer)
+  s16 offset;
+  // Multiplier is the size of each DTV entry in bytes
+  // Typically 8 bytes on 64bit musl and 16 bytes on 64bit glibc
+  u8 multiplier;
+  // Indirect is 0 if DTV is at FS+offset, 1 if at [FS+0]+offset
+  u8 indirect;
+} DTVInfo;
+
 // DotnetProcInfo is a container for the data needed to build stack trace for a dotnet process.
 typedef struct DotnetProcInfo {
   u32 version;
