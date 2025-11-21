@@ -865,11 +865,6 @@ func unpackEnvFlags(packed uint16) uint32 {
 
 func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType uint8, frameFlags uint32) (*rubyIseq, error) {
 	vms := &r.r.vmStructs
-	lineNo, err := r.getRubyLineNo(iseqBody, uint64(pc))
-	if err != nil {
-		lineNo = 0
-		log.Warnf("RubySymbolizer: Failed to get line number (%d) %v", frameAddrType, err)
-	}
 
 	// Read contiguous pointer values into a buffer to be more efficient
 	dataBytes := make([]byte, 3*vms.size_of_value)
@@ -922,7 +917,6 @@ func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType ui
 		baseLabel:      iseqBaseLabel,
 		methodName:     methodName,
 		sourceFileName: sourceFileName,
-		line:           libpf.SourceLineno(lineNo),
 	}, nil
 }
 
@@ -945,11 +939,13 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 	var cme bool
 
 	vms := &r.r.vmStructs
-	frameAddr := libpf.Address(ef.Variable(0) & support.RubyAddrMask48Bit)
-	frameAddrType := uint8(ef.Variable(0) >> 48)
-	pc := libpf.Address(ef.Variable(1) & support.RubyAddrMask48Bit)
+	frameAddr := libpf.Address(ef.Data() & support.RubyAddrMask48Bit)
+	frameAddrType := uint8(ef.Data() >> 48)
 
-	frameFlags := unpackEnvFlags(uint16(ef.Variable(1) >> 48))
+	pc := libpf.Address(ef.Variable(0) & support.RubyAddrMask48Bit)
+	frameFlags := unpackEnvFlags(uint16(ef.Variable(0) >> 48))
+
+	cfpIseq := libpf.Address(ef.Variable(1))
 
 	switch frameAddrType {
 	case support.RubyFrameTypeCmeCfunc:
@@ -1013,13 +1009,18 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 		sourceFile = cfuncDummyFile
 	} else {
 		// The Ruby VM program counter that was extracted from the current call frame is embedded in
-		// the Linenos field.
+		// the Linenos field, and we use the iseq address passed in to decode it
+		lineNo, err := r.getRubyLineNo(cfpIseq, uint64(pc))
+		if err != nil {
+			lineNo = 0
+			log.Warnf("RubySymbolizer: Failed to get line number (%d) %v", frameAddrType, err)
+		}
 		iseq, err := r.readIseqBody(iseqBody, pc, frameAddrType, frameFlags)
 		if err != nil {
 			return err
 		}
 		sourceFile = iseq.sourceFileName
-		sourceLine = iseq.line
+		sourceLine = libpf.SourceLineno(lineNo)
 
 		fullLabel = profileFrameFullLabel(classPath, iseq.label, iseq.baseLabel, iseq.methodName, singleton, cframe)
 

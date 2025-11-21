@@ -66,8 +66,8 @@ typedef struct vm_env_struct {
 // frame_type is encoded into the "file" attribute of frame in the spare bits
 // frame flags are encoded in the upper bits of "line" for debugging purposes, but this
 // is may change in the future.
-static EBPF_INLINE ErrorCode
-push_ruby(UnwindState *state, Trace *trace, u16 flags, u8 frame_type, u64 file, u64 line)
+static EBPF_INLINE ErrorCode push_ruby(
+  UnwindState *state, Trace *trace, u16 flags, u8 frame_type, u64 file, u64 line, u64 iseq_addr)
 {
   if (frame_type != FRAME_TYPE_NONE) {
     // Ensure address is actually no more than 48-bits
@@ -75,7 +75,7 @@ push_ruby(UnwindState *state, Trace *trace, u16 flags, u8 frame_type, u64 file, 
     if (addr != file)
       return ERR_RUBY_PACK_FRAME;
     // Shift data to bits 48-55
-    u64 packed = addr | ((u64)frame_type << 48);
+    u64 packed = addr | ((u64)(frame_type & 0xF) << 48);
     file       = packed;
   }
 
@@ -87,12 +87,12 @@ push_ruby(UnwindState *state, Trace *trace, u16 flags, u8 frame_type, u64 file, 
     u64 packed = pc_addr | ((u64)flags << 48);
     line       = packed;
   }
-  u64 *data = push_frame(state, trace, FRAME_MARKER_RUBY, FRAME_FLAG_PID_SPECIFIC, 0, 2);
+  u64 *data = push_frame(state, trace, FRAME_MARKER_RUBY, FRAME_FLAG_PID_SPECIFIC, file, 2);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }
-  data[0] = file;
-  data[1] = line;
+  data[0] = line;
+  data[1] = iseq_addr;
   return ERR_OK;
 }
 
@@ -110,6 +110,8 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
   u8 frame_type;
   // Actual frame address of the given type
   u64 frame_addr;
+  // Address of the cfp->iseq, used to get the line number using the pc
+  u64 iseq_addr = 0;
   u64 pc;
 
   Trace *trace     = &record->trace;
@@ -167,6 +169,19 @@ read_ep:
     frame_flags = (u64)vm_env.flags;
   }
   cfunc = (((frame_flags & VM_FRAME_MAGIC_MASK) == VM_FRAME_MAGIC_CFUNC) || pc == 0);
+
+  if (!cfunc) {
+    // Read the control frame iseq so we can get the line number
+    if (control_frame.iseq == NULL) {
+      increment_metric(metricID_UnwindRubyErrInvalidIseq);
+      return ERR_RUBY_INVALID_ISEQ;
+    }
+    if (bpf_probe_read_user(
+          &iseq_addr, sizeof(iseq_addr), (void *)(control_frame.iseq + rubyinfo->body))) {
+      increment_metric(metricID_UnwindRubyErrReadIseqBody);
+      return ERR_RUBY_READ_ISEQ_BODY;
+    }
+  }
 
   // Pack the frame flags into 16 bits for debugging purposes
   // Extract high byte (nibbles 6-7)
@@ -273,25 +288,15 @@ done_check:
 
   // Fallback to just reading the iseq if we couldn't detect a supported CME type
   if (frame_type == FRAME_TYPE_NONE) {
-    if (control_frame.iseq == NULL) {
-      increment_metric(metricID_UnwindRubyErrInvalidIseq);
-      return ERR_RUBY_INVALID_ISEQ;
-    }
-
-    if (control_frame.iseq != NULL) {
-      if (bpf_probe_read_user(
-            &frame_addr, sizeof(frame_addr), (void *)(control_frame.iseq + rubyinfo->body))) {
-        increment_metric(metricID_UnwindRubyErrReadIseqBody);
-        return ERR_RUBY_READ_ISEQ_BODY;
-      }
-      frame_type = FRAME_TYPE_ISEQ;
-    }
+    frame_addr = iseq_addr;
+    frame_type = FRAME_TYPE_ISEQ;
   }
 
   // For symbolization of the frame we forward the information about the CME,
   // or plain iseq to userspace, along with the pc so we can get line information.
   // From this we can then extract information like file or function name and line number.
-  ErrorCode error = push_ruby(&record->state, trace, packed_flags, frame_type, frame_addr, pc);
+  ErrorCode error =
+    push_ruby(&record->state, trace, packed_flags, frame_type, frame_addr, pc, iseq_addr);
   if (error) {
     DEBUG_PRINT("ruby: failed to push frame");
     return error;
@@ -399,7 +404,13 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
   // frame now so it can take "ownership" of the native code that was unwound
   if (record->rubyUnwindState.cfunc_saved_frame != 0) {
     error = push_ruby(
-      &record->state, trace, 0, FRAME_TYPE_CME_CFUNC, record->rubyUnwindState.cfunc_saved_frame, 0);
+      &record->state,
+      trace,
+      0,
+      FRAME_TYPE_CME_CFUNC,
+      record->rubyUnwindState.cfunc_saved_frame,
+      0,
+      0);
     if (error) {
       return error;
     }
