@@ -33,13 +33,13 @@ func (l LibcInfo) IsEqual(other LibcInfo) bool {
 // Merge merges another LibcInfo into this one.
 // Non-empty values from other override values in the receiver.
 func (l *LibcInfo) Merge(other LibcInfo) {
-	// If other has TSDInfo, take it
-	if other.TSDInfo != (TSDInfo{}) {
+	// If other has TSDInfo and this instance does not, take it
+	if other.TSDInfo != (TSDInfo{}) && l.TSDInfo == (TSDInfo{}) {
 		l.TSDInfo = other.TSDInfo
 	}
 
-	// If other has DTVInfo, take it
-	if other.DTVInfo != (DTVInfo{}) {
+	// If other has DTVInfo and this instance does not, take it
+	if other.DTVInfo != (DTVInfo{}) && l.DTVInfo == (DTVInfo{}) {
 		l.DTVInfo = other.DTVInfo
 	}
 }

@@ -553,3 +553,225 @@ func TestExtractDTVOffset(t *testing.T) {
 		})
 	}
 }
+
+func TestLibcInfoIsEqual(t *testing.T) {
+	testCases := map[string]struct {
+		left        LibcInfo
+		right       LibcInfo
+		expectEqual bool
+	}{
+		"empty libcinfos are equal": {
+			left:        LibcInfo{},
+			right:       LibcInfo{},
+			expectEqual: true,
+		},
+		"nested values are equal": {
+			left: LibcInfo{
+				TSDInfo{
+					Offset:     8,
+					Multiplier: 8,
+					Indirect:   1,
+				},
+				DTVInfo{
+					Offset:     -8,
+					Multiplier: 16,
+					Indirect:   0,
+				},
+			},
+			right: LibcInfo{
+				TSDInfo{
+					Offset:     8,
+					Multiplier: 8,
+					Indirect:   1,
+				},
+				DTVInfo{
+					Offset:     -8,
+					Multiplier: 16,
+					Indirect:   0,
+				},
+			},
+			expectEqual: true,
+		},
+		"nested values are not equal": {
+			left: LibcInfo{
+				TSDInfo{},
+				DTVInfo{
+					Offset:     -8,
+					Multiplier: 16,
+					Indirect:   0,
+				},
+			},
+			right: LibcInfo{
+				TSDInfo{
+					Offset:     8,
+					Multiplier: 8,
+					Indirect:   1,
+				},
+				DTVInfo{},
+			},
+			expectEqual: false,
+		},
+	}
+
+	for name, test := range testCases {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, test.expectEqual, test.left.IsEqual(test.right))
+		})
+	}
+}
+
+func TestLibcInfoMerge(t *testing.T) {
+	testCases := map[string]struct {
+		left     LibcInfo
+		right    LibcInfo
+		expected LibcInfo
+	}{
+		"non-empty TSD values are accumulated from other": {
+			left: LibcInfo{},
+			right: LibcInfo{
+				TSDInfo{
+					Offset:     8,
+					Multiplier: 8,
+					Indirect:   1,
+				},
+				DTVInfo{},
+			},
+			expected: LibcInfo{
+				TSDInfo{
+					Offset:     8,
+					Multiplier: 8,
+					Indirect:   1,
+				},
+				DTVInfo{},
+			},
+		},
+		"non-empty DTV values are accumulated from other": {
+			left: LibcInfo{},
+			right: LibcInfo{
+				TSDInfo{},
+				DTVInfo{
+					Offset:     -8,
+					Multiplier: 16,
+					Indirect:   0,
+				},
+			},
+			expected: LibcInfo{
+				TSDInfo{},
+				DTVInfo{
+					Offset:     -8,
+					Multiplier: 16,
+					Indirect:   0,
+				},
+			},
+		},
+		"non-empty TSD values are accumulated from other, with DTV already set": {
+			left: LibcInfo{
+				TSDInfo{},
+				DTVInfo{
+					Offset:     -8,
+					Multiplier: 16,
+					Indirect:   0,
+				},
+			},
+			right: LibcInfo{
+				TSDInfo{
+					Offset:     8,
+					Multiplier: 8,
+					Indirect:   1,
+				},
+				DTVInfo{},
+			},
+			expected: LibcInfo{
+				TSDInfo{
+					Offset:     8,
+					Multiplier: 8,
+					Indirect:   1,
+				},
+				DTVInfo{
+					Offset:     -8,
+					Multiplier: 16,
+					Indirect:   0,
+				},
+			},
+		},
+		"non-empty DTV values are accumulated from other, with TSD already set": {
+			left: LibcInfo{
+				TSDInfo{
+					Offset:     8,
+					Multiplier: 8,
+					Indirect:   1,
+				},
+				DTVInfo{},
+			},
+			right: LibcInfo{
+				TSDInfo{},
+				DTVInfo{
+					Offset:     -8,
+					Multiplier: 16,
+					Indirect:   0,
+				},
+			},
+			expected: LibcInfo{
+				TSDInfo{
+					Offset:     8,
+					Multiplier: 8,
+					Indirect:   1,
+				},
+				DTVInfo{
+					Offset:     -8,
+					Multiplier: 16,
+					Indirect:   0,
+				},
+			},
+		},
+
+		// This is not expected to actually happen, but we want to be clear
+		// that values already present, if not empty, are kept and not reset
+		"non-empty values are ignored if already set": {
+			left: LibcInfo{
+				TSDInfo{
+					Offset:     8,
+					Multiplier: 8,
+					Indirect:   1,
+				},
+				DTVInfo{
+					Offset:     -8,
+					Multiplier: 16,
+					Indirect:   0,
+				},
+			},
+			right: LibcInfo{
+				TSDInfo{
+					Offset:     16,
+					Multiplier: 16,
+					Indirect:   0,
+				},
+				DTVInfo{
+					Offset:     8,
+					Multiplier: 16,
+					Indirect:   1,
+				},
+			},
+			expected: LibcInfo{
+				TSDInfo{
+					Offset:     8,
+					Multiplier: 8,
+					Indirect:   1,
+				},
+				DTVInfo{
+					Offset:     -8,
+					Multiplier: 16,
+					Indirect:   0,
+				},
+			},
+		},
+	}
+
+	for name, test := range testCases {
+		t.Run(name, func(t *testing.T) {
+			merged := test.left
+			merged.Merge(test.right)
+			assert.True(t, test.expected.IsEqual(merged))
+		})
+	}
+}
