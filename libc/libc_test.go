@@ -312,7 +312,7 @@ func TestExtractDTVOffset(t *testing.T) {
 			},
 			info: DTVInfo{
 				Offset:     8,
-				EntryWidth: 16,
+				Multiplier: 16,
 				Indirect:   0,
 			},
 		},
@@ -360,7 +360,7 @@ func TestExtractDTVOffset(t *testing.T) {
 			},
 			info: DTVInfo{
 				Offset:     8,
-				EntryWidth: 16,
+				Multiplier: 16,
 				Indirect:   0,
 			},
 		},
@@ -382,7 +382,7 @@ func TestExtractDTVOffset(t *testing.T) {
 			},
 			info: DTVInfo{
 				Offset:     8,
-				EntryWidth: 8,
+				Multiplier: 8,
 				Indirect:   1,
 			},
 		},
@@ -410,7 +410,7 @@ func TestExtractDTVOffset(t *testing.T) {
 			},
 			info: DTVInfo{
 				Offset:     8,
-				EntryWidth: 8,
+				Multiplier: 8,
 				Indirect:   1,
 			},
 		},
@@ -446,7 +446,7 @@ func TestExtractDTVOffset(t *testing.T) {
 			},
 			info: DTVInfo{
 				Offset:     0,
-				EntryWidth: 16,
+				Multiplier: 16,
 				Indirect:   1,
 			},
 		},
@@ -485,7 +485,7 @@ func TestExtractDTVOffset(t *testing.T) {
 			},
 			info: DTVInfo{
 				Offset:     0,
-				EntryWidth: 16,
+				Multiplier: 16,
 				Indirect:   1,
 			},
 		},
@@ -514,7 +514,7 @@ func TestExtractDTVOffset(t *testing.T) {
 			},
 			info: DTVInfo{
 				Offset:     192,
-				EntryWidth: 16,
+				Multiplier: 16,
 				Indirect:   1,
 			},
 		},
@@ -531,7 +531,7 @@ func TestExtractDTVOffset(t *testing.T) {
 			},
 			info: DTVInfo{
 				Offset:     -8,
-				EntryWidth: 8,
+				Multiplier: 8,
 				Indirect:   1,
 			},
 		},
