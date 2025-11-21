@@ -270,7 +270,7 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 }
 
 func extractDTVInfoARM(code []byte) (DTVInfo, error) {
-	dtvOffset := int64(0)
+	dtvOffset := int16(0)
 	entryWidth := uint32(0)
 	foundThreadPtr := false
 	foundDTVLoad := false
@@ -296,7 +296,7 @@ func extractDTVInfoARM(code []byte) (DTVInfo, error) {
 				if m, ok := inst.Args[1].(aa.MemImmediate); ok {
 					imm, ok := ah.DecodeImmediate(m)
 					if ok {
-						dtvOffset = imm
+						dtvOffset = int16(imm & 0xFFFF)
 						foundDTVLoad = true
 					}
 				}
@@ -310,7 +310,7 @@ func extractDTVInfoARM(code []byte) (DTVInfo, error) {
 					if foundThreadPtr && !foundDTVLoad {
 						imm, ok := ah.DecodeImmediate(m)
 						if ok {
-							dtvOffset = imm
+							dtvOffset = int16(imm & 0xFFFF)
 							foundDTVLoad = true
 						}
 					}
@@ -332,7 +332,7 @@ func extractDTVInfoARM(code []byte) (DTVInfo, error) {
 	}
 
 	return DTVInfo{
-		Offset:     int16(dtvOffset),
+		Offset:     dtvOffset,
 		Multiplier: uint8(entryWidth),
 		Indirect:   1,
 	}, nil
