@@ -230,6 +230,7 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->state.r13 = 0;
 #elif defined(__aarch64__)
   record->state.lr         = 0;
+  record->state.r20        = 0;
   record->state.r22        = 0;
   record->state.r28        = 0;
   record->state.lr_invalid = false;
@@ -613,6 +614,7 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   state->sp  = regs->sp;
   state->fp  = regs->regs[29];
   state->lr  = normalize_pac_ptr(regs->regs[30]);
+  state->r20 = regs->regs[20];
   state->r22 = regs->regs[22];
   state->r28 = regs->regs[28];
 
