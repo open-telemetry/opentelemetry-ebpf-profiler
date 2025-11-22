@@ -174,6 +174,13 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		Ranges_n:              uint8(d.vmStructs.ranges.n),
 	}
 
+	if d.erts_frame_layout == ^uint64(0) {
+		// If frame pointers are not supported, they will not be used
+		data.Erts_frame_layout = uint64(0)
+	} else {
+		data.Erts_frame_layout = rm.Uint64(bias + libpf.Address(d.erts_frame_layout))
+	}
+
 	if err := ebpf.UpdateProcData(libpf.BEAM, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err
 	}
