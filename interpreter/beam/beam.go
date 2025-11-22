@@ -93,9 +93,20 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	// "r" symbol is from:
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L62
-	r, _, err := ef.SymbolData("r", 8)
-	if err != nil {
-		return nil, fmt.Errorf("symbol 'r' not found: %v", err)
+	// TODO: We want to avoid reading static symbols to find the address of r here,
+	// because it would be removed if the binary is stripped, but it seems that's the only
+	// way to get it currently. If possible, we should get it exported in erl_etp.c
+	var r libpf.Symbol
+	ef.VisitSymbols(func(sym libpf.Symbol) bool {
+		if sym.Name == "r" {
+			r = sym
+			return false
+		} else {
+			return true
+		}
+	})
+	if r.Name != "r" {
+		return nil, fmt.Errorf("symbol 'r' not found")
 	}
 
 	// "the_active_code_index" symbol is from:
