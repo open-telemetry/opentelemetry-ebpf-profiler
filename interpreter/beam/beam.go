@@ -33,13 +33,12 @@ var (
 )
 
 type beamData struct {
-	otpRelease             string
-	ertsVersion            string
-	the_active_code_index  uint64
-	r                      uint64
-	beam_normal_exit       uint64
-	erts_frame_layout      uint64
-	etp_header_subtag_mask uint64
+	otpRelease            string
+	ertsVersion           string
+	the_active_code_index uint64
+	r                     uint64
+	beam_normal_exit      uint64
+	erts_frame_layout     uint64
 
 	// Sizes and offsets BEAM internal structs we need to traverse
 	vmStructs struct {
@@ -152,7 +151,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.ranges_entry.end = 8
 
 	if d.otpRelease != "27" && d.otpRelease != "28" {
-		return d, fmt.Errorf("unsupported OTP version for BEAM interpreter: %d", d.otpRelease)
+		return d, fmt.Errorf("unsupported OTP version for BEAM interpreter: %s", d.otpRelease)
 	}
 
 	return d, nil
@@ -172,6 +171,9 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		Ranges_sizeof:         uint8(d.vmStructs.ranges.size_of),
 		Ranges_modules:        uint8(d.vmStructs.ranges.modules),
 		Ranges_n:              uint8(d.vmStructs.ranges.n),
+		Ranges_entry_sizeof:   uint8(d.vmStructs.ranges_entry.size_of),
+		Ranges_entry_start:    uint8(d.vmStructs.ranges_entry.start),
+		Ranges_entry_end:      uint8(d.vmStructs.ranges_entry.end),
 	}
 
 	if d.erts_frame_layout == ^uint64(0) {
@@ -248,9 +250,8 @@ func (i *beamInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 	}
 
 	frames.Append(&libpf.Frame{
-		Type:       libpf.BEAMFrame,
-		SourceFile: libpf.Intern("Unknown File"),
-		SourceLine: libpf.SourceLineno(frame.Lineno),
+		Type:            libpf.BEAMFrame,
+		AddressOrLineno: frame.Lineno,
 	})
 
 	return nil

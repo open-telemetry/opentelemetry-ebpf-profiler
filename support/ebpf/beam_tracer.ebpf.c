@@ -38,7 +38,23 @@ typedef struct BEAMRangesInfo {
 } BEAMRangesInfo;
 
 static EBPF_INLINE ErrorCode
-unwind_one_beam_frame(PerCPURecord *record, BEAMRangesInfo *ranges, bool frame_pointers_enabled)
+read_range_entry(BEAMRangeEntry *entry, BEAMProcInfo *info, u64 modules, u64 index)
+{
+  u64 entry_ptr = modules + index * info->ranges_entry_sizeof;
+  if (bpf_probe_read_user(
+        &entry->start, sizeof(u64), (void *)(entry_ptr + info->ranges_entry_start))) {
+    DEBUG_PRINT("beam: Failed to read modules[%llu].start", index);
+    return ERR_BEAM_MODULES_READ_FAILURE;
+  }
+  if (bpf_probe_read_user(&entry->end, sizeof(u64), (void *)(entry_ptr + info->ranges_entry_end))) {
+    DEBUG_PRINT("beam: Failed to read modules[%llu].end", index);
+    return ERR_BEAM_MODULES_READ_FAILURE;
+  }
+  return ERR_OK;
+}
+
+static EBPF_INLINE ErrorCode
+unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *ranges)
 {
   UnwindState *state = &record->state;
   Trace *trace       = &record->trace;
@@ -69,15 +85,15 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMRangesInfo *ranges, bool frame_p
       break;
     }
 
-    current  = low + (high - low) / 2;
-    u64 addr = ranges->modules + current * sizeof(BEAMRangeEntry);
-    if (bpf_probe_read_user((void *)&current_range, sizeof(BEAMRangeEntry), (void *)(addr))) {
-      DEBUG_PRINT("beam: Failed to read ranges[%llu]", current);
-      return ERR_BEAM_MODULES_READ_FAILURE;
+    current         = low + (high - low) / 2;
+    ErrorCode error = read_range_entry(&current_range, info, ranges->modules, current);
+    if (error) {
+      return error;
     }
   }
 
-  if (frame_pointers_enabled) {
+  // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_vm.h#L68-L73
+  if (info->erts_frame_layout == 1) {
     if (!unwinder_unwind_frame_pointer(state)) {
       DEBUG_PRINT("beam: invalid frame pointer");
       return ERR_BEAM_FRAME_POINTER_INVALID;
@@ -105,7 +121,6 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMRangesInfo *ranges, bool frame_p
 // BEAM stack frames to the trace object for the current CPU.
 static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
 {
-
   int unwinder    = PROG_UNWIND_STOP;
   ErrorCode error = ERR_OK;
 
@@ -130,11 +145,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
   unwinder_mark_nonleaf_frame(state);
   _push_with_return_address(trace, 0LL, state->pc, FRAME_MARKER_BEAM, state->return_address);
 
-  // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_vm.h#L68-L73
-  bool frame_pointers_enabled = info->erts_frame_layout == 1;
-
-  DEBUG_PRINT(
-    "==== unwind_beam %d (frame_pointers: %d)====", trace->stack_len, frame_pointers_enabled);
+  DEBUG_PRINT("==== unwind_beam %d, pc: 0x%llx ====", trace->stack_len, state->pc);
 
   // "the_active_code_index" symbol is from:
   // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.c#L46
@@ -173,30 +184,17 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
 
   DEBUG_PRINT("beam: modules: %llx, n: %llu", ranges.modules, ranges.n);
 
-  if (bpf_probe_read_user(&ranges.first, sizeof(BEAMRangeEntry), (void *)(ranges.modules))) {
-    DEBUG_PRINT("beam: Failed to read ranges.first");
-    error = ERR_BEAM_MODULES_READ_FAILURE;
+  if ((error = read_range_entry(&ranges.first, info, ranges.modules, 0))) {
     goto exit;
   }
-  if (bpf_probe_read_user(
-        &ranges.mid,
-        sizeof(BEAMRangeEntry),
-        (void *)(ranges.modules + (ranges.n / 2) * sizeof(BEAMRangeEntry)))) {
-    DEBUG_PRINT("beam: Failed to read ranges.mid");
-    error = ERR_BEAM_MODULES_READ_FAILURE;
+  if ((error = read_range_entry(&ranges.mid, info, ranges.modules, (ranges.n / 2)))) {
     goto exit;
   }
-  if (bpf_probe_read_user(
-        &ranges.last,
-        sizeof(BEAMRangeEntry),
-        (void *)(ranges.modules + (ranges.n - 1) * sizeof(BEAMRangeEntry)))) {
-    DEBUG_PRINT("beam: Failed to read ranges.last");
-    error = ERR_BEAM_MODULES_READ_FAILURE;
+  if ((error = read_range_entry(&ranges.last, info, ranges.modules, (ranges.n - 1)))) {
     goto exit;
   }
 
-  DEBUG_PRINT(
-    "beam: ranges.first.start: %llx, ranges.last.end: %llx", ranges.first.start, ranges.last.end);
+  DEBUG_PRINT("beam: valid addresses 0x%llx - 0x%llx", ranges.first.start, ranges.last.end);
 
   UNROLL for (int i = 0; i < FRAMES_PER_PROGRAM; i++)
   {
@@ -206,7 +204,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
       break;
     }
 
-    error = unwind_one_beam_frame(record, &ranges, frame_pointers_enabled);
+    error = unwind_one_beam_frame(record, info, &ranges);
     if (error) {
       break;
     }
