@@ -268,17 +268,16 @@ func (pm *ProcessManager) maybeNotifyAPMAgent(
 	rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16,
 ) string {
 	pm.mu.RLock()
+	// Keeping the lock until end of the function is needed because inner map can be modified concurrently (by synchronizeMappings/newFrameMapping).
+	defer pm.mu.RUnlock()
 	pidInterp, ok := pm.interpreters[rawTrace.PID]
-	pm.mu.RUnlock()
 	if !ok {
 		return ""
 	}
-
 	var serviceName string
 	for _, mapping := range pidInterp {
 		if apm, ok := mapping.(*apmint.Instance); ok {
 			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, umTraceHash, count)
-
 			if serviceName != "" {
 				log.Warnf("Overwriting APM service name from '%s' to '%s' for PID %d",
 					serviceName,
@@ -369,13 +368,14 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *host.Trace) {
 	if cacheHit != 0 {
 		pm.frameCacheHit.Add(cacheHit)
 	}
-
+	pm.mu.RLock()
 	// Release resources that were used to symbolize this stack.
 	for _, instance := range pm.interpreters[pid] {
 		if err := instance.ReleaseResources(); err != nil {
 			log.Warnf("Failed to release resources for %d: %v", pid, err)
 		}
 	}
+	pm.mu.RUnlock()
 
 	trace.Hash = traceutil.HashTrace(trace)
 	meta.APMServiceName = pm.maybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
