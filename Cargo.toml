@@ -67,7 +67,7 @@ version = "0.16.0"
 default-features = false
 
 [workspace.dependencies.object]
-version = "0.37.0"
+version = "0.38.0"
 default-features = false
 features = ["std", "read_core", "elf", "macho", "unaligned"]
 
