@@ -280,7 +280,7 @@ func (p *Pdata) setProfile(
 
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Samples().Len())
 
-	profile.SetDuration(pcommon.Timestamp(endTS - startTS))
+	profile.SetDurationNano(endTS - startTS)
 	profile.SetTime(pcommon.Timestamp(startTS))
 
 	return nil
