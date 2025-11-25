@@ -24,15 +24,15 @@ require (
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zeebo/xxh3 v1.0.2
-	go.opentelemetry.io/collector/component v1.46.1-0.20251120204106-2e9c82787618
-	go.opentelemetry.io/collector/confmap/xconfmap v0.140.1-0.20251120204106-2e9c82787618
-	go.opentelemetry.io/collector/consumer/consumertest v0.140.1-0.20251120204106-2e9c82787618
-	go.opentelemetry.io/collector/consumer/xconsumer v0.140.1-0.20251120204106-2e9c82787618
-	go.opentelemetry.io/collector/pdata v1.46.1-0.20251120204106-2e9c82787618
-	go.opentelemetry.io/collector/pdata/pprofile v0.140.1-0.20251120204106-2e9c82787618
-	go.opentelemetry.io/collector/receiver v1.46.1-0.20251120204106-2e9c82787618
-	go.opentelemetry.io/collector/receiver/receivertest v0.140.1-0.20251120204106-2e9c82787618
-	go.opentelemetry.io/collector/receiver/xreceiver v0.140.1-0.20251120204106-2e9c82787618
+	go.opentelemetry.io/collector/component v1.46.1-0.20251124173854-1578cf80b9c0
+	go.opentelemetry.io/collector/confmap/xconfmap v0.140.1-0.20251124173854-1578cf80b9c0
+	go.opentelemetry.io/collector/consumer/consumertest v0.140.1-0.20251124173854-1578cf80b9c0
+	go.opentelemetry.io/collector/consumer/xconsumer v0.140.1-0.20251124173854-1578cf80b9c0
+	go.opentelemetry.io/collector/pdata v1.46.1-0.20251124173854-1578cf80b9c0
+	go.opentelemetry.io/collector/pdata/pprofile v0.140.1-0.20251124173854-1578cf80b9c0
+	go.opentelemetry.io/collector/receiver v1.46.1-0.20251124173854-1578cf80b9c0
+	go.opentelemetry.io/collector/receiver/receivertest v0.140.1-0.20251124173854-1578cf80b9c0
+	go.opentelemetry.io/collector/receiver/xreceiver v0.140.1-0.20251124173854-1578cf80b9c0
 	go.opentelemetry.io/otel v1.38.0
 	go.opentelemetry.io/otel/metric v1.38.0
 	go.uber.org/zap/exp v0.3.0
