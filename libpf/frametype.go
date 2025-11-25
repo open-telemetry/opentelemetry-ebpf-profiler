@@ -51,6 +51,8 @@ const (
 	DotnetFrame FrameType = support.FrameMarkerDotnet
 	// GoFrame identifies Go frames.
 	GoFrame FrameType = support.FrameMarkerGo
+	// BEAMFrame identifies the BEAM interpreter frames.
+	BEAMFrame FrameType = support.FrameMarkerBEAM
 	// AbortFrame identifies frames that report that further unwinding was aborted due to an error.
 	AbortFrame FrameType = support.FrameMarkerAbort
 )

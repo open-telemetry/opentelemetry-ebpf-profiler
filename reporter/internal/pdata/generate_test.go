@@ -97,39 +97,41 @@ func TestGetDummyMappingIndex(t *testing.T) {
 }
 
 func newTestFrames(extraFrame bool) libpf.Frames {
-	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-		FileID: libpf.NewFileID(2, 3),
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID: libpf.NewFileID(2, 3),
+		}),
 	})
 	frames := make(libpf.Frames, 0, 5)
 	frames.Append(&libpf.Frame{
 		Type:            libpf.KernelFrame,
 		AddressOrLineno: 0xef,
 		FunctionName:    libpf.Intern("func1"),
-		MappingFile:     mappingFile,
+		Mapping:         mapping,
 	})
 	frames.Append(&libpf.Frame{
 		Type:            libpf.KernelFrame,
 		AddressOrLineno: 0x1ef,
 		FunctionName:    libpf.Intern("func2"),
-		MappingFile:     mappingFile,
+		Mapping:         mapping,
 	})
 	frames.Append(&libpf.Frame{
 		Type:            libpf.KernelFrame,
 		AddressOrLineno: 0x2ef,
 		FunctionName:    libpf.Intern("func3"),
-		MappingFile:     mappingFile,
+		Mapping:         mapping,
 	})
 	frames.Append(&libpf.Frame{
 		Type:            libpf.KernelFrame,
 		AddressOrLineno: 0x3ef,
 		FunctionName:    libpf.Intern("func4"),
-		MappingFile:     mappingFile,
+		Mapping:         mapping,
 	})
 	frames.Append(&libpf.Frame{
 		Type:            libpf.KernelFrame,
 		AddressOrLineno: 0x4ef,
 		FunctionName:    libpf.Intern("func5"),
-		MappingFile:     mappingFile,
+		Mapping:         mapping,
 	})
 
 	if extraFrame {
@@ -137,7 +139,7 @@ func newTestFrames(extraFrame bool) libpf.Frames {
 			Type:            libpf.KernelFrame,
 			AddressOrLineno: 0x5ef,
 			FunctionName:    libpf.Intern("func6"),
-			MappingFile:     mappingFile,
+			Mapping:         mapping,
 		})
 	}
 	return frames
@@ -236,7 +238,7 @@ func TestProfileDuration(t *testing.T) {
 			require.NoError(t, err)
 
 			profile := res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0)
-			require.Equal(t, pcommon.Timestamp(7), profile.Duration())
+			require.Equal(t, uint64(7), profile.DurationNano())
 			require.Equal(t, pcommon.Timestamp(1), profile.Time())
 		})
 	}
@@ -252,7 +254,7 @@ func TestGenerate_EmptyTree(t *testing.T) {
 	assert.Equal(t, 0, profiles.ResourceProfiles().Len())
 }
 
-func singleFrameTrace(ty libpf.FrameType, mappingFile libpf.FrameMappingFile,
+func singleFrameTrace(ty libpf.FrameType, mapping libpf.FrameMapping,
 	lineno libpf.AddressOrLineno, funcName string, sourceFile libpf.String,
 	sourceLine libpf.SourceLineno,
 ) libpf.Frames {
@@ -263,7 +265,7 @@ func singleFrameTrace(ty libpf.FrameType, mappingFile libpf.FrameMappingFile,
 		FunctionName:    libpf.Intern(funcName),
 		SourceFile:      sourceFile,
 		SourceLine:      sourceLine,
-		MappingFile:     mappingFile,
+		Mapping:         mapping,
 	})
 	return frames
 }
@@ -274,9 +276,11 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 
 	funcName := "main"
 	filePath := libpf.Intern("/bin/test")
-	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-		FileID:   libpf.NewFileID(1, 2),
-		FileName: filePath,
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(1, 2),
+			FileName: filePath,
+		}),
 	})
 
 	traceKey := samples.TraceAndMetaKey{
@@ -289,10 +293,10 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 	events := map[libpf.Origin]samples.KeyToEventMapping{
 		support.TraceOriginSampling: {
 			traceKey: &samples.TraceEvents{
-				Frames: singleFrameTrace(libpf.GoFrame, mappingFile,
+				Frames: singleFrameTrace(libpf.GoFrame, mapping,
 					0x10, funcName, filePath, 42),
 				Timestamps: []uint64{100},
-				EnvVars:    map[libpf.String]libpf.String{
+				EnvVars: map[libpf.String]libpf.String{
 					libpf.Intern("FOO"): libpf.Intern("BAR"),
 				},
 			},
@@ -317,7 +321,7 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 	require.Equal(t, 1, sp.Profiles().Len())
 	prof := sp.Profiles().At(0)
 	assert.Equal(t, pcommon.Timestamp(100), prof.Time())
-	assert.Equal(t, pcommon.Timestamp(0), prof.Duration())
+	assert.Equal(t, uint64(0), prof.DurationNano())
 
 	t.Run("Check environment variable attribute", func(t *testing.T) {
 		foundFOOKey := false
@@ -346,13 +350,15 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 	d, err := New(100, nil)
 	require.NoError(t, err)
 
-	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-		FileID:   libpf.NewFileID(5, 6),
-		FileName: libpf.Intern("/bin/foo"),
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(5, 6),
+			FileName: libpf.Intern("/bin/foo"),
+		}),
 	})
 	exec := libpf.Intern("/bin/foo")
 	traceKey := samples.TraceAndMetaKey{ExecutablePath: exec}
-	frames := singleFrameTrace(libpf.PythonFrame, mappingFile, 0x20, "f", exec, 1)
+	frames := singleFrameTrace(libpf.PythonFrame, mapping, 0x20, "f", exec, 1)
 
 	events1 := map[libpf.Origin]samples.KeyToEventMapping{
 		support.TraceOriginSampling: {
@@ -409,16 +415,18 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 
 	funcName := "myfunc"
 	filePath := libpf.Intern("/bin/bar")
-	mappingFile := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-		FileID:   libpf.NewFileID(7, 8),
-		FileName: filePath,
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(7, 8),
+			FileName: filePath,
+		}),
 	})
 
 	traceKey := samples.TraceAndMetaKey{ExecutablePath: filePath}
 	events := map[libpf.Origin]samples.KeyToEventMapping{
 		support.TraceOriginSampling: {
 			traceKey: &samples.TraceEvents{
-				Frames: singleFrameTrace(libpf.PythonFrame, mappingFile, 0x30,
+				Frames: singleFrameTrace(libpf.PythonFrame, mapping, 0x30,
 					funcName, filePath, 123),
 				Timestamps: []uint64{42},
 			},
@@ -453,12 +461,14 @@ func singleFrameNative(mappingFile libpf.FrameMappingFile, lineno libpf.AddressO
 ) libpf.Frames {
 	frames := make(libpf.Frames, 0, 1)
 	frames.Append(&libpf.Frame{
-		Type:              libpf.NativeFrame,
-		AddressOrLineno:   lineno,
-		MappingStart:      mappingStart,
-		MappingEnd:        mappingEnd,
-		MappingFileOffset: mappingFileOffset,
-		MappingFile:       mappingFile,
+		Type:            libpf.NativeFrame,
+		AddressOrLineno: lineno,
+		Mapping: libpf.NewFrameMapping(libpf.FrameMappingData{
+			Start:      mappingStart,
+			End:        mappingEnd,
+			FileOffset: mappingFileOffset,
+			File:       mappingFile,
+		}),
 	})
 	return frames
 }
@@ -511,11 +521,11 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	require.Equal(t, 1, sp.Profiles().Len())
 	prof := sp.Profiles().At(0)
 	assert.Equal(t, pcommon.Timestamp(123), prof.Time())
-	assert.Equal(t, pcommon.Timestamp(666), prof.Duration())
+	assert.Equal(t, uint64(666), prof.DurationNano())
 
 	// Verify profile contains one sample
-	assert.Equal(t, 1, prof.Sample().Len())
-	sample := prof.Sample().At(0)
+	assert.Equal(t, 1, prof.Samples().Len())
+	sample := prof.Samples().At(0)
 	assert.Len(t, sample.Values().AsRaw(), 0)
 	assert.Len(t, sample.TimestampsUnixNano().AsRaw(), 3)
 

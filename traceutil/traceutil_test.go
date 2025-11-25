@@ -24,20 +24,29 @@ func newTrace() *libpf.Trace {
 	trace.Frames.Append(&libpf.Frame{
 		Type:            libpf.NativeFrame,
 		AddressOrLineno: 0,
-		MappingFile: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-			FileID: libpf.NewFileID(0, 0)}),
+		Mapping: libpf.NewFrameMapping(libpf.FrameMappingData{
+			File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+				FileID: libpf.NewFileID(0, 0),
+			}),
+		}),
 	})
 	trace.Frames.Append(&libpf.Frame{
 		Type:            libpf.NativeFrame,
 		AddressOrLineno: 1,
-		MappingFile: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-			FileID: libpf.NewFileID(1, 1)}),
+		Mapping: libpf.NewFrameMapping(libpf.FrameMappingData{
+			File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+				FileID: libpf.NewFileID(1, 1),
+			}),
+		}),
 	})
 	trace.Frames.Append(&libpf.Frame{
 		Type:            libpf.NativeFrame,
 		AddressOrLineno: 2,
-		MappingFile: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-			FileID: libpf.NewFileID(2, 2)}),
+		Mapping: libpf.NewFrameMapping(libpf.FrameMappingData{
+			File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+				FileID: libpf.NewFileID(2, 2),
+			}),
+		}),
 	})
 	return trace
 }

@@ -37,6 +37,9 @@ typedef enum ErrorCode {
   // Hotspot: Unwind instructions requested LR unwinding mid-trace (nonsensical)
   ERR_HOTSPOT_LR_UNWINDING_MID_TRACE = 1004,
 
+  // Hotspot: No entry for this process exists in the Hotspot process info array
+  ERR_HOTSPOT_NO_PROC_INFO = 1005,
+
   // Python: Unable to read current PyCodeObject
   ERR_PYTHON_BAD_CODE_OBJECT_ADDR = 2000,
 
@@ -87,6 +90,9 @@ typedef enum ErrorCode {
 
   // Ruby: Unable to read the instruction sequence size
   ERR_RUBY_READ_ISEQ_SIZE = 3007,
+
+  // Ruby: Unable to determine the base address for thread-specific data
+  ERR_RUBY_READ_TSD_BASE = 3008,
 
   // Native: Unable to find the code section in the stack delta page info map
   ERR_NATIVE_LOOKUP_TEXT_SECTION = 4000,
@@ -162,7 +168,13 @@ typedef enum ErrorCode {
   ERR_DOTNET_CODE_HEADER = 6002,
 
   // Dotnet: Code object was too large to unwind in eBPF
-  ERR_DOTNET_CODE_TOO_LARGE = 6003
+  ERR_DOTNET_CODE_TOO_LARGE = 6003,
+
+  // BEAM: No entry for this process exists in the BEAM process info array
+  ERR_BEAM_NO_PROC_INFO = 7000,
+
+  // BEAM: PC was outside the expected address range
+  ERR_BEAM_PC_INVALID = 7001
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H

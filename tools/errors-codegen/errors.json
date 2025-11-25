@@ -56,6 +56,11 @@
     "description": "Hotspot: Unwind instructions requested LR unwinding mid-trace (nonsensical)"
   },
   {
+    "id": 1005,
+    "name": "hotspot_no_proc_info",
+    "description": "Hotspot: No entry for this process exists in the Hotspot process info array"
+  },
+  {
     "id": 2000,
     "name": "python_bad_code_object_addr",
     "description": "Python: Unable to read current PyCodeObject"
@@ -139,6 +144,11 @@
     "id": 3007,
     "name": "ruby_read_iseq_size",
     "description": "Ruby: Unable to read the instruction sequence size"
+  },
+  {
+    "id": 3008,
+    "name": "ruby_read_tsd_base",
+    "description": "Ruby: Unable to determine the base address for thread-specific data"
   },
   {
     "id": 4000,
@@ -264,5 +274,15 @@
     "id": 6003,
     "name": "dotnet_code_too_large",
     "description": "Dotnet: Code object was too large to unwind in eBPF"
+  },
+  {
+    "id": 7000,
+    "name": "beam_no_proc_info",
+    "description": "BEAM: No entry for this process exists in the BEAM process info array"
+  },
+  {
+    "id": 7001,
+    "name": "beam_pc_invalid",
+    "description": "BEAM: PC was outside the expected address range"
   }
 ]

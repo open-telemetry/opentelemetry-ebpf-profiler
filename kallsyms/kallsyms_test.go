@@ -4,6 +4,7 @@
 package kallsyms
 
 import (
+	"io"
 	"strings"
 	"testing"
 
@@ -102,4 +103,37 @@ ffffffffc13fcb20 t init_xfs_fs	[xfs]`))
 
 	assertSymbol(t, s, 0xffffffffb5000470, "vmlinux", "startup_64_setup_gdt_idt", 0)
 	assertSymbol(t, s, 0xffffffffc13cc610+1, "xfs", "perf_trace_xfs_attr_list_class", 1)
+}
+
+func BenchmarkSort(b *testing.B) {
+	r := strings.NewReader(`0000000000000000 A __per_cpu_start
+0000000000001000 A cpu_debug_store
+0000000000002000 A irq_stack_backing_store
+ffffffffb5000000 t pvh_start_xen
+ffffffffb5000000 T _stext
+ffffffffb5000000 T _text
+ffffffffb5000123 T startup_64
+ffffffffb5000180 T __pfx___startup_64
+ffffffffb5000190 T __startup_64
+ffffffffb5000460 T __pfx_startup_64_setup_gdt_idt
+ffffffffb5000470 T startup_64_setup_gdt_idt
+ffffffffb5001000 T __pfx___traceiter_initcall_level
+ffffffffb6000000 T _etext
+ffffffffc13cc610 t perf_trace_xfs_attr_list_class	[xfs]
+ffffffffc13cc770 t perf_trace_xfs_perag_class	[xfs]
+ffffffffc13cc8b0 t perf_trace_xfs_inodegc_worker	[xfs]
+ffffffffc13cc9d0 t perf_trace_xfs_fs_class	[xfs]
+ffffffffc13ccb20 t perf_trace_xfs_inodegc_shrinker_scan	[xfs]
+ffffffffc1400000 t foo	[foo]
+ffffffffc13fcb20 t init_xfs_fs	[xfs]`)
+
+	s := &Symbolizer{}
+
+	for i := 0; i < b.N; i++ {
+		r.Seek(0, io.SeekStart)
+		if err := s.updateSymbolsFrom(r); err != nil {
+			b.Fail()
+		}
+	}
+
 }

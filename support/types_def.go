@@ -31,6 +31,7 @@ const (
 	FrameMarkerV8       = C.FRAME_MARKER_V8
 	FrameMarkerDotnet   = C.FRAME_MARKER_DOTNET
 	FrameMarkerGo       = C.FRAME_MARKER_GO
+	FrameMarkerBEAM     = C.FRAME_MARKER_BEAM
 	FrameMarkerAbort    = C.FRAME_MARKER_ABORT
 )
 
@@ -45,6 +46,7 @@ const (
 	ProgUnwindV8      = C.PROG_UNWIND_V8
 	ProgUnwindDotnet  = C.PROG_UNWIND_DOTNET
 	ProgGoLabels      = C.PROG_GO_LABELS
+	ProgUnwindBEAM    = C.PROG_UNWIND_BEAM
 )
 
 const (
@@ -121,6 +123,7 @@ type Trace C.Trace
 type UnwindInfo C.UnwindInfo
 
 type ApmIntProcInfo C.ApmIntProcInfo
+type BEAMProcInfo C.BEAMProcInfo
 type DotnetProcInfo C.DotnetProcInfo
 type GoLabelsOffsets C.GoLabelsOffsets
 type HotspotProcInfo C.HotspotProcInfo

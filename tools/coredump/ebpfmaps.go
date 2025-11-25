@@ -70,6 +70,8 @@ func (emc *ebpfMapsCoredump) UpdateProcData(t libpf.InterpreterType, pid libpf.P
 		emc.ctx.addMap(unsafe.Pointer(&C.ruby_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_RubyProcInfo))
 	case libpf.V8:
 		emc.ctx.addMap(unsafe.Pointer(&C.v8_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_V8ProcInfo))
+	case libpf.BEAM:
+		emc.ctx.addMap(unsafe.Pointer(&C.beam_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_BEAMProcInfo))
 	}
 	return nil
 }
@@ -90,6 +92,8 @@ func (emc *ebpfMapsCoredump) DeleteProcData(t libpf.InterpreterType, pid libpf.P
 		emc.ctx.delMap(unsafe.Pointer(&C.ruby_procs), C.u32(pid))
 	case libpf.V8:
 		emc.ctx.delMap(unsafe.Pointer(&C.v8_procs), C.u32(pid))
+	case libpf.BEAM:
+		emc.ctx.delMap(unsafe.Pointer(&C.beam_procs), C.u32(pid))
 	}
 	return nil
 }
