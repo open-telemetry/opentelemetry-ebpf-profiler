@@ -139,7 +139,7 @@ jobs:
   integration-tests:
     name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }})
     runs-on: ubuntu-24.04
-    container: ghcr.io/open-telemetry/ebpf-integration-test:latest
+    container: ghcr.io/open-telemetry/ebpf-integration-tests:latest
     needs: build-integration-test-binaries
     timeout-minutes: 10
     strategy:
@@ -174,16 +174,6 @@ jobs:
           sudo dpkg-reconfigure man-db
       - name: Clone code
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -y
-          case "${{ matrix.target_arch }}" in
-            amd64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-x86 ;;
-            arm64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-arm ipxe-qemu ;;
-            *) echo >&2 "bug: bad arch selected"; exit 1;;
-          esac
-          go install github.com/florianl/bluebox@v0.0.1
-          sudo mv ~/go/bin/bluebox /usr/local/bin/.
       - name: Fetch integration test binaries
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
         with: { name: "integration-test-binaries-${{ matrix.target_arch }}" }
