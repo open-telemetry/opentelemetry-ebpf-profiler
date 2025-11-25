@@ -112,8 +112,14 @@ func (i *Interpreter) Step() (x86asm.Inst, error) {
 			case x86asm.Reg:
 				i.Regs.setX86asm(dst, i.Regs.GetX86(src))
 			case x86asm.Mem:
-				v := i.MemArg(src)
-
+				var v expression.Expression
+				if src.Base == x86asm.RIP {
+					// For RIP-relative, the address is RIP + displacement.
+					// RIP points to the already updated next instruction.
+					v = expression.Add(i.Regs.GetX86(x86asm.RIP), expression.Imm(uint64(src.Disp)))
+				} else {
+					v = i.MemArg(src)
+				}
 				dataSizeBits := inst.DataSize
 
 				v = expression.MemWithSegment(src.Segment, v, inst.MemBytes)

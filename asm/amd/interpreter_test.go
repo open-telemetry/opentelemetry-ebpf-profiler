@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/ebpf-profiler/asm/expression"
+	"golang.org/x/arch/x86/x86asm"
 )
 
 func BenchmarkPythonInterpreter(b *testing.B) {
@@ -75,9 +76,11 @@ func TestRecoverSwitchCase(t *testing.T) {
 			// 003310F7 	41 F6 C4 04 	test 	r12b, 4
 			// 003310FB 	4C 89 74 24 10 	mov 	qword ptr [rsp + 0x10], r14
 			// 00331100 	74 08 	je 	0x33110a
-			Code: []byte{0x48, 0x8b, 0x44, 0x24, 0x20, 0x48, 0x89, 0x18, 0x49,
+			Code: []byte{
+				0x48, 0x8b, 0x44, 0x24, 0x20, 0x48, 0x89, 0x18, 0x49,
 				0x83, 0xc2, 0x02, 0x44, 0x89, 0xe0, 0x83, 0xe0, 0x03, 0x31, 0xdb,
-				0x41, 0xf6, 0xc4, 0x04, 0x4c, 0x89, 0x74, 0x24, 0x10, 0x74, 0x08},
+				0x41, 0xf6, 0xc4, 0x04, 0x4c, 0x89, 0x74, 0x24, 0x10, 0x74, 0x08,
+			},
 		},
 		{
 			Address: expression.Imm(0x33110a),
@@ -168,4 +171,50 @@ func TestMoveSignExtend(t *testing.T) {
 	require.ErrorIs(t, err, io.EOF)
 	pattern := expression.SignExtend(expression.Mem(expression.Imm(7), 2), 64)
 	require.True(t, i.Regs.Get(RAX).Match(pattern))
+}
+
+func TestRIPRelativeAddressing(t *testing.T) {
+	// Test case: mov 0x10512121(%rip),%rcx
+	code := []byte{
+		0x48, 0x8b, 0xd, 0x21, 0x21, 0x51, 0x10, // mov    0x10512121(%rip),%rcx        # 16561fa8 <runtime.tlsg@@Base+0x16561fa8>
+		0x64, 0x48, 0x8b, 0x1, // mov    %fs:(%rcx),%rax
+		0x48, 0x39, 0x60, 0x8, // cmp    %rsp,0x8(%rax)
+		0x77, 0x5, // ja     604fe96 <runtime.stackcheck.abi0@@Base+0x16>
+		0xe8, 0xca, 0xff, 0xff, 0xff, // call   604fe60 <runtime.abort.abi0@@Base>
+		0x48, 0x3b, 0x20, // cmp    (%rax),%rsp
+		0x77, 0x5, // ja     604fea0 <runtime.stackcheck.abi0@@Base+0x20>
+		0xe8, 0xc0, 0xff, 0xff, 0xff, // call   604fe60 <runtime.abort.abi0@@Base>
+		0xc3, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
+		0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
+		0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
+	}
+
+	interp := NewInterpreter()
+	baseAddr := expression.Imm(0x604fe80)
+	interp.ResetCode(code, baseAddr)
+
+	// Execute the first instruction (mov 0x10512121(%rip),%rcx)
+	inst, err := interp.Step()
+	require.NoError(t, err, "Failed to execute first instruction")
+	require.Equal(t, x86asm.MOV, inst.Op, "Expected MOV instruction")
+
+	// Verify that the instruction was decoded correctly with RIP-relative addressing
+	memArg, ok := inst.Args[1].(x86asm.Mem)
+	require.True(t, ok, "Expected Mem argument")
+	require.Equal(t, x86asm.RIP, memArg.Base, "Expected RIP as base register")
+	require.Equal(t, int64(0x10512121), memArg.Disp, "Expected displacement 0x10512121")
+
+	// Check that RCX contains a memory expression with RIP-relative address
+	rcxVal := interp.Regs.GetX86(x86asm.RCX)
+
+	// The effective address should be: base_addr + instruction_length + displacement
+	// base_addr = 0x604fe80, instruction_length = 7, displacement = 0x10512121
+	expectedAddr := expression.Add(
+		baseAddr,
+		expression.Imm(7),
+		expression.Imm(0x10512121),
+	)
+	expectedExpr := expression.ZeroExtend(expression.Mem(expectedAddr, 8), 64)
+
+	assertEval(t, rcxVal, expectedExpr)
 }
