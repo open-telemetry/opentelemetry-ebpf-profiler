@@ -139,6 +139,7 @@ jobs:
   integration-tests:
     name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }})
     runs-on: ubuntu-24.04
+    container: ghcr.io/open-telemetry/ebpf-integration-test:latest
     needs: build-integration-test-binaries
     timeout-minutes: 10
     strategy:
