@@ -3,14 +3,14 @@
 #include "types.h"
 
 // The number of frames to unwind per frame-unwinding eBPF program.
-#define FRAMES_PER_PROGRAM 8
+#define BEAM_FRAMES_PER_PROGRAM 8
 
 // The max number of loops to unroll when searching for the correct CodeHeader.
 // Should be log base 2 of a reasonable number of modules to binary-search through.
-#define CODE_HEADER_SEARCH_ITERATIONS 16
+#define BEAM_CODE_HEADER_SEARCH_ITERATIONS 16
 
 // The max number of loops to unroll when scanning the stack from for continuation pointers
-#define STACK_FRAME_SCAN_ITERATIONS 16
+#define BEAM_STACK_FRAME_SCAN_ITERATIONS 16
 
 #if defined(__x86_64__)
   #define SP_REGISTER sp
@@ -72,7 +72,7 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *
   current_range.start = ranges->mid.start;
   current_range.end   = ranges->mid.end;
 
-  UNROLL for (int i = 0; i < CODE_HEADER_SEARCH_ITERATIONS; i++)
+  UNROLL for (int i = 0; i < BEAM_CODE_HEADER_SEARCH_ITERATIONS; i++)
   {
     if (pc < current_range.start) {
       high = current;
@@ -99,7 +99,7 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *
       return ERR_BEAM_FRAME_POINTER_INVALID;
     }
   } else {
-    UNROLL for (int i = 0; i < STACK_FRAME_SCAN_ITERATIONS; i++)
+    UNROLL for (int i = 0; i < BEAM_STACK_FRAME_SCAN_ITERATIONS; i++)
     {
       state->SP_REGISTER += 8;
       bpf_probe_read_user(&state->pc, sizeof(u64), (void *)state->SP_REGISTER);
@@ -196,7 +196,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
 
   DEBUG_PRINT("beam: valid addresses 0x%llx - 0x%llx", ranges.first.start, ranges.last.end);
 
-  UNROLL for (int i = 0; i < FRAMES_PER_PROGRAM; i++)
+  UNROLL for (int i = 0; i < BEAM_FRAMES_PER_PROGRAM; i++)
   {
     unwinder_mark_nonleaf_frame(state);
     if (record->state.pc == info->beam_normal_exit) {
