@@ -12,13 +12,6 @@
 // The max number of loops to unroll when scanning the stack from for continuation pointers
 #define BEAM_STACK_FRAME_SCAN_ITERATIONS 16
 
-#if defined(__x86_64__)
-  #define SP_REGISTER sp
-#elif defined(__aarch64__)
-  // Native stack is not supported on ARM due to 16-byte stack alignment hassle
-  #define SP_REGISTER r20
-#endif
-
 struct beam_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
   __type(key, pid_t);
@@ -101,8 +94,15 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *
   } else {
     UNROLL for (int i = 0; i < BEAM_STACK_FRAME_SCAN_ITERATIONS; i++)
     {
-      state->SP_REGISTER += 8;
-      bpf_probe_read_user(&state->pc, sizeof(u64), (void *)state->SP_REGISTER);
+// Native stack is not supported on ARM due to 16-byte stack alignment hassle
+// r20 is used to store the stack pointer for JIT code to allow 8-bit alignment.
+#if defined(__aarch64__)
+      state->r20 += 8;
+      bpf_probe_read_user(&state->pc, sizeof(u64), (void *)state->r20);
+#else
+      state->sp += 8;
+      bpf_probe_read_user(&state->pc, sizeof(u64), (void *)state->sp);
+#endif
       if ((state->pc & 0x03) == 0) {
         break;
       }
