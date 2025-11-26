@@ -131,6 +131,7 @@ func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
 }
 
 // assignInterpreter will update the interpreters maps with given interpreter.Instance.
+// Caller is responsible to hold pm.mu write lock to avoid race conditions.
 func (pm *ProcessManager) assignInterpreter(pid libpf.PID, key util.OnDiskFileIdentifier,
 	instance interpreter.Instance,
 ) {
@@ -293,6 +294,7 @@ func (pm *ProcessManager) processRemovedMapping(pid libpf.PID, m *Mapping) uint6
 	return uint64(deleted)
 }
 
+// Caller is responsible to hold pm.mu write lock to avoid race conditions.
 func (pm *ProcessManager) processRemovedInterpreters(pid libpf.PID,
 	interpretersValid libpf.Set[util.OnDiskFileIdentifier]) {
 	if !pm.interpreterTracerEnabled {

@@ -268,7 +268,8 @@ func (pm *ProcessManager) maybeNotifyAPMAgent(
 	rawTrace *host.Trace, umTraceHash libpf.TraceHash, count uint16,
 ) string {
 	pm.mu.RLock()
-	// Keeping the lock until end of the function is needed because inner map can be modified concurrently (by synchronizeMappings/newFrameMapping).
+	// Keeping the lock until end of the function is needed because inner map can be modified
+	// concurrently (by synchronizeMappings/newFrameMapping).
 	defer pm.mu.RUnlock()
 	pidInterp, ok := pm.interpreters[rawTrace.PID]
 	if !ok {
