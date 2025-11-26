@@ -33,10 +33,6 @@ import (
 )
 
 const (
-	// lruFileIDCacheSize is the LRU size for caching 64-bit and 128-bit file IDs.
-	// This should reflect the number of hot file IDs that are seen often in a trace.
-	lruFileIDCacheSize = 32768
-
 	// Maximum size of the LRU cache holding the executables' ELF information.
 	elfInfoCacheSize = 16384
 
@@ -55,11 +51,6 @@ var dummyPrefix = lpm.Prefix{Key: 0, Length: 64}
 
 var (
 	errSymbolizationNotSupported = errors.New("symbolization not supported")
-	// errUnknownMapping indicates that the memory mapping is not known to
-	// the process manager.
-	errUnknownMapping = errors.New("unknown memory mapping")
-	// errUnknownPID indicates that the process is not known to the process manager.
-	errUnknownPID = errors.New("unknown process")
 	// errPIDGone indicates that a process is no longer managed by the process manager.
 	errPIDGone = errors.New("interpreter process gone")
 )
