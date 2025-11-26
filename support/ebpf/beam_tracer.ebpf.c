@@ -103,7 +103,8 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *
       state->sp += 8;
       bpf_probe_read_user(&state->pc, sizeof(u64), (void *)state->sp);
 #endif
-      // On the stack, if the value is tagged as a header value, then that means it's actually a continuation pointer.
+      // On the stack, if the value is tagged as a header value, then that means it's actually a
+      // continuation pointer.
       // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L132
       // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L133
       if ((state->pc & 0x03) == 0) {
@@ -111,7 +112,8 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *
       }
     }
 
-    // If we got here but the pc doesn't look like a continuation pointer, then is means we ran out of loop unrolls iterations.
+    // If we got here but the pc doesn't look like a continuation pointer, then is means we ran out
+    // of loop unrolls iterations.
     if ((state->pc & 0x03) != 0) {
       return ERR_BEAM_STACK_SCAN_EXHAUSTED;
     }

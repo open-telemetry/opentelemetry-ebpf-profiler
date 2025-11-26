@@ -35,9 +35,9 @@ var (
 type beamData struct {
 	otpRelease            string
 	ertsVersion           string
-	the_active_code_index uint64
-	r                     uint64
-	beam_normal_exit      uint64
+	the_active_code_index libpf.Address
+	r                     libpf.Address
+	beam_normal_exit      libpf.Address
 	erts_frame_layout     uint64
 
 	// Sizes and offsets BEAM internal structs we need to traverse
@@ -125,9 +125,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	d := &beamData{
 		otpRelease:            string(otpRelease[:len(otpRelease)-1]),
 		ertsVersion:           string(ertsVersion[:len(ertsVersion)-1]),
-		the_active_code_index: uint64(codeIndex.Address),
-		r:                     uint64(r.Address),
-		beam_normal_exit:      uint64(beam_normal_exit.Address),
+		the_active_code_index: libpf.Address(codeIndex.Address),
+		r:                     libpf.Address(r.Address),
+		beam_normal_exit:      libpf.Address(beam_normal_exit.Address),
 	}
 
 	// If erts_frame_layout is not defined, it means that frame pointers are not supported,
@@ -165,9 +165,9 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	log.Debugf("BEAM attaching, OTP %s, ERTS %s, bias: 0x%x", d.otpRelease, d.ertsVersion, bias)
 
 	data := support.BEAMProcInfo{
-		R:                     uint64(bias) + d.r,
-		The_active_code_index: uint64(bias) + d.the_active_code_index,
-		Beam_normal_exit:      uint64(bias) + d.beam_normal_exit,
+		R:                     uint64(bias + d.r),
+		The_active_code_index: uint64(bias + d.the_active_code_index),
+		Beam_normal_exit:      uint64(bias + d.beam_normal_exit),
 		Ranges_sizeof:         uint8(d.vmStructs.ranges.size_of),
 		Ranges_modules:        uint8(d.vmStructs.ranges.modules),
 		Ranges_n:              uint8(d.vmStructs.ranges.n),
