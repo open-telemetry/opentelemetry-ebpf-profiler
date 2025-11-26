@@ -139,7 +139,7 @@ jobs:
   integration-tests:
     name: Integration tests (v${{ matrix.kernel }} ${{ matrix.target_arch }})
     runs-on: ubuntu-24.04
-    container: ghcr.io/open-telemetry/ebpf-integration-tests:latest
+    container: docker.io/kushalshukla/ebpf-testing:latest
     needs: build-integration-test-binaries
     timeout-minutes: 10
     strategy:
@@ -168,10 +168,6 @@ jobs:
           # fixed in qemu 9.2
           #- { target_arch: arm64, kernel: 6.16 }
     steps:
-      - name: Disable man-db
-        run: |
-          echo "set man-db/auto-update false" | sudo debconf-communicate
-          sudo dpkg-reconfigure man-db
       - name: Clone code
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - name: Fetch integration test binaries

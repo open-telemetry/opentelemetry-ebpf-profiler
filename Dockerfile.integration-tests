@@ -1,4 +1,9 @@
 FROM ubuntu:24.04
+
+# Disable man-db auto updates (avoids slow CI reindexing)
+RUN echo "man-db man-db/auto-update boolean false" | debconf-set-selections && \
+    echo "path-exclude /usr/share/man/*" > /etc/dpkg/dpkg.cfg.d/99disable-manpages
+
 # Install dependencies once
 RUN apt-get update && apt-get install -y \
     qemu-system-x86 \
