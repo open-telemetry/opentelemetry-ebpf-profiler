@@ -238,7 +238,7 @@ func TestProfileDuration(t *testing.T) {
 			require.NoError(t, err)
 
 			profile := res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0)
-			require.Equal(t, pcommon.Timestamp(7), profile.Duration())
+			require.Equal(t, uint64(7), profile.DurationNano())
 			require.Equal(t, pcommon.Timestamp(1), profile.Time())
 		})
 	}
@@ -321,7 +321,7 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 	require.Equal(t, 1, sp.Profiles().Len())
 	prof := sp.Profiles().At(0)
 	assert.Equal(t, pcommon.Timestamp(100), prof.Time())
-	assert.Equal(t, pcommon.Timestamp(0), prof.Duration())
+	assert.Equal(t, uint64(0), prof.DurationNano())
 
 	t.Run("Check environment variable attribute", func(t *testing.T) {
 		foundFOOKey := false
@@ -521,11 +521,11 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	require.Equal(t, 1, sp.Profiles().Len())
 	prof := sp.Profiles().At(0)
 	assert.Equal(t, pcommon.Timestamp(123), prof.Time())
-	assert.Equal(t, pcommon.Timestamp(666), prof.Duration())
+	assert.Equal(t, uint64(666), prof.DurationNano())
 
 	// Verify profile contains one sample
-	assert.Equal(t, 1, prof.Sample().Len())
-	sample := prof.Sample().At(0)
+	assert.Equal(t, 1, prof.Samples().Len())
+	sample := prof.Samples().At(0)
 	assert.Len(t, sample.Values().AsRaw(), 0)
 	assert.Len(t, sample.TimestampsUnixNano().AsRaw(), 3)
 

@@ -22,6 +22,7 @@ const (
 	FrameMarkerPerl    = 0x7
 	FrameMarkerV8      = 0x8
 	FrameMarkerDotnet  = 0xa
+	FrameMarkerBEAM    = 0xc
 	FrameMarkerGo      = 0xb
 )
 
@@ -42,6 +43,7 @@ const (
 	ProgUnwindV8      = 0x7
 	ProgUnwindDotnet  = 0x8
 	ProgGoLabels      = 0x9
+	ProgUnwindBEAM    = 0xa
 )
 
 const (
@@ -172,6 +174,9 @@ type UnwindInfo struct {
 
 type ApmIntProcInfo struct {
 	Offset uint64
+}
+type BEAMProcInfo struct {
+	Bias uint64
 }
 type DotnetProcInfo struct {
 	Version uint32

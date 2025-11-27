@@ -131,6 +131,7 @@ func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
 }
 
 // assignInterpreter will update the interpreters maps with given interpreter.Instance.
+// Caller is responsible to hold pm.mu write lock to avoid race conditions.
 func (pm *ProcessManager) assignInterpreter(pid libpf.PID, key util.OnDiskFileIdentifier,
 	instance interpreter.Instance,
 ) {
@@ -293,6 +294,7 @@ func (pm *ProcessManager) processRemovedMapping(pid libpf.PID, m *Mapping) uint6
 	return uint64(deleted)
 }
 
+// Caller is responsible to hold pm.mu write lock to avoid race conditions.
 func (pm *ProcessManager) processRemovedInterpreters(pid libpf.PID,
 	interpretersValid libpf.Set[util.OnDiskFileIdentifier]) {
 	if !pm.interpreterTracerEnabled {
@@ -352,11 +354,13 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.Mapping
 		return libpf.FrameMapping{}, err
 	}
 
+	pm.mu.Lock()
 	pm.assignLibcInfo(pr.PID(), ei.LibcInfo)
 	if ei.Data != nil {
 		bias := libpf.Address(m.Vaddr - elfSpaceVA)
 		pm.handleNewInterpreter(pr, bias, m.GetOnDiskFileIdentifier(), ei.Data)
 	}
+	pm.mu.Unlock()
 
 	return libpf.NewFrameMapping(libpf.FrameMappingData{
 		File:       info.mappingFile,
@@ -482,7 +486,9 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		numChanges += pm.processRemovedMapping(pid, m)
 	}
 	pm.pidPageToMappingInfoSize -= numChanges
+	pm.mu.Lock()
 	pm.processRemovedInterpreters(pid, interpretersValid)
+	pm.mu.Unlock()
 
 	// Add new mappings
 	numChanges = 0

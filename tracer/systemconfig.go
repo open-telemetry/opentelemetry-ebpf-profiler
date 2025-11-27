@@ -252,8 +252,7 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 		return nil, nil, err
 	}
 
-	//nolint:staticcheck
-	if err := new.RewriteMaps(maps); err != nil {
+	if err := rewriteMaps(new, maps); err != nil {
 		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
 

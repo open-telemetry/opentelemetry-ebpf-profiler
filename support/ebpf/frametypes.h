@@ -31,6 +31,8 @@
 #define FRAME_MARKER_DOTNET  0xA
 // Indicates a Go frame
 #define FRAME_MARKER_GO      0xB
+// Indicates a BEAM frame
+#define FRAME_MARKER_BEAM    0xC
 
 // Frame flags
 #define FRAME_FLAG_ERROR          1
