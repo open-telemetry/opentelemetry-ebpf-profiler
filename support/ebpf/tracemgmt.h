@@ -330,7 +330,13 @@ static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u
   return ((u64)frame_type << 60) | ((u64)flags << 56) | ((u64)length << 52) | data;
 }
 
-// Determine if the trace has still spave to unwind frames.
+// Push a data frame with variable length payload. This function allocates space from
+// the 'trace' for one frame and populates a common header for it. Frame type and flags
+// are used to determine the symbolization plugin and how to cache and interpret it.
+// The header has a 52 bit 'data' field for use of the interpreter, along with variable
+// number of 64-bit 'variable' fields.
+// On success, a pointer to the first 'variable' field is returned.
+// On failure, NULL is returned. The 'UnwindState' is updated for too long stack error.
 static inline EBPF_INLINE u64 *push_frame(
   UnwindState *state, Trace *trace, u8 frame_type, u8 frame_flags, u64 frame_data, u8 frame_varlen)
 {
@@ -345,12 +351,6 @@ static inline EBPF_INLINE u64 *push_frame(
     return NULL;
   }
   trace->frame_data_len += frame_size;
-  // frame format:
-  //  #bits   usage
-  //      4   frame type
-  //      4   frame flags
-  //      4   number of 64-bit data entries
-  //     52   type specific data
   pos[0] = frame_header(frame_type, frame_flags, frame_size, frame_data);
   return &pos[1];
 }
