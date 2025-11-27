@@ -159,6 +159,16 @@ func TestExtractContainerID(t *testing.T) {
 			line:                "0::/system.slice/docker-b1eba9dfaeba29d8b80532a574a03ea3cac29384327f339c26da13649e2120df.scope/init",
 			expectedContainerID: "b1eba9dfaeba29d8b80532a574a03ea3cac29384327f339c26da13649e2120df",
 		},
+		{
+			// cgroup v1
+			line:                "11:memory:/kubepods/besteffort/poda9c80282-3f6b-4d5b-84d5-a137a6668011/ed89697807a981b82f6245ac3a13be232c1e13435d52bc3f53060d61babe1997",
+			expectedContainerID: "ed89697807a981b82f6245ac3a13be232c1e13435d52bc3f53060d61babe1997",
+		},
+		{
+			// cgroup v1
+			line:                "11:cpucpuacct:/system.slice/containerd.service/kubepods-besteffort-pod86811ae3_b633_4eb8_a508_e3eae190f6ce.slice:cri-containerd:da1bdd84c8b25938081afe48da7075e2a211d2b1a62e01c894b4e5f3ffab670a",
+			expectedContainerID: "da1bdd84c8b25938081afe48da7075e2a211d2b1a62e01c894b4e5f3ffab670a",
+		},
 	}
 
 	for _, tc := range tests {
