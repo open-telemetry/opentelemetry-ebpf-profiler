@@ -34,9 +34,6 @@ import (
 )
 
 const (
-	// iseqCacheSize is the LRU size for caching Ruby instruction sequences for an interpreter.
-	// This should reflect the number of hot functions that are seen often in a trace.
-	iseqCacheSize = 1024
 	// addrToStringSize is the LRU size for caching Ruby VM addresses to Ruby strings.
 	addrToStringSize = 1024
 
@@ -67,9 +64,6 @@ const (
 
 	// RARRAY_EMBED_FLAG
 	rarrayEmbed = 8192
-
-	// PATHOBJ_REALPATH
-	pathObjRealPathIdx = 1
 )
 
 var (

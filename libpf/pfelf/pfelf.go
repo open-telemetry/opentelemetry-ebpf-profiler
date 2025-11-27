@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"regexp"
 	"strings"
 )
 
@@ -42,7 +41,6 @@ func ParseDebugLink(data []byte) (linkName string, crc32 int32, err error) {
 }
 
 var ErrNoBuildID = errors.New("no build ID")
-var ubuntuKernelSignature = regexp.MustCompile(` \(Ubuntu[^)]*\)\n$`)
 
 // getGoBuildIDFromNotes returns the Go build ID from an ELF notes section data.
 func getGoBuildIDFromNotes(notes []byte) (string, error) {
