@@ -312,7 +312,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *host.Trace) {
 	pid := bpfTrace.PID
 	kernelFramesLen := len(bpfTrace.KernelFrames)
 	trace := &libpf.Trace{
-		Frames:       make(libpf.Frames, kernelFramesLen, 512),
+		Frames:       make(libpf.Frames, kernelFramesLen, kernelFramesLen+len(bpfTrace.Frames)),
 		CustomLabels: bpfTrace.CustomLabels,
 	}
 	copy(trace.Frames, bpfTrace.KernelFrames)
