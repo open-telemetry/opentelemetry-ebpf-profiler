@@ -540,7 +540,7 @@ func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
 }
 
 // Symbolize returns the file, line and function information for given PC
-func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
+func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string, funcLine uint) {
 	// Binary search for the matching go function maps entry. The search
 	// lambda makes 'sort.Search' return the first entry that is larger
 	// than the pc. Thus -1 is needed to get index for the first entry
@@ -552,13 +552,13 @@ func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcNam
 		return funcPc > pc
 	}) - 1
 	if index >= g.numFuncs || index < 0 {
-		return "", 0, ""
+		return "", 0, "", 0
 	}
 
 	mapPc, funcOff := g.getFuncMapEntry(index)
 	funcPc, fun := g.getFunc(funcOff)
 	if fun == nil || mapPc != funcPc {
-		return "", 0, ""
+		return "", 0, "", 0
 	}
 
 	funcName = getString(g.funcnametab, int(fun.nameOff))
@@ -573,8 +573,11 @@ func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcNam
 	if fun.pclnOff != 0 {
 		lineNo, _ := g.mapPcval(fun.pclnOff, uint(funcPc), uint(pc))
 		line = uint(lineNo)
+
+		funcLineNo, _ := g.mapPcval(fun.pclnOff, uint(funcPc), uint(funcPc))
+		funcLine = uint(funcLineNo)
 	}
-	return sourceFile, line, funcName
+	return sourceFile, line, funcName, funcLine
 }
 
 type strategy int
