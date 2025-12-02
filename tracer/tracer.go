@@ -178,12 +178,12 @@ type progLoaderHelper struct {
 }
 
 // Convert a C-string to Go string.
-func goString(cstr []byte) string {
+func goString(cstr []byte) libpf.String {
 	index := bytes.IndexByte(cstr, byte(0))
 	if index < 0 {
 		index = len(cstr)
 	}
-	return strings.Clone(pfunsafe.ToString(cstr[:index]))
+	return libpf.Intern(pfunsafe.ToString(cstr[:index]))
 }
 
 // schedProcessFreeHookName returns the name of the tracepoint hook to use.
@@ -222,7 +222,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	hasBatchOperations := ebpfHandler.SupportsGenericBatchOperations()
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
-		ebpfHandler, nil, cfg.TraceReporter, cfg.ExecutableReporter,
+		ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
 		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
 	if err != nil {
@@ -285,7 +285,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	// does not load them into the kernel.
 	// A collection specification holds the information about eBPF programs and maps.
 	// References to eBPF maps in the eBPF programs are just placeholders that need to be
-	// replaced by the actual loaded maps later on with RewriteMaps before loading the
+	// replaced by the actual loaded maps later on with rewriteMaps before loading the
 	// programs into the kernel.
 	major, minor, patch, err := GetCurrentKernelVersion()
 	if err != nil {
@@ -321,8 +321,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 
 	// Replace the place holders for map access in the eBPF programs with
 	// the file descriptors of the loaded maps.
-	//nolint:staticcheck
-	if err = coll.RewriteMaps(ebpfMaps); err != nil {
+	if err = rewriteMaps(coll, ebpfMaps); err != nil {
 		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
 
@@ -392,6 +391,11 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 			name:   "go_labels",
 			enable: cfg.IncludeTracers.Has(types.Labels),
 		},
+		{
+			progID: uint32(support.ProgUnwindBEAM),
+			name:   "unwind_beam",
+			enable: cfg.IncludeTracers.Has(types.BEAMTracer),
+		},
 	}
 
 	if err = loadPerfUnwinders(coll, ebpfProgs, ebpfMaps["perf_progs"], tailCallProgs,
@@ -457,6 +461,47 @@ func removeTemporaryMaps(ebpfMaps map[string]*cebpf.Map) error {
 		}
 		delete(ebpfMaps, mapName)
 	}
+	return nil
+}
+
+// rewriteMaps replaces all references to named eBPF maps.
+// This means that pre-existing maps are used, instead of new ones created
+// when calling NewCollection. Any named eBPF maps are removed from CollectionSpec.Maps.
+//
+// This function used to be part of cilium/ebpf before it got deprecated and finally removed.
+// As we require to resize maps in loadAllMaps() we still need this functionality.
+// cilium/ebpf deprecated this function as FDs from *cebpf.Map are taken, but no references to
+// the Map entries are kept. If no one else holds a reference to these Map entries, they can
+// get GCd, the FD closed and the program load fails.
+//
+// Returns an error if a named eBPF map isn't used in at least one program.
+func rewriteMaps(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map) error {
+	for symbol, m := range maps {
+		// have we seen a program that uses this symbol / map
+		seen := false
+		for progName, progSpec := range coll.Programs {
+			err := progSpec.Instructions.AssociateMap(symbol, m)
+
+			switch {
+			case err == nil:
+				seen = true
+
+			case errors.Is(err, asm.ErrUnreferencedSymbol):
+				// Not all programs need to use the map
+
+			default:
+				return fmt.Errorf("program %s: %w", progName, err)
+			}
+		}
+
+		if !seen {
+			return fmt.Errorf("map %s not referenced by any programs", symbol)
+		}
+
+		// Prevent NewCollection from creating rewritten maps
+		delete(coll.Maps, symbol)
+	}
+
 	return nil
 }
 
@@ -716,7 +761,7 @@ func (t *Tracer) readKernelFrames(kstackID int32) (libpf.Frames, error) {
 
 		kmod, err := t.kernelSymbolizer.GetModuleByAddress(address)
 		if err == nil {
-			frame.MappingFile = kmod.MappingFile()
+			frame.Mapping = kmod.Mapping()
 			frame.AddressOrLineno -= libpf.AddressOrLineno(kmod.Start())
 
 			if funcName, _, err := kmod.LookupSymbolByAddress(address); err == nil {
@@ -912,7 +957,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	}
 
 	if ptr.Custom_labels.Len > 0 {
-		trace.CustomLabels = make(map[string]string, int(ptr.Custom_labels.Len))
+		trace.CustomLabels = make(map[libpf.String]libpf.String, int(ptr.Custom_labels.Len))
 		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
 			lbl := ptr.Custom_labels.Labels[i]
 			key := goString(lbl.Key[:])

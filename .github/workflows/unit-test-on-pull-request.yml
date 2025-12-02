@@ -15,9 +15,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Clone code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - name: Set up Go
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -37,19 +37,36 @@ jobs:
         target_arch: [amd64, arm64]
     steps:
       - name: Clone code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - name: Set up environment
         uses: ./.github/workflows/env
         with:
           target_arch: ${{ matrix.target_arch }}
-      - name: Get linter version
-        id: linter-version
-        run: (echo -n "version="; make linter-version) >> "$GITHUB_OUTPUT"
       - name: linter
         env:
           GOARCH: ${{ matrix.target-arch }}
           CGO_ENABLED: 1
         run: make lint
+
+  format:
+    name: Format Go and C code
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target_arch: [amd64]
+    steps:
+      - name: Clone code
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - name: Set up environment
+        uses: ./.github/workflows/env
+        with:
+          target_arch: ${{ matrix.target_arch }}
+      - name: formatter
+        env:
+          CGO_ENABLED: 1
+        run: |
+          make format
+          git diff --exit-code || (echo 'Code base is not Go or C formatted, please run "make format" and commit the changes in this PR.'; exit 1)
 
   test:
     name: Test (${{ matrix.target_arch }}${{ matrix.go_flags }})
@@ -63,7 +80,7 @@ jobs:
           # - { target_arch: arm64, go_flags: "-race" } # seem to not work under qemu
     steps:
       - name: Clone code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - name: Set up environment
         uses: ./.github/workflows/env
         with:
@@ -88,7 +105,7 @@ jobs:
         target_arch: [amd64, arm64]
     steps:
       - name: Clone code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - name: Set up environment
         uses: ./.github/workflows/env
         with:
@@ -106,9 +123,9 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Clone code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - name: Set up Go
-        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -159,7 +176,7 @@ jobs:
           echo "set man-db/auto-update false" | sudo debconf-communicate
           sudo dpkg-reconfigure man-db
       - name: Clone code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
       - name: Install dependencies
         run: |
           sudo apt-get update -y

@@ -58,6 +58,10 @@ type symbol struct {
 	index uint32
 }
 
+func compareSymbol(a, b symbol) int {
+	return int(int64(b.offset) - int64(a.offset))
+}
+
 // Module contains symbols and metadata for one kernel module.
 type Module struct {
 	start libpf.Address
@@ -65,10 +69,20 @@ type Module struct {
 	mtime int64
 	stub  bool
 
-	mappingFile libpf.FrameMappingFile
+	mapping libpf.FrameMapping
 
 	names   []byte
 	symbols []symbol
+}
+
+func compareModule(a, b Module) int {
+	if a.start > b.start {
+		return -1
+	}
+	if a.start < b.start {
+		return 1
+	}
+	return 0
 }
 
 // Symbolizer provides the main API for reading, updating and querying
@@ -181,10 +195,12 @@ var loadModuleMetadata = func(m *Module, name string, oldMtime int64) bool {
 	if err == nil && len(buildID) >= 16 {
 		fileID = libpf.FileIDFromKernelBuildID(buildID)
 	}
-	m.mappingFile = libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-		FileID:     fileID,
-		FileName:   libpf.Intern(name),
-		GnuBuildID: buildID,
+	m.mapping = libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:     fileID,
+			FileName:   libpf.Intern(name),
+			GnuBuildID: buildID,
+		}),
 	})
 	return true
 }
@@ -198,10 +214,7 @@ func (m *Module) finish() {
 		lastSymbol := m.start + libpf.Address(m.symbols[len(m.symbols)-1].offset)
 		m.end = (lastSymbol + 4095) & ^libpf.Address(4095)
 	}
-
-	sort.Slice(m.symbols, func(i, j int) bool {
-		return m.symbols[i].offset >= m.symbols[j].offset
-	})
+	slices.SortFunc(m.symbols, compareSymbol)
 }
 
 func (m *Module) Name() string {
@@ -216,8 +229,8 @@ func (m *Module) End() libpf.Address {
 	return m.end
 }
 
-func (m *Module) MappingFile() libpf.FrameMappingFile {
-	return m.mappingFile
+func (m *Module) Mapping() libpf.FrameMapping {
+	return m.mapping
 }
 
 // LookupSymbolByAddress resolves the `pc` address to the function and offset from it.
@@ -227,9 +240,7 @@ func (m *Module) LookupSymbolByAddress(pc libpf.Address) (funcName string, offse
 		return "", 0, ErrModuleStub
 	}
 	pcOffs := uint32(pc - m.start)
-	symIdx := sort.Search(len(m.symbols), func(i int) bool {
-		return pcOffs >= m.symbols[i].offset
-	})
+	symIdx, _ := slices.BinarySearchFunc(m.symbols, symbol{offset: pcOffs}, compareSymbol)
 	if symIdx >= len(m.symbols) {
 		return "", 0, ErrNoSymbol
 	}
@@ -451,10 +462,8 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	if noSymbols {
 		return ErrSymbolPermissions
 	}
+	slices.SortFunc(mods, compareModule)
 
-	sort.Slice(mods, func(i, j int) bool {
-		return mods[i].start >= mods[j].start
-	})
 	// Heap allocate the exact amount needed. This also makes the initial
 	// buffer stack allocated.
 	s.modules.Store(slices.Clone(mods))
@@ -532,9 +541,7 @@ func (s *Symbolizer) loadModules() (bool, error) {
 		}
 	}
 
-	sort.Slice(mods, func(i, j int) bool {
-		return mods[i].start >= mods[j].start
-	})
+	slices.SortFunc(mods, compareModule)
 	// Heap allocate the exact amount needed. This also makes the initial
 	// buffer stack allocated.
 	s.modules.Store(slices.Clone(mods))

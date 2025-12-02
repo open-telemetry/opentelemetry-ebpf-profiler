@@ -9,7 +9,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -20,16 +19,13 @@ type LoaderInfo struct {
 	fileID host.FileID
 	// elfRef provides a cached access to the ELF file.
 	elfRef *pfelf.Reference
-	// gaps represents holes in the stack deltas of the executable.
-	gaps []util.Range
 }
 
 // NewLoaderInfo returns a populated LoaderInfo struct.
-func NewLoaderInfo(fileID host.FileID, elfRef *pfelf.Reference, gaps []util.Range) *LoaderInfo {
+func NewLoaderInfo(fileID host.FileID, elfRef *pfelf.Reference) *LoaderInfo {
 	return &LoaderInfo{
 		fileID: fileID,
 		elfRef: elfRef,
-		gaps:   gaps,
 	}
 }
 
@@ -63,19 +59,4 @@ func (i *LoaderInfo) FileID() host.FileID {
 // FileName returns the fileName  element of the LoaderInfo struct.
 func (i *LoaderInfo) FileName() string {
 	return i.elfRef.FileName()
-}
-
-// Gaps returns the gaps for the executable of this LoaderInfo.
-func (i *LoaderInfo) Gaps() []util.Range {
-	return i.gaps
-}
-
-// ExtractAsFile returns a filename referring to the ELF executable, extracting
-// it from a backing archive if needed.
-func (i *LoaderInfo) ExtractAsFile() (string, error) {
-	if pr, ok := i.elfRef.ELFOpener.(process.Process); ok {
-		return pr.ExtractAsFile(i.FileName())
-	}
-	return "", fmt.Errorf("unable to open main executable '%v' due to wrong interface type",
-		i.FileName())
 }

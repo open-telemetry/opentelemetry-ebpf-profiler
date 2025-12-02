@@ -134,8 +134,9 @@ func Test_Golabels(t *testing.T) {
 				}
 				if len(trace.CustomLabels) > 0 {
 					hits := 0
-					for k, v := range trace.CustomLabels {
-						t.Logf("Received label %v=%v", k, v)
+					for ks, vs := range trace.CustomLabels {
+						k := ks.String()
+						v := vs.String()
 						if strings.HasPrefix(k, "l1") {
 							require.Len(t, v, 22)
 							require.True(t, strings.HasPrefix(v, "label1"))

@@ -368,15 +368,15 @@ static EBPF_INLINE int unwind_perl(struct pt_regs *ctx)
 
   Trace *trace = &record->trace;
   u32 pid      = trace->pid;
+  int unwinder = get_next_unwinder_after_interpreter();
   DEBUG_PRINT("unwind_perl()");
 
   PerlProcInfo *perlinfo = bpf_map_lookup_elem(&perl_procs, &pid);
   if (!perlinfo) {
     DEBUG_PRINT("Can't build Perl stack, no address info");
-    return 0;
+    goto exit;
   }
 
-  int unwinder = get_next_unwinder_after_interpreter();
   DEBUG_PRINT("Building Perl stack for 0x%x", perlinfo->version);
 
   if (!record->perlUnwindState.stackinfo) {

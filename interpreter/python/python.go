@@ -26,6 +26,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -33,7 +34,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -371,20 +371,14 @@ func (p *pythonInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
-func (p *pythonInstance) UpdateTSDInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	tsdInfo tpbase.TSDInfo,
-) error {
+func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
+	libcInfo libc.LibcInfo) error {
 	d := p.d
 	vm := &d.vmStructs
 	cdata := support.PyProcInfo{
 		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
 		Version:        d.version,
-
-		TsdInfo: support.TSDInfo{
-			Offset:     tsdInfo.Offset,
-			Multiplier: tsdInfo.Multiplier,
-			Indirect:   tsdInfo.Indirect,
-		},
+		TsdInfo:        libcInfo.TSDInfo,
 
 		PyThreadState_frame:            uint8(vm.PyThreadState.Frame),
 		PyCFrame_current_frame:         uint8(vm.PyCFrame.CurrentFrame),

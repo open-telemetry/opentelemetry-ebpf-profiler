@@ -3,7 +3,19 @@
 
 package config // import "go.opentelemetry.io/ebpf-profiler/collector/config"
 
-import "time"
+import (
+	"errors"
+	"fmt"
+	"runtime"
+	"time"
+
+	"go.opentelemetry.io/ebpf-profiler/tracer"
+)
+
+const (
+	// 1TB of executable address space
+	MaxArgMapScaleFactor = 8
+)
 
 // Config is the configuration for the collector.
 type Config struct {
@@ -26,4 +38,71 @@ type Config struct {
 	NoKernelVersionCheck   bool          `mapstructure:"no_kernel_version_check"`
 	MaxGRPCRetries         uint32        `mapstructure:"max_grpc_retries"`
 	MaxRPCMsgSize          int           `mapstructure:"max_rpc_msg_size"`
+}
+
+// Validate validates the config.
+// This is automatically called by the config parser as it implements the xconfmap.Validator interface.
+func (cfg *Config) Validate() error {
+	if cfg.SamplesPerSecond < 1 {
+		return fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond)
+	}
+
+	if cfg.MapScaleFactor > MaxArgMapScaleFactor {
+		return fmt.Errorf(
+			"eBPF map scaling factor %d exceeds limit (max: %d)",
+			cfg.MapScaleFactor, MaxArgMapScaleFactor,
+		)
+	}
+
+	if cfg.BPFVerifierLogLevel > 2 {
+		return fmt.Errorf("invalid eBPF verifier log level: %d", cfg.BPFVerifierLogLevel)
+	}
+
+	if cfg.ProbabilisticInterval < 1*time.Minute || cfg.ProbabilisticInterval > 5*time.Minute {
+		return errors.New(
+			"invalid argument for probabilistic-interval: use " +
+				"a duration between 1 and 5 minutes",
+		)
+	}
+
+	if cfg.ProbabilisticThreshold < 1 ||
+		cfg.ProbabilisticThreshold > tracer.ProbabilisticThresholdMax {
+		return fmt.Errorf(
+			"invalid argument for probabilistic-threshold. Value "+
+				"should be between 1 and %d",
+			tracer.ProbabilisticThresholdMax,
+		)
+	}
+
+	if cfg.OffCPUThreshold < 0.0 || cfg.OffCPUThreshold > 1.0 {
+		return errors.New(
+			"invalid argument for off-cpu-threshold. The value " +
+				"should be in the range [0..1]. 0 disables off-cpu profiling")
+	}
+
+	if !cfg.NoKernelVersionCheck {
+		major, minor, patch, err := tracer.GetCurrentKernelVersion()
+		if err != nil {
+			return fmt.Errorf("failed to get kernel version: %v", err)
+		}
+
+		var minMajor, minMinor uint32
+		switch runtime.GOARCH {
+		case "amd64":
+			minMajor, minMinor = 5, 2
+		case "arm64":
+			// Older ARM64 kernel versions have broken bpf_probe_read.
+			// https://github.com/torvalds/linux/commit/6ae08ae3dea2cfa03dd3665a3c8475c2d429ef47
+			minMajor, minMinor = 5, 5
+		default:
+			return fmt.Errorf("unsupported architecture: %s", runtime.GOARCH)
+		}
+
+		if major < minMajor || (major == minMajor && minor < minMinor) {
+			return fmt.Errorf("host Agent requires kernel version "+
+				"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)
+		}
+	}
+
+	return nil
 }

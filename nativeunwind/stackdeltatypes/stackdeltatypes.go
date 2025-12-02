@@ -7,15 +7,12 @@
 package stackdeltatypes // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 
 import (
+	"slices"
+
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
-	// ABI is the current binary compatibility version. It is incremented
-	// if struct IntervalData, struct StackDelta or the meaning of their contents
-	// changes, and can be used to determine if the data is compatible
-	ABI = 15
-
 	// MinimumGap determines the minimum number of alignment bytes needed
 	// in order to keep the created STOP stack delta between functions
 	MinimumGap = 15
@@ -25,8 +22,8 @@ const (
 	// UnwindHintKeep flags important intervals that should not be removed
 	// (e.g. has CALL/SYSCALL assembly opcode, or is part of function prologue)
 	UnwindHintKeep uint8 = 1
-	// UnwindHintGap indicates that the delta marks function end
-	UnwindHintGap uint8 = 4
+	// UnwindHintEnd indicates end-of-function delta.
+	UnwindHintEnd uint8 = 2
 )
 
 // UnwindInfo contains the data needed to unwind PC, SP and FP
@@ -92,7 +89,7 @@ func (deltas *StackDeltaArray) AddEx(delta StackDelta, sorted bool) {
 	}
 	if num > 0 && sorted {
 		prev := &(*deltas)[num-1]
-		if prev.Hints&UnwindHintGap != 0 && prev.Address+MinimumGap >= delta.Address {
+		if prev.Hints&UnwindHintEnd != 0 && prev.Address+MinimumGap >= delta.Address {
 			// The previous opcode is end-of-function marker, and
 			// the gap is not large. Reduce deltas by overwriting it.
 			if num <= 1 || (*deltas)[num-2].Info != delta.Info {
@@ -119,6 +116,39 @@ func (deltas *StackDeltaArray) AddEx(delta StackDelta, sorted bool) {
 // Add adds a new stack delta from a sorted source.
 func (deltas *StackDeltaArray) Add(delta StackDelta) {
 	deltas.AddEx(delta, true)
+}
+
+// compareStackDelta implements the comparison logic for slices.SortFunc.
+// It must return:
+// -1 if a should come before b (a < b)
+// 0 if a and b are considered equal
+// 1 if a should come after b (a > b)
+func compareStackDelta(a, b StackDelta) int {
+	// 1. Primary Key: Address (uint64)
+	if a.Address < b.Address {
+		return -1
+	}
+	if a.Address > b.Address {
+		return 1
+	}
+	if a.Info.Opcode < b.Info.Opcode {
+		return -1
+	}
+	if a.Info.Opcode > b.Info.Opcode {
+		return 1
+	}
+	if a.Info.Param < b.Info.Param {
+		return -1
+	}
+	if a.Info.Param > b.Info.Param {
+		return 1
+	}
+	return 0
+}
+
+// Sort sorts the stack deltas.
+func (deltas *StackDeltaArray) Sort() {
+	slices.SortFunc(*deltas, compareStackDelta)
 }
 
 // PackDerefParam compresses pre- and post-dereference parameters to single value

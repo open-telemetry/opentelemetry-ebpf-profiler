@@ -6,7 +6,6 @@ package times // import "go.opentelemetry.io/ebpf-profiler/times"
 import (
 	"context"
 	"runtime"
-	"sort"
 	"sync/atomic"
 	"time"
 
@@ -143,18 +142,19 @@ func getBootTimeUnixNano() int64 {
 		samples[i].t2 = time.Now()
 	}
 
-	sort.Slice(samples, func(i, j int) bool {
-		di := samples[i].t2.UnixNano() - samples[i].t1.UnixNano()
-		dj := samples[j].t2.UnixNano() - samples[j].t1.UnixNano()
-		if di < 0 {
-			di = -di
+	// Find the index with minimal time delta
+	md := int64(^uint64(0) >> 1) // same as math.MaxInt64
+	mi := 0
+	for i := range samples {
+		delta := samples[i].t2.UnixNano() - samples[i].t1.UnixNano()
+		if delta < 0 {
+			delta = -delta
 		}
-		if dj < 0 {
-			dj = -dj
+		if delta < md {
+			md = delta
+			mi = i
 		}
-		return di < dj
-	})
-
+	}
 	// This should never be negative, as t1.UnixNano() >> ktime
-	return samples[0].t1.UnixNano() - samples[0].ktime
+	return samples[mi].t1.UnixNano() - samples[mi].ktime
 }

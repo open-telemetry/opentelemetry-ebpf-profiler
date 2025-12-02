@@ -11,6 +11,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -19,7 +20,6 @@ import (
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/tpbase"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -65,13 +65,6 @@ type ProcessManager struct {
 
 	// ebpf contains the interface to manipulate ebpf maps
 	ebpf pmebpf.EbpfHandler
-
-	// FileIDMapper provides a cache that implements the FileIDMapper interface. The tracer writes
-	// the 64-bit to 128-bit file ID mapping to the cache, as this is where the two values are
-	// created. The attached interpreters read from the cache when converting traces prior to
-	// sending to the collection agent. The cache resides in this package instead of the ebpf
-	// package to prevent circular imports.
-	FileIDMapper FileIDMapper
 
 	// elfInfoCacheHit
 	elfInfoCacheHit  atomic.Uint64
@@ -123,21 +116,10 @@ type ProcessManager struct {
 
 // Mapping represents an executable memory mapping of a process.
 type Mapping struct {
-	// FileID represents the host-wide unique identifier of the mapped file.
-	FileID host.FileID
-
 	// Vaddr represents the starting virtual address of the mapping.
 	Vaddr libpf.Address
 
-	// Bias is the offset between the ELF on-disk virtual address space and the
-	// virtual address where it is actually mapped in the process. Thus it is the
-	// virtual address bias or "ASLR offset". It serves as a translation offset
-	// from the process VA space into the VA space of the ELF file. It's calculated as
-	// `bias = vaddr_in_proc - vaddr_in_elf`.
-	// Adding the bias to a VA in ELF space translates it into process space.
-	Bias uint64
-
-	// Length represents the memory size of the mapping.
+	// Length is the length of the mapping
 	Length uint64
 
 	// Device number of the backing file
@@ -146,8 +128,8 @@ type Mapping struct {
 	// Inode number of the backing file
 	Inode uint64
 
-	// File offset of the backing file
-	FileOffset uint64
+	// FrameMapping data for this mapping.
+	FrameMapping libpf.FrameMapping
 }
 
 // GetOnDiskFileIdentifier returns the OnDiskFileIdentifier for the mapping
@@ -163,35 +145,8 @@ func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 type processInfo struct {
 	// process metadata, fixed for process lifetime (read-only)
 	meta process.ProcessMeta
-	// executable mappings keyed by start address.
-	mappings map[libpf.Address]*Mapping
-	// executable mappings keyed by host file ID.
-	mappingsByFileID map[host.FileID]map[libpf.Address]*Mapping
+	// executable mappings sorted by FileID and mapping start address
+	mappings []Mapping
 	// C-library Thread Specific Data information
-	tsdInfo *tpbase.TSDInfo
-}
-
-// addMapping adds a mapping to the internal indices.
-func (pi *processInfo) addMapping(m Mapping) {
-	p := &m
-	pi.mappings[m.Vaddr] = p
-
-	inner := pi.mappingsByFileID[m.FileID]
-	if inner == nil {
-		inner = make(map[libpf.Address]*Mapping, 1)
-		pi.mappingsByFileID[m.FileID] = inner
-	}
-	inner[m.Vaddr] = p
-}
-
-// removeMapping removes a mapping from the internal indices.
-func (pi *processInfo) removeMapping(m *Mapping) {
-	delete(pi.mappings, m.Vaddr)
-
-	if inner, ok := pi.mappingsByFileID[m.FileID]; ok {
-		delete(inner, m.Vaddr)
-		if len(inner) != 0 {
-			delete(pi.mappingsByFileID, m.FileID)
-		}
-	}
+	libcInfo *libc.LibcInfo
 }
