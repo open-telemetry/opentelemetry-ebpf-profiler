@@ -39,7 +39,7 @@ VERSION ?= v0.0.0
 BUILD_TIMESTAMP ?= $(shell date +%s)
 REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
 
-LDFLAGS ?= -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
+LDFLAGS := -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
 	-X go.opentelemetry.io/ebpf-profiler/vc.revision=$(REVISION) \
 	-X go.opentelemetry.io/ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
 	-extldflags=-static
@@ -47,8 +47,7 @@ LDFLAGS ?= -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
 GO_TAGS := osusergo,netgo
 EBPF_FLAGS :=
 
-GO_FLAGS ?=
-override GO_FLAGS := $(GO_FLAGS) -buildvcs=false -ldflags="$(LDFLAGS)"
+GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 
 MAKEFLAGS += -j$(shell nproc)
 
