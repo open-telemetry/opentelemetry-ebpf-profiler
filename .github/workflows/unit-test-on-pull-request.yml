@@ -69,11 +69,15 @@ jobs:
           git diff --exit-code || (echo 'Code base is not Go or C formatted, please run "make format" and commit the changes in this PR.'; exit 1)
 
   test:
-    name: Test (${{ matrix.target_arch }})
+    name: Test (${{ matrix.target_arch }}${{ matrix.go_flags }})
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        target_arch: [amd64, arm64]
+        include:
+          - { target_arch: amd64, go_flags: "" }
+          - { target_arch: amd64, go_flags: "-race" }
+          - { target_arch: arm64, go_flags: "" }
+          # - { target_arch: arm64, go_flags: "-race" } # seem to not work under qemu
     steps:
       - name: Clone code
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
@@ -90,7 +94,7 @@ jobs:
             coredumps-${{ matrix.target_arch }}
             coredumps-
       - name: Tests
-        run: make test TARGET_ARCH=${{ matrix.target_arch }}
+        run: make test TARGET_ARCH=${{ matrix.target_arch }} GO_FLAGS="${{ matrix.go_flags }}"
 
   build-integration-test-binaries:
     name: Build integration test binaries (${{ matrix.target_arch }})
