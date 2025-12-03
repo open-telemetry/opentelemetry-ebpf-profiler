@@ -116,17 +116,24 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		extraMeta = b.cfg.ExtraSampleAttrProd.CollectExtraSampleMeta(trace, meta)
 	}
 	keyHash := trace.Hash
-	if meta.MemAlloc > 0 && meta.MemAddr > 0 {
-		if meta.OffTime == 1 { // mem-alloc
-			b.addrHashMap[meta.MemAddr] = keyHash
-		}
-		if meta.OffTime == 0 { // mem-free需要在这里找到分配内存的调用栈后续才能关联
-			hash, ok := b.addrHashMap[meta.MemAddr]
-			if !ok {
-				return
+	if meta.MemAlloc > 0 {
+		if meta.MemAddr > 0 {
+			if meta.OffTime == 1 { // mem-alloc
+				b.addrHashMap[meta.MemAddr] = keyHash
 			}
-			delete(b.addrHashMap, meta.MemAddr)
-			keyHash = hash
+			if meta.OffTime == 0 { // mem-free需要在这里找到分配内存的调用栈后续才能关联
+				hash, ok := b.addrHashMap[meta.MemAddr]
+				if !ok {
+					return
+				}
+				delete(b.addrHashMap, meta.MemAddr)
+				keyHash = hash
+			}
+		} else {
+			// fixme 在golang中或者python中，协程可能会映射到不同的线程ID，导致同一个栈无法关联起来。
+			// 当前只发现golang有问题，且golang的线程相对来说不重要，这里直接把线程置零。
+			// golang的 meta.MemAddr == 0
+			meta.TID = 0
 			extraMeta = uint64(meta.PID.Hash32())<<32 | uint64(meta.TID.Hash32()) // NOTE this logic is from cloudcapture
 			//extraMeta = hash FIXME when you debug locally, use this，extraMeta just set tp hash
 		}

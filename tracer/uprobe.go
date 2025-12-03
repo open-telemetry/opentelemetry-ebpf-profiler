@@ -8,6 +8,7 @@ import (
 	"github.com/toliu/opentelemetry-ebpf-profiler/libpf"
 	"github.com/toliu/opentelemetry-ebpf-profiler/process"
 	"golang.org/x/exp/maps"
+	"runtime"
 	"slices"
 	"unsafe"
 )
@@ -64,7 +65,7 @@ func loadUProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf
 	return nil
 }
 
-func (t *Tracer) AttachUProbesWithProgPrefix(u *uprobe) {
+func (t *Tracer) AttachUProbes(u *uprobe) {
 	if enter, ok := t.ebpfProgs[u.progEnter]; ok {
 		if uprobeLink, err := u.exec.Uprobe(u.symbol, enter, u.opts); err != nil {
 			if u.canFail {
@@ -102,7 +103,7 @@ func (t *Tracer) detachMemProfile(pid libpf.PID) {
 	delete(t.memProfileHooks, pid)
 }
 
-// StartCLikeMemProfiling starts off-cpu profiling for c/c++/rust by attaching the programs to the hooks.
+// StartCLikeMemProfiling starts mem profiling for c/c++/rust by attaching the programs to the hooks.
 func (t *Tracer) StartCLikeMemProfiling(execute string, pid int) bool {
 	if execute == "" {
 		return false
@@ -129,8 +130,30 @@ func (t *Tracer) StartCLikeMemProfiling(execute string, pid int) bool {
 		{exec, "free", "free_enter", "", false, pid, opts},
 		{exec, "munmap", "munmap_enter", "", true, pid, opts},
 	} {
-		t.AttachUProbesWithProgPrefix(u)
+		t.AttachUProbes(u)
 	}
+	return true
+}
+
+// StartGolangMemProfiling starts mem profiling for golang by attaching the programs to the hooks.
+func (t *Tracer) StartGolangMemProfiling(execute string, pid int, isRegister bool) bool {
+	if execute == "" {
+		return false
+	}
+	exec, err := link.OpenExecutable(execute)
+	if err != nil {
+		return false
+	}
+	var opts *link.UprobeOptions
+	if pid > 0 {
+		opts = &link.UprobeOptions{PID: pid}
+	}
+	prog := "mallocgc_register_enter"
+	if !isRegister {
+		prog = "mallocgc_stack_enter"
+	}
+	u := &uprobe{exec, "runtime.mallocgc", prog, "", false, pid, opts}
+	t.AttachUProbes(u)
 	return true
 }
 
@@ -140,8 +163,20 @@ func (t *Tracer) TriggerMemProfile(p process.Process) {
 		case libpf.HotSpot:
 		case libpf.Python:
 		case libpf.Golang:
+			isRegister := true
+			switch runtime.GOARCH {
+			case "amd64":
+				if memProfileInfo.MinorVersion < 17 {
+					isRegister = false
+				}
+			case "arm64":
+				if memProfileInfo.MinorVersion < 18 {
+					isRegister = false
+				}
+			}
+			t.StartGolangMemProfiling(memProfileInfo.ExecAbsPath, int(p.PID()), isRegister)
 		default:
-			t.StartCLikeMemProfiling(memProfileInfo.LibcPath, int(p.PID())) // todo
+			t.StartCLikeMemProfiling(memProfileInfo.LibcPath, int(p.PID()))
 		}
 		return
 	}

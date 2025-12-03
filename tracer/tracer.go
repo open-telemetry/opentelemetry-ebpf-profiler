@@ -516,9 +516,16 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 			"posix_memalign_enter", "posix_memalign_exit", "aligned_alloc_enter", "aligned_alloc_exit", "valloc_enter", "valloc_exit",
 			"memalign_enter", "memalign_exit", "pvalloc_enter", "pvalloc_exit"}
 
-		//var uProgs []progLoaderHelper
-		uProgs := make([]progLoaderHelper, len(cprogss))
+		goProgs := []string{
+			"mallocgc_stack_enter",
+			"mallocgc_register_enter",
+		}
+
+		uProgs := make([]progLoaderHelper, len(cprogss)+len(goProgs))
 		for _, p := range cprogss {
+			uProgs = append(uProgs, progLoaderHelper{name: p, noTailCallTarget: true, enable: true})
+		}
+		for _, p := range goProgs {
 			uProgs = append(uProgs, progLoaderHelper{name: p, noTailCallTarget: true, enable: true})
 		}
 
@@ -1079,6 +1086,9 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 			Type:          libpf.FrameType(rawFrame.kind),
 			ReturnAddress: rawFrame.return_address != 0,
 		}
+	}
+	if trace.Origin == support.TraceOriginHeap {
+		fmt.Printf("trace: %v \n", trace)
 	}
 	return trace
 }
