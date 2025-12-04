@@ -5,6 +5,7 @@
 #include "types.h"
 #include "tsd.h"
 
+// todo belows are able to remove
 #define KERNEL 0
 #define MALLOC 1
 #define CALLOC 2
@@ -17,6 +18,9 @@
 #define ALIGNED_ALLOC 9
 #define FREE 10
 #define MUNMAP 11
+#define PYMALLOC 16
+#define PYCALLOC 17
+#define PYREALLOC 18
 
 
 struct kmalloc_event {
@@ -328,4 +332,59 @@ int mallocgc_stack_enter(struct pt_regs *ctx) {
     u32 pid = id >> 32;
     u64 ts = bpf_ktime_get_ns();
     return collect_trace(ctx, TRACE_HEAP_ALLOC, pid, tid, ts, 1, size, 0);
+}
+
+/*Python*/
+// void * PyObject_Malloc(size_t size)
+SEC("uprobe/pyobj_malloc")
+int PyObject_Malloc_enter(struct pt_regs *ctx)
+{
+    size_t nbytes = PT_REGS_PARM1(ctx);
+    return alloc_enter(ctx, nbytes, PYMALLOC);
+}
+
+// void * PyObject_Malloc(size_t size)
+SEC("uretprobe/pyobj_malloc")
+int PyObject_Malloc_exit(struct pt_regs *ctx)
+{
+    return alloc_exit2(ctx, PT_REGS_RC(ctx), PYMALLOC);
+}
+
+// void * PyObject_Calloc(size_t nelem, size_t elsize)
+SEC("uprobe/pyobj_calloc")
+int PyObject_Calloc_enter(struct pt_regs *ctx)
+{
+    size_t nelem = (size_t)PT_REGS_PARM1(ctx);
+    size_t elsize = (size_t)PT_REGS_PARM2(ctx);
+    return alloc_enter(ctx, nelem * elsize, PYCALLOC);
+}
+
+// void * PyObject_Calloc(size_t nelem, size_t elsize)
+SEC("uretprobe/pyobj_calloc")
+int PyObject_Calloc_exit(struct pt_regs *ctx)
+{
+    return alloc_exit2(ctx, PT_REGS_RC(ctx), PYCALLOC);
+}
+
+// void * PyObject_Realloc(void *ptr, size_t new_size)
+// ptr here maybe 0, then cpython will use _PyObject_Malloc
+SEC("uprobe/pyobj_realloc")
+int PyObject_Realloc_enter(struct pt_regs *ctx) {
+    size_t size = (size_t)PT_REGS_PARM2(ctx);
+    alloc_enter(ctx, size, PYREALLOC);
+    void *ptr = (void *)PT_REGS_PARM1(ctx);
+    return free_entry(ctx, ptr);
+}
+
+// void * PyObject_Realloc(void *ptr, size_t new_size)
+SEC("uretprobe/pyobj_realloc")
+int PyObject_Realloc_exit(struct pt_regs *ctx) {
+    return alloc_exit(ctx, PYREALLOC);
+}
+
+// void PyObject_Free(void *ptr)
+SEC("uprobe/pyobj_free")
+int PyObject_Free_enter(struct pt_regs *ctx) {
+    void *address = (void *)PT_REGS_PARM1(ctx);
+    return free_entry(ctx, address);
 }

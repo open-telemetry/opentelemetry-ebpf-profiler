@@ -520,12 +520,23 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 			"mallocgc_stack_enter",
 			"mallocgc_register_enter",
 		}
+		pyProgs := []string{
+			"PyObject_Malloc_enter",
+			"PyObject_Malloc_exit",
+			"PyObject_Calloc_enter",
+			"PyObject_Calloc_exit",
+			"PyObject_Realloc_enter",
+			"PyObject_Realloc_exit",
+			"PyObject_Free_enter"}
 
-		uProgs := make([]progLoaderHelper, len(cprogss)+len(goProgs))
+		uProgs := make([]progLoaderHelper, len(cprogss)+len(goProgs)+len(pyProgs))
 		for _, p := range cprogss {
 			uProgs = append(uProgs, progLoaderHelper{name: p, noTailCallTarget: true, enable: true})
 		}
 		for _, p := range goProgs {
+			uProgs = append(uProgs, progLoaderHelper{name: p, noTailCallTarget: true, enable: true})
+		}
+		for _, p := range pyProgs {
 			uProgs = append(uProgs, progLoaderHelper{name: p, noTailCallTarget: true, enable: true})
 		}
 

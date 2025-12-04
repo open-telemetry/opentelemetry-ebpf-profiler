@@ -1,12 +1,14 @@
 package tracer
 
 import (
+	"errors"
 	"fmt"
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	log "github.com/sirupsen/logrus"
 	"github.com/toliu/opentelemetry-ebpf-profiler/libpf"
 	"github.com/toliu/opentelemetry-ebpf-profiler/process"
+	"github.com/toliu/opentelemetry-ebpf-profiler/processmanager"
 	"golang.org/x/exp/maps"
 	"runtime"
 	"slices"
@@ -65,15 +67,14 @@ func loadUProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf
 	return nil
 }
 
-func (t *Tracer) AttachUProbes(u *uprobe) {
+func (t *Tracer) AttachUProbes(u *uprobe) error {
 	if enter, ok := t.ebpfProgs[u.progEnter]; ok {
 		if uprobeLink, err := u.exec.Uprobe(u.symbol, enter, u.opts); err != nil {
 			if u.canFail {
 				err = nil
-				return
 			}
-			log.Errorf("failed to attach u-probe program %s, %s: %v", u.progEnter, u.progExit, err)
-			return
+			err = fmt.Errorf("failed to attach u-probe program %s: %v", u.progEnter, err)
+			return err
 		} else {
 			t.memProfileHooks[libpf.PID(u.pid)] = append(t.memProfileHooks[libpf.PID(u.pid)], uprobeLink)
 		}
@@ -82,45 +83,36 @@ func (t *Tracer) AttachUProbes(u *uprobe) {
 		if uRetProbeLink, err := u.exec.Uretprobe(u.symbol, exit, u.opts); err != nil {
 			if u.canFail {
 				err = nil
-				return
 			}
-			log.Errorf("failed to attach u-probe program %s, %s: %v", u.progEnter, u.progExit, err)
-			return
+			err = fmt.Errorf("failed to attach u-probe program %s: %v", u.progExit, err)
+			return err
 		} else {
 			t.memProfileHooks[libpf.PID(u.pid)] = append(t.memProfileHooks[libpf.PID(u.pid)], uRetProbeLink)
 		}
 	}
+	log.Debugf("attached u-probe program %v", u)
+	return nil
 }
 
 func (t *Tracer) detachMemProfile(pid libpf.PID) {
 	if links, ok := t.memProfileHooks[pid]; ok {
-		for _, link := range links {
-			if e := link.Close(); e != nil {
-				log.Errorf("failed to close memprofile link{ pid:%d, link:%v, err: %v", pid, link, e)
+		for _, _link := range links {
+			if e := _link.Close(); e != nil {
+				log.Errorf("failed to close memprofile link{ pid:%d, link:%v, err: %v", pid, _link, e)
 			}
 		}
 	}
+	log.Infof("detachMemProfile for pid %v", pid)
 	delete(t.memProfileHooks, pid)
 }
 
 // StartCLikeMemProfiling starts mem profiling for c/c++/rust by attaching the programs to the hooks.
-func (t *Tracer) StartCLikeMemProfiling(execute string, pid int) bool {
-	if execute == "" {
-		return false
-	}
-	exec, err := link.OpenExecutable(execute)
-	if err != nil {
-		return false
-	}
-	var opts *link.UprobeOptions
-	if pid > 0 {
-		opts = &link.UprobeOptions{PID: pid}
-	}
+func (t *Tracer) StartCLikeMemProfiling(exec *link.Executable, _ *processmanager.MemProfileMeta, pid int, opts *link.UprobeOptions) error {
+	var errs []error
 	for _, u := range []*uprobe{
 		{exec, "malloc", "malloc_enter", "malloc_exit", false, pid, opts},
 		{exec, "calloc", "calloc_enter", "calloc_exit", false, pid, opts},
 		{exec, "realloc", "realloc_enter", "realloc_exit", false, pid, opts},
-		{exec, "free", "free_enter", "free_exit", false, pid, opts},
 		{exec, "mmap", "mmap_enter", "mmap_exit", true, pid, opts},
 		{exec, "posix_memalign", "posix_memalign_enter", "posix_memalign_exit", false, pid, opts},
 		{exec, "valloc", "valloc_enter", "valloc_exit", true, pid, opts},
@@ -130,57 +122,77 @@ func (t *Tracer) StartCLikeMemProfiling(execute string, pid int) bool {
 		{exec, "free", "free_enter", "", false, pid, opts},
 		{exec, "munmap", "munmap_enter", "", true, pid, opts},
 	} {
-		t.AttachUProbes(u)
+		if err := t.AttachUProbes(u); err != nil {
+			log.Errorf("failed to attach uprobe:%v, err:%v", u, err)
+			errs = append(errs, err)
+		}
 	}
-	return true
+	return errors.Join(errs...)
 }
 
 // StartGolangMemProfiling starts mem profiling for golang by attaching the programs to the hooks.
-func (t *Tracer) StartGolangMemProfiling(execute string, pid int, isRegister bool) bool {
-	if execute == "" {
-		return false
-	}
-	exec, err := link.OpenExecutable(execute)
-	if err != nil {
-		return false
-	}
-	var opts *link.UprobeOptions
-	if pid > 0 {
-		opts = &link.UprobeOptions{PID: pid}
-	}
+func (t *Tracer) StartGolangMemProfiling(exec *link.Executable, info *processmanager.MemProfileMeta, pid int, opts *link.UprobeOptions) error {
 	prog := "mallocgc_register_enter"
-	if !isRegister {
+	if (runtime.GOARCH == "amd64" && info.MinorVersion < 17) ||
+		(runtime.GOARCH == "arm64" && info.MinorVersion < 18) {
 		prog = "mallocgc_stack_enter"
 	}
 	u := &uprobe{exec, "runtime.mallocgc", prog, "", false, pid, opts}
-	t.AttachUProbes(u)
-	return true
+	err := t.AttachUProbes(u)
+	if err != nil {
+		log.Errorf("failed to attach uprobe:%v, err:%v", u, err)
+	}
+	return err
 }
 
-func (t *Tracer) TriggerMemProfile(p process.Process) {
+// StartPythonMemProfiling starts mem profiling for python by attaching the programs to the hooks.
+func (t *Tracer) StartPythonMemProfiling(exec *link.Executable, _ *processmanager.MemProfileMeta, pid int, opts *link.UprobeOptions) error {
+	var errs []error
+	for _, u := range []*uprobe{
+		{exec, "PyObject_Malloc", "PyObject_Malloc_enter", "PyObject_Malloc_exit", false, pid, opts},
+		{exec, "PyObject_Calloc", "PyObject_Calloc_enter", "PyObject_Calloc_exit", false, pid, opts},
+		{exec, "PyObject_Realloc", "PyObject_Realloc_enter", "PyObject_Realloc_exit", false, pid, opts},
+		{exec, "PyObject_Free", "PyObject_Free_enter", "", false, pid, opts},
+	} {
+		if err := t.AttachUProbes(u); err != nil {
+			log.Errorf("failed to attach uprobe:%v, err:%v", u, err)
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (t *Tracer) TriggerMemProfile(p process.Process) error {
 	if memProfileInfo := t.processManager.GetMemProfileInfo(p.PID()); memProfileInfo != nil {
+		var startProfiling func(exec *link.Executable, info *processmanager.MemProfileMeta, pid int, opts *link.UprobeOptions) error
+		var exec *link.Executable
+		var execPath string
 		switch memProfileInfo.Lang {
 		case libpf.HotSpot:
 		case libpf.Python:
+			startProfiling = t.StartPythonMemProfiling
+			execPath = memProfileInfo.ExecAbsPath
 		case libpf.Golang:
-			isRegister := true
-			switch runtime.GOARCH {
-			case "amd64":
-				if memProfileInfo.MinorVersion < 17 {
-					isRegister = false
-				}
-			case "arm64":
-				if memProfileInfo.MinorVersion < 18 {
-					isRegister = false
-				}
-			}
-			t.StartGolangMemProfiling(memProfileInfo.ExecAbsPath, int(p.PID()), isRegister)
+			startProfiling = t.StartGolangMemProfiling
+			execPath = memProfileInfo.ExecAbsPath
 		default:
-			t.StartCLikeMemProfiling(memProfileInfo.LibcPath, int(p.PID()))
+			startProfiling = t.StartCLikeMemProfiling
+			execPath = memProfileInfo.LibcPath
 		}
-		return
+		if execPath == "" {
+			return fmt.Errorf("unable to start memprofiling with empty executeable path: %v", memProfileInfo)
+		}
+		exec, err := link.OpenExecutable(execPath)
+		if err != nil {
+			return err
+		}
+		var opts *link.UprobeOptions
+		if p.PID() > 0 {
+			opts = &link.UprobeOptions{PID: int(p.PID())}
+		}
+		return startProfiling(exec, memProfileInfo, int(p.PID()), opts)
 	}
-	return
+	return fmt.Errorf("unable to start memprofile with pid: %d, can not find MemProfile MetaInfo", p.PID())
 }
 
 func (t *Tracer) SyncMemProfile(pids []libpf.PID, memProfileBlock uint64) {
@@ -205,7 +217,9 @@ func (t *Tracer) SyncMemProfile(pids []libpf.PID, memProfileBlock uint64) {
 		}
 		proc := process.New(p)
 		t.processManager.SynchronizeProcess(proc)
-		t.TriggerMemProfile(proc)
+		if err := t.TriggerMemProfile(proc); err != nil {
+			t.detachMemProfile(proc.PID())
+		}
 	}
 }
 

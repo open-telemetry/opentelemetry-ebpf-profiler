@@ -129,14 +129,11 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 				delete(b.addrHashMap, meta.MemAddr)
 				keyHash = hash
 			}
-		} else {
-			// fixme 在golang中或者python中，协程可能会映射到不同的线程ID，导致同一个栈无法关联起来。
-			// 当前只发现golang有问题，且golang的线程相对来说不重要，这里直接把线程置零。
-			// golang的 meta.MemAddr == 0
-			meta.TID = 0
-			extraMeta = uint64(meta.PID.Hash32())<<32 | uint64(meta.TID.Hash32()) // NOTE this logic is from cloudcapture
-			//extraMeta = hash FIXME when you debug locally, use this，extraMeta just set tp hash
 		}
+		//不同的线程ID，导致key不一样，无法将栈进行合并
+		meta.TID = 0
+		extraMeta = uint64(meta.PID.Hash32())<<32 | uint64(meta.TID.Hash32()) // NOTE this logic is from cloudcapture
+		//extraMeta = hash FIXME when you debug locally, use this，extraMeta just set tp hash
 	}
 
 	containerID, err := libpf.LookupCgroupv2(b.cgroupv2ID, meta.PID)
