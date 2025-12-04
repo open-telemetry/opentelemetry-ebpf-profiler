@@ -88,7 +88,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
 		OffCPUThreshold:        uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
 		IncludeEnvVars:         envVars,
-		UProbeLinks:            c.config.UProbeLinks,
+		ProbeLinks:             c.config.ProbeLinks,
 		LoadProbe:              c.config.LoadProbe,
 		ExecutableReporter:     c.config.ExecutableReporter,
 	})
@@ -118,11 +118,11 @@ func (c *Controller) Start(ctx context.Context) error {
 		log.Infof("Enabled off-cpu profiling with p=%f", c.config.OffCPUThreshold)
 	}
 
-	if len(c.config.UProbeLinks) > 0 {
-		if err := trc.AttachUProbes(c.config.UProbeLinks); err != nil {
-			return fmt.Errorf("failed to attach uprobes: %v", err)
+	if len(c.config.ProbeLinks) > 0 {
+		if err := trc.AttachProbes(c.config.ProbeLinks); err != nil {
+			return fmt.Errorf("failed to attach probes: %v", err)
 		}
-		log.Info("Attached uprobes")
+		log.Info("Attached probes")
 	}
 
 	if c.config.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {

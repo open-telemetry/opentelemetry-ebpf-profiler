@@ -345,7 +345,7 @@ typedef enum TraceOrigin {
   TRACE_UNKNOWN,
   TRACE_SAMPLING,
   TRACE_OFF_CPU,
-  TRACE_UPROBE,
+  TRACE_PROBE,
 } TraceOrigin;
 
 // MAX_FRAME_UNWINDS defines the maximum number of frames per
