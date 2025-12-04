@@ -109,9 +109,14 @@ func (g *goInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	sfCounter := successfailurecounter.New(&g.successCount, &g.failCount)
 	defer sfCounter.DefaultToFailure()
 
-	sourceFile, lineNo, fn := g.d.pclntab.Symbolize(uintptr(frame.Lineno))
+	sourceFile, lineNo, fn, fnLineNo := g.d.pclntab.Symbolize(uintptr(frame.Lineno))
 	if fn == "" {
 		return fmt.Errorf("failed to symbolize 0x%x", frame.Lineno)
+	}
+
+	offset := uint32(0)
+	if lineNo != 0 && fnLineNo != 0 {
+		offset = uint32(lineNo - fnLineNo)
 	}
 
 	frames.Append(&libpf.Frame{
@@ -119,6 +124,7 @@ func (g *goInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 		//TODO: File: convert the frame.File (host.FileID) to libpf.FileID here
 		AddressOrLineno: frame.Lineno,
 		FunctionName:    libpf.Intern(fn),
+		FunctionOffset:  offset,
 		SourceFile:      libpf.Intern(sourceFile),
 		SourceLine:      libpf.SourceLineno(lineNo),
 	})
