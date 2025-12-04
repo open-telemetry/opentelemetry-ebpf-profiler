@@ -867,16 +867,16 @@ func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 // Symbolize interpreters Hotspot eBPF uwinder given data containing target
 // process address and translates it to decorated frames expanding any inlined
 // frames to multiple new frames.
-func (d *hotspotInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
-	if !frame.Type.IsInterpType(libpf.HotSpot) {
+func (d *hotspotInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+	if !ef.Type().IsInterpType(libpf.HotSpot) {
 		return interpreter.ErrMismatchInterpreterType
 	}
 
 	// Extract the HotSpot frame bitfields from the file and line variables
-	ptr := libpf.Address(frame.File)
-	subtype := uint32(frame.Lineno>>60) & 0xf
-	ripOrBci := uint32(frame.Lineno>>32) & 0x0fffffff
-	ptrCheck := uint32(frame.Lineno)
+	ptr := libpf.Address(ef.Variable(0))
+	subtype := uint32(ef.Variable(1)>>60) & 0xf
+	ripOrBci := uint32(ef.Variable(1)>>32) & 0x0fffffff
+	ptrCheck := uint32(ef.Variable(1))
 
 	var err error
 	sfCounter := successfailurecounter.New(&d.successCount, &d.failCount)

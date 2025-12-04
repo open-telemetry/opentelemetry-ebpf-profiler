@@ -13,6 +13,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -23,7 +24,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -89,6 +89,9 @@ type Tracer struct {
 	// that is required to unwind processes in the kernel. This includes maintaining the
 	// associated eBPF maps.
 	processManager *pm.ProcessManager
+
+	// tracePool is cache of libpf.EbpfTrace to avoid GC pressure
+	tracePool sync.Pool
 
 	// triggerPIDProcessing is used as manual trigger channel to request immediate
 	// processing of pending PIDs. This is requested on notifications from eBPF code
@@ -196,6 +199,14 @@ func schedProcessFreeHookName(progNames libpf.Set[string]) string {
 	return schedProcessFreeV2
 }
 
+func newTracePool() sync.Pool {
+	return sync.Pool{
+		New: func() any {
+			return &libpf.EbpfTrace{}
+		},
+	}
+}
+
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
 func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	kernelSymbolizer, err := kallsyms.NewSymbolizer()
@@ -235,6 +246,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		kernelSymbolizer:       kernelSymbolizer,
 		processManager:         processManager,
 		triggerPIDProcessing:   make(chan bool, 1),
+		tracePool:              newTracePool(),
 		pidEvents:              make(chan libpf.PIDTID, pidEventBufferSize),
 		ebpfMaps:               ebpfMaps,
 		ebpfProgs:              ebpfProgs,
@@ -734,7 +746,7 @@ func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 
 // readKernelFrames fetches the kernel stack frames for a particular kstackID and
 // returns them as symbolized libpf.Frames.
-func (t *Tracer) readKernelFrames(kstackID int32) (libpf.Frames, error) {
+func (t *Tracer) readKernelFrames(kstackID int32, oldFrames libpf.Frames) (libpf.Frames, error) {
 	cKstackID := kstackID
 	kstackVal := make([]uint64, support.PerfMaxStackDepth)
 
@@ -751,7 +763,10 @@ func (t *Tracer) readKernelFrames(kstackID int32) (libpf.Frames, error) {
 		kstackLen++
 	}
 
-	frames := make(libpf.Frames, 0, kstackLen)
+	frames := oldFrames
+	if kstackLen > uint32(len(frames)) {
+		frames = make(libpf.Frames, 0, kstackLen)
+	}
 	for i := uint32(0); i < kstackLen; i++ {
 		address := libpf.Address(kstackVal[i])
 		frame := libpf.Frame{
@@ -906,24 +921,25 @@ func (t *Tracer) eBPFMetricsCollector(
 //
 // If the raw trace contains a kernel stack ID, the kernel stack is also
 // retrieved and inserted at the appropriate position.
-func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
-	frameListOffs := int(unsafe.Offsetof(support.Trace{}.Frames))
+func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *libpf.EbpfTrace {
+	frameListOffs := int(unsafe.Offsetof(support.Trace{}.Frame_data))
 
 	if len(raw) < frameListOffs {
 		panic("trace record too small")
 	}
 
-	frameSize := support.Sizeof_Frame
 	ptr := traceFromRaw(raw)
+	frameDataLen := int(ptr.Frame_data_len) * 8
 
 	// NOTE: can't do exact check here: kernel adds a few padding bytes to messages.
-	if len(raw) < frameListOffs+int(ptr.Stack_len)*frameSize {
+	if len(raw) < frameListOffs+frameDataLen {
 		panic("unexpected record size")
 	}
 
 	pid := libpf.PID(ptr.Pid)
 	procMeta := t.processManager.MetaForPID(pid)
-	trace := &host.Trace{
+	trace := t.tracePool.Get().(*libpf.EbpfTrace)
+	*trace = libpf.EbpfTrace{
 		Comm:             goString(ptr.Comm[:]),
 		ExecutablePath:   procMeta.Executable,
 		ContainerID:      procMeta.ContainerID,
@@ -934,7 +950,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		TID:              libpf.PID(ptr.Tid),
 		Origin:           libpf.Origin(ptr.Origin),
 		OffTime:          int64(ptr.Offtime),
-		KTime:            times.KTime(ptr.Ktime),
+		KTime:            int64(ptr.Ktime),
 		CPU:              cpu,
 		EnvVars:          procMeta.EnvVariables,
 	}
@@ -950,7 +966,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 
 	if ptr.Kernel_stack_id >= 0 {
 		var err error
-		trace.KernelFrames, err = t.readKernelFrames(ptr.Kernel_stack_id)
+		trace.KernelFrames, err = t.readKernelFrames(ptr.Kernel_stack_id, trace.KernelFrames)
 		if err != nil {
 			log.Errorf("Failed to get kernel stack frames: %v", err)
 		}
@@ -966,22 +982,15 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		}
 	}
 
-	trace.Frames = make([]host.Frame, ptr.Stack_len)
-	for i := 0; i < int(ptr.Stack_len); i++ {
-		rawFrame := &ptr.Frames[i]
-		trace.Frames[i] = host.Frame{
-			File:          host.FileID(rawFrame.File_id),
-			Lineno:        libpf.AddressOrLineno(rawFrame.Addr_or_line),
-			Type:          libpf.FrameType(rawFrame.Kind),
-			ReturnAddress: rawFrame.Return_address != 0,
-		}
-	}
+	trace.FrameData = trace.FrameDataBuf[:ptr.Frame_data_len]
+	copy(trace.FrameData, ptr.Frame_data[:ptr.Frame_data_len])
+
 	return trace
 }
 
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
 // maps for tracepoints, new traces, trace count updates and unknown PCs.
-func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host.Trace) error {
+func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libpf.EbpfTrace) error {
 	if err := t.kernelSymbolizer.StartMonitor(ctx); err != nil {
 		log.Warnf("Failed to start kallsyms monitor: %v", err)
 	}
@@ -1202,6 +1211,10 @@ func (t *Tracer) AttachUProbes(uprobes []string) error {
 	return nil
 }
 
-func (t *Tracer) HandleTrace(bpfTrace *host.Trace) {
+func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	t.processManager.HandleTrace(bpfTrace)
+
+	// Reclain the EbpfTrace
+	bpfTrace.KernelFrames = bpfTrace.KernelFrames[0:0]
+	t.tracePool.Put(bpfTrace)
 }

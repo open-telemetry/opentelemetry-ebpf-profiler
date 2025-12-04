@@ -37,7 +37,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
   }
 
   unwinder_mark_nonleaf_frame(state);
-  _push_with_return_address(trace, 0LL, state->pc, FRAME_MARKER_BEAM, state->return_address);
+  push_frame(state, trace, FRAME_MARKER_BEAM, state->return_address, state->pc, 0);
   // Pretend that there was an error unwinding for now,
   // so that we don't have an infinite loop,
   // since we're not actually unwinding / updating the state.

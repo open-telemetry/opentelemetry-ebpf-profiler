@@ -7,10 +7,6 @@
 #ifndef OPTI_FRAMETYPES_H
 #define OPTI_FRAMETYPES_H
 
-// Defines the bit mask that, when ORed with it, turn any of the below
-// frame types into an error frame.
-#define FRAME_MARKER_ERROR_BIT 0x80
-
 // Indicates that the interpreter/runtime this frame belongs to is unknown.
 #define FRAME_MARKER_UNKNOWN 0x0
 // Indicates a Python frame
@@ -38,9 +34,10 @@
 // Indicates a BEAM frame
 #define FRAME_MARKER_BEAM    0xC
 
-// Indicates a frame containing information about a critical unwinding error
-// that caused further unwinding to be aborted.
-#define FRAME_MARKER_ABORT (0x7F | FRAME_MARKER_ERROR_BIT)
+// Frame flags
+#define FRAME_FLAG_ERROR          1
+#define FRAME_FLAG_RETURN_ADDRESS 2
+#define FRAME_FLAG_PID_SPECIFIC   4
 
 // HotSpot frame subtypes stored in a bitfield of the trace->lines[]
 #define FRAME_HOTSPOT_STUB        0

@@ -15,7 +15,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
@@ -153,15 +152,15 @@ func (i *beamInstance) Detach(interpreter.EbpfHandler, libpf.PID) error {
 	return nil
 }
 
-func (i *beamInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
-	if !frame.Type.IsInterpType(libpf.BEAM) {
+func (r *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+	if !ef.Type().IsInterpType(libpf.BEAM) {
 		return interpreter.ErrMismatchInterpreterType
 	}
 
 	frames.Append(&libpf.Frame{
 		Type:       libpf.BEAMFrame,
 		SourceFile: libpf.Intern("Unknown File"),
-		SourceLine: libpf.SourceLineno(frame.Lineno),
+		SourceLine: libpf.SourceLineno(ef.Data()),
 	})
 
 	return nil
