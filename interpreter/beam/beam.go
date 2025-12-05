@@ -146,6 +146,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.ranges.sizeOf = 32
 	vms.ranges.modules = 0
 	vms.ranges.n = 8
+	// The ebpf code assumes this exact structure for rangesEntry
 	vms.rangesEntry.sizeOf = 16
 	vms.rangesEntry.start = 0
 	vms.rangesEntry.end = 8

@@ -19,35 +19,29 @@ struct beam_procs_t {
   __uint(max_entries, 256);
 } beam_procs SEC(".maps");
 
+// We assume this Range struct is stable so we can read it all at once directly.
+// If it were to change in the future, we'd need to change the way this struct is read.
+// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L31-L34
 typedef struct BEAMRangeEntry {
   u64 start;
   u64 end;
 } BEAMRangeEntry;
 
+// We assume this ranges struct will at least have these two values as the first two fields.
+// That allows us to directly read them efficiently at once, but it could break in in the future.
+// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L56-L61
 typedef struct BEAMRangesInfo {
   u64 modules;
   u64 n;
-  BEAMRangeEntry first, mid, last;
 } BEAMRangesInfo;
 
-static EBPF_INLINE ErrorCode
-read_range_entry(BEAMRangeEntry *entry, BEAMProcInfo *info, u64 modules, u64 index)
-{
-  u64 entry_ptr = modules + index * info->ranges_entry_sizeof;
-  if (bpf_probe_read_user(
-        &entry->start, sizeof(u64), (void *)(entry_ptr + info->ranges_entry_start))) {
-    DEBUG_PRINT("beam: Failed to read modules[%llu].start", index);
-    return ERR_BEAM_MODULES_READ_FAILURE;
-  }
-  if (bpf_probe_read_user(&entry->end, sizeof(u64), (void *)(entry_ptr + info->ranges_entry_end))) {
-    DEBUG_PRINT("beam: Failed to read modules[%llu].end", index);
-    return ERR_BEAM_MODULES_READ_FAILURE;
-  }
-  return ERR_OK;
-}
+typedef struct BEAMRangesSearchCache {
+  BEAMRangesInfo info;
+  BEAMRangeEntry first, mid, last;
+} BEAMRangesSearchCache;
 
 static EBPF_INLINE ErrorCode
-unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *ranges)
+unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearchCache *ranges)
 {
   UnwindState *state = &record->state;
   Trace *trace       = &record->trace;
@@ -60,7 +54,7 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *
   unwinder_mark_nonleaf_frame(state);
 
   u64 low     = 0;
-  u64 high    = ranges->n;
+  u64 high    = ranges->info.n;
   u64 current = low + (high - low) / 2;
 
   BEAMRangeEntry current_range = ranges->mid;
@@ -78,10 +72,12 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *
       break;
     }
 
-    current         = low + (high - low) / 2;
-    ErrorCode error = read_range_entry(&current_range, info, ranges->modules, current);
-    if (error) {
-      return error;
+    current = low + (high - low) / 2;
+
+    u64 entry_ptr = ranges->info.modules + current * sizeof(BEAMRangeEntry);
+    if (bpf_probe_read_user(&current_range, sizeof(BEAMRangeEntry), (void *)(entry_ptr))) {
+      DEBUG_PRINT("beam: Failed to read current range");
+      return ERR_BEAM_MODULES_READ_FAILURE;
     }
   }
 
@@ -169,30 +165,34 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
     the_active_code_index,
     active_ranges);
 
-  BEAMRangesInfo ranges;
+  BEAMRangesSearchCache ranges;
 
-  if (bpf_probe_read_user(
-        &ranges.modules, sizeof(u64), (void *)(active_ranges + info->ranges_modules))) {
-    DEBUG_PRINT("beam: Failed to read ranges.modules");
+  if (bpf_probe_read_user(&ranges.info, sizeof(BEAMRangesInfo), (void *)(active_ranges))) {
+    DEBUG_PRINT("beam: Failed to read active ranges");
     error = ERR_BEAM_MODULES_READ_FAILURE;
     goto exit;
   }
 
-  if (bpf_probe_read_user(&ranges.n, sizeof(u64), (void *)(active_ranges + info->ranges_n))) {
-    DEBUG_PRINT("beam: Failed to read ranges.n");
+  DEBUG_PRINT("beam: modules: %llx, n: %llu", ranges.info.modules, ranges.info.n);
+
+  u64 entry_ptr = ranges.info.modules;
+  if (bpf_probe_read_user(&ranges.first, sizeof(BEAMRangeEntry), (void *)(entry_ptr))) {
+    DEBUG_PRINT("beam: Failed to read first range");
     error = ERR_BEAM_MODULES_READ_FAILURE;
     goto exit;
   }
 
-  DEBUG_PRINT("beam: modules: %llx, n: %llu", ranges.modules, ranges.n);
+  entry_ptr = ranges.info.modules + (ranges.info.n / 2) * sizeof(BEAMRangeEntry);
+  if (bpf_probe_read_user(&ranges.mid, sizeof(BEAMRangeEntry), (void *)(entry_ptr))) {
+    DEBUG_PRINT("beam: Failed to read middle range");
+    error = ERR_BEAM_MODULES_READ_FAILURE;
+    goto exit;
+  }
 
-  if ((error = read_range_entry(&ranges.first, info, ranges.modules, 0))) {
-    goto exit;
-  }
-  if ((error = read_range_entry(&ranges.mid, info, ranges.modules, (ranges.n / 2)))) {
-    goto exit;
-  }
-  if ((error = read_range_entry(&ranges.last, info, ranges.modules, (ranges.n - 1)))) {
+  entry_ptr = ranges.info.modules + (ranges.info.n - 1) * sizeof(BEAMRangeEntry);
+  if (bpf_probe_read_user(&ranges.last, sizeof(BEAMRangeEntry), (void *)(entry_ptr))) {
+    DEBUG_PRINT("beam: Failed to read last range");
+    error = ERR_BEAM_MODULES_READ_FAILURE;
     goto exit;
   }
 
