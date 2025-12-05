@@ -187,12 +187,7 @@ type BEAMProcInfo struct {
 	Frame_pointers_enabled bool
 	Beam_normal_exit       uint64
 	Ranges_sizeof          uint8
-	Ranges_modules         uint8
-	Ranges_n               uint8
-	Ranges_entry_sizeof    uint8
-	Ranges_entry_start     uint8
-	Ranges_entry_end       uint8
-	Pad_cgo_0              [2]byte
+	Pad_cgo_0              [7]byte
 }
 type DotnetProcInfo struct {
 	Version uint32

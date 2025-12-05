@@ -45,13 +45,7 @@ type beamData struct {
 		// ranges
 		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L56-L61
 		ranges struct {
-			sizeOf, modules, n uint8
-		}
-
-		// Range
-		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L31-L34
-		rangesEntry struct {
-			sizeOf, start, end uint8
+			sizeOf uint8
 		}
 	}
 }
@@ -141,15 +135,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	vms := &d.vmStructs
 
-	// These values are the same on OTP releases 27.2.4 and 28.0.2.
-	// We'll see what varies by version.
+	// This is the same on OTP releases 27.2.4 and 28.0.2.
 	vms.ranges.sizeOf = 32
-	vms.ranges.modules = 0
-	vms.ranges.n = 8
-	// The ebpf code assumes this exact structure for rangesEntry
-	vms.rangesEntry.sizeOf = 16
-	vms.rangesEntry.start = 0
-	vms.rangesEntry.end = 8
 
 	if d.otpRelease != "27" && d.otpRelease != "28" {
 		return d, fmt.Errorf("unsupported OTP version for BEAM interpreter: %s", d.otpRelease)
@@ -170,11 +157,6 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		The_active_code_index: uint64(bias + d.theActiveCodeIndex),
 		Beam_normal_exit:      uint64(bias + d.beamNormalExit),
 		Ranges_sizeof:         uint8(d.vmStructs.ranges.sizeOf),
-		Ranges_modules:        uint8(d.vmStructs.ranges.modules),
-		Ranges_n:              uint8(d.vmStructs.ranges.n),
-		Ranges_entry_sizeof:   uint8(d.vmStructs.rangesEntry.sizeOf),
-		Ranges_entry_start:    uint8(d.vmStructs.rangesEntry.start),
-		Ranges_entry_end:      uint8(d.vmStructs.rangesEntry.end),
 	}
 
 	// If this value is zero, it means that frame pointer support is not included in the runtime binary

@@ -522,8 +522,7 @@ typedef struct BEAMProcInfo {
   bool frame_pointers_enabled;
   u64 beam_normal_exit;
   // Introspection Struct Offsets
-  u8 ranges_sizeof, ranges_modules, ranges_n;
-  u8 ranges_entry_sizeof, ranges_entry_start, ranges_entry_end;
+  u8 ranges_sizeof;
 } BEAMProcInfo;
 
 // COMM_LEN defines the maximum length we will receive for the comm of a task.
