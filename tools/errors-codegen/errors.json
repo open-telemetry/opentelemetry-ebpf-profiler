@@ -304,5 +304,10 @@
     "id": 7005,
     "name": "beam_modules_read_failure",
     "description": "BEAM: Unable to read modules table"
+  },
+  {
+    "id": 7006,
+    "name": "beam_range_search_exhausted",
+    "description": "BEAM: Ran out of iterations searching for the current code header"
   }
 ]

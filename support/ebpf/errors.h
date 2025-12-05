@@ -186,7 +186,10 @@ typedef enum ErrorCode {
   ERR_BEAM_ACTIVE_CODE_INDEX_READ_FAILURE = 7004,
 
   // BEAM: Unable to read modules table
-  ERR_BEAM_MODULES_READ_FAILURE = 7005
+  ERR_BEAM_MODULES_READ_FAILURE = 7005,
+
+  // BEAM: Ran out of iterations searching for the current code header
+  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H

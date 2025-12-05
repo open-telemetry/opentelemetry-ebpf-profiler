@@ -81,6 +81,11 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearch
     }
   }
 
+  if (pc < current_range.start || pc >= current_range.end) {
+    // Ran out of loop iterations without locating the correct range
+    return ERR_BEAM_RANGE_SEARCH_EXHAUSTED;
+  }
+
   if (info->frame_pointers_enabled) {
     if (!unwinder_unwind_frame_pointer(state)) {
       DEBUG_PRINT("beam: invalid frame pointer");
