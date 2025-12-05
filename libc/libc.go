@@ -34,7 +34,7 @@ func (l LibcInfo) IsEqual(other LibcInfo) bool {
 // Non-empty values from other override values in the receiver.
 func (l *LibcInfo) Merge(other LibcInfo) {
 	// If other has TSDInfo and this instance does not, take it
-	if other.TSDInfo != (TSDInfo{}) && l.TSDInfo == (TSDInfo{}) {
+	if l.TSDInfo == (TSDInfo{}) {
 		l.TSDInfo = other.TSDInfo
 	}
 
