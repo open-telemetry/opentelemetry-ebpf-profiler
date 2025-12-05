@@ -131,12 +131,12 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	// If erts_frame_layout is not defined, it means that frame pointers are not supported,
-	// so we use a null pointer to signify that they're not enabled.
+	// so use 0 to signify that they're not enabled since that shouldn't be a real offset.
 	erts_frame_layout_symbol, _, err := ef.SymbolData("erts_frame_layout", 8)
 	if err == nil {
 		d.erts_frame_layout = uint64(erts_frame_layout_symbol.Address)
 	} else {
-		d.erts_frame_layout = ^uint64(0)
+		d.erts_frame_layout = uint64(0)
 	}
 
 	vms := &d.vmStructs
@@ -176,11 +176,11 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		Ranges_entry_end:      uint8(d.vmStructs.ranges_entry.end),
 	}
 
-	if d.erts_frame_layout == ^uint64(0) {
-		// If frame pointers are not supported, they will not be used
-		data.Erts_frame_layout = uint64(0)
-	} else {
-		data.Erts_frame_layout = rm.Uint64(bias + libpf.Address(d.erts_frame_layout))
+	// If this value is zero, it means that frame pointer support is not included in the runtime binary
+	if d.erts_frame_layout != uint64(0) {
+		erts_frame_layout := rm.Uint64(bias + libpf.Address(d.erts_frame_layout))
+		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_vm.h#L68-L73
+		data.Frame_pointers_enabled = erts_frame_layout == 1
 	}
 
 	if err := ebpf.UpdateProcData(libpf.BEAM, pid, unsafe.Pointer(&data)); err != nil {

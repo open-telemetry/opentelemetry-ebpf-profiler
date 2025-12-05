@@ -85,8 +85,7 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *
     }
   }
 
-  // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_vm.h#L68-L73
-  if (info->erts_frame_layout == 1) {
+  if (info->frame_pointers_enabled) {
     if (!unwinder_unwind_frame_pointer(state)) {
       DEBUG_PRINT("beam: invalid frame pointer");
       return ERR_BEAM_FRAME_POINTER_INVALID;
@@ -112,8 +111,8 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *
       }
     }
 
-    // If we got here but the pc doesn't look like a continuation pointer, then is means we ran out
-    // of loop unrolls iterations.
+    // If we got here but the pc doesn't look like a continuation pointer, then it means we ran out
+    // of loop unroll iterations.
     if ((state->pc & 0x03) != 0) {
       return ERR_BEAM_STACK_SCAN_EXHAUSTED;
     }

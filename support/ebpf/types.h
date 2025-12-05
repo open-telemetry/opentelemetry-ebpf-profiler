@@ -519,7 +519,7 @@ typedef struct BEAMProcInfo {
   u64 bias;
   u64 r;
   u64 the_active_code_index;
-  u64 erts_frame_layout;
+  bool frame_pointers_enabled;
   u64 beam_normal_exit;
   // Introspection Struct Offsets
   u8 ranges_sizeof, ranges_modules, ranges_n;
