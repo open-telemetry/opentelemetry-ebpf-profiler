@@ -33,25 +33,25 @@ var (
 )
 
 type beamData struct {
-	otpRelease            string
-	ertsVersion           string
-	the_active_code_index libpf.Address
-	r                     libpf.Address
-	beam_normal_exit      libpf.Address
-	erts_frame_layout     uint64
+	otpRelease         string
+	ertsVersion        string
+	theActiveCodeIndex libpf.Address
+	r                  libpf.Address
+	beamNormalExit     libpf.Address
+	ertsFrameLayout    uint64
 
 	// Sizes and offsets BEAM internal structs we need to traverse
 	vmStructs struct {
 		// ranges
 		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L56-L61
 		ranges struct {
-			size_of, modules, n uint8
+			sizeOf, modules, n uint8
 		}
 
 		// Range
 		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/beam_ranges.c#L31-L34
-		ranges_entry struct {
-			size_of, start, end uint8
+		rangesEntry struct {
+			sizeOf, start, end uint8
 		}
 	}
 }
@@ -117,38 +117,38 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	// "beam_normal_exit" symbol is from:
 	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/jit/beam_jit_main.cpp#L54
-	beam_normal_exit, _, err := ef.SymbolData("beam_normal_exit", 8)
+	beamNormalExit, _, err := ef.SymbolData("beam_normal_exit", 8)
 	if err != nil {
 		return nil, fmt.Errorf("symbol 'beam_normal_exit' not found: %v", err)
 	}
 
 	d := &beamData{
-		otpRelease:            string(otpRelease[:len(otpRelease)-1]),
-		ertsVersion:           string(ertsVersion[:len(ertsVersion)-1]),
-		the_active_code_index: libpf.Address(codeIndex.Address),
-		r:                     libpf.Address(r.Address),
-		beam_normal_exit:      libpf.Address(beam_normal_exit.Address),
+		otpRelease:         string(otpRelease[:len(otpRelease)-1]),
+		ertsVersion:        string(ertsVersion[:len(ertsVersion)-1]),
+		theActiveCodeIndex: libpf.Address(codeIndex.Address),
+		r:                  libpf.Address(r.Address),
+		beamNormalExit:     libpf.Address(beamNormalExit.Address),
 	}
 
 	// If erts_frame_layout is not defined, it means that frame pointers are not supported,
 	// so use 0 to signify that they're not enabled since that shouldn't be a real offset.
 	erts_frame_layout_symbol, _, err := ef.SymbolData("erts_frame_layout", 8)
 	if err == nil {
-		d.erts_frame_layout = uint64(erts_frame_layout_symbol.Address)
+		d.ertsFrameLayout = uint64(erts_frame_layout_symbol.Address)
 	} else {
-		d.erts_frame_layout = uint64(0)
+		d.ertsFrameLayout = uint64(0)
 	}
 
 	vms := &d.vmStructs
 
 	// These values are the same on OTP releases 27.2.4 and 28.0.2.
 	// We'll see what varies by version.
-	vms.ranges.size_of = 32
+	vms.ranges.sizeOf = 32
 	vms.ranges.modules = 0
 	vms.ranges.n = 8
-	vms.ranges_entry.size_of = 16
-	vms.ranges_entry.start = 0
-	vms.ranges_entry.end = 8
+	vms.rangesEntry.sizeOf = 16
+	vms.rangesEntry.start = 0
+	vms.rangesEntry.end = 8
 
 	if d.otpRelease != "27" && d.otpRelease != "28" {
 		return d, fmt.Errorf("unsupported OTP version for BEAM interpreter: %s", d.otpRelease)
@@ -166,21 +166,21 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 
 	data := support.BEAMProcInfo{
 		R:                     uint64(bias + d.r),
-		The_active_code_index: uint64(bias + d.the_active_code_index),
-		Beam_normal_exit:      uint64(bias + d.beam_normal_exit),
-		Ranges_sizeof:         uint8(d.vmStructs.ranges.size_of),
+		The_active_code_index: uint64(bias + d.theActiveCodeIndex),
+		Beam_normal_exit:      uint64(bias + d.beamNormalExit),
+		Ranges_sizeof:         uint8(d.vmStructs.ranges.sizeOf),
 		Ranges_modules:        uint8(d.vmStructs.ranges.modules),
 		Ranges_n:              uint8(d.vmStructs.ranges.n),
-		Ranges_entry_sizeof:   uint8(d.vmStructs.ranges_entry.size_of),
-		Ranges_entry_start:    uint8(d.vmStructs.ranges_entry.start),
-		Ranges_entry_end:      uint8(d.vmStructs.ranges_entry.end),
+		Ranges_entry_sizeof:   uint8(d.vmStructs.rangesEntry.sizeOf),
+		Ranges_entry_start:    uint8(d.vmStructs.rangesEntry.start),
+		Ranges_entry_end:      uint8(d.vmStructs.rangesEntry.end),
 	}
 
 	// If this value is zero, it means that frame pointer support is not included in the runtime binary
-	if d.erts_frame_layout != uint64(0) {
-		erts_frame_layout := rm.Uint64(bias + libpf.Address(d.erts_frame_layout))
+	if d.ertsFrameLayout != uint64(0) {
+		ertsFrameLayout := rm.Uint64(bias + libpf.Address(d.ertsFrameLayout))
 		// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_vm.h#L68-L73
-		data.Frame_pointers_enabled = erts_frame_layout == 1
+		data.Frame_pointers_enabled = ertsFrameLayout == 1
 	}
 
 	if err := ebpf.UpdateProcData(libpf.BEAM, pid, unsafe.Pointer(&data)); err != nil {
