@@ -174,7 +174,22 @@ typedef enum ErrorCode {
   ERR_BEAM_NO_PROC_INFO = 7000,
 
   // BEAM: PC was outside the expected address range
-  ERR_BEAM_PC_INVALID = 7001
+  ERR_BEAM_PC_INVALID = 7001,
+
+  // BEAM: Hit the stack frame scan iteration limit looking for the next stack frame
+  ERR_BEAM_STACK_SCAN_EXHAUSTED = 7002,
+
+  // BEAM: Invalid frame pointer
+  ERR_BEAM_FRAME_POINTER_INVALID = 7003,
+
+  // BEAM: Unable to read the_active_code_index
+  ERR_BEAM_ACTIVE_CODE_INDEX_READ_FAILURE = 7004,
+
+  // BEAM: Unable to read modules table
+  ERR_BEAM_MODULES_READ_FAILURE = 7005,
+
+  // BEAM: Ran out of iterations searching for the current code header
+  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H

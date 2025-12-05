@@ -181,7 +181,13 @@ type ApmIntProcInfo struct {
 	Offset uint64
 }
 type BEAMProcInfo struct {
-	Bias uint64
+	Bias                   uint64
+	R                      uint64
+	The_active_code_index  uint64
+	Beam_normal_exit       uint64
+	Frame_pointers_enabled bool
+	Ranges_sizeof          uint8
+	Pad_cgo_0              [6]byte
 }
 type DotnetProcInfo struct {
 	Version uint32
