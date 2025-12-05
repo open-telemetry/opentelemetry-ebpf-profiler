@@ -51,8 +51,6 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearch
     return ERR_BEAM_PC_INVALID;
   }
 
-  unwinder_mark_nonleaf_frame(state);
-
   u64 low     = 0;
   u64 high    = ranges->info.n;
   u64 current = low + (high - low) / 2;
@@ -108,6 +106,7 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearch
       // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L132
       // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L133
       if ((state->pc & 0x03) == 0) {
+        unwinder_mark_nonleaf_frame(state);
         break;
       }
     }
