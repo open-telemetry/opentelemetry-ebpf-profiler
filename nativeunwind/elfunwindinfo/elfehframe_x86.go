@@ -8,10 +8,10 @@ package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/
 // can be taken into account regardless of the target build platform.
 
 import (
-	"bytes"
 	"debug/elf"
 	"fmt"
 
+	"go.opentelemetry.io/ebpf-profiler/asm/amd"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"golang.org/x/arch/x86/x86asm"
@@ -174,27 +174,73 @@ func detectEntryX86(code []byte) int {
 	// On musl, the entry has no FDE, or possibly has an FDE covering part of it.
 	// Detect the musl case and return entry.
 
-	// Match the assembly exactly except the LEA call offset
-	if len(code) < 32 ||
-		!bytes.Equal(code[:9], []byte{0x48, 0x31, 0xed, 0x48, 0x89, 0xe7, 0x48, 0x8d, 0x35}) ||
-		!bytes.Equal(code[13:22], []byte{0x48, 0x83, 0xe4, 0xf0, 0xe8, 0x00, 0x00, 0x00, 0x00}) {
+	// Expected pattern:
+	//   xor    %rbp,%rbp
+	//   mov    %rsp,%rdi
+	//   lea    <offset>(%rip),%rsi
+	//   and    $0xfffffffffffffff0,%rsp
+	//   call   <offset>
+	//   ... (more instructions)
+	//   jmp    <offset>
+
+	if len(code) < 32 {
 		return 0
 	}
 
-	// Decode the second portion and allow whitelisted opcodes finding the JMP
-	for pos := 22; pos < len(code); {
-		inst, err := x86asm.Decode(code[pos:], 64)
+	interp := amd.NewInterpreterWithCode(code)
+	pos := 0
+
+	// First instruction: xor %rbp,%rbp
+	inst, err := interp.Step()
+	if err != nil || inst.Op != x86asm.XOR {
+		return 0
+	}
+	pos += inst.Len
+
+	// Second instruction: mov %rsp,%rdi
+	inst, err = interp.Step()
+	if err != nil || inst.Op != x86asm.MOV {
+		return 0
+	}
+	pos += inst.Len
+
+	// Third instruction: lea <offset>(%rip),%rsi
+	inst, err = interp.Step()
+	if err != nil || inst.Op != x86asm.LEA {
+		return 0
+	}
+	pos += inst.Len
+
+	// Fourth instruction: and $0xfffffffffffffff0,%rsp
+	inst, err = interp.Step()
+	if err != nil || inst.Op != x86asm.AND {
+		return 0
+	}
+	pos += inst.Len
+
+	// Fifth instruction: call <offset>
+	inst, err = interp.Step()
+	if err != nil || inst.Op != x86asm.CALL {
+		return 0
+	}
+	pos += inst.Len
+
+	// Continue decoding and allow whitelisted opcodes until finding the JMP
+	for {
+		inst, err := interp.Step()
 		if err != nil {
 			return 0
 		}
+		pos += inst.Len
+
 		switch inst.Op {
-		case x86asm.MOV, x86asm.LEA, x86asm.XOR:
-			pos += inst.Len
+		case x86asm.MOV, x86asm.LEA, x86asm.XOR, x86asm.NOP, x86asm.AND:
+			// Continue to next instruction
 		case x86asm.JMP:
-			return pos + inst.Len
+			// Found JMP, return position after it
+			return pos
 		default:
 			return 0
 		}
 	}
-	return 0
 }
