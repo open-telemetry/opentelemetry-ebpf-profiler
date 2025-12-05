@@ -63,9 +63,7 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *
   u64 high    = ranges->n;
   u64 current = low + (high - low) / 2;
 
-  BEAMRangeEntry current_range;
-  current_range.start = ranges->mid.start;
-  current_range.end   = ranges->mid.end;
+  BEAMRangeEntry current_range = ranges->mid;
 
   UNROLL for (int i = 0; i < BEAM_CODE_HEADER_SEARCH_ITERATIONS; i++)
   {
