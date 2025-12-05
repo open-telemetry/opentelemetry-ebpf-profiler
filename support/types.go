@@ -155,6 +155,11 @@ type TSDInfo struct {
 	Multiplier uint8
 	Indirect   uint8
 }
+type DTVInfo struct {
+	Offset     int16
+	Multiplier uint8
+	Indirect   uint8
+}
 type Trace struct {
 	Pid                uint32
 	Tid                uint32
