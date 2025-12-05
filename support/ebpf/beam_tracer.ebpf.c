@@ -57,6 +57,8 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesInfo *
     return ERR_BEAM_PC_INVALID;
   }
 
+  unwinder_mark_nonleaf_frame(state);
+
   u64 low     = 0;
   u64 high    = ranges->n;
   u64 current = low + (high - low) / 2;
@@ -147,9 +149,6 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
     goto exit;
   }
 
-  unwinder_mark_nonleaf_frame(state);
-  _push_with_return_address(trace, 0LL, state->pc, FRAME_MARKER_BEAM, state->return_address);
-
   DEBUG_PRINT("==== unwind_beam %d, pc: 0x%llx ====", trace->stack_len, state->pc);
 
   // "the_active_code_index" symbol is from:
@@ -203,7 +202,6 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
 
   UNROLL for (int i = 0; i < BEAM_FRAMES_PER_PROGRAM; i++)
   {
-    unwinder_mark_nonleaf_frame(state);
     if (record->state.pc == info->beam_normal_exit) {
       unwinder = PROG_UNWIND_STOP;
       break;
