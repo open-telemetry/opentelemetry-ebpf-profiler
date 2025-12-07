@@ -284,5 +284,30 @@
     "id": 7001,
     "name": "beam_pc_invalid",
     "description": "BEAM: PC was outside the expected address range"
+  },
+  {
+    "id": 7002,
+    "name": "beam_stack_scan_exhausted",
+    "description": "BEAM: Hit the stack frame scan iteration limit looking for the next stack frame"
+  },
+  {
+    "id": 7003,
+    "name": "beam_frame_pointer_invalid",
+    "description": "BEAM: Invalid frame pointer"
+  },
+  {
+    "id": 7004,
+    "name": "beam_active_code_index_read_failure",
+    "description": "BEAM: Unable to read the_active_code_index"
+  },
+  {
+    "id": 7005,
+    "name": "beam_modules_read_failure",
+    "description": "BEAM: Unable to read modules table"
+  },
+  {
+    "id": 7006,
+    "name": "beam_range_search_exhausted",
+    "description": "BEAM: Ran out of iterations searching for the current code header"
   }
 ]
