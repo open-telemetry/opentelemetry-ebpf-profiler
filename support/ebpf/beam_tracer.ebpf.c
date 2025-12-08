@@ -40,8 +40,7 @@ typedef struct BEAMRangesSearchCache {
   BEAMRangeEntry first, mid, last;
 } BEAMRangesSearchCache;
 
-static EBPF_INLINE ErrorCode
-push_beam(UnwindState *state, Trace *trace, u64 range_start)
+static EBPF_INLINE ErrorCode push_beam(UnwindState *state, Trace *trace, u64 range_start)
 {
   const u8 ra_flag = state->return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
 
