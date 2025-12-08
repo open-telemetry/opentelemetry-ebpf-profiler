@@ -35,9 +35,9 @@
 #define FRAME_MARKER_BEAM    0xC
 
 // Frame flags
-#define FRAME_FLAG_ERROR          1
-#define FRAME_FLAG_RETURN_ADDRESS 2
-#define FRAME_FLAG_PID_SPECIFIC   4
+#define FRAME_FLAG_ERROR          (1U << 0)
+#define FRAME_FLAG_RETURN_ADDRESS (1U << 1)
+#define FRAME_FLAG_PID_SPECIFIC   (1U << 2)
 
 // HotSpot frame subtypes stored in a bitfield of the trace->lines[]
 #define FRAME_HOTSPOT_STUB        0
