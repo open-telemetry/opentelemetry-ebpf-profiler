@@ -7,7 +7,7 @@ import (
 
 var (
 	// SetLevel configures the log level for the profiler's internal logger.
-	SetLevel = log.SetLevelLogger
+	SetLevel = log.SetLevel
 	// SetLogger configures the profiler's internal logger.
 	SetLogger = log.SetLogger
 )

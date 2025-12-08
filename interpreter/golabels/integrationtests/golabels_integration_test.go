@@ -87,7 +87,7 @@ func Test_Golabels(t *testing.T) {
 			enabledTracers.Enable(tracertypes.Labels)
 			enabledTracers.Enable(tracertypes.GoTracer)
 
-			log.SetLevelLogger(slog.LevelDebug)
+			log.SetLevel(slog.LevelDebug)
 			trc, err := tracer.NewTracer(ctx, &tracer.Config{
 				Intervals:              &mockIntervals{},
 				IncludeTracers:         enabledTracers,

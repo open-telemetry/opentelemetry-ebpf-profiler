@@ -82,7 +82,7 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 	}
 
 	if cmd.debugLog {
-		log.SetLevelLogger(slog.LevelDebug)
+		log.SetLevel(slog.LevelDebug)
 	}
 
 	var proc process.Process

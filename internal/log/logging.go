@@ -27,14 +27,14 @@ var globalLogger = func() *atomic.Pointer[slog.Logger] {
 }()
 
 // SetLogger sets the global logger to l while respecting programLevel's log
-// level. When default logger is overidden, SetLevelLogger has no effect.
+// level. When default logger is overidden, SetLevel has no effect.
 func SetLogger(l slog.Logger) {
 	globalLogger.Store(&l)
 }
 
-// SetLevelLogger dynamically changes the logger's log level, excluding
+// SetLevel dynamically changes the logger's log level, excluding
 // those set via SetLogger.
-func SetLevelLogger(level slog.Level) {
+func SetLevel(level slog.Level) {
 	programLevel.Set(level)
 }
 

@@ -77,7 +77,7 @@ func mainWithExitCode() exitCode {
 	}
 
 	if cfg.VerboseMode {
-		log.SetLevelLogger(slog.LevelDebug)
+		log.SetLevel(slog.LevelDebug)
 		// Dump the arguments in debug mode.
 		cfg.Dump()
 	}
