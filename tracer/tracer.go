@@ -155,10 +155,10 @@ type Config struct {
 	// IncludeEnvVars holds a list of environment variables that should be captured and reported
 	// from processes
 	IncludeEnvVars libpf.Set[string]
-	// UProbes holds a list of executable:symbol elements to which
-	// a uprobe will be attached.
-	UProbeLinks []string
-	// LoadProbe inidicates whether the generic eBPF program should be loaded
+	// Probes holds a list of probe_type:target[:symbol] elements to which
+	// a probe will be attached.
+	ProbeLinks []string
+	// LoadProbe indicates whether the generic eBPF program should be loaded
 	// without being attached to something.
 	LoadProbe bool
 }
@@ -415,7 +415,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		return nil, nil, fmt.Errorf("failed to load perf eBPF programs: %v", err)
 	}
 
-	if cfg.OffCPUThreshold > 0 || len(cfg.UProbeLinks) > 0 || cfg.LoadProbe {
+	if cfg.OffCPUThreshold > 0 || len(cfg.ProbeLinks) > 0 || cfg.LoadProbe {
 		// Load the tail call destinations if any kind of event profiling is enabled.
 		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
@@ -442,15 +442,15 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		}
 	}
 
-	if len(cfg.UProbeLinks) > 0 || cfg.LoadProbe {
-		uprobeProgs := []progLoaderHelper{
+	if len(cfg.ProbeLinks) > 0 || cfg.LoadProbe {
+		probeProgs := []progLoaderHelper{
 			{
-				name:             "uprobe__generic",
+				name:             genericProgName,
 				noTailCallTarget: true,
 				enable:           true,
 			},
 		}
-		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], uprobeProgs,
+		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], probeProgs,
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, fmt.Errorf("failed to load uprobe eBPF programs: %v", err)
 		}
@@ -958,7 +958,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *libpf.EbpfTrace {
 	switch trace.Origin {
 	case support.TraceOriginSampling:
 	case support.TraceOriginOffCPU:
-	case support.TraceOriginUProbe:
+	case support.TraceOriginProbe:
 	default:
 		log.Warnf("Skip handling trace from unexpected %d origin", trace.Origin)
 		return nil
@@ -1190,23 +1190,24 @@ func (t *Tracer) StartOffCPUProfiling() error {
 	return nil
 }
 
-func (t *Tracer) AttachUProbes(uprobes []string) error {
-	uProbeProg, ok := t.ebpfProgs["uprobe__generic"]
-	if !ok {
-		return errors.New("uprobe__generic is not available")
-	}
-	for _, uprobeStr := range uprobes {
-		split := strings.SplitN(uprobeStr, ":", 2)
+func (t *Tracer) AttachProbes(probes []string) error {
+	for _, probeStr := range probes {
+		probeSpec, err := ParseProbe(probeStr)
+		if err != nil {
+			return err
+		}
 
-		exec, err := link.OpenExecutable(split[0])
+		uProbeProg, ok := t.ebpfProgs[probeSpec.ProgName]
+		if !ok {
+			return fmt.Errorf("%s is not available", probeSpec.ProgName)
+		}
+
+		probeLink, err := AttachProbe(uProbeProg, probeSpec)
 		if err != nil {
 			return err
 		}
-		uprobeLink, err := exec.Uprobe(split[1], uProbeProg, nil)
-		if err != nil {
-			return err
-		}
-		t.hooks[hookPoint{group: "uprobe", name: uprobeStr}] = uprobeLink
+
+		t.hooks[hookPoint{group: probeSpec.Type.String(), name: probeStr}] = probeLink
 	}
 	return nil
 }

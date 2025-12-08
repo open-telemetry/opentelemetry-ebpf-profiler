@@ -31,7 +31,7 @@ type Config struct {
 	VerboseMode            bool          `mapstructure:"verbose_mode"`
 	OffCPUThreshold        float64       `mapstructure:"off_cpu_threshold"`
 	IncludeEnvVars         string        `mapstructure:"include_env_vars"`
-	UProbeLinks            []string      `mapstructure:"u_probe_links"`
+	ProbeLinks             []string      `mapstructure:"probe_links"`
 	LoadProbe              bool          `mapstructure:"load_probe"`
 	MapScaleFactor         uint          `mapstructure:"map_scale_factor"`
 	BPFVerifierLogLevel    uint          `mapstructure:"bpf_verifier_log_level"`

@@ -6,7 +6,6 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 import (
 	"errors"
 	"fmt"
-	"slices"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -45,7 +44,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	switch meta.Origin {
 	case support.TraceOriginSampling:
 	case support.TraceOriginOffCPU:
-	case support.TraceOriginUProbe:
+	case support.TraceOriginProbe:
 	default:
 		return fmt.Errorf("skip reporting trace for %d origin: %w", meta.Origin,
 			errUnknownOrigin)
@@ -89,7 +88,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		return nil
 	}
 	(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = &samples.TraceEvents{
-		Frames:     slices.Clone(trace.Frames),
+		Frames:     trace.Frames,
 		Timestamps: []uint64{uint64(meta.Timestamp)},
 		OffTimes:   []int64{meta.OffTime},
 		EnvVars:    meta.EnvVars,
