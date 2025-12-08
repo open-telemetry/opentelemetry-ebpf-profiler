@@ -115,6 +115,7 @@ type EbpfTrace struct {
 	APMTraceID       APMTraceID
 	APMTransactionID APMTransactionID
 	CPU              int
+	NumFrames        int
 	EnvVars          map[String]String
 	CustomLabels     map[String]String
 	KernelFrames     Frames

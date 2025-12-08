@@ -627,7 +627,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
     unwinder = PROG_UNWIND_STOP;
 
     // Unwind native code
-    DEBUG_PRINT("==== unwind_native %d ====", trace->frame_data_len);
+    DEBUG_PRINT("==== unwind_native %d ====", trace->num_frames);
     increment_metric(metricID_UnwindNativeAttempts);
 
     // Push frame first. The PC is valid because a text section mapping was found.
@@ -635,7 +635,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
       "Pushing %llx %llx to position %u on stack",
       record->state.text_section_id,
       record->state.text_section_offset,
-      trace->frame_data_len);
+      trace->num_frames);
     error = push_native(
       &record->state,
       trace,

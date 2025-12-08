@@ -929,7 +929,7 @@ static EBPF_INLINE int unwind_hotspot(struct pt_regs *ctx)
 
   Trace *trace = &record->trace;
   pid_t pid    = trace->pid;
-  DEBUG_PRINT("==== jvm: unwind %d ====", trace->frame_data_len);
+  DEBUG_PRINT("==== jvm: unwind %d ====", trace->num_frames);
 
   int unwinder    = PROG_UNWIND_STOP;
   ErrorCode error = ERR_OK;

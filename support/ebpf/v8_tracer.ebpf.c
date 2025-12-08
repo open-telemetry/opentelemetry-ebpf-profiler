@@ -317,7 +317,7 @@ static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
 
   Trace *trace = &record->trace;
   u32 pid      = trace->pid;
-  DEBUG_PRINT("==== unwind_v8 %d ====", trace->frame_data_len);
+  DEBUG_PRINT("==== unwind_v8 %d ====", trace->num_frames);
 
   int unwinder    = PROG_UNWIND_STOP;
   ErrorCode error = ERR_OK;

@@ -252,6 +252,7 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   Trace *trace           = &record->trace;
   trace->kernel_stack_id = -1;
   trace->frame_data_len  = 0;
+  trace->num_frames      = 0;
   trace->pid             = 0;
   trace->tid             = 0;
 
@@ -351,6 +352,7 @@ static inline EBPF_INLINE u64 *push_frame(
     state->error_metric = metricID_UnwindErrStackLengthExceeded;
     return NULL;
   }
+  trace->num_frames++;
   trace->frame_data_len += frame_size;
   pos[0] = frame_header(frame_type, frame_flags, frame_size, frame_data);
   return &pos[1];
@@ -374,6 +376,7 @@ static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
 
   // Check that there is enough space for this frame and at least one error frame.
   if (trace->frame_data_len < max_frame_size) {
+    trace->num_frames++;
     trace->frame_data[trace->frame_data_len++] =
       frame_header(FRAME_MARKER_UNKNOWN, FRAME_FLAG_ERROR, 1, error);
   }
@@ -508,7 +511,7 @@ get_next_unwinder_after_native_frame(PerCPURecord *record, int *unwinder)
     return ERR_NATIVE_ZERO_PC;
   }
 
-  DEBUG_PRINT("==== Resolve next frame unwinder: frame %d ====", record->trace.frame_data_len);
+  DEBUG_PRINT("==== Resolve next frame unwinder: frame %d ====", record->trace.num_frames);
   ErrorCode error = resolve_unwind_mapping(record, unwinder);
   if (error) {
     return error;

@@ -159,7 +159,8 @@ type Trace struct {
 	Apm_trace_id       [16]byte
 	Custom_labels      CustomLabelsArray
 	Kernel_stack_id    int32
-	Frame_data_len     uint32
+	Frame_data_len     uint16
+	Num_frames         uint16
 	Origin             uint32
 	Offtime            uint64
 	Frame_data         [3072]uint64

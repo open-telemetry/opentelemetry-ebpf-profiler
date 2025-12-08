@@ -161,7 +161,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
     goto exit;
   }
 
-  DEBUG_PRINT("==== unwind_beam %d, pc: 0x%llx ====", trace->frame_data_len, state->pc);
+  DEBUG_PRINT("==== unwind_beam %d, pc: 0x%llx ====", trace->num_frames, state->pc);
 
   // "the_active_code_index" symbol is from:
   // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.c#L46

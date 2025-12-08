@@ -561,7 +561,9 @@ typedef struct Trace {
   // The kernel stack ID.
   s32 kernel_stack_id;
   // The number of frame_data elements present.
-  u32 frame_data_len;
+  u16 frame_data_len;
+  // The number of frames present.
+  u16 num_frames;
 
   // origin indicates the source of the trace.
   TraceOrigin origin;

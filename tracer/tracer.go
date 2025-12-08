@@ -982,6 +982,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *libpf.EbpfTrace {
 		}
 	}
 
+	trace.NumFrames = int(ptr.Num_frames)
 	trace.FrameData = trace.FrameDataBuf[:ptr.Frame_data_len]
 	copy(trace.FrameData, ptr.Frame_data[:ptr.Frame_data_len])
 
