@@ -59,23 +59,27 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 	}
 
 	originsMap := make(map[libpf.Origin]samples.KeyToEventMapping, 2)
-	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
-		support.TraceOriginOffCPU} {
+	for _, origin := range []libpf.Origin{support.TraceOriginSampling, support.TraceOriginOffCPU, support.TraceOriginHeap} {
 		originsMap[origin] = make(samples.KeyToEventMapping)
 	}
 
 	return &CollectorReporter{
 		baseReporter: &baseReporter{
-			cfg:          cfg,
-			name:         cfg.Name,
-			version:      cfg.Version,
-			pdata:        data,
-			cgroupv2ID:   cgroupv2ID,
-			traceEvents:  xsync.NewRWMutex(originsMap),
-			hostmetadata: hostmetadata,
+			cfg:            cfg,
+			name:           cfg.Name,
+			version:        cfg.Version,
+			pdata:          data,
+			cgroupv2ID:     cgroupv2ID,
+			traceEvents:    xsync.NewRWMutex(originsMap),
+			memTraceEvents: xsync.NewRWMutex(originsMap),
+			hostmetadata:   hostmetadata,
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),
 			},
+			memRunLoop: &runLoop{
+				stopSignal: make(chan libpf.Void),
+			},
+			addrHashMap: make(map[int64]libpf.TraceHash),
 		},
 		nextConsumer: nextConsumer,
 	}, nil

@@ -9,8 +9,10 @@ package elfunwindinfo // import "github.com/toliu/opentelemetry-ebpf-profiler/na
 
 import (
 	"bytes"
+	"debug/buildinfo"
 	"debug/elf"
 	"fmt"
+	"strings"
 	"unsafe"
 
 	log "github.com/sirupsen/logrus"
@@ -330,6 +332,17 @@ func SearchGoPclntab(ef *pfelf.File) ([]byte, error) {
 	}
 
 	return nil, nil
+}
+
+func (ee *elfExtractor) parseGoVer() string {
+	if !ee.file.IsGolang() {
+		return ""
+	}
+	bi, err := buildinfo.ReadFile(ee.ref.FileName())
+	if err != nil {
+		return ""
+	}
+	return strings.TrimPrefix(bi.GoVersion, "Go cmd/compile")
 }
 
 // Parse Golang .gopclntab spdelta tables and try to produce minified intervals

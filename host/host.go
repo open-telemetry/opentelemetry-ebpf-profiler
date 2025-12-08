@@ -56,7 +56,9 @@ type Trace struct {
 	PID              libpf.PID
 	TID              libpf.PID
 	Origin           libpf.Origin
-	OffTime          int64 // Time a task was off-cpu in nanoseconds.
+	OffTime          int64  // Time a task was off-cpu in nanoseconds. if memAlloc is not 0, this indicate free(0) or malloc(1) of memAlloc
+	MemAlloc         uint64 // bytes
+	MemAddr          uint64 // bytes
 	APMTraceID       libpf.APMTraceID
 	APMTransactionID libpf.APMTransactionID
 	CPU              int

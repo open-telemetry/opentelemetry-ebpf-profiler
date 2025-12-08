@@ -337,6 +337,7 @@ typedef enum TraceOrigin {
   TRACE_UNKNOWN,
   TRACE_SAMPLING,
   TRACE_OFF_CPU,
+  TRACE_HEAP_ALLOC,
 } TraceOrigin;
 
 // OFF_CPU_THRESHOLD_MAX defines the maximum threshold.
@@ -550,6 +551,12 @@ typedef struct Trace {
 
   // offtime stores the nanoseconds that the trace was off-cpu for.
   u64 offtime;
+
+  // bytes allocated
+  u64 mem_alloc;
+
+  // mem_addr
+  u64 mem_addr;
 
   // The frames of the stack trace.
   Frame frames[MAX_FRAME_UNWINDS];

@@ -64,6 +64,8 @@ type ExecutableInfo struct {
 	Data interpreter.Data
 	// TSDInfo stores TSD information if the executable is libc, otherwise nil.
 	TSDInfo *tpbase.TSDInfo
+	// LanVer indicates the language and version
+	LanVer string
 }
 
 // ExecutableInfoManager manages all per-executable (FileID) information that we require to
@@ -215,6 +217,7 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 		ExecutableInfo: ExecutableInfo{
 			Data:    state.detectAndLoadInterpData(loaderInfo),
 			TSDInfo: tsdInfo,
+			LanVer:  intervalData.LanVer,
 		},
 		mapRef: ref,
 		rc:     1,

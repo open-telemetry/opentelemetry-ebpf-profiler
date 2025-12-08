@@ -133,7 +133,7 @@ func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
 		hooks:            &filter,
 		allowGenericRegs: isLibCrypto(elfFile),
 	}
-
+	lanVer := ee.parseGoVer()
 	if err = ee.parseGoPclntab(); err != nil {
 		return fmt.Errorf("failure to parse golang stack deltas: %v", err)
 	}
@@ -199,6 +199,7 @@ func ExtractELF(elfRef *pfelf.Reference, interval *sdtypes.IntervalData) error {
 
 	*interval = sdtypes.IntervalData{
 		Deltas: deltas,
+		LanVer: lanVer,
 	}
 	return nil
 }

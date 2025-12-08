@@ -29,8 +29,7 @@ func (p *Pdata) Generate(events map[libpf.Origin]samples.KeyToEventMapping) ppro
 	profiles := pprofile.NewProfiles()
 	rp := profiles.ResourceProfiles().AppendEmpty()
 	sp := rp.ScopeProfiles().AppendEmpty()
-	for _, origin := range []libpf.Origin{support.TraceOriginSampling,
-		support.TraceOriginOffCPU} {
+	for _, origin := range []libpf.Origin{support.TraceOriginSampling, support.TraceOriginOffCPU, support.TraceOriginHeap} {
 		if len(events[origin]) == 0 {
 			// Do not append empty profiles, if there
 			// is not profiling data for this origin.
@@ -84,6 +83,21 @@ func (p *Pdata) setProfile(
 	case support.TraceOriginOffCPU:
 		st.SetTypeStrindex(getStringMapIndex(stringMap, "events"))
 		st.SetUnitStrindex(getStringMapIndex(stringMap, "nanoseconds"))
+	case support.TraceOriginHeap:
+		pt := profile.PeriodType()
+		pt.SetTypeStrindex(getStringMapIndex(stringMap, "heap"))
+		pt.SetUnitStrindex(getStringMapIndex(stringMap, "bytes"))
+		// alloc_space
+		st.SetTypeStrindex(getStringMapIndex(stringMap, "space"))
+		st.SetUnitStrindex(getStringMapIndex(stringMap, "bytes"))
+		// allocs
+		st = profile.SampleType().AppendEmpty()
+		st.SetTypeStrindex(getStringMapIndex(stringMap, "allocs"))
+		st.SetUnitStrindex(getStringMapIndex(stringMap, "count"))
+		// inuse_space
+		st = profile.SampleType().AppendEmpty()
+		st.SetTypeStrindex(getStringMapIndex(stringMap, "inuse_space"))
+		st.SetUnitStrindex(getStringMapIndex(stringMap, "bytes"))
 	default:
 		log.Errorf("Generating profile for unsupported origin %d", origin)
 		return
@@ -110,9 +124,12 @@ func (p *Pdata) setProfile(
 			sample.Value().Append(1)
 		case support.TraceOriginOffCPU:
 			sample.Value().Append(traceInfo.OffTimes...)
+		case support.TraceOriginHeap:
+			sample.Value().Append(traceInfo.MemAlloc...)
 		}
 
 		// Walk every frame of the trace.
+		// todo mem profile may cache this operation
 		for i := range traceInfo.FrameTypes {
 			loc := profile.LocationTable().AppendEmpty()
 			loc.SetAddress(uint64(traceInfo.Linenos[i]))

@@ -8,6 +8,7 @@ import (
 	"github.com/toliu/opentelemetry-ebpf-profiler/support"
 	"go.opentelemetry.io/collector/pdata/pprofile"
 	"maps"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,7 @@ type (
 		lastReportTime       time.Time
 		cacheEventSTolerance int
 		cacheEventSTimeout   time.Duration
+		consumerLock         sync.Mutex
 	}
 )
 
@@ -71,11 +73,23 @@ func (c *ColaSoft) Start(parent context.Context) error {
 		c.cgroupv2ID.PurgeExpired()
 	})
 
+	// handle memprofile trace
+	c.memRunLoop.Start(ctx, 10*time.Second, func() {
+		if err := c.reportMemProfile(context.Background()); err != nil {
+			log.Errorf("Request failed: %v", err)
+		}
+	}, func() {
+		// Allow the GC to purge expired entries to avoid memory leaks.
+		c.pdata.Purge()
+		c.cgroupv2ID.PurgeExpired()
+	})
+
 	// When Stop() is called and a signal to 'stop' is received, then:
 	// - cancel the reporting functions currently running (using context)
 	// - close the gRPC connection with collection-agent
 	go func() {
 		<-c.runLoop.stopSignal
+		<-c.memRunLoop.stopSignal
 		cancelReporting()
 	}()
 
@@ -105,6 +119,7 @@ func (c *ColaSoft) reportProfile(ctx context.Context) error {
 				if _traceEvents, ok := events[pid][kind][key]; ok {
 					_traceEvents.Timestamps = append(_traceEvents.Timestamps, value.Timestamps...)
 					_traceEvents.OffTimes = append(_traceEvents.OffTimes, value.OffTimes...)
+					_traceEvents.MemAlloc = append(_traceEvents.MemAlloc, value.MemAlloc...)
 				} else {
 					events[pid][kind][key] = value
 				}
@@ -127,12 +142,49 @@ func (c *ColaSoft) reportProfile(ctx context.Context) error {
 	if len(tds) == 0 {
 		return nil
 	}
-
+	c.consumerLock.Lock()
 	err := c.consumer(ctx, tds)
+	c.consumerLock.Unlock()
 	c.cacheMapping = make(map[uint32]map[libpf.Origin]samples.KeyToEventMapping)
 	c.cacheEventSCount = 0
 	c.lastReportTime = time.Now()
 	return err
+}
+
+// 单独处理memProfile的数据，间隔一定时间上报
+func (c *ColaSoft) reportMemProfile(ctx context.Context) error {
+	traceEvents := c.memTraceEvents.WLock()
+	var mappings = make(map[libpf.Origin]samples.KeyToEventMapping)
+	mappings[support.TraceOriginHeap] = maps.Clone((*traceEvents)[support.TraceOriginHeap])
+	c.memTraceEvents.WUnlock(&traceEvents)
+	events := make(map[uint32]map[libpf.Origin]samples.KeyToEventMapping)
+	for kind, mapping := range mappings {
+		for key, value := range mapping {
+			pid := uint32(key.Pid)
+			if _, ok := events[pid]; !ok {
+				events[pid] = make(map[libpf.Origin]samples.KeyToEventMapping)
+			}
+			if _, ok := events[pid][kind]; !ok {
+				events[pid][kind] = make(samples.KeyToEventMapping)
+			}
+			events[pid][kind][key] = value
+		}
+	}
+	tds := make(map[uint32]pprofile.Profiles)
+	for pid, val := range events {
+		td := c.pdata.Generate(val)
+		if td.SampleCount() == 0 {
+			log.Tracef("Skip sending profile with no samples for pid %d", pid)
+			continue
+		}
+		tds[pid] = td
+	}
+	if len(tds) == 0 {
+		return nil
+	}
+	c.consumerLock.Lock()
+	defer c.consumerLock.Unlock()
+	return c.consumer(ctx, tds)
 }
 
 func (c *ColaSoft) ExecutableKnown(fileID libpf.FileID) bool {

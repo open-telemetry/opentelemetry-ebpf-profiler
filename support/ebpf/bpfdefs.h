@@ -145,3 +145,31 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
 #endif // !TESTING_COREDUMP
 
 #endif // OPTI_BPFDEFS_H
+
+#if defined(__x86_64__)
+#define PT_REGS_PARM1(ctx)	((ctx)->di)
+#define PT_REGS_PARM2(ctx)	((ctx)->si)
+#define PT_REGS_PARM3(ctx)	((ctx)->dx)
+#define PT_REGS_PARM4(ctx)	((ctx)->cx)
+#define PT_REGS_PARM5(ctx)	((ctx)->r8)
+#define PT_REGS_PARM6(ctx)	((ctx)->r9)
+#define PT_REGS_RET(ctx)	((ctx)->sp)
+#define PT_REGS_FP(ctx)         ((ctx)->bp) /* Works only with CONFIG_FRAME_POINTER */
+#define PT_REGS_RC(ctx)		((ctx)->ax)
+#define PT_REGS_IP(ctx)		((ctx)->ip)
+#define PT_REGS_SP(ctx)		((ctx)->sp)
+#endif
+
+#if defined(__aarch64__)
+#define PT_REGS_PARM1(x)	((x)->regs[0])
+#define PT_REGS_PARM2(x)	((x)->regs[1])
+#define PT_REGS_PARM3(x)	((x)->regs[2])
+#define PT_REGS_PARM4(x)	((x)->regs[3])
+#define PT_REGS_PARM5(x)	((x)->regs[4])
+#define PT_REGS_PARM6(x)	((x)->regs[5])
+#define PT_REGS_RET(x)		((x)->regs[30])
+#define PT_REGS_FP(x)		((x)->regs[29]) /*  Works only with CONFIG_FRAME_POINTER */
+#define PT_REGS_RC(x)		((x)->regs[0])
+#define PT_REGS_SP(x)		((x)->sp)
+#define PT_REGS_IP(x)		((x)->pc)
+#endif

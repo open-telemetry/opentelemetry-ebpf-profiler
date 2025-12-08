@@ -31,6 +31,7 @@ const (
 	V8 InterpreterType = support.FrameMarkerV8
 	// Dotnet identifies the Dotnet interpreter.
 	Dotnet InterpreterType = support.FrameMarkerDotnet
+	Golang                 = support.FrameMarkerGolang
 )
 
 // Pseudo-interpreters without a corresponding frame type.

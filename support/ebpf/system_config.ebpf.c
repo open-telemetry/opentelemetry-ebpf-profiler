@@ -10,7 +10,7 @@ bpf_map_def SEC("maps") system_config = {
   .type        = BPF_MAP_TYPE_ARRAY,
   .key_size    = sizeof(u32),
   .value_size  = sizeof(struct SystemConfig),
-  .max_entries = 1,
+  .max_entries = 2,
 };
 
 #ifndef TESTING_COREDUMP
