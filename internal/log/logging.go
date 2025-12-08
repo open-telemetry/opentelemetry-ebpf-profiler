@@ -26,35 +26,13 @@ var globalLogger = func() *atomic.Pointer[slog.Logger] {
 	return p
 }()
 
-// levelHandler wraps any slog.Handler to respect programLevel for dynamic level changes.
-type levelHandler struct {
-	slog.Handler
-}
-
-// Enabled checks only programLevel, giving it full control over log filtering.
-// This allows programLevel to override the underlying handler's configured level,
-// enabling dynamic level changes even for handlers that have their own
-// level configuration.
-func (h *levelHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return level >= programLevel.Level()
-}
-
-func (h *levelHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &levelHandler{Handler: h.Handler.WithAttrs(attrs)}
-}
-
-func (h *levelHandler) WithGroup(name string) slog.Handler {
-	return &levelHandler{Handler: h.Handler.WithGroup(name)}
-}
-
 // SetLogger sets the global logger to l while respecting programLevel's log
-// level.
+// level. When default logger is overidden, SetLevelLogger has no effect.
 func SetLogger(l slog.Logger) {
-	wrapped := slog.New(&levelHandler{Handler: l.Handler()})
-	globalLogger.Store(wrapped)
+	globalLogger.Store(&l)
 }
 
-// SetLevelLogger dynamically changes the logger's log level, including
+// SetLevelLogger dynamically changes the logger's log level, excluding
 // those set via SetLogger.
 func SetLevelLogger(level slog.Level) {
 	programLevel.Set(level)
