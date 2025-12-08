@@ -8,6 +8,9 @@ import (
 	"sync/atomic"
 )
 
+// programLevel controls the minimum log level for all loggers.
+var programLevel = new(slog.LevelVar) // Info by default
+
 // globalLogger holds a reference to the [slog.Logger] used within
 // go.opentelemetry.io/ebpf-profiler.
 //
@@ -15,7 +18,7 @@ import (
 // interface. This logger will show messages at the Info Level.
 var globalLogger = func() *atomic.Pointer[slog.Logger] {
 	l := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: programLevel,
 	}))
 
 	p := new(atomic.Pointer[slog.Logger])
@@ -23,16 +26,38 @@ var globalLogger = func() *atomic.Pointer[slog.Logger] {
 	return p
 }()
 
-// SetLogger sets the global Logger to l.
-func SetLogger(l slog.Logger) {
-	globalLogger.Store(&l)
+// levelHandler wraps any slog.Handler to respect programLevel for dynamic level changes.
+type levelHandler struct {
+	slog.Handler
 }
 
-// SetDebugLogger configures the global logger to write debug-level logs to stderr.
-func SetDebugLogger() {
-	SetLogger(*slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	})))
+// Enabled checks only programLevel, giving it full control over log filtering.
+// This allows programLevel to override the underlying handler's configured level,
+// enabling dynamic level changes even for handlers that have their own
+// level configuration.
+func (h *levelHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return level >= programLevel.Level()
+}
+
+func (h *levelHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &levelHandler{Handler: h.Handler.WithAttrs(attrs)}
+}
+
+func (h *levelHandler) WithGroup(name string) slog.Handler {
+	return &levelHandler{Handler: h.Handler.WithGroup(name)}
+}
+
+// SetLogger sets the global logger to l while respecting programLevel's log
+// level.
+func SetLogger(l slog.Logger) {
+	wrapped := slog.New(&levelHandler{Handler: l.Handler()})
+	globalLogger.Store(wrapped)
+}
+
+// SetLevelLogger dynamically changes the logger's log level, including
+// those set via SetLogger.
+func SetLevelLogger(level slog.Level) {
+	programLevel.Set(level)
 }
 
 // getLogger returns the global logger.

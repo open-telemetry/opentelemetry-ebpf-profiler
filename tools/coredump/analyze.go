@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -81,7 +82,7 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 	}
 
 	if cmd.debugLog {
-		log.SetDebugLogger()
+		log.SetLevelLogger(slog.LevelDebug)
 	}
 
 	var proc process.Process
