@@ -141,9 +141,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	// So if you change this log line update also the system test.
 	log.Info("Attached sched monitor")
 
-	if err := startTraceHandling(ctx, trc); err != nil {
-		return fmt.Errorf("failed to start trace handling: %w", err)
-	}
+	c.startTraceHandling(ctx, trc)
 
 	return nil
 }
@@ -160,13 +158,12 @@ func (c *Controller) Shutdown() {
 	}
 }
 
-func startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
+func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer) {
 	// Spawn monitors for the various result maps
 	traceCh := make(chan *libpf.EbpfTrace)
+	errs := make(chan error)
 
-	if err := trc.StartMapMonitors(ctx, traceCh); err != nil {
-		return fmt.Errorf("failed to start map monitors: %v", err)
-	}
+	trc.StartMapMonitors(ctx, traceCh, errs)
 
 	go func() {
 		// Poll the output channels
@@ -176,11 +173,13 @@ func startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
 				if trace != nil {
 					trc.HandleTrace(trace)
 				}
+			case err := <-errs:
+				log.Error(fmt.Errorf("Shutting down controller due unrecoverable error: %w", err))
+				c.Shutdown()
+				return
 			case <-ctx.Done():
 				return
 			}
 		}
 	}()
-
-	return nil
 }
