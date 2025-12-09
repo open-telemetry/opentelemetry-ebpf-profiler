@@ -21,7 +21,7 @@ func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 		_ component.Config,
 		_ xconsumer.Profiles,
 	) (xreceiver.Profiles, error) {
-		return nil, errors.New("profiling receiver is only supported on linux")
+		return nil, errors.New("profiling receiver is only supported on Linux")
 
 	}
 }
