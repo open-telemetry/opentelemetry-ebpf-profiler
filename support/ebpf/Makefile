@@ -1,9 +1,9 @@
 SHELL ?= bash
-BPF_CLANG ?= clang-17
-BPF_LINK ?= llvm-link-17
-STRIP ?= llvm-strip-17
-LLC ?= llc-17
-CLANG_FORMAT ?= clang-format-17
+BPF_CLANG ?= clang-19
+BPF_LINK ?= llvm-link-19
+STRIP ?= llvm-strip-19
+LLC ?= llc-19
+CLANG_FORMAT ?= clang-format-19
 
 # Detect native architecture and translate to GOARCH.
 NATIVE_ARCH := $(shell uname -m)
