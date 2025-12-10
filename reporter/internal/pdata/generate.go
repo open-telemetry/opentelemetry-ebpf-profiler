@@ -219,6 +219,37 @@ func (p *Pdata) setProfile(
 					fileNameIdx: stringSet.Add(frame.SourceFile.String()),
 				}
 				locInfo.functionIndex = funcSet.Add(fi)
+
+				// Check if this interpreted frame has a FileID (e.g., V8 frames with debug IDs)
+				if frame.FileID != (libpf.FileID{}) {
+					locationMappingIndex, exists := mappingSet.AddWithCheck(frame.FileID)
+					if !exists {
+						ei, exists := p.Executables.GetAndRefresh(frame.FileID,
+							ExecutableCacheLifetime)
+						fileName := frame.SourceFile.String()
+						buildID := ""
+						if exists {
+							if ei.FileName != "" {
+								fileName = ei.FileName
+							}
+							buildID = ei.GnuBuildID
+						}
+
+						mapping := dic.MappingTable().AppendEmpty()
+						mapping.SetFilenameStrindex(stringSet.Add(fileName))
+						attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+							semconv.ProcessExecutableBuildIDGNUKey,
+							buildID)
+						attrMgr.AppendOptionalString(mapping.AttributeIndices(),
+							semconv.ProcessExecutableBuildIDHtlhashKey,
+							frame.FileID.StringNoQuotes())
+
+					}
+					locInfo.mappingIndex = locationMappingIndex
+				} else {
+					// mapping_table[0] is always the dummy mapping
+					locInfo.mappingIndex = 0
+				}
 			}
 
 			idx, exists := locationSet.AddWithCheck(locInfo)
