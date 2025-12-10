@@ -174,6 +174,15 @@ func detectEntryX86(code []byte) int {
 	// On musl, the entry has no FDE, or possibly has an FDE covering part of it.
 	// Detect the musl case and return entry.
 
+	// Expected pattern originating from https://git.musl-libc.org/cgit/musl/tree/arch/x86_64/crt_arch.h:
+	//   xor    %rbp,%rbp
+	//   mov    %rsp,%rdi
+	//   lea    <offset>(%rip),%rsi
+	//   and    $0xfffffffffffffff0,%rsp
+	//   call   <offset>
+	//   ... (more instructions)
+	//   jmp    <offset>
+
 	// Match the assembly exactly except the LEA call offset
 	if len(code) < 32 ||
 		!bytes.Equal(code[:9], []byte{0x48, 0x31, 0xed, 0x48, 0x89, 0xe7, 0x48, 0x8d, 0x35}) ||
