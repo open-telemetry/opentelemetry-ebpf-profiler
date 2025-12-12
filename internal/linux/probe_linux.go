@@ -4,14 +4,23 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
+package linux // import "go.opentelemetry.io/ebpf-profiler/internal/linux"
 
 import (
 	"bytes"
 	"errors"
 	"fmt"
+	"sync"
 
 	"golang.org/x/sys/unix"
+)
+
+var (
+	versionMajor uint32
+	versionMinor uint32
+	versionPatch uint32
+	versionErr   error
+	versionOnce  sync.Once
 )
 
 // ProbeBPFSyscall checks if the syscall EBPF is available on the system.
@@ -26,10 +35,12 @@ func ProbeBPFSyscall() error {
 // GetCurrentKernelVersion returns the major, minor and patch version of the kernel of the host
 // from the utsname struct.
 func GetCurrentKernelVersion() (major, minor, patch uint32, err error) {
-	var uname unix.Utsname
-	if err := unix.Uname(&uname); err != nil {
-		return 0, 0, 0, fmt.Errorf("could not get Kernel Version: %v", err)
-	}
-	_, _ = fmt.Fscanf(bytes.NewReader(uname.Release[:]), "%d.%d.%d", &major, &minor, &patch)
-	return major, minor, patch, nil
+	versionOnce.Do(func() {
+		var uname unix.Utsname
+		if err := unix.Uname(&uname); err != nil {
+			versionErr = err
+		}
+		_, _ = fmt.Fscanf(bytes.NewReader(uname.Release[:]), "%d.%d.%d", &versionMajor, &versionMinor, &versionPatch)
+	})
+	return versionMajor, versionMinor, versionPatch, versionErr
 }

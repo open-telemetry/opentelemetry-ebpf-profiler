@@ -20,6 +20,7 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
+	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
@@ -287,7 +288,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	// References to eBPF maps in the eBPF programs are just placeholders that need to be
 	// replaced by the actual loaded maps later on with rewriteMaps before loading the
 	// programs into the kernel.
-	major, minor, patch, err := GetCurrentKernelVersion()
+	major, minor, patch, err := linux.GetCurrentKernelVersion()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get kernel version: %v", err)
 	}

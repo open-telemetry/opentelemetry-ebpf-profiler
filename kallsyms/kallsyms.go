@@ -27,8 +27,8 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	"github.com/mdlayher/kobject"
+	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/tracer"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -705,7 +705,7 @@ func (s *Symbolizer) StartMonitor(ctx context.Context) error {
 	}
 	go s.reloadWorker(ctx, kobjectClient)
 	go s.pollKobjectClient(ctx, kobjectClient)
-	major, minor, _, err := tracer.GetCurrentKernelVersion()
+	major, minor, _, err := linux.GetCurrentKernelVersion()
 	if err != nil {
 		return fmt.Errorf("failed to get kernel version: %v", err)
 	}
