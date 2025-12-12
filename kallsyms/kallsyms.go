@@ -28,6 +28,7 @@ import (
 	"github.com/cilium/ebpf/perf"
 	"github.com/mdlayher/kobject"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/tracer"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -704,7 +705,15 @@ func (s *Symbolizer) StartMonitor(ctx context.Context) error {
 	}
 	go s.reloadWorker(ctx, kobjectClient)
 	go s.pollKobjectClient(ctx, kobjectClient)
-	go s.bpfKsymsTrigger(ctx)
+	major, minor, _, err := tracer.GetCurrentKernelVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get kernel version: %v", err)
+	}
+	if major < 5 || (major == 5 && minor < 8) {
+		log.Infof("Monitoring kallsyms is supported only for Linux kernel 5.8 or greater")
+	} else {
+		go s.bpfKsymsTrigger(ctx)
+	}
 	return nil
 }
 
