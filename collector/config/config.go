@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"time"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -81,7 +82,7 @@ func (cfg *Config) Validate() error {
 	}
 
 	if !cfg.NoKernelVersionCheck {
-		major, minor, patch, err := tracer.GetCurrentKernelVersion()
+		major, minor, patch, err := linux.GetCurrentKernelVersion()
 		if err != nil {
 			return fmt.Errorf("failed to get kernel version: %v", err)
 		}

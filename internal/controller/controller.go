@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -42,7 +43,7 @@ func New(cfg *Config) *Controller {
 // Start starts the controller
 // The controller should only be started once.
 func (c *Controller) Start(ctx context.Context) error {
-	if err := tracer.ProbeBPFSyscall(); err != nil {
+	if err := linux.ProbeBPFSyscall(); err != nil {
 		return fmt.Errorf("failed to probe eBPF syscall: %w", err)
 	}
 
