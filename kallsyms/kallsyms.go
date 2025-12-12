@@ -688,10 +688,12 @@ func (s *Symbolizer) bpfKsymsTrigger(ctx context.Context) {
 				log.Errorf("Failed to handle notification on bpf_ksym_add: %v", err)
 				continue
 			}
-			s.reloadModules <- true
+			select {
+			case s.reloadModules <- true:
+			default:
+			}
 		}
 	}
-
 }
 
 // Reload will trigger asynchronous update of modules and symbols.
