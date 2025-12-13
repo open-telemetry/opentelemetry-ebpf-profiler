@@ -40,6 +40,19 @@ typedef struct BEAMRangesSearchCache {
   BEAMRangeEntry first, mid, last;
 } BEAMRangesSearchCache;
 
+static EBPF_INLINE ErrorCode push_beam(UnwindState *state, Trace *trace, u64 range_start)
+{
+  const u8 ra_flag = state->return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
+
+  // `pc` is in the `current_range` CodeHeader
+  u64 *data = push_frame(state, trace, FRAME_MARKER_BEAM, ra_flag, state->pc, 1);
+  if (!data) {
+    return false;
+  }
+  data[0] = range_start;
+  return true;
+}
+
 static EBPF_INLINE ErrorCode
 unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearchCache *ranges)
 {
@@ -64,9 +77,6 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearch
     } else if (pc >= current_range.end) {
       low = current + 1;
     } else {
-      // `pc` is in the `current_range` CodeHeader
-      _push_with_return_address(
-        trace, current_range.start, pc, FRAME_MARKER_BEAM, state->return_address);
       break;
     }
 
@@ -82,6 +92,10 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearch
   if (pc < current_range.start || pc >= current_range.end) {
     // Ran out of loop iterations without locating the correct range
     return ERR_BEAM_RANGE_SEARCH_EXHAUSTED;
+  }
+
+  if (!push_beam(state, trace, current_range.start)) {
+    return ERR_STACK_LENGTH_EXCEEDED;
   }
 
   if (info->frame_pointers_enabled) {
@@ -147,7 +161,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
     goto exit;
   }
 
-  DEBUG_PRINT("==== unwind_beam %d, pc: 0x%llx ====", trace->stack_len, state->pc);
+  DEBUG_PRINT("==== unwind_beam %d, pc: 0x%llx ====", trace->num_frames, state->pc);
 
   // "the_active_code_index" symbol is from:
   // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/code_ix.c#L46

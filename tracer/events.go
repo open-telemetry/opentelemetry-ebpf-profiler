@@ -15,7 +15,7 @@ import (
 	"github.com/cilium/ebpf/perf"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -135,7 +135,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 // Returns a function that can be called to retrieve perf event array
 // error counts.
 func (t *Tracer) startTraceEventMonitor(ctx context.Context,
-	traceOutChan chan<- *host.Trace,
+	traceOutChan chan<- *libpf.EbpfTrace,
 ) func() []metrics.Metric {
 	eventsMap := t.ebpfMaps["trace_events"]
 	eventReader, err := perf.NewReader(eventsMap,
@@ -152,7 +152,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
 	go func() {
 		var data perf.Record
-		var oldKTime, minKTime times.KTime
+		var oldKTime, minKTime int64
 		var eventCount int
 
 		pollTicker := time.NewTicker(t.intervals.TracePollInterval())
@@ -251,10 +251,10 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				if minKTime > 0 && minKTime <= oldKTime {
 					// If minKTime is smaller than oldKTime, use it and reset it
 					// to avoid a repeat during next iteration.
-					t.processManager.ProcessedUntil(minKTime)
+					t.processManager.ProcessedUntil(times.KTime(minKTime))
 					minKTime = 0
 				} else {
-					t.processManager.ProcessedUntil(oldKTime)
+					t.processManager.ProcessedUntil(times.KTime(oldKTime))
 				}
 			}
 			oldKTime = minKTime
