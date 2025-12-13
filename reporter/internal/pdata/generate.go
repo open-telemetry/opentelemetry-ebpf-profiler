@@ -199,6 +199,7 @@ func (p *Pdata) setProfile(
 				// Store interpreted frame information as a Line message
 				locInfo.hasLine = true
 				locInfo.lineNumber = int64(frame.SourceLine)
+				locInfo.columnNumber = int64(frame.SourceColumn)
 				fi := funcInfo{
 					nameIdx:     stringSet.Add(frame.FunctionName.String()),
 					fileNameIdx: stringSet.Add(frame.SourceFile.String()),
@@ -215,6 +216,7 @@ func (p *Pdata) setProfile(
 				if locInfo.hasLine {
 					line := loc.Lines().AppendEmpty()
 					line.SetLine(locInfo.lineNumber)
+					line.SetColumn(locInfo.columnNumber)
 					line.SetFunctionIndex(locInfo.functionIndex)
 				}
 				attrMgr.AppendOptionalString(loc.AttributeIndices(),

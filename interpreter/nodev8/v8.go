@@ -1127,8 +1127,7 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 	if sodiType == vms.Type.Script {
 		sfi.source = i.getSource(sodiAddr)
 		if sfi.funcStartPos != sfi.funcEndPos {
-			sfi.funcStartLine = mapPositionToLine(sfi.source.lineTable,
-				int32(sfi.funcStartPos))
+			sfi.funcStartLine, _ = mapPositionToLine(sfi.source.lineTable, int32(sfi.funcStartPos))
 		}
 	}
 
@@ -1452,33 +1451,45 @@ func decodePosition(table []byte, delta uint64) sourcePosition {
 	}
 }
 
-// mapPositionToLine maps a file position (byte offset) to a line number. This is
-// done against a table containing a offsets where each line ends.
-func mapPositionToLine(lineEnds []uint32, pos int32) libpf.SourceLineno {
+// mapPositionToLine maps a file position (byte offset) to a line number and column
+// number. This is done against a table containing offsets where each line ends.
+func mapPositionToLine(lineEnds []uint32, pos int32) (libpf.SourceLineno, libpf.SourceColumn) {
 	if len(lineEnds) == 0 || pos < 0 {
-		return 0
+		return 0, 0
 	}
 	// Use binary search to locate the line number
 	index := sort.Search(len(lineEnds), func(ndx int) bool {
 		return lineEnds[ndx] >= uint32(pos)
 	})
-	return libpf.SourceLineno(index + 1)
+
+	// Calculate column: position - start of line
+	// The start of line is the end of previous line + 1 (or 0 for first line)
+	var lineStart uint32
+	if index > 0 {
+		lineStart = lineEnds[index-1] + 1
+	} else {
+		lineStart = 0
+	}
+
+	column := uint32(pos) - lineStart
+
+	return libpf.SourceLineno(index + 1), libpf.SourceColumn(column)
 }
 
-// scriptOffsetToLine maps a sourcePosition to a line number in the corresponding source
-func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) libpf.SourceLineno {
+// scriptOffsetToLine maps a sourcePosition to a line and column number in the corresponding source
+func (sfi *v8SFI) scriptOffsetToLine(position sourcePosition) (libpf.SourceLineno, libpf.SourceColumn) {
 	scriptOffset := position.scriptOffset()
 	// The scriptOffset is offset by one, to make kNoSourcePosition zero.
 	//nolint:lll
 	// https://chromium.googlesource.com/v8/v8.git/+/refs/tags/9.2.230.1/src/codegen/source-position.h#93
 	if scriptOffset == 0 {
-		return sfi.funcStartLine
+		return sfi.funcStartLine, 0
 	}
 	return mapPositionToLine(sfi.source.lineTable, scriptOffset-1)
 }
 
 // appendFrame adds a new frame to frames.
-func (i *v8Instance) appendFrame(frames *libpf.Frames, sfi *v8SFI, lineNo libpf.SourceLineno) {
+func (i *v8Instance) appendFrame(frames *libpf.Frames, sfi *v8SFI, lineNo libpf.SourceLineno, column libpf.SourceColumn) {
 	funcOffset := uint32(0)
 	if lineNo > sfi.funcStartLine {
 		funcOffset = uint32(lineNo - sfi.funcStartLine)
@@ -1488,6 +1499,7 @@ func (i *v8Instance) appendFrame(frames *libpf.Frames, sfi *v8SFI, lineNo libpf.
 		FunctionName:   sfi.funcName,
 		SourceFile:     sfi.source.fileName,
 		SourceLine:     lineNo,
+		SourceColumn:   column,
 		FunctionOffset: funcOffset,
 	})
 }
@@ -1506,15 +1518,15 @@ func (i *v8Instance) generateNativeFrame(sourcePos sourcePosition, sfi *v8SFI,
 		return
 	}
 
-	lineNo := sfi.scriptOffsetToLine(sourcePos)
-	i.appendFrame(frames, sfi, lineNo)
+	lineNo, column := sfi.scriptOffsetToLine(sourcePos)
+	i.appendFrame(frames, sfi, lineNo, column)
 }
 
 // appendBytecodeFrame symbolizes and records to a trace a Bytecode based frame.
 func (i *v8Instance) appendBytecodeFrame(sfi *v8SFI, delta uint64, frames *libpf.Frames) {
 	sourcePos := decodePosition(sfi.bytecodePositionTable, delta)
-	lineNo := sfi.scriptOffsetToLine(sourcePos)
-	i.appendFrame(frames, sfi, lineNo)
+	lineNo, column := sfi.scriptOffsetToLine(sourcePos)
+	i.appendFrame(frames, sfi, lineNo, column)
 }
 
 // symbolizeSFI symbolizes and records to a trace a SharedFunctionInfo based frame.

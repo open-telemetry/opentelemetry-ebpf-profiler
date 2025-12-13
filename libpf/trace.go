@@ -79,6 +79,8 @@ type Frame struct {
 	SourceFile String
 	// SourceLine is the source code level line number of this frame.
 	SourceLine SourceLineno
+	// SourceColumn is the source code level column number of this frame.
+	SourceColumn SourceColumn
 	// An address in ELF VA space (native frame) or line number (interpreted frame).
 	AddressOrLineno AddressOrLineno
 	// Mapping is a reference to the mapping data to which this Frame corresponds to.
