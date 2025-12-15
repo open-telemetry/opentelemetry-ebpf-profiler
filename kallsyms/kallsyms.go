@@ -22,13 +22,13 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/asm"
+	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	"github.com/mdlayher/kobject"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/support"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -614,65 +614,61 @@ func (s *Symbolizer) pollKobjectClient(ctx context.Context, kobjectClient *kobje
 	}
 }
 
-// bpfKsymsTrigger attaches a minimal eBPF program to bpf events, that update
-// kallsyms, to notify user space about changes.
-func (s *Symbolizer) bpfKsymsTrigger(ctx context.Context) {
-	events, err := ebpf.NewMap(&ebpf.MapSpec{
-		Type: ebpf.PerfEventArray,
-		Name: "ksym_update_trigger",
-	})
-	if err != nil {
-		log.Errorf("Failed creating perf event array: %s", err)
-		return
-	}
-	defer events.Close()
+// kallsymsTrigger holds the program and map to notify
+// user space about changes to kallsyms.
+type kallsymsTrigger struct {
+	Program *cebpf.Program `ebpf:"kprobe__kallsyms"`
+	Map     *cebpf.Map     `ebpf:"report_kallsyms"`
+}
 
-	rd, err := perf.NewReader(events, os.Getpagesize())
+// prepareKallsymsTrigger loads and assigns the relevant ebpf objects to notify
+// user space about changes to kallsyms.
+func prepareKallsymsTrigger() (*kallsymsTrigger, error) {
+	coll, err := support.LoadCollectionSpec()
 	if err != nil {
-		log.Errorf("Failed creating event reader: %s", err)
-		return
+		return nil, fmt.Errorf("failed to load specification for kallsyms trigger: %v", err)
+	}
+
+	// The ebpf binary blob holds more programs and maps than should be loaded
+	// at this point. Therefore remove all maps and programs, that are not
+	// relevant for kallsyms handling.
+	for mapName := range coll.Maps {
+		if mapName != "report_kallsyms" && mapName != ".rodata.var" {
+			delete(coll.Maps, mapName)
+		}
+	}
+
+	for progName := range coll.Programs {
+		if progName != "kprobe__kallsyms" {
+			delete(coll.Programs, progName)
+		}
+	}
+
+	var obj kallsymsTrigger
+	if err := coll.LoadAndAssign(&obj, nil); err != nil {
+		return nil, err
+	}
+
+	return &obj, nil
+}
+
+// kallsymsTrigger attaches the kallsyms trigger to the relevant kprobe and
+// listens for its notifications.
+func (s *Symbolizer) kallsymsTrigger(ctx context.Context, obj *kallsymsTrigger) {
+	defer func() {
+		obj.Program.Close()
+		obj.Map.Close()
+	}()
+
+	rd, err := perf.NewReader(obj.Map, os.Getpagesize())
+	if err != nil {
+		log.Fatalf("creating event reader: %s", err)
 	}
 	defer rd.Close()
 
-	var progSpec = &ebpf.ProgramSpec{
-		Name:    "ksym_update_trigger",
-		Type:    ebpf.Kprobe,
-		License: "GPL",
-	}
-
-	// Minimal eBPF program that writes the static value '1' to the perf event
-	// array on each event. The arbitrary value of '1' is used just to notify
-	// the user space about changes to kallsyms.
-	progSpec.Instructions = asm.Instructions{
-		// store the integer 1 at FP[-8]
-		asm.Mov.Imm(asm.R2, 1),
-		asm.StoreMem(asm.RFP, -8, asm.R2, asm.Word),
-
-		// load registers with arguments for call of FnPerfEventOutput
-		asm.LoadMapPtr(asm.R2, events.FD()), // file descriptor of the perf event array
-		asm.LoadImm(asm.R3, 0xffffffff, asm.DWord),
-		asm.Mov.Reg(asm.R4, asm.RFP),
-		asm.Add.Imm(asm.R4, -8),
-		asm.Mov.Imm(asm.R5, 4),
-
-		// call FnPerfEventOutput, an eBPF kernel helper
-		asm.FnPerfEventOutput.Call(),
-
-		// set exit code to 0
-		asm.Mov.Imm(asm.R0, 0),
-		asm.Return(),
-	}
-
-	prog, err := ebpf.NewProgram(progSpec)
+	kp, err := link.Kprobe("bpf_ksym_add", obj.Program, nil)
 	if err != nil {
-		log.Errorf("Failed creating ebpf program: %s", err)
-		return
-	}
-	defer prog.Close()
-
-	kp, err := link.Kprobe("bpf_ksym_add", prog, nil)
-	if err != nil {
-		log.Errorf("Failed opening kprobe: %s", err)
+		log.Errorf("Failed opening kprobe for kallsyms trigger: %s", err)
 		return
 	}
 	defer kp.Close()
@@ -712,7 +708,11 @@ func (s *Symbolizer) StartMonitor(ctx context.Context) error {
 	if major < 5 || (major == 5 && minor < 8) {
 		log.Infof("Monitoring kallsyms is supported only for Linux kernel 5.8 or greater")
 	} else {
-		go s.bpfKsymsTrigger(ctx)
+		trigger, err := prepareKallsymsTrigger()
+		if err != nil {
+			return err
+		}
+		go s.kallsymsTrigger(ctx, trigger)
 	}
 	return nil
 }
