@@ -1020,6 +1020,8 @@ typedef struct StackDelta {
 #define UNWIND_COMMAND_SIGNAL        3
 // Unwind using standard frame pointer
 #define UNWIND_COMMAND_FRAME_POINTER 4
+// Unwind past the Go runtime.morestack function
+#define UNWIND_COMMAND_GO_MORESTACK  5
 
 // StackDeltaPageKey is the look up key for stack delta page map.
 typedef struct StackDeltaPageKey {

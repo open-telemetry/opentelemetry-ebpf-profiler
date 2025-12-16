@@ -52,6 +52,12 @@ var UnwindInfoLR = UnwindInfo{
 	AuxBaseReg: support.UnwindRegLr,
 }
 
+// UnwindInfoGoMorestack contains the description to unwind past the Go
+// "runtime.morestack" function.
+var UnwindInfoGoMorestack = UnwindInfo{
+	Param: support.UnwindCommandGoMorestack,
+}
+
 // StackDelta defines the start address for the delta interval, along with
 // the unwind information.
 type StackDelta struct {

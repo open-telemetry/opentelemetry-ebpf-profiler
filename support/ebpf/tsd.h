@@ -2,6 +2,8 @@
 #define OPTI_TSD_H
 
 #include "bpfdefs.h"
+#include "types.h"
+#include "util.h"
 
 // tpbase_offset is declared in native_stack_trace.ebpf.c
 extern u64 tpbase_offset;

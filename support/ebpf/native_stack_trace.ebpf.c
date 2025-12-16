@@ -331,9 +331,10 @@ unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool 
 // is marked with UNWIND_COMMAND_STOP which marks entry points (main function,
 // thread spawn function, signal handlers, ...).
 #if defined(__x86_64__)
-static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
 {
-  *stop = false;
+  UnwindState *state = &record->state;
+  *stop              = false;
 
   u32 unwindInfo = 0;
   u64 rt_regs[18];
@@ -383,6 +384,11 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
         goto err_native_pc_read;
       }
       goto frame_ok;
+    case UNWIND_COMMAND_GO_MORESTACK:
+      if (!unwinder_unwind_go_morestack(record)) {
+        goto err_native_pc_read;
+      }
+      goto frame_ok;
     default: return ERR_UNREACHABLE;
     }
   } else {
@@ -427,9 +433,10 @@ frame_ok:
   return ERR_OK;
 }
 #elif defined(__aarch64__)
-static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode unwind_one_frame(struct PerCPURecord *record, bool *stop)
 {
-  *stop = false;
+  UnwindState *state = &record->state;
+  *stop              = false;
 
   u32 unwindInfo = 0;
   int addrDiff   = 0;
@@ -471,6 +478,11 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
     case UNWIND_COMMAND_STOP: *stop = true; return ERR_OK;
     case UNWIND_COMMAND_FRAME_POINTER:
       if (!unwinder_unwind_frame_pointer(state)) {
+        goto err_native_pc_read;
+      }
+      goto frame_ok;
+    case UNWIND_COMMAND_GO_MORESTACK:
+      if (!unwinder_unwind_go_morestack(record)) {
         goto err_native_pc_read;
       }
       goto frame_ok;
@@ -584,7 +596,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 
     // Unwind the native frame using stack deltas. Stop if no next frame.
     bool stop;
-    error = unwind_one_frame(&record->state, &stop);
+    error = unwind_one_frame(record, &stop);
     if (error || stop) {
       break;
     }

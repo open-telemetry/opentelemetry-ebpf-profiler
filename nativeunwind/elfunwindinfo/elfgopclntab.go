@@ -39,6 +39,8 @@ var goFunctionsStopDelta = map[string]*sdtypes.UnwindInfo{
 	// signal return frame
 	"runtime.sigreturn":            &sdtypes.UnwindInfoSignal,
 	"runtime.sigreturn__sigaction": &sdtypes.UnwindInfoSignal,
+
+	"runtime.morestack": &sdtypes.UnwindInfoGoMorestack,
 }
 
 const (

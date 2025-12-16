@@ -7,6 +7,7 @@
 #include "errors.h"
 #include "extmaps.h"
 #include "frametypes.h"
+#include "go_support.h"
 #include "types.h"
 
 #if defined(TESTING_COREDUMP)
@@ -40,17 +41,6 @@ extern u32 task_stack_offset;
 
 // stack_ptregs_offset is declared in native_stack_trace.ebpf.c
 extern u32 stack_ptregs_offset;
-
-// increment_metric increments the value of the given metricID by 1
-static inline EBPF_INLINE void increment_metric(u32 metricID)
-{
-  u64 *count = bpf_map_lookup_elem(&metrics, &metricID);
-  if (count) {
-    ++*count;
-  } else {
-    DEBUG_PRINT("Failed to lookup metrics map for metricID %d", metricID);
-  }
-}
 
 // Send immediate notifications for event triggers to Go.
 // Notifications for GENERIC_PID and RELOAD_KALLSYMS will be
@@ -305,6 +295,44 @@ static inline EBPF_INLINE bool unwinder_unwind_frame_pointer(UnwindState *state)
   state->fp = regs[0];
   state->pc = regs[1];
   unwinder_mark_nonleaf_frame(state);
+  return true;
+}
+
+static inline EBPF_INLINE bool unwinder_unwind_go_morestack(PerCPURecord *record)
+{
+  GoLabelsOffsets *offs = bpf_map_lookup_elem(&go_labels_procs, &record->trace.pid);
+  if (!offs) {
+    DEBUG_PRINT("morestack: failed to read go labels offsets");
+    return false;
+  }
+  void *mptr = get_go_m_ptr(offs, &record->state);
+  DEBUG_PRINT("morestack: curg offset: %d, mptr: %llx\n", offs->curg, (u64)mptr);
+
+  size_t curg_ptr_addr;
+  if (bpf_probe_read_user(&curg_ptr_addr, sizeof(void *), (void *)((u64)mptr + offs->curg))) {
+    DEBUG_PRINT("morestack: failed to read value for m_ptr->curg");
+    return false;
+  }
+
+  DEBUG_PRINT("morestack: curg is %lx\n", curg_ptr_addr);
+
+  // Valid since go 1.25:
+  // https://github.com/golang/go/blob/7b60d06739/src/runtime/runtime2.go#L303-L322
+  // On previous versions, there was an extra "ret" value, so "bp" is one spot later.
+  // TODO - make this work on earlier versions.
+  unsigned long regs[6];
+  if (bpf_probe_read_user(regs, sizeof(regs), (void *)(curg_ptr_addr + 56 /* XXX */))) {
+    DEBUG_PRINT("morestack: failed to read regs");
+    return false;
+  }
+  record->state.sp = regs[0];
+  record->state.pc = regs[1];
+  record->state.fp = regs[5];
+  DEBUG_PRINT(
+    "morestack: success, sp is %llx, pc is %llx, fp is %llx",
+    record->state.sp,
+    record->state.pc,
+    record->state.fp);
   return true;
 }
 
