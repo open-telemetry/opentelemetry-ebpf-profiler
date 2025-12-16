@@ -8,10 +8,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1051,13 +1054,37 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
 		}
 	}
 
-	if ptr.Custom_labels.Len > 0 {
-		trace.CustomLabels = make(map[libpf.String]libpf.String, int(ptr.Custom_labels.Len))
-		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
-			lbl := ptr.Custom_labels.Labels[i]
-			key := goString(lbl.Key[:])
-			val := goString(lbl.Val[:])
-			trace.CustomLabels[key] = val
+	switch ptr.Custom_labels_type {
+	case support.CustomLabelsTypeGo:
+		customLabels := (*support.CustomLabelsArray)(unsafe.Pointer(&ptr.Custom_labels_data))
+		if customLabels.Len > 0 {
+			trace.CustomLabels = make(map[libpf.String]libpf.String, int(customLabels.Len))
+			for i := 0; i < int(customLabels.Len); i++ {
+				lbl := customLabels.Labels[i]
+				key := goString(lbl.Key[:])
+				val := goString(lbl.Val[:])
+				trace.CustomLabels[key] = val
+			}
+		}
+	case support.CustomLabelsTypeNative:
+		trace.CustomLabels = procMeta.ProcessContextInfo.DecodeThreadLabels(ptr.Custom_labels_data.Data[:ptr.Custom_labels_data.Size])
+	}
+
+	if ptr.Apm_span_id != libpf.InvalidAPMSpanID {
+		if trace.CustomLabels == nil {
+			trace.CustomLabels = make(map[libpf.String]libpf.String)
+		}
+
+		spanID := binary.LittleEndian.Uint64(ptr.Apm_span_id[:])
+		trace.CustomLabels[libpf.Intern("span id")] = libpf.Intern(strconv.FormatUint(spanID, 10))
+
+		if ptr.Apm_transaction_id != libpf.InvalidAPMSpanID {
+			rootSpanID := binary.LittleEndian.Uint64(ptr.Apm_transaction_id[:])
+			trace.CustomLabels[libpf.Intern("local root span id")] = libpf.Intern(strconv.FormatUint(rootSpanID, 10))
+		}
+
+		if ptr.Apm_trace_id != libpf.InvalidAPMTraceID {
+			trace.CustomLabels[libpf.Intern("trace id")] = libpf.Intern(hex.EncodeToString(ptr.Apm_trace_id[:]))
 		}
 	}
 

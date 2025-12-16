@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"structs"
 
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 	"google.golang.org/protobuf/proto"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
-	processcontext "go.opentelemetry.io/ebpf-profiler/proto/processcontext"
+	"go.opentelemetry.io/ebpf-profiler/proto/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
@@ -29,6 +32,10 @@ const (
 	// Maximum retries for concurrent updates
 	maxRetries = 3
 
+	threadCtxSchemaVersionKey       = "threadlocal.schema_version"
+	supportedThreadCtxSchemaVersion = "tlsdesc_v1_dev"
+	threadCtxKeyMapKey              = "threadlocal.attribute_key_map"
+
 	MemfdContextMappingName      = "/memfd:OTEL_CTX"
 	AnonymousContextMappingName  = "[anon:OTEL_CTX]"
 	AnonSharedContextMappingName = "[anon_shmem:OTEL_CTX]"
@@ -43,10 +50,20 @@ var (
 
 	// ErrNoUpdate indicates the ProcessContext has not been updated since the last published.
 	ErrNoUpdate = errors.New("ProcessContext has not been updated since the last published")
+
+	ErrThreadContextInfoNotFound = errors.New("thread context info not found")
 )
 
+type AttributeKeyMap []libpf.String
+
+type ThreadContextInfo struct {
+	schemaVersion   string
+	attributeKeyMap AttributeKeyMap
+}
+
 type ProcessContextInfo struct {
-	Context       *processcontext.ProcessContext
+	Resource      *resourcepb.Resource
+	ThreadContext *ThreadContextInfo
 	PublishedAtNs uint64
 }
 
@@ -177,10 +194,75 @@ func readProcessContext(rm remotememory.RemoteMemory, hdr processContextHeader) 
 	}
 
 	// Deserialize the ProcessContext protobuf message
-	ctx := &processcontext.ProcessContext{}
-	if err := proto.Unmarshal(payloadBytes, ctx); err != nil {
+	ctx := processcontext.ProcessContext{}
+	if err := proto.Unmarshal(payloadBytes, &ctx); err != nil {
 		return ProcessContextInfo{}, fmt.Errorf("failed to unmarshal ProcessContext: %w", err)
 	}
 
-	return ProcessContextInfo{Context: ctx, PublishedAtNs: hdr.PublishedAtNs}, nil
+	threadCtx, err := readThreadContextInfo(ctx.ExtraAttributes)
+	if err != nil && !errors.Is(err, ErrThreadContextInfoNotFound) {
+		log.Debugf("failed to read thread context: %v", err)
+	}
+
+	return ProcessContextInfo{Resource: ctx.Resource, ThreadContext: threadCtx, PublishedAtNs: hdr.PublishedAtNs}, nil
+}
+
+func readThreadContextInfo(extraAttributes []*commonpb.KeyValue) (*ThreadContextInfo, error) {
+	var attributeKeyMap AttributeKeyMap
+	var schemaVersion string
+	for _, attr := range extraAttributes {
+		switch attr.Key {
+		case threadCtxSchemaVersionKey:
+			schemaVersion = attr.Value.GetStringValue()
+			if schemaVersion != supportedThreadCtxSchemaVersion {
+				return nil, fmt.Errorf("unsupported thread context schema version: %s", attr.Value.String())
+			}
+		case threadCtxKeyMapKey:
+			arrayValue := attr.Value.GetArrayValue()
+			if arrayValue == nil {
+				return nil, fmt.Errorf("thread context attribute key map is not an array")
+			}
+			for _, item := range arrayValue.Values {
+				stringValue := item.GetStringValue()
+				if stringValue == "" {
+					return nil, fmt.Errorf("invalid thread context attribute: %s", attr.Value.String())
+				}
+				attributeKeyMap = append(attributeKeyMap, libpf.Intern(stringValue))
+			}
+		}
+	}
+	if schemaVersion == "" {
+		return nil, ErrThreadContextInfoNotFound
+	}
+	return &ThreadContextInfo{schemaVersion: schemaVersion, attributeKeyMap: attributeKeyMap}, nil
+}
+
+func (t *ThreadContextInfo) GetSchemaVersion() string {
+	return t.schemaVersion
+}
+
+func (t *ThreadContextInfo) DecodeThreadLabels(data []byte) map[libpf.String]libpf.String {
+	labels := make(map[libpf.String]libpf.String)
+	for len(data) >= 2 {
+		keyIndex := int(data[0])
+		valueLen := int(data[1])
+		if len(data) < 2+valueLen {
+			break
+		}
+		val := data[2 : 2+valueLen]
+		valStr := libpf.Intern(pfunsafe.ToString(val))
+		data = data[2+valueLen:]
+		if keyIndex >= len(t.attributeKeyMap) {
+			continue
+		}
+		labels[t.attributeKeyMap[keyIndex]] = valStr
+	}
+	return labels
+}
+
+func (p *ProcessContextInfo) DecodeThreadLabels(data []byte) map[libpf.String]libpf.String {
+	if p.ThreadContext == nil {
+		return nil
+	}
+	return p.ThreadContext.DecodeThreadLabels(data)
 }

@@ -61,7 +61,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x68
+	MetricIDBeginCumulative = 0x6f
 )
 
 const (
@@ -98,6 +98,12 @@ const (
 	TraceOriginProbe    = 0x3
 )
 
+const (
+	CustomLabelsTypeNone   = 0x0
+	CustomLabelsTypeNative = 0x1
+	CustomLabelsTypeGo     = 0x2
+)
+
 type ApmSpanID [8]byte
 type ApmTraceID [16]byte
 type CustomLabel struct {
@@ -107,6 +113,15 @@ type CustomLabel struct {
 type CustomLabelsArray struct {
 	Len    uint32
 	Labels [10]CustomLabel
+}
+type CustomLabelsData struct {
+	Size uint16
+	Data [642]uint8
+}
+type DTVInfo struct {
+	Offset     int16
+	Multiplier uint8
+	Pad_cgo_0  [1]byte
 }
 type Event struct {
 	Type uint32
@@ -158,8 +173,11 @@ type Trace struct {
 	Ktime              uint64
 	Comm               [16]uint8
 	Apm_transaction_id [8]byte
+	Apm_span_id        [8]byte
 	Apm_trace_id       [16]byte
-	Custom_labels      CustomLabelsArray
+	Custom_labels_type uint8
+	Pad_cgo_0          [3]byte
+	Custom_labels_data CustomLabelsData
 	Kernel_stack_id    int32
 	Frame_data_len     uint16
 	Num_frames         uint16
@@ -300,6 +318,11 @@ type RubyProcInfo struct {
 	Running_ec                   uint16
 	Pad_cgo_0                    [4]byte
 }
+type ThreadContextProcInfo struct {
+	Tls_offset    int32
+	Dtv_offset    int32
+	Module_offset int32
+}
 type V8ProcInfo struct {
 	Version                      uint32
 	Type_JSFunction_first        uint16
@@ -325,7 +348,7 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0x62d0
+	Sizeof_Trace      = 0x62e0
 
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4

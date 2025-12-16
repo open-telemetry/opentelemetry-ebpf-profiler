@@ -130,7 +130,7 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(headerAddr, header)
 				mock.writeAt(payloadAddr, payload)
 			},
-			expectedResult: ProcessContextInfo{Context: &testProcessContext, PublishedAtNs: 123456789},
+			expectedResult: ProcessContextInfo{Resource: testProcessContext.Resource, PublishedAtNs: 123456789},
 		},
 		{
 			name: "read error",
@@ -234,7 +234,7 @@ func TestProcessContext_Read(t *testing.T) {
 				require.NotNil(t, ctx)
 				require.EqualExportedValues(t, &tt.expectedResult, &ctx)
 			} else {
-				assert.Nil(t, ctx.Context)
+				assert.Nil(t, ctx.Resource)
 				assert.Zero(t, ctx.PublishedAtNs)
 				assert.Error(t, err)
 				if tt.expectedErr != nil {
@@ -361,7 +361,7 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			result, err := ReadProcessContext(m, proc.GetRemoteMemory(), 0)
 			require.NoError(t, err)
 			require.EqualExportedValues(t,
-				ProcessContextInfo{Context: &testProcessContext, PublishedAtNs: 123456789},
+				ProcessContextInfo{Resource: testProcessContext.Resource, PublishedAtNs: 123456789},
 				result)
 
 		})
