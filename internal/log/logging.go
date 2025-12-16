@@ -8,6 +8,9 @@ import (
 	"sync/atomic"
 )
 
+// programLevel controls the minimum log level for all loggers.
+var programLevel = new(slog.LevelVar) // Info by default
+
 // globalLogger holds a reference to the [slog.Logger] used within
 // go.opentelemetry.io/ebpf-profiler.
 //
@@ -15,7 +18,7 @@ import (
 // interface. This logger will show messages at the Info Level.
 var globalLogger = func() *atomic.Pointer[slog.Logger] {
 	l := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: programLevel,
 	}))
 
 	p := new(atomic.Pointer[slog.Logger])
@@ -23,16 +26,16 @@ var globalLogger = func() *atomic.Pointer[slog.Logger] {
 	return p
 }()
 
-// SetLogger sets the global Logger to l.
+// SetLogger sets the global logger to l while respecting programLevel's log
+// level. When default logger is overidden, SetLevel has no effect.
 func SetLogger(l slog.Logger) {
 	globalLogger.Store(&l)
 }
 
-// SetDebugLogger configures the global logger to write debug-level logs to stderr.
-func SetDebugLogger() {
-	SetLogger(*slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	})))
+// SetLevel dynamically changes the logger's log level, excluding
+// those set via SetLogger.
+func SetLevel(level slog.Level) {
+	programLevel.Set(level)
 }
 
 // getLogger returns the global logger.

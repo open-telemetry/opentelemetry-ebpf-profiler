@@ -30,7 +30,7 @@ jobs:
           target_arch: ${{ matrix.target_arch }}
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@fe4161a26a8629af62121b670040955b330f9af2 # v4.31.6
+        uses: github/codeql-action/init@1b168cd39490f61582a9beae412bb7057a6b2c4e # v4.31.8
         with:
           languages: go
 
@@ -39,7 +39,7 @@ jobs:
           make TARGET_ARCH=${{ matrix.target_arch }}
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@fe4161a26a8629af62121b670040955b330f9af2 # v4.31.6
+        uses: github/codeql-action/analyze@1b168cd39490f61582a9beae412bb7057a6b2c4e # v4.31.8
         with:
             category: "/language:Go"
         timeout-minutes: 10
