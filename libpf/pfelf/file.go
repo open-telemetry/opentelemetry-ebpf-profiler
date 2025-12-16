@@ -945,6 +945,7 @@ func (f *File) readAndMatchSymbol(n uint32, name libpf.SymbolName) (libpf.Symbol
 		Name:    name,
 		Address: libpf.SymbolValue(sym.Value),
 		Size:    sym.Size,
+		Info:    sym.Info,
 	}, true
 }
 
@@ -1101,6 +1102,7 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 				Name:    libpf.SymbolName(name),
 				Address: libpf.SymbolValue(sym.Value),
 				Size:    sym.Size,
+				Info:    sym.Info,
 			}) {
 				break
 			}

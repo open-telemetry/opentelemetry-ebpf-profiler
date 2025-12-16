@@ -13,11 +13,13 @@ import (
 )
 
 type TSDInfo = support.TSDInfo
+type DTVInfo = support.DTVInfo
 
 // LibcInfo contains introspection information extracted from the C-library
 type LibcInfo struct {
 	// TSDInfo is the TSDInfo extracted for this C-library
 	TSDInfo TSDInfo
+	DTVInfo DTVInfo
 }
 
 // This code analyzes the C-library provided POSIX defined function which is used
@@ -75,14 +77,43 @@ func IsPotentialTSDDSO(filename string) bool {
 	return libcRegex.MatchString(filename)
 }
 
+func IsGlibc(ef *pfelf.File) bool {
+	// gnu_get_libc_version is only defined in glibc
+	_, err := ef.LookupSymbol("gnu_get_libc_version")
+	return err == nil
+}
+
 func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
 	tsdinfo, err := extractTSDInfo(ef)
 	if err != nil {
 		return nil, err
 	}
 
+	var dtvOffset int16
+	var dtvMultiplier uint8
+
+	if IsGlibc(ef) {
+		dtvMultiplier = 16 // 16 bytes for glibc
+		if ef.Machine == elf.EM_AARCH64 {
+			dtvOffset = 0
+		} else {
+			dtvOffset = 8
+		}
+	} else {
+		dtvMultiplier = 8 // 8 bytes for musl
+		if ef.Machine == elf.EM_AARCH64 {
+			dtvOffset = -8 // on aarch64, TP points after the TCB
+		} else {
+			dtvOffset = 8
+		}
+	}
+
 	return &LibcInfo{
 		TSDInfo: tsdinfo,
+		DTVInfo: DTVInfo{
+			Offset:     dtvOffset, // offset of the dtv pointer from the tpbase pointer, same for musl/glibc amd64/arm64
+			Multiplier: dtvMultiplier,
+		},
 	}, nil
 }
 

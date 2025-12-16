@@ -125,6 +125,13 @@ struct apm_int_procs_t {
   __uint(max_entries, 128);
 } apm_int_procs SEC(".maps");
 
+struct thread_context_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, ThreadContextProcInfo);
+  __uint(max_entries, 128);
+} thread_context_procs SEC(".maps");
+
 // filter_error_frames is set during load time.
 BPF_RODATA_VAR(bool, filter_error_frames, false)
 
@@ -237,6 +244,86 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
     corr_buf.trace_flags);
 }
 
+static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
+{
+  u32 pid                     = trace->pid; // verifier needs this to be on stack on 4.15 kernel
+  ThreadContextProcInfo *proc = bpf_map_lookup_elem(&thread_context_procs, &pid);
+  if (!proc) {
+    return;
+  }
+
+  u64 tsd_base;
+  if (tsd_get_base((void **)&tsd_base) != 0) {
+    increment_metric(metricID_UnwindThreadContextErrReadTsdBase);
+    DEBUG_PRINT("Failed to get TSD base for native thread labels");
+    return;
+  }
+
+  if (proc->module_offset != 0) {
+    // dynamic TLS is used, base address is dtv[module_id]
+    // dtv is at offset proc->dtv_offset from tsd_base
+    u64 dtv_ptr;
+    if (bpf_probe_read_user(&dtv_ptr, sizeof(dtv_ptr), (void *)(tsd_base + proc->dtv_offset))) {
+      increment_metric(metricID_UnwindThreadContextErrReadDtvPtr);
+      DEBUG_PRINT("Failed to read DTV pointer");
+      return;
+    }
+
+    if (bpf_probe_read_user(&tsd_base, sizeof(tsd_base), (void *)(dtv_ptr + proc->module_offset))) {
+      increment_metric(metricID_UnwindThreadContextErrReadModuleTlsBase);
+      DEBUG_PRINT("Failed to read module TLS base from DTV");
+      return;
+    }
+  }
+
+  DEBUG_PRINT("Thread labels ptr should be at 0x%llx", tsd_base + proc->tls_offset);
+
+  u64 thread_context_buf_ptr;
+  if (bpf_probe_read_user(
+        &thread_context_buf_ptr,
+        sizeof(thread_context_buf_ptr),
+        (void *)(tsd_base + proc->tls_offset))) {
+    increment_metric(metricID_UnwindThreadContextErrReadThreadCtxBufPtr);
+    DEBUG_PRINT("Failed to read custom labels buffer pointer");
+    return;
+  }
+
+  ThreadContextBuf thread_context_buf;
+  if (bpf_probe_read_user(
+        &thread_context_buf, sizeof(thread_context_buf), (void *)thread_context_buf_ptr)) {
+    increment_metric(metricID_UnwindThreadContextErrReadThreadCtxBuf);
+    DEBUG_PRINT("Failed to read custom labels buffer");
+    return;
+  }
+
+  if (!thread_context_buf.valid) {
+    return;
+  }
+
+  trace->apm_trace_id.as_int.hi = thread_context_buf.trace_id.as_int.hi;
+  trace->apm_trace_id.as_int.lo = thread_context_buf.trace_id.as_int.lo;
+  trace->apm_span_id.as_int     = thread_context_buf.span_id.as_int;
+
+  // Truncate the data size to the size of the custom labels data
+  if (thread_context_buf.attrs_data_size > sizeof(trace->custom_labels_data.data)) {
+    thread_context_buf.attrs_data_size = sizeof(trace->custom_labels_data.data);
+  }
+  if (!bpf_probe_read_user(
+        &trace->custom_labels_data.data,
+        thread_context_buf.attrs_data_size,
+        (void *)(thread_context_buf_ptr + sizeof(thread_context_buf)))) {
+    trace->custom_labels_type      = CUSTOM_LABELS_TYPE_NATIVE;
+    trace->custom_labels_data.size = thread_context_buf.attrs_data_size;
+  } else {
+    increment_metric(metricID_UnwindThreadContextErrReadThreadCtxAttrs);
+  }
+
+  increment_metric(metricID_UnwindThreadContextReadSuccesses);
+
+  // WARN: we print this as little endian
+  DEBUG_PRINT("Thread labels trace ID: %016llX%016llX, span ID: %016llX", trace->apm_trace_id.as_int.hi, trace->apm_trace_id.as_int.lo, trace->apm_span_id.as_int);
+}
+
 // unwind_stop is the tail call destination for PROG_UNWIND_STOP.
 static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 {
@@ -246,6 +333,8 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   Trace *trace       = &record->trace;
   UnwindState *state = &record->state;
 
+  maybe_add_thread_context_info(trace);
+  // TODO: remove apmint once thread context info is fully supported
   maybe_add_apm_info(trace);
 
   // If the stack is otherwise empty, push an error for that: we should
