@@ -311,12 +311,26 @@ int pvalloc_exit(struct pt_regs *ctx) {
 // func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
 SEC("uprobe/mallocgc_register")
 int mallocgc_register_enter(struct pt_regs *ctx) {
-    u64 size = (u64)PT_REGS_PARM1(ctx);
-
+    u64 size = (u64)GO_PARM1(ctx);
     u64 id  = bpf_get_current_pid_tgid();
     u32 tid = id & 0xFFFFFFFF;
     u32 pid = id >> 32;
     u64 ts = bpf_ktime_get_ns();
+    u32 memKey = 1;
+    SystemConfig *memcfg = bpf_map_lookup_elem(&system_config, &memKey);
+    if (memcfg && memcfg->inverse_pac_mask > 0) {
+        u64 s = size;
+        u64* current_size = bpf_map_lookup_elem(&thread_alloc_size, &tid);
+        if (current_size) {
+            s += *current_size;
+        }
+        if (s < memcfg->inverse_pac_mask) {
+            bpf_map_update_elem(&thread_alloc_size, &tid, &s, BPF_ANY);
+            return 0;
+        }
+        s = 0;
+        bpf_map_update_elem(&thread_alloc_size, &tid, &s, BPF_ANY);
+    }
     return collect_trace(ctx, TRACE_HEAP_ALLOC, pid, tid, ts, 1, size, 0);
 }
 
@@ -331,6 +345,21 @@ int mallocgc_stack_enter(struct pt_regs *ctx) {
     u32 tid = id & 0xFFFFFFFF;
     u32 pid = id >> 32;
     u64 ts = bpf_ktime_get_ns();
+    u32 memKey = 1;
+    SystemConfig *memcfg = bpf_map_lookup_elem(&system_config, &memKey);
+    if (memcfg && memcfg->inverse_pac_mask > 0) {
+        u64 s = size;
+        u64* current_size = bpf_map_lookup_elem(&thread_alloc_size, &tid);
+        if (current_size) {
+            s += *current_size;
+        }
+        if (s < memcfg->inverse_pac_mask) {
+            bpf_map_update_elem(&thread_alloc_size, &tid, &s, BPF_ANY);
+            return 0;
+        }
+        s = 0;
+        bpf_map_update_elem(&thread_alloc_size, &tid, &s, BPF_ANY);
+    }
     return collect_trace(ctx, TRACE_HEAP_ALLOC, pid, tid, ts, 1, size, 0);
 }
 

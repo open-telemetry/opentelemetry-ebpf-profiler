@@ -30,14 +30,14 @@ type (
 var _ colasoft.SymbolReporter = (*SampleAttrProducer)(nil)
 
 func (s *SampleAttrProducer) CollectExtraSampleMeta(trace *libpf.Trace, meta *samples.TraceEventMeta) any {
-	log.Debugf("\tCollectExtraSampleMeta: %x", meta.Timestamp)
+	log.Infof("\tCollectExtraSampleMeta: %x", meta.Timestamp)
 	s.extra[trace.Hash] = trace
 	return trace.Hash
 }
 
 func (s *SampleAttrProducer) ExtraSampleAttrs(attrMgr *samples.AttrTableManager, meta any) []int32 {
 	key := meta.(libpf.TraceHash)
-	log.Debugf("\tExtraSampleAttrs: %x", key)
+	log.Infof("\tExtraSampleAttrs: %x", key)
 	trace := s.extra[key]
 	fts := make([]string, 0)
 	for _, ft := range trace.FrameTypes {
@@ -173,7 +173,11 @@ func main() {
 	defer cancel()
 
 	c := colasoft.NewCollector(attrs)
-	if err := c.Start(ctx, 20, 0, time.Second*5, nil, 5000, time.Minute, true, false, []libpf.PID{}, 1024*512); err != nil {
+	cfg := colasoft.StartCfg{0, 0, 5000, time.Second * 5,
+		time.Minute, map[libpf.PID]struct{}{}, map[libpf.PID]struct{}{},
+		1024 * 2048}
+
+	if err := c.Start(ctx, cfg); err != nil {
 		log.Fatal(err)
 	}
 	<-ctx.Done()

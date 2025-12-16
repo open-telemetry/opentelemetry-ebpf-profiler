@@ -97,7 +97,7 @@ type ProcessManager struct {
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
 
-	targetPids []libpf.PID
+	targetPids map[libpf.PID]struct{}
 }
 
 // Mapping represents an executable memory mapping of a process.
@@ -151,6 +151,7 @@ type MemProfileMeta struct {
 	MinorVersion int
 	LibcPath     string
 	ExecAbsPath  string
+	ItData       interpreter.Data
 }
 
 // processInfo contains information about the executable mappings

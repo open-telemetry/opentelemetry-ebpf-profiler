@@ -129,9 +129,8 @@ type Tracer struct {
 
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
-
-	memProfileHooks map[libpf.PID][]link.Link
-	memProfileBlock uint64
+	memProfileHooks        xsync.RWMutex[map[libpf.PID][]*link.Link]
+	memProfileBlock        uint64
 }
 
 type Config struct {
@@ -160,9 +159,10 @@ type Config struct {
 	// OffCPUThreshold is the user defined threshold for off-cpu profiling.
 	OffCPUThreshold uint32
 	// MemProfile switch memprofile
-	MemProfile bool
 	// TargetPIDs is a list of PIDs to target for profiling.
-	TargetPIDs      []libpf.PID
+	TargetPIDs    map[libpf.PID]struct{}
+	MemTargetPIDs map[libpf.PID]struct{}
+	// 每分配MemProfileBlock字节的内存就采集一次
 	MemProfileBlock uint64
 }
 
@@ -325,6 +325,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	}
 
 	perfEventList := []*perf.Event{}
+	memProfileHooks := map[libpf.PID][]*link.Link{}
 
 	return &Tracer{
 		processManager:         processManager,
@@ -343,7 +344,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		samplesPerSecond:       cfg.SamplesPerSecond,
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
-		memProfileHooks:        make(map[libpf.PID][]link.Link),
+		memProfileHooks:        xsync.NewRWMutex(memProfileHooks),
 	}, nil
 }
 
@@ -361,6 +362,17 @@ func (t *Tracer) Close() {
 	}
 	*events = nil
 	t.perfEntrypoints.WUnlock(&events)
+
+	memProfileHooks := t.memProfileHooks.WLock()
+	for _, links := range *memProfileHooks {
+		for _, l := range links {
+			if err := (*l).Close(); err != nil {
+				log.Errorf("Failed to close mem profile hook: %v", err)
+			}
+		}
+	}
+	memProfileHooks = nil
+	t.memProfileHooks.WUnlock(&memProfileHooks)
 
 	// Avoid resource leakage by closing all kernel hooks.
 	for hookPoint, hook := range t.hooks {
@@ -509,7 +521,7 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 		}
 	}
 
-	if cfg.MemProfile {
+	if cfg.MemProfileBlock > 0 {
 		var progs []progLoaderHelper
 		cprogss := []string{"malloc_enter", "malloc_exit", "free_enter",
 			"calloc_enter", "calloc_exit", "realloc_enter", "realloc_exit", "mmap_enter", "mmap_exit", "munmap_enter",
@@ -1098,9 +1110,6 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 			ReturnAddress: rawFrame.return_address != 0,
 		}
 	}
-	if trace.Origin == support.TraceOriginHeap {
-		fmt.Printf("trace: %v \n", trace)
-	}
 	return trace
 }
 
@@ -1284,7 +1293,7 @@ func (t *Tracer) AttachTracer() error {
 func (t *Tracer) EnableProfiling() error {
 	events := t.perfEntrypoints.WLock()
 	defer t.perfEntrypoints.WUnlock(&events)
-	if len(*events) == 0 && len(t.memProfileHooks) == 0 {
+	if len(*events) == 0 && t.memProfileBlock == 0 {
 		return errors.New("no perf events available to enable for profiling")
 	}
 	for id, event := range *events {
@@ -1394,6 +1403,6 @@ func (t *Tracer) TraceProcessor() tracehandler.TraceProcessor {
 	return t.processManager
 }
 
-func (t *Tracer) SyncTargetPIDs(targetPids []libpf.PID) error {
+func (t *Tracer) SyncTargetPIDs(targetPids map[libpf.PID]struct{}) error {
 	return t.processManager.SyncTargetPids(targetPids)
 }

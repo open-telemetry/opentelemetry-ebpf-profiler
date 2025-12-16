@@ -150,7 +150,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	traceOutChan chan<- *host.Trace) func() []metrics.Metric {
 	eventsMap := t.ebpfMaps["trace_events"]
 	eventReader, err := perf.NewReader(eventsMap,
-		t.samplesPerSecond*int(unsafe.Sizeof(C.Trace{})))
+		(int(t.memProfileBlock/1024)+t.samplesPerSecond)*int(unsafe.Sizeof(C.Trace{})))
 	if err != nil {
 		log.Fatalf("Failed to setup perf reporting via %s: %v", eventsMap, err)
 	}

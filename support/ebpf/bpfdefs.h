@@ -147,6 +147,7 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
 #endif // OPTI_BPFDEFS_H
 
 #if defined(__x86_64__)
+#define GO_PARM1(ctx)	    ((ctx)->ax)
 #define PT_REGS_PARM1(ctx)	((ctx)->di)
 #define PT_REGS_PARM2(ctx)	((ctx)->si)
 #define PT_REGS_PARM3(ctx)	((ctx)->dx)
@@ -161,6 +162,7 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
 #endif
 
 #if defined(__aarch64__)
+#define GO_PARM1(x)	        ((x)->regs[0])
 #define PT_REGS_PARM1(x)	((x)->regs[0])
 #define PT_REGS_PARM2(x)	((x)->regs[1])
 #define PT_REGS_PARM3(x)	((x)->regs[2])

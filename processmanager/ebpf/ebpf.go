@@ -92,7 +92,7 @@ type EbpfHandler interface {
 	// on LPM trie maps.
 	SupportsLPMTrieBatchOperations() bool
 
-	ConfigureTargetPIDs(pids []libpf.PID) error
+	ConfigureTargetPIDs(pids map[libpf.PID]struct{}) error
 }
 
 type ebpfMapsImpl struct {
@@ -251,7 +251,7 @@ func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map) (EbpfHandler, err
 	}
 
 	if err := probeBatchOperations(cebpf.Array); err == nil {
-		log.Infof("Supports array eBPF map batch operations")
+		log.Tracef("Supports array eBPF map batch operations")
 		impl.hasArrayBatchOperations = true
 	}
 
@@ -839,7 +839,7 @@ func (impl *ebpfMapsImpl) SupportsLPMTrieBatchOperations() bool {
 }
 
 // ConfigureTargetPIDs 设置过滤的进程ID, 如果要开启进程过滤，传入参数中必须要有0,参数为空或者不传入0，则不会过滤进程
-func (impl *ebpfMapsImpl) ConfigureTargetPIDs(pids []libpf.PID) error {
+func (impl *ebpfMapsImpl) ConfigureTargetPIDs(pids map[libpf.PID]struct{}) error {
 	if impl.targetPids == nil {
 		log.Warnf("targetPids is nil, skip configure target pids")
 		return nil
@@ -859,7 +859,7 @@ func (impl *ebpfMapsImpl) ConfigureTargetPIDs(pids []libpf.PID) error {
 	if len(pids) == 0 { // 将所有进程清除，不开启进程过滤，执行全量profile
 		removed = oldKeys
 	} else {
-		for _, pid := range pids {
+		for pid, _ := range pids {
 			if !slices.ContainsFunc(oldKeys, func(u uint32) bool { return u == uint32(pid) }) {
 				add = append(add, uint32(pid))
 				addValues = append(addValues, 1)
@@ -867,12 +867,12 @@ func (impl *ebpfMapsImpl) ConfigureTargetPIDs(pids []libpf.PID) error {
 		}
 
 		for _, oldPid := range oldKeys {
-			if !slices.ContainsFunc(pids, func(u libpf.PID) bool { return uint32(u) == oldPid }) {
+			if _, ok := pids[libpf.PID(oldPid)]; !ok {
 				removed = append(removed, oldPid)
 			}
 		}
 	}
-	log.Debugf("oldPids: %v, addPids: %v, removedPids: %v", oldKeys, add, removed)
+	log.Tracef("oldPids: %v, addPids: %v, removedPids: %v", oldKeys, add, removed)
 	if impl.hasGenericBatchOperations {
 		if _, err := targetPids.BatchDelete(ptrCastMarshaler[uint32](removed), nil); err != nil {
 			err = errors.Join(fmt.Errorf("clean ebpf target_pids: %v failed", removed), err)
