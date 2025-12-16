@@ -52,7 +52,8 @@ get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
       return false;
     }
   }
-  out->len = num_to_read;
+  out->len                         = num_to_read;
+  record->trace.custom_labels_type = CUSTOM_LABELS_TYPE_GO;
 
   return true;
 }
@@ -131,6 +132,7 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr, Go
     }
   }
 
+  record->trace.custom_labels_type = CUSTOM_LABELS_TYPE_GO;
   return true;
 }
 

@@ -1064,14 +1064,20 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
 		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
 	}
 
-	if ptr.Custom_labels.Len > 0 {
-		trace.CustomLabels = make(map[libpf.String]libpf.String, int(ptr.Custom_labels.Len))
-		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
-			lbl := ptr.Custom_labels.Labels[i]
-			key := goString(lbl.Key[:])
-			val := goString(lbl.Val[:])
-			trace.CustomLabels[key] = val
+	switch ptr.Custom_labels_type {
+	case support.CustomLabelsTypeGo:
+		customLabels := (*support.CustomLabelsArray)(unsafe.Pointer(&ptr.Custom_labels_data))
+		if customLabels.Len > 0 {
+			trace.CustomLabels = make(map[libpf.String]libpf.String, int(customLabels.Len))
+			for i := 0; i < int(customLabels.Len); i++ {
+				lbl := customLabels.Labels[i]
+				key := goString(lbl.Key[:])
+				val := goString(lbl.Val[:])
+				trace.CustomLabels[key] = val
+			}
 		}
+	case support.CustomLabelsTypeNative:
+		trace.CustomLabels = procMeta.ProcessContextInfo.DecodeThreadLabels(ptr.Custom_labels_data.Data[:ptr.Custom_labels_data.Size])
 	}
 
 	trace.NumFrames = int(ptr.Num_frames)

@@ -34,8 +34,7 @@ typedef struct {
 #ifndef USE_DLOPEN
 int init_process_context(void);
 void init_thread_context(size_t attrs_data_size);
-void update_thread_context(uint64_t span_id, uint64_t trace_id_lo,
-                           uint64_t trace_id_hi, attribute_t *attrs,
-                           size_t attrs_count);
+void update_thread_context(const uint8_t span_id[8], const uint8_t trace_id[16],
+                           attribute_t *attrs, size_t attrs_count);
 void burn(int ms);
 #endif

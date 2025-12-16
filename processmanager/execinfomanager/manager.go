@@ -25,6 +25,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/python"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/threadcontext"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -127,6 +128,7 @@ func NewExecutableInfoManager(
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
 	if includeTracers.Has(types.Labels) {
+		interpreterLoaders = append(interpreterLoaders, threadcontext.Loader)
 		interpreterLoaders = append(interpreterLoaders, golabels.Loader)
 	}
 

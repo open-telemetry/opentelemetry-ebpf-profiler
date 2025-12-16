@@ -62,16 +62,12 @@ void init_thread_context(size_t attrs_data_size) {
   }
 }
 
-void update_thread_context(uint64_t span_id, uint64_t trace_id_lo,
-                           uint64_t trace_id_hi, attribute_t *attrs,
-                           size_t attrs_count) {
+void update_thread_context(const uint8_t span_id[8], const uint8_t trace_id[16],
+                           attribute_t *attrs, size_t attrs_count) {
   otel_thread_ctx_v1->valid = 0;
 
-  memcpy(otel_thread_ctx_v1->trace_id, &trace_id_lo,
-         sizeof(trace_id_lo));
-  memcpy(otel_thread_ctx_v1->trace_id + sizeof(trace_id_lo),
-         &trace_id_hi, sizeof(trace_id_hi));
-  memcpy(otel_thread_ctx_v1->span_id, &span_id, sizeof(span_id));
+  memcpy(otel_thread_ctx_v1->trace_id, trace_id, 16);
+  memcpy(otel_thread_ctx_v1->span_id, span_id, 8);
 
   size_t attr_pos = 0;
   for (size_t i = 0; i < attrs_count; ++i) {

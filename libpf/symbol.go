@@ -28,4 +28,5 @@ type Symbol struct {
 	Name    SymbolName
 	Address SymbolValue
 	Size    uint64
+	Info    uint8
 }
