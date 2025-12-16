@@ -103,10 +103,17 @@ const (
 	TraceOriginProbe    = C.TRACE_PROBE
 )
 
+const (
+	CustomLabelsTypeNone   = C.CUSTOM_LABELS_TYPE_NONE
+	CustomLabelsTypeNative = C.CUSTOM_LABELS_TYPE_NATIVE
+	CustomLabelsTypeGo     = C.CUSTOM_LABELS_TYPE_GO
+)
+
 type ApmSpanID C.ApmSpanID
 type ApmTraceID C.ApmTraceID
 type CustomLabel C.CustomLabel
 type CustomLabelsArray C.CustomLabelsArray
+type CustomLabelsData C.CustomLabelsData
 type Event C.Event
 type OffsetRange C.OffsetRange
 type PIDPage C.PIDPage
@@ -129,6 +136,7 @@ type PHPProcInfo C.PHPProcInfo
 type PerlProcInfo C.PerlProcInfo
 type PyProcInfo C.PyProcInfo
 type RubyProcInfo C.RubyProcInfo
+type ThreadContextProcInfo C.ThreadContextProcInfo
 type V8ProcInfo C.V8ProcInfo
 
 const (

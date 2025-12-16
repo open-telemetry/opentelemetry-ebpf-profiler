@@ -819,9 +819,9 @@ func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContex
 		return oldProcessContextInfo
 	}
 	if errors.Is(err, processcontext.ErrConcurrentUpdate) {
-		// If the context cannot be read because of a concurrent update, keep the resource and thread context since they are immutable,
-		// but discard the extra attributes as they may be stale.
-		oldProcessContextInfo.ClearExtraAttributes()
+		// If the context cannot be read because of a concurrent update, keep the resource since it is immutable,
+		// but discard the thread context info as it may be stale.
+		oldProcessContextInfo.ClearThreadContextInfo()
 		return oldProcessContextInfo
 	}
 
