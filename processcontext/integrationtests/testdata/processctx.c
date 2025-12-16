@@ -17,7 +17,7 @@
 
 typedef int (*init_process_context_t)(void);
 typedef void (*init_thread_context_t)(size_t);
-typedef void (*update_thread_context_t)(uint64_t, uint64_t, uint64_t,
+typedef void (*update_thread_context_t)(const uint8_t[8], const uint8_t[16],
                                         attribute_t *, size_t);
 typedef void (*burn_t)(int);
 
@@ -88,9 +88,9 @@ int main(int argc, char *argv[]) {
   }
   init_thread_context(128);
 
-  const uint64_t trace_id_lo = 0x1234567890abcdef;
-  const uint64_t trace_id_hi = 0xfedcba9876543210;
-  const uint64_t span_id = 0x1234;
+  const uint8_t trace_id[16] = {0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
+                                0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10};
+  const uint8_t span_id[8] = {0x12, 0x34};
 
   attribute_t attrs[] = {
       {2, "some_user_id"},
@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
 
   // Burn CPU so the profiler can sample us.
   while (running) {
-    update_thread_context(span_id, trace_id_lo, trace_id_hi, attrs,
+    update_thread_context(span_id, trace_id, attrs,
                           sizeof(attrs) / sizeof(attrs[0]));
     burn(10);
   }

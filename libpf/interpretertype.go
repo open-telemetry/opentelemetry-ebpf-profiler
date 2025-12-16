@@ -49,6 +49,9 @@ const (
 
 	// Go identifies the pseudo-interpreter for Go custom labels support.
 	GoLabels InterpreterType = 0x101
+
+	// ThreadContext identifies the pseudo-interpreter for thread context support.
+	ThreadContext InterpreterType = 0x102
 )
 
 // Frame converts the interpreter type into the corresponding frame type.
@@ -64,20 +67,21 @@ var interpreterTypeToString = map[InterpreterType]string{
 	UnknownInterp: "unknown",
 	PHP:           "php",
 	// OTel SemConv does not differentiate between jitted code and interpreted code.
-	PHPJIT:   "php",
-	Python:   "cpython",
-	Native:   "native",
-	Kernel:   "kernel",
-	HotSpot:  "jvm",
-	Ruby:     "ruby",
-	Perl:     "perl",
-	V8:       "v8js",
-	Dotnet:   "dotnet",
-	BEAM:     "beam",
-	APMInt:   "apm-integration",
-	LuaJIT:   "luajit",
-	Go:       "go",
-	GoLabels: "go-labels",
+	PHPJIT:        "php",
+	Python:        "cpython",
+	Native:        "native",
+	Kernel:        "kernel",
+	HotSpot:       "jvm",
+	Ruby:          "ruby",
+	Perl:          "perl",
+	V8:            "v8js",
+	Dotnet:        "dotnet",
+	BEAM:          "beam",
+	APMInt:        "apm-integration",
+	LuaJIT:        "luajit",
+	Go:            "go",
+	GoLabels:      "go-labels",
+	ThreadContext: "thread-context",
 }
 
 var stringToInterpreterType = make(map[string]InterpreterType, len(interpreterTypeToString))

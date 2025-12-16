@@ -91,4 +91,9 @@ type SampleKey struct {
 
 	SpanID  libpf.APMSpanID
 	TraceID libpf.APMTraceID
+
+	// LabelsHash is a hash of the custom labels attached to the trace.
+	// It separates samples that share the same stack / TID / SpanID / TraceID
+	// but carry different labels so their labels aren't merged.
+	LabelsHash uint64
 }

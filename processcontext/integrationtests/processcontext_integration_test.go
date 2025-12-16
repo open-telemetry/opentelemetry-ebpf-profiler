@@ -27,6 +27,20 @@ import (
 	"go.opentelemetry.io/otel/metric/noop"
 )
 
+// Expected trace/span IDs derived from the trace_id_lo/hi/span_id constants in
+// processctx.c. These confirm thread context labels are read
+// from native TLS via the threadcontext interpreter.
+var (
+	expectedTraceID = libpf.APMTraceID{0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef,
+		0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10}
+	expectedSpanID = libpf.APMSpanID{0x12, 0x34}
+	expectedAttrs  = map[string]string{
+		"user_id":     "some_user_id",
+		"http_method": "GET",
+		"http_route":  "some_endpoint",
+	}
+)
+
 // expectedResource lists the resource attributes the testdata C programs
 // publish via init_process_context() in processctx_lib.c.
 var expectedResource = map[string]string{
@@ -65,12 +79,12 @@ func Test_ProcessContext(t *testing.T) {
 		exeName string
 		args    []string
 	}{
-		"glibc_exe": {exeName: "processctx_exe_glibc"},
-		// "musl_exe":     {exeName: "processctx_exe_musl"},
-		// "glibc_lib":    {exeName: "processctx_lib_glibc"},
-		// "musl_lib":     {exeName: "processctx_lib_musl"},
-		// "glibc_dlopen": {exeName: "processctx_dlopen_glibc", args: []string{filepath.Join(exeDir, "libprocessctx_glibc.so")}},
-		// "musl_dlopen":  {exeName: "processctx_dlopen_musl", args: []string{filepath.Join(exeDir, "libprocessctx_musl.so")}},
+		"glibc_exe":    {exeName: "processctx_exe_glibc"},
+		"musl_exe":     {exeName: "processctx_exe_musl"},
+		"glibc_lib":    {exeName: "processctx_lib_glibc"},
+		"musl_lib":     {exeName: "processctx_lib_musl"},
+		"glibc_dlopen": {exeName: "processctx_dlopen_glibc", args: []string{filepath.Join(exeDir, "libprocessctx_glibc.so")}},
+		"musl_dlopen":  {exeName: "processctx_dlopen_musl", args: []string{filepath.Join(exeDir, "libprocessctx_musl.so")}},
 	}
 
 	for name, tc := range tests {
@@ -127,7 +141,8 @@ func Test_ProcessContext(t *testing.T) {
 			timeout := time.NewTimer(10 * time.Second)
 			defer timeout.Stop()
 
-			ok := false
+			gotResource := false
+			gotLabels := false
 		Loop:
 			for {
 				select {
@@ -137,20 +152,29 @@ func Test_ProcessContext(t *testing.T) {
 					if trace == nil || trace.PID != libpf.PID(cmd.Process.Pid) {
 						continue
 					}
-					if trace.Resource == nil {
-						continue
+					if !gotResource && trace.Resource != nil &&
+						resourceMatches(trace.Resource, expectedResource) {
+						t.Logf("Got expected resource for PID %d", trace.PID)
+						gotResource = true
 					}
-					if !resourceMatches(trace.Resource, expectedResource) {
-						continue
+					if !gotLabels && len(trace.CustomLabels) > 0 {
+						if trace.APMTraceID == expectedTraceID &&
+							trace.APMTransactionID == expectedSpanID &&
+							labelsMatch(trace.CustomLabels, expectedAttrs) {
+							t.Logf("Got expected thread context for PID %d", trace.PID)
+
+							gotLabels = true
+						}
 					}
-					t.Logf("Got expected resource for PID %d", trace.PID)
-					ok = true
-					break Loop
+					if gotResource && gotLabels {
+						break Loop
+					}
 				}
 			}
 			cancel()
 			wg.Wait()
-			require.True(t, ok, "process context not received")
+			require.True(t, gotResource, "process context not received")
+			require.True(t, gotLabels, "thread context not received")
 			t.Log("Exiting test case")
 		})
 	}
@@ -164,6 +188,16 @@ func resourceMatches(r *pcommon.Resource, want map[string]string) bool {
 	for k, v := range want {
 		got, ok := attrs.Get(k)
 		if !ok || got.Type() != pcommon.ValueTypeStr || got.Str() != v {
+			return false
+		}
+	}
+	return true
+}
+
+func labelsMatch(labels map[libpf.String]libpf.String, want map[string]string) bool {
+	for k, v := range want {
+		got, ok := labels[libpf.Intern(k)]
+		if !ok || got.String() != v {
 			return false
 		}
 	}

@@ -4,6 +4,7 @@
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
+	"hash/maphash"
 	"unique"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -185,4 +186,21 @@ func (f EbpfFrame) Data() uint64 {
 
 func (f EbpfFrame) Variable(ndx int) uint64 {
 	return f[ndx+1]
+}
+
+var labelsHashSeed = maphash.MakeSeed()
+
+// HashLabels returns a 64-bit order-independent hash of a labels map.
+// Uses XOR of per-entry hashes so map iteration order is irrelevant.
+func HashLabels(labels map[String]String) uint64 {
+	var sum uint64
+	var h maphash.Hash
+	h.SetSeed(labelsHashSeed)
+	for k, v := range labels {
+		maphash.WriteComparable(&h, k)
+		maphash.WriteComparable(&h, v)
+		sum ^= h.Sum64()
+		h.Reset()
+	}
+	return sum
 }
