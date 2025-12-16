@@ -27,6 +27,14 @@ import (
 	"go.opentelemetry.io/otel/metric/noop"
 )
 
+// Expected trace/span IDs derived from the trace_id_lo/hi/span_id constants in
+// processctx.c (little-endian). These confirm thread context labels are read
+// from native TLS via the threadcontext interpreter.
+const (
+	expectedTraceID = "efcdab90785634121032547698badcfe"
+	expectedSpanID  = "4660"
+)
+
 // expectedResource lists the resource attributes the testdata C programs
 // publish via init_process_context() in processctx_lib.c.
 var expectedResource = map[string]string{
@@ -65,12 +73,12 @@ func Test_ProcessContext(t *testing.T) {
 		exeName string
 		args    []string
 	}{
-		"glibc_exe": {exeName: "processctx_exe_glibc"},
-		// "musl_exe":     {exeName: "processctx_exe_musl"},
-		// "glibc_lib":    {exeName: "processctx_lib_glibc"},
-		// "musl_lib":     {exeName: "processctx_lib_musl"},
-		// "glibc_dlopen": {exeName: "processctx_dlopen_glibc", args: []string{filepath.Join(exeDir, "libprocessctx_glibc.so")}},
-		// "musl_dlopen":  {exeName: "processctx_dlopen_musl", args: []string{filepath.Join(exeDir, "libprocessctx_musl.so")}},
+		"glibc_exe":    {exeName: "processctx_exe_glibc"},
+		"musl_exe":     {exeName: "processctx_exe_musl"},
+		"glibc_lib":    {exeName: "processctx_lib_glibc"},
+		"musl_lib":     {exeName: "processctx_lib_musl"},
+		"glibc_dlopen": {exeName: "processctx_dlopen_glibc", args: []string{filepath.Join(exeDir, "libprocessctx_glibc.so")}},
+		"musl_dlopen":  {exeName: "processctx_dlopen_musl", args: []string{filepath.Join(exeDir, "libprocessctx_musl.so")}},
 	}
 
 	for name, tc := range tests {
@@ -81,6 +89,7 @@ func Test_ProcessContext(t *testing.T) {
 			metrics.Start(noop.Meter{})
 
 			enabledTracers, _ := tracertypes.Parse("")
+			enabledTracers.Enable(tracertypes.Labels)
 
 			log.SetLevel(slog.LevelDebug)
 			trc, err := tracer.NewTracer(ctx, &tracer.Config{
@@ -129,7 +138,8 @@ func Test_ProcessContext(t *testing.T) {
 			timeout := time.NewTimer(10 * time.Second)
 			defer timeout.Stop()
 
-			ok := false
+			gotResource := false
+			gotLabels := false
 		Loop:
 			for {
 				select {
@@ -139,20 +149,28 @@ func Test_ProcessContext(t *testing.T) {
 					if trace == nil || trace.PID != libpf.PID(cmd.Process.Pid) {
 						continue
 					}
-					if trace.Resource == nil {
-						continue
+					if !gotResource && trace.Resource != nil &&
+						resourceMatches(trace.Resource, expectedResource) {
+						t.Logf("Got expected resource for PID %d", trace.PID)
+						gotResource = true
 					}
-					if !resourceMatches(trace.Resource, expectedResource) {
-						continue
+					if !gotLabels && len(trace.CustomLabels) > 0 {
+						traceID := trace.CustomLabels[libpf.Intern("trace id")].String()
+						spanID := trace.CustomLabels[libpf.Intern("span id")].String()
+						if traceID == expectedTraceID && spanID == expectedSpanID {
+							t.Logf("Got expected thread context for PID %d", trace.PID)
+							gotLabels = true
+						}
 					}
-					t.Logf("Got expected resource for PID %d", trace.PID)
-					ok = true
-					break Loop
+					if gotResource && gotLabels {
+						break Loop
+					}
 				}
 			}
 			cancel()
 			wg.Wait()
-			require.True(t, ok, "process context not received")
+			require.True(t, gotResource, "process context not received")
+			require.True(t, gotLabels, "thread context not received")
 			t.Log("Exiting test case")
 		})
 	}

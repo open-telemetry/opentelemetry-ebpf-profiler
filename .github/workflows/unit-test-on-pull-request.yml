@@ -200,8 +200,7 @@ jobs:
           support/run-tests.sh ${{ matrix.kernel }}
 
   # Runs on host (not qemu) because the qemu initramfs doesn't allow loading
-  # shared libraries, which the dlopen/lib testdata variants will need once thread
-  # context support lands.
+  # shared libraries, which the dlopen/lib testdata variants need.
   integration-tests-processcontext:
     name: Integration tests (processcontext ${{ matrix.target_arch }})
     runs-on: ${{ matrix.runner }}
