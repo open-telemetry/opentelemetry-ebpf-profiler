@@ -58,6 +58,9 @@ type ebpfMapsImpl struct {
 	UnwindInfoArray       *cebpf.Map `name:"unwind_info_array"`
 	ReportedPIDs          *cebpf.Map `name:"reported_pids"`
 
+	// Template used to update the inner maps of ExeIDToStackDeltaMaps
+	stackdeltaInnerMapTemplate *cebpf.MapSpec
+
 	errCounterLock sync.Mutex
 	errCounter     map[metrics.MetricID]int64
 
@@ -75,8 +78,10 @@ var _ ebpfapi.EbpfHandler = &ebpfMapsImpl{}
 //
 // It further spawns background workers for deferred map updates; the given
 // context can be used to terminate them on shutdown.
-func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map) (ebpfapi.EbpfHandler, error) {
-	impl := &ebpfMapsImpl{}
+func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map, stackdeltaInnerMapSpec *cebpf.MapSpec) (ebpfapi.EbpfHandler, error) {
+	impl := &ebpfMapsImpl{
+		stackdeltaInnerMapTemplate: stackdeltaInnerMapSpec,
+	}
 	impl.errCounter = make(map[metrics.MetricID]int64)
 
 	implRefVal := reflect.ValueOf(impl).Elem()
@@ -438,12 +443,14 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 		return 0, fmt.Errorf("failed to increase rlimit: %v", err)
 	}
 	defer restoreRlimit()
-	innerMap, err := cebpf.NewMap(&cebpf.MapSpec{
-		Type:       cebpf.Array,
-		KeySize:    4,
-		ValueSize:  support.Sizeof_StackDelta,
-		MaxEntries: 1 << mapID,
-	})
+
+	innerMapSpec := impl.stackdeltaInnerMapTemplate.Copy()
+	// Set the name of the inner map for easier debugging and
+	// set the MaxEntries depending on mapID.
+	innerMapSpec.Name = fmt.Sprintf("exe_id_to_%d_stack_deltas_inner", mapID)
+	innerMapSpec.MaxEntries = 1 << mapID
+
+	innerMap, err := cebpf.NewMap(innerMapSpec)
 	if err != nil {
 		return 0, fmt.Errorf("failed to create inner map: %v", err)
 	}
