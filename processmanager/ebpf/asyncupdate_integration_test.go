@@ -14,6 +14,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
+	"go.opentelemetry.io/ebpf-profiler/support"
 
 	"github.com/stretchr/testify/require"
 )
@@ -21,26 +22,16 @@ import (
 func prepareMapInMap(t *testing.T) *ebpf.Map {
 	t.Helper()
 
+	coll, err := support.LoadCollectionSpec()
+	require.NoError(t, err)
+
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	require.NoError(t, err)
 	defer restoreRlimit()
 
-	outerMapSpec := ebpf.MapSpec{
-		Name:       "outer_map",
-		Type:       ebpf.HashOfMaps,
-		KeySize:    8,
-		ValueSize:  4,
-		MaxEntries: 3,
-		InnerMap: &ebpf.MapSpec{
-			Name:       "inner_map",
-			Type:       ebpf.Hash,
-			KeySize:    8,
-			ValueSize:  4,
-			MaxEntries: 3,
-		},
-	}
+	outerMapSpec := coll.Maps["exe_id_to_8_stack_deltas"]
 
-	outerMap, err := ebpf.NewMap(&outerMapSpec)
+	outerMap, err := ebpf.NewMap(outerMapSpec)
 	require.NoError(t, err)
 	return outerMap
 }
