@@ -1,0 +1,30 @@
+{
+  "coredump-ref": "517028a6d45241ed202e81083d836a47469e68a1345d7be7860f8127b5823d90",
+  "threads": [
+    {
+      "lwp": 3428,
+      "frames": [
+        "test_rust+0x12f60",
+        "test_rust+0x12f83",
+        "test_rust+0x12fa7",
+        "test_rust+0x1317f",
+        "test_rust+0x1303f",
+        "test_rust+0x1312b",
+        "test_rust+0x2be73",
+        "test_rust+0x13103",
+        "test_rust+0x1301f",
+        "<unwinding aborted due to error native_no_pid_page_mapping>"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "36d6ee161f7831c61ecad24a80fc26d8a7221db3907639c6f078d59bbadc2549",
+      "local-path": "/home/brennan/test_rust/target/debug/test_rust"
+    },
+    {
+      "ref": "a5945db37288c7ccf89169b911fa7ac634e7d2434a0b8287e485cf5ea98d5646",
+      "local-path": "/gnu/store/50jqiigxwa1s9xljqrl1wh85yncqnybr-glibc-2.41/lib/ld-linux-aarch64.so.1"
+    }
+  ]
+}

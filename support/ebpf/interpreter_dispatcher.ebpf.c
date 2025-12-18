@@ -281,6 +281,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
       increment_metric(metricID_NumUnknownPC);
     }
     // Fallthrough to report the error
+    [[fallthrough]];
   default: increment_metric(state->error_metric);
   }
 

@@ -160,16 +160,19 @@ static EBPF_INLINE void *get_stack_delta_map(int mapID)
 // Get the stack offset of the given instruction.
 static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, u32 *unwindInfo)
 {
+  u64 text_section_offset = state->text_section_offset;
+  if (state->return_address)
+    --text_section_offset;
   u64 exe_id = state->text_section_id;
 
   // Look up the stack delta page information for this address.
   StackDeltaPageKey key = {};
   key.fileID            = state->text_section_id;
-  key.page              = state->text_section_offset & ~STACK_DELTA_PAGE_MASK;
+  key.page              = text_section_offset & ~STACK_DELTA_PAGE_MASK;
   DEBUG_PRINT(
     "Look up stack delta for %lx:%lx",
     (unsigned long)state->text_section_id,
-    (unsigned long)state->text_section_offset);
+    (unsigned long)text_section_offset);
   StackDeltaPageInfo *info = bpf_map_lookup_elem(&stack_delta_page_to_info, &key);
   if (!info) {
     DEBUG_PRINT(
@@ -199,7 +202,7 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
 
   // Preinitialize the idx for the index to use for page without any deltas.
   u32 idx         = info->firstDelta;
-  u16 page_offset = state->text_section_offset & STACK_DELTA_PAGE_MASK;
+  u16 page_offset = text_section_offset & STACK_DELTA_PAGE_MASK;
   if (info->numDeltas) {
     // Page has deltas, so find the correct one to use using binary search.
     u32 lo = info->firstDelta;
