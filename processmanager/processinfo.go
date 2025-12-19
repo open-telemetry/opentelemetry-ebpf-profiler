@@ -137,7 +137,7 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 	return false, err
 }
 
-func (pm *ProcessManager) setProcessMemProfileMeta(lanVer string, pid libpf.PID) {
+func (pm *ProcessManager) setProcessMemProfileMeta(lanVer string, pid libpf.PID, itData interpreter.Data) {
 	info, ok := pm.pidToProcessInfo[pid]
 	if !ok {
 		return
@@ -151,12 +151,17 @@ func (pm *ProcessManager) setProcessMemProfileMeta(lanVer string, pid libpf.PID)
 	// dotnet major.minor.release
 	var lan = libpf.Native
 	var major, minor int
+	var lanStr string
 	if lanV := strings.Split(lanVer, " "); len(lanV) > 1 {
-		lanStr := lanV[0]
-		for _, s := range lanV[1:] {
-			if ver := strings.Split(s, "."); len(ver) > 1 {
-				major, _ = strconv.Atoi(ver[0])
-				minor, _ = strconv.Atoi(ver[1])
+		if strings.Contains(lanVer, "unintrospected JVM") { //jvm info uninited
+			lanStr = "Java"
+		} else {
+			lanStr = lanV[0]
+			for _, s := range lanV[1:] {
+				if ver := strings.Split(s, "."); len(ver) > 1 {
+					major, _ = strconv.Atoi(ver[0])
+					minor, _ = strconv.Atoi(ver[1])
+				}
 			}
 		}
 		switch lanStr {
@@ -183,6 +188,7 @@ func (pm *ProcessManager) setProcessMemProfileMeta(lanVer string, pid libpf.PID)
 	info.memProfileMeta.Lang = lan
 	info.memProfileMeta.MinorVersion = minor
 	info.memProfileMeta.MajorVersion = major
+	info.memProfileMeta.ItData = itData
 }
 
 // deletePIDAddress removes the mapping at addr from pid from the internal structure of the
@@ -297,7 +303,7 @@ func (pm *ProcessManager) handleNewMapping(pr process.Process, m *Mapping,
 		lanVer = fmt.Sprintf("%s", ei.Data)
 	}
 	if lanVer != "" {
-		pm.setProcessMemProfileMeta(lanVer, pid)
+		pm.setProcessMemProfileMeta(lanVer, pid, ei.Data)
 	}
 	pm.assignTSDInfo(pid, ei.TSDInfo)
 
@@ -433,7 +439,7 @@ func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *pro
 		// Same as above, ignore the errors related to process having exited.
 		// Also ignore errors of deferred file IDs.
 		if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, eim.ErrDeferredFileID) {
-			log.Infof("Failed to handle mapping for PID %d, file %s: %v",
+			log.Tracef("Failed to handle mapping for PID %d, file %s: %v",
 				pr.PID(), mapping.Path, err)
 		}
 	}

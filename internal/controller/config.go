@@ -38,15 +38,13 @@ type Config struct {
 	// IPAddress is the IP address of the host that sends data to CollAgentAddr.
 	IPAddress       string
 	OffCPUThreshold uint
-	MemProfile      bool
-	CpuProfile      bool
 
 	Reporter reporter.Reporter
 
 	Fs *flag.FlagSet
 
-	TargetPIDs      []libpf.PID
-	MemProfilePIDs  []libpf.PID
+	TargetPIDs      map[libpf.PID]struct{}
+	MemTargetPIDs   map[libpf.PID]struct{}
 	MemProfileBlock uint64
 }
 

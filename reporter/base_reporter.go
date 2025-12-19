@@ -5,6 +5,7 @@ package reporter // import "github.com/toliu/opentelemetry-ebpf-profiler/reporte
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -48,6 +49,8 @@ type baseReporter struct {
 
 	// memAddr-hash
 	addrHashMap map[int64]libpf.TraceHash
+
+	targetPids sync.Map
 }
 
 func (b *baseReporter) Stop() {
@@ -116,20 +119,25 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		extraMeta = b.cfg.ExtraSampleAttrProd.CollectExtraSampleMeta(trace, meta)
 	}
 	keyHash := trace.Hash
-	if meta.MemAlloc > 0 && meta.MemAddr > 0 {
-		if meta.OffTime == 1 { // mem-alloc
-			b.addrHashMap[meta.MemAddr] = keyHash
-		}
-		if meta.OffTime == 0 { // mem-free需要在这里找到分配内存的调用栈后续才能关联
-			hash, ok := b.addrHashMap[meta.MemAddr]
-			if !ok {
-				return
+	if meta.MemAlloc > 0 {
+		if meta.MemAddr > 0 {
+			if meta.OffTime == 1 { // mem-alloc
+				b.addrHashMap[meta.MemAddr] = keyHash
 			}
-			delete(b.addrHashMap, meta.MemAddr)
-			keyHash = hash
-			extraMeta = uint64(meta.PID.Hash32())<<32 | uint64(meta.TID.Hash32()) // NOTE this logic is from cloudcapture
-			//extraMeta = hash FIXME when you debug locally, use this，extraMeta just set tp hash
+			if meta.OffTime == 0 { // mem-free需要在这里找到分配内存的调用栈后续才能关联
+				hash, ok := b.addrHashMap[meta.MemAddr]
+				if !ok {
+					return
+				}
+				delete(b.addrHashMap, meta.MemAddr)
+				keyHash = hash
+			}
 		}
+		//不同的线程ID，导致key不一样，无法将栈进行合并,内存剖析不上报线程了。
+		meta.TID = 0
+		extraMeta = uint64(meta.PID.Hash32())<<32 | uint64(meta.TID.Hash32()) // NOTE this logic is from cloudcapture
+		// FIXME when you debug locally, use this，extraMeta just set tp hash
+		//extraMeta = keyHash
 	}
 
 	containerID, err := libpf.LookupCgroupv2(b.cgroupv2ID, meta.PID)
@@ -150,13 +158,17 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	if meta.Origin == support.TraceOriginHeap {
 		traceEventsMap := b.memTraceEvents.WLock()
 		defer b.memTraceEvents.WUnlock(&traceEventsMap)
-		var allocSpaces, allocs, inuseSpaces int64
+		var allocSpaces, allocs, inuseSpaces, inuseAllocs int64
 		if meta.OffTime == 0 { // free
 			inuseSpaces = -meta.MemAlloc
+			inuseAllocs = -1
 		} else { // alloc
 			allocSpaces = meta.MemAlloc
 			allocs = 1
-			inuseSpaces = meta.MemAlloc
+			if meta.MemAddr > 0 {
+				inuseSpaces = meta.MemAlloc
+				inuseAllocs = 1
+			}
 		}
 		events, exists := (*traceEventsMap)[meta.Origin][key]
 		// 只有申请内存的时候才新创建event,如果是释放内存但是没有event说明这个地址是开启profile之前申请的，忽略掉
@@ -169,8 +181,12 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 					MappingStarts:      trace.MappingStart,
 					MappingEnds:        trace.MappingEnd,
 					MappingFileOffsets: trace.MappingFileOffsets,
-					Timestamps:         []uint64{0},      // 只记录最新的时间
-					MemAlloc:           []int64{0, 0, 0}, // 记录最新的内存状态
+					Timestamps:         []uint64{0}, // 只记录最新的时间
+				}
+				if meta.MemAddr > 0 {
+					events.MemAlloc = []int64{0, 0, 0, 0}
+				} else {
+					events.MemAlloc = []int64{0, 0, -1, -1} // 不支持inuse
 				}
 			} else {
 				return
@@ -180,6 +196,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		events.MemAlloc[0] += allocSpaces
 		events.MemAlloc[1] += allocs
 		events.MemAlloc[2] += inuseSpaces
+		events.MemAlloc[3] += inuseAllocs
 		(*traceEventsMap)[meta.Origin][key] = events
 		return
 	}
@@ -246,4 +263,16 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 	}
 	mu := xsync.NewRWMutex(v)
 	b.pdata.Frames.Add(fileID, &mu)
+}
+
+func (b *baseReporter) SyncTargetPids(targetPids map[libpf.PID]struct{}) {
+	b.targetPids.Range(func(k, v interface{}) bool {
+		if _, ok := targetPids[k.(libpf.PID)]; !ok {
+			b.targetPids.Delete(k)
+		}
+		return true
+	})
+	for pid, v := range targetPids {
+		b.targetPids.Store(pid, v)
+	}
 }

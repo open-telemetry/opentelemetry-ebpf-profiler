@@ -87,16 +87,8 @@ func (p *Pdata) setProfile(
 		pt := profile.PeriodType()
 		pt.SetTypeStrindex(getStringMapIndex(stringMap, "heap"))
 		pt.SetUnitStrindex(getStringMapIndex(stringMap, "bytes"))
-		// alloc_space
-		st.SetTypeStrindex(getStringMapIndex(stringMap, "space"))
-		st.SetUnitStrindex(getStringMapIndex(stringMap, "bytes"))
-		// allocs
-		st = profile.SampleType().AppendEmpty()
-		st.SetTypeStrindex(getStringMapIndex(stringMap, "allocs"))
-		st.SetUnitStrindex(getStringMapIndex(stringMap, "count"))
-		// inuse_space
-		st = profile.SampleType().AppendEmpty()
-		st.SetTypeStrindex(getStringMapIndex(stringMap, "inuse_space"))
+		//alloc_space
+		st.SetTypeStrindex(getStringMapIndex(stringMap, "heap"))
 		st.SetUnitStrindex(getStringMapIndex(stringMap, "bytes"))
 	default:
 		log.Errorf("Generating profile for unsupported origin %d", origin)

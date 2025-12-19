@@ -66,7 +66,7 @@ var (
 // implementation.
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
 	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, symbolReporter reporter.SymbolReporter,
-	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool, targetPids []libpf.PID) (*ProcessManager, error) {
+	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool, targetPids map[libpf.PID]struct{}) (*ProcessManager, error) {
 	if fileIDMapper == nil {
 		var err error
 		fileIDMapper, err = newFileIDMapper(lruFileIDCacheSize)
@@ -329,7 +329,7 @@ func (pm *ProcessManager) ConfigureTargetPids() error {
 	return pm.ebpf.ConfigureTargetPIDs(pm.targetPids)
 }
 
-func (pm *ProcessManager) SyncTargetPids(targetPids []libpf.PID) error {
+func (pm *ProcessManager) SyncTargetPids(targetPids map[libpf.PID]struct{}) error {
 	pm.targetPids = targetPids
 	return pm.ConfigureTargetPids()
 }

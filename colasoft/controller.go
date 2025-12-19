@@ -18,48 +18,51 @@ type (
 		reporter *reporter.ColaSoft
 		cfg      *controller.Config
 	}
+
+	StartCfg struct {
+		Freq, OffCpuThreshold, CacheEventSTolerance int
+		Interval, CacheEventSTimeout                time.Duration
+		TargetPids, MemTargetPIDs                   map[libpf.PID]struct{}
+		MemProfileBlock                             uint64
+	}
 )
 
 func NewCollector(sr SymbolReporter) *Collector { return &Collector{sr: sr} }
 
-func (c *Collector) Start(ctx context.Context, freq, offCpuThreshold int, interval time.Duration,
-	cpuProfileTargetPids []libpf.PID, cacheEventSTolerance int,
-	cacheEventSTimeout time.Duration, memProfile bool, cpuProfile bool, memProfilePids []libpf.PID,
-	memProfileBlock uint64) error {
+func (c *Collector) Start(ctx context.Context, cfg StartCfg) error {
 	if c.cfg != nil {
-		if c.cfg.ReporterInterval == interval &&
-			c.cfg.SamplesPerSecond == freq &&
-			c.cfg.OffCPUThreshold == uint(offCpuThreshold) {
+		if c.cfg.ReporterInterval == cfg.Interval &&
+			c.cfg.SamplesPerSecond == cfg.Freq &&
+			c.cfg.OffCPUThreshold == uint(cfg.OffCpuThreshold) &&
+			c.cfg.MemProfileBlock == cfg.MemProfileBlock {
 			return nil
 		}
 		c.Stop()
 	}
 
-	rpt, err := reporter.NewColaSoft(freq, interval, c.sr, c.sr.ConsumeProfilesFunc, noFrameOpSymbolReporter{c.sr}, cacheEventSTolerance, cacheEventSTimeout)
+	rpt, err := reporter.NewColaSoft(cfg.Freq, cfg.Interval, c.sr, c.sr.ConsumeProfilesFunc, noFrameOpSymbolReporter{c.sr}, cfg.CacheEventSTolerance, cfg.CacheEventSTimeout)
 	if err != nil {
 		return err
 	}
 
-	cfg := &controller.Config{
+	controllerCfg := &controller.Config{
 		MonitorInterval: time.Second * 5, ClockSyncInterval: time.Minute * 3,
 		NoKernelVersionCheck: true, ProbabilisticInterval: time.Minute,
 		ProbabilisticThreshold: tracer.ProbabilisticThresholdMax * 2,
-		ReporterInterval:       interval, SamplesPerSecond: freq, Reporter: rpt,
+		ReporterInterval:       cfg.Interval, SamplesPerSecond: cfg.Freq, Reporter: rpt,
 		Tracers:         "perl,php,python,hotspot,ruby,v8",
-		OffCPUThreshold: uint(offCpuThreshold),
-		TargetPIDs:      cpuProfileTargetPids,
-		MemProfile:      memProfile,
-		CpuProfile:      cpuProfile,
-		MemProfilePIDs:  memProfilePids,
-		MemProfileBlock: memProfileBlock,
+		OffCPUThreshold: uint(cfg.OffCpuThreshold),
+		TargetPIDs:      cfg.TargetPids,
+		MemTargetPIDs:   cfg.MemTargetPIDs,
+		MemProfileBlock: cfg.MemProfileBlock,
 	}
-	ctrl := controller.New(cfg)
+	ctrl := controller.New(controllerCfg)
 	if err = ctrl.Start(ctx); err != nil {
 		return err
 	}
 	c.ctrl = ctrl
 	c.reporter = rpt
-	c.cfg = cfg
+	c.cfg = controllerCfg
 	return nil
 }
 
@@ -72,12 +75,12 @@ func (c *Collector) Stop() {
 	}
 }
 
-func (c *Collector) SyncTargetPIDs(targetPIds []libpf.PID) error {
+func (c *Collector) SyncTargetPIDs(targetPIds map[libpf.PID]struct{}) error {
 	return c.ctrl.SyncTargetPIDs(targetPIds)
 }
 
-func (c *Collector) SyncMemProfileTargetPids(targetPIds []libpf.PID) error {
-	return c.ctrl.SyncMemProfileTargetPIDs(targetPIds)
+func (c *Collector) SyncMemTargetPIDs(targetPIds map[libpf.PID]struct{}) error {
+	return c.ctrl.SyncMemTargetPIDs(targetPIds)
 }
 
 func (c *Collector) SyncMemProfileBlock(memProfileBlock uint64) error {

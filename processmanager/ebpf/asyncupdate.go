@@ -68,7 +68,7 @@ func (p *asyncMapUpdaterPool) EnqueueUpdate(
 	workerIdx := uint64(fileID) % uint64(len(p.workers))
 	if err := p.workers[workerIdx].ctx.Err(); err != nil {
 		if errors.Is(err, context.Canceled) {
-			log.Debugf("Skipping handling of %v: %v", fileID, err)
+			log.Tracef("Skipping handling of %v: %v", fileID, err)
 		} else {
 			log.Warnf("Skipping handling of %v: %v", fileID, err)
 		}
