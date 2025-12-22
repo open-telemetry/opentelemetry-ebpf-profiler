@@ -1,4 +1,4 @@
-FROM debian:testing-20250721-slim@sha256:aaa28744f5b892a7ccc3e97c0e9b9cdd0fcc447227efaf9e54080801b990f973
+FROM debian:trixie-20251208-slim@sha256:e711a7b30ec1261130d0a121050b4ed81d7fb28aeabcf4ea0c7876d4e9f5aca2
 
 WORKDIR /agent
 
