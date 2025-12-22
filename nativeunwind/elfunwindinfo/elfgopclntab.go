@@ -596,6 +596,8 @@ var noFPSourceSuffixes = []string{
 	"/src/crypto/sha256/sha256.go",
 	"/src/crypto/sha512/sha512.go",
 	"/src/crypto/elliptic/p256_asm.go",
+	"/src/internal/cpu/cpu_arm64.go",
+	"/src/internal/cpu/cpu_x86.go",
 	"golang.org/x/crypto/curve25519/curve25519_amd64.go",
 	"golang.org/x/crypto/chacha20poly1305/chacha20poly1305_amd64.go",
 }
