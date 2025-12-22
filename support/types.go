@@ -49,7 +49,8 @@ const (
 )
 
 const (
-	EventTypeGenericPID = 0x1
+	EventTypeGenericPID     = 0x1
+	EventTypeReloadKallsyms = 0x2
 )
 
 const MaxFrameUnwinds = 0x80

@@ -74,8 +74,11 @@ func (t *Tracer) handleGenericPID() {
 // handler is invoked.
 func (t *Tracer) triggerPidEvent(data []byte) {
 	event := (*support.Event)(unsafe.Pointer(&data[0]))
-	if event.Type == support.EventTypeGenericPID {
+	switch event.Type {
+	case support.EventTypeGenericPID:
 		t.handleGenericPID()
+	case support.EventTypeReloadKallsyms:
+		t.kernelSymbolizer.Reload()
 	}
 }
 

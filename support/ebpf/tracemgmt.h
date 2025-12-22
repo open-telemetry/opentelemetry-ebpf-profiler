@@ -64,13 +64,11 @@ static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event
   // To avoid redundant notifications while userspace processing for them is already taking
   // place, we allow latch-like inhibition, where eBPF sets it and Go has to manually reset
   // it, before new notifications are triggered.
-  if (event_type != EVENT_TYPE_GENERIC_PID) {
-    return;
-  }
-
-  if (bpf_map_update_elem(&inhibit_events, &inhibit_key, &inhibit_value, BPF_NOEXIST) < 0) {
-    DEBUG_PRINT("Event type %d inhibited", event_type);
-    return;
+  if (event_type == EVENT_TYPE_GENERIC_PID) {
+    if (bpf_map_update_elem(&inhibit_events, &inhibit_key, &inhibit_value, BPF_NOEXIST) < 0) {
+      DEBUG_PRINT("Event type %d inhibited", event_type);
+      return;
+    }
   }
 
   switch (event_type) {
