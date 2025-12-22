@@ -22,13 +22,8 @@ import (
 	"time"
 	"unsafe"
 
-	cebpf "github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
-	"github.com/cilium/ebpf/perf"
 	"github.com/mdlayher/kobject"
-	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/support"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -614,85 +609,6 @@ func (s *Symbolizer) pollKobjectClient(ctx context.Context, kobjectClient *kobje
 	}
 }
 
-// kallsymsTrigger holds the program and map to notify
-// user space about changes to kallsyms.
-type kallsymsTrigger struct {
-	Program *cebpf.Program `ebpf:"kprobe__kallsyms"`
-	Map     *cebpf.Map     `ebpf:"report_kallsyms"`
-}
-
-// prepareKallsymsTrigger loads and assigns the relevant ebpf objects to notify
-// user space about changes to kallsyms.
-func prepareKallsymsTrigger() (*kallsymsTrigger, error) {
-	coll, err := support.LoadCollectionSpec()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load specification for kallsyms trigger: %v", err)
-	}
-
-	// The ebpf binary blob holds more programs and maps than should be loaded
-	// at this point. Therefore remove all maps and programs, that are not
-	// relevant for kallsyms handling.
-	for mapName := range coll.Maps {
-		if mapName != "report_kallsyms" && mapName != ".rodata.var" {
-			delete(coll.Maps, mapName)
-		}
-	}
-
-	for progName := range coll.Programs {
-		if progName != "kprobe__kallsyms" {
-			delete(coll.Programs, progName)
-		}
-	}
-
-	var obj kallsymsTrigger
-	if err := coll.LoadAndAssign(&obj, nil); err != nil {
-		return nil, err
-	}
-
-	return &obj, nil
-}
-
-// kallsymsTrigger attaches the kallsyms trigger to the relevant kprobe and
-// listens for its notifications.
-func (s *Symbolizer) kallsymsTrigger(ctx context.Context, obj *kallsymsTrigger) {
-	defer func() {
-		obj.Program.Close()
-		obj.Map.Close()
-	}()
-
-	rd, err := perf.NewReader(obj.Map, os.Getpagesize())
-	if err != nil {
-		log.Fatalf("creating event reader: %s", err)
-	}
-	defer rd.Close()
-
-	kp, err := link.Kprobe("bpf_ksym_add", obj.Program, nil)
-	if err != nil {
-		log.Errorf("Failed opening kprobe for kallsyms trigger: %s", err)
-		return
-	}
-	defer kp.Close()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			if _, err := rd.Read(); err != nil {
-				if errors.Is(err, perf.ErrClosed) {
-					return
-				}
-				log.Errorf("Failed to handle notification on bpf_ksym_add: %v", err)
-				continue
-			}
-			select {
-			case s.reloadModules <- true:
-			default:
-			}
-		}
-	}
-}
-
 // Reload will trigger asynchronous update of modules and symbols.
 func (s *Symbolizer) StartMonitor(ctx context.Context) error {
 	kobjectClient, err := kobject.New()
@@ -701,20 +617,16 @@ func (s *Symbolizer) StartMonitor(ctx context.Context) error {
 	}
 	go s.reloadWorker(ctx, kobjectClient)
 	go s.pollKobjectClient(ctx, kobjectClient)
-	major, minor, _, err := linux.GetCurrentKernelVersion()
-	if err != nil {
-		return fmt.Errorf("failed to get kernel version: %v", err)
-	}
-	if major < 5 || (major == 5 && minor < 8) {
-		log.Infof("Monitoring kallsyms is supported only for Linux kernel 5.8 or greater")
-	} else {
-		trigger, err := prepareKallsymsTrigger()
-		if err != nil {
-			return err
-		}
-		go s.kallsymsTrigger(ctx, trigger)
-	}
 	return nil
+}
+
+// Reload triggers a non-blocking reload and update of Symbolizer
+// with the recent information of /proc/kallsyms.
+func (s *Symbolizer) Reload() {
+	select {
+	case s.reloadModules <- true:
+	default:
+	}
 }
 
 // getModuleByAddress is a helper to find a Module from the sorted 'modules'

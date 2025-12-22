@@ -12,13 +12,17 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"os"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
+	cperf "github.com/cilium/ebpf/perf"
 	"github.com/elastic/go-perf"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -445,6 +449,10 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		}
 	}
 
+	if err = loadKallsymsTrigger(coll, ebpfProgs, cfg.BPFVerifierLogLevel); err != nil {
+		return nil, nil, fmt.Errorf("failed to remove temporary maps: %v", err)
+	}
+
 	if err = removeTemporaryMaps(ebpfMaps); err != nil {
 		return nil, nil, fmt.Errorf("failed to remove temporary maps: %v", err)
 	}
@@ -552,6 +560,36 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			return fmt.Errorf("failed to load %s: %v", mapName, err)
 		}
 		ebpfMaps[mapName] = ebpfMap
+	}
+
+	return nil
+}
+
+// loadKallsymsTrigger loads the eBPF program that triggers kallsym updates.
+func loadKallsymsTrigger(coll *cebpf.CollectionSpec,
+	ebpfProgs map[string]*cebpf.Program, bpfVerifierLogLevel uint32) error {
+	major, minor, _, err := linux.GetCurrentKernelVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get kernel version: %v", err)
+	}
+	if major < 5 || (major == 5 && minor < 8) {
+		log.Infof("Monitoring kallsyms is supported only for Linux kernel 5.8 or greater")
+		return nil
+	}
+
+	programOptions := cebpf.ProgramOptions{
+		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
+	}
+
+	kallsymsTriggerProg := "kprobe__kallsyms"
+	progSpec, ok := coll.Programs[kallsymsTriggerProg]
+	if !ok {
+		return fmt.Errorf("program %s does not exist", kallsymsTriggerProg)
+	}
+
+	if err := loadProgram(ebpfProgs, nil, 0, progSpec,
+		programOptions, true); err != nil {
+		return err
 	}
 
 	return nil
@@ -1021,10 +1059,69 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 	return nil
 }
 
+func (t *Tracer) attachToKallsymsUpdates(ctx context.Context) error {
+	defer func() {
+		pc, _, line, _ := runtime.Caller(1)
+		fn := runtime.FuncForPC(pc)
+		fmt.Fprintf(os.Stderr, "\t[%s():%d]\n", fn.Name(), line)
+	}()
+	prog, ok := t.ebpfProgs["kprobe__kallsyms"]
+	if !ok {
+		// For Linux kernels < 5.8 the program is not loaded.
+		// See verison check in loadKallsymsTrigger().
+		log.Infof("Will not attach to updates of /proc/kallsyms")
+		return nil
+	}
+
+	kallsysMap, ok := t.ebpfMaps["report_kallsyms"]
+	if !ok {
+		return fmt.Errorf("reporting map for kallsyms is missing")
+	}
+
+	rd, err := cperf.NewReader(kallsysMap, os.Getpagesize())
+	if err != nil {
+		return fmt.Errorf("failed creating event reader: %s", err)
+	}
+
+	kallsymsAttachPoint := "bpf_ksym_add"
+	hook, err := link.Kprobe(kallsymsAttachPoint, prog, nil)
+	if err != nil {
+		rd.Close()
+		return fmt.Errorf("failed opening kprobe for kallsyms trigger: %s", err)
+	}
+	t.hooks[hookPoint{group: "kprobe", name: kallsymsAttachPoint}] = hook
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer rd.Close()
+		wg.Done()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				if _, err := rd.Read(); err != nil {
+					if errors.Is(err, cperf.ErrClosed) {
+						return
+					}
+					log.Errorf("Failed to handle notification on bpf_ksym_add: %v", err)
+					continue
+				} else {
+					t.kernelSymbolizer.Reload()
+				}
+			}
+		}
+	}()
+	wg.Wait()
+
+	return nil
+}
+
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
 // entry point is always the native tracer. The native tracer will determine when to invoke the
 // interpreter tracers based on address range information.
-func (t *Tracer) AttachTracer() error {
+func (t *Tracer) AttachTracer(ctx context.Context) error {
 	tracerProg, ok := t.ebpfProgs["native_tracer_entry"]
 	if !ok {
 		return errors.New("entry program is not available")
@@ -1056,6 +1153,11 @@ func (t *Tracer) AttachTracer() error {
 		}
 		*events = append(*events, perfEvent)
 	}
+
+	if err = t.attachToKallsymsUpdates(ctx); err != nil {
+		return err
+	}
+
 	return nil
 }
 
