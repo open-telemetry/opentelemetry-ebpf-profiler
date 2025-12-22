@@ -9,7 +9,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -163,7 +162,7 @@ func (c *Controller) Shutdown() {
 
 func startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
 	// Spawn monitors for the various result maps
-	traceCh := make(chan *host.Trace)
+	traceCh := make(chan *libpf.EbpfTrace)
 
 	if err := trc.StartMapMonitors(ctx, traceCh); err != nil {
 		return fmt.Errorf("failed to start map monitors: %v", err)

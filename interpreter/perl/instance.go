@@ -13,7 +13,6 @@ import (
 	"github.com/zeebo/xxh3"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -385,8 +384,8 @@ func (i *perlInstance) getCOP(copAddr libpf.Address, funcName libpf.String) (
 	return c, nil
 }
 
-func (i *perlInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
-	if !frame.Type.IsInterpType(libpf.Perl) {
+func (i *perlInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+	if !ef.Type().IsInterpType(libpf.Perl) {
 		return interpreter.ErrMismatchInterpreterType
 	}
 
@@ -394,13 +393,13 @@ func (i *perlInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error 
 	defer sfCounter.DefaultToFailure()
 
 	functionName := interpreter.TopLevelFunctionName
-	if gvAddr := libpf.Address(frame.File); gvAddr != 0 {
+	if gvAddr := libpf.Address(ef.Variable(0)); gvAddr != 0 {
 		var err error
 		if functionName, err = i.getGV(gvAddr, false); err != nil {
 			return fmt.Errorf("failed to get Perl GV %x: %v", gvAddr, err)
 		}
 	}
-	copAddr := libpf.Address(frame.Lineno)
+	copAddr := libpf.Address(ef.Variable(1))
 	cop, err := i.getCOP(copAddr, functionName)
 	if err != nil {
 		return fmt.Errorf("failed to get Perl COP %x: %v", copAddr, err)
