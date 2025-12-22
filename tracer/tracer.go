@@ -1054,18 +1054,21 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 func (t *Tracer) attachToKallsymsUpdates() error {
 	prog, ok := t.ebpfProgs["kprobe__kallsyms"]
 	if !ok {
-		major, minor, _, err := linux.GetCurrentKernelVersion()
-		if err != nil {
-			return fmt.Errorf("failed to get kernel version: %v", err)
-		}
-		if major < 5 || (major == 5 && minor < 8) {
-			log.Infof("Monitoring kallsyms is supported only for Linux kernel 5.8 or greater")
-			return nil
-		}
 		return fmt.Errorf("kprobe__kallsyms is not available")
 	}
 
 	kallsymsAttachPoint := "bpf_ksym_add"
+	kmod, err := t.kernelSymbolizer.GetModuleByName(kallsyms.Kernel)
+	if err != nil {
+		return err
+	}
+
+	if _, err := kmod.LookupSymbol(kallsymsAttachPoint); err != nil {
+		log.Infof("Monitoring kallsyms is supported only for Linux kernel 5.8 or greater: %s: %v",
+			kallsymsAttachPoint, err)
+		return nil
+	}
+
 	hook, err := link.Kprobe(kallsymsAttachPoint, prog, nil)
 	if err != nil {
 		return fmt.Errorf("failed opening kprobe for kallsyms trigger: %s", err)
