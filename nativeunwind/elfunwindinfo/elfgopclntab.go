@@ -468,6 +468,20 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.functab = data[hdr118.pclnOffset:]
 		g.funcdata = g.functab
 		g.textStart = hdr118.textStart
+		if g.textStart == 0 {
+			// Starting with Go 1.26 the field textStart is set to 0 but moduledata.text
+			// which contains the same value is unaffected.
+			// The following logic assumes that .text matches moduledata.text
+			// which might not always be true (in which case we need to switch to moduledata.text
+			// which can be found through runtime.firstmoduledata).
+			//
+			//nolint:lll
+			// See https://github.com/golang/go/commit/0e1bd8b5f17e337df0ffb57af03419b96c695fe4
+			if sec := ef.Section(".text"); sec != nil {
+				g.textStart = uintptr(sec.Addr)
+				break
+			}
+		}
 		// With the change of the type of the first field of _func in Go 1.18, this
 		// value is now hard coded.
 		//
