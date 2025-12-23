@@ -79,6 +79,7 @@ func (t *Tracer) triggerPidEvent(data []byte) {
 		t.handleGenericPID()
 	case support.EventTypeReloadKallsyms:
 		t.kernelSymbolizer.Reload()
+		t.enableEvent(support.EventTypeReloadKallsyms)
 	}
 }
 
