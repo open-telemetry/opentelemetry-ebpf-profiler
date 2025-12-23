@@ -56,7 +56,8 @@ const (
 )
 
 const (
-	EventTypeGenericPID = C.EVENT_TYPE_GENERIC_PID
+	EventTypeGenericPID     = C.EVENT_TYPE_GENERIC_PID
+	EventTypeReloadKallsyms = C.EVENT_TYPE_RELOAD_KALLSYMS
 )
 
 const MaxFrameUnwinds = C.MAX_FRAME_UNWINDS

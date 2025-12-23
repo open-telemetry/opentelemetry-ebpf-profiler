@@ -20,6 +20,7 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
+	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
@@ -288,7 +289,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	// References to eBPF maps in the eBPF programs are just placeholders that need to be
 	// replaced by the actual loaded maps later on with rewriteMaps before loading the
 	// programs into the kernel.
-	major, minor, patch, err := GetCurrentKernelVersion()
+	major, minor, patch, err := linux.GetCurrentKernelVersion()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get kernel version: %v", err)
 	}
@@ -449,6 +450,10 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		}
 	}
 
+	if err = loadKallsymsTrigger(coll, ebpfProgs, cfg.BPFVerifierLogLevel); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to remove temporary maps: %v", err)
+	}
+
 	if err = removeTemporaryMaps(ebpfMaps); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to remove temporary maps: %v", err)
 	}
@@ -556,6 +561,27 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			return fmt.Errorf("failed to load %s: %v", mapName, err)
 		}
 		ebpfMaps[mapName] = ebpfMap
+	}
+
+	return nil
+}
+
+// loadKallsymsTrigger loads the eBPF program that triggers kallsym updates.
+func loadKallsymsTrigger(coll *cebpf.CollectionSpec,
+	ebpfProgs map[string]*cebpf.Program, bpfVerifierLogLevel uint32) error {
+	programOptions := cebpf.ProgramOptions{
+		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
+	}
+
+	kallsymsTriggerProg := "kprobe__kallsyms"
+	progSpec, ok := coll.Programs[kallsymsTriggerProg]
+	if !ok {
+		return fmt.Errorf("program %s does not exist", kallsymsTriggerProg)
+	}
+
+	if err := loadProgram(ebpfProgs, nil, 0, progSpec,
+		programOptions, true); err != nil {
+		return err
 	}
 
 	return nil
@@ -1025,6 +1051,33 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 	return nil
 }
 
+func (t *Tracer) attachToKallsymsUpdates() error {
+	prog, ok := t.ebpfProgs["kprobe__kallsyms"]
+	if !ok {
+		return fmt.Errorf("kprobe__kallsyms is not available")
+	}
+
+	kallsymsAttachPoint := "bpf_ksym_add"
+	kmod, err := t.kernelSymbolizer.GetModuleByName(kallsyms.Kernel)
+	if err != nil {
+		return err
+	}
+
+	if _, err := kmod.LookupSymbol(kallsymsAttachPoint); err != nil {
+		log.Infof("Monitoring kallsyms is supported only for Linux kernel 5.8 or greater: %s: %v",
+			kallsymsAttachPoint, err)
+		return nil
+	}
+
+	hook, err := link.Kprobe(kallsymsAttachPoint, prog, nil)
+	if err != nil {
+		return fmt.Errorf("failed opening kprobe for kallsyms trigger: %s", err)
+	}
+	t.hooks[hookPoint{group: "kprobe", name: kallsymsAttachPoint}] = hook
+
+	return nil
+}
+
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
 // entry point is always the native tracer. The native tracer will determine when to invoke the
 // interpreter tracers based on address range information.
@@ -1060,6 +1113,11 @@ func (t *Tracer) AttachTracer() error {
 		}
 		*events = append(*events, perfEvent)
 	}
+
+	if err = t.attachToKallsymsUpdates(); err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -91,6 +91,7 @@ type Symbolizer struct {
 	modules atomic.Value
 
 	reloadModules chan bool
+	reloadSymbols chan bool
 }
 
 // NewSymbolizer creates and returns a new kallsyms symbolizer and loads
@@ -98,6 +99,7 @@ type Symbolizer struct {
 func NewSymbolizer() (*Symbolizer, error) {
 	s := &Symbolizer{
 		reloadModules: make(chan bool, 1),
+		reloadSymbols: make(chan bool, 1),
 	}
 	if err := s.loadKallsyms(); err != nil {
 		return nil, err
@@ -573,6 +575,12 @@ func (s *Symbolizer) reloadWorker(ctx context.Context, kobjectClient *kobject.Cl
 				log.Warnf("Failed to reload kernel modules metadata: %v", err)
 				nextModulesReload = time.After(10 * time.Second)
 			}
+		case <-s.reloadSymbols:
+			// Just trigger reloading of symbols with small delay to batch
+			// potentially multiple module loads.
+			if nextKallsymsReload == noTimeout {
+				nextKallsymsReload = time.After(100 * time.Millisecond)
+			}
 		case <-nextKallsymsReload:
 			if err := s.loadKallsyms(); err == nil {
 				log.Debugf("Kernel symbols reloaded")
@@ -590,7 +598,7 @@ func (s *Symbolizer) reloadWorker(ctx context.Context, kobjectClient *kobject.Cl
 }
 
 // pollKobjectClient listens for kernel kobject events to reload kallsyms when needed.
-func (s *Symbolizer) pollKobjectClient(kobjectClient *kobject.Client) {
+func (s *Symbolizer) pollKobjectClient(ctx context.Context, kobjectClient *kobject.Client) {
 	for {
 		event, err := kobjectClient.Receive()
 		if err != nil {
@@ -601,6 +609,8 @@ func (s *Symbolizer) pollKobjectClient(kobjectClient *kobject.Client) {
 			// Notify worker thread without blocking
 			select {
 			case s.reloadModules <- true:
+			case <-ctx.Done():
+				return
 			default:
 			}
 		}
@@ -614,8 +624,17 @@ func (s *Symbolizer) StartMonitor(ctx context.Context) error {
 		return fmt.Errorf("failed to create kobject netlink socket: %v", err)
 	}
 	go s.reloadWorker(ctx, kobjectClient)
-	go s.pollKobjectClient(kobjectClient)
+	go s.pollKobjectClient(ctx, kobjectClient)
 	return nil
+}
+
+// Reload triggers a non-blocking reload and update of Symbolizer
+// with the recent information of /proc/kallsyms.
+func (s *Symbolizer) Reload() {
+	select {
+	case s.reloadSymbols <- true:
+	default:
+	}
 }
 
 // getModuleByAddress is a helper to find a Module from the sorted 'modules'
