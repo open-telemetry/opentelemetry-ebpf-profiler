@@ -57,7 +57,7 @@ ENV CARGO_HOME=/usr/local/cargo
 ENV RUSTUP_HOME=/usr/local/rustup
 
 # Install rustup and cargo
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.77
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.84.1
 
 # Add rust related environment variables
 RUN echo 'export PATH="/usr/local/cargo/bin:$PATH"' >> /etc/profile     \
