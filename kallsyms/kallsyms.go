@@ -91,6 +91,7 @@ type Symbolizer struct {
 	modules atomic.Value
 
 	reloadModules chan bool
+	reloadSymbols chan bool
 }
 
 // NewSymbolizer creates and returns a new kallsyms symbolizer and loads
@@ -98,6 +99,7 @@ type Symbolizer struct {
 func NewSymbolizer() (*Symbolizer, error) {
 	s := &Symbolizer{
 		reloadModules: make(chan bool, 1),
+		reloadSymbols: make(chan bool, 1),
 	}
 	if err := s.loadKallsyms(); err != nil {
 		return nil, err
@@ -573,6 +575,12 @@ func (s *Symbolizer) reloadWorker(ctx context.Context, kobjectClient *kobject.Cl
 				log.Warnf("Failed to reload kernel modules metadata: %v", err)
 				nextModulesReload = time.After(10 * time.Second)
 			}
+		case <-s.reloadSymbols:
+			// Just trigger reloading of symbols with small delay to batch
+			// potentially multiple module loads.
+			if nextKallsymsReload == noTimeout {
+				nextKallsymsReload = time.After(100 * time.Millisecond)
+			}
 		case <-nextKallsymsReload:
 			if err := s.loadKallsyms(); err == nil {
 				log.Debugf("Kernel symbols reloaded")
@@ -624,7 +632,7 @@ func (s *Symbolizer) StartMonitor(ctx context.Context) error {
 // with the recent information of /proc/kallsyms.
 func (s *Symbolizer) Reload() {
 	select {
-	case s.reloadModules <- true:
+	case s.reloadSymbols <- true:
 	default:
 	}
 }
