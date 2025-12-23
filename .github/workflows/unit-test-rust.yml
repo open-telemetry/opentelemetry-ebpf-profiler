@@ -31,7 +31,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
-          toolchain: 1.77
+          toolchain: 1.84.1
       - name: Install protoc
         uses: ./.github/workflows/protoc
       - name: Tests
