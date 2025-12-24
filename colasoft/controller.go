@@ -22,7 +22,7 @@ type (
 	StartCfg struct {
 		Freq, OffCpuThreshold, CacheEventSTolerance int
 		Interval, CacheEventSTimeout                time.Duration
-		TargetPids, MemTargetPIDs                   map[libpf.PID]struct{}
+		TargetPids, MemTargetPIDs                   map[libpf.PID]bool
 		MemProfileBlock                             uint64
 	}
 )
@@ -75,12 +75,13 @@ func (c *Collector) Stop() {
 	}
 }
 
-func (c *Collector) SyncTargetPIDs(targetPIds map[libpf.PID]struct{}) error {
+func (c *Collector) SyncTargetPIDs(targetPIds map[libpf.PID]bool) error {
 	return c.ctrl.SyncTargetPIDs(targetPIds)
 }
 
-func (c *Collector) SyncMemTargetPIDs(targetPIds map[libpf.PID]struct{}) error {
-	return c.ctrl.SyncMemTargetPIDs(targetPIds)
+func (c *Collector) SyncMemTargetPIDs(targetPIds map[libpf.PID]bool) error {
+	c.ctrl.SyncMemTargetPIDs(targetPIds)
+	return nil
 }
 
 func (c *Collector) SyncMemProfileBlock(memProfileBlock uint64) error {

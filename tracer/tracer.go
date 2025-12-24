@@ -14,6 +14,7 @@ import (
 	"math/rand/v2"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -131,6 +132,7 @@ type Tracer struct {
 	probabilisticThreshold uint
 	memProfileHooks        xsync.RWMutex[map[libpf.PID][]*link.Link]
 	memProfileBlock        uint64
+	memProfileTargetPids   sync.Map
 }
 
 type Config struct {
@@ -160,8 +162,7 @@ type Config struct {
 	OffCPUThreshold uint32
 	// MemProfile switch memprofile
 	// TargetPIDs is a list of PIDs to target for profiling.
-	TargetPIDs    map[libpf.PID]struct{}
-	MemTargetPIDs map[libpf.PID]struct{}
+	TargetPIDs map[libpf.PID]bool
 	// 每分配MemProfileBlock字节的内存就采集一次
 	MemProfileBlock uint64
 }
@@ -345,6 +346,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
 		memProfileHooks:        xsync.NewRWMutex(memProfileHooks),
+		memProfileTargetPids:   sync.Map{},
 	}, nil
 }
 
@@ -1403,6 +1405,6 @@ func (t *Tracer) TraceProcessor() tracehandler.TraceProcessor {
 	return t.processManager
 }
 
-func (t *Tracer) SyncTargetPIDs(targetPids map[libpf.PID]struct{}) error {
+func (t *Tracer) SyncTargetPIDs(targetPids map[libpf.PID]bool) error {
 	return t.processManager.SyncTargetPids(targetPids)
 }

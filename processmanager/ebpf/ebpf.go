@@ -92,7 +92,7 @@ type EbpfHandler interface {
 	// on LPM trie maps.
 	SupportsLPMTrieBatchOperations() bool
 
-	ConfigureTargetPIDs(pids map[libpf.PID]struct{}) error
+	ConfigureTargetPIDs(pids map[libpf.PID]bool) error
 }
 
 type ebpfMapsImpl struct {
@@ -839,7 +839,7 @@ func (impl *ebpfMapsImpl) SupportsLPMTrieBatchOperations() bool {
 }
 
 // ConfigureTargetPIDs 设置过滤的进程ID, 如果要开启进程过滤，传入参数中必须要有0,参数为空或者不传入0，则不会过滤进程
-func (impl *ebpfMapsImpl) ConfigureTargetPIDs(pids map[libpf.PID]struct{}) error {
+func (impl *ebpfMapsImpl) ConfigureTargetPIDs(pids map[libpf.PID]bool) error {
 	if impl.targetPids == nil {
 		log.Warnf("targetPids is nil, skip configure target pids")
 		return nil

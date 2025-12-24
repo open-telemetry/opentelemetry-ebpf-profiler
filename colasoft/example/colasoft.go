@@ -174,7 +174,7 @@ func main() {
 
 	c := colasoft.NewCollector(attrs)
 	cfg := colasoft.StartCfg{0, 0, 5000, time.Second * 5,
-		time.Minute, map[libpf.PID]struct{}{}, map[libpf.PID]struct{}{},
+		time.Minute, map[libpf.PID]bool{}, map[libpf.PID]bool{},
 		1024 * 2048}
 
 	if err := c.Start(ctx, cfg); err != nil {
