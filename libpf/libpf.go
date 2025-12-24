@@ -52,5 +52,9 @@ type Void struct{}
 // interpreted code.
 type SourceLineno uint64
 
+// SourceColumn represents a column number within a source file line. It is intended to be used
+// for the source column numbers in interpreted code.
+type SourceColumn uint64
+
 // Origin determines the source of a trace.
 type Origin int

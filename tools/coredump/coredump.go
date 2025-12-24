@@ -78,9 +78,13 @@ func formatFrame(frame *libpf.Frame) (string, error) {
 	}
 
 	if frame.FunctionName != libpf.NullString {
-		return fmt.Sprintf("%s+%d in %s:%d",
+		columnInfo := ""
+		if frame.SourceColumn != 0 {
+			columnInfo = fmt.Sprintf(":%d", frame.SourceColumn)
+		}
+		return fmt.Sprintf("%s+%d in %s:%d%s",
 			frame.FunctionName, frame.FunctionOffset,
-			frame.SourceFile, frame.SourceLine), nil
+			frame.SourceFile, frame.SourceLine, columnInfo), nil
 	}
 
 	if frame.Mapping.Valid() {
