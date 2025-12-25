@@ -95,7 +95,7 @@ func (pm *ProcessManager) updatePidInformation(pid libpf.PID, m *Mapping) (bool,
 			mappings:         make(map[libpf.Address]*Mapping),
 			mappingsByFileID: make(map[host.FileID]map[libpf.Address]*Mapping),
 			tsdInfo:          nil,
-			memProfileMeta:   &MemProfileMeta{ExecAbsPath: getAbsPath(pid, exePath)},
+			memProfileMeta:   &MemProfileMeta{ExecAbsPath: fmt.Sprintf("/proc/%d/root%s", pid, exePath)},
 		}
 		pm.pidToProcessInfo[pid] = info
 
@@ -450,7 +450,7 @@ func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *pro
 			if _info.memProfileMeta == nil {
 				_info.memProfileMeta = &MemProfileMeta{}
 			}
-			_info.memProfileMeta.LibcPath = libcPath
+			_info.memProfileMeta.LibcPath = fmt.Sprintf("/proc/%d/root%s", pr.PID(), libcPath)
 		}
 	}
 }

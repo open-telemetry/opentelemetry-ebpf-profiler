@@ -43,8 +43,8 @@ type Config struct {
 
 	Fs *flag.FlagSet
 
-	TargetPIDs      map[libpf.PID]struct{}
-	MemTargetPIDs   map[libpf.PID]struct{}
+	TargetPIDs      map[libpf.PID]bool
+	MemTargetPIDs   map[libpf.PID]bool
 	MemProfileBlock uint64
 }
 

@@ -1,6 +1,7 @@
 package tracer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	cebpf "github.com/cilium/ebpf"
@@ -11,11 +12,10 @@ import (
 	"github.com/toliu/opentelemetry-ebpf-profiler/processmanager"
 	"github.com/toliu/opentelemetry-ebpf-profiler/reporter"
 	"github.com/toliu/opentelemetry-ebpf-profiler/reporter/hotspotmem"
-	"golang.org/x/exp/maps"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unsafe"
 )
 
@@ -204,6 +204,8 @@ func (t *Tracer) TriggerMemProfile(p process.Process) error {
 		case libpf.Golang:
 			startProfiling = t.StartGolangMemProfiling
 			execPath = memProfileInfo.ExecAbsPath
+		case libpf.PHP, libpf.PHPJIT, libpf.Kernel, libpf.Ruby, libpf.Perl, libpf.V8, libpf.Dotnet:
+			return nil
 		default:
 			startProfiling = t.StartCLikeMemProfiling
 			execPath = memProfileInfo.LibcPath
@@ -228,45 +230,43 @@ func (t *Tracer) TriggerMemProfile(p process.Process) error {
 	return fmt.Errorf("unable to start memprofile with pid: %d, can not find MemProfile MetaInfo", p.PID())
 }
 
-func (t *Tracer) SyncMemProfile(pids map[libpf.PID]struct{}, memProfileBlock uint64) {
+func (t *Tracer) StartMemProfile(ctx context.Context, memProfileBlock uint64) {
 	if err := t.SyncMemProfileBlock(memProfileBlock); err != nil {
 		return
 	}
-	if r, ok := t.reporter.(reporter.MemReporter); ok {
-		r.SyncTargetPids(pids)
-	}
-	memProfileHooks := t.memProfileHooks.WLock()
-	oldPids := maps.Keys(*memProfileHooks)
-	t.memProfileHooks.WUnlock(&memProfileHooks)
-	var addProcs []process.Process
-	for p, _ := range pids {
-		if slices.Contains(oldPids, p) || p == 0 {
-			continue
+	ticker := time.NewTicker(time.Second)
+	go func(t *Tracer) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			t.memProfileTargetPids.Range(func(k, v interface{}) bool {
+				if add, ok := v.(bool); ok {
+					if !add {
+						t.detachMemProfile(k.(libpf.PID))
+						t.memProfileTargetPids.Delete(k)
+					} else {
+						proc := process.New(k.(libpf.PID))
+						t.processManager.SynchronizeProcess(proc)
+						if err := t.TriggerMemProfile(proc); err != nil {
+							log.Debugf("failed to trigger memprofile for process %v: %v", k, err)
+						} else {
+							t.memProfileTargetPids.Delete(k)
+						}
+					}
+				}
+				return true
+			})
 		}
-		proc := process.New(p)
-		t.processManager.SynchronizeProcess(proc)
-		addProcs = append(addProcs, proc)
-	}
-	var removePids []libpf.PID
-	for _, oldP := range oldPids {
-		if _, ok := pids[oldP]; ok {
-			continue
-		}
-		removePids = append(removePids, oldP)
-	}
-	for _, pid := range removePids {
-		t.detachMemProfile(pid)
-	}
-	for _, proc := range addProcs {
-		if err := t.TriggerMemProfile(proc); err != nil {
-			log.Debugf("failed to trigger memprofile for process %d: %v", proc.PID(), err)
-		}
-	}
+	}(t)
 }
 
-func (t *Tracer) SyncMemProfileTargetPids(targetPids map[libpf.PID]struct{}) error {
-	t.SyncMemProfile(targetPids, t.memProfileBlock)
-	return nil
+func (t *Tracer) SyncMemProfileTargetPids(targetPids map[libpf.PID]bool) {
+	for pid, add := range targetPids {
+		t.memProfileTargetPids.Store(pid, add)
+	}
 }
 
 func (t *Tracer) SyncMemProfileBlock(block uint64) error {
