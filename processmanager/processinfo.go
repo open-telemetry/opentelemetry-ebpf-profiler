@@ -446,7 +446,10 @@ func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *pro
 
 	if isCLibrary(mapping.Path) {
 		libcPath := getAbsPath(pr.PID(), mapping.Path)
-		if _info, ok := pm.pidToProcessInfo[pr.PID()]; ok {
+		pm.mu.RLock()
+		_info, ok := pm.pidToProcessInfo[pr.PID()]
+		pm.mu.RUnlock()
+		if ok {
 			if _info.memProfileMeta == nil {
 				_info.memProfileMeta = &MemProfileMeta{}
 			}
@@ -804,6 +807,8 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 }
 
 func (pm *ProcessManager) GetMemProfileInfo(pid libpf.PID) *MemProfileMeta {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
 	if info, ok := pm.pidToProcessInfo[pid]; ok {
 		return info.memProfileMeta
 	}
