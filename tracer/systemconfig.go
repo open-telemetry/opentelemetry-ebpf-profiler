@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"runtime"
 	"strings"
 	"syscall"
@@ -16,6 +17,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/pacmask"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -178,7 +181,7 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 
 	key0 := uint32(0)
 	data := support.SystemAnalysis{
-		Pid:     uint32(os.Getpid()),
+		Done:    false,
 		Address: uint64(address),
 	}
 
@@ -231,8 +234,8 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 }
 
 func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.SymbolValue) error {
-	if data.Pid != 0 {
-		return fmt.Errorf("%w for pid %d at 0x%x", errSystemAnalysisNotHandled, data.Pid, address)
+	if !data.Done {
+		return fmt.Errorf("%w at 0x%x", errSystemAnalysisNotHandled, address)
 	}
 
 	if data.Err != 0 {
@@ -313,8 +316,95 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 	return errors.New("unable to find task stack offset")
 }
 
+func retrievePkgName(val any) string {
+	pc := reflect.ValueOf(val).Pointer()
+	return runtime.FuncForPC(pc).Name()
+}
+
+func loadTracerPID(orig *cebpf.CollectionSpec) (uint32, error) {
+	selfFilePath, err := os.Executable()
+	if err != nil {
+		return 0, err
+	}
+	file, err := pfelf.Open(selfFilePath)
+	if err != nil {
+		return 0, err
+	}
+	goPclntab, err := elfunwindinfo.NewGopclntab(file)
+	if err != nil {
+		return 0, err
+	}
+	// symbolName := "go.opentelemetry.io/ebpf-profiler/tracer.storePid"
+	symbolName := retrievePkgName(storePid)
+	sym, err := goPclntab.LookupSymbol(libpf.SymbolName(symbolName))
+	if err != nil {
+		return 0, err
+	}
+	addr, err := file.VirtAddrToFileOffset(uint64(sym.Address))
+	if err != nil {
+		return 0, err
+	}
+	progSpec, err := ParseProbe(fmt.Sprintf("uprobe:%s:%s", selfFilePath, symbolName))
+	if err != nil {
+		return 0, err
+	}
+
+	new := &cebpf.CollectionSpec{
+		Maps:     make(map[string]*cebpf.MapSpec),
+		Programs: make(map[string]*cebpf.ProgramSpec),
+	}
+	new.Maps["tracer_pid_m"] = orig.Maps["tracer_pid_m"].Copy()
+	new.Programs["store_tracer_pid"] = orig.Programs["store_tracer_pid"].Copy()
+	maps := make(map[string]*cebpf.Map)
+
+	if err := loadAllMaps(new, &Config{}, maps); err != nil {
+		return 0, err
+	}
+
+	if err := rewriteMaps(new, maps); err != nil {
+		return 0, fmt.Errorf("failed to rewrite maps: %v", err)
+	}
+
+	uprobeProg, err := cebpf.NewProgram(new.Programs["store_tracer_pid"])
+	if err != nil {
+		return 0, err
+	}
+	ex, err := link.OpenExecutable(progSpec.Target)
+	if err != nil {
+		return 0, err
+	}
+
+	link, err := ex.Uprobe(progSpec.Symbol, uprobeProg, &link.UprobeOptions{Address: addr})
+	if err != nil {
+		return 0, err
+	}
+	defer link.Close()
+	// trigger uprobe
+	storePid()
+
+	key0 := uint32(0)
+	var tracerPid uint32
+	if err = maps["tracer_pid_m"].Lookup(unsafe.Pointer(&key0), unsafe.Pointer(&tracerPid)); err != nil {
+		return 0, err
+	}
+
+	return tracerPid, nil
+}
+
+//go:noinline
+func storePid() {}
+
 // prepareAnalysis creates a new CollectionSpec for the system analysis.
 func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[string]*cebpf.Map, error) {
+	tracerPid, err := loadTracerPID(orig)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := orig.Variables["tracer_pid"].Set(tracerPid); err != nil {
+		return nil, nil, fmt.Errorf("failed to set tracer_pid: %v", err)
+	}
+
 	new := &cebpf.CollectionSpec{
 		Maps:     make(map[string]*cebpf.MapSpec),
 		Programs: make(map[string]*cebpf.ProgramSpec),

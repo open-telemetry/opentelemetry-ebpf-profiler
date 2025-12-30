@@ -42,7 +42,7 @@ import (
 // isPIDLive checks if a PID belongs to a live process. It will never produce a false negative but
 // may produce a false positive (e.g. due to permissions) in which case an error will also be
 // returned.
-func isPIDLive(pid libpf.PID) (bool, error) {
+func (pm *ProcessManager) isPIDLive(pid libpf.PID) (bool, error) {
 	// Check first with the kill syscall which is the fastest route.
 	// A kill syscall with a 0 signal is documented to still do the check
 	// whether the process exists: https://linux.die.net/man/2/kill
@@ -64,7 +64,7 @@ func isPIDLive(pid libpf.PID) (bool, error) {
 		}
 	}
 
-	path := fmt.Sprintf("/proc/%d/maps", pid)
+	path := path.Join(pm.procFsPath, fmt.Sprintf("/%d/maps", pid))
 	_, err = os.Stat(path)
 	if err != nil && os.IsNotExist(err) {
 		return false, nil
@@ -781,7 +781,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	for _, instance := range interpreters {
 		err := instance.SynchronizeMappings(pm.ebpf, pm.exeReporter, pr, interpreterMappings.mappings())
 		if err != nil {
-			if alive, _ := isPIDLive(pid); alive {
+			if alive, _ := pm.isPIDLive(pid); alive {
 				log.Debugf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
 			} else {
 				log.Debugf("Failed to handle new anonymous mapping for PID %d: process exited",
@@ -819,7 +819,7 @@ func (pm *ProcessManager) CleanupPIDs() {
 
 	pm.mu.RLock()
 	for pid := range pm.pidToProcessInfo {
-		if live, _ := isPIDLive(pid); !live {
+		if live, _ := pm.isPIDLive(pid); !live {
 			deadPids = append(deadPids, pid)
 		}
 	}

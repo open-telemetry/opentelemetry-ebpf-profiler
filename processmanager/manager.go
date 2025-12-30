@@ -68,6 +68,7 @@ type Config struct {
 	FrameCacheSize        uint32
 	FilterErrorFrames     bool
 	IncludeEnvVars        libpf.Set[string]
+	ProcFsPath            string
 }
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
@@ -127,6 +128,7 @@ func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
 		includeEnvVars:           cfg.IncludeEnvVars,
 		selfCgroupIno:            selfCgroupIno,
 		selfContainerID:          selfContainerID,
+		procFsPath:               cfg.ProcFsPath,
 	}
 
 	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)

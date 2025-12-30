@@ -156,14 +156,17 @@ type Symbolizer struct {
 	bpf *bpfSymbolizer
 
 	reloadModules chan libpf.Void
+
+	rootFs string
 }
 
 // NewSymbolizer creates and returns a new kallsyms symbolizer and loads
 // the initial 'kallsymbols'.
-func NewSymbolizer() (*Symbolizer, error) {
+func NewSymbolizer(procFsPath string) (*Symbolizer, error) {
 	s := &Symbolizer{
 		bpf:           &bpfSymbolizer{},
 		reloadModules: make(chan libpf.Void, 1),
+		rootFs:        procFsPath,
 	}
 	if err := s.loadKallsyms(); err != nil {
 		return nil, err
@@ -548,7 +551,7 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 // loadKallsyms will reload kernel symbols. This function can run concurrently with
 // module and symbol lookups. The reload result is visible atomically after success.
 func (s *Symbolizer) loadKallsyms() error {
-	file, err := os.Open("/proc/kallsyms")
+	file, err := os.Open(path.Join(s.rootFs, "proc", "kallsyms"))
 	if err != nil {
 		return fmt.Errorf("unable to open kallsyms: %v", err)
 	}

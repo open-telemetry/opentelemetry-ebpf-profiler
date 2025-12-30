@@ -76,7 +76,8 @@ const (
 // Shared map name according to
 // https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
 const (
-	obiSpanTracesMap = "traces_ctx_v1"
+	obiSpanTracesMap  = "traces_ctx_v1"
+	defaultRootFsPath = "/"
 )
 
 // Intervals is a subset of config.IntervalsAndTimers.
@@ -155,6 +156,11 @@ type Tracer struct {
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
 	doneOnce sync.Once
+
+	// filterIdleFrames indicates whether idle frames should be filtered.
+	filterIdleFrames bool
+
+	procPath string
 }
 
 // Done returns a channel that is closed when the tracer encounters an
@@ -215,6 +221,7 @@ type Config struct {
 	BPFFSRoot string
 	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
 	OBIProcessCtx bool
+	RootFs        string
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -254,7 +261,11 @@ func newTracePool() sync.Pool {
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
 func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
-	kernelSymbolizer, err := kallsyms.NewSymbolizer()
+	if cfg.RootFs == "" {
+		cfg.RootFs = defaultRootFsPath
+	}
+
+	kernelSymbolizer, err := kallsyms.NewSymbolizer(cfg.RootFs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
@@ -286,6 +297,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		FrameCacheSize:        cfg.FrameCacheSize,
 		FilterErrorFrames:     cfg.FilterErrorFrames,
 		IncludeEnvVars:        cfg.IncludeEnvVars,
+		ProcFsPath:            cfg.RootFs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
@@ -315,6 +327,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
 		done:                   make(chan libpf.Void),
+		procPath:               cfg.RootFs,
 	}
 
 	return tracer, nil

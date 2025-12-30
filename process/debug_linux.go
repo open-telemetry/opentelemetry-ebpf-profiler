@@ -8,6 +8,7 @@ package process // import "go.opentelemetry.io/ebpf-profiler/process"
 import (
 	"fmt"
 	"os"
+	"path"
 	"runtime"
 	"strconv"
 	"unsafe"
@@ -61,7 +62,7 @@ func NewPtrace(pid libpf.PID) (Process, error) {
 }
 
 func (sp *ptraceProcess) GetThreads() ([]ThreadInfo, error) {
-	tidFiles, err := os.ReadDir(fmt.Sprintf("/proc/%d/task", sp.pid))
+	tidFiles, err := os.ReadDir(path.Join(sp.rootFs, fmt.Sprintf("/%d/task", sp.pid)))
 	if err != nil {
 		return nil, err
 	}

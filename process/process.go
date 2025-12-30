@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -65,6 +66,8 @@ type systemProcess struct {
 
 	mainThreadExit bool
 	remoteMemory   remotememory.RemoteMemory
+
+	rootFs string
 }
 
 var _ Process = &systemProcess{}
@@ -86,11 +89,12 @@ func init() {
 }
 
 // New returns an object with Process interface accessing it
-func New(pid, tid libpf.PID) Process {
+func New(pid, tid libpf.PID, procRootPath string) Process {
 	return &systemProcess{
 		pid:          pid,
 		tid:          tid,
 		remoteMemory: remotememory.NewProcessVirtualMemory(pid),
+		rootFs:       procRootPath,
 	}
 }
 
@@ -103,7 +107,7 @@ func (sp *systemProcess) GetMachineData() MachineData {
 }
 
 func (sp *systemProcess) GetExe() (libpf.String, error) {
-	str, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", sp.pid))
+	str, err := os.Readlink(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/exe", sp.pid)))
 	if err != nil {
 		return libpf.NullString, err
 	}
@@ -113,13 +117,13 @@ func (sp *systemProcess) GetExe() (libpf.String, error) {
 func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 	var processName libpf.String
 	exePath, _ := sp.GetExe()
-	if name, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", sp.pid)); err == nil {
+	if name, err := os.ReadFile(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/comm", sp.pid))); err == nil {
 		processName = libpf.Intern(pfunsafe.ToString(name))
 	}
 
 	var envVarMap map[libpf.String]libpf.String
 	if len(cfg.IncludeEnvVars) > 0 {
-		if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", sp.pid)); err == nil {
+		if envVars, err := os.ReadFile(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/environ", sp.pid))); err == nil {
 			envVarMap = make(map[libpf.String]libpf.String, len(cfg.IncludeEnvVars))
 			// environ has environment variables separated by a null byte (hex: 00)
 			for envVar := range strings.SplitSeq(pfunsafe.ToString(envVars), "\000") {
@@ -134,7 +138,7 @@ func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 		}
 	}
 
-	containerID, err := extractContainerID(sp.pid)
+	containerID, err := sp.extractContainerID()
 	if err != nil {
 		log.Debugf("Failed extracting containerID for %d: %v", sp.pid, err)
 	}
@@ -176,8 +180,8 @@ func parseContainerID(cgroupFile io.Reader) libpf.String {
 }
 
 // extractContainerID returns the containerID for pid (supports both cgroup v1 and v2)
-func extractContainerID(pid libpf.PID) (libpf.String, error) {
-	cgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
+func (sp *systemProcess) extractContainerID() (libpf.String, error) {
+	cgroupFile, err := os.Open(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/cgroup", sp.pid)))
 	if err != nil {
 		return libpf.NullString, err
 	}
@@ -391,7 +395,7 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 }
 
 func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint32, error) {
-	mapsFile, err := os.Open(fmt.Sprintf("/proc/%d/maps", sp.pid))
+	mapsFile, err := os.Open(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/maps", sp.pid)))
 	if err != nil {
 		return 0, err
 	}
@@ -422,7 +426,7 @@ func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint
 		}
 
 		log.Debugf("TID: %v extracting mappings", sp.tid)
-		mapsFileAlt, err := os.Open(fmt.Sprintf("/proc/%d/task/%d/maps", sp.pid, sp.tid))
+		mapsFileAlt, err := os.Open(path.Join(sp.rootFs, fmt.Sprintf("/proc/%d/task/%d/maps", sp.pid, sp.tid)))
 		// On all errors resulting from trying to get mappings from a different thread,
 		// return ErrNoMappings which will keep the PID tracked in processmanager and
 		// allow for a future iteration to try extracting mappings from a different thread.
@@ -492,7 +496,7 @@ func (sp *systemProcess) getMappingFile(m *RawMapping) (*os.File, error) {
 		}
 		return f, nil
 	}
-	filename := fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
+	filename := path.Join(sp.rootFs, fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length))
 	return os.Open(filename)
 }
 
