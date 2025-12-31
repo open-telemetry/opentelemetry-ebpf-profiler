@@ -179,6 +179,11 @@ func (t *Tracer) StartPythonMemProfiling(exec *link.Executable, _ *processmanage
 }
 
 func (t *Tracer) TriggerMemProfile(p process.Process) error {
+	memProfileHooks := t.memProfileHooks.WLock()
+	if _, exist := (*memProfileHooks)[p.PID()]; exist {
+		return nil
+	}
+	t.memProfileHooks.WUnlock(&memProfileHooks)
 	if memProfileInfo := t.processManager.GetMemProfileInfo(p.PID()); memProfileInfo != nil {
 		var startProfiling func(exec *link.Executable, info *processmanager.MemProfileMeta, pid int, opts *link.UprobeOptions) ([]*link.Link, error)
 		var exec *link.Executable
