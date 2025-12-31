@@ -102,7 +102,7 @@ func (j *JVMAttacher) startAttachMechanism() error {
 	attachFile := fmt.Sprintf("%s/.attach_pid%d", j.tmpPath, j.nspid)
 
 	// 尝试在 /proc/pid/cwd 创建
-	cwdAttachFile := fmt.Sprintf("/proc/%d/cwd/.attach_pid%d", j.nspid, j.nspid)
+	cwdAttachFile := fmt.Sprintf("/proc/%d/cwd/.attach_pid%d", j.pid, j.nspid)
 	f, err := os.OpenFile(cwdAttachFile, os.O_CREATE|os.O_WRONLY, 0660)
 	if err == nil {
 		_ = f.Close()
