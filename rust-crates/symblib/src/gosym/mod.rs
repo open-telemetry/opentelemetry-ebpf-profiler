@@ -70,13 +70,12 @@ impl<'obj> GoRuntimeInfo<'obj> {
         };
 
         // Fall back to code section address if the text start isn't
-        // available from the header.
-        let text_start = if let Some(start) = offsets.text_start {
-            start
-        } else {
-            obj.load_section(b".text")?
+        // available from the header or is 0.
+        let text_start = match offsets.text_start {
+            Some(start) if start != 0 => start,
+            _ => obj.load_section(b".text")?
                 .ok_or(Error::CodeSectionNotFound)?
-                .virt_addr()
+                .virt_addr(),
         };
 
         // Create decoders for the various sub-regions of runtime info.
