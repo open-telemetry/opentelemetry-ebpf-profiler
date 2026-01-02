@@ -340,9 +340,9 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 		oldLen := len(trace.Frames)
 		key := frameCacheKey{}
 		if frame.Flags().PIDSpecific() {
-			key.data[0] = uint64(pid)
+			key.pid = pid
 		}
-		copy(key.data[1:], frame)
+		copy(key.data[:], frame)
 		if cached, ok := pm.frameCache.GetAndRefresh(key, frameCacheLifetime); ok {
 			// Fast path
 			cacheHit++

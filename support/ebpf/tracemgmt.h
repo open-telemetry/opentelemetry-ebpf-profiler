@@ -323,11 +323,11 @@ static inline EBPF_INLINE bool unwinder_unwind_frame_pointer(UnwindState *state)
 
 static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u64 data)
 {
-  // frame format:
+  // frame header format (fixed size):
   //  #bits   usage
   //      4   frame type
   //      4   frame flags
-  //      4   number of 64-bit data entries
+  //      4   number of 64-bit 'variable' fields
   //     52   type specific data
   return ((u64)frame_type << 60) | ((u64)flags << 56) | ((u64)length << 52) | data;
 }

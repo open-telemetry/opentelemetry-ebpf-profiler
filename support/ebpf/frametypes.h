@@ -35,8 +35,12 @@
 #define FRAME_MARKER_BEAM    0xC
 
 // Frame flags
+// Indicates that this frame is an error frame.
 #define FRAME_FLAG_ERROR          (1U << 0)
+// Indicates that this frame PC is a return address.
 #define FRAME_FLAG_RETURN_ADDRESS (1U << 1)
+// Indicates that the frame contains process specific addresses,
+// and the PID should be included in the caching key.
 #define FRAME_FLAG_PID_SPECIFIC   (1U << 2)
 
 // HotSpot frame subtypes stored in a bitfield of the trace->lines[]

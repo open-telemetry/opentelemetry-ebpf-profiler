@@ -574,8 +574,8 @@ typedef struct Trace {
   // The frame data of the stack trace. Each frame is variable length.
   // Frame is currently 2-3 entries long. This array size limits the
   // number of frames we can unwind, but also increases the memory
-  // needed for buffering everything. The 3kB entries here is choson
-  // to allow about 1024 frames long traces to be sent.
+  // needed for buffering everything. The 3kB entries here is chosen
+  // to allow about 1024 frames in a trace to be sent.
   u64 frame_data[3072];
 
   // NOTE: both send_trace in BPF and loadBpfTrace in UM code require `frame_data`
