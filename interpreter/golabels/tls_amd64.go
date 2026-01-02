@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
+	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"golang.org/x/arch/x86/x86asm"
 )
 
@@ -34,6 +35,9 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 	// Binaries built with -buildmode=pie have a different assembly code for stackcheck with 2 movs:
 	//  0x00000000007ec320 <+0>:	mov    $0xfffffffffffffff8,%rcx
 	//  0x00000000007ec327 <+7>:	mov    %fs:(%rcx),%rax
+	// In some binaries offset is stored relative to RIP:
+	// 0x000000000017e34c0 <+0>: 	mov    0x40b9af9(%rip),%rcx        # 589cfc0 <runtime.tlsg@@Base+0x589cfc0>
+	// 0x000000000017e34c7 <+7>:	mov    %fs:(%rcx),%rax
 	sym, err := pclntab.LookupSymbol(libpf.SymbolName(symbolName))
 	if err != nil {
 		return 0, err
@@ -47,6 +51,8 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 
 	offset := e.NewImmediateCapture("offset")
 	it := amd.NewInterpreterWithCode(code)
+	it.CodeAddress = e.Imm(uint64(sym.Address))
+
 	for {
 		op, err := it.Step()
 		if err != nil {
@@ -67,11 +73,25 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 		// Otherwise, the offset is in the register:
 		// 0x00000000007ec320 <+0>:	mov    $0xfffffffffffffff8,%rcx
 		// 0x00000000007ec327 <+7>:	mov    %fs:(%rcx),%rax
-		// Check if the register value was set with an immediate value in a previous instruction
-		// and if so, use that value as the offset.
+		// or loaded from memory via RIP-relative addressing:
+		// 0x000000000017e34c0 <+0>: 	mov    0x40b9af9(%rip),%rcx        # 589cfc0 <runtime.tlsg@@Base+0x589cfc0>
+		// 0x000000000017e34c7 <+7>:	mov    %fs:(%rcx),%rax
+		// The register system handles RIP-relative addressing transparently,
+		// resolving it to a virtual memory address.
 		actual := it.Regs.GetX86(mem.Base)
 		if actual.Match(offset) {
 			return int32(offset.CapturedValue()), nil
+		}
+		// If the register value is a memory reference, read from it
+		addr := e.NewImmediateCapture("addr")
+		if actual.Match(e.Mem8(addr)) {
+			valueBytes, err := f.VirtualMemory(int64(addr.CapturedValue()), 8, 8)
+			if err != nil {
+				continue
+			}
+			// Read the 8-byte value as int64 (little-endian)
+			value := int64(npsr.Uint64(valueBytes, 0))
+			return int32(value), nil
 		}
 	}
 	return -8, fmt.Errorf("symbol '%s': %w", symbolName, errDecodeSymbol)

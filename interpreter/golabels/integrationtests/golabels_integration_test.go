@@ -8,6 +8,7 @@ package integrationtests
 import (
 	"context"
 	_ "embed"
+	"log/slog"
 	"math"
 	"os"
 	"os/exec"
@@ -86,7 +87,7 @@ func Test_Golabels(t *testing.T) {
 			enabledTracers.Enable(tracertypes.Labels)
 			enabledTracers.Enable(tracertypes.GoTracer)
 
-			log.SetDebugLogger()
+			log.SetLevel(slog.LevelDebug)
 			trc, err := tracer.NewTracer(ctx, &tracer.Config{
 				Intervals:              &mockIntervals{},
 				IncludeTracers:         enabledTracers,
