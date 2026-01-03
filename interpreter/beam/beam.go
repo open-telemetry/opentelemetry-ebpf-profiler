@@ -9,13 +9,16 @@ package beam // import "go.opentelemetry.io/ebpf-profiler/interpreter/beam"
 // that share the same bytecode, such as Elixir and Gleam.
 
 import (
+	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"regexp"
 	"strings"
 	"unsafe"
 
 	"github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -102,16 +105,23 @@ type beamData struct {
 	}
 }
 
+type beamMfa struct {
+	module   uint32
+	function uint32
+	arity    uint32
+}
+
 type beamInstance struct {
 	interpreter.InstanceStubs
 
-	pid         libpf.PID
-	data        *beamData
-	rm          remotememory.RemoteMemory
-	rangesPtr   libpf.Address
-	atomTable   libpf.Address
-	atomCache   map[uint32]string
-	stringCache *freelru.LRU[libpf.Address, libpf.String]
+	pid          libpf.PID
+	data         *beamData
+	rm           remotememory.RemoteMemory
+	rangesPtr    libpf.Address
+	atomTable    libpf.Address
+	atomCache    *freelru.LRU[uint32, libpf.String]
+	mfaNameCache *freelru.LRU[beamMfa, libpf.String]
+	stringCache  *freelru.LRU[libpf.Address, libpf.String]
 
 	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
 	prefixes map[lpm.Prefix]uint32
@@ -229,6 +239,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.beamCodeHeader.lineTable = 72
 	vms.ertsCodeInfo.sizeOf = 40
 	vms.ertsCodeInfo.mfa = 16
+	vms.ertsCodeMfa.sizeOf = 24
 	vms.ertsCodeMfa.module = 0
 	vms.ertsCodeMfa.function = 8
 	vms.ertsCodeMfa.arity = 16
@@ -282,6 +293,25 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		return nil, err
 	}
 
+	atomCache, err := freelru.New[uint32, libpf.String](
+		interpreter.LruFunctionCacheSize, hash.Uint32)
+	if err != nil {
+		return nil, err
+	}
+
+	hashMFA := func(key beamMfa) uint32 {
+		data := make([]byte, 12)
+		binary.LittleEndian.PutUint32(data[0:4], key.module)
+		binary.LittleEndian.PutUint32(data[4:8], key.function)
+		binary.LittleEndian.PutUint32(data[8:12], key.arity)
+		return crc32.ChecksumIEEE(data)
+	}
+	mfaNameCache, err := freelru.New[beamMfa, libpf.String](
+		interpreter.LruFunctionCacheSize, hashMFA)
+	if err != nil {
+		return nil, err
+	}
+
 	stringCache, err := freelru.New[libpf.Address, libpf.String](
 		interpreter.LruFunctionCacheSize, libpf.Address.Hash32)
 	if err != nil {
@@ -289,14 +319,15 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	}
 
 	return &beamInstance{
-		pid:         pid,
-		data:        d,
-		rm:          rm,
-		prefixes:    make(map[lpm.Prefix]uint32),
-		rangesPtr:   bias + libpf.Address(d.r),
-		atomTable:   bias + libpf.Address(d.ertsAtomTable),
-		atomCache:   make(map[uint32]string),
-		stringCache: stringCache,
+		pid:          pid,
+		data:         d,
+		rm:           rm,
+		prefixes:     make(map[lpm.Prefix]uint32),
+		rangesPtr:    bias + libpf.Address(d.r),
+		atomTable:    bias + libpf.Address(d.ertsAtomTable),
+		atomCache:    atomCache,
+		mfaNameCache: mfaNameCache,
+		stringCache:  stringCache,
 	}, nil
 }
 
@@ -356,60 +387,74 @@ func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 	pc := libpf.Address(ef.Data())
 	codeHeader := libpf.Address(ef.Variable(0))
 
-	log.Debugf("BEAM symbolizing pc: 0x%x", pc)
-
-	functionIndex, moduleID, functionID, arity, err := i.findMFA(pc, codeHeader)
+	functionIndex, mfa, err := i.findMFA(pc, codeHeader)
 	if err != nil {
 		return err
 	}
 
-	moduleName, err := i.lookupAtom(moduleID)
-	if err != nil {
-		return err
-	}
-	functionName, err := i.lookupAtom(functionID)
-	if err != nil {
-		return err
-	}
-
-	mfaName := ""
-	if strings.HasPrefix(moduleName, "Elixir.") {
-		// This is an Elixir module, so format the function using Elixir syntax (without the "Elixir." prefix)
-		mfaName = fmt.Sprintf("%s.%s/%d", moduleName[7:], functionName, arity)
+	var mfaName libpf.String
+	if value, ok := i.mfaNameCache.Get(mfa); ok {
+		mfaName = value
 	} else {
-		// Assume it's Erlang and format it using Erlang syntax
-		mfaName = fmt.Sprintf("%s:%s/%d", moduleName, functionName, arity)
+		moduleName, err := i.lookupAtom(mfa.module)
+		if err != nil {
+			return err
+		}
+		functionName, err := i.lookupAtom(mfa.function)
+		if err != nil {
+			return err
+		}
+
+		if strings.HasPrefix(moduleName.String(), "Elixir.") {
+			// This is an Elixir module, so format the function using Elixir syntax (without the "Elixir." prefix)
+			mfaName = libpf.Intern(fmt.Sprintf("%s.%s/%d", moduleName.String()[7:], functionName, mfa.arity))
+		} else {
+			// Assume it's Erlang and format it using Erlang syntax
+			mfaName = libpf.Intern(fmt.Sprintf("%s:%s/%d", moduleName, functionName, mfa.arity))
+		}
+
+		i.mfaNameCache.Add(mfa, mfaName)
 	}
 
 	fileName, lineNumber, err := i.findFileLocation(codeHeader, functionIndex, pc)
-	if err != nil {
-		return err
+	if err == nil {
+		log.Debugf("BEAM Found function %s at %s:%d", mfaName, fileName, lineNumber)
+		frames.Append(&libpf.Frame{
+			Type:         libpf.BEAMFrame,
+			FunctionName: mfaName,
+			SourceFile:   fileName,
+			SourceLine:   libpf.SourceLineno(lineNumber),
+		})
+	} else {
+		log.Debugf("BEAM Found function %s", mfaName)
+		frames.Append(&libpf.Frame{
+			Type:         libpf.BEAMFrame,
+			FunctionName: mfaName,
+		})
 	}
-
-	log.Debugf("BEAM Found function %s at %s:%d", mfaName, fileName, lineNumber)
-	frames.Append(&libpf.Frame{
-		Type:         libpf.BEAMFrame,
-		FunctionName: libpf.Intern(mfaName),
-		SourceFile:   fileName,
-		SourceLine:   libpf.SourceLineno(lineNumber),
-	})
 
 	return nil
 }
 
-func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (functionIndex uint64, moduleID uint32, functionID uint32, arity uint32, err error) {
+func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (functionIndex uint64, mfa beamMfa, err error) {
 	vms := i.data.vmStructs
 
 	numFunctions := i.rm.Uint32(codeHeader + libpf.Address(vms.beamCodeHeader.numFunctions))
 	functions := codeHeader + libpf.Address(vms.beamCodeHeader.functions)
+
+	midBuffer := make([]byte, 16)
 
 	ertsCodeInfo := libpf.Address(0)
 	lowIdx := uint64(0)
 	highIdx := uint64(numFunctions) - 1
 	for lowIdx < highIdx {
 		midIdx := lowIdx + (highIdx-lowIdx)/2
-		midStart := i.rm.Ptr(functions + libpf.Address(midIdx*8))
-		midEnd := i.rm.Ptr(functions + libpf.Address((midIdx+1)*8))
+		err := i.rm.Read(functions+libpf.Address(midIdx*8), midBuffer)
+		if err != nil {
+			return 0, beamMfa{}, fmt.Errorf("BEAM unable to read codeHeader.functions[%d] for codeHeader 0x%x", midIdx, codeHeader)
+		}
+		midStart := nopanicslicereader.Ptr(midBuffer, 0)
+		midEnd := nopanicslicereader.Ptr(midBuffer, 8)
 		if pc < midStart {
 			highIdx = midIdx
 		} else if pc >= midEnd {
@@ -418,16 +463,20 @@ func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (func
 			ertsCodeInfo = midStart
 			functionIndex = midIdx
 
-			mfa := ertsCodeInfo + libpf.Address(vms.ertsCodeInfo.mfa)
-			moduleID := i.rm.Uint32(mfa + libpf.Address(vms.ertsCodeMfa.module))
-			functionID := i.rm.Uint32(mfa + libpf.Address(vms.ertsCodeMfa.function))
-			arity := i.rm.Uint32(mfa + libpf.Address(vms.ertsCodeMfa.arity))
+			data := make([]byte, vms.ertsCodeMfa.sizeOf)
+			err = i.rm.Read(ertsCodeInfo+libpf.Address(vms.ertsCodeInfo.mfa), data)
+			if err != nil {
+				return 0, beamMfa{}, fmt.Errorf("BEAM unable to look up MFA at for ertsCodeInfo 0x%x", ertsCodeInfo)
+			}
+			mfa.module = nopanicslicereader.Uint32(data, uint(vms.ertsCodeMfa.module))
+			mfa.function = nopanicslicereader.Uint32(data, uint(vms.ertsCodeMfa.function))
+			mfa.arity = nopanicslicereader.Uint32(data, uint(vms.ertsCodeMfa.arity))
 
-			return functionIndex, moduleID, functionID, arity, nil
+			return functionIndex, mfa, nil
 		}
 	}
 
-	return 0, 0, 0, 0, fmt.Errorf("BEAM unable to find the MFA for PC 0x%x in expected code range", pc)
+	return 0, beamMfa{}, fmt.Errorf("BEAM unable to find the MFA for PC 0x%x in expected code range", pc)
 }
 
 func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex uint64, pc libpf.Address) (fileName libpf.String, lineNumber uint64, err error) {
@@ -436,21 +485,35 @@ func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex 
 	lineTable := i.rm.Ptr(codeHeader + libpf.Address(vms.beamCodeHeader.lineTable))
 	functionTable := lineTable + libpf.Address(vms.beamCodeLineTab.funcTab)
 
-	lineLow := i.rm.Ptr(functionTable + libpf.Address(8*functionIndex))
-	lineHigh := i.rm.Ptr(functionTable + libpf.Address(8*(functionIndex+1)))
+	lineRange := make([]byte, 16)
+	err = i.rm.Read(functionTable+libpf.Address(8*functionIndex), lineRange)
+	if err != nil {
+		return libpf.NullString, 0, fmt.Errorf("BEAM failed to read function table info")
+	}
+	lineLow := nopanicslicereader.Ptr(lineRange, 0)
+	lineHigh := nopanicslicereader.Ptr(lineRange, 8)
 
+	lineMidBuffer := make([]byte, 16)
 	// We need to align the lineMid values on 8-byte address boundaries
 	bitmask := libpf.Address(^(uint64(0xf)))
 	for lineHigh > lineLow {
 		lineMid := lineLow + ((lineHigh-lineLow)/2)&bitmask
-
-		if pc < i.rm.Ptr(lineMid) {
+		err := i.rm.Read(lineMid, lineMidBuffer)
+		if err != nil {
+			return libpf.NullString, 0, fmt.Errorf("BEAM failed to read line table")
+		}
+		if pc < nopanicslicereader.Ptr(lineMidBuffer, 0) {
 			lineHigh = lineMid
-		} else if pc < i.rm.Ptr(lineMid+libpf.Address(8)) {
+		} else if pc < nopanicslicereader.Ptr(lineMidBuffer, 8) {
 			firstLine := i.rm.Ptr(functionTable)
 			locIndex := uint32((lineMid - firstLine) / 8)
-			locSize := i.rm.Uint32(lineTable + libpf.Address(vms.beamCodeLineTab.locSize))
-			locTab := i.rm.Ptr(lineTable + libpf.Address(vms.beamCodeLineTab.locTab))
+			lineTab := make([]byte, vms.beamCodeLineTab.sizeOf)
+			err = i.rm.Read(lineTable, lineTab)
+			if err != nil {
+				return libpf.NullString, 0, fmt.Errorf("BEAM failed to read line table info")
+			}
+			locSize := nopanicslicereader.Uint32(lineTab, uint(vms.beamCodeLineTab.locSize))
+			locTab := nopanicslicereader.Ptr(lineTab, uint(vms.beamCodeLineTab.locTab))
 			locAddr := locTab + libpf.Address(locSize*locIndex)
 			loc := uint64(0)
 			if locSize == 2 {
@@ -471,8 +534,8 @@ func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex 
 	return libpf.NullString, 0, fmt.Errorf("BEAM unable to find file and line number")
 }
 
-func (i *beamInstance) lookupAtom(index uint32) (string, error) {
-	if value, ok := i.atomCache[index]; ok {
+func (i *beamInstance) lookupAtom(index uint32) (libpf.String, error) {
+	if value, ok := i.atomCache.Get(index); ok {
 		return value, nil
 	}
 
@@ -489,7 +552,7 @@ func (i *beamInstance) lookupAtom(index uint32) (string, error) {
 	case "27":
 		err := i.rm.Read(i.rm.Ptr(entry+libpf.Address(vms.atom.name)), name)
 		if err != nil {
-			return "", fmt.Errorf("BEAM Unable to lookup atom with index %d: %v", index, err)
+			return libpf.NullString, fmt.Errorf("BEAM Unable to lookup atom with index %d: %v", index, err)
 		}
 	case "28":
 		// Implementation based on https://github.com/erlang/otp/blob/OTP-28.0.2/erts/etc/unix/etp-commands.in#L657-L674
@@ -499,15 +562,16 @@ func (i *beamInstance) lookupAtom(index uint32) (string, error) {
 		if subtag == uint64(i.data.etpHeapBitsSubtag) {
 			err := i.rm.Read(unboxed+libpf.Address(vms.erlHeapBits.data), name)
 			if err != nil {
-				return "", fmt.Errorf("BEAM Unable to lookup atom with index %d (ErlHeapBits tag): %v", index, err)
+				return libpf.NullString, fmt.Errorf("BEAM Unable to lookup atom with index %d (ErlHeapBits tag): %v", index, err)
 			}
 		} else {
-			return "", fmt.Errorf("BEAM Unable to lookup atom with index %d: expected boxed value subtag 0x%x, found 0x%x", index, i.data.etpHeapBitsSubtag, subtag)
+			return libpf.NullString, fmt.Errorf("BEAM Unable to lookup atom with index %d: expected boxed value subtag 0x%x, found 0x%x", index, i.data.etpHeapBitsSubtag, subtag)
 		}
 	}
 
-	i.atomCache[index] = string(name)
-	return string(name), nil
+	nameString := libpf.Intern(string(name))
+	i.atomCache.Add(index, nameString)
+	return nameString, nil
 }
 
 func (i *beamInstance) readErlangString(eterm libpf.Address, maxLength uint64) libpf.String {
