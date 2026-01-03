@@ -522,8 +522,8 @@ func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex 
 				loc = uint64(i.rm.Uint32(locAddr))
 			}
 			fnameIndex := loc >> 24
-			fileNamePtr := libpf.Address(i.rm.Uint64(lineTable) + 8*fnameIndex)
-			fileName = i.readErlangString(libpf.Address(i.rm.Uint64(fileNamePtr)), 256)
+			fileNamePtr := i.rm.Ptr(lineTable) + libpf.Address(8*fnameIndex)
+			fileName = i.readErlangString(i.rm.Ptr(fileNamePtr), 256)
 
 			return fileName, loc & ((1 << 24) - 1), nil
 		} else {
