@@ -52,7 +52,7 @@ const (
 // Frame converts the interpreter type into the corresponding frame type.
 func (i InterpreterType) Frame() FrameType {
 	if i >= pseudoInterpreterStart {
-		return unknownFrame
+		return UnknownFrame
 	}
 
 	return FrameType(i)

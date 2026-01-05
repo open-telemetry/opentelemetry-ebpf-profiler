@@ -50,12 +50,10 @@ func BenchmarkGolang(b *testing.B) {
 		}
 
 		frames := libpf.Frames{}
+		ef := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 1, uint64(pc))
+		ef[1] = uint64(hostFileID)
 
-		if err := gI.Symbolize(&host.Frame{
-			File:   hostFileID,
-			Lineno: libpf.AddressOrLineno(pc),
-			Type:   libpf.FrameType(libpf.Native),
-		}, &frames); err != nil {
+		if err := gI.Symbolize(ef, &frames); err != nil {
 			b.Fatalf("Failed to symbolize 0x%x: %v", pc, err)
 		}
 

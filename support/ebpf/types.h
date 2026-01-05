@@ -348,47 +348,10 @@ typedef enum TraceOrigin {
   TRACE_PROBE,
 } TraceOrigin;
 
-// MAX_FRAME_UNWINDS defines the maximum number of frames per
-// Trace we can unwind and respect the limit of eBPF instructions,
-// limit of tail calls and limit of stack size per eBPF program.
-#define MAX_FRAME_UNWINDS 128
-
-// MAX_NON_ERROR_FRAME_UNWINDS defines the maximum number of frames
-// to be pushed by unwinders while still leaving space for an error frame.
-// This is used to make sure that there is always space for an error
-// frame reporting that we ran out of stack space.
-#define MAX_NON_ERROR_FRAME_UNWINDS (MAX_FRAME_UNWINDS - 1)
-
 // Maximum number of unique stack deltas needed on a system. This is based on
 // normal desktop /usr/bin/* and /usr/lib/*.so having about 9700 unique deltas.
 // Can be increased up to 2^15, see also STACK_DELTA_COMMAND_FLAG.
 #define UNWIND_INFO_MAX_ENTRIES 16384
-
-// Type to represent a globally-unique file id to be used as key for a BPF hash map
-typedef u64 FileID;
-
-// Individual frame in a stack-trace.
-typedef struct Frame {
-  // IDs that uniquely identify a file combination
-  FileID file_id;
-  // For PHP this is the line numbers, corresponding to the files in `stack`.
-  // For Python, each value provides information to allow for the recovery of
-  // the line number associated with its corresponding offset in `stack`.
-  // The lower 32 bits provide the co_firstlineno value and the upper 32 bits
-  // provide the f_lasti value. Other interpreter handlers use the field in
-  // a similarly domain-specific fashion.
-  u64 addr_or_line;
-  // Indicates the type of the frame (Python, PHP, native etc.).
-  u8 kind;
-  // Indicates that the address is a return address.
-  u8 return_address;
-  // Explicit padding bytes that the compiler would have inserted anyway.
-  // Here to make it clear to readers that there are spare bytes that could
-  // be put to work without extra cost in case an interpreter needs it.
-  u8 pad[6];
-} Frame;
-
-_Static_assert(sizeof(Frame) == 3 * 8, "frame padding not working as expected");
 
 // TSDInfo contains data needed to extract Thread Specific Data (TSD) values
 typedef struct TSDInfo {
@@ -597,8 +560,10 @@ typedef struct Trace {
   CustomLabelsArray custom_labels;
   // The kernel stack ID.
   s32 kernel_stack_id;
-  // The number of frames in the stack.
-  u32 stack_len;
+  // The number of frame_data elements present.
+  u16 frame_data_len;
+  // The number of frames present.
+  u16 num_frames;
 
   // origin indicates the source of the trace.
   TraceOrigin origin;
@@ -606,13 +571,21 @@ typedef struct Trace {
   // offtime stores the nanoseconds that the trace was off-cpu for.
   u64 offtime;
 
-  // The frames of the stack trace.
-  Frame frames[MAX_FRAME_UNWINDS];
+  // The frame data of the stack trace. Each frame is variable length.
+  // Frame is currently 2-3 entries long. This array size limits the
+  // number of frames we can unwind, but also increases the memory
+  // needed for buffering everything. The 3kB entries here is chosen
+  // to allow about 1024 frames in a trace to be sent.
+  u64 frame_data[3072];
 
-  // NOTE: both send_trace in BPF and loadBpfTrace in UM code require `frames`
-  // to be the last item in the struct. Do not add new members here without also
-  // adjusting the UM code.
+  // NOTE: both send_trace in BPF and loadBpfTrace in UM code require `frame_data`
+  // to be the last item in the struct. When sending as a perf event, only the
+  // 'frame_data_len' elements of 'frame_data' are sent.
 } Trace;
+
+// Trace is sent as a perf raw event. As all perf events are contained within
+// struct perf_event_header with 'u16 size', this limits the size of Trace.
+_Static_assert(sizeof(struct Trace) < 63 * 1024, "Trace too large");
 
 // Container for unwinding state
 typedef struct UnwindState {
@@ -804,6 +777,9 @@ typedef struct PerCPURecord {
   // ratelimitAction determines the PID event rate limiting mode
   u8 ratelimitAction;
 } PerCPURecord;
+
+// https://github.com/torvalds/linux/blob/e9a6fb0bcdd7609be6969112f3fbfcce3b1d4a7c/include/linux/percpu.h#L24C39-L24C47
+_Static_assert(sizeof(struct PerCPURecord) <= (32 << 10), "Per CPU record too large");
 
 // UnwindInfo contains the unwind information needed to unwind one frame
 // from a specific address.

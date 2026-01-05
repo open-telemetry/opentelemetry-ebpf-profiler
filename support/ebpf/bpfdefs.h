@@ -41,6 +41,7 @@ extern u32 with_debug_output;
 int bpf_tail_call(void *ctx, void *map, int index);
 unsigned long long bpf_ktime_get_ns(void);
 int bpf_get_current_comm(void *, int);
+int bpf_perf_event_output(void *, void *, unsigned long long, void *, int);
 
 static inline long bpf_probe_read_user(void *buf, u32 sz, const void *ptr)
 {
@@ -73,17 +74,6 @@ static inline int bpf_map_update_elem(
 static inline int bpf_map_delete_elem(UNUSED void *map, UNUSED const void *key)
 {
   return -1;
-}
-
-static inline int bpf_perf_event_output(
-  UNUSED void *ctx,
-  UNUSED void *map,
-  UNUSED unsigned long long flags,
-  UNUSED void *data,
-  UNUSED int size)
-{
-
-  return 0;
 }
 
 static inline int bpf_get_stackid(UNUSED void *ctx, UNUSED void *map, UNUSED u64 flags)

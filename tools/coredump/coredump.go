@@ -71,7 +71,7 @@ func formatFrame(frame *libpf.Frame) (string, error) {
 				"got invalid error code %d. forgot to `make generate`",
 				frame.AddressOrLineno)
 		}
-		if frame.Type == libpf.AbortFrame {
+		if frame.Type.IsAbort() {
 			return fmt.Sprintf("<unwinding aborted due to error %s>", errName), nil
 		}
 		return fmt.Sprintf("<error %s>", errName), nil
