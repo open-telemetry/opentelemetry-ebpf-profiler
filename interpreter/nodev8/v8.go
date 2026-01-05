@@ -168,7 +168,6 @@ import (
 
 	"github.com/elastic/go-freelru"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -1701,21 +1700,21 @@ func (i *v8Instance) symbolizeCode(code *v8Code, delta uint64, returnAddress boo
 	return nil
 }
 
-func (i *v8Instance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
-	if !frame.Type.IsInterpType(libpf.V8) {
+func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+	if !ef.Type().IsInterpType(libpf.V8) {
 		return interpreter.ErrMismatchInterpreterType
 	}
 
 	sfCounter := successfailurecounter.New(&i.successCount, &i.failCount)
 	defer sfCounter.DefaultToFailure()
 
-	pointerAndType := libpf.Address(frame.File)
-	deltaOrMarker := uint64(frame.Lineno)
-	frameType := pointerAndType & support.V8FileTypeMask
+	pointerAndType := libpf.Address(ef.Variable(0))
+	deltaOrMarker := uint64(ef.Variable(1))
+	subframeType := pointerAndType & support.V8FileTypeMask
 	pointer := pointerAndType&^support.V8FileTypeMask | HeapObjectTag
 
 	var err error
-	switch frameType {
+	switch subframeType {
 	case support.V8FileTypeMarker:
 		// This is a stub V8 frame, with deltaOrMarker containing the marker.
 		// Convert the V8 build specific marker ID to a static ID and symbolize
@@ -1726,16 +1725,16 @@ func (i *v8Instance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
 	case support.V8FileTypeNativeCode, support.V8FileTypeNativeJSFunc:
 		var code *v8Code
 		codeCookie := uint32(deltaOrMarker & support.V8LineCookieMask >> support.V8LineCookieShift)
-		if frameType == support.V8FileTypeNativeCode {
+		if subframeType == support.V8FileTypeNativeCode {
 			code, err = i.getCode(pointer, codeCookie)
 		} else {
 			code, err = i.getCodeFromJSFunc(pointer, codeCookie)
 		}
 		if err == nil {
-			err = i.symbolizeCode(code, deltaOrMarker, frame.ReturnAddress, frames)
+			err = i.symbolizeCode(code, deltaOrMarker, ef.Flags().ReturnAddress(), frames)
 		}
 	default:
-		err = fmt.Errorf("unsupported frame type %#x", frameType)
+		err = fmt.Errorf("unsupported frame type %#x", subframeType)
 	}
 	if err != nil {
 		// TODO: emit error frame

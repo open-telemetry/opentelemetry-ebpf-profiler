@@ -9,7 +9,6 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/times"
 )
 
 // FileID is used for unique identifiers for files, and is required to be 64-bits
@@ -32,30 +31,4 @@ func (fid FileID) StringNoQuotes() string {
 // FileIDFromLibpf truncates a libpf.FileID to be a host.FileID.
 func FileIDFromLibpf(id libpf.FileID) FileID {
 	return FileID(id.Hi())
-}
-
-type Frame struct {
-	File          FileID
-	Lineno        libpf.AddressOrLineno
-	Type          libpf.FrameType
-	ReturnAddress bool
-}
-
-type Trace struct {
-	Comm             libpf.String
-	ProcessName      libpf.String
-	ExecutablePath   libpf.String
-	ContainerID      libpf.String
-	Frames           []Frame
-	KTime            times.KTime
-	PID              libpf.PID
-	TID              libpf.PID
-	Origin           libpf.Origin
-	OffTime          int64 // Time a task was off-cpu in nanoseconds.
-	APMTraceID       libpf.APMTraceID
-	APMTransactionID libpf.APMTransactionID
-	CPU              int
-	EnvVars          map[libpf.String]libpf.String
-	CustomLabels     map[libpf.String]libpf.String
-	KernelFrames     libpf.Frames
 }

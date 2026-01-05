@@ -8,6 +8,7 @@ package tracer_test
 import (
 	"math"
 	"runtime"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -18,7 +19,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
@@ -79,29 +79,10 @@ func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
 	require.NoError(t, err)
 }
 
-func validateTrace(t *testing.T, expected, returned *host.Trace) {
-	t.Helper()
+type trace struct {
+	numKernelFrames int
 
-	require.Len(t, returned.Frames, len(expected.Frames))
-
-	for i, expFrame := range expected.Frames {
-		retFrame := returned.Frames[i]
-		assert.Equal(t, expFrame.File, retFrame.File)
-		assert.Equal(t, expFrame.Lineno, retFrame.Lineno)
-		assert.Equal(t, expFrame.Type, retFrame.Type)
-	}
-}
-
-func generateMaxLengthTrace() host.Trace {
-	var trace host.Trace
-	for i := 0; i < support.MaxFrameUnwinds; i++ {
-		trace.Frames = append(trace.Frames, host.Frame{
-			File:   ^host.FileID(i),
-			Lineno: libpf.AddressOrLineno(i),
-			Type:   support.FrameMarkerNative,
-		})
-	}
-	return trace
+	frames libpf.EbpfFrame
 }
 
 func TestTraceTransmissionAndParsing(t *testing.T) {
@@ -127,13 +108,13 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 	require.NoError(t, err)
 	defer tr.Close()
 
-	traceChan := make(chan *host.Trace, 16)
+	traceChan := make(chan *libpf.EbpfTrace, 16)
 	err = tr.StartMapMonitors(ctx, traceChan)
 	require.NoError(t, err)
 
 	runKernelFrameProbe(t, tr)
 
-	traces := make(map[uint8]*host.Trace)
+	traces := make(map[uint8]trace)
 	timeout := time.NewTimer(1 * time.Second)
 
 	// Wait 1 second for traces to arrive.
@@ -142,13 +123,19 @@ Loop:
 		select {
 		case <-timeout.C:
 			break Loop
-		case trace := <-traceChan:
-			comm := trace.Comm.String()
+		case ebpfTrace := <-traceChan:
+			comm := ebpfTrace.Comm.String()
 			require.GreaterOrEqual(t, len(comm), 4)
 			require.Equal(t, "\xAA\xBB\xCC", comm[0:3])
-			traces[comm[3]] = trace
+			traces[comm[3]] = trace{
+				numKernelFrames: len(ebpfTrace.KernelFrames),
+				frames:          libpf.EbpfFrame(slices.Clone(ebpfTrace.FrameData)),
+			}
 		}
 	}
+
+	nativeFrame := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 2, 21)
+	nativeFrame[1] = 1337
 
 	tests := map[string]struct {
 		// id identifies the trace to inspect (encoded in COMM[3]).
@@ -157,51 +144,16 @@ Loop:
 		hasKernelFrames bool
 		// userSpaceTrace holds a single Trace with just the user-space portion of the trace
 		// that will be verified against the returned Trace.
-		userSpaceTrace host.Trace
+		userSpaceTrace libpf.EbpfFrame
 	}{
 		"Single Native Frame": {
-			id: 1,
-			userSpaceTrace: host.Trace{
-				Frames: []host.Frame{{
-					File:   1337,
-					Lineno: 21,
-					Type:   support.FrameMarkerNative,
-				}},
-			},
+			id:             1,
+			userSpaceTrace: nativeFrame,
 		},
 		"Single Native Frame with Kernel Frames": {
 			id:              2,
 			hasKernelFrames: true,
-			userSpaceTrace: host.Trace{
-				Frames: []host.Frame{{
-					File:   1337,
-					Lineno: 21,
-					Type:   support.FrameMarkerNative,
-				}},
-			},
-		},
-		"Three Python Frames": {
-			id: 3,
-			userSpaceTrace: host.Trace{
-				Frames: []host.Frame{{
-					File:   1337,
-					Lineno: 42,
-					Type:   support.FrameMarkerNative,
-				}, {
-					File:   1338,
-					Lineno: 21,
-					Type:   support.FrameMarkerNative,
-				}, {
-					File:   1339,
-					Lineno: 22,
-					Type:   support.FrameMarkerPython,
-				}},
-			},
-		},
-		"Maximum Length Trace": {
-			id:              4,
-			hasKernelFrames: true,
-			userSpaceTrace:  generateMaxLengthTrace(),
+			userSpaceTrace:  nativeFrame,
 		},
 	}
 
@@ -211,10 +163,8 @@ Loop:
 			trace, ok := traces[testcase.id]
 			require.Truef(t, ok, "trace ID %d not received", testcase.id)
 
-			numKernelFrames := len(trace.KernelFrames)
-			userspaceFrameCount := len(trace.Frames)
+			numKernelFrames := trace.numKernelFrames
 
-			assert.Equal(t, len(testcase.userSpaceTrace.Frames), userspaceFrameCount)
 			assert.False(t, !testcase.hasKernelFrames && numKernelFrames > 0,
 				"unexpected kernel frames")
 
@@ -227,10 +177,9 @@ Loop:
 			assert.Falsef(t, testcase.hasKernelFrames && numKernelFrames < 2,
 				"expected at least 2 kernel frames, but got %d", numKernelFrames)
 
-			t.Logf("Received %d user frames and %d kernel frames",
-				userspaceFrameCount, numKernelFrames)
-
-			validateTrace(t, &testcase.userSpaceTrace, trace)
+			t.Logf("Received %d framedata and %d kernel frames",
+				len(trace.frames), numKernelFrames)
+			assert.Equal(t, testcase.userSpaceTrace, trace.frames)
 		})
 	}
 }

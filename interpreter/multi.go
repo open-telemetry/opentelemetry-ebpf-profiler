@@ -6,7 +6,6 @@ package interpreter // import "go.opentelemetry.io/ebpf-profiler/interpreter"
 import (
 	"errors"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -116,10 +115,10 @@ func (m *MultiInstance) UpdateLibcInfo(ebpf EbpfHandler, pid libpf.PID, info lib
 }
 
 // Symbolize tries to symbolize the frame with each interpreter instance until one succeeds.
-func (m *MultiInstance) Symbolize(ebpfFrame *host.Frame, frames *libpf.Frames) error {
+func (m *MultiInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
 	// Try each interpreter in order
 	for _, instance := range m.instances {
-		err := instance.Symbolize(ebpfFrame, frames)
+		err := instance.Symbolize(ef, frames)
 		if err != ErrMismatchInterpreterType {
 			return err
 		}
