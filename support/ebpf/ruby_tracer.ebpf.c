@@ -112,7 +112,7 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
   u64 frame_addr;
   // Address of the cfp->iseq, used to get the line number using the pc
   u64 iseq_addr = 0;
-  u64 pc = 0;
+  u64 pc        = 0;
 
   Trace *trace     = &record->trace;
   u64 rbasic_flags = 0;
@@ -123,7 +123,8 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
   u64 frame_flags  = 0;
   bool cfunc       = false;
 
-  u64 ep_check = 0;
+  u16 packed_flags = 0;
+  u64 ep_check     = 0;
 
   vm_env_t vm_env;
   rb_control_frame_t control_frame;
@@ -141,102 +142,99 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
   current_ep = (void *)control_frame.ep;
   pc         = (u64)control_frame.pc;
 
-// this code emulates ruby's rb_vm_frame_method_entry, which is called by
-// rb_vm_frame_method_entry to check the frame for a callable method entry, CME
-// https://github.com/ruby/ruby/blob/v3_4_7/vm_insnhelper.c#L769
-//
-// It uses labels and gotos to cut back on the instructions executed, while also
-// trying to emulate a "while" loop.
-read_ep:
-
-  frame_addr = 0;
-  frame_type = FRAME_TYPE_NONE;
-  cfunc      = false;
-
-  if (bpf_probe_read_user(
-        &vm_env, sizeof(vm_env), (void *)(current_ep - sizeof(vm_env) + sizeof(void *)))) {
-    DEBUG_PRINT("ruby: failed to get vm env");
-    increment_metric(metricID_UnwindRubyErrReadEp);
-    return ERR_RUBY_READ_EP;
-  }
-
-  me_or_cref = (u64)vm_env.me_cref;
-  // Only check the flags from the "root" env
-  if (frame_flags == 0) {
-    frame_flags = (u64)vm_env.flags;
-  }
-  cfunc = (((frame_flags & VM_FRAME_MAGIC_MASK) == VM_FRAME_MAGIC_CFUNC) || pc == 0);
-
-  if (!cfunc) {
-    // Read the control frame iseq so we can get the line number
-    if (control_frame.iseq == NULL) {
-      increment_metric(metricID_UnwindRubyErrInvalidIseq);
-      return ERR_RUBY_INVALID_ISEQ;
+  // this code emulates ruby's rb_vm_frame_method_entry, which is called by
+  // rb_vm_frame_method_entry to check the frame for a callable method entry, CME
+  // https://github.com/ruby/ruby/blob/v3_4_7/vm_insnhelper.c#L769
+  UNROLL for (ep_check = 0; ep_check < MAX_EP_CHECKS; ++ep_check)
+  {
+    // On every iteration except the first, get the ep from specval only if
+    // it is non-local.
+    if (ep_check > 0) {
+      if (!((u64)vm_env.flags & VM_ENV_FLAG_LOCAL)) {
+        // https://github.com/ruby/ruby/blob/v3_4_5/vm_core.h#L1355
+        current_ep = (void *)((u64)vm_env.specval & ~0x03);
+      } else {
+        break;
+      }
     }
+
+    frame_addr = 0;
+    frame_type = FRAME_TYPE_NONE;
+    cfunc      = false;
+
     if (bpf_probe_read_user(
-          &iseq_addr, sizeof(iseq_addr), (void *)(control_frame.iseq + rubyinfo->body))) {
-      increment_metric(metricID_UnwindRubyErrReadIseqBody);
-      return ERR_RUBY_READ_ISEQ_BODY;
+          &vm_env, sizeof(vm_env), (void *)(current_ep - sizeof(vm_env) + sizeof(void *)))) {
+      DEBUG_PRINT("ruby: failed to get vm env");
+      increment_metric(metricID_UnwindRubyErrReadEp);
+      return ERR_RUBY_READ_EP;
     }
-  }
 
-  // Pack the frame flags into 16 bits for debugging purposes
-  // Extract high byte (nibbles 6-7)
-  u16 high_byte    = (frame_flags >> 24) & 0xFF;
-  u16 low_byte     = (frame_flags >> 4) & 0xFF;
-  // Extract nibbles 1-2 (middle of lower 16 bits)
-  u16 packed_flags = (high_byte << 8) | low_byte;
-
-// this code emulate's ruby's check_method_entry to traverse the environment
-// until it finds a method entry. Since the function calls itself, the code
-// is a bit out of order to try and optimize running as few instructions as
-// possible, since this is in the M * N part of the loop and we want the code
-// to pass the kernel verifier.
-// https://github.com/ruby/ruby/blob/v3_4_7/vm_insnhelper.c#L743
-check_me:
-  if (me_or_cref == 0)
-    goto next_ep;
-
-  if (bpf_probe_read_user(&rbasic_flags, sizeof(rbasic_flags), (void *)(me_or_cref))) {
-    increment_metric(metricID_UnwindRubyErrReadRbasicFlags);
-    return ERR_RUBY_READ_RBASIC_FLAGS;
-  }
-
-  // https://github.com/ruby/ruby/blob/3361aa5c7df35b1d1daea578fefec3addf29c9a6/internal/imemo.h#L165-L169
-  imemo_mask = (rbasic_flags >> RUBY_FL_USHIFT) & IMEMO_MASK;
-
-  if ((u64)vm_env.flags & VM_ENV_FLAG_LOCAL) {
-    if (imemo_mask == IMEMO_SVAR) {
-      if (bpf_probe_read_user(&svar_cref, sizeof(svar_cref), (void *)(me_or_cref + 8))) {
-        increment_metric(metricID_UnwindRubyErrReadSvar);
-        return ERR_RUBY_READ_SVAR;
-      }
-      me_or_cref = svar_cref;
-
-      if (bpf_probe_read_user(&rbasic_flags, sizeof(rbasic_flags), (void *)(me_or_cref))) {
-        increment_metric(metricID_UnwindRubyErrReadRbasicFlags);
-        return ERR_RUBY_READ_RBASIC_FLAGS;
-      }
-      imemo_mask = (rbasic_flags >> RUBY_FL_USHIFT) & IMEMO_MASK;
+    me_or_cref = (u64)vm_env.me_cref;
+    // Only check the flags from the "root" env
+    if (frame_flags == 0) {
+      frame_flags = (u64)vm_env.flags;
     }
-  }
+    cfunc = (((frame_flags & VM_FRAME_MAGIC_MASK) == VM_FRAME_MAGIC_CFUNC) || pc == 0);
 
-  if (imemo_mask == IMEMO_MENT)
-    goto done_check;
+    if (!cfunc) {
+      // Read the control frame iseq so we can get the line number
+      if (control_frame.iseq == NULL) {
+        increment_metric(metricID_UnwindRubyErrInvalidIseq);
+        return ERR_RUBY_INVALID_ISEQ;
+      }
+      if (bpf_probe_read_user(
+            &iseq_addr, sizeof(iseq_addr), (void *)(control_frame.iseq + rubyinfo->body))) {
+        increment_metric(metricID_UnwindRubyErrReadIseqBody);
+        return ERR_RUBY_READ_ISEQ_BODY;
+      }
+    }
 
-// Next iteration of the loop, or error out if we have hit the maximum as we
-// couldn't find the method entry
-next_ep:
-  if (ep_check++ < MAX_EP_CHECKS && (!((u64)vm_env.flags & VM_ENV_FLAG_LOCAL))) {
-    // https://github.com/ruby/ruby/blob/v3_4_5/vm_core.h#L1355
-    current_ep = (void *)((u64)vm_env.specval & ~0x03);
-    goto read_ep;
+    // Pack the frame flags into 16 bits for debugging purposes
+    // Extract high byte (nibbles 6-7)
+    u16 high_byte = (frame_flags >> 24) & 0xFF;
+    u16 low_byte  = (frame_flags >> 4) & 0xFF;
+    // Extract nibbles 1-2 (middle of lower 16 bits)
+    packed_flags  = (high_byte << 8) | low_byte;
+
+    // this code emulate's ruby's check_method_entry to traverse the environment
+    // until it finds a method entry. Since the function calls itself, the code
+    // is a bit out of order to try and optimize running as few instructions as
+    // possible, since this is in the M * N part of the loop and we want the code
+    // to pass the kernel verifier.
+    // https://github.com/ruby/ruby/blob/v3_4_7/vm_insnhelper.c#L743
+    if (me_or_cref == 0)
+      continue;
+
+    if (bpf_probe_read_user(&rbasic_flags, sizeof(rbasic_flags), (void *)(me_or_cref))) {
+      increment_metric(metricID_UnwindRubyErrReadRbasicFlags);
+      return ERR_RUBY_READ_RBASIC_FLAGS;
+    }
+
+    // https://github.com/ruby/ruby/blob/3361aa5c7df35b1d1daea578fefec3addf29c9a6/internal/imemo.h#L165-L169
+    imemo_mask = (rbasic_flags >> RUBY_FL_USHIFT) & IMEMO_MASK;
+
+    if ((u64)vm_env.flags & VM_ENV_FLAG_LOCAL) {
+      if (imemo_mask == IMEMO_SVAR) {
+        if (bpf_probe_read_user(&svar_cref, sizeof(svar_cref), (void *)(me_or_cref + 8))) {
+          increment_metric(metricID_UnwindRubyErrReadSvar);
+          return ERR_RUBY_READ_SVAR;
+        }
+        me_or_cref = svar_cref;
+
+        if (bpf_probe_read_user(&rbasic_flags, sizeof(rbasic_flags), (void *)(me_or_cref))) {
+          increment_metric(metricID_UnwindRubyErrReadRbasicFlags);
+          return ERR_RUBY_READ_RBASIC_FLAGS;
+        }
+        imemo_mask = (rbasic_flags >> RUBY_FL_USHIFT) & IMEMO_MASK;
+      }
+    }
+
+    if (imemo_mask == IMEMO_MENT)
+      break;
   }
 
   if (ep_check >= MAX_EP_CHECKS)
     return ERR_RUBY_READ_CME_MAX_EP;
-
-done_check:
 
   if (imemo_mask == IMEMO_MENT) {
     frame_addr = me_or_cref;
