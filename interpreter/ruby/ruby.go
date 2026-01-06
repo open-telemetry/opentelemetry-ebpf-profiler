@@ -346,6 +346,8 @@ type rubyInstance struct {
 	r  *rubyData
 	rm remotememory.RemoteMemory
 
+	// lastId is a cached copy index of the final entry in the global symbol table
+	lastId uint32
 	// globalSymbolsAddr is the offset of the global symbol table, for looking up ruby symbolic ids
 	globalSymbolsAddr libpf.Address
 
@@ -793,10 +795,12 @@ func (r *rubyInstance) id2str(originalId uint64) (libpf.String, error) {
 		serial = originalId >> rubyIdScopeShift
 	}
 
-	lastId := r.rm.Uint32(r.globalSymbolsAddr)
-
-	if serial > uint64(lastId) {
-		return libpf.NullString, fmt.Errorf("invalid serial %d, greater than last id %d", serial, lastId)
+	if serial > uint64(r.lastId) {
+		// First try synchronizing the value in case it is uninitialized or was updated, then check again
+		r.lastId = r.rm.Uint32(r.globalSymbolsAddr)
+		if serial > uint64(r.lastId) {
+			return libpf.NullString, fmt.Errorf("invalid serial %d, greater than last id %d", serial, r.lastId)
+		}
 	}
 
 	ids := r.rm.Ptr(r.globalSymbolsAddr + libpf.Address(vms.rb_symbols_t.ids))
