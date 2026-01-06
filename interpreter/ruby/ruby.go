@@ -94,7 +94,7 @@ var (
 	// regex to extract a version from a string
 	rubyVersionRegex = regexp.MustCompile(`^(\d)\.(\d)\.(\d)$`)
 
-	unknownCfunc   = libpf.Intern("UNKNOWN CFUNC")
+	unknownCfunc   = libpf.Intern("<unknown ruby cfunc>")
 	cfuncDummyFile = libpf.Intern("<cfunc>")
 	// compiler check to make sure the needed interfaces are satisfied
 	_ interpreter.Data     = &rubyData{}
