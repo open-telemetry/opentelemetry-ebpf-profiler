@@ -74,6 +74,18 @@ const (
 	// ISEQ_TYPE_METHOD
 	// https://github.com/ruby/ruby/blob/v3_4_5/vm_core.h#L380
 	iseqTypeMethod = 1
+
+	// RUBY_ID_SCOPE_SHIFT = 4
+	// https://github.com/ruby/ruby/blob/797a4115bbb249c4f5f11e1b4bacba7781c68cee/template/id.h.tmpl#L30
+	rubyIdScopeShift = 4
+
+	// ID_ENTRY_UNIT
+	// https://github.com/ruby/ruby/blob/v3_4_5/symbol.c#L77
+	idEntryUnit = uint64(512)
+
+	// ID_ENTRY_SIZE
+	// https://github.com/ruby/ruby/blob/980e18496e1aafc642b199d24c81ab4a8afb3abb/symbol.c#L93
+	idEntrySize = uint64(2)
 )
 
 var (
@@ -773,18 +785,6 @@ func (r *rubyInstance) readClassName(classAddr libpf.Address) (libpf.String, boo
 func (r *rubyInstance) id2str(originalId uint64) (libpf.String, error) {
 	var symbolName libpf.String
 	var err error
-
-	// RUBY_ID_SCOPE_SHIFT = 4
-	// https://github.com/ruby/ruby/blob/797a4115bbb249c4f5f11e1b4bacba7781c68cee/template/id.h.tmpl#L30
-	rubyIdScopeShift := 4
-
-	// ID_ENTRY_UNIT
-	// https://github.com/ruby/ruby/blob/v3_4_5/symbol.c#L77
-	idEntryUnit := uint64(512)
-
-	// ID_ENTRY_SIZE
-	// https://github.com/ruby/ruby/blob/980e18496e1aafc642b199d24c81ab4a8afb3abb/symbol.c#L93
-	idEntrySize := uint64(2)
 
 	vms := &r.r.vmStructs
 
