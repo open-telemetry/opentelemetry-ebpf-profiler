@@ -125,13 +125,13 @@ static inline __attribute__((__always_inline__)) int alloc_enter(struct pt_regs 
     u32 tid = bpf_get_current_pid_tgid();
     u32 memKey = 1;
     SystemConfig *memcfg = bpf_map_lookup_elem(&system_config, &memKey);
-    if (memcfg && memcfg->inverse_pac_mask > 0) {
+    if (memcfg && memcfg->mem_profile_threshold > 0) {
         u64 s = size;
         u64* current_size = bpf_map_lookup_elem(&thread_alloc_size, &tid);
         if (current_size) {
             s += *current_size;
         }
-        if (s < memcfg->inverse_pac_mask) {
+        if (s < memcfg->mem_profile_threshold) {
             bpf_map_update_elem(&thread_alloc_size, &tid, &s, BPF_ANY);
             return 0;
         }
@@ -318,13 +318,13 @@ int mallocgc_register_enter(struct pt_regs *ctx) {
     u64 ts = bpf_ktime_get_ns();
     u32 memKey = 1;
     SystemConfig *memcfg = bpf_map_lookup_elem(&system_config, &memKey);
-    if (memcfg && memcfg->inverse_pac_mask > 0) {
+    if (memcfg && memcfg->mem_profile_threshold > 0) {
         u64 s = size;
         u64* current_size = bpf_map_lookup_elem(&thread_alloc_size, &tid);
         if (current_size) {
             s += *current_size;
         }
-        if (s < memcfg->inverse_pac_mask) {
+        if (s < memcfg->mem_profile_threshold) {
             bpf_map_update_elem(&thread_alloc_size, &tid, &s, BPF_ANY);
             return 0;
         }
@@ -347,13 +347,13 @@ int mallocgc_stack_enter(struct pt_regs *ctx) {
     u64 ts = bpf_ktime_get_ns();
     u32 memKey = 1;
     SystemConfig *memcfg = bpf_map_lookup_elem(&system_config, &memKey);
-    if (memcfg && memcfg->inverse_pac_mask > 0) {
+    if (memcfg && memcfg->mem_profile_threshold > 0) {
         u64 s = size;
         u64* current_size = bpf_map_lookup_elem(&thread_alloc_size, &tid);
         if (current_size) {
             s += *current_size;
         }
-        if (s < memcfg->inverse_pac_mask) {
+        if (s < memcfg->mem_profile_threshold) {
             bpf_map_update_elem(&thread_alloc_size, &tid, &s, BPF_ANY);
             return 0;
         }

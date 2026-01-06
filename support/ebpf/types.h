@@ -863,6 +863,9 @@ decode_bias_and_unwind_program(u64 bias_and_unwind_program, u64 *bias, int *unwi
 // Struct of the `system_config` map. Contains various configuration variables
 // determined and set by the host agent.
 typedef struct SystemConfig {
+  // memory profile collect threshold, byte
+  u64 mem_profile_threshold;
+
   // PAC mask that is determined by user-space and used in `normalize_pac_ptr`.
   // ARM64 specific, `MAX_U64` otherwise.
   u64 inverse_pac_mask;
