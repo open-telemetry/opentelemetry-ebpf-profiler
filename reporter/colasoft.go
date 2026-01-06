@@ -63,7 +63,7 @@ func NewColaSoft(
 		cacheEventSCount:         0,
 		cacheEventSTolerance:     cacheEventSTolerance,
 		cacheEventSTimeout:       cacheEventSTimeout,
-		hotspotMemProfileChan:    make(chan map[uint32]pprofile.Profiles, 100),
+		hotspotMemProfileChan:    make(chan map[uint32]pprofile.Profiles, 1024),
 		hotspotMemProfileCancels: make(map[int]context.CancelFunc)}, nil
 }
 
@@ -162,15 +162,6 @@ func (c *ColaSoft) reportProfile(ctx context.Context) error {
 
 // 单独处理memProfile的数据，间隔一定时间上报
 func (c *ColaSoft) reportMemProfile(ctx context.Context) error {
-	var removeEvts []samples.TraceAndMetaKey
-	defer func() {
-		traceEvents := c.memTraceEvents.WLock()
-		headEvts := (*traceEvents)[support.TraceOriginHeap]
-		for _, key := range removeEvts {
-			delete(headEvts, key)
-		}
-		c.memTraceEvents.WUnlock(&traceEvents)
-	}()
 	traceEvents := c.memTraceEvents.WLock()
 	var mappings = make(map[libpf.Origin]samples.KeyToEventMapping)
 	mappings[support.TraceOriginHeap] = maps.Clone((*traceEvents)[support.TraceOriginHeap])
@@ -179,10 +170,6 @@ func (c *ColaSoft) reportMemProfile(ctx context.Context) error {
 	for kind, mapping := range mappings {
 		for key, value := range mapping {
 			pid := uint32(key.Pid)
-			if _, ok := c.targetPids.Load(libpf.PID(pid)); !ok {
-				removeEvts = append(removeEvts, key)
-				continue
-			}
 			if _, ok := events[pid]; !ok {
 				events[pid] = make(map[libpf.Origin]samples.KeyToEventMapping)
 			}

@@ -446,23 +446,23 @@ func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *pro
 
 	if isCLibrary(mapping.Path) {
 		libcPath := getAbsPath(pr.PID(), mapping.Path)
-		pm.mu.RLock()
+		pm.mu.Lock()
 		_info, ok := pm.pidToProcessInfo[pr.PID()]
-		pm.mu.RUnlock()
 		if ok {
 			if _info.memProfileMeta == nil {
 				_info.memProfileMeta = &MemProfileMeta{}
 			}
 			_info.memProfileMeta.LibcPath = fmt.Sprintf("/proc/%d/root%s", pr.PID(), libcPath)
 		}
+		pm.mu.Unlock()
 	}
 }
 
 func isCLibrary(path string) bool {
-	return strings.Contains(path, "libc.so") || strings.Contains(path, "libc.musl") ||
-		strings.Contains(path, "libjemalloc.so") || strings.Contains(path, "libtcmalloc") ||
-		strings.Contains(path, "libmimalloc.so") || strings.Contains(path, "libefence.so") ||
-		strings.Contains(path, "libdlmalloc.so")
+	return strings.Contains(path, "libc.so") || strings.Contains(path, "libc-") ||
+		strings.Contains(path, "libc.musl") || strings.Contains(path, "libjemalloc.so") ||
+		strings.Contains(path, "libtcmalloc") || strings.Contains(path, "libmimalloc.so") ||
+		strings.Contains(path, "libefence.so") || strings.Contains(path, "libdlmalloc.so")
 }
 
 // processRemovedMappings removes listed memory mappings and loaded interpreters from

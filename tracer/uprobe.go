@@ -137,6 +137,7 @@ func (t *Tracer) StartCLikeMemProfiling(exec *link.Executable, _ *processmanager
 			log.Debugf("failed to attach uprobe:%v, err:%v", u, err)
 			errs = append(errs, err)
 		} else {
+			log.Infof("c-like mem profiling attach uprobe on pid(%d) func(%s)", pid, u.symbol)
 			links = append(links, ls...)
 		}
 	}
@@ -154,6 +155,8 @@ func (t *Tracer) StartGolangMemProfiling(exec *link.Executable, info *processman
 	links, err := t.AttachUProbes(u)
 	if err != nil {
 		log.Debugf("failed to attach uprobe:%v, err:%v", u, err)
+	} else {
+		log.Infof("golang mem profiling attach uprobe on pid(%d) func(%s)", pid, u.symbol)
 	}
 	return links, err
 }
@@ -172,6 +175,7 @@ func (t *Tracer) StartPythonMemProfiling(exec *link.Executable, _ *processmanage
 			log.Debugf("failed to attach uprobe:%v, err:%v", u, err)
 			errs = append(errs, err)
 		} else {
+			log.Infof("python mem profiling attach uprobe on pid(%d) func(%s)", pid, u.symbol)
 			links = append(links, ls...)
 		}
 	}
@@ -228,10 +232,13 @@ func (t *Tracer) TriggerMemProfile(p process.Process) error {
 			opts = &link.UprobeOptions{PID: int(p.PID())}
 		}
 		links, err := startProfiling(exec, memProfileInfo, int(p.PID()), opts)
+		if err != nil {
+			return err
+		}
 		memProfileHooks := t.memProfileHooks.WLock()
 		(*memProfileHooks)[p.PID()] = links
 		t.memProfileHooks.WUnlock(&memProfileHooks)
-		return err
+		return nil
 	}
 	return fmt.Errorf("unable to start memprofile with pid: %d, can not find MemProfile MetaInfo", p.PID())
 }
@@ -248,23 +255,28 @@ func (t *Tracer) StartMemProfile(ctx context.Context, memProfileBlock uint64) {
 				return
 			case <-ticker.C:
 			}
+			var memProfileTargetPids []libpf.PID
 			t.memProfileTargetPids.Range(func(k, v interface{}) bool {
+				pid := k.(libpf.PID)
+				if pid == 0 {
+					return true
+				}
+				memProfileTargetPids = append(memProfileTargetPids, pid)
 				if add, ok := v.(bool); ok {
 					if !add {
-						t.detachMemProfile(k.(libpf.PID))
+						t.detachMemProfile(pid)
 						t.memProfileTargetPids.Delete(k)
 					} else {
-						proc := process.New(k.(libpf.PID))
+						proc := process.New(pid)
 						t.processManager.SynchronizeProcess(proc)
 						if err := t.TriggerMemProfile(proc); err != nil {
 							log.Debugf("failed to trigger memprofile for process %v: %v", k, err)
-						} else {
-							t.memProfileTargetPids.Delete(k)
 						}
 					}
 				}
 				return true
 			})
+			log.Debugf("apply mem profiling target pids: %v", memProfileTargetPids)
 		}
 	}(t)
 }
@@ -279,7 +291,7 @@ func (t *Tracer) SyncMemProfileBlock(block uint64) error {
 	t.memProfileBlock = block
 	// 复用SystemConfig传递内存采样上报的阈值
 	syscfg := C.SystemConfig{
-		inverse_pac_mask: C.u64(block),
+		mem_profile_threshold: C.u64(block),
 	}
 	keyMemConfig := uint32(1)
 	err := t.ebpfMaps["system_config"].Update(unsafe.Pointer(&keyMemConfig), unsafe.Pointer(&syscfg),
