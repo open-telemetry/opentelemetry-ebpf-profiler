@@ -112,7 +112,7 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
   u64 frame_addr;
   // Address of the cfp->iseq, used to get the line number using the pc
   u64 iseq_addr = 0;
-  u64 pc;
+  u64 pc = 0;
 
   Trace *trace     = &record->trace;
   u64 rbasic_flags = 0;
@@ -133,10 +133,7 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
   if (rubyinfo->version < 0x30100)
     cf_size -= sizeof(control_frame.jit_return);
 
-read_cfp:
-  pc          = 0;
-  ep_check    = 0;
-  frame_flags = 0;
+  // Read the control frame pointer
   if (bpf_probe_read_user(&control_frame, cf_size, (void *)(stack_ptr))) {
     increment_metric(metricID_UnwindRubyErrReadStackPtr);
     return ERR_RUBY_READ_STACK_PTR;
