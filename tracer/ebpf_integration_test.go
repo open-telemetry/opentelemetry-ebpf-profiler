@@ -109,7 +109,8 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 	defer tr.Close()
 
 	traceChan := make(chan *libpf.EbpfTrace, 16)
-	err = tr.StartMapMonitors(ctx, traceChan)
+	errsChan := make(chan error)
+	err = tr.StartMapMonitors(ctx, traceChan, errsChan)
 	require.NoError(t, err)
 
 	runKernelFrameProbe(t, tr)
@@ -123,6 +124,8 @@ Loop:
 		select {
 		case <-timeout.C:
 			break Loop
+		case err := <-errsChan:
+			require.NoError(t, err)
 		case ebpfTrace := <-traceChan:
 			comm := ebpfTrace.Comm.String()
 			require.GreaterOrEqual(t, len(comm), 4)
