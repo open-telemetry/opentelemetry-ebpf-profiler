@@ -34,8 +34,7 @@ func Start(ctx context.Context, interval time.Duration, callback func()) func() 
 // from <reset> channel until the <ctx> is canceled. Additionally the 'trigger'
 // channel can be used to trigger callback immediately.
 func StartWithManualTrigger(ctx context.Context, interval time.Duration, trigger chan bool,
-	callback func(manualTrigger bool),
-) func() {
+	callback func(manualTrigger bool)) func() {
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
@@ -59,8 +58,7 @@ func StartWithManualTrigger(ctx context.Context, interval time.Duration, trigger
 // until the <ctx> is canceled. <jitter>, [0..1], is used to add +/- jitter
 // to <baseDuration> at every iteration of the timer.
 func StartWithJitter(ctx context.Context, baseDuration time.Duration, jitter float64,
-	callback func(),
-) func() {
+	callback func()) func() {
 	ticker := time.NewTicker(libpf.AddJitter(baseDuration, jitter))
 	go func() {
 		defer ticker.Stop()
