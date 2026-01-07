@@ -300,6 +300,7 @@ static EBPF_INLINE u64 unwind_register_address(UnwindState *state, u64 cfa, u8 o
 
   // Resolve the 'BASE' register, and fetch the CFA/FP/SP value.
   switch (opcode & ~UNWIND_OPCODEF_DEREF) {
+  case UNWIND_OPCODE_BASE_CFA_FRAME:
   case UNWIND_OPCODE_BASE_CFA: addr = cfa; break;
   case UNWIND_OPCODE_BASE_FP: addr = state->fp; break;
   case UNWIND_OPCODE_BASE_SP: addr = state->sp; break;
@@ -342,6 +343,7 @@ static EBPF_INLINE u64 unwind_register_address(UnwindState *state, u64 cfa, u8 o
 #ifdef OPTI_DEBUG
   switch (opcode) {
   case UNWIND_OPCODE_BASE_CFA: DEBUG_PRINT("unwind: cfa+%d", preDeref); break;
+  case UNWIND_OPCODE_BASE_CFA_FRAME: DEBUG_PRINT("unwind (fp+ra): cfa+%d", preDeref - 8); break;
   case UNWIND_OPCODE_BASE_FP: DEBUG_PRINT("unwind: fp+%d", preDeref); break;
   case UNWIND_OPCODE_BASE_SP: DEBUG_PRINT("unwind: sp+%d", preDeref); break;
   case UNWIND_OPCODE_BASE_CFA | UNWIND_OPCODEF_DEREF:
@@ -569,7 +571,19 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
       DEBUG_PRINT("RA: %016llX", (u64)ra);
 
       // read the value of RA from stack
-      if (bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)ra)) {
+      int err;
+      if (info->fpOpcode == UNWIND_OPCODE_BASE_CFA_FRAME) {
+        // FP precedes the RA on the stack (Aarch64 ABI requirement; also implied by this opcode)
+        u64 fpra[2];
+        err = bpf_probe_read_user(fpra, sizeof(fpra), (void *)(ra - 8));
+        if (!err) {
+          state->fp = fpra[0];
+          state->pc = fpra[1];
+        }
+      } else {
+        err = bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)ra);
+      }
+      if (err) {
         // error reading memory, mark RA as invalid
         ra = 0;
       }
@@ -584,22 +598,6 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
     increment_metric(metricID_UnwindNativeErrPCRead);
     DEBUG_PRINT("Giving up due to failure to resolve RA");
     return ERR_NATIVE_PC_READ;
-  }
-
-  // Try to resolve frame pointer
-  // simple heuristic for FP based frames
-  // the GCC compiler usually generates stack frame records in such a way,
-  // so that FP/RA pair is at the bottom of a stack frame (stack frame
-  // record at lower addresses is followed by stack vars at higher ones)
-  // this implies that if no other changes are applied to the stack such
-  // as alloca(), following the prolog SP/FP points to the frame record
-  // itself, in such a case FP offset will be equal to 8
-  if (info->fpParam == 8) {
-    // we can assume the presence of frame pointers
-    if (info->fpOpcode != UNWIND_OPCODE_BASE_LR) {
-      // FP precedes the RA on the stack (Aarch64 ABI requirement)
-      bpf_probe_read_user(&state->fp, sizeof(state->fp), (void *)(ra - 8));
-    }
   }
 
   state->sp = cfa;

@@ -55,6 +55,8 @@ func getOpcode(opcode uint8, param int32) string {
 		str = "fp"
 	case support.UnwindOpcodeBaseSP:
 		str = "sp"
+	case support.UnwindOpcodeBaseCFAFrame:
+		str += "cfa (fpra)"
 	default:
 		return "?"
 	}
