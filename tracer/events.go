@@ -215,6 +215,11 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 
 				// Keep track of min KTime seen in this batch processing loop
 				trace := t.loadBpfTrace(data.RawSample, data.CPU)
+				if trace == nil {
+					// loadBpfTrace only handles known origins and returns nil otherwise.
+					// Skip these cases here and continue with the following traces.
+					continue
+				}
 				if minKTime == 0 || trace.KTime < minKTime {
 					minKTime = trace.KTime
 				}
