@@ -742,14 +742,21 @@ func (r *rubyInstance) readClassName(classAddr libpf.Address) (libpf.String, boo
 	var singleton bool
 	var err error
 
-	classFlags := r.rm.Ptr(classAddr)
+	// Read the rbasic + rclass_ext + classpath + value to buffer entire object + classpath pointer
+	// do one large, buffered read rather than many small reads.
+	dataBytes := make([]byte, r.r.vmStructs.rclass_and_rb_classext_t.classext+r.r.vmStructs.rb_classext_struct.classpath+r.r.vmStructs.size_of_value)
+	if err := r.rm.Read(classAddr, dataBytes); err != nil {
+		return classPath, singleton, err
+	}
+
+	classFlags := npsr.Ptr(dataBytes, 0)
 	classMask := classFlags & rubyTMask
 
-	classpathPtr = r.rm.Ptr(classAddr + libpf.Address(r.r.vmStructs.rclass_and_rb_classext_t.classext+r.r.vmStructs.rb_classext_struct.classpath))
+	classpathPtr = npsr.Ptr(dataBytes, uint(r.r.vmStructs.rclass_and_rb_classext_t.classext+r.r.vmStructs.rb_classext_struct.classpath))
 	if classMask == rubyTIClass {
 		//https://github.com/ruby/ruby/blob/b627532/vm_backtrace.c#L1931-L1933
 
-		if klassAddr := r.rm.Ptr(classAddr + libpf.Address(r.r.vmStructs.rbasic_struct.klass)); klassAddr != 0 {
+		if klassAddr := npsr.Ptr(dataBytes, uint(r.r.vmStructs.rbasic_struct.klass)); klassAddr != 0 {
 			classpathPtr = r.rm.Ptr(klassAddr + libpf.Address(r.r.vmStructs.rclass_and_rb_classext_t.classext+r.r.vmStructs.rb_classext_struct.classpath))
 		}
 	} else if classFlags&r.r.rubyFlSingleton != 0 {
@@ -759,7 +766,7 @@ func (r *rubyInstance) readClassName(classAddr libpf.Address) (libpf.String, boo
 		// From these ruby macros:
 		// #define RCLASS_ATTACHED_OBJECT(c) (RCLASS_EXT_PRIME(c)->as.singleton_class.attached_object)
 		// #define RCLASS_EXT_PRIME(c) (&((struct RClass_and_rb_classext_t*)(c))->classext)
-		singletonObject := r.rm.Ptr(classAddr + libpf.Address(r.r.vmStructs.rclass_and_rb_classext_t.classext+r.r.vmStructs.rb_classext_struct.as_singleton_class_attached_object))
+		singletonObject := npsr.Ptr(dataBytes, uint(r.r.vmStructs.rclass_and_rb_classext_t.classext+r.r.vmStructs.rb_classext_struct.as_singleton_class_attached_object))
 		classpathPtr = r.rm.Ptr(singletonObject + libpf.Address(r.r.vmStructs.rclass_and_rb_classext_t.classext+r.r.vmStructs.rb_classext_struct.classpath))
 
 		// TODO (dalehamel) in future PR handle anonymous classes and modules
