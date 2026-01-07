@@ -78,7 +78,6 @@
         "node+0x1941a5b",
         "node+0xe2d1cf",
         "libc.so.6+0x7d5c7",
-        "libc.so.6+0x7d5c7",
         "libc.so.6+0xe5d9b"
       ]
     },
@@ -96,7 +95,6 @@
         "node+0x194f93b",
         "node+0xe28677",
         "libc.so.6+0x7d5c7",
-        "libc.so.6+0x7d5c7",
         "libc.so.6+0xe5d9b"
       ]
     },
@@ -107,7 +105,6 @@
         "libc.so.6+0x7c8fb",
         "node+0x194f93b",
         "node+0xe28677",
-        "libc.so.6+0x7d5c7",
         "libc.so.6+0x7d5c7",
         "libc.so.6+0xe5d9b"
       ]
@@ -120,7 +117,6 @@
         "node+0x194f93b",
         "node+0xe28677",
         "libc.so.6+0x7d5c7",
-        "libc.so.6+0x7d5c7",
         "libc.so.6+0xe5d9b"
       ]
     },
@@ -131,7 +127,6 @@
         "libc.so.6+0x7c8fb",
         "node+0x194f93b",
         "node+0xe28677",
-        "libc.so.6+0x7d5c7",
         "libc.so.6+0x7d5c7",
         "libc.so.6+0xe5d9b"
       ]
