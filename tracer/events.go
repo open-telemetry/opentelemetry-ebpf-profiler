@@ -6,6 +6,7 @@ package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"sync/atomic"
 	"time"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -89,10 +89,10 @@ func (t *Tracer) triggerPidEvent(data []byte) {
 // error counts.
 func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 	triggerFunc func([]byte), perCPUBufferSize int,
-) func() (lost, noData, readError uint64) {
+) (func() (lost, noData, readError uint64), error) {
 	eventReader, err := perf.NewReader(perfEventMap, perCPUBufferSize)
 	if err != nil {
-		log.Fatalf("Failed to setup perf reporting via %s: %v", perfEventMap, err)
+		return nil, fmt.Errorf("Failed to setup perf reporting via %s: %w", perfEventMap, err)
 	}
 
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
@@ -125,7 +125,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 		noData = noDataCount.Swap(0)
 		readError = readErrorCount.Swap(0)
 		return
-	}
+	}, nil
 }
 
 // startTraceEventMonitor spawns a goroutine that receives trace events from
@@ -136,12 +136,12 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 // error counts.
 func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	traceOutChan chan<- *libpf.EbpfTrace,
-) func() []metrics.Metric {
+) (func() []metrics.Metric, error) {
 	eventsMap := t.ebpfMaps["trace_events"]
 	eventReader, err := perf.NewReader(eventsMap,
 		t.samplesPerSecond*support.Sizeof_Trace)
 	if err != nil {
-		log.Fatalf("Failed to setup perf reporting via %s: %v", eventsMap, err)
+		return nil, fmt.Errorf("Failed to setup perf reporting via %s: %v", eventsMap, err)
 	}
 
 	// A deadline of zero is treated as "no deadline". A deadline in the past
@@ -270,19 +270,22 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 			{ID: metrics.IDTraceEventNoData, Value: metrics.MetricValue(noData)},
 			{ID: metrics.IDTraceEventReadError, Value: metrics.MetricValue(readError)},
 		}
-	}
+	}, nil
 }
 
 // startEventMonitor spawns a goroutine that receives events from the
 // map report_events. Returns a function that can be called to retrieve
 // perf event array metrics.
-func (t *Tracer) startEventMonitor(ctx context.Context) func() []metrics.Metric {
+func (t *Tracer) startEventMonitor(ctx context.Context) (func() []metrics.Metric, error) {
 	eventMap, ok := t.ebpfMaps["report_events"]
 	if !ok {
-		log.Fatalf("Map report_events is not available")
+		return nil, fmt.Errorf("Map report_events is not available")
 	}
 
-	getPerfErrorCounts := startPerfEventMonitor(ctx, eventMap, t.triggerPidEvent, os.Getpagesize())
+	getPerfErrorCounts, err := startPerfEventMonitor(ctx, eventMap, t.triggerPidEvent, os.Getpagesize())
+	if err != nil {
+		return nil, err
+	}
 	return func() []metrics.Metric {
 		lost, noData, readError := getPerfErrorCounts()
 
@@ -291,5 +294,5 @@ func (t *Tracer) startEventMonitor(ctx context.Context) func() []metrics.Metric 
 			{ID: metrics.IDPerfEventNoData, Value: metrics.MetricValue(noData)},
 			{ID: metrics.IDPerfEventReadError, Value: metrics.MetricValue(readError)},
 		}
-	}
+	}, nil
 }

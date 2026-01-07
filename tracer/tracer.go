@@ -997,12 +997,18 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *libpf.EbpfTrace {
 
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
 // maps for tracepoints, new traces, trace count updates and unknown PCs.
-func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libpf.EbpfTrace, unrecoverableErrors chan<- error) {
+func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libpf.EbpfTrace, unrecoverableErrors chan<- error) error {
 	if err := t.kernelSymbolizer.StartMonitor(ctx); err != nil {
 		log.Warnf("Failed to start kallsyms monitor: %v", err)
 	}
-	eventMetricCollector := t.startEventMonitor(ctx)
-	traceEventMetricCollector := t.startTraceEventMonitor(ctx, traceOutChan)
+	eventMetricCollector, err := t.startEventMonitor(ctx)
+	if err != nil {
+		return err
+	}
+	traceEventMetricCollector, err := t.startTraceEventMonitor(ctx, traceOutChan)
+	if err != nil {
+		return err
+	}
 
 	pidEvents := make([]libpf.PIDTID, 0)
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
@@ -1035,6 +1041,8 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 		metrics.AddSlice(traceEventMetricCollector())
 		metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
 	})
+
+	return nil
 }
 
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
