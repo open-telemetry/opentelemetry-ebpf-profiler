@@ -997,7 +997,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *libpf.EbpfTrace {
 
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
 // maps for tracepoints, new traces, trace count updates and unknown PCs.
-func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libpf.EbpfTrace, unrecoverableErrors chan<- error) error {
+func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libpf.EbpfTrace, errsChan chan<- error) error {
 	if err := t.kernelSymbolizer.StartMonitor(ctx); err != nil {
 		log.Warnf("Failed to start kallsyms monitor: %v", err)
 	}
@@ -1016,7 +1016,13 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 			t.enableEvent(support.EventTypeGenericPID)
 			err := t.monitorPIDEventsMap(&pidEvents)
 			if err != nil {
-				unrecoverableErrors <- err
+				select {
+				case errsChan <- err:
+					// Error sent successfully
+				case <-ctx.Done():
+					// Context canceled, stop trying to send
+				}
+				return
 			}
 
 			for _, pidTid := range pidEvents {

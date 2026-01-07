@@ -163,7 +163,7 @@ func (c *Controller) Shutdown() {
 func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
 	// Spawn monitors for the various result maps
 	traceCh := make(chan *libpf.EbpfTrace)
-	errs := make(chan error)
+	errs := make(chan error, 1)
 
 	err := trc.StartMapMonitors(ctx, traceCh, errs)
 	if err != nil {
