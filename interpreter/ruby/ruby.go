@@ -160,7 +160,8 @@ type rubyData struct {
 		// rb_iseq_location_struct
 		// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L272
 		iseq_location_struct struct {
-			pathobj, base_label, label uint8
+			pathobj, base_label, label   uint8
+			size_of_iseq_location_struct uint8
 		}
 
 		// succ_index_table_struct
@@ -871,7 +872,7 @@ func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType ui
 	vms := &r.r.vmStructs
 
 	// Read contiguous pointer values into a buffer to be more efficient
-	dataBytes := make([]byte, 3*vms.size_of_value)
+	dataBytes := make([]byte, vms.iseq_location_struct.size_of_iseq_location_struct)
 	if err := r.rm.Read(iseqBody+libpf.Address(vms.iseq_constant_body.location), dataBytes); err != nil {
 		return &rubyIseq{}, fmt.Errorf("failed to read iseq location data, %v", err)
 	}
@@ -1423,6 +1424,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.iseq_location_struct.pathobj = 0
 	vms.iseq_location_struct.base_label = 8
 	vms.iseq_location_struct.label = 16
+	vms.iseq_location_struct.size_of_iseq_location_struct = 24
 
 	switch {
 	case version < rubyVersion(2, 6, 0):

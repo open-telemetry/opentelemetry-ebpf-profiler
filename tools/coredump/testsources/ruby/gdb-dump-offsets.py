@@ -52,6 +52,7 @@ fields = {
     'iseq_location_struct.pathobj': offset_of('rb_iseq_location_struct', 'pathobj'),
     'iseq_location_struct.base_label': offset_of('rb_iseq_location_struct', 'base_label'),
     'iseq_location_struct.label': offset_of('rb_iseq_location_struct', 'label'),
+    'iseq_location_struct.size_of_iseq_location_struct': size_of('rb_iseq_location_struct'),
 
     'iseq_insn_info_entry.position': offset_of('iseq_insn_info_entry', 'position'),
     'iseq_insn_info_entry.size_of_position': size_of_field('iseq_insn_info_entry', 'position'),
