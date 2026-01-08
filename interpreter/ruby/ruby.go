@@ -892,20 +892,20 @@ func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType ui
 	sourceFileNamePtr := npsr.Ptr(dataBytes, uint(vms.iseq_location_struct.pathobj))
 	sourceFileName, err := r.getStringCached(sourceFileNamePtr, r.readPathObjRealPath)
 	if err != nil {
-		log.Warnf("RubySymbolizer: Failed to get source file name %v", err)
+		log.Debugf("Failed to get source file name %v", err)
 	}
 
 	iseqLabelPtr := npsr.Ptr(dataBytes, uint(vms.iseq_location_struct.label))
 	iseqLabel, err := r.getStringCached(iseqLabelPtr, r.readRubyString)
 	if err != nil {
-		log.Warnf("RubySymbolizer: Failed to get source label (iseq@0x%08x) %d %08x, %v", iseqBody, frameAddrType, frameFlags, err)
+		log.Debugf("Failed to get source label (iseq@0x%08x) %d %08x, %v", iseqBody, frameAddrType, frameFlags, err)
 		return &rubyIseq{}, err
 	}
 
 	iseqBaseLabelPtr := npsr.Ptr(dataBytes, uint(vms.iseq_location_struct.base_label))
 	iseqBaseLabel, err := r.getStringCached(iseqBaseLabelPtr, r.readRubyString)
 	if err != nil {
-		log.Warnf("RubySymbolizer: Failed to get source base label (iseq@0x%08x) %d %08x, %v", iseqBody, frameAddrType, frameFlags, err)
+		log.Debugf("Failed to get source base label (iseq@0x%08x) %d %08x, %v", iseqBody, frameAddrType, frameFlags, err)
 		return &rubyIseq{}, err
 	}
 
