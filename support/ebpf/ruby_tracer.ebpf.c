@@ -29,10 +29,15 @@ struct ruby_procs_t {
 #define MAX_EP_CHECKS              6
 
 // Constants related to reading a method entry
+// https://github.com/ruby/ruby/blob/523857bfcb0f0cdfd1ed7faa09b9c59a0266e7e2/method.h#L118
 #define VM_METHOD_TYPE_ISEQ 0
+// https://github.com/ruby/ruby/blob/523857bfcb0f0cdfd1ed7faa09b9c59a0266e7e2/vm_core.h#L1412
 #define VM_ENV_FLAG_LOCAL   0x2
+// https://github.com/ruby/ruby/blob/523857bfcb0f0cdfd1ed7faa09b9c59a0266e7e2/include/ruby/internal/fl_type.h#L157
 #define RUBY_FL_USHIFT      12
+// https://github.com/ruby/ruby/blob/523857bfcb0f0cdfd1ed7faa09b9c59a0266e7e2/internal/imemo.h#L18
 #define IMEMO_MASK          0x0f
+// https://github.com/ruby/ruby/blob/523857bfcb0f0cdfd1ed7faa09b9c59a0266e7e2/internal/imemo.h#L33-L37
 #define IMEMO_SVAR          2
 #define IMEMO_MENT          6
 
