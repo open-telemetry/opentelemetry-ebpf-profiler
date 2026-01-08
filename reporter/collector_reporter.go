@@ -57,7 +57,7 @@ func (r *CollectorReporter) Start(ctx context.Context) error {
 	ctx, cancelReporting := context.WithCancel(ctx)
 
 	r.runLoop.Start(ctx, r.cfg.ReportInterval, func() {
-		if err := r.reportProfile(context.Background()); err != nil {
+		if err := r.reportProfile(ctx); err != nil {
 			log.Errorf("Request failed: %v", err)
 		}
 	}, func() {
