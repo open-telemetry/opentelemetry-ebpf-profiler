@@ -67,6 +67,7 @@ fields = {
 
     'rarray_struct.as_ary': offset_of('RArray', 'as.ary'),
     'rarray_struct.as_heap_ptr': offset_of('RArray', 'as.heap.ptr'),
+    'rarray_struct.size_of_rarray': size_of('RArray'),
 
     'succ_index_table_struct.small_block_ranks': offset_of('succ_dict_block', 'small_block_ranks'),
     'succ_index_table_struct.block_bits': offset_of('succ_dict_block', 'bits'),

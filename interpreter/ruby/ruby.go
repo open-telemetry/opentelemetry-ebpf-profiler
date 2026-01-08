@@ -181,7 +181,7 @@ type rubyData struct {
 		// RBasic
 		// https://github.com/ruby/ruby/blob/d5c05585923bca11f07ff19edccd1f8e67620610/include/ruby/internal/core/rbasic.h#L110
 		rbasic_struct struct {
-			klass uint8
+			flags, klass uint8
 		}
 
 		// RString
@@ -196,6 +196,7 @@ type rubyData struct {
 		// https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/include/ruby/ruby.h#L1048
 		rarray_struct struct {
 			as_heap_ptr, as_ary uint8
+			size_of_rarray      uint8
 		}
 
 		// size_of_immediate_table holds the size of the macro IMMEDIATE_TABLE_SIZE as defined in
@@ -814,7 +815,7 @@ func (r *rubyInstance) id2str(originalId uint64) (libpf.String, error) {
 	ids := r.rm.Ptr(r.globalSymbolsAddr + libpf.Address(vms.rb_symbols_t.ids))
 	idx := serial / idEntryUnit
 
-	flags := r.rm.Ptr(ids)
+	flags := r.rm.Uint64(ids)
 
 	var idsPtr libpf.Address
 	var idsLen uint64
@@ -830,8 +831,12 @@ func (r *rubyInstance) id2str(originalId uint64) (libpf.String, error) {
 		// https://github.com/ruby/ruby/blob/8836f26efa7a6deb0ef8b3f253d8d53d04d43152/include/ruby/internal/core/rarray.h#L240-L242
 		idsLen = uint64((flags & RARRAY_EMBED_LEN_MASK) >> RARRAY_EMBED_LEN_SHIFT)
 	} else {
-		idsPtr = r.rm.Ptr(ids + libpf.Address(vms.rarray_struct.as_heap_ptr))
-		idsLen = r.rm.Uint64(ids + libpf.Address(vms.rarray_struct.as_ary))
+		dataBytes := make([]byte, vms.rarray_struct.size_of_rarray)
+		if err := r.rm.Read(ids, dataBytes); err != nil {
+			return libpf.NullString, fmt.Errorf("failed to id table heap rarray data, %v", err)
+		}
+		idsPtr = npsr.Ptr(dataBytes, uint(vms.rarray_struct.as_heap_ptr))
+		idsLen = npsr.Uint64(dataBytes, uint(vms.rarray_struct.as_ary))
 	}
 
 	if idx > idsLen {
@@ -841,7 +846,7 @@ func (r *rubyInstance) id2str(originalId uint64) (libpf.String, error) {
 	array := r.rm.Ptr(idsPtr + libpf.Address(idx*uint64(vms.size_of_value)))
 	arrayPtr := r.rm.Ptr(array + libpf.Address(vms.rarray_struct.as_heap_ptr))
 
-	flags = r.rm.Ptr(array)
+	flags = r.rm.Uint64(array + +libpf.Address(vms.rbasic_struct.flags))
 	if (flags & RARRAY_EMBED_FLAG) > 0 {
 		log.Debugf("Handling embedded array (2 levels) with shift")
 		arrayPtr = r.rm.Ptr(array + libpf.Address(vms.rarray_struct.as_ary))
@@ -1456,11 +1461,13 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.rstring_struct.as_ary = 24
 	}
 
+	vms.rbasic_struct.flags = 0
 	vms.rbasic_struct.klass = 8
 	vms.rstring_struct.as_heap_ptr = 24
 
 	vms.rarray_struct.as_ary = 16
 	vms.rarray_struct.as_heap_ptr = 32
+	vms.rarray_struct.size_of_rarray = 40
 
 	vms.succ_index_table_struct.small_block_ranks = 8
 	vms.succ_index_table_struct.block_bits = 16
