@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"reflect"
 	"regexp"
 	"slices"
@@ -46,6 +47,25 @@ var (
 // pythonVer builds a version number from readable numbers
 func pythonVer(major, minor int) uint16 {
 	return uint16(major)*0x100 + uint16(minor)
+}
+
+func readPyVersionHex(ef *pfelf.File) (int, int, uint32, error) {
+	addr, err := ef.LookupSymbolAddress("Py_Version")
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	rm := ef.GetRemoteMemory()
+	versionHex := rm.Uint32(libpf.Address(addr))
+	if versionHex == 0 {
+		return 0, 0, versionHex, errors.New("Py_Version is 0")
+	}
+
+	major := int((versionHex >> 24) & 0xff)
+	minor := int((versionHex >> 16) & 0xff)
+	if major == 0 {
+		return 0, 0, versionHex, fmt.Errorf("invalid Py_Version 0x%x", versionHex)
+	}
+	return major, minor, versionHex, nil
 }
 
 //nolint:lll
@@ -673,18 +693,42 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	mainDSO := false
+	major := 0
+	minor := 0
+	var ef *pfelf.File
+	var err error
 	matches := libpythonRegex.FindStringSubmatch(info.FileName())
 	if matches == nil {
 		mainDSO = true
 		matches = pythonRegex.FindStringSubmatch(info.FileName())
-		if matches == nil {
+	}
+	if matches == nil {
+		if strings.HasPrefix(path.Base(info.FileName()), "python") {
+			elfFile, err := info.GetELF()
+			if err != nil {
+				return nil, err
+			}
+			ef = elfFile
+			var versionErr error
+			major, minor, _, versionErr = readPyVersionHex(ef)
+			if versionErr != nil {
+				return nil, nil
+			}
+			mainDSO = true
+		} else {
 			return nil, nil
 		}
+	} else {
+		major, _ = strconv.Atoi(matches[1])
+		minor, _ = strconv.Atoi(matches[2])
 	}
 
-	ef, err := info.GetELF()
-	if err != nil {
-		return nil, err
+	if ef == nil {
+		elfFile, err := info.GetELF()
+		if err != nil {
+			return nil, err
+		}
+		ef = elfFile
 	}
 
 	if mainDSO {
@@ -701,8 +745,6 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	var pyruntimeAddr, autoTLSKey libpf.SymbolValue
-	major, _ := strconv.Atoi(matches[1])
-	minor, _ := strconv.Atoi(matches[2])
 	version := pythonVer(major, minor)
 
 	minVer := pythonVer(3, 6)
