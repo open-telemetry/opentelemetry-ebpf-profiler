@@ -941,10 +941,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 
 	var err error
 	var iseqBody libpf.Address
-	var classPath libpf.String
-	var methodName libpf.String
-	var fullLabel libpf.String
-	var sourceFile libpf.String
+	var classPath, methodName, fullLabel, sourceFile libpf.String
 	var sourceLine libpf.SourceLineno
 	var singleton bool
 	var cframe bool
