@@ -1042,7 +1042,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 			// If it failed to symbolize at all, create a dummy value that includes the
 			// flags for debugging purposes.
 			// Most often this is only hit if the process died before we could read memory
-			fullLabel = libpf.Intern(fmt.Sprintf("UNKNOWN_FUNCTION %d %08x", frameAddrType, frameFlags))
+			fullLabel = libpf.Intern(fmt.Sprintf("<unknown function %d %08x>", frameAddrType, frameFlags))
 		}
 	}
 	frames.Append(&libpf.Frame{
