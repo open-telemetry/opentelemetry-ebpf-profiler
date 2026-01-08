@@ -24,6 +24,8 @@ type Controller struct {
 	config   *Config
 	reporter reporter.Reporter
 	tracer   *tracer.Tracer
+
+	cancelFn context.CancelFunc
 }
 
 // New creates a new controller
@@ -47,6 +49,8 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	intervals := times.New(c.config.ReporterInterval, c.config.MonitorInterval,
 		c.config.ProbabilisticInterval)
+
+	ctx, c.cancelFn = context.WithCancel(ctx)
 
 	// Start periodic synchronization with the realtime clock
 	times.StartRealtimeSync(ctx, c.config.ClockSyncInterval)
@@ -151,6 +155,10 @@ func (c *Controller) Start(ctx context.Context) error {
 // Shutdown stops the controller
 func (c *Controller) Shutdown() {
 	log.Info("Stop processing ...")
+	if c.cancelFn != nil {
+		c.cancelFn()
+	}
+
 	if c.reporter != nil {
 		c.reporter.Stop()
 	}
