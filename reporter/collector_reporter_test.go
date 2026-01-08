@@ -110,5 +110,5 @@ func TestCollectorReporterShutdown(t *testing.T) {
 	cancelFn()
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		assert.True(collect, cancelled.Load())
-	}, 300*time.Millisecond, 50*time.Millisecond, "failed to cancel consumer")
+	}, 300*time.Millisecond, 50*time.Millisecond, "consumer did not exit after context cancellation")
 }
