@@ -133,14 +133,10 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
 
   vm_env_t vm_env;
   rb_control_frame_t control_frame;
-  u64 cf_size = sizeof(rb_control_frame_t);
-
-  // Ruby prior to 3.1.0 control frame did not have jit_return
-  if (rubyinfo->version < 0x30100)
-    cf_size -= sizeof(control_frame.jit_return);
 
   // Read the control frame pointer
-  if (bpf_probe_read_user(&control_frame, cf_size, (void *)(stack_ptr))) {
+  if (bpf_probe_read_user(
+        &control_frame, rubyinfo->size_of_control_frame_struct, (void *)(stack_ptr))) {
     increment_metric(metricID_UnwindRubyErrReadStackPtr);
     return ERR_RUBY_READ_STACK_PTR;
   }
