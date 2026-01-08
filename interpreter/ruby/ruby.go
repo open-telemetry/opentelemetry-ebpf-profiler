@@ -1268,7 +1268,6 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	globalSymbols, err = ef.LookupSymbolAddress(globalSymbolsName)
 	if err != nil {
 		log.Debugf("Direct lookup of %v failed: %v, will try fallback", globalSymbolsName, err)
-	} else {
 	}
 
 	if err = ef.VisitSymbols(func(s libpf.Symbol) bool {
