@@ -146,12 +146,13 @@ type ProcessMeta struct {
 }
 
 type MemProfileMeta struct {
-	Lang         libpf.InterpreterType
-	MajorVersion int
-	MinorVersion int
-	LibcPath     string
-	ExecAbsPath  string
-	ItData       interpreter.Data
+	Lang          libpf.InterpreterType
+	MajorVersion  int
+	MinorVersion  int
+	LibcPath      string
+	ExecAbsPath   string
+	LibPythonPath string
+	ItData        interpreter.Data
 }
 
 // processInfo contains information about the executable mappings
