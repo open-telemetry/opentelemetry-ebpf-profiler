@@ -198,12 +198,16 @@ func ConvertOtlpData(data OTLPProfileData, pid uint32) map[uint32]pprofile.Profi
 		})
 		return false
 	})
-	for _, mapping := range data.ProfilesData.Dictionary.GetMappingTable() {
+	dictionary := data.ProfilesData.GetDictionary()
+	if dictionary == nil {
+		return tds
+	}
+	for _, mapping := range dictionary.GetMappingTable() {
 		m := profile.MappingTable().AppendEmpty()
 		m.AttributeIndices().Append(mapping.GetAttributeIndices()...)
 	}
 
-	for _, l := range data.ProfilesData.Dictionary.GetLocationTable() {
+	for _, l := range dictionary.GetLocationTable() {
 		_l := profile.LocationTable().AppendEmpty()
 		_l.SetMappingIndex(l.GetMappingIndex())
 		_l.SetAddress(l.Address)
@@ -215,15 +219,15 @@ func ConvertOtlpData(data OTLPProfileData, pid uint32) map[uint32]pprofile.Profi
 		}
 	}
 
-	for _, f := range data.ProfilesData.Dictionary.FunctionTable {
+	for _, f := range dictionary.GetFunctionTable() {
 		_f := profile.FunctionTable().AppendEmpty()
 		_f.SetNameStrindex(f.GetNameStrindex())
 		_f.SetFilenameStrindex(f.GetFilenameStrindex())
 	}
-	sb := data.ProfilesData.Dictionary.GetStringTable()
+	sb := dictionary.GetStringTable()
 	sb[typeStrIndex] = "heap"
 	sb[unitStrIndex] = "bytes"
-	profile.StringTable().Append(data.ProfilesData.Dictionary.StringTable...)
+	profile.StringTable().Append(dictionary.StringTable...)
 	profile.SetTime(pcommon.Timestamp(t[0]))
 	profile.PeriodType().SetTypeStrindex(typeStrIndex)
 	profile.PeriodType().SetUnitStrindex(unitStrIndex)
