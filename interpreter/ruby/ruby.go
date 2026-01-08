@@ -1052,8 +1052,6 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 
 // qualified_method_name, translated into golang
 // https://github.com/ruby/ruby/blob/v3_4_7/vm_backtrace.c#L1947
-// qualified_method_name, translated into golang
-// https://github.com/ruby/ruby/blob/v3_4_7/vm_backtrace.c#L1947
 func qualifiedMethodName(classPath, methodName libpf.String, singleton bool) libpf.String {
 	if methodName == libpf.NullString {
 		return methodName
