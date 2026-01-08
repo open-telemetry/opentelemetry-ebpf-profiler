@@ -518,6 +518,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 
 	interpretersValid := make(libpf.Set[util.OnDiskFileIdentifier])
 	var libcPath, libPythonPath string
+	var lan libpf.InterpreterType
 	for idx := range mappings {
 		m := &mappings[idx]
 		if !m.IsExecutable() || m.IsAnonymous() {
@@ -531,6 +532,14 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		isCpython := isPythonLibrary(m.Path)
 		isLibc := isCLibrary(m.Path)
 		if !isCpython && !isLibc {
+			elf, err := pr.OpenELF(m.Path)
+			if err != nil {
+				continue
+			}
+			// golang类型的判断需要从elf文件中读取
+			if elf.IsGolang() {
+				lan = libpf.Golang
+			}
 			continue
 		}
 		absPath := getAbsPath(pid, m.Path)
@@ -582,6 +591,9 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		}
 		_info.memProfileMeta.LibcPath = libcPath
 		_info.memProfileMeta.LibPythonPath = libPythonPath
+		if lan != libpf.UnknownInterp {
+			_info.memProfileMeta.Lang = lan
+		}
 	}
 	pm.mu.Unlock()
 
