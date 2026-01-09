@@ -48,14 +48,14 @@ struct ruby_procs_t {
 // Save on read ops by reading the whole control frame struct
 // as technically this reads too much memory
 typedef struct rb_control_frame_struct {
-  const void *pc;         // cfp[0]
-  void *sp;               // cfp[1]
-  const void *iseq;       // cfp[2]
-  void *self;             // cfp[3] / block[0]
-  const void *ep;         // cfp[4] / block[1]
-  const void *block_code; // cfp[5] / block[2] -- iseq, ifunc, or forwarded block handler
-  void *jit_return;       // cfp[6] -- return address for JIT code
-  void *padding;          // cfp[7] / VALUE *bp_check if compiled with VM_DEBUG_BP_CHECK
+  const void *pc;          // cfp[0]
+  void *_sp;               // cfp[1]
+  const void *iseq;        // cfp[2]
+  void *_self;             // cfp[3] / block[0]
+  const void *ep;          // cfp[4] / block[1]
+  const void *_block_code; // cfp[5] / block[2] -- iseq, ifunc, or forwarded block handler
+  void *_jit_return;       // cfp[6] -- return address for JIT code
+  void *_padding;          // cfp[7] / VALUE *bp_check if compiled with VM_DEBUG_BP_CHECK
 } rb_control_frame_t;
 
 // Save on reads by putting all of these variables into one struct:
@@ -135,13 +135,8 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
   vm_env_t vm_env;
   rb_control_frame_t control_frame;
 
-  // The verifier needs to be shown that the following read is safe
-  if (rubyinfo->size_of_control_frame_struct > sizeof(rb_control_frame_t))
-    return ERR_RUBY_READ_STACK_PTR;
-
   // Read the control frame pointer
-  if (bpf_probe_read_user(
-        &control_frame, rubyinfo->size_of_control_frame_struct, (void *)(stack_ptr))) {
+  if (bpf_probe_read_user(&control_frame, sizeof(rb_control_frame_t), (void *)(stack_ptr))) {
     increment_metric(metricID_UnwindRubyErrReadStackPtr);
     return ERR_RUBY_READ_STACK_PTR;
   }
