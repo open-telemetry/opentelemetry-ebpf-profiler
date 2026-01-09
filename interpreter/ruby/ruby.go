@@ -69,6 +69,7 @@ const (
 	rarrayEmbed = RUBY_FL_USER1
 
 	// PATHOBJ_REALPATH
+	// https://github.com/ruby/ruby/blob/3185786874315ab4f1cfcc73c3d1b14613452905/vm_core.h#L343
 	pathObjRealPathIdx = 1
 
 	// ISEQ_TYPE_METHOD
@@ -94,7 +95,7 @@ var (
 	// regex to extract a version from a string
 	rubyVersionRegex = regexp.MustCompile(`^(\d)\.(\d)\.(\d)$`)
 
-	unknownCfunc   = libpf.Intern("<unknown ruby cfunc>")
+	unknownCfunc   = libpf.Intern("<unknown cfunc>")
 	cfuncDummyFile = libpf.Intern("<cfunc>")
 	// compiler check to make sure the needed interfaces are satisfied
 	_ interpreter.Data     = &rubyData{}
