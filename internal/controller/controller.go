@@ -50,7 +50,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	intervals := times.New(c.config.ReporterInterval, c.config.MonitorInterval,
 		c.config.ProbabilisticInterval)
 
-	ctx, c.cancelFn = context.WithCancel(ctx)
+	ctx, c.cancelFunc = context.WithCancel(ctx)
 
 	// Start periodic synchronization with the realtime clock
 	times.StartRealtimeSync(ctx, c.config.ClockSyncInterval)
