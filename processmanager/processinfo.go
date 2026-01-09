@@ -165,7 +165,7 @@ func (pm *ProcessManager) setProcessMemProfileMeta(lanVer string, pid libpf.PID,
 			}
 		}
 		switch lanStr {
-		case "Python":
+		case "Python", "cpython", "python":
 			lan = libpf.Python
 		case "Java":
 			lan = libpf.HotSpot
@@ -443,26 +443,18 @@ func (pm *ProcessManager) processNewExecMapping(pr process.Process, mapping *pro
 				pr.PID(), mapping.Path, err)
 		}
 	}
-
-	if isCLibrary(mapping.Path) {
-		libcPath := getAbsPath(pr.PID(), mapping.Path)
-		pm.mu.Lock()
-		_info, ok := pm.pidToProcessInfo[pr.PID()]
-		if ok {
-			if _info.memProfileMeta == nil {
-				_info.memProfileMeta = &MemProfileMeta{}
-			}
-			_info.memProfileMeta.LibcPath = fmt.Sprintf("/proc/%d/root%s", pr.PID(), libcPath)
-		}
-		pm.mu.Unlock()
-	}
 }
 
 func isCLibrary(path string) bool {
 	return strings.Contains(path, "libc.so") || strings.Contains(path, "libc-") ||
 		strings.Contains(path, "libc.musl") || strings.Contains(path, "libjemalloc.so") ||
 		strings.Contains(path, "libtcmalloc") || strings.Contains(path, "libmimalloc.so") ||
-		strings.Contains(path, "libefence.so") || strings.Contains(path, "libdlmalloc.so")
+		strings.Contains(path, "libefence.so") || strings.Contains(path, "libdlmalloc.so") ||
+		strings.Contains(path, "ld-musl")
+}
+
+func isPythonLibrary(path string) bool {
+	return strings.Contains(path, "libpython")
 }
 
 // processRemovedMappings removes listed memory mappings and loaded interpreters from
@@ -525,6 +517,8 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	mpRemove := make([]libpf.Address, 0)
 
 	interpretersValid := make(libpf.Set[util.OnDiskFileIdentifier])
+	var libcPath, libPythonPath string
+	var lan libpf.InterpreterType
 	for idx := range mappings {
 		m := &mappings[idx]
 		if !m.IsExecutable() || m.IsAnonymous() {
@@ -533,6 +527,28 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		mpAdd[libpf.Address(m.Vaddr)] = m
 		key := m.GetOnDiskFileIdentifier()
 		interpretersValid[key] = libpf.Void{}
+
+		// 内存profile元数据获取, 相同动态库的符号表会被去重，遍历自身进程时判断内存采集类型，不然后来的进程无法确定采集类型
+		isCpython := isPythonLibrary(m.Path)
+		isLibc := isCLibrary(m.Path)
+		if !isCpython && !isLibc {
+			elf, err := pr.OpenELF(m.Path)
+			if err != nil {
+				continue
+			}
+			// golang类型的判断需要从elf文件中读取
+			if elf.IsGolang() {
+				lan = libpf.Golang
+			}
+			continue
+		}
+		absPath := getAbsPath(pid, m.Path)
+		if isCpython {
+			libPythonPath = fmt.Sprintf("/proc/%d/root%s", pid, absPath)
+		}
+		if isLibc {
+			libcPath = fmt.Sprintf("/proc/%d/root%s", pid, absPath)
+		}
 	}
 
 	// Generate the list of added and removed mappings.
@@ -566,6 +582,20 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	for _, mapping := range mpAdd {
 		pm.processNewExecMapping(pr, mapping)
 	}
+
+	pm.mu.Lock()
+	_info, ok := pm.pidToProcessInfo[pid]
+	if ok {
+		if _info.memProfileMeta == nil {
+			_info.memProfileMeta = &MemProfileMeta{}
+		}
+		_info.memProfileMeta.LibcPath = libcPath
+		_info.memProfileMeta.LibPythonPath = libPythonPath
+		if lan != libpf.UnknownInterp {
+			_info.memProfileMeta.Lang = lan
+		}
+	}
+	pm.mu.Unlock()
 
 	// Update interpreter plugins about the changed mappings
 	if pm.interpreterTracerEnabled {

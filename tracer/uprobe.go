@@ -76,10 +76,9 @@ func (t *Tracer) AttachUProbes(u *uprobe) ([]*link.Link, error) {
 	if enter, ok := t.ebpfProgs[u.progEnter]; ok {
 		if uprobeLink, err := u.exec.Uprobe(u.symbol, enter, u.opts); err != nil {
 			if u.canFail {
-				err = nil
+				return nil, nil
 			}
-			err = fmt.Errorf("failed to attach u-probe program %s: %v", u.progEnter, err)
-			return nil, err
+			return nil, fmt.Errorf("failed to attach u-probe program %s: %v", u.progEnter, err)
 		} else {
 			resLinks = append(resLinks, &uprobeLink)
 		}
@@ -87,10 +86,9 @@ func (t *Tracer) AttachUProbes(u *uprobe) ([]*link.Link, error) {
 	if exit, ok := t.ebpfProgs[u.progExit]; ok {
 		if uRetProbeLink, err := u.exec.Uretprobe(u.symbol, exit, u.opts); err != nil {
 			if u.canFail {
-				err = nil
+				return nil, nil
 			}
-			err = fmt.Errorf("failed to attach u-probe program %s: %v", u.progExit, err)
-			return nil, err
+			return nil, fmt.Errorf("failed to attach u-probe program %s: %v", u.progExit, err)
 		} else {
 			resLinks = append(resLinks, &uRetProbeLink)
 		}
@@ -128,6 +126,7 @@ func (t *Tracer) StartCLikeMemProfiling(exec *link.Executable, _ *processmanager
 		{exec, "posix_memalign", "posix_memalign_enter", "posix_memalign_exit", false, pid, opts},
 		{exec, "valloc", "valloc_enter", "valloc_exit", true, pid, opts},
 		{exec, "memalign", "memalign_enter", "memalign_exit", false, pid, opts},
+		/* pvalloc在arm64上不存在,不需要挂载 */
 		{exec, "pvalloc", "pvalloc_enter", "pvalloc_exit", true, pid, opts},
 		{exec, "aligned_alloc", "aligned_alloc_enter", "aligned_alloc_exit", true, pid, opts},
 		{exec, "free", "free_enter", "", false, pid, opts},
@@ -182,65 +181,70 @@ func (t *Tracer) StartPythonMemProfiling(exec *link.Executable, _ *processmanage
 	return links, errors.Join(errs...)
 }
 
-func (t *Tracer) TriggerMemProfile(p process.Process) error {
+func (t *Tracer) HasMemProfileHooks(pid libpf.PID) bool {
+	memProfileHooks := t.memProfileHooks.RLock()
+	_, exist := (*memProfileHooks)[pid]
+	t.memProfileHooks.RUnlock(&memProfileHooks)
+	return exist
+}
+
+func (t *Tracer) updateMemProfileHooks(pid libpf.PID, links []*link.Link) {
 	memProfileHooks := t.memProfileHooks.WLock()
-	if _, exist := (*memProfileHooks)[p.PID()]; exist {
-		t.memProfileHooks.WUnlock(&memProfileHooks)
-		return nil
-	}
+	(*memProfileHooks)[pid] = links
 	t.memProfileHooks.WUnlock(&memProfileHooks)
-	if memProfileInfo := t.processManager.GetMemProfileInfo(p.PID()); memProfileInfo != nil {
-		var startProfiling func(exec *link.Executable, info *processmanager.MemProfileMeta, pid int, opts *link.UprobeOptions) ([]*link.Link, error)
-		var exec *link.Executable
-		var execPath string
-		switch memProfileInfo.Lang {
-		case libpf.HotSpot:
-			cfg := &hotspotmem.OTLPProfilerConfig{
-				PID:           int(p.PID()),
-				AllocInterval: t.memProfileBlock, //bytes
-			}
-			err := t.startHotspotMemProfiling(memProfileInfo, cfg)
-			if err != nil {
-				t.detachMemProfile(p.PID())
-				return err
-			}
-			memProfileHooks := t.memProfileHooks.WLock()
-			(*memProfileHooks)[p.PID()] = nil
-			t.memProfileHooks.WUnlock(&memProfileHooks)
-			return nil
-		case libpf.Python:
-			startProfiling = t.StartPythonMemProfiling
-			execPath = memProfileInfo.ExecAbsPath
-		case libpf.Golang:
-			startProfiling = t.StartGolangMemProfiling
-			execPath = memProfileInfo.ExecAbsPath
-		case libpf.PHP, libpf.PHPJIT, libpf.Kernel, libpf.Ruby, libpf.Perl, libpf.V8, libpf.Dotnet:
-			return nil
-		default:
-			startProfiling = t.StartCLikeMemProfiling
-			execPath = memProfileInfo.LibcPath
-		}
-		if execPath == "" {
-			return fmt.Errorf("unable to start memprofiling for process %d with empty executeable path: %v", p.PID(), memProfileInfo)
-		}
-		exec, err := link.OpenExecutable(execPath)
-		if err != nil {
-			return err
-		}
-		var opts *link.UprobeOptions
-		if p.PID() > 0 {
-			opts = &link.UprobeOptions{PID: int(p.PID())}
-		}
-		links, err := startProfiling(exec, memProfileInfo, int(p.PID()), opts)
-		if err != nil {
-			return err
-		}
-		memProfileHooks := t.memProfileHooks.WLock()
-		(*memProfileHooks)[p.PID()] = links
-		t.memProfileHooks.WUnlock(&memProfileHooks)
-		return nil
+}
+
+func (t *Tracer) TriggerMemProfile(p process.Process) error {
+	pid := p.PID()
+	memProfileInfo := t.processManager.GetMemProfileInfo(pid)
+	if memProfileInfo == nil {
+		return fmt.Errorf("unable to start memprofile with pid: %d, can not find MemProfile MetaInfo", pid)
 	}
-	return fmt.Errorf("unable to start memprofile with pid: %d, can not find MemProfile MetaInfo", p.PID())
+	var startProfiling func(exec *link.Executable, info *processmanager.MemProfileMeta, pid int, opts *link.UprobeOptions) ([]*link.Link, error)
+	var exec *link.Executable
+	var execPath string
+	switch memProfileInfo.Lang {
+	case libpf.HotSpot:
+		cfg := &hotspotmem.OTLPProfilerConfig{
+			PID:           int(pid),
+			AllocInterval: t.memProfileBlock, //bytes
+		}
+		err := t.startHotspotMemProfiling(memProfileInfo, cfg)
+		if err != nil {
+			t.detachMemProfile(pid)
+			return err
+		}
+		t.updateMemProfileHooks(pid, nil)
+		return nil
+	case libpf.Python:
+		startProfiling = t.StartPythonMemProfiling
+		execPath = memProfileInfo.LibPythonPath
+	case libpf.Golang:
+		startProfiling = t.StartGolangMemProfiling
+		execPath = memProfileInfo.ExecAbsPath
+	case libpf.PHP, libpf.PHPJIT, libpf.Kernel, libpf.Ruby, libpf.Perl, libpf.V8, libpf.Dotnet:
+		return nil
+	default:
+		startProfiling = t.StartCLikeMemProfiling
+		execPath = memProfileInfo.LibcPath
+	}
+	if execPath == "" {
+		return fmt.Errorf("unable to start memprofiling for process %d with empty executeable path: %v", pid, memProfileInfo)
+	}
+	exec, err := link.OpenExecutable(execPath)
+	if err != nil {
+		return err
+	}
+	var opts *link.UprobeOptions
+	if pid > 0 {
+		opts = &link.UprobeOptions{PID: int(pid)}
+	}
+	links, err := startProfiling(exec, memProfileInfo, int(pid), opts)
+	if err != nil {
+		return err
+	}
+	t.updateMemProfileHooks(pid, links)
+	return nil
 }
 
 func (t *Tracer) StartMemProfile(ctx context.Context, memProfileBlock uint64) {
@@ -267,6 +271,9 @@ func (t *Tracer) StartMemProfile(ctx context.Context, memProfileBlock uint64) {
 						t.detachMemProfile(pid)
 						t.memProfileTargetPids.Delete(k)
 					} else {
+						if t.HasMemProfileHooks(pid) {
+							return true
+						}
 						proc := process.New(pid)
 						t.processManager.SynchronizeProcess(proc)
 						if err := t.TriggerMemProfile(proc); err != nil {
@@ -282,6 +289,7 @@ func (t *Tracer) StartMemProfile(ctx context.Context, memProfileBlock uint64) {
 }
 
 func (t *Tracer) SyncMemProfileTargetPids(targetPids map[libpf.PID]bool) {
+	t.memProfileTargetPids.Clear()
 	for pid, add := range targetPids {
 		t.memProfileTargetPids.Store(pid, add)
 	}
