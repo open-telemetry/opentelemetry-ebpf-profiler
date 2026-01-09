@@ -451,8 +451,6 @@ var MetricsTranslation = []metrics.MetricID{
 	0x4c: metrics.IDUnwindRubyErrReadCfp,
 	0x4d: metrics.IDUnwindRubyErrReadEp,
 	0x4e: metrics.IDUnwindRubyErrReadIseqBody,
-	0x4f: metrics.IDUnwindRubyErrReadIseqEncoded,
-	0x50: metrics.IDUnwindRubyErrReadIseqSize,
 	0x51: metrics.IDUnwindNativeErrLrUnwindingMidTrace,
 	0x52: metrics.IDUnwindNativeErrReadKernelModeRegs,
 	0x53: metrics.IDUnwindNativeErrChaseIrqStackLink,
