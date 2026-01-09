@@ -138,17 +138,52 @@
   {
     "id": 3006,
     "name": "ruby_read_iseq_encoded",
-    "description": "Ruby: Unable to read the instruction sequence encoded size"
+    "description": "Ruby: Unable to read the instruction sequence encoded size (deprecated)"
   },
   {
     "id": 3007,
     "name": "ruby_read_iseq_size",
-    "description": "Ruby: Unable to read the instruction sequence size"
+    "description": "Ruby: Unable to read the instruction sequence size (deprecated)"
   },
   {
     "id": 3008,
     "name": "ruby_read_tsd_base",
     "description": "Ruby: Unable to determine the base address for thread-specific data"
+  },
+  {
+    "id": 3009,
+    "name": "ruby_invalid_iseq",
+    "description": "Ruby: Invalid instruction sequence"
+  },
+  {
+    "id": 3010,
+    "name": "ruby_read_method_def",
+    "description": "Ruby: Unable to read the method definition"
+  },
+  {
+    "id": 3011,
+    "name": "ruby_read_method_type",
+    "description": "Ruby: Unable to read the method type"
+  },
+  {
+    "id": 3012,
+    "name": "ruby_read_svar",
+    "description": "Ruby: Unable to read svar while locating CME from EP"
+  },
+  {
+    "id": 3013,
+    "name": "ruby_read_rbasic_flags",
+    "description": "Ruby: Unable to read rbasic flags"
+  },
+  {
+    "id": 3020,
+    "name": "ruby_read_cme_max_ep",
+    "description": "Ruby: Exceeded maximum EP checks while locating CME"
+  },
+  {
+    "id": 3021,
+    "name": "ruby_pack_frame",
+    "description": "Ruby: Failed to pack additional into spare bytes of Frame field"
   },
   {
     "id": 4000,

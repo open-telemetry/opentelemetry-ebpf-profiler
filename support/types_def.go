@@ -14,6 +14,7 @@ import (
 #include "./ebpf/frametypes.h"
 #include "./ebpf/stackdeltatypes.h"
 #include "./ebpf/v8_tracer.h"
+#include "./ebpf/ruby_tracer.h"
 */
 import "C"
 
@@ -193,6 +194,14 @@ const (
 	V8LineCookieShift = C.V8_LINE_COOKIE_SHIFT
 	V8LineCookieMask  = C.V8_LINE_COOKIE_MASK
 	V8LineDeltaMask   = C.V8_LINE_DELTA_MASK
+
+	RubyAddrMask48Bit     = C.ADDR_MASK_48_BIT
+	RubyExtraAddrTypeMask = C.EXTRA_TYPE_MASK
+
+	RubyFrameTypeNone     = C.FRAME_TYPE_NONE
+	RubyFrameTypeCmeIseq  = C.FRAME_TYPE_CME_ISEQ
+	RubyFrameTypeCmeCfunc = C.FRAME_TYPE_CME_CFUNC
+	RubyFrameTypeIseq     = C.FRAME_TYPE_ISEQ
 )
 
 var MetricsTranslation = []metrics.MetricID{
@@ -269,8 +278,6 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindRubyErrReadCfp:                       metrics.IDUnwindRubyErrReadCfp,
 	C.metricID_UnwindRubyErrReadEp:                        metrics.IDUnwindRubyErrReadEp,
 	C.metricID_UnwindRubyErrReadIseqBody:                  metrics.IDUnwindRubyErrReadIseqBody,
-	C.metricID_UnwindRubyErrReadIseqEncoded:               metrics.IDUnwindRubyErrReadIseqEncoded,
-	C.metricID_UnwindRubyErrReadIseqSize:                  metrics.IDUnwindRubyErrReadIseqSize,
 	C.metricID_UnwindNativeErrLrUnwindingMidTrace:         metrics.IDUnwindNativeErrLrUnwindingMidTrace,
 	C.metricID_UnwindNativeErrReadKernelModeRegs:          metrics.IDUnwindNativeErrReadKernelModeRegs,
 	C.metricID_UnwindNativeErrChaseIrqStackLink:           metrics.IDUnwindNativeErrChaseIrqStackLink,
@@ -286,4 +293,10 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindDotnetErrBadFP:                       metrics.IDUnwindDotnetErrBadFP,
 	C.metricID_UnwindDotnetErrCodeHeader:                  metrics.IDUnwindDotnetErrCodeHeader,
 	C.metricID_UnwindDotnetErrCodeTooLarge:                metrics.IDUnwindDotnetErrCodeTooLarge,
+	C.metricID_UnwindRubyErrInvalidIseq:                   metrics.IDUnwindRubyErrInvalidIseq,
+	C.metricID_UnwindRubyErrReadMethodDef:                 metrics.IDUnwindRubyErrReadMethodDef,
+	C.metricID_UnwindRubyErrReadMethodType:                metrics.IDUnwindRubyErrReadMethodType,
+	C.metricID_UnwindRubyErrReadSvar:                      metrics.IDUnwindRubyErrReadSvar,
+	C.metricID_UnwindRubyErrReadRbasicFlags:               metrics.IDUnwindRubyErrReadRbasicFlags,
+	C.metricID_UnwindRubyErrCmeMaxEp:                      metrics.IDUnwindRubyErrCmeMaxEp,
 }
