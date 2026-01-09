@@ -533,12 +533,6 @@ const (
 	// Number of failures to read the instruction sequence body
 	IDUnwindRubyErrReadIseqBody = 243
 
-	// Number of failures to read the instruction sequence encoded size (deprecated)
-	IDUnwindRubyErrReadIseqEncoded = 244
-
-	// Number of failures to read the instruction sequence size (deprecated)
-	IDUnwindRubyErrReadIseqSize = 245
-
 	// Number of times the unwind instructions requested LR unwinding mid-trace
 	IDUnwindNativeErrLrUnwindingMidTrace = 246
 
