@@ -25,7 +25,7 @@ type Controller struct {
 	reporter reporter.Reporter
 	tracer   *tracer.Tracer
 
-	cancelFn context.CancelFunc
+	cancelFunc context.CancelFunc
 }
 
 // New creates a new controller
