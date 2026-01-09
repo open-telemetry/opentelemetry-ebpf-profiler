@@ -155,8 +155,8 @@ func (c *Controller) Start(ctx context.Context) error {
 // Shutdown stops the controller
 func (c *Controller) Shutdown() {
 	log.Info("Stop processing ...")
-	if c.cancelFn != nil {
-		c.cancelFn()
+	if c.cancelFunc != nil {
+		c.cancelFunc()
 	}
 
 	if c.reporter != nil {
