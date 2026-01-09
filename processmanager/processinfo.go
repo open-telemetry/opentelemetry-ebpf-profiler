@@ -457,6 +457,10 @@ func isPythonLibrary(path string) bool {
 	return strings.Contains(path, "libpython")
 }
 
+func isJvmLibrary(path string) bool {
+	return strings.Contains(path, "libjvm")
+}
+
 // processRemovedMappings removes listed memory mappings and loaded interpreters from
 // the internal structures and eBPF maps.
 func (pm *ProcessManager) processRemovedMappings(pid libpf.PID, mappings []libpf.Address,
@@ -529,25 +533,29 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		interpretersValid[key] = libpf.Void{}
 
 		// 内存profile元数据获取, 相同动态库的符号表会被去重，遍历自身进程时判断内存采集类型，不然后来的进程无法确定采集类型
-		isCpython := isPythonLibrary(m.Path)
-		isLibc := isCLibrary(m.Path)
-		if !isCpython && !isLibc {
-			elf, err := pr.OpenELF(m.Path)
-			if err != nil {
-				continue
-			}
-			// golang类型的判断需要从elf文件中读取
-			if elf.IsGolang() {
-				lan = libpf.Golang
-			}
+		if isJvmLibrary(m.Path) {
+			lan = libpf.HotSpot
 			continue
 		}
-		absPath := getAbsPath(pid, m.Path)
+		isCpython := isPythonLibrary(m.Path)
 		if isCpython {
-			libPythonPath = fmt.Sprintf("/proc/%d/root%s", pid, absPath)
+			lan = libpf.Python
+			libPythonPath = fmt.Sprintf("/proc/%d/root%s", pid, getAbsPath(pid, m.Path))
+			continue
 		}
+		elf, err := pr.OpenELF(m.Path)
+		if err != nil {
+			continue
+		}
+		// golang类型的判断需要从elf文件中读取
+		if elf.IsGolang() {
+			lan = libpf.Golang
+			continue
+		}
+		isLibc := isCLibrary(m.Path)
 		if isLibc {
-			libcPath = fmt.Sprintf("/proc/%d/root%s", pid, absPath)
+			libcPath = fmt.Sprintf("/proc/%d/root%s", pid, getAbsPath(pid, m.Path))
+			continue
 		}
 	}
 
@@ -583,20 +591,6 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		pm.processNewExecMapping(pr, mapping)
 	}
 
-	pm.mu.Lock()
-	_info, ok := pm.pidToProcessInfo[pid]
-	if ok {
-		if _info.memProfileMeta == nil {
-			_info.memProfileMeta = &MemProfileMeta{}
-		}
-		_info.memProfileMeta.LibcPath = libcPath
-		_info.memProfileMeta.LibPythonPath = libPythonPath
-		if lan != libpf.UnknownInterp {
-			_info.memProfileMeta.Lang = lan
-		}
-	}
-	pm.mu.Unlock()
-
 	// Update interpreter plugins about the changed mappings
 	if pm.interpreterTracerEnabled {
 		pm.mu.Lock()
@@ -618,6 +612,23 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		log.Tracef("Added %v mappings, removed %v mappings for PID: %v",
 			len(mpAdd), len(mpRemove), pid)
 	}
+
+	if len(libcPath) == 0 && len(libPythonPath) == 0 && lan == libpf.UnknownInterp {
+		return newProcess
+	}
+	pm.mu.Lock()
+	_info, ok := pm.pidToProcessInfo[pid]
+	if ok {
+		if _info.memProfileMeta == nil {
+			_info.memProfileMeta = &MemProfileMeta{}
+		}
+		_info.memProfileMeta.LibcPath = libcPath
+		_info.memProfileMeta.LibPythonPath = libPythonPath
+		if _info.memProfileMeta.Lang == libpf.UnknownInterp {
+			_info.memProfileMeta.Lang = lan
+		}
+	}
+	pm.mu.Unlock()
 	return newProcess
 }
 

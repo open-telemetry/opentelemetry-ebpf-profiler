@@ -31,6 +31,7 @@ type (
 		hotspotMemProfileChan           chan map[uint32]pprofile.Profiles
 		hotspotMemProfileCancels        map[int]context.CancelFunc
 		hotspotMemProfileReporterCancel context.CancelFunc
+		hotspotEmptyTrace               *libpf.Trace
 	}
 )
 
@@ -64,7 +65,10 @@ func NewColaSoft(
 		cacheEventSTolerance:     cacheEventSTolerance,
 		cacheEventSTimeout:       cacheEventSTimeout,
 		hotspotMemProfileChan:    make(chan map[uint32]pprofile.Profiles, 1024),
-		hotspotMemProfileCancels: make(map[int]context.CancelFunc)}, nil
+		hotspotMemProfileCancels: make(map[int]context.CancelFunc),
+		hotspotEmptyTrace:        &libpf.Trace{FrameTypes: []libpf.FrameType{libpf.HotSpotFrame}},
+	}, nil
+
 }
 
 func (c *ColaSoft) Start(parent context.Context) error {
@@ -276,6 +280,7 @@ func (c *ColaSoft) StartHotspotMemProfiling(cfg *hotspotmem.OTLPProfilerConfig) 
 
 func (c *ColaSoft) completeHotspotMemProfileData(tds map[uint32]pprofile.Profiles) {
 	for pid, td := range tds {
+		traceEventMeta := &samples.TraceEventMeta{Origin: support.TraceOriginHeap, PID: libpf.PID(pid), TID: 0}
 		td.ResourceProfiles().RemoveIf(func(profiles pprofile.ResourceProfiles) bool {
 			profiles.Resource().Attributes().PutBool("hotspotMem", true)
 			profiles.ScopeProfiles().RemoveIf(func(scopeProfiles pprofile.ScopeProfiles) bool {
@@ -303,6 +308,7 @@ func (c *ColaSoft) completeHotspotMemProfileData(tds map[uint32]pprofile.Profile
 							semconv.ProcessPIDKey, int64(pid))
 						if c.pdata.ExtraSampleAttrProd != nil {
 							extraMeta := uint64(pid)<<32 | uint64(0) // 这个逻辑来自cloudcapture
+							c.pdata.ExtraSampleAttrProd.CollectExtraSampleMeta(c.hotspotEmptyTrace, traceEventMeta)
 							extra := c.pdata.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, extraMeta)
 							sample.AttributeIndices().Append(extra...)
 						}

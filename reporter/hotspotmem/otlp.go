@@ -69,13 +69,13 @@ func StartMemAllocProfilingOTLP(ctx context.Context, config *OTLPProfilerConfig,
 
 	// 启动 profiling
 	startCmd := fmt.Sprintf("start,event=alloc,alloc=%d", config.AllocInterval)
-	log.Tracef("Starting hotspot mem profiling with command: %s", startCmd)
 	// 不需要手动停止，过一分钟后会自动退出
 	response, err := attacher.loadAgent(startCmd)
 	if err != nil {
 		return fmt.Errorf("failed to start profiling: %w", err)
 	}
 	log.Tracef("start hot spot mem profiling: %s", response)
+	log.Infof("hotspot mem profiling on pid(%d) with command: %s", config.PID, startCmd)
 
 	// 启动 dump 协程
 	go func() {
