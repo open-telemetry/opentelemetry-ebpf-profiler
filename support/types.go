@@ -326,13 +326,14 @@ const (
 )
 
 const (
-	UnwindOpcodeCommand   uint8 = 0x0
-	UnwindOpcodeBaseCFA   uint8 = 0x1
-	UnwindOpcodeBaseSP    uint8 = 0x2
-	UnwindOpcodeBaseFP    uint8 = 0x3
-	UnwindOpcodeBaseLR    uint8 = 0x4
-	UnwindOpcodeBaseReg   uint8 = 0x5
-	UnwindOpcodeFlagDeref uint8 = 0x80
+	UnwindOpcodeCommand      uint8 = 0x0
+	UnwindOpcodeBaseCFA      uint8 = 0x1
+	UnwindOpcodeBaseSP       uint8 = 0x2
+	UnwindOpcodeBaseFP       uint8 = 0x3
+	UnwindOpcodeBaseLR       uint8 = 0x4
+	UnwindOpcodeBaseReg      uint8 = 0x5
+	UnwindOpcodeBaseCFAFrame uint8 = 0x6
+	UnwindOpcodeFlagDeref    uint8 = 0x80
 
 	UnwindCommandInvalid      int32 = 0x0
 	UnwindCommandStop         int32 = 0x1

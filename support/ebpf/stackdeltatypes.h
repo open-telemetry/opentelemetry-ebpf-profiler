@@ -2,19 +2,22 @@
 #define OPTI_STACKDELTATYPES_H
 
 // Command without arguments, the argument is instead an UNWIND_COMMAND_* value
-#define UNWIND_OPCODE_COMMAND  0x00
+#define UNWIND_OPCODE_COMMAND        0x00
 // Expression with base value being the Canonical Frame Address (CFA)
-#define UNWIND_OPCODE_BASE_CFA 0x01
+#define UNWIND_OPCODE_BASE_CFA       0x01
 // Expression with base value being the Stack Pointer
-#define UNWIND_OPCODE_BASE_SP  0x02
+#define UNWIND_OPCODE_BASE_SP        0x02
 // Expression with base value being the Frame Pointer
-#define UNWIND_OPCODE_BASE_FP  0x03
+#define UNWIND_OPCODE_BASE_FP        0x03
 // Expression with base value being the Link Register (ARM64)
-#define UNWIND_OPCODE_BASE_LR  0x04
+#define UNWIND_OPCODE_BASE_LR        0x04
 // Expression with base value being a Generic Register
-#define UNWIND_OPCODE_BASE_REG 0x05
+#define UNWIND_OPCODE_BASE_REG       0x05
+// Expression for RA with base value being the CFA, and
+// also indicating that the FP immediately precedes the RA (ARM64).
+#define UNWIND_OPCODE_BASE_CFA_FRAME 0x06
 // An opcode flag to indicate that the value should be dereferenced
-#define UNWIND_OPCODEF_DEREF   0x80
+#define UNWIND_OPCODEF_DEREF         0x80
 
 // Unsupported or no value for the register
 #define UNWIND_COMMAND_INVALID       0

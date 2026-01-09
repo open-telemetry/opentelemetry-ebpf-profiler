@@ -55,10 +55,10 @@
         "<main>+0 in /app/loop-with-ractors.rb:29",
         "libruby.so.3.2.2+0x3382d7",
         "libruby.so.3.2.2+0x2edb13",
-        "<main>+0 in /app/loop-with-ractors.rb:30",
-        "<main>+0 in /app/loop-with-ractors.rb:29",
-        "libruby.so.3.2.2+0x3382d7",
-        "<unwinding aborted due to error native_no_pid_page_mapping>"
+        "libruby.so.3.2.2+0x2ee5bb",
+        "libruby.so.3.2.2+0x2ee7d3",
+        "libc.so.6+0x7ee17",
+        "libc.so.6+0xe7e9b"
       ]
     }
   ],
