@@ -1765,14 +1765,16 @@
     "id": 243
   },
   {
-    "description": "Number of failures to read the instruction sequence encoded size (deprecated)",
+    "description": "Number of failures to read the instruction sequence encoded size",
+    "obsolete": true,
     "type": "counter",
     "name": "UnwindRubyErrReadIseqEncoded",
     "field": "bpf.ruby.errors.read_iseq_encoded",
     "id": 244
   },
   {
-    "description": "Number of failures to read the instruction sequence size (deprecated)",
+    "description": "Number of failures to read the instruction sequence size",
+    "obsolete": true,
     "type": "counter",
     "name": "UnwindRubyErrReadIseqSize",
     "field": "bpf.ruby.errors.read_iseq_size",
