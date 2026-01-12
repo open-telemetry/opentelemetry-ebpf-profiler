@@ -29,7 +29,8 @@ const (
 	defaultEnvVarsValue           = ""
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
-	defaultArgMapScaleFactor = 0
+	defaultArgMapScaleFactor         = 0
+	defaultArgGoLabelsMapScaleFactor = 0
 )
 
 // Help strings for command line arguments
@@ -44,6 +45,11 @@ var (
 		"Every increase by 1 doubles the map size. Increase if you see eBPF map size errors. "+
 		"Default is %d corresponding to 4GB of executable address space, max is %d.",
 		defaultArgMapScaleFactor, config.MaxArgMapScaleFactor)
+	goLabelsMapScaleFactorHelp = fmt.Sprintf("Scaling factor for the eBPF map that enables handling "+
+		"of labels for this number of Go processes. "+
+		"Every increase by 1 doubles the map size. Increase if you see eBPF map size errors. "+
+		"Default is %d corresponding to being able to handle %d Go processes.",
+		defaultArgGoLabelsMapScaleFactor, 1<<tracer.GoLabelsDefaultScaleFactor)
 	disableTLSHelp             = "Disable encryption for data in transit."
 	bpfVerifierLogLevelHelp    = "Log level of the eBPF verifier output (0,1,2). Default is 0."
 	versionHelp                = "Show version."
@@ -95,6 +101,9 @@ func parseArgs() (*controller.Config, error) {
 
 	fs.UintVar(&args.MapScaleFactor, "map-scale-factor",
 		defaultArgMapScaleFactor, mapScaleFactorHelp)
+
+	fs.UintVar(&args.GoLabelsScaleFactor, "go-labels-map-scale-factor",
+		defaultArgGoLabelsMapScaleFactor, goLabelsMapScaleFactorHelp)
 
 	fs.DurationVar(&args.MonitorInterval, "monitor-interval", defaultArgMonitorInterval,
 		monitorIntervalHelp)

@@ -6,6 +6,14 @@
 #include "tsd.h"
 #include "types.h"
 
+// go_labels_procs stores Go label specific offsets per Go process.
+struct go_labels_procs_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, pid_t);
+  __type(value, GoLabelsOffsets);
+  __uint(max_entries, 128);
+} go_labels_procs SEC(".maps");
+
 static EBPF_INLINE bool
 get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
 {
