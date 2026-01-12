@@ -572,18 +572,17 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
 
       // read the value of RA from stack
       int err;
+      u64 fpra[2];
+      fpra[0] = state->fp;
       if (info->fpOpcode == UNWIND_OPCODE_BASE_CFA_FRAME) {
-        // FP precedes the RA on the stack (Aarch64 ABI requirement; also implied by this opcode)
-        u64 fpra[2];
-        err = bpf_probe_read_user(fpra, sizeof(fpra), (void *)(ra - 8));
-        if (!err) {
+          err = bpf_probe_read_user(fpra, sizeof(fpra), (void *)(ra - 8));
+      } else {
+          err = bpf_probe_read_user(&fpra[1], sizeof(fpra[0]), (void *)ra);
+      }
+      if (!err) {
           state->fp = fpra[0];
           state->pc = fpra[1];
-        }
       } else {
-        err = bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)ra);
-      }
-      if (err) {
         // error reading memory, mark RA as invalid
         ra = 0;
       }
