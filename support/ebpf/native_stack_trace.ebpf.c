@@ -300,7 +300,9 @@ static EBPF_INLINE u64 unwind_register_address(UnwindState *state, u64 cfa, u8 o
 
   // Resolve the 'BASE' register, and fetch the CFA/FP/SP value.
   switch (opcode & ~UNWIND_OPCODEF_DEREF) {
+#if defined(__aarch64__)
   case UNWIND_OPCODE_BASE_CFA_FRAME:
+#endif
   case UNWIND_OPCODE_BASE_CFA: addr = cfa; break;
   case UNWIND_OPCODE_BASE_FP: addr = state->fp; break;
   case UNWIND_OPCODE_BASE_SP: addr = state->sp; break;
