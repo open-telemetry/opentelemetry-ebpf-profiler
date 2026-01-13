@@ -153,10 +153,14 @@ func (c *Controller) Shutdown() {
 	log.Info("Stop processing ...")
 	if c.reporter != nil {
 		c.reporter.Stop()
+		// Set to nil to prevent accidental reuse after shutdown
+		c.reporter = nil
 	}
 
 	if c.tracer != nil {
 		c.tracer.Close()
+		// Set to nil to prevent accidental reuse after shutdown
+		c.tracer = nil
 	}
 }
 
@@ -165,9 +169,8 @@ func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer)
 	traceCh := make(chan *libpf.EbpfTrace)
 	errs := make(chan error, 1)
 
-	err := trc.StartMapMonitors(ctx, traceCh, errs)
-	if err != nil {
-		return err
+	if err := trc.StartMapMonitors(ctx, traceCh, errs); err != nil {
+		return fmt.Errorf("failed to start map monitors: %v", err)
 	}
 
 	go func() {
