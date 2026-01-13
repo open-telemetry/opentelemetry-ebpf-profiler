@@ -11,7 +11,7 @@ struct go_labels_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
   __type(key, pid_t);
   __type(value, GoLabelsOffsets);
-  __uint(max_entries, 128);
+  __uint(max_entries, 1024);
 } go_labels_procs SEC(".maps");
 
 static EBPF_INLINE bool

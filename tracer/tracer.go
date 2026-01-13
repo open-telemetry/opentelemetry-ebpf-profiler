@@ -46,10 +46,6 @@ const (
 	// ProbabilisticThresholdMax defines the upper bound of the probabilistic profiling
 	// threshold.
 	ProbabilisticThresholdMax = 100
-
-	// GoLabelsDefaultScaleFactor defines the default scale (1<<X) enabling the handling
-	// of labels for this number of Go processes.
-	GoLabelsDefaultScaleFactor = 8
 )
 
 // Constants that define the status of probabilistic profiling.
@@ -140,8 +136,6 @@ type Config struct {
 	SamplesPerSecond int
 	// MapScaleFactor is the scaling factor for eBPF map sizes.
 	MapScaleFactor int
-	// GoLabelsScaleFactor scales the go_labels_procs eBPF map size.
-	GoLabelsScaleFactor int
 	// FilterErrorFrames indicates whether error frames should be filtered.
 	FilterErrorFrames bool
 	// FilterIdleFrames indicates whether idle frames should be filtered.
@@ -554,8 +548,6 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	adaption["stack_delta_page_to_info"] = 1 << uint32(stackDeltaPageToInfoSize+cfg.MapScaleFactor)
 
 	adaption["sched_times"] = schedTimesSize(cfg.OffCPUThreshold)
-
-	adaption["go_labels_procs"] = 1 << uint32(GoLabelsDefaultScaleFactor+cfg.GoLabelsScaleFactor)
 
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
 		mapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)

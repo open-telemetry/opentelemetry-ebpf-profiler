@@ -34,7 +34,6 @@ type Config struct {
 	ProbeLinks             []string      `mapstructure:"probe_links"`
 	LoadProbe              bool          `mapstructure:"load_probe"`
 	MapScaleFactor         uint          `mapstructure:"map_scale_factor"`
-	GoLabelsScaleFactor    uint          `mapstructure:"go_labels_map_scale_factor"`
 	BPFVerifierLogLevel    uint          `mapstructure:"bpf_verifier_log_level"`
 	NoKernelVersionCheck   bool          `mapstructure:"no_kernel_version_check"`
 	MaxGRPCRetries         uint32        `mapstructure:"max_grpc_retries"`
