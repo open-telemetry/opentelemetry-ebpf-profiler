@@ -522,8 +522,8 @@ func rewriteMaps(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map) error {
 	return nil
 }
 
-// isTracerEnabled checks if an interpreter tracer for the given map is enabled.
-func isTracerEnabled(mapName string, includeTracers types.IncludedTracers) bool {
+// isMapEnabled checks if the given map is enabled and should be loaded.
+func isMapEnabled(mapName string, includeTracers types.IncludedTracers) bool {
 	switch mapName {
 	case "perl_procs":
 		return includeTracers.Has(types.PerlTracer)
@@ -588,7 +588,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			continue
 		}
 
-		if !isTracerEnabled(mapName, cfg.IncludeTracers) {
+		if !isMapEnabled(mapName, cfg.IncludeTracers) {
 			log.Debugf("Skipping eBPF map %s: tracer not enabled", mapName)
 			continue
 		}
