@@ -85,6 +85,34 @@ type trace struct {
 	frames libpf.EbpfFrame
 }
 
+func TestTracerErrorPropagation(t *testing.T) {
+	ctx := t.Context()
+
+	metrics.Start(noop.Meter{})
+
+	tr, err := tracer.NewTracer(ctx, &tracer.Config{
+		Intervals:              &mockIntervals{},
+		FilterErrorFrames:      false,
+		SamplesPerSecond:       20,
+		MapScaleFactor:         0,
+		KernelVersionCheck:     true,
+		BPFVerifierLogLevel:    0,
+		ProbabilisticInterval:  100,
+		ProbabilisticThreshold: 100,
+		OffCPUThreshold:        1 * math.MaxUint32,
+		VerboseMode:            true,
+	})
+	require.NoError(t, err)
+	defer tr.Close()
+
+	// force error by removing a required map during map monitor start up
+	delete(tr.GetEbpfMaps(), "report_events")
+
+	traceChan := make(chan *libpf.EbpfTrace, 16)
+	errsChan := make(chan error)
+	require.Error(t, tr.StartMapMonitors(ctx, traceChan, errsChan))
+}
+
 func TestTraceTransmissionAndParsing(t *testing.T) {
 	ctx := t.Context()
 
