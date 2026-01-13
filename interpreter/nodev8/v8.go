@@ -2104,11 +2104,12 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 	return nil
 }
 
-func locateSnapshotArea(ef *pfelf.File) util.Range {
-	addr, err := ef.LookupSymbolAddress("_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv")
-	if err != nil {
+func locateSnapshotArea(ef *pfelf.File, syms relevantSymbols) util.Range {
+	sym := syms.DefaultSnapshotBlob
+	if sym == nil {
 		return util.Range{}
 	}
+	addr := sym.Address
 
 	// If there is a big stack delta soon after v8::internal::Snapshot::DefaultSnapshotBlob()
 	// assume it is the V8 snapshot data.
@@ -2137,6 +2138,67 @@ func locateSnapshotArea(ef *pfelf.File) util.Range {
 		prevEnd = fde.PCBegin + fde.PCRange
 	}
 	return util.Range{}
+}
+
+type relevantSymbols struct {
+	DefaultSnapshotBlob *libpf.Symbol
+	BytecodeSizes       *libpf.Symbol
+}
+
+// scanForRelevantSymbols gets the symbols needed for Node unwinding
+// by scanning the symtab.
+func scanForRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
+	rv := relevantSymbols{}
+	err := ef.VisitSymbols(func(sym libpf.Symbol) bool {
+		if sym.Name == "_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv" {
+			rv.DefaultSnapshotBlob = &sym
+		}
+		if sym.Name == "_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE" {
+			rv.BytecodeSizes = &sym
+		}
+		return rv.DefaultSnapshotBlob == nil || rv.BytecodeSizes == nil
+	})
+	if err != nil {
+		return relevantSymbols{}, err
+	}
+	return rv, nil
+}
+
+// lookupRelevantSymbols tries to get the symbols needed for Node unwinding.
+// It first tries using the DT_GNU_HASH mechanism to look them up as dynamic symbols.
+//
+// If this doesn't work
+// (which we know to be true for Node v24.11.1 and above,
+//
+//	see https://github.com/nodejs/node/pull/56290
+//	)
+//
+// then fall back to scanning for them in the symtab.
+func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
+	rv := relevantSymbols{}
+	sym, err := ef.LookupSymbol("_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv")
+	if errors.Is(err, libpf.ErrSymbolNotFound) {
+		// If the first one failed, they are probably all going to fail.
+		// Scan instead.
+		return scanForRelevantSymbols(ef)
+	}
+	// Match historic behavior: keep going, even if we can't get the snapshot blob.
+	// (TODO: Figure out when/why this can happen)
+	if err != nil {
+		log.Warnf("Couldn't get node.js DefaultSnapshotBlob: %v", err)
+	} else {
+		rv.DefaultSnapshotBlob = sym
+	}
+	// If the first one succeeded, they should all succeed, so keep
+	// using `ef.LookupSymbol`.
+	sym, err = ef.LookupSymbol("_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE")
+	if err != nil {
+		// As above, keep going to match historic behavior (why?)
+		log.Warnf("Couldn't get node.js BytecodeSizes: %v", err)
+	} else {
+		rv.BytecodeSizes = sym
+	}
+	return rv, nil
 }
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
@@ -2168,13 +2230,17 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			vers[0], vers[1], vers[2])
 	}
 
+	syms, err := lookupRelevantSymbols(ef)
+	if err != nil {
+		return nil, err
+	}
 	d := &v8Data{
 		version:       version,
-		snapshotRange: locateSnapshotArea(ef),
+		snapshotRange: locateSnapshotArea(ef, syms),
 	}
 
-	sym, err := ef.LookupSymbol("_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE")
-	if err == nil && sym.Size%3 == 0 && sym.Size < 3*256 {
+	sym := syms.BytecodeSizes
+	if sym != nil && sym.Size%3 == 0 && sym.Size < 3*256 {
 		// Symbol v8::internal::interpreter::Bytecodes::kBytecodeSizes:
 		// static const uint8_t Bytecodes::kBytecodeSizes[3][kBytecodeCount];
 		log.Debugf("V8: bytecode sizes at %x, length %d, %d opcodes",
