@@ -28,6 +28,7 @@ import (
 	"hash/crc32"
 	"io"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"slices"
 	"syscall"
@@ -581,7 +582,7 @@ func (f *File) GetBuildID() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
+	runtime.KeepAlive(f)
 	return getBuildIDFromNotes(data)
 }
 
@@ -726,6 +727,7 @@ func (f *File) visitTLSDescriptorsForSection(visitor func(ElfReloc, string) bool
 			return false, nil
 		}
 	}
+	runtime.KeepAlive(f)
 
 	return true, nil
 }
@@ -742,6 +744,7 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 	if err != nil {
 		return "", 0, fmt.Errorf("could not read link: %w", ErrNoDebugLink)
 	}
+	runtime.KeepAlive(f)
 	return ParseDebugLink(d)
 }
 
@@ -1103,6 +1106,7 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 			}
 		}
 	}
+	runtime.KeepAlive(f)
 	return nil
 }
 
