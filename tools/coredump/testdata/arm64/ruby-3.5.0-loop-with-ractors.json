@@ -49,8 +49,10 @@
         "<main>+0 in /app/loop-with-ractors.rb:29",
         "libruby.so.3.5.0+0x31c543",
         "libruby.so.3.5.0+0x2c6463",
-        "libruby.so.3.5.0+0x22a817",
-        "<unwinding aborted due to error native_no_pid_page_mapping>"
+        "libruby.so.3.5.0+0x2c6a47",
+        "libruby.so.3.5.0+0x2c700b",
+        "libruby.so.3.5.0+0x2c6eeb",
+        "<unwinding aborted due to error native_lr_unwinding_mid_trace>"
       ]
     },
     {
@@ -61,7 +63,6 @@
         "libc.so.6+0x8269b",
         "libc.so.6+0xee143",
         "libruby.so.3.5.0+0x2c205b",
-        "libc.so.6+0x85f77",
         "libc.so.6+0x85f77",
         "libc.so.6+0xedc1b"
       ]

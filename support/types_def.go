@@ -146,13 +146,14 @@ const (
 
 const (
 	// UnwindOpcodes from the C header file
-	UnwindOpcodeCommand   uint8 = C.UNWIND_OPCODE_COMMAND
-	UnwindOpcodeBaseCFA   uint8 = C.UNWIND_OPCODE_BASE_CFA
-	UnwindOpcodeBaseSP    uint8 = C.UNWIND_OPCODE_BASE_SP
-	UnwindOpcodeBaseFP    uint8 = C.UNWIND_OPCODE_BASE_FP
-	UnwindOpcodeBaseLR    uint8 = C.UNWIND_OPCODE_BASE_LR
-	UnwindOpcodeBaseReg   uint8 = C.UNWIND_OPCODE_BASE_REG
-	UnwindOpcodeFlagDeref uint8 = C.UNWIND_OPCODEF_DEREF
+	UnwindOpcodeCommand      uint8 = C.UNWIND_OPCODE_COMMAND
+	UnwindOpcodeBaseCFA      uint8 = C.UNWIND_OPCODE_BASE_CFA
+	UnwindOpcodeBaseSP       uint8 = C.UNWIND_OPCODE_BASE_SP
+	UnwindOpcodeBaseFP       uint8 = C.UNWIND_OPCODE_BASE_FP
+	UnwindOpcodeBaseLR       uint8 = C.UNWIND_OPCODE_BASE_LR
+	UnwindOpcodeBaseReg      uint8 = C.UNWIND_OPCODE_BASE_REG
+	UnwindOpcodeBaseCFAFrame uint8 = C.UNWIND_OPCODE_BASE_CFA_FRAME
+	UnwindOpcodeFlagDeref    uint8 = C.UNWIND_OPCODEF_DEREF
 
 	// UnwindCommands from the C header file
 	UnwindCommandInvalid      int32 = C.UNWIND_COMMAND_INVALID
