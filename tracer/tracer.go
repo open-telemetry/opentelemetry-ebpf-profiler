@@ -366,7 +366,12 @@ func (t *Tracer) Close() {
 	t.perfEntrypoints.WUnlock(&events)
 
 	memProfileHooks := t.memProfileHooks.WLock()
-	for _, links := range *memProfileHooks {
+	for pid, links := range *memProfileHooks {
+		if links == nil {
+			if r, ok := t.reporter.(reporter.HotspotMemReporter); ok {
+				r.StopHotspotMemProfiling(int(pid))
+			}
+		}
 		for _, l := range links {
 			if err := (*l).Close(); err != nil {
 				log.Errorf("Failed to close mem profile hook: %v", err)

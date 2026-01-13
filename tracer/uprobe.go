@@ -181,7 +181,7 @@ func (t *Tracer) StartPythonMemProfiling(exec *link.Executable, _ *processmanage
 	return links, errors.Join(errs...)
 }
 
-func (t *Tracer) HasMemProfileHooks(pid libpf.PID) bool {
+func (t *Tracer) hasMemProfileHooks(pid libpf.PID) bool {
 	memProfileHooks := t.memProfileHooks.RLock()
 	_, exist := (*memProfileHooks)[pid]
 	t.memProfileHooks.RUnlock(&memProfileHooks)
@@ -196,6 +196,9 @@ func (t *Tracer) updateMemProfileHooks(pid libpf.PID, links []*link.Link) {
 
 func (t *Tracer) TriggerMemProfile(p process.Process) error {
 	pid := p.PID()
+	if t.hasMemProfileHooks(pid) {
+		return nil
+	}
 	memProfileInfo := t.processManager.GetMemProfileInfo(pid)
 	if memProfileInfo == nil {
 		return fmt.Errorf("unable to start memprofile with pid: %d, can not find MemProfile MetaInfo", pid)
@@ -271,9 +274,6 @@ func (t *Tracer) StartMemProfile(ctx context.Context, memProfileBlock uint64) {
 						t.detachMemProfile(pid)
 						t.memProfileTargetPids.Delete(k)
 					} else {
-						if t.HasMemProfileHooks(pid) {
-							return true
-						}
 						proc := process.New(pid)
 						t.processManager.SynchronizeProcess(proc)
 						if err := t.TriggerMemProfile(proc); err != nil {
