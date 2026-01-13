@@ -577,13 +577,13 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
       u64 fpra[2];
       fpra[0] = state->fp;
       if (info->fpOpcode == UNWIND_OPCODE_BASE_CFA_FRAME) {
-          err = bpf_probe_read_user(fpra, sizeof(fpra), (void *)(ra - 8));
+        err = bpf_probe_read_user(fpra, sizeof(fpra), (void *)(ra - 8));
       } else {
-          err = bpf_probe_read_user(&fpra[1], sizeof(fpra[0]), (void *)ra);
+        err = bpf_probe_read_user(&fpra[1], sizeof(fpra[0]), (void *)ra);
       }
       if (!err) {
-          state->fp = fpra[0];
-          state->pc = fpra[1];
+        state->fp = fpra[0];
+        state->pc = fpra[1];
       } else {
         // error reading memory, mark RA as invalid
         ra = 0;
