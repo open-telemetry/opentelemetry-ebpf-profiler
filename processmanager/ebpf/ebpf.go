@@ -16,6 +16,7 @@ import (
 	"github.com/cilium/ebpf/features"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/exp/constraints"
+	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -183,6 +184,10 @@ func (impl *ebpfMapsImpl) UpdateProcData(typ libpf.InterpreterType, pid libpf.PI
 
 	pid32 := uint32(pid)
 	if err := ebpfMap.Update(unsafe.Pointer(&pid32), data, cebpf.UpdateAny); err != nil {
+		if errors.Is(err, unix.E2BIG) {
+			return fmt.Errorf("no more space in map %v", typ)
+		}
+
 		return fmt.Errorf("failed to add %v info: %s", typ, err)
 	}
 	return nil
