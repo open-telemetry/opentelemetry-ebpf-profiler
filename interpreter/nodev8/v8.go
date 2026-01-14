@@ -2167,12 +2167,9 @@ func scanForRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 // lookupRelevantSymbols tries to get the symbols needed for Node unwinding.
 // It first tries using the DT_GNU_HASH mechanism to look them up as dynamic symbols.
 //
-// If this doesn't work
-// (which we know to be true for Node v24.11.1 and above,
-//
-//	see https://github.com/nodejs/node/pull/56290
-//	)
-//
+```suggestion
+// If this doesn't work (which we know to be true for Node v24.11.1 and above,
+// see: https://github.com/nodejs/node/pull/56290)
 // then fall back to scanning for them in the symtab.
 func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	rv := relevantSymbols{}
