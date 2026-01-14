@@ -2182,7 +2182,7 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	// Match historic behavior: keep going, even if we can't get the snapshot blob.
 	// (TODO: Figure out when/why this can happen)
 	if err != nil {
-		log.Warnf("Couldn't get node.js DefaultSnapshotBlob: %v", err)
+		log.Warnf("Couldn't get V8 DefaultSnapshotBlob: %v", err)
 	} else {
 		rv.DefaultSnapshotBlob = sym
 	}
