@@ -2191,7 +2191,7 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	sym, err = ef.LookupSymbol("_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE")
 	if err != nil {
 		// As above, keep going to match historic behavior (why?)
-		log.Warnf("Couldn't get node.js BytecodeSizes: %v", err)
+		log.Warnf("Couldn't get V8 BytecodeSizes: %v", err)
 	} else {
 		rv.BytecodeSizes = sym
 	}
