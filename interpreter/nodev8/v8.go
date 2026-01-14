@@ -2145,15 +2145,20 @@ type relevantSymbols struct {
 	BytecodeSizes       *libpf.Symbol
 }
 
+const (
+	defaultSnapshotBlobSymbol libpf.SymbolName = "_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv"
+	bytecodeSizesSymbol       libpf.SymbolName = "_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE"
+)
+
 // scanForRelevantSymbols gets the symbols needed for Node unwinding
 // by scanning the symtab.
 func scanForRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	rv := relevantSymbols{}
 	err := ef.VisitSymbols(func(sym libpf.Symbol) bool {
-		if sym.Name == "_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv" {
+		if sym.Name == defaultSnapshotBlobSymbol {
 			rv.DefaultSnapshotBlob = &sym
 		}
-		if sym.Name == "_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE" {
+		if sym.Name == bytecodeSizesSymbol {
 			rv.BytecodeSizes = &sym
 		}
 		return rv.DefaultSnapshotBlob == nil || rv.BytecodeSizes == nil
@@ -2172,7 +2177,7 @@ func scanForRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 // then fall back to scanning for them in the symtab.
 func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	rv := relevantSymbols{}
-	sym, err := ef.LookupSymbol("_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv")
+	sym, err := ef.LookupSymbol(defaultSnapshotBlobSymbol)
 	if errors.Is(err, libpf.ErrSymbolNotFound) {
 		// If the first one failed, they are probably all going to fail.
 		// Scan instead.
@@ -2187,7 +2192,7 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	}
 	// If the first one succeeded, they should all succeed, so keep
 	// using `ef.LookupSymbol`.
-	sym, err = ef.LookupSymbol("_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE")
+	sym, err = ef.LookupSymbol(bytecodeSizesSymbol)
 	if err != nil {
 		// As above, keep going to match historic behavior (why?)
 		log.Warnf("Couldn't get V8 BytecodeSizes: %v", err)
