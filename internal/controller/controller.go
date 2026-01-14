@@ -190,7 +190,7 @@ func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer)
 					trc.HandleTrace(trace)
 				}
 			case err := <-errs:
-				log.Errorf("Shutting down controller due to unrecoverable error: %w", err))
+				log.Errorf("Shutting down controller due to unrecoverable error: %w", err)
 				c.Shutdown()
 				return
 			case <-ctx.Done():
