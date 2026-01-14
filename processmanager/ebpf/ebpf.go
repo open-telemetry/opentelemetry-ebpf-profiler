@@ -105,7 +105,7 @@ func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map, stackdeltaInnerMa
 		deltasMapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)
 		deltasMap, ok := maps[deltasMapName]
 		if !ok {
-			return nil, fmt.Errorf("Map %s is not available", deltasMapName)
+			return nil, fmt.Errorf("Map %v is not available", deltasMapName)
 		}
 		impl.ExeIDToStackDeltaMaps[i-support.StackDeltaBucketSmallest] = deltasMap
 	}
