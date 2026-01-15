@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	Type      = component.MustNewType("ebpf")
+	Type      = component.MustNewType("profiling")
 	ScopeName = "go.opentelemetry.io/ebpf-profiler/collector"
 )
 

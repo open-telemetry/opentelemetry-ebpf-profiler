@@ -1,4 +1,4 @@
-type: ebpf
+type: profiling
 github_project: open-telemetry/opentelemetry-ebpf-profiler
 
 status:
