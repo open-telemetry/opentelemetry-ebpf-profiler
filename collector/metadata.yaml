@@ -1,0 +1,12 @@
+type: ebpf
+github_project: open-telemetry/opentelemetry-ebpf-profiler
+
+status:
+  disable_codecov_badge: true
+  class: receiver
+  codeowners:
+    active:
+      - dmathieu
+  stability:
+    development: [profiles]
+  distributions: [ebpf-profiler]
