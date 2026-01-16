@@ -5,7 +5,6 @@ package types
 
 import (
 	"runtime"
-	"slices"
 	"strings"
 	"testing"
 
@@ -53,9 +52,15 @@ func TestParseTracers(t *testing.T) {
 				return
 			}
 
-			expected := strings.Split(in, ",")
 			for tracer := range maxTracers {
-				if slices.Contains(expected, tracer.String()) && availableOnArch(tracer) {
+				found := false
+				for name := range strings.SplitSeq(in, ",") {
+					if name == tracer.String() {
+						found = true
+						break
+					}
+				}
+				if found && availableOnArch(tracer) {
 					require.True(t, include.Has(tracer))
 				} else {
 					require.False(t, include.Has(tracer))

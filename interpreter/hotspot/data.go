@@ -211,7 +211,7 @@ func fieldByJavaName(obj reflect.Value, fieldName string) reflect.Value {
 	for i := 0; i < obj.NumField(); i++ {
 		objField := objType.Field(i)
 		if nameTag, ok := objField.Tag.Lookup("name"); ok {
-			for _, javaName := range strings.Split(nameTag, ",") {
+			for javaName := range strings.SplitSeq(nameTag, ",") {
 				if fieldName == javaName {
 					return obj.Field(i)
 				}

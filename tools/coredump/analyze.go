@@ -71,7 +71,7 @@ func (cmd *analyzeCmd) exec(context.Context, []string) (err error) {
 
 	lwpFilter := libpf.Set[libpf.PID]{}
 	if cmd.lwpFilter != "" {
-		for _, lwp := range strings.Split(cmd.lwpFilter, ",") {
+		for lwp := range strings.SplitSeq(cmd.lwpFilter, ",") {
 			var parsed int64
 			parsed, err = strconv.ParseInt(lwp, 10, 32)
 			if err != nil {

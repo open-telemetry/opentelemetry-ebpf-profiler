@@ -1886,7 +1886,7 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 				memberName = nameTag
 			}
 
-			for _, n := range strings.Split(memberName, ",") {
+			for n := range strings.SplitSeq(memberName, ",") {
 				s := prefix + n
 				if memberVal.Kind() == reflect.Bool {
 					s = "v8dbg_parent_" + className + "__" + memberName

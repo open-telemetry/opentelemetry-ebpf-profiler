@@ -9,6 +9,8 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+
+	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
 // ProbeType represents the type of eBPF probe.
@@ -67,8 +69,9 @@ const genericProgName = "kprobe__generic"
 //   - "uprobe:/usr/bin/bash:readline"
 //   - "uretprobe:/lib/x86_64-linux-gnu/libc.so.6:malloc"
 func ParseProbe(spec string) (*ProbeSpec, error) {
-	parts := strings.SplitN(spec, ":", 3)
-	if len(parts) < 2 {
+	var parts [3]string
+	n := stringutil.SplitN(spec, ":", parts[:])
+	if n < 2 {
 		return nil, fmt.Errorf("invalid format: %s, expected: <probe_type>:<symbol>", spec)
 	}
 
@@ -90,7 +93,7 @@ func ParseProbe(spec string) (*ProbeSpec, error) {
 
 	switch probeType {
 	case ProbeTypeKprobe, ProbeTypeKretprobe:
-		if len(parts) != 2 || parts[1] == "" {
+		if n != 2 || parts[1] == "" {
 			return nil, fmt.Errorf("invalid format: %s, expected: <probe_type>:<symbol>", spec)
 		}
 		return &ProbeSpec{
@@ -100,7 +103,7 @@ func ParseProbe(spec string) (*ProbeSpec, error) {
 		}, nil
 
 	case ProbeTypeUprobe, ProbeTypeUretprobe:
-		if len(parts) != 3 || parts[2] == "" {
+		if n != 3 || parts[2] == "" {
 			return nil, fmt.Errorf("invalid format: %s, expected: <probe_type>:<target>:<symbol>", spec)
 		}
 		return &ProbeSpec{
