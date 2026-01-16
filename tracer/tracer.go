@@ -226,7 +226,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
 
-	ebpfHandler, err := pmebpf.LoadMaps(ctx, ebpfMaps, stackdeltaInnerMapSpec)
+	ebpfHandler, err := pmebpf.LoadMaps(ctx, cfg.IncludeTracers, ebpfMaps, stackdeltaInnerMapSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
@@ -463,7 +463,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	}
 
 	if err = loadKallsymsTrigger(coll, ebpfProgs, cfg.BPFVerifierLogLevel); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to remove temporary maps: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to load kallsym eBPF program: %v", err)
 	}
 
 	if err = removeTemporaryMaps(ebpfMaps); err != nil {
@@ -562,6 +562,11 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	for mapName, mapSpec := range coll.Maps {
 		if mapName == "sched_times" && cfg.OffCPUThreshold == 0 {
 			// Off CPU Profiling is disabled. So do not load this map.
+			continue
+		}
+
+		if !types.IsMapEnabled(mapName, cfg.IncludeTracers) {
+			log.Debugf("Skipping eBPF map %s: tracer not enabled", mapName)
 			continue
 		}
 		if newSize, ok := adaption[mapName]; ok {

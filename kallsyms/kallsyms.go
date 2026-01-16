@@ -90,16 +90,16 @@ func compareModule(a, b Module) int {
 type Symbolizer struct {
 	modules atomic.Value
 
-	reloadModules chan bool
-	reloadSymbols chan bool
+	reloadModules chan libpf.Void
+	reloadSymbols chan libpf.Void
 }
 
 // NewSymbolizer creates and returns a new kallsyms symbolizer and loads
 // the initial 'kallsymbols'.
 func NewSymbolizer() (*Symbolizer, error) {
 	s := &Symbolizer{
-		reloadModules: make(chan bool, 1),
-		reloadSymbols: make(chan bool, 1),
+		reloadModules: make(chan libpf.Void, 1),
+		reloadSymbols: make(chan libpf.Void, 1),
 	}
 	if err := s.loadKallsyms(); err != nil {
 		return nil, err
@@ -608,7 +608,7 @@ func (s *Symbolizer) pollKobjectClient(ctx context.Context, kobjectClient *kobje
 			log.Debugf("Kernel modules changed")
 			// Notify worker thread without blocking
 			select {
-			case s.reloadModules <- true:
+			case s.reloadModules <- libpf.Void{}:
 			case <-ctx.Done():
 				return
 			default:
@@ -632,7 +632,7 @@ func (s *Symbolizer) StartMonitor(ctx context.Context) error {
 // with the recent information of /proc/kallsyms.
 func (s *Symbolizer) Reload() {
 	select {
-	case s.reloadSymbols <- true:
+	case s.reloadSymbols <- libpf.Void{}:
 	default:
 	}
 }

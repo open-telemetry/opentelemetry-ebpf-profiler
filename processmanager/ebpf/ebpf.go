@@ -15,7 +15,9 @@ import (
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/features"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"golang.org/x/exp/constraints"
+	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -78,7 +80,8 @@ var _ ebpfapi.EbpfHandler = &ebpfMapsImpl{}
 //
 // It further spawns background workers for deferred map updates; the given
 // context can be used to terminate them on shutdown.
-func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map, stackdeltaInnerMapSpec *cebpf.MapSpec) (ebpfapi.EbpfHandler, error) {
+func LoadMaps(ctx context.Context, includeTracers types.IncludedTracers,
+	maps map[string]*cebpf.Map, stackdeltaInnerMapSpec *cebpf.MapSpec) (ebpfapi.EbpfHandler, error) {
 	impl := &ebpfMapsImpl{
 		stackdeltaInnerMapTemplate: stackdeltaInnerMapSpec,
 	}
@@ -94,6 +97,9 @@ func LoadMaps(ctx context.Context, maps map[string]*cebpf.Map, stackdeltaInnerMa
 		}
 		mapVal, ok := maps[nameTag]
 		if !ok {
+			if !types.IsMapEnabled(nameTag, includeTracers) {
+				continue
+			}
 			log.Fatalf("Map %v is not available", nameTag)
 		}
 		implRefVal.Field(i).Set(reflect.ValueOf(mapVal))
@@ -183,6 +189,10 @@ func (impl *ebpfMapsImpl) UpdateProcData(typ libpf.InterpreterType, pid libpf.PI
 
 	pid32 := uint32(pid)
 	if err := ebpfMap.Update(unsafe.Pointer(&pid32), data, cebpf.UpdateAny); err != nil {
+		if errors.Is(err, unix.E2BIG) {
+			return fmt.Errorf("no more space in map %v", typ)
+		}
+
 		return fmt.Errorf("failed to add %v info: %s", typ, err)
 	}
 	return nil

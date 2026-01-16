@@ -125,13 +125,6 @@ struct apm_int_procs_t {
   __uint(max_entries, 128);
 } apm_int_procs SEC(".maps");
 
-struct go_labels_procs_t {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, pid_t);
-  __type(value, GoLabelsOffsets);
-  __uint(max_entries, 128);
-} go_labels_procs SEC(".maps");
-
 // filter_error_frames is set during load time.
 BPF_RODATA_VAR(bool, filter_error_frames, false)
 
