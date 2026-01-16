@@ -105,6 +105,46 @@ func TestTracerErrorPropagation(t *testing.T) {
 	require.NoError(t, err)
 	defer tr.Close()
 
+	// tamper ebpf pid_events map type to produce invalid argument error
+	badSpec := &cebpf.MapSpec{
+		Name:       "pid_events",
+		Type:       cebpf.Queue, // Hash type is expected instead
+		KeySize:    0,
+		ValueSize:  4,
+		MaxEntries: 100,
+	}
+
+	badMap, err := cebpf.NewMap(badSpec)
+	require.NoError(t, err)
+
+	tr.GetEbpfMaps()["pid_events"] = badMap
+
+	traceChan := make(chan *libpf.EbpfTrace, 16)
+	errsChan := make(chan error)
+	require.NoError(t, tr.StartMapMonitors(ctx, traceChan, errsChan))
+	require.ErrorContains(t, <-errsChan, "Failed to read from pid_events map: next key: invalid argument")
+}
+
+func TestTracerMapMonitorsError(t *testing.T) {
+	ctx := t.Context()
+
+	metrics.Start(noop.Meter{})
+
+	tr, err := tracer.NewTracer(ctx, &tracer.Config{
+		Intervals:              &mockIntervals{},
+		FilterErrorFrames:      false,
+		SamplesPerSecond:       20,
+		MapScaleFactor:         0,
+		KernelVersionCheck:     true,
+		BPFVerifierLogLevel:    0,
+		ProbabilisticInterval:  100,
+		ProbabilisticThreshold: 100,
+		OffCPUThreshold:        1 * math.MaxUint32,
+		VerboseMode:            true,
+	})
+	require.NoError(t, err)
+	defer tr.Close()
+
 	// force error by removing a required map during map monitor start up
 	delete(tr.GetEbpfMaps(), "report_events")
 

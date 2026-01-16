@@ -865,7 +865,7 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) error {
 	if keysToDelete != 0 {
 		keys := libpf.MapKeysToSlice(deleteBatch)
 		if _, err := eventsMap.BatchDelete(keys, nil); err != nil {
-			fmt.Errorf("Failed to batch delete %d entries from pid_events map: %v",
+			return fmt.Errorf("Failed to batch delete %d entries from pid_events map: %v",
 				keysToDelete, err)
 		}
 	}
