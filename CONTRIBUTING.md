@@ -147,6 +147,7 @@ For more information about the maintainer role, see the [community repository](h
 
 - [Damien Mathieu](https://github.com/dmathieu), Elastic
 - [Florian Lehner](https://github.com/florianl), Elastic
+- [Roger Coll](https://github.com/rogercoll), Elastic
 - [Joel Höner](https://github.com/athre0z)
 - [Tim Rühsen](https://github.com/rockdaboot), Elastic
 
