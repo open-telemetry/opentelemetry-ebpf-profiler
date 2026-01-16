@@ -114,6 +114,10 @@ func TestTracerErrorPropagation(t *testing.T) {
 		MaxEntries: 100,
 	}
 
+	restoreRlimit, err := rlimit.MaximizeMemlock()
+	require.NoError(t, err)
+	defer restoreRlimit()
+
 	badMap, err := cebpf.NewMap(badSpec)
 	require.NoError(t, err)
 
