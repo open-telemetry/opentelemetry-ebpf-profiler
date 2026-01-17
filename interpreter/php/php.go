@@ -4,7 +4,6 @@
 package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 
 import (
-	"bytes"
 	"debug/elf"
 	"errors"
 	"fmt"
@@ -18,8 +17,8 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfatbuf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -28,12 +27,6 @@ const (
 	// This is used to check if the VM mode is the default one
 	// From https://github.com/php/php-src/blob/PHP-8.0/Zend/zend_vm_opcodes.h#L29
 	ZEND_VM_KIND_HYBRID = (1 << 2)
-)
-
-const (
-	// maxPHPRODataSize is the maximum PHP RO Data segment size to scan
-	// (currently the largest seen is about 9M)
-	maxPHPRODataSize = 16 * 1024 * 1024
 )
 
 var (
@@ -165,23 +158,21 @@ func determinePHPVersion(ef *pfelf.File) (uint, error) {
 		return 0, errors.New("no RO data")
 	}
 
+	cache := pfatbuf.Cache{}
 	needle := []byte("X-Powered-By: PHP/")
-	for _, segment := range ef.ROData {
-		rodata, err := segment.Data(maxPHPRODataSize)
+	for _, ph := range ef.ROData {
+		cache.Init(ph)
+
+		offs, err := cache.Search(needle)
 		if err != nil {
-			return 0, err
-		}
-		idx := bytes.Index(rodata, needle)
-		if idx < 0 {
 			continue
 		}
 
-		idx += len(needle)
-		zeroIdx := bytes.IndexByte(rodata[idx:], 0)
-		if zeroIdx < 0 {
+		verStr, err := cache.UnsafeStringAt(offs+int64(len(needle)), 64)
+		if err != nil {
 			continue
 		}
-		version, err := versionExtract(pfunsafe.ToString(rodata[idx : idx+zeroIdx]))
+		version, err := versionExtract(verStr)
 		if err != nil {
 			continue
 		}

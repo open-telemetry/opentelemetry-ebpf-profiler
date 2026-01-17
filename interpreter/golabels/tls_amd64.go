@@ -6,6 +6,7 @@
 package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
+	"encoding/binary"
 	"fmt"
 
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
@@ -13,7 +14,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
-	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"golang.org/x/arch/x86/x86asm"
 )
 
@@ -44,8 +44,8 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 	}
 
 	sz := int(min(sym.Size, 128))
-	code, err := f.VirtualMemory(int64(sym.Address), sz, sz)
-	if err != nil {
+	code := make([]byte, sz)
+	if _, err = f.ReadAt(code, int64(sym.Address)); err != nil {
 		return 0, err
 	}
 
@@ -85,13 +85,12 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 		// If the register value is a memory reference, read from it
 		addr := e.NewImmediateCapture("addr")
 		if actual.Match(e.Mem8(addr)) {
-			valueBytes, err := f.VirtualMemory(int64(addr.CapturedValue()), 8, 8)
+			d := make([]byte, 8)
+			_, err := f.ReadAt(d, int64(addr.CapturedValue()))
 			if err != nil {
 				continue
 			}
-			// Read the 8-byte value as int64 (little-endian)
-			value := int64(npsr.Uint64(valueBytes, 0))
-			return int32(value), nil
+			return int32(binary.LittleEndian.Uint64(d)), nil
 		}
 	}
 	return -8, fmt.Errorf("symbol '%s': %w", symbolName, errDecodeSymbol)
