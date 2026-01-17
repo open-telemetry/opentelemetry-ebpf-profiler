@@ -20,7 +20,7 @@ eBPF.
 - Support for native code (C/C++, Rust, Zig, Go, etc. without debug symbols on
   host)
 - Support for a broad set of HLLs (Hotspot JVM, Python, Ruby, PHP, Node.JS, V8,
-  Perl), .NET is in preparation.
+  Perl, Erlang), .NET is in preparation.
 - 100% non-intrusive: there's no need to load agents or libraries into the
   processes that are being profiled.
 - No need for any reconfiguration, instrumentation or restarts of HLL
