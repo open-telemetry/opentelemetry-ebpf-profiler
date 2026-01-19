@@ -438,6 +438,11 @@ func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (func
 	numFunctions := i.rm.Uint32(codeHeader + libpf.Address(vms.beamCodeHeader.numFunctions))
 	functions := codeHeader + libpf.Address(vms.beamCodeHeader.functions)
 
+	// This buffer is used to load the start and end pointers for the memory
+	// ranges as we binary-search for the correct MFA entry in the codeHeader
+	// based on whether the PC falls before, after, or within the mid range.
+	// Based on the implementation here:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/etc/unix/etp-commands.in#L1343
 	midBuffer := make([]byte, 16)
 
 	ertsCodeInfo := libpf.Address(0)
@@ -489,6 +494,12 @@ func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex 
 	lineLow := nopanicslicereader.Ptr(lineRange, 0)
 	lineHigh := nopanicslicereader.Ptr(lineRange, 8)
 
+	// This buffer is used to load the start and end pointers for the memory
+	// ranges as we binary-search for the correct line number from the start of
+	// the MFA entry in the codeHeader based on whether the PC falls before,
+	// after, or within the mid range.
+	// Based on the implementation here:
+	// https://github.com/erlang/otp/blob/OTP-27.2.4/erts/etc/unix/etp-commands.in#L1269
 	lineMidBuffer := make([]byte, 16)
 	// We need to align the lineMid values on 8-byte address boundaries
 	bitmask := libpf.Address(^(uint64(0xf)))
