@@ -18,6 +18,7 @@ import (
 	"github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -582,7 +583,7 @@ func (i *beamInstance) lookupAtom(index uint32) (libpf.String, error) {
 		}
 	}
 
-	nameString := libpf.Intern(string(name))
+	nameString := libpf.Intern(pfunsafe.ToString(name))
 	i.atomCache.Add(index, nameString)
 	return nameString, nil
 }
