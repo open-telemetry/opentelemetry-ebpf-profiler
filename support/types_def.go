@@ -145,15 +145,23 @@ const (
 )
 
 const (
-	// UnwindOpcodes from the C header file
-	UnwindOpcodeCommand      uint8 = C.UNWIND_OPCODE_COMMAND
-	UnwindOpcodeBaseCFA      uint8 = C.UNWIND_OPCODE_BASE_CFA
-	UnwindOpcodeBaseSP       uint8 = C.UNWIND_OPCODE_BASE_SP
-	UnwindOpcodeBaseFP       uint8 = C.UNWIND_OPCODE_BASE_FP
-	UnwindOpcodeBaseLR       uint8 = C.UNWIND_OPCODE_BASE_LR
-	UnwindOpcodeBaseReg      uint8 = C.UNWIND_OPCODE_BASE_REG
-	UnwindOpcodeBaseCFAFrame uint8 = C.UNWIND_OPCODE_BASE_CFA_FRAME
-	UnwindOpcodeFlagDeref    uint8 = C.UNWIND_OPCODEF_DEREF
+	// Unwind register base values from the C header file
+	UnwindRegInvalid uint8 = C.UNWIND_REG_INVALID
+	UnwindRegCfa     uint8 = C.UNWIND_REG_CFA
+	UnwindRegPc      uint8 = C.UNWIND_REG_PC
+	UnwindRegSp      uint8 = C.UNWIND_REG_SP
+	UnwindRegFp      uint8 = C.UNWIND_REG_FP
+	UnwindRegLr      uint8 = C.UNWIND_REG_LR
+	UnwindRegX86RAX  uint8 = C.UNWIND_REG_X86_RAX
+	UnwindRegX86R9   uint8 = C.UNWIND_REG_X86_R9
+	UnwindRegX86R11  uint8 = C.UNWIND_REG_X86_R11
+	UnwindRegX86R15  uint8 = C.UNWIND_REG_X86_R15
+
+	// UnwindFlag values from the C header file
+	UnwindFlagCommand  uint8 = C.UNWIND_FLAG_COMMAND
+	UnwindFlagFrame    uint8 = C.UNWIND_FLAG_FRAME
+	UnwindFlagLeafOnly uint8 = C.UNWIND_FLAG_LEAF_ONLY
+	UnwindFlagDerefCfa uint8 = C.UNWIND_FLAG_DEREF_CFA
 
 	// UnwindCommands from the C header file
 	UnwindCommandInvalid      int32 = C.UNWIND_COMMAND_INVALID

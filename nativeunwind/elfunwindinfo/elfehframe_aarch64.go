@@ -119,10 +119,10 @@ func (regs *vmRegs) getUnwindInfoARM() sdtypes.UnwindInfo {
 	// are used for CFA.
 	switch regs.cfa.reg {
 	case armRegFP:
-		info.Opcode = support.UnwindOpcodeBaseFP
+		info.BaseReg = support.UnwindRegFp
 		info.Param = int32(regs.cfa.off)
 	case armRegSP:
-		info.Opcode = support.UnwindOpcodeBaseSP
+		info.BaseReg = support.UnwindRegSp
 		info.Param = int32(regs.cfa.off)
 	}
 
@@ -141,14 +141,13 @@ func (regs *vmRegs) getUnwindInfoARM() sdtypes.UnwindInfo {
 		// thus, the assumption - use UnwindOpcodeBaseLR to instruct native stack
 		// unwinder to load RA from link register
 		// This is either prolog or epilog sequence, read RA from link register.
-		info.FPOpcode = support.UnwindOpcodeBaseLR
-		info.FPParam = 0
+		info.AuxBaseReg = support.UnwindRegLr
+		info.AuxParam = 0
 	case regCFA:
-		info.FPParam = int32(regs.ra.off)
-		if regs.fp.reg == regCFA && regs.fp.off+8 == regs.ra.off {
-			info.FPOpcode = support.UnwindOpcodeBaseCFAFrame
-		} else {
-			info.FPOpcode = support.UnwindOpcodeBaseCFA
+		info.AuxBaseReg = support.UnwindRegCfa
+		info.AuxParam = int32(regs.ra.off)
+		if regs.fp.reg == regs.ra.reg && regs.fp.off+8 == regs.ra.off {
+			info.Flags |= support.UnwindFlagFrame
 		}
 	}
 

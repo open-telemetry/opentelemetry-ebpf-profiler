@@ -607,20 +607,23 @@ _Static_assert(sizeof(struct Trace) < 63 * 1024, "Trace too large");
 
 // Container for unwinding state
 typedef struct UnwindState {
-  // Current register value for Program Counter
-  u64 pc;
-  // Current register value for Stack Pointer
-  u64 sp;
-  // Current register value for Frame Pointer
-  u64 fp;
-
+  // CPU register state
+  union {
+    // regs is for the native unwinder to index the registers
+    u64 regs[16];
+    // And the anonymous struct offers readable ebpf code access.
+    // stackdeltatypes.h must have corresponding indexes to these names.
+    struct {
+      u64 inval, cfa, pc, sp, fp, lr;
+      // The per-CPU registers which are not unwound, but needed to be accessed
+      // on leaf frames.
 #if defined(__x86_64__)
-  // Current register values for named registers
-  u64 rax, r9, r11, r13, r15;
+      u64 rax, r9, r11, r13, r15;
 #elif defined(__aarch64__)
-  // Current register values for named registers
-  u64 lr, r20, r22, r28;
+      u64 r20, r22, r28;
 #endif
+    };
+  };
 
   // The executable ID/hash associated with PC
   u64 text_section_id;
@@ -804,11 +807,12 @@ _Static_assert(sizeof(struct PerCPURecord) <= (32 << 10), "Per CPU record too la
 // UnwindInfo contains the unwind information needed to unwind one frame
 // from a specific address.
 typedef struct UnwindInfo {
-  u8 opcode;      // main opcode to unwind CFA
-  u8 fpOpcode;    // opcode to unwind FP
+  u8 flags;       // flags
+  u8 baseReg;     // base register to calculate CFA from
+  u8 auxBaseReg;  // base register to calculate FP (x86-64) or RA[+FP] (aarch64)
   u8 mergeOpcode; // opcode for generating next stack delta, see below
   s32 param;      // parameter for the CFA expression
-  s32 fpParam;    // parameter for the FP expression
+  s32 auxParam;   // parameter for the FP expression
 } UnwindInfo;
 
 // The 8-bit mergeOpcode consists of two separate fields:
