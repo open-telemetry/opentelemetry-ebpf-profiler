@@ -18,21 +18,21 @@ require (
 	github.com/elastic/go-freelru v0.16.0
 	github.com/elastic/go-perf v0.0.0-20241029065020-30bec95324b8
 	github.com/google/uuid v1.6.0
-	github.com/klauspost/compress v1.18.2
+	github.com/klauspost/compress v1.18.3
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zeebo/xxh3 v1.0.2
-	go.opentelemetry.io/collector/component v1.49.1-0.20260115162016-5e41fb551263
-	go.opentelemetry.io/collector/confmap/xconfmap v0.143.1-0.20260115162016-5e41fb551263
-	go.opentelemetry.io/collector/consumer/consumertest v0.143.1-0.20260115162016-5e41fb551263
-	go.opentelemetry.io/collector/consumer/xconsumer v0.143.1-0.20260115162016-5e41fb551263
-	go.opentelemetry.io/collector/pdata v1.49.1-0.20260115162016-5e41fb551263
-	go.opentelemetry.io/collector/pdata/pprofile v0.143.1-0.20260115162016-5e41fb551263
-	go.opentelemetry.io/collector/receiver v1.49.1-0.20260115162016-5e41fb551263
-	go.opentelemetry.io/collector/receiver/receivertest v0.143.1-0.20260115162016-5e41fb551263
-	go.opentelemetry.io/collector/receiver/xreceiver v0.143.1-0.20260115162016-5e41fb551263
+	go.opentelemetry.io/collector/component v1.49.1-0.20260119032349-b32538d871f0
+	go.opentelemetry.io/collector/confmap/xconfmap v0.143.1-0.20260119032349-b32538d871f0
+	go.opentelemetry.io/collector/consumer/consumertest v0.143.1-0.20260119032349-b32538d871f0
+	go.opentelemetry.io/collector/consumer/xconsumer v0.143.1-0.20260119032349-b32538d871f0
+	go.opentelemetry.io/collector/pdata v1.49.1-0.20260119032349-b32538d871f0
+	go.opentelemetry.io/collector/pdata/pprofile v0.143.1-0.20260119032349-b32538d871f0
+	go.opentelemetry.io/collector/receiver v1.49.1-0.20260119032349-b32538d871f0
+	go.opentelemetry.io/collector/receiver/receivertest v0.143.1-0.20260119032349-b32538d871f0
+	go.opentelemetry.io/collector/receiver/xreceiver v0.143.1-0.20260119032349-b32538d871f0
 	go.opentelemetry.io/otel v1.39.0
 	go.opentelemetry.io/otel/metric v1.39.0
 	go.uber.org/zap/exp v0.3.0
