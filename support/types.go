@@ -368,9 +368,6 @@ const (
 	V8LineCookieMask  = 0xffffffff00000000
 	V8LineDeltaMask   = 0xffffffff
 
-	RubyAddrMask48Bit     = 0xffffffffffff
-	RubyExtraAddrTypeMask = 0xf000000000000
-
 	RubyFrameTypeNone     = 0x0
 	RubyFrameTypeCmeIseq  = 0x1
 	RubyFrameTypeCmeCfunc = 0x2

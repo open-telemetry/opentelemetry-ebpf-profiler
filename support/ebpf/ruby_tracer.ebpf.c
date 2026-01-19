@@ -1,6 +1,5 @@
 // This file contains the code and map definitions for the Ruby tracer
 
-#include "ruby_tracer.h"
 #include "bpfdefs.h"
 #include "tracemgmt.h"
 #include "tsd.h"
@@ -70,35 +69,17 @@ typedef struct vm_env_struct {
 
 // Record a Ruby frame
 // frame_type is encoded into the "file" attribute of frame in the spare bits
-// frame flags are encoded in the upper bits of "line" for debugging purposes, but this
 // is may change in the future.
-static EBPF_INLINE ErrorCode push_ruby(
-  UnwindState *state, Trace *trace, u16 flags, u8 frame_type, u64 file, u64 line, u64 iseq_addr)
+static EBPF_INLINE ErrorCode
+push_ruby(UnwindState *state, Trace *trace, u8 frame_type, u64 file, u64 line, u64 iseq_addr)
 {
-  if (frame_type != FRAME_TYPE_NONE) {
-    // Ensure address is actually no more than 48-bits
-    u64 addr = file & ADDR_MASK_48_BIT;
-    if (addr != file)
-      return ERR_RUBY_PACK_FRAME;
-    // Shift data to bits 48-55
-    u64 packed = addr | ((u64)(frame_type & 0xF) << 48);
-    file       = packed;
-  }
-
-  if (flags != 0) {
-    u64 pc_addr = line & ADDR_MASK_48_BIT;
-    if (pc_addr != line)
-      return ERR_RUBY_PACK_FRAME;
-    // Shift data to bits 48-55
-    u64 packed = pc_addr | ((u64)flags << 48);
-    line       = packed;
-  }
-  u64 *data = push_frame(state, trace, FRAME_MARKER_RUBY, FRAME_FLAG_PID_SPECIFIC, file, 2);
+  u64 *data = push_frame(state, trace, FRAME_MARKER_RUBY, FRAME_FLAG_PID_SPECIFIC, file, 3);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }
-  data[0] = line;
-  data[1] = iseq_addr;
+  data[0] = frame_type;
+  data[1] = line;
+  data[2] = iseq_addr;
   return ERR_OK;
 }
 
@@ -129,8 +110,7 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
   u64 frame_flags  = 0;
   bool cfunc       = false;
 
-  u16 packed_flags = 0;
-  u64 ep_check     = 0;
+  u64 ep_check = 0;
 
   vm_env_t vm_env;
   rb_control_frame_t control_frame;
@@ -160,7 +140,7 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
     }
 
     frame_addr = 0;
-    frame_type = FRAME_TYPE_NONE;
+    frame_type = RUBY_FRAME_TYPE_NONE;
     cfunc      = false;
 
     if (bpf_probe_read_user(
@@ -189,13 +169,6 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
         return ERR_RUBY_READ_ISEQ_BODY;
       }
     }
-
-    // Pack the frame flags into 16 bits for debugging purposes
-    // Extract high byte (nibbles 6-7)
-    u16 high_byte = (frame_flags >> 24) & 0xFF;
-    u16 low_byte  = (frame_flags >> 4) & 0xFF;
-    // Extract nibbles 1-2 (middle of lower 16 bits)
-    packed_flags  = (high_byte << 8) | low_byte;
 
     // this code emulate's ruby's check_method_entry to traverse the environment
     // until it finds a method entry. Since the function calls itself, the code
@@ -248,7 +221,7 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
         // As this is not available for Ruby versions < 2.6 we just push the cfunc frame and
         // continue unwinding Ruby VM frames. Due to this issue, the ordering of Ruby and native
         // frames will almost certainly be incorrect for Ruby versions < 2.6.
-        frame_type = FRAME_TYPE_CME_CFUNC;
+        frame_type = RUBY_FRAME_TYPE_CME_CFUNC;
       } else {
         // We save this cfp on in the "Record" entry, and when we start the unwinder
         // again we'll push it so that the order is correct and the cfunc "owns" any native code we
@@ -277,22 +250,21 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
 
       method_type &= 0xf;
       if (method_type == VM_METHOD_TYPE_ISEQ) {
-        frame_type = FRAME_TYPE_CME_ISEQ;
+        frame_type = RUBY_FRAME_TYPE_CME_ISEQ;
       }
     }
   }
 
   // Fallback to just reading the iseq if we couldn't detect a supported CME type
-  if (frame_type == FRAME_TYPE_NONE) {
+  if (frame_type == RUBY_FRAME_TYPE_NONE) {
     frame_addr = iseq_addr;
-    frame_type = FRAME_TYPE_ISEQ;
+    frame_type = RUBY_FRAME_TYPE_ISEQ;
   }
 
   // For symbolization of the frame we forward the information about the CME,
   // or plain iseq to userspace, along with the pc so we can get line information.
   // From this we can then extract information like file or function name and line number.
-  ErrorCode error =
-    push_ruby(&record->state, trace, packed_flags, frame_type, frame_addr, pc, iseq_addr);
+  ErrorCode error = push_ruby(&record->state, trace, frame_type, frame_addr, pc, iseq_addr);
   if (error) {
     DEBUG_PRINT("ruby: failed to push frame");
     return error;
@@ -402,8 +374,7 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
     error = push_ruby(
       &record->state,
       trace,
-      0,
-      FRAME_TYPE_CME_CFUNC,
+      RUBY_FRAME_TYPE_CME_CFUNC,
       record->rubyUnwindState.cfunc_saved_frame,
       0,
       0);

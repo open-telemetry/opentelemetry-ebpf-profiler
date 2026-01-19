@@ -863,25 +863,7 @@ func (r *rubyInstance) id2str(originalId uint64) (libpf.String, error) {
 	return symbolName, err
 }
 
-// For debugging purposes only
-// Reconstructing (expanding back to 32 bits with 0xF fill)
-func unpackEnvFlags(packed uint16) uint32 {
-	// Extract the saved bytes
-	highByte := uint32((packed >> 8) & 0xFF) // Gets 0x22
-	lowByte := uint32(packed & 0xFF)         // Gets 0x02
-
-	// Reconstruct with pattern: 0xHH HH F LL F
-	// Where HH = highByte (repeated), LL = lowByte
-	reconstructed := (highByte << 24) | // 0x22000000
-		(highByte << 16) | // 0x00220000 (repeat high)
-		(0xF << 12) | // 0x0000F000
-		(lowByte << 4) | // 0x00000020
-		0xF // 0x0000000F
-
-	return reconstructed // 0x2222F02F
-}
-
-func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType uint8, frameFlags uint32) (*rubyIseq, error) {
+func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType uint8) (*rubyIseq, error) {
 	vms := &r.r.vmStructs
 
 	// Read contiguous pointer values into a buffer to be more efficient
@@ -899,14 +881,14 @@ func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType ui
 	iseqLabelPtr := npsr.Ptr(dataBytes, uint(vms.iseq_location_struct.label))
 	iseqLabel, err := r.getStringCached(iseqLabelPtr, r.readRubyString)
 	if err != nil {
-		log.Debugf("Failed to get source label (iseq@0x%08x) %d %08x, %v", iseqBody, frameAddrType, frameFlags, err)
+		log.Debugf("Failed to get source label (iseq@0x%08x) %d, %v", iseqBody, frameAddrType, err)
 		return &rubyIseq{}, err
 	}
 
 	iseqBaseLabelPtr := npsr.Ptr(dataBytes, uint(vms.iseq_location_struct.base_label))
 	iseqBaseLabel, err := r.getStringCached(iseqBaseLabelPtr, r.readRubyString)
 	if err != nil {
-		log.Debugf("Failed to get source base label (iseq@0x%08x) %d %08x, %v", iseqBody, frameAddrType, frameFlags, err)
+		log.Debugf("Failed to get source base label (iseq@0x%08x) %d, %v", iseqBody, frameAddrType, err)
 		return &rubyIseq{}, err
 	}
 
@@ -954,13 +936,11 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 	var cme bool
 
 	vms := &r.r.vmStructs
-	frameAddr := libpf.Address(ef.Data() & support.RubyAddrMask48Bit)
-	frameAddrType := uint8(ef.Data() >> 48)
+	frameAddr := libpf.Address(ef.Data())
+	frameAddrType := uint8(ef.Variable(0))
 
-	pc := libpf.Address(ef.Variable(0) & support.RubyAddrMask48Bit)
-	frameFlags := unpackEnvFlags(uint16(ef.Variable(0) >> 48))
-
-	cfpIseq := libpf.Address(ef.Variable(1))
+	pc := libpf.Address(ef.Variable(1))
+	cfpIseq := libpf.Address(ef.Variable(2))
 
 	switch frameAddrType {
 	case support.RubyFrameTypeCmeCfunc:
@@ -968,7 +948,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 		cframe = true
 		methodDefinition := r.rm.Ptr(frameAddr + libpf.Address(vms.rb_method_entry_struct.def))
 		if methodDefinition == 0 {
-			return fmt.Errorf("Unable to read method definition for cfunc (%04x)", frameFlags)
+			return fmt.Errorf("Unable to read method definition for cfunc")
 		}
 
 		originalId := r.rm.Uint64(methodDefinition + libpf.Address(vms.rb_method_definition_struct.original_id))
@@ -986,24 +966,24 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 
 		methodDefinition := r.rm.Ptr(frameAddr + libpf.Address(vms.rb_method_entry_struct.def))
 		if methodDefinition == 0 {
-			return fmt.Errorf("Unable to read method definition for CME (%04x)", frameFlags)
+			return fmt.Errorf("Unable to read method definition for CME")
 		}
 
 		methodBody := r.rm.Ptr(methodDefinition + libpf.Address(vms.rb_method_definition_struct.body))
 		if methodBody == 0 {
-			return fmt.Errorf("unable to read method body for CME (%04x)", frameFlags)
+			return fmt.Errorf("unable to read method body for CME")
 		}
 
 		iseqBody = r.rm.Ptr(methodBody + libpf.Address(vms.rb_method_iseq_struct.iseqptr+vms.iseq_struct.body))
 
 		if iseqBody == 0 {
-			return fmt.Errorf("unable to read iseq body for CME (%04x)", frameFlags)
+			return fmt.Errorf("unable to read iseq body for CME")
 		}
 
 	case support.RubyFrameTypeIseq:
 		iseqBody = libpf.Address(frameAddr)
 	default:
-		return fmt.Errorf("Unable to get CME or ISEQ from frame address (%d : %04x)", frameAddrType, frameFlags)
+		return fmt.Errorf("Unable to get CME or ISEQ from frame address (%d)", frameAddrType)
 	}
 
 	if cme && r.r.hasClassPath {
@@ -1012,7 +992,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 		if err != nil {
 			// Failing to read the class name is not a fatal error, keep going with just the method name
 			// and provide an incomplete label rather than nothing at all.
-			log.Errorf("Failed to read class name for cme (%d : %04x): %v", frameAddrType, frameFlags, err)
+			log.Errorf("Failed to read class name for cme (%d): %v", frameAddrType, err)
 		}
 	}
 
@@ -1030,7 +1010,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 			lineNo = 0
 			log.Warnf("RubySymbolizer: Failed to get line number (%d) %v", frameAddrType, err)
 		}
-		iseq, err := r.readIseqBody(iseqBody, pc, frameAddrType, frameFlags)
+		iseq, err := r.readIseqBody(iseqBody, pc, frameAddrType)
 		if err != nil {
 			return err
 		}
@@ -1043,7 +1023,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 			// If it failed to symbolize at all, create a dummy value that includes the
 			// flags for debugging purposes.
 			// Most often this is only hit if the process died before we could read memory
-			fullLabel = libpf.Intern(fmt.Sprintf("<unknown function %d %08x>", frameAddrType, frameFlags))
+			fullLabel = libpf.Intern(fmt.Sprintf("<unknown function %d>", frameAddrType))
 		}
 	}
 	frames.Append(&libpf.Frame{
