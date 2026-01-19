@@ -9,9 +9,7 @@ package beam // import "go.opentelemetry.io/ebpf-profiler/interpreter/beam"
 // that share the same bytecode, such as Elixir and Gleam.
 
 import (
-	"encoding/binary"
 	"fmt"
-	"hash/crc32"
 	"regexp"
 	"strings"
 	"unsafe"
@@ -272,6 +270,11 @@ func (d *beamData) String() string {
 	return fmt.Sprintf("BEAM OTP %s, ERTS %s", d.otpRelease, d.ertsVersion)
 }
 
+func hashMFA(key beamMfa) uint32 {
+	mfhash := uint32(hash.Uint64(uint64(key.module)<<32 | uint64(key.function)))
+	return uint32(hash.Uint64(uint64(mfhash)<<32 | uint64(key.arity)))
+}
+
 func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	log.Debugf("BEAM attaching, OTP %s, ERTS %s, bias: 0x%x", d.otpRelease, d.ertsVersion, bias)
 
@@ -299,13 +302,6 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		return nil, err
 	}
 
-	hashMFA := func(key beamMfa) uint32 {
-		data := make([]byte, 12)
-		binary.LittleEndian.PutUint32(data[0:4], key.module)
-		binary.LittleEndian.PutUint32(data[4:8], key.function)
-		binary.LittleEndian.PutUint32(data[8:12], key.arity)
-		return crc32.ChecksumIEEE(data)
-	}
 	mfaNameCache, err := freelru.New[beamMfa, libpf.String](
 		interpreter.LruFunctionCacheSize, hashMFA)
 	if err != nil {
