@@ -38,7 +38,7 @@ var (
 )
 
 type beamData struct {
-	otpRelease          uint32
+	otpRelease          uint8
 	ertsVersion         string
 	theActiveCodeIndex  libpf.Address
 	r                   libpf.Address
@@ -146,8 +146,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 	// Slice off the null-terminator before parsing
 	otpRelease, err := strconv.Atoi(string(otpReleaseString[:len(otpReleaseString)-1]))
-	if err != nil {
-		return nil, fmt.Errorf("OTP Release wasn't an integer: %v", otpReleaseString)
+	if err != nil || otpRelease < 0 || otpRelease > 255 {
+		return nil, fmt.Errorf("Invalid OTP Release: %v", otpReleaseString)
 	}
 
 	_, ertsVersion, err := ef.SymbolData("etp_erts_version", 64)
@@ -216,7 +216,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	d := &beamData{
-		otpRelease:          uint32(otpRelease),
+		otpRelease:          uint8(otpRelease),
 		ertsVersion:         string(ertsVersion[:len(ertsVersion)-1]),
 		theActiveCodeIndex:  libpf.Address(codeIndex.Address),
 		r:                   libpf.Address(r.Address),
