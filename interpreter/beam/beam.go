@@ -11,6 +11,7 @@ package beam // import "go.opentelemetry.io/ebpf-profiler/interpreter/beam"
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"unsafe"
 
@@ -36,7 +37,7 @@ var (
 )
 
 type beamData struct {
-	otpRelease          string
+	otpRelease          uint32
 	ertsVersion         string
 	theActiveCodeIndex  libpf.Address
 	r                   libpf.Address
@@ -138,9 +139,14 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, err
 	}
 
-	_, otpRelease, err := ef.SymbolData("etp_otp_release", 4)
+	_, otpReleaseString, err := ef.SymbolData("etp_otp_release", 4)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read OTP release: %v", err)
+	}
+	// Slice off the null-terminator before parsing
+	otpRelease, err := strconv.Atoi(string(otpReleaseString[:len(otpReleaseString)-1]))
+	if err != nil {
+		return nil, fmt.Errorf("OTP Release wasn't an integer: %v", otpReleaseString)
 	}
 
 	_, ertsVersion, err := ef.SymbolData("etp_erts_version", 64)
@@ -209,7 +215,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	d := &beamData{
-		otpRelease:          string(otpRelease[:len(otpRelease)-1]),
+		otpRelease:          uint32(otpRelease),
 		ertsVersion:         string(ertsVersion[:len(ertsVersion)-1]),
 		theActiveCodeIndex:  libpf.Address(codeIndex.Address),
 		r:                   libpf.Address(r.Address),
@@ -251,23 +257,23 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.erlHeapBits.data = 16
 
 	switch d.otpRelease {
-	case "27":
+	case 27:
 		vms.beamCodeHeader.sizeOf = 144
 		vms.beamCodeHeader.functions = 136
 		vms.atom.name = 32
-	case "28":
+	case 28:
 		vms.beamCodeHeader.sizeOf = 160
 		vms.beamCodeHeader.functions = 152
 		vms.atom.u.bin = 32
 	default:
-		return d, fmt.Errorf("unsupported OTP version for BEAM interpreter: %s", d.otpRelease)
+		return d, fmt.Errorf("unsupported OTP version for BEAM interpreter: %d", d.otpRelease)
 	}
 
 	return d, nil
 }
 
 func (d *beamData) String() string {
-	return fmt.Sprintf("BEAM OTP %s, ERTS %s", d.otpRelease, d.ertsVersion)
+	return fmt.Sprintf("BEAM OTP %d, ERTS %s", d.otpRelease, d.ertsVersion)
 }
 
 func hashMFA(key beamMfa) uint32 {
@@ -276,7 +282,7 @@ func hashMFA(key beamMfa) uint32 {
 }
 
 func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-	log.Debugf("BEAM attaching, OTP %s, ERTS %s, bias: 0x%x", d.otpRelease, d.ertsVersion, bias)
+	log.Debugf("BEAM attaching, OTP %d, ERTS %s, bias: 0x%x", d.otpRelease, d.ertsVersion, bias)
 
 	data := support.BEAMProcInfo{
 		R:                     uint64(bias + d.r),
@@ -556,12 +562,12 @@ func (i *beamInstance) lookupAtom(index uint32) (libpf.String, error) {
 
 	name := make([]byte, len)
 	switch i.data.otpRelease {
-	case "27":
+	case 27:
 		err := i.rm.Read(i.rm.Ptr(entry+libpf.Address(vms.atom.name)), name)
 		if err != nil {
 			return libpf.NullString, fmt.Errorf("BEAM Unable to lookup atom with index %d: %v", index, err)
 		}
-	case "28":
+	case 28:
 		// Implementation based on https://github.com/erlang/otp/blob/OTP-28.0.2/erts/etc/unix/etp-commands.in#L657-L674
 		unboxed := i.rm.Ptr(entry+libpf.Address(vms.atom.u.bin)) & libpf.Address(i.data.etpPtrMask)
 
