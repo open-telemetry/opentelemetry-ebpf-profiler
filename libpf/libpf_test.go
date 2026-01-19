@@ -17,7 +17,7 @@ func TestTraceType(t *testing.T) {
 		str    string
 	}{
 		{
-			ty:     AbortFrame,
+			ty:     abortFrame,
 			isErr:  true,
 			interp: UnknownInterp,
 			str:    "abort-marker",

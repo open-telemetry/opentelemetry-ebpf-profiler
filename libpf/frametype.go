@@ -18,7 +18,7 @@ import (
 //   - A fatal failure that caused further unwinding to be aborted. This is indicated using the
 //     special value support.FrameMarkerAbort (0xFF). It thus also contains the error bit, but
 //     does not fit into the `InterpreterType` enum.
-type FrameType int
+type FrameType uint8
 
 // Convenience shorthands to create various frame types.
 //
@@ -26,9 +26,9 @@ type FrameType int
 // methods to query the required information (IsError, Interpreter, ...) to improve forward
 // compatibility and clarify intentions.
 const (
-	// unknownFrame indicates a frame of an unknown interpreter.
-	// If this appears, it's likely a bug somewhere.
-	unknownFrame FrameType = support.FrameMarkerUnknown
+	// UnknownFrame indicates a frame of an unknown interpreter.
+	// Typically an error frame not associated with an interpreter.
+	UnknownFrame FrameType = support.FrameMarkerUnknown
 	// PHPFrame identifies PHP interpreter frames.
 	PHPFrame FrameType = support.FrameMarkerPHP
 	// PHPJITFrame identifies PHP JIT interpreter frames.
@@ -53,29 +53,26 @@ const (
 	GoFrame FrameType = support.FrameMarkerGo
 	// BEAMFrame identifies the BEAM interpreter frames.
 	BEAMFrame FrameType = support.FrameMarkerBEAM
-	// AbortFrame identifies frames that report that further unwinding was aborted due to an error.
-	AbortFrame FrameType = support.FrameMarkerAbort
 )
 
 const (
 	abortFrameName = "abort-marker"
+
+	errorBit = 0x80
+
+	abortFrame = errorBit | UnknownFrame
 )
 
 func FrameTypeFromString(name string) FrameType {
 	if name == abortFrameName {
-		return AbortFrame
+		return abortFrame
 	}
 	return InterpreterTypeFromString(name).Frame()
 }
 
 // Interpreter returns the interpreter that produced the frame.
 func (ty FrameType) Interpreter() InterpreterType {
-	switch ty {
-	case support.FrameMarkerAbort, support.FrameMarkerUnknown:
-		return UnknownInterp
-	default:
-		return InterpreterType(ty &^ support.FrameMarkerErrorBit)
-	}
+	return InterpreterType(ty &^ errorBit)
 }
 
 // IsInterpType checks whether the frame type belongs to the given interpreter.
@@ -85,18 +82,23 @@ func (ty FrameType) IsInterpType(ity InterpreterType) bool {
 
 // Error adds the error bit into the frame type.
 func (ty FrameType) Error() FrameType {
-	return ty | support.FrameMarkerErrorBit
+	return ty | errorBit
 }
 
 // IsError checks whether the frame is an error frame.
 func (ty FrameType) IsError() bool {
-	return ty&support.FrameMarkerErrorBit != 0
+	return ty&errorBit != 0
+}
+
+// IsAbort checks whether the frame is an abort frame.
+func (ty FrameType) IsAbort() bool {
+	return ty == abortFrame
 }
 
 // String implements the Stringer interface.
 func (ty FrameType) String() string {
 	switch ty {
-	case support.FrameMarkerAbort:
+	case abortFrame:
 		return abortFrameName
 	default:
 		interp := ty.Interpreter()

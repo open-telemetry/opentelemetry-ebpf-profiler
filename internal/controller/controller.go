@@ -9,7 +9,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -25,6 +24,8 @@ type Controller struct {
 	config   *Config
 	reporter reporter.Reporter
 	tracer   *tracer.Tracer
+
+	cancelFunc context.CancelFunc
 }
 
 // New creates a new controller
@@ -48,6 +49,8 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	intervals := times.New(c.config.ReporterInterval, c.config.MonitorInterval,
 		c.config.ProbabilisticInterval)
+
+	ctx, c.cancelFunc = context.WithCancel(ctx)
 
 	// Start periodic synchronization with the realtime clock
 	times.StartRealtimeSync(ctx, c.config.ClockSyncInterval)
@@ -152,6 +155,10 @@ func (c *Controller) Start(ctx context.Context) error {
 // Shutdown stops the controller
 func (c *Controller) Shutdown() {
 	log.Info("Stop processing ...")
+	if c.cancelFunc != nil {
+		c.cancelFunc()
+	}
+
 	if c.reporter != nil {
 		c.reporter.Stop()
 	}
@@ -163,7 +170,7 @@ func (c *Controller) Shutdown() {
 
 func startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
 	// Spawn monitors for the various result maps
-	traceCh := make(chan *host.Trace)
+	traceCh := make(chan *libpf.EbpfTrace)
 
 	if err := trc.StartMapMonitors(ctx, traceCh); err != nil {
 		return fmt.Errorf("failed to start map monitors: %v", err)

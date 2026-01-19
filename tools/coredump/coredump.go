@@ -71,16 +71,20 @@ func formatFrame(frame *libpf.Frame) (string, error) {
 				"got invalid error code %d. forgot to `make generate`",
 				frame.AddressOrLineno)
 		}
-		if frame.Type == libpf.AbortFrame {
+		if frame.Type.IsAbort() {
 			return fmt.Sprintf("<unwinding aborted due to error %s>", errName), nil
 		}
 		return fmt.Sprintf("<error %s>", errName), nil
 	}
 
 	if frame.FunctionName != libpf.NullString {
-		return fmt.Sprintf("%s+%d in %s:%d",
+		columnInfo := ""
+		if frame.SourceColumn != 0 {
+			columnInfo = fmt.Sprintf(":%d", frame.SourceColumn)
+		}
+		return fmt.Sprintf("%s+%d in %s:%d%s",
 			frame.FunctionName, frame.FunctionOffset,
-			frame.SourceFile, frame.SourceLine), nil
+			frame.SourceFile, frame.SourceLine, columnInfo), nil
 	}
 
 	if frame.Mapping.Valid() {

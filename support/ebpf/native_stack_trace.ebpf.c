@@ -30,18 +30,18 @@ BPF_RODATA_VAR(u32, stack_ptregs_offset, 0)
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
 // fileID.
 #define STACK_DELTA_BUCKET(X)                                                                      \
-  struct inner_map_##X {                                                                           \
-    __uint(type, BPF_MAP_TYPE_ARRAY);                                                              \
-    __uint(max_entries, 1 << X);                                                                   \
-    __type(key, u32);                                                                              \
-    __type(value, StackDelta);                                                                     \
-  };                                                                                               \
   struct exe_id_to_##X##_stack_deltas_t {                                                          \
     __uint(type, BPF_MAP_TYPE_HASH_OF_MAPS);                                                       \
     __type(key, u64);                                                                              \
     __type(value, u32);                                                                            \
     __uint(max_entries, 4096);                                                                     \
-    __array(values, struct inner_map_##X);                                                         \
+    __array(                                                                                       \
+      values, struct {                                                                             \
+        __uint(type, BPF_MAP_TYPE_ARRAY);                                                          \
+        __uint(max_entries, 1 << X);                                                               \
+        __type(key, u32);                                                                          \
+        __type(value, StackDelta);                                                                 \
+      });                                                                                          \
   } exe_id_to_##X##_stack_deltas SEC(".maps");
 
 // Create buckets to hold the stack delta information for the executables.
@@ -108,9 +108,17 @@ struct kernel_stackmap_t {
 } kernel_stackmap SEC(".maps");
 
 // Record a native frame
-static EBPF_INLINE ErrorCode push_native(Trace *trace, u64 file, u64 line, bool return_address)
+static EBPF_INLINE ErrorCode
+push_native(UnwindState *state, Trace *trace, u64 file, u64 line, bool return_address)
 {
-  return _push_with_return_address(trace, file, line, FRAME_MARKER_NATIVE, return_address);
+  const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
+
+  u64 *data = push_frame(state, trace, FRAME_MARKER_NATIVE, ra_flag, line, 1);
+  if (!data) {
+    return ERR_STACK_LENGTH_EXCEEDED;
+  }
+  data[0] = file;
+  return ERR_OK;
 }
 
 // A single step for the bsearch into the big_stack_deltas array. This is really a textbook bsearch
@@ -619,8 +627,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
     unwinder = PROG_UNWIND_STOP;
 
     // Unwind native code
-    u32 frame_idx = trace->stack_len;
-    DEBUG_PRINT("==== unwind_native %d ====", frame_idx);
+    DEBUG_PRINT("==== unwind_native %d ====", trace->num_frames);
     increment_metric(metricID_UnwindNativeAttempts);
 
     // Push frame first. The PC is valid because a text section mapping was found.
@@ -628,8 +635,9 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
       "Pushing %llx %llx to position %u on stack",
       record->state.text_section_id,
       record->state.text_section_offset,
-      trace->stack_len);
+      trace->num_frames);
     error = push_native(
+      &record->state,
       trace,
       record->state.text_section_id,
       record->state.text_section_offset,

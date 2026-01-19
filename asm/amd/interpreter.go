@@ -36,6 +36,10 @@ func NewInterpreterWithCode(code []byte) *Interpreter {
 	return it
 }
 
+func (i *Interpreter) PC() int {
+	return i.pc
+}
+
 func (i *Interpreter) ResetCode(code []byte, address expression.Expression) {
 	i.code = code
 	i.CodeAddress = address

@@ -24,7 +24,6 @@ import (
 
 	"github.com/elastic/go-freelru"
 
-	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -549,15 +548,15 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	return pco, nil
 }
 
-func (p *pythonInstance) Symbolize(frame *host.Frame, frames *libpf.Frames) error {
-	if !frame.Type.IsInterpType(libpf.Python) {
+func (p *pythonInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+	if !ef.Type().IsInterpType(libpf.Python) {
 		return interpreter.ErrMismatchInterpreterType
 	}
 
 	// Extract the Python frame bitfields from the file and line variables
-	ptr := libpf.Address(frame.File)
-	lastI := uint32(frame.Lineno>>32) & 0x0fffffff
-	objectID := uint32(frame.Lineno)
+	ptr := libpf.Address(ef.Variable(0))
+	lastI := uint32(ef.Variable(1)>>32) & 0x0fffffff
+	objectID := uint32(ef.Variable(1))
 
 	sfCounter := successfailurecounter.New(&p.successCount, &p.failCount)
 	defer sfCounter.DefaultToFailure()
@@ -705,7 +704,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	version := pythonVer(major, minor)
 
 	minVer := pythonVer(3, 6)
-	maxVer := pythonVer(3, 13)
+	maxVer := pythonVer(3, 14)
 	if version < minVer || version > maxVer {
 		return nil, fmt.Errorf("unsupported Python %d.%d (need >= %d.%d and <= %d.%d)",
 			major, minor,
@@ -813,6 +812,23 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.PyThreadState.Frame = 72
 		// Current frame is not used anymore, see commit 006e44f9 in the CPython repo:
 		// they removed one level of indirection.
+		vms.PyCFrame.CurrentFrame = 0
+		vms.PyASCIIObject.Data = 40
+	case pythonVer(3, 14):
+		// Python 3.14 underwent significant structural changes
+		// _PyInterpreterFrame structure:
+		//   - f_executable at offset 0 (instead of f_code)
+		//   - previous at offset 8
+		//   - instr_ptr at offset 56 (instead of prev_instr)
+		//   - owner at offset 74
+		// PyThreadState: current_frame at offset 72
+		vms.PyFrameObject.Code = 0         // f_executable in _PyInterpreterFrame
+		vms.PyFrameObject.LastI = 56       // instr_ptr (changed from prev_instr)
+		vms.PyFrameObject.Back = 8         // struct _PyInterpreterFrame *previous
+		vms.PyFrameObject.EntryMember = 74 // char owner
+		vms.PyFrameObject.EntryVal = 3     // enum _frameowner, FRAME_OWNED_BY_CSTACK
+		vms.PyThreadState.Frame = 72       // current_frame in _ts structure
+		// Current frame is not used anymore (removed in 3.13)
 		vms.PyCFrame.CurrentFrame = 0
 		vms.PyASCIIObject.Data = 40
 	}
