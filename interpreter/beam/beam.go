@@ -17,11 +17,11 @@ import (
 	"github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
+	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
-	"go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -215,9 +215,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		r:                   libpf.Address(r.Address),
 		beamNormalExit:      libpf.Address(beamNormalExit.Address),
 		ertsAtomTable:       uint64(atomTable.Address),
-		etpPtrMask:          nopanicslicereader.Uint64(etpPtrMask, 0),
-		etpHeaderSubtagMask: nopanicslicereader.Uint64(etpHeaderSubtagMask, 0),
-		etpHeapBitsSubtag:   nopanicslicereader.Uint64(etpHeapBitsSubtag, 0),
+		etpPtrMask:          npsr.Uint64(etpPtrMask, 0),
+		etpHeaderSubtagMask: npsr.Uint64(etpHeaderSubtagMask, 0),
+		etpHeapBitsSubtag:   npsr.Uint64(etpHeapBitsSubtag, 0),
 	}
 
 	// If erts_frame_layout is not defined, it means that frame pointers are not supported,
@@ -454,8 +454,8 @@ func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (func
 		if err != nil {
 			return 0, beamMfa{}, fmt.Errorf("BEAM unable to read codeHeader.functions[%d] for codeHeader 0x%x", midIdx, codeHeader)
 		}
-		midStart := nopanicslicereader.Ptr(midBuffer, 0)
-		midEnd := nopanicslicereader.Ptr(midBuffer, 8)
+		midStart := npsr.Ptr(midBuffer, 0)
+		midEnd := npsr.Ptr(midBuffer, 8)
 		if pc < midStart {
 			highIdx = midIdx
 		} else if pc >= midEnd {
@@ -469,9 +469,9 @@ func (i *beamInstance) findMFA(pc libpf.Address, codeHeader libpf.Address) (func
 			if err != nil {
 				return 0, beamMfa{}, fmt.Errorf("BEAM unable to look up MFA at for ertsCodeInfo 0x%x", ertsCodeInfo)
 			}
-			mfa.module = nopanicslicereader.Uint32(data, uint(vms.ertsCodeMfa.module))
-			mfa.function = nopanicslicereader.Uint32(data, uint(vms.ertsCodeMfa.function))
-			mfa.arity = nopanicslicereader.Uint32(data, uint(vms.ertsCodeMfa.arity))
+			mfa.module = npsr.Uint32(data, uint(vms.ertsCodeMfa.module))
+			mfa.function = npsr.Uint32(data, uint(vms.ertsCodeMfa.function))
+			mfa.arity = npsr.Uint32(data, uint(vms.ertsCodeMfa.arity))
 
 			return functionIndex, mfa, nil
 		}
@@ -491,8 +491,8 @@ func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex 
 	if err != nil {
 		return libpf.NullString, 0, fmt.Errorf("BEAM failed to read function table info")
 	}
-	lineLow := nopanicslicereader.Ptr(lineRange, 0)
-	lineHigh := nopanicslicereader.Ptr(lineRange, 8)
+	lineLow := npsr.Ptr(lineRange, 0)
+	lineHigh := npsr.Ptr(lineRange, 8)
 
 	// This buffer is used to load the start and end pointers for the memory
 	// ranges as we binary-search for the correct line number from the start of
@@ -509,9 +509,9 @@ func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex 
 		if err != nil {
 			return libpf.NullString, 0, fmt.Errorf("BEAM failed to read line table")
 		}
-		if pc < nopanicslicereader.Ptr(lineMidBuffer, 0) {
+		if pc < npsr.Ptr(lineMidBuffer, 0) {
 			lineHigh = lineMid
-		} else if pc < nopanicslicereader.Ptr(lineMidBuffer, 8) {
+		} else if pc < npsr.Ptr(lineMidBuffer, 8) {
 			firstLine := i.rm.Ptr(functionTable)
 			locIndex := uint32((lineMid - firstLine) / 8)
 			lineTab := make([]byte, vms.beamCodeLineTab.sizeOf)
@@ -519,8 +519,8 @@ func (i *beamInstance) findFileLocation(codeHeader libpf.Address, functionIndex 
 			if err != nil {
 				return libpf.NullString, 0, fmt.Errorf("BEAM failed to read line table info")
 			}
-			locSize := nopanicslicereader.Uint32(lineTab, uint(vms.beamCodeLineTab.locSize))
-			locTab := nopanicslicereader.Ptr(lineTab, uint(vms.beamCodeLineTab.locTab))
+			locSize := npsr.Uint32(lineTab, uint(vms.beamCodeLineTab.locSize))
+			locTab := npsr.Ptr(lineTab, uint(vms.beamCodeLineTab.locTab))
 			locAddr := locTab + libpf.Address(locSize*locIndex)
 			loc := uint64(0)
 			if locSize == 2 {
