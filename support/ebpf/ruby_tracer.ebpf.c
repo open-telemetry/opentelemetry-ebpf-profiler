@@ -283,20 +283,29 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
 // On the Ruby VM stack we have for each cfp one struct [1]. These cfp structs then point to
 // instruction sequence (iseq) structs [2] that store the information about file and function name
 // that we forward to user space for the symbolization process of the frame, or they may
-// point to a callable method entry (cme) [3]. In the Ruby's own backtrace functions, they
-// may store either of these [4]. In the case of a cme, since ruby 3.3.0 [5] class names
+// point to a Callable Method Entry (CME) [3]. In the Ruby's own backtrace functions, they
+// may store either of these [4]. In the case of a CME, since ruby 3.3.0 [5] class names
 // have been stored as an easily accessible struct member on the classext, accessible
-// through the cme. We will check the frame for IMEMO_MENT to see if it is a cme frame,
+// through the CME. We will check the frame for IMEMO_MENT to see if it is a CME frame,
 // which makes it possible to determine the classname. The iseq body is accessible through
-// additional indirection of the cme, so we can still get the file and function names
+// additional indirection of the CME, so we can still get the file and function names
 // through the existing method.
 //
-// If the frame is a cme, we will push it with a separate frame type to userspace
+// If the frame is a CME, we will push it with a separate frame type to userspace
 // so that the Symbolizer will know what type of pointer we have given it, and
 // can search the struct at the right offsets for the classpath and iseq body.
 //
 // If the frame is the plain iseq type, the original logic of just extracting the
 // function and file names and line numbers is executed.
+
+// The frame values, and in particular the CMEs, are read in BPF because the CFP
+// entries are volatile, and we cannot simply push the CFP into go as the control
+// frame data will likely have changed if it is not read during the perf interrupt.
+// This code approach also mimics how ruby's own backtrace function works:
+// - Build up a frame buffer of CME or plain iseq entries, done while state
+//   is guaranteed consistent during the perf interrupt. [4]
+// - These more stable references can be converted to useful symbolic labels
+//   out-of-band from the unwinding and sample collection. [6]
 //
 // [0] rb_execution_context_struct
 // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L843
@@ -307,11 +316,16 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
 // [3] rb_callable_method_entry_struct
 // https://github.com/ruby/ruby/blob/fd59ac6410d0cc93a8baaa42df77491abdb2e9b6/method.h#L63-L69
 //
-// [4] thread_profile_frames frame storage of cme or iseq
+// [4] thread_profile_frames frame storage of CME or iseq members for a single backtrace
 // https://github.com/ruby/ruby/blob/fd59ac6410d0cc93a8baaa42df77491abdb2e9b6/vm_backtrace.c#L1754-L1761
 //
 // [5] classpath stored as struct member instead of ivar
 // https://github.com/ruby/ruby/commit/abff5f62037284024aaf469fc46a6e8de98fa1e3
+//
+// [6] rb_profile_frame_full_label describes how the collected samples can be symbolized on the go
+// side
+// https://github.com/ruby/ruby/blob/fd59ac6410d0cc93a8baaa42df77491abdb2e9b6/vm_backtrace.c#L1995
+
 static EBPF_INLINE ErrorCode walk_ruby_stack(
   PerCPURecord *record,
   const RubyProcInfo *rubyinfo,
