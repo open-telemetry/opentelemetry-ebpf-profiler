@@ -219,21 +219,10 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   if (!record)
     return record;
 
-  record->state.pc = 0;
-  record->state.sp = 0;
-  record->state.fp = 0;
-#if defined(__x86_64__)
-  record->state.r13 = 0;
-#elif defined(__aarch64__)
-  record->state.lr         = 0;
-  record->state.r20        = 0;
-  record->state.r22        = 0;
-  record->state.r28        = 0;
-  record->state.lr_invalid = false;
-#endif
-  record->state.return_address             = false;
-  record->state.error_metric               = -1;
-  record->state.unwind_error               = ERR_OK;
+  record->state = (UnwindState){
+    .error_metric = -1,
+    .unwind_error = ERR_OK,
+  };
   record->perlUnwindState.stackinfo        = 0;
   record->perlUnwindState.cop              = 0;
   record->pythonUnwindState.py_frame       = 0;
@@ -257,13 +246,6 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   trace->apm_transaction_id.as_int = 0;
 
   trace->custom_labels.len = 0;
-  u64 *labels_space        = (u64 *)&trace->custom_labels.labels;
-  // I'm not sure this is necessary since we only increment len after
-  // we successfully write the label.
-  UNROLL for (int i = 0; i < sizeof(CustomLabel) * MAX_CUSTOM_LABELS / 8; i++)
-  {
-    labels_space[i] = 0;
-  }
 
   return record;
 }
