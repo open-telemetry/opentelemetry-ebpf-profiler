@@ -345,7 +345,9 @@ static EBPF_INLINE u64 unwind_register_address(UnwindState *state, u64 cfa, u8 o
 #ifdef OPTI_DEBUG
   switch (opcode) {
   case UNWIND_OPCODE_BASE_CFA: DEBUG_PRINT("unwind: cfa+%d", preDeref); break;
+  #if defined(__aarch64__)
   case UNWIND_OPCODE_BASE_CFA_FRAME: DEBUG_PRINT("unwind (fp+ra): cfa+%d", preDeref - 8); break;
+  #endif
   case UNWIND_OPCODE_BASE_FP: DEBUG_PRINT("unwind: fp+%d", preDeref); break;
   case UNWIND_OPCODE_BASE_SP: DEBUG_PRINT("unwind: sp+%d", preDeref); break;
   case UNWIND_OPCODE_BASE_CFA | UNWIND_OPCODEF_DEREF:
