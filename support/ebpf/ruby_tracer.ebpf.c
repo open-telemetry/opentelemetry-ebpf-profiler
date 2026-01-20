@@ -92,7 +92,6 @@ push_ruby(UnwindState *state, Trace *trace, u8 frame_type, u64 file, u64 line, u
 static EBPF_INLINE ErrorCode read_ruby_frame(
   PerCPURecord *record, const RubyProcInfo *rubyinfo, void *stack_ptr, int *next_unwinder)
 {
-
   // Type of frame we found and are pushing (encoded in upper bits of Frame
   u8 frame_type;
   // Actual frame address of the given type
