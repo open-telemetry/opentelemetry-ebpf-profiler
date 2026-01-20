@@ -50,24 +50,10 @@
         "block (3 levels) in <main>+0 in /app/loop-with-ractors.rb:31",
         "libruby.so.3.4.5+0x325fd3",
         "libruby.so.3.4.5+0x2ce40f",
-        "libruby.so.3.4.5+0x30eac7",
-        "libruby.so.3.4.5+0x313c07",
-        "libruby.so.3.4.5+0x31fe1b",
-        "Range#each+0 in <cfunc>:0",
-        "block (2 levels) in <main>+0 in /app/loop-with-ractors.rb:30",
-        "Kernel#loop+0 in <internal:kernel>:168",
-        "block in <main>+0 in /app/loop-with-ractors.rb:29",
-        "libruby.so.3.4.5+0x3261bb",
-        "libruby.so.3.4.5+0x32a937",
-        "libruby.so.3.4.5+0x2328cb",
-        "libruby.so.3.4.5+0x30d193",
-        "libruby.so.3.4.5+0x313c07",
-        "libruby.so.3.4.5+0x31fe1b",
-        "block in <main>+0 in /app/loop-with-ractors.rb:29",
-        "libruby.so.3.4.5+0x325fd3",
-        "libruby.so.3.4.5+0x2ce40f",
-        "libruby.so.3.4.5+0x313c07",
-        "<unwinding aborted due to error native_zero_pc>"
+        "libruby.so.3.4.5+0x2ce9f7",
+        "libruby.so.3.4.5+0x2cefbf",
+        "libruby.so.3.4.5+0x2cee9f",
+        "<unwinding aborted due to error native_lr_unwinding_mid_trace>"
       ]
     },
     {
@@ -78,7 +64,6 @@
         "libc.so.6+0x8269b",
         "libc.so.6+0xee143",
         "libruby.so.3.4.5+0x2ca01b",
-        "libc.so.6+0x85f77",
         "libc.so.6+0x85f77",
         "libc.so.6+0xedc1b"
       ]

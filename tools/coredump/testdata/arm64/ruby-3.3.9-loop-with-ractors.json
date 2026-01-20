@@ -46,8 +46,10 @@
         "block (3 levels) in <main>+0 in /app/loop-with-ractors.rb:31",
         "libruby.so.3.3.9+0x2feedb",
         "libruby.so.3.3.9+0x2abdaf",
-        "libruby.so.3.3.9+0x307d87",
-        "<unwinding aborted due to error native_small_pc>"
+        "libruby.so.3.3.9+0x2ac5cf",
+        "libruby.so.3.3.9+0x2aca0b",
+        "libruby.so.3.3.9+0x2ac8e7",
+        "<unwinding aborted due to error native_lr_unwinding_mid_trace>"
       ]
     },
     {
@@ -58,7 +60,6 @@
         "libc.so.6+0x8269b",
         "libc.so.6+0xee143",
         "libruby.so.3.3.9+0x2a78f3",
-        "libc.so.6+0x85f77",
         "libc.so.6+0x85f77",
         "libc.so.6+0xedc1b"
       ]
