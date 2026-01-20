@@ -99,6 +99,10 @@ jobs:
   build-integration-test-binaries:
     name: Build integration test binaries (${{ matrix.target_arch }})
     runs-on: ubuntu-24.04
+    container: otel/opentelemetry-ebpf-profiler-dev:latest@sha256:1d78b71cfc84beafdb321a11375628c2cb8c2d5ca544e34ddf50e3478eff8e6f
+    defaults:
+      run:
+        shell: bash --login {0}
     timeout-minutes: 10
     strategy:
       matrix:
