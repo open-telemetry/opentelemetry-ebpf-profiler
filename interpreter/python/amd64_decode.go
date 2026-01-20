@@ -63,3 +63,47 @@ func evaluateStubAnswerAMD64(res e.Expression, memBase uint64) (uint64, error) {
 	}
 	return 0, fmt.Errorf("not found %s", res.DebugString())
 }
+
+// extractTLSOffsetFromCodeAMD64 extracts the TLS offset by analyzing x86_64 assembly code.
+// It looks for MOV instructions with FS segment prefix (e.g., MOV rax, FS:[offset]).
+func extractTLSOffsetFromCodeAMD64(code []byte, baseAddr uint64) (int64, error) {
+	it := amd.NewInterpreterWithCode(code)
+	it.CodeAddress = e.Imm(baseAddr)
+
+	offset := e.NewImmediateCapture("tls_offset")
+	expected := e.MemWithSegment8(x86asm.FS, offset)
+
+	for {
+		op, err := it.Step()
+		if err != nil {
+			break
+		}
+
+		if op.Op != x86asm.MOV {
+			continue
+		}
+
+		// Check if the source argument (Args[1]) uses FS segment
+		mem, ok := op.Args[1].(x86asm.Mem)
+		if !ok || mem.Segment != x86asm.FS {
+			continue
+		}
+
+		// Get the destination register's expression
+		dst, ok := op.Args[0].(x86asm.Reg)
+		if !ok {
+			continue
+		}
+
+		actual := it.Regs.GetX86(dst)
+		if actual.Match(expected) {
+			capturedValue := offset.CapturedValue()
+			signedOffset := int64(int32(capturedValue))
+			if (signedOffset < 0 && signedOffset > -4096) || (signedOffset > 0 && signedOffset < 4096) {
+				return signedOffset, nil
+			}
+		}
+	}
+
+	return 0, fmt.Errorf("could not find FS-relative MOV instruction")
+}

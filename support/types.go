@@ -256,6 +256,7 @@ type PyProcInfo struct {
 	AutoTLSKeyAddr                 uint64
 	NoneStructAddr                 uint64
 	Version                        uint16
+	Tls_offset                     int8
 	TsdInfo                        TSDInfo
 	PyThreadState_frame            uint8
 	PyCFrame_current_frame         uint8
@@ -271,7 +272,7 @@ type PyProcInfo struct {
 	PyCodeObject_sizeof            uint8
 	Lasti_is_codeunit              uint8
 	Frame_is_cframe                uint8
-	Pad_cgo_0                      [4]byte
+	Pad_cgo_0                      [2]byte
 }
 type RubyProcInfo struct {
 	Version                      uint32

@@ -410,6 +410,7 @@ typedef struct PyProcInfo {
   u64 autoTLSKeyAddr;
   u64 noneStructAddr;
   u16 version;
+  s8 tls_offset;
   TSDInfo tsdInfo;
   // The Python object member offsets
   u8 PyThreadState_frame;
