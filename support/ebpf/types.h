@@ -302,6 +302,26 @@ enum {
   metricID_UnwindDotnetErrCodeTooLarge,
 
   // number of attempts to read Go custom labels
+  // number of failures to get TSD base for native custom labels
+  metricID_UnwindNativeCustomLabelsErrReadTsdBase,
+
+  // number of failures to read native custom labels thread-local object
+  metricID_UnwindNativeCustomLabelsErrReadData,
+
+  // number of failures to read native custom labels key buffer
+  metricID_UnwindNativeCustomLabelsErrReadKey,
+
+  // number of failures to read native custom labels value buffer
+  metricID_UnwindNativeCustomLabelsErrReadValue,
+
+  // number of successful reads of native custom labels
+  metricID_UnwindNativeCustomLabelsReadSuccesses,
+
+  // total number of failures to add native custom labels
+  metricID_UnwindNativeCustomLabelsAddErrors,
+
+  // total number of successes adding native custom labels
+  metricID_UnwindNativeCustomLabelsAddSuccesses,
   metricID_UnwindGoLabelsAttempts,
 
   // number of failures to read Go custom labels
@@ -529,14 +549,29 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
   ApmSpanID transaction_id;
 } ApmCorrelationBuf;
 
-#define CUSTOM_LABEL_MAX_KEY_LEN COMM_LEN
-// Big enough to hold UUIDs, etc.
-#define CUSTOM_LABEL_MAX_VAL_LEN 48
+#define CUSTOM_LABEL_MAX_KEY_LEN 25
+#define CUSTOM_LABEL_MAX_VAL_LEN 53
 
 typedef struct CustomLabel {
-  u8 key[CUSTOM_LABEL_MAX_KEY_LEN];
-  u8 val[CUSTOM_LABEL_MAX_VAL_LEN];
+  u8 key[CUSTOM_LABEL_MAX_KEY_LEN + 1];
+  u8 val[CUSTOM_LABEL_MAX_VAL_LEN + 1];
 } CustomLabel;
+
+typedef struct NativeCustomLabelsString {
+  size_t len;
+  const unsigned char *buf;
+} NativeCustomLabelsString;
+
+typedef struct NativeCustomLabel {
+  NativeCustomLabelsString key;
+  NativeCustomLabelsString value;
+} NativeCustomLabel;
+
+typedef struct NativeCustomLabelsThreadLocalData {
+  NativeCustomLabel *storage;
+  size_t count;
+  size_t capacity;
+} NativeCustomLabelsSet;
 
 #define MAX_CUSTOM_LABELS 10
 
@@ -758,6 +793,8 @@ typedef struct PerCPURecord {
     V8UnwindScratchSpace v8UnwindScratch;
     // Scratch space for the Python unwinder
     PythonUnwindScratchSpace pythonUnwindScratch;
+    // Native labels scratch space
+    NativeCustomLabel nativeCustomLabel;
     // Go labels scratch
     GoMapBucket goMapBucket;
     // Scratch for Go 1.24 labels
@@ -934,6 +971,14 @@ typedef struct SystemConfig {
 typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
+
+typedef struct NativeCustomLabelsProcInfo {
+  u64 current_set_tls_offset;
+
+  bool has_als_data;
+  u64 als_identity_hash_tls_offset;
+  u64 als_handle_tls_offset;
+} NativeCustomLabelsProcInfo;
 
 typedef struct GoLabelsOffsets {
   u32 m_offset;

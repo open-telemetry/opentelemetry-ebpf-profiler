@@ -6,7 +6,6 @@ package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -38,6 +37,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // Compile time check to make sure times.Times satisfies the interfaces.
@@ -164,15 +164,6 @@ type progLoaderHelper struct {
 	progID uint32
 	// noTailCallTarget indicates if this eBPF program should be added to the tailcallMap.
 	noTailCallTarget bool
-}
-
-// Convert a C-string to Go string.
-func goString(cstr []byte) string {
-	index := bytes.IndexByte(cstr, byte(0))
-	if index < 0 {
-		index = len(cstr)
-	}
-	return strings.Clone(unsafe.String(unsafe.SliceData(cstr), index))
 }
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
@@ -883,7 +874,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	pid := libpf.PID(ptr.Pid)
 	procMeta := t.processManager.MetaForPID(pid)
 	trace := &host.Trace{
-		Comm:             goString(ptr.Comm[:]),
+		Comm:             util.GoString(ptr.Comm[:]),
 		ExecutablePath:   procMeta.Executable,
 		ContainerID:      procMeta.ContainerID,
 		ProcessName:      procMeta.Name,
@@ -907,6 +898,17 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		return nil
 	}
 
+	clLen := int(ptr.Custom_labels.Len)
+	if clLen > 0 {
+		trace.CustomLabels = make(map[string]string, clLen)
+		for i := 0; i < clLen; i++ {
+			lbl := ptr.Custom_labels.Labels[i]
+			key := util.GoString(lbl.Key[:])
+			val := util.GoString(lbl.Val[:])
+			trace.CustomLabels[key] = val
+		}
+	}
+
 	// Trace fields included in the hash:
 	//  - PID, kernel stack ID, length & frame array
 	// Intentionally excluded:
@@ -917,6 +919,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	ptr.Ktime = 0
 	ptr.Origin = 0
 	ptr.Offtime = 0
+	ptr.Custom_labels = support.CustomLabelsArray{}
 	trace.Hash = host.TraceHash(xxh3.Hash128(raw).Lo)
 
 	if ptr.Kernel_stack_id >= 0 {
@@ -924,16 +927,6 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		trace.KernelFrames, err = t.readKernelFrames(ptr.Kernel_stack_id)
 		if err != nil {
 			log.Errorf("Failed to get kernel stack frames for 0x%x: %v", trace.Hash, err)
-		}
-	}
-
-	if ptr.Custom_labels.Len > 0 {
-		trace.CustomLabels = make(map[string]string, int(ptr.Custom_labels.Len))
-		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
-			lbl := ptr.Custom_labels.Labels[i]
-			key := goString(lbl.Key[:])
-			val := goString(lbl.Val[:])
-			trace.CustomLabels[key] = val
 		}
 	}
 

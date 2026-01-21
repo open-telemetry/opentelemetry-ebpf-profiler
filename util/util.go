@@ -4,10 +4,13 @@
 package util // import "go.opentelemetry.io/ebpf-profiler/util"
 
 import (
+	"bytes"
 	"math/bits"
+	"strings"
 	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
+	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 )
@@ -78,4 +81,13 @@ type OnDiskFileIdentifier struct {
 
 func (odfi OnDiskFileIdentifier) Hash32() uint32 {
 	return uint32(hash.Uint64(odfi.InodeNum) + odfi.DeviceID)
+}
+
+// Convert a C-string to Go string.
+func GoString(cstr []byte) string {
+	index := bytes.IndexByte(cstr, byte(0))
+	if index < 0 {
+		index = len(cstr)
+	}
+	return strings.Clone(unsafe.String(unsafe.SliceData(cstr), index))
 }

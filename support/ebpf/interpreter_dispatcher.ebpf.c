@@ -132,6 +132,13 @@ bpf_map_def SEC("maps") go_labels_procs = {
   .max_entries = 128,
 };
 
+bpf_map_def SEC("maps") cl_procs = {
+  .type        = BPF_MAP_TYPE_HASH,
+  .key_size    = sizeof(pid_t),
+  .value_size  = sizeof(NativeCustomLabelsProcInfo),
+  .max_entries = 128,
+};
+
 static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UNUSED UnwindState *state)
 {
   u64 g_addr     = 0;
@@ -192,6 +199,139 @@ static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURe
   tail_call(ctx, PROG_GO_LABELS);
 }
 
+static EBPF_INLINE u64 addr_for_tls_symbol(u64 symbol, bool dtv)
+{
+  u64 tsd_base;
+  if (tsd_get_base((void **)&tsd_base) != 0) {
+    increment_metric(metricID_UnwindNativeCustomLabelsErrReadTsdBase);
+    DEBUG_PRINT("cl: failed to get TSD base for native custom labels");
+    return 0;
+  }
+
+  int err;
+  u64 addr;
+  if (dtv) {
+    // ELF Handling For Thread-Local Storage, p.5.
+    // The thread register points to a "TCB" (Thread Control Block)
+    // whose first element is a pointer to a "DTV"  (Dynamic Thread Vector)...
+    u64 dtv_addr;
+    if ((err = bpf_probe_read_user(&dtv_addr, sizeof(void *), (void *)(tsd_base)))) {
+      increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+      DEBUG_PRINT("Failed to read TLS DTV addr: %d", err);
+      return 0;
+    }
+    // ... and at offsite 16 in the DTV, there is a pointer to the TLS block.
+    if ((err = bpf_probe_read_user(&addr, sizeof(void *), (void *)(dtv_addr + 16)))) {
+      increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+      DEBUG_PRINT("Failed to read main TLS block addr: %d", err);
+      return 0;
+    }
+    addr += symbol;
+  } else {
+    addr = tsd_base + symbol;
+  }
+  return addr;
+}
+
+static EBPF_INLINE bool
+read_labelset_into_trace(PerCPURecord *record, NativeCustomLabelsSet *p_current_set)
+{
+  int err;
+
+  NativeCustomLabelsSet current_set;
+  if ((err = bpf_probe_read_user(&current_set, sizeof(current_set), p_current_set))) {
+    increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+    DEBUG_PRINT("cl: failed to read custom labels data: %d", err);
+    return false;
+  }
+
+  DEBUG_PRINT("cl: native custom labels count: %lu", current_set.count);
+
+  unsigned ct            = 0;
+  CustomLabelsArray *out = &record->trace.custom_labels;
+
+  for (int i = 0; i < MAX_CUSTOM_LABELS; i++) {
+    if (i >= current_set.count)
+      break;
+    NativeCustomLabel *lbl_ptr = current_set.storage + i;
+    if ((err = bpf_probe_read_user(
+           &record->nativeCustomLabel, sizeof(NativeCustomLabel), (void *)(lbl_ptr)))) {
+      increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+      DEBUG_PRINT("cl: failed to read label storage struct: %d", err);
+      return false;
+    }
+    NativeCustomLabel *lbl = &record->nativeCustomLabel;
+    if (!lbl->key.buf)
+      continue;
+    CustomLabel *out_lbl = &out->labels[ct];
+    unsigned klen        = MIN(lbl->key.len, CUSTOM_LABEL_MAX_KEY_LEN);
+    if ((err = bpf_probe_read_user(out_lbl->key, klen, (void *)lbl->key.buf))) {
+      increment_metric(metricID_UnwindNativeCustomLabelsErrReadKey);
+      DEBUG_PRINT("cl: failed to read label key: %d", err);
+      goto exit;
+    }
+    unsigned vlen = MIN(lbl->value.len, CUSTOM_LABEL_MAX_VAL_LEN);
+    if ((err = bpf_probe_read_user(out_lbl->val, vlen, (void *)lbl->value.buf))) {
+      increment_metric(metricID_UnwindNativeCustomLabelsErrReadValue);
+      DEBUG_PRINT("cl: failed to read label value: %d", err);
+      goto exit;
+    }
+    ++ct;
+  }
+exit:
+  out->len = ct;
+  increment_metric(metricID_UnwindNativeCustomLabelsReadSuccesses);
+  return true;
+}
+
+static EBPF_INLINE bool
+get_native_custom_labels(PerCPURecord *record, NativeCustomLabelsProcInfo *proc)
+{
+  int err;
+  bool is_aarch64 =
+#if defined(__aarch64__)
+    true
+#else
+    false
+#endif
+    ;
+  u64 addr = addr_for_tls_symbol(proc->current_set_tls_offset, is_aarch64);
+  if (!addr)
+    return false;
+
+  DEBUG_PRINT("cl: native custom labels data at 0x%llx", addr);
+
+  NativeCustomLabelsSet *p_current_set;
+  if ((err = bpf_probe_read_user(&p_current_set, sizeof(void *), (void *)(addr)))) {
+    increment_metric(metricID_UnwindNativeCustomLabelsErrReadData);
+    DEBUG_PRINT("Failed to read custom labels current set pointer: %d", err);
+    return false;
+  }
+
+  if (!p_current_set) {
+    DEBUG_PRINT("Null labelset");
+    record->trace.custom_labels.len = 0;
+    return true;
+  }
+
+  return read_labelset_into_trace(record, p_current_set);
+}
+
+static EBPF_INLINE void maybe_add_native_custom_labels(PerCPURecord *record)
+{
+  u32 pid                          = record->trace.pid;
+  NativeCustomLabelsProcInfo *proc = bpf_map_lookup_elem(&cl_procs, &pid);
+  if (!proc) {
+    DEBUG_PRINT("cl: %d does not support native custom labels", pid);
+    return;
+  }
+  DEBUG_PRINT("cl: trace is within a process with native custom labels enabled");
+  bool success = get_native_custom_labels(record, proc);
+  if (success)
+    increment_metric(metricID_UnwindNativeCustomLabelsAddSuccesses);
+  else
+    increment_metric(metricID_UnwindNativeCustomLabelsAddErrors);
+}
 static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 {
   u32 pid              = trace->pid; // verifier needs this to be on stack on 4.15 kernel
@@ -250,6 +390,9 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   Trace *trace       = &record->trace;
   UnwindState *state = &record->state;
 
+  // TODO: maybe instead of adding a per-language call here, we
+  // should have "path to CLs" be a standard part of some per-pid map?
+  maybe_add_native_custom_labels(record);
   maybe_add_apm_info(trace);
 
   // If the stack is otherwise empty, push an error for that: we should

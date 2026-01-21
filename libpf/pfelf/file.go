@@ -51,12 +51,11 @@ const (
 
 // List of public errors.
 var (
-	// ErrSymbolNotFound is returned when the requested symbol was not found.
-	ErrSymbolNotFound = errors.New("symbol not found")
-
 	// ErrNotELF is returned when the file is not an ELF file.
 	ErrNotELF = errors.New("not an ELF file")
 )
+
+var ErrNoTLS = errors.New("no TLS program header")
 
 // File represents an open ELF file
 type File struct {
@@ -448,6 +447,16 @@ func (f *File) Section(name string) *Section {
 		}
 	}
 	return nil
+}
+
+// TLS gets the TLS segment (program header)
+func (f *File) TLS() (*Prog, error) {
+	for _, seg := range f.Progs {
+		if seg.Type == elf.PT_TLS {
+			return &seg, nil
+		}
+	}
+	return nil, ErrNoTLS
 }
 
 // findVirtualAddressProg determines the Prog header containing the virtual address.
@@ -927,6 +936,61 @@ func calcSysvHash(s libpf.SymbolName) uint32 {
 	return h & 0xfffffff
 }
 
+// roundUp rounds `value` up to the nearest multiple of `multiple`.
+func roundUp(value, multiple uint64) uint64 {
+	if multiple == 0 {
+		return value
+	}
+	return (value + multiple - 1) / multiple * multiple
+}
+
+// LookupTLSSymbolOffset computes the offset of a symbol
+// in thread-local storage of the main binary.
+//
+// On x86-64,  this is the offset from the fs-base internal register (and should be negative).
+// On aarch64, this is the offset from the tpidr_el0 register (and should be positive).
+//
+// Note that this only works _in the main binary of the executable_.
+// Lookup up a thread-local variable in a shared library requires a more complex
+// procedure.
+func (f *File) LookupTLSSymbolOffset(symbol libpf.SymbolName) (int64, error) {
+	tlsSym, err := f.LookupSymbol(symbol)
+	if err != nil {
+		return 0, err
+	}
+	return f.AdjustTLSSymbol(tlsSym)
+}
+
+func (f *File) AdjustTLSSymbol(tlsSym *libpf.Symbol) (int64, error) {
+	if f.Machine == elf.EM_AARCH64 {
+		return int64(tlsSym.Address), nil
+	}
+	if f.Machine == elf.EM_X86_64 {
+		// Symbol addresses are relative to the start of the
+		// thread-local storage image, but the thread pointer points to the _end_
+		// of the image. So we need to find the size of the image in order to know where the
+		// beginning is.
+		//
+		// Furthermore, the thread pointer (fs-base) respects the TLS segment's alignment
+		// (which is a bit weird given that offsets are negative, but it is in fact true).
+		//
+		// So if the segment is 32-byte aligned (and of size <= 32), and some object is at
+		// byte 4 in the segment,
+		// it will be at offset -28 from fs-base.
+		//
+		// See "ELF Handling For Thread-Local Storage" (https://www.uclibc.org/docs/tls.pdf),
+		// pp. 8 ("Variant II"), 11 ("IA-32 Specific"), 14 ("x86-64 Specific").
+		tls, err := f.TLS()
+		if err != nil {
+			return 0, err
+		}
+		offset := int64(tlsSym.Address) - int64(roundUp(tls.Memsz, tls.Align))
+
+		return offset, nil
+	}
+	return 0, fmt.Errorf("unrecognized machine: %s", f.Machine.String())
+}
+
 // LookupSymbol searches for a given symbol in the ELF
 func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 	if f.gnuHash.addr != 0 {
@@ -955,7 +1019,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 		mask := uint(1)<<(h%ptrSizeBits) |
 			uint(1)<<((h>>hdr.bloomShift)%ptrSizeBits)
 		if bloom&mask != mask {
-			return nil, ErrSymbolNotFound
+			return nil, libpf.ErrSymbolNotFound
 		}
 
 		// Read the initial symbol index to start looking from
@@ -966,7 +1030,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 			return nil, err
 		}
 		if i == 0 {
-			return nil, ErrSymbolNotFound
+			return nil, libpf.ErrSymbolNotFound
 		}
 
 		// Search the hash bucket
@@ -1021,7 +1085,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 		return nil, errors.New("symbol hash not present")
 	}
 
-	return nil, ErrSymbolNotFound
+	return nil, libpf.ErrSymbolNotFound
 }
 
 // LookupSymbol searches for a given symbol in the ELF
