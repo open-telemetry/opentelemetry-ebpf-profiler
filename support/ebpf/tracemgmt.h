@@ -60,7 +60,8 @@ static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event
   int inhibit_key    = event_type;
   bool inhibit_value = true;
 
-  // This is a global notification that triggers eBPF map iteration+processing in Go.
+  // This is a global notification mechanism that may trigger eBPF map
+  // iteration+processing in Go (EVENT_TYPE_GENERIC_PID).
   // To avoid redundant notifications while userspace processing for them is already taking
   // place, we allow latch-like inhibition, where eBPF sets it and Go has to manually reset
   // it, before new notifications are triggered.

@@ -609,8 +609,6 @@ func (s *Symbolizer) pollKobjectClient(ctx context.Context, kobjectClient *kobje
 			// Notify worker thread without blocking
 			select {
 			case s.reloadModules <- libpf.Void{}:
-			case <-ctx.Done():
-				return
 			default:
 			}
 		}
