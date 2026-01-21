@@ -250,10 +250,10 @@ enum {
   // number of failures to read the instruction sequence body
   metricID_UnwindRubyErrReadIseqBody,
 
-  // number of failures to read the instruction sequence encoded size
+  // number of failures to read the instruction sequence encoded size (deprecated)
   metricID_UnwindRubyErrReadIseqEncoded,
 
-  // number of failures to read the instruction sequence size
+  // number of failures to read the instruction sequence size (deprecated)
   metricID_UnwindRubyErrReadIseqSize,
 
   // number of times the unwind instructions requested LR unwinding mid-trace
@@ -306,6 +306,24 @@ enum {
 
   // number of failures to read Go custom labels
   metricID_UnwindGoLabelsFailures,
+
+  // number of invalid instruction sequences sequence
+  metricID_UnwindRubyErrInvalidIseq,
+
+  // number of failures to read the Ruby method definition
+  metricID_UnwindRubyErrReadMethodDef,
+
+  // number of failures to read the Ruby method type
+  metricID_UnwindRubyErrReadMethodType,
+
+  // number of failures to read the Ruby svar while finding CME
+  metricID_UnwindRubyErrReadSvar,
+
+  // number of failures to read the Ruby rbasic flags
+  metricID_UnwindRubyErrReadRbasicFlags,
+
+  // number of failed attempts to read a CME by exceeding max EP checks
+  metricID_UnwindRubyErrCmeMaxEp,
 
   //
   // Metric IDs above are for counters (cumulative values)
@@ -453,8 +471,8 @@ typedef struct RubyProcInfo {
   // rb_iseq_struct offsets:
   u8 body;
 
-  // rb_iseq_constant_body:
-  u8 iseq_type, iseq_encoded, iseq_size;
+  // rb_callable_method_entry_struct
+  u8 cme_method_def;
 
   // size_of_value holds the size of the macro VALUE as defined in
   // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L1136
@@ -666,6 +684,8 @@ typedef struct RubyUnwindState {
   void *stack_ptr;
   // Pointer to the last control frame struct in the Ruby VM stack we want to handle.
   void *last_stack_frame;
+  // Frame for last cfunc before we switched to native unwinder
+  u64 cfunc_saved_frame;
 } RubyUnwindState;
 
 // Container for additional scratch space needed by the HotSpot unwinder.
