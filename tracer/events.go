@@ -214,7 +214,22 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				eventCount++
 
 				// Keep track of min KTime seen in this batch processing loop
-				trace := t.loadBpfTrace(data.RawSample, data.CPU)
+				trace, err := t.loadBpfTrace(data.RawSample, data.CPU)
+				switch {
+				case err == nil:
+					// Fast path for no error.
+				case errors.Is(err, errOriginUnexpected):
+					log.Warnf("skip trace handling: %v", err)
+					continue
+				case errors.Is(err, errRecordTooSmall), errors.Is(err, errRecordUnexpectedSize):
+					log.Errorf("stop receiving traces: %v", err)
+					// TODO: trigger a graceful shutdown
+					return
+				default:
+					log.Warnf("unexpected error handling trace: %v", err)
+					continue
+				}
+
 				if minKTime == 0 || trace.KTime < minKTime {
 					minKTime = trace.KTime
 				}

@@ -106,11 +106,6 @@ struct pt_regs {
   u64 orig_x0;
   s32 syscallno;
   u32 unused2;
-  u64 sdei_ttbr1;
-  u64 pmr_save;
-  u64 stackframe[2];
-  u64 lockdep_hardirqs;
-  u64 exit_rcu;
 };
   #define reg_pc pc
 #else

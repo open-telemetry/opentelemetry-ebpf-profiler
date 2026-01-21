@@ -928,15 +928,22 @@ func (t *Tracer) eBPFMetricsCollector(
 	return metricsUpdates
 }
 
+// Various bpf trace handling related errors:
+var (
+	errRecordTooSmall       = errors.New("trace record too small")
+	errRecordUnexpectedSize = errors.New("unexpected record size")
+	errOriginUnexpected     = errors.New("unexepcted origin")
+)
+
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
 //
 // If the raw trace contains a kernel stack ID, the kernel stack is also
 // retrieved and inserted at the appropriate position.
-func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *libpf.EbpfTrace {
+func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
 	frameListOffs := int(unsafe.Offsetof(support.Trace{}.Frame_data))
 
 	if len(raw) < frameListOffs {
-		panic("trace record too small")
+		return nil, fmt.Errorf("%d < %d: %w", len(raw), frameListOffs, errRecordTooSmall)
 	}
 
 	ptr := traceFromRaw(raw)
@@ -944,7 +951,8 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *libpf.EbpfTrace {
 
 	// NOTE: can't do exact check here: kernel adds a few padding bytes to messages.
 	if len(raw) < frameListOffs+frameDataLen {
-		panic("unexpected record size")
+		return nil, fmt.Errorf("%d < %d: %w", len(raw), frameListOffs+frameDataLen,
+			errRecordUnexpectedSize)
 	}
 
 	pid := libpf.PID(ptr.Pid)
@@ -971,8 +979,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *libpf.EbpfTrace {
 	case support.TraceOriginOffCPU:
 	case support.TraceOriginProbe:
 	default:
-		log.Warnf("Skip handling trace from unexpected %d origin", trace.Origin)
-		return nil
+		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
 	}
 
 	if ptr.Kernel_stack_id >= 0 {
@@ -997,7 +1004,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *libpf.EbpfTrace {
 	trace.FrameData = trace.FrameDataBuf[:ptr.Frame_data_len]
 	copy(trace.FrameData, ptr.Frame_data[:ptr.Frame_data_len])
 
-	return trace
+	return trace, nil
 }
 
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
