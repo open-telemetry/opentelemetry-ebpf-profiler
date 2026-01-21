@@ -1,0 +1,88 @@
+# NOTE:
+# This builder configuration is NOT used to build any official binary.
+# To see the builder manifests used for official binaries,
+# check https://github.com/open-telemetry/opentelemetry-collector-releases
+#
+# For the OpenTelemetry Collector Core official distribution sources, check
+# https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-ebpf-profiler
+
+dist:
+  module: go.opentelemetry.io/ebpf-profiler/cmd/otelcol-ebpf-profiler
+  name: otelcol-ebpf-profiler
+  description: Local OpenTelemetry Collector binary, testing only.
+  version: 0.144.0-dev
+
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.144.0
+  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202601
+    import: go.opentelemetry.io/ebpf-profiler/collector
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.144.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.144.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.144.0
+
+providers:
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.50.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.50.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.50.0
+
+replaces:
+  - go.opentelemetry.io/ebpf-profiler => ../../
+  - go.opentelemetry.io/ebpf-profiler/armhelpers => ../../armhelpers/
+  - go.opentelemetry.io/ebpf-profiler/asm/amd => ../../asm/amd/
+  - go.opentelemetry.io/ebpf-profiler/asm/expression => ../../asm/expression/
+  - go.opentelemetry.io/ebpf-profiler/collector/config => ../../collector/config/
+  - go.opentelemetry.io/ebpf-profiler/collector/internal => ../../collector/internal/
+  - go.opentelemetry.io/ebpf-profiler/host => ../../host/
+  - go.opentelemetry.io/ebpf-profiler/internal/controller => ../../internal/controller/
+  - go.opentelemetry.io/ebpf-profiler/internal/log => ../../internal/log/
+  - go.opentelemetry.io/ebpf-profiler/interpreter => ../../interpreter/
+  - go.opentelemetry.io/ebpf-profiler/interpreter/apmint => ../../interpreter/apmint/
+  - go.opentelemetry.io/ebpf-profiler/interpreter/beam => ../../interpreter/beam/
+  - go.opentelemetry.io/ebpf-profiler/interpreter/dotnet => ../../interpreter/dotnet/
+  - go.opentelemetry.io/ebpf-profiler/interpreter/golabels => ../../interpreter/golabels/
+  - go.opentelemetry.io/ebpf-profiler/interpreter/hotspot => ../../interpreter/hotspot/
+  - go.opentelemetry.io/ebpf-profiler/interpreter/nodev8 => ../../interpreter/nodev8/
+  - go.opentelemetry.io/ebpf-profiler/interpreter/perl => ../../interpreter/perl/
+  - go.opentelemetry.io/ebpf-profiler/interpreter/php => ../../interpreter/php/
+  - go.opentelemetry.io/ebpf-profiler/interpreter/python => ../../interpreter/python/
+  - go.opentelemetry.io/ebpf-profiler/interpreter/ruby => ../../interpreter/ruby/
+  - go.opentelemetry.io/ebpf-profiler/kallsyms => ../../kallsyms/
+  - go.opentelemetry.io/ebpf-profiler/libc => ../../libc/
+  - go.opentelemetry.io/ebpf-profiler/libpf => ../../libpf/
+  - go.opentelemetry.io/ebpf-profiler/libpf/basehash => ../../libpf/basehash/
+  - go.opentelemetry.io/ebpf-profiler/libpf/hash => ../../libpf/hash/
+  - go.opentelemetry.io/ebpf-profiler/libpf/pfelf => ../../libpf/pfelf/
+  - go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap => ../../libpf/pfelf/internal/mmap/
+  - go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe => ../../libpf/pfunsafe/
+  - go.opentelemetry.io/ebpf-profiler/libpf/readatbuf => ../../libpf/readatbuf/
+  - go.opentelemetry.io/ebpf-profiler/libpf/xsync => ../../libpf/xsync/
+  - go.opentelemetry.io/ebpf-profiler/lpm => ../../lpm/
+  - go.opentelemetry.io/ebpf-profiler/maccess => ../../maccess/
+  - go.opentelemetry.io/ebpf-profiler/metrics => ../../metrics/
+  - go.opentelemetry.io/ebpf-profiler/nativeunwind => ../../nativeunwind/
+  - go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo => ../../nativeunwind/elfunwindinfo/
+  - go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes => ../../nativeunwind/stackdeltatypes/
+  - go.opentelemetry.io/ebpf-profiler/pacmask => ../../pacmask/
+  - go.opentelemetry.io/ebpf-profiler/periodiccaller => ../../periodiccaller/
+  - go.opentelemetry.io/ebpf-profiler/process => ../../process/
+  - go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi => ../../processmanager/ebpfapi/
+  - go.opentelemetry.io/ebpf-profiler/remotememory => ../../remotememory/
+  - go.opentelemetry.io/ebpf-profiler/reporter => ../../reporter/
+  - go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset => ../../reporter/internal/orderedset/
+  - go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata => ../../reporter/internal/pdata/
+  - go.opentelemetry.io/ebpf-profiler/reporter/samples => ../../reporter/samples/
+  - go.opentelemetry.io/ebpf-profiler/rlimit => ../../rlimit/
+  - go.opentelemetry.io/ebpf-profiler/stringutil => ../../stringutil/
+  - go.opentelemetry.io/ebpf-profiler/successfailurecounter => ../../successfailurecounter/
+  - go.opentelemetry.io/ebpf-profiler/support => ../../support/
+  - go.opentelemetry.io/ebpf-profiler/testsupport => ../../testsupport/
+  - go.opentelemetry.io/ebpf-profiler/times => ../../times/
+  - go.opentelemetry.io/ebpf-profiler/tools/coredump/cloudstore => ../../tools/coredump/cloudstore/
+  - go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore => ../../tools/coredump/modulestore/
+  - go.opentelemetry.io/ebpf-profiler/tracer => ../../tracer/
+  - go.opentelemetry.io/ebpf-profiler/tracer/types => ../../tracer/types/
+  - go.opentelemetry.io/ebpf-profiler/traceutil => ../../traceutil/
+  - go.opentelemetry.io/ebpf-profiler/util => ../../util/
+  - go.opentelemetry.io/ebpf-profiler/vc => ../../vc/

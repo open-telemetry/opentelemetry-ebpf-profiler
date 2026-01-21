@@ -1,0 +1,35 @@
+receivers:
+  profiling:
+
+processors:
+
+exporters:
+  otlp/local:
+    # equivalent to -collection-agent deprecated cli flag
+    endpoint: http://127.0.0.1:11000
+    # equivalent to -disable-tls deprecated cli flag
+    tls:
+      insecure: true
+      insecure_skip_verify: true
+
+connectors:
+
+service:
+  telemetry:
+    logs:
+      level: info
+      # equivalent to -verbose_mode deprecated cli flag
+      # level: debug
+    # metrics:
+    #   level: detailed
+    #   readers:
+    #     - pull:
+    #         exporter:
+    #           prometheus:
+    #             host: '0.0.0.0'
+    #             port: 8888
+  pipelines:
+    profiles:
+      receivers: [profiling]
+      processors: []
+      exporters: [otlp/local]
