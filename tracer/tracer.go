@@ -1017,7 +1017,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	if err != nil {
 		return err
 	}
-	traceEventMetricCollector, err := t.startTraceEventMonitor(ctx, traceOutChan)
+	traceEventMetricCollector, err := t.startTraceEventMonitor(ctx, traceOutChan, errsChan)
 	if err != nil {
 		return err
 	}

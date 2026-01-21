@@ -15,6 +15,7 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -136,6 +137,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 // error counts.
 func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	traceOutChan chan<- *libpf.EbpfTrace,
+	errsChan chan<- error,
 ) (func() []metrics.Metric, error) {
 	eventsMap := t.ebpfMaps["trace_events"]
 	eventReader, err := perf.NewReader(eventsMap,
@@ -222,8 +224,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 					log.Warnf("skip trace handling: %v", err)
 					continue
 				case errors.Is(err, errRecordTooSmall), errors.Is(err, errRecordUnexpectedSize):
-					log.Errorf("stop receiving traces: %v", err)
-					// TODO: trigger a graceful shutdown
+					errsChan <- fmt.Errorf("stop receiving traces: %v", err)
 					return
 				default:
 					log.Warnf("unexpected error handling trace: %v", err)
