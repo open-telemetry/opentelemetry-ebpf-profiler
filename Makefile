@@ -84,7 +84,7 @@ ebpf-profiler: ebpf generate-collector
 	pushd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../ebpf-profiler ./... && popd
 
 run: ebpf-profiler
-	sudo ./ebpf-profiler --config ${RUN_CONFIG} ${RUN_ARGS}
+	./ebpf-profiler --config ${RUN_CONFIG} ${RUN_ARGS}
 
 rust-targets:
 	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
