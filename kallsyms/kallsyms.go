@@ -598,7 +598,7 @@ func (s *Symbolizer) reloadWorker(ctx context.Context, kobjectClient *kobject.Cl
 }
 
 // pollKobjectClient listens for kernel kobject events to reload kallsyms when needed.
-func (s *Symbolizer) pollKobjectClient(ctx context.Context, kobjectClient *kobject.Client) {
+func (s *Symbolizer) pollKobjectClient(_ context.Context, kobjectClient *kobject.Client) {
 	for {
 		event, err := kobjectClient.Receive()
 		if err != nil {
