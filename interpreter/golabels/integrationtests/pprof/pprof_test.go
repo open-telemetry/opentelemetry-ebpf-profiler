@@ -27,7 +27,7 @@ func setPprofLabels(t *testing.T, ctx context.Context, cookie string, busyFunc f
 	labels := pprof.Labels(
 		"l1"+cookie, "label1"+randomString(16),
 		"l2"+cookie, "label2"+randomString(24),
-		"l3"+cookie, "label3"+randomString(48))
+		"l3"+cookie, "label3"+randomString(54))
 
 	ctx, _ = context.WithTimeout(ctx, 10*time.Second)
 	pprof.Do(ctx, labels, func(context.Context) {

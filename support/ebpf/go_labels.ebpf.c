@@ -38,13 +38,13 @@ get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
     if (i >= labels_slice.len)
       break;
     CustomLabel *lbl = &out->labels[i];
-    u8 klen          = MIN(record->labels[i * 2].len, CUSTOM_LABEL_MAX_KEY_LEN - 1);
+    u8 klen          = MIN(record->labels[i * 2].len, CUSTOM_LABEL_MAX_KEY_LEN);
     if (bpf_probe_read_user(lbl->key, klen, record->labels[i * 2].str)) {
       DEBUG_PRINT(
         "cl: failed to read key for custom label (%lx)", (unsigned long)record->labels[i * 2].str);
       return false;
     }
-    u8 vlen = MIN(record->labels[i * 2 + 1].len, CUSTOM_LABEL_MAX_VAL_LEN - 1);
+    u8 vlen = MIN(record->labels[i * 2 + 1].len, CUSTOM_LABEL_MAX_VAL_LEN);
     if (bpf_probe_read_user(lbl->val, vlen, record->labels[i * 2 + 1].str)) {
       DEBUG_PRINT(
         "cl: failed to read key for custom label (%lx)",
@@ -118,11 +118,11 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr, Go
       char *vstr       = map_value->values[i].str;
       unsigned vlen    = map_value->values[i].len;
       if (tophash != 0 && kstr != NULL) {
-        if (bpf_probe_read_user(lbl->key, MIN(klen, CUSTOM_LABEL_MAX_KEY_LEN - 1), kstr)) {
+        if (bpf_probe_read_user(lbl->key, MIN(klen, CUSTOM_LABEL_MAX_KEY_LEN), kstr)) {
           DEBUG_PRINT("cl: failed to read key for custom label (%lx)", (unsigned long)kstr);
           return false;
         }
-        if (bpf_probe_read_user(lbl->val, MIN(vlen, CUSTOM_LABEL_MAX_VAL_LEN - 1), vstr)) {
+        if (bpf_probe_read_user(lbl->val, MIN(vlen, CUSTOM_LABEL_MAX_VAL_LEN), vstr)) {
           DEBUG_PRINT("cl: failed to read value for custom label");
           return false;
         }

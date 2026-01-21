@@ -1043,6 +1043,16 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
 		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
 	}
 
+	clLen := int(ptr.Custom_labels.Len)
+	if clLen > 0 {
+		trace.CustomLabels = make(map[libpf.String]libpf.String, clLen)
+		for i := 0; i < clLen; i++ {
+			lbl := ptr.Custom_labels.Labels[i]
+			key := goString(lbl.Key[:])
+			val := goString(lbl.Val[:])
+			trace.CustomLabels[key] = val
+		}
+	}
 	if ptr.Kernel_stack_id >= 0 {
 		var err error
 		trace.KernelFrames, err = t.readKernelFrames(ptr.Kernel_stack_id, trace.KernelFrames)

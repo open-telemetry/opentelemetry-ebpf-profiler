@@ -647,6 +647,27 @@ const (
 	// Number of failed attempts to read a CME by exceeding max EP checks
 	IDUnwindRubyErrCmeMaxEp = 285
 
+	// Number of failures to get TSD base for native custom labels
+	IDUnwindNativeCustomLabelsErrReadTsdBase = 286
+
+	// Number of failures to read native custom labels thread-local object
+	IDUnwindNativeCustomLabelsErrReadData = 287
+
+	// Number of failures to read native custom labels key buffer
+	IDUnwindNativeCustomLabelsErrReadKey = 288
+
+	// Number of failures to read native custom labels value buffer
+	IDUnwindNativeCustomLabelsErrReadValue = 289
+
+	// Number of successful reads of native custom labels
+	IDUnwindNativeCustomLabelsReadSuccesses = 290
+
+	// Total number of failures to add native custom labels
+	IDUnwindNativeCustomLabelsAddErrors = 291
+
+	// Number of successes adding native custom labels
+	IDUnwindNativeCustomLabelsAddSuccesses = 292
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 286
+	IDMax = 293
 )

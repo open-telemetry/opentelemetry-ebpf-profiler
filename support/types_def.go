@@ -134,6 +134,7 @@ type PerlProcInfo C.PerlProcInfo
 type PyProcInfo C.PyProcInfo
 type RubyProcInfo C.RubyProcInfo
 type V8ProcInfo C.V8ProcInfo
+type NativeCustomLabelsProcInfo C.NativeCustomLabelsProcInfo
 
 const (
 	Sizeof_StackDelta = C.sizeof_StackDelta
@@ -209,6 +210,9 @@ const (
 	RubyFrameTypeCmeCfunc = C.RUBY_FRAME_TYPE_CME_CFUNC
 	RubyFrameTypeIseq     = C.RUBY_FRAME_TYPE_ISEQ
 	RubyFrameTypeGc       = C.RUBY_FRAME_TYPE_GC
+
+	CustomLabelMaxKeyLen = C.CUSTOM_LABEL_MAX_KEY_LEN
+	CustomLabelMaxValLen = C.CUSTOM_LABEL_MAX_VAL_LEN
 )
 
 var MetricsTranslation = []metrics.MetricID{

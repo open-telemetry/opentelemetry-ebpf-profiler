@@ -2063,5 +2063,54 @@
     "name": "UnwindRubyErrCmeMaxEp",
     "field": "bpf.ruby.errors.read_cme_max_ep",
     "id": 285
+  },
+  {
+    "description": "Number of failures to get TSD base for native custom labels",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsErrReadTsdBase",
+    "field": "bpf.native_custom_labels.errors.read_tsd_base",
+    "id": 286
+  },
+  {
+    "description": "Number of failures to read native custom labels thread-local object",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsErrReadData",
+    "field": "bpf.native_custom_labels.errors.read_data",
+    "id": 287
+  },
+  {
+    "description": "Number of failures to read native custom labels key buffer",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsErrReadKey",
+    "field": "bpf.native_custom_labels.errors.read_key",
+    "id": 288
+  },
+  {
+    "description": "Number of failures to read native custom labels value buffer",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsErrReadValue",
+    "field": "bpf.native_custom_labels.errors.read_value",
+    "id": 289
+  },
+  {
+    "description": "Number of successful reads of native custom labels",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsReadSuccesses",
+    "field": "bpf.native_custom_labels.read.successes",
+    "id": 290
+  },
+  {
+    "description": "Total number of failures to add native custom labels",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsAddErrors",
+    "field": "bpf.native_custom_labels.add.errors",
+    "id": 291
+  },
+  {
+    "description": "Number of successes adding native custom labels",
+    "type": "counter",
+    "name": "UnwindNativeCustomLabelsAddSuccesses",
+    "field": "bpf.native_custom_labels.add.successes",
+    "id": 292
   }
 ]

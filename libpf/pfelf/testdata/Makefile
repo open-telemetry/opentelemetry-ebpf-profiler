@@ -6,7 +6,15 @@ OBJCOPY ?= objcopy
 BINARIES=fixed-address \
 	go-binary \
 	the_notorious_build_id \
-	without-debug-syms
+	without-debug-syms \
+	tls-tbss \
+	tls-aligned-tbss \
+	tls-tdata \
+	tls-aligned-tdata \
+	tls-tbss-tdata \
+	tls-aligned-tbss-tdata \
+	tls-tbss-aligned-tdata \
+	tls-aligned-tbss-aligned-tdata
 
 all: $(BINARIES)
 
@@ -31,3 +39,28 @@ the_notorious_build_id:
 go-binary: gotest.go
 	go build -o go-binary -ldflags "-w -s" gotest.go
 
+# -Wl,-E makes all the symbols dynamic.
+
+tls-tbss: tls-lookup.c
+	$(CC) -Wl,-E -DHAS_TBSS=1 $< -o $@
+
+tls-aligned-tbss: tls-lookup.c
+	$(CC) -Wl,-E -DHAS_TBSS=1 -DTBSS_ALIGN=1 $< -o $@
+
+tls-tdata: tls-lookup.c
+	$(CC) -Wl,-E -DHAS_TDATA=1 $< -o $@
+
+tls-aligned-tdata: tls-lookup.c
+	$(CC) -Wl,-E -DHAS_TDATA=1 -DTDATA_ALIGN=1 $< -o $@
+
+tls-tbss-tdata: tls-lookup.c
+	$(CC) -Wl,-E -DHAS_TBSS=1 -DHAS_TDATA=1 $< -o $@
+
+tls-aligned-tbss-tdata: tls-lookup.c
+	$(CC) -Wl,-E -DHAS_TBSS=1 -DTBSS_ALIGN=1 -DHAS_TDATA=1 $< -o $@
+
+tls-tbss-aligned-tdata: tls-lookup.c
+	$(CC) -Wl,-E -DHAS_TBSS=1 -DHAS_TDATA=1 -DTDATA_ALIGN=1 $< -o $@
+
+tls-aligned-tbss-aligned-tdata: tls-lookup.c
+	$(CC) -Wl,-E -DHAS_TBSS=1 -DTDATA_ALIGN=1 -DHAS_TDATA=1 -DTDATA_ALIGN=1 $< -o $@
