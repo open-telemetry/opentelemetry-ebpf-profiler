@@ -52,7 +52,7 @@ case "$qemu_arch" in
         bb_args+=(-a amd64)
         ;;
     aarch64)
-        additionalQemuArgs+=" -machine virt -cpu max"
+        additionalQemuArgs+=" -machine virt -cpu cortex-a72"
         bb_args+=(-a arm64)
         ;;
 esac
