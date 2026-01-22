@@ -225,6 +225,7 @@ func (d *dotnetData) loadIntrospectionData() {
 		vms.PatchpointInfo.SizeOf = 32
 		vms.PatchpointInfo.NumberOfLocals = 8
 		vms.Module.SimpleName = 0x108
+		vms.VirtualCallStubManager.Next = 0x268
 		d.walkRangeSectionsMethod = (*dotnetInstance).walkRangeSectionMap
 	}
 
@@ -251,10 +252,6 @@ func (d *dotnetData) loadIntrospectionData() {
 		vms.PrecodeStubManager.FixupPrecodeRangeList = vms.StubManager.SizeOf +
 			vms.LockedRangeList.SizeOf
 		vms.VirtualCallStubManager.Next = 0x6e8
-	case 8:
-		vms.VirtualCallStubManager.Next = 0x268
-	case 9:
-		vms.VirtualCallStubManager.Next = 0x260
 	}
 
 	// Calculated masks
