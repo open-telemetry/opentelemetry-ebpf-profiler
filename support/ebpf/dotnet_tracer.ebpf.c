@@ -73,7 +73,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
     // We can read full scratch buffer, adjust map_start so that last entry read corresponds
     // pc_delta
     map_start +=
-      pc_delta / DOTNET_CODE_BYTES_PER_ENTRY * sizeof(u32) - sizeof(scratch->map) + sizeof(u32);
+      pc_delta / DOTNET_CODE_BYTES_PER_ENTRY * sizeof(u32) - sizeof(scratch->map) / 2 + sizeof(u32);
     offs = 0;
   }
   offs %= map_elements;

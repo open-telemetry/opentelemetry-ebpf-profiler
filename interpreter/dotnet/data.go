@@ -204,7 +204,7 @@ func (d *dotnetData) loadIntrospectionData() {
 
 	// Version specific introspection data
 	switch d.version >> 24 {
-	case 6:
+	case 6, 7:
 		vms.DacTable.DelegateInvokeStubManager = 0xe
 		vms.DacTable.VirtualCallStubManagerManager = 0xf
 		vms.RangeSection.Next = 0x18
@@ -212,19 +212,29 @@ func (d *dotnetData) loadIntrospectionData() {
 		vms.RangeSection.HeapList = 0x30
 		vms.RangeSection.Module = 0x30
 		vms.RangeSection.SizeOf = 0x38
+		d.walkRangeSectionsMethod = (*dotnetInstance).walkRangeSectionList
+	case 8, 9:
+		vms.DacTable.VirtualCallStubManagerManager = 0xe
+		vms.RangeSection.Flags = 0x10
+		vms.RangeSection.Module = 0x20
+		vms.RangeSection.HeapList = 0x28
+		vms.RangeSection.RangeList = 0x30
+		vms.RangeSection.SizeOf = 0x38
+		vms.CodeRangeMapRangeList.RangeListType = 0x120
+		vms.MethodDesc.TokenRemainderBits = 12
+		vms.PatchpointInfo.SizeOf = 32
+		vms.PatchpointInfo.NumberOfLocals = 8
+		vms.Module.SimpleName = 0x108
+		d.walkRangeSectionsMethod = (*dotnetInstance).walkRangeSectionMap
+	}
+
+	switch d.version >> 24 {
+	case 6:
 		vms.MethodDesc.TokenRemainderBits = 14
 		vms.Module.SimpleName = 0x8
 		vms.PatchpointInfo.SizeOf = 20
 		vms.PatchpointInfo.NumberOfLocals = 0
-		d.walkRangeSectionsMethod = (*dotnetInstance).walkRangeSectionList
 	case 7:
-		vms.DacTable.DelegateInvokeStubManager = 0xe
-		vms.DacTable.VirtualCallStubManagerManager = 0xf
-		vms.RangeSection.Next = 0x18
-		vms.RangeSection.Flags = 0x28
-		vms.RangeSection.HeapList = 0x30
-		vms.RangeSection.Module = 0x30
-		vms.RangeSection.SizeOf = 0x38
 		vms.MethodDesc.TokenRemainderBits = 13
 		// Module inherits from ModuleBase with quite a bit of data
 		// see: https://github.com/dotnet/runtime/pull/71271
@@ -241,21 +251,10 @@ func (d *dotnetData) loadIntrospectionData() {
 		vms.PrecodeStubManager.FixupPrecodeRangeList = vms.StubManager.SizeOf +
 			vms.LockedRangeList.SizeOf
 		vms.VirtualCallStubManager.Next = 0x6e8
-		d.walkRangeSectionsMethod = (*dotnetInstance).walkRangeSectionList
 	case 8:
-		vms.DacTable.VirtualCallStubManagerManager = 0xe
-		vms.RangeSection.Flags = 0x10
-		vms.RangeSection.Module = 0x20
-		vms.RangeSection.HeapList = 0x28
-		vms.RangeSection.RangeList = 0x30
-		vms.RangeSection.SizeOf = 0x38
-		vms.CodeRangeMapRangeList.RangeListType = 0x120
-		vms.MethodDesc.TokenRemainderBits = 12
-		vms.Module.SimpleName = 0x108
-		vms.PatchpointInfo.SizeOf = 32
-		vms.PatchpointInfo.NumberOfLocals = 8
 		vms.VirtualCallStubManager.Next = 0x268
-		d.walkRangeSectionsMethod = (*dotnetInstance).walkRangeSectionMap
+	case 9:
+		vms.VirtualCallStubManager.Next = 0x260
 	}
 
 	// Calculated masks

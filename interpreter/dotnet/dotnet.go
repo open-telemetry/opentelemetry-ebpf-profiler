@@ -149,7 +149,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	version := dotnetVer(uint32(major), uint32(minor), uint32(release))
 
 	// dotnet8 requires additional support for RangeSectionMap and MethodDesc updates
-	if version < dotnetVer(6, 0, 0) || version >= dotnetVer(9, 0, 0) {
+	if version < dotnetVer(6, 0, 0) || version >= dotnetVer(10, 0, 0) {
 		return nil, fmt.Errorf("dotnet version %d.%d.%d not supported",
 			major, minor, release)
 	}
