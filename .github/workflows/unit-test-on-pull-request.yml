@@ -161,6 +161,7 @@ jobs:
           - { target_arch: amd64, kernel: 6.9.1 }
           - { target_arch: amd64, kernel: 6.12.16 }
           - { target_arch: amd64, kernel: 6.16 }
+          - { target_arch: amd64, kernel: 6.18 }
 
           # ARM64 (NOTE: older ARM64 kernels are not available in Cilium repos)
           - { target_arch: arm64, kernel: 6.6.31 }
@@ -170,6 +171,7 @@ jobs:
           # qemu has a bug that prevents booting the following kernel on ARM,
           # fixed in qemu 9.2
           #- { target_arch: arm64, kernel: 6.16 }
+          - { target_arch: arm64, kernel: 6.18 }
     steps:
       - name: Disable man-db
         run: |
