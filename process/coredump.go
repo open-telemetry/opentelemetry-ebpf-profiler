@@ -16,6 +16,7 @@ import (
 	"hash/fnv"
 	"io"
 	"strings"
+	"sync/atomic"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -323,6 +324,9 @@ func (cd *CoredumpProcess) OpenELF(path string) (*pfelf.File, error) {
 	return nil, fmt.Errorf("ELF file `%s` not found", path)
 }
 
+// Global inode counter to generate unique inode for each coredump file
+var curInode atomic.Uint64
+
 // getFile returns (creating if needed) a matching CoredumpFile for given file name.
 func (cd *CoredumpProcess) getFile(name string) *CoredumpFile {
 	if cf, ok := cd.files[name]; ok {
@@ -333,7 +337,7 @@ func (cd *CoredumpProcess) getFile(name string) *CoredumpFile {
 	}
 	cf := &CoredumpFile{
 		parent: cd,
-		inode:  uint64(len(cd.files) + 1),
+		inode:  curInode.Add(1),
 		Name:   libpf.Intern(name),
 	}
 	cd.files[name] = cf
