@@ -139,7 +139,7 @@ type rubyData struct {
 	// Is it possible to read the classpath
 	hasClassPath bool
 
-	// Is it possible to objspace information
+	// Is it possible to read objspace information
 	hasObjspace bool
 
 	// Is it possible to read the global symbol table (to symbolize cfuncs)
@@ -1033,6 +1033,8 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 			gcModeStr = rubyGcSweeping
 		case rubyGcModeCompacting:
 			gcModeStr = rubyGcCompacting
+		default:
+			gcModeStr = libpf.Intern(fmt.Sprintf("(unknown action %d)", gcMode))		
 		}
 
 		frames.Append(&libpf.Frame{
@@ -1419,9 +1421,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	vms.thread_struct.vm = 32
 
-	// objspace address varies a lot by version since it is deep in the vm struct
-	// here only specific versions are supported for ruby 3.1.0+, as rubies older
-	// than this fail to compile in modern toolchains making it difficult to
+	// objspace address varies a lot by ruby version since it is deep in the vm struct.
+	// Here only specific versions are supported for ruby 3.1.0+, as versions older
+	// than this fail to compile with modern toolchains making it difficult to
 	// verify their offsets.
 	rid.hasObjspace = false
 	switch {
