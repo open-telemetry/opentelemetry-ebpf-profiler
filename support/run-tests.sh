@@ -52,6 +52,12 @@ case "$qemu_arch" in
         bb_args+=(-a amd64)
         ;;
     aarch64)
+        # Newer Linux kernels may fail to load with QEMU for arm64.
+        # This issue has been addressed in QEMU 9.2+ by
+        # https://github.com/qemu/qemu/commit/1505b651fdbd9af59a4a90876a62ae7ea2d4cd39.
+        #
+        # To test newer Linux kernels with older QEMU versions, a dedicated,
+        # unaffected CPU should be set for the QEMU configuration.
         additionalQemuArgs+=" -machine virt -cpu cortex-a72"
         bb_args+=(-a arm64)
         ;;
