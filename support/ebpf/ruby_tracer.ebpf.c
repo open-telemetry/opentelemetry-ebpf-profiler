@@ -17,12 +17,16 @@ struct ruby_procs_t {
 // The number of Ruby frames to unwind per frame-unwinding eBPF program. If
 // we start running out of instructions in the walk_ruby_stack program, one
 // option is to adjust this number downwards.
-// NOTE the maximum size stack is this times 33
+// NOTE: the maximum size stack is FRAMES_PER_WALK_RUBY_STACK*33.
 #define FRAMES_PER_WALK_RUBY_STACK 32
 // When resolving a CME, we need to traverse environment pointers until we
 // find IMEMO_MENT. Since we can't do a while loop, we have to bound this
 // the max encountered in experimentation on a production rails app is 6.
 // This increases insn for the kernel verifier all code in the ep check "loop"
+// is M*N for instruction checks, so be extra sensitive about additions there.
+// find IMEMO_MENT. Since we can't do a while loop, we have to bound this.
+// The max encountered empirically on a production rails app is 6.
+// This increases insn for the kernel verifier: all code in the ep check "loop"
 // is M*N for instruction checks, so be extra sensitive about additions there.
 // If we get ERR_RUBY_READ_CME_MAX_EP regularly, we may need to raise it.
 #define MAX_EP_CHECKS              10
@@ -163,13 +167,14 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
   current_ep = (void *)control_frame.ep;
   pc         = (u64)control_frame.pc;
 
-  // Read the vm env of from the 'base' ep
+  // Read the vm env from the 'base' ep
   if (bpf_probe_read_user(
         &vm_env, sizeof(vm_env), (void *)(current_ep - sizeof(vm_env) + sizeof(void *)))) {
     DEBUG_PRINT("ruby: failed to get vm env");
     increment_metric(metricID_UnwindRubyErrReadEp);
     return ERR_RUBY_READ_EP;
   }
+
   // First method entry to check
   me_or_cref  = (u64)vm_env.me_cref;
   // Check frame flags to see if it is a cfunc
@@ -195,10 +200,10 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
   // https://github.com/ruby/ruby/blob/v3_4_7/vm_insnhelper.c#L769
   UNROLL for (ep_check = 0; ep_check < MAX_EP_CHECKS; ++ep_check)
   {
-    // This code emulate's ruby's check_method_entry to traverse the environment
+    // This code emulates ruby's check_method_entry to traverse the environment
     // until it finds a method entry. Since the function calls itself, the code
     // is a bit out of order to try and optimize running as few instructions as
-    // possible, since this is in the M * N part of the loop and we need the code
+    // possible, since this is in the M*N part of the loop and we need the code
     // to pass the kernel verifier.
     // https://github.com/ruby/ruby/blob/v3_4_7/vm_insnhelper.c#L743
     if (me_or_cref != 0) {
@@ -232,8 +237,8 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
     me_or_cref = (u64)vm_env.me_cref;
   }
 
-  // TODO perhaps rather than bailing on MAX_EP, we should push a dummy frame instead
-  // So we can continue unwinding the stack.
+  // TODO: Perhaps rather than bailing on MAX_EP, we should push a dummy frame instead,
+  // so we can continue unwinding the stack.
   if (ep_check >= MAX_EP_CHECKS)
     return ERR_RUBY_READ_CME_MAX_EP;
 
