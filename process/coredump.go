@@ -400,6 +400,19 @@ func (cd *CoredumpProcess) parseMappings(desc []byte,
 			// Synthesize non-zero device and inode indicating this is a filebacked mapping.
 			mapping.Device = 1
 			mapping.Inode = cf.inode
+		} else {
+			// This file backed mapping is not in the coredump LOAD tables
+			// Likely a executable mapping excluded by core_filter. Construct
+			// the mappings assuming R+X.
+			cd.mappings = append(cd.mappings, Mapping{
+				Vaddr:      entry.Start,
+				Length:     entry.End - entry.Start,
+				Flags:      elf.PF_R + elf.PF_X,
+				FileOffset: entry.FileOffset * hdr.PageSize,
+				Device:     1,
+				Inode:      cf.inode,
+				Path:       cf.Name,
+			})
 		}
 		strs = strs[fnlen+1:]
 	}
