@@ -171,7 +171,7 @@ jobs:
           # qemu has a bug that prevents booting the following kernel on ARM,
           # fixed in qemu 9.2
           #- { target_arch: arm64, kernel: 6.16 }
-          - { target_arch: arm64, kernel: 6.18 }
+          #- { target_arch: arm64, kernel: 6.18 }
     steps:
       - name: Disable man-db
         run: |
