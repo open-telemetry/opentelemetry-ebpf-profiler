@@ -14,7 +14,7 @@ gdb $(which ruby)
 
 (gdb) start tools/coredump/testsources/ruby/loop.rb
 
-(gdb) break gc_mark_finish
+(gdb) break gc_marks_finish
 
 (gdb) continue
 ```
@@ -24,7 +24,7 @@ To break during sweeping, `gc_sweep_step` can be used.
 We should be able to verify the GC state by running:
 
 ```
-(gdb) print objectspace.flags
+(gdb) print objspace.flags
 $2 = {mode = 2, immediate_sweep = 0, dont_gc = 0, dont_incremental = 0, during_gc = 1, during_compacting = 0, during_reference_updating = 0, gc_stressful = 0, has_newobj_hook = 0, during_minor_gc = 1,
   during_incremental_marking = 0, measure_gc = 1}
 ```
