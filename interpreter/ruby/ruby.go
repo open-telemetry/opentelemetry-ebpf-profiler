@@ -1034,7 +1034,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error
 		case rubyGcModeCompacting:
 			gcModeStr = rubyGcCompacting
 		default:
-			gcModeStr = libpf.Intern(fmt.Sprintf("(unknown action %d)", gcMode))		
+			gcModeStr = libpf.Intern(fmt.Sprintf("(unknown gc mode %d)", gcMode))
 		}
 
 		frames.Append(&libpf.Frame{
