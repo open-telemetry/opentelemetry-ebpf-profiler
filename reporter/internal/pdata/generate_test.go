@@ -89,8 +89,8 @@ func TestGetDummyMappingIndex(t *testing.T) {
 
 			require.Equal(t, len(tt.wantMappingTable), dic.MappingTable().Len())
 			for i, v := range tt.wantMappingTable {
-				mapp := dic.MappingTable().At(i)
-				assert.Equal(t, v, mapp.FilenameStrindex())
+				mappingTable := dic.MappingTable().At(i)
+				assert.Equal(t, v, mappingTable.FilenameStrindex())
 			}
 		})
 	}
