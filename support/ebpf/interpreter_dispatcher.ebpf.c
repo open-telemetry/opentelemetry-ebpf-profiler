@@ -188,6 +188,29 @@ static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURe
   tail_call(ctx, PROG_GO_LABELS);
 }
 
+// TODO: move this to the right place
+struct shared_span_trace_t {
+  __uint(type, BPF_MAP_TYPE_HASH);
+  __type(key, u64);
+  __type(value, SpanTraceInfo);
+  __uint(max_entries, 4096);
+} shared_span_trace SEC(".maps");
+
+// TODO: add some documentation
+static EBPF_INLINE void maybe_add_shared_span_trace_id(Trace *trace)
+{
+  u64 id = bpf_get_current_pid_tgid();
+
+  SpanTraceInfo *info = bpf_map_lookup_elem(&shared_span_trace, &id);
+  if (!info) {
+    return;
+  }
+
+  trace->apm_trace_id.as_int.hi    = info->trace_id.as_int.hi;
+  trace->apm_trace_id.as_int.lo    = info->trace_id.as_int.lo;
+  trace->apm_transaction_id.as_int = info->span_id.as_int;
+}
+
 static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 {
   u32 pid              = trace->pid; // verifier needs this to be on stack on 4.15 kernel
@@ -247,6 +270,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   UnwindState *state = &record->state;
 
   maybe_add_apm_info(trace);
+  maybe_add_shared_span_trace_id(trace);
 
   // If the stack is otherwise empty, push an error for that: we should
   // never encounter empty stacks for successful unwinding.

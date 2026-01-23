@@ -528,6 +528,11 @@ typedef union ApmSpanID {
 
 _Static_assert(sizeof(ApmSpanID) == 8, "unexpected trace ID size");
 
+typedef struct __attribute__((packed)) SpanTraceInfo {
+  ApmTraceID trace_id;
+  ApmSpanID span_id;
+} SpanTraceInfo;
+
 // Defines the format of the APM correlation TLS buffer.
 //
 // Specification:

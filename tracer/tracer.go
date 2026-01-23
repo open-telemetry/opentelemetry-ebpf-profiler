@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -558,6 +559,18 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 		if mapName == "sched_times" && cfg.OffCPUThreshold == 0 {
 			// Off CPU Profiling is disabled. So do not load this map.
 			continue
+		}
+
+		if mapName == "shared_span_trace" {
+			// Try to load it from a known path:
+			mPath := path.Join("/sys/fs/bpf", "otel_ebpf", mapName)
+			ebpfMap, err := cebpf.LoadPinnedMap(mPath, &cebpf.LoadPinOptions{ReadOnly: true, WriteOnly: false})
+			if err == nil {
+				log.Infof("Using shared map for span/trace ID communciation")
+				ebpfMaps[mapName] = ebpfMap
+				continue
+			}
+			// The shared map does not yet exist - so continue as usual
 		}
 
 		if !types.IsMapEnabled(mapName, cfg.IncludeTracers) {
