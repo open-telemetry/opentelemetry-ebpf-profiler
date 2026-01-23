@@ -16,6 +16,7 @@ import (
 	"hash/fnv"
 	"io"
 	"strings"
+	"sync/atomic"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -323,6 +324,9 @@ func (cd *CoredumpProcess) OpenELF(path string) (*pfelf.File, error) {
 	return nil, fmt.Errorf("ELF file `%s` not found", path)
 }
 
+// Global inode counter to generate unique inode for each coredump file
+var curInode atomic.Uint64
+
 // getFile returns (creating if needed) a matching CoredumpFile for given file name.
 func (cd *CoredumpProcess) getFile(name string) *CoredumpFile {
 	if cf, ok := cd.files[name]; ok {
@@ -333,7 +337,7 @@ func (cd *CoredumpProcess) getFile(name string) *CoredumpFile {
 	}
 	cf := &CoredumpFile{
 		parent: cd,
-		inode:  uint64(len(cd.files) + 1),
+		inode:  curInode.Add(1),
 		Name:   libpf.Intern(name),
 	}
 	cd.files[name] = cf
@@ -400,6 +404,19 @@ func (cd *CoredumpProcess) parseMappings(desc []byte,
 			// Synthesize non-zero device and inode indicating this is a filebacked mapping.
 			mapping.Device = 1
 			mapping.Inode = cf.inode
+		} else {
+			// This file backed mapping is not in the coredump LOAD tables
+			// Likely a executable mapping excluded by core_filter. Construct
+			// the mappings assuming R+X.
+			cd.mappings = append(cd.mappings, Mapping{
+				Vaddr:      entry.Start,
+				Length:     entry.End - entry.Start,
+				Flags:      elf.PF_R + elf.PF_X,
+				FileOffset: entry.FileOffset * hdr.PageSize,
+				Device:     1,
+				Inode:      cf.inode,
+				Path:       cf.Name,
+			})
 		}
 		strs = strs[fnlen+1:]
 	}
