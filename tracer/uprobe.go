@@ -4,19 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	cebpf "github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
-	log "github.com/sirupsen/logrus"
-	"github.com/toliu/opentelemetry-ebpf-profiler/libpf"
-	"github.com/toliu/opentelemetry-ebpf-profiler/process"
-	"github.com/toliu/opentelemetry-ebpf-profiler/processmanager"
-	"github.com/toliu/opentelemetry-ebpf-profiler/reporter"
-	"github.com/toliu/opentelemetry-ebpf-profiler/reporter/hotspotmem"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
 	"unsafe"
+
+	cebpf "github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
+	log "github.com/sirupsen/logrus"
+
+	"github.com/toliu/opentelemetry-ebpf-profiler/libpf"
+	"github.com/toliu/opentelemetry-ebpf-profiler/process"
+	"github.com/toliu/opentelemetry-ebpf-profiler/processmanager"
+	"github.com/toliu/opentelemetry-ebpf-profiler/reporter"
+	"github.com/toliu/opentelemetry-ebpf-profiler/reporter/hotspotmem"
 )
 
 // #include "../support/ebpf/types.h"
@@ -274,9 +276,8 @@ func (t *Tracer) StartMemProfile(ctx context.Context, memProfileBlock uint64) {
 						t.detachMemProfile(pid)
 						t.memProfileTargetPids.Delete(k)
 					} else {
-						proc := process.New(pid)
-						t.processManager.SynchronizeProcess(proc)
-						if err := t.TriggerMemProfile(proc); err != nil {
+						t.pidEvents <- pid
+						if err := t.TriggerMemProfile(process.New(pid)); err != nil {
 							log.Debugf("failed to trigger memprofile for process %v: %v", k, err)
 						}
 					}
