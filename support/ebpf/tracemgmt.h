@@ -312,7 +312,8 @@ static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u
   //      4   frame flags
   //      4   number of 64-bit 'variable' fields
   //     52   type specific data
-  return ((u64)frame_type << 60) | ((u64)flags << 56) | ((u64)length << 52) | data;
+  return ((u64)frame_type << 60) | ((u64)flags << 56) | ((u64)length << 52) |
+         (data & ((1ULL << 52) - 1));
 }
 
 // Push a data frame with variable length payload. This function allocates space from

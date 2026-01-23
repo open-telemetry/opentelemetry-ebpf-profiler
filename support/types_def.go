@@ -40,17 +40,18 @@ const (
 )
 
 const (
-	ProgUnwindStop    = C.PROG_UNWIND_STOP
-	ProgUnwindNative  = C.PROG_UNWIND_NATIVE
-	ProgUnwindHotspot = C.PROG_UNWIND_HOTSPOT
-	ProgUnwindPython  = C.PROG_UNWIND_PYTHON
-	ProgUnwindPHP     = C.PROG_UNWIND_PHP
-	ProgUnwindRuby    = C.PROG_UNWIND_RUBY
-	ProgUnwindPerl    = C.PROG_UNWIND_PERL
-	ProgUnwindV8      = C.PROG_UNWIND_V8
-	ProgUnwindDotnet  = C.PROG_UNWIND_DOTNET
-	ProgGoLabels      = C.PROG_GO_LABELS
-	ProgUnwindBEAM    = C.PROG_UNWIND_BEAM
+	ProgUnwindStop     = C.PROG_UNWIND_STOP
+	ProgUnwindNative   = C.PROG_UNWIND_NATIVE
+	ProgUnwindHotspot  = C.PROG_UNWIND_HOTSPOT
+	ProgUnwindPython   = C.PROG_UNWIND_PYTHON
+	ProgUnwindPHP      = C.PROG_UNWIND_PHP
+	ProgUnwindRuby     = C.PROG_UNWIND_RUBY
+	ProgUnwindPerl     = C.PROG_UNWIND_PERL
+	ProgUnwindV8       = C.PROG_UNWIND_V8
+	ProgUnwindDotnet   = C.PROG_UNWIND_DOTNET
+	ProgUnwindDotnet10 = C.PROG_UNWIND_DOTNET10
+	ProgGoLabels       = C.PROG_GO_LABELS
+	ProgUnwindBEAM     = C.PROG_UNWIND_BEAM
 )
 
 const (
