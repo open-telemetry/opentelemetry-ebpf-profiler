@@ -53,5 +53,6 @@
 #define RUBY_FRAME_TYPE_CME_ISEQ  1
 #define RUBY_FRAME_TYPE_CME_CFUNC 2
 #define RUBY_FRAME_TYPE_ISEQ      3
+#define RUBY_FRAME_TYPE_JIT       5
 
 #endif
