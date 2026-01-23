@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Set up Go Stable
@@ -26,7 +26,7 @@ jobs:
         with:
           go-version: stable
       - name: Cache coredump modules
-        uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
         with:
           path: tools/coredump/modulecache
           key: coredumps-collector-${{ hashFiles('tools/coredump/testdata/*/*.json') }}

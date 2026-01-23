@@ -1,0 +1,77 @@
+{
+  "coredump-ref": "a69bc3dea27b197295177ab1645783ddf27e682fafc9102ef7723b05c528285c",
+  "threads": [
+    {
+      "lwp": 28509,
+      "frames": [
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "recur_fibo+4 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:7",
+        "<module>+9 in /tmp/opentelemetry-ebpf-profiler/tools/coredump/testsources/python/fib.py:10",
+        "?+0x0",
+        "python3.14+0x5454c6",
+        "python3.14+0x53ffa0",
+        "python3.14+0x6b741e",
+        "python3.14+0x6b3dcf",
+        "python3.14+0x6b377d",
+        "python3.14+0x6b3271",
+        "python3.14+0x6b0552",
+        "python3.14+0x65ea68",
+        "libc.so.6+0x29f74",
+        "libc.so.6+0x2a026",
+        "python3.14+0x65de70"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "85590dd58edf5445e18bc7193e5ebc01ac5841f1ae187e97705a662e90c6421e",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libz.so.1.3.1"
+    },
+    {
+      "ref": "e9a55da498abf2f190abd96115c7b9381d51968729b35e9d351e6a16cc951e5c",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "f5ffb9a6143905c445c980b7430ea94ad800b3c15dc83d5ec7667c6807f595dd",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "af6ab77528a4732280b9e158c987893a492ae315929277493fb60f0b4d381d8c",
+      "local-path": "/usr/bin/python3.14"
+    },
+    {
+      "ref": "7d771b3a3182ca9193afafa461e099af06ec929b6171bb1c20920c11af3e5850",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "01ed980b9420653bfa242cdddcfed0b59c5dc066c79d95b8637a52d0135a64f1",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libexpat.so.1.11.1"
+    }
+  ]
+}
