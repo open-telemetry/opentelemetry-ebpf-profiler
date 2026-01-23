@@ -1,48 +1,69 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:best-practices",
-    "helpers:pinGitHubActionDigestsToSemver"
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:best-practices',
+    'helpers:pinGitHubActionDigestsToSemver',
   ],
-  "postUpdateOptions" : [
-    "gomodTidy"
+  postUpdateOptions: [
+    'gomodTidy',
   ],
-  "ignorePaths": ["LICENSES/**"],
-  "gomod": {
-    "fileMatch": [
-      "/(^|/)go\\.mod$/",
-      "/(^|/)tools\\.mod$/"
-    ]
+  ignorePaths: [
+    'LICENSES/**',
+  ],
+  gomod: {
+    managerFilePatterns: [
+      '//(^|/)go\\.mod$//',
+      '//(^|/)tools\\.mod$//',
+    ],
   },
-  "packageRules": [
+  packageRules: [
     {
-      "groupName": "Go dependencies",
-      "matchManagers": ["gomod"],
-      "schedule": ["before 8am every weekday"],
-      "automerge": true
+      groupName: 'Go dependencies',
+      matchManagers: [
+        'gomod',
+      ],
+      schedule: [
+        'before 8am every weekday',
+      ],
+      automerge: true,
     },
     {
-      "groupName": "Docker related dependencies",
-      "matchManagers": ["buildpacks", "devcontainer", "docker-compose", "dockerfile"],
-      "schedule": ["before 8am every weekday"],
-      "automerge": true
+      groupName: 'Docker related dependencies',
+      matchManagers: [
+        'buildpacks',
+        'devcontainer',
+        'docker-compose',
+        'dockerfile',
+      ],
+      schedule: [
+        'before 8am every weekday',
+      ],
+      automerge: true,
     },
     {
-      "groupName": "GitHub Actions",
-      "matchManagers": ["github-actions"],
-      "schedule": ["before 8am every weekday"],
-      "automerge": true
+      groupName: 'GitHub Actions',
+      matchManagers: [
+        'github-actions',
+      ],
+      schedule: [
+        'before 8am every weekday',
+      ],
+      automerge: true,
     },
     {
-      "groupName": "Rust dependencies",
-      "matchManagers": ["cargo"],
-      "schedule": ["before 8am every weekday"]
-    }
+      groupName: 'Rust dependencies',
+      matchManagers: [
+        'cargo',
+      ],
+      schedule: [
+        'before 8am every weekday',
+      ],
+    },
   ],
-  "ignoreDeps": [
-    "golangci/golangci-lint-action"
+  ignoreDeps: [
+    'golangci/golangci-lint-action',
   ],
-  "labels": [
-    "dependencies"
-  ]
+  labels: [
+    'dependencies',
+  ],
 }
