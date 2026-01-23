@@ -40,7 +40,7 @@ const (
 
 	// CLR internal debug info flags
 	// https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/vm/debuginfostore.cpp#L458
-	extraDebugInfoPathcPoint = 0x01
+	extraDebugInfoPatchPoint = 0x01
 	extraDebugInfoRich       = 0x02
 )
 
@@ -164,10 +164,10 @@ func (m *dotnetMethod) readDebugInfo(r *cachingReader, d *dotnetData) error {
 	if err != nil {
 		return fmt.Errorf("failed to read flags: %w", err)
 	}
-	if flags&^(extraDebugInfoPathcPoint|extraDebugInfoRich) != 0 {
+	if flags&^(extraDebugInfoPatchPoint|extraDebugInfoRich) != 0 {
 		return fmt.Errorf("flags (%#x) not supported", flags)
 	}
-	if flags&extraDebugInfoPathcPoint != 0 {
+	if flags&extraDebugInfoPatchPoint != 0 {
 		// skip PatchpointInfo
 		// https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/debuginfostore.cpp#L741-L746
 		// https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/inc/patchpointinfo.h#L29-L35

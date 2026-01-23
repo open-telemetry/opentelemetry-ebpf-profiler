@@ -35,22 +35,22 @@
         "libruby.so.3.5.0+0x30676b",
         "libruby.so.3.5.0+0x30a927",
         "libruby.so.3.5.0+0x316b6b",
-        "is_prime+0 in /app/loop-with-ractors.rb:10",
-        "sum_of_primes+0 in /app/loop-with-ractors.rb:20",
-        "<main>+0 in /app/loop-with-ractors.rb:31",
         "libruby.so.3.5.0+0x31c73f",
         "libruby.so.3.5.0+0x320eb7",
         "libruby.so.3.5.0+0x22aa2b",
         "libruby.so.3.5.0+0x304373",
         "libruby.so.3.5.0+0x30a927",
         "libruby.so.3.5.0+0x316b6b",
-        "<main>+0 in /app/loop-with-ractors.rb:30",
-        "loop+0 in <internal:kernel>:168",
-        "<main>+0 in /app/loop-with-ractors.rb:29",
+        "Range#each+0 in <cfunc>:0",
+        "Object#is_prime+0 in /app/loop-with-ractors.rb:10",
+        "Object#sum_of_primes+0 in /app/loop-with-ractors.rb:20",
+        "block (3 levels) in <main>+0 in /app/loop-with-ractors.rb:31",
         "libruby.so.3.5.0+0x31c543",
         "libruby.so.3.5.0+0x2c6463",
-        "libruby.so.3.5.0+0x22a817",
-        "<unwinding aborted due to error native_no_pid_page_mapping>"
+        "libruby.so.3.5.0+0x2c6a47",
+        "libruby.so.3.5.0+0x2c700b",
+        "libruby.so.3.5.0+0x2c6eeb",
+        "<unwinding aborted due to error native_lr_unwinding_mid_trace>"
       ]
     },
     {
@@ -61,7 +61,6 @@
         "libc.so.6+0x8269b",
         "libc.so.6+0xee143",
         "libruby.so.3.5.0+0x2c205b",
-        "libc.so.6+0x85f77",
         "libc.so.6+0x85f77",
         "libc.so.6+0xedc1b"
       ]

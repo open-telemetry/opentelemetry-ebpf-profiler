@@ -144,19 +144,11 @@ func (regs *vmRegs) getUnwindInfoARM() sdtypes.UnwindInfo {
 		info.FPOpcode = support.UnwindOpcodeBaseLR
 		info.FPParam = 0
 	case regCFA:
-		if regs.cfa.off != 0 {
-			// In ARM64, nothing can be assumed regarding RA location, it is
-			// simply somewhere on the stack, its detailed location needs to
-			// be extracted from FDE record.
-			// In our approach, RA offset part of stack delta always points
-			// to RA location  no matter whether CFA is evaluated with respect
-			// to SP or FP.
-			// Use same opcode as for CFA:
-			info.FPOpcode = info.Opcode
-			// Convert CFA base to SP / FP base in order to keep
-			// offset to RA from frame bottom (FP based heuristic).
-			// CFA offset needs to be added to the one denoting RA location.
-			info.FPParam = int32(regs.cfa.off) + int32(regs.ra.off)
+		info.FPParam = int32(regs.ra.off)
+		if regs.fp.reg == regCFA && regs.fp.off+8 == regs.ra.off {
+			info.FPOpcode = support.UnwindOpcodeBaseCFAFrame
+		} else {
+			info.FPOpcode = support.UnwindOpcodeBaseCFA
 		}
 	}
 

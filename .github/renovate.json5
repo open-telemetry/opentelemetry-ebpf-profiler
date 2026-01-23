@@ -8,6 +8,12 @@
     "gomodTidy"
   ],
   "ignorePaths": ["LICENSES/**"],
+  "gomod": {
+    "fileMatch": [
+      "/(^|/)go\\.mod$/"
+      "/(^|/)tools\\.mod$/"
+    ]
+  },
   "packageRules": [
     {
       "groupName": "Go dependencies",
