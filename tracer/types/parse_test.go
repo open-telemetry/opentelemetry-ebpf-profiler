@@ -52,15 +52,9 @@ func TestParseTracers(t *testing.T) {
 				return
 			}
 
+			expected := strings.Split(in, ",")
 			for tracer := range maxTracers {
-				found := false
-				for name := range strings.SplitSeq(in, ",") {
-					if name == tracer.String() {
-						found = true
-						break
-					}
-				}
-				if found && availableOnArch(tracer) {
+				if slices.Contains(expected, tracer.String()) && availableOnArch(tracer) {
 					require.True(t, include.Has(tracer))
 				} else {
 					require.False(t, include.Has(tracer))
