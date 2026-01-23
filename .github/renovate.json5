@@ -10,7 +10,7 @@
   "ignorePaths": ["LICENSES/**"],
   "gomod": {
     "fileMatch": [
-      "/(^|/)go\\.mod$/"
+      "/(^|/)go\\.mod$/",
       "/(^|/)tools\\.mod$/"
     ]
   },
