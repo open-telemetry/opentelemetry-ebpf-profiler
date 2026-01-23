@@ -17,7 +17,7 @@ import (
 
 // https://github.com/golang/go/blob/6885bad7dd86880be/src/runtime/tls_arm64.s#L11
 //
-//	Gets compiled into:
+//	Get's compiled into:
 //	0x000000000007f260 <+0>:     adrp    x27, 0x1c2000 <runtime.mheap_+101440>
 //	0x000000000007f264 <+4>:     ldrsb   x0, [x27, #284]
 //	0x000000000007f268 <+8>:     cbz     x0, 0x7f278 <runtime.load_g+24>
