@@ -8,8 +8,3 @@ ebpf-profiler
 ci-kernels
 # Ignore target directory
 target/*
-
-# auto-generated bin files
-cmd/otelcol-ebpf-profiler/*.go
-cmd/otelcol-ebpf-profiler/go.mod
-cmd/otelcol-ebpf-profiler/go.sum
