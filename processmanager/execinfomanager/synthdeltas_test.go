@@ -15,10 +15,10 @@ import (
 
 func TestVDSOArm64(t *testing.T) {
 	frameSize16 := sdtypes.UnwindInfo{
-		Opcode:   support.UnwindOpcodeBaseFP,
-		Param:    16,
-		FPOpcode: support.UnwindOpcodeBaseFP,
-		FPParam:  8,
+		BaseReg:    support.UnwindRegFp,
+		Param:      16,
+		AuxBaseReg: support.UnwindRegFp,
+		AuxParam:   8,
 	}
 
 	testCases := map[string]sdtypes.StackDeltaArray{
