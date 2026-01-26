@@ -199,6 +199,7 @@ const (
 	RubyFrameTypeCmeIseq  = C.RUBY_FRAME_TYPE_CME_ISEQ
 	RubyFrameTypeCmeCfunc = C.RUBY_FRAME_TYPE_CME_CFUNC
 	RubyFrameTypeIseq     = C.RUBY_FRAME_TYPE_ISEQ
+	RubyFrameTypeGc       = C.RUBY_FRAME_TYPE_GC
 )
 
 var MetricsTranslation = []metrics.MetricID{

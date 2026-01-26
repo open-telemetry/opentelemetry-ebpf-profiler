@@ -460,10 +460,21 @@ typedef struct RubyProcInfo {
   // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
   u64 current_ctx_ptr;
 
+  // is reading gc state from objspace supported for this version?
+  bool has_objspace;
   // Offsets and sizes of Ruby internal structs
 
   // rb_execution_context_struct offsets:
-  u8 vm_stack, vm_stack_size, cfp;
+  u8 vm_stack, vm_stack_size, cfp, thread_ptr;
+
+  // rb_thread_struct offsets
+  u8 thread_vm;
+
+  // rb_vm_struct offsets
+  u16 vm_objspace;
+
+  // rb_objspace offsets
+  u8 objspace_flags, objspace_size_of_flags;
 
   // rb_control_frame_struct offsets:
   u8 pc, iseq, ep, size_of_control_frame_struct;
