@@ -53,21 +53,18 @@ static inline EBPF_INLINE void increment_metric(u32 metricID)
 }
 
 // Send immediate notifications for event triggers to Go.
-// Notifications for GENERIC_PID and TRACES_FOR_SYMBOLIZATION will be
+// Notifications for GENERIC_PID and RELOAD_KALLSYMS will be
 // automatically inhibited until HA resets the type.
 static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event_type)
 {
   int inhibit_key    = event_type;
   bool inhibit_value = true;
 
-  // GENERIC_PID is a global notification that triggers eBPF map iteration+processing in Go.
+  // This is a global notification mechanism that may trigger eBPF map
+  // iteration+processing in Go (EVENT_TYPE_GENERIC_PID).
   // To avoid redundant notifications while userspace processing for them is already taking
   // place, we allow latch-like inhibition, where eBPF sets it and Go has to manually reset
   // it, before new notifications are triggered.
-  if (event_type != EVENT_TYPE_GENERIC_PID) {
-    return;
-  }
-
   if (bpf_map_update_elem(&inhibit_events, &inhibit_key, &inhibit_value, BPF_NOEXIST) < 0) {
     DEBUG_PRINT("Event type %d inhibited", event_type);
     return;
