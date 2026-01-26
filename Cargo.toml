@@ -53,7 +53,7 @@ zstd = "0.13.0"
 zydis = "4.1.1"
 
 [workspace.dependencies.gimli]
-version = "0.32.0"
+version = "0.33.0"
 default-features = false
 features = ["std", "endian-reader", "fallible-iterator"]
 
