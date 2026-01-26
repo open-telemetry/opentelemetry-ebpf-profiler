@@ -138,17 +138,17 @@ func (regs *vmRegs) getUnwindInfoARM() sdtypes.UnwindInfo {
 		// 2) the link register is restored from the stack (one can assume it is
 		//    valid for a sequence of instructions in the function prolog - prior to
 		//    the ret instruction itself)
-		// thus, the assumption - use UnwindOpcodeBaseLR to instruct native stack
-		// unwinder to load RA from link register
+		// thus, the assumption - use UnwindRegLr to instruct native stack unwinder
+		// to load RA from link register
 		// This is either prolog or epilog sequence, read RA from link register.
 		info.AuxBaseReg = support.UnwindRegLr
 		info.AuxParam = 0
 	case regCFA:
 		info.AuxBaseReg = support.UnwindRegCfa
 		info.AuxParam = int32(regs.ra.off)
-		if regs.fp.reg == regs.ra.reg && regs.fp.off+8 == regs.ra.off {
-			info.Flags |= support.UnwindFlagFrame
-		}
+	}
+	if regs.ra.reg != regSame && regs.fp.reg == regs.ra.reg && regs.fp.off+8 == regs.ra.off {
+		info.Flags |= support.UnwindFlagFrame
 	}
 
 	return info

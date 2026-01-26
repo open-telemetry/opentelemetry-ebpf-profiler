@@ -75,7 +75,7 @@ type IntervalData struct {
 // AddEx adds a new stack delta to the array.
 func (deltas *StackDeltaArray) AddEx(delta StackDelta, sorted bool) {
 	num := len(*deltas)
-	if delta.Info.Flags == support.UnwindFlagCommand {
+	if delta.Info.Flags&support.UnwindFlagCommand != 0 {
 		// FP information is invalid/unused for command opcodes.
 		// But DWARF info often leaves bogus data there, so resetting it
 		// reduces the number of unique Info contents generated.

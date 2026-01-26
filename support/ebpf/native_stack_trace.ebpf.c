@@ -1,6 +1,5 @@
 #include "bpfdefs.h"
 #include "frametypes.h"
-#include "stackdeltatypes.h"
 #include "tracemgmt.h"
 #include "types.h"
 
@@ -284,8 +283,9 @@ static EBPF_INLINE u64 unwind_calc_register(UnwindState *state, u8 baseReg, s32 
 
 #if defined(__x86_64__)
 
-// unwind_calc_register_deref calculates the given basic register expression "BASE_REG + param"
-// or expression with a dereference "*(BASE_REG + preDeref) + postDeref" if 'deref' is set.
+// unwind_calc_register_with_deref calculates the expression as:
+// - basic expression "BASE_REG + param"
+// - expression with a dereference "*(BASE_REG + preDeref) + postDeref"
 static EBPF_INLINE u64
 unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool deref)
 {
@@ -325,7 +325,7 @@ unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool 
 // This function resolves a "stack delta" command from from our internal maps.
 // This stack delta refers to a rule on how to unwind the state. In the simple
 // case it just provides SP delta and potentially offset from where to recover
-// FP value. See unwind_calc_register[_deref]() on the expressions supported.
+// FP value. See unwind_calc_register[_with_deref]() on the expressions supported.
 //
 // The function sets the bool pointed to by the given `stop` pointer to `false`
 // if the main ebpf unwinder should exit. This is the case if the current PC

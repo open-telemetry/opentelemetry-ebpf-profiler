@@ -44,7 +44,7 @@ func getCommand(param int32) string {
 	case support.UnwindCommandFramePointer:
 		return "framepointer"
 	default:
-		return "?"
+		return fmt.Sprintf("%#x", param)
 	}
 }
 

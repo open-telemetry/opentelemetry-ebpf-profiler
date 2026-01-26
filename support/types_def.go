@@ -12,7 +12,6 @@ import (
 /*
 #include "./ebpf/types.h"
 #include "./ebpf/frametypes.h"
-#include "./ebpf/stackdeltatypes.h"
 #include "./ebpf/v8_tracer.h"
 */
 import "C"
