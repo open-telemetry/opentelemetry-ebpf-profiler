@@ -234,7 +234,7 @@ static EBPF_INLINE ErrorCode dotnet10_find_code_start(PerCPURecord *record, u64 
       goto decode_pointer;
     }
 
-    // #3 check if corresponding nibble is intialized and points to an equal or earlier address
+    // #3 check if corresponding nibble is initialized and points to an equal or earlier address
     val >>= DOTNET10_POS2SHIFTCOUNT(startPos);
     u8 offset = DOTNET10_ADDR2OFFS(pc_delta); // this is the offset inside the bucket + 1
     u8 nibble = val & DOTNET10_NIBBLE_MASK;
