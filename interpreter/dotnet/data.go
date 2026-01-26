@@ -21,6 +21,9 @@ type dotnetData struct {
 	// version contains the version
 	version uint32
 
+	// unwinder is the unwinder program index to use
+	unwinder uint8
+
 	// dacTableAddr contains the ELF symbol 'g_dacTable' value
 	// https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/debug/ee/dactable.cpp#L80-L81
 	dacTableAddr libpf.SymbolValue
@@ -213,7 +216,7 @@ func (d *dotnetData) loadIntrospectionData() {
 		vms.RangeSection.Module = 0x30
 		vms.RangeSection.SizeOf = 0x38
 		d.walkRangeSectionsMethod = (*dotnetInstance).walkRangeSectionList
-	case 8, 9:
+	case 8, 9, 10:
 		vms.DacTable.VirtualCallStubManagerManager = 0xe
 		vms.RangeSection.Flags = 0x10
 		vms.RangeSection.Module = 0x20
@@ -252,6 +255,14 @@ func (d *dotnetData) loadIntrospectionData() {
 		vms.PrecodeStubManager.FixupPrecodeRangeList = vms.StubManager.SizeOf +
 			vms.LockedRangeList.SizeOf
 		vms.VirtualCallStubManager.Next = 0x6e8
+	case 10:
+		vms.DacTable.ExecutionManagerCodeRangeList = 0
+		vms.DacTable.StubLinkStubManager = 0xa
+		vms.DacTable.ThunkHeapStubManager = 0
+		vms.DacTable.VirtualCallStubManagerManager = 0xc
+		vms.Module.SimpleName = 0xc0
+		vms.VirtualCallStubManager.Next = 0xe0
+		d.unwinder = support.ProgUnwindDotnet10
 	}
 
 	// Calculated masks

@@ -1,0 +1,244 @@
+{
+  "coredump-ref": "933ba2db3d3a535b302edc466a773ca4010c1996780ca81de64b23f32c0eef6a",
+  "threads": [
+    {
+      "lwp": 31314,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68ef4",
+        "ld-musl-x86_64.so.1+0x66867",
+        "ld-musl-x86_64.so.1+0x6b5e8",
+        "libSystem.Native.so+0xeacb",
+        "System.IO.StreamWriter.Flush+2 in System.Private.CoreLib.dll:0",
+        "System.IO.StreamWriter.WriteLine+0 in System.Private.CoreLib.dll:0",
+        "System.IO.TextWriter/SyncTextWriter.WriteLine+0 in System.Private.CoreLib.dll:0",
+        "System.Console.WriteLine+0 in System.Console.dll:0",
+        "foo.bar+11 in helloworld.dll:0",
+        "main.Main+0 in helloworld.dll:0",
+        "libcoreclr.so+0x62e10b",
+        "libcoreclr.so+0x47fc70",
+        "libcoreclr.so+0x361321",
+        "libcoreclr.so+0x3617b4",
+        "libcoreclr.so+0x38aef9",
+        "libcoreclr.so+0x1ccf8e",
+        "libhostpolicy.so+0x328b2",
+        "libhostpolicy.so+0x33d2d",
+        "libhostfxr.so+0x20f33",
+        "libhostfxr.so+0x1f984",
+        "libhostfxr.so+0x1a04e",
+        "helloworld+0x8725",
+        "helloworld+0x8a71",
+        "ld-musl-x86_64.so.1+0x41a2f",
+        "helloworld+0x70d5"
+      ]
+    },
+    {
+      "lwp": 31323,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x56188",
+        "libSystem.Native.so+0x166a8",
+        "libSystem.Native.so+0x153c7",
+        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x68ec0"
+      ]
+    },
+    {
+      "lwp": 31322,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x570f4",
+        "libcoreclr.so+0x672415",
+        "ld-musl-x86_64.so.1+0x6799f",
+        "ld-musl-x86_64.so.1+0x6731a",
+        "ld-musl-x86_64.so.1+0x6757a",
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 31321,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68ef4",
+        "ld-musl-x86_64.so.1+0x66867",
+        "ld-musl-x86_64.so.1+0x65d23",
+        "ld-musl-x86_64.so.1+0x66c04",
+        "libcoreclr.so+0x667236",
+        "libcoreclr.so+0x666eb0",
+        "libcoreclr.so+0x66bb1f",
+        "libcoreclr.so+0x66be14",
+        "libcoreclr.so+0x4b9dde",
+        "libcoreclr.so+0x4b9ee6",
+        "libcoreclr.so+0x44abfe",
+        "libcoreclr.so+0x4ba4b7",
+        "libcoreclr.so+0x673125",
+        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x68ec0"
+      ]
+    },
+    {
+      "lwp": 31320,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68ef4",
+        "ld-musl-x86_64.so.1+0x66867",
+        "ld-musl-x86_64.so.1+0x65d23",
+        "ld-musl-x86_64.so.1+0x66c04",
+        "libcoreclr.so+0x66729f",
+        "libcoreclr.so+0x666eb0",
+        "libcoreclr.so+0x66bb1f",
+        "libcoreclr.so+0x66be14",
+        "libcoreclr.so+0x293214",
+        "libcoreclr.so+0x293079",
+        "libcoreclr.so+0x292d76",
+        "libcoreclr.so+0x673125",
+        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x68ec0"
+      ]
+    },
+    {
+      "lwp": 31319,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68ef4",
+        "ld-musl-x86_64.so.1+0x66867",
+        "ld-musl-x86_64.so.1+0x423c6",
+        "libcoreclr.so+0x29b1cf",
+        "libcoreclr.so+0x295a87",
+        "libcoreclr.so+0x294a96",
+        "libcoreclr.so+0x673125",
+        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x68ec0"
+      ]
+    },
+    {
+      "lwp": 31318,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68ef4",
+        "ld-musl-x86_64.so.1+0x66867",
+        "ld-musl-x86_64.so.1+0x5e446",
+        "libcoreclr.so+0x29b79b",
+        "libcoreclr.so+0x20d54d",
+        "libcoreclr.so+0x213fe1",
+        "libcoreclr.so+0x673125",
+        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x68ec0"
+      ]
+    },
+    {
+      "lwp": 31317,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68ef4",
+        "ld-musl-x86_64.so.1+0x66867",
+        "ld-musl-x86_64.so.1+0x5e446",
+        "libcoreclr.so+0x66927d",
+        "libcoreclr.so+0x668be2",
+        "libcoreclr.so+0x673125",
+        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x68ec0"
+      ]
+    },
+    {
+      "lwp": 31316,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x56911",
+        "liblttng-ust.so.1.0.0+0xaf54",
+        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x68ec0"
+      ]
+    },
+    {
+      "lwp": 31315,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x56911",
+        "liblttng-ust.so.1.0.0+0xaf54",
+        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x68ec0"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "0ea959387b385d63b7e8730cd4fc7e7f94ee032a61aacabc81e1df3ce4a9344e",
+      "local-path": "/lib/ld-musl-x86_64.so.1"
+    },
+    {
+      "ref": "550fc69976237dc911d61c4e0ac105a743638574b70d7c74f8a2e16b2aabbc48",
+      "local-path": "/usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.2/System.Console.dll"
+    },
+    {
+      "ref": "80ac80eb31baa509de88cf77754b1124646e01bc19c118bf9b611223afdaf1bd",
+      "local-path": "/usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.2/System.Threading.dll"
+    },
+    {
+      "ref": "30a4e9b1bfbd139478fb433d6fc3c22ccec27a29aceb1fbca76eec98b1fd2501",
+      "local-path": "/usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.2/libclrjit.so"
+    },
+    {
+      "ref": "e11504cd151c2839fed0a45fd0cc47d16b7e4a41e2910010f6abe2043e667c11",
+      "local-path": "/usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.2/libhostpolicy.so"
+    },
+    {
+      "ref": "ae81a1dd9b4fbab42a1014dda6b9ed13834610583781fe562f84e3cf65ea669b",
+      "local-path": "/usr/lib/libstdc++.so.6.0.34"
+    },
+    {
+      "ref": "6b80d52dbcec730bec43441db8e33aba187bfa96bcd9afd052aa9177d051ee46",
+      "local-path": "/usr/lib/debug/lib/ld-musl-x86_64.so.1.debug"
+    },
+    {
+      "ref": "e929b436f8e76517fe87b2fd58fb1933b230119c0d0c2161c58c623dc3b65edc",
+      "local-path": "/usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.2/System.Collections.dll"
+    },
+    {
+      "ref": "22dd3fb27313a4258194ec7c3eb2927752fa1281570b2cf56118869b5ff67bc5",
+      "local-path": "/usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.2/Microsoft.Win32.Primitives.dll"
+    },
+    {
+      "ref": "ae441c6dfb11074b32b9ece43de1eae07f516bc15a5c7383f1b50d859fa2b22d",
+      "local-path": "/usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.2/System.Runtime.dll"
+    },
+    {
+      "ref": "e648947dc05942329883698c1f6be21118fc6bab0d7d52ffc7d4f3bbdd4d7f92",
+      "local-path": "/profiler/bin/Debug/net10.0/helloworld.dll"
+    },
+    {
+      "ref": "70c7feab7b180930548c560063462973de901c63673c2ea76156d2c689b98956",
+      "local-path": "/profiler/bin/Debug/net10.0/helloworld"
+    },
+    {
+      "ref": "c3497cdb3e1fd925dc812ed422b162169051f9a2e524129765dbb552113c0381",
+      "local-path": "/usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.2/libSystem.Native.so"
+    },
+    {
+      "ref": "c11a0546435f80cf24ca118c89b90fea546736450f6e0013e6f566ab2d9ba2f3",
+      "local-path": "/usr/lib/liblttng-ust.so.1.0.0"
+    },
+    {
+      "ref": "c7c186fbef506fb4fe78a252aedc35ffcb582e4cd52147239094878a33ba5927",
+      "local-path": "/usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.2/System.Private.CoreLib.dll"
+    },
+    {
+      "ref": "96320bed994b96ac6aacffc5fc04f14d0405a733f9ab84482ca9c8efabc377dc",
+      "local-path": "/usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.2/libcoreclrtraceptprovider.so"
+    },
+    {
+      "ref": "9c704ebb15418d7345b1ac217604f29923df20a5996d518ca37e63d07ec51a4a",
+      "local-path": "/usr/lib/liblttng-ust-tracepoint.so.1.0.0"
+    },
+    {
+      "ref": "0f3c933942935150d3864bcd3b20b7922c8d95a66959fe1da5e2da73ba986e8a",
+      "local-path": "/usr/lib/libgcc_s.so.1"
+    },
+    {
+      "ref": "8deb258e5a034e94495533d0594ca48aa9e25418cb301074e7bb8d556a803a3b",
+      "local-path": "/usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.2/System.Runtime.InteropServices.dll"
+    },
+    {
+      "ref": "b047dc84b26f05ebc40bfda2b65a190129f7960d91b478b9e893a14729d7a997",
+      "local-path": "/usr/lib/dotnet/shared/Microsoft.NETCore.App/10.0.2/libcoreclr.so"
+    },
+    {
+      "ref": "a950ac80ad8228de64c745416c5c4ec6b8f4ccabc898562545917d8347f450cc",
+      "local-path": "/usr/lib/liblttng-ust-common.so.1.0.0"
+    },
+    {
+      "ref": "4edb0dce07ab835cbea057c639d5798ba5f08d76ba3e6ee45a1c510317caa20d",
+      "local-path": "/usr/lib/dotnet/host/fxr/10.0.2/libhostfxr.so"
+    }
+  ]
+}

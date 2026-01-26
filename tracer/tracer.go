@@ -398,6 +398,11 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
 		},
 		{
+			progID: uint32(support.ProgUnwindDotnet10),
+			name:   "unwind_dotnet10",
+			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
+		},
+		{
 			progID: uint32(support.ProgGoLabels),
 			name:   "go_labels",
 			enable: cfg.IncludeTracers.Has(types.Labels),
