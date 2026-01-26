@@ -104,7 +104,9 @@ func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
 			tc.seen[fileName] = libpf.Void{}
 			return f, err
 		}
-		tc.warnMissing(fileName)
+		if !errors.Is(err, pfelf.ErrNotELF) {
+			tc.warnMissing(fileName)
+		}
 	}
 	return tc.CoredumpProcess.OpenELF(fileName)
 }
