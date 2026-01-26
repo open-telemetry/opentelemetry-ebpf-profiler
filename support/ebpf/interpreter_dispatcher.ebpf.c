@@ -34,7 +34,7 @@ struct perf_progs_t {
   __uint(max_entries, NUM_TRACER_PROGS);
 } perf_progs SEC(".maps");
 
-// report_events notifies user space about events (GENERIC_PID and TRACES_FOR_SYMBOLIZATION).
+// report_events notifies user space about events (GENERIC_PID and RELOAD_KALLSYMS).
 //
 // As a key the CPU number is used and the value represents a perf event file descriptor.
 // Information transmitted is the event type only. We use 0 as the number of max entries
