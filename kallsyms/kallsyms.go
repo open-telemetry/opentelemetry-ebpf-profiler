@@ -90,14 +90,16 @@ func compareModule(a, b Module) int {
 type Symbolizer struct {
 	modules atomic.Value
 
-	reloadModules chan bool
+	reloadModules chan libpf.Void
+	reloadSymbols chan libpf.Void
 }
 
 // NewSymbolizer creates and returns a new kallsyms symbolizer and loads
 // the initial 'kallsymbols'.
 func NewSymbolizer() (*Symbolizer, error) {
 	s := &Symbolizer{
-		reloadModules: make(chan bool, 1),
+		reloadModules: make(chan libpf.Void, 1),
+		reloadSymbols: make(chan libpf.Void, 1),
 	}
 	if err := s.loadKallsyms(); err != nil {
 		return nil, err
@@ -573,6 +575,12 @@ func (s *Symbolizer) reloadWorker(ctx context.Context, kobjectClient *kobject.Cl
 				log.Warnf("Failed to reload kernel modules metadata: %v", err)
 				nextModulesReload = time.After(10 * time.Second)
 			}
+		case <-s.reloadSymbols:
+			// Just trigger reloading of symbols with small delay to batch
+			// potentially multiple module loads.
+			if nextKallsymsReload == noTimeout {
+				nextKallsymsReload = time.After(100 * time.Millisecond)
+			}
 		case <-nextKallsymsReload:
 			if err := s.loadKallsyms(); err == nil {
 				log.Debugf("Kernel symbols reloaded")
@@ -590,7 +598,7 @@ func (s *Symbolizer) reloadWorker(ctx context.Context, kobjectClient *kobject.Cl
 }
 
 // pollKobjectClient listens for kernel kobject events to reload kallsyms when needed.
-func (s *Symbolizer) pollKobjectClient(kobjectClient *kobject.Client) {
+func (s *Symbolizer) pollKobjectClient(_ context.Context, kobjectClient *kobject.Client) {
 	for {
 		event, err := kobjectClient.Receive()
 		if err != nil {
@@ -600,7 +608,7 @@ func (s *Symbolizer) pollKobjectClient(kobjectClient *kobject.Client) {
 			log.Debugf("Kernel modules changed")
 			// Notify worker thread without blocking
 			select {
-			case s.reloadModules <- true:
+			case s.reloadModules <- libpf.Void{}:
 			default:
 			}
 		}
@@ -614,8 +622,17 @@ func (s *Symbolizer) StartMonitor(ctx context.Context) error {
 		return fmt.Errorf("failed to create kobject netlink socket: %v", err)
 	}
 	go s.reloadWorker(ctx, kobjectClient)
-	go s.pollKobjectClient(kobjectClient)
+	go s.pollKobjectClient(ctx, kobjectClient)
 	return nil
+}
+
+// Reload triggers a non-blocking reload and update of Symbolizer
+// with the recent information of /proc/kallsyms.
+func (s *Symbolizer) Reload() {
+	select {
+	case s.reloadSymbols <- libpf.Void{}:
+	default:
+	}
 }
 
 // getModuleByAddress is a helper to find a Module from the sorted 'modules'

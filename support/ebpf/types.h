@@ -352,6 +352,7 @@ typedef enum TracePrograms {
   PROG_UNWIND_RUBY,
   PROG_UNWIND_V8,
   PROG_UNWIND_DOTNET,
+  PROG_UNWIND_DOTNET10,
   PROG_GO_LABELS,
   PROG_UNWIND_BEAM,
   NUM_TRACER_PROGS,
@@ -898,7 +899,8 @@ typedef struct Event {
 } Event;
 
 // Event types that notifications are sent for through event_send_trigger.
-#define EVENT_TYPE_GENERIC_PID 1
+#define EVENT_TYPE_GENERIC_PID     1
+#define EVENT_TYPE_RELOAD_KALLSYMS 2
 
 // PIDPage represents the key of the eBPF map pid_page_to_mapping_info.
 typedef struct PIDPage {
