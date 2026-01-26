@@ -15,3 +15,4 @@ AlignConsecutiveMacros: AcrossComments
 AlignConsecutiveAssignments: AcrossComments
 AllowShortCaseLabelsOnASingleLine: true
 ContinuationIndentWidth: 2
+KeepEmptyLinesAtTheStartOfBlocks: false

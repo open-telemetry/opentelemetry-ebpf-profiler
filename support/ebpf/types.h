@@ -250,10 +250,10 @@ enum {
   // number of failures to read the instruction sequence body
   metricID_UnwindRubyErrReadIseqBody,
 
-  // number of failures to read the instruction sequence encoded size
+  // number of failures to read the instruction sequence encoded size (deprecated)
   metricID_UnwindRubyErrReadIseqEncoded,
 
-  // number of failures to read the instruction sequence size
+  // number of failures to read the instruction sequence size (deprecated)
   metricID_UnwindRubyErrReadIseqSize,
 
   // number of times the unwind instructions requested LR unwinding mid-trace
@@ -306,6 +306,24 @@ enum {
 
   // number of failures to read Go custom labels
   metricID_UnwindGoLabelsFailures,
+
+  // number of invalid instruction sequences sequence
+  metricID_UnwindRubyErrInvalidIseq,
+
+  // number of failures to read the Ruby method definition
+  metricID_UnwindRubyErrReadMethodDef,
+
+  // number of failures to read the Ruby method type
+  metricID_UnwindRubyErrReadMethodType,
+
+  // number of failures to read the Ruby svar while finding CME
+  metricID_UnwindRubyErrReadSvar,
+
+  // number of failures to read the Ruby rbasic flags
+  metricID_UnwindRubyErrReadRbasicFlags,
+
+  // number of failed attempts to read a CME by exceeding max EP checks
+  metricID_UnwindRubyErrCmeMaxEp,
 
   //
   // Metric IDs above are for counters (cumulative values)
@@ -442,10 +460,21 @@ typedef struct RubyProcInfo {
   // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
   u64 current_ctx_ptr;
 
+  // is reading gc state from objspace supported for this version?
+  bool has_objspace;
   // Offsets and sizes of Ruby internal structs
 
   // rb_execution_context_struct offsets:
-  u8 vm_stack, vm_stack_size, cfp;
+  u8 vm_stack, vm_stack_size, cfp, thread_ptr;
+
+  // rb_thread_struct offsets
+  u8 thread_vm;
+
+  // rb_vm_struct offsets
+  u16 vm_objspace;
+
+  // rb_objspace offsets
+  u8 objspace_flags, objspace_size_of_flags;
 
   // rb_control_frame_struct offsets:
   u8 pc, iseq, ep, size_of_control_frame_struct;
@@ -453,8 +482,8 @@ typedef struct RubyProcInfo {
   // rb_iseq_struct offsets:
   u8 body;
 
-  // rb_iseq_constant_body:
-  u8 iseq_type, iseq_encoded, iseq_size;
+  // rb_callable_method_entry_struct
+  u8 cme_method_def;
 
   // size_of_value holds the size of the macro VALUE as defined in
   // https://github.com/ruby/ruby/blob/5445e0435260b449decf2ac16f9d09bae3cafe72/vm_core.h#L1136
@@ -666,6 +695,8 @@ typedef struct RubyUnwindState {
   void *stack_ptr;
   // Pointer to the last control frame struct in the Ruby VM stack we want to handle.
   void *last_stack_frame;
+  // Frame for last cfunc before we switched to native unwinder
+  u64 cfunc_saved_frame;
 } RubyUnwindState;
 
 // Container for additional scratch space needed by the HotSpot unwinder.
@@ -863,7 +894,8 @@ typedef struct Event {
 } Event;
 
 // Event types that notifications are sent for through event_send_trigger.
-#define EVENT_TYPE_GENERIC_PID 1
+#define EVENT_TYPE_GENERIC_PID     1
+#define EVENT_TYPE_RELOAD_KALLSYMS 2
 
 // PIDPage represents the key of the eBPF map pid_page_to_mapping_info.
 typedef struct PIDPage {

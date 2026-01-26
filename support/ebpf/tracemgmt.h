@@ -53,21 +53,18 @@ static inline EBPF_INLINE void increment_metric(u32 metricID)
 }
 
 // Send immediate notifications for event triggers to Go.
-// Notifications for GENERIC_PID and TRACES_FOR_SYMBOLIZATION will be
+// Notifications for GENERIC_PID and RELOAD_KALLSYMS will be
 // automatically inhibited until HA resets the type.
 static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event_type)
 {
   int inhibit_key    = event_type;
   bool inhibit_value = true;
 
-  // GENERIC_PID is a global notification that triggers eBPF map iteration+processing in Go.
+  // This is a global notification mechanism that may trigger eBPF map
+  // iteration+processing in Go (EVENT_TYPE_GENERIC_PID).
   // To avoid redundant notifications while userspace processing for them is already taking
   // place, we allow latch-like inhibition, where eBPF sets it and Go has to manually reset
   // it, before new notifications are triggered.
-  if (event_type != EVENT_TYPE_GENERIC_PID) {
-    return;
-  }
-
   if (bpf_map_update_elem(&inhibit_events, &inhibit_key, &inhibit_value, BPF_NOEXIST) < 0) {
     DEBUG_PRINT("Event type %d inhibited", event_type);
     return;
@@ -223,31 +220,21 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   if (!record)
     return record;
 
-  record->state.pc = 0;
-  record->state.sp = 0;
-  record->state.fp = 0;
-#if defined(__x86_64__)
-  record->state.r13 = 0;
-#elif defined(__aarch64__)
-  record->state.lr         = 0;
-  record->state.r20        = 0;
-  record->state.r22        = 0;
-  record->state.r28        = 0;
-  record->state.lr_invalid = false;
-#endif
-  record->state.return_address             = false;
-  record->state.error_metric               = -1;
-  record->state.unwind_error               = ERR_OK;
-  record->perlUnwindState.stackinfo        = 0;
-  record->perlUnwindState.cop              = 0;
-  record->pythonUnwindState.py_frame       = 0;
-  record->phpUnwindState.zend_execute_data = 0;
-  record->rubyUnwindState.stack_ptr        = 0;
-  record->rubyUnwindState.last_stack_frame = 0;
-  record->unwindersDone                    = 0;
-  record->tailCalls                        = 0;
-  record->ratelimitAction                  = RATELIMIT_ACTION_DEFAULT;
-  record->customLabelsState.go_m_ptr       = NULL;
+  record->state = (UnwindState){
+    .error_metric = -1,
+    .unwind_error = ERR_OK,
+  };
+  record->perlUnwindState.stackinfo         = 0;
+  record->perlUnwindState.cop               = 0;
+  record->pythonUnwindState.py_frame        = 0;
+  record->phpUnwindState.zend_execute_data  = 0;
+  record->rubyUnwindState.stack_ptr         = 0;
+  record->rubyUnwindState.last_stack_frame  = 0;
+  record->rubyUnwindState.cfunc_saved_frame = 0;
+  record->unwindersDone                     = 0;
+  record->tailCalls                         = 0;
+  record->ratelimitAction                   = RATELIMIT_ACTION_DEFAULT;
+  record->customLabelsState.go_m_ptr        = NULL;
 
   Trace *trace           = &record->trace;
   trace->kernel_stack_id = -1;
@@ -261,13 +248,6 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   trace->apm_transaction_id.as_int = 0;
 
   trace->custom_labels.len = 0;
-  u64 *labels_space        = (u64 *)&trace->custom_labels.labels;
-  // I'm not sure this is necessary since we only increment len after
-  // we successfully write the label.
-  UNROLL for (int i = 0; i < sizeof(CustomLabel) * MAX_CUSTOM_LABELS / 8; i++)
-  {
-    labels_space[i] = 0;
-  }
 
   return record;
 }

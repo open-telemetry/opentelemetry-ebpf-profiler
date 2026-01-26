@@ -479,7 +479,6 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 			// See https://github.com/golang/go/commit/0e1bd8b5f17e337df0ffb57af03419b96c695fe4
 			if sec := ef.Section(".text"); sec != nil {
 				g.textStart = uintptr(sec.Addr)
-				break
 			}
 		}
 		// With the change of the type of the first field of _func in Go 1.18, this
