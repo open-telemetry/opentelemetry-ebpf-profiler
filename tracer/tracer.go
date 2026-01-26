@@ -267,14 +267,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 // NOTE: Close may be called multiple times in succession.
 func (t *Tracer) Close() {
 	events := t.perfEntrypoints.WLock()
-	for _, event := range *events {
-		if err := event.Disable(); err != nil {
-			log.Errorf("Failed to disable perf event: %v", err)
-		}
-		if err := event.Close(); err != nil {
-			log.Errorf("Failed to close perf event: %v", err)
-		}
-	}
+	terminatePerfEvents(*events)
 	*events = nil
 	t.perfEntrypoints.WUnlock(&events)
 
@@ -1100,6 +1093,18 @@ func (t *Tracer) attachToKallsymsUpdates() error {
 	return nil
 }
 
+// terminatePerfEvents disables perf events and closes their file descriptor.
+func terminatePerfEvents(events []*perf.Event) {
+	for _, event := range events {
+		if err := event.Disable(); err != nil {
+			log.Errorf("Failed to disable perf event: %v", err)
+		}
+		if err := event.Close(); err != nil {
+			log.Errorf("Failed to close perf event: %v", err)
+		}
+	}
+}
+
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
 // entry point is always the native tracer. The native tracer will determine when to invoke the
 // interpreter tracers based on address range information.
@@ -1128,15 +1133,18 @@ func (t *Tracer) AttachTracer() error {
 	for _, id := range onlineCPUIDs {
 		perfEvent, err := perf.Open(perfAttribute, perf.AllThreads, id, nil)
 		if err != nil {
+			terminatePerfEvents(*events)
 			return fmt.Errorf("failed to attach to perf event on CPU %d: %v", id, err)
 		}
 		if err := perfEvent.SetBPF(uint32(tracerProg.FD())); err != nil {
+			terminatePerfEvents(*events)
 			return fmt.Errorf("failed to attach eBPF program to perf event: %v", err)
 		}
 		*events = append(*events, perfEvent)
 	}
 
 	if err = t.attachToKallsymsUpdates(); err != nil {
+		terminatePerfEvents(*events)
 		return err
 	}
 
