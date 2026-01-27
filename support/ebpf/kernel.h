@@ -73,7 +73,6 @@ struct task_struct;
 
 // Defined in arch/{x86,arm64}/include/asm/ptrace.h
 #if defined(__x86_64)
-  #define reg_pc ip
 struct pt_regs {
   unsigned long r15;
   unsigned long r14;
@@ -107,7 +106,6 @@ struct pt_regs {
   s32 syscallno;
   u32 unused2;
 };
-  #define reg_pc pc
 #else
   #error "Unsupported architecture"
 #endif

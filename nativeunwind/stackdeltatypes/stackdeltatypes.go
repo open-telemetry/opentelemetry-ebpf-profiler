@@ -27,34 +27,29 @@ const (
 )
 
 // UnwindInfo contains the data needed to unwind PC, SP and FP
-type UnwindInfo struct {
-	Opcode, FPOpcode, MergeOpcode uint8
-
-	Param, FPParam int32
-}
+type UnwindInfo = support.UnwindInfo
 
 // UnwindInfoInvalid is the stack delta info indicating invalid or unsupported PC.
-var UnwindInfoInvalid = UnwindInfo{Opcode: support.UnwindOpcodeCommand,
+var UnwindInfoInvalid = UnwindInfo{Flags: support.UnwindFlagCommand,
 	Param: support.UnwindCommandInvalid}
 
 // UnwindInfoStop is the stack delta info indicating root function of a stack.
-var UnwindInfoStop = UnwindInfo{Opcode: support.UnwindOpcodeCommand,
+var UnwindInfoStop = UnwindInfo{Flags: support.UnwindFlagCommand,
 	Param: support.UnwindCommandStop}
 
 // UnwindInfoSignal is the stack delta info indicating signal return frame.
-var UnwindInfoSignal = UnwindInfo{Opcode: support.UnwindOpcodeCommand,
+var UnwindInfoSignal = UnwindInfo{Flags: support.UnwindFlagCommand,
 	Param: support.UnwindCommandSignal}
 
 // UnwindInfoFramePointer contains the description to unwind a frame pointer frame.
-var UnwindInfoFramePointer = UnwindInfo{
-	Opcode: support.UnwindOpcodeCommand,
-	Param:  support.UnwindCommandFramePointer,
+var UnwindInfoFramePointer = UnwindInfo{Flags: support.UnwindFlagCommand,
+	Param: support.UnwindCommandFramePointer,
 }
 
 // UnwindInfoLR contains the description to unwind ARM64 function without a frame (LR only)
 var UnwindInfoLR = UnwindInfo{
-	Opcode:   support.UnwindOpcodeBaseSP,
-	FPOpcode: support.UnwindOpcodeBaseLR,
+	BaseReg:    support.UnwindRegSp,
+	AuxBaseReg: support.UnwindRegLr,
 }
 
 // StackDelta defines the start address for the delta interval, along with
@@ -80,12 +75,14 @@ type IntervalData struct {
 // AddEx adds a new stack delta to the array.
 func (deltas *StackDeltaArray) AddEx(delta StackDelta, sorted bool) {
 	num := len(*deltas)
-	if delta.Info.Opcode == support.UnwindOpcodeCommand {
+	if delta.Info.Flags&support.UnwindFlagCommand != 0 {
 		// FP information is invalid/unused for command opcodes.
 		// But DWARF info often leaves bogus data there, so resetting it
 		// reduces the number of unique Info contents generated.
-		delta.Info.FPOpcode = support.UnwindOpcodeCommand
-		delta.Info.FPParam = support.UnwindCommandInvalid
+		delta.Info = UnwindInfo{
+			Flags: support.UnwindFlagCommand,
+			Param: delta.Info.Param,
+		}
 	}
 	if num > 0 && sorted {
 		prev := &(*deltas)[num-1]
@@ -131,10 +128,10 @@ func compareStackDelta(a, b StackDelta) int {
 	if a.Address > b.Address {
 		return 1
 	}
-	if a.Info.Opcode < b.Info.Opcode {
+	if a.Info.BaseReg < b.Info.BaseReg {
 		return -1
 	}
-	if a.Info.Opcode > b.Info.Opcode {
+	if a.Info.AuxBaseReg > b.Info.AuxBaseReg {
 		return 1
 	}
 	if a.Info.Param < b.Info.Param {

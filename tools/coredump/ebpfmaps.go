@@ -156,15 +156,9 @@ func (emc *ebpfMapsCoredump) UpdateUnwindInfo(index uint16, info sdtypes.UnwindI
 			index, support.UnwindInfoMaxEntries)
 	}
 
-	cmd := (*C.UnwindInfo)(unsafe.Pointer(uintptr(emc.ctx.unwindInfoArray) +
+	cmd := (*support.UnwindInfo)(unsafe.Pointer(uintptr(emc.ctx.unwindInfoArray) +
 		uintptr(index)*C.sizeof_UnwindInfo))
-	*cmd = C.UnwindInfo{
-		opcode:      C.u8(info.Opcode),
-		fpOpcode:    C.u8(info.FPOpcode),
-		mergeOpcode: C.u8(info.MergeOpcode),
-		param:       C.s32(info.Param),
-		fpParam:     C.s32(info.FPParam),
-	}
+	*cmd = info
 	return nil
 }
 
