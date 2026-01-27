@@ -108,8 +108,8 @@ func Test_Golabels(t *testing.T) {
 			require.NoError(t, trc.AttachSchedMonitor())
 
 			traceCh := make(chan *libpf.EbpfTrace)
-			errsCh := make(chan error, 1)
-			require.NoError(t, trc.StartMapMonitors(ctx, traceCh, errsCh))
+			errCh := make(chan error, 1)
+			require.NoError(t, trc.StartMapMonitors(ctx, traceCh, errCh))
 
 			wg := sync.WaitGroup{}
 			wg.Add(1)
