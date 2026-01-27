@@ -591,8 +591,10 @@ func fieldByPythonName(obj reflect.Value, fieldName string) reflect.Value {
 	for i := 0; i < obj.NumField(); i++ {
 		objField := objType.Field(i)
 		if nameTag, ok := objField.Tag.Lookup("name"); ok {
-			if slices.Contains(strings.Split(nameTag, ","), fieldName) {
-				return obj.Field(i)
+			for name := range strings.SplitSeq(nameTag, ",") {
+				if name == fieldName {
+					return obj.Field(i)
+				}
 			}
 		}
 		if fieldName == objField.Name {

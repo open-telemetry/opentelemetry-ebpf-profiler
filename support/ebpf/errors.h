@@ -115,6 +115,18 @@ typedef enum ErrorCode {
   // Ruby: Failed to pack additional into spare bytes of Frame field
   ERR_RUBY_PACK_FRAME = 3021,
 
+  // Ruby: Unable to read current thread
+  ERR_RUBY_READ_CURRENT_THREAD = 3030,
+
+  // Ruby: Unable to read current vm
+  ERR_RUBY_READ_CURRENT_VM = 3031,
+
+  // Ruby: Unable to read objspace handle
+  ERR_RUBY_READ_OBJSPACE = 3032,
+
+  // Ruby: Unable to read objspace flags
+  ERR_RUBY_READ_OBJSPACE_FLAGS = 3033,
+
   // Native: Unable to find the code section in the stack delta page info map
   ERR_NATIVE_LOOKUP_TEXT_SECTION = 4000,
 
@@ -148,8 +160,7 @@ typedef enum ErrorCode {
   // Native: Unable to read the IRQ stack link
   ERR_NATIVE_CHASE_IRQ_STACK_LINK = 4010,
 
-  // Native: Unexpectedly encountered a kernel mode pointer while attempting to unwind user-mode
-  // stack
+  // Native: Unexpectedly encountered a kernel mode pointer while attempting to unwind user-mode stack
   ERR_NATIVE_UNEXPECTED_KERNEL_ADDRESS = 4011,
 
   // Native: Unable to locate the PID page mapping for the current instruction pointer

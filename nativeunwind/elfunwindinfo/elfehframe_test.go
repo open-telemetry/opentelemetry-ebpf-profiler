@@ -46,24 +46,24 @@ func (e *ehtester) deltaHook(ip uintptr, regs *vmRegs, delta sdtypes.StackDelta)
 func (e *ehtester) golangHook(_, _ uintptr) {
 }
 
-func genDelta(opcode uint8, cfa, rbp int32) sdtypes.UnwindInfo {
+func genDelta(baseReg uint8, cfa, rbp int32) sdtypes.UnwindInfo {
 	res := sdtypes.UnwindInfo{
-		Opcode: opcode,
-		Param:  cfa,
+		BaseReg: baseReg,
+		Param:   cfa,
 	}
 	if rbp != 0 {
-		res.FPOpcode = support.UnwindOpcodeBaseCFA
-		res.FPParam = -rbp
+		res.AuxBaseReg = support.UnwindRegCfa
+		res.AuxParam = -rbp
 	}
 	return res
 }
 
 func deltaRSP(cfa, rbp int32) sdtypes.UnwindInfo {
-	return genDelta(support.UnwindOpcodeBaseSP, cfa, rbp)
+	return genDelta(support.UnwindRegSp, cfa, rbp)
 }
 
 func deltaRBP(cfa, rbp int32) sdtypes.UnwindInfo {
-	return genDelta(support.UnwindOpcodeBaseFP, cfa, rbp)
+	return genDelta(support.UnwindRegFp, cfa, rbp)
 }
 
 func TestEhFrame(t *testing.T) {

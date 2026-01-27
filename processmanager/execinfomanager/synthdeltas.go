@@ -100,10 +100,10 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 					sdtypes.StackDelta{
 						Address: addr + frameStart,
 						Info: sdtypes.UnwindInfo{
-							Opcode:   support.UnwindOpcodeBaseFP,
-							Param:    int32(frameSize),
-							FPOpcode: support.UnwindOpcodeBaseFP,
-							FPParam:  8,
+							BaseReg:    support.UnwindRegFp,
+							Param:      int32(frameSize),
+							AuxBaseReg: support.UnwindRegFp,
+							AuxParam:   8,
 						},
 					},
 					sdtypes.StackDelta{Address: addr + offs + 4, Info: sdtypes.UnwindInfoLR},

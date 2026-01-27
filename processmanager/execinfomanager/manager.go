@@ -430,16 +430,16 @@ func (state *executableInfoManagerState) loadDeltas(
 // Zero means no merging happened. Only small differences for address and the CFA delta
 // are considered, in order to limit the amount of unique combinations generated.
 func calculateMergeOpcode(delta, nextDelta sdtypes.StackDelta) uint8 {
-	if delta.Info.Opcode == support.UnwindOpcodeCommand {
+	if delta.Info.Flags&support.UnwindFlagCommand != 0 {
 		return 0
 	}
 	addrDiff := nextDelta.Address - delta.Address
 	if addrDiff < 1 || addrDiff > 2 {
 		return 0
 	}
-	if nextDelta.Info.Opcode != delta.Info.Opcode ||
-		nextDelta.Info.FPOpcode != delta.Info.FPOpcode ||
-		nextDelta.Info.FPParam != delta.Info.FPParam {
+	if nextDelta.Info.BaseReg != delta.Info.BaseReg ||
+		nextDelta.Info.AuxBaseReg != delta.Info.AuxBaseReg ||
+		nextDelta.Info.AuxParam != delta.Info.AuxParam {
 		return 0
 	}
 	paramDiff := nextDelta.Info.Param - delta.Info.Param
@@ -458,7 +458,7 @@ func calculateMergeOpcode(delta, nextDelta sdtypes.StackDelta) uint8 {
 func (state *executableInfoManagerState) getUnwindInfoIndex(
 	info sdtypes.UnwindInfo,
 ) (uint16, error) {
-	if info.Opcode == support.UnwindOpcodeCommand {
+	if info.Flags&support.UnwindFlagCommand != 0 {
 		return uint16(info.Param) | support.DeltaCommandFlag, nil
 	}
 
