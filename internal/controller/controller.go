@@ -45,6 +45,19 @@ func New(cfg *Config) *Controller {
 
 // Start starts the controller
 // The controller should only be started once.
+//
+// Lifecycle note:
+// This controller is expected to be started by the OpenTelemetry Collector
+// service. If Start returns an error (for example, if StartMapMonitors fails),
+// collector startup is aborted and the collector will immediately invoke
+// Shutdown on all started services.
+//
+// In other words, partial initialization performed by Start does not require
+// explicit cleanup on error here: the collector guarantees that Shutdown(ctx)
+// will be called as part of its startup error handling path.
+//
+// See:
+// https://github.com/open-telemetry/opentelemetry-collector/blob/v0.144.0/otelcol/collector.go#L258-L260
 func (c *Controller) Start(ctx context.Context) error {
 	if err := linux.ProbeBPFSyscall(); err != nil {
 		return fmt.Errorf("failed to probe eBPF syscall: %w", err)
