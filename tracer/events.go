@@ -33,7 +33,8 @@ const (
 	// consuming goroutine doesn't go idle due to scheduling, but small enough
 	// so that the hostagent startup phase can wait on most PID notifications
 	// to be processed before starting the tracer.
-	pidEventBufferSize = 10
+	pidEventBufferSize           = 10
+	defaultMemProfileSampleCount = 128
 )
 
 // StartPIDEventProcessor spawns a goroutine to process PID events.
@@ -149,8 +150,15 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	traceOutChan chan<- *host.Trace) func() []metrics.Metric {
 	eventsMap := t.ebpfMaps["trace_events"]
-	eventReader, err := perf.NewReader(eventsMap,
-		(int(t.memProfileBlock/1024)+t.samplesPerSecond)*int(unsafe.Sizeof(C.Trace{})))
+	sampleCount := 0
+	if t.samplesPerSecond > 0 {
+		sampleCount += t.samplesPerSecond
+	}
+	if t.memProfileBlock > 0 {
+		// 开启内存profile的时候，默认多缓存128个样本的trace
+		sampleCount += defaultMemProfileSampleCount
+	}
+	eventReader, err := perf.NewReader(eventsMap, sampleCount*int(unsafe.Sizeof(C.Trace{})))
 	if err != nil {
 		log.Fatalf("Failed to setup perf reporting via %s: %v", eventsMap, err)
 	}
