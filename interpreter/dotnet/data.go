@@ -22,6 +22,18 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
+// dotnetCdacHeader is the Dotnet CDAC header
+// https://github.com/dotnet/runtime/blob/v10.0.2/docs/design/datacontracts/contract-descriptor.md
+type dotnetCdacHeader struct {
+	magic     uint64
+	flags     uint32
+	descrSize uint32
+	descrPtr  uint64
+	dataCount uint32
+	pad0      uint32
+	dataPtr   uint64
+}
+
 // globalVar is a helper type to decode a Global definition from CDAC JSON contract
 // https://github.com/dotnet/runtime/blob/v10.0.2/docs/design/datacontracts/data_descriptor.md#global-values
 type globalVar uint64
@@ -317,40 +329,35 @@ func (d *dotnetData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address)
 		cdac.dacTable.StubLinkStubManager = 0xa
 	}
 
-	var err error
 	if d.cdacDescAddr != libpf.SymbolValueInvalid {
-		// https://github.com/dotnet/runtime/blob/v10.0.2/docs/design/datacontracts/contract-descriptor.md
-		hdr := struct {
-			magic     uint64
-			flags     uint32
-			descrSize uint32
-			descrPtr  uint64
-			dataCount uint32
-			pad0      uint32
-			dataPtr   uint64
-		}{}
-		if err = rm.Read(libpf.Address(d.cdacDescAddr)+bias, pfunsafe.FromPointer(&hdr)); err == nil {
-			if hdr.magic == 0x0043414443434e44 && hdr.descrSize < 64*1024 {
-				jsonData := make([]byte, hdr.descrSize)
-				err = rm.Read(libpf.Address(hdr.descrPtr), jsonData)
-				if err == nil {
-					err = json.Unmarshal(jsonData, &cdac)
-					log.Debugf("CDAC data unmarshalled: %v", err)
-				}
-			}
-			// Synthesize missing data
-			if vms.Module.SimpleName == 0 {
-				vms.Module.SimpleName = vms.Module.Path - 8
-			}
-			if vms.CodeHeapListNode.SizeOf == 0 {
-				vms.CodeHeapListNode.SizeOf = vms.CodeHeapListNode.HeaderMap + 8
-			}
-			if vms.RangeSection.RangeList == 0 {
-				vms.RangeSection.RangeList = vms.RangeSection.HeapList + 8
-			}
-			if vms.RangeSection.SizeOf == 0 {
-				vms.RangeSection.SizeOf = vms.RangeSection.NextForDelete
-			}
+		var hdr dotnetCdacHeader
+		if err := rm.Read(libpf.Address(d.cdacDescAddr)+bias, pfunsafe.FromPointer(&hdr)); err != nil {
+			return dotnetCdac{}, err
+		}
+		if hdr.magic != 0x0043414443434e44 || hdr.descrSize > 64*1024 {
+			return dotnetCdac{}, fmt.Errorf("invalid cdac header: magic=%x, size=%d",
+				hdr.magic, hdr.descrSize)
+		}
+		jsonData := make([]byte, hdr.descrSize)
+		if err := rm.Read(libpf.Address(hdr.descrPtr), jsonData); err != nil {
+			return dotnetCdac{}, err
+		}
+		if err := json.Unmarshal(jsonData, &cdac); err != nil {
+			return dotnetCdac{}, err
+		}
+
+		// Synthesize missing data
+		if vms.Module.SimpleName == 0 {
+			vms.Module.SimpleName = vms.Module.Path - 8
+		}
+		if vms.CodeHeapListNode.SizeOf == 0 {
+			vms.CodeHeapListNode.SizeOf = vms.CodeHeapListNode.HeaderMap + 8
+		}
+		if vms.RangeSection.RangeList == 0 {
+			vms.RangeSection.RangeList = vms.RangeSection.HeapList + 8
+		}
+		if vms.RangeSection.SizeOf == 0 {
+			vms.RangeSection.SizeOf = vms.RangeSection.NextForDelete
 		}
 	}
 	vms.RealCodeHeader.SizeOf = vms.RealCodeHeader.MethodDesc + 8
@@ -359,5 +366,5 @@ func (d *dotnetData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address)
 	cdac.calculated.MethodDescTokenRemainderMask = (1 << cdac.Globals.MethodDescTokenRemainderBitCount) - 1
 	cdac.calculated.MethodDescChunkTokenRangeMask = (1 << (24 - cdac.Globals.MethodDescTokenRemainderBitCount)) - 1
 
-	return cdac, err
+	return cdac, nil
 }
