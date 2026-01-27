@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
 // hasProbeReadBug returns true if the given Linux kernel version is affected by
@@ -64,13 +66,14 @@ func getOnlineCPUIDs() ([]int, error) {
 func readCPURange(cpuRangeStr string) ([]int, error) {
 	var cpus []int
 	cpuRangeStr = strings.Trim(cpuRangeStr, "\n ")
-	for _, cpuRange := range strings.Split(cpuRangeStr, ",") {
-		rangeOp := strings.SplitN(cpuRange, "-", 2)
+	for cpuRange := range strings.SplitSeq(cpuRangeStr, ",") {
+		var rangeOp [2]string
+		nParts := stringutil.SplitN(cpuRange, "-", rangeOp[:])
 		first, err := strconv.ParseUint(rangeOp[0], 10, 32)
 		if err != nil {
 			return nil, err
 		}
-		if len(rangeOp) == 1 {
+		if nParts == 1 {
 			cpus = append(cpus, int(first))
 			continue
 		}

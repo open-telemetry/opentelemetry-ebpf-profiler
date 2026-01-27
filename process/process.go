@@ -102,8 +102,7 @@ func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 		if envVars, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", sp.pid)); err == nil {
 			envVarMap = make(map[libpf.String]libpf.String, len(cfg.IncludeEnvVars))
 			// environ has environment variables separated by a null byte (hex: 00)
-			splittedVars := strings.Split(pfunsafe.ToString(envVars), "\000")
-			for _, envVar := range splittedVars {
+			for envVar := range strings.SplitSeq(pfunsafe.ToString(envVars), "\000") {
 				var fields [2]string
 				if stringutil.SplitN(envVar, "=", fields[:]) < 2 {
 					continue

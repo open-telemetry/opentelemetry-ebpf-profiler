@@ -416,20 +416,12 @@ func (impl *ebpfMapsImpl) RemoveReportedPID(pid libpf.PID) {
 }
 
 // UpdateUnwindInfo writes UnwindInfo into the unwind info array at the given index
-func (impl *ebpfMapsImpl) UpdateUnwindInfo(index uint16, info sdtypes.UnwindInfo) error {
+func (impl *ebpfMapsImpl) UpdateUnwindInfo(index uint16, value sdtypes.UnwindInfo) error {
 	if uint32(index) >= impl.UnwindInfoArray.MaxEntries() {
 		return fmt.Errorf("unwind info array full (%d/%d items)",
 			index, impl.UnwindInfoArray.MaxEntries())
 	}
-
 	key := uint32(index)
-	value := support.UnwindInfo{
-		Opcode:      info.Opcode,
-		FpOpcode:    info.FPOpcode,
-		MergeOpcode: info.MergeOpcode,
-		Param:       info.Param,
-		FpParam:     info.FPParam,
-	}
 	return impl.trackMapError(metrics.IDUnwindInfoArrayUpdate,
 		impl.UnwindInfoArray.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
 			cebpf.UpdateAny))

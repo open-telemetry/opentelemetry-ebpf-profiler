@@ -23,7 +23,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
-	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -187,7 +186,7 @@ func (i *dotnetInstance) addRange(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	i.ranges[lowAddress] = rs
 
 	for _, prefix := range rs.prefixes {
-		err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindDotnet,
+		err := ebpf.UpdatePidInterpreterMapping(pid, prefix, i.d.unwinder,
 			host.FileID(stubTypeOrHdrMap), uint64(mapBase))
 		if err != nil {
 			log.Debugf("Failed to update interpreter mapping: %v", err)

@@ -641,12 +641,12 @@ func parseX86pclntabFunc(deltas *sdtypes.StackDeltaArray, p pcval, s strategy) e
 	hints := sdtypes.UnwindHintKeep
 	for ok := true; ok; ok = p.step() {
 		info := sdtypes.UnwindInfo{
-			Opcode: support.UnwindOpcodeBaseSP,
-			Param:  p.val + 8,
+			BaseReg: support.UnwindRegSp,
+			Param:   p.val + 8,
 		}
 		if s == strategyDeltasWithFrame && info.Param >= 16 {
-			info.FPOpcode = support.UnwindOpcodeBaseCFA
-			info.FPParam = -16
+			info.AuxBaseReg = support.UnwindRegCfa
+			info.AuxParam = -16
 		}
 		deltas.Add(sdtypes.StackDelta{
 			Address: uint64(p.pcStart),
@@ -670,13 +670,13 @@ func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, p pcval, s strategy)
 			// Regular basic block in the function body: unwind via SP.
 			info = sdtypes.UnwindInfo{
 				// Unwind via SP offset.
-				Opcode: support.UnwindOpcodeBaseSP,
-				Param:  p.val,
+				BaseReg: support.UnwindRegSp,
+				Param:   p.val,
 			}
 			if s == strategyDeltasWithFrame {
 				// On ARM64, the previous LR value is stored to top-of-stack.
-				info.FPOpcode = support.UnwindOpcodeBaseSP
-				info.FPParam = 0
+				info.AuxBaseReg = support.UnwindRegSp
+				info.AuxParam = 0
 			}
 		}
 

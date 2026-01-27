@@ -42,6 +42,7 @@ FLAGS=$(TARGET_FLAGS) -g \
 	-Wno-sign-compare \
 	-fno-stack-protector \
 	-D__SOURCE_DATE_EPOCH__=0 \
+	-std=gnu17 \
 	-Xclang -fdebug-prefix-map=$(CURDIR)=$(REPRODUCIBLE_PREFIX) \
 	-Xclang -fmacro-prefix-map=$(CURDIR)=$(REPRODUCIBLE_PREFIX)
 
