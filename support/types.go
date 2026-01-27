@@ -259,7 +259,7 @@ type PyProcInfo struct {
 	AutoTLSKeyAddr                 uint64
 	NoneStructAddr                 uint64
 	Version                        uint16
-	Tls_offset                     int8
+	Tls_offset                     int16
 	TsdInfo                        TSDInfo
 	PyThreadState_frame            uint8
 	PyCFrame_current_frame         uint8

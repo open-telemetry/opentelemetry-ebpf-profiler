@@ -381,7 +381,7 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 	cdata := support.PyProcInfo{
 		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
 		Version:        d.version,
-		Tls_offset:     int8(d.staticTLSOffset),
+		Tls_offset:     int16(d.staticTLSOffset),
 		TsdInfo:        libcInfo.TSDInfo,
 
 		PyThreadState_frame:            uint8(vm.PyThreadState.Frame),
