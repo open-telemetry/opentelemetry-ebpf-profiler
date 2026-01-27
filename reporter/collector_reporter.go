@@ -5,6 +5,7 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 
 import (
 	"context"
+	"time"
 
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -53,6 +54,9 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 }
 
 func (r *CollectorReporter) Start(ctx context.Context) error {
+	// Initialize collection start time
+	r.collectionStartTime = time.Now()
+
 	// Create a child context for reporting features
 	ctx, cancelReporting := context.WithCancel(ctx)
 
@@ -82,9 +86,13 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	reportedEvents := (*traceEventsPtr)
 	newEvents := make(samples.TraceEventsTree)
 	*traceEventsPtr = newEvents
+	collectionEndTime := time.Now()
+	collectionStartTime := r.collectionStartTime
+	r.collectionStartTime = collectionEndTime
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
-	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version)
+	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version,
+		collectionStartTime, collectionEndTime)
 	if err != nil {
 		log.Errorf("pdata: %v", err)
 		return nil

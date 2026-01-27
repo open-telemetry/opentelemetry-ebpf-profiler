@@ -5,7 +5,6 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 
 import (
 	"fmt"
-	"math"
 	"path/filepath"
 	"time"
 
@@ -27,9 +26,11 @@ const (
 )
 
 // Generate generates a pdata request out of internal profiles data, to be
-// exported.
+// exported. The collectionStartTime and collectionEndTime define the time window
+// during which the profiler was actively collecting samples.
 func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	agentName, agentVersion string,
+	collectionStartTime, collectionEndTime time.Time,
 ) (pprofile.Profiles, error) {
 	profiles := pprofile.NewProfiles()
 	dic := profiles.Dictionary()
@@ -84,7 +85,8 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic,
 				attrMgr, stringSet, funcSet, mappingSet, stackSet, locationSet,
-				origin, originToEvents[origin], prof); err != nil {
+				origin, originToEvents[origin], prof,
+				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
 			}
 		}
@@ -124,6 +126,7 @@ func (p *Pdata) setProfile(
 	origin libpf.Origin,
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
+	collectionStartTime, collectionEndTime time.Time,
 ) error {
 	st := profile.SampleType()
 	switch origin {
@@ -146,14 +149,8 @@ func (p *Pdata) setProfile(
 		return fmt.Errorf("generating profile for unsupported origin %d", origin)
 	}
 
-	startTS, endTS := uint64(math.MaxUint64), uint64(0)
 	for traceKey, traceInfo := range events {
 		sample := profile.Samples().AppendEmpty()
-
-		for _, ts := range traceInfo.Timestamps {
-			startTS = min(startTS, ts)
-			endTS = max(endTS, ts)
-		}
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
 		if origin == support.TraceOriginOffCPU {
@@ -282,8 +279,9 @@ func (p *Pdata) setProfile(
 
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Samples().Len())
 
-	profile.SetDurationNano(endTS - startTS)
-	profile.SetTime(pcommon.Timestamp(startTS))
+	// Use collection window for both duration and start time
+	profile.SetDurationNano(uint64(collectionEndTime.Sub(collectionStartTime).Nanoseconds()))
+	profile.SetTime(pcommon.Timestamp(collectionStartTime.UnixNano()))
 
 	return nil
 }
