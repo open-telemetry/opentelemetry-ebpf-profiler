@@ -106,14 +106,14 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearch
   } else {
     UNROLL for (int i = 0; i < BEAM_STACK_FRAME_SCAN_ITERATIONS; i++)
     {
-// Native stack is not supported on ARM due to 16-byte stack alignment hassle
-// r20 is used to store the stack pointer for JIT code to allow 8-bit alignment.
+      // Native stack is not supported on ARM due to 16-byte stack alignment hassle
+      // r20 is used to store the stack pointer for JIT code to allow 8-bit alignment.
 #if defined(__aarch64__)
       state->r20 += 8;
-      bpf_probe_read_user(&state->pc, sizeof(u64), (void *)state->r20);
+      bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)state->r20);
 #else
       state->sp += 8;
-      bpf_probe_read_user(&state->pc, sizeof(u64), (void *)state->sp);
+      bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)state->sp);
 #endif
       // On the stack, if the value is tagged as a header value, then that means it's actually a
       // continuation pointer.
