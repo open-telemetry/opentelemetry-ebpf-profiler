@@ -250,6 +250,10 @@ func (emc *ebpfMapsCoredump) SupportsGenericBatchOperations() bool {
 	return false
 }
 
+func (emc *ebpfMapsCoredump) SupportsGenericBatchLookupAndDelete() bool {
+	return false
+}
+
 func (emc *ebpfMapsCoredump) SupportsLPMTrieBatchOperations() bool {
 	return false
 }
