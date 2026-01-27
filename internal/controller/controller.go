@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
@@ -26,7 +27,8 @@ type Controller struct {
 	reporter reporter.Reporter
 	tracer   *tracer.Tracer
 
-	cancelFunc context.CancelFunc
+	shutdownMutex sync.Mutex
+	cancelFunc    context.CancelFunc
 }
 
 // New creates a new controller
@@ -154,6 +156,9 @@ func (c *Controller) Start(ctx context.Context) error {
 
 // Shutdown stops the controller
 func (c *Controller) Shutdown() {
+	c.shutdownMutex.Lock()
+	defer c.shutdownMutex.Unlock()
+
 	log.Info("Stop processing ...")
 	if c.cancelFunc != nil {
 		c.cancelFunc()
