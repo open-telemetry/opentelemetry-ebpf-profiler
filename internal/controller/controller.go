@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
@@ -26,7 +27,8 @@ type Controller struct {
 	reporter reporter.Reporter
 	tracer   *tracer.Tracer
 
-	cancelFunc context.CancelFunc
+	shutdownMutex sync.Mutex
+	cancelFunc    context.CancelFunc
 }
 
 // New creates a new controller
@@ -43,6 +45,19 @@ func New(cfg *Config) *Controller {
 
 // Start starts the controller
 // The controller should only be started once.
+//
+// Lifecycle note:
+// This controller is expected to be started by the OpenTelemetry Collector
+// service. If Start returns an error (for example, if StartMapMonitors fails),
+// collector startup is aborted and the collector will immediately invoke
+// Shutdown on all started services.
+//
+// In other words, partial initialization performed by Start does not require
+// explicit cleanup on error here: the collector guarantees that Shutdown(ctx)
+// will be called as part of its startup error handling path.
+//
+// See:
+// https://github.com/open-telemetry/opentelemetry-collector/blob/v0.144.0/otelcol/collector.go#L258-L260
 func (c *Controller) Start(ctx context.Context) error {
 	if err := linux.ProbeBPFSyscall(); err != nil {
 		return fmt.Errorf("failed to probe eBPF syscall: %w", err)
@@ -145,7 +160,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	// So if you change this log line update also the system test.
 	log.Info("Attached sched monitor")
 
-	if err := startTraceHandling(ctx, trc); err != nil {
+	if err := c.startTraceHandling(ctx, trc); err != nil {
 		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
@@ -154,6 +169,9 @@ func (c *Controller) Start(ctx context.Context) error {
 
 // Shutdown stops the controller
 func (c *Controller) Shutdown() {
+	c.shutdownMutex.Lock()
+	defer c.shutdownMutex.Unlock()
+
 	log.Info("Stop processing ...")
 	if c.cancelFunc != nil {
 		c.cancelFunc()
@@ -161,18 +179,23 @@ func (c *Controller) Shutdown() {
 
 	if c.reporter != nil {
 		c.reporter.Stop()
+		// Set to nil to prevent accidental reuse after shutdown
+		c.reporter = nil
 	}
 
 	if c.tracer != nil {
 		c.tracer.Close()
+		// Set to nil to prevent accidental reuse after shutdown
+		c.tracer = nil
 	}
 }
 
-func startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
+func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
 	// Spawn monitors for the various result maps
 	traceCh := make(chan *libpf.EbpfTrace)
+	errCh := make(chan error, 1)
 
-	if err := trc.StartMapMonitors(ctx, traceCh); err != nil {
+	if err := trc.StartMapMonitors(ctx, traceCh, errCh); err != nil {
 		return fmt.Errorf("failed to start map monitors: %v", err)
 	}
 
@@ -184,6 +207,10 @@ func startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
 				if trace != nil {
 					trc.HandleTrace(trace)
 				}
+			case err := <-errCh:
+				log.Errorf("Shutting down controller due to unrecoverable error: %s", err)
+				c.Shutdown()
+				return
 			case <-ctx.Done():
 				return
 			}
