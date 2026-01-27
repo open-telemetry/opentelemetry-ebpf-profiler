@@ -1516,14 +1516,13 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.iseq_constant_body.local_iseq = 168
 		vms.iseq_constant_body.size_of_iseq_constant_body = 352
 	case version >= rubyVersion(4, 0, 0):
-		// Ruby 4.0+ adds lvar_states field after local_table (+8 bytes), but ZJIT
-		// replaces YJIT fields resulting in same total size. The insns_info offsets
-		// are unchanged since they come before local_table in the struct.
+		// Ruby 4.0+ has different struct layout due to ZJIT replacing YJIT
+		// and other internal changes. Offsets determined via GDB analysis.
 		vms.iseq_constant_body.insn_info_body = 112
 		vms.iseq_constant_body.insn_info_size = 128
 		vms.iseq_constant_body.succ_index_table = 136
-		vms.iseq_constant_body.local_iseq = 168
-		vms.iseq_constant_body.size_of_iseq_constant_body = 352
+		vms.iseq_constant_body.local_iseq = 176
+		vms.iseq_constant_body.size_of_iseq_constant_body = 304
 	default: // 3.3.x and 3.5.x have the same values
 		vms.iseq_constant_body.insn_info_body = 112
 		vms.iseq_constant_body.insn_info_size = 128
@@ -1598,13 +1597,12 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	if version >= rubyVersion(3, 0, 0) {
 		if version >= rubyVersion(4, 0, 0) {
-			// Ruby 4.0+ redesigned rb_ractor_sync with Port-based API and removed
-			// receiving_mutex and barrier_wait_cond fields between sync and threads.
-			// The offset is reduced from 3.3+ due to these structural changes.
+			// Ruby 4.0+ redesigned rb_ractor_sync with Port-based API.
+			// Offsets determined via GDB analysis of rb_ractor_struct.
 			if runtime.GOARCH == "amd64" {
-				vms.rb_ractor_struct.running_ec = 0x150
+				vms.rb_ractor_struct.running_ec = 0x138
 			} else {
-				vms.rb_ractor_struct.running_ec = 0x160
+				vms.rb_ractor_struct.running_ec = 0x148
 			}
 		} else if version >= rubyVersion(3, 3, 0) {
 			if runtime.GOARCH == "amd64" {
