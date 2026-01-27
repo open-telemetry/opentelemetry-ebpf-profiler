@@ -21,6 +21,7 @@ import (
 	"github.com/elastic/go-freelru"
 
 	"go.opentelemetry.io/ebpf-profiler/asm/amd"
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
@@ -651,8 +652,7 @@ func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
 	var offset int64
 	switch ef.Machine {
 	case elf.EM_AARCH64:
-		visited := make(map[uint64]bool)
-		offset, err = extractTLSOffsetFromCodeARM64(code, uint64(sym.Address), visited, 0, ef)
+		offset, err = arm.ExtractTLSOffsetFromCodeARM64(code, uint64(sym.Address), ef)
 	case elf.EM_X86_64:
 		offset, err = extractTLSOffsetFromCodeAMD64(code, uint64(sym.Address))
 	default:
