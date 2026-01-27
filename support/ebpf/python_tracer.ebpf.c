@@ -211,7 +211,7 @@ stop:
 static EBPF_INLINE ErrorCode get_PyThreadState(
   const PyProcInfo *pyinfo, void *tsd_base, void *autoTLSkeyAddr, void **thread_state)
 {
-  if (pyinfo->version >= 0x030D && pyinfo->tls_offset != 0) {
+  if (pyinfo->tls_offset != 0) {
     if (bpf_probe_read_user(thread_state, sizeof(void *), tsd_base + pyinfo->tls_offset)) {
       DEBUG_PRINT(
         "Failed to read direct TLS at base 0x%lx offset %d",
