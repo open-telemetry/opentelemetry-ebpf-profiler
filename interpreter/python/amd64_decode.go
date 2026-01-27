@@ -83,12 +83,6 @@ func extractTLSOffsetFromCodeAMD64(code []byte, baseAddr uint64) (int64, error) 
 			continue
 		}
 
-		// Check if the source argument (Args[1]) uses FS segment
-		mem, ok := op.Args[1].(x86asm.Mem)
-		if !ok || mem.Segment != x86asm.FS {
-			continue
-		}
-
 		// Get the destination register's expression
 		dst, ok := op.Args[0].(x86asm.Reg)
 		if !ok {
