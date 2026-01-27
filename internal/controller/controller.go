@@ -189,7 +189,7 @@ func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer)
 				if trace != nil {
 					trc.HandleTrace(trace)
 				}
-			case err := <-errs:
+			case err := <-errCh:
 				log.Errorf("Shutting down controller due to unrecoverable error: %s", err)
 				c.Shutdown()
 				return
