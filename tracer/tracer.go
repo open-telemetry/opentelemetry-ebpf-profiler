@@ -94,6 +94,10 @@ type Tracer struct {
 	// tracePool is cache of libpf.EbpfTrace to avoid GC pressure
 	tracePool sync.Pool
 
+	// monitorPIDEventsMap iterates over the eBPF map pid_events, collects PIDs and
+	// writes them to the keys slice. The implementation is selected on creation.
+	monitorPIDEventsMapMethod func(keys *[]libpf.PIDTID)
+
 	// triggerPIDProcessing is used as manual trigger channel to request immediate
 	// processing of pending PIDs. This is requested on notifications from eBPF code
 	// when process events take place (new, exit, unknown PC).
@@ -232,6 +236,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	}
 
 	hasBatchOperations := ebpfHandler.SupportsGenericBatchOperations()
+	hasBatchLookupAndDelete := ebpfHandler.SupportsGenericBatchLookupAndDelete()
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
 		ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
@@ -258,6 +263,13 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		samplesPerSecond:       cfg.SamplesPerSecond,
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
+	}
+
+	// Use an optimized version if available
+	if hasBatchLookupAndDelete {
+		tracer.monitorPIDEventsMapMethod = (*tracer).monitorPIDEventsMapBatch
+	} else {
+		tracer.monitorPIDEventsMapMethod = (*tracer).monitorPIDEventsMapSingle
 	}
 
 	return tracer, nil
@@ -833,9 +845,9 @@ func (t *Tracer) enableEvent(eventType int) {
 	_ = inhibitEventsMap.Delete(unsafe.Pointer(&et))
 }
 
-// monitorPIDEventsMap periodically iterates over the eBPF map pid_events,
-// collects PIDs and writes them to the keys slice.
-func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) {
+// monitorPIDEventsMapSingle iterates over the eBPF map pid_events, collects PIDs
+// and writes them to the keys slice.
+func (t *Tracer) monitorPIDEventsMapSingle(keys *[]libpf.PIDTID) {
 	eventsMap := t.ebpfMaps["pid_events"]
 	var key, nextKey uint64
 	var value bool
@@ -891,6 +903,34 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) {
 		if _, err := eventsMap.BatchDelete(keys, nil); err != nil {
 			log.Fatalf("Failed to batch delete %d entries from pid_events map: %v",
 				keysToDelete, err)
+		}
+	}
+}
+
+// monitorPIDEventsMapBatch iterates over the eBPF map pid_events in batches,
+// collects PIDs and writes them to the keys slice.
+func (t *Tracer) monitorPIDEventsMapBatch(keys *[]libpf.PIDTID) {
+	eventsMap := t.ebpfMaps["pid_events"]
+
+	removed := make([]uint64, 128)
+	values := make([]bool, len(removed))
+
+	cursor := cebpf.MapBatchCursor{}
+
+	for {
+		n, err := eventsMap.BatchLookupAndDelete(&cursor, removed, values, nil)
+
+		// There can be results even if there's an error.
+		for i := range n {
+			*keys = append(*keys, libpf.PIDTID(removed[i]))
+		}
+
+		if errors.Is(err, cebpf.ErrKeyNotExist) {
+			break
+		}
+
+		if err != nil {
+			log.Fatalf("Failed to batch lookup and delete entries from pid_events map: %v", err)
 		}
 	}
 }
@@ -1043,7 +1083,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
 		t.triggerPIDProcessing, func(_ bool) {
 			t.enableEvent(support.EventTypeGenericPID)
-			t.monitorPIDEventsMap(&pidEvents)
+			t.monitorPIDEventsMapMethod(&pidEvents)
 
 			for _, pidTid := range pidEvents {
 				log.Debugf("=> %v", pidTid)
