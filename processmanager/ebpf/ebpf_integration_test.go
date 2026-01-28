@@ -82,6 +82,11 @@ func TestBatchOperations(t *testing.T) {
 			if err != nil {
 				require.ErrorIs(t, err, cebpf.ErrNotSupported)
 			}
+
+			err = probeBatchLookupAndDelete(mapType)
+			if err != nil {
+				require.ErrorIs(t, err, cebpf.ErrNotSupported)
+			}
 		})
 	}
 }

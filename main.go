@@ -117,6 +117,7 @@ func mainWithExitCode() exitCode {
 		GRPCStartupBackoffTime: intervals.GRPCStartupBackoffTime(),
 		GRPCConnectionTimeout:  intervals.GRPCConnectionTimeout(),
 		ReportInterval:         intervals.ReportInterval(),
+		ReportJitter:           cfg.ReporterJitter,
 		SamplesPerSecond:       cfg.SamplesPerSecond,
 	})
 	if err != nil {

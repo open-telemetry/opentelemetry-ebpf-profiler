@@ -60,6 +60,10 @@ type EbpfHandler interface {
 	// on hash and array maps.
 	SupportsGenericBatchOperations() bool
 
+	// SupportsGenericBatchLookupAndDelete returns true if the kernel supports eBPF batch
+	// lookup-and-delete operations on hash and array maps.
+	SupportsGenericBatchLookupAndDelete() bool
+
 	// SupportsLPMTrieBatchOperations returns true if the kernel supports eBPF batch operations
 	// on LPM trie maps.
 	SupportsLPMTrieBatchOperations() bool
