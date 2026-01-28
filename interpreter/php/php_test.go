@@ -30,7 +30,7 @@ func TestPHPRegexs(t *testing.T) {
 func TestVersionExtract(t *testing.T) {
 	tests := map[string]struct {
 		given       string
-		expected    uint
+		expected    uint32
 		expectError bool
 	}{
 		"7.x":          {given: "7.4.19", expected: phpVersion(7, 4, 19), expectError: false},

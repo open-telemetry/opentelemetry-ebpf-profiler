@@ -164,7 +164,7 @@ func parseUIDGIDLine(line string) (uint32, error) {
 	}
 
 	// Fields: real, effective, saved, FS UID
-	eid, err := strconv.Atoi(fields[2])
+	eid, err := strconv.ParseUint(fields[2], 10, 32)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse uid/gid int: %v", err)
 	}

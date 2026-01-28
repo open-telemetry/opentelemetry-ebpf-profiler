@@ -143,7 +143,7 @@ var (
 )
 
 type opcacheData struct {
-	version uint
+	version uint32
 
 	// dasmBuf is the address of the shared memory that is used for the JIT'd code.
 	// This is defined here:
@@ -252,7 +252,7 @@ func (d *opcacheData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.
 func (d *opcacheData) Unload(_ interpreter.EbpfHandler) {
 }
 
-func determineOPCacheVersion(ef *pfelf.File) (uint, error) {
+func determineOPCacheVersion(ef *pfelf.File) (uint32, error) {
 	// In contrast to interpreterphp, the opcache actually contains
 	// a really straightforward way to recover the version. As the opcache
 	// is a Zend extension, it has to provide a version, which just so
