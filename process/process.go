@@ -152,10 +152,11 @@ func parseContainerID(cgroupFile io.Reader) libpf.String {
 			continue // Skip a common case
 		}
 		line := pfunsafe.ToString(b)
-		m := expLine.FindStringSubmatch(line)
-		if len(m) == 2 {
-			if parts := expContainerID.FindStringSubmatch(m[1]); len(parts) == 2 {
-				return libpf.Intern(parts[1])
+		m := expLine.FindStringSubmatchIndex(line)
+		if len(m) == 4 {
+			sub := line[m[2]:m[3]]
+			if parts := expContainerID.FindStringSubmatchIndex(sub); len(parts) == 4 {
+				return libpf.Intern(sub[parts[2]:parts[3]])
 			}
 		}
 		log.Debugf("Could not extract container ID from line: %s", line)
