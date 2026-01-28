@@ -17,5 +17,11 @@ func AddJitter(baseDuration time.Duration, jitter float64) time.Duration {
 		return baseDuration
 	}
 	//nolint:gosec
-	return time.Duration((1 + jitter - 2*jitter*rand.Float64()) * float64(baseDuration))
+	result := time.Duration((1 + jitter - 2*jitter*rand.Float64()) * float64(baseDuration))
+	// Clamp to minimum 1ns to prevent panic in time.Ticker.Reset with d <= 0.
+	// With jitter close to 1.0, float arithmetic can produce values that truncate to 0.
+	if result < 1 {
+		return 1
+	}
+	return result
 }
