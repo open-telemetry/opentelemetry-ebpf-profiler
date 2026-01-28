@@ -30,9 +30,20 @@ import (
 // GetMappings returns this error when no mappings can be extracted.
 var ErrNoMappings = errors.New("no mappings")
 
+const (
+	containerSource = "[0-9a-f]{64}"
+	taskSource      = "[0-9a-f]{32}-\\d+"
+)
+
 //nolint:lll
 var (
-	cgroupv2ContainerIDPattern = regexp.MustCompile(`0:.*?:.*?([0-9a-fA-F]{64})(?:\.scope)?(?:/[a-z]+)?$`)
+	// expLine matches a line in the /proc/<pid>/cgroup file. It has a submatch for the last element (path), which contains the container ID. Support both cgroup v1 and v2.
+	expLine = regexp.MustCompile(`^\d+:[^:]*:(.+)$`)
+
+	// Inspired from https://github.com/DataDog/dd-otel-host-profiler/blob/1e50a36d4c3a8a87f0cc828f37b48455ec436e55/containermetadata/container.go#L32-L47 with the following changes to handle unit tests in process_test.go:
+	// - support prefix after `scope` to handle "0::/system.slice/docker-b1eba9dfaeba29d8b80532a574a03ea3cac29384327f339c26da13649e2120df.scope/init"
+	// - remove uuidSource to doesn't match "0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-org.gnome.Terminal.slice/vte-spawn-868f9513-eee8-457d-8e36-1b37ae8ae622.scope"
+	expContainerID = regexp.MustCompile(fmt.Sprintf(`(%s|%s)(?:\.scope)?(?:/[a-z]+)?$`, containerSource, taskSource))
 )
 
 // systemProcess provides an implementation of the Process interface for a
@@ -126,7 +137,7 @@ func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 	}
 }
 
-// parseContainerID parses cgroup v2 container IDs
+// parseContainerID parses cgroup v1 and v2 container IDs
 func parseContainerID(cgroupFile io.Reader) libpf.String {
 	scanner := bufio.NewScanner(cgroupFile)
 	buf := make([]byte, 512)
@@ -135,31 +146,32 @@ func parseContainerID(cgroupFile io.Reader) libpf.String {
 	// With a maximum of 4096 characters path in the kernel, 8192 should be fine here. We don't
 	// expect lines in /proc/<PID>/cgroup to be longer than that.
 	scanner.Buffer(buf, 8192)
-	var pathParts []string
 	for scanner.Scan() {
 		b := scanner.Bytes()
 		if bytes.Equal(b, []byte("0::/")) {
 			continue // Skip a common case
 		}
 		line := pfunsafe.ToString(b)
-		pathParts = cgroupv2ContainerIDPattern.FindStringSubmatch(line)
-		if pathParts == nil {
-			log.Debugf("Could not extract cgroupv2 path from line: %s", line)
-			continue
+		m := expLine.FindStringSubmatch(line)
+		if len(m) == 2 {
+			if parts := expContainerID.FindStringSubmatch(m[1]); len(parts) == 2 {
+				return libpf.Intern(parts[1])
+			}
 		}
-		return libpf.Intern(pathParts[1])
+		log.Debugf("Could not extract container ID from line: %s", line)
 	}
 
 	// No containerID could be extracted
 	return libpf.NullString
 }
 
-// extractContainerID returns the containerID for pid if cgroup v2 is used.
+// extractContainerID returns the containerID for pid (supports both cgroup v1 and v2)
 func extractContainerID(pid libpf.PID) (libpf.String, error) {
 	cgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
 	if err != nil {
 		return libpf.NullString, err
 	}
+	defer cgroupFile.Close()
 
 	return parseContainerID(cgroupFile), nil
 }
