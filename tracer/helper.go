@@ -5,7 +5,6 @@ package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"fmt"
-	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -74,9 +73,6 @@ func readCPURange(cpuRangeStr string) ([]int, error) {
 		if err != nil {
 			return nil, err
 		}
-		if first >= math.MaxInt {
-			return nil, fmt.Errorf("invalid first CPU ID: %d", first)
-		}
 		if nParts == 1 {
 			cpus = append(cpus, int(first))
 			continue
@@ -84,9 +80,6 @@ func readCPURange(cpuRangeStr string) ([]int, error) {
 		last, err := strconv.ParseUint(rangeOp[1], 10, 32)
 		if err != nil {
 			return nil, err
-		}
-		if last >= math.MaxInt {
-			return nil, fmt.Errorf("invalid last CPU ID: %d", last)
 		}
 		for n := first; n <= last; n++ {
 			cpus = append(cpus, int(n))
