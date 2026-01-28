@@ -51,7 +51,7 @@ func hasProbeReadBug(major, minor, patch uint32) bool {
 
 // getOnlineCPUIDs reads online CPUs from /sys/devices/system/cpu/online and reports
 // the core IDs as a list of integers.
-func getOnlineCPUIDs() ([]int, error) {
+func getOnlineCPUIDs() ([]uint32, error) {
 	cpuPath := "/sys/devices/system/cpu/online"
 	buf, err := os.ReadFile(cpuPath)
 	if err != nil {
@@ -63,8 +63,8 @@ func getOnlineCPUIDs() ([]int, error) {
 // Since the format of online CPUs can contain comma-separated, ranges or a single value
 // we need to try and parse it in all its different forms.
 // Reference: https://www.kernel.org/doc/Documentation/admin-guide/cputopology.rst
-func readCPURange(cpuRangeStr string) ([]int, error) {
-	var cpus []int
+func readCPURange(cpuRangeStr string) ([]uint32, error) {
+	var cpus []uint32
 	cpuRangeStr = strings.Trim(cpuRangeStr, "\n ")
 	for cpuRange := range strings.SplitSeq(cpuRangeStr, ",") {
 		var rangeOp [2]string
@@ -74,7 +74,7 @@ func readCPURange(cpuRangeStr string) ([]int, error) {
 			return nil, err
 		}
 		if nParts == 1 {
-			cpus = append(cpus, int(first))
+			cpus = append(cpus, uint32(first))
 			continue
 		}
 		last, err := strconv.ParseUint(rangeOp[1], 10, 32)
@@ -82,7 +82,7 @@ func readCPURange(cpuRangeStr string) ([]int, error) {
 			return nil, err
 		}
 		for n := first; n <= last; n++ {
-			cpus = append(cpus, int(n))
+			cpus = append(cpus, uint32(n))
 		}
 	}
 	return cpus, nil
