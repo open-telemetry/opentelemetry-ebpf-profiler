@@ -5,6 +5,7 @@ package libpf
 
 import (
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/util"
 
@@ -37,4 +38,37 @@ func TestIsValidString(t *testing.T) {
 			assert.Equal(t, testcase.expected, util.IsValidString(string(testcase.input)))
 		})
 	}
+}
+
+func TestAddJitter(t *testing.T) {
+	baseDuration := 5 * time.Second
+
+	t.Run("never produces zero or negative duration", func(t *testing.T) {
+		// Test with jitter values including edge case near 1.0
+		jitterValues := []float64{0.2, 0.5, 0.9, 0.99, 1.0}
+		for _, jitter := range jitterValues {
+			for i := 0; i < 1000; i++ {
+				result := AddJitter(baseDuration, jitter)
+				assert.Greater(t, result, time.Duration(0),
+					"jitter=%f produced non-positive duration", jitter)
+			}
+		}
+	})
+
+	t.Run("result is within expected range for normal jitter", func(t *testing.T) {
+		jitter := 0.2
+		minExpected := time.Duration(float64(baseDuration) * (1 - jitter))
+		maxExpected := time.Duration(float64(baseDuration) * (1 + jitter))
+
+		for i := 0; i < 1000; i++ {
+			result := AddJitter(baseDuration, jitter)
+			assert.GreaterOrEqual(t, result, minExpected)
+			assert.LessOrEqual(t, result, maxExpected)
+		}
+	})
+
+	t.Run("jitter of 0.0 returns baseDuration exactly", func(t *testing.T) {
+		result := AddJitter(baseDuration, 0.0)
+		assert.Equal(t, baseDuration, result)
+	})
 }
