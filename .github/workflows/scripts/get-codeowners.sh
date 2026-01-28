@@ -21,11 +21,11 @@ get_codeowners() {
         cut -f3- -d ' '
 }
 
-if [[ -z "${INTERPRETER:-}" ]]; then
-    echo "INTERPRETER has not been set, please ensure it is set."
+if [[ -z "${COMPONENT:-}" ]]; then
+    echo "COMPONENT has not been set, please ensure it is set."
     exit 1
 fi
 
-OWNERS="$(get_codeowners "${INTERPRETER}")"
+OWNERS="$(get_codeowners "${COMPONENT}")"
 
 echo "${OWNERS}"

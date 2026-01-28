@@ -32,9 +32,9 @@ main () {
     AUTHOR=$(echo -n "${JSON}"| jq -r '.author.login')
     FILES=$(echo -n "${JSON}"| jq -r '.files[].path')
     REVIEW_LOGINS=$(echo -n "${JSON}"| jq -r '.latestReviews[].author.login')
-    INTERPRETERS=$(bash "${CUR_DIRECTORY}/get-interpreters.sh" | tac) # Reversed so we visit subdirectories first
+    COMPONENTS=$(bash "${CUR_DIRECTORY}/get-components.sh" | tac) # Reversed so we visit subdirectories first
     REVIEWERS=""
-    declare -A PROCESSED_INTERPRETERS
+    declare -A PROCESSED_COMPONENTS
     declare -A REVIEWED
 
     for REVIEWER in ${REVIEW_LOGINS}; do
@@ -51,30 +51,29 @@ main () {
         echo "This PR has not yet been reviewed, all code owners are eligible for a review request"
     fi
 
-    for INTERPRETER in ${INTERPRETERS}; do
+    for COMPONENT in ${COMPONENTS}; do
         # Files will be in alphabetical order and there are many files to
-        # an interpreter, so loop through files in an inner loop. This allows
-        # us to remove all files for an interpreter from the list so they
-        # won't be checked against the remaining interpreters in the components
+        # a component, so loop through files in an inner loop. This allows
+        # us to remove all files for a component from the list so they
+        # won't be checked against the remaining components in the components
         # list. This provides a meaningful speedup in practice.
         for FILE in ${FILES}; do
-            MATCH=$(echo -n "${FILE}" | grep -E "^${INTERPRETER}" || true)
+            MATCH=$(echo -n "${FILE}" | grep -E "^${COMPONENT}" || true)
 
             if [[ -z "${MATCH}" ]]; then
                 continue
             fi
 
-
             # If we match a file with a component we don't need to process the file again.
             FILES=$(echo -n "${FILES}" | grep -v "${FILE}")
 
-            if [[ -v PROCESSED_INTERPRETERS["${INTERPRETER}"] ]]; then
+            if [[ -v PROCESSED_COMPONENTS["${COMPONENT}"] ]]; then
                 continue
             fi
 
-            PROCESSED_INTERPRETERS["${INTERPRETER}"]=true
+            PROCESSED_COMPONENTS["${COMPONENT}"]=true
 
-            OWNERS=$(INTERPRETER="${INTERPRETER}" bash "${CUR_DIRECTORY}/get-codeowners.sh")
+            OWNERS=$(COMPONENT="${COMPONENT}" bash "${CUR_DIRECTORY}/get-codeowners.sh")
 
             for OWNER in ${OWNERS}; do
                 # Users that leave reviews are removed from the "requested reviewers"
