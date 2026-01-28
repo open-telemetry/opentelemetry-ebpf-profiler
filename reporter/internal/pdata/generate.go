@@ -35,6 +35,26 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	profiles := pprofile.NewProfiles()
 	dic := profiles.Dictionary()
 
+	// Find oldest sample timestamp across all containers to handle buffered samples.
+	adjustedStartTime := collectionStartTime
+	for _, containerEvents := range tree {
+		for _, originEvents := range containerEvents {
+			for _, traceEvents := range originEvents {
+				for _, ts := range traceEvents.Timestamps {
+					sampleTime := time.Unix(0, int64(ts))
+					if sampleTime.Before(adjustedStartTime) {
+						adjustedStartTime = sampleTime
+					}
+				}
+			}
+		}
+	}
+	if adjustedStartTime.Before(collectionStartTime) {
+		log.Debugf("Adjusted profile start time backward by %v to include oldest sample",
+			collectionStartTime.Sub(adjustedStartTime))
+	}
+	collectionStartTime = adjustedStartTime
+
 	// Temporary helpers that will build the various tables in ProfilesDictionary.
 	stringSet := make(orderedset.OrderedSet[string], 64)
 	funcSet := make(orderedset.OrderedSet[funcInfo], 64)
@@ -279,7 +299,6 @@ func (p *Pdata) setProfile(
 
 	log.Debugf("Reporting OTLP profile with %d samples", profile.Samples().Len())
 
-	// Use collection window for both duration and start time
 	profile.SetDurationNano(uint64(collectionEndTime.Sub(collectionStartTime).Nanoseconds()))
 	profile.SetTime(pcommon.Timestamp(collectionStartTime.UnixNano()))
 

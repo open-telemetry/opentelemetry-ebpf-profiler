@@ -71,7 +71,6 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 
 // Start sets up and manages the reporting connection to a OTLP backend.
 func (r *OTLPReporter) Start(ctx context.Context) error {
-	// Initialize collection start time
 	r.collectionStartTime = time.Now()
 
 	// Create a child context for reporting features

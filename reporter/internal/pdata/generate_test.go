@@ -225,37 +225,100 @@ func TestFunctionTableOrder(t *testing.T) {
 }
 
 func TestProfileDuration(t *testing.T) {
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID: libpf.NewFileID(1, 2),
+		}),
+	})
+
 	for _, tt := range []struct {
-		name   string
-		events map[libpf.Origin]samples.KeyToEventMapping
+		name             string
+		tree             samples.TraceEventsTree
+		expectedTime     pcommon.Timestamp
+		expectedDuration uint64
 	}{
 		{
-			name: "profile duration",
-			events: map[libpf.Origin]samples.KeyToEventMapping{
-				support.TraceOriginSampling: map[samples.TraceAndMetaKey]*samples.TraceEvents{
-					{Pid: 1}: {
-						Timestamps: []uint64{2, 1, 3, 4, 7},
-					},
-					{Pid: 2}: {
-						Timestamps: []uint64{8},
+			name: "samples within collection window",
+			tree: samples.TraceEventsTree{
+				libpf.NullString: map[libpf.Origin]samples.KeyToEventMapping{
+					support.TraceOriginSampling: map[samples.TraceAndMetaKey]*samples.TraceEvents{
+						{Pid: 1}: {
+							// Timestamps within the collection window (1000-1060)
+							Timestamps: []uint64{
+								uint64(time.Unix(1010, 0).UnixNano()),
+								uint64(time.Unix(1020, 0).UnixNano()),
+								uint64(time.Unix(1030, 0).UnixNano()),
+							},
+						},
+						{Pid: 2}: {
+							Timestamps: []uint64{uint64(time.Unix(1040, 0).UnixNano())},
+						},
 					},
 				},
 			},
+			expectedTime:     testProfileTime,
+			expectedDuration: testProfileDuration,
+		},
+		{
+			name: "adjusted start time for buffered samples",
+			tree: samples.TraceEventsTree{
+				libpf.NullString: map[libpf.Origin]samples.KeyToEventMapping{
+					support.TraceOriginSampling: {
+						{Pid: 1}: {
+							Frames: newTestFrames(false),
+							// Sample before collection start (990 vs 1000)
+							Timestamps: []uint64{uint64(time.Unix(990, 0).UnixNano())},
+						},
+					},
+				},
+			},
+			expectedTime:     pcommon.Timestamp(time.Unix(990, 0).UnixNano()),
+			expectedDuration: uint64(testCollectionEnd.Sub(time.Unix(990, 0)).Nanoseconds()),
+		},
+		{
+			name: "adjusted across multiple containers",
+			tree: samples.TraceEventsTree{
+				libpf.Intern("container1"): map[libpf.Origin]samples.KeyToEventMapping{
+					support.TraceOriginSampling: {
+						{Pid: 1}: {
+							Frames: singleFrameTrace(libpf.GoFrame, mapping, 0x10, "func1", libpf.NullString, 1),
+							// Oldest sample at 985
+							Timestamps: []uint64{uint64(time.Unix(985, 0).UnixNano())},
+						},
+					},
+				},
+				libpf.Intern("container2"): map[libpf.Origin]samples.KeyToEventMapping{
+					support.TraceOriginSampling: {
+						{Pid: 2}: {
+							Frames: singleFrameTrace(libpf.GoFrame, mapping, 0x20, "func2", libpf.NullString, 2),
+							// Newer old sample at 995
+							Timestamps: []uint64{uint64(time.Unix(995, 0).UnixNano())},
+						},
+					},
+				},
+			},
+			expectedTime:     pcommon.Timestamp(time.Unix(985, 0).UnixNano()),
+			expectedDuration: uint64(testCollectionEnd.Sub(time.Unix(985, 0)).Nanoseconds()),
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			d, err := New(100, nil)
 			require.NoError(t, err)
 
-			tree := make(samples.TraceEventsTree)
-			tree[libpf.NullString] = tt.events
-			res, err := testGenerate(d, tree, tt.name, "version")
+			res, err := testGenerate(d, tt.tree, tt.name, "version")
 			require.NoError(t, err)
 
-			profile := res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0)
-			// Duration and time both use collection window
-			require.Equal(t, testProfileDuration, profile.DurationNano())
-			require.Equal(t, testProfileTime, profile.Time())
+			for i := 0; i < res.ResourceProfiles().Len(); i++ {
+				rp := res.ResourceProfiles().At(i)
+				for j := 0; j < rp.ScopeProfiles().Len(); j++ {
+					sp := rp.ScopeProfiles().At(j)
+					for k := 0; k < sp.Profiles().Len(); k++ {
+						profile := sp.Profiles().At(k)
+						assert.Equal(t, tt.expectedTime, profile.Time())
+						assert.Equal(t, tt.expectedDuration, profile.DurationNano())
+					}
+				}
+			}
 		})
 	}
 }
@@ -311,7 +374,7 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 			traceKey: &samples.TraceEvents{
 				Frames: singleFrameTrace(libpf.GoFrame, mapping,
 					0x10, funcName, filePath, 42),
-				Timestamps: []uint64{100},
+				Timestamps: []uint64{uint64(time.Unix(1010, 0).UnixNano())},
 				EnvVars: map[libpf.String]libpf.String{
 					libpf.Intern("FOO"): libpf.Intern("BAR"),
 				},
@@ -379,15 +442,21 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 	events1 := map[libpf.Origin]samples.KeyToEventMapping{
 		support.TraceOriginSampling: {
 			traceKey: &samples.TraceEvents{
-				Frames:     frames,
-				Timestamps: []uint64{1, 2},
+				Frames: frames,
+				Timestamps: []uint64{
+					uint64(time.Unix(1010, 0).UnixNano()),
+					uint64(time.Unix(1020, 0).UnixNano()),
+				},
 			},
 		},
 		support.TraceOriginOffCPU: {
 			traceKey: &samples.TraceEvents{
-				Frames:     frames,
-				Timestamps: []uint64{3, 4},
-				OffTimes:   []int64{10, 20},
+				Frames: frames,
+				Timestamps: []uint64{
+					uint64(time.Unix(1030, 0).UnixNano()),
+					uint64(time.Unix(1040, 0).UnixNano()),
+				},
+				OffTimes: []int64{10, 20},
 			},
 		},
 	}
@@ -395,7 +464,7 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 		support.TraceOriginSampling: {
 			traceKey: &samples.TraceEvents{
 				Frames:     frames,
-				Timestamps: []uint64{5},
+				Timestamps: []uint64{uint64(time.Unix(1050, 0).UnixNano())},
 			},
 		},
 	}
@@ -518,8 +587,12 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	events := map[libpf.Origin]samples.KeyToEventMapping{
 		support.TraceOriginSampling: {
 			traceKey: &samples.TraceEvents{
-				Frames:     singleFrameNative(mappingFile, 0x1000, 0x1000, 0x2000, 0x100),
-				Timestamps: []uint64{123, 456, 789},
+				Frames: singleFrameNative(mappingFile, 0x1000, 0x1000, 0x2000, 0x100),
+				Timestamps: []uint64{
+					uint64(time.Unix(1010, 0).UnixNano()),
+					uint64(time.Unix(1020, 0).UnixNano()),
+					uint64(time.Unix(1030, 0).UnixNano()),
+				},
 			},
 		},
 	}

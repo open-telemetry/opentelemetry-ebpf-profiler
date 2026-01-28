@@ -54,7 +54,6 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 }
 
 func (r *CollectorReporter) Start(ctx context.Context) error {
-	// Initialize collection start time
 	r.collectionStartTime = time.Now()
 
 	// Create a child context for reporting features
