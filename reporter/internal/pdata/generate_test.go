@@ -2,6 +2,7 @@ package pdata
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,6 +16,20 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
+
+var (
+	// Test collection window: 60 second duration
+	testCollectionStart = time.Unix(1000, 0)
+	testCollectionEnd   = time.Unix(1060, 0)
+	// Expected profile metadata based on collection window
+	testProfileTime     = pcommon.Timestamp(testCollectionStart.UnixNano())
+	testProfileDuration = uint64(testCollectionEnd.Sub(testCollectionStart).Nanoseconds())
+)
+
+// testGenerate is a helper that calls Generate with the standard test collection window
+func testGenerate(p *Pdata, tree samples.TraceEventsTree, name, version string) (pprofile.Profiles, error) {
+	return p.Generate(tree, name, version, testCollectionStart, testCollectionEnd)
+}
 
 func TestGetDummyMappingIndex(t *testing.T) {
 	fileID := libpf.NewFileID(12345678, 12345678)
@@ -184,7 +199,7 @@ func TestFunctionTableOrder(t *testing.T) {
 			require.NoError(t, err)
 			tree := make(samples.TraceEventsTree)
 			tree[libpf.NullString] = tt.events
-			res, _ := d.Generate(tree, tt.name, "version")
+			res, _ := testGenerate(d, tree, tt.name, "version")
 			require.Equal(t, tt.expectedResourceProfiles, res.ResourceProfiles().Len())
 			if tt.expectedResourceProfiles == 0 {
 				// Do not check elements of ResourceProfile if there is no expected
@@ -234,12 +249,13 @@ func TestProfileDuration(t *testing.T) {
 
 			tree := make(samples.TraceEventsTree)
 			tree[libpf.NullString] = tt.events
-			res, err := d.Generate(tree, tt.name, "version")
+			res, err := testGenerate(d, tree, tt.name, "version")
 			require.NoError(t, err)
 
 			profile := res.ResourceProfiles().At(0).ScopeProfiles().At(0).Profiles().At(0)
-			require.Equal(t, uint64(7), profile.DurationNano())
-			require.Equal(t, pcommon.Timestamp(1), profile.Time())
+			// Duration and time both use collection window
+			require.Equal(t, testProfileDuration, profile.DurationNano())
+			require.Equal(t, testProfileTime, profile.Time())
 		})
 	}
 }
@@ -249,7 +265,7 @@ func TestGenerate_EmptyTree(t *testing.T) {
 	require.NoError(t, err)
 
 	tree := make(samples.TraceEventsTree)
-	profiles, err := d.Generate(tree, "agent", "v1")
+	profiles, err := testGenerate(d, tree, "agent", "v1")
 	require.NoError(t, err)
 	assert.Equal(t, 0, profiles.ResourceProfiles().Len())
 }
@@ -306,7 +322,7 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 		libpf.Intern("container1"): events,
 	}
 
-	profiles, err := d.Generate(tree, "agent", "v1")
+	profiles, err := testGenerate(d, tree, "agent", "v1")
 	require.NoError(t, err)
 	require.Equal(t, 1, profiles.ResourceProfiles().Len())
 	rp := profiles.ResourceProfiles().At(0)
@@ -320,8 +336,8 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 	assert.Equal(t, semconv.SchemaURL, sp.SchemaUrl())
 	require.Equal(t, 1, sp.Profiles().Len())
 	prof := sp.Profiles().At(0)
-	assert.Equal(t, pcommon.Timestamp(100), prof.Time())
-	assert.Equal(t, uint64(0), prof.DurationNano())
+	assert.Equal(t, testProfileTime, prof.Time())
+	assert.Equal(t, testProfileDuration, prof.DurationNano())
 
 	t.Run("Check environment variable attribute", func(t *testing.T) {
 		foundFOOKey := false
@@ -388,7 +404,7 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 		libpf.Intern("c2"): events2,
 	}
 
-	profiles, err := d.Generate(tree, "agent", "v2")
+	profiles, err := testGenerate(d, tree, "agent", "v2")
 	require.NoError(t, err)
 	require.Equal(t, 2, profiles.ResourceProfiles().Len())
 
@@ -399,8 +415,18 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 		val, exists := rp.Resource().Attributes().Get(string(semconv.ContainerIDKey))
 		require.True(t, exists)
 		containerID := val.Str()
-		profileCount := rp.ScopeProfiles().At(0).Profiles().Len()
+		sp := rp.ScopeProfiles().At(0)
+		profileCount := sp.Profiles().Len()
 		containerProfileCounts[containerID] = profileCount
+
+		// All profiles should have the same duration and start time based on collection window
+		for j := range profileCount {
+			prof := sp.Profiles().At(j)
+			assert.Equal(t, testProfileTime, prof.Time(),
+				"profile %d in container %s", j, containerID)
+			assert.Equal(t, testProfileDuration, prof.DurationNano(),
+				"profile %d in container %s", j, containerID)
+		}
 	}
 
 	// c1 has both origins, so 2 profiles
@@ -436,7 +462,7 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 		libpf.Intern("c"): events,
 	}
 
-	profiles, err := d.Generate(tree, "agent", "v3")
+	profiles, err := testGenerate(d, tree, "agent", "v3")
 	require.NoError(t, err)
 	dic := profiles.Dictionary()
 	// The string table should contain "" as first element, then function name and file path
@@ -501,7 +527,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 		libpf.Intern("native_container"): events,
 	}
 
-	profiles, err := d.Generate(tree, "agent", "v1")
+	profiles, err := testGenerate(d, tree, "agent", "v1")
 	require.NoError(t, err)
 	require.Equal(t, 1, profiles.ResourceProfiles().Len())
 
@@ -520,8 +546,8 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	// Check profile
 	require.Equal(t, 1, sp.Profiles().Len())
 	prof := sp.Profiles().At(0)
-	assert.Equal(t, pcommon.Timestamp(123), prof.Time())
-	assert.Equal(t, uint64(666), prof.DurationNano())
+	assert.Equal(t, testProfileTime, prof.Time())
+	assert.Equal(t, testProfileDuration, prof.DurationNano())
 
 	// Verify profile contains one sample
 	assert.Equal(t, 1, prof.Samples().Len())
@@ -622,7 +648,7 @@ func TestStackTableOrder(t *testing.T) {
 			require.NoError(t, err)
 			tree := make(samples.TraceEventsTree)
 			tree[libpf.NullString] = tt.events
-			res, _ := d.Generate(tree, tt.name, "version")
+			res, _ := testGenerate(d, tree, tt.name, "version")
 
 			dic := res.Dictionary()
 

@@ -71,6 +71,9 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 
 // Start sets up and manages the reporting connection to a OTLP backend.
 func (r *OTLPReporter) Start(ctx context.Context) error {
+	// Initialize collection start time
+	r.collectionStartTime = time.Now()
+
 	// Create a child context for reporting features
 	ctx, cancelReporting := context.WithCancel(ctx)
 
@@ -114,9 +117,19 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	reportedEvents := (*traceEventsPtr)
 	newEvents := make(samples.TraceEventsTree)
 	*traceEventsPtr = newEvents
+	collectionEndTime := time.Now()
+	collectionStartTime := r.collectionStartTime
+	r.collectionStartTime = collectionEndTime
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
-	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version)
+	adjustedStartTime := adjustStartTimeForSamples(reportedEvents, collectionStartTime)
+	if adjustedStartTime.Before(collectionStartTime) {
+		log.Debugf("Adjusted profile start time backward by %v to include oldest sample",
+			collectionStartTime.Sub(adjustedStartTime))
+	}
+
+	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version,
+		adjustedStartTime, collectionEndTime)
 	if err != nil {
 		log.Errorf("pdata: %v", err)
 		return nil
