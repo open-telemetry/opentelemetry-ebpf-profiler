@@ -4,6 +4,7 @@ builtin = clear,rare,informal
 check-filenames =
 check-hidden =
 ignore-words = .codespellignore
+ignore-regex = \b[a-z]+[A-Z][a-zA-Z0-9]*\b
 interactive = 1
 skip = .git,AUTHORS.md,go.mod,go.sum,LICENSES,zydis,tools.mod,tools.sum
 uri-ignore-words-list = *
