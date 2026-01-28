@@ -66,4 +66,9 @@ func TestAddJitter(t *testing.T) {
 			assert.LessOrEqual(t, result, maxExpected)
 		}
 	})
+
+	t.Run("jitter of 0.0 returns baseDuration exactly", func(t *testing.T) {
+		result := AddJitter(baseDuration, 0.0)
+		assert.Equal(t, baseDuration, result)
+	})
 }
