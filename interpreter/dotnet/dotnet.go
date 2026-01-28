@@ -107,7 +107,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
@@ -165,14 +164,15 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, err
 	}
 
-	log.Debugf("Dotnet DAC table at %x", addr)
+	// cdac is optional and present starting dotnet9
+	cdac, _ := ef.LookupSymbolAddress("DotNetRuntimeContractDescriptor")
+
+	log.Debugf("Dotnet DAC table at %x, CDAC header at %x", addr, cdac)
 
 	d := &dotnetData{
 		version:      version,
 		dacTableAddr: addr,
-		unwinder:     support.ProgUnwindDotnet,
+		cdacDescAddr: cdac,
 	}
-	d.loadIntrospectionData()
-
 	return d, nil
 }
