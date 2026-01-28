@@ -20,21 +20,27 @@ runs:
       run: |
         # Ubuntu has ARM64 packages in an entirely different repo, so we can't just
         # `dpkg --add-architecture arm64` here: we have to add a custom sources.list first.
+        #
+        # We only need 'main' and 'universe' components (not restricted/multiverse)
+        # to minimize package index downloads.
         sudo tee /etc/apt/sources.list.d/ubuntu.sources <<EOF > /dev/null
         Types: deb
         URIs: http://azure.archive.ubuntu.com/ubuntu/
         Suites: noble noble-updates noble-backports
-        Components: main universe restricted multiverse
+        Components: main universe
         Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
         Architectures: amd64
 
         Types: deb
         URIs: http://azure.ports.ubuntu.com/ubuntu-ports/
         Suites: noble noble-updates noble-backports
-        Components: main universe restricted multiverse
+        Components: main universe
         Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
         Architectures: arm64
         EOF
+
+        # Skip downloading translations to speed up apt-get update
+        echo 'Acquire::Languages "none";' | sudo tee /etc/apt/apt.conf.d/99no-translations > /dev/null
 
         sudo dpkg --add-architecture arm64
         sudo apt-get update -y
