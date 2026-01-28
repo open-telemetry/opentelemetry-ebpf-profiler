@@ -2,6 +2,7 @@ package tracer
 
 import (
 	"context"
+	"debug/buildinfo"
 	"errors"
 	"fmt"
 	"runtime"
@@ -23,6 +24,12 @@ import (
 
 // #include "../support/ebpf/types.h"
 import "C"
+
+const (
+	goVersionPrefix = "Go cmd/compile"
+)
+
+var ErrVersionNotFound = errors.New("version info not found")
 
 type uprobe struct {
 	exec                *link.Executable
@@ -157,7 +164,7 @@ func (t *Tracer) StartGolangMemProfiling(exec *link.Executable, info *processman
 	if err != nil {
 		log.Debugf("failed to attach uprobe:%v, err:%v", u, err)
 	} else {
-		log.Infof("golang mem profiling attach uprobe on pid(%d) func(%s)", pid, u.symbol)
+		log.Infof("golang mem profiling attach uprobe on pid(%d) func(%s) on prog(%s)", pid, u.symbol, prog)
 	}
 	return links, err
 }
@@ -227,6 +234,21 @@ func (t *Tracer) TriggerMemProfile(p process.Process) error {
 	case libpf.Golang:
 		startProfiling = t.StartGolangMemProfiling
 		execPath = memProfileInfo.ExecAbsPath
+		if memProfileInfo.MajorVersion == 0 {
+			newMemProfileInfo := *memProfileInfo
+			// golang在没有栈回溯的时候，也不包含版本信息，需要先解析出go的版本信息
+			bi, e := buildinfo.ReadFile(execPath)
+			if e != nil {
+				return fmt.Errorf("[mem profile] failed to read buildinfo for %s pid(%d): %v", execPath, pid, e)
+			}
+			major, minor, err := parseGoVersion(bi.GoVersion)
+			if err != nil {
+				return err
+			}
+			newMemProfileInfo.MajorVersion = major
+			newMemProfileInfo.MinorVersion = minor
+			memProfileInfo = &newMemProfileInfo
+		}
 	case libpf.PHP, libpf.PHPJIT, libpf.Kernel, libpf.Ruby, libpf.Perl, libpf.V8, libpf.Dotnet:
 		return nil
 	default:
@@ -337,4 +359,28 @@ func (t *Tracer) startHotspotMemProfiling(meta *processmanager.MemProfileMeta, c
 		}
 	}
 	return nil
+}
+
+func parseGoVersion(r string) (int, int, error) {
+	ver := strings.TrimPrefix(r, goVersionPrefix)
+
+	if strings.HasPrefix(ver, "go") {
+		v := strings.SplitN(ver[2:], ".", 3)
+		var major, minor int
+		var err error
+
+		major, err = strconv.Atoi(v[0])
+		if err != nil {
+			return 0, 0, err
+		}
+
+		if len(v) >= 2 {
+			minor, err = strconv.Atoi(v[1])
+			if err != nil {
+				return 0, 0, err
+			}
+		}
+		return major, minor, nil
+	}
+	return 0, 0, ErrVersionNotFound
 }
