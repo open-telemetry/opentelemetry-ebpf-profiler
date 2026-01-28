@@ -37,10 +37,35 @@ type baseReporter struct {
 	// collectionStartTime tracks when the current collection window started.
 	// Initialized when Start() is called. The duration of the first profile may be
 	// slightly overestimated as it includes tracer setup time before samples arrive.
+	// The actual profile start time may be adjusted backward in reportProfile() to
+	// include buffered samples with timestamps before this value.
 	collectionStartTime time.Time
 }
 
 var errUnknownOrigin = errors.New("unknown trace origin")
+
+// adjustStartTimeForSamples finds the oldest sample timestamp in the events tree
+// and adjusts the collection start time backward if needed to include all samples.
+// Returns the adjusted start time.
+func adjustStartTimeForSamples(
+	reportedEvents samples.TraceEventsTree,
+	collectionStartTime time.Time,
+) time.Time {
+	adjustedStartTime := collectionStartTime
+	for _, containerEvents := range reportedEvents {
+		for _, originEvents := range containerEvents {
+			for _, traceEvents := range originEvents {
+				for _, ts := range traceEvents.Timestamps {
+					sampleTime := time.Unix(0, int64(ts))
+					if sampleTime.Before(adjustedStartTime) {
+						adjustedStartTime = sampleTime
+					}
+				}
+			}
+		}
+	}
+	return adjustedStartTime
+}
 
 func (b *baseReporter) Stop() {
 	b.runLoop.Stop()

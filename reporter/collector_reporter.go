@@ -91,8 +91,14 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	r.collectionStartTime = collectionEndTime
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
+	adjustedStartTime := adjustStartTimeForSamples(reportedEvents, collectionStartTime)
+	if adjustedStartTime.Before(collectionStartTime) {
+		log.Debugf("Adjusted profile start time backward by %v to include oldest sample",
+			collectionStartTime.Sub(adjustedStartTime))
+	}
+
 	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version,
-		collectionStartTime, collectionEndTime)
+		adjustedStartTime, collectionEndTime)
 	if err != nil {
 		log.Errorf("pdata: %v", err)
 		return nil
