@@ -1176,7 +1176,7 @@ func (t *Tracer) AttachTracer() error {
 	events := t.perfEntrypoints.WLock()
 	defer t.perfEntrypoints.WUnlock(&events)
 	for _, id := range onlineCPUIDs {
-		perfEvent, err := perf.Open(perfAttribute, perf.AllThreads, int(id), nil)
+		perfEvent, err := perf.Open(perfAttribute, perf.AllThreads, id, nil)
 		if err != nil {
 			terminatePerfEvents(*events)
 			return fmt.Errorf("failed to attach to perf event on CPU %d: %v", id, err)

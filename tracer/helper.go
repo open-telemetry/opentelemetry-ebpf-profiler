@@ -5,6 +5,7 @@ package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -51,7 +52,7 @@ func hasProbeReadBug(major, minor, patch uint32) bool {
 
 // getOnlineCPUIDs reads online CPUs from /sys/devices/system/cpu/online and reports
 // the core IDs as a list of integers.
-func getOnlineCPUIDs() ([]uint32, error) {
+func getOnlineCPUIDs() ([]int, error) {
 	cpuPath := "/sys/devices/system/cpu/online"
 	buf, err := os.ReadFile(cpuPath)
 	if err != nil {
@@ -63,8 +64,8 @@ func getOnlineCPUIDs() ([]uint32, error) {
 // Since the format of online CPUs can contain comma-separated, ranges or a single value
 // we need to try and parse it in all its different forms.
 // Reference: https://www.kernel.org/doc/Documentation/admin-guide/cputopology.rst
-func readCPURange(cpuRangeStr string) ([]uint32, error) {
-	var cpus []uint32
+func readCPURange(cpuRangeStr string) ([]int, error) {
+	var cpus []int
 	cpuRangeStr = strings.Trim(cpuRangeStr, "\n ")
 	for cpuRange := range strings.SplitSeq(cpuRangeStr, ",") {
 		var rangeOp [2]string
@@ -73,16 +74,22 @@ func readCPURange(cpuRangeStr string) ([]uint32, error) {
 		if err != nil {
 			return nil, err
 		}
+		if first >= math.MaxInt {
+			return nil, fmt.Errorf("invalid first CPU ID: %d", first)
+		}
 		if nParts == 1 {
-			cpus = append(cpus, uint32(first))
+			cpus = append(cpus, int(first))
 			continue
 		}
 		last, err := strconv.ParseUint(rangeOp[1], 10, 32)
 		if err != nil {
 			return nil, err
 		}
+		if last >= math.MaxInt {
+			return nil, fmt.Errorf("invalid last CPU ID: %d", first)
+		}
 		for n := first; n <= last; n++ {
-			cpus = append(cpus, uint32(n))
+			cpus = append(cpus, int(n))
 		}
 	}
 	return cpus, nil
