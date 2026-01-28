@@ -86,7 +86,7 @@ func readCPURange(cpuRangeStr string) ([]int, error) {
 			return nil, err
 		}
 		if last >= math.MaxInt {
-			return nil, fmt.Errorf("invalid last CPU ID: %d", first)
+			return nil, fmt.Errorf("invalid last CPU ID: %d", last)
 		}
 		for n := first; n <= last; n++ {
 			cpus = append(cpus, int(n))
