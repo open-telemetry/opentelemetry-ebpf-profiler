@@ -20,7 +20,7 @@ type branchTarget struct {
 
 // ExtractTLSOffsetFromCodeARM64 extracts the TLS offset by analyzing ARM64 assembly code.
 // It looks for the pattern: MRS Xn, TPIDR_EL0 followed by ADD Xn, Xn, #offset or LDR [Xn, #offset].
-func ExtractTLSOffsetFromCodeARM64(code []byte, baseAddr uint64, ef *pfelf.File) (int64, error) {
+func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int64, error) {
 	const maxDepth = 5
 	const maxIterations = 100
 

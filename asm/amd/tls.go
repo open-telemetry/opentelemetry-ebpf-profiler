@@ -22,7 +22,7 @@ import (
 // The function returns the TLS offset found, or an error if no valid pattern is detected.
 // For RIP-relative addressing, the file parameter can be provided to resolve memory references.
 // If file is nil, RIP-relative memory dereferencing will be skipped.
-func ExtractFSOffsetFromCode(code []byte, codeAddress uint64, file *pfelf.File) (int32, error) {
+func ExtractTLSOffset(code []byte, codeAddress uint64, file *pfelf.File) (int32, error) {
 	offset := e.NewImmediateCapture("offset")
 	it := NewInterpreterWithCode(code)
 	it.CodeAddress = e.Imm(codeAddress)
