@@ -114,10 +114,10 @@ func (g *goInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, mapping
 	if fn == "" {
 		return fmt.Errorf("failed to symbolize 0x%x", address)
 	}
+	// See comment about return address handling in ProcessManager.convertFrame
 	if ef.Flags().ReturnAddress() {
 		address--
 	}
-
 	frames.Append(&libpf.Frame{
 		Type:            libpf.GoFrame,
 		AddressOrLineno: libpf.AddressOrLineno(address),

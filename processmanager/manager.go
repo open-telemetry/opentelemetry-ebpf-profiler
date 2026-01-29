@@ -212,6 +212,18 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 		log.Errorf("Unexpected frame type 0x%02X (neither error nor usermode frame)",
 			uint8(ef.Type()))
 	case libpf.Native:
+		fileID := host.FileID(ef.Variable(0))
+		address := libpf.Address(ef.Data())
+
+		// Locate mapping info for the frame.
+		mapping := pm.findMappingForTrace(pid, fileID, address)
+
+		// Attempt symbolization of native frames. It is best effort and
+		// provides non-symbolized frames if no native symbolizer is active.
+		if err := pm.symbolizeFrame(pid, ef, dst, mapping); err == nil {
+			return true
+		}
+
 		// The BPF code classifies whether an address is a return address or not.
 		// Return addresses are where execution resumes when returning to the stack
 		// frame and point to the **next instruction** after the call instruction
@@ -226,25 +238,12 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 		// Optimally we'd subtract the size of the call instruction here instead
 		// of doing `- 1`, but disassembling backwards is quite difficult for
 		// variable length instruction sets like X86.
-		fileID := host.FileID(ef.Variable(0))
-		lineno := libpf.Address(ef.Data())
-
-		// Locate mapping info for the frame.
-		mapping := pm.findMappingForTrace(pid, fileID, lineno)
-
-		// Attempt symbolization of native frames. It is best effort and
-		// provides non-symbolized frames if no native symbolizer is active.
-		if err := pm.symbolizeFrame(pid, ef, dst, mapping); err == nil {
-			return true
-		}
-
-		relativeRIP := libpf.AddressOrLineno(lineno)
 		if ef.Flags().ReturnAddress() {
-			relativeRIP--
+			address--
 		}
 		dst.Append(&libpf.Frame{
 			Type:            ef.Type(),
-			AddressOrLineno: relativeRIP,
+			AddressOrLineno: libpf.AddressOrLineno(address),
 			Mapping:         mapping,
 		})
 	default:

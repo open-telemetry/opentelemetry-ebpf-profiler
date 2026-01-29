@@ -148,6 +148,7 @@ type Instance interface {
 	UpdateLibcInfo(ebpf EbpfHandler, pid libpf.PID, info libc.LibcInfo) error
 
 	// Symbolize converts one ebpf frame to one or more (if inlining was expanded) libpf.Frame.
+	// The 'mapping' is set only when symbolizing native frames.
 	// The resulting libpf.Frame values are appended to frames.
 	Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, mapping libpf.FrameMapping) error
 
