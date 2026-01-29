@@ -40,9 +40,8 @@ type globalVar uint64
 
 func (gv *globalVar) UnmarshalJSON(b []byte) error {
 	var fields []string
-	err := json.Unmarshal(b, &fields)
-	if err != nil {
-		return nil
+	if err := json.Unmarshal(b, &fields); err != nil {
+		return err
 	}
 	if len(fields) < 2 {
 		return errors.New("unknown global var format")
@@ -50,13 +49,15 @@ func (gv *globalVar) UnmarshalJSON(b []byte) error {
 
 	switch fields[1] {
 	case "uint8", "uint16", "uint32", "uint64":
-		var val uint64
-		val, err = strconv.ParseUint(fields[0], 0, 64)
+		val, err := strconv.ParseUint(fields[0], 0, 64)
+		if err != nil {
+			return err
+		}
 		*gv = globalVar(val)
 	default:
-		err = fmt.Errorf("unexpected global var type: %v", fields[1])
+		return fmt.Errorf("unexpected global var type: %v", fields[1])
 	}
-	return err
+	return nil
 }
 
 // dotnetCdac reflects the Dotnet JSON contract descriptor data, and contains
