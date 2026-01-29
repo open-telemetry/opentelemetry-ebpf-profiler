@@ -118,7 +118,8 @@ struct trace_events_t {
 
 // End shared maps
 
-// NOTE: PoC implementation for https://github.com/open-telemetry/opentelemetry-specification/pull/4855
+// NOTE: PoC implementation for
+// https://github.com/open-telemetry/opentelemetry-specification/pull/4855
 struct otel_traces_ctx_v1_t {
   __uint(type, BPF_MAP_TYPE_LRU_HASH);
   __type(key, u64);
@@ -196,7 +197,8 @@ static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURe
   tail_call(ctx, PROG_GO_LABELS);
 }
 
-// NOTE: PoC implementation for https://github.com/open-telemetry/opentelemetry-specification/pull/4855
+// NOTE: PoC implementation for
+// https://github.com/open-telemetry/opentelemetry-specification/pull/4855
 static EBPF_INLINE void maybe_add_otel_span_trace_id(Trace *trace)
 {
   u64 id = bpf_get_current_pid_tgid();

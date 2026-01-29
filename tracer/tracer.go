@@ -167,6 +167,8 @@ type Config struct {
 	// LoadProbe indicates whether the generic eBPF program should be loaded
 	// without being attached to something.
 	LoadProbe bool
+	// BPFFSRoot is the root path to BPF filesystem for pinned maps and programs.
+	BPFFSRoot string
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -576,9 +578,9 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			continue
 		}
 
-		if mapName == "otel_traces_ctx_v1" {
+		if mapName == "otel_traces_ctx_v1" && cfg.BPFFSRoot != "" {
 			// Try to load it from a known path:
-			mPath := path.Join("/sys/fs/bpf", "otel_traces_ctx_v1", mapName)
+			mPath := path.Join(cfg.BPFFSRoot, mapName)
 			ebpfMap, err := cebpf.LoadPinnedMap(mPath, &cebpf.LoadPinOptions{ReadOnly: true, WriteOnly: false})
 			if err == nil {
 				log.Infof("Using shared map for OpenTelemetry span/trace ID communciation")
@@ -601,6 +603,12 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			return fmt.Errorf("failed to load %s: %v", mapName, err)
 		}
 		ebpfMaps[mapName] = ebpfMap
+
+		if mapName == "otel_traces_ctx_v1" && cfg.BPFFSRoot != "" {
+			if err := ebpfMap.Pin(path.Join(cfg.BPFFSRoot, mapName)); err != nil {
+				return fmt.Errorf("failed to pin map '%s': %v", mapName, err)
+			}
+		}
 	}
 
 	return nil
