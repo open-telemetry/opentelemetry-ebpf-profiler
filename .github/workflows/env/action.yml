@@ -1,11 +1,5 @@
 name: Common environment setup
 
-inputs:
-  target_arch:
-    description: 'Target architecture'
-    required: false
-    default: amd64
-
 runs:
   using: composite
   steps:
@@ -14,33 +8,16 @@ runs:
       run: |
         echo "set man-db/auto-update false" | sudo debconf-communicate
         sudo dpkg-reconfigure man-db
-    - name: Install dependencies (arm64)
-      if: ${{ inputs.target_arch == 'arm64' }}
+    - name: Install build dependencies
       shell: bash
       run: |
-        # Ubuntu has ARM64 packages in an entirely different repo, so we can't just
-        # `dpkg --add-architecture arm64` here: we have to add a custom sources.list first.
-        sudo tee /etc/apt/sources.list.d/ubuntu.sources <<EOF > /dev/null
-        Types: deb
-        URIs: http://azure.archive.ubuntu.com/ubuntu/
-        Suites: noble noble-updates noble-backports
-        Components: main universe restricted multiverse
-        Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-        Architectures: amd64
-
-        Types: deb
-        URIs: http://azure.ports.ubuntu.com/ubuntu-ports/
-        Suites: noble noble-updates noble-backports
-        Components: main universe restricted multiverse
-        Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-        Architectures: arm64
-        EOF
-
-        sudo dpkg --add-architecture arm64
-        sudo apt-get update -y
-        sudo apt-get install -y gcc-aarch64-linux-gnu \
-          libc6-arm64-cross qemu-user-binfmt libc6:arm64 \
-          binutils-aarch64-linux-gnu
+        # Skip translations to speed up apt-get update
+        echo 'Acquire::Languages "none";' | sudo tee /etc/apt/apt.conf.d/99no-translations > /dev/null
+        # Makefile expects ARCH-linux-gnu-gcc; install if not available
+        case "$(uname -m)" in
+          x86_64)  command -v x86_64-linux-gnu-gcc  >/dev/null || { sudo apt-get update && sudo apt-get install -y gcc-x86-64-linux-gnu; } ;;
+          aarch64) command -v aarch64-linux-gnu-gcc >/dev/null || { sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu; } ;;
+        esac
     - name: Set up Go
       uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
       with:

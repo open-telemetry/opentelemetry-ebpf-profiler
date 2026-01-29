@@ -144,9 +144,9 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	if matches == nil {
 		return nil, nil
 	}
-	major, _ := strconv.Atoi(matches[1])
-	minor, _ := strconv.Atoi(matches[2])
-	release, _ := strconv.Atoi(matches[3])
+	major, _ := strconv.ParseUint(matches[1], 10, 32)
+	minor, _ := strconv.ParseUint(matches[2], 10, 32)
+	release, _ := strconv.ParseUint(matches[3], 10, 32)
 	version := dotnetVer(uint32(major), uint32(minor), uint32(release))
 
 	// dotnet8 requires additional support for RangeSectionMap and MethodDesc updates
