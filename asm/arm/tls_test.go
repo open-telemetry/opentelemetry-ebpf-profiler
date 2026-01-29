@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExtractTLSOffsetFromCodeARM64(t *testing.T) {
+func TestExtractTLSOffset(t *testing.T) {
 	testdata := []struct {
 		name          string
 		code          []byte
 		baseAddr      uint64
-		expected      int64
+		expected      int32
 		expectedError string
 	}{
 		{

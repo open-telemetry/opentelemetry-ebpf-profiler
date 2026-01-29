@@ -649,12 +649,12 @@ func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
 		return 0, fmt.Errorf("could not read %s: %v", funcName, err)
 	}
 
-	var offset int64
+	var offset int32
 	switch ef.Machine {
 	case elf.EM_AARCH64:
 		offset, err = arm.ExtractTLSOffset(code, uint64(sym.Address), ef)
 	case elf.EM_X86_64:
-		offset, err = extractTLSOffsetFromCodeAMD64(code, uint64(sym.Address))
+		offset, err = amd.ExtractTLSOffset(code, uint64(sym.Address), nil)
 	default:
 		return 0, fmt.Errorf("unsupported architecture for assembly analysis")
 	}
@@ -663,7 +663,7 @@ func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
 		return 0, fmt.Errorf("could not extract TLS offset from %s: %v", funcName, err)
 	}
 
-	return offset, nil
+	return int64(offset), nil
 }
 
 // decodeStub will resolve a given symbol, extract the code for it, and analyze

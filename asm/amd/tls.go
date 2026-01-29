@@ -42,7 +42,7 @@ func ExtractTLSOffset(code []byte, codeAddress uint64, file *pfelf.File) (int32,
 		// Pattern 1: Direct FS-relative addressing
 		// Example: MOV rax, FS:[0xfffffffffffffff8]
 		if mem.Base == 0 {
-			return int32(mem.Disp), nil
+			return validateTLSOffset(int32(mem.Disp))
 		}
 		// Pattern 2 & 3: Register-based or RIP-relative addressing
 		// Example: MOV $0xfffffffffffffff8, rcx; MOV rax, FS:(rcx)
@@ -51,7 +51,7 @@ func ExtractTLSOffset(code []byte, codeAddress uint64, file *pfelf.File) (int32,
 		// resolving it to a virtual memory address.
 		actual := it.Regs.GetX86(mem.Base)
 		if actual.Match(offset) {
-			return int32(offset.CapturedValue()), nil
+			return validateTLSOffset(int32(offset.CapturedValue()))
 		}
 		// Pattern 3 continued: If the register value is a memory reference,
 		// read from the file to resolve it
@@ -64,9 +64,20 @@ func ExtractTLSOffset(code []byte, codeAddress uint64, file *pfelf.File) (int32,
 				}
 				// Read the 8-byte value as int64 (little-endian)
 				value := int64(npsr.Uint64(valueBytes, 0))
-				return int32(value), nil
+				return validateTLSOffset(int32(value))
 			}
 		}
 	}
 	return 0, fmt.Errorf("could not find FS-relative MOV instruction with valid TLS offset")
+}
+
+// validateTLSOffset make sure that the extracted offset is within some boundaries.
+func validateTLSOffset(offset int32) (int32, error) {
+	// In theory all 32 bit can be used to represent the offset.
+	// But usually this is not the case.
+	// For more see https://www.akkadia.org/drepper/tls.pdf
+	if (offset < 0 && offset > -4096) || (offset > 0 && offset < 4096) {
+		return offset, nil
+	}
+	return 0, fmt.Errorf("could not find valid FS-relative MOV instruction")
 }

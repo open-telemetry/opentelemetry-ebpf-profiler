@@ -20,7 +20,7 @@ type branchTarget struct {
 
 // ExtractTLSOffsetFromCodeARM64 extracts the TLS offset by analyzing ARM64 assembly code.
 // It looks for the pattern: MRS Xn, TPIDR_EL0 followed by ADD Xn, Xn, #offset or LDR [Xn, #offset].
-func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int64, error) {
+func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int32, error) {
 	const maxDepth = 5
 	const maxIterations = 100
 
@@ -92,7 +92,7 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int64, erro
 
 						if destOk && srcOk && immOk && srcReg == tpReg {
 							if imm > 0 && imm < 0x1000 {
-								return int64(imm), nil
+								return validateTLSOffset(int32(imm))
 							}
 							// Track the new register holding TP+offset
 							tpReg = destReg
@@ -108,7 +108,7 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int64, erro
 
 							if regOk && immOk && baseReg == tpReg {
 								if imm > 0 && imm < 0x1000 {
-									return int64(imm), nil
+									return validateTLSOffset(int32(imm))
 								}
 							}
 						}
@@ -143,4 +143,15 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int64, erro
 		return 0, fmt.Errorf("could not find MRS TPIDR_EL0 instruction")
 	}
 	return 0, fmt.Errorf("found MRS TPIDR_EL0 but no matching ADD/LDR with TLS offset")
+}
+
+// validateTLSOffset make sure that the extracted offset is within some boundaries.
+func validateTLSOffset(offset int32) (int32, error) {
+	// In theory 64 bit can be used to represent the offset.
+	// But usually this is not the case.
+	// For more see https://github.com/ARM-software/abi-aa/blob/main/aaelf64/aaelf64.rst
+	if (offset < 0 && offset > -4096) || (offset > 0 && offset < 4096) {
+		return offset, nil
+	}
+	return 0, fmt.Errorf("could not find valid FS-relative MOV instruction")
 }
