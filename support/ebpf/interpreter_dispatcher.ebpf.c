@@ -34,7 +34,7 @@ struct perf_progs_t {
   __uint(max_entries, NUM_TRACER_PROGS);
 } perf_progs SEC(".maps");
 
-// report_events notifies user space about events (GENERIC_PID and TRACES_FOR_SYMBOLIZATION).
+// report_events notifies user space about events (GENERIC_PID and RELOAD_KALLSYMS).
 //
 // As a key the CPU number is used and the value represents a perf event file descriptor.
 // Information transmitted is the event type only. We use 0 as the number of max entries
@@ -118,6 +118,14 @@ struct trace_events_t {
 
 // End shared maps
 
+// NOTE: PoC implementation for https://github.com/open-telemetry/opentelemetry-specification/pull/4855
+struct otel_traces_ctx_v1_t {
+  __uint(type, BPF_MAP_TYPE_LRU_HASH);
+  __type(key, u64);
+  __type(value, SpanTraceInfo);
+  __uint(max_entries, 4096);
+} otel_traces_ctx_v1 SEC(".maps");
+
 struct apm_int_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
   __type(key, pid_t);
@@ -188,23 +196,18 @@ static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURe
   tail_call(ctx, PROG_GO_LABELS);
 }
 
-// TODO: move this to the right place
-struct shared_span_trace_t {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __type(key, u64);
-  __type(value, SpanTraceInfo);
-  __uint(max_entries, 4096);
-} shared_span_trace SEC(".maps");
-
-// TODO: add some documentation
-static EBPF_INLINE void maybe_add_shared_span_trace_id(Trace *trace)
+// NOTE: PoC implementation for https://github.com/open-telemetry/opentelemetry-specification/pull/4855
+static EBPF_INLINE void maybe_add_otel_span_trace_id(Trace *trace)
 {
   u64 id = bpf_get_current_pid_tgid();
 
-  SpanTraceInfo *info = bpf_map_lookup_elem(&shared_span_trace, &id);
+  SpanTraceInfo *info = bpf_map_lookup_elem(&otel_traces_ctx_v1, &id);
   if (!info) {
     return;
   }
+
+  // The structure of apm_[transaction|trace]_id happens to be the same
+  // as proposed in https://github.com/open-telemetry/opentelemetry-specification/pull/4855.
 
   trace->apm_trace_id.as_int.hi    = info->trace_id.as_int.hi;
   trace->apm_trace_id.as_int.lo    = info->trace_id.as_int.lo;
@@ -270,7 +273,7 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   UnwindState *state = &record->state;
 
   maybe_add_apm_info(trace);
-  maybe_add_shared_span_trace_id(trace);
+  maybe_add_otel_span_trace_id(trace);
 
   // If the stack is otherwise empty, push an error for that: we should
   // never encounter empty stacks for successful unwinding.

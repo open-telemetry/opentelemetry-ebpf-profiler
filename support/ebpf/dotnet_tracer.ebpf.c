@@ -12,6 +12,9 @@
 // The number of dotnet frames to unwind per frame-unwinding eBPF program.
 #define DOTNET_FRAMES_PER_PROGRAM 6
 
+// The number of dotnet10+ frames to unwind per frame-unwinding eBPF program.
+#define DOTNET10_FRAMES_PER_PROGRAM 9
+
 // The maximum dotnet frame length used in heuristic to validate FP
 #define DOTNET_MAX_FRAME_LENGTH 8192
 
@@ -27,6 +30,8 @@ struct dotnet_procs_t {
   __type(value, DotnetProcInfo);
   __uint(max_entries, 1024);
 } dotnet_procs SEC(".maps");
+
+typedef ErrorCode (*find_code_start_f)(PerCPURecord *record, u64 pc, u64 *code_start);
 
 // Nibble map tunables
 // https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/inc/nibblemapmacros.h
@@ -168,6 +173,119 @@ bad_code_header:
   return ERR_DOTNET_CODE_HEADER;
 }
 
+// Dotnet 10 nibble map constants and functions converted to macroes from:
+// https://github.com/dotnet/runtime/blob/v10.0.2/src/coreclr/inc/nibblemapmacros.h
+#define DOTNET10_LOG2_NIBBLE_SIZE       2
+#define DOTNET10_LOG2_CODE_ALIGN        2
+#define DOTNET10_LOG2_NIBBLES_PER_DWORD 3
+#define DOTNET10_LOG2_BYTES_PER_BUCKET  (DOTNET10_LOG2_CODE_ALIGN + DOTNET10_LOG2_NIBBLES_PER_DWORD)
+#define DOTNET10_NIBBLE_MASK            0xfu
+#define DOTNET10_NIBBLE_SIZE            4
+#define DOTNET10_NIBBLES_PER_DWORD      (2 * sizeof(u32)) // 8 (4-bit) nibbles per dword
+#define DOTNET10_NIBBLES_PER_DWORD_MASK (DOTNET10_NIBBLES_PER_DWORD - 1) // 7
+#define DOTNET10_BYTES_PER_BUCKET                                                                  \
+  (DOTNET10_NIBBLES_PER_DWORD * (1 << DOTNET10_LOG2_CODE_ALIGN))       // 32 bytes per bucket
+#define DOTNET10_MASK_BYTES_PER_BUCKET (DOTNET10_BYTES_PER_BUCKET - 1) // 31
+
+#define DOTNET10_IS_POINTER(val) ((val & DOTNET10_NIBBLE_MASK) > 8)
+#define DOTNET10_DECODE_POINTER(val)                                                               \
+  ((val & ~DOTNET10_NIBBLE_MASK) + (((val & DOTNET10_NIBBLE_MASK) - 9) << 2))
+
+#define DOTNET10_POS2SHIFTCOUNT(x)                                                                 \
+  (u32)(                                                                                           \
+    32 - DOTNET10_NIBBLE_SIZE -                                                                    \
+    (((x) & DOTNET10_NIBBLES_PER_DWORD_MASK) << DOTNET10_LOG2_NIBBLE_SIZE))
+#define DOTNET10_ADDR2POS(x) ((x) >> DOTNET10_LOG2_BYTES_PER_BUCKET)
+#define DOTNET10_ADDR2OFFS(x)                                                                      \
+  (u32)((((x) & DOTNET10_MASK_BYTES_PER_BUCKET) >> DOTNET10_LOG2_CODE_ALIGN) + 1)
+#define DOTNET10_POSOFF2ADDR(pos, of)                                                              \
+  (((pos) << DOTNET10_LOG2_BYTES_PER_BUCKET) + (((of)-1) << DOTNET10_LOG2_CODE_ALIGN))
+
+static EBPF_INLINE ErrorCode dotnet10_find_code_start(PerCPURecord *record, u64 pc, u64 *code_start)
+{
+  // This is an ebpf optimized version of EECodeGenManager::FindMethodCode.
+  // https://github.com/dotnet/runtime/blob/v10.0.2/src/coreclr/vm/codeman.cpp#L4434
+  const UnwindState *state          = &record->state;
+  DotnetUnwindScratchSpace *scratch = &record->dotnetUnwindScratch;
+  u64 map_start                     = state->text_section_id;
+  u64 pc_base                       = state->text_section_bias;
+  u64 pc_delta                      = pc - pc_base;
+
+  // map pc_delta to the nibble map position
+  size_t startPos = DOTNET10_ADDR2POS(pc_delta);
+
+  // #1 lookup DWORD representing current PC (and the preceding if possible)
+  u32 *map_dst    = &scratch->map[1];
+  scratch->map[0] = 0;
+  if (startPos >> DOTNET10_LOG2_NIBBLES_PER_DWORD) {
+    // not first entry: adjust to read th preceding and current PC entry
+    map_start += sizeof(u32) * ((startPos >> DOTNET10_LOG2_NIBBLES_PER_DWORD) - 1);
+    map_dst = &scratch->map[0];
+  }
+  if (bpf_probe_read_user(map_dst, sizeof(u32[2]), (void *)map_start)) {
+    goto bad_code_header;
+  }
+
+  u32 val = scratch->map[1];
+  if (val) {
+    // #2 if DWORD is a pointer, calculate code start from it
+    DEBUG_PRINT("dotnet10: --> pc_delta %lx: first entry %x", (unsigned long)pc_delta, val);
+    if (DOTNET10_IS_POINTER(val)) {
+      goto decode_pointer;
+    }
+
+    // #3 check if corresponding nibble is initialized and points to an equal or earlier address
+    val >>= DOTNET10_POS2SHIFTCOUNT(startPos);
+    u8 offset = DOTNET10_ADDR2OFFS(pc_delta); // this is the offset inside the bucket + 1
+    u8 nibble = val & DOTNET10_NIBBLE_MASK;
+    if (nibble && nibble <= offset) {
+      goto decode_nibble;
+    }
+    // #4 other preceding nibbles
+    val >>= DOTNET10_NIBBLE_SIZE;
+    if (val) {
+      startPos--;
+      goto decode_nibble_map;
+    }
+  }
+
+  // #5.1 read previous DWORD
+  startPos = ((startPos >> DOTNET10_LOG2_NIBBLES_PER_DWORD) << DOTNET10_LOG2_NIBBLES_PER_DWORD) - 1;
+  val      = scratch->map[0];
+  DEBUG_PRINT("dotnet10: --> pc_delta %lx: prev entry %x", (unsigned long)pc_delta, val);
+  if (!val) {
+    goto bad_code_header;
+  }
+
+  // #5.2 either DWORD is a pointer
+  if (DOTNET10_IS_POINTER(val)) {
+  decode_pointer:
+    *code_start = pc_base + DOTNET10_DECODE_POINTER(val);
+    DEBUG_PRINT("dotnet10: --> find code start via pointer %lx", (unsigned long)*code_start);
+    return ERR_OK;
+  }
+
+  // #5.4 or contains a nibble map
+decode_nibble_map:
+  UNROLL for (int i = 0; i < DOTNET10_NIBBLES_PER_DWORD - 1; i++)
+  {
+    if (val & DOTNET10_NIBBLE_MASK) {
+      break;
+    }
+    val >>= DOTNET10_NIBBLE_SIZE;
+    startPos--;
+  }
+decode_nibble:
+  *code_start = pc_base + DOTNET10_POSOFF2ADDR(startPos, val & DOTNET10_NIBBLE_MASK);
+  DEBUG_PRINT("dotnet10: --> find code start via nibble %lx", (unsigned long)*code_start);
+  return ERR_OK;
+
+bad_code_header:
+  DEBUG_PRINT("dotnet10: --> code start not found");
+  increment_metric(metricID_UnwindDotnetErrCodeHeader);
+  return ERR_DOTNET_CODE_HEADER;
+}
+
 // Record a Dotnet frame
 static EBPF_INLINE ErrorCode push_dotnet(
   UnwindState *state, Trace *trace, u64 code_header_ptr, u64 pc_offset, bool return_address)
@@ -184,7 +302,8 @@ static EBPF_INLINE ErrorCode push_dotnet(
 }
 
 // Unwind one dotnet frame
-static EBPF_INLINE ErrorCode unwind_one_dotnet_frame(PerCPURecord *record)
+static EBPF_INLINE ErrorCode
+unwind_one_dotnet_frame(PerCPURecord *record, find_code_start_f find_code_start)
 {
   UnwindState *state = &record->state;
   Trace *trace       = &record->trace;
@@ -247,7 +366,7 @@ static EBPF_INLINE ErrorCode unwind_one_dotnet_frame(PerCPURecord *record)
   }
 
   // JIT generated code, locate code start
-  ErrorCode error = dotnet_find_code_start(record, pc, &code_start);
+  ErrorCode error = find_code_start(record, pc, &code_start);
   if (error != ERR_OK) {
     DEBUG_PRINT("dotnet:  --> code_start failed with %d", error);
     // dotnet_find_code_start incremented the metric already
@@ -287,7 +406,11 @@ push_frame:
 // unwind_dotnet is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // dotnet stack frames to the trace object for the current CPU.
-static EBPF_INLINE int unwind_dotnet(struct pt_regs *ctx)
+static EBPF_INLINE int unwind_dotnet_core(
+  struct pt_regs *ctx,
+  u8 unwinder_program,
+  int frames_per_program,
+  find_code_start_f find_code_start)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
@@ -311,17 +434,17 @@ static EBPF_INLINE int unwind_dotnet(struct pt_regs *ctx)
   record->ratelimitAction = RATELIMIT_ACTION_FAST;
   increment_metric(metricID_UnwindDotnetAttempts);
 
-  UNROLL for (int i = 0; i < DOTNET_FRAMES_PER_PROGRAM; i++)
+  UNROLL for (int i = 0; i < frames_per_program; i++)
   {
     unwinder = PROG_UNWIND_STOP;
 
-    error = unwind_one_dotnet_frame(record);
+    error = unwind_one_dotnet_frame(record, find_code_start);
     if (error) {
       break;
     }
 
     error = get_next_unwinder_after_native_frame(record, &unwinder);
-    if (error || unwinder != PROG_UNWIND_DOTNET) {
+    if (error || unwinder != unwinder_program) {
       break;
     }
   }
@@ -332,4 +455,17 @@ exit:
   DEBUG_PRINT("dotnet: tail call for next frame unwinder (%d) failed", unwinder);
   return -1;
 }
+
+static EBPF_INLINE int unwind_dotnet(struct pt_regs *ctx)
+{
+  return unwind_dotnet_core(
+    ctx, PROG_UNWIND_DOTNET, DOTNET_FRAMES_PER_PROGRAM, dotnet_find_code_start);
+}
 MULTI_USE_FUNC(unwind_dotnet)
+
+static EBPF_INLINE int unwind_dotnet10(struct pt_regs *ctx)
+{
+  return unwind_dotnet_core(
+    ctx, PROG_UNWIND_DOTNET10, DOTNET10_FRAMES_PER_PROGRAM, dotnet10_find_code_start);
+}
+MULTI_USE_FUNC(unwind_dotnet10)
