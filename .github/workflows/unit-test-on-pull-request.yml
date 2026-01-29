@@ -31,36 +31,30 @@ jobs:
 
   lint:
     name: Lint (${{ matrix.target_arch }})
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        target_arch: [amd64, arm64]
+        include:
+          - { target_arch: amd64, runner: ubuntu-24.04 }
+          - { target_arch: arm64, runner: ubuntu-24.04-arm }
     steps:
       - name: Clone code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up environment
         uses: ./.github/workflows/env
-        with:
-          target_arch: ${{ matrix.target_arch }}
       - name: linter
         env:
-          GOARCH: ${{ matrix.target-arch }}
           CGO_ENABLED: 1
         run: make lint
 
   format:
     name: Format Go and C code
     runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        target_arch: [amd64]
     steps:
       - name: Clone code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up environment
         uses: ./.github/workflows/env
-        with:
-          target_arch: ${{ matrix.target_arch }}
       - name: formatter
         env:
           CGO_ENABLED: 1
@@ -70,21 +64,19 @@ jobs:
 
   test:
     name: Test (${{ matrix.target_arch }}${{ matrix.go_flags }})
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
-          - { target_arch: amd64, go_flags: "" }
-          - { target_arch: amd64, go_flags: "-race" }
-          - { target_arch: arm64, go_flags: "" }
-          # - { target_arch: arm64, go_flags: "-race" } # seem to not work under qemu
+          - { target_arch: amd64, runner: ubuntu-24.04, go_flags: "" }
+          - { target_arch: amd64, runner: ubuntu-24.04, go_flags: "-race" }
+          - { target_arch: arm64, runner: ubuntu-24.04-arm, go_flags: "" }
+          - { target_arch: arm64, runner: ubuntu-24.04-arm, go_flags: "-race" }
     steps:
       - name: Clone code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up environment
         uses: ./.github/workflows/env
-        with:
-          target_arch: ${{ matrix.target_arch }}
       - name: Cache coredump modules
         uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
         with:
@@ -98,18 +90,18 @@ jobs:
 
   build-integration-test-binaries:
     name: Build integration test binaries (${{ matrix.target_arch }})
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
     strategy:
       matrix:
-        target_arch: [amd64, arm64]
+        include:
+          - { target_arch: amd64, runner: ubuntu-24.04 }
+          - { target_arch: arm64, runner: ubuntu-24.04-arm }
     steps:
       - name: Clone code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up environment
         uses: ./.github/workflows/env
-        with:
-          target_arch: ${{ matrix.target_arch }}
       - name: Prepare integration test binaries for qemu tests
         run: make integration-test-binaries TARGET_ARCH=${{ matrix.target_arch }}
       - name: Upload integration test binaries
