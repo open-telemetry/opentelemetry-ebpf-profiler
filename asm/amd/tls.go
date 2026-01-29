@@ -12,7 +12,7 @@ import (
 	"golang.org/x/arch/x86/x86asm"
 )
 
-// ExtractFSOffsetFromCode scans through x86_64 assembly code looking for MOV instructions
+// ExtractTLSOffset scans through x86_64 assembly code looking for MOV instructions
 // that access Thread Local Storage (TLS) via the FS segment register.
 // It handles three common patterns:
 //  1. Direct FS-relative addressing: MOV reg, FS:[offset]

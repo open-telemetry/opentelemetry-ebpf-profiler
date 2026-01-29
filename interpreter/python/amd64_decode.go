@@ -67,7 +67,7 @@ func evaluateStubAnswerAMD64(res e.Expression, memBase uint64) (uint64, error) {
 // extractTLSOffsetFromCodeAMD64 extracts the TLS offset by analyzing x86_64 assembly code.
 // It looks for MOV instructions with FS segment prefix (e.g., MOV rax, FS:[offset]).
 func extractTLSOffsetFromCodeAMD64(code []byte, baseAddr uint64) (int64, error) {
-	offset, err := amd.ExtractFSOffsetFromCode(code, baseAddr, nil)
+	offset, err := amd.ExtractTLSOffset(code, baseAddr, nil)
 	if err != nil {
 		return 0, fmt.Errorf("could not find FS-relative MOV instruction")
 	}

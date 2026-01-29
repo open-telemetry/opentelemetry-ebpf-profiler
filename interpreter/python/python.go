@@ -652,7 +652,7 @@ func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
 	var offset int64
 	switch ef.Machine {
 	case elf.EM_AARCH64:
-		offset, err = arm.ExtractTLSOffsetFromCodeARM64(code, uint64(sym.Address), ef)
+		offset, err = arm.ExtractTLSOffset(code, uint64(sym.Address), ef)
 	case elf.EM_X86_64:
 		offset, err = extractTLSOffsetFromCodeAMD64(code, uint64(sym.Address))
 	default:

@@ -136,7 +136,7 @@ func TestExtractTLSOffsetFromCodeARM64(t *testing.T) {
 
 	for _, td := range testdata {
 		t.Run(td.name, func(t *testing.T) {
-			offset, err := ExtractTLSOffsetFromCodeARM64(td.code, td.baseAddr, nil)
+			offset, err := ExtractTLSOffset(td.code, td.baseAddr, nil)
 			if td.expectedError != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), td.expectedError)

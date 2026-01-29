@@ -46,7 +46,7 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 		return 0, err
 	}
 
-	offset, err := amd.ExtractFSOffsetFromCode(code, uint64(sym.Address), f)
+	offset, err := amd.ExtractTLSOffset(code, uint64(sym.Address), f)
 	if err != nil {
 		return -8, fmt.Errorf("symbol '%s': %w", symbolName, errDecodeSymbol)
 	}
