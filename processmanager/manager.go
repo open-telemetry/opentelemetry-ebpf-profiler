@@ -180,7 +180,7 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 func (pm *ProcessManager) Close() {
 }
 
-func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *libpf.Frames) error {
+func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *libpf.Frames, mapping libpf.FrameMapping) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -189,7 +189,7 @@ func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *l
 	}
 
 	for _, instance := range pm.interpreters[pid] {
-		if err := instance.Symbolize(data, frames); err != nil {
+		if err := instance.Symbolize(data, frames, mapping); err != nil {
 			if errors.Is(err, interpreter.ErrMismatchInterpreterType) {
 				// The interpreter type of instance did not match the type of frame.
 				// So continue with the next interpreter instance for this PID.
@@ -212,12 +212,6 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 		log.Errorf("Unexpected frame type 0x%02X (neither error nor usermode frame)",
 			uint8(ef.Type()))
 	case libpf.Native:
-		// Attempt symbolization of native frames. It is best effort and
-		// provides non-symbolized frames if no native symbolizer is active.
-		if err := pm.symbolizeFrame(pid, ef, dst); err == nil {
-			return true
-		}
-
 		// The BPF code classifies whether an address is a return address or not.
 		// Return addresses are where execution resumes when returning to the stack
 		// frame and point to the **next instruction** after the call instruction
@@ -234,20 +228,27 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 		// variable length instruction sets like X86.
 		fileID := host.FileID(ef.Variable(0))
 		lineno := libpf.Address(ef.Data())
-		relativeRIP := lineno
-		if ef.Flags().ReturnAddress() {
-			relativeRIP--
-		}
 
 		// Locate mapping info for the frame.
 		mapping := pm.findMappingForTrace(pid, fileID, lineno)
+
+		// Attempt symbolization of native frames. It is best effort and
+		// provides non-symbolized frames if no native symbolizer is active.
+		if err := pm.symbolizeFrame(pid, ef, dst, mapping); err == nil {
+			return true
+		}
+
+		relativeRIP := libpf.AddressOrLineno(lineno)
+		if ef.Flags().ReturnAddress() {
+			relativeRIP--
+		}
 		dst.Append(&libpf.Frame{
 			Type:            ef.Type(),
-			AddressOrLineno: libpf.AddressOrLineno(relativeRIP),
+			AddressOrLineno: relativeRIP,
 			Mapping:         mapping,
 		})
 	default:
-		err := pm.symbolizeFrame(pid, ef, dst)
+		err := pm.symbolizeFrame(pid, ef, dst, libpf.FrameMapping{})
 		if err == nil {
 			return true
 		}
