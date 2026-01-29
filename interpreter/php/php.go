@@ -51,12 +51,12 @@ var (
 	_ interpreter.Instance = &phpInstance{}
 )
 
-func phpVersion(major, minor, release uint) uint {
+func phpVersion(major, minor, release uint32) uint32 {
 	return major*0x10000 + minor*0x100 + release
 }
 
 type phpData struct {
-	version uint
+	version uint32
 
 	// egAddr is the `executor_globals` symbol value which is needed by the eBPF
 	// program to build php backtraces.
@@ -146,19 +146,19 @@ func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf
 func (d *phpData) Unload(_ interpreter.EbpfHandler) {
 }
 
-func versionExtract(rodata string) (uint, error) {
+func versionExtract(rodata string) (uint32, error) {
 	matches := versionMatch.FindStringSubmatch(rodata)
 	if matches == nil {
 		return 0, errors.New("no valid PHP version string found")
 	}
 
-	major, _ := strconv.Atoi(matches[1])
-	minor, _ := strconv.Atoi(matches[2])
-	release, _ := strconv.Atoi(matches[3])
-	return phpVersion(uint(major), uint(minor), uint(release)), nil
+	major, _ := strconv.ParseUint(matches[1], 10, 32)
+	minor, _ := strconv.ParseUint(matches[2], 10, 32)
+	release, _ := strconv.ParseUint(matches[3], 10, 32)
+	return phpVersion(uint32(major), uint32(minor), uint32(release)), nil
 }
 
-func determinePHPVersion(ef *pfelf.File) (uint, error) {
+func determinePHPVersion(ef *pfelf.File) (uint32, error) {
 	// There is no ideal way to get the PHP version. This just searches
 	// for a known string with the version number from .rodata.
 	if ef.ROData == nil {

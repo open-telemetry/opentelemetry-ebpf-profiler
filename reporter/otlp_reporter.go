@@ -87,7 +87,7 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 	}
 	r.client = pprofileotlp.NewGRPCClient(otlpGrpcConn)
 
-	r.runLoop.Start(ctx, r.cfg.ReportInterval, func() {
+	r.runLoop.Start(ctx, r.cfg.ReportInterval, r.cfg.ReportJitter, func() {
 		if err := r.reportOTLPProfile(ctx); err != nil {
 			log.Errorf("Request failed: %v", err)
 		}

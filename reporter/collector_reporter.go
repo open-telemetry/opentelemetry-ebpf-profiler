@@ -59,7 +59,7 @@ func (r *CollectorReporter) Start(ctx context.Context) error {
 	// Create a child context for reporting features
 	ctx, cancelReporting := context.WithCancel(ctx)
 
-	r.runLoop.Start(ctx, r.cfg.ReportInterval, func() {
+	r.runLoop.Start(ctx, r.cfg.ReportInterval, r.cfg.ReportJitter, func() {
 		if err := r.reportProfile(ctx); err != nil {
 			log.Errorf("Request failed: %v", err)
 		}
