@@ -1233,9 +1233,9 @@ func determineRubyVersion(ef *pfelf.File) (uint32, error) {
 	if len(matches) < 3 {
 		return 0, fmt.Errorf("failed to parse version string: '%s'", versionString)
 	}
-	major, _ := strconv.Atoi(matches[1])
-	minor, _ := strconv.Atoi(matches[2])
-	release, _ := strconv.Atoi(matches[3])
+	major, _ := strconv.ParseUint(matches[1], 10, 32)
+	minor, _ := strconv.ParseUint(matches[2], 10, 32)
+	release, _ := strconv.ParseUint(matches[3], 10, 32)
 
 	return rubyVersion(uint32(major), uint32(minor), uint32(release)), nil
 }
