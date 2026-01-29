@@ -16,18 +16,18 @@ jobs:
       security-events: write # for github/codeql-action/analyze to upload SARIF results
     name: Analyze Go (${{ matrix.target_arch }})
     if: ${{ github.actor != 'dependabot[bot]' && github.repository == 'open-telemetry/opentelemetry-ebpf-profiler' }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        target_arch: [amd64, arm64]
+        include:
+          - { target_arch: amd64, runner: ubuntu-24.04 }
+          - { target_arch: arm64, runner: ubuntu-24.04-arm }
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up environment
         uses: ./.github/workflows/env
-        with:
-          target_arch: ${{ matrix.target_arch }}
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@b20883b0cd1f46c72ae0ba6d1090936928f9fa30 # v4.32.0
@@ -35,8 +35,7 @@ jobs:
           languages: go
 
       - name: Build Artifact
-        run: |
-          make TARGET_ARCH=${{ matrix.target_arch }}
+        run: make
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@b20883b0cd1f46c72ae0ba6d1090936928f9fa30 # v4.32.0
