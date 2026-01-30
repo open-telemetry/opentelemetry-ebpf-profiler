@@ -383,7 +383,7 @@ func (i *beamInstance) Detach(interpreter.EbpfHandler, libpf.PID) error {
 	return nil
 }
 
-func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.BEAM) {
 		return interpreter.ErrMismatchInterpreterType
 	}

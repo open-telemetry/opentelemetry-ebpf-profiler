@@ -1710,7 +1710,7 @@ func (i *v8Instance) symbolizeCode(code *v8Code, delta uint64, returnAddress boo
 	return nil
 }
 
-func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.V8) {
 		return interpreter.ErrMismatchInterpreterType
 	}
