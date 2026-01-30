@@ -554,7 +554,7 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	return pco, nil
 }
 
-func (p *pythonInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+func (p *pythonInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.Python) {
 		return interpreter.ErrMismatchInterpreterType
 	}

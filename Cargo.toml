@@ -11,7 +11,7 @@ resolver = "2"
 
 [workspace.package]
 version = "0.0.0"
-rust-version = "1.84.1"
+rust-version = "1.88.0"
 license = "Apache-2.0"
 
 [profile.release]
@@ -53,7 +53,7 @@ zstd = "0.13.0"
 zydis = "4.1.1"
 
 [workspace.dependencies.gimli]
-version = "0.32.0"
+version = "0.33.0"
 default-features = false
 features = ["std", "endian-reader", "fallible-iterator"]
 
