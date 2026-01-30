@@ -1258,9 +1258,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// Reason for lowest supported version:
 	// - Ruby 2.5 is still commonly used at time of writing this code.
 	//   https://www.jetbrains.com/lp/devecosystem-2020/ruby/
-	// Reason for maximum supported version 3.5.x:
-	// - this is currently the newest stable version
-	minVer, maxVer := rubyVersion(2, 5, 0), rubyVersion(3, 6, 0)
+	// Reason for maximum supported version 4.0.x:
+	// - Ruby 4.0 was released December 2025 with ZJIT and redesigned Ractor Port API
+	minVer, maxVer := rubyVersion(2, 5, 0), rubyVersion(4, 1, 0)
 	if version < minVer || version >= maxVer {
 		return nil, fmt.Errorf("unsupported Ruby %d.%d.%d (need >= %d.%d.%d and <= %d.%d.%d)",
 			(version>>16)&0xff, (version>>8)&0xff, version&0xff,
@@ -1515,6 +1515,14 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.iseq_constant_body.succ_index_table = 136
 		vms.iseq_constant_body.local_iseq = 168
 		vms.iseq_constant_body.size_of_iseq_constant_body = 352
+	case version >= rubyVersion(4, 0, 0):
+		// Ruby 4.0+ has different struct layout due to ZJIT replacing YJIT
+		// and other internal changes. Offsets determined via GDB analysis.
+		vms.iseq_constant_body.insn_info_body = 112
+		vms.iseq_constant_body.insn_info_size = 128
+		vms.iseq_constant_body.succ_index_table = 136
+		vms.iseq_constant_body.local_iseq = 176
+		vms.iseq_constant_body.size_of_iseq_constant_body = 304
 	default: // 3.3.x and 3.5.x have the same values
 		vms.iseq_constant_body.insn_info_body = 112
 		vms.iseq_constant_body.insn_info_size = 128
@@ -1588,7 +1596,15 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.rb_symbols_t.ids = 16
 
 	if version >= rubyVersion(3, 0, 0) {
-		if version >= rubyVersion(3, 3, 0) {
+		if version >= rubyVersion(4, 0, 0) {
+			// Ruby 4.0+ redesigned rb_ractor_sync with Port-based API.
+			// Offsets determined via GDB analysis of rb_ractor_struct.
+			if runtime.GOARCH == "amd64" {
+				vms.rb_ractor_struct.running_ec = 0x138
+			} else {
+				vms.rb_ractor_struct.running_ec = 0x148
+			}
+		} else if version >= rubyVersion(3, 3, 0) {
 			if runtime.GOARCH == "amd64" {
 				vms.rb_ractor_struct.running_ec = 0x180
 			} else {
