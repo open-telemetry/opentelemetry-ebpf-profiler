@@ -8,5 +8,3 @@ ignore-regex = \b[a-z]+[A-Z][a-zA-Z0-9]*\b|\b[a-z_]+_[a-z_]+\b|\b0x[0-9a-fA-F]+\
 interactive = 1
 skip = .git,AUTHORS.md,go.mod,go.sum,LICENSES,zydis,tools.mod,tools.sum
 uri-ignore-words-list = *
-write =
-
