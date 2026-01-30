@@ -132,7 +132,55 @@ Any [Maintainer] can merge the PR once the above criteria have been met.
 [^1]: A qualified approval is a GitHub Pull Request review with "Approve"
 	status from an OpenTelemetry Profiler [Approver] or [Maintainer].
 
-## Approvers and Maintainers
+## Membership, Roles, and Responsibilities
+
+See the [OpenTelemetry membership
+guide](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md)
+for information on how to become a member of the OpenTelemetry organization and
+the different roles available. In addition to the roles listed there we also
+have a Profiler-specific role: code owners.
+
+### Becoming a Code Owner
+
+A Code Owner is responsible for a language interpreter code within the
+OpenTelemetry eBPF Profiler, as indicated by the [CODEOWNERS
+file](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/.github/CODEOWNERS).
+That responsibility includes maintaining the interpreter, triaging and
+responding to issues, and reviewing pull requests.
+
+Sometimes a language interpreter may be in need of a new or additional Code
+Owner. A few reasons this situation may arise would be:
+
+- The existing Code Owners are actively looking for more help.
+- A previous Code Owner stepped down.
+- An existing Code Owner has become unresponsive.
+- The component was never assigned a Code Owner.
+
+Code Ownership does not have to be a full-time job. If you can find a couple
+hours to help out on a recurring basis, please consider pursuing Code Ownership.
+
+#### Requirements
+
+If you would like to help and become a Code Owner you must meet the following
+requirements:
+
+1. [Be a member of the OpenTelemetry
+organization.](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#member)
+2. (Code Owner Discretion) It is best to have resolved an issue related to the
+component, contributed directly to the component, and/or review component PRs.
+How much interaction with the component is required before becoming a Code Owner
+is up to any existing Code Owners.
+
+Code Ownership is ultimately up to the judgment of the existing Code Owners and
+eBPF Profiler Maintainers. Meeting the above requirements is not a guarantee to
+be granted Code Ownership.
+
+#### How to become a Code Owner
+
+To become a Code Owner, add your GitHub username to the
+[CODEOWNERS](.github/CODEOWNERS)] file with an entry for all files related to
+the interpreter code. Be sure to tag the existing Code Owners, if any, within
+the PR to ensure they receive a notification.
 
 ### Maintainers
 
