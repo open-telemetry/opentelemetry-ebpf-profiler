@@ -194,8 +194,8 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 		intervalData = synthesizeIntervalData(ef)
 	}
 
-	// Also gather TSD info if applicable.
-	if libc.IsPotentialTSDDSO(elfRef.FileName()) {
+	// Also gather Libc info if applicable.
+	if libc.IsPotentialLibcDSO(elfRef.FileName()) {
 		if ef, errx := elfRef.GetELF(); errx == nil {
 			libcInfo, _ = libc.ExtractLibcInfo(ef)
 		}
