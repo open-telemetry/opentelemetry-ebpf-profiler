@@ -68,14 +68,18 @@ func (t *Tracer) handleGenericPID() {
 	}
 }
 
-// triggerPidEvent is a trigger function for the eBPF map report_events. It is
+// triggerReportEvent is a trigger function for the eBPF map report_events. It is
 // called for every event that is received in user space from this map. The underlying
 // C structure in the received data is transformed to a Go structure and the event
 // handler is invoked.
-func (t *Tracer) triggerPidEvent(data []byte) {
+func (t *Tracer) triggerReportEvent(data []byte) {
 	event := (*support.Event)(unsafe.Pointer(&data[0]))
-	if event.Type == support.EventTypeGenericPID {
+	switch event.Type {
+	case support.EventTypeGenericPID:
 		t.handleGenericPID()
+	case support.EventTypeReloadKallsyms:
+		t.kernelSymbolizer.Reload()
+		t.enableEvent(support.EventTypeReloadKallsyms)
 	}
 }
 
@@ -297,7 +301,7 @@ func (t *Tracer) startEventMonitor(ctx context.Context) func() []metrics.Metric 
 		log.Fatalf("Map report_events is not available")
 	}
 
-	getPerfErrorCounts := startPerfEventMonitor(ctx, eventMap, t.triggerPidEvent, os.Getpagesize())
+	getPerfErrorCounts := startPerfEventMonitor(ctx, eventMap, t.triggerReportEvent, os.Getpagesize())
 	return func() []metrics.Metric {
 		lost, noData, readError := getPerfErrorCounts()
 

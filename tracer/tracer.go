@@ -21,6 +21,7 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
+	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
@@ -92,6 +93,10 @@ type Tracer struct {
 
 	// tracePool is cache of libpf.EbpfTrace to avoid GC pressure
 	tracePool sync.Pool
+
+	// monitorPIDEventsMap iterates over the eBPF map pid_events, collects PIDs and
+	// writes them to the keys slice. The implementation is selected on creation.
+	monitorPIDEventsMapMethod func(keys *[]libpf.PIDTID)
 
 	// triggerPIDProcessing is used as manual trigger channel to request immediate
 	// processing of pending PIDs. This is requested on notifications from eBPF code
@@ -231,6 +236,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	}
 
 	hasBatchOperations := ebpfHandler.SupportsGenericBatchOperations()
+	hasBatchLookupAndDelete := ebpfHandler.SupportsGenericBatchLookupAndDelete()
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
 		ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
@@ -259,6 +265,13 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
 	}
 
+	// Use an optimized version if available
+	if hasBatchLookupAndDelete {
+		tracer.monitorPIDEventsMapMethod = (*tracer).monitorPIDEventsMapBatch
+	} else {
+		tracer.monitorPIDEventsMapMethod = (*tracer).monitorPIDEventsMapSingle
+	}
+
 	return tracer, nil
 }
 
@@ -266,14 +279,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 // NOTE: Close may be called multiple times in succession.
 func (t *Tracer) Close() {
 	events := t.perfEntrypoints.WLock()
-	for _, event := range *events {
-		if err := event.Disable(); err != nil {
-			log.Errorf("Failed to disable perf event: %v", err)
-		}
-		if err := event.Close(); err != nil {
-			log.Errorf("Failed to close perf event: %v", err)
-		}
-	}
+	terminatePerfEvents(*events)
 	*events = nil
 	t.perfEntrypoints.WUnlock(&events)
 
@@ -300,7 +306,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	// References to eBPF maps in the eBPF programs are just placeholders that need to be
 	// replaced by the actual loaded maps later on with rewriteMaps before loading the
 	// programs into the kernel.
-	major, minor, patch, err := GetCurrentKernelVersion()
+	major, minor, patch, err := linux.GetCurrentKernelVersion()
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get kernel version: %v", err)
 	}
@@ -404,6 +410,11 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
 		},
 		{
+			progID: uint32(support.ProgUnwindDotnet10),
+			name:   "unwind_dotnet10",
+			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
+		},
+		{
 			progID: uint32(support.ProgGoLabels),
 			name:   "go_labels",
 			enable: cfg.IncludeTracers.Has(types.Labels),
@@ -459,6 +470,10 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to load uprobe eBPF programs: %v", err)
 		}
+	}
+
+	if err = loadKallsymsTrigger(coll, ebpfProgs, cfg.BPFVerifierLogLevel); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load kallsym eBPF program: %v", err)
 	}
 
 	if err = removeTemporaryMaps(ebpfMaps); err != nil {
@@ -573,6 +588,27 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			return fmt.Errorf("failed to load %s: %v", mapName, err)
 		}
 		ebpfMaps[mapName] = ebpfMap
+	}
+
+	return nil
+}
+
+// loadKallsymsTrigger loads the eBPF program that triggers kallsym updates.
+func loadKallsymsTrigger(coll *cebpf.CollectionSpec,
+	ebpfProgs map[string]*cebpf.Program, bpfVerifierLogLevel uint32) error {
+	programOptions := cebpf.ProgramOptions{
+		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
+	}
+
+	kallsymsTriggerProg := "kprobe__kallsyms"
+	progSpec, ok := coll.Programs[kallsymsTriggerProg]
+	if !ok {
+		return fmt.Errorf("program %s does not exist", kallsymsTriggerProg)
+	}
+
+	if err := loadProgram(ebpfProgs, nil, 0, progSpec,
+		programOptions, true); err != nil {
+		return err
 	}
 
 	return nil
@@ -809,9 +845,9 @@ func (t *Tracer) enableEvent(eventType int) {
 	_ = inhibitEventsMap.Delete(unsafe.Pointer(&et))
 }
 
-// monitorPIDEventsMap periodically iterates over the eBPF map pid_events,
-// collects PIDs and writes them to the keys slice.
-func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) {
+// monitorPIDEventsMapSingle iterates over the eBPF map pid_events, collects PIDs
+// and writes them to the keys slice.
+func (t *Tracer) monitorPIDEventsMapSingle(keys *[]libpf.PIDTID) {
 	eventsMap := t.ebpfMaps["pid_events"]
 	var key, nextKey uint64
 	var value bool
@@ -867,6 +903,34 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) {
 		if _, err := eventsMap.BatchDelete(keys, nil); err != nil {
 			log.Fatalf("Failed to batch delete %d entries from pid_events map: %v",
 				keysToDelete, err)
+		}
+	}
+}
+
+// monitorPIDEventsMapBatch iterates over the eBPF map pid_events in batches,
+// collects PIDs and writes them to the keys slice.
+func (t *Tracer) monitorPIDEventsMapBatch(keys *[]libpf.PIDTID) {
+	eventsMap := t.ebpfMaps["pid_events"]
+
+	removed := make([]uint64, 128)
+	values := make([]bool, len(removed))
+
+	cursor := cebpf.MapBatchCursor{}
+
+	for {
+		n, err := eventsMap.BatchLookupAndDelete(&cursor, removed, values, nil)
+
+		// There can be results even if there's an error.
+		for i := range n {
+			*keys = append(*keys, libpf.PIDTID(removed[i]))
+		}
+
+		if errors.Is(err, cebpf.ErrKeyNotExist) {
+			break
+		}
+
+		if err != nil {
+			log.Fatalf("Failed to batch lookup and delete entries from pid_events map: %v", err)
 		}
 	}
 }
@@ -1019,7 +1083,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
 		t.triggerPIDProcessing, func(_ bool) {
 			t.enableEvent(support.EventTypeGenericPID)
-			t.monitorPIDEventsMap(&pidEvents)
+			t.monitorPIDEventsMapMethod(&pidEvents)
 
 			for _, pidTid := range pidEvents {
 				log.Debugf("=> %v", pidTid)
@@ -1045,6 +1109,45 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	})
 
 	return nil
+}
+
+func (t *Tracer) attachToKallsymsUpdates() error {
+	prog, ok := t.ebpfProgs["kprobe__kallsyms"]
+	if !ok {
+		return fmt.Errorf("kprobe__kallsyms is not available")
+	}
+
+	kallsymsAttachPoint := "bpf_ksym_add"
+	kmod, err := t.kernelSymbolizer.GetModuleByName(kallsyms.Kernel)
+	if err != nil {
+		return err
+	}
+
+	if _, err := kmod.LookupSymbol(kallsymsAttachPoint); err != nil {
+		log.Infof("Monitoring kallsyms is supported only for Linux kernel 5.8 or greater: %s: %v",
+			kallsymsAttachPoint, err)
+		return nil
+	}
+
+	hook, err := link.Kprobe(kallsymsAttachPoint, prog, nil)
+	if err != nil {
+		return fmt.Errorf("failed opening kprobe for kallsyms trigger: %s", err)
+	}
+	t.hooks[hookPoint{group: "kprobe", name: kallsymsAttachPoint}] = hook
+
+	return nil
+}
+
+// terminatePerfEvents disables perf events and closes their file descriptor.
+func terminatePerfEvents(events []*perf.Event) {
+	for _, event := range events {
+		if err := event.Disable(); err != nil {
+			log.Errorf("Failed to disable perf event: %v", err)
+		}
+		if err := event.Close(); err != nil {
+			log.Errorf("Failed to close perf event: %v", err)
+		}
+	}
 }
 
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
@@ -1075,13 +1178,21 @@ func (t *Tracer) AttachTracer() error {
 	for _, id := range onlineCPUIDs {
 		perfEvent, err := perf.Open(perfAttribute, perf.AllThreads, id, nil)
 		if err != nil {
+			terminatePerfEvents(*events)
 			return fmt.Errorf("failed to attach to perf event on CPU %d: %v", id, err)
 		}
 		if err := perfEvent.SetBPF(uint32(tracerProg.FD())); err != nil {
+			terminatePerfEvents(*events)
 			return fmt.Errorf("failed to attach eBPF program to perf event: %v", err)
 		}
 		*events = append(*events, perfEvent)
 	}
+
+	if err = t.attachToKallsymsUpdates(); err != nil {
+		terminatePerfEvents(*events)
+		return err
+	}
+
 	return nil
 }
 

@@ -44,8 +44,8 @@ var (
 )
 
 // pythonVer builds a version number from readable numbers
-func pythonVer(major, minor int) uint16 {
-	return uint16(major)*0x100 + uint16(minor)
+func pythonVer(major, minor uint16) uint16 {
+	return major*0x100 + minor
 }
 
 //nolint:lll
@@ -548,7 +548,7 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	return pco, nil
 }
 
-func (p *pythonInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+func (p *pythonInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.Python) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -586,8 +586,10 @@ func fieldByPythonName(obj reflect.Value, fieldName string) reflect.Value {
 	for i := 0; i < obj.NumField(); i++ {
 		objField := objType.Field(i)
 		if nameTag, ok := objField.Tag.Lookup("name"); ok {
-			if slices.Contains(strings.Split(nameTag, ","), fieldName) {
-				return obj.Field(i)
+			for name := range strings.SplitSeq(nameTag, ",") {
+				if name == fieldName {
+					return obj.Field(i)
+				}
 			}
 		}
 		if fieldName == objField.Name {
@@ -699,9 +701,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	var pyruntimeAddr, autoTLSKey libpf.SymbolValue
-	major, _ := strconv.Atoi(matches[1])
-	minor, _ := strconv.Atoi(matches[2])
-	version := pythonVer(major, minor)
+	major, _ := strconv.ParseUint(matches[1], 10, 16)
+	minor, _ := strconv.ParseUint(matches[2], 10, 16)
+	version := pythonVer(uint16(major), uint16(minor))
 
 	minVer := pythonVer(3, 6)
 	maxVer := pythonVer(3, 14)

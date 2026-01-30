@@ -1,6 +1,5 @@
 #include "bpfdefs.h"
 #include "frametypes.h"
-#include "stackdeltatypes.h"
 #include "tracemgmt.h"
 #include "types.h"
 
@@ -76,7 +75,7 @@ struct unwind_info_array_t {
 } unwind_info_array SEC(".maps");
 
 // The number of native frames to unwind per frame-unwinding eBPF program.
-#define NATIVE_FRAMES_PER_PROGRAM 4
+#define NATIVE_FRAMES_PER_PROGRAM 5
 
 // The decision whether to unwind native stacks or interpreter stacks is made by checking if a given
 // PC address falls into the "interpreter loop" of an interpreter. This map helps identify such
@@ -275,108 +274,47 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
   return ERR_OK;
 }
 
-// unwind_register_address calculates the given expression ('opcode'/'param') to get
-// the CFA (canonical frame address, to recover PC and be used in further calculations),
-// or the address where a register is stored (FP currently), so that the value of
-// the register can be recovered.
-//
-// Currently the following expressions are supported:
-//   1. Not recoverable -> NULL is returned.
-//   2. When UNWIND_OPCODEF_DEREF is not set:
-//      BASE + param
-//   3. When UNWIND_OPCODEF_DEREF is set:
-//      *(BASE + preDeref) + postDeref
-static EBPF_INLINE u64 unwind_register_address(UnwindState *state, u64 cfa, u8 opcode, s32 param)
+// unwind_calc_register calculates the given basic register expression of
+// format "BASE_REG + param".
+static EBPF_INLINE u64 unwind_calc_register(UnwindState *state, u8 baseReg, s32 param)
 {
-  unsigned long addr, val;
+  return state->regs[baseReg % (sizeof(state->regs) / sizeof(state->regs[0]))] + param;
+}
+
+#if defined(__x86_64__)
+
+// unwind_calc_register_with_deref calculates the expression as:
+// - basic expression "BASE_REG + param"
+// - expression with a dereference "*(BASE_REG + preDeref) + postDeref"
+static EBPF_INLINE u64
+unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool deref)
+{
   s32 preDeref = param, postDeref = 0;
 
-  if (opcode & UNWIND_OPCODEF_DEREF) {
+  if (deref) {
     // For expressions that dereference the base expression, the parameter is constructed
     // of pre-dereference and post-derefence operands. Unpack those.
     preDeref &= ~UNWIND_DEREF_MASK;
     postDeref = (param & UNWIND_DEREF_MASK) * UNWIND_DEREF_MULTIPLIER;
   }
 
-  // Resolve the 'BASE' register, and fetch the CFA/FP/SP value.
-  switch (opcode & ~UNWIND_OPCODEF_DEREF) {
-#if defined(__aarch64__)
-  case UNWIND_OPCODE_BASE_CFA_FRAME:
-#endif
-  case UNWIND_OPCODE_BASE_CFA: addr = cfa; break;
-  case UNWIND_OPCODE_BASE_FP: addr = state->fp; break;
-  case UNWIND_OPCODE_BASE_SP: addr = state->sp; break;
-#if defined(__aarch64__)
-  case UNWIND_OPCODE_BASE_LR:
-    DEBUG_PRINT("unwind: lr");
-
-    if (state->lr == 0) {
-      increment_metric(metricID_UnwindNativeLr0);
-      DEBUG_PRINT("Failure to unwind frame: zero LR at %llx", state->pc);
-      return 0;
-    }
-
-    return state->lr;
-#endif
-#if defined(__x86_64__)
-  case UNWIND_OPCODE_BASE_REG:
-    val = (param & ~UNWIND_REG_MASK) >> 1;
-    DEBUG_PRINT("unwind: r%d+%lu", param & UNWIND_REG_MASK, val);
-    switch (param & UNWIND_REG_MASK) {
-    case 0: // rax
-      addr = state->rax;
-      break;
-    case 9: // r9
-      addr = state->r9;
-      break;
-    case 11: // r11
-      addr = state->r11;
-      break;
-    case 15: // r15
-      addr = state->r15;
-      break;
-    default: return 0;
-    }
-    return addr + val;
-#endif
-  default: return 0;
-  }
-
-#ifdef OPTI_DEBUG
-  switch (opcode) {
-  case UNWIND_OPCODE_BASE_CFA: DEBUG_PRINT("unwind: cfa+%d", preDeref); break;
-  #if defined(__aarch64__)
-  case UNWIND_OPCODE_BASE_CFA_FRAME: DEBUG_PRINT("unwind (fp+ra): cfa+%d", preDeref - 8); break;
-  #endif
-  case UNWIND_OPCODE_BASE_FP: DEBUG_PRINT("unwind: fp+%d", preDeref); break;
-  case UNWIND_OPCODE_BASE_SP: DEBUG_PRINT("unwind: sp+%d", preDeref); break;
-  case UNWIND_OPCODE_BASE_CFA | UNWIND_OPCODEF_DEREF:
-    DEBUG_PRINT("unwind: *(cfa+%d)+%d", preDeref, postDeref);
-    break;
-  case UNWIND_OPCODE_BASE_FP | UNWIND_OPCODEF_DEREF:
-    DEBUG_PRINT("unwind: *(fp+%d)+%d", preDeref, postDeref);
-    break;
-  case UNWIND_OPCODE_BASE_SP | UNWIND_OPCODEF_DEREF:
-    DEBUG_PRINT("unwind: *(sp+%d)+%d", preDeref, postDeref);
-    break;
-  }
-#endif
-
-  // Adjust based on parameter / preDereference adder.
-  addr += preDeref;
-  if ((opcode & UNWIND_OPCODEF_DEREF) == 0) {
+  // Resolve the "BASE + param" before potential derereference
+  u64 addr = unwind_calc_register(state, baseReg, preDeref);
+  if (!deref) {
     // All done: return "BASE + param"
     return addr;
   }
 
   // Dereference, and add the postDereference adder.
+  unsigned long val;
   if (bpf_probe_read_user(&val, sizeof(val), (void *)addr)) {
-    DEBUG_PRINT("unwind failed to dereference address 0x%lx", addr);
+    DEBUG_PRINT("unwind failed to dereference address 0x%lx", (unsigned long)addr);
     return 0;
   }
   // Return: "*(BASE + preDeref) + postDeref"
   return val + postDeref;
 }
+#endif
 
 // Stack unwinding in the absence of frame pointers can be a bit involved, so
 // this comment explains what the following code does.
@@ -387,7 +325,7 @@ static EBPF_INLINE u64 unwind_register_address(UnwindState *state, u64 cfa, u8 o
 // This function resolves a "stack delta" command from from our internal maps.
 // This stack delta refers to a rule on how to unwind the state. In the simple
 // case it just provides SP delta and potentially offset from where to recover
-// FP value. See unwind_register_address() on the expressions supported.
+// FP value. See unwind_calc_register[_with_deref]() on the expressions supported.
 //
 // The function sets the bool pointed to by the given `stop` pointer to `false`
 // if the main ebpf unwinder should exit. This is the case if the current PC
@@ -428,14 +366,15 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       if (bpf_probe_read_user(&rt_regs, sizeof(rt_regs), (void *)(state->sp + 40))) {
         goto err_native_pc_read;
       }
-      state->rax            = rt_regs[13];
-      state->r9             = rt_regs[1];
-      state->r11            = rt_regs[3];
-      state->r13            = rt_regs[5];
-      state->r15            = rt_regs[7];
-      state->fp             = rt_regs[10];
-      state->sp             = rt_regs[15];
-      state->pc             = rt_regs[16];
+      state->rax = rt_regs[13];
+      state->r9  = rt_regs[1];
+      state->r11 = rt_regs[3];
+      state->r13 = rt_regs[5];
+      state->r15 = rt_regs[7];
+      state->fp  = rt_regs[10];
+      state->sp  = rt_regs[15];
+      state->pc  = rt_regs[16];
+
       state->return_address = false;
       DEBUG_PRINT("signal frame");
       goto frame_ok;
@@ -465,12 +404,13 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
 
     // Resolve the frame's CFA (previous PC is fixed to CFA) address, and
     // the previous FP address if any.
-    cfa     = unwind_register_address(state, 0, info->opcode, param);
-    u64 fpa = unwind_register_address(state, cfa, info->fpOpcode, info->fpParam);
+    state->cfa = cfa = unwind_calc_register_with_deref(
+      state, info->baseReg, param, (info->flags & UNWIND_FLAG_DEREF_CFA) != 0);
+    u64 fpa = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
 
     if (fpa) {
       bpf_probe_read_user(&state->fp, sizeof(state->fp), (void *)fpa);
-    } else if (info->opcode == UNWIND_OPCODE_BASE_FP) {
+    } else if (info->baseReg == UNWIND_REG_FP) {
       // FP used for recovery, but no new FP value received, clear FP
       state->fp = 0;
     }
@@ -495,7 +435,6 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
   u32 unwindInfo = 0;
   int addrDiff   = 0;
   u64 rt_regs[34];
-  u64 cfa = 0;
 
   // The relevant executable is compiled with frame pointer omission, so
   // stack deltas need to be retrieved from the relevant map.
@@ -517,13 +456,14 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
       if (bpf_probe_read_user(&rt_regs, sizeof(rt_regs), (void *)(state->sp + 312))) {
         goto err_native_pc_read;
       }
-      state->pc             = normalize_pac_ptr(rt_regs[32]);
-      state->sp             = rt_regs[31];
-      state->fp             = rt_regs[29];
-      state->lr             = normalize_pac_ptr(rt_regs[30]);
-      state->r20            = rt_regs[20];
-      state->r22            = rt_regs[22];
-      state->r28            = rt_regs[28];
+      state->pc  = normalize_pac_ptr(rt_regs[32]);
+      state->sp  = rt_regs[31];
+      state->fp  = rt_regs[29];
+      state->lr  = normalize_pac_ptr(rt_regs[30]);
+      state->r20 = rt_regs[20];
+      state->r22 = rt_regs[22];
+      state->r28 = rt_regs[28];
+
       state->return_address = false;
       state->lr_invalid     = false;
       DEBUG_PRINT("signal frame");
@@ -555,55 +495,50 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
   }
 
   // Resolve the frame CFA (previous PC is fixed to CFA) address
-  cfa = unwind_register_address(state, 0, info->opcode, param);
+  state->cfa = unwind_calc_register(state, info->baseReg, param);
 
   // Resolve Return Address, it is either the value of link register or
   // stack address where RA is stored
-  u64 ra = unwind_register_address(state, cfa, info->fpOpcode, info->fpParam);
-  if (ra) {
-    if (info->fpOpcode == UNWIND_OPCODE_BASE_LR) {
-      // Allow LR unwinding only if it's known to be valid: either because
-      // it's the topmost user-mode frame, or recovered by signal trampoline.
-      if (state->lr_invalid) {
-        increment_metric(metricID_UnwindNativeErrLrUnwindingMidTrace);
-        return ERR_NATIVE_LR_UNWINDING_MID_TRACE;
-      }
-
-      // set return address location to link register
-      state->pc = ra;
-    } else {
-      DEBUG_PRINT("RA: %016llX", (u64)ra);
-
-      // read the value of RA from stack
-      int err;
-      u64 fpra[2];
-      fpra[0] = state->fp;
-      if (info->fpOpcode == UNWIND_OPCODE_BASE_CFA_FRAME) {
-        err = bpf_probe_read_user(fpra, sizeof(fpra), (void *)(ra - 8));
-      } else {
-        err = bpf_probe_read_user(&fpra[1], sizeof(fpra[0]), (void *)ra);
-      }
-      if (!err) {
-        state->fp = fpra[0];
-        state->pc = fpra[1];
-      } else {
-        // error reading memory, mark RA as invalid
-        ra = 0;
-      }
-    }
-
-    state->pc = normalize_pac_ptr(state->pc);
-  }
-
+  u64 ra = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
   if (!ra) {
-  err_native_pc_read:
+    if (info->auxBaseReg == UNWIND_REG_LR) {
+      increment_metric(metricID_UnwindNativeLr0);
+    } else {
+    err_native_pc_read:
+      increment_metric(metricID_UnwindNativeErrPCRead);
+    }
     // report failure to resolve RA and stop unwinding
-    increment_metric(metricID_UnwindNativeErrPCRead);
     DEBUG_PRINT("Giving up due to failure to resolve RA");
     return ERR_NATIVE_PC_READ;
   }
 
-  state->sp = cfa;
+  if (info->auxBaseReg == UNWIND_REG_LR) {
+    // Allow LR unwinding only if it's known to be valid: either because
+    // it's the topmost user-mode frame, or recovered by signal trampoline.
+    if (state->lr_invalid) {
+      increment_metric(metricID_UnwindNativeErrLrUnwindingMidTrace);
+      return ERR_NATIVE_LR_UNWINDING_MID_TRACE;
+    }
+  } else {
+    DEBUG_PRINT("RA: %016llX", (u64)ra);
+
+    // read the value of RA from stack
+    int err;
+    u64 fpra[2];
+    fpra[0] = state->fp;
+    if (info->flags & UNWIND_FLAG_FRAME) {
+      err = bpf_probe_read_user(fpra, sizeof(fpra), (void *)(ra - 8));
+    } else {
+      err = bpf_probe_read_user(&fpra[1], sizeof(fpra[0]), (void *)ra);
+    }
+    if (err) {
+      goto err_native_pc_read;
+    }
+    state->fp = fpra[0];
+    ra        = fpra[1];
+  }
+  state->pc = normalize_pac_ptr(ra);
+  state->sp = state->cfa;
   unwinder_mark_nonleaf_frame(state);
 frame_ok:
   increment_metric(metricID_UnwindNativeFrames);

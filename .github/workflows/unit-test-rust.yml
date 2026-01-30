@@ -20,17 +20,19 @@ permissions:
 jobs:
   rust-test:
     name: Rust Tests (${{ matrix.target_arch }})
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        target_arch: [amd64, arm64]
+        include:
+          - { target_arch: amd64, runner: ubuntu-24.04, rust_target: x86_64-unknown-linux-musl }
+          - { target_arch: arm64, runner: ubuntu-24.04-arm, rust_target: aarch64-unknown-linux-musl }
     steps:
       - name: Clone code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
+          targets: ${{ matrix.rust_target }}
           toolchain: 1.88.0
       - name: Install protoc
         uses: ./.github/workflows/protoc
