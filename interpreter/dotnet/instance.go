@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/support"
 
 	"github.com/elastic/go-freelru"
 
@@ -180,13 +181,18 @@ func (i *dotnetInstance) addRange(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		stubTypeOrHdrMap |= codeFlagLeaf
 	}
 
+	unwinder := uint8(support.ProgUnwindDotnet)
+	if i.d.Get().Contracts.ExecutionManager >= 2 {
+		unwinder = support.ProgUnwindDotnet10
+	}
+
 	rs := dotnetRangeSection{
 		prefixes: prefixes,
 	}
 	i.ranges[lowAddress] = rs
 
 	for _, prefix := range rs.prefixes {
-		err := ebpf.UpdatePidInterpreterMapping(pid, prefix, i.d.unwinder,
+		err := ebpf.UpdatePidInterpreterMapping(pid, prefix, unwinder,
 			host.FileID(stubTypeOrHdrMap), uint64(mapBase))
 		if err != nil {
 			log.Debugf("Failed to update interpreter mapping: %v", err)
@@ -235,12 +241,11 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 
 // addRangeSection processes a RangeSection structure and calls addRange as needed
 func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	rangeSection []byte,
-) error {
+	rangeSection []byte) error {
 	// Extract interesting fields
-	vms := &i.d.vmStructs
-	lowAddress := npsr.Ptr(rangeSection, vms.RangeSection.LowAddress)
-	highAddress := npsr.Ptr(rangeSection, vms.RangeSection.HighAddress)
+	vms := &i.d.Get().Types
+	lowAddress := npsr.Ptr(rangeSection, vms.RangeSection.RangeBegin)
+	highAddress := npsr.Ptr(rangeSection, vms.RangeSection.RangeEndOpen)
 	flags := npsr.Uint32(rangeSection, vms.RangeSection.Flags)
 	if _, ok := i.ranges[lowAddress]; ok {
 		return nil
@@ -261,18 +266,18 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf
 	// https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/vm/codeman.h#L640-L645
 	if flags&rangeSectionCodeHeap != 0 {
 		// heapListOrZapModule points to a heap list
-		heapList := make([]byte, vms.HeapList.SizeOf)
+		heapList := make([]byte, vms.CodeHeapListNode.SizeOf)
 		heapListPtr := npsr.Ptr(rangeSection, vms.RangeSection.HeapList)
 
 		if err := i.rm.Read(heapListPtr, heapList); err != nil {
 			log.Debugf("Failed to read heapList at %#x", heapListPtr)
 			return err
 		}
-		mapBase := npsr.Ptr(heapList, vms.HeapList.MapBase)
-		hdrMap := npsr.Ptr(heapList, vms.HeapList.HdrMap)
-		heapListPtr = npsr.Ptr(heapList, vms.HeapList.Next)
-		heapStart := npsr.Ptr(heapList, vms.HeapList.StartAddress)
-		heapEnd := npsr.Ptr(heapList, vms.HeapList.EndAddress)
+		mapBase := npsr.Ptr(heapList, vms.CodeHeapListNode.MapBase)
+		hdrMap := npsr.Ptr(heapList, vms.CodeHeapListNode.HeaderMap)
+		heapListPtr = npsr.Ptr(heapList, vms.CodeHeapListNode.Next)
+		heapStart := npsr.Ptr(heapList, vms.CodeHeapListNode.StartAddress)
+		heapEnd := npsr.Ptr(heapList, vms.CodeHeapListNode.EndAddress)
 
 		log.Debugf("%x-%x flags:%x  heap: next:%x %x-%x mapBase: %x headerMap: %x",
 			lowAddress, highAddress, flags,
@@ -281,7 +286,7 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf
 		i.addRange(ebpf, pid, lowAddress, highAddress, mapBase, uint64(hdrMap))
 	} else {
 		// heapListOrZapModule points to a Module.
-		modulePtr := npsr.Ptr(rangeSection, vms.RangeSection.Module)
+		modulePtr := npsr.Ptr(rangeSection, vms.RangeSection.R2RModule)
 		// Find the memory mapping area for this module, and establish mapping from
 		// Module* to the PE. This precaches the mapping for R2R modules and avoids
 		// some remote memory reads.
@@ -301,7 +306,7 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf
 
 // walkRangeSectionList adds all RangeSections in a list (dotnet6 and dotnet7)
 func (i *dotnetInstance) walkRangeSectionList(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	vms := &i.d.vmStructs
+	vms := &i.d.Get().Types
 	rangeSection := make([]byte, vms.RangeSection.SizeOf)
 	// walk the RangeSection list
 	ptr := i.rm.Ptr(i.codeRangeListPtr)
@@ -312,7 +317,7 @@ func (i *dotnetInstance) walkRangeSectionList(ebpf interpreter.EbpfHandler, pid 
 		if err := i.addRangeSection(ebpf, pid, rangeSection); err != nil {
 			return err
 		}
-		ptr = npsr.Ptr(rangeSection, vms.RangeSection.Next)
+		ptr = npsr.Ptr(rangeSection, vms.RangeSection.next)
 	}
 	return nil
 }
@@ -323,7 +328,7 @@ func (i *dotnetInstance) walkRangeSectionMapFragments(ebpf interpreter.EbpfHandl
 	fragmentPtr libpf.Address,
 ) error {
 	// https://github.com/dotnet/runtime/blob/v8.0.4/src/coreclr/vm/codeman.h#L974
-	vms := &i.d.vmStructs
+	vms := &i.d.Get().Types
 	fragment := make([]byte, 4*8)
 	rangeSection := make([]byte, vms.RangeSection.SizeOf)
 	for fragmentPtr != 0 {
@@ -415,7 +420,7 @@ func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (*peInfo,
 	// we fallback to finding the PE info. The strategy is to read the SimpleName
 	// member which is a pointer inside the memory mapped location of the PE .dll.
 	// Read that and locate the memory mapping to get the PE info.
-	vms := &i.d.vmStructs
+	vms := &i.d.Get().Types
 	simpleNamePtr := i.rm.Ptr(modulePtr + libpf.Address(vms.Module.SimpleName))
 	if simpleNamePtr == 0 {
 		return nil, fmt.Errorf("module at %x, does not have name", modulePtr)
@@ -429,10 +434,9 @@ func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (*peInfo,
 	return info, nil
 }
 
-func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address,
-	debugInfoPtr libpf.Address,
-) (*dotnetMethod, error) {
-	vms := &i.d.vmStructs
+func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr libpf.Address) (*dotnetMethod, error) {
+	cdac := i.d.Get()
+	vms := &cdac.Types
 
 	// Extract MethodDesc data
 	methodDesc := make([]byte, vms.MethodDesc.SizeOf)
@@ -441,14 +445,14 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address,
 	}
 
 	tokenRemainder := npsr.Uint16(methodDesc, vms.MethodDesc.Flags3AndTokenRemainder)
-	tokenRemainder &= vms.MethodDesc.TokenRemainderMask
+	tokenRemainder &= cdac.calculated.MethodDescTokenRemainderMask
 	chunkIndex := npsr.Uint8(methodDesc, vms.MethodDesc.ChunkIndex)
 	classification := npsr.Uint16(methodDesc, vms.MethodDesc.Flags) & mdcClassificationMask
 
 	// Calculate the offset to the owning MethodDescChunk structure
 	// https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/method.hpp#L2321-L2328
 	methodDescChunkPtr := methodDescPtr -
-		libpf.Address(chunkIndex)*libpf.Address(vms.MethodDesc.Alignment) -
+		libpf.Address(chunkIndex)*libpf.Address(cdac.Globals.MethodDescAlignment) -
 		libpf.Address(vms.MethodDescChunk.SizeOf)
 
 	log.Debugf("method @%x: classification '%v', tokenRemainder %x, chunkIndex %x -> chunkPtr %x",
@@ -461,12 +465,12 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address,
 		return nil, err
 	}
 	methodTablePtr := npsr.Ptr(methodDescChunk, vms.MethodDescChunk.MethodTable)
-	tokenRange := npsr.Uint16(methodDescChunk, vms.MethodDescChunk.TokenRange)
-	tokenRange &= vms.MethodDescChunk.TokenRangeMask
+	tokenRange := npsr.Uint16(methodDescChunk, vms.MethodDescChunk.FlagsAndTokenRange)
+	tokenRange &= cdac.calculated.MethodDescChunkTokenRangeMask
 
 	// Merge the MethodDesc and MethodDescChunk bits of Token value
 	// https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/method.hpp#L76-L80
-	index := uint32(tokenRange)<<vms.MethodDesc.TokenRemainderBits + uint32(tokenRemainder)
+	index := uint32(tokenRange)<<cdac.Globals.MethodDescTokenRemainderBitCount + uint32(tokenRemainder)
 	log.Debugf("methodchunk @%x: methodTablePtr %x: tokenRange %d, tokenRemainder %d -> index %d",
 		methodDescChunkPtr, methodTablePtr, tokenRange, tokenRemainder, index)
 
@@ -474,7 +478,7 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address,
 	// https://github.com/dotnet/runtime/blob/release/8.0/src/coreclr/vm/methodtable.cpp#L369-L383
 	// FIXME: The dotnet runtime handles generic and array method differently.
 	// Investigate if this needs adjustments to create correct method indexes.
-	loaderModulePtr := i.rm.Ptr(methodTablePtr + libpf.Address(vms.MethodTable.LoaderModule))
+	loaderModulePtr := i.rm.Ptr(methodTablePtr + libpf.Address(vms.MethodTable.Module))
 	module, err := i.getPEInfoByModulePtr(loaderModulePtr)
 	if err != nil {
 		return nil, err
@@ -487,7 +491,7 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address,
 	}
 	if debugInfoPtr != 0 {
 		if err := method.readDebugInfo(newCachingReader(i.rm, int64(debugInfoPtr),
-			1024), i.d); err != nil {
+			1024), cdac); err != nil {
 			log.Debugf("debug info reading failed: %v", err)
 		}
 	}
@@ -499,14 +503,14 @@ func (i *dotnetInstance) getMethod(codeHeaderPtr libpf.Address) (*dotnetMethod, 
 		return method, nil
 	}
 
-	vms := &i.d.vmStructs
-	codeHeader := make([]byte, vms.CodeHeader.SizeOf)
+	vms := i.d.Get().Types
+	codeHeader := make([]byte, vms.RealCodeHeader.SizeOf)
 	if err := i.rm.Read(codeHeaderPtr, codeHeader); err != nil {
 		return nil, err
 	}
 
-	debugInfoPtr := npsr.Ptr(codeHeader, vms.CodeHeader.DebugInfo)
-	methodDescPtr := npsr.Ptr(codeHeader, vms.CodeHeader.MethodDesc)
+	debugInfoPtr := npsr.Ptr(codeHeader, vms.RealCodeHeader.DebugInfo)
+	methodDescPtr := npsr.Ptr(codeHeader, vms.RealCodeHeader.MethodDesc)
 	method, err := i.readMethod(methodDescPtr, debugInfoPtr)
 	if err != nil {
 		return nil, err
@@ -550,10 +554,16 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	exeReporter reporter.ExecutableReporter, pr process.Process,
 	mappings []process.Mapping,
 ) error {
+	// get introspection data
+	cdac, err := i.d.GetOrInit(func() (dotnetCdac, error) { return i.d.newVMData(i.rm, i.bias) })
+	if err != nil {
+		return err
+	}
+
 	// find pointer to codeRangeList if needed
-	vms := &i.d.vmStructs
+	vms := &cdac.Types
 	if i.codeRangeListPtr == 0 {
-		i.codeRangeListPtr = i.getDacSlot(vms.DacTable.ExecutionManagerCodeRangeList)
+		i.codeRangeListPtr = i.getDacSlot(cdac.dacTable.ExecutionManagerCodeRangeList)
 		if i.codeRangeListPtr == 0 {
 			// This is normal state if we attached to the process before
 			// the dotnet runtime has initialized itself fully.
@@ -562,21 +572,21 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		}
 		log.Debugf("Found code range list head at %x", i.codeRangeListPtr)
 	}
-	if i.precodeStubManagerPtr == 0 && vms.DacTable.PrecodeStubManager != 0 {
-		i.precodeStubManagerPtr = i.getDacSlotPtr(vms.DacTable.PrecodeStubManager)
+	if i.precodeStubManagerPtr == 0 && cdac.dacTable.PrecodeStubManager != 0 {
+		i.precodeStubManagerPtr = i.getDacSlotPtr(cdac.dacTable.PrecodeStubManager)
 	}
-	if i.stubLinkStubManagerPtr == 0 && vms.DacTable.StubLinkStubManager != 0 {
-		i.stubLinkStubManagerPtr = i.getDacSlotPtr(vms.DacTable.StubLinkStubManager)
+	if i.stubLinkStubManagerPtr == 0 && cdac.dacTable.StubLinkStubManager != 0 {
+		i.stubLinkStubManagerPtr = i.getDacSlotPtr(cdac.dacTable.StubLinkStubManager)
 	}
-	if i.thunkHeapStubManagerPtr == 0 && vms.DacTable.ThunkHeapStubManager != 0 {
-		i.thunkHeapStubManagerPtr = i.getDacSlotPtr(vms.DacTable.ThunkHeapStubManager)
+	if i.thunkHeapStubManagerPtr == 0 && cdac.dacTable.ThunkHeapStubManager != 0 {
+		i.thunkHeapStubManagerPtr = i.getDacSlotPtr(cdac.dacTable.ThunkHeapStubManager)
 	}
-	if i.delegateInvokeStubManagerPtr == 0 && vms.DacTable.DelegateInvokeStubManager != 0 {
-		i.delegateInvokeStubManagerPtr = i.getDacSlotPtr(vms.DacTable.DelegateInvokeStubManager)
+	if i.delegateInvokeStubManagerPtr == 0 && cdac.dacTable.DelegateInvokeStubManager != 0 {
+		i.delegateInvokeStubManagerPtr = i.getDacSlotPtr(cdac.dacTable.DelegateInvokeStubManager)
 	}
-	if i.virtualCallStubManagerManagerPtr == 0 && vms.DacTable.VirtualCallStubManagerManager != 0 {
+	if i.virtualCallStubManagerManagerPtr == 0 && cdac.dacTable.VirtualCallStubManagerManager != 0 {
 		i.virtualCallStubManagerManagerPtr = i.getDacSlotPtr(
-			vms.DacTable.VirtualCallStubManagerManager)
+			cdac.dacTable.VirtualCallStubManagerManager)
 	}
 
 	// Collect PE files
@@ -669,16 +679,16 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			case 7:
 				i.walkRangeList(ebpf, pr.PID(), rangeListPtr, codeStubVirtualCallLookup)
 
-				rangeListPtr += libpf.Address(vms.LockedRangeList.SizeOf)
+				rangeListPtr += libpf.Address(vms.lockedRangeList.SizeOf)
 				i.walkRangeList(ebpf, pr.PID(), rangeListPtr, codeStubVirtualCallResolve)
 
-				rangeListPtr += libpf.Address(vms.LockedRangeList.SizeOf)
+				rangeListPtr += libpf.Address(vms.lockedRangeList.SizeOf)
 				i.walkRangeList(ebpf, pr.PID(), rangeListPtr, codeStubVirtualCallDispatch)
 
-				rangeListPtr += libpf.Address(vms.LockedRangeList.SizeOf)
+				rangeListPtr += libpf.Address(vms.lockedRangeList.SizeOf)
 				i.walkRangeList(ebpf, pr.PID(), rangeListPtr, codeStubVirtualCallCacheEntry)
 
-				rangeListPtr += libpf.Address(vms.LockedRangeList.SizeOf)
+				rangeListPtr += libpf.Address(vms.lockedRangeList.SizeOf)
 				i.walkRangeList(ebpf, pr.PID(), rangeListPtr, codeStubVirtualCallVtable)
 			case 8:
 				i.walkRangeList(ebpf, pr.PID(), rangeListPtr, codeStubVirtualCallCacheEntry)
@@ -713,7 +723,7 @@ func (i *dotnetInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 	}, nil
 }
 
-func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.Dotnet) {
 		return interpreter.ErrMismatchInterpreterType
 	}

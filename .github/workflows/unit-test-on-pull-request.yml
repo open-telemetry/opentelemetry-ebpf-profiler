@@ -78,7 +78,7 @@ jobs:
       - name: Set up environment
         uses: ./.github/workflows/env
       - name: Cache coredump modules
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: tools/coredump/modulecache
           key: coredumps-${{ matrix.target_arch }}-${{ hashFiles('tools/coredump/testdata/*/*.json') }}
@@ -122,7 +122,7 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
       - name: Cache coredump modules
-        uses: actions/cache@8b402f58fbc84540c8b491a91e594a4576fec3d7 # v5.0.2
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: tools/coredump/modulecache
           key: coredumps-arm64-${{ hashFiles('tools/coredump/testdata/*/*.json') }}
