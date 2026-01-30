@@ -8,7 +8,6 @@ package tracehandler // import "github.com/toliu/opentelemetry-ebpf-profiler/tra
 import (
 	"context"
 	"fmt"
-	"github.com/toliu/opentelemetry-ebpf-profiler/support"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -119,10 +118,6 @@ func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 }
 
 func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
-	// FIXME: 可能帧异常情况，原因未知，先过滤掉
-	if bpfTrace.Origin == support.TraceOriginHeap && len(bpfTrace.Frames) == 0 {
-		return
-	}
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(bpfTrace.KTime.UnixNano()),
 		Comm:           bpfTrace.Comm,
