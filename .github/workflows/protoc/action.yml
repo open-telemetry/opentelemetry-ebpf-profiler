@@ -7,9 +7,23 @@ runs:
       shell: bash
       env:
         PB_URL: "https://github.com/protocolbuffers/protobuf/releases/download/v24.4/"
-        PB_FILE: "protoc-24.4-linux-x86_64.zip"
         INSTALL_DIR: "/usr/local"
       run: |
+        # Detect architecture
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64)
+            PB_FILE="protoc-24.4-linux-x86_64.zip"
+            ;;
+          aarch64|arm64)
+            PB_FILE="protoc-24.4-linux-aarch_64.zip"
+            ;;
+          *)
+            echo "Unsupported architecture: $ARCH"
+            exit 1
+            ;;
+        esac
+        
         wget -nv "$PB_URL/$PB_FILE"
         sudo unzip "$PB_FILE" -d "$INSTALL_DIR" 'bin/*' 'include/*'
         sudo chmod +xr "$INSTALL_DIR/bin/protoc"
