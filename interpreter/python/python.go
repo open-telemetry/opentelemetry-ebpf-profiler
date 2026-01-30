@@ -656,7 +656,8 @@ func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
 	case elf.EM_X86_64:
 		offset, err = amd.ExtractTLSOffset(code, uint64(sym.Address), nil)
 	default:
-		return 0, fmt.Errorf("unsupported architecture for assembly analysis")
+		return 0, fmt.Errorf("unsupported architecture for assembly analysis: %v",
+			ef.Machine)
 	}
 
 	if err != nil {

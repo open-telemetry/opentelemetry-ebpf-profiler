@@ -71,9 +71,9 @@ func ExtractTLSOffset(code []byte, codeAddress uint64, file *pfelf.File) (int32,
 	return 0, fmt.Errorf("could not find FS-relative MOV instruction with valid TLS offset")
 }
 
-// validateTLSOffset make sure that the extracted offset is within some boundaries.
+// validateTLSOffset ensures that the extracted offset is within some boundaries.
 func validateTLSOffset(offset int32) (int32, error) {
-	// In theory all 32 bit can be used to represent the offset.
+	// In theory all 32 bits can be used to represent the offset.
 	// But usually this is not the case.
 	// For more see https://www.akkadia.org/drepper/tls.pdf
 	if (offset < 0 && offset > -4096) || (offset > 0 && offset < 4096) {
