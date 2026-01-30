@@ -50,6 +50,9 @@ EBPF_FLAGS :=
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
 GO_TOOLS := -modfile=tools.mod
 
+RUN_CONFIG?=cmd/otelcol-ebpf-profiler/local.example.yaml
+RUN_ARGS?=--feature-gates=+service.profilesSupport
+
 MAKEFLAGS += -j$(shell nproc)
 
 JUNIT_OUT_DIR ?= /tmp/testresults
@@ -71,8 +74,14 @@ generate:
 ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
-ebpf-profiler: generate ebpf
+ebpf-profiler: ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
+
+ebpf-profiler-collector: ebpf
+	pushd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../ebpf-profiler-collector ./... && popd
+
+run-collector: ebpf-profiler
+	./ebpf-profiler --config ${RUN_CONFIG} ${RUN_ARGS}
 
 rust-targets:
 	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
