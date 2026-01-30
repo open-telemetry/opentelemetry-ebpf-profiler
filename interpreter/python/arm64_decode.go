@@ -4,7 +4,7 @@
 package python // import "go.opentelemetry.io/ebpf-profiler/interpreter/python"
 
 import (
-	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
@@ -60,7 +60,7 @@ func decodeStubArgumentARM64(code []byte,
 		}
 
 		// Interested only on commands modifying Xn
-		dest, ok := ah.Xreg2num(inst.Args[0])
+		dest, ok := arm.Xreg2num(inst.Args[0])
 		if !ok {
 			continue
 		}
@@ -69,7 +69,7 @@ func decodeStubArgumentARM64(code []byte,
 		instRetval := libpf.SymbolValueInvalid
 		switch inst.Op {
 		case aa.ADD:
-			a2, ok := ah.DecodeImmediate(inst.Args[2])
+			a2, ok := arm.DecodeImmediate(inst.Args[2])
 			if !ok {
 				break
 			}
@@ -80,11 +80,11 @@ func decodeStubArgumentARM64(code []byte,
 			if !ok {
 				break
 			}
-			src, ok := ah.Xreg2num(m.Base)
+			src, ok := arm.Xreg2num(m.Base)
 			if !ok {
 				break
 			}
-			imm, ok := ah.DecodeImmediate(inst.Args[1])
+			imm, ok := arm.DecodeImmediate(inst.Args[1])
 			if !ok {
 				break
 			}

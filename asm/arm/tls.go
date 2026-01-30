@@ -6,7 +6,6 @@ package arm // import "go.opentelemetry.io/ebpf-profiler/asm/arm"
 import (
 	"fmt"
 
-	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	aa "golang.org/x/arch/arm64/arm64asm"
@@ -70,7 +69,7 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int32, erro
 
 			// Check for MRS Xn, TPIDR_EL0 (system register S3_3_C13_C0_2)
 			if inst.Op == aa.MRS && inst.Args[1].String() == "S3_3_C13_C0_2" {
-				reg, ok := ah.Xreg2num(inst.Args[0])
+				reg, ok := Xreg2num(inst.Args[0])
 				if !ok {
 					continue
 				}
@@ -86,9 +85,9 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int32, erro
 
 					// Check for ADD Xd, Xn, #imm
 					if nextInst.Op == aa.ADD {
-						destReg, destOk := ah.Xreg2num(nextInst.Args[0])
-						srcReg, srcOk := ah.Xreg2num(nextInst.Args[1])
-						imm, immOk := ah.DecodeImmediate(nextInst.Args[2])
+						destReg, destOk := Xreg2num(nextInst.Args[0])
+						srcReg, srcOk := Xreg2num(nextInst.Args[1])
+						imm, immOk := DecodeImmediate(nextInst.Args[2])
 
 						if destOk && srcOk && immOk && srcReg == tpReg {
 							if imm > 0 && imm < 0x1000 {
@@ -103,8 +102,8 @@ func ExtractTLSOffset(code []byte, baseAddr uint64, ef *pfelf.File) (int32, erro
 					if nextInst.Op == aa.LDR {
 						// Args[1] is MemImmediate
 						if mem, ok := nextInst.Args[1].(aa.MemImmediate); ok {
-							baseReg, regOk := ah.Xreg2num(mem.Base)
-							imm, immOk := ah.DecodeImmediate(mem)
+							baseReg, regOk := Xreg2num(mem.Base)
+							imm, immOk := DecodeImmediate(mem)
 
 							if regOk && immOk && baseReg == tpReg {
 								if imm > 0 && imm < 0x1000 {
