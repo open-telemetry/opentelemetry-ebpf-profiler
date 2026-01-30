@@ -18,17 +18,17 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"go.opentelemetry.io/ebpf-profiler/asm/amd"
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
-
 	"github.com/elastic/go-freelru"
 
+	"go.opentelemetry.io/ebpf-profiler/asm/amd"
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	npsr "go.opentelemetry.io/ebpf-profiler/nopanicslicereader"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/successfailurecounter"
@@ -53,6 +53,10 @@ type pythonData struct {
 	version uint16
 
 	autoTLSKey libpf.SymbolValue
+
+	// For Python 3.13+: staticTLSOffset stores the TLS offset for direct TLS access
+	// extracted from assembly analysis.
+	staticTLSOffset int64
 
 	noneStruct libpf.SymbolValue
 
@@ -374,9 +378,11 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 	libcInfo libc.LibcInfo) error {
 	d := p.d
 	vm := &d.vmStructs
+
 	cdata := support.PyProcInfo{
 		AutoTLSKeyAddr: uint64(d.autoTLSKey) + uint64(p.bias),
 		Version:        d.version,
+		Tls_offset:     int16(d.staticTLSOffset),
 		TsdInfo:        libcInfo.TSDInfo,
 
 		PyThreadState_frame:            uint8(vm.PyThreadState.Frame),
@@ -633,6 +639,34 @@ func (d *pythonData) readIntrospectionData(ef *pfelf.File, symbol libpf.SymbolNa
 	return nil
 }
 
+// getTLSOffsetFromAssembly extracts the TLS offset by analyzing the assembly code
+// of _PyThreadState_GetCurrent which directly accesses _Py_tss_tstate.
+// This works when the TLS variable exists but isn't exported in the symbol table.
+func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
+	funcName := "_PyThreadState_GetCurrent"
+	sym, code, err := ef.SymbolData(libpf.SymbolName(funcName), 512)
+	if err != nil {
+		return 0, fmt.Errorf("could not read %s: %v", funcName, err)
+	}
+
+	var offset int32
+	switch ef.Machine {
+	case elf.EM_AARCH64:
+		offset, err = arm.ExtractTLSOffset(code, uint64(sym.Address), ef)
+	case elf.EM_X86_64:
+		offset, err = amd.ExtractTLSOffset(code, uint64(sym.Address), nil)
+	default:
+		return 0, fmt.Errorf("unsupported architecture for assembly analysis: %v",
+			ef.Machine)
+	}
+
+	if err != nil {
+		return 0, fmt.Errorf("could not extract TLS offset from %s: %v", funcName, err)
+	}
+
+	return int64(offset), nil
+}
+
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
 // the code to resolve specified argument parameter to the first jump/call.
 func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
@@ -743,9 +777,20 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, err
 	}
 
+	// Python 3.13+ uses direct TLS variable _Py_tss_tstate instead of pthread_getspecific.
+	var staticTLSOffset int64
+	if version >= pythonVer(3, 13) {
+		var err error
+		staticTLSOffset, err = getTLSOffsetFromAssembly(ef)
+		if err != nil {
+			log.Warnf("Failed to extract TLS offset: %v", err)
+		}
+	}
+
 	pd := &pythonData{
-		version:    version,
-		autoTLSKey: autoTLSKey,
+		version:         version,
+		autoTLSKey:      autoTLSKey,
+		staticTLSOffset: staticTLSOffset,
 	}
 	vms := &pd.vmStructs
 
