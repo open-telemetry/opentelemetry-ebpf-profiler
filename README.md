@@ -74,7 +74,7 @@ This will build the profiler natively on your machine.
 You can start the agent with the following command:
 
 ```sh
-sudo make run
+sudo ./ebpf-profiler -collection-agent=127.0.0.1:11000 -disable-tls
 ```
 
 The agent comes with a functional but work-in-progress / evolving implementation
