@@ -959,7 +959,7 @@ func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType ui
 	}, nil
 }
 
-func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.Ruby) {
 		return interpreter.ErrMismatchInterpreterType
 	}
