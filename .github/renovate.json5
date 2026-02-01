@@ -39,6 +39,18 @@
       "schedule": ["before 8am every weekday"]
     }
   ],
+  customManagers: [
+    {
+      customType: 'regex',
+      fileMatch: [
+        'cmd/otelcol-ebpf-profiler/manifest.yaml$',
+      ],
+      datasourceTemplate: 'go',
+      matchStrings: [
+        'gomod: (?<depName>.+) (?<currentValue>.+)',
+      ],
+    },
+  ],
   "ignoreDeps": [
     "golangci/golangci-lint-action"
   ],

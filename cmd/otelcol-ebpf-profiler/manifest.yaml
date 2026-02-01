@@ -10,7 +10,7 @@ dist:
   module: go.opentelemetry.io/ebpf-profiler/cmd/otelcol-ebpf-profiler
   name: otelcol-ebpf-profiler
   description: Local OpenTelemetry Collector binary, testing only.
-  version: 0.144.0-dev
+  version: dev
 
 receivers:
   - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.144.0
