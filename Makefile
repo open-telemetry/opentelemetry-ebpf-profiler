@@ -74,13 +74,16 @@ generate:
 ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
-ebpf-profiler: ebpf
-	go build $(GO_FLAGS) -tags $(GO_TAGS)
+generate-collector:
+	go tool $(GO_TOOLS) builder \
+		--skip-compilation=true \
+		--config cmd/otelcol-ebpf-profiler/manifest.yaml \
+		--output-path cmd/otelcol-ebpf-profiler
 
-ebpf-profiler-collector: ebpf
-	pushd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../ebpf-profiler-collector ./... && popd
+ebpf-profiler: ebpf generate-collector
+	pushd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../ebpf-profiler ./... && popd
 
-run-collector: ebpf-profiler
+run: ebpf-profiler
 	./ebpf-profiler --config ${RUN_CONFIG} ${RUN_ARGS}
 
 rust-targets:
