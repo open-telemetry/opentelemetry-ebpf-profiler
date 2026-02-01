@@ -859,7 +859,7 @@ func (regs *vmRegs) getUnwindInfo(allowGenericRegisters bool) sdtypes.UnwindInfo
 	default:
 		panic(fmt.Sprintf("architecture %d is not supported", regs.arch))
 	}
-	if !allowGenericRegisters && info.Opcode == support.UnwindOpcodeBaseReg {
+	if !allowGenericRegisters && info.Flags&support.UnwindFlagLeafOnly != 0 {
 		return sdtypes.UnwindInfoInvalid
 	}
 	return info

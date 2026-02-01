@@ -215,9 +215,9 @@ impl<'dwarf> CachedUnitInfo<'dwarf> {
         let mut producer = None;
         let mut language = None;
 
-        if let Some((_, die)) = die_iter.next_dfs()? {
-            let mut attrs = die.attrs();
-            while let Some(attr) = attrs.next()? {
+        if let Some(die) = die_iter.next_dfs()? {
+            let attrs = die.attrs();
+            for attr in attrs {
                 match attr.name() {
                     DW_AT_producer => {
                         producer = Some(dwarf.attr_string(&gimli_unit, attr.value())?);
@@ -430,7 +430,7 @@ impl fmt::Debug for Unit<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // We add the header length here to obtain the offset of the first DIE.
         let hdr_len = self.unit.gimli_unit.header.size_of_header();
-        let offs = self.unit.gimli_unit.header.offset().as_debug_info_offset();
+        let offs = self.unit.gimli_unit.header.offset().to_debug_info_offset(&self.unit.gimli_unit.header);
         let offs = offs.expect("we don't inspect type sections").0 + hdr_len;
 
         let name = self.name().unwrap_or(Cow::Borrowed("<unnamed>"));
@@ -558,7 +558,7 @@ enum NextItemMode {
 #[derive(Clone)]
 pub struct SubprogramIter<'dwarf, 'units, 'unit: 'units> {
     unit: &'unit Unit<'dwarf, 'units>,
-    die_iter: gimli::EntriesCursor<'unit, 'unit, R<'dwarf>>,
+    die_iter: gimli::EntriesCursor<'unit, R<'dwarf>>,
     next_mode: NextItemMode,
 }
 
@@ -587,7 +587,7 @@ impl<'dwarf, 'units, 'unit: 'units> FallibleIterator for SubprogramIter<'dwarf, 
                 }
 
                 match self.die_iter.next_dfs()? {
-                    Some(x) => x.1,
+                    Some(x) => x,
                     None => return Ok(None),
                 }
             };
@@ -622,7 +622,7 @@ impl<'dwarf, 'units, 'unit: 'units> FallibleIterator for SubprogramIter<'dwarf, 
 pub struct Subprogram<'dwarf, 'units> {
     unit: Unit<'dwarf, 'units>,
     info: SubprogramInfo<'dwarf, 'units>,
-    die_iter: gimli::EntriesCursor<'units, 'units, R<'dwarf>>,
+    die_iter: gimli::EntriesCursor<'units, R<'dwarf>>,
 }
 
 impl<'dwarf, 'units> Subprogram<'dwarf, 'units> {
@@ -650,6 +650,7 @@ impl<'dwarf, 'units> Subprogram<'dwarf, 'units> {
             die_iter: self.die_iter.clone(),
             tag_stack: smallvec![DW_TAG_subprogram],
             fn_tree_depth: 1,
+            prev_depth: 0,
         }
     }
 }
@@ -659,9 +660,10 @@ impl<'dwarf, 'units> Subprogram<'dwarf, 'units> {
 /// Created via [`Subprogram::inline_instances`].
 pub struct InlineInstanceIter<'dwarf, 'units> {
     unit: Unit<'dwarf, 'units>,
-    die_iter: gimli::EntriesCursor<'units, 'units, R<'dwarf>>,
+    die_iter: gimli::EntriesCursor<'units, R<'dwarf>>,
     tag_stack: SmallVec<[DwTag; 64]>,
     fn_tree_depth: u64,
+    prev_depth: isize,
 }
 
 impl<'dwarf, 'units> FallibleIterator for InlineInstanceIter<'dwarf, 'units> {
@@ -674,9 +676,12 @@ impl<'dwarf, 'units> FallibleIterator for InlineInstanceIter<'dwarf, 'units> {
         }
 
         loop {
-            let Some((depth_delta, die)) = self.die_iter.next_dfs()? else {
+            let Some(die) = self.die_iter.next_dfs()? else {
                 return Ok(None);
             };
+            let depth = die.depth() as isize;
+            let depth_delta = depth - self.prev_depth;
+            self.prev_depth = depth;
 
             // Remove as many levels as we have left behind, plus one since we
             // always push the current element even if it doesn't have children.
@@ -758,7 +763,7 @@ impl<'dwarf, 'units> SubprogramInfo<'dwarf, 'units> {
     fn from_die(
         fn_tree_depth: u64,
         unit: Unit<'dwarf, 'units>,
-        die: &gimli::DebuggingInformationEntry<'_, '_, R<'dwarf>>,
+        die: &gimli::DebuggingInformationEntry<R<'dwarf>>,
     ) -> Result<Self> {
         Self::from_die_impl(fn_tree_depth, unit, die, 0)
     }
@@ -766,7 +771,7 @@ impl<'dwarf, 'units> SubprogramInfo<'dwarf, 'units> {
     fn from_die_impl(
         fn_tree_depth: u64,
         unit: Unit<'dwarf, 'units>,
-        die: &gimli::DebuggingInformationEntry<'_, '_, R<'dwarf>>,
+        die: &gimli::DebuggingInformationEntry<R<'dwarf>>,
         recursion_depth: usize,
     ) -> Result<Self> {
         // Protect against theoretically-possible infinite reference loops (from abstract origins & specifications).
@@ -784,8 +789,8 @@ impl<'dwarf, 'units> SubprogramInfo<'dwarf, 'units> {
         let mut spec = None;
         let mut call_line = None;
         let mut call_file = None;
-        let mut attrs = die.attrs();
-        while let Some(attr) = attrs.next()? {
+        let attrs = die.attrs();
+        for attr in attrs {
             match attr.name() {
                 // Reading is expensive: save unit + attribute value and decode lazily.
                 DW_AT_name => name = Some(UnitAV(unit.clone(), attr.value())),
@@ -1096,7 +1101,7 @@ struct UnitAV<'dwarf, 'units>(Unit<'dwarf, 'units>, AV<R<'dwarf>>);
 /// Unwraps the start offset of a unit into a generic [`usize`].
 fn unit_start(unit: &gimli::UnitHeader<R<'_>>) -> gimli::DebugInfoOffset {
     unit.offset()
-        .as_debug_info_offset()
+        .to_debug_info_offset(unit)
         .expect("we only collect non-type units")
 }
 
@@ -1109,9 +1114,9 @@ fn unit_range(unit: &gimli::UnitHeader<R<'_>>) -> Range<gimli::DebugInfoOffset> 
 
 /// Inspect the given DIE and determine whether it is an abstract record
 /// that doesn't actually describe a location in the executable by itself.
-fn die_is_abstract(die: &gimli::DebuggingInformationEntry<'_, '_, R<'_>>) -> Result<bool> {
-    let mut attrs = die.attrs();
-    while let Some(attr) = attrs.next()? {
+fn die_is_abstract(die: &gimli::DebuggingInformationEntry<R<'_>>) -> Result<bool> {
+    let attrs = die.attrs();
+    for attr in attrs {
         match attr.name() {
             // DWARF 5 [3.3.8.1]:
             // > Any subroutine entry that contains a DW_AT_inline attribute
@@ -1144,7 +1149,7 @@ fn die_is_abstract(die: &gimli::DebuggingInformationEntry<'_, '_, R<'_>>) -> Res
 fn collect_unit_headers<'obj>(
     dwarf: &gimli::Dwarf<R<'obj>>,
 ) -> Result<Vec<gimli::UnitHeader<R<'obj>>>> {
-    let mut unit_iter = dwarf.units().enumerate();
+    let mut unit_iter = FallibleIterator::enumerate(dwarf.units());
     let mut units = Vec::with_capacity(unit_iter.size_hint().0);
 
     while let Some((i, unit)) = unit_iter.next()? {

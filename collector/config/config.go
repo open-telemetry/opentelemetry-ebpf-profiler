@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"time"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -20,6 +21,7 @@ const (
 // Config is the configuration for the collector.
 type Config struct {
 	ReporterInterval       time.Duration `mapstructure:"reporter_interval"`
+	ReporterJitter         float64       `mapstructure:"reporter_jitter"`
 	MonitorInterval        time.Duration `mapstructure:"monitor_interval"`
 	SamplesPerSecond       int           `mapstructure:"samples_per_second"`
 	ProbabilisticInterval  time.Duration `mapstructure:"probabilistic_interval"`
@@ -80,8 +82,14 @@ func (cfg *Config) Validate() error {
 				"should be in the range [0..1]. 0 disables off-cpu profiling")
 	}
 
+	if cfg.ReporterJitter < 0.0 || cfg.ReporterJitter > 1.0 {
+		return errors.New(
+			"invalid argument for reporter-jitter. The value " +
+				"should be in the range [0..1]. 0 disables jitter")
+	}
+
 	if !cfg.NoKernelVersionCheck {
-		major, minor, patch, err := tracer.GetCurrentKernelVersion()
+		major, minor, patch, err := linux.GetCurrentKernelVersion()
 		if err != nil {
 			return fmt.Errorf("failed to get kernel version: %v", err)
 		}

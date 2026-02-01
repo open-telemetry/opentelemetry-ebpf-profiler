@@ -13,7 +13,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -41,8 +40,10 @@ type apmAgentSocket struct {
 func openAPMAgentSocket(pid libpf.PID, socketPath string) (*apmAgentSocket, error) {
 	// Ensure that the socket path can't escape our root.
 	socketPath = filepath.Clean(socketPath)
-	if slices.Contains(strings.Split(socketPath, "/"), "..") {
-		return nil, errors.New("socket path escapes root")
+	for part := range strings.SplitSeq(socketPath, "/") {
+		if part == ".." {
+			return nil, errors.New("socket path escapes root")
+		}
 	}
 
 	// Prepend root system to ensure that this also works with containerized apps.
@@ -163,7 +164,7 @@ func parseUIDGIDLine(line string) (uint32, error) {
 	}
 
 	// Fields: real, effective, saved, FS UID
-	eid, err := strconv.Atoi(fields[2])
+	eid, err := strconv.ParseUint(fields[2], 10, 32)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse uid/gid int: %v", err)
 	}

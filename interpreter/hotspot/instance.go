@@ -867,7 +867,7 @@ func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 // Symbolize interpreters Hotspot eBPF uwinder given data containing target
 // process address and translates it to decorated frames expanding any inlined
 // frames to multiple new frames.
-func (d *hotspotInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+func (d *hotspotInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.HotSpot) {
 		return interpreter.ErrMismatchInterpreterType
 	}

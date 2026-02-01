@@ -143,13 +143,13 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	if matches == nil {
 		return nil, nil
 	}
-	major, _ := strconv.Atoi(matches[1])
-	minor, _ := strconv.Atoi(matches[2])
-	release, _ := strconv.Atoi(matches[3])
+	major, _ := strconv.ParseUint(matches[1], 10, 32)
+	minor, _ := strconv.ParseUint(matches[2], 10, 32)
+	release, _ := strconv.ParseUint(matches[3], 10, 32)
 	version := dotnetVer(uint32(major), uint32(minor), uint32(release))
 
 	// dotnet8 requires additional support for RangeSectionMap and MethodDesc updates
-	if version < dotnetVer(6, 0, 0) || version >= dotnetVer(10, 0, 0) {
+	if version < dotnetVer(6, 0, 0) || version >= dotnetVer(11, 0, 0) {
 		return nil, fmt.Errorf("dotnet version %d.%d.%d not supported",
 			major, minor, release)
 	}
@@ -164,13 +164,15 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, err
 	}
 
-	log.Debugf("Dotnet DAC table at %x", addr)
+	// cdac is optional and present starting dotnet9
+	cdac, _ := ef.LookupSymbolAddress("DotNetRuntimeContractDescriptor")
+
+	log.Debugf("Dotnet DAC table at %x, CDAC header at %x", addr, cdac)
 
 	d := &dotnetData{
 		version:      version,
 		dacTableAddr: addr,
+		cdacDescAddr: cdac,
 	}
-	d.loadIntrospectionData()
-
 	return d, nil
 }

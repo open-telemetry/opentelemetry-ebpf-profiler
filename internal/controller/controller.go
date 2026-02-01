@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -43,7 +44,7 @@ func New(cfg *Config) *Controller {
 // Start starts the controller
 // The controller should only be started once.
 func (c *Controller) Start(ctx context.Context) error {
-	if err := tracer.ProbeBPFSyscall(); err != nil {
+	if err := linux.ProbeBPFSyscall(); err != nil {
 		return fmt.Errorf("failed to probe eBPF syscall: %w", err)
 	}
 
@@ -67,8 +68,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 
 	envVars := libpf.Set[string]{}
-	splittedEnvVars := strings.Split(c.config.IncludeEnvVars, ",")
-	for _, envVar := range splittedEnvVars {
+	for envVar := range strings.SplitSeq(c.config.IncludeEnvVars, ",") {
 		envVar = strings.TrimSpace(envVar)
 		if envVar != "" {
 			envVars[envVar] = libpf.Void{}

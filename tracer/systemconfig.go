@@ -46,7 +46,7 @@ func memberByName(t *btf.Struct, field string) (*btf.Member, error) {
 // can refer to field within nested structs.
 func calculateFieldOffset(t btf.Type, fieldSpec string) (uint, error) {
 	offset := uint(0)
-	for _, field := range strings.Split(fieldSpec, ".") {
+	for field := range strings.SplitSeq(fieldSpec, ".") {
 		st, ok := t.(*btf.Struct)
 		if !ok {
 			return 0, fmt.Errorf("field '%s' is not a struct", field)

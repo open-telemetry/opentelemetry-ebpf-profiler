@@ -36,6 +36,7 @@ type Config struct {
 	GRPCStartupBackoffTime time.Duration
 	GRPCConnectionTimeout  time.Duration
 	ReportInterval         time.Duration
+	ReportJitter           float64
 
 	// gRPCInterceptor is the client gRPC interceptor, e.g., for sending gRPC metadata.
 	GRPCClientInterceptor grpc.UnaryClientInterceptor

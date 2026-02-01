@@ -1710,7 +1710,7 @@ func (i *v8Instance) symbolizeCode(code *v8Code, delta uint64, returnAddress boo
 	return nil
 }
 
-func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+func (i *v8Instance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.V8) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -1886,7 +1886,7 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 				memberName = nameTag
 			}
 
-			for _, n := range strings.Split(memberName, ",") {
+			for n := range strings.SplitSeq(memberName, ",") {
 				s := prefix + n
 				if memberVal.Kind() == reflect.Bool {
 					s = "v8dbg_parent_" + className + "__" + memberName

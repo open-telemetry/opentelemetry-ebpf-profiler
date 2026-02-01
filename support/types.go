@@ -33,17 +33,18 @@ const (
 )
 
 const (
-	ProgUnwindStop    = 0x0
-	ProgUnwindNative  = 0x1
-	ProgUnwindHotspot = 0x2
-	ProgUnwindPython  = 0x4
-	ProgUnwindPHP     = 0x5
-	ProgUnwindRuby    = 0x6
-	ProgUnwindPerl    = 0x3
-	ProgUnwindV8      = 0x7
-	ProgUnwindDotnet  = 0x8
-	ProgGoLabels      = 0x9
-	ProgUnwindBEAM    = 0xa
+	ProgUnwindStop     = 0x0
+	ProgUnwindNative   = 0x1
+	ProgUnwindHotspot  = 0x2
+	ProgUnwindPython   = 0x4
+	ProgUnwindPHP      = 0x5
+	ProgUnwindRuby     = 0x6
+	ProgUnwindPerl     = 0x3
+	ProgUnwindV8       = 0x7
+	ProgUnwindDotnet   = 0x8
+	ProgUnwindDotnet10 = 0x9
+	ProgGoLabels       = 0xa
+	ProgUnwindBEAM     = 0xb
 )
 
 const (
@@ -53,7 +54,8 @@ const (
 )
 
 const (
-	EventTypeGenericPID = 0x1
+	EventTypeGenericPID     = 0x1
+	EventTypeReloadKallsyms = 0x2
 )
 
 const UnwindInfoMaxEntries = 0x4000
@@ -166,11 +168,12 @@ type Trace struct {
 	Frame_data         [3072]uint64
 }
 type UnwindInfo struct {
-	Opcode      uint8
-	FpOpcode    uint8
+	Flags       uint8
+	BaseReg     uint8
+	AuxBaseReg  uint8
 	MergeOpcode uint8
 	Param       int32
-	FpParam     int32
+	AuxParam    int32
 }
 
 type ApmIntProcInfo struct {
@@ -256,6 +259,7 @@ type PyProcInfo struct {
 	AutoTLSKeyAddr                 uint64
 	NoneStructAddr                 uint64
 	Version                        uint16
+	Tls_offset                     int16
 	TsdInfo                        TSDInfo
 	PyThreadState_frame            uint8
 	PyCFrame_current_frame         uint8
@@ -271,15 +275,21 @@ type PyProcInfo struct {
 	PyCodeObject_sizeof            uint8
 	Lasti_is_codeunit              uint8
 	Frame_is_cframe                uint8
-	Pad_cgo_0                      [4]byte
+	Pad_cgo_0                      [2]byte
 }
 type RubyProcInfo struct {
 	Version                      uint32
 	Current_ec_tpbase_tls_offset uint64
 	Current_ctx_ptr              uint64
+	Has_objspace                 bool
 	Vm_stack                     uint8
 	Vm_stack_size                uint8
 	Cfp                          uint8
+	Thread_ptr                   uint8
+	Thread_vm                    uint8
+	Vm_objspace                  uint16
+	Objspace_flags               uint8
+	Objspace_size_of_flags       uint8
 	Pc                           uint8
 	Iseq                         uint8
 	Ep                           uint8
@@ -320,18 +330,25 @@ const (
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
 	sizeof_PHPProcInfo    = 0x18
-	sizeof_RubyProcInfo   = 0x28
+	sizeof_RubyProcInfo   = 0x30
 )
 
 const (
-	UnwindOpcodeCommand      uint8 = 0x0
-	UnwindOpcodeBaseCFA      uint8 = 0x1
-	UnwindOpcodeBaseSP       uint8 = 0x2
-	UnwindOpcodeBaseFP       uint8 = 0x3
-	UnwindOpcodeBaseLR       uint8 = 0x4
-	UnwindOpcodeBaseReg      uint8 = 0x5
-	UnwindOpcodeBaseCFAFrame uint8 = 0x6
-	UnwindOpcodeFlagDeref    uint8 = 0x80
+	UnwindRegInvalid uint8 = 0x0
+	UnwindRegCfa     uint8 = 0x1
+	UnwindRegPc      uint8 = 0x2
+	UnwindRegSp      uint8 = 0x3
+	UnwindRegFp      uint8 = 0x4
+	UnwindRegLr      uint8 = 0x5
+	UnwindRegX86RAX  uint8 = 0x6
+	UnwindRegX86R9   uint8 = 0x7
+	UnwindRegX86R11  uint8 = 0x8
+	UnwindRegX86R15  uint8 = 0xa
+
+	UnwindFlagCommand  uint8 = 0x1
+	UnwindFlagFrame    uint8 = 0x2
+	UnwindFlagLeafOnly uint8 = 0x4
+	UnwindFlagDerefCfa uint8 = 0x8
 
 	UnwindCommandInvalid      int32 = 0x0
 	UnwindCommandStop         int32 = 0x1
@@ -373,6 +390,7 @@ const (
 	RubyFrameTypeCmeIseq  = 0x1
 	RubyFrameTypeCmeCfunc = 0x2
 	RubyFrameTypeIseq     = 0x3
+	RubyFrameTypeGc       = 0x4
 )
 
 var MetricsTranslation = []metrics.MetricID{
