@@ -589,20 +589,7 @@ func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcNam
 }
 
 func (g *Gopclntab) findTextStart(ef *pfelf.File) (uintptr, error) {
-	var textStart uintptr
-	// First: try to get textstart from `runtime.text` symbol.
-	_ = ef.VisitSymbols(func(sym libpf.Symbol) bool {
-		if sym.Name == "runtime.text" {
-			textStart = uintptr(sym.Address)
-			return false
-		}
-		return true
-	})
-	if textStart != 0 {
-		return textStart, nil
-	}
-
-	// Second: try to get textstart from moduledata
+	// Get textstart from moduledata
 	// Starting from Go 1.26, moduledata has its own `.go.module` section.
 	// Since this function is expected to be called only for Go 1.26+ binaries,
 	// we can expect that the section exists and error out if it does not.
@@ -611,17 +598,14 @@ func (g *Gopclntab) findTextStart(ef *pfelf.File) (uintptr, error) {
 		return 0, errors.New("could not find .go.module section")
 	}
 
-	moduleData, err := moduleDataSection.Data(maxBytesGoPclntab)
+	const textStartOff = 22 * 8
+	var textStartBytes [8]byte
+	_, err := moduleDataSection.ReadAt(textStartBytes[:], textStartOff)
 	if err != nil {
-		return 0, fmt.Errorf("could not read .go.module section: %w", err)
+		return 0, fmt.Errorf("could not read .go.module section at offset %v: %w", textStartOff, err)
 	}
 
-	const textStartOff = 22 * 8
-	if textStartOff+8 > len(moduleData) {
-		return 0, fmt.Errorf("invalid text start offset: %v", textStartOff)
-	}
-	textStart = *(*uintptr)(unsafe.Pointer(&moduleData[textStartOff]))
-	return textStart, nil
+	return *(*uintptr)(unsafe.Pointer(&textStartBytes[0])), nil
 }
 
 type strategy int
