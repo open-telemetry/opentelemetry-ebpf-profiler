@@ -37,9 +37,6 @@ const (
 
 //nolint:lll
 var (
-	// expLine matches a line in the /proc/<pid>/cgroup file. It has a submatch for the last element (path), which contains the container ID. Support both cgroup v1 and v2.
-	expLine = regexp.MustCompile(`^\d+:[^:]*:(.+)$`)
-
 	// Inspired from https://github.com/DataDog/dd-otel-host-profiler/blob/1e50a36d4c3a8a87f0cc828f37b48455ec436e55/containermetadata/container.go#L32-L47 with the following changes to handle unit tests in process_test.go:
 	// - support prefix after `scope` to handle "0::/system.slice/docker-b1eba9dfaeba29d8b80532a574a03ea3cac29384327f339c26da13649e2120df.scope/init"
 	// - remove uuidSource to doesn't match "0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-org.gnome.Terminal.slice/vte-spawn-868f9513-eee8-457d-8e36-1b37ae8ae622.scope"
@@ -152,11 +149,12 @@ func parseContainerID(cgroupFile io.Reader) libpf.String {
 			continue // Skip a common case
 		}
 		line := pfunsafe.ToString(b)
-		m := expLine.FindStringSubmatchIndex(line)
-		if len(m) == 4 {
-			sub := line[m[2]:m[3]]
-			if parts := expContainerID.FindStringSubmatchIndex(sub); len(parts) == 4 {
-				return libpf.Intern(sub[parts[2]:parts[3]])
+		parts := strings.SplitN(line, ":", 3)
+		_, err := strconv.Atoi(parts[0])
+		if len(parts) == 3 && err == nil {
+			sub := parts[2]
+			if partsIdx := expContainerID.FindStringSubmatchIndex(sub); len(partsIdx) == 4 {
+				return libpf.Intern(sub[partsIdx[2]:partsIdx[3]])
 			}
 		}
 		log.Debugf("Could not extract container ID from line: %s", line)
