@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
 
@@ -49,11 +49,11 @@ func analyzeTLSSetARM(code []byte) (uint32, error) {
 		switch inst.Op {
 		case aa.MOV:
 			// Track register moves
-			destReg, ok := ah.Xreg2num(inst.Args[0])
+			destReg, ok := arm.Xreg2num(inst.Args[0])
 			if !ok {
 				continue
 			}
-			if srcReg, ok := ah.Xreg2num(inst.Args[1]); ok {
+			if srcReg, ok := arm.Xreg2num(inst.Args[1]); ok {
 				arg[destReg] = arg[srcReg]
 			}
 		case aa.LDR:
@@ -63,12 +63,12 @@ func analyzeTLSSetARM(code []byte) (uint32, error) {
 				continue
 			}
 			var srcReg int
-			if srcReg, ok = ah.Xreg2num(m.Base); !ok || !arg[srcReg] {
+			if srcReg, ok = arm.Xreg2num(m.Base); !ok || !arg[srcReg] {
 				continue
 			}
 			// FIXME: m.imm is not public, but should be.
 			// https://github.com/golang/go/issues/51517
-			imm, ok := ah.DecodeImmediate(m)
+			imm, ok := arm.DecodeImmediate(m)
 			if !ok {
 				return 0, err
 			}
@@ -80,7 +80,7 @@ func analyzeTLSSetARM(code []byte) (uint32, error) {
 			return uint32(imm), nil
 		default:
 			// Reset register state if something unsupported happens on it
-			if destReg, ok := ah.Xreg2num(inst.Args[0]); ok {
+			if destReg, ok := arm.Xreg2num(inst.Args[0]); ok {
 				arg[destReg] = false
 			}
 		}

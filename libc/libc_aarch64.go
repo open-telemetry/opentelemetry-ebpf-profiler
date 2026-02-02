@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
@@ -57,7 +57,7 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 			break
 		}
 
-		destReg, ok := ah.Xreg2num(inst.Args[0])
+		destReg, ok := arm.Xreg2num(inst.Args[0])
 		if !ok {
 			continue
 		}
@@ -80,7 +80,7 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 				}
 			default:
 				// Track register moves
-				srcReg, ok := ah.Xreg2num(inst.Args[1])
+				srcReg, ok := arm.Xreg2num(inst.Args[1])
 				if !ok {
 					continue
 				}
@@ -100,12 +100,12 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 			if !ok {
 				continue
 			}
-			srcReg, ok := ah.Xreg2num(m.Base)
+			srcReg, ok := arm.Xreg2num(m.Base)
 			if !ok {
 				continue
 			}
 			if regs[srcReg].status == TSDBase {
-				imm, ok := ah.DecodeImmediate(m)
+				imm, ok := arm.DecodeImmediate(m)
 				if !ok {
 					continue
 				}
@@ -122,11 +122,11 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 			switch m := inst.Args[1].(type) {
 			case aa.MemExtend:
 				// LDR X0, [X1,W0,UXTW #3]
-				srcReg, ok := ah.Xreg2num(m.Base)
+				srcReg, ok := arm.Xreg2num(m.Base)
 				if !ok {
 					continue
 				}
-				srcIndex, ok := ah.Xreg2num(m.Index)
+				srcIndex, ok := arm.Xreg2num(m.Index)
 				if !ok {
 					continue
 				}
@@ -142,12 +142,12 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 				}
 			case aa.MemImmediate:
 				// ldr x0, [x2, #8]
-				srcReg, ok := ah.Xreg2num(m.Base)
+				srcReg, ok := arm.Xreg2num(m.Base)
 				if !ok {
 					continue
 				}
 				if regs[srcReg].status == TSDElementBase {
-					i, ok := ah.DecodeImmediate(m)
+					i, ok := arm.DecodeImmediate(m)
 					if !ok {
 						continue
 					}
@@ -163,7 +163,7 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 			}
 		case aa.UBFIZ:
 			// UBFIZ X0, X1, #4, #32
-			srcReg, ok := ah.Xreg2num(inst.Args[1])
+			srcReg, ok := arm.Xreg2num(inst.Args[1])
 			if !ok {
 				continue
 			}
@@ -179,13 +179,13 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 				}
 			}
 		case aa.ADD:
-			srcReg, ok := ah.Xreg2num(inst.Args[1])
+			srcReg, ok := arm.Xreg2num(inst.Args[1])
 			if !ok {
 				continue
 			}
 			switch a2 := inst.Args[2].(type) {
 			case aa.ImmShift:
-				i, ok := ah.DecodeImmediate(a2)
+				i, ok := arm.DecodeImmediate(a2)
 				if !ok {
 					continue
 				}
@@ -205,11 +205,11 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 						}
 					}
 				}
-				reg, ok := ah.DecodeRegister(regStr)
+				reg, ok := arm.DecodeRegister(regStr)
 				if !ok {
 					continue
 				}
-				srcReg2, ok := ah.Xreg2num(reg)
+				srcReg2, ok := arm.Xreg2num(reg)
 				if !ok {
 					continue
 				}
@@ -231,12 +231,12 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 				}
 			}
 		case aa.SUB:
-			srcReg, ok := ah.Xreg2num(inst.Args[1])
+			srcReg, ok := arm.Xreg2num(inst.Args[1])
 			if !ok {
 				continue
 			}
 			if regs[srcReg].status != Unspec {
-				i, ok := ah.DecodeImmediate(inst.Args[2])
+				i, ok := arm.DecodeImmediate(inst.Args[2])
 				if !ok {
 					continue
 				}
