@@ -20,6 +20,7 @@ const (
 	// Default values for CLI flags
 	defaultArgSamplesPerSecond    = 20
 	defaultArgReporterInterval    = 5.0 * time.Second
+	defaultArgReporterJitter      = 0.2
 	defaultArgMonitorInterval     = 5.0 * time.Second
 	defaultClockSyncInterval      = 3 * time.Minute
 	defaultProbabilisticThreshold = tracer.ProbabilisticThresholdMax
@@ -56,9 +57,13 @@ var (
 		tracer.ProbabilisticThresholdMax-1, tracer.ProbabilisticThresholdMax-1)
 	probabilisticIntervalHelp = "Time interval for which probabilistic profiling will be " +
 		"enabled or disabled."
-	pprofHelp             = "Listening address (e.g. localhost:6060) to serve pprof information."
-	samplesPerSecondHelp  = "Set the frequency (in Hz) of stack trace sampling."
-	reporterIntervalHelp  = "Set the reporter's interval in seconds."
+	pprofHelp            = "Listening address (e.g. localhost:6060) to serve pprof information."
+	samplesPerSecondHelp = "Set the frequency (in Hz) of stack trace sampling."
+	reporterIntervalHelp = "Set the reporter's interval in seconds."
+	reporterJitterHelp   = fmt.Sprintf("Set the jitter applied to the reporter's interval as a fraction. "+
+		"Valid values are in the range [0..1]. "+
+		"Default is %.1f.",
+		defaultArgReporterJitter)
 	monitorIntervalHelp   = "Set the monitor interval in seconds."
 	clockSyncIntervalHelp = "Set the sync interval with the realtime clock. " +
 		"If zero, monotonic-realtime clock sync will be performed once, " +
@@ -114,6 +119,8 @@ func parseArgs() (*controller.Config, error) {
 
 	fs.DurationVar(&args.ReporterInterval, "reporter-interval", defaultArgReporterInterval,
 		reporterIntervalHelp)
+	fs.Float64Var(&args.ReporterJitter, "reporter-jitter", defaultArgReporterJitter,
+		reporterJitterHelp)
 
 	fs.IntVar(&args.SamplesPerSecond, "samples-per-second", defaultArgSamplesPerSecond,
 		samplesPerSecondHelp)

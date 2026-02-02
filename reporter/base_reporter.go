@@ -6,6 +6,7 @@ package reporter // import "go.opentelemetry.io/ebpf-profiler/reporter"
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -32,6 +33,11 @@ type baseReporter struct {
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
 	traceEvents xsync.RWMutex[samples.TraceEventsTree]
+
+	// collectionStartTime tracks when the current collection window started.
+	// Initialized when Start() is called. The duration of the first profile may be
+	// slightly overestimated as it includes tracer setup time before samples arrive.
+	collectionStartTime time.Time
 }
 
 var errUnknownOrigin = errors.New("unknown trace origin")

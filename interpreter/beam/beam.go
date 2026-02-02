@@ -145,8 +145,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, fmt.Errorf("failed to read OTP release: %v", err)
 	}
 	// Slice off the null-terminator before parsing
-	otpRelease, err := strconv.Atoi(string(otpReleaseString[:len(otpReleaseString)-1]))
-	if err != nil || otpRelease < 0 || otpRelease > 255 {
+	otpRelease, err := strconv.ParseUint(string(otpReleaseString[:len(otpReleaseString)-1]), 10, 32)
+	if err != nil || otpRelease > 255 {
 		return nil, fmt.Errorf("Invalid OTP Release: %v", otpReleaseString)
 	}
 
@@ -383,7 +383,7 @@ func (i *beamInstance) Detach(interpreter.EbpfHandler, libpf.PID) error {
 	return nil
 }
 
-func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.BEAM) {
 		return interpreter.ErrMismatchInterpreterType
 	}

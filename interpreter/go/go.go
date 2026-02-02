@@ -101,7 +101,7 @@ func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
 	return nil
 }
 
-func (g *goInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+func (g *goInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, mapping libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.Native) {
 		return interpreter.ErrMismatchInterpreterType
 	}
@@ -114,11 +114,14 @@ func (g *goInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
 	if fn == "" {
 		return fmt.Errorf("failed to symbolize 0x%x", address)
 	}
-
+	// See comment about return address handling in ProcessManager.convertFrame
+	if ef.Flags().ReturnAddress() {
+		address--
+	}
 	frames.Append(&libpf.Frame{
-		Type: libpf.GoFrame,
-		//TODO: File: convert the frame.File (host.FileID) to libpf.FileID here
+		Type:            libpf.GoFrame,
 		AddressOrLineno: libpf.AddressOrLineno(address),
+		Mapping:         mapping,
 		FunctionName:    libpf.Intern(fn),
 		SourceFile:      libpf.Intern(sourceFile),
 		SourceLine:      libpf.SourceLineno(lineNo),

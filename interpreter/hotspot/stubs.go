@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -208,7 +208,7 @@ Outer:
 				if arg.Mode != aa.AddrPostIndex && arg.Mode != aa.AddrPreIndex {
 					continue
 				}
-				imm, ok := armhelpers.DecodeImmediate(arg)
+				imm, ok := arm.DecodeImmediate(arg)
 				if !ok {
 					continue
 				}
@@ -221,7 +221,7 @@ Outer:
 					continue Outer
 				}
 			}
-			imm, ok := armhelpers.DecodeImmediate(insn.Args[2])
+			imm, ok := arm.DecodeImmediate(insn.Args[2])
 			if !ok {
 				continue
 			}
