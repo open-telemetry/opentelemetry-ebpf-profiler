@@ -10,6 +10,7 @@ package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/
 import (
 	"bytes"
 	"debug/elf"
+	"errors"
 	"fmt"
 	"go/version"
 	"io"
@@ -469,16 +470,13 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.funcdata = g.functab
 		g.textStart = hdr118.textStart
 		if g.textStart == 0 {
-			// Starting with Go 1.26 the field textStart is set to 0 but moduledata.text
-			// which contains the same value is unaffected.
-			// The following logic assumes that .text matches moduledata.text
-			// which might not always be true (in which case we need to switch to moduledata.text
-			// which can be found through runtime.firstmoduledata).
-			//
-			//nolint:lll
-			// See https://github.com/golang/go/commit/0e1bd8b5f17e337df0ffb57af03419b96c695fe4
-			if sec := ef.Section(".text"); sec != nil {
-				g.textStart = uintptr(sec.Addr)
+			// Starting from Go 1.26, textStart address in pclntab is always set to 0.
+			// Therefore we need to get it from either `runtime.text` symbol or moduledata.
+			// Note that it does not always match the address of `.text` section
+			// (for example with cgo binaries or when built with -linkmode=external).
+			g.textStart, err = g.findTextStart(ef)
+			if err != nil {
+				return nil, fmt.Errorf("failed to find text start: %w", err)
 			}
 		}
 		// With the change of the type of the first field of _func in Go 1.18, this
@@ -588,6 +586,42 @@ func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcNam
 		line = uint(lineNo)
 	}
 	return sourceFile, line, funcName
+}
+
+func (g *Gopclntab) findTextStart(ef *pfelf.File) (uintptr, error) {
+	var textStart uintptr
+	// First: try to get textstart from `runtime.text` symbol.
+	_ = ef.VisitSymbols(func(sym libpf.Symbol) bool {
+		if sym.Name == "runtime.text" {
+			textStart = uintptr(sym.Address)
+			return false
+		}
+		return true
+	})
+	if textStart != 0 {
+		return textStart, nil
+	}
+
+	// Second: try to get textstart from moduledata
+	// Starting from Go 1.26, moduledata has its own `.go.module` section.
+	// Since this function is expected to be called only for Go 1.26+ binaries,
+	// we can expect that the section exists and error out if it does not.
+	moduleDataSection := ef.Section(".go.module")
+	if moduleDataSection == nil {
+		return 0, errors.New("could not find .go.module section")
+	}
+
+	moduleData, err := moduleDataSection.Data(maxBytesGoPclntab)
+	if err != nil {
+		return 0, fmt.Errorf("could not read .go.module section: %w", err)
+	}
+
+	const textStartOff = 22 * 8
+	if textStartOff+8 > len(moduleData) {
+		return 0, fmt.Errorf("invalid text start offset: %v", textStartOff)
+	}
+	textStart = *(*uintptr)(unsafe.Pointer(&moduleData[textStartOff]))
+	return textStart, nil
 }
 
 type strategy int

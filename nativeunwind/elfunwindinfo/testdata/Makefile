@@ -3,7 +3,8 @@
 BINARIES=helloworld \
 	helloworld.pie \
 	helloworld.stripped.pie \
-	helloworld.arm64
+	helloworld.arm64 \
+	helloworld.linkexternal
 
 # Use the default go executable if it is not specified otherwise.
 GO_BINARY ?= go
@@ -24,3 +25,6 @@ helloworld.stripped.pie:
 
 helloworld.arm64:
 	GOARCH=arm64 $(GO_BINARY) build -o $@ helloworld.go
+
+helloworld.linkexternal:
+	CGO_ENABLED=1 GOTOOLCHAIN=go1.26rc2 $(GO_BINARY) build -ldflags="-linkmode=external" -o $@ helloworld.go
