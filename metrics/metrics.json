@@ -3,7 +3,7 @@
     "description": "Leave out the 0 value. It's an indication of not explicitly initialized variables.",
     "type": "counter",
     "name": "invalid",
-    "field": "",
+    "const": "Invalid",
     "id": 0
   },
   {
@@ -72,6 +72,7 @@
     "description": "Number of calls to interpreter unwinding in dispatch_interpreters()",
     "type": "counter",
     "name": "unwind.call.interpreter",
+    "const": "UnwindCallInterpreter",
     "field": "bpf.interpreter.calls",
     "id": 8
   },
@@ -86,6 +87,7 @@
     "description": "Unwind attempts since the previous check",
     "type": "counter",
     "name": "unwind.native.attempts",
+    "const": "UnwindNativeAttempts",
     "field": "bpf.native.attempts",
     "id": 10
   },
@@ -93,6 +95,7 @@
     "description": "Unwound frames since the previous check",
     "type": "counter",
     "name": "unwind.native.frames",
+    "const": "UnwindNativeFrames",
     "field": "bpf.native.frames",
     "id": 11
   },
@@ -100,6 +103,7 @@
     "description": "Number of times MAX_FRAME_UNWINDS has been exceeded in unwind_next_frame()",
     "type": "counter",
     "name": "unwind.err.stack.length.exceeded",
+    "const": "UnwindErrStackLengthExceeded",
     "field": "bpf.errors.stack_length_exceeded",
     "id": 12
   },
@@ -107,6 +111,7 @@
     "description": "Number of failed range searches within 20 steps in get_stack_delta()",
     "type": "counter",
     "name": "unwind.native.err.lookup.text.section",
+    "const": "UnwindNativeErrLookupTextSection",
     "field": "bpf.native.errors.lookup_text_section",
     "id": 13
   },
@@ -114,6 +119,7 @@
     "description": "Number of failures to get stack_unwind_info from big_stack_deltas in get_stack_delta()",
     "type": "counter",
     "name": "unwind.native.err.lookup.iterations",
+    "const": "UnwindNativeErrLookupIterations",
     "field": "bpf.native.errors.lookup_iterations",
     "id": 14
   },
@@ -121,6 +127,7 @@
     "description": "Number of failures to get stack_unwind_info from big_stack_deltas in get_stack_delta()",
     "type": "counter",
     "name": "unwind.native.err.lookup.range",
+    "const": "UnwindNativeErrLookupRange",
     "field": "bpf.native.errors.lookup_range",
     "id": 15
   },
@@ -128,6 +135,7 @@
     "description": "Number of kernel addresses passed to get_text_section()",
     "type": "counter",
     "name": "unwind.native.err.kernel.address",
+    "const": "UnwindNativeErrKernelAddress",
     "field": "bpf.native.errors.kernel_address",
     "id": 16
   },
@@ -135,6 +143,7 @@
     "description": "Number of failures to find the text section in get_text_section()",
     "type": "counter",
     "name": "unwind.native.err.wrong.text.section",
+    "const": "UnwindNativeErrWrongTextSection",
     "field": "bpf.native.errors.wrong_text_section",
     "id": 17
   },
@@ -142,6 +151,7 @@
     "description": "Number of failures due to PC == 0 in unwind_next_frame()",
     "type": "counter",
     "name": "unwind.err.zero.pc",
+    "const": "UnwindErrZeroPC",
     "field": "bpf.errors.zero_pc",
     "id": 18
   },
@@ -149,6 +159,7 @@
     "description": "Number of attempted python unwinds",
     "type": "counter",
     "name": "unwind.python.attempts",
+    "const": "UnwindPythonAttempts",
     "field": "bpf.python.attempts",
     "id": 19
   },
@@ -156,13 +167,15 @@
     "description": "Number of unwound python frames",
     "type": "counter",
     "name": "unwind.python.frames",
+    "const": "UnwindPythonFrames",
     "field": "bpf.python.frames",
     "id": 20
   },
   {
-    "description": "Number of failures to read from pyinfo->pyThreadStateCurrentAddr",
+    "description": "Number of failures to read from pyinfo-\u003epyThreadStateCurrentAddr",
     "type": "counter",
     "name": "unwind.python.err.bad.py.thread.state.current.addr",
+    "const": "UnwindPythonErrBadPyThreadStateCurrentAddr",
     "field": "bpf.python.errors.bad_py_thread_state_current_addr",
     "id": 21
   },
@@ -170,6 +183,7 @@
     "description": "Number of PyThreadState being 0x0",
     "type": "counter",
     "name": "unwind.python.err.zero.thread.state",
+    "const": "UnwindPythonErrZeroThreadState",
     "field": "bpf.python.errors.zero_thread_state",
     "id": 22
   },
@@ -184,6 +198,7 @@
     "description": "Number of failures to read from the TLS",
     "type": "counter",
     "name": "unwind.err.bad.tls.addr",
+    "const": "UnwindErrBadTLSAddr",
     "field": "bpf.errors.bad_tls_addr",
     "id": 24
   },
@@ -198,6 +213,7 @@
     "description": "Number of failures to get the TLS base in tls_get_base()",
     "type": "counter",
     "name": "unwind.err.bad.tp.base.addr",
+    "const": "UnwindErrBadTPBaseAddr",
     "field": "bpf.errors.bad_tp_base_addr",
     "id": 26
   },
@@ -205,12 +221,13 @@
     "description": "Number of failures to read PyThreadState.frame in unwind_python()",
     "type": "counter",
     "name": "unwind.python.err.bad.thread.state.frame.addr",
+    "const": "UnwindPythonErrBadThreadStateFrameAddr",
     "field": "bpf.python.errors.bad_thread_state_frame_addr",
     "id": 27
   },
   {
     "obsolete": true,
-    "description": "Number of failures to read PyFrameObject->f_back in walk_python_stack()",
+    "description": "Number of failures to read PyFrameObject-\u003ef_back in walk_python_stack()",
     "type": "counter",
     "name": "unwind.python.err.bad.frame.object.back.addr",
     "field": "bpf.python.errors.bad_frame_object_back_addr",
@@ -218,7 +235,7 @@
   },
   {
     "obsolete": true,
-    "description": "Number of failures to read PyFrameObject->f_code in process_python_frame()",
+    "description": "Number of failures to read PyFrameObject-\u003ef_code in process_python_frame()",
     "type": "counter",
     "name": "unwind.python.err.bad.frame.code.object.addr",
     "field": "bpf.python.errors.bad_frame_code_object_addr",
@@ -228,6 +245,7 @@
     "description": "Number of NULL code objects found in process_python_frame()",
     "type": "counter",
     "name": "unwind.python.zero.frame.code.object",
+    "const": "UnwindPythonZeroFrameCodeObject",
     "field": "bpf.python.zero_frame_code_object",
     "id": 30
   },
@@ -271,6 +289,7 @@
     "description": "Number of failures to get code object's argcount in process_python_frame()",
     "type": "counter",
     "name": "unwind.python.err.bad.code.object.arg.count.addr",
+    "const": "UnwindPythonErrBadCodeObjectArgCountAddr",
     "field": "bpf.python.errors.bad_code_object_arg_count_addr",
     "id": 36
   },
@@ -323,6 +342,7 @@
     "description": "The number of executables loaded to eBPF maps",
     "type": "gauge",
     "name": "num.exe.id.loaded.to.ebpf",
+    "const": "NumExeIDLoadedToEBPF",
     "field": "agent.num_exe_id_loaded_to_ebpf",
     "id": 43
   },
@@ -330,6 +350,7 @@
     "description": "Current size of the hash map pid_page_to_mapping_info",
     "type": "gauge",
     "name": "hashmap.pid.page.to.mapping.info",
+    "const": "HashmapPidPageToMappingInfo",
     "field": "agent.hashmap_pid_page_to_mapping_info.size",
     "id": 44
   },
@@ -353,6 +374,7 @@
     "description": "Number of invalid stack deltas in the native unwinder",
     "type": "counter",
     "name": "unwind.native.err.stack.delta.invalid",
+    "const": "UnwindNativeErrStackDeltaInvalid",
     "field": "bpf.native.errors.stack_delta_invalid",
     "id": 47
   },
@@ -360,6 +382,7 @@
     "description": "Number of times unwind_stop is called without a trace",
     "type": "counter",
     "name": "err.empty.stack",
+    "const": "ErrEmptyStack",
     "field": "bpf.errors.empty_stack",
     "id": 48
   },
@@ -375,6 +398,7 @@
     "description": "Number of attempted Hotspot frame unwinds",
     "type": "counter",
     "name": "unwind.hotspot.attempts",
+    "const": "UnwindHotspotAttempts",
     "field": "bpf.hotspot.attempts",
     "id": 50
   },
@@ -382,6 +406,7 @@
     "description": "Number of unwound Hotspot frames",
     "type": "counter",
     "name": "unwind.hotspot.frames",
+    "const": "UnwindHotspotFrames",
     "field": "bpf.hotspot.frames",
     "id": 51
   },
@@ -389,6 +414,7 @@
     "description": "Number of failures to get hotspot codeblob address (no heap or bad segmap)",
     "type": "counter",
     "name": "unwind.hotspot.err.no.codeblob",
+    "const": "UnwindHotspotErrNoCodeblob",
     "field": "bpf.hotspot.errors.no_codeblob",
     "id": 52
   },
@@ -396,6 +422,7 @@
     "description": "Number of failures to get codeblob data",
     "type": "counter",
     "name": "unwind.hotspot.err.invalid.codeblob",
+    "const": "UnwindHotspotErrInvalidCodeblob",
     "field": "bpf.hotspot.errors.invalid_codeblob",
     "id": 53
   },
@@ -403,6 +430,7 @@
     "description": "Number of failures to unwind interpreter due to invalid FP",
     "type": "counter",
     "name": "unwind.hotspot.err.interpreter.fp",
+    "const": "UnwindHotspotErrInterpreterFP",
     "field": "bpf.hotspot.errors.interpreter_fp",
     "id": 54
   },
@@ -410,6 +438,7 @@
     "description": "Number of successfully symbolized python frames",
     "type": "counter",
     "name": "python.symbolization.successes",
+    "const": "PythonSymbolizationSuccesses",
     "field": "agent.python.symbolization.successes",
     "id": 55
   },
@@ -417,6 +446,7 @@
     "description": "Number of Python frames that failed symbolization",
     "type": "counter",
     "name": "python.symbolization.failures",
+    "const": "PythonSymbolizationFailures",
     "field": "agent.python.symbolization.failures",
     "id": 56
   },
@@ -424,6 +454,7 @@
     "description": "Number of successfully symbolized hotspot frames",
     "type": "counter",
     "name": "hotspot.symbolization.successes",
+    "const": "HotspotSymbolizationSuccesses",
     "field": "agent.hotspot.symbolization.successes",
     "id": 57
   },
@@ -431,6 +462,7 @@
     "description": "Number of Hotspot frames that failed symbolization",
     "type": "counter",
     "name": "hotspot.symbolization.failures",
+    "const": "HotspotSymbolizationFailures",
     "field": "agent.hotspot.symbolization.failures",
     "id": 58
   },
@@ -438,6 +470,7 @@
     "description": "Number of times that PC hold a value smaller than 0x1000",
     "type": "counter",
     "name": "unwind.native.small.pc",
+    "const": "UnwindNativeSmallPC",
     "field": "bpf.native.small_pc",
     "id": 59
   },
@@ -501,6 +534,7 @@
     "description": "Number of lost perf events in the communication between kernel and user space (report_events)",
     "type": "counter",
     "name": "perf.event.lost",
+    "const": "PerfEventLost",
     "field": "agent.errors.perf_event_lost",
     "id": 67
   },
@@ -508,6 +542,7 @@
     "description": "Number of stop stack deltas in the native unwinder (success)",
     "type": "counter",
     "name": "unwind.native.stack.delta.stop",
+    "const": "UnwindNativeStackDeltaStop",
     "field": "bpf.native.stack_delta_stop",
     "id": 68
   },
@@ -515,6 +550,7 @@
     "description": "Number of times failure to read PC from unwound stack (invalid stack delta)",
     "type": "counter",
     "name": "unwind.native.err.pc.read",
+    "const": "UnwindNativeErrPCRead",
     "field": "bpf.native.errors.pc_read",
     "id": 69
   },
@@ -522,6 +558,7 @@
     "description": "Number of times that a lookup of a inner map for stack deltas failed",
     "type": "counter",
     "name": "unwind.native.err.lookup.stack.delta.inner.map",
+    "const": "UnwindNativeErrLookupStackDeltaInnerMap",
     "field": "bpf.native.errors.lookup_stack_delta_inner_map",
     "id": 70
   },
@@ -529,12 +566,13 @@
     "description": "Number of times that a lookup of the outer map for stack deltas failed",
     "type": "counter",
     "name": "unwind.native.err.lookup.stack.delta.outer.map",
+    "const": "UnwindNativeErrLookupStackDeltaOuterMap",
     "field": "bpf.native.errors.lookup_stack_delta_outer_map",
     "id": 71
   },
   {
     "obsolete": true,
-    "description": "Number of times a PID maps file cannot be read as /proc/<PID> folder does not exist anymore",
+    "description": "Number of times a PID maps file cannot be read as /proc/\u003cPID\u003e folder does not exist anymore",
     "type": "counter",
     "name": "err.proc.pid.read",
     "id": 72
@@ -559,6 +597,7 @@
     "description": "Number of times the bpf helper failed to get the current comm of the task",
     "type": "counter",
     "name": "err.bpf.current.comm",
+    "const": "ErrBPFCurrentComm",
     "field": "bpf.errors.bpf_current_comm",
     "id": 75
   },
@@ -566,6 +605,7 @@
     "description": "Number of attempted PHP unwinds",
     "type": "counter",
     "name": "unwind.php.attempts",
+    "const": "UnwindPHPAttempts",
     "field": "bpf.php.attempts",
     "id": 76
   },
@@ -573,6 +613,7 @@
     "description": "Number of unwound PHP frames",
     "type": "counter",
     "name": "unwind.php.frames",
+    "const": "UnwindPHPFrames",
     "field": "bpf.php.frames",
     "id": 77
   },
@@ -580,6 +621,7 @@
     "description": "Number of failures to read PHP current execute data pointer",
     "type": "counter",
     "name": "unwind.php.err.bad.current.execute.data",
+    "const": "UnwindPHPErrBadCurrentExecuteData",
     "field": "bpf.php.errors.bad_current_execute_data",
     "id": 78
   },
@@ -587,6 +629,7 @@
     "description": "Number of failures to read PHP execute data contents",
     "type": "counter",
     "name": "unwind.php.err.bad.zend.execute.data",
+    "const": "UnwindPHPErrBadZendExecuteData",
     "field": "bpf.php.errors.bad_zend_execute_data",
     "id": 79
   },
@@ -594,6 +637,7 @@
     "description": "Number of failures to read PHP zend function contents",
     "type": "counter",
     "name": "unwind.php.err.bad.zend.function",
+    "const": "UnwindPHPErrBadZendFunction",
     "field": "bpf.php.errors.bad_zend_function",
     "id": 80
   },
@@ -601,6 +645,7 @@
     "description": "Number of failures to read PHP zend opline contents",
     "type": "counter",
     "name": "unwind.php.err.bad.zend.opline",
+    "const": "UnwindPHPErrBadZendOpline",
     "field": "bpf.php.errors.bad_zend_opline",
     "id": 81
   },
@@ -608,6 +653,7 @@
     "description": "Number of LRU hits for kernel symbols",
     "type": "counter",
     "name": "kernel.fallback.symbol.lru.hit",
+    "const": "KernelFallbackSymbolLRUHit",
     "field": "agent.kernel.fallback_symbol_lru.hits",
     "id": 82
   },
@@ -615,6 +661,7 @@
     "description": "Number of LRU mises for kernel symbols",
     "type": "counter",
     "name": "kernel.fallback.symbol.lru.miss",
+    "const": "KernelFallbackSymbolLRUMiss",
     "field": "agent.kernel.fallback_symbol_lru.misses",
     "id": 83
   },
@@ -622,6 +669,7 @@
     "description": "Number of cache hits for ELF information",
     "type": "counter",
     "name": "elf.info.cache.hit",
+    "const": "ELFInfoCacheHit",
     "field": "agent.elf_info_cache.hits",
     "id": 84
   },
@@ -629,6 +677,7 @@
     "description": "Number of cache misses for ELF information",
     "type": "counter",
     "name": "elf.info.cache.miss",
+    "const": "ELFInfoCacheMiss",
     "field": "agent.elf_info_cache.misses",
     "id": 85
   },
@@ -636,6 +685,7 @@
     "description": "Number of successfully symbolized PHP frames",
     "type": "counter",
     "name": "php.symbolization.success",
+    "const": "PHPSymbolizationSuccess",
     "field": "agent.php.symbolization.successes",
     "id": 86
   },
@@ -643,6 +693,7 @@
     "description": "Number of PHP frames that failed symbolization",
     "type": "counter",
     "name": "php.symbolization.failure",
+    "const": "PHPSymbolizationFailure",
     "field": "agent.php.symbolization.failures",
     "id": 87
   },
@@ -650,6 +701,7 @@
     "description": "Number of cache hits for Python AddrToCodeObject",
     "type": "counter",
     "name": "python.addr.to.code.object.hit",
+    "const": "PythonAddrToCodeObjectHit",
     "field": "agent.python.addr_to_code_object.hits",
     "id": 88
   },
@@ -657,6 +709,7 @@
     "description": "Number of cache misses for Python AddrToCodeObject",
     "type": "counter",
     "name": "python.addr.to.code.object.miss",
+    "const": "PythonAddrToCodeObjectMiss",
     "field": "agent.python.addr_to_code_object.misses",
     "id": 89
   },
@@ -664,6 +717,7 @@
     "description": "Number of cache hits for Hotspot AddrToSymbol",
     "type": "counter",
     "name": "hotspot.addr.to.symbol.hit",
+    "const": "HotspotAddrToSymbolHit",
     "field": "agent.hotspot.addr_to_symbol.hits",
     "id": 90
   },
@@ -671,6 +725,7 @@
     "description": "Number of cache misses for Hotspot AddrToSymbol",
     "type": "counter",
     "name": "hotspot.addr.to.symbol.miss",
+    "const": "HotspotAddrToSymbolMiss",
     "field": "agent.hotspot.addr_to_symbol.misses",
     "id": 91
   },
@@ -678,6 +733,7 @@
     "description": "Number of cache hits for Hotspot AddrToMethod",
     "type": "counter",
     "name": "hotspot.addr.to.method.hit",
+    "const": "HotspotAddrToMethodHit",
     "field": "agent.hotspot.addr_to_method.hits",
     "id": 92
   },
@@ -685,6 +741,7 @@
     "description": "Number of cache misses for Hotspot AddrToMethod",
     "type": "counter",
     "name": "hotspot.addr.to.method.miss",
+    "const": "HotspotAddrToMethodMiss",
     "field": "agent.hotspot.addr_to_method.misses",
     "id": 93
   },
@@ -692,6 +749,7 @@
     "description": "Number of cache hits for Hotspot AddrToJITInfo",
     "type": "counter",
     "name": "hotspot.addr.to.jit.info.hit",
+    "const": "HotspotAddrToJITInfoHit",
     "field": "agent.hotspot.addr_to_jit_info.hits",
     "id": 94
   },
@@ -699,6 +757,7 @@
     "description": "Number of cache misses for Hotspot AddrToJITInfo",
     "type": "counter",
     "name": "hotspot.addr.to.jit.info.miss",
+    "const": "HotspotAddrToJITInfoMiss",
     "field": "agent.hotspot.addr_to_jit_info.misses",
     "id": 95
   },
@@ -706,6 +765,7 @@
     "description": "Number of cache hits for PHP AddrToFunc",
     "type": "counter",
     "name": "php.addr.to.func.hit",
+    "const": "PHPAddrToFuncHit",
     "field": "agent.php.addr_to_func.hits",
     "id": 96
   },
@@ -713,6 +773,7 @@
     "description": "Number of cache misses for PHP AddrToFunc",
     "type": "counter",
     "name": "php.addr.to.func.miss",
+    "const": "PHPAddrToFuncMiss",
     "field": "agent.php.addr_to_func.misses",
     "id": 97
   },
@@ -745,6 +806,7 @@
     "description": "Number of times a perf event was received without data (report_events)",
     "type": "counter",
     "name": "perf.event.no.data",
+    "const": "PerfEventNoData",
     "field": "agent.errors.perf_event_no_data",
     "id": 101
   },
@@ -752,6 +814,7 @@
     "description": "Number of times a perf event read failed (report_events)",
     "type": "counter",
     "name": "perf.event.read.error",
+    "const": "PerfEventReadError",
     "field": "agent.errors.perf_event_read_error",
     "id": 102
   },
@@ -780,6 +843,7 @@
     "description": "Number of successfully symbolized Ruby frames",
     "type": "counter",
     "name": "ruby.symbolization.success",
+    "const": "RubySymbolizationSuccess",
     "field": "agent.ruby.symbolization.successes",
     "id": 106
   },
@@ -787,6 +851,7 @@
     "description": "Number of Ruby frames that failed symbolization",
     "type": "counter",
     "name": "ruby.symbolization.failure",
+    "const": "RubySymbolizationFailure",
     "field": "agent.ruby.symbolization.failures",
     "id": 107
   },
@@ -794,6 +859,7 @@
     "description": "Number of attempted Ruby unwinds",
     "type": "counter",
     "name": "unwind.ruby.attempts",
+    "const": "UnwindRubyAttempts",
     "field": "bpf.ruby.attempts",
     "id": 108
   },
@@ -801,6 +867,7 @@
     "description": "Number of unwound Ruby frames",
     "type": "counter",
     "name": "unwind.ruby.frames",
+    "const": "UnwindRubyFrames",
     "field": "bpf.ruby.frames",
     "id": 109
   },
@@ -824,6 +891,7 @@
     "description": "Number of cache hits for Ruby AddrToString",
     "type": "counter",
     "name": "ruby.addr.to.string.hit",
+    "const": "RubyAddrToStringHit",
     "field": "agent.ruby.addr_to_string.hits",
     "id": 112
   },
@@ -831,6 +899,7 @@
     "description": "Number of cache misses for Ruby AddrToString",
     "type": "counter",
     "name": "ruby.addr.to.string.miss",
+    "const": "RubyAddrToStringMiss",
     "field": "agent.ruby.addr_to_string.misses",
     "id": 113
   },
@@ -845,6 +914,7 @@
     "description": "Number of attempted perl unwinds",
     "type": "counter",
     "name": "unwind.perl.attempts",
+    "const": "UnwindPerlAttempts",
     "field": "bpf.perl.attempts",
     "id": 115
   },
@@ -852,6 +922,7 @@
     "description": "Number of unwound perl frames",
     "type": "counter",
     "name": "unwind.perl.frames",
+    "const": "UnwindPerlFrames",
     "field": "bpf.perl.frames",
     "id": 116
   },
@@ -859,6 +930,7 @@
     "description": "Number of failures to read perl TLS info",
     "type": "counter",
     "name": "unwind.perl.tls",
+    "const": "UnwindPerlTLS",
     "field": "bpf.perl.errors.tls",
     "id": 117
   },
@@ -866,6 +938,7 @@
     "description": "Number of failures to read perl stack info",
     "type": "counter",
     "name": "unwind.perl.read.stack.info",
+    "const": "UnwindPerlReadStackInfo",
     "field": "bpf.perl.errors.read_stack_info",
     "id": 118
   },
@@ -873,6 +946,7 @@
     "description": "Number of failures to read perl context stack entry",
     "type": "counter",
     "name": "unwind.perl.read.context.stack.entry",
+    "const": "UnwindPerlReadContextStackEntry",
     "field": "bpf.perl.errors.read_context_stack_entry",
     "id": 119
   },
@@ -880,6 +954,7 @@
     "description": "Number of failures to resolve perl EGV",
     "type": "counter",
     "name": "unwind.perl.resolve.egv",
+    "const": "UnwindPerlResolveEGV",
     "field": "bpf.perl.errors.resolve_egv",
     "id": 120
   },
@@ -887,6 +962,7 @@
     "description": "Number of successfully symbolized Perl frames",
     "type": "counter",
     "name": "perl.symbolization.success",
+    "const": "PerlSymbolizationSuccess",
     "field": "agent.perl.symbolization.successes",
     "id": 121
   },
@@ -894,6 +970,7 @@
     "description": "Number of Perl frames that failed symbolization",
     "type": "counter",
     "name": "perl.symbolization.failure",
+    "const": "PerlSymbolizationFailure",
     "field": "agent.perl.symbolization.failures",
     "id": 122
   },
@@ -901,6 +978,7 @@
     "description": "Number of cache hits for Perl AddrToHEK",
     "type": "counter",
     "name": "perl.addr.to.hek.hit",
+    "const": "PerlAddrToHEKHit",
     "field": "agent.perl.addr_to_hek.hits",
     "id": 123
   },
@@ -908,6 +986,7 @@
     "description": "Number of cache misses for Perl AddrToHEK",
     "type": "counter",
     "name": "perl.addr.to.hek.miss",
+    "const": "PerlAddrToHEKMiss",
     "field": "agent.perl.addr_to_hek.misses",
     "id": 124
   },
@@ -915,6 +994,7 @@
     "description": "Number of cache hits for Perl AddrToCOP",
     "type": "counter",
     "name": "perl.addr.to.cop.hit",
+    "const": "PerlAddrToCOPHit",
     "field": "agent.perl.addr_to_cop.hits",
     "id": 125
   },
@@ -922,6 +1002,7 @@
     "description": "Number of cache misses for Perl AddrToCOP",
     "type": "counter",
     "name": "perl.addr.to.cop.miss",
+    "const": "PerlAddrToCOPMiss",
     "field": "agent.perl.addr_to_cop.misses",
     "id": 126
   },
@@ -929,6 +1010,7 @@
     "description": "Number of cache hits for Perl AddrToGV",
     "type": "counter",
     "name": "perl.addr.to.gv.hit",
+    "const": "PerlAddrToGVHit",
     "field": "agent.perl.addr_to_gv.hits",
     "id": 127
   },
@@ -936,6 +1018,7 @@
     "description": "Number of cache misses for Perl AddrToGV",
     "type": "counter",
     "name": "perl.addr.to.gv.miss",
+    "const": "PerlAddrToGVMiss",
     "field": "agent.perl.addr_to_gv.misses",
     "id": 128
   },
@@ -950,6 +1033,7 @@
     "description": "Number of failures to unwind because return address was not found with heuristic",
     "type": "counter",
     "name": "unwind.hotspot.err.invalid.ra",
+    "const": "UnwindHotspotErrInvalidRA",
     "field": "bpf.hotspot.errors.invalid_ra",
     "id": 130
   },
@@ -973,6 +1057,7 @@
     "description": "Current size of the unwind info array",
     "type": "gauge",
     "name": "unwind.info.array.size",
+    "const": "UnwindInfoArraySize",
     "field": "agent.unwind_info_array.size",
     "id": 133
   },
@@ -980,6 +1065,7 @@
     "description": "Current size of the stack delta pages hash map",
     "type": "gauge",
     "name": "hashmap.num.stack.delta.pages",
+    "const": "HashmapNumStackDeltaPages",
     "field": "agent.stack_delta_pages.size",
     "id": 134
   },
@@ -994,6 +1080,7 @@
     "description": "Number of attempted V8 unwinds",
     "type": "counter",
     "name": "unwind.v8.attempts",
+    "const": "UnwindV8Attempts",
     "field": "bpf.v8.attempts",
     "id": 136
   },
@@ -1001,6 +1088,7 @@
     "description": "Number of unwound V8 frames",
     "type": "counter",
     "name": "unwind.v8.frames",
+    "const": "UnwindV8Frames",
     "field": "bpf.v8.frames",
     "id": 137
   },
@@ -1008,6 +1096,7 @@
     "description": "Number of failures to read V8 frame pointer data",
     "type": "counter",
     "name": "unwind.v8.err.bad.fp",
+    "const": "UnwindV8ErrBadFP",
     "field": "bpf.v8.errors.bad_fp",
     "id": 138
   },
@@ -1015,6 +1104,7 @@
     "description": "Number of failures to read V8 Code/JSFunction object",
     "type": "counter",
     "name": "unwind.v8.err.bad.js.func",
+    "const": "UnwindV8ErrBadJSFunc",
     "field": "bpf.v8.errors.bad_js_func",
     "id": 139
   },
@@ -1022,6 +1112,7 @@
     "description": "Number of failures to read V8 Code object",
     "type": "counter",
     "name": "unwind.v8.err.bad.code",
+    "const": "UnwindV8ErrBadCode",
     "field": "bpf.v8.errors.bad_code",
     "id": 140
   },
@@ -1029,6 +1120,7 @@
     "description": "Number of successfully symbolized V8 frames",
     "type": "counter",
     "name": "v8.symbolization.success",
+    "const": "V8SymbolizationSuccess",
     "field": "agent.v8.symbolization.successes",
     "id": 141
   },
@@ -1036,6 +1128,7 @@
     "description": "Number of V8 frames that failed symbolization",
     "type": "counter",
     "name": "v8.symbolization.failure",
+    "const": "V8SymbolizationFailure",
     "field": "agent.v8.symbolization.failures",
     "id": 142
   },
@@ -1043,6 +1136,7 @@
     "description": "Number of cache hits for V8 strings",
     "type": "counter",
     "name": "v8.addr.to.string.hit",
+    "const": "V8AddrToStringHit",
     "field": "agent.v8.addr_to_string.hits",
     "id": 143
   },
@@ -1050,6 +1144,7 @@
     "description": "Number of cache misses for V8 strings",
     "type": "counter",
     "name": "v8.addr.to.string.miss",
+    "const": "V8AddrToStringMiss",
     "field": "agent.v8.addr_to_string.misses",
     "id": 144
   },
@@ -1057,6 +1152,7 @@
     "description": "Number of cache hits for V8 SharedFunctionInfo",
     "type": "counter",
     "name": "v8.addr.to.sfi.hit",
+    "const": "V8AddrToSFIHit",
     "field": "agent.v8.addr_to_sfi.hits",
     "id": 145
   },
@@ -1064,6 +1160,7 @@
     "description": "Number of cache misses for V8 SharedFunctionInfo",
     "type": "counter",
     "name": "v8.addr.to.sfi.miss",
+    "const": "V8AddrToSFIMiss",
     "field": "agent.v8.addr_to_sfi.misses",
     "id": 146
   },
@@ -1071,6 +1168,7 @@
     "description": "Number of cache hits for V8 Code/JSFunction",
     "type": "counter",
     "name": "v8.addr.to.func.hit",
+    "const": "V8AddrToFuncHit",
     "field": "agent.v8.addr_to_func.hits",
     "id": 147
   },
@@ -1078,6 +1176,7 @@
     "description": "Number of cache misses for V8 Code/JSFunction",
     "type": "counter",
     "name": "v8.addr.to.func.miss",
+    "const": "V8AddrToFuncMiss",
     "field": "agent.v8.addr_to_func.misses",
     "id": 148
   },
@@ -1085,6 +1184,7 @@
     "description": "Number of cache hits for V8 Source",
     "type": "counter",
     "name": "v8.addr.to.source.hit",
+    "const": "V8AddrToSourceHit",
     "field": "agent.v8.addr_to_source.hits",
     "id": 149
   },
@@ -1092,6 +1192,7 @@
     "description": "Number of cache misses for V8 Source",
     "type": "counter",
     "name": "v8.addr.to.source.miss",
+    "const": "V8AddrToSourceMiss",
     "field": "agent.v8.addr_to_source.misses",
     "id": 150
   },
@@ -1099,6 +1200,7 @@
     "description": "Number of cache hits for Hotspot AddrToStubNameID",
     "type": "counter",
     "name": "hotspot.addr.to.stub.name.id.hit",
+    "const": "HotspotAddrToStubNameIDHit",
     "field": "agent.hotspot.addr_to_stub_name_id.hits",
     "id": 151
   },
@@ -1106,6 +1208,7 @@
     "description": "Number of cache misses for Hotspot AddrToStubNameID",
     "type": "counter",
     "name": "hotspot.addr.to.stub.name.id.miss",
+    "const": "HotspotAddrToStubNameIDMiss",
     "field": "agent.hotspot.addr_to_stub_name_id.misses",
     "id": 152
   },
@@ -1129,30 +1232,33 @@
   },
   {
     "obsolete": true,
-    "description": "Number of times reading /proc/<PID> failed due to missing text section",
+    "description": "Number of times reading /proc/\u003cPID\u003e failed due to missing text section",
     "type": "counter",
     "name": "err.proc.no.text.sec",
     "field": "agent.errors.proc_no_text_section",
     "id": 155
   },
   {
-    "description": "Number of times reading /proc/<PID> as it does not exist anymore",
+    "description": "Number of times reading /proc/\u003cPID\u003e as it does not exist anymore",
     "type": "counter",
     "name": "err.proc.not.exist",
+    "const": "ErrProcNotExist",
     "field": "agent.errors.proc_not_exists",
     "id": 156
   },
   {
-    "description": "Number of times process exits while reading /proc/<PID>",
+    "description": "Number of times process exits while reading /proc/\u003cPID\u003e",
     "type": "counter",
     "name": "err.proc.esrch",
+    "const": "ErrProcESRCH",
     "field": "agent.errors.proc_esrch",
     "id": 157
   },
   {
-    "description": "Number of times reading /proc/<PID> failed due to missing permission",
+    "description": "Number of times reading /proc/\u003cPID\u003e failed due to missing permission",
     "type": "counter",
     "name": "err.proc.perm",
+    "const": "ErrProcPerm",
     "field": "agent.errors.proc_perm",
     "id": 158
   },
@@ -1176,6 +1282,7 @@
     "description": "Number of added cache elements for Perl AddrToHEK",
     "type": "counter",
     "name": "perl.addr.to.hek.add",
+    "const": "PerlAddrToHEKAdd",
     "field": "agent.perl.addr_to_hek.add",
     "id": 161
   },
@@ -1183,6 +1290,7 @@
     "description": "Number of deleted cache elements for Perl AddrToHEK",
     "type": "counter",
     "name": "perl.addr.to.hek.del",
+    "const": "PerlAddrToHEKDel",
     "field": "agent.perl.addr_to_hek.del",
     "id": 162
   },
@@ -1190,6 +1298,7 @@
     "description": "Number of added cache elements for Perl AddrToCOP",
     "type": "counter",
     "name": "perl.addr.to.cop.add",
+    "const": "PerlAddrToCOPAdd",
     "field": "agent.perl.addr_to_cop.add",
     "id": 163
   },
@@ -1197,6 +1306,7 @@
     "description": "Number of deleted cache elements for Perl AddrToCOP",
     "type": "counter",
     "name": "perl.addr.to.cop.del",
+    "const": "PerlAddrToCOPDel",
     "field": "agent.perl.addr_to_cop.del",
     "id": 164
   },
@@ -1204,6 +1314,7 @@
     "description": "Number of added cache elements for Perl AddrToGV",
     "type": "counter",
     "name": "perl.addr.to.gv.add",
+    "const": "PerlAddrToGVAdd",
     "field": "agent.perl.addr_to_gv.add",
     "id": 165
   },
@@ -1211,6 +1322,7 @@
     "description": "Number of deleted cache elementes Perl AddrToGV",
     "type": "counter",
     "name": "perl.addr.to.gv.del",
+    "const": "PerlAddrToGVDel",
     "field": "agent.perl.addr_to_gv.del",
     "id": 166
   },
@@ -1218,6 +1330,7 @@
     "description": "Number of added cache elements for Hotspot AddrToSymbol",
     "type": "counter",
     "name": "hotspot.addr.to.symbol.add",
+    "const": "HotspotAddrToSymbolAdd",
     "field": "agent.hotspot.addr_to_symbol.add",
     "id": 167
   },
@@ -1225,6 +1338,7 @@
     "description": "Number of deleted cache elements for Hotspot AddrToSymbol",
     "type": "counter",
     "name": "hotspot.addr.to.symbol.del",
+    "const": "HotspotAddrToSymbolDel",
     "field": "agent.hotspot.addr_to_symbol.del",
     "id": 168
   },
@@ -1232,6 +1346,7 @@
     "description": "Number of added cache elements for Hotspot AddrToMethod",
     "type": "counter",
     "name": "hotspot.addr.to.method.add",
+    "const": "HotspotAddrToMethodAdd",
     "field": "agent.hotspot.addr_to_method.add",
     "id": 169
   },
@@ -1239,6 +1354,7 @@
     "description": "Number of deleted cache elements for Hotspot AddrToMethod",
     "type": "counter",
     "name": "hotspot.addr.to.method.del",
+    "const": "HotspotAddrToMethodDel",
     "field": "agent.hotspot.addr_to_method.del",
     "id": 170
   },
@@ -1246,6 +1362,7 @@
     "description": "Number of added cache elements for Hotspot AddrToJITInfo",
     "type": "counter",
     "name": "hotspot.addr.to.jit.info.add",
+    "const": "HotspotAddrToJITInfoAdd",
     "field": "agent.hotspot.addr_to_jit_info.add",
     "id": 171
   },
@@ -1253,6 +1370,7 @@
     "description": "Number of deleted cache elements for Hotspot AddrToJITInfo",
     "type": "counter",
     "name": "hotspot.addr.to.jit.info.del",
+    "const": "HotspotAddrToJITInfoDel",
     "field": "agent.hotspot.addr_to_jit_info.del",
     "id": 172
   },
@@ -1260,6 +1378,7 @@
     "description": "Number of added cache elements for Hotspot AddrToStubNameID",
     "type": "counter",
     "name": "hotspot.addr.to.stub.name.id.add",
+    "const": "HotspotAddrToStubNameIDAdd",
     "field": "agent.hotspot.addr_to_stub_name.add",
     "id": 173
   },
@@ -1267,6 +1386,7 @@
     "description": "Number of deleted cache elements for Hotspot AddrToStubNameID",
     "type": "counter",
     "name": "hotspot.addr.to.stub.name.id.del",
+    "const": "HotspotAddrToStubNameIDDel",
     "field": "agent.hotspot.addr_to_stub_name.del",
     "id": 174
   },
@@ -1274,6 +1394,7 @@
     "description": "Number of added cache elements for PHP AddrToFunc",
     "type": "counter",
     "name": "php.addr.to.func.add",
+    "const": "PHPAddrToFuncAdd",
     "field": "agent.php.addr_to_func.add",
     "id": 175
   },
@@ -1281,6 +1402,7 @@
     "description": "Number of deleted cache elements for PHP AddrToFunc",
     "type": "counter",
     "name": "php.addr.to.func.del",
+    "const": "PHPAddrToFuncDel",
     "field": "agent.php.addr_to_func.del",
     "id": 176
   },
@@ -1288,6 +1410,7 @@
     "description": "Number of added cache elements for Python AddrToCodeObject",
     "type": "counter",
     "name": "python.addr.to.code.object.add",
+    "const": "PythonAddrToCodeObjectAdd",
     "field": "agent.python.addr_to_code_object.add",
     "id": 177
   },
@@ -1295,6 +1418,7 @@
     "description": "Number of deleted cache elements for Python AddrToCodeObject",
     "type": "counter",
     "name": "python.addr.to.code.object.del",
+    "const": "PythonAddrToCodeObjectDel",
     "field": "agent.python.addr_to_code_object.del",
     "id": 178
   },
@@ -1318,6 +1442,7 @@
     "description": "Number of added cache elements for Ruby AddrToString",
     "type": "counter",
     "name": "ruby.addr.to.string.add",
+    "const": "RubyAddrToStringAdd",
     "field": "agent.ruby.addr_to_string.add",
     "id": 181
   },
@@ -1325,6 +1450,7 @@
     "description": "Number of deleted cache elements for Ruby AddrToString",
     "type": "counter",
     "name": "ruby.addr.to.string.del",
+    "const": "RubyAddrToStringDel",
     "field": "agent.ruby.addr_to_string.del",
     "id": 182
   },
@@ -1332,6 +1458,7 @@
     "description": "Number of added cache elements for V8 strings",
     "type": "counter",
     "name": "v8.addr.to.string.add",
+    "const": "V8AddrToStringAdd",
     "field": "agent.v8.addr_to_string.add",
     "id": 183
   },
@@ -1339,6 +1466,7 @@
     "description": "Number of deleted cache elements for V8 strings",
     "type": "counter",
     "name": "v8.addr.to.string.del",
+    "const": "V8AddrToStringDel",
     "field": "agent.v8.addr_to_string.del",
     "id": 184
   },
@@ -1346,6 +1474,7 @@
     "description": "Number of added cache elements for V8 SharedFunctionInfo",
     "type": "counter",
     "name": "v8.addr.to.sfi.add",
+    "const": "V8AddrToSFIAdd",
     "field": "agent.v8.addr_to_sfi.add",
     "id": 185
   },
@@ -1353,6 +1482,7 @@
     "description": "Number of deleted cache elements for V8 SharedFunctionInfo",
     "type": "counter",
     "name": "v8.addr.to.sfi.del",
+    "const": "V8AddrToSFIDel",
     "field": "agent.v8.addr_to_sfi.del",
     "id": 186
   },
@@ -1360,6 +1490,7 @@
     "description": "Number of added cache elements for V8 Code/JSFunction",
     "type": "counter",
     "name": "v8.addr.to.func.add",
+    "const": "V8AddrToFuncAdd",
     "field": "agent.v8.addr_to_func.add",
     "id": 187
   },
@@ -1367,6 +1498,7 @@
     "description": "Number of deleted cache elements for V8 Code/JSFunction",
     "type": "counter",
     "name": "v8.addr.to.func.del",
+    "const": "V8AddrToFuncDel",
     "field": "agent.v8.addr_to_func.del",
     "id": 188
   },
@@ -1374,6 +1506,7 @@
     "description": "Number of added cache elements for V8 Source",
     "type": "counter",
     "name": "v8.addr.to.source.add",
+    "const": "V8AddrToSourceAdd",
     "field": "agent.v8.addr_to_source.add",
     "id": 189
   },
@@ -1381,6 +1514,7 @@
     "description": "Number of deleted cache elements for V8 Source",
     "type": "counter",
     "name": "v8.addr.to.source.del",
+    "const": "V8AddrToSourceDel",
     "field": "agent.v8.addr_to_source.del",
     "id": 190
   },
@@ -1388,6 +1522,7 @@
     "description": "Number of times we failed to update reported_pids",
     "type": "counter",
     "name": "reported.pids.err",
+    "const": "ReportedPIDsErr",
     "field": "bpf.errors.reported_pids",
     "id": 191
   },
@@ -1395,6 +1530,7 @@
     "description": "Maximum number of size that was requested within the last reporting interval",
     "type": "counter",
     "name": "ruby.max.size",
+    "const": "RubyMaxSize",
     "field": "agent.ruby.max_size",
     "id": 192
   },
@@ -1402,6 +1538,7 @@
     "description": "Maximum number of hekLen that was requested within the last reporting interval",
     "type": "counter",
     "name": "perl.hek.len",
+    "const": "PerlHekLen",
     "field": "agent.perl.hek_len",
     "id": 193
   },
@@ -1409,6 +1546,7 @@
     "description": "Number of times frame unwinding failed because of LR == 0",
     "type": "counter",
     "name": "unwind.native.lr0",
+    "const": "UnwindNativeLr0",
     "field": "bpf.native.errors.lr0",
     "id": 194
   },
@@ -1416,6 +1554,7 @@
     "description": "Number of times updating an element in unwindInfoArray failed",
     "type": "counter",
     "name": "unwind.info.array.update",
+    "const": "UnwindInfoArrayUpdate",
     "field": "agent.errors.unwind_info_array_update",
     "id": 195
   },
@@ -1423,6 +1562,7 @@
     "description": "Number of times updating an element in exeIDToStackDeltas failed",
     "type": "counter",
     "name": "exe.id.to.stack.deltas.update",
+    "const": "ExeIDToStackDeltasUpdate",
     "field": "agent.errors.exe_id_to_stack_deltas_update",
     "id": 196
   },
@@ -1438,6 +1578,7 @@
     "description": "Number of times updating an element in stackDeltaPageToInfo failed",
     "type": "counter",
     "name": "stack.delta.page.to.info.update",
+    "const": "StackDeltaPageToInfoUpdate",
     "field": "agent.errors.stack_delta_page_to_info_update",
     "id": 198
   },
@@ -1445,6 +1586,7 @@
     "description": "Number of times deleting an element from stackDeltaPageToInfo failed",
     "type": "counter",
     "name": "stack.delta.page.to.info.delete",
+    "const": "StackDeltaPageToInfoDelete",
     "field": "agent.errors.stack_delta_page_to_info_delete",
     "id": 199
   },
@@ -1452,6 +1594,7 @@
     "description": "Number of times updating an element in pidPageToMappingInfo failed",
     "type": "counter",
     "name": "pid.page.to.mapping.info.update",
+    "const": "PidPageToMappingInfoUpdate",
     "field": "agent.errors.pid_page_to_mapping_info_update",
     "id": 200
   },
@@ -1459,6 +1602,7 @@
     "description": "Number of times deleting an element from pidPageToMappingInfo failed",
     "type": "counter",
     "name": "pid.page.to.mapping.info.delete",
+    "const": "PidPageToMappingInfoDelete",
     "field": "agent.errors.pid_page_to_mapping_info_delete",
     "id": 201
   },
@@ -1482,6 +1626,7 @@
     "description": "Number of times the stack delta provider failed to extract stack deltas",
     "type": "counter",
     "name": "stack.delta.provider.extraction.error",
+    "const": "StackDeltaProviderExtractionError",
     "field": "agent.errors.stack_delta_provider_extraction",
     "id": 204
   },
@@ -1489,6 +1634,7 @@
     "description": "Number of cache hits in tracehandler trace cache by UM hash",
     "type": "counter",
     "name": "trace.cache.hit",
+    "const": "TraceCacheHit",
     "field": "agent.trace_cache.hits",
     "id": 205
   },
@@ -1496,6 +1642,7 @@
     "description": "Number of cache misses in tracehandler trace cache by UM hash",
     "type": "counter",
     "name": "trace.cache.miss",
+    "const": "TraceCacheMiss",
     "field": "agent.trace_cache.misses",
     "id": 206
   },
@@ -1503,6 +1650,7 @@
     "description": "Number of /proc/PID/maps process attempts",
     "type": "counter",
     "name": "num.proc.attempts",
+    "const": "NumProcAttempts",
     "field": "agent.num_proc_attempts",
     "id": 207
   },
@@ -1510,6 +1658,7 @@
     "description": "Number of times finding the return address in the interpreter loop failed for PHP 8+.",
     "type": "counter",
     "name": "php.failed.to.find.return.address",
+    "const": "PHPFailedToFindReturnAddress",
     "field": "agent.php.errors.failed_to_find_return_address",
     "id": 208
   },
@@ -1517,6 +1666,7 @@
     "description": "Number of times we encountered frame sizes larger than the supported maximum",
     "type": "counter",
     "name": "hotspot.unsupported.frame.size",
+    "const": "HotspotUnsupportedFrameSize",
     "field": "bpf.hotspot.errors.unsupported_frame_size",
     "id": 209
   },
@@ -1545,6 +1695,7 @@
     "description": "Number of new PID events (report_events)",
     "type": "counter",
     "name": "num.proc.new",
+    "const": "NumProcNew",
     "field": "bpf.num_proc_new",
     "id": 213
   },
@@ -1552,6 +1703,7 @@
     "description": "Number of exit PID events (report_events)",
     "type": "counter",
     "name": "num.proc.exit",
+    "const": "NumProcExit",
     "field": "bpf.num_proc_exit",
     "id": 214
   },
@@ -1559,6 +1711,7 @@
     "description": "Number of unknown PC events (report_events)",
     "type": "counter",
     "name": "num.unknown.pc",
+    "const": "NumUnknownPC",
     "field": "bpf.num_unknown_pc",
     "id": 215
   },
@@ -1581,6 +1734,7 @@
     "description": "Max /proc/PID/maps parse time for a single collection interval, in microseconds",
     "type": "counter",
     "name": "max.proc.parse.usec",
+    "const": "MaxProcParseUsec",
     "field": "agent.max_proc_parse.us",
     "unit": "micros",
     "id": 218
@@ -1589,6 +1743,7 @@
     "description": "Time spent processing /proc/PID/maps on startup, in milliseconds",
     "type": "counter",
     "name": "proc.pid.startup.ms",
+    "const": "ProcPIDStartupMs",
     "field": "agent.time.proc_pid_startup",
     "unit": "ms",
     "id": 219
@@ -1597,6 +1752,7 @@
     "description": "Total /proc/PID/maps parse time for a single collection interval, in microseconds",
     "type": "counter",
     "name": "total.proc.parse.usec",
+    "const": "TotalProcParseUsec",
     "field": "agent.time.total_proc_parse",
     "unit": "micros",
     "id": 220
@@ -1645,6 +1801,7 @@
     "description": "Number of generic PID events (report_events)",
     "type": "counter",
     "name": "num.generic.pid",
+    "const": "NumGenericPID",
     "field": "agent.num_generic_pid",
     "id": 226
   },
@@ -1652,6 +1809,7 @@
     "description": "Number of times we failed to update pid_events",
     "type": "counter",
     "name": "pid.events.err",
+    "const": "PIDEventsErr",
     "field": "bpf.errors.pid_events",
     "id": 227
   },
@@ -1659,6 +1817,7 @@
     "description": "Number of failures to read _PyCFrame.current_frame in unwind_python()",
     "type": "counter",
     "name": "unwind.python.err.bad.cframe.frame.addr",
+    "const": "UnwindPythonErrBadCFrameFrameAddr",
     "field": "bpf.python.errors.bad_cframe_frame_addr",
     "id": 228
   },
@@ -1666,6 +1825,7 @@
     "description": "Number of times stack unwinding was stopped to not hit the limit of tail calls",
     "type": "counter",
     "name": "max.tail.calls",
+    "const": "MaxTailCalls",
     "field": "bpf.tail_calls_max",
     "id": 229
   },
@@ -1673,31 +1833,36 @@
     "description": "Indicates if probabilistic profiling is enabled or disabled: 1 profiling is enabled, -1 profiling is disabled.",
     "type": "gauge",
     "name": "prob.profiling.status",
+    "const": "ProbProfilingStatus",
     "id": 230
   },
   {
     "description": "Interval in seconds for which probabilistic profiling will be enabled or disabled.",
     "type": "counter",
     "name": "prob.profiling.interval",
-    "id": 231,
-    "unit": "s"
+    "const": "ProbProfilingInterval",
+    "unit": "s",
+    "id": 231
   },
   {
     "description": "Number of times enabling a perf event hook failed",
     "type": "counter",
     "name": "perf.event.enable.err",
+    "const": "PerfEventEnableErr",
     "id": 232
   },
   {
     "description": "Number of times disabling a perf event hook failed",
     "type": "counter",
     "name": "perf.event.disable.err",
+    "const": "PerfEventDisableErr",
     "id": 233
   },
   {
     "description": "Number of times we didn't find an entry for this process in the Python process info array",
     "type": "counter",
     "name": "unwind.python.err.no.proc.info",
+    "const": "UnwindPythonErrNoProcInfo",
     "field": "bpf.python.errors.no_proc_info",
     "id": 234
   },
@@ -1705,6 +1870,7 @@
     "description": "Number of failures to read autoTLSkey",
     "type": "counter",
     "name": "unwind.python.err.bad.auto.tls.key.addr",
+    "const": "UnwindPythonErrBadAutoTlsKeyAddr",
     "field": "bpf.python.errors.bad_auto_tls_key_addr",
     "id": 235
   },
@@ -1712,6 +1878,7 @@
     "description": "Number of failures to read the thread state pointer from TLD",
     "type": "counter",
     "name": "unwind.python.err.read.thread.state.addr",
+    "const": "UnwindPythonErrReadThreadStateAddr",
     "field": "bpf.python.errors.read_thread_state_addr",
     "id": 236
   },
@@ -1719,6 +1886,7 @@
     "description": "Number of failures to determine the base address for thread-specific data",
     "type": "counter",
     "name": "unwind.python.err.read.tsd.base",
+    "const": "UnwindPythonErrReadTsdBase",
     "field": "bpf.python.errors.read_tsd_base",
     "id": 237
   },
@@ -1726,6 +1894,7 @@
     "description": "Number of times we didn't find an entry for this process in the Ruby process info array",
     "type": "counter",
     "name": "unwind.ruby.err.no.proc.info",
+    "const": "UnwindRubyErrNoProcInfo",
     "field": "bpf.ruby.errors.no_proc_info",
     "id": 238
   },
@@ -1733,6 +1902,7 @@
     "description": "Number of failures to read the stack pointer from the Ruby context",
     "type": "counter",
     "name": "unwind.ruby.err.read.stack.ptr",
+    "const": "UnwindRubyErrReadStackPtr",
     "field": "bpf.ruby.errors.read_stack_ptr",
     "id": 239
   },
@@ -1740,6 +1910,7 @@
     "description": "Number of failures to read the size of the VM stack from the Ruby context",
     "type": "counter",
     "name": "unwind.ruby.err.read.stack.size",
+    "const": "UnwindRubyErrReadStackSize",
     "field": "bpf.ruby.errors.read_stack_size",
     "id": 240
   },
@@ -1747,6 +1918,7 @@
     "description": "Number of failures to read the control frame pointer from the Ruby context",
     "type": "counter",
     "name": "unwind.ruby.err.read.cfp",
+    "const": "UnwindRubyErrReadCfp",
     "field": "bpf.ruby.errors.read_cfp",
     "id": 241
   },
@@ -1754,6 +1926,7 @@
     "description": "Number of failures to read the expression path from the Ruby frame",
     "type": "counter",
     "name": "unwind.ruby.err.read.ep",
+    "const": "UnwindRubyErrReadEp",
     "field": "bpf.ruby.errors.read_ep",
     "id": 242
   },
@@ -1761,20 +1934,21 @@
     "description": "Number of failures to read the instruction sequence body",
     "type": "counter",
     "name": "unwind.ruby.err.read.iseq.body",
+    "const": "UnwindRubyErrReadIseqBody",
     "field": "bpf.ruby.errors.read_iseq_body",
     "id": 243
   },
   {
-    "description": "Number of failures to read the instruction sequence encoded size",
     "obsolete": true,
+    "description": "Number of failures to read the instruction sequence encoded size",
     "type": "counter",
     "name": "unwind.ruby.err.read.iseq.encoded",
     "field": "bpf.ruby.errors.read_iseq_encoded",
     "id": 244
   },
   {
-    "description": "Number of failures to read the instruction sequence size",
     "obsolete": true,
+    "description": "Number of failures to read the instruction sequence size",
     "type": "counter",
     "name": "unwind.ruby.err.read.iseq.size",
     "field": "bpf.ruby.errors.read_iseq_size",
@@ -1784,6 +1958,7 @@
     "description": "Number of times the unwind instructions requested LR unwinding mid-trace",
     "type": "counter",
     "name": "unwind.native.err.lr.unwinding.mid.trace",
+    "const": "UnwindNativeErrLrUnwindingMidTrace",
     "field": "bpf.native.errors.lr_unwinding_mid_trace",
     "id": 246
   },
@@ -1791,6 +1966,7 @@
     "description": "Number of failures to read the kernel-mode registers",
     "type": "counter",
     "name": "unwind.native.err.read.kernel.mode.regs",
+    "const": "UnwindNativeErrReadKernelModeRegs",
     "field": "bpf.native.errors.read_kernel_mode_regs",
     "id": 247
   },
@@ -1798,6 +1974,7 @@
     "description": "Number of failures to read the IRQ stack link",
     "type": "counter",
     "name": "unwind.native.err.chase.irq.stack.link",
+    "const": "UnwindNativeErrChaseIrqStackLink",
     "field": "bpf.native.errors.chase_irq_stack_link",
     "id": 248
   },
@@ -1805,6 +1982,7 @@
     "description": "Number of times we didn't find an entry for this process in the V8 process info array",
     "type": "counter",
     "name": "unwind.v8.err.no.proc.info",
+    "const": "UnwindV8ErrNoProcInfo",
     "field": "bpf.v8.errors.no_proc_info",
     "id": 249
   },
@@ -1812,6 +1990,7 @@
     "description": "Number of times an unwind_info_array index was invalid",
     "type": "counter",
     "name": "unwind.native.err.bad.unwind.info.index",
+    "const": "UnwindNativeErrBadUnwindInfoIndex",
     "field": "bpf.native.errors.bad_unwind_info_index",
     "id": 250
   },
@@ -1819,6 +1998,7 @@
     "description": "Number of times batch updating elements in exeIDToStackDeltas failed",
     "type": "counter",
     "name": "exe.id.to.stack.deltas.batch.update",
+    "const": "ExeIDToStackDeltasBatchUpdate",
     "field": "agent.errors.exe_id_to_stack_deltas_batch_update",
     "id": 251
   },
@@ -1826,6 +2006,7 @@
     "description": "Number of times batch updating elements in stackDeltaPageToInfo failed",
     "type": "counter",
     "name": "stack.delta.page.to.info.batch.update",
+    "const": "StackDeltaPageToInfoBatchUpdate",
     "field": "agent.errors.stack_delta_page_to_info_batch_update",
     "id": 252
   },
@@ -1833,6 +2014,7 @@
     "description": "Number of times batch deleting elements from pidPageToMappingInfo failed",
     "type": "counter",
     "name": "pid.page.to.mapping.info.batch.delete",
+    "const": "PidPageToMappingInfoBatchDelete",
     "field": "agent.errors.pid_page_to_mapping_info_batch_delete",
     "id": 253
   },
@@ -1858,6 +2040,7 @@
     "description": "Number of times the Hotspot unwind instructions requested LR unwinding mid-trace",
     "type": "counter",
     "name": "unwind.hotspot.err.lr.unwinding.mid.trace",
+    "const": "UnwindHotspotErrLrUnwindingMidTrace",
     "field": "bpf.hotspot.errors.lr_unwinding_mid_trace",
     "id": 256
   },
@@ -1865,6 +2048,7 @@
     "description": "Number of failures to get TSD base for APM correlation",
     "type": "counter",
     "name": "unwind.apm.int.err.read.tsd.base",
+    "const": "UnwindApmIntErrReadTsdBase",
     "field": "bpf.apmint.errors.read_tsd_base",
     "id": 257
   },
@@ -1872,6 +2056,7 @@
     "description": "Number of failures read the APM correlation pointer",
     "type": "counter",
     "name": "unwind.apm.int.err.read.corr.buf.ptr",
+    "const": "UnwindApmIntErrReadCorrBufPtr",
     "field": "bpf.apmint.errors.read_corr_buf_ptr",
     "id": 258
   },
@@ -1879,6 +2064,7 @@
     "description": "Number of failures read the APM correlation buffer",
     "type": "counter",
     "name": "unwind.apm.int.err.read.corr.buf",
+    "const": "UnwindApmIntErrReadCorrBuf",
     "field": "bpf.apmint.errors.read_corr_buf",
     "id": 259
   },
@@ -1886,6 +2072,7 @@
     "description": "Number of successful reads of APM correlation info",
     "type": "counter",
     "name": "unwind.apm.int.read.successes",
+    "const": "UnwindApmIntReadSuccesses",
     "field": "bpf.apmint.read.successes",
     "id": 260
   },
@@ -1893,6 +2080,7 @@
     "description": "Number of attempted dotnet unwinds",
     "type": "counter",
     "name": "unwind.dotnet.attempts",
+    "const": "UnwindDotnetAttempts",
     "field": "bpf.dotnet.attempts",
     "id": 261
   },
@@ -1900,6 +2088,7 @@
     "description": "Number of unwound dotnet frames",
     "type": "counter",
     "name": "unwind.dotnet.frames",
+    "const": "UnwindDotnetFrames",
     "field": "bpf.dotnet.frames",
     "id": 262
   },
@@ -1907,6 +2096,7 @@
     "description": "Number of times we didn't find an entry for this process in the dotnet process info array",
     "type": "counter",
     "name": "unwind.dotnet.err.no.proc.info",
+    "const": "UnwindDotnetErrNoProcInfo",
     "field": "bpf.dotnet.errors.no_proc_info",
     "id": 263
   },
@@ -1914,6 +2104,7 @@
     "description": "Number of failures to read dotnet frame pointer data",
     "type": "counter",
     "name": "unwind.dotnet.err.bad.fp",
+    "const": "UnwindDotnetErrBadFP",
     "field": "bpf.dotnet.errors.bad_fp",
     "id": 264
   },
@@ -1921,6 +2112,7 @@
     "description": "Number of failures to read dotnet CodeHeader",
     "type": "counter",
     "name": "unwind.dotnet.err.code.header",
+    "const": "UnwindDotnetErrCodeHeader",
     "field": "bpf.dotnet.errors.code_header",
     "id": 265
   },
@@ -1928,6 +2120,7 @@
     "description": "Number of failures to unwind dotnet frame due to large code size",
     "type": "counter",
     "name": "unwind.dotnet.err.code.too.large",
+    "const": "UnwindDotnetErrCodeTooLarge",
     "field": "bpf.dotnet.errors.code_too_large",
     "id": 266
   },
@@ -1935,6 +2128,7 @@
     "description": "Number of successfully symbolized dotnet frames",
     "type": "counter",
     "name": "dotnet.symbolization.successes",
+    "const": "DotnetSymbolizationSuccesses",
     "field": "agent.dotnet.symbolization.successes",
     "id": 267
   },
@@ -1942,6 +2136,7 @@
     "description": "Number of dotnet frames that failed symbolization",
     "type": "counter",
     "name": "dotnet.symbolization.failures",
+    "const": "DotnetSymbolizationFailures",
     "field": "agent.dotnet.symbolization.failures",
     "id": 268
   },
@@ -1949,6 +2144,7 @@
     "description": "Number of cache hits for dotnet AddrToMethod",
     "type": "counter",
     "name": "dotnet.addr.to.method.hit",
+    "const": "DotnetAddrToMethodHit",
     "field": "agent.dotnet.addr_to_method.hits",
     "id": 269
   },
@@ -1956,6 +2152,7 @@
     "description": "Number of cache misses for dotnet AddrToMethod",
     "type": "counter",
     "name": "dotnet.addr.to.method.miss",
+    "const": "DotnetAddrToMethodMiss",
     "field": "agent.dotnet.addr_to_method.misses",
     "id": 270
   },
@@ -1963,6 +2160,7 @@
     "description": "Number of times the stack delta provider succeeded to extract stack deltas",
     "type": "counter",
     "name": "stack.delta.provider.success",
+    "const": "StackDeltaProviderSuccess",
     "field": "agent.stack_delta_extraction.success",
     "id": 271
   },
@@ -1970,6 +2168,7 @@
     "description": "Number of lost trace events in the communication between kernel and user space (trace_events)",
     "type": "counter",
     "name": "trace.event.lost",
+    "const": "TraceEventLost",
     "field": "agent.errors.trace_event_lost",
     "id": 272
   },
@@ -1977,6 +2176,7 @@
     "description": "Number of times a trace event was received without data (trace_events)",
     "type": "counter",
     "name": "trace.event.no.data",
+    "const": "TraceEventNoData",
     "field": "agent.errors.trace_event_no_data",
     "id": 273
   },
@@ -1984,13 +2184,15 @@
     "description": "Number of times a trace event read failed (trace_events)",
     "type": "counter",
     "name": "trace.event.read.error",
+    "const": "TraceEventReadError",
     "field": "agent.errors.trace_event_read_error",
     "id": 274
   },
   {
-    "description": "Number of parsing errors seen during processing /proc/<PID>/maps",
+    "description": "Number of parsing errors seen during processing /proc/\u003cPID\u003e/maps",
     "type": "counter",
     "name": "err.proc.parse",
+    "const": "ErrProcParse",
     "field": "agent.errors.proc_parse",
     "id": 275
   },
@@ -1998,6 +2200,7 @@
     "description": "Number of successfully symbolized Go frames",
     "type": "counter",
     "name": "go.symbolization.success",
+    "const": "GoSymbolizationSuccess",
     "field": "agent.go.symbolization.successes",
     "id": 276
   },
@@ -2005,6 +2208,7 @@
     "description": "Number of Go frames that failed symbolization",
     "type": "counter",
     "name": "go.symbolization.failure",
+    "const": "GoSymbolizationFailure",
     "field": "agent.go.symbolization.failures",
     "id": 277
   },
@@ -2012,6 +2216,7 @@
     "description": "Number of attempts to read Go custom labels",
     "type": "counter",
     "name": "unwind.go.labels.attempts",
+    "const": "UnwindGoLabelsAttempts",
     "field": "bpf.golabels.attempts",
     "id": 278
   },
@@ -2019,6 +2224,7 @@
     "description": "Number of failures reading Go custom labels",
     "type": "counter",
     "name": "unwind.go.labels.failures",
+    "const": "UnwindGoLabelsFailures",
     "field": "bpf.golabels.errors",
     "id": 279
   },
@@ -2026,6 +2232,7 @@
     "description": "Number of invalid instruction sequences sequence",
     "type": "counter",
     "name": "unwind.ruby.err.invalid.iseq",
+    "const": "UnwindRubyErrInvalidIseq",
     "field": "bpf.ruby.errors.invalid_iseq",
     "id": 280
   },
@@ -2033,6 +2240,7 @@
     "description": "Number of failures to read the Ruby method definition",
     "type": "counter",
     "name": "unwind.ruby.err.read.method.def",
+    "const": "UnwindRubyErrReadMethodDef",
     "field": "bpf.ruby.errors.read_method_def",
     "id": 281
   },
@@ -2040,6 +2248,7 @@
     "description": "Number of failures to read the Ruby method type",
     "type": "counter",
     "name": "unwind.ruby.err.read.method.type",
+    "const": "UnwindRubyErrReadMethodType",
     "field": "bpf.ruby.errors.read_method_type",
     "id": 282
   },
@@ -2047,6 +2256,7 @@
     "description": "Number of failures to read the Ruby svar while finding CME",
     "type": "counter",
     "name": "unwind.ruby.err.read.svar",
+    "const": "UnwindRubyErrReadSvar",
     "field": "bpf.ruby.errors.read_svar",
     "id": 283
   },
@@ -2054,6 +2264,7 @@
     "description": "Number of failures to read the Ruby rbasic flags",
     "type": "counter",
     "name": "unwind.ruby.err.read.rbasic.flags",
+    "const": "UnwindRubyErrReadRbasicFlags",
     "field": "bpf.ruby.errors.read_rbasic_flags",
     "id": 284
   },
@@ -2061,6 +2272,7 @@
     "description": "Number of failed attempts to read a CME by exceeding max EP checks",
     "type": "counter",
     "name": "unwind.ruby.err.cme.max.ep",
+    "const": "UnwindRubyErrCmeMaxEp",
     "field": "bpf.ruby.errors.read_cme_max_ep",
     "id": 285
   }
