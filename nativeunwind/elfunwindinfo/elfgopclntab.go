@@ -594,8 +594,8 @@ func (g *Gopclntab) findTextStart(ef *pfelf.File) (uintptr, error) {
 	// Since this function is expected to be called only for Go 1.26+ binaries,
 	// we can expect that the section exists and error out if it does not.
 	moduleDataSection := ef.Section(".go.module")
-	if moduleDataSection == nil {
-		return 0, errors.New("could not find .go.module section")
+	if moduleDataSection == nil || moduleDataSection.Type == elf.SHT_NOBITS {
+		return 0, errors.New("could not find .go.module section or it is empty")
 	}
 
 	const textStartOff = 22 * 8
