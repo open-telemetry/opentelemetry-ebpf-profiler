@@ -69,13 +69,13 @@ Examples of such abstractions:
 ### Debugging the debug format parsers
 
 The debug information emitted by modern compilers is not nearly as well-tested
-and maintained as the code that they are genearting. It's not at all uncommon to
+and maintained as the code that they are generating. It's not at all uncommon to
 have at least partially broken debug info. The formats are also often very
 complex and it's easy to accidentally do incorrect parsing in our code.
 
 To simplify debugging and investigating such problems, we tend to have an internal
 debugging sub-command for each symbol format abstraction in `symbtool`. For
-example, the `dwarf` abstration has a corresponding `dwarf` sub-command that in
+example, the `dwarf` abstraction has a corresponding `dwarf` sub-command that in
 turn has a `dump` sub-command that prints (and optionally filters) all info that
 the format abstraction exposes in a format fit for human consumption.
 
@@ -107,7 +107,7 @@ slow if we did them for every single frame that we want to symbolize.
 We then made the following observations:
 
 - in every stack trace, all[^all] frames except for the last one will always be a
-  return addresses thats follow a call
+  return addresses that's follow a call
 - only a small fraction of instructions in a typical executables are calls
 
 Based on these observations, we came up with the idea to:
@@ -145,7 +145,7 @@ sufficient to also get return pad extraction support for free**.
 
 `symblib` uses strong-typed error handling. Each major sub-module defines their
 own `Error` and `Result` types. These types are usually error `enums` that
-explicitly list most common problems that can occurr during usage and implement
+explicitly list most common problems that can occur during usage and implement
 the [`std::error::Error`] trait via the macros in the [`thiserror`] crate. The
 idea here is to allow library users to detect and specifically handle particular
 errors. Debug information in real-world executables is often partially broken,
