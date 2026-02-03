@@ -584,7 +584,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 				// As BPF FS is not set, the map can not be shared with other
 				// OTel components. To reduce the memory footprint in this case
 				// reduce the size of the map.
-				mapSpec.MapExtra = 1
+				mapSpec.MaxEntries = 1
 			} else {
 				// Try to load it from a known path:
 				mPath := path.Join(cfg.BPFFSRoot, "otel", mapName)
