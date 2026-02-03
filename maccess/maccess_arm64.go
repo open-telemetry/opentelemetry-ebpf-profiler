@@ -8,7 +8,7 @@ package maccess // import "go.opentelemetry.io/ebpf-profiler/maccess"
 import (
 	"errors"
 
-	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
 
@@ -72,7 +72,7 @@ func CopyFromUserNoFaultIsPatched(codeblob []byte, _, _ uint64) (bool, error) {
 			}
 
 			if r, ok := inst.Args[0].(aa.Reg); ok {
-				if regN, ok := ah.Xreg2num(r); ok &&
+				if regN, ok := arm.Xreg2num(r); ok &&
 					expectedInstructionTracker == stepNone {
 					trackedReg = regN
 					expectedInstructionTracker ^= stepMov
@@ -84,14 +84,14 @@ func CopyFromUserNoFaultIsPatched(codeblob []byte, _, _ uint64) (bool, error) {
 			trackedReg = -1
 			expectedInstructionTracker = stepNone
 		case aa.CMP:
-			if regN, ok := ah.Xreg2num(inst.Args[0]); ok &&
+			if regN, ok := arm.Xreg2num(inst.Args[0]); ok &&
 				expectedInstructionTracker&stepMov == stepMov {
 				if trackedReg == regN {
 					expectedInstructionTracker ^= stepCmp
 					continue
 				}
 			}
-			if regN, ok := ah.Xreg2num(inst.Args[1]); ok {
+			if regN, ok := arm.Xreg2num(inst.Args[1]); ok {
 				if trackedReg == regN {
 					expectedInstructionTracker ^= stepCmp
 					continue
@@ -122,7 +122,7 @@ func CopyFromUserNoFaultIsPatched(codeblob []byte, _, _ uint64) (bool, error) {
 		case aa.SUB:
 			// If the minuend of the subtraction is trackedReg, copy_from_user_nofault seems
 			// to be patched.
-			if regN, ok := ah.Xreg2num(inst.Args[1]); ok {
+			if regN, ok := arm.Xreg2num(inst.Args[1]); ok {
 				if trackedReg == regN && expectedInstructionTracker == (stepMov|stepCmp|stepB) {
 					return true, nil
 				}
