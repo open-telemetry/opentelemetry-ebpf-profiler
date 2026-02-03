@@ -10,6 +10,7 @@ package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/
 import (
 	"bytes"
 	"debug/elf"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"go/version"
@@ -610,7 +611,7 @@ func findTextStart(ef *pfelf.File) (uintptr, error) {
 		return 0, fmt.Errorf("could not read .go.module section at offset %v: %w", textOffset, err)
 	}
 
-	return *(*uintptr)(unsafe.Pointer(&textBytes[0])), nil
+	return uintptr(binary.LittleEndian.Uint64(textBytes[:])), nil
 }
 
 type strategy int
