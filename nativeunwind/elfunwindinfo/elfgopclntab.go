@@ -52,7 +52,8 @@ const (
 	go1_18    = 18
 	go1_20    = 20
 
-	// 22 * 8 bytes is the offset of the text field in moduledata struct for Go 1.16+
+	// Offset of the text field in moduledata struct for Go 1.16+
+	// https://github.com/golang/go/blob/release-branch.go1.16/src/runtime/symtab.go#L370
 	textOffset = 22 * 8
 	// section name for the module data for Go 1.26+
 	moduleDataSectionName = ".go.module"
@@ -479,7 +480,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 			// Therefore we need to get it from either `runtime.text` symbol or moduledata.
 			// Note that it does not always match the address of `.text` section
 			// (for example with cgo binaries or when built with -linkmode=external).
-			g.textStart, err = g.findTextStart(ef)
+			g.textStart, err = findTextStart(ef)
 			if err != nil {
 				return nil, fmt.Errorf("failed to find text start: %w", err)
 			}
@@ -593,7 +594,7 @@ func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcNam
 	return sourceFile, line, funcName
 }
 
-func (g *Gopclntab) findTextStart(ef *pfelf.File) (uintptr, error) {
+func findTextStart(ef *pfelf.File) (uintptr, error) {
 	// Get textstart from moduledata
 	// Starting from Go 1.26, moduledata has its own `.go.module` section.
 	// Since this function is expected to be called only for Go 1.26+ binaries,
