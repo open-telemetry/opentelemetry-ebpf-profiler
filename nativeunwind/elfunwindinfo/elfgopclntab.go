@@ -51,6 +51,11 @@ const (
 	go1_16    = 16
 	go1_18    = 18
 	go1_20    = 20
+
+	// 22 * 8 bytes is the offset of the text field in moduledata struct for Go 1.16+
+	textOffset = 22 * 8
+	// section name for the module data for Go 1.26+
+	moduleDataSectionName = ".go.module"
 )
 
 func goMagicToVersion(magic uint32) uint8 {
@@ -593,19 +598,18 @@ func (g *Gopclntab) findTextStart(ef *pfelf.File) (uintptr, error) {
 	// Starting from Go 1.26, moduledata has its own `.go.module` section.
 	// Since this function is expected to be called only for Go 1.26+ binaries,
 	// we can expect that the section exists and error out if it does not.
-	moduleDataSection := ef.Section(".go.module")
+	moduleDataSection := ef.Section(moduleDataSectionName)
 	if moduleDataSection == nil || moduleDataSection.Type == elf.SHT_NOBITS {
 		return 0, errors.New("could not find .go.module section or it is empty")
 	}
 
-	const textStartOff = 22 * 8
-	var textStartBytes [8]byte
-	_, err := moduleDataSection.ReadAt(textStartBytes[:], textStartOff)
+	var textBytes [8]byte
+	_, err := moduleDataSection.ReadAt(textBytes[:], textOffset)
 	if err != nil {
-		return 0, fmt.Errorf("could not read .go.module section at offset %v: %w", textStartOff, err)
+		return 0, fmt.Errorf("could not read .go.module section at offset %v: %w", textOffset, err)
 	}
 
-	return *(*uintptr)(unsafe.Pointer(&textStartBytes[0])), nil
+	return *(*uintptr)(unsafe.Pointer(&textBytes[0])), nil
 }
 
 type strategy int

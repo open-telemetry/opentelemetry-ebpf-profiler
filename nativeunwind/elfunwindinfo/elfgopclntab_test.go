@@ -5,8 +5,6 @@ package elfunwindinfo
 
 import (
 	"debug/elf"
-	"os/exec"
-	"path/filepath"
 	"testing"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -123,11 +121,7 @@ func TestTextStart(t *testing.T) {
 	require.Equal(t, runtimeTextAddr, g.textStart)
 
 	// stripped binary should have the same text start
-	tmpDir := t.TempDir()
-	tmpFile := filepath.Join(tmpDir, "helloworld.stripped")
-	err = exec.Command("objcopy", "-S", "testdata/helloworld.linkexternal", tmpFile).Run()
-	require.NoError(t, err)
-	efStripped, err := pfelf.Open(tmpFile)
+	efStripped, err := pfelf.Open("testdata/helloworld.linkexternal.stripped")
 	require.NoError(t, err)
 	defer efStripped.Close()
 	gStripped, err := NewGopclntab(efStripped)
