@@ -624,10 +624,17 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			// OTel components can also use it.
 			otelBPFFS := path.Join(cfg.BPFFSRoot, "otel")
 			if err := os.MkdirAll(otelBPFFS, 0o1700); err != nil {
-				return fmt.Errorf("failed creating '%s': %v", otelBPFFS, err)
+				// This is a non-fatal error for the functionality
+				// of the profiler. So just log it.
+				log.Warnf("Failed to create '%s'. OTel span/trace IDs can not be shared: %v",
+					otelBPFFS, err)
+				continue
 			}
 			if err := ebpfMap.Pin(path.Join(otelBPFFS, mapName)); err != nil {
-				return fmt.Errorf("failed to pin map '%s': %v", mapName, err)
+				// This is a non-fatal error for the functionality
+				// of the profiler. So just log it.
+				log.Warnf("Failed to pin '%s'. OTel span/trace IDs can not be shared: %v",
+					mapName, err)
 			}
 		}
 	}
