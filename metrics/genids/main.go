@@ -14,7 +14,6 @@ type metricDef struct {
 	Description string `json:"description"`
 	MetricType  string `json:"type"`
 	Name        string `json:"name"`
-	Const       string `json:"const"`
 	FieldName   string `json:"field"`
 	ID          uint32 `json:"id"`
 	Obsolete    bool   `json:"obsolete"`
@@ -57,7 +56,7 @@ func main() {
 
 		output.WriteString(
 			fmt.Sprintf("\n\t// %s\n\tID%s = %d\n",
-				m.Description, m.Const, m.ID))
+				m.Description, m.Name, m.ID))
 	}
 
 	output.WriteString(

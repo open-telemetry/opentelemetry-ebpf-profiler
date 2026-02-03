@@ -30,7 +30,6 @@ type MetricDefinition struct {
 	Field       string     `json:"field"`
 	Unit        string     `json:"unit"`
 	Obsolete    bool       `json:"obsolete"`
-	Const       string     `json:"const"`
 }
 
 type MetricType string
