@@ -118,14 +118,14 @@ struct trace_events_t {
 
 // End shared maps
 
-// NOTE: PoC implementation for
+// Implements the OTel specification to share span/trace IDs according to:
 // https://github.com/open-telemetry/opentelemetry-specification/pull/4855
-struct otel_traces_ctx_v1_t {
+struct traces_ctx_v1_t {
   __uint(type, BPF_MAP_TYPE_LRU_HASH);
   __type(key, u64);
   __type(value, SpanTraceInfo);
-  __uint(max_entries, 4096);
-} otel_traces_ctx_v1 SEC(".maps");
+  __uint(max_entries, 1 << 14);
+} traces_ctx_v1 SEC(".maps");
 
 struct apm_int_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
@@ -197,13 +197,13 @@ static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURe
   tail_call(ctx, PROG_GO_LABELS);
 }
 
-// NOTE: PoC implementation for
+// Implements the OTel specification to share span/trace IDs according to:
 // https://github.com/open-telemetry/opentelemetry-specification/pull/4855
 static EBPF_INLINE void maybe_add_otel_span_trace_id(Trace *trace)
 {
   u64 id = bpf_get_current_pid_tgid();
 
-  SpanTraceInfo *info = bpf_map_lookup_elem(&otel_traces_ctx_v1, &id);
+  SpanTraceInfo *info = bpf_map_lookup_elem(&traces_ctx_v1, &id);
   if (!info) {
     return;
   }

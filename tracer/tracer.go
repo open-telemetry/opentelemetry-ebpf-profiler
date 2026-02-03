@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -578,16 +579,16 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			continue
 		}
 
-		if mapName == "otel_traces_ctx_v1" && cfg.BPFFSRoot != "" {
+		if mapName == "traces_ctx_v1" && cfg.BPFFSRoot != "" {
 			// Try to load it from a known path:
-			mPath := path.Join(cfg.BPFFSRoot, mapName)
-			ebpfMap, err := cebpf.LoadPinnedMap(mPath, &cebpf.LoadPinOptions{ReadOnly: true, WriteOnly: false})
+			mPath := path.Join(cfg.BPFFSRoot, "otel", mapName)
+			ebpfMap, err := cebpf.LoadPinnedMap(mPath, &cebpf.LoadPinOptions{ReadOnly: true})
 			if err == nil {
 				log.Infof("Using shared map for OpenTelemetry span/trace ID communciation")
 				ebpfMaps[mapName] = ebpfMap
 				continue
 			}
-			// The shared map does not yet exist - so continue as usual
+			// The shared map does not yet exist or BPF FS is not set - so continue as usual
 		}
 
 		if !types.IsMapEnabled(mapName, cfg.IncludeTracers) {
@@ -604,8 +605,21 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 		}
 		ebpfMaps[mapName] = ebpfMap
 
-		if mapName == "otel_traces_ctx_v1" && cfg.BPFFSRoot != "" {
-			if err := ebpfMap.Pin(path.Join(cfg.BPFFSRoot, mapName)); err != nil {
+		if mapName == "traces_ctx_v1" {
+			if cfg.BPFFSRoot == "" {
+				// In environments, where BPF FS is not available,
+				// we just load the map to not break eBPF programs.
+				log.Infof("Skip pinning eBPF map to share OTel span/trace IDs")
+				continue
+			}
+
+			// Pin the loaded map to a known path, so that other
+			// OTel components can also use it.
+			otelBPFFS := path.Join(cfg.BPFFSRoot, "otel")
+			if err := os.MkdirAll(otelBPFFS, 0o1700); err != nil {
+				return fmt.Errorf("failed creating '%s': %v", otelBPFFS, err)
+			}
+			if err := ebpfMap.Pin(path.Join(otelBPFFS, mapName)); err != nil {
 				return fmt.Errorf("failed to pin map '%s': %v", mapName, err)
 			}
 		}
