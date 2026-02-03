@@ -48,10 +48,9 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	}
 	abiVersionSym, err := ef.LookupSymbol(abiVersionExport)
 	if err != nil {
-		if errors.Is(err, libpf.ErrSymbolNotFound) {
+		if errors.Is(err, libpf.ErrSymbolNotFound) || errors.Is(err, libpf.ErrNoSymbolHash) {
 			return nil, nil
 		}
-
 		return nil, err
 	}
 

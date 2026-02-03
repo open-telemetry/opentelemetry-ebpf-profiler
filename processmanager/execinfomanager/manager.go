@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
+	"runtime"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -381,13 +383,14 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 	for _, loader := range state.interpreterLoaders {
 		data, err := loader(state.ebpf, loaderInfo)
 		if err != nil {
+			loaderName := runtime.FuncForPC(reflect.ValueOf(loader).Pointer()).Name()
 			if errors.Is(err, os.ErrNotExist) {
 				// Very common if the process exited when we tried to analyze it.
-				log.Debugf("Failed to load %v (%#016x): file not found",
-					loaderInfo.FileName(), loaderInfo.FileID())
+				log.Debugf("Failed to load %v (%#016x) [%s]: file not found",
+					loaderInfo.FileName(), loaderInfo.FileID(), loaderName)
 			} else {
-				log.Errorf("Failed to load %v (%#016x): %v",
-					loaderInfo.FileName(), loaderInfo.FileID(), err)
+				log.Errorf("Failed to load %v (%#016x) [%s]: %v",
+					loaderInfo.FileName(), loaderInfo.FileID(), loaderName, err)
 			}
 			// Continue checking other loaders even if one fails
 			continue
