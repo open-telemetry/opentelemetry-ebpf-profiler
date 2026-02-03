@@ -1,14 +1,12 @@
 package tracer
 
 import (
-	"context"
 	"debug/buildinfo"
 	"errors"
 	"fmt"
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
@@ -203,7 +201,7 @@ func (t *Tracer) updateMemProfileHooks(pid libpf.PID, links []*link.Link) {
 	t.memProfileHooks.WUnlock(&memProfileHooks)
 }
 
-func (t *Tracer) TriggerMemProfile(p process.Process) error {
+func (t *Tracer) triggerMemProfile(p process.Process) error {
 	pid := p.PID()
 	if t.hasMemProfileHooks(pid) {
 		return nil
@@ -219,7 +217,7 @@ func (t *Tracer) TriggerMemProfile(p process.Process) error {
 	case libpf.HotSpot:
 		cfg := &hotspotmem.OTLPProfilerConfig{
 			PID:           int(pid),
-			AllocInterval: t.memProfileBlock, //bytes
+			AllocInterval: t.memProfileBlock.Load(), //bytes
 		}
 		err := t.startHotspotMemProfiling(memProfileInfo, cfg)
 		if err != nil {
@@ -274,41 +272,34 @@ func (t *Tracer) TriggerMemProfile(p process.Process) error {
 	return nil
 }
 
-func (t *Tracer) StartMemProfile(ctx context.Context, memProfileBlock uint64) {
-	if err := t.SyncMemProfileBlock(memProfileBlock); err != nil {
+func (t *Tracer) monitorMemProfilePids(keys *[]uint32) {
+	if t.memProfileBlock.Load() == 0 {
 		return
 	}
-	ticker := time.NewTicker(time.Second)
-	go func(t *Tracer) {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-			var memProfileTargetPids []libpf.PID
-			t.memProfileTargetPids.Range(func(k, v interface{}) bool {
-				pid := k.(libpf.PID)
-				if pid == 0 {
+	var memProfileTargetPids []libpf.PID
+	t.memProfileTargetPids.Range(func(k, v interface{}) bool {
+		pid := k.(libpf.PID)
+		if pid == 0 {
+			return true
+		}
+		if add, ok := v.(bool); ok {
+			if !add {
+				t.detachMemProfile(pid)
+				t.memProfileTargetPids.Delete(k)
+			} else {
+				memProfileTargetPids = append(memProfileTargetPids, pid)
+				if t.hasMemProfileHooks(pid) {
 					return true
 				}
-				memProfileTargetPids = append(memProfileTargetPids, pid)
-				if add, ok := v.(bool); ok {
-					if !add {
-						t.detachMemProfile(pid)
-						t.memProfileTargetPids.Delete(k)
-					} else {
-						t.pidEvents <- pid
-						if err := t.TriggerMemProfile(process.New(pid)); err != nil {
-							log.Debugf("failed to trigger memprofile for process %v: %v", k, err)
-						}
-					}
+				*keys = append(*keys, pid.Hash32())
+				if err := t.triggerMemProfile(process.New(pid)); err != nil {
+					log.Debugf("failed to trigger memprofile for process %v: %v", k, err)
 				}
-				return true
-			})
-			log.Debugf("apply mem profiling target pids: %v", memProfileTargetPids)
+			}
 		}
-	}(t)
+		return true
+	})
+	log.Debugf("apply mem profiling target pids: %v", memProfileTargetPids)
 }
 
 func (t *Tracer) SyncMemProfileTargetPids(targetPids map[libpf.PID]bool) {
@@ -319,7 +310,7 @@ func (t *Tracer) SyncMemProfileTargetPids(targetPids map[libpf.PID]bool) {
 }
 
 func (t *Tracer) SyncMemProfileBlock(block uint64) error {
-	t.memProfileBlock = block
+	t.memProfileBlock.Store(block)
 	// 复用SystemConfig传递内存采样上报的阈值
 	syscfg := C.SystemConfig{
 		mem_profile_threshold: C.u64(block),

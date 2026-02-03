@@ -120,7 +120,7 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	if c.config.MemProfileBlock > 0 {
 		trc.SyncMemProfileTargetPids(c.config.MemTargetPIDs)
-		trc.StartMemProfile(ctx, c.config.MemProfileBlock)
+		_ = trc.SyncMemProfileBlock(c.config.MemProfileBlock)
 	}
 
 	if c.config.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {

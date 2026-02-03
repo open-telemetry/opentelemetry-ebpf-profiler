@@ -131,7 +131,7 @@ type Tracer struct {
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
 	memProfileHooks        xsync.RWMutex[map[libpf.PID][]*link.Link]
-	memProfileBlock        uint64
+	memProfileBlock        atomic.Uint64
 	memProfileTargetPids   sync.Map
 }
 
@@ -1131,6 +1131,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *host
 		t.triggerPIDProcessing, func(_ bool) {
 			t.enableEvent(support.EventTypeGenericPID)
 			t.monitorPIDEventsMap(&pidEvents)
+			t.monitorMemProfilePids(&pidEvents)
 
 			for _, ev := range pidEvents {
 				log.Tracef("=> PID: %v", ev)
@@ -1300,7 +1301,7 @@ func (t *Tracer) AttachTracer() error {
 func (t *Tracer) EnableProfiling() error {
 	events := t.perfEntrypoints.WLock()
 	defer t.perfEntrypoints.WUnlock(&events)
-	if len(*events) == 0 && t.memProfileBlock == 0 {
+	if len(*events) == 0 && t.memProfileBlock.Load() == 0 {
 		return errors.New("no perf events available to enable for profiling")
 	}
 	for id, event := range *events {
