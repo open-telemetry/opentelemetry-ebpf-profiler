@@ -296,7 +296,7 @@ func extractDTVInfoARM(code []byte) (DTVInfo, error) {
 			break
 		}
 
-		destReg, ok := ah.Xreg2num(inst.Args[0])
+		destReg, ok := arm.Xreg2num(inst.Args[0])
 		if !ok {
 			continue
 		}
@@ -305,7 +305,7 @@ func extractDTVInfoARM(code []byte) (DTVInfo, error) {
 		switch inst.Op {
 		case aa.MOV:
 			// Track register moves
-			srcReg, ok := ah.Xreg2num(inst.Args[1])
+			srcReg, ok := arm.Xreg2num(inst.Args[1])
 			if !ok {
 				continue
 			}
@@ -326,12 +326,12 @@ func extractDTVInfoARM(code []byte) (DTVInfo, error) {
 			if !ok {
 				continue
 			}
-			srcReg, ok := ah.Xreg2num(m.Base)
+			srcReg, ok := arm.Xreg2num(m.Base)
 			if !ok {
 				continue
 			}
 			if regs[srcReg].status == TSDBase {
-				imm, ok := ah.DecodeImmediate(m)
+				imm, ok := arm.DecodeImmediate(m)
 				if !ok {
 					continue
 				}
@@ -353,13 +353,13 @@ func extractDTVInfoARM(code []byte) (DTVInfo, error) {
 			switch m := inst.Args[1].(type) {
 			case aa.MemImmediate:
 				// ldr x1, [x1, #0] or ldr x1, [x1]
-				srcReg, ok := ah.Xreg2num(m.Base)
+				srcReg, ok := arm.Xreg2num(m.Base)
 				if !ok {
 					continue
 				}
 				if regs[srcReg].status == TSDBase {
 					// Loading DTV pointer from thread pointer
-					imm, ok := ah.DecodeImmediate(m)
+					imm, ok := arm.DecodeImmediate(m)
 					if !ok {
 						imm = 0
 					}
@@ -375,7 +375,7 @@ func extractDTVInfoARM(code []byte) (DTVInfo, error) {
 
 			case aa.MemExtend:
 				// ldr x1, [x1, x2, lsl #3]
-				srcReg, ok := ah.Xreg2num(m.Base)
+				srcReg, ok := arm.Xreg2num(m.Base)
 				if !ok {
 					continue
 				}
