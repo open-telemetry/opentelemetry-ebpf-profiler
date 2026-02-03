@@ -44,6 +44,18 @@ func (l *LibcInfo) Merge(other LibcInfo) {
 	}
 }
 
+// HasTSDInfo returns true if the LibcInfo contains valid TSD information.
+// TSDInfo is considered valid when the Multiplier field is non-zero.
+func (l LibcInfo) HasTSDInfo() bool {
+	return l.TSDInfo.Multiplier != 0
+}
+
+// HasDTVInfo returns true if the LibcInfo contains valid DTV information.
+// DTVInfo is considered valid when the Multiplier field is non-zero.
+func (l LibcInfo) HasDTVInfo() bool {
+	return l.DTVInfo.Multiplier != 0
+}
+
 var (
 	// regex for the libc
 	libcRegex = regexp.MustCompile(`.*/(ld-musl|ld-linux|libc|libpthread)([-.].*)?\.so`)

@@ -377,6 +377,22 @@ func (p *pythonInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	libcInfo libc.LibcInfo) error {
 	d := p.d
+
+	// Python 3.13+ can use direct TLS access (staticTLSOffset) which doesn't require TSDInfo.
+	// Earlier versions need TSDInfo to access thread state via pthread_getspecific.
+	// Since UpdateLibcInfo may be called multiple times as LibcInfo is collected from
+	// multiple DSOs, we should only insert proc data when we have what we need.
+	needsTSDInfo := d.version < pythonVer(3, 13) || d.staticTLSOffset == 0
+	if needsTSDInfo && !libcInfo.HasTSDInfo() {
+		// We need TSDInfo but don't have it yet, wait for another call
+		return nil
+	}
+
+	// If we've already inserted proc info, don't do it again
+	if p.procInfoInserted {
+		return nil
+	}
+
 	vm := &d.vmStructs
 
 	cdata := support.PyProcInfo{
