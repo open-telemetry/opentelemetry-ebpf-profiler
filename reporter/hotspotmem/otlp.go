@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"time"
 
 	profilesv1 "go.opentelemetry.io/proto/otlp/profiles/v1development"
@@ -227,7 +228,9 @@ func ConvertOtlpData(data OTLPProfileData, pid uint32) map[uint32]pprofile.Profi
 	sb := dictionary.GetStringTable()
 	sb[typeStrIndex] = "heap"
 	sb[unitStrIndex] = "bytes"
-	profile.StringTable().Append(dictionary.StringTable...)
+	for _, st := range dictionary.GetStringTable() {
+		profile.StringTable().Append(strings.ReplaceAll(st, "/", "."))
+	}
 	profile.SetTime(pcommon.Timestamp(t[0]))
 	profile.PeriodType().SetTypeStrindex(typeStrIndex)
 	profile.PeriodType().SetUnitStrindex(unitStrIndex)

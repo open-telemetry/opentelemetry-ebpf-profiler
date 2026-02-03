@@ -192,7 +192,10 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 				return
 			}
 		}
-		events.Timestamps[0] = uint64(meta.Timestamp)
+		newTimestamp := uint64(meta.Timestamp)
+		if events.Timestamps[0] < newTimestamp {
+			events.Timestamps[0] = newTimestamp
+		}
 		events.MemAlloc[0] += allocSpaces
 		events.MemAlloc[1] += allocs
 		events.MemAlloc[2] += inuseSpaces

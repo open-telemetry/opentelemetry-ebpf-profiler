@@ -154,7 +154,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	if t.samplesPerSecond > 0 {
 		sampleCount += t.samplesPerSecond
 	}
-	if t.memProfileBlock > 0 {
+	if t.memProfileBlock.Load() > 0 {
 		// 开启内存profile的时候，默认多缓存128个样本的trace
 		sampleCount += defaultMemProfileSampleCount
 	}
