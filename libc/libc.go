@@ -21,7 +21,8 @@ type DTVInfo = support.DTVInfo
 type LibcInfo struct {
 	// TSDInfo is the TSDInfo extracted for this C-library
 	TSDInfo TSDInfo
-	// TODO comment
+	// DTVInfo contains DTV (Dynamic Thread Vector) introspection data for accessing
+	// TLS variables when TLS descriptors are not available
 	DTVInfo DTVInfo
 }
 
