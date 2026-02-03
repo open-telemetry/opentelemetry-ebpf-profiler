@@ -40,7 +40,7 @@ func (l *LibcInfo) Merge(other LibcInfo) {
 	}
 
 	// If other has DTVInfo and this instance does not, take it
-	if other.DTVInfo != (DTVInfo{}) && l.DTVInfo == (DTVInfo{}) {
+	if l.DTVInfo == (DTVInfo{}) {
 		l.DTVInfo = other.DTVInfo
 	}
 }
