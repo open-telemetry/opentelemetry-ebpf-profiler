@@ -107,7 +107,7 @@ slow if we did them for every single frame that we want to symbolize.
 We then made the following observations:
 
 - in every stack trace, all[^all] frames except for the last one will always be a
-  return addresses that follow a call
+  return address that follows a call
 - only a small fraction of instructions in a typical executables are calls
 
 Based on these observations, we came up with the idea to:
