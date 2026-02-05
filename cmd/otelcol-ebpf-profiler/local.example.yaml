@@ -42,5 +42,4 @@ service:
   pipelines:
     profiles:
       receivers: [profiling]
-      processors: []
       exporters: [otlp/local]
