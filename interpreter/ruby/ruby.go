@@ -1387,6 +1387,13 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.rclass_and_rb_classext_t.classext = 32
 		vms.rb_classext_struct.as_singleton_class_attached_object = 96
 		vms.rb_classext_struct.classpath = 120
+	case version >= rubyVersion(4, 0, 0) && version < rubyVersion(4, 1, 0):
+		rid.hasClassPath = true
+		rid.rubyFlSingleton = libpf.Address(RUBY_FL_USER1)
+
+		vms.rclass_and_rb_classext_t.classext = 24
+		vms.rb_classext_struct.as_singleton_class_attached_object = 112
+		vms.rb_classext_struct.classpath = 128
 	default:
 		rid.hasClassPath = true
 		rid.rubyFlSingleton = libpf.Address(RUBY_FL_USER1)
@@ -1407,6 +1414,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		rid.lastOpId = 169
 	case version < rubyVersion(3, 5, 0):
 		rid.lastOpId = 170
+	case version < rubyVersion(4, 1, 0):
+		rid.lastOpId = 171
 	default:
 		rid.lastOpId = 170
 	}
@@ -1452,6 +1461,14 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			vms.vm_struct.gc_objspace = 1320
 		}
 		vms.objspace.flags = 16
+	case version >= rubyVersion(4, 0, 0) && version < rubyVersion(4, 1, 0):
+		rid.hasObjspace = true
+		if runtime.GOARCH == "amd64" {
+			vms.vm_struct.gc_objspace = 1248
+		} else {
+			vms.vm_struct.gc_objspace = 1272
+		}
+		vms.objspace.flags = 28
 	default:
 		rid.hasObjspace = true
 		vms.objspace.flags = 20
@@ -1515,14 +1532,18 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.iseq_constant_body.succ_index_table = 136
 		vms.iseq_constant_body.local_iseq = 168
 		vms.iseq_constant_body.size_of_iseq_constant_body = 352
-	case version >= rubyVersion(4, 0, 0):
-		// Ruby 4.0+ has different struct layout due to ZJIT replacing YJIT
-		// and other internal changes. Offsets determined via GDB analysis.
+	case version >= rubyVersion(4, 0, 0) && version < rubyVersion(4, 1, 0):
+		// Ruby 4.0+ has different struct layout due to JIT refactoring
+		// and other internal changes.
 		vms.iseq_constant_body.insn_info_body = 112
 		vms.iseq_constant_body.insn_info_size = 128
 		vms.iseq_constant_body.succ_index_table = 136
 		vms.iseq_constant_body.local_iseq = 176
-		vms.iseq_constant_body.size_of_iseq_constant_body = 304
+		if runtime.GOARCH == "amd64" {
+			vms.iseq_constant_body.size_of_iseq_constant_body = 304
+		} else {
+			vms.iseq_constant_body.size_of_iseq_constant_body = 360
+		}
 	default: // 3.3.x and 3.5.x have the same values
 		vms.iseq_constant_body.insn_info_body = 112
 		vms.iseq_constant_body.insn_info_size = 128
