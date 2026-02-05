@@ -81,7 +81,7 @@ ebpf-profiler: ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 ebpf-profiler-collector: ebpf generate-collector
-	pushd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../ebpf-profiler ./... && popd
+	pushd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../$@ ./... && popd
 
 rust-targets:
 	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
