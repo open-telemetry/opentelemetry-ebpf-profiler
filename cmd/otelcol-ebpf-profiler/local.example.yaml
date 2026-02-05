@@ -2,6 +2,16 @@
 # exporting the corresponding profiles to the http://127.0.0.1:11000 OTLP
 # endpoint. Note that the service.profilesSupport feature gate must be enabled
 # (e.g. using --feature-gates=+service.profilesSupport CLI argument)
+#
+# The profiling receiver requires elevated privileges because it relies on
+# low-level OS instrumentation (e.g. eBPF, or ptrace). On Linux, this means
+# running the Collector as root (sudo) or granting specific capabilities such
+# as CAP_SYS_ADMIN, CAP_PERFMON, and/or CAP_BPF, as well as access to /proc.
+#
+# When running in containers or Kubernetes:
+#   - hostPID: true
+#   - privileged: true or explicitly adding the required Linux capabilities
+#   - mounting kernel-related filesystems (e.g. /sys, /proc) as needed
 receivers:
   profiling:
 
