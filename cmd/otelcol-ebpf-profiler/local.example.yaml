@@ -15,8 +15,6 @@
 receivers:
   profiling:
 
-processors:
-
 exporters:
   otlp/local:
     # equivalent to -collection-agent deprecated cli flag
