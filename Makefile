@@ -62,6 +62,7 @@ clean:
 	@$(MAKE) -s -C support/ebpf clean
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache support/*.test interpreter/golabels/integrationtests/pprof_1_*
+	@rm cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum}
 	@cargo clean
 
 generate:
@@ -80,7 +81,7 @@ generate-collector:
 ebpf-profiler: ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
-ebpf-profiler-collector: ebpf generate-collector
+otelcol-ebpf-profiler: ebpf generate-collector
 	pushd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../$@ ./... && popd
 
 rust-targets:
