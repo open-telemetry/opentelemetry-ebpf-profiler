@@ -3,33 +3,6 @@
 
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
-import (
-	"encoding/json"
-	"time"
-)
-
-// UnixTime32 is another type to represent seconds since epoch.
-// In most cases 32bit time values are good enough until year 2106.
-// Our time series database backend uses this type for TimeStamps as well,
-// so there is no need to use a different type than uint32.
-// Also, Go's semantics on map[time.Time] are particularly nasty footguns,
-// and since the code is mostly dealing with UNIX timestamps, we may
-// as well use uint32s instead.
-// To restore some semblance of type safety, we declare a type alias here.
-type UnixTime32 uint32
-
-func (t UnixTime32) MarshalJSON() ([]byte, error) {
-	return time.Unix(int64(t), 0).UTC().MarshalJSON()
-}
-
-// Compile-time interface checks
-var _ json.Marshaler = (*UnixTime32)(nil)
-
-// NowAsUInt32 is a convenience function to avoid code repetition
-func NowAsUInt32() uint32 {
-	return uint32(time.Now().Unix())
-}
-
 // UnixTime64 represents nanoseconds since epoch.
 type UnixTime64 uint64
 
