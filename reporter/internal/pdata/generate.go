@@ -101,15 +101,23 @@ func (p *Pdata) setProfile(
 	attrMgr := samples.NewAttrTableManager(profile.AttributeTable())
 	var locationIndex int32
 	var startTS, endTS pcommon.Timestamp
+	now := time.Now()
 	for traceKey, traceInfo := range events {
 		sample := profile.Sample().AppendEmpty()
 		sample.SetLocationsStartIndex(locationIndex)
+		timestamps := traceInfo.Timestamps
+		switch origin {
+		case support.TraceOriginHeap:
+			// 内存profile生成时，所有调用用链的时间戳统一使用当前时间
+			timestamps = []uint64{uint64(now.UnixNano())}
+		default:
+		}
 
-		slices.Sort(traceInfo.Timestamps)
-		startTS = pcommon.Timestamp(traceInfo.Timestamps[0])
-		endTS = pcommon.Timestamp(traceInfo.Timestamps[len(traceInfo.Timestamps)-1])
+		slices.Sort(timestamps)
+		startTS = pcommon.Timestamp(timestamps[0])
+		endTS = pcommon.Timestamp(timestamps[len(timestamps)-1])
 
-		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
+		sample.TimestampsUnixNano().FromRaw(timestamps)
 
 		switch origin {
 		case support.TraceOriginSampling:

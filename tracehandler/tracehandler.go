@@ -119,8 +119,8 @@ func newTraceHandler(rep reporter.TraceReporter, traceProcessor TraceProcessor,
 }
 
 func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
-	// FIXME: 可能帧异常情况，原因未知，先过滤掉
-	if bpfTrace.Origin == support.TraceOriginHeap && len(bpfTrace.Frames) == 0 && bpfTrace.OffTime != 0 {
+	// FIXME: 可能帧异常情况，原因未知，先过滤掉，调用链<3的情况暂时归于异常，不上报
+	if bpfTrace.Origin == support.TraceOriginHeap && len(bpfTrace.Frames) < 3 && bpfTrace.OffTime != 0 {
 		return
 	}
 	meta := &samples.TraceEventMeta{
