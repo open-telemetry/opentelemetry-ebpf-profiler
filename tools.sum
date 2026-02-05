@@ -464,6 +464,8 @@ github.com/knadh/koanf/providers/fs v1.0.0 h1:tvn4MrduLgdOSUqqEHULUuIcELXf6xDOpH
 github.com/knadh/koanf/providers/fs v1.0.0/go.mod h1:FksHET+xXFNDozvj8ZCdom54OnZ6eGKJtC5FhZJKx/8=
 github.com/knadh/koanf/v2 v2.3.0 h1:Qg076dDRFHvqnKG97ZEsi9TAg2/nFTa9hCdcSa1lvlM=
 github.com/knadh/koanf/v2 v2.3.0/go.mod h1:gRb40VRAbd4iJMYYD5IxZ6hfuopFcXBpc9bbQpZwo28=
+github.com/knadh/koanf/v2 v2.3.2 h1:Ee6tuzQYFwcZXQpc2MiVeC6qHMandf5SMUJJNoFp/c4=
+github.com/knadh/koanf/v2 v2.3.2/go.mod h1:gRb40VRAbd4iJMYYD5IxZ6hfuopFcXBpc9bbQpZwo28=
 github.com/konsorten/go-windows-terminal-sequences v1.0.1/go.mod h1:T0+1ngSBFLxvqU3pZ+m/2kptfBszLMUkC4ZK/EgS/cQ=
 github.com/konsorten/go-windows-terminal-sequences v1.0.3/go.mod h1:T0+1ngSBFLxvqU3pZ+m/2kptfBszLMUkC4ZK/EgS/cQ=
 github.com/kr/logfmt v0.0.0-20140226030751-b84e30acd515/go.mod h1:+0opPa2QZZtGFBFZlji/RkVcI2GknAs/DXo4wKdlNEc=
@@ -761,6 +763,8 @@ go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
 go.opentelemetry.io/collector/cmd/builder v0.144.0 h1:ua4t8axst4zlPxlXgK6vlkEAxyDTRgISraBld86clCA=
 go.opentelemetry.io/collector/cmd/builder v0.144.0/go.mod h1:j8STDjN940/ozMZVUUi7DQF+dyoihEz5PzI5rPDIz80=
+go.opentelemetry.io/collector/cmd/builder v0.145.0 h1:3Uw0pC5hDS8agtSkP4Lnq2aLvZeYYKXmi4XH4j3o47Q=
+go.opentelemetry.io/collector/cmd/builder v0.145.0/go.mod h1:JRN4XzcfREYd2VnZfCyADTI/rv+GeKZ3Yakj/xqaxI8=
 go.opentelemetry.io/collector/component v1.50.0 h1:AvIhCc/J7tXlKZDETPDMDp6g6pwa3FBD6c0Q8h2u3xA=
 go.opentelemetry.io/collector/component v1.50.0/go.mod h1:S0p+mq0ZvEEN67BKWt0atC5cHn2Km8vBeeIZuYzD0XU=
 go.opentelemetry.io/collector/component/componenttest v0.144.0 h1:Ah7E3OVdc3QKu8gyxpxkm4a5TAypUIAICNgY/6GW0sY=

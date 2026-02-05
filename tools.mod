@@ -183,7 +183,7 @@ require (
 	github.com/knadh/koanf/providers/env/v2 v2.0.0 // indirect
 	github.com/knadh/koanf/providers/file v1.2.1 // indirect
 	github.com/knadh/koanf/providers/fs v1.0.0 // indirect
-	github.com/knadh/koanf/v2 v2.3.0 // indirect
+	github.com/knadh/koanf/v2 v2.3.2 // indirect
 	github.com/kulti/thelper v0.7.1 // indirect
 	github.com/kunwardeep/paralleltest v1.0.15 // indirect
 	github.com/lasiar/canonicalheader v1.1.2 // indirect
@@ -280,7 +280,7 @@ require (
 	go.augendre.info/fatcontext v0.9.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/collector/cmd/builder v0.144.0 // indirect
+	go.opentelemetry.io/collector/cmd/builder v0.145.0 // indirect
 	go.opentelemetry.io/collector/component/componenttest v0.144.0 // indirect
 	go.opentelemetry.io/collector/confmap v1.50.0 // indirect
 	go.opentelemetry.io/collector/consumer v1.50.0 // indirect
