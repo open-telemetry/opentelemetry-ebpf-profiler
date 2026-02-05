@@ -844,7 +844,7 @@ func (ph *Prog) Data(maxSize uint) ([]byte, error) {
 		return mapping.Subslice(int(ph.Off), int(ph.Filesz))
 	}
 
-	// Fallback option if the file is not mmaped.
+	// Fallback option if the file is not mmapped.
 	if ph.Filesz > uint64(maxSize) {
 		return nil, fmt.Errorf("segment size %d is too large", ph.Filesz)
 	}
@@ -889,7 +889,7 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 		return mapping.Subslice(int(sh.Offset), int(sh.FileSize))
 	}
 
-	// Fallback option if the file is not mmaped.
+	// Fallback option if the file is not mmapped.
 	if sh.FileSize > uint64(maxSize) {
 		return nil, fmt.Errorf("section size %d is too large", sh.FileSize)
 	}
@@ -898,7 +898,7 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 	return p, err
 }
 
-// SetDontNeed sets the flag MADV_DONTNEED on the mmaped data.
+// SetDontNeed sets the flag MADV_DONTNEED on the mmapped data.
 func (f *File) SetDontNeed() {
 	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
 		if err := mapping.SetMadvDontNeed(); err != nil {
