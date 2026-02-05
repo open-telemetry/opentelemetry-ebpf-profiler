@@ -24,7 +24,6 @@ exporters:
       insecure: true
       insecure_skip_verify: true
 
-connectors:
 
 service:
   telemetry:
