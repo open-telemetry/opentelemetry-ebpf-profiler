@@ -849,7 +849,7 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) error {
 		if errors.Is(err, cebpf.ErrKeyNotExist) {
 			return nil
 		}
-		return fmt.Errorf("Failed to read from pid_events map: %w", err)
+		return fmt.Errorf("Failed to read from pid_events map: %v", err)
 	}
 
 	for keyFound {
