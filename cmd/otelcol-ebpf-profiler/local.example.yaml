@@ -1,4 +1,4 @@
-# Sample OpenTelemetry Collector configuration running the profling receiver and
+# Sample OpenTelemetry Collector configuration running the profiling receiver and
 # exporting the corresponding profiles to the http://127.0.0.1:11000 OTLP
 # endpoint. Note that the service.profilesSupport feature gate must be enabled
 # (e.g. using --feature-gates=+service.profilesSupport CLI argument)
