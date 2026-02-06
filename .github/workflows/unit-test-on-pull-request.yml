@@ -63,7 +63,7 @@ jobs:
           git diff --exit-code || (echo 'Code base is not Go or C formatted, please run "make format" and commit the changes in this PR.'; exit 1)
 
   build-collector:
-    name: Build Otel Collector (${{ matrix.target_arch }})
+    name: Build OTel Collector (${{ matrix.target_arch }})
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
