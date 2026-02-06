@@ -86,7 +86,7 @@ func (ji *hotspotJITInfo) symbolize(ripDelta int32, ii *hotspotInstance,
 	// so the below loop needs to handle negative pc_deltas correctly.
 	bestPCDelta := int32(-2)
 	scopeOff := uint32(0)
-	vms := &ii.d.Get().vmStructs
+	vms := &ii.d.vmData.Get().vmStructs
 	for i := uint(0); i < uint(len(ji.scopesPcs)); i += vms.PcDesc.Sizeof {
 		pcDelta := int32(npsr.Uint32(ji.scopesPcs, i+vms.PcDesc.PcOffset))
 		if pcDelta >= bestPCDelta && pcDelta <= ripDelta {

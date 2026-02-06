@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sync"
 	"time"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
@@ -57,15 +57,15 @@ func generateErrorMap() (map[libpf.AddressOrLineno]string, error) {
 	return out, nil
 }
 
-var errorMap xsync.Once[map[libpf.AddressOrLineno]string]
+var errorMap = sync.OnceValues(generateErrorMap)
 
 func formatFrame(frame *libpf.Frame) (string, error) {
 	if frame.Type.IsError() {
-		errMap, err := errorMap.GetOrInit(generateErrorMap)
+		errMap, err := errorMap()
 		if err != nil {
 			return "", fmt.Errorf("unable to construct error map: %v", err)
 		}
-		errName, ok := (*errMap)[frame.AddressOrLineno]
+		errName, ok := errMap[frame.AddressOrLineno]
 		if !ok {
 			return "", fmt.Errorf(
 				"got invalid error code %d. forgot to `make generate`",
