@@ -97,7 +97,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 ) (func() (lost, noData, readError uint64), error) {
 	eventReader, err := perf.NewReader(perfEventMap, perCPUBufferSize)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to setup perf reporting via %s: %w", perfEventMap, err)
+		return nil, fmt.Errorf("Failed to setup perf reporting via %s: %v", perfEventMap, err)
 	}
 
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
