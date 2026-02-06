@@ -122,6 +122,10 @@ type Tracer struct {
 
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
+
+	// stopMonitors cancels the context used by map monitor goroutines
+	// started in StartMapMonitors.
+	stopMonitors context.CancelFunc
 }
 
 type Config struct {
@@ -275,6 +279,10 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 // Close provides functionality for Tracer to perform cleanup tasks.
 // NOTE: Close may be called multiple times in succession.
 func (t *Tracer) Close() {
+	if t.stopMonitors != nil {
+		t.stopMonitors()
+	}
+
 	events := t.perfEntrypoints.WLock()
 	terminatePerfEvents(*events)
 	*events = nil
@@ -1085,6 +1093,10 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	if err != nil {
 		return err
 	}
+
+	// Derive a cancellable context so that all monitor goroutines are
+	// stopped when the tracer is closed.
+	ctx, t.stopMonitors = context.WithCancel(ctx)
 
 	pidEvents := make([]libpf.PIDTID, 0)
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
