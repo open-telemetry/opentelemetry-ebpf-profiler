@@ -141,7 +141,6 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 // error counts.
 func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	traceOutChan chan<- *libpf.EbpfTrace,
-	errsChan chan<- error,
 ) (func() []metrics.Metric, error) {
 	eventsMap := t.ebpfMaps["trace_events"]
 	eventReader, err := perf.NewReader(eventsMap,
@@ -228,7 +227,8 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 					log.Warnf("skip trace handling: %v", err)
 					continue
 				case errors.Is(err, errRecordTooSmall), errors.Is(err, errRecordUnexpectedSize):
-					errsChan <- fmt.Errorf("stop receiving traces: %v", err)
+					log.Errorf("Stop receiving traces: %v", err)
+					t.signalDone()
 					return
 				default:
 					log.Warnf("unexpected error handling trace: %v", err)

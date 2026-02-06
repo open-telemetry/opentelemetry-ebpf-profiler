@@ -193,9 +193,8 @@ func (c *Controller) Shutdown() {
 func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {
 	// Spawn monitors for the various result maps
 	traceCh := make(chan *libpf.EbpfTrace)
-	errCh := make(chan error, 1)
 
-	if err := trc.StartMapMonitors(ctx, traceCh, errCh); err != nil {
+	if err := trc.StartMapMonitors(ctx, traceCh); err != nil {
 		return fmt.Errorf("failed to start map monitors: %v", err)
 	}
 
@@ -207,8 +206,8 @@ func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer)
 				if trace != nil {
 					trc.HandleTrace(trace)
 				}
-			case err := <-errCh:
-				log.Errorf("Shutting down controller due to unrecoverable error: %s", err)
+			case <-trc.Done():
+				log.Errorf("Shutting down controller due to unrecoverable tracer error")
 				c.Shutdown()
 				return
 			case <-ctx.Done():

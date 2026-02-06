@@ -126,6 +126,23 @@ type Tracer struct {
 	// stopMonitors cancels the context used by map monitor goroutines
 	// started in StartMapMonitors.
 	stopMonitors context.CancelFunc
+	// done is closed when the tracer encounters an unrecoverable error.
+	// Use Done() to obtain a read-only channel for use in select statements.
+	done     chan struct{}
+	doneOnce sync.Once
+}
+
+// Done returns a channel that is closed when the tracer encounters an
+// unrecoverable error. It can be used in select statements to detect
+// when the tracer should be stopped.
+func (t *Tracer) Done() <-chan struct{} {
+	return t.done
+}
+
+// signalDone closes the done channel to indicate an unrecoverable error.
+// It is safe to call multiple times.
+func (t *Tracer) signalDone() {
+	t.doneOnce.Do(func() { close(t.done) })
 }
 
 type Config struct {
@@ -264,6 +281,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		samplesPerSecond:       cfg.SamplesPerSecond,
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
+		done:                   make(chan struct{}),
 	}
 
 	// Use an optimized version if available
@@ -1081,7 +1099,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
 
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
 // maps for tracepoints, new traces, trace count updates and unknown PCs.
-func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libpf.EbpfTrace, errsChan chan<- error) error {
+func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libpf.EbpfTrace) error {
 	if err := t.kernelSymbolizer.StartMonitor(ctx); err != nil {
 		log.Warnf("Failed to start kallsyms monitor: %v", err)
 	}
@@ -1089,7 +1107,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	if err != nil {
 		return err
 	}
-	traceEventMetricCollector, err := t.startTraceEventMonitor(ctx, traceOutChan, errsChan)
+	traceEventMetricCollector, err := t.startTraceEventMonitor(ctx, traceOutChan)
 	if err != nil {
 		return err
 	}
@@ -1104,7 +1122,8 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 			t.enableEvent(support.EventTypeGenericPID)
 			err := t.monitorPIDEventsMapMethod(&pidEvents)
 			if err != nil {
-				errsChan <- err
+				log.Errorf("Failed to monitor PID events: %v", err)
+				t.signalDone()
 				return true
 			}
 

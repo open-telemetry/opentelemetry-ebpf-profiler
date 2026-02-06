@@ -124,9 +124,8 @@ func TestTracerErrorPropagation(t *testing.T) {
 	tr.GetEbpfMaps()["pid_events"] = badMap
 
 	traceChan := make(chan *libpf.EbpfTrace, 16)
-	errsChan := make(chan error)
-	require.NoError(t, tr.StartMapMonitors(ctx, traceChan, errsChan))
-	require.Error(t, <-errsChan)
+	require.NoError(t, tr.StartMapMonitors(ctx, traceChan))
+	<-tr.Done()
 }
 
 func TestTracerMapMonitorsError(t *testing.T) {
@@ -153,8 +152,7 @@ func TestTracerMapMonitorsError(t *testing.T) {
 	delete(tr.GetEbpfMaps(), "report_events")
 
 	traceChan := make(chan *libpf.EbpfTrace, 16)
-	errsChan := make(chan error)
-	require.Error(t, tr.StartMapMonitors(ctx, traceChan, errsChan))
+	require.Error(t, tr.StartMapMonitors(ctx, traceChan))
 }
 
 func TestTraceTransmissionAndParsing(t *testing.T) {
@@ -181,8 +179,7 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 	defer tr.Close()
 
 	traceChan := make(chan *libpf.EbpfTrace, 16)
-	errsChan := make(chan error)
-	err = tr.StartMapMonitors(ctx, traceChan, errsChan)
+	err = tr.StartMapMonitors(ctx, traceChan)
 	require.NoError(t, err)
 
 	runKernelFrameProbe(t, tr)
@@ -196,8 +193,8 @@ Loop:
 		select {
 		case <-timeout.C:
 			break Loop
-		case err := <-errsChan:
-			require.NoError(t, err)
+		case <-tr.Done():
+			t.Fatal("tracer encountered an unrecoverable error")
 		case ebpfTrace := <-traceChan:
 			comm := ebpfTrace.Comm.String()
 			require.GreaterOrEqual(t, len(comm), 4)
