@@ -135,6 +135,8 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	// function are never used.
 	monitorInterval := time.Hour * 24
 
+	executableUnloadDelay := time.Minute * 5
+
 	// Check compatibility.
 	pid := pr.PID()
 	machineData := pr.GetMachineData()
@@ -169,9 +171,9 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	// Instantiate managers and enable all tracers by default
 	includeTracers, _ := tracertypes.Parse("all")
 
-	manager, err := pm.New(todo, includeTracers, monitorInterval, &coredumpEbpfMaps,
-		&traceReporter, nil, elfunwindinfo.NewStackDeltaProvider(), false,
-		libpf.Set[string]{})
+	manager, err := pm.New(todo, includeTracers, monitorInterval, executableUnloadDelay,
+		&coredumpEbpfMaps, &traceReporter, nil, elfunwindinfo.NewStackDeltaProvider(),
+		false, libpf.Set[string]{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)
 	}
