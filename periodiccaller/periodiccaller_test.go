@@ -134,7 +134,7 @@ func TestPeriodicCaller(t *testing.T) {
 			return StartWithJitter(ctx, interval, 0.2, cb)
 		},
 		"StartWithManualTrigger": func(ctx context.Context, cb func()) func() {
-			return StartWithManualTrigger(ctx, interval, trigger, func(bool) { cb() })
+			return StartWithManualTrigger(ctx, interval, trigger, func(bool) bool { cb(); return false })
 		},
 	}
 
@@ -187,7 +187,7 @@ func TestPeriodicCallerCancellation(t *testing.T) {
 			return StartWithJitter(ctx, interval, 0.2, cb)
 		},
 		"StartWithManualTrigger": func(ctx context.Context, cb func()) func() {
-			return StartWithManualTrigger(ctx, interval, trigger, func(bool) { cb() })
+			return StartWithManualTrigger(ctx, interval, trigger, func(bool) bool { cb(); return false })
 		},
 	}
 
@@ -229,12 +229,13 @@ func TestPeriodicCallerManualTrigger(t *testing.T) {
 	trigger := make(chan bool)
 	done := make(chan bool)
 
-	stop := StartWithManualTrigger(ctx, interval, trigger, func(manualTrigger bool) {
+	stop := StartWithManualTrigger(ctx, interval, trigger, func(manualTrigger bool) bool {
 		require.True(t, manualTrigger)
 		n := counter.Add(1)
 		if n == int32(numTrigger) {
 			done <- true
 		}
+		return false
 	})
 	defer stop()
 

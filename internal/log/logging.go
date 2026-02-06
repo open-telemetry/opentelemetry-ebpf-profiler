@@ -111,12 +111,3 @@ func Warn(msg string) {
 		getLogger().Warn(msg)
 	}
 }
-
-// Fatalf logs a fatal error message and exits the program.
-// This wrapper maintains backward compatibility with unstructured logs by
-// formatting messages as strings.
-// TODO: remove Fatalf calls from the codebase (https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/888).
-func Fatalf(msg string, keysAndValues ...any) {
-	Errorf(msg, keysAndValues...)
-	os.Exit(1)
-}
