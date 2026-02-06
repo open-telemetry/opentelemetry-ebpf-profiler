@@ -8,7 +8,7 @@ package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabe
 import (
 	"fmt"
 
-	"go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
@@ -17,7 +17,7 @@ import (
 
 // https://github.com/golang/go/blob/6885bad7dd86880be/src/runtime/tls_arm64.s#L11
 //
-//	Get's compiled into:
+//	Gets compiled into:
 //	0x000000000007f260 <+0>:     adrp    x27, 0x1c2000 <runtime.mheap_+101440>
 //	0x000000000007f264 <+4>:     ldrsb   x0, [x27, #284]
 //	0x000000000007f268 <+8>:     cbz     x0, 0x7f278 <runtime.load_g+24>
@@ -82,7 +82,7 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 			// movk x27, #0x10
 			// For now, we'll just decode the immediate value from the movk instruction since the one from the movz
 			// instruction seems to always be 0.
-			imm, ok := armhelpers.DecodeImmediate(i.Args[1])
+			imm, ok := arm.DecodeImmediate(i.Args[1])
 			if ok {
 				return int32(imm), nil
 			}

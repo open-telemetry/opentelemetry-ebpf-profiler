@@ -94,6 +94,10 @@ type Tracer struct {
 	// tracePool is cache of libpf.EbpfTrace to avoid GC pressure
 	tracePool sync.Pool
 
+	// monitorPIDEventsMap iterates over the eBPF map pid_events, collects PIDs and
+	// writes them to the keys slice. The implementation is selected on creation.
+	monitorPIDEventsMapMethod func(keys *[]libpf.PIDTID) error
+
 	// triggerPIDProcessing is used as manual trigger channel to request immediate
 	// processing of pending PIDs. This is requested on notifications from eBPF code
 	// when process events take place (new, exit, unknown PC).
@@ -118,9 +122,6 @@ type Tracer struct {
 
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
-
-	// filterIdleFrames indicates whether idle frames should be filtered.
-	filterIdleFrames bool
 }
 
 type Config struct {
@@ -232,6 +233,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	}
 
 	hasBatchOperations := ebpfHandler.SupportsGenericBatchOperations()
+	hasBatchLookupAndDelete := ebpfHandler.SupportsGenericBatchLookupAndDelete()
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
 		ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
@@ -258,6 +260,13 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		samplesPerSecond:       cfg.SamplesPerSecond,
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
+	}
+
+	// Use an optimized version if available
+	if hasBatchLookupAndDelete {
+		tracer.monitorPIDEventsMapMethod = (*tracer).monitorPIDEventsMapBatch
+	} else {
+		tracer.monitorPIDEventsMapMethod = (*tracer).monitorPIDEventsMapSingle
 	}
 
 	return tracer, nil
@@ -583,7 +592,8 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 
 // loadKallsymsTrigger loads the eBPF program that triggers kallsym updates.
 func loadKallsymsTrigger(coll *cebpf.CollectionSpec,
-	ebpfProgs map[string]*cebpf.Program, bpfVerifierLogLevel uint32) error {
+	ebpfProgs map[string]*cebpf.Program, bpfVerifierLogLevel uint32,
+) error {
 	programOptions := cebpf.ProgramOptions{
 		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
 	}
@@ -833,9 +843,9 @@ func (t *Tracer) enableEvent(eventType int) {
 	_ = inhibitEventsMap.Delete(unsafe.Pointer(&et))
 }
 
-// monitorPIDEventsMap periodically iterates over the eBPF map pid_events,
-// collects PIDs and writes them to the keys slice.
-func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) error {
+// monitorPIDEventsMapSingle iterates over the eBPF map pid_events, collects PIDs
+// and writes them to the keys slice.
+func (t *Tracer) monitorPIDEventsMapSingle(keys *[]libpf.PIDTID) error {
 	eventsMap := t.ebpfMaps["pid_events"]
 	var key, nextKey uint64
 	var value bool
@@ -893,6 +903,36 @@ func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) error {
 				keysToDelete, err)
 		}
 	}
+	return nil
+}
+
+// monitorPIDEventsMapBatch iterates over the eBPF map pid_events in batches,
+// collects PIDs and writes them to the keys slice.
+func (t *Tracer) monitorPIDEventsMapBatch(keys *[]libpf.PIDTID) error {
+	eventsMap := t.ebpfMaps["pid_events"]
+
+	removed := make([]uint64, 128)
+	values := make([]bool, len(removed))
+
+	cursor := cebpf.MapBatchCursor{}
+
+	for {
+		n, err := eventsMap.BatchLookupAndDelete(&cursor, removed, values, nil)
+
+		// There can be results even if there's an error.
+		for i := range n {
+			*keys = append(*keys, libpf.PIDTID(removed[i]))
+		}
+
+		if errors.Is(err, cebpf.ErrKeyNotExist) {
+			break
+		}
+
+		if err != nil {
+			return fmt.Errorf("Failed to batch lookup and delete entries from pid_events map: %v", err)
+		}
+	}
+
 	return nil
 }
 
@@ -956,7 +996,7 @@ func (t *Tracer) eBPFMetricsCollector(
 var (
 	errRecordTooSmall       = errors.New("trace record too small")
 	errRecordUnexpectedSize = errors.New("unexpected record size")
-	errOriginUnexpected     = errors.New("unexepcted origin")
+	errOriginUnexpected     = errors.New("unexpected origin")
 )
 
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
@@ -1050,7 +1090,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
 		t.triggerPIDProcessing, func(_ bool) {
 			t.enableEvent(support.EventTypeGenericPID)
-			err := t.monitorPIDEventsMap(&pidEvents)
+			err := t.monitorPIDEventsMapMethod(&pidEvents)
 			if err != nil {
 				select {
 				case errsChan <- err:
@@ -1139,9 +1179,6 @@ func (t *Tracer) AttachTracer() error {
 	perfAttribute.SetSampleFreq(uint64(t.samplesPerSecond))
 	if err := perf.CPUClock.Configure(perfAttribute); err != nil {
 		return fmt.Errorf("failed to configure software perf event: %v", err)
-	}
-	if !t.filterIdleFrames {
-		perfAttribute.Options.ExcludeIdle = false
 	}
 
 	onlineCPUIDs, err := getOnlineCPUIDs()

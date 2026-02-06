@@ -89,7 +89,7 @@ func (t *Tracer) triggerReportEvent(data []byte) {
 // will wake up user-land.
 //
 // For each received event, triggerFunc is called. triggerFunc may NOT store
-// references into the buffer that it is given: the buffer is re-used across
+// references into the buffer that it is given: the buffer is reused across
 // calls. Returns a function that can be called to retrieve perf event array
 // error counts.
 func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,

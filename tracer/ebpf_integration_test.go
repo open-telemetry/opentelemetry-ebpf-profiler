@@ -126,7 +126,7 @@ func TestTracerErrorPropagation(t *testing.T) {
 	traceChan := make(chan *libpf.EbpfTrace, 16)
 	errsChan := make(chan error)
 	require.NoError(t, tr.StartMapMonitors(ctx, traceChan, errsChan))
-	require.ErrorContains(t, <-errsChan, "Failed to read from pid_events map: next key: invalid argument")
+	require.Error(t, <-errsChan)
 }
 
 func TestTracerMapMonitorsError(t *testing.T) {

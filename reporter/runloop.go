@@ -16,7 +16,8 @@ type runLoop struct {
 	stopSignal chan libpf.Void
 }
 
-func (rl *runLoop) Start(ctx context.Context, reportInterval time.Duration, run, purge func()) {
+func (rl *runLoop) Start(ctx context.Context, reportInterval time.Duration, jitter float64,
+	run, purge func()) {
 	go func() {
 		tick := time.NewTicker(reportInterval)
 		defer tick.Stop()
@@ -31,7 +32,7 @@ func (rl *runLoop) Start(ctx context.Context, reportInterval time.Duration, run,
 				return
 			case <-tick.C:
 				run()
-				tick.Reset(libpf.AddJitter(reportInterval, 0.2))
+				tick.Reset(libpf.AddJitter(reportInterval, jitter))
 			case <-purgeTick.C:
 				purge()
 			}
