@@ -55,7 +55,7 @@ func Start(meter metric.Meter) {
 		metricTypes[md.ID] = md.Type
 		switch typ := md.Type; typ {
 		case MetricTypeCounter:
-			counter, err := meter.Int64Counter(md.Name,
+			counter, err := meter.Int64Counter(md.Field,
 				metric.WithDescription(md.Description),
 				metric.WithUnit(md.Unit))
 			if err != nil {
@@ -64,7 +64,7 @@ func Start(meter metric.Meter) {
 			}
 			counters[md.ID] = counter
 		case MetricTypeGauge:
-			gauge, err := meter.Int64Gauge(md.Name,
+			gauge, err := meter.Int64Gauge(md.Field,
 				metric.WithDescription(md.Description),
 				metric.WithUnit(md.Unit))
 			if err != nil {
