@@ -32,9 +32,10 @@ func Start(ctx context.Context, interval time.Duration, callback func()) func() 
 
 // StartWithManualTrigger starts a timer that calls <callback> every <interval>
 // from <reset> channel until the <ctx> is canceled. Additionally the 'trigger'
-// channel can be used to trigger callback immediately.
+// channel can be used to trigger callback immediately. If the callback returns
+// true, the main loop exits.
 func StartWithManualTrigger(ctx context.Context, interval time.Duration, trigger chan bool,
-	callback func(manualTrigger bool)) func() {
+	callback func(manualTrigger bool) bool) func() {
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
@@ -42,9 +43,13 @@ func StartWithManualTrigger(ctx context.Context, interval time.Duration, trigger
 		for {
 			select {
 			case <-ticker.C:
-				callback(false)
+				if callback(false) {
+					return
+				}
 			case <-trigger:
-				callback(true)
+				if callback(true) {
+					return
+				}
 			case <-ctx.Done():
 				return
 			}

@@ -1088,17 +1088,12 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 
 	pidEvents := make([]libpf.PIDTID, 0)
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
-		t.triggerPIDProcessing, func(_ bool) {
+		t.triggerPIDProcessing, func(_ bool) bool {
 			t.enableEvent(support.EventTypeGenericPID)
 			err := t.monitorPIDEventsMapMethod(&pidEvents)
 			if err != nil {
-				select {
-				case errsChan <- err:
-					// Error sent successfully
-				case <-ctx.Done():
-					// Context canceled, stop trying to send
-				}
-				return
+				errsChan <- err
+				return true
 			}
 
 			for _, pidTid := range pidEvents {
@@ -1108,6 +1103,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 
 			// Keep the underlying array alive to avoid GC pressure
 			pidEvents = pidEvents[:0]
+			return false
 		})
 
 	// translateIDs is a translation table for eBPF IDs into Metric IDs.
