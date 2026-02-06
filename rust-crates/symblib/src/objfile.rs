@@ -452,7 +452,7 @@ impl<'obj> SectionData<'obj> {
     /// Builds a mutable reference to the section's data (CoW semantics).
     ///
     /// If the data was previously borrowed, the first call will force a copy;
-    /// all consecutive calls will re-use the same buffer.
+    /// all consecutive calls will reuse the same buffer.
     pub fn make_mut(&mut self) -> Result<&mut [u8]> {
         let borrowed = match self {
             // Fast paths: underlying buffer is writable already.

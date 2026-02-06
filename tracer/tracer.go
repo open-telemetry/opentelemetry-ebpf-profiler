@@ -122,9 +122,6 @@ type Tracer struct {
 
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
-
-	// filterIdleFrames indicates whether idle frames should be filtered.
-	filterIdleFrames bool
 }
 
 type Config struct {
@@ -995,7 +992,7 @@ func (t *Tracer) eBPFMetricsCollector(
 var (
 	errRecordTooSmall       = errors.New("trace record too small")
 	errRecordUnexpectedSize = errors.New("unexpected record size")
-	errOriginUnexpected     = errors.New("unexepcted origin")
+	errOriginUnexpected     = errors.New("unexpected origin")
 )
 
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
@@ -1163,9 +1160,6 @@ func (t *Tracer) AttachTracer() error {
 	perfAttribute.SetSampleFreq(uint64(t.samplesPerSecond))
 	if err := perf.CPUClock.Configure(perfAttribute); err != nil {
 		return fmt.Errorf("failed to configure software perf event: %v", err)
-	}
-	if !t.filterIdleFrames {
-		perfAttribute.Options.ExcludeIdle = false
 	}
 
 	onlineCPUIDs, err := getOnlineCPUIDs()

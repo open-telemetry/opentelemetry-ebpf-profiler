@@ -31,7 +31,7 @@ pub trait InstrDecoder {
 /// Information about an instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstrInfo {
-    /// Virtual addresss of the instruction.
+    /// Virtual address of the instruction.
     pub addr: VirtAddr,
 
     /// Whether the instruction is a call or syscall.
