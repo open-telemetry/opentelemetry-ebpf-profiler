@@ -1539,11 +1539,10 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.iseq_constant_body.insn_info_size = 128
 		vms.iseq_constant_body.succ_index_table = 136
 		vms.iseq_constant_body.local_iseq = 176
-		if runtime.GOARCH == "amd64" {
-			vms.iseq_constant_body.size_of_iseq_constant_body = 304
-		} else {
-			vms.iseq_constant_body.size_of_iseq_constant_body = 360
-		}
+	        // The JIT fields at the end of the struct get added if you have rustc installed or are otherwise build config dependent.
+	        // 304 is the size without them and the "common" size regardless of config.
+	        // It is safer to set this to the smaller value, especially since the highest field we actually access is much lower
+                vms.iseq_constant_body.size_of_iseq_constant_body = 304
 	default: // 3.3.x and 3.5.x have the same values
 		vms.iseq_constant_body.insn_info_body = 112
 		vms.iseq_constant_body.insn_info_size = 128
