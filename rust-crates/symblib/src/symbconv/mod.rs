@@ -9,7 +9,7 @@ use std::io;
 /// Result type shorthand.
 pub type Result<T = (), E = Error> = std::result::Result<T, E>;
 
-/// Errors that can occurr during symbol extraction.
+/// Errors that can occur during symbol extraction.
 #[non_exhaustive]
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
@@ -87,7 +87,7 @@ pub struct ResolvedSymbol {
     pub function_name: Option<String>,
     /// File name that hold this function.
     pub file_name: Option<String>,
-    /// Line number associcated with this virtual address.
+    /// Line number associated with this virtual address.
     pub line_number: Option<u32>,
 }
 

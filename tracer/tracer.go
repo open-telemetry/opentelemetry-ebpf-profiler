@@ -992,7 +992,7 @@ func (t *Tracer) eBPFMetricsCollector(
 var (
 	errRecordTooSmall       = errors.New("trace record too small")
 	errRecordUnexpectedSize = errors.New("unexpected record size")
-	errOriginUnexpected     = errors.New("unexepcted origin")
+	errOriginUnexpected     = errors.New("unexpected origin")
 )
 
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
