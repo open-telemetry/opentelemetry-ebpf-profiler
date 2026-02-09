@@ -36,11 +36,11 @@ require (
 	go.opentelemetry.io/otel v1.40.0
 	go.opentelemetry.io/otel/metric v1.40.0
 	go.uber.org/zap/exp v0.3.0
-	golang.org/x/arch v0.23.0
+	golang.org/x/arch v0.24.0
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96
 	golang.org/x/mod v0.32.0
 	golang.org/x/sync v0.19.0
-	golang.org/x/sys v0.40.0
+	golang.org/x/sys v0.41.0
 	google.golang.org/grpc v1.78.0
 )
 
