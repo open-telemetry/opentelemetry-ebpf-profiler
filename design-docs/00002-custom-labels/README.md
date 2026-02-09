@@ -27,7 +27,7 @@ This design doc describes how we can surface Go pprof labels in the OTel profile
 - When disabled custom labels has little to no impact on performance or memory usage of the profiler
 - Custom labels should be limited so that even if a program has thousands of eligible labels the number supported is reasonably small (mostly enforced by eBPF itself)
 - Custom labels should be short and have fixed memory overhead
-- The custom labels should be made available to the reporter backend but otherwise it should be left up to implementors what to do with them
+- The custom labels should be made available to the reporter backend but otherwise it should be left up to implementers what to do with them
 
 # Scope
 

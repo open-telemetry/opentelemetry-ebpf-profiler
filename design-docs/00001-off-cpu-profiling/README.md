@@ -101,7 +101,7 @@ algorithm should be revisited and updated.
 ## Option A
 
 Attach stack unwinding functionality to the tracepoint `tracepoint:sched:sched_switch`. This
-tracepoint is called everytime the Linux kernel scheduler takes resources from a task before
+tracepoint is called every time the Linux kernel scheduler takes resources from a task before
 assigning these resources to another task.
 
 Similar to the eBPF program [`perf_event/native_tracer_entry`](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/dd0c20701b191975d6c13408c92d7fed637119da/support/ebpf/native_stack_trace.ebpf.c#L860C6-L860C36)
