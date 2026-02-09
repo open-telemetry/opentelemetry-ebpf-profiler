@@ -387,10 +387,9 @@ unwind_one_dotnet_frame(PerCPURecord *record, find_code_start_f find_code_start)
     return ERR_DOTNET_CODE_HEADER;
   }
 
-  // Validate code_header_ptr is a plausible userspace pointer. Race conditions with
-  // .NET GC/JIT may cause us to read stale or garbage values.
-  if (code_header_ptr == 0 || code_header_ptr >= 0x8000000000000000ULL ||
-      code_header_ptr < 0x1000) {
+  // Validate code_header_ptr looks like a valid userspace address.
+  // The memory we read from may contain stale or invalid data.
+  if (is_kernel_address(code_header_ptr) || code_header_ptr < 0x1000) {
     DEBUG_PRINT("dotnet: invalid code_header_ptr 0x%lx, skipping frame",
                 (unsigned long)code_header_ptr);
     increment_metric(metricID_UnwindDotnetErrCodeHeader);
@@ -400,12 +399,6 @@ unwind_one_dotnet_frame(PerCPURecord *record, find_code_start_f find_code_start)
   type = DOTNET_CODE_JIT;
 
 push_frame:
-  // Sanity check: code_start > pc indicates corrupted nibble map data.
-  if (code_start > pc) {
-    DEBUG_PRINT("dotnet: code_start > pc, skipping frame");
-    increment_metric(metricID_UnwindDotnetErrCodeHeader);
-    return ERR_DOTNET_CODE_HEADER;
-  }
   DEBUG_PRINT(
     "dotnet:  --> code_start = %lx, code_header = %lx, pc_offset = %lx",
     (unsigned long)code_start,
