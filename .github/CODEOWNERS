@@ -22,3 +22,12 @@
 
 # interpreter/beam/ @open-telemetry/ebpf-profiler-approvers @GregMefford
 # support/ebpf/beam_tracer.ebpf.c @open-telemetry/ebpf-profiler-approvers @GregMefford
+
+#####################################################
+#
+# List of Ruby interpreter code owners
+#
+#####################################################
+
+interpreter/ruby/ @open-telemetry/ebpf-profiler-approvers @dalehamel
+support/ebpf/ruby_tracer.ebpf.c @open-telemetry/ebpf-profiler-approvers @dalehamel
