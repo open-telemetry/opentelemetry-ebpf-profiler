@@ -393,7 +393,7 @@ unwind_one_dotnet_frame(PerCPURecord *record, find_code_start_f find_code_start)
     DEBUG_PRINT("dotnet: invalid code_header_ptr 0x%lx, skipping frame",
                 (unsigned long)code_header_ptr);
     increment_metric(metricID_UnwindDotnetErrCodeHeader);
-    return ERR_DOTNET_CODE_HEADER;
+    return push_error(state, trace, FRAME_MARKER_DOTNET, ERR_DOTNET_CODE_HEADER);
   }
 
   type = DOTNET_CODE_JIT;
