@@ -105,6 +105,8 @@ type ProcessMeta struct {
 	EnvVariables map[libpf.String]libpf.String
 	// container ID retrieved from /proc/PID/cgroup
 	ContainerID libpf.String
+	// process context
+	ProcessContextInfo ProcessContextInfo
 }
 
 // Process is the interface to inspect ELF coredump/process.
