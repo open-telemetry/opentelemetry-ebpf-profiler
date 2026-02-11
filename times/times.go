@@ -48,6 +48,7 @@ type Times struct {
 	grpcAuthErrorDelay        time.Duration
 	pidCleanupInterval        time.Duration
 	probabilisticInterval     time.Duration
+	executableUnloadDelay     time.Duration
 }
 
 // IntervalsAndTimers is a meta-interface that exists purely to document its functionality.
@@ -74,6 +75,9 @@ type IntervalsAndTimers interface {
 	// ProbabilisticInterval defines the interval for which probabilistic profiling will
 	// be enabled or disabled.
 	ProbabilisticInterval() time.Duration
+	// ExecutableUnloadDelay defines how long to wait after an executable is no longer used
+	// before unloading it from memory.
+	ExecutableUnloadDelay() time.Duration
 }
 
 func (t *Times) MonitorInterval() time.Duration { return t.monitorInterval }
@@ -93,6 +97,8 @@ func (t *Times) GRPCAuthErrorDelay() time.Duration { return t.grpcAuthErrorDelay
 func (t *Times) PIDCleanupInterval() time.Duration { return t.pidCleanupInterval }
 
 func (t *Times) ProbabilisticInterval() time.Duration { return t.probabilisticInterval }
+
+func (t *Times) ExecutableUnloadDelay() time.Duration { return t.executableUnloadDelay }
 
 // StartRealtimeSync calculates a delta between the monotonic clock
 // (CLOCK_MONOTONIC, rebased to unixtime) and the realtime clock. If syncInterval is
@@ -119,6 +125,7 @@ func New(reportInterval, monitorInterval, probabilisticInterval time.Duration) *
 		reportInterval:            reportInterval,
 		monitorInterval:           monitorInterval,
 		probabilisticInterval:     probabilisticInterval,
+		executableUnloadDelay:     5 * time.Minute,
 	}
 }
 

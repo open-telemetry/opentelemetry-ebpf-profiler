@@ -1,0 +1,95 @@
+{
+  "coredump-ref": "a9472d159e9def7bc2ca7e5286e5175619d0978f45d35e7382cbeb43ed9c3c18",
+  "threads": [
+    {
+      "lwp": 13967,
+      "frames": [
+        "libruby.so.4.0.1+0x328510",
+        "libruby.so.4.0.1+0x34e01b",
+        "libruby.so.4.0.1+0x34edb9",
+        "libruby.so.4.0.1+0x3516b4",
+        "libruby.so.4.0.1+0x1c2446",
+        "libruby.so.4.0.1+0x11a11f",
+        "libruby.so.4.0.1+0x32bfec",
+        "libruby.so.4.0.1+0x335772",
+        "libruby.so.4.0.1+0x34435d",
+        "libruby.so.4.0.1+0x348923",
+        "libruby.so.4.0.1+0x34da1f",
+        "libruby.so.4.0.1+0x23f1ed",
+        "libruby.so.4.0.1+0x32bfec",
+        "libruby.so.4.0.1+0x335772",
+        "libruby.so.4.0.1+0x34435d",
+        "Enumerator::ArithmeticSequence#each+0 in <cfunc>:0",
+        "Object#is_prime+0 in /tmp/loop.rb:10",
+        "Object#sum_of_primes+0 in /tmp/loop.rb:19",
+        "libruby.so.4.0.1+0x348923",
+        "libruby.so.4.0.1+0x34da1f",
+        "libruby.so.4.0.1+0x23f1ed",
+        "libruby.so.4.0.1+0x32bfec",
+        "libruby.so.4.0.1+0x335772",
+        "libruby.so.4.0.1+0x34435d",
+        "Range#each+0 in <cfunc>:0",
+        "Object#sum_of_primes+0 in /tmp/loop.rb:18",
+        "?+0x0",
+        "libruby.so.4.0.1+0x348923",
+        "libruby.so.4.0.1+0x12bd24",
+        "libruby.so.4.0.1+0x13022a",
+        "ruby+0x1185",
+        "libc.so.6+0x2a1c9",
+        "libc.so.6+0x2a28a",
+        "ruby+0x11d4"
+      ]
+    },
+    {
+      "lwp": 13983,
+      "frames": [
+        "libc.so.6+0x12a072",
+        "libruby.so.4.0.1+0x2e5873",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c6b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "829c92e26260412dfdd414e989144e57c1e2c29d5c5a9c299373fb6947e8438c",
+      "local-path": "/home/liad.linux/.rbenv/versions/4.0.1/bin/ruby"
+    },
+    {
+      "ref": "511f825ee075610ac9c0f7f91e2c13de2000d0f7b859f6461137e809a0a009d0",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "f06f2ce1f1833df5f41cf13b6447ff07bea993ad9b27297d3428c2f70ab3f0e7",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "759e56c545b4a4c34a6ab9d0be9da8f2406824aee37db8178162b5916e32e70d",
+      "local-path": "/home/liad.linux/.rbenv/versions/4.0.1/lib/libruby.so.4.0.1"
+    },
+    {
+      "ref": "ed53deb1ff75db1f7215b7499b906048d7f22ade66c201206489528b1270bf87",
+      "local-path": "/home/liad.linux/.rbenv/versions/4.0.1/lib/ruby/4.0.0/x86_64-linux/monitor.so"
+    },
+    {
+      "ref": "588d492660cceeb95955c1d2af4b6e828a9294713192c44d42f205a84c562d64",
+      "local-path": "/home/liad.linux/.rbenv/versions/4.0.1/lib/ruby/4.0.0/x86_64-linux/enc/encdb.so"
+    },
+    {
+      "ref": "1502636e3be8232c9cf801dfb533694aea985d449904f3e1295db26d7b348946",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcrypt.so.1.1.0"
+    },
+    {
+      "ref": "6222a16be7f2d458d6870efe6e715fc0c8d45766fb79cf7dcc3125538d703e28",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "30675893bbad819d6ce4368263a20c65dce58751c2a891d61a7957a1da7281e7",
+      "local-path": "/home/liad.linux/.rbenv/versions/4.0.1/lib/ruby/4.0.0/x86_64-linux/enc/trans/transdb.so"
+    },
+    {
+      "ref": "9b64150b28505a33d6bc3ecf709c279f6de97a1c184dbda65d06ee4537f6d286",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libz.so.1.3"
+    }
+  ]
+}
