@@ -37,7 +37,7 @@ const (
 
 //nolint:lll
 var (
-	// expLine matches a line in the /proc/<pid>/cgroup file. It has a submatch for the last element (path), which contains the container ID. Support both cgroup v1 and v2.
+	// expLine matches a line in the /proc/<pid>/cgroup file. It has a submatch for the last element (path), which contains the container ID. Supports both cgroup v1 and v2.
 	expLine = regexp.MustCompile(`^\d+:[^:]*:(.+)$`)
 
 	// Inspired from https://github.com/DataDog/dd-otel-host-profiler/blob/1e50a36d4c3a8a87f0cc828f37b48455ec436e55/containermetadata/container.go#L32-L47 with the following changes to handle unit tests in process_test.go:
