@@ -182,7 +182,7 @@ func (i *dotnetInstance) addRange(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	}
 
 	unwinder := uint8(support.ProgUnwindDotnet)
-	if i.d.vmData.Get().Contracts.ExecutionManager >= 2 {
+	if i.d.Get().Contracts.ExecutionManager >= 2 {
 		unwinder = support.ProgUnwindDotnet10
 	}
 
@@ -243,7 +243,7 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	rangeSection []byte) error {
 	// Extract interesting fields
-	vms := &i.d.vmData.Get().Types
+	vms := &i.d.Get().Types
 	lowAddress := npsr.Ptr(rangeSection, vms.RangeSection.RangeBegin)
 	highAddress := npsr.Ptr(rangeSection, vms.RangeSection.RangeEndOpen)
 	flags := npsr.Uint32(rangeSection, vms.RangeSection.Flags)
@@ -306,7 +306,7 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf
 
 // walkRangeSectionList adds all RangeSections in a list (dotnet6 and dotnet7)
 func (i *dotnetInstance) walkRangeSectionList(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	vms := &i.d.vmData.Get().Types
+	vms := &i.d.Get().Types
 	rangeSection := make([]byte, vms.RangeSection.SizeOf)
 	// walk the RangeSection list
 	ptr := i.rm.Ptr(i.codeRangeListPtr)
@@ -328,7 +328,7 @@ func (i *dotnetInstance) walkRangeSectionMapFragments(ebpf interpreter.EbpfHandl
 	fragmentPtr libpf.Address,
 ) error {
 	// https://github.com/dotnet/runtime/blob/v8.0.4/src/coreclr/vm/codeman.h#L974
-	vms := &i.d.vmData.Get().Types
+	vms := &i.d.Get().Types
 	fragment := make([]byte, 4*8)
 	rangeSection := make([]byte, vms.RangeSection.SizeOf)
 	for fragmentPtr != 0 {
@@ -420,7 +420,7 @@ func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (*peInfo,
 	// we fallback to finding the PE info. The strategy is to read the SimpleName
 	// member which is a pointer inside the memory mapped location of the PE .dll.
 	// Read that and locate the memory mapping to get the PE info.
-	vms := &i.d.vmData.Get().Types
+	vms := &i.d.Get().Types
 	simpleNamePtr := i.rm.Ptr(modulePtr + libpf.Address(vms.Module.SimpleName))
 	if simpleNamePtr == 0 {
 		return nil, fmt.Errorf("module at %x, does not have name", modulePtr)
@@ -435,7 +435,7 @@ func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (*peInfo,
 }
 
 func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr libpf.Address) (*dotnetMethod, error) {
-	cdac := i.d.vmData.Get()
+	cdac := i.d.Get()
 	vms := &cdac.Types
 
 	// Extract MethodDesc data
@@ -503,7 +503,7 @@ func (i *dotnetInstance) getMethod(codeHeaderPtr libpf.Address) (*dotnetMethod, 
 		return method, nil
 	}
 
-	vms := i.d.vmData.Get().Types
+	vms := i.d.Get().Types
 	codeHeader := make([]byte, vms.RealCodeHeader.SizeOf)
 	if err := i.rm.Read(codeHeaderPtr, codeHeader); err != nil {
 		return nil, err
@@ -555,7 +555,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	mappings []process.Mapping,
 ) error {
 	// get introspection data
-	cdac, err := i.d.vmData.GetOrInit(func() (dotnetCdac, error) { return i.d.newVMData(i.rm, i.bias) })
+	cdac, err := i.d.GetOrInit(func() (dotnetCdac, error) { return i.d.newVMData(i.rm, i.bias) })
 	if err != nil {
 		return err
 	}

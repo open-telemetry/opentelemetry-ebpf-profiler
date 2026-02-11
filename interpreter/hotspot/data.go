@@ -318,18 +318,19 @@ type hotspotData struct {
 	// ELF symbols needed for the introspection data
 	typePtrs, structPtrs, jvmciStructPtrs hotspotIntrospectionTable
 
-	vmData xsync.OnceValue[hotspotVMData]
+	// Once protected hotspotVMData
+	xsync.Once[hotspotVMData]
 }
 
 func (d *hotspotData) newUnsigned5Decoder(r io.ByteReader) *unsigned5Decoder {
 	return &unsigned5Decoder{
 		r: r,
-		x: d.vmData.Get().unsigned5X,
+		x: d.Get().unsigned5X,
 	}
 }
 
 func (d *hotspotData) String() string {
-	if vmd := d.vmData.Get(); vmd != nil {
+	if vmd := d.Get(); vmd != nil {
 		return fmt.Sprintf("Java HotSpot VM %d.%d.%d+%d (%v)",
 			(vmd.version>>24)&0xff, (vmd.version>>16)&0xff,
 			(vmd.version>>8)&0xff, vmd.version&0xff,

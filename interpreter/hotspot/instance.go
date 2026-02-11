@@ -181,7 +181,7 @@ func (d *hotspotInstance) getSymbol(addr libpf.Address) libpf.String {
 	if value, ok := d.addrToSymbol.Get(addr); ok {
 		return value
 	}
-	vms := d.d.vmData.Get().vmStructs
+	vms := d.d.Get().vmStructs
 
 	// Read the symbol length and readahead bytes in attempt to avoid second
 	// system call to read the target string. 128 is chosen arbitrarily as "hopefully
@@ -223,7 +223,7 @@ func (d *hotspotInstance) getPoolSymbol(addr libpf.Address, ndx uint16) libpf.St
 		return libpf.NullString
 	}
 
-	vms := &d.d.vmData.Get().vmStructs
+	vms := &d.d.Get().vmStructs
 	offs := libpf.Address(vms.ConstantPool.Sizeof) + 8*libpf.Address(ndx)
 	cpoolVal := d.rm.Ptr(addr + offs)
 	// The lowest bit is reserved by JVM to indicate if the value has been
@@ -237,7 +237,7 @@ func (d *hotspotInstance) getStubName(ripOrBci uint32, addr libpf.Address) libpf
 	if value, ok := d.addrToStubName.Get(addr); ok {
 		return value
 	}
-	vms := &d.d.vmData.Get().vmStructs
+	vms := &d.d.Get().vmStructs
 	constStubNameAddr := d.rm.Ptr(addr + libpf.Address(vms.CodeBlob.Name))
 	stubName := d.rm.String(constStubNameAddr)
 
@@ -258,7 +258,7 @@ func (d *hotspotInstance) getMethod(addr libpf.Address, _ uint32) (*hotspotMetho
 	if value, ok := d.addrToMethod.Get(addr); ok {
 		return value, nil
 	}
-	vms := &d.d.vmData.Get().vmStructs
+	vms := &d.d.Get().vmStructs
 	constMethodAddr := d.rm.Ptr(addr + libpf.Address(vms.Method.ConstMethod))
 	constMethod := make([]byte, vms.ConstMethod.Sizeof)
 	if err := d.rm.Read(constMethodAddr, constMethod); err != nil {
@@ -417,7 +417,7 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 			return jit, nil
 		}
 	}
-	vmd := d.d.vmData.Get()
+	vmd := d.d.Get()
 	vms := &vmd.vmStructs
 	nmethod := make([]byte, vms.Nmethod.Sizeof)
 	if err := d.rm.Read(addr, nmethod); err != nil {
@@ -838,7 +838,7 @@ func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
 func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	_ reporter.ExecutableReporter, pr process.Process, _ []process.Mapping,
 ) error {
-	vmd, err := d.d.vmData.GetOrInit(func() (hotspotVMData, error) { return d.d.newVMData(d.rm, d.bias) })
+	vmd, err := d.d.GetOrInit(func() (hotspotVMData, error) { return d.d.newVMData(d.rm, d.bias) })
 	if err != nil {
 		return err
 	}
@@ -850,7 +850,7 @@ func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 
 	// Populate main mappings, if not done previously.
 	pid := pr.PID()
-	err = d.populateMainMappings(&vmd, ebpf, pid)
+	err = d.populateMainMappings(vmd, ebpf, pid)
 	if err != nil {
 		return err
 	}
@@ -859,7 +859,7 @@ func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		return nil
 	}
 
-	d.updateStubMappings(&vmd, ebpf, pid)
+	d.updateStubMappings(vmd, ebpf, pid)
 
 	return nil
 }

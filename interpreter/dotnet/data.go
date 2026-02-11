@@ -191,7 +191,8 @@ type dotnetData struct {
 	walkRangeSectionsMethod func(i *dotnetInstance, ebpf interpreter.EbpfHandler,
 		pid libpf.PID) error
 
-	vmData xsync.OnceValue[dotnetCdac]
+	// Once protected dotnetCdac
+	xsync.Once[dotnetCdac]
 }
 
 func (d *dotnetData) String() string {

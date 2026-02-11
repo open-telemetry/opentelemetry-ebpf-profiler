@@ -19,7 +19,7 @@ import (
 
 func TestJavaSymbolExtraction(t *testing.T) {
 	id := hotspotData{}
-	vmd, _ := id.vmData.GetOrInit(func() (hotspotVMData, error) {
+	vmd, _ := id.GetOrInit(func() (hotspotVMData, error) {
 		vmd := hotspotVMData{}
 		vmd.vmStructs.Symbol.Length = 2
 		vmd.vmStructs.Symbol.Body = 4
