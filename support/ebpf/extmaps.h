@@ -17,6 +17,7 @@ extern struct interpreter_offsets_t interpreter_offsets;
 extern struct trace_events_t trace_events;
 extern struct go_labels_procs_t go_labels_procs;
 extern struct custom_labels_procs_t cl_procs;
+extern struct v8_procs_t v8_procs;
 
 #if defined(TESTING_COREDUMP)
 

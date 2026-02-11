@@ -322,6 +322,17 @@ enum {
   // total number of successes adding native custom labels
   metricID_UnwindNativeCustomLabelsAddSuccesses,
 
+  // total number of attempts to add node custom labels.
+  // This - (successes + errors) is the number of times
+  // we read nothing (undefined or empty labelset).
+  metricID_UnwindNodeCustomLabelsAttempts,
+
+  // total number of successes adding node custom labels
+  metricID_UnwindNodeCustomLabelsSuccesses,
+
+  // total number of failed attempts to add node custom labels
+  metricID_UnwindNodeCustomLabelsFailures,
+
   // number of attempts to read Go custom labels
   metricID_UnwindGoLabelsAttempts,
 
@@ -527,6 +538,9 @@ typedef struct V8ProcInfo {
   u8 off_Code_instruction_start, off_Code_instruction_size, off_Code_flags;
   u8 fp_marker, fp_function, fp_bytecode_offset;
   u8 codekind_shift, codekind_mask, codekind_baseline;
+  u64 isolate_sym;
+  u32 cped_offset;
+  u32 wrapped_object_offset;
 } V8ProcInfo;
 
 // BEAMProcInfo is a container for the data needed to build a stack trace for a BEAM process.

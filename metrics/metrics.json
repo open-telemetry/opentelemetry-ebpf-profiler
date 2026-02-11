@@ -2112,5 +2112,26 @@
     "name": "UnwindNativeCustomLabelsAddSuccesses",
     "field": "bpf.native_custom_labels.add.successes",
     "id": 292
+  },
+  {
+    "description": "Number of attempts to read Node.js custom labels",
+    "type": "counter",
+    "name": "UnwindNodeCustomLabelsAttempts",
+    "field": "bpf.node_custom_labels.attempts",
+    "id": 293
+  },
+  {
+    "description": "Number of successful reads of Node.js custom labels",
+    "type": "counter",
+    "name": "UnwindNodeCustomLabelsSuccesses",
+    "field": "bpf.node_custom_labels.successes",
+    "id": 294
+  },
+  {
+    "description": "Number of failed attempts to read Node.js custom labels",
+    "type": "counter",
+    "name": "UnwindNodeCustomLabelsFailures",
+    "field": "bpf.node_custom_labels.failures",
+    "id": 295
   }
 ]

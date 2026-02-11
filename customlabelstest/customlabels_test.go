@@ -48,11 +48,12 @@ func TestNativeCustomLabels(t *testing.T) {
 Loop:
 	for {
 		select {
-		case trace, ok := <-traceCh:
+		case traceEvent, ok := <-traceCh:
 			if !ok {
 				break Loop
 			}
-			t.Logf("got a trace %s", trace.Comm)
+			trace := traceEvent.Trace
+			t.Logf("got a trace %s", traceEvent.Meta.Comm)
 			if len(trace.CustomLabels) > 0 {
 				var gotL1, gotL2 bool
 				for k, v := range trace.CustomLabels {

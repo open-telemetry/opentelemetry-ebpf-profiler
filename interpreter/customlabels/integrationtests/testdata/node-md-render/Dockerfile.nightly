@@ -1,0 +1,31 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y git python3 make g++ libatomic1 curl
+
+
+WORKDIR /app
+ENV PATH /app/node/bin:$PATH
+
+COPY package.json ./
+
+RUN git clone https://github.com/markedjs/marked.git /tmp/marked && \
+    cd /tmp/marked && \
+    git checkout 0a0da515346d2b3dd1662531043fa6925cb73fe3 && \
+    cp -r docs /app/docs && \
+    rm -rf /tmp/marked
+
+COPY *.js ./
+
+ARG NODE_URL
+
+RUN curl $NODE_URL > out.tar.gz
+
+RUN tar zxf out.tar.gz
+
+RUN mv node* node
+
+RUN npm install
+
+EXPOSE 80
+
+CMD node index.js

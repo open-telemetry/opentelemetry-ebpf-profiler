@@ -65,16 +65,25 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	// symbol.
 	fn := info.FileName()
 	isNativeSharedLibrary := dsoRegex.MatchString(fn)
+	isNodeExtension := (!isNativeSharedLibrary) && nodeRegex.MatchString(fn)
+	isSharedLibrary := isNativeSharedLibrary || isNodeExtension
 
 	var currentSetTlsAddr *libpf.Address
-	if isNativeSharedLibrary {
+	var alsIdentityHashAddr, alsHandleAddr *libpf.Address
+	if isSharedLibrary {
 		// Resolve thread info TLS export.
 		if err := ef.VisitTLSRelocations(func(r pfelf.ElfReloc, symName string) bool {
 			if symName == currentSetTlsExport {
 				currentSetTlsAddr = heapify(libpf.Address(r.Off))
-				return false
+			} else if isNodeExtension {
+				if symName == alsIdentityHashExport {
+					alsIdentityHashAddr = heapify(libpf.Address(r.Off))
+				} else if symName == alsHandleExport {
+					alsHandleAddr = heapify(libpf.Address(r.Off))
+				}
 			}
-			return true
+			return alsHandleAddr == nil ||
+				(isNodeExtension && (alsIdentityHashAddr == nil || alsHandleAddr == nil))
 		}); err != nil {
 			return nil, errors.New("failed to scan TLS symbols")
 		}
@@ -89,10 +98,21 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		currentSetTlsAddr = heapify(libpf.Address(offset))
 	}
 
+	var idAddr libpf.Address
+	var handleAddr libpf.Address
+	if alsIdentityHashAddr != nil {
+		idAddr = *alsIdentityHashAddr
+	}
+	if alsHandleAddr != nil {
+		handleAddr = *alsHandleAddr
+	}
 	d := data{
-		abiVersionElfVA:   libpf.Address(abiVersionSym.Address),
-		currentSetTlsAddr: *currentSetTlsAddr,
-		isSharedLibrary:   isNativeSharedLibrary,
+		abiVersionElfVA:     libpf.Address(abiVersionSym.Address),
+		currentSetTlsAddr:   *currentSetTlsAddr,
+		isSharedLibrary:     isSharedLibrary,
+		hasAlsData:          alsHandleAddr != nil,
+		alsIdentityHashAddr: idAddr,
+		alsHandleAddr:       handleAddr,
 	}
 	return &d, nil
 }

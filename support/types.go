@@ -61,7 +61,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x6f
+	MetricIDBeginCumulative = 0x72
 )
 
 const (
@@ -320,7 +320,9 @@ type V8ProcInfo struct {
 	Codekind_shift               uint8
 	Codekind_mask                uint8
 	Codekind_baseline            uint8
-	Pad_cgo_0                    [2]byte
+	Isolate_sym                  uint64
+	Cped_offset                  uint32
+	Wrapped_object_offset        uint32
 }
 type NativeCustomLabelsProcInfo struct {
 	Current_set_tls_offset       uint64
@@ -491,10 +493,13 @@ var MetricsTranslation = []metrics.MetricID{
 	0x5d: metrics.IDUnwindDotnetErrBadFP,
 	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
 	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,
-	0x69: metrics.IDUnwindRubyErrInvalidIseq,
-	0x6a: metrics.IDUnwindRubyErrReadMethodDef,
-	0x6b: metrics.IDUnwindRubyErrReadMethodType,
-	0x6c: metrics.IDUnwindRubyErrReadSvar,
-	0x6d: metrics.IDUnwindRubyErrReadRbasicFlags,
-	0x6e: metrics.IDUnwindRubyErrCmeMaxEp,
+	0x6c: metrics.IDUnwindRubyErrInvalidIseq,
+	0x6d: metrics.IDUnwindRubyErrReadMethodDef,
+	0x6e: metrics.IDUnwindRubyErrReadMethodType,
+	0x6f: metrics.IDUnwindRubyErrReadSvar,
+	0x70: metrics.IDUnwindRubyErrReadRbasicFlags,
+	0x71: metrics.IDUnwindRubyErrCmeMaxEp,
+	0x67: metrics.IDUnwindNodeCustomLabelsAttempts,
+	0x68: metrics.IDUnwindNodeCustomLabelsSuccesses,
+	0x69: metrics.IDUnwindNodeCustomLabelsFailures,
 }

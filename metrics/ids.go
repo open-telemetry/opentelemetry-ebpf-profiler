@@ -668,6 +668,15 @@ const (
 	// Number of successes adding native custom labels
 	IDUnwindNativeCustomLabelsAddSuccesses = 292
 
+	// Number of attempts to read Node.js custom labels
+	IDUnwindNodeCustomLabelsAttempts = 293
+
+	// Number of successful reads of Node.js custom labels
+	IDUnwindNodeCustomLabelsSuccesses = 294
+
+	// Number of failed attempts to read Node.js custom labels
+	IDUnwindNodeCustomLabelsFailures = 295
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 293
+	IDMax = 296
 )
