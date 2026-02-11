@@ -390,8 +390,8 @@ unwind_one_dotnet_frame(PerCPURecord *record, find_code_start_f find_code_start)
   // Validate code_header_ptr looks like a valid userspace address as a
   // defense-in-depth measure against reading stale or invalid data.
   if (is_kernel_address(code_header_ptr) || code_header_ptr < 0x1000) {
-    DEBUG_PRINT("dotnet: invalid code_header_ptr 0x%lx, skipping frame",
-                (unsigned long)code_header_ptr);
+    DEBUG_PRINT(
+      "dotnet: invalid code_header_ptr 0x%lx, skipping frame", (unsigned long)code_header_ptr);
     increment_metric(metricID_UnwindDotnetErrCodeHeader);
     return push_error(state, trace, FRAME_MARKER_DOTNET, ERR_DOTNET_CODE_HEADER);
   }
