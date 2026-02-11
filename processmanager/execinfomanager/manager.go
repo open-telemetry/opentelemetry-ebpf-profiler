@@ -11,6 +11,7 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/util"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -20,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/gpu"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
@@ -132,6 +134,15 @@ func NewExecutableInfoManager(
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
 	if includeTracers.Has(types.Labels) {
 		interpreterLoaders = append(interpreterLoaders, golabels.Loader, customlabels.Loader)
+	}
+
+	if includeTracers.Has(types.CUDATracer) {
+		// USDT support requires cookies
+		if util.HasBpfGetAttachCookie() {
+			interpreterLoaders = append(interpreterLoaders, gpu.Loader)
+		} else {
+			log.Warn("CUDA USDT tracing is not supported on this kernel (missing bpf_get_attach_cookie)")
+		}
 	}
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,

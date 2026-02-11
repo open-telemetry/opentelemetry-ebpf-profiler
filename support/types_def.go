@@ -18,20 +18,21 @@ import (
 import "C"
 
 const (
-	FrameMarkerUnknown = C.FRAME_MARKER_UNKNOWN
-	FrameMarkerPython  = C.FRAME_MARKER_PYTHON
-	FrameMarkerNative  = C.FRAME_MARKER_NATIVE
-	FrameMarkerPHP     = C.FRAME_MARKER_PHP
-	FrameMarkerPHPJIT  = C.FRAME_MARKER_PHP_JIT
-	FrameMarkerKernel  = C.FRAME_MARKER_KERNEL
-	FrameMarkerHotSpot = C.FRAME_MARKER_HOTSPOT
-	FrameMarkerRuby    = C.FRAME_MARKER_RUBY
-	FrameMarkerPerl    = C.FRAME_MARKER_PERL
-	FrameMarkerV8      = C.FRAME_MARKER_V8
-	FrameMarkerDotnet  = C.FRAME_MARKER_DOTNET
-	FrameMarkerLuaJIT  = C.FRAME_MARKER_LUAJIT
-	FrameMarkerBEAM    = C.FRAME_MARKER_BEAM
-	FrameMarkerGo      = C.FRAME_MARKER_GO
+	FrameMarkerUnknown    = C.FRAME_MARKER_UNKNOWN
+	FrameMarkerPython     = C.FRAME_MARKER_PYTHON
+	FrameMarkerNative     = C.FRAME_MARKER_NATIVE
+	FrameMarkerPHP        = C.FRAME_MARKER_PHP
+	FrameMarkerPHPJIT     = C.FRAME_MARKER_PHP_JIT
+	FrameMarkerKernel     = C.FRAME_MARKER_KERNEL
+	FrameMarkerHotSpot    = C.FRAME_MARKER_HOTSPOT
+	FrameMarkerRuby       = C.FRAME_MARKER_RUBY
+	FrameMarkerPerl       = C.FRAME_MARKER_PERL
+	FrameMarkerV8         = C.FRAME_MARKER_V8
+	FrameMarkerDotnet     = C.FRAME_MARKER_DOTNET
+	FrameMarkerLuaJIT     = C.FRAME_MARKER_LUAJIT
+	FrameMarkerBEAM       = C.FRAME_MARKER_BEAM
+	FrameMarkerCUDAKernel = C.FRAME_MARKER_CUDA_KERNEL
+	FrameMarkerGo         = C.FRAME_MARKER_GO
 )
 
 const (
@@ -109,6 +110,7 @@ const (
 	TraceOriginSampling = C.TRACE_SAMPLING
 	TraceOriginOffCPU   = C.TRACE_OFF_CPU
 	TraceOriginProbe    = C.TRACE_PROBE
+	TraceOriginCuda     = C.TRACE_CUDA_LAUNCH
 )
 
 type ApmSpanID C.ApmSpanID

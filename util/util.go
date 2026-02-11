@@ -4,11 +4,21 @@
 package util // import "go.opentelemetry.io/ebpf-profiler/util"
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
+	"os"
+	"sync"
 	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
+	"github.com/cilium/ebpf/link"
+	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
+	"golang.org/x/sys/unix"
 )
 
 // IsValidString checks if string is UTF-8-encoded and only contains expected characters.
@@ -63,4 +73,171 @@ type OnDiskFileIdentifier struct {
 
 func (odfi OnDiskFileIdentifier) Hash32() uint32 {
 	return uint32(hash.Uint64(odfi.InodeNum) + odfi.DeviceID)
+}
+
+// GetCurrentKernelVersion returns the major, minor and patch version of the kernel of the host
+// from the utsname struct.
+func GetCurrentKernelVersion() (major, minor, patch uint32, err error) {
+	var uname unix.Utsname
+	if err := unix.Uname(&uname); err != nil {
+		return 0, 0, 0, fmt.Errorf("could not get Kernel Version: %v", err)
+	}
+	_, _ = fmt.Fscanf(bytes.NewReader(uname.Release[:]), "%d.%d.%d", &major, &minor, &patch)
+	return major, minor, patch, nil
+}
+
+var (
+	// testOnlyMultiUprobeOverride allows tests to override HasMultiUprobeSupport
+	testOnlyMultiUprobeOverride *bool
+	// multiUprobeSupportCache caches the result of probing for multi-uprobe support
+	multiUprobeSupportOnce   sync.Once
+	multiUprobeSupportCached bool
+	// bpfGetAttachCookieCache caches the result of probing for bpf_get_attach_cookie support
+	bpfGetAttachCookieOnce   sync.Once
+	bpfGetAttachCookieCached bool
+)
+
+// SetTestOnlyMultiUprobeSupport overrides HasMultiUprobeSupport for testing.
+// Pass nil to restore normal behavior.
+func SetTestOnlyMultiUprobeSupport(override *bool) {
+	testOnlyMultiUprobeOverride = override
+}
+
+// probeBpfGetAttachCookie tests if the kernel supports bpf_get_attach_cookie by attempting
+// to load a minimal BPF program that uses it. This is more reliable than checking kernel
+// versions since support can be backported.
+func probeBpfGetAttachCookie() bool {
+	// Create a minimal program that calls bpf_get_attach_cookie
+	// This is equivalent to libbpf's probe_kern_bpf_cookie function
+	insns := asm.Instructions{
+		// Call bpf_get_attach_cookie() - BPF_FUNC_get_attach_cookie = 80
+		asm.FnGetAttachCookie.Call(),
+		// Exit
+		asm.Return(),
+	}
+
+	spec := &ebpf.ProgramSpec{
+		Type:         ebpf.TracePoint,
+		Instructions: insns,
+		License:      "GPL",
+	}
+
+	prog, err := ebpf.NewProgramWithOptions(spec, ebpf.ProgramOptions{
+		LogDisabled: true,
+	})
+	if err != nil {
+		return false
+	}
+	if err := prog.Close(); err != nil {
+		log.Warnf("Failed to close test program: %v", err)
+	}
+	return true
+}
+
+// HasBpfGetAttachCookie checks if the kernel supports the bpf_get_attach_cookie helper.
+// This function uses a cached, once-calculated value for performance.
+//
+// Note: This function requires CAP_BPF or CAP_SYS_ADMIN capabilities to load the probe
+// program. The profiler should already have these privileges.
+func HasBpfGetAttachCookie() bool {
+	bpfGetAttachCookieOnce.Do(func() {
+		bpfGetAttachCookieCached = probeBpfGetAttachCookie()
+	})
+
+	return bpfGetAttachCookieCached
+}
+
+// probeBpfUprobeMultiLink probes for uprobe_multi link support by attempting to create
+// an invalid uprobe_multi link. This is modeled after libbpf's probe_uprobe_multi_link
+// and cilium/ebpf's haveBPFLinkUprobeMulti which is not exposed publicly.
+//
+// Try to create a link to (invalid binary) which should fail with EBADF if supported
+func probeBpfUprobeMultiLink() bool {
+	prog, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Name: "probe_upm_link",
+		Type: ebpf.Kprobe,
+		Instructions: asm.Instructions{
+			asm.Mov.Imm(asm.R0, 0),
+			asm.Return(),
+		},
+		AttachType: ebpf.AttachTraceUprobeMulti,
+		License:    "MIT",
+	})
+	if errors.Is(err, unix.E2BIG) {
+		// Kernel doesn't support AttachType field.
+		return false
+	}
+	if err != nil {
+		log.Warnf("Failed to create test program for uprobe_multi link probe: %v", err)
+		return false
+	}
+	defer prog.Close()
+
+	ex := link.Executable{}
+
+	_, err = ex.UprobeMulti([]string{""}, prog, &link.UprobeMultiOptions{
+		Addresses: []uint64{1},
+	})
+
+	if errors.Is(err, unix.EBADF) {
+		return true
+	}
+
+	if errors.Is(err, unix.EINVAL) {
+		return false
+	}
+
+	log.Warnf("Unexpected error when probing for uprobe_multi link support: %v", err)
+	return false
+}
+
+// HasMultiUprobeSupport checks if the kernel supports uprobe multi-attach.
+// Multi-uprobes allow attaching one BPF program to multiple probe points with a single syscall,
+// which is more efficient than individual uprobe attachments.
+// This function probes for uprobe_multi link support, which was introduced in kernel 6.6.
+//
+// Note: This function requires CAP_BPF or CAP_SYS_ADMIN capabilities to load the probe
+// program. The profiler should already have these privileges.
+//
+// The behavior can be overridden by:
+// - Setting PARCA_DISABLE_MULTIPROBE=1 environment variable to force single-shot uprobe mode
+// - Using SetTestOnlyMultiUprobeSupport() for testing purposes
+func HasMultiUprobeSupport() bool {
+	// Check for test override first (takes precedence over everything)
+	if testOnlyMultiUprobeOverride != nil {
+		return *testOnlyMultiUprobeOverride
+	}
+
+	// Cache the probe result since it's expensive to check
+	multiUprobeSupportOnce.Do(func() {
+		// Check for environment variable override inside the Do() to ensure
+		// it's only evaluated once and consistently cached
+		if os.Getenv("PARCA_DISABLE_MULTIPROBE") == "1" {
+			multiUprobeSupportCached = false
+		} else {
+			multiUprobeSupportCached = probeBpfUprobeMultiLink()
+		}
+	})
+
+	return multiUprobeSupportCached
+}
+
+// ProgArrayReferences returns a list of instructions which load a specified tail
+// call FD.
+func ProgArrayReferences(perfTailCallMapFD int, insns asm.Instructions) []int {
+	insNos := []int{}
+	for i := range insns {
+		ins := &insns[i]
+		if asm.OpCode(ins.OpCode.Class()) != asm.OpCode(asm.LdClass) {
+			continue
+		}
+		m := ins.Map()
+		if m == nil {
+			continue
+		}
+		if perfTailCallMapFD == m.FD() {
+			insNos = append(insNos, i)
+		}
+	}
+	return insNos
 }

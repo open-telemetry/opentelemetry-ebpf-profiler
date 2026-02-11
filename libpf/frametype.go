@@ -55,6 +55,8 @@ const (
 	BEAMFrame FrameType = support.FrameMarkerBEAM
 	// LuaJITFrame identifies the LuaJIT interpreter frames.
 	LuaJITFrame FrameType = support.FrameMarkerLuaJIT
+	// CUDAKernelFrame identifies CUDA kernel frames.
+	CUDAKernelFrame FrameType = support.FrameMarkerCUDAKernel
 )
 
 const (

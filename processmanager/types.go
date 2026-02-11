@@ -151,3 +151,8 @@ type processInfo struct {
 	// C-library Thread Specific Data information
 	libcInfo *libc.LibcInfo
 }
+
+// GetEbpfHandler returns the EbpfHandler interface for direct access to eBPF operations.
+func (pm *ProcessManager) GetEbpfHandler() pmebpf.EbpfHandler {
+	return pm.ebpf
+}

@@ -1,0 +1,9 @@
+# Custom golangci-lint image with systemtap-sdt-dev for CGO USDT support
+ARG GOLANGCI_LINT_VERSION=v1.62.2
+FROM golangci/golangci-lint:${GOLANGCI_LINT_VERSION}
+
+# Install systemtap-sdt-dev for CGO USDT compilation
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends systemtap-sdt-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*

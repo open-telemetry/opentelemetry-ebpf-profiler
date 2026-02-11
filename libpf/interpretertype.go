@@ -37,6 +37,8 @@ const (
 	Go InterpreterType = support.FrameMarkerGo
 	// BEAM identifies the BEAM interpreter.
 	BEAM InterpreterType = support.FrameMarkerBEAM
+	// CUDA interpreter type for CUDA kernels.
+	CUDA InterpreterType = support.FrameMarkerCUDAKernel
 )
 
 // Pseudo-interpreters without a corresponding frame type.
