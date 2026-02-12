@@ -76,4 +76,3 @@ func (m *EbpfHandlerStubs) AttachUSDTProbes(libpf.PID, string, string, []pfelf.U
 	[]uint64, []string) (LinkCloser, error) {
 	return nil, nil
 }
-

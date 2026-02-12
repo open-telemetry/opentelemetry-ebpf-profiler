@@ -28,16 +28,15 @@
 // Indicates a PHP JIT frame
 #define FRAME_MARKER_PHP_JIT     0x9
 // Indicates a Dotnet frame
-#define FRAME_MARKER_DOTNET  0xA
+#define FRAME_MARKER_DOTNET      0xA
 // Indicates a Go frame
-#define FRAME_MARKER_GO      0xB
+#define FRAME_MARKER_GO          0xB
 // Indicates a BEAM frame
-#define FRAME_MARKER_BEAM    0xC
+#define FRAME_MARKER_BEAM        0xC
 // Indicates a LuaJIT frame
-#define FRAME_MARKER_LUAJIT  0xD
+#define FRAME_MARKER_LUAJIT      0xD
 // Indicates a CUDA kernel frame
 #define FRAME_MARKER_CUDA_KERNEL 0xE
-
 
 // Frame flags
 // Indicates that this frame is an error frame.

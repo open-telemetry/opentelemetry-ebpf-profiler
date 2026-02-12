@@ -92,8 +92,9 @@ func lookupRegister(regName string) (usdt.Register, bool) {
 
 // Regex patterns for parsing USDT argument specifications
 // USDT argument format: SIZE@LOCATION where:
-//   SIZE: byte size (negative for signed)
-//   LOCATION: register (%rax), memory offset(%reg) or [reg, offset], or constant ($123 or 123)
+//
+//	SIZE: byte size (negative for signed)
+//	LOCATION: register (%rax), memory offset(%reg) or [reg, offset], or constant ($123 or 123)
 var (
 	// Memory dereference with offset - x86_64 syntax: -4@-1204(%rbp) or -4f@-1204(%rbp)
 	regexRegDerefWithOffset = regexp.MustCompile(
