@@ -30,11 +30,11 @@ func Start(ctx context.Context, interval time.Duration, callback func()) func() 
 	return ticker.Stop
 }
 
-// StartWithManualTrigger starts a timer that calls <callback> every <interval>
-// from <reset> channel until the <ctx> is canceled. Additionally the 'trigger'
-// channel can be used to trigger callback immediately.
+// StartWithManualTrigger starts a timer goroutine that calls <callback> every
+// <interval> until the <ctx> is canceled or <callback> returns false.
+// The 'trigger' channel can be used to trigger callback immediately.
 func StartWithManualTrigger(ctx context.Context, interval time.Duration, trigger chan bool,
-	callback func(manualTrigger bool)) func() {
+	callback func(manualTrigger bool) bool) func() {
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
@@ -42,9 +42,13 @@ func StartWithManualTrigger(ctx context.Context, interval time.Duration, trigger
 		for {
 			select {
 			case <-ticker.C:
-				callback(false)
+				if ret := callback(false); !ret {
+					return
+				}
 			case <-trigger:
-				callback(true)
+				if ret := callback(true); !ret {
+					return
+				}
 			case <-ctx.Done():
 				return
 			}
