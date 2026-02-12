@@ -115,10 +115,10 @@ func (m *MultiInstance) UpdateLibcInfo(ebpf EbpfHandler, pid libpf.PID, info lib
 }
 
 // Symbolize tries to symbolize the frame with each interpreter instance until one succeeds.
-func (m *MultiInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames) error {
+func (m *MultiInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, mapping libpf.FrameMapping) error {
 	// Try each interpreter in order
 	for _, instance := range m.instances {
-		err := instance.Symbolize(ef, frames)
+		err := instance.Symbolize(ef, frames, mapping)
 		if err != ErrMismatchInterpreterType {
 			return err
 		}

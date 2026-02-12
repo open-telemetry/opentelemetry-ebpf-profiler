@@ -89,6 +89,29 @@ func (regs *vmRegs) regX86(ndx uleb128) *vmReg {
 	}
 }
 
+func getUnwinderRegX86(reg uleb128) uint8 {
+	switch reg {
+	case x86RegRAX:
+		return support.UnwindRegX86RAX
+	case x86RegR9:
+		return support.UnwindRegX86R9
+	case x86RegR11:
+		return support.UnwindRegX86R11
+	case x86RegR15:
+		return support.UnwindRegX86R15
+	case x86RegRBP:
+		return support.UnwindRegFp
+	case x86RegRSP:
+		return support.UnwindRegSp
+	case x86RegRIP:
+		return support.UnwindRegPc
+	case regCFA:
+		return support.UnwindRegCfa
+	default:
+		return support.UnwindRegInvalid
+	}
+}
+
 // getUnwindInfo x86 specific part
 func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 	// Is CFA and RIP (return address) valid?
@@ -102,6 +125,10 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 		// thread start __clone function, treat this as STOP. Seeing the INVALID
 		// condition in samples is statistically unlikely.
 		return sdtypes.UnwindInfoStop
+	}
+	// Filter invalid RSP based CFAs
+	if regs.cfa.reg == x86RegRSP && regs.cfa.off == 0 {
+		return sdtypes.UnwindInfoInvalid
 	}
 
 	// The CFI allows having Return Address (RA) be recoverable via an expression,
@@ -118,52 +145,47 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 	case regCFA:
 		// Check that RBP is between CFA and stack top
 		if regs.cfa.reg != x86RegRSP || (regs.fp.off < 0 && regs.fp.off >= -regs.cfa.off) {
-			info.FPOpcode = support.UnwindOpcodeBaseCFA
-			info.FPParam = int32(regs.fp.off)
+			info.AuxBaseReg = support.UnwindRegCfa
+			info.AuxParam = int32(regs.fp.off)
 		}
 	case regExprReg:
 		// expression: RBP+offrbp
 		if r, _, offrbp, _ := splitOff(regs.fp.off); uleb128(r) == x86RegRBP {
-			info.FPOpcode = support.UnwindOpcodeBaseFP
-			info.FPParam = int32(offrbp)
+			info.AuxBaseReg = support.UnwindRegFp
+			info.AuxParam = int32(offrbp)
 		}
 	}
 
 	// Determine unwind info for stack pointer
 	switch regs.cfa.reg {
-	case x86RegRBP:
-		info.Opcode = support.UnwindOpcodeBaseFP
+	case x86RegRBP, x86RegRSP:
+		info.BaseReg = getUnwinderRegX86(regs.cfa.reg)
 		info.Param = int32(regs.cfa.off)
-	case x86RegRSP:
-		if regs.cfa.off != 0 {
-			info.Opcode = support.UnwindOpcodeBaseSP
-			info.Param = int32(regs.cfa.off)
-		}
 	case x86RegRAX, x86RegR9, x86RegR11, x86RegR15:
 		// openssl libcrypto has handwritten assembly that use these registers
 		// as the CFA directly. These function do not call other code that would
 		// trash the register, so allow these for libcrypto.
-		if regs.cfa.off%8 == 0 {
-			info.Opcode = support.UnwindOpcodeBaseReg
-			info.Param = int32(regs.cfa.reg) + int32(regs.cfa.off)<<1
-		}
+		info.Flags |= support.UnwindFlagLeafOnly
+		info.BaseReg = getUnwinderRegX86(regs.cfa.reg)
+		info.Param = int32(regs.cfa.off)
 	case regExprPLT:
-		info.Opcode = support.UnwindOpcodeCommand
+		info.Flags = support.UnwindFlagCommand
 		info.Param = support.UnwindCommandPLT
 	case regExprRegDeref:
 		reg, _, off, off2 := splitOff(regs.cfa.off)
 		if param, ok := sdtypes.PackDerefParam(int32(off), int32(off2)); ok {
 			switch uleb128(reg) {
-			case x86RegRBP:
+			case x86RegRBP, x86RegRSP:
 				// GCC SSE vectorized functions
-				info.Opcode = support.UnwindOpcodeBaseFP | support.UnwindOpcodeFlagDeref
-				info.Param = param
-			case x86RegRSP:
 				// OpenSSL assembly using SSE/AVX
-				info.Opcode = support.UnwindOpcodeBaseSP | support.UnwindOpcodeFlagDeref
+				info.Flags |= support.UnwindFlagDerefCfa
+				info.BaseReg = getUnwinderRegX86(uleb128(reg))
 				info.Param = param
 			}
 		}
+	}
+	if info.BaseReg == support.UnwindRegInvalid {
+		return sdtypes.UnwindInfoInvalid
 	}
 	return info
 }

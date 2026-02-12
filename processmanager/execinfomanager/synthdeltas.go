@@ -8,7 +8,7 @@ import (
 
 	aa "golang.org/x/arch/arm64/arm64asm"
 
-	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
@@ -70,13 +70,13 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 			case aa.RET:
 				return true
 			case aa.STP:
-				if reg, ok := ah.Xreg2num(inst.Args[0]); !ok || reg != regFP {
+				if reg, ok := arm.Xreg2num(inst.Args[0]); !ok || reg != regFP {
 					continue
 				}
-				if reg, ok := ah.Xreg2num(inst.Args[1]); !ok || reg != regLR {
+				if reg, ok := arm.Xreg2num(inst.Args[1]); !ok || reg != regLR {
 					continue
 				}
-				imm, ok := ah.DecodeImmediate(inst.Args[2])
+				imm, ok := arm.DecodeImmediate(inst.Args[2])
 				if !ok {
 					continue
 				}
@@ -86,10 +86,10 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 					frameSize = int(imm)
 				}
 			case aa.LDP:
-				if reg, ok := ah.Xreg2num(inst.Args[0]); !ok || reg != regFP {
+				if reg, ok := arm.Xreg2num(inst.Args[0]); !ok || reg != regFP {
 					continue
 				}
-				if reg, ok := ah.Xreg2num(inst.Args[1]); !ok || reg != regLR {
+				if reg, ok := arm.Xreg2num(inst.Args[1]); !ok || reg != regLR {
 					continue
 				}
 				if frameStart == 0 {
@@ -100,10 +100,10 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 					sdtypes.StackDelta{
 						Address: addr + frameStart,
 						Info: sdtypes.UnwindInfo{
-							Opcode:   support.UnwindOpcodeBaseFP,
-							Param:    int32(frameSize),
-							FPOpcode: support.UnwindOpcodeBaseFP,
-							FPParam:  8,
+							BaseReg:    support.UnwindRegFp,
+							Param:      int32(frameSize),
+							AuxBaseReg: support.UnwindRegFp,
+							AuxParam:   8,
 						},
 					},
 					sdtypes.StackDelta{Address: addr + offs + 4, Info: sdtypes.UnwindInfoLR},

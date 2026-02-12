@@ -161,9 +161,6 @@ func Parse(tracers string) (IncludedTracers, error) {
 		switch name {
 		case "all":
 			result.enableAll()
-			if runtime.GOARCH == "arm64" {
-				result.Disable(DotnetTracer)
-			}
 		case "native":
 			log.Warn("Enabling the `native` tracer explicitly is deprecated (it's always-on)")
 		default:
