@@ -20,8 +20,8 @@
 #
 #####################################################
 
-# interpreter/beam/ @open-telemetry/ebpf-profiler-approvers @GregMefford
-# support/ebpf/beam_tracer.ebpf.c @open-telemetry/ebpf-profiler-approvers @GregMefford
+interpreter/beam/ @open-telemetry/ebpf-profiler-approvers @GregMefford
+support/ebpf/beam_tracer.ebpf.c @open-telemetry/ebpf-profiler-approvers @GregMefford
 
 #####################################################
 #
