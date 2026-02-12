@@ -81,7 +81,7 @@ pub enum Error {
     #[error("Not all arrays in a columnar struct-of-arrays have the same length")]
     ColumnLengthMismatch,
 
-    #[error("Encountered relative value without an absolut value preceding it")]
+    #[error("Encountered relative value without an absolute value preceding it")]
     RelativeValueWithoutReference,
 
     #[error("IO error")]

@@ -12,7 +12,7 @@ use fallible_iterator::FallibleIterator as _;
 /// Result type shorthand.
 pub type Result<T = (), E = Error> = std::result::Result<T, E>;
 
-/// Errors that can occurr during Go symbol extraction.
+/// Errors that can occur during Go symbol extraction.
 #[non_exhaustive]
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]

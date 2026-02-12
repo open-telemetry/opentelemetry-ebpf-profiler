@@ -68,14 +68,18 @@ func (t *Tracer) handleGenericPID() {
 	}
 }
 
-// triggerPidEvent is a trigger function for the eBPF map report_events. It is
+// triggerReportEvent is a trigger function for the eBPF map report_events. It is
 // called for every event that is received in user space from this map. The underlying
 // C structure in the received data is transformed to a Go structure and the event
 // handler is invoked.
-func (t *Tracer) triggerPidEvent(data []byte) {
+func (t *Tracer) triggerReportEvent(data []byte) {
 	event := (*support.Event)(unsafe.Pointer(&data[0]))
-	if event.Type == support.EventTypeGenericPID {
+	switch event.Type {
+	case support.EventTypeGenericPID:
 		t.handleGenericPID()
+	case support.EventTypeReloadKallsyms:
+		t.kernelSymbolizer.Reload()
+		t.enableEvent(support.EventTypeReloadKallsyms)
 	}
 }
 
@@ -84,7 +88,7 @@ func (t *Tracer) triggerPidEvent(data []byte) {
 // will wake up user-land.
 //
 // For each received event, triggerFunc is called. triggerFunc may NOT store
-// references into the buffer that it is given: the buffer is re-used across
+// references into the buffer that it is given: the buffer is reused across
 // calls. Returns a function that can be called to retrieve perf event array
 // error counts.
 func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
@@ -214,7 +218,22 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				eventCount++
 
 				// Keep track of min KTime seen in this batch processing loop
-				trace := t.loadBpfTrace(data.RawSample, data.CPU)
+				trace, err := t.loadBpfTrace(data.RawSample, data.CPU)
+				switch {
+				case err == nil:
+					// Fast path for no error.
+				case errors.Is(err, errOriginUnexpected):
+					log.Warnf("skip trace handling: %v", err)
+					continue
+				case errors.Is(err, errRecordTooSmall), errors.Is(err, errRecordUnexpectedSize):
+					log.Errorf("stop receiving traces: %v", err)
+					// TODO: trigger a graceful shutdown
+					return
+				default:
+					log.Warnf("unexpected error handling trace: %v", err)
+					continue
+				}
+
 				if minKTime == 0 || trace.KTime < minKTime {
 					minKTime = trace.KTime
 				}
@@ -282,7 +301,7 @@ func (t *Tracer) startEventMonitor(ctx context.Context) func() []metrics.Metric 
 		log.Fatalf("Map report_events is not available")
 	}
 
-	getPerfErrorCounts := startPerfEventMonitor(ctx, eventMap, t.triggerPidEvent, os.Getpagesize())
+	getPerfErrorCounts := startPerfEventMonitor(ctx, eventMap, t.triggerReportEvent, os.Getpagesize())
 	return func() []metrics.Metric {
 		lost, noData, readError := getPerfErrorCounts()
 

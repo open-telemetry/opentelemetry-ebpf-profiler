@@ -31,34 +31,42 @@ type stats struct {
 	numDeltas, numMerged uint
 }
 
-func getOpcode(opcode uint8, param int32) string {
-	str := ""
-	switch opcode &^ support.UnwindOpcodeFlagDeref {
-	case support.UnwindOpcodeCommand:
-		switch param {
-		case support.UnwindCommandInvalid:
-			return "invalid"
-		case support.UnwindCommandStop:
-			return "stop"
-		case support.UnwindCommandPLT:
-			return "plt"
-		case support.UnwindCommandSignal:
-			return "signal"
-		case support.UnwindCommandFramePointer:
-			return "framepointer"
-		default:
-			return "?"
-		}
-	case support.UnwindOpcodeBaseCFA:
-		str = "cfa"
-	case support.UnwindOpcodeBaseFP:
-		str = "fp"
-	case support.UnwindOpcodeBaseSP:
-		str = "sp"
+func getCommand(param int32) string {
+	switch param {
+	case support.UnwindCommandInvalid:
+		return "invalid"
+	case support.UnwindCommandStop:
+		return "stop"
+	case support.UnwindCommandPLT:
+		return "plt"
+	case support.UnwindCommandSignal:
+		return "signal"
+	case support.UnwindCommandFramePointer:
+		return "framepointer"
 	default:
-		return "?"
+		return fmt.Sprintf("%#x", param)
 	}
-	if opcode&support.UnwindOpcodeFlagDeref != 0 {
+}
+
+func getOpcode(baseReg uint8, param int32, deref bool) string {
+	str := ""
+	switch baseReg {
+	case support.UnwindRegInvalid:
+		return "?"
+	case support.UnwindRegCfa:
+		str = "cfa"
+	case support.UnwindRegPc:
+		str = "pc"
+	case support.UnwindRegSp:
+		str = "sp"
+	case support.UnwindRegFp:
+		str = "fp"
+	case support.UnwindRegLr:
+		str = "lr"
+	default:
+		str = fmt.Sprintf("r%d", baseReg)
+	}
+	if deref {
 		preDeref, postDeref := sdtypes.UnpackDerefParam(param)
 		if postDeref != 0 {
 			str = fmt.Sprintf("*(%s%+x)%+x", str, preDeref, postDeref)
@@ -71,13 +79,35 @@ func getOpcode(opcode uint8, param int32) string {
 	return str
 }
 
+func dumpDelta(delta sdtypes.StackDelta, merged bool) {
+	var cfa, fp string
+	info := &delta.Info
+	if info.Flags&support.UnwindFlagCommand != 0 {
+		cfa = getCommand(info.Param)
+	} else {
+		cfa = getOpcode(info.BaseReg, info.Param, info.Flags&support.UnwindFlagDerefCfa != 0)
+		fp = getOpcode(info.AuxBaseReg, info.AuxParam, false)
+	}
+	comment := ""
+	if delta.Hints&sdtypes.UnwindHintKeep != 0 {
+		comment += " keep"
+	}
+	if delta.Hints&sdtypes.UnwindHintEnd != 0 {
+		comment += " end"
+	}
+	if merged {
+		comment += " merged"
+	}
+	fmt.Printf("%016x %-16s%-16s%s\n", delta.Address, cfa, fp, comment)
+}
+
 func canMerge(delta, nextDelta sdtypes.StackDelta) bool {
 	if nextDelta.Address-delta.Address > uint64(*mergeDistance) {
 		return false
 	}
-	if nextDelta.Info.Opcode != delta.Info.Opcode ||
-		nextDelta.Info.FPOpcode != delta.Info.FPOpcode ||
-		nextDelta.Info.FPParam != delta.Info.FPParam {
+	if nextDelta.Info.BaseReg != delta.Info.BaseReg ||
+		nextDelta.Info.AuxBaseReg != delta.Info.AuxBaseReg ||
+		nextDelta.Info.AuxParam != delta.Info.AuxParam {
 		return false
 	}
 	deltaDiff := nextDelta.Info.Param - delta.Info.Param
@@ -105,19 +135,7 @@ func analyzeFile(filename string, s *stats, dump bool) error {
 	var numMerged uint
 	for index, delta := range data.Deltas {
 		if dump {
-			cfa := getOpcode(delta.Info.Opcode, delta.Info.Param)
-			fp := getOpcode(delta.Info.FPOpcode, delta.Info.FPParam)
-			comment := ""
-			if delta.Hints&sdtypes.UnwindHintKeep != 0 {
-				comment += " keep"
-			}
-			if delta.Hints&sdtypes.UnwindHintEnd != 0 {
-				comment += " end"
-			}
-			if merged {
-				comment += " merged"
-			}
-			fmt.Printf("%016x %-16s%-16s%s\n", delta.Address, cfa, fp, comment)
+			dumpDelta(delta, merged)
 		}
 		if merged {
 			merged = false

@@ -10,6 +10,8 @@ package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/
 import (
 	"bytes"
 	"debug/elf"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"go/version"
 	"io"
@@ -50,6 +52,12 @@ const (
 	go1_16    = 16
 	go1_18    = 18
 	go1_20    = 20
+
+	// Offset of the text field in moduledata struct for Go 1.16+
+	// https://github.com/golang/go/blob/release-branch.go1.16/src/runtime/symtab.go#L370
+	textOffset = 22 * 8
+	// section name for the module data for Go 1.26+
+	moduleDataSectionName = ".go.module"
 )
 
 func goMagicToVersion(magic uint32) uint8 {
@@ -469,17 +477,13 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.funcdata = g.functab
 		g.textStart = hdr118.textStart
 		if g.textStart == 0 {
-			// Starting with Go 1.26 the field textStart is set to 0 but moduledata.text
-			// which contains the same value is unaffected.
-			// The following logic assumes that .text matches moduledata.text
-			// which might not always be true (in which case we need to switch to moduledata.text
-			// which can be found through runtime.firstmoduledata).
-			//
-			//nolint:lll
-			// See https://github.com/golang/go/commit/0e1bd8b5f17e337df0ffb57af03419b96c695fe4
-			if sec := ef.Section(".text"); sec != nil {
-				g.textStart = uintptr(sec.Addr)
-				break
+			// Starting from Go 1.26, textStart address in pclntab is always set to 0.
+			// Therefore we need to get it from either `runtime.text` symbol or moduledata.
+			// Note that it does not always match the address of `.text` section
+			// (for example with cgo binaries or when built with -linkmode=external).
+			g.textStart, err = findTextStart(ef)
+			if err != nil {
+				return nil, fmt.Errorf("failed to find text start: %w", err)
 			}
 		}
 		// With the change of the type of the first field of _func in Go 1.18, this
@@ -591,6 +595,25 @@ func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcNam
 	return sourceFile, line, funcName
 }
 
+func findTextStart(ef *pfelf.File) (uintptr, error) {
+	// Get textstart from moduledata
+	// Starting from Go 1.26, moduledata has its own `.go.module` section.
+	// Since this function is expected to be called only for Go 1.26+ binaries,
+	// we can expect that the section exists and error out if it does not.
+	moduleDataSection := ef.Section(moduleDataSectionName)
+	if moduleDataSection == nil || moduleDataSection.Type == elf.SHT_NOBITS {
+		return 0, errors.New("could not find .go.module section or it is empty")
+	}
+
+	var textBytes [8]byte
+	_, err := moduleDataSection.ReadAt(textBytes[:], textOffset)
+	if err != nil {
+		return 0, fmt.Errorf("could not read .go.module section at offset %v: %w", textOffset, err)
+	}
+
+	return uintptr(binary.LittleEndian.Uint64(textBytes[:])), nil
+}
+
 type strategy int
 
 const (
@@ -642,12 +665,12 @@ func parseX86pclntabFunc(deltas *sdtypes.StackDeltaArray, p pcval, s strategy) e
 	hints := sdtypes.UnwindHintKeep
 	for ok := true; ok; ok = p.step() {
 		info := sdtypes.UnwindInfo{
-			Opcode: support.UnwindOpcodeBaseSP,
-			Param:  p.val + 8,
+			BaseReg: support.UnwindRegSp,
+			Param:   p.val + 8,
 		}
 		if s == strategyDeltasWithFrame && info.Param >= 16 {
-			info.FPOpcode = support.UnwindOpcodeBaseCFA
-			info.FPParam = -16
+			info.AuxBaseReg = support.UnwindRegCfa
+			info.AuxParam = -16
 		}
 		deltas.Add(sdtypes.StackDelta{
 			Address: uint64(p.pcStart),
@@ -671,13 +694,13 @@ func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, p pcval, s strategy)
 			// Regular basic block in the function body: unwind via SP.
 			info = sdtypes.UnwindInfo{
 				// Unwind via SP offset.
-				Opcode: support.UnwindOpcodeBaseSP,
-				Param:  p.val,
+				BaseReg: support.UnwindRegSp,
+				Param:   p.val,
 			}
 			if s == strategyDeltasWithFrame {
 				// On ARM64, the previous LR value is stored to top-of-stack.
-				info.FPOpcode = support.UnwindOpcodeBaseSP
-				info.FPParam = 0
+				info.AuxBaseReg = support.UnwindRegSp
+				info.AuxParam = 0
 			}
 		}
 

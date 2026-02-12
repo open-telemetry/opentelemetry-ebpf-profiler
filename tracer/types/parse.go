@@ -148,7 +148,7 @@ func Parse(tracers string) (IncludedTracers, error) {
 	var result IncludedTracers
 
 	// Parse and validate tracers string.
-	for _, name := range strings.Split(tracers, ",") {
+	for name := range strings.SplitSeq(tracers, ",") {
 		name = strings.ToLower(strings.TrimSpace(name))
 		if name == "" {
 			continue
@@ -161,9 +161,6 @@ func Parse(tracers string) (IncludedTracers, error) {
 		switch name {
 		case "all":
 			result.enableAll()
-			if runtime.GOARCH == "arm64" {
-				result.Disable(DotnetTracer)
-			}
 		case "native":
 			log.Warn("Enabling the `native` tracer explicitly is deprecated (it's always-on)")
 		default:

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"slices"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -1135,23 +1136,12 @@ func (pp *peParser) parse() error {
 }
 
 func (pi *peInfo) resolveMethodName(methodIdx uint32) libpf.String {
-	if methodIdx == 0 || methodIdx > uint32(len(pi.methodSpecs)) {
+	idx := sort.Search(len(pi.typeSpecs), func(idx int) bool {
+		return pi.typeSpecs[idx].methodIdx > methodIdx
+	}) - 1
+	if methodIdx == 0 || methodIdx > uint32(len(pi.methodSpecs)) || idx < 0 {
 		return libpf.Intern(fmt.Sprintf("<invalid method index %d/%d>",
 			methodIdx, len(pi.methodSpecs)))
-	}
-
-	idx, ok := slices.BinarySearchFunc(pi.typeSpecs, methodIdx,
-		func(typespec peTypeSpec, methodIdx uint32) int {
-			if methodIdx < typespec.methodIdx {
-				return 1
-			}
-			if methodIdx > typespec.methodIdx {
-				return -1
-			}
-			return 0
-		})
-	if !ok {
-		idx--
 	}
 
 	typeSpec := &pi.typeSpecs[idx]

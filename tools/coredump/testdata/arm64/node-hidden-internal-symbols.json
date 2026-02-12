@@ -1,0 +1,143 @@
+{
+  "coredump-ref": "14843242db7d986752e4620174154affa528806cfbd2651fae93f278b7f2d025",
+  "threads": [
+    {
+      "lwp": 27330,
+      "frames": [
+        "_write+0 in node:internal/streams/writable:0",
+        "log+0 in node:internal/console/constructor:0",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0xcc3623",
+        "node+0xcc4207",
+        "node+0xb42107",
+        "node+0xa46483",
+        "V8::UnknownFrame+0 in :0",
+        "utf8+0 in /local/hello3.js:0",
+        "<anonymous>+0 in node:internal/modules/cjs/loader:0",
+        "<anonymous>+0 in node:internal/modules/cjs/loader:0",
+        "<anonymous>+0 in node:internal/modules/cjs/loader:0",
+        "<anonymous>+0 in node:internal/modules/cjs/loader:0",
+        "traceSync+0 in node:diagnostics_channel:0",
+        "wrapModuleLoad+0 in node:internal/modules/cjs/loader:0",
+        "executeUserEntryPoint+0 in node:internal/modules/run_main:0",
+        "node:internal/main/run_main_module+0 in node:internal/main/run_main_module:0",
+        "V8::InternalFrame+0 in :0",
+        "V8::EntryFrame+0 in :0",
+        "node+0xcc3623",
+        "node+0xcc4207",
+        "node+0xb42107",
+        "node+0x8477ef",
+        "node+0x921583",
+        "node+0x81788f",
+        "node+0x81ed23",
+        "node+0x773957",
+        "node+0x8cc9bf",
+        "node+0x81e337",
+        "libc.so.6+0x27743",
+        "libc.so.6+0x27817",
+        "node+0x76c2ff"
+      ]
+    },
+    {
+      "lwp": 27376,
+      "frames": [
+        "libc.so.6+0x7e834",
+        "libc.so.6+0x8a643",
+        "node+0x17f0627",
+        "node+0xa2bf6f",
+        "libc.so.6+0x8202f",
+        "libc.so.6+0xebf1b"
+      ]
+    },
+    {
+      "lwp": 27375,
+      "frames": [
+        "libc.so.6+0x7e834",
+        "libc.so.6+0x81387",
+        "node+0x17f07fb",
+        "node+0x90848b",
+        "libc.so.6+0x8202f",
+        "libc.so.6+0xebf1b"
+      ]
+    },
+    {
+      "lwp": 27374,
+      "frames": [
+        "libc.so.6+0x7e834",
+        "libc.so.6+0x81387",
+        "node+0x17f07fb",
+        "node+0x90848b",
+        "libc.so.6+0x8202f",
+        "libc.so.6+0xebf1b"
+      ]
+    },
+    {
+      "lwp": 27373,
+      "frames": [
+        "libc.so.6+0x7e834",
+        "libc.so.6+0x81387",
+        "node+0x17f07fb",
+        "node+0x90848b",
+        "libc.so.6+0x8202f",
+        "libc.so.6+0xebf1b"
+      ]
+    },
+    {
+      "lwp": 27372,
+      "frames": [
+        "libc.so.6+0x7e834",
+        "libc.so.6+0x81387",
+        "node+0x17f07fb",
+        "node+0x90848b",
+        "libc.so.6+0x8202f",
+        "libc.so.6+0xebf1b"
+      ]
+    },
+    {
+      "lwp": 27371,
+      "frames": [
+        "libc.so.6+0xec0b4",
+        "node+0x17f656b",
+        "node+0x17e1abb",
+        "node+0x90d2ff",
+        "libc.so.6+0x8202f",
+        "libc.so.6+0xebf1b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "532f3a12d7b8fef6cc7a064ea106b6c4ab2365674b73e743e4a385d4ffb6c8ab",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.30"
+    },
+    {
+      "ref": "e5e9474a683596d59cc9e13246bc83878433e53c3befbabd73e3da9ccb5fe174",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libdl.so.2"
+    },
+    {
+      "ref": "add9309ee6f1252a4d018de9db5ed39100f8128037f45e387e07e279824d05a4",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "9189756f81aa0d5c706826f2a7763227a5abba0b5ca8c770096a25f35cf10e55",
+      "local-path": "/usr/local/bin/node"
+    },
+    {
+      "ref": "3c4cb3be0b974edf05f023f85ab15107fb5afc2687163593d0d4cf8e80c17b39",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "44b77ca3a741a38d3d0d855b293f5b9d50bac8368b717087cd7e76b3abccd6f9",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "434dcd27f22fc8bf236c0c00541a1e503d302aa796c333729a2cd15a4cfe4814",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libpthread.so.0"
+    },
+    {
+      "ref": "046856f95f4636f1fc7c3a12bf4f3cd5634c2fc5145c3fdf7395d4f349fa69c7",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1"
+    }
+  ]
+}

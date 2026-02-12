@@ -46,7 +46,7 @@ func memberByName(t *btf.Struct, field string) (*btf.Member, error) {
 // can refer to field within nested structs.
 func calculateFieldOffset(t btf.Type, fieldSpec string) (uint, error) {
 	offset := uint(0)
-	for _, field := range strings.Split(fieldSpec, ".") {
+	for field := range strings.SplitSeq(fieldSpec, ".") {
 		st, ok := t.(*btf.Struct)
 		if !ok {
 			return 0, fmt.Errorf("field '%s' is not a struct", field)
@@ -296,7 +296,7 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	return nil
 }
 
-// loadRodataVars initalizes RODATA variables for the eBPF programs.
+// loadRodataVars initializes RODATA variables for the eBPF programs.
 func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config) error {
 	if cfg.VerboseMode {
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {

@@ -294,7 +294,7 @@ sent through:
 `<code block embedding removed: git history no longer exists>`
 
 Perf events are essentially per-CPU ring-buffers. The events don't have to be
-copied into user-mode memory: the ring buffer is `mmaped` into the UM
+copied into user-mode memory: the ring buffer is `mmapped` into the UM
 process[^1].
 
 Since we're currently only suppressing about 45% of trace resends anyway, we
@@ -628,7 +628,7 @@ of caching. No strong opinion on this, though.
 #### Improvements on newer kernels
 
 Kernel versions v4.18+ actually have a function `bpf_get_current_cgroup_id` that
-we could use to obtain a unique ID that is guaranteed not to be re-used:
+we could use to obtain a unique ID that is guaranteed not to be reused:
 
 https://github.com/torvalds/linux/blob/9b6de136b5f0158c60844f85286a593cb70fb364/include/linux/kernfs.h#L217-L221
 

@@ -60,7 +60,7 @@ var (
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
-	ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
+	executableUnloadDelay time.Duration, ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
 	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
 	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
 	if exeReporter == nil {
@@ -84,6 +84,13 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
+
+	periodiccaller.Start(ctx, executableUnloadDelay, func() {
+		err := em.CleanupUnused(executableUnloadDelay)
+		if err != nil {
+			log.Errorf("Failed to cleanup unused executables: %v", err)
+		}
+	})
 
 	interpreters := make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance)
 
@@ -180,7 +187,7 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 func (pm *ProcessManager) Close() {
 }
 
-func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *libpf.Frames) error {
+func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *libpf.Frames, mapping libpf.FrameMapping) error {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
@@ -189,7 +196,7 @@ func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *l
 	}
 
 	for _, instance := range pm.interpreters[pid] {
-		if err := instance.Symbolize(data, frames); err != nil {
+		if err := instance.Symbolize(data, frames, mapping); err != nil {
 			if errors.Is(err, interpreter.ErrMismatchInterpreterType) {
 				// The interpreter type of instance did not match the type of frame.
 				// So continue with the next interpreter instance for this PID.
@@ -212,9 +219,15 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 		log.Errorf("Unexpected frame type 0x%02X (neither error nor usermode frame)",
 			uint8(ef.Type()))
 	case libpf.Native:
+		fileID := host.FileID(ef.Variable(0))
+		address := libpf.Address(ef.Data())
+
+		// Locate mapping info for the frame.
+		mapping := pm.findMappingForTrace(pid, fileID, address)
+
 		// Attempt symbolization of native frames. It is best effort and
 		// provides non-symbolized frames if no native symbolizer is active.
-		if err := pm.symbolizeFrame(pid, ef, dst); err == nil {
+		if err := pm.symbolizeFrame(pid, ef, dst, mapping); err == nil {
 			return true
 		}
 
@@ -232,22 +245,16 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 		// Optimally we'd subtract the size of the call instruction here instead
 		// of doing `- 1`, but disassembling backwards is quite difficult for
 		// variable length instruction sets like X86.
-		fileID := host.FileID(ef.Variable(0))
-		lineno := libpf.Address(ef.Data())
-		relativeRIP := lineno
 		if ef.Flags().ReturnAddress() {
-			relativeRIP--
+			address--
 		}
-
-		// Locate mapping info for the frame.
-		mapping := pm.findMappingForTrace(pid, fileID, lineno)
 		dst.Append(&libpf.Frame{
 			Type:            ef.Type(),
-			AddressOrLineno: libpf.AddressOrLineno(relativeRIP),
+			AddressOrLineno: libpf.AddressOrLineno(address),
 			Mapping:         mapping,
 		})
 	default:
-		err := pm.symbolizeFrame(pid, ef, dst)
+		err := pm.symbolizeFrame(pid, ef, dst, libpf.FrameMapping{})
 		if err == nil {
 			return true
 		}
