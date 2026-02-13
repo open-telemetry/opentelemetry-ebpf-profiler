@@ -14,4 +14,20 @@
 
 * @open-telemetry/ebpf-profiler-maintainers @open-telemetry/ebpf-profiler-approvers
 
-CODEOWNERS @open-telemetry/ebpf-profiler-maintainers
+#####################################################
+#
+# List of BEAM interpreter code owners
+#
+#####################################################
+
+interpreter/beam/ @open-telemetry/ebpf-profiler-approvers @GregMefford
+support/ebpf/beam_tracer.ebpf.c @open-telemetry/ebpf-profiler-approvers @GregMefford
+
+#####################################################
+#
+# List of Ruby interpreter code owners
+#
+#####################################################
+
+interpreter/ruby/ @open-telemetry/ebpf-profiler-approvers @dalehamel
+support/ebpf/ruby_tracer.ebpf.c @open-telemetry/ebpf-profiler-approvers @dalehamel
