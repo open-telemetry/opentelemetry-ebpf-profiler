@@ -9,7 +9,11 @@ RELEASE="${RELEASE:-jammy}"  # jammy/noble for ubuntu (with USDT probes), bullse
 ROOTFS_DIR="rootfs"
 OUTPUT_DIR="output"
 KERN_DIR="${KERN_DIR:-ci-kernels}"
+PARCAGPU_DIR="${PARCAGPU_DIR:-parcagpu-lib}"
 CACHE_DIR="${CACHE_DIR:-/tmp/debootstrap-cache}"
+
+# Download parcagpu library
+PARCAGPU_DIR="${PARCAGPU_DIR}" ./download-parcagpu.sh
 
 echo "Building rootfs with $DISTRO $RELEASE..."
 
@@ -90,20 +94,23 @@ if [[ "${USE_DOCKER}" == "1" ]] && command -v docker &> /dev/null; then
                  wget -q https://go.dev/dl/go1.24.7.linux-${GOARCH}.tar.gz && \
                  tar -C /usr/local -xzf go1.24.7.linux-${GOARCH}.tar.gz && \
                  export PATH=/usr/local/go/bin:\$PATH && \
-                 CGO_ENABLED=1 go test -c ../../interpreter/rtld ../../support/usdt/test"
+                 CGO_ENABLED=1 go test -c ../../interpreter/rtld ../../support/usdt/test ../../test/cudaverify"
 else
     # Local build with cross-compilation if needed
     echo "Building locally for ${GOARCH}..."
     if [ "$GOARCH" = "arm64" ]; then
         # Cross-compile for ARM64 using aarch64-linux-gnu-gcc
-        CGO_ENABLED=1 GOARCH=${GOARCH} CC=aarch64-linux-gnu-gcc go test -c ../../interpreter/rtld ../../support/usdt/test
+        CGO_ENABLED=1 GOARCH=${GOARCH} CC=aarch64-linux-gnu-gcc go test -c ../../interpreter/rtld ../../support/usdt/test ../../test/cudaverify
     else
-        CGO_ENABLED=1 GOARCH=${GOARCH} go test -c ../../interpreter/rtld ../../support/usdt/test
+        CGO_ENABLED=1 GOARCH=${GOARCH} go test -c ../../interpreter/rtld ../../support/usdt/test ../../test/cudaverify
     fi
 fi
 
-# Copy test binary into rootfs
+# Copy test binaries into rootfs
 cp *.test "$ROOTFS_DIR/"
+
+# Copy parcagpu .so into rootfs
+cp "${PARCAGPU_DIR}/libparcagpucupti.so" "$ROOTFS_DIR/"
 
 # List dynamic dependencies for debugging
 echo "Test binary dependencies:"
@@ -139,7 +146,7 @@ export DEBUG_TEST=1
 
 # Run the tests
 echo ""
-/rtld.test -test.v && /test.test -test.v
+/rtld.test -test.v && /test.test -test.v && /cudaverify.test -test.v -so-path=/libparcagpucupti.so
 RESULT=$?
 
 if [ $RESULT -eq 0 ]; then
