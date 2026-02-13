@@ -258,7 +258,7 @@ func TestPeriodicCallerSelfStop(t *testing.T) {
 	// Number of iterations we allow the callback to be called
 	numIters := int32(5)
 
-	// This should be something larger than time taken to execute triggers
+	// This should be something larger than time taken to execute this test
 	timeout := time.After(10 * time.Second)
 
 	var counter atomic.Int32
