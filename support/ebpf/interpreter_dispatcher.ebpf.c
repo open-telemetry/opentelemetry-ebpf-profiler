@@ -141,64 +141,6 @@ bpf_map_def SEC("maps") cl_procs = {
   .max_entries = 128,
 };
 
-static EBPF_INLINE void *
-get_m_ptr_legacy(struct GoCustomLabelsOffsets *offs, UNUSED UnwindState *state)
-{
-  long res;
-
-  size_t g_addr;
-#if defined(__x86_64__)
-  u64 g_addr_offset = 0xfffffffffffffff8;
-  void *tls_base    = NULL;
-  res               = tsd_get_base(&tls_base);
-  if (res < 0) {
-    DEBUG_PRINT("cl mptr legacy: failed to get tsd base; can't read m_ptr");
-    return NULL;
-  }
-
-  res = bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((u64)tls_base + g_addr_offset));
-  if (res < 0) {
-    DEBUG_PRINT("cl mptr legacy: failed to read g_addr, tls_base(%lx)", (unsigned long)tls_base);
-    return NULL;
-  }
-#elif defined(__aarch64__)
-  g_addr = state->r28;
-#endif
-
-  DEBUG_PRINT("cl mptr legacy: reading m_ptr_addr at 0x%lx + 0x%x", g_addr, offs->m_offset);
-  void *m_ptr_addr;
-  res = bpf_probe_read_user(&m_ptr_addr, sizeof(void *), (void *)(g_addr + offs->m_offset));
-  if (res < 0) {
-    DEBUG_PRINT("cl mptr legacy: failed m_ptr_addr");
-    return NULL;
-  }
-
-  DEBUG_PRINT("cl mptr legacy: returning 0x%llx", (u64)m_ptr_addr);
-  return m_ptr_addr;
-}
-
-static EBPF_INLINE void maybe_add_go_custom_labels_legacy(struct pt_regs *ctx, PerCPURecord *record)
-{
-  u32 pid                        = record->trace.pid;
-  // The Go label extraction code is too big to fit in this program, so we need to
-  // tail call it
-  GoCustomLabelsOffsets *offsets = bpf_map_lookup_elem(&go_labels_procs, &pid);
-  if (!offsets) {
-    DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", pid);
-    return;
-  }
-
-  void *m_ptr_addr = get_m_ptr_legacy(offsets, &record->state);
-  if (!m_ptr_addr) {
-    return;
-  }
-  record->customLabelsState.go_m_ptr = m_ptr_addr;
-
-  DEBUG_PRINT("cl: trace is within a process with Go custom labels enabled");
-  increment_metric(metricID_UnwindGoCustomLabelsAttempts);
-  tail_call(ctx, PROG_GO_LABELS);
-}
-
 static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURecord *record)
 {
   u32 pid                  = record->trace.pid;
@@ -789,9 +731,6 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   }
   // TEMPORARY HACK END
 
-  // Try legacy Go custom labels first, then new Go labels implementation
-  // Must be last since it may not return (it will call send_trace).
-  maybe_add_go_custom_labels_legacy(ctx, record);
   maybe_add_go_custom_labels(ctx, record);
 
   send_trace(ctx, trace);

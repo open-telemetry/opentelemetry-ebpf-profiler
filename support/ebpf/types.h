@@ -1,4 +1,4 @@
-// Provides type definitions shared by the eBPF and Go components
+// provides type definitions shared by the eBPF and Go components
 
 #ifndef OPTI_TYPES_H
 #define OPTI_TYPES_H
@@ -1087,15 +1087,6 @@ typedef struct NativeCustomLabelsProcInfo {
   u64 als_identity_hash_tls_offset;
   u64 als_handle_tls_offset;
 } NativeCustomLabelsProcInfo;
-
-typedef struct GoCustomLabelsOffsets {
-  u32 m_offset;
-  u32 curg;
-  u32 labels;
-  u32 hmap_count;
-  u32 hmap_log2_bucket_count;
-  u32 hmap_buckets;
-} GoCustomLabelsOffsets;
 
 typedef struct GoLabelsOffsets {
   u32 m_offset;
