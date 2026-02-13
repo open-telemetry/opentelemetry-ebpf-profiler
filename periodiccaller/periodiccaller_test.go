@@ -259,15 +259,13 @@ func TestPeriodicCallerSelfStop(t *testing.T) {
 	numIters := int32(5)
 
 	// This should be something larger than time taken to execute triggers
-	cancelInterval := 10 * time.Second
-	ctx, cancel := context.WithTimeout(t.Context(), cancelInterval)
-	defer cancel()
+	timeout := time.After(10 * time.Second)
 
 	var counter atomic.Int32
 	trigger := make(chan bool)
 	done := make(chan bool, 1)
 
-	stop := StartWithManualTrigger(ctx, 1*time.Millisecond, trigger,
+	stop := StartWithManualTrigger(t.Context(), 1*time.Millisecond, trigger,
 		func(manualTrigger bool) bool {
 			n := counter.Add(1)
 			if n == int32(numIters) {
@@ -279,8 +277,9 @@ func TestPeriodicCallerSelfStop(t *testing.T) {
 	defer stop()
 
 	select {
+	case <-timeout:
+		assert.Fail(t, "timeout - periodiccaller not working")
 	case <-done:
-	case <-ctx.Done():
 	}
 
 	assert.Equal(t, numIters, counter.Load())
