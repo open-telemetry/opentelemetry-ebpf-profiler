@@ -25,6 +25,32 @@ BPF_RODATA_VAR(u32, task_stack_offset, 0)
 // The offset of struct pt_regs within the kernel entry stack.
 BPF_RODATA_VAR(u32, stack_ptregs_offset, 0)
 
+// If enabled, the profiler translates host-level PIDs/TGIDs into the
+// corresponding IDs within a specific PID namespace. This is essential
+// for sidecar deployments to report PIDs consistent with the container's
+// internal view (e.g., reporting PID 1 instead of the host PID).
+BPF_RODATA_VAR(bool, pid_ns_translation_enabled, false)
+
+// The inode number of the target PID namespace.
+// Obtained by calling stat() on /proc/[pid]/ns/pid.
+BPF_RODATA_VAR(u64, target_pid_ns_inode, 0)
+
+// The device ID (st_dev) of the target PID namespace inode.
+// Required by the bpf_get_ns_current_pid_tgid helper to uniquely
+// identify the namespace filesystem (nsfs) instance.
+BPF_RODATA_VAR(u64, target_pid_ns_dev, 0)
+
+// Target PID namespace process identifiers.
+// pid:  The process ID as seen within the target PID namespace.
+// tgid: The thread group ID (effectively the process ID in userspace)
+// within the target PID namespace.
+// This structure must match the kernel's definition for use with the
+// bpf_get_ns_current_pid_tgid() helper.
+struct bpf_pidns_info {
+  u32 pid;
+  u32 tgid;
+};
+
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
 // fileID.
@@ -610,10 +636,24 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 SEC("perf_event/native_tracer_entry")
 int native_tracer_entry(struct bpf_perf_event_data *ctx)
 {
-  // Get the PID and TGID register.
-  u64 id  = bpf_get_current_pid_tgid();
-  u32 pid = id >> 32;
-  u32 tid = id & 0xFFFFFFFF;
+  u32 pid = 0;
+  u32 tid = 0;
+  if (pid_ns_translation_enabled) {
+    struct bpf_pidns_info ns_info = {0};
+    long ret                      = bpf_get_ns_current_pid_tgid(
+      target_pid_ns_dev, target_pid_ns_inode, &ns_info, sizeof(ns_info));
+    if (ret < 0) {
+      DEBUG_PRINT(
+        "failed to get namespace PID/TGID (%llu, %llu)", target_pid_ns_dev, target_pid_ns_inode);
+      return 0;
+    }
+    pid = ns_info.pid;
+    tid = ns_info.tgid;
+  } else {
+    u64 id = bpf_get_current_pid_tgid();
+    pid    = id >> 32;
+    tid    = id & 0xFFFFFFFF;
+  }
 
   if (pid == 0 && filter_idle_frames) {
     return 0;
