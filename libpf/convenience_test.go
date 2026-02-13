@@ -47,7 +47,7 @@ func TestAddJitter(t *testing.T) {
 		// Test with jitter values including edge case near 1.0
 		jitterValues := []float64{0.2, 0.5, 0.9, 0.99, 1.0}
 		for _, jitter := range jitterValues {
-			for i := 0; i < 1000; i++ {
+			for range 1000 {
 				result := AddJitter(baseDuration, jitter)
 				assert.Greater(t, result, time.Duration(0),
 					"jitter=%f produced non-positive duration", jitter)
@@ -60,7 +60,7 @@ func TestAddJitter(t *testing.T) {
 		minExpected := time.Duration(float64(baseDuration) * (1 - jitter))
 		maxExpected := time.Duration(float64(baseDuration) * (1 + jitter))
 
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			result := AddJitter(baseDuration, jitter)
 			assert.GreaterOrEqual(t, result, minExpected)
 			assert.LessOrEqual(t, result, maxExpected)

@@ -46,7 +46,7 @@ func TestAnalyzeArm64Stubs(t *testing.T) {
 }
 
 func BenchmarkDecodeAmd64(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		code := []byte{
 			0xf3, 0x0f, 0x1e, 0xfa, // 1bbba0: endbr64
 			0x48, 0x83, 0x3d, 0x74, 0x90, 0x1e, 0x00, // 1bbba4: cmp    QWORD PTR [rip+0x1e9074],0x0        # 3a4c20 <_PyRuntime+0x240>
