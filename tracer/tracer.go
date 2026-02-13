@@ -69,6 +69,7 @@ type Intervals interface {
 	MonitorInterval() time.Duration
 	TracePollInterval() time.Duration
 	PIDCleanupInterval() time.Duration
+	ExecutableUnloadDelay() time.Duration
 }
 
 // Tracer provides an interface for loading and initializing the eBPF components as
@@ -240,7 +241,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	hasBatchLookupAndDelete := ebpfHandler.SupportsGenericBatchLookupAndDelete()
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
-		ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
+		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
 		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
 	if err != nil {

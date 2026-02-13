@@ -8,7 +8,7 @@ module go.opentelemetry.io/ebpf-profiler
 // For the OpenTelemetry eBPF Profiler distribution specifically, see
 // https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-ebpf-profiler
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.1
@@ -37,7 +37,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.40.0
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/arch v0.24.0
-	golang.org/x/exp v0.0.0-20260209203927-2842357ff358
+	golang.org/x/exp v0.0.0-20260211191109-2735e65f0518
 	golang.org/x/mod v0.33.0
 	golang.org/x/sync v0.19.0
 	golang.org/x/sys v0.41.0
