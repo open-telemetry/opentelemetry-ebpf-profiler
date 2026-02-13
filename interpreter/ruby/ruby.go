@@ -1258,9 +1258,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// Reason for lowest supported version:
 	// - Ruby 2.5 is still commonly used at time of writing this code.
 	//   https://www.jetbrains.com/lp/devecosystem-2020/ruby/
-	// Reason for maximum supported version 3.5.x:
-	// - this is currently the newest stable version
-	minVer, maxVer := rubyVersion(2, 5, 0), rubyVersion(3, 6, 0)
+	// Reason for maximum supported version 4.0.x:
+	// - Ruby 4.0 was released December 2025 with ZJIT and redesigned Ractor Port API
+	minVer, maxVer := rubyVersion(2, 5, 0), rubyVersion(4, 1, 0)
 	if version < minVer || version >= maxVer {
 		return nil, fmt.Errorf("unsupported Ruby %d.%d.%d (need >= %d.%d.%d and <= %d.%d.%d)",
 			(version>>16)&0xff, (version>>8)&0xff, version&0xff,
@@ -1387,6 +1387,13 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.rclass_and_rb_classext_t.classext = 32
 		vms.rb_classext_struct.as_singleton_class_attached_object = 96
 		vms.rb_classext_struct.classpath = 120
+	case version >= rubyVersion(4, 0, 0) && version < rubyVersion(4, 1, 0):
+		rid.hasClassPath = true
+		rid.rubyFlSingleton = libpf.Address(RUBY_FL_USER1)
+
+		vms.rclass_and_rb_classext_t.classext = 24
+		vms.rb_classext_struct.as_singleton_class_attached_object = 112
+		vms.rb_classext_struct.classpath = 128
 	default:
 		rid.hasClassPath = true
 		rid.rubyFlSingleton = libpf.Address(RUBY_FL_USER1)
@@ -1407,6 +1414,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		rid.lastOpId = 169
 	case version < rubyVersion(3, 5, 0):
 		rid.lastOpId = 170
+	case version < rubyVersion(4, 1, 0):
+		rid.lastOpId = 171
 	default:
 		rid.lastOpId = 170
 	}
@@ -1452,6 +1461,14 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			vms.vm_struct.gc_objspace = 1320
 		}
 		vms.objspace.flags = 16
+	case version >= rubyVersion(4, 0, 0) && version < rubyVersion(4, 1, 0):
+		rid.hasObjspace = true
+		if runtime.GOARCH == "amd64" {
+			vms.vm_struct.gc_objspace = 1248
+		} else {
+			vms.vm_struct.gc_objspace = 1272
+		}
+		vms.objspace.flags = 28
 	default:
 		rid.hasObjspace = true
 		vms.objspace.flags = 20
@@ -1515,6 +1532,17 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		vms.iseq_constant_body.succ_index_table = 136
 		vms.iseq_constant_body.local_iseq = 168
 		vms.iseq_constant_body.size_of_iseq_constant_body = 352
+	case version >= rubyVersion(4, 0, 0) && version < rubyVersion(4, 1, 0):
+		// Ruby 4.0+ has different struct layout due to JIT refactoring
+		// and other internal changes.
+		vms.iseq_constant_body.insn_info_body = 112
+		vms.iseq_constant_body.insn_info_size = 128
+		vms.iseq_constant_body.succ_index_table = 136
+		vms.iseq_constant_body.local_iseq = 176
+		// The JIT fields at the end of the struct get added if you have rustc installed or are otherwise build config dependent.
+		// 304 is the size without them and the "common" size regardless of config.
+		// It is safer to set this to the smaller value, especially since the highest field we actually access is much lower
+		vms.iseq_constant_body.size_of_iseq_constant_body = 304
 	default: // 3.3.x and 3.5.x have the same values
 		vms.iseq_constant_body.insn_info_body = 112
 		vms.iseq_constant_body.insn_info_size = 128
@@ -1588,7 +1616,15 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.rb_symbols_t.ids = 16
 
 	if version >= rubyVersion(3, 0, 0) {
-		if version >= rubyVersion(3, 3, 0) {
+		if version >= rubyVersion(4, 0, 0) {
+			// Ruby 4.0+ redesigned rb_ractor_sync with Port-based API.
+			// Offsets determined via GDB analysis of rb_ractor_struct.
+			if runtime.GOARCH == "amd64" {
+				vms.rb_ractor_struct.running_ec = 0x138
+			} else {
+				vms.rb_ractor_struct.running_ec = 0x148
+			}
+		} else if version >= rubyVersion(3, 3, 0) {
 			if runtime.GOARCH == "amd64" {
 				vms.rb_ractor_struct.running_ec = 0x180
 			} else {

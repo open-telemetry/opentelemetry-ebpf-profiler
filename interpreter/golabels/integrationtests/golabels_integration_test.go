@@ -44,9 +44,10 @@ var (
 
 type mockIntervals struct{}
 
-func (mockIntervals) MonitorInterval() time.Duration    { return 1 * time.Second }
-func (mockIntervals) TracePollInterval() time.Duration  { return 250 * time.Millisecond }
-func (mockIntervals) PIDCleanupInterval() time.Duration { return 1 * time.Second }
+func (mockIntervals) MonitorInterval() time.Duration       { return 1 * time.Second }
+func (mockIntervals) TracePollInterval() time.Duration     { return 250 * time.Millisecond }
+func (mockIntervals) PIDCleanupInterval() time.Duration    { return 1 * time.Second }
+func (mockIntervals) ExecutableUnloadDelay() time.Duration { return 1 * time.Second }
 
 func isRoot() bool {
 	return os.Geteuid() == 0

@@ -60,7 +60,7 @@ var (
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
-	ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
+	executableUnloadDelay time.Duration, ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
 	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
 	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
 	if exeReporter == nil {
@@ -84,6 +84,13 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
+
+	periodiccaller.Start(ctx, executableUnloadDelay, func() {
+		err := em.CleanupUnused(executableUnloadDelay)
+		if err != nil {
+			log.Errorf("Failed to cleanup unused executables: %v", err)
+		}
+	})
 
 	interpreters := make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance)
 
