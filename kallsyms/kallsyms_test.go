@@ -129,7 +129,7 @@ ffffffffc13fcb20 t init_xfs_fs	[xfs]`)
 
 	s := &Symbolizer{}
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		r.Seek(0, io.SeekStart)
 		if err := s.updateSymbolsFrom(r); err != nil {
 			b.Fail()
