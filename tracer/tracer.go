@@ -164,6 +164,9 @@ type Config struct {
 	// LoadProbe indicates whether the generic eBPF program should be loaded
 	// without being attached to something.
 	LoadProbe bool
+	// EnableNamespacePID toggles the translation of host-level PIDs into their
+	// container-specific equivalents using the PID namespace of the profiler.
+	EnableNamespacePID bool
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.

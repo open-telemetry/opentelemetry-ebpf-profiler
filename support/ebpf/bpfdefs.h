@@ -59,6 +59,11 @@ static inline u64 bpf_get_current_pid_tgid(void)
   return __cgo_ctx->id;
 }
 
+static inline u64 bpf_get_ns_current_pid_tgid(u64 dev, u64 ino, void *info, u32 size)
+{
+  return __cgo_ctx->id;
+}
+
 static inline void *bpf_map_lookup_elem(void *map, const void *key)
 {
   void *__bpf_map_lookup_elem(u64, void *, const void *);
@@ -106,7 +111,9 @@ static int (*bpf_probe_read)(void *dst, int size, const void *unsafe_ptr) = (voi
   BPF_FUNC_probe_read;
 static unsigned long long (*bpf_ktime_get_ns)(void)         = (void *)BPF_FUNC_ktime_get_ns;
 static unsigned long long (*bpf_get_current_pid_tgid)(void) = (void *)BPF_FUNC_get_current_pid_tgid;
-static int (*bpf_get_current_comm)(void *buf, int buf_size) = (void *)BPF_FUNC_get_current_comm;
+static unsigned long long (*bpf_get_ns_current_pid_tgid)(u64 dev, u64 ino, void *info, u32 size) =
+  (void *)BPF_FUNC_get_ns_current_pid_tgid;
+static int (*bpf_get_current_comm)(void *buf, int buf_size)   = (void *)BPF_FUNC_get_current_comm;
 static void (*bpf_tail_call)(void *ctx, void *map, int index) = (void *)BPF_FUNC_tail_call;
 static unsigned long long (*bpf_get_current_task)(void)       = (void *)BPF_FUNC_get_current_task;
 static int (*bpf_perf_event_output)(

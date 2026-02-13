@@ -40,6 +40,7 @@ type Config struct {
 	NoKernelVersionCheck   bool          `mapstructure:"no_kernel_version_check"`
 	MaxGRPCRetries         uint32        `mapstructure:"max_grpc_retries"`
 	MaxRPCMsgSize          int           `mapstructure:"max_rpc_msg_size"`
+	EnableNamespacePID     bool          `mapstructure:"enable_namespace_pid"`
 }
 
 // Validate validates the config.

@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"syscall"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -259,6 +260,19 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 	return new, maps, nil
 }
 
+func getCurrentNS(filename string) (uint64, uint64, error) {
+	info, err := os.Stat(filename)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, 0, fmt.Errorf("not a syscall.Stat_t")
+	}
+	return uint64(stat.Dev), uint64(stat.Ino), nil
+}
+
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	kmod *kallsyms.Module, includeTracers types.IncludedTracers, vars *sysConfigVars,
 ) error {
@@ -301,6 +315,21 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	if cfg.VerboseMode {
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
 			return fmt.Errorf("failed to set debug output: %v", err)
+		}
+	}
+	if cfg.EnableNamespacePID {
+		if err := coll.Variables["pid_ns_translation_enabled"].Set(uint8(1)); err != nil {
+			return fmt.Errorf("failed to set pid_ns_translation_enabled: %v", err)
+		}
+		dev, ns, err := getCurrentNS("/proc/self/ns/pid")
+		if err != nil {
+			return fmt.Errorf("failed to read my namespace: %v", err)
+		}
+		if err := coll.Variables["target_pid_ns_inode"].Set(ns); err != nil {
+			return fmt.Errorf("failed to set target_pid_ns_inode: %v", err)
+		}
+		if err := coll.Variables["target_pid_ns_dev"].Set(dev); err != nil {
+			return fmt.Errorf("failed to set target_pid_ns_dev: %v", err)
 		}
 	}
 
