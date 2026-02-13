@@ -151,8 +151,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
   }
 
   // Decode the code start info from the entry
-  UNROLL for (int i = 0; i < DOTNET_CODE_NIBBLES_PER_ENTRY; i++)
-  {
+  for (int i = 0; i < DOTNET_CODE_NIBBLES_PER_ENTRY; i++) {
     u8 nybble = val & 0xf;
     if (nybble != 0) {
       *code_start = pc_base + pc_delta + (nybble - 1) * DOTNET_CODE_ALIGN;
@@ -267,8 +266,7 @@ static EBPF_INLINE ErrorCode dotnet10_find_code_start(PerCPURecord *record, u64 
 
   // #5.4 or contains a nibble map
 decode_nibble_map:
-  UNROLL for (int i = 0; i < DOTNET10_NIBBLES_PER_DWORD - 1; i++)
-  {
+  for (int i = 0; i < DOTNET10_NIBBLES_PER_DWORD - 1; i++) {
     if (val & DOTNET10_NIBBLE_MASK) {
       break;
     }
@@ -434,8 +432,7 @@ static EBPF_INLINE int unwind_dotnet_core(
   record->ratelimitAction = RATELIMIT_ACTION_FAST;
   increment_metric(metricID_UnwindDotnetAttempts);
 
-  UNROLL for (int i = 0; i < frames_per_program; i++)
-  {
+  for (int i = 0; i < frames_per_program; i++) {
     unwinder = PROG_UNWIND_STOP;
 
     error = unwind_one_dotnet_frame(record, find_code_start);
