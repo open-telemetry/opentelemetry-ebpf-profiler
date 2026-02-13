@@ -15,21 +15,19 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
 // sendSocket is the shared, unbound socket that we use for communication with
 // all agents. It is initialized once when the first APM agent shows up and then
 // never closed until HA exit.
-var sendSocket = sync.OnceValues(func() (int, error) {
-	return unix.Socket(unix.AF_UNIX, unix.SOCK_DGRAM, 0)
-})
+var sendSocket xsync.Once[int]
 
 // apmAgentSocket represents a unix socket connection to an APM agent.
 type apmAgentSocket struct {
@@ -86,12 +84,14 @@ func openAPMAgentSocket(pid libpf.PID, socketPath string) (*apmAgentSocket, erro
 // full or the socket was closed, an error is returned and the message is
 // discarded.
 func (s *apmAgentSocket) SendMessage(msg []byte) error {
-	fd, err := sendSocket()
+	fd, err := sendSocket.GetOrInit(func() (int, error) {
+		return unix.Socket(unix.AF_UNIX, unix.SOCK_DGRAM, 0)
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create global send socket: %v", err)
 	}
 
-	return unix.Sendto(fd, msg, unix.MSG_DONTWAIT, &s.addr)
+	return unix.Sendto(*fd, msg, unix.MSG_DONTWAIT, &s.addr)
 }
 
 // traceCorrMsg represents a trace correlation socket message.
