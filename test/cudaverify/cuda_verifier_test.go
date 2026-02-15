@@ -111,8 +111,7 @@ func buildCookiesAndProgNames(probes []pfelf.USDTProbe) ([]uint64, []string) {
 
 // TestCUDAVerifierSingleShot verifies CUDA eBPF programs pass the BPF verifier
 // using individual per-probe program attachment (works on kernel 5.15+).
-// Forces single-shot mode by disabling multi-uprobe support so that
-// loadProbeUnwinders and loadUSDTProgram use consistent attach types.
+// Forces single-shot mode so that AttachUSDTProbes uses per-probe attachment.
 func TestCUDAVerifierSingleShot(t *testing.T) {
 	if os.Getuid() != 0 {
 		t.Skip("requires root to load eBPF programs")
@@ -121,8 +120,8 @@ func TestCUDAVerifierSingleShot(t *testing.T) {
 		t.Skip("requires kernel support for bpf_get_attach_cookie (5.15+)")
 	}
 
-	// Force single-shot mode before creating the tracer so that
-	// loadProbeUnwinders does not set AttachTraceUprobeMulti.
+	// Force single-shot mode so loadUSDTProgram does not set
+	// AttachTraceUprobeMulti.
 	noMulti := false
 	util.SetTestOnlyMultiUprobeSupport(&noMulti)
 	defer util.SetTestOnlyMultiUprobeSupport(nil)

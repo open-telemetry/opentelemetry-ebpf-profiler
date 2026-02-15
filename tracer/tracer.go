@@ -638,10 +638,6 @@ func loadProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.
 			return fmt.Errorf("program %s does not exist", unwindProgName)
 		}
 
-		if util.HasMultiUprobeSupport() {
-			progSpec.AttachType = cebpf.AttachTraceUprobeMulti
-		}
-
 		// Replace the prog array for the tail calls.
 		insns := util.ProgArrayReferences(perfTailCallMapFD, progSpec.Instructions)
 		for _, ins := range insns {
