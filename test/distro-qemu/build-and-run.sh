@@ -6,30 +6,29 @@ KERNEL_VERSION="${1:-5.10.217}"
 QEMU_ARCH="${QEMU_ARCH:-x86_64}"
 DISTRO="${DISTRO:-ubuntu}"  # debian or ubuntu
 RELEASE="${RELEASE:-jammy}"  # jammy/noble for ubuntu (with USDT probes), bullseye for debian
-ROOTFS_DIR="rootfs"
-OUTPUT_DIR="output"
+ROOTFS_DIR=$(mktemp -d /tmp/distro-qemu-rootfs.XXXXXX)
+OUTPUT_DIR=$(mktemp -d /tmp/distro-qemu-output.XXXXXX)
 KERN_DIR="${KERN_DIR:-ci-kernels}"
 PARCAGPU_DIR="${PARCAGPU_DIR:-parcagpu-lib}"
 CACHE_DIR="${CACHE_DIR:-/tmp/debootstrap-cache}"
+
+cleanup() {
+    if [ -d "$ROOTFS_DIR" ]; then
+        findmnt -o TARGET -n -l | grep "^${ROOTFS_DIR}" | sort -r | while read -r mp; do
+            sudo umount "$mp" || sudo umount -l "$mp" || true
+        done
+        sudo rm -rf "$ROOTFS_DIR"
+    fi
+    rm -rf "$OUTPUT_DIR"
+}
+trap cleanup EXIT
 
 # Download parcagpu library
 PARCAGPU_DIR="${PARCAGPU_DIR}" ./download-parcagpu.sh
 
 echo "Building rootfs with $DISTRO $RELEASE..."
 
-# Clean up previous builds
-# First, unmount any leftover mounts from previous debootstrap runs
-if [ -d "$ROOTFS_DIR" ]; then
-    echo "Cleaning up any mounted filesystems in $ROOTFS_DIR..."
-    # Find all mount points under ROOTFS_DIR and unmount them in reverse order (deepest first)
-    findmnt -o TARGET -n -l | grep "^$(pwd)/$ROOTFS_DIR" | sort -r | while read -r mountpoint; do
-        echo "  Unmounting $mountpoint"
-        sudo umount "$mountpoint" || sudo umount -l "$mountpoint" || true
-    done
-fi
-
-sudo rm -rf "$ROOTFS_DIR" "$OUTPUT_DIR"
-mkdir -p "$ROOTFS_DIR" "$OUTPUT_DIR" "$CACHE_DIR"
+mkdir -p "$CACHE_DIR"
 
 # Determine debootstrap architecture
 DEBOOTSTRAP_ARCH="amd64"
@@ -73,6 +72,9 @@ sudo chown -R "$(id -u):$(id -g)" "$ROOTFS_DIR"
 # Build the test binary (must be dynamic for dlopen to work)
 echo "Building test binary for $DISTRO $RELEASE $DEBOOTSTRAP_ARCH..."
 
+REPO_ROOT="$(cd ../.. && pwd)"
+TEST_PKGS="./interpreter/rtld ./support/usdt/test ./test/cudaverify"
+
 # For cross-compilation or Ubuntu jammy/noble, local build works (host has compatible or newer glibc)
 # For older distros, would need Docker build (disabled by default for speed)
 if [[ "${USE_DOCKER}" == "1" ]] && command -v docker &> /dev/null; then
@@ -86,35 +88,38 @@ if [[ "${USE_DOCKER}" == "1" ]] && command -v docker &> /dev/null; then
     # Build in container to match target glibc (slow, downloads Go)
     echo "Using Docker to build with matching glibc version..."
     docker run --rm \
-        -v "$(pwd)/../..:/workspace" \
-        -w /workspace/test/distro-qemu \
+        -v "${REPO_ROOT}:/workspace" \
+        -v "${OUTPUT_DIR}:/output" \
+        -w /workspace \
         --platform "linux/${DEBOOTSTRAP_ARCH}" \
         "$BASE_IMAGE" \
         bash -c "apt-get update -qq && apt-get install -y -qq wget libc6-dev gcc > /dev/null 2>&1 && \
                  wget -q https://go.dev/dl/go1.24.7.linux-${GOARCH}.tar.gz && \
                  tar -C /usr/local -xzf go1.24.7.linux-${GOARCH}.tar.gz && \
                  export PATH=/usr/local/go/bin:\$PATH && \
-                 CGO_ENABLED=1 go test -c ../../interpreter/rtld ../../support/usdt/test ../../test/cudaverify"
+                 CGO_ENABLED=1 go test -c -o /output/ ${TEST_PKGS}"
 else
     # Local build with cross-compilation if needed
     echo "Building locally for ${GOARCH}..."
-    if [ "$GOARCH" = "arm64" ]; then
-        # Cross-compile for ARM64 using aarch64-linux-gnu-gcc
-        CGO_ENABLED=1 GOARCH=${GOARCH} CC=aarch64-linux-gnu-gcc go test -c ../../interpreter/rtld ../../support/usdt/test ../../test/cudaverify
-    else
-        CGO_ENABLED=1 GOARCH=${GOARCH} go test -c ../../interpreter/rtld ../../support/usdt/test ../../test/cudaverify
-    fi
+    (
+        cd "${REPO_ROOT}"
+        if [ "$GOARCH" = "arm64" ]; then
+            CGO_ENABLED=1 GOARCH=${GOARCH} CC=aarch64-linux-gnu-gcc \
+                go test -c -o "${OUTPUT_DIR}/" ${TEST_PKGS}
+        else
+            CGO_ENABLED=1 GOARCH=${GOARCH} \
+                go test -c -o "${OUTPUT_DIR}/" ${TEST_PKGS}
+        fi
+    )
 fi
 
-# Copy test binaries into rootfs
-cp *.test "$ROOTFS_DIR/"
-
-# Copy parcagpu .so into rootfs
+# Copy test binaries and parcagpu .so into rootfs
+cp "${OUTPUT_DIR}"/*.test "$ROOTFS_DIR/"
 cp "${PARCAGPU_DIR}/libparcagpucupti.so" "$ROOTFS_DIR/"
 
 # List dynamic dependencies for debugging
 echo "Test binary dependencies:"
-ldd rtld.test || true
+ldd "${OUTPUT_DIR}/rtld.test" || true
 
 # Create init script
 cat << 'EOF' > "$ROOTFS_DIR/init"
@@ -175,7 +180,7 @@ chmod +x "$ROOTFS_DIR/init"
 
 # Create initramfs
 echo "Creating initramfs..."
-(cd "$ROOTFS_DIR" && find . | cpio -o -H newc | gzip > "../$OUTPUT_DIR/initramfs.gz")
+(cd "$ROOTFS_DIR" && find . | cpio -o -H newc | gzip > "$OUTPUT_DIR/initramfs.gz")
 
 echo "Rootfs created: $OUTPUT_DIR/initramfs.gz ($(du -h $OUTPUT_DIR/initramfs.gz | cut -f1))"
 
@@ -239,21 +244,21 @@ ${sudo} qemu-system-${QEMU_ARCH} ${additionalQemuArgs} \
 if grep -q "===== TEST PASSED =====" "$QEMU_OUTPUT"; then
     rm -f "$QEMU_OUTPUT"
     echo ""
-    echo "✅ Test completed successfully"
+    echo "Test completed successfully"
     exit 0
 elif grep -q "===== TEST FAILED" "$QEMU_OUTPUT"; then
     rm -f "$QEMU_OUTPUT"
     echo ""
-    echo "❌ Test failed"
+    echo "Test failed"
     exit 1
 elif grep -q "===== TEST TIMED OUT =====" "$QEMU_OUTPUT"; then
     rm -f "$QEMU_OUTPUT"
     echo ""
-    echo "❌ Test timed out"
+    echo "Test timed out"
     exit 124
 else
     rm -f "$QEMU_OUTPUT"
     echo ""
-    echo "❌ Could not determine test result (QEMU may have crashed)"
+    echo "Could not determine test result (QEMU may have crashed)"
     exit 2
 fi
