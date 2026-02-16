@@ -115,8 +115,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
       // the loop iterations is number of u64 elements minus two:
       // - the last element special handled earlier
       // - the second last element which is preloaded immediately above
-      UNROLL for (int i = 0; i < map_elements / 2 - 2; i++)
-      {
+      for (int i = 0; i < map_elements / 2 - 2; i++) {
         if (val64 != 0) {
           break;
         }

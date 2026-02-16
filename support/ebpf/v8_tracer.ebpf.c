@@ -241,8 +241,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
       }
 
       int i;
-      UNROLL for (i = sizeof(stk) / sizeof(stk[0]) - 1; i >= 0; i--)
-      {
+      for (i = sizeof(stk) / sizeof(stk[0]) - 1; i >= 0; i--) {
         if (stk[i] >= code_start && stk[i] < code_end) {
           break;
         }
