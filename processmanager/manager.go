@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"os"
 	"slices"
 	"time"
 
@@ -96,8 +95,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 
 	interpreters := make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance)
 
-	selfPID := libpf.PID(os.Getpid())
-	selfContainerID, err := process.DetectSelfContainerIDViaInode()
+	selfContainerID, selfCgroupIno, err := process.DetectSelfContainerIDViaInode()
 	if err != nil {
 		log.Debugf("Failed to detect self container ID via inode: %v", err)
 	}
@@ -116,7 +114,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        filterErrorFrames,
 		includeEnvVars:           includeEnvVars,
-		selfPID:                  selfPID,
+		selfCgroupIno:            selfCgroupIno,
 		selfContainerID:          selfContainerID,
 	}
 

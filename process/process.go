@@ -186,12 +186,12 @@ func extractContainerID(pid libpf.PID) (libpf.String, error) {
 // returns the inode of the profiler's actual cgroup directory on the host. This function
 // walks the host's cgroup tree (via /proc/1/root/sys/fs/cgroup) to find the directory
 // whose inode matches, then extracts the container ID from its path.
-func DetectSelfContainerIDViaInode() (libpf.String, error) {
+func DetectSelfContainerIDViaInode() (libpf.String, uint64, error) {
 	const hostCgroupRoot = "/proc/1/root/sys/fs/cgroup"
 
 	var selfStat unix.Stat_t
 	if err := unix.Stat("/sys/fs/cgroup", &selfStat); err != nil {
-		return libpf.NullString, fmt.Errorf("failed to stat /sys/fs/cgroup: %w", err)
+		return libpf.NullString, 0, fmt.Errorf("failed to stat /sys/fs/cgroup: %w", err)
 	}
 	selfIno := selfStat.Ino
 
@@ -216,9 +216,9 @@ func DetectSelfContainerIDViaInode() (libpf.String, error) {
 		return nil
 	})
 	if err != nil {
-		return libpf.NullString, fmt.Errorf("failed to walk host cgroup tree: %w", err)
+		return libpf.NullString, 0, fmt.Errorf("failed to walk host cgroup tree: %w", err)
 	}
-	return matched, nil
+	return matched, selfIno, nil
 }
 
 func trimMappingPath(path string) string {
