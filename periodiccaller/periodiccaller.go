@@ -30,12 +30,18 @@ func Start(ctx context.Context, interval time.Duration, callback func()) func() 
 	return ticker.Stop
 }
 
-// StartWithManualTrigger starts a timer that calls <callback> every <interval>
-// from <reset> channel until the <ctx> is canceled. Additionally the 'trigger'
-// channel can be used to trigger callback immediately. If the callback returns
-// true, the main loop exits.
-func StartWithManualTrigger(ctx context.Context, interval time.Duration, trigger chan bool,
-	callback func(manualTrigger bool) bool) func() {
+// CallbackFunc is a function that can be triggered periodically or manually.
+// The manualTrigger parameter indicates whether the callback was triggered manually (true)
+// or by the periodic timer (false). The return value signals whether the periodic caller
+// should continue (true) or stop (false).
+type CallbackFunc func(manualTrigger bool) bool
+
+// StartWithManualTrigger starts a timer goroutine that calls <callback> every
+// <interval> until the <ctx> is canceled or <callback> returns false.
+// The 'trigger' channel can be used to trigger callback immediately.
+func StartWithManualTrigger(ctx context.Context, interval time.Duration,
+	trigger chan bool, callback CallbackFunc,
+) func() {
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
@@ -43,11 +49,11 @@ func StartWithManualTrigger(ctx context.Context, interval time.Duration, trigger
 		for {
 			select {
 			case <-ticker.C:
-				if callback(false) {
+				if ret := callback(false); !ret {
 					return
 				}
 			case <-trigger:
-				if callback(true) {
+				if ret := callback(true); !ret {
 					return
 				}
 			case <-ctx.Done():
@@ -63,7 +69,8 @@ func StartWithManualTrigger(ctx context.Context, interval time.Duration, trigger
 // until the <ctx> is canceled. <jitter>, [0..1], is used to add +/- jitter
 // to <baseDuration> at every iteration of the timer.
 func StartWithJitter(ctx context.Context, baseDuration time.Duration, jitter float64,
-	callback func()) func() {
+	callback func(),
+) func() {
 	ticker := time.NewTicker(libpf.AddJitter(baseDuration, jitter))
 	go func() {
 		defer ticker.Stop()

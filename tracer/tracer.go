@@ -1125,7 +1125,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 			if err != nil {
 				log.Errorf("Failed to monitor PID events: %v", err)
 				t.signalDone()
-				return true
+				return false
 			}
 
 			for _, pidTid := range pidEvents {
@@ -1135,7 +1135,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 
 			// Keep the underlying array alive to avoid GC pressure
 			pidEvents = pidEvents[:0]
-			return false
+			return true
 		})
 
 	// translateIDs is a translation table for eBPF IDs into Metric IDs.

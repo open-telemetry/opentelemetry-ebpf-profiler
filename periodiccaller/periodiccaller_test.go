@@ -134,7 +134,10 @@ func TestPeriodicCaller(t *testing.T) {
 			return StartWithJitter(ctx, interval, 0.2, cb)
 		},
 		"StartWithManualTrigger": func(ctx context.Context, cb func()) func() {
-			return StartWithManualTrigger(ctx, interval, trigger, func(bool) bool { cb(); return false })
+			return StartWithManualTrigger(ctx, interval, trigger, func(bool) bool {
+				cb()
+				return true
+			})
 		},
 	}
 
@@ -187,7 +190,10 @@ func TestPeriodicCallerCancellation(t *testing.T) {
 			return StartWithJitter(ctx, interval, 0.2, cb)
 		},
 		"StartWithManualTrigger": func(ctx context.Context, cb func()) func() {
-			return StartWithManualTrigger(ctx, interval, trigger, func(bool) bool { cb(); return false })
+			return StartWithManualTrigger(ctx, interval, trigger, func(bool) bool {
+				cb()
+				return true
+			})
 		},
 	}
 
@@ -219,7 +225,7 @@ func TestPeriodicCallerCancellation(t *testing.T) {
 func TestPeriodicCallerManualTrigger(t *testing.T) {
 	defer checkForGoRoutineLeaks(t)
 	// Number of manual triggers
-	numTrigger := 5
+	numTrigger := int32(5)
 	// This should be something larger than time taken to execute triggers
 	interval := 10 * time.Second
 	ctx, cancel := context.WithTimeout(t.Context(), interval)
@@ -235,7 +241,7 @@ func TestPeriodicCallerManualTrigger(t *testing.T) {
 		if n == int32(numTrigger) {
 			done <- true
 		}
-		return false
+		return true
 	})
 	defer stop()
 
@@ -243,7 +249,38 @@ func TestPeriodicCallerManualTrigger(t *testing.T) {
 		trigger <- true
 	}
 	<-done
+	assert.Equal(t, counter.Load(), numTrigger)
+}
 
-	numExec := counter.Load()
-	assert.Equal(t, int(numExec), numTrigger)
+// TestPeriodicCallerSelfStop tests periodic calling with self stoppage
+func TestPeriodicCallerSelfStop(t *testing.T) {
+	defer checkForGoRoutineLeaks(t)
+	// Number of iterations we allow the callback to be called
+	numIters := int32(5)
+
+	// This should be something larger than time taken to execute this test
+	timeout := time.After(10 * time.Second)
+
+	var counter atomic.Int32
+	trigger := make(chan bool)
+	done := make(chan bool, 1)
+
+	stop := StartWithManualTrigger(t.Context(), 1*time.Millisecond, trigger,
+		func(manualTrigger bool) bool {
+			n := counter.Add(1)
+			if n == int32(numIters) {
+				done <- true
+				return false
+			}
+			return true
+		})
+	defer stop()
+
+	select {
+	case <-timeout:
+		assert.Fail(t, "timeout - periodiccaller not working")
+	case <-done:
+	}
+
+	assert.Equal(t, numIters, counter.Load())
 }
