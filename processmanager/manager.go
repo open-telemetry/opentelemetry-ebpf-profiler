@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
+	"go.opentelemetry.io/ebpf-profiler/process"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -94,6 +95,11 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 
 	interpreters := make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance)
 
+	selfContainerID, selfCgroupIno, err := process.DetectSelfContainerIDViaInode()
+	if err != nil {
+		log.Debugf("Failed to detect self container ID via inode: %v", err)
+	}
+
 	pm := &ProcessManager{
 		interpreterTracerEnabled: em.NumInterpreterLoaders() > 0,
 		eim:                      em,
@@ -108,6 +114,8 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        filterErrorFrames,
 		includeEnvVars:           includeEnvVars,
+		selfCgroupIno:            selfCgroupIno,
+		selfContainerID:          selfContainerID,
 	}
 
 	collectInterpreterMetrics(ctx, pm, monitorInterval)
