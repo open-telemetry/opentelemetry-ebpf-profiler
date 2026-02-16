@@ -10,8 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -175,6 +177,48 @@ func extractContainerID(pid libpf.PID) (libpf.String, error) {
 	defer cgroupFile.Close()
 
 	return parseContainerID(cgroupFile), nil
+}
+
+// DetectSelfContainerIDViaInode detects the current process's container ID by matching
+// cgroup directory inodes. When the profiler runs with hostPID:true in Kubernetes but has
+// a private cgroup namespace (cgroup v2), /proc/self/cgroup returns "0::/", making it
+// impossible to extract the container ID via the standard path. However, stat("/sys/fs/cgroup")
+// returns the inode of the profiler's actual cgroup directory on the host. This function
+// walks the host's cgroup tree (via /proc/1/root/sys/fs/cgroup) to find the directory
+// whose inode matches, then extracts the container ID from its path.
+func DetectSelfContainerIDViaInode() (libpf.String, error) {
+	const hostCgroupRoot = "/proc/1/root/sys/fs/cgroup"
+
+	var selfStat unix.Stat_t
+	if err := unix.Stat("/sys/fs/cgroup", &selfStat); err != nil {
+		return libpf.NullString, fmt.Errorf("failed to stat /sys/fs/cgroup: %w", err)
+	}
+	selfIno := selfStat.Ino
+
+	var matched libpf.String
+	err := filepath.WalkDir(hostCgroupRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip inaccessible directories
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		var st unix.Stat_t
+		if err := unix.Stat(path, &st); err != nil {
+			return nil
+		}
+		if st.Ino == selfIno {
+			if parts := expContainerID.FindStringSubmatch(path); len(parts) == 2 {
+				matched = libpf.Intern(parts[1])
+			}
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		return libpf.NullString, fmt.Errorf("failed to walk host cgroup tree: %w", err)
+	}
+	return matched, nil
 }
 
 func trimMappingPath(path string) string {

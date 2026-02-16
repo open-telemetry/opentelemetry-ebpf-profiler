@@ -113,6 +113,14 @@ type ProcessManager struct {
 
 	// includeEnvVars holds a list of env vars that should be captured from processes
 	includeEnvVars libpf.Set[string]
+
+	// selfPID is the profiler's own PID.
+	selfPID libpf.PID
+
+	// selfContainerID is the profiler's own container ID, detected once at startup.
+	// Used as a fallback when /proc/self/cgroup yields no container ID (e.g., private
+	// cgroup namespace with hostPID:true in Kubernetes).
+	selfContainerID libpf.String
 }
 
 // Mapping represents an executable memory mapping of a process.

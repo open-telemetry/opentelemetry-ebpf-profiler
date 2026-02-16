@@ -121,13 +121,26 @@ func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
 		return nil
 	}
 
+	meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
+	pm.fillSelfContainerID(pid, &meta)
 	info := &processInfo{
-		meta:     pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars}),
+		meta:     meta,
 		libcInfo: nil,
 	}
 	pm.pidToProcessInfo[pid] = info
 	pm.pidPageToMappingInfoSize++
 	return info
+}
+
+// fillSelfContainerID sets the container ID on meta for the profiler's own process
+// when the standard cgroup-based detection returned no result.
+func (pm *ProcessManager) fillSelfContainerID(pid libpf.PID, meta *process.ProcessMeta) {
+	if meta.ContainerID != libpf.NullString || pm.selfContainerID == libpf.NullString {
+		return
+	}
+	if pid == pm.selfPID {
+		meta.ContainerID = pm.selfContainerID
+	}
 }
 
 // assignInterpreter will update the interpreters maps with given interpreter.Instance.
@@ -501,6 +514,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	var meta process.ProcessMeta
 	if updateProcessMeta {
 		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
+		pm.fillSelfContainerID(pid, &meta)
 	}
 
 	// Sort and publish the new mappings and meta
