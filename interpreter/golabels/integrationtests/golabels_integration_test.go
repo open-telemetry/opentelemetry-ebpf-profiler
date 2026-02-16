@@ -19,13 +19,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/otel/metric/noop"
-
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 var (
@@ -40,6 +39,15 @@ var (
 
 	//go:embed pprof_1_24_cgo_pie
 	pprof_1_24_cgo_pie []byte
+
+	//go:embed pprof_stable
+	pprof_stable []byte
+
+	//go:embed pprof_stable_cgo
+	pprof_stable_cgo []byte
+
+	//go:embed pprof_stable_cgo_pie
+	pprof_stable_cgo_pie []byte
 )
 
 type mockIntervals struct{}
@@ -61,10 +69,13 @@ func Test_Golabels(t *testing.T) {
 	tests := map[string]struct {
 		bin []byte
 	}{
-		"pprof_1_23":         {bin: pprof_1_23},
-		"pprof_1_24":         {bin: pprof_1_24},
-		"pprof_1_24_cgo":     {bin: pprof_1_24_cgo},
-		"pprof_1_24_cgo_pie": {bin: pprof_1_24_cgo_pie},
+		"pprof_1_23":           {bin: pprof_1_23},
+		"pprof_1_24":           {bin: pprof_1_24},
+		"pprof_1_24_cgo":       {bin: pprof_1_24_cgo},
+		"pprof_1_24_cgo_pie":   {bin: pprof_1_24_cgo_pie},
+		"pprof_stable":         {bin: pprof_stable},
+		"pprof_stable_cgo":     {bin: pprof_stable_cgo},
+		"pprof_stable_cgo_pie": {bin: pprof_stable_cgo_pie},
 	}
 
 	for name, tc := range tests {
