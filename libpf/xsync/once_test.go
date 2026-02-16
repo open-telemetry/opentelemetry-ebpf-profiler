@@ -26,9 +26,8 @@ func TestOnceLock(t *testing.T) {
 	assert.Nil(t, once.Get())
 
 	for range 32 {
-		wg.Add(1)
 
-		go func() {
+		wg.Go(func() {
 			val, err := once.GetOrInit(func() (string, error) {
 				if attempt == 3 {
 					time.Sleep(25 * time.Millisecond)
@@ -49,8 +48,7 @@ func TestOnceLock(t *testing.T) {
 				assert.Fail(t, "unreachable")
 			}
 
-			wg.Done()
-		}()
+		})
 	}
 
 	wg.Wait()
