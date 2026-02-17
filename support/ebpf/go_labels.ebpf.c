@@ -181,16 +181,20 @@ static EBPF_INLINE int go_labels(struct pt_regs *ctx)
   u32 pid                  = record->trace.pid;
   GoLabelsOffsets *offsets = bpf_map_lookup_elem(&go_labels_procs, &pid);
   if (!offsets) {
-    DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", pid);
-    return -1;
-  }
-  DEBUG_PRINT(
-    "cl: go offsets found, %d recognized as a go binary: m_ptr: %lx",
-    pid,
-    (unsigned long)record->customLabelsState.go_m_ptr);
-  bool success = get_go_custom_labels(record, offsets);
-  if (!success) {
-    increment_metric(metricID_UnwindGoLabelsFailures);
+    DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary. This should never happen!", pid);
+    // We shouldn't tail call
+    // into this program if there is no map element.
+    // Nevertheless, if that happens due to some bug,
+    // fall through rather than swallowing the trace.
+  } else {
+    DEBUG_PRINT(
+      "cl: go offsets found, %d recognized as a go binary: m_ptr: %lx",
+      pid,
+      (unsigned long)record->customLabelsState.go_m_ptr);
+    bool success = get_go_custom_labels(record, offsets);
+    if (!success) {
+      increment_metric(metricID_UnwindGoLabelsFailures);
+    }
   }
 
   send_trace(ctx, &record->trace);
