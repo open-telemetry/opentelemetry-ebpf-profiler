@@ -207,12 +207,6 @@ enum {
   // (other values omitted here)
 };
 
-struct bpf_perf_event_value {
-  u64 counter;
-  u64 enabled;
-  u64 running;
-};
-
 // BPF helper function IDs
 // https://github.com/torvalds/linux/blob/e8f897f4a/include/uapi/linux/bpf.h#L5683
 #define BPF_FUNC_map_lookup_elem                1
