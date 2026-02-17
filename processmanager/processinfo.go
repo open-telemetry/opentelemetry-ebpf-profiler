@@ -757,6 +757,7 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		log.Debugf("PID %v deleted", pid)
 		delete(pm.pidToProcessInfo, pid)
 
+		// Detach all interpreters for this PID
 		for _, instance := range pm.interpreters[pid] {
 			if err2 := instance.Detach(pm.ebpf, pid); err2 != nil {
 				err = errors.Join(err,
@@ -765,6 +766,7 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 			}
 		}
 		delete(pm.interpreters, pid)
+
 		delete(pm.exitEvents, pid)
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}

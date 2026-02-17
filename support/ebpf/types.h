@@ -1,4 +1,4 @@
-// Provides type definitions shared by the eBPF and Go components
+// provides type definitions shared by the eBPF and Go components
 
 #ifndef OPTI_TYPES_H
 #define OPTI_TYPES_H
@@ -274,10 +274,10 @@ enum {
   // number of failures to get TSD base for APM correlation
   metricID_UnwindApmIntErrReadTsdBase,
 
-  // number of failures read the APM correlation pointer
+  // number of failures to read the APM correlation pointer
   metricID_UnwindApmIntErrReadCorrBufPtr,
 
-  // number of failures read the APM correlation buffer
+  // number of failures to read the APM correlation buffer
   metricID_UnwindApmIntErrReadCorrBuf,
 
   // number of successful reads of APM correlation info

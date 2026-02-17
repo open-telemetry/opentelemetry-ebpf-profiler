@@ -466,6 +466,7 @@ static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record,
   decode_bias_and_unwind_program(val->bias_and_unwind_program, &state->text_section_bias, unwinder);
   state->text_section_id     = val->file_id;
   state->text_section_offset = pc - state->text_section_bias;
+
   DEBUG_PRINT(
     "Text section id for PC %lx is %llx (unwinder %d)",
     (unsigned long)pc,
