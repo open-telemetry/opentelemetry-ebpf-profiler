@@ -1543,7 +1543,7 @@
     "type": "counter",
     "name": "PerfEventLostMunmap",
     "id": 210,
-    "field": "perf.event.lost.munmap"
+    "field": "perf_event.lost.munmap"
   },
   {
     "obsolete": true,
