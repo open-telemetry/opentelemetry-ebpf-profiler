@@ -1551,7 +1551,7 @@
     "type": "counter",
     "name": "PerfEventNoDataMunmap",
     "id": 211,
-    "field": "perf.event.no.data.munmap"
+    "field": "perf_event.no.data.munmap"
   },
   {
     "obsolete": true,
