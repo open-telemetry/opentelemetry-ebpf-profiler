@@ -55,12 +55,6 @@ var (
 	ErrNotELF = errors.New("not an ELF file")
 )
 
-// ErrNoTbss is returned when the tbss section cannot be found
-var ErrNoTbss = errors.New("no thread-local uninitialized data section (tbss)")
-
-// ErrNoTdata is returned when the tdata section cannot be found
-var ErrNoTdata = errors.New("no thread-local initialized data section (tdata)")
-
 var ErrNoTLS = errors.New("no TLS program header")
 
 // File represents an open ELF file
@@ -453,32 +447,6 @@ func (f *File) Section(name string) *Section {
 		}
 	}
 	return nil
-}
-
-// Tbss gets the thread-local uninitialized data section
-func (f *File) Tbss() (*Section, error) {
-	if err := f.LoadSections(); err != nil {
-		return nil, err
-	}
-	for _, sec := range f.Sections {
-		if sec.Type == elf.SHT_NOBITS && sec.Flags&elf.SHF_TLS != 0 {
-			return &sec, nil
-		}
-	}
-	return nil, ErrNoTbss
-}
-
-// Tdata gets the thread-local initialized data section
-func (f *File) Tdata() (*Section, error) {
-	if err := f.LoadSections(); err != nil {
-		return nil, err
-	}
-	for _, sec := range f.Sections {
-		if sec.Type == elf.SHT_PROGBITS && sec.Flags&elf.SHF_TLS != 0 {
-			return &sec, nil
-		}
-	}
-	return nil, ErrNoTdata
 }
 
 // TLS gets the TLS segment (program header)
