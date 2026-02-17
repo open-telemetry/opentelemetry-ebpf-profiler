@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
@@ -191,10 +192,84 @@ func probeBpfUprobeMultiLink() bool {
 	return false
 }
 
+// probeProgArrayAttachTypeCompat checks whether the kernel allows programs with
+// different expected_attach_type values in the same BPF_MAP_TYPE_PROG_ARRAY.
+// Kernels 6.12+ (commit 4540aed51b12) enforce that all programs in a prog array
+// share the same expected_attach_type, which prevents mixing default kprobe
+// programs with AttachTraceUprobeMulti programs in the same tail call map.
+//
+// Returns true if mixed attach types are allowed (pre-6.12 behavior).
+func probeProgArrayAttachTypeCompat() bool {
+	progArray, err := ebpf.NewMap(&ebpf.MapSpec{
+		Type:       ebpf.ProgramArray,
+		KeySize:    4,
+		ValueSize:  4,
+		MaxEntries: 2,
+	})
+	if err != nil {
+		log.Warnf("Failed to create test prog array: %v", err)
+		return true // assume compatible if we can't test
+	}
+	defer progArray.Close()
+
+	minimalInsns := asm.Instructions{
+		asm.Mov.Imm(asm.R0, 0),
+		asm.Return(),
+	}
+
+	// Load a program with default attach type (like our kprobe unwinders).
+	defaultProg, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Name:         "probe_default",
+		Type:         ebpf.Kprobe,
+		Instructions: minimalInsns,
+		License:      "MIT",
+	})
+	if err != nil {
+		log.Warnf("Failed to create default attach type program: %v", err)
+		return true
+	}
+	defer defaultProg.Close()
+
+	// Load a program with AttachTraceUprobeMulti (like our USDT programs).
+	multiProg, err := ebpf.NewProgram(&ebpf.ProgramSpec{
+		Name:         "probe_multi",
+		Type:         ebpf.Kprobe,
+		AttachType:   ebpf.AttachTraceUprobeMulti,
+		Instructions: minimalInsns,
+		License:      "MIT",
+	})
+	if err != nil {
+		log.Warnf("Failed to create uprobe_multi program: %v", err)
+		return true
+	}
+	defer multiProg.Close()
+
+	// Insert the default program first.
+	key0 := uint32(0)
+	fd0 := uint32(defaultProg.FD())
+	if err := progArray.Update(unsafe.Pointer(&key0), unsafe.Pointer(&fd0),
+		ebpf.UpdateAny); err != nil {
+		log.Warnf("Failed to insert default program into prog array: %v", err)
+		return true
+	}
+
+	// Try to insert the multi-uprobe program into the same array.
+	// On 6.12+ this will fail with EINVAL due to attach type mismatch.
+	key1 := uint32(1)
+	fd1 := uint32(multiProg.FD())
+	err = progArray.Update(unsafe.Pointer(&key1), unsafe.Pointer(&fd1), ebpf.UpdateAny)
+
+	return err == nil
+}
+
 // HasMultiUprobeSupport checks if the kernel supports uprobe multi-attach.
 // Multi-uprobes allow attaching one BPF program to multiple probe points with a single syscall,
 // which is more efficient than individual uprobe attachments.
 // This function probes for uprobe_multi link support, which was introduced in kernel 6.6.
+//
+// On kernels 6.12+ which enforce that all programs in a BPF_MAP_TYPE_PROG_ARRAY share the same
+// expected_attach_type, multi-uprobe is disabled because the unwinder tail call programs in
+// kprobe_progs use the default attach type which is incompatible with AttachTraceUprobeMulti.
 //
 // Note: This function requires CAP_BPF or CAP_SYS_ADMIN capabilities to load the probe
 // program. The profiler should already have these privileges.
@@ -215,7 +290,8 @@ func HasMultiUprobeSupport() bool {
 		if os.Getenv("PARCA_DISABLE_MULTIPROBE") == "1" {
 			multiUprobeSupportCached = false
 		} else {
-			multiUprobeSupportCached = probeBpfUprobeMultiLink()
+			multiUprobeSupportCached = probeBpfUprobeMultiLink() &&
+				probeProgArrayAttachTypeCompat()
 		}
 	})
 

@@ -29,6 +29,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/python"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/rtld"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -136,7 +137,7 @@ func NewExecutableInfoManager(
 	if includeTracers.Has(types.Labels) {
 		interpreterLoaders = append(interpreterLoaders, golabels.Loader, customlabels.Loader)
 	}
-	interpreterLoaders = append(interpreterLoaders, oomwatcher.Loader)
+	interpreterLoaders = append(interpreterLoaders, oomwatcher.Loader, rtld.Loader)
 
 	if includeTracers.Has(types.CUDATracer) {
 		// USDT support requires cookies

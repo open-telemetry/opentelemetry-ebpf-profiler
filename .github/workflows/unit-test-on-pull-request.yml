@@ -214,3 +214,62 @@ jobs:
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           support/run-tests.sh ${{ matrix.kernel }}
+  distro-qemu-tests:
+    name: Distro QEMU tests (${{ matrix.kernel }} ${{ matrix.target_arch }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        include:
+          - { target_arch: amd64, kernel: 5.4.276 }
+          - { target_arch: amd64, kernel: 5.10.217 }
+          - { target_arch: amd64, kernel: 5.15.159 }
+          - { target_arch: amd64, kernel: 6.1.91 }
+          - { target_arch: amd64, kernel: 6.6.31 }
+          - { target_arch: amd64, kernel: 6.8.10 }
+          - { target_arch: amd64, kernel: 6.9.1 }
+          - { target_arch: amd64, kernel: 6.12.16 }
+          - { target_arch: amd64, kernel: 6.16 }
+
+          # ARM64 (NOTE: older ARM64 kernels are not available in Cilium repos)
+          - { target_arch: arm64, kernel: 6.6.31 }
+          - { target_arch: arm64, kernel: 6.8.4 }
+          - { target_arch: arm64, kernel: 6.9.1 }
+          - { target_arch: arm64, kernel: 6.12.16 }
+    steps:
+      - name: Clone code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Set up environment
+        uses: ./.github/workflows/env
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          case "${{ matrix.target_arch }}" in
+            amd64) sudo apt-get -y install qemu-system-x86;;
+            arm64) sudo apt-get -y install qemu-system-arm;;
+            *) echo >&2 "bug: bad arch selected"; exit 1;;
+          esac
+          sudo apt-get install -y debootstrap systemtap-sdt-dev
+      - name: Download kernel
+        run: |
+          cd test/distro-qemu
+          case "${{ matrix.target_arch }}" in
+            amd64) export QEMU_ARCH=x86_64;;
+            arm64) export QEMU_ARCH=aarch64;;
+            *) echo >&2 "bug: bad arch selected"; exit 1;;
+          esac
+          ./download-kernel.sh ${{ matrix.kernel }}
+      - name: Run Full Distro tests in QEMU
+        run: |
+          cd test/distro-qemu
+          case "${{ matrix.target_arch }}" in
+            amd64) export QEMU_ARCH=x86_64;;
+            arm64) export QEMU_ARCH=aarch64;;
+            *) echo >&2 "bug: bad arch selected"; exit 1;;
+          esac
+          ./build-and-run.sh ${{ matrix.kernel }}

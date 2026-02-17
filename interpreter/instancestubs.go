@@ -27,6 +27,10 @@ func (is *InstanceStubs) SynchronizeMappings(EbpfHandler, reporter.ExecutableRep
 	return nil
 }
 
+func (is *InstanceStubs) Detach(EbpfHandler, libpf.PID) error {
+	return nil
+}
+
 func (is *InstanceStubs) UpdateLibcInfo(EbpfHandler, libpf.PID, libc.LibcInfo) error {
 	return nil
 }
@@ -74,5 +78,10 @@ func (m *EbpfHandlerStubs) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID
 
 func (m *EbpfHandlerStubs) AttachUSDTProbes(libpf.PID, string, string, []pfelf.USDTProbe,
 	[]uint64, []string) (LinkCloser, error) {
+	return nil, nil
+}
+
+func (mockup *EbpfHandlerStubs) AttachUprobe(
+	libpf.PID, string, uint64, string) (LinkCloser, error) {
 	return nil, nil
 }

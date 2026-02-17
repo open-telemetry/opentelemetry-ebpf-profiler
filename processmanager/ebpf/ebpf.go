@@ -443,6 +443,42 @@ func (impl *ebpfMapsImpl) loadUSDTProgram(progName string, useMulti bool) error 
 	return nil
 }
 
+// AttachUprobe attaches an eBPF uprobe to a function at a specific offset in a binary
+func (impl *ebpfMapsImpl) AttachUprobe(pid libpf.PID, path string, offset uint64,
+	progName string) (interpreter.LinkCloser, error) {
+	containerPath := fmt.Sprintf("/proc/%d/root/%s", pid, path)
+
+	exe, err := link.OpenExecutable(containerPath)
+	if err != nil {
+		log.Warnf("failed to open executable in AttachUprobe %v", err)
+		return nil, err
+	}
+
+	if impl.userProgs == nil {
+		impl.userProgs = make(map[string]*cebpf.Program)
+	}
+
+	// Load the program if not already loaded
+	prog := impl.userProgs[progName]
+	if prog == nil {
+		if loadErr := impl.loadUSDTProgram(progName, false); loadErr != nil {
+			return nil, loadErr
+		}
+		prog = impl.userProgs[progName]
+	}
+
+	// Attach the uprobe
+	lnk, err := exe.Uprobe("", prog, &link.UprobeOptions{
+		Address: offset,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach uprobe to %s at offset 0x%x: %w",
+			path, offset, err)
+	}
+	log.Infof("Attached uprobe %s to %s at offset 0x%x in PID %d", progName, path, offset, pid)
+	return &linkCloser{unloadLink: []link.Link{lnk}}, nil
+}
+
 func (impl *ebpfMapsImpl) CoredumpTest() bool {
 	return false
 }

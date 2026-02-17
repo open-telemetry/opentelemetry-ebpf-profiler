@@ -18,3 +18,22 @@ int uprobe__generic(void *ctx)
 
   return collect_trace(ctx, TRACE_PROBE, pid, tid, ts, 0, 0);
 }
+
+SEC("uprobe/dlopen")
+int uprobe_dlopen(struct pt_regs *ctx)
+{
+  u64 pid_tgid = bpf_get_current_pid_tgid();
+  u32 pid      = pid_tgid >> 32;
+  u32 tid      = pid_tgid & 0xFFFFFFFF;
+
+  DEBUG_PRINT("uprobe_dlopen fired: PID=%u TID=%u", pid, tid);
+
+  // Increment the metric for dlopen uprobe hits
+  increment_metric(metricID_DlopenUprobeHits);
+
+  if (report_pid(ctx, pid_tgid, RATELIMIT_ACTION_NONE)) {
+    DEBUG_PRINT("Reported PID %u from uprobe_dlopen", pid);
+  }
+
+  return 0;
+}

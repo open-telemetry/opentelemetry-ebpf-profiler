@@ -683,18 +683,21 @@ const (
 	// Number of failed attempts to read Node.js custom labels
 	IDUnwindNodeCustomLabelsFailures = 297
 
+	// Number of times dlopen uprobe was fired
+	IDDlopenUprobeHits = 298
+
 	// Number of GPU timing events waiting for matching traces
-	IDCudaTimesAwaitingTraces = 298
+	IDCudaTimesAwaitingTraces = 299
 
 	// Number of GPU traces waiting for matching timing events
-	IDCudaTracesAwaitingTimes = 299
+	IDCudaTracesAwaitingTimes = 300
 
 	// Number of GPU timing entries cleared due to threshold
-	IDCudaTimesCleared = 300
+	IDCudaTimesCleared = 301
 
 	// Number of GPU trace entries cleared due to threshold
-	IDCudaTracesCleared = 301
+	IDCudaTracesCleared = 302
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 302
+	IDMax = 303
 )

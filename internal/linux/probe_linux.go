@@ -40,6 +40,10 @@ func ProbeBPFSyscall() error {
 // GetCurrentKernelVersion returns the major, minor and patch version of the kernel of the host
 // from the utsname struct.
 func GetCurrentKernelVersion() (major, minor, patch uint32, err error) {
-	v, err := getKernelVersion()
-	return v.major, v.minor, v.patch, err
+	var uname unix.Utsname
+	if err := unix.Uname(&uname); err != nil {
+		return 0, 0, 0, fmt.Errorf("could not get Kernel Version: %v", err)
+	}
+	_, _ = fmt.Fscanf(bytes.NewReader(uname.Release[:]), "%d.%d.%d", &major, &minor, &patch)
+	return major, minor, patch, nil
 }

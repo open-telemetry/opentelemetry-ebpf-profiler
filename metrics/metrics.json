@@ -2149,31 +2149,38 @@
     "id": 297
   },
   {
+    "description": "Number of times dlopen uprobe was fired",
+    "type": "counter",
+    "name": "DlopenUprobeHits",
+    "field": "bpf.dlopen.uprobe_hits",
+    "id": 298
+  },
+  {
     "description": "Number of GPU timing events waiting for matching traces",
     "type": "gauge",
     "name": "CudaTimesAwaitingTraces",
     "field": "cuda.times_awaiting_traces",
-    "id": 298
+    "id": 299
   },
   {
     "description": "Number of GPU traces waiting for matching timing events",
     "type": "gauge",
     "name": "CudaTracesAwaitingTimes",
     "field": "cuda.traces_awaiting_times",
-    "id": 299
+    "id": 300
   },
   {
     "description": "Number of GPU timing entries cleared due to threshold",
     "type": "counter",
     "name": "CudaTimesCleared",
     "field": "cuda.times_cleared",
-    "id": 300
+    "id": 301
   },
   {
     "description": "Number of GPU trace entries cleared due to threshold",
     "type": "counter",
     "name": "CudaTracesCleared",
     "field": "cuda.traces_cleared",
-    "id": 301
+    "id": 302
   }
 ]

@@ -369,6 +369,9 @@ enum {
   // number of failed attempts to read a CME by exceeding max EP checks
   metricID_UnwindRubyErrCmeMaxEp,
 
+  // number of times dlopen uprobe was fired
+  metricID_DlopenUprobeHits,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //

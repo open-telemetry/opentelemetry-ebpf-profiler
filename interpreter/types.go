@@ -133,6 +133,9 @@ type EbpfHandler interface {
 	//    3. Call LinkCloser.Unload() from Data.Unload() to fully clean up the eBPF program
 	AttachUSDTProbes(pid libpf.PID, path, multiProgName string, probes []pfelf.USDTProbe,
 		cookies []uint64, singleProgNames []string) (LinkCloser, error)
+
+	// AttachUprobe attaches an eBPF uprobe to a function at a specific offset in a binary
+	AttachUprobe(pid libpf.PID, path string, offset uint64, progName string) (LinkCloser, error)
 }
 
 type LinkCloser interface {

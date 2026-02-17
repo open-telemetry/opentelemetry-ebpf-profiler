@@ -266,7 +266,13 @@ func (emc *ebpfMapsCoredump) SupportsGenericBatchLookupAndDelete() bool {
 func (emc *ebpfMapsCoredump) SupportsLPMTrieBatchOperations() bool {
 	return false
 }
+
 func (emc *ebpfMapsCoredump) AttachUSDTProbes(_ libpf.PID, _, _ string, _ []pfelf.USDTProbe,
 	_ []uint64, _ []string) (interpreter.LinkCloser, error) {
+	return nil, nil
+}
+
+func (emc *ebpfMapsCoredump) AttachUprobe(_ libpf.PID, _ string, _ uint64,
+	_ string) (interpreter.LinkCloser, error) {
 	return nil, nil
 }
