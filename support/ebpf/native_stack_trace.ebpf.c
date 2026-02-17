@@ -25,6 +25,61 @@ BPF_RODATA_VAR(u32, task_stack_offset, 0)
 // The offset of struct pt_regs within the kernel entry stack.
 BPF_RODATA_VAR(u32, stack_ptregs_offset, 0)
 
+// If enabled, the profiler translates host-level PIDs/TGIDs into the
+// corresponding IDs within a specific PID namespace. This is essential
+// for sidecar deployments to report PIDs consistent with the container's
+// internal view (e.g., reporting PID 1 instead of the host PID).
+// It requires to have BTF support for the kernel.
+BPF_RODATA_VAR(bool, pid_ns_translation_enabled, false)
+
+// The inode number of the target PID namespace.
+// Obtained by calling stat() on /proc/[pid]/ns/pid.
+BPF_RODATA_VAR(u64, target_pid_ns_inode, 0)
+
+// The device ID (st_dev) of the target PID namespace inode.
+// Required by the bpf_get_ns_current_pid_tgid helper to uniquely
+// identify the namespace filesystem (nsfs) instance.
+BPF_RODATA_VAR(u64, target_pid_ns_dev, 0)
+
+// Offsets for walking kernel structures to translate host PIDs into a target PID
+// namespace (see parseBTFForNsTranslation). Hierarchy of related kernel types:
+//
+//   task_struct                    nsproxy                 pid_namespace
+//   +------------------+           +----------------+       +------------------+
+//   | nsproxy          |---------->| pid_ns_for_    |------>| ns.inum          |
+//   | thread_pid       |--+        |   children     |       +------------------+
+//   | group_leader     |--|        +----------------+               ^
+//   +------------------+  |                                        |
+//          |              v                                        |
+//          |         struct pid                                    |
+//          |         +------------------+                          |
+//          +-------->| level            |                          |
+//                    | numbers[]        |--+  (array of struct upid)
+//                    +------------------+  |         |
+//                                          v         v
+//                                    struct upid    struct upid ...
+//                                    +----------+   +----------+
+//                                    | nr       |   | nr       |  (PID value per level)
+//                                    +----------+   +----------+
+//
+// task_struct:
+// offset of nsproxy (-> struct nsproxy)
+BPF_RODATA_VAR(u32, task_nsproxy_off, 0)
+// offset of thread_pid (-> struct pid)
+BPF_RODATA_VAR(u32, task_thread_pid_off, 0)
+// offset of group_leader (-> task_struct of main thread)
+BPF_RODATA_VAR(u32, task_group_leader_off, 0)
+// offset of pid_ns_for_children (-> struct pid_namespace)
+BPF_RODATA_VAR(u32, nsproxy_pid_ns_for_children_off, 0)
+// pid_namespace: one per PID namespace; ns.inum is the inode number (e.g. for /proc/pid/ns/pid).
+BPF_RODATA_VAR(u32, pid_ns_inum_off, 0) // offset of ns.inum within pid_namespace
+// pid: represents a PID across namespace levels; numbers[] has one upid per level.
+BPF_RODATA_VAR(u32, pid_level_off, 0)   // offset of level
+BPF_RODATA_VAR(u32, pid_numbers_off, 0) // offset of numbers (array of struct upid)
+// upid: PID value in a single namespace; nr is the numeric PID in that namespace.
+BPF_RODATA_VAR(u32, upid_nr_off, 0) // offset of nr within struct upid
+BPF_RODATA_VAR(u32, upid_size, 0)   // sizeof(struct upid), stride of pid.numbers[]
+
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
 // fileID.
@@ -607,16 +662,92 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
   return -1;
 }
 
+struct ns_pid_info {
+  u32 ns_inode;
+  u32 vpid;
+  u32 vtgid;
+};
+
+#ifdef TESTING_COREDUMP
+static int get_current_ns_pid_tgid(struct ns_pid_info *pid_info)
+{
+  *pid_info = (struct ns_pid_info){0, 0, 0};
+  return 0;
+}
+#else
+// Get namespace inode, virtual PID and virtual TGID using only offsets (no kernel struct defs).
+// Offsets must be set at load time via BPF_RODATA;
+// Return 0 on success, -1 on failure.
+static int get_current_ns_pid_tgid(struct ns_pid_info *pid_info)
+{
+  *pid_info = (struct ns_pid_info){0, 0, 0};
+
+  u64 ptr_val;
+  u32 level;
+
+  if (!pid_ns_translation_enabled) {
+    return 0;
+  }
+  void *task = (void *)bpf_get_current_task();
+  char *t    = (char *)task;
+
+  if (bpf_probe_read_kernel(&ptr_val, sizeof(ptr_val), t + task_nsproxy_off) == 0 && ptr_val) {
+    if (
+      bpf_probe_read_kernel(
+        &ptr_val, sizeof(ptr_val), (char *)ptr_val + nsproxy_pid_ns_for_children_off) == 0 &&
+      ptr_val) {
+      bpf_probe_read_kernel(
+        &pid_info->ns_inode, sizeof(pid_info->ns_inode), (char *)ptr_val + pid_ns_inum_off);
+    }
+  }
+
+  if (bpf_probe_read_kernel(&ptr_val, sizeof(ptr_val), t + task_thread_pid_off) != 0) {
+    return -1;
+  }
+  if (
+    bpf_probe_read_kernel(&level, sizeof(level), (char *)ptr_val + pid_level_off) != 0 ||
+    level > 32) {
+    return -1;
+  }
+  bpf_probe_read_kernel(
+    &pid_info->vpid,
+    sizeof(pid_info->vpid),
+    (char *)ptr_val + pid_numbers_off + level * upid_size + upid_nr_off);
+
+  if (bpf_probe_read_kernel(&ptr_val, sizeof(ptr_val), t + task_group_leader_off) == 0 && ptr_val) {
+    if (
+      bpf_probe_read_kernel(&ptr_val, sizeof(ptr_val), (char *)ptr_val + task_thread_pid_off) ==
+        0 &&
+      ptr_val) {
+      bpf_probe_read_kernel(
+        &pid_info->vtgid,
+        sizeof(pid_info->vtgid),
+        (char *)ptr_val + pid_numbers_off + level * upid_size + upid_nr_off);
+    }
+  }
+  return 0;
+}
+#endif
+
 SEC("perf_event/native_tracer_entry")
 int native_tracer_entry(struct bpf_perf_event_data *ctx)
 {
-  // Get the PID and TGID register.
-  u64 id  = bpf_get_current_pid_tgid();
-  u32 pid = id >> 32;
-  u32 tid = id & 0xFFFFFFFF;
-
-  if (pid == 0 && filter_idle_frames) {
-    return 0;
+  u32 pid = 0;
+  u32 tid = 0;
+  if (pid_ns_translation_enabled) {
+    struct ns_pid_info pid_info = {0};
+    if (get_current_ns_pid_tgid(&pid_info) != 0) {
+      return 0;
+    }
+    if (pid_info.ns_inode != target_pid_ns_inode) {
+      return 0;
+    }
+    pid = pid_info.vpid;
+    tid = pid_info.vtgid;
+  } else {
+    u64 id = bpf_get_current_pid_tgid();
+    pid    = id >> 32;
+    tid    = id & 0xFFFFFFFF;
   }
 
   u64 ts = bpf_ktime_get_ns();
