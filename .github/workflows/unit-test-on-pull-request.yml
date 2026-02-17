@@ -214,6 +214,30 @@ jobs:
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           support/run-tests.sh ${{ matrix.kernel }}
+  interpreter-integration-tests:
+    name: Interpreter integration (${{ matrix.target_arch }}, ${{ matrix.test_type }})
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target_arch: [amd64, arm64]
+        test_type: [stable, known-failing]
+    steps:
+      - name: Clone code
+        uses: actions/checkout@v4
+      - name: Set up environment
+        uses: ./.github/workflows/env
+      - name: Test interpreter integration (stable tests)
+        if: matrix.test_type == 'stable'
+        run: |
+          uname -a
+          sudo go test ./interpreter/... -v -run TestIntegration -skip "TestIntegration/(node-local-nightly|node-latest)"
+      - name: Test interpreter integration (known failing tests)
+        if: matrix.test_type == 'known-failing'
+        continue-on-error: true
+        run: |
+          uname -a
+          sudo go test ./interpreter/... -v -run "TestIntegration/(node-local-nightly|node-latest)"
+
   distro-qemu-tests:
     name: Distro QEMU tests (${{ matrix.kernel }} ${{ matrix.target_arch }})
     runs-on: ubuntu-24.04
