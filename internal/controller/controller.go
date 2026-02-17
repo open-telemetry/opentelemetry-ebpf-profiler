@@ -27,8 +27,8 @@ type Controller struct {
 	reporter reporter.Reporter
 	tracer   *tracer.Tracer
 
-	shutdownMutex sync.Mutex
-	cancelFunc    context.CancelFunc
+	shutdownOnceFn sync.Once
+	cancelFunc     context.CancelFunc
 }
 
 // New creates a new controller
@@ -169,25 +169,20 @@ func (c *Controller) Start(ctx context.Context) error {
 
 // Shutdown stops the controller
 func (c *Controller) Shutdown() {
-	c.shutdownMutex.Lock()
-	defer c.shutdownMutex.Unlock()
+	c.shutdownOnceFn.Do(func() {
+		log.Info("Stop processing ...")
+		if c.cancelFunc != nil {
+			c.cancelFunc()
+		}
 
-	log.Info("Stop processing ...")
-	if c.cancelFunc != nil {
-		c.cancelFunc()
-	}
+		if c.reporter != nil {
+			c.reporter.Stop()
+		}
 
-	if c.reporter != nil {
-		c.reporter.Stop()
-		// Set to nil to prevent accidental reuse after shutdown
-		c.reporter = nil
-	}
-
-	if c.tracer != nil {
-		c.tracer.Close()
-		// Set to nil to prevent accidental reuse after shutdown
-		c.tracer = nil
-	}
+		if c.tracer != nil {
+			c.tracer.Close()
+		}
+	})
 }
 
 func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer) error {

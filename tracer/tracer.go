@@ -316,6 +316,7 @@ func (t *Tracer) Close() {
 	}
 
 	t.processManager.Close()
+	t.signalDone()
 }
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
