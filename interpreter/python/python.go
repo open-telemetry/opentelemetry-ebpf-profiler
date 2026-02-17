@@ -44,28 +44,30 @@ var (
 	libpythonRegex = regexp.MustCompile(`^(?:.*/)?libpython(\d)\.(\d+)[^/]*`)
 )
 
-// pythonVer builds a version number from readable numbers
+// pythonVer builds a version number from readable numbers.
 func pythonVer(major, minor int) uint16 {
 	return uint16(major)*0x100 + uint16(minor)
 }
 
-func readPyVersionHex(ef *pfelf.File) (int, int, uint32, error) {
+func readPyVersionHex(ef *pfelf.File) (major uint8, minor uint8, err error) {
+	// Py_Version is referenced in CPython internals for versioned Python binaries.
+	// https://github.com/python/cpython/blob/v3.11.0/Doc/c-api/apiabiversion.rst
 	addr, err := ef.LookupSymbolAddress("Py_Version")
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, err
 	}
 	rm := ef.GetRemoteMemory()
 	versionHex := rm.Uint32(libpf.Address(addr))
 	if versionHex == 0 {
-		return 0, 0, versionHex, errors.New("Py_Version is 0")
+		return 0, 0, errors.New("Py_Version is 0")
 	}
 
-	major := int((versionHex >> 24) & 0xff)
-	minor := int((versionHex >> 16) & 0xff)
+	major = uint8((versionHex >> 24) & 0xff)
+	minor = uint8((versionHex >> 16) & 0xff)
 	if major == 0 {
-		return 0, 0, versionHex, fmt.Errorf("invalid Py_Version 0x%x", versionHex)
+		return 0, 0, fmt.Errorf("invalid Py_Version 0x%x", versionHex)
 	}
-	return major, minor, versionHex, nil
+	return major, minor, nil
 }
 
 //nolint:lll
@@ -695,27 +697,13 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	mainDSO := false
 	major := 0
 	minor := 0
-	var ef *pfelf.File
-	var err error
 	matches := libpythonRegex.FindStringSubmatch(info.FileName())
 	if matches == nil {
 		mainDSO = true
 		matches = pythonRegex.FindStringSubmatch(info.FileName())
 	}
 	if matches == nil {
-		if strings.HasPrefix(path.Base(info.FileName()), "python") {
-			elfFile, err := info.GetELF()
-			if err != nil {
-				return nil, err
-			}
-			ef = elfFile
-			var versionErr error
-			major, minor, _, versionErr = readPyVersionHex(ef)
-			if versionErr != nil {
-				return nil, nil
-			}
-			mainDSO = true
-		} else {
+		if !strings.HasPrefix(path.Base(info.FileName()), "python") {
 			return nil, nil
 		}
 	} else {
@@ -723,12 +711,17 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		minor, _ = strconv.Atoi(matches[2])
 	}
 
-	if ef == nil {
-		elfFile, err := info.GetELF()
-		if err != nil {
-			return nil, err
+	ef, err := info.GetELF()
+	if err != nil {
+		return nil, err
+	}
+	if major == 0 {
+		majorFromSym, minorFromSym, versionErr := readPyVersionHex(ef)
+		if versionErr != nil {
+			return nil, nil
 		}
-		ef = elfFile
+		major = int(majorFromSym)
+		minor = int(minorFromSym)
 	}
 
 	if mainDSO {
