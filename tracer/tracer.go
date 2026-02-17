@@ -673,7 +673,8 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 			name:             "native_tracer_entry",
 			noTailCallTarget: true,
 			enable:           true,
-		})
+		},
+	)
 
 	for _, unwindProg := range progs {
 		if !unwindProg.enable {

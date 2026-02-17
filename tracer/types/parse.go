@@ -181,7 +181,6 @@ func Parse(tracers string) (IncludedTracers, error) {
 
 	if tracersEnabled := result.String(); tracersEnabled != "" {
 		log.Debugf("Tracer string: %v", tracers)
-		log.Infof("Interpreter tracers: %v", tracersEnabled)
 	}
 
 	return result, nil

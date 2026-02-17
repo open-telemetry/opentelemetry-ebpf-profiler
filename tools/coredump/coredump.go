@@ -44,13 +44,13 @@ func generateErrorMap() (map[libpf.AddressOrLineno]string, error) {
 		Name string `json:"name"`
 	}
 
-	var errors []JSONError
-	if err = json.NewDecoder(file).Decode(&errors); err != nil {
+	var errs []JSONError
+	if err = json.NewDecoder(file).Decode(&errs); err != nil {
 		return nil, fmt.Errorf("failed to parse errors.json: %w", err)
 	}
 
-	out := make(map[libpf.AddressOrLineno]string, len(errors))
-	for _, item := range errors {
+	out := make(map[libpf.AddressOrLineno]string, len(errs))
+	for _, item := range errs {
 		out[libpf.AddressOrLineno(item.ID)] = item.Name
 	}
 

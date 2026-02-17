@@ -288,6 +288,9 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 		lost := lostEventsCount.Swap(0)
 		noData := noDataCount.Swap(0)
 		readError := readErrorCount.Swap(0)
+		if lost > 0 || readError > 0 {
+			log.Warnf("[trace] trace event reader: lost=%d readErrors=%d noData=%d", lost, readError, noData)
+		}
 		return []metrics.Metric{
 			{ID: metrics.IDTraceEventLost, Value: metrics.MetricValue(lost)},
 			{ID: metrics.IDTraceEventNoData, Value: metrics.MetricValue(noData)},
