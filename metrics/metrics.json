@@ -1559,7 +1559,7 @@
     "type": "counter",
     "name": "PerfEventReadErrorMunmap",
     "id": 212,
-    "field": "perf.event.read.error.munmap"
+    "field": "perf_event.read.error.munmap"
   },
   {
     "description": "Number of new PID events (report_events)",
