@@ -1718,7 +1718,7 @@
     "type": "counter",
     "name": "PerfEventDisableErr",
     "id": 233,
-    "field": "perf.event.disable.err"
+    "field": "perf_event.disable.err"
   },
   {
     "description": "Number of times we didn't find an entry for this process in the Python process info array",
