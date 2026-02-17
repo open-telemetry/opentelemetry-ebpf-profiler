@@ -36,9 +36,8 @@ func BenchmarkGolang(b *testing.B) {
 	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef)
 	rm := remotememory.NewProcessVirtualMemory(libpfPID)
 
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		gD, err := Loader(nil, loaderInfo)
 		if err != nil {
 			b.Fatalf("Failed to create loader: %v", err)

@@ -89,7 +89,7 @@ func LoadMaps(ctx context.Context, includeTracers types.IncludedTracers,
 	impl.errCounter = make(map[metrics.MetricID]int64)
 
 	implRefVal := reflect.ValueOf(impl).Elem()
-	implRefType := reflect.TypeOf(impl).Elem()
+	implRefType := reflect.TypeFor[ebpfMapsImpl]()
 	for i := 0; i < implRefType.NumField(); i++ {
 		fieldType := implRefType.Field(i)
 		nameTag, ok := fieldType.Tag.Lookup("name")
