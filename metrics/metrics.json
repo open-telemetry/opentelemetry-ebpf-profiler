@@ -1711,7 +1711,7 @@
     "type": "counter",
     "name": "PerfEventEnableErr",
     "id": 232,
-    "field": "perf.event.enable.err"
+    "field": "perf_event.enable.err"
   },
   {
     "description": "Number of times disabling a perf event hook failed",
