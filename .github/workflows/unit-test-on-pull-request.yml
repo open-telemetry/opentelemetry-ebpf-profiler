@@ -168,6 +168,9 @@ jobs:
           - { target_arch: amd64, kernel: 6.8.10 }
           - { target_arch: amd64, kernel: 6.9.1 }
           - { target_arch: amd64, kernel: 6.12.16 }
+          # include a kernel that has 4540aed51b12bc13364149bf95f6ecef013197c0
+          # (see https://github.com/parca-dev/opentelemetry-ebpf-profiler/pull/201)
+          - { target_arch: amd64, kernel: 6.12.63 }
           - { target_arch: amd64, kernel: 6.16 }
           - { target_arch: amd64, kernel: 6.18 }
 
@@ -253,6 +256,9 @@ jobs:
           - { target_arch: amd64, kernel: 6.8.10 }
           - { target_arch: amd64, kernel: 6.9.1 }
           - { target_arch: amd64, kernel: 6.12.16 }
+          # include a kernel that has 4540aed51b12bc13364149bf95f6ecef013197c0
+          # (see https://github.com/parca-dev/opentelemetry-ebpf-profiler/pull/201)
+          - { target_arch: amd64, kernel: 6.12.63 }
           - { target_arch: amd64, kernel: 6.16 }
 
           # ARM64 (NOTE: older ARM64 kernels are not available in Cilium repos)
