@@ -1366,6 +1366,12 @@ func (t *Tracer) GetEbpfMaps() map[string]*cebpf.Map {
 func (t *Tracer) GetEbpfHandler() interpreter.EbpfHandler {
 	return t.processManager.GetEbpfHandler()
 }
+
+// GetInterpretersForPID returns all interpreter instances for the given PID.
+func (t *Tracer) GetInterpretersForPID(pid libpf.PID) []interpreter.Instance {
+	return t.processManager.GetInterpretersForPID(pid)
+}
+
 // ForceProcessPID forces processing of the given PID by sending it to the
 // pidEvents channel. Used to speed up tests.
 func (t *Tracer) ForceProcessPID(pid libpf.PID) {
