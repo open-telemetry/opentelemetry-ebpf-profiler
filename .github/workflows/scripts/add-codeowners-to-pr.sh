@@ -9,7 +9,8 @@
 #
 # Note that since this script is considered a requirement for PRs,
 # it should never fail.
-
+#
+# Modified version of https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/571fce853d044786bd41913765d1f5a813261233/.github/workflows/scripts (removed LABELS handling)
 set -euo pipefail
 
 if [[ -z "${REPO:-}" || -z "${PR:-}" ]]; then
