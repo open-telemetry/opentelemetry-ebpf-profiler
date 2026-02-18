@@ -1,7 +1,7 @@
-.PHONY: all all-common clean ebpf generate test test-deps \
+.PHONY: all all-common clean ebpf generate generate-collector test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
 	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
-	pprof_1_23 pprof_1_24 pprof_1_24_cgo \
+	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
 SHELL := /usr/bin/env bash
@@ -62,6 +62,7 @@ clean:
 	@$(MAKE) -s -C support/ebpf clean
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache support/*.test interpreter/golabels/integrationtests/pprof_1_*
+	@rm -f cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
 	@cargo clean
 
 generate:
@@ -71,8 +72,17 @@ generate:
 ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
-ebpf-profiler: generate ebpf
+generate-collector:
+	GOARCH=$(NATIVE_ARCH) go tool $(GO_TOOLS) builder \
+		--skip-compilation=true \
+		--config cmd/otelcol-ebpf-profiler/manifest.yaml \
+		--output-path cmd/otelcol-ebpf-profiler
+
+ebpf-profiler: ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
+
+otelcol-ebpf-profiler: ebpf generate-collector
+	cd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../$@ 
 
 rust-targets:
 	rustup target add $(ARCH_PREFIX)-unknown-linux-musl

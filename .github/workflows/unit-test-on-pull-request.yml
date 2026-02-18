@@ -62,6 +62,22 @@ jobs:
           make format
           git diff --exit-code || (echo 'Code base is not Go or C formatted, please run "make format" and commit the changes in this PR.'; exit 1)
 
+  build-collector:
+    name: Build OTel Collector (${{ matrix.target_arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - { target_arch: amd64, runner: ubuntu-24.04 }
+          - { target_arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - name: Clone code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up environment
+        uses: ./.github/workflows/env
+      - name: build
+        run: make otelcol-ebpf-profiler
+
   test:
     name: Test (${{ matrix.target_arch }}${{ matrix.go_flags }})
     runs-on: ${{ matrix.runner }}
