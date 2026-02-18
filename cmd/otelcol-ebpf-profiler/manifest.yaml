@@ -13,7 +13,7 @@ dist:
   version: dev
 
 receivers:
-  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.145.0
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.146.1
   - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202606
     import: go.opentelemetry.io/ebpf-profiler/collector
 
