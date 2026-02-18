@@ -56,7 +56,7 @@ const (
 const MaxFrameUnwinds = 0x100
 
 const (
-	MetricIDBeginCumulative = 0x73
+	MetricIDBeginCumulative = 0x71
 )
 
 const (
@@ -489,10 +489,10 @@ var MetricsTranslation = []metrics.MetricID{
 	0x5d: metrics.IDUnwindDotnetErrBadFP,
 	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
 	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,
-	0x69: metrics.IDUnwindLuaJITAttempts,
-	0x6a: metrics.IDUnwindLuaJITErrNoProcInfo,
-	0x72: metrics.IDDlopenUprobeHits,
-	0x6d: metrics.IDUnwindNodeCustomLabelsAttempts,
-	0x6e: metrics.IDUnwindNodeCustomLabelsSuccesses,
-	0x6f: metrics.IDUnwindNodeCustomLabelsFailures,
+	0x67: metrics.IDUnwindLuaJITAttempts,
+	0x68: metrics.IDUnwindLuaJITErrNoProcInfo,
+	0x70: metrics.IDDlopenUprobeHits,
+	0x6b: metrics.IDUnwindNodeCustomLabelsAttempts,
+	0x6c: metrics.IDUnwindNodeCustomLabelsSuccesses,
+	0x6d: metrics.IDUnwindNodeCustomLabelsFailures,
 }
