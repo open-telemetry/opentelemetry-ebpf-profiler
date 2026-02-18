@@ -142,10 +142,10 @@ have a Profiler-specific role: code owners.
 
 ### Becoming a Code Owner
 
-A Code Owner is responsible for a language interpreter code within the
+A Code Owner is responsible for a component (typically a language interpreter) within the
 OpenTelemetry eBPF Profiler, as indicated by the [CODEOWNERS
 file](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/.github/CODEOWNERS).
-That responsibility includes maintaining the interpreter, triaging and
+That responsibility includes maintaining the component, triaging and
 responding to issues, and reviewing pull requests.
 
 Sometimes a language interpreter may be in need of a new or additional Code
