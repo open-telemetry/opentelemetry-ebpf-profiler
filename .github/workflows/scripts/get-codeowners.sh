@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # This script checks the GitHub CODEOWNERS file for any code owners
-# of profiler interpreters and returns a string of the code owners if it
+# of profiler components and returns a string of the code owners if it
 # finds them.
 
 set -euo pipefail
