@@ -148,8 +148,8 @@ file](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/.g
 That responsibility includes maintaining the component, triaging and
 responding to issues, and reviewing pull requests.
 
-Sometimes a language interpreter may be in need of a new or additional Code
-Owner. A few reasons this situation may arise would be:
+Sometimes the component may be in need of a new or additional Code Owner.
+A few reasons this situation may arise would be:
 
 - The existing Code Owners are actively looking for more help.
 - A previous Code Owner stepped down.
