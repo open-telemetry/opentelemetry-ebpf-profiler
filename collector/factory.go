@@ -1,6 +1,8 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+//go:generate go tool -modfile=../tools.mod mdatagen metadata.yaml
+
 package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 
 import (
@@ -12,20 +14,17 @@ import (
 	"go.opentelemetry.io/collector/receiver/xreceiver"
 
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
+	"go.opentelemetry.io/ebpf-profiler/collector/internal/metadata"
 )
 
-var (
-	typeStr = component.MustNewType("profiling")
-
-	errInvalidConfig = errors.New("invalid config")
-)
+var errInvalidConfig = errors.New("invalid config")
 
 // NewFactory creates a factory for the receiver.
 func NewFactory() receiver.Factory {
 	return xreceiver.NewFactory(
-		typeStr,
+		metadata.Type,
 		defaultConfig,
-		xreceiver.WithProfiles(BuildProfilesReceiver(), component.StabilityLevelAlpha))
+		xreceiver.WithProfiles(BuildProfilesReceiver(), metadata.ProfilesStability))
 }
 
 func defaultConfig() component.Config {
