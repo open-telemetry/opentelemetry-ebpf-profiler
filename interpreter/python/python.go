@@ -469,10 +469,12 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	if addr == 0 {
 		return nil, errors.New("failed to read code object: null pointer")
 	}
-	if value, ok := p.addrToCodeObject.Get(addr); ok {
-		m := value
-		if m.ebpfChecksum == ebpfChecksum {
-			return m, nil
+	if ebpfChecksum != 0 {
+		if value, ok := p.addrToCodeObject.Get(addr); ok {
+			m := value
+			if m.ebpfChecksum == ebpfChecksum {
+				return m, nil
+			}
 		}
 	}
 
@@ -527,7 +529,7 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 
 	ebpfChecksumCalculated := (argCount << 25) + (kwonlyArgCount << 18) +
 		(flags << 10) + firstLineNo
-	if ebpfChecksum != ebpfChecksumCalculated {
+	if ebpfChecksum != 0 && ebpfChecksum != ebpfChecksumCalculated {
 		return nil, fmt.Errorf("read code object was stale: %x != %x",
 			ebpfChecksum, ebpfChecksumCalculated)
 	}
@@ -548,7 +550,7 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 		sourceFileName: libpf.Intern(sourceFileName),
 		firstLineNo:    firstLineNo,
 		lineTable:      lineTable,
-		ebpfChecksum:   ebpfChecksum,
+		ebpfChecksum:   ebpfChecksumCalculated,
 	}
 	p.addrToCodeObject.Add(addr, pco)
 	return pco, nil
