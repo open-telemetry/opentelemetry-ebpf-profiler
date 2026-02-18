@@ -179,7 +179,7 @@ be granted Code Ownership.
 
 To become a Code Owner, add your GitHub username to the
 [CODEOWNERS](.github/CODEOWNERS)] file with an entry for all files related to
-the interpreter code. Be sure to tag the existing Code Owners, if any, within
+the component code. Be sure to tag the existing Code Owners, if any, within
 the PR to ensure they receive a notification.
 
 ### Maintainers
