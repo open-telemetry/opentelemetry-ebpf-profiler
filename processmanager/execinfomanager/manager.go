@@ -142,6 +142,7 @@ func NewExecutableInfoManager(
 		state: xsync.NewRWMutex(executableInfoManagerState{
 			interpreterLoaders: interpreterLoaders,
 			executables:        map[host.FileID]*entry{},
+			unusedExecutables:  map[host.FileID]time.Time{},
 			unwindInfoIndex:    map[sdtypes.UnwindInfo]uint16{},
 			ebpf:               ebpf,
 		}),
@@ -173,6 +174,9 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	if ok {
 		defer mgr.state.WUnlock(&state)
 		info.rc++
+		if info.rc == 1 {
+			delete(state.unusedExecutables, fileID)
+		}
 		return info.ExecutableInfo, nil
 	}
 
@@ -207,6 +211,9 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	defer mgr.state.WUnlock(&state)
 	if info, ok = state.executables[fileID]; ok {
 		info.rc++
+		if info.rc == 1 {
+			delete(state.unusedExecutables, fileID)
+		}
 		return info.ExecutableInfo, nil
 	}
 
@@ -234,10 +241,8 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	return info.ExecutableInfo, nil
 }
 
-// RemoveOrDecRef decrements the reference counter of the executable being tracked. Once the RC
-// reaches zero, information about the file is removed from the manager and the corresponding
-// BPF maps.
-func (mgr *ExecutableInfoManager) RemoveOrDecRef(fileID host.FileID) error {
+// DecRef decrements the reference counter of the executable being tracked.
+func (mgr *ExecutableInfoManager) DecRef(fileID host.FileID) error {
 	state := mgr.state.WLock()
 	defer mgr.state.WUnlock(&state)
 
@@ -246,21 +251,53 @@ func (mgr *ExecutableInfoManager) RemoveOrDecRef(fileID host.FileID) error {
 		return fmt.Errorf("FileID %v is not known to ExecutableInfoManager", fileID)
 	}
 
-	switch info.rc {
-	case 1:
-		// This was the last reference: clean up all associated resources.
+	if info.rc == 0 {
+		// This should be unreachable.
+		return errors.New("state corruption in ExecutableInfoManager: encountered 0 RC")
+	}
+
+	info.rc--
+
+	if info.rc == 0 {
+		state.unusedExecutables[fileID] = time.Now()
+	}
+
+	return nil
+}
+
+// CleanupUnused removes tracked executables for which reference counter has reached zero
+// more than `age` ago. During cleanup information about the file is removed from the manager
+// and the corresponding BPF maps.
+func (mgr *ExecutableInfoManager) CleanupUnused(age time.Duration) error {
+	state := mgr.state.WLock()
+	defer mgr.state.WUnlock(&state)
+
+	cutoff := time.Now().Add(-age)
+
+	for fileID, unusedSince := range state.unusedExecutables {
+		if unusedSince.After(cutoff) {
+			continue
+		}
+
+		info, ok := state.executables[fileID]
+		if !ok {
+			return fmt.Errorf("FileID %v is in state.unusedExecutables, but not in state.executables", fileID)
+		}
+
+		if info.rc != 0 {
+			return fmt.Errorf("FileID %v has rc=%d when zero is expected", fileID, info.rc)
+		}
+
 		if err := state.unloadDeltas(fileID, &info.mapRef); err != nil {
 			return fmt.Errorf("failed remove fileID 0x%x from BPF maps: %w", fileID, err)
 		}
+
 		if info.Data != nil {
 			info.Data.Unload(state.ebpf)
 		}
+
 		delete(state.executables, fileID)
-	case 0:
-		// This should be unreachable.
-		return errors.New("state corruption in ExecutableInfoManager: encountered 0 RC")
-	default:
-		info.rc--
+		delete(state.unusedExecutables, fileID)
 	}
 
 	return nil
@@ -300,6 +337,10 @@ type executableInfoManagerState struct {
 	// - stack_delta_page_to_info
 	// - exe_id_to_%d_stack_deltas
 	executables map[host.FileID]*entry
+
+	// unusedExecutables is an additional mapping from file ID to the time when their reference
+	// counter reached zero.
+	unusedExecutables map[host.FileID]time.Time
 
 	// unwindInfoIndex maps each unique UnwindInfo to its array index within the corresponding
 	// BPF map. This serves for de-duplication purposes. Elements are never removed. Entries are

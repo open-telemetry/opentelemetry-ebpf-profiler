@@ -67,6 +67,7 @@ type Intervals interface {
 	MonitorInterval() time.Duration
 	TracePollInterval() time.Duration
 	PIDCleanupInterval() time.Duration
+	ExecutableUnloadDelay() time.Duration
 }
 
 // Tracer provides an interface for loading and initializing the eBPF components as
@@ -236,7 +237,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	hasBatchLookupAndDelete := ebpfHandler.SupportsGenericBatchLookupAndDelete()
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
-		ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
+		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
 		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
 	if err != nil {
@@ -1078,7 +1079,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 
 	pidEvents := make([]libpf.PIDTID, 0)
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
-		t.triggerPIDProcessing, func(_ bool) {
+		t.triggerPIDProcessing, func(_ bool) bool {
 			t.enableEvent(support.EventTypeGenericPID)
 			t.monitorPIDEventsMapMethod(&pidEvents)
 
@@ -1089,6 +1090,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 
 			// Keep the underlying array alive to avoid GC pressure
 			pidEvents = pidEvents[:0]
+			return true
 		})
 
 	// translateIDs is a translation table for eBPF IDs into Metric IDs.

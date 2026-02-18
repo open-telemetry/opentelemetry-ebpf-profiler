@@ -59,8 +59,8 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, nil
 	}
 
-	if version.Compare(goVersion, "go1.26") >= 0 {
-		return nil, fmt.Errorf("unsupported Go version %s (need >= 1.13 and <= 1.25)", goVersion)
+	if version.Compare(goVersion, "go1.27") >= 0 {
+		return nil, fmt.Errorf("unsupported Go version %s (need >= 1.13 and <= 1.26)", goVersion)
 	}
 
 	log.Debugf("file %s detected as go version %s", info.FileName(), goVersion)

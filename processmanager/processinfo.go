@@ -290,7 +290,7 @@ func (pm *ProcessManager) processRemovedMapping(pid libpf.PID, m *Mapping) uint6
 	}
 
 	fileID := host.FileIDFromLibpf(mf.File.Value().FileID)
-	pm.eim.RemoveOrDecRef(fileID)
+	pm.eim.DecRef(fileID)
 	return uint64(deleted)
 }
 
