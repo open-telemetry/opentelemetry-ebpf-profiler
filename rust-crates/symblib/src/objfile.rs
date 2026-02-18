@@ -103,7 +103,7 @@ impl File {
     }
 
     /// Parse the header and create a reader.
-    pub fn parse(&self) -> Result<Reader> {
+    pub fn parse(&self) -> Result<Reader<'_>> {
         Ok(Reader(object::File::parse(&self.0[..])?))
     }
 }
@@ -578,7 +578,7 @@ impl<'obj> MemoryMap<'obj> {
     }
 
     /// Iterate over all memory regions.
-    pub fn iter(&self) -> std::slice::Iter<Section<'obj>> {
+    pub fn iter(&self) -> std::slice::Iter<'_, Section<'obj>> {
         self.0.iter()
     }
 }
@@ -761,7 +761,7 @@ mod tests {
         assert_eq!(
             alt_link.build_id,
             GnuBuildId([
-                0x83, 0xFF, 0xD1, 0xE5, 0x5E, 0xB9, 0x9F, 0x9A, 0x41, 0xA0, 
+                0x83, 0xFF, 0xD1, 0xE5, 0x5E, 0xB9, 0x9F, 0x9A, 0x41, 0xA0,
                 0x77, 0xAD, 0xBC, 0x95, 0x09, 0x96, 0xBF, 0xB7, 0x93, 0x7F,
             ]),
         );
