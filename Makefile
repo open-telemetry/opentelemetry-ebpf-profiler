@@ -158,31 +158,7 @@ docker-image:
 	docker build -t otel/opentelemetry-ebpf-profiler-dev -f Dockerfile .
 
 agent:
-	@HOST_GOPATH=$$(go env GOPATH); \
-	HOST_GOCACHE=$$(go env GOCACHE); \
-	WORK_DIR="/agent"; \
-	VOLUME_MOUNTS="-v $$PWD:/agent"; \
-	ENV_VARS=""; \
-	if [ -n "$$HOST_GOPATH" ]; then \
-		case "$$PWD/" in \
-			$$HOST_GOPATH/*) \
-				REL_PATH=$${PWD#$$HOST_GOPATH/}; \
-				VOLUME_MOUNTS="-v $$HOST_GOPATH:/go"; \
-				WORK_DIR="/go/$$REL_PATH"; \
-				ENV_VARS="-e GOPATH=/go"; \
-				;; \
-			*) \
-				VOLUME_MOUNTS="$$VOLUME_MOUNTS -v $$HOST_GOPATH:/go"; \
-				ENV_VARS="-e GOPATH=/go"; \
-				;; \
-		esac; \
-	fi; \
-	if [ -n "$$HOST_GOCACHE" ]; then \
-		VOLUME_MOUNTS="$$VOLUME_MOUNTS -v $$HOST_GOCACHE:/tmp/go-cache"; \
-		ENV_VARS="$$ENV_VARS -e GOCACHE=/tmp/go-cache"; \
-	fi; \
-	docker run $$VOLUME_MOUNTS $$ENV_VARS -w $$WORK_DIR -it --rm --user $(shell id -u):$(shell id -g) otel/opentelemetry-ebpf-profiler-dev:latest \
-	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
+	@./tools/docker-agent-build.sh "$(TARGET_ARCH)" "$(VERSION)" "$(REVISION)" "$(BUILD_TIMESTAMP)"
 
 legal:
 	go tool $(GO_TOOLS) go-licenses save --force . --save_path=LICENSES
