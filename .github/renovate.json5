@@ -63,8 +63,8 @@
   customManagers: [
     {
       customType: 'regex',
-      fileMatch: [
-        'cmd/otelcol-ebpf-profiler/manifest.yaml$',
+      managerFilePatterns: [
+        '/cmd/otelcol-ebpf-profiler/manifest.yaml$/',
       ],
       datasourceTemplate: 'go',
       matchStrings: [
