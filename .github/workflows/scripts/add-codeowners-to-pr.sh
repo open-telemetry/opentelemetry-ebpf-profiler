@@ -88,7 +88,6 @@ main () {
                 fi
                 REVIEWERS+=$(echo -n "${OWNER}" | sed -E 's/@(.+)/"\1"/')
             done
-
         done
     done
 
