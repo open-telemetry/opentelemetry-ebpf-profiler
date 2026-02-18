@@ -23,7 +23,7 @@ exporters:
   - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.145.0
 
 providers:
-  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.51.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.52.0
   - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.51.0
   - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.51.0
 
