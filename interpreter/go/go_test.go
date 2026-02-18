@@ -36,9 +36,8 @@ func BenchmarkGolang(b *testing.B) {
 	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef)
 	rm := remotememory.NewProcessVirtualMemory(libpfPID)
 
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		gD, err := Loader(nil, loaderInfo)
 		if err != nil {
 			b.Fatalf("Failed to create loader: %v", err)
@@ -53,7 +52,7 @@ func BenchmarkGolang(b *testing.B) {
 		ef := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 1, uint64(pc))
 		ef[1] = uint64(hostFileID)
 
-		if err := gI.Symbolize(ef, &frames); err != nil {
+		if err := gI.Symbolize(ef, &frames, libpf.FrameMapping{}); err != nil {
 			b.Fatalf("Failed to symbolize 0x%x: %v", pc, err)
 		}
 

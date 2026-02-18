@@ -17,7 +17,7 @@
 #define V8_HeapObjectTagMask 0x3
 
 // The Trace 'file' field is split to object pointer (aligned to 8 bytes),
-// and the zero bits due to alignment are re-used as the following flags.
+// and the zero bits due to alignment are reused as the following flags.
 #define V8_FILE_TYPE_MARKER        0x0
 #define V8_FILE_TYPE_BYTECODE      0x1
 #define V8_FILE_TYPE_NATIVE_SFI    0x2

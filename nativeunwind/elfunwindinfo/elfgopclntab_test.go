@@ -7,6 +7,7 @@ import (
 	"debug/elf"
 	"testing"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 
@@ -95,4 +96,38 @@ func TestParseGoPclntab(t *testing.T) {
 			assert.NotEmpty(t, *ee.deltas)
 		})
 	}
+}
+
+func TestTextStart(t *testing.T) {
+	ef, err := pfelf.Open("testdata/helloworld.linkexternal")
+	require.NoError(t, err)
+	defer ef.Close()
+
+	var runtimeTextAddr uintptr
+	ef.VisitSymbols(func(sym libpf.Symbol) bool {
+		if sym.Name == "runtime.text" {
+			runtimeTextAddr = uintptr(sym.Address)
+			return false
+		}
+		return true
+	})
+	require.NotZero(t, runtimeTextAddr)
+
+	g, err := NewGopclntab(ef)
+	require.NoError(t, err)
+	require.NotNil(t, g)
+	defer g.Close()
+
+	require.Equal(t, runtimeTextAddr, g.textStart)
+
+	// stripped binary should have the same text start
+	efStripped, err := pfelf.Open("testdata/helloworld.linkexternal.stripped")
+	require.NoError(t, err)
+	defer efStripped.Close()
+	gStripped, err := NewGopclntab(efStripped)
+	require.NoError(t, err)
+	require.NotNil(t, gStripped)
+	defer gStripped.Close()
+
+	require.Equal(t, runtimeTextAddr, gStripped.textStart)
 }

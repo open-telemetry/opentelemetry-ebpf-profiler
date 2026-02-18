@@ -25,7 +25,7 @@ func (is *InstanceStubs) UpdateLibcInfo(EbpfHandler, libpf.PID, libc.LibcInfo) e
 	return nil
 }
 
-func (is *InstanceStubs) Symbolize(libpf.EbpfFrame, *libpf.Frames) error {
+func (is *InstanceStubs) Symbolize(libpf.EbpfFrame, *libpf.Frames, libpf.FrameMapping) error {
 	return ErrMismatchInterpreterType
 }
 

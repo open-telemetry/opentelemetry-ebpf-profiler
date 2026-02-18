@@ -71,6 +71,8 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 
 // Start sets up and manages the reporting connection to a OTLP backend.
 func (r *OTLPReporter) Start(ctx context.Context) error {
+	r.collectionStartTime = time.Now()
+
 	// Create a child context for reporting features
 	ctx, cancelReporting := context.WithCancel(ctx)
 
@@ -85,7 +87,7 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 	}
 	r.client = pprofileotlp.NewGRPCClient(otlpGrpcConn)
 
-	r.runLoop.Start(ctx, r.cfg.ReportInterval, func() {
+	r.runLoop.Start(ctx, r.cfg.ReportInterval, r.cfg.ReportJitter, func() {
 		if err := r.reportOTLPProfile(ctx); err != nil {
 			log.Errorf("Request failed: %v", err)
 		}
@@ -114,9 +116,13 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	reportedEvents := (*traceEventsPtr)
 	newEvents := make(samples.TraceEventsTree)
 	*traceEventsPtr = newEvents
+	collectionEndTime := time.Now()
+	collectionStartTime := r.collectionStartTime
+	r.collectionStartTime = collectionEndTime
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
-	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version)
+	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version,
+		collectionStartTime, collectionEndTime)
 	if err != nil {
 		log.Errorf("pdata: %v", err)
 		return nil

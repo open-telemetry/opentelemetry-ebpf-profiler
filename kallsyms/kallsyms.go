@@ -278,7 +278,7 @@ func (m *Module) LookupSymbolsByPrefix(prefix string) []*libpf.Symbol {
 }
 
 // updateSymbolsFrom parses /proc/kallsyms format data from the reader 'r'.
-// If possible the data from previous reads is re-used to avoid allocations.
+// If possible the data from previous reads is reused to avoid allocations.
 // The Symbolizer internal state is updated only if the input data is parsed
 // successfully.
 func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {

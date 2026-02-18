@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	ah "go.opentelemetry.io/ebpf-profiler/armhelpers"
+	"go.opentelemetry.io/ebpf-profiler/asm/arm"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	aa "golang.org/x/arch/arm64/arm64asm"
 )
@@ -34,13 +34,13 @@ func retrieveZendVMKindARM(code []byte) (uint, error) {
 		}
 
 		// We only care about writes into w0
-		dest, ok := ah.Xreg2num(inst.Args[0])
+		dest, ok := arm.Xreg2num(inst.Args[0])
 		if dest != 0 || !ok {
 			continue
 		}
 
 		if inst.Op == aa.MOV {
-			val, ok := ah.DecodeImmediate(inst.Args[1])
+			val, ok := arm.DecodeImmediate(inst.Args[1])
 			if !ok {
 				break
 			}
@@ -140,14 +140,14 @@ func retrieveJITBufferPtrARM(code []byte, addrBase libpf.SymbolValue) (
 		}
 
 		// We only care about writes into xn/wn registers.
-		dest, ok := ah.Xreg2num(inst.Args[0])
+		dest, ok := arm.Xreg2num(inst.Args[0])
 		if !ok {
 			continue
 		}
 
 		switch inst.Op {
 		case aa.ADD:
-			a2, ok := ah.DecodeImmediate(inst.Args[2])
+			a2, ok := arm.DecodeImmediate(inst.Args[2])
 			if !ok {
 				break
 			}
@@ -159,7 +159,7 @@ func retrieveJITBufferPtrARM(code []byte, addrBase libpf.SymbolValue) (
 			// Note that GDB lies to you here: it will give you
 			// a different value in the ASM listing compared to the
 			// disassembler
-			a2, ok := ah.DecodeImmediate(inst.Args[1])
+			a2, ok := arm.DecodeImmediate(inst.Args[1])
 			if !ok {
 				break
 			}
@@ -174,12 +174,12 @@ func retrieveJITBufferPtrARM(code []byte, addrBase libpf.SymbolValue) (
 				break
 			}
 
-			val, ok := ah.DecodeImmediate(m)
+			val, ok := arm.DecodeImmediate(m)
 			if !ok {
 				break
 			}
 
-			src, ok := ah.Xreg2num(m.Base)
+			src, ok := arm.Xreg2num(m.Base)
 			if !ok {
 				break
 			}

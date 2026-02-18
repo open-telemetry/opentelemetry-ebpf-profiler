@@ -74,7 +74,7 @@ func (r *ReaderAt) ReadAt(p []byte, off int64) (int, error) {
 	return n, nil
 }
 
-// Subslice returns a subset of the mmaped backed data.
+// Subslice returns a subset of the mmapped backed data.
 func (r *ReaderAt) Subslice(offset, length int) ([]byte, error) {
 	if offset+length > r.Len() {
 		return nil, fmt.Errorf("requested data %x-%x exceeds %x: %w",

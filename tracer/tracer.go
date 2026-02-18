@@ -67,6 +67,7 @@ type Intervals interface {
 	MonitorInterval() time.Duration
 	TracePollInterval() time.Duration
 	PIDCleanupInterval() time.Duration
+	ExecutableUnloadDelay() time.Duration
 }
 
 // Tracer provides an interface for loading and initializing the eBPF components as
@@ -122,9 +123,6 @@ type Tracer struct {
 
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
-
-	// filterIdleFrames indicates whether idle frames should be filtered.
-	filterIdleFrames bool
 }
 
 type Config struct {
@@ -239,7 +237,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	hasBatchLookupAndDelete := ebpfHandler.SupportsGenericBatchLookupAndDelete()
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
-		ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
+		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
 		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
 	if err != nil {
@@ -995,7 +993,7 @@ func (t *Tracer) eBPFMetricsCollector(
 var (
 	errRecordTooSmall       = errors.New("trace record too small")
 	errRecordUnexpectedSize = errors.New("unexpected record size")
-	errOriginUnexpected     = errors.New("unexepcted origin")
+	errOriginUnexpected     = errors.New("unexpected origin")
 )
 
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
@@ -1081,7 +1079,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 
 	pidEvents := make([]libpf.PIDTID, 0)
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
-		t.triggerPIDProcessing, func(_ bool) {
+		t.triggerPIDProcessing, func(_ bool) bool {
 			t.enableEvent(support.EventTypeGenericPID)
 			t.monitorPIDEventsMapMethod(&pidEvents)
 
@@ -1092,6 +1090,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 
 			// Keep the underlying array alive to avoid GC pressure
 			pidEvents = pidEvents[:0]
+			return true
 		})
 
 	// translateIDs is a translation table for eBPF IDs into Metric IDs.
@@ -1163,9 +1162,6 @@ func (t *Tracer) AttachTracer() error {
 	perfAttribute.SetSampleFreq(uint64(t.samplesPerSecond))
 	if err := perf.CPUClock.Configure(perfAttribute); err != nil {
 		return fmt.Errorf("failed to configure software perf event: %v", err)
-	}
-	if !t.filterIdleFrames {
-		perfAttribute.Options.ExcludeIdle = false
 	}
 
 	onlineCPUIDs, err := getOnlineCPUIDs()
