@@ -93,7 +93,8 @@ func readProcessContextOnce(mapping *Mapping, rm remotememory.RemoteMemory, last
 		return ProcessContextInfo{}, ErrConcurrentUpdate
 	}
 
-	if hdr.PublishedAtNs <= lastPublishedAtNs {
+	// timestamp monotonicity is not guaranteed, so we only check if the timestamp has changed
+	if hdr.PublishedAtNs == lastPublishedAtNs {
 		return ProcessContextInfo{}, ErrNoUpdate
 	}
 
