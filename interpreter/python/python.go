@@ -44,9 +44,9 @@ var (
 	libpythonRegex = regexp.MustCompile(`^(?:.*/)?libpython(\d)\.(\d+)[^/]*`)
 )
 
-// pythonVer builds a version number from readable numbers.
-func pythonVer(major, minor int) uint16 {
-	return uint16(major)*0x100 + uint16(minor)
+// pythonVer builds a version number from readable numbers
+func pythonVer(major, minor uint16) uint16 {
+	return major*0x100 + minor
 }
 
 func readPyVersionHex(ef *pfelf.File) (major uint8, minor uint8, err error) {
@@ -772,7 +772,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	var pyruntimeAddr, autoTLSKey libpf.SymbolValue
-	version := pythonVer(major, minor)
+	version := pythonVer(uint16(major), uint16(minor))
 
 	minVer := pythonVer(3, 6)
 	maxVer := pythonVer(3, 14)
