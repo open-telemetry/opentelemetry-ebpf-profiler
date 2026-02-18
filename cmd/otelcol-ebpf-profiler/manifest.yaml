@@ -24,7 +24,7 @@ exporters:
 
 providers:
   - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.52.0
-  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.51.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.52.0
   - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.52.0
 
 replaces:
