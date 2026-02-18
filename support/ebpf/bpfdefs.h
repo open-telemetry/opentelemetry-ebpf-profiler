@@ -34,9 +34,6 @@ extern u32 with_debug_output;
   #define printt(fmt, ...)      bpf_log(fmt, ##__VA_ARGS__)
   #define DEBUG_PRINT(fmt, ...) bpf_log(fmt, ##__VA_ARGS__)
 
-  // Macro for loop unrolling. Expands to nothing for TESTING_COREDUMP.
-  #define UNROLL
-
 // BPF helpers. Mostly stubs to dispatch the call to Go code with the context ID.
 int bpf_tail_call(void *ctx, void *map, int index);
 unsigned long long bpf_ktime_get_ns(void);
@@ -174,15 +171,6 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
     _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wignored-attributes\"")      \
       __attribute__((section(name), used)) _Pragma("GCC diagnostic pop")
   #define EBPF_INLINE __attribute__((__always_inline__))
-
-  #if defined(__clang__)
-    // Macro for loop unrolling. Expands to the appropriate pragma for clang.
-    // Unrolls up to 256 loop iterations.
-    #define UNROLL _Pragma("unroll 256")
-  #else
-    // Macro for loop unrolling. Expands to nothing for gcc.
-    #define UNROLL
-  #endif
 
 #endif // !TESTING_COREDUMP
 

@@ -1152,12 +1152,9 @@ func profileFrameFullLabel(classPath, label, baseLabel, methodName libpf.String,
 	baseLabelStr := baseLabel.String()
 	labelLength := len(labelStr)
 	baseLabelLength := len(baseLabelStr)
-	prefixLen := labelLength - baseLabelLength
-
-	// Ensure prefixLen doesn't exceed label length (defensive programming)
-	if prefixLen < 0 {
-		prefixLen = 0
-	}
+	prefixLen := max(
+		// Ensure prefixLen doesn't exceed label length (defensive programming)
+		labelLength-baseLabelLength, 0)
 
 	if prefixLen > labelLength {
 		prefixLen = labelLength
