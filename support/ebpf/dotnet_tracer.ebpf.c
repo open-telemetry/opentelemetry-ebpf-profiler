@@ -115,8 +115,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
       // the loop iterations is number of u64 elements minus two:
       // - the last element special handled earlier
       // - the second last element which is preloaded immediately above
-      UNROLL for (int i = 0; i < map_elements / 2 - 2; i++)
-      {
+      for (int i = 0; i < map_elements / 2 - 2; i++) {
         if (val64 != 0) {
           break;
         }
@@ -151,8 +150,7 @@ static EBPF_INLINE ErrorCode dotnet_find_code_start(PerCPURecord *record, u64 pc
   }
 
   // Decode the code start info from the entry
-  UNROLL for (int i = 0; i < DOTNET_CODE_NIBBLES_PER_ENTRY; i++)
-  {
+  for (int i = 0; i < DOTNET_CODE_NIBBLES_PER_ENTRY; i++) {
     u8 nybble = val & 0xf;
     if (nybble != 0) {
       *code_start = pc_base + pc_delta + (nybble - 1) * DOTNET_CODE_ALIGN;
@@ -267,8 +265,7 @@ static EBPF_INLINE ErrorCode dotnet10_find_code_start(PerCPURecord *record, u64 
 
   // #5.4 or contains a nibble map
 decode_nibble_map:
-  UNROLL for (int i = 0; i < DOTNET10_NIBBLES_PER_DWORD - 1; i++)
-  {
+  for (int i = 0; i < DOTNET10_NIBBLES_PER_DWORD - 1; i++) {
     if (val & DOTNET10_NIBBLE_MASK) {
       break;
     }
@@ -384,8 +381,18 @@ unwind_one_dotnet_frame(PerCPURecord *record, find_code_start_f find_code_start)
         &code_header_ptr, sizeof(code_header_ptr), (void *)code_start - sizeof(u64))) {
     DEBUG_PRINT("dotnet:  --> bad code header");
     increment_metric(metricID_UnwindDotnetErrCodeHeader);
-    return ERR_DOTNET_CODE_HEADER;
+    return push_error(state, trace, FRAME_MARKER_DOTNET, ERR_DOTNET_CODE_HEADER);
   }
+
+  // Validate code_header_ptr looks like a valid userspace address as a
+  // defense-in-depth measure against reading stale or invalid data.
+  if (is_kernel_address(code_header_ptr) || code_header_ptr < 0x1000) {
+    DEBUG_PRINT(
+      "dotnet: invalid code_header_ptr 0x%lx, skipping frame", (unsigned long)code_header_ptr);
+    increment_metric(metricID_UnwindDotnetErrCodeHeader);
+    return push_error(state, trace, FRAME_MARKER_DOTNET, ERR_DOTNET_CODE_HEADER);
+  }
+
   type = DOTNET_CODE_JIT;
 
 push_frame:
@@ -434,8 +441,7 @@ static EBPF_INLINE int unwind_dotnet_core(
   record->ratelimitAction = RATELIMIT_ACTION_FAST;
   increment_metric(metricID_UnwindDotnetAttempts);
 
-  UNROLL for (int i = 0; i < frames_per_program; i++)
-  {
+  for (int i = 0; i < frames_per_program; i++) {
     unwinder = PROG_UNWIND_STOP;
 
     error = unwind_one_dotnet_frame(record, find_code_start);

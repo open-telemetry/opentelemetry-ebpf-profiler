@@ -1,7 +1,7 @@
-.PHONY: all all-common clean ebpf generate test test-deps \
+.PHONY: all all-common clean ebpf generate generate-collector test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
 	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
-	pprof_1_23 pprof_1_24 pprof_1_24_cgo \
+	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
 
 SHELL := /usr/bin/env bash
@@ -62,6 +62,7 @@ clean:
 	@$(MAKE) -s -C support/ebpf clean
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache support/*.test interpreter/golabels/integrationtests/pprof_1_*
+	@rm -f cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
 	@cargo clean
 
 generate:
@@ -71,8 +72,17 @@ generate:
 ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
-ebpf-profiler: generate ebpf
+generate-collector:
+	GOARCH=$(NATIVE_ARCH) go tool $(GO_TOOLS) builder \
+		--skip-compilation=true \
+		--config cmd/otelcol-ebpf-profiler/manifest.yaml \
+		--output-path cmd/otelcol-ebpf-profiler
+
+ebpf-profiler: ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
+
+otelcol-ebpf-profiler: ebpf generate-collector
+	cd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../$@ 
 
 rust-targets:
 	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
@@ -123,7 +133,7 @@ test-deps:
 
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support interpreter/golabels/integrationtests
 
-pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie
+pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_cgo pprof_stable_cgo_pie
 
 pprof_1_23:
 	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
@@ -136,6 +146,15 @@ pprof_1_24_cgo:
 
 pprof_1_24_cgo_pie:
 	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
+
+pprof_stable:
+	CGO_ENABLED=0 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+
+pprof_stable_cgo:
+	CGO_ENABLED=1 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
+
+pprof_stable_cgo_pie:
+	CGO_ENABLED=1 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
 integration-test-binaries: generate ebpf pprof-execs
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \

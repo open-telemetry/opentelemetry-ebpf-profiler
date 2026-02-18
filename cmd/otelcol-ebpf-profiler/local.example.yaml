@@ -1,0 +1,45 @@
+# Sample OpenTelemetry Collector configuration running the profiling receiver and
+# exporting the corresponding profiles to the http://127.0.0.1:11000 OTLP
+# endpoint. Note that the service.profilesSupport feature gate must be enabled
+# (e.g. using --feature-gates=+service.profilesSupport CLI argument)
+#
+# The profiling receiver requires elevated privileges because it relies on
+# low-level OS instrumentation (e.g. eBPF, or ptrace). On Linux, this means
+# running the Collector as root (sudo) or granting specific capabilities such
+# as CAP_SYS_ADMIN, CAP_PERFMON, and/or CAP_BPF, as well as access to /proc.
+#
+# When running in containers or Kubernetes:
+#   - hostPID: true
+#   - privileged: true or explicitly adding the required Linux capabilities
+#   - mounting kernel-related filesystems (e.g. /sys, /proc) as needed
+receivers:
+  profiling:
+
+exporters:
+  otlp/local:
+    # equivalent to -collection-agent deprecated cli flag
+    endpoint: http://127.0.0.1:11000
+    # equivalent to -disable-tls deprecated cli flag
+    tls:
+      insecure: true
+      insecure_skip_verify: true
+
+
+service:
+  telemetry:
+    logs:
+      level: info
+      # equivalent to -verbose_mode deprecated cli flag
+      # level: debug
+    # metrics:
+    #   level: detailed
+    #   readers:
+    #     - pull:
+    #         exporter:
+    #           prometheus:
+    #             host: '0.0.0.0'
+    #             port: 8888
+  pipelines:
+    profiles:
+      receivers: [profiling]
+      exporters: [otlp/local]
