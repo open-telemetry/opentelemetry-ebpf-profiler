@@ -6,7 +6,9 @@
 # This script checks the GitHub CODEOWNERS file for any code owners
 # of profiler components and returns a string of the code owners if it
 # finds them.
-
+#
+# Modified version of https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/571fce853d044786bd41913765d1f5a813261233/.github/workflows/scripts
+# Removed COMPONENT_TYPE handling
 set -euo pipefail
 
 get_codeowners() {
