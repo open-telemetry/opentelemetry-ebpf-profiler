@@ -60,6 +60,18 @@
       ],
     },
   ],
+  customManagers: [
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/cmd/otelcol-ebpf-profiler/manifest.yaml$/',
+      ],
+      datasourceTemplate: 'go',
+      matchStrings: [
+        'gomod: (?<depName>.+) (?<currentValue>.+)',
+      ],
+    },
+  ],
   ignoreDeps: [
     'golangci/golangci-lint-action',
   ],
