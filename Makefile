@@ -29,8 +29,8 @@ endif
 export TARGET_ARCH
 export CGO_ENABLED = 0
 export GOARCH = $(TARGET_ARCH)
-export CC = $(ARCH_PREFIX)-linux-gnu-gcc
-export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
+export CC = $(shell command -v $(ARCH_PREFIX)-linux-gnu-gcc || command -v $(ARCH_PREFIX)-unknown-linux-gnu-gcc)
+export OBJCOPY = $(shell command -v $(ARCH_PREFIX)-linux-gnu-objcopy || command -v $(ARCH_PREFIX)-unknown-linux-gnu-objcopy)
 
 BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
 COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
