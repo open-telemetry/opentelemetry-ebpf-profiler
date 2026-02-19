@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	// MinimumGap determines the minimum number of alignment bytes needed
+	// minimumGap determines the minimum number of alignment bytes needed
 	// in order to keep the created STOP stack delta between functions
-	MinimumGap = 15
+	minimumGap = 15
 
 	// UnwindHintNone indicates that no flags are set.
 	UnwindHintNone uint8 = 0
@@ -86,7 +86,7 @@ func (deltas *StackDeltaArray) AddEx(delta StackDelta, sorted bool) {
 	}
 	if num > 0 && sorted {
 		prev := &(*deltas)[num-1]
-		if prev.Hints&UnwindHintEnd != 0 && prev.Address+MinimumGap >= delta.Address {
+		if prev.Hints&UnwindHintEnd != 0 && prev.Address+minimumGap >= delta.Address {
 			// The previous opcode is end-of-function marker, and
 			// the gap is not large. Reduce deltas by overwriting it.
 			if num <= 1 || (*deltas)[num-2].Info != delta.Info {
@@ -95,8 +95,10 @@ func (deltas *StackDeltaArray) AddEx(delta StackDelta, sorted bool) {
 			}
 			// The delta before end-of-function marker is same as
 			// what is being inserted now. Overwrite that.
-			prev = &(*deltas)[num-2]
 			*deltas = (*deltas)[:num-1]
+			prev = &(*deltas)[num-2]
+			prev.Hints |= delta.Hints & UnwindHintKeep
+			return
 		}
 		if prev.Info == delta.Info {
 			prev.Hints |= delta.Hints & UnwindHintKeep
@@ -127,6 +129,20 @@ func compareStackDelta(a, b StackDelta) int {
 	}
 	if a.Address > b.Address {
 		return 1
+	}
+	if a.Hints != b.Hints {
+		if a.Hints&UnwindHintEnd > b.Hints&UnwindHintEnd {
+			return -1
+		}
+		if a.Hints&UnwindHintEnd < b.Hints&UnwindHintEnd {
+			return 1
+		}
+		if a.Hints&UnwindHintKeep > b.Hints&UnwindHintKeep {
+			return 1
+		}
+		if a.Hints&UnwindHintKeep < b.Hints&UnwindHintKeep {
+			return -1
+		}
 	}
 	if a.Info.BaseReg < b.Info.BaseReg {
 		return -1

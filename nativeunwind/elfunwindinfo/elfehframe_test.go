@@ -4,8 +4,10 @@
 package elfunwindinfo
 
 import (
+	"bytes"
 	"testing"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfatbuf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -16,14 +18,14 @@ import (
 
 type ehtester struct {
 	t     *testing.T
-	res   map[uintptr]sdtypes.UnwindInfo
+	res   map[uint64]sdtypes.UnwindInfo
 	found int
 }
 
 func (e *ehtester) fdeUnsorted() {
 }
 
-func (e *ehtester) fdeHook(cie *cieInfo, fde *fdeInfo, _ *sdtypes.StackDeltaArray) bool {
+func (e *ehtester) fdeHook(cie *cieInfo, fde fdeInfo, _ *sdtypes.StackDeltaArray) bool {
 	e.t.Logf("FDE ciePos %x, ip %x...%x, ipLen %d (enc %x, cf %d, df %d, ra %d)",
 		fde.ciePos, fde.ipStart, fde.ipStart+fde.ipLen, fde.ipLen,
 		cie.enc, cie.codeAlign, cie.dataAlign, cie.regRA)
@@ -31,7 +33,7 @@ func (e *ehtester) fdeHook(cie *cieInfo, fde *fdeInfo, _ *sdtypes.StackDeltaArra
 	return true
 }
 
-func (e *ehtester) deltaHook(ip uintptr, regs *vmRegs, delta sdtypes.StackDelta) {
+func (e *ehtester) deltaHook(ip uint64, regs *vmRegs, delta sdtypes.StackDelta) {
 	e.t.Logf("%016x %-12s %-5s %s",
 		ip,
 		regs.cfa.String(),
@@ -43,7 +45,7 @@ func (e *ehtester) deltaHook(ip uintptr, regs *vmRegs, delta sdtypes.StackDelta)
 	}
 }
 
-func (e *ehtester) golangHook(_, _ uintptr) {
+func (e *ehtester) golangHook(_, _ uint64) {
 }
 
 func genDelta(baseReg uint8, cfa, rbp int32) sdtypes.UnwindInfo {
@@ -71,14 +73,14 @@ func TestEhFrame(t *testing.T) {
 		elfFile string
 		// Some selected stack delta matches to verify that the ehframe
 		// machine is working correctly.
-		res map[uintptr]sdtypes.UnwindInfo
+		res map[uint64]sdtypes.UnwindInfo
 	}{
 		// test.so is openssl libcrypto.so.1.1's stripped to contain only .eh_frame and
 		// .eh_frame_hdr. The current ELF is imported from Alpine Linux
 		// openssl-1.1.1g-r0 package's libcrypto.so.1.1:
 		//   objcopy -j .eh_frame -j .eh_frame_hdr /lib/libcrypto.so.1.1 test.so
 		"libcrypto": {elfFile: "testdata/test.so",
-			res: map[uintptr]sdtypes.UnwindInfo{
+			res: map[uint64]sdtypes.UnwindInfo{
 				0x07631f: deltaRSP(8, 0),
 				0x07a0d4: deltaRSP(160, 24),
 				0x07b1ec: deltaRSP(8, 0),
@@ -91,7 +93,7 @@ func TestEhFrame(t *testing.T) {
 		// .eh_frame_hdr from /exports/schrodinger/internal/lib/libpython3.8.so.1.0 - see PF-1538.
 		//   objcopy -j .eh_frame -j .eh_frame_hdr /lib/libcrypto.so.1.1 test.so
 		"schrodinger-libpython": {elfFile: "testdata/schrodinger-libpython3.8.so.1.0",
-			res: map[uintptr]sdtypes.UnwindInfo{
+			res: map[uint64]sdtypes.UnwindInfo{
 				0x6f805:  deltaRSP(80, 48),
 				0x7077c:  deltaRSP(24, 0),
 				0x83194:  deltaRSP(64, 16),
@@ -166,13 +168,15 @@ func TestParseCIE(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			rdr := pfatbuf.Cache{}
+			rdr.Init(bytes.NewReader(tc.data))
 			fakeReader := &reader{
 				debugFrame: tc.debugFrame,
-				data:       tc.data,
-				end:        uintptr(len(tc.data)),
+				rd:         &rdr,
+				end:        int64(len(tc.data)),
 			}
 			extracted := &cieInfo{}
-			err := fakeReader.parseCIE(extracted)
+			_, err := fakeReader.parseCIE(extracted)
 			require.NoError(t, err)
 			assert.Equal(t, tc.expected, extracted)
 		})

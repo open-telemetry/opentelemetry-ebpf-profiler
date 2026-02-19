@@ -6,29 +6,23 @@ package elfunwindinfo // import "go.opentelemetry.io/ebpf-profiler/nativeunwind/
 import (
 	"bytes"
 	"debug/elf"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"unsafe"
 
 	lru "github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfatbuf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-const (
-	// Most files have single CIE, and all FDEs use that. But multiple CIEs are needed
-	// in some cases. E.g. glibc has 4 CIEs. 16 was chosen to be generous and make sure
-	// CIEs would not need to be reparsed.
-	cieCacheSize = 16
-
-	// Maximum bytes in .eh_frame (xul has about 16M)
-	maxBytesEHFrame = 64 * 1024 * 1024
-)
+// Most files have single CIE, and all FDEs use that. But multiple CIEs are needed
+// in some cases.
+const cieCacheSize = 256
 
 // errUnexpectedType is used internally to detect inconsistent FDE/CIE types
 var errUnexpectedType = errors.New("unexpected FDE/CIE type")
@@ -41,11 +35,11 @@ type ehframeHooks interface {
 	// fdeUnsorted is called if FDE entries from unsorted area are found.
 	fdeUnsorted()
 	// fdeHook is called for each FDE. Returns false if the FDE should be filtered out.
-	fdeHook(cie *cieInfo, fde *fdeInfo, deltas *sdtypes.StackDeltaArray) bool
+	fdeHook(cie *cieInfo, fde fdeInfo, deltas *sdtypes.StackDeltaArray) bool
 	// deltaHook is called for each stack delta found
-	deltaHook(ip uintptr, regs *vmRegs, delta sdtypes.StackDelta)
+	deltaHook(ip uint64, regs *vmRegs, delta sdtypes.StackDelta)
 	// golangHook is called if .gopclntab is found to report its coverage
-	golangHook(start, end uintptr)
+	golangHook(start, end uint64)
 }
 
 // uleb128 is the data type for unsigned little endian base-128 encoded number
@@ -163,10 +157,52 @@ type ehFrameHdr struct {
 type reader struct {
 	debugFrame bool
 
-	data  []byte
-	pos   uintptr
-	end   uintptr
-	vaddr uintptr
+	rd    *pfatbuf.Cache
+	base  int64
+	pos   int64
+	end   int64
+	vaddr uint64
+}
+
+// newReaderFromProg
+func newReaderFromProg(prog *pfelf.Prog, cache *pfatbuf.Cache, name string, pos int64) reader {
+	cache.InitName(name, prog)
+	return reader{
+		rd:    cache,
+		vaddr: prog.Vaddr,
+		pos:   pos,
+		end:   int64(prog.Filesz),
+	}
+}
+
+// newReaderFromSection
+func newReaderFromSection(sec *pfelf.Section, debugFrame bool, cache *pfatbuf.Cache) reader {
+	if sec == nil || sec.Type == elf.SHT_NOBITS {
+		return reader{}
+	}
+	cache.InitName("eh.sec", sec)
+	return reader{
+		debugFrame: debugFrame,
+		rd:         cache,
+		vaddr:      sec.Addr,
+		end:        int64(sec.FileSize),
+	}
+}
+
+func (r *reader) setBase() {
+	r.base = r.pos
+}
+
+// reader creates a "sub"-reader for the data starting from offset relative to base
+func (r *reader) offset(offs int64) reader {
+	return reader{
+		debugFrame: r.debugFrame,
+		rd:         r.rd,
+		base:       r.base,
+		pos:        r.base + offs,
+		end:        r.end,
+		vaddr:      r.vaddr,
+	}
 }
 
 // hasData checks if the reader is still in valid state
@@ -176,43 +212,45 @@ func (r *reader) hasData() bool {
 
 // isValid checks if the reader is still in valid state
 func (r *reader) isValid() bool {
-	return r.pos <= r.end
+	return r.rd != nil && r.pos <= r.end
 }
 
-// get gets a pointer for n bytes of data, and advances the current position
-func (r *reader) get(n uintptr) unsafe.Pointer {
-	pos := r.pos
-	r.pos += n
-	if !r.isValid() {
-		// Return valid pointer to zero data of up to 8-bytes so the
-		// following accessors can dereference the return value.
-		// If an overread happened, it is detected at the end of parsing
-		// an block with isValid() call to see if r.pos is still within
-		// correct bounds.
-		v := uint64(0)
-		return unsafe.Pointer(&v)
-	}
-	return unsafe.Pointer(&r.data[pos])
+func (r *reader) skip(num int64) {
+	r.pos += num
 }
 
-// u8 reads one unsigned byte
+func (r *reader) read(to []byte) error {
+	_, err := r.rd.ReadAt(to, int64(r.pos))
+	r.pos += int64(len(to))
+	return err
+}
+
+// u8 reads one unsigned byte.
 func (r *reader) u8() uint8 {
-	return *(*uint8)(r.get(1))
+	v := r.rd.Uint8At(r.pos)
+	r.pos++
+	return v
 }
 
-// u16 reads one unsigned 16-bit word
+// u16 reads one unsigned word.
 func (r *reader) u16() uint16 {
-	return *(*uint16)(r.get(2))
+	v := r.rd.Uint16At(r.pos)
+	r.pos += 2
+	return v
 }
 
-// u32 reads one unsigned 32-bit word
+// u32 reads one unsigned word.
 func (r *reader) u32() uint32 {
-	return *(*uint32)(r.get(4))
+	v := r.rd.Uint32At(r.pos)
+	r.pos += 4
+	return v
 }
 
-// u64 reads one unsigned 64-bit word
+// u64 reads one unsigned word.
 func (r *reader) u64() uint64 {
-	return *(*uint64)(r.get(8))
+	v := r.rd.Uint64At(r.pos)
+	r.pos += 8
+	return v
 }
 
 // uleb reads one unsigned little endian base-128 encoded value
@@ -242,26 +280,31 @@ func (r *reader) sleb() sleb128 {
 	return val
 }
 
-// str reads one zero-terminated string value
-func (r *reader) str() []byte {
-	cur := r.pos
-	end := r.pos
-	for r.data[end] != 0 {
-		end++
+// str reads one zero-terminated string value. This is currently used
+// to read augmentation string only which is a small (under 64 bytes string).
+func (r *reader) str() string {
+	str, err := r.rd.StringAt(r.pos)
+	if err != nil {
+		return ""
 	}
-	r.pos = end + 1
-	return r.data[cur:end]
+	r.skip(int64(len(str) + 1))
+	return str
 }
 
 // bytes reads one n-length byte array value
-func (r *reader) bytes(num uintptr) []byte {
-	cur := r.pos
-	end := r.pos + num
-	r.pos = end
-	if !r.isValid() {
-		return nil
+func (r *reader) bytes(num uint64) reader {
+	pos := r.pos
+	r.pos = pos + int64(num)
+	if r.pos > r.end {
+		return reader{}
 	}
-	return r.data[cur:end]
+	return reader{
+		debugFrame: r.debugFrame,
+		rd:         r.rd,
+		pos:        pos,
+		end:        r.pos,
+		vaddr:      r.vaddr,
+	}
 }
 
 // expression reads one DWARF expression, and normalizes it in the sense that
@@ -269,15 +312,8 @@ func (r *reader) bytes(num uintptr) []byte {
 // adjusted to it's basic value with operand separated. The concept is to allow
 // pattern matching expression with opcodes sequences.
 func (r *reader) expression() ([]dwarfExpression, error) {
-	blen := uintptr(r.uleb())
-	data := r.bytes(blen)
-	if data == nil {
-		return nil, errors.New("expression data missing")
-	}
-	ed := reader{
-		data: data,
-		end:  blen,
-	}
+	blen := uint64(r.uleb())
+	ed := r.bytes(blen)
 	expr := make([]dwarfExpression, 0, 8)
 	for ed.hasData() {
 		op := expressionOpcode(ed.u8())
@@ -306,31 +342,30 @@ func (r *reader) expression() ([]dwarfExpression, error) {
 		case op == opDeref, op >= opRot && op <= opNE:
 			expr = append(expr, dwarfExpression{opcode: op})
 		default:
-			return nil, fmt.Errorf("unsupported expression: %s",
-				hex.EncodeToString(data))
+			return nil, fmt.Errorf("unsupported expression (length %v): op %#x", blen, op)
 		}
 	}
 	return expr, nil
 }
 
 // ptr reads one pointer value encoded with enc encoding
-func (r *reader) ptr(enc encoding) (uintptr, error) {
+func (r *reader) ptr(enc encoding) (uint64, error) {
 	if enc == encOmit {
 		return 0, nil
 	}
-	pos := r.pos
-	var val uintptr
+	pos := uint64(r.pos)
+	var val uint64
 	switch enc & (encFormatMask | encSignedMask) {
 	case encFormatData2:
-		val = uintptr(r.u16())
+		val = uint64(r.u16())
 	case encFormatData4:
-		val = uintptr(r.u32())
+		val = uint64(r.u32())
 	case encFormatData8, encFormatNative, encFormatData8 | encSignedMask:
-		val = uintptr(r.u64())
+		val = r.u64()
 	case encFormatData2 | encSignedMask:
-		val = uintptr(int64(*(*int16)(r.get(2))))
+		val = uint64(int64(int16(r.u16())))
 	case encFormatData4 | encSignedMask:
-		val = uintptr(int64(*(*int32)(r.get(4))))
+		val = uint64(int64(int32(r.u32())))
 	default:
 		return 0, fmt.Errorf("unsupported format encoding %#02x", enc)
 	}
@@ -369,8 +404,8 @@ type cieInfo struct {
 // fdeInfo contains one Frame Description Entry (FDE)
 type fdeInfo struct {
 	ciePos  uint64
-	ipLen   uintptr
-	ipStart uintptr
+	ipLen   uint64
+	ipStart uint64
 }
 
 const (
@@ -557,7 +592,7 @@ type state struct {
 	// cie is the CIE being currently processed
 	cie *cieInfo
 	// loc is the current location (RIP)
-	loc uintptr
+	loc uint64
 	// cur is the current state of the virtual machine
 	cur vmRegs
 	// stash is the implicit stack of register states for remember/restore opcodes
@@ -568,7 +603,7 @@ type state struct {
 
 // advance increments current virtual address by given delta and code alignment
 func (st *state) advance(delta int) {
-	st.loc += uintptr(delta * int(st.cie.codeAlign))
+	st.loc += uint64(delta * int(st.cie.codeAlign))
 }
 
 // rule assign an unwinding rule for given register 'reg'
@@ -694,7 +729,7 @@ func (st *state) step(r *reader) error {
 		case cfaValExpression:
 			// Not really supported, just mark the register undefined
 			st.rule(r.uleb(), regUndefined, 0)
-			r.pos += uintptr(r.uleb())
+			r.pos += int64(r.uleb())
 		case cfaGNUWindowSave:
 			// No handling needed
 		case cfaGNUArgsSize:
@@ -724,32 +759,34 @@ func (st *state) step(r *reader) error {
 // parseHDR parses the common part of CIE and FDE blocks
 // http://dwarfstd.org/doc/DWARF5.pdf §6.4.1
 // https://refspecs.linuxfoundation.org/LSB_5.0.0/LSB-Core-generic/LSB-Core-generic/ehframechpt.html
-func (r *reader) parseHDR(expectCIE bool) (hlen, ciePos uint64, err error) {
+func (r *reader) parseHDR(expectCIE bool) (data reader, ciePos uint64, err error) {
 	var idPos, cieMarker uint64
-	pos := r.pos
-	hlen = uint64(r.u32())
-	if hlen == 0 {
-		return 4, 0, errEmptyEntry
+	dlen := uint64(r.u32())
+	if dlen == 0 {
+		return reader{}, 0, errEmptyEntry
 	}
-	if hlen < 0xfffffff0 {
+	if dlen < 0xfffffff0 {
 		// Normal 32-bit dwarf
-		hlen += 4
 		idPos = uint64(r.pos)
 		ciePos = uint64(r.u32())
 		cieMarker = 0xffffffff
-	} else if hlen == 0xffffffff {
+		dlen -= 4
+	} else if dlen == 0xffffffff {
 		// 64-bit dwarf
-		hlen = r.u64()
-		hlen += 4 + 8
+		dlen = r.u64()
 		idPos = uint64(r.pos)
 		ciePos = r.u64()
 		cieMarker = 0xffffffffffffffff
+		dlen -= 2 * 8
 	} else {
-		return 0, 0, fmt.Errorf("unsupported initial length %#x", hlen)
+		// Abort reading as sync is lost
+		r.pos = r.end
+		return reader{}, 0, fmt.Errorf("unsupported initial length %#x", dlen)
 	}
-	r.end = pos + uintptr(hlen)
-	if r.end > uintptr(len(r.data)) {
-		return 0, 0, fmt.Errorf("CIE/FDE extends beyond end at %#x", r.pos)
+
+	data = r.bytes(dlen)
+	if !data.isValid() {
+		return reader{}, 0, fmt.Errorf("CIE/FDE %#x: extends beyond file end", ciePos)
 	}
 	if !r.debugFrame {
 		// In .eh_frame's the CIE marker pointer value is zero
@@ -757,7 +794,7 @@ func (r *reader) parseHDR(expectCIE bool) (hlen, ciePos uint64, err error) {
 	}
 	isCIE := ciePos == cieMarker
 	if isCIE != expectCIE {
-		return hlen, 0, fmt.Errorf("CIE/FDE %#x: %w", ciePos, errUnexpectedType)
+		return data, 0, errUnexpectedType
 	}
 	if !isCIE {
 		if !r.debugFrame {
@@ -765,25 +802,25 @@ func (r *reader) parseHDR(expectCIE bool) (hlen, ciePos uint64, err error) {
 			// not to the start of section.
 			ciePos = idPos - ciePos
 		}
-		if ciePos >= uint64(len(r.data)) {
-			return 0, 0, fmt.Errorf("FDE starts beyond end at %#x", ciePos)
+		if ciePos >= uint64(r.end) {
+			return data, 0, fmt.Errorf("FDE starts beyond end at %#x", ciePos)
 		}
 	}
-	return hlen, ciePos, nil
+	return data, ciePos, nil
 }
 
 // parseCIE reads and processes one Common Information Entry
 // http://dwarfstd.org/doc/DWARF5.pdf §6.4.1
 // https://refspecs.linuxfoundation.org/LSB_5.0.0/LSB-Core-generic/LSB-Core-generic/ehframechpt.html
-func (r *reader) parseCIE(cie *cieInfo) error {
-	_, _, err := r.parseHDR(true)
+func (r *reader) parseCIE(cie *cieInfo) (data reader, err error) {
+	data, _, err = r.parseHDR(true)
 	if err != nil {
-		return err
+		return reader{}, err
 	}
 
-	ver := r.u8()
+	ver := data.u8()
 	if ver != 1 && ver != 3 && ver != 4 {
-		return fmt.Errorf("CIE version %d not supported", ver)
+		return reader{}, fmt.Errorf("CIE version %d not supported", ver)
 	}
 
 	*cie = cieInfo{
@@ -791,61 +828,59 @@ func (r *reader) parseCIE(cie *cieInfo) error {
 		ldsaEnc: encFormatNative | encAdjustAbs,
 	}
 
-	augmentation := r.str()
-
+	augmentation := data.str()
 	if ver == 4 {
 		// CIE version 4 adds two new fields we don't make use of yet. But we need to
 		// read them so the rest of the data is aligned correctly.
 
 		// Skip the address_size field
-		r.u8()
 		// Skip the segment_selector_size field
-		r.u8()
+		data.skip(2)
 	}
 
-	cie.codeAlign = r.uleb()
-	cie.dataAlign = r.sleb()
+	cie.codeAlign = data.uleb()
+	cie.dataAlign = data.sleb()
 	if ver == 1 {
-		cie.regRA = uleb128(r.u8())
+		cie.regRA = uleb128(data.u8())
 	} else {
-		cie.regRA = r.uleb()
+		cie.regRA = data.uleb()
 	}
 
 	// A zero length string indicates that no augmentation data is present.
 	if len(augmentation) > 0 {
 		// Parse rest of CIE header based on augmentation string
 		if augmentation[0] != 'z' {
-			return fmt.Errorf("too old augmentation string '%s'", augmentation)
+			return reader{}, fmt.Errorf("too old augmentation string '%s'", augmentation)
 		}
-		r.uleb()
+		data.uleb()
 		cie.hasAugmentation = true
 
 		for _, ch := range string(augmentation[1:]) {
 			switch ch {
 			case 'L':
-				cie.ldsaEnc = encoding(r.u8())
+				cie.ldsaEnc = encoding(data.u8())
 			case 'R':
-				cie.enc = encoding(r.u8())
+				cie.enc = encoding(data.u8())
 			case 'P':
 				// remove the indirect as it's not supported, but we
 				// don't use the result here anyway
-				enc := encoding(r.u8()) &^ encIndirect
-				if _, err = r.ptr(enc); err != nil {
-					return err
+				enc := encoding(data.u8()) &^ encIndirect
+				if _, err = data.ptr(enc); err != nil {
+					return reader{}, err
 				}
 			case 'S':
 				cie.isSignalHandler = true
 			default:
-				return fmt.Errorf("unsupported augmentation string '%s'",
+				return reader{}, fmt.Errorf("unsupported augmentation string '%s'",
 					augmentation)
 			}
 		}
 	}
 
-	if !r.isValid() {
-		return errors.New("CIE not valid after header")
+	if !data.isValid() {
+		return reader{}, errors.New("CIE not valid after header")
 	}
-	return err
+	return data, err
 }
 
 // getUnwindInfo generates the needed unwind information from the register set
@@ -884,10 +919,11 @@ func isSignalTrampoline(efCode *pfelf.File, fde *fdeInfo) bool {
 	if !ok {
 		return false
 	}
-	if fde.ipLen != uintptr(len(sigretCode)) {
+	if fde.ipLen != uint64(len(sigretCode)) {
 		return false
 	}
-	fdeCode, err := efCode.VirtualMemory(int64(fde.ipStart), len(sigretCode), 64)
+	fdeCode := make([]byte, len(sigretCode))
+	_, err := efCode.ReadAt(fdeCode, int64(fde.ipStart))
 	if err != nil {
 		return false
 	}
@@ -895,29 +931,27 @@ func isSignalTrampoline(efCode *pfelf.File, fde *fdeInfo) bool {
 }
 
 // parses first fields of FDE, specifically PC Begin, PC Range
-func parsesFDEHeader(r *reader, efm elf.Machine, ipStart uintptr,
-	cieCache *lru.LRU[uint64, *cieInfo],
-) (fdeLen uint64, fde fdeInfo, info *cieInfo, err error) {
+func parsesFDEHeader(fdeReader *reader, efm elf.Machine, ipStart uint64,
+	cieCache *lru.LRU[uint64, *cieInfo]) (r reader, fde fdeInfo, info *cieInfo, err error) {
 	// Parse FDE header
-	fdeID := r.pos
+	fdeID := fdeReader.pos
 	fde = fdeInfo{}
-	fdeLen, fde.ciePos, err = r.parseHDR(false)
+	r, fde.ciePos, err = fdeReader.parseHDR(false)
 	if err != nil {
 		// parseHDR returns unconditionally the CIE/FDE entry length.
 		// Also return the size here. This is to allow walkFDEs to use
 		// this function and skip CIEs.
-		return fdeLen, fde, nil, err
+		return r, fde, nil, err
 	}
 
 	// Calculate CIE location, and get and cache the CIE data
 	cie, ok := cieCache.Get(fde.ciePos)
 	if !ok {
-		cr := *r
-		cr.pos = uintptr(fde.ciePos)
-
 		cie = &cieInfo{}
-		if err = cr.parseCIE(cie); err != nil {
-			return 0, fde, nil, fmt.Errorf("CIE %#x failed: %v", fde.ciePos, err)
+		cr := fdeReader.offset(int64(fde.ciePos))
+		cr, err = cr.parseCIE(cie)
+		if err != nil {
+			return r, fde, nil, fmt.Errorf("CIE %#x failed: %v", fde.ciePos, err)
 		}
 
 		// initialize vmRegs from initialState - these can be used by restore
@@ -930,10 +964,10 @@ func parsesFDEHeader(r *reader, efm elf.Machine, ipStart uintptr,
 			cur: newVMRegs(efm),
 		}
 		if err = st.step(&cr); err != nil {
-			return 0, fde, nil, err
+			return r, fde, nil, err
 		}
 		if !cr.isValid() {
-			return 0, fde, nil, fmt.Errorf("CIE %x parsing failed", fde.ciePos)
+			return r, fde, nil, fmt.Errorf("CIE %x parsing failed", fde.ciePos)
 		}
 		cie.initialState = st.cur
 		cieCache.Add(fde.ciePos, cie)
@@ -943,10 +977,10 @@ func parsesFDEHeader(r *reader, efm elf.Machine, ipStart uintptr,
 
 	fde.ipStart, err = r.ptr(cie.enc)
 	if err != nil {
-		return 0, fde, nil, err
+		return r, fde, nil, err
 	}
 	if ipStart != 0 && fde.ipStart != ipStart {
-		return 0, fde, nil, fmt.Errorf(
+		return r, fde, nil, fmt.Errorf(
 			"FDE ipStart (%x) not matching search table FDE ipStart (%x)",
 			fde.ipStart, ipStart)
 	}
@@ -956,37 +990,36 @@ func parsesFDEHeader(r *reader, efm elf.Machine, ipStart uintptr,
 		fde.ipLen, err = r.ptr(cie.enc & (encFormatMask | encSignedMask))
 	}
 	if err != nil {
-		return 0, fde, nil, err
+		return r, fde, nil, err
 	}
 
 	if cie.hasAugmentation {
-		r.pos += uintptr(r.uleb())
+		r.skip(int64(r.uleb()))
 	}
 	if !r.isValid() {
-		return 0, fde, nil, fmt.Errorf("FDE %x not valid after header", fdeID)
+		return r, fde, nil, fmt.Errorf("FDE %x not valid after header", fdeID)
 	}
-	return fdeLen, fde, cie, nil
+	return r, fde, cie, nil
 }
 
-// parseFDE reads and processes one Frame Description Entry and returns the size of
-// the CIE/FDE entry, and amends the intervals to deltas table.
+// parseFDE reads and processes one Frame Description Entry from the reader 'r'.
+// It reads the CIE/FDE entry, and amends the intervals to deltas table.
 // The FDE format is described in:
 // http://dwarfstd.org/doc/DWARF5.pdf §6.4.1
 // https://refspecs.linuxfoundation.org/LSB_5.0.0/LSB-Core-generic/LSB-Core-generic/ehframechpt.html
-func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
-	cieCache *lru.LRU[uint64, *cieInfo], sorted bool,
-) (size uintptr, err error) {
+func (ee *elfExtractor) parseFDE(fdeReader *reader, ef *pfelf.File, ipStart uint64,
+	cieCache *lru.LRU[uint64, *cieInfo], sorted bool) error {
 	// Parse FDE header
-	fdeID := r.pos
-	fdeLen, fde, cie, err := parsesFDEHeader(r, ef.Machine, ipStart, cieCache)
+	fdeID := fdeReader.pos
+	r, fde, cie, err := parsesFDEHeader(fdeReader, ef.Machine, ipStart, cieCache)
 	if err != nil {
-		return uintptr(fdeLen), err
+		return err
 	}
 	st := state{cie: cie, cur: cie.initialState}
 
 	// Process the FDE opcodes
-	if !ee.hooks.fdeHook(st.cie, &fde, ee.deltas) {
-		return uintptr(fdeLen), nil
+	if !ee.hooks.fdeHook(st.cie, fde, ee.deltas) {
+		return nil
 	}
 	st.loc = fde.ipStart
 	if st.cie.isSignalHandler || isSignalTrampoline(ee.file, &fde) {
@@ -1001,8 +1034,8 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 		hint := sdtypes.UnwindHintKeep
 		for r.hasData() {
 			ip := st.loc
-			if err := st.step(r); err != nil {
-				return 0, err
+			if err := st.step(&r); err != nil {
+				return err
 			}
 			delta := sdtypes.StackDelta{
 				Address: uint64(ip),
@@ -1023,7 +1056,7 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 		ee.deltas.AddEx(delta, sorted)
 
 		if !r.isValid() {
-			return 0, fmt.Errorf("FDE %x parsing failed", fdeID)
+			return fmt.Errorf("FDE %x parsing failed", fdeID)
 		}
 	}
 
@@ -1035,170 +1068,104 @@ func (ee *elfExtractor) parseFDE(r *reader, ef *pfelf.File, ipStart uintptr,
 		Info:    sdtypes.UnwindInfoInvalid,
 	}, sorted)
 
-	return uintptr(fdeLen), nil
+	return nil
 }
 
-// elfRegion is a reference to a region within an ELF file. Such a region reference can be
-// constructed from either an ELF section or an ELF program header.
-type elfRegion struct {
-	data  []byte
-	vaddr uintptr
+type ehframeSections struct {
+	header reader
+	frames reader
+
+	headerCache pfatbuf.Cache
+	framesCache pfatbuf.Cache
+
+	ehHdr    ehFrameHdr
+	fdeCount uint64
 }
 
-// reader creates a `reader` for this ELF region.
-func (ref *elfRegion) reader(pos uintptr, debugFrame bool) reader {
-	return reader{
-		debugFrame: debugFrame,
-		data:       ref.data,
-		pos:        pos,
-		end:        uintptr(len(ref.data)),
-		vaddr:      ref.vaddr,
+// readEhHdr reads and validates the given `.eh_frame_hdr` section is in a format that we
+// support. Returns if the header is valid.
+func (es *ehframeSections) readEhHdr(r *reader) bool {
+	if !r.isValid() {
+		return false
 	}
-}
-
-// elfRegionFromSection checks whether a given ELF section looks valid and has data, then
-// creating a elfRegion for it. Otherwise, returns `nil`.
-func elfRegionFromSection(sec *pfelf.Section) *elfRegion {
-	if sec == nil || sec.Type == elf.SHT_NOBITS {
-		return nil
+	if err := r.read(pfunsafe.FromPointer(&es.ehHdr)); err != nil {
+		return false
 	}
-
-	data, err := sec.Data(maxBytesEHFrame)
-	if err != nil {
-		return nil
+	if es.ehHdr.version != 1 {
+		return false
 	}
-
-	return &elfRegion{
-		data:  data,
-		vaddr: uintptr(sec.Addr),
-	}
-}
-
-// validateEhFrameHdr checks whether the given `.eh_frame_hdr` section is in a format that we
-// support for parsing, returning a pointer to the header struct. Otherwise, returns `nil`.
-func validateEhFrameHdr(ehFrameHdrSec *elfRegion) *ehFrameHdr {
-	if ehFrameHdrSec == nil {
-		return nil
-	}
-
-	if uintptr(len(ehFrameHdrSec.data)) < unsafe.Sizeof(ehFrameHdr{}) {
-		return nil
-	}
-
-	// If the header version is not what we expect, we can't reasonably expect to be able to
-	// parse the eh_frame section.
-	h := (*ehFrameHdr)(unsafe.Pointer(&ehFrameHdrSec.data[0]))
-	if h.version != 1 {
-		return nil
-	}
-
 	// If the binary search table is in an unsupported format or omitted, we just ignore it
 	// and go with the same approach as if the header wasn't present at all.
-	if h.tableEnc != encAdjustDataRel+encSignedMask+encFormatData4 {
-		return nil
+	if es.ehHdr.tableEnc != encAdjustDataRel+encSignedMask+encFormatData4 {
+		return false
 	}
 
-	return h
+	// Read the frame count
+	if _, err := r.ptr(es.ehHdr.ehFramePtrEnc); err != nil {
+		return false
+	}
+	fdeCount, err := r.ptr(es.ehHdr.fdeCountEnc)
+	if err != nil {
+		return false
+	}
+	es.fdeCount = fdeCount
+	r.setBase()
+
+	return true
 }
 
-// findEhSections attempts multiple different methods of locating the .eh_frame_hdr and .eh_frame
-// ELF sections.
-func findEhSections(ef *pfelf.File) (
-	ehFrameHdrSec *elfRegion, ehFrameSec *elfRegion, err error,
-) {
-	ehFrameHdrSize := unsafe.Sizeof(ehFrameHdr{})
-
+// locatieSections attempts multiple different methods of locating
+// the .eh_frame_hdr and .eh_frame ELF sections.
+func (es *ehframeSections) locateSections(ef *pfelf.File) error {
 	// Attempt to find .eh_frame{,_hdr} via their section header. This should work for the majority
 	// of well-behaved ELF binaries.
-	ehFrameSec = elfRegionFromSection(ef.Section(".eh_frame"))
-	ehFrameHdrSec = elfRegionFromSection(ef.Section(".eh_frame_hdr"))
+	es.fdeCount = ^uint64(0)
+	es.header = newReaderFromSection(ef.Section(".eh_frame_hdr"), false, &es.headerCache)
+	es.frames = newReaderFromSection(ef.Section(".eh_frame"), false, &es.framesCache)
 
 	// Validate whether we can use the eh_frame_hdr section.
-	if hdr := validateEhFrameHdr(ehFrameHdrSec); hdr == nil {
-		ehFrameHdrSec = nil
+	if ok := es.readEhHdr(&es.header); !ok {
+		es.header = reader{}
 	}
 
 	// If we at least have the eh_frame section now, we can early-exit. The code below is a bit
 	// more wobbly, so it's better to proceed without the header than to risk having to go with
 	// the fallback.
-	if ehFrameSec != nil {
-		return ehFrameHdrSec, ehFrameSec, nil
+	if es.frames.isValid() {
+		return nil
 	}
 
 	// Attempt to locate the eh_frame section via the program headers. This is here to support
 	// coredump binaries and other ELF files that have the section headers stripped.
-	prog, err := ef.EHFrame()
+	prog, hdrSz, err := ef.EHFrame()
 	if err != nil {
 		log.Debugf("No PT_GNU_EH_FRAME dynamic tag: %v", err)
-		return nil, nil, nil
+		return nil
 	}
 
-	data, err := prog.Data(maxBytesEHFrame)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if uintptr(len(data)) < ehFrameHdrSize {
-		return nil, nil, fmt.Errorf(
-			"located ELF region is too small to be a valid eh_frame header (%d bytes)", len(data))
-	}
-
-	ehFrameHdrSec = &elfRegion{
-		data:  data,
-		vaddr: uintptr(prog.Vaddr),
-	}
+	es.header = newReaderFromProg(prog, &es.headerCache, "eh.hdr", 0)
+	es.frames = newReaderFromProg(prog, &es.framesCache, "eh.dat", int64(hdrSz))
 
 	// Validate .eh_frame_hdr section.
-	if hdr := validateEhFrameHdr(ehFrameHdrSec); hdr == nil {
+	if ok := es.readEhHdr(&es.header); !ok {
 		// There is no DWARF tag for the eh_frame section, just for the header. If the header
 		// is not in a suitable format, we thus can't do a linear sweep of the FDEs, simply because
 		// we have no idea where the actual list of FDEs starts. Thus, we pretend that the section
 		// doesn't exist at all here.
-		return nil, nil, errors.New("no suitable way to parsing eh_frame found")
-	}
-
-	ehFrameSec = &elfRegion{
-		data:  data[ehFrameHdrSize:],
-		vaddr: ehFrameHdrSec.vaddr + ehFrameHdrSize,
+		return errors.New("no suitable way to parsing eh_frame found")
 	}
 
 	// Some binaries only have the header, but no actual eh_frame section. This is, for example,
 	// the case with cranelift generated binaries in coredumps, because they don't have the
 	// eh_frame section in a PT_LOAD region.
-	if len(data) == 0 {
-		return nil, nil, errors.New("the eh_frame section is empty")
-	}
-
-	return ehFrameHdrSec, ehFrameSec, nil
-}
-
-// walkBinSearchTable parses FDEs by following all references in the binary search table in the
-// `.eh_frame_hdr` section.
-func (ee *elfExtractor) walkBinSearchTable(ef *pfelf.File, ehFrameHdrSec *elfRegion,
-	ehFrameSec *elfRegion,
-) error {
-	t, err := newEhFrameTableFromSections(ehFrameHdrSec, ehFrameSec, ef.Machine)
-	if err != nil {
-		return err
-	}
-	r := t.entryAt(0)
-	for f := uintptr(0); f < t.fdeCount; f++ {
-		ipStart, fr, entryErr := t.decodeEntry(&r)
-		if entryErr != nil {
-			return entryErr
-		}
-		_, err = ee.parseFDE(&fr, ef, ipStart, t.cieCache, f > 0)
-		if err != nil && !errors.Is(err, errEmptyEntry) {
-			return fmt.Errorf("failed to parse FDE: %v", err)
-		}
+	if !es.frames.hasData() {
+		return errors.New("the eh_frame section is empty")
 	}
 	return nil
 }
 
 // walkFDEs walks .debug_frame or .eh_frame section, and processes it for stack deltas.
-func (ee *elfExtractor) walkFDEs(ef *pfelf.File, ehFrameSec *elfRegion, debugFrame bool) error {
-	var err error
-
+func (ee *elfExtractor) walkFDEs(ef *pfelf.File, frames *reader, numFDEs uint64) error {
 	cieCache, err := lru.New[uint64, *cieInfo](cieCacheSize, hashUint64)
 	if err != nil {
 		return err
@@ -1207,15 +1174,13 @@ func (ee *elfExtractor) walkFDEs(ef *pfelf.File, ehFrameSec *elfRegion, debugFra
 	ee.hooks.fdeUnsorted()
 
 	// Walk the section, and process each FDE it contains
-	var entryLen uintptr
-	for f := uintptr(0); f < uintptr(len(ehFrameSec.data)); f += entryLen {
-		fr := ehFrameSec.reader(f, debugFrame)
-		entryLen, err = ee.parseFDE(&fr, ef, 0, cieCache, false)
-		if err != nil && !errors.Is(err, errUnexpectedType) && !errors.Is(err, errEmptyEntry) {
-			return fmt.Errorf("failed to parse FDE %#x: %v", f, err)
-		}
-		if entryLen == 0 {
-			return fmt.Errorf("failed to parse FDE %#x: internal error", f)
+	for frames.hasData() && numFDEs > 0 {
+		pos := frames.pos
+		err = ee.parseFDE(frames, ef, 0, cieCache, false)
+		if err == nil {
+			numFDEs--
+		} else if err != errUnexpectedType && err != errEmptyEntry {
+			return fmt.Errorf("failed to parse FDE %#x: %v", pos, err)
 		}
 	}
 
@@ -1228,34 +1193,29 @@ func hashUint64(u uint64) uint32 {
 
 // parseEHFrame parses the .eh_frame DWARF info, extracting stack deltas.
 func (ee *elfExtractor) parseEHFrame() error {
-	ehFrameHdrSec, ehFrameSec, err := findEhSections(ee.file)
+	var es ehframeSections
+
+	err := es.locateSections(ee.file)
 	if err != nil {
 		return fmt.Errorf("failed to get EH sections: %w", err)
 	}
 
-	if ehFrameSec == nil {
+	if !es.frames.isValid() {
 		// No eh_frame section being present at all is not an error -- there's simply no data for
 		// us to parse present.
 		return nil
 	}
 
-	if ehFrameHdrSec != nil {
-		// If we have both the header and the actual eh_frame section, walk the FDEs via the
-		// binary search table. Because the binary search table is ordered, this spares us from
-		// having to sort the FDEs later.
-		return ee.walkBinSearchTable(ee.file, ehFrameHdrSec, ehFrameSec)
-	}
-
-	// Otherwise, manually walk the FDEs.
-	return ee.walkFDEs(ee.file, ehFrameSec, false)
+	return ee.walkFDEs(ee.file, &es.frames, es.fdeCount)
 }
 
 // parseDebugFrame parses the .debug_frame DWARF info, extracting stack deltas.
 func (ee *elfExtractor) parseDebugFrame(ef *pfelf.File) error {
-	debugFrameSection := elfRegionFromSection(ef.Section(".debug_frame"))
-	if debugFrameSection == nil {
+	var cache pfatbuf.Cache
+
+	frames := newReaderFromSection(ef.Section(".debug_frame"), true, &cache)
+	if !frames.isValid() {
 		return nil
 	}
-
-	return ee.walkFDEs(ef, debugFrameSection, true)
+	return ee.walkFDEs(ef, &frames, ^uint64(0))
 }
