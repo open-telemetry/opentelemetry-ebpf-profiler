@@ -6,6 +6,7 @@
 package tracer_test
 
 import (
+	"fmt"
 	"math"
 	"runtime"
 	"slices"
@@ -186,16 +187,32 @@ Loop:
 }
 
 func TestAllTracers(t *testing.T) {
-	tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
-		Intervals:              &mockIntervals{},
-		IncludeTracers:         tracertypes.AllTracers(),
-		SamplesPerSecond:       20,
-		ProbabilisticInterval:  100,
-		ProbabilisticThreshold: 100,
-		OffCPUThreshold:        uint32(math.MaxUint32 / 100),
-		VerboseMode:            true,
-		LoadProbe:              true,
-	})
-	require.NoError(t, err)
-	defer tr.Close()
+	testcases := []struct {
+		enablePidTranslation bool
+	}{
+		{
+			enablePidTranslation: true,
+		},
+		{
+			enablePidTranslation: false,
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(fmt.Sprintf("enablePidTranslation=%t", testcase.enablePidTranslation), func(t *testing.T) {
+			tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
+				Intervals:              &mockIntervals{},
+				IncludeTracers:         tracertypes.AllTracers(),
+				SamplesPerSecond:       20,
+				ProbabilisticInterval:  100,
+				ProbabilisticThreshold: 100,
+				OffCPUThreshold:        uint32(math.MaxUint32 / 100),
+				VerboseMode:            true,
+				LoadProbe:              true,
+				EnableNamespacePID:     testcase.enablePidTranslation,
+			})
+			require.NoError(t, err)
+			defer tr.Close()
+		})
+	}
 }

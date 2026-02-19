@@ -402,12 +402,14 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		if err := parseBTF(vars, spec); err != nil {
 			btfResolution = false
 		}
-		// parseBTFForNsTranslation is only called if
-		// namespace PID translation is enabled and BTF resolution is successful.
-		if enableNamespacePID && btfResolution {
-			err := parseBTFForNsTranslation(vars, spec)
-			log.Debugf("parseBTFForNsTranslation err %v", err)
-			log.Debugf("vars.ns_translation_enabled %+v", vars)
+	}
+
+	if enableNamespacePID {
+		if !btfResolution {
+			return fmt.Errorf("configuration error: namespace PID translation is enabled but BTF resolution is not available")
+		}
+		if err := parseBTFForNsTranslation(vars, spec); err != nil {
+			return err
 		}
 	}
 
