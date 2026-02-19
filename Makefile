@@ -62,7 +62,7 @@ clean:
 	@$(MAKE) -s -C support/ebpf clean
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache support/*.test interpreter/golabels/integrationtests/pprof_1_*
-	@rm -f cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
+	@rm -f otelcol-ebpf-profiler cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
 	@cargo clean
 
 generate:

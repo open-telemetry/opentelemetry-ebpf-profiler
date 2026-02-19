@@ -16,6 +16,11 @@
       '//(^|/)tools\\.mod$//',
     ],
   },
+  ocb: {
+    managerFilePatterns: [
+      '/cmd/otelcol-ebpf-profiler/manifest.yaml$/',
+    ],
+  },
   packageRules: [
     {
       groupName: 'Go dependencies',
@@ -59,16 +64,13 @@
         'before 8am every weekday',
       ],
     },
-  ],
-  customManagers: [
     {
-      customType: 'regex',
-      managerFilePatterns: [
-        '/cmd/otelcol-ebpf-profiler/manifest.yaml$/',
+      groupName: 'OCB (manifest) dependencies',
+      matchManagers: [
+        'ocb',
       ],
-      datasourceTemplate: 'go',
-      matchStrings: [
-        'gomod: (?<depName>.+) (?<currentValue>.+)',
+      schedule: [
+        'before 8am every weekday',
       ],
     },
   ],
