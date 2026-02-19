@@ -3,7 +3,7 @@
     "description": "Leave out the 0 value. It's an indication of not explicitly initialized variables.",
     "type": "counter",
     "name": "Invalid",
-    "field": "",
+    "field": "invalid",
     "id": 0
   },
   {
@@ -80,7 +80,8 @@
     "description": "Number of failures to call interpreter unwinding in dispatch_interpreters()",
     "type": "counter",
     "name": "UnwindErrCallInterpreter",
-    "id": 9
+    "id": 9,
+    "field": "unwind.err.call.interpreter"
   },
   {
     "description": "Unwind attempts since the previous check",
@@ -178,7 +179,8 @@
     "description": "Number of failures to read the autoTLSkey address",
     "type": "counter",
     "name": "UnwindPythonErrBadAutoTLSKeyAddr",
-    "id": 23
+    "id": 23,
+    "field": "unwind.python.err.bad.auto.tls.key.addr"
   },
   {
     "description": "Number of failures to read from the TLS",
@@ -192,7 +194,8 @@
     "description": "Number of failures to lookup the fsbase offset in tls_get_base()",
     "type": "counter",
     "name": "UnwindErrLookupFSBaseOffset",
-    "id": 25
+    "id": 25,
+    "field": "unwind.err.lookup.fs.base.offset"
   },
   {
     "description": "Number of failures to get the TLS base in tls_get_base()",
@@ -236,28 +239,32 @@
     "description": "Number of code objects with no filename in process_python_frame()",
     "type": "counter",
     "name": "UnwindPythonErrBadCodeObjectFilenameAddr",
-    "id": 31
+    "id": 31,
+    "field": "unwind.python.err.bad.code.object.filename.addr"
   },
   {
     "obsolete": true,
     "description": "Number of failures to zero out filename in process_python_frame()",
     "type": "counter",
     "name": "UnwindPythonErrBadZeroFileAddr",
-    "id": 32
+    "id": 32,
+    "field": "unwind.python.err.bad.zero.file.addr"
   },
   {
     "obsolete": true,
     "description": "Number of failures to get the file ID in process_python_frame()",
     "type": "counter",
     "name": "UnwindPythonErrBadFilenameAddr",
-    "id": 33
+    "id": 33,
+    "field": "unwind.python.err.bad.filename.addr"
   },
   {
     "obsolete": true,
     "description": "Number of failures to get the file ID in process_python_frame()",
     "type": "counter",
     "name": "UnwindPythonErrNoFileID",
-    "id": 34
+    "id": 34,
+    "field": "unwind.python.err.no.file.id"
   },
   {
     "obsolete": true,
@@ -303,21 +310,24 @@
     "description": "Current size of the hash map mmap_monitor",
     "type": "gauge",
     "name": "HashmapMmapMonitor",
-    "id": 40
+    "id": 40,
+    "field": "hashmap.mmap.monitor"
   },
   {
     "obsolete": true,
     "description": "Current size of the hash map mmap_executable",
     "type": "gauge",
     "name": "HashmapMmapExecutable",
-    "id": 41
+    "id": 41,
+    "field": "hashmap.mmap.executable"
   },
   {
     "obsolete": true,
     "description": "Current size of the hash map mprotect_executable",
     "type": "gauge",
     "name": "HashmapMprotectExecutable",
-    "id": 42
+    "id": 42,
+    "field": "hashmap.mprotect.executable"
   },
   {
     "description": "The number of executables loaded to eBPF maps",
@@ -537,7 +547,8 @@
     "description": "Number of times a PID maps file cannot be read as /proc/<PID> folder does not exist anymore",
     "type": "counter",
     "name": "ErrProcPIDRead",
-    "id": 72
+    "id": 72,
+    "field": "err.proc.pid.read"
   },
   {
     "obsolete": true,
@@ -760,21 +771,24 @@
     "description": "Indicates if probabilistic sampling is en- or disabled. 1 sampling is enabled  - see ebpf.probSampleEnable. -1 sampling is disabled - see ebpf.probSampleDisable.",
     "type": "gauge",
     "name": "ProbSampleStatus",
-    "id": 103
+    "id": 103,
+    "field": "prob.sample.status"
   },
   {
     "obsolete": true,
     "description": "Number of times the cache for pre-to-post conversion trace hashes was hit.",
     "type": "counter",
     "name": "HashMapperCacheHit",
-    "id": 104
+    "id": 104,
+    "field": "hash.mapper.cache.hit"
   },
   {
     "obsolete": true,
     "description": "Number of times the cache for pre-to-post conversion trace hashes was missed.",
     "type": "counter",
     "name": "HashMapperCacheMiss",
-    "id": 105
+    "id": 105,
+    "field": "hash.mapper.cache.miss"
   },
   {
     "description": "Number of successfully symbolized Ruby frames",
@@ -839,7 +853,8 @@
     "description": "Number of times a pre-conversion hash has not been present in the traceHashMapper used by the traceHandler",
     "type": "counter",
     "name": "TraceHashMapperMissingEntry",
-    "id": 114
+    "id": 114,
+    "field": "trace.hash.mapper.missing.entry"
   },
   {
     "description": "Number of attempted perl unwinds",
@@ -944,7 +959,8 @@
     "description": "Number of failures to unwind because PC is outside matched codeblob code range",
     "type": "counter",
     "name": "UnwindHotspotErrPCOutsideCodeblobCode",
-    "id": 129
+    "id": 129,
+    "field": "unwind.hotspot.err.pc.outside.codeblob.code"
   },
   {
     "description": "Number of failures to unwind because return address was not found with heuristic",
@@ -988,7 +1004,8 @@
     "description": "Number of elements zapped from known traces",
     "type": "counter",
     "name": "KnownTracesZapCount",
-    "id": 135
+    "id": 135,
+    "field": "known.traces.zap.count"
   },
   {
     "description": "Number of attempted V8 unwinds",
@@ -1525,21 +1542,24 @@
     "description": "Number of lost perf events in the communication between kernel and user space (report_munmap_events)",
     "type": "counter",
     "name": "PerfEventLostMunmap",
-    "id": 210
+    "id": 210,
+    "field": "perf_event.lost.munmap"
   },
   {
     "obsolete": true,
     "description": "Number of times a perf event was received without data (report_munmap_events)",
     "type": "counter",
     "name": "PerfEventNoDataMunmap",
-    "id": 211
+    "id": 211,
+    "field": "perf_event.no.data.munmap"
   },
   {
     "obsolete": true,
     "description": "Number of times a perf event read failed (report_munmap_events)",
     "type": "counter",
     "name": "PerfEventReadErrorMunmap",
-    "id": 212
+    "id": 212,
+    "field": "perf_event.read.error.munmap"
   },
   {
     "description": "Number of new PID events (report_events)",
@@ -1575,7 +1595,8 @@
     "description": "Number of munmap events (report_munmap_events)",
     "type": "counter",
     "name": "NumMunmapEvent",
-    "id": 217
+    "id": 217,
+    "field": "num.munmap.event"
   },
   {
     "description": "Max /proc/PID/maps parse time for a single collection interval, in microseconds",
@@ -1631,7 +1652,8 @@
     "type": "counter",
     "name": "MonitorHashMapsIntervalMs",
     "unit": "ms",
-    "id": 224
+    "id": 224,
+    "field": "monitor.hash.maps.interval.ms"
   },
   {
     "obsolete": true,
@@ -1673,26 +1695,30 @@
     "description": "Indicates if probabilistic profiling is enabled or disabled: 1 profiling is enabled, -1 profiling is disabled.",
     "type": "gauge",
     "name": "ProbProfilingStatus",
-    "id": 230
+    "id": 230,
+    "field": "prob.profiling.status"
   },
   {
     "description": "Interval in seconds for which probabilistic profiling will be enabled or disabled.",
     "type": "counter",
     "name": "ProbProfilingInterval",
     "id": 231,
-    "unit": "s"
+    "unit": "s",
+    "field": "prob.profiling.interval"
   },
   {
     "description": "Number of times enabling a perf event hook failed",
     "type": "counter",
     "name": "PerfEventEnableErr",
-    "id": 232
+    "id": 232,
+    "field": "perf_event.enable.err"
   },
   {
     "description": "Number of times disabling a perf event hook failed",
     "type": "counter",
     "name": "PerfEventDisableErr",
-    "id": 233
+    "id": 233,
+    "field": "perf_event.disable.err"
   },
   {
     "description": "Number of times we didn't find an entry for this process in the Python process info array",
