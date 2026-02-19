@@ -4,7 +4,6 @@
 package hotspot // import "go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -18,6 +17,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfatbuf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
@@ -395,40 +395,27 @@ func (d *hotspotData) Unload(_ interpreter.EbpfHandler) {
 //
 //nolint:lll
 func locateJvmciVMStructs(ef *pfelf.File) (libpf.Address, error) {
-	const maxDataReadSize = 1 * 1024 * 1024   // seen in practice: 192 KiB
-	const maxRodataReadSize = 4 * 1024 * 1024 // seen in practice: 753 KiB
-
-	rodataSec := ef.Section(".rodata")
-	if rodataSec == nil {
+	rodata := ef.Section(".rodata")
+	if rodata == nil {
 		return 0, errors.New("unable to find `.rodata` section")
 	}
 
-	rodata, err := rodataSec.Data(maxRodataReadSize)
+	offs, err := pfatbuf.Search(rodata, []byte("Klass_vtable_start_offset"), nil)
 	if err != nil {
-		return 0, err
-	}
-
-	offs := bytes.Index(rodata, []byte("Klass_vtable_start_offset"))
-	if offs == -1 {
 		return 0, errors.New("unable to find string for heuristic")
 	}
 
-	ptr := rodataSec.Addr + uint64(offs)
+	ptr := rodata.Addr + uint64(offs)
 	ptrEncoded := make([]byte, 8)
 	binary.LittleEndian.PutUint64(ptrEncoded, ptr)
 
-	dataSec := ef.Section(".data")
-	if dataSec == nil {
+	data := ef.Section(".data")
+	if data == nil {
 		return 0, errors.New("unable to find `.data` section")
 	}
 
-	data, err := dataSec.Data(maxDataReadSize)
+	offs, err = pfatbuf.Search(data, ptrEncoded, nil)
 	if err != nil {
-		return 0, err
-	}
-
-	offs = bytes.Index(data, ptrEncoded)
-	if offs == -1 {
 		return 0, errors.New("unable to find string pointer")
 	}
 
@@ -436,7 +423,7 @@ func locateJvmciVMStructs(ef *pfelf.File) (libpf.Address, error) {
 	// gHotSpotVMStructEntryFieldNameOffset. This value unfortunately lives in
 	// BSS, so we have no choice but to hard-code it. Fortunately enough this
 	// offset hasn't changed since at least JDK 9.
-	return libpf.Address(dataSec.Addr + uint64(offs) - 8), nil
+	return libpf.Address(data.Addr + uint64(offs) - 8), nil
 }
 
 // forEachItem walks the given struct reflection fields recursively, and calls the visitor

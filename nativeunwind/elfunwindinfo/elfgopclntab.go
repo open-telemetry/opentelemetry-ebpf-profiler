@@ -20,6 +20,7 @@ import (
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfatbuf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
@@ -42,10 +43,6 @@ var goFunctionsStopDelta = map[string]*sdtypes.UnwindInfo{
 }
 
 const (
-	// maximum pclntab (or rodata segment) size to inspect. The .gopclntab is
-	// often huge. Host agent binaries have about 32M .rodata, so allow for more.
-	maxBytesGoPclntab = 128 * 1024 * 1024
-
 	// internally used gopclntab version
 	goInvalid = 0
 	go1_2     = 2
@@ -90,35 +87,33 @@ type pclntabHeader struct {
 	numFuncs uint64
 }
 
-// pclntabHeader116 is the Golang pclntab header structure starting Go 1.16
+// pclntabHeader116 is the Golang pclntab additional header starting Go 1.16
 // structural definition of this is found in go/src/runtime/symtab.go as pcHeader
 type pclntabHeader116 struct {
-	pclntabHeader
 	nfiles         uint
-	funcnameOffset uintptr
-	cuOffset       uintptr
-	filetabOffset  uintptr
-	pctabOffset    uintptr
-	pclnOffset     uintptr
+	funcnameOffset int64
+	cuOffset       int64
+	filetabOffset  int64
+	pctabOffset    int64
+	pclnOffset     int64
 }
 
-// pclntabHeader118 is the Golang pclntab header structure starting Go 1.18
+// pclntabHeader118 is the Golang pclntab additional header starting Go 1.18
 // structural definition of this is found in go/src/runtime/symtab.go as pcHeader
 type pclntabHeader118 struct {
-	pclntabHeader
 	nfiles         uint
-	textStart      uintptr
-	funcnameOffset uintptr
-	cuOffset       uintptr
-	filetabOffset  uintptr
-	pctabOffset    uintptr
-	pclnOffset     uintptr
+	textStart      uint64
+	funcnameOffset int64
+	cuOffset       int64
+	filetabOffset  int64
+	pctabOffset    int64
+	pclnOffset     int64
 }
 
 // pclntabFuncMap is the Golang function symbol table map entry
 type pclntabFuncMap struct {
-	pc      uintptr
-	funcOff uintptr
+	pc      uint64
+	funcOff int64
 }
 
 // pclntabFuncMap118 is the Golang function symbol table map entry for Go 1.18+.
@@ -142,11 +137,14 @@ type pclntabFunc struct {
 // depends on which table is being processed. It can signify the Stack Delta in
 // bytes, the source filename index, or the source line number.
 type pcval struct {
-	ptr     []byte
+	rd      *pfatbuf.Cache
+	data    []byte
+	offs    int64
 	pcStart uint
 	pcEnd   uint
 	val     int32
 	quantum uint8
+	eof     bool
 }
 
 // PclntabHeaderSize returns the minimal pclntab header size.
@@ -173,12 +171,13 @@ func pclntabHeaderSignature(arch elf.Machine) []byte {
 	//  - quantum depends on the architecture
 	//  - ptrSize is 8 for 64 bit systems (arm64 and amd64)
 
-	return []byte{0xff, 0xff, 0xff, 0x00, 0x00, quantum, 0x08}
+	return []byte{0, 0xff, 0xff, 0xff, 0x00, 0x00, quantum, 0x08}
 }
 
-func newPcval(data []byte, pc uint, quantum uint8) pcval {
+func newPcval(rd *pfatbuf.Cache, offs int64, pc uint, quantum uint8) pcval {
 	p := pcval{
-		ptr:     data,
+		rd:      rd,
+		offs:    offs,
 		pcEnd:   pc,
 		val:     -1,
 		quantum: quantum,
@@ -187,15 +186,30 @@ func newPcval(data []byte, pc uint, quantum uint8) pcval {
 	return p
 }
 
+// getByte reads one byte
+func (p *pcval) getByte() byte {
+	if len(p.data) == 0 {
+		if p.eof {
+			return 0
+		}
+		data, err := p.rd.UnsafeReadAt(1, p.offs)
+		if len(data) == 0 || err != nil {
+			p.eof = true
+			return 0
+		}
+		p.data = data
+	}
+	p.offs++
+	b := p.data[0]
+	p.data = p.data[1:]
+	return b
+}
+
 // getInt reads one zig-zag encoded integer
 func (p *pcval) getInt() uint32 {
 	var v, shift uint32
 	for {
-		if len(p.ptr) == 0 {
-			return 0
-		}
-		b := p.ptr[0]
-		p.ptr = p.ptr[1:]
+		b := p.getByte()
 		v |= (uint32(b) & 0x7F) << shift
 		if b&0x80 == 0 {
 			break
@@ -207,11 +221,11 @@ func (p *pcval) getInt() uint32 {
 
 // step executes one line of the pcval table. Returns true on success.
 func (p *pcval) step() bool {
-	if len(p.ptr) == 0 || p.ptr[0] == 0 {
+	d := p.getInt()
+	if d == 0 {
 		return false
 	}
 	p.pcStart = p.pcEnd
-	d := p.getInt()
 	if d&1 != 0 {
 		d = ^(d >> 1)
 	} else {
@@ -222,28 +236,8 @@ func (p *pcval) step() bool {
 	return true
 }
 
-// getInt32 gets a 32-bit integer from the data slice at offset with bounds checking
-func getInt32(data []byte, offset int) int {
-	if offset < 0 || offset+4 > len(data) {
-		return -1
-	}
-	return int(*(*int32)(unsafe.Pointer(&data[offset])))
-}
-
-// getString returns a string from the data slice at given offset.
-func getString(data []byte, offset int) string {
-	if offset < 0 || offset > len(data) {
-		return ""
-	}
-	zeroIdx := bytes.IndexByte(data[offset:], 0)
-	if zeroIdx < 0 {
-		return ""
-	}
-	return pfunsafe.ToString(data[offset : offset+zeroIdx])
-}
-
 // searchGoPclntab uses heuristic to find the gopclntab from RO data.
-func searchGoPclntab(ef *pfelf.File) ([]byte, error) {
+func searchGoPclntab(ef *pfelf.File, notFound error) (io.ReaderAt, int64, error) {
 	// The sections headers are not available for coredump testing, because they are
 	// not inside any PT_LOAD segment. And in the case ofwhere they might be available
 	// because of alignment they are likely not usable, e.g. the musl C-library will
@@ -259,7 +253,6 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, error) {
 	// a heuristic to find the .gopclntab from the RO data segment based on its header.
 
 	signature := pclntabHeaderSignature(ef.Machine)
-
 	for i := range ef.Progs {
 		p := &ef.Progs[i]
 		// Search for the .rodata (read-only) and .data.rel.ro (read-write which gets
@@ -268,91 +261,83 @@ func searchGoPclntab(ef *pfelf.File) ([]byte, error) {
 			continue
 		}
 
-		// Skip segments that are too small anyway.
-		if p.Filesz < uint64(PclntabHeaderSize()) {
-			continue
-		}
-
-		var data []byte
-		var err error
-		if data, err = p.Data(maxBytesGoPclntab); err != nil {
-			return nil, err
-		}
-
-		for i := 1; i < len(data)-PclntabHeaderSize(); i += 8 {
-			// Search for something looking like a valid pclntabHeader header
-			// Ignore the first byte on bytes.Index (differs on magicGo1_XXX)
-			n := bytes.Index(data[i:], signature)
-			if n < 0 {
+		var buf [64 * 1024]byte
+		for offs := int64(0); offs+int64(PclntabHeaderSize()) < int64(p.Filesz); {
+			n, err := p.ReadAt(buf[:], offs)
+			for x := 0; x+len(signature) < n; x += len(signature) {
+				if !bytes.Equal(signature[1:], buf[x+1:x+len(signature)]) {
+					continue
+				}
+				// Check the 'magic' against supported list, and if valid, use this
+				// location as the .gopclntab base. Otherwise, continue just search
+				// for next candidate location.
+				magic := binary.LittleEndian.Uint32(buf[x:])
+				if goMagicToVersion(magic) != goInvalid {
+					offs += int64(x)
+					maxSize := int64(p.Filesz) - offs
+					return io.NewSectionReader(p, offs, maxSize), maxSize, nil
+				}
+			}
+			if err != nil {
 				break
 			}
-			i += n - 1
-
-			// Check the 'magic' against supported list, and if valid, use this
-			// location as the .gopclntab base. Otherwise, continue just search
-			// for next candidate location.
-			hdr := (*pclntabHeader)(unsafe.Pointer(&data[i]))
-			if goMagicToVersion(hdr.magic) != goInvalid {
-				return data[i:], nil
-			}
+			offs += int64(n - len(signature))
 		}
 	}
-
-	return nil, nil
+	return nil, 0, notFound
 }
 
-// extractGoPclntab extracts the .gopclntab data from a given pfelf.File.
-func extractGoPclntab(ef *pfelf.File) (data []byte, err error) {
+var errFailedToFindGopclntab = errors.New("failed to find .gopclntab on go binary")
+
+// extractGoPclntab extracts the .gopclntab reader from a given pfelf.File.
+func extractGoPclntab(ef *pfelf.File) (data io.ReaderAt, maxSz int64, err error) {
 	if ef.InsideCore {
 		// Section tables not available. Use heuristic. Ignore errors as
 		// this might not be a Go binary.
-		data, _ = searchGoPclntab(ef)
-	} else if s := ef.Section(".gopclntab"); s != nil {
+		return searchGoPclntab(ef, nil)
+	}
+	if s := ef.Section(".gopclntab"); s != nil {
 		// Load the .gopclntab via section if available.
-		if data, err = s.Data(maxBytesGoPclntab); err != nil {
-			return nil, fmt.Errorf("failed to load .gopclntab section: %v", err)
-		}
-	} else if s := ef.Section(".go.buildinfo"); s != nil {
+		return s, int64(s.FileSize), nil
+	}
+	if s := ef.Section(".go.buildinfo"); s != nil {
 		// This looks like Go binary. Lookup the runtime.pclntab symbols,
 		// as the .gopclntab section is not available on PIE binaries.
 		// A full symbol table read is needed as these are not dynamic symbols.
 		// Consequently these symbols might be unavailable on a stripped binary.
-		var start, end libpf.SymbolValue
+		var start, end int64
 		ef.VisitSymbols(func(sym libpf.Symbol) bool {
 			if sym.Name == "runtime.pclntab" {
-				start = sym.Address
+				start = int64(sym.Address)
 			} else if sym.Name == "runtime.epclntab" {
-				end = sym.Address
+				end = int64(sym.Address)
 			}
 			return start == 0 || end == 0
 		})
 		if start == 0 || end == 0 {
 			// It seems the Go binary was stripped. So we use the heuristic approach
 			// to get the stack deltas.
-			if data, err = searchGoPclntab(ef); err != nil {
-				return nil, fmt.Errorf("failed to search .gopclntab: %v", err)
-			}
-		} else {
-			if start >= end {
-				return nil, fmt.Errorf("invalid .gopclntab symbols: %v-%v", start, end)
-			}
-			data, err = ef.VirtualMemory(int64(start), int(end-start), maxBytesGoPclntab)
-			if err != nil {
-				return nil, fmt.Errorf("failed to load .gopclntab via symbols: %v", err)
-			}
+			return searchGoPclntab(ef, errFailedToFindGopclntab)
 		}
+		if start >= end {
+			return nil, 0, fmt.Errorf("invalid .gopclntab symbols: %v-%v", start, end)
+		}
+		return io.NewSectionReader(ef, start, end-start), end - start, nil
 	}
-	return data, nil
+	return nil, 0, nil
 }
 
 // Gopclntab is the API for extracting data from .gopclntab
 type Gopclntab struct {
-	dataRef     io.Closer
-	setDontNeed func()
+	ef            *pfelf.File
+	cache         pfatbuf.Cache
+	cutabCache    pfatbuf.Cache
+	funcMapCache  pfatbuf.Cache
+	funcNameCache pfatbuf.Cache
 
-	data      []byte
-	textStart uintptr
+	textStart uint64
 	numFuncs  int
+	numFiles  uint
 
 	version     uint8
 	quantum     uint8
@@ -360,12 +345,8 @@ type Gopclntab struct {
 	funSize     uint8
 	funcMapSize uint8
 
-	// These are read-only byte slices to various areas within .gopclntab
-	// (subslices of data []byte). Since 'data' a slice returned by pfelf.File
-	// it can be allocated or mmapped read-only data. To keep memory usage
-	// and GC stress minimal the returned strings (symbol and file names) refer
-	// to this data directly (via unsafe.String).
-	functab, funcdata, funcnametab, filetab, pctab, cutab []byte
+	// These are offsets to various areas within .gopclntab
+	functab, funcdata, funcnametab, filetab, pctab, cutab int64
 }
 
 // LookupSymbol searches for a given symbol in .gopclntab.
@@ -374,10 +355,10 @@ func (g *Gopclntab) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error)
 	for i := 0; i < g.numFuncs; i++ {
 		_, funcOff := g.getFuncMapEntry(i)
 		pc, fun := g.getFunc(funcOff)
-		if fun == nil {
+		if pc == 0 {
 			continue
 		}
-		name := getString(g.funcnametab, int(fun.nameOff))
+		name, _ := g.funcNameCache.UnsafeStringAt(g.funcnametab+int64(fun.nameOff), len(symbol))
 		if name == symString {
 			nextPc, _ := g.getFuncMapEntry(i + 1)
 			size := uint64(nextPc - pc)
@@ -394,53 +375,49 @@ func (g *Gopclntab) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error)
 
 // NewGopclntab parses and returns the parsed data for further operations.
 func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
-	data, err := extractGoPclntab(ef)
-	if data == nil {
+	rdr, dataLen, err := extractGoPclntab(ef)
+	if rdr == nil || err != nil {
 		return nil, err
 	}
-	defer ef.SetDontNeed()
 
-	hdrSize := uintptr(PclntabHeaderSize())
-	dataLen := uintptr(len(data))
-	if dataLen < hdrSize {
-		return nil, fmt.Errorf(".gopclntab is too short (%v)", len(data))
-	}
+	g := &Gopclntab{}
+	g.cache.InitName("go.cache", rdr)
+	g.cutabCache.InitName("go.cutab", rdr)
+	g.funcMapCache.InitName("go.funcMap", rdr)
+	g.funcNameCache.InitName("go.funcName", rdr)
 
-	hdr := (*pclntabHeader)(unsafe.Pointer(&data[0]))
-	g := &Gopclntab{
-		data:        data,
-		version:     goMagicToVersion(hdr.magic),
-		quantum:     hdr.quantum,
-		ptrSize:     hdr.ptrSize,
-		funSize:     hdr.ptrSize + uint8(unsafe.Sizeof(pclntabFunc{})),
-		funcMapSize: hdr.ptrSize * 2,
-		numFuncs:    int(hdr.numFuncs),
+	hdrSize := int64(PclntabHeaderSize())
+	var hdr pclntabHeader
+	if _, err = g.cache.ReadAt(pfunsafe.FromPointer(&hdr), 0); err != nil {
+		return nil, fmt.Errorf("failed to read .gopclntab header: %w", err)
 	}
+	g.version = goMagicToVersion(hdr.magic)
+	g.quantum = hdr.quantum
+	g.ptrSize = hdr.ptrSize
+	g.funSize = hdr.ptrSize + uint8(unsafe.Sizeof(pclntabFunc{}))
+	g.funcMapSize = hdr.ptrSize * 2
+	g.numFuncs = int(hdr.numFuncs)
+
 	if g.version == goInvalid || hdr.pad != 0 || hdr.ptrSize != 8 {
 		return nil, fmt.Errorf(".gopclntab header: %x, %x, %x", hdr.magic, hdr.pad, hdr.ptrSize)
 	}
 
 	switch g.version {
 	case go1_2:
-		functabEnd := int(hdrSize) + g.numFuncs*int(g.funcMapSize) + int(hdr.ptrSize)
-		filetabOffset := getInt32(data, functabEnd)
-		numSourceFiles := getInt32(data, filetabOffset)
-		if filetabOffset == 0 || numSourceFiles == 0 {
+		functabEnd := uint64(hdrSize) + uint64(g.numFuncs)*uint64(g.funcMapSize) + uint64(hdr.ptrSize)
+		filetabOffset := g.cache.Uint32At(int64(functabEnd))
+		g.numFiles = uint(g.cache.Uint32At(int64(filetabOffset)))
+		if filetabOffset == 0 || g.numFiles == 0 {
 			return nil, fmt.Errorf(".gopclntab corrupt (filetab 0x%x, nfiles %d)",
-				filetabOffset, numSourceFiles)
+				filetabOffset, g.numFiles)
 		}
-		g.functab = data[hdrSize:filetabOffset]
-		g.cutab = data[filetabOffset:]
-		g.pctab = data
-		g.funcnametab = data
-		g.funcdata = data
-		g.filetab = data
+		g.functab = int64(hdrSize)
+		g.cutab = int64(filetabOffset)
 	case go1_16:
-		hdrSize = unsafe.Sizeof(pclntabHeader116{})
-		if dataLen < hdrSize {
-			return nil, fmt.Errorf(".gopclntab is too short (%v)", len(data))
+		var hdr116 pclntabHeader116
+		if _, err = g.cache.ReadAt(pfunsafe.FromPointer(&hdr116), hdrSize); err != nil {
+			return nil, fmt.Errorf("failed to read .gopclntab header: %w", err)
 		}
-		hdr116 := (*pclntabHeader116)(unsafe.Pointer(&data[0]))
 		if dataLen < hdr116.funcnameOffset || dataLen < hdr116.cuOffset ||
 			dataLen < hdr116.filetabOffset || dataLen < hdr116.pctabOffset ||
 			dataLen < hdr116.pclnOffset {
@@ -449,18 +426,18 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 				hdr116.filetabOffset, hdr116.pctabOffset,
 				hdr116.pclnOffset)
 		}
-		g.funcnametab = data[hdr116.funcnameOffset:]
-		g.cutab = data[hdr116.cuOffset:]
-		g.filetab = data[hdr116.filetabOffset:]
-		g.pctab = data[hdr116.pctabOffset:]
-		g.functab = data[hdr116.pclnOffset:]
+		g.numFiles = hdr116.nfiles
+		g.funcnametab = hdr116.funcnameOffset
+		g.cutab = hdr116.cuOffset
+		g.filetab = hdr116.filetabOffset
+		g.pctab = hdr116.pctabOffset
+		g.functab = hdr116.pclnOffset
 		g.funcdata = g.functab
 	case go1_18, go1_20:
-		hdrSize = unsafe.Sizeof(pclntabHeader118{})
-		if dataLen < hdrSize {
-			return nil, fmt.Errorf(".gopclntab is too short (%v)", dataLen)
+		var hdr118 pclntabHeader118
+		if _, err = g.cache.ReadAt(pfunsafe.FromPointer(&hdr118), hdrSize); err != nil {
+			return nil, fmt.Errorf("failed to read .gopclntab header: %w", err)
 		}
-		hdr118 := (*pclntabHeader118)(unsafe.Pointer(&data[0]))
 		if dataLen < hdr118.funcnameOffset || dataLen < hdr118.cuOffset ||
 			dataLen < hdr118.filetabOffset || dataLen < hdr118.pctabOffset ||
 			dataLen < hdr118.pclnOffset {
@@ -469,11 +446,12 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 				hdr118.filetabOffset, hdr118.pctabOffset,
 				hdr118.pclnOffset)
 		}
-		g.funcnametab = data[hdr118.funcnameOffset:]
-		g.cutab = data[hdr118.cuOffset:]
-		g.filetab = data[hdr118.filetabOffset:]
-		g.pctab = data[hdr118.pctabOffset:]
-		g.functab = data[hdr118.pclnOffset:]
+		g.numFiles = hdr118.nfiles
+		g.funcnametab = hdr118.funcnameOffset
+		g.cutab = hdr118.cuOffset
+		g.filetab = hdr118.filetabOffset
+		g.pctab = hdr118.pctabOffset
+		g.functab = hdr118.pclnOffset
 		g.funcdata = g.functab
 		g.textStart = hdr118.textStart
 		if g.textStart == 0 {
@@ -494,98 +472,89 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.funcMapSize = 2 * 4
 		g.funSize = 4 + uint8(unsafe.Sizeof(pclntabFunc{}))
 	}
-	g.dataRef = ef.Take()
-	g.setDontNeed = ef.SetDontNeed
-
+	g.ef = ef.Take()
 	return g, nil
-}
-
-// SetDontNeed gives advice about further use of memory.
-func (g *Gopclntab) SetDontNeed() error {
-	g.setDontNeed()
-	return nil
 }
 
 // Close releases the pfelf Data reference taken.
 func (g *Gopclntab) Close() error {
-	return g.dataRef.Close()
+	return g.ef.Close()
 }
 
 // getFuncMapEntry returns the entry at 'index' from the gopclntab function lookup map.
-func (g *Gopclntab) getFuncMapEntry(index int) (pc, funcOff uintptr) {
+func (g *Gopclntab) getFuncMapEntry(index int) (pc uint64, funcOff int64) {
+	offs := g.functab + int64(index*int(g.funcMapSize))
+	data, err := g.funcMapCache.UnsafeReadAt(int(g.funcMapSize), offs)
+	if err != nil {
+		return 0, 0
+	}
 	if g.version >= go1_18 {
 		//nolint:lll
 		// See: https://github.com/golang/go/blob/6df0957060b1315db4fd6a359eefc3ee92fcc198/src/debug/gosym/pclntab.go#L401-L413
-		fmap := (*pclntabFuncMap118)(unsafe.Pointer(&g.functab[index*int(g.funcMapSize)]))
-		return g.textStart + uintptr(fmap.pc), uintptr(fmap.funcOff)
+		fmap := (*pclntabFuncMap118)(unsafe.Pointer(unsafe.SliceData(data)))
+		return g.textStart + uint64(fmap.pc), int64(fmap.funcOff)
 	} else {
-		fmap := (*pclntabFuncMap)(unsafe.Pointer(&g.functab[index*int(g.funcMapSize)]))
+		fmap := (*pclntabFuncMap)(unsafe.Pointer(unsafe.SliceData(data)))
 		return fmap.pc, fmap.funcOff
 	}
+	return 0, 0
 }
 
 // getFunc returns the gopclntab function data and its start address.
-func (g *Gopclntab) getFunc(funcOff uintptr) (uintptr, *pclntabFunc) {
-	// Get the function data
-	if uintptr(len(g.funcdata)) < funcOff+uintptr(g.funSize) {
-		return 0, nil
+func (g *Gopclntab) getFunc(funcOff int64) (pc uint64, fun pclntabFunc) {
+	data, err := g.cache.UnsafeReadAt(int(g.funSize), g.funcdata+funcOff)
+	if err != nil {
+		return 0, pclntabFunc{}
 	}
-	var pc uintptr
 	if g.version >= go1_18 {
-		pc = g.textStart + uintptr(*(*uint32)(unsafe.Pointer(&g.funcdata[funcOff])))
-		funcOff += 4
+		pc = g.textStart + uint64(binary.LittleEndian.Uint32(data))
+		data = data[4:]
 	} else {
-		pc = *(*uintptr)(unsafe.Pointer(&g.funcdata[funcOff]))
-		funcOff += uintptr(g.ptrSize)
+		pc = g.textStart + binary.LittleEndian.Uint64(data)
+		data = data[8:]
 	}
-	return pc, (*pclntabFunc)(unsafe.Pointer(&g.funcdata[funcOff]))
+	return pc, *(*pclntabFunc)(unsafe.Pointer(unsafe.SliceData(data)))
 }
 
 // getPcval returns the pcval table at given offset with 'startPc' as the pc start value.
 func (g *Gopclntab) getPcval(offs int32, startPc uint) pcval {
-	return newPcval(g.pctab[int(offs):], startPc, g.quantum)
+	return newPcval(&g.cache, int64(g.pctab)+int64(offs), startPc, g.quantum)
 }
 
 // mapPcval steps the given pcval table until matching PC is found and returns the value.
 func (g *Gopclntab) mapPcval(offs int32, startPc, pc uint) (int32, bool) {
 	p := g.getPcval(offs, startPc)
-	for pc >= p.pcEnd {
-		if ok := p.step(); !ok {
-			return 0, false
+	for ok := true; ok; ok = p.step() {
+		if p.pcEnd > pc {
+			return p.val, true
 		}
 	}
-	return p.val, true
+	return 0, false
 }
 
 // Symbolize returns the file, line and function information for given PC
-func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcName string) {
-	// Binary search for the matching go function maps entry. The search
-	// lambda makes 'sort.Search' return the first entry that is larger
-	// than the pc. Thus -1 is needed to get index for the first entry
-	// which is equal or less than pc. The gopclntab has an extra entry in
-	// the end to indicate the end of Go code, use that to determine
-	// if the pc is higher than any Go function address.
-	index := sort.Search(g.numFuncs+1, func(i int) bool {
+func (g *Gopclntab) Symbolize(pc uint64) (sourceFile libpf.String, line uint, funcName libpf.String) {
+	index := sort.Search(int(g.numFuncs), func(i int) bool {
 		funcPc, _ := g.getFuncMapEntry(i)
 		return funcPc > pc
 	}) - 1
-	if index >= g.numFuncs || index < 0 {
-		return "", 0, ""
+	if index < 0 || index >= g.numFuncs {
+		return libpf.NullString, 0, libpf.NullString
 	}
 
 	mapPc, funcOff := g.getFuncMapEntry(index)
 	funcPc, fun := g.getFunc(funcOff)
-	if fun == nil || mapPc != funcPc {
-		return "", 0, ""
+	if mapPc != funcPc {
+		return libpf.NullString, 0, libpf.NullString
 	}
-
-	funcName = getString(g.funcnametab, int(fun.nameOff))
+	funcName, _ = g.funcNameCache.InternStringAt(int64(g.funcnametab) + int64(fun.nameOff))
 	if fun.pcfileOff != 0 {
 		if fileIndex, ok := g.mapPcval(fun.pcfileOff, uint(funcPc), uint(pc)); ok {
 			if g.version >= go1_16 {
 				fileIndex += fun.npcData
 			}
-			sourceFile = getString(g.filetab, getInt32(g.cutab, 4*int(fileIndex)))
+			fileOffs := int64(g.cutabCache.Uint32At(g.cutab + 4*int64(fileIndex)))
+			sourceFile, _ = g.cache.InternStringAt(g.filetab + fileOffs)
 		}
 	}
 	if fun.pclnOff != 0 {
@@ -595,7 +564,7 @@ func (g *Gopclntab) Symbolize(pc uintptr) (sourceFile string, line uint, funcNam
 	return sourceFile, line, funcName
 }
 
-func findTextStart(ef *pfelf.File) (uintptr, error) {
+func findTextStart(ef *pfelf.File) (uint64, error) {
 	// Get textstart from moduledata
 	// Starting from Go 1.26, moduledata has its own `.go.module` section.
 	// Since this function is expected to be called only for Go 1.26+ binaries,
@@ -611,7 +580,7 @@ func findTextStart(ef *pfelf.File) (uintptr, error) {
 		return 0, fmt.Errorf("could not read .go.module section at offset %v: %w", textOffset, err)
 	}
 
-	return uintptr(binary.LittleEndian.Uint64(textBytes[:])), nil
+	return binary.LittleEndian.Uint64(textBytes[:]), nil
 }
 
 type strategy int
@@ -639,25 +608,42 @@ var noFPSourceSuffixes = []string{
 	"golang.org/x/crypto/chacha20poly1305/chacha20poly1305_amd64.go",
 }
 
-// getSourceFileStrategy categorizes sourceFile's unwinding strategy based on its name
-func getSourceFileStrategy(arch elf.Machine, sourceFile string, defaultStrategy strategy) strategy {
-	switch arch {
-	case elf.EM_X86_64:
-		// Most of the assembly code needs explicit SP delta as they do not
-		// create stack frame. Do not recover RBP as it is not modified.
-		if strings.HasSuffix(sourceFile, ".s") {
-			return strategyDeltasWithoutFrame
-		}
-		// Check for the Go source files needing SP delta unwinding to recover RBP
-		for _, suffix := range noFPSourceSuffixes {
-			if strings.HasSuffix(sourceFile, suffix) {
-				return strategyDeltasWithFrame
-			}
-		}
-		return defaultStrategy
-	default:
-		return defaultStrategy
+// Go uses frame-pointers by default since Go 1.7, but unfortunately
+// it is not necessarily available when in code from non-Golang source
+// files, such as the assembly, of the Go runtime.
+// Since Golang binaries are huge statically compiled executables and
+// would fill up our precious kernel delta maps fast, the strategy is to
+// create deltastack maps for non-Go source files only, and otherwise
+// cover the vast majority with "use frame pointer" stack delta.
+func getX86SourceFileStrategy(sourceFile string) strategy {
+	// Most of the assembly code needs explicit SP delta as they do not
+	// create stack frame. Do not recover RBP as it is not modified.
+	if strings.HasSuffix(sourceFile, ".s") {
+		return strategyDeltasWithoutFrame
 	}
+	// Check for the Go source files needing SP delta unwinding to recover RBP
+	for _, suffix := range noFPSourceSuffixes {
+		if strings.HasSuffix(sourceFile, suffix) {
+			return strategyDeltasWithFrame
+		}
+	}
+	return strategyUnknown
+}
+
+func resolveX86SourceFileStrategies(g *Gopclntab) map[uint32]strategy {
+	cache := make(map[uint32]strategy)
+	filetabCache := pfatbuf.Cache{}
+	filetabCache.InitName("go.filetab", g.cache.Inner())
+
+	offs := uint32(0)
+	for range g.numFiles {
+		sourceFile, _ := filetabCache.UnsafeStringAt(g.filetab+int64(offs), 256)
+		if s := getX86SourceFileStrategy(sourceFile); s != strategyUnknown {
+			cache[offs] = s
+		}
+		offs += uint32(len(sourceFile)) + 1
+	}
+	return cache
 }
 
 // parseX86pclntabFunc extracts interval information from x86_64 based pclntabFunc.
@@ -725,23 +711,17 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	}
 	defer g.Close()
 
-	// Go uses frame-pointers by default since Go 1.7, but unfortunately
-	// it is not necessarily available when in code from non-Golang source
-	// files, such as the assembly, of the Go runtime.
-	// Since Golang binaries are huge statically compiled executables and
-	// would fill up our precious kernel delta maps fast, the strategy is to
-	// create deltastack maps for non-Go source files only, and otherwise
-	// cover the vast majority with "use frame pointer" stack delta.
-	sourceStrategy := make(map[int]strategy)
-
 	// Get target machine architecture for the ELF file
 	arch := ee.file.Machine
 	defaultStrategy := strategyFramePointer
+	pcfileOffToIndex := make(map[int32]uint32)
+	var fileOffsToStrategy map[uint32]strategy
 	var parsePclntab func(deltas *sdtypes.StackDeltaArray, p pcval, s strategy) error
 
 	switch arch {
 	case elf.EM_X86_64:
 		parsePclntab = parseX86pclntabFunc
+		fileOffsToStrategy = resolveX86SourceFileStrategies(g)
 	case elf.EM_AARCH64:
 		parsePclntab = parseArm64pclntabFunc
 		// Go 1.20 and earlier did not maintain frame pointers properly on arm64.
@@ -764,16 +744,18 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	}
 
 	// Iterate the golang PC to function lookup table (sorted by PC)
+	pcfileOff := int32(0)
+	start, _ := g.getFuncMapEntry(0)
 	for i := 0; i < g.numFuncs; i++ {
 		mapPc, funcOff := g.getFuncMapEntry(i)
 		funcPc, fun := g.getFunc(funcOff)
-		if fun == nil || mapPc != funcPc {
+		if mapPc != funcPc {
 			return fmt.Errorf(".gopclntab func %v descriptor is invalid (pc %x/%x)",
 				i, mapPc, funcPc)
 		}
 
 		// First, check for functions with special handling.
-		funcName := getString(g.funcnametab, int(fun.nameOff))
+		funcName, _ := g.funcNameCache.UnsafeStringAt(g.funcnametab+int64(fun.nameOff), 32)
 		if info, found := goFunctionsStopDelta[funcName]; found {
 			ee.deltas.Add(sdtypes.StackDelta{
 				Address: uint64(funcPc),
@@ -785,19 +767,25 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		// Use source file to determine strategy if possible, and default
 		// to using frame pointers in the unlikely case of no file info
 		fileStrategy := defaultStrategy
-		if fun.pcfileOff != 0 {
-			p := g.getPcval(fun.pcfileOff, uint(funcPc))
-			fileIndex := int(p.val)
-			if g.version >= go1_16 {
-				fileIndex += int(fun.npcData)
+		if fileOffsToStrategy != nil && fun.pcfileOff != 0 {
+			fileIndex, ok := pcfileOffToIndex[fun.pcfileOff]
+			if !ok {
+				p := g.getPcval(fun.pcfileOff, uint(funcPc))
+				fileIndex = uint32(p.val)
+				if fun.pcfileOff < pcfileOff {
+					// Backreference, likely to happen again, so memoize it
+					pcfileOffToIndex[fun.pcfileOff] = fileIndex
+				} else {
+					pcfileOff = fun.pcfileOff
+				}
 			}
 
-			// Determine strategy
-			fileStrategy = sourceStrategy[fileIndex]
-			if fileStrategy == strategyUnknown {
-				sourceFile := getString(g.filetab, getInt32(g.cutab, 4*fileIndex))
-				fileStrategy = getSourceFileStrategy(arch, sourceFile, defaultStrategy)
-				sourceStrategy[fileIndex] = fileStrategy
+			if g.version >= go1_16 {
+				fileIndex += uint32(fun.npcData)
+			}
+			fileOffs := g.cutabCache.Uint32At(g.cutab + int64(4*fileIndex))
+			if s, ok := fileOffsToStrategy[fileOffs]; ok {
+				fileStrategy = s
 			}
 		}
 
@@ -816,10 +804,6 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		}
 
 		// Generate stack deltas as the information is available
-		if len(g.pctab) < int(fun.pcspOff) {
-			return fmt.Errorf(".gopclntab func %v pcscOff (%d) is invalid",
-				i, fun.pcspOff)
-		}
 		p := g.getPcval(fun.pcspOff, uint(funcPc))
 		if err := parsePclntab(ee.deltas, p, fileStrategy); err != nil {
 			return err
@@ -827,9 +811,8 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	}
 
 	// Filter out .gopclntab info from other sources
-	start, _ := g.getFuncMapEntry(0)
-	end, _ := g.getFuncMapEntry(g.numFuncs)
-	ee.hooks.golangHook(start, end)
+	end, _ := g.getFuncMapEntry(int(g.numFuncs))
+	ee.hooks.golangHook(uint64(start), uint64(end))
 
 	// Add end of code indicator
 	ee.deltas.Add(sdtypes.StackDelta{

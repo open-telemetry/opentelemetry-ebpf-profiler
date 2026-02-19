@@ -2122,7 +2122,7 @@ func locateSnapshotArea(ef *pfelf.File, syms relevantSymbols) util.Range {
 		return util.Range{}
 	}
 
-	for prevEnd := uintptr(addr); prevEnd-uintptr(addr) < 1024; ndx++ {
+	for prevEnd := uint64(addr); prevEnd-uint64(addr) < 1024; ndx++ {
 		fde, err := eft.DecodeIndex(ndx)
 		if err != nil {
 			return util.Range{}

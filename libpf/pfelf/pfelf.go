@@ -133,11 +133,8 @@ func getNoteDescBytes(sectionBytes []byte, name string, noteType uint32) (
 func getNoteHexString(sectionBytes []byte, name string, noteType uint32) (
 	noteHexString string, found bool, err error) {
 	noteBytes, found, err := getNoteDescBytes(sectionBytes, name, noteType)
-	if err != nil {
+	if err != nil || !found {
 		return "", false, err
-	}
-	if !found {
-		return "", false, nil
 	}
 	return hex.EncodeToString(noteBytes), true, nil
 }
@@ -145,11 +142,8 @@ func getNoteHexString(sectionBytes []byte, name string, noteType uint32) (
 func getNoteString(sectionBytes []byte, name string, noteType uint32) (
 	noteString string, found bool, err error) {
 	noteBytes, found, err := getNoteDescBytes(sectionBytes, name, noteType)
-	if err != nil {
+	if err != nil || !found {
 		return "", false, err
-	}
-	if !found {
-		return "", false, nil
 	}
 	return string(noteBytes), true, nil
 }
