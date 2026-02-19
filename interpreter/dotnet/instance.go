@@ -622,6 +622,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			MappingFile: info.mapping.Value().File,
 			Process:     pr,
 			Mapping:     m,
+			IsElf:       false,
 		})
 
 		dotnetMappings = append(dotnetMappings, dotnetMapping{
