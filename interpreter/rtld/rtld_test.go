@@ -32,8 +32,13 @@ func test(t *testing.T) {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	// Create a context for the tracer
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Create a context for the tracer. We use WithCancel (not WithTimeout)
+	// because under QEMU emulation the tracer startup (eBPF program loading
+	// and verification) can take 30+ seconds, which would cause a timeout
+	// context to expire before ForceProcessPID is called, killing the PID
+	// event processing goroutines. The require.Eventually below handles the
+	// test-level timeout instead.
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// Start the tracer with all tracers enabled
@@ -43,9 +48,7 @@ func test(t *testing.T) {
 		false)
 	defer trc.Close()
 
-	trc.StartPIDEventProcessor(ctx)
-
-	// tickle tihs process to speed things up
+	// tickle this process to speed things up
 	trc.ForceProcessPID(libpf.PID(uint32(os.Getpid())))
 
 	// Consume traces to prevent blocking
