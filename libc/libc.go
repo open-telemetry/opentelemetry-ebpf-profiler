@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"regexp"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
-
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -31,8 +29,8 @@ func (l LibcInfo) IsEqual(other LibcInfo) bool {
 	return l.TSDInfo == other.TSDInfo && l.DTVInfo == other.DTVInfo
 }
 
-// Merge merges another LibcInfo into this one.
-// Non-empty values from other override values in the receiver.
+// Merge fills in empty fields of the receiver with corresponding values from other.
+// Fields already populated in the receiver are not overwritten.
 func (l *LibcInfo) Merge(other LibcInfo) {
 	// If other has TSDInfo and this instance does not, take it
 	if l.TSDInfo == (TSDInfo{}) {
@@ -162,10 +160,8 @@ func extractDTVInfo(ef *pfelf.File) (DTVInfo, error) {
 	var info DTVInfo
 	_, code, err := ef.SymbolData("__tls_get_addr", 2048)
 	if err != nil {
-		// Only error out reading DTV if we have the symbol, but fail to parse it
-		// if the symbol is not exported, failing to read it is not a critical error
-		// and empty DTV introspection data is returned
-		log.Warnf("unable to read '__tls_get_addr': %s, libc DTV introspection data is unavailable", err)
+		// If the symbol is not exported, this is not a critical error.
+		// Callers can check HasDTVInfo() to determine if DTV data is available.
 		return info, nil
 	}
 

@@ -120,7 +120,7 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 
 	if result.Match(expected) {
 		return DTVInfo{
-			Offset:     int16(dtvOffset.CapturedValue()),
+			Offset:     int16(dtvOffset.CapturedValue() & 0xFFFF),
 			Multiplier: uint8(entryWidth.CapturedValue()),
 			Indirect:   0,
 		}, nil
@@ -143,7 +143,7 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 
 	if result.Match(expected) {
 		return DTVInfo{
-			Offset:     int16(dtvOffset.CapturedValue()),
+			Offset:     int16(dtvOffset.CapturedValue() & 0xFFFF),
 			Multiplier: uint8(entryWidth.CapturedValue()),
 			Indirect:   1,
 		}, nil
@@ -162,7 +162,7 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 
 	if result.Match(expected) {
 		return DTVInfo{
-			Offset:     int16(dtvOffset.CapturedValue()),
+			Offset:     int16(dtvOffset.CapturedValue() & 0xFFFF),
 			Multiplier: uint8(entryWidth.CapturedValue()),
 			Indirect:   1,
 		}, nil
@@ -182,7 +182,7 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 
 	if result.Match(expected) {
 		return DTVInfo{
-			Offset:     int16(dtvOffset.CapturedValue()),
+			Offset:     int16(dtvOffset.CapturedValue() & 0xFFFF),
 			Multiplier: uint8(entryWidth.CapturedValue()),
 			Indirect:   1,
 		}, nil
