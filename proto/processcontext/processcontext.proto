@@ -1,0 +1,55 @@
+// Copyright 2019, OpenTelemetry Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+// TODO: Is this in the right namespace? Since this is not only for profiling,
+// `opentelemetry.proto.profiles` doesn't seem the right place, but perhaps common ain't
+// it either? Feedback very welcome!
+package opentelemetry.proto.common.v1;
+
+import "common.proto";
+import "resource.proto";
+
+option csharp_namespace = "OpenTelemetry.Proto.Common.V1";
+option java_multiple_files = true;
+option java_package = "io.opentelemetry.proto.common.v1";
+option java_outer_classname = "ProcessContextProto";
+option go_package = "go.opentelemetry.io/proto/otlp/common/v1";
+
+// ProcessContext represents the payload for the process context sharing mechanism.
+//
+// This message is designed to be published by OpenTelemetry SDKs via a memory-mapped
+// region, allowing external readers (such as the OpenTelemetry eBPF Profiler) to
+// discover and read resource attributes from instrumented processes without requiring
+// direct integration or process activity.
+message ProcessContext {
+  // The resource attributes describing this process.
+  //
+  // Attribute keys MUST be unique (it is not allowed to have more than one
+  // attribute with the same key). The behavior of software that receives
+  // duplicated keys can be unpredictable.
+  //
+  // Attributes SHOULD follow OpenTelemetry semantic conventions where applicable.
+  // See: https://opentelemetry.io/docs/specs/semconv/
+  opentelemetry.proto.resource.v1.Resource resource = 1;
+
+  // Additional attributes to share with external readers that are not part of
+  // the standard Resource. [Optional]
+  //
+  // This field allows publishers to include supplementary key-value pairs that
+  // may be useful for external readers but are not part of the SDK's configured
+  // Resource.
+  repeated opentelemetry.proto.common.v1.KeyValue extra_attributes = 2;
+}

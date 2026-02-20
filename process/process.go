@@ -275,6 +275,11 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 				inode = vdsoInode
 			} else if fields[5] == "" {
 				// This is an anonymous mapping, keep it
+			} else if fields[5] == AnonymousContextMappingName {
+				// Keep process context mappings based on named anonymous mappings.
+				// Note that context mappings based on memfd have a non-zero inode
+				// and are already kept by the other branch.
+				path = libpf.Intern(fields[5])
 			} else {
 				// Ignore other mappings that are invalid, non-existent or are special pseudo-files
 				continue

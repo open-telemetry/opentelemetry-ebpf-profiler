@@ -419,6 +419,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	}
 	// Check if process meta needs an update
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
+	oldProcessContextInfo := info.meta.ProcessContextInfo
 
 	// Get existing info
 	oldMappings := info.mappings
@@ -436,6 +437,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		mpRemove[uint64(m.Vaddr)] = m
 	}
 
+	var processContextInfo process.ProcessContextInfo
 	// Generate the list of new processmanager mappings and interpreters.
 	// Reuse existing mappings if possible.
 	mappings := make([]Mapping, 0, len(processMappings))
@@ -444,6 +446,13 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	for idx := range processMappings {
 		m := &processMappings[idx]
 		if !m.IsExecutable() || m.IsAnonymous() {
+			if process.IsProcessContextMapping(m) {
+				processContextInfo = readProcessContext(m, pr, oldProcessContextInfo)
+				// Even if process context is not found, it might be published in the future.
+				// For now, we rely on a new call to synchronizeMappings to pick it up.
+				// TODO: Add some kind of polling mechanism or a hook on prctl to be notified
+				// when the process context is published.
+			}
 			continue
 		}
 
@@ -512,6 +521,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		if updateProcessMeta {
 			info.meta = meta
 		}
+		info.meta.ProcessContextInfo = processContextInfo
 	}
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()
@@ -768,4 +778,19 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		delete(pm.exitEvents, pid)
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
+}
+
+func readProcessContext(mapping *process.Mapping, pr process.Process, oldProcessContextInfo process.ProcessContextInfo) process.ProcessContextInfo {
+	ctxInfo, err := process.ReadProcessContext(mapping, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs)
+	if err == nil {
+		return ctxInfo
+	}
+	if errors.Is(err, process.ErrNoUpdate) {
+		return oldProcessContextInfo
+	}
+	// If the process context cannot be read because of a concurrent update,
+	// prefer to drop the current (stale) process context and rely on a new call to
+	// synchronizeMappings to pick it up.
+	log.Debugf("Failed to read ProcessContext for PID %d: %v", pr.PID(), err)
+	return process.ProcessContextInfo{}
 }
