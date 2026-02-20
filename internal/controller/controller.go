@@ -181,7 +181,7 @@ func startTraceHandling(ctx context.Context, rep reporter.TraceReporter,
 	}
 
 	_, err := tracehandler.Start(ctx, rep, trc.TraceProcessor(),
-		traceCh, intervals, cacheSize)
+		traceCh, intervals, cacheSize, nil)
 	return err
 }
 

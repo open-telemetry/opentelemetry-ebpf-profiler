@@ -34,6 +34,12 @@ type Times interface {
 // symbolization efforts.
 var traceCacheLifetime = 5 * time.Minute
 
+// TraceInterceptor is called after ConvertTrace with the symbolized trace,
+// metadata, and original BPF trace. Return true to consume the trace
+// (skip caching and reporting), false to proceed normally.
+type TraceInterceptor func(trace *libpf.Trace, meta *samples.TraceEventMeta,
+	rawTrace *host.Trace) bool
+
 // TraceProcessor is an interface used by traceHandler to convert traces
 // from a form received from eBPF to the form we wish to dispatch to the
 // collection agent.
@@ -72,12 +78,17 @@ type traceHandler struct {
 	// reporter instance to use to send out traces.
 	reporter reporter.TraceReporter
 
+	// interceptor, if set, is called after ConvertTrace on cache-miss.
+	// If it returns true the trace is consumed and not cached or reported.
+	interceptor TraceInterceptor
+
 	times Times
 }
 
 // newTraceHandler creates a new traceHandler
 func newTraceHandler(ctx context.Context, rep reporter.TraceReporter,
-	traceProcessor TraceProcessor, intervals Times, cacheSize uint32) (*traceHandler, error) {
+	traceProcessor TraceProcessor, intervals Times, cacheSize uint32,
+	interceptor TraceInterceptor) (*traceHandler, error) {
 	traceCache, err := lru.NewSynced[host.TraceHash, libpf.Trace](
 		cacheSize, func(k host.TraceHash) uint32 { return uint32(k) })
 	if err != nil {
@@ -111,6 +122,7 @@ func newTraceHandler(ctx context.Context, rep reporter.TraceReporter,
 		traceProcessor: traceProcessor,
 		traceCache:     traceCache,
 		reporter:       rep,
+		interceptor:    interceptor,
 		times:          intervals,
 	}, nil
 }
@@ -150,6 +162,13 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		panic(err)
 	}
 	log.Debugf("Trace hash remap 0x%x -> 0x%x", bpfTrace.Hash, umTrace.Hash)
+
+	// If an interceptor is set and consumes the trace, skip caching and reporting.
+	// CUDA traces are always intercepted here and never cached.
+	if m.interceptor != nil && m.interceptor(umTrace, meta, bpfTrace) {
+		return
+	}
+
 	m.traceCache.Add(bpfTrace.Hash, *umTrace)
 
 	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
@@ -164,9 +183,10 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 // to exit after a cancellation through the context.
 func Start(ctx context.Context, rep reporter.TraceReporter, traceProcessor TraceProcessor,
 	traceInChan <-chan *host.Trace, intervals Times, cacheSize uint32,
+	interceptor TraceInterceptor,
 ) (workerExited <-chan libpf.Void, err error) {
 	handler, err :=
-		newTraceHandler(ctx, rep, traceProcessor, intervals, cacheSize)
+		newTraceHandler(ctx, rep, traceProcessor, intervals, cacheSize, interceptor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create traceHandler: %v", err)
 	}
