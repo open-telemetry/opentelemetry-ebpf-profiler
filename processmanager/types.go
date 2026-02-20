@@ -18,6 +18,7 @@ import (
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -39,6 +40,12 @@ type frameCacheKey struct {
 	// data is the frame data: frame header and the two first variable fields
 	data [3]uint64
 }
+
+// TraceInterceptor is called after ConvertTrace with the symbolized trace,
+// metadata, and original BPF trace. Return true to consume the trace
+// (skip caching and reporting), false to proceed normally.
+type TraceInterceptor func(trace *libpf.Trace, meta *samples.TraceEventMeta,
+	rawTrace *libpf.EbpfTrace) bool
 
 // ProcessManager is responsible for managing the events happening throughout the lifespan of a
 // process.
@@ -97,6 +104,10 @@ type ProcessManager struct {
 
 	// traceReporter is the interface to report traces
 	traceReporter reporter.TraceReporter
+
+	// interceptor, if set, is called after ConvertTrace on cache-miss.
+	// If it returns true the trace is consumed and not cached or reported.
+	interceptor TraceInterceptor
 
 	// exeReporter is the interface to report executables
 	exeReporter reporter.ExecutableReporter

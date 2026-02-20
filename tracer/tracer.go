@@ -249,7 +249,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
 		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
-		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
+		cfg.FilterErrorFrames, cfg.IncludeEnvVars, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}

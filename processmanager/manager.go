@@ -62,7 +62,8 @@ var (
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
 	executableUnloadDelay time.Duration, ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
 	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
-	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
+	filterErrorFrames bool, includeEnvVars libpf.Set[string],
+	interceptor TraceInterceptor) (*ProcessManager, error) {
 	if exeReporter == nil {
 		exeReporter = executableReporterStub{}
 	}
@@ -105,6 +106,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		frameCache:               frameCache,
 		traceReporter:            traceReporter,
 		exeReporter:              exeReporter,
+		interceptor:              interceptor,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        filterErrorFrames,
 		includeEnvVars:           includeEnvVars,
@@ -378,6 +380,11 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	pm.mu.RUnlock()
 
 	trace.Hash = traceutil.HashTrace(trace)
+
+	if pm.interceptor != nil && pm.interceptor(trace, meta, bpfTrace) {
+		return
+	}
+
 	meta.APMServiceName = pm.maybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
 
 	if err := pm.traceReporter.ReportTraceEvent(trace, meta); err != nil {
