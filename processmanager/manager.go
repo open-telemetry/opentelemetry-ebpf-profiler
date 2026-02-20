@@ -286,6 +286,10 @@ func (pm *ProcessManager) ConvertTrace(trace *host.Trace) (newTrace *libpf.Trace
 
 			newTrace.AppendFrameFull(frame.Type, fileID,
 				relativeRIP, mappingStart, mappingEnd, fileOffset)
+		case libpf.CUDA:
+			// CUDA kernel frames are symbolized later when GPU timing arrives.
+			// Preserve AddressOrLineno which encodes correlation ID | (CBID << 32).
+			newTrace.AppendFrame(frame.Type, libpf.UnsymbolizedFileID, frame.Lineno)
 		default:
 			err := pm.symbolizeFrame(i, trace, &newTrace.Frames)
 			if err != nil {

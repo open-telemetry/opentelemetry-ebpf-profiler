@@ -11,40 +11,20 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/gpu"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
+	"go.opentelemetry.io/ebpf-profiler/tracehandler"
 )
 
-// Start starts two goroutines that filter traces coming from ebpf and match them up with timing
-// information coming from the parcagpu usdt probes.
-func Start(ctx context.Context, traceInCh <-chan *host.Trace,
-	tr *tracer.Tracer) chan *host.Trace {
+// Start starts a goroutine that reads GPU timing events and returns a TraceInterceptor
+// that diverts CUDA traces (post-symbolization) into the GPU fixer.
+// Completed CUDA traces are reported directly via rep.
+func Start(ctx context.Context, tr *tracer.Tracer,
+	rep reporter.TraceReporter) tracehandler.TraceInterceptor {
 	gpuTimingEvents := tr.GetEbpfMaps()["cuda_timing_events"]
-	traceOutChan := make(chan *host.Trace, 1024)
-
-	// Read traces coming from ebpf and send normal traces through
-	go func() {
-		timer := time.NewTicker(1 * time.Second)
-		defer timer.Stop()
-
-		for {
-			select {
-			case <-timer.C:
-				// Periodically clean up all GPU trace fixers and report metrics
-				gpu.MaybeClearAll()
-			case <-ctx.Done():
-				return
-			case t := <-traceInCh:
-				if t != nil && t.Origin == support.TraceOriginCuda {
-					if err := gpu.AddTrace(t, traceOutChan); err != nil {
-						log.Errorf("[parcagpu] failed to add trace for PID %d: %v", t.PID, err)
-					}
-				} else {
-					traceOutChan <- t
-				}
-			}
-		}
-	}()
 
 	// Per-CPU buffer size for timing events. CuptiTimingEvent is ~300 bytes,
 	// so 1MB allows ~3400 events per CPU before overflow.
@@ -55,9 +35,14 @@ func Start(ctx context.Context, traceInCh <-chan *host.Trace,
 
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
 
-	// processBatch processes a batch of timing events in parallel.
+	// processBatch processes a batch of timing events and reports completed traces.
 	processBatch := func(batch []gpu.CuptiTimingEvent) {
-		gpu.AddTimes(batch, traceOutChan)
+		outputs := gpu.AddTimes(batch)
+		for i := range outputs {
+			if err := rep.ReportTraceEvent(outputs[i].Trace, outputs[i].Meta); err != nil {
+				log.Errorf("[parcagpu] failed to report CUDA trace: %v", err)
+			}
+		}
 	}
 
 	const batchSize = 100
@@ -67,6 +52,10 @@ func Start(ctx context.Context, traceInCh <-chan *host.Trace,
 
 		logTicker := time.NewTicker(5 * time.Second)
 		defer logTicker.Stop()
+
+		clearTicker := time.NewTicker(1 * time.Second)
+		defer clearTicker.Stop()
+
 		for {
 			select {
 			case <-logTicker.C:
@@ -77,6 +66,9 @@ func Start(ctx context.Context, traceInCh <-chan *host.Trace,
 					log.Warnf("[cuda] timing event reader: lost=%d readErrors=%d noData=%d",
 						lost, readErr, noData)
 				}
+			case <-clearTicker.C:
+				// Periodically clean up all GPU trace fixers and report metrics
+				gpu.MaybeClearAll()
 			case <-ctx.Done():
 				return
 			default:
@@ -103,5 +95,44 @@ func Start(ctx context.Context, traceInCh <-chan *host.Trace,
 		}
 	}()
 
-	return traceOutChan
+	// Return the interceptor function that diverts CUDA traces post-symbolization.
+	return func(trace *libpf.Trace, meta *samples.TraceEventMeta,
+		rawTrace *host.Trace) bool {
+		if meta.Origin != support.TraceOriginCuda {
+			return false
+		}
+
+		// Find the CUDA kernel frame in the symbolized trace
+		cudaFrameIdx := -1
+		for i, uniqueFrame := range trace.Frames {
+			if uniqueFrame.Value().Type == libpf.CUDAKernelFrame {
+				cudaFrameIdx = i
+				break
+			}
+		}
+		if cudaFrameIdx < 0 {
+			log.Errorf("[parcagpu] CUDA trace has no CUDAKernelFrame")
+			return false
+		}
+
+		frame := trace.Frames[cudaFrameIdx].Value()
+		correlationID := uint32(frame.AddressOrLineno)
+		cbid := int32(frame.AddressOrLineno >> 32)
+
+		st := &gpu.SymbolizedCudaTrace{
+			Trace:         trace,
+			Meta:          meta,
+			CorrelationID: correlationID,
+			CBID:          cbid,
+		}
+
+		outputs := gpu.AddTrace(st)
+		for i := range outputs {
+			if err := rep.ReportTraceEvent(outputs[i].Trace, outputs[i].Meta); err != nil {
+				log.Errorf("[parcagpu] failed to report CUDA trace: %v", err)
+			}
+		}
+
+		return true // consumed
+	}
 }
