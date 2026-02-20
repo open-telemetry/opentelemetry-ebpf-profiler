@@ -363,8 +363,8 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
   *stop              = false;
 
   u32 unwindInfo = 0;
-  int addrDiff = 0;
-  u64 cfa      = 0;
+  int addrDiff   = 0;
+  u64 cfa        = 0;
 
   // The relevant executable is compiled with frame pointer omission, so
   // stack deltas need to be retrieved from the relevant map.
@@ -467,7 +467,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct PerCPURecord *record, bool 
 
   u32 unwindInfo = 0;
   int addrDiff   = 0;
-  u64 cfa = 0;
+  u64 cfa        = 0;
 
   // The relevant executable is compiled with frame pointer omission, so
   // stack deltas need to be retrieved from the relevant map.
