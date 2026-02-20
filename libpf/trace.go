@@ -163,7 +163,3 @@ func (f EbpfFrame) NumVariables() uint8 {
 func (f EbpfFrame) Variable(ndx int) uint64 {
 	return f[ndx+1]
 }
-
-func (f EbpfFrame) SetVariable(ndx int, val uint64) {
-	f[ndx+1] = val
-}
