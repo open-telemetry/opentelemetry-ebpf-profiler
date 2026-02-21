@@ -44,6 +44,8 @@ require (
 	google.golang.org/grpc v1.79.1
 )
 
+replace github.com/elastic/go-perf => github.com/bobrik/go-perf v0.0.0-20260220212220-c450b7aad367
+
 require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.4 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.9 // indirect
