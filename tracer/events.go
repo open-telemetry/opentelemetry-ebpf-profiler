@@ -77,9 +77,6 @@ func (t *Tracer) triggerReportEvent(data []byte) {
 	switch event.Type {
 	case support.EventTypeGenericPID:
 		t.handleGenericPID()
-	case support.EventTypeReloadKallsyms:
-		t.kernelSymbolizer.Reload()
-		t.enableEvent(support.EventTypeReloadKallsyms)
 	}
 }
 
