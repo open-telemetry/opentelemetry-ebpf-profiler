@@ -941,8 +941,7 @@ typedef struct Event {
 } Event;
 
 // Event types that notifications are sent for through event_send_trigger.
-#define EVENT_TYPE_GENERIC_PID     1
-#define EVENT_TYPE_RELOAD_KALLSYMS 2
+#define EVENT_TYPE_GENERIC_PID 1
 
 // PIDPage represents the key of the eBPF map pid_page_to_mapping_info.
 typedef struct PIDPage {

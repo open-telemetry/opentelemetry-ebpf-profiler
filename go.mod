@@ -16,7 +16,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.0
 	github.com/cilium/ebpf v0.20.0
 	github.com/elastic/go-freelru v0.16.0
-	github.com/elastic/go-perf v0.0.0-20241029065020-30bec95324b8
+	github.com/elastic/go-perf v0.0.0-20260224073651-af0ee0c731b7
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.18.4
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d

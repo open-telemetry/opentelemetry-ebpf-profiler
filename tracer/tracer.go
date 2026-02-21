@@ -87,6 +87,9 @@ type Tracer struct {
 	// hooks holds references to loaded eBPF hooks.
 	hooks map[hookPoint]link.Link
 
+	// onlineCPUs is the list on online CPUs at the time of tracer creation
+	onlineCPUs []int
+
 	// processManager keeps track of loading, unloading and organization of information
 	// that is required to unwind processes in the kernel. This includes maintaining the
 	// associated eBPF maps.
@@ -244,6 +247,11 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
 
+	onlineCPUs, err := getOnlineCPUIDs()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get online CPUs: %v", err)
+	}
+
 	perfEventList := []*perf.Event{}
 
 	tracer := &Tracer{
@@ -255,6 +263,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		ebpfMaps:               ebpfMaps,
 		ebpfProgs:              ebpfProgs,
 		hooks:                  make(map[hookPoint]link.Link),
+		onlineCPUs:             onlineCPUs,
 		intervals:              cfg.Intervals,
 		hasBatchOperations:     hasBatchOperations,
 		perfEntrypoints:        xsync.NewRWMutex(perfEventList),
@@ -470,10 +479,6 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		}
 	}
 
-	if err = loadKallsymsTrigger(coll, ebpfProgs, cfg.BPFVerifierLogLevel); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to load kallsym eBPF program: %v", err)
-	}
-
 	if err = removeTemporaryMaps(ebpfMaps); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to remove temporary maps: %v", err)
 	}
@@ -586,27 +591,6 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			return fmt.Errorf("failed to load %s: %v", mapName, err)
 		}
 		ebpfMaps[mapName] = ebpfMap
-	}
-
-	return nil
-}
-
-// loadKallsymsTrigger loads the eBPF program that triggers kallsym updates.
-func loadKallsymsTrigger(coll *cebpf.CollectionSpec,
-	ebpfProgs map[string]*cebpf.Program, bpfVerifierLogLevel uint32) error {
-	programOptions := cebpf.ProgramOptions{
-		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
-	}
-
-	kallsymsTriggerProg := "kprobe__kallsyms"
-	progSpec, ok := coll.Programs[kallsymsTriggerProg]
-	if !ok {
-		return fmt.Errorf("program %s does not exist", kallsymsTriggerProg)
-	}
-
-	if err := loadProgram(ebpfProgs, nil, 0, progSpec,
-		programOptions, true); err != nil {
-		return err
 	}
 
 	return nil
@@ -1071,7 +1055,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
 // maps for tracepoints, new traces, trace count updates and unknown PCs.
 func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libpf.EbpfTrace) error {
-	if err := t.kernelSymbolizer.StartMonitor(ctx); err != nil {
+	if err := t.kernelSymbolizer.StartMonitor(ctx, t.onlineCPUs); err != nil {
 		log.Warnf("Failed to start kallsyms monitor: %v", err)
 	}
 	eventMetricCollector := t.startEventMonitor(ctx)
@@ -1110,33 +1094,6 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	return nil
 }
 
-func (t *Tracer) attachToKallsymsUpdates() error {
-	prog, ok := t.ebpfProgs["kprobe__kallsyms"]
-	if !ok {
-		return fmt.Errorf("kprobe__kallsyms is not available")
-	}
-
-	kallsymsAttachPoint := "bpf_ksym_add"
-	kmod, err := t.kernelSymbolizer.GetModuleByName(kallsyms.Kernel)
-	if err != nil {
-		return err
-	}
-
-	if _, err := kmod.LookupSymbol(kallsymsAttachPoint); err != nil {
-		log.Infof("Monitoring kallsyms is supported only for Linux kernel 5.8 or greater: %s: %v",
-			kallsymsAttachPoint, err)
-		return nil
-	}
-
-	hook, err := link.Kprobe(kallsymsAttachPoint, prog, nil)
-	if err != nil {
-		return fmt.Errorf("failed opening kprobe for kallsyms trigger: %s", err)
-	}
-	t.hooks[hookPoint{group: "kprobe", name: kallsymsAttachPoint}] = hook
-
-	return nil
-}
-
 // terminatePerfEvents disables perf events and closes their file descriptor.
 func terminatePerfEvents(events []*perf.Event) {
 	for _, event := range events {
@@ -1164,14 +1121,9 @@ func (t *Tracer) AttachTracer() error {
 		return fmt.Errorf("failed to configure software perf event: %v", err)
 	}
 
-	onlineCPUIDs, err := getOnlineCPUIDs()
-	if err != nil {
-		return fmt.Errorf("failed to get online CPUs: %v", err)
-	}
-
 	events := t.perfEntrypoints.WLock()
 	defer t.perfEntrypoints.WUnlock(&events)
-	for _, id := range onlineCPUIDs {
+	for _, id := range t.onlineCPUs {
 		perfEvent, err := perf.Open(perfAttribute, perf.AllThreads, id, nil)
 		if err != nil {
 			terminatePerfEvents(*events)
@@ -1182,11 +1134,6 @@ func (t *Tracer) AttachTracer() error {
 			return fmt.Errorf("failed to attach eBPF program to perf event: %v", err)
 		}
 		*events = append(*events, perfEvent)
-	}
-
-	if err = t.attachToKallsymsUpdates(); err != nil {
-		terminatePerfEvents(*events)
-		return err
 	}
 
 	return nil

@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"golang.org/x/sys/unix"
 
+	"github.com/elastic/go-perf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -103,6 +105,154 @@ ffffffffc13fcb20 t init_xfs_fs	[xfs]`))
 
 	assertSymbol(t, s, 0xffffffffb5000470, "vmlinux", "startup_64_setup_gdt_idt", 0)
 	assertSymbol(t, s, 0xffffffffc13cc610+1, "xfs", "perf_trace_xfs_attr_list_class", 1)
+}
+
+func TestBPFUpdates(t *testing.T) {
+	s := &Symbolizer{}
+
+	err := s.updateSymbolsFrom(strings.NewReader(`ffffffe4f3395268 t pci_host_common_probe        [pci_host_common]
+ffffffc080f26228 t bpf_prog_00354c172d366337_sd_devices [bpf]
+ffffffc080f26430 t bpf_prog_772db7720b2728e9_sd_fw_egress       [bpf]
+ffffffc080f264d8 t bpf_prog_772db7720b2728e9_sd_fw_ingress      [bpf]
+ffffffc080f28490 t bpf_prog_56551fa66be1356a_sd_devices [bpf]
+ffffffc080f2867c t bpf_prog_772db7720b2728e9_sd_fw_egress       [bpf]
+ffffffc080f2871c t bpf_prog_772db7720b2728e9_sd_fw_ingress      [bpf]
+ffffffc080f2da64 t bpf_prog_00354c172d366337_sd_devices [bpf]
+ffffffc080f304a0 t bpf_prog_5be112cdf63b0d8c_sysctl_monitor     [bpf]
+ffffffc080f3089c t bpf_prog_292e0637857c1257_cut_last   [bpf]
+ffffffc080f3096c t bpf_prog_a97c143260cd9940_sd_devices [bpf]
+ffffffc080f32f4c t bpf_prog_79c5319176ee7ce5_sd_devices [bpf]
+ffffffc080f331e4 t bpf_prog_772db7720b2728e9_sd_fw_egress       [bpf]
+ffffffc080f33288 t bpf_prog_772db7720b2728e9_sd_fw_ingress      [bpf]
+ffffffc080f35f1c t bpf_prog_461f9f5162fd8042_sd_devices [bpf]
+ffffffc080f3629c t bpf_prog_b8f4fb5f08605bc5    [bpf]`))
+	require.NoError(t, err)
+
+	// adding a symbol at the end
+	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+		Addr: 0xffffffc080f38288,
+		Name: "bpf_prog_05cbe5ca7b74dd09_sys_enter",
+	})
+	require.NoError(t, err)
+
+	mod, err := s.GetModuleByName("bpf")
+	require.NoError(t, err)
+
+	// remember how long the names were (they should not grow due to reuse)
+	max := len(mod.names)
+
+	// exact module match
+	mod, err = s.GetModuleByAddress(0xffffffc080f38288)
+	require.NoError(t, err)
+	assert.Equal(t, "bpf", mod.Name())
+
+	// just above module match
+	mod, err = s.GetModuleByAddress(0xffffffc080f3828c)
+	require.NoError(t, err)
+	assert.Equal(t, "bpf", mod.Name())
+
+	// exact symbol match
+	name, off, err := mod.LookupSymbolByAddress(libpf.Address(0xffffffc080f38288))
+	require.NoError(t, err)
+	assert.Equal(t, "bpf_prog_05cbe5ca7b74dd09_sys_enter", name)
+	assert.Equal(t, uint(0x0), off)
+
+	// just above symbol match
+	name, off, err = mod.LookupSymbolByAddress(libpf.Address(0xffffffc080f3828c))
+	require.NoError(t, err)
+	assert.Equal(t, "bpf_prog_05cbe5ca7b74dd09_sys_enter", name)
+	assert.Equal(t, uint(0x4), off)
+
+	// remove the added symbol
+	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+		Addr:  0xffffffc080f38288,
+		Name:  "bpf_prog_05cbe5ca7b74dd09_sys_enter",
+		Flags: unix.PERF_RECORD_KSYMBOL_FLAGS_UNREGISTER,
+	})
+	require.NoError(t, err)
+
+	// the address goes poof
+	mod, err = s.GetModuleByAddress(0xffffffc080f38288)
+	assert.Equal(t, ErrNoModule, err)
+
+	// add it back
+	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+		Addr: 0xffffffc080f38288,
+		Name: "bpf_prog_05cbe5ca7b74dd09_sys_enter",
+	})
+	require.NoError(t, err)
+
+	mod, err = s.GetModuleByName("bpf")
+	require.NoError(t, err)
+
+	// the names did not grow
+	assert.Equal(t, max, len(mod.names))
+
+	// find the pre-existing symbol by aiming slightly above
+	mod, err = s.GetModuleByAddress(0xffffffc080f3089e)
+	require.NoError(t, err)
+
+	name, off, err = mod.LookupSymbolByAddress(0xffffffc080f3089e)
+	require.NoError(t, err)
+	assert.Equal(t, "bpf_prog_292e0637857c1257_cut_last", name)
+	assert.Equal(t, uint(0x2), off)
+
+	// remove the pre-existing symbol
+	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+		Addr:  0xffffffc080f3089c,
+		Name:  "bpf_prog_292e0637857c1257_cut_last",
+		Flags: unix.PERF_RECORD_KSYMBOL_FLAGS_UNREGISTER,
+	})
+	require.NoError(t, err)
+
+	// look for it again
+	mod, err = s.GetModuleByAddress(0xffffffc080f3089e)
+	require.NoError(t, err)
+
+	// the symbol just below is matching now
+	name, off, err = mod.LookupSymbolByAddress(0xffffffc080f3089e)
+	require.NoError(t, err)
+	assert.Equal(t, "bpf_prog_5be112cdf63b0d8c_sysctl_monitor", name)
+	assert.Equal(t, uint(0x3fe), off)
+
+	// put the removed symbol back
+	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+		Addr: 0xffffffc080f3089c,
+		Name: "bpf_prog_292e0637857c1257_cut_last",
+	})
+	require.NoError(t, err)
+
+	mod, err = s.GetModuleByAddress(0xffffffc080f3089e)
+	require.NoError(t, err)
+
+	// and it's right there where we put it
+	name, off, err = mod.LookupSymbolByAddress(0xffffffc080f3089e)
+	require.NoError(t, err)
+	assert.Equal(t, "bpf_prog_292e0637857c1257_cut_last", name)
+	assert.Equal(t, uint(0x2), off)
+
+	// still good with the name reuse
+	mod, err = s.GetModuleByAddress(0xffffffc080f3089e)
+	assert.Equal(t, max, len(mod.names))
+
+	// checking for lost symbols triggering full reload
+	err = s.handleBPFUpdate(nil)
+	assert.NotNil(t, err)
+
+	// adding before start doesn't work
+	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+		Addr: 0xffffffc080f26226,
+		Name: "add_before_start",
+	})
+	assert.NotNil(t, err)
+
+	// removing the first symbol doesn't work
+	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+		Addr:  0xffffffc080f26228,
+		Name:  "bpf_prog_00354c172d366337_sd_device",
+		Flags: unix.PERF_RECORD_KSYMBOL_FLAGS_UNREGISTER,
+	})
+	assert.NotNil(t, err)
 }
 
 func BenchmarkSort(b *testing.B) {
