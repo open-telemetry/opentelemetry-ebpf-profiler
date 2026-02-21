@@ -21,13 +21,6 @@ extern bpf_map_def trace_events;
 extern bpf_map_def go_labels_procs;
 extern bpf_map_def cl_procs;
 extern bpf_map_def v8_procs;
-
-#if defined(TESTING_COREDUMP)
-
-// References to maps in alphabetical order that
-// are needed only for testing.
-
-extern bpf_map_def apm_int_procs;
 extern bpf_map_def exe_id_to_8_stack_deltas;
 extern bpf_map_def exe_id_to_9_stack_deltas;
 extern bpf_map_def exe_id_to_10_stack_deltas;
@@ -44,14 +37,21 @@ extern bpf_map_def exe_id_to_20_stack_deltas;
 extern bpf_map_def exe_id_to_21_stack_deltas;
 extern bpf_map_def exe_id_to_22_stack_deltas;
 extern bpf_map_def exe_id_to_23_stack_deltas;
+extern bpf_map_def stack_delta_page_to_info;
+extern bpf_map_def unwind_info_array;
+
+#if defined(TESTING_COREDUMP)
+
+// References to maps in alphabetical order that
+// are needed only for testing.
+
+extern bpf_map_def apm_int_procs;
 extern bpf_map_def hotspot_procs;
 extern bpf_map_def dotnet_procs;
 extern bpf_map_def perl_procs;
 extern bpf_map_def php_procs;
 extern bpf_map_def py_procs;
 extern bpf_map_def ruby_procs;
-extern bpf_map_def stack_delta_page_to_info;
-extern bpf_map_def unwind_info_array;
 extern bpf_map_def luajit_procs;
 
 #endif // TESTING_COREDUMP
