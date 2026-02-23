@@ -11,6 +11,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter/gpu"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
@@ -66,8 +67,10 @@ func Start(ctx context.Context, tr *tracer.Tracer,
 						lost, readErr, noData)
 				}
 			case <-clearTicker.C:
-				// Periodically clean up all GPU trace fixers and report metrics
-				gpu.MaybeClearAll()
+				// Periodically clean up all GPU trace fixers and report metrics.
+				// MaybeClearAll returns metrics for the caller to report via AddSlice,
+				// avoiding duplicate-metric warnings from the metrics system.
+				metrics.AddSlice(gpu.MaybeClearAll())
 			case <-ctx.Done():
 				return
 			default:

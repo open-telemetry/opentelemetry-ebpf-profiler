@@ -450,8 +450,8 @@ func AddTimes(events []CuptiTimingEvent) []CudaTraceOutput {
 	return outputs
 }
 
-// MaybeClearAll periodically clears all fixers and reports aggregated metrics.
-func MaybeClearAll() {
+// MaybeClearAll periodically clears all fixers and returns metrics for the caller to report.
+func MaybeClearAll() []metrics.Metric {
 	var totalTimes, totalTraces, totalTimesCleared, totalTracesCleared int
 
 	gpuFixers.Range(func(key, value any) bool {
@@ -464,13 +464,17 @@ func MaybeClearAll() {
 		return true
 	})
 
-	// Report metrics outside of any locks
-	metrics.Add(metrics.IDCudaTimesAwaitingTraces, metrics.MetricValue(totalTimes))
-	metrics.Add(metrics.IDCudaTracesAwaitingTimes, metrics.MetricValue(totalTraces))
-	if totalTimesCleared > 0 || totalTracesCleared > 0 {
-		metrics.Add(metrics.IDCudaTimesCleared, metrics.MetricValue(totalTimesCleared))
-		metrics.Add(metrics.IDCudaTracesCleared, metrics.MetricValue(totalTracesCleared))
+	out := []metrics.Metric{
+		{ID: metrics.IDCudaTimesAwaitingTraces, Value: metrics.MetricValue(totalTimes)},
+		{ID: metrics.IDCudaTracesAwaitingTimes, Value: metrics.MetricValue(totalTraces)},
 	}
+	if totalTimesCleared > 0 || totalTracesCleared > 0 {
+		out = append(out,
+			metrics.Metric{ID: metrics.IDCudaTimesCleared, Value: metrics.MetricValue(totalTimesCleared)},
+			metrics.Metric{ID: metrics.IDCudaTracesCleared, Value: metrics.MetricValue(totalTracesCleared)},
+		)
+	}
+	return out
 }
 
 // Symbolize is a stub — ConvertTrace handles CUDA frames directly via `case libpf.CUDA`,
