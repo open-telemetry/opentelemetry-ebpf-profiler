@@ -108,9 +108,22 @@ ffffffffc13fcb20 t init_xfs_fs	[xfs]`))
 }
 
 func TestBPFUpdates(t *testing.T) {
-	s := &Symbolizer{}
+	s := &Symbolizer{
+		bpf: &bpfSymbolizer{},
+	}
 
-	err := s.updateSymbolsFrom(strings.NewReader(`ffffffe4f3395268 t pci_host_common_probe        [pci_host_common]
+	// no bpf symbols
+	err := s.bpf.updateSymbolsFrom(strings.NewReader("ffffffe4f3395268 t pci_host_common_probe        [pci_host_common]"))
+	require.NoError(t, err)
+
+	// adding the first symbol
+	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
+		Addr: 0xffffffc080f38288,
+		Name: "bpf_prog_05cbe5ca7b74dd09_sys_enter",
+	})
+	assert.NotNil(t, err)
+
+	kallsyms := `ffffffe4f3395268 t pci_host_common_probe        [pci_host_common]
 ffffffc080f26228 t bpf_prog_00354c172d366337_sd_devices [bpf]
 ffffffc080f26430 t bpf_prog_772db7720b2728e9_sd_fw_egress       [bpf]
 ffffffc080f264d8 t bpf_prog_772db7720b2728e9_sd_fw_ingress      [bpf]
@@ -125,11 +138,15 @@ ffffffc080f32f4c t bpf_prog_79c5319176ee7ce5_sd_devices [bpf]
 ffffffc080f331e4 t bpf_prog_772db7720b2728e9_sd_fw_egress       [bpf]
 ffffffc080f33288 t bpf_prog_772db7720b2728e9_sd_fw_ingress      [bpf]
 ffffffc080f35f1c t bpf_prog_461f9f5162fd8042_sd_devices [bpf]
-ffffffc080f3629c t bpf_prog_b8f4fb5f08605bc5    [bpf]`))
+ffffffc080f3629c t bpf_prog_b8f4fb5f08605bc5    [bpf]`
+
+	err = s.updateSymbolsFrom(strings.NewReader(kallsyms))
+	require.NoError(t, err)
+	err = s.bpf.updateSymbolsFrom(strings.NewReader(kallsyms))
 	require.NoError(t, err)
 
 	// adding a symbol at the end
-	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
 		Addr: 0xffffffc080f38288,
 		Name: "bpf_prog_05cbe5ca7b74dd09_sys_enter",
 	})
@@ -164,7 +181,7 @@ ffffffc080f3629c t bpf_prog_b8f4fb5f08605bc5    [bpf]`))
 	assert.Equal(t, uint(0x4), off)
 
 	// remove the added symbol
-	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
 		Addr:  0xffffffc080f38288,
 		Name:  "bpf_prog_05cbe5ca7b74dd09_sys_enter",
 		Flags: unix.PERF_RECORD_KSYMBOL_FLAGS_UNREGISTER,
@@ -176,7 +193,7 @@ ffffffc080f3629c t bpf_prog_b8f4fb5f08605bc5    [bpf]`))
 	assert.Equal(t, ErrNoModule, err)
 
 	// add it back
-	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
 		Addr: 0xffffffc080f38288,
 		Name: "bpf_prog_05cbe5ca7b74dd09_sys_enter",
 	})
@@ -198,7 +215,7 @@ ffffffc080f3629c t bpf_prog_b8f4fb5f08605bc5    [bpf]`))
 	assert.Equal(t, uint(0x2), off)
 
 	// remove the pre-existing symbol
-	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
 		Addr:  0xffffffc080f3089c,
 		Name:  "bpf_prog_292e0637857c1257_cut_last",
 		Flags: unix.PERF_RECORD_KSYMBOL_FLAGS_UNREGISTER,
@@ -216,7 +233,7 @@ ffffffc080f3629c t bpf_prog_b8f4fb5f08605bc5    [bpf]`))
 	assert.Equal(t, uint(0x3fe), off)
 
 	// put the removed symbol back
-	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
 		Addr: 0xffffffc080f3089c,
 		Name: "bpf_prog_292e0637857c1257_cut_last",
 	})
@@ -233,21 +250,22 @@ ffffffc080f3629c t bpf_prog_b8f4fb5f08605bc5    [bpf]`))
 
 	// still good with the name reuse
 	mod, err = s.GetModuleByAddress(0xffffffc080f3089e)
+	require.NoError(t, err)
 	assert.Equal(t, max, len(mod.names))
 
 	// checking for lost symbols triggering full reload
-	err = s.handleBPFUpdate(nil)
+	err = s.bpf.handleBPFUpdate(nil)
 	assert.NotNil(t, err)
 
 	// adding before start doesn't work
-	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
 		Addr: 0xffffffc080f26226,
 		Name: "add_before_start",
 	})
 	assert.NotNil(t, err)
 
 	// removing the first symbol doesn't work
-	err = s.handleBPFUpdate(&perf.KSymbolRecord{
+	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
 		Addr:  0xffffffc080f26228,
 		Name:  "bpf_prog_00354c172d366337_sd_device",
 		Flags: unix.PERF_RECORD_KSYMBOL_FLAGS_UNREGISTER,

@@ -22,10 +22,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/elastic/go-perf"
 	"github.com/mdlayher/kobject"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -92,7 +90,7 @@ func compareModule(a, b Module) int {
 type Symbolizer struct {
 	modules atomic.Value
 
-	bpfUpdates chan *perf.KSymbolRecord
+	bpf *bpfSymbolizer
 
 	reloadModules chan libpf.Void
 }
@@ -101,8 +99,8 @@ type Symbolizer struct {
 // the initial 'kallsymbols'.
 func NewSymbolizer() (*Symbolizer, error) {
 	s := &Symbolizer{
+		bpf:           &bpfSymbolizer{},
 		reloadModules: make(chan libpf.Void, 1),
-		bpfUpdates:    make(chan *perf.KSymbolRecord),
 	}
 	if err := s.loadKallsyms(); err != nil {
 		return nil, err
@@ -175,12 +173,6 @@ func parseSysfsUint(mod, knob string) (uint64, error) {
 // Overridable for the test suite. Returns true if the metadata was loaded
 // successfully.
 var loadModuleMetadata = func(m *Module, name string, oldMtime int64) bool {
-	if name == "bpf" {
-		// Kernel reports the BPF JIT symbols as part of 'bpf' module.
-		// There is no metadata available.
-		return true
-	}
-
 	// Determine notes location and module size
 	notesFile := "/sys/kernel/notes"
 	if name != Kernel {
@@ -380,6 +372,11 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 			return fmt.Errorf("unexpected line in kallsyms: '%s'", line)
 		}
 
+		// bpf is handled separately by bpfSymbolizer
+		if fields[3] == "[bpf]" {
+			continue
+		}
+
 		// Skip non-text symbols, see 'man nm'.
 		// Special case for 'etext', which can be of type `D` (data) in some kernels.
 		if strings.IndexByte("TtVvWw", fields[1][0]) == -1 && fields[2] != "_etext" {
@@ -432,13 +429,11 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 					symbols: syms[0:0],
 					names:   names[0:0],
 				}
-				if moduleName != "bpf" {
-					oldMod, _ = getModuleByAddress(modules, libpf.Address(address))
-					if oldMod != nil && !oldMod.stub && oldMod.Name() == moduleName {
-						oldMtime = oldMod.mtime
-					} else {
-						oldMod = nil
-					}
+				oldMod, _ = getModuleByAddress(modules, libpf.Address(address))
+				if oldMod != nil && !oldMod.stub && oldMod.Name() == moduleName {
+					oldMtime = oldMod.mtime
+				} else {
+					oldMod = nil
 				}
 				if loadModuleMetadata(&newMod, moduleName, oldMtime) {
 					// Module metadata was updated. Parse this module symbols.
@@ -509,7 +504,6 @@ func (s *Symbolizer) loadKallsyms() error {
 
 var nonsyfsModules = libpf.Set[string]{
 	Kernel: libpf.Void{},
-	"bpf":  libpf.Void{},
 }
 
 // loadModules will reload module metadata.
@@ -575,9 +569,9 @@ func (s *Symbolizer) loadModules() (bool, error) {
 }
 
 // reloadWorker is the goroutine handling the reloads of the kallsyms.
-func (s *Symbolizer) reloadWorker(ctx context.Context, bpfUpdater *bpfUpdater, kobjectClient *kobject.Client) {
+func (s *Symbolizer) reloadWorker(ctx context.Context, kobjectClient *kobject.Client) {
 	noTimeout := make(<-chan time.Time)
-	nextKallsymsReload := time.After(0) // immediately reload to capture updates between NewSymbolizer() and now
+	nextKallsymsReload := noTimeout
 	nextModulesReload := noTimeout
 	for {
 		select {
@@ -606,88 +600,12 @@ func (s *Symbolizer) reloadWorker(ctx context.Context, bpfUpdater *bpfUpdater, k
 				log.Warnf("Failed to reload kernel symbols: %v", err)
 				nextKallsymsReload = time.After(time.Minute)
 			}
-		case record := <-s.bpfUpdates:
-			if err := s.handleBPFUpdate(record); err != nil {
-				// errors in handling require full re-parsing as well
-				nextKallsymsReload = time.After(0)
-			}
 		case <-ctx.Done():
-			// Terminate bpf updater perf event fds
-			bpfUpdater.Close()
 			// Terminate also the kobject poller thread
 			_ = kobjectClient.Close()
 			return
 		}
 	}
-}
-
-// handleBPFUpdate handles an update from [bpfUpdater].
-// Any error returned means full symbol reload is needed.
-func (s *Symbolizer) handleBPFUpdate(record *perf.KSymbolRecord) error {
-	if record == nil {
-		return errors.New("lost events detected")
-	}
-
-	modules := s.modules.Load().([]Module)
-	bpfIdx := slices.IndexFunc(modules, func(mod Module) bool { return mod.Name() == "bpf" })
-
-	if bpfIdx == -1 {
-		return errors.New("bpf module is missing")
-	}
-
-	bpf := modules[bpfIdx]
-	var replacement *Module
-
-	addr := libpf.Address(record.Addr)
-
-	if record.Flags&unix.PERF_RECORD_KSYMBOL_FLAGS_UNREGISTER != 0 {
-		// If we can find the exact symbol, remove it. If we can't, it's a benign race.
-		// A race is possible for events that were buffered while a full parsing happened.
-		_, off, err := bpf.LookupSymbolByAddress(addr)
-		if err == nil && off == 0 {
-			replacement = bpf.replacement()
-
-			removeIdx := slices.IndexFunc(replacement.symbols, func(sym symbol) bool {
-				return sym.offset == uint32(addr-bpf.start)
-			})
-
-			if removeIdx == -1 {
-				return errors.New("symbol found by address but not by name scan, index inconsistency")
-			}
-
-			if replacement.symbols[removeIdx].offset == 0 {
-				return errors.New("the first symbol is being removed, full re-scan is necessary")
-			}
-
-			replacement.symbols = slices.Delete(replacement.symbols, removeIdx, removeIdx+1)
-		}
-	} else {
-		if addr < bpf.start {
-			return errors.New("new bpf symbol below bpf module start, full re-scan is necessary")
-		}
-
-		// If we can't find the exact symbol, add a new one. If we can't, it's a benign race.
-		// A race is possible for events that were buffered while a full parsing happened.
-		name, off, err := bpf.LookupSymbolByAddress(addr)
-		if err != nil || off > 0 || name != record.Name {
-			replacement = bpf.replacement()
-
-			replacement.symbols = append(replacement.symbols, symbol{
-				offset: uint32(addr - replacement.start),
-				index:  replacement.addName(record.Name),
-			})
-		}
-	}
-
-	if replacement != nil {
-		replacement.finish()
-
-		modules = slices.Clone(modules)
-		modules[bpfIdx] = *replacement
-		s.modules.Store(modules)
-	}
-
-	return nil
 }
 
 // pollKobjectClient listens for kernel kobject events to reload kallsyms when needed.
@@ -708,18 +626,19 @@ func (s *Symbolizer) pollKobjectClient(_ context.Context, kobjectClient *kobject
 	}
 }
 
-// Reload will trigger asynchronous update of modules and symbols.
+// StartMonitor starts the update monitoring for kallsyms.
 func (s *Symbolizer) StartMonitor(ctx context.Context, onlineCPUs []int) error {
 	kobjectClient, err := kobject.New()
 	if err != nil {
 		return fmt.Errorf("failed to create kobject netlink socket: %v", err)
 	}
-	bpfUpdater, err := newBpfUpdater(ctx, onlineCPUs, s.bpfUpdates)
+	err = s.bpf.startMonitor(ctx, onlineCPUs)
 	if err != nil {
+		s.bpf.Close()
 		_ = kobjectClient.Close()
 		return err
 	}
-	go s.reloadWorker(ctx, bpfUpdater, kobjectClient)
+	go s.reloadWorker(ctx, kobjectClient)
 	go s.pollKobjectClient(ctx, kobjectClient)
 	return nil
 }
@@ -742,11 +661,26 @@ func getModuleByAddress(modules []Module, pc libpf.Address) (*Module, error) {
 
 // GetModuleByAddress finds the Module containing the address 'pc'.
 func (s *Symbolizer) GetModuleByAddress(pc libpf.Address) (*Module, error) {
+	if s.bpf != nil {
+		bpf := s.bpf.Module()
+		if bpf != nil && pc >= bpf.start && pc < bpf.end {
+			return bpf, nil
+		}
+	}
+
 	return getModuleByAddress(s.modules.Load().([]Module), pc)
 }
 
 // GetModuleByAddress finds the Module containing the module 'module'.
 func (s *Symbolizer) GetModuleByName(module string) (*Module, error) {
+	if module == "bpf" {
+		mod := s.bpf.Module()
+		if mod == nil {
+			return nil, ErrNoModule
+		}
+		return mod, nil
+	}
+
 	modules := s.modules.Load().([]Module)
 	for i := range modules {
 		kmod := &modules[i]

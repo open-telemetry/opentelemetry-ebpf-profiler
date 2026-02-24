@@ -87,7 +87,7 @@ type Tracer struct {
 	// hooks holds references to loaded eBPF hooks.
 	hooks map[hookPoint]link.Link
 
-	// onlineCPUs is the list on online CPUs at the time of tracer creation
+	// onlineCPUs is the list of online CPUs at the time of tracer creation
 	onlineCPUs []int
 
 	// processManager keeps track of loading, unloading and organization of information
