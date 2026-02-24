@@ -337,8 +337,9 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
 
   u32 unwindInfo = 0;
   u64 rt_regs[18];
-  int addrDiff = 0;
-  u64 cfa      = 0;
+  int addrDiff     = 0;
+  u64 cfa          = 0;
+  UnwindInfo *info = NULL;
 
   // The relevant executable is compiled with frame pointer omission, so
   // stack deltas need to be retrieved from the relevant map.
@@ -386,6 +387,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
     default: return ERR_UNREACHABLE;
     }
   } else {
+    DEBUG_PRINT("unwindInfo: %u", unwindInfo);
     UnwindInfo *info = bpf_map_lookup_elem(&unwind_info_array, &unwindInfo);
     if (!info) {
       increment_metric(metricID_UnwindNativeErrBadUnwindInfoIndex);
@@ -413,12 +415,18 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       // FP used for recovery, but no new FP value received, clear FP
       state->fp = 0;
     }
+    DEBUG_PRINT("info: flags=%x raReg=%u", info->flags, info->raReg);
   }
 
-  if (!cfa || bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)(cfa - 8))) {
-  err_native_pc_read:
-    increment_metric(metricID_UnwindNativeErrPCRead);
-    return ERR_NATIVE_PC_READ;
+  if (info && (info->flags & UNWIND_FLAG_REGISTER_RA)) {
+    state->pc = unwind_calc_register(state, info->raReg, 0);
+    DEBUG_PRINT("REGISTER_RA: new PC=%llx from reg %u", state->pc, info->raReg);
+  } else {
+    if (!cfa || bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)(cfa - 8))) {
+    err_native_pc_read:
+      increment_metric(metricID_UnwindNativeErrPCRead);
+      return ERR_NATIVE_PC_READ;
+    }
   }
   state->sp = cfa;
   unwinder_mark_nonleaf_frame(state);

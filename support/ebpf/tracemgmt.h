@@ -585,11 +585,17 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   state->r11 = regs->r11;
   state->r13 = regs->r13;
   state->r15 = regs->r15;
+  state->rdi = regs->di;
+  state->r8  = regs->r8;
+  DEBUG_PRINT("Captured RDI: %llx, R8: %llx", state->rdi, state->r8);
 
-  // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
-  // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/include/asm/syscall.h#L31-L39
-  // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/entry/entry_64.S#L847
-  state->return_address = interrupted_kernelmode && regs->orig_ax != -1;
+  // For the initial frame, we do not treat it as a return address even if
+  // we are in a syscall. This is to ensure that the stack delta lookup
+  // uses the exact PC, which is necessary for state transition instructions
+  // like vfork. Subsequent frames will be marked as return addresses
+  // by the unwinder itself.
+  (void)interrupted_kernelmode;
+  state->return_address = false;
 #elif defined(__aarch64__)
   // For backwards compatibility aarch64 can run 32-bit code.
   // Check if the process is running in this 32-bit compat mod.
@@ -697,8 +703,8 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 
 #else // TESTING_COREDUMP
 
-static inline EBPF_INLINE ErrorCode
-get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs)
+static inline EBPF_INLINE
+  ErrorCode get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs)
 {
   // Coredumps provide always usermode pt_regs directly.
   ErrorCode error = copy_state_regs(state, ctx, false);

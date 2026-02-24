@@ -171,7 +171,9 @@ type UnwindInfo struct {
 	Flags       uint8
 	BaseReg     uint8
 	AuxBaseReg  uint8
+	RaReg       uint8
 	MergeOpcode uint8
+	Pad         [3]uint8
 	Param       int32
 	AuxParam    int32
 }
@@ -343,12 +345,16 @@ const (
 	UnwindRegX86RAX  uint8 = 0x6
 	UnwindRegX86R9   uint8 = 0x7
 	UnwindRegX86R11  uint8 = 0x8
+	UnwindRegX86R13  uint8 = 0x9
 	UnwindRegX86R15  uint8 = 0xa
+	UnwindRegX86RDI  uint8 = 0xb
+	UnwindRegX86R8   uint8 = 0xc
 
-	UnwindFlagCommand  uint8 = 0x1
-	UnwindFlagFrame    uint8 = 0x2
-	UnwindFlagLeafOnly uint8 = 0x4
-	UnwindFlagDerefCfa uint8 = 0x8
+	UnwindFlagCommand    uint8 = 0x1
+	UnwindFlagFrame      uint8 = 0x2
+	UnwindFlagLeafOnly   uint8 = 0x4
+	UnwindFlagDerefCfa   uint8 = 0x8
+	UnwindFlagRegisterRA uint8 = 0x10
 
 	UnwindCommandInvalid      int32 = 0x0
 	UnwindCommandStop         int32 = 0x1

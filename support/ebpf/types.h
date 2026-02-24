@@ -632,7 +632,7 @@ typedef struct UnwindState {
       // The per-CPU registers which are not unwound, but needed to be accessed
       // on leaf frames.
 #if defined(__x86_64__)
-      u64 rax, r9, r11, r13, r15;
+      u64 rax, r9, r11, r13, r15, rdi, r8;
 #elif defined(__aarch64__)
       u64 r20, r22, r28;
 #endif
@@ -824,9 +824,11 @@ typedef struct UnwindInfo {
   u8 flags;       // flags: UNWIND_FLAG_*
   u8 baseReg;     // base register to calculate CFA from
   u8 auxBaseReg;  // base register to calculate FP (x86-64) or RA[+FP] (aarch64)
+  u8 raReg;       // return address register (if UNWIND_FLAG_REGISTER_RA is set)
   u8 mergeOpcode; // opcode for generating next stack delta, see below
-  s32 param;      // parameter for the CFA expression
-  s32 auxParam;   // parameter for the FP expression
+  u8 pad[3];
+  s32 param;    // parameter for the CFA expression
+  s32 auxParam; // parameter for the FP expression
 } UnwindInfo;
 
 // UNWIND_REF_* values are used for 'baseReg' and auxBaseReg'.
@@ -843,15 +845,19 @@ typedef struct UnwindInfo {
 #define UNWIND_REG_X86_R11 8
 #define UNWIND_REG_X86_R13 9
 #define UNWIND_REG_X86_R15 10
+#define UNWIND_REG_X86_RDI 11
+#define UNWIND_REG_X86_R8  12
 
 // Flag to indicate a command (used inside Go stack delta generation only)
-#define UNWIND_FLAG_COMMAND   (1 << 0)
+#define UNWIND_FLAG_COMMAND     (1 << 0)
 // Flag to indicate that a full LR+FR frame is present on aarch64
-#define UNWIND_FLAG_FRAME     (1 << 1)
+#define UNWIND_FLAG_FRAME       (1 << 1)
 // Flag to indicate that unwinding is valid on leaf frames only (uses untracked register)
-#define UNWIND_FLAG_LEAF_ONLY (1 << 2)
+#define UNWIND_FLAG_LEAF_ONLY   (1 << 2)
 // Flag to indicate that the resolve CFA value should be dereferenced
-#define UNWIND_FLAG_DEREF_CFA (1 << 3)
+#define UNWIND_FLAG_DEREF_CFA   (1 << 3)
+// Flag to indicate that the return address is in a register
+#define UNWIND_FLAG_REGISTER_RA (1 << 4)
 
 // If flags has UNWIND_FLAG_DEREF_CFA set, the lowest bits of 'param' are used
 // as second adder as post-deref operation. This contains the mask for that.
