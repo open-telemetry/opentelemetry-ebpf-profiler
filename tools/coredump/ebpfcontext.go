@@ -19,6 +19,13 @@ import (
 */
 import "C"
 
+// pyCodeObjectBPFReadSize is the size of PythonUnwindScratchSpace.code,
+// the buffer bpf_probe_read_user uses to read a PyCodeObject.
+var pyCodeObjectBPFReadSize = func() int {
+	var pss C.PythonUnwindScratchSpace
+	return int(unsafe.Sizeof(pss.code))
+}()
+
 // ebpfContext is the context for EBPF code regarding the process it's unwinding.
 type ebpfContext struct {
 	// trace will contain the trace from the CGO executed eBPF unwinding code

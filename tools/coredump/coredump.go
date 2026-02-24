@@ -113,7 +113,7 @@ func (c *symbolizationCache) formatFrame(frame *libpf.Frame) (string, error) {
 }
 
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
-	lwpFilter libpf.Set[libpf.PID]) ([]ThreadInfo, error) {
+	lwpFilter libpf.Set[libpf.PID], ebpfPr ...process.Process) ([]ThreadInfo, error) {
 	todo, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -153,8 +153,15 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 		return nil, fmt.Errorf("failed to get thread info for process %d: %v", pid, err)
 	}
 
-	// Interfaces for the managers
-	ebpfCtx := newEBPFContext(pr)
+	// Interfaces for the managers.
+	// An optional separate process can be provided for the eBPF context,
+	// allowing tests to inject a faulting memory reader for bpf_probe_read_user
+	// while the interpreter manager uses the real process memory.
+	ebpfProcess := pr
+	if len(ebpfPr) > 0 && ebpfPr[0] != nil {
+		ebpfProcess = ebpfPr[0]
+	}
+	ebpfCtx := newEBPFContext(ebpfProcess)
 	defer ebpfCtx.release()
 
 	coredumpEbpfMaps := ebpfMapsCoredump{ctx: ebpfCtx}
