@@ -70,6 +70,13 @@ func loadUProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf
 			}
 		}
 
+		// uprobe ebpf程序不需要绑定内核结构体或方法，此处强制把此字段置为空
+		// 后续需要注意：uprobe的ebpf程序将默认有section为'uprobe/'和'uretprobe/'的约定
+		if strings.HasPrefix(progSpec.SectionName, "uprobe/") ||
+			strings.HasPrefix(progSpec.SectionName, "uretprobe/") {
+			progSpec.AttachTo = ""
+		}
+
 		if err := loadProgram(ebpfProgs, tailcallMap, unwindProg.progID, progSpec,
 			programOptions, unwindProg.noTailCallTarget); err != nil {
 			return err
