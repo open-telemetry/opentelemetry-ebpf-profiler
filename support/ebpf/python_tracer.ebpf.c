@@ -253,9 +253,7 @@ static EBPF_INLINE ErrorCode get_PyFrame(const PyProcInfo *pyinfo, void **frame)
 #define PYTHON_NATIVE_LOOP_ITERS 9
 
 // step_python processes one Python frame and updates *unwinder to indicate
-// what should happen next: PROG_UNWIND_NATIVE to unwind a native boundary
-// frame, PROG_UNWIND_PYTHON to tail-call back (more frames but budget
-// exhausted), or PROG_UNWIND_STOP when all Python frames are done.
+// what should happen next
 static EBPF_INLINE ErrorCode
 step_python(PerCPURecord *record, const PyProcInfo *pyinfo, void **py_frame, int *unwinder)
 {
@@ -270,15 +268,13 @@ step_python(PerCPURecord *record, const PyProcInfo *pyinfo, void **py_frame, int
   } else if (!*py_frame) {
     *unwinder = PROG_UNWIND_STOP;
   } else {
-    // More Python frames but loop budget will be exhausted; tail call to self.
     *unwinder = PROG_UNWIND_PYTHON;
   }
   return ERR_OK;
 }
 
 // step_native processes one native frame at an interpreter boundary and
-// updates *unwinder: PROG_UNWIND_PYTHON when we've crossed back into Python,
-// or whatever get_next_unwinder_after_native_frame returns otherwise.
+// updates *unwinder
 static EBPF_INLINE ErrorCode step_native(PerCPURecord *record, int *unwinder)
 {
   Trace *trace = &record->trace;
