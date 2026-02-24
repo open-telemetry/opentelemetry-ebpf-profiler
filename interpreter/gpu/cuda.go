@@ -33,11 +33,12 @@ var (
 )
 
 // SymbolizedCudaTrace holds a symbolized trace awaiting GPU timing information.
-// The CPU frames are already symbolized; only the CUDA kernel frame (frame[0])
+// The CPU frames are already symbolized; only the CUDA kernel frame
 // needs the kernel name from the timing event.
 type SymbolizedCudaTrace struct {
 	Trace         *libpf.Trace
 	Meta          *samples.TraceEventMeta
+	CUDAFrameIdx  int // index of CUDAKernelFrame in Trace.Frames
 	CorrelationID uint32
 	CBID          int32
 }
@@ -356,7 +357,7 @@ func (f *gpuTraceFixer) prepTrace(st *SymbolizedCudaTrace, ev *CuptiTimingEvent)
 		out.Trace.CustomLabels[cudaId] = libpf.Intern(strconv.FormatUint(uint64(ev.Id), 10))
 	}
 
-	// Extract kernel name from timing event, demangle, and update frame[0]
+	// Extract kernel name from timing event, demangle, and update the CUDA frame.
 	nameBytes := ev.KernelName[:]
 	if idx := bytes.IndexByte(nameBytes, 0); idx >= 0 {
 		nameBytes = nameBytes[:idx]
@@ -369,11 +370,10 @@ func (f *gpuTraceFixer) prepTrace(st *SymbolizedCudaTrace, ev *CuptiTimingEvent)
 			funcName = libpf.Intern(demStr)
 		}
 
-		currentFrame := out.Trace.Frames[0].Value()
-		out.Trace.Frames[0] = unique.Make(libpf.Frame{
-			Type:            currentFrame.Type,
-			AddressOrLineno: currentFrame.AddressOrLineno,
-			FunctionName:    funcName,
+		fi := st.CUDAFrameIdx
+		out.Trace.Frames[fi] = unique.Make(libpf.Frame{
+			Type:         out.Trace.Frames[fi].Value().Type,
+			FunctionName: funcName,
 		})
 	}
 
@@ -388,7 +388,7 @@ func AddTrace(st *SymbolizedCudaTrace) []CudaTraceOutput {
 	pid := st.Meta.PID
 	value, ok := gpuFixers.Load(pid)
 	if !ok {
-		log.Warnf("no GPU fixer found for PID %d", pid)
+		log.Warnf("no GPU fixer found for PID %d in AddTrace", pid)
 		return nil
 	}
 	fixer := value.(*gpuTraceFixer)
@@ -400,7 +400,7 @@ func addTimeSingle(ev *CuptiTimingEvent) (CudaTraceOutput, bool) {
 	pid := libpf.PID(ev.Pid)
 	value, ok := gpuFixers.Load(pid)
 	if !ok {
-		log.Warnf("no GPU fixer found for PID %d", pid)
+		log.Warnf("no GPU fixer found for PID %d in AddTime", pid)
 		return CudaTraceOutput{}, false
 	}
 	fixer := value.(*gpuTraceFixer)
@@ -422,6 +422,7 @@ func AddTimes(events []CuptiTimingEvent) []CudaTraceOutput {
 	pid := libpf.PID(events[0].Pid)
 	value, ok := gpuFixers.Load(pid)
 	if !ok {
+		log.Warnf("no GPU fixer found for PID %d in AddTimes", pid)
 		return nil
 	}
 	fixer := value.(*gpuTraceFixer)
@@ -461,6 +462,7 @@ func MaybeClearAll() []metrics.Metric {
 		totalTraces += stats.tracesLen
 		totalTimesCleared += stats.timesCleared
 		totalTracesCleared += stats.tracesCleared
+
 		return true
 	})
 
