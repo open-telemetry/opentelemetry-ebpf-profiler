@@ -73,6 +73,7 @@ func Start(ctx context.Context, tr *tracer.Tracer,
 				// avoiding duplicate-metric warnings from the metrics system.
 				metrics.AddSlice(gpu.MaybeClearAll())
 			case <-ctx.Done():
+				eventReader.Close()
 				return
 			default:
 				if err := eventReader.ReadInto(&data); err != nil {
@@ -105,7 +106,19 @@ func Start(ctx context.Context, tr *tracer.Tracer,
 			return false
 		}
 
-		// Find the CUDA kernel frame in the symbolized trace
+		// Extract correlation ID and CBID from the raw BPF trace (not the
+		// symbolized trace, which may be a cached template with stale values).
+		var correlationID uint32
+		var cbid int32
+		for i := range rawTrace.Frames {
+			if rawTrace.Frames[i].Type == libpf.CUDAKernelFrame {
+				correlationID = uint32(rawTrace.Frames[i].Lineno)
+				cbid = int32(rawTrace.Frames[i].Lineno >> 32)
+				break
+			}
+		}
+
+		// Find the CUDA kernel frame index in the symbolized trace.
 		cudaFrameIdx := -1
 		for i, uniqueFrame := range trace.Frames {
 			if uniqueFrame.Value().Type == libpf.CUDAKernelFrame {
@@ -118,13 +131,10 @@ func Start(ctx context.Context, tr *tracer.Tracer,
 			return false
 		}
 
-		frame := trace.Frames[cudaFrameIdx].Value()
-		correlationID := uint32(frame.AddressOrLineno)
-		cbid := int32(frame.AddressOrLineno >> 32)
-
 		st := &gpu.SymbolizedCudaTrace{
 			Trace:         trace,
 			Meta:          meta,
+			CUDAFrameIdx:  cudaFrameIdx,
 			CorrelationID: correlationID,
 			CBID:          cbid,
 		}

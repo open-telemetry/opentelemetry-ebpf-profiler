@@ -110,7 +110,7 @@ func TestTraceInterceptor(t *testing.T) {
 				libpf.NewTraceHash(2, 2): 1,
 			},
 		},
-		"consumed trace not cached on repeat": {
+		"consumed on both cache miss and hit": {
 			interceptReturn: map[host.TraceHash]bool{
 				host.TraceHash(0xcc): true,
 			},
@@ -118,7 +118,7 @@ func TestTraceInterceptor(t *testing.T) {
 				{trace: &host.Trace{Hash: host.TraceHash(0xcc)}},
 				{trace: &host.Trace{Hash: host.TraceHash(0xcc)}},
 			},
-			expectedEvents: nil, // both consumed, nothing reported
+			expectedEvents: nil, // first miss + second hit, both consumed
 		},
 	}
 

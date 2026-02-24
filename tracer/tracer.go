@@ -934,19 +934,6 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		}
 	}
 
-	// Trace fields included in the hash:
-	//  - PID, kernel stack ID, length & frame array
-	// Intentionally excluded:
-	//  - ktime, COMM, APM trace, APM transaction ID, Origin and Off Time
-	ptr.Comm = [16]byte{}
-	ptr.Apm_trace_id = support.ApmTraceID{}
-	ptr.Apm_transaction_id = support.ApmSpanID{}
-	ptr.Ktime = 0
-	ptr.Origin = 0
-	ptr.Offtime = 0
-	ptr.Custom_labels = support.CustomLabelsArray{}
-	trace.Hash = host.TraceHash(xxh3.Hash128(raw).Lo)
-
 	if ptr.Kernel_stack_id >= 0 {
 		var err error
 		trace.KernelFrames, err = t.readKernelFrames(ptr.Kernel_stack_id)
@@ -955,6 +942,9 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		}
 	}
 
+	// Build host.Trace frames BEFORE zeroing per-sample fields, because
+	// ZeroPerSampleFields clears the CUDA frame's Addr_or_line which carries
+	// the correlation ID needed by the GPU interceptor.
 	trace.Frames = make([]host.Frame, ptr.Stack_len)
 	for i := 0; i < int(ptr.Stack_len); i++ {
 		rawFrame := &ptr.Frames[i]
@@ -967,6 +957,15 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 			LJCallerPC:    uint32(rawFrame.Caller_pc_lo) + (uint32(rawFrame.Caller_pc_hi) << 16),
 		}
 	}
+
+	// Trace fields included in the hash:
+	//  - PID, kernel stack ID, length & frame array
+	// Intentionally excluded:
+	//  - ktime, COMM, APM trace, APM transaction ID, Origin and Off Time
+	//  - CUDA frame addr_or_line (correlation ID is per-sample, not trace identity)
+	ptr.ZeroPerSampleFields()
+	trace.Hash = host.TraceHash(xxh3.Hash128(raw).Lo)
+
 	return trace
 }
 

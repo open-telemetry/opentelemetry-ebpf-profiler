@@ -146,7 +146,10 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	if trace, exists := m.traceCache.GetAndRefresh(bpfTrace.Hash,
 		traceCacheLifetime); exists {
 		m.traceCacheHit++
-		// Fast path
+		// Fast path: interceptor gets cached template + fresh rawTrace.
+		if m.interceptor != nil && m.interceptor(&trace, meta, bpfTrace) {
+			return
+		}
 		meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
 		if err := m.reporter.ReportTraceEvent(&trace, meta); err != nil {
 			log.Errorf("Failed to report trace event: %v", err)
@@ -163,13 +166,12 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 	}
 	log.Debugf("Trace hash remap 0x%x -> 0x%x", bpfTrace.Hash, umTrace.Hash)
 
-	// If an interceptor is set and consumes the trace, skip caching and reporting.
-	// CUDA traces are always intercepted here and never cached.
+	m.traceCache.Add(bpfTrace.Hash, *umTrace)
+
+	// If an interceptor consumes the trace, skip reporting.
 	if m.interceptor != nil && m.interceptor(umTrace, meta, bpfTrace) {
 		return
 	}
-
-	m.traceCache.Add(bpfTrace.Hash, *umTrace)
 
 	meta.APMServiceName = m.traceProcessor.MaybeNotifyAPMAgent(bpfTrace, umTrace.Hash, 1)
 	if err := m.reporter.ReportTraceEvent(umTrace, meta); err != nil {
