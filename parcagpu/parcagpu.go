@@ -54,7 +54,7 @@ func Start(ctx context.Context, tr *tracer.Tracer,
 		logTicker := time.NewTicker(5 * time.Second)
 		defer logTicker.Stop()
 
-		clearTicker := time.NewTicker(1 * time.Second)
+		clearTicker := time.NewTicker(2 * time.Second)
 		defer clearTicker.Stop()
 
 		for {

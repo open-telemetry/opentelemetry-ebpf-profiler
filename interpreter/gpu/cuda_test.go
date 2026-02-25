@@ -242,13 +242,12 @@ func TestAddTraceAndTimes(t *testing.T) {
 	assert.Equal(t, "0", out.Trace.CustomLabels["cuda_device"])
 	assert.Equal(t, "7", out.Trace.CustomLabels["cuda_stream"])
 
-	// Verify the CUDA frame got the demangled kernel name and zeroed AddressOrLineno.
+	// Verify the CUDA frame got the kernel name and zeroed AddressOrLineno.
 	cudaFrame := out.Trace.Frames[0].Value()
 	assert.Equal(t, libpf.CUDAKernelFrame, cudaFrame.Type)
 	assert.Equal(t, libpf.AddressOrLineno(0), cudaFrame.AddressOrLineno,
 		"correlation ID should be zeroed in output")
-	assert.Contains(t, cudaFrame.FunctionName.String(), "myKernel",
-		"kernel name should be demangled")
+	assert.Equal(t, "_Z9myKernelPfS_i", cudaFrame.FunctionName.String())
 }
 
 func TestAddTimeThenTrace(t *testing.T) {
@@ -293,7 +292,7 @@ func TestAddTimeThenTrace(t *testing.T) {
 	assert.Equal(t, "1", out.Trace.CustomLabels["cuda_device"])
 
 	cudaFrame := out.Trace.Frames[0].Value()
-	assert.Contains(t, cudaFrame.FunctionName.String(), "square")
+	assert.Equal(t, "_Z6squarePfS_", cudaFrame.FunctionName.String())
 	assert.Equal(t, libpf.AddressOrLineno(0), cudaFrame.AddressOrLineno)
 }
 
@@ -344,7 +343,7 @@ func TestCachedTemplateWithDifferentCorrelationIDs(t *testing.T) {
 		assert.Equal(t, libpf.AddressOrLineno(0), cudaFrame.AddressOrLineno,
 			"correlation ID must not leak into output")
 		// Verify each launch got its own kernel name.
-		assert.Contains(t, cudaFrame.FunctionName.String(), tc.kernelName[3:10],
+		assert.Equal(t, tc.kernelName, cudaFrame.FunctionName.String(),
 			"each launch should get its own kernel name")
 	}
 }
@@ -382,7 +381,7 @@ func TestCUDAFrameIdxNonZero(t *testing.T) {
 	// The CUDA frame at index 2 should have the kernel name.
 	cudaFrame := outputs[0].Trace.Frames[2].Value()
 	assert.Equal(t, libpf.CUDAKernelFrame, cudaFrame.Type)
-	assert.Contains(t, cudaFrame.FunctionName.String(), "test")
+	assert.Equal(t, "_Z4testv", cudaFrame.FunctionName.String())
 
 	// The non-CUDA frames should be untouched.
 	for _, idx := range []int{0, 1, 3, 4} {

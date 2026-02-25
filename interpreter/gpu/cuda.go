@@ -8,7 +8,6 @@ import (
 	"unique"
 	"unsafe"
 
-	"github.com/ianlancetaylor/demangle"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -344,19 +343,13 @@ func (f *gpuTraceFixer) prepTrace(st *SymbolizedCudaTrace, ev *CuptiTimingEvent)
 		out.Trace.CustomLabels["cuda_id"] = strconv.FormatUint(uint64(ev.Id), 10)
 	}
 
-	// Extract kernel name from timing event, demangle, and update the CUDA frame.
+	// Extract kernel name from timing event and update the CUDA frame.
 	nameBytes := ev.KernelName[:]
 	if idx := bytes.IndexByte(nameBytes, 0); idx >= 0 {
 		nameBytes = nameBytes[:idx]
 	}
 	if len(nameBytes) > 0 {
-		mangledStr := libpf.Intern(unsafe.String(unsafe.SliceData(nameBytes), len(nameBytes)))
-		funcName := mangledStr
-		if demStr, err := demangle.ToString(
-			mangledStr.String(), demangle.NoParams, demangle.NoEnclosingParams); err == nil {
-			funcName = libpf.Intern(demStr)
-		}
-
+		funcName := libpf.Intern(unsafe.String(unsafe.SliceData(nameBytes), len(nameBytes)))
 		fi := st.CUDAFrameIdx
 		out.Trace.Frames[fi] = unique.Make(libpf.Frame{
 			Type:         out.Trace.Frames[fi].Value().Type,
