@@ -10,6 +10,7 @@ import (
 	"hash/fnv"
 	"io"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 
@@ -91,7 +92,8 @@ type hotspotInstance struct {
 	heapAreas []jitArea
 
 	// stubs stores all known stub routine regions.
-	stubs map[libpf.Address]StubRoutine
+	stubsMu sync.RWMutex
+	stubs   map[libpf.Address]StubRoutine
 }
 
 func (d *hotspotInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
@@ -242,12 +244,14 @@ func (d *hotspotInstance) getStubName(ripOrBci uint32, addr libpf.Address) libpf
 	stubName := d.rm.String(constStubNameAddr)
 
 	a := d.rm.Ptr(addr+libpf.Address(vms.CodeBlob.CodeBegin)) + libpf.Address(ripOrBci)
+	d.stubsMu.RLock()
 	for _, stub := range d.stubs {
 		if stub.start <= a && stub.end > a {
 			stubName = fmt.Sprintf("%s [%s]", stubName, stub.name)
 			break
 		}
 	}
+	d.stubsMu.RUnlock()
 	name := libpf.Intern(stubName)
 	d.addrToStubName.Add(addr, name)
 	return name
@@ -794,11 +798,15 @@ func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
 	ebpf interpreter.EbpfHandler, pid libpf.PID,
 ) {
 	for _, stub := range findStubBounds(vmd, d.bias, d.rm) {
-		if _, exists := d.stubs[stub.start]; exists {
+		d.stubsMu.Lock()
+		_, exists := d.stubs[stub.start]
+		if !exists {
+			d.stubs[stub.start] = stub
+		}
+		d.stubsMu.Unlock()
+		if exists {
 			continue
 		}
-
-		d.stubs[stub.start] = stub
 
 		// Separate stub areas are only required on ARM64.
 		if runtime.GOARCH != "arm64" {
