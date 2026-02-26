@@ -168,8 +168,7 @@ docker-image:
 	docker build -t otel/opentelemetry-ebpf-profiler-dev -f Dockerfile .
 
 agent:
-	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) otel/opentelemetry-ebpf-profiler-dev:latest \
-	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
+	./tools/docker-agent-build.sh "$(TARGET_ARCH)" "$(VERSION)" "$(REVISION)" "$(BUILD_TIMESTAMP)"
 
 legal:
 	go tool $(GO_TOOLS) go-licenses save --force . --save_path=LICENSES
