@@ -10,8 +10,8 @@ VERSION="${2:-}"
 REVISION="${3:-}"
 BUILD_TIMESTAMP="${4:-}"
 
-HOST_GOPATH=$(go env GOPATH)
-HOST_GOCACHE=$(go env GOCACHE)
+HOST_GOPATH="$(go env GOPATH)"
+HOST_GOCACHE="$(go env GOCACHE)"
 WORK_DIR="/agent"
 VOLUME_MOUNTS=(-v "$PWD:/agent")
 ENV_VARS=()
