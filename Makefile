@@ -2,7 +2,8 @@
 	test-junit protobuf docker-image agent legal integration-test-binaries \
 	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
-	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
+	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix \
+	otel-from-tree otel-from-lib
 
 SHELL := /usr/bin/env bash
 
@@ -83,6 +84,45 @@ ebpf-profiler: ebpf
 
 otelcol-ebpf-profiler: ebpf generate-collector
 	cd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../$@ 
+
+# Sets opentelemetry collector modules to be pulled from local source tree.
+# This command allows you to make changes to your local checkout of otel core and build
+# the collector against those changes without having to push to github.
+# The workflow is:
+#
+# 1. Hack on changes in core (assumed to be checked out in ../opentelemetry-collector from this directory)
+# 2. Run `make otel-from-tree` (only need to run it once to remap go modules)
+# 3. You can now build collector and it will use your local otel core changes.
+# 4. Before committing/pushing your changes, undo by running `make otel-from-lib`.
+.PHONY: otel-from-tree
+otel-from-tree:
+	@echo "Adding local opentelemetry-collector replaces to manifest.yaml"
+	@if grep -q "# START otel-from-tree" cmd/otelcol-ebpf-profiler/manifest.yaml; then \
+		echo "otel-from-tree already applied. Run 'make otel-from-lib' first to revert."; \
+		exit 1; \
+	fi
+	@echo "  # START otel-from-tree - Do not edit below this line" >> cmd/otelcol-ebpf-profiler/manifest.yaml
+	@grep -E "gomod: go.opentelemetry.io/collector/" cmd/otelcol-ebpf-profiler/manifest.yaml | \
+		sed -E 's/.*gomod: ([^ ]+) .*/\1/' | \
+		sort -u | \
+		while read -r module; do \
+			subpath=$${module#go.opentelemetry.io/collector}; \
+			echo "  - $${module} => ../opentelemetry-collector$${subpath}" >> cmd/otelcol-ebpf-profiler/manifest.yaml; \
+		done
+	@echo "Local replaces added. You can now build with local opentelemetry-collector changes."
+
+# Removes local opentelemetry-collector replaces from manifest.yaml.
+# (Undoes otel-from-tree.)
+.PHONY: otel-from-lib
+otel-from-lib:
+	@echo "Removing local opentelemetry-collector replaces from manifest.yaml"
+	@if ! grep -q "# START otel-from-tree" cmd/otelcol-ebpf-profiler/manifest.yaml; then \
+		echo "otel-from-tree not currently applied. Nothing to revert."; \
+		exit 0; \
+	fi
+	@sed -i '/# START otel-from-tree/,$$d' cmd/otelcol-ebpf-profiler/manifest.yaml
+	@echo "" >> cmd/otelcol-ebpf-profiler/manifest.yaml
+	@echo "Local replaces removed. Collector will use published opentelemetry-collector modules."
 
 rust-targets:
 	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
