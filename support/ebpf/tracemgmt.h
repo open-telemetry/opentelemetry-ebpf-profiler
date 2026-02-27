@@ -47,8 +47,6 @@ static inline EBPF_INLINE void increment_metric(u32 metricID)
   u64 *count = bpf_map_lookup_elem(&metrics, &metricID);
   if (count) {
     ++*count;
-  } else {
-    DEBUG_PRINT("Failed to lookup metrics map for metricID %d", metricID);
   }
 }
 
@@ -66,7 +64,6 @@ static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event
   // place, we allow latch-like inhibition, where eBPF sets it and Go has to manually reset
   // it, before new notifications are triggered.
   if (bpf_map_update_elem(&inhibit_events, &inhibit_key, &inhibit_value, BPF_NOEXIST) < 0) {
-    DEBUG_PRINT("Event type %d inhibited", event_type);
     return;
   }
 
@@ -80,7 +77,6 @@ static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event
   Event event = {.event_type = event_type};
   int ret = bpf_perf_event_output(ctx, &report_events, BPF_F_CURRENT_CPU, &event, sizeof(event));
   if (ret < 0) {
-    DEBUG_PRINT("event_send_trigger failed to send event %d: error %d", event_type, ret);
   }
 }
 
@@ -131,7 +127,6 @@ static inline EBPF_INLINE bool pid_event_ratelimit(u32 pid, int ratelimit_action
 
     if (diff_ts < limit_window_ts) {
       // Minimum event interval.
-      DEBUG_PRINT("PID %d event limited: too fast", pid);
       return true;
     }
     if (diff_ts < limit_window_ts + (5000 * 1000000ULL)) {
@@ -149,7 +144,6 @@ static inline EBPF_INLINE bool pid_event_ratelimit(u32 pid, int ratelimit_action
   // 59 bits - the high bits of timestamp of last event
   //  1 bit  - set if the PID should be in fast timer mode
   //  4 bits - number of bursts left at event time
-  DEBUG_PRINT("PID %d event send, attempt=%d", pid, attempt);
   u64 token = (ts & ~0x1fULL) | fast_timer | attempt;
 
   // Update the map entry. Technically this is not SMP safe, but doing
@@ -159,7 +153,6 @@ static inline EBPF_INLINE bool pid_event_ratelimit(u32 pid, int ratelimit_action
   int err = bpf_map_update_elem(&reported_pids, &pid, &token, BPF_ANY);
   if (err != 0) {
     // Should never happen
-    DEBUG_PRINT("Failed to report PID %d: %d", pid, err);
     increment_metric(metricID_ReportedPIDsErr);
     return true;
   }
@@ -183,7 +176,6 @@ static inline EBPF_INLINE bool report_pid(void *ctx, u64 pid_tgid, int ratelimit
   int errNo  = bpf_map_update_elem(&pid_events, &pid_tgid, &value, BPF_ANY);
   if (errNo != 0) {
     __attribute__((unused)) u32 tid = pid_tgid & 0xFFFFFFFF;
-    DEBUG_PRINT("Failed to update pid_events with PID %d TID: %d: %d", pid, tid, errNo);
     increment_metric(metricID_PIDEventsErr);
     return false;
   }
@@ -400,7 +392,6 @@ static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record,
   if (is_kernel_address(pc)) {
     // This should not happen as we should only be unwinding usermode stacks.
     // Seeing PC point to a kernel address indicates a bad unwind.
-    DEBUG_PRINT("PC value %lx is a kernel address", (unsigned long)pc);
     state->error_metric = metricID_UnwindNativeErrKernelAddress;
     return ERR_NATIVE_UNEXPECTED_KERNEL_ADDRESS;
   }
@@ -410,7 +401,6 @@ static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record,
     // above the value defined in /proc/sys/vm/mmap_min_addr.
     // As such small PC values happens regularly (e.g. by handling or extracting the
     // PC value incorrectly) we track them but don't proceed with unwinding.
-    DEBUG_PRINT("small pc value %lx, ignoring", (unsigned long)pc);
     state->error_metric = metricID_UnwindNativeSmallPC;
     return ERR_NATIVE_SMALL_PC;
   }
@@ -423,7 +413,6 @@ static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record,
   // Check if we have the data for this virtual address
   PIDPageMappingInfo *val = bpf_map_lookup_elem(&pid_page_to_mapping_info, &key);
   if (!val) {
-    DEBUG_PRINT("Failure to look up interval memory mapping for PC 0x%lx", (unsigned long)pc);
     state->error_metric = metricID_UnwindNativeErrWrongTextSection;
     return ERR_NATIVE_NO_PID_PAGE_MAPPING;
   }
@@ -431,15 +420,6 @@ static inline EBPF_INLINE ErrorCode resolve_unwind_mapping(PerCPURecord *record,
   decode_bias_and_unwind_program(val->bias_and_unwind_program, &state->text_section_bias, unwinder);
   state->text_section_id     = val->file_id;
   state->text_section_offset = pc - state->text_section_bias;
-  DEBUG_PRINT(
-    "Text section id for PC %lx is %llx (unwinder %d)",
-    (unsigned long)pc,
-    state->text_section_id,
-    *unwinder);
-  DEBUG_PRINT(
-    "Text section bias is %llx, and offset is %llx",
-    state->text_section_bias,
-    state->text_section_offset);
 
   return ERR_OK;
 }
@@ -467,12 +447,10 @@ static inline EBPF_INLINE int get_next_interpreter(PerCPURecord *record)
   OffsetRange *range = bpf_map_lookup_elem(&interpreter_offsets, &section_id);
   if (range != 0) {
     if (matches_interpreter_range(section_offset, range)) {
-      DEBUG_PRINT("interpreter_offsets match %d", range->program_index);
       if (!unwinder_is_done(record, range->program_index)) {
         increment_metric(metricID_UnwindCallInterpreter);
         return range->program_index;
       }
-      DEBUG_PRINT("interpreter unwinder done");
     }
   }
   return PROG_UNWIND_NATIVE;
@@ -487,12 +465,10 @@ get_next_unwinder_after_native_frame(PerCPURecord *record, int *unwinder)
   *unwinder          = PROG_UNWIND_STOP;
 
   if (state->pc == 0) {
-    DEBUG_PRINT("Stopping unwind due to unwind failure (PC == 0)");
     state->error_metric = metricID_UnwindErrZeroPC;
     return ERR_NATIVE_ZERO_PC;
   }
 
-  DEBUG_PRINT("==== Resolve next frame unwinder: frame %d ====", record->trace.num_frames);
   ErrorCode error = resolve_unwind_mapping(record, unwinder);
   if (error) {
     return error;
@@ -581,21 +557,14 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   state->sp  = regs->sp;
   state->fp  = regs->bp;
   state->rax = regs->ax;
+  state->rdi = regs->di;
+  state->r8  = regs->r8;
   state->r9  = regs->r9;
   state->r11 = regs->r11;
   state->r13 = regs->r13;
   state->r15 = regs->r15;
-  state->rdi = regs->di;
-  state->r8  = regs->r8;
-  DEBUG_PRINT("Captured RDI: %llx, R8: %llx", state->rdi, state->r8);
 
-  // For the initial frame, we do not treat it as a return address even if
-  // we are in a syscall. This is to ensure that the stack delta lookup
-  // uses the exact PC, which is necessary for state transition instructions
-  // like vfork. Subsequent frames will be marked as return addresses
-  // by the unwinder itself.
-  (void)interrupted_kernelmode;
-  state->return_address = false;
+  state->return_address = interrupted_kernelmode;
 #elif defined(__aarch64__)
   // For backwards compatibility aarch64 can run 32-bit code.
   // Check if the process is running in this 32-bit compat mod.
@@ -695,7 +664,6 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
     error = copy_state_regs(state, ctx, false);
   }
   if (error == ERR_OK) {
-    DEBUG_PRINT("Read regs: pc: %llx sp: %llx fp: %llx", state->pc, state->sp, state->fp);
     *has_usermode_regs = true;
   }
   return error;
@@ -721,7 +689,6 @@ static inline EBPF_INLINE int collect_trace(
 {
   // The trace is reused on each call to this function so we have to reset the
   // variables used to maintain state.
-  DEBUG_PRINT("Resetting CPU record");
   PerCPURecord *record = get_pristine_per_cpu_record();
   if (!record) {
     return -1;
@@ -766,7 +733,6 @@ static inline EBPF_INLINE int collect_trace(
 exit:
   record->state.unwind_error = error;
   tail_call(ctx, unwinder);
-  DEBUG_PRINT("bpf_tail call failed for %d in native_tracer_entry", unwinder);
   return -1;
 }
 
