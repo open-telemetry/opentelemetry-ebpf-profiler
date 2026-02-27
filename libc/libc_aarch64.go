@@ -268,3 +268,146 @@ func extractTSDInfoARM(code []byte) (TSDInfo, error) {
 		Indirect:   indirect,
 	}, nil
 }
+
+func extractDTVInfoARM(code []byte) (DTVInfo, error) {
+	// Track register states similar to extractTSDInfoARM
+	var regs [32]regState
+
+	dtvOffset := int16(0)
+	entryWidth := uint32(0)
+	resetReg := int(-1)
+
+	// Scan entire function
+	for offs := 0; offs < len(code); offs += 4 {
+		if offs+4 > len(code) {
+			break
+		}
+
+		if resetReg >= 0 {
+			// Reset register state if something unsupported happens on it
+			regs[resetReg] = regState{status: Unspec}
+		}
+
+		inst, err := aa.Decode(code[offs:])
+		if err != nil {
+			continue
+		}
+		if inst.Op == aa.RET {
+			break
+		}
+
+		destReg, ok := arm.Xreg2num(inst.Args[0])
+		if !ok {
+			continue
+		}
+
+		resetReg = destReg
+		switch inst.Op {
+		case aa.MOV:
+			// Track register moves
+			srcReg, ok := arm.Xreg2num(inst.Args[1])
+			if !ok {
+				continue
+			}
+			regs[destReg] = regs[srcReg]
+
+		case aa.MRS:
+			// MRS X1, S3_3_C13_C0_2 (tpidr_el0)
+			if inst.Args[1].String() == "S3_3_C13_C0_2" {
+				regs[destReg] = regState{
+					status:     TSDBase, // Reuse TSDBase to mean thread pointer
+					multiplier: 1,
+				}
+			}
+
+		case aa.LDUR:
+			// LDUR X1, [X1,#-8]
+			m, ok := inst.Args[1].(aa.MemImmediate)
+			if !ok {
+				continue
+			}
+			srcReg, ok := arm.Xreg2num(m.Base)
+			if !ok {
+				continue
+			}
+			if regs[srcReg].status == TSDBase {
+				imm, ok := arm.DecodeImmediate(m)
+				if !ok {
+					continue
+				}
+				// This is loading the DTV pointer from thread pointer
+				dtvOffset = int16(imm & 0xFFFF)
+				regs[destReg] = regState{
+					status:     TSDElementBase, // DTV pointer
+					offset:     imm,
+					multiplier: 1,
+				}
+			} else {
+				continue
+			}
+
+		case aa.LDR:
+			if len(inst.Args) < 2 {
+				continue
+			}
+			switch m := inst.Args[1].(type) {
+			case aa.MemImmediate:
+				// ldr x1, [x1, #0] or ldr x1, [x1]
+				srcReg, ok := arm.Xreg2num(m.Base)
+				if !ok {
+					continue
+				}
+				if regs[srcReg].status == TSDBase {
+					// Loading DTV pointer from thread pointer
+					imm, ok := arm.DecodeImmediate(m)
+					if !ok {
+						imm = 0
+					}
+					dtvOffset = int16(imm & 0xFFFF)
+					regs[destReg] = regState{
+						status:     TSDElementBase, // DTV pointer
+						offset:     imm,
+						multiplier: 1,
+					}
+				} else {
+					continue
+				}
+
+			case aa.MemExtend:
+				// ldr x1, [x1, x2, lsl #3]
+				srcReg, ok := arm.Xreg2num(m.Base)
+				if !ok {
+					continue
+				}
+				if regs[srcReg].status == TSDElementBase {
+					// This is indexing into the DTV array
+					if m.Amount > 0 {
+						entryWidth = uint32(1 << m.Amount)
+					}
+				}
+			}
+
+		case aa.LSL:
+			// lsl x3, x3, #4
+			if len(inst.Args) >= 3 {
+				if imm, ok := inst.Args[2].(aa.Imm); ok {
+					entryWidth = uint32(1 << imm.Imm)
+				}
+			}
+
+		case aa.CMP, aa.CBZ, aa.CMN:
+			// Opcode with no affect on first argument.
+			// Noop to exit switch without default continue.
+
+		default:
+			continue
+		}
+		resetReg = -1
+	}
+
+	return DTVInfo{
+		Offset:     dtvOffset,
+		Multiplier: uint8(entryWidth),
+		Indirect:   1,
+	}, nil
+}

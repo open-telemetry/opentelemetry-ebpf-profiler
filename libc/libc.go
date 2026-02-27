@@ -13,11 +13,73 @@ import (
 )
 
 type TSDInfo = support.TSDInfo
+type DTVInfo = support.DTVInfo
 
 // LibcInfo contains introspection information extracted from the C-library
 type LibcInfo struct {
 	// TSDInfo is the TSDInfo extracted for this C-library
 	TSDInfo TSDInfo
+	// DTVInfo contains DTV (Dynamic Thread Vector) introspection data for accessing
+	// TLS variables when TLS descriptors are not available
+	DTVInfo DTVInfo
+}
+
+// IsEqual checks if two LibcInfo instances are equal
+func (l LibcInfo) IsEqual(other LibcInfo) bool {
+	return l.TSDInfo == other.TSDInfo && l.DTVInfo == other.DTVInfo
+}
+
+// Merge fills in empty fields of the receiver with corresponding values from other.
+// Fields already populated in the receiver are not overwritten.
+func (l *LibcInfo) Merge(other LibcInfo) {
+	// If other has TSDInfo and this instance does not, take it
+	if l.TSDInfo == (TSDInfo{}) {
+		l.TSDInfo = other.TSDInfo
+	}
+
+	// If other has DTVInfo and this instance does not, take it
+	if l.DTVInfo == (DTVInfo{}) {
+		l.DTVInfo = other.DTVInfo
+	}
+}
+
+// HasTSDInfo returns true if the LibcInfo contains valid TSD information.
+// TSDInfo is considered valid when the Multiplier field is non-zero.
+func (l LibcInfo) HasTSDInfo() bool {
+	return l.TSDInfo.Multiplier != 0
+}
+
+// HasDTVInfo returns true if the LibcInfo contains valid DTV information.
+// DTVInfo is considered valid when the Multiplier field is non-zero.
+func (l LibcInfo) HasDTVInfo() bool {
+	return l.DTVInfo.Multiplier != 0
+}
+
+var (
+	// regex for the libc
+	libcRegex = regexp.MustCompile(`.*/(ld-musl|ld-linux|libc|libpthread)([-.].*)?\.so`)
+)
+
+// IsPotentialLibcDSO determines if the DSO filename potentially contains libc code
+func IsPotentialLibcDSO(filename string) bool {
+	return libcRegex.MatchString(filename)
+}
+
+func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
+	tsdinfo, err := extractTSDInfo(ef)
+	if err != nil {
+		return nil, err
+	}
+
+	dtvinfo, err := extractDTVInfo(ef)
+	if err != nil {
+		return &LibcInfo{}, err
+	}
+
+	return &LibcInfo{
+		TSDInfo: tsdinfo,
+		DTVInfo: dtvinfo,
+	}, nil
 }
 
 // This code analyzes the C-library provided POSIX defined function which is used
@@ -65,27 +127,6 @@ type LibcInfo struct {
 //
 // Reading the value is basically "return self->specific_1stblock[key].data;"
 
-var (
-	// regex for the libc
-	libcRegex = regexp.MustCompile(`.*/(ld-musl|libc|libpthread)([-.].*)?\.so`)
-)
-
-// IsPotentialTSDDSO determines if the DSO filename potentially contains pthread code
-func IsPotentialTSDDSO(filename string) bool {
-	return libcRegex.MatchString(filename)
-}
-
-func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
-	tsdinfo, err := extractTSDInfo(ef)
-	if err != nil {
-		return nil, err
-	}
-
-	return &LibcInfo{
-		TSDInfo: tsdinfo,
-	}, nil
-}
-
 // extractTSDInfo extracts the introspection data for pthread thread specific data.
 func extractTSDInfo(ef *pfelf.File) (TSDInfo, error) {
 	_, code, err := ef.SymbolData("__pthread_getspecific", 2048)
@@ -110,6 +151,34 @@ func extractTSDInfo(ef *pfelf.File) (TSDInfo, error) {
 	}
 	if err != nil {
 		return TSDInfo{}, fmt.Errorf("failed to extract getspecific data: %s", err)
+	}
+	return info, nil
+}
+
+// extractDTVInfo extracts the introspection data for the DTV to access TLS vars
+func extractDTVInfo(ef *pfelf.File) (DTVInfo, error) {
+	var info DTVInfo
+	_, code, err := ef.SymbolData("__tls_get_addr", 2048)
+	if err != nil {
+		// If the symbol is not exported, this is not a critical error.
+		// Callers can check HasDTVInfo() to determine if DTV data is available.
+		return info, nil
+	}
+
+	if len(code) < 8 {
+		return info, fmt.Errorf("__tls_get_addr function size is %d", len(code))
+	}
+
+	switch ef.Machine {
+	case elf.EM_AARCH64:
+		info, err = extractDTVInfoARM(code)
+	case elf.EM_X86_64:
+		info, err = extractDTVInfoX86(code)
+	default:
+		return info, fmt.Errorf("unsupported arch %s", ef.Machine.String())
+	}
+	if err != nil {
+		return info, fmt.Errorf("failed to extract DTV data: %s", err)
 	}
 	return info, nil
 }

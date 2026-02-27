@@ -377,6 +377,20 @@ func (p *pythonInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	libcInfo libc.LibcInfo) error {
 	d := p.d
+
+	// If we don't have a static TLS offset (Python < 3.13 or extraction failed),
+	// we need TSDInfo to access thread state via pthread_getspecific.
+	// Since UpdateLibcInfo may be called multiple times as LibcInfo is collected
+	// from multiple DSOs, wait until we have TSDInfo before inserting proc data.
+	if d.staticTLSOffset == 0 && !libcInfo.HasTSDInfo() {
+		return nil
+	}
+
+	// Prevent duplicate inserts
+	if p.procInfoInserted {
+		return nil
+	}
+
 	vm := &d.vmStructs
 
 	cdata := support.PyProcInfo{
