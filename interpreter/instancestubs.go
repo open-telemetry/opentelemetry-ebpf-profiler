@@ -81,6 +81,10 @@ func (m *EbpfHandlerStubs) AttachUSDTProbes(libpf.PID, string, string, []pfelf.U
 	return nil, nil
 }
 
+func (mockup *EbpfHandlerStubs) UpdateProgArray(string, uint32, string) error {
+	return nil
+}
+
 func (mockup *EbpfHandlerStubs) AttachUprobe(
 	libpf.PID, string, uint64, string) (LinkCloser, error) {
 	return nil, nil

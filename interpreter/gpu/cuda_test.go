@@ -27,12 +27,13 @@ package gpu_test
 // 	coll, err := support.LoadCollectionSpec()
 // 	require.NoError(t, err, "Failed to load eBPF collection spec")
 
-// 	// Verify single-shot program names exist
-// 	t.Run("SingleShotPrograms", func(t *testing.T) {
-// 		progNames := []string{
-// 			gpu.USDTProgCudaCorrelation,
-// 			gpu.USDTProgCudaKernel,
-// 		}
+	// // Verify single-shot program names exist
+	// t.Run("SingleShotPrograms", func(t *testing.T) {
+	// 	progNames := []string{
+	// 		gpu.USDTProgCudaCorrelation,
+	// 		gpu.USDTProgCudaKernel,
+	// 		gpu.USDTProgCudaActivityBatch,
+	// 	}
 
 // 		for _, progName := range progNames {
 // 			t.Run(progName, func(t *testing.T) {
