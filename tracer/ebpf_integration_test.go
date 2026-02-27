@@ -86,6 +86,76 @@ type trace struct {
 	frames libpf.EbpfFrame
 }
 
+func TestTracerErrorPropagation(t *testing.T) {
+	ctx := t.Context()
+
+	metrics.Start(noop.Meter{})
+
+	tr, err := tracer.NewTracer(ctx, &tracer.Config{
+		Intervals:              &mockIntervals{},
+		FilterErrorFrames:      false,
+		SamplesPerSecond:       20,
+		MapScaleFactor:         0,
+		KernelVersionCheck:     true,
+		BPFVerifierLogLevel:    0,
+		ProbabilisticInterval:  100,
+		ProbabilisticThreshold: 100,
+		OffCPUThreshold:        1 * math.MaxUint32,
+		VerboseMode:            true,
+	})
+	require.NoError(t, err)
+	defer tr.Close()
+
+	// tamper ebpf pid_events map type to produce invalid argument error
+	badSpec := &cebpf.MapSpec{
+		Name:       "pid_events",
+		Type:       cebpf.Queue, // Hash type is expected instead
+		KeySize:    0,
+		ValueSize:  4,
+		MaxEntries: 100,
+	}
+
+	restoreRlimit, err := rlimit.MaximizeMemlock()
+	require.NoError(t, err)
+	defer restoreRlimit()
+
+	badMap, err := cebpf.NewMap(badSpec)
+	require.NoError(t, err)
+
+	tr.GetEbpfMaps()["pid_events"] = badMap
+
+	traceChan := make(chan *libpf.EbpfTrace, 16)
+	require.NoError(t, tr.StartMapMonitors(ctx, traceChan))
+	<-tr.Done()
+}
+
+func TestTracerMapMonitorsError(t *testing.T) {
+	ctx := t.Context()
+
+	metrics.Start(noop.Meter{})
+
+	tr, err := tracer.NewTracer(ctx, &tracer.Config{
+		Intervals:              &mockIntervals{},
+		FilterErrorFrames:      false,
+		SamplesPerSecond:       20,
+		MapScaleFactor:         0,
+		KernelVersionCheck:     true,
+		BPFVerifierLogLevel:    0,
+		ProbabilisticInterval:  100,
+		ProbabilisticThreshold: 100,
+		OffCPUThreshold:        1 * math.MaxUint32,
+		VerboseMode:            true,
+	})
+	require.NoError(t, err)
+	defer tr.Close()
+
+	// force error by removing a required map during map monitor start up
+	delete(tr.GetEbpfMaps(), "report_events")
+
+	traceChan := make(chan *libpf.EbpfTrace, 16)
+	require.Error(t, tr.StartMapMonitors(ctx, traceChan))
+}
+
 func TestTraceTransmissionAndParsing(t *testing.T) {
 	ctx := t.Context()
 
@@ -124,6 +194,8 @@ Loop:
 		select {
 		case <-timeout.C:
 			break Loop
+		case <-tr.Done():
+			t.Fatal("tracer encountered an unrecoverable error")
 		case ebpfTrace := <-traceChan:
 			comm := ebpfTrace.Comm.String()
 			require.GreaterOrEqual(t, len(comm), 4)

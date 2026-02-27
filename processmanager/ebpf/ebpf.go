@@ -101,7 +101,7 @@ func LoadMaps(ctx context.Context, includeTracers types.IncludedTracers,
 			if !types.IsMapEnabled(nameTag, includeTracers) {
 				continue
 			}
-			log.Fatalf("Map %v is not available", nameTag)
+			return nil, fmt.Errorf("Map %v is not available", nameTag)
 		}
 		implRefVal.Field(i).Set(reflect.ValueOf(mapVal))
 	}
@@ -112,7 +112,7 @@ func LoadMaps(ctx context.Context, includeTracers types.IncludedTracers,
 		deltasMapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)
 		deltasMap, ok := maps[deltasMapName]
 		if !ok {
-			log.Fatalf("Map %s is not available", deltasMapName)
+			return nil, fmt.Errorf("Map %v is not available", deltasMapName)
 		}
 		impl.ExeIDToStackDeltaMaps[i-support.StackDeltaBucketSmallest] = deltasMap
 	}
@@ -147,7 +147,8 @@ func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID 
 	}
 	if err := impl.InterpreterOffsets.Update(unsafe.Pointer(&key), unsafe.Pointer(&value),
 		cebpf.UpdateAny); err != nil {
-		log.Fatalf("Failed to place interpreter range in map: %v", err)
+		// TODO: Used to be log.Fatalf, revisit if needed
+		return fmt.Errorf("Failed to place interpreter range in map: %v", err)
 	}
 
 	return nil

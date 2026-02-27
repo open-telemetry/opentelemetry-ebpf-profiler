@@ -130,6 +130,11 @@ func Test_Golabels(t *testing.T) {
 				select {
 				case <-ctx.Done():
 					t.Log("Test program cancelled (run complete)")
+					select {
+					case <-trc.Done():
+						t.Error("map monitoring ended with unrecoverable errors")
+					default:
+					}
 				default:
 					// Normal exit. We failed to capture frames.
 					require.NoError(t, err)
