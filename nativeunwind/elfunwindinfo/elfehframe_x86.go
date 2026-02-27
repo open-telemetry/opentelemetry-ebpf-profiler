@@ -80,6 +80,12 @@ func getRegNameX86(reg uleb128) string {
 // regX86 returns the address to x86 specific register in vmRegs
 func (regs *vmRegs) regX86(ndx uleb128) *vmReg {
 	switch ndx {
+	case x86RegRAX:
+		// We don't have a specific field for RAX, but we can't return nil
+		// if we want to support DW_CFA_register for it.
+		// However, vmRegs only has fp and ra.
+		// If RA is in RAX, we need to return &regs.ra.
+		return &regs.ra
 	case x86RegRBP:
 		return &regs.fp
 	case x86RegRIP:
@@ -93,16 +99,22 @@ func getUnwinderRegX86(reg uleb128) uint8 {
 	switch reg {
 	case x86RegRAX:
 		return support.UnwindRegX86RAX
-	case x86RegR9:
-		return support.UnwindRegX86R9
-	case x86RegR11:
-		return support.UnwindRegX86R11
-	case x86RegR15:
-		return support.UnwindRegX86R15
+	case x86RegRDI:
+		return support.UnwindRegX86RDI
 	case x86RegRBP:
 		return support.UnwindRegFp
 	case x86RegRSP:
 		return support.UnwindRegSp
+	case x86RegR8:
+		return support.UnwindRegX86R8
+	case x86RegR9:
+		return support.UnwindRegX86R9
+	case x86RegR11:
+		return support.UnwindRegX86R11
+	case x86RegR13:
+		return support.UnwindRegX86R13
+	case x86RegR15:
+		return support.UnwindRegX86R15
 	case x86RegRIP:
 		return support.UnwindRegPc
 	case regCFA:
@@ -126,19 +138,26 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 		// condition in samples is statistically unlikely.
 		return sdtypes.UnwindInfoStop
 	}
-	// Filter invalid RSP based CFAs
-	if regs.cfa.reg == x86RegRSP && regs.cfa.off == 0 {
-		return sdtypes.UnwindInfoInvalid
-	}
-
-	// The CFI allows having Return Address (RA) be recoverable via an expression,
-	// but the eBPF currently supports the ABI standard RA=CFA-8 only. Verify that
-	// we are not in any weird hand woven assembly which is not supported.
-	if regs.ra.reg != regCFA || regs.ra.off != -8 {
-		return sdtypes.UnwindInfoInvalid
-	}
-
 	info := sdtypes.UnwindInfo{}
+
+	// The Return Address (RA) is usually recoverable via an ABI standard RA=CFA-8.
+	// But some functions (like __vfork) use a register to store the RA.
+	raReg := getUnwinderRegX86(regs.ra.reg)
+	if raReg != support.UnwindRegInvalid && raReg != support.UnwindRegCfa {
+		info.Flags |= support.UnwindFlagRegisterRA
+		info.AuxBaseReg = raReg
+	} else if regs.ra.reg == regCFA && regs.ra.off == -8 {
+		// Standard CFA-8
+	} else {
+		// Not the standard CFA-8 and not a supported register
+		return sdtypes.UnwindInfoInvalid
+	}
+
+	// Filter invalid RSP based CFAs (except when using register RA)
+	if (info.Flags&support.UnwindFlagRegisterRA) == 0 &&
+		regs.cfa.reg == x86RegRSP && regs.cfa.off == 0 {
+		return sdtypes.UnwindInfoInvalid
+	}
 
 	// Determine unwind info for frame pointer
 	switch regs.fp.reg {
