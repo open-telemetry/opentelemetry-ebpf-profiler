@@ -28,6 +28,7 @@ const (
 	defaultArgSendErrorFrames     = false
 	defaultOffCPUThreshold        = 0
 	defaultEnvVarsValue           = ""
+	defaultBPFFSRoot              = "/sys/fs/bpf/"
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -80,6 +81,8 @@ var (
 		"Expected format: probe_type:target[:symbol]. probe_type can be kprobe, kretprobe, uprobe, or uretprobe."
 	loadProbeHelper = "Load generic eBPF program that can be attached externally to " +
 		"various user or kernel space hooks."
+	bpffsHelp = fmt.Sprintf("Set the root path for BPF FS for pinned maps. Default is %s",
+		defaultBPFFSRoot)
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -140,6 +143,8 @@ func parseArgs() (*controller.Config, error) {
 		defaultOffCPUThreshold, offCPUThresholdHelp)
 
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
+
+	fs.StringVar(&args.BPFFSRoot, "bpffs-root", defaultBPFFSRoot, bpffsHelp)
 
 	fs.Func("probe-link", probeLinkHelper, func(link string) error {
 		args.ProbeLinks = append(args.ProbeLinks, link)

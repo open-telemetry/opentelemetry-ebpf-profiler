@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"os"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -164,6 +166,8 @@ type Config struct {
 	// LoadProbe indicates whether the generic eBPF program should be loaded
 	// without being attached to something.
 	LoadProbe bool
+	// BPFFSRoot is the root path to BPF filesystem for pinned maps and programs.
+	BPFFSRoot string
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -573,6 +577,25 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			continue
 		}
 
+		if mapName == "traces_ctx_v1" {
+			if cfg.BPFFSRoot == "" {
+				// As BPF FS is not set, the map can not be shared with other
+				// OTel components. To reduce the memory footprint in this case
+				// reduce the size of the map.
+				mapSpec.MaxEntries = 1
+			} else {
+				// Try to load it from a known path:
+				mPath := path.Join(cfg.BPFFSRoot, "otel", mapName)
+				ebpfMap, err := cebpf.LoadPinnedMap(mPath, &cebpf.LoadPinOptions{})
+				if err == nil {
+					log.Infof("Using shared map for OpenTelemetry span/trace ID communication")
+					ebpfMaps[mapName] = ebpfMap
+					continue
+				}
+				// The shared map does not yet exist or BPF FS is not set - so continue as usual
+			}
+		}
+
 		if !types.IsMapEnabled(mapName, cfg.IncludeTracers) {
 			log.Debugf("Skipping eBPF map %s: tracer not enabled", mapName)
 			continue
@@ -586,6 +609,32 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			return fmt.Errorf("failed to load %s: %v", mapName, err)
 		}
 		ebpfMaps[mapName] = ebpfMap
+
+		if mapName == "traces_ctx_v1" {
+			if cfg.BPFFSRoot == "" {
+				// In environments, where BPF FS is not available,
+				// we just load the map to not break eBPF programs.
+				log.Infof("Skip pinning eBPF map to share OTel span/trace IDs")
+				continue
+			}
+
+			// Pin the loaded map to a known path, so that other
+			// OTel components can also use it.
+			otelBPFFS := path.Join(cfg.BPFFSRoot, "otel")
+			if err := os.MkdirAll(otelBPFFS, 0o1700); err != nil {
+				// This is a non-fatal error for the functionality
+				// of the profiler. So just log it.
+				log.Warnf("Failed to create '%s'. OTel span/trace IDs can not be shared: %v",
+					otelBPFFS, err)
+				continue
+			}
+			if err := ebpfMap.Pin(path.Join(otelBPFFS, mapName)); err != nil {
+				// This is a non-fatal error for the functionality
+				// of the profiler. So just log it.
+				log.Warnf("Failed to pin '%s'. OTel span/trace IDs can not be shared: %v",
+					mapName, err)
+			}
+		}
 	}
 
 	return nil
