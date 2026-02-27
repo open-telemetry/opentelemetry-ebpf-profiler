@@ -162,6 +162,8 @@ elif [ $RESULT -eq 137 ] || [ $RESULT -eq 124 ]; then
     echo "===== TEST TIMED OUT ====="
 else
     echo ""
+    echo "===== BPF dmesg ====="
+    dmesg | tail -60
     echo "===== TEST FAILED (exit code: $RESULT) ====="
 fi
 

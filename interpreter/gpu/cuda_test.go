@@ -32,6 +32,7 @@ func TestProgramNamesExist(t *testing.T) {
 		progNames := []string{
 			gpu.USDTProgCudaCorrelation,
 			gpu.USDTProgCudaKernel,
+			gpu.USDTProgCudaActivityBatch,
 		}
 
 		for _, progName := range progNames {

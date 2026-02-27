@@ -50,12 +50,23 @@ func parseProbes(t *testing.T) []pfelf.USDTProbe {
 	var requiredProbes []pfelf.USDTProbe
 	for _, probe := range allProbes {
 		if probe.Provider == "parcagpu" &&
-			(probe.Name == "cuda_correlation" || probe.Name == "kernel_executed") {
+			(probe.Name == "cuda_correlation" || probe.Name == "kernel_executed" || probe.Name == "activity_batch") {
 			requiredProbes = append(requiredProbes, probe)
 		}
 	}
-	require.Len(t, requiredProbes, 2,
-		"expected 2 parcagpu USDT probes (cuda_correlation, kernel_executed), got %d", len(requiredProbes))
+	// Need cuda_correlation + at least one of kernel_executed/activity_batch
+	hasCorrelation := false
+	hasKernel := false
+	for _, p := range requiredProbes {
+		switch p.Name {
+		case "cuda_correlation":
+			hasCorrelation = true
+		case "kernel_executed", "activity_batch":
+			hasKernel = true
+		}
+	}
+	require.True(t, hasCorrelation, "missing cuda_correlation probe")
+	require.True(t, hasKernel, "missing kernel_executed or activity_batch probe")
 
 	for _, p := range requiredProbes {
 		t.Logf("Found probe: provider=%s name=%s location=0x%x args=%s",
@@ -93,17 +104,21 @@ func createTracer(t *testing.T) (*tracer.Tracer, interpreter.EbpfHandler, contex
 }
 
 // buildCookiesAndProgNames builds the cookie and program-name slices that
-// mirror interpreter/gpu/cuda.go:124-137.
+// mirror interpreter/gpu/cuda.go Attach().
 func buildCookiesAndProgNames(probes []pfelf.USDTProbe) ([]uint64, []string) {
 	cookies := make([]uint64, len(probes))
 	progNames := make([]string, len(probes))
 	for i, probe := range probes {
-		cookies[i] = uint64(probe.Name[0])
 		switch probe.Name {
 		case "cuda_correlation":
+			cookies[i] = 0 // CudaProgCorrelation
 			progNames[i] = "cuda_correlation"
 		case "kernel_executed":
+			cookies[i] = 1 // CudaProgKernelExec
 			progNames[i] = "cuda_kernel_exec"
+		case "activity_batch":
+			cookies[i] = 2 // CudaProgActivityBatch
+			progNames[i] = "cuda_activity_batch"
 		}
 	}
 	return cookies, progNames
@@ -165,7 +180,17 @@ func TestCUDAVerifierMultiProbe(t *testing.T) {
 	defer tr.Close()
 	defer cancel()
 
-	cookies, _ := buildCookiesAndProgNames(probes)
+	cookies, progNames := buildCookiesAndProgNames(probes)
+
+	// Populate the tail-call prog array for activity_batch (the only tail-call
+	// target — correlation and kernel_exec are inlined in cuda_probe).
+	for _, probe := range probes {
+		if probe.Name == "activity_batch" {
+			err := ebpfHandler.UpdateProgArray("cuda_progs", 0, "cuda_activity_batch")
+			require.NoError(t, err, "UpdateProgArray failed for cuda_activity_batch")
+			break
+		}
+	}
 
 	lc, err := ebpfHandler.AttachUSDTProbes(
 		libpf.PID(os.Getpid()),
@@ -173,7 +198,7 @@ func TestCUDAVerifierMultiProbe(t *testing.T) {
 		"cuda_probe", // multi-probe program
 		probes,
 		cookies,
-		nil, // no individual program names in multi mode
+		progNames,
 	)
 	require.NoError(t, err, "AttachUSDTProbes (multi-probe) failed — BPF verifier rejected CUDA programs")
 	defer lc.Unload()

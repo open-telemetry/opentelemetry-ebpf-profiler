@@ -270,6 +270,10 @@ func (emc *ebpfMapsCoredump) AttachUSDTProbes(_ libpf.PID, _, _ string, _ []pfel
 	return nil, nil
 }
 
+func (emc *ebpfMapsCoredump) UpdateProgArray(string, uint32, string) error {
+	return nil
+}
+
 func (emc *ebpfMapsCoredump) AttachUprobe(_ libpf.PID, _ string, _ uint64,
 	_ string) (interpreter.LinkCloser, error) {
 	return nil, nil

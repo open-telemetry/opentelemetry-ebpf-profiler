@@ -22,14 +22,30 @@ import (
 const (
 	// eBPF program names for USDT probes
 	// These correspond to the function names in cuda.ebpf.c, not the SEC() paths
-	USDTProgCudaCorrelation = "cuda_correlation"
-	USDTProgCudaKernel      = "cuda_kernel_exec"
-	USDTProgCudaProbe       = "cuda_probe"
+	USDTProgCudaCorrelation   = "cuda_correlation"
+	USDTProgCudaKernel        = "cuda_kernel_exec"
+	USDTProgCudaActivityBatch = "cuda_activity_batch"
+	USDTProgCudaProbe         = "cuda_probe"
+
+	// BPF attach cookie values — must match CUDA_PROG_* in cuda.ebpf.c.
+	// Used in the low 32 bits of the BPF attach cookie so cuda_probe can
+	// distinguish probes.  The cuda_progs prog array uses a fixed key (0)
+	// for the single tail-call target (activity_batch).
+	CudaProgCorrelation   = 0
+	CudaProgKernelExec    = 1
+	CudaProgActivityBatch = 2
 )
+
+const cudaProgsMap = "cuda_progs"
 
 var (
 	// gpuFixers maps PID to gpuTraceFixer
 	gpuFixers sync.Map
+
+	// cudaTailCallOnce ensures the cuda_progs prog array is populated exactly
+	// once.  The tail-call targets must be in place before cuda_probe fires.
+	cudaTailCallOnce   sync.Once
+	cudaTailCallFailed bool
 )
 
 // SymbolizedCudaTrace holds a symbolized trace awaiting GPU timing information.
@@ -66,9 +82,10 @@ type gpuTraceFixer struct {
 }
 
 type data struct {
-	path   string
-	link   interpreter.LinkCloser
-	probes []pfelf.USDTProbe
+	path           string
+	link           interpreter.LinkCloser
+	probes         []pfelf.USDTProbe
+	kernelFallback *pfelf.USDTProbe // kernel_executed probe, kept as fallback if activity_batch fails
 }
 
 // Instance is the CUDA interpreter instance
@@ -110,15 +127,36 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			return nil, nil
 		}
 
-		// Filter to only the probes we need
-		var requiredProbes []pfelf.USDTProbe
-		for _, probe := range parcagpuProbes {
-			if probe.Name == "cuda_correlation" || probe.Name == "kernel_executed" {
-				requiredProbes = append(requiredProbes, probe)
+		// Filter to only the probes we need.
+		// Always require cuda_correlation. Prefer activity_batch over kernel_executed.
+		var correlationProbe *pfelf.USDTProbe
+		var kernelProbe *pfelf.USDTProbe
+		var batchProbe *pfelf.USDTProbe
+		for i := range parcagpuProbes {
+			switch parcagpuProbes[i].Name {
+			case "cuda_correlation":
+				correlationProbe = &parcagpuProbes[i]
+			case "kernel_executed":
+				kernelProbe = &parcagpuProbes[i]
+			case "activity_batch":
+				batchProbe = &parcagpuProbes[i]
 			}
 		}
-		if len(requiredProbes) != 2 {
-			log.Warnf("parcagpu USDT probes in %s missing required probes (need cuda_correlation and kernel_executed): %v", info.FileName(), parcagpuProbes)
+		if correlationProbe == nil {
+			log.Warnf("parcagpu USDT probes in %s missing cuda_correlation: %v", info.FileName(), parcagpuProbes)
+			return nil, nil
+		}
+
+		var requiredProbes []pfelf.USDTProbe
+		requiredProbes = append(requiredProbes, *correlationProbe)
+		if batchProbe != nil {
+			requiredProbes = append(requiredProbes, *batchProbe)
+			log.Debugf("parcagpu: using activity_batch mode for %s", info.FileName())
+		} else if kernelProbe != nil {
+			requiredProbes = append(requiredProbes, *kernelProbe)
+			log.Debugf("parcagpu: using kernel_executed mode for %s", info.FileName())
+		} else {
+			log.Warnf("parcagpu USDT probes in %s missing kernel probe (need activity_batch or kernel_executed): %v", info.FileName(), parcagpuProbes)
 			return nil, nil
 		}
 		parcagpuProbes = requiredProbes
@@ -129,6 +167,11 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			path:   info.FileName(),
 			probes: parcagpuProbes,
 		}
+		// If using activity_batch, keep kernel_executed as fallback in case
+		// the tail-call prog array setup fails (e.g. verifier rejection).
+		if batchProbe != nil && kernelProbe != nil {
+			d.kernelFallback = kernelProbe
+		}
 
 		return d, nil
 	}
@@ -137,20 +180,46 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
 	_ remotememory.RemoteMemory) (interpreter.Instance, error) {
-	// Maps usdt probe name to ebpf program name.
-	// Use the first character of the probe name as a cookie.
-	// 'c' -> cuda_correlation
-	// 'k' -> cuda_kernel_exec
+	// If using activity_batch, ensure the tail-call prog array is populated.
+	// On failure (e.g. verifier rejection), fall back to kernel_executed.
+	for i, probe := range d.probes {
+		if probe.Name != "activity_batch" {
+			continue
+		}
+		cudaTailCallOnce.Do(func() {
+			if err := ebpf.UpdateProgArray(cudaProgsMap, 0,
+				USDTProgCudaActivityBatch); err != nil {
+				log.Errorf("[cuda] activity_batch tail call failed: %v", err)
+				cudaTailCallFailed = true
+			}
+		})
+		if cudaTailCallFailed {
+			if d.kernelFallback != nil {
+				d.probes[i] = *d.kernelFallback
+				log.Warnf("[cuda] falling back to kernel_executed mode")
+			} else {
+				log.Errorf("[cuda] activity_batch failed and no kernel_executed fallback")
+				d.probes = append(d.probes[:i], d.probes[i+1:]...)
+			}
+		}
+		break
+	}
+
+	// Map USDT probe names to eBPF program names and tail-call indices.
+	// The cookie doubles as the cuda_progs prog array key for tail-call dispatch.
 	cookies := make([]uint64, len(d.probes))
 	progNames := make([]string, len(d.probes))
 	for i, probe := range d.probes {
-		cookies[i] = uint64(probe.Name[0])
-		// Map probe names to specific program names for single-shot mode
 		switch probe.Name {
 		case "cuda_correlation":
+			cookies[i] = CudaProgCorrelation
 			progNames[i] = USDTProgCudaCorrelation
 		case "kernel_executed":
+			cookies[i] = CudaProgKernelExec
 			progNames[i] = USDTProgCudaKernel
+		case "activity_batch":
+			cookies[i] = CudaProgActivityBatch
+			progNames[i] = USDTProgCudaActivityBatch
 		default:
 			log.Debugf("unknown parcagpu USDT probe name: %s", probe.Name)
 		}
