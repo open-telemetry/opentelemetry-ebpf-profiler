@@ -2,7 +2,8 @@
 	test-junit protobuf docker-image agent legal integration-test-binaries \
 	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
-	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix
+	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix \
+	otel-from-tree otel-from-lib
 
 SHELL := /usr/bin/env bash
 
@@ -83,6 +84,23 @@ ebpf-profiler: ebpf
 
 otelcol-ebpf-profiler: ebpf generate-collector
 	cd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../$@ 
+
+# Sets opentelemetry collector modules to be pulled from local source tree.
+# This command allows you to make changes to your local checkout of otel core and build
+# the collector against those changes without having to push to github.
+# The workflow is:
+#
+# 1. Hack on changes in core (assumed to be checked out in ../opentelemetry-collector from this directory)
+# 2. Run `make otel-from-tree` (only need to run it once to remap go modules)
+# 3. You can now build collector and it will use your local otel core changes.
+# 4. Before committing/pushing your changes, undo by running `make otel-from-lib`.
+otel-from-tree:
+	./cmd/otelcol-ebpf-profiler/otel-from-tree.sh
+
+# Removes local opentelemetry-collector replaces from manifest.yaml.
+# (Undoes otel-from-tree.)
+otel-from-lib:
+	./cmd/otelcol-ebpf-profiler/otel-from-lib.sh
 
 rust-targets:
 	rustup target add $(ARCH_PREFIX)-unknown-linux-musl
@@ -168,8 +186,7 @@ docker-image:
 	docker build -t otel/opentelemetry-ebpf-profiler-dev -f Dockerfile .
 
 agent:
-	docker run -v "$$PWD":/agent -it --rm --user $(shell id -u):$(shell id -g) otel/opentelemetry-ebpf-profiler-dev:latest \
-	   "make TARGET_ARCH=$(TARGET_ARCH) VERSION=$(VERSION) REVISION=$(REVISION) BUILD_TIMESTAMP=$(BUILD_TIMESTAMP)"
+	./tools/docker-agent-build.sh "$(TARGET_ARCH)" "$(VERSION)" "$(REVISION)" "$(BUILD_TIMESTAMP)"
 
 legal:
 	go tool $(GO_TOOLS) go-licenses save --force . --save_path=LICENSES
