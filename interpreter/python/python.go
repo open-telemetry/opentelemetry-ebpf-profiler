@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"reflect"
 	"regexp"
 	"slices"
@@ -46,6 +47,27 @@ var (
 // pythonVer builds a version number from readable numbers
 func pythonVer(major, minor uint16) uint16 {
 	return major*0x100 + minor
+}
+
+func readPyVersionHex(ef *pfelf.File) (major uint8, minor uint8, err error) {
+	// Py_Version is referenced in CPython internals for versioned Python binaries.
+	// https://github.com/python/cpython/blob/v3.11.0/Doc/c-api/apiabiversion.rst
+	addr, err := ef.LookupSymbolAddress("Py_Version")
+	if err != nil {
+		return 0, 0, err
+	}
+	rm := ef.GetRemoteMemory()
+	versionHex := rm.Uint32(libpf.Address(addr))
+	if versionHex == 0 {
+		return 0, 0, errors.New("Py_Version is 0")
+	}
+
+	major = uint8((versionHex >> 24) & 0xff)
+	minor = uint8((versionHex >> 16) & 0xff)
+	if major == 0 {
+		return 0, 0, fmt.Errorf("invalid Py_Version 0x%x", versionHex)
+	}
+	return major, minor, nil
 }
 
 //nolint:lll
@@ -707,18 +729,33 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	mainDSO := false
+	major := 0
+	minor := 0
 	matches := libpythonRegex.FindStringSubmatch(info.FileName())
 	if matches == nil {
 		mainDSO = true
 		matches = pythonRegex.FindStringSubmatch(info.FileName())
-		if matches == nil {
+	}
+	if matches == nil {
+		if !strings.HasPrefix(path.Base(info.FileName()), "python") {
 			return nil, nil
 		}
+	} else {
+		major, _ = strconv.Atoi(matches[1])
+		minor, _ = strconv.Atoi(matches[2])
 	}
 
 	ef, err := info.GetELF()
 	if err != nil {
 		return nil, err
+	}
+	if major == 0 {
+		majorFromSym, minorFromSym, versionErr := readPyVersionHex(ef)
+		if versionErr != nil {
+			return nil, nil
+		}
+		major = int(majorFromSym)
+		minor = int(minorFromSym)
 	}
 
 	if mainDSO {
@@ -735,8 +772,6 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	var pyruntimeAddr, autoTLSKey libpf.SymbolValue
-	major, _ := strconv.ParseUint(matches[1], 10, 16)
-	minor, _ := strconv.ParseUint(matches[2], 10, 16)
 	version := pythonVer(uint16(major), uint16(minor))
 
 	minVer := pythonVer(3, 6)
