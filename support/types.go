@@ -54,8 +54,7 @@ const (
 )
 
 const (
-	EventTypeGenericPID     = 0x1
-	EventTypeReloadKallsyms = 0x2
+	EventTypeGenericPID = 0x1
 )
 
 const UnwindInfoMaxEntries = 0x4000
