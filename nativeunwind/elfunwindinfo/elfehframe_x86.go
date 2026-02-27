@@ -85,7 +85,7 @@ func (regs *vmRegs) regX86(ndx uleb128) *vmReg {
 		// if we want to support DW_CFA_register for it.
 		// However, vmRegs only has fp and ra.
 		// If RA is in RAX, we need to return &regs.ra.
-		return nil
+		return &regs.ra
 	case x86RegRBP:
 		return &regs.fp
 	case x86RegRIP:
@@ -99,22 +99,22 @@ func getUnwinderRegX86(reg uleb128) uint8 {
 	switch reg {
 	case x86RegRAX:
 		return support.UnwindRegX86RAX
-	case x86RegR9:
-		return support.UnwindRegX86R9
-	case x86RegR11:
-		return support.UnwindRegX86R11
-	case x86RegR15:
-		return support.UnwindRegX86R15
 	case x86RegRDI:
 		return support.UnwindRegX86RDI
-	case x86RegR13:
-		return support.UnwindRegX86R13
-	case x86RegR8:
-		return support.UnwindRegX86R8
 	case x86RegRBP:
 		return support.UnwindRegFp
 	case x86RegRSP:
 		return support.UnwindRegSp
+	case x86RegR8:
+		return support.UnwindRegX86R8
+	case x86RegR9:
+		return support.UnwindRegX86R9
+	case x86RegR11:
+		return support.UnwindRegX86R11
+	case x86RegR13:
+		return support.UnwindRegX86R13
+	case x86RegR15:
+		return support.UnwindRegX86R15
 	case x86RegRIP:
 		return support.UnwindRegPc
 	case regCFA:
@@ -145,7 +145,7 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 	raReg := getUnwinderRegX86(regs.ra.reg)
 	if raReg != support.UnwindRegInvalid && raReg != support.UnwindRegCfa {
 		info.Flags |= support.UnwindFlagRegisterRA
-		info.RaReg = raReg
+		info.AuxBaseReg = raReg
 	} else if regs.ra.reg == regCFA && regs.ra.off == -8 {
 		// Standard CFA-8
 	} else {
