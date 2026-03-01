@@ -36,6 +36,10 @@ type ebpfMapsCoredump struct {
 
 var _ interpreter.EbpfHandler = &ebpfMapsCoredump{}
 
+func (emc *ebpfMapsCoredump) CoredumpTest() bool {
+	return true
+}
+
 func (emc *ebpfMapsCoredump) RemoveReportedPID(libpf.PID) {
 }
 
@@ -72,6 +76,8 @@ func (emc *ebpfMapsCoredump) UpdateProcData(t libpf.InterpreterType, pid libpf.P
 		emc.ctx.addMap(unsafe.Pointer(&C.v8_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_V8ProcInfo))
 	case libpf.BEAM:
 		emc.ctx.addMap(unsafe.Pointer(&C.beam_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_BEAMProcInfo))
+	case libpf.LuaJIT:
+		emc.ctx.addMap(unsafe.Pointer(&C.luajit_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_LuaJITProcInfo))
 	}
 	return nil
 }
@@ -94,6 +100,8 @@ func (emc *ebpfMapsCoredump) DeleteProcData(t libpf.InterpreterType, pid libpf.P
 		emc.ctx.delMap(unsafe.Pointer(&C.v8_procs), C.u32(pid))
 	case libpf.BEAM:
 		emc.ctx.delMap(unsafe.Pointer(&C.beam_procs), C.u32(pid))
+	case libpf.LuaJIT:
+		emc.ctx.delMap(unsafe.Pointer(&C.luajit_procs), C.u32(pid))
 	}
 	return nil
 }
