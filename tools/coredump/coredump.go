@@ -192,7 +192,6 @@ func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debu
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Interpreter manager: %v", err)
 	}
-
 	manager.SynchronizeProcess(pr)
 
 	info := make([]ThreadInfo, 0, len(threadInfo))

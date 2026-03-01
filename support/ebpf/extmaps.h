@@ -48,6 +48,7 @@ extern struct php_procs_t php_procs;
 extern struct py_procs_t py_procs;
 extern struct ruby_procs_t ruby_procs;
 extern struct v8_procs_t v8_procs;
+extern struct luajit_procs_t luajit_procs;
 #endif // TESTING_COREDUMP
 
 #endif // OPTI_EXTMAPS_H

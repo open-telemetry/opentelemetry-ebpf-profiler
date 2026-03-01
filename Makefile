@@ -30,8 +30,8 @@ endif
 export TARGET_ARCH
 export CGO_ENABLED = 0
 export GOARCH = $(TARGET_ARCH)
-export CC = $(ARCH_PREFIX)-linux-gnu-gcc
-export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
+# export CC = $(ARCH_PREFIX)-linux-gnu-gcc
+# export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
 
 BRANCH = $(shell git branch --show-current)
 

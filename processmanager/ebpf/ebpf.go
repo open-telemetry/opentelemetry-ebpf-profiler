@@ -52,6 +52,7 @@ type ebpfMapsImpl struct {
 	BeamProcs          *cebpf.Map `name:"beam_procs"`
 	ApmIntProcs        *cebpf.Map `name:"apm_int_procs"`
 	GoProcs            *cebpf.Map `name:"go_procs"`
+	LuajitProcs        *cebpf.Map `name:"luajit_procs"`
 
 	// Stackdelta and process related eBPF maps
 	ExeIDToStackDeltaMaps []*cebpf.Map
@@ -127,6 +128,10 @@ func LoadMaps(ctx context.Context, interpretersConfig interpreterconfig.Config,
 	return impl, nil
 }
 
+func (impl *ebpfMapsImpl) CoredumpTest() bool {
+	return false
+}
+
 // UpdateInterpreterOffsets adds the given moduleRanges to the eBPF map interpreterOffsets.
 func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID host.FileID,
 	offsetRanges []util.Range,
@@ -168,6 +173,8 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.ApmIntProcs, nil
 	case libpf.Go:
 		return impl.GoProcs, nil
+	case libpf.LuaJIT:
+		return impl.LuajitProcs, nil
 	default:
 		return nil, fmt.Errorf("type %d is not (yet) supported", typ)
 	}
