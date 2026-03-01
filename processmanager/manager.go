@@ -368,14 +368,6 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	if cacheHit != 0 {
 		pm.frameCacheHit.Add(cacheHit)
 	}
-	pm.mu.RLock()
-	// Release resources that were used to symbolize this stack.
-	for _, instance := range pm.interpreters[pid] {
-		if err := instance.ReleaseResources(); err != nil {
-			log.Warnf("Failed to release resources for %d: %v", pid, err)
-		}
-	}
-	pm.mu.RUnlock()
 
 	trace.Hash = traceutil.HashTrace(trace)
 	meta.APMServiceName = pm.maybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)

@@ -32,7 +32,3 @@ func (is *InstanceStubs) Symbolize(libpf.EbpfFrame, *libpf.Frames, libpf.FrameMa
 func (is *InstanceStubs) GetAndResetMetrics() ([]metrics.Metric, error) {
 	return []metrics.Metric{}, nil
 }
-
-func (is *InstanceStubs) ReleaseResources() error {
-	return nil
-}

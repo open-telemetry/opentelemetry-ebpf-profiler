@@ -110,8 +110,8 @@ func (g *goInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, mapping
 	defer sfCounter.DefaultToFailure()
 
 	address := ef.Data()
-	sourceFile, lineNo, fn := g.d.pclntab.Symbolize(uintptr(address))
-	if fn == "" {
+	sourceFile, lineNo, fn := g.d.pclntab.Symbolize(uint64(address))
+	if fn == libpf.NullString {
 		return fmt.Errorf("failed to symbolize 0x%x", address)
 	}
 	// See comment about return address handling in ProcessManager.convertFrame
@@ -121,15 +121,11 @@ func (g *goInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, mapping
 	frames.Append(&libpf.Frame{
 		Type:            libpf.GoFrame,
 		AddressOrLineno: libpf.AddressOrLineno(address),
-		Mapping:         mapping,
-		FunctionName:    libpf.Intern(fn),
-		SourceFile:      libpf.Intern(sourceFile),
+		FunctionName:    fn,
+		SourceFile:      sourceFile,
 		SourceLine:      libpf.SourceLineno(lineNo),
+		Mapping:         mapping,
 	})
 	sfCounter.ReportSuccess()
 	return nil
-}
-
-func (g *goInstance) ReleaseResources() error {
-	return g.d.pclntab.SetDontNeed()
 }

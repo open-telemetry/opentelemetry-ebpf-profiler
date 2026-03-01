@@ -60,8 +60,9 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 			return 0, err
 		}
 	}
-	b, err := f.VirtualMemory(int64(sym.Address), 32, 32)
-	if err != nil {
+	sz := int(min(sym.Size, 32))
+	b := make([]byte, sz)
+	if _, err := f.ReadAt(b, int64(sym.Address)); err != nil {
 		return 0, err
 	}
 	for ; len(b) > 0; b = b[4:] {
