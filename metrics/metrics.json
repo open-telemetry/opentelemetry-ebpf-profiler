@@ -2063,5 +2063,19 @@
     "name": "UnwindRubyErrCmeMaxEp",
     "field": "bpf.ruby.errors.read_cme_max_ep",
     "id": 285
+  },
+  {
+    "description": "Number of attempted LuaJIT unwinds",
+    "type": "counter",
+    "name": "UnwindLuaJITAttempts",
+    "field": "bpf.luajit.attempts",
+    "id": 286
+  },
+  {
+    "description": "Number of times we didn't find an entry for this process in the LuaJIT process info array",
+    "type": "counter",
+    "name": "UnwindLuaJITErrNoProcInfo",
+    "field": "bpf.luajit.errors.no_proc_info",
+    "id": 287
   }
 ]

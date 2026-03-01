@@ -33,7 +33,7 @@ func BenchmarkGolang(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create hostID: %v", err)
 	}
-	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef)
+	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef, nil)
 	rm := remotememory.NewProcessVirtualMemory(libpfPID)
 
 	b.ReportAllocs()

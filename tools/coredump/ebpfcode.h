@@ -36,6 +36,7 @@ void bpf_log(const char *fmt, ...)
 #include "../../support/ebpf/go_labels.ebpf.c"
 #include "../../support/ebpf/hotspot_tracer.ebpf.c"
 #include "../../support/ebpf/interpreter_dispatcher.ebpf.c"
+#include "../../support/ebpf/luajit_tracer.ebpf.c"
 #include "../../support/ebpf/native_stack_trace.ebpf.c"
 #include "../../support/ebpf/perl_tracer.ebpf.c"
 #include "../../support/ebpf/php_tracer.ebpf.c"
@@ -90,6 +91,7 @@ int bpf_tail_call(void *ctx, UNUSED void *map, int index)
   case PROG_UNWIND_DOTNET10: rc = unwind_dotnet10(ctx); break;
   case PROG_UNWIND_BEAM: rc = unwind_beam(ctx); break;
   case PROG_GO_LABELS: rc = go_labels(ctx); break;
+  case PROG_UNWIND_LUAJIT: rc = unwind_luajit(ctx); break;
   default: return -1;
   }
   __cgo_ctx->ret = rc;

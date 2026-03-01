@@ -647,6 +647,12 @@ const (
 	// Number of failed attempts to read a CME by exceeding max EP checks
 	IDUnwindRubyErrCmeMaxEp = 285
 
+	// Number of attempted LuaJIT unwinds
+	IDUnwindLuaJITAttempts = 286
+
+	// Number of times we didn't find an entry for this process in the LuaJIT process info array
+	IDUnwindLuaJITErrNoProcInfo = 287
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 286
+	IDMax = 288
 )
