@@ -39,6 +39,8 @@ var (
 	UnknownFunctionName = libpf.Intern("<unknown>")
 
 	ErrMismatchInterpreterType = errors.New("mismatched interpreter type")
+	// Special coredump only error used to restart ConvertTrace processing.
+	ErrLJRestart = errors.New("lj_restart")
 )
 
 // The following function Loader and interfaces Data and Instance work together
@@ -107,6 +109,9 @@ type EbpfHandler interface {
 	// DeletePidInterpreterMapping removes the element specified by pid, prefix
 	// rom the eBPF map pid_page_to_mapping_info.
 	DeletePidInterpreterMapping(libpf.PID, lpm.Prefix) error
+
+	// If unwinder needs special behavior for coredump mode to work use this.
+	CoredumpTest() bool
 }
 
 // Loader is a function to detect and load data from given interpreter ELF file.

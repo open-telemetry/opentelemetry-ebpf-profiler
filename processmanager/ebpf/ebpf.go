@@ -53,6 +53,7 @@ type ebpfMapsImpl struct {
 	ApmIntProcs        *cebpf.Map `name:"apm_int_procs"`
 	GoLabelsProcs      *cebpf.Map `name:"go_labels_procs"`
 	ClProcs            *cebpf.Map `name:"cl_procs"`
+	LuajitProcs        *cebpf.Map `name:"luajit_procs"`
 
 	// Stackdelta and process related eBPF maps
 	ExeIDToStackDeltaMaps []*cebpf.Map
@@ -138,6 +139,10 @@ func LoadMaps(ctx context.Context, includeTracers types.IncludedTracers,
 	return impl, nil
 }
 
+func (impl *ebpfMapsImpl) CoredumpTest() bool {
+	return false
+}
+
 // UpdateInterpreterOffsets adds the given moduleRanges to the eBPF map interpreterOffsets.
 func (impl *ebpfMapsImpl) UpdateInterpreterOffsets(ebpfProgIndex uint16, fileID host.FileID,
 	offsetRanges []util.Range,
@@ -180,6 +185,8 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.GoLabelsProcs, nil
 	case libpf.CustomLabels:
 		return impl.ClProcs, nil
+	case libpf.LuaJIT:
+		return impl.LuajitProcs, nil
 	default:
 		return nil, fmt.Errorf("type %d is not (yet) supported", typ)
 	}

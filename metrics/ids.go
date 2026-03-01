@@ -668,15 +668,21 @@ const (
 	// Number of successes adding native custom labels
 	IDUnwindNativeCustomLabelsAddSuccesses = 292
 
+	// Number of attempted LuaJIT unwinds
+	IDUnwindLuaJITAttempts = 293
+
+	// Number of times we didn't find an entry for this process in the LuaJIT process info array
+	IDUnwindLuaJITErrNoProcInfo = 294
+
 	// Number of attempts to read Node.js custom labels
-	IDUnwindNodeCustomLabelsAttempts = 293
+	IDUnwindNodeCustomLabelsAttempts = 295
 
 	// Number of successful reads of Node.js custom labels
-	IDUnwindNodeCustomLabelsSuccesses = 294
+	IDUnwindNodeCustomLabelsSuccesses = 296
 
 	// Number of failed attempts to read Node.js custom labels
-	IDUnwindNodeCustomLabelsFailures = 295
+	IDUnwindNodeCustomLabelsFailures = 297
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 296
+	IDMax = 298
 )

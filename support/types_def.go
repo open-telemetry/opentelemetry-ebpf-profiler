@@ -13,6 +13,7 @@ import (
 #include "./ebpf/types.h"
 #include "./ebpf/frametypes.h"
 #include "./ebpf/v8_tracer.h"
+#include "./ebpf/luajit.h"
 */
 import "C"
 
@@ -28,6 +29,7 @@ const (
 	FrameMarkerPerl    = C.FRAME_MARKER_PERL
 	FrameMarkerV8      = C.FRAME_MARKER_V8
 	FrameMarkerDotnet  = C.FRAME_MARKER_DOTNET
+	FrameMarkerLuaJIT  = C.FRAME_MARKER_LUAJIT
 	FrameMarkerBEAM    = C.FRAME_MARKER_BEAM
 	FrameMarkerGo      = C.FRAME_MARKER_GO
 )
@@ -51,6 +53,7 @@ const (
 	ProgUnwindDotnet10 = C.PROG_UNWIND_DOTNET10
 	ProgGoLabels       = C.PROG_GO_LABELS
 	ProgUnwindBEAM     = C.PROG_UNWIND_BEAM
+	ProgUnwindLuaJIT   = C.PROG_UNWIND_LUAJIT
 )
 
 const (
@@ -135,6 +138,7 @@ type PyProcInfo C.PyProcInfo
 type RubyProcInfo C.RubyProcInfo
 type V8ProcInfo C.V8ProcInfo
 type NativeCustomLabelsProcInfo C.NativeCustomLabelsProcInfo
+type LuaJITProcInfo C.LuaJITProcInfo
 
 const (
 	Sizeof_StackDelta = C.sizeof_StackDelta
@@ -213,6 +217,13 @@ const (
 
 	CustomLabelMaxKeyLen = C.CUSTOM_LABEL_MAX_KEY_LEN
 	CustomLabelMaxValLen = C.CUSTOM_LABEL_MAX_VAL_LEN
+)
+
+const (
+	LJFFIFunc     = C.LUAJIT_FFI_FUNC
+	LJFileId      = C.LUAJIT_JIT_FILE_ID
+	LJNormalFrame = C.LUAJIT_NORMAL_FRAME
+	LJGReport     = C.LUAJIT_G_REPORT
 )
 
 var MetricsTranslation = []metrics.MetricID{
@@ -313,4 +324,6 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindNodeCustomLabelsAttempts:             metrics.IDUnwindNodeCustomLabelsAttempts,
 	C.metricID_UnwindNodeCustomLabelsSuccesses:            metrics.IDUnwindNodeCustomLabelsSuccesses,
 	C.metricID_UnwindNodeCustomLabelsFailures:             metrics.IDUnwindNodeCustomLabelsFailures,
+	C.metricID_UnwindLuaJITAttempts:                       metrics.IDUnwindLuaJITAttempts,
+	C.metricID_UnwindLuaJITErrNoProcInfo:                  metrics.IDUnwindLuaJITErrNoProcInfo,
 }

@@ -22,6 +22,7 @@ const (
 	FrameMarkerPerl    = 0x7
 	FrameMarkerV8      = 0x8
 	FrameMarkerDotnet  = 0xa
+	FrameMarkerLuaJIT  = 0xd
 	FrameMarkerBEAM    = 0xc
 	FrameMarkerGo      = 0xb
 )
@@ -45,6 +46,7 @@ const (
 	ProgUnwindDotnet10 = 0x9
 	ProgGoLabels       = 0xa
 	ProgUnwindBEAM     = 0xb
+	ProgUnwindLuaJIT   = 0xc
 )
 
 const (
@@ -61,7 +63,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x72
+	MetricIDBeginCumulative = 0x76
 )
 
 const (
@@ -330,6 +332,11 @@ type NativeCustomLabelsProcInfo struct {
 	Als_identity_hash_tls_offset uint64
 	Als_handle_tls_offset        uint64
 }
+type LuaJITProcInfo struct {
+	G2dispatch      uint16
+	Cur_L_offset    uint16
+	Cframe_size_jit uint16
+}
 
 const (
 	Sizeof_StackDelta = 0x4
@@ -402,6 +409,13 @@ const (
 
 	CustomLabelMaxKeyLen = 0x19
 	CustomLabelMaxValLen = 0x35
+)
+
+const (
+	LJFFIFunc     = 0xff1
+	LJFileId      = 0x2a
+	LJNormalFrame = 0x0
+	LJGReport     = 0xff2
 )
 
 var MetricsTranslation = []metrics.MetricID{
@@ -493,13 +507,15 @@ var MetricsTranslation = []metrics.MetricID{
 	0x5d: metrics.IDUnwindDotnetErrBadFP,
 	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
 	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,
-	0x6c: metrics.IDUnwindRubyErrInvalidIseq,
-	0x6d: metrics.IDUnwindRubyErrReadMethodDef,
-	0x6e: metrics.IDUnwindRubyErrReadMethodType,
-	0x6f: metrics.IDUnwindRubyErrReadSvar,
-	0x70: metrics.IDUnwindRubyErrReadRbasicFlags,
-	0x71: metrics.IDUnwindRubyErrCmeMaxEp,
-	0x67: metrics.IDUnwindNodeCustomLabelsAttempts,
-	0x68: metrics.IDUnwindNodeCustomLabelsSuccesses,
-	0x69: metrics.IDUnwindNodeCustomLabelsFailures,
+	0x70: metrics.IDUnwindRubyErrInvalidIseq,
+	0x71: metrics.IDUnwindRubyErrReadMethodDef,
+	0x72: metrics.IDUnwindRubyErrReadMethodType,
+	0x73: metrics.IDUnwindRubyErrReadSvar,
+	0x74: metrics.IDUnwindRubyErrReadRbasicFlags,
+	0x75: metrics.IDUnwindRubyErrCmeMaxEp,
+	0x6b: metrics.IDUnwindNodeCustomLabelsAttempts,
+	0x6c: metrics.IDUnwindNodeCustomLabelsSuccesses,
+	0x6d: metrics.IDUnwindNodeCustomLabelsFailures,
+	0x67: metrics.IDUnwindLuaJITAttempts,
+	0x68: metrics.IDUnwindLuaJITErrNoProcInfo,
 }

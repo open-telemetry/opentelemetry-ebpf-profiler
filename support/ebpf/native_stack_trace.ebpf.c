@@ -460,6 +460,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
       state->fp  = rt_regs[29];
       state->lr  = normalize_pac_ptr(rt_regs[30]);
       state->r20 = rt_regs[20];
+      state->r7  = rt_regs[7];
       state->r22 = rt_regs[22];
       state->r28 = rt_regs[28];
 
