@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x6a
+	MetricIDBeginCumulative = 0x6e
 )
 
 const (
@@ -328,6 +328,11 @@ type V8ProcInfo struct {
 	Codekind_baseline            uint8
 	Pad_cgo_0                    [2]byte
 }
+type LuaJITProcInfo struct {
+	G2dispatch      uint16
+	Cur_L_offset    uint16
+	Cframe_size_jit uint16
+}
 
 const (
 	Sizeof_StackDelta = 0x4
@@ -401,6 +406,13 @@ const (
 	RubyFrameTypeCmeCfunc = 0x2
 	RubyFrameTypeIseq     = 0x3
 	RubyFrameTypeGc       = 0x4
+)
+
+const (
+	LJFFIFunc     = 0xff1
+	LJFileId      = 0x2a
+	LJNormalFrame = 0x0
+	LJGReport     = 0xff2
 )
 
 var MetricsTranslation = []metrics.MetricID{
@@ -492,12 +504,12 @@ var MetricsTranslation = []metrics.MetricID{
 	0x5d: metrics.IDUnwindDotnetErrBadFP,
 	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
 	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,
-	0x62: metrics.IDUnwindRubyErrInvalidIseq,
-	0x63: metrics.IDUnwindRubyErrReadMethodDef,
-	0x64: metrics.IDUnwindRubyErrReadMethodType,
-	0x65: metrics.IDUnwindRubyErrReadSvar,
-	0x66: metrics.IDUnwindRubyErrReadRbasicFlags,
-	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
-	0x68: metrics.IDUnwindErrBadDTVRead,
-	0x69: metrics.IDBPFRingbufOutputErr,
+	0x66: metrics.IDUnwindRubyErrInvalidIseq,
+	0x67: metrics.IDUnwindRubyErrReadMethodDef,
+	0x68: metrics.IDUnwindRubyErrReadMethodType,
+	0x69: metrics.IDUnwindRubyErrReadSvar,
+	0x6a: metrics.IDUnwindRubyErrReadRbasicFlags,
+	0x6b: metrics.IDUnwindRubyErrCmeMaxEp,
+	0x6c: metrics.IDUnwindErrBadDTVRead,
+	0x6d: metrics.IDBPFRingbufOutputErr,
 }

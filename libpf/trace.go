@@ -156,6 +156,10 @@ func (f EbpfFrame) Data() uint64 {
 	return uint64(f[0]) & 0xfffffffffffff
 }
 
+func (f EbpfFrame) NumVariables() uint8 {
+	return f.Length() - 1
+}
+
 func (f EbpfFrame) Variable(ndx int) uint64 {
 	return f[ndx+1]
 }
