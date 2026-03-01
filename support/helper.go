@@ -6,24 +6,24 @@ package support // import "go.opentelemetry.io/ebpf-profiler/support"
 
 import "fmt"
 
-// ZeroPerSampleFields clears the fields of a Trace that vary per sample and
-// should not contribute to trace identity (hash). The caller is responsible
-// for hashing the resulting bytes.
-func (t *Trace) ZeroPerSampleFields() {
-	t.Comm = [16]byte{}
-	t.Apm_trace_id = ApmTraceID{}
-	t.Apm_transaction_id = ApmSpanID{}
-	t.Ktime = 0
-	t.Origin = 0
-	t.Offtime = 0
-	t.Custom_labels = CustomLabelsArray{}
-	for i := 0; i < int(t.Stack_len); i++ {
-		if t.Frames[i].Kind == FrameMarkerCUDAKernel {
-			t.Frames[i].Addr_or_line = 0
-			break // only one CUDA frame per trace
-		}
-	}
-}
+// // ZeroPerSampleFields clears the fields of a Trace that vary per sample and
+// // should not contribute to trace identity (hash). The caller is responsible
+// // for hashing the resulting bytes.
+// func (t *Trace) ZeroPerSampleFields() {
+// 	t.Comm = [16]byte{}
+// 	t.Apm_trace_id = ApmTraceID{}
+// 	t.Apm_transaction_id = ApmSpanID{}
+// 	t.Ktime = 0
+// 	t.Origin = 0
+// 	t.Offtime = 0
+// 	t.Custom_labels = CustomLabelsArray{}
+// 	for i := 0; i < int(t.Stack_len); i++ {
+// 		if t.Frames[i].Kind == FrameMarkerCUDAKernel {
+// 			t.Frames[i].Addr_or_line = 0
+// 			break // only one CUDA frame per trace
+// 		}
+// 	}
+// }
 
 // EncodeBiasAndUnwindProgram encodes a bias_and_unwind_program value (for C.PIDPageMappingInfo)
 // from a bias and unwind program values.
