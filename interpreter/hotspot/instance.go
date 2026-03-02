@@ -796,16 +796,17 @@ func (d *hotspotInstance) populateMainMappings(vmd *hotspotVMData,
 func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
 	ebpf interpreter.EbpfHandler, pid libpf.PID,
 ) {
-	for _, stub := range findStubBounds(vmd, d.bias, d.rm) {
-		stubs := d.stubs.WLock()
-		_, exists := (*stubs)[stub.start]
-		if !exists {
-			(*stubs)[stub.start] = stub
-		}
-		d.stubs.WUnlock(&stubs)
-		if exists {
+	allStubs := findStubBounds(vmd, d.bias, d.rm)
+
+	stubs := d.stubs.WLock()
+	defer d.stubs.WUnlock(&stubs)
+
+	for _, stub := range allStubs {
+		if _, exists := (*stubs)[stub.start]; exists {
 			continue
 		}
+
+		(*stubs)[stub.start] = stub
 
 		// Separate stub areas are only required on ARM64.
 		if runtime.GOARCH != "arm64" {
