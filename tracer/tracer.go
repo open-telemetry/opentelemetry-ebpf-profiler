@@ -129,7 +129,7 @@ type Tracer struct {
 	stopMonitors context.CancelFunc
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
-	done     chan struct{}
+	done     chan libpf.Void
 	doneOnce sync.Once
 }
 
