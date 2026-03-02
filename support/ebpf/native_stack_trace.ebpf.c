@@ -160,23 +160,36 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
   u64 exe_id = state->text_section_id;
 
   // Look up the stack delta page information for this address.
-  StackDeltaPageKey key         = {};
-  key.fileID                    = state->text_section_id;
-  key.page                      = state->text_section_offset & ~STACK_DELTA_PAGE_MASK;
+  StackDeltaPageKey key = {};
+  key.fileID            = state->text_section_id;
+  key.page              = state->text_section_offset & ~STACK_DELTA_PAGE_MASK;
+  DEBUG_PRINT(
+    "Look up stack delta for %lx:%lx",
+    (unsigned long)state->text_section_id,
+    (unsigned long)state->text_section_offset);
   StackDeltaPageInfo *info_page = bpf_map_lookup_elem(&stack_delta_page_to_info, &key);
   if (!info_page) {
+    DEBUG_PRINT(
+      "Failure to look up stack delta page fileID %lx, page %lx",
+      (unsigned long)key.fileID,
+      (unsigned long)key.page);
     state->error_metric = metricID_UnwindNativeErrLookupTextSection;
     return ERR_NATIVE_LOOKUP_TEXT_SECTION;
   }
 
   void *outer_map = get_stack_delta_map(info_page->mapID);
   if (!outer_map) {
+    DEBUG_PRINT(
+      "Failure to look up outer map for text section %lx in mapID %d",
+      (unsigned long)exe_id,
+      (int)info_page->mapID);
     state->error_metric = metricID_UnwindNativeErrLookupStackDeltaOuterMap;
     return ERR_NATIVE_LOOKUP_STACK_DELTA_OUTER_MAP;
   }
 
   void *inner_map = bpf_map_lookup_elem(outer_map, &exe_id);
   if (!inner_map) {
+    DEBUG_PRINT("Failure to look up inner map for text section %lx", (unsigned long)exe_id);
     state->error_metric = metricID_UnwindNativeErrLookupStackDeltaInnerMap;
     return ERR_NATIVE_LOOKUP_STACK_DELTA_INNER_MAP;
   }
@@ -189,6 +202,12 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
     u32 lo = info_page->firstDelta;
     u32 hi = lo + info_page->numDeltas;
 
+    DEBUG_PRINT(
+      "Intervals should be from %lu to %lu (mapID %d)",
+      (unsigned long)lo,
+      (unsigned long)hi,
+      (int)info_page->mapID);
+
     // Do the binary search, up to 16 iterations. Deltas are paged to 64kB pages.
     // They can contain at most 64kB deltas even if everything is single byte opcodes.
     int i;
@@ -198,6 +217,7 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
       }
     }
     if (i >= 16 || hi == 0) {
+      DEBUG_PRINT("Failed bsearch in 16 steps. Corrupt data?");
       state->error_metric = metricID_UnwindNativeErrLookupIterations;
       return ERR_NATIVE_EXCEEDED_DELTA_LOOKUP_ITERATIONS;
     }
@@ -216,6 +236,9 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
     state->error_metric = metricID_UnwindNativeErrLookupRange;
     return ERR_NATIVE_LOOKUP_RANGE;
   }
+
+  DEBUG_PRINT(
+    "delta index %d, addrLow 0x%x, unwindInfo %d", idx, delta->addrLow, delta->unwindInfo);
 
   // Calculate PC delta from stack delta for merged delta comparison
   int deltaOffset = (int)page_offset - (int)delta->addrLow;
@@ -274,6 +297,7 @@ unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool 
   // Dereference, and add the postDereference adder.
   unsigned long val;
   if (bpf_probe_read_user(&val, sizeof(val), (void *)addr)) {
+    DEBUG_PRINT("unwind failed to dereference address 0x%lx", (unsigned long)addr);
     return 0;
   }
   // Return: "*(BASE + preDeref) + postDeref"
@@ -322,6 +346,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       // This is the hard coded implementation of this expression. For further details,
       // see https://hal.inria.fr/hal-02297690/document, page 4. (DOI: 10.1145/3360572)
       cfa = state->sp + 8 + ((((state->pc & 15) >= 11) ? 1 : 0) << 3);
+      DEBUG_PRINT("PLT, cfa=0x%lx", (unsigned long)cfa);
       break;
     case UNWIND_COMMAND_SIGNAL:
       // The rt_sigframe is defined at:
@@ -341,6 +366,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       state->pc  = rt_regs[16];
 
       state->return_address = false;
+      DEBUG_PRINT("signal frame");
       goto frame_ok;
     case UNWIND_COMMAND_STOP: *stop = true; return ERR_OK;
     case UNWIND_COMMAND_FRAME_POINTER:
@@ -359,8 +385,10 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
 
     s32 param = info->param;
     if (info->mergeOpcode) {
+      DEBUG_PRINT("AddrDiff %d, merged delta %#02x", addrDiff, info->mergeOpcode);
       if (addrDiff >= (info->mergeOpcode & ~MERGEOPCODE_NEGATIVE)) {
         param += (info->mergeOpcode & MERGEOPCODE_NEGATIVE) ? -8 : 8;
+        DEBUG_PRINT("Merged delta match: cfaDelta=%d", unwindInfo);
       }
     }
 
@@ -369,13 +397,14 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
     state->cfa = cfa = unwind_calc_register_with_deref(
       state, info->baseReg, param, (info->flags & UNWIND_FLAG_DEREF_CFA) != 0);
 
-    if (info->flags & UNWIND_FLAG_REGISTER_RA) {
-      state->pc = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
-    } else {
-      u64 fpa = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
+    u64 aux = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
 
-      if (fpa) {
-        bpf_probe_read_user(&state->fp, sizeof(state->fp), (void *)fpa);
+    if (info->flags & UNWIND_FLAG_REGISTER_RA) {
+      state->pc = aux;
+    } else {
+      DEBUG_PRINT("info: flags=%x auxBaseReg=%u", info->flags, info->auxBaseReg);
+      if (aux) {
+        bpf_probe_read_user(&state->fp, sizeof(state->fp), (void *)aux);
       } else if (info->baseReg == UNWIND_REG_FP) {
         // FP used for recovery, but no new FP value received, clear FP
         state->fp = 0;
@@ -434,6 +463,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
 
       state->return_address = false;
       state->lr_invalid     = false;
+      DEBUG_PRINT("signal frame");
       goto frame_ok;
     case UNWIND_COMMAND_STOP: *stop = true; return ERR_OK;
     case UNWIND_COMMAND_FRAME_POINTER:
@@ -448,13 +478,16 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
   UnwindInfo *info = bpf_map_lookup_elem(&unwind_info_array, &unwindInfo);
   if (!info) {
     increment_metric(metricID_UnwindNativeErrBadUnwindInfoIndex);
+    DEBUG_PRINT("Giving up due to invalid unwind info array index");
     return ERR_NATIVE_BAD_UNWIND_INFO_INDEX;
   }
 
   s32 param = info->param;
   if (info->mergeOpcode) {
+    DEBUG_PRINT("AddrDiff %d, merged delta %#02x", addrDiff, info->mergeOpcode);
     if (addrDiff >= (info->mergeOpcode & ~MERGEOPCODE_NEGATIVE)) {
       param += (info->mergeOpcode & MERGEOPCODE_NEGATIVE) ? -8 : 8;
+      DEBUG_PRINT("Merged delta match: cfaDelta=%d", unwindInfo);
     }
   }
 
@@ -472,6 +505,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
       increment_metric(metricID_UnwindNativeErrPCRead);
     }
     // report failure to resolve RA and stop unwinding
+    DEBUG_PRINT("Giving up due to failure to resolve RA");
     // report failure to resolve RA and stop unwinding
     return ERR_NATIVE_PC_READ;
   }
@@ -484,6 +518,8 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
       return ERR_NATIVE_LR_UNWINDING_MID_TRACE;
     }
   } else {
+    DEBUG_PRINT("RA: %016llX", (u64)ra);
+
     // read the value of RA from stack
     int err;
     u64 fpra[2];
@@ -524,6 +560,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
     unwinder = PROG_UNWIND_STOP;
 
     // Unwind native code
+    DEBUG_PRINT("==== unwind_native %d ====", trace->num_frames);
     increment_metric(metricID_UnwindNativeAttempts);
 
     // Push frame first. The PC is valid because a text section mapping was found.
@@ -534,6 +571,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
       record->state.text_section_offset,
       record->state.return_address);
     if (error) {
+      DEBUG_PRINT("failed to push native frame");
       break;
     }
 
@@ -545,6 +583,8 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
     }
 
     // Continue unwinding
+    DEBUG_PRINT(
+      " pc: %llx sp: %llx fp: %llx", record->state.pc, record->state.sp, record->state.fp);
     error = get_next_unwinder_after_native_frame(record, &unwinder);
     if (error || unwinder != PROG_UNWIND_NATIVE) {
       break;
@@ -555,6 +595,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
   // trace due to end-of-trace or error. The unwinder program index is set accordingly.
   record->state.unwind_error = error;
   tail_call(ctx, unwinder);
+  DEBUG_PRINT("bpf_tail call failed for %d in unwind_native", unwinder);
   return -1;
 }
 

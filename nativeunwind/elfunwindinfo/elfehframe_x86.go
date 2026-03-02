@@ -160,18 +160,20 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 	}
 
 	// Determine unwind info for frame pointer
-	switch regs.fp.reg {
-	case regCFA:
-		// Check that RBP is between CFA and stack top
-		if regs.cfa.reg != x86RegRSP || (regs.fp.off < 0 && regs.fp.off >= -regs.cfa.off) {
-			info.AuxBaseReg = support.UnwindRegCfa
-			info.AuxParam = int32(regs.fp.off)
-		}
-	case regExprReg:
-		// expression: RBP+offrbp
-		if r, _, offrbp, _ := splitOff(regs.fp.off); uleb128(r) == x86RegRBP {
-			info.AuxBaseReg = support.UnwindRegFp
-			info.AuxParam = int32(offrbp)
+	if (info.Flags & support.UnwindFlagRegisterRA) == 0 {
+		switch regs.fp.reg {
+		case regCFA:
+			// Check that RBP is between CFA and stack top
+			if regs.cfa.reg != x86RegRSP || (regs.fp.off < 0 && regs.fp.off >= -regs.cfa.off) {
+				info.AuxBaseReg = support.UnwindRegCfa
+				info.AuxParam = int32(regs.fp.off)
+			}
+		case regExprReg:
+			// expression: RBP+offrbp
+			if r, _, offrbp, _ := splitOff(regs.fp.off); uleb128(r) == x86RegRBP {
+				info.AuxBaseReg = support.UnwindRegFp
+				info.AuxParam = int32(offrbp)
+			}
 		}
 	}
 
