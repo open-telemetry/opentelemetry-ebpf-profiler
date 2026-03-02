@@ -61,7 +61,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x68
+	MetricIDBeginCumulative = 0x69
 )
 
 const (
@@ -281,6 +281,9 @@ type PyProcInfo struct {
 type RubyProcInfo struct {
 	Version                      uint32
 	Current_ec_tpbase_tls_offset int64
+	Dtv_info                     DTVInfo
+	Current_ec_tls_offset        uint64
+	Tls_module_id                uint32
 	Current_ctx_ptr              uint64
 	Has_objspace                 bool
 	Vm_stack                     uint8
@@ -331,7 +334,7 @@ const (
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
 	sizeof_PHPProcInfo    = 0x18
-	sizeof_RubyProcInfo   = 0x30
+	sizeof_RubyProcInfo   = 0x48
 )
 
 const (
@@ -489,4 +492,5 @@ var MetricsTranslation = []metrics.MetricID{
 	0x65: metrics.IDUnwindRubyErrReadSvar,
 	0x66: metrics.IDUnwindRubyErrReadRbasicFlags,
 	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
+	0x68: metrics.IDUnwindErrBadDTVRead,
 }
