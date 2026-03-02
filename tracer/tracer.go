@@ -620,8 +620,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 
 // loadKallsymsTrigger loads the eBPF program that triggers kallsym updates.
 func loadKallsymsTrigger(coll *cebpf.CollectionSpec,
-	ebpfProgs map[string]*cebpf.Program, bpfVerifierLogLevel uint32,
-) error {
+	ebpfProgs map[string]*cebpf.Program, bpfVerifierLogLevel uint32) error {
 	programOptions := cebpf.ProgramOptions{
 		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
 	}
