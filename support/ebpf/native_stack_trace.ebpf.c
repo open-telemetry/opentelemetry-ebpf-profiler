@@ -167,8 +167,8 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
     "Look up stack delta for %lx:%lx",
     (unsigned long)state->text_section_id,
     (unsigned long)state->text_section_offset);
-  StackDeltaPageInfo *info_page = bpf_map_lookup_elem(&stack_delta_page_to_info, &key);
-  if (!info_page) {
+  StackDeltaPageInfo *info = bpf_map_lookup_elem(&stack_delta_page_to_info, &key);
+  if (!info) {
     DEBUG_PRINT(
       "Failure to look up stack delta page fileID %lx, page %lx",
       (unsigned long)key.fileID,
@@ -177,12 +177,12 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
     return ERR_NATIVE_LOOKUP_TEXT_SECTION;
   }
 
-  void *outer_map = get_stack_delta_map(info_page->mapID);
+  void *outer_map = get_stack_delta_map(info->mapID);
   if (!outer_map) {
     DEBUG_PRINT(
       "Failure to look up outer map for text section %lx in mapID %d",
       (unsigned long)exe_id,
-      (int)info_page->mapID);
+      (int)info->mapID);
     state->error_metric = metricID_UnwindNativeErrLookupStackDeltaOuterMap;
     return ERR_NATIVE_LOOKUP_STACK_DELTA_OUTER_MAP;
   }
@@ -195,18 +195,18 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
   }
 
   // Preinitialize the idx for the index to use for page without any deltas.
-  u32 idx         = info_page->firstDelta;
+  u32 idx         = info->firstDelta;
   u16 page_offset = state->text_section_offset & STACK_DELTA_PAGE_MASK;
-  if (info_page->numDeltas) {
+  if (info->numDeltas) {
     // Page has deltas, so find the correct one to use using binary search.
-    u32 lo = info_page->firstDelta;
-    u32 hi = lo + info_page->numDeltas;
+    u32 lo = info->firstDelta;
+    u32 hi = lo + info->numDeltas;
 
     DEBUG_PRINT(
       "Intervals should be from %lu to %lu (mapID %d)",
       (unsigned long)lo,
       (unsigned long)hi,
-      (int)info_page->mapID);
+      (int)info->mapID);
 
     // Do the binary search, up to 16 iterations. Deltas are paged to 64kB pages.
     // They can contain at most 64kB deltas even if everything is single byte opcodes.
@@ -242,7 +242,7 @@ static EBPF_INLINE ErrorCode get_stack_delta(UnwindState *state, int *addrDiff, 
 
   // Calculate PC delta from stack delta for merged delta comparison
   int deltaOffset = (int)page_offset - (int)delta->addrLow;
-  if (idx < info_page->firstDelta) {
+  if (idx < info->firstDelta) {
     // PC is below the first delta of the corresponding page. This means that
     // delta->addrLow contains address relative to one page before the page_offset.
     // Fix up the deltaOffset with this difference of base pages.
@@ -327,9 +327,8 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
 
   u32 unwindInfo = 0;
   u64 rt_regs[18];
-  int addrDiff     = 0;
-  u64 cfa          = 0;
-  UnwindInfo *info = NULL;
+  int addrDiff = 0;
+  u64 cfa      = 0;
 
   // The relevant executable is compiled with frame pointer omission, so
   // stack deltas need to be retrieved from the relevant map.
@@ -377,7 +376,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
     default: return ERR_UNREACHABLE;
     }
   } else {
-    info = bpf_map_lookup_elem(&unwind_info_array, &unwindInfo);
+    UnwindInfo *info = bpf_map_lookup_elem(&unwind_info_array, &unwindInfo);
     if (!info) {
       increment_metric(metricID_UnwindNativeErrBadUnwindInfoIndex);
       return ERR_NATIVE_BAD_UNWIND_INFO_INDEX;
@@ -506,7 +505,6 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
     }
     // report failure to resolve RA and stop unwinding
     DEBUG_PRINT("Giving up due to failure to resolve RA");
-    // report failure to resolve RA and stop unwinding
     return ERR_NATIVE_PC_READ;
   }
 
@@ -564,6 +562,11 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
     increment_metric(metricID_UnwindNativeAttempts);
 
     // Push frame first. The PC is valid because a text section mapping was found.
+    DEBUG_PRINT(
+      "Pushing %llx %llx to position %u on stack",
+      record->state.text_section_id,
+      record->state.text_section_offset,
+      trace->num_frames);
     error = push_native(
       &record->state,
       trace,
