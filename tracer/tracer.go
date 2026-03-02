@@ -136,7 +136,7 @@ type Tracer struct {
 // Done returns a channel that is closed when the tracer encounters an
 // unrecoverable error. It can be used in select statements to detect
 // when the tracer should be stopped.
-func (t *Tracer) Done() <-chan struct{} {
+func (t *Tracer) Done() <-chan libpf.Void {
 	return t.done
 }
 
