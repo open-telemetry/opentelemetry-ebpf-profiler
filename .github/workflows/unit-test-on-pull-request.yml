@@ -101,6 +101,10 @@ jobs:
           restore-keys: |
             coredumps-${{ matrix.target_arch }}
             coredumps-
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y debootstrap systemtap-sdt-dev
       - name: Tests
         run: make test TARGET_ARCH=${{ matrix.target_arch }} GO_FLAGS="${{ matrix.go_flags }}"
 
