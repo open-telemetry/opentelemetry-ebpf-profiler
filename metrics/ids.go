@@ -647,6 +647,9 @@ const (
 	// Number of failed attempts to read a CME by exceeding max EP checks
 	IDUnwindRubyErrCmeMaxEp = 285
 
+	// Number of failures to read TLS variables via the DTV
+	IDUnwindErrBadDTVRead = 286
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 286
+	IDMax = 287
 )
