@@ -70,8 +70,7 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearch
 
   BEAMRangeEntry current_range = ranges->mid;
 
-  UNROLL for (int i = 0; i < BEAM_CODE_HEADER_SEARCH_ITERATIONS; i++)
-  {
+  for (int i = 0; i < BEAM_CODE_HEADER_SEARCH_ITERATIONS; i++) {
     if (pc < current_range.start) {
       high = current;
     } else if (pc >= current_range.end) {
@@ -104,8 +103,7 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearch
       return ERR_BEAM_FRAME_POINTER_INVALID;
     }
   } else {
-    UNROLL for (int i = 0; i < BEAM_STACK_FRAME_SCAN_ITERATIONS; i++)
-    {
+    for (int i = 0; i < BEAM_STACK_FRAME_SCAN_ITERATIONS; i++) {
       // Native stack is not supported on ARM due to 16-byte stack alignment hassle
       // r20 is used to store the stack pointer for JIT code to allow 8-bit alignment.
 #if defined(__aarch64__)
@@ -216,8 +214,7 @@ static EBPF_INLINE int unwind_beam(struct pt_regs *ctx)
 
   DEBUG_PRINT("beam: valid addresses 0x%llx - 0x%llx", ranges.first.start, ranges.last.end);
 
-  UNROLL for (int i = 0; i < BEAM_FRAMES_PER_PROGRAM; i++)
-  {
+  for (int i = 0; i < BEAM_FRAMES_PER_PROGRAM; i++) {
     if (record->state.pc == info->beam_normal_exit) {
       unwinder = PROG_UNWIND_STOP;
       break;

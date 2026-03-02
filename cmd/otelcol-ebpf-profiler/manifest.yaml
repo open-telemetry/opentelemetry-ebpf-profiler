@@ -1,0 +1,31 @@
+# NOTE:
+# This builder configuration is NOT used to build any official binary.
+# To see the builder manifests used for official binaries,
+# check https://github.com/open-telemetry/opentelemetry-collector-releases
+#
+# For the OpenTelemetry Collector Core official distribution sources, check
+# https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-ebpf-profiler
+
+dist:
+  module: go.opentelemetry.io/ebpf-profiler/cmd/otelcol-ebpf-profiler
+  name: otelcol-ebpf-profiler
+  description: Local OpenTelemetry Collector binary, testing only.
+  version: dev
+
+receivers:
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.146.1
+  - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202606
+    import: go.opentelemetry.io/ebpf-profiler/collector
+
+exporters:
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.146.1
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.146.1
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.146.1
+
+providers:
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.52.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.52.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.52.0
+
+replaces:
+  - go.opentelemetry.io/ebpf-profiler => ../../

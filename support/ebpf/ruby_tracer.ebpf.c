@@ -198,8 +198,7 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
   // rb_vm_frame_method_entry to check the frame for a callable method entry, CME
   // If it cannot find a local method entry within MAX_EP_CHECKS, it will error
   // https://github.com/ruby/ruby/blob/v3_4_7/vm_insnhelper.c#L769
-  UNROLL for (ep_check = 0; ep_check < MAX_EP_CHECKS; ++ep_check)
-  {
+  for (ep_check = 0; ep_check < MAX_EP_CHECKS; ++ep_check) {
     // This code emulates ruby's check_method_entry to traverse the environment
     // until it finds a method entry. Since the function calls itself, the code
     // is a bit out of order to try and optimize running as few instructions as
@@ -447,8 +446,7 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
     record->rubyUnwindState.cfunc_saved_frame = 0;
   }
 
-  UNROLL for (u32 i = 0; i < FRAMES_PER_WALK_RUBY_STACK; ++i)
-  {
+  for (u32 i = 0; i < FRAMES_PER_WALK_RUBY_STACK; ++i) {
     error = read_ruby_frame(record, rubyinfo, stack_ptr, next_unwinder);
     if (error != ERR_OK)
       return error;
