@@ -282,7 +282,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		samplesPerSecond:       cfg.SamplesPerSecond,
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
-		done:                   make(chan struct{}),
+		done:                   make(chan libpf.Void),
 	}
 
 	// Use an optimized version if available
