@@ -80,12 +80,6 @@ func getRegNameX86(reg uleb128) string {
 // regX86 returns the address to x86 specific register in vmRegs
 func (regs *vmRegs) regX86(ndx uleb128) *vmReg {
 	switch ndx {
-	case x86RegRAX:
-		// We don't have a specific field for RAX, but we can't return nil
-		// if we want to support DW_CFA_register for it.
-		// However, vmRegs only has fp and ra.
-		// If RA is in RAX, we need to return &regs.ra.
-		return &regs.ra
 	case x86RegRBP:
 		return &regs.fp
 	case x86RegRIP:
@@ -150,12 +144,6 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 		// Standard CFA-8
 	} else {
 		// Not the standard CFA-8 and not a supported register
-		return sdtypes.UnwindInfoInvalid
-	}
-
-	// Filter invalid RSP based CFAs (except when using register RA)
-	if (info.Flags&support.UnwindFlagRegisterRA) == 0 &&
-		regs.cfa.reg == x86RegRSP && regs.cfa.off == 0 {
 		return sdtypes.UnwindInfoInvalid
 	}
 
