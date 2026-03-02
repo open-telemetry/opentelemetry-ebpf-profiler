@@ -8,6 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
+	"go.opentelemetry.io/collector/pdata/pprofile/pprofileotlp"
+	v1profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/open-telemetry/sig-profiling/tools/profcheck"
 
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
@@ -733,4 +738,62 @@ func TestStackTableOrder(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGenerate_Validate(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	funcName := "myfunc"
+	filePath := libpf.Intern("/bin/bar")
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(7, 8),
+			FileName: filePath,
+		}),
+	})
+
+	traceKey := samples.TraceAndMetaKey{ExecutablePath: filePath}
+	events := map[libpf.Origin]samples.KeyToEventMapping{
+		support.TraceOriginSampling: {
+			traceKey: &samples.TraceEvents{
+				Frames: singleFrameTrace(libpf.PythonFrame, mapping, 0x30,
+					funcName, filePath, 123),
+				Timestamps: []uint64{42},
+			},
+		},
+	}
+	tree := samples.TraceEventsTree{
+		libpf.Intern("native_container"): events,
+	}
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+
+	// We can not directly use ConformanceChecker on profiles,
+	// so we first need to marshal and unmarshal the data
+	// for the expected format.
+
+	req := pprofileotlp.NewExportRequestFromProfiles(profiles)
+	contents, err := req.MarshalProto()
+	require.NoError(t, err)
+
+	var data v1profiles.ProfilesData
+	err = proto.Unmarshal(contents, &data)
+	require.NoError(t, err)
+
+	// Fix for protobuf unmarshaling for ConformanceChecker: The first attribute
+	// table entry must have a nil Value,but protobuf unmarshaling creates a
+	// non-nil but empty AnyValue. Explicitly set it to nil.
+	if data.Dictionary != nil && len(data.Dictionary.AttributeTable) > 0 {
+		firstAttr := data.Dictionary.AttributeTable[0]
+		if firstAttr.KeyStrindex == 0 && firstAttr.UnitStrindex == 0 {
+			firstAttr.Value = nil
+		}
+	}
+
+	err = (profcheck.ConformanceChecker{
+		CheckDictionaryDuplicates: true,
+		CheckSampleTimestampShape: true}).Check(&data)
+	require.NoError(t, err)
 }

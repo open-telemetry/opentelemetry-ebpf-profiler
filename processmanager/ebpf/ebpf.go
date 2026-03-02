@@ -374,6 +374,11 @@ func probeBatchLookupAndDeleteInner[T constraints.Unsigned](probeMap *cebpf.Map,
 		return err
 	}
 
+	if n != len(keys) {
+		return fmt.Errorf("unexpected batch update return: expected %d but got %d",
+			len(keys), n)
+	}
+
 	batchKeys := make([]T, 16)
 	batchValues := make([]uint64, 16)
 
