@@ -270,6 +270,10 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
         // continue unwinding Ruby VM frames. Due to this issue, the ordering of Ruby and native
         // frames will almost certainly be incorrect for Ruby versions < 2.6.
         frame_type = RUBY_FRAME_TYPE_CME_CFUNC;
+      } else if (rubyinfo->skip_native_resume) {
+        // Push cfunc inline without transitioning to the native unwinder.
+        // This saves tail calls at the cost of losing native frames within cfuncs.
+        frame_type = RUBY_FRAME_TYPE_CME_CFUNC;
       } else {
         // We save this cfp on in the "Record" entry, and when we start the unwinder
         // again we'll push it so that the order is correct and the cfunc "owns" any native code we
