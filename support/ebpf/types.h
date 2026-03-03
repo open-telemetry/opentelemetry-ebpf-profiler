@@ -488,6 +488,12 @@ typedef struct RubyProcInfo {
 
   // is reading gc state from objspace supported for this version?
   bool has_objspace;
+
+  // When true, cfunc frames are pushed inline without transitioning back to the
+  // native unwinder. This saves tail calls at the cost of losing native frames
+  // within cfuncs, preventing stack truncation on deep mixed stacks.
+  bool skip_native_resume;
+
   // Offsets and sizes of Ruby internal structs
 
   // rb_execution_context_struct offsets:
