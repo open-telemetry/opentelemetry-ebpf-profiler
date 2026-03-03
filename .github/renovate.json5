@@ -12,8 +12,7 @@
   ],
   gomod: {
     managerFilePatterns: [
-      '//(^|/)go\\.mod$//',
-      '//(^|/)tools\\.mod$//',
+      '/(^|/)tools\\.mod$/',
     ],
   },
   ocb: {
