@@ -77,14 +77,34 @@ func StartTracer(ctx context.Context, t *testing.T, et tracertypes.IncludedTrace
 
 	err = trc.AttachTracer()
 	require.NoError(t, err)
-
 	log.Info("Attached tracer program")
 
 	err = trc.EnableProfiling()
 	require.NoError(t, err)
+	log.Info("Enabled profiling")
 
 	err = trc.AttachSchedMonitor()
 	require.NoError(t, err)
+	log.Info("Attached sched monitor")
+
+	// Spawn monitors for the various result maps
+	ebpfTraceCh := make(chan *libpf.EbpfTrace)
+
+	err = trc.StartMapMonitors(ctx, ebpfTraceCh)
+	require.NoError(t, err)
+
+	go func() {
+		for {
+			select {
+			case trace := <-ebpfTraceCh:
+				if trace != nil {
+					trc.HandleTrace(trace)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	return traceCh, trc
 }
