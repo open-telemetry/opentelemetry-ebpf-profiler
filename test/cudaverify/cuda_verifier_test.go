@@ -184,7 +184,7 @@ func TestCUDAVerifierMultiProbe(t *testing.T) {
 	// target — correlation and kernel_exec are inlined in cuda_probe).
 	for _, probe := range probes {
 		if probe.Name == "activity_batch" {
-			err := ebpfHandler.UpdateProgArray("cuda_progs", 0, "cuda_activity_batch")
+			err := ebpfHandler.UpdateProgArray("cuda_progs", 0, "cuda_activity_batch_tail")
 			require.NoError(t, err, "UpdateProgArray failed for cuda_activity_batch")
 			break
 		}

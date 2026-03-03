@@ -33,6 +33,7 @@ package gpu_test
 	// 		gpu.USDTProgCudaCorrelation,
 	// 		gpu.USDTProgCudaKernel,
 	// 		gpu.USDTProgCudaActivityBatch,
+	// 		gpu.USDTProgCudaActivityBatchTail,
 	// 	}
 
 // 		for _, progName := range progNames {
