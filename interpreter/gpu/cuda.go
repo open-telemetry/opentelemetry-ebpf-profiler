@@ -24,8 +24,9 @@ const (
 	// These correspond to the function names in cuda.ebpf.c, not the SEC() paths
 	USDTProgCudaCorrelation   = "cuda_correlation"
 	USDTProgCudaKernel        = "cuda_kernel_exec"
-	USDTProgCudaActivityBatch = "cuda_activity_batch"
-	USDTProgCudaProbe         = "cuda_probe"
+	USDTProgCudaActivityBatch     = "cuda_activity_batch"
+	USDTProgCudaActivityBatchTail = "cuda_activity_batch_tail"
+	USDTProgCudaProbe             = "cuda_probe"
 
 	// BPF attach cookie values — must match CUDA_PROG_* in cuda.ebpf.c.
 	// Used in the low 32 bits of the BPF attach cookie so cuda_probe can
@@ -188,7 +189,7 @@ func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Addre
 		}
 		cudaTailCallOnce.Do(func() {
 			if err := ebpf.UpdateProgArray(cudaProgsMap, 0,
-				USDTProgCudaActivityBatch); err != nil {
+				USDTProgCudaActivityBatchTail); err != nil {
 				log.Errorf("[cuda] activity_batch tail call failed: %v", err)
 				cudaTailCallFailed = true
 			}
