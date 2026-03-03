@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [btv/merges]
   pull_request:
     branches: ["**"]
 
