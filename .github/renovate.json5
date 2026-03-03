@@ -12,8 +12,12 @@
   ],
   gomod: {
     managerFilePatterns: [
-      '//(^|/)go\\.mod$//',
-      '//(^|/)tools\\.mod$//',
+      '/(^|/)tools\\.mod$/',
+    ],
+  },
+  ocb: {
+    managerFilePatterns: [
+      '/cmd/otelcol-ebpf-profiler/manifest.yaml$/',
     ],
   },
   packageRules: [
@@ -54,6 +58,15 @@
       groupName: 'Rust dependencies',
       matchManagers: [
         'cargo',
+      ],
+      schedule: [
+        'before 8am every weekday',
+      ],
+    },
+    {
+      groupName: 'OCB (manifest) dependencies',
+      matchManagers: [
+        'ocb',
       ],
       schedule: [
         'before 8am every weekday',
