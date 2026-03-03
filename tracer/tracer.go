@@ -1378,3 +1378,7 @@ func (t *Tracer) GetInterpretersForPID(pid libpf.PID) []interpreter.Instance {
 func (t *Tracer) ForceProcessPID(pid libpf.PID) {
 	t.pidEvents <- libpf.PIDTID(uint64(pid) + uint64(pid)<<32)
 }
+
+func (t *Tracer) SetInterceptor(interceptor pm.TraceInterceptor) {
+	t.processManager.SetInterceptor(interceptor)
+}

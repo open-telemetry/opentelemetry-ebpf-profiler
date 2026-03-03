@@ -167,3 +167,8 @@ type processInfo struct {
 func (pm *ProcessManager) GetEbpfHandler() pmebpf.EbpfHandler {
 	return pm.ebpf
 }
+
+// SetInterceptor sets an interceptor to be used for traces
+func (pm *ProcessManager) SetInterceptor(interceptor TraceInterceptor) {
+	pm.interceptor = interceptor
+}
