@@ -4,6 +4,10 @@ on:
   schedule:
     # Run every day at 3:15 AM.
     - cron: '15 3 * * *'
+  pull_request:
+    branches: ["**"]
+    paths:
+      - cmd/otelcol-ebpf-profiler/manifest.yaml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
@@ -43,6 +47,36 @@ jobs:
           go mod tidy
       - name: Tests
         run: make test-junit
+      - name: Generate Issue
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          go install go.opentelemetry.io/build-tools/issuegenerator@v0.28.1
+          issuegenerator -path /tmp/testresults
+
+  otelcol-ebpf-profiler:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up Go Stable
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version: stable
+      - name: Clone Collector
+        run: |
+          collector_path=/tmp/opentelemetry-collector
+          git clone --depth=1 https://github.com/open-telemetry/opentelemetry-collector.git $collector_path
+      - name: Setup replace statements
+        run: |
+          COLLECTOR_PATH=/tmp/opentelemetry-collector make otel-from-tree
+      - name: Generate files for otelcol-ebpf-profiler
+        run: |
+          make generate-collector
+      - name: Build otelcol-ebpf-profiler
+        run: |
+          make otelcol-ebpf-profiler
       - name: Generate Issue
         if: failure()
         env:
