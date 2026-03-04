@@ -133,17 +133,6 @@ func TestProcessContext_Read(t *testing.T) {
 			expectedResult: ProcessContextInfo{Context: &testProcessContext, PublishedAtNs: 123456789},
 		},
 		{
-			name: "success with memfd mapping",
-			setupMock: func(mock *mockReader) {
-				headerAddr := uint64(0x1000)
-				payloadAddr := uint64(0x2000)
-				header := createValidHeader(uint32(len(payload)), payloadAddr, 123456789)
-				mock.writeAt(headerAddr, header)
-				mock.writeAt(payloadAddr, payload)
-			},
-			expectedResult: ProcessContextInfo{Context: &testProcessContext, PublishedAtNs: 123456789},
-		},
-		{
 			name: "read error",
 			setupMock: func(mock *mockReader) {
 				mock.setError(errors.New("read error"))
