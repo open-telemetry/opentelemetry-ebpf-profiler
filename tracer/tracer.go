@@ -124,9 +124,6 @@ type Tracer struct {
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
 
-	// stopMonitors cancels the context used by map monitor goroutines
-	// started in StartMapMonitors.
-	stopMonitors context.CancelFunc
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
