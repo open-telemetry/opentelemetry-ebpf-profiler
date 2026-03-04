@@ -14,7 +14,7 @@ static inline EBPF_INLINE void increment_metric(u32 metricID)
   if (count) {
     ++*count;
   } else {
-    DEBUG_PRINT("Failed to lookup metrics map for metricID %d", metricID);
+    // DEBUG_PRINT("Failed to lookup metrics map for metricID %d", metricID);
   }
 }
 

@@ -257,7 +257,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
       // This is the hard coded implementation of this expression. For further details,
       // see https://hal.inria.fr/hal-02297690/document, page 4. (DOI: 10.1145/3360572)
       cfa = state->sp + 8 + ((((state->pc & 15) >= 11) ? 1 : 0) << 3);
-      DEBUG_PRINT("PLT, cfa=0x%lx", (unsigned long)cfa);
+      // DEBUG_PRINT("PLT, cfa=0x%lx", (unsigned long)cfa);
       break;
     case UNWIND_COMMAND_SIGNAL: {
       // Use the PerCPURecord scratch union instead of a stack-local buffer to avoid
@@ -280,7 +280,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
       state->pc  = rt_regs[16];
 
       state->return_address = false;
-      DEBUG_PRINT("signal frame");
+      // DEBUG_PRINT("signal frame");
       goto frame_ok;
     }
     case UNWIND_COMMAND_STOP: *stop = true; return ERR_OK;
@@ -305,10 +305,10 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
 
     s32 param = info->param;
     if (info->mergeOpcode) {
-      DEBUG_PRINT("AddrDiff %d, merged delta %#02x", addrDiff, info->mergeOpcode);
+      // DEBUG_PRINT("AddrDiff %d, merged delta %#02x", addrDiff, info->mergeOpcode);
       if (addrDiff >= (info->mergeOpcode & ~MERGEOPCODE_NEGATIVE)) {
         param += (info->mergeOpcode & MERGEOPCODE_NEGATIVE) ? -8 : 8;
-        DEBUG_PRINT("Merged delta match: cfaDelta=%d", unwindInfo);
+        // DEBUG_PRINT("Merged delta match: cfaDelta=%d", unwindInfo);
       }
     }
 
