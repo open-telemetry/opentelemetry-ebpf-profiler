@@ -21,8 +21,8 @@ import (
 const (
 	// eBPF program names for USDT probes
 	// These correspond to the function names in cuda.ebpf.c, not the SEC() paths
-	USDTProgCudaCorrelation   = "cuda_correlation"
-	USDTProgCudaKernel        = "cuda_kernel_exec"
+	USDTProgCudaCorrelation       = "cuda_correlation"
+	USDTProgCudaKernel            = "cuda_kernel_exec"
 	USDTProgCudaActivityBatch     = "cuda_activity_batch"
 	USDTProgCudaActivityBatchTail = "cuda_activity_batch_tail"
 	USDTProgCudaProbe             = "cuda_probe"

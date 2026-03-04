@@ -293,7 +293,6 @@ lj_record_frame(PerCPURecord *record, TValue *frame, TValue frame_value, TValue 
   if (f->ffid != FF_LUA) {
     DEBUG_PRINT("lj: lj_record_frame: ffi function %lx", (unsigned long)f->ffid);
     // We can't derive a name for this function, so we'll just emit a pseudo frame.
-    // XXX[btv] where does this get read?
     u64 *data = push_frame(
       &record->state,
       &record->trace,

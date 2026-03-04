@@ -111,7 +111,6 @@ rust-components: rust-targets
 rust-tests: rust-targets
 	cargo test
 
-# TODO (btv) -- the golang-ci with systemtap support got lost in the merge, figure out how to fix this.
 lint: generate vanity-import-check pprof-execs
 	$(MAKE) lint -C support/ebpf
 	go tool $(GO_TOOLS) golangci-lint config verify
