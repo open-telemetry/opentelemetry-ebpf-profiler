@@ -103,7 +103,7 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 		<-r.runLoop.stopSignal
 		cancelReporting()
 		if err := otlpGrpcConn.Close(); err != nil {
-			log.Fatalf("Stopping connection of OTLP client client failed: %v", err)
+			log.Errorf("Stopping connection of OTLP client client failed: %v", err)
 		}
 	}()
 
