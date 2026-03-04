@@ -286,10 +286,28 @@ jobs:
         uses: ./.github/workflows/env
       - name: Install dependencies
         run: |
+          sudo tee /etc/apt/sources.list.d/ubuntu.sources <<EOF > /dev/null
+          Types: deb
+          URIs: http://azure.archive.ubuntu.com/ubuntu/
+          Suites: noble noble-updates noble-backports
+          Components: main universe restricted multiverse
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          Architectures: amd64
+
+          Types: deb
+          URIs: http://azure.ports.ubuntu.com/ubuntu-ports/
+          Suites: noble noble-updates noble-backports
+          Components: main universe restricted multiverse
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          Architectures: arm64
+          EOF
+
+          sudo dpkg --add-architecture arm64
+
           sudo apt-get update -y
           case "${{ matrix.target_arch }}" in
             amd64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-x86;;
-            arm64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-arm ipxe-qemu;;
+            arm64) sudo apt-get -y install qemu-system-arm ipxe-qemu gcc-aarch64-linux-gnu libc6-arm64-cross libc6:arm64 binutils-aarch64-linux-gnu musl-dev:arm64 systemtap-sdt-dev:arm64;;
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           sudo apt-get install -y debootstrap systemtap-sdt-dev
