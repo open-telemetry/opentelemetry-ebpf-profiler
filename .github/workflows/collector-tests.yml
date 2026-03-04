@@ -48,5 +48,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          go install go.opentelemetry.io/build-tools/issuegenerator@latest
+          go install go.opentelemetry.io/build-tools/issuegenerator@v0.28.1
           issuegenerator -path /tmp/testresults
