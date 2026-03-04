@@ -295,10 +295,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 // Close provides functionality for Tracer to perform cleanup tasks.
 // NOTE: Close may be called multiple times in succession.
 func (t *Tracer) Close() {
-	if t.stopMonitors != nil {
-		t.stopMonitors()
-	}
-
 	events := t.perfEntrypoints.WLock()
 	terminatePerfEvents(*events)
 	*events = nil
