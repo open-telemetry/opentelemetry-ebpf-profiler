@@ -6,6 +6,7 @@
 package tracer_test
 
 import (
+	"context"
 	"math"
 	"runtime"
 	"slices"
@@ -87,7 +88,8 @@ type trace struct {
 }
 
 func TestTracerErrorPropagation(t *testing.T) {
-	ctx := t.Context()
+	ctx, cancelFn := context.WithCancel(t.Context())
+	defer cancelFn()
 
 	metrics.Start(noop.Meter{})
 
@@ -130,7 +132,8 @@ func TestTracerErrorPropagation(t *testing.T) {
 }
 
 func TestTracerMapMonitorsError(t *testing.T) {
-	ctx := t.Context()
+	ctx, cancelFn := context.WithCancel(t.Context())
+	defer cancelFn()
 
 	metrics.Start(noop.Meter{})
 
@@ -157,7 +160,8 @@ func TestTracerMapMonitorsError(t *testing.T) {
 }
 
 func TestTraceTransmissionAndParsing(t *testing.T) {
-	ctx := t.Context()
+	ctx, cancelFn := context.WithCancel(t.Context())
+	defer cancelFn()
 
 	metrics.Start(noop.Meter{})
 
