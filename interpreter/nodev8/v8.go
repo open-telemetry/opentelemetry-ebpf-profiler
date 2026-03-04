@@ -2209,6 +2209,10 @@ func (rv *relevantSymbols) scan(ef *pfelf.File) error {
 		}
 		return len(remaining) > 0
 	})
+	if errors.Is(err, pfelf.ErrSectionNotPresent) {
+		log.Info("Couldn't find node symtab")
+		err = nil
+	}
 	return err
 }
 
