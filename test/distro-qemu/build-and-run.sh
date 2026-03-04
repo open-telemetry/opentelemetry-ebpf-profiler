@@ -124,6 +124,13 @@ fi
 cp "${OUTPUT_DIR}"/*.test "$ROOTFS_DIR/"
 cp "${PARCAGPU_DIR}/libparcagpucupti.so" "$ROOTFS_DIR/"
 
+# Copy stub libcupti .so next to the .so (for the test's preload logic) and
+# into the RUNPATH (/usr/local/cuda/lib64) as a fallback for the dynamic linker.
+mkdir -p "$ROOTFS_DIR/usr/local/cuda/lib64"
+for stub in "${PARCAGPU_DIR}"/libcupti.so*; do
+    [ -f "$stub" ] && cp "$stub" "$ROOTFS_DIR/" && cp "$stub" "$ROOTFS_DIR/usr/local/cuda/lib64/"
+done
+
 # List dynamic dependencies for debugging
 echo "Test binary dependencies:"
 ldd "${OUTPUT_DIR}/rtld.test" || true
