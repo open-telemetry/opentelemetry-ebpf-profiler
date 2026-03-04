@@ -1106,7 +1106,6 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 		return err
 	}
 
-
 	pidEvents := make([]libpf.PIDTID, 0)
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
 		t.triggerPIDProcessing, func(_ bool) bool {
