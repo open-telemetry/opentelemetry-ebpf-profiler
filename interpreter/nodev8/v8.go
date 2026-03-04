@@ -2184,43 +2184,32 @@ func locateSnapshotArea(ef *pfelf.File, syms relevantSymbols) util.Range {
 }
 
 type relevantSymbols struct {
-	DefaultSnapshotBlob *libpf.Symbol
-	BytecodeSizes       *libpf.Symbol
-	NodeVersion         *libpf.Symbol
-	CurrentIsolate      *libpf.Symbol
+	DefaultSnapshotBlob *libpf.Symbol `sym:"_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv"`
+	BytecodeSizes       *libpf.Symbol `sym:"_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE"`
+	NodeVersion         *libpf.Symbol `sym:"_ZZ21napi_get_node_versionE7version"`
+	CurrentIsolate      *libpf.Symbol `sym:"_ZN2v88internal18g_current_isolate_E"`
 }
 
-const (
-	defaultSnapshotBlobSymbol libpf.SymbolName = "_ZN2v88internal8Snapshot19DefaultSnapshotBlobEv"
-	bytecodeSizesSymbol       libpf.SymbolName = "_ZN2v88internal11interpreter9Bytecodes14kBytecodeSizesE"
-	nodeVersionSymbol         libpf.SymbolName = "_ZZ21napi_get_node_versionE7version"
-	currentIsolateSymbol      libpf.SymbolName = "_ZN2v88internal18g_current_isolate_E"
-)
-
-// scanForRelevantSymbols gets the symbols needed for Node unwinding
+// scan gets the symbols needed for Node unwinding
 // by scanning the symtab.
-func scanForRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
-	rv := relevantSymbols{}
-	err := ef.VisitSymbols(func(sym libpf.Symbol) bool {
-		if sym.Name == defaultSnapshotBlobSymbol {
-			rv.DefaultSnapshotBlob = &sym
+func (rv *relevantSymbols) scan(ef *pfelf.File) error {
+	remaining := make(map[libpf.SymbolName]int)
+	val := reflect.ValueOf(rv).Elem()
+	for i := 0; i < val.NumField(); i++ {
+		fval := val.Field(i)
+		if fval.IsNil() {
+			tag := val.Type().Field(i).Tag.Get("sym")
+			remaining[libpf.SymbolName(tag)] = i
 		}
-		if sym.Name == bytecodeSizesSymbol {
-			rv.BytecodeSizes = &sym
-		}
-		if sym.Name == nodeVersionSymbol {
-			rv.NodeVersion = &sym
-		}
-		if sym.Name == currentIsolateSymbol {
-			rv.CurrentIsolate = &sym
-		}
-		return rv.DefaultSnapshotBlob == nil || rv.BytecodeSizes == nil ||
-			rv.NodeVersion == nil || rv.CurrentIsolate == nil
-	})
-	if err != nil {
-		return relevantSymbols{}, err
 	}
-	return rv, nil
+	err := ef.VisitSymbols(func(sym libpf.Symbol) bool {
+		if field, ok := remaining[sym.Name]; ok {
+			val.Field(field).Set(reflect.ValueOf(&sym))
+			delete(remaining, sym.Name)
+		}
+		return len(remaining) > 0
+	})
+	return err
 }
 
 // lookupRelevantSymbols tries to get the symbols needed for Node unwinding.
@@ -2231,29 +2220,30 @@ func scanForRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 // then fall back to scanning for them in the symtab.
 func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	rv := relevantSymbols{}
-	sym, err := ef.LookupSymbol(defaultSnapshotBlobSymbol)
-	if errors.Is(err, libpf.ErrSymbolNotFound) {
-		// If the first one failed, they are probably all going to fail.
-		// Scan instead.
-		return scanForRelevantSymbols(ef)
+	val := reflect.ValueOf(&rv).Elem()
+	typ := val.Type()
+	anyFailed := false
+	for i := 0; i < val.NumField(); i++ {
+		ftyp := typ.Field(i)
+		fval := val.Field(i)
+		tag := ftyp.Tag.Get("sym")
+
+		sym, err := ef.LookupSymbol(libpf.SymbolName(tag))
+		if err != nil {
+			if !errors.Is(err, libpf.ErrSymbolNotFound) {
+				log.Warnf("Couldn't get V8 symbol %s: %v", ftyp.Name, err)
+			}
+			anyFailed = true
+		} else {
+			fval.Set(reflect.ValueOf(sym))
+		}
 	}
-	// Match historic behavior: keep going, even if we can't get the snapshot blob.
-	// (TODO: Figure out when/why this can happen)
-	if err != nil {
-		log.Warnf("Couldn't get V8 DefaultSnapshotBlob: %v", err)
+	if anyFailed {
+		err := rv.scan(ef)
+		return rv, err
 	} else {
-		rv.DefaultSnapshotBlob = sym
+		return rv, nil
 	}
-	// If the first one succeeded, they should all succeed, so keep
-	// using `ef.LookupSymbol`.
-	sym, err = ef.LookupSymbol(bytecodeSizesSymbol)
-	if err != nil {
-		// As above, keep going to match historic behavior (why?)
-		log.Warnf("Couldn't get V8 BytecodeSizes: %v", err)
-	} else {
-		rv.BytecodeSizes = sym
-	}
-	return rv, nil
 }
 
 // loadNodeClData loads various offsets that are needed for custom labels handling.

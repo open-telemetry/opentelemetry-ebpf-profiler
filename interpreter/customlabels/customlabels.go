@@ -81,7 +81,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 					alsHandleAddr = heapify(libpf.Address(r.Off))
 				}
 			}
-			return alsHandleAddr == nil ||
+			return currentSetTlsAddr == nil ||
 				(isNodeExtension && (alsIdentityHashAddr == nil || alsHandleAddr == nil))
 		}); err != nil {
 			return nil, errors.New("failed to scan TLS symbols")
