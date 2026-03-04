@@ -1106,9 +1106,6 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 		return err
 	}
 
-	// Derive a cancellable context so that all monitor goroutines are
-	// stopped when the tracer is closed.
-	ctx, t.stopMonitors = context.WithCancel(ctx)
 
 	pidEvents := make([]libpf.PIDTID, 0)
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
