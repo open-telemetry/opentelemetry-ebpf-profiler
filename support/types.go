@@ -284,7 +284,7 @@ type PyProcInfo struct {
 }
 type RubyProcInfo struct {
 	Version                      uint32
-	Current_ec_tpbase_tls_offset uint64
+	Current_ec_tpbase_tls_offset int64
 	Current_ctx_ptr              uint64
 	Has_objspace                 bool
 	Vm_stack                     uint8
