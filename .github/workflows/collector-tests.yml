@@ -56,7 +56,14 @@ jobs:
           issuegenerator -path /tmp/testresults
 
   otelcol-ebpf-profiler:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, use-upstream: true }
+          - { runner: ubuntu-24.04, use-upstream: false }
+          - { runner: ubuntu-24.04-arm, use-upstream: true }
+          - { runner: ubuntu-24.04-arm, use-upstream: false }
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout Repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -65,15 +72,14 @@ jobs:
         with:
           go-version: stable
       - name: Clone Collector
+        if: ${{ matrix.use-upstream }}
         run: |
           collector_path=/tmp/opentelemetry-collector
           git clone --depth=1 https://github.com/open-telemetry/opentelemetry-collector.git $collector_path
       - name: Setup replace statements
+        if: ${{ matrix.use-upstream }}
         run: |
           COLLECTOR_PATH=/tmp/opentelemetry-collector make otel-from-tree
-      - name: Generate files for otelcol-ebpf-profiler
-        run: |
-          make generate-collector
       - name: Build otelcol-ebpf-profiler
         run: |
           make otelcol-ebpf-profiler
