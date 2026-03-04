@@ -25,12 +25,11 @@ echo -n "Generating ProcessContext protobuf code..."
 cd "${REPO_ROOT}"
 
 protoc \
-    --go_out=. \
+    --go_out=proto/processcontext \
     --go_opt=paths=source_relative \
-    --go_opt=Mopentelemetry/proto/resource/v1/resource.proto=go.opentelemetry.io/proto/slim/otlp/resource/v1 \
-    --go_opt=Mopentelemetry/proto/common/v1/common.proto=go.opentelemetry.io/proto/slim/otlp/common/v1 \
+    "--go_opt=Mprocesscontext.proto=go.opentelemetry.io/ebpf-profiler/proto/processcontext;processcontext" \
     --proto_path="${OTEL_PROTO_DIR}" \
-    --proto_path=. \
-    proto/processcontext/processcontext.proto
+    --proto_path=proto/processcontext \
+    processcontext.proto
 
 echo " done"

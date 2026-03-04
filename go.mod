@@ -35,7 +35,7 @@ require (
 	go.opentelemetry.io/collector/receiver/xreceiver v0.145.0
 	go.opentelemetry.io/otel v1.40.0
 	go.opentelemetry.io/otel/metric v1.40.0
-	go.opentelemetry.io/proto/slim/otlp v1.9.0
+	go.opentelemetry.io/proto/otlp v1.9.0
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/arch v0.24.0
 	golang.org/x/exp v0.0.0-20260212183809-81e46e3db34a

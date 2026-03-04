@@ -19,8 +19,8 @@ syntax = "proto3";
 // it either? Feedback very welcome!
 package opentelemetry.proto.common.v1;
 
-import "common.proto";
-import "resource.proto";
+import "opentelemetry/proto/common/v1/common.proto";
+import "opentelemetry/proto/resource/v1/resource.proto";
 
 option csharp_namespace = "OpenTelemetry.Proto.Common.V1";
 option java_multiple_files = true;

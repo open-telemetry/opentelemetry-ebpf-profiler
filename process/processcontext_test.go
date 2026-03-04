@@ -19,30 +19,30 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	processcontext "go.opentelemetry.io/ebpf-profiler/proto/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
-	otlpcommon "go.opentelemetry.io/proto/slim/otlp/common/v1"
-	otlpresource "go.opentelemetry.io/proto/slim/otlp/resource/v1"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
+	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 )
 
 const headerSize = 32
 
 var testProcessContext = processcontext.ProcessContext{
-	Resource: &otlpresource.Resource{
-		Attributes: []*otlpcommon.KeyValue{
+	Resource: &resourcepb.Resource{
+		Attributes: []*commonpb.KeyValue{
 			{
 				Key: "service.name",
-				Value: &otlpcommon.AnyValue{
-					Value: &otlpcommon.AnyValue_StringValue{
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_StringValue{
 						StringValue: "test-service",
 					},
 				},
 			},
 		},
 	},
-	ExtraAttributes: []*otlpcommon.KeyValue{
+	ExtraAttributes: []*commonpb.KeyValue{
 		{
 			Key: "custom.attribute",
-			Value: &otlpcommon.AnyValue{
-				Value: &otlpcommon.AnyValue_StringValue{
+			Value: &commonpb.AnyValue{
+				Value: &commonpb.AnyValue_StringValue{
 					StringValue: "custom-value",
 				},
 			},
