@@ -74,7 +74,21 @@ func hashCOPKey(k copKey) uint32 {
 
 func (i *perlInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	libcInfo libc.LibcInfo) error {
+	// Perl requires TSDInfo to access thread state. If stateInTSD is true,
+	// we need valid TSDInfo to proceed. If it's false, we can proceed without it.
+	// Since UpdateLibcInfo may be called multiple times as LibcInfo is collected
+	// from multiple DSOs, we should only insert proc data when we have what we need.
 	d := i.d
+	if d.stateInTSD && !libcInfo.HasTSDInfo() {
+		// We need TSDInfo but don't have it yet, wait for another call
+		return nil
+	}
+
+	// If we've already inserted proc info, don't do it again
+	if i.procInfoInserted {
+		return nil
+	}
+
 	stateInTSD := uint8(0)
 	if d.stateInTSD {
 		stateInTSD = 1

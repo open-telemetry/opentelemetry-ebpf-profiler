@@ -2,7 +2,11 @@
 
 set -euo pipefail
 
+# Use COLLECTOR_PATH if set, otherwise default to ../../../opentelemetry-collector
+COLLECTOR_PATH="${COLLECTOR_PATH:-../../../opentelemetry-collector}"
+
 echo "Adding local opentelemetry-collector replaces to manifest.yaml"
+echo "Using collector path: $COLLECTOR_PATH"
 
 if grep -q "# START otel-from-tree" cmd/otelcol-ebpf-profiler/manifest.yaml; then
     echo "otel-from-tree already applied. Run 'make otel-from-lib' first to revert."
@@ -16,7 +20,7 @@ grep -E "gomod: go.opentelemetry.io/collector/" cmd/otelcol-ebpf-profiler/manife
     sort -u | \
     while read -r module; do
         subpath=${module#go.opentelemetry.io/collector}
-        echo "  - ${module} => ../opentelemetry-collector${subpath}" >> cmd/otelcol-ebpf-profiler/manifest.yaml
+        echo "  - ${module} => ${COLLECTOR_PATH}${subpath}" >> cmd/otelcol-ebpf-profiler/manifest.yaml
     done
 
 echo "Local replaces added. You can now build with local opentelemetry-collector changes."
