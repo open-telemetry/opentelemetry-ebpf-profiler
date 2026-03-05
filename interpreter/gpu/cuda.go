@@ -15,7 +15,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/traceutil"
+
 )
 
 const (
@@ -27,7 +27,7 @@ const (
 	USDTProgCudaActivityBatchTail = "cuda_activity_batch_tail"
 	USDTProgCudaProbe             = "cuda_probe"
 
-	// BPF attach cookie values — must match CUDA_PROG_* in cuda.ebpf.c.
+	// BPF attach cookie values - must match CUDA_PROG_* in cuda.ebpf.c.
 	// Used in the low 32 bits of the BPF attach cookie so cuda_probe can
 	// distinguish probes.  The cuda_progs prog array uses a fixed key (0)
 	// for the single tail-call target (activity_batch).
@@ -279,38 +279,71 @@ func isGraphLaunch(cbid int32) bool {
 	return false
 }
 
-// addTrace is called when a symbolized CUDA trace is received, to match it with timing info.
-// Returns completed traces (may be multiple for graph launches).
-func (f *gpuTraceFixer) addTrace(st *SymbolizedCudaTrace) []CudaTraceOutput {
-	log.Debugf("[cuda] adding trace with id %d cbid %d (0x%x) for pid %d",
-		st.CorrelationID, int(st.CBID), uint32(st.CBID), st.Meta.PID)
+// addSingleTrace handles non-graph CUDA launches. If timing already arrived it
+// returns the completed output directly (no slice, no SymbolizedCudaTrace allocated).
+// Otherwise it stores a SymbolizedCudaTrace for later matching.
+func (f *gpuTraceFixer) addSingleTrace(trace *libpf.Trace, meta *samples.TraceEventMeta,
+	cudaFrameIdx int, correlationID uint32, cbid int32) (CudaTraceOutput, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// Update max, detecting wrap-around (new ID much smaller than max means wrap)
-	if st.CorrelationID > f.maxCorrelationId || f.maxCorrelationId-st.CorrelationID > 1<<31 {
-		f.maxCorrelationId = st.CorrelationID
+	if correlationID > f.maxCorrelationId || f.maxCorrelationId-correlationID > 1<<31 {
+		f.maxCorrelationId = correlationID
+	}
+
+	evs, ok := f.timesAwaitingTraces[correlationID]
+	if ok && len(evs) > 0 {
+		log.Debugf("[cuda] gpu trace completed id %d cbid %d (0x%x) for pid %d",
+			correlationID, int(cbid), uint32(cbid), meta.PID)
+		out := f.prepTrace(trace, meta, cudaFrameIdx, &evs[0])
+		delete(f.timesAwaitingTraces, correlationID)
+		return out, true
+	}
+
+	// Store trace for future timing events
+	f.tracesAwaitingTimes[correlationID] = &SymbolizedCudaTrace{
+		Trace:         trace,
+		Meta:          meta,
+		CUDAFrameIdx:  cudaFrameIdx,
+		CorrelationID: correlationID,
+		CBID:          cbid,
+	}
+	return CudaTraceOutput{}, false
+}
+
+// addGraphTrace handles graph CUDA launches. Returns completed outputs for any
+// timing events that arrived before this trace, and always stores the trace for
+// future timing events (graphs can fire many kernels with the same correlation ID).
+func (f *gpuTraceFixer) addGraphTrace(trace *libpf.Trace, meta *samples.TraceEventMeta,
+	cudaFrameIdx int, correlationID uint32, cbid int32) []CudaTraceOutput {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	// Update max, detecting wrap-around (new ID much smaller than max means wrap)
+	if correlationID > f.maxCorrelationId || f.maxCorrelationId-correlationID > 1<<31 {
+		f.maxCorrelationId = correlationID
 	}
 
 	var outputs []CudaTraceOutput
-
-	evs, ok := f.timesAwaitingTraces[st.CorrelationID]
+	evs, ok := f.timesAwaitingTraces[correlationID]
 	if ok && len(evs) > 0 {
-		// Process any timing events that arrived before this trace
 		for idx := range evs {
 			log.Debugf("[cuda] gpu trace completed id %d cbid %d (0x%x) for pid %d",
-				st.CorrelationID, int(st.CBID), uint32(st.CBID), st.Meta.PID)
-			outputs = append(outputs, f.prepTrace(st, &evs[idx]))
+				correlationID, int(cbid), uint32(cbid), meta.PID)
+			outputs = append(outputs, f.prepTrace(trace, meta, cudaFrameIdx, &evs[idx]))
 		}
-		// Always delete the key to avoid nil entries accumulating
-		delete(f.timesAwaitingTraces, st.CorrelationID)
-		// For non-graph launches, we've matched the only timing event, done
-		if !isGraphLaunch(st.CBID) {
-			return outputs
-		}
+		delete(f.timesAwaitingTraces, correlationID)
 	}
-	// Store trace for future timing events
-	f.tracesAwaitingTimes[st.CorrelationID] = st
+
+	// Always store for future timing events
+	f.tracesAwaitingTimes[correlationID] = &SymbolizedCudaTrace{
+		Trace:         trace,
+		Meta:          meta,
+		CUDAFrameIdx:  cudaFrameIdx,
+		CorrelationID: correlationID,
+		CBID:          cbid,
+	}
 	return outputs
 }
 
@@ -327,7 +360,7 @@ func (f *gpuTraceFixer) addTime(ev *CuptiTimingEvent) (CudaTraceOutput, bool) {
 		if ev.Graph == 0 {
 			delete(f.tracesAwaitingTimes, ev.Id)
 		}
-		return f.prepTrace(st, ev), true
+		return f.prepTrace(st.Trace, st.Meta, st.CUDAFrameIdx, ev), true
 	}
 	f.timesAwaitingTraces[ev.Id] = append(f.timesAwaitingTraces[ev.Id], *ev)
 	return CudaTraceOutput{}, false
@@ -392,23 +425,24 @@ func init() {
 
 // prepTrace attaches timing information and the demangled kernel name to a symbolized
 // CUDA trace, producing a CudaTraceOutput ready for reporting.
-func (f *gpuTraceFixer) prepTrace(st *SymbolizedCudaTrace, ev *CuptiTimingEvent) CudaTraceOutput {
+func (f *gpuTraceFixer) prepTrace(trace *libpf.Trace, meta *samples.TraceEventMeta,
+	cudaFrameIdx int, ev *CuptiTimingEvent) CudaTraceOutput {
 	out := CudaTraceOutput{
-		Trace: st.Trace,
-		Meta:  st.Meta,
+		Trace: trace,
+		Meta:  meta,
 	}
 
 	if ev.Graph != 0 {
 		// Graphs can have many kernels with same correlation ID.
 		// Copy Trace (Frames differ per kernel, Hash differs) and Meta (OffTime differs)
-		// since the original st stays in the map for future timing events.
+		// since the original stays in the map for future timing events.
 		// CustomLabels are NOT copied: all events for the same correlation ID share
 		// identical cuda_device/cuda_stream/cuda_graph values.
-		traceCopy := *st.Trace
-		traceCopy.Frames = make(libpf.Frames, len(st.Trace.Frames))
-		copy(traceCopy.Frames, st.Trace.Frames)
+		traceCopy := *trace
+		traceCopy.Frames = make(libpf.Frames, len(trace.Frames))
+		copy(traceCopy.Frames, trace.Frames)
 		out.Trace = &traceCopy
-		metaCopy := *st.Meta
+		metaCopy := *meta
 		out.Meta = &metaCopy
 	}
 
@@ -433,29 +467,60 @@ func (f *gpuTraceFixer) prepTrace(st *SymbolizedCudaTrace, ev *CuptiTimingEvent)
 	}
 	if len(nameBytes) > 0 {
 		funcName := libpf.Intern(unsafe.String(unsafe.SliceData(nameBytes), len(nameBytes)))
-		fi := st.CUDAFrameIdx
-		out.Trace.Frames[fi] = unique.Make(libpf.Frame{
-			Type:         out.Trace.Frames[fi].Value().Type,
+		out.Trace.Frames[cudaFrameIdx] = unique.Make(libpf.Frame{
+			Type:         out.Trace.Frames[cudaFrameIdx].Value().Type,
 			FunctionName: funcName,
 		})
 	}
 
-	// Recompute trace hash since we modified frame[0]
-	out.Trace.Hash = traceutil.HashTrace(out.Trace)
-
 	return out
 }
 
-// AddTrace is a static function that delegates to the appropriate fixer for the PID.
-func AddTrace(st *SymbolizedCudaTrace) []CudaTraceOutput {
-	pid := st.Meta.PID
+// InterceptTrace finds the CUDA frame, extracts the correlation ID and CBID,
+// and delegates to the appropriate fixer. When timing is already available the
+// finishTrace callback is invoked (outside the fixer lock); otherwise the trace
+// is stored for later matching via AddTimes.
+func InterceptTrace(trace *libpf.Trace, meta *samples.TraceEventMeta,
+	finishTrace func(*libpf.Trace, *samples.TraceEventMeta)) {
+	// Find the CUDA kernel frame and extract correlation ID + CBID.
+	cudaFrameIdx := -1
+	var correlationID uint32
+	var cbid int32
+	for i, uniqueFrame := range trace.Frames {
+		if uniqueFrame.Value().Type == libpf.CUDAKernelFrame {
+			cudaFrameIdx = i
+			packed := uint64(uniqueFrame.Value().AddressOrLineno)
+			correlationID = uint32(packed)
+			cbid = int32(packed >> 32)
+			break
+		}
+	}
+	if cudaFrameIdx < 0 {
+		log.Errorf("[cuda] CUDA trace has no CUDAKernelFrame")
+		return
+	}
+
+	log.Debugf("[cuda] adding trace with id %d cbid %d (0x%x) for pid %d",
+		correlationID, int(cbid), uint32(cbid), meta.PID)
+
+	pid := meta.PID
 	value, ok := gpuFixers.Load(pid)
 	if !ok {
-		log.Warnf("no GPU fixer found for PID %d in AddTrace", pid)
-		return nil
+		log.Warnf("no GPU fixer found for PID %d in InterceptTrace", pid)
+		return
 	}
 	fixer := value.(*gpuTraceFixer)
-	return fixer.addTrace(st)
+
+	if isGraphLaunch(cbid) {
+		outputs := fixer.addGraphTrace(trace, meta, cudaFrameIdx, correlationID, cbid)
+		for i := range outputs {
+			finishTrace(outputs[i].Trace, outputs[i].Meta)
+		}
+	} else {
+		if out, ok := fixer.addSingleTrace(trace, meta, cudaFrameIdx, correlationID, cbid); ok {
+			finishTrace(out.Trace, out.Meta)
+		}
+	}
 }
 
 // addTimeSingle is a static function that delegates to the appropriate fixer for the PID.
@@ -542,7 +607,7 @@ func MaybeClearAll() []metrics.Metric {
 	return out
 }
 
-// Symbolize is a stub — ConvertTrace handles CUDA frames directly via `case libpf.CUDA`,
+// Symbolize is a stub - CUDA frames are handled directly by convertFrame,
 // so this should never be called in normal operation.
 func (i *Instance) Symbolize(f libpf.EbpfFrame, _ *libpf.Frames, _ libpf.FrameMapping) error {
 	return fmt.Errorf("CUDA Symbolize called unexpectedly for frame type %d: %w",

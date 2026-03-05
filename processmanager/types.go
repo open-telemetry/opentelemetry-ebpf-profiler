@@ -41,11 +41,11 @@ type frameCacheKey struct {
 	data [3]uint64
 }
 
-// TraceInterceptor is called after ConvertTrace with the symbolized trace,
-// metadata, and original BPF trace. Return true to consume the trace
-// (skip caching and reporting), false to proceed normally.
+// TraceInterceptor is called with the symbolized trace and metadata.
+// Return true to consume the trace (skip reporting), false to proceed
+// normally. The finishTrace callback hashes and reports the trace.
 type TraceInterceptor func(trace *libpf.Trace, meta *samples.TraceEventMeta,
-	rawTrace *libpf.EbpfTrace) bool
+	finishTrace func(*libpf.Trace, *samples.TraceEventMeta)) bool
 
 // ProcessManager is responsible for managing the events happening throughout the lifespan of a
 // process.
@@ -105,8 +105,8 @@ type ProcessManager struct {
 	// traceReporter is the interface to report traces
 	traceReporter reporter.TraceReporter
 
-	// interceptor, if set, is called after ConvertTrace on cache-miss.
-	// If it returns true the trace is consumed and not cached or reported.
+	// interceptor, if set, is called after symbolization.
+	// If it returns true the trace is consumed and not reported.
 	interceptor TraceInterceptor
 
 	// exeReporter is the interface to report executables
@@ -119,7 +119,7 @@ type ProcessManager struct {
 	// pid_page_to_mapping_info.
 	pidPageToMappingInfoSize uint64
 
-	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
+	// filterErrorFrames determines whether error frames are dropped during symbolization.
 	filterErrorFrames bool
 
 	// includeEnvVars holds a list of env vars that should be captured from processes

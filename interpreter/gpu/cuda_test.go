@@ -1,394 +1,312 @@
-// // Copyright The OpenTelemetry Authors
-// // SPDX-License-Identifier: Apache-2.0
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
 
 package gpu_test
 
-// import (
-// 	"testing"
-// 	"unique"
-// 	"unsafe"
+import (
+	"testing"
+	"unique"
 
-// 	"github.com/stretchr/testify/assert"
-// 	"github.com/stretchr/testify/require"
-// 	"github.com/zeebo/xxh3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-// 	"go.opentelemetry.io/ebpf-profiler/host"
-// 	"go.opentelemetry.io/ebpf-profiler/interpreter/gpu"
-// 	"go.opentelemetry.io/ebpf-profiler/libpf"
-// 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-// 	"go.opentelemetry.io/ebpf-profiler/support"
-// )
+	"go.opentelemetry.io/ebpf-profiler/interpreter/gpu"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+	"go.opentelemetry.io/ebpf-profiler/support"
+	"go.opentelemetry.io/ebpf-profiler/traceutil"
+)
 
-// // TestProgramNamesExist verifies that the eBPF program names used in cuda.go
-// // actually exist in the compiled eBPF collection. This catches bugs where
-// // the program names don't match the SEC() names in the .ebpf.c files.
-// func TestProgramNamesExist(t *testing.T) {
-// 	// Load the eBPF collection
-// 	coll, err := support.LoadCollectionSpec()
-// 	require.NoError(t, err, "Failed to load eBPF collection spec")
+// TestProgramNamesExist verifies that the eBPF program names used in cuda.go
+// actually exist in the compiled eBPF collection. This catches bugs where
+// the program names don't match the SEC() names in the .ebpf.c files.
+func TestProgramNamesExist(t *testing.T) {
+	// Load the eBPF collection
+	coll, err := support.LoadCollectionSpec()
+	require.NoError(t, err, "Failed to load eBPF collection spec")
 
-// // Verify single-shot program names exist
-// t.Run("SingleShotPrograms", func(t *testing.T) {
-// 	progNames := []string{
-// 		gpu.USDTProgCudaCorrelation,
-// 		gpu.USDTProgCudaKernel,
-// 		gpu.USDTProgCudaActivityBatch,
-// 		gpu.USDTProgCudaActivityBatchTail,
-// 	}
+	// Verify single-shot program names exist
+	t.Run("SingleShotPrograms", func(t *testing.T) {
+		progNames := []string{
+			gpu.USDTProgCudaCorrelation,
+			gpu.USDTProgCudaKernel,
+			gpu.USDTProgCudaActivityBatch,
+			gpu.USDTProgCudaActivityBatchTail,
+		}
 
-// 		for _, progName := range progNames {
-// 			t.Run(progName, func(t *testing.T) {
-// 				prog := coll.Programs[progName]
-// 				require.NotNil(t, prog, "eBPF program %q not found in collection", progName)
-// 				t.Logf("Found program %q", progName)
-// 			})
-// 		}
-// 	})
+		for _, progName := range progNames {
+			t.Run(progName, func(t *testing.T) {
+				prog := coll.Programs[progName]
+				require.NotNil(t, prog, "eBPF program %q not found in collection", progName)
+				t.Logf("Found program %q", progName)
+			})
+		}
+	})
 
-// 	// Verify multi-attach program name exists
-// 	t.Run("MultiAttachProgram", func(t *testing.T) {
-// 		prog := coll.Programs[gpu.USDTProgCudaProbe]
-// 		require.NotNil(t, prog, "eBPF program %q not found in collection", gpu.USDTProgCudaProbe)
-// 		t.Logf("Found program %q", gpu.USDTProgCudaProbe)
-// 	})
-// }
+	// Verify multi-attach program name exists
+	t.Run("MultiAttachProgram", func(t *testing.T) {
+		prog := coll.Programs[gpu.USDTProgCudaProbe]
+		require.NotNil(t, prog, "eBPF program %q not found in collection", gpu.USDTProgCudaProbe)
+		t.Logf("Found program %q", gpu.USDTProgCudaProbe)
+	})
+}
 
-// // computeTraceHash replicates the hash logic from tracer.loadBpfTrace:
-// // zero per-sample fields, then hash the raw bytes.
-// func computeTraceHash(tr *support.Trace) host.TraceHash {
-// 	// Work on a copy so we don't mutate the caller's data.
-// 	clone := *tr
-// 	clone.ZeroPerSampleFields()
-// 	raw := unsafe.Slice((*byte)(unsafe.Pointer(&clone)), unsafe.Sizeof(clone))
-// 	return host.TraceHash(xxh3.Hash128(raw).Lo)
-// }
+// packCudaID encodes a correlation ID and CBID into the AddressOrLineno value
+func packCudaID(correlationID uint32, cbid int32) libpf.AddressOrLineno {
+	return libpf.AddressOrLineno(uint64(correlationID) | (uint64(uint32(cbid)) << 32))
+}
 
-// // makeCUDATrace builds a support.Trace with one CUDA kernel frame (at position 0)
-// // followed by nativFrames native frames. The CUDA frame encodes the given
-// // correlationID and cbid.
-// func makeCUDATrace(pid uint32, correlationID uint32, cbid int32,
-// 	nativeFrames []support.Frame) support.Trace {
-// 	tr := support.Trace{
-// 		Pid:             pid,
-// 		Tid:             pid,
-// 		Origin:          support.TraceOriginCuda,
-// 		Kernel_stack_id: -1, // no kernel stack
-// 	}
+// makeMapping creates a FrameMapping with the given FileID high bits.
+func makeMapping(fileIDHi uint64) libpf.FrameMapping {
+	return libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID: libpf.NewFileID(fileIDHi, 0),
+		}),
+	})
+}
 
-// 	// CUDA kernel frame first (matches BPF collect_trace ordering).
-// 	cudaID := uint64(correlationID) | (uint64(uint32(cbid)) << 32)
-// 	tr.Frames[0] = support.Frame{
-// 		Kind:         support.FrameMarkerCUDAKernel,
-// 		Addr_or_line: cudaID,
-// 	}
-// 	tr.Stack_len = 1
+// TestCUDATraceHashStability verifies that after prepTrace sets the kernel name
+// (zeroing AddressOrLineno), traces from the same call site hash equally
+// regardless of correlation ID, and different call sites hash differently.
+func TestCUDATraceHashStability(t *testing.T) {
+	mapping := makeMapping(0xaaaa)
 
-// 	for i, f := range nativeFrames {
-// 		tr.Frames[1+i] = f
-// 		tr.Stack_len++
-// 	}
+	makeTrace := func(correlationID uint32, nativeAddr uint64) *libpf.Trace {
+		trace := &libpf.Trace{}
+		trace.Frames = append(trace.Frames, unique.Make(libpf.Frame{
+			Type:            libpf.CUDAKernelFrame,
+			AddressOrLineno: packCudaID(correlationID, 1),
+		}))
+		trace.Frames = append(trace.Frames, unique.Make(libpf.Frame{
+			Type:            libpf.NativeFrame,
+			AddressOrLineno: libpf.AddressOrLineno(nativeAddr),
+			Mapping:         mapping,
+		}))
+		return trace
+	}
 
-// 	return tr
-// }
+	// Same call site, different correlation IDs.
+	tr1 := makeTrace(42, 0x1000)
+	tr2 := makeTrace(999, 0x1000)
+	// Different call site.
+	tr3 := makeTrace(42, 0x2000)
 
-// func TestCUDATraceHashStability(t *testing.T) {
-// 	// Two launches from the same call site (identical native frames)
-// 	// with different correlation IDs must produce the same hash.
-// 	nativeFrames := []support.Frame{
-// 		{File_id: 0xaaaa, Addr_or_line: 0x1000, Kind: 8}, // native
-// 		{File_id: 0xaaaa, Addr_or_line: 0x2000, Kind: 8}, // native
-// 		{File_id: 0xbbbb, Addr_or_line: 0x3000, Kind: 8}, // native
-// 	}
+	// Simulate what prepTrace does: replace CUDA frame with kernel name.
+	for _, tr := range []*libpf.Trace{tr1, tr2, tr3} {
+		tr.Frames[0] = unique.Make(libpf.Frame{
+			Type:         libpf.CUDAKernelFrame,
+			FunctionName: libpf.Intern("_Z6kernelv"),
+		})
+	}
 
-// 	tr1 := makeCUDATrace(100, 42, 1, nativeFrames)
-// 	tr2 := makeCUDATrace(100, 999, 1, nativeFrames)
+	h1 := traceutil.HashTrace(tr1)
+	h2 := traceutil.HashTrace(tr2)
+	h3 := traceutil.HashTrace(tr3)
+	assert.Equal(t, h1, h2, "same call site must hash equal")
+	assert.NotEqual(t, h1, h3, "different call sites must hash different")
+}
 
-// 	hash1 := computeTraceHash(&tr1)
-// 	hash2 := computeTraceHash(&tr2)
-// 	assert.Equal(t, hash1, hash2,
-// 		"same call site with different correlation IDs should produce identical hashes")
+// makeSymbolizedTrace builds a libpf.Trace that looks like what HandleTrace
+// produces for a CUDA trace: frames before cudaFrameIdx are native, then the
+// CUDAKernelFrame (with packed cuda_id in AddressOrLineno), then more native frames.
+func makeSymbolizedTrace(cudaFrameIdx int, nativeFrameCount int,
+	correlationID uint32, cbid int32) *libpf.Trace {
+	trace := &libpf.Trace{}
+	for i := range cudaFrameIdx + 1 + nativeFrameCount {
+		if i == cudaFrameIdx {
+			trace.Frames = append(trace.Frames, unique.Make(libpf.Frame{
+				Type:            libpf.CUDAKernelFrame,
+				AddressOrLineno: packCudaID(correlationID, cbid),
+			}))
+		} else {
+			trace.Frames = append(trace.Frames, unique.Make(libpf.Frame{
+				Type:            libpf.NativeFrame,
+				AddressOrLineno: libpf.AddressOrLineno(0x1000 * (i + 1)),
+				Mapping:         makeMapping(uint64(i + 1)),
+			}))
+		}
+	}
+	return trace
+}
 
-// 	// Different CBID (different API call type) with same native stack should
-// 	// also produce the same hash since cbid is part of addr_or_line.
-// 	tr3 := makeCUDATrace(100, 42, 7, nativeFrames)
-// 	hash3 := computeTraceHash(&tr3)
-// 	assert.Equal(t, hash1, hash3,
-// 		"same call site with different CBIDs should produce identical hashes")
-// }
+func TestAddTraceAndTimes(t *testing.T) {
+	const pid = libpf.PID(500)
+	gpu.RegisterTestFixer(pid)
+	t.Cleanup(func() { gpu.UnregisterTestFixer(pid) })
 
-// func TestCUDATraceHashDiffers(t *testing.T) {
-// 	framesA := []support.Frame{
-// 		{File_id: 0xaaaa, Addr_or_line: 0x1000, Kind: 8},
-// 	}
-// 	framesB := []support.Frame{
-// 		{File_id: 0xaaaa, Addr_or_line: 0x2000, Kind: 8}, // different addr
-// 	}
+	// Simulate: trace arrives first, timing arrives second.
+	trace := makeSymbolizedTrace(0, 2, 100, 1) // CUDA frame at index 0
+	meta := &samples.TraceEventMeta{PID: pid}
 
-// 	trA := makeCUDATrace(100, 42, 1, framesA)
-// 	trB := makeCUDATrace(100, 42, 1, framesB)
+	var finished []gpu.CudaTraceOutput
+	finishTrace := func(t *libpf.Trace, m *samples.TraceEventMeta) {
+		finished = append(finished, gpu.CudaTraceOutput{Trace: t, Meta: m})
+	}
 
-// 	hashA := computeTraceHash(&trA)
-// 	hashB := computeTraceHash(&trB)
-// 	assert.NotEqual(t, hashA, hashB,
-// 		"different native stacks should produce different hashes")
-// }
+	// InterceptTrace with no pending timing -> stored, finishTrace not called.
+	gpu.InterceptTrace(trace, meta, finishTrace)
+	assert.Empty(t, finished, "no timing yet, should produce no outputs")
 
-// func TestCUDATraceHashExcludesPerSampleFields(t *testing.T) {
-// 	frames := []support.Frame{
-// 		{File_id: 0xaaaa, Addr_or_line: 0x1000, Kind: 8},
-// 	}
+	// Now timing arrives.
+	kernelName := [256]byte{}
+	copy(kernelName[:], "_Z9myKernelPfS_i")
 
-// 	tr1 := makeCUDATrace(100, 42, 1, frames)
-// 	tr2 := makeCUDATrace(100, 42, 1, frames)
+	events := []gpu.CuptiTimingEvent{{
+		Pid:        uint32(pid),
+		Id:         100,
+		Start:      1000,
+		End:        2000,
+		Dev:        0,
+		Stream:     7,
+		KernelName: kernelName,
+	}}
 
-// 	// Vary all the per-sample fields that should be excluded.
-// 	tr2.Ktime = 99999
-// 	tr2.Origin = support.TraceOriginOffCPU
-// 	tr2.Offtime = 12345
-// 	tr2.Comm = [16]byte{'d', 'i', 'f', 'f', 'e', 'r', 'e', 'n', 't'}
+	outputs := gpu.AddTimes(events)
+	require.Len(t, outputs, 1, "timing matched, should produce one output")
 
-// 	hash1 := computeTraceHash(&tr1)
-// 	hash2 := computeTraceHash(&tr2)
-// 	assert.Equal(t, hash1, hash2,
-// 		"per-sample fields (ktime, origin, offtime, comm) must not affect hash")
-// }
+	out := outputs[0]
+	assert.Equal(t, int64(1000), out.Meta.OffTime, "OffTime should be End-Start")
+	assert.Equal(t, "0", out.Trace.CustomLabels[libpf.Intern("cuda_device")].String())
+	assert.Equal(t, "7", out.Trace.CustomLabels[libpf.Intern("cuda_stream")].String())
 
-// func TestNonCUDATraceHashIncludesAddrOrLine(t *testing.T) {
-// 	// For non-CUDA frames, addr_or_line MUST be included in the hash.
-// 	makeNative := func(addr uint64) support.Trace {
-// 		tr := support.Trace{
-// 			Pid:             100,
-// 			Tid:             100,
-// 			Origin:          support.TraceOriginSampling,
-// 			Stack_len:       1,
-// 			Kernel_stack_id: -1,
-// 		}
-// 		tr.Frames[0] = support.Frame{
-// 			File_id:      0xaaaa,
-// 			Addr_or_line: addr,
-// 			Kind:         8, // native
-// 		}
-// 		return tr
-// 	}
+	// Verify the CUDA frame got the kernel name and zeroed AddressOrLineno.
+	cudaFrame := out.Trace.Frames[0].Value()
+	assert.Equal(t, libpf.CUDAKernelFrame, cudaFrame.Type)
+	assert.Equal(t, libpf.AddressOrLineno(0), cudaFrame.AddressOrLineno,
+		"correlation ID should be zeroed in output")
+	assert.Equal(t, "_Z9myKernelPfS_i", cudaFrame.FunctionName.String())
+}
 
-// 	tr1 := makeNative(0x1000)
-// 	tr2 := makeNative(0x2000)
+func TestAddTimeThenTrace(t *testing.T) {
+	const pid = libpf.PID(501)
+	gpu.RegisterTestFixer(pid)
+	t.Cleanup(func() { gpu.UnregisterTestFixer(pid) })
 
-// 	hash1 := computeTraceHash(&tr1)
-// 	hash2 := computeTraceHash(&tr2)
-// 	assert.NotEqual(t, hash1, hash2,
-// 		"non-CUDA traces with different addresses must have different hashes")
-// }
+	// Simulate: timing arrives first, trace arrives second.
+	kernelName := [256]byte{}
+	copy(kernelName[:], "_Z6squarePfS_")
 
-// // makeSymbolizedTrace builds a libpf.Trace that looks like what ConvertTrace
-// // produces for a CUDA trace: frames before cudaFrameIdx are native, then the
-// // CUDAKernelFrame, then more native frames.
-// func makeSymbolizedTrace(cudaFrameIdx int, nativeFrameCount int) *libpf.Trace {
-// 	trace := &libpf.Trace{}
-// 	for i := range cudaFrameIdx + 1 + nativeFrameCount {
-// 		if i == cudaFrameIdx {
-// 			trace.Frames = append(trace.Frames, unique.Make(libpf.Frame{
-// 				Type: libpf.CUDAKernelFrame,
-// 			}))
-// 		} else {
-// 			trace.Frames = append(trace.Frames, unique.Make(libpf.Frame{
-// 				Type:            libpf.NativeFrame,
-// 				AddressOrLineno: libpf.AddressOrLineno(0x1000 * (i + 1)),
-// 				FileID:          libpf.NewFileID(uint64(i+1), 0),
-// 			}))
-// 		}
-// 	}
-// 	return trace
-// }
+	events := []gpu.CuptiTimingEvent{{
+		Pid:        uint32(pid),
+		Id:         200,
+		Start:      5000,
+		End:        8000,
+		Dev:        1,
+		KernelName: kernelName,
+	}}
 
-// func TestAddTraceAndTimes(t *testing.T) {
-// 	const pid = libpf.PID(500)
-// 	gpu.RegisterTestFixer(pid)
-// 	t.Cleanup(func() { gpu.UnregisterTestFixer(pid) })
+	// Timing arrives first -> stored, no outputs.
+	outputs := gpu.AddTimes(events)
+	assert.Empty(t, outputs)
 
-// 	// Simulate: trace arrives first, timing arrives second.
-// 	trace := makeSymbolizedTrace(0, 2) // CUDA frame at index 0
-// 	meta := &samples.TraceEventMeta{PID: pid}
+	// Now trace arrives and matches - finishTrace called immediately.
+	trace := makeSymbolizedTrace(0, 1, 200, 1)
+	meta := &samples.TraceEventMeta{PID: pid}
 
-// 	st := &gpu.SymbolizedCudaTrace{
-// 		Trace:         trace,
-// 		Meta:          meta,
-// 		CUDAFrameIdx:  0,
-// 		CorrelationID: 100,
-// 		CBID:          1,
-// 	}
+	var finished []gpu.CudaTraceOutput
+	finishTrace := func(t *libpf.Trace, m *samples.TraceEventMeta) {
+		finished = append(finished, gpu.CudaTraceOutput{Trace: t, Meta: m})
+	}
 
-// 	// AddTrace with no pending timing -> stored, no outputs.
-// 	outputs := gpu.AddTrace(st)
-// 	assert.Empty(t, outputs, "no timing yet, should produce no outputs")
+	gpu.InterceptTrace(trace, meta, finishTrace)
+	require.Len(t, finished, 1)
 
-// 	// Now timing arrives.
-// 	kernelName := [256]byte{}
-// 	copy(kernelName[:], "_Z9myKernelPfS_i")
+	out := finished[0]
+	assert.Equal(t, int64(3000), out.Meta.OffTime)
+	assert.Equal(t, "1", out.Trace.CustomLabels[libpf.Intern("cuda_device")].String())
 
-// 	events := []gpu.CuptiTimingEvent{{
-// 		Pid:        uint32(pid),
-// 		Id:         100,
-// 		Start:      1000,
-// 		End:        2000,
-// 		Dev:        0,
-// 		Stream:     7,
-// 		KernelName: kernelName,
-// 	}}
+	cudaFrame := out.Trace.Frames[0].Value()
+	assert.Equal(t, "_Z6squarePfS_", cudaFrame.FunctionName.String())
+	assert.Equal(t, libpf.AddressOrLineno(0), cudaFrame.AddressOrLineno)
+}
 
-// 	outputs = gpu.AddTimes(events)
-// 	require.Len(t, outputs, 1, "timing matched, should produce one output")
+func TestCachedTemplateWithDifferentCorrelationIDs(t *testing.T) {
+	const pid = libpf.PID(502)
+	gpu.RegisterTestFixer(pid)
+	t.Cleanup(func() { gpu.UnregisterTestFixer(pid) })
 
-// 	out := outputs[0]
-// 	assert.Equal(t, int64(1000), out.Meta.OffTime, "OffTime should be End-Start")
-// 	assert.Equal(t, "0", out.Trace.CustomLabels["cuda_device"])
-// 	assert.Equal(t, "7", out.Trace.CustomLabels["cuda_stream"])
+	// Simulate two launches from the same call site with different correlation
+	// IDs and different kernel names from timing. Trace arrives first each time.
+	var finished []gpu.CudaTraceOutput
+	finishTrace := func(t *libpf.Trace, m *samples.TraceEventMeta) {
+		finished = append(finished, gpu.CudaTraceOutput{Trace: t, Meta: m})
+	}
 
-// 	// Verify the CUDA frame got the kernel name and zeroed AddressOrLineno.
-// 	cudaFrame := out.Trace.Frames[0].Value()
-// 	assert.Equal(t, libpf.CUDAKernelFrame, cudaFrame.Type)
-// 	assert.Equal(t, libpf.AddressOrLineno(0), cudaFrame.AddressOrLineno,
-// 		"correlation ID should be zeroed in output")
-// 	assert.Equal(t, "_Z9myKernelPfS_i", cudaFrame.FunctionName.String())
-// }
+	for _, tc := range []struct {
+		corrID     uint32
+		kernelName string
+		offTime    int64
+	}{
+		{corrID: 300, kernelName: "_Z7kernelAv", offTime: 100},
+		{corrID: 301, kernelName: "_Z7kernelBv", offTime: 200},
+	} {
+		trace := makeSymbolizedTrace(0, 2, tc.corrID, 1)
+		meta := &samples.TraceEventMeta{PID: pid}
 
-// func TestAddTimeThenTrace(t *testing.T) {
-// 	const pid = libpf.PID(501)
-// 	gpu.RegisterTestFixer(pid)
-// 	t.Cleanup(func() { gpu.UnregisterTestFixer(pid) })
+		gpu.InterceptTrace(trace, meta, finishTrace)
 
-// 	// Simulate: timing arrives first, trace arrives second.
-// 	kernelName := [256]byte{}
-// 	copy(kernelName[:], "_Z6squarePfS_")
+		kn := [256]byte{}
+		copy(kn[:], tc.kernelName)
+		outputs := gpu.AddTimes([]gpu.CuptiTimingEvent{{
+			Pid:        uint32(pid),
+			Id:         tc.corrID,
+			Start:      0,
+			End:        uint64(tc.offTime),
+			KernelName: kn,
+		}})
+		require.Len(t, outputs, 1, "corrID %d should produce one output", tc.corrID)
 
-// 	events := []gpu.CuptiTimingEvent{{
-// 		Pid:        uint32(pid),
-// 		Id:         200,
-// 		Start:      5000,
-// 		End:        8000,
-// 		Dev:        1,
-// 		KernelName: kernelName,
-// 	}}
+		out := outputs[0]
+		assert.Equal(t, tc.offTime, out.Meta.OffTime)
 
-// 	// Timing arrives first -> stored, no outputs.
-// 	outputs := gpu.AddTimes(events)
-// 	assert.Empty(t, outputs)
+		cudaFrame := out.Trace.Frames[0].Value()
+		assert.Equal(t, libpf.AddressOrLineno(0), cudaFrame.AddressOrLineno,
+			"correlation ID must not leak into output")
+		// Verify each launch got its own kernel name.
+		assert.Equal(t, tc.kernelName, cudaFrame.FunctionName.String(),
+			"each launch should get its own kernel name")
+	}
+}
 
-// 	// Now trace arrives and matches.
-// 	trace := makeSymbolizedTrace(0, 1)
-// 	meta := &samples.TraceEventMeta{PID: pid}
+func TestCUDAFrameIdxNonZero(t *testing.T) {
+	const pid = libpf.PID(503)
+	gpu.RegisterTestFixer(pid)
+	t.Cleanup(func() { gpu.UnregisterTestFixer(pid) })
 
-// 	st := &gpu.SymbolizedCudaTrace{
-// 		Trace:         trace,
-// 		Meta:          meta,
-// 		CUDAFrameIdx:  0,
-// 		CorrelationID: 200,
-// 		CBID:          1,
-// 	}
+	// CUDA frame at index 2 (after two native frames).
+	trace := makeSymbolizedTrace(2, 2, 400, 1) // [native, native, CUDA, native, native]
+	meta := &samples.TraceEventMeta{PID: pid}
 
-// 	outputs = gpu.AddTrace(st)
-// 	require.Len(t, outputs, 1)
+	var finished []gpu.CudaTraceOutput
+	finishTrace := func(t *libpf.Trace, m *samples.TraceEventMeta) {
+		finished = append(finished, gpu.CudaTraceOutput{Trace: t, Meta: m})
+	}
 
-// 	out := outputs[0]
-// 	assert.Equal(t, int64(3000), out.Meta.OffTime)
-// 	assert.Equal(t, "1", out.Trace.CustomLabels["cuda_device"])
+	// Trace first, timing second.
+	gpu.InterceptTrace(trace, meta, finishTrace)
+	assert.Empty(t, finished)
 
-// 	cudaFrame := out.Trace.Frames[0].Value()
-// 	assert.Equal(t, "_Z6squarePfS_", cudaFrame.FunctionName.String())
-// 	assert.Equal(t, libpf.AddressOrLineno(0), cudaFrame.AddressOrLineno)
-// }
+	kernelName := [256]byte{}
+	copy(kernelName[:], "_Z4testv")
 
-// func TestCachedTemplateWithDifferentCorrelationIDs(t *testing.T) {
-// 	const pid = libpf.PID(502)
-// 	gpu.RegisterTestFixer(pid)
-// 	t.Cleanup(func() { gpu.UnregisterTestFixer(pid) })
+	outputs := gpu.AddTimes([]gpu.CuptiTimingEvent{{
+		Pid:        uint32(pid),
+		Id:         400,
+		Start:      0,
+		End:        500,
+		KernelName: kernelName,
+	}})
+	require.Len(t, outputs, 1)
 
-// 	// Simulate two launches from the same call site (same template) with
-// 	// different correlation IDs and different kernel names from timing.
-// 	// This is the scenario where the cache provides the template.
-// 	template := makeSymbolizedTrace(0, 2)
+	// The CUDA frame at index 2 should have the kernel name.
+	cudaFrame := outputs[0].Trace.Frames[2].Value()
+	assert.Equal(t, libpf.CUDAKernelFrame, cudaFrame.Type)
+	assert.Equal(t, "_Z4testv", cudaFrame.FunctionName.String())
 
-// 	for _, tc := range []struct {
-// 		corrID     uint32
-// 		kernelName string
-// 		offTime    int64
-// 	}{
-// 		{corrID: 300, kernelName: "_Z7kernelAv", offTime: 100},
-// 		{corrID: 301, kernelName: "_Z7kernelBv", offTime: 200},
-// 	} {
-// 		meta := &samples.TraceEventMeta{PID: pid}
-
-// 		st := &gpu.SymbolizedCudaTrace{
-// 			Trace:         template,
-// 			Meta:          meta,
-// 			CUDAFrameIdx:  0,
-// 			CorrelationID: tc.corrID,
-// 			CBID:          1,
-// 		}
-// 		gpu.AddTrace(st)
-
-// 		kn := [256]byte{}
-// 		copy(kn[:], tc.kernelName)
-// 		outputs := gpu.AddTimes([]gpu.CuptiTimingEvent{{
-// 			Pid:        uint32(pid),
-// 			Id:         tc.corrID,
-// 			Start:      0,
-// 			End:        uint64(tc.offTime),
-// 			KernelName: kn,
-// 		}})
-// 		require.Len(t, outputs, 1, "corrID %d should produce one output", tc.corrID)
-
-// 		out := outputs[0]
-// 		assert.Equal(t, tc.offTime, out.Meta.OffTime)
-
-// 		cudaFrame := out.Trace.Frames[0].Value()
-// 		assert.Equal(t, libpf.AddressOrLineno(0), cudaFrame.AddressOrLineno,
-// 			"correlation ID must not leak into output")
-// 		// Verify each launch got its own kernel name.
-// 		assert.Equal(t, tc.kernelName, cudaFrame.FunctionName.String(),
-// 			"each launch should get its own kernel name")
-// 	}
-// }
-
-// func TestCUDAFrameIdxNonZero(t *testing.T) {
-// 	const pid = libpf.PID(503)
-// 	gpu.RegisterTestFixer(pid)
-// 	t.Cleanup(func() { gpu.UnregisterTestFixer(pid) })
-
-// 	// CUDA frame at index 2 (after two kernel/native frames).
-// 	trace := makeSymbolizedTrace(2, 2) // [native, native, CUDA, native, native]
-// 	meta := &samples.TraceEventMeta{PID: pid}
-
-// 	kernelName := [256]byte{}
-// 	copy(kernelName[:], "_Z4testv")
-
-// 	st := &gpu.SymbolizedCudaTrace{
-// 		Trace:         trace,
-// 		Meta:          meta,
-// 		CUDAFrameIdx:  2,
-// 		CorrelationID: 400,
-// 		CBID:          1,
-// 	}
-// 	gpu.AddTrace(st)
-
-// 	outputs := gpu.AddTimes([]gpu.CuptiTimingEvent{{
-// 		Pid:        uint32(pid),
-// 		Id:         400,
-// 		Start:      0,
-// 		End:        500,
-// 		KernelName: kernelName,
-// 	}})
-// 	require.Len(t, outputs, 1)
-
-// 	// The CUDA frame at index 2 should have the kernel name.
-// 	cudaFrame := outputs[0].Trace.Frames[2].Value()
-// 	assert.Equal(t, libpf.CUDAKernelFrame, cudaFrame.Type)
-// 	assert.Equal(t, "_Z4testv", cudaFrame.FunctionName.String())
-
-// 	// The non-CUDA frames should be untouched.
-// 	for _, idx := range []int{0, 1, 3, 4} {
-// 		f := outputs[0].Trace.Frames[idx].Value()
-// 		assert.Equal(t, libpf.NativeFrame, f.Type,
-// 			"frame %d should remain native", idx)
-// 	}
-// }
+	// The non-CUDA frames should be untouched.
+	for _, idx := range []int{0, 1, 3, 4} {
+		f := outputs[0].Trace.Frames[idx].Value()
+		assert.Equal(t, libpf.NativeFrame, f.Type,
+			"frame %d should remain native", idx)
+	}
+}

@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
+	"go.opentelemetry.io/ebpf-profiler/traceutil"
 )
 
 // Start starts a goroutine that reads GPU timing events and returns a TraceInterceptor
@@ -39,6 +40,7 @@ func Start(ctx context.Context, tr *tracer.Tracer,
 	processBatch := func(batch []gpu.CuptiTimingEvent) {
 		outputs := gpu.AddTimes(batch)
 		for i := range outputs {
+			outputs[i].Trace.Hash = traceutil.HashTrace(outputs[i].Trace)
 			if err := rep.ReportTraceEvent(outputs[i].Trace, outputs[i].Meta); err != nil {
 				log.Errorf("[parcagpu] failed to report CUDA trace: %v", err)
 			}
@@ -100,52 +102,11 @@ func Start(ctx context.Context, tr *tracer.Tracer,
 
 	// Return the interceptor function that diverts CUDA traces post-symbolization.
 	return func(trace *libpf.Trace, meta *samples.TraceEventMeta,
-		rawTrace *libpf.EbpfTrace) bool {
+		finishTrace func(*libpf.Trace, *samples.TraceEventMeta)) bool {
 		if meta.Origin != support.TraceOriginCuda {
 			return false
 		}
-
-		// Extract correlation ID and CBID from the raw BPF trace (not the
-		// symbolized trace, which may be a cached template with stale values).
-		var correlationID uint32
-		var cbid int32
-		for frames := libpf.EbpfFrame(rawTrace.FrameData); len(frames) > 0; frames = frames[frames.Length():] {
-			if frames.Type() == libpf.CUDAKernelFrame {
-				lineno := frames.Variable(0)
-				correlationID = uint32(lineno)
-				cbid = int32(lineno >> 32)
-				break
-			}
-		}
-
-		// Find the CUDA kernel frame index in the symbolized trace.
-		cudaFrameIdx := -1
-		for i, uniqueFrame := range trace.Frames {
-			if uniqueFrame.Value().Type == libpf.CUDAKernelFrame {
-				cudaFrameIdx = i
-				break
-			}
-		}
-		if cudaFrameIdx < 0 {
-			log.Errorf("[parcagpu] CUDA trace has no CUDAKernelFrame")
-			return false
-		}
-
-		st := &gpu.SymbolizedCudaTrace{
-			Trace:         trace,
-			Meta:          meta,
-			CUDAFrameIdx:  cudaFrameIdx,
-			CorrelationID: correlationID,
-			CBID:          cbid,
-		}
-
-		outputs := gpu.AddTrace(st)
-		for i := range outputs {
-			if err := rep.ReportTraceEvent(outputs[i].Trace, outputs[i].Meta); err != nil {
-				log.Errorf("[parcagpu] failed to report CUDA trace: %v", err)
-			}
-		}
-
-		return true // consumed
+		gpu.InterceptTrace(trace, meta, finishTrace)
+		return true
 	}
 }
