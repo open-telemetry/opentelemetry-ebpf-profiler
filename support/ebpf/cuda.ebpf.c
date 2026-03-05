@@ -55,7 +55,7 @@ struct cuda_scratch_heap_t {
   __type(key, u32);
   __type(value, struct cuda_scratch);
   __uint(max_entries, 1);
-} cuda_scratch_heap;
+} cuda_scratch_heap SEC(".maps");
 
 struct cuda_timing_events_t {
   __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
