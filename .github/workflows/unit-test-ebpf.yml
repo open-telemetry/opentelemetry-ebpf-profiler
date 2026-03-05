@@ -2,7 +2,7 @@ name: "CI-EBPF"
 
 on:
   push:
-    branches: [main]
+    branches: [main, main-next]
     paths:
       - support/ebpf/**
   pull_request:
