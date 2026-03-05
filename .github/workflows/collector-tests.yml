@@ -45,6 +45,10 @@ jobs:
         run: |
           COLLECTOR_PATH=/tmp/opentelemetry-collector ./support/local-collector.sh
           go mod tidy
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y debootstrap systemtap-sdt-dev
       - name: Tests
         run: make test-junit
       - name: Generate Issue
