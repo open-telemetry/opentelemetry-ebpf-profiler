@@ -855,8 +855,8 @@ typedef struct UnwindInfo {
   u8 baseReg;     // base register to calculate CFA from
   u8 auxBaseReg;  // base register to calculate FP (x86-64) or RA[+FP] (aarch64)
   u8 mergeOpcode; // opcode for generating next stack delta, see below
-  s32 param;    // parameter for the CFA expression
-  s32 auxParam; // parameter for the FP expression
+  s32 param;      // parameter for the CFA expression
+  s32 auxParam;   // parameter for the FP expression
 } UnwindInfo;
 
 // UNWIND_REF_* values are used for 'baseReg' and auxBaseReg'.
