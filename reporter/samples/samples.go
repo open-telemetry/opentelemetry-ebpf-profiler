@@ -30,20 +30,27 @@ type TraceEvents struct {
 	Labels     map[libpf.String]libpf.String
 }
 
-// TraceAndMetaKey is the deduplication key for samples. This **must always**
-// contain all trace fields that aren't already part of the trace hash to ensure
-// that we don't accidentally merge traces with different fields.
-type TraceAndMetaKey struct {
-	// Hash is not sent forward, but it is used as the primary key
-	// to not aggregate difference traces.
-	Hash libpf.TraceHash
+// TraceEventsTree stores samples and their related metadata in a tree-like
+// structure optimized for the OTel Profiling protocol representation.
+type TraceEventsTree map[ResourceKey]map[libpf.Origin]HashToEvents
+
+type HashToEvents map[libpf.TraceHash]*TraceEvents
+
+// ResourceKey is the deduplication key for samples that describes a unique
+// resource. This **must always** contain all trace fields that aren't
+// already part of the trace hash to ensure that we don't accidentally merge
+// traces with different fields.
+type ResourceKey struct {
 	// comm and apmServiceName are provided by the eBPF programs
 	Comm           libpf.String
 	ApmServiceName string
-	Pid            int64
-	Tid            int64
-	CPU            int64
+	// ContainerID represents an extracted key from /proc/<PID>/cgroup.
+	ContainerID libpf.String
+	Pid         int64
+	Tid         int64
+	CPU         int64
 	// Process name is retrieved from /proc/PID/comm
+	// TODO (flo): ProcessName was never used - verify its use
 	ProcessName libpf.String
 	// Executable path is retrieved from /proc/PID/exe
 	ExecutablePath libpf.String
@@ -52,13 +59,3 @@ type TraceAndMetaKey struct {
 	// `SampleAttrProducer` instance. May be nil.
 	ExtraMeta any
 }
-
-// TraceEventsTree stores samples and their related metadata in a tree-like
-// structure optimized for the OTel Profiling protocol representation.
-type TraceEventsTree map[ContainerID]map[libpf.Origin]KeyToEventMapping
-
-// ContainerID represents an extracted key from /proc/<PID>/cgroup.
-type ContainerID = libpf.String
-
-// KeyToEventMapping supports temporary mapping traces to additional information.
-type KeyToEventMapping map[TraceAndMetaKey]*TraceEvents
