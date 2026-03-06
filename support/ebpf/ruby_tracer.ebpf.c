@@ -515,6 +515,30 @@ static EBPF_INLINE int unwind_ruby(struct pt_regs *ctx)
           &current_ctx_addr, sizeof(current_ctx_addr), (void *)(tls_current_ec_addr))) {
       goto exit;
     }
+    DEBUG_PRINT("ruby: EC from TLS: 0x%llx", (u64)current_ctx_addr);
+  } else if (rubyinfo->tls_module_id != 0 && rubyinfo->dtv_info.multiplier != 0) {
+    // DTV-based TLS access: traverse the Dynamic Thread Vector to find ruby_current_ec.
+    // Used when TLSDESC relocations are unavailable (e.g. some musl setups,
+    // or when TLS is allocated dynamically).
+    u64 tsd_base;
+    if (tsd_get_base((void **)&tsd_base) != 0) {
+      DEBUG_PRINT("ruby: failed to get TSD base for DTV lookup");
+      error = ERR_RUBY_READ_TSD_BASE;
+      goto exit;
+    }
+
+    void *ec_ptr;
+    if (dtv_read(
+          &rubyinfo->dtv_info,
+          (void *)tsd_base,
+          rubyinfo->tls_module_id,
+          rubyinfo->current_ec_tls_offset,
+          &ec_ptr)) {
+      DEBUG_PRINT("ruby: failed to read EC from DTV");
+      goto exit;
+    }
+    current_ctx_addr = ec_ptr;
+    DEBUG_PRINT("ruby: EC from DTV: 0x%llx", (u64)current_ctx_addr);
   } else if (rubyinfo->version >= 0x30000) {
     void *single_main_ractor = NULL;
     if (bpf_probe_read_user(
