@@ -173,7 +173,7 @@ type hotspotVMData struct {
 			DependenciesOffset       uint `name:"_dependencies_offset"`             // JDK -22 only
 			ImmutableData            uint `name:"_immutable_data"`                  // JDK 23+ only
 			ImmutableDataSize        uint `name:"_immutable_data_size"`             // JDK 23+ only
-			ImmutableDataRefCountOff uint `name:"_immutable_data_ref_count_offset"` // JDK 26 only
+			ImmutableDataRefCountOff uint `name:"_immutable_data_ref_count_offset"` // JDK 26+ only
 			OrigPcOffset             uint `name:"_orig_pc_offset"`
 			DeoptimizeOffset         uint `name:"_deoptimize_offset,_deopt_handler_offset,_deopt_handler_begin,_deopt_handler_entry_offset"`
 			Method                   uint `name:"_method"`
