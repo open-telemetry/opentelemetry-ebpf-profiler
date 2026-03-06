@@ -93,16 +93,22 @@ func getUnwinderRegX86(reg uleb128) uint8 {
 	switch reg {
 	case x86RegRAX:
 		return support.UnwindRegX86RAX
-	case x86RegR9:
-		return support.UnwindRegX86R9
-	case x86RegR11:
-		return support.UnwindRegX86R11
-	case x86RegR15:
-		return support.UnwindRegX86R15
+	case x86RegRDI:
+		return support.UnwindRegX86RDI
 	case x86RegRBP:
 		return support.UnwindRegFp
 	case x86RegRSP:
 		return support.UnwindRegSp
+	case x86RegR8:
+		return support.UnwindRegX86R8
+	case x86RegR9:
+		return support.UnwindRegX86R9
+	case x86RegR11:
+		return support.UnwindRegX86R11
+	case x86RegR13:
+		return support.UnwindRegX86R13
+	case x86RegR15:
+		return support.UnwindRegX86R15
 	case x86RegRIP:
 		return support.UnwindRegPc
 	case regCFA:
@@ -126,33 +132,36 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 		// condition in samples is statistically unlikely.
 		return sdtypes.UnwindInfoStop
 	}
-	// Filter invalid RSP based CFAs
-	if regs.cfa.reg == x86RegRSP && regs.cfa.off == 0 {
-		return sdtypes.UnwindInfoInvalid
-	}
-
-	// The CFI allows having Return Address (RA) be recoverable via an expression,
-	// but the eBPF currently supports the ABI standard RA=CFA-8 only. Verify that
-	// we are not in any weird hand woven assembly which is not supported.
-	if regs.ra.reg != regCFA || regs.ra.off != -8 {
-		return sdtypes.UnwindInfoInvalid
-	}
-
 	info := sdtypes.UnwindInfo{}
 
+	// The Return Address (RA) is usually recoverable via an ABI standard RA=CFA-8.
+	// But some functions (like __vfork) use a register to store the RA.
+	raReg := getUnwinderRegX86(regs.ra.reg)
+	if raReg != support.UnwindRegInvalid && raReg != support.UnwindRegCfa {
+		info.Flags |= support.UnwindFlagRegisterRA
+		info.AuxBaseReg = raReg
+	} else if regs.ra.reg == regCFA && regs.ra.off == -8 {
+		// Standard CFA-8
+	} else {
+		// Not the standard CFA-8 and not a supported register
+		return sdtypes.UnwindInfoInvalid
+	}
+
 	// Determine unwind info for frame pointer
-	switch regs.fp.reg {
-	case regCFA:
-		// Check that RBP is between CFA and stack top
-		if regs.cfa.reg != x86RegRSP || (regs.fp.off < 0 && regs.fp.off >= -regs.cfa.off) {
-			info.AuxBaseReg = support.UnwindRegCfa
-			info.AuxParam = int32(regs.fp.off)
-		}
-	case regExprReg:
-		// expression: RBP+offrbp
-		if r, _, offrbp, _ := splitOff(regs.fp.off); uleb128(r) == x86RegRBP {
-			info.AuxBaseReg = support.UnwindRegFp
-			info.AuxParam = int32(offrbp)
+	if (info.Flags & support.UnwindFlagRegisterRA) == 0 {
+		switch regs.fp.reg {
+		case regCFA:
+			// Check that RBP is between CFA and stack top
+			if regs.cfa.reg != x86RegRSP || (regs.fp.off < 0 && regs.fp.off >= -regs.cfa.off) {
+				info.AuxBaseReg = support.UnwindRegCfa
+				info.AuxParam = int32(regs.fp.off)
+			}
+		case regExprReg:
+			// expression: RBP+offrbp
+			if r, _, offrbp, _ := splitOff(regs.fp.off); uleb128(r) == x86RegRBP {
+				info.AuxBaseReg = support.UnwindRegFp
+				info.AuxParam = int32(offrbp)
+			}
 		}
 	}
 
