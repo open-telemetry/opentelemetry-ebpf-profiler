@@ -61,39 +61,36 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		extraMeta = b.cfg.ExtraSampleAttrProd.CollectExtraSampleMeta(trace, meta)
 	}
 
-	containerID := meta.ContainerID
-	key := samples.TraceAndMetaKey{
-		Hash:           trace.Hash,
+	key := samples.ResourceKey{
 		Comm:           meta.Comm,
-		ProcessName:    meta.ProcessName,
-		ExecutablePath: meta.ExecutablePath,
 		ApmServiceName: meta.APMServiceName,
+		ContainerID:    meta.ContainerID,
 		Pid:            int64(meta.PID),
 		Tid:            int64(meta.TID),
 		CPU:            int64(meta.CPU),
+		ProcessName:    meta.ProcessName,
+		ExecutablePath: meta.ExecutablePath,
 		ExtraMeta:      extraMeta,
 	}
 
 	eventsTree := b.traceEvents.WLock()
 	defer b.traceEvents.WUnlock(&eventsTree)
 
-	if _, exists := (*eventsTree)[samples.ContainerID(containerID)]; !exists {
-		(*eventsTree)[samples.ContainerID(containerID)] =
-			make(map[libpf.Origin]samples.KeyToEventMapping)
+	if _, exists := (*eventsTree)[key]; !exists {
+		(*eventsTree)[key] = make(map[libpf.Origin]samples.HashToEvents)
 	}
 
-	if _, exists := (*eventsTree)[samples.ContainerID(containerID)][meta.Origin]; !exists {
-		(*eventsTree)[samples.ContainerID(containerID)][meta.Origin] =
-			make(samples.KeyToEventMapping)
+	if _, exists := (*eventsTree)[key][meta.Origin]; !exists {
+		(*eventsTree)[key][meta.Origin] = make(samples.HashToEvents)
 	}
 
-	if events, exists := (*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key]; exists {
+	if events, exists := (*eventsTree)[key][meta.Origin][trace.Hash]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
 		events.OffTimes = append(events.OffTimes, meta.OffTime)
-		(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = events
 		return nil
 	}
-	(*eventsTree)[samples.ContainerID(containerID)][meta.Origin][key] = &samples.TraceEvents{
+
+	(*eventsTree)[key][meta.Origin][trace.Hash] = &samples.TraceEvents{
 		Frames:     trace.Frames,
 		Timestamps: []uint64{uint64(meta.Timestamp)},
 		OffTimes:   []int64{meta.OffTime},

@@ -5,7 +5,6 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 
 import (
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -35,12 +34,12 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	profiles := pprofile.NewProfiles()
 	dic := profiles.Dictionary()
 
-	// Find oldest sample timestamp across all containers to handle buffered samples.
+	// Find oldest sample timestamp across all resources to handle buffered samples.
 	adjustedStartTime := collectionStartTime
-	for _, containerEvents := range tree {
-		for _, originEvents := range containerEvents {
-			for _, traceEvents := range originEvents {
-				for _, ts := range traceEvents.Timestamps {
+	for _, resourceToEvents := range tree {
+		for _, traceEvents := range resourceToEvents {
+			for _, traceInfo := range traceEvents {
+				for _, ts := range traceInfo.Timestamps {
 					sampleTime := time.Unix(0, int64(ts))
 					if sampleTime.Before(adjustedStartTime) {
 						adjustedStartTime = sampleTime
@@ -77,14 +76,13 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 	attrMgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
 
-	for containerID, originToEvents := range tree {
+	for resource, originToEvents := range tree {
 		if len(originToEvents) == 0 {
 			continue
 		}
 
 		rp := profiles.ResourceProfiles().AppendEmpty()
-		rp.Resource().Attributes().PutStr(string(semconv.ContainerIDKey),
-			containerID.String())
+		setResourceAttributes(rp.Resource().Attributes(), resource)
 		rp.SetSchemaUrl(semconv.SchemaURL)
 
 		sp := rp.ScopeProfiles().AppendEmpty()
@@ -103,13 +101,14 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			}
 
 			prof := sp.Profiles().AppendEmpty()
-			if err := p.setProfile(dic,
-				attrMgr, stringSet, funcSet, mappingSet, stackSet, locationSet,
+			if err := p.setProfile(dic, attrMgr, resource.ExtraMeta,
+				stringSet, funcSet, mappingSet, stackSet, locationSet,
 				origin, originToEvents[origin], prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
 			}
 		}
+
 	}
 
 	// Populate the ProfilesDictionary tables.
@@ -138,13 +137,14 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 func (p *Pdata) setProfile(
 	dic pprofile.ProfilesDictionary,
 	attrMgr *samples.AttrTableManager,
+	extraMeta any,
 	stringSet orderedset.OrderedSet[string],
 	funcSet orderedset.OrderedSet[funcInfo],
 	mappingSet orderedset.OrderedSet[libpf.FrameMapping],
 	stackSet orderedset.OrderedSet[stackInfo],
 	locationSet orderedset.OrderedSet[locationInfo],
 	origin libpf.Origin,
-	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
+	events samples.HashToEvents,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
@@ -169,7 +169,7 @@ func (p *Pdata) setProfile(
 		return fmt.Errorf("generating profile for unsupported origin %d", origin)
 	}
 
-	for traceKey, traceInfo := range events {
+	for _, traceInfo := range events {
 		sample := profile.Samples().AppendEmpty()
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
@@ -251,28 +251,6 @@ func (p *Pdata) setProfile(
 		}
 		sample.SetStackIndex(stackIdx)
 
-		exeName := ""
-		if traceKey.ExecutablePath != libpf.NullString {
-			_, exeName = filepath.Split(traceKey.ExecutablePath.String())
-		}
-
-		attrMgr.AppendOptionalString(sample.AttributeIndices(),
-			semconv.ThreadNameKey, traceKey.Comm.String())
-
-		attrMgr.AppendOptionalString(sample.AttributeIndices(),
-			semconv.ProcessExecutableNameKey, exeName)
-		attrMgr.AppendOptionalString(sample.AttributeIndices(),
-			semconv.ProcessExecutablePathKey, traceKey.ExecutablePath.String())
-
-		attrMgr.AppendOptionalString(sample.AttributeIndices(),
-			semconv.ServiceNameKey, traceKey.ApmServiceName)
-		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.ProcessPIDKey, traceKey.Pid)
-		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.ThreadIDKey, traceKey.Tid)
-		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.CPULogicalNumberKey, int64(traceKey.CPU))
-
 		for key, value := range traceInfo.EnvVars {
 			env := semconv.ProcessEnvironmentVariable(key.String(), value.String())
 			attrMgr.AppendOptionalString(
@@ -289,7 +267,7 @@ func (p *Pdata) setProfile(
 		}
 
 		if p.ExtraSampleAttrProd != nil {
-			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, traceKey.ExtraMeta)
+			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, extraMeta)
 			sample.AttributeIndices().Append(extra...)
 		}
 	} // End sample processing
@@ -300,4 +278,24 @@ func (p *Pdata) setProfile(
 	profile.SetTime(pcommon.Timestamp(collectionStartTime.UnixNano()))
 
 	return nil
+}
+
+func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey) {
+	if resource.Comm != libpf.NullString {
+		attrs.PutStr(string(semconv.ThreadNameKey), resource.Comm.String())
+	}
+	if resource.ApmServiceName != "" {
+		attrs.PutStr(string(semconv.ServiceNameKey), resource.ApmServiceName)
+	}
+	if resource.ContainerID != libpf.NullString {
+		attrs.PutStr(string(semconv.ContainerIDKey), resource.ContainerID.String())
+	}
+
+	attrs.PutInt(string(semconv.ProcessPIDKey), resource.Pid)
+	attrs.PutInt(string(semconv.ThreadIDKey), resource.Tid)
+	attrs.PutInt(string(semconv.CPULogicalNumberKey), resource.CPU)
+
+	if resource.ExecutablePath != libpf.NullString {
+		attrs.PutStr(string(semconv.ProcessExecutablePathKey), resource.ExecutablePath.String())
+	}
 }
