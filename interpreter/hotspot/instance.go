@@ -535,6 +535,15 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		scopesDataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
 		immutableDataPtr := npsr.Ptr(nmethod, vms.Nmethod.ImmutableData)
 		immutableDataSize := npsr.Uint32(nmethod, vms.Nmethod.ImmutableDataSize)
+
+		// JDK26+: immutable data ends at ref_count offset, not at immutable_data_size
+		if vms.Nmethod.ImmutableDataRefCountOff != 0 {
+			immutableDataRefCountOff := npsr.Uint32(nmethod, vms.Nmethod.ImmutableDataRefCountOff)
+			if immutableDataRefCountOff < immutableDataSize {
+				immutableDataSize = immutableDataRefCountOff
+			}
+		}
+
 		if immutableDataSize >= maxMetadataSize {
 			return nil, fmt.Errorf("unreasonably large immutable data region: %d bytes",
 				immutableDataSize)

@@ -78,6 +78,13 @@ package hotspot // import "go.opentelemetry.io/ebpf-profiler/interpreter/hotspot
 //  JDK24 - Tested ok
 //   - nmethod metadata moved to codeblob mutable data area
 //  JDK25 - Tested ok
+//  JDK26 - Tested ok
+//   - nmethod._deopt_handler_offset renamed to _deopt_handler_entry_offset
+//   - _deopt_mh_handler_offset removed
+//   - _has_method_handle_invokes removed from nmethod
+//   - PcDesc flags renumbered (method_handle_invoke flag removed)
+//   - immutable_data now has ref count trailer (_immutable_data_ref_count_offset)
+//   - nmethod relocation support added (transparent for profiler)
 //
 // NOTE: Ahead-Of-Time compilation (AOT) is NOT SUPPORTED. The main complication is that, the AOT
 // ELF files are mapped directly to the program virtual space, and contain the code to execute.
