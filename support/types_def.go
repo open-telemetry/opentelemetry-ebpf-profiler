@@ -60,8 +60,7 @@ const (
 )
 
 const (
-	EventTypeGenericPID     = C.EVENT_TYPE_GENERIC_PID
-	EventTypeReloadKallsyms = C.EVENT_TYPE_RELOAD_KALLSYMS
+	EventTypeGenericPID = C.EVENT_TYPE_GENERIC_PID
 )
 
 const UnwindInfoMaxEntries = C.UNWIND_INFO_MAX_ENTRIES
