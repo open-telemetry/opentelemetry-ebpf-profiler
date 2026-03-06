@@ -227,7 +227,7 @@ struct cuda_progs_t {
   __type(key, u32);
   __type(value, u32);
   __uint(max_entries, 1);
-} cuda_progs;
+} cuda_progs SEC(".maps");
 
 SEC("usdt/cuda_probe")
 int cuda_probe(struct pt_regs *ctx)
