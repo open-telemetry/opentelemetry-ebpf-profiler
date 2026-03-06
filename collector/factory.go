@@ -40,5 +40,6 @@ func defaultConfig() component.Config {
 		ClockSyncInterval:      3 * time.Minute,
 		MaxGRPCRetries:         5,
 		MaxRPCMsgSize:          32 << 20, // 32 MiB,
+		BPFFSRoot:              "/sys/fs/bpf/",
 	}
 }
