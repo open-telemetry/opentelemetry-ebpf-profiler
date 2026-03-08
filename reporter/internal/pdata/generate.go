@@ -197,9 +197,6 @@ func (p *Pdata) setProfile(
 				mapping.SetFileOffset(m.FileOffset)
 				mapping.SetFilenameStrindex(stringSet.Add(mf.FileName.String()))
 
-				// Once SemConv and its Go package is released with the new
-				// semantic convention for build_id, replace these hard coded
-				// strings.
 				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
 					semconv.ProcessExecutableBuildIDGNUKey,
 					mf.GnuBuildID)
