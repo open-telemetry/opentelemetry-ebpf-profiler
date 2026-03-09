@@ -603,7 +603,7 @@ func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address
 	}
 
 	// JDK26+: immutable data size is defined by ref count trailer, not present prior to JDK26
-	if vms.Nmethod.ImmutableDataRefCountOff == ^uint(0) {
+	if vms.Nmethod.ImmutableDataRefCountOff == ^uint(0) && major < 26 {
 		vms.Nmethod.ImmutableDataRefCountOff = 0
 	}
 
