@@ -509,7 +509,8 @@ find_context(struct pt_regs *ctx, PerCPURecord *record, const LuaJITProcInfo *in
     // Once the HA fills in text_section_bias with G we'll stop sending these report_pids.
     if (state->text_section_bias == 0) {
       DEBUG_PRINT("lj: unwinding unmapped JIT frame");
-      report_pid(ctx, record->trace.pid, RATELIMIT_ACTION_DEFAULT);
+      u64 pid_tgid = (u64)record->trace.pid << 32 | record->trace.tid;
+      report_pid(ctx, pid_tgid, RATELIMIT_ACTION_DEFAULT);
 
       // If top frame isn't luajit we can't rely on the register still holding the DISPATCH table,
       // but once we propagate G to the HA text_section_bias will be set to the G pointer and we can
