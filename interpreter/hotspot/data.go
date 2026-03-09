@@ -602,6 +602,11 @@ func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address
 		vms.CodeBlob.RelocationSize = 0
 	}
 
+	// JDK26+: immutable data size is defined by ref count trailer, not present prior JDK26
+	if vms.Nmethod.ImmutableDataRefCountOff != ^uint(0) {
+		vms.Nmethod.ImmutableDataRefCountOff = 0
+	}
+
 	// Check that all symbols got loaded from JVM introspection data
 	err := forEachItem("", reflect.ValueOf(&vmd.vmStructs).Elem(),
 		func(item reflect.Value, name string) error {
