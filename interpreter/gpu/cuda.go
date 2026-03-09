@@ -3,8 +3,10 @@ package gpu // import "go.opentelemetry.io/ebpf-profiler/interpreter/gpu"
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"strconv"
 	"sync"
+	"syscall"
 	"unique"
 	"unsafe"
 
@@ -15,6 +17,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 const (
@@ -77,9 +80,9 @@ type gpuTraceFixer struct {
 
 type data struct {
 	path           string
-	link           interpreter.LinkCloser
 	probes         []pfelf.USDTProbe
 	kernelFallback *pfelf.USDTProbe // kernel_executed probe, kept as fallback if activity_batch fails
+	links          map[util.OnDiskFileIdentifier]interpreter.LinkCloser // uprobe attachments keyed by inode
 }
 
 // Instance is the CUDA interpreter instance
@@ -216,17 +219,29 @@ func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Addre
 		}
 	}
 
-	var lc interpreter.LinkCloser
-	if d.link == nil {
-		var err error
-		lc, err = ebpf.AttachUSDTProbes(pid, d.path, USDTProgCudaProbe, d.probes, cookies, progNames)
+	// Stat the path to get the current inode. Uprobe attachments are
+	// inode-based, so we need a separate attachment per inode.
+	st, err := os.Stat(d.path)
+	if err != nil {
+		return nil, fmt.Errorf("[cuda] stat %s: %w", d.path, err)
+	}
+	sys, ok := st.Sys().(*syscall.Stat_t)
+	if !ok || sys == nil {
+		return nil, fmt.Errorf("[cuda] failed to get stat_t for %s", d.path)
+	}
+	key := util.OnDiskFileIdentifier{DeviceID: uint64(sys.Dev), InodeNum: uint64(sys.Ino)}
+
+	if d.links == nil {
+		d.links = make(map[util.OnDiskFileIdentifier]interpreter.LinkCloser)
+	}
+	if _, ok := d.links[key]; !ok {
+		lc, err := ebpf.AttachUSDTProbes(pid, d.path, USDTProgCudaProbe, d.probes, cookies, progNames)
 		if err != nil {
 			return nil, err
 		}
-		log.Debugf("[cuda] parcagpu USDT probes attached for %s", d.path)
-		d.link = lc
-	} else {
-		log.Debugf("[cuda] parcagpu USDT probes already attached for %s", d.path)
+		d.links[key] = lc
+		log.Debugf("[cuda] parcagpu USDT probes attached for %s (dev=%d ino=%d)",
+			d.path, key.DeviceID, key.InodeNum)
 	}
 
 	// Create and register fixer for this PID
@@ -605,11 +620,13 @@ func (i *Instance) Symbolize(f libpf.EbpfFrame, _ *libpf.Frames, _ libpf.FrameMa
 		f.Type(), interpreter.ErrMismatchInterpreterType)
 }
 
-func (d *data) Unload(ebpf interpreter.EbpfHandler) {
-	if d.link != nil {
-		log.Debugf("[cuda] parcagpu USDT probes closed for %s", d.path)
-		if err := d.link.Unload(); err != nil {
+func (d *data) Unload(_ interpreter.EbpfHandler) {
+	for key, le := range d.links {
+		log.Debugf("[cuda] parcagpu USDT probes closed for %s (dev=%d ino=%d)",
+			d.path, key.DeviceID, key.InodeNum)
+		if err := le.Unload(); err != nil {
 			log.Errorf("error closing cuda usdt link: %s", err)
 		}
 	}
+	d.links = nil
 }
