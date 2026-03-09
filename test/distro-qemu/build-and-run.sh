@@ -53,7 +53,7 @@ if [[ "$DISTRO" == "ubuntu" ]]; then
     if [[ "$DEBOOTSTRAP_ARCH" == "arm64" ]]; then
         MIRROR="http://ports.ubuntu.com/ubuntu-ports/"
     else
-        MIRROR="http://mirrors.layeronline.com/ubuntu/"
+        MIRROR="https://archive.ubuntu.com/ubuntu/"
     fi
 else
     MIRROR="http://deb.debian.org/debian/"
