@@ -78,18 +78,26 @@ type gpuTraceFixer struct {
 	maxCorrelationId    uint32                          // track highest ID for threshold-based clearing
 }
 
+type linkEntry struct {
+	link interpreter.LinkCloser
+	refs int
+}
+
 type data struct {
 	path           string
 	probes         []pfelf.USDTProbe
 	kernelFallback *pfelf.USDTProbe // kernel_executed probe, kept as fallback if activity_batch fails
-	links          map[util.OnDiskFileIdentifier]interpreter.LinkCloser // uprobe attachments keyed by inode
+
+	links map[util.OnDiskFileIdentifier]*linkEntry // uprobe attachments keyed by inode
 }
 
 // Instance is the CUDA interpreter instance
 type Instance struct {
 	interpreter.InstanceStubs
+	d    *data
 	path string
 	pid  libpf.PID
+	odfi util.OnDiskFileIdentifier
 }
 
 // CuptiTimingEvent is the structure received from eBPF via perf buffer
@@ -232,17 +240,20 @@ func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Addre
 	key := util.OnDiskFileIdentifier{DeviceID: uint64(sys.Dev), InodeNum: uint64(sys.Ino)}
 
 	if d.links == nil {
-		d.links = make(map[util.OnDiskFileIdentifier]interpreter.LinkCloser)
+		d.links = make(map[util.OnDiskFileIdentifier]*linkEntry)
 	}
-	if _, ok := d.links[key]; !ok {
+	le := d.links[key]
+	if le == nil {
 		lc, err := ebpf.AttachUSDTProbes(pid, d.path, USDTProgCudaProbe, d.probes, cookies, progNames)
 		if err != nil {
 			return nil, err
 		}
-		d.links[key] = lc
+		le = &linkEntry{link: lc}
+		d.links[key] = le
 		log.Debugf("[cuda] parcagpu USDT probes attached for %s (dev=%d ino=%d)",
 			d.path, key.DeviceID, key.InodeNum)
 	}
+	le.refs++
 
 	// Create and register fixer for this PID
 	fixer := &gpuTraceFixer{
@@ -252,13 +263,26 @@ func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Addre
 
 	gpuFixers.Store(pid, fixer)
 	return &Instance{
+		d:    d,
 		path: d.path,
 		pid:  pid,
+		odfi: key,
 	}, nil
 }
 
 func (i *Instance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
 	gpuFixers.Delete(i.pid)
+	if le := i.d.links[i.odfi]; le != nil {
+		le.refs--
+		if le.refs <= 0 {
+			log.Debugf("[cuda] last ref for %s (dev=%d ino=%d), unloading probes",
+				i.d.path, i.odfi.DeviceID, i.odfi.InodeNum)
+			if err := le.link.Unload(); err != nil {
+				log.Errorf("error closing cuda usdt link: %s", err)
+			}
+			delete(i.d.links, i.odfi)
+		}
+	}
 	return nil
 }
 
@@ -624,7 +648,7 @@ func (d *data) Unload(_ interpreter.EbpfHandler) {
 	for key, le := range d.links {
 		log.Debugf("[cuda] parcagpu USDT probes closed for %s (dev=%d ino=%d)",
 			d.path, key.DeviceID, key.InodeNum)
-		if err := le.Unload(); err != nil {
+		if err := le.link.Unload(); err != nil {
 			log.Errorf("error closing cuda usdt link: %s", err)
 		}
 	}
