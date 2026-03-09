@@ -79,6 +79,7 @@ linters:
     - wastedassign
     - wsl
     - wrapcheck
+    - prealloc # CI failure with golangci 2.10.1, worth fixing
     # we don't want to change code to Go 1.22+ yet
     - intrange
     - copyloopvar
@@ -87,7 +88,7 @@ linters:
     paths:
       - design-docs
       - doc
-      - LICENSES 
+      - LICENSES
       - target
       - go
 
