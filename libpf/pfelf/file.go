@@ -641,8 +641,14 @@ type ElfReloc *elf.Rela64
 func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
 	checkFunc := func(rela ElfReloc) bool {
 		ty := rela.Info & 0xffff
-		return (f.Machine == elf.EM_AARCH64 && elf.R_AARCH64(ty) == elf.R_AARCH64_TLSDESC) ||
-			(f.Machine == elf.EM_X86_64 && elf.R_X86_64(ty) == elf.R_X86_64_TLSDESC)
+		switch f.Machine {
+		case elf.EM_AARCH64:
+			return elf.R_AARCH64(ty) == elf.R_AARCH64_TLSDESC
+		case elf.EM_X86_64:
+			return elf.R_X86_64(ty) == elf.R_X86_64_TLSDESC
+		default:
+			return false
+		}
 	}
 	return f.VisitRelocations(visitor, checkFunc)
 }
