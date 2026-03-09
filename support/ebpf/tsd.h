@@ -78,7 +78,8 @@ dtv_read(const DTVInfo *dtvi, const void *tsd_base, u32 module_id, u64 tls_offse
   return 0;
 
 err:
-  DEBUG_PRINT("Failed to read TLS via DTV from 0x%lx", (unsigned long)dtv_ptr);
+  DEBUG_PRINT(
+    "Failed to read TLS via DTV from 0x%lx for module %d", (unsigned long)dtv_ptr, module_id);
   increment_metric(metricID_UnwindErrBadDTVRead);
   return -1;
 }
