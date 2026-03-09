@@ -511,9 +511,9 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		// [scopes_data]	@ _immutable_data + nmethod._scopes_data_begin	\ arrays we need
 		// [scopes_pcs]		@ _immutable_data + nmethod._scopes_pcs_offset	/ for inlining info
 		// [speculations]	@ _immutable_data + nmethod._speculations_offset
-		// [end]		    @ _immutable_Data + nmethod._immutable_data_size
+		// [end]		    @ _immutable_data + nmethod._immutable_data_size
 		// [end]            @ _immutable_data + min(_immutable_data_size, _immutable_data_ref_count_offset)  (JDK 26+)
-		// // ...
+		// ...
 		// speculations presence depends on JDK build, and is not used. Instead the scopes
 		// end is determined from immutable data size.
 
