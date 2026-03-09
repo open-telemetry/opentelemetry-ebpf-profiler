@@ -379,7 +379,7 @@ func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.
 		addrToJITInfo:  addrToJITInfo,
 		addrToStubName: addrToStubName,
 		prefixes:       libpf.Set[lpm.Prefix]{},
-		stubs:          map[libpf.Address]StubRoutine{},
+		stubs:          xsync.NewRWMutex(map[libpf.Address]StubRoutine{}),
 	}, nil
 }
 
