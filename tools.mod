@@ -7,6 +7,7 @@ tool (
 	github.com/google/go-licenses/v2
 	github.com/jcchavezs/porto/cmd/porto
 	go.opentelemetry.io/collector/cmd/builder
+	go.opentelemetry.io/collector/cmd/mdatagen
 	gotest.tools/gotestsum
 )
 
@@ -26,6 +27,8 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/zeebo/xxh3 v1.1.0
 	go.opentelemetry.io/collector/component v1.53.0
+	go.opentelemetry.io/collector/component/componenttest v0.147.0
+	go.opentelemetry.io/collector/confmap v1.53.0
 	go.opentelemetry.io/collector/confmap/xconfmap v0.147.0
 	go.opentelemetry.io/collector/consumer/consumertest v0.147.0
 	go.opentelemetry.io/collector/consumer/xconsumer v0.147.0
@@ -37,6 +40,7 @@ require (
 	go.opentelemetry.io/otel v1.41.0
 	go.opentelemetry.io/otel/metric v1.41.0
 	go.opentelemetry.io/proto/otlp/profiles/v1development v0.2.0
+	go.uber.org/goleak v1.3.0
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/arch v0.24.0
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa
@@ -115,7 +119,7 @@ require (
 	github.com/curioswitch/go-reassign v0.3.0 // indirect
 	github.com/daixiang0/gci v0.13.7 // indirect
 	github.com/dave/dst v0.27.3 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/denis-tingaikin/go-header v0.5.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/dnephin/pflag v1.0.7 // indirect
@@ -227,7 +231,7 @@ require (
 	github.com/otiai10/copy v1.14.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.12.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
@@ -284,11 +288,12 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/collector/cmd/builder v0.147.0 // indirect
-	go.opentelemetry.io/collector/component/componenttest v0.147.0 // indirect
-	go.opentelemetry.io/collector/confmap v1.53.0 // indirect
+	go.opentelemetry.io/collector/cmd/mdatagen v0.147.0 // indirect
+	go.opentelemetry.io/collector/confmap/provider/fileprovider v1.53.0 // indirect
 	go.opentelemetry.io/collector/consumer v1.53.0 // indirect
 	go.opentelemetry.io/collector/consumer/consumererror v0.147.0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.53.0 // indirect
+	go.opentelemetry.io/collector/filter v0.147.0 // indirect
 	go.opentelemetry.io/collector/internal/componentalias v0.147.0 // indirect
 	go.opentelemetry.io/collector/pipeline v1.53.0 // indirect
 	go.opentelemetry.io/otel/sdk v1.40.0 // indirect
@@ -303,7 +308,7 @@ require (
 	golang.org/x/term v0.40.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260122232226-8e98ce8d340d // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

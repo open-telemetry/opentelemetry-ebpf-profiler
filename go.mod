@@ -26,6 +26,8 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/zeebo/xxh3 v1.1.0
 	go.opentelemetry.io/collector/component v1.53.0
+	go.opentelemetry.io/collector/component/componenttest v0.147.0
+	go.opentelemetry.io/collector/confmap v1.53.0
 	go.opentelemetry.io/collector/confmap/xconfmap v0.147.0
 	go.opentelemetry.io/collector/consumer/consumertest v0.147.0
 	go.opentelemetry.io/collector/consumer/xconsumer v0.147.0
@@ -37,6 +39,7 @@ require (
 	go.opentelemetry.io/otel v1.41.0
 	go.opentelemetry.io/otel/metric v1.41.0
 	go.opentelemetry.io/proto/otlp/profiles/v1development v0.2.0
+	go.uber.org/goleak v1.3.0
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/arch v0.24.0
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa
@@ -87,8 +90,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/collector/component/componenttest v0.147.0 // indirect
-	go.opentelemetry.io/collector/confmap v1.53.0 // indirect
 	go.opentelemetry.io/collector/consumer v1.53.0 // indirect
 	go.opentelemetry.io/collector/consumer/consumererror v0.147.0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.53.0 // indirect
