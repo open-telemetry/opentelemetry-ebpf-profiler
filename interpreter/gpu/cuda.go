@@ -40,11 +40,6 @@ const cudaProgsMap = "cuda_progs"
 var (
 	// gpuFixers maps PID to gpuTraceFixer
 	gpuFixers sync.Map
-
-	// cudaTailCallOnce ensures the cuda_progs prog array is populated exactly
-	// once.  The tail-call targets must be in place before cuda_probe fires.
-	cudaTailCallOnce   sync.Once
-	cudaTailCallFailed bool
 )
 
 // SymbolizedCudaTrace holds a symbolized trace awaiting GPU timing information.
@@ -180,19 +175,16 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
 	_ remotememory.RemoteMemory) (interpreter.Instance, error) {
 	// If using activity_batch, ensure the tail-call prog array is populated.
+	// UpdateProgArray is idempotent (programs are cached, map updates are atomic)
+	// so it is safe to call on every Attach.
 	// On failure (e.g. verifier rejection), fall back to kernel_executed.
 	for i, probe := range d.probes {
 		if probe.Name != "activity_batch" {
 			continue
 		}
-		cudaTailCallOnce.Do(func() {
-			if err := ebpf.UpdateProgArray(cudaProgsMap, 0,
-				USDTProgCudaActivityBatchTail); err != nil {
-				log.Errorf("[cuda] activity_batch tail call failed: %v", err)
-				cudaTailCallFailed = true
-			}
-		})
-		if cudaTailCallFailed {
+		if err := ebpf.UpdateProgArray(cudaProgsMap, 0,
+			USDTProgCudaActivityBatchTail); err != nil {
+			log.Errorf("[cuda] activity_batch tail call failed: %v", err)
 			if d.kernelFallback != nil {
 				d.probes[i] = *d.kernelFallback
 				log.Warnf("[cuda] falling back to kernel_executed mode")

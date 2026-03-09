@@ -22,6 +22,12 @@ type USDTProbe struct {
 // It applies prelink adjustments if .stapsdt.base section exists, and converts
 // virtual addresses to file offsets suitable for uprobe attachment.
 func (f *File) ParseUSDTProbes() ([]USDTProbe, error) {
+	// LoadSections populates f.Sections from section headers.
+	// It is idempotent and required for the .note.stapsdt lookup below.
+	if err := f.LoadSections(); err != nil {
+		return nil, err
+	}
+
 	var probes []USDTProbe
 
 	// Find .note.stapsdt section
