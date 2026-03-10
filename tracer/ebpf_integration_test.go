@@ -32,7 +32,7 @@ import (
 
 func TestMain(m *testing.M) {
 	// Initialize metrics once to avoid concurrent map access between
-	// Start() and AddSlice() called from lingering periodiccaller goroutines.
+	// metrics.Start() and metrics.AddSlice() called from lingering periodiccaller goroutines.
 	metrics.Start(noop.Meter{})
 	os.Exit(m.Run())
 }
