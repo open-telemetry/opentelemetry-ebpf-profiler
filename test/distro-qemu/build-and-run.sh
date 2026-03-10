@@ -3,7 +3,13 @@ set -ex
 
 # Configuration
 KERNEL_VERSION="${1:-5.10.217}"
-QEMU_ARCH="${QEMU_ARCH:-x86_64}"
+# Auto-detect host architecture if QEMU_ARCH not set.
+case "$(uname -m)" in
+    x86_64)  _default_arch="x86_64" ;;
+    aarch64) _default_arch="aarch64" ;;
+    *)       _default_arch="x86_64" ;;
+esac
+QEMU_ARCH="${QEMU_ARCH:-$_default_arch}"
 DISTRO="${DISTRO:-ubuntu}"  # debian or ubuntu
 RELEASE="${RELEASE:-jammy}"  # jammy/noble for ubuntu (with USDT probes), bullseye for debian
 ROOTFS_DIR=$(mktemp -d /tmp/distro-qemu-rootfs.XXXXXX)
@@ -24,7 +30,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Download parcagpu library
-PARCAGPU_DIR="${PARCAGPU_DIR}" ./download-parcagpu.sh
+QEMU_ARCH="${QEMU_ARCH}" PARCAGPU_DIR="${PARCAGPU_DIR}" ./download-parcagpu.sh
 
 echo "Building rootfs with $DISTRO $RELEASE..."
 
@@ -65,13 +71,12 @@ if ! sudo debootstrap --variant=minbase \
     --arch="$DEBOOTSTRAP_ARCH" \
     --cache-dir="$CACHE_DIR" \
     --foreign \
+    --include=libstdc++6 \
     "$RELEASE" "$ROOTFS_DIR" "$MIRROR" ; then
     echo "Debootstrap failed, log follows."
     cat "$ROOTFS_DIR/debootstrap/debootstrap.log"
     exit 1
 fi
-
-
 
 # Change ownership of rootfs to current user to avoid needing sudo for subsequent operations
 sudo chown -R "$(id -u):$(id -g)" "$ROOTFS_DIR"
@@ -124,12 +129,21 @@ fi
 cp "${OUTPUT_DIR}"/*.test "$ROOTFS_DIR/"
 cp "${PARCAGPU_DIR}/libparcagpucupti.so" "$ROOTFS_DIR/"
 
-# Copy stub libcupti .so next to the .so (for the test's preload logic) and
-# into the RUNPATH (/usr/local/cuda/lib64) as a fallback for the dynamic linker.
+# Copy stub libcupti .so into the RUNPATH (/usr/local/cuda/lib64) so the
+# dynamic linker resolves the DT_NEEDED entry without a real CUDA install.
 mkdir -p "$ROOTFS_DIR/usr/local/cuda/lib64"
 for stub in "${PARCAGPU_DIR}"/libcupti.so*; do
-    [ -f "$stub" ] && cp "$stub" "$ROOTFS_DIR/" && cp "$stub" "$ROOTFS_DIR/usr/local/cuda/lib64/"
+    [ -f "$stub" ] && cp "$stub" "$ROOTFS_DIR/usr/local/cuda/lib64/"
 done
+
+# Copy libstdc++ into the RUNPATH so the dynamic linker finds it.
+# Cross-arch debootstrap doesn't run ldconfig, leaving ld.so.cache incomplete,
+# so multiarch paths like /usr/lib/aarch64-linux-gnu/ aren't searched.
+LIBSTDCXX=$(find "$ROOTFS_DIR" -name 'libstdc++.so.6*' -type f | head -1)
+if [ -n "$LIBSTDCXX" ]; then
+    cp "$LIBSTDCXX" "$ROOTFS_DIR/usr/local/cuda/lib64/"
+    echo "Copied $(basename "$LIBSTDCXX") to RUNPATH"
+fi
 
 # List dynamic dependencies for debugging
 echo "Test binary dependencies:"
@@ -159,6 +173,10 @@ echo "================================="
 mount -t proc proc /proc 2>/dev/null || true
 mount -t sysfs sys /sys 2>/dev/null || true
 mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null || true
+
+# Rebuild ld.so cache so the linker finds libraries in multiarch paths
+# (e.g. /usr/lib/aarch64-linux-gnu/libstdc++.so.6).
+ldconfig 2>/dev/null || true
 
 # Enable debug logging
 export DEBUG_TEST=1

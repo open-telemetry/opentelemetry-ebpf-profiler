@@ -1,7 +1,12 @@
 #!/bin/bash
 set -e
 
-QEMU_ARCH="${QEMU_ARCH:-x86_64}"
+case "$(uname -m)" in
+    x86_64)  _default_arch="x86_64" ;;
+    aarch64) _default_arch="aarch64" ;;
+    *)       _default_arch="x86_64" ;;
+esac
+QEMU_ARCH="${QEMU_ARCH:-$_default_arch}"
 PARCAGPU_DIR="${PARCAGPU_DIR:-parcagpu-lib}"
 
 # Map QEMU arch to Docker platform
