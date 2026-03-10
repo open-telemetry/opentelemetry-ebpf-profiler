@@ -61,10 +61,17 @@ fi
 
 # Create minimal rootfs with debootstrap (requires sudo for chroot operations)
 echo "Running debootstrap to create $DISTRO $RELEASE rootfs for $DEBOOTSTRAP_ARCH..."
-sudo debootstrap --variant=minbase \
+if ! sudo debootstrap --variant=minbase \
     --arch="$DEBOOTSTRAP_ARCH" \
     --cache-dir="$CACHE_DIR" \
-    "$RELEASE" "$ROOTFS_DIR" "$MIRROR" || cat "$ROOTFS_DIR/debootstrap/debootstrap.log"
+    --foreign \
+    "$RELEASE" "$ROOTFS_DIR" "$MIRROR" ; then
+    echo "Debootstrap failed, log follows."
+    cat "$ROOTFS_DIR/debootstrap/debootstrap.log"
+    exit 1
+fi
+
+
 
 # Change ownership of rootfs to current user to avoid needing sudo for subsequent operations
 sudo chown -R "$(id -u):$(id -g)" "$ROOTFS_DIR"
