@@ -137,12 +137,28 @@ for stub in "${PARCAGPU_DIR}"/libcupti.so*; do
 done
 
 # Copy libstdc++ into the RUNPATH so the dynamic linker finds it.
-# Cross-arch debootstrap doesn't run ldconfig, leaving ld.so.cache incomplete,
-# so multiarch paths like /usr/lib/aarch64-linux-gnu/ aren't searched.
-LIBSTDCXX=$(find "$ROOTFS_DIR" -name 'libstdc++.so.6*' -type f | head -1)
-if [ -n "$LIBSTDCXX" ]; then
-    cp "$LIBSTDCXX" "$ROOTFS_DIR/usr/local/cuda/lib64/"
-    echo "Copied $(basename "$LIBSTDCXX") to RUNPATH"
+# With --foreign debootstrap the .deb is downloaded but not extracted, so we
+# pull the .so directly from the .deb archive.
+LIBSTDCXX_DEB=$(find "$ROOTFS_DIR" -name 'libstdc++6_*.deb' -type f | head -1)
+if [ -n "$LIBSTDCXX_DEB" ]; then
+    EXTRACT_TMP=$(mktemp -d)
+    dpkg-deb -x "$LIBSTDCXX_DEB" "$EXTRACT_TMP"
+    # Copy the real .so file (not the symlink) and create the soname symlink.
+    LIBSTDCXX_REAL=$(find "$EXTRACT_TMP" -name 'libstdc++.so.6.*' ! -name '*.py' -type f | head -1)
+    if [ -n "$LIBSTDCXX_REAL" ]; then
+        cp "$LIBSTDCXX_REAL" "$ROOTFS_DIR/usr/local/cuda/lib64/"
+        ln -sf "$(basename "$LIBSTDCXX_REAL")" "$ROOTFS_DIR/usr/local/cuda/lib64/libstdc++.so.6"
+        echo "Copied $(basename "$LIBSTDCXX_REAL") + symlink to RUNPATH from deb"
+    fi
+    rm -rf "$EXTRACT_TMP"
+else
+    # Fallback: check if already extracted (non-foreign debootstrap)
+    LIBSTDCXX_REAL=$(find "$ROOTFS_DIR" -name 'libstdc++.so.6.*' ! -name '*.py' -type f | head -1)
+    if [ -n "$LIBSTDCXX_REAL" ]; then
+        cp "$LIBSTDCXX_REAL" "$ROOTFS_DIR/usr/local/cuda/lib64/"
+        ln -sf "$(basename "$LIBSTDCXX_REAL")" "$ROOTFS_DIR/usr/local/cuda/lib64/libstdc++.so.6"
+        echo "Copied $(basename "$LIBSTDCXX_REAL") + symlink to RUNPATH"
+    fi
 fi
 
 # List dynamic dependencies for debugging
