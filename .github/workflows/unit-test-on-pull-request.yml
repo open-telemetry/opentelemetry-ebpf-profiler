@@ -295,11 +295,16 @@ jobs:
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           sudo apt-get install -y debootstrap systemtap-sdt-dev
+      - name: Get parcagpu image digest
+        id: parcagpu-digest
+        run: |
+          digest=$(docker buildx imagetools inspect ghcr.io/parca-dev/parcagpu:latest --format '{{.Digest}}' 2>/dev/null || echo "unknown")
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
       - name: Cache parcagpu library
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
           path: test/distro-qemu/parcagpu-lib
-          key: parcagpu-${{ matrix.target_arch }}
+          key: parcagpu-${{ matrix.target_arch }}-${{ steps.parcagpu-digest.outputs.digest }}
       - name: Download kernel
         run: |
           cd test/distro-qemu

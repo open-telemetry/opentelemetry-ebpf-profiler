@@ -335,40 +335,57 @@ func runEndToEnd(t *testing.T, multiProbe bool) {
 		return false
 	}, 15*time.Second, 200*time.Millisecond, "GPU interpreter never attached after dlopen")
 
-	// Simulate a kernel launch (fires cuda_correlation USDT).
-	cSimulateKernelLaunch(42)
-
-	// Simulate buffer completion (fires kernel_executed + activity_batch USDTs).
-	cSimulateBufferCompletion(42, 0, 7, "testKernel")
-
-	// Poll perf reader for timing events.
+	// Simulate kernel launches and wait for timing events.  Retry the
+	// simulation several times — on slow CI the uprobes may not be fully
+	// active in the kernel immediately after the interpreter is detected.
 	var events []gpu.CuptiTimingEvent
-	deadline := time.After(5 * time.Second)
 	var rec perf.Record
 
-	for {
-		reader.SetDeadline(time.Now().Add(200 * time.Millisecond))
-		err := reader.ReadInto(&rec)
-		if err != nil {
-			select {
-			case <-deadline:
-				goto done
-			default:
+	const (
+		maxAttempts  = 3
+		pollTimeout  = 5 * time.Second
+		pollInterval = 200 * time.Millisecond
+	)
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		t.Logf("simulation attempt %d/%d", attempt, maxAttempts)
+
+		// Simulate a kernel launch (fires cuda_correlation USDT).
+		cSimulateKernelLaunch(42)
+
+		// Simulate buffer completion (fires kernel_executed + activity_batch USDTs).
+		cSimulateBufferCompletion(42, 0, 7, "testKernel")
+
+		// Poll perf reader for timing events.
+		deadline := time.After(pollTimeout)
+		for {
+			reader.SetDeadline(time.Now().Add(pollInterval))
+			err := reader.ReadInto(&rec)
+			if err != nil {
+				select {
+				case <-deadline:
+					goto nextAttempt
+				default:
+					continue
+				}
+			}
+			if rec.LostSamples != 0 || len(rec.RawSample) == 0 {
 				continue
 			}
+			ev := (*gpu.CuptiTimingEvent)(unsafe.Pointer(&rec.RawSample[0]))
+			events = append(events, *ev)
+			t.Logf("Received timing event: pid=%d id=%d dev=%d stream=%d kernel=%s",
+				ev.Pid, ev.Id, ev.Dev, ev.Stream,
+				string(ev.KernelName[:bytes.IndexByte(ev.KernelName[:], 0)]))
 		}
-		if rec.LostSamples != 0 || len(rec.RawSample) == 0 {
-			continue
+	nextAttempt:
+		if len(events) > 0 {
+			break
 		}
-		ev := (*gpu.CuptiTimingEvent)(unsafe.Pointer(&rec.RawSample[0]))
-		events = append(events, *ev)
-		t.Logf("Received timing event: pid=%d id=%d dev=%d stream=%d kernel=%s",
-			ev.Pid, ev.Id, ev.Dev, ev.Stream,
-			string(ev.KernelName[:bytes.IndexByte(ev.KernelName[:], 0)]))
+		t.Logf("no events after attempt %d, retrying...", attempt)
 	}
-done:
 
-	require.NotEmpty(t, events, "no timing events received from cuda_timing_events perf buffer")
+	require.NotEmpty(t, events, "no timing events received from cuda_timing_events perf buffer after %d attempts", maxAttempts)
 
 	// Verify at least one event matches our simulated kernel.
 	found := false
