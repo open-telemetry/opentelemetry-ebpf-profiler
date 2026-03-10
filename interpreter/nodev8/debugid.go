@@ -17,9 +17,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
-// debugIDRegex matches the debug ID magic comment at the end of JS files
+// debugIDRegex matches the debug ID magic comment per the ECMA-426 spec:
+// https://github.com/tc39/ecma426/blob/main/proposals/debug-id.md
 // Pattern: //# debugId=550e8400-e29b-41d4-a716-446655440000
-var debugIDRegex = regexp.MustCompile(`//# debugId=([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})`)
+var debugIDRegex = regexp.MustCompile(`(?m)^//# debugId=([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})$`)
 
 // uuidToFileID converts a UUID to a FileID by splitting into two uint64s.
 func uuidToFileID(u uuid.UUID) libpf.FileID {

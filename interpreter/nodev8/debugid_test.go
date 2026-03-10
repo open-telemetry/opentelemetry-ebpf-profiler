@@ -13,6 +13,10 @@ func TestDebugIDRegex(t *testing.T) {
 	shouldMatch := map[string]string{
 		"// Built with esbuild - minified for production\nimport*as m from'http';var c=process.env.PORT||3e3,l,f=!0;process.exit(1)}}$();\n//# sourceMappingURL=server.js.map\n//# debugId=25f5c240-2294-5287-af80-41686c416a20\n": "25f5c240-2294-5287-af80-41686c416a20",
 		"//# debugId=25f5c240-2294-5287-af80-41686c416a20": "25f5c240-2294-5287-af80-41686c416a20",
+		// Uppercase hex (spec allows case-insensitive)
+		"//# debugId=25F5C240-2294-5287-AF80-41686C416A20": "25F5C240-2294-5287-AF80-41686C416A20",
+		// Mixed case
+		"//# debugId=25f5C240-2294-5287-Af80-41686c416A20": "25f5C240-2294-5287-Af80-41686c416A20",
 	}
 	for s, expected := range shouldMatch {
 		matches := debugIDRegex.FindStringSubmatch(s)
