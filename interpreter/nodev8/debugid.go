@@ -15,7 +15,6 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
 // debugIDRegex matches the debug ID magic comment at the end of JS files
@@ -97,17 +96,6 @@ func (i *v8Instance) extractDebugID(fileName libpf.String) libpf.FileID {
 	log.Debugf("V8: debug ID cache miss for %s", fileName)
 	fileID := extractDebugIDFromFile(i.pid, fileName.String())
 	i.fileToDebugID.Add(fileName, fileID)
-
-	// If we found a debug ID, report it as executable metadata
-	if fileID != (libpf.FileID{}) && i.reporter != nil && !i.reporter.ExecutableKnown(fileID) {
-		log.Debugf("V8: reporting metadata for %s, debug ID %v", fileName, fileID)
-		i.reporter.ExecutableMetadata(&reporter.ExecutableMetadataArgs{
-			FileID:     fileID,
-			FileName:   fileName.String(),
-			GnuBuildID: fileID.ToUUIDString(),
-			Interp:     libpf.V8,
-		})
-	}
 
 	return fileID
 }

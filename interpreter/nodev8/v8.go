@@ -524,9 +524,6 @@ type v8Instance struct {
 	// fileToDebugID maps JavaScript file paths to their debug IDs (extracted from //# debugId= comment)
 	fileToDebugID *freelru.LRU[libpf.String, libpf.FileID]
 
-	// reporter is used to report executable metadata for JavaScript files with debug IDs
-	reporter reporter.ExecutableReporter
-
 	// pid is the process ID, used to access files via /proc/PID/root/ for containerized processes
 	pid libpf.PID
 
@@ -585,9 +582,8 @@ func (i *v8Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 }
 
 func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
-	exeReporter reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping,
+	_ reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping,
 ) error {
-	i.reporter = exeReporter
 	i.pid = pr.PID()
 
 	pid := i.pid
@@ -1534,7 +1530,7 @@ func (i *v8Instance) appendFrame(frames *libpf.Frames, sfi *v8SFI, lineNo libpf.
 	fileName := sfi.source.fileName
 	fileID := i.extractDebugID(fileName)
 
-	frames.Append(&libpf.Frame{
+	frame := libpf.Frame{
 		Type:           libpf.V8Frame,
 		FunctionName:   sfi.funcName,
 		SourceFile:     fileName,
@@ -1542,7 +1538,20 @@ func (i *v8Instance) appendFrame(frames *libpf.Frames, sfi *v8SFI, lineNo libpf.
 		SourceColumn:   column,
 		FunctionOffset: funcOffset,
 		FileID:         fileID,
-	})
+	}
+
+	// If a debug ID was found, create a mapping so the build ID gets reported
+	if fileID != (libpf.FileID{}) {
+		frame.Mapping = libpf.NewFrameMapping(libpf.FrameMappingData{
+			File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+				FileID:     fileID,
+				FileName:   fileName,
+				GnuBuildID: fileID.ToUUIDString(),
+			}),
+		})
+	}
+
+	frames.Append(&frame)
 }
 
 var externalFunctionTag = libpf.Intern("<external-file>")
