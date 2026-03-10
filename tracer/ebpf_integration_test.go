@@ -8,6 +8,7 @@ package tracer_test
 import (
 	"context"
 	"math"
+	"os"
 	"runtime"
 	"slices"
 	"sync"
@@ -28,6 +29,13 @@ import (
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/otel/metric/noop"
 )
+
+func TestMain(m *testing.M) {
+	// Initialize metrics once to avoid concurrent map access between
+	// Start() and AddSlice() called from lingering periodiccaller goroutines.
+	metrics.Start(noop.Meter{})
+	os.Exit(m.Run())
+}
 
 type mockIntervals struct{}
 
@@ -91,8 +99,6 @@ func TestTracerErrorPropagation(t *testing.T) {
 	ctx, cancelFn := context.WithCancel(t.Context())
 	defer cancelFn()
 
-	metrics.Start(noop.Meter{})
-
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
 		FilterErrorFrames:      false,
@@ -135,8 +141,6 @@ func TestTracerMapMonitorsError(t *testing.T) {
 	ctx, cancelFn := context.WithCancel(t.Context())
 	defer cancelFn()
 
-	metrics.Start(noop.Meter{})
-
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
 		FilterErrorFrames:      false,
@@ -162,8 +166,6 @@ func TestTracerMapMonitorsError(t *testing.T) {
 func TestTraceTransmissionAndParsing(t *testing.T) {
 	ctx, cancelFn := context.WithCancel(t.Context())
 	defer cancelFn()
-
-	metrics.Start(noop.Meter{})
 
 	enabledTracers, _ := tracertypes.Parse("")
 	enabledTracers.Enable(tracertypes.PythonTracer)
