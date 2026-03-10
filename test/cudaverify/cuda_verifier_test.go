@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+	"go.opentelemetry.io/ebpf-profiler/testutils"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -186,6 +187,9 @@ func TestCUDAVerifierMultiProbe(t *testing.T) {
 	}
 
 	probes := parseProbes(t)
+
+	testutils.InitializeMetrics()
+
 	tr, ebpfHandler, cancel := createTracer(t)
 	defer tr.Close()
 	defer cancel()
