@@ -585,9 +585,8 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	_ reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping,
 ) error {
 	i.pid = pr.PID()
-
-	pid := i.pid
 	i.mappingGeneration++
+
 	for idx := range mappings {
 		m := &mappings[idx]
 		if !m.IsExecutable() || !m.IsAnonymous() {
@@ -615,7 +614,7 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		for _, prefix := range prefixes {
 			_, exists := i.prefixes[prefix]
 			if !exists {
-				err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindV8, 0, 0)
+				err := ebpf.UpdatePidInterpreterMapping(i.pid, prefix, support.ProgUnwindV8, 0, 0)
 				if err != nil {
 					return err
 				}
@@ -630,7 +629,7 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			continue
 		}
 		log.Debugf("Delete V8 prefix %#v", prefix)
-		_ = ebpf.DeletePidInterpreterMapping(pid, prefix)
+		_ = ebpf.DeletePidInterpreterMapping(i.pid, prefix)
 		delete(i.prefixes, prefix)
 	}
 	for m, generationPtr := range i.mappings {
