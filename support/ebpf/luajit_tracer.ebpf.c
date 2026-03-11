@@ -27,12 +27,6 @@ struct luajit_procs_t {
 // The number of LuaJIT frames to unwind per frame-unwinding eBPF program.
 #define FRAMES_PER_WALK_LUAJIT_STACK 15
 
-#if defined(__x86_64__)
-  #define DISPATCH r14
-#elif defined(__aarch64__)
-  #define DISPATCH r7
-#endif
-
 // Non error checking bpf read, used sparingly for reading sections of the stack after
 // we've established we can read neighboring memory.
 #define deref(o)                                                                                   \
@@ -516,7 +510,11 @@ find_context(struct pt_regs *ctx, PerCPURecord *record, const LuaJITProcInfo *in
       // but once we propagate G to the HA text_section_bias will be set to the G pointer and we can
       // pull cur_L from that. So this is just a bootstrap crutch that just has to work once (or
       // never because G also gets picked up from interpreter hits).
-      G_ptr   = (char *)state->DISPATCH - info->g2dispatch;
+#if defined(__x86_64__)
+      G_ptr = (char *)state->r14 - info->g2dispatch;
+#elif defined(__aarch64__)
+      G_ptr = (char *)state->r22;
+#endif
       reportG = true;
     } else {
       G_ptr = (void *)state->text_section_bias;
