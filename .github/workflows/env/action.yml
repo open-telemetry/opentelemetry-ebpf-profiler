@@ -14,9 +14,13 @@ runs:
         # Skip translations to speed up apt-get update
         echo 'Acquire::Languages "none";' | sudo tee /etc/apt/apt.conf.d/99no-translations > /dev/null
         # Makefile expects ARCH-linux-gnu-gcc; install if not available
+        sudo apt-get update
+        # systemtap-sdt-dev provides sys/sdt.h needed by support/usdt/test
+        sudo apt-get install -y --no-install-recommends systemtap-sdt-dev
+        # Makefile expects ARCH-linux-gnu-gcc; install if not available
         case "$(uname -m)" in
-          x86_64)  command -v x86_64-linux-gnu-gcc  >/dev/null || { sudo apt-get update && sudo apt-get install -y gcc-x86-64-linux-gnu; } ;;
-          aarch64) command -v aarch64-linux-gnu-gcc >/dev/null || { sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu; } ;;
+          x86_64)  command -v x86_64-linux-gnu-gcc  >/dev/null || sudo apt-get install -y gcc-x86-64-linux-gnu ;;
+          aarch64) command -v aarch64-linux-gnu-gcc >/dev/null || sudo apt-get install -y gcc-aarch64-linux-gnu ;;
         esac
     - name: Set up Go
       uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0

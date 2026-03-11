@@ -42,10 +42,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Set up environment
         uses: ./.github/workflows/env
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y debootstrap systemtap-sdt-dev
       - name: linter
         env:
           CGO_ENABLED: 1
@@ -89,10 +85,6 @@ jobs:
           restore-keys: |
             coredumps-${{ matrix.target_arch }}
             coredumps-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y debootstrap systemtap-sdt-dev
       - name: Tests
         run: make test TARGET_ARCH=${{ matrix.target_arch }} GO_FLAGS="${{ matrix.go_flags }}"
 
@@ -291,10 +283,10 @@ jobs:
           sudo apt-get update -y
           case "${{ matrix.target_arch }}" in
             amd64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-x86;;
-            arm64) sudo apt-get -y install qemu-system-arm ipxe-qemu gcc-aarch64-linux-gnu libc6-arm64-cross libc6:arm64 binutils-aarch64-linux-gnu musl-dev:arm64 systemtap-sdt-dev:arm64;;
+            arm64) sudo apt-get -y install qemu-system-arm ipxe-qemu gcc-aarch64-linux-gnu libc6-arm64-cross libc6:arm64 binutils-aarch64-linux-gnu musl-dev:arm64;;
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
-          sudo apt-get install -y debootstrap systemtap-sdt-dev
+          sudo apt-get install -y --no-install-recommends debootstrap
       - name: Get parcagpu image digest
         id: parcagpu-digest
         run: |
