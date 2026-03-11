@@ -3,7 +3,7 @@
     "description": "Leave out the 0 value. It's an indication of not explicitly initialized variables.",
     "type": "counter",
     "name": "Invalid",
-    "field": "invalid",
+    "field": "",
     "id": 0
   },
   {
