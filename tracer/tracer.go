@@ -170,8 +170,6 @@ type Config struct {
 	KernelVersionCheck bool
 	// VerboseMode indicates whether to enable verbose output of eBPF tracers.
 	VerboseMode bool
-	// InstrumentCudaLaunch determines whether to instrument calls to `cudaLaunchKernel`.
-	InstrumentCudaLaunch bool
 	// TraceBufferSizeMultiplier scales the trace_events perf buffer size.
 	// Useful for high-throughput scenarios like GPU profiling. Defaults to 1.
 	TraceBufferSizeMultiplier int
@@ -468,7 +466,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	if cfg.OffCPUThreshold > 0 ||
 		len(cfg.ProbeLinks) > 0 ||
 		cfg.LoadProbe ||
-		cfg.InstrumentCudaLaunch {
+		cfg.IncludeTracers.Has(types.CUDATracer) {
 		// Load the tail call destinations if any kind of event profiling is enabled.
 		if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], tailCallProgs,
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
