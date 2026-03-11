@@ -153,6 +153,8 @@ func TestCUDAVerifierSingleShot(t *testing.T) {
 	defer util.SetTestOnlyMultiUprobeSupport(nil)
 
 	probes := parseProbes(t)
+
+	testutils.InitializeMetrics()
 	tr, ebpfHandler, cancel := createTracer(t)
 	defer tr.Close()
 	defer cancel()
