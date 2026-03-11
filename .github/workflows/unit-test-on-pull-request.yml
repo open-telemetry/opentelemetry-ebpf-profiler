@@ -235,7 +235,7 @@ jobs:
 
   distro-qemu-tests:
     name: Distro QEMU tests (${{ matrix.kernel }} ${{ matrix.target_arch }})
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.target_arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 15
     strategy:
       matrix:

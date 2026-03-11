@@ -305,7 +305,7 @@ func runEndToEnd(t *testing.T, multiProbe bool) {
 		t.Log("waiting for initial process sync...")
 		tr.ForceProcessPID(pid)
 		return false
-	}, 15*time.Second, 200*time.Millisecond, "process manager never synced our PID")
+	}, 30*time.Second, 200*time.Millisecond, "process manager never synced our PID")
 
 	// Set up perf reader on the cuda_timing_events map BEFORE the dlopen so we
 	// don't miss any events.
@@ -339,7 +339,7 @@ func runEndToEnd(t *testing.T, multiProbe bool) {
 		t.Logf("waiting for GPU interpreter instance (%d interpreters so far)...", len(instances))
 		tr.ForceProcessPID(pid)
 		return false
-	}, 15*time.Second, 200*time.Millisecond, "GPU interpreter never attached after dlopen")
+	}, 30*time.Second, 200*time.Millisecond, "GPU interpreter never attached after dlopen")
 
 	// Simulate kernel launches and wait for timing events.  Retry the
 	// simulation several times — on slow CI the uprobes may not be fully
@@ -348,8 +348,8 @@ func runEndToEnd(t *testing.T, multiProbe bool) {
 	var rec perf.Record
 
 	const (
-		maxAttempts  = 3
-		pollTimeout  = 5 * time.Second
+		maxAttempts  = 10
+		pollTimeout  = 10 * time.Second
 		pollInterval = 200 * time.Millisecond
 	)
 
