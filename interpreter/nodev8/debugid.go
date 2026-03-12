@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -60,7 +61,7 @@ func readFileTail(path string, maxBytes int64) ([]byte, error) {
 // extractDebugIDFromFile reads the debug ID magic comment from a JavaScript file's tail.
 func extractDebugIDFromFile(pid libpf.PID, filePath string) libpf.FileID {
 	filePath = strings.TrimPrefix(filePath, "file://")
-	containerPath := fmt.Sprintf("/proc/%d/root%s", pid, filePath)
+	containerPath := filepath.Join(fmt.Sprintf("/proc/%d/root", pid), filePath)
 
 	log.Debugf("V8: extracting debug ID from %s", containerPath)
 
