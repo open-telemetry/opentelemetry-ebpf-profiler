@@ -511,7 +511,8 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		// [scopes_data]	@ _immutable_data + nmethod._scopes_data_begin	\ arrays we need
 		// [scopes_pcs]		@ _immutable_data + nmethod._scopes_pcs_offset	/ for inlining info
 		// [speculations]	@ _immutable_data + nmethod._speculations_offset
-		// [end]		@ _immutable_Data + nmethod._immutable_data_size
+		// [end]		    @ _immutable_data + nmethod._immutable_data_size
+		// [end]            @ _immutable_data + min(_immutable_data_size, _immutable_data_ref_count_offset)  (JDK 26+)
 		// ...
 		// speculations presence depends on JDK build, and is not used. Instead the scopes
 		// end is determined from immutable data size.
@@ -535,6 +536,15 @@ func (d *hotspotInstance) getJITInfo(addr libpf.Address, addrCheck uint32) (
 		scopesDataOff := npsr.PtrDiff32(nmethod, vms.Nmethod.ScopesDataOffset)
 		immutableDataPtr := npsr.Ptr(nmethod, vms.Nmethod.ImmutableData)
 		immutableDataSize := npsr.Uint32(nmethod, vms.Nmethod.ImmutableDataSize)
+
+		// JDK26+: immutable data ends at ref_count offset, not at immutable_data_size
+		if vms.Nmethod.ImmutableDataRefCountOff != 0 {
+			immutableDataRefCountOff := npsr.Uint32(nmethod, vms.Nmethod.ImmutableDataRefCountOff)
+			if immutableDataRefCountOff < immutableDataSize {
+				immutableDataSize = immutableDataRefCountOff
+			}
+		}
+
 		if immutableDataSize >= maxMetadataSize {
 			return nil, fmt.Errorf("unreasonably large immutable data region: %d bytes",
 				immutableDataSize)
