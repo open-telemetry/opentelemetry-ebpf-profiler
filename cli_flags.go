@@ -7,6 +7,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/peterbourgon/ff/v3"
@@ -80,13 +82,35 @@ var (
 		"Expected format: probe_type:target[:symbol]. probe_type can be kprobe, kretprobe, uprobe, or uretprobe."
 	loadProbeHelper = "Load generic eBPF program that can be attached externally to " +
 		"various user or kernel space hooks."
+	targetPidsHelp = "Comma-separated list of host PIDs to profile. When set, only these PIDs are instrumented. Empty means profile all."
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
 // to the same flagset.
 
+func parseTargetPIDs(s string) []int {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]int, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		n, err := strconv.Atoi(p)
+		if err != nil || n <= 0 {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
 func parseArgs() (*controller.Config, error) {
 	var args controller.Config
+	var targetPidsStr string
 
 	fs := flag.NewFlagSet("ebpf-profiler", flag.ExitOnError)
 
@@ -148,13 +172,15 @@ func parseArgs() (*controller.Config, error) {
 
 	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
 
+	fs.StringVar(&targetPidsStr, "target-pids", "", targetPidsHelp)
+
 	fs.Usage = func() {
 		fs.PrintDefaults()
 	}
 
 	args.Fs = fs
 
-	return &args, ff.Parse(fs, os.Args[1:],
+	if err := ff.Parse(fs, os.Args[1:],
 		ff.WithEnvVarPrefix("OTEL_PROFILING_AGENT"),
 		ff.WithConfigFileFlag("config"),
 		ff.WithConfigFileParser(ff.PlainParser),
@@ -162,5 +188,11 @@ func parseArgs() (*controller.Config, error) {
 		// does not recognize.
 		ff.WithIgnoreUndefined(true),
 		ff.WithAllowMissingConfigFile(true),
-	)
+	); err != nil {
+		return nil, err
+	}
+	if targetPidsStr != "" {
+		args.TargetPIDs = parseTargetPIDs(targetPidsStr)
+	}
+	return &args, nil
 }

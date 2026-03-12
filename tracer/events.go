@@ -49,6 +49,9 @@ func (t *Tracer) processPIDEvents(ctx context.Context) {
 	for {
 		select {
 		case pidTid := <-t.pidEvents:
+			if !t.isTargetPID(pidTid.PID()) {
+				continue
+			}
 			t.processManager.SynchronizeProcess(process.New(pidTid.PID(), pidTid.TID()))
 		case <-pidCleanupTicker.C:
 			t.processManager.CleanupPIDs()

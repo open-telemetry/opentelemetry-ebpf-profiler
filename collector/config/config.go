@@ -40,6 +40,12 @@ type Config struct {
 	NoKernelVersionCheck   bool          `mapstructure:"no_kernel_version_check"`
 	MaxGRPCRetries         uint32        `mapstructure:"max_grpc_retries"`
 	MaxRPCMsgSize          int           `mapstructure:"max_rpc_msg_size"`
+	// TargetPIDs, when non-empty, restricts instrumentation to these host PIDs only. Empty means instrument all.
+	TargetPIDs []int `mapstructure:"target_pids"`
+	// TargetPIDsFile, when non-empty, is a path to a file that lists target PIDs (one per line or comma-separated).
+	// The controller watches this file and calls UpdateTargetPIDs with the parsed list on change. Used when an
+	// external process (e.g. Odiglet) writes the current set of PIDs to instrument.
+	TargetPIDsFile string `mapstructure:"target_pids_file"`
 }
 
 // Validate validates the config.

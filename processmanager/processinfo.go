@@ -689,6 +689,27 @@ func (pm *ProcessManager) CleanupPIDs() {
 	}
 }
 
+// TrackedPIDs returns a copy of the PIDs currently tracked by the ProcessManager
+// (present in pidToProcessInfo). Used by the tracer to determine which PIDs to
+// revoke when the target PID allowlist is updated.
+func (pm *ProcessManager) TrackedPIDs() []libpf.PID {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	out := make([]libpf.PID, 0, len(pm.pidToProcessInfo))
+	for pid := range pm.pidToProcessInfo {
+		out = append(out, pid)
+	}
+	return out
+}
+
+// RemoveFromInstrumentation tears down instrumentation for the given PID the same
+// way as process exit: removes from pid_page_to_mapping_info, records exit, and
+// lets ProcessedUntil clean in-memory state. Use this when the PID is no longer
+// in the target allowlist (process may still be live).
+func (pm *ProcessManager) RemoveFromInstrumentation(pid libpf.PID) {
+	pm.processPIDExit(pid)
+}
+
 // MetaForPID returns the process metadata for given PID.
 func (pm *ProcessManager) MetaForPID(pid libpf.PID) process.ProcessMeta {
 	pm.mu.RLock()

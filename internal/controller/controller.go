@@ -1,9 +1,12 @@
 package controller // import "go.opentelemetry.io/ebpf-profiler/internal/controller"
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"math"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -109,6 +112,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		ProbeLinks:             c.config.ProbeLinks,
 		LoadProbe:              c.config.LoadProbe,
 		ExecutableReporter:     c.config.ExecutableReporter,
+		TargetPIDs:             c.config.TargetPIDs,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
@@ -164,6 +168,10 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
+	if c.config.TargetPIDsFile != "" {
+		go c.runTargetPIDsFileWatcher(ctx, trc)
+	}
+
 	return nil
 }
 
@@ -212,4 +220,70 @@ func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer)
 	}()
 
 	return nil
+}
+
+const targetPIDsFilePollInterval = 10 * time.Second
+
+// runTargetPIDsFileWatcher polls the configured file and updates the tracer's target PIDs on change.
+// File format: one PID per line, or comma-separated (or both). Empty/missing file means instrument all.
+func (c *Controller) runTargetPIDsFileWatcher(ctx context.Context, trc *tracer.Tracer) {
+	path := c.config.TargetPIDsFile
+	var lastMod time.Time
+	ticker := time.NewTicker(targetPIDsFilePollInterval)
+	defer ticker.Stop()
+
+	apply := func() {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				log.Debugf("target_pids_file read failed: %v", err)
+			}
+			trc.UpdateTargetPIDs(nil)
+			return
+		}
+		pids := parsePIDsFromFileContent(data)
+		trc.UpdateTargetPIDs(pids)
+		log.Debugf("target_pids_file applied %d PIDs from %s", len(pids), path)
+	}
+
+	// Apply once immediately, then on ticker when file mod time changes
+	apply()
+	if info, err := os.Stat(path); err == nil {
+		lastMod = info.ModTime()
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			info, err := os.Stat(path)
+			if err != nil {
+				continue
+			}
+			if info.ModTime().After(lastMod) {
+				lastMod = info.ModTime()
+				apply()
+			}
+		}
+	}
+}
+
+// parsePIDsFromFileContent parses PIDs from file content: newline and comma separated, positive integers only.
+func parsePIDsFromFileContent(data []byte) []int {
+	var pids []int
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	for scanner.Scan() {
+		for _, p := range strings.Split(scanner.Text(), ",") {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			n, err := strconv.Atoi(p)
+			if err != nil || n <= 0 {
+				continue
+			}
+			pids = append(pids, n)
+		}
+	}
+	return pids
 }

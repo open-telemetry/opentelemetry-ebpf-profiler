@@ -129,6 +129,11 @@ type Tracer struct {
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
 	doneOnce sync.Once
+
+	// targetPIDs, when non-nil and non-empty, restricts instrumentation to these PIDs.
+	// Nil or empty map means instrument all (default). Protected by targetPIDsMu.
+	targetPIDsMu sync.RWMutex
+	targetPIDs   map[libpf.PID]struct{}
 }
 
 // Done returns a channel that is closed when the tracer encounters an
@@ -183,6 +188,9 @@ type Config struct {
 	// LoadProbe indicates whether the generic eBPF program should be loaded
 	// without being attached to something.
 	LoadProbe bool
+	// TargetPIDs, when non-empty, restricts instrumentation to these host PIDs only.
+	// Nil or empty means instrument all processes (default).
+	TargetPIDs []int
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -281,6 +289,14 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
 		done:                   make(chan libpf.Void),
+	}
+	if len(cfg.TargetPIDs) > 0 {
+		tracer.targetPIDs = make(map[libpf.PID]struct{}, len(cfg.TargetPIDs))
+		for _, pid := range cfg.TargetPIDs {
+			if pid > 0 {
+				tracer.targetPIDs[libpf.PID(pid)] = struct{}{}
+			}
+		}
 	}
 
 	// Use an optimized version if available
@@ -1417,9 +1433,100 @@ func (t *Tracer) AttachProbes(probes []string) error {
 }
 
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
+	if !t.isTargetPID(bpfTrace.PID) {
+		bpfTrace.KernelFrames = bpfTrace.KernelFrames[0:0]
+		t.tracePool.Put(bpfTrace)
+		return
+	}
 	t.processManager.HandleTrace(bpfTrace)
 
 	// Reclain the EbpfTrace
 	bpfTrace.KernelFrames = bpfTrace.KernelFrames[0:0]
 	t.tracePool.Put(bpfTrace)
+}
+
+// isTargetPID returns true if the PID should be instrumented: either no allowlist
+// is set (instrument all) or the PID is in the allowlist.
+func (t *Tracer) isTargetPID(pid libpf.PID) bool {
+	t.targetPIDsMu.RLock()
+	defer t.targetPIDsMu.RUnlock()
+	if t.targetPIDs == nil || len(t.targetPIDs) == 0 {
+		return true
+	}
+	_, ok := t.targetPIDs[pid]
+	return ok
+}
+
+// UpdateTargetPIDs replaces the target PID allowlist and revokes instrumentation for
+// any currently tracked PID not in the new set. Pass nil or empty to instrument all.
+// For incremental updates (add/remove individual PIDs), use AddTargetPIDs and RemoveTargetPIDs
+// to align with the OBI dynamic PID API (see opentelemetry-ebpf-instrumentation PR #1388).
+func (t *Tracer) UpdateTargetPIDs(newSet []int) {
+	t.targetPIDsMu.Lock()
+	if len(newSet) == 0 {
+		t.targetPIDs = nil
+		t.targetPIDsMu.Unlock()
+		return
+	}
+	allowlist := make(map[libpf.PID]struct{}, len(newSet))
+	for _, pid := range newSet {
+		if pid > 0 {
+			allowlist[libpf.PID(pid)] = struct{}{}
+		}
+	}
+	t.targetPIDs = allowlist
+	t.targetPIDsMu.Unlock()
+
+	for _, pid := range t.processManager.TrackedPIDs() {
+		t.targetPIDsMu.RLock()
+		_, inSet := t.targetPIDs[pid]
+		t.targetPIDsMu.RUnlock()
+		if !inSet {
+			t.processManager.RemoveFromInstrumentation(pid)
+		}
+	}
+}
+
+// AddTargetPIDs adds PIDs to the target allowlist. If the allowlist was empty (instrument all),
+// this switches to allowlist mode and only these PIDs are instrumented. Otherwise the PIDs
+// are merged with the existing set. Aligns with OBI's dynamic PID API (PR #1388).
+func (t *Tracer) AddTargetPIDs(pids ...int) {
+	if len(pids) == 0 {
+		return
+	}
+	t.targetPIDsMu.Lock()
+	if t.targetPIDs == nil {
+		t.targetPIDs = make(map[libpf.PID]struct{}, len(pids))
+	}
+	for _, pid := range pids {
+		if pid > 0 {
+			t.targetPIDs[libpf.PID(pid)] = struct{}{}
+		}
+	}
+	t.targetPIDsMu.Unlock()
+}
+
+// RemoveTargetPIDs removes PIDs from the target allowlist and revokes instrumentation for
+// each of those PIDs (same as OBI synthetic delete → attacher teardown). If the allowlist
+// becomes empty, behavior reverts to instrument all. Aligns with OBI's dynamic PID API (PR #1388).
+func (t *Tracer) RemoveTargetPIDs(pids ...int) {
+	if len(pids) == 0 {
+		return
+	}
+	t.targetPIDsMu.Lock()
+	for _, pid := range pids {
+		if pid > 0 {
+			delete(t.targetPIDs, libpf.PID(pid))
+		}
+	}
+	if len(t.targetPIDs) == 0 {
+		t.targetPIDs = nil
+	}
+	t.targetPIDsMu.Unlock()
+
+	for _, pid := range pids {
+		if pid > 0 {
+			t.processManager.RemoveFromInstrumentation(libpf.PID(pid))
+		}
+	}
 }
