@@ -1,8 +1,8 @@
 #!/bin/bash
 set -ex
 
-# Build an initramfs containing test binaries, parcagpu, and a debootstrap
-# rootfs.  The resulting initramfs is arch-specific but kernel-independent.
+# Build an initramfs containing test binaries, shared libraries, and busybox.
+# The resulting initramfs is arch-specific but kernel-independent.
 #
 # In CI the build runs on native runners (no cross-compilation needed).
 # For local use, cross-compilation is supported via GOARCH + CC overrides.
@@ -16,10 +16,7 @@ case "$(uname -m)" in
     *)       _default_arch="x86_64" ;;
 esac
 QEMU_ARCH="${QEMU_ARCH:-$_default_arch}"
-DISTRO="${DISTRO:-ubuntu}"
-RELEASE="${RELEASE:-jammy}"
 PARCAGPU_DIR="${PARCAGPU_DIR:-parcagpu-lib}"
-CACHE_DIR="${CACHE_DIR:-/tmp/debootstrap-cache}"
 
 OUTPUT="${1:-initramfs.gz}"
 # Make output path absolute.
@@ -32,13 +29,7 @@ ROOTFS_DIR=$(mktemp -d /tmp/distro-qemu-rootfs.XXXXXX)
 BUILD_DIR=$(mktemp -d /tmp/distro-qemu-build.XXXXXX)
 
 cleanup() {
-    if [ -d "$ROOTFS_DIR" ]; then
-        findmnt -o TARGET -n -l | grep "^${ROOTFS_DIR}" | sort -r | while read -r mp; do
-            sudo umount "$mp" || sudo umount -l "$mp" || true
-        done
-        sudo rm -rf "$ROOTFS_DIR"
-    fi
-    rm -rf "$BUILD_DIR"
+    rm -rf "$ROOTFS_DIR" "$BUILD_DIR"
 }
 trap cleanup EXIT
 
@@ -47,37 +38,10 @@ QEMU_ARCH="${QEMU_ARCH}" PARCAGPU_DIR="${PARCAGPU_DIR}" ./download-parcagpu.sh
 
 # Determine architecture names.
 case "$QEMU_ARCH" in
-    x86_64)  DEBOOTSTRAP_ARCH="amd64" ;;
-    aarch64) DEBOOTSTRAP_ARCH="arm64" ;;
+    x86_64)  GOARCH="amd64" ;;
+    aarch64) GOARCH="arm64" ;;
     *)       echo "Unsupported QEMU_ARCH: $QEMU_ARCH"; exit 1 ;;
 esac
-GOARCH=$DEBOOTSTRAP_ARCH
-
-# Choose mirror based on distro and architecture.
-if [[ "$DISTRO" == "ubuntu" ]]; then
-    if [[ "$DEBOOTSTRAP_ARCH" == "arm64" ]]; then
-        MIRROR="http://ports.ubuntu.com/ubuntu-ports/"
-    else
-        MIRROR="https://archive.ubuntu.com/ubuntu/"
-    fi
-else
-    MIRROR="http://deb.debian.org/debian/"
-fi
-
-# Create minimal rootfs with debootstrap.
-echo "Running debootstrap to create $DISTRO $RELEASE rootfs for $DEBOOTSTRAP_ARCH..."
-mkdir -p "$CACHE_DIR"
-if ! sudo debootstrap --variant=minbase \
-    --arch="$DEBOOTSTRAP_ARCH" \
-    --cache-dir="$CACHE_DIR" \
-    --foreign \
-    --include=libstdc++6 \
-    "$RELEASE" "$ROOTFS_DIR" "$MIRROR" ; then
-    echo "Debootstrap failed, log follows."
-    cat "$ROOTFS_DIR/debootstrap/debootstrap.log"
-    exit 1
-fi
-sudo chown -R "$(id -u):$(id -g)" "$ROOTFS_DIR"
 
 # Build test binaries.
 echo "Building test binaries for ${GOARCH}..."
@@ -95,73 +59,102 @@ TEST_PKGS="./interpreter/rtld ./support/usdt/test ./test/cudaverify"
     fi
 )
 
+# --- Build minimal rootfs with busybox ---
+
+echo "Building minimal rootfs with busybox..."
+mkdir -p "$ROOTFS_DIR"/{bin,proc,sys,dev,tmp,usr/local/cuda/lib64}
+
+# Install busybox and create symlinks.
+BUSYBOX=$(command -v busybox)
+cp "$BUSYBOX" "$ROOTFS_DIR/bin/busybox"
+for cmd in sh mount umount dmesg poweroff halt reboot hostname uname \
+           find head tail sleep cat grep cut echo ls mkdir ln; do
+    ln -s busybox "$ROOTFS_DIR/bin/$cmd"
+done
+
+# copy_lib_deps: copy shared library dependencies of a binary into the rootfs,
+# preserving the original directory structure.
+copy_lib_deps() {
+    local binary="$1"
+    ldd "$binary" 2>/dev/null | grep -oP '/\S+' | while read -r lib; do
+        [ -f "$lib" ] || continue
+        # Resolve symlinks to get the real file.
+        local real_lib
+        real_lib=$(readlink -f "$lib")
+        local dir
+        dir=$(dirname "$lib")
+        mkdir -p "$ROOTFS_DIR$dir"
+        # Copy the real file if not already present.
+        if [ ! -f "$ROOTFS_DIR$real_lib" ]; then
+            mkdir -p "$ROOTFS_DIR$(dirname "$real_lib")"
+            cp "$real_lib" "$ROOTFS_DIR$real_lib"
+        fi
+        # Recreate the symlink if the original path differs from the real path.
+        if [ "$lib" != "$real_lib" ]; then
+            ln -sf "$real_lib" "$ROOTFS_DIR$lib"
+        fi
+    done
+}
+
 # Copy test binaries and parcagpu .so into rootfs.
 cp "${BUILD_DIR}"/*.test "$ROOTFS_DIR/"
 cp "${PARCAGPU_DIR}/libparcagpucupti.so" "$ROOTFS_DIR/"
 
-# Copy stub libcupti .so into the RUNPATH so the dynamic linker resolves
-# the DT_NEEDED entry without a real CUDA install.
-mkdir -p "$ROOTFS_DIR/usr/local/cuda/lib64"
+# Copy stub libcupti .so and libstdc++ into the RUNPATH so dlopen of
+# libparcagpucupti.so can resolve its DT_NEEDED entries.
 for stub in "${PARCAGPU_DIR}"/libcupti.so*; do
     [ -f "$stub" ] && cp "$stub" "$ROOTFS_DIR/usr/local/cuda/lib64/"
 done
+LIBSTDCXX=$(find /lib* /usr/lib* -name 'libstdc++.so.6' 2>/dev/null | head -1)
+if [ -n "$LIBSTDCXX" ]; then
+    local_real=$(readlink -f "$LIBSTDCXX")
+    cp "$local_real" "$ROOTFS_DIR/usr/local/cuda/lib64/$(basename "$local_real")"
+    ln -sf "$(basename "$local_real")" "$ROOTFS_DIR/usr/local/cuda/lib64/libstdc++.so.6"
+    echo "Copied libstdc++ to RUNPATH"
+fi
 
-# Copy libstdc++ into the RUNPATH so the dynamic linker finds it.
-# With --foreign debootstrap the .deb is downloaded but not extracted, so we
-# pull the .so directly from the .deb archive.
-LIBSTDCXX_DEB=$(find "$ROOTFS_DIR" -name 'libstdc++6_*.deb' -type f | head -1)
-if [ -n "$LIBSTDCXX_DEB" ]; then
-    EXTRACT_TMP=$(mktemp -d)
-    dpkg-deb -x "$LIBSTDCXX_DEB" "$EXTRACT_TMP"
-    LIBSTDCXX_REAL=$(find "$EXTRACT_TMP" -name 'libstdc++.so.6.*' ! -name '*.py' -type f | head -1)
-    if [ -n "$LIBSTDCXX_REAL" ]; then
-        cp "$LIBSTDCXX_REAL" "$ROOTFS_DIR/usr/local/cuda/lib64/"
-        ln -sf "$(basename "$LIBSTDCXX_REAL")" "$ROOTFS_DIR/usr/local/cuda/lib64/libstdc++.so.6"
-        echo "Copied $(basename "$LIBSTDCXX_REAL") + symlink to RUNPATH from deb"
-    fi
-    rm -rf "$EXTRACT_TMP"
-else
-    LIBSTDCXX_REAL=$(find "$ROOTFS_DIR" -name 'libstdc++.so.6.*' ! -name '*.py' -type f | head -1)
-    if [ -n "$LIBSTDCXX_REAL" ]; then
-        cp "$LIBSTDCXX_REAL" "$ROOTFS_DIR/usr/local/cuda/lib64/"
-        ln -sf "$(basename "$LIBSTDCXX_REAL")" "$ROOTFS_DIR/usr/local/cuda/lib64/libstdc++.so.6"
-        echo "Copied $(basename "$LIBSTDCXX_REAL") + symlink to RUNPATH"
-    fi
+# Copy shared library deps for all test binaries, parcagpu, and busybox.
+for bin in "${BUILD_DIR}"/*.test "${PARCAGPU_DIR}/libparcagpucupti.so" "$ROOTFS_DIR/bin/busybox"; do
+    copy_lib_deps "$bin"
+done
+
+# Ensure libm.so is present (rtld test does runtime dlopen of libm).
+LIBM=$(find /lib* /usr/lib* -name 'libm.so.6' 2>/dev/null | head -1)
+if [ -n "$LIBM" ]; then
+    copy_lib_deps "$LIBM"
+    local_dir=$(dirname "$LIBM")
+    mkdir -p "$ROOTFS_DIR$local_dir"
+    [ -f "$ROOTFS_DIR$LIBM" ] || cp "$(readlink -f "$LIBM")" "$ROOTFS_DIR$LIBM"
+fi
+
+# Copy ld.so into the rootfs (needed as the ELF interpreter).
+LDSO=$(readelf -l "${BUILD_DIR}/rtld.test" 2>/dev/null \
+    | sed -n 's|.*\[\(.*\)\]|\1|p' | head -1)
+if [ -n "$LDSO" ] && [ -f "$LDSO" ]; then
+    mkdir -p "$ROOTFS_DIR$(dirname "$LDSO")"
+    cp "$(readlink -f "$LDSO")" "$ROOTFS_DIR$LDSO"
 fi
 
 echo "Test binary dependencies:"
 ldd "${BUILD_DIR}/rtld.test" || true
 
 # Create init script.
-cat << 'EOF' > "$ROOTFS_DIR/init"
+cat << 'INIT_EOF' > "$ROOTFS_DIR/init"
 #!/bin/sh
+export PATH=/bin
+
 echo "===== Test Environment ====="
 echo "Kernel: $(uname -r)"
-echo "Hostname: $(hostname)"
-
-# Find and display ld.so info
-LDSO=$(find /lib* /usr/lib* -name 'ld-linux*' -o -name 'ld-*.so*' 2>/dev/null | head -1)
-echo "ld.so location: $LDSO"
-if [ -n "$LDSO" ]; then
-    echo "ld.so version: $($LDSO --version | head -1)"
-fi
-
-# Find libm for dlopen test
-LIBM=$(find /lib* /usr/lib* -name 'libm.so*' 2>/dev/null | head -1)
-echo "libm.so location: $LIBM"
-
-echo "================================="
 
 # Mount required filesystems
 mount -t proc proc /proc 2>/dev/null || true
 mount -t sysfs sys /sys 2>/dev/null || true
 mount -t debugfs debugfs /sys/kernel/debug 2>/dev/null || true
 
-# Rebuild ld.so cache so the linker finds libraries in multiarch paths.
-ldconfig 2>/dev/null || true
-
 # Enable debug logging
 export DEBUG_TEST=1
+# Help the dynamic linker find libs in the CUDA RUNPATH.
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64
 
 # Run the tests
 echo ""
@@ -185,7 +178,7 @@ sleep 1
 echo o > /proc/sysrq-trigger 2>/dev/null
 sleep 1
 poweroff -f 2>/dev/null || halt -f
-EOF
+INIT_EOF
 chmod +x "$ROOTFS_DIR/init"
 
 # Pack initramfs.

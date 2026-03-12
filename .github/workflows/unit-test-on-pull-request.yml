@@ -247,7 +247,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y --no-install-recommends debootstrap systemtap-sdt-dev
+          sudo apt-get install -y --no-install-recommends busybox-static
       - name: Get parcagpu image digest
         id: parcagpu-digest
         run: |
