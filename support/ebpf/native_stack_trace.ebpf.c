@@ -405,21 +405,28 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
     // the previous FP address if any.
     state->cfa = cfa = unwind_calc_register_with_deref(
       state, info->baseReg, param, (info->flags & UNWIND_FLAG_DEREF_CFA) != 0);
-    u64 fpa = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
 
-    if (fpa) {
-      bpf_probe_read_user(&state->fp, sizeof(state->fp), (void *)fpa);
-    } else if (info->baseReg == UNWIND_REG_FP) {
-      // FP used for recovery, but no new FP value received, clear FP
-      state->fp = 0;
+    u64 aux = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
+
+    if (info->flags & UNWIND_FLAG_REGISTER_RA) {
+      state->pc = aux;
+    } else {
+      DEBUG_PRINT("info: flags=%x auxBaseReg=%u", info->flags, info->auxBaseReg);
+      if (aux) {
+        bpf_probe_read_user(&state->fp, sizeof(state->fp), (void *)aux);
+      } else if (info->baseReg == UNWIND_REG_FP) {
+        // FP used for recovery, but no new FP value received, clear FP
+        state->fp = 0;
+      }
+
+      if (!cfa || bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)(cfa - 8))) {
+      err_native_pc_read:
+        increment_metric(metricID_UnwindNativeErrPCRead);
+        return ERR_NATIVE_PC_READ;
+      }
     }
   }
 
-  if (!cfa || bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)(cfa - 8))) {
-  err_native_pc_read:
-    increment_metric(metricID_UnwindNativeErrPCRead);
-    return ERR_NATIVE_PC_READ;
-  }
   state->sp = cfa;
   unwinder_mark_nonleaf_frame(state);
 frame_ok:
