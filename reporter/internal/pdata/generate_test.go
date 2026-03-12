@@ -203,7 +203,7 @@ func TestFunctionTableOrder(t *testing.T) {
 			require.NoError(t, err)
 			tree := make(samples.TraceEventsTree)
 			if len(tt.events) > 0 {
-				tree[samples.ResourceKey{Pid: 1}] = tt.events
+				tree[samples.ResourceKey{Pid: 1}] = samples.ResourceToProfiles{Events: tt.events}
 			}
 			res, _ := testGenerate(d, tree, tt.name, "version")
 			require.Equal(t, tt.expectedResourceProfiles, res.ResourceProfiles().Len())
@@ -246,7 +246,7 @@ func TestProfileDuration(t *testing.T) {
 		{
 			name: "samples within collection window",
 			tree: samples.TraceEventsTree{
-				samples.ResourceKey{Pid: 1}: map[libpf.Origin]samples.HashToEvents{
+				samples.ResourceKey{Pid: 1}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.HashToEvents{
 					support.TraceOriginSampling: map[libpf.TraceHash]*samples.TraceEvents{
 						{}: {
 							// Timestamps within the collection window (1000-1060)
@@ -257,14 +257,14 @@ func TestProfileDuration(t *testing.T) {
 							},
 						},
 					},
-				},
-				samples.ResourceKey{Pid: 2}: map[libpf.Origin]samples.HashToEvents{
+				}},
+				samples.ResourceKey{Pid: 2}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.HashToEvents{
 					support.TraceOriginSampling: map[libpf.TraceHash]*samples.TraceEvents{
 						{}: {
 							Timestamps: []uint64{uint64(time.Unix(1040, 0).UnixNano())},
 						},
 					},
-				},
+				}},
 			},
 			expectedTime:     testProfileTime,
 			expectedDuration: testProfileDuration,
@@ -272,7 +272,7 @@ func TestProfileDuration(t *testing.T) {
 		{
 			name: "adjusted start time for buffered samples",
 			tree: samples.TraceEventsTree{
-				samples.ResourceKey{Pid: 1}: map[libpf.Origin]samples.HashToEvents{
+				samples.ResourceKey{Pid: 1}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.HashToEvents{
 					support.TraceOriginSampling: {
 						{}: {
 							Frames: newTestFrames(false),
@@ -280,7 +280,7 @@ func TestProfileDuration(t *testing.T) {
 							Timestamps: []uint64{uint64(time.Unix(990, 0).UnixNano())},
 						},
 					},
-				},
+				}},
 			},
 			expectedTime:     pcommon.Timestamp(time.Unix(990, 0).UnixNano()),
 			expectedDuration: uint64(testCollectionEnd.Sub(time.Unix(990, 0)).Nanoseconds()),
@@ -288,7 +288,7 @@ func TestProfileDuration(t *testing.T) {
 		{
 			name: "adjusted across multiple containers",
 			tree: samples.TraceEventsTree{
-				samples.ResourceKey{Pid: 1, ContainerID: libpf.Intern("container1")}: map[libpf.Origin]samples.HashToEvents{
+				samples.ResourceKey{Pid: 1, ContainerID: libpf.Intern("container1")}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.HashToEvents{
 					support.TraceOriginSampling: {
 						{}: {
 							Frames: singleFrameTrace(libpf.GoFrame, mapping, 0x10, "func1", libpf.NullString, 1),
@@ -296,8 +296,8 @@ func TestProfileDuration(t *testing.T) {
 							Timestamps: []uint64{uint64(time.Unix(985, 0).UnixNano())},
 						},
 					},
-				},
-				samples.ResourceKey{Pid: 2, ContainerID: libpf.Intern("container2")}: map[libpf.Origin]samples.HashToEvents{
+				}},
+				samples.ResourceKey{Pid: 2, ContainerID: libpf.Intern("container2")}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.HashToEvents{
 					support.TraceOriginSampling: {
 						{}: {
 							Frames: singleFrameTrace(libpf.GoFrame, mapping, 0x20, "func2", libpf.NullString, 2),
@@ -305,7 +305,7 @@ func TestProfileDuration(t *testing.T) {
 							Timestamps: []uint64{uint64(time.Unix(995, 0).UnixNano())},
 						},
 					},
-				},
+				}},
 			},
 			expectedTime:     pcommon.Timestamp(time.Unix(985, 0).UnixNano()),
 			expectedDuration: uint64(testCollectionEnd.Sub(time.Unix(985, 0)).Nanoseconds()),
@@ -386,14 +386,16 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 				Frames: singleFrameTrace(libpf.GoFrame, mapping,
 					0x10, funcName, filePath, 42),
 				Timestamps: []uint64{uint64(time.Unix(1010, 0).UnixNano())},
-				EnvVars: map[libpf.String]libpf.String{
-					libpf.Intern("FOO"): libpf.Intern("BAR"),
-				},
 			},
 		},
 	}
 	tree := samples.TraceEventsTree{
-		resourceKey: events,
+		resourceKey: samples.ResourceToProfiles{
+			EnvVars: map[libpf.String]libpf.String{
+				libpf.Intern("FOO"): libpf.Intern("BAR"),
+			},
+			Events: events,
+		},
 	}
 
 	profiles, err := testGenerate(d, tree, "agent", "v1")
@@ -414,25 +416,12 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 	assert.Equal(t, testProfileDuration, prof.DurationNano())
 
 	t.Run("Check environment variable attribute", func(t *testing.T) {
-		foundFOOKey := false
-		foundBarValue := false
-
-		dic := profiles.Dictionary()
-		for _, attr := range dic.AttributeTable().All() {
-			key := dic.StringTable().At(int(attr.KeyStrindex()))
-			value := attr.Value()
-			// Check if this is an environment variable attribute
-			if key == "process.environment_variable.FOO" {
-				foundFOOKey = true
-				if value.Type() == pcommon.ValueTypeStr && value.Str() == "BAR" {
-					foundBarValue = true
-				}
-			}
-		}
-		assert.True(t, foundFOOKey,
-			"Attribute 'process.environment_variable.FOO' should be in the attribute table")
-		assert.True(t, foundBarValue,
-			"Environment variable value 'bar' should be in the attribute table")
+		rp := profiles.ResourceProfiles().At(0)
+		val, exists := rp.Resource().Attributes().Get("process.environment_variable.FOO")
+		assert.True(t, exists,
+			"Attribute 'process.environment_variable.FOO' should be in the resource attributes")
+		assert.Equal(t, "BAR", val.Str(),
+			"Environment variable value 'BAR' should be in the resource attributes")
 	})
 }
 
@@ -487,8 +476,8 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 		},
 	}
 	tree := samples.TraceEventsTree{
-		resourceKey1: events1,
-		resourceKey2: events2,
+		resourceKey1: samples.ResourceToProfiles{Events: events1},
+		resourceKey2: samples.ResourceToProfiles{Events: events2},
 	}
 
 	profiles, err := testGenerate(d, tree, "agent", "v2")
@@ -549,7 +538,7 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 		},
 	}
 	tree := samples.TraceEventsTree{
-		resourceKey: events,
+		resourceKey: samples.ResourceToProfiles{Events: events},
 	}
 
 	profiles, err := testGenerate(d, tree, "agent", "v3")
@@ -619,7 +608,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 		},
 	}
 	tree := samples.TraceEventsTree{
-		resourceKey: events,
+		resourceKey: samples.ResourceToProfiles{Events: events},
 	}
 
 	profiles, err := testGenerate(d, tree, "agent", "v1")
@@ -742,7 +731,7 @@ func TestStackTableOrder(t *testing.T) {
 			d, err := New(100, nil)
 			require.NoError(t, err)
 			tree := make(samples.TraceEventsTree)
-			tree[samples.ResourceKey{}] = tt.events
+			tree[samples.ResourceKey{}] = samples.ResourceToProfiles{Events: tt.events}
 			res, _ := testGenerate(d, tree, tt.name, "version")
 
 			dic := res.Dictionary()
@@ -784,7 +773,7 @@ func TestGenerate_Validate(t *testing.T) {
 		},
 	}
 	tree := samples.TraceEventsTree{
-		resourceKey: events,
+		resourceKey: samples.ResourceToProfiles{Events: events},
 	}
 
 	profiles, err := testGenerate(d, tree, "agent", "v1")

@@ -37,7 +37,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	// Find oldest sample timestamp across all resources to handle buffered samples.
 	adjustedStartTime := collectionStartTime
 	for _, resourceToEvents := range tree {
-		for _, traceEvents := range resourceToEvents {
+		for _, traceEvents := range resourceToEvents.Events {
 			for _, traceInfo := range traceEvents {
 				for _, ts := range traceInfo.Timestamps {
 					sampleTime := time.Unix(0, int64(ts))
@@ -76,13 +76,13 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 	attrMgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
 
-	for resource, originToEvents := range tree {
-		if len(originToEvents) == 0 {
+	for resource, toEvents := range tree {
+		if len(toEvents.Events) == 0 {
 			continue
 		}
 
 		rp := profiles.ResourceProfiles().AppendEmpty()
-		setResourceAttributes(rp.Resource().Attributes(), resource)
+		setResourceAttributes(rp.Resource().Attributes(), resource, toEvents.EnvVars)
 		rp.SetSchemaUrl(semconv.SchemaURL)
 
 		sp := rp.ScopeProfiles().AppendEmpty()
@@ -95,15 +95,15 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			support.TraceOriginOffCPU,
 			support.TraceOriginProbe,
 		} {
-			if len(originToEvents[origin]) == 0 {
+			if len(toEvents.Events[origin]) == 0 {
 				// Do not append empty profiles.
 				continue
 			}
 
 			prof := sp.Profiles().AppendEmpty()
-			if err := p.setProfile(dic, attrMgr, resource.ExtraMeta,
+			if err := p.setProfile(dic, attrMgr, toEvents.ExtraMeta,
 				stringSet, funcSet, mappingSet, stackSet, locationSet,
-				origin, originToEvents[origin], prof,
+				origin, toEvents.Events[origin], prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
 			}
@@ -251,12 +251,6 @@ func (p *Pdata) setProfile(
 		}
 		sample.SetStackIndex(stackIdx)
 
-		for key, value := range traceInfo.EnvVars {
-			env := semconv.ProcessEnvironmentVariable(key.String(), value.String())
-			attrMgr.AppendOptionalString(
-				sample.AttributeIndices(),
-				env.Key, env.Value.AsString())
-		}
 		for key, value := range traceInfo.Labels {
 			// Once https://github.com/open-telemetry/semantic-conventions/issues/2561
 			// reached an agreement, use the actual OTel SemConv attribute.
@@ -280,7 +274,7 @@ func (p *Pdata) setProfile(
 	return nil
 }
 
-func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey) {
+func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envVars map[libpf.String]libpf.String) {
 	if resource.Comm != libpf.NullString {
 		attrs.PutStr(string(semconv.ThreadNameKey), resource.Comm.String())
 	}
@@ -297,5 +291,9 @@ func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey) {
 
 	if resource.ExecutablePath != libpf.NullString {
 		attrs.PutStr(string(semconv.ProcessExecutablePathKey), resource.ExecutablePath.String())
+	}
+
+	for key, value := range envVars {
+		attrs.PutStr("process.environment_variable."+key.String(), value.String())
 	}
 }

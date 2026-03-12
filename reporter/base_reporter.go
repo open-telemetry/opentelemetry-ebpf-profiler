@@ -70,31 +70,34 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		CPU:            int64(meta.CPU),
 		ProcessName:    meta.ProcessName,
 		ExecutablePath: meta.ExecutablePath,
-		ExtraMeta:      extraMeta,
 	}
 
 	eventsTree := b.traceEvents.WLock()
 	defer b.traceEvents.WUnlock(&eventsTree)
 
 	if _, exists := (*eventsTree)[key]; !exists {
-		(*eventsTree)[key] = make(map[libpf.Origin]samples.HashToEvents)
+		(*eventsTree)[key] = samples.ResourceToProfiles{
+			ExtraMeta: extraMeta,
+			EnvVars:   meta.EnvVars,
+			Events:    make(map[libpf.Origin]samples.HashToEvents),
+		}
 	}
 
-	if _, exists := (*eventsTree)[key][meta.Origin]; !exists {
-		(*eventsTree)[key][meta.Origin] = make(samples.HashToEvents)
+	rtp := (*eventsTree)[key]
+	if _, exists := rtp.Events[meta.Origin]; !exists {
+		rtp.Events[meta.Origin] = make(samples.HashToEvents)
 	}
 
-	if events, exists := (*eventsTree)[key][meta.Origin][trace.Hash]; exists {
+	if events, exists := rtp.Events[meta.Origin][trace.Hash]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
 		events.OffTimes = append(events.OffTimes, meta.OffTime)
 		return nil
 	}
 
-	(*eventsTree)[key][meta.Origin][trace.Hash] = &samples.TraceEvents{
+	rtp.Events[meta.Origin][trace.Hash] = &samples.TraceEvents{
 		Frames:     trace.Frames,
 		Timestamps: []uint64{uint64(meta.Timestamp)},
 		OffTimes:   []int64{meta.OffTime},
-		EnvVars:    meta.EnvVars,
 		Labels:     trace.CustomLabels,
 	}
 	return nil

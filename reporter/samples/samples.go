@@ -26,13 +26,25 @@ type TraceEvents struct {
 	Frames     libpf.Frames
 	Timestamps []uint64 // in nanoseconds
 	OffTimes   []int64  // in nanoseconds
-	EnvVars    map[libpf.String]libpf.String
 	Labels     map[libpf.String]libpf.String
 }
 
 // TraceEventsTree stores samples and their related metadata in a tree-like
 // structure optimized for the OTel Profiling protocol representation.
-type TraceEventsTree map[ResourceKey]map[libpf.Origin]HashToEvents
+type TraceEventsTree map[ResourceKey]ResourceToProfiles
+
+// ResourceToProfiles holds non-comparable information that belong to
+// a resource as well as profiling event data of this resource.
+type ResourceToProfiles struct {
+	EnvVars map[libpf.String]libpf.String
+
+	// ExtraMeta stores extra meta info that may have been produced by a
+	// `SampleAttrProducer` instance. May be nil.
+	ExtraMeta any
+
+	// Events holds the actual profiling information.
+	Events map[libpf.Origin]HashToEvents
+}
 
 type HashToEvents map[libpf.TraceHash]*TraceEvents
 
@@ -54,8 +66,4 @@ type ResourceKey struct {
 	ProcessName libpf.String
 	// Executable path is retrieved from /proc/PID/exe
 	ExecutablePath libpf.String
-
-	// ExtraMeta stores extra meta info that may have been produced by a
-	// `SampleAttrProducer` instance. May be nil.
-	ExtraMeta any
 }
