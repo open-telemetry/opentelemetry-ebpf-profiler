@@ -639,6 +639,25 @@ type ElfReloc *elf.Rela64
 // for the TLS symbol, as well as a best-effort string for the symbol's name
 // it continues until the visitor returns false
 func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
+	checkFunc := func(rela ElfReloc) bool {
+		ty := rela.Info & 0xffff
+		switch f.Machine {
+		case elf.EM_AARCH64:
+			return elf.R_AARCH64(ty) == elf.R_AARCH64_TLSDESC
+		case elf.EM_X86_64:
+			return elf.R_X86_64(ty) == elf.R_X86_64_TLSDESC
+		default:
+			return false
+		}
+	}
+	return f.VisitRelocations(visitor, checkFunc)
+}
+
+// VisitRelocations visits all relocations matching checkFunc and provides the
+// relocation and symbol name to the visitor. The visitor can return false to
+// stop iteration. The checkFunc filters which relocation types to process.
+func (f *File) VisitRelocations(visitor func(ElfReloc, string) bool,
+	checkFunc func(ElfReloc) bool) error {
 	var err error
 	if err = f.LoadSections(); err != nil {
 		return err
@@ -648,7 +667,7 @@ func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
 		section := &f.Sections[i]
 		// NOTE: SHT_REL is not relevant for the archs that we care about
 		if section.Type == elf.SHT_RELA {
-			cont, err := f.visitTLSDescriptorsForSection(visitor, section)
+			cont, err := f.visitRelocationsForSection(visitor, checkFunc, section)
 			if err != nil {
 				return err
 			}
@@ -661,7 +680,8 @@ func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
 	return nil
 }
 
-func (f *File) visitTLSDescriptorsForSection(visitor func(ElfReloc, string) bool,
+func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
+	checkRelocation func(ElfReloc) bool,
 	relaSection *Section,
 ) (bool, error) {
 	if relaSection.Link > uint32(len(f.Sections)) {
@@ -704,9 +724,7 @@ func (f *File) visitTLSDescriptorsForSection(visitor func(ElfReloc, string) bool
 	for i := 0; i < len(relaData); i += relaSz {
 		rela := (*elf.Rela64)(unsafe.Pointer(&relaData[i]))
 
-		ty := rela.Info & 0xffff
-		if !(f.Machine == elf.EM_AARCH64 && elf.R_AARCH64(ty) == elf.R_AARCH64_TLSDESC) &&
-			!(f.Machine == elf.EM_X86_64 && elf.R_X86_64(ty) == elf.R_X86_64_TLSDESC) {
+		if !checkRelocation(rela) {
 			continue
 		}
 

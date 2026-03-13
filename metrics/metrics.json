@@ -2063,5 +2063,12 @@
     "name": "UnwindRubyErrCmeMaxEp",
     "field": "bpf.ruby.errors.read_cme_max_ep",
     "id": 285
+  },
+  {
+    "description": "Number of failures to read TLS variables via the DTV",
+    "type": "counter",
+    "name": "UnwindErrBadDTVRead",
+    "field": "bpf.errors.bad_dtv_read",
+    "id": 286
   }
 ]
