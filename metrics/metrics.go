@@ -211,7 +211,7 @@ func GetDefinitions() []MetricDefinition {
 		panic(fmt.Sprintf("extracting definitions from metrics.json: %v", err))
 	}
 	for i, d := range defs {
-		if d.Field == "" {
+		if d.Field == "" && d.ID != 0 {
 			panic(fmt.Sprintf("metric %d: missing required field", i))
 		}
 	}
