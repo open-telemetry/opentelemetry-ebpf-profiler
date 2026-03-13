@@ -27,17 +27,15 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"os"
 	"path/filepath"
-	"runtime"
 	"runtime/debug"
 	"slices"
 	"syscall"
 	"unsafe"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
-
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfatbuf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
@@ -46,11 +44,6 @@ const (
 	// maxBytesSmallSection is the maximum section size for small libpf
 	// parsed sections (e.g. notes and debug link)
 	maxBytesSmallSection = 4 * 1024
-
-	// maxBytesLargeSection is the maximum section size for large libpf
-	// parsed sections (e.g. symbol tables and string tables; libxul
-	// has about 4MB .dynstr)
-	maxBytesLargeSection = 16 * 1024 * 1024
 )
 
 // List of public errors.
@@ -61,6 +54,9 @@ var (
 
 // File represents an open ELF file
 type File struct {
+	// reference count
+	refs int
+
 	// closer is called internally when resources for this File are to be released
 	closer io.Closer
 
@@ -170,7 +166,7 @@ type Section struct {
 
 // Open opens the named file using os.Open and prepares it for use as an ELF binary.
 func Open(name string) (*File, error) {
-	f, err := mmap.Open(name)
+	f, err := os.Open(name)
 	if err != nil {
 		return nil, err
 	}
@@ -185,11 +181,20 @@ func Open(name string) (*File, error) {
 
 // Close closes the File.
 func (f *File) Close() (err error) {
+	f.refs--
+	if f.refs > 0 {
+		return nil
+	}
 	if f.closer != nil {
 		err = f.closer.Close()
 		f.closer = nil
 	}
 	return err
+}
+
+func (f *File) Take() *File {
+	f.refs++
+	return f
 }
 
 // NewFile creates a new ELF file object that borrows the given reader.
@@ -201,6 +206,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 	loadAddress uint64, hasMusl bool,
 ) (*File, error) {
 	f := &File{
+		refs:       1,
 		elfReader:  r,
 		InsideCore: loadAddress != 0,
 		closer:     closer,
@@ -294,11 +300,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		}
 		switch p.ProgHeader.Type {
 		case elf.PT_DYNAMIC:
-			rdr, err := p.DataReader(maxBytesLargeSection)
-			if err != nil {
-				continue
-			}
-			var dyn elf.Dyn64
+			rdr := p.Open()
 			var bias int64
 			if !hasMusl {
 				// glibc adjusts the PT_DYNAMIC table to contain
@@ -307,6 +309,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 				bias = int64(f.bias)
 			}
 			for {
+				var dyn elf.Dyn64
 				if _, err := rdr.Read(pfunsafe.FromPointer(&dyn)); err != nil {
 					break
 				}
@@ -335,37 +338,6 @@ func newFile(r io.ReaderAt, closer io.Closer,
 	}
 
 	return f, nil
-}
-
-// getString extracts a null terminated string from an ELF string table
-func getString(section []byte, start int) (string, bool) {
-	if start < 0 || start >= len(section) {
-		return "", false
-	}
-	slen := bytes.IndexByte(section[start:], 0)
-	if slen < 0 {
-		return "", false
-	}
-	return string(section[start : start+slen]), true
-}
-
-// NoMmapCloser is a no-op io.Closer which is returned from Take() when
-// the File is not memory mapped.
-type NoMmapCloser libpf.Void
-
-// Close implements io.Closer interface.
-func (_ NoMmapCloser) Close() error {
-	return nil
-}
-
-// Take takes a reference on the backing mmapped data. This allows callers to
-// keep slices returned by Section.Data() and Prog.Data() after File has been
-// GCd. The returned Close() will release the reference on data.
-func (f *File) Take() io.Closer {
-	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
-		return mapping.Take()
-	}
-	return NoMmapCloser{}
 }
 
 // LoadSections loads the ELF file sections
@@ -416,21 +388,18 @@ func (f *File) LoadSections() error {
 	}
 
 	// Load the section name string table
-	strsh := f.Sections[hdr.Shstrndx]
-	strtab, err := strsh.Data(maxBytesLargeSection)
-	if err != nil {
-		return err
-	}
+	strtab := &f.Sections[hdr.Shstrndx]
+	cache := pfatbuf.Cache{}
+	cache.InitName("pfelf.sections", strtab)
 	for i := range f.Sections {
 		sh := &f.Sections[i]
-		var ok bool
-		sh.Name, ok = getString(strtab, int(sections[i].Name))
-		if !ok {
-			return fmt.Errorf("bad section name index (section %d, index %d/%d)",
-				i, sections[i].Name, len(strtab))
+		var err error
+		sh.Name, err = cache.StringAt(int64(sections[i].Name))
+		if err != nil {
+			return fmt.Errorf("bad section name index (section %d, index %d/%d): %w",
+				i, sections[i].Name, strtab.FileSize, err)
 		}
 	}
-
 	return nil
 }
 
@@ -463,47 +432,36 @@ func (f *File) findVirtualAddressProg(addr uint64) *Prog {
 	return nil
 }
 
-// VirtualMemory returns a slice for the request data at a virtual address.
-// The slice may point to mmapped data or be a newly allocated slice.
-// The maxSize is the limit for allocating the memory from heap.
-func (f *File) VirtualMemory(addr int64, sz, maxSize int) ([]byte, error) {
-	if sz == 0 {
-		return nil, nil
-	}
-	if ph := f.findVirtualAddressProg(uint64(addr)); ph != nil {
-		offset := addr - int64(ph.Vaddr)
-		if offset+int64(sz) <= int64(ph.Filesz) {
-			if mapping, ok := ph.elfReader.(*mmap.ReaderAt); ok {
-				return mapping.Subslice(int(ph.Off)+int(offset), sz)
-			}
-		}
-		if sz > maxSize {
-			return nil, fmt.Errorf("virtual memory area too large (%d) to copy", sz)
-		}
-		buf := make([]byte, sz)
-		n, err := ph.ReadAt(buf, offset)
-		return buf[:n], err
-	}
-	return nil, fmt.Errorf("no matching segment for 0x%x", uint64(addr))
+// VirtualMemory returns a reader for the requested data at the virtual address.
+func (f *File) VirtualMemory(addr int64, size uint64) *io.SectionReader {
+	return io.NewSectionReader(f, addr, int64(size))
 }
 
 // SymbolData returns the data associated with given dynamic symbol.
-// The backing mmapped data is returned if possible, otherwise a maximum of
 // maxCopy bytes of the symbol data will read to newly allocated buffer.
-func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (*libpf.Symbol, []byte, error) {
+func (f *File) SymbolData(name libpf.SymbolName, maxCopy uint) (*libpf.Symbol, []byte, error) {
 	sym, err := f.LookupSymbol(name)
 	if err != nil {
 		return nil, nil, err
 	}
 	symSize := int(sym.Size)
-	if symSize > maxCopy {
-		// Truncate read size if not memory mapped data.
-		if _, ok := f.elfReader.(*mmap.ReaderAt); !ok {
-			symSize = maxCopy
-		}
+	if uint(symSize) > maxCopy {
+		symSize = int(maxCopy)
 	}
-	data, err := f.VirtualMemory(int64(sym.Address), symSize, maxCopy)
-	return sym, data, err
+	data := make([]byte, symSize)
+	if _, err := f.ReadAt(data, int64(sym.Address)); err != nil {
+		return nil, nil, err
+	}
+	return sym, data, nil
+}
+
+// SymbolReader returns a reader associated with the given dynamic symbol.
+func (f *File) SymbolReader(name libpf.SymbolName) (*libpf.Symbol, *io.SectionReader, error) {
+	sym, err := f.LookupSymbol(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	return sym, f.VirtualMemory(int64(sym.Address), sym.Size), nil
 }
 
 // ReadVirtualMemory reads bytes from given virtual address
@@ -518,9 +476,9 @@ func (f *File) ReadVirtualMemory(p []byte, addr int64) (int, error) {
 }
 
 // EHFrame constructs a Program header with the EH Frame sections
-func (f *File) EHFrame() (*Prog, error) {
+func (f *File) EHFrame() (*Prog, uint64, error) {
 	if f.ehFrame == nil {
-		return nil, errors.New("no PT_GNU_EH_FRAME tag found")
+		return nil, 0, errors.New("no PT_GNU_EH_FRAME tag found")
 	}
 	// Find matching PT_LOAD segment
 	p := f.ehFrame
@@ -535,6 +493,7 @@ func (f *File) EHFrame() (*Prog, error) {
 		// from start of the PT_GNU_EH_FRAME start until end of the LOAD
 		// segment.
 		offs := p.Vaddr - ph.Vaddr
+		hdrSz := p.Memsz
 		return &Prog{
 			ProgHeader: elf.ProgHeader{
 				Type:   ph.Type,
@@ -547,9 +506,9 @@ func (f *File) EHFrame() (*Prog, error) {
 				Align:  ph.Align,
 			},
 			elfReader: f.elfReader,
-		}, nil
+		}, hdrSz, nil
 	}
-	return nil, errors.New("no PT_LOAD segment for PT_GNU_EH_FRAME found")
+	return nil, 0, errors.New("no PT_LOAD segment for PT_GNU_EH_FRAME found")
 }
 
 // GetGoBuildID returns the Go BuildID if present
@@ -561,7 +520,7 @@ func (f *File) GetGoBuildID() (string, error) {
 	if s == nil {
 		return "", ErrNoBuildID
 	}
-	data, err := s.Data(maxBytesSmallSection)
+	data, err := s.ReadAll(maxBytesSmallSection)
 	if err != nil {
 		return "", err
 	}
@@ -578,11 +537,11 @@ func (f *File) GetBuildID() (string, error) {
 	if s == nil {
 		return "", ErrNoBuildID
 	}
-	data, err := s.Data(maxBytesSmallSection)
+	data, err := s.ReadAll(maxBytesSmallSection)
 	if err != nil {
 		return "", err
 	}
-	runtime.KeepAlive(f)
+
 	return getBuildIDFromNotes(data)
 }
 
@@ -670,9 +629,6 @@ func (f *File) visitTLSDescriptorsForSection(visitor func(ElfReloc, string) bool
 	if relaSection.Link == 0 {
 		return false, errors.New("rela section link is empty")
 	}
-	if relaSection.Size > maxBytesLargeSection {
-		return false, fmt.Errorf("relocation section too big (%d bytes)", relaSection.Size)
-	}
 	if relaSection.Size%uint64(unsafe.Sizeof(elf.Rela64{})) != 0 {
 		return false, errors.New("relocation section size isn't multiple of rela64 struct")
 	}
@@ -685,24 +641,16 @@ func (f *File) visitTLSDescriptorsForSection(visitor func(ElfReloc, string) bool
 		return false, errors.New("symbol section size isn't multiple of sym64 struct")
 	}
 
-	strtabSection := &f.Sections[symtabSection.Link]
-	if strtabSection.Size > maxBytesLargeSection {
-		return false, fmt.Errorf("string table too big (%d bytes)", strtabSection.Size)
-	}
-
-	strtabData, err := strtabSection.Data(uint(strtabSection.Size))
-	if err != nil {
-		return false, fmt.Errorf("failed to read string table: %w", err)
-	}
-
-	relaData, err := relaSection.Data(uint(relaSection.Size))
-	if err != nil {
-		return false, fmt.Errorf("failed to read relocation section: %w", err)
-	}
-
-	relaSz := int(unsafe.Sizeof(elf.Rela64{}))
-	for i := 0; i < len(relaData); i += relaSz {
-		rela := (*elf.Rela64)(unsafe.Pointer(&relaData[i]))
+	strtab := &f.Sections[symtabSection.Link]
+	cache := pfatbuf.Cache{}
+	cache.InitName("pfelf.strtab", strtab)
+	relaSz := int64(unsafe.Sizeof(elf.Rela64{}))
+	for i := int64(0); i < int64(relaSection.FileSize); i += relaSz {
+		var rela elf.Rela64
+		// FIXME: should use caching
+		if _, err := relaSection.ReadAt(pfunsafe.FromPointer(&rela), i); err != nil {
+			return false, fmt.Errorf("failed to read relocation section: %w", err)
+		}
 
 		ty := rela.Info & 0xffff
 		if !(f.Machine == elf.EM_AARCH64 && elf.R_AARCH64(ty) == elf.R_AARCH64_TLSDESC) &&
@@ -713,21 +661,21 @@ func (f *File) visitTLSDescriptorsForSection(visitor func(ElfReloc, string) bool
 		sym := elf.Sym64{}
 		symSz := int64(unsafe.Sizeof(sym))
 		symNo := int64(rela.Info >> 32)
+		// FIXME: should use caching?
 		n, err := symtabSection.ReadAt(pfunsafe.FromPointer(&sym), symNo*symSz)
 		if err != nil || n != int(symSz) {
 			return false, fmt.Errorf("failed to read relocation symbol: %w", err)
 		}
 
-		symStr, ok := getString(strtabData, int(sym.Name))
-		if !ok {
+		symStr, err := cache.StringAt(int64(sym.Name))
+		if err != nil {
 			return false, errors.New("failed to get relocation name string")
 		}
 
-		if !visitor(rela, symStr) {
+		if !visitor(&rela, symStr) {
 			return false, nil
 		}
 	}
-	runtime.KeepAlive(f)
 
 	return true, nil
 }
@@ -740,11 +688,10 @@ func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
 		return "", 0, ErrNoDebugLink
 	}
 
-	d, err := note.Data(maxBytesSmallSection)
+	d, err := note.ReadAll(maxBytesSmallSection)
 	if err != nil {
 		return "", 0, fmt.Errorf("could not read link: %w", ErrNoDebugLink)
 	}
-	runtime.KeepAlive(f)
 	return ParseDebugLink(d)
 }
 
@@ -833,37 +780,18 @@ func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 	return n, nil
 }
 
-// Open returns a new ReadSeeker reading the ELF program body.
-func (ph *Prog) Open() io.ReadSeeker {
-	return io.NewSectionReader(ph, 0, 1<<63-1)
+// Open returns a new section reader for the Prog header
+func (ph *Prog) Open() *io.SectionReader {
+	return io.NewSectionReader(ph, 0, int64(ph.Filesz))
 }
 
-// Data loads the whole program header referenced data, and returns it as slice.
-func (ph *Prog) Data(maxSize uint) ([]byte, error) {
-	if mapping, ok := ph.elfReader.(*mmap.ReaderAt); ok {
-		return mapping.Subslice(int(ph.Off), int(ph.Filesz))
-	}
-
-	// Fallback option if the file is not mmapped.
-	if ph.Filesz > uint64(maxSize) {
-		return nil, fmt.Errorf("segment size %d is too large", ph.Filesz)
-	}
-	p := make([]byte, ph.Filesz)
-	_, err := ph.ReadAt(p, 0)
-	return p, err
-}
-
-// DataReader loads the whole program header referenced data, and returns reader to it.
-func (ph *Prog) DataReader(maxSize uint) (io.Reader, error) {
-	p, err := ph.Data(maxSize)
-	if err != nil {
-		return nil, err
-	}
-	return bytes.NewReader(p), nil
-}
+var errCompressedSection = errors.New("compressed sections not supported")
 
 // ReadAt implements the io.ReaderAt interface
 func (sh *Section) ReadAt(p []byte, off int64) (n int, err error) {
+	if sh.Flags&elf.SHF_COMPRESSED != 0 {
+		return 0, errCompressedSection
+	}
 	if off < 0 || uint64(off) >= sh.FileSize {
 		return 0, io.EOF
 	}
@@ -879,18 +807,12 @@ func (sh *Section) ReadAt(p []byte, off int64) (n int, err error) {
 	return n, err
 }
 
-// Data loads the whole section header referenced data, and returns it as a slice.
-func (sh *Section) Data(maxSize uint) ([]byte, error) {
+// ReadAll reads the full section with a given limit
+func (sh *Section) ReadAll(maxSz uint) ([]byte, error) {
 	if sh.Flags&elf.SHF_COMPRESSED != 0 {
-		return nil, errors.New("compressed sections not supported")
+		return nil, errCompressedSection
 	}
-
-	if mapping, ok := sh.elfReader.(*mmap.ReaderAt); ok {
-		return mapping.Subslice(int(sh.Offset), int(sh.FileSize))
-	}
-
-	// Fallback option if the file is not mmapped.
-	if sh.FileSize > uint64(maxSize) {
+	if sh.FileSize > uint64(maxSz) {
 		return nil, fmt.Errorf("section size %d is too large", sh.FileSize)
 	}
 	p := make([]byte, sh.FileSize)
@@ -898,13 +820,9 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 	return p, err
 }
 
-// SetDontNeed sets the flag MADV_DONTNEED on the mmapped data.
-func (f *File) SetDontNeed() {
-	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
-		if err := mapping.SetMadvDontNeed(); err != nil {
-			log.Errorf("Failed to set MADV_DONTNEED: %v", err)
-		}
-	}
+// Open returns a new section reader for the Section
+func (sh *Section) Open() *io.SectionReader {
+	return io.NewSectionReader(sh, 0, int64(sh.FileSize))
 }
 
 // ReadAt reads bytes from given virtual address
@@ -931,8 +849,8 @@ func (f *File) readAndMatchSymbol(n uint32, name libpf.SymbolName) (libpf.Symbol
 		return libpf.Symbol{}, false
 	}
 	slen := len(name)
-	sname, err := f.VirtualMemory(f.stringsAddr+int64(sym.Name), slen+1, maxBytesSmallSection)
-	if err != nil {
+	sname := make([]byte, slen+1)
+	if _, err := f.ReadAt(sname, f.stringsAddr+int64(sym.Name)); err != nil {
 		return libpf.Symbol{}, false
 	}
 
@@ -1083,20 +1001,18 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 		return fmt.Errorf("failed to read %v strtab: link %v out of range",
 			name, symTab.Link)
 	}
-	strTab := f.Sections[symTab.Link]
-	strs, err := strTab.Data(maxBytesLargeSection)
-	if err != nil {
-		return fmt.Errorf("failed to read %v: %v", strTab.Name, err)
-	}
-	syms, err := symTab.Data(maxBytesLargeSection)
-	if err != nil {
-		return fmt.Errorf("failed to read %v: %v", name, err)
-	}
+	strtab := &f.Sections[symTab.Link]
+	cache := pfatbuf.Cache{}
+	cache.InitName("pfelf.symmstr", strtab)
 
-	symSz := int(unsafe.Sizeof(elf.Sym64{}))
-	for i := 0; i < len(syms); i += symSz {
-		sym := (*elf.Sym64)(unsafe.Pointer(&syms[i]))
-		if name, ok := getString(strs, int(sym.Name)); ok {
+	symSz := int64(unsafe.Sizeof(elf.Sym64{}))
+	for i := int64(0); i < int64(symTab.FileSize); i += symSz {
+		var sym elf.Sym64
+		// FIXME: should use caching
+		if _, err := symTab.ReadAt(pfunsafe.FromPointer(&sym), i); err != nil {
+			return err
+		}
+		if name, err := cache.StringAt(int64(sym.Name)); err == nil {
 			if !visitor(libpf.Symbol{
 				Name:    libpf.SymbolName(name),
 				Address: libpf.SymbolValue(sym.Value),
@@ -1106,7 +1022,6 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 			}
 		}
 	}
-	runtime.KeepAlive(f)
 	return nil
 }
 
