@@ -40,6 +40,7 @@ type Config struct {
 	NoKernelVersionCheck   bool          `mapstructure:"no_kernel_version_check"`
 	MaxGRPCRetries         uint32        `mapstructure:"max_grpc_retries"`
 	MaxRPCMsgSize          int           `mapstructure:"max_rpc_msg_size"`
+	AllowStartupFailure    bool          `mapstructure:"allow_startup_failure"`
 }
 
 // Validate validates the config.

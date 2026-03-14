@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/collector/receiver"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
@@ -22,10 +23,11 @@ const (
 )
 
 // Controller is a bridge between the Collector's [receiverprofiles.Profiles]
-// interface and our [internal.Controller]
+// interface and our [internal.Controller].
 type Controller struct {
-	ctlr       *controller.Controller
-	onShutdown func() error
+	ctlr                *controller.Controller
+	onShutdown          func() error
+	allowStartupFailure bool
 }
 
 func NewController(cfg *controller.Config, rs receiver.Settings,
@@ -62,14 +64,22 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	metrics.Start(meter)
 
 	return &Controller{
-		onShutdown: cfg.OnShutdown,
-		ctlr:       controller.New(cfg),
+		onShutdown:          cfg.OnShutdown,
+		ctlr:                controller.New(cfg),
+		allowStartupFailure: cfg.AllowStartupFailure,
 	}, nil
 }
 
 // Start starts the receiver.
 func (c *Controller) Start(ctx context.Context, _ component.Host) error {
-	return c.ctlr.Start(ctx)
+	if err := c.ctlr.Start(ctx); err != nil {
+		if c.allowStartupFailure {
+			log.Errorf("eBPF profiler receiver failed, continuing without profiling: %v", err)
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // Shutdown stops the receiver.
