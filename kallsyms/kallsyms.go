@@ -90,16 +90,17 @@ func compareModule(a, b Module) int {
 type Symbolizer struct {
 	modules atomic.Value
 
+	bpf *bpfSymbolizer
+
 	reloadModules chan libpf.Void
-	reloadSymbols chan libpf.Void
 }
 
 // NewSymbolizer creates and returns a new kallsyms symbolizer and loads
 // the initial 'kallsymbols'.
 func NewSymbolizer() (*Symbolizer, error) {
 	s := &Symbolizer{
+		bpf:           &bpfSymbolizer{},
 		reloadModules: make(chan libpf.Void, 1),
-		reloadSymbols: make(chan libpf.Void, 1),
 	}
 	if err := s.loadKallsyms(); err != nil {
 		return nil, err
@@ -107,9 +108,29 @@ func NewSymbolizer() (*Symbolizer, error) {
 	return s, nil
 }
 
+// replacement returns a copy of the module for adjustments.
+func (m *Module) replacement() *Module {
+	return &Module{
+		start:   m.start,
+		names:   slices.Clone(m.names),
+		symbols: slices.Clone(m.symbols),
+	}
+}
+
 // addName appends the 'name' to the module's string slice, and returns
 // an index suitable for storing in the `symbol` struct.
 func (m *Module) addName(name string) uint32 {
+	if len(m.names) > 0 && m.Name() == "bpf" {
+		// Reuse existing symbols if possible. This is useful for bpf symbols that can disappear
+		// and then come back with the same name. Doing this prevents unbounded growth.
+		for i := uint32(0); i < uint32(len(m.names)); {
+			if m.stringAt(i) == name {
+				return i
+			}
+			i += 1 + uint32(m.names[i])
+		}
+	}
+
 	index := len(m.names)
 	// Cap the length to 255 bytes so it fits a byte. Longest seen
 	// symbol so far is 83 bytes.
@@ -152,12 +173,6 @@ func parseSysfsUint(mod, knob string) (uint64, error) {
 // Overridable for the test suite. Returns true if the metadata was loaded
 // successfully.
 var loadModuleMetadata = func(m *Module, name string, oldMtime int64) bool {
-	if name == "bpf" {
-		// Kernel reports the BPF JIT symbols as part of 'bpf' module.
-		// There is no metadata available.
-		return true
-	}
-
 	// Determine notes location and module size
 	notesFile := "/sys/kernel/notes"
 	if name != Kernel {
@@ -210,13 +225,13 @@ var loadModuleMetadata = func(m *Module, name string, oldMtime int64) bool {
 // finish will finalize the Module. The 'symbols' slice is sorted, and
 // a fallback fileID is synthesized if buildID is not available.
 func (m *Module) finish() {
+	slices.SortFunc(m.symbols, compareSymbol)
 	if m.end == 0 || m.end == ^libpf.Address(0) {
 		// Synthesize the end address at last symbol rounded up to page size
 		// because it could not be reliably determined.
-		lastSymbol := m.start + libpf.Address(m.symbols[len(m.symbols)-1].offset)
+		lastSymbol := m.start + libpf.Address(m.symbols[0].offset)
 		m.end = (lastSymbol + 4095) & ^libpf.Address(4095)
 	}
-	slices.SortFunc(m.symbols, compareSymbol)
 }
 
 func (m *Module) Name() string {
@@ -357,6 +372,11 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 			return fmt.Errorf("unexpected line in kallsyms: '%s'", line)
 		}
 
+		// bpf is handled separately by bpfSymbolizer
+		if fields[3] == "[bpf]" {
+			continue
+		}
+
 		// Skip non-text symbols, see 'man nm'.
 		// Special case for 'etext', which can be of type `D` (data) in some kernels.
 		if strings.IndexByte("TtVvWw", fields[1][0]) == -1 && fields[2] != "_etext" {
@@ -409,13 +429,11 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 					symbols: syms[0:0],
 					names:   names[0:0],
 				}
-				if moduleName != "bpf" {
-					oldMod, _ = getModuleByAddress(modules, libpf.Address(address))
-					if oldMod != nil && !oldMod.stub && oldMod.Name() == moduleName {
-						oldMtime = oldMod.mtime
-					} else {
-						oldMod = nil
-					}
+				oldMod, _ = getModuleByAddress(modules, libpf.Address(address))
+				if oldMod != nil && !oldMod.stub && oldMod.Name() == moduleName {
+					oldMtime = oldMod.mtime
+				} else {
+					oldMod = nil
 				}
 				if loadModuleMetadata(&newMod, moduleName, oldMtime) {
 					// Module metadata was updated. Parse this module symbols.
@@ -486,7 +504,6 @@ func (s *Symbolizer) loadKallsyms() error {
 
 var nonsyfsModules = libpf.Set[string]{
 	Kernel: libpf.Void{},
-	"bpf":  libpf.Void{},
 }
 
 // loadModules will reload module metadata.
@@ -575,12 +592,6 @@ func (s *Symbolizer) reloadWorker(ctx context.Context, kobjectClient *kobject.Cl
 				log.Warnf("Failed to reload kernel modules metadata: %v", err)
 				nextModulesReload = time.After(10 * time.Second)
 			}
-		case <-s.reloadSymbols:
-			// Just trigger reloading of symbols with small delay to batch
-			// potentially multiple module loads.
-			if nextKallsymsReload == noTimeout {
-				nextKallsymsReload = time.After(100 * time.Millisecond)
-			}
 		case <-nextKallsymsReload:
 			if err := s.loadKallsyms(); err == nil {
 				log.Debugf("Kernel symbols reloaded")
@@ -615,24 +626,21 @@ func (s *Symbolizer) pollKobjectClient(_ context.Context, kobjectClient *kobject
 	}
 }
 
-// Reload will trigger asynchronous update of modules and symbols.
-func (s *Symbolizer) StartMonitor(ctx context.Context) error {
+// StartMonitor starts the update monitoring for kallsyms.
+func (s *Symbolizer) StartMonitor(ctx context.Context, onlineCPUs []int) error {
 	kobjectClient, err := kobject.New()
 	if err != nil {
 		return fmt.Errorf("failed to create kobject netlink socket: %v", err)
 	}
+	err = s.bpf.startMonitor(ctx, onlineCPUs)
+	if err != nil {
+		s.bpf.Close()
+		_ = kobjectClient.Close()
+		return err
+	}
 	go s.reloadWorker(ctx, kobjectClient)
 	go s.pollKobjectClient(ctx, kobjectClient)
 	return nil
-}
-
-// Reload triggers a non-blocking reload and update of Symbolizer
-// with the recent information of /proc/kallsyms.
-func (s *Symbolizer) Reload() {
-	select {
-	case s.reloadSymbols <- libpf.Void{}:
-	default:
-	}
 }
 
 // getModuleByAddress is a helper to find a Module from the sorted 'modules'
@@ -653,11 +661,26 @@ func getModuleByAddress(modules []Module, pc libpf.Address) (*Module, error) {
 
 // GetModuleByAddress finds the Module containing the address 'pc'.
 func (s *Symbolizer) GetModuleByAddress(pc libpf.Address) (*Module, error) {
+	if s.bpf != nil {
+		bpf := s.bpf.Module()
+		if bpf != nil && pc >= bpf.start && pc < bpf.end {
+			return bpf, nil
+		}
+	}
+
 	return getModuleByAddress(s.modules.Load().([]Module), pc)
 }
 
 // GetModuleByAddress finds the Module containing the module 'module'.
 func (s *Symbolizer) GetModuleByName(module string) (*Module, error) {
+	if module == "bpf" {
+		mod := s.bpf.Module()
+		if mod == nil {
+			return nil, ErrNoModule
+		}
+		return mod, nil
+	}
+
 	modules := s.modules.Load().([]Module)
 	for i := range modules {
 		kmod := &modules[i]
