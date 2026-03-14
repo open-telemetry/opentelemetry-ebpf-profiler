@@ -147,6 +147,9 @@ func TestBaseReporterGenerate(t *testing.T) {
 	assert.Equal(t, 2, profiles.ResourceProfiles().Len(),
 		"Should have exactly two resource profile")
 
+	// Check that every process gets its own ResourceProfile
+	assert.Equal(t, 2, profiles.ResourceProfiles().Len())
+
 	// Check that we have scope profiles
 	resourceProfile := profiles.ResourceProfiles().At(0)
 	assert.Equal(t, 1, resourceProfile.ScopeProfiles().Len(), 0,

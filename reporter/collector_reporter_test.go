@@ -88,9 +88,9 @@ func TestCollectorReporterShutdown(t *testing.T) {
 
 	traceEventsPtr := r.traceEvents.WLock()
 	tree := (*traceEventsPtr)
-	tree[libpf.NullString] = map[libpf.Origin]samples.KeyToEventMapping{
-		support.TraceOriginProbe: map[samples.TraceAndMetaKey]*samples.TraceEvents{
-			{Pid: 1}: {
+	tree[samples.ResourceKey{Pid: 1}] = samples.ResourceToProfiles{Events: map[libpf.Origin]samples.HashToEvents{
+		support.TraceOriginProbe: map[libpf.TraceHash]*samples.TraceEvents{
+			{}: {
 				Frames: func() libpf.Frames {
 					frames := make(libpf.Frames, 0, 1)
 					frames.Append(&libpf.Frame{
@@ -103,7 +103,7 @@ func TestCollectorReporterShutdown(t *testing.T) {
 				Timestamps: []uint64{1, 2, 3, 4},
 			},
 		},
-	}
+	}}
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
 	ctx, cancelFn := context.WithCancel(t.Context())

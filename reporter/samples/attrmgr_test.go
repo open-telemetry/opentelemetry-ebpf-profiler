@@ -25,14 +25,13 @@ func TestAttrTableManager(t *testing.T) {
 	comm1 := libpf.Intern("comm1")
 	comm2 := libpf.Intern("comm2")
 	tests := map[string]struct {
-		k                      []TraceAndMetaKey
+		k                      []ResourceKey
 		expectedIndices        [][]int32
 		expectedAttributeTable []attributeStruct
 	}{
 		"empty": {
-			k: []TraceAndMetaKey{
+			k: []ResourceKey{
 				{
-					Hash:           libpf.TraceHash{},
 					ApmServiceName: "",
 					Pid:            0,
 				},
@@ -43,15 +42,13 @@ func TestAttrTableManager(t *testing.T) {
 			},
 		},
 		"duplicate": {
-			k: []TraceAndMetaKey{
+			k: []ResourceKey{
 				{
-					Hash:           libpf.TraceHash{},
 					Comm:           comm1,
 					ApmServiceName: "apmServiceName1",
 					Pid:            1234,
 				},
 				{
-					Hash:           libpf.TraceHash{},
 					Comm:           comm1,
 					ApmServiceName: "apmServiceName1",
 					Pid:            1234,
@@ -65,15 +62,13 @@ func TestAttrTableManager(t *testing.T) {
 			},
 		},
 		"different": {
-			k: []TraceAndMetaKey{
+			k: []ResourceKey{
 				{
-					Hash:           libpf.TraceHash{},
 					Comm:           comm1,
 					ApmServiceName: "apmServiceName1",
 					Pid:            1234,
 				},
 				{
-					Hash:           libpf.TraceHash{},
 					Comm:           comm2,
 					ApmServiceName: "apmServiceName2",
 					Pid:            6789,
