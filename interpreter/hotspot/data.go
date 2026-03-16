@@ -166,17 +166,18 @@ type hotspotVMData struct {
 			ConstMethod uint `name:"_constMethod"`
 		} `name:"Method,methodOopDesc"`
 		Nmethod struct { // .Sizeof >256
-			Sizeof             uint
-			CompileID          uint `name:"_compile_id"`
-			MetadataOffset     uint `name:"_metadata_offset,_oops_offset"`
-			ScopesPcsOffset    uint `name:"_scopes_pcs_offset"`
-			DependenciesOffset uint `name:"_dependencies_offset"` // JDK -22 only
-			ImmutableData      uint `name:"_immutable_data"`      // JDK 23+ only
-			ImmutableDataSize  uint `name:"_immutable_data_size"` // JDK 23+ only
-			OrigPcOffset       uint `name:"_orig_pc_offset"`
-			DeoptimizeOffset   uint `name:"_deoptimize_offset,_deopt_handler_offset,_deopt_handler_begin"`
-			Method             uint `name:"_method"`
-			ScopesDataOffset   uint `name:"_scopes_data_offset,_scopes_data_begin"`
+			Sizeof                   uint
+			CompileID                uint `name:"_compile_id"`
+			MetadataOffset           uint `name:"_metadata_offset,_oops_offset"`
+			ScopesPcsOffset          uint `name:"_scopes_pcs_offset"`
+			DependenciesOffset       uint `name:"_dependencies_offset"`             // JDK -22 only
+			ImmutableData            uint `name:"_immutable_data"`                  // JDK 23+ only
+			ImmutableDataSize        uint `name:"_immutable_data_size"`             // JDK 23+ only
+			ImmutableDataRefCountOff uint `name:"_immutable_data_ref_count_offset"` // JDK 26+ only
+			OrigPcOffset             uint `name:"_orig_pc_offset"`
+			DeoptimizeOffset         uint `name:"_deoptimize_offset,_deopt_handler_offset,_deopt_handler_begin,_deopt_handler_entry_offset"`
+			Method                   uint `name:"_method"`
+			ScopesDataOffset         uint `name:"_scopes_data_offset,_scopes_data_begin"`
 		} `name:"nmethod,CompiledMethod"`
 		OopDesc struct {
 			Sizeof uint
@@ -599,6 +600,11 @@ func (d *hotspotData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address
 		vms.CodeBlob.MutableData = 0
 		vms.CodeBlob.MutableDataSize = 0
 		vms.CodeBlob.RelocationSize = 0
+	}
+
+	// JDK26+: immutable data has a ref count trailer; not present prior to JDK26
+	if vms.Nmethod.ImmutableDataRefCountOff == ^uint(0) {
+		vms.Nmethod.ImmutableDataRefCountOff = 0
 	}
 
 	// Check that all symbols got loaded from JVM introspection data

@@ -1,0 +1,317 @@
+{
+  "coredump-ref": "708cbf9b57c22025f7479adab562fb4c422053d41ad00cb13f2d7f13bd5e37ae",
+  "threads": [
+    {
+      "lwp": 28749,
+      "frames": [
+        "libc.so.6+0x11b4fd",
+        "gdb+0x7849dd",
+        "gdb+0x7854f7",
+        "gdb+0x3d3ea9",
+        "gdb+0x3d6f04",
+        "gdb+0x11ddab",
+        "libc.so.6+0x2a1c9",
+        "libc.so.6+0x2a28a",
+        "gdb+0x12c1f4"
+      ]
+    },
+    {
+      "lwp": 28758,
+      "frames": [
+        "libc.so.6+0x98d71",
+        "libc.so.6+0x9b7ec",
+        "gdb+0x790f5a",
+        "libstdc++.so.6.0.33+0xecdb3",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c6b"
+      ]
+    },
+    {
+      "lwp": 28757,
+      "frames": [
+        "libc.so.6+0x98d71",
+        "libc.so.6+0x9b7ec",
+        "gdb+0x790f5a",
+        "libstdc++.so.6.0.33+0xecdb3",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c6b"
+      ]
+    },
+    {
+      "lwp": 28756,
+      "frames": [
+        "libc.so.6+0x98d71",
+        "libc.so.6+0x9b7ec",
+        "gdb+0x790f5a",
+        "libstdc++.so.6.0.33+0xecdb3",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c6b"
+      ]
+    },
+    {
+      "lwp": 28755,
+      "frames": [
+        "libc.so.6+0x98d71",
+        "libc.so.6+0x9b7ec",
+        "gdb+0x790f5a",
+        "libstdc++.so.6.0.33+0xecdb3",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c6b"
+      ]
+    },
+    {
+      "lwp": 28754,
+      "frames": [
+        "libc.so.6+0x98d71",
+        "libc.so.6+0x9b7ec",
+        "gdb+0x790f5a",
+        "libstdc++.so.6.0.33+0xecdb3",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c6b"
+      ]
+    },
+    {
+      "lwp": 28753,
+      "frames": [
+        "libc.so.6+0x98d71",
+        "libc.so.6+0x9b7ec",
+        "gdb+0x790f5a",
+        "libstdc++.so.6.0.33+0xecdb3",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c6b"
+      ]
+    },
+    {
+      "lwp": 28752,
+      "frames": [
+        "libc.so.6+0x98d71",
+        "libc.so.6+0x9b7ec",
+        "gdb+0x790f5a",
+        "libstdc++.so.6.0.33+0xecdb3",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c6b"
+      ]
+    },
+    {
+      "lwp": 28751,
+      "frames": [
+        "libc.so.6+0x98d71",
+        "libc.so.6+0x9b7ec",
+        "gdb+0x790f5a",
+        "libstdc++.so.6.0.33+0xecdb3",
+        "libc.so.6+0x9caa3",
+        "libc.so.6+0x129c6b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "022943b3b11c860b049bce41342f1c2594941b7b401d95dfdf235521099fee08",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcom_err.so.2.1"
+    },
+    {
+      "ref": "398c6d2025210279f4c7413ebdb7f4c63bc5afda5ec3b1ccc58885a65acc2b78",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libnghttp2.so.14.26.0"
+    },
+    {
+      "ref": "2156351fa3dedd04a7381c6ac7a8a26efa2d6fb08b80f8a2d644ccdd653710ae",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libmpfr.so.6.2.1"
+    },
+    {
+      "ref": "5bf46ff3e0fb33f25ff7cd98c877a45dbaf423242904a7eb485173f3fed91ca6",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libbabeltrace.so.1.0.0"
+    },
+    {
+      "ref": "0a079f958147699f7bb5bf228406a5d878dc2387fe9cdc5cce6f3e35e20380fc",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libreadline.so.8.2"
+    },
+    {
+      "ref": "a91ead095d2c80520c55a89057bbe10b031a075340442e63f44b310f93883a1b",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libbrotlicommon.so.1.1.0"
+    },
+    {
+      "ref": "ae6c5a9aecc249fc66e03c16ec6c4385d09d7e12e0ea7694bb831ab4fee8133c",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libpsl.so.5.3.4"
+    },
+    {
+      "ref": "9be84101980765fbf67430ca573b648406e68157ef022420e41b17e131904d91",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libssh.so.4.9.6"
+    },
+    {
+      "ref": "42467d0dbcc0a6c9e0a31f05a5944095504ce98f093c3fe0825f0a1533fa8207",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libglib-2.0.so.0.8000.0"
+    },
+    {
+      "ref": "6e632fd9a3125db60bbc623719bbc17b0470330321c5b1c57f1ff7190e5551ad",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libidn2.so.0.4.0"
+    },
+    {
+      "ref": "1b87a1a50b496cfead2b0ad134c2ff536705c82608db240c7e8aa48d6c0e4217",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "f96cda97eecdc05d36923d7a52d2119297c12904e321a40490a68f7b2c50394c",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libpython3.12.so.1.0"
+    },
+    {
+      "ref": "c6b469a006685ebf2075e200180c3b21f41b88ad722c5697d736ea558cfe3ea1",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libp11-kit.so.0.3.1"
+    },
+    {
+      "ref": "a0f410ad093236856eee59c4ff2838dc04d932ea0993400f23ed77d67d85af34",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libsasl2.so.2.0.25"
+    },
+    {
+      "ref": "59994414d0cdec4f678ef91eaaafc44b26b00bca507e4cc7978caaf79f584173",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libtasn1.so.6.6.3"
+    },
+    {
+      "ref": "c3c606139d4f7776efa4dbd4a6b62e30c916b07a0cafd8c3ef173d6f093607e3",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libhogweed.so.6.8"
+    },
+    {
+      "ref": "64d8a5019d4c294b89fde1193343ea324bbd8603652554e5545f0a01595fa2c5",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libbrotlidec.so.1.1.0"
+    },
+    {
+      "ref": "b7ae1a5a5702267e1612599335a5ece68093be99c13b394d55f9a782c390413e",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgnutls.so.30.37.1"
+    },
+    {
+      "ref": "d5a30761bb7e8eadc3345ce3cfbb7567df86159b93e8e1700fd6d34505ad2e20",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libbabeltrace-ctf.so.1.0.0"
+    },
+    {
+      "ref": "a9793942a8a5f6f4d0f523ef9e0a5be4f0033f2c6c28520cd2b4e706d53c6e17",
+      "local-path": "/usr/lib/x86_64-linux-gnu/liblzma.so.5.4.5"
+    },
+    {
+      "ref": "1cd555ac46b7887edeaf3c42aac5408c8135e52f6b37870da2cf82d5fe14e829",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "720f3720d0a0891042b0773d3218163a8e050e26c33744dc173086c5db25f9d6",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcurl-gnutls.so.4.8.0"
+    },
+    {
+      "ref": "f48214417757f18793ed6e180cc14ee1d6f04252a518fc7270e8ca1d0b4260fe",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libkeyutils.so.1.10"
+    },
+    {
+      "ref": "e00576d71d81d3ba0cfa4903c835a44a8723aac96f72f79ff75200b4cff9071b",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libpcre2-8.so.0.11.2"
+    },
+    {
+      "ref": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "0ccdfb6d6f5c039465f6d002cf7e4c072d48ac6a2cffc8dd6c748dec31592804",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgmp.so.10.5.0"
+    },
+    {
+      "ref": "8e1ef5a40f7b0d5b0fbcd6e4f28dd50b263650338a2bb72503be34632f3629d6",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libkrb5support.so.0.1"
+    },
+    {
+      "ref": "b9a20df712d206654477c079f03b568276933e91cbe237e62af791f0f3ab8d8b",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgssapi_krb5.so.2.2"
+    },
+    {
+      "ref": "248c989360783cdc52f3659921de852c2efcc2097253ce58e34443f856412814",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libelf-0.190.so"
+    },
+    {
+      "ref": "7a73ccfb5cb9fe03ffa3710cf6fcae518af48fb71696957f5a334c802e8f42a5",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libsource-highlight.so.4.0.1"
+    },
+    {
+      "ref": "ada59231b9ce983951fdd3425ebb4c138fa473b7470d5bc9d9285a3f8687f801",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libdebuginfod-0.190.so"
+    },
+    {
+      "ref": "4763f3f4e0c4f776ec0d6bda54374c0d86bab570259501e50bc492a4fe9cf978",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libipt.so.2.0.6"
+    },
+    {
+      "ref": "61f693cd7f8e55ad3ab518b20a00c01adb46ef829cf90773c97615a73f99e09b",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libtinfo.so.6.4"
+    },
+    {
+      "ref": "a7d7897c415473e5a4e393fe1a6faf5828c73e06ed2eb6d11648a2cef4ea3552",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libncursesw.so.6.4"
+    },
+    {
+      "ref": "2c4c310ff85793ed0edcff9d548a6a73041f68fd0eb6fa998388bb43787036e3",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libresolv.so.2"
+    },
+    {
+      "ref": "d6fc1bc9de29c55fc905f77edba1ccc7c7a50b32bd2bb9086b0d0b00104eafc4",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcrypto.so.3"
+    },
+    {
+      "ref": "8394027f2be7c2cc7b2da4797476a8b688a21f75ee231941fa2df8d00ba79d08",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libk5crypto.so.3.1"
+    },
+    {
+      "ref": "ddf14275b1fb70ba06510094071adcc1462e675f15ae6cdcadbf40c1dabe5a03",
+      "local-path": "/usr/lib/x86_64-linux-gnu/liblber.so.2.0.200"
+    },
+    {
+      "ref": "a9829b999c95452eb0a34cc7b5349427b76dbf3e5d5c8672a5ca69e454c1b151",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libldap.so.2.0.200"
+    },
+    {
+      "ref": "15a2a75e8c437b9c99971b5ee10278ab110beef1a56d1d9e5d6759ea140e98ac",
+      "local-path": "/usr/lib/x86_64-linux-gnu/librtmp.so.1"
+    },
+    {
+      "ref": "d8db8739a1633c972cec6a4fe0566bdcec6fd088f98723492ab0361f66238f75",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "a43c43c2fbb643f42572577b6c2514905804f963d186d4d630e184c4015e68a7",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libxxhash.so.0.8.2"
+    },
+    {
+      "ref": "7bcf825cd449892db5105ad2aed91dcf94a27b796426600c765720c584c54dd1",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libunistring.so.5.0.0"
+    },
+    {
+      "ref": "f0068d3b418ae039c309574b33901b82404025eb46c2e983246b9c3976ba7e83",
+      "local-path": "/usr/bin/gdb"
+    },
+    {
+      "ref": "52c143c9c77a223a4dac5449eac41fd2490e37c8a30430f1559c1421f4f8ed73",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libkrb5.so.3.3"
+    },
+    {
+      "ref": "00f593fe192f2851b8ce23b25cec2488d769beb5a8f63e8c9e563071e1075153",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libffi.so.8.1.4"
+    },
+    {
+      "ref": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33"
+    },
+    {
+      "ref": "fdbd3ec8f62e02fdf12e2fbfd2ba080ed0122a2f0a56a343061a6743f1a56568",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libuuid.so.1.3.0"
+    },
+    {
+      "ref": "c42ff317838b4b4639e2ea801905f0317177c6df7e31b2f0d0240e3c3ac0cfde",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libexpat.so.1.9.1"
+    },
+    {
+      "ref": "0a2128bc10841fb29e76d08d945864dfb0b6a66da5df6df5d8299197439e54bb",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libzstd.so.1.5.5"
+    },
+    {
+      "ref": "a245ed916229583d6fe0b07657b3ed945bc148c28cc08b5266295f620d2b91cc",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libnettle.so.8.8"
+    },
+    {
+      "ref": "9b64150b28505a33d6bc3ecf709c279f6de97a1c184dbda65d06ee4537f6d286",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libz.so.1.3"
+    }
+  ]
+}
