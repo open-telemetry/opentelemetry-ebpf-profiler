@@ -695,7 +695,7 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 	var value libpf.SymbolValue
 	switch ef.Machine {
 	case elf.EM_AARCH64:
-		value, err = decodeStubArgumentARM64(code, memoryBase), nil
+		value, err = decodeStubArgumentARM64(code, memoryBase, uint64(sym.Address)), nil
 	case elf.EM_X86_64:
 		value, err = decodeStubArgumentAMD64(code, uint64(sym.Address), uint64(memoryBase))
 	default:

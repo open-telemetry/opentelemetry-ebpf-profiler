@@ -10,9 +10,10 @@ import (
 )
 
 // decodeStubArgumentARM64 disassembles arm64 code and decodes the assumed value
-// of requested argument.
+// of requested argument. symAddr is the virtual address of the first instruction
+// in code[], needed to resolve ADRP PC-relative addresses.
 func decodeStubArgumentARM64(code []byte,
-	addrBase libpf.SymbolValue) libpf.SymbolValue {
+	addrBase libpf.SymbolValue, symAddr uint64) libpf.SymbolValue {
 	const argNumber uint8 = 0
 	// The concept is to track the latest load offset for all X0..X30 registers.
 	// These registers are used as the function arguments. Once the first branch
@@ -46,7 +47,16 @@ func decodeStubArgumentARM64(code []byte,
 	// LDR  W0, [X3,#0x25C] ; key
 	// B    .pthread_getspecific
 
-	// Storage for load offsets for each Xn register
+	// PyGILState_GetThisThreadState (Python 3.12, static):
+	// BTI  C
+	// ADRP X0, 60c000
+	// ADD  X0, X0, #0x818      ; X0 = _PyRuntime (directly, no GOT indirection)
+	// LDR  W1, [X0,#1544]      ; tss_is_created check
+	// CBZ  W1, ...
+	// LDR  W0, [X0,#1548]      ; load pthread key from _PyRuntime+0x60c
+	// B    pthread_getspecific
+
+	// Symbolic offset from addrBase for each Xn register.
 	var regOffset [32]int64
 	retValue := libpf.SymbolValueInvalid
 
@@ -65,6 +75,18 @@ func decodeStubArgumentARM64(code []byte,
 			continue
 		}
 
+		// ADRP computes a PC-relative page address: (PC & ~0xFFF) + signext(imm << 12).
+		// Store it as an offset from addrBase so subsequent ADD/LDR naturally compose.
+		if inst.Op == aa.ADRP {
+			pcrel, ok := arm.DecodeImmediate(inst.Args[1])
+			if ok {
+				pc := symAddr + uint64(offs)
+				pageAddr := (pc & ^uint64(0xFFF)) + uint64(pcrel)
+				regOffset[dest] = int64(pageAddr) - int64(addrBase)
+			}
+			continue
+		}
+
 		instOffset := int64(0)
 		instRetval := libpf.SymbolValueInvalid
 		switch inst.Op {
@@ -73,8 +95,14 @@ func decodeStubArgumentARM64(code []byte,
 			if !ok {
 				break
 			}
-			instOffset = a2
-			instRetval = addrBase + libpf.SymbolValue(a2)
+			src, ok := arm.Xreg2num(inst.Args[1])
+			if !ok {
+				break
+			}
+			// Accumulate src's offset: for GOT-indirect regOffset[src] is 0
+			// so this is just a2; for ADRP+ADD it includes the page offset.
+			instOffset = regOffset[src] + a2
+			instRetval = addrBase + libpf.SymbolValue(instOffset)
 		case aa.LDR:
 			m, ok := inst.Args[1].(aa.MemImmediate)
 			if !ok {
