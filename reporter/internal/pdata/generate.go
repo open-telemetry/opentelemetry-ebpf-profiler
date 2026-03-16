@@ -182,7 +182,7 @@ func (p *Pdata) setProfile(
 			frame := uniqueFrame.Value()
 			locInfo := locationInfo{
 				address:   uint64(frame.AddressOrLineno),
-				frameType: frame.Type.String(),
+				frameType: frame.Type,
 			}
 
 			index, ok := mappingSet.AddWithCheck(frame.Mapping)
@@ -233,7 +233,7 @@ func (p *Pdata) setProfile(
 					line.SetFunctionIndex(locInfo.functionIndex)
 				}
 				attrMgr.AppendOptionalString(loc.AttributeIndices(),
-					semconv.ProfileFrameTypeKey, locInfo.frameType)
+					semconv.ProfileFrameTypeKey, locInfo.frameType.String())
 			}
 			locationIndices = append(locationIndices, idx)
 		} // End per-frame processing

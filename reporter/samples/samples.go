@@ -8,25 +8,25 @@ import (
 )
 
 type TraceEventMeta struct {
-	Timestamp      libpf.UnixTime64
 	Comm           libpf.String
 	ProcessName    libpf.String
 	ExecutablePath libpf.String
-	APMServiceName string
 	ContainerID    libpf.String
-	PID, TID       libpf.PID
+	EnvVars        map[libpf.String]libpf.String
+	APMServiceName string
+	Timestamp      libpf.UnixTime64
 	CPU            int
 	Origin         libpf.Origin
 	OffTime        int64
-	EnvVars        map[libpf.String]libpf.String
+	PID, TID       libpf.PID
 }
 
 // TraceEvents holds known information about a trace.
 type TraceEvents struct {
+	Labels     map[libpf.String]libpf.String
 	Frames     libpf.Frames
 	Timestamps []uint64 // in nanoseconds
 	OffTimes   []int64  // in nanoseconds
-	Labels     map[libpf.String]libpf.String
 }
 
 // TraceEventsTree stores samples and their related metadata in a tree-like
@@ -53,30 +53,31 @@ type SampleToEvents map[SampleKey]*TraceEvents
 // already part of the trace hash to ensure that we don't accidentally merge
 // traces with different fields.
 type ResourceKey struct {
-	// ApmServiceName is provided by the eBPF programs
-	ApmServiceName string
-
 	// ContainerID represents an extracted key from /proc/<PID>/cgroup.
 	ContainerID libpf.String
-	Pid         int64
-
 	// Process name is retrieved from /proc/PID/comm
 	// TODO (flo): ProcessName was never used - verify its use
 	ProcessName libpf.String
 	// Executable path is retrieved from /proc/PID/exe
 	ExecutablePath libpf.String
+
+	// ApmServiceName is provided by the eBPF programs
+	ApmServiceName string
+
+	Pid int64
 }
 
 // SampleKey holds a unique trace hash and its dedicated meta data.
 type SampleKey struct {
-	Hash libpf.TraceHash
-
-	// Comm is provided by the eBPF programs
-	Comm libpf.String
-	Tid  int64
-	CPU  int64
-
 	// ExtraMeta stores extra meta info that may have been produced by a
 	// `SampleAttrProducer` instance. May be nil.
 	ExtraMeta any
+
+	// Comm is provided by the eBPF programs
+	Comm libpf.String
+
+	Hash libpf.TraceHash
+
+	Tid int64
+	CPU int64
 }
