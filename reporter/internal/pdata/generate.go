@@ -101,7 +101,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			}
 
 			prof := sp.Profiles().AppendEmpty()
-			if err := p.setProfile(dic, attrMgr, toEvents.ExtraMeta,
+			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet,
 				origin, toEvents.Events[origin], prof,
 				collectionStartTime, collectionEndTime); err != nil {
@@ -137,14 +137,13 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 func (p *Pdata) setProfile(
 	dic pprofile.ProfilesDictionary,
 	attrMgr *samples.AttrTableManager,
-	extraMeta any,
 	stringSet orderedset.OrderedSet[string],
 	funcSet orderedset.OrderedSet[funcInfo],
 	mappingSet orderedset.OrderedSet[libpf.FrameMapping],
 	stackSet orderedset.OrderedSet[stackInfo],
 	locationSet orderedset.OrderedSet[locationInfo],
 	origin libpf.Origin,
-	events samples.HashToEvents,
+	events samples.SampleToEvents,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
@@ -169,7 +168,7 @@ func (p *Pdata) setProfile(
 		return fmt.Errorf("generating profile for unsupported origin %d", origin)
 	}
 
-	for _, traceInfo := range events {
+	for sampleKey, traceInfo := range events {
 		sample := profile.Samples().AppendEmpty()
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
@@ -260,8 +259,15 @@ func (p *Pdata) setProfile(
 				value.String())
 		}
 
+		attrMgr.AppendOptionalString(sample.AttributeIndices(),
+			semconv.ThreadNameKey, sampleKey.Comm.String())
+		attrMgr.AppendInt(sample.AttributeIndices(),
+			semconv.ThreadIDKey, sampleKey.Tid)
+		attrMgr.AppendInt(sample.AttributeIndices(),
+			semconv.CPULogicalNumberKey, int64(sampleKey.CPU))
+
 		if p.ExtraSampleAttrProd != nil {
-			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, extraMeta)
+			extra := p.ExtraSampleAttrProd.ExtraSampleAttrs(attrMgr, sampleKey.ExtraMeta)
 			sample.AttributeIndices().Append(extra...)
 		}
 	} // End sample processing
@@ -275,9 +281,6 @@ func (p *Pdata) setProfile(
 }
 
 func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envVars map[libpf.String]libpf.String) {
-	if resource.Comm != libpf.NullString {
-		attrs.PutStr(string(semconv.ThreadNameKey), resource.Comm.String())
-	}
 	if resource.ApmServiceName != "" {
 		attrs.PutStr(string(semconv.ServiceNameKey), resource.ApmServiceName)
 	}
@@ -286,8 +289,6 @@ func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envV
 	}
 
 	attrs.PutInt(string(semconv.ProcessPIDKey), resource.Pid)
-	attrs.PutInt(string(semconv.ThreadIDKey), resource.Tid)
-	attrs.PutInt(string(semconv.CPULogicalNumberKey), resource.CPU)
 
 	if resource.ExecutablePath != libpf.NullString {
 		attrs.PutStr(string(semconv.ProcessExecutablePathKey), resource.ExecutablePath.String())

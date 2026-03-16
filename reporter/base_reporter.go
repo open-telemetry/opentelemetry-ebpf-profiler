@@ -62,12 +62,9 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	}
 
 	key := samples.ResourceKey{
-		Comm:           meta.Comm,
 		ApmServiceName: meta.APMServiceName,
 		ContainerID:    meta.ContainerID,
 		Pid:            int64(meta.PID),
-		Tid:            int64(meta.TID),
-		CPU:            int64(meta.CPU),
 		ProcessName:    meta.ProcessName,
 		ExecutablePath: meta.ExecutablePath,
 	}
@@ -77,24 +74,30 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 
 	if _, exists := (*eventsTree)[key]; !exists {
 		(*eventsTree)[key] = samples.ResourceToProfiles{
-			ExtraMeta: extraMeta,
-			EnvVars:   meta.EnvVars,
-			Events:    make(map[libpf.Origin]samples.HashToEvents),
+			EnvVars: meta.EnvVars,
+			Events:  make(map[libpf.Origin]samples.SampleToEvents),
 		}
 	}
 
 	rtp := (*eventsTree)[key]
 	if _, exists := rtp.Events[meta.Origin]; !exists {
-		rtp.Events[meta.Origin] = make(samples.HashToEvents)
+		rtp.Events[meta.Origin] = make(samples.SampleToEvents)
 	}
 
-	if events, exists := rtp.Events[meta.Origin][trace.Hash]; exists {
+	sampleKey := samples.SampleKey{
+		Hash:      trace.Hash,
+		Comm:      meta.Comm,
+		Tid:       int64(meta.TID),
+		CPU:       int64(meta.CPU),
+		ExtraMeta: extraMeta,
+	}
+	if events, exists := rtp.Events[meta.Origin][sampleKey]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
 		events.OffTimes = append(events.OffTimes, meta.OffTime)
 		return nil
 	}
 
-	rtp.Events[meta.Origin][trace.Hash] = &samples.TraceEvents{
+	rtp.Events[meta.Origin][sampleKey] = &samples.TraceEvents{
 		Frames:     trace.Frames,
 		Timestamps: []uint64{uint64(meta.Timestamp)},
 		OffTimes:   []int64{meta.OffTime},

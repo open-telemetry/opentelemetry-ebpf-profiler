@@ -36,34 +36,47 @@ type TraceEventsTree map[ResourceKey]ResourceToProfiles
 // ResourceToProfiles holds non-comparable information that belong to
 // a resource as well as profiling event data of this resource.
 type ResourceToProfiles struct {
+	// EnvVars can not be part of ResourceKey as maps are not
+	// comparable.
 	EnvVars map[libpf.String]libpf.String
 
-	// ExtraMeta stores extra meta info that may have been produced by a
-	// `SampleAttrProducer` instance. May be nil.
-	ExtraMeta any
-
 	// Events holds the actual profiling information.
-	Events map[libpf.Origin]HashToEvents
+	Events map[libpf.Origin]SampleToEvents
 }
 
-type HashToEvents map[libpf.TraceHash]*TraceEvents
+// SampleToEvents maps a unique trace hash with its meta data to
+// trace events.
+type SampleToEvents map[SampleKey]*TraceEvents
 
 // ResourceKey is the deduplication key for samples that describes a unique
 // resource. This **must always** contain all trace fields that aren't
 // already part of the trace hash to ensure that we don't accidentally merge
 // traces with different fields.
 type ResourceKey struct {
-	// comm and apmServiceName are provided by the eBPF programs
-	Comm           libpf.String
+	// ApmServiceName is provided by the eBPF programs
 	ApmServiceName string
+
 	// ContainerID represents an extracted key from /proc/<PID>/cgroup.
 	ContainerID libpf.String
 	Pid         int64
-	Tid         int64
-	CPU         int64
+
 	// Process name is retrieved from /proc/PID/comm
 	// TODO (flo): ProcessName was never used - verify its use
 	ProcessName libpf.String
 	// Executable path is retrieved from /proc/PID/exe
 	ExecutablePath libpf.String
+}
+
+// SampleKey holds a unique trace hash and its dedicated meta data.
+type SampleKey struct {
+	Hash libpf.TraceHash
+
+	// Comm is provided by the eBPF programs
+	Comm libpf.String
+	Tid  int64
+	CPU  int64
+
+	// ExtraMeta stores extra meta info that may have been produced by a
+	// `SampleAttrProducer` instance. May be nil.
+	ExtraMeta any
 }

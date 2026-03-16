@@ -168,26 +168,26 @@ func newTestFrames(extraFrame bool) libpf.Frames {
 func TestFunctionTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
-		events map[libpf.Origin]samples.HashToEvents
+		events map[libpf.Origin]samples.SampleToEvents
 
 		wantFunctionTable        []string
 		expectedResourceProfiles int
 	}{
 		{
 			name:                     "no events",
-			events:                   map[libpf.Origin]samples.HashToEvents{},
+			events:                   map[libpf.Origin]samples.SampleToEvents{},
 			wantFunctionTable:        []string{""},
 			expectedResourceProfiles: 0,
 		}, {
 			name:                     "single executable",
 			expectedResourceProfiles: 1,
-			events: map[libpf.Origin]samples.HashToEvents{
-				support.TraceOriginSampling: map[libpf.TraceHash]*samples.TraceEvents{
+			events: map[libpf.Origin]samples.SampleToEvents{
+				support.TraceOriginSampling: samples.SampleToEvents{
 					{}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
 					},
-					libpf.NewTraceHash(0, 1): {
+					samples.SampleKey{Hash: libpf.NewTraceHash(0, 1)}: {
 						Frames:     newTestFrames(true),
 						Timestamps: []uint64{6, 7, 8, 9, 10, 11},
 					},
@@ -246,8 +246,8 @@ func TestProfileDuration(t *testing.T) {
 		{
 			name: "samples within collection window",
 			tree: samples.TraceEventsTree{
-				samples.ResourceKey{Pid: 1}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.HashToEvents{
-					support.TraceOriginSampling: map[libpf.TraceHash]*samples.TraceEvents{
+				samples.ResourceKey{Pid: 1}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.SampleToEvents{
+					support.TraceOriginSampling: samples.SampleToEvents{
 						{}: {
 							// Timestamps within the collection window (1000-1060)
 							Timestamps: []uint64{
@@ -258,8 +258,8 @@ func TestProfileDuration(t *testing.T) {
 						},
 					},
 				}},
-				samples.ResourceKey{Pid: 2}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.HashToEvents{
-					support.TraceOriginSampling: map[libpf.TraceHash]*samples.TraceEvents{
+				samples.ResourceKey{Pid: 2}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.SampleToEvents{
+					support.TraceOriginSampling: samples.SampleToEvents{
 						{}: {
 							Timestamps: []uint64{uint64(time.Unix(1040, 0).UnixNano())},
 						},
@@ -272,7 +272,7 @@ func TestProfileDuration(t *testing.T) {
 		{
 			name: "adjusted start time for buffered samples",
 			tree: samples.TraceEventsTree{
-				samples.ResourceKey{Pid: 1}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.HashToEvents{
+				samples.ResourceKey{Pid: 1}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.SampleToEvents{
 					support.TraceOriginSampling: {
 						{}: {
 							Frames: newTestFrames(false),
@@ -288,7 +288,7 @@ func TestProfileDuration(t *testing.T) {
 		{
 			name: "adjusted across multiple containers",
 			tree: samples.TraceEventsTree{
-				samples.ResourceKey{Pid: 1, ContainerID: libpf.Intern("container1")}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.HashToEvents{
+				samples.ResourceKey{Pid: 1, ContainerID: libpf.Intern("container1")}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.SampleToEvents{
 					support.TraceOriginSampling: {
 						{}: {
 							Frames: singleFrameTrace(libpf.GoFrame, mapping, 0x10, "func1", libpf.NullString, 1),
@@ -297,7 +297,7 @@ func TestProfileDuration(t *testing.T) {
 						},
 					},
 				}},
-				samples.ResourceKey{Pid: 2, ContainerID: libpf.Intern("container2")}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.HashToEvents{
+				samples.ResourceKey{Pid: 2, ContainerID: libpf.Intern("container2")}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.SampleToEvents{
 					support.TraceOriginSampling: {
 						{}: {
 							Frames: singleFrameTrace(libpf.GoFrame, mapping, 0x20, "func2", libpf.NullString, 2),
@@ -374,13 +374,11 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 
 	resourceKey := samples.ResourceKey{
 		ExecutablePath: filePath,
-		Comm:           libpf.Intern("testproc"),
 		Pid:            123,
-		Tid:            456,
 		ApmServiceName: "svc",
 		ContainerID:    libpf.Intern("container1"),
 	}
-	events := map[libpf.Origin]samples.HashToEvents{
+	events := map[libpf.Origin]samples.SampleToEvents{
 		support.TraceOriginSampling: {
 			{}: &samples.TraceEvents{
 				Frames: singleFrameTrace(libpf.GoFrame, mapping,
@@ -442,7 +440,7 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 		ExecutablePath: exec,
 		ContainerID:    libpf.Intern("c1"),
 	}
-	events1 := map[libpf.Origin]samples.HashToEvents{
+	events1 := map[libpf.Origin]samples.SampleToEvents{
 		support.TraceOriginSampling: {
 			{}: &samples.TraceEvents{
 				Frames: frames,
@@ -467,7 +465,7 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 		ExecutablePath: exec,
 		ContainerID:    libpf.Intern("c2"),
 	}
-	events2 := map[libpf.Origin]samples.HashToEvents{
+	events2 := map[libpf.Origin]samples.SampleToEvents{
 		support.TraceOriginSampling: {
 			{}: &samples.TraceEvents{
 				Frames:     frames,
@@ -528,7 +526,7 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 		ExecutablePath: filePath,
 		ContainerID:    libpf.Intern("c"),
 	}
-	events := map[libpf.Origin]samples.HashToEvents{
+	events := map[libpf.Origin]samples.SampleToEvents{
 		support.TraceOriginSampling: {
 			{}: &samples.TraceEvents{
 				Frames: singleFrameTrace(libpf.PythonFrame, mapping, 0x30,
@@ -590,12 +588,10 @@ func TestGenerate_NativeFrame(t *testing.T) {
 
 	resourceKey := samples.ResourceKey{
 		ExecutablePath: filePath,
-		Comm:           libpf.Intern("native_app"),
 		Pid:            789,
-		Tid:            1011,
 		ContainerID:    libpf.Intern("native_container"),
 	}
-	events := map[libpf.Origin]samples.HashToEvents{
+	events := map[libpf.Origin]samples.SampleToEvents{
 		support.TraceOriginSampling: {
 			{}: &samples.TraceEvents{
 				Frames: singleFrameNative(mappingFile, 0x1000, 0x1000, 0x2000, 0x100),
@@ -677,15 +673,15 @@ func TestGenerate_NativeFrame(t *testing.T) {
 func TestStackTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
-		events map[libpf.Origin]samples.HashToEvents
+		events map[libpf.Origin]samples.SampleToEvents
 
 		wantStackTable           [][]int32
 		expectedLocationTableLen int
 	}{
 		{
 			name: "single stack",
-			events: map[libpf.Origin]samples.HashToEvents{
-				support.TraceOriginSampling: map[libpf.TraceHash]*samples.TraceEvents{
+			events: map[libpf.Origin]samples.SampleToEvents{
+				support.TraceOriginSampling: samples.SampleToEvents{
 					{}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
@@ -699,8 +695,8 @@ func TestStackTableOrder(t *testing.T) {
 		},
 		{
 			name: "multiple stacks",
-			events: map[libpf.Origin]samples.HashToEvents{
-				support.TraceOriginSampling: map[libpf.TraceHash]*samples.TraceEvents{
+			events: map[libpf.Origin]samples.SampleToEvents{
+				support.TraceOriginSampling: samples.SampleToEvents{
 					{}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
@@ -708,12 +704,12 @@ func TestStackTableOrder(t *testing.T) {
 				},
 				// This test relies on an implementation detail for ordering of results:
 				// it assumes that support.TraceOriginSampling events are processed first
-				support.TraceOriginOffCPU: map[libpf.TraceHash]*samples.TraceEvents{
-					libpf.NewTraceHash(0, 1): {
+				support.TraceOriginOffCPU: samples.SampleToEvents{
+					samples.SampleKey{Hash: libpf.NewTraceHash(0, 1)}: {
 						Frames:     newTestFrames(true),
 						Timestamps: []uint64{7, 8, 9, 10, 11, 12},
 					},
-					libpf.NewTraceHash(0, 2): {
+					samples.SampleKey{Hash: libpf.NewTraceHash(0, 2)}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{13, 14, 15, 16, 17},
 					},
@@ -763,7 +759,7 @@ func TestGenerate_Validate(t *testing.T) {
 		ExecutablePath: filePath,
 		ContainerID:    libpf.Intern("native_container"),
 	}
-	events := map[libpf.Origin]samples.HashToEvents{
+	events := map[libpf.Origin]samples.SampleToEvents{
 		support.TraceOriginSampling: {
 			{}: &samples.TraceEvents{
 				Frames: singleFrameTrace(libpf.PythonFrame, mapping, 0x30,
