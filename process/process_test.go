@@ -30,87 +30,111 @@ var testMappings = `55fe82710000-55fe8273c000 r--p 00000000 fd:01 1068432       
 7f63c8eef000 r-xp 0001c000 1fd:01 1075944
 7f8b929f0000-7f8b92a00000 r-xp 00000000 00:00 0 `
 
+var allExpectedMappings = []Mapping{
+	{
+		Vaddr:      0x55fe82710000,
+		Device:     0xfd01,
+		Flags:      elf.PF_R,
+		Inode:      1068432,
+		Length:     0x2c000,
+		FileOffset: 0,
+		Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
+	},
+	{
+		Vaddr:      0x55fe8273c000,
+		Device:     0xfd01,
+		Flags:      elf.PF_R + elf.PF_X,
+		Inode:      1068432,
+		Length:     0x82000,
+		FileOffset: 0x2c000,
+		Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
+	},
+	{
+		Vaddr:      0x55fe827be000,
+		Device:     0xfd01,
+		Flags:      elf.PF_R,
+		Inode:      1068432,
+		Length:     0x78000,
+		FileOffset: 0xae000,
+		Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
+	},
+	{
+		Vaddr:      0x55fe82836000,
+		Device:     0xfd01,
+		Flags:      elf.PF_R,
+		Inode:      1068432,
+		Length:     0x7000,
+		FileOffset: 0x125000,
+		Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
+	},
+	{
+		Vaddr:      0x55fe8283d000,
+		Device:     0xfd01,
+		Flags:      elf.PF_R + elf.PF_W,
+		Inode:      1068432,
+		Length:     0x1000,
+		FileOffset: 0x12c000,
+		Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
+	},
+	{
+		Vaddr:      0x7f63c8c3e000,
+		Device:     0x0801,
+		Flags:      elf.PF_R + elf.PF_X,
+		Inode:      1048922,
+		Length:     0x1A2000,
+		FileOffset: 544768,
+		Path:       libpf.Intern("/tmp/usr_lib_x86_64-linux-gnu_libcrypto.so.1.1"),
+	},
+	{
+		Vaddr:      0x7f63c8ebf000,
+		Device:     0x1fd01,
+		Flags:      elf.PF_R + elf.PF_X,
+		Inode:      1075944,
+		Length:     0x130000,
+		FileOffset: 114688,
+		Path:       libpf.Intern("/tmp/usr_lib_x86_64-linux-gnu_libopensc.so.6.0.0"),
+	},
+	{
+		Vaddr:      0x7f8b929f0000,
+		Device:     0x0,
+		Flags:      elf.PF_R + elf.PF_X,
+		Inode:      0,
+		Length:     0x10000,
+		FileOffset: 0,
+		Path:       libpf.NullString,
+	},
+}
+
 func TestParseMappings(t *testing.T) {
 	mappings, numParseErrors, err := parseMappings(strings.NewReader(testMappings))
 	require.NoError(t, err)
 	require.Equal(t, uint32(4), numParseErrors)
-	assert.NotNil(t, mappings)
+	assert.Equal(t, allExpectedMappings, mappings)
+}
 
-	expected := []Mapping{
-		{
-			Vaddr:      0x55fe82710000,
-			Device:     0xfd01,
-			Flags:      elf.PF_R,
-			Inode:      1068432,
-			Length:     0x2c000,
-			FileOffset: 0,
-			Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
-		},
-		{
-			Vaddr:      0x55fe8273c000,
-			Device:     0xfd01,
-			Flags:      elf.PF_R + elf.PF_X,
-			Inode:      1068432,
-			Length:     0x82000,
-			FileOffset: 0x2c000,
-			Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
-		},
-		{
-			Vaddr:      0x55fe827be000,
-			Device:     0xfd01,
-			Flags:      elf.PF_R,
-			Inode:      1068432,
-			Length:     0x78000,
-			FileOffset: 0xae000,
-			Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
-		},
-		{
-			Vaddr:      0x55fe82836000,
-			Device:     0xfd01,
-			Flags:      elf.PF_R,
-			Inode:      1068432,
-			Length:     0x7000,
-			FileOffset: 0x125000,
-			Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
-		},
-		{
-			Vaddr:      0x55fe8283d000,
-			Device:     0xfd01,
-			Flags:      elf.PF_R + elf.PF_W,
-			Inode:      1068432,
-			Length:     0x1000,
-			FileOffset: 0x12c000,
-			Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
-		},
-		{
-			Vaddr:      0x7f63c8c3e000,
-			Device:     0x0801,
-			Flags:      elf.PF_R + elf.PF_X,
-			Inode:      1048922,
-			Length:     0x1A2000,
-			FileOffset: 544768,
-			Path:       libpf.Intern("/tmp/usr_lib_x86_64-linux-gnu_libcrypto.so.1.1"),
-		},
-		{
-			Vaddr:      0x7f63c8ebf000,
-			Device:     0x1fd01,
-			Flags:      elf.PF_R + elf.PF_X,
-			Inode:      1075944,
-			Length:     0x130000,
-			FileOffset: 114688,
-			Path:       libpf.Intern("/tmp/usr_lib_x86_64-linux-gnu_libopensc.so.6.0.0"),
-		},
-		{
-			Vaddr:      0x7f8b929f0000,
-			Device:     0x0,
-			Flags:      elf.PF_R + elf.PF_X,
-			Inode:      0,
-			Length:     0x10000,
-			FileOffset: 0,
-			Path:       libpf.NullString,
-		},
-	}
-	assert.Equal(t, expected, mappings)
+func TestIterateMappings(t *testing.T) {
+	t.Run("collects all mappings", func(t *testing.T) {
+		var got []Mapping
+		numParseErrors, err := iterateMappings(strings.NewReader(testMappings), func(m Mapping) bool {
+			got = append(got, m)
+			return true
+		})
+		require.NoError(t, err)
+		require.Equal(t, uint32(4), numParseErrors)
+		assert.Equal(t, allExpectedMappings, got)
+	})
+
+	t.Run("stops early when callback returns false", func(t *testing.T) {
+		var got []Mapping
+		numParseErrors, err := iterateMappings(strings.NewReader(testMappings), func(m Mapping) bool {
+			got = append(got, m)
+			return len(got) < 3
+		})
+		require.NoError(t, err)
+		assert.Equal(t, uint32(0), numParseErrors)
+		assert.Len(t, got, 3)
+		assert.Equal(t, allExpectedMappings[:3], got)
+	})
 }
 
 func TestNewPIDOfSelf(t *testing.T) {
