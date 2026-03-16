@@ -18,6 +18,7 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -608,7 +609,18 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
-	mappings, numParseErrors, err := pr.GetMappings()
+
+	executableMappings := make([]process.Mapping, 0, 32)
+	var dllMappings []process.Mapping
+	numParseErrors, err := pr.IterateMappings(func(m process.Mapping) bool {
+		if m.IsExecutable() || m.IsAnonymous() {
+			executableMappings = append(executableMappings, m)
+		} else if strings.HasSuffix(m.Path.String(), ".dll") {
+			dllMappings = append(dllMappings, m)
+		}
+		return true
+	})
+
 	elapsed := time.Since(start)
 	pm.mappingStats.numProcParseErrors.Add(numParseErrors)
 
@@ -650,7 +662,8 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	util.AtomicUpdateMaxUint32(&pm.mappingStats.maxProcParseUsec, uint32(elapsed.Microseconds()))
 	pm.mappingStats.totalProcParseUsec.Add(uint32(elapsed.Microseconds()))
 
-	if pm.synchronizeMappings(pr, mappings) {
+	allMappings := slices.Concat(executableMappings, dllMappings)
+	if pm.synchronizeMappings(pr, allMappings) {
 		log.Debugf("+ PID: %v", pid)
 		// TODO: Fine-grained reported_pids handling (evaluate per-PID mapping
 		// synchronization based on per-PID state such as time since last

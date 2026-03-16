@@ -189,13 +189,12 @@ func trimMappingPath(path string) string {
 	return path
 }
 
-func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
+func iterateMappings(mapsFile io.Reader, fn func(m Mapping) bool) (uint32, error) {
 	numParseErrors := uint32(0)
-	mappings := make([]Mapping, 0, 32)
 	scanner := bufio.NewScanner(mapsFile)
 	scanBuf := bufPool.Get().(*[]byte)
 	if scanBuf == nil {
-		return mappings, 0, errors.New("failed to get memory from sync pool")
+		return 0, errors.New("failed to get memory from sync pool")
 	}
 	defer func() {
 		// Reset memory and return it for reuse.
@@ -295,7 +294,6 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 			numParseErrors++
 			continue
 		}
-		length := vend - vaddr
 
 		fileOffset, err := strconv.ParseUint(fields[2], 16, 64)
 		if err != nil {
@@ -304,37 +302,54 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 			continue
 		}
 
-		mappings = append(mappings, Mapping{
+		if !fn(Mapping{
 			Vaddr:      vaddr,
-			Length:     length,
+			Length:     vend - vaddr,
 			Flags:      flags,
 			FileOffset: fileOffset,
 			Device:     device,
 			Inode:      inode,
 			Path:       path,
-		})
+		}) {
+			return numParseErrors, scanner.Err()
+		}
 	}
-	return mappings, numParseErrors, scanner.Err()
+	return numParseErrors, scanner.Err()
 }
 
-// GetMappings will process the mappings file from proc. Additionally,
-// a reverse map from mapping filename to a Mapping node is built to allow
-// OpenELF opening ELF files using the corresponding proc map_files entry.
-// WARNING: This implementation does not support calling GetMappings
-// concurrently with itself, or with OpenELF.
-func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
+func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
+	mappings := make([]Mapping, 0, 32)
+	numParseErrors, err := iterateMappings(mapsFile, func(m Mapping) bool {
+		mappings = append(mappings, m)
+		return true
+	})
+
+	return mappings, numParseErrors, err
+}
+
+func (sp *systemProcess) IterateMappings(fn func(m Mapping) bool) (uint32, error) {
 	mapsFile, err := os.Open(fmt.Sprintf("/proc/%d/maps", sp.pid))
 	if err != nil {
-		return nil, 0, err
+		return 0, err
 	}
 	defer mapsFile.Close()
 
-	mappings, numParseErrors, err := parseMappings(mapsFile)
-	if err != nil {
-		return mappings, numParseErrors, err
+	var namedMappings []Mapping
+	gotMappings := false
+	wrappedFn := func(m Mapping) bool {
+		gotMappings = true
+		if m.Path != libpf.NullString {
+			namedMappings = append(namedMappings, m)
+		}
+		return fn(m)
 	}
 
-	if len(mappings) == 0 {
+	numParseErrors, err := iterateMappings(mapsFile, wrappedFn)
+	if err != nil {
+		return numParseErrors, err
+	}
+
+	if !gotMappings {
 		// We could test for main thread exit here by checking for zombie state
 		// in /proc/sp.pid/stat but it's simpler to assume that this is the case
 		// and try extracting mappings for a different thread. Since we stopped
@@ -344,7 +359,7 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 		sp.mainThreadExit = true
 
 		if sp.pid == sp.tid {
-			return mappings, numParseErrors, ErrNoMappings
+			return numParseErrors, ErrNoMappings
 		}
 
 		log.Debugf("TID: %v extracting mappings", sp.tid)
@@ -356,24 +371,38 @@ func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
 		// the agent to unload process metadata when a thread exits but the process is still
 		// alive).
 		if err != nil {
-			return mappings, numParseErrors, ErrNoMappings
+			return numParseErrors, ErrNoMappings
 		}
 		defer mapsFileAlt.Close()
-		mappings, numParseErrors, err = parseMappings(mapsFileAlt)
-		if err != nil || len(mappings) == 0 {
-			return mappings, numParseErrors, ErrNoMappings
+		fallbackErrors, err := iterateMappings(mapsFileAlt, wrappedFn)
+		numParseErrors += fallbackErrors
+		if err != nil || !gotMappings {
+			return numParseErrors, ErrNoMappings
 		}
 	}
 
-	fileToMapping := make(map[string]*Mapping)
-	for idx := range mappings {
-		m := &mappings[idx]
-		if m.Path != libpf.NullString {
-			fileToMapping[m.Path.String()] = m
-		}
+	fileToMapping := make(map[string]*Mapping, len(namedMappings))
+	for i := range namedMappings {
+		fileToMapping[namedMappings[i].Path.String()] = &namedMappings[i]
 	}
+
 	sp.fileToMapping = fileToMapping
-	return mappings, numParseErrors, nil
+	return numParseErrors, nil
+}
+
+// GetMappings will process the mappings file from proc. Additionally,
+// a reverse map from mapping filename to a Mapping node is built to allow
+// OpenELF opening ELF files using the corresponding proc map_files entry.
+// WARNING: This implementation does not support calling GetMappings
+// concurrently with itself, or with OpenELF.
+func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
+	mappings := make([]Mapping, 0, 32)
+	numParseErrors, err := sp.IterateMappings(func(m Mapping) bool {
+		mappings = append(mappings, m)
+		return true
+	})
+
+	return mappings, numParseErrors, err
 }
 
 func (sp *systemProcess) GetThreads() ([]ThreadInfo, error) {

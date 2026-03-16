@@ -127,6 +127,11 @@ type Process interface {
 	// GetMappings reads and parses process memory mappings.
 	GetMappings() ([]Mapping, uint32, error)
 
+	// IterateMappings parses process memory mappings and calls fn for each
+	// valid mapping. Parsing stops early if fn returns false.
+	// The returned uint32 is the number of parse errors encountered.
+	IterateMappings(fn func(m Mapping) bool) (uint32, error)
+
 	// GetThreads reads the process thread states.
 	GetThreads() ([]ThreadInfo, error)
 

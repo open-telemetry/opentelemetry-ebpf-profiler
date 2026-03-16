@@ -274,6 +274,15 @@ func (cd *CoredumpProcess) GetMappings() ([]Mapping, uint32, error) {
 	return cd.mappings, 0, nil
 }
 
+func (cd *CoredumpProcess) IterateMappings(fn func(m Mapping) bool) (uint32, error) {
+	for _, m := range cd.mappings {
+		if !fn(m) {
+			break
+		}
+	}
+	return 0, nil
+}
+
 // GetThreadInfo implements the Process interface.
 func (cd *CoredumpProcess) GetThreads() ([]ThreadInfo, error) {
 	return cd.threadInfo, nil
