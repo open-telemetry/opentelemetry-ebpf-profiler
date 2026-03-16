@@ -68,9 +68,15 @@ type processContextHeader struct {
 func ReadProcessContext(mapping *Mapping, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (ProcessContextInfo, error) {
 	var lastErr error
 
+	addr := libpf.Address(mapping.Vaddr)
+	// This is to fix a CodeQL warning about potential overflow on 32-bit systems
+	if mapping.Vaddr != uint64(addr) {
+		return ProcessContextInfo{}, fmt.Errorf("%w: invalid mapping address", ErrInvalidContext)
+	}
+
 	// Find the ProcessContext mapping
 	for range maxRetries {
-		ctx, err := readProcessContextOnce(mapping, rm, lastPublishedAtNs)
+		ctx, err := readProcessContextOnce(addr, rm, lastPublishedAtNs)
 		if err == nil {
 			return ctx, nil
 		}
@@ -83,8 +89,8 @@ func ReadProcessContext(mapping *Mapping, rm remotememory.RemoteMemory, lastPubl
 }
 
 // readProcessContextOnce performs a single attempt to read ProcessContext.
-func readProcessContextOnce(mapping *Mapping, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (ProcessContextInfo, error) {
-	monotonicPublishedAtNs, err := readTimestamp(rm, mapping)
+func readProcessContextOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (ProcessContextInfo, error) {
+	monotonicPublishedAtNs, err := readTimestamp(rm, mappingAddr)
 	if err != nil {
 		return ProcessContextInfo{}, fmt.Errorf("%w: %w",
 			ErrInvalidContext, err)
@@ -102,7 +108,7 @@ func readProcessContextOnce(mapping *Mapping, rm remotememory.RemoteMemory, last
 	memoryBarrier()
 
 	// Read and validate the header
-	hdr, err := readProcessContextHeader(rm, mapping)
+	hdr, err := readProcessContextHeader(rm, mappingAddr)
 	if err != nil {
 		return ProcessContextInfo{}, fmt.Errorf("%w: %w",
 			ErrInvalidContext, err)
@@ -118,7 +124,7 @@ func readProcessContextOnce(mapping *Mapping, rm remotememory.RemoteMemory, last
 	memoryBarrier()
 
 	// Re-read the timestamp to check for concurrent updates
-	monotonicPublishedAtNs2, err := readTimestamp(rm, mapping)
+	monotonicPublishedAtNs2, err := readTimestamp(rm, mappingAddr)
 	if err != nil {
 		return ProcessContextInfo{}, fmt.Errorf("%w: %w",
 			ErrInvalidContext, err)
@@ -155,20 +161,19 @@ func findContextMapping(mappings []Mapping) *Mapping {
 	return nil
 }
 
-func readTimestamp(rm remotememory.RemoteMemory, mapping *Mapping) (uint64, error) {
+func readTimestamp(rm remotememory.RemoteMemory, headerAddr libpf.Address) (uint64, error) {
 	var buf [8]byte
-	if err := rm.Read(libpf.Address(mapping.Vaddr+16), buf[:]); err != nil {
+	if err := rm.Read(headerAddr+16, buf[:]); err != nil {
 		return 0, fmt.Errorf("failed to read timestamp: %w", err)
 	}
 	return binary.LittleEndian.Uint64(buf[:]), nil
 }
 
 // readProcessContextHeader reads and validates the 32-byte ProcessContext header.
-func readProcessContextHeader(rm remotememory.RemoteMemory, mapping *Mapping) (processContextHeader, error) {
+func readProcessContextHeader(rm remotememory.RemoteMemory, headerAddr libpf.Address) (processContextHeader, error) {
 	// Read the 32-byte header
 	var hdr processContextHeader
-	err := rm.Read(libpf.Address(mapping.Vaddr), pfunsafe.FromPointer(&hdr))
-	if err != nil {
+	if err := rm.Read(headerAddr, pfunsafe.FromPointer(&hdr)); err != nil {
 		return processContextHeader{}, fmt.Errorf("failed to read ProcessContext header: %w", err)
 	}
 
