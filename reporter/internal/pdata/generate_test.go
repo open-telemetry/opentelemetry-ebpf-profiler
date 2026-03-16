@@ -182,7 +182,7 @@ func TestFunctionTableOrder(t *testing.T) {
 			name:                     "single executable",
 			expectedResourceProfiles: 1,
 			events: map[libpf.Origin]samples.SampleToEvents{
-				support.TraceOriginSampling: samples.SampleToEvents{
+				support.TraceOriginSampling: {
 					{}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
@@ -247,7 +247,7 @@ func TestProfileDuration(t *testing.T) {
 			name: "samples within collection window",
 			tree: samples.TraceEventsTree{
 				samples.ResourceKey{Pid: 1}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.SampleToEvents{
-					support.TraceOriginSampling: samples.SampleToEvents{
+					support.TraceOriginSampling: {
 						{}: {
 							// Timestamps within the collection window (1000-1060)
 							Timestamps: []uint64{
@@ -259,7 +259,7 @@ func TestProfileDuration(t *testing.T) {
 					},
 				}},
 				samples.ResourceKey{Pid: 2}: samples.ResourceToProfiles{Events: map[libpf.Origin]samples.SampleToEvents{
-					support.TraceOriginSampling: samples.SampleToEvents{
+					support.TraceOriginSampling: {
 						{}: {
 							Timestamps: []uint64{uint64(time.Unix(1040, 0).UnixNano())},
 						},
@@ -681,7 +681,7 @@ func TestStackTableOrder(t *testing.T) {
 		{
 			name: "single stack",
 			events: map[libpf.Origin]samples.SampleToEvents{
-				support.TraceOriginSampling: samples.SampleToEvents{
+				support.TraceOriginSampling: {
 					{}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
@@ -696,7 +696,7 @@ func TestStackTableOrder(t *testing.T) {
 		{
 			name: "multiple stacks",
 			events: map[libpf.Origin]samples.SampleToEvents{
-				support.TraceOriginSampling: samples.SampleToEvents{
+				support.TraceOriginSampling: {
 					{}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
@@ -704,7 +704,7 @@ func TestStackTableOrder(t *testing.T) {
 				},
 				// This test relies on an implementation detail for ordering of results:
 				// it assumes that support.TraceOriginSampling events are processed first
-				support.TraceOriginOffCPU: samples.SampleToEvents{
+				support.TraceOriginOffCPU: {
 					samples.SampleKey{Hash: libpf.NewTraceHash(0, 1)}: {
 						Frames:     newTestFrames(true),
 						Timestamps: []uint64{7, 8, 9, 10, 11, 12},
