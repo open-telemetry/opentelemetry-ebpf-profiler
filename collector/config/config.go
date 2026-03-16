@@ -6,17 +6,38 @@ package config // import "go.opentelemetry.io/ebpf-profiler/collector/config"
 import (
 	"errors"
 	"fmt"
-	"runtime"
-	"time"
-
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
+	"runtime"
+	"strings"
+	"time"
 )
 
 const (
 	// 1TB of executable address space
 	MaxArgMapScaleFactor = 8
 )
+
+// ErrorMode controls how the profiler receiver handles startup errors.
+type ErrorMode string
+
+const (
+	// IgnoreError means startup errors are logged but not returned to the collector.
+	IgnoreError ErrorMode = "ignore"
+	// PropagateError means startup errors are returned to the collector (default).
+	PropagateError ErrorMode = "propagate"
+)
+
+func (e *ErrorMode) UnmarshalText(text []byte) error {
+	str := ErrorMode(strings.ToLower(string(text)))
+	switch str {
+	case IgnoreError, PropagateError:
+		*e = str
+		return nil
+	default:
+		return fmt.Errorf("unknown error mode %q", str)
+	}
+}
 
 // Config is the configuration for the collector.
 type Config struct {
@@ -40,7 +61,7 @@ type Config struct {
 	NoKernelVersionCheck   bool          `mapstructure:"no_kernel_version_check"`
 	MaxGRPCRetries         uint32        `mapstructure:"max_grpc_retries"`
 	MaxRPCMsgSize          int           `mapstructure:"max_rpc_msg_size"`
-	AllowStartupFailure    bool          `mapstructure:"allow_startup_failure"`
+	ErrorMode              ErrorMode     `mapstructure:"error_mode"`
 }
 
 // Validate validates the config.
