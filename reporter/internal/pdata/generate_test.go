@@ -375,7 +375,7 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 	resourceKey := samples.ResourceKey{
 		ExecutablePath: filePath,
 		Pid:            123,
-		ApmServiceName: "svc",
+		APMServiceName: "svc",
 		ContainerID:    libpf.Intern("container1"),
 	}
 	events := map[libpf.Origin]samples.SampleToEvents{

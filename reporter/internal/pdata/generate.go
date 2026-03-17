@@ -5,6 +5,7 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -281,8 +282,8 @@ func (p *Pdata) setProfile(
 }
 
 func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envVars map[libpf.String]libpf.String) {
-	if resource.ApmServiceName != "" {
-		attrs.PutStr(string(semconv.ServiceNameKey), resource.ApmServiceName)
+	if resource.APMServiceName != "" {
+		attrs.PutStr(string(semconv.ServiceNameKey), resource.APMServiceName)
 	}
 	if resource.ContainerID != libpf.NullString {
 		attrs.PutStr(string(semconv.ContainerIDKey), resource.ContainerID.String())
@@ -292,6 +293,8 @@ func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envV
 
 	if resource.ExecutablePath != libpf.NullString {
 		attrs.PutStr(string(semconv.ProcessExecutablePathKey), resource.ExecutablePath.String())
+		_, exeName := filepath.Split(resource.ExecutablePath.String())
+		attrs.PutStr(string(semconv.ProcessExecutableNameKey), exeName)
 	}
 
 	for key, value := range envVars {

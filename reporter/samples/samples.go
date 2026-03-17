@@ -55,14 +55,12 @@ type SampleToEvents map[SampleKey]*TraceEvents
 type ResourceKey struct {
 	// ContainerID represents an extracted key from /proc/<PID>/cgroup.
 	ContainerID libpf.String
-	// Process name is retrieved from /proc/PID/comm
-	// TODO (flo): ProcessName was never used - verify its use
-	ProcessName libpf.String
+
 	// Executable path is retrieved from /proc/PID/exe
 	ExecutablePath libpf.String
 
-	// ApmServiceName is provided by the eBPF programs
-	ApmServiceName string
+	// APMServiceName is provided by the eBPF programs
+	APMServiceName string
 
 	Pid int64
 }

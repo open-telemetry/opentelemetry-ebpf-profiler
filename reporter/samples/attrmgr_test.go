@@ -29,7 +29,7 @@ func TestAttrTableManager(t *testing.T) {
 		"empty": {
 			k: []ResourceKey{
 				{
-					ApmServiceName: "",
+					APMServiceName: "",
 					Pid:            0,
 				},
 			},
@@ -41,36 +41,36 @@ func TestAttrTableManager(t *testing.T) {
 		"duplicate": {
 			k: []ResourceKey{
 				{
-					ApmServiceName: "apmServiceName1",
+					APMServiceName: "APMServiceName1",
 					Pid:            1234,
 				},
 				{
-					ApmServiceName: "apmServiceName1",
+					APMServiceName: "APMServiceName1",
 					Pid:            1234,
 				},
 			},
 			expectedIndices: [][]int32{{0, 1}, {0, 1}},
 			expectedAttributeTable: []attributeStruct{
-				{Key: "service.name", Value: "apmServiceName1"},
+				{Key: "service.name", Value: "APMServiceName1"},
 				{Key: "process.pid", Value: int64(1234)},
 			},
 		},
 		"different": {
 			k: []ResourceKey{
 				{
-					ApmServiceName: "apmServiceName1",
+					APMServiceName: "APMServiceName1",
 					Pid:            1234,
 				},
 				{
-					ApmServiceName: "apmServiceName2",
+					APMServiceName: "APMServiceName2",
 					Pid:            6789,
 				},
 			},
 			expectedIndices: [][]int32{{0, 1}, {2, 3}},
 			expectedAttributeTable: []attributeStruct{
-				{Key: "service.name", Value: "apmServiceName1"},
+				{Key: "service.name", Value: "APMServiceName1"},
 				{Key: "process.pid", Value: int64(1234)},
-				{Key: "service.name", Value: "apmServiceName2"},
+				{Key: "service.name", Value: "APMServiceName2"},
 				{Key: "process.pid", Value: int64(6789)},
 			},
 		},
@@ -84,7 +84,7 @@ func TestAttrTableManager(t *testing.T) {
 			indices := make([][]int32, 0)
 			for _, k := range tc.k {
 				inner := pcommon.NewInt32Slice()
-				mgr.AppendOptionalString(inner, semconv.ServiceNameKey, k.ApmServiceName)
+				mgr.AppendOptionalString(inner, semconv.ServiceNameKey, k.APMServiceName)
 				mgr.AppendInt(inner, semconv.ProcessPIDKey, k.Pid)
 				indices = append(indices, inner.AsRaw())
 			}
