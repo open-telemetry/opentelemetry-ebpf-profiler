@@ -236,12 +236,12 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->ratelimitAction                   = RATELIMIT_ACTION_DEFAULT;
   record->customLabelsState.go_m_ptr        = NULL;
 
-  Trace *trace           = &record->trace;
-  trace->kernel_stack_id = -1;
-  trace->frame_data_len  = 0;
-  trace->num_frames      = 0;
-  trace->pid             = 0;
-  trace->tid             = 0;
+  Trace *trace             = &record->trace;
+  trace->frame_data_len    = 0;
+  trace->num_frames        = 0;
+  trace->num_kernel_frames = 0;
+  trace->pid               = 0;
+  trace->tid               = 0;
 
   trace->apm_trace_id.as_int.hi    = 0;
   trace->apm_trace_id.as_int.lo    = 0;
@@ -363,15 +363,37 @@ static inline EBPF_INLINE void push_abort(Trace *trace, ErrorCode error)
   }
 }
 
+// push_kernel_frames captures the kernel stack via bpf_get_stack() and stores
+// the raw addresses at the beginning of frame_data. Must be called before any
+// userspace frames are pushed. The num_kernel_frames field tells userspace how
+// many leading frame_data entries are kernel addresses.
+static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
+{
+  _Static_assert(
+    sizeof(trace->frame_data) > PERF_MAX_STACK_DEPTH * sizeof(u64), "frame data too small");
+  long bytes = bpf_get_stack(ctx, trace->frame_data, PERF_MAX_STACK_DEPTH * sizeof(u64), 0);
+  if (bytes > 0) {
+    int nframes              = bytes / sizeof(u64);
+    trace->num_kernel_frames = nframes;
+    trace->frame_data_len    = nframes;
+  }
+}
+
 // Send a trace to user-land via the `trace_events` perf event buffer.
 static inline EBPF_INLINE void send_trace(void *ctx, Trace *trace)
 {
-  const u64 send_size = sizeof(Trace) - sizeof(trace->frame_data) +
-                        sizeof(trace->frame_data[0]) * trace->frame_data_len;
-
-  if (send_size < sizeof(Trace)) {
-    bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, trace, send_size);
+  // Explicitly clamp frame_data_len for the verifier. In production the value
+  // is always within bounds, but when send_trace is inlined into the same
+  // program as push_frame (e.g. the integration test), the verifier cannot
+  // track frame_data_len through memory stores and reloads.
+  u16 len = trace->frame_data_len;
+  if (len > sizeof(trace->frame_data) / sizeof(trace->frame_data[0])) {
+    len = sizeof(trace->frame_data) / sizeof(trace->frame_data[0]);
   }
+  const u64 send_size =
+    sizeof(Trace) - sizeof(trace->frame_data) + sizeof(trace->frame_data[0]) * len;
+
+  bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, trace, send_size);
 }
 
 // is_kernel_address checks if the given address looks like virtual address to kernel memory.
@@ -731,9 +753,8 @@ static inline EBPF_INLINE int collect_trace(
     increment_metric(metricID_ErrBPFCurrentComm);
   }
 
-  // Get the kernel mode stack trace first
-  trace->kernel_stack_id = bpf_get_stackid(ctx, &kernel_stackmap, BPF_F_REUSE_STACKID);
-  DEBUG_PRINT("kernel stack id = %d", trace->kernel_stack_id);
+  // Capture kernel stack and push each frame into frame_data.
+  push_kernel_frames(ctx, trace);
 
   if (pid == 0) {
     tail_call(ctx, PROG_UNWIND_STOP);

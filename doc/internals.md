@@ -104,12 +104,6 @@ network would be very wasteful. We use trace hashing to avoid this. Different
 hashing schemes are used for the BPF and user-mode trace representations. Multiple
 64 bit hashes can end up being mapped to the same 128 bit hash, but *not* vice-versa.
 
-**BPF trace hash (64 bit):**
-
-```
-H(kernel_stack_id, frames_user, PID)
-```
-
 **User-land trace hash (128 bit)**
 
 ```
