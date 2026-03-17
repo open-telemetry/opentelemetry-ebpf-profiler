@@ -366,6 +366,8 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
         goto err_native_pc_read;
       }
       state->rax = rt_regs[13];
+      state->rdx = rt_regs[12];
+      state->rdi = rt_regs[8];
       state->r9  = rt_regs[1];
       state->r11 = rt_regs[3];
       state->r13 = rt_regs[5];
@@ -405,6 +407,19 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
     // the previous FP address if any.
     state->cfa = cfa = unwind_calc_register_with_deref(
       state, info->baseReg, param, (info->flags & UNWIND_FLAG_DEREF_CFA) != 0);
+
+    if (info->flags & UNWIND_FLAG_REG_RA) {
+      // Stackless frame (e.g. vfork): RA is in a register, not on the stack.
+      state->pc = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
+      if (!state->pc) {
+        goto err_native_pc_read;
+      }
+      state->fp = 0;
+      state->sp = cfa;
+      unwinder_mark_nonleaf_frame(state);
+      goto frame_ok;
+    }
+
     u64 fpa = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
 
     if (fpa) {
