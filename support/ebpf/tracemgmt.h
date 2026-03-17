@@ -581,6 +581,8 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   state->sp  = regs->sp;
   state->fp  = regs->bp;
   state->rax = regs->ax;
+  state->rdx = regs->dx;
+  state->rdi = regs->di;
   state->r9  = regs->r9;
   state->r11 = regs->r11;
   state->r13 = regs->r13;
