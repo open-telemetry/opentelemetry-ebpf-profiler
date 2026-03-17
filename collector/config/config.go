@@ -6,11 +6,12 @@ package config // import "go.opentelemetry.io/ebpf-profiler/collector/config"
 import (
 	"errors"
 	"fmt"
-	"go.opentelemetry.io/ebpf-profiler/internal/linux"
-	"go.opentelemetry.io/ebpf-profiler/tracer"
 	"runtime"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/linux"
+	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
 const (
@@ -67,6 +68,15 @@ type Config struct {
 // Validate validates the config.
 // This is automatically called by the config parser as it implements the xconfmap.Validator interface.
 func (cfg *Config) Validate() error {
+
+	if cfg.ErrorMode == "" {
+		cfg.ErrorMode = PropagateError
+	}
+
+	if cfg.ErrorMode != IgnoreError && cfg.ErrorMode != PropagateError {
+		return fmt.Errorf("unknown error mode %q", cfg.ErrorMode)
+	}
+
 	if cfg.SamplesPerSecond < 1 {
 		return fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond)
 	}

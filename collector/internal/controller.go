@@ -74,6 +74,7 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 func (c *Controller) Start(ctx context.Context, _ component.Host) error {
 	if err := c.ctlr.Start(ctx); err != nil {
 		if c.errorMode == config.IgnoreError {
+			c.ctlr.Shutdown()
 			log.Errorf("eBPF profiler receiver failed, continuing without profiling: %v", err)
 			return nil
 		}
