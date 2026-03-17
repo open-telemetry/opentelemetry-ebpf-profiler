@@ -123,6 +123,75 @@ func TestEhFrame(t *testing.T) {
 	}
 }
 
+func TestGetUnwindInfoX86_RegisterRA(t *testing.T) {
+	tests := map[string]struct {
+		regs     vmRegs
+		expected sdtypes.UnwindInfo
+	}{
+		// Standard RA=CFA-8 with CFA=RSP+16
+		"standard RA": {
+			regs: vmRegs{
+				cfa: vmReg{reg: x86RegRSP, off: 16},
+				ra:  vmReg{reg: regCFA, off: -8},
+			},
+			expected: sdtypes.UnwindInfo{
+				BaseReg: support.UnwindRegSp,
+				Param:   16,
+			},
+		},
+		// Register-based RA (RDI) with CFA=RSP+8: used by glibc vfork
+		// mid-execution (after popq %rdi, before pushq %rdi)
+		"register RA rdi cfa rsp+8": {
+			regs: vmRegs{
+				cfa: vmReg{reg: x86RegRSP, off: 0},
+				ra:  vmReg{reg: x86RegRDI, off: 0},
+			},
+			expected: sdtypes.UnwindInfo{
+				Flags:      support.UnwindFlagRegRA,
+				BaseReg:    support.UnwindRegSp,
+				Param:      0,
+				AuxBaseReg: support.UnwindRegX86RDI,
+			},
+		},
+		// Register-based RA (RDX) with CFA=RSP+0: musl alternative
+		"register RA rdx": {
+			regs: vmRegs{
+				cfa: vmReg{reg: x86RegRSP, off: 0},
+				ra:  vmReg{reg: x86RegRDX, off: 0},
+			},
+			expected: sdtypes.UnwindInfo{
+				Flags:      support.UnwindFlagRegRA,
+				BaseReg:    support.UnwindRegSp,
+				Param:      0,
+				AuxBaseReg: support.UnwindRegX86RDX,
+			},
+		},
+		// Standard RA with CFA=RSP+0 and RA=CFA-8 is musl clone: should be STOP
+		"musl clone stop": {
+			regs: vmRegs{
+				cfa: vmReg{reg: x86RegRSP, off: 0},
+				ra:  vmReg{reg: regCFA, off: -8},
+			},
+			expected: sdtypes.UnwindInfoStop,
+		},
+		// Unsupported register for RA: should be INVALID
+		"unsupported ra register": {
+			regs: vmRegs{
+				cfa: vmReg{reg: x86RegRSP, off: 0},
+				ra:  vmReg{reg: x86RegRCX, off: 0},
+			},
+			expected: sdtypes.UnwindInfoInvalid,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tc.regs.getUnwindInfoX86()
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
 func TestParseCIE(t *testing.T) {
 	tests := map[string]struct {
 		data       []byte
