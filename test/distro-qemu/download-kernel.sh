@@ -2,7 +2,12 @@
 set -e
 
 KERNEL_VERSION="${1:-5.10.217}"
-QEMU_ARCH="${QEMU_ARCH:-x86_64}"
+case "$(uname -m)" in
+    x86_64)  _default_arch="x86_64" ;;
+    aarch64) _default_arch="aarch64" ;;
+    *)       _default_arch="x86_64" ;;
+esac
+QEMU_ARCH="${QEMU_ARCH:-$_default_arch}"
 KERN_DIR="${KERN_DIR:-ci-kernels}"
 
 # Map QEMU arch to Docker platform

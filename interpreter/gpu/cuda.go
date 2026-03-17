@@ -3,8 +3,10 @@ package gpu // import "go.opentelemetry.io/ebpf-profiler/interpreter/gpu"
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"strconv"
 	"sync"
+	"syscall"
 	"unique"
 	"unsafe"
 
@@ -15,6 +17,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 const (
@@ -40,11 +43,6 @@ const cudaProgsMap = "cuda_progs"
 var (
 	// gpuFixers maps PID to gpuTraceFixer
 	gpuFixers sync.Map
-
-	// cudaTailCallOnce ensures the cuda_progs prog array is populated exactly
-	// once.  The tail-call targets must be in place before cuda_probe fires.
-	cudaTailCallOnce   sync.Once
-	cudaTailCallFailed bool
 )
 
 // SymbolizedCudaTrace holds a symbolized trace awaiting GPU timing information.
@@ -80,18 +78,26 @@ type gpuTraceFixer struct {
 	maxCorrelationId    uint32                          // track highest ID for threshold-based clearing
 }
 
+type linkEntry struct {
+	link interpreter.LinkCloser
+	refs int
+}
+
 type data struct {
 	path           string
-	link           interpreter.LinkCloser
 	probes         []pfelf.USDTProbe
 	kernelFallback *pfelf.USDTProbe // kernel_executed probe, kept as fallback if activity_batch fails
+
+	links map[util.OnDiskFileIdentifier]*linkEntry // uprobe attachments keyed by inode
 }
 
 // Instance is the CUDA interpreter instance
 type Instance struct {
 	interpreter.InstanceStubs
+	d    *data
 	path string
 	pid  libpf.PID
+	odfi util.OnDiskFileIdentifier
 }
 
 // CuptiTimingEvent is the structure received from eBPF via perf buffer
@@ -180,19 +186,16 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
 	_ remotememory.RemoteMemory) (interpreter.Instance, error) {
 	// If using activity_batch, ensure the tail-call prog array is populated.
+	// UpdateProgArray is idempotent (programs are cached, map updates are atomic)
+	// so it is safe to call on every Attach.
 	// On failure (e.g. verifier rejection), fall back to kernel_executed.
 	for i, probe := range d.probes {
 		if probe.Name != "activity_batch" {
 			continue
 		}
-		cudaTailCallOnce.Do(func() {
-			if err := ebpf.UpdateProgArray(cudaProgsMap, 0,
-				USDTProgCudaActivityBatchTail); err != nil {
-				log.Errorf("[cuda] activity_batch tail call failed: %v", err)
-				cudaTailCallFailed = true
-			}
-		})
-		if cudaTailCallFailed {
+		if err := ebpf.UpdateProgArray(cudaProgsMap, 0,
+			USDTProgCudaActivityBatchTail); err != nil {
+			log.Errorf("[cuda] activity_batch tail call failed: %v", err)
 			if d.kernelFallback != nil {
 				d.probes[i] = *d.kernelFallback
 				log.Warnf("[cuda] falling back to kernel_executed mode")
@@ -224,18 +227,33 @@ func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Addre
 		}
 	}
 
-	var lc interpreter.LinkCloser
-	if d.link == nil {
-		var err error
-		lc, err = ebpf.AttachUSDTProbes(pid, d.path, USDTProgCudaProbe, d.probes, cookies, progNames)
+	// Stat the path to get the current inode. Uprobe attachments are
+	// inode-based, so we need a separate attachment per inode.
+	st, err := os.Stat(d.path)
+	if err != nil {
+		return nil, fmt.Errorf("[cuda] stat %s: %w", d.path, err)
+	}
+	sys, ok := st.Sys().(*syscall.Stat_t)
+	if !ok || sys == nil {
+		return nil, fmt.Errorf("[cuda] failed to get stat_t for %s", d.path)
+	}
+	key := util.OnDiskFileIdentifier{DeviceID: uint64(sys.Dev), InodeNum: uint64(sys.Ino)}
+
+	if d.links == nil {
+		d.links = make(map[util.OnDiskFileIdentifier]*linkEntry)
+	}
+	le := d.links[key]
+	if le == nil {
+		lc, err := ebpf.AttachUSDTProbes(pid, d.path, USDTProgCudaProbe, d.probes, cookies, progNames)
 		if err != nil {
 			return nil, err
 		}
-		log.Debugf("[cuda] parcagpu USDT probes attached for %s", d.path)
-		d.link = lc
-	} else {
-		log.Debugf("[cuda] parcagpu USDT probes already attached for %s", d.path)
+		le = &linkEntry{link: lc}
+		d.links[key] = le
+		log.Debugf("[cuda] parcagpu USDT probes attached for %s (dev=%d ino=%d)",
+			d.path, key.DeviceID, key.InodeNum)
 	}
+	le.refs++
 
 	// Create and register fixer for this PID
 	fixer := &gpuTraceFixer{
@@ -245,13 +263,26 @@ func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Addre
 
 	gpuFixers.Store(pid, fixer)
 	return &Instance{
+		d:    d,
 		path: d.path,
 		pid:  pid,
+		odfi: key,
 	}, nil
 }
 
 func (i *Instance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
 	gpuFixers.Delete(i.pid)
+	if le := i.d.links[i.odfi]; le != nil {
+		le.refs--
+		if le.refs <= 0 {
+			log.Debugf("[cuda] last ref for %s (dev=%d ino=%d), unloading probes",
+				i.d.path, i.odfi.DeviceID, i.odfi.InodeNum)
+			if err := le.link.Unload(); err != nil {
+				log.Errorf("error closing cuda usdt link: %s", err)
+			}
+			delete(i.d.links, i.odfi)
+		}
+	}
 	return nil
 }
 
@@ -613,11 +644,13 @@ func (i *Instance) Symbolize(f libpf.EbpfFrame, _ *libpf.Frames, _ libpf.FrameMa
 		f.Type(), interpreter.ErrMismatchInterpreterType)
 }
 
-func (d *data) Unload(ebpf interpreter.EbpfHandler) {
-	if d.link != nil {
-		log.Debugf("[cuda] parcagpu USDT probes closed for %s", d.path)
-		if err := d.link.Unload(); err != nil {
+func (d *data) Unload(_ interpreter.EbpfHandler) {
+	for key, le := range d.links {
+		log.Debugf("[cuda] parcagpu USDT probes closed for %s (dev=%d ino=%d)",
+			d.path, key.DeviceID, key.InodeNum)
+		if err := le.link.Unload(); err != nil {
 			log.Errorf("error closing cuda usdt link: %s", err)
 		}
 	}
+	d.links = nil
 }
