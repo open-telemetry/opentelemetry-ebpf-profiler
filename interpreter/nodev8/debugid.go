@@ -5,11 +5,11 @@ package nodev8 // import "go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 
 import (
 	"encoding/binary"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -61,7 +61,7 @@ func readFileTail(path string, maxBytes int64) ([]byte, error) {
 // extractDebugIDFromFile reads the debug ID magic comment from a JavaScript file's tail.
 func extractDebugIDFromFile(pid libpf.PID, filePath string) libpf.FileID {
 	filePath = strings.TrimPrefix(filePath, "file://")
-	containerPath := filepath.Join(fmt.Sprintf("/proc/%d/root", pid), filePath)
+	containerPath := filepath.Join("/proc", strconv.FormatUint(uint64(pid), 10), "root", filePath)
 
 	log.Debugf("V8: extracting debug ID from %s", containerPath)
 
