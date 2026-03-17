@@ -97,9 +97,9 @@ const (
 
 var (
 	// regex to identify the Ruby interpreter executable
-	rubyRegex = regexp.MustCompile(`^(?:.*/)?libruby(?:-.*)?\.so\.(\d)\.(\d)\.(\d)$`)
+	rubyRegex = regexp.MustCompile(`^(?:.*/)?libruby(?:-.*)?\.so\.(\d+)\.(\d+)\.(\d+)$`)
 	// regex to extract a version from a string
-	rubyVersionRegex = regexp.MustCompile(`^(\d)\.(\d)\.(\d)$`)
+	rubyVersionRegex = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)$`)
 
 	unknownCfunc     = libpf.Intern("<unknown cfunc>")
 	cfuncDummyFile   = libpf.Intern("<cfunc>")
