@@ -61,6 +61,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	mappingSet := make(orderedset.OrderedSet[libpf.FrameMapping], 64)
 	stackSet := make(orderedset.OrderedSet[stackInfo], 64)
 	locationSet := make(orderedset.OrderedSet[locationInfo], 64)
+	linkSet := make(orderedset.OrderedSet[linkInfo], 64)
 
 	// By specification, the first element should be empty.
 	stringSet.Add("")
@@ -104,7 +105,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic,
-				attrMgr, stringSet, funcSet, mappingSet, stackSet, locationSet,
+				attrMgr, stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
 				origin, originToEvents[origin], prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
@@ -143,6 +144,7 @@ func (p *Pdata) setProfile(
 	mappingSet orderedset.OrderedSet[libpf.FrameMapping],
 	stackSet orderedset.OrderedSet[stackInfo],
 	locationSet orderedset.OrderedSet[locationInfo],
+	linkSet orderedset.OrderedSet[linkInfo],
 	origin libpf.Origin,
 	events map[samples.TraceAndMetaKey]*samples.TraceEvents,
 	profile pprofile.Profile,
@@ -175,6 +177,21 @@ func (p *Pdata) setProfile(
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
 		if origin == support.TraceOriginOffCPU {
 			sample.Values().Append(traceInfo.OffTimes...)
+		}
+
+		if traceKey.SpanID != libpf.InvalidAPMSpanID &&
+			traceKey.TraceID != libpf.InvalidAPMTraceID {
+			link, ok := linkSet.AddWithCheck(linkInfo{
+				traceID: traceKey.TraceID,
+				spanID:  traceKey.SpanID,
+			})
+			if !ok {
+				l := dic.LinkTable().AppendEmpty()
+				l.SetSpanID(pcommon.SpanID(traceKey.SpanID))
+				l.SetTraceID(pcommon.TraceID(traceKey.TraceID))
+
+			}
+			sample.SetLinkIndex(link)
 		}
 
 		locationIndices := make([]int32, 0, len(traceInfo.Frames))

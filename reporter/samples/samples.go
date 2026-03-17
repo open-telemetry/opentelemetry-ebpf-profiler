@@ -19,6 +19,8 @@ type TraceEventMeta struct {
 	Origin         libpf.Origin
 	OffTime        int64
 	EnvVars        map[libpf.String]libpf.String
+	SpanID         libpf.APMSpanID
+	TraceID        libpf.APMTraceID
 }
 
 // TraceEvents holds known information about a trace.
@@ -47,6 +49,9 @@ type TraceAndMetaKey struct {
 	ProcessName libpf.String
 	// Executable path is retrieved from /proc/PID/exe
 	ExecutablePath libpf.String
+
+	SpanID  libpf.APMSpanID
+	TraceID libpf.APMTraceID
 
 	// ExtraMeta stores extra meta info that may have been produced by a
 	// `SampleAttrProducer` instance. May be nil.
