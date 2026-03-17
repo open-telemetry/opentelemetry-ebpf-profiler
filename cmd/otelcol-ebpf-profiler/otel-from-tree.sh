@@ -15,8 +15,8 @@ fi
 
 echo "  # START otel-from-tree - Do not edit below this line" >> cmd/otelcol-ebpf-profiler/manifest.yaml
 
-grep -E "gomod: go.opentelemetry.io/collector/" cmd/otelcol-ebpf-profiler/manifest.yaml | \
-    sed -E 's/.*gomod: ([^ ]+) .*/\1/' | \
+grep -E "^[[:space:]]*go.opentelemetry.io/collector/" cmd/otelcol-ebpf-profiler/go.mod | \
+    awk '{print $1}' | \
     sort -u | \
     while read -r module; do
         subpath=${module#go.opentelemetry.io/collector}
