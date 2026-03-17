@@ -58,6 +58,10 @@ Since the profiler is Linux-only, macOS and Windows users need to set up a Linux
 
 [7ddc23ea](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/commit/7ddc23ea135a2e00fffc17850ab90534e9b63108) is the last commit with support for 4.19. Changes after this commit may require a minimal Linux kernel version of 5.4.
 
+### Updating the supported Linux kernel version
+
+The project maintains its minimum supported kernel version in line with the lowest kernel version currently provided by actively maintained major Linux distributions, which include Debian stable, Red Hat Enterprise Linux, Ubuntu LTS, and Amazon Linux. The minimum requirement may be increased when all such distributions no longer ship a specific kernel version. This approach enables the codebase to utilize newer eBPF features and avoids the need to maintain compatibility shims for obsolete kernels.
+
 ## Alternative Build (Without Docker)
 You can build the agent without Docker by directly installing the dependencies listed in the Dockerfile. Once dependencies are set up, simply run:
 ```sh
