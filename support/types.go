@@ -349,11 +349,14 @@ const (
 	UnwindRegX86R9   uint8 = 0x7
 	UnwindRegX86R11  uint8 = 0x8
 	UnwindRegX86R15  uint8 = 0xa
+	UnwindRegX86RDI  uint8 = 0xb
+	UnwindRegX86RDX  uint8 = 0xc
 
-	UnwindFlagCommand  uint8 = 0x1
-	UnwindFlagFrame    uint8 = 0x2
-	UnwindFlagLeafOnly uint8 = 0x4
-	UnwindFlagDerefCfa uint8 = 0x8
+	UnwindFlagCommand    uint8 = 0x1
+	UnwindFlagFrame      uint8 = 0x2
+	UnwindFlagLeafOnly   uint8 = 0x4
+	UnwindFlagDerefCfa   uint8 = 0x8
+	UnwindFlagRegRA uint8 = 0x10
 
 	UnwindCommandInvalid      int32 = 0x0
 	UnwindCommandStop         int32 = 0x1

@@ -644,7 +644,7 @@ typedef struct UnwindState {
       // The per-CPU registers which are not unwound, but needed to be accessed
       // on leaf frames.
 #if defined(__x86_64__)
-      u64 rax, r9, r11, r13, r15;
+      u64 rax, r9, r11, r13, r15, rdi, rdx;
 #elif defined(__aarch64__)
       u64 r20, r22, r28;
 #endif
@@ -854,7 +854,9 @@ typedef struct UnwindInfo {
 #define UNWIND_REG_X86_R9  7
 #define UNWIND_REG_X86_R11 8
 #define UNWIND_REG_X86_R13 9
-#define UNWIND_REG_X86_R15 10
+#define UNWIND_REG_X86_R15  10
+#define UNWIND_REG_X86_RDI  11
+#define UNWIND_REG_X86_RDX  12
 
 // Flag to indicate a command (used inside Go stack delta generation only)
 #define UNWIND_FLAG_COMMAND   (1 << 0)
@@ -864,6 +866,8 @@ typedef struct UnwindInfo {
 #define UNWIND_FLAG_LEAF_ONLY (1 << 2)
 // Flag to indicate that the resolve CFA value should be dereferenced
 #define UNWIND_FLAG_DEREF_CFA (1 << 3)
+// Flag to indicate a stackless frame where RA is in a register (auxBaseReg)
+#define UNWIND_FLAG_REG_RA    (1 << 4)
 
 // If flags has UNWIND_FLAG_DEREF_CFA set, the lowest bits of 'param' are used
 // as second adder as post-deref operation. This contains the mask for that.

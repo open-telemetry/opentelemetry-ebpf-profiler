@@ -99,6 +99,10 @@ func getUnwinderRegX86(reg uleb128) uint8 {
 		return support.UnwindRegX86R11
 	case x86RegR15:
 		return support.UnwindRegX86R15
+	case x86RegRDI:
+		return support.UnwindRegX86RDI
+	case x86RegRDX:
+		return support.UnwindRegX86RDX
 	case x86RegRBP:
 		return support.UnwindRegFp
 	case x86RegRSP:
@@ -126,14 +130,29 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 		// condition in samples is statistically unlikely.
 		return sdtypes.UnwindInfoStop
 	}
+	// Check if RA is in a register (e.g., vfork stores RA in RDI).
+	raReg := getUnwinderRegX86(regs.ra.reg)
+	if raReg != support.UnwindRegInvalid && raReg != support.UnwindRegCfa {
+		// Register-based RA. AuxBaseReg carries the RA register; no FP recovery.
+		switch regs.cfa.reg {
+		case x86RegRBP, x86RegRSP:
+			return sdtypes.UnwindInfo{
+				Flags:      support.UnwindFlagRegRA,
+				BaseReg:    getUnwinderRegX86(regs.cfa.reg),
+				Param:      int32(regs.cfa.off),
+				AuxBaseReg: raReg,
+				AuxParam:   int32(regs.ra.off),
+			}
+		default:
+			return sdtypes.UnwindInfoInvalid
+		}
+	}
+
+	// Standard RA = CFA - 8.
 	// Filter invalid RSP based CFAs
 	if regs.cfa.reg == x86RegRSP && regs.cfa.off == 0 {
 		return sdtypes.UnwindInfoInvalid
 	}
-
-	// The CFI allows having Return Address (RA) be recoverable via an expression,
-	// but the eBPF currently supports the ABI standard RA=CFA-8 only. Verify that
-	// we are not in any weird hand woven assembly which is not supported.
 	if regs.ra.reg != regCFA || regs.ra.off != -8 {
 		return sdtypes.UnwindInfoInvalid
 	}

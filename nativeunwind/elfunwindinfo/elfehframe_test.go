@@ -178,3 +178,79 @@ func TestParseCIE(t *testing.T) {
 		})
 	}
 }
+
+func TestGetUnwindInfoX86_RegisterRA(t *testing.T) {
+	tests := []struct {
+		name     string
+		regs     vmRegs
+		expected sdtypes.UnwindInfo
+	}{
+		{
+			name: "Standard RA=CFA-8",
+			regs: vmRegs{
+				cfa: vmReg{reg: x86RegRSP, off: 16},
+				ra:  vmReg{reg: regCFA, off: -8},
+				fp:  vmReg{reg: regCFA, off: -16},
+			},
+			expected: sdtypes.UnwindInfo{
+				BaseReg:    support.UnwindRegSp,
+				Param:      16,
+				AuxBaseReg: support.UnwindRegCfa,
+				AuxParam:   -16,
+			},
+		},
+		{
+			name: "Register-based RA (RDI) with CFA=RSP+8",
+			regs: vmRegs{
+				cfa: vmReg{reg: x86RegRSP, off: 8},
+				ra:  vmReg{reg: x86RegRDI, off: 0},
+				fp:  vmReg{reg: regCFA, off: 0},
+			},
+			expected: sdtypes.UnwindInfo{
+				Flags:      support.UnwindFlagRegRA,
+				BaseReg:    support.UnwindRegSp,
+				Param:      8,
+				AuxBaseReg: support.UnwindRegX86RDI,
+			},
+		},
+		{
+			name: "Exact __vfork FDE: CFA=RSP+0 with RA=RDI",
+			regs: vmRegs{
+				cfa: vmReg{reg: x86RegRSP, off: 0},
+				ra:  vmReg{reg: x86RegRDI, off: 0},
+				fp:  vmReg{reg: regUndefined},
+			},
+			expected: sdtypes.UnwindInfo{
+				Flags:      support.UnwindFlagRegRA,
+				BaseReg:    support.UnwindRegSp,
+				Param:      0,
+				AuxBaseReg: support.UnwindRegX86RDI,
+			},
+		},
+		{
+			name: "Standard RA with CFA=RSP+0 is stop (musl clone)",
+			regs: vmRegs{
+				cfa: vmReg{reg: x86RegRSP, off: 0},
+				ra:  vmReg{reg: regCFA, off: -8},
+				fp:  vmReg{reg: regCFA, off: 0},
+			},
+			expected: sdtypes.UnwindInfoStop,
+		},
+		{
+			name: "Non-standard RA offset is invalid",
+			regs: vmRegs{
+				cfa: vmReg{reg: x86RegRSP, off: 20},
+				ra:  vmReg{reg: regCFA, off: -16},
+				fp:  vmReg{reg: regCFA, off: 0},
+			},
+			expected: sdtypes.UnwindInfoInvalid,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := tt.regs.getUnwindInfoX86()
+			assert.Equal(t, tt.expected, actual)
+		})
+	}
+}

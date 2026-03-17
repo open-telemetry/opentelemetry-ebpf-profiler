@@ -585,6 +585,8 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   state->r11 = regs->r11;
   state->r13 = regs->r13;
   state->r15 = regs->r15;
+  state->rdi = regs->di;
+  state->rdx = regs->dx;
 
   // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/include/asm/syscall.h#L31-L39
