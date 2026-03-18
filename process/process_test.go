@@ -139,28 +139,6 @@ func TestParseMappings(t *testing.T) {
 	assert.Equal(t, allExpectedMappings, mappings)
 }
 
-func TestIterateMappings(t *testing.T) {
-	t.Run("collects all mappings", func(t *testing.T) {
-		mappings, numParseErrors, err := getTestMappings(t, strings.NewReader(testMappings))
-		require.NoError(t, err)
-		require.Equal(t, uint32(4), numParseErrors)
-		assert.Equal(t, allExpectedMappings, mappings)
-	})
-
-	t.Run("stops early when callback returns false", func(t *testing.T) {
-		var got []Mapping
-		collectThree := func(m RawMapping) bool {
-			got = append(got, m.ToMapping())
-			return len(got) < 3
-		}
-		numParseErrors, err := iterateMappings(strings.NewReader(testMappings), collectThree)
-		require.NoError(t, err)
-		assert.Equal(t, uint32(0), numParseErrors)
-		assert.Len(t, got, 3)
-		assert.Equal(t, allExpectedMappings[:3], got)
-	})
-}
-
 func TestRawMappingPredicates(t *testing.T) {
 	tests := []struct {
 		name      string

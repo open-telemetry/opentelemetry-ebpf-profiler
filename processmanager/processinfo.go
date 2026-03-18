@@ -395,154 +395,6 @@ func compareMapping(a, b Mapping) int {
 	return 0
 }
 
-// synchronizeMappings synchronizes executable mappings for the given PID.
-// This method will be called when a PID is first encountered or when the eBPF
-// code encounters an address in an executable mapping that HA has no information
-// on. Therefore, executable mapping synchronization takes place lazily on-demand,
-// and map/unmap operations are not precisely tracked (reduce processing load).
-// This means that at any point, we may have cached stale (or miss) executable
-// mappings. The expectation is that stale mappings will disappear and new
-// mappings cached at the next synchronization triggered by process exit or
-// unknown address encountered.
-//
-// TODO: Periodic synchronization of mappings for every tracked PID.
-func (pm *ProcessManager) synchronizeMappings(pr process.Process,
-	processMappings []process.Mapping) bool {
-	pid := pr.PID()
-
-	// Get current executable name
-	exe, err := pr.GetExe()
-	if err != nil && !os.IsNotExist(err) {
-		// The /proc/PID/exe returns "not exists" error also in
-		// the case of main thread exit. Ignore it.
-		log.Warnf("Failed to get executable of process %d: %v", pid, err)
-	}
-
-	pm.mu.Lock()
-	info := pm.getPidInformation(pid, pr)
-	if info == nil {
-		pm.mu.Unlock()
-		return false
-	}
-	// Check if process meta needs an update
-	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
-
-	// Get existing info
-	oldMappings := info.mappings
-	newProcess := len(info.mappings) == 0
-	var numInterpreters int
-	if intrp, ok := pm.interpreters[pid]; ok {
-		numInterpreters = len(intrp)
-	}
-	pm.mu.Unlock()
-
-	// Create a lookup map for the old mappings
-	mpRemove := make(map[uint64]*Mapping, len(oldMappings))
-	for idx := range oldMappings {
-		m := &oldMappings[idx]
-		mpRemove[uint64(m.Vaddr)] = m
-	}
-
-	// Generate the list of new processmanager mappings and interpreters.
-	// Reuse existing mappings if possible.
-	mappings := make([]Mapping, 0, len(processMappings))
-	mpAdd := make([]*Mapping, 0, len(processMappings))
-	interpretersValid := make(libpf.Set[util.OnDiskFileIdentifier], numInterpreters)
-	for idx := range processMappings {
-		m := &processMappings[idx]
-		if !m.IsExecutable() || m.IsAnonymous() {
-			continue
-		}
-
-		var fm libpf.FrameMapping
-		if oldm, ok := mpRemove[m.Vaddr]; ok {
-			if oldm.Length == m.Length && oldm.Device == m.Device && oldm.Inode == m.Inode {
-				delete(mpRemove, m.Vaddr)
-				fm = oldm.FrameMapping
-			}
-		}
-		newMapping := false
-		if !fm.Valid() {
-			newMapping = true
-			var err error
-			fm, err = pm.newFrameMapping(pr, m)
-			if err != nil {
-				// newFrameMapping logged the message if needed
-				continue
-			}
-		}
-
-		key := m.GetOnDiskFileIdentifier()
-		interpretersValid[key] = libpf.Void{}
-
-		mappings = append(mappings, Mapping{
-			Vaddr:        libpf.Address(m.Vaddr),
-			Length:       m.Length,
-			Device:       m.Device,
-			Inode:        m.Inode,
-			FrameMapping: fm,
-		})
-		if newMapping {
-			mpAdd = append(mpAdd, &mappings[len(mappings)-1])
-		}
-	}
-
-	// Detach removed interpreters and remove old mappings
-	numChanges := uint64(0)
-	for _, m := range mpRemove {
-		numChanges += pm.processRemovedMapping(pid, m)
-	}
-	pm.pidPageToMappingInfoSize -= numChanges
-	pm.mu.Lock()
-	pm.processRemovedInterpreters(pid, interpretersValid)
-	pm.mu.Unlock()
-
-	// Add new mappings
-	numChanges = 0
-	for _, m := range mpAdd {
-		numChanges += pm.processNewMapping(pid, m)
-	}
-	pm.pidPageToMappingInfoSize += numChanges
-
-	// Update metadata of the process.
-	var meta process.ProcessMeta
-	if updateProcessMeta {
-		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
-	}
-
-	// Sort and publish the new mappings and meta
-	slices.SortFunc(mappings, compareMapping)
-	pm.mu.Lock()
-	info = pm.getPidInformation(pid, pr)
-	if info != nil {
-		info.mappings = mappings
-		if updateProcessMeta {
-			info.meta = meta
-		}
-	}
-	interpreters := pm.interpreters[pid]
-	pm.mu.Unlock()
-
-	// Synchronize all interpreters with updated mappings
-	for _, instance := range interpreters {
-		err := instance.SynchronizeMappings(pm.ebpf, pm.exeReporter, pr, processMappings)
-		if err != nil {
-			if alive, _ := isPIDLive(pid); alive {
-				log.Errorf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
-			} else {
-				log.Debugf("Failed to handle new anonymous mapping for PID %d: process exited",
-					pid)
-			}
-		}
-	}
-
-	if len(mpAdd) > 0 || len(mpRemove) > 0 || len(interpreters) > 0 {
-		log.Debugf("Added %v mappings, removed %v mappings for PID %v with %d interpreters",
-			len(mpAdd), len(mpRemove), pid, len(interpreters))
-	}
-	return newProcess
-}
-
 // processPIDExit informs the ProcessManager that a process exited and no longer will be scheduled.
 // exitKTime is stored for later processing in ProcessedUntil, when traces up to this time have been
 // processed. There can be a race condition if we can not clean up the references for this process
@@ -591,7 +443,18 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 }
 
 // SynchronizeProcess triggers ProcessManager to update its internal information
-// about a process. This includes process exit information as well as changed memory mappings.
+// about a process. It synchronizes executable mappings for the given PID by
+// parsing /proc/PID/maps and building the internal mapping state directly in
+// a single pass. This method will be called when a PID is first encountered or
+// when the eBPF code encounters an address in an executable mapping that HA has
+// no information on. Therefore, executable mapping synchronization takes place
+// lazily on-demand, and map/unmap operations are not precisely tracked (reduce
+// processing load). This means that at any point, we may have cached stale (or
+// miss) executable mappings. The expectation is that stale mappings will
+// disappear and new mappings cached at the next synchronization triggered by
+// process exit or unknown address encountered.
+//
+// TODO: Periodic synchronization of mappings for every tracked PID.
 func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pid := pr.PID()
 	log.Debugf("= PID: %v", pid)
@@ -607,26 +470,84 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		return
 	}
 
+	// Read existing mapping state for diffing. We only read here (no creation)
+	// so that if IterateMappings fails, we haven't created any state to leak.
+	var oldMappings []Mapping
+	var numInterpreters int
+
+	pm.mu.RLock()
+	if info, ok := pm.pidToProcessInfo[pid]; ok {
+		oldMappings = info.mappings
+	}
+	if intrp, ok := pm.interpreters[pid]; ok {
+		numInterpreters = len(intrp)
+	}
+	pm.mu.RUnlock()
+
+	// Create a lookup map for the old mappings
+	mpRemove := make(map[uint64]*Mapping, len(oldMappings))
+	for idx := range oldMappings {
+		m := &oldMappings[idx]
+		mpRemove[uint64(m.Vaddr)] = m
+	}
+
+	interpreterMappings := make([]process.Mapping, 0, 8)
+	interpretersValid := make(libpf.Set[util.OnDiskFileIdentifier], numInterpreters)
+	capHeuristic := max(32, len(oldMappings))
+	mappings := make([]Mapping, 0, capHeuristic)
+	mpAdd := make([]*Mapping, 0, capHeuristic)
+
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
 
-	executableMappings := make([]process.Mapping, 0, 32)
-	var dllMappings []process.Mapping
+	numParseErrors, err := pr.IterateMappings(func(raw process.RawMapping) bool {
+		// executable mappings and VDSO converted directly to libpf.FrameMapping
+		if raw.IsExecutable() && !raw.IsAnonymous() {
+			m := raw.ToMapping()
 
-	// filterMappings keeps only mappings relevant for profiling:
-	// executable, anonymous (JIT), and .dll (dotnet PE assemblies).
-	// Non-executable file-backed mappings (e.g. read-only data files)
-	// are discarded without interning their path.
-	filterMappings := func(m process.RawMapping) bool {
-		if m.IsExecutable() || m.IsAnonymous() {
-			executableMappings = append(executableMappings, m.ToMapping())
-		} else if m.IsFileBacked() && strings.HasSuffix(m.Path, ".dll") {
-			dllMappings = append(dllMappings, m.ToMapping())
+			var fm libpf.FrameMapping
+			if oldm, ok := mpRemove[m.Vaddr]; ok {
+				if oldm.Length == m.Length && oldm.Device == m.Device && oldm.Inode == m.Inode {
+					delete(mpRemove, m.Vaddr)
+					fm = oldm.FrameMapping
+				}
+			}
+			newMapping := false
+			if !fm.Valid() {
+				newMapping = true
+				var err error
+				fm, err = pm.newFrameMapping(pr, &m)
+				if err != nil {
+					return true // Ignore error, continue with next mapping
+				}
+			}
+
+			key := m.GetOnDiskFileIdentifier()
+			interpretersValid[key] = libpf.Void{}
+
+			mappings = append(mappings, Mapping{
+				Vaddr:        libpf.Address(m.Vaddr),
+				Length:       m.Length,
+				Device:       m.Device,
+				Inode:        m.Inode,
+				FrameMapping: fm,
+			})
+			if newMapping {
+				mpAdd = append(mpAdd, &mappings[len(mappings)-1])
+			}
+		}
+
+		// Interpreters specific mappings
+		// Needed by V8 and BEAM to retrieve JIT mappings
+		if raw.IsExecutable() && raw.IsAnonymous() {
+			interpreterMappings = append(interpreterMappings, raw.ToMapping())
+		}
+		// Needed by .NET to retrieve PE assembly mappings
+		if !raw.IsAnonymous() && strings.HasSuffix(raw.Path, ".dll") {
+			interpreterMappings = append(interpreterMappings, raw.ToMapping())
 		}
 		return true
-	}
-
-	numParseErrors, err := pr.IterateMappings(filterMappings)
+	})
 
 	elapsed := time.Since(start)
 	pm.mappingStats.numProcParseErrors.Add(numParseErrors)
@@ -669,8 +590,78 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	util.AtomicUpdateMaxUint32(&pm.mappingStats.maxProcParseUsec, uint32(elapsed.Microseconds()))
 	pm.mappingStats.totalProcParseUsec.Add(uint32(elapsed.Microseconds()))
 
-	allMappings := slices.Concat(executableMappings, dllMappings)
-	if pm.synchronizeMappings(pr, allMappings) {
+	exe, exeErr := pr.GetExe()
+	if exeErr != nil && !os.IsNotExist(exeErr) {
+		log.Warnf("Failed to get executable of process %d: %v", pid, exeErr)
+	}
+
+	pm.mu.Lock()
+	info := pm.getPidInformation(pid, pr)
+	if info == nil {
+		pm.mu.Unlock()
+		return
+	}
+
+	// Check if process meta needs an update
+	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
+	newProcess := len(info.mappings) == 0
+	pm.mu.Unlock()
+
+	// Detach removed interpreters and remove old mappings
+	numChanges := uint64(0)
+	for _, m := range mpRemove {
+		numChanges += pm.processRemovedMapping(pid, m)
+	}
+	pm.pidPageToMappingInfoSize -= numChanges
+	pm.mu.Lock()
+	pm.processRemovedInterpreters(pid, interpretersValid)
+	pm.mu.Unlock()
+
+	// Add new mappings
+	numChanges = 0
+	for _, m := range mpAdd {
+		numChanges += pm.processNewMapping(pid, m)
+	}
+	pm.pidPageToMappingInfoSize += numChanges
+
+	// Update metadata of the process.
+	var meta process.ProcessMeta
+	if updateProcessMeta {
+		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
+	}
+
+	// Sort and publish the new mappings and meta
+	slices.SortFunc(mappings, compareMapping)
+	pm.mu.Lock()
+	info = pm.getPidInformation(pid, pr)
+	if info != nil {
+		info.mappings = mappings
+		if updateProcessMeta {
+			info.meta = meta
+		}
+	}
+	interpreters := pm.interpreters[pid]
+	pm.mu.Unlock()
+
+	// Synchronize all interpreters with updated mappings
+	for _, instance := range interpreters {
+		err := instance.SynchronizeMappings(pm.ebpf, pm.exeReporter, pr, interpreterMappings)
+		if err != nil {
+			if alive, _ := isPIDLive(pid); alive {
+				log.Errorf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
+			} else {
+				log.Debugf("Failed to handle new anonymous mapping for PID %d: process exited",
+					pid)
+			}
+		}
+	}
+
+	if len(mpAdd) > 0 || len(mpRemove) > 0 || len(interpreters) > 0 {
+		log.Debugf("Added %v mappings, removed %v mappings for PID %v with %d interpreters",
+			len(mpAdd), len(mpRemove), pid, len(interpreters))
+	}
+
+	if newProcess {
 		log.Debugf("+ PID: %v", pid)
 		// TODO: Fine-grained reported_pids handling (evaluate per-PID mapping
 		// synchronization based on per-PID state such as time since last
@@ -678,11 +669,6 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		// if it's a new process and on process exit. This limits
 		// the frequency of PID mapping synchronizations to PID lifetime in
 		// reported_pids (which is dictated by REPORTED_PIDS_TIMEOUT in eBPF).
-
-		// We're immediately removing a new PID from reported_pids, to cover
-		// corner cases where processes load on startup in quick-succession
-		// additional code (e.g. plugins, Asterisk).
-		// Also see: Unified PID Events design doc
 		pm.ebpf.RemoveReportedPID(pid)
 	}
 }
