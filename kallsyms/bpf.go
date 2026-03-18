@@ -149,7 +149,7 @@ func (s *bpfSymbolizer) subscribe(ctx context.Context, onlineCPUs []int) error {
 	s.records = make(chan *perf.KSymbolRecord)
 
 	for _, cpu := range onlineCPUs {
-		event, err := perf.Open(attr, -1, cpu, nil)
+		event, err := perf.Open(attr, perf.AllThreads, cpu, nil)
 		if err != nil {
 			return err
 		}
