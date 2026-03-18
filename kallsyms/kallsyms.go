@@ -630,6 +630,11 @@ func (s *Symbolizer) pollKobjectClient(_ context.Context, kobjectClient *kobject
 	}
 }
 
+// Close frees resources associated with the Symbolizer.
+func (s *Symbolizer) Close() {
+	s.bpf.Close()
+}
+
 // StartMonitor starts the update monitoring for kallsyms.
 func (s *Symbolizer) StartMonitor(ctx context.Context, onlineCPUs []int) error {
 	kobjectClient, err := kobject.New()

@@ -313,6 +313,7 @@ func (t *Tracer) Close() {
 	}
 
 	t.processManager.Close()
+	t.kernelSymbolizer.Close()
 	t.signalDone()
 }
 

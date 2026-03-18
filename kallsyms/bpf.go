@@ -34,6 +34,7 @@ type bpfSymbol struct {
 type bpfSymbolizer struct {
 	records chan *perf.KSymbolRecord
 	events  []*perf.Event
+	cancel  context.CancelFunc
 	module  atomic.Pointer[Module]
 }
 
@@ -125,6 +126,8 @@ func (s *bpfSymbolizer) updateSymbolsFrom(r io.Reader) error {
 
 // startMonitor starts the update monitoring and loads bpf symbols from /proc/kallsyms.
 func (s *bpfSymbolizer) startMonitor(ctx context.Context, onlineCPUs []int) error {
+	ctx, s.cancel = context.WithCancel(ctx)
+
 	err := s.subscribe(ctx, onlineCPUs)
 	if err != nil {
 		return err
@@ -287,6 +290,12 @@ func (s *bpfSymbolizer) handleBPFUpdate(record *perf.KSymbolRecord) error {
 
 // Close frees resources associated with bpfSymbolizer.
 func (s *bpfSymbolizer) Close() {
+	// Cancel the context first so reader goroutines and reloadWorker
+	// observe ctx.Done() and exit before we close the perf events.
+	if s.cancel != nil {
+		s.cancel()
+	}
+
 	for _, event := range s.events {
 		if err := event.Disable(); err != nil {
 			log.Errorf("Failed to disable perf event: %v", err)
