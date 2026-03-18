@@ -375,8 +375,7 @@ func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint
 			return numParseErrors, ErrNoMappings
 		}
 		defer mapsFileAlt.Close()
-		fallbackErrors, err := iterateMappings(mapsFileAlt, collectForOpenELF)
-		numParseErrors += fallbackErrors
+		numParseErrors, err := iterateMappings(mapsFileAlt, collectForOpenELF)
 		if err != nil || !gotMappings {
 			return numParseErrors, ErrNoMappings
 		}

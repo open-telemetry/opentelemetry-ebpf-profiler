@@ -493,9 +493,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	interpreterMappings := make([]process.Mapping, 0, 8)
 	interpretersValid := make(libpf.Set[util.OnDiskFileIdentifier], numInterpreters)
-	capHeuristic := max(32, len(oldMappings))
-	mappings := make([]Mapping, 0, capHeuristic)
-	mpAdd := make([]*Mapping, 0, capHeuristic)
+	capHint := max(32, len(oldMappings))
+	mappings := make([]Mapping, 0, capHint)
+	mpAdd := make([]*Mapping, 0, capHint)
 
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
