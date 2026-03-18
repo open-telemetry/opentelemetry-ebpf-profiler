@@ -470,19 +470,31 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		return
 	}
 
-	// Read existing mapping state for diffing. We only read here (no creation)
-	// so that if IterateMappings fails, we haven't created any state to leak.
-	var oldMappings []Mapping
-	var numInterpreters int
-
-	pm.mu.RLock()
-	if info, ok := pm.pidToProcessInfo[pid]; ok {
-		oldMappings = info.mappings
+	// Get current executable name
+	exe, exeErr := pr.GetExe()
+	if exeErr != nil && !os.IsNotExist(exeErr) {
+		// The /proc/PID/exe returns "not exists" error also in
+		// the case of main thread exit. Ignore it.
+		log.Warnf("Failed to get executable of process %d: %v", pid, exeErr)
 	}
+
+	pm.mu.Lock()
+	info := pm.getPidInformation(pid, pr)
+	if info == nil {
+		pm.mu.Unlock()
+		return
+	}
+	// Check if process meta needs an update
+	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
+
+	// Get existing info
+	oldMappings := info.mappings
+	newProcess := len(info.mappings) == 0
+	var numInterpreters int
 	if intrp, ok := pm.interpreters[pid]; ok {
 		numInterpreters = len(intrp)
 	}
-	pm.mu.RUnlock()
+	pm.mu.Unlock()
 
 	// Create a lookup map for the old mappings
 	mpRemove := make(map[uint64]*Mapping, len(oldMappings))
@@ -493,7 +505,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	interpreterMappings := make([]process.Mapping, 0, 8)
 	interpretersValid := make(libpf.Set[util.OnDiskFileIdentifier], numInterpreters)
-	capHint := max(32, len(oldMappings))
+	capHint := max(32, min(len(oldMappings), 256))
 	mappings := make([]Mapping, 0, capHint)
 	mpAdd := make([]*Mapping, 0, capHint)
 
@@ -515,25 +527,24 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			newMapping := false
 			if !fm.Valid() {
 				newMapping = true
-				var err error
-				fm, err = pm.newFrameMapping(pr, &m)
-				if err != nil {
-					return true // Ignore error, continue with next mapping
-				}
+				// Error is expected for non-ELF files (e.g. PE .dll);
+				// fm will be invalid and the mapping skipped below but will enter the interpreter mappings block.
+				fm, _ = pm.newFrameMapping(pr, &m)
 			}
+			if fm.Valid() {
+				key := m.GetOnDiskFileIdentifier()
+				interpretersValid[key] = libpf.Void{}
 
-			key := m.GetOnDiskFileIdentifier()
-			interpretersValid[key] = libpf.Void{}
-
-			mappings = append(mappings, Mapping{
-				Vaddr:        libpf.Address(m.Vaddr),
-				Length:       m.Length,
-				Device:       m.Device,
-				Inode:        m.Inode,
-				FrameMapping: fm,
-			})
-			if newMapping {
-				mpAdd = append(mpAdd, &mappings[len(mappings)-1])
+				mappings = append(mappings, Mapping{
+					Vaddr:        libpf.Address(m.Vaddr),
+					Length:       m.Length,
+					Device:       m.Device,
+					Inode:        m.Inode,
+					FrameMapping: fm,
+				})
+				if newMapping {
+					mpAdd = append(mpAdd, &mappings[len(mappings)-1])
+				}
 			}
 		}
 
@@ -589,23 +600,6 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	util.AtomicUpdateMaxUint32(&pm.mappingStats.maxProcParseUsec, uint32(elapsed.Microseconds()))
 	pm.mappingStats.totalProcParseUsec.Add(uint32(elapsed.Microseconds()))
-
-	exe, exeErr := pr.GetExe()
-	if exeErr != nil && !os.IsNotExist(exeErr) {
-		log.Warnf("Failed to get executable of process %d: %v", pid, exeErr)
-	}
-
-	pm.mu.Lock()
-	info := pm.getPidInformation(pid, pr)
-	if info == nil {
-		pm.mu.Unlock()
-		return
-	}
-
-	// Check if process meta needs an update
-	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
-	newProcess := len(info.mappings) == 0
-	pm.mu.Unlock()
 
 	// Detach removed interpreters and remove old mappings
 	numChanges := uint64(0)
