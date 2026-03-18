@@ -417,6 +417,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
     return ERR_NATIVE_PC_READ;
   }
 
+nonleaf_frame_ok:
   state->sp = cfa;
   unwinder_mark_nonleaf_frame(state);
 frame_ok:
