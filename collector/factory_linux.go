@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-//go:build linux
+//go:build linux && (amd64 || arm64)
 
 package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 

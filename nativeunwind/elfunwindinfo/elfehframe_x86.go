@@ -169,7 +169,7 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 		info.BaseReg = getUnwinderRegX86(regs.cfa.reg)
 		info.Param = int32(regs.cfa.off)
 	case regExprPLT:
-		info.Flags = support.UnwindFlagCommand
+		info.Flags |= support.UnwindFlagCommand
 		info.Param = support.UnwindCommandPLT
 	case regExprRegDeref:
 		reg, _, off, off2 := splitOff(regs.cfa.off)
@@ -184,7 +184,7 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 			}
 		}
 	}
-	if info.BaseReg == support.UnwindRegInvalid {
+	if info.Flags&support.UnwindFlagCommand == 0 && info.BaseReg == support.UnwindRegInvalid {
 		return sdtypes.UnwindInfoInvalid
 	}
 	return info

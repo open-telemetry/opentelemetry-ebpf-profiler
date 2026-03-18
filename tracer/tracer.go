@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -353,6 +354,12 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	// as template for further updates.
 	innerMapTemplate := coll.Maps["exe_id_to_8_stack_deltas"].InnerMap.Copy()
 
+	// Since we load maps individually with cebpf.NewMap, we must manually propagate
+	// variable values back into the map spec contents before creating the maps.
+	if err = syncVariablesToMapSpecs(coll); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to sync variables to map specs: %v", err)
+	}
+
 	// Load all maps into the kernel that are used later on in eBPF programs. So we can rewrite
 	// in the next step the placesholders in the eBPF programs with the file descriptors of the
 	// loaded maps in the kernel.
@@ -552,6 +559,44 @@ func rewriteMaps(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map) error {
 		delete(coll.Maps, symbol)
 	}
 
+	return nil
+}
+
+// syncVariablesToMapSpecs copies VariableSpec values back into the corresponding
+// MapSpec contents. This is necessary starting from cilium/ebpf v0.21.0, as
+// VariableSpec.Set() only updates VariableSpec.Value and no longer directly
+// modifies the underlying MapSpec.Contents byte slice.
+func syncVariablesToMapSpecs(coll *cebpf.CollectionSpec) error {
+	for mapName, mapSpec := range coll.Maps {
+		if len(mapSpec.Contents) == 0 {
+			continue
+		}
+		data, ok := mapSpec.Contents[0].Value.([]byte)
+		if !ok {
+			continue
+		}
+		modified := false
+		for _, v := range coll.Variables {
+			if v.SectionName != mapName || len(v.Value) == 0 {
+				continue
+			}
+			end := int(v.Offset) + len(v.Value)
+			if end > len(data) {
+				return fmt.Errorf("variable %s (offset %d, size %d) exceeds map %s data size %d",
+					v.Name, v.Offset, len(v.Value), mapName, len(data))
+			}
+			if !modified {
+				// Clone the underlying slice to avoid modifying shared data
+				// (MapSpec.Copy performs a shallow copy of Contents).
+				data = slices.Clone(data)
+				modified = true
+			}
+			copy(data[v.Offset:end], v.Value)
+		}
+		if modified {
+			mapSpec.Contents[0] = cebpf.MapKV{Key: uint32(0), Value: data}
+		}
+	}
 	return nil
 }
 
