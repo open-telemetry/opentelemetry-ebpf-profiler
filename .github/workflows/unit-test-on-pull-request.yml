@@ -138,6 +138,7 @@ jobs:
     needs: build-integration-test-binaries
     timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
         include:
           # List of available kernels here:
