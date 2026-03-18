@@ -71,6 +71,9 @@ type Intervals interface {
 	ExecutableUnloadDelay() time.Duration
 }
 
+// onlineCPUs once resolves and caches the list of online CPUs.
+var onlineCPUsOnce = sync.OnceValues(getOnlineCPUIDs)
+
 // Tracer provides an interface for loading and initializing the eBPF components as
 // well as for monitoring the output maps for new traces and count updates.
 type Tracer struct {
@@ -87,9 +90,6 @@ type Tracer struct {
 
 	// hooks holds references to loaded eBPF hooks.
 	hooks map[hookPoint]link.Link
-
-	// onlineCPUs is the list of online CPUs at the time of tracer creation
-	onlineCPUs []int
 
 	// processManager keeps track of loading, unloading and organization of information
 	// that is required to unwind processes in the kernel. This includes maintaining the
@@ -266,11 +266,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
 
-	onlineCPUs, err := getOnlineCPUIDs()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get online CPUs: %v", err)
-	}
-
 	perfEventList := []*perf.Event{}
 
 	tracer := &Tracer{
@@ -282,7 +277,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		ebpfMaps:               ebpfMaps,
 		ebpfProgs:              ebpfProgs,
 		hooks:                  make(map[hookPoint]link.Link),
-		onlineCPUs:             onlineCPUs,
 		intervals:              cfg.Intervals,
 		hasBatchOperations:     hasBatchOperations,
 		perfEntrypoints:        xsync.NewRWMutex(perfEventList),
@@ -1100,7 +1094,12 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
 // maps for tracepoints, new traces, trace count updates and unknown PCs.
 func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libpf.EbpfTrace) error {
-	if err := t.kernelSymbolizer.StartMonitor(ctx, t.onlineCPUs); err != nil {
+	onlineCPUs, err := onlineCPUsOnce()
+	if err != nil {
+		return fmt.Errorf("failed to get online cpus: %w", err)
+	}
+
+	if err := t.kernelSymbolizer.StartMonitor(ctx, onlineCPUs); err != nil {
 		log.Warnf("Failed to start kallsyms monitor: %v", err)
 	}
 	eventMetricCollector, err := t.startEventMonitor(ctx)
@@ -1177,9 +1176,14 @@ func (t *Tracer) AttachTracer() error {
 		return fmt.Errorf("failed to configure software perf event: %v", err)
 	}
 
+	onlineCPUs, err := onlineCPUsOnce()
+	if err != nil {
+		return fmt.Errorf("failed to get online cpus: %w", err)
+	}
+
 	events := t.perfEntrypoints.WLock()
 	defer t.perfEntrypoints.WUnlock(&events)
-	for _, id := range t.onlineCPUs {
+	for _, id := range onlineCPUs {
 		perfEvent, err := perf.Open(perfAttribute, perf.AllThreads, id, nil)
 		if err != nil {
 			terminatePerfEvents(*events)
