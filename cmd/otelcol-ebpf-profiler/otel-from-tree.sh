@@ -23,7 +23,6 @@ cd cmd/otelcol-ebpf-profiler && go list -m -u all | \
     grep 'go\.opentelemetry\.io/collector' | \
     awk '{print $1}' | \
   while read -r module; do
-    echo "$module"
     subpath=${module#go.opentelemetry.io/collector}
     echo "  - ${module} => ${COLLECTOR_PATH}${subpath}" >> manifest.yaml
   done
