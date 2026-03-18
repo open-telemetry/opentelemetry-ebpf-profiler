@@ -607,16 +607,16 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   if (regs->cs == __USER32_CS) {
     return ERR_NATIVE_X64_32BIT_COMPAT_MODE;
   }
-  state->pc             = regs->ip;
-  state->sp             = regs->sp;
-  state->fp             = regs->bp;
-  state->rax            = regs->ax;
-  state->rdi            = regs->di;
-  state->r8             = regs->r8;
-  state->r9             = regs->r9;
-  state->r11            = regs->r11;
-  state->r13            = regs->r13;
-  state->r15            = regs->r15;
+  state->pc  = regs->ip;
+  state->sp  = regs->sp;
+  state->fp  = regs->bp;
+  state->rax = regs->ax;
+  state->rdi = regs->di;
+  state->r8  = regs->r8;
+  state->r9  = regs->r9;
+  state->r11 = regs->r11;
+  state->r13 = regs->r13;
+  state->r15 = regs->r15;
   // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/include/asm/syscall.h#L31-L39
   // https://github.com/torvalds/linux/blob/2ef5971ff3/arch/x86/entry/entry_64.S#L847
