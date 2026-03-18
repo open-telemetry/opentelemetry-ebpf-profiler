@@ -669,6 +669,11 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		// if it's a new process and on process exit. This limits
 		// the frequency of PID mapping synchronizations to PID lifetime in
 		// reported_pids (which is dictated by REPORTED_PIDS_TIMEOUT in eBPF).
+
+		// We're immediately removing a new PID from reported_pids, to cover
+		// corner cases where processes load on startup in quick-succession
+		// additional code (e.g. plugins, Asterisk).
+		// Also see: Unified PID Events design doc
 		pm.ebpf.RemoveReportedPID(pid)
 	}
 }

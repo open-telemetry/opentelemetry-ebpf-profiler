@@ -98,7 +98,7 @@ func (tc *trackedCoredump) OpenMappingFile(m *process.Mapping) (process.ReadAtCl
 }
 
 func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
-	if fileName != process.VdsoPathName {
+	if fileName != process.VdsoPathName.String() {
 		f, err := pfelf.Open(path.Join(tc.prefix, fileName))
 		if err == nil {
 			tc.seen[fileName] = libpf.Void{}

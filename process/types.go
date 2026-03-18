@@ -17,7 +17,7 @@ import (
 )
 
 // VdsoPathName is the path used for VDSO mappings.
-const VdsoPathName = "linux-vdso.1.so"
+var VdsoPathName = libpf.Intern("linux-vdso.1.so")
 
 // vdsoInode is the synthesized inode number for VDSO mappings.
 const vdsoInode = 50
@@ -62,7 +62,7 @@ func (m *RawMapping) IsMemFD() bool {
 }
 
 func (m *RawMapping) IsVDSO() bool {
-	return m.Path == VdsoPathName
+	return m.Path == VdsoPathName.String()
 }
 
 // ToMapping converts to a Mapping with an interned Path. Only call this
@@ -115,7 +115,7 @@ func (m *Mapping) IsMemFD() bool {
 }
 
 func (m *Mapping) IsVDSO() bool {
-	return m.Path.String() == VdsoPathName
+	return m.Path == VdsoPathName
 }
 
 func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
@@ -187,11 +187,10 @@ type Process interface {
 	GetExe() (libpf.String, error)
 
 	// IterateMappings parses process memory mappings and calls callback
-	// for each valid mapping. The callback receives a RawMapping whose
-	// Path may reference an internal buffer recycled after iteration.
-	// Use m.ToMapping() inside the callback to produce a safe Mapping
-	// for any mapping you intend to keep. Parsing stops early if
-	// callback returns false.
+	// for each mapping. The callback receives a RawMapping whose Path
+	// may reference an internal buffer recycled after iteration; use
+	// ToMapping() to produce a Mapping safe to store long-term.
+	// The callback is responsible for filtering out unwanted mappings.
 	IterateMappings(callback func(m RawMapping) bool) (uint32, error)
 
 	// GetThreads reads the process thread states.

@@ -151,7 +151,7 @@ func TestRawMappingPredicates(t *testing.T) {
 		{"anonymous", RawMapping{}, true, false, false, false},
 		{"file-backed", RawMapping{Path: "/usr/lib/foo.so"}, false, true, false, false},
 		{"memfd", RawMapping{Path: "/memfd:jit"}, true, false, true, false},
-		{"vdso", RawMapping{Path: VdsoPathName}, false, false, false, true},
+		{"vdso", RawMapping{Path: VdsoPathName.String()}, false, false, false, true},
 		{"/dev/zero normalized", RawMapping{Inode: 42, Device: 1}, true, false, false, false},
 	}
 	for _, tt := range tests {
@@ -176,7 +176,7 @@ func TestMappingPredicates(t *testing.T) {
 		{"anonymous", Mapping{}, true, false, false, false},
 		{"file-backed", Mapping{Path: libpf.Intern("/usr/lib/foo.so")}, false, true, false, false},
 		{"memfd", Mapping{Path: libpf.Intern("/memfd:jit")}, true, false, true, false},
-		{"vdso", Mapping{Path: libpf.Intern(VdsoPathName)}, false, false, false, true},
+		{"vdso", Mapping{Path: VdsoPathName}, false, false, false, true},
 		{"/dev/zero normalized", Mapping{Inode: 42, Device: 1}, true, false, false, false},
 	}
 	for _, tt := range tests {

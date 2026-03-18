@@ -269,6 +269,7 @@ func (cd *CoredumpProcess) GetExe() (libpf.String, error) {
 	return cd.fname, nil
 }
 
+// IterateMappings implements the Process interface.
 func (cd *CoredumpProcess) IterateMappings(callback func(m RawMapping) bool) (uint32, error) {
 	for _, m := range cd.mappings {
 		raw := RawMapping{
@@ -449,7 +450,7 @@ func (cd *CoredumpProcess) parseAuxVector(desc []byte, vaddrToMappings map[uint6
 
 			vm := &cd.mappings[m.mappingIndex]
 			vm.Inode = vdsoInode
-			vm.Path = libpf.Intern(VdsoPathName)
+			vm.Path = VdsoPathName
 
 			cf := cd.getFile(vm.Path.String())
 			cm := CoredumpMapping{

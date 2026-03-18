@@ -272,11 +272,12 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 		var path string
 		if inode == 0 {
 			if fields[5] == "[vdso]" {
-				path = VdsoPathName
+				// Map to something filename looking with synthesized inode
+				path = VdsoPathName.String()
 				device = 0
 				inode = vdsoInode
 			} else if fields[5] == "" {
-				// Anonymous mapping, keep it with empty path
+				// This is an anonymous mapping, keep it
 			} else {
 				// Ignore other mappings that are invalid, non-existent or are special pseudo-files
 				continue
@@ -321,6 +322,11 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 	return numParseErrors, scanner.Err()
 }
 
+// IterateMappings parses process memory mappings and calls callback
+// for each mapping. The callback receives a RawMapping whose Path
+// may reference an internal buffer recycled after iteration; use
+// ToMapping() to produce a Mapping safe to store long-term.
+// The callback is responsible for filtering out unwanted mappings.
 func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint32, error) {
 	mapsFile, err := os.Open(fmt.Sprintf("/proc/%d/maps", sp.pid))
 	if err != nil {
