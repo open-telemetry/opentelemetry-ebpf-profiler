@@ -25,15 +25,15 @@ require (
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zeebo/xxh3 v1.1.0
-	go.opentelemetry.io/collector/component v1.53.0
-	go.opentelemetry.io/collector/confmap/xconfmap v0.147.0
-	go.opentelemetry.io/collector/consumer/consumertest v0.147.0
-	go.opentelemetry.io/collector/consumer/xconsumer v0.147.0
-	go.opentelemetry.io/collector/pdata v1.53.0
-	go.opentelemetry.io/collector/pdata/pprofile v0.147.0
-	go.opentelemetry.io/collector/receiver v1.53.0
-	go.opentelemetry.io/collector/receiver/receivertest v0.147.0
-	go.opentelemetry.io/collector/receiver/xreceiver v0.147.0
+	go.opentelemetry.io/collector/component v1.54.0
+	go.opentelemetry.io/collector/confmap/xconfmap v0.148.0
+	go.opentelemetry.io/collector/consumer/consumertest v0.148.0
+	go.opentelemetry.io/collector/consumer/xconsumer v0.148.0
+	go.opentelemetry.io/collector/pdata v1.54.0
+	go.opentelemetry.io/collector/pdata/pprofile v0.148.0
+	go.opentelemetry.io/collector/receiver v1.54.0
+	go.opentelemetry.io/collector/receiver/receivertest v0.148.0
+	go.opentelemetry.io/collector/receiver/xreceiver v0.148.0
 	go.opentelemetry.io/otel v1.42.0
 	go.opentelemetry.io/otel/metric v1.42.0
 	go.opentelemetry.io/proto/otlp/profiles/v1development v0.3.0
@@ -186,7 +186,7 @@ require (
 	github.com/knadh/koanf/providers/env/v2 v2.0.0 // indirect
 	github.com/knadh/koanf/providers/file v1.2.1 // indirect
 	github.com/knadh/koanf/providers/fs v1.0.0 // indirect
-	github.com/knadh/koanf/v2 v2.3.2 // indirect
+	github.com/knadh/koanf/v2 v2.3.3 // indirect
 	github.com/kulti/thelper v0.7.1 // indirect
 	github.com/kunwardeep/paralleltest v1.0.15 // indirect
 	github.com/lasiar/canonicalheader v1.1.2 // indirect
@@ -284,15 +284,15 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/collector/cmd/builder v0.147.0 // indirect
-	go.opentelemetry.io/collector/component/componenttest v0.147.0 // indirect
-	go.opentelemetry.io/collector/confmap v1.53.0 // indirect
-	go.opentelemetry.io/collector/consumer v1.53.0 // indirect
-	go.opentelemetry.io/collector/consumer/consumererror v0.147.0 // indirect
-	go.opentelemetry.io/collector/featuregate v1.53.0 // indirect
-	go.opentelemetry.io/collector/internal/componentalias v0.147.0 // indirect
-	go.opentelemetry.io/collector/pipeline v1.53.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.40.0 // indirect
-	go.opentelemetry.io/otel/sdk/metric v1.40.0 // indirect
+	go.opentelemetry.io/collector/component/componenttest v0.148.0 // indirect
+	go.opentelemetry.io/collector/confmap v1.54.0 // indirect
+	go.opentelemetry.io/collector/consumer v1.54.0 // indirect
+	go.opentelemetry.io/collector/consumer/consumererror v0.148.0 // indirect
+	go.opentelemetry.io/collector/featuregate v1.54.0 // indirect
+	go.opentelemetry.io/collector/internal/componentalias v0.148.0 // indirect
+	go.opentelemetry.io/collector/pipeline v1.54.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.42.0 // indirect
+	go.opentelemetry.io/otel/sdk/metric v1.42.0 // indirect
 	go.opentelemetry.io/otel/trace v1.42.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
