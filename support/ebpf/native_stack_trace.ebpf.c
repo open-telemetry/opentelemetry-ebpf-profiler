@@ -400,7 +400,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
 
     if (info->flags & UNWIND_FLAG_REGISTER_RA) {
       state->pc = aux;
-      goto frame_ok;
+      goto nonleaf_frame_ok;
     }
 
     if (aux) {
