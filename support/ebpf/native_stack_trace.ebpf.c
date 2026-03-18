@@ -412,8 +412,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
     }
   }
 
-restore_pc:
-  if (bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)(cfa - 8))) {
+  if (!cfa || bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)(cfa - 8))) {
   err_native_pc_read:
     increment_metric(metricID_UnwindNativeErrPCRead);
     return ERR_NATIVE_PC_READ;
