@@ -4,6 +4,7 @@
 package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
+	"hash/crc32"
 	"unique"
 )
 
@@ -28,4 +29,9 @@ func (s String) String() string {
 		return ""
 	}
 	return s.value.Value()
+}
+
+// StringHashCRC32 computes a 32-bit hash of a String using CRC32 with IEEE polynomial.
+func StringHashCRC32(s String) uint32 {
+	return crc32.ChecksumIEEE([]byte(s.String()))
 }

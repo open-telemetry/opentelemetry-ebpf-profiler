@@ -209,6 +209,10 @@ const (
 	// lruMapTypeCacheSize is the LRU size for caching the Map.InstanceType field.
 	lruMapTypeCacheSize = 32
 
+	// lruFileToDebugIDCacheSize is the LRU size for caching file name to debug ID mappings.
+	// Node.js applications (including dependencies) can typically have a large number of JS files.
+	lruFileToDebugIDCacheSize = 128 * 1024
+
 	// The native pointer size in bytes for 64-bit architectures
 	pointerSize = 8
 )
@@ -517,6 +521,12 @@ type v8Instance struct {
 	addrToSource *freelru.LRU[libpf.Address, *v8Source]
 	addrToType   *freelru.LRU[libpf.Address, uint16]
 
+	// fileToDebugID maps JavaScript file paths to their debug IDs (extracted from //# debugId= comment)
+	fileToDebugID *freelru.LRU[libpf.String, libpf.FileID]
+
+	// pid is the process ID, used to access files via /proc/PID/root/ for containerized processes
+	pid libpf.PID
+
 	// mappings is indexed by the Mapping to its generation
 	mappings map[process.Mapping]*uint32
 	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
@@ -574,8 +584,9 @@ func (i *v8Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	_ reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping,
 ) error {
-	pid := pr.PID()
+	i.pid = pr.PID()
 	i.mappingGeneration++
+
 	for idx := range mappings {
 		m := &mappings[idx]
 		if !m.IsExecutable() || !m.IsAnonymous() {
@@ -603,7 +614,7 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		for _, prefix := range prefixes {
 			_, exists := i.prefixes[prefix]
 			if !exists {
-				err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindV8, 0, 0)
+				err := ebpf.UpdatePidInterpreterMapping(i.pid, prefix, support.ProgUnwindV8, 0, 0)
 				if err != nil {
 					return err
 				}
@@ -618,7 +629,7 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			continue
 		}
 		log.Debugf("Delete V8 prefix %#v", prefix)
-		_ = ebpf.DeletePidInterpreterMapping(pid, prefix)
+		_ = ebpf.DeletePidInterpreterMapping(i.pid, prefix)
 		delete(i.prefixes, prefix)
 	}
 	for m, generationPtr := range i.mappings {
@@ -1512,14 +1523,32 @@ func (i *v8Instance) appendFrame(frames *libpf.Frames, sfi *v8SFI, lineNo libpf.
 	if lineNo > sfi.funcStartLine {
 		funcOffset = uint32(lineNo - sfi.funcStartLine)
 	}
-	frames.Append(&libpf.Frame{
+
+	fileName := sfi.source.fileName
+	fileID := i.extractDebugID(fileName)
+
+	frame := libpf.Frame{
 		Type:           libpf.V8Frame,
 		FunctionName:   sfi.funcName,
-		SourceFile:     sfi.source.fileName,
+		SourceFile:     fileName,
 		SourceLine:     lineNo,
 		SourceColumn:   column,
 		FunctionOffset: funcOffset,
-	})
+		FileID:         fileID,
+	}
+
+	// If a debug ID was found, create a mapping so the build ID gets reported
+	if fileID != (libpf.FileID{}) {
+		frame.Mapping = libpf.NewFrameMapping(libpf.FrameMappingData{
+			File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+				FileID:     fileID,
+				FileName:   fileName,
+				GnuBuildID: fileID.ToUUIDString(),
+			}),
+		})
+	}
+
+	frames.Append(&frame)
 }
 
 var externalFunctionTag = libpf.Intern("<external-file>")
@@ -1861,17 +1890,23 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 	if err != nil {
 		return nil, err
 	}
+	fileToDebugID, err := freelru.New[libpf.String, libpf.FileID](lruFileToDebugIDCacheSize,
+		libpf.StringHashCRC32)
+	if err != nil {
+		return nil, err
+	}
 
 	return &v8Instance{
-		d:            d,
-		rm:           rm,
-		mappings:     make(map[process.Mapping]*uint32),
-		prefixes:     make(map[lpm.Prefix]*uint32),
-		addrToString: addrToString,
-		addrToCode:   addrToCode,
-		addrToSFI:    addrToSFI,
-		addrToSource: addrToSource,
-		addrToType:   addrToType,
+		d:             d,
+		rm:            rm,
+		mappings:      make(map[process.Mapping]*uint32),
+		prefixes:      make(map[lpm.Prefix]*uint32),
+		addrToString:  addrToString,
+		addrToCode:    addrToCode,
+		addrToSFI:     addrToSFI,
+		addrToSource:  addrToSource,
+		addrToType:    addrToType,
+		fileToDebugID: fileToDebugID,
 	}, nil
 }
 
