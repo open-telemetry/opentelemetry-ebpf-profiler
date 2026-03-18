@@ -346,7 +346,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       // see https://hal.inria.fr/hal-02297690/document, page 4. (DOI: 10.1145/3360572)
       cfa = state->sp + 8 + ((((state->pc & 15) >= 11) ? 1 : 0) << 3);
       DEBUG_PRINT("PLT, cfa=0x%lx", (unsigned long)cfa);
-      goto restore_pc;
+      break;
     case UNWIND_COMMAND_SIGNAL:
       // The rt_sigframe is defined at:
       // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/sigframe.h?h=v6.4#n59
@@ -403,7 +403,6 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       goto frame_ok;
     }
 
-    DEBUG_PRINT("info: flags=%x auxBaseReg=%u", info->flags, info->auxBaseReg);
     if (aux) {
       bpf_probe_read_user(&state->fp, sizeof(state->fp), (void *)aux);
     } else if (info->baseReg == UNWIND_REG_FP) {
@@ -412,6 +411,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
     }
   }
 
+restore_pc:
   if (!cfa || bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)(cfa - 8))) {
   err_native_pc_read:
     increment_metric(metricID_UnwindNativeErrPCRead);

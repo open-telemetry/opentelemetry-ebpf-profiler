@@ -720,6 +720,7 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
     error = copy_state_regs(state, ctx, false);
   }
   if (error == ERR_OK) {
+    DEBUG_PRINT("Read regs: pc: %llx sp: %llx fp: %llx", state->pc, state->sp, state->fp);
     *has_usermode_regs = true;
   }
   return error;
@@ -727,8 +728,8 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 
 #else // TESTING_COREDUMP
 
-static inline EBPF_INLINE ErrorCode
-get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs)
+static inline EBPF_INLINE
+  ErrorCode get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs)
 {
   // Coredumps provide always usermode pt_regs directly.
   ErrorCode error = copy_state_regs(state, ctx, false);
