@@ -27,7 +27,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
-// GetMappings returns this error when no mappings can be extracted.
+// IterateMappings returns this error when no mappings can be extracted.
 var ErrNoMappings = errors.New("no mappings")
 
 const (
@@ -189,7 +189,7 @@ func trimMappingPath(path string) string {
 	return path
 }
 
-func iterateMappings(mapsFile io.Reader, callback func(m Mapping) bool) (uint32, error) {
+func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint32, error) {
 	numParseErrors := uint32(0)
 	scanner := bufio.NewScanner(mapsFile)
 	scanBuf := bufPool.Get().(*[]byte)
@@ -211,8 +211,9 @@ func iterateMappings(mapsFile io.Reader, callback func(m Mapping) bool) (uint32,
 		var devs [2]string
 
 		// WARNING: line (and all substrings derived from it, including
-		// mappingPath) points into scanBuf which is recycled after iteration.
-		// Callbacks that store mappings must call m.Retain() to clone Path.
+		// the Path field of the emitted RawMapping) points into scanBuf
+		// which is recycled after iteration. Callers must use
+		// m.ToMapping() to produce a safe copy before storing.
 		line := pfunsafe.ToString(scanner.Bytes())
 		if stringutil.FieldsN(line, fields[:]) < 5 {
 			numParseErrors++
@@ -305,7 +306,7 @@ func iterateMappings(mapsFile io.Reader, callback func(m Mapping) bool) (uint32,
 			continue
 		}
 
-		if !callback(Mapping{
+		if !callback(RawMapping{
 			Vaddr:      vaddr,
 			Length:     length,
 			Flags:      flags,
@@ -320,7 +321,7 @@ func iterateMappings(mapsFile io.Reader, callback func(m Mapping) bool) (uint32,
 	return numParseErrors, scanner.Err()
 }
 
-func (sp *systemProcess) IterateMappings(callback func(m Mapping) bool) (uint32, error) {
+func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint32, error) {
 	mapsFile, err := os.Open(fmt.Sprintf("/proc/%d/maps", sp.pid))
 	if err != nil {
 		return 0, err
@@ -330,11 +331,10 @@ func (sp *systemProcess) IterateMappings(callback func(m Mapping) bool) (uint32,
 	var elfMappings []Mapping
 	gotMappings := false
 
-	collectForOpenELF := func(m Mapping) bool {
+	collectForOpenELF := func(m RawMapping) bool {
 		gotMappings = true
 		if m.IsExecutable() || m.IsVDSO() {
-			m.Retain()
-			elfMappings = append(elfMappings, m)
+			elfMappings = append(elfMappings, m.ToMapping())
 		}
 		return callback(m)
 	}
@@ -379,7 +379,7 @@ func (sp *systemProcess) IterateMappings(callback func(m Mapping) bool) (uint32,
 	fileToMapping := make(map[string]*Mapping, len(elfMappings))
 	for i := range elfMappings {
 		m := &elfMappings[i]
-		fileToMapping[m.Path] = m
+		fileToMapping[m.Path.String()] = m
 	}
 	sp.fileToMapping = fileToMapping
 
@@ -417,7 +417,7 @@ func (sp *systemProcess) getMappingFile(m *Mapping) string {
 		// nor /proc/sp.pid/root exist if main thread has exited, so we use the
 		// mapping path directly under the sp.tid root.
 		rootPath := fmt.Sprintf("/proc/%v/task/%v/root", sp.pid, sp.tid)
-		return path.Join(rootPath, m.Path)
+		return path.Join(rootPath, m.Path.String())
 	}
 	return fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
 }

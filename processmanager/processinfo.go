@@ -225,7 +225,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		return info
 	}
 
-	baseName := path.Base(mapping.Path)
+	baseName := path.Base(mapping.Path.String())
 	if baseName == "/" {
 		// There are circumstances where there is no filename.
 		// E.g. kernel module 'bpfilter_umh' before Linux 5.9-rc1 uses
@@ -333,7 +333,7 @@ func (pm *ProcessManager) processRemovedInterpreters(pid libpf.PID,
 var errInvalidVirtualAddress = errors.New("invalid ELF virtual address")
 
 func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.Mapping) (libpf.FrameMapping, error) {
-	elfRef := pfelf.NewReference(m.Path, pr)
+	elfRef := pfelf.NewReference(m.Path.String(), pr)
 	defer elfRef.Close()
 
 	info := pm.getELFInfo(pr, m, elfRef)
@@ -617,13 +617,11 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	// executable, anonymous (JIT), and .dll (dotnet PE assemblies).
 	// Non-executable file-backed mappings (e.g. read-only data files)
 	// are discarded without interning their path.
-	filterMappings := func(m process.Mapping) bool {
+	filterMappings := func(m process.RawMapping) bool {
 		if m.IsExecutable() || m.IsAnonymous() {
-			m.Retain()
-			executableMappings = append(executableMappings, m)
+			executableMappings = append(executableMappings, m.ToMapping())
 		} else if m.IsFileBacked() && strings.HasSuffix(m.Path, ".dll") {
-			m.Retain()
-			dllMappings = append(dllMappings, m)
+			dllMappings = append(dllMappings, m.ToMapping())
 		}
 		return true
 	}

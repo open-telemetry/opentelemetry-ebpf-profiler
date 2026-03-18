@@ -269,9 +269,18 @@ func (cd *CoredumpProcess) GetExe() (libpf.String, error) {
 	return cd.fname, nil
 }
 
-func (cd *CoredumpProcess) IterateMappings(callback func(m Mapping) bool) (uint32, error) {
+func (cd *CoredumpProcess) IterateMappings(callback func(m RawMapping) bool) (uint32, error) {
 	for _, m := range cd.mappings {
-		if !callback(m) {
+		raw := RawMapping{
+			Vaddr:      m.Vaddr,
+			Length:     m.Length,
+			Flags:      m.Flags,
+			FileOffset: m.FileOffset,
+			Device:     m.Device,
+			Inode:      m.Inode,
+			Path:       m.Path.String(),
+		}
+		if !callback(raw) {
 			break
 		}
 	}
@@ -303,7 +312,7 @@ func (cd *CoredumpProcess) CalculateMappingFileID(m *Mapping) (libpf.FileID, err
 
 	h := fnv.New128a()
 	_, _ = h.Write(vaddr)
-	_, _ = h.Write([]byte(m.Path))
+	_, _ = h.Write([]byte(m.Path.String()))
 	return libpf.FileIDFromBytes(h.Sum(nil))
 }
 
@@ -403,7 +412,7 @@ func (cd *CoredumpProcess) parseMappings(desc []byte,
 			cf.Mappings = append(cf.Mappings, cm)
 
 			mapping := &cd.mappings[m.mappingIndex]
-			mapping.Path = cf.Name.String()
+			mapping.Path = cf.Name
 			mapping.FileOffset = entry.FileOffset * hdr.PageSize
 			// Synthesize non-zero device and inode indicating this is a filebacked mapping.
 			mapping.Device = 1
@@ -419,7 +428,7 @@ func (cd *CoredumpProcess) parseMappings(desc []byte,
 				FileOffset: entry.FileOffset * hdr.PageSize,
 				Device:     1,
 				Inode:      cf.inode,
-				Path:       cf.Name.String(),
+				Path:       cf.Name,
 			})
 		}
 		strs = strs[fnlen+1:]
@@ -440,9 +449,9 @@ func (cd *CoredumpProcess) parseAuxVector(desc []byte, vaddrToMappings map[uint6
 
 			vm := &cd.mappings[m.mappingIndex]
 			vm.Inode = vdsoInode
-			vm.Path = VdsoPathName
+			vm.Path = libpf.Intern(VdsoPathName)
 
-			cf := cd.getFile(vm.Path)
+			cf := cd.getFile(vm.Path.String())
 			cm := CoredumpMapping{
 				Prog: m.prog,
 				File: cf,

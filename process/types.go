@@ -22,8 +22,12 @@ const VdsoPathName = "linux-vdso.1.so"
 // vdsoInode is the synthesized inode number for VDSO mappings.
 const vdsoInode = 50
 
-// Mapping contains information about a memory mapping.
-type Mapping struct {
+// RawMapping is the ephemeral representation of a memory mapping as parsed
+// from /proc/pid/maps. Path is a plain string that may reference the
+// parser's internal buffer and must not be stored beyond the
+// IterateMappings callback. Use ToMapping() to produce a Mapping with
+// an interned Path that is safe to store long-term.
+type RawMapping struct {
 	// Vaddr is the virtual memory start for this mapping.
 	Vaddr uint64
 	// Length is the length of the mapping.
@@ -37,43 +41,81 @@ type Mapping struct {
 	// Inode holds the mapped file's inode number.
 	Inode uint64
 	// Path is the file path for file-backed and special mappings.
-	// For live processes parsed from /proc/pid/maps, this string may
-	// reference an internal buffer that is recycled. Callers must call
-	// Retain() on any mapping they store beyond the iteration callback.
+	// May reference an internal buffer recycled after iteration.
 	Path string
+}
+
+func (m *RawMapping) IsExecutable() bool {
+	return m.Flags&elf.PF_X == elf.PF_X
+}
+
+func (m *RawMapping) IsAnonymous() bool {
+	return !m.IsFileBacked() && !m.IsVDSO()
+}
+
+func (m *RawMapping) IsFileBacked() bool {
+	return m.Path != "" && !m.IsVDSO() && !m.IsMemFD()
+}
+
+func (m *RawMapping) IsMemFD() bool {
+	return strings.HasPrefix(m.Path, "/memfd:")
+}
+
+func (m *RawMapping) IsVDSO() bool {
+	return m.Path == VdsoPathName
+}
+
+// ToMapping converts to a Mapping with an interned Path. Only call this
+// for mappings you intend to keep.
+func (m *RawMapping) ToMapping() Mapping {
+	return Mapping{
+		Vaddr:      m.Vaddr,
+		Length:     m.Length,
+		Flags:      m.Flags,
+		FileOffset: m.FileOffset,
+		Device:     m.Device,
+		Inode:      m.Inode,
+		Path:       libpf.Intern(m.Path),
+	}
+}
+
+// Mapping is the stable representation of a memory mapping with an
+// interned Path. Produced by RawMapping.ToMapping() after filtering.
+type Mapping struct {
+	// Vaddr is the virtual memory start for this mapping.
+	Vaddr uint64
+	// Length is the length of the mapping.
+	Length uint64
+	// Flags contains the mapping flags and permissions.
+	Flags elf.ProgFlag
+	// FileOffset contains for file backed mappings the offset from the file start.
+	FileOffset uint64
+	// Device holds the device ID where the file is located.
+	Device uint64
+	// Inode holds the mapped file's inode number.
+	Inode uint64
+	// Path is the interned file path for file-backed and special mappings.
+	Path libpf.String
 }
 
 func (m *Mapping) IsExecutable() bool {
 	return m.Flags&elf.PF_X == elf.PF_X
 }
 
-// IsAnonymous returns true for mappings without a backing file.
-// This includes memfd mappings and /dev/zero.
 func (m *Mapping) IsAnonymous() bool {
 	return !m.IsFileBacked() && !m.IsVDSO()
 }
 
-// IsFileBacked returns true for mappings backed by a regular file on disk.
-// Excludes memfd, vdso, and anonymous mappings.
 func (m *Mapping) IsFileBacked() bool {
-	return m.Path != "" && !m.IsVDSO() && !m.IsMemFD()
+	return m.Path != libpf.NullString && !m.IsVDSO() && !m.IsMemFD()
 }
 
 func (m *Mapping) IsMemFD() bool {
-	return strings.HasPrefix(m.Path, "/memfd:")
+	return strings.HasPrefix(m.Path.String(), "/memfd:")
 }
 
 func (m *Mapping) IsVDSO() bool {
-	return m.Path == VdsoPathName
-}
-
-// Retain makes a copy of Path so the mapping can safely outlive the
-// parser's internal buffer. Must be called inside the IterateMappings
-// callback for any mapping that will be stored beyond the callback.
-// Safe to call on mappings from implementations that don't use buffer
-// recycling (e.g. coredump) -- it's a no-op clone in that case.
-func (m *Mapping) Retain() {
-	m.Path = strings.Clone(m.Path)
+	return m.Path.String() == VdsoPathName
 }
 
 func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
@@ -144,13 +186,13 @@ type Process interface {
 	// GetExe returns the executable path of the process.
 	GetExe() (libpf.String, error)
 
-	// IterateMappings parses process memory mappings and calls callback for
-	// each valid mapping. Path is set to the raw file path for file-backed
-	// mappings. The callback must call m.Retain() on any mapping it stores
-	// beyond the callback scope, because Path may reference an internal
-	// buffer that is recycled after iteration. Parsing stops early if
+	// IterateMappings parses process memory mappings and calls callback
+	// for each valid mapping. The callback receives a RawMapping whose
+	// Path may reference an internal buffer recycled after iteration.
+	// Use m.ToMapping() inside the callback to produce a safe Mapping
+	// for any mapping you intend to keep. Parsing stops early if
 	// callback returns false.
-	IterateMappings(callback func(m Mapping) bool) (uint32, error)
+	IterateMappings(callback func(m RawMapping) bool) (uint32, error)
 
 	// GetThreads reads the process thread states.
 	GetThreads() ([]ThreadInfo, error)

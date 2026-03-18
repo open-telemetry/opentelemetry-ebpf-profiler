@@ -599,7 +599,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		if m.IsAnonymous() {
 			continue
 		}
-		if !strings.HasSuffix(m.Path, ".dll") {
+		if !strings.HasSuffix(m.Path.String(), ".dll") {
 			continue
 		}
 
