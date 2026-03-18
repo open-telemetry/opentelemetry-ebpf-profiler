@@ -60,7 +60,9 @@ func (s *bpfSymbolizer) updateSymbolsFrom(r io.Reader) error {
 
 	minAddr := uint64(0)
 
-	for scanner := bufio.NewScanner(r); scanner.Scan(); {
+	scanner := bufio.NewScanner(r)
+
+	for scanner.Scan() {
 		// Avoid heap allocation by not using scanner.Text().
 		// NOTE: The underlying bytes will change with the next call to scanner.Scan(),
 		// so make sure to not keep any references after the end of the loop iteration.
@@ -91,6 +93,10 @@ func (s *bpfSymbolizer) updateSymbolsFrom(r io.Reader) error {
 			address: libpf.Address(address),
 			name:    strings.Clone(fields[2]),
 		})
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error scanning /proc/kallsyms: %w", err)
 	}
 
 	if len(symbols) == 0 {
