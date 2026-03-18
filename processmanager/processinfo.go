@@ -225,7 +225,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		return info
 	}
 
-	baseName := path.Base(mapping.Path.String())
+	baseName := path.Base(mapping.Path)
 	if baseName == "/" {
 		// There are circumstances where there is no filename.
 		// E.g. kernel module 'bpfilter_umh' before Linux 5.9-rc1 uses
@@ -333,7 +333,7 @@ func (pm *ProcessManager) processRemovedInterpreters(pid libpf.PID,
 var errInvalidVirtualAddress = errors.New("invalid ELF virtual address")
 
 func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.Mapping) (libpf.FrameMapping, error) {
-	elfRef := pfelf.NewReference(m.Path.String(), pr)
+	elfRef := pfelf.NewReference(m.Path, pr)
 	defer elfRef.Close()
 
 	info := pm.getELFInfo(pr, m, elfRef)
@@ -612,14 +612,23 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	executableMappings := make([]process.Mapping, 0, 32)
 	var dllMappings []process.Mapping
-	numParseErrors, err := pr.IterateMappings(func(m process.Mapping) bool {
+
+	// filterMappings keeps only mappings relevant for profiling:
+	// executable, anonymous (JIT), and .dll (dotnet PE assemblies).
+	// Non-executable file-backed mappings (e.g. read-only data files)
+	// are discarded without interning their path.
+	filterMappings := func(m process.Mapping) bool {
 		if m.IsExecutable() || m.IsAnonymous() {
+			m.Retain()
 			executableMappings = append(executableMappings, m)
-		} else if strings.HasSuffix(m.Path.String(), ".dll") {
+		} else if m.IsFileBacked() && strings.HasSuffix(m.Path, ".dll") {
+			m.Retain()
 			dllMappings = append(dllMappings, m)
 		}
 		return true
-	})
+	}
+
+	numParseErrors, err := pr.IterateMappings(filterMappings)
 
 	elapsed := time.Since(start)
 	pm.mappingStats.numProcParseErrors.Add(numParseErrors)

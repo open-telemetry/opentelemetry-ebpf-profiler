@@ -1243,7 +1243,7 @@ func (pc *peCache) Get(pr process.Process, mapping *process.Mapping) *peInfo {
 	if info.err == nil {
 		mf := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 			FileID:     fileID,
-			FileName:   libpf.Intern(path.Base(mapping.Path.String())),
+			FileName:   libpf.Intern(path.Base(mapping.Path)),
 			GnuBuildID: info.guid,
 		})
 		info.mapping = libpf.NewFrameMapping(libpf.FrameMappingData{

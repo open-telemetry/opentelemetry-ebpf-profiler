@@ -189,7 +189,7 @@ func trimMappingPath(path string) string {
 	return path
 }
 
-func iterateMappings(mapsFile io.Reader, fn func(m Mapping) bool) (uint32, error) {
+func iterateMappings(mapsFile io.Reader, callback func(m Mapping) bool) (uint32, error) {
 	numParseErrors := uint32(0)
 	scanner := bufio.NewScanner(mapsFile)
 	scanBuf := bufPool.Get().(*[]byte)
@@ -210,6 +210,9 @@ func iterateMappings(mapsFile io.Reader, fn func(m Mapping) bool) (uint32, error
 		var addrs [2]string
 		var devs [2]string
 
+		// WARNING: line (and all substrings derived from it, including
+		// mappingPath) points into scanBuf which is recycled after iteration.
+		// Callbacks that store mappings must call m.Retain() to clone Path.
 		line := pfunsafe.ToString(scanner.Bytes())
 		if stringutil.FieldsN(line, fields[:]) < 5 {
 			numParseErrors++
@@ -265,21 +268,20 @@ func iterateMappings(mapsFile io.Reader, fn func(m Mapping) bool) (uint32, error
 		}
 		device := major<<8 + minor
 
-		var path libpf.String
+		var path string
 		if inode == 0 {
 			if fields[5] == "[vdso]" {
-				// Map to something filename looking with synthesized inode
 				path = VdsoPathName
 				device = 0
 				inode = vdsoInode
 			} else if fields[5] == "" {
-				// This is an anonymous mapping, keep it
+				// Anonymous mapping, keep it with empty path
 			} else {
 				// Ignore other mappings that are invalid, non-existent or are special pseudo-files
 				continue
 			}
 		} else {
-			path = libpf.Intern(trimMappingPath(fields[5]))
+			path = trimMappingPath(fields[5])
 		}
 
 		vaddr, err := strconv.ParseUint(addrs[0], 16, 64)
@@ -294,6 +296,7 @@ func iterateMappings(mapsFile io.Reader, fn func(m Mapping) bool) (uint32, error
 			numParseErrors++
 			continue
 		}
+		length := vend - vaddr
 
 		fileOffset, err := strconv.ParseUint(fields[2], 16, 64)
 		if err != nil {
@@ -302,9 +305,9 @@ func iterateMappings(mapsFile io.Reader, fn func(m Mapping) bool) (uint32, error
 			continue
 		}
 
-		if !fn(Mapping{
+		if !callback(Mapping{
 			Vaddr:      vaddr,
-			Length:     vend - vaddr,
+			Length:     length,
 			Flags:      flags,
 			FileOffset: fileOffset,
 			Device:     device,
@@ -317,34 +320,26 @@ func iterateMappings(mapsFile io.Reader, fn func(m Mapping) bool) (uint32, error
 	return numParseErrors, scanner.Err()
 }
 
-func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
-	mappings := make([]Mapping, 0, 32)
-	numParseErrors, err := iterateMappings(mapsFile, func(m Mapping) bool {
-		mappings = append(mappings, m)
-		return true
-	})
-
-	return mappings, numParseErrors, err
-}
-
-func (sp *systemProcess) IterateMappings(fn func(m Mapping) bool) (uint32, error) {
+func (sp *systemProcess) IterateMappings(callback func(m Mapping) bool) (uint32, error) {
 	mapsFile, err := os.Open(fmt.Sprintf("/proc/%d/maps", sp.pid))
 	if err != nil {
 		return 0, err
 	}
 	defer mapsFile.Close()
 
-	var namedMappings []Mapping
+	var elfMappings []Mapping
 	gotMappings := false
-	wrappedFn := func(m Mapping) bool {
+
+	collectForOpenELF := func(m Mapping) bool {
 		gotMappings = true
-		if m.Path != libpf.NullString {
-			namedMappings = append(namedMappings, m)
+		if m.IsExecutable() || m.IsVDSO() {
+			m.Retain()
+			elfMappings = append(elfMappings, m)
 		}
-		return fn(m)
+		return callback(m)
 	}
 
-	numParseErrors, err := iterateMappings(mapsFile, wrappedFn)
+	numParseErrors, err := iterateMappings(mapsFile, collectForOpenELF)
 	if err != nil {
 		return numParseErrors, err
 	}
@@ -374,35 +369,21 @@ func (sp *systemProcess) IterateMappings(fn func(m Mapping) bool) (uint32, error
 			return numParseErrors, ErrNoMappings
 		}
 		defer mapsFileAlt.Close()
-		fallbackErrors, err := iterateMappings(mapsFileAlt, wrappedFn)
+		fallbackErrors, err := iterateMappings(mapsFileAlt, collectForOpenELF)
 		numParseErrors += fallbackErrors
 		if err != nil || !gotMappings {
 			return numParseErrors, ErrNoMappings
 		}
 	}
 
-	fileToMapping := make(map[string]*Mapping, len(namedMappings))
-	for i := range namedMappings {
-		fileToMapping[namedMappings[i].Path.String()] = &namedMappings[i]
+	fileToMapping := make(map[string]*Mapping, len(elfMappings))
+	for i := range elfMappings {
+		m := &elfMappings[i]
+		fileToMapping[m.Path] = m
 	}
-
 	sp.fileToMapping = fileToMapping
+
 	return numParseErrors, nil
-}
-
-// GetMappings will process the mappings file from proc. Additionally,
-// a reverse map from mapping filename to a Mapping node is built to allow
-// OpenELF opening ELF files using the corresponding proc map_files entry.
-// WARNING: This implementation does not support calling GetMappings
-// concurrently with itself, or with OpenELF.
-func (sp *systemProcess) GetMappings() ([]Mapping, uint32, error) {
-	mappings := make([]Mapping, 0, 32)
-	numParseErrors, err := sp.IterateMappings(func(m Mapping) bool {
-		mappings = append(mappings, m)
-		return true
-	})
-
-	return mappings, numParseErrors, err
 }
 
 func (sp *systemProcess) GetThreads() ([]ThreadInfo, error) {
@@ -436,7 +417,7 @@ func (sp *systemProcess) getMappingFile(m *Mapping) string {
 		// nor /proc/sp.pid/root exist if main thread has exited, so we use the
 		// mapping path directly under the sp.tid root.
 		rootPath := fmt.Sprintf("/proc/%v/task/%v/root", sp.pid, sp.tid)
-		return path.Join(rootPath, m.Path.String())
+		return path.Join(rootPath, m.Path)
 	}
 	return fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
 }

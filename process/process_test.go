@@ -5,6 +5,7 @@ package process
 
 import (
 	"debug/elf"
+	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -38,7 +39,7 @@ var allExpectedMappings = []Mapping{
 		Inode:      1068432,
 		Length:     0x2c000,
 		FileOffset: 0,
-		Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
+		Path:       "/tmp/usr_bin_seahorse",
 	},
 	{
 		Vaddr:      0x55fe8273c000,
@@ -47,7 +48,7 @@ var allExpectedMappings = []Mapping{
 		Inode:      1068432,
 		Length:     0x82000,
 		FileOffset: 0x2c000,
-		Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
+		Path:       "/tmp/usr_bin_seahorse",
 	},
 	{
 		Vaddr:      0x55fe827be000,
@@ -56,7 +57,7 @@ var allExpectedMappings = []Mapping{
 		Inode:      1068432,
 		Length:     0x78000,
 		FileOffset: 0xae000,
-		Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
+		Path:       "/tmp/usr_bin_seahorse",
 	},
 	{
 		Vaddr:      0x55fe82836000,
@@ -65,7 +66,7 @@ var allExpectedMappings = []Mapping{
 		Inode:      1068432,
 		Length:     0x7000,
 		FileOffset: 0x125000,
-		Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
+		Path:       "/tmp/usr_bin_seahorse",
 	},
 	{
 		Vaddr:      0x55fe8283d000,
@@ -74,7 +75,7 @@ var allExpectedMappings = []Mapping{
 		Inode:      1068432,
 		Length:     0x1000,
 		FileOffset: 0x12c000,
-		Path:       libpf.Intern("/tmp/usr_bin_seahorse"),
+		Path:       "/tmp/usr_bin_seahorse",
 	},
 	{
 		Vaddr:      0x7f63c8c3e000,
@@ -83,7 +84,7 @@ var allExpectedMappings = []Mapping{
 		Inode:      1048922,
 		Length:     0x1A2000,
 		FileOffset: 544768,
-		Path:       libpf.Intern("/tmp/usr_lib_x86_64-linux-gnu_libcrypto.so.1.1"),
+		Path:       "/tmp/usr_lib_x86_64-linux-gnu_libcrypto.so.1.1",
 	},
 	{
 		Vaddr:      0x7f63c8ebf000,
@@ -92,7 +93,7 @@ var allExpectedMappings = []Mapping{
 		Inode:      1075944,
 		Length:     0x130000,
 		FileOffset: 114688,
-		Path:       libpf.Intern("/tmp/usr_lib_x86_64-linux-gnu_libopensc.so.6.0.0"),
+		Path:       "/tmp/usr_lib_x86_64-linux-gnu_libopensc.so.6.0.0",
 	},
 	{
 		Vaddr:      0x7f8b929f0000,
@@ -101,12 +102,39 @@ var allExpectedMappings = []Mapping{
 		Inode:      0,
 		Length:     0x10000,
 		FileOffset: 0,
-		Path:       libpf.NullString,
 	},
 }
 
+func getTestMappings(t *testing.T, mapsFile io.Reader) ([]Mapping, uint32, error) {
+	t.Helper()
+
+	mappings := make([]Mapping, 0, 32)
+	collectAll := func(m Mapping) bool {
+		m.Retain()
+		mappings = append(mappings, m)
+		return true
+	}
+
+	numParseErrors, err := iterateMappings(mapsFile, collectAll)
+	return mappings, numParseErrors, err
+}
+
+func getTestMappingsFromProcess(t *testing.T, process Process) ([]Mapping, uint32, error) {
+	t.Helper()
+
+	mappings := make([]Mapping, 0, 32)
+	collectAll := func(m Mapping) bool {
+		m.Retain()
+		mappings = append(mappings, m)
+		return true
+	}
+
+	numParseErrors, err := process.IterateMappings(collectAll)
+	return mappings, numParseErrors, err
+}
+
 func TestParseMappings(t *testing.T) {
-	mappings, numParseErrors, err := parseMappings(strings.NewReader(testMappings))
+	mappings, numParseErrors, err := getTestMappings(t, strings.NewReader(testMappings))
 	require.NoError(t, err)
 	require.Equal(t, uint32(4), numParseErrors)
 	assert.Equal(t, allExpectedMappings, mappings)
@@ -114,27 +142,60 @@ func TestParseMappings(t *testing.T) {
 
 func TestIterateMappings(t *testing.T) {
 	t.Run("collects all mappings", func(t *testing.T) {
-		var got []Mapping
-		numParseErrors, err := iterateMappings(strings.NewReader(testMappings), func(m Mapping) bool {
-			got = append(got, m)
-			return true
-		})
+		mappings, numParseErrors, err := getTestMappings(t, strings.NewReader(testMappings))
 		require.NoError(t, err)
 		require.Equal(t, uint32(4), numParseErrors)
-		assert.Equal(t, allExpectedMappings, got)
+		assert.Equal(t, allExpectedMappings, mappings)
 	})
 
 	t.Run("stops early when callback returns false", func(t *testing.T) {
 		var got []Mapping
-		numParseErrors, err := iterateMappings(strings.NewReader(testMappings), func(m Mapping) bool {
+		collectThree := func(m Mapping) bool {
+			m.Retain()
 			got = append(got, m)
 			return len(got) < 3
-		})
+		}
+		numParseErrors, err := iterateMappings(strings.NewReader(testMappings), collectThree)
 		require.NoError(t, err)
 		assert.Equal(t, uint32(0), numParseErrors)
 		assert.Len(t, got, 3)
 		assert.Equal(t, allExpectedMappings[:3], got)
 	})
+}
+
+func TestMappingPredicates(t *testing.T) {
+	tests := []struct {
+		name      string
+		m         Mapping
+		wantAnon  bool
+		wantFile  bool
+		wantMemFD bool
+		wantVDSO  bool
+	}{
+		{"anonymous", Mapping{}, true, false, false, false},
+		{"file-backed", Mapping{Path: "/usr/lib/foo.so"}, false, true, false, false},
+		{"memfd", Mapping{Path: "/memfd:jit"}, true, false, true, false},
+		{"vdso", Mapping{Path: VdsoPathName}, false, false, false, true},
+		{"/dev/zero normalized", Mapping{Inode: 42, Device: 1}, true, false, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wantAnon, tt.m.IsAnonymous(), "IsAnonymous")
+			assert.Equal(t, tt.wantFile, tt.m.IsFileBacked(), "IsFileBacked")
+			assert.Equal(t, tt.wantMemFD, tt.m.IsMemFD(), "IsMemFD")
+			assert.Equal(t, tt.wantVDSO, tt.m.IsVDSO(), "IsVDSO")
+		})
+	}
+}
+
+func TestMappingRetain(t *testing.T) {
+	m := Mapping{Path: "/usr/lib/foo.so"}
+	assert.True(t, m.IsFileBacked())
+
+	m.Retain()
+	assert.Equal(t, "/usr/lib/foo.so", m.Path)
+	assert.True(t, m.IsFileBacked())
+	assert.False(t, m.IsAnonymous())
 }
 
 func TestNewPIDOfSelf(t *testing.T) {
@@ -145,7 +206,7 @@ func TestNewPIDOfSelf(t *testing.T) {
 	pr := New(pid, pid)
 	assert.NotNil(t, pr)
 
-	mappings, numParseErrors, err := pr.GetMappings()
+	mappings, numParseErrors, err := getTestMappingsFromProcess(t, pr)
 	require.NoError(t, err)
 	require.Equal(t, uint32(0), numParseErrors)
 	assert.NotEmpty(t, mappings)

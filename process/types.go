@@ -16,8 +16,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-// VdsoPathName is the path to use for VDSO mappings.
-var VdsoPathName = libpf.Intern("linux-vdso.1.so")
+// VdsoPathName is the path used for VDSO mappings.
+const VdsoPathName = "linux-vdso.1.so"
 
 // vdsoInode is the synthesized inode number for VDSO mappings.
 const vdsoInode = 50
@@ -36,24 +36,44 @@ type Mapping struct {
 	Device uint64
 	// Inode holds the mapped file's inode number.
 	Inode uint64
-	// Path contains the file name for file backed mappings.
-	Path libpf.String
+	// Path is the file path for file-backed and special mappings.
+	// For live processes parsed from /proc/pid/maps, this string may
+	// reference an internal buffer that is recycled. Callers must call
+	// Retain() on any mapping they store beyond the iteration callback.
+	Path string
 }
 
 func (m *Mapping) IsExecutable() bool {
 	return m.Flags&elf.PF_X == elf.PF_X
 }
 
+// IsAnonymous returns true for mappings without a backing file.
+// This includes memfd mappings and /dev/zero.
 func (m *Mapping) IsAnonymous() bool {
-	return m.Path == libpf.NullString || m.IsMemFD()
+	return !m.IsFileBacked() && !m.IsVDSO()
+}
+
+// IsFileBacked returns true for mappings backed by a regular file on disk.
+// Excludes memfd, vdso, and anonymous mappings.
+func (m *Mapping) IsFileBacked() bool {
+	return m.Path != "" && !m.IsVDSO() && !m.IsMemFD()
 }
 
 func (m *Mapping) IsMemFD() bool {
-	return strings.HasPrefix(m.Path.String(), "/memfd:")
+	return strings.HasPrefix(m.Path, "/memfd:")
 }
 
 func (m *Mapping) IsVDSO() bool {
 	return m.Path == VdsoPathName
+}
+
+// Retain makes a copy of Path so the mapping can safely outlive the
+// parser's internal buffer. Must be called inside the IterateMappings
+// callback for any mapping that will be stored beyond the callback.
+// Safe to call on mappings from implementations that don't use buffer
+// recycling (e.g. coredump) -- it's a no-op clone in that case.
+func (m *Mapping) Retain() {
+	m.Path = strings.Clone(m.Path)
 }
 
 func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
@@ -124,13 +144,13 @@ type Process interface {
 	// GetExe returns the executable path of the process.
 	GetExe() (libpf.String, error)
 
-	// GetMappings reads and parses process memory mappings.
-	GetMappings() ([]Mapping, uint32, error)
-
-	// IterateMappings parses process memory mappings and calls fn for each
-	// valid mapping. Parsing stops early if fn returns false.
-	// The returned uint32 is the number of parse errors encountered.
-	IterateMappings(fn func(m Mapping) bool) (uint32, error)
+	// IterateMappings parses process memory mappings and calls callback for
+	// each valid mapping. Path is set to the raw file path for file-backed
+	// mappings. The callback must call m.Retain() on any mapping it stores
+	// beyond the callback scope, because Path may reference an internal
+	// buffer that is recycled after iteration. Parsing stops early if
+	// callback returns false.
+	IterateMappings(callback func(m Mapping) bool) (uint32, error)
 
 	// GetThreads reads the process thread states.
 	GetThreads() ([]ThreadInfo, error)
