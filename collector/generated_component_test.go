@@ -31,7 +31,15 @@ func TestComponentLifecycle(t *testing.T) {
 	tests := []struct {
 		createFn func(ctx context.Context, set receiver.Settings, cfg component.Config) (component.Component, error)
 		name     string
-	}{}
+	}{
+
+		{
+			name: "profiles",
+			createFn: func(ctx context.Context, set receiver.Settings, cfg component.Config) (component.Component, error) {
+				return factory.(xreceiver.Factory).CreateProfiles(ctx, set, cfg, consumertest.NewNop())
+			},
+		},
+	}
 
 	cm, err := confmaptest.LoadConf("metadata.yaml")
 	require.NoError(t, err)
