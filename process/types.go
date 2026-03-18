@@ -16,7 +16,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
-// VdsoPathName is the path used for VDSO mappings.
+// VdsoPathName is the path to use for VDSO mappings.
 var VdsoPathName = libpf.Intern("linux-vdso.1.so")
 
 // vdsoInode is the synthesized inode number for VDSO mappings.
