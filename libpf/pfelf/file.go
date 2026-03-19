@@ -635,29 +635,54 @@ func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string
 
 type ElfReloc *elf.Rela64
 
-// VisitTLSDescriptors visits all TLS relocations and provides the relocation
-// for the TLS symbol, as well as a best-effort string for the symbol's name
-// it continues until the visitor returns false
-func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
-	checkFunc := func(rela ElfReloc) bool {
-		ty := rela.Info & 0xffff
-		switch f.Machine {
-		case elf.EM_AARCH64:
-			return elf.R_AARCH64(ty) == elf.R_AARCH64_TLSDESC
-		case elf.EM_X86_64:
-			return elf.R_X86_64(ty) == elf.R_X86_64_TLSDESC
-		default:
-			return false
+// RelocType represents an architecture-independent relocation type.
+// Multiple values can be combined with bitwise OR to match several types.
+type RelocType uint32
+
+const (
+	// RelTLSDESC matches TLSDESC relocations (R_AARCH64_TLSDESC, R_X86_64_TLSDESC).
+	RelTLSDESC RelocType = 1 << iota
+	// RelDTPMOD64 matches DTPMOD64 relocations (R_AARCH64_TLS_DTPMOD64, R_X86_64_DTPMOD64).
+	RelDTPMOD64
+)
+
+// classifyReloc returns the RelocType for a given ELF relocation, or 0 if unrecognised.
+func (f *File) classifyReloc(rela ElfReloc) RelocType {
+	ty := rela.Info & 0xffff
+	switch f.Machine {
+	case elf.EM_AARCH64:
+		switch elf.R_AARCH64(ty) {
+		case elf.R_AARCH64_TLSDESC:
+			return RelTLSDESC
+		case elf.R_AARCH64_TLS_DTPMOD64:
+			return RelDTPMOD64
+		}
+	case elf.EM_X86_64:
+		switch elf.R_X86_64(ty) {
+		case elf.R_X86_64_TLSDESC:
+			return RelTLSDESC
+		case elf.R_X86_64_DTPMOD64:
+			return RelDTPMOD64
 		}
 	}
-	return f.VisitRelocations(visitor, checkFunc)
+	return 0
 }
 
-// VisitRelocations visits all relocations matching checkFunc and provides the
-// relocation and symbol name to the visitor. The visitor can return false to
-// stop iteration. The checkFunc filters which relocation types to process.
+// VisitTLSRelocations visits all TLSDESC relocations and provides the relocation
+// for the TLS symbol, as well as a best-effort string for the symbol's name.
+// It continues until the visitor returns false.
+func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
+	return f.VisitRelocations(visitor, RelTLSDESC)
+}
+
+// VisitRelocations visits all relocations whose type matches the relTypes
+// bitmask and provides the relocation and symbol name to the visitor. The
+// visitor can return false to stop iteration.
 func (f *File) VisitRelocations(visitor func(ElfReloc, string) bool,
-	checkFunc func(ElfReloc) bool) error {
+	relTypes RelocType) error {
+	checkFunc := func(rela ElfReloc) bool {
+		return f.classifyReloc(rela)&relTypes != 0
+	}
 	var err error
 	if err = f.LoadSections(); err != nil {
 		return err
