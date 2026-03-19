@@ -526,9 +526,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			return true
 		}
 
-		if m.Path != "" {
-			m.Path = strings.Clone(m.Path)
-		}
+		m.Path = strings.Clone(m.Path)
 
 		if mappingNeeded {
 			var fm libpf.FrameMapping
