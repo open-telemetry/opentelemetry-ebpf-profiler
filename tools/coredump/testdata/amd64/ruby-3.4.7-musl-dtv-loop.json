@@ -1,0 +1,87 @@
+{
+  "coredump-ref": "02d32387b21c1526348226e518c931a88e11785e50385ff33cf1cf674fa5bf77",
+  "threads": [
+    {
+      "lwp": 1,
+      "frames": [
+        "libruby.so.3.4.7+0x337d52",
+        "Object#is_prime+0 in /src/tools/coredump/testsources/ruby/loop.rb:11",
+        "libruby.so.3.4.7+0x33df39",
+        "libruby.so.3.4.7+0x342c27",
+        "libruby.so.3.4.7+0x23c7a8",
+        "libruby.so.3.4.7+0x3217b0",
+        "libruby.so.3.4.7+0x328d64",
+        "libruby.so.3.4.7+0x3393c5",
+        "Range#each+0 in <cfunc>:0",
+        "Object#is_prime+0 in /src/tools/coredump/testsources/ruby/loop.rb:10",
+        "Object#sum_of_primes+0 in /src/tools/coredump/testsources/ruby/loop.rb:20",
+        "block (2 levels) in <main>+0 in /src/tools/coredump/testsources/ruby/loop.rb:30",
+        "libruby.so.3.4.7+0x33e009",
+        "libruby.so.3.4.7+0x342c27",
+        "libruby.so.3.4.7+0x23c9ed",
+        "libruby.so.3.4.7+0x32034b",
+        "libruby.so.3.4.7+0x328d64",
+        "libruby.so.3.4.7+0x3393c5",
+        "Range#each+0 in <cfunc>:0",
+        "block in <main>+0 in /src/tools/coredump/testsources/ruby/loop.rb:29",
+        "Kernel#loop+0 in <internal:kernel>:168",
+        "<main>+0 in /src/tools/coredump/testsources/ruby/loop.rb:28",
+        "libruby.so.3.4.7+0x33df39",
+        "libruby.so.3.4.7+0x128ea8",
+        "libruby.so.3.4.7+0x12f2fa",
+        "ruby+0x10ff",
+        "ld-musl-x86_64.so.1+0x41a2f",
+        "ruby+0x1131"
+      ]
+    },
+    {
+      "lwp": 16,
+      "frames": [
+        "ld-musl-x86_64.so.1+0x68ef4",
+        "ld-musl-x86_64.so.1+0x66867",
+        "ld-musl-x86_64.so.1+0x4396b",
+        "libruby.so.3.4.7+0x2dd9e3",
+        "ld-musl-x86_64.so.1+0x67572",
+        "ld-musl-x86_64.so.1+0x68ec0"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "60997f0db81cadd7cd12e787f3cc7de3c1e0946bc9bf28160c10199cceb59fef",
+      "local-path": "/usr/lib/libz.so.1.3.2"
+    },
+    {
+      "ref": "204f1e328f8d2ab7ab1151c3b695c3d5e39b76d736faf858277ea48776813b49",
+      "local-path": "/opt/ruby/lib/libruby.so.3.4.7"
+    },
+    {
+      "ref": "0ea959387b385d63b7e8730cd4fc7e7f94ee032a61aacabc81e1df3ce4a9344e",
+      "local-path": "/lib/ld-musl-x86_64.so.1"
+    },
+    {
+      "ref": "1374a685840d3b078875c64934b6a527012761d703e945fbd2541390f1403582",
+      "local-path": "/opt/ruby/bin/ruby"
+    },
+    {
+      "ref": "67f780fda984c35142a1c9f6d1eb88db0486dc5b411d993f8bc96c2ac05fb233",
+      "local-path": "/opt/ruby/lib/ruby/3.4.0/x86_64-linux-musl/enc/encdb.so"
+    },
+    {
+      "ref": "6b80d52dbcec730bec43441db8e33aba187bfa96bcd9afd052aa9177d051ee46",
+      "local-path": "/usr/lib/debug/lib/ld-musl-x86_64.so.1.debug"
+    },
+    {
+      "ref": "4aa55d0d1f1fa458a84e197e5e70a2f78b803ee4044d2c2e127f2ff77785a459",
+      "local-path": "/opt/ruby/lib/ruby/3.4.0/x86_64-linux-musl/monitor.so"
+    },
+    {
+      "ref": "795395a5c42e9afbf3b1e74095cfe47931d6bacc6b3106c1bd80a3125b582b2e",
+      "local-path": "/opt/ruby/lib/ruby/3.4.0/x86_64-linux-musl/enc/trans/transdb.so"
+    },
+    {
+      "ref": "2892d049d8f445b6d93c1acf365192a6620cf36b066c7c95129aa9d03f4a3ab0",
+      "local-path": "/usr/lib/libgmp.so.10.5.0"
+    }
+  ]
+}
