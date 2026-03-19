@@ -4,7 +4,6 @@
 package ruby // import "go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
 
 import (
-	"debug/elf"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -1447,17 +1446,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		log.Debugf("Found DTPMOD64 relocation at offset %x", r.Off)
 		tlsModuleIdOffset = libpf.Address(r.Off)
 		return false
-	}, func(rela pfelf.ElfReloc) bool {
-		ty := rela.Info & 0xffff
-		switch ef.Machine {
-		case elf.EM_AARCH64:
-			return elf.R_AARCH64(ty) == elf.R_AARCH64_TLS_DTPMOD64
-		case elf.EM_X86_64:
-			return elf.R_X86_64(ty) == elf.R_X86_64_DTPMOD64
-		default:
-			return false
-		}
-	}); err != nil {
+	}, pfelf.RelDTPMOD64); err != nil {
 		log.Warnf("failed to find DTPMOD64 relocation: %v", err)
 	}
 
