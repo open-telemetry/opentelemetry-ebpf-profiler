@@ -137,9 +137,19 @@ type Instance interface {
 	// simple interpreters can use the global Data also as the Instance implementation.
 	Detach(ebpf EbpfHandler, pid libpf.PID) error
 
-	// SynchronizeMappings is called when the processmanager has reread process memory
-	// mappings. Interpreters not needing to process these events can simply ignore them
-	// by just returning a nil.
+	// SynchronizeMappings is called when the processmanager has reread process
+	// memory mappings. The mappings slice contains only the subset of mappings
+	// that are relevant to interpreters: executable anonymous mappings (for JIT
+	// engines like HotSpot, V8, BEAM) and .dll file-backed mappings (for .NET
+	// PE assemblies). The processmanager decides which mappings are included;
+	// this can be made more dynamic in the future if needed.
+	//
+	// The mappings are in /proc/PID/maps order (ascending by virtual address)
+	// but are NOT sorted by any other criteria. Interpreters that need a
+	// specific ordering must sort locally.
+	//
+	// Interpreters not needing to process these events can simply ignore them
+	// by returning nil.
 	SynchronizeMappings(ebpf EbpfHandler, exeReporter reporter.ExecutableReporter,
 		pr process.Process, mappings []process.Mapping) error
 

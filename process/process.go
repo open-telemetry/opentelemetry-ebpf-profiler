@@ -27,8 +27,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
-// IterateMappings returns this error when no mappings can be extracted.
+// ErrNoMappings is returned when no mappings can be extracted.
 var ErrNoMappings = errors.New("no mappings")
+
+// ErrCallbackStopped is returned when the IterateMappings callback returns
+// false, signaling that iteration was intentionally interrupted.
+var ErrCallbackStopped = errors.New("iteration stopped by callback")
 
 const (
 	containerSource = "[0-9a-f]{64}"
@@ -189,7 +193,7 @@ func trimMappingPath(path string) string {
 	return path
 }
 
-func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint32, error) {
+func iterateMappings(mapsFile io.Reader, callback func(m Mapping) bool) (uint32, error) {
 	numParseErrors := uint32(0)
 	scanner := bufio.NewScanner(mapsFile)
 	scanBuf := bufPool.Get().(*[]byte)
@@ -210,10 +214,10 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 		var addrs [2]string
 		var devs [2]string
 
-		// WARNING: line (and all substrings derived from it, including
-		// the Path field of the emitted RawMapping) points into scanBuf
-		// which is recycled after iteration. Callers must use
-		// m.ToMapping() to produce a safe copy before storing.
+		// WARNING: line (and all substrings derived from it, including the
+		// Path field of the emitted Mapping) points into scanBuf which is
+		// recycled after iteration. Callers must copy Path (strings.Clone)
+		// or intern it (libpf.Intern) before storing.
 		line := pfunsafe.ToString(scanner.Bytes())
 		if stringutil.FieldsN(line, fields[:]) < 5 {
 			numParseErrors++
@@ -273,7 +277,7 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 		if inode == 0 {
 			if fields[5] == "[vdso]" {
 				// Map to something filename looking with synthesized inode
-				path = VdsoPathName.String()
+				path = VdsoPathName
 				device = 0
 				inode = vdsoInode
 			} else if fields[5] == "" {
@@ -307,7 +311,7 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 			continue
 		}
 
-		if !callback(RawMapping{
+		if !callback(Mapping{
 			Vaddr:      vaddr,
 			Length:     length,
 			Flags:      flags,
@@ -316,31 +320,28 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 			Inode:      inode,
 			Path:       path,
 		}) {
-			return numParseErrors, scanner.Err()
+			return numParseErrors, ErrCallbackStopped
 		}
 	}
 	return numParseErrors, scanner.Err()
 }
 
-// IterateMappings parses process memory mappings and calls callback
-// for each mapping. The callback receives a RawMapping whose Path
-// may reference an internal buffer recycled after iteration; use
-// ToMapping() to produce a Mapping safe to store long-term.
-// The callback is responsible for filtering out unwanted mappings.
-func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint32, error) {
+func (sp *systemProcess) IterateMappings(callback func(m Mapping) bool) (uint32, error) {
 	mapsFile, err := os.Open(fmt.Sprintf("/proc/%d/maps", sp.pid))
 	if err != nil {
 		return 0, err
 	}
 	defer mapsFile.Close()
 
-	var elfMappings []Mapping
+	fileToMapping := make(map[string]*Mapping)
 	gotMappings := false
 
-	collectForOpenELF := func(m RawMapping) bool {
+	collectForOpenELF := func(m Mapping) bool {
 		gotMappings = true
 		if m.IsExecutable() || m.IsVDSO() {
-			elfMappings = append(elfMappings, m.ToMapping())
+			stored := m
+			stored.Path = strings.Clone(m.Path)
+			fileToMapping[stored.Path] = &stored
 		}
 		return callback(m)
 	}
@@ -381,13 +382,7 @@ func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint
 		}
 	}
 
-	fileToMapping := make(map[string]*Mapping, len(elfMappings))
-	for i := range elfMappings {
-		m := &elfMappings[i]
-		fileToMapping[m.Path.String()] = m
-	}
 	sp.fileToMapping = fileToMapping
-
 	return numParseErrors, nil
 }
 
@@ -422,7 +417,7 @@ func (sp *systemProcess) getMappingFile(m *Mapping) string {
 		// nor /proc/sp.pid/root exist if main thread has exited, so we use the
 		// mapping path directly under the sp.tid root.
 		rootPath := fmt.Sprintf("/proc/%v/task/%v/root", sp.pid, sp.tid)
-		return path.Join(rootPath, m.Path.String())
+		return path.Join(rootPath, m.Path)
 	}
 	return fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
 }

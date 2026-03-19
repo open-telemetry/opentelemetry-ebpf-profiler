@@ -225,7 +225,7 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		return info
 	}
 
-	baseName := path.Base(mapping.Path.String())
+	baseName := path.Base(mapping.Path)
 	if baseName == "/" {
 		// There are circumstances where there is no filename.
 		// E.g. kernel module 'bpfilter_umh' before Linux 5.9-rc1 uses
@@ -333,7 +333,7 @@ func (pm *ProcessManager) processRemovedInterpreters(pid libpf.PID,
 var errInvalidVirtualAddress = errors.New("invalid ELF virtual address")
 
 func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.Mapping) (libpf.FrameMapping, error) {
-	elfRef := pfelf.NewReference(m.Path.String(), pr)
+	elfRef := pfelf.NewReference(m.Path, pr)
 	defer elfRef.Close()
 
 	info := pm.getELFInfo(pr, m, elfRef)
@@ -503,6 +503,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		mpRemove[uint64(m.Vaddr)] = m
 	}
 
+	// interpreterMappings collects the subset of mappings relevant to interpreters:
+	// executable anonymous mappings (JIT) and .dll file-backed mappings (.NET PE).
+	// They are in /proc/PID/maps order (ascending Vaddr), not sorted otherwise.
 	interpreterMappings := make([]process.Mapping, 0, 8)
 	interpretersValid := make(libpf.Set[util.OnDiskFileIdentifier], numInterpreters)
 	capHint := max(32, min(len(oldMappings), 256))
@@ -512,11 +515,22 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
 
-	numParseErrors, err := pr.IterateMappings(func(raw process.RawMapping) bool {
-		// executable mappings and VDSO converted directly to libpf.FrameMapping
-		if raw.IsExecutable() && !raw.IsAnonymous() {
-			m := raw.ToMapping()
+	numParseErrors, err := pr.IterateMappings(func(m process.Mapping) bool {
+		// Executable mappings and VDSO, converted directly to libpf.FrameMapping
+		mappingNeeded := m.IsExecutable() && !m.IsAnonymous()
+		// Needed for JIT mappings (Hotspot, V8, BEAM, etc.)
+		interpreterNeeded := m.IsExecutable() && m.IsAnonymous()
+		// Needed by .NET to retrieve PE assembly mappings
+		interpreterNeeded = interpreterNeeded || strings.HasSuffix(m.Path, ".dll")
+		if !mappingNeeded && !interpreterNeeded {
+			return true
+		}
 
+		if m.Path != "" {
+			m.Path = strings.Clone(m.Path)
+		}
+
+		if mappingNeeded {
 			var fm libpf.FrameMapping
 			if oldm, ok := mpRemove[m.Vaddr]; ok {
 				if oldm.Length == m.Length && oldm.Device == m.Device && oldm.Inode == m.Inode {
@@ -548,14 +562,8 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			}
 		}
 
-		// Interpreters specific mappings
-		// Needed by V8 and BEAM to retrieve JIT mappings
-		if raw.IsExecutable() && raw.IsAnonymous() {
-			interpreterMappings = append(interpreterMappings, raw.ToMapping())
-		}
-		// Needed by .NET to retrieve PE assembly mappings
-		if !raw.IsAnonymous() && strings.HasSuffix(raw.Path, ".dll") {
-			interpreterMappings = append(interpreterMappings, raw.ToMapping())
+		if interpreterNeeded {
+			interpreterMappings = append(interpreterMappings, m)
 		}
 		return true
 	})
@@ -564,16 +572,18 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.mappingStats.numProcParseErrors.Add(numParseErrors)
 
 	if err != nil {
-		if os.IsPermission(err) {
+		if errors.Is(err, process.ErrCallbackStopped) {
+			// Defensive: the current callback does not stop early, but the
+			// IterateMappings contract allows it. Treat as non-fatal.
+			err = nil
+		} else if os.IsPermission(err) {
 			// Ignore the synchronization completely in case of permission
 			// error. This implies the process is still alive, but we cannot
 			// inspect it. Exiting here keeps the PID in the eBPF maps so
 			// we avoid a notification flood to resynchronize.
 			pm.mappingStats.errProcPerm.Add(1)
 			return
-		}
-
-		if errors.Is(err, process.ErrNoMappings) {
+		} else if errors.Is(err, process.ErrNoMappings) {
 			// When no mappings can be extracted but the process is still alive,
 			// do not trigger a process exit to avoid unloading process metadata.
 			// As it's likely that a future iteration can extract mappings from a
@@ -581,7 +591,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			pm.ebpf.RemoveReportedPID(pid)
 			return
 		}
+	}
 
+	if err != nil {
 		// All other errors imply that the process has exited.
 		if os.IsNotExist(err) {
 			// Since listing /proc and opening files in there later is inherently racy,
