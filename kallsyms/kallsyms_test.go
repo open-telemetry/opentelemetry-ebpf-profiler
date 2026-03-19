@@ -257,20 +257,37 @@ ffffffc080f3629c t bpf_prog_b8f4fb5f08605bc5    [bpf]`
 	err = s.bpf.handleBPFUpdate(nil)
 	assert.NotNil(t, err)
 
-	// adding before start doesn't work
+	// adding before start shifts the module start
 	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
 		Addr: 0xffffffc080f26226,
 		Name: "add_before_start",
 	})
-	assert.NotNil(t, err)
+	require.NoError(t, err)
 
-	// removing the first symbol doesn't work
+	assertSymbol(t, s, 0xffffffc080f26226, "bpf", "add_before_start", 0)
+	assertSymbol(t, s, 0xffffffc080f26228, "bpf", "bpf_prog_00354c172d366337_sd_devices", 0)
+
+	// removing the first symbol shifts the module start forward
 	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
-		Addr:  0xffffffc080f26228,
-		Name:  "bpf_prog_00354c172d366337_sd_device",
+		Addr:  0xffffffc080f26226,
+		Name:  "add_before_start",
 		Flags: unix.PERF_RECORD_KSYMBOL_FLAGS_UNREGISTER,
 	})
-	assert.NotNil(t, err)
+	require.NoError(t, err)
+
+	// module start shifted back to the original first symbol
+	assertSymbol(t, s, 0xffffffc080f26228, "bpf", "bpf_prog_00354c172d366337_sd_devices", 0)
+
+	// removing the (new) first symbol also works
+	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
+		Addr:  0xffffffc080f26228,
+		Name:  "bpf_prog_00354c172d366337_sd_devices",
+		Flags: unix.PERF_RECORD_KSYMBOL_FLAGS_UNREGISTER,
+	})
+	require.NoError(t, err)
+
+	// the next symbol is now the first
+	assertSymbol(t, s, 0xffffffc080f26430, "bpf", "bpf_prog_772db7720b2728e9_sd_fw_egress", 0)
 }
 
 func BenchmarkSort(b *testing.B) {

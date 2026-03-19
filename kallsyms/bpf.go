@@ -240,42 +240,48 @@ func (s *bpfSymbolizer) handleBPFUpdate(record *perf.KSymbolRecord) error {
 
 	mod := s.module.Load()
 	if mod == nil {
+		// Unlikely to be triggered as some bpf programs are loaded by the tracer.
 		return errors.New("first bpf symbol being added")
 	}
-
-	var replacement *Module
 
 	addr := libpf.Address(record.Addr)
 
 	if record.Flags&unix.PERF_RECORD_KSYMBOL_FLAGS_UNREGISTER != 0 {
-		// If we can find the exact symbol, remove it. If we can't, it's a benign race.
-		// A race is possible for events that were buffered while a full parsing happened.
-		removeIdx := slices.IndexFunc(mod.symbols, func(sym symbol) bool {
-			return sym.offset == uint32(addr-mod.start)
+		return s.removeBPFSymbol(mod, addr)
+	}
+
+	return s.addBPFSymbol(mod, addr, record.Name)
+}
+
+// addBPFSymbol handles adding a new BPF symbol to the module.
+func (s *bpfSymbolizer) addBPFSymbol(mod *Module, addr libpf.Address, name string) error {
+	var replacement *Module
+
+	if addr < mod.start {
+		// New symbol is below the current module start. Shift all existing
+		// offsets up by the difference and set the new start address.
+		replacement = mod.replacement()
+
+		delta := uint32(mod.start - addr)
+		for i := range replacement.symbols {
+			replacement.symbols[i].offset += delta
+		}
+		replacement.start = addr
+
+		replacement.symbols = append(replacement.symbols, symbol{
+			offset: 0,
+			index:  replacement.addName(name),
 		})
-		if removeIdx != -1 {
-			replacement = mod.replacement()
-
-			if replacement.symbols[removeIdx].offset == 0 {
-				return errors.New("the first symbol is being removed, full re-scan is necessary")
-			}
-
-			replacement.symbols = slices.Delete(replacement.symbols, removeIdx, removeIdx+1)
-		}
 	} else {
-		if addr < mod.start {
-			return errors.New("new bpf symbol below bpf module start, full re-scan is necessary")
-		}
-
-		// If we can't find the exact symbol, add a new one. If we can't, it's a benign race.
+		// If we can find the exact symbol, it's a benign race.
 		// A race is possible for events that were buffered while a full parsing happened.
-		name, off, err := mod.LookupSymbolByAddress(addr)
-		if err != nil || off > 0 || name != record.Name {
+		existing, off, err := mod.LookupSymbolByAddress(addr)
+		if err != nil || off > 0 || existing != name {
 			replacement = mod.replacement()
 
 			replacement.symbols = append(replacement.symbols, symbol{
 				offset: uint32(addr - replacement.start),
-				index:  replacement.addName(record.Name),
+				index:  replacement.addName(name),
 			})
 		}
 	}
@@ -284,6 +290,43 @@ func (s *bpfSymbolizer) handleBPFUpdate(record *perf.KSymbolRecord) error {
 		replacement.finish()
 		s.module.Store(replacement)
 	}
+
+	return nil
+}
+
+// removeBPFSymbol handles removing a BPF symbol from the module.
+func (s *bpfSymbolizer) removeBPFSymbol(mod *Module, addr libpf.Address) error {
+	// If we can find the exact symbol, remove it. If we can't, it's a benign race.
+	// A race is possible for events that were buffered while a full parsing happened.
+	removeIdx := slices.IndexFunc(mod.symbols, func(sym symbol) bool {
+		return sym.offset == uint32(addr-mod.start)
+	})
+	if removeIdx == -1 {
+		return nil
+	}
+
+	replacement := mod.replacement()
+	replacement.symbols = slices.Delete(replacement.symbols, removeIdx, removeIdx+1)
+
+	if len(replacement.symbols) == 0 {
+		// All symbols gone, clear the module.
+		s.module.Store(nil)
+		return nil
+	}
+
+	// If the lowest-address symbol was removed, adjust the module
+	// start to the new lowest and shift all offsets down.
+	newFirst := replacement.symbols[len(replacement.symbols)-1]
+	if newFirst.offset > 0 {
+		delta := newFirst.offset
+		replacement.start += libpf.Address(delta)
+		for i := range replacement.symbols {
+			replacement.symbols[i].offset -= delta
+		}
+	}
+
+	replacement.finish()
+	s.module.Store(replacement)
 
 	return nil
 }
