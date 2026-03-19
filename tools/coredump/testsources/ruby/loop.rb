@@ -1,5 +1,9 @@
 #!/usr/bin/env ruby
 
+# Set RUBY_DISABLE_GC=1 to disable garbage collection.
+# This avoids capturing GC frames in coredumps.
+GC.disable if ENV["RUBY_DISABLE_GC"]
+
 def is_prime(n)
   if n < 2
     return false
