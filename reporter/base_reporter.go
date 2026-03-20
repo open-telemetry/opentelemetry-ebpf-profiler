@@ -64,7 +64,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	key := samples.ResourceKey{
 		APMServiceName: meta.APMServiceName,
 		ContainerID:    meta.ContainerID,
-		Pid:            int64(meta.PID),
+		PID:            int64(meta.PID),
 		ExecutablePath: meta.ExecutablePath,
 	}
 
@@ -86,7 +86,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	sampleKey := samples.SampleKey{
 		Hash:      trace.Hash,
 		Comm:      meta.Comm,
-		Tid:       int64(meta.TID),
+		TID:       int64(meta.TID),
 		CPU:       int64(meta.CPU),
 		ExtraMeta: extraMeta,
 	}

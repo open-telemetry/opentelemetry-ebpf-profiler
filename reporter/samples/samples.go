@@ -62,7 +62,7 @@ type ResourceKey struct {
 	// APMServiceName is provided by the eBPF programs
 	APMServiceName string
 
-	Pid int64
+	PID int64
 }
 
 // SampleKey holds a unique trace hash and its dedicated meta data.
@@ -76,6 +76,6 @@ type SampleKey struct {
 
 	Hash libpf.TraceHash
 
-	Tid int64
+	TID int64
 	CPU int64
 }

@@ -30,7 +30,7 @@ func TestAttrTableManager(t *testing.T) {
 			k: []ResourceKey{
 				{
 					APMServiceName: "",
-					Pid:            0,
+					PID:            0,
 				},
 			},
 			expectedIndices: [][]int32{{0}},
@@ -42,11 +42,11 @@ func TestAttrTableManager(t *testing.T) {
 			k: []ResourceKey{
 				{
 					APMServiceName: "APMServiceName1",
-					Pid:            1234,
+					PID:            1234,
 				},
 				{
 					APMServiceName: "APMServiceName1",
-					Pid:            1234,
+					PID:            1234,
 				},
 			},
 			expectedIndices: [][]int32{{0, 1}, {0, 1}},
@@ -59,11 +59,11 @@ func TestAttrTableManager(t *testing.T) {
 			k: []ResourceKey{
 				{
 					APMServiceName: "APMServiceName1",
-					Pid:            1234,
+					PID:            1234,
 				},
 				{
 					APMServiceName: "APMServiceName2",
-					Pid:            6789,
+					PID:            6789,
 				},
 			},
 			expectedIndices: [][]int32{{0, 1}, {2, 3}},
@@ -85,7 +85,7 @@ func TestAttrTableManager(t *testing.T) {
 			for _, k := range tc.k {
 				inner := pcommon.NewInt32Slice()
 				mgr.AppendOptionalString(inner, semconv.ServiceNameKey, k.APMServiceName)
-				mgr.AppendInt(inner, semconv.ProcessPIDKey, k.Pid)
+				mgr.AppendInt(inner, semconv.ProcessPIDKey, k.PID)
 				indices = append(indices, inner.AsRaw())
 			}
 

@@ -88,7 +88,7 @@ func TestCollectorReporterShutdown(t *testing.T) {
 
 	traceEventsPtr := r.traceEvents.WLock()
 	tree := (*traceEventsPtr)
-	tree[samples.ResourceKey{Pid: 1}] = samples.ResourceToProfiles{Events: map[libpf.Origin]samples.SampleToEvents{
+	tree[samples.ResourceKey{PID: 1}] = samples.ResourceToProfiles{Events: map[libpf.Origin]samples.SampleToEvents{
 		support.TraceOriginProbe: {
 			{}: {
 				Frames: func() libpf.Frames {

@@ -263,7 +263,7 @@ func (p *Pdata) setProfile(
 		attrMgr.AppendOptionalString(sample.AttributeIndices(),
 			semconv.ThreadNameKey, sampleKey.Comm.String())
 		attrMgr.AppendInt(sample.AttributeIndices(),
-			semconv.ThreadIDKey, sampleKey.Tid)
+			semconv.ThreadIDKey, sampleKey.TID)
 		attrMgr.AppendInt(sample.AttributeIndices(),
 			semconv.CPULogicalNumberKey, int64(sampleKey.CPU))
 
@@ -289,7 +289,7 @@ func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envV
 		attrs.PutStr(string(semconv.ContainerIDKey), resource.ContainerID.String())
 	}
 
-	attrs.PutInt(string(semconv.ProcessPIDKey), resource.Pid)
+	attrs.PutInt(string(semconv.ProcessPIDKey), resource.PID)
 
 	if resource.ExecutablePath != libpf.NullString {
 		attrs.PutStr(string(semconv.ProcessExecutablePathKey), resource.ExecutablePath.String())
