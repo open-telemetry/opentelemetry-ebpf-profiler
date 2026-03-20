@@ -646,26 +646,28 @@ const (
 	RelDTPMOD64
 )
 
-// classifyReloc returns the RelocType for a given ELF relocation, or 0 if unrecognised.
-func (f *File) classifyReloc(rela ElfReloc) RelocType {
-	ty := rela.Info & 0xffff
-	switch f.Machine {
-	case elf.EM_AARCH64:
-		switch elf.R_AARCH64(ty) {
-		case elf.R_AARCH64_TLSDESC:
-			return RelTLSDESC
-		case elf.R_AARCH64_TLS_DTPMOD64:
-			return RelDTPMOD64
-		}
-	case elf.EM_X86_64:
-		switch elf.R_X86_64(ty) {
-		case elf.R_X86_64_TLSDESC:
-			return RelTLSDESC
-		case elf.R_X86_64_DTPMOD64:
-			return RelDTPMOD64
-		}
+// classifyRelocAarch64 returns the RelocType for an AARCH64 relocation.
+func classifyRelocAarch64(rela ElfReloc) RelocType {
+	switch elf.R_AARCH64(rela.Info & 0xffff) {
+	case elf.R_AARCH64_TLSDESC:
+		return RelTLSDESC
+	case elf.R_AARCH64_TLS_DTPMOD64:
+		return RelDTPMOD64
+	default:
+		return 0
 	}
-	return 0
+}
+
+// classifyRelocX86_64 returns the RelocType for an X86_64 relocation.
+func classifyRelocX86_64(rela ElfReloc) RelocType {
+	switch elf.R_X86_64(rela.Info & 0xffff) {
+	case elf.R_X86_64_TLSDESC:
+		return RelTLSDESC
+	case elf.R_X86_64_DTPMOD64:
+		return RelDTPMOD64
+	default:
+		return 0
+	}
 }
 
 // VisitTLSRelocations visits all TLSDESC relocations and provides the relocation
@@ -680,8 +682,17 @@ func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
 // visitor can return false to stop iteration.
 func (f *File) VisitRelocations(visitor func(ElfReloc, string) bool,
 	relTypes RelocType) error {
-	checkFunc := func(rela ElfReloc) bool {
-		return f.classifyReloc(rela)&relTypes != 0
+	var classify func(ElfReloc) RelocType
+	switch f.Machine {
+	case elf.EM_AARCH64:
+		classify = classifyRelocAarch64
+	case elf.EM_X86_64:
+		classify = classifyRelocX86_64
+	default:
+		return nil
+	}
+	filterFunc := func(rela ElfReloc) bool {
+		return classify(rela)&relTypes != 0
 	}
 	var err error
 	if err = f.LoadSections(); err != nil {
@@ -692,7 +703,7 @@ func (f *File) VisitRelocations(visitor func(ElfReloc, string) bool,
 		section := &f.Sections[i]
 		// NOTE: SHT_REL is not relevant for the archs that we care about
 		if section.Type == elf.SHT_RELA {
-			cont, err := f.visitRelocationsForSection(visitor, checkFunc, section)
+			cont, err := f.visitRelocationsForSection(visitor, filterFunc, section)
 			if err != nil {
 				return err
 			}
