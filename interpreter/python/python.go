@@ -743,8 +743,8 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	mainDSO := false
-	major := 0
-	minor := 0
+	major := uint16(0)
+	minor := uint16(0)
 	matches := libpythonRegex.FindStringSubmatch(info.FileName())
 	if matches == nil {
 		mainDSO = true
@@ -755,8 +755,10 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			return nil, nil
 		}
 	} else {
-		major, _ = strconv.Atoi(matches[1])
-		minor, _ = strconv.Atoi(matches[2])
+		majorValue, _ := strconv.ParseUint(matches[1], 10, 16)
+		minorValue, _ := strconv.ParseUint(matches[2], 10, 16)
+		major = uint16(majorValue)
+		minor = uint16(minorValue)
 	}
 
 	ef, err := info.GetELF()
@@ -768,8 +770,8 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		if versionErr != nil {
 			return nil, nil
 		}
-		major = int(majorFromSym)
-		minor = int(minorFromSym)
+		major = uint16(majorFromSym)
+		minor = uint16(minorFromSym)
 	}
 
 	if mainDSO {
@@ -786,7 +788,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	var pyruntimeAddr, autoTLSKey libpf.SymbolValue
-	version := pythonVer(uint16(major), uint16(minor))
+	version := pythonVer(major, minor)
 
 	minVer := pythonVer(3, 6)
 	maxVer := pythonVer(3, 14)
