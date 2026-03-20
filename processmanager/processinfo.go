@@ -452,7 +452,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	for idx := range processMappings {
 		m := &processMappings[idx]
 		if !m.IsExecutable() || m.IsAnonymous() {
-			if process.IsProcessContextMapping(m) {
+			if process.IsProcessContextMapping(m.Path.String()) {
 				processContextInfo = readProcessContext(m, pr, oldProcessContextInfo)
 				// Even if process context is not found, it might be published in the future.
 				// For now, we rely on a new call to synchronizeMappings to pick it up.
@@ -787,7 +787,7 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 }
 
 func readProcessContext(mapping *process.Mapping, pr process.Process, oldProcessContextInfo process.ProcessContextInfo) process.ProcessContextInfo {
-	ctxInfo, err := process.ReadProcessContext(mapping, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs)
+	ctxInfo, err := process.ReadProcessContext(libpf.Address(mapping.Vaddr), pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs)
 	if err == nil {
 		return ctxInfo
 	}

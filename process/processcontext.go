@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"structs"
 	"sync/atomic"
+	"unsafe"
 
 	"google.golang.org/protobuf/proto"
 
@@ -19,6 +20,19 @@ import (
 )
 
 const (
+	// OTel process context is published in a mapping:
+	// - based on a memfd file descriptor named "OTEL_CTX" when memfd_create is available.
+	// - based on an anonymous private mapping when memfd_create is not available
+	// In both cases, an attempt is made to name the mapping "OTEL_CTX" using prctl(PR_SET_VMA_ANON_NAME) which may fail depending on kernel version/configuration.
+	// Consequently the mapping can show up with 3 different names:
+	// - "/memfd:OTEL_CTX": memfd-based mapping and prctl failed
+	// - "[anon_shmem:OTEL_CTX]": memfd-based mapping and prctl succeeded
+	// - "[anon:OTEL_CTX]": anonymous mapping and prctl succeeded
+	// Case where both memfd_create and prctl fail is considered a failure and is not supported.
+	ContextMappingMemfd      = "/memfd:OTEL_CTX"
+	ContextMappingMemfdNamed = "[anon_shmem:OTEL_CTX]"
+	ContextMappingAnonNamed  = "[anon:OTEL_CTX]"
+
 	// Signature
 	signatureOTELCTX = "OTEL_CTX"
 
@@ -31,9 +45,8 @@ const (
 	// Maximum retries for concurrent updates
 	maxRetries = 3
 
-	MemfdContextMappingName      = "/memfd:OTEL_CTX"
-	AnonymousContextMappingName  = "[anon:OTEL_CTX]"
-	AnonSharedContextMappingName = "[anon_shmem:OTEL_CTX]"
+	// Offset of the MonotonicPublishedAtNs field in the processContextHeader struct
+	monotonicPublishedAtNsOffset = libpf.Address(unsafe.Offsetof(processContextHeader{}.MonotonicPublishedAtNs))
 )
 
 var (
@@ -44,7 +57,7 @@ var (
 	ErrConcurrentUpdate = errors.New("concurrent ProcessContext update detected")
 
 	// ErrNoUpdate indicates the ProcessContext has not been updated since it was last published.
-	ErrNoUpdate = errors.New("ProcessContext has not been updated since the last published")
+	ErrNoUpdate = errors.New("ProcessContext has not been updated")
 )
 
 type ProcessContextInfo struct {
@@ -62,17 +75,11 @@ type processContextHeader struct {
 	PayloadPtr             uint64  // Memory pointer to protobuf payload
 }
 
-// ReadProcessContext reads ProcessContext from process memory using the provided mappings.
+// ReadProcessContext reads ProcessContext from remote process memory using the provided address.
 // Returns ErrProcessContextNotFound if the process has no ProcessContext memory region.
 // Retries up to maxRetries times when concurrent updates are detected.
-func ReadProcessContext(mapping *Mapping, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (ProcessContextInfo, error) {
+func ReadProcessContext(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (ProcessContextInfo, error) {
 	var lastErr error
-
-	addr := libpf.Address(mapping.Vaddr)
-	// This is to fix a CodeQL warning about potential overflow on 32-bit systems
-	if mapping.Vaddr != uint64(addr) {
-		return ProcessContextInfo{}, fmt.Errorf("%w: invalid mapping address", ErrInvalidContext)
-	}
 
 	// Find the ProcessContext mapping
 	for range maxRetries {
@@ -115,7 +122,7 @@ func readProcessContextOnce(mappingAddr libpf.Address, rm remotememory.RemoteMem
 	}
 
 	// Read the payload
-	ctx, ctxErr := readProcessContext(rm, hdr)
+	ctx, ctxErr := readProcessContextPayload(rm, hdr)
 	// Do not check for errors here as the context read might have failed due to
 	// a concurrent update occurring between the header read and the payload read.
 	// We will check for context read error after re-reading the header.
@@ -141,29 +148,17 @@ func readProcessContextOnce(mappingAddr libpf.Address, rm remotememory.RemoteMem
 	return ctx, nil
 }
 
-func IsProcessContextMapping(mapping *Mapping) bool {
-	path := mapping.Path.String()
+func IsProcessContextMapping(mappingPath string) bool {
 	// In some cases the name can show up in proc as "/memfd:OTEL_CTX (deleted)"
 	// but the " (deleted)" suffix is separately trimmed by parseMappings
-	return path == MemfdContextMappingName ||
-		path == AnonymousContextMappingName ||
-		path == AnonSharedContextMappingName
-}
-
-// findContextMapping searches for the ProcessContext memory mapping.
-func findContextMapping(mappings []Mapping) *Mapping {
-	for i := range mappings {
-		m := &mappings[i]
-		if IsProcessContextMapping(m) {
-			return m
-		}
-	}
-	return nil
+	return mappingPath == ContextMappingMemfd ||
+		mappingPath == ContextMappingAnonNamed ||
+		mappingPath == ContextMappingMemfdNamed
 }
 
 func readTimestamp(rm remotememory.RemoteMemory, headerAddr libpf.Address) (uint64, error) {
 	var buf [8]byte
-	if err := rm.Read(headerAddr+16, buf[:]); err != nil {
+	if err := rm.Read(headerAddr+monotonicPublishedAtNsOffset, buf[:]); err != nil {
 		return 0, fmt.Errorf("failed to read timestamp: %w", err)
 	}
 	return binary.LittleEndian.Uint64(buf[:]), nil
@@ -195,8 +190,7 @@ func readProcessContextHeader(rm remotememory.RemoteMemory, headerAddr libpf.Add
 	return hdr, nil
 }
 
-// readProcessContext reads the ProcessContext payload.
-func readProcessContext(rm remotememory.RemoteMemory, hdr processContextHeader) (ProcessContextInfo, error) {
+func readProcessContextPayload(rm remotememory.RemoteMemory, hdr processContextHeader) (ProcessContextInfo, error) {
 	// Read the protobuf payload from remote memory
 	payloadBytes := make([]byte, hdr.PayloadSize)
 	err := rm.Read(libpf.Address(hdr.PayloadPtr), payloadBytes)

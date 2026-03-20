@@ -109,15 +109,17 @@ func createValidHeader(payloadSize uint32, payloadPtr uint64, publishedAt uint64
 }
 
 func TestProcessContext_IsProcessContextMapping(t *testing.T) {
-	assert.True(t, IsProcessContextMapping(&Mapping{Path: libpf.Intern("[anon:OTEL_CTX]")}))
-	assert.True(t, IsProcessContextMapping(&Mapping{Path: libpf.Intern("[anon_shmem:OTEL_CTX]")}))
-	assert.True(t, IsProcessContextMapping(&Mapping{Path: libpf.Intern("/memfd:OTEL_CTX")}))
-	assert.False(t, IsProcessContextMapping(&Mapping{Path: libpf.Intern("test")}))
+	assert.True(t, IsProcessContextMapping("[anon:OTEL_CTX]"))
+	assert.True(t, IsProcessContextMapping("[anon_shmem:OTEL_CTX]"))
+	assert.True(t, IsProcessContextMapping("/memfd:OTEL_CTX"))
+	assert.False(t, IsProcessContextMapping("test"))
 }
 
 func TestProcessContext_Read(t *testing.T) {
 	payload, err := proto.Marshal(&testProcessContext)
 	require.NoError(t, err)
+
+	mappingAddr := libpf.Address(0x1000)
 
 	tests := []struct {
 		name              string
@@ -130,7 +132,7 @@ func TestProcessContext_Read(t *testing.T) {
 		{
 			name: "success with valid context",
 			setupMock: func(mock *mockReader) {
-				headerAddr := uint64(0x1000)
+				headerAddr := uint64(mappingAddr)
 				payloadAddr := uint64(0x2000)
 				header := createValidHeader(uint32(len(payload)), payloadAddr, 123456789)
 				mock.writeAt(headerAddr, header)
@@ -148,7 +150,7 @@ func TestProcessContext_Read(t *testing.T) {
 		{
 			name: "invalid protobuf",
 			setupMock: func(mock *mockReader) {
-				headerAddr := uint64(0x1000)
+				headerAddr := uint64(mappingAddr)
 				payloadAddr := uint64(0x2000)
 				invalidPayload := []byte{0xff, 0xff, 0xff, 0xff}
 				header := createValidHeader(uint32(len(invalidPayload)), payloadAddr, 123456789)
@@ -161,7 +163,7 @@ func TestProcessContext_Read(t *testing.T) {
 		{
 			name: "invalid signature",
 			setupMock: func(mock *mockReader) {
-				headerAddr := uint64(0x1000)
+				headerAddr := uint64(mappingAddr)
 				header := createHeader("INVALID!", supportedVersion, 100, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
@@ -171,7 +173,7 @@ func TestProcessContext_Read(t *testing.T) {
 		{
 			name: "invalid version",
 			setupMock: func(mock *mockReader) {
-				headerAddr := uint64(0x1000)
+				headerAddr := uint64(mappingAddr)
 				header := createHeader(signatureOTELCTX, 999, 100, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
@@ -181,7 +183,7 @@ func TestProcessContext_Read(t *testing.T) {
 		{
 			name: "zero payload size",
 			setupMock: func(mock *mockReader) {
-				headerAddr := uint64(0x1000)
+				headerAddr := uint64(mappingAddr)
 				header := createHeader(signatureOTELCTX, supportedVersion, 0, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
@@ -191,7 +193,7 @@ func TestProcessContext_Read(t *testing.T) {
 		{
 			name: "payload size too large",
 			setupMock: func(mock *mockReader) {
-				headerAddr := uint64(0x1000)
+				headerAddr := uint64(mappingAddr)
 				header := createHeader(signatureOTELCTX, supportedVersion, maxPayloadSize+1, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
@@ -201,7 +203,7 @@ func TestProcessContext_Read(t *testing.T) {
 		{
 			name: "published at zero - update in progress",
 			setupMock: func(mock *mockReader) {
-				headerAddr := uint64(0x1000)
+				headerAddr := uint64(mappingAddr)
 				// PublishedAtNs = 0 indicates update in progress
 				header := createValidHeader(100, 0x2000, 0)
 				mock.writeAt(headerAddr, header)
@@ -211,7 +213,7 @@ func TestProcessContext_Read(t *testing.T) {
 		{
 			name: "published at same as last published",
 			setupMock: func(mock *mockReader) {
-				headerAddr := uint64(0x1000)
+				headerAddr := uint64(mappingAddr)
 				header := createValidHeader(100, 0x2000, 123456788)
 				mock.writeAt(headerAddr, header)
 			},
@@ -221,7 +223,7 @@ func TestProcessContext_Read(t *testing.T) {
 		{
 			name: "published at too old",
 			setupMock: func(mock *mockReader) {
-				headerAddr := uint64(0x1000)
+				headerAddr := uint64(mappingAddr)
 				header := createValidHeader(100, 0x2000, 123456787)
 				mock.writeAt(headerAddr, header)
 			},
@@ -237,12 +239,7 @@ func TestProcessContext_Read(t *testing.T) {
 
 			rm := remotememory.RemoteMemory{ReaderAt: mock}
 
-			mapping := &Mapping{
-				Vaddr: 0x1000,
-				Path:  libpf.Intern("[anon:OTEL_CTX]"),
-			}
-
-			ctx, err := ReadProcessContext(mapping, rm, tt.lastPublishedAtNs)
+			ctx, err := ReadProcessContext(mappingAddr, rm, tt.lastPublishedAtNs)
 
 			if tt.expectedErr == nil {
 				require.NoError(t, err)
@@ -373,7 +370,7 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			m := findContextMapping(mappings)
 			require.NotNil(t, m)
 
-			result, err := ReadProcessContext(m, proc.GetRemoteMemory(), 0)
+			result, err := ReadProcessContext(libpf.Address(m.Vaddr), proc.GetRemoteMemory(), 0)
 			require.NoError(t, err)
 			require.EqualExportedValues(t,
 				ProcessContextInfo{Context: &testProcessContext, PublishedAtNs: 123456789},
@@ -381,4 +378,15 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 
 		})
 	}
+}
+
+// findContextMapping searches for the ProcessContext memory mapping.
+func findContextMapping(mappings []Mapping) *Mapping {
+	for i := range mappings {
+		m := &mappings[i]
+		if IsProcessContextMapping(m.Path.String()) {
+			return m
+		}
+	}
+	return nil
 }
