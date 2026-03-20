@@ -190,7 +190,7 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 	return nil
 }
 
-func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mapping,
+func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.RawMapping,
 	elfRef *pfelf.Reference,
 ) elfInfo {
 	key := mapping.GetOnDiskFileIdentifier()
@@ -332,7 +332,7 @@ func (pm *ProcessManager) processRemovedInterpreters(pid libpf.PID,
 
 var errInvalidVirtualAddress = errors.New("invalid ELF virtual address")
 
-func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.Mapping) (libpf.FrameMapping, error) {
+func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapping) (libpf.FrameMapping, error) {
 	elfRef := pfelf.NewReference(m.Path, pr)
 	defer elfRef.Close()
 
@@ -506,7 +506,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	// interpreterMappings collects the subset of mappings relevant to interpreters:
 	// executable anonymous mappings (JIT) and .dll file-backed mappings (.NET PE).
 	// They are in /proc/PID/maps order (ascending Vaddr), not sorted otherwise.
-	interpreterMappings := make([]process.Mapping, 0, 8)
+	interpreterMappings := make([]process.RawMapping, 0, 8)
 	interpretersValid := make(libpf.Set[util.OnDiskFileIdentifier], numInterpreters)
 	capHint := max(32, min(len(oldMappings), 256))
 	mappings := make([]Mapping, 0, capHint)
@@ -515,7 +515,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
 
-	numParseErrors, err := pr.IterateMappings(func(m process.Mapping) bool {
+	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
 		// Executable mappings and VDSO, converted directly to libpf.FrameMapping
 		mappingNeeded := m.IsExecutable() && !m.IsAnonymous()
 		// Needed for JIT mappings (Hotspot, V8, BEAM, etc.)
@@ -526,7 +526,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			return true
 		}
 
-		m.Path = strings.Clone(m.Path)
+		m.Path = libpf.Intern(m.Path).String()
 
 		if mappingNeeded {
 			var fm libpf.FrameMapping

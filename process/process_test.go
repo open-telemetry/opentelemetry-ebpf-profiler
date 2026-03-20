@@ -31,7 +31,7 @@ var testMappings = `55fe82710000-55fe8273c000 r--p 00000000 fd:01 1068432       
 7f63c8eef000 r-xp 0001c000 1fd:01 1075944
 7f8b929f0000-7f8b92a00000 r-xp 00000000 00:00 0 `
 
-var allExpectedMappings = []Mapping{
+var allExpectedMappings = []RawMapping{
 	{
 		Vaddr:      0x55fe82710000,
 		Device:     0xfd01,
@@ -106,24 +106,24 @@ var allExpectedMappings = []Mapping{
 	},
 }
 
-func getTestMappings(t *testing.T, mapsFile io.Reader) ([]Mapping, uint32, error) {
+func getTestMappings(t *testing.T, mapsFile io.Reader) ([]RawMapping, uint32, error) {
 	t.Helper()
 
-	mappings := make([]Mapping, 0, 32)
-	numParseErrors, err := iterateMappings(mapsFile, func(m Mapping) bool {
-		m.Path = strings.Clone(m.Path)
+	mappings := make([]RawMapping, 0, 32)
+	numParseErrors, err := iterateMappings(mapsFile, func(m RawMapping) bool {
+		m.Path = libpf.Intern(m.Path).String()
 		mappings = append(mappings, m)
 		return true
 	})
 	return mappings, numParseErrors, err
 }
 
-func getTestMappingsFromProcess(t *testing.T, process Process) ([]Mapping, uint32, error) {
+func getTestMappingsFromProcess(t *testing.T, process Process) ([]RawMapping, uint32, error) {
 	t.Helper()
 
-	mappings := make([]Mapping, 0, 32)
-	numParseErrors, err := process.IterateMappings(func(m Mapping) bool {
-		m.Path = strings.Clone(m.Path)
+	mappings := make([]RawMapping, 0, 32)
+	numParseErrors, err := process.IterateMappings(func(m RawMapping) bool {
+		m.Path = libpf.Intern(m.Path).String()
 		mappings = append(mappings, m)
 		return true
 	})
@@ -140,17 +140,17 @@ func TestParseMappings(t *testing.T) {
 func TestMappingPredicates(t *testing.T) {
 	tests := []struct {
 		name      string
-		m         Mapping
+		m         RawMapping
 		wantAnon  bool
 		wantFile  bool
 		wantMemFD bool
 		wantVDSO  bool
 	}{
-		{"anonymous", Mapping{}, true, false, false, false},
-		{"file-backed", Mapping{Path: "/usr/lib/foo.so"}, false, true, false, false},
-		{"memfd", Mapping{Path: "/memfd:jit"}, true, false, true, false},
-		{"vdso", Mapping{Path: VdsoPathName}, false, false, false, true},
-		{"/dev/zero normalized", Mapping{Inode: 42, Device: 1}, true, false, false, false},
+		{"anonymous", RawMapping{}, true, false, false, false},
+		{"file-backed", RawMapping{Path: "/usr/lib/foo.so"}, false, true, false, false},
+		{"memfd", RawMapping{Path: "/memfd:jit"}, true, false, true, false},
+		{"vdso", RawMapping{Path: VdsoPathName}, false, false, false, true},
+		{"/dev/zero normalized", RawMapping{Inode: 42, Device: 1}, true, false, false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

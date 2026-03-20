@@ -40,9 +40,9 @@ type ExecutableMetadata struct {
 	// Process is the interface to the process holding the file.
 	Process process.Process
 
-	// Mapping is the process.Mapping file. Process.OpenMappingFile can be used
+	// Mapping is the process.RawMapping file. Process.OpenMappingFile can be used
 	// to open the file if needed.
-	Mapping *process.Mapping
+	Mapping *process.RawMapping
 
 	// DebuglinkFileName is the path to the matching debug file
 	// from the .gnu.debuglink, if any. The caller should

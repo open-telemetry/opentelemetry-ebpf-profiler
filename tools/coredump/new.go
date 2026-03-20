@@ -60,7 +60,7 @@ func newTrackedCoredump(corePath, filePrefix string) (*trackedCoredump, error) {
 	}, nil
 }
 
-func (tc *trackedCoredump) GetMappingFileLastModified(_ *process.Mapping) int64 {
+func (tc *trackedCoredump) GetMappingFileLastModified(_ *process.RawMapping) int64 {
 	return 0
 }
 
@@ -71,7 +71,7 @@ func (tc *trackedCoredump) warnMissing(fileName string) {
 	}
 }
 
-func (tc *trackedCoredump) CalculateMappingFileID(m *process.Mapping) (libpf.FileID, error) {
+func (tc *trackedCoredump) CalculateMappingFileID(m *process.RawMapping) (libpf.FileID, error) {
 	if !m.IsVDSO() && !m.IsAnonymous() {
 		file := m.Path
 		fid, err := libpf.FileIDFromExecutableFile(path.Join(tc.prefix, file))
@@ -84,7 +84,7 @@ func (tc *trackedCoredump) CalculateMappingFileID(m *process.Mapping) (libpf.Fil
 	return tc.CoredumpProcess.CalculateMappingFileID(m)
 }
 
-func (tc *trackedCoredump) OpenMappingFile(m *process.Mapping) (process.ReadAtCloser, error) {
+func (tc *trackedCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
 	if !m.IsVDSO() && !m.IsAnonymous() {
 		file := m.Path
 		rac, err := os.Open(path.Join(tc.prefix, file))

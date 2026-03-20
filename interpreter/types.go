@@ -151,7 +151,7 @@ type Instance interface {
 	// Interpreters not needing to process these events can simply ignore them
 	// by returning nil.
 	SynchronizeMappings(ebpf EbpfHandler, exeReporter reporter.ExecutableReporter,
-		pr process.Process, mappings []process.Mapping) error
+		pr process.Process, mappings []process.RawMapping) error
 
 	// UpdateLibcInfo is called when the process C-library related
 	// introspection data has been updated.

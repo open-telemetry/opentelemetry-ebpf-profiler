@@ -59,7 +59,7 @@ type systemProcess struct {
 	mainThreadExit bool
 	remoteMemory   remotememory.RemoteMemory
 
-	fileToMapping map[string]*Mapping
+	fileToMapping map[string]*RawMapping
 }
 
 var _ Process = &systemProcess{}
@@ -193,7 +193,7 @@ func trimMappingPath(path string) string {
 	return path
 }
 
-func iterateMappings(mapsFile io.Reader, callback func(m Mapping) bool) (uint32, error) {
+func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint32, error) {
 	numParseErrors := uint32(0)
 	scanner := bufio.NewScanner(mapsFile)
 	scanBuf := bufPool.Get().(*[]byte)
@@ -215,9 +215,9 @@ func iterateMappings(mapsFile io.Reader, callback func(m Mapping) bool) (uint32,
 		var devs [2]string
 
 		// WARNING: line (and all substrings derived from it, including the
-		// Path field of the emitted Mapping) points into scanBuf which is
-		// recycled after iteration. Callers must copy Path (strings.Clone)
-		// or intern it (libpf.Intern) before storing.
+		// Path field of the emitted RawMapping) points into scanBuf which is
+		// recycled after iteration. Callers must intern Path (libpf.Intern)
+		// before storing.
 		line := pfunsafe.ToString(scanner.Bytes())
 		if stringutil.FieldsN(line, fields[:]) < 5 {
 			numParseErrors++
@@ -311,7 +311,7 @@ func iterateMappings(mapsFile io.Reader, callback func(m Mapping) bool) (uint32,
 			continue
 		}
 
-		if !callback(Mapping{
+		if !callback(RawMapping{
 			Vaddr:      vaddr,
 			Length:     length,
 			Flags:      flags,
@@ -326,21 +326,21 @@ func iterateMappings(mapsFile io.Reader, callback func(m Mapping) bool) (uint32,
 	return numParseErrors, scanner.Err()
 }
 
-func (sp *systemProcess) IterateMappings(callback func(m Mapping) bool) (uint32, error) {
+func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint32, error) {
 	mapsFile, err := os.Open(fmt.Sprintf("/proc/%d/maps", sp.pid))
 	if err != nil {
 		return 0, err
 	}
 	defer mapsFile.Close()
 
-	fileToMapping := make(map[string]*Mapping)
+	fileToMapping := make(map[string]*RawMapping)
 	gotMappings := false
 
-	collectForOpenELF := func(m Mapping) bool {
+	collectForOpenELF := func(m RawMapping) bool {
 		gotMappings = true
 		if m.IsExecutable() || m.IsVDSO() {
 			stored := m
-			stored.Path = strings.Clone(m.Path)
+			stored.Path = libpf.Intern(m.Path).String()
 			fileToMapping[stored.Path] = &stored
 		}
 		return callback(m)
@@ -398,7 +398,7 @@ func (sp *systemProcess) GetRemoteMemory() remotememory.RemoteMemory {
 	return sp.remoteMemory
 }
 
-func (sp *systemProcess) extractMapping(m *Mapping) (*bytes.Reader, error) {
+func (sp *systemProcess) extractMapping(m *RawMapping) (*bytes.Reader, error) {
 	data := make([]byte, m.Length)
 	_, err := sp.remoteMemory.ReadAt(data, int64(m.Vaddr))
 	if err != nil {
@@ -408,7 +408,7 @@ func (sp *systemProcess) extractMapping(m *Mapping) (*bytes.Reader, error) {
 	return bytes.NewReader(data), nil
 }
 
-func (sp *systemProcess) getMappingFile(m *Mapping) string {
+func (sp *systemProcess) getMappingFile(m *RawMapping) string {
 	if m.IsAnonymous() || m.IsVDSO() {
 		return ""
 	}
@@ -422,7 +422,7 @@ func (sp *systemProcess) getMappingFile(m *Mapping) string {
 	return fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
 }
 
-func (sp *systemProcess) OpenMappingFile(m *Mapping) (ReadAtCloser, error) {
+func (sp *systemProcess) OpenMappingFile(m *RawMapping) (ReadAtCloser, error) {
 	filename := sp.getMappingFile(m)
 	if filename == "" {
 		return nil, errors.New("no backing file for anonymous memory")
@@ -430,7 +430,7 @@ func (sp *systemProcess) OpenMappingFile(m *Mapping) (ReadAtCloser, error) {
 	return os.Open(filename)
 }
 
-func (sp *systemProcess) GetMappingFileLastModified(m *Mapping) int64 {
+func (sp *systemProcess) GetMappingFileLastModified(m *RawMapping) int64 {
 	filename := sp.getMappingFile(m)
 	if filename != "" {
 		var st unix.Stat_t
@@ -445,7 +445,7 @@ func (sp *systemProcess) GetMappingFileLastModified(m *Mapping) int64 {
 // VDSO for the system.
 var vdsoFileID libpf.FileID
 
-func (sp *systemProcess) CalculateMappingFileID(m *Mapping) (libpf.FileID, error) {
+func (sp *systemProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, error) {
 	if m.IsVDSO() {
 		if vdsoFileID != (libpf.FileID{}) {
 			return vdsoFileID, nil

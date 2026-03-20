@@ -45,7 +45,7 @@ func (scd *StoreCoredump) openFile(path string) (process.ReadAtCloser, error) {
 	return file, nil
 }
 
-func (scd *StoreCoredump) OpenMappingFile(m *process.Mapping) (process.ReadAtCloser, error) {
+func (scd *StoreCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
 	return scd.openFile(m.Path)
 }
 

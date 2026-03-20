@@ -854,7 +854,7 @@ func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
 }
 
 func (d *hotspotInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
-	_ reporter.ExecutableReporter, pr process.Process, _ []process.Mapping,
+	_ reporter.ExecutableReporter, pr process.Process, _ []process.RawMapping,
 ) error {
 	vmd, err := d.d.GetOrInit(func() (hotspotVMData, error) { return d.d.newVMData(d.rm, d.bias) })
 	if err != nil {
