@@ -107,43 +107,76 @@ ffffffffc13fcb20 t init_xfs_fs	[xfs]`))
 	assertSymbol(t, s, 0xffffffffc13cc610+1, "xfs", "perf_trace_xfs_attr_list_class", 1)
 }
 
+// setBPFSymbols builds a bpf Module from the given symbols and stores it
+// in the bpfSymbolizer. This replaces the production loadBPFPrograms for tests.
+func setBPFSymbols(s *bpfSymbolizer, symbols []bpfSymbol) {
+	if len(symbols) == 0 {
+		s.module.Store(nil)
+		return
+	}
+
+	minAddr := symbols[0].address
+	for _, sym := range symbols[1:] {
+		if sym.address < minAddr {
+			minAddr = sym.address
+		}
+	}
+
+	mod := &Module{
+		start: minAddr,
+	}
+	mod.addName("bpf")
+
+	for _, sym := range symbols {
+		mod.symbols = append(mod.symbols, symbol{
+			offset: uint32(sym.address - mod.start),
+			index:  mod.addName(sym.name),
+		})
+	}
+
+	mod.finish()
+	s.module.Store(mod)
+}
+
 func TestBPFUpdates(t *testing.T) {
+	loadModuleMetadata = func(_ *Module, _ string, _ int64) bool { return true }
+
 	s := &Symbolizer{
 		bpf: &bpfSymbolizer{},
 	}
 
-	// no bpf symbols
-	err := s.bpf.updateSymbolsFrom(strings.NewReader("ffffffe4f3395268 t pci_host_common_probe        [pci_host_common]"))
+	// Initialize the main symbolizer modules so GetModuleByAddress doesn't
+	// panic when falling through the bpf module check.
+	err := s.updateSymbolsFrom(strings.NewReader(
+		"ffffffe4f3395268 t pci_host_common_probe        [pci_host_common]"))
 	require.NoError(t, err)
 
-	// adding the first symbol
+	// no bpf symbols — handleBPFUpdate should fail on nil module
 	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
 		Addr: 0xffffffc080f38288,
 		Name: "bpf_prog_05cbe5ca7b74dd09_sys_enter",
 	})
 	assert.NotNil(t, err)
 
-	kallsyms := `ffffffe4f3395268 t pci_host_common_probe        [pci_host_common]
-ffffffc080f26228 t bpf_prog_00354c172d366337_sd_devices [bpf]
-ffffffc080f26430 t bpf_prog_772db7720b2728e9_sd_fw_egress       [bpf]
-ffffffc080f264d8 t bpf_prog_772db7720b2728e9_sd_fw_ingress      [bpf]
-ffffffc080f28490 t bpf_prog_56551fa66be1356a_sd_devices [bpf]
-ffffffc080f2867c t bpf_prog_772db7720b2728e9_sd_fw_egress       [bpf]
-ffffffc080f2871c t bpf_prog_772db7720b2728e9_sd_fw_ingress      [bpf]
-ffffffc080f2da64 t bpf_prog_00354c172d366337_sd_devices [bpf]
-ffffffc080f304a0 t bpf_prog_5be112cdf63b0d8c_sysctl_monitor     [bpf]
-ffffffc080f3089c t bpf_prog_292e0637857c1257_cut_last   [bpf]
-ffffffc080f3096c t bpf_prog_a97c143260cd9940_sd_devices [bpf]
-ffffffc080f32f4c t bpf_prog_79c5319176ee7ce5_sd_devices [bpf]
-ffffffc080f331e4 t bpf_prog_772db7720b2728e9_sd_fw_egress       [bpf]
-ffffffc080f33288 t bpf_prog_772db7720b2728e9_sd_fw_ingress      [bpf]
-ffffffc080f35f1c t bpf_prog_461f9f5162fd8042_sd_devices [bpf]
-ffffffc080f3629c t bpf_prog_b8f4fb5f08605bc5    [bpf]`
+	bpfSymbols := []bpfSymbol{
+		{0xffffffc080f26228, "bpf_prog_00354c172d366337_sd_devices"},
+		{0xffffffc080f26430, "bpf_prog_772db7720b2728e9_sd_fw_egress"},
+		{0xffffffc080f264d8, "bpf_prog_772db7720b2728e9_sd_fw_ingress"},
+		{0xffffffc080f28490, "bpf_prog_56551fa66be1356a_sd_devices"},
+		{0xffffffc080f2867c, "bpf_prog_772db7720b2728e9_sd_fw_egress"},
+		{0xffffffc080f2871c, "bpf_prog_772db7720b2728e9_sd_fw_ingress"},
+		{0xffffffc080f2da64, "bpf_prog_00354c172d366337_sd_devices"},
+		{0xffffffc080f304a0, "bpf_prog_5be112cdf63b0d8c_sysctl_monitor"},
+		{0xffffffc080f3089c, "bpf_prog_292e0637857c1257_cut_last"},
+		{0xffffffc080f3096c, "bpf_prog_a97c143260cd9940_sd_devices"},
+		{0xffffffc080f32f4c, "bpf_prog_79c5319176ee7ce5_sd_devices"},
+		{0xffffffc080f331e4, "bpf_prog_772db7720b2728e9_sd_fw_egress"},
+		{0xffffffc080f33288, "bpf_prog_772db7720b2728e9_sd_fw_ingress"},
+		{0xffffffc080f35f1c, "bpf_prog_461f9f5162fd8042_sd_devices"},
+		{0xffffffc080f3629c, "bpf_prog_b8f4fb5f08605bc5"},
+	}
 
-	err = s.updateSymbolsFrom(strings.NewReader(kallsyms))
-	require.NoError(t, err)
-	err = s.bpf.updateSymbolsFrom(strings.NewReader(kallsyms))
-	require.NoError(t, err)
+	setBPFSymbols(s.bpf, bpfSymbols)
 
 	// adding a symbol at the end
 	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{

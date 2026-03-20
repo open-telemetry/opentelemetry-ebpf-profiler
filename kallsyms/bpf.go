@@ -4,23 +4,16 @@
 package kallsyms // import "go.opentelemetry.io/ebpf-profiler/kallsyms"
 
 import (
-	"bufio"
 	"context"
 	"errors"
-	"fmt"
-	"io"
-	"os"
 	"slices"
-	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/cilium/ebpf"
 	"github.com/elastic/go-perf"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
-	"go.opentelemetry.io/ebpf-profiler/stringutil"
 	"golang.org/x/sys/unix"
 )
 
@@ -44,60 +37,50 @@ func (s *bpfSymbolizer) Module() *Module {
 	return s.module.Load()
 }
 
-// loadKallsyms loads bpf symbols from /proc/kallsyms.
-func (s *bpfSymbolizer) loadKallsyms() error {
-	file, err := os.Open("/proc/kallsyms")
-	if err != nil {
-		return fmt.Errorf("unable to open kallsyms: %v", err)
-	}
-	defer file.Close()
-
-	return s.updateSymbolsFrom(file)
-}
-
-// updateSymbolsFrom parses /proc/kallsyms format data from the reader 'r'.
-func (s *bpfSymbolizer) updateSymbolsFrom(r io.Reader) error {
-	symbols := []bpfSymbol{}
-
+// loadBPFPrograms enumerates all loaded BPF programs via bpf syscall
+// and builds a Module from their JIT symbol addresses and names.
+func (s *bpfSymbolizer) loadBPFPrograms() error {
+	var symbols []bpfSymbol
 	minAddr := uint64(0)
 
-	scanner := bufio.NewScanner(r)
-
-	for scanner.Scan() {
-		// Avoid heap allocation by not using scanner.Text().
-		// NOTE: The underlying bytes will change with the next call to scanner.Scan(),
-		// so make sure to not keep any references after the end of the loop iteration.
-		line := pfunsafe.ToString(scanner.Bytes())
-
-		// Avoid heap allocations here - do not use strings.FieldsN()
-		var fields [4]string
-		nFields := stringutil.FieldsN(line, fields[:])
-		if nFields < 3 {
-			return fmt.Errorf("unexpected line in kallsyms: '%s'", line)
+	id := ebpf.ProgramID(0)
+	for {
+		var err error
+		id, err = ebpf.ProgramGetNextID(id)
+		if err != nil {
+			break
 		}
 
-		if fields[3] != "[bpf]" {
+		prog, err := ebpf.NewProgramFromID(id)
+		if err != nil {
+			// Program may have been unloaded between listing and opening.
 			continue
 		}
 
-		address, err := strconv.ParseUint(fields[0], 16, pointerBits)
+		info, err := prog.Info()
+		prog.Close()
 		if err != nil {
-			return fmt.Errorf("failed to parse address value: '%s'", fields[0])
+			continue
 		}
 
-		if address < minAddr || minAddr == 0 {
-			minAddr = address
+		addrs, ok := info.JitedKsymAddrs()
+		if !ok || len(addrs) == 0 {
+			continue
 		}
 
-		// bpf symbols can come out of order, so we cannot build a Module incrementally
-		symbols = append(symbols, bpfSymbol{
-			address: libpf.Address(address),
-			name:    strings.Clone(fields[2]),
-		})
-	}
+		// The kernel names BPF JIT symbols as "bpf_prog_<tag>_<name>".
+		name := "bpf_prog_" + info.Tag + "_" + info.Name
 
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error scanning /proc/kallsyms: %w", err)
+		for _, addr := range addrs {
+			a := uint64(addr)
+			if a < minAddr || minAddr == 0 {
+				minAddr = a
+			}
+			symbols = append(symbols, bpfSymbol{
+				address: libpf.Address(a),
+				name:    name,
+			})
+		}
 	}
 
 	if len(symbols) == 0 {
@@ -124,7 +107,7 @@ func (s *bpfSymbolizer) updateSymbolsFrom(r io.Reader) error {
 	return nil
 }
 
-// startMonitor starts the update monitoring and loads bpf symbols from /proc/kallsyms.
+// startMonitor starts the update monitoring and loads bpf symbols.
 func (s *bpfSymbolizer) startMonitor(ctx context.Context, onlineCPUs []int) error {
 	ctx, s.cancel = context.WithCancel(ctx)
 
@@ -133,7 +116,7 @@ func (s *bpfSymbolizer) startMonitor(ctx context.Context, onlineCPUs []int) erro
 		return err
 	}
 
-	err = s.loadKallsyms()
+	err = s.loadBPFPrograms()
 	if err != nil {
 		return err
 	}
@@ -214,7 +197,7 @@ func (s *bpfSymbolizer) reloadWorker(ctx context.Context) {
 	for {
 		select {
 		case <-nextKallsymsReload:
-			if err := s.loadKallsyms(); err == nil {
+			if err := s.loadBPFPrograms(); err == nil {
 				log.Debugf("Kernel symbols reloaded")
 				nextKallsymsReload = noTimeout
 			} else {
