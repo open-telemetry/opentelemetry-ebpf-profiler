@@ -19,6 +19,7 @@ import (
 
 type bpfSymbol struct {
 	address libpf.Address
+	size    uint32
 	name    string
 }
 
@@ -29,6 +30,10 @@ type bpfSymbolizer struct {
 	events  []*perf.Event
 	cancel  context.CancelFunc
 	module  atomic.Pointer[Module]
+	// sizes maps BPF symbol start addresses to their JIT'd byte lengths. It is
+	// used by finish to set the module end address to the precise end of the
+	// last symbol rather than a page-rounded approximation.
+	sizes map[libpf.Address]uint32
 }
 
 // Module returns the [Module] with bpf symbols in it.
@@ -42,6 +47,7 @@ func (s *bpfSymbolizer) Module() *Module {
 func (s *bpfSymbolizer) loadBPFPrograms() error {
 	var symbols []bpfSymbol
 	minAddr := uint64(0)
+	sizes := make(map[libpf.Address]uint32)
 
 	id := ebpf.ProgramID(0)
 	for {
@@ -68,18 +74,25 @@ func (s *bpfSymbolizer) loadBPFPrograms() error {
 			continue
 		}
 
+		lens, _ := info.JitedFuncLens()
+
 		// The kernel names BPF JIT symbols as "bpf_prog_<tag>_<name>".
 		name := "bpf_prog_" + info.Tag + "_" + info.Name
 
-		for _, addr := range addrs {
+		for i, addr := range addrs {
 			a := uint64(addr)
 			if a < minAddr || minAddr == 0 {
 				minAddr = a
 			}
-			symbols = append(symbols, bpfSymbol{
+			sym := bpfSymbol{
 				address: libpf.Address(a),
 				name:    name,
-			})
+			}
+			if i < len(lens) {
+				sym.size = lens[i]
+				sizes[sym.address] = lens[i]
+			}
+			symbols = append(symbols, sym)
 		}
 	}
 
@@ -100,11 +113,24 @@ func (s *bpfSymbolizer) loadBPFPrograms() error {
 		})
 	}
 
-	mod.finish()
+	s.sizes = sizes
+	s.finish(mod)
 
 	s.module.Store(mod)
 
 	return nil
+}
+
+// finish finalizes a BPF module. It calls Module.finish() to sort symbols and
+// synthesize end, then improves the end estimate for the last (highest-address)
+// symbol using its known JIT'd size from the sizes map. If the size is unknown
+// the page-rounded fallback from Module.finish() is kept.
+func (s *bpfSymbolizer) finish(m *Module) {
+	m.finish()
+	lastAddr := m.start + libpf.Address(m.symbols[0].offset)
+	if size, ok := s.sizes[lastAddr]; ok {
+		m.end = lastAddr + libpf.Address(size)
+	}
 }
 
 // startMonitor starts the update monitoring and loads bpf symbols.
@@ -233,11 +259,11 @@ func (s *bpfSymbolizer) handleBPFUpdate(record *perf.KSymbolRecord) error {
 		return s.removeBPFSymbol(mod, addr)
 	}
 
-	return s.addBPFSymbol(mod, addr, record.Name)
+	return s.addBPFSymbol(mod, addr, record.Name, record.Len)
 }
 
 // addBPFSymbol handles adding a new BPF symbol to the module.
-func (s *bpfSymbolizer) addBPFSymbol(mod *Module, addr libpf.Address, name string) error {
+func (s *bpfSymbolizer) addBPFSymbol(mod *Module, addr libpf.Address, name string, size uint32) error {
 	var replacement *Module
 
 	if addr < mod.start {
@@ -270,7 +296,8 @@ func (s *bpfSymbolizer) addBPFSymbol(mod *Module, addr libpf.Address, name strin
 	}
 
 	if replacement != nil {
-		replacement.finish()
+		s.sizes[addr] = size
+		s.finish(replacement)
 		s.module.Store(replacement)
 	}
 
@@ -308,7 +335,8 @@ func (s *bpfSymbolizer) removeBPFSymbol(mod *Module, addr libpf.Address) error {
 		}
 	}
 
-	replacement.finish()
+	delete(s.sizes, addr)
+	s.finish(replacement)
 	s.module.Store(replacement)
 
 	return nil

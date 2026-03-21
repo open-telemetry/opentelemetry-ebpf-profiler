@@ -127,14 +127,17 @@ func setBPFSymbols(s *bpfSymbolizer, symbols []bpfSymbol) {
 	}
 	mod.addName("bpf")
 
+	sizes := make(map[libpf.Address]uint32)
 	for _, sym := range symbols {
 		mod.symbols = append(mod.symbols, symbol{
 			offset: uint32(sym.address - mod.start),
 			index:  mod.addName(sym.name),
 		})
+		sizes[sym.address] = sym.size
 	}
 
-	mod.finish()
+	s.sizes = sizes
+	s.finish(mod)
 	s.module.Store(mod)
 }
 
@@ -159,28 +162,33 @@ func TestBPFUpdates(t *testing.T) {
 	assert.NotNil(t, err)
 
 	bpfSymbols := []bpfSymbol{
-		{0xffffffc080f26228, "bpf_prog_00354c172d366337_sd_devices"},
-		{0xffffffc080f26430, "bpf_prog_772db7720b2728e9_sd_fw_egress"},
-		{0xffffffc080f264d8, "bpf_prog_772db7720b2728e9_sd_fw_ingress"},
-		{0xffffffc080f28490, "bpf_prog_56551fa66be1356a_sd_devices"},
-		{0xffffffc080f2867c, "bpf_prog_772db7720b2728e9_sd_fw_egress"},
-		{0xffffffc080f2871c, "bpf_prog_772db7720b2728e9_sd_fw_ingress"},
-		{0xffffffc080f2da64, "bpf_prog_00354c172d366337_sd_devices"},
-		{0xffffffc080f304a0, "bpf_prog_5be112cdf63b0d8c_sysctl_monitor"},
-		{0xffffffc080f3089c, "bpf_prog_292e0637857c1257_cut_last"},
-		{0xffffffc080f3096c, "bpf_prog_a97c143260cd9940_sd_devices"},
-		{0xffffffc080f32f4c, "bpf_prog_79c5319176ee7ce5_sd_devices"},
-		{0xffffffc080f331e4, "bpf_prog_772db7720b2728e9_sd_fw_egress"},
-		{0xffffffc080f33288, "bpf_prog_772db7720b2728e9_sd_fw_ingress"},
-		{0xffffffc080f35f1c, "bpf_prog_461f9f5162fd8042_sd_devices"},
-		{0xffffffc080f3629c, "bpf_prog_b8f4fb5f08605bc5"},
+		{address: 0xffffffc080f26228, size: 1024, name: "bpf_prog_00354c172d366337_sd_devices"},
+		{address: 0xffffffc080f26430, size: 1024, name: "bpf_prog_772db7720b2728e9_sd_fw_egress"},
+		{address: 0xffffffc080f264d8, size: 1024, name: "bpf_prog_772db7720b2728e9_sd_fw_ingress"},
+		{address: 0xffffffc080f28490, size: 1024, name: "bpf_prog_56551fa66be1356a_sd_devices"},
+		{address: 0xffffffc080f2867c, size: 1024, name: "bpf_prog_772db7720b2728e9_sd_fw_egress"},
+		{address: 0xffffffc080f2871c, size: 1024, name: "bpf_prog_772db7720b2728e9_sd_fw_ingress"},
+		{address: 0xffffffc080f2da64, size: 1024, name: "bpf_prog_00354c172d366337_sd_devices"},
+		{address: 0xffffffc080f304a0, size: 1024, name: "bpf_prog_5be112cdf63b0d8c_sysctl_monitor"},
+		{address: 0xffffffc080f3089c, size: 1024, name: "bpf_prog_292e0637857c1257_cut_last"},
+		{address: 0xffffffc080f3096c, size: 1024, name: "bpf_prog_a97c143260cd9940_sd_devices"},
+		{address: 0xffffffc080f32f4c, size: 1024, name: "bpf_prog_79c5319176ee7ce5_sd_devices"},
+		{address: 0xffffffc080f331e4, size: 1024, name: "bpf_prog_772db7720b2728e9_sd_fw_egress"},
+		{address: 0xffffffc080f33288, size: 1024, name: "bpf_prog_772db7720b2728e9_sd_fw_ingress"},
+		{address: 0xffffffc080f35f1c, size: 1024, name: "bpf_prog_461f9f5162fd8042_sd_devices"},
+		{address: 0xffffffc080f3629c, size: 1024, name: "bpf_prog_b8f4fb5f08605bc5"},
 	}
 
 	setBPFSymbols(s.bpf, bpfSymbols)
 
-	// adding a symbol at the end
+	// Adding a symbol at the end with a known size of 12288 bytes. This ensures
+	// that an address 10240 bytes into the symbol is covered by the module even
+	// though that far exceeds a single page past the symbol start.
+	const lastSymAddr = libpf.Address(0xffffffc080f38288)
+	const lastSymSize = uint32(12288)
 	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
-		Addr: 0xffffffc080f38288,
+		Addr: uint64(lastSymAddr),
+		Len:  lastSymSize,
 		Name: "bpf_prog_05cbe5ca7b74dd09_sys_enter",
 	})
 	require.NoError(t, err)
@@ -192,42 +200,43 @@ func TestBPFUpdates(t *testing.T) {
 	max := len(mod.names)
 
 	// exact module match
-	mod, err = s.GetModuleByAddress(0xffffffc080f38288)
+	mod, err = s.GetModuleByAddress(lastSymAddr)
 	require.NoError(t, err)
 	assert.Equal(t, "bpf", mod.Name())
 
-	// just above module match
-	mod, err = s.GetModuleByAddress(0xffffffc080f3828c)
+	// 10240 bytes into the last symbol must still be within the module
+	mod, err = s.GetModuleByAddress(lastSymAddr + 10240)
 	require.NoError(t, err)
 	assert.Equal(t, "bpf", mod.Name())
 
 	// exact symbol match
-	name, off, err := mod.LookupSymbolByAddress(libpf.Address(0xffffffc080f38288))
+	name, off, err := mod.LookupSymbolByAddress(lastSymAddr)
 	require.NoError(t, err)
 	assert.Equal(t, "bpf_prog_05cbe5ca7b74dd09_sys_enter", name)
 	assert.Equal(t, uint(0x0), off)
 
-	// just above symbol match
-	name, off, err = mod.LookupSymbolByAddress(libpf.Address(0xffffffc080f3828c))
+	// 10240 bytes into the last symbol must resolve correctly
+	name, off, err = mod.LookupSymbolByAddress(lastSymAddr + 10240)
 	require.NoError(t, err)
 	assert.Equal(t, "bpf_prog_05cbe5ca7b74dd09_sys_enter", name)
-	assert.Equal(t, uint(0x4), off)
+	assert.Equal(t, uint(10240), off)
 
 	// remove the added symbol
 	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
-		Addr:  0xffffffc080f38288,
+		Addr:  uint64(lastSymAddr),
 		Name:  "bpf_prog_05cbe5ca7b74dd09_sys_enter",
 		Flags: unix.PERF_RECORD_KSYMBOL_FLAGS_UNREGISTER,
 	})
 	require.NoError(t, err)
 
 	// the address goes poof
-	mod, err = s.GetModuleByAddress(0xffffffc080f38288)
+	_, err = s.GetModuleByAddress(lastSymAddr)
 	assert.Equal(t, ErrNoModule, err)
 
 	// add it back
 	err = s.bpf.handleBPFUpdate(&perf.KSymbolRecord{
-		Addr: 0xffffffc080f38288,
+		Addr: uint64(lastSymAddr),
+		Len:  lastSymSize,
 		Name: "bpf_prog_05cbe5ca7b74dd09_sys_enter",
 	})
 	require.NoError(t, err)
