@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package process // import "go.opentelemetry.io/ebpf-profiler/process"
+package processcontext // import "go.opentelemetry.io/ebpf-profiler/processcontext"
 
 import (
 	"encoding/binary"
@@ -15,7 +15,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
-	processcontext "go.opentelemetry.io/ebpf-profiler/proto/processcontext"
+	processcontextpb "go.opentelemetry.io/ebpf-profiler/proto/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
 
@@ -40,13 +40,13 @@ const (
 	supportedVersion = 2
 
 	// Maximum payload size
-	maxPayloadSize = 16384
+	maxPayloadSize = 65536
 
 	// Maximum retries for concurrent updates
 	maxRetries = 3
 
-	// Offset of the MonotonicPublishedAtNs field in the processContextHeader struct
-	monotonicPublishedAtNsOffset = libpf.Address(unsafe.Offsetof(processContextHeader{}.MonotonicPublishedAtNs))
+	// Offset of the MonotonicPublishedAtNs field in the header struct
+	monotonicPublishedAtNsOffset = libpf.Address(unsafe.Offsetof(header{}.MonotonicPublishedAtNs))
 )
 
 var (
@@ -60,13 +60,13 @@ var (
 	ErrNoUpdate = errors.New("ProcessContext has not been updated")
 )
 
-type ProcessContextInfo struct {
-	Context       *processcontext.ProcessContext
+type Info struct {
+	Context       *processcontextpb.ProcessContext
 	PublishedAtNs uint64
 }
 
-// processContextHeader represents the 32-byte memory region header per OTEP #4719.
-type processContextHeader struct {
+// header represents the 32-byte memory region header per OTEP #4719.
+type header struct {
 	_                      structs.HostLayout
 	Signature              [8]byte // "OTEL_CTX"
 	Version                uint32  // Format version (2)
@@ -75,54 +75,54 @@ type processContextHeader struct {
 	PayloadPtr             uint64  // Memory pointer to protobuf payload
 }
 
-// ReadProcessContext reads ProcessContext from remote process memory using the provided address.
-// Returns ErrProcessContextNotFound if the process has no ProcessContext memory region.
+// Read reads ProcessContext from remote process memory using the provided address.
+// Returns ErrInvalidContext if the process has no ProcessContext memory region.
 // Retries up to maxRetries times when concurrent updates are detected.
-func ReadProcessContext(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (ProcessContextInfo, error) {
+func Read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (Info, error) {
 	var lastErr error
 
 	// Find the ProcessContext mapping
 	for range maxRetries {
-		ctx, err := readProcessContextOnce(addr, rm, lastPublishedAtNs)
+		ctx, err := readOnce(addr, rm, lastPublishedAtNs)
 		if err == nil {
 			return ctx, nil
 		}
 		if !errors.Is(err, ErrConcurrentUpdate) {
-			return ProcessContextInfo{}, err
+			return Info{}, err
 		}
 		lastErr = err
 	}
-	return ProcessContextInfo{}, lastErr
+	return Info{}, lastErr
 }
 
-// readProcessContextOnce performs a single attempt to read ProcessContext.
-func readProcessContextOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (ProcessContextInfo, error) {
+// readOnce performs a single attempt to read ProcessContext.
+func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (Info, error) {
 	monotonicPublishedAtNs, err := readTimestamp(rm, mappingAddr)
 	if err != nil {
-		return ProcessContextInfo{}, fmt.Errorf("%w: %w",
+		return Info{}, fmt.Errorf("%w: %w",
 			ErrInvalidContext, err)
 	}
 	if monotonicPublishedAtNs == 0 {
-		return ProcessContextInfo{}, ErrConcurrentUpdate
+		return Info{}, ErrConcurrentUpdate
 	}
 
 	// Check if the context was published after the last published timestamp
 	if monotonicPublishedAtNs <= lastPublishedAtNs {
-		return ProcessContextInfo{}, ErrNoUpdate
+		return Info{}, ErrNoUpdate
 	}
 
 	// Memory barrier to ensure the timestamp is read before the header
 	memoryBarrier()
 
 	// Read and validate the header
-	hdr, err := readProcessContextHeader(rm, mappingAddr)
+	hdr, err := readHeader(rm, mappingAddr)
 	if err != nil {
-		return ProcessContextInfo{}, fmt.Errorf("%w: %w",
+		return Info{}, fmt.Errorf("%w: %w",
 			ErrInvalidContext, err)
 	}
 
 	// Read the payload
-	ctx, ctxErr := readProcessContextPayload(rm, hdr)
+	ctx, ctxErr := readPayload(rm, hdr)
 	// Do not check for errors here as the context read might have failed due to
 	// a concurrent update occurring between the header read and the payload read.
 	// We will check for context read error after re-reading the header.
@@ -133,22 +133,22 @@ func readProcessContextOnce(mappingAddr libpf.Address, rm remotememory.RemoteMem
 	// Re-read the timestamp to check for concurrent updates
 	monotonicPublishedAtNs2, err := readTimestamp(rm, mappingAddr)
 	if err != nil {
-		return ProcessContextInfo{}, fmt.Errorf("%w: %w",
+		return Info{}, fmt.Errorf("%w: %w",
 			ErrInvalidContext, err)
 	}
 
 	if monotonicPublishedAtNs != monotonicPublishedAtNs2 {
-		return ProcessContextInfo{}, ErrConcurrentUpdate
+		return Info{}, ErrConcurrentUpdate
 	}
 
 	if ctxErr != nil {
-		return ProcessContextInfo{}, fmt.Errorf("%w: %w", ErrInvalidContext, ctxErr)
+		return Info{}, fmt.Errorf("%w: %w", ErrInvalidContext, ctxErr)
 	}
 
 	return ctx, nil
 }
 
-func IsProcessContextMapping(mappingPath string) bool {
+func IsContextMapping(mappingPath string) bool {
 	// In some cases the name can show up in proc as "/memfd:OTEL_CTX (deleted)"
 	// but the " (deleted)" suffix is separately trimmed by parseMappings
 	return mappingPath == ContextMappingMemfd ||
@@ -164,47 +164,47 @@ func readTimestamp(rm remotememory.RemoteMemory, headerAddr libpf.Address) (uint
 	return binary.LittleEndian.Uint64(buf[:]), nil
 }
 
-// readProcessContextHeader reads and validates the 32-byte ProcessContext header.
-func readProcessContextHeader(rm remotememory.RemoteMemory, headerAddr libpf.Address) (processContextHeader, error) {
+// readHeader reads and validates the 32-byte ProcessContext header.
+func readHeader(rm remotememory.RemoteMemory, headerAddr libpf.Address) (header, error) {
 	// Read the 32-byte header
-	var hdr processContextHeader
+	var hdr header
 	if err := rm.Read(headerAddr, pfunsafe.FromPointer(&hdr)); err != nil {
-		return processContextHeader{}, fmt.Errorf("failed to read ProcessContext header: %w", err)
+		return header{}, fmt.Errorf("failed to read ProcessContext header: %w", err)
 	}
 
 	if pfunsafe.ToString(hdr.Signature[:]) != signatureOTELCTX {
-		return processContextHeader{}, fmt.Errorf("invalid signature: got %q, want %q",
+		return header{}, fmt.Errorf("invalid signature: got %q, want %q",
 			string(hdr.Signature[:]), signatureOTELCTX)
 	}
 	if hdr.Version != supportedVersion {
-		return processContextHeader{}, fmt.Errorf("invalid version: got %d, want %d",
+		return header{}, fmt.Errorf("invalid version: got %d, want %d",
 			hdr.Version, supportedVersion)
 	}
 
 	// Validate payload size
 	if hdr.PayloadSize == 0 || hdr.PayloadSize > maxPayloadSize {
-		return processContextHeader{}, fmt.Errorf("invalid payload size: %d bytes (max %d)",
+		return header{}, fmt.Errorf("invalid payload size: %d bytes (max %d)",
 			hdr.PayloadSize, maxPayloadSize)
 	}
 
 	return hdr, nil
 }
 
-func readProcessContextPayload(rm remotememory.RemoteMemory, hdr processContextHeader) (ProcessContextInfo, error) {
+func readPayload(rm remotememory.RemoteMemory, hdr header) (Info, error) {
 	// Read the protobuf payload from remote memory
 	payloadBytes := make([]byte, hdr.PayloadSize)
 	err := rm.Read(libpf.Address(hdr.PayloadPtr), payloadBytes)
 	if err != nil {
-		return ProcessContextInfo{}, fmt.Errorf("failed to read payload: %w", err)
+		return Info{}, fmt.Errorf("failed to read payload: %w", err)
 	}
 
 	// Deserialize the ProcessContext protobuf message
-	ctx := &processcontext.ProcessContext{}
+	ctx := &processcontextpb.ProcessContext{}
 	if err := proto.Unmarshal(payloadBytes, ctx); err != nil {
-		return ProcessContextInfo{}, fmt.Errorf("failed to unmarshal ProcessContext: %w", err)
+		return Info{}, fmt.Errorf("failed to unmarshal ProcessContext: %w", err)
 	}
 
-	return ProcessContextInfo{Context: ctx, PublishedAtNs: hdr.MonotonicPublishedAtNs}, nil
+	return Info{Context: ctx, PublishedAtNs: hdr.MonotonicPublishedAtNs}, nil
 }
 
 func memoryBarrier() {

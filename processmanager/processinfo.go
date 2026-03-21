@@ -31,6 +31,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -443,7 +444,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 		mpRemove[uint64(m.Vaddr)] = m
 	}
 
-	var processContextInfo process.ProcessContextInfo
+	var processContextInfo processcontext.Info
 	// Generate the list of new processmanager mappings and interpreters.
 	// Reuse existing mappings if possible.
 	mappings := make([]Mapping, 0, len(processMappings))
@@ -452,7 +453,7 @@ func (pm *ProcessManager) synchronizeMappings(pr process.Process,
 	for idx := range processMappings {
 		m := &processMappings[idx]
 		if !m.IsExecutable() || m.IsAnonymous() {
-			if process.IsProcessContextMapping(m.Path.String()) {
+			if processcontext.IsContextMapping(m.Path.String()) {
 				processContextInfo = readProcessContext(m, pr, oldProcessContextInfo)
 				// Even if process context is not found, it might be published in the future.
 				// For now, we rely on a new call to synchronizeMappings to pick it up.
@@ -786,17 +787,17 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 	}
 }
 
-func readProcessContext(mapping *process.Mapping, pr process.Process, oldProcessContextInfo process.ProcessContextInfo) process.ProcessContextInfo {
-	ctxInfo, err := process.ReadProcessContext(libpf.Address(mapping.Vaddr), pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs)
+func readProcessContext(mapping *process.Mapping, pr process.Process, oldProcessContextInfo processcontext.Info) processcontext.Info {
+	ctxInfo, err := processcontext.Read(libpf.Address(mapping.Vaddr), pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs)
 	if err == nil {
 		return ctxInfo
 	}
-	if errors.Is(err, process.ErrNoUpdate) {
+	if errors.Is(err, processcontext.ErrNoUpdate) {
 		return oldProcessContextInfo
 	}
 	// If the process context cannot be read because of a concurrent update,
 	// prefer to drop the current (stale) process context and rely on a new call to
 	// synchronizeMappings to pick it up.
 	log.Debugf("Failed to read ProcessContext for PID %d: %v", pr.PID(), err)
-	return process.ProcessContextInfo{}
+	return processcontext.Info{}
 }

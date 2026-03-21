@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
@@ -275,7 +276,7 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 				inode = vdsoInode
 			} else if fields[5] == "" {
 				// This is an anonymous mapping, keep it
-			} else if fields[5] == ContextMappingAnonNamed {
+			} else if fields[5] == processcontext.ContextMappingAnonNamed {
 				// Keep process context mappings based on named anonymous mappings.
 				// Note that context mappings based on memfd have a non-zero inode
 				// and are already kept by the other branch.

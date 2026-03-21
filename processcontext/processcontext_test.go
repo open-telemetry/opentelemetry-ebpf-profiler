@@ -3,7 +3,7 @@
 
 //go:build amd64 || arm64
 
-package process
+package processcontext_test
 
 import (
 	"encoding/binary"
@@ -19,15 +19,21 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	processcontext "go.opentelemetry.io/ebpf-profiler/proto/processcontext"
+	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/processcontext"
+	processcontextpb "go.opentelemetry.io/ebpf-profiler/proto/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
 )
 
-const headerSize = 32
+const (
+	headerSignature  = "OTEL_CTX"
+	supportedVersion = 2
+	headerSize       = 32
+)
 
-var testProcessContext = processcontext.ProcessContext{
+var testContext = processcontextpb.ProcessContext{
 	Resource: &resourcepb.Resource{
 		Attributes: []*commonpb.KeyValue{
 			{
@@ -105,18 +111,18 @@ func createHeader(signature string, version uint32, payloadSize uint32, payloadP
 
 // createValidHeader creates a valid ProcessContext header
 func createValidHeader(payloadSize uint32, payloadPtr uint64, publishedAt uint64) []byte {
-	return createHeader(signatureOTELCTX, supportedVersion, payloadSize, payloadPtr, publishedAt)
+	return createHeader(headerSignature, supportedVersion, payloadSize, payloadPtr, publishedAt)
 }
 
-func TestProcessContext_IsProcessContextMapping(t *testing.T) {
-	assert.True(t, IsProcessContextMapping("[anon:OTEL_CTX]"))
-	assert.True(t, IsProcessContextMapping("[anon_shmem:OTEL_CTX]"))
-	assert.True(t, IsProcessContextMapping("/memfd:OTEL_CTX"))
-	assert.False(t, IsProcessContextMapping("test"))
+func TestProcessContext_IsContextMapping(t *testing.T) {
+	assert.True(t, processcontext.IsContextMapping("[anon:OTEL_CTX]"))
+	assert.True(t, processcontext.IsContextMapping("[anon_shmem:OTEL_CTX]"))
+	assert.True(t, processcontext.IsContextMapping("/memfd:OTEL_CTX"))
+	assert.False(t, processcontext.IsContextMapping("test"))
 }
 
 func TestProcessContext_Read(t *testing.T) {
-	payload, err := proto.Marshal(&testProcessContext)
+	payload, err := proto.Marshal(&testContext)
 	require.NoError(t, err)
 
 	mappingAddr := libpf.Address(0x1000)
@@ -124,7 +130,7 @@ func TestProcessContext_Read(t *testing.T) {
 	tests := []struct {
 		name              string
 		setupMock         func(*mockReader)
-		expectedResult    ProcessContextInfo
+		expectedResult    processcontext.Info
 		expectedErr       error
 		errorSubstring    string
 		lastPublishedAtNs uint64
@@ -138,14 +144,14 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(headerAddr, header)
 				mock.writeAt(payloadAddr, payload)
 			},
-			expectedResult: ProcessContextInfo{Context: &testProcessContext, PublishedAtNs: 123456789},
+			expectedResult: processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
 		},
 		{
 			name: "read error",
 			setupMock: func(mock *mockReader) {
 				mock.setError(errors.New("read error"))
 			},
-			expectedErr: ErrInvalidContext,
+			expectedErr: processcontext.ErrInvalidContext,
 		},
 		{
 			name: "invalid protobuf",
@@ -157,7 +163,7 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(headerAddr, header)
 				mock.writeAt(payloadAddr, invalidPayload)
 			},
-			expectedErr:    ErrInvalidContext,
+			expectedErr:    processcontext.ErrInvalidContext,
 			errorSubstring: "failed to unmarshal",
 		},
 		{
@@ -167,37 +173,37 @@ func TestProcessContext_Read(t *testing.T) {
 				header := createHeader("INVALID!", supportedVersion, 100, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
-			expectedErr:    ErrInvalidContext,
+			expectedErr:    processcontext.ErrInvalidContext,
 			errorSubstring: "signature",
 		},
 		{
 			name: "invalid version",
 			setupMock: func(mock *mockReader) {
 				headerAddr := uint64(mappingAddr)
-				header := createHeader(signatureOTELCTX, 999, 100, 0x2000, 123456789)
+				header := createHeader(headerSignature, 999, 100, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
-			expectedErr:    ErrInvalidContext,
+			expectedErr:    processcontext.ErrInvalidContext,
 			errorSubstring: "version",
 		},
 		{
 			name: "zero payload size",
 			setupMock: func(mock *mockReader) {
 				headerAddr := uint64(mappingAddr)
-				header := createHeader(signatureOTELCTX, supportedVersion, 0, 0x2000, 123456789)
+				header := createValidHeader(0, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
-			expectedErr:    ErrInvalidContext,
+			expectedErr:    processcontext.ErrInvalidContext,
 			errorSubstring: "payload size",
 		},
 		{
 			name: "payload size too large",
 			setupMock: func(mock *mockReader) {
 				headerAddr := uint64(mappingAddr)
-				header := createHeader(signatureOTELCTX, supportedVersion, maxPayloadSize+1, 0x2000, 123456789)
+				header := createHeader(headerSignature, supportedVersion, 1024*1024, 0x2000, 123456789)
 				mock.writeAt(headerAddr, header)
 			},
-			expectedErr:    ErrInvalidContext,
+			expectedErr:    processcontext.ErrInvalidContext,
 			errorSubstring: "payload size",
 		},
 		{
@@ -208,7 +214,7 @@ func TestProcessContext_Read(t *testing.T) {
 				header := createValidHeader(100, 0x2000, 0)
 				mock.writeAt(headerAddr, header)
 			},
-			expectedErr: ErrConcurrentUpdate,
+			expectedErr: processcontext.ErrConcurrentUpdate,
 		},
 		{
 			name: "published at same as last published",
@@ -218,7 +224,7 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(headerAddr, header)
 			},
 			lastPublishedAtNs: 123456788,
-			expectedErr:       ErrNoUpdate,
+			expectedErr:       processcontext.ErrNoUpdate,
 		},
 		{
 			name: "published at too old",
@@ -228,7 +234,7 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(headerAddr, header)
 			},
 			lastPublishedAtNs: 123456788,
-			expectedErr:       ErrNoUpdate,
+			expectedErr:       processcontext.ErrNoUpdate,
 		},
 	}
 
@@ -239,7 +245,7 @@ func TestProcessContext_Read(t *testing.T) {
 
 			rm := remotememory.RemoteMemory{ReaderAt: mock}
 
-			ctx, err := ReadProcessContext(mappingAddr, rm, tt.lastPublishedAtNs)
+			ctx, err := processcontext.Read(mappingAddr, rm, tt.lastPublishedAtNs)
 
 			if tt.expectedErr == nil {
 				require.NoError(t, err)
@@ -258,28 +264,6 @@ func TestProcessContext_Read(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Integration tests that create real ProcessContext memory regions
-
-// writeProcessContextToMemory writes a ProcessContext header and payload to a memory region
-func writeProcessContextToMemory(mem []byte, payload []byte) error {
-	// Allocate memory for payload (after header)
-	if len(mem) < headerSize+len(payload) {
-		return errors.New("memory region too small")
-	}
-
-	// Write header
-	headerAddr := uintptr(unsafe.Pointer(&mem[0]))
-	payloadAddr := headerAddr + headerSize
-
-	header := createHeader(signatureOTELCTX, supportedVersion,
-		uint32(len(payload)), uint64(payloadAddr), 123456789)
-
-	copy(mem[0:headerSize], header)
-	copy(mem[headerSize:], payload)
-
-	return nil
 }
 
 func TestProcessContext_Read_RealProcessContext(t *testing.T) {
@@ -307,14 +291,17 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create test ProcessContext
-			payload, err := proto.Marshal(&testProcessContext)
+			payload, err := proto.Marshal(&testContext)
 			require.NoError(t, err)
 
-			memSize := headerSize + len(payload)
+			payloadAddr := libpf.Address(unsafe.Pointer(&payload[0]))
+			header := createValidHeader(uint32(len(payload)), uint64(payloadAddr), 123456789)
+
+			memSize := len(header)
 			var mem []byte
 			if tt.useMemfd {
 				// Create memfd with OTEL_CTX name
-				fd, err := unix.MemfdCreate("OTEL_CTX", 0)
+				fd, err := unix.MemfdCreate(headerSignature, 0)
 				require.NoError(t, err)
 				defer unix.Close(fd)
 
@@ -342,12 +329,11 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			}
 
 			// Write ProcessContext to memory
-			err = writeProcessContextToMemory(mem, payload)
-			require.NoError(t, err)
+			copy(mem[0:len(header)], header)
 
 			if tt.usePrctl {
 				// Name the memory region using prctl
-				nameNullTerminated, _ := unix.ByteSliceFromString(signatureOTELCTX)
+				nameNullTerminated, _ := unix.ByteSliceFromString(headerSignature)
 				err = unix.Prctl(unix.PR_SET_VMA,
 					unix.PR_SET_VMA_ANON_NAME,
 					uintptr(unsafe.Pointer(&mem[0])),
@@ -361,7 +347,7 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 
 			// Get current process mappings
 			pid := libpf.PID(os.Getpid())
-			proc := New(pid, pid)
+			proc := process.New(pid, pid)
 			defer proc.Close()
 
 			mappings, _, err := proc.GetMappings()
@@ -370,10 +356,10 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			m := findContextMapping(mappings)
 			require.NotNil(t, m)
 
-			result, err := ReadProcessContext(libpf.Address(m.Vaddr), proc.GetRemoteMemory(), 0)
+			result, err := processcontext.Read(libpf.Address(m.Vaddr), proc.GetRemoteMemory(), 0)
 			require.NoError(t, err)
 			require.EqualExportedValues(t,
-				ProcessContextInfo{Context: &testProcessContext, PublishedAtNs: 123456789},
+				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
 				result)
 
 		})
@@ -381,10 +367,10 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 }
 
 // findContextMapping searches for the ProcessContext memory mapping.
-func findContextMapping(mappings []Mapping) *Mapping {
+func findContextMapping(mappings []process.Mapping) *process.Mapping {
 	for i := range mappings {
 		m := &mappings[i]
-		if IsProcessContextMapping(m.Path.String()) {
+		if processcontext.IsContextMapping(m.Path.String()) {
 			return m
 		}
 	}
