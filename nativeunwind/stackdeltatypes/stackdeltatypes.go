@@ -46,6 +46,14 @@ var UnwindInfoFramePointer = UnwindInfo{Flags: support.UnwindFlagCommand,
 	Param: support.UnwindCommandFramePointer,
 }
 
+// UnwindInfoGoStack is the stack delta info for Go stack-switch functions
+// (runtime.systemstack and runtime.mcall). When encountered during unwinding,
+// the unwinder crosses from the g0 system stack to the goroutine stack by
+// reading the goroutine's saved context (g.sched.sp and g.sched.pc).
+var UnwindInfoGoStack = UnwindInfo{Flags: support.UnwindFlagCommand,
+	Param: support.UnwindCommandGoStack,
+}
+
 // UnwindInfoLR contains the description to unwind ARM64 function without a frame (LR only)
 var UnwindInfoLR = UnwindInfo{
 	BaseReg:    support.UnwindRegSp,

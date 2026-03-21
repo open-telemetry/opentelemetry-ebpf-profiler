@@ -1,7 +1,9 @@
 #include "bpfdefs.h"
 #include "frametypes.h"
 #include "tracemgmt.h"
+#include "tsd.h"
 #include "types.h"
+#include "go_runtime.h"
 
 // with_debug_output is set during load time.
 BPF_RODATA_VAR(u32, with_debug_output, 0)
@@ -330,8 +332,11 @@ unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool 
 // if the main ebpf unwinder should exit. This is the case if the current PC
 // is marked with UNWIND_COMMAND_STOP which marks entry points (main function,
 // thread spawn function, signal handlers, ...).
+//
+// go_offs, if non-NULL, provides Go runtime struct offsets used to cross the
+// g0/goroutine stack boundary when UNWIND_COMMAND_GOSTACK is encountered.
 #if defined(__x86_64__)
-static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop, GoLabelsOffsets *go_offs)
 {
   *stop = false;
 
@@ -383,6 +388,56 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
         goto err_native_pc_read;
       }
       goto frame_ok;
+    case UNWIND_COMMAND_GOSTACK: {
+      // Cross the Go stack-switch boundary: recover the goroutine's saved context
+      // from g.sched (set by runtime.systemstack or runtime.mcall when they
+      // switched from the goroutine stack to the g0 system stack).
+      if (!go_offs) {
+        DEBUG_PRINT("GOSTACK: no Go offsets for this process, stopping");
+        *stop = true;
+        return ERR_OK;
+      }
+      void *m_ptr = get_m_ptr(go_offs, state);
+      if (!m_ptr) {
+        DEBUG_PRINT("GOSTACK: failed to get m_ptr, stopping");
+        *stop = true;
+        return ERR_OK;
+      }
+      u64 curg_ptr = 0;
+      if (bpf_probe_read_user(
+            &curg_ptr, sizeof(curg_ptr), (void *)((u64)m_ptr + go_offs->curg))) {
+        DEBUG_PRINT("GOSTACK: failed to read curg, stopping");
+        *stop = true;
+        return ERR_OK;
+      }
+      if (!curg_ptr) {
+        // Running in scheduler context (g0/gsignal) with no user goroutine.
+        DEBUG_PRINT("GOSTACK: no user goroutine (curg==nil), stopping");
+        *stop = true;
+        return ERR_OK;
+      }
+      u64 sched_sp = 0, sched_pc = 0;
+      if (bpf_probe_read_user(
+            &sched_sp, sizeof(sched_sp), (void *)(curg_ptr + go_offs->sched_sp))) {
+        DEBUG_PRINT("GOSTACK: failed to read sched_sp, stopping");
+        *stop = true;
+        return ERR_OK;
+      }
+      if (bpf_probe_read_user(
+            &sched_pc, sizeof(sched_pc), (void *)(curg_ptr + go_offs->sched_pc))) {
+        DEBUG_PRINT("GOSTACK: failed to read sched_pc, stopping");
+        *stop = true;
+        return ERR_OK;
+      }
+      DEBUG_PRINT(
+        "GOSTACK: crossing to goroutine stack sp=0x%lx pc=0x%lx",
+        (unsigned long)sched_sp,
+        (unsigned long)sched_pc);
+      state->sp = sched_sp;
+      state->pc = sched_pc;
+      unwinder_mark_nonleaf_frame(state);
+      goto frame_ok;
+    }
     default: return ERR_UNREACHABLE;
     }
   } else {
@@ -427,7 +482,7 @@ frame_ok:
   return ERR_OK;
 }
 #elif defined(__aarch64__)
-static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *stop, GoLabelsOffsets *go_offs)
 {
   *stop = false;
 
@@ -473,6 +528,59 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
         goto err_native_pc_read;
       }
       goto frame_ok;
+    case UNWIND_COMMAND_GOSTACK: {
+      // Cross the Go stack-switch boundary: recover the goroutine's saved context
+      // from g.sched (set by runtime.systemstack or runtime.mcall when they
+      // switched from the goroutine stack to the g0 system stack).
+      if (!go_offs) {
+        DEBUG_PRINT("GOSTACK: no Go offsets for this process, stopping");
+        *stop = true;
+        return ERR_OK;
+      }
+      void *m_ptr = get_m_ptr(go_offs, state);
+      if (!m_ptr) {
+        DEBUG_PRINT("GOSTACK: failed to get m_ptr, stopping");
+        *stop = true;
+        return ERR_OK;
+      }
+      u64 curg_ptr = 0;
+      if (bpf_probe_read_user(
+            &curg_ptr, sizeof(curg_ptr), (void *)((u64)m_ptr + go_offs->curg))) {
+        DEBUG_PRINT("GOSTACK: failed to read curg, stopping");
+        *stop = true;
+        return ERR_OK;
+      }
+      if (!curg_ptr) {
+        // Running in scheduler context (g0/gsignal) with no user goroutine.
+        DEBUG_PRINT("GOSTACK: no user goroutine (curg==nil), stopping");
+        *stop = true;
+        return ERR_OK;
+      }
+      u64 sched_sp = 0, sched_pc = 0;
+      if (bpf_probe_read_user(
+            &sched_sp, sizeof(sched_sp), (void *)(curg_ptr + go_offs->sched_sp))) {
+        DEBUG_PRINT("GOSTACK: failed to read sched_sp, stopping");
+        *stop = true;
+        return ERR_OK;
+      }
+      if (bpf_probe_read_user(
+            &sched_pc, sizeof(sched_pc), (void *)(curg_ptr + go_offs->sched_pc))) {
+        DEBUG_PRINT("GOSTACK: failed to read sched_pc, stopping");
+        *stop = true;
+        return ERR_OK;
+      }
+      DEBUG_PRINT(
+        "GOSTACK: crossing to goroutine stack sp=0x%lx pc=0x%lx",
+        (unsigned long)sched_sp,
+        (unsigned long)sched_pc);
+      state->sp  = sched_sp;
+      state->pc  = normalize_pac_ptr(sched_pc);
+      // Update r28 (the g register on aarch64) to point to curg so that
+      // subsequent get_m_ptr calls use the correct goroutine pointer.
+      state->r28 = curg_ptr;
+      unwinder_mark_nonleaf_frame(state);
+      goto frame_ok;
+    }
     default: return ERR_UNREACHABLE;
     }
   }
@@ -557,6 +665,12 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
   Trace *trace = &record->trace;
   int unwinder;
   ErrorCode error;
+
+  // Look up Go runtime offsets for this process once. These are needed when
+  // UNWIND_COMMAND_GOSTACK is encountered to cross the g0/goroutine boundary.
+  u32 pid                  = trace->pid;
+  GoLabelsOffsets *go_offs = bpf_map_lookup_elem(&go_labels_procs, &pid);
+
   for (int i = 0; i < NATIVE_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
 
@@ -583,7 +697,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 
     // Unwind the native frame using stack deltas. Stop if no next frame.
     bool stop;
-    error = unwind_one_frame(&record->state, &stop);
+    error = unwind_one_frame(&record->state, &stop, go_offs);
     if (error || stop) {
       break;
     }

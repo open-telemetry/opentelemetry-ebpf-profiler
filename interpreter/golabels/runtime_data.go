@@ -27,6 +27,11 @@ func getOffsets(vers string) support.GoLabelsOffsets {
 		Hmap_log2_bucket_count: 0,
 		// https://github.com/golang/go/blob/6885bad7dd86880be6929c0/src/runtime/map.go#L118
 		Hmap_buckets: 0,
+		// g.sched is a gobuf struct immediately following g.m (offset 48 + 8 = 56).
+		// gobuf.sp is the first field (offset 0 in gobuf), gobuf.pc is the second (offset 8).
+		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L325
+		Sched_sp: 56,
+		Sched_pc: 64,
 	}
 
 	// Version enforcement takes place in the Loader function.
