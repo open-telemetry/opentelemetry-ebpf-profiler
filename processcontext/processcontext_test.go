@@ -21,7 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/processcontext"
-	processcontextpb "go.opentelemetry.io/ebpf-profiler/proto/processcontext"
+	processcontextpb "go.opentelemetry.io/ebpf-profiler/processcontext/v1development"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	resourcepb "go.opentelemetry.io/proto/otlp/resource/v1"
