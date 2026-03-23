@@ -10,14 +10,6 @@ There was a limit of 1 eBPF program per tracepoint/kprobe.
 This limit no longer holds and was removed with commit [e87c6bc3852b981e71c757be20771546ce9f76f3](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=e87c6bc3852b981e71c757be20771546ce9f76f3).
 
 
-Obtaining Kernel backtrace
---------------------------
-Affects kernel < 4.18
-
-It is not possible to get individual backtraces from kernel mode stack with bpf_get_stackid(). It returns hash of the backtrace, and if it collides with another backtrace before the agent has collected it, we might report wrong kernel backtracec.
-A more suitable helper bpf_get_stack() was added in commit [c195651e565ae7f41a68acb7d4aa7390ad215de1](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=c195651e565ae7f41a68acb7d4aa7390ad215de1).
-
-
 Kernel version check
 --------------------
 Affects kernel < 5.0.

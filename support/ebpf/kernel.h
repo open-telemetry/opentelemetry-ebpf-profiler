@@ -185,12 +185,11 @@ enum bpf_map_type {
   BPF_MAP_TYPE_CGRP_STORAGE,
 };
 
-// Flags bpf_get_stackid/bpf_get_stack.
+// Flags for bpf_get_stack.
 enum {
   BPF_F_SKIP_FIELD_MASK = 0xffULL,
   BPF_F_USER_STACK      = (1ULL << 8),
   BPF_F_FAST_STACK_CMP  = (1ULL << 9),
-  BPF_F_REUSE_STACKID   = (1ULL << 10),
   BPF_F_USER_BUILD_ID   = (1ULL << 11),
 };
 
