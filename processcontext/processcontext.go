@@ -33,6 +33,9 @@ const (
 	ContextMappingMemfdNamed = "[anon_shmem:OTEL_CTX]"
 	ContextMappingAnonNamed  = "[anon:OTEL_CTX]"
 
+	// Default maximum retries for concurrent updates
+	DefaultMaxRetries = 3
+
 	// Signature
 	signatureOTELCTX = "OTEL_CTX"
 
@@ -41,9 +44,6 @@ const (
 
 	// Maximum payload size
 	maxPayloadSize = 65536
-
-	// Maximum retries for concurrent updates
-	maxRetries = 3
 
 	// Offset of the MonotonicPublishedAtNs field in the header struct
 	monotonicPublishedAtNsOffset = libpf.Address(unsafe.Offsetof(header{}.MonotonicPublishedAtNs))
@@ -78,7 +78,7 @@ type header struct {
 // Read reads ProcessContext from remote process memory using the provided address.
 // Returns ErrInvalidContext if the process has no ProcessContext memory region.
 // Retries up to maxRetries times when concurrent updates are detected.
-func Read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64) (Info, error) {
+func Read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64, maxRetries int) (Info, error) {
 	var lastErr error
 
 	// Find the ProcessContext mapping

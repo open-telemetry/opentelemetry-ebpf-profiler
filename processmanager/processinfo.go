@@ -790,7 +790,7 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 func readProcessContext(mapping *process.Mapping, pr process.Process, oldProcessContextInfo processcontext.Info) processcontext.Info {
 	// Workaround to fix a CodeQL warning about potential for integer overflow when converting from uint64 to uintptr (libpf.Address)
 	addr := libpf.Address(mapping.Vaddr & uint64(^libpf.Address(0)))
-	ctxInfo, err := processcontext.Read(addr, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs)
+	ctxInfo, err := processcontext.Read(addr, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs, processcontext.DefaultMaxRetries)
 	if err == nil {
 		return ctxInfo
 	}

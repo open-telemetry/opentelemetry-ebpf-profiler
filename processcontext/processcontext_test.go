@@ -245,7 +245,7 @@ func TestProcessContext_Read(t *testing.T) {
 
 			rm := remotememory.RemoteMemory{ReaderAt: mock}
 
-			ctx, err := processcontext.Read(mappingAddr, rm, tt.lastPublishedAtNs)
+			ctx, err := processcontext.Read(mappingAddr, rm, tt.lastPublishedAtNs, processcontext.DefaultMaxRetries)
 
 			if tt.expectedErr == nil {
 				require.NoError(t, err)
@@ -356,7 +356,7 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			m := findContextMapping(mappings)
 			require.NotNil(t, m)
 
-			result, err := processcontext.Read(libpf.Address(m.Vaddr), proc.GetRemoteMemory(), 0)
+			result, err := processcontext.Read(libpf.Address(m.Vaddr), proc.GetRemoteMemory(), 0, processcontext.DefaultMaxRetries)
 			require.NoError(t, err)
 			require.EqualExportedValues(t,
 				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
