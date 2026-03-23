@@ -1,9 +1,9 @@
 #include "bpfdefs.h"
 #include "frametypes.h"
+#include "go_runtime.h"
 #include "tracemgmt.h"
 #include "tsd.h"
 #include "types.h"
-#include "go_runtime.h"
 
 // with_debug_output is set during load time.
 BPF_RODATA_VAR(u32, with_debug_output, 0)
@@ -326,7 +326,8 @@ unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool 
 // go_offs, if non-NULL, provides Go runtime struct offsets used to cross the
 // g0/goroutine stack boundary when UNWIND_COMMAND_GOSTACK is encountered.
 #if defined(__x86_64__)
-static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop, GoLabelsOffsets *go_offs)
+static EBPF_INLINE ErrorCode
+unwind_one_frame(UnwindState *state, bool *stop, GoLabelsOffsets *go_offs)
 {
   *stop = false;
 
@@ -394,8 +395,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop, Go
         return ERR_OK;
       }
       u64 curg_ptr = 0;
-      if (bpf_probe_read_user(
-            &curg_ptr, sizeof(curg_ptr), (void *)((u64)m_ptr + go_offs->curg))) {
+      if (bpf_probe_read_user(&curg_ptr, sizeof(curg_ptr), (void *)((u64)m_ptr + go_offs->curg))) {
         DEBUG_PRINT("GOSTACK: failed to read curg, stopping");
         *stop = true;
         return ERR_OK;
@@ -472,7 +472,8 @@ frame_ok:
   return ERR_OK;
 }
 #elif defined(__aarch64__)
-static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *stop, GoLabelsOffsets *go_offs)
+static EBPF_INLINE ErrorCode
+unwind_one_frame(struct UnwindState *state, bool *stop, GoLabelsOffsets *go_offs)
 {
   *stop = false;
 
@@ -534,8 +535,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
         return ERR_OK;
       }
       u64 curg_ptr = 0;
-      if (bpf_probe_read_user(
-            &curg_ptr, sizeof(curg_ptr), (void *)((u64)m_ptr + go_offs->curg))) {
+      if (bpf_probe_read_user(&curg_ptr, sizeof(curg_ptr), (void *)((u64)m_ptr + go_offs->curg))) {
         DEBUG_PRINT("GOSTACK: failed to read curg, stopping");
         *stop = true;
         return ERR_OK;

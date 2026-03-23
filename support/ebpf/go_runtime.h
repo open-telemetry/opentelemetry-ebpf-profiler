@@ -3,6 +3,10 @@
 #ifndef OPTI_GO_RUNTIME_H
 #define OPTI_GO_RUNTIME_H
 
+#include "bpfdefs.h"
+#include "tsd.h"
+#include "types.h"
+
 // get_m_ptr reads the M (machine/OS thread) pointer for the current goroutine.
 // It does so by reading the G (goroutine) pointer from thread-local storage,
 // then following the g.m pointer.

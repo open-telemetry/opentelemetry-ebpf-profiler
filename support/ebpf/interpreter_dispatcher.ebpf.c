@@ -3,11 +3,11 @@
 // perf event and will call the appropriate tracer for a given process
 
 #include "bpfdefs.h"
+#include "go_runtime.h"
 #include "kernel.h"
 #include "tracemgmt.h"
 #include "tsd.h"
 #include "types.h"
-#include "go_runtime.h"
 
 // Begin shared maps
 
