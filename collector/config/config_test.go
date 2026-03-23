@@ -24,6 +24,7 @@ func validConfig() *Config {
 func TestValidate(t *testing.T) {
 	cfg := &Config{
 		SamplesPerSecond: 0,
+		ErrorMode:        PropagateError,
 	}
 	err := xconfmap.Validate(cfg)
 	require.Error(t, err)
@@ -79,9 +80,9 @@ func TestValidateErrorMode(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			name:      "empty defaults to propagate",
+			name:      "empty error mode is invalid",
 			errorMode: "",
-			want:      PropagateError,
+			wantErr:   true,
 		},
 		{
 			name:      "ignore is valid",
