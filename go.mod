@@ -18,7 +18,7 @@ require (
 	github.com/elastic/go-freelru v0.16.0
 	github.com/elastic/go-perf v0.0.0-20260224073651-af0ee0c731b7
 	github.com/google/uuid v1.6.0
-	github.com/klauspost/compress v1.18.4
+	github.com/klauspost/compress v1.18.5
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
 	github.com/open-telemetry/sig-profiling/tools/profcheck v0.0.0-20260303084341-52f633d434c9
