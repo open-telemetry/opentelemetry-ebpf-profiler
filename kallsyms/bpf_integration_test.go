@@ -61,27 +61,26 @@ func loadSocketFilter(t *testing.T, name string) *ebpf.Program {
 	return prog
 }
 
-// findBPFSymbol searches the bpf module for a symbol whose kernel-assigned name
-// ends with "_<progName>". Returns the full symbol name and its address.
+// findBPFSymbol searches the bpfSymbolTable for a symbol whose name ends with
+// "_<progName>". Returns the full symbol name and its address.
 func findBPFSymbol(s *bpfSymbolizer, progName string) (string, libpf.Address) {
 	suffix := "_" + progName
 
-	mod := s.Module()
-	if mod == nil {
+	tbl := s.table.Load()
+	if tbl == nil {
 		return "", 0
 	}
 
-	for _, sym := range mod.symbols {
-		name := mod.stringAt(sym.index)
-		if strings.HasSuffix(name, suffix) {
-			return name, mod.start + libpf.Address(sym.offset)
+	for _, sym := range tbl.symbols {
+		if strings.HasSuffix(sym.name, suffix) {
+			return sym.name, sym.address
 		}
 	}
 	return "", 0
 }
 
 // assertBPFSymbolFound polls the symbolizer until a BPF symbol matching progName
-// appears, then verifies the full symbolization path (address -> module -> symbol).
+// appears, then verifies the full symbolization path (address -> symbol).
 func assertBPFSymbolFound(t *testing.T, s *Symbolizer, progName string) (string, libpf.Address) {
 	t.Helper()
 
@@ -95,17 +94,13 @@ func assertBPFSymbolFound(t *testing.T, s *Symbolizer, progName string) (string,
 
 	t.Logf("Found BPF program %q at address 0x%x", fullName, progAddr)
 
-	mod, err := s.GetModuleByAddress(progAddr)
-	require.NoError(t, err)
-	assert.Equal(t, "bpf", mod.Name())
-
-	funcName, offset, err := mod.LookupSymbolByAddress(progAddr)
-	require.NoError(t, err)
+	funcName, offset, ok := s.LookupBPFSymbol(progAddr)
+	require.True(t, ok, "LookupBPFSymbol failed for address 0x%x", progAddr)
 	assert.Equal(t, fullName, funcName)
 	assert.Equal(t, uint(0), offset)
 
-	funcName, offset, err = mod.LookupSymbolByAddress(progAddr + 1)
-	require.NoError(t, err)
+	funcName, offset, ok = s.LookupBPFSymbol(progAddr + 1)
+	require.True(t, ok, "LookupBPFSymbol failed for address 0x%x", progAddr+1)
 	assert.Equal(t, fullName, funcName)
 	assert.Equal(t, uint(1), offset)
 

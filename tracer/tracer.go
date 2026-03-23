@@ -844,7 +844,11 @@ func (t *Tracer) symbolizeKernelFrames(addrs []uint64, oldFrames libpf.Frames) l
 			Type:            libpf.KernelFrame,
 			AddressOrLineno: libpf.AddressOrLineno(address - 1),
 		}
-		if kmod, err := t.kernelSymbolizer.GetModuleByAddress(address); err == nil {
+		if funcName, offset, ok := t.kernelSymbolizer.LookupBPFSymbol(address); ok {
+			// BPF program: use address relative to symbol start for deduplication.
+			frame.AddressOrLineno = libpf.AddressOrLineno(offset)
+			frame.FunctionName = libpf.Intern(funcName)
+		} else if kmod, err := t.kernelSymbolizer.GetModuleByAddress(address); err == nil {
 			frame.Mapping = kmod.Mapping()
 			frame.AddressOrLineno -= libpf.AddressOrLineno(kmod.Start())
 			if funcName, _, err := kmod.LookupSymbolByAddress(address); err == nil {

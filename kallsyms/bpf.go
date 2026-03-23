@@ -4,9 +4,11 @@
 package kallsyms // import "go.opentelemetry.io/ebpf-profiler/kallsyms"
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -17,10 +19,48 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// bpfProgPrefix is the prefix the kernel uses for all JIT'd BPF program
+// symbols in /proc/kallsyms and PERF_RECORD_KSYMBOL events.
+const bpfProgPrefix = "bpf_prog_"
+
 type bpfSymbol struct {
 	address libpf.Address
 	size    uint32
 	name    string
+}
+
+// bpfSymbolTable is a sorted (by address) snapshot of all known BPF program
+// symbols. It is stored atomically so readers never block writers.
+type bpfSymbolTable struct {
+	symbols []bpfSymbol
+}
+
+// lookup returns the symbol containing addr, or ("", false) if none does.
+// A symbol covers [address, address+size).
+func (t *bpfSymbolTable) lookup(addr libpf.Address) (string, uint, bool) {
+	// Binary search for the last symbol whose address <= addr.
+	// BinarySearchFunc returns (index of exact match, true) or
+	// (insertion point, false). In both cases the candidate symbol
+	// is at the returned index when found, or at index-1 when not found.
+	idx, found := slices.BinarySearchFunc(t.symbols, addr, func(sym bpfSymbol, a libpf.Address) int {
+		return cmp.Compare(sym.address, a)
+	})
+
+	if !found {
+		// idx is the insertion point; the last symbol with address <= addr
+		// is one position to the left.
+		if idx == 0 {
+			return "", 0, false
+		}
+		idx--
+	}
+
+	sym := &t.symbols[idx]
+	if addr >= sym.address+libpf.Address(sym.size) {
+		return "", 0, false
+	}
+
+	return sym.name, uint(addr - sym.address), true
 }
 
 // bpfSymbolizer is responsible for getting updates from `PERF_RECORD_KSYMBOL`.
@@ -29,25 +69,27 @@ type bpfSymbolizer struct {
 	records chan *perf.KSymbolRecord
 	events  []*perf.Event
 	cancel  context.CancelFunc
-	module  atomic.Pointer[Module]
-	// sizes maps BPF symbol start addresses to their JIT'd byte lengths. It is
-	// used by finish to set the module end address to the precise end of the
-	// last symbol rather than a page-rounded approximation.
-	sizes map[libpf.Address]uint32
+	table   atomic.Pointer[bpfSymbolTable]
 }
 
-// Module returns the [Module] with bpf symbols in it.
-// It returns nil until startMonitor is called or if there are no bpf symbols.
-func (s *bpfSymbolizer) Module() *Module {
-	return s.module.Load()
+// LookupSymbol resolves addr to a BPF program symbol name and offset.
+// Returns ("", 0, false) if no BPF program covers addr.
+func (s *bpfSymbolizer) LookupSymbol(addr libpf.Address) (string, uint, bool) {
+	t := s.table.Load()
+	if t == nil {
+		return "", 0, false
+	}
+
+	return t.lookup(addr)
 }
 
-// loadBPFPrograms enumerates all loaded BPF programs via bpf syscall
-// and builds a Module from their JIT symbol addresses and names.
+// loadBPFPrograms enumerates all loaded BPF programs via the bpf syscall and
+// builds a sorted bpfSymbolTable from their JIT symbol addresses and sizes.
+// Only symbols with the "bpf_prog_" prefix are included; trampolines and
+// dispatchers are intentionally excluded because they are not visible at
+// initial scan time and would cause misattribution.
 func (s *bpfSymbolizer) loadBPFPrograms() error {
-	var symbols []bpfSymbol
-	minAddr := uint64(0)
-	sizes := make(map[libpf.Address]uint32)
+	symbols := []bpfSymbol{}
 
 	id := ebpf.ProgramID(0)
 	for {
@@ -77,60 +119,29 @@ func (s *bpfSymbolizer) loadBPFPrograms() error {
 		lens, _ := info.JitedFuncLens()
 
 		// The kernel names BPF JIT symbols as "bpf_prog_<tag>_<name>".
-		name := "bpf_prog_" + info.Tag + "_" + info.Name
+		name := bpfProgPrefix + info.Tag + "_" + info.Name
 
 		for i, addr := range addrs {
-			a := uint64(addr)
-			if a < minAddr || minAddr == 0 {
-				minAddr = a
-			}
 			sym := bpfSymbol{
-				address: libpf.Address(a),
+				address: libpf.Address(addr),
 				name:    name,
 			}
+
 			if i < len(lens) {
 				sym.size = lens[i]
-				sizes[sym.address] = lens[i]
 			}
+
 			symbols = append(symbols, sym)
 		}
 	}
 
-	if len(symbols) == 0 {
-		s.module.Store(nil)
-		return nil
-	}
+	slices.SortFunc(symbols, func(a, b bpfSymbol) int {
+		return cmp.Compare(a.address, b.address)
+	})
 
-	mod := &Module{
-		start: libpf.Address(minAddr),
-	}
-	mod.addName("bpf")
-
-	for _, sym := range symbols {
-		mod.symbols = append(mod.symbols, symbol{
-			offset: uint32(sym.address - mod.start),
-			index:  mod.addName(sym.name),
-		})
-	}
-
-	s.sizes = sizes
-	s.finish(mod)
-
-	s.module.Store(mod)
+	s.table.Store(&bpfSymbolTable{symbols: symbols})
 
 	return nil
-}
-
-// finish finalizes a BPF module. It calls Module.finish() to sort symbols and
-// synthesize end, then improves the end estimate for the last (highest-address)
-// symbol using its known JIT'd size from the sizes map. If the size is unknown
-// the page-rounded fallback from Module.finish() is kept.
-func (s *bpfSymbolizer) finish(m *Module) {
-	m.finish()
-	lastAddr := m.start + libpf.Address(m.symbols[0].offset)
-	if size, ok := s.sizes[lastAddr]; ok {
-		m.end = lastAddr + libpf.Address(size)
-	}
 }
 
 // startMonitor starts the update monitoring and loads bpf symbols.
@@ -148,6 +159,7 @@ func (s *bpfSymbolizer) startMonitor(ctx context.Context, onlineCPUs []int) erro
 	}
 
 	go s.reloadWorker(ctx)
+
 	return nil
 }
 
@@ -219,21 +231,21 @@ func (s *bpfSymbolizer) subscribe(ctx context.Context, onlineCPUs []int) error {
 // reloadWorker is the goroutine handling the reloads of the bpf symbols.
 func (s *bpfSymbolizer) reloadWorker(ctx context.Context) {
 	noTimeout := make(<-chan time.Time)
-	nextKallsymsReload := noTimeout
+	nextReload := noTimeout
 	for {
 		select {
-		case <-nextKallsymsReload:
+		case <-nextReload:
 			if err := s.loadBPFPrograms(); err == nil {
 				log.Debugf("Kernel symbols reloaded")
-				nextKallsymsReload = noTimeout
+				nextReload = noTimeout
 			} else {
 				log.Warnf("Failed to reload kernel symbols: %v", err)
-				nextKallsymsReload = time.After(time.Second)
+				nextReload = time.After(time.Second)
 			}
 		case record := <-s.records:
 			if err := s.handleBPFUpdate(record); err != nil {
 				log.Warnf("Error handling bpf ksymbol update: %v", err)
-				nextKallsymsReload = time.After(time.Second)
+				nextReload = time.After(time.Second)
 			}
 		case <-ctx.Done():
 			return
@@ -247,99 +259,68 @@ func (s *bpfSymbolizer) handleBPFUpdate(record *perf.KSymbolRecord) error {
 		return errors.New("lost events detected")
 	}
 
-	mod := s.module.Load()
-	if mod == nil {
-		// Unlikely to be triggered as some bpf programs are loaded by the tracer.
-		return errors.New("first bpf symbol being added")
+	// Only track bpf_prog_* symbols. Trampolines, dispatchers, and other
+	// BPF-tagged symbols are excluded because they are not present at initial
+	// scan time and would cause misattribution.
+	if !strings.HasPrefix(record.Name, bpfProgPrefix) {
+		return nil
 	}
-
-	addr := libpf.Address(record.Addr)
 
 	if record.Flags&unix.PERF_RECORD_KSYMBOL_FLAGS_UNREGISTER != 0 {
-		return s.removeBPFSymbol(mod, addr)
+		s.removeBPFSymbol(libpf.Address(record.Addr))
+		return nil
 	}
 
-	return s.addBPFSymbol(mod, addr, record.Name, record.Len)
-}
-
-// addBPFSymbol handles adding a new BPF symbol to the module.
-func (s *bpfSymbolizer) addBPFSymbol(mod *Module, addr libpf.Address, name string, size uint32) error {
-	var replacement *Module
-
-	if addr < mod.start {
-		// New symbol is below the current module start. Shift all existing
-		// offsets up by the difference and set the new start address.
-		replacement = mod.replacement()
-
-		delta := uint32(mod.start - addr)
-		for i := range replacement.symbols {
-			replacement.symbols[i].offset += delta
-		}
-		replacement.start = addr
-
-		replacement.symbols = append(replacement.symbols, symbol{
-			offset: 0,
-			index:  replacement.addName(name),
-		})
-	} else {
-		// If we can find the exact symbol, it's a benign race.
-		// A race is possible for events that were buffered while a full parsing happened.
-		existing, off, err := mod.LookupSymbolByAddress(addr)
-		if err != nil || off > 0 || existing != name {
-			replacement = mod.replacement()
-
-			replacement.symbols = append(replacement.symbols, symbol{
-				offset: uint32(addr - replacement.start),
-				index:  replacement.addName(name),
-			})
-		}
-	}
-
-	if replacement != nil {
-		s.sizes[addr] = size
-		s.finish(replacement)
-		s.module.Store(replacement)
-	}
+	s.addBPFSymbol(libpf.Address(record.Addr), record.Name, record.Len)
 
 	return nil
 }
 
-// removeBPFSymbol handles removing a BPF symbol from the module.
-func (s *bpfSymbolizer) removeBPFSymbol(mod *Module, addr libpf.Address) error {
-	// If we can find the exact symbol, remove it. If we can't, it's a benign race.
-	// A race is possible for events that were buffered while a full parsing happened.
-	removeIdx := slices.IndexFunc(mod.symbols, func(sym symbol) bool {
-		return sym.offset == uint32(addr-mod.start)
+// addBPFSymbol inserts a new BPF program symbol into the table.
+func (s *bpfSymbolizer) addBPFSymbol(addr libpf.Address, name string, size uint32) {
+	old := s.table.Load()
+	var oldSymbols []bpfSymbol
+	if old != nil {
+		oldSymbols = old.symbols
+	}
+
+	// Check for a benign race: symbol already present with the same name.
+	idx, found := slices.BinarySearchFunc(oldSymbols, addr, func(sym bpfSymbol, a libpf.Address) int {
+		return cmp.Compare(sym.address, a)
 	})
-	if removeIdx == -1 {
-		return nil
+	if found && oldSymbols[idx].name == name {
+		return
 	}
 
-	replacement := mod.replacement()
-	replacement.symbols = slices.Delete(replacement.symbols, removeIdx, removeIdx+1)
+	// Insert the new symbol into the right position to maintain sorting.
+	newSym := bpfSymbol{address: addr, size: size, name: name}
+	newSymbols := make([]bpfSymbol, len(oldSymbols)+1)
+	copy(newSymbols, oldSymbols[:idx])
+	newSymbols[idx] = newSym
+	copy(newSymbols[idx+1:], oldSymbols[idx:])
 
-	if len(replacement.symbols) == 0 {
-		// All symbols gone, clear the module.
-		s.module.Store(nil)
-		return nil
+	s.table.Store(&bpfSymbolTable{symbols: newSymbols})
+}
+
+// removeBPFSymbol removes a BPF program symbol from the table by address.
+func (s *bpfSymbolizer) removeBPFSymbol(addr libpf.Address) {
+	old := s.table.Load()
+	if old == nil {
+		return
 	}
 
-	// If the lowest-address symbol was removed, adjust the module
-	// start to the new lowest and shift all offsets down.
-	newFirst := replacement.symbols[len(replacement.symbols)-1]
-	if newFirst.offset > 0 {
-		delta := newFirst.offset
-		replacement.start += libpf.Address(delta)
-		for i := range replacement.symbols {
-			replacement.symbols[i].offset -= delta
-		}
+	idx, found := slices.BinarySearchFunc(old.symbols, addr, func(sym bpfSymbol, a libpf.Address) int {
+		return cmp.Compare(sym.address, a)
+	})
+	if !found {
+		return
 	}
 
-	delete(s.sizes, addr)
-	s.finish(replacement)
-	s.module.Store(replacement)
+	newSymbols := make([]bpfSymbol, len(old.symbols)-1)
+	copy(newSymbols, old.symbols[:idx])
+	copy(newSymbols[idx:], old.symbols[idx+1:])
 
-	return nil
+	s.table.Store(&bpfSymbolTable{symbols: newSymbols})
 }
 
 // Close frees resources associated with bpfSymbolizer.

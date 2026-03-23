@@ -108,29 +108,9 @@ func NewSymbolizer() (*Symbolizer, error) {
 	return s, nil
 }
 
-// replacement returns a copy of the module for adjustments.
-func (m *Module) replacement() *Module {
-	return &Module{
-		start:   m.start,
-		names:   slices.Clone(m.names),
-		symbols: slices.Clone(m.symbols),
-	}
-}
-
 // addName appends the 'name' to the module's string slice, and returns
 // an index suitable for storing in the `symbol` struct.
 func (m *Module) addName(name string) uint32 {
-	if len(m.names) > 0 && m.Name() == "bpf" {
-		// Reuse existing symbols if possible. This is useful for bpf symbols that can disappear
-		// and then come back with the same name. Doing this prevents unbounded growth.
-		for i := uint32(0); i < uint32(len(m.names)); {
-			if m.stringAt(i) == name {
-				return i
-			}
-			i += 1 + uint32(m.names[i])
-		}
-	}
-
 	index := len(m.names)
 	// Cap the length to 255 bytes so it fits a byte. Longest seen
 	// symbol so far is 83 bytes.
@@ -225,13 +205,13 @@ var loadModuleMetadata = func(m *Module, name string, oldMtime int64) bool {
 // finish will finalize the Module. The 'symbols' slice is sorted, and
 // a fallback fileID is synthesized if buildID is not available.
 func (m *Module) finish() {
-	slices.SortFunc(m.symbols, compareSymbol)
 	if m.end == 0 || m.end == ^libpf.Address(0) {
 		// Synthesize the end address at last symbol rounded up to page size
 		// because it could not be reliably determined.
-		lastSymbol := m.start + libpf.Address(m.symbols[0].offset)
+		lastSymbol := m.start + libpf.Address(m.symbols[len(m.symbols)-1].offset)
 		m.end = (lastSymbol + 4095) & ^libpf.Address(4095)
 	}
+	slices.SortFunc(m.symbols, compareSymbol)
 }
 
 func (m *Module) Name() string {
@@ -670,26 +650,11 @@ func getModuleByAddress(modules []Module, pc libpf.Address) (*Module, error) {
 
 // GetModuleByAddress finds the Module containing the address 'pc'.
 func (s *Symbolizer) GetModuleByAddress(pc libpf.Address) (*Module, error) {
-	if s.bpf != nil {
-		bpf := s.bpf.Module()
-		if bpf != nil && pc >= bpf.start && pc < bpf.end {
-			return bpf, nil
-		}
-	}
-
 	return getModuleByAddress(s.modules.Load().([]Module), pc)
 }
 
-// GetModuleByAddress finds the Module containing the module 'module'.
+// GetModuleByName finds the Module with the given name.
 func (s *Symbolizer) GetModuleByName(module string) (*Module, error) {
-	if module == "bpf" {
-		mod := s.bpf.Module()
-		if mod == nil {
-			return nil, ErrNoModule
-		}
-		return mod, nil
-	}
-
 	modules := s.modules.Load().([]Module)
 	for i := range modules {
 		kmod := &modules[i]
@@ -698,4 +663,13 @@ func (s *Symbolizer) GetModuleByName(module string) (*Module, error) {
 		}
 	}
 	return nil, ErrNoModule
+}
+
+// LookupBPFSymbol resolves addr to a BPF program symbol name and offset.
+// Returns ("", 0, false) if no BPF program covers addr.
+func (s *Symbolizer) LookupBPFSymbol(addr libpf.Address) (string, uint, bool) {
+	if s.bpf == nil {
+		return "", 0, false
+	}
+	return s.bpf.LookupSymbol(addr)
 }
