@@ -671,6 +671,9 @@ const (
 	// Number of Go custom labels dropped because the label value was not valid UTF-8
 	IDGoLabelsDroppedInvalidValue = 294
 
+	// Number of prctl(PR_SET_VMA) calls naming an anonymous mapping OTEL_CTX
+	IDNumPrctlSetVmaOtelCtx = 295
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 295
+	IDMax = 296
 )

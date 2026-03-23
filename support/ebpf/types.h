@@ -331,6 +331,9 @@ enum {
   // number of bpf_ringbuf_output failures
   metricID_BPFRingbufOutputErr,
 
+  // number of prctl(PR_SET_VMA) calls naming an anonymous mapping OTEL_CTX
+  metricID_NumPrctlSetVmaOtelCtx,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
