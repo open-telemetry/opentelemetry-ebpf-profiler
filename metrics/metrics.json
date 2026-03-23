@@ -2188,5 +2188,12 @@
     "name": "UnwindLuaJITErrNoProcInfo",
     "field": "bpf.luajit.errors.no_proc_info",
     "id": 299
+  },
+  {
+    "description": "Number of prctl(PR_SET_VMA) calls naming an anonymous mapping OTEL_CTX",
+    "type": "counter",
+    "name": "NumPrctlSetVmaOtelCtx",
+    "field": "bpf.num_prctl_set_vma_otel_ctx",
+    "id": 300
   }
 ]
