@@ -602,12 +602,13 @@ typedef struct Trace {
   ApmTraceID apm_trace_id;
   // Custom Labels
   CustomLabelsArray custom_labels;
-  // The kernel stack ID.
-  s32 kernel_stack_id;
   // The number of frame_data elements present.
   u16 frame_data_len;
   // The number of frames present.
   u16 num_frames;
+  // The number of kernel stack frames at the start of frame_data.
+  // These are raw u64 addresses from bpf_get_stack(), not encoded frames.
+  u16 num_kernel_frames;
 
   // origin indicates the source of the trace.
   TraceOrigin origin;
