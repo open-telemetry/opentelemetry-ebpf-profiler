@@ -62,6 +62,8 @@ Since the profiler is Linux-only, macOS and Windows users need to set up a Linux
 
 The project maintains its minimum supported kernel version in line with the lowest kernel version currently provided by actively maintained major Linux distributions, which include Debian stable, Red Hat Enterprise Linux, Ubuntu LTS, Amazon Linux and SUSE Linux. The minimum requirement may be increased when all such distributions no longer ship a specific kernel version. This approach enables the codebase to utilize newer eBPF features and avoids the need to maintain compatibility shims for obsolete kernels.
 
+It should be noted that certain distributions incorporate eBPF features from newer kernels into their supported versions. When this occurs, the distribution's stated kernel version does not accurately reflect its true eBPF capabilities and will not prevent us from increasing the minimum supported version.
+
 ## Alternative Build (Without Docker)
 You can build the agent without Docker by directly installing the dependencies listed in the Dockerfile. Once dependencies are set up, simply run:
 ```sh
