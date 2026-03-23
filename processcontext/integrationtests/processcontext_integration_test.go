@@ -64,8 +64,16 @@ func Test_ProcessContext(t *testing.T) {
 	tests := map[string]struct {
 		exeName string
 		args    []string
+		env     []string
 	}{
 		"glibc_exe": {exeName: "processctx_exe_glibc"},
+		// Publishes the process context after a delay, so the profiler discovers
+		// the PID before the publication and the prctl monitor must trigger a
+		// resync to pick up the OTEL_CTX mapping.
+		"glibc_exe_delayed_publish": {
+			exeName: "processctx_exe_glibc",
+			env:     []string{"OTEL_PROCESS_CTX_PUBLISH_DELAY_MS=200"},
+		},
 		// "musl_exe":     {exeName: "processctx_exe_musl"},
 		// "glibc_lib":    {exeName: "processctx_lib_glibc"},
 		// "musl_lib":     {exeName: "processctx_lib_musl"},
@@ -107,6 +115,9 @@ func Test_ProcessContext(t *testing.T) {
 
 			cmd := exec.CommandContext(ctx, filepath.Join(exeDir, tc.exeName), tc.args...)
 			cmd.Stderr = os.Stderr
+			if len(tc.env) > 0 {
+				cmd.Env = append(os.Environ(), tc.env...)
+			}
 			require.NoError(t, cmd.Start())
 
 			wg := sync.WaitGroup{}
