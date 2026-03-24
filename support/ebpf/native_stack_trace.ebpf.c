@@ -355,6 +355,8 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       if (bpf_probe_read_user(&rt_regs, sizeof(rt_regs), (void *)(state->sp + 40))) {
         goto err_native_pc_read;
       }
+      state->rdi = rt_regs[8];
+      state->r8  = rt_regs[0];
       state->rax = rt_regs[13];
       state->r9  = rt_regs[1];
       state->r11 = rt_regs[3];

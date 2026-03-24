@@ -140,6 +140,9 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 	if raReg != support.UnwindRegInvalid && raReg != support.UnwindRegCfa {
 		info.Flags |= support.UnwindFlagRegisterRA
 		info.AuxBaseReg = raReg
+		if raReg != support.UnwindRegFp && raReg != support.UnwindRegSp {
+			info.Flags |= support.UnwindFlagLeafOnly
+		}
 	} else if regs.ra.reg == regCFA && regs.ra.off == -8 {
 		// Standard CFA-8
 	} else {
@@ -148,7 +151,7 @@ func (regs *vmRegs) getUnwindInfoX86() sdtypes.UnwindInfo {
 	}
 
 	// Determine unwind info for frame pointer
-	if (info.Flags & support.UnwindFlagRegisterRA) == 0 {
+	if info.Flags&support.UnwindFlagRegisterRA == 0 {
 		switch regs.fp.reg {
 		case regCFA:
 			// Check that RBP is between CFA and stack top
