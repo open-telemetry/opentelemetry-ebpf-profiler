@@ -797,9 +797,13 @@ func readProcessContext(mapping *process.Mapping, pr process.Process, oldProcess
 	if errors.Is(err, processcontext.ErrNoUpdate) {
 		return oldProcessContextInfo
 	}
-	// If the process context cannot be read because of a concurrent update,
-	// prefer to drop the current (stale) process context and rely on a new call to
-	// synchronizeMappings to pick it up.
+	if errors.Is(err, processcontext.ErrConcurrentUpdate) {
+		// If the context cannot be read because of a concurrent update, keep the resource since it is immutable,
+		// but discard the extra attributes as they may be stale.
+		oldProcessContextInfo.Context.ExtraAttributes = nil
+		return oldProcessContextInfo
+	}
+
 	log.Debugf("Failed to read ProcessContext for PID %d: %v", pr.PID(), err)
 	return processcontext.Info{}
 }
