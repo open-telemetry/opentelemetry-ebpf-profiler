@@ -25,7 +25,7 @@ eBPF.
 - No need for any reconfiguration, instrumentation or restarts of HLL
   interpreters and VMs: the agent supports unwinding each of the supported
   languages in the default configuration.
-- ARM64 support for all unwinders.
+- ARM64 support for all unwinders except .NET.
 - Support for native `inline frames`, which provide insights into compiler
   optimizations and offer a higher precision of function call chains.
 
