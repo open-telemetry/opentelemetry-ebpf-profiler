@@ -31,7 +31,7 @@ eBPF.
 
 ## Building
 
-We are have integrated the profiler into the [OTel Collector](https://opentelemetry.io/docs/collector/) as a receiver,
+We have integrated the profiler into the [OTel Collector](https://opentelemetry.io/docs/collector/) as a receiver,
 and this is the [supported configuration](https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-ebpf-profiler) going forward.
 
 To aid with development, testing and debugging, we also offer a standalone profiling agent binary named `ebpf-profiler`,
