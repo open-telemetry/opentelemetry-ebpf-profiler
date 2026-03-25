@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"structs"
-	"sync/atomic"
 	"unsafe"
 
 	"google.golang.org/protobuf/proto"
@@ -111,9 +110,6 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 		return Info{}, ErrNoUpdate
 	}
 
-	// Memory barrier to ensure the timestamp is read before the header
-	memoryBarrier()
-
 	// Read and validate the header
 	hdr, err := readHeader(rm, mappingAddr)
 	if err != nil {
@@ -126,9 +122,6 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 	// Do not check for errors here as the context read might have failed due to
 	// a concurrent update occurring between the header read and the payload read.
 	// We will check for context read error after re-reading the header.
-
-	// Memory barrier to ensure the header is read before the timestamp (again)
-	memoryBarrier()
 
 	// Re-read the timestamp to check for concurrent updates
 	monotonicPublishedAtNs2, err := readTimestamp(rm, mappingAddr)
@@ -205,10 +198,4 @@ func readPayload(rm remotememory.RemoteMemory, hdr header) (Info, error) {
 	}
 
 	return Info{Context: ctx, PublishedAtNs: hdr.MonotonicPublishedAtNs}, nil
-}
-
-func memoryBarrier() {
-	// On ARM64, atomic add will compile as LDADDAL which will act as a full memory barrier.
-	var fence uint64
-	atomic.AddUint64(&fence, 0)
 }
