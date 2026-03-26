@@ -1,6 +1,10 @@
 #ifndef OPTI_NATIVE_STACK_TRACE_H
 #define OPTI_NATIVE_STACK_TRACE_H
 
+#include "bpfdefs.h"
+#include "extmaps.h"
+#include "tracemgmt.h"
+
 // Unwind info value for invalid stack delta
 #define STACK_DELTA_INVALID (STACK_DELTA_COMMAND_FLAG | UNWIND_COMMAND_INVALID)
 #define STACK_DELTA_STOP    (STACK_DELTA_COMMAND_FLAG | UNWIND_COMMAND_STOP)
