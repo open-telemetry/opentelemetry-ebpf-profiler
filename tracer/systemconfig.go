@@ -302,6 +302,13 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
 			return fmt.Errorf("failed to set debug output: %v", err)
 		}
+	} else {
+		// Without debug output the verifier skips DEBUG_PRINT branches,
+		// leaving enough instruction budget to increase the Python
+		// unwinder loop iterations (default 7 -> 12).
+		if err := coll.Variables["python_native_loop_iters"].Set(uint32(12)); err != nil {
+			return fmt.Errorf("failed to set python_native_loop_iters: %v", err)
+		}
 	}
 
 	if err := coll.Variables["off_cpu_threshold"].Set(cfg.OffCPUThreshold); err != nil {
