@@ -1337,7 +1337,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// symbols depending on the version.
 	// [0] https://github.com/ruby/ruby/commit/837fd5e494731d7d44786f29e7d6e8c27029806f
 	// [1] https://github.com/ruby/ruby/commit/79df14c04b452411b9d17e26a398e491bca1a811
-	currentCtxSymbol := libpf.SymbolName("ruby_single_main_ractor")
+	currentCtxSymbol := libpf.SymbolName("ruby_single_main_ractor_DISABLED")
 	if version < rubyVersion(3, 0, 0) {
 		currentCtxSymbol = "ruby_current_execution_context_ptr"
 	}
