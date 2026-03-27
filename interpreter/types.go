@@ -140,7 +140,7 @@ type Instance interface {
 	// SynchronizeMappings is called when the processmanager has reread process
 	// memory mappings. The mappings slice contains only the subset of mappings
 	// that are relevant to interpreters: executable anonymous mappings (for JIT
-	// engines like HotSpot, V8, BEAM) and .dll file-backed mappings (for .NET
+	// engines like HotSpot, V8, BEAM) and DLL file-backed mappings (for .NET
 	// PE assemblies). The processmanager decides which mappings are included;
 	// this can be made more dynamic in the future if needed.
 	//

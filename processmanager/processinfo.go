@@ -475,7 +475,6 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	if exeErr != nil && !os.IsNotExist(exeErr) {
 		// The /proc/PID/exe returns "not exists" error also in
 		// the case of main thread exit. Ignore it.
-		log.Warnf("Failed to get executable of process %d: %v", pid, exeErr)
 	}
 
 	pm.mu.Lock()
@@ -504,7 +503,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 
 	// interpreterMappings collects the subset of mappings relevant to interpreters:
-	// executable anonymous mappings (JIT) and .dll file-backed mappings (.NET PE).
+	// executable anonymous mappings (JIT) and DLL file-backed mappings (.NET PE).
 	// They are in /proc/PID/maps order (ascending Vaddr), not sorted otherwise.
 	interpreterMappings := make([]process.RawMapping, 0, 8)
 	interpretersValid := make(libpf.Set[util.OnDiskFileIdentifier], numInterpreters)
@@ -539,7 +538,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			newMapping := false
 			if !fm.Valid() {
 				newMapping = true
-				// Error is expected for non-ELF files (e.g. PE .dll);
+				// Error is expected for non-ELF files (e.g. PE DLL);
 				// fm will be invalid and the mapping skipped below but will enter the interpreter mappings block.
 				fm, _ = pm.newFrameMapping(pr, &m)
 			}

@@ -32,7 +32,7 @@ var ErrNoMappings = errors.New("no mappings")
 
 // ErrCallbackStopped is returned when the IterateMappings callback returns
 // false, signaling that iteration was intentionally interrupted.
-var ErrCallbackStopped = errors.New("iteration stopped by callback")
+var ErrCallbackStopped = errors.New("IterateMappings stopped by callback")
 
 const (
 	containerSource = "[0-9a-f]{64}"
@@ -409,7 +409,8 @@ func (sp *systemProcess) extractMapping(m *RawMapping) (*bytes.Reader, error) {
 }
 
 func (sp *systemProcess) getMappingFile(m *RawMapping) string {
-	if m.IsAnonymous() || m.IsVDSO() {
+
+	if !m.IsFileBacked() {
 		return ""
 	}
 	if sp.mainThreadExit {
