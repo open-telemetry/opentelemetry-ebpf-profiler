@@ -98,6 +98,13 @@ The latter behavior is problematic as it:
    This is not a theoretical concern as we've seen it happen multiple times.
 3. Does not credit the reviewer who came up with the accepted suggestion.
 
+You can pull the GitHub-generated commits (after you've accepted a suggestion)
+into your local repository by executing:
+
+```sh
+git pull <YOUR_FORK> <YOUR_BRANCH_NAME>
+```
+
 ### How to Get PRs Merged
 
 A PR is considered **ready to merge** when:
