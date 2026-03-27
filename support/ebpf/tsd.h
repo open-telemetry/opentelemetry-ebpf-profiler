@@ -49,12 +49,12 @@ static inline EBPF_INLINE int
 dtv_read(const DTVInfo *dtvi, const void *tsd_base, u32 module_id, u64 tls_offset, void **out)
 {
   const void *dtv_ptr = tsd_base + dtvi->offset;
-  if (dtvi->indirect) {
-    // DTV pointer is behind an indirection (e.g. musl: [TP+0] -> dtv_base)
-    if (bpf_probe_read_user(&dtv_ptr, sizeof(dtv_ptr), dtv_ptr)) {
-      goto err;
-    }
+  // if (dtvi->indirect) {
+  // DTV pointer is behind an indirection (e.g. musl: [TP+0] -> dtv_base)
+  if (bpf_probe_read_user(&dtv_ptr, sizeof(dtv_ptr), dtv_ptr)) {
+    goto err;
   }
+  // }
 
   // Index into the DTV to find this module's TLS block base address.
   // DTV layout: [generation, module1_block, module2_block, ...]

@@ -67,9 +67,9 @@ func IsPotentialLibcDSO(filename string) bool {
 
 func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
 	tsdinfo, err := extractTSDInfo(ef)
-	if err != nil {
-		return nil, err
-	}
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	dtvinfo, err := extractDTVInfo(ef)
 	if err != nil {
