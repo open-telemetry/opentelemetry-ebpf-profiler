@@ -86,6 +86,18 @@ All pull requests are squashed to a single commit upon merge to `main`.
 	[`draft`](https://github.blog/2019-02-14-introducing-draft-pull-requests/).
 * Make sure CLA is signed and CI is clear.
 
+### How to Address Review Feedback
+
+Please use the GitHub UI to accept review suggestions that you don't
+subsequently modify. Do not reimplement them in a separate commit.
+The latter behavior is problematic as it:
+
+1. Increases burden on reviewers who have to spend additional time to check
+   that your reimplementation accurately reflects the original suggestion.
+2. Increases the probability of bugs being introduced into the codebase.
+   This is not a theoretical concern as we've seen it happen multiple times.
+3. Does not credit the reviewer who came up with the accepted suggestion.
+
 ### How to Get PRs Merged
 
 A PR is considered **ready to merge** when:
