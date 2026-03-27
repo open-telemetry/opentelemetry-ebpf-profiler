@@ -7,6 +7,7 @@ package collector
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,13 +26,12 @@ import (
 // dummyReporter is a no-op reporter for testing.
 type dummyReporter struct{}
 
-func (d *dummyReporter) Start(context.Context) error                                  { return nil }
+func (d *dummyReporter) Start(context.Context) error                                  { return fmt.Errorf("dummy error") }
 func (d *dummyReporter) Stop()                                                        {}
 func (d *dummyReporter) ReportTraceEvent(*libpf.Trace, *samples.TraceEventMeta) error { return nil }
 
 // TestStartErrorMode tests the error_mode config option on controller Start().
-// In test environments without root/CAP_BPF, ProbeBPFSyscall() fails naturally,
-// providing the startup error to test against.
+// dummyReporter.Start() always returns an error to simulate startup failure.
 func TestStartErrorMode(t *testing.T) {
 	dummyFactory := func(_ *reporter.Config, _ xconsumer.Profiles) (reporter.Reporter, error) {
 		return &dummyReporter{}, nil
