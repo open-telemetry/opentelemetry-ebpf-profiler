@@ -409,7 +409,6 @@ func (sp *systemProcess) extractMapping(m *RawMapping) (*bytes.Reader, error) {
 }
 
 func (sp *systemProcess) getMappingFile(m *RawMapping) string {
-
 	if !m.IsFileBacked() {
 		return ""
 	}
