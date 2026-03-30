@@ -275,7 +275,12 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   UnwindState *state = &record->state;
 
   maybe_add_apm_info(trace);
-  maybe_add_otel_span_trace_id(trace);
+  if (
+    trace->apm_trace_id.as_int.hi == 0 && trace->apm_trace_id.as_int.lo == 0 &&
+    trace->apm_transaction_id.as_int == 0) {
+    // Populate OTel span/trace ID only if span/trace ID is not yet set.
+    maybe_add_otel_span_trace_id(trace);
+  }
 
   // If the stack is otherwise empty, push an error for that: we should
   // never encounter empty stacks for successful unwinding.
