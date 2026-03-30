@@ -69,6 +69,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	mappingSet.Add(libpf.FrameMapping{})
 	stackSet.Add(stackInfo{})
 	locationSet.Add(locationInfo{})
+	linkSet.Add(linkInfo{})
 
 	dic.LinkTable().AppendEmpty()
 	dic.MappingTable().AppendEmpty()
@@ -179,16 +180,16 @@ func (p *Pdata) setProfile(
 			sample.Values().Append(traceInfo.OffTimes...)
 		}
 
-		if traceKey.SpanID != libpf.InvalidAPMSpanID &&
-			traceKey.TraceID != libpf.InvalidAPMTraceID {
+		if sampleKey.SpanID != libpf.InvalidAPMSpanID &&
+			sampleKey.TraceID != libpf.InvalidAPMTraceID {
 			link, ok := linkSet.AddWithCheck(linkInfo{
-				traceID: traceKey.TraceID,
-				spanID:  traceKey.SpanID,
+				traceID: sampleKey.TraceID,
+				spanID:  sampleKey.SpanID,
 			})
 			if !ok {
 				l := dic.LinkTable().AppendEmpty()
-				l.SetSpanID(pcommon.SpanID(traceKey.SpanID))
-				l.SetTraceID(pcommon.TraceID(traceKey.TraceID))
+				l.SetSpanID(pcommon.SpanID(sampleKey.SpanID))
+				l.SetTraceID(pcommon.TraceID(sampleKey.TraceID))
 
 			}
 			sample.SetLinkIndex(link)

@@ -80,4 +80,7 @@ type SampleKey struct {
 
 	TID int64
 	CPU int64
+
+	SpanID  libpf.APMSpanID
+	TraceID libpf.APMTraceID
 }
