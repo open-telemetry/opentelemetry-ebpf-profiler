@@ -6,7 +6,7 @@
 #include "tracemgmt.h"
 #include "types.h"
 
-static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, s32 kstack)
+static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid)
 {
   // Use the per CPU record for trace storage: it's too big for stack.
   PerCPURecord *record = get_pristine_per_cpu_record();
@@ -24,10 +24,9 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, s32 kstack)
 
   trace->origin = TRACE_SAMPLING;
 
-  trace->comm[3]         = 1;
-  trace->pid             = pid;
-  trace->tid             = pid;
-  trace->kernel_stack_id = -1;
+  trace->comm[3] = 1;
+  trace->pid     = pid;
+  trace->tid     = pid;
 
   u64 *data = push_frame(&record->state, trace, FRAME_MARKER_NATIVE, 0, 21, 1);
   if (data) {
@@ -36,23 +35,29 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid, s32 kstack)
   send_trace(ctx, trace);
 
   // Single native frame, with kernel trace.
-  trace->comm[3]         = 2;
-  trace->kernel_stack_id = kstack;
+  trace->frame_data_len    = 0;
+  trace->num_frames        = 0;
+  trace->num_kernel_frames = 0;
+  trace->comm[3]           = 2;
+  push_kernel_frames(ctx, trace);
+  data = push_frame(&record->state, trace, FRAME_MARKER_NATIVE, 0, 21, 1);
+  if (data) {
+    data[0] = 1337;
+  }
   send_trace(ctx, trace);
 }
 
-// tracepoint_integration__sched_switch fetches the current kernel stack ID from
-// kernel_stackmap and communicates it to userspace via kernel_stack_id map.
+// tracepoint_integration__sched_switch captures the kernel stack inline
+// and sends sample traces to userspace.
 SEC("tracepoint/integration/sched_switch")
 int tracepoint_integration__sched_switch(void *ctx)
 {
   u64 id  = bpf_get_current_pid_tgid();
   u64 pid = id >> 32;
 
-  s32 kernel_stack_id = bpf_get_stackid(ctx, &kernel_stackmap, BPF_F_REUSE_STACKID);
-  printt("pid %lld with kernel_stack_id %d", pid, kernel_stack_id);
+  printt("pid %lld in integration test", pid);
 
-  send_sample_traces(ctx, pid, kernel_stack_id);
+  send_sample_traces(ctx, pid);
 
   return 0;
 }

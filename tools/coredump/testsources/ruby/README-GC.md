@@ -58,5 +58,15 @@ We should now have a coredump that is being taken during GC
 
 # Coredump without GC
 
-Add `GC.disable` to the ruby script before running it to ensure GC won't be
-running when the coredump is taken
+Set the `RUBY_DISABLE_GC` environment variable before running the script:
+
+```
+RUBY_DISABLE_GC=1 ruby tools/coredump/testsources/ruby/loop.rb
+```
+
+The `loop.rb` script checks for this variable and calls `GC.disable` at startup.
+
+**Important:** When GC is disabled, Ruby's heap grows without bound. Capture the
+coredump quickly (within a few seconds of starting the process) to avoid bloating
+the coredump file size. A coredump taken after 2 seconds is typically ~30-40MB,
+while one taken after 30+ seconds can exceed 100MB.

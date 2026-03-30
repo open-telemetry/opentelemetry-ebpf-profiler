@@ -403,7 +403,7 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 func (state *executableInfoManagerState) loadDeltas(
 	fileID host.FileID,
 	deltas []sdtypes.StackDelta,
-) (ref mapRef, err error) {
+) (mapRef, error) {
 	numDeltas := len(deltas)
 	if numDeltas == 0 {
 		// If no deltas are extracted, cache the result but don't reserve memory in BPF maps.
@@ -433,7 +433,7 @@ func (state *executableInfoManagerState) loadDeltas(
 		// here. In the end, it's only the unwindInfoIndex being different for
 		// merged deltas.
 		var unwindInfoIndex uint16
-		unwindInfoIndex, err = state.getUnwindInfoIndex(unwindInfo)
+		unwindInfoIndex, err := state.getUnwindInfoIndex(unwindInfo)
 		if err != nil {
 			return mapRef{}, err
 		}
@@ -454,7 +454,7 @@ func (state *executableInfoManagerState) loadDeltas(
 	// Update stack delta pages
 	if err = state.ebpf.UpdateStackDeltaPages(fileID, numDeltasPerPage, mapID,
 		firstPageAddr); err != nil {
-		_ = state.ebpf.DeleteExeIDToStackDeltas(fileID, ref.MapID)
+		_ = state.ebpf.DeleteExeIDToStackDeltas(fileID, mapID)
 		return mapRef{},
 			fmt.Errorf("failed UpdateStackDeltaPages for FileID %x: %v", fileID, err)
 	}
