@@ -902,49 +902,28 @@ func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 	return nil
 }
 
-// readKernelFrames fetches the kernel stack frames for a particular kstackID and
-// returns them as symbolized libpf.Frames.
-func (t *Tracer) readKernelFrames(kstackID int32, oldFrames libpf.Frames) (libpf.Frames, error) {
-	cKstackID := kstackID
-	kstackVal := make([]uint64, support.PerfMaxStackDepth)
-
-	if err := t.ebpfMaps["kernel_stackmap"].Lookup(unsafe.Pointer(&cKstackID),
-		unsafe.Pointer(&kstackVal[0])); err != nil {
-		return nil, fmt.Errorf("failed to lookup kernel frames for stackID %d: %v", kstackID, err)
-	}
-
-	// The kernel returns absolute addresses in kernel address
-	// space format. Here just the stack length is needed.
-	// But also debug print the symbolization based on kallsyms.
-	var kstackLen uint32
-	for kstackLen < support.PerfMaxStackDepth && kstackVal[kstackLen] != 0 {
-		kstackLen++
-	}
-
+// symbolizeKernelFrames converts raw kernel addresses into symbolized frames.
+func (t *Tracer) symbolizeKernelFrames(addrs []uint64, oldFrames libpf.Frames) libpf.Frames {
 	frames := oldFrames
-	if kstackLen > uint32(len(frames)) {
-		frames = make(libpf.Frames, 0, kstackLen)
+	if len(addrs) > len(frames) {
+		frames = make(libpf.Frames, 0, len(addrs))
 	}
-	for i := uint32(0); i < kstackLen; i++ {
-		address := libpf.Address(kstackVal[i])
+	for _, addr := range addrs {
+		address := libpf.Address(addr)
 		frame := libpf.Frame{
 			Type:            libpf.KernelFrame,
 			AddressOrLineno: libpf.AddressOrLineno(address - 1),
 		}
-
-		kmod, err := t.kernelSymbolizer.GetModuleByAddress(address)
-		if err == nil {
+		if kmod, err := t.kernelSymbolizer.GetModuleByAddress(address); err == nil {
 			frame.Mapping = kmod.Mapping()
 			frame.AddressOrLineno -= libpf.AddressOrLineno(kmod.Start())
-
 			if funcName, _, err := kmod.LookupSymbolByAddress(address); err == nil {
 				frame.FunctionName = libpf.Intern(funcName)
 			}
 		}
 		frames.Append(&frame)
 	}
-
-	return frames, nil
+	return frames
 }
 
 // enableEvent removes the entry of given eventType from the inhibitEvents map
@@ -1114,9 +1093,6 @@ var (
 )
 
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
-//
-// If the raw trace contains a kernel stack ID, the kernel stack is also
-// retrieved and inserted at the appropriate position.
 func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
 	frameListOffs := int(unsafe.Offsetof(support.Trace{}.Frame_data))
 
@@ -1160,14 +1136,6 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
 		return nil, fmt.Errorf("origin %d: %w", trace.Origin, errOriginUnexpected)
 	}
 
-	if ptr.Kernel_stack_id >= 0 {
-		var err error
-		trace.KernelFrames, err = t.readKernelFrames(ptr.Kernel_stack_id, trace.KernelFrames)
-		if err != nil {
-			log.Errorf("Failed to get kernel stack frames: %v", err)
-		}
-	}
-
 	if ptr.Custom_labels.Len > 0 {
 		trace.CustomLabels = make(map[libpf.String]libpf.String, int(ptr.Custom_labels.Len))
 		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
@@ -1179,8 +1147,17 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
 	}
 
 	trace.NumFrames = int(ptr.Num_frames)
-	trace.FrameData = trace.FrameDataBuf[:ptr.Frame_data_len]
-	copy(trace.FrameData, ptr.Frame_data[:ptr.Frame_data_len])
+
+	// Symbolize kernel frames directly from the raw BPF data before copying
+	// userspace frame data, so we only copy what's needed.
+	numKernelFrames := int(ptr.Num_kernel_frames)
+	if numKernelFrames > 0 {
+		trace.KernelFrames = t.symbolizeKernelFrames(
+			ptr.Frame_data[:numKernelFrames], trace.KernelFrames)
+	}
+	userFrameLen := int(ptr.Frame_data_len) - numKernelFrames
+	trace.FrameData = trace.FrameDataBuf[:userFrameLen]
+	copy(trace.FrameData, ptr.Frame_data[numKernelFrames:ptr.Frame_data_len])
 
 	return trace, nil
 }
@@ -1468,7 +1445,7 @@ func (t *Tracer) AttachProbes(probes []string) error {
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	t.processManager.HandleTrace(bpfTrace)
 
-	// Reclain the EbpfTrace
+	// Reclaim the EbpfTrace
 	bpfTrace.KernelFrames = bpfTrace.KernelFrames[0:0]
 	t.tracePool.Put(bpfTrace)
 }

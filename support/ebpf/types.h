@@ -468,8 +468,9 @@ typedef struct RubyProcInfo {
   // version of the Ruby interpreter.
   u32 version;
 
-  // tls_offset holds TLS base + ruby_current_ec tls symbol, as an offset from tpbase
-  u64 current_ec_tpbase_tls_offset;
+  // tls_offset holds TLS base + ruby_current_ec tls symbol, as an offset from tpbase.
+  // Signed because static TLS offsets (local exec model) are negative on x86_64.
+  s64 current_ec_tpbase_tls_offset;
 
   // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
   u64 current_ctx_ptr;
@@ -606,12 +607,13 @@ typedef struct Trace {
   ApmTraceID apm_trace_id;
   // Custom Labels
   CustomLabelsArray custom_labels;
-  // The kernel stack ID.
-  s32 kernel_stack_id;
   // The number of frame_data elements present.
   u16 frame_data_len;
   // The number of frames present.
   u16 num_frames;
+  // The number of kernel stack frames at the start of frame_data.
+  // These are raw u64 addresses from bpf_get_stack(), not encoded frames.
+  u16 num_kernel_frames;
 
   // origin indicates the source of the trace.
   TraceOrigin origin;
