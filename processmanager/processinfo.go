@@ -514,6 +514,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
 
+	// This callback processes each memory mapping, keeping only executable
+	// file-backed mappings and anonymous executable/DLL mappings needed by interpreters.
+	// All other mappings are skipped.
 	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
 		// Executable mappings and VDSO, converted directly to libpf.FrameMapping
 		mappingNeeded := m.IsExecutable() && !m.IsAnonymous()
@@ -569,42 +572,43 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.mappingStats.numProcParseErrors.Add(numParseErrors)
 
 	if err != nil {
-		if errors.Is(err, process.ErrCallbackStopped) {
+		switch {
+		case errors.Is(err, process.ErrCallbackStopped):
 			// Defensive: the current callback does not stop early, but the
-			// IterateMappings contract allows it. Treat as non-fatal.
+			// IterateMappings contract allows it. Treat as non-fatal and
+			// continue with whatever mappings were collected so far.
 			err = nil
-		} else if os.IsPermission(err) {
+		case os.IsPermission(err):
 			// Ignore the synchronization completely in case of permission
 			// error. This implies the process is still alive, but we cannot
 			// inspect it. Exiting here keeps the PID in the eBPF maps so
 			// we avoid a notification flood to resynchronize.
 			pm.mappingStats.errProcPerm.Add(1)
 			return
-		} else if errors.Is(err, process.ErrNoMappings) {
+		case errors.Is(err, process.ErrNoMappings):
 			// When no mappings can be extracted but the process is still alive,
 			// do not trigger a process exit to avoid unloading process metadata.
 			// As it's likely that a future iteration can extract mappings from a
 			// different thread in the process, notify eBPF to enable further notifications.
 			pm.ebpf.RemoveReportedPID(pid)
 			return
-		}
-	}
-
-	if err != nil {
-		// All other errors imply that the process has exited.
-		if os.IsNotExist(err) {
+		case os.IsNotExist(err):
 			// Since listing /proc and opening files in there later is inherently racy,
 			// we expect to lose the race sometimes and thus expect to hit os.IsNotExist.
 			pm.mappingStats.errProcNotExist.Add(1)
-		} else if e, ok := err.(*os.PathError); ok && e.Err == syscall.ESRCH {
-			// If the process exits while reading its /proc/$PID/maps, the kernel will
-			// return ESRCH. Handle it as if the process did not exist.
-			pm.mappingStats.errProcESRCH.Add(1)
+			log.Debugf("removing pid due to mappings read error: %v", err)
+			pm.processPIDExit(pid)
+			return
+		default:
+			if e, ok := err.(*os.PathError); ok && e.Err == syscall.ESRCH {
+				// If the process exits while reading its /proc/$PID/maps, the kernel will
+				// return ESRCH. Handle it as if the process did not exist.
+				pm.mappingStats.errProcESRCH.Add(1)
+			}
+			log.Debugf("removing pid due to mappings read error: %v", err)
+			pm.processPIDExit(pid)
+			return
 		}
-		// Clean up, and notify eBPF.
-		log.Debugf("removing pid due to mappings read error: %v", err)
-		pm.processPIDExit(pid)
-		return
 	}
 
 	util.AtomicUpdateMaxUint32(&pm.mappingStats.maxProcParseUsec, uint32(elapsed.Microseconds()))
