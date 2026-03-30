@@ -80,7 +80,7 @@ func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
 
 	// Return an error only if both extractions failed.
 	if tsdErr != nil && dtvErr != nil {
-		return info, fmt.Errorf("TSD: %s; DTV: %s", tsdErr, dtvErr)
+		return nil, fmt.Errorf("TSD: %s; DTV: %s", tsdErr, dtvErr)
 	}
 
 	return info, nil
