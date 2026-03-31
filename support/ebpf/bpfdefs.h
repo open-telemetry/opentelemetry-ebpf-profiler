@@ -73,7 +73,8 @@ static inline int bpf_map_delete_elem(UNUSED void *map, UNUSED const void *key)
   return -1;
 }
 
-static inline int bpf_get_stackid(UNUSED void *ctx, UNUSED void *map, UNUSED u64 flags)
+static inline long
+bpf_get_stack(UNUSED void *ctx, UNUSED void *buf, UNUSED u32 size, UNUSED u64 flags)
 {
   return -1;
 }
@@ -109,8 +110,9 @@ static unsigned long long (*bpf_get_current_task)(void)       = (void *)BPF_FUNC
 static int (*bpf_perf_event_output)(
   void *ctx, void *map, unsigned long long flags, void *data, int size) = (void *)
   BPF_FUNC_perf_event_output;
-static int (*bpf_get_stackid)(void *ctx, void *map, u64 flags) = (void *)BPF_FUNC_get_stackid;
-static unsigned long long (*bpf_get_prandom_u32)(void)         = (void *)BPF_FUNC_get_prandom_u32;
+static long (*bpf_get_stack)(void *ctx, void *buf, u32 size, u64 flags) = (void *)
+  BPF_FUNC_get_stack;
+static unsigned long long (*bpf_get_prandom_u32)(void) = (void *)BPF_FUNC_get_prandom_u32;
 
 __attribute__((format(printf, 1, 3))) static int (*bpf_trace_printk)(
   const char *fmt, int fmt_size, ...) = (void *)BPF_FUNC_trace_printk;

@@ -91,8 +91,7 @@ func runKernelFrameProbe(t *testing.T, tr *tracer.Tracer) {
 
 type trace struct {
 	numKernelFrames int
-
-	frames libpf.EbpfFrame
+	frames          libpf.EbpfFrame
 }
 
 func TestTracerErrorPropagation(t *testing.T) {

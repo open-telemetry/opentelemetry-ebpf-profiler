@@ -11,7 +11,6 @@ import (
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pprofile"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 )
@@ -22,19 +21,16 @@ type attributeStruct struct {
 }
 
 func TestAttrTableManager(t *testing.T) {
-	comm1 := libpf.Intern("comm1")
-	comm2 := libpf.Intern("comm2")
 	tests := map[string]struct {
-		k                      []TraceAndMetaKey
+		k                      []ResourceKey
 		expectedIndices        [][]int32
 		expectedAttributeTable []attributeStruct
 	}{
 		"empty": {
-			k: []TraceAndMetaKey{
+			k: []ResourceKey{
 				{
-					Hash:           libpf.TraceHash{},
-					ApmServiceName: "",
-					Pid:            0,
+					APMServiceName: "",
+					PID:            0,
 				},
 			},
 			expectedIndices: [][]int32{{0}},
@@ -43,49 +39,38 @@ func TestAttrTableManager(t *testing.T) {
 			},
 		},
 		"duplicate": {
-			k: []TraceAndMetaKey{
+			k: []ResourceKey{
 				{
-					Hash:           libpf.TraceHash{},
-					Comm:           comm1,
-					ApmServiceName: "apmServiceName1",
-					Pid:            1234,
+					APMServiceName: "APMServiceName1",
+					PID:            1234,
 				},
 				{
-					Hash:           libpf.TraceHash{},
-					Comm:           comm1,
-					ApmServiceName: "apmServiceName1",
-					Pid:            1234,
+					APMServiceName: "APMServiceName1",
+					PID:            1234,
 				},
 			},
-			expectedIndices: [][]int32{{0, 1, 2}, {0, 1, 2}},
+			expectedIndices: [][]int32{{0, 1}, {0, 1}},
 			expectedAttributeTable: []attributeStruct{
-				{Key: "thread.name", Value: "comm1"},
-				{Key: "service.name", Value: "apmServiceName1"},
+				{Key: "service.name", Value: "APMServiceName1"},
 				{Key: "process.pid", Value: int64(1234)},
 			},
 		},
 		"different": {
-			k: []TraceAndMetaKey{
+			k: []ResourceKey{
 				{
-					Hash:           libpf.TraceHash{},
-					Comm:           comm1,
-					ApmServiceName: "apmServiceName1",
-					Pid:            1234,
+					APMServiceName: "APMServiceName1",
+					PID:            1234,
 				},
 				{
-					Hash:           libpf.TraceHash{},
-					Comm:           comm2,
-					ApmServiceName: "apmServiceName2",
-					Pid:            6789,
+					APMServiceName: "APMServiceName2",
+					PID:            6789,
 				},
 			},
-			expectedIndices: [][]int32{{0, 1, 2}, {3, 4, 5}},
+			expectedIndices: [][]int32{{0, 1}, {2, 3}},
 			expectedAttributeTable: []attributeStruct{
-				{Key: "thread.name", Value: "comm1"},
-				{Key: "service.name", Value: "apmServiceName1"},
+				{Key: "service.name", Value: "APMServiceName1"},
 				{Key: "process.pid", Value: int64(1234)},
-				{Key: "thread.name", Value: "comm2"},
-				{Key: "service.name", Value: "apmServiceName2"},
+				{Key: "service.name", Value: "APMServiceName2"},
 				{Key: "process.pid", Value: int64(6789)},
 			},
 		},
@@ -99,9 +84,8 @@ func TestAttrTableManager(t *testing.T) {
 			indices := make([][]int32, 0)
 			for _, k := range tc.k {
 				inner := pcommon.NewInt32Slice()
-				mgr.AppendOptionalString(inner, semconv.ThreadNameKey, k.Comm.String())
-				mgr.AppendOptionalString(inner, semconv.ServiceNameKey, k.ApmServiceName)
-				mgr.AppendInt(inner, semconv.ProcessPIDKey, k.Pid)
+				mgr.AppendOptionalString(inner, semconv.ServiceNameKey, k.APMServiceName)
+				mgr.AppendInt(inner, semconv.ProcessPIDKey, k.PID)
 				indices = append(indices, inner.AsRaw())
 			}
 

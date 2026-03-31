@@ -62,7 +62,7 @@ func TestRubyRegex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			matches := rubyRegex.FindStringSubmatch(tt.input)
+			matches := libRubyRegex.FindStringSubmatch(tt.input)
 			if !tt.match {
 				assert.Nil(t, matches)
 				return

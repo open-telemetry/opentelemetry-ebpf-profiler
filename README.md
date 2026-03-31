@@ -5,8 +5,7 @@ eBPF.
 
 ## Core features and strengths
 
-- Implements the [experimental OTel profiling
-  signal](https://github.com/open-telemetry/opentelemetry-proto/pull/534)
+- Implements the [Alpha OTel Profiles signal](https://github.com/open-telemetry/opentelemetry-proto/pull/775)
 - Very low CPU and memory overhead (1% CPU and 250MB memory are our upper limits
   in testing and the agent typically manages to stay way below that)
 - Support for native C/C++ executables without the need for DWARF debug
@@ -19,22 +18,25 @@ eBPF.
   languages.
 - Support for native code (C/C++, Rust, Zig, Go, etc. without debug symbols on
   host)
-- Support for a broad set of HLLs, like Hotspot JVM, Python, Ruby, PHP, Node.JS, V8,
-  Perl, Erlang and .NET.
+- Support for a broad set of HLLs, like Hotspot JVM, Python, Ruby, PHP, Node.JS,
+  V8, Perl, Erlang and .NET.
 - 100% non-intrusive: there's no need to load agents or libraries into the
   processes that are being profiled.
 - No need for any reconfiguration, instrumentation or restarts of HLL
   interpreters and VMs: the agent supports unwinding each of the supported
   languages in the default configuration.
-- ARM64 support for all unwinders except NodeJS.
+- ARM64 support for all unwinders except .NET.
 - Support for native `inline frames`, which provide insights into compiler
   optimizations and offer a higher precision of function call chains.
 
 ## Building
 
-We are working towards integrating the profiling functionality into the [OTel Collector](https://opentelemetry.io/docs/collector/) as a receiver,
-which will be the supported configuration going forward. In the meantime, we also offer a standalone profiling agent binary named `ebpf-profiler`,
-to aid with development and debugging. The expectation is that this will go away once the integration with the [OTel Collector](https://opentelemetry.io/docs/collector/) is complete.
+We have integrated the profiler into the [OTel Collector](https://opentelemetry.io/docs/collector/) as a receiver,
+and this is the [supported configuration](https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-ebpf-profiler) going forward.
+
+To aid with development, testing and debugging, we also offer a standalone profiling agent binary named `ebpf-profiler`,
+and a local build of an OTel Collector profiling receiver binary (`otelcol-ebpf-profiler`). These binaries are not
+supported in any way, can be dropped in the future and should not be deployed in production.
 
 ## Platform Requirements
 The agent can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
@@ -58,6 +60,12 @@ Since the profiler is Linux-only, macOS and Windows users need to set up a Linux
 
 [7ddc23ea](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/commit/7ddc23ea135a2e00fffc17850ab90534e9b63108) is the last commit with support for 4.19. Changes after this commit may require a minimal Linux kernel version of 5.4.
 
+### Updating the supported Linux kernel version
+
+The project maintains its minimum supported kernel version in line with the lowest kernel version currently provided by actively maintained major Linux distributions, which include Debian stable, Red Hat Enterprise Linux, Ubuntu LTS, Amazon Linux and SUSE Linux. The minimum requirement may be increased when all such distributions no longer ship a specific kernel version. This approach enables the codebase to utilize newer eBPF features and avoids the need to maintain compatibility shims for obsolete kernels.
+
+It should be noted that certain distributions incorporate eBPF features from newer kernels into their supported versions. When this occurs, the distribution's stated kernel version does not accurately reflect its true eBPF capabilities and will not prevent us from increasing the minimum supported version. On such kernels, the `no-kernel-version-check` configuration option can be used to bypass the checks and allow the profiler to execute.
+
 ## Alternative Build (Without Docker)
 You can build the agent without Docker by directly installing the dependencies listed in the Dockerfile. Once dependencies are set up, simply run:
 ```sh
@@ -69,6 +77,18 @@ make debug
 ```
 This will build the profiler natively on your machine.
 
+## Building `otelcol-ebpf-profiler` locally (Without Docker)
+You can build the local `otelcol-ebpf-profiler` binary by running:
+```sh
+make otelcol-ebpf-profiler
+```
+or to cross-compile for a different architecture (e.g. arm64):
+```sh
+make otelcol-ebpf-profiler TARGET_ARCH=arm64
+```
+
+See [local.example.yml](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/cmd/otelcol-ebpf-profiler/local.example.yaml) for an example configuration.
+
 ## Running
 
 You can start the agent with the following command:
@@ -77,16 +97,28 @@ You can start the agent with the following command:
 sudo ./ebpf-profiler -collection-agent=127.0.0.1:11000 -disable-tls
 ```
 
+To start the OTel Collector profiling receiver, run:
+```sh
+sudo ./otelcol-ebpf-profiler --feature-gates=+service.profilesSupport --config cmd/otelcol-ebpf-profiler/local.example.yaml
+```
+
 The agent comes with a functional but work-in-progress / evolving implementation
-of the recently released OTel profiling [signal](https://github.com/open-telemetry/opentelemetry-proto/pull/534).
+of the recently released Alpha OTel Profiles [signal](https://github.com/open-telemetry/opentelemetry-proto/pull/775).
 
 The agent loads the eBPF program and its maps, starts unwinding and reports
 captured traces to the backend.
 
+## Open Source Backends
+As the OTel Profiles signal is still in development, mature production-ready
+backends have yet to emerge. To speed up development and experimentation, Elastic
+has open-sourced a desktop application named [devfiler](https://github.com/elastic/devfiler)
+that reimplements the backend (collection, data storage, symbolization and UI)
+portion of the eBPF profiler. Note that devfiler is not a real production backend
+and should not be used as such. It is solely aimed at testing, experimentation and development.
+
 ## Development
 
 To understand how this project works and learn more about profiling, check out [Profiling internals](doc/internals.md)
-
 
 # Legal
 

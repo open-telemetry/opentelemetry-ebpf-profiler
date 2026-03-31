@@ -96,8 +96,10 @@ const (
 )
 
 var (
-	// regex to identify the Ruby interpreter executable
-	rubyRegex = regexp.MustCompile(`^(?:.*/)?libruby(?:-.*)?\.so\.(\d+)\.(\d+)\.(\d+)$`)
+	// regex to identify the Ruby interpreter shared library
+	libRubyRegex = regexp.MustCompile(`^(?:.*/)?libruby(?:-.*)?\.so\.(\d+)\.(\d+)\.(\d+)$`)
+	// regex to identify a statically-linked Ruby binary
+	binRubyRegex = regexp.MustCompile(`^(?:.*/)?(?:bin/)?ruby$`)
 	// regex to extract a version from a string
 	rubyVersionRegex = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)$`)
 
@@ -122,6 +124,10 @@ type rubyData struct {
 
 	// Address to the ruby_current_ec variable in TLS, as an offset from tpbase
 	currentEcTpBaseTlsOffset libpf.Address
+
+	// For statically-linked ruby, the direct TP-relative offset to ruby_current_ec
+	// extracted from disassembly of rb_current_ec_noinline
+	staticTLSOffset int64
 
 	// Address to global symbols, for id to string mappings
 	globalSymbolsAddr libpf.Address
@@ -295,10 +301,14 @@ func (r *rubyData) String() string {
 func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
-	var tlsOffset uint64
-	if r.currentEcTpBaseTlsOffset != 0 {
+	var tlsOffset int64
+	if r.staticTLSOffset != 0 {
+		// For statically-linked ruby, use the direct TP-relative offset
+		// extracted from disassembly of rb_current_ec_noinline.
+		tlsOffset = r.staticTLSOffset
+	} else if r.currentEcTpBaseTlsOffset != 0 {
 		// Read TLS offset from the TLS descriptor.
-		tlsOffset = rm.Uint64(bias + r.currentEcTpBaseTlsOffset + 8)
+		tlsOffset = int64(rm.Uint64(bias + r.currentEcTpBaseTlsOffset + 8))
 	}
 
 	cdata := support.RubyProcInfo{
@@ -1238,7 +1248,8 @@ func determineRubyVersion(ef *pfelf.File) (uint32, error) {
 }
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
-	if !rubyRegex.MatchString(info.FileName()) {
+	isBinRuby := binRubyRegex.MatchString(info.FileName())
+	if !libRubyRegex.MatchString(info.FileName()) && !isBinRuby {
 		return nil, nil
 	}
 
@@ -1363,11 +1374,26 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		log.Warnf("failed to locate TLS descriptor: %v", err)
 	}
 
-	log.Debugf("Discovered EC tls tpbase offset %x, fallback ctx %x, interp ranges: %v, global symbols: %x", currentEcTpBaseTlsOffset, currentCtxPtr, interpRanges, globalSymbols)
+	// For statically-linked ruby, extract the direct TP-relative offset from
+	// rb_current_ec_noinline disassembly. This is the same pattern Python 3.13+
+	// uses for _PyThreadState_GetCurrent.
+	var staticTLSOffset int64
+	if isBinRuby {
+		offset, ecErr := extractEcTLSOffset(ef)
+		if ecErr != nil {
+			log.Warnf("failed to extract EC TLS offset for static ruby: %v", ecErr)
+		} else {
+			staticTLSOffset = offset
+		}
+	}
+
+	log.Debugf("Discovered EC tls tpbase offset %x, static tls offset %d, fallback ctx %x, interp ranges: %v, global symbols: %x",
+		currentEcTpBaseTlsOffset, staticTLSOffset, currentCtxPtr, interpRanges, globalSymbols)
 
 	rid := &rubyData{
 		version:                  version,
 		currentEcTpBaseTlsOffset: libpf.Address(currentEcTpBaseTlsOffset),
+		staticTLSOffset:          staticTLSOffset,
 		currentCtxPtr:            libpf.Address(currentCtxPtr),
 		hasGlobalSymbols:         globalSymbols != 0,
 		globalSymbolsAddr:        libpf.Address(globalSymbols),

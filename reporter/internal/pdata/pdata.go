@@ -10,12 +10,12 @@ import (
 // Pdata holds the cache for the data used to generate the events reporters
 // will export when handling OTLP data.
 type Pdata struct {
-	// samplesPerSecond is the number of samples per second.
-	samplesPerSecond int
-
 	// ExtraSampleAttrProd is an optional hook point for adding custom
 	// attributes to samples.
 	ExtraSampleAttrProd samples.SampleAttrProducer
+
+	// samplesPerSecond is the number of samples per second.
+	samplesPerSecond int
 }
 
 func New(samplesPerSecond int, extra samples.SampleAttrProducer) (*Pdata, error) {
