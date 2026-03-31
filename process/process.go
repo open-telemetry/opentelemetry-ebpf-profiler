@@ -277,6 +277,7 @@ func parseMappings(mapsFile io.Reader) ([]Mapping, uint32, error) {
 			} else if fields[5] == "" {
 				// This is an anonymous mapping, keep it
 			} else if fields[5] == processcontext.ContextMappingAnonNamed {
+				// No need to trim path since mapping is not file backed.
 				// Keep process context mappings based on named anonymous mappings.
 				// Note that context mappings based on memfd have a non-zero inode
 				// and are already kept by the other branch.
