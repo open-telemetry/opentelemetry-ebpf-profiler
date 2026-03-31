@@ -154,6 +154,8 @@ func parseArgs() (*controller.Config, error) {
 
 	args.Fs = fs
 
+	args.ErrorMode = config.PropagateError
+
 	return &args, ff.Parse(fs, os.Args[1:],
 		ff.WithEnvVarPrefix("OTEL_PROFILING_AGENT"),
 		ff.WithConfigFileFlag("config"),
