@@ -16,6 +16,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -65,6 +66,7 @@ func mainWithExitCode() exitCode {
 		log.Errorf("Failure to parse arguments: %v", err)
 		return exitParseError
 	}
+	cfg.ErrorMode = config.PropagateError
 
 	if cfg.Copyright {
 		fmt.Print(copyright)
