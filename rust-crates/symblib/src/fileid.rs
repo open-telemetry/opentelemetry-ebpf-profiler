@@ -6,7 +6,6 @@
 use base64::Engine;
 use sha2::digest::FixedOutput;
 use sha2::Digest as _;
-use std::io::Read as _;
 use std::{fmt, fs, io, path};
 
 /// Size of the head and tail blocks used for partially hashing ELF files.
@@ -44,12 +43,17 @@ impl FileId {
 
         // Hash first 4096 bytes.
         stream.seek(io::SeekFrom::Start(0))?;
-        io::copy(&mut stream.by_ref().take(PARTIAL_HASH_SIZE), &mut hasher)?;
+        let mut buf = [0u8; 4096];
+        let to_read = (PARTIAL_HASH_SIZE as usize).min(buf.len());
+        let n = stream.read(&mut buf[..to_read])?;
+        hasher.update(&buf[..n]);
 
         // Hash last 4096 bytes.
         let tail_start = stream_len.saturating_sub(PARTIAL_HASH_SIZE);
         stream.seek(io::SeekFrom::Start(tail_start))?;
-        io::copy(&mut stream.by_ref().take(PARTIAL_HASH_SIZE), &mut hasher)?;
+        let to_read = (PARTIAL_HASH_SIZE as usize).min(buf.len());
+        let n = stream.read(&mut buf[..to_read])?;
+        hasher.update(&buf[..n]);
 
         // Hash length.
         hasher.update(u64::to_be_bytes(stream_len));
