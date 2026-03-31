@@ -133,7 +133,7 @@ vanity-import-fix: $(PORTO)
 
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
-	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 go test $(GO_FLAGS) -exec=sudo -tags $(GO_TAGS) ./...
 
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
