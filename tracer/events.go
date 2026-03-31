@@ -35,6 +35,10 @@ const (
 	// events are produced by the kernel between two polling intervals, the queue from bpf
 	// to userspace will fill up and the kernel will start dropping events.
 	maxEvents = 4096
+
+	// eventReaderDeadline is the timeout for perf event reads. It allows the
+	// reader goroutine to periodically check for context cancellation.
+	eventReaderDeadline = 100 * time.Millisecond
 )
 
 // StartPIDEventProcessor spawns a goroutine to process PID events.
@@ -101,7 +105,7 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 	}
 
 	// Set a deadline so ReadInto times out periodically and we can check context
-	eventReader.SetDeadline(time.Now().Add(100 * time.Millisecond))
+	eventReader.SetDeadline(time.Now().Add(eventReaderDeadline))
 
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
 	go func() {
