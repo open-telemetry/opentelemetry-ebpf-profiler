@@ -653,7 +653,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 				mPath := path.Join(cfg.BPFFSRoot, "otel", mapName)
 				ebpfMap, err := cebpf.LoadPinnedMap(mPath, &cebpf.LoadPinOptions{})
 				if err == nil {
-					log.Infof("Using shared map for OBI span/trace ID communication (OBI)")
+					log.Infof("Using shared map for OBI span/trace ID communication")
 					ebpfMaps[mapName] = ebpfMap
 					continue
 				}

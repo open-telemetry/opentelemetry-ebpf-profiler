@@ -119,7 +119,7 @@ struct trace_events_t {
 // End shared maps
 
 // Implements the OTel specification to share span/trace IDs according to:
-// https://github.com/open-telemetry/opentelemetry-specification/pull/4855
+// https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
 struct traces_ctx_v1_t {
   __uint(type, BPF_MAP_TYPE_LRU_HASH);
   __type(key, u64);
