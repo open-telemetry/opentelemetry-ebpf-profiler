@@ -8,3 +8,4 @@ type APMTraceID [16]byte
 type APMTransactionID = APMSpanID
 
 var InvalidAPMSpanID = APMSpanID{0, 0, 0, 0, 0, 0, 0, 0}
+var InvalidAPMTraceID = APMTraceID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}

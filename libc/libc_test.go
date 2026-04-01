@@ -4,10 +4,15 @@
 package libc // import "go.opentelemetry.io/ebpf-profiler/libc"
 
 import (
+	"bytes"
 	"debug/elf"
+	"encoding/binary"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 )
 
 func TestExtractTSDInfo(t *testing.T) {
@@ -544,6 +549,241 @@ func TestExtractDTVOffset(t *testing.T) {
 			}
 		})
 	}
+}
+
+// buildTestELF creates a minimal 64-bit ELF binary with the given dynamic symbols.
+// Each symbol maps to its corresponding code byte slice. The resulting ELF has a
+// SysV hash table so pfelf.File can resolve symbols via LookupSymbol/SymbolData.
+func buildTestELF(t *testing.T, machine elf.Machine, symbols map[string][]byte) *pfelf.File {
+	t.Helper()
+
+	// Layout: ELF header | Phdr[0] PT_LOAD | Phdr[1] PT_DYNAMIC |
+	//         strtab | symtab | hash | dyntab | code...
+	//
+	// Everything lives in one PT_LOAD segment starting at vaddr 0.
+	const vaddr = uint64(0x1000)
+
+	// Build string table: \0 then each symbol name \0-terminated
+	var strtab bytes.Buffer
+	strtab.WriteByte(0) // index 0 = empty string
+	nameOffsets := make(map[string]uint32)
+	for name := range symbols {
+		nameOffsets[name] = uint32(strtab.Len())
+		strtab.WriteString(name)
+		strtab.WriteByte(0)
+	}
+
+	// Build symbol table: Sym64[0] is always null, then one per symbol
+	numSyms := 1 + len(symbols)
+	symtab := make([]elf.Sym64, numSyms)
+	// Symbol index 0 is reserved (STN_UNDEF)
+
+	// We'll fill in addresses after we know the code layout
+	symOrder := make([]string, 0, len(symbols))
+	for name := range symbols {
+		symOrder = append(symOrder, name)
+	}
+
+	// sysvHash computes the ELF SysV hash for a symbol name.
+	sysvHash := func(s string) uint32 {
+		h := uint32(0)
+		for _, c := range []byte(s) {
+			h = 16*h + uint32(c)
+			h ^= h >> 24 & 0xf0
+		}
+		return h & 0xfffffff
+	}
+
+	// Build SysV hash table
+	// nbucket = numSyms, nchain = numSyms (simple 1:1 mapping)
+	nbucket := uint32(numSyms)
+	nchain := uint32(numSyms)
+
+	// Now compute sizes for layout
+	ehdrSize := int(binary.Size(elf.Header64{}))
+	phdrSize := int(binary.Size(elf.Prog64{}))
+	numPhdrs := 2
+
+	strtabOff := ehdrSize + phdrSize*numPhdrs
+	symtabOff := strtabOff + strtab.Len()
+	hashOff := symtabOff + numSyms*int(binary.Size(elf.Sym64{}))
+	hashSize := int(4 + 4 + 4*int(nbucket) + 4*int(nchain)) // nbucket, nchain, buckets, chains
+	dynOff := hashOff + hashSize
+	dynSize := int(4 * binary.Size(elf.Dyn64{})) // STRTAB, SYMTAB, HASH, NULL
+	codeOff := dynOff + dynSize
+
+	// Place code for each symbol
+	codeOffsets := make(map[string]int)
+	offset := codeOff
+	for _, name := range symOrder {
+		codeOffsets[name] = offset
+		offset += len(symbols[name])
+	}
+	totalSize := offset
+
+	// Fill in symbol table entries
+	for i, name := range symOrder {
+		idx := i + 1 // skip null symbol at index 0
+		symtab[idx] = elf.Sym64{
+			Name:  nameOffsets[name],
+			Info:  byte(elf.STB_GLOBAL)<<4 | byte(elf.STT_FUNC),
+			Other: byte(elf.STV_DEFAULT),
+			Shndx: 1, // non-zero = defined
+			Value: vaddr + uint64(codeOffsets[name]),
+			Size:  uint64(len(symbols[name])),
+		}
+	}
+
+	// Build SysV hash: simple bucket[hash % nbucket] = sym_index, chain = 0
+	hashBuf := make([]byte, hashSize)
+	binary.LittleEndian.PutUint32(hashBuf[0:], nbucket)
+	binary.LittleEndian.PutUint32(hashBuf[4:], nchain)
+	bucketsStart := 8
+	chainsStart := bucketsStart + 4*int(nbucket)
+
+	// Initialize all buckets and chains to 0 (STN_UNDEF)
+	for i, name := range symOrder {
+		symIdx := uint32(i + 1)
+		h := sysvHash(name)
+		bucket := h % nbucket
+		bucketOff := bucketsStart + 4*int(bucket)
+		existing := binary.LittleEndian.Uint32(hashBuf[bucketOff:])
+		if existing == 0 {
+			binary.LittleEndian.PutUint32(hashBuf[bucketOff:], symIdx)
+		} else {
+			// Chain from existing
+			cur := existing
+			for {
+				chainOff := chainsStart + 4*int(cur)
+				next := binary.LittleEndian.Uint32(hashBuf[chainOff:])
+				if next == 0 {
+					binary.LittleEndian.PutUint32(hashBuf[chainOff:], symIdx)
+					break
+				}
+				cur = next
+			}
+		}
+	}
+
+	// Build dynamic table
+	dynEntries := []elf.Dyn64{
+		{Tag: int64(elf.DT_STRTAB), Val: vaddr + uint64(strtabOff)},
+		{Tag: int64(elf.DT_SYMTAB), Val: vaddr + uint64(symtabOff)},
+		{Tag: int64(elf.DT_HASH), Val: vaddr + uint64(hashOff)},
+		{Tag: int64(elf.DT_NULL), Val: 0},
+	}
+
+	// Assemble the ELF
+	buf := make([]byte, totalSize)
+
+	// ELF header
+	hdr := elf.Header64{
+		Ident:     [16]byte{0x7f, 'E', 'L', 'F', byte(elf.ELFCLASS64), byte(elf.ELFDATA2LSB), byte(elf.EV_CURRENT)},
+		Type:      uint16(elf.ET_DYN),
+		Machine:   uint16(machine),
+		Version:   uint32(elf.EV_CURRENT),
+		Entry:     vaddr + uint64(codeOff),
+		Phoff:     uint64(ehdrSize),
+		Ehsize:    uint16(ehdrSize),
+		Phentsize: uint16(phdrSize),
+		Phnum:     uint16(numPhdrs),
+	}
+	binary.Encode(buf[0:], binary.LittleEndian, &hdr)
+
+	// Program headers
+	phLoad := elf.Prog64{
+		Type:   uint32(elf.PT_LOAD),
+		Flags:  uint32(elf.PF_R | elf.PF_X),
+		Off:    0,
+		Vaddr:  vaddr,
+		Paddr:  vaddr,
+		Filesz: uint64(totalSize),
+		Memsz:  uint64(totalSize),
+		Align:  0x1000,
+	}
+	binary.Encode(buf[ehdrSize:], binary.LittleEndian, &phLoad)
+
+	phDyn := elf.Prog64{
+		Type:   uint32(elf.PT_DYNAMIC),
+		Flags:  uint32(elf.PF_R),
+		Off:    uint64(dynOff),
+		Vaddr:  vaddr + uint64(dynOff),
+		Paddr:  vaddr + uint64(dynOff),
+		Filesz: uint64(dynSize),
+		Memsz:  uint64(dynSize),
+		Align:  8,
+	}
+	binary.Encode(buf[ehdrSize+phdrSize:], binary.LittleEndian, &phDyn)
+
+	// String table
+	copy(buf[strtabOff:], strtab.Bytes())
+
+	// Symbol table
+	for i, sym := range symtab {
+		binary.Encode(buf[symtabOff+i*int(binary.Size(elf.Sym64{})):], binary.LittleEndian, &sym)
+	}
+
+	// Hash table
+	copy(buf[hashOff:], hashBuf)
+
+	// Dynamic table
+	for i, dyn := range dynEntries {
+		binary.Encode(buf[dynOff+i*int(binary.Size(elf.Dyn64{})):], binary.LittleEndian, &dyn)
+	}
+
+	// Code sections
+	for _, name := range symOrder {
+		copy(buf[codeOffsets[name]:], symbols[name])
+	}
+
+	ef, err := pfelf.NewFile(bytes.NewReader(buf), 0, false)
+	require.NoError(t, err)
+	return ef
+}
+
+// TestExtractLibcInfoIndependence verifies that TSD and DTV extraction are
+// independent: failure to extract one should not prevent extraction of the other.
+// This is a regression test for a bug where ExtractLibcInfo would bail out
+// entirely if extractTSDInfo failed, even when __tls_get_addr was available
+// (e.g., in ld-linux.so which exports __tls_get_addr but not pthread_getspecific).
+func TestExtractLibcInfoIndependence(t *testing.T) {
+	// glibc 2.36 / debian 12 / x86_64 __tls_get_addr machine code
+	tlsGetAddrCode := []byte{
+		0x64, 0x48, 0x8b, 0x14, 0x25, 0x08, 0x00, 0x00, 0x00,
+		0x48, 0x8b, 0x05, 0x48, 0xfc, 0x01, 0x00,
+		0x48, 0x39, 0x02,
+		0x75, 0x16,
+		0x48, 0x8b, 0x07,
+		0x48, 0xc1, 0xe0, 0x04,
+		0x48, 0x8b, 0x04, 0x02,
+		0x48, 0x83, 0xf8, 0xff,
+		0x74, 0x05,
+		0x48, 0x03, 0x47, 0x08,
+		0xc3,
+	}
+
+	// Build a minimal ELF with ONLY __tls_get_addr (no pthread_getspecific).
+	// This simulates ld-linux.so which exports __tls_get_addr but not the
+	// pthread_getspecific symbol.
+	ef := buildTestELF(t, elf.EM_X86_64, map[string][]byte{
+		"__tls_get_addr": tlsGetAddrCode,
+	})
+
+	// Call ExtractLibcInfo — previously this would return (nil, err) because
+	// extractTSDInfo failed first and short-circuited the DTV extraction.
+	info, err := ExtractLibcInfo(ef)
+
+	// Should succeed (no error) because DTV extraction works even though TSD fails.
+	assert.NoError(t, err)
+	require.NotNil(t, info, "ExtractLibcInfo should return non-nil LibcInfo")
+
+	// TSD should be empty (no pthread_getspecific symbol)
+	assert.False(t, info.HasTSDInfo(), "should not have TSD info")
+
+	// DTV should be populated from __tls_get_addr
+	assert.True(t, info.HasDTVInfo(), "should have DTV info from __tls_get_addr")
+	assert.Equal(t, int16(8), info.DTVInfo.Offset)
+	assert.Equal(t, uint8(16), info.DTVInfo.Multiplier)
 }
 
 func TestLibcInfoIsEqual(t *testing.T) {
