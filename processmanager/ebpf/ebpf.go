@@ -66,9 +66,9 @@ type ebpfMapsImpl struct {
 	errCounterLock sync.Mutex
 	errCounter     map[metrics.MetricID]int64
 
-	hasGenericBatchOperations      bool
-	hasGenericBatchLookupAndDelete bool
-	hasLPMTrieBatchOperations      bool
+	// Support for batch operations on LPM eBPF maps was only
+	// introduced with Linux kernel 5.13.
+	hasLPMTrieBatchOperations bool
 
 	updateWorkers *asyncMapUpdaterPool
 }
@@ -115,16 +115,6 @@ func LoadMaps(ctx context.Context, includeTracers types.IncludedTracers,
 			return nil, fmt.Errorf("Map %v is not available", deltasMapName)
 		}
 		impl.ExeIDToStackDeltaMaps[i-support.StackDeltaBucketSmallest] = deltasMap
-	}
-
-	if err := probeBatchOperations(cebpf.Hash); err == nil {
-		log.Infof("Supports generic eBPF map batch operations")
-		impl.hasGenericBatchOperations = true
-	}
-
-	if err := probeBatchLookupAndDelete(cebpf.Hash); err == nil {
-		log.Infof("Supports generic eBPF map batch lookup-and-delete")
-		impl.hasGenericBatchLookupAndDelete = true
 	}
 
 	if err := probeBatchOperations(cebpf.LPMTrie); err == nil {
@@ -449,6 +439,12 @@ func probeBatchOperations(mapType cebpf.MapType) error {
 	return probeMapOperations(mapType, probeBatchOperationsInner[uint64])
 }
 
+// SupportsLPMTrieBatchOperations returns true if the kernel supports eBPF batch operations
+// on LPM trie maps.
+func (impl *ebpfMapsImpl) SupportsLPMTrieBatchOperations() bool {
+	return impl.hasLPMTrieBatchOperations
+}
+
 // getMapID returns the mapID number to use for given number of stack deltas.
 func getMapID(numDeltas uint32) (uint16, error) {
 	significantBits := 32 - bits.LeadingZeros32(numDeltas)
@@ -538,44 +534,26 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 
 	impl.updateWorkers.EnqueueUpdate(outerMap, fileID, innerMapCloned)
 
-	if impl.hasGenericBatchOperations {
-		innerKeys := make([]uint32, numDeltas)
-		stackDeltas := make([]support.StackDelta, numDeltas)
+	innerKeys := make([]uint32, numDeltas)
+	stackDeltas := make([]support.StackDelta, numDeltas)
 
-		// Prepare values for batch update.
-		for index, delta := range deltas {
-			innerKeys[index] = uint32(index)
-			stackDeltas[index].AddrLow = delta.AddressLow
-			stackDeltas[index].UnwindInfo = delta.UnwindInfo
-		}
-
-		_, err := innerMap.BatchUpdate(
-			ptrCastMarshaler[uint32](innerKeys),
-			ptrCastMarshaler[support.StackDelta](stackDeltas),
-			&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateAny)})
-		if err != nil {
-			return 0, impl.trackMapError(metrics.IDExeIDToStackDeltasBatchUpdate,
-				fmt.Errorf("failed to batch insert %d elements for 0x%x "+
-					"into exeIDTostack_deltas: %v",
-					numDeltas, fileID, err))
-		}
-		return mapID, nil
-	}
-
-	innerKey := uint32(0)
-	stackDelta := support.StackDelta{}
+	// Prepare values for batch update.
 	for index, delta := range deltas {
-		stackDelta.AddrLow = delta.AddressLow
-		stackDelta.UnwindInfo = delta.UnwindInfo
-		innerKey = uint32(index)
-		if err := innerMap.Update(unsafe.Pointer(&innerKey), unsafe.Pointer(&stackDelta),
-			cebpf.UpdateAny); err != nil {
-			return 0, impl.trackMapError(metrics.IDExeIDToStackDeltasUpdate, fmt.Errorf(
-				"failed to insert element %d for 0x%x into exeIDTostack_deltas: %v",
-				index, fileID, err))
-		}
+		innerKeys[index] = uint32(index)
+		stackDeltas[index].AddrLow = delta.AddressLow
+		stackDeltas[index].UnwindInfo = delta.UnwindInfo
 	}
 
+	_, err = innerMap.BatchUpdate(
+		ptrCastMarshaler[uint32](innerKeys),
+		ptrCastMarshaler[support.StackDelta](stackDeltas),
+		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateAny)})
+	if err != nil {
+		return 0, impl.trackMapError(metrics.IDExeIDToStackDeltasBatchUpdate,
+			fmt.Errorf("failed to batch insert %d elements for 0x%x "+
+				"into exeIDTostack_deltas: %v",
+				numDeltas, fileID, err))
+	}
 	return mapID, nil
 }
 
@@ -617,22 +595,12 @@ func (impl *ebpfMapsImpl) UpdateStackDeltaPages(fileID host.FileID, numDeltasPer
 		firstDelta += uint32(numDeltas)
 	}
 
-	if impl.hasGenericBatchOperations {
-		_, err := impl.StackDeltaPageToInfo.BatchUpdate(
-			ptrCastMarshaler[support.StackDeltaPageKey](keys),
-			ptrCastMarshaler[support.StackDeltaPageInfo](values),
-			&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateNoExist)})
-		return impl.trackMapError(metrics.IDStackDeltaPageToInfoBatchUpdate, err)
-	}
+	_, err := impl.StackDeltaPageToInfo.BatchUpdate(
+		ptrCastMarshaler[support.StackDeltaPageKey](keys),
+		ptrCastMarshaler[support.StackDeltaPageInfo](values),
+		&cebpf.BatchOptions{Flags: uint64(cebpf.UpdateNoExist)})
+	return impl.trackMapError(metrics.IDStackDeltaPageToInfoBatchUpdate, err)
 
-	for index := range keys {
-		if err := impl.trackMapError(metrics.IDStackDeltaPageToInfoUpdate,
-			impl.StackDeltaPageToInfo.Update(unsafe.Pointer(&keys[index]),
-				unsafe.Pointer(&values[index]), cebpf.UpdateNoExist)); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // DeleteStackDeltaPage removes the entry specified by fileID and page from the eBPF map.
@@ -735,24 +703,6 @@ func (impl *ebpfMapsImpl) LookupPidPageInformation(pid libpf.PID, page uint64) (
 	}
 	bias, _ := support.DecodeBiasAndUnwindProgram(cValue.Bias_and_unwind_program)
 	return host.FileID(cValue.File_id), bias, nil
-}
-
-// SupportsGenericBatchOperations returns true if the kernel supports eBPF batch operations
-// on hash and array maps.
-func (impl *ebpfMapsImpl) SupportsGenericBatchOperations() bool {
-	return impl.hasGenericBatchOperations
-}
-
-// SupportsGenericBatchLookupAndDelete returns true if the kernel supports eBPF batch
-// lookup-and-delete operations on hash and array maps.
-func (impl *ebpfMapsImpl) SupportsGenericBatchLookupAndDelete() bool {
-	return impl.hasGenericBatchLookupAndDelete
-}
-
-// SupportsLPMTrieBatchOperations returns true if the kernel supports eBPF batch operations
-// on LPM trie maps.
-func (impl *ebpfMapsImpl) SupportsLPMTrieBatchOperations() bool {
-	return impl.hasLPMTrieBatchOperations
 }
 
 // ptrCastMarshaler is a small wrapper type intended to be used with cilium's BatchUpdate and
