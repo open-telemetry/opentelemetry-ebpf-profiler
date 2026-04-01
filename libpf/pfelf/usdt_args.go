@@ -105,6 +105,9 @@ var (
 	// Memory dereference without offset: 8@(%rsp) or 8f@(%rsp)
 	regexRegDerefNoOffset = regexp.MustCompile(
 		`^\s*(-?\d+)(f?)\s*@\s*\(\s*%([a-z0-9]+)\s*\)\s*$`)
+	// Memory dereference without offset - ARM64 syntax: 8@[x0] or 8f@[sp]
+	regexRegDerefNoOffsetARM = regexp.MustCompile(
+		`^\s*(-?\d+)(f?)\s*@\s*\[\s*([a-z0-9]+)\s*\]\s*$`)
 	// Immediate constant with dollar sign: -4@$5 or -4@$-9 or -4f@$5
 	regexConst = regexp.MustCompile(`^\s*(-?\d+)(f?)\s*@\s*\$(-?\d+)\s*$`)
 	// Bare constant (no dollar sign): -4@100 or 4@0 or -4f@100
@@ -185,6 +188,31 @@ func ParseUSDTArgSpec(argStr string) (*usdt.ArgSpec, error) {
 
 	// Try memory dereference without offset
 	if matches := regexRegDerefNoOffset.FindStringSubmatch(argStr); matches != nil {
+		argSz, err := strconv.ParseInt(matches[1], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid arg size: %w", err)
+		}
+		isFloat := matches[2] == "f"
+		regName := matches[3]
+
+		spec.Arg_type = usdt.ArgRegDeref
+		spec.Val_off = 0
+		regID, ok := lookupRegister(regName)
+		if !ok {
+			return nil, fmt.Errorf("unknown register: %s", regName)
+		}
+		spec.Reg_id = regID
+		spec.Arg_signed = argSz < 0
+		spec.Arg_is_float = isFloat
+		if argSz < 0 {
+			argSz = -argSz
+		}
+		spec.Arg_bitshift = int8(64 - argSz*8)
+		return spec, nil
+	}
+
+	// Try memory dereference without offset (ARM64 bracket syntax)
+	if matches := regexRegDerefNoOffsetARM.FindStringSubmatch(argStr); matches != nil {
 		argSz, err := strconv.ParseInt(matches[1], 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("invalid arg size: %w", err)

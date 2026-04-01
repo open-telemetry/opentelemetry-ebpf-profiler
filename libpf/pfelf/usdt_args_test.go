@@ -458,6 +458,30 @@ func TestParseUSDTArgSpec_ARM64(t *testing.T) {
 			},
 		},
 		{
+			name:        "ARM64 bracket syntax without offset",
+			argStr:      "8@[x0]",
+			expectError: false,
+			expected: &usdt.ArgSpec{
+				Val_off:      0,
+				Arg_type:     usdt.ArgRegDeref,
+				Reg_id:       usdt.RegX0,
+				Arg_signed:   false,
+				Arg_bitshift: 0, // 64 - 8*8 = 0
+			},
+		},
+		{
+			name:        "ARM64 bracket syntax without offset signed",
+			argStr:      "-4@[sp]",
+			expectError: false,
+			expected: &usdt.ArgSpec{
+				Val_off:      0,
+				Arg_type:     usdt.ArgRegDeref,
+				Reg_id:       usdt.RegSP,
+				Arg_signed:   true,
+				Arg_bitshift: 32, // 64 - 4*8 = 32
+			},
+		},
+		{
 			name:        "ARM64 register without percent sign",
 			argStr:      "8@x1",
 			expectError: false,
