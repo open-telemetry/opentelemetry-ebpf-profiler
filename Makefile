@@ -94,7 +94,7 @@ otelcol-ebpf-profiler: ebpf generate-collector
 # 2. Run `make otel-from-tree` (only need to run it once to remap go modules)
 # 3. You can now build collector and it will use your local otel core changes.
 # 4. Before committing/pushing your changes, undo by running `make otel-from-lib`.
-otel-from-tree:
+otel-from-tree: generate-collector
 	./cmd/otelcol-ebpf-profiler/otel-from-tree.sh
 
 # Removes local opentelemetry-collector replaces from manifest.yaml.
