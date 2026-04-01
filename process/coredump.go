@@ -46,7 +46,7 @@ type CoredumpProcess struct {
 	machineData MachineData
 
 	// mappings contains the parsed mappings.
-	mappings []Mapping
+	mappings []RawMapping
 
 	// threadInfo contains the parsed thread info.
 	threadInfo []ThreadInfo
@@ -145,7 +145,7 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 	cd := &CoredumpProcess{
 		File:       f,
 		files:      make(map[string]*CoredumpFile),
-		mappings:   make([]Mapping, 0, len(f.Progs)),
+		mappings:   make([]RawMapping, 0, len(f.Progs)),
 		threadInfo: make([]ThreadInfo, 0, 8),
 	}
 	cd.machineData.Machine = cd.Machine
@@ -157,7 +157,7 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 	for i := range f.Progs {
 		p := &f.Progs[i]
 		if p.Type == elf.PT_LOAD && p.Flags != 0 {
-			m := Mapping{
+			m := RawMapping{
 				Vaddr:  p.Vaddr,
 				Length: p.Memsz,
 				Flags:  p.Flags,
@@ -269,9 +269,14 @@ func (cd *CoredumpProcess) GetExe() (libpf.String, error) {
 	return cd.fname, nil
 }
 
-// GetMappings implements the Process interface.
-func (cd *CoredumpProcess) GetMappings() ([]Mapping, uint32, error) {
-	return cd.mappings, 0, nil
+// IterateMappings implements the Process interface.
+func (cd *CoredumpProcess) IterateMappings(callback func(m RawMapping) bool) (uint32, error) {
+	for _, m := range cd.mappings {
+		if !callback(m) {
+			return 0, ErrCallbackStopped
+		}
+	}
+	return 0, nil
 }
 
 // GetThreadInfo implements the Process interface.
@@ -280,18 +285,18 @@ func (cd *CoredumpProcess) GetThreads() ([]ThreadInfo, error) {
 }
 
 // OpenMappingFile implements the Process interface.
-func (cd *CoredumpProcess) OpenMappingFile(_ *Mapping) (ReadAtCloser, error) {
+func (cd *CoredumpProcess) OpenMappingFile(_ *RawMapping) (ReadAtCloser, error) {
 	// Coredumps do not contain the original backing files.
 	return nil, errors.New("coredump does not support opening backing file")
 }
 
 // GetMappingFileLastModified implements the Process interface.
-func (cd *CoredumpProcess) GetMappingFileLastModified(_ *Mapping) int64 {
+func (cd *CoredumpProcess) GetMappingFileLastModified(_ *RawMapping) int64 {
 	return 0
 }
 
 // CalculateMappingFileID implements the Process interface.
-func (cd *CoredumpProcess) CalculateMappingFileID(m *Mapping) (libpf.FileID, error) {
+func (cd *CoredumpProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, error) {
 	// It is not possible to calculate the real FileID as the section headers
 	// are likely missing. So just return a synthesized FileID.
 	vaddr := make([]byte, 8)
@@ -299,7 +304,7 @@ func (cd *CoredumpProcess) CalculateMappingFileID(m *Mapping) (libpf.FileID, err
 
 	h := fnv.New128a()
 	_, _ = h.Write(vaddr)
-	_, _ = h.Write([]byte(m.Path.String()))
+	_, _ = h.Write([]byte(m.Path))
 	return libpf.FileIDFromBytes(h.Sum(nil))
 }
 
@@ -399,7 +404,7 @@ func (cd *CoredumpProcess) parseMappings(desc []byte,
 			cf.Mappings = append(cf.Mappings, cm)
 
 			mapping := &cd.mappings[m.mappingIndex]
-			mapping.Path = cf.Name
+			mapping.Path = cf.Name.String()
 			mapping.FileOffset = entry.FileOffset * hdr.PageSize
 			// Synthesize non-zero device and inode indicating this is a filebacked mapping.
 			mapping.Device = 1
@@ -408,14 +413,14 @@ func (cd *CoredumpProcess) parseMappings(desc []byte,
 			// This file backed mapping is not in the coredump LOAD tables
 			// Likely a executable mapping excluded by core_filter. Construct
 			// the mappings assuming R+X.
-			cd.mappings = append(cd.mappings, Mapping{
+			cd.mappings = append(cd.mappings, RawMapping{
 				Vaddr:      entry.Start,
 				Length:     entry.End - entry.Start,
 				Flags:      elf.PF_R + elf.PF_X,
 				FileOffset: entry.FileOffset * hdr.PageSize,
 				Device:     1,
 				Inode:      cf.inode,
-				Path:       cf.Name,
+				Path:       cf.Name.String(),
 			})
 		}
 		strs = strs[fnlen+1:]
@@ -438,7 +443,7 @@ func (cd *CoredumpProcess) parseAuxVector(desc []byte, vaddrToMappings map[uint6
 			vm.Inode = vdsoInode
 			vm.Path = VdsoPathName
 
-			cf := cd.getFile(vm.Path.String())
+			cf := cd.getFile(vm.Path)
 			cm := CoredumpMapping{
 				Prog: m.prog,
 				File: cf,
