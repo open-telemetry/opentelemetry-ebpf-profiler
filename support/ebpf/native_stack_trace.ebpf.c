@@ -541,8 +541,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
         return ERR_OK;
       }
       u64 sched_pc = 0, sched_sp = 0, sched_bp = 0;
-      if (bpf_probe_read_user(
-            &sched_pc, sizeof(sched_pc), (void *)(curg + go_offs->sched_pc))) {
+      if (bpf_probe_read_user(&sched_pc, sizeof(sched_pc), (void *)(curg + go_offs->sched_pc))) {
         DEBUG_PRINT("GO_MCALL: failed to read sched_pc, stopping");
         *stop = true;
         return ERR_OK;
@@ -851,8 +850,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
         return ERR_OK;
       }
       u64 sched_pc = 0, sched_sp = 0, sched_bp = 0;
-      if (bpf_probe_read_user(
-            &sched_pc, sizeof(sched_pc), (void *)(curg + go_offs->sched_pc))) {
+      if (bpf_probe_read_user(&sched_pc, sizeof(sched_pc), (void *)(curg + go_offs->sched_pc))) {
         DEBUG_PRINT("GO_MCALL: failed to read sched_pc, stopping");
         *stop = true;
         return ERR_OK;

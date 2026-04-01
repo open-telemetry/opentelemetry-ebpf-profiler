@@ -361,11 +361,11 @@ const (
 	UnwindFlagDerefCfa   uint8 = 0x8
 	UnwindFlagRegisterRA uint8 = 0x10
 
-	UnwindCommandInvalid      int32 = 0x0
-	UnwindCommandStop         int32 = 0x1
-	UnwindCommandPLT          int32 = 0x2
-	UnwindCommandSignal       int32 = 0x3
-	UnwindCommandFramePointer int32 = 0x4
+	UnwindCommandInvalid       int32 = 0x0
+	UnwindCommandStop          int32 = 0x1
+	UnwindCommandPLT           int32 = 0x2
+	UnwindCommandSignal        int32 = 0x3
+	UnwindCommandFramePointer  int32 = 0x4
 	UnwindCommandGoSystemstack int32 = 0x5
 	UnwindCommandGoMcall       int32 = 0x6
 

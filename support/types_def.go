@@ -165,11 +165,11 @@ const (
 	UnwindFlagRegisterRA uint8 = C.UNWIND_FLAG_REGISTER_RA
 
 	// UnwindCommands from the C header file
-	UnwindCommandInvalid      int32 = C.UNWIND_COMMAND_INVALID
-	UnwindCommandStop         int32 = C.UNWIND_COMMAND_STOP
-	UnwindCommandPLT          int32 = C.UNWIND_COMMAND_PLT
-	UnwindCommandSignal       int32 = C.UNWIND_COMMAND_SIGNAL
-	UnwindCommandFramePointer int32 = C.UNWIND_COMMAND_FRAME_POINTER
+	UnwindCommandInvalid       int32 = C.UNWIND_COMMAND_INVALID
+	UnwindCommandStop          int32 = C.UNWIND_COMMAND_STOP
+	UnwindCommandPLT           int32 = C.UNWIND_COMMAND_PLT
+	UnwindCommandSignal        int32 = C.UNWIND_COMMAND_SIGNAL
+	UnwindCommandFramePointer  int32 = C.UNWIND_COMMAND_FRAME_POINTER
 	UnwindCommandGoSystemstack int32 = C.UNWIND_COMMAND_GO_SYSTEMSTACK
 	UnwindCommandGoMcall       int32 = C.UNWIND_COMMAND_GO_MCALL
 
