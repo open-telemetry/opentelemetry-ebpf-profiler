@@ -465,8 +465,8 @@ func (r *rubyInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PI
 		return err
 	}
 	r.dtvInfoInserted = true
-	log.Debugf("Ruby: updated proc data with DTVInfo (offset=%d, multiplier=%d, indirect=%d)",
-		libcInfo.DTVInfo.Offset, libcInfo.DTVInfo.Multiplier, libcInfo.DTVInfo.Indirect)
+	log.Debugf("Ruby: updated proc data with DTVInfo (offset=%d, multiplier=%d)",
+		libcInfo.DTVInfo.Offset, libcInfo.DTVInfo.Multiplier)
 	return nil
 }
 

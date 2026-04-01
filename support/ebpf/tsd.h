@@ -40,7 +40,7 @@ err:
 // This path is also needed on other platforms when TLSDESC is unavailable.
 //
 // Parameters:
-//   dtvi:       DTVInfo extracted from __tls_get_addr disassembly (offset, multiplier, indirect)
+//   dtvi:       DTVInfo extracted from __tls_get_addr disassembly (offset, multiplier)
 //   tsd_base:   thread pointer base (from tsd_get_base)
 //   module_id:  TLS module ID for the target DSO (from DTPMOD64 relocation)
 //   tls_offset: offset of the variable within its module's TLS block
@@ -48,12 +48,11 @@ err:
 static inline EBPF_INLINE int
 dtv_read(const DTVInfo *dtvi, const void *tsd_base, u32 module_id, u64 tls_offset, void **out)
 {
-  const void *dtv_ptr = tsd_base + dtvi->offset;
-  if (dtvi->indirect) {
-    // DTV pointer is behind an indirection (e.g. musl: [TP+0] -> dtv_base)
-    if (bpf_probe_read_user(&dtv_ptr, sizeof(dtv_ptr), dtv_ptr)) {
-      goto err;
-    }
+  // DTV access is always indirect: TP+offset yields a pointer to the DTV array,
+  // which must be dereferenced before indexing by module ID.
+  const void *dtv_ptr;
+  if (bpf_probe_read_user(&dtv_ptr, sizeof(dtv_ptr), tsd_base + dtvi->offset)) {
+    goto err;
   }
 
   // Index into the DTV to find this module's TLS block base address.
