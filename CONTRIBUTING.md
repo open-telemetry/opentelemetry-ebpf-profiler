@@ -145,6 +145,11 @@ A PR is considered **ready to merge** when:
 * All required GitHub workflows have succeeded.
 * Urgent fix can take exception as long as it has been actively communicated
 	among [Maintainer]s.
+* Before merging, the [Maintainer] should review PR comments and add proper
+	credit attribution to reviewers whose suggestions were accepted. This can be
+	done by adding `Co-Authored-By: <reviewer>` lines to the commit message for
+	substantive review contributions. This ensures reviewers receive proper credit
+	for their work rather than having it reimplemented without attribution.
 
 Any [Maintainer] can merge the PR once the above criteria have been met.
 
