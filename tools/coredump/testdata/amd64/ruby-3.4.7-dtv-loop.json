@@ -1,20 +1,21 @@
 {
-  "coredump-ref": "b46d05cf2089cda67cb8d28a8c33890d29d85a0215b4e29881308e5ef0f4fca0",
+  "coredump-ref": "04198656d80942275b90395583ac2d04160a2493375c7befd5e7a0f39bcb3dac",
   "threads": [
     {
-      "lwp": 19379,
+      "lwp": 157954,
       "frames": [
-        "Object#is_prime+0 in /home/dalehamel/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:10",
-        "libruby.so.3.4.7+0x316110",
+        "libruby.so.3.4.7+0x312edf",
+        "Object#is_prime+0 in /home/dalehamel/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:15",
+        "libruby.so.3.4.7+0x316278",
         "libruby.so.3.4.7+0x31b0b7",
         "libruby.so.3.4.7+0x225a4d",
         "libruby.so.3.4.7+0x2fc1eb",
         "libruby.so.3.4.7+0x302c2e",
         "libruby.so.3.4.7+0x3103ad",
         "Range#each+0 in <cfunc>:0",
-        "Object#is_prime+0 in /home/dalehamel/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:10",
-        "Object#sum_of_primes+0 in /home/dalehamel/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:20",
-        "block (2 levels) in <main>+0 in /home/dalehamel/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:30",
+        "Object#is_prime+0 in /home/dalehamel/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:14",
+        "Object#sum_of_primes+0 in /home/dalehamel/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:24",
+        "block (2 levels) in <main>+0 in /home/dalehamel/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:34",
         "libruby.so.3.4.7+0x3162f1",
         "libruby.so.3.4.7+0x31b0b7",
         "libruby.so.3.4.7+0x22593d",
@@ -22,9 +23,9 @@
         "libruby.so.3.4.7+0x302c2e",
         "libruby.so.3.4.7+0x3103ad",
         "Range#each+0 in <cfunc>:0",
-        "block in <main>+0 in /home/dalehamel/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:29",
+        "block in <main>+0 in /home/dalehamel/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:33",
         "Kernel#loop+0 in <internal:kernel>:168",
-        "<main>+0 in /home/dalehamel/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:28",
+        "<main>+0 in /home/dalehamel/opentelemetry-ebpf-profiler/tools/coredump/testsources/ruby/loop.rb:32",
         "libruby.so.3.4.7+0x316278",
         "libruby.so.3.4.7+0x11eb28",
         "libruby.so.3.4.7+0x1225ba",
@@ -35,7 +36,7 @@
       ]
     },
     {
-      "lwp": 19381,
+      "lwp": 157956,
       "frames": [
         "libc.so.6+0x108f26",
         "libruby.so.3.4.7+0x2bbdf4",
@@ -46,12 +47,12 @@
   ],
   "modules": [
     {
-      "ref": "b7013a7dfb98df74b4112f83673416758fab092ffaf24b774733a877768b7549",
-      "local-path": "/home/dalehamel/.rubies/ruby-3.4.7-shared/bin/ruby"
+      "ref": "de70efd1ae64a21ddf67e16d6974e15e915775bb49dcf9f54b29d28b421f9cf7",
+      "local-path": "/home/dalehamel/.rubies/ruby-3.4.7-shared/lib/libruby.so.3.4.7"
     },
     {
-      "ref": "56907ceb098978c0b264c511ce6aabe8377a8e8979588e0830828c9198cabf2a",
-      "local-path": "/home/dalehamel/.rubies/ruby-3.4.7-shared/lib/libruby.so.3.4.7"
+      "ref": "7e2a72b4c4b38c61e6962de6e3f4a5e9ae692e732c68deead10a7ce2135a7f68",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libz.so.1.2.13"
     },
     {
       "ref": "8e08758f96765c14bf25e66de3c5e18c858a4554c6264f5c11d532695144728b",
@@ -78,16 +79,16 @@
       "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
     },
     {
+      "ref": "b7013a7dfb98df74b4112f83673416758fab092ffaf24b774733a877768b7549",
+      "local-path": "/home/dalehamel/.rubies/ruby-3.4.7-shared/bin/ruby"
+    },
+    {
       "ref": "bff8750fe719e6000791b88b11747dce8772c37118d0b2348044b70819d13835",
       "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
     },
     {
       "ref": "7f2ca87f652f56b094462474b076749e90e689d0ecb9cb63c7679820b271b4e7",
       "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
-    },
-    {
-      "ref": "7e2a72b4c4b38c61e6962de6e3f4a5e9ae692e732c68deead10a7ce2135a7f68",
-      "local-path": "/usr/lib/x86_64-linux-gnu/libz.so.1.2.13"
     }
   ]
 }
