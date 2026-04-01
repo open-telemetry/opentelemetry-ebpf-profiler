@@ -9,6 +9,8 @@ import (
 	"go/version"
 	"unsafe"
 
+	cebpf "github.com/cilium/ebpf"
+
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
@@ -40,7 +42,14 @@ func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 }
 
 func (d *data) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	return ebpf.DeleteProcData(libpf.GoLabels, pid)
+	// Go plugins share the runtime with the main binary, so multiple Go ELF
+	// files in the same process produce duplicate golabels instances that all
+	// write/delete the same eBPF map entry. Tolerate the key already being
+	// removed by another instance.
+	if err := ebpf.DeleteProcData(libpf.GoLabels, pid); err != nil && !errors.Is(err, cebpf.ErrKeyNotExist) {
+		return err
+	}
+	return nil
 }
 
 func (d *data) Unload(_ interpreter.EbpfHandler) {}
