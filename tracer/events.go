@@ -117,7 +117,8 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 				return
 			default:
 			}
-
+	// Set a deadline so ReadInto times out and we can check context
+	eventReader.SetDeadline(time.Now().Add(eventReaderDeadline))
 			if err := eventReader.ReadInto(&data); err != nil {
 				if !errors.Is(err, os.ErrDeadlineExceeded) {
 					readErrorCount.Add(1)
