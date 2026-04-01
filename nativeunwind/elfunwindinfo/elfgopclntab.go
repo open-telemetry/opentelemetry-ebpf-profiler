@@ -33,9 +33,9 @@ var goFunctionsStopDelta = map[string]*sdtypes.UnwindInfo{
 
 	// Stack switch functions: when encountered during unwinding on the g0 (system) stack,
 	// the unwinder crosses back to the goroutine stack by reading the goroutine's saved
-	// context (g.sched.sp and g.sched.bp). See UNWIND_COMMAND_GOSTACK.
-	"runtime.mcall":       &sdtypes.UnwindInfoGoStack,
-	"runtime.systemstack": &sdtypes.UnwindInfoGoStack,
+	// context from gobuf.
+	"runtime.systemstack": &sdtypes.UnwindInfoGoSystemstack,
+	"runtime.mcall":       &sdtypes.UnwindInfoGoMcall,
 
 	// signal return frame
 	"runtime.sigreturn":            &sdtypes.UnwindInfoSignal,

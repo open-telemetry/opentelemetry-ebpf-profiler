@@ -20,6 +20,7 @@ type goLabelsOffsets struct {
 	hmapLog2BucketCount uint32
 	hmapBuckets         uint32
 	schedSp             uint32
+	schedPc             uint32
 	schedBp             uint32
 }
 
@@ -76,6 +77,15 @@ func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
 	if err != nil {
 		return nil, err
 	}
+	_, schedPcOff, err := ReadChildTypeAndOffset(r, "pc")
+	if err != nil {
+		return nil, err
+	}
+	r.Seek(schedType.Offset)
+	_, err = r.Next()
+	if err != nil {
+		return nil, err
+	}
 	_, schedBpOff, err := ReadChildTypeAndOffset(r, "bp")
 	if err != nil {
 		return nil, err
@@ -119,6 +129,7 @@ func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
 			curg:    uint32(curgOffset),
 			labels:  uint32(labelsOffset),
 			schedSp: uint32(schedOffset + schedSpOff),
+			schedPc: uint32(schedOffset + schedPcOff),
 			schedBp: uint32(schedOffset + schedBpOff),
 		}, nil
 	}
@@ -154,6 +165,7 @@ func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
 		hmapLog2BucketCount: uint32(bOffset),
 		hmapBuckets:         uint32(bucketsOffset),
 		schedSp:             uint32(schedOffset + schedSpOff),
+		schedPc:             uint32(schedOffset + schedPcOff),
 		schedBp:             uint32(schedOffset + schedBpOff),
 	}, nil
 }
@@ -200,6 +212,7 @@ func main() {
 	fmt.Printf("\thmap_log2_bucket_count: %d,\n", offs.hmapLog2BucketCount)
 	fmt.Printf("\thmap_buckets:           %d,\n", offs.hmapBuckets)
 	fmt.Printf("\tsched_sp:               %d,\n", offs.schedSp)
+	fmt.Printf("\tsched_pc:               %d,\n", offs.schedPc)
 	fmt.Printf("\tsched_bp:               %d,\n", offs.schedBp)
 	fmt.Println("},")
 }
