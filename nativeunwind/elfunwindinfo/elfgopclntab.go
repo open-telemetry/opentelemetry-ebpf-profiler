@@ -31,10 +31,11 @@ var goFunctionsStopDelta = map[string]*sdtypes.UnwindInfo{
 	"runtime.mstart": &sdtypes.UnwindInfoStop, // topmost for the go runtime main stacks
 	"runtime.goexit": &sdtypes.UnwindInfoStop, // return address in all goroutine stacks
 
-	// stack switch functions that would need special handling for further unwinding.
-	// See PF-1101.
-	"runtime.mcall":       &sdtypes.UnwindInfoStop,
-	"runtime.systemstack": &sdtypes.UnwindInfoStop,
+	// Stack switch functions: when encountered during unwinding on the g0 (system) stack,
+	// the unwinder crosses back to the goroutine stack by reading the goroutine's saved
+	// context (g.sched.sp and g.sched.bp). See UNWIND_COMMAND_GOSTACK.
+	"runtime.mcall":       &sdtypes.UnwindInfoGoStack,
+	"runtime.systemstack": &sdtypes.UnwindInfoGoStack,
 
 	// signal return frame
 	"runtime.sigreturn":            &sdtypes.UnwindInfoSignal,

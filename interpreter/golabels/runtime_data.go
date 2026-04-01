@@ -27,16 +27,31 @@ func getOffsets(vers string) support.GoLabelsOffsets {
 		Hmap_log2_bucket_count: 0,
 		// https://github.com/golang/go/blob/6885bad7dd86880be6929c0/src/runtime/map.go#L118
 		Hmap_buckets: 0,
+		// Absolute offsets from g struct start for g.sched (gobuf) fields.
+		// g.sched starts at offset 56 (immediately after g.m at offset 48, pointer 8 bytes).
+		// gobuf.sp is at offset 0 within gobuf - stable across all supported Go versions.
+		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L325
+		Sched_sp: 56,
+		// Within gobuf: bp is at +48 (Go <= 1.24) or +40 (Go >= 1.25, gobuf.ret removed).
+		// Default: absolute offset = 56 + 48 = 104 for Go <= 1.24.
+		// https://github.com/golang/go/blob/339c903a75c3fe936fb4ed6c355d15e6081d6af3/src/runtime/runtime2.go#L317
+		Sched_bp: 104,
 	}
 
 	// Version enforcement takes place in the Loader function.
 	if version.Compare(vers, "go1.26") >= 0 {
 		offsets.Curg = 184
 		offsets.Labels = 352
+		// gobuf.ret removed in Go 1.25: gobuf.bp shifts from +48 to +40, lr from +40 to +32.
+		// https://github.com/golang/go/blob/56ebf80e57db9f61981fc0636fc6419dc6f68eda/src/runtime/runtime2.go#L315
+		offsets.Sched_bp = 96 // 56 + 40
 		return offsets
 	} else if version.Compare(vers, "go1.25") >= 0 {
 		offsets.Curg = 184
 		offsets.Labels = 344
+		// gobuf.ret removed in Go 1.25: gobuf.bp shifts from +48 to +40.
+		// https://github.com/golang/go/blob/56ebf80e57db9f61981fc0636fc6419dc6f68eda/src/runtime/runtime2.go#L315
+		offsets.Sched_bp = 96 // 56 + 40
 		return offsets
 	} else if version.Compare(vers, "go1.24") >= 0 {
 		offsets.Labels = 352
