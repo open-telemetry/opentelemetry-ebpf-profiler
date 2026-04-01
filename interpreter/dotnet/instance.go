@@ -141,7 +141,7 @@ type dotnetInstance struct {
 	virtualCallStubManagerManagerPtr libpf.Address
 
 	// mappings contains the PE mappings to process memory space. Multiple individual
-	// consecutive process.Mappings may be merged to one mapping per PE file.
+	// consecutive process.RawMappings may be merged to one mapping per PE file.
 	mappings []dotnetMapping
 
 	ranges map[libpf.Address]dotnetRangeSection
@@ -552,7 +552,7 @@ func (i *dotnetInstance) getDacSlotPtr(slot uint) libpf.Address {
 
 func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	exeReporter reporter.ExecutableReporter, pr process.Process,
-	mappings []process.Mapping,
+	mappings []process.RawMapping,
 ) error {
 	// get introspection data
 	cdac, err := i.d.GetOrInit(func() (dotnetCdac, error) { return i.d.newVMData(i.rm, i.bias) })
@@ -599,7 +599,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		if m.IsAnonymous() {
 			continue
 		}
-		if !strings.HasSuffix(m.Path.String(), ".dll") {
+		if !strings.HasSuffix(m.Path, ".dll") {
 			continue
 		}
 

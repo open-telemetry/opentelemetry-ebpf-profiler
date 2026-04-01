@@ -500,8 +500,8 @@ type v8Instance struct {
 	addrToSource *freelru.LRU[libpf.Address, *v8Source]
 	addrToType   *freelru.LRU[libpf.Address, uint16]
 
-	// mappings is indexed by the Mapping to its generation
-	mappings map[process.Mapping]*uint32
+	// mappings is indexed by the RawMapping to its generation
+	mappings map[process.RawMapping]*uint32
 	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
 	prefixes map[lpm.Prefix]*uint32
 	// mappingGeneration is the current generation (so old entries can be pruned)
@@ -555,7 +555,7 @@ func (i *v8Instance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 }
 
 func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
-	_ reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping,
+	_ reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping,
 ) error {
 	pid := pr.PID()
 	i.mappingGeneration++
@@ -1841,7 +1841,7 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 	return &v8Instance{
 		d:            d,
 		rm:           rm,
-		mappings:     make(map[process.Mapping]*uint32),
+		mappings:     make(map[process.RawMapping]*uint32),
 		prefixes:     make(map[lpm.Prefix]*uint32),
 		addrToString: addrToString,
 		addrToCode:   addrToCode,

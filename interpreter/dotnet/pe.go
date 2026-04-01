@@ -1209,7 +1209,7 @@ func (pc *peCache) init() {
 	pc.peInfoCache = peInfoCache
 }
 
-func (pc *peCache) Get(pr process.Process, mapping *process.Mapping) *peInfo {
+func (pc *peCache) Get(pr process.Process, mapping *process.RawMapping) *peInfo {
 	key := mapping.GetOnDiskFileIdentifier()
 	lastModified := pr.GetMappingFileLastModified(mapping)
 	if info, ok := pc.peInfoCache.Get(key); ok && info.lastModified == lastModified {
@@ -1243,7 +1243,7 @@ func (pc *peCache) Get(pr process.Process, mapping *process.Mapping) *peInfo {
 	if info.err == nil {
 		mf := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
 			FileID:     fileID,
-			FileName:   libpf.Intern(path.Base(mapping.Path.String())),
+			FileName:   libpf.Intern(path.Base(mapping.Path)),
 			GnuBuildID: info.guid,
 		})
 		info.mapping = libpf.NewFrameMapping(libpf.FrameMappingData{

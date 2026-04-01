@@ -13,19 +13,19 @@ dist:
   version: dev
 
 receivers:
-  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.148.0
+  - gomod: go.opentelemetry.io/collector/receiver/otlpreceiver v0.149.0
   - gomod: go.opentelemetry.io/ebpf-profiler v0.0.202613
     import: go.opentelemetry.io/ebpf-profiler/collector
 
 exporters:
-  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.148.0
-  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.148.0
-  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.148.0
+  - gomod: go.opentelemetry.io/collector/exporter/debugexporter v0.149.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlpexporter v0.149.0
+  - gomod: go.opentelemetry.io/collector/exporter/otlphttpexporter v0.149.0
 
 providers:
-  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.54.0
-  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.54.0
-  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.54.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.55.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.55.0
+  - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.55.0
 
 replaces:
   - go.opentelemetry.io/ebpf-profiler => ../../
