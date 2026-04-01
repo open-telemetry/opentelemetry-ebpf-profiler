@@ -913,6 +913,8 @@ typedef struct StackDelta {
 #define UNWIND_COMMAND_SIGNAL        3
 // Unwind using standard frame pointer
 #define UNWIND_COMMAND_FRAME_POINTER 4
+// Cross Go stack switch boundary (systemstack/mcall) using goroutine saved context
+#define UNWIND_COMMAND_GOSTACK       5
 
 // StackDeltaPageKey is the look up key for stack delta page map.
 typedef struct StackDeltaPageKey {
@@ -1031,6 +1033,10 @@ typedef struct GoLabelsOffsets {
   u32 hmap_log2_bucket_count;
   u32 hmap_buckets;
   s32 tls_offset;
+  // Offsets within g.sched (gobuf) for goroutine saved context, used to cross
+  // the systemstack/mcall boundary during stack unwinding.
+  u32 sched_sp; // offset of g.sched.sp from the start of g
+  u32 sched_bp; // offset of g.sched.bp from the start of g
 } GoLabelsOffsets;
 
 #endif // OPTI_TYPES_H
