@@ -319,6 +319,8 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 		Origin:         bpfTrace.Origin,
 		OffTime:        bpfTrace.OffTime,
 		EnvVars:        bpfTrace.EnvVars,
+		TraceID:        bpfTrace.APMTraceID,
+		SpanID:         bpfTrace.APMTransactionID,
 	}
 
 	pid := bpfTrace.PID
