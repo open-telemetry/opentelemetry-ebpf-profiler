@@ -9,7 +9,6 @@ import (
 	"context"
 	_ "embed"
 	"log/slog"
-	"math"
 	"os"
 	"os/exec"
 	"runtime/debug"
@@ -106,7 +105,6 @@ func Test_Golabels(t *testing.T) {
 				SamplesPerSecond:       20,
 				ProbabilisticInterval:  100,
 				ProbabilisticThreshold: 100,
-				OffCPUThreshold:        uint32(math.MaxUint32 / 100),
 				VerboseMode:            true,
 			})
 			require.NoError(t, err)

@@ -115,6 +115,10 @@ func (t *traceReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.Trace
 	return nil
 }
 
+func (t *traceReporter) RegisterProbeOrigin(origin libpf.Origin, meta samples.ProbeOriginMetadata) error {
+	return nil
+}
+
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	lwpFilter libpf.Set[libpf.PID]) ([]ThreadInfo, error) {
 	todo, cancel := context.WithCancel(ctx)

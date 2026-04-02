@@ -136,8 +136,9 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.VerboseMode, "verbose", false, verboseModeHelp)
 	fs.BoolVar(&args.Version, "version", false, versionHelp)
 
-	fs.Float64Var(&args.OffCPUThreshold, "off-cpu-threshold",
-		defaultOffCPUThreshold, offCPUThresholdHelp)
+	// TODO(flo)
+	//fs.Float64Var(&args.OffCPUThreshold, "off-cpu-threshold",
+	//	defaultOffCPUThreshold, offCPUThresholdHelp)
 
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
 

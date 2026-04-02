@@ -42,27 +42,27 @@ func (e *ErrorMode) UnmarshalText(text []byte) error {
 
 // Config is the configuration for the collector.
 type Config struct {
-	ReporterInterval       time.Duration `mapstructure:"reporter_interval"`
-	ReporterJitter         float64       `mapstructure:"reporter_jitter"`
-	MonitorInterval        time.Duration `mapstructure:"monitor_interval"`
-	SamplesPerSecond       int           `mapstructure:"samples_per_second"`
-	ProbabilisticInterval  time.Duration `mapstructure:"probabilistic_interval"`
-	ProbabilisticThreshold uint          `mapstructure:"probabilistic_threshold"`
-	Tracers                string        `mapstructure:"tracers"`
-	ClockSyncInterval      time.Duration `mapstructure:"clock_sync_interval"`
-	SendErrorFrames        bool          `mapstructure:"send_error_frames"`
-	SendIdleFrames         bool          `mapstructure:"send_idle_frames"`
-	VerboseMode            bool          `mapstructure:"verbose_mode"`
-	OffCPUThreshold        float64       `mapstructure:"off_cpu_threshold"`
-	IncludeEnvVars         string        `mapstructure:"include_env_vars"`
-	ProbeLinks             []string      `mapstructure:"probe_links"`
-	LoadProbe              bool          `mapstructure:"load_probe"`
-	MapScaleFactor         uint          `mapstructure:"map_scale_factor"`
-	BPFVerifierLogLevel    uint          `mapstructure:"bpf_verifier_log_level"`
-	NoKernelVersionCheck   bool          `mapstructure:"no_kernel_version_check"`
-	MaxGRPCRetries         uint32        `mapstructure:"max_grpc_retries"`
-	MaxRPCMsgSize          int           `mapstructure:"max_rpc_msg_size"`
-	ErrorMode              ErrorMode     `mapstructure:"error_mode"`
+	ReporterInterval       time.Duration  `mapstructure:"reporter_interval"`
+	ReporterJitter         float64        `mapstructure:"reporter_jitter"`
+	MonitorInterval        time.Duration  `mapstructure:"monitor_interval"`
+	SamplesPerSecond       int            `mapstructure:"samples_per_second"`
+	ProbabilisticInterval  time.Duration  `mapstructure:"probabilistic_interval"`
+	ProbabilisticThreshold uint           `mapstructure:"probabilistic_threshold"`
+	Tracers                string         `mapstructure:"tracers"`
+	ClockSyncInterval      time.Duration  `mapstructure:"clock_sync_interval"`
+	SendErrorFrames        bool           `mapstructure:"send_error_frames"`
+	SendIdleFrames         bool           `mapstructure:"send_idle_frames"`
+	VerboseMode            bool           `mapstructure:"verbose_mode"`
+	IncludeEnvVars         string         `mapstructure:"include_env_vars"`
+	ProbeLinks             []string       `mapstructure:"probe_links"`
+	LoadProbe              bool           `mapstructure:"load_probe"`
+	MapScaleFactor         uint           `mapstructure:"map_scale_factor"`
+	BPFVerifierLogLevel    uint           `mapstructure:"bpf_verifier_log_level"`
+	NoKernelVersionCheck   bool           `mapstructure:"no_kernel_version_check"`
+	MaxGRPCRetries         uint32         `mapstructure:"max_grpc_retries"`
+	MaxRPCMsgSize          int            `mapstructure:"max_rpc_msg_size"`
+	ErrorMode              ErrorMode      `mapstructure:"error_mode"`
+	CustomProbes           map[string]any `mapstructure:"custom_probes"`
 }
 
 // Validate validates the config.
@@ -101,12 +101,6 @@ func (cfg *Config) Validate() error {
 				"should be between 1 and %d",
 			tracer.ProbabilisticThresholdMax,
 		)
-	}
-
-	if cfg.OffCPUThreshold < 0.0 || cfg.OffCPUThreshold > 1.0 {
-		return errors.New(
-			"invalid argument for off-cpu-threshold. The value " +
-				"should be in the range [0..1]. 0 disables off-cpu profiling")
 	}
 
 	if cfg.ReporterJitter < 0.0 || cfg.ReporterJitter > 1.0 {

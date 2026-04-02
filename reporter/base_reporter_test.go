@@ -14,7 +14,13 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/support"
+)
+
+const (
+	_ libpf.Origin = iota
+	originSampling
+	originOffCPU
+	originGenericProbe
 )
 
 // createTestBaseReporter creates a minimal baseReporter for testing purposes
@@ -32,14 +38,41 @@ func createTestBaseReporter(t *testing.T, cfg *Config) *baseReporter {
 	pdataInstance, err := pdata.New(cfg.SamplesPerSecond, cfg.ExtraSampleAttrProd)
 	require.NoError(t, err)
 
-	return &baseReporter{
+	reporter := &baseReporter{
 		cfg:                 cfg,
 		name:                cfg.Name,
 		version:             cfg.Version,
 		pdata:               pdataInstance,
 		traceEvents:         xsync.NewRWMutex(make(samples.TraceEventsTree)),
+		probeOrigins:        xsync.NewRWMutex(make(map[libpf.Origin]struct{})),
 		collectionStartTime: time.Now(),
 	}
+
+	// Register standard origins for tests
+	err = reporter.RegisterProbeOrigin(originSampling, samples.ProbeOriginMetadata{
+		Period:       1e9,
+		PeriodType:   "cpu",
+		PeriodUnit:   "nanoseconds",
+		Typ:          "samples",
+		Unit:         "count",
+		ReportValues: false,
+	})
+	require.NoError(t, err)
+	err = reporter.RegisterProbeOrigin(originOffCPU, samples.ProbeOriginMetadata{
+		PeriodType:   "",
+		Typ:          "off_cpu",
+		Unit:         "nanoseconds",
+		ReportValues: true,
+	})
+	require.NoError(t, err)
+	err = reporter.RegisterProbeOrigin(originGenericProbe, samples.ProbeOriginMetadata{
+		Typ:          "events",
+		Unit:         "count",
+		ReportValues: false,
+	})
+	require.NoError(t, err)
+
+	return reporter
 }
 
 // TestBaseReporterGenerate tests the Generate method and validates the output
@@ -98,7 +131,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 		PID:            1000,
 		TID:            1001,
 		CPU:            0,
-		Origin:         support.TraceOriginSampling,
+		Origin:         originSampling,
 	}
 
 	meta2 := &samples.TraceEventMeta{
@@ -111,8 +144,8 @@ func TestBaseReporterGenerate(t *testing.T) {
 		PID:            2000,
 		TID:            2001,
 		CPU:            1,
-		Origin:         support.TraceOriginOffCPU,
-		OffTime:        5000000, // 5ms
+		Origin:         originOffCPU,
+		Value:          5000000, // 5ms
 	}
 
 	err := reporter.ReportTraceEvent(trace1, meta1)
@@ -160,4 +193,23 @@ func TestBaseReporterGenerate(t *testing.T) {
 	// Verify profiles exist
 	assert.Greater(t, scopeProfile.Profiles().Len(), 0,
 		"Should have at least one profile")
+}
+
+// TestRegisterProbeOriginDuplicate tests that registering a duplicate probe origin returns an error
+func TestRegisterProbeOriginDuplicate(t *testing.T) {
+	reporter := createTestBaseReporter(t, nil)
+
+	// Try to register the same origin again
+	err := reporter.RegisterProbeOrigin(originSampling, samples.ProbeOriginMetadata{
+		Period:       1e9,
+		PeriodType:   "cpu",
+		PeriodUnit:   "nanoseconds",
+		Typ:          "samples",
+		Unit:         "count",
+		ReportValues: false,
+	})
+
+	// Should return an error for duplicate origin
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "already registered")
 }

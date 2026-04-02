@@ -7,7 +7,6 @@ package tracer_test
 
 import (
 	"context"
-	"math"
 	"os"
 	"runtime"
 	"slices"
@@ -107,7 +106,6 @@ func TestTracerErrorPropagation(t *testing.T) {
 		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
-		OffCPUThreshold:        1 * math.MaxUint32,
 		VerboseMode:            true,
 	})
 	require.NoError(t, err)
@@ -149,7 +147,6 @@ func TestTracerMapMonitorsError(t *testing.T) {
 		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
-		OffCPUThreshold:        1 * math.MaxUint32,
 		VerboseMode:            true,
 	})
 	require.NoError(t, err)
@@ -178,7 +175,6 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		BPFVerifierLogLevel:    0,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
-		OffCPUThreshold:        1 * math.MaxUint32,
 		VerboseMode:            true,
 	})
 	require.NoError(t, err)
@@ -269,7 +265,6 @@ func TestAllTracers(t *testing.T) {
 		SamplesPerSecond:       20,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
-		OffCPUThreshold:        uint32(math.MaxUint32 / 100),
 		VerboseMode:            true,
 		LoadProbe:              true,
 	})

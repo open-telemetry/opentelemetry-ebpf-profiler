@@ -21,6 +21,9 @@ struct sched_times_t {
 // off_cpu_threshold is set during load time.
 BPF_RODATA_VAR(u32, off_cpu_threshold, 0)
 
+// origin_id_off_cpu is set during load time.
+BPF_RODATA_VAR(u32, origin_id_off_cpu, 0)
+
 // tracepoint__sched_switch serves as entry point for off cpu profiling.
 SEC("tracepoint/sched/sched_switch")
 int tracepoint__sched_switch(UNUSED void *ctx)
@@ -69,7 +72,6 @@ int finish_task_switch(struct pt_regs *ctx)
   if (pid == 0 || tid == 0) {
     return 0;
   }
-
   u64 ts = bpf_ktime_get_ns();
 
   u64 *start_ts = bpf_map_lookup_elem(&sched_times, &pid_tgid);
@@ -85,5 +87,5 @@ int finish_task_switch(struct pt_regs *ctx)
   u64 diff = ts - *start_ts;
   DEBUG_PRINT("==== finish_task_switch ====");
 
-  return collect_trace(ctx, TRACE_OFF_CPU, pid, tid, ts, diff);
+  return collect_trace(ctx, origin_id_off_cpu, pid, tid, ts, diff);
 }

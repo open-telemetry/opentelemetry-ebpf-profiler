@@ -55,11 +55,12 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 
 	return &OTLPReporter{
 		baseReporter: &baseReporter{
-			cfg:         cfg,
-			name:        cfg.Name,
-			version:     cfg.Version,
-			pdata:       data,
-			traceEvents: xsync.NewRWMutex(eventsTree),
+			cfg:          cfg,
+			name:         cfg.Name,
+			version:      cfg.Version,
+			pdata:        data,
+			traceEvents:  xsync.NewRWMutex(eventsTree),
+			probeOrigins: xsync.NewRWMutex(make(map[libpf.Origin]struct{})),
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),
 			},

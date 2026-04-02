@@ -4,6 +4,7 @@
 package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 
 import (
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
@@ -16,13 +17,22 @@ type Pdata struct {
 
 	// samplesPerSecond is the number of samples per second.
 	samplesPerSecond int
+
+	// probeMetadata stores metadata for dynamically registered probe origins.
+	probeMetadata map[libpf.Origin]samples.ProbeOriginMetadata
 }
 
 func New(samplesPerSecond int, extra samples.SampleAttrProducer) (*Pdata, error) {
 	return &Pdata{
 		samplesPerSecond:    samplesPerSecond,
 		ExtraSampleAttrProd: extra,
+		probeMetadata:       make(map[libpf.Origin]samples.ProbeOriginMetadata),
 	}, nil
+}
+
+// RegisterProbeOrigin registers metadata for a custom probe origin.
+func (p *Pdata) RegisterProbeOrigin(origin libpf.Origin, meta samples.ProbeOriginMetadata) {
+	p.probeMetadata[origin] = meta
 }
 
 // Purge purges all the expired data

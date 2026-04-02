@@ -40,11 +40,12 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 
 	return &CollectorReporter{
 		baseReporter: &baseReporter{
-			cfg:         cfg,
-			name:        cfg.Name,
-			version:     cfg.Version,
-			pdata:       data,
-			traceEvents: xsync.NewRWMutex(tree),
+			cfg:          cfg,
+			name:         cfg.Name,
+			version:      cfg.Version,
+			pdata:        data,
+			traceEvents:  xsync.NewRWMutex(tree),
+			probeOrigins: xsync.NewRWMutex(make(map[libpf.Origin]struct{})),
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),
 			},
