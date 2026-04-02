@@ -394,15 +394,13 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       // Although systemstack is declared with $0 frame size, Go's linker injects
       // a frame pointer prologue (PUSH RBP + MOVQ RSP, RBP) for all non-NOFRAME
       // functions that contain a CALL instruction.
+      // https://github.com/golang/go/blob/affadc7997466dfacad5b9a3dc90ee5e7a7b6085/src/cmd/internal/obj/x86/obj6.go#L637
       //
       // Stack layout inside gosave_systemstack_switch at the time of LEAQ:
-      //   [SP+0]  = RA back into systemstack   (pushed by CALL gosave, useless)
+      //   [SP+0]  = RA back into systemstack    (pushed by CALL gosave, useless)
       //   [SP+8]  = saved old RBP of caller     (pushed by systemstack's PUSH RBP prologue)
       //   [SP+16] = RA caller of systemstack    (pushed by CALL systemstack)
-      //
-      // After PUSH RBP + MOVQ RSP, RBP in systemstack's prologue:
-      //   RBP = RSP_after_push = SP+8 inside gosave
-      // So gobuf.bp == gobuf.sp — both point to the saved old RBP slot.
+      //   SP+24 = address of SP before the call to systemstack
       //
       // We want to resume unwinding at the caller of systemstack, so:
       //   pc = *(gobuf.sp + 8) = RA caller of systemstack
@@ -478,101 +476,6 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       state->pc = caller_pc;
       state->sp = sched_sp + 16;
       state->fp = caller_fp;
-      unwinder_mark_nonleaf_frame(state);
-      goto frame_ok;
-    }
-    case UNWIND_COMMAND_GO_MCALL: {
-      // Cross the Go mcall boundary: recover the goroutine's saved context
-      // directly from gobuf fields.
-      //
-      // Unlike systemstack (which uses gosave_systemstack_switch and stores a
-      // synthetic UNDEF marker in gobuf.pc), mcall saves the caller's real
-      // register values into gobuf:
-      //
-      //   MOVQ  8(SP), BX
-      //   MOVQ  BX, gobuf_pc(R14)               // gobuf.pc = caller's PC (real return address)
-      //   LEAQ  fn+0(FP), BX
-      //   MOVQ  BX, gobuf_sp(R14)               // gobuf.sp = caller's SP
-      //   MOVQ  (BP), BX
-      //   MOVQ  BX, gobuf_bp(R14)               // gobuf.bp = *(BP) = caller's FP (dereferenced)
-      //
-      // Because mcall dereferences BP (reads the saved old RBP from the current
-      // frame), gobuf.bp already contains the caller's frame pointer — no need
-      // to read it from the stack like we do for systemstack.
-      //
-      // We want to resume unwinding at the caller of mcall, so:
-      //   pc = gobuf.pc   = real caller PC
-      //   sp = gobuf.sp   = caller's SP
-      //   fp = gobuf.bp   = caller's frame pointer
-      //
-      // https://github.com/golang/go/blob/917949cc1d16c652cb09ba369718f45e5d814d8f/src/runtime/asm_amd64.s#L458
-      PerCPURecord *cpu_record = get_per_cpu_record();
-      if (!cpu_record) {
-        DEBUG_PRINT("GO_MCALL: no per-CPU record, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      u32 pid                  = cpu_record->trace.pid;
-      GoLabelsOffsets *go_offs = bpf_map_lookup_elem(&go_labels_procs, &pid);
-      if (!go_offs) {
-        DEBUG_PRINT("GO_MCALL: no Go offsets for this process, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      if (!go_offs->sched_sp) {
-        DEBUG_PRINT("GO_MCALL: sched offsets not configured, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      void *m_ptr = get_m_ptr(go_offs, state);
-      if (!m_ptr) {
-        DEBUG_PRINT("GO_MCALL: failed to get m_ptr, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      u64 curg = 0;
-      if (bpf_probe_read_user(&curg, sizeof(curg), (void *)((u64)m_ptr + go_offs->curg))) {
-        DEBUG_PRINT("GO_MCALL: failed to read curg, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      if (!curg) {
-        DEBUG_PRINT("GO_MCALL: no user goroutine (curg == NULL), stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      u64 sched_pc = 0, sched_sp = 0, sched_bp = 0;
-      if (bpf_probe_read_user(&sched_pc, sizeof(sched_pc), (void *)(curg + go_offs->sched_pc))) {
-        DEBUG_PRINT("GO_MCALL: failed to read sched_pc, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      if (bpf_probe_read_user(&sched_sp, sizeof(sched_sp), (void *)(curg + go_offs->sched_sp))) {
-        DEBUG_PRINT("GO_MCALL: failed to read sched_sp, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      if (!sched_sp || !sched_pc) {
-        DEBUG_PRINT(
-          "GO_MCALL: gobuf not populated (sp=%lx, pc=%lx), stopping",
-          (unsigned long)sched_sp,
-          (unsigned long)sched_pc);
-        *stop = true;
-        return ERR_OK;
-      }
-      if (bpf_probe_read_user(&sched_bp, sizeof(sched_bp), (void *)(curg + go_offs->sched_bp))) {
-        DEBUG_PRINT("GO_MCALL: failed to read sched_bp, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      DEBUG_PRINT(
-        "GO_MCALL: recovered caller context: pc=0x%lx, sp=0x%lx, fp=0x%lx",
-        (unsigned long)sched_pc,
-        (unsigned long)sched_sp,
-        (unsigned long)sched_bp);
-      state->pc = sched_pc;
-      state->sp = sched_sp;
-      state->fp = sched_bp;
       unwinder_mark_nonleaf_frame(state);
       goto frame_ok;
     }
@@ -702,7 +605,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
       //
       // We want to resume unwinding at the caller of systemstack, so:
       //   pc = *(gobuf.sp + 8)   = LR saved by STP = RA caller of systemstack
-      //   sp = gobuf.sp + 16     = beyond the consumed R29+LR slot (STP allocated 16 bytes)
+      //   sp = gobuf.sp + 16     = SP before the call to systemstack
       //   fp = *(gobuf.sp + 0)   = R29 saved by STP = frame pointer of the caller
       //
       // gobuf.pc (systemstack_switch = UNDEF) is intentionally ignored: it is a
@@ -774,101 +677,6 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
       state->pc  = normalize_pac_ptr(caller_pc);
       state->sp  = sched_sp + 16;
       state->fp  = caller_fp;
-      state->lr  = 0;
-      state->r28 = curg;
-      unwinder_mark_nonleaf_frame(state);
-      goto frame_ok;
-    }
-    case UNWIND_COMMAND_GO_MCALL: {
-      // Cross the Go mcall boundary: recover the goroutine's saved context
-      // directly from gobuf fields.
-      //
-      // Unlike systemstack (which uses gosave_systemstack_switch and stores a
-      // synthetic UNDEF marker in gobuf.pc), mcall saves the caller's real
-      // register values into gobuf:
-      //
-      //   MOVD  RSP, R0
-      //   MOVD  R0, (g_sched+gobuf_sp)(g)        // gobuf.sp = RSP (caller's SP)
-      //   MOVD  R29, (g_sched+gobuf_bp)(g)        // gobuf.bp = R29 (caller's FP)
-      //   MOVD  LR, (g_sched+gobuf_pc)(g)         // gobuf.pc = LR  (caller's return address)
-      //   MOVD  $0, (g_sched+gobuf_lr)(g)         // gobuf.lr = 0
-      //
-      // mcall is NOSPLIT|NOFRAME — no STP prologue, so RSP, R29 and LR are
-      // the caller's original values (unchanged by BL mcall on arm64).
-      //
-      // We want to resume unwinding at the caller of mcall, so:
-      //   pc = gobuf.pc   = LR = real caller return address
-      //   sp = gobuf.sp   = RSP = caller's stack pointer
-      //   fp = gobuf.bp   = R29 = caller's frame pointer
-      //
-      // https://github.com/golang/go/blob/5a928e5a37dc632bbb1794fe0e0846e6352be8b2/src/runtime/asm_arm64.s#L282
-      PerCPURecord *cpu_record = get_per_cpu_record();
-      if (!cpu_record) {
-        DEBUG_PRINT("GO_MCALL: no per-CPU record, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      u32 pid                  = cpu_record->trace.pid;
-      GoLabelsOffsets *go_offs = bpf_map_lookup_elem(&go_labels_procs, &pid);
-      if (!go_offs) {
-        DEBUG_PRINT("GO_MCALL: no Go offsets for this process, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      if (!go_offs->sched_sp) {
-        DEBUG_PRINT("GO_MCALL: sched offsets not configured, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      void *m_ptr = get_m_ptr(go_offs, state);
-      if (!m_ptr) {
-        DEBUG_PRINT("GO_MCALL: failed to get m_ptr, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      u64 curg = 0;
-      if (bpf_probe_read_user(&curg, sizeof(curg), (void *)((u64)m_ptr + go_offs->curg))) {
-        DEBUG_PRINT("GO_MCALL: failed to read curg, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      if (!curg) {
-        DEBUG_PRINT("GO_MCALL: no user goroutine (curg == NULL), stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      u64 sched_pc = 0, sched_sp = 0, sched_bp = 0;
-      if (bpf_probe_read_user(&sched_pc, sizeof(sched_pc), (void *)(curg + go_offs->sched_pc))) {
-        DEBUG_PRINT("GO_MCALL: failed to read sched_pc, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      if (bpf_probe_read_user(&sched_sp, sizeof(sched_sp), (void *)(curg + go_offs->sched_sp))) {
-        DEBUG_PRINT("GO_MCALL: failed to read sched_sp, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      if (!sched_sp || !sched_pc) {
-        DEBUG_PRINT(
-          "GO_MCALL: gobuf not populated (sp=%lx, pc=%lx), stopping",
-          (unsigned long)sched_sp,
-          (unsigned long)sched_pc);
-        *stop = true;
-        return ERR_OK;
-      }
-      if (bpf_probe_read_user(&sched_bp, sizeof(sched_bp), (void *)(curg + go_offs->sched_bp))) {
-        DEBUG_PRINT("GO_MCALL: failed to read sched_bp, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      DEBUG_PRINT(
-        "GO_MCALL: recovered caller context: pc=0x%lx, sp=0x%lx, fp=0x%lx",
-        (unsigned long)sched_pc,
-        (unsigned long)sched_sp,
-        (unsigned long)sched_bp);
-      state->pc  = normalize_pac_ptr(sched_pc);
-      state->sp  = sched_sp;
-      state->fp  = sched_bp;
       state->lr  = 0;
       state->r28 = curg;
       unwinder_mark_nonleaf_frame(state);
