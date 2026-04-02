@@ -19,6 +19,8 @@ type TraceEventMeta struct {
 	Origin         libpf.Origin
 	OffTime        int64
 	PID, TID       libpf.PID
+	SpanID         libpf.APMSpanID
+	TraceID        libpf.APMTraceID
 }
 
 // TraceEvents holds known information about a trace.
@@ -78,4 +80,7 @@ type SampleKey struct {
 
 	TID int64
 	CPU int64
+
+	SpanID  libpf.APMSpanID
+	TraceID libpf.APMTraceID
 }

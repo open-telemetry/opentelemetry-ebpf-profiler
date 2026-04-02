@@ -593,7 +593,15 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	}
 	events := map[libpf.Origin]samples.SampleToEvents{
 		support.TraceOriginSampling: {
-			{}: &samples.TraceEvents{
+			{
+				Hash:   libpf.NewTraceHash(0, 1),
+				Comm:   libpf.Intern("abc"),
+				TID:    42,
+				CPU:    73,
+				SpanID: libpf.APMSpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
+				TraceID: libpf.APMTraceID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+					0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27},
+			}: &samples.TraceEvents{
 				Frames: singleFrameNative(mappingFile, 0x1000, 0x1000, 0x2000, 0x100),
 				Timestamps: []uint64{
 					uint64(time.Unix(1010, 0).UnixNano()),
@@ -668,6 +676,50 @@ func TestGenerate_NativeFrame(t *testing.T) {
 	// since it's resolved by the backend. The function table should be empty.
 	assert.Equal(t, 1, dic.FunctionTable().Len(),
 		"Function table should be empty for native frames")
+
+	// Verify SpanID and TraceID are set via Link
+	linkIndex := sample.LinkIndex()
+	assert.Greater(t, linkIndex, int32(0), "Sample should have a link set (index > 0, since 0 is dummy)")
+	link := dic.LinkTable().At(int(linkIndex))
+	expectedSpanID := pcommon.SpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7}
+	expectedTraceID := pcommon.TraceID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+		0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27}
+	assert.Equal(t, expectedSpanID, link.SpanID())
+	assert.Equal(t, expectedTraceID, link.TraceID())
+
+	// Verify Comm, TID, and CPU are set in sample attributes
+	attributeIndices := sample.AttributeIndices().AsRaw()
+	assert.NotEmpty(t, attributeIndices, "Sample should have attributes")
+
+	attributeTable := dic.AttributeTable()
+	stringTable := dic.StringTable()
+
+	foundComm := false
+	foundTID := false
+	foundCPU := false
+
+	for _, attrIdx := range attributeIndices {
+		attr := attributeTable.At(int(attrIdx))
+		keyStrIdx := attr.KeyStrindex()
+		key := stringTable.At(int(keyStrIdx))
+
+		switch key {
+		case string(semconv.ThreadNameKey):
+			assert.Equal(t, "abc", attr.Value().Str())
+			foundComm = true
+		case string(semconv.ThreadIDKey):
+			assert.Equal(t, int64(42), attr.Value().Int())
+			foundTID = true
+		case string(semconv.CPULogicalNumberKey):
+			assert.Equal(t, int64(73), attr.Value().Int())
+			foundCPU = true
+		}
+	}
+
+	assert.True(t, foundComm, "Sample should have Comm attribute set")
+	assert.True(t, foundTID, "Sample should have TID attribute set")
+	assert.True(t, foundCPU, "Sample should have CPU attribute set")
+
 }
 
 func TestStackTableOrder(t *testing.T) {
@@ -761,7 +813,15 @@ func TestGenerate_Validate(t *testing.T) {
 	}
 	events := map[libpf.Origin]samples.SampleToEvents{
 		support.TraceOriginSampling: {
-			{}: &samples.TraceEvents{
+			{
+				Hash:   libpf.NewTraceHash(0, 1),
+				Comm:   libpf.Intern("abc"),
+				TID:    42,
+				CPU:    73,
+				SpanID: libpf.APMSpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
+				TraceID: libpf.APMTraceID{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+					0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27},
+			}: &samples.TraceEvents{
 				Frames: singleFrameTrace(libpf.PythonFrame, mapping, 0x30,
 					funcName, filePath, 123),
 				Timestamps: []uint64{42},

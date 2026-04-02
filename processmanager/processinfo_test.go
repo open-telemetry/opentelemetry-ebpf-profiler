@@ -63,7 +63,6 @@ func TestAssignLibcInfoMergesLibcInfo(t *testing.T) {
 		libc.DTVInfo{
 			Offset:     -8,
 			Multiplier: 16,
-			Indirect:   1,
 		},
 	}
 

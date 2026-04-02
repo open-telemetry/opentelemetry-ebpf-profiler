@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
@@ -17,6 +18,27 @@ const (
 	// 1TB of executable address space
 	MaxArgMapScaleFactor = 8
 )
+
+// ErrorMode controls how the profiler receiver handles startup errors.
+type ErrorMode string
+
+const (
+	// IgnoreError means startup errors are logged but not returned to the collector.
+	IgnoreError ErrorMode = "ignore"
+	// PropagateError means startup errors are returned to the collector (default).
+	PropagateError ErrorMode = "propagate"
+)
+
+func (e *ErrorMode) UnmarshalText(text []byte) error {
+	str := ErrorMode(strings.ToLower(string(text)))
+	switch str {
+	case IgnoreError, PropagateError:
+		*e = str
+		return nil
+	default:
+		return fmt.Errorf("unknown error mode %q", str)
+	}
+}
 
 // Config is the configuration for the collector.
 type Config struct {
@@ -41,11 +63,16 @@ type Config struct {
 	MaxGRPCRetries         uint32        `mapstructure:"max_grpc_retries"`
 	MaxRPCMsgSize          int           `mapstructure:"max_rpc_msg_size"`
 	BPFFSRoot              string        `mapstructure:"bpf_fs_root"`
+	ErrorMode              ErrorMode     `mapstructure:"error_mode"`
 }
 
 // Validate validates the config.
 // This is automatically called by the config parser as it implements the xconfmap.Validator interface.
 func (cfg *Config) Validate() error {
+	if cfg.ErrorMode != IgnoreError && cfg.ErrorMode != PropagateError {
+		return fmt.Errorf("unknown error mode %q", cfg.ErrorMode)
+	}
+
 	if cfg.SamplesPerSecond < 1 {
 		return fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond)
 	}

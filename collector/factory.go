@@ -41,5 +41,6 @@ func defaultConfig() component.Config {
 		MaxGRPCRetries:         5,
 		MaxRPCMsgSize:          32 << 20, // 32 MiB,
 		BPFFSRoot:              "/sys/fs/bpf/",
+		ErrorMode:              config.PropagateError,
 	}
 }
