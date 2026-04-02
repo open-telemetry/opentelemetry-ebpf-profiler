@@ -3,6 +3,7 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 import (
 	"hash/fnv"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 )
 
@@ -10,7 +11,7 @@ import (
 type locationInfo struct {
 	address       uint64
 	mappingIndex  int32
-	frameType     string
+	frameType     libpf.FrameType
 	hasLine       bool
 	lineNumber    int64
 	columnNumber  int64
@@ -33,4 +34,10 @@ func hashLocationIndices(locationIndices []int32) uint64 {
 	h := fnv.New64a()
 	h.Write(pfunsafe.FromSlice(locationIndices))
 	return h.Sum64()
+}
+
+// linkInfo is a helper used to deduplicate Links.
+type linkInfo struct {
+	spanID  libpf.APMSpanID
+	traceID libpf.APMTraceID
 }

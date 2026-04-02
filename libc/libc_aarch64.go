@@ -408,6 +408,5 @@ func extractDTVInfoARM(code []byte) (DTVInfo, error) {
 	return DTVInfo{
 		Offset:     dtvOffset,
 		Multiplier: uint8(entryWidth),
-		Indirect:   1,
 	}, nil
 }

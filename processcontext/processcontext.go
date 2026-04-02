@@ -143,7 +143,7 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 
 func IsContextMapping(mappingPath string) bool {
 	// In some cases the name can show up in proc as "/memfd:OTEL_CTX (deleted)"
-	// but the " (deleted)" suffix is separately trimmed by parseMappings
+	// but the " (deleted)" suffix is separately trimmed by iterateMappings
 	return mappingPath == ContextMappingMemfd ||
 		mappingPath == ContextMappingAnonNamed ||
 		mappingPath == ContextMappingMemfdNamed

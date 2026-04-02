@@ -49,7 +49,7 @@ func Start(meter metric.Meter) {
 	defs := GetDefinitions()
 	metricTypes = make(map[MetricID]MetricType, len(defs))
 	for _, md := range defs {
-		if md.Obsolete {
+		if md.Obsolete || md.Field == "" {
 			continue
 		}
 		metricTypes[md.ID] = md.Type

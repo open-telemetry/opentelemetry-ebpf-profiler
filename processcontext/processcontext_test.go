@@ -255,9 +255,7 @@ func TestProcessContext_Read(t *testing.T) {
 				assert.Nil(t, ctx.Context)
 				assert.Zero(t, ctx.PublishedAtNs)
 				assert.Error(t, err)
-				if tt.expectedErr != nil {
-					assert.ErrorIs(t, err, tt.expectedErr)
-				}
+				assert.ErrorIs(t, err, tt.expectedErr)
 				if tt.errorSubstring != "" {
 					assert.Contains(t, err.Error(), tt.errorSubstring)
 				}
@@ -350,13 +348,20 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			proc := process.New(pid, pid)
 			defer proc.Close()
 
-			mappings, _, err := proc.GetMappings()
-			require.NoError(t, err)
+			var contextMappingAddr uint64
+			_, err = proc.IterateMappings(func(m process.RawMapping) bool {
+				if processcontext.IsContextMapping(m.Path) {
+					contextMappingAddr = m.Vaddr
+					return false
+				}
+				return true
+			})
+			if err != nil && !errors.Is(err, process.ErrCallbackStopped) {
+				require.NoError(t, err)
+			}
+			require.NotZero(t, contextMappingAddr)
 
-			m := findContextMapping(mappings)
-			require.NotNil(t, m)
-
-			result, err := processcontext.Read(libpf.Address(m.Vaddr), proc.GetRemoteMemory(), 0, processcontext.DefaultMaxRetries)
+			result, err := processcontext.Read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, processcontext.DefaultMaxRetries)
 			require.NoError(t, err)
 			require.EqualExportedValues(t,
 				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
@@ -364,15 +369,4 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 
 		})
 	}
-}
-
-// findContextMapping searches for the ProcessContext memory mapping.
-func findContextMapping(mappings []process.Mapping) *process.Mapping {
-	for i := range mappings {
-		m := &mappings[i]
-		if processcontext.IsContextMapping(m.Path.String()) {
-			return m
-		}
-	}
-	return nil
 }

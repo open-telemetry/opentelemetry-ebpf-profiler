@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# NOTE: This script needs to be executed from the root directory
+# of the repository.
+
 set -euo pipefail
 
 # Use COLLECTOR_PATH if set, otherwise default to ../../../opentelemetry-collector
@@ -15,12 +18,13 @@ fi
 
 echo "  # START otel-from-tree - Do not edit below this line" >> cmd/otelcol-ebpf-profiler/manifest.yaml
 
-grep -E "gomod: go.opentelemetry.io/collector/" cmd/otelcol-ebpf-profiler/manifest.yaml | \
-    sed -E 's/.*gomod: ([^ ]+) .*/\1/' | \
-    sort -u | \
-    while read -r module; do
-        subpath=${module#go.opentelemetry.io/collector}
-        echo "  - ${module} => ${COLLECTOR_PATH}${subpath}" >> cmd/otelcol-ebpf-profiler/manifest.yaml
-    done
+# Replace collector module dependencies with local paths
+cd cmd/otelcol-ebpf-profiler && go list -m -u all | \
+    grep 'go\.opentelemetry\.io/collector' | \
+    awk '{print $1}' | \
+  while read -r module; do
+    subpath=${module#go.opentelemetry.io/collector}
+    echo "  - ${module} => ${COLLECTOR_PATH}${subpath}" >> manifest.yaml
+  done
 
 echo "Local replaces added. You can now build with local opentelemetry-collector changes."

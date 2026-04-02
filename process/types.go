@@ -18,13 +18,19 @@ import (
 )
 
 // VdsoPathName is the path to use for VDSO mappings.
-var VdsoPathName = libpf.Intern("linux-vdso.1.so")
+const VdsoPathName = "linux-vdso.1.so"
 
 // vdsoInode is the synthesized inode number for VDSO mappings.
 const vdsoInode = 50
 
-// Mapping contains information about a memory mapping.
-type Mapping struct {
+// RawMapping represents a memory mapping parsed from /proc/pid/maps or a coredump.
+//
+// WARNING: When produced by the systemProcess IterateMappings implementation,
+// Path may reference an internal scanner buffer that is recycled after the
+// iteration completes. Callers that need to store the mapping beyond the
+// callback scope must intern the Path via libpf.Intern to detach it from the
+// buffer and deduplicate identical paths across mappings.
+type RawMapping struct {
 	// Vaddr is the virtual memory start for this mapping.
 	Vaddr uint64
 	// Length is the length of the mapping.
@@ -37,27 +43,34 @@ type Mapping struct {
 	Device uint64
 	// Inode holds the mapped file's inode number.
 	Inode uint64
-	// Path contains the file name for file backed mappings.
-	Path libpf.String
+	// Path is the file path for file-backed and special mappings.
+	// When received from IterateMappings, this may point into an internal
+	// buffer. The caller must use libpf.Intern to detach it before storing
+	// the mapping long-term.
+	Path string
 }
 
-func (m *Mapping) IsExecutable() bool {
+func (m *RawMapping) IsExecutable() bool {
 	return m.Flags&elf.PF_X == elf.PF_X
 }
 
-func (m *Mapping) IsAnonymous() bool {
-	return m.Path == libpf.NullString || m.IsMemFD()
+func (m *RawMapping) IsAnonymous() bool {
+	return !m.IsFileBacked() && !m.IsVDSO()
 }
 
-func (m *Mapping) IsMemFD() bool {
-	return strings.HasPrefix(m.Path.String(), "/memfd:")
+func (m *RawMapping) IsFileBacked() bool {
+	return m.Path != "" && !m.IsVDSO() && !m.IsMemFD()
 }
 
-func (m *Mapping) IsVDSO() bool {
+func (m *RawMapping) IsMemFD() bool {
+	return strings.HasPrefix(m.Path, "/memfd:")
+}
+
+func (m *RawMapping) IsVDSO() bool {
 	return m.Path == VdsoPathName
 }
 
-func (m *Mapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
+func (m *RawMapping) GetOnDiskFileIdentifier() util.OnDiskFileIdentifier {
 	return util.OnDiskFileIdentifier{
 		DeviceID: m.Device,
 		InodeNum: m.Inode,
@@ -127,8 +140,13 @@ type Process interface {
 	// GetExe returns the executable path of the process.
 	GetExe() (libpf.String, error)
 
-	// GetMappings reads and parses process memory mappings.
-	GetMappings() ([]Mapping, uint32, error)
+	// IterateMappings parses process memory mappings and calls the
+	// callback for each mapping. The RawMapping's Path field may reference
+	// an internal buffer that is recycled after the iteration completes;
+	// callers must use libpf.Intern to detach the Path before storing the
+	// mapping beyond the callback scope. Returning false from the callback
+	// stops iteration and causes ErrCallbackStopped to be returned.
+	IterateMappings(callback func(m RawMapping) bool) (uint32, error)
 
 	// GetThreads reads the process thread states.
 	GetThreads() ([]ThreadInfo, error)
@@ -137,14 +155,14 @@ type Process interface {
 	GetRemoteMemory() remotememory.RemoteMemory
 
 	// OpenMappingFile returns ReadAtCloser accessing the backing file of the mapping.
-	OpenMappingFile(*Mapping) (ReadAtCloser, error)
+	OpenMappingFile(*RawMapping) (ReadAtCloser, error)
 
 	// GetMappingFileLastModifed returns the timestamp when the backing file was last modified
 	// or zero if an error occurs or mapping file is not accessible via filesystem.
-	GetMappingFileLastModified(*Mapping) int64
+	GetMappingFileLastModified(*RawMapping) int64
 
 	// CalculateMappingFileID calculates FileID of the backing file.
-	CalculateMappingFileID(*Mapping) (libpf.FileID, error)
+	CalculateMappingFileID(*RawMapping) (libpf.FileID, error)
 
 	io.Closer
 
