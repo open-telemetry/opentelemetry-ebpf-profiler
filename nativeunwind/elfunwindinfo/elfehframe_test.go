@@ -208,7 +208,7 @@ func TestGetUnwindInfoX86_RegisterRA(t *testing.T) {
 				fp:  vmReg{reg: regCFA, off: 0},
 			},
 			expected: sdtypes.UnwindInfo{
-				Flags:      support.UnwindFlagRegisterRA,
+				Flags:      support.UnwindFlagRegisterRA | support.UnwindFlagLeafOnly,
 				BaseReg:    support.UnwindRegSp,
 				Param:      8,
 				AuxBaseReg: support.UnwindRegX86RDI,
@@ -231,7 +231,7 @@ func TestGetUnwindInfoX86_RegisterRA(t *testing.T) {
 				fp:  vmReg{reg: regUndefined},      // FP not specified
 			},
 			expected: sdtypes.UnwindInfo{
-				Flags:      support.UnwindFlagRegisterRA,
+				Flags:      support.UnwindFlagRegisterRA | support.UnwindFlagLeafOnly,
 				BaseReg:    support.UnwindRegSp,
 				Param:      0,
 				AuxBaseReg: support.UnwindRegX86RDI,
