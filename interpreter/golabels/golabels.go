@@ -46,10 +46,12 @@ func (d *data) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 	// files in the same process produce duplicate golabels instances that all
 	// write/delete the same eBPF map entry. Tolerate the key already being
 	// removed by another instance.
-	if err := ebpf.DeleteProcData(libpf.GoLabels, pid); err != nil && !errors.Is(err, cebpf.ErrKeyNotExist) {
-		return err
+	err := ebpf.DeleteProcData(libpf.GoLabels, pid)
+	if errors.Is(err, cebpf.ErrKeyNotExist) {
+		log.Debugf("golabels entry for %d already removed", pid)
+		return nil
 	}
-	return nil
+	return err
 }
 
 func (d *data) Unload(_ interpreter.EbpfHandler) {}
