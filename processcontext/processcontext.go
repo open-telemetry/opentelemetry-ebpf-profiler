@@ -199,3 +199,9 @@ func readPayload(rm remotememory.RemoteMemory, hdr header) (Info, error) {
 
 	return Info{Context: ctx, PublishedAtNs: hdr.MonotonicPublishedAtNs}, nil
 }
+
+func (p *Info) ClearExtraAttributes() {
+	if p.Context != nil {
+		p.Context.ExtraAttributes = nil
+	}
+}
