@@ -128,7 +128,7 @@ func NewExecutableInfoManager(
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
 
 	// Always register golabels loader: the native unwinder needs Go runtime
-	// offsets (m, curg, g.sched) to cross systemstack/mcall stack boundaries,
+	// offsets (m, curg, g.sched) to cross the systemstack boundary,
 	// regardless of whether custom labels extraction is enabled.
 	interpreterLoaders = append(interpreterLoaders, golabels.Loader)
 

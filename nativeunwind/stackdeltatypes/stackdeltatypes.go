@@ -53,12 +53,6 @@ var UnwindInfoFramePointer = UnwindInfo{Flags: support.UnwindFlagCommand,
 var UnwindInfoGoSystemstack = UnwindInfo{Flags: support.UnwindFlagCommand,
 	Param: support.UnwindCommandGoSystemstack}
 
-// UnwindInfoGoMcall is the stack delta info for runtime.mcall.
-// Unlike systemstack, mcall stores the caller's context directly in gobuf fields
-// (gobuf.pc = real caller PC, gobuf.sp = caller's SP, gobuf.bp = caller's FP).
-var UnwindInfoGoMcall = UnwindInfo{Flags: support.UnwindFlagCommand,
-	Param: support.UnwindCommandGoMcall}
-
 // UnwindInfoLR contains the description to unwind ARM64 function without a frame (LR only)
 var UnwindInfoLR = UnwindInfo{
 	BaseReg:    support.UnwindRegSp,
