@@ -197,8 +197,8 @@ static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURe
   tail_call(ctx, PROG_GO_LABELS);
 }
 
-// Implements the OTel specification to share span/trace IDs according to:
-// https://github.com/open-telemetry/opentelemetry-specification/pull/4855
+// Implements the specification to share span/trace IDs according to:
+// https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
 static EBPF_INLINE void maybe_add_otel_span_trace_id(Trace *trace)
 {
   u64 id = bpf_get_current_pid_tgid();
@@ -209,7 +209,7 @@ static EBPF_INLINE void maybe_add_otel_span_trace_id(Trace *trace)
   }
 
   // The structure of apm_[transaction|trace]_id happens to be the same
-  // as proposed in https://github.com/open-telemetry/opentelemetry-specification/pull/4855.
+  // as proposed in https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
 
   trace->apm_trace_id.as_int.hi    = info->trace_id.as_int.hi;
   trace->apm_trace_id.as_int.lo    = info->trace_id.as_int.lo;
