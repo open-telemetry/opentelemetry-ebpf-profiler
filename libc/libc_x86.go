@@ -107,7 +107,9 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 		entryWidth = e.NewImmediateCapture("entryWidth")
 	)
 
-	// Pattern 1: glibc - Direct DTV access
+	// Pattern 1: glibc - DTV pointer loaded from FS:offset, then indexed
+	// FS:offset is a memory load that retrieves the DTV pointer, so this is
+	// indirect access (two dereferences: load DTV ptr, then index into DTV).
 	expected := e.Add(
 		e.Mem8(
 			e.Add(
@@ -122,7 +124,6 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 		return DTVInfo{
 			Offset:     int16(dtvOffset.CapturedValue() & 0xFFFF),
 			Multiplier: uint8(entryWidth.CapturedValue()),
-			Indirect:   0,
 		}, nil
 	}
 
@@ -145,7 +146,6 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 		return DTVInfo{
 			Offset:     int16(dtvOffset.CapturedValue() & 0xFFFF),
 			Multiplier: uint8(entryWidth.CapturedValue()),
-			Indirect:   1,
 		}, nil
 	}
 
@@ -164,7 +164,6 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 		return DTVInfo{
 			Offset:     int16(dtvOffset.CapturedValue() & 0xFFFF),
 			Multiplier: uint8(entryWidth.CapturedValue()),
-			Indirect:   1,
 		}, nil
 	}
 
@@ -184,7 +183,6 @@ func extractDTVInfoX86(code []byte) (DTVInfo, error) {
 		return DTVInfo{
 			Offset:     int16(dtvOffset.CapturedValue() & 0xFFFF),
 			Multiplier: uint8(entryWidth.CapturedValue()),
-			Indirect:   1,
 		}, nil
 	}
 

@@ -61,6 +61,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	mappingSet := make(orderedset.OrderedSet[libpf.FrameMapping], 64)
 	stackSet := make(orderedset.OrderedSet[stackInfo], 64)
 	locationSet := make(orderedset.OrderedSet[locationInfo], 64)
+	linkSet := make(orderedset.OrderedSet[linkInfo], 64)
 
 	// By specification, the first element should be empty.
 	stringSet.Add("")
@@ -68,6 +69,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	mappingSet.Add(libpf.FrameMapping{})
 	stackSet.Add(stackInfo{})
 	locationSet.Add(locationInfo{})
+	linkSet.Add(linkInfo{})
 
 	dic.LinkTable().AppendEmpty()
 	dic.MappingTable().AppendEmpty()
@@ -103,7 +105,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
-				stringSet, funcSet, mappingSet, stackSet, locationSet,
+				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
 				origin, toEvents.Events[origin], prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
@@ -143,6 +145,7 @@ func (p *Pdata) setProfile(
 	mappingSet orderedset.OrderedSet[libpf.FrameMapping],
 	stackSet orderedset.OrderedSet[stackInfo],
 	locationSet orderedset.OrderedSet[locationInfo],
+	linkSet orderedset.OrderedSet[linkInfo],
 	origin libpf.Origin,
 	events samples.SampleToEvents,
 	profile pprofile.Profile,
@@ -175,6 +178,21 @@ func (p *Pdata) setProfile(
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
 		if origin == support.TraceOriginOffCPU {
 			sample.Values().Append(traceInfo.OffTimes...)
+		}
+
+		if sampleKey.SpanID != libpf.InvalidAPMSpanID &&
+			sampleKey.TraceID != libpf.InvalidAPMTraceID {
+			link, ok := linkSet.AddWithCheck(linkInfo{
+				traceID: sampleKey.TraceID,
+				spanID:  sampleKey.SpanID,
+			})
+			if !ok {
+				l := dic.LinkTable().AppendEmpty()
+				l.SetSpanID(pcommon.SpanID(sampleKey.SpanID))
+				l.SetTraceID(pcommon.TraceID(sampleKey.TraceID))
+
+			}
+			sample.SetLinkIndex(link)
 		}
 
 		locationIndices := make([]int32, 0, len(traceInfo.Frames))

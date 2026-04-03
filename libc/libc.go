@@ -66,20 +66,24 @@ func IsPotentialLibcDSO(filename string) bool {
 }
 
 func ExtractLibcInfo(ef *pfelf.File) (*LibcInfo, error) {
-	tsdinfo, err := extractTSDInfo(ef)
-	if err != nil {
-		return nil, err
+	info := &LibcInfo{}
+
+	tsdinfo, tsdErr := extractTSDInfo(ef)
+	if tsdErr == nil {
+		info.TSDInfo = tsdinfo
 	}
 
-	dtvinfo, err := extractDTVInfo(ef)
-	if err != nil {
-		return &LibcInfo{}, err
+	dtvinfo, dtvErr := extractDTVInfo(ef)
+	if dtvErr == nil {
+		info.DTVInfo = dtvinfo
 	}
 
-	return &LibcInfo{
-		TSDInfo: tsdinfo,
-		DTVInfo: dtvinfo,
-	}, nil
+	// Return an error only if both extractions failed.
+	if tsdErr != nil && dtvErr != nil {
+		return nil, fmt.Errorf("TSD: %s; DTV: %s", tsdErr, dtvErr)
+	}
+
+	return info, nil
 }
 
 // This code analyzes the C-library provided POSIX defined function which is used
