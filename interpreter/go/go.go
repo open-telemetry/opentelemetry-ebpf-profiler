@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -24,6 +25,7 @@ var (
 type goData struct {
 	refs atomic.Int32
 
+	fileID  host.FileID
 	version string
 
 	pclntab *elfunwindinfo.Gopclntab
@@ -56,6 +58,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	}
 
 	g := &goData{
+		fileID:  info.FileID(),
 		version: goVersion,
 		pclntab: pclntab,
 	}
@@ -103,6 +106,9 @@ func (g *goInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
 
 func (g *goInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, mapping libpf.FrameMapping) error {
 	if !ef.Type().IsInterpType(libpf.Native) {
+		return interpreter.ErrMismatchInterpreterType
+	}
+	if ef.Length() != 2 || host.FileID(ef.Variable(0)) != g.d.fileID {
 		return interpreter.ErrMismatchInterpreterType
 	}
 
