@@ -4,12 +4,11 @@
 package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
+	"debug/elf"
 	"errors"
 	"fmt"
 	"go/version"
 	"unsafe"
-
-	cebpf "github.com/cilium/ebpf"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
@@ -42,16 +41,7 @@ func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 }
 
 func (d *data) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	// Go plugins share the runtime with the main binary, so multiple Go ELF
-	// files in the same process produce duplicate golabels instances that all
-	// write/delete the same eBPF map entry. Tolerate the key already being
-	// removed by another instance.
-	err := ebpf.DeleteProcData(libpf.GoLabels, pid)
-	if errors.Is(err, cebpf.ErrKeyNotExist) {
-		log.Debugf("golabels entry for %d already removed", pid)
-		return nil
-	}
-	return err
+	return ebpf.DeleteProcData(libpf.GoLabels, pid)
 }
 
 func (d *data) Unload(_ interpreter.EbpfHandler) {}
@@ -68,6 +58,25 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	if goVersion == "" {
 		log.Debugf("file %s is not a Go binary", info.FileName())
 		return nil, nil
+	}
+
+	// Go plugins are shared objects that share the runtime with the main
+	// binary. The offsets we need are determined by the main binary so
+	// there is no reason to create a duplicate golabels instance for
+	// a plugin. A shared library is ET_DYN without a PT_INTERP segment
+	// (PIE executables are also ET_DYN but have PT_INTERP).
+	if file.Type == elf.ET_DYN {
+		hasInterp := false
+		for i := range file.Progs {
+			if file.Progs[i].Type == elf.PT_INTERP {
+				hasInterp = true
+				break
+			}
+		}
+		if !hasInterp {
+			log.Debugf("file %s is a Go shared library, skipping golabels", info.FileName())
+			return nil, nil
+		}
 	}
 
 	if version.Compare(goVersion, "go1.27") >= 0 {
