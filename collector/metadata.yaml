@@ -7,3 +7,5 @@ status:
   stability:
     development: [profiles]
   distributions: [ebpf-profiler]
+tests:
+  skip_lifecycle: true

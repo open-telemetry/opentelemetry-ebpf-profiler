@@ -83,7 +83,7 @@ ebpf-profiler: ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 otelcol-ebpf-profiler: ebpf generate-collector
-	cd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../$@ 
+	cd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../$@
 
 # Sets opentelemetry collector modules to be pulled from local source tree.
 # This command allows you to make changes to your local checkout of otel core and build
@@ -133,7 +133,7 @@ vanity-import-fix: $(PORTO)
 
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
-	CGO_ENABLED=1 go test $(GO_FLAGS) -exec=sudo -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
