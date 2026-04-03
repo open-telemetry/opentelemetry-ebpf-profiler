@@ -523,6 +523,10 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
 		if processcontext.IsContextMapping(m.Path) {
 			processContextInfo = readProcessContext(m.Vaddr, pr, oldProcessContextInfo)
+			// Even if process context is not found, it might be published in the future.
+			// For now, we rely on a new call to synchronizeMappings to pick it up.
+			// TODO: Add some kind of polling mechanism or a hook on prctl to be notified
+			// when the process context is published.
 		}
 
 		// Executable mappings and VDSO, converted directly to libpf.FrameMapping
