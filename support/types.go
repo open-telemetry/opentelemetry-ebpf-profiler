@@ -151,7 +151,7 @@ type TSDInfo struct {
 type DTVInfo struct {
 	Offset     int16
 	Multiplier uint8
-	Indirect   uint8
+	Pad_cgo_0  [1]byte
 }
 type Trace struct {
 	Pid                uint32
