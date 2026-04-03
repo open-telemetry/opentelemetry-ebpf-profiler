@@ -7,11 +7,17 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"structs"
 	"unsafe"
 
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/protobuf/proto"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	processcontextpb "go.opentelemetry.io/ebpf-profiler/processcontext/v1development"
@@ -47,6 +53,12 @@ const (
 
 	// Offset of the MonotonicPublishedAtNs field in the header struct
 	monotonicPublishedAtNsOffset = libpf.Address(unsafe.Offsetof(header{}.MonotonicPublishedAtNs))
+
+	// resourceAttrKey is the environment variable name OpenTelemetry Resource information will be read from.
+	resourceAttrKey = "OTEL_RESOURCE_ATTRIBUTES"
+
+	// svcNameKey is the environment variable name that Service Name information will be read from.
+	svcNameKey = "OTEL_SERVICE_NAME"
 )
 
 var (
@@ -61,8 +73,9 @@ var (
 )
 
 type Info struct {
-	Context       *processcontextpb.ProcessContext
-	PublishedAtNs uint64
+	Resource        *pcommon.Resource
+	ExtraAttributes *pcommon.Map
+	PublishedAtNs   uint64
 }
 
 // header represents the 32-byte memory region header per OTEP #4719.
@@ -200,11 +213,151 @@ func readPayload(rm remotememory.RemoteMemory, hdr header) (Info, error) {
 		return Info{}, fmt.Errorf("failed to unmarshal ProcessContext: %w", err)
 	}
 
-	return Info{Context: ctx, PublishedAtNs: hdr.MonotonicPublishedAtNs}, nil
+	var resource *pcommon.Resource
+	if ctx.Resource != nil {
+		r := pcommon.NewResource()
+		for _, attr := range ctx.Resource.Attributes {
+			convertAnyValue(attr.Value).MoveTo(r.Attributes().PutEmpty(attr.Key))
+		}
+		resource = &r
+	}
+
+	var extraAttributes *pcommon.Map
+	if ctx.ExtraAttributes != nil {
+		m := pcommon.NewMap()
+		for _, attr := range ctx.ExtraAttributes {
+			convertAnyValue(attr.Value).MoveTo(m.PutEmpty(attr.Key))
+		}
+		extraAttributes = &m
+	}
+	return Info{Resource: resource, ExtraAttributes: extraAttributes, PublishedAtNs: hdr.MonotonicPublishedAtNs}, nil
 }
 
 func (p *Info) ClearExtraAttributes() {
-	if p.Context != nil {
-		p.Context.ExtraAttributes = nil
+	// if p.Context != nil {
+	// 	p.Context.ExtraAttributes = nil
+	// }
+}
+
+// convertAnyValue converts a commonpb.AnyValue to a pcommon.Value,
+// handling all value types including nested maps and arrays.
+func convertAnyValue(src *commonpb.AnyValue) pcommon.Value {
+	if src == nil {
+		return pcommon.NewValueEmpty()
 	}
+	switch v := src.Value.(type) {
+	case *commonpb.AnyValue_StringValue:
+		return pcommon.NewValueStr(v.StringValue)
+	case *commonpb.AnyValue_BoolValue:
+		return pcommon.NewValueBool(v.BoolValue)
+	case *commonpb.AnyValue_IntValue:
+		return pcommon.NewValueInt(v.IntValue)
+	case *commonpb.AnyValue_DoubleValue:
+		return pcommon.NewValueDouble(v.DoubleValue)
+	case *commonpb.AnyValue_BytesValue:
+		val := pcommon.NewValueBytes()
+		val.Bytes().FromRaw(v.BytesValue)
+		return val
+	case *commonpb.AnyValue_ArrayValue:
+		val := pcommon.NewValueSlice()
+		if v.ArrayValue != nil {
+			sl := val.Slice()
+			sl.EnsureCapacity(len(v.ArrayValue.Values))
+			for _, item := range v.ArrayValue.Values {
+				convertAnyValue(item).MoveTo(sl.AppendEmpty())
+			}
+		}
+		return val
+	case *commonpb.AnyValue_KvlistValue:
+		val := pcommon.NewValueMap()
+		if v.KvlistValue != nil {
+			m := val.Map()
+			m.EnsureCapacity(len(v.KvlistValue.Values))
+			for _, kv := range v.KvlistValue.Values {
+				convertAnyValue(kv.Value).MoveTo(m.PutEmpty(kv.Key))
+			}
+		}
+		return val
+	default:
+		return pcommon.NewValueEmpty()
+	}
+}
+
+func (p *Info) addResourceStringAttribute(key string, value string) {
+	if p.Resource == nil {
+		r := pcommon.NewResource()
+		p.Resource = &r
+	}
+	// Only add the attribute if it is not already present.
+	if _, ok := p.Resource.Attributes().Get(key); ok {
+		return
+	}
+	p.Resource.Attributes().PutStr(key, value)
+}
+
+// AddEnvVars adds the given env vars to the ProcessContext as resource attributes.
+// OTEL_SERVICE_NAME is mapped to the service.name attribute.
+// OTEL_RESOURCE_ATTRIBUTES is parsed as comma-separated key=value pairs with
+// percent-encoded keys and values per the OTel resource SDK specification.
+// OTEL_SERVICE_NAME takes precedence over service.name in OTEL_RESOURCE_ATTRIBUTES.
+func (p *Info) AddEnvVars(envVars map[libpf.String]libpf.String) {
+	// Process OTEL_SERVICE_NAME first so it takes precedence over any
+	// service.name key inside OTEL_RESOURCE_ATTRIBUTES (addResourceAttribute
+	// skips keys that are already present).
+	if value, ok := envVars[libpf.Intern(svcNameKey)]; ok {
+		p.addResourceStringAttribute(string(semconv.ServiceNameKey), value.String())
+	}
+	if value, ok := envVars[libpf.Intern(resourceAttrKey)]; ok {
+		p.parseResourceAttributes(value.String())
+	}
+}
+
+// parseResourceAttributes parses the OTEL_RESOURCE_ATTRIBUTES env var value
+// as comma-separated key=value pairs where keys and values are percent-encoded.
+// On any decoding error the entire value is discarded.
+func (p *Info) parseResourceAttributes(raw string) {
+	if raw == "" {
+		return
+	}
+	// Parse into a temporary slice first so that on error we discard everything
+	// per the OTel spec.
+	type kv struct{ key, value string }
+	var pairs []kv
+	for pair := range strings.SplitSeq(raw, ",") {
+		k, v, ok := strings.Cut(pair, "=")
+		if !ok {
+			log.Debugf("OTEL_RESOURCE_ATTRIBUTES: discarding invalid value: missing '=' in %q", pair)
+			return
+		}
+		key, err := url.PathUnescape(k)
+		if err != nil {
+			log.Debugf("OTEL_RESOURCE_ATTRIBUTES: discarding invalid value: %v", err)
+			return
+		}
+		value, err := url.PathUnescape(v)
+		if err != nil {
+			log.Debugf("OTEL_RESOURCE_ATTRIBUTES: discarding invalid value: %v", err)
+			return
+		}
+		pairs = append(pairs, kv{key, value})
+	}
+	for _, pair := range pairs {
+		p.addResourceStringAttribute(pair.key, pair.value)
+	}
+}
+
+func ResourceToContextKey(resource *pcommon.Resource) libpf.String {
+	if resource == nil {
+		return libpf.NullString
+	}
+	// Per semantic conventions, triplet of service.namespace, service.name, service.instance.id
+	// must be globally unique.
+	// https://github.com/open-telemetry/semantic-conventions/blob/main/docs/registry/attributes/service.md
+	serviceNamespace, namespaceOk := resource.Attributes().Get(string(semconv.ServiceNamespaceKey))
+	serviceName, nameOk := resource.Attributes().Get(string(semconv.ServiceNameKey))
+	serviceInstanceID, instanceIdOk := resource.Attributes().Get(string(semconv.ServiceInstanceIDKey))
+	if !namespaceOk || !nameOk || !instanceIdOk {
+		return libpf.NullString
+	}
+	return libpf.Intern(fmt.Sprintf("%s:%s:%s", serviceNamespace.Str(), serviceName.Str(), serviceInstanceID.Str()))
 }

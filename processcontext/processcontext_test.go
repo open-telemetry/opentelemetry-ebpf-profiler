@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
 
@@ -41,6 +42,70 @@ var testContext = processcontextpb.ProcessContext{
 				Value: &commonpb.AnyValue{
 					Value: &commonpb.AnyValue_StringValue{
 						StringValue: "test-service",
+					},
+				},
+			},
+			{
+				Key: "service.version",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_IntValue{
+						IntValue: 42,
+					},
+				},
+			},
+			{
+				Key: "service.active",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_BoolValue{
+						BoolValue: true,
+					},
+				},
+			},
+			{
+				Key: "service.weight",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_DoubleValue{
+						DoubleValue: 3.14,
+					},
+				},
+			},
+			{
+				Key: "service.tags",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_ArrayValue{
+						ArrayValue: &commonpb.ArrayValue{
+							Values: []*commonpb.AnyValue{
+								{Value: &commonpb.AnyValue_StringValue{StringValue: "tag1"}},
+								{Value: &commonpb.AnyValue_IntValue{IntValue: 2}},
+							},
+						},
+					},
+				},
+			},
+			{
+				Key: "service.metadata",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_KvlistValue{
+						KvlistValue: &commonpb.KeyValueList{
+							Values: []*commonpb.KeyValue{
+								{
+									Key: "nested.key",
+									Value: &commonpb.AnyValue{
+										Value: &commonpb.AnyValue_StringValue{
+											StringValue: "nested-value",
+										},
+									},
+								},
+								{
+									Key: "nested.count",
+									Value: &commonpb.AnyValue{
+										Value: &commonpb.AnyValue_IntValue{
+											IntValue: 7,
+										},
+									},
+								},
+							},
+						},
 					},
 				},
 			},
@@ -146,7 +211,11 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(headerAddr, header)
 				mock.writeAt(payloadAddr, payload)
 			},
-			expectedResult: processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
+			expectedResult: processcontext.Info{
+				Resource:        expectedResource(),
+				ExtraAttributes: expectedExtraAttributes(),
+				PublishedAtNs:   123456789,
+			},
 		},
 		{
 			name: "read error",
@@ -254,7 +323,8 @@ func TestProcessContext_Read(t *testing.T) {
 				require.NotNil(t, ctx)
 				require.EqualExportedValues(t, &tt.expectedResult, &ctx)
 			} else {
-				assert.Nil(t, ctx.Context)
+				assert.Nil(t, ctx.Resource)
+				assert.Nil(t, ctx.ExtraAttributes)
 				assert.Zero(t, ctx.PublishedAtNs)
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
@@ -366,9 +436,146 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			result, err := processcontext.Read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
 			require.NoError(t, err)
 			require.EqualExportedValues(t,
-				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
+				processcontext.Info{
+					Resource:        expectedResource(),
+					ExtraAttributes: expectedExtraAttributes(),
+					PublishedAtNs:   123456789,
+				},
 				result)
 
+		})
+	}
+}
+
+func expectedResource() *pcommon.Resource {
+	r := pcommon.NewResource()
+	r.Attributes().PutStr("service.name", "test-service")
+	r.Attributes().PutInt("service.version", 42)
+	r.Attributes().PutBool("service.active", true)
+	r.Attributes().PutDouble("service.weight", 3.14)
+
+	tags := r.Attributes().PutEmptySlice("service.tags")
+	tags.AppendEmpty().SetStr("tag1")
+	tags.AppendEmpty().SetInt(2)
+
+	metadata := r.Attributes().PutEmptyMap("service.metadata")
+	metadata.PutStr("nested.key", "nested-value")
+	metadata.PutInt("nested.count", 7)
+
+	return &r
+}
+
+func expectedExtraAttributes() *pcommon.Map {
+	m := pcommon.NewMap()
+	m.PutStr("custom.attribute", "custom-value")
+	return &m
+}
+
+func TestAddEnvVars(t *testing.T) {
+	tests := []struct {
+		name     string
+		envVars  map[libpf.String]libpf.String
+		expected map[string]string
+	}{
+		{
+			name: "OTEL_SERVICE_NAME",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_SERVICE_NAME"): libpf.Intern("my-service"),
+			},
+			expected: map[string]string{
+				"service.name": "my-service",
+			},
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES simple",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("key1=value1,key2=value2"),
+			},
+			expected: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES percent-encoded",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("key1=val%2Cwith%2Ccomma,key%3D2=value2"),
+			},
+			expected: map[string]string{
+				"key1":  "val,with,comma",
+				"key=2": "value2",
+			},
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES invalid encoding discards all",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("good=value,bad=%ZZ"),
+			},
+			// Per OTel spec, the entire value is discarded on any error.
+			expected: nil,
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES missing equals discards all",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("good=value,badpair"),
+			},
+			// Per OTel spec, the entire value is discarded on any error.
+			expected: nil,
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES empty value",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern(""),
+			},
+			expected: nil,
+		},
+		{
+			name: "OTEL_SERVICE_NAME does not override existing",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_SERVICE_NAME"): libpf.Intern("env-service"),
+			},
+			expected: map[string]string{
+				"service.name": "test-service",
+			},
+		},
+		{
+			name: "both env vars",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_SERVICE_NAME"):        libpf.Intern("my-svc"),
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("deployment.environment=prod"),
+			},
+			expected: map[string]string{
+				"service.name":           "my-svc",
+				"deployment.environment": "prod",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := processcontext.Info{}
+
+			// For the "does not override" test, pre-populate with a resource.
+			if tt.name == "OTEL_SERVICE_NAME does not override existing" {
+				r := pcommon.NewResource()
+				r.Attributes().PutStr("service.name", "test-service")
+				info.Resource = &r
+			}
+
+			info.AddEnvVars(tt.envVars)
+
+			if tt.expected == nil {
+				assert.Nil(t, info.Resource)
+				return
+			}
+
+			require.NotNil(t, info.Resource)
+			got := make(map[string]string)
+			info.Resource.Attributes().Range(func(k string, v pcommon.Value) bool {
+				got[k] = v.Str()
+				return true
+			})
+			assert.Equal(t, tt.expected, got)
 		})
 	}
 }

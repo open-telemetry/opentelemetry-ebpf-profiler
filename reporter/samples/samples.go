@@ -4,6 +4,7 @@
 package samples // import "go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 import (
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
@@ -14,6 +15,7 @@ type TraceEventMeta struct {
 	ContainerID    libpf.String
 	EnvVars        map[libpf.String]libpf.String
 	APMServiceName string
+	Resource       *pcommon.Resource
 	Timestamp      libpf.UnixTime64
 	CPU            int
 	Origin         libpf.Origin
@@ -42,6 +44,9 @@ type ResourceToProfiles struct {
 	// comparable.
 	EnvVars map[libpf.String]libpf.String
 
+	// Resource is the OTel resource from ProcessContext, if available.
+	Resource *pcommon.Resource
+
 	// Events holds the actual profiling information.
 	Events map[libpf.Origin]SampleToEvents
 }
@@ -63,6 +68,9 @@ type ResourceKey struct {
 
 	// APMServiceName is provided by the eBPF programs
 	APMServiceName string
+
+	// ContextKey is the unique identifier for a service instance
+	ContextKey libpf.String
 
 	PID int64
 }
