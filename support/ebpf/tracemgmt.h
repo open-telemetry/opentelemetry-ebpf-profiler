@@ -516,6 +516,31 @@ get_next_unwinder_after_native_frame(PerCPURecord *record, int *unwinder)
 
   DEBUG_PRINT("==== Resolve next frame unwinder: frame %d ====", record->trace.num_frames);
   ErrorCode error = resolve_unwind_mapping(record, unwinder);
+  if (error == ERR_NATIVE_NO_PID_PAGE_MAPPING) {
+    // For Go processes, after unwinding through cgo (runtime.asmcgocall), the return
+    // address may point to the goroutine stack (anonymous mmap at 0xc000xxxxxx) which
+    // is not tracked in pid_page_to_mapping_info. Try frame pointer unwinding to get
+    // back to the Go binary's text section.
+    u32 pid = record->trace.pid;
+    if (bpf_map_lookup_elem(&go_labels_procs, &pid)) {
+      DEBUG_PRINT(
+        "Go process %d: trying FP unwinding through goroutine stack (pc=%llx)", pid, state->pc);
+      if (unwinder_unwind_frame_pointer(state)) {
+        if (state->pc != 0) {
+          error = resolve_unwind_mapping(record, unwinder);
+          if (!error) {
+            DEBUG_PRINT("Go FP unwinding succeeded, new pc=%llx", state->pc);
+            if (*unwinder == PROG_UNWIND_NATIVE) {
+              *unwinder = get_next_interpreter(record);
+            }
+            return ERR_OK;
+          }
+        }
+      }
+      DEBUG_PRINT("Go FP unwinding fallback failed");
+    }
+    return ERR_NATIVE_NO_PID_PAGE_MAPPING;
+  }
   if (error) {
     return error;
   }
