@@ -325,6 +325,9 @@ enum {
   // number of failed attempts to read a CME by exceeding max EP checks
   metricID_UnwindRubyErrCmeMaxEp,
 
+  // number of failures to read TLS variables via the DTV
+  metricID_UnwindErrBadDTVRead,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -472,6 +475,13 @@ typedef struct RubyProcInfo {
   // tls_offset holds TLS base + ruby_current_ec tls symbol, as an offset from tpbase.
   // Signed because static TLS offsets (local exec model) are negative on x86_64.
   s64 current_ec_tpbase_tls_offset;
+
+  // DTV-based TLS access for ruby_current_ec (fallback when TLSDESC unavailable)
+  DTVInfo dtv_info;
+  // Offset of ruby_current_ec within its module's TLS block
+  u64 current_ec_tls_offset;
+  // Runtime TLS module ID for libruby.so (from DTPMOD64 relocation, written by linker)
+  u32 tls_module_id;
 
   // current_ctx_ptr holds the address of the symbol ruby_current_execution_context_ptr.
   u64 current_ctx_ptr;

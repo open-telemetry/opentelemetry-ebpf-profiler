@@ -635,10 +635,65 @@ func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string
 
 type ElfReloc *elf.Rela64
 
-// VisitTLSDescriptors visits all TLS relocations and provides the relocation
-// for the TLS symbol, as well as a best-effort string for the symbol's name
-// it continues until the visitor returns false
+// RelocType represents an architecture-independent relocation type.
+// Multiple values can be combined with bitwise OR to match several types.
+type RelocType uint32
+
+const (
+	// RelTLSDESC matches TLSDESC relocations (R_AARCH64_TLSDESC, R_X86_64_TLSDESC).
+	RelTLSDESC RelocType = 1 << iota
+	// RelDTPMOD64 matches DTPMOD64 relocations (R_AARCH64_TLS_DTPMOD64, R_X86_64_DTPMOD64).
+	RelDTPMOD64
+)
+
+// classifyRelocAarch64 returns the RelocType for an AARCH64 relocation.
+func classifyRelocAarch64(rela ElfReloc) RelocType {
+	switch elf.R_AARCH64(rela.Info & 0xffff) {
+	case elf.R_AARCH64_TLSDESC:
+		return RelTLSDESC
+	case elf.R_AARCH64_TLS_DTPMOD64:
+		return RelDTPMOD64
+	default:
+		return 0
+	}
+}
+
+// classifyRelocX86_64 returns the RelocType for an X86_64 relocation.
+func classifyRelocX86_64(rela ElfReloc) RelocType {
+	switch elf.R_X86_64(rela.Info & 0xffff) {
+	case elf.R_X86_64_TLSDESC:
+		return RelTLSDESC
+	case elf.R_X86_64_DTPMOD64:
+		return RelDTPMOD64
+	default:
+		return 0
+	}
+}
+
+// VisitTLSRelocations visits all TLSDESC relocations and provides the relocation
+// for the TLS symbol, as well as a best-effort string for the symbol's name.
+// It continues until the visitor returns false.
 func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
+	return f.VisitRelocations(visitor, RelTLSDESC)
+}
+
+// VisitRelocations visits all relocations whose type matches the relTypes
+// bitmask and provides the relocation and symbol name to the visitor. The
+// visitor can return false to stop iteration.
+func (f *File) VisitRelocations(visitor func(ElfReloc, string) bool,
+	relTypes RelocType) error {
+	var classify func(ElfReloc) RelocType
+	switch f.Machine {
+	case elf.EM_AARCH64:
+		classify = classifyRelocAarch64
+	case elf.EM_X86_64:
+		classify = classifyRelocX86_64
+	default:
+		return nil
+	}
+	filterFunc := func(rela ElfReloc) bool {
+		return classify(rela)&relTypes != 0
+	}
 	var err error
 	if err = f.LoadSections(); err != nil {
 		return err
@@ -648,7 +703,7 @@ func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
 		section := &f.Sections[i]
 		// NOTE: SHT_REL is not relevant for the archs that we care about
 		if section.Type == elf.SHT_RELA {
-			cont, err := f.visitTLSDescriptorsForSection(visitor, section)
+			cont, err := f.visitRelocationsForSection(visitor, filterFunc, section)
 			if err != nil {
 				return err
 			}
@@ -661,7 +716,8 @@ func (f *File) VisitTLSRelocations(visitor func(ElfReloc, string) bool) error {
 	return nil
 }
 
-func (f *File) visitTLSDescriptorsForSection(visitor func(ElfReloc, string) bool,
+func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
+	checkRelocation func(ElfReloc) bool,
 	relaSection *Section,
 ) (bool, error) {
 	if relaSection.Link > uint32(len(f.Sections)) {
@@ -704,9 +760,7 @@ func (f *File) visitTLSDescriptorsForSection(visitor func(ElfReloc, string) bool
 	for i := 0; i < len(relaData); i += relaSz {
 		rela := (*elf.Rela64)(unsafe.Pointer(&relaData[i]))
 
-		ty := rela.Info & 0xffff
-		if !(f.Machine == elf.EM_AARCH64 && elf.R_AARCH64(ty) == elf.R_AARCH64_TLSDESC) &&
-			!(f.Machine == elf.EM_X86_64 && elf.R_X86_64(ty) == elf.R_X86_64_TLSDESC) {
+		if !checkRelocation(rela) {
 			continue
 		}
 
