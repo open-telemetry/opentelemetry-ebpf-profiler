@@ -193,6 +193,8 @@ type Config struct {
 	LoadProbe bool
 	// BPFFSRoot is the root path to BPF filesystem for pinned maps and programs.
 	BPFFSRoot string
+	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
+	OBIProcessCtx bool
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -647,8 +649,12 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			// Off CPU Profiling is disabled. So do not load this map.
 			continue
 		}
-
 		if mapName == obiSpanTracesMap {
+			if !cfg.OBIProcessCtx {
+				// Process context sharing with OBI is not enabled.
+				continue
+			}
+
 			if cfg.BPFFSRoot == "" {
 				// As BPF FS is not set, the map can not be shared with other
 				// OTel components. To reduce the memory footprint in this case
@@ -681,7 +687,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 		}
 		ebpfMaps[mapName] = ebpfMap
 
-		if mapName == "traces_ctx_v1" {
+		if mapName == obiSpanTracesMap {
 			if cfg.BPFFSRoot == "" {
 				// In environments, where BPF FS is not available,
 				// we just load the map to not break eBPF programs.

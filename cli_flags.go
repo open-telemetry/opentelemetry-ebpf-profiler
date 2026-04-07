@@ -83,6 +83,7 @@ var (
 		"various user or kernel space hooks."
 	bpffsHelp = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
 		defaultBPFFSRoot)
+	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context information with OBI."
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -150,6 +151,8 @@ func parseArgs() (*controller.Config, error) {
 		args.ProbeLinks = append(args.ProbeLinks, link)
 		return nil
 	})
+
+	fs.BoolVar(&args.OBIProcessCtx, "obi-process-ctx", false, obiProcessCtxHelp)
 
 	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
 
