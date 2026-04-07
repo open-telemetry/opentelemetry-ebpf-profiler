@@ -10,11 +10,6 @@
   ignorePaths: [
     'LICENSES/**',
   ],
-  gomod: {
-    managerFilePatterns: [
-      '/(^|/)tools\\.mod$/',
-    ],
-  },
   ocb: {
     managerFilePatterns: [
       '/cmd/otelcol-ebpf-profiler/manifest.yaml$/',

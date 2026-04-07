@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-//go:generate go tool -modfile=../tools.mod mdatagen metadata.yaml
+//go:generate go tool -modfile=../go.mod mdatagen metadata.yaml
 
 package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 
