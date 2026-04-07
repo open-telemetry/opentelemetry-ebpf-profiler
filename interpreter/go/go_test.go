@@ -49,7 +49,7 @@ func BenchmarkGolang(b *testing.B) {
 		}
 
 		frames := libpf.Frames{}
-		ef := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 1, uint64(pc))
+		ef := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 2, uint64(pc))
 		ef[1] = uint64(hostFileID)
 
 		if err := gI.Symbolize(ef, &frames, libpf.FrameMapping{}); err != nil {
