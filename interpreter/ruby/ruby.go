@@ -455,7 +455,18 @@ type rubyInstance struct {
 }
 
 func (r *rubyInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	return ebpf.DeleteProcData(libpf.Ruby, pid)
+	var err error
+	err = ebpf.DeleteProcData(libpf.Ruby, pid)
+
+	for prefix := range r.prefixes {
+		if err2 := ebpf.DeletePidInterpreterMapping(pid, prefix); err2 != nil {
+			err = errors.Join(err,
+				fmt.Errorf("failed to remove ruby prefix 0x%x/%d: %v",
+					prefix.Key, prefix.Length, err2))
+		}
+	}
+
+	return err
 }
 
 // UpdateLibcInfo is called when libc introspection data becomes available.
@@ -1268,12 +1279,59 @@ func profileFrameFullLabel(classPath, label, baseLabel, methodName libpf.String,
 	return libpf.Intern(profileLabel)
 }
 
+// findJITRegion detects the YJIT JIT code region from process memory mappings.
+// YJIT reserves a large contiguous address range (typically 48-128 MiB) via mmap
+// with PROT_NONE and then mprotects individual 16k codepages to r-x as needed.
+// On systems with CONFIG_ANON_VMA_NAME, Ruby labels the region via prctl(PR_SET_VMA)
+// giving it a path like "[anon:Ruby:rb_yjit_reserve_addr_space]".
+// On systems without that config, we fall back to a heuristic: the first anonymous
+// executable mapping (by address) is assumed to be the JIT region since YJIT
+// initializes before any gems could create anonymous executable mappings.
+// Returns (start, end, found).
+func findJITRegion(mappings []process.RawMapping) (uint64, uint64, bool) {
+	var jitStart, jitEnd uint64
+	labelFound := false
+	var heuristicStart, heuristicEnd uint64
+	heuristicFound := false
+
+	for idx := range mappings {
+		m := &mappings[idx]
+
+		// Check for prctl-labeled JIT region. These mappings may be ---p (PROT_NONE)
+		// or r-xp depending on whether YJIT has activated codepages in this region.
+		if strings.Contains(m.Path, "jit_reserve_addr_space") {
+			if !labelFound || m.Vaddr < jitStart {
+				jitStart = m.Vaddr
+			}
+			if !labelFound || m.Vaddr+m.Length > jitEnd {
+				jitEnd = m.Vaddr + m.Length
+			}
+			labelFound = true
+			continue
+		}
+
+		// Heuristic fallback: first anonymous executable mapping by address.
+		// Mappings from /proc/pid/maps are sorted by address, so the first
+		// match is the lowest address.
+		if !heuristicFound && m.IsExecutable() && m.IsAnonymous() {
+			heuristicStart = m.Vaddr
+			heuristicEnd = m.Vaddr + m.Length
+			heuristicFound = true
+		}
+	}
+
+	if labelFound {
+		return jitStart, jitEnd, true
+	}
+	if heuristicFound {
+		return heuristicStart, heuristicEnd, true
+	}
+	return 0, 0, false
+}
+
 func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	_ reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping) error {
-	var jitMapping *process.RawMapping
-
 	pid := pr.PID()
-	jitFound := false
 	r.mappingGeneration++
 
 	log.Debugf("Synchronizing ruby mappings")
@@ -1282,19 +1340,6 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		m := &mappings[idx]
 		if !m.IsExecutable() || !m.IsAnonymous() {
 			continue
-		}
-		// If prctl is allowed, ruby should label the memory region
-		// always prefer that
-		if strings.Contains(m.Path, "jit_reserve_addr_space") {
-			jitMapping = m
-			jitFound = true
-		}
-		// Use the first executable anon region we find if it isn't labeled
-		// If we find more, prefer ones earlier in memory or larger in size
-		if !jitFound && (jitMapping == nil || m.Vaddr < jitMapping.Vaddr || m.Length > jitMapping.Length) {
-			// Don't set jitFound here as it is a heuristic, we aren't sure
-			// could be on a system without linux config flag to allow prctl to label memoy
-			jitMapping = m
 		}
 
 		if _, exists := r.mappings[*m]; exists {
@@ -1326,13 +1371,15 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			r.prefixes[prefix] = &mappingGeneration
 		}
 	}
-	if jitMapping != nil && (r.procInfo.Jit_start != jitMapping.Vaddr || r.procInfo.Jit_end != jitMapping.Vaddr+jitMapping.Length) {
-		r.procInfo.Jit_start = jitMapping.Vaddr
-		r.procInfo.Jit_end = jitMapping.Vaddr + jitMapping.Length
+	// Detect JIT region from all mappings and update proc data if changed.
+	jitStart, jitEnd, jitFound := findJITRegion(mappings)
+	if jitFound && (r.procInfo.Jit_start != jitStart || r.procInfo.Jit_end != jitEnd) {
+		r.procInfo.Jit_start = jitStart
+		r.procInfo.Jit_end = jitEnd
 		if err := ebpf.UpdateProcData(libpf.Ruby, pr.PID(), unsafe.Pointer(r.procInfo)); err != nil {
 			return err
 		}
-		log.Debugf("Added jit mapping %08x ruby proc info, %08x", r.procInfo.Jit_start, r.procInfo.Jit_end)
+		log.Debugf("Updated JIT region %#x-%#x in ruby proc info", jitStart, jitEnd)
 	}
 	// Remove prefixes not seen
 	for prefix, generationPtr := range r.prefixes {
