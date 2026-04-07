@@ -58,7 +58,10 @@ Since the profiler is Linux-only, macOS and Windows users need to set up a Linux
 
 ## Supported Linux kernel version
 
-[7ddc23ea](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/commit/7ddc23ea135a2e00fffc17850ab90534e9b63108) is the last commit with support for 4.19. Changes after this commit may require a minimal Linux kernel version of 5.4.
+The minimum required Linux kernel version has increased with certain commits. Specifically:
+
+- Commit [8047150e](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/commit/8047150e3f325f852874591356c69d0487b67d7c) was the last to support kernel version 5.4. Subsequent changes may require a minimal Linux kernel version of 5.10 or greater.
+- Commit [7ddc23ea](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/commit/7ddc23ea135a2e00fffc17850ab90534e9b63108) was the last to support kernel version 4.19. Subsequent changes may require a minimal Linux kernel version of at least 5.4.
 
 ### Updating the supported Linux kernel version
 
