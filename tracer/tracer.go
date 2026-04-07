@@ -650,15 +650,10 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			continue
 		}
 		if mapName == obiSpanTracesMap {
-			if !cfg.OBIProcessCtx {
-				// Process context sharing with OBI is not enabled.
-				continue
-			}
-
-			if cfg.BPFFSRoot == "" {
-				// As BPF FS is not set, the map can not be shared with other
-				// OTel components. To reduce the memory footprint in this case
-				// reduce the size of the map.
+			if cfg.BPFFSRoot == "" || !cfg.OBIProcessCtx {
+				// As BPF FS is not set or process context sharing with OBI is not
+				// enabled, the map can not be shared with other OTel components.
+				// To reduce the memory footprint in this case reduce the size of the map.
 				mapSpec.MaxEntries = 1
 			} else {
 				// Try to load it from a known path:
