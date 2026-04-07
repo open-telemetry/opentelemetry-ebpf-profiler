@@ -167,6 +167,7 @@ const (
 	UnwindCommandSignal        int32 = C.UNWIND_COMMAND_SIGNAL
 	UnwindCommandFramePointer  int32 = C.UNWIND_COMMAND_FRAME_POINTER
 	UnwindCommandGoSystemstack int32 = C.UNWIND_COMMAND_GO_SYSTEMSTACK
+	UnwindCommandGoMcall       int32 = C.UNWIND_COMMAND_GO_MCALL
 
 	// UnwindDeref handling from the C header file
 	UnwindDerefMask       int32 = C.UNWIND_DEREF_MASK

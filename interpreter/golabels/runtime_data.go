@@ -27,21 +27,27 @@ func getOffsets(vers string) support.GoLabelsOffsets {
 		Hmap_log2_bucket_count: 0,
 		// https://github.com/golang/go/blob/6885bad7dd86880be6929c0/src/runtime/map.go#L118
 		Hmap_buckets: 0,
-		// Absolute offsets from g struct start for g.sched (gobuf) fields.
-		// g.sched starts at offset 56 (immediately after g.m at offset 48, pointer 8 bytes).
-		// gobuf.sp is at offset 0 within gobuf - stable across all supported Go versions.
-		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L325
+		// g.sched is a gobuf struct immediately following g.m (offset 48 + 8 = 56).
+		// gobuf.sp is the first field (offset 0 in gobuf), gobuf.pc is the second (offset 8).
+		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f4e2da099a4eec5957/src/runtime/runtime2.go#L311
 		Sched_sp: 56,
+		Sched_pc: 64,
+		// gobuf.bp is at offset 48 within gobuf in go1.24 and earlier. In go1.25 and later,
+		// it is at offset 40 because of ret field removal. (offset 56 + 48 = 104)
+		// go1.25: https://github.com/golang/go/blob/6e676ab2b809d46623acb5988248d95d1eb7939c/src/runtime/runtime2.go#L315
+		Sched_bp: 104,
 	}
 
 	// Version enforcement takes place in the Loader function.
 	if version.Compare(vers, "go1.26") >= 0 {
 		offsets.Curg = 184
 		offsets.Labels = 352
+		offsets.Sched_bp = 96
 		return offsets
 	} else if version.Compare(vers, "go1.25") >= 0 {
 		offsets.Curg = 184
 		offsets.Labels = 344
+		offsets.Sched_bp = 96
 		return offsets
 	} else if version.Compare(vers, "go1.24") >= 0 {
 		offsets.Labels = 352
