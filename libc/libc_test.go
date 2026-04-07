@@ -318,7 +318,6 @@ func TestExtractDTVOffset(t *testing.T) {
 			info: DTVInfo{
 				Offset:     8,
 				Multiplier: 16,
-				Indirect:   0,
 			},
 		},
 		"glibc 2.32 / Fedora 33 / x86_64": {
@@ -366,7 +365,6 @@ func TestExtractDTVOffset(t *testing.T) {
 			info: DTVInfo{
 				Offset:     8,
 				Multiplier: 16,
-				Indirect:   0,
 			},
 		},
 		"musl 1.2.5 / alpine 3.22.2 / x86_64": {
@@ -388,7 +386,6 @@ func TestExtractDTVOffset(t *testing.T) {
 			info: DTVInfo{
 				Offset:     8,
 				Multiplier: 8,
-				Indirect:   1,
 			},
 		},
 		"musl 1.1.5 / alpine 3.1 / x86_64": {
@@ -416,7 +413,6 @@ func TestExtractDTVOffset(t *testing.T) {
 			info: DTVInfo{
 				Offset:     8,
 				Multiplier: 8,
-				Indirect:   1,
 			},
 		},
 		"glibc 2.39 / ubuntu 24.04 / aarch64": {
@@ -452,7 +448,6 @@ func TestExtractDTVOffset(t *testing.T) {
 			info: DTVInfo{
 				Offset:     0,
 				Multiplier: 16,
-				Indirect:   1,
 			},
 		},
 		"glibc / Fedora 39 / aarch64": {
@@ -491,7 +486,6 @@ func TestExtractDTVOffset(t *testing.T) {
 			info: DTVInfo{
 				Offset:     0,
 				Multiplier: 16,
-				Indirect:   1,
 			},
 		},
 		"glibc / Fedora 33 / aarch64": {
@@ -520,7 +514,6 @@ func TestExtractDTVOffset(t *testing.T) {
 			info: DTVInfo{
 				Offset:     0,
 				Multiplier: 16,
-				Indirect:   1,
 			},
 		},
 
@@ -537,7 +530,6 @@ func TestExtractDTVOffset(t *testing.T) {
 			info: DTVInfo{
 				Offset:     -8,
 				Multiplier: 8,
-				Indirect:   1,
 			},
 		},
 	}
@@ -815,7 +807,6 @@ func TestLibcInfoIsEqual(t *testing.T) {
 				DTVInfo{
 					Offset:     -8,
 					Multiplier: 16,
-					Indirect:   0,
 				},
 			},
 			right: LibcInfo{
@@ -827,7 +818,6 @@ func TestLibcInfoIsEqual(t *testing.T) {
 				DTVInfo{
 					Offset:     -8,
 					Multiplier: 16,
-					Indirect:   0,
 				},
 			},
 			expectEqual: true,
@@ -838,7 +828,6 @@ func TestLibcInfoIsEqual(t *testing.T) {
 				DTVInfo{
 					Offset:     -8,
 					Multiplier: 16,
-					Indirect:   0,
 				},
 			},
 			right: LibcInfo{
@@ -892,7 +881,6 @@ func TestLibcInfoMerge(t *testing.T) {
 				DTVInfo{
 					Offset:     -8,
 					Multiplier: 16,
-					Indirect:   0,
 				},
 			},
 			expected: LibcInfo{
@@ -900,7 +888,6 @@ func TestLibcInfoMerge(t *testing.T) {
 				DTVInfo{
 					Offset:     -8,
 					Multiplier: 16,
-					Indirect:   0,
 				},
 			},
 		},
@@ -910,7 +897,6 @@ func TestLibcInfoMerge(t *testing.T) {
 				DTVInfo{
 					Offset:     -8,
 					Multiplier: 16,
-					Indirect:   0,
 				},
 			},
 			right: LibcInfo{
@@ -930,7 +916,6 @@ func TestLibcInfoMerge(t *testing.T) {
 				DTVInfo{
 					Offset:     -8,
 					Multiplier: 16,
-					Indirect:   0,
 				},
 			},
 		},
@@ -948,7 +933,6 @@ func TestLibcInfoMerge(t *testing.T) {
 				DTVInfo{
 					Offset:     -8,
 					Multiplier: 16,
-					Indirect:   0,
 				},
 			},
 			expected: LibcInfo{
@@ -960,7 +944,6 @@ func TestLibcInfoMerge(t *testing.T) {
 				DTVInfo{
 					Offset:     -8,
 					Multiplier: 16,
-					Indirect:   0,
 				},
 			},
 		},
@@ -977,7 +960,6 @@ func TestLibcInfoMerge(t *testing.T) {
 				DTVInfo{
 					Offset:     -8,
 					Multiplier: 16,
-					Indirect:   0,
 				},
 			},
 			right: LibcInfo{
@@ -989,7 +971,6 @@ func TestLibcInfoMerge(t *testing.T) {
 				DTVInfo{
 					Offset:     8,
 					Multiplier: 16,
-					Indirect:   1,
 				},
 			},
 			expected: LibcInfo{
@@ -1001,7 +982,6 @@ func TestLibcInfoMerge(t *testing.T) {
 				DTVInfo{
 					Offset:     -8,
 					Multiplier: 16,
-					Indirect:   0,
 				},
 			},
 		},

@@ -35,6 +35,10 @@ const (
 	// events are produced by the kernel between two polling intervals, the queue from bpf
 	// to userspace will fill up and the kernel will start dropping events.
 	maxEvents = 4096
+
+	// eventReaderDeadline is the timeout for perf event reads. It allows the
+	// reader goroutine to periodically check for context cancellation.
+	eventReaderDeadline = 100 * time.Millisecond
 )
 
 // StartPIDEventProcessor spawns a goroutine to process PID events.
@@ -100,28 +104,36 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 		return nil, fmt.Errorf("Failed to setup perf reporting via %s: %v", perfEventMap, err)
 	}
 
+	// Set a deadline so ReadInto times out periodically and we can check context
+	eventReader.SetDeadline(time.Now().Add(eventReaderDeadline))
+
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
 	go func() {
+		defer eventReader.Close()
 		var data perf.Record
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
-				if err := eventReader.ReadInto(&data); err != nil {
-					readErrorCount.Add(1)
-					continue
-				}
-				if data.LostSamples != 0 {
-					lostEventsCount.Add(data.LostSamples)
-					continue
-				}
-				if len(data.RawSample) == 0 {
-					noDataCount.Add(1)
-					continue
-				}
-				triggerFunc(data.RawSample)
 			}
+			// Set a deadline so ReadInto times out and we can check context
+			eventReader.SetDeadline(time.Now().Add(eventReaderDeadline))
+			if err := eventReader.ReadInto(&data); err != nil {
+				if !errors.Is(err, os.ErrDeadlineExceeded) {
+					readErrorCount.Add(1)
+				}
+				continue
+			}
+			if data.LostSamples != 0 {
+				lostEventsCount.Add(data.LostSamples)
+				continue
+			}
+			if len(data.RawSample) == 0 {
+				noDataCount.Add(1)
+				continue
+			}
+			triggerFunc(data.RawSample)
 		}
 	}()
 
@@ -156,6 +168,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 
 	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
 	go func() {
+		defer eventReader.Close()
 		var data perf.Record
 		var oldKTime, minKTime int64
 		var eventCount int
