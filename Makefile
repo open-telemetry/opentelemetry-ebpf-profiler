@@ -125,6 +125,9 @@ format-go:
 format-ebpf:
 	$(MAKE) format -C support/ebpf
 
+tidy:
+	find . -name go.mod -not -path './LICENSES/*' -execdir go mod tidy \;
+
 vanity-import-check:
 	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 

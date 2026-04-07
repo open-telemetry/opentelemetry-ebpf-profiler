@@ -59,8 +59,8 @@ jobs:
         env:
           CGO_ENABLED: 1
         run: |
-          make format
-          git diff --exit-code || (echo 'Code base is not Go or C formatted, please run "make format" and commit the changes in this PR.'; exit 1)
+          make tidy format
+          git diff --exit-code || (echo 'Code base is not Go, C formatted or go.mod tidy, please run "make tidy format" and commit the changes in this PR.'; exit 1)
 
   test:
     name: Test (${{ matrix.target_arch }}${{ matrix.go_flags }})
