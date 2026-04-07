@@ -1,0 +1,100 @@
+{
+  "coredump-ref": "dabb590e2c833ed7e93a95e5324c4bff6d37626a5a626961cc69c4f4e6c45f68",
+  "threads": [
+    {
+      "lwp": 615559,
+      "frames": [
+        "libc.so.6+0xd6413",
+        "libc.so.6+0xdaeb6",
+        "libc.so.6+0xdade2",
+        "runtime.asmcgocall+0 in /home/alban/programs/golang/go/src/runtime/asm_amd64.s:925",
+        "runtime.cgocall+0 in /home/alban/programs/golang/go/src/runtime/cgocall.go:185",
+        "main._Cfunc_c_outer+0 in _cgo_gotypes.go:49",
+        "main.goCallC+0 in /home/alban/go/src/github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/testsources/go-cgo/main.go:26",
+        "main.goMiddle+0 in /home/alban/go/src/github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/testsources/go-cgo/main.go:32",
+        "main.goOuter+0 in /home/alban/go/src/github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/testsources/go-cgo/main.go:37",
+        "main.main+0 in /home/alban/go/src/github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/testsources/go-cgo/main.go:41",
+        "runtime.main+0 in /home/alban/programs/golang/go/src/internal/runtime/atomic/types.go:194",
+        "runtime.goexit+0 in /home/alban/programs/golang/go/src/runtime/asm_amd64.s:1694"
+      ]
+    },
+    {
+      "lwp": 615560,
+      "frames": [
+        "runtime.futex+0 in /home/alban/programs/golang/go/src/runtime/sys_linux_amd64.s:558",
+        "runtime.futexsleep+0 in /home/alban/programs/golang/go/src/runtime/os_linux.go:82",
+        "runtime.notetsleep_internal+0 in /home/alban/programs/golang/go/src/runtime/lock_futex.go:90",
+        "runtime.notetsleep+0 in /home/alban/programs/golang/go/src/runtime/lock_futex.go:112",
+        "runtime.sysmon+0 in /home/alban/programs/golang/go/src/runtime/proc.go:6270",
+        "runtime.mstart1+0 in /home/alban/programs/golang/go/src/runtime/proc.go:1928",
+        "runtime.mstart0+0 in /home/alban/programs/golang/go/src/runtime/proc.go:1890",
+        "runtime.mstart+0 in /home/alban/programs/golang/go/src/runtime/asm_amd64.s:396"
+      ]
+    },
+    {
+      "lwp": 615561,
+      "frames": [
+        "runtime.futex+0 in /home/alban/programs/golang/go/src/runtime/sys_linux_amd64.s:558",
+        "runtime.futexsleep+0 in /home/alban/programs/golang/go/src/runtime/os_linux.go:76",
+        "runtime.notesleep+0 in /home/alban/programs/golang/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /home/alban/programs/golang/go/src/runtime/proc.go:1961",
+        "runtime.startlockedm+0 in /home/alban/programs/golang/go/src/runtime/proc.go:3283",
+        "runtime.schedule+0 in /home/alban/programs/golang/go/src/runtime/proc.go:4128",
+        "runtime.park_m+0 in /home/alban/programs/golang/go/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /home/alban/programs/golang/go/src/runtime/asm_amd64.s:462"
+      ]
+    },
+    {
+      "lwp": 615562,
+      "frames": [
+        "runtime.futex+0 in /home/alban/programs/golang/go/src/runtime/sys_linux_amd64.s:558",
+        "runtime.futexsleep+0 in /home/alban/programs/golang/go/src/runtime/os_linux.go:76",
+        "runtime.notesleep+0 in /home/alban/programs/golang/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /home/alban/programs/golang/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /home/alban/programs/golang/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /home/alban/programs/golang/go/src/runtime/proc.go:4138",
+        "runtime.park_m+0 in /home/alban/programs/golang/go/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /home/alban/programs/golang/go/src/runtime/asm_amd64.s:462"
+      ]
+    },
+    {
+      "lwp": 615563,
+      "frames": [
+        "runtime.futex+0 in /home/alban/programs/golang/go/src/runtime/sys_linux_amd64.s:558",
+        "runtime.futexsleep+0 in /home/alban/programs/golang/go/src/runtime/os_linux.go:76",
+        "runtime.notesleep+0 in /home/alban/programs/golang/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /home/alban/programs/golang/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /home/alban/programs/golang/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /home/alban/programs/golang/go/src/runtime/proc.go:4138",
+        "runtime.park_m+0 in /home/alban/programs/golang/go/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /home/alban/programs/golang/go/src/runtime/asm_amd64.s:462"
+      ]
+    },
+    {
+      "lwp": 615564,
+      "frames": [
+        "runtime.futex+0 in /home/alban/programs/golang/go/src/runtime/sys_linux_amd64.s:558",
+        "runtime.futexsleep+0 in /home/alban/programs/golang/go/src/runtime/os_linux.go:76",
+        "runtime.notesleep+0 in /home/alban/programs/golang/go/src/runtime/lock_futex.go:48",
+        "runtime.templateThread+0 in /home/alban/programs/golang/go/src/runtime/lock_spinbit.go:152",
+        "runtime.mstart1+0 in /home/alban/programs/golang/go/src/runtime/proc.go:1928",
+        "runtime.mstart0+0 in /home/alban/programs/golang/go/src/runtime/proc.go:1890",
+        "runtime.mstart+0 in /home/alban/programs/golang/go/src/runtime/asm_amd64.s:396"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "e6c68d4f77a659ba6a2e039d3f31a83db3a32e1e82a3ac0cdc0f59439173800c",
+      "local-path": "/usr/lib64/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "f5c4c4727df059388754bd752a9dad34595f1602b5cb4f837f3637e89a1358db",
+      "local-path": "/home/alban/go/src/github.com/open-telemetry/opentelemetry-ebpf-profiler/tools/coredump/testsources/go-cgo/go-cgo-test"
+    },
+    {
+      "ref": "fc0514430fe542c91106549663c502deec6ddac2ed7d8cc84c2140a1cd379a09",
+      "local-path": "/usr/lib64/libc.so.6"
+    }
+  ]
+}
