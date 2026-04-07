@@ -216,7 +216,7 @@ func (impl *ebpfMapsImpl) DeleteProcData(typ libpf.InterpreterType, pid libpf.PI
 
 	pid32 := uint32(pid)
 	if err := ebpfMap.Delete(unsafe.Pointer(&pid32)); err != nil {
-		return fmt.Errorf("failed to remove info: %v", err)
+		return fmt.Errorf("failed to remove info: %w", err)
 	}
 	return nil
 }
