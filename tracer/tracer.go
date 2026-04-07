@@ -65,6 +65,12 @@ const (
 	schedProcessFreeV2 = "tracepoint__sched_process_free"
 )
 
+// Shared map name according to
+// https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
+const (
+	obiSpanTracesMap = "traces_ctx_v1"
+)
+
 // Intervals is a subset of config.IntervalsAndTimers.
 type Intervals interface {
 	MonitorInterval() time.Duration
@@ -642,7 +648,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			continue
 		}
 
-		if mapName == "traces_ctx_v1" {
+		if mapName == obiSpanTracesMap {
 			if cfg.BPFFSRoot == "" {
 				// As BPF FS is not set, the map can not be shared with other
 				// OTel components. To reduce the memory footprint in this case
