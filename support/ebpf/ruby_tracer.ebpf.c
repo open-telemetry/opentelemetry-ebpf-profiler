@@ -19,7 +19,6 @@ struct ruby_procs_t {
 // option is to adjust this number downwards.
 // NOTE: the maximum size stack is FRAMES_PER_WALK_RUBY_STACK * calls to tail_call().
 #define FRAMES_PER_WALK_RUBY_STACK 32
-
 // When resolving a CME, we need to traverse environment pointers until we
 // find IMEMO_MENT. Since we can't do a while loop, we have to bound this
 // the max encountered in experimentation on a production rails app is 6.
@@ -30,7 +29,7 @@ struct ruby_procs_t {
 // This increases insn for the kernel verifier: all code in the ep check "loop"
 // is M*N for instruction checks, so be extra sensitive about additions there.
 // If we get ERR_RUBY_READ_CME_MAX_EP regularly, we may need to raise it.
-#define MAX_EP_CHECKS 10
+#define MAX_EP_CHECKS              10
 
 // Constants related to reading a method entry
 // https://github.com/ruby/ruby/blob/523857bfcb0f0cdfd1ed7faa09b9c59a0266e7e2/method.h#L118
