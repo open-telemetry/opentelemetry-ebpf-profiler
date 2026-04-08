@@ -113,11 +113,16 @@ captured traces to the backend.
 
 ## Open Source Backends
 As the OTel Profiles signal is still in development, mature production-ready
-backends have yet to emerge. To speed up development and experimentation, Elastic
-has open-sourced a desktop application named [devfiler](https://github.com/elastic/devfiler)
-that reimplements the backend (collection, data storage, symbolization and UI)
-portion of the eBPF profiler. Note that devfiler is not a real production backend
-and should not be used as such. It is solely aimed at testing, experimentation and development.
+backends have yet to emerge. The following open source projects can be used as backends:
+
+- [devfiler](https://github.com/elastic/devfiler) — to speed up development and
+  experimentation, Elastic has open-sourced a desktop application that
+  reimplements the backend (collection, data storage, symbolization and UI)
+  portion of the eBPF profiler. Note that devfiler is not a real production
+  backend and should not be used as such. It is solely aimed at testing,
+  experimentation and development.
+- [Pyroscope](https://github.com/grafana/pyroscope) — an open source continuous
+  profiling database that natively supports ingesting OTel profiling data.
 
 ## Development
 
