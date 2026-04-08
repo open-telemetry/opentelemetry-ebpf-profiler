@@ -451,7 +451,7 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
   }
 
   if (
-    rubyinfo->jit_start > 0 && record->state.pc > rubyinfo->jit_start &&
+    rubyinfo->jit_start > 0 && record->state.pc >= rubyinfo->jit_start &&
     record->state.pc < rubyinfo->jit_end) {
     record->rubyUnwindState.jit_detected = true;
 

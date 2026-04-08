@@ -282,6 +282,9 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 				inode = vdsoInode
 			} else if fields[5] == "" {
 				// This is an anonymous mapping, keep it
+			} else if strings.HasPrefix(fields[5], "[anon:") {
+				// This is an anonymous mapping named with prctl(PR_SET_VMA), keep the name
+				path = trimMappingPath(fields[5])
 			} else {
 				// Ignore other mappings that are invalid, non-existent or are special pseudo-files
 				continue
