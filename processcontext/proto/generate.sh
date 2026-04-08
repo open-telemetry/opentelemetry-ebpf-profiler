@@ -16,7 +16,7 @@ OTEL_PROTO_DIR="$(mktemp -d)"
 trap "rm -rf '${OTEL_PROTO_DIR}'" EXIT
 
 echo "Cloning OpenTelemetry proto definitions to temporary directory..."
-git clone --depth 1 --branch v1.9.0 \
+git clone --depth 1 --branch v1.10.0 \
     https://github.com/open-telemetry/opentelemetry-proto.git \
     "${OTEL_PROTO_DIR}" 2>/dev/null
 
