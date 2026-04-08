@@ -141,7 +141,7 @@ static EBPF_INLINE ErrorCode process_python_frame(
   }
 
   // Read PyCodeObject
-  if (bpf_probe_read_user(pss->code, sizeof(pss->code), py_codeobject)) {
+  if (bpf_probe_read_user_with_test_fault(pss->code, sizeof(pss->code), py_codeobject)) {
     DEBUG_PRINT("Failed to read PyCodeObject at 0x%lx", (unsigned long)(py_codeobject));
     increment_metric(metricID_UnwindPythonErrBadCodeObjectArgCountAddr);
     // Push the frame with the code object address so the agent can try to
