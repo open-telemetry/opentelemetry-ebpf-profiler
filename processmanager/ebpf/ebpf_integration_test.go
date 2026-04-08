@@ -15,6 +15,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -34,6 +35,7 @@ func loadTracers(t *testing.T) *ebpfMapsImpl {
 
 	return &ebpfMapsImpl{
 		PidPageToMappingInfo: pidPageToMappingInfo,
+		errCounter:           make(map[metrics.MetricID]int64),
 	}
 }
 
