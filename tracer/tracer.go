@@ -666,7 +666,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 		ebpfMaps[mapName] = ebpfMap
 
 		if mapName == obiSpanTracesMap {
-			if cfg.BPFFSRoot == "" {
+			if cfg.BPFFSRoot == "" || !cfg.OBIProcessCtx {
 				// In environments, where BPF FS is not available,
 				// we just load the map to not break eBPF programs.
 				log.Infof("Skip pinning eBPF map to share OTel span/trace IDs")
