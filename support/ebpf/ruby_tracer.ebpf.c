@@ -19,6 +19,7 @@ struct ruby_procs_t {
 // option is to adjust this number downwards.
 // NOTE: the maximum size stack is FRAMES_PER_WALK_RUBY_STACK * calls to tail_call().
 #define FRAMES_PER_WALK_RUBY_STACK 32
+
 // When resolving a CME, we need to traverse environment pointers until we
 // find IMEMO_MENT. Since we can't do a while loop, we have to bound this
 // the max encountered in experimentation on a production rails app is 6.
@@ -29,7 +30,7 @@ struct ruby_procs_t {
 // This increases insn for the kernel verifier: all code in the ep check "loop"
 // is M*N for instruction checks, so be extra sensitive about additions there.
 // If we get ERR_RUBY_READ_CME_MAX_EP regularly, we may need to raise it.
-#define MAX_EP_CHECKS              10
+#define MAX_EP_CHECKS 10
 
 // Constants related to reading a method entry
 // https://github.com/ruby/ruby/blob/523857bfcb0f0cdfd1ed7faa09b9c59a0266e7e2/method.h#L118
@@ -271,8 +272,9 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
         // frames will almost certainly be incorrect for Ruby versions < 2.6.
         frame_type = RUBY_FRAME_TYPE_CME_CFUNC;
       } else if (record->rubyUnwindState.jit_detected) {
-        // If we detected a jit frame and are now in a cfunc, push the c frame
-        // as we can no longer unwind native anymore
+        // JIT is active but frame pointers are not available, so we cannot unwind
+        // through JIT frames to get back to native code. Push the cfunc inline
+        // instead of handing off to the native unwinder.
         frame_type = RUBY_FRAME_TYPE_CME_CFUNC;
       } else {
         // We save this cfp on in the "Record" entry, and when we start the unwinder
@@ -450,20 +452,19 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
     record->rubyUnwindState.cfunc_saved_frame = 0;
   }
 
-  if (
-    rubyinfo->jit_start > 0 && record->state.pc >= rubyinfo->jit_start &&
-    record->state.pc < rubyinfo->jit_end) {
+  // Detect if the CPU PC is in the JIT region.
+  bool in_jit = rubyinfo->jit_start > 0 && record->state.pc >= rubyinfo->jit_start &&
+                record->state.pc < rubyinfo->jit_end;
+
+  if (in_jit) {
     record->rubyUnwindState.jit_detected = true;
 
-    // If the first frame is a jit PC, the leaf ruby frame should be the jit "owner"
-    // the cpu PC is also pushed as the address,
-    // as in theory this can be used to symbolize the JIT frame later
-    if (trace->num_frames == 0) {
-      ErrorCode error =
-        push_ruby(&record->state, trace, RUBY_FRAME_TYPE_JIT, (u64)record->state.pc, 0, 0);
-      if (error) {
-        return error;
-      }
+    // Push a JIT frame with the raw machine PC. This can be used to
+    // symbolize the JIT frame via perf map later.
+    ErrorCode jit_error =
+      push_ruby(&record->state, trace, RUBY_FRAME_TYPE_JIT, (u64)record->state.pc, 0, 0);
+    if (jit_error) {
+      return jit_error;
     }
   }
 
@@ -474,8 +475,8 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
 
     if (last_stack_frame <= stack_ptr) {
       // We have processed all frames in the Ruby VM and can stop here.
-      // if this process has been JIT'd, the PC is invalid and we cannot resume native unwinding so
-      // we are done
+      // If JIT was detected, the PC is in the JIT region and native
+      // unwinding would fail, so we stop.
       *next_unwinder = record->rubyUnwindState.jit_detected ? PROG_UNWIND_STOP : PROG_UNWIND_NATIVE;
       goto save_state;
     } else {

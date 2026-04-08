@@ -1336,6 +1336,7 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 
 	log.Debugf("Synchronizing ruby mappings")
 
+	// Register LPM prefixes for executable anonymous mappings.
 	for idx := range mappings {
 		m := &mappings[idx]
 		if !m.IsExecutable() || !m.IsAnonymous() {
