@@ -1,0 +1,80 @@
+{
+  "coredump-ref": "7918f8b3303996c779d53a84af6aea00b197529ae02e51337592c8bb0d69df09",
+  "threads": [
+    {
+      "lwp": 780083,
+      "frames": [
+        "libruby.so.3.4.7+0x33c55f",
+        "libruby.so.3.4.7+0x241573",
+        "<unknown jit code>+0 in <jitted code>:0",
+        "Range#each+0 in <cfunc>:0",
+        "Object#is_prime+0 in /home/dalehamel/repo/otel-profiler/tools/coredump/testsources/ruby/loop.rb:14",
+        "Object#sum_of_primes+0 in /home/dalehamel/repo/otel-profiler/tools/coredump/testsources/ruby/loop.rb:24",
+        "block (2 levels) in <main>+0 in /home/dalehamel/repo/otel-profiler/tools/coredump/testsources/ruby/loop.rb:34",
+        "Range#each+0 in <cfunc>:0",
+        "block in <main>+0 in /home/dalehamel/repo/otel-profiler/tools/coredump/testsources/ruby/loop.rb:33",
+        "Kernel#loop+0 in <internal:kernel>:168",
+        "<main>+0 in /home/dalehamel/repo/otel-profiler/tools/coredump/testsources/ruby/loop.rb:32"
+      ]
+    },
+    {
+      "lwp": 780085,
+      "frames": [
+        "libc.so.6+0x108f26",
+        "libruby.so.3.4.7+0x2d7c94",
+        "libc.so.6+0x891f4",
+        "libc.so.6+0x1098db"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "7f2ca87f652f56b094462474b076749e90e689d0ecb9cb63c7679820b271b4e7",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "af3b11eb5acff87eae2761c08c645f3753b1a9245c56626ea4ae5e0d17d33ae5",
+      "local-path": "/opt/ruby-yjit/lib/ruby/3.4.0/x86_64-linux/enc/trans/transdb.so"
+    },
+    {
+      "ref": "7376c9af0afd6e7698a64ee19de3c8a0199418664974384c70435a51c7ff7f3f",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgmp.so.10.4.1"
+    },
+    {
+      "ref": "7e2a72b4c4b38c61e6962de6e3f4a5e9ae692e732c68deead10a7ce2135a7f68",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libz.so.1.2.13"
+    },
+    {
+      "ref": "58bef3cc4efc5b32f3ec7dfa978d4401be09e7d3245ee294570fce8bc0789364",
+      "local-path": "/opt/ruby-yjit/lib/ruby/3.4.0/x86_64-linux/enc/encdb.so"
+    },
+    {
+      "ref": "593bb1d5355658e645f36e6b1f49832691b24e177209765914e4cce51499dbb4",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    },
+    {
+      "ref": "79bc04a41245d221b215c2bab17aff0fe981257d0a2386b3a653d1945ea38d80",
+      "local-path": "/opt/ruby-yjit/bin/ruby"
+    },
+    {
+      "ref": "bff8750fe719e6000791b88b11747dce8772c37118d0b2348044b70819d13835",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "5db18e8a8894ef4746eb8230855b638a5e52e782b2f10deede5f1dad846178bb",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libcrypt.so.1.1.0"
+    },
+    {
+      "ref": "2f5641d2f866c73d349141261fb08ae2ed11a2dd416263bd575afc998259173d",
+      "local-path": "/opt/ruby-yjit/lib/libruby.so.3.4.7"
+    },
+    {
+      "ref": "631d4d8d03ee4735b853b4b8d8cf8aa18666233c3952e421863a9fbbf29c5467",
+      "local-path": "/opt/ruby-yjit/lib/ruby/3.4.0/x86_64-linux/monitor.so"
+    },
+    {
+      "ref": "2bd1552c47799ef67e701e81d4383061fd76059868e446e63560f0dd0d5ec14e",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1"
+    }
+  ]
+}
