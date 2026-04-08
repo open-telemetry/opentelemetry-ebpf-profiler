@@ -40,6 +40,9 @@ func getS3ObjectList(client *s3.Client, bucket, prefix string,
 			return nil, errors.New("too many matching items in bucket")
 		}
 
+		if resp.ContinuationToken == nil || *resp.ContinuationToken == "" {
+			break
+		}
 		contToken = resp.ContinuationToken
 	}
 
