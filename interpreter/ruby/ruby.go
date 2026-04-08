@@ -1342,8 +1342,8 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			continue
 		}
 
-		if _, exists := r.mappings[*m]; exists {
-			*r.mappings[*m] = r.mappingGeneration
+		if gen, exists := r.mappings[*m]; exists {
+			*gen = r.mappingGeneration
 			continue
 		}
 
@@ -1352,12 +1352,11 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		mappingGeneration := r.mappingGeneration
 		r.mappings[*m] = &mappingGeneration
 
-		// Just assume all anonymous and executable mappings are Ruby for now
 		log.Debugf("Enabling Ruby interpreter for %#x/%#x", m.Vaddr, m.Length)
 
 		prefixes, err := lpm.CalculatePrefixList(m.Vaddr, m.Vaddr+m.Length)
 		if err != nil {
-			return fmt.Errorf("new anonymous mapping lpm failure %#x/%#x", m.Vaddr, m.Length)
+			return fmt.Errorf("new anonymous mapping lpm failure %#x/%#x: %w", m.Vaddr, m.Length, err)
 		}
 
 		for _, prefix := range prefixes {
@@ -1386,8 +1385,9 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		if *generationPtr == r.mappingGeneration {
 			continue
 		}
-		log.Debugf("Delete Ruby prefix %#v", prefix)
-		_ = ebpf.DeletePidInterpreterMapping(pid, prefix)
+		if err := ebpf.DeletePidInterpreterMapping(pid, prefix); err != nil {
+			log.Debugf("Failed to delete Ruby prefix %#v: %v", prefix, err)
+		}
 		delete(r.prefixes, prefix)
 	}
 	for m, generationPtr := range r.mappings {
