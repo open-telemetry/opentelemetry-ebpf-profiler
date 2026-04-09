@@ -403,7 +403,12 @@ static inline EBPF_INLINE void send_trace(UNUSED void *ctx, Trace *trace)
 
   // We specify neither BPF_RB_NO_WAKEUP nor BPF_RB_FORCE_WAKEUP here, to allow
   // for an 'adaptive' notification to userspace.
+
+  // TODO: Unlike perf events, there's no "lost events" counter that userspace can
+  // access. We can however capture an error here and increment an associated metric.
   bpf_ringbuf_output(&trace_events, trace, send_size, 0);
+
+
 }
 
 // is_kernel_address checks if the given address looks like virtual address to kernel memory.
