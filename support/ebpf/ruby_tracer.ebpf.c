@@ -457,7 +457,9 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
 
     if (last_stack_frame <= stack_ptr) {
       // We have processed all frames in the Ruby VM and can stop here.
-      *next_unwinder = PROG_UNWIND_NATIVE;
+      // If skip_native_resume is set, stop instead of resuming native unwinding
+      // to prevent re-entering the Ruby unwinder from native JIT mappings.
+      *next_unwinder = rubyinfo->skip_native_resume ? PROG_UNWIND_STOP : PROG_UNWIND_NATIVE;
     } else {
       // If we aren't at the end, advance the stack pointer to continue from the next frame
       stack_ptr += rubyinfo->size_of_control_frame_struct;
