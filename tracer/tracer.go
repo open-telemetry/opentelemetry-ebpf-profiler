@@ -627,8 +627,8 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	// Allow for 1s of 'burst' trace data
 	// TODO: Base this on present CPUs instead, as runtime.NumCPU is fixed
 	// for the lifetime of the process?
-	ringbufSize := uint32(cfg.SamplesPerSecond * runtime.NumCPU() * support.Sizeof_Trace)
-	adaption["trace_events"] = uint32(util.NextPowerOfTwo(uint(ringbufSize)))
+	ringbufSize := uint64(cfg.SamplesPerSecond * runtime.NumCPU() * support.Sizeof_Trace)
+	adaption["trace_events"] = uint32(util.NextPowerOfTwo(ringbufSize))
 
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
 		mapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)
