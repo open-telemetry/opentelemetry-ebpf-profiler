@@ -770,6 +770,14 @@ typedef struct V8UnwindScratchSpace {
   u8 code[96];
 } V8UnwindScratchSpace;
 
+// Container for additional scratch space needed by the Go unwinder.
+typedef struct GoUnwindScratchSpace {
+  // The gobuf struct has a maximum size of 56 bytes (Go <= 1.24, with ret field).
+  // This buffer is used to read gobuf in a single bpf_probe_read_user call and
+  // extract fields at dynamic offsets.
+  u8 gobuf[56];
+} GoUnwindScratchSpace;
+
 // Container for additional scratch space needed by the Python unwinder.
 typedef struct PythonUnwindScratchSpace {
   // Read buffer for storing the PyInterpreterFrame (PyFrameObject).
@@ -804,6 +812,19 @@ typedef struct GoMapBucket {
 typedef struct CustomLabelsState {
   void *go_m_ptr;
 } CustomLabelsState;
+
+typedef struct GoLabelsOffsets {
+  u32 m_offset;
+  u32 curg;
+  u32 labels;
+  u32 hmap_count;
+  u32 hmap_log2_bucket_count;
+  u32 hmap_buckets;
+  s32 tls_offset;
+  u32 sched_sp;
+  u8 sched_pc_off;
+  u8 sched_bp_off;
+} GoLabelsOffsets;
 
 // Per-CPU info for the stack being built. This contains the stack as well as
 // meta-data on the number of eBPF tail-calls used so far to construct it.
@@ -842,7 +863,10 @@ typedef struct PerCPURecord {
 #elif defined(__aarch64__)
     u64 rt_regs[34];
 #endif
+    // Scratch for Go unwinder
+    GoUnwindScratchSpace goUnwindScratch;
   };
+
   // Mask to indicate which unwinders are complete
   u32 unwindersDone;
 
@@ -921,19 +945,17 @@ typedef struct StackDelta {
 #define STACK_DELTA_COMMAND_FLAG 0x8000
 
 // Unsupported or no value for the register
-#define UNWIND_COMMAND_INVALID        0
+#define UNWIND_COMMAND_INVALID       0
 // For CFA: stop unwinding, this function is a stack root function
-#define UNWIND_COMMAND_STOP           1
+#define UNWIND_COMMAND_STOP          1
 // Unwind a PLT entry
-#define UNWIND_COMMAND_PLT            2
+#define UNWIND_COMMAND_PLT           2
 // Unwind a signal frame
-#define UNWIND_COMMAND_SIGNAL         3
+#define UNWIND_COMMAND_SIGNAL        3
 // Unwind using standard frame pointer
-#define UNWIND_COMMAND_FRAME_POINTER  4
-// Cross Go systemstack boundary using goroutine saved context from gobuf stack frame
-#define UNWIND_COMMAND_GO_SYSTEMSTACK 5
+#define UNWIND_COMMAND_FRAME_POINTER 4
 // Cross Go mcall boundary using goroutine saved context from gobuf fields directly.
-#define UNWIND_COMMAND_GO_MCALL       6
+#define UNWIND_COMMAND_GO_MCALL      5
 
 // StackDeltaPageKey is the look up key for stack delta page map.
 typedef struct StackDeltaPageKey {
@@ -1043,18 +1065,5 @@ typedef struct PIDPageMappingInfo {
 typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
-
-typedef struct GoLabelsOffsets {
-  u32 m_offset;
-  u32 curg;
-  u32 labels;
-  u32 hmap_count;
-  u32 hmap_log2_bucket_count;
-  u32 hmap_buckets;
-  s32 tls_offset;
-  u32 sched_sp;
-  u32 sched_pc;
-  u32 sched_bp;
-} GoLabelsOffsets;
 
 #endif // OPTI_TYPES_H

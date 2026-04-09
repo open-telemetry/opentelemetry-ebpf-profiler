@@ -301,70 +301,6 @@ unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool 
 }
 #endif
 
-// go_get_go_offsets returns GoLabelsOffsets for the current process, or NULL.
-static EBPF_INLINE GoLabelsOffsets *go_get_go_offsets(void)
-{
-  PerCPURecord *cpu_record = get_per_cpu_record();
-  if (!cpu_record) {
-    return NULL;
-  }
-  u32 pid                  = cpu_record->trace.pid;
-  GoLabelsOffsets *go_offs = bpf_map_lookup_elem(&go_labels_procs, &pid);
-  if (!go_offs || !go_offs->sched_sp) {
-    return NULL;
-  }
-  return go_offs;
-}
-
-// go_read_curg resolves the user goroutine address via TLS -> g -> m -> m.curg.
-// During systemstack, m.curg is always valid (systemstack does not call dropg contrary to mcall).
-// Returns the curg address, or 0 on failure (sets *stop = true).
-static EBPF_INLINE u64 go_read_curg(GoLabelsOffsets *go_offs, UnwindState *state, bool *stop)
-{
-  void *m_ptr = get_m_ptr(go_offs, state);
-  if (!m_ptr) {
-    DEBUG_PRINT("GO: failed to get m_ptr, stopping");
-    *stop = true;
-    return 0;
-  }
-  u64 curg = 0;
-  if (bpf_probe_read_user(&curg, sizeof(curg), (void *)((u64)m_ptr + go_offs->curg))) {
-    DEBUG_PRINT("GO: failed to read curg, stopping");
-    *stop = true;
-    return 0;
-  }
-  if (!curg) {
-    DEBUG_PRINT("GO: no user goroutine (curg == NULL), stopping");
-    *stop = true;
-    return 0;
-  }
-  return curg;
-}
-
-// go_read_curg_sched_sp resolves curg via go_read_curg, then reads curg.sched.sp.
-// Returns sched_sp or 0 on failure. Passes curg via *out_curg.
-static EBPF_INLINE u64
-go_read_curg_sched_sp(GoLabelsOffsets *go_offs, UnwindState *state, bool *stop, u64 *out_curg)
-{
-  u64 curg = go_read_curg(go_offs, state, stop);
-  if (!curg) {
-    return 0;
-  }
-  u64 sched_sp = 0;
-  if (bpf_probe_read_user(&sched_sp, sizeof(sched_sp), (void *)(curg + go_offs->sched_sp))) {
-    DEBUG_PRINT("GO: failed to read sched_sp, stopping");
-    *stop = true;
-    return 0;
-  }
-  if (!sched_sp) {
-    DEBUG_PRINT("GO: gobuf not populated (sched_sp==0), stopping");
-    *stop = true;
-    return 0;
-  }
-  *out_curg = curg;
-  return sched_sp;
-}
-
 // go_resolve_mcall_goroutine resolves the user goroutine for mcall unwinding.
 // First tries m.curg (valid before dropg). If nil, falls back
 // to reading the goroutine pointer from g0's stack at *(g0.sched.sp - 8), where
@@ -452,6 +388,119 @@ static EBPF_INLINE u64 go_resolve_mcall_goroutine(struct GoLabelsOffsets *offs, 
   return candidate;
 }
 
+// go_unwind_mcall crosses the Go mcall stack-switch boundary by reading the
+// caller's saved registers from gobuf.{pc, sp, bp}. Unlike systemstack (which
+// preserves the frame pointer chain and uses FRAME_POINTER unwinding), mcall
+// clears BP/R29 before calling fn, so the FP chain is broken and we must read
+// the gobuf fields directly.
+//
+// mcall saves the caller's actual registers into gobuf before switching to g0:
+//
+// AMD64 (asm_amd64.s):
+//   MOVQ 8(BX), BX                  // gobuf.pc = caller's return address
+//   LEAQ fn+0(FP), BX               // gobuf.sp = caller's SP
+//   MOVQ (BP), BX                   // gobuf.bp = caller's FP
+//
+//   After saving gobuf, mcall switches to g0 and calls fn(old_g):
+//
+//   MOVQ R14, AX                       // AX = old_g (user goroutine)
+//   MOVQ SI, R14                       // R14 = g0
+//   MOVQ R14, FS:0xfffffff8            // TLS = g0
+//   MOVQ (g_sched+gobuf_sp)(R14), SP   // SP = g0.sched.sp
+//   MOVQ $0, BP                        // clear frame pointer
+//   PUSHQ AX                           // *(g0.sched.sp - 8) = old_g
+//   CALL R12                           // fn(old_g)
+//   https://github.com/golang/go/blob/917949cc1d16c652cb09ba369718f45e5d814d8f/src/runtime/asm_amd64.s#L427
+//
+// ARM64 (asm_arm64.s, NOSPLIT|NOFRAME - no prologue):
+//   MOVD  RSP, R0
+//   MOVD  R0, (g_sched+gobuf_sp)(g)    // gobuf.sp = caller's SP
+//   MOVD  R29, (g_sched+gobuf_bp)(g)   // gobuf.bp = caller's FP
+//   MOVD  R30, (g_sched+gobuf_pc)(g)   // gobuf.pc = LR = caller's return addr
+//
+//   After saving gobuf, mcall switches to g0 and calls fn(old_g):
+//
+//   MOVD  (g_sched+gobuf_sp)(g), R0
+//   MOVD  R0, RSP                       // RSP = g0.sched.sp
+//   MOVD  ZR, R29                       // clear frame pointer
+//   MOVD  R3, R0                        // R0 = old_g (fn's argument)
+//   MOVD  ZR, -16(RSP)
+//   SUB   $16, RSP                      // allocate 16-byte arg space
+//   BL    (R4)                          // fn(old_g), entry SP = g0.sched.sp - 16
+//   https://github.com/golang/go/blob/5a928e5a37dc632bbb1794fe0e0846e6352be8b2/src/runtime/asm_arm64.s#L215
+//
+// fn (park_m, goexit0, etc.) typically calls dropg() which sets m.curg to nil.
+// go_resolve_mcall_goroutine() handles this by falling back to
+// *(g0.sched.sp - 8) where:
+//   AMD64: PUSHQ AX deterministically placed old_g
+//   ARM64: fn's ABIInternal prologue spills R0 (old_g) to its arg area
+//          at fn_entry_SP + 8 = g0.sched.sp - 16 + 8 = g0.sched.sp - 8
+//          (verified via DWARF: DW_OP_fbreg(+8) = CFA+8)
+//
+// Returns true if the transition succeeded and state was updated.
+// Returns false if the goroutine could not be resolved (caller should STOP).
+static EBPF_INLINE bool go_unwind_mcall(UnwindState *state)
+{
+  PerCPURecord *record = get_per_cpu_record();
+  if (!record) {
+    return false;
+  }
+  u32 pid                  = record->trace.pid;
+  GoLabelsOffsets *go_offs = bpf_map_lookup_elem(&go_labels_procs, &pid);
+  if (!go_offs || !go_offs->sched_sp) {
+    return false;
+  }
+  u64 curg = go_resolve_mcall_goroutine(go_offs, state);
+  if (!curg) {
+    DEBUG_PRINT("GO_MCALL: could not resolve user goroutine, stopping");
+    return false;
+  }
+
+  // Read gobuf.{sp, pc, bp} in a single bpf_probe_read_user into the PerCPURecord
+  // scratch buffer. See GoUnwindScratchSpace in types.h. Gobuf layout in runtime_data.go.
+  u8 *gobuf = record->goUnwindScratch.gobuf;
+  if (bpf_probe_read_user(
+        gobuf, sizeof(record->goUnwindScratch.gobuf), (void *)(curg + go_offs->sched_sp))) {
+    DEBUG_PRINT("GO_MCALL: failed to read gobuf, stopping");
+    return false;
+  }
+  // sched_pc_off and sched_bp_off are u8 offsets relative to gobuf.sp, stored
+  // in GoLabelsOffsets. Using u8 fields (not u32 subtractions) lets the BPF
+  // verifier bound them naturally.
+  if (
+    go_offs->sched_bp_off + sizeof(u64) > sizeof(record->goUnwindScratch.gobuf) ||
+    go_offs->sched_pc_off + sizeof(u64) > sizeof(record->goUnwindScratch.gobuf)) {
+    return false;
+  }
+  u64 saved_sp = *(u64 *)(gobuf);
+  u64 saved_pc = *(u64 *)(gobuf + go_offs->sched_pc_off);
+  u64 saved_bp = *(u64 *)(gobuf + go_offs->sched_bp_off);
+
+  if (!saved_sp || !saved_pc) {
+    DEBUG_PRINT(
+      "GO_MCALL: gobuf not populated (sp=0x%lx pc=0x%lx), stopping",
+      (unsigned long)saved_sp,
+      (unsigned long)saved_pc);
+    return false;
+  }
+  DEBUG_PRINT(
+    "GO_MCALL: recovered context: pc=0x%lx, sp=0x%lx, fp=0x%lx",
+    (unsigned long)saved_pc,
+    (unsigned long)saved_sp,
+    (unsigned long)saved_bp);
+  state->sp = saved_sp;
+  state->fp = saved_bp;
+#if defined(__aarch64__)
+  state->pc  = normalize_pac_ptr(saved_pc);
+  state->lr  = 0;
+  state->r28 = curg;
+#else
+  state->pc = saved_pc;
+#endif
+  unwinder_mark_nonleaf_frame(state);
+  return true;
+}
+
 // Stack unwinding in the absence of frame pointers can be a bit involved, so
 // this comment explains what the following code does.
 //
@@ -526,141 +575,12 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
         goto err_native_pc_read;
       }
       goto frame_ok;
-    case UNWIND_COMMAND_GO_SYSTEMSTACK: {
-      // Cross the Go stack-switch boundary: recover the goroutine's saved context
-      // from g.sched (set by runtime.systemstack when it switched from the
-      // goroutine stack to the g0 system stack).
-      //
-      // gosave_systemstack_switch (asm_amd64.s) builds gobuf as follows:
-      //
-      //   MOVQ $runtime.systemstack_switch+8(SB), R9
-      //   MOVQ R9, gobuf_pc(R14)        // gobuf.pc = UNDEF marker; useless for unwinding
-      //
-      //   LEAQ 8(SP), R9
-      //   MOVQ R9, gobuf_sp(R14)        // gobuf.sp = SP+8
-      //
-      //   MOVQ BP, gobuf_bp(R14)        // gobuf.bp = BP (== gobuf.sp, see below)
-      //
-      // Although systemstack is declared with $0 frame size, Go's linker injects
-      // a frame pointer prologue (PUSH RBP + MOVQ RSP, RBP) for all non-NOFRAME
-      // functions that contain a CALL instruction.
-      // https://github.com/golang/go/blob/affadc7997466dfacad5b9a3dc90ee5e7a7b6085/src/cmd/internal/obj/x86/obj6.go#L637
-      //
-      // Stack layout inside gosave_systemstack_switch at the time of LEAQ:
-      //   [high address]
-      //   SP+24 = address of SP before the call to systemstack
-      //   [SP+16] = RA caller of systemstack    (pushed by CALL systemstack)
-      //   [SP+8]  = saved old RBP of caller = gobuf.sp after LEAQ    (pushed by systemstack
-      //   prologue)
-      //   [SP+0]  = RA back into systemstack    (pushed by CALL gosave)
-      //   [low address]
-      //
-      // We want to resume unwinding at the caller of systemstack, so:
-      //   pc = *(gobuf.sp + 8) = RA caller of systemstack
-      //   sp = gobuf.sp + 16   = beyond consumed old-RBP + RA slots
-      //   fp = *(gobuf.sp)     = saved old RBP = frame pointer of the caller
-      //
-      // gobuf.pc (systemstack_switch+8 = UNDEF) is intentionally ignored: it is a
-      // synthetic marker for Go's stack scanner and scheduler, not a real return address.
-      //
-      // https://github.com/golang/go/blob/917949cc1d16c652cb09ba369718f45e5d814d8f/src/runtime/asm_amd64.s#L886
-      GoLabelsOffsets *go_offs = go_get_go_offsets();
-      if (!go_offs) {
-        DEBUG_PRINT("GO_SYSTEMSTACK: no Go offsets, stopping");
-        *stop = true;
-        return ERR_OK;
+    case UNWIND_COMMAND_GO_MCALL:
+      if (go_unwind_mcall(state)) {
+        goto frame_ok;
       }
-      u64 curg     = 0;
-      u64 sched_sp = go_read_curg_sched_sp(go_offs, state, stop, &curg);
-      if (!sched_sp) {
-        return ERR_OK;
-      }
-      u64 caller_pc = 0, caller_fp = 0;
-      if (
-        bpf_probe_read_user(&caller_fp, sizeof(caller_fp), (void *)sched_sp) ||
-        bpf_probe_read_user(&caller_pc, sizeof(caller_pc), (void *)(sched_sp + 8))) {
-        *stop = true;
-        return ERR_OK;
-      }
-      DEBUG_PRINT(
-        "GO_SYSTEMSTACK: recovered caller context: pc=0x%lx, sp=0x%lx, fp=0x%lx",
-        (unsigned long)caller_pc,
-        (unsigned long)(sched_sp + 16),
-        (unsigned long)caller_fp);
-      state->pc = caller_pc;
-      state->sp = sched_sp + 16;
-      state->fp = caller_fp;
-      unwinder_mark_nonleaf_frame(state);
-      goto frame_ok;
-    }
-    case UNWIND_COMMAND_GO_MCALL: {
-      // Cross the Go mcall boundary: recover the goroutine's saved context
-      // from g.sched (set by runtime.mcall when it switched from the goroutine
-      // stack to the g0 system stack).
-      //
-      // Unlike systemstack, mcall saves the caller's actual registers into gobuf:
-      //
-      //   MOVQ 8(BX), BX                  // gobuf.pc = caller's return address
-      //   LEAQ fn+0(FP), BX               // gobuf.sp = caller's SP
-      //   MOVQ (BP), BX                   // gobuf.bp = caller's FP (dereferenced)
-      //
-      // Recovery reads gobuf.{pc, sp, bp} directly, no stack dereferencing needed.
-      //
-      // After saving gobuf, mcall switches to g0 and calls fn(old_g):
-      //
-      //   MOVQ R14, AX                       // AX = old_g (user goroutine)
-      //   MOVQ SI, R14                       // R14 = g0
-      //   MOVQ R14, FS:0xfffffff8            // TLS = g0
-      //   MOVQ (g_sched+gobuf_sp)(R14), SP   // SP = g0.sched.sp
-      //   MOVQ $0, BP                        // clear frame pointer
-      //   PUSHQ AX                           // *(g0.sched.sp - 8) = old_g
-      //   CALL R12                           // fn(old_g)
-      //
-      // fn (park_m, goexit0, etc.) typically calls dropg() which sets m.curg
-      // to nil. go_resolve_mcall_goroutine() handles this by falling back to
-      // *(g0.sched.sp - 8) where PUSHQ AX placed the goroutine pointer.
-      //
-      // https://github.com/golang/go/blob/917949cc1d16c652cb09ba369718f45e5d814d8f/src/runtime/asm_amd64.s#L458
-      GoLabelsOffsets *go_offs = go_get_go_offsets();
-      if (!go_offs) {
-        DEBUG_PRINT("GO_MCALL: no Go offsets, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      u64 curg = go_resolve_mcall_goroutine(go_offs, state);
-      if (!curg) {
-        DEBUG_PRINT("GO_MCALL: could not resolve user goroutine, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      u64 saved_pc = 0, saved_sp = 0, saved_bp = 0;
-      if (
-        bpf_probe_read_user(&saved_sp, sizeof(saved_sp), (void *)(curg + go_offs->sched_sp)) ||
-        bpf_probe_read_user(&saved_pc, sizeof(saved_pc), (void *)(curg + go_offs->sched_pc)) ||
-        bpf_probe_read_user(&saved_bp, sizeof(saved_bp), (void *)(curg + go_offs->sched_bp))) {
-        DEBUG_PRINT("GO_MCALL: failed to read gobuf fields, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      if (!saved_sp || !saved_pc) {
-        DEBUG_PRINT(
-          "GO_MCALL: gobuf not populated (sp=0x%lx pc=0x%lx), stopping",
-          (unsigned long)saved_sp,
-          (unsigned long)saved_pc);
-        *stop = true;
-        return ERR_OK;
-      }
-      DEBUG_PRINT(
-        "GO_MCALL: recovered context: pc=0x%lx, sp=0x%lx, fp=0x%lx",
-        (unsigned long)saved_pc,
-        (unsigned long)saved_sp,
-        (unsigned long)saved_bp);
-      state->pc = saved_pc;
-      state->sp = saved_sp;
-      state->fp = saved_bp;
-      unwinder_mark_nonleaf_frame(state);
-      goto frame_ok;
-    }
+      *stop = true;
+      return ERR_OK;
     default: return ERR_UNREACHABLE;
     }
   } else {
@@ -764,153 +684,12 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
         goto err_native_pc_read;
       }
       goto frame_ok;
-    case UNWIND_COMMAND_GO_SYSTEMSTACK: {
-      // Cross the Go stack-switch boundary: recover the goroutine's saved context
-      // from g.sched (set by runtime.systemstack when it switched from the
-      // goroutine stack to the g0 system stack).
-      //
-      // gosave_systemstack_switch (asm_arm64.s) builds gobuf as follows:
-      //
-      //   MOVD  $runtime.systemstack_switch(SB), R0
-      //   ADD   $8, R0 // get past prologue
-      //   MOVD  R0, (g_sched+gobuf_pc)(g)         // gobuf.pc = UNDEF marker; useless for unwinding
-      //
-      //   MOVD  RSP, R0
-      //   MOVD  R0, (g_sched+gobuf_sp)(g)         // gobuf.sp = RSP
-      //
-      //   MOVD  R29, (g_sched+gobuf_bp)(g)        // gobuf.bp = R29 (== gobuf.sp, see below)
-      //
-      //   MOVD  $0, (g_sched+gobuf_lr)(g)         // gobuf.lr = 0
-      //
-      // Although systemstack is declared with $0 frame size, Go's linker injects
-      // a frame pointer prologue for all non-NOFRAME functions. On arm64, Go uses
-      // MOVD.W (NOT standard STP), which stores LR and R29 in the opposite order:
-      // https://github.com/golang/go/blob/917949cc1d16c652cb09ba369718f45e5d814d8f/src/cmd/internal/obj/arm64/obj7.go#L653
-      //
-      //   MOVD.W R30, -16(RSP)   // RSP -= 16, *(RSP) = LR    (at SP+0)
-      //   MOVD R29, -8(RSP)      // *(RSP-8) = R29            (at SP-8)
-      //   SUB $8, RSP, R29       // R29 = RSP - 8
-      //
-      // Stack layout inside gosave_systemstack_switch at the time of MOVD RSP:
-      //   [SP+0]   = saved LR = RA caller of systemstack  (stored by MOVD.W)
-      //   [SP-8]   = saved R29 of caller                  (stored by MOVD R29)
-      //
-      // R29 = SP - 8, so gobuf.bp = gobuf.sp - 8.
-      //
-      // We want to resume unwinding at the caller of systemstack, so:
-      //   pc = *(gobuf.sp + 0)   = LR saved by MOVD.W = RA caller of systemstack
-      //   sp = gobuf.sp + 16     = SP before the call to systemstack
-      //   fp = *(gobuf.sp - 8)   = R29 saved by MOVD = frame pointer of the caller
-      //
-      // gobuf.pc (systemstack_switch = UNDEF) is intentionally ignored: it is a
-      // synthetic marker for Go's stack scanner and scheduler, not a real return address.
-      //
-      // https://github.com/golang/go/blob/5a928e5a37dc632bbb1794fe0e0846e6352be8b2/src/runtime/asm_arm64.s#L1124
-      GoLabelsOffsets *go_offs = go_get_go_offsets();
-      if (!go_offs) {
-        DEBUG_PRINT("GO_SYSTEMSTACK: no Go offsets, stopping");
-        *stop = true;
-        return ERR_OK;
+    case UNWIND_COMMAND_GO_MCALL:
+      if (go_unwind_mcall(state)) {
+        goto frame_ok;
       }
-      u64 curg     = 0;
-      u64 sched_sp = go_read_curg_sched_sp(go_offs, state, stop, &curg);
-      if (!sched_sp) {
-        return ERR_OK;
-      }
-      u64 caller_pc = 0, caller_fp = 0;
-      if (
-        bpf_probe_read_user(&caller_pc, sizeof(caller_pc), (void *)sched_sp) ||
-        bpf_probe_read_user(&caller_fp, sizeof(caller_fp), (void *)(sched_sp - 8))) {
-        *stop = true;
-        return ERR_OK;
-      }
-      DEBUG_PRINT(
-        "GO_SYSTEMSTACK: recovered caller context: pc=0x%lx, sp=0x%lx, fp=0x%lx",
-        (unsigned long)caller_pc,
-        (unsigned long)(sched_sp + 16),
-        (unsigned long)caller_fp);
-      state->pc  = normalize_pac_ptr(caller_pc);
-      state->sp  = sched_sp + 16;
-      state->fp  = caller_fp;
-      state->lr  = 0;
-      state->r28 = curg;
-      unwinder_mark_nonleaf_frame(state);
-      goto frame_ok;
-    }
-    case UNWIND_COMMAND_GO_MCALL: {
-      // Cross the Go mcall boundary: recover the goroutine's saved context
-      // from g.sched (set by runtime.mcall when it switched from the goroutine
-      // stack to the g0 system stack).
-      //
-      // Unlike systemstack, mcall on ARM64 saves the caller's actual registers:
-      //
-      //   MOVD  RSP, R0
-      //   MOVD  R0, (g_sched+gobuf_sp)(g)    // gobuf.sp = caller's SP
-      //   MOVD  R29, (g_sched+gobuf_bp)(g)   // gobuf.bp = caller's FP
-      //   MOVD  R30, (g_sched+gobuf_pc)(g)   // gobuf.pc = LR = caller's return addr
-      //
-      // mcall is NOSPLIT|NOFRAME - no linker-injected prologue.
-      // Recovery reads gobuf.{pc, sp, bp} directly.
-      //
-      // After saving gobuf, mcall switches to g0 and calls fn(old_g):
-      //
-      //   MOVD  (g_sched+gobuf_sp)(g), R0
-      //   MOVD  R0, RSP                      // RSP = g0.sched.sp
-      //   MOVD  ZR, R29
-      //   MOVD  R3, R0                       // R0 = old_g (fn's argument)
-      //   MOVD  ZR, -16(RSP)
-      //   SUB   $16, RSP                     // allocate 16-byte arg space
-      //   BL    (R4)                         // fn(old_g), entry SP = g0.sched.sp - 16
-      //
-      // fn (park_m, goexit0, etc.) typically calls dropg() which sets m.curg
-      // to nil. go_resolve_mcall_goroutine() handles this by falling back to
-      // *(g0.sched.sp - 8), where fn's ABIInternal prologue spills R0 (old_g)
-      // to its arg area at fn_entry_SP + 8 = g0.sched.sp - 16 + 8 = g0.sched.sp - 8.
-      // (verified via DWARF: DW_OP_fbreg(+8) = CFA+8)
-      //
-      // https://github.com/golang/go/blob/5a928e5a37dc632bbb1794fe0e0846e6352be8b2/src/runtime/asm_arm64.s#L215
-      GoLabelsOffsets *go_offs = go_get_go_offsets();
-      if (!go_offs) {
-        DEBUG_PRINT("GO_MCALL: no Go offsets, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      u64 curg = go_resolve_mcall_goroutine(go_offs, state);
-      if (!curg) {
-        DEBUG_PRINT("GO_MCALL: could not resolve user goroutine, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      u64 saved_pc = 0, saved_sp = 0, saved_bp = 0;
-      if (
-        bpf_probe_read_user(&saved_sp, sizeof(saved_sp), (void *)(curg + go_offs->sched_sp)) ||
-        bpf_probe_read_user(&saved_pc, sizeof(saved_pc), (void *)(curg + go_offs->sched_pc)) ||
-        bpf_probe_read_user(&saved_bp, sizeof(saved_bp), (void *)(curg + go_offs->sched_bp))) {
-        DEBUG_PRINT("GO_MCALL: failed to read gobuf fields, stopping");
-        *stop = true;
-        return ERR_OK;
-      }
-      if (!saved_sp || !saved_pc) {
-        DEBUG_PRINT(
-          "GO_MCALL: gobuf not populated (sp=0x%lx pc=0x%lx), stopping",
-          (unsigned long)saved_sp,
-          (unsigned long)saved_pc);
-        *stop = true;
-        return ERR_OK;
-      }
-      DEBUG_PRINT(
-        "GO_MCALL: recovered context: pc=0x%lx, sp=0x%lx, fp=0x%lx",
-        (unsigned long)saved_pc,
-        (unsigned long)saved_sp,
-        (unsigned long)saved_bp);
-      state->pc  = normalize_pac_ptr(saved_pc);
-      state->sp  = saved_sp;
-      state->fp  = saved_bp;
-      state->lr  = 0;
-      state->r28 = curg;
-      unwinder_mark_nonleaf_frame(state);
-      goto frame_ok;
-    }
+      *stop = true;
+      return ERR_OK;
     default: return ERR_UNREACHABLE;
     }
   }

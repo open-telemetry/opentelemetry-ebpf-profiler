@@ -52,7 +52,8 @@ static EBPF_INLINE u64 get_g_ptr(struct GoLabelsOffsets *offs, UnwindState *stat
 // get_m_ptr reads the M (machine/OS thread) pointer for the current goroutine.
 // It does so by reading the G (goroutine) pointer from thread-local storage,
 // then following the g.m pointer.
-static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
+__attribute__((unused)) static EBPF_INLINE void *
+get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
 {
   u64 g_addr = get_g_ptr(offs, state);
   if (!g_addr) {

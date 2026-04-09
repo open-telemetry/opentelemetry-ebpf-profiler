@@ -46,13 +46,6 @@ var UnwindInfoFramePointer = UnwindInfo{Flags: support.UnwindFlagCommand,
 	Param: support.UnwindCommandFramePointer,
 }
 
-// UnwindInfoGoSystemstack is the stack delta info for runtime.systemstack.
-// When encountered during unwinding, the unwinder crosses from the g0 system
-// stack to the goroutine stack by reading the saved FP and RA from the frame
-// pointer prologue at gobuf.sp.
-var UnwindInfoGoSystemstack = UnwindInfo{Flags: support.UnwindFlagCommand,
-	Param: support.UnwindCommandGoSystemstack}
-
 // UnwindInfoGoMcall is the stack delta info for runtime.mcall.
 // When encountered during unwinding, the unwinder crosses from the g0 system
 // stack to the goroutine stack by reading the caller's saved registers directly
