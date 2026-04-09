@@ -447,9 +447,9 @@ type rubyInstance struct {
 	maxSize atomic.Uint32
 
 	// mappings is indexed by the Mapping to its generation
-	mappings map[process.RawMapping]*uint32
+	mappings map[process.RawMapping]uint32
 	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
-	prefixes map[lpm.Prefix]*uint32
+	prefixes map[lpm.Prefix]uint32
 	// mappingGeneration is the current generation (so old entries can be pruned)
 	mappingGeneration uint32
 }
