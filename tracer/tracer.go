@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"os"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -63,6 +65,12 @@ const (
 	schedProcessFreeV2 = "tracepoint__sched_process_free"
 )
 
+// Shared map name according to
+// https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
+const (
+	obiSpanTracesMap = "traces_ctx_v1"
+)
+
 // Intervals is a subset of config.IntervalsAndTimers.
 type Intervals interface {
 	MonitorInterval() time.Duration
@@ -96,10 +104,6 @@ type Tracer struct {
 	// tracePool is cache of libpf.EbpfTrace to avoid GC pressure
 	tracePool sync.Pool
 
-	// monitorPIDEventsMap iterates over the eBPF map pid_events, collects PIDs and
-	// writes them to the keys slice. The implementation is selected on creation.
-	monitorPIDEventsMapMethod func(keys *[]libpf.PIDTID) error
-
 	// triggerPIDProcessing is used as manual trigger channel to request immediate
 	// processing of pending PIDs. This is requested on notifications from eBPF code
 	// when process events take place (new, exit, unknown PC).
@@ -113,8 +117,6 @@ type Tracer struct {
 
 	// intervals provides access to globally configured timers and counters.
 	intervals Intervals
-
-	hasBatchOperations bool
 
 	// samplesPerSecond holds the configured number of samples per second.
 	samplesPerSecond int
@@ -183,6 +185,10 @@ type Config struct {
 	// LoadProbe indicates whether the generic eBPF program should be loaded
 	// without being attached to something.
 	LoadProbe bool
+	// BPFFSRoot is the root path to BPF filesystem for pinned maps and programs.
+	BPFFSRoot string
+	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
+	OBIProcessCtx bool
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -252,9 +258,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
-	hasBatchOperations := ebpfHandler.SupportsGenericBatchOperations()
-	hasBatchLookupAndDelete := ebpfHandler.SupportsGenericBatchLookupAndDelete()
-
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
 		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
@@ -275,19 +278,11 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		ebpfProgs:              ebpfProgs,
 		hooks:                  make(map[hookPoint]link.Link),
 		intervals:              cfg.Intervals,
-		hasBatchOperations:     hasBatchOperations,
 		perfEntrypoints:        xsync.NewRWMutex(perfEventList),
 		samplesPerSecond:       cfg.SamplesPerSecond,
 		probabilisticInterval:  cfg.ProbabilisticInterval,
 		probabilisticThreshold: cfg.ProbabilisticThreshold,
 		done:                   make(chan libpf.Void),
-	}
-
-	// Use an optimized version if available
-	if hasBatchLookupAndDelete {
-		tracer.monitorPIDEventsMapMethod = (*tracer).monitorPIDEventsMapBatch
-	} else {
-		tracer.monitorPIDEventsMapMethod = (*tracer).monitorPIDEventsMapSingle
 	}
 
 	return tracer, nil
@@ -637,6 +632,24 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			// Off CPU Profiling is disabled. So do not load this map.
 			continue
 		}
+		if mapName == obiSpanTracesMap {
+			if cfg.BPFFSRoot == "" || !cfg.OBIProcessCtx {
+				// As BPF FS is not set or process context sharing with OBI is not
+				// enabled, the map can not be shared with other OTel components.
+				// To reduce the memory footprint in this case reduce the size of the map.
+				mapSpec.MaxEntries = 1
+			} else {
+				// Try to load it from a known path:
+				mPath := path.Join(cfg.BPFFSRoot, "otel", mapName)
+				ebpfMap, err := cebpf.LoadPinnedMap(mPath, &cebpf.LoadPinOptions{})
+				if err == nil {
+					log.Infof("Using shared map for OBI span/trace ID communication")
+					ebpfMaps[mapName] = ebpfMap
+					continue
+				}
+				// The shared map does not yet exist or BPF FS is not set - so continue as usual
+			}
+		}
 
 		if !types.IsMapEnabled(mapName, cfg.IncludeTracers) {
 			log.Debugf("Skipping eBPF map %s: tracer not enabled", mapName)
@@ -651,6 +664,32 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			return fmt.Errorf("failed to load %s: %v", mapName, err)
 		}
 		ebpfMaps[mapName] = ebpfMap
+
+		if mapName == obiSpanTracesMap {
+			if cfg.BPFFSRoot == "" || !cfg.OBIProcessCtx {
+				// In environments, where BPF FS is not available,
+				// we just load the map to not break eBPF programs.
+				log.Infof("Skip pinning eBPF map to share OTel span/trace IDs")
+				continue
+			}
+
+			// Pin the loaded map to a known path, so that other
+			// OTel components can also use it.
+			otelBPFFS := path.Join(cfg.BPFFSRoot, "otel")
+			if err := os.MkdirAll(otelBPFFS, 0o1700); err != nil {
+				// This is a non-fatal error for the functionality
+				// of the profiler. So just log it.
+				log.Warnf("Failed to create '%s'. OTel span/trace IDs can not be shared: %v",
+					otelBPFFS, err)
+				continue
+			}
+			if err := ebpfMap.Pin(path.Join(otelBPFFS, mapName)); err != nil {
+				// This is a non-fatal error for the functionality
+				// of the profiler. So just log it.
+				log.Warnf("Failed to pin '%s'. OTel span/trace IDs can not be shared: %v",
+					mapName, err)
+			}
+		}
 	}
 
 	return nil
@@ -887,72 +926,9 @@ func (t *Tracer) enableEvent(eventType int) {
 	_ = inhibitEventsMap.Delete(unsafe.Pointer(&et))
 }
 
-// monitorPIDEventsMapSingle iterates over the eBPF map pid_events, collects PIDs
-// and writes them to the keys slice.
-func (t *Tracer) monitorPIDEventsMapSingle(keys *[]libpf.PIDTID) error {
-	eventsMap := t.ebpfMaps["pid_events"]
-	var key, nextKey uint64
-	var value bool
-	keyFound := true
-	deleteBatch := make(libpf.Set[uint64])
-
-	// Key 0 retrieves the very first element in the hash map as
-	// it is guaranteed not to exist in pid_events.
-	key = 0
-	if err := eventsMap.NextKey(unsafe.Pointer(&key), unsafe.Pointer(&nextKey)); err != nil {
-		if errors.Is(err, cebpf.ErrKeyNotExist) {
-			return nil
-		}
-		return fmt.Errorf("Failed to read from pid_events map: %v", err)
-	}
-
-	for keyFound {
-		key = nextKey
-
-		if err := eventsMap.Lookup(unsafe.Pointer(&key), unsafe.Pointer(&value)); err != nil {
-			return fmt.Errorf("Failed to lookup '%v' in pid_events: %v", key, err)
-		}
-
-		// Lookup the next map entry before deleting the current one.
-		if err := eventsMap.NextKey(unsafe.Pointer(&key), unsafe.Pointer(&nextKey)); err != nil {
-			if !errors.Is(err, cebpf.ErrKeyNotExist) {
-				return fmt.Errorf("Failed to read from pid_events map: %v", err)
-			}
-			keyFound = false
-		}
-
-		if !t.hasBatchOperations {
-			// Now that we have the next key, we can delete the current one.
-			if err := eventsMap.Delete(unsafe.Pointer(&key)); err != nil {
-				return fmt.Errorf("Failed to delete '%v' from pid_events: %v", key, err)
-			}
-		} else {
-			// Store to-be-deleted keys in a map so we can delete them all with a single
-			// bpf syscall.
-			deleteBatch[key] = libpf.Void{}
-		}
-
-		// If we process keys inline with iteration (e.g. by sending them to t.pidEvents at this
-		// exact point), we may block sending to the channel, delay the iteration and may introduce
-		// race conditions (related to deletion). For that reason, keys are first collected and,
-		// after the iteration has finished, sent to the channel.
-		*keys = append(*keys, libpf.PIDTID(key))
-	}
-
-	keysToDelete := len(deleteBatch)
-	if keysToDelete != 0 {
-		keys := libpf.MapKeysToSlice(deleteBatch)
-		if _, err := eventsMap.BatchDelete(keys, nil); err != nil {
-			return fmt.Errorf("Failed to batch delete %d entries from pid_events map: %v",
-				keysToDelete, err)
-		}
-	}
-	return nil
-}
-
-// monitorPIDEventsMapBatch iterates over the eBPF map pid_events in batches,
+// monitorPIDEventsMap iterates over the eBPF map pid_events in batches,
 // collects PIDs and writes them to the keys slice.
-func (t *Tracer) monitorPIDEventsMapBatch(keys *[]libpf.PIDTID) error {
+func (t *Tracer) monitorPIDEventsMap(keys *[]libpf.PIDTID) error {
 	eventsMap := t.ebpfMaps["pid_events"]
 
 	removed := make([]uint64, 128)
@@ -1132,7 +1108,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	periodiccaller.StartWithManualTrigger(ctx, t.intervals.MonitorInterval(),
 		t.triggerPIDProcessing, func(_ bool) bool {
 			t.enableEvent(support.EventTypeGenericPID)
-			err := t.monitorPIDEventsMapMethod(&pidEvents)
+			err := t.monitorPIDEventsMap(&pidEvents)
 			if err != nil {
 				log.Errorf("Failed to monitor PID events: %v", err)
 				t.signalDone()
