@@ -28,6 +28,7 @@ const (
 	defaultArgSendErrorFrames     = false
 	defaultOffCPUThreshold        = 0
 	defaultEnvVarsValue           = ""
+	defaultBPFFSRoot              = "/sys/fs/bpf/"
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
 	defaultArgMapScaleFactor = 0
@@ -80,6 +81,9 @@ var (
 		"Expected format: probe_type:target[:symbol]. probe_type can be kprobe, kretprobe, uprobe, or uretprobe."
 	loadProbeHelper = "Load generic eBPF program that can be attached externally to " +
 		"various user or kernel space hooks."
+	bpffsHelp = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
+		defaultBPFFSRoot)
+	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context information with OBI."
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -141,10 +145,14 @@ func parseArgs() (*controller.Config, error) {
 
 	fs.StringVar(&args.IncludeEnvVars, "env-vars", defaultEnvVarsValue, envVarsHelp)
 
+	fs.StringVar(&args.BPFFSRoot, "bpffs-root", defaultBPFFSRoot, bpffsHelp)
+
 	fs.Func("probe-link", probeLinkHelper, func(link string) error {
 		args.ProbeLinks = append(args.ProbeLinks, link)
 		return nil
 	})
+
+	fs.BoolVar(&args.OBIProcessCtx, "obi-process-ctx", false, obiProcessCtxHelp)
 
 	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
 
