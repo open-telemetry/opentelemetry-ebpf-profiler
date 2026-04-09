@@ -350,7 +350,7 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 
 	elfSpaceVA, ok := info.addressMapper.FileOffsetToVirtualAddress(m.FileOffset)
 	if !ok {
-		log.Debugf("Failed to map file offset of PID %d, file %s, offset %d",
+		log.Warnf("Failed to map file offset of PID %d, file %s, offset %d",
 			pr.PID(), m.Path, m.FileOffset)
 		return libpf.FrameMapping{}, errInvalidVirtualAddress
 	}
@@ -358,6 +358,8 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 	fileID := host.FileIDFromLibpf(info.mappingFile.Value().FileID)
 	ei, err := pm.eim.AddOrIncRef(fileID, elfRef)
 	if err != nil {
+		log.Errorf("Failed to load executable info for PID %d file %v (fileID %s): %v",
+			pr.PID(), m.Path, fileID.StringNoQuotes(), err)
 		return libpf.FrameMapping{}, err
 	}
 
