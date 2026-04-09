@@ -74,6 +74,13 @@ int bpf_perf_event_output(
   return 0;
 }
 
+long bpf_ringbuf_output(UNUSED void *ringbuf, void *data, UNUSED u64 size, UNUSED u64 flags)
+{
+  void __bpf_copy_frame(u64, void *);
+  __bpf_copy_frame(__cgo_ctx->id, data);
+  return 0;
+}
+
 int bpf_tail_call(void *ctx, UNUSED void *map, int index)
 {
   int rc = 0;
