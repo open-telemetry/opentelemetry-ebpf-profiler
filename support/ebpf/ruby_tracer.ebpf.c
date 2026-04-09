@@ -458,12 +458,16 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
   if (in_jit) {
     record->rubyUnwindState.jit_detected = true;
 
-    // Push a JIT frame with the raw machine PC. This can be used to
-    // symbolize the JIT frame via perf map later.
-    ErrorCode jit_error =
-      push_ruby(&record->state, trace, RUBY_FRAME_TYPE_JIT, (u64)record->state.pc, 0, 0);
-    if (jit_error) {
-      return jit_error;
+    // Only push a JIT frame if this is the leaf (first frame on the stack).
+    // When the PC is in the JIT region, the leaf frame is the JIT-compiled code.
+    // If native frames were already unwound before entering the Ruby unwinder,
+    // the JIT PC has already been accounted for and we should not push it again.
+    if (trace->num_frames == 0) {
+      ErrorCode jit_error =
+        push_ruby(&record->state, trace, RUBY_FRAME_TYPE_JIT, (u64)record->state.pc, 0, 0);
+      if (jit_error) {
+        return jit_error;
+      }
     }
   }
 
