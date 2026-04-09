@@ -118,8 +118,7 @@ static int (*bpf_perf_event_output)(
   BPF_FUNC_perf_event_output;
 static long (*bpf_ringbuf_output)(void *ringbuf, void *data, u64 size, u64 flags) = (void *)
   BPF_FUNC_ringbuf_output;
-static u32 (*bpf_get_smp_processor_id)(void) = (void *)
-  BPF_FUNC_get_smp_processor_id;
+static u32 (*bpf_get_smp_processor_id)(void) = (void *)BPF_FUNC_get_smp_processor_id;
 static long (*bpf_get_stack)(void *ctx, void *buf, u32 size, u64 flags) = (void *)
   BPF_FUNC_get_stack;
 static unsigned long long (*bpf_get_prandom_u32)(void) = (void *)BPF_FUNC_get_prandom_u32;
