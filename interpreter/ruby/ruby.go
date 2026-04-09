@@ -446,7 +446,10 @@ type rubyInstance struct {
 	// in getRubyLineNo.
 	maxSize atomic.Uint32
 
-	// mappings is indexed by the Mapping to its generation
+	// mappings is indexed by the Mapping to its generation.
+	// Entries are pruned each SynchronizeMappings call; the map size is bounded
+	// by the number of executable anonymous mappings for this process (typically
+	// a handful for JIT code pages plus any native gems with anonymous exec pages).
 	mappings map[process.RawMapping]uint32
 	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
 	prefixes map[lpm.Prefix]uint32
