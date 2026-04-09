@@ -275,17 +275,18 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 
 		var path string
 		if inode == 0 {
-			if fields[5] == "[vdso]" {
+			switch fieldValue := fields[5]; {
+			case fieldValue == "[vdso]":
 				// Map to something filename looking with synthesized inode
 				path = VdsoPathName
 				device = 0
 				inode = vdsoInode
-			} else if fields[5] == "" {
+			case fieldValue == "":
 				// This is an anonymous mapping, keep it
-			} else if strings.HasPrefix(fields[5], "[anon:") {
+			case strings.HasPrefix(fieldValue, "[anon:"):
 				// This is an anonymous mapping named with prctl(PR_SET_VMA), keep the name
-				path = trimMappingPath(fields[5])
-			} else {
+				path = trimMappingPath(fieldValue)
+			default:
 				// Ignore other mappings that are invalid, non-existent or are special pseudo-files
 				continue
 			}
