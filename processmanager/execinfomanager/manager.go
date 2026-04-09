@@ -126,9 +126,11 @@ func NewExecutableInfoManager(
 	}
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
-	if includeTracers.Has(types.Labels) {
-		interpreterLoaders = append(interpreterLoaders, golabels.Loader)
-	}
+
+	// Register golabels loader. The native unwinder needs Go runtime
+	// offsets (m, curg, g.sched) to cross the systemstack boundary,
+	// to perform Go stack unwinding.
+	interpreterLoaders = append(interpreterLoaders, golabels.Loader)
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
 		func(id host.FileID) uint32 { return uint32(id) })

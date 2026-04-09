@@ -904,15 +904,19 @@ typedef struct StackDelta {
 #define STACK_DELTA_COMMAND_FLAG 0x8000
 
 // Unsupported or no value for the register
-#define UNWIND_COMMAND_INVALID       0
+#define UNWIND_COMMAND_INVALID        0
 // For CFA: stop unwinding, this function is a stack root function
-#define UNWIND_COMMAND_STOP          1
+#define UNWIND_COMMAND_STOP           1
 // Unwind a PLT entry
-#define UNWIND_COMMAND_PLT           2
+#define UNWIND_COMMAND_PLT            2
 // Unwind a signal frame
-#define UNWIND_COMMAND_SIGNAL        3
+#define UNWIND_COMMAND_SIGNAL         3
 // Unwind using standard frame pointer
-#define UNWIND_COMMAND_FRAME_POINTER 4
+#define UNWIND_COMMAND_FRAME_POINTER  4
+// Cross Go systemstack boundary using goroutine saved context from gobuf stack frame
+#define UNWIND_COMMAND_GO_SYSTEMSTACK 5
+// Cross Go mcall boundary using goroutine saved context from gobuf fields directly.
+#define UNWIND_COMMAND_GO_MCALL       6
 
 // StackDeltaPageKey is the look up key for stack delta page map.
 typedef struct StackDeltaPageKey {
@@ -1031,6 +1035,9 @@ typedef struct GoLabelsOffsets {
   u32 hmap_log2_bucket_count;
   u32 hmap_buckets;
   s32 tls_offset;
+  u32 sched_sp;
+  u32 sched_pc;
+  u32 sched_bp;
 } GoLabelsOffsets;
 
 #endif // OPTI_TYPES_H

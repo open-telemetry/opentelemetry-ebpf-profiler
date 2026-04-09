@@ -200,6 +200,9 @@ type GoLabelsOffsets struct {
 	Hmap_log2_bucket_count uint32
 	Hmap_buckets           uint32
 	Tls_offset             int32
+	Sched_sp               uint32
+	Sched_pc               uint32
+	Sched_bp               uint32
 }
 type HotspotProcInfo struct {
 	Codecache_start        uint64
@@ -354,11 +357,13 @@ const (
 	UnwindFlagLeafOnly uint8 = 0x4
 	UnwindFlagDerefCfa uint8 = 0x8
 
-	UnwindCommandInvalid      int32 = 0x0
-	UnwindCommandStop         int32 = 0x1
-	UnwindCommandPLT          int32 = 0x2
-	UnwindCommandSignal       int32 = 0x3
-	UnwindCommandFramePointer int32 = 0x4
+	UnwindCommandInvalid       int32 = 0x0
+	UnwindCommandStop          int32 = 0x1
+	UnwindCommandPLT           int32 = 0x2
+	UnwindCommandSignal        int32 = 0x3
+	UnwindCommandFramePointer  int32 = 0x4
+	UnwindCommandGoSystemstack int32 = 0x5
+	UnwindCommandGoMcall       int32 = 0x6
 
 	UnwindDerefMask       int32 = 0x7
 	UnwindDerefMultiplier int32 = 0x8
