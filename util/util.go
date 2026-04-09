@@ -68,6 +68,10 @@ func (odfi OnDiskFileIdentifier) Hash32() uint32 {
 
 // NextPowerOfTwo returns value rounded up to the next power of two.
 // It returns value unchanged if value is already a power of two.
-func NextPowerOfTwo(v uint) uint {
-	return 1 << bits.Len(uint(v-1))
+func NextPowerOfTwo(v uint64) uint64 {
+	if v <= 1 {
+		return 1
+	}
+
+	return 1 << bits.Len64(v-1)
 }
