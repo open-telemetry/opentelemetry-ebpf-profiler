@@ -484,6 +484,7 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 		return nil, errors.New("failed to read code object: null pointer")
 	}
 	if ebpfChecksum != 0 {
+		// A zero checksum indicates code object read failed in the kernel (e.g. paged out).
 		if value, ok := p.addrToCodeObject.Get(addr); ok {
 			m := value
 			if m.ebpfChecksum == ebpfChecksum {
