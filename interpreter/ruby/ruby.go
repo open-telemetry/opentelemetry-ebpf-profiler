@@ -381,8 +381,8 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		procInfo:          &cdata,
 		globalSymbolsAddr: r.globalSymbolsAddr + bias,
 		addrToString:      addrToString,
-		mappings:          make(map[process.RawMapping]*uint32),
-		prefixes:          make(map[lpm.Prefix]*uint32),
+		mappings:          make(map[process.RawMapping]uint32),
+		prefixes:          make(map[lpm.Prefix]uint32),
 		memPool: sync.Pool{
 			New: func() any {
 				buf := make([]byte, 512)
@@ -1343,17 +1343,12 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			continue
 		}
 
-		if gen, exists := r.mappings[*m]; exists {
-			*gen = r.mappingGeneration
-			continue
+		isNew := false
+		if _, exists := r.mappings[*m]; !exists {
+			isNew = true
+			log.Debugf("Enabling Ruby interpreter for %#x/%#x", m.Vaddr, m.Length)
 		}
-
-		// Generate a new uint32 pointer which is shared for mapping and the prefixes it owns
-		// so updating the mapping above will reflect to prefixes also.
-		mappingGeneration := r.mappingGeneration
-		r.mappings[*m] = &mappingGeneration
-
-		log.Debugf("Enabling Ruby interpreter for %#x/%#x", m.Vaddr, m.Length)
+		r.mappings[*m] = r.mappingGeneration
 
 		prefixes, err := lpm.CalculatePrefixList(m.Vaddr, m.Vaddr+m.Length)
 		if err != nil {
@@ -1361,14 +1356,13 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		}
 
 		for _, prefix := range prefixes {
-			_, exists := r.prefixes[prefix]
-			if !exists {
-				err := ebpf.UpdatePidInterpreterMapping(pid, prefix, support.ProgUnwindRuby, 0, 0)
-				if err != nil {
+			if isNew {
+				if err := ebpf.UpdatePidInterpreterMapping(pid, prefix,
+					support.ProgUnwindRuby, 0, 0); err != nil {
 					return err
 				}
 			}
-			r.prefixes[prefix] = &mappingGeneration
+			r.prefixes[prefix] = r.mappingGeneration
 		}
 	}
 	// Detect JIT region from all mappings and update proc data if changed.
@@ -1382,8 +1376,8 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		log.Debugf("Updated JIT region %#x-%#x in ruby proc info", jitStart, jitEnd)
 	}
 	// Remove prefixes not seen
-	for prefix, generationPtr := range r.prefixes {
-		if *generationPtr == r.mappingGeneration {
+	for prefix, gen := range r.prefixes {
+		if gen == r.mappingGeneration {
 			continue
 		}
 		if err := ebpf.DeletePidInterpreterMapping(pid, prefix); err != nil {
@@ -1391,8 +1385,8 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		}
 		delete(r.prefixes, prefix)
 	}
-	for m, generationPtr := range r.mappings {
-		if *generationPtr == r.mappingGeneration {
+	for m, gen := range r.mappings {
+		if gen == r.mappingGeneration {
 			continue
 		}
 		log.Debugf("Disabling Ruby for %#x/%#x", m.Vaddr, m.Length)
