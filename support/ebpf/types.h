@@ -634,6 +634,9 @@ typedef struct Trace {
   // e.g. time in nanoseconds for off-CPU traces
   u64 value;
 
+  // The CPU that captured this trace.
+  u32 cpu_id;
+
   // The frame data of the stack trace. Each frame is variable length.
   // Frame is currently 2-3 entries long. This array size limits the
   // number of frames we can unwind, but also increases the memory
@@ -642,13 +645,9 @@ typedef struct Trace {
   u64 frame_data[3072];
 
   // NOTE: both send_trace in BPF and loadBpfTrace in UM code require `frame_data`
-  // to be the last item in the struct. When sending as a perf event, only the
+  // to be the last item in the struct. When sending via the ringbuffer, only the
   // 'frame_data_len' elements of 'frame_data' are sent.
 } Trace;
-
-// Trace is sent as a perf raw event. As all perf events are contained within
-// struct perf_event_header with 'u16 size', this limits the size of Trace.
-_Static_assert(sizeof(struct Trace) < 63 * 1024, "Trace too large");
 
 // Container for unwinding state
 typedef struct UnwindState {

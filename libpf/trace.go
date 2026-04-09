@@ -116,7 +116,7 @@ type EbpfTrace struct {
 	Value            int64
 	APMTraceID       APMTraceID
 	APMTransactionID APMTransactionID
-	CPU              int
+	CpuID            int
 	NumFrames        int
 	EnvVars          map[String]String
 	CustomLabels     map[String]String
