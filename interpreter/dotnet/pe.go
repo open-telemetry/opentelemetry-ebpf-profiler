@@ -20,6 +20,7 @@ import (
 	"github.com/elastic/go-freelru"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -32,6 +33,12 @@ const (
 
 	// TTL of entries in the LRU cache holding the executables' PE information.
 	peInfoCacheTTL = 6 * time.Hour
+
+	// Maximum size of the LRU cache holding the dotnet strings.
+	peStringsCacheSize = 1024
+
+	// TTL of entries in the LRU cache holding the dotnet strings.
+	peStringsCacheTTL = 1 * time.Hour
 )
 
 // OptionalHeader32 is the IMAGE_OPTIONAL_HEADER32 without its Magic or DataDirectory
@@ -266,10 +273,14 @@ type peInfo struct {
 	methodSpecs  []peMethodSpec
 	sizeOfImage  uint32
 
-	// strings contains the preloaded strings from dotnet string heap.
-	// If this consumes too much memory, this could be converted to LRU and on-demand
-	// populated by reading the strings from attached process memory.
-	strings map[uint32]libpf.String
+	// stringsCache contains strings read on demand from attached process memory.
+	stringsCache *freelru.LRU[uint32, libpf.String]
+
+	// stringsReader is the io.SectionReader starting at the dotnet string heap.
+	stringsReader io.ReaderAt
+
+	// file is the reference to the backing file so we can close it when evicted from cache.
+	file process.ReadAtCloser
 }
 
 // peParser contains the needed data when reading and parsing the dotnet data from a PE file.
@@ -291,9 +302,8 @@ type peParser struct {
 	indexSizes [indexCount]int
 	tableRows  [64]uint32
 
-	dotnetTables  io.ReadSeeker
-	dotnetStrings io.ReaderAt
-	dotnetGUID    io.ReaderAt
+	dotnetTables io.ReadSeeker
+	dotnetGUID   io.ReaderAt
 
 	r2rFunctions io.ReadSeeker
 }
@@ -574,7 +584,7 @@ func (pp *peParser) parseCLI() error {
 		switch pfunsafe.ToString(name) {
 		case "#Strings":
 			// ECMA-335 II.24.2.3 #Strings heap
-			pp.dotnetStrings = io.NewSectionReader(r, int64(hdr.Offset), int64(hdr.Size))
+			pp.info.stringsReader = io.NewSectionReader(r, int64(hdr.Offset), int64(hdr.Size))
 		case "#GUID":
 			// ECMA-335 II.24.2.5 #GUID heap
 			pp.dotnetGUID = io.NewSectionReader(r, int64(hdr.Offset), int64(hdr.Size))
@@ -598,33 +608,6 @@ func (pp *peParser) parseCLI() error {
 	return nil
 }
 
-func (pp *peParser) readDotnetString(offs uint32) libpf.String {
-	// Read a string from the ECMA-335 II.24.2.3 #Strings heap
-	if offs == 0 {
-		return libpf.NullString
-	}
-
-	// Zero terminated string. Assume maximum length of 1024 bytes.
-	// But read it in small chunks to make good use of the readatbuf.
-	var str [1024]byte
-	chunkSize := 128
-	for i := 0; i < len(str); i += chunkSize {
-		chunk := str[i : i+chunkSize]
-		n, err := pp.dotnetStrings.ReadAt(chunk, int64(offs)+int64(i))
-		if n == 0 && err != nil {
-			return libpf.NullString
-		}
-
-		zeroIdx := bytes.IndexByte(chunk[:n], 0)
-		if zeroIdx >= 0 {
-			return libpf.Intern(pfunsafe.ToString(str[:i+zeroIdx]))
-		}
-	}
-
-	// Likely broken string.
-	return libpf.NullString
-}
-
 func (pp *peParser) readDotnetGUID(offs uint32) string {
 	// Read a GUID from the ECMA-335 II.24.2.5 #GUID heap
 	if offs == 0 {
@@ -643,18 +626,6 @@ func (pp *peParser) readDotnetGUID(offs uint32) string {
 		binary.LittleEndian.Uint16(guid[6:8]),
 		guid[8:10],
 		guid[10:])
-}
-
-func (pp *peParser) preloadString(heapIndex uint32) {
-	// String index is well known empty string
-	if heapIndex == 0 {
-		return
-	}
-	// Check if already loaded
-	if _, ok := pp.info.strings[heapIndex]; ok {
-		return
-	}
-	pp.info.strings[heapIndex] = pp.readDotnetString(heapIndex)
 }
 
 func (pp *peParser) skipDotnetBytes(n int) {
@@ -700,16 +671,8 @@ func (pp *peParser) parseModuleTable() {
 		guidIdx := pp.readDotnetIndex(indexGUID)
 		pp.skipDotnetBytes(2 * pp.indexSizes[indexGUID])
 
-		pp.info.simpleName = pp.readDotnetString(nameIdx)
+		pp.info.simpleName = pp.info.readDotnetString(nameIdx)
 		pp.info.guid = pp.readDotnetGUID(guidIdx)
-	}
-}
-
-// preloadTypeSpecStrings preload the strings for given TypeDef entry
-func (pp *peParser) preloadTypeSpecStrings(spec *peTypeSpec) {
-	if spec.methodIdx < pp.tableRows[tableMethodDef] {
-		pp.preloadString(spec.namespaceIdx)
-		pp.preloadString(spec.typeNameIdx)
 	}
 }
 
@@ -738,10 +701,6 @@ func (pp *peParser) parseTypeDef() {
 		pp.skipDotnetBytes(pp.indexSizes[indexTypeDefOrRef] + pp.indexSizes[indexField])
 		methodIdx := pp.readDotnetIndex(indexMethodDef)
 
-		if prevEntry.methodIdx != methodIdx {
-			pp.preloadTypeSpecStrings(&prevEntry)
-		}
-
 		prevEntry = peTypeSpec{
 			namespaceIdx: namespaceIdx,
 			typeNameIdx:  typeNameIdx,
@@ -749,7 +708,6 @@ func (pp *peParser) parseTypeDef() {
 		}
 		specs = append(specs, prevEntry)
 	}
-	pp.preloadTypeSpecStrings(&specs[len(specs)-1])
 
 	pp.info.typeSpecs = specs
 }
@@ -770,7 +728,6 @@ func (pp *peParser) parseMethodDef() {
 		nameIdx := pp.readDotnetIndex(indexString)
 		pp.skipDotnetBytes(pp.indexSizes[indexBlob] + pp.indexSizes[indexParam])
 
-		pp.preloadString(nameIdx)
 		specs = append(specs, peMethodSpec{methodNameIdx: nameIdx})
 	}
 	pp.info.methodSpecs = specs
@@ -850,7 +807,12 @@ func (pp *peParser) parseTables() error {
 		return fmt.Errorf("number of Modules (%d) is unexpected", pp.tableRows[0])
 	}
 
-	pp.info.strings = map[uint32]libpf.String{}
+	var err error
+	pp.info.stringsCache, err = freelru.New[uint32, libpf.String](peStringsCacheSize, hash.Uint32)
+	if err != nil {
+		return fmt.Errorf("failed to create strings cache: %w", err)
+	}
+	pp.info.stringsCache.SetLifetime(peStringsCacheTTL)
 
 	// Precalculate the column sizes we need to know
 	pp.indexSizes[indexString] = getHeapSize(tablesHeader.HeapSizes&0x1 != 0)
@@ -1145,16 +1107,16 @@ func (pi *peInfo) resolveMethodName(methodIdx uint32) libpf.String {
 	}
 
 	typeSpec := &pi.typeSpecs[idx]
-	typeName := pi.strings[typeSpec.typeNameIdx].String()
+	typeName := pi.lookupString(typeSpec.typeNameIdx)
 	for typeSpec.enclosingClass != 0 {
 		enclosingSpec := &pi.typeSpecs[typeSpec.enclosingClass-1]
-		typeName = fmt.Sprintf("%s/%s", pi.strings[enclosingSpec.typeNameIdx], typeName)
+		typeName = fmt.Sprintf("%s/%s", pi.lookupString(enclosingSpec.typeNameIdx), typeName)
 		typeSpec = enclosingSpec
 	}
-	methodName := pi.strings[pi.methodSpecs[methodIdx-1].methodNameIdx]
+	methodName := pi.lookupString(pi.methodSpecs[methodIdx-1].methodNameIdx)
 	if typeSpec.namespaceIdx != 0 {
 		return libpf.Intern(fmt.Sprintf("%s.%s.%s",
-			pi.strings[typeSpec.namespaceIdx],
+			pi.lookupString(typeSpec.namespaceIdx),
 			typeName, methodName))
 	}
 	return libpf.Intern(fmt.Sprintf("%s.%s", typeName, methodName))
@@ -1175,6 +1137,52 @@ func (pi *peInfo) resolveR2RMethodName(pcRVA uint32) libpf.String {
 		idx--
 	}
 	return pi.resolveMethodName(uint32(idx + 1))
+}
+
+func (pi *peInfo) lookupString(idx uint32) string {
+	// Index 0 is well known empty string, so return it immediately
+	if idx == 0 {
+		return ""
+	}
+
+	// Check if string is in the cache
+	if value, ok := pi.stringsCache.Get(idx); ok {
+		// Cached data ok
+		return value.String()
+	}
+
+	// Slow path, read dotnet string and update cache
+	value := pi.readDotnetString(idx)
+	pi.stringsCache.Add(idx, value)
+
+	return value.String()
+}
+
+func (pi *peInfo) readDotnetString(offs uint32) libpf.String {
+	// Read a string from the ECMA-335 II.24.2.3 #Strings heap
+	if offs == 0 {
+		return libpf.NullString
+	}
+
+	// Zero terminated string. Assume maximum length of 1024 bytes.
+	// But read it in small chunks to make good use of the readatbuf.
+	var str [1024]byte
+	chunkSize := 128
+	for i := 0; i < len(str); i += chunkSize {
+		chunk := str[i : i+chunkSize]
+		n, err := pi.stringsReader.ReadAt(chunk, int64(offs)+int64(i))
+		if n == 0 && err != nil {
+			return libpf.NullString
+		}
+
+		zeroIdx := bytes.IndexByte(chunk[:n], 0)
+		if zeroIdx >= 0 {
+			return libpf.Intern(pfunsafe.ToString(str[:i+zeroIdx]))
+		}
+	}
+
+	// Likely broken string.
+	return libpf.NullString
 }
 
 func (pi *peInfo) parse(r io.ReaderAt) error {
@@ -1206,6 +1214,11 @@ func (pc *peCache) init() {
 		panic(fmt.Errorf("unable to create peInfoCache: %v", err))
 	}
 	peInfoCache.SetLifetime(peInfoCacheTTL)
+	peInfoCache.SetOnEvict(func(key util.OnDiskFileIdentifier, value *peInfo) {
+		if value.file != nil {
+			value.file.Close()
+		}
+	})
 	pc.peInfoCache = peInfoCache
 }
 
@@ -1229,7 +1242,6 @@ func (pc *peCache) Get(pr process.Process, mapping *process.RawMapping) *peInfo 
 		}
 		return info
 	}
-	defer file.Close()
 
 	fileID, err := pr.CalculateMappingFileID(mapping)
 	if err != nil {
@@ -1238,6 +1250,7 @@ func (pc *peCache) Get(pr process.Process, mapping *process.RawMapping) *peInfo 
 
 	info := &peInfo{
 		lastModified: lastModified,
+		file:         file,
 	}
 	info.err = info.parse(file)
 	if info.err == nil {
