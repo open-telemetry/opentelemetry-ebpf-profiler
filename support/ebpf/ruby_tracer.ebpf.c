@@ -270,6 +270,11 @@ static EBPF_INLINE ErrorCode read_ruby_frame(
         // continue unwinding Ruby VM frames. Due to this issue, the ordering of Ruby and native
         // frames will almost certainly be incorrect for Ruby versions < 2.6.
         frame_type = RUBY_FRAME_TYPE_CME_CFUNC;
+      } else if (record->rubyUnwindState.jit_detected) {
+        // JIT is active but frame pointers are not available, so we cannot unwind
+        // through JIT frames to get back to native code. Push the cfunc inline
+        // instead of handing off to the native unwinder.
+        frame_type = RUBY_FRAME_TYPE_CME_CFUNC;
       } else {
         // We save this cfp on in the "Record" entry, and when we start the unwinder
         // again we'll push it so that the order is correct and the cfunc "owns" any native code we
@@ -446,6 +451,22 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
     record->rubyUnwindState.cfunc_saved_frame = 0;
   }
 
+  // Detect if the CPU PC is in the JIT region.
+  bool in_jit = rubyinfo->jit_start > 0 && record->state.pc >= rubyinfo->jit_start &&
+                record->state.pc < rubyinfo->jit_end;
+
+  if (in_jit) {
+    record->rubyUnwindState.jit_detected = true;
+
+    // Push a JIT frame with the raw machine PC. This can be used to
+    // symbolize the JIT frame via perf map later.
+    ErrorCode jit_error =
+      push_ruby(&record->state, trace, RUBY_FRAME_TYPE_JIT, (u64)record->state.pc, 0, 0);
+    if (jit_error) {
+      return jit_error;
+    }
+  }
+
   for (u32 i = 0; i < FRAMES_PER_WALK_RUBY_STACK; ++i) {
     error = read_ruby_frame(record, rubyinfo, stack_ptr, next_unwinder);
     if (error != ERR_OK)
@@ -453,7 +474,10 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
 
     if (last_stack_frame <= stack_ptr) {
       // We have processed all frames in the Ruby VM and can stop here.
-      *next_unwinder = PROG_UNWIND_NATIVE;
+      // If JIT was detected, the PC is in the JIT region and native
+      // unwinding would fail, so we stop.
+      *next_unwinder = record->rubyUnwindState.jit_detected ? PROG_UNWIND_STOP : PROG_UNWIND_NATIVE;
+      goto save_state;
     } else {
       // If we aren't at the end, advance the stack pointer to continue from the next frame
       stack_ptr += rubyinfo->size_of_control_frame_struct;
