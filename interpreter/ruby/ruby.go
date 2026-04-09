@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/bits"
+	"os"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -95,6 +96,17 @@ const (
 	rubyGcModeSweeping   = 2
 	rubyGcModeCompacting = 3
 )
+
+// skipNativeResume returns whether the Ruby unwinder should push cfunc frames
+// inline without transitioning back to the native unwinder. This saves tail
+// calls (each cfunc round-trip costs 2-3 tail calls out of a budget of 29)
+// at the cost of losing native frames within cfuncs.
+// Opt-in via OTEL_EBPF_RUBY_SKIP_NATIVE_RESUME=true (default: false).
+// Evaluated per-process at attach time; could be hoisted to Loader if needed.
+func skipNativeResume() bool {
+	v := os.Getenv("OTEL_EBPF_RUBY_SKIP_NATIVE_RESUME")
+	return strings.EqualFold(v, "true") || v == "1"
+}
 
 var (
 	// regex to identify the Ruby interpreter shared library
@@ -358,6 +370,10 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		Size_of_value: r.vmStructs.size_of_value,
 
 		Running_ec: r.vmStructs.rb_ractor_struct.running_ec,
+
+		// Skip native resume for cfuncs to save tail calls when opted in.
+		// Enable with OTEL_EBPF_RUBY_SKIP_NATIVE_RESUME=true.
+		Skip_native_resume: skipNativeResume(),
 	}
 
 	if err := ebpf.UpdateProcData(libpf.Ruby, pid, unsafe.Pointer(&cdata)); err != nil {
