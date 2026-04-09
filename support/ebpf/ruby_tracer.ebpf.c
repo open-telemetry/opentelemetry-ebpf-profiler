@@ -453,7 +453,7 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
 
   // Detect if the CPU PC is in the JIT region.
   bool in_jit = rubyinfo->jit_start > 0 && record->state.pc >= rubyinfo->jit_start &&
-                record->state.pc < rubyinfo->jit_end;
+                record->state.pc < rubyinfo->jit_end && !record->rubyUnwindState.jit_detected;
 
   if (in_jit) {
     record->rubyUnwindState.jit_detected = true;
