@@ -116,7 +116,7 @@ type EbpfTrace struct {
 	OffTime          int64 // Time a task was off-cpu in nanoseconds.
 	APMTraceID       APMTraceID
 	APMTransactionID APMTransactionID
-	CPU              int
+	CpuID            int
 	NumFrames        int
 	EnvVars          map[String]String
 	CustomLabels     map[String]String

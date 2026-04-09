@@ -4,6 +4,7 @@
 package util // import "go.opentelemetry.io/ebpf-profiler/util"
 
 import (
+	"math/bits"
 	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
@@ -63,4 +64,10 @@ type OnDiskFileIdentifier struct {
 
 func (odfi OnDiskFileIdentifier) Hash32() uint32 {
 	return uint32(hash.Uint64(odfi.InodeNum) + odfi.DeviceID)
+}
+
+// NextPowerOfTwo returns value rounded up to the next power of two.
+// It returns value unchanged if value is already a power of two.
+func NextPowerOfTwo(v uint) uint {
+	return 1 << bits.Len(uint(v-1))
 }

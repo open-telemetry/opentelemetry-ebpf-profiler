@@ -14,6 +14,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/ringbuf"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -90,7 +91,7 @@ func (t *Tracer) triggerReportEvent(data []byte) {
 
 // startPerfEventMonitor spawns a goroutine that receives events from the given
 // perf event map by waiting for events the kernel. Every event in the buffer
-// will wake up user-land.
+// will wake up userspace.
 //
 // For each received event, triggerFunc is called. triggerFunc may NOT store
 // references into the buffer that it is given: the buffer is reused across
@@ -146,30 +147,29 @@ func startPerfEventMonitor(ctx context.Context, perfEventMap *ebpf.Map,
 }
 
 // startTraceEventMonitor spawns a goroutine that receives trace events from
-// the kernel by periodically polling the underlying perf event buffer.
-// Events written to the perf event buffer do not wake user-land immediately.
+// the kernel by periodically polling the underlying ringbuffer.
+// Events written to the ringbuffer do not wake userspace immediately.
 //
-// Returns a function that can be called to retrieve perf event array
-// error counts.
+// Returns a function that can be called to retrieve ringbuffer error counts.
 func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	traceOutChan chan<- *libpf.EbpfTrace,
 ) (func() []metrics.Metric, error) {
 	eventsMap := t.ebpfMaps["trace_events"]
-	eventReader, err := perf.NewReader(eventsMap,
-		t.samplesPerSecond*support.Sizeof_Trace)
+	eventReader, err := ringbuf.NewReader(eventsMap)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to setup perf reporting via %s: %v", eventsMap, err)
+		return nil, fmt.Errorf("Failed to setup ringbuf reporting via %s: %v", eventsMap, err)
 	}
 
 	// A deadline of zero is treated as "no deadline". A deadline in the past
 	// means "always return immediately". We thus set a deadline 1 second after
 	// unix epoch to always ensure the latter behavior.
+	// TODO: adapt this to better reflect ringbuffer behavior
 	eventReader.SetDeadline(time.Unix(1, 0))
 
-	var lostEventsCount, readErrorCount, noDataCount atomic.Uint64
+	var readErrorCount, noDataCount atomic.Uint64
 	go func() {
 		defer eventReader.Close()
-		var data perf.Record
+		var data ringbuf.Record
 		var oldKTime, minKTime int64
 		var eventCount int
 
@@ -220,10 +220,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				// Regardless, the current data transmission architecture from kernel to user and
 				// the -serial- event processing pipeline in the rest of the agent is not designed
 				// for the data volumes that off-cpu profiling can generate and should be revisited.
-				if data.LostSamples != 0 {
-					lostEventsCount.Add(data.LostSamples)
-					continue
-				}
+
 				if len(data.RawSample) == 0 {
 					noDataCount.Add(1)
 					continue
@@ -232,7 +229,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				eventCount++
 
 				// Keep track of min KTime seen in this batch processing loop
-				trace, err := t.loadBpfTrace(data.RawSample, data.CPU)
+				trace, err := t.loadBpfTrace(data.RawSample)
 				switch {
 				case err == nil:
 					// Fast path for no error.
@@ -252,7 +249,7 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 					minKTime = trace.KTime
 				}
 				// TODO: This per-event channel send couples event processing in the rest of
-				// the agent with event reading from the perf buffers slowing down the latter.
+				// the agent with event reading from the ringbuffer slowing down the latter.
 				traceOutChan <- trace
 				if eventCount == maxEvents {
 					// Break this inner loop to ensure ProcessedUntil logic executes
@@ -295,11 +292,9 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 	}()
 
 	return func() []metrics.Metric {
-		lost := lostEventsCount.Swap(0)
 		noData := noDataCount.Swap(0)
 		readError := readErrorCount.Swap(0)
 		return []metrics.Metric{
-			{ID: metrics.IDTraceEventLost, Value: metrics.MetricValue(lost)},
 			{ID: metrics.IDTraceEventNoData, Value: metrics.MetricValue(noData)},
 			{ID: metrics.IDTraceEventReadError, Value: metrics.MetricValue(readError)},
 		}

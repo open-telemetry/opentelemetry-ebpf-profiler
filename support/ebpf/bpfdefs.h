@@ -39,6 +39,7 @@ int bpf_tail_call(void *ctx, void *map, int index);
 unsigned long long bpf_ktime_get_ns(void);
 int bpf_get_current_comm(void *, int);
 int bpf_perf_event_output(void *, void *, unsigned long long, void *, int);
+long bpf_ringbuf_output(void *, void *, u64, u64);
 
 static inline long bpf_probe_read_user(void *buf, u32 sz, const void *ptr)
 {
@@ -71,6 +72,11 @@ static inline int bpf_map_update_elem(
 static inline int bpf_map_delete_elem(UNUSED void *map, UNUSED const void *key)
 {
   return -1;
+}
+
+static inline u32 bpf_get_smp_processor_id(void)
+{
+  return 0;
 }
 
 static inline long
@@ -110,6 +116,10 @@ static unsigned long long (*bpf_get_current_task)(void)       = (void *)BPF_FUNC
 static int (*bpf_perf_event_output)(
   void *ctx, void *map, unsigned long long flags, void *data, int size) = (void *)
   BPF_FUNC_perf_event_output;
+static long (*bpf_ringbuf_output)(void *ringbuf, void *data, u64 size, u64 flags) = (void *)
+  BPF_FUNC_ringbuf_output;
+static u32 (*bpf_get_smp_processor_id)(void) = (void *)
+  BPF_FUNC_get_smp_processor_id;
 static long (*bpf_get_stack)(void *ctx, void *buf, u32 size, u64 flags) = (void *)
   BPF_FUNC_get_stack;
 static unsigned long long (*bpf_get_prandom_u32)(void) = (void *)BPF_FUNC_get_prandom_u32;

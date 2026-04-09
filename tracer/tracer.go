@@ -14,6 +14,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -41,6 +42,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // Compile time check to make sure times.Times satisfies the interfaces.
@@ -622,6 +624,12 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 
 	adaption["sched_times"] = schedTimesSize(cfg.OffCPUThreshold)
 
+	// Allow for 10s of 'burst' trace data
+	// TODO: Change to present CPUs as runtime.NumCPU is fixed for the lifetime of the process?
+	ringbufSize := 10 * uint32(cfg.SamplesPerSecond*runtime.NumCPU()*support.Sizeof_Trace)
+
+	adaption["trace_events"] = uint32(util.NextPowerOfTwo(uint(ringbufSize)))
+
 	for i := support.StackDeltaBucketSmallest; i <= support.StackDeltaBucketLargest; i++ {
 		mapName := fmt.Sprintf("exe_id_to_%d_stack_deltas", i)
 		adaption[mapName] = 1 << uint32(exeIDToStackDeltasSize+cfg.MapScaleFactor)
@@ -1020,7 +1028,7 @@ var (
 )
 
 // loadBpfTrace parses a raw BPF trace into a `host.Trace` instance.
-func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
+func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	frameListOffs := int(unsafe.Offsetof(support.Trace{}.Frame_data))
 
 	if len(raw) < frameListOffs {
@@ -1051,7 +1059,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
 		Origin:           libpf.Origin(ptr.Origin),
 		OffTime:          int64(ptr.Offtime),
 		KTime:            int64(ptr.Ktime),
-		CPU:              cpu,
+		CpuID:            int(ptr.Cpu_id),
 		EnvVars:          procMeta.EnvVariables,
 	}
 
