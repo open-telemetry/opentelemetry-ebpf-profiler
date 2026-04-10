@@ -30,6 +30,10 @@ func (tc *traceCapture) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEve
 	return nil
 }
 
+func (tc *traceCapture) RegisterProbeOrigin(_ libpf.Origin, _ samples.ProbeOriginMetadata) error {
+	return nil
+}
+
 func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	require := require.New(t)
 
