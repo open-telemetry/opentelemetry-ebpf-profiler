@@ -128,7 +128,7 @@ format-ebpf:
 vanity-import-check:
 	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 
-vanity-import-fix: $(PORTO)
+vanity-import-fix:
 	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
 
 test: generate ebpf test-deps
