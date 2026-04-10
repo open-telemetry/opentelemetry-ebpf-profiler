@@ -6,7 +6,6 @@ package config // import "go.opentelemetry.io/ebpf-profiler/collector/config"
 import (
 	"errors"
 	"fmt"
-	"runtime"
 	"strings"
 	"time"
 
@@ -61,7 +60,9 @@ type Config struct {
 	NoKernelVersionCheck   bool           `mapstructure:"no_kernel_version_check"`
 	MaxGRPCRetries         uint32         `mapstructure:"max_grpc_retries"`
 	MaxRPCMsgSize          int            `mapstructure:"max_rpc_msg_size"`
+	BPFFSRoot              string         `mapstructure:"bpf_fs_root"`
 	ErrorMode              ErrorMode      `mapstructure:"error_mode"`
+	OBIProcessCtx          bool           `mapstructure:"obi_process_ctx"`
 	CustomProbes           map[string]any `mapstructure:"custom_probes"`
 }
 
@@ -116,17 +117,7 @@ func (cfg *Config) Validate() error {
 		}
 
 		var minMajor, minMinor uint32
-		switch runtime.GOARCH {
-		case "amd64":
-			minMajor, minMinor = 5, 2
-		case "arm64":
-			// Older ARM64 kernel versions have broken bpf_probe_read.
-			// https://github.com/torvalds/linux/commit/6ae08ae3dea2cfa03dd3665a3c8475c2d429ef47
-			minMajor, minMinor = 5, 5
-		default:
-			return fmt.Errorf("unsupported architecture: %s", runtime.GOARCH)
-		}
-
+		minMajor, minMinor = 5, 10
 		if major < minMajor || (major == minMajor && minor < minMinor) {
 			return fmt.Errorf("host Agent requires kernel version "+
 				"%d.%d or newer but got %d.%d.%d", minMajor, minMinor, major, minor, patch)

@@ -57,6 +57,14 @@ type ebpfContext struct {
 
 	// stackDeltaFileID is context variable for nested map lookups
 	stackDeltaFileID C.u64
+
+	// faultAddresses maps user-space addresses on which
+	// bpf_probe_read_user_with_test_fault should pretend the kernel could not
+	// read (returns -1) to a hit counter. The presence of a key (regardless of
+	// value) is what triggers the fault; the int value records how many times
+	// the helper visited that address during the unwind so tests can assert
+	// every injected fault actually exercised the code path under test.
+	faultAddresses map[uintptr]int
 }
 
 // ebpfContextMap is global mapping of EBPFContext id (PIDandTGID) to the actual data.
@@ -65,8 +73,11 @@ type ebpfContext struct {
 // passed directly to the C code).
 var ebpfContextMap = map[C.u64]*ebpfContext{}
 
-// newEBPFContext creates new EBPF Context from given core dump image
-func newEBPFContext(pr process.Process) *ebpfContext {
+// newEBPFContext creates new EBPF Context from given core dump image. The
+// faultAddresses map, if non-empty, instructs bpf_probe_read_user_with_test_fault
+// to return -1 for those addresses; the int value of each entry is incremented
+// each time the helper visits the address.
+func newEBPFContext(pr process.Process, faultAddresses map[uintptr]int) *ebpfContext {
 	pid := pr.PID()
 	ctx := &ebpfContext{
 		trace:                 libpf.EbpfTrace{PID: pid},
@@ -78,6 +89,7 @@ func newEBPFContext(pr process.Process) *ebpfContext {
 		maps:                  make(map[unsafe.Pointer]map[any]unsafe.Pointer),
 		perCPURecord:          C.malloc(C.sizeof_PerCPURecord),
 		unwindInfoArray:       C.malloc(C.sizeof_UnwindInfo * C.ulong(support.UnwindInfoMaxEntries)),
+		faultAddresses:        faultAddresses,
 	}
 	ebpfContextMap[ctx.PIDandTGID] = ctx
 	return ctx

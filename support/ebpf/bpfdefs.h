@@ -46,6 +46,12 @@ static inline long bpf_probe_read_user(void *buf, u32 sz, const void *ptr)
   return __bpf_probe_read_user(__cgo_ctx->id, buf, sz, ptr);
 }
 
+static inline long bpf_probe_read_user_with_test_fault(void *buf, u32 sz, const void *ptr)
+{
+  long __bpf_probe_read_user_with_test_fault(u64, void *, u32, const void *);
+  return __bpf_probe_read_user_with_test_fault(__cgo_ctx->id, buf, sz, ptr);
+}
+
 static inline long bpf_probe_read_kernel(UNUSED void *buf, UNUSED u32 sz, UNUSED const void *ptr)
 {
   return -1;
@@ -122,12 +128,11 @@ static long (*bpf_probe_read_user)(void *dst, int size, const void *unsafe_ptr) 
 static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr) = (void *)
   BPF_FUNC_probe_read_kernel;
 
-  // The sizeof in bpf_trace_printk() must include \0, else no output
-  // is generated. The \n is not needed on 5.8+ kernels, but definitely on
-  // 5.4 kernels.
+  #define bpf_probe_read_user_with_test_fault bpf_probe_read_user
+
   #define printt(fmt, ...)                                                                         \
     ({                                                                                             \
-      const char ____fmt[] = fmt "\n";                                                             \
+      const char ____fmt[] = fmt;                                                                  \
       bpf_trace_printk(____fmt, sizeof(____fmt), ##__VA_ARGS__);                                   \
     })
 

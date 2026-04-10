@@ -120,7 +120,7 @@ func (t *traceReporter) RegisterProbeOrigin(origin libpf.Origin, meta samples.Pr
 }
 
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
-	lwpFilter libpf.Set[libpf.PID]) ([]ThreadInfo, error) {
+	lwpFilter libpf.Set[libpf.PID], faultAddresses map[uintptr]int) ([]ThreadInfo, error) {
 	todo, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -163,7 +163,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	}
 
 	// Interfaces for the managers
-	ebpfCtx := newEBPFContext(pr)
+	ebpfCtx := newEBPFContext(pr, faultAddresses)
 	defer ebpfCtx.release()
 
 	inverse_pac_mask := ^(pr.GetMachineData().CodePACMask)

@@ -109,6 +109,8 @@ func (c *Controller) Start(ctx context.Context) error {
 		// ProbeLinks:             c.config.ProbeLinks, // Replaced by c.config.CustomProbes
 		LoadProbe:          c.config.LoadProbe || len(c.config.CustomProbes) != 0,
 		ExecutableReporter: c.config.ExecutableReporter,
+		BPFFSRoot:          c.config.BPFFSRoot,
+		OBIProcessCtx:      c.config.OBIProcessCtx,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
