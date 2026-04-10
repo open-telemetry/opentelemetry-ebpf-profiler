@@ -49,6 +49,7 @@ GO_TAGS := osusergo,netgo
 EBPF_FLAGS :=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
+GO_TOOLS := -modfile=internal/tools/go.mod
 
 MAKEFLAGS += -j$(shell nproc)
 
@@ -73,7 +74,7 @@ ebpf: generate
 	$(MAKE) $(EBPF_FLAGS) -C support/ebpf
 
 generate-collector:
-	GOARCH=$(NATIVE_ARCH) go tool builder \
+	GOARCH=$(NATIVE_ARCH) go tool $(GO_TOOLS) builder \
 		--skip-compilation=true \
 		--config cmd/otelcol-ebpf-profiler/manifest.yaml \
 		--output-path cmd/otelcol-ebpf-profiler
@@ -112,23 +113,23 @@ rust-tests: rust-targets
 
 lint: generate vanity-import-check pprof-execs
 	$(MAKE) lint -C support/ebpf
-	go tool golangci-lint config verify
+	go tool $(GO_TOOLS) golangci-lint config verify
 	# tools/coredump tests require CGO_ENABLED
-	CGO_ENABLED=1 go tool golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
+	CGO_ENABLED=1 go tool $(GO_TOOLS) golangci-lint run --max-issues-per-linter -1 --max-same-issues -1
 
 format: format-go format-ebpf
 
 format-go:
-	go tool golangci-lint fmt
+	go tool $(GO_TOOLS) golangci-lint fmt
 
 format-ebpf:
 	$(MAKE) format -C support/ebpf
 
 vanity-import-check:
-	go tool porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 
 vanity-import-fix: $(PORTO)
-	go tool porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
+	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
 
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
@@ -136,7 +137,7 @@ test: generate ebpf test-deps
 
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
-	CGO_ENABLED=1 go tool gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
@@ -188,7 +189,7 @@ agent:
 	./tools/docker-agent-build.sh "$(TARGET_ARCH)" "$(VERSION)" "$(REVISION)" "$(BUILD_TIMESTAMP)"
 
 legal:
-	go tool go-licenses save --force . --save_path=LICENSES
+	go tool $(GO_TOOLS) go-licenses save --force . --save_path=LICENSES
 
 codespell:
 	@codespell
