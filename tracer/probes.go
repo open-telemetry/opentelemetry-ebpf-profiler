@@ -55,7 +55,7 @@ func (t *Tracer) Enable(p Probe) error {
 	return nil
 }
 
-// CollectionSpecWith returns a CollectionSpec optimized for the necesary elements.
+// CollectionSpecWith returns a CollectionSpec optimized for the necessary elements.
 func CollectionSpecWith(extraMaps []string, extraProgs []string, extraVars []string, systemVars *SystemVariables) (*cebpf.CollectionSpec, error) {
 	orig, err := support.LoadCollectionSpec()
 	if err != nil {

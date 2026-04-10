@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package oomreporter provides a costum probe that attaches
+// Package oomreporter provides a custom probe that attaches
 // to kprobe:oom_kill_process to trigger stack unwinding for
 // processes that get killed because they are out of memory.
 package oom // import "go.opentelemetry.io/ebpf-profiler/probes/oom"
