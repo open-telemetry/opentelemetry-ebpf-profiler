@@ -6,6 +6,7 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -92,7 +93,14 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		sp.Scope().SetVersion(agentVersion)
 		sp.SetSchemaUrl(semconv.SchemaURL)
 
+		// Collect and sort origins to ensure deterministic processing order
+		origins := make([]libpf.Origin, 0, len(p.probeMetadata))
 		for origin := range p.probeMetadata {
+			origins = append(origins, origin)
+		}
+		slices.Sort(origins)
+
+		for _, origin := range origins {
 			if len(toEvents.Events[origin]) == 0 {
 				// Do not append empty profiles.
 				continue

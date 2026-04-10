@@ -777,8 +777,6 @@ func TestStackTableOrder(t *testing.T) {
 						Timestamps: []uint64{1, 2, 3, 4, 5},
 					},
 				},
-				// This test relies on an implementation detail for ordering of results:
-				// it assumes that support.TraceOriginSampling events are processed first
 				originOffCPU: {
 					samples.SampleKey{Hash: libpf.NewTraceHash(0, 1)}: {
 						Frames:     newTestFrames(true),
