@@ -22,6 +22,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -42,6 +43,16 @@ func (mockIntervals) MonitorInterval() time.Duration       { return 1 * time.Sec
 func (mockIntervals) TracePollInterval() time.Duration     { return 250 * time.Millisecond }
 func (mockIntervals) PIDCleanupInterval() time.Duration    { return 1 * time.Second }
 func (mockIntervals) ExecutableUnloadDelay() time.Duration { return 1 * time.Second }
+
+type dummyTraceReporter struct{}
+
+func (dummyTraceReporter) RegisterProbeOrigin(libpf.Origin, samples.ProbeOriginMetadata) error {
+	return nil
+}
+
+func (dummyTraceReporter) ReportTraceEvent(*libpf.Trace, *samples.TraceEventMeta) error {
+	return nil
+}
 
 // forceContextSwitch makes sure two Go threads are running concurrently
 // and that there will be a context switch between those two.
@@ -107,6 +118,7 @@ func TestTracerErrorPropagation(t *testing.T) {
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
 		VerboseMode:            true,
+		TraceReporter:          dummyTraceReporter{},
 	})
 	require.NoError(t, err)
 	defer tr.Close()
@@ -148,6 +160,7 @@ func TestTracerMapMonitorsError(t *testing.T) {
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
 		VerboseMode:            true,
+		TraceReporter:          dummyTraceReporter{},
 	})
 	require.NoError(t, err)
 	defer tr.Close()
@@ -176,6 +189,7 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
 		VerboseMode:            true,
+		TraceReporter:          dummyTraceReporter{},
 	})
 	require.NoError(t, err)
 	defer tr.Close()
@@ -267,6 +281,7 @@ func TestAllTracers(t *testing.T) {
 		ProbabilisticThreshold: 100,
 		VerboseMode:            true,
 		LoadProbe:              true,
+		TraceReporter:          dummyTraceReporter{},
 	})
 	require.NoError(t, err)
 	defer tr.Close()

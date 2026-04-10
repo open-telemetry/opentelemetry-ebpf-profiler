@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/otel/metric/noop"
@@ -55,6 +56,16 @@ func (mockIntervals) MonitorInterval() time.Duration       { return 1 * time.Sec
 func (mockIntervals) TracePollInterval() time.Duration     { return 250 * time.Millisecond }
 func (mockIntervals) PIDCleanupInterval() time.Duration    { return 1 * time.Second }
 func (mockIntervals) ExecutableUnloadDelay() time.Duration { return 1 * time.Second }
+
+type dummyTraceReporter struct{}
+
+func (dummyTraceReporter) RegisterProbeOrigin(libpf.Origin, samples.ProbeOriginMetadata) error {
+	return nil
+}
+
+func (dummyTraceReporter) ReportTraceEvent(*libpf.Trace, *samples.TraceEventMeta) error {
+	return nil
+}
 
 func isRoot() bool {
 	return os.Geteuid() == 0
@@ -106,6 +117,7 @@ func Test_Golabels(t *testing.T) {
 				ProbabilisticInterval:  100,
 				ProbabilisticThreshold: 100,
 				VerboseMode:            true,
+				TraceReporter:          dummyTraceReporter{},
 			})
 			require.NoError(t, err)
 			defer trc.Close()
