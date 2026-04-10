@@ -42,7 +42,7 @@ require (
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/arch v0.25.0
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
-	golang.org/x/mod v0.34.0
+	golang.org/x/mod v0.35.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.43.0
 	google.golang.org/grpc v1.80.0
