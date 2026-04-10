@@ -49,7 +49,7 @@ GO_TAGS := osusergo,netgo
 EBPF_FLAGS :=
 
 GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
-GO_TOOLS := -modfile=tools.mod
+GO_TOOLS := -modfile=internal/tools/go.mod
 
 MAKEFLAGS += -j$(shell nproc)
 
@@ -128,7 +128,7 @@ format-ebpf:
 vanity-import-check:
 	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -l . || ( echo "(run: make vanity-import-fix)"; exit 1 )
 
-vanity-import-fix: $(PORTO)
+vanity-import-fix:
 	go tool $(GO_TOOLS) porto --skip-dirs "^(LICENSES|go|target).*" --include-internal -w .
 
 test: generate ebpf test-deps
