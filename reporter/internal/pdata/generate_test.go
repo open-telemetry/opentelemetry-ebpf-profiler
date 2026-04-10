@@ -12,7 +12,7 @@ import (
 	v1profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/open-telemetry/sig-profiling/tools/profcheck"
+	"github.com/open-telemetry/sig-profiling/profcheck"
 
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
