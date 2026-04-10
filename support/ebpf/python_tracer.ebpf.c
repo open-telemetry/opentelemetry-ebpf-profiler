@@ -141,10 +141,15 @@ static EBPF_INLINE ErrorCode process_python_frame(
   }
 
   // Read PyCodeObject
-  if (bpf_probe_read_user(pss->code, sizeof(pss->code), py_codeobject)) {
+  if (bpf_probe_read_user_with_test_fault(pss->code, sizeof(pss->code), py_codeobject)) {
     DEBUG_PRINT("Failed to read PyCodeObject at 0x%lx", (unsigned long)(py_codeobject));
     increment_metric(metricID_UnwindPythonErrBadCodeObjectArgCountAddr);
-    return ERR_PYTHON_BAD_CODE_OBJECT_ADDR;
+    // Push the frame with the code object address so the agent can try to
+    // read it in userspace (which can take page faults unlike BPF).
+    // codeobject_id=0 distinguishes this from a successful read.
+    file_id = (u64)py_codeobject;
+    lineno  = py_encode_lineno(0, (u32)py_f_lasti);
+    goto push_frame;
   }
 
   int py_argcount       = *(int *)(&pss->code[pyinfo->PyCodeObject_co_argcount]);

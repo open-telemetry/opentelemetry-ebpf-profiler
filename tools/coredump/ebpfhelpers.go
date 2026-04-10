@@ -55,6 +55,31 @@ func __bpf_probe_read_user(id C.u64, buf unsafe.Pointer, sz C.int, ptr unsafe.Po
 	return 0
 }
 
+//export __bpf_probe_read_user_with_test_fault
+func __bpf_probe_read_user_with_test_fault(
+	id C.u64, buf unsafe.Pointer, sz C.int, ptr unsafe.Pointer,
+) C.long {
+	ctx := ebpfContextMap[id]
+	addr := uintptr(ptr)
+	// Trace every call so coredump test authors can grep the test output to
+	// pick a candidate address (e.g. the 192-byte read of a PyCodeObject) when
+	// constructing a fault-injection test case.
+	log.Debugf("bpf_probe_read_user_with_test_fault: sz=%d ptr=0x%x", int(sz), addr)
+	if _, ok := ctx.faultAddresses[addr]; ok {
+		// This log line stays at Info level so it's visible in CI when a
+		// fault-injection test actually exercises the recovery path.
+		log.Infof("bpf_probe_read_user_with_test_fault: injecting fault at 0x%x (sz=%d)",
+			addr, int(sz))
+		ctx.faultAddresses[addr]++
+		return -1
+	}
+	dst := sliceBuffer(buf, sz)
+	if _, err := ctx.remoteMemory.ReadAt(dst, int64(addr)); err != nil {
+		return -1
+	}
+	return 0
+}
+
 // stackDeltaInnerMap is a special map returned to C code to indicate that
 // we are accessing one of nested maps in the exe_id_to_X_stack_deltas maps
 var stackDeltaInnerMap = C.malloc(1)
