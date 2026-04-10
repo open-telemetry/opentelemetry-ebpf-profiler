@@ -253,6 +253,10 @@ func newTracePool() sync.Pool {
 
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
 func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
+	if cfg.TraceReporter == nil {
+		return nil, fmt.Errorf("TraceReporter is required for NewTracer")
+	}
+
 	kernelSymbolizer, err := kallsyms.NewSymbolizer()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
