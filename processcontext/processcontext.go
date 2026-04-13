@@ -32,8 +32,8 @@ const (
 	ContextMappingMemfdNamed = "[anon_shmem:OTEL_CTX]"
 	ContextMappingAnonNamed  = "[anon:OTEL_CTX]"
 
-	// Default maximum retries for concurrent updates
-	DefaultMaxRetries = 3
+	// default maximum number of read attempts on concurrent updates
+	defaultMaxAttempts = 3
 
 	// Signature
 	signatureOTELCTX = "OTEL_CTX"
@@ -76,12 +76,15 @@ type header struct {
 
 // Read reads ProcessContext from remote process memory using the provided address.
 // Returns ErrInvalidContext if the process has no ProcessContext memory region.
-// Retries up to maxRetries times when concurrent updates are detected.
-func Read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64, maxRetries int) (Info, error) {
+// Retries on concurrent updates, up to maxAttempts total attempts.
+// If maxAttempts is 0, the default value is used.
+func Read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs uint64, maxAttempts int) (Info, error) {
+	if maxAttempts == 0 {
+		maxAttempts = defaultMaxAttempts
+	}
 	var lastErr error
 
-	// Find the ProcessContext mapping
-	for range maxRetries {
+	for range maxAttempts {
 		ctx, err := readOnce(addr, rm, lastPublishedAtNs)
 		if err == nil {
 			return ctx, nil
