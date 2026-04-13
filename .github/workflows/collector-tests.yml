@@ -45,6 +45,7 @@ jobs:
         run: |
           COLLECTOR_PATH=/tmp/opentelemetry-collector ./support/local-collector.sh
           go mod tidy
+          go mod tidy -modfile=internal/tools/go.mod
       - name: Tests
         run: make test-junit
       - name: Generate Issue
