@@ -283,7 +283,7 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 			} else if fields[5] == "" {
 				// This is an anonymous mapping, keep it
 			} else if strings.HasPrefix(fields[5], "[anon:") {
-				// Keep named anonymous mappings.
+				// Keep named anonymous mapping
 				path = fields[5]
 			} else {
 				// Ignore other mappings that are invalid, non-existent or are special pseudo-files
