@@ -12,7 +12,7 @@ bpf_map_def SEC("maps") kprobe_progs = {
 
 // sched_times keeps track of sched_switch call times.
 bpf_map_def SEC("maps") sched_times = {
-  .type        = BPF_MAP_TYPE_LRU_PERCPU_HASH,
+  .type        = BPF_MAP_TYPE_LRU_HASH,
   .key_size    = sizeof(u64), // pid_tgid
   .value_size  = sizeof(u64), // time in ns
   .max_entries = 256,         // value is adjusted at load time in loadAllMaps.
