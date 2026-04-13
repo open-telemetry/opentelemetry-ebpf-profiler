@@ -40,6 +40,10 @@ func getS3ObjectList(client *s3.Client, bucket, prefix string,
 			return nil, errors.New("too many matching items in bucket")
 		}
 
+		// Passing a nil continuation token to ListObjectsV2 will restart the operation and lead to an infinite loop
+		if resp.ContinuationToken == nil || *resp.ContinuationToken == "" {
+			break
+		}
 		contToken = resp.ContinuationToken
 	}
 
