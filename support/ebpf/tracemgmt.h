@@ -395,12 +395,13 @@ static inline EBPF_INLINE void send_trace(UNUSED void *ctx, Trace *trace)
 
   trace->cpu_id = bpf_get_smp_processor_id();
 
-  // We specify neither BPF_RB_NO_WAKEUP nor BPF_RB_FORCE_WAKEUP here, to allow
-  // for an 'adaptive' notification to userspace.
+  // We specify BPF_RB_NO_WAKEUP here as userspace is polling on a timer (instead
+  // of blocking on epoll). If epoll blocking is implemented we should remove
+  // BPF_RB_NO_WAKEUP to switch to 'adaptive' notifications.
 
   // TODO: Unlike perf events, there's no "lost events" counter that userspace can
   // access. We can however capture an error here and increment an associated metric.
-  bpf_ringbuf_output(&trace_events, trace, send_size, 0);
+  bpf_ringbuf_output(&trace_events, trace, send_size, BPF_RB_NO_WAKEUP);
 }
 
 // is_kernel_address checks if the given address looks like virtual address to kernel memory.
