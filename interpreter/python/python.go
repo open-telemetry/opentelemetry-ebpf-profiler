@@ -58,10 +58,6 @@ func readPyVersionHex(ef *pfelf.File) (major uint8, minor uint8, err error) {
 	}
 	rm := ef.GetRemoteMemory()
 	versionHex := rm.Uint32(libpf.Address(addr))
-	if versionHex == 0 {
-		return 0, 0, errors.New("Py_Version is 0")
-	}
-
 	major = uint8((versionHex >> 24) & 0xff)
 	minor = uint8((versionHex >> 16) & 0xff)
 	if major == 0 {
