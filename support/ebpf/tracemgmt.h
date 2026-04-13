@@ -65,8 +65,14 @@ static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event
   // To avoid redundant notifications while userspace processing for them is already taking
   // place, we allow latch-like inhibition, where eBPF sets it and Go has to manually reset
   // it, before new notifications are triggered.
-  if (bpf_map_update_elem(&inhibit_events, &inhibit_key, &inhibit_value, BPF_NOEXIST) < 0) {
+  //
+  // Check the latch with a lock-free lookup first to avoid taking the hash bucket lock
+  // on every call. The lock is only taken on the first insert after Go resets the latch.
+  if (bpf_map_lookup_elem(&inhibit_events, &inhibit_key)) {
     DEBUG_PRINT("Event type %d inhibited", event_type);
+    return;
+  }
+  if (bpf_map_update_elem(&inhibit_events, &inhibit_key, &inhibit_value, BPF_NOEXIST) < 0) {
     return;
   }
 
