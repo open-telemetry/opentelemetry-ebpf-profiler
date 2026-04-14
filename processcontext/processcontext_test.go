@@ -115,10 +115,12 @@ func createValidHeader(payloadSize uint32, payloadPtr uint64, publishedAt uint64
 }
 
 func TestProcessContext_IsContextMapping(t *testing.T) {
-	assert.True(t, processcontext.IsContextMapping("[anon:OTEL_CTX]"))
-	assert.True(t, processcontext.IsContextMapping("[anon_shmem:OTEL_CTX]"))
-	assert.True(t, processcontext.IsContextMapping("/memfd:OTEL_CTX"))
-	assert.False(t, processcontext.IsContextMapping("test"))
+	assert.True(t, processcontext.IsContextMapping(false, "[anon:OTEL_CTX]"))
+	assert.True(t, processcontext.IsContextMapping(false, "[anon_shmem:OTEL_CTX]"))
+	assert.True(t, processcontext.IsContextMapping(false, "/memfd:OTEL_CTX"))
+	assert.True(t, processcontext.IsContextMapping(false, "/memfd:OTEL_CTX (deleted)"))
+	assert.False(t, processcontext.IsContextMapping(false, "test"))
+	assert.False(t, processcontext.IsContextMapping(true, "[anon:OTEL_CTX]"))
 }
 
 func TestProcessContext_Read(t *testing.T) {
@@ -350,7 +352,7 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 
 			var contextMappingAddr uint64
 			_, err = proc.IterateMappings(func(m process.RawMapping) bool {
-				if processcontext.IsContextMapping(m.Path) {
+				if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {
 					contextMappingAddr = m.Vaddr
 					return false
 				}

@@ -521,7 +521,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	// file-backed mappings and anonymous executable/DLL mappings needed by interpreters.
 	// All other mappings are skipped.
 	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
-		if processcontext.IsContextMapping(m.Path) {
+		if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {
 			processContextInfo = readProcessContext(m.Vaddr, pr, oldProcessContextInfo)
 			// Even if process context is not found, it might be published in the future.
 			// For now, we rely on a new call to synchronizeMappings to pick it up.

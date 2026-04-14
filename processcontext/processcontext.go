@@ -28,9 +28,10 @@ const (
 	// - "[anon_shmem:OTEL_CTX]": memfd-based mapping and prctl succeeded
 	// - "[anon:OTEL_CTX]": anonymous mapping and prctl succeeded
 	// Case where both memfd_create and prctl fail is considered a failure and is not supported.
-	ContextMappingMemfd      = "/memfd:OTEL_CTX"
-	ContextMappingMemfdNamed = "[anon_shmem:OTEL_CTX]"
-	ContextMappingAnonNamed  = "[anon:OTEL_CTX]"
+	ContextMappingMemfd        = "/memfd:OTEL_CTX"
+	ContextMappingMemfdDeleted = "/memfd:OTEL_CTX (deleted)"
+	ContextMappingMemfdNamed   = "[anon_shmem:OTEL_CTX]"
+	ContextMappingAnonNamed    = "[anon:OTEL_CTX]"
 
 	// default maximum number of read attempts on concurrent updates
 	defaultMaxAttempts = 3
@@ -144,12 +145,11 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 	return ctx, nil
 }
 
-func IsContextMapping(mappingPath string) bool {
-	// In some cases the name can show up in proc as "/memfd:OTEL_CTX (deleted)"
-	// but the " (deleted)" suffix is separately trimmed by iterateMappings
-	return mappingPath == ContextMappingMemfd ||
+func IsContextMapping(isExecutable bool, mappingPath string) bool {
+	return !isExecutable && (mappingPath == ContextMappingMemfd ||
+		mappingPath == ContextMappingMemfdDeleted ||
 		mappingPath == ContextMappingAnonNamed ||
-		mappingPath == ContextMappingMemfdNamed
+		mappingPath == ContextMappingMemfdNamed)
 }
 
 func readTimestamp(rm remotememory.RemoteMemory, headerAddr libpf.Address) (uint64, error) {
