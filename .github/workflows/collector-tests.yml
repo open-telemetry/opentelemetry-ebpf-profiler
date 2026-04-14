@@ -8,6 +8,7 @@ on:
     branches: ["**"]
     paths:
       - cmd/otelcol-ebpf-profiler/manifest.yaml
+      - .github/workflows/collector-tests.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
