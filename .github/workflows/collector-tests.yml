@@ -49,6 +49,9 @@ jobs:
           go mod edit -modfile=internal/tools/go.mod -replace='google.golang.org/genproto@v0.0.0-20220519153652-3a47de7e79bd=google.golang.org/genproto@v0.0.0-20260226221140-a57be14db171'
           go mod edit -modfile=internal/tools/go.mod -replace='google.golang.org/genproto/googleapis/rpc@v0.0.0-20220519153652-3a47de7e79bd=google.golang.org/genproto/googleapis/rpc@v0.0.0-20260226221140-a57be14db171'
           go mod edit -modfile=internal/tools/go.mod -replace="go.opentelemetry.io/ebpf-profiler=$(pwd)"
+          go mod tidy
+          go mod tidy -modfile=internal/tools/go.mod
+          # Manual run of go generate and go mod tidy to have a clean start for make test-junit
           go generate ./...
           go mod tidy
           go mod tidy -modfile=internal/tools/go.mod
