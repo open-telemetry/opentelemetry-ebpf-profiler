@@ -68,6 +68,8 @@ static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event
   //
   // Check the latch with a lock-free lookup first to avoid taking the hash bucket lock
   // on every call. The lock is only taken on the first insert after Go resets the latch.
+  // There is a TOCTOU race window here which shouldn't affect correctness for PID events:
+  // Userspace will periodically drain the PID events map regardless of notification.
   if (bpf_map_lookup_elem(&inhibit_events, &inhibit_key)) {
     DEBUG_PRINT("Event type %d inhibited", event_type);
     return;
