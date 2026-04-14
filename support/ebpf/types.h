@@ -363,12 +363,8 @@ typedef enum TracePrograms {
 
 // TraceOrigin describes the source of the trace. This enables
 // origin specific handling of traces in user space.
-typedef enum TraceOrigin {
-  TRACE_UNKNOWN,
-  TRACE_SAMPLING,
-  TRACE_OFF_CPU,
-  TRACE_PROBE,
-} TraceOrigin;
+// Dynamic probes get their unique origin set at load time.
+typedef u32 TraceOrigin;
 
 // Maximum number of unique stack deltas needed on a system. This is based on
 // normal desktop /usr/bin/* and /usr/lib/*.so having about 9700 unique deltas.
@@ -629,8 +625,9 @@ typedef struct Trace {
   // origin indicates the source of the trace.
   TraceOrigin origin;
 
-  // offtime stores the nanoseconds that the trace was off-cpu for.
-  u64 offtime;
+  // value is a generic option to report a value that was collected
+  // along the stack trace.
+  u64 value;
 
   // The frame data of the stack trace. Each frame is variable length.
   // Frame is currently 2-3 entries long. This array size limits the

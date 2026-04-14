@@ -17,7 +17,7 @@ type TraceEventMeta struct {
 	Timestamp      libpf.UnixTime64
 	CPU            int
 	Origin         libpf.Origin
-	OffTime        int64
+	Value          int64
 	PID, TID       libpf.PID
 	SpanID         libpf.APMSpanID
 	TraceID        libpf.APMTraceID
@@ -28,7 +28,7 @@ type TraceEvents struct {
 	Labels     map[libpf.String]libpf.String
 	Frames     libpf.Frames
 	Timestamps []uint64 // in nanoseconds
-	OffTimes   []int64  // in nanoseconds
+	Values     []int64
 }
 
 // TraceEventsTree stores samples and their related metadata in a tree-like
@@ -83,4 +83,22 @@ type SampleKey struct {
 
 	SpanID  libpf.APMSpanID
 	TraceID libpf.APMTraceID
+}
+
+// ProbeOriginMetadata holds information about a custom probe origin
+// for use by the reporter.
+type ProbeOriginMetadata struct {
+	// Period, if positive, defines the sample period.
+	Period int64
+
+	// PeriodType and PeriodUnit define the period type of a profile.
+	PeriodType string
+	PeriodUnit string
+
+	// Typ and Unit define the sample type/unit.
+	Typ  string
+	Unit string
+
+	// ReportValues controls whether per-sample values are emitted.
+	ReportValues bool
 }

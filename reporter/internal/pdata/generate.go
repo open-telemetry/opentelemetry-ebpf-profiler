@@ -6,6 +6,7 @@ package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pda
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -18,7 +19,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
@@ -93,11 +93,14 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		sp.Scope().SetVersion(agentVersion)
 		sp.SetSchemaUrl(semconv.SchemaURL)
 
-		for _, origin := range []libpf.Origin{
-			support.TraceOriginSampling,
-			support.TraceOriginOffCPU,
-			support.TraceOriginProbe,
-		} {
+		// Collect and sort origins to ensure deterministic processing order
+		origins := make([]libpf.Origin, 0, len(p.probeMetadata))
+		for origin := range p.probeMetadata {
+			origins = append(origins, origin)
+		}
+		slices.Sort(origins)
+
+		for _, origin := range origins {
 			if len(toEvents.Events[origin]) == 0 {
 				// Do not append empty profiles.
 				continue
@@ -152,32 +155,28 @@ func (p *Pdata) setProfile(
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
 	st := profile.SampleType()
-	switch origin {
-	case support.TraceOriginSampling:
-		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
-		pt := profile.PeriodType()
-		pt.SetTypeStrindex(stringSet.Add("cpu"))
-		pt.SetUnitStrindex(stringSet.Add("nanoseconds"))
-
-		st.SetTypeStrindex(stringSet.Add("samples"))
-		st.SetUnitStrindex(stringSet.Add("count"))
-	case support.TraceOriginOffCPU:
-		st.SetTypeStrindex(stringSet.Add("off_cpu"))
-		st.SetUnitStrindex(stringSet.Add("nanoseconds"))
-	case support.TraceOriginProbe:
-		st.SetTypeStrindex(stringSet.Add("events"))
-		st.SetUnitStrindex(stringSet.Add("count"))
-	default:
-		// Should never happen
+	meta, ok := p.probeMetadata[origin]
+	if !ok {
 		return fmt.Errorf("generating profile for unsupported origin %d", origin)
 	}
+	if meta.Period > 0 {
+		profile.SetPeriod(meta.Period)
+	}
+	if meta.PeriodType != "" {
+		pt := profile.PeriodType()
+		pt.SetTypeStrindex(stringSet.Add(meta.PeriodType))
+		pt.SetUnitStrindex(stringSet.Add(meta.PeriodUnit))
+	}
+	st.SetTypeStrindex(stringSet.Add(meta.Typ))
+	st.SetUnitStrindex(stringSet.Add(meta.Unit))
 
 	for sampleKey, traceInfo := range events {
 		sample := profile.Samples().AppendEmpty()
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
-		if origin == support.TraceOriginOffCPU {
-			sample.Values().Append(traceInfo.OffTimes...)
+		probeMeta, ok := p.probeMetadata[origin]
+		if ok && probeMeta.ReportValues {
+			sample.Values().Append(traceInfo.Values...)
 		}
 
 		if sampleKey.SpanID != libpf.InvalidAPMSpanID &&

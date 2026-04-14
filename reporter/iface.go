@@ -11,6 +11,14 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
+// ProbeRegistrar is an optional extension for reporters that support
+// dynamic registration of custom probe origins.
+type ProbeRegistrar interface {
+	// RegisterProbeOrigin registers a custom probe origin with the reporter
+	// and provides metadata for how to handle samples from that origin.
+	RegisterProbeOrigin(origin libpf.Origin, meta samples.ProbeOriginMetadata) error
+}
+
 // Reporter is the top-level interface implemented by a full reporter.
 type Reporter interface {
 	TraceReporter
@@ -27,6 +35,8 @@ type Reporter interface {
 }
 
 type TraceReporter interface {
+	ProbeRegistrar
+
 	// ReportTraceEvent accepts a trace event (trace metadata with frames)
 	// and enqueues it for reporting to the backend.
 	// If handling the trace event fails it returns an error.

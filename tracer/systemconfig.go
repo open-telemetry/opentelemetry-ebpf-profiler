@@ -25,6 +25,14 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
+// SystemVariables contains kernel architecture-dependent configuration.
+// These values are determined once and shared across all eBPF programs.
+type SystemVariables struct {
+	TPBaseOffset      uint64
+	TaskStackOffset   uint32
+	StackPtregsOffset uint32
+}
+
 // sysConfigVars supports collecting system configuration information.
 type sysConfigVars struct {
 	tpbase_offset       uint64
@@ -252,7 +260,7 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 		return nil, nil, err
 	}
 
-	if err := rewriteMaps(new, maps); err != nil {
+	if err := RewriteMaps(new, maps); err != nil {
 		return nil, nil, fmt.Errorf("failed to rewrite maps: %v", err)
 	}
 
@@ -296,26 +304,10 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	return nil
 }
 
-// loadRodataVars initializes RODATA variables for the eBPF programs.
-func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config) error {
-	if cfg.VerboseMode {
-		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
-			return fmt.Errorf("failed to set debug output: %v", err)
-		}
-	}
-
-	if err := coll.Variables["off_cpu_threshold"].Set(cfg.OffCPUThreshold); err != nil {
-		return fmt.Errorf("failed to set off_cpu_threshold: %v", err)
-	}
-
-	if err := coll.Variables["filter_error_frames"].Set(cfg.FilterErrorFrames); err != nil {
-		return fmt.Errorf("failed to set drop_error_only_traces: %v", err)
-	}
-
-	if err := coll.Variables["filter_idle_frames"].Set(cfg.FilterIdleFrames); err != nil {
-		return fmt.Errorf("failed to set debug output: %v", err)
-	}
-
+// setSystemVariables sets system-level eBPF variables that depend on the architecture and kernel.
+// It configures the PAC mask and kernel structure offsets (tpbase, task_stack, stack_ptregs).
+func setSystemVariables(coll *cebpf.CollectionSpec, tpbaseOffset uint64, taskStackOffset, stackPtregsOffset uint32) error {
+	// Set PAC mask
 	pacMask := pacmask.GetPACMask()
 	if pacMask != 0 {
 		log.Infof("Determined PAC mask to be 0x%016X", pacMask)
@@ -326,25 +318,58 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set inverse_pac_mask: %v", err)
 	}
 
+	// Set offsets
+	if err := coll.Variables["tpbase_offset"].Set(tpbaseOffset); err != nil {
+		return fmt.Errorf("failed to set tpbase_offset: %v", err)
+	}
+	if err := coll.Variables["task_stack_offset"].Set(taskStackOffset); err != nil {
+		return fmt.Errorf("failed to set task_stack_offset: %v", err)
+	}
+	if err := coll.Variables["stack_ptregs_offset"].Set(stackPtregsOffset); err != nil {
+		return fmt.Errorf("failed to set stack_ptregs_offset: %v", err)
+	}
+	return nil
+}
+
+// loadRodataVars initializes RODATA variables for the eBPF programs.
+// It returns the determined system variables which can be shared with other probes.
+func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config) (*SystemVariables, error) {
+	if err := coll.Variables["origin_id_sampling"].Set(uint32(originIDSampling)); err != nil {
+		return nil, fmt.Errorf("failed to set origin ID for sampling: %v", err)
+	}
+
+	if cfg.VerboseMode {
+		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
+			return nil, fmt.Errorf("failed to set debug output: %v", err)
+		}
+	}
+
+	if err := coll.Variables["filter_error_frames"].Set(cfg.FilterErrorFrames); err != nil {
+		return nil, fmt.Errorf("failed to set drop_error_only_traces: %v", err)
+	}
+
+	if err := coll.Variables["filter_idle_frames"].Set(cfg.FilterIdleFrames); err != nil {
+		return nil, fmt.Errorf("failed to set debug output: %v", err)
+	}
+
 	rodataVars := sysConfigVars{}
 
 	systemAnalysisColl, maps, err := prepareAnalysis(coll)
 	if err != nil {
-		return fmt.Errorf("failed to prepare programs and maps for system analysis: %v", err)
+		return nil, fmt.Errorf("failed to prepare programs and maps for system analysis: %v", err)
 	}
 
 	if err := determineSysConfig(systemAnalysisColl, maps, kmod, cfg.IncludeTracers, &rodataVars); err != nil {
-		return fmt.Errorf("failed to determine system configs: %v", err)
-	}
-	if err := coll.Variables["tpbase_offset"].Set(rodataVars.tpbase_offset); err != nil {
-		return fmt.Errorf("failed to set tpbase_offset: %v", err)
-	}
-	if err := coll.Variables["task_stack_offset"].Set(rodataVars.task_stack_offset); err != nil {
-		return fmt.Errorf("failed to set task_stack_offset: %v", err)
-	}
-	if err := coll.Variables["stack_ptregs_offset"].Set(rodataVars.stack_ptregs_offset); err != nil {
-		return fmt.Errorf("failed to set stack_ptregs_offset: %v", err)
+		return nil, fmt.Errorf("failed to determine system configs: %v", err)
 	}
 
-	return nil
+	if err := setSystemVariables(coll, rodataVars.tpbase_offset, rodataVars.task_stack_offset, rodataVars.stack_ptregs_offset); err != nil {
+		return nil, err
+	}
+
+	return &SystemVariables{
+		TPBaseOffset:      rodataVars.tpbase_offset,
+		TaskStackOffset:   rodataVars.task_stack_offset,
+		StackPtregsOffset: rodataVars.stack_ptregs_offset,
+	}, nil
 }

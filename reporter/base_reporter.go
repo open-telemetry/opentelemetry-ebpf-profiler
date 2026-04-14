@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // baseReporter encapsulates shared behavior between all the available reporters.
@@ -34,6 +33,9 @@ type baseReporter struct {
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
 	traceEvents xsync.RWMutex[samples.TraceEventsTree]
 
+	// probeOrigins tracks which probe origins have been registered.
+	probeOrigins xsync.RWMutex[map[libpf.Origin]struct{}]
+
 	// collectionStartTime tracks when the current collection window started.
 	// Initialized when Start() is called. The duration of the first profile may be
 	// slightly overestimated as it includes tracer setup time before samples arrive.
@@ -46,12 +48,23 @@ func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
 }
 
+func (b *baseReporter) RegisterProbeOrigin(origin libpf.Origin, meta samples.ProbeOriginMetadata) error {
+	m := b.probeOrigins.WLock()
+	defer b.probeOrigins.WUnlock(&m)
+	if _, exists := (*m)[origin]; exists {
+		return fmt.Errorf("probe origin %d already registered", origin)
+	}
+	(*m)[origin] = struct{}{}
+	b.pdata.RegisterProbeOrigin(origin, meta)
+	return nil
+}
+
 func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
-	switch meta.Origin {
-	case support.TraceOriginSampling:
-	case support.TraceOriginOffCPU:
-	case support.TraceOriginProbe:
-	default:
+	// Check if this origin has been registered
+	m := b.probeOrigins.RLock()
+	_, registered := (*m)[meta.Origin]
+	b.probeOrigins.RUnlock(&m)
+	if !registered {
 		return fmt.Errorf("skip reporting trace for %d origin: %w", meta.Origin,
 			errUnknownOrigin)
 	}
@@ -94,14 +107,14 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	}
 	if events, exists := rtp.Events[meta.Origin][sampleKey]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
-		events.OffTimes = append(events.OffTimes, meta.OffTime)
+		events.Values = append(events.Values, meta.Value)
 		return nil
 	}
 
 	rtp.Events[meta.Origin][sampleKey] = &samples.TraceEvents{
 		Frames:     trace.Frames,
 		Timestamps: []uint64{uint64(meta.Timestamp)},
-		OffTimes:   []int64{meta.OffTime},
+		Values:     []int64{meta.Value},
 		Labels:     trace.CustomLabels,
 	}
 	return nil

@@ -17,7 +17,6 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 func TestCollectorReporterReportTraceEvent(t *testing.T) {
@@ -86,10 +85,17 @@ func TestCollectorReporterShutdown(t *testing.T) {
 	}, next)
 	require.NoError(t, err)
 
+	// Register standard origins for this test
+	r.pdata.RegisterProbeOrigin(3, samples.ProbeOriginMetadata{ // TraceOriginProbe
+		Typ:          "events",
+		Unit:         "count",
+		ReportValues: false,
+	})
+
 	traceEventsPtr := r.traceEvents.WLock()
 	tree := (*traceEventsPtr)
 	tree[samples.ResourceKey{PID: 1}] = samples.ResourceToProfiles{Events: map[libpf.Origin]samples.SampleToEvents{
-		support.TraceOriginProbe: {
+		originSampling + 2: {
 			{}: {
 				Frames: func() libpf.Frames {
 					frames := make(libpf.Frames, 0, 1)

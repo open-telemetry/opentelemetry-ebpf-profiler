@@ -22,7 +22,7 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid)
   trace->comm[1] = 0xBB;
   trace->comm[2] = 0xCC;
 
-  trace->origin = TRACE_SAMPLING;
+  trace->origin = 1;
 
   trace->comm[3] = 1;
   trace->pid     = pid;

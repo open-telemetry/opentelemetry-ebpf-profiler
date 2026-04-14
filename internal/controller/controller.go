@@ -3,13 +3,14 @@ package controller // import "go.opentelemetry.io/ebpf-profiler/internal/control
 import (
 	"context"
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"time"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/probes/offcpu"
+	"go.opentelemetry.io/ebpf-profiler/probes/oom"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -104,13 +105,12 @@ func (c *Controller) Start(ctx context.Context) error {
 		BPFVerifierLogLevel:    uint32(c.config.BPFVerifierLogLevel),
 		ProbabilisticInterval:  c.config.ProbabilisticInterval,
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
-		OffCPUThreshold:        uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
 		IncludeEnvVars:         envVars,
-		ProbeLinks:             c.config.ProbeLinks,
-		LoadProbe:              c.config.LoadProbe,
-		ExecutableReporter:     c.config.ExecutableReporter,
-		BPFFSRoot:              c.config.BPFFSRoot,
-		OBIProcessCtx:          c.config.OBIProcessCtx,
+		// ProbeLinks:             c.config.ProbeLinks, // Replaced by c.config.CustomProbes
+		LoadProbe:          c.config.LoadProbe || len(c.config.CustomProbes) != 0,
+		ExecutableReporter: c.config.ExecutableReporter,
+		BPFFSRoot:          c.config.BPFFSRoot,
+		OBIProcessCtx:      c.config.OBIProcessCtx,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to load eBPF tracer: %w", err)
@@ -131,19 +131,19 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 	log.Info("Attached tracer program")
 
-	if c.config.OffCPUThreshold > 0.0 {
-		if err := trc.StartOffCPUProfiling(); err != nil {
-			return fmt.Errorf("failed to start off-cpu profiling: %v", err)
-		}
-		log.Infof("Enabled off-cpu profiling with p=%f", c.config.OffCPUThreshold)
-	}
+	//	if c.config.OffCPUThreshold > 0.0 {
+	//		if err := trc.StartOffCPUProfiling(); err != nil {
+	//			return fmt.Errorf("failed to start off-cpu profiling: %v", err)
+	//		}
+	//		log.Infof("Enabled off-cpu profiling with p=%f", c.config.OffCPUThreshold)
+	//	}
 
-	if len(c.config.ProbeLinks) > 0 {
-		if err := trc.AttachProbes(c.config.ProbeLinks); err != nil {
-			return fmt.Errorf("failed to attach probes: %v", err)
-		}
-		log.Info("Attached probes")
-	}
+	// if len(c.config.ProbeLinks) > 0 {
+	// 	if err := trc.AttachProbes(c.config.ProbeLinks); err != nil {
+	// 		return fmt.Errorf("failed to attach probes: %v", err)
+	// 	}
+	// 	log.Info("Attached probes")
+	// }
 
 	if c.config.ProbabilisticThreshold < tracer.ProbabilisticThresholdMax {
 		trc.StartProbabilisticProfiling(ctx)
@@ -164,6 +164,10 @@ func (c *Controller) Start(ctx context.Context) error {
 
 	if err := c.startTraceHandling(ctx, trc); err != nil {
 		return fmt.Errorf("failed to start trace handling: %w", err)
+	}
+
+	if err := c.enableCustomProbes(trc); err != nil {
+		return fmt.Errorf("failed to enable custom probes: %w", err)
 	}
 
 	return nil
@@ -214,4 +218,36 @@ func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer)
 	}()
 
 	return nil
+}
+
+func (c *Controller) enableCustomProbes(trc *tracer.Tracer) error {
+	if len(c.config.CustomProbes) == 0 {
+		return nil
+	}
+
+	for probeName, probeConfig := range c.config.CustomProbes {
+		probe, err := createCustomProbe(probeName, probeConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create custom probe %q: %w", probeName, err)
+		}
+
+		if err := trc.Enable(probe); err != nil {
+			return fmt.Errorf("failed to enable custom probe %q: %w", probeName, err)
+		}
+
+		log.Infof("Enabled custom probe %q", probeName)
+	}
+
+	return nil
+}
+
+func createCustomProbe(name string, cfg any) (tracer.Probe, error) {
+	switch name {
+	case "oom":
+		return oom.New(cfg)
+	case "offcpu":
+		return offcpu.New(cfg)
+	default:
+		return nil, fmt.Errorf("unknown custom probe: %q", name)
+	}
 }
