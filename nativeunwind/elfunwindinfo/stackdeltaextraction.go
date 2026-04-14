@@ -24,11 +24,11 @@ const (
 type extractionFilter struct {
 	// start and end contains the virtual address block of code which
 	// should be excluded from .eh_frame extraction.
-	start, end uintptr
+	start, end uint64
 
 	// entryStart and entryEnd contain the virtual address for the entry
 	// stub code with synthesized stack deltas.
-	entryStart, entryEnd uintptr
+	entryStart, entryEnd uint64
 
 	// entryPending is true if the entry stub stack delta has not been added.
 	entryPending bool
@@ -54,6 +54,7 @@ func (f *extractionFilter) addEntryDeltas(deltas *sdtypes.StackDeltaArray) {
 	}, !f.unsortedFrames)
 	deltas.Add(sdtypes.StackDelta{
 		Address: uint64(f.entryEnd),
+		Hints:   sdtypes.UnwindHintEnd,
 		Info:    sdtypes.UnwindInfoInvalid,
 	})
 	f.ehFrames = true
@@ -65,7 +66,7 @@ func (f *extractionFilter) fdeUnsorted() {
 }
 
 // fdeHook filters out .eh_frame data that is superseded by .gopclntab data
-func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo, deltas *sdtypes.StackDeltaArray) bool {
+func (f *extractionFilter) fdeHook(_ *cieInfo, fde fdeInfo, deltas *sdtypes.StackDeltaArray) bool {
 	// Drop FDEs inside the gopclntab area
 	if f.start <= fde.ipStart && fde.ipStart+fde.ipLen <= f.end {
 		return false
@@ -89,11 +90,11 @@ func (f *extractionFilter) fdeHook(_ *cieInfo, fde *fdeInfo, deltas *sdtypes.Sta
 }
 
 // deltaHook is a stub to satisfy ehframeHooks interface
-func (f *extractionFilter) deltaHook(uintptr, *vmRegs, sdtypes.StackDelta) {
+func (f *extractionFilter) deltaHook(uint64, *vmRegs, sdtypes.StackDelta) {
 }
 
 // golangHook reports the .gopclntab area
-func (f *extractionFilter) golangHook(start, end uintptr) {
+func (f *extractionFilter) golangHook(start, end uint64) {
 	f.start = start
 	f.end = end
 	f.golangFrames = true
@@ -162,11 +163,11 @@ func detectEntry(ef *pfelf.File) int {
 	}
 
 	// Typically 52-80 bytes, allow for a bit of variance
-	code, err := ef.VirtualMemory(int64(ef.Entry), 128, 128)
-	if err != nil {
+	var code [128]byte
+	if _, err := ef.ReadAt(code[:], int64(ef.Entry)); err != nil {
 		return 0
 	}
-	return detectEntryCode(ef.Machine, code)
+	return detectEntryCode(ef.Machine, code[:])
 }
 
 // ExtractELF takes a pfelf.Reference and provides the stack delta
@@ -195,8 +196,8 @@ func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference,
 	}
 
 	if entryLength := detectEntry(elfFile); entryLength != 0 {
-		filter.entryStart = uintptr(elfFile.Entry)
-		filter.entryEnd = filter.entryStart + uintptr(entryLength)
+		filter.entryStart = elfFile.Entry
+		filter.entryEnd = filter.entryStart + uint64(entryLength)
 		filter.entryPending = true
 	}
 
