@@ -86,9 +86,9 @@ func Read(addr libpf.Address, rm remotememory.RemoteMemory, lastPublishedAtNs ui
 	var lastErr error
 
 	for range maxAttempts {
-		ctx, err := readOnce(addr, rm, lastPublishedAtNs)
+		processCtx, err := readOnce(addr, rm, lastPublishedAtNs)
 		if err == nil {
-			return ctx, nil
+			return processCtx, nil
 		}
 		if !errors.Is(err, ErrConcurrentUpdate) {
 			return Info{}, err
