@@ -83,8 +83,8 @@ func (t *Tracer) triggerReportEvent(data []byte) {
 	case support.EventTypeGenericPID:
 		t.handleGenericPID()
 	case support.EventTypeReloadKallsyms:
-		t.kernelSymbolizer.Reload()
 		t.enableEvent(support.EventTypeReloadKallsyms)
+		t.kernelSymbolizer.Reload()
 	}
 }
 
