@@ -12,6 +12,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -118,6 +119,8 @@ type ProcessMeta struct {
 	EnvVariables map[libpf.String]libpf.String
 	// container ID retrieved from /proc/PID/cgroup
 	ContainerID libpf.String
+	// process context
+	ProcessContextInfo processcontext.Info
 }
 
 // Process is the interface to inspect ELF coredump/process.
