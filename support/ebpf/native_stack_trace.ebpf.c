@@ -346,7 +346,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       // see https://hal.inria.fr/hal-02297690/document, page 4. (DOI: 10.1145/3360572)
       cfa = state->sp + 8 + ((((state->pc & 15) >= 11) ? 1 : 0) << 3);
       DEBUG_PRINT("PLT, cfa=0x%lx", (unsigned long)cfa);
-      break;
+      goto restore_pc;
     case UNWIND_COMMAND_SIGNAL:
       // The rt_sigframe is defined at:
       // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/sigframe.h?h=v6.4#n59
@@ -355,6 +355,8 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       if (bpf_probe_read_user(&rt_regs, sizeof(rt_regs), (void *)(state->sp + 40))) {
         goto err_native_pc_read;
       }
+      state->rdi = rt_regs[8];
+      state->r8  = rt_regs[0];
       state->rax = rt_regs[13];
       state->r9  = rt_regs[1];
       state->r11 = rt_regs[3];
@@ -395,22 +397,31 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
     // the previous FP address if any.
     state->cfa = cfa = unwind_calc_register_with_deref(
       state, info->baseReg, param, (info->flags & UNWIND_FLAG_DEREF_CFA) != 0);
-    u64 fpa = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
 
-    if (fpa) {
-      bpf_probe_read_user(&state->fp, sizeof(state->fp), (void *)fpa);
+    u64 aux = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
+
+    if (info->flags & UNWIND_FLAG_REGISTER_RA) {
+      state->pc = aux;
+      goto nonleaf_frame_ok;
+    }
+
+    if (aux) {
+      bpf_probe_read_user(&state->fp, sizeof(state->fp), (void *)aux);
     } else if (info->baseReg == UNWIND_REG_FP) {
       // FP used for recovery, but no new FP value received, clear FP
       state->fp = 0;
     }
   }
-
-  if (!cfa || bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)(cfa - 8))) {
+restore_pc:
+  if (bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)(cfa - 8))) {
   err_native_pc_read:
     increment_metric(metricID_UnwindNativeErrPCRead);
     return ERR_NATIVE_PC_READ;
   }
+
+nonleaf_frame_ok:
   state->sp = cfa;
+  state->fp = 0;
   unwinder_mark_nonleaf_frame(state);
 frame_ok:
   increment_metric(metricID_UnwindNativeFrames);

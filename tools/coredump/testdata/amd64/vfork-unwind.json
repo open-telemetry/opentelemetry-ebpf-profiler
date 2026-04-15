@@ -1,0 +1,30 @@
+{
+  "coredump-ref": "8f5e743313c1d20f0636ae821e7f4d2fb3b720b2956711edca5d45bf48a13a82",
+  "threads": [
+    {
+      "lwp": 95340,
+      "frames": [
+        "libc.so.6+0xeca7a",
+        "libc.so.6+0xf9a26",
+        "libc.so.6+0x10ec92",
+        "vfork+0x12a1",
+        "vfork+0x12eb",
+        "<unwinding aborted due to error native_stack_delta_invalid>"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "bb3ea285bd3612ccf0642d06b89783e2d73ce7d4db33f88f62235cf8a61dc771",
+      "local-path": "/home/hanshal101/mg/opentelemetry-ebpf-profiler/vfork"
+    },
+    {
+      "ref": "d8db8739a1633c972cec6a4fe0566bdcec6fd088f98723492ab0361f66238f75",
+      "local-path": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "1cd555ac46b7887edeaf3c42aac5408c8135e52f6b37870da2cf82d5fe14e829",
+      "local-path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+    }
+  ]
+}
