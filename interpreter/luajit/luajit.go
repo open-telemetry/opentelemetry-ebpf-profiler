@@ -457,7 +457,7 @@ func (l *luajitInstance) Symbolize(frame libpf.EbpfFrame, frames *libpf.Frames, 
 		}
 		frames.Append(&libpf.Frame{
 			Type:         libpf.LuaJITFrame,
-			FunctionName: libpf.Intern(funcName),
+			FunctionName: libpf.Intern("LuaJIT FFI: " + funcName),
 		})
 		return nil
 	case support.LJGReport:

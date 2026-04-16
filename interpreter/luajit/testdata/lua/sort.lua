@@ -12,7 +12,6 @@ function compare(a, b)
     for i=0,1000000 do
         local x = i * i
     end
-    ngx.say(debug.traceback())
     return a[0] - b[0]
 end
 

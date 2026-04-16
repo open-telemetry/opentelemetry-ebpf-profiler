@@ -15,11 +15,9 @@
 
 package luajit // import "go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 
-// This is CFRAME_SIZE in src/lj_frame.h
-// We could dynamically get this from lj_vm_ffi_callback disassembly and look for:
-// lea rax, [rsp+CFRAME_SIZE]
-// https://github.com/openresty/luajit2/blob/7952882d/src/vm_x64.dasc#L2725
+import "go.opentelemetry.io/ebpf-profiler/support"
+
 const (
-	cframeSize    int32 = 80
+	cframeSize    int32 = support.LJCframeSpaceX86
 	cframeSizeJIT int32 = cframeSize + 16
 )

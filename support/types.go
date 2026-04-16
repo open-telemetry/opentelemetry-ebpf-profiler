@@ -405,10 +405,12 @@ const (
 )
 
 const (
-	LJFFIFunc     = 0xff1
-	LJFileId      = 0x2a
-	LJNormalFrame = 0x0
-	LJGReport     = 0xff2
+	LJFFIFunc        = 0xff1
+	LJFileId         = 0x2a
+	LJNormalFrame    = 0x0
+	LJGReport        = 0xff2
+	LJCframeSpaceX86 = 0x50
+	LJCframeSpaceArm = 0xd0
 )
 
 var MetricsTranslation = []metrics.MetricID{

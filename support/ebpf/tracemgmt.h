@@ -335,6 +335,7 @@ static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u
 static inline EBPF_INLINE u64 *push_frame(
   UnwindState *state, Trace *trace, u8 frame_type, u8 frame_flags, u64 frame_data, u8 frame_varlen)
 {
+  DEBUG_PRINT("push_frame type: %d flags: %x data: %llx", frame_type, frame_flags, frame_data);
   const int max_frame_size   = sizeof trace->frame_data / sizeof trace->frame_data[0];
   const int error_frame_size = 1;
 
