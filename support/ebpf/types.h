@@ -834,6 +834,13 @@ typedef struct PerCPURecord {
     GoMapBucket goMapBucket;
     // Scratch for Go 1.24 labels
     struct GoString labels[MAX_CUSTOM_LABELS * 2];
+    // Signal frame registers for unwind_one_frame (avoids 272-byte stack alloc on arm64).
+    // Sized to match the kernel rt_sigframe register array for the target architecture.
+#if defined(__x86_64__)
+    u64 rt_regs[18];
+#elif defined(__aarch64__)
+    u64 rt_regs[34];
+#endif
   };
   // Mask to indicate which unwinders are complete
   u32 unwindersDone;
