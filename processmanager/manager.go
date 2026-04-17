@@ -312,7 +312,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 		PID:            bpfTrace.PID,
 		TID:            bpfTrace.TID,
 		APMServiceName: "", // filled in below
-		CPU:            bpfTrace.CPU,
+		CPU:            bpfTrace.CpuID,
 		ProcessName:    bpfTrace.ProcessName,
 		ExecutablePath: bpfTrace.ExecutablePath,
 		ContainerID:    bpfTrace.ContainerID,

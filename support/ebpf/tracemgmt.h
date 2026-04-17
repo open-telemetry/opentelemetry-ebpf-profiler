@@ -386,8 +386,8 @@ static inline EBPF_INLINE void push_kernel_frames(void *ctx, Trace *trace)
   }
 }
 
-// Send a trace to user-land via the `trace_events` perf event buffer.
-static inline EBPF_INLINE void send_trace(void *ctx, Trace *trace)
+// Send a trace to userspace via the `trace_events` ringbuffer.
+static inline EBPF_INLINE void send_trace(UNUSED void *ctx, Trace *trace)
 {
   // Explicitly clamp frame_data_len for the verifier. In production the value
   // is always within bounds, but when send_trace is inlined into the same
@@ -400,7 +400,15 @@ static inline EBPF_INLINE void send_trace(void *ctx, Trace *trace)
   const u64 send_size =
     sizeof(Trace) - sizeof(trace->frame_data) + sizeof(trace->frame_data[0]) * len;
 
-  bpf_perf_event_output(ctx, &trace_events, BPF_F_CURRENT_CPU, trace, send_size);
+  trace->cpu_id = bpf_get_smp_processor_id();
+
+  // We specify BPF_RB_NO_WAKEUP here as userspace is polling on a timer (instead
+  // of blocking on epoll). If epoll blocking is implemented we should remove
+  // BPF_RB_NO_WAKEUP to switch to 'adaptive' notifications.
+
+  // TODO: Unlike perf events, there's no "lost events" counter that userspace can
+  // access. We can however capture an error here and increment an associated metric.
+  bpf_ringbuf_output(&trace_events, trace, send_size, BPF_RB_NO_WAKEUP);
 }
 
 // is_kernel_address checks if the given address looks like virtual address to kernel memory.
