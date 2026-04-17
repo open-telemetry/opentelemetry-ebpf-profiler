@@ -660,6 +660,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			info.meta = meta
 		}
 		info.meta.ProcessContextInfo = processContextInfo
+		info.meta.ProcessContextInfo.AddEnvVars(info.meta.EnvVariables)
 	}
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()

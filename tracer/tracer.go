@@ -1073,6 +1073,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) (*libpf.EbpfTrace, error) {
 		}
 	}
 
+	trace.Resource = procMeta.ProcessContextInfo.Resource
 	trace.NumFrames = int(ptr.Num_frames)
 
 	// Symbolize kernel frames directly from the raw BPF data before copying
