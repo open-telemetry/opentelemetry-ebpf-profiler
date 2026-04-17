@@ -328,6 +328,27 @@ enum {
   // number of failures to read TLS variables via the DTV
   metricID_UnwindErrBadDTVRead,
 
+  // number of failures to get TSD base for thread context
+  metricID_UnwindThreadContextErrReadTsdBase,
+
+  // number of failures read the thread context pointer
+  metricID_UnwindThreadContextErrReadThreadCtxBufPtr,
+
+  // number of failures read the thread context buffer
+  metricID_UnwindThreadContextErrReadThreadCtxBuf,
+
+  // number of failures read the thread context attributes
+  metricID_UnwindThreadContextErrReadThreadCtxAttrs,
+
+  // number of failures read the DTV pointer
+  metricID_UnwindThreadContextErrReadDtvPtr,
+
+  // number of failures read the module TLS base
+  metricID_UnwindThreadContextErrReadModuleTlsBase,
+
+  // number of successful reads of thread context info
+  metricID_UnwindThreadContextReadSuccesses,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -584,6 +605,14 @@ typedef struct __attribute__((packed)) ApmCorrelationBuf {
   ApmSpanID transaction_id;
 } ApmCorrelationBuf;
 
+typedef struct __attribute__((packed)) ThreadContextBuf {
+  ApmTraceID trace_id;
+  ApmSpanID span_id;
+  u8 valid;
+  u8 _reserved;
+  u16 attrs_data_size;
+} ThreadContextBuf;
+
 #define CUSTOM_LABEL_MAX_KEY_LEN COMM_LEN
 // Big enough to hold UUIDs, etc.
 #define CUSTOM_LABEL_MAX_VAL_LEN 48
@@ -600,6 +629,17 @@ typedef struct CustomLabelsArray {
   CustomLabel labels[MAX_CUSTOM_LABELS];
 } CustomLabelsArray;
 
+typedef struct CustomLabelsData {
+  u16 size;
+  u8 data[sizeof(CustomLabelsArray) - sizeof(u16)];
+} CustomLabelsData;
+
+enum CustomLabelsType {
+  CUSTOM_LABELS_TYPE_NONE,
+  CUSTOM_LABELS_TYPE_NATIVE,
+  CUSTOM_LABELS_TYPE_GO,
+};
+
 // Container for a stack trace
 typedef struct Trace {
   // The process ID
@@ -614,10 +654,17 @@ typedef struct Trace {
   u8 comm[COMM_LEN];
   // APM transaction ID or all-zero if not present.
   ApmSpanID apm_transaction_id;
+  // APM span ID or all-zero if not present.
+  ApmSpanID apm_span_id;
   // APM trace ID or all-zero if not present.
   ApmTraceID apm_trace_id;
-  // Custom Labels
-  CustomLabelsArray custom_labels;
+  // Custom labels type (Native or Go)
+  u8 custom_labels_type;
+  union {
+    // Custom labels data
+    CustomLabelsData custom_labels_data;
+    CustomLabelsArray custom_labels;
+  };
   // The number of frame_data elements present.
   u16 frame_data_len;
   // The number of frames present.
@@ -1034,6 +1081,12 @@ typedef struct PIDPageMappingInfo {
 typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
+
+typedef struct ThreadContextProcInfo {
+  s32 tls_offset;
+  s32 dtv_offset;
+  s32 module_offset;
+} ThreadContextProcInfo;
 
 typedef struct GoLabelsOffsets {
   u32 m_offset;
