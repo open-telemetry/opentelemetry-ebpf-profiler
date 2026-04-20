@@ -129,9 +129,9 @@ func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
 
 	if semver.Compare(version, "v1.24.0") >= 0 {
 		return &goLabelsOffsets{
-			mOffset: uint32(mOffset),
-			curg:    uint32(curgOffset),
-			labels:  uint32(labelsOffset),
+			mOffset:    uint32(mOffset),
+			curg:       uint32(curgOffset),
+			labels:     uint32(labelsOffset),
 			schedSp:    uint32(schedOffset + schedSpOff),
 			schedPcOff: uint8(schedPcOff),
 			schedBpOff: uint8(schedBpOff),
@@ -168,9 +168,9 @@ func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
 		hmapCount:           uint32(countOffset),
 		hmapLog2BucketCount: uint32(bOffset),
 		hmapBuckets:         uint32(bucketsOffset),
-		schedSp:    uint32(schedOffset + schedSpOff),
-		schedPcOff: uint8(schedPcOff - schedSpOff),
-		schedBpOff: uint8(schedBpOff - schedSpOff),
+		schedSp:             uint32(schedOffset + schedSpOff),
+		schedPcOff:          uint8(schedPcOff - schedSpOff),
+		schedBpOff:          uint8(schedBpOff - schedSpOff),
 	}, nil
 }
 
