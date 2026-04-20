@@ -1,0 +1,241 @@
+{
+  "coredump-ref": "1dd0a9e19b0307e10662268aefb1a17509db852b3f0ae3ac738df29404b6fb5e",
+  "threads": [
+    {
+      "lwp": 10029,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 10051,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 10046,
+      "frames": [
+        "runtime.wakep+0 in /usr/local/go/src/runtime/proc.go:3207",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4300",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 10045,
+      "frames": [
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.main.func1+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:88",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 10044,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 10043,
+      "frames": [
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.deepStack+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:27",
+        "main.main.func1+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:88",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 10042,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 10041,
+      "frames": [
+        "runtime.unlock2+0 in /usr/local/go/src/runtime/lock_spinbit.go:314",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3452",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 10040,
+      "frames": [
+        "linux-vdso.1.so+0x360",
+        "runtime.nanotime1+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:364",
+        "runtime.(*timers).check+0 in /usr/local/go/src/runtime/time_nofake.go:33",
+        "runtime.stealWork+0 in /usr/local/go/src/runtime/proc.go:3837",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3497",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 10039,
+      "frames": [
+        "internal/runtime/syscall.Syscall6+0 in /usr/local/go/src/internal/runtime/syscall/asm_linux_arm64.s:17",
+        "runtime.netpoll+0 in /usr/local/go/src/runtime/netpoll_epoll.go:120",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3728",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 10038,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 10037,
+      "frames": [
+        "main.mutexBlocker+0 in /usr/local/go/src/internal/sync/mutex.go:63",
+        "main.main.gowrap3+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcall/main.go:99",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 10036,
+      "frames": [
+        "runtime.usleep+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:138",
+        "runtime.sysmon+0 in /usr/local/go/src/runtime/proc.go:6251",
+        "runtime.mstart1+0 in /usr/local/go/src/runtime/proc.go:1931",
+        "runtime.mstart0+0 in /usr/local/go/src/runtime/proc.go:1858",
+        "runtime.mstart+0 in /usr/local/go/src/runtime/asm_arm64.s:180"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "f253b2baa217b7efd68a7ee944af1ffdb42eabfcba68fd2a11b5e253799102a0",
+      "local-path": "/home/tintin/ebpf/test-mcall"
+    }
+  ]
+}

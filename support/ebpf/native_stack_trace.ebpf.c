@@ -437,23 +437,27 @@ static EBPF_INLINE u64 go_resolve_mcall_goroutine(struct GoLabelsOffsets *offs, 
 //          at fn_entry_SP + 8 = g0.sched.sp - 16 + 8 = g0.sched.sp - 8
 //          (verified via DWARF: DW_OP_fbreg(+8) = CFA+8)
 //
-// Returns true if the transition succeeded and state was updated.
-// Returns false if the goroutine could not be resolved (caller should STOP).
-static EBPF_INLINE bool go_unwind_mcall(UnwindState *state)
+// Returns ERR_OK if the transition succeeded and state was updated.
+// Returns a specific ErrorCode on failure (caller should STOP).
+static EBPF_INLINE ErrorCode go_unwind_mcall(UnwindState *state)
 {
+  increment_metric(metricID_UnwindGoMcallAttempts);
+
   PerCPURecord *record = get_per_cpu_record();
   if (!record) {
-    return false;
+    return ERR_UNREACHABLE;
   }
   u32 pid                  = record->trace.pid;
   GoLabelsOffsets *go_offs = bpf_map_lookup_elem(&go_labels_procs, &pid);
   if (!go_offs || !go_offs->sched_sp) {
-    return false;
+    increment_metric(metricID_UnwindGoMcallErrNoGoOffsets);
+    return ERR_GO_MCALL_NO_GO_OFFSETS;
   }
   u64 curg = go_resolve_mcall_goroutine(go_offs, state);
   if (!curg) {
     DEBUG_PRINT("GO_MCALL: could not resolve user goroutine, stopping");
-    return false;
+    increment_metric(metricID_UnwindGoMcallErrResolveGoroutine);
+    return ERR_GO_MCALL_RESOLVE_GOROUTINE;
   }
 
   // Read gobuf.{sp, pc, bp} in a single bpf_probe_read_user into the PerCPURecord
@@ -462,7 +466,8 @@ static EBPF_INLINE bool go_unwind_mcall(UnwindState *state)
   if (bpf_probe_read_user(
         gobuf, sizeof(record->goUnwindScratch.gobuf), (void *)(curg + go_offs->sched_sp))) {
     DEBUG_PRINT("GO_MCALL: failed to read gobuf, stopping");
-    return false;
+    increment_metric(metricID_UnwindGoMcallErrReadGobuf);
+    return ERR_GO_MCALL_READ_GOBUF;
   }
   // sched_pc_off and sched_bp_off are u8 offsets relative to gobuf.sp, stored
   // in GoLabelsOffsets. Using u8 fields (not u32 subtractions) lets the BPF
@@ -470,7 +475,8 @@ static EBPF_INLINE bool go_unwind_mcall(UnwindState *state)
   if (
     go_offs->sched_bp_off + sizeof(u64) > sizeof(record->goUnwindScratch.gobuf) ||
     go_offs->sched_pc_off + sizeof(u64) > sizeof(record->goUnwindScratch.gobuf)) {
-    return false;
+    increment_metric(metricID_UnwindGoMcallErrReadGobuf);
+    return ERR_GO_MCALL_READ_GOBUF;
   }
   u64 saved_sp = *(u64 *)(gobuf);
   u64 saved_pc = *(u64 *)(gobuf + go_offs->sched_pc_off);
@@ -481,7 +487,8 @@ static EBPF_INLINE bool go_unwind_mcall(UnwindState *state)
       "GO_MCALL: gobuf not populated (sp=0x%lx pc=0x%lx), stopping",
       (unsigned long)saved_sp,
       (unsigned long)saved_pc);
-    return false;
+    increment_metric(metricID_UnwindGoMcallErrGobufNotPopulated);
+    return ERR_GO_MCALL_GOBUF_NOT_POPULATED;
   }
   DEBUG_PRINT(
     "GO_MCALL: recovered context: pc=0x%lx, sp=0x%lx, fp=0x%lx",
@@ -498,7 +505,8 @@ static EBPF_INLINE bool go_unwind_mcall(UnwindState *state)
   state->pc = saved_pc;
 #endif
   unwinder_mark_nonleaf_frame(state);
-  return true;
+  increment_metric(metricID_UnwindGoMcallSuccess);
+  return ERR_OK;
 }
 
 // Stack unwinding in the absence of frame pointers can be a bit involved, so
@@ -575,12 +583,14 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
         goto err_native_pc_read;
       }
       goto frame_ok;
-    case UNWIND_COMMAND_GO_MCALL:
-      if (go_unwind_mcall(state)) {
+    case UNWIND_COMMAND_GO_MCALL: {
+      ErrorCode mcall_err = go_unwind_mcall(state);
+      if (mcall_err == ERR_OK) {
         goto frame_ok;
       }
       *stop = true;
       return ERR_OK;
+    }
     default: return ERR_UNREACHABLE;
     }
   } else {
@@ -684,12 +694,14 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
         goto err_native_pc_read;
       }
       goto frame_ok;
-    case UNWIND_COMMAND_GO_MCALL:
-      if (go_unwind_mcall(state)) {
+    case UNWIND_COMMAND_GO_MCALL: {
+      ErrorCode mcall_err = go_unwind_mcall(state);
+      if (mcall_err == ERR_OK) {
         goto frame_ok;
       }
       *stop = true;
       return ERR_OK;
+    }
     default: return ERR_UNREACHABLE;
     }
   }

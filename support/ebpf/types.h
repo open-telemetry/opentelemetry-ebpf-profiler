@@ -328,6 +328,24 @@ enum {
   // number of failures to read TLS variables via the DTV
   metricID_UnwindErrBadDTVRead,
 
+  // number of attempted Go mcall stack-switch unwinds
+  metricID_UnwindGoMcallAttempts,
+
+  // number of successful Go mcall stack-switch unwinds
+  metricID_UnwindGoMcallSuccess,
+
+  // number of Go mcall unwind failures due to missing Go offsets
+  metricID_UnwindGoMcallErrNoGoOffsets,
+
+  // number of Go mcall unwind failures due to goroutine resolution
+  metricID_UnwindGoMcallErrResolveGoroutine,
+
+  // number of Go mcall unwind failures due to gobuf read errors
+  metricID_UnwindGoMcallErrReadGobuf,
+
+  // number of Go mcall unwind failures due to unpopulated gobuf
+  metricID_UnwindGoMcallErrGobufNotPopulated,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //

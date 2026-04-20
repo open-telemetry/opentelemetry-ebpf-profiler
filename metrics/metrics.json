@@ -2096,5 +2096,47 @@
     "name": "UnwindErrBadDTVRead",
     "field": "bpf.errors.bad_dtv_read",
     "id": 286
+  },
+  {
+    "description": "Number of attempted Go mcall stack-switch unwinds",
+    "type": "counter",
+    "name": "UnwindGoMcallAttempts",
+    "field": "bpf.go.mcall_attempts",
+    "id": 287
+  },
+  {
+    "description": "Number of successful Go mcall stack-switch unwinds",
+    "type": "counter",
+    "name": "UnwindGoMcallSuccess",
+    "field": "bpf.go.mcall_success",
+    "id": 288
+  },
+  {
+    "description": "Number of Go mcall unwind failures due to missing Go offsets",
+    "type": "counter",
+    "name": "UnwindGoMcallErrNoGoOffsets",
+    "field": "bpf.go.errors.mcall_no_go_offsets",
+    "id": 289
+  },
+  {
+    "description": "Number of Go mcall unwind failures due to goroutine resolution",
+    "type": "counter",
+    "name": "UnwindGoMcallErrResolveGoroutine",
+    "field": "bpf.go.errors.mcall_resolve_goroutine",
+    "id": 290
+  },
+  {
+    "description": "Number of Go mcall unwind failures due to gobuf read errors",
+    "type": "counter",
+    "name": "UnwindGoMcallErrReadGobuf",
+    "field": "bpf.go.errors.mcall_read_gobuf",
+    "id": 291
+  },
+  {
+    "description": "Number of Go mcall unwind failures due to unpopulated gobuf",
+    "type": "counter",
+    "name": "UnwindGoMcallErrGobufNotPopulated",
+    "field": "bpf.go.errors.mcall_gobuf_not_populated",
+    "id": 292
   }
 ]

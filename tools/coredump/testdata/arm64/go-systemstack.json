@@ -1,0 +1,85 @@
+{
+  "coredump-ref": "12aeb71e72a7856db3371aab97d522d8abe9c68618322716632afb692b58fbe2",
+  "threads": [
+    {
+      "lwp": 9982,
+      "frames": [
+        "runtime.(*unwinder).symPC+0 in /usr/local/go/src/runtime/traceback.go:581",
+        "runtime.tracebackPCs+0 in /usr/local/go/src/runtime/traceback.go:628",
+        "runtime.callers.func1+0 in /usr/local/go/src/runtime/traceback.go:1100",
+        "runtime.systemstack+0 in /usr/local/go/src/runtime/asm_arm64.s:297",
+        "runtime.callers+0 in /usr/local/go/src/runtime/traceback.go:1102",
+        "main.main+0 in /home/tintin/ebpf/tools/coredump/testsources/go/systemstack/main.go:33",
+        "runtime.main+0 in /usr/local/go/src/internal/runtime/atomic/types.go:194",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 9993,
+      "frames": [
+        "internal/runtime/syscall.Syscall6+0 in /usr/local/go/src/internal/runtime/syscall/asm_linux_arm64.s:17",
+        "runtime.netpoll+0 in /usr/local/go/src/runtime/netpoll_epoll.go:120",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3728",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 9992,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.newstack+0 in /usr/local/go/src/runtime/stack.go:1130",
+        "runtime.morestack+0 in /usr/local/go/src/runtime/asm_arm64.s:396",
+        "<unwinding aborted due to error native_pc_read>"
+      ]
+    },
+    {
+      "lwp": 9991,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.startlockedm+0 in /usr/local/go/src/runtime/proc.go:3283",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4128",
+        "runtime.park_m+0 in /usr/local/go/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 9990,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:651",
+        "runtime.notesleep+0 in /usr/local/go/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /usr/local/go/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.newstack+0 in /usr/local/go/src/runtime/stack.go:1130",
+        "runtime.morestack+0 in /usr/local/go/src/runtime/asm_arm64.s:396",
+        "<unwinding aborted due to error native_pc_read>"
+      ]
+    },
+    {
+      "lwp": 9989,
+      "frames": [
+        "runtime.usleep+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:138",
+        "runtime.sysmon+0 in /usr/local/go/src/runtime/proc.go:6251",
+        "runtime.mstart1+0 in /usr/local/go/src/runtime/proc.go:1931",
+        "runtime.mstart0+0 in /usr/local/go/src/runtime/proc.go:1858",
+        "runtime.mstart+0 in /usr/local/go/src/runtime/asm_arm64.s:180"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "aa6217c134a0cedb8f170637641ccbc9e61f17b1fc1b137efef4653364e7d8ab",
+      "local-path": "/home/tintin/ebpf/test-systemstack"
+    }
+  ]
+}
