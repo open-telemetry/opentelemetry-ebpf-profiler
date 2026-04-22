@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(file *)"
+    ]
+  },
+  "$version": 3
+}
