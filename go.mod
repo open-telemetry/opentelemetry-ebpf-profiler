@@ -13,7 +13,7 @@ go 1.25.0
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.6
 	github.com/aws/aws-sdk-go-v2/config v1.32.16
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.99.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.100.0
 	github.com/cilium/ebpf v0.21.0
 	github.com/elastic/go-freelru v0.16.0
 	github.com/elastic/go-perf v0.0.0-20260224073651-af0ee0c731b7
@@ -21,7 +21,7 @@ require (
 	github.com/klauspost/compress v1.18.5
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
-	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260420183608-5939a84a5ae2
+	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260422152846-dd95db7b8093
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zeebo/xxh3 v1.1.0

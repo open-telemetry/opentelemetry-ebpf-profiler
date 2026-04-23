@@ -22,8 +22,8 @@ github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.22 h1:PUmZeJU6
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.22/go.mod h1:nO6egFBoAaoXze24a2C0NjQCvdpk8OueRoYimvEB9jo=
 github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.22 h1:SE+aQ4DEqG53RRCAIHlCf//B2ycxGH7jFkpnAh/kKPM=
 github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.22/go.mod h1:ES3ynECd7fYeJIL6+oax+uIEljmfps0S70BaQzbMd/o=
-github.com/aws/aws-sdk-go-v2/service/s3 v1.99.1 h1:kU/eBN5+MWNo/LcbNa4hWDdN76hdcd7hocU5kvu7IsU=
-github.com/aws/aws-sdk-go-v2/service/s3 v1.99.1/go.mod h1:Fw9aqhJicIVee1VytBBjH+l+5ov6/PhbtIK/u3rt/ls=
+github.com/aws/aws-sdk-go-v2/service/s3 v1.100.0 h1:7G26Sae6PMKn4kMcU5JzNfrm1YrKwyOhowXPYR2WiWY=
+github.com/aws/aws-sdk-go-v2/service/s3 v1.100.0/go.mod h1:Fw9aqhJicIVee1VytBBjH+l+5ov6/PhbtIK/u3rt/ls=
 github.com/aws/aws-sdk-go-v2/service/signin v1.0.10 h1:a1Fq/KXn75wSzoJaPQTgZO0wHGqE9mjFnylnqEPTchA=
 github.com/aws/aws-sdk-go-v2/service/signin v1.0.10/go.mod h1:p6+MXNxW7IA6dMgHfTAzljuwSKD0NCm/4lbS4t6+7vI=
 github.com/aws/aws-sdk-go-v2/service/sso v1.30.16 h1:x6bKbmDhsgSZwv6q19wY/u3rLk/3FGjJWyqKcIRufpE=
@@ -113,8 +113,8 @@ github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJ
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee h1:W5t00kpgFdJifH4BDsTlE89Zl93FEloxaWZfGcifgq8=
 github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
-github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260420183608-5939a84a5ae2 h1:ttf1nLpRdVK+fQE+jJjczdfyl1YLjyOI79PddHU3HOI=
-github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260420183608-5939a84a5ae2/go.mod h1:WPdgk1BinVdvYdkbt1KIkgDw6qUiK8CnGq+ftaJ41Ns=
+github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260422152846-dd95db7b8093 h1:NWkokqNTFElJQUa1VLnW/8RVL0JTGyNdGtfiRpUBBcs=
+github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260422152846-dd95db7b8093/go.mod h1:WPdgk1BinVdvYdkbt1KIkgDw6qUiK8CnGq+ftaJ41Ns=
 github.com/peterbourgon/ff/v3 v3.4.0 h1:QBvM/rizZM1cB0p0lGMdmR7HxZeI/ZrBWB4DqLkMUBc=
 github.com/peterbourgon/ff/v3 v3.4.0/go.mod h1:zjJVUhx+twciwfDl0zBcFzl4dW8axCRyXE/eKY9RztQ=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
