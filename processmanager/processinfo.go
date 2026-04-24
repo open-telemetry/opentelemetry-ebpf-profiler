@@ -152,6 +152,8 @@ func (pm *ProcessManager) fillSelfContainerID(pid libpf.PID, meta *process.Proce
 	}
 	if st.Ino == pm.selfCgroupIno {
 		meta.ContainerID = pm.selfContainerID
+	} else {
+		log.Debugf("Process %d cgroup inode (%d) doesn't match profiler (%d)", pid, st.Ino, pm.selfCgroupIno)
 	}
 }
 
