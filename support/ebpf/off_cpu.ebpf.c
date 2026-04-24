@@ -82,6 +82,7 @@ int finish_task_switch(struct pt_regs *ctx)
   // reported accidentally without the start timestamp updated in tracepoint/sched/sched_switch.
   bpf_map_delete_elem(&sched_times, &pid_tgid);
 
+  // diff stores the nanoseconds that the trace was off-cpu for.
   u64 diff = ts - *start_ts;
   DEBUG_PRINT("==== finish_task_switch ====");
 

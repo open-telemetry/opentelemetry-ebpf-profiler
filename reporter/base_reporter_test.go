@@ -112,7 +112,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 		TID:            2001,
 		CPU:            1,
 		Origin:         support.TraceOriginOffCPU,
-		OffTime:        5000000, // 5ms
+		Value:          5000000, // 5ms
 	}
 
 	err := reporter.ReportTraceEvent(trace1, meta1)

@@ -457,7 +457,7 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 					uint64(time.Unix(1030, 0).UnixNano()),
 					uint64(time.Unix(1040, 0).UnixNano()),
 				},
-				OffTimes: []int64{10, 20},
+				Values: []int64{10, 20},
 			},
 		},
 	}
