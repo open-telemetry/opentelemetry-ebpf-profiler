@@ -629,8 +629,9 @@ typedef struct Trace {
   // origin indicates the source of the trace.
   TraceOrigin origin;
 
-  // offtime stores the nanoseconds that the trace was off-cpu for.
-  u64 offtime;
+  // value stores context-specific data that was collected with the stack.
+  // e.g. time in nanoseconds for off-CPU traces
+  u64 value;
 
   // The frame data of the stack trace. Each frame is variable length.
   // Frame is currently 2-3 entries long. This array size limits the

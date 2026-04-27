@@ -177,7 +177,7 @@ func (p *Pdata) setProfile(
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
 		if origin == support.TraceOriginOffCPU {
-			sample.Values().Append(traceInfo.OffTimes...)
+			sample.Values().Append(traceInfo.Values...)
 		}
 
 		if sampleKey.SpanID != libpf.InvalidAPMSpanID &&

@@ -165,7 +165,7 @@ type Trace struct {
 	Num_frames         uint16
 	Num_kernel_frames  uint16
 	Origin             uint32
-	Offtime            uint64
+	Value              uint64
 	Frame_data         [3072]uint64
 }
 type UnwindInfo struct {

@@ -113,7 +113,7 @@ type EbpfTrace struct {
 	PID              PID
 	TID              PID
 	Origin           Origin
-	OffTime          int64 // Time a task was off-cpu in nanoseconds.
+	Value            int64
 	APMTraceID       APMTraceID
 	APMTransactionID APMTransactionID
 	CPU              int
