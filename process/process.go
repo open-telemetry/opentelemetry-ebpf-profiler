@@ -213,7 +213,10 @@ func DetectSelfContainerIDViaInode() (libpf.String, uint64, error) {
 	var matched libpf.String
 	err := filepath.WalkDir(hostCgroupRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil // skip inaccessible directories
+			if d == nil {
+				return err // root is inaccessible
+			}
+			return nil // skip inaccessible subdirectories
 		}
 		if !d.IsDir() {
 			return nil
