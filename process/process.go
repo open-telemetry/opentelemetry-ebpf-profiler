@@ -183,6 +183,16 @@ func extractContainerID(pid libpf.PID) (libpf.String, error) {
 	return parseContainerID(cgroupFile), nil
 }
 
+// CgroupRootInode returns the inode of /proc/<pid>/root/sys/fs/cgroup, which identifies
+// the cgroup namespace root visible to the given process, unaffected by namespace masking.
+func CgroupRootInode(pid libpf.PID) (uint64, error) {
+	var st unix.Stat_t
+	if err := unix.Stat(fmt.Sprintf("/proc/%d/root/sys/fs/cgroup", pid), &st); err != nil {
+		return 0, err
+	}
+	return st.Ino, nil
+}
+
 // DetectSelfContainerIDViaInode detects the current process's container ID by matching
 // cgroup directory inodes. When the process runs in a private cgroup namespace (cgroup v2),
 // /proc/self/cgroup returns a path relative to the namespace root (e.g. "0::/"), making it

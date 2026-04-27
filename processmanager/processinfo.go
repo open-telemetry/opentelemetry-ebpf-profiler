@@ -146,14 +146,14 @@ func (pm *ProcessManager) fillSelfContainerID(pid libpf.PID, meta *process.Proce
 	if meta.ContainerID != libpf.NullString || pm.selfContainerID == libpf.NullString {
 		return
 	}
-	var st unix.Stat_t
-	if err := unix.Stat(fmt.Sprintf("/proc/%d/root/sys/fs/cgroup", pid), &st); err != nil {
+	ino, err := process.CgroupRootInode(pid)
+	if err != nil {
 		return
 	}
-	if st.Ino == pm.selfCgroupIno {
+	if ino == pm.selfCgroupIno {
 		meta.ContainerID = pm.selfContainerID
 	} else {
-		log.Debugf("Process %d cgroup inode (%d) doesn't match profiler (%d)", pid, st.Ino, pm.selfCgroupIno)
+		log.Debugf("Process %d cgroup inode (%d) doesn't match profiler (%d)", pid, ino, pm.selfCgroupIno)
 	}
 }
 
