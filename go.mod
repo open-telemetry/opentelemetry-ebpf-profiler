@@ -21,13 +21,12 @@ require (
 	github.com/klauspost/compress v1.18.5
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
-	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260422152846-dd95db7b8093
+	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260427172309-47cc6a9c3929
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zeebo/xxh3 v1.1.0
 	go.opentelemetry.io/collector/component v1.56.0
 	go.opentelemetry.io/collector/component/componenttest v0.150.0
-	go.opentelemetry.io/collector/confmap v1.56.0
 	go.opentelemetry.io/collector/confmap/xconfmap v0.150.0
 	go.opentelemetry.io/collector/consumer/consumertest v0.150.0
 	go.opentelemetry.io/collector/consumer/xconsumer v0.150.0
@@ -40,7 +39,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.43.0
 	go.opentelemetry.io/proto/otlp v1.10.0
 	go.opentelemetry.io/proto/otlp/profiles/v1development v0.3.0
-	go.uber.org/goleak v1.3.0
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/arch v0.26.0
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f
@@ -90,6 +88,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
+	go.opentelemetry.io/collector/confmap v1.56.0 // indirect
 	go.opentelemetry.io/collector/consumer v1.56.0 // indirect
 	go.opentelemetry.io/collector/consumer/consumererror v0.150.0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.56.0 // indirect
