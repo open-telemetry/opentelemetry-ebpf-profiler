@@ -13,6 +13,7 @@ import (
 #include "./ebpf/types.h"
 #include "./ebpf/frametypes.h"
 #include "./ebpf/v8_tracer.h"
+#include "./ebpf/luajit.h"
 */
 import "C"
 
@@ -28,6 +29,7 @@ const (
 	FrameMarkerPerl    = C.FRAME_MARKER_PERL
 	FrameMarkerV8      = C.FRAME_MARKER_V8
 	FrameMarkerDotnet  = C.FRAME_MARKER_DOTNET
+	FrameMarkerLuaJIT  = C.FRAME_MARKER_LUAJIT
 	FrameMarkerBEAM    = C.FRAME_MARKER_BEAM
 	FrameMarkerGo      = C.FRAME_MARKER_GO
 )
@@ -51,6 +53,7 @@ const (
 	ProgUnwindDotnet10 = C.PROG_UNWIND_DOTNET10
 	ProgGoLabels       = C.PROG_GO_LABELS
 	ProgUnwindBEAM     = C.PROG_UNWIND_BEAM
+	ProgUnwindLuaJIT   = C.PROG_UNWIND_LUAJIT
 )
 
 const (
@@ -130,6 +133,7 @@ type PerlProcInfo C.PerlProcInfo
 type PyProcInfo C.PyProcInfo
 type RubyProcInfo C.RubyProcInfo
 type V8ProcInfo C.V8ProcInfo
+type LuaJITProcInfo C.LuaJITProcInfo
 
 const (
 	Sizeof_StackDelta = C.sizeof_StackDelta
@@ -205,6 +209,15 @@ const (
 	RubyFrameTypeCmeCfunc = C.RUBY_FRAME_TYPE_CME_CFUNC
 	RubyFrameTypeIseq     = C.RUBY_FRAME_TYPE_ISEQ
 	RubyFrameTypeGc       = C.RUBY_FRAME_TYPE_GC
+)
+
+const (
+	LJFFIFunc        = C.LUAJIT_FFI_FUNC
+	LJFileId         = C.LUAJIT_JIT_FILE_ID
+	LJNormalFrame    = C.LUAJIT_NORMAL_FRAME
+	LJGReport        = C.LUAJIT_G_REPORT
+	LJCframeSpaceX86 = C.LUAJIT_CFRAME_SPACE_X86_64
+	LJCframeSpaceArm = C.LUAJIT_CFRAME_SPACE_AARCH64
 )
 
 var MetricsTranslation = []metrics.MetricID{
@@ -303,4 +316,6 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindRubyErrReadRbasicFlags:               metrics.IDUnwindRubyErrReadRbasicFlags,
 	C.metricID_UnwindRubyErrCmeMaxEp:                      metrics.IDUnwindRubyErrCmeMaxEp,
 	C.metricID_UnwindErrBadDTVRead:                        metrics.IDUnwindErrBadDTVRead,
+	C.metricID_UnwindLuaJITAttempts:                       metrics.IDUnwindLuaJITAttempts,
+	C.metricID_UnwindLuaJITErrNoProcInfo:                  metrics.IDUnwindLuaJITErrNoProcInfo,
 }

@@ -9,6 +9,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -19,13 +20,17 @@ type LoaderInfo struct {
 	fileID host.FileID
 	// elfRef provides a cached access to the ELF file.
 	elfRef *pfelf.Reference
+	// deltas contains the stack deltas for the executable.
+	deltas sdtypes.StackDeltaArray
 }
 
 // NewLoaderInfo returns a populated LoaderInfo struct.
-func NewLoaderInfo(fileID host.FileID, elfRef *pfelf.Reference) *LoaderInfo {
+func NewLoaderInfo(fileID host.FileID, elfRef *pfelf.Reference,
+	deltas sdtypes.StackDeltaArray) *LoaderInfo {
 	return &LoaderInfo{
 		fileID: fileID,
 		elfRef: elfRef,
+		deltas: deltas,
 	}
 }
 
@@ -59,4 +64,9 @@ func (i *LoaderInfo) FileID() host.FileID {
 // FileName returns the fileName  element of the LoaderInfo struct.
 func (i *LoaderInfo) FileName() string {
 	return i.elfRef.FileName()
+}
+
+// Deltas returns the stack deltas for the executable of this LoaderInfo.
+func (i *LoaderInfo) Deltas() sdtypes.StackDeltaArray {
+	return i.deltas
 }

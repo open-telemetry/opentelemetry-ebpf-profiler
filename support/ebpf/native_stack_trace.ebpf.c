@@ -457,6 +457,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
       state->fp  = rt_regs[29];
       state->lr  = normalize_pac_ptr(rt_regs[30]);
       state->r20 = rt_regs[20];
+      state->r7  = rt_regs[7];
       state->r22 = rt_regs[22];
       state->r28 = rt_regs[28];
 
@@ -493,7 +494,8 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
 
   // Resolve the frame CFA (previous PC is fixed to CFA) address
   state->cfa = unwind_calc_register(state, info->baseReg, param);
-
+  DEBUG_PRINT("prev cfa: %llx", state->cfa);
+  
   // Resolve Return Address, it is either the value of link register or
   // stack address where RA is stored
   u64 ra = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
@@ -517,7 +519,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
       return ERR_NATIVE_LR_UNWINDING_MID_TRACE;
     }
   } else {
-    DEBUG_PRINT("RA: %016llX", (u64)ra);
+    DEBUG_PRINT("RA: *(%016llX)", (u64)ra);
 
     // read the value of RA from stack
     int err;
@@ -536,6 +538,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
   }
   state->pc = normalize_pac_ptr(ra);
   state->sp = state->cfa;
+  DEBUG_PRINT("fp, ra, sp: %llx, %llx, %llx", state->fp, ra, state->sp);
   unwinder_mark_nonleaf_frame(state);
 frame_ok:
   increment_metric(metricID_UnwindNativeFrames);

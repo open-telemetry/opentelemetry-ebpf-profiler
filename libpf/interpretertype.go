@@ -31,6 +31,8 @@ const (
 	V8 InterpreterType = support.FrameMarkerV8
 	// Dotnet identifies the Dotnet interpreter.
 	Dotnet InterpreterType = support.FrameMarkerDotnet
+	// LuaJIT identifies the LuaJIT interpreter.
+	LuaJIT InterpreterType = support.FrameMarkerLuaJIT
 	// Go identifies Go code.
 	Go InterpreterType = support.FrameMarkerGo
 	// BEAM identifies the BEAM interpreter.
@@ -73,6 +75,7 @@ var interpreterTypeToString = map[InterpreterType]string{
 	Dotnet:   "dotnet",
 	BEAM:     "beam",
 	APMInt:   "apm-integration",
+	LuaJIT:   "luajit",
 	Go:       "go",
 	GoLabels: "go-labels",
 }

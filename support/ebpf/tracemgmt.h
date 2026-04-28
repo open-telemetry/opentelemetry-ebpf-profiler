@@ -238,6 +238,11 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->rubyUnwindState.stack_ptr         = 0;
   record->rubyUnwindState.last_stack_frame  = 0;
   record->rubyUnwindState.cfunc_saved_frame = 0;
+  record->luajitUnwindState.frame           = 0;
+  record->luajitUnwindState.prevframe       = 0;
+  record->luajitUnwindState.L_ptr           = 0;
+  record->luajitUnwindState.cframe          = 0;
+  record->luajitUnwindState.is_jit          = false;
   record->unwindersDone                     = 0;
   record->tailCalls                         = 0;
   record->ratelimitAction                   = RATELIMIT_ACTION_DEFAULT;
@@ -330,6 +335,7 @@ static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u
 static inline EBPF_INLINE u64 *push_frame(
   UnwindState *state, Trace *trace, u8 frame_type, u8 frame_flags, u64 frame_data, u8 frame_varlen)
 {
+  DEBUG_PRINT("push_frame type: %d flags: %x data: %llx", frame_type, frame_flags, frame_data);
   const int max_frame_size   = sizeof trace->frame_data / sizeof trace->frame_data[0];
   const int error_frame_size = 1;
 
@@ -613,6 +619,7 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   state->r9  = regs->r9;
   state->r11 = regs->r11;
   state->r13 = regs->r13;
+  state->r14 = regs->r14;
   state->r15 = regs->r15;
 
   // Treat syscalls as return addresses, but not IRQ handling, page faults, etc..
@@ -630,6 +637,7 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   state->fp  = regs->regs[29];
   state->lr  = normalize_pac_ptr(regs->regs[30]);
   state->r20 = regs->regs[20];
+  state->r7  = regs->regs[7];
   state->r22 = regs->regs[22];
   state->r28 = regs->regs[28];
 
