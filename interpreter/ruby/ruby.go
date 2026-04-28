@@ -381,7 +381,6 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 		procInfo:          &cdata,
 		globalSymbolsAddr: r.globalSymbolsAddr + bias,
 		addrToString:      addrToString,
-		mappings:          make(map[process.RawMapping]uint32),
 		prefixes:          make(map[lpm.Prefix]uint32),
 		memPool: sync.Pool{
 			New: func() any {
@@ -446,12 +445,9 @@ type rubyInstance struct {
 	// in getRubyLineNo.
 	maxSize atomic.Uint32
 
-	// mappings is indexed by the Mapping to its generation.
-	// Entries are pruned each SynchronizeMappings call; the map size is bounded
-	// by the number of executable anonymous mappings for this process (typically
-	// a handful for JIT code pages plus any native gems with anonymous exec pages).
-	mappings map[process.RawMapping]uint32
-	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation
+	// prefixes is indexed by the prefix added to ebpf maps (to be cleaned up) to its generation.
+	// Entries are pruned each SynchronizeMappings call; the map size is bounded by the LPM
+	// representation of the single Ruby JIT region (typically only a handful of prefixes).
 	prefixes map[lpm.Prefix]uint32
 	// mappingGeneration is the current generation (so old entries can be pruned)
 	mappingGeneration uint32
@@ -1287,15 +1283,15 @@ func profileFrameFullLabel(classPath, label, baseLabel, methodName libpf.String,
 // with PROT_NONE and then mprotects individual 16k codepages to r-x as needed.
 // On systems with CONFIG_ANON_VMA_NAME, Ruby labels the region via prctl(PR_SET_VMA)
 // giving it a path like "[anon:Ruby:rb_yjit_reserve_addr_space]".
-// On systems without that config, we fall back to a heuristic: the first anonymous
-// executable mapping (by address) is assumed to be the JIT region since YJIT
-// initializes before any gems could create anonymous executable mappings.
+// On systems without that config, we fall back to a heuristic: the contiguous
+// anonymous region starting at the first anonymous executable mapping is assumed
+// to be the JIT reservation. /proc/pid/maps is sorted by address, and YJIT keeps
+// the first code page executable, so this includes later r-x code pages and
+// PROT_NONE gaps without needing to know Ruby's version-specific reservation size.
 // Returns (start, end, found).
 func findJITRegion(mappings []process.RawMapping) (uint64, uint64, bool) {
 	var jitStart, jitEnd uint64
 	labelFound := false
-	var heuristicStart, heuristicEnd uint64
-	heuristicFound := false
 
 	for idx := range mappings {
 		m := &mappings[idx]
@@ -1310,25 +1306,31 @@ func findJITRegion(mappings []process.RawMapping) (uint64, uint64, bool) {
 				jitEnd = m.Vaddr + m.Length
 			}
 			labelFound = true
-			continue
-		}
-
-		// Heuristic fallback: first anonymous executable mapping by address.
-		// Mappings from /proc/pid/maps are sorted by address, so the first
-		// match is the lowest address.
-		if !heuristicFound && m.IsExecutable() && m.IsAnonymous() {
-			heuristicStart = m.Vaddr
-			heuristicEnd = m.Vaddr + m.Length
-			heuristicFound = true
 		}
 	}
-
 	if labelFound {
 		return jitStart, jitEnd, true
 	}
-	if heuristicFound {
-		return heuristicStart, heuristicEnd, true
+
+	for idx := range mappings {
+		m := &mappings[idx]
+		if !m.IsExecutable() || !m.IsAnonymous() {
+			continue
+		}
+
+		jitStart = m.Vaddr
+		jitEnd = m.Vaddr + m.Length
+		for nextIdx := idx + 1; nextIdx < len(mappings); nextIdx++ {
+			nextMapping := &mappings[nextIdx]
+			if !nextMapping.IsAnonymous() || nextMapping.Vaddr != jitEnd ||
+				(!nextMapping.IsExecutable() && nextMapping.Flags != 0) {
+				break
+			}
+			jitEnd = nextMapping.Vaddr + nextMapping.Length
+		}
+		return jitStart, jitEnd, true
 	}
+
 	return 0, 0, false
 }
 
@@ -1339,27 +1341,18 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 
 	log.Debugf("Synchronizing ruby mappings")
 
-	// Register LPM prefixes for executable anonymous mappings.
-	for idx := range mappings {
-		m := &mappings[idx]
-		if !m.IsExecutable() || !m.IsAnonymous() {
-			continue
-		}
-
-		isNew := false
-		if _, exists := r.mappings[*m]; !exists {
-			isNew = true
-			log.Debugf("Enabling Ruby interpreter for %#x/%#x", m.Vaddr, m.Length)
-		}
-		r.mappings[*m] = r.mappingGeneration
-
-		prefixes, err := lpm.CalculatePrefixList(m.Vaddr, m.Vaddr+m.Length)
+	// Detect the JIT region once and register interpreter prefixes for the whole
+	// reservation. PROT_NONE gaps are safe to include because they cannot execute,
+	// and covering the full range avoids churn as YJIT mprotects new code pages.
+	jitStart, jitEnd, jitFound := findJITRegion(mappings)
+	if jitFound {
+		prefixes, err := lpm.CalculatePrefixList(jitStart, jitEnd)
 		if err != nil {
-			return fmt.Errorf("new anonymous mapping lpm failure %#x/%#x: %w", m.Vaddr, m.Length, err)
+			return fmt.Errorf("ruby jit region lpm failure %#x-%#x: %w", jitStart, jitEnd, err)
 		}
 
 		for _, prefix := range prefixes {
-			if isNew {
+			if _, exists := r.prefixes[prefix]; !exists {
 				if err := ebpf.UpdatePidInterpreterMapping(pid, prefix,
 					support.ProgUnwindRuby, 0, 0); err != nil {
 					return err
@@ -1367,10 +1360,12 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			}
 			r.prefixes[prefix] = r.mappingGeneration
 		}
+	} else {
+		jitStart = 0
+		jitEnd = 0
 	}
-	// Detect JIT region from all mappings and update proc data if changed.
-	jitStart, jitEnd, jitFound := findJITRegion(mappings)
-	if jitFound && (r.procInfo.Jit_start != jitStart || r.procInfo.Jit_end != jitEnd) {
+
+	if r.procInfo.Jit_start != jitStart || r.procInfo.Jit_end != jitEnd {
 		r.procInfo.Jit_start = jitStart
 		r.procInfo.Jit_end = jitEnd
 		if err := ebpf.UpdateProcData(libpf.Ruby, pr.PID(), unsafe.Pointer(r.procInfo)); err != nil {
@@ -1378,7 +1373,8 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		}
 		log.Debugf("Updated JIT region %#x-%#x in ruby proc info", jitStart, jitEnd)
 	}
-	// Remove prefixes not seen
+
+	// Remove prefixes not seen.
 	for prefix, gen := range r.prefixes {
 		if gen == r.mappingGeneration {
 			continue
@@ -1387,13 +1383,6 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			log.Debugf("Failed to delete Ruby prefix %#v: %v", prefix, err)
 		}
 		delete(r.prefixes, prefix)
-	}
-	for m, gen := range r.mappings {
-		if gen == r.mappingGeneration {
-			continue
-		}
-		log.Debugf("Disabling Ruby for %#x/%#x", m.Vaddr, m.Length)
-		delete(r.mappings, m)
 	}
 
 	return nil

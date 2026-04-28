@@ -246,11 +246,19 @@ func TestFindJITRegion(t *testing.T) {
 			Path:   "",
 		}
 	}
-	labeled := func(vaddr, length uint64) process.RawMapping {
+	anon := func(vaddr, length uint64) process.RawMapping {
 		return process.RawMapping{
 			Vaddr:  vaddr,
 			Length: length,
 			Flags:  0, // ---p (PROT_NONE)
+			Path:   "",
+		}
+	}
+	labeled := func(vaddr, length uint64, flags elf.ProgFlag) process.RawMapping {
+		return process.RawMapping{
+			Vaddr:  vaddr,
+			Length: length,
+			Flags:  flags,
 			Path:   "[anon:Ruby:rb_yjit_reserve_addr_space]",
 		}
 	}
@@ -287,41 +295,38 @@ func TestFindJITRegion(t *testing.T) {
 			name: "labeled JIT region (single mapping)",
 			mappings: []process.RawMapping{
 				fileBacked(0x400000, 0x1000, "/usr/bin/ruby"),
-				labeled(0x7f17d99b9000, 0x8000000),
+				labeled(0x7f17d99b9000, 0x8000000, 0),
 			},
 			wantStart: 0x7f17d99b9000,
 			wantEnd:   0x7f17d99b9000 + 0x8000000,
 			wantFound: true,
 		},
 		{
-			name: "labeled JIT region with holes (multiple contiguous mappings)",
+			name: "labeled JIT region with split mappings and holes",
 			mappings: []process.RawMapping{
 				fileBacked(0x400000, 0x1000, "/usr/bin/ruby"),
-				{
-					Vaddr:  0x7f17d99b9000,
-					Length: 0x15f000,
-					Flags:  elf.PF_R | elf.PF_X,
-					Path:   "[anon:Ruby:rb_yjit_reserve_addr_space]",
-				},
-				{
-					Vaddr:  0x7f17d9b18000,
-					Length: 0x119000,
-					Flags:  elf.PF_R | elf.PF_X,
-					Path:   "[anon:Ruby:rb_yjit_reserve_addr_space]",
-				},
-				{
-					Vaddr:  0x7f17d9c31000,
-					Length: 0x7d88000,
-					Flags:  0, // ---p reserved
-					Path:   "[anon:Ruby:rb_yjit_reserve_addr_space]",
-				},
+				labeled(0x7f17d99b9000, 0x15f000, elf.PF_R|elf.PF_X),
+				labeled(0x7f17d9b18000, 0x119000, elf.PF_R|elf.PF_X),
+				labeled(0x7f17d9c31000, 0x7d88000, 0),
 			},
 			wantStart: 0x7f17d99b9000,
 			wantEnd:   0x7f17d9c31000 + 0x7d88000,
 			wantFound: true,
 		},
 		{
-			name: "heuristic fallback - first anonymous executable mapping",
+			name: "heuristic fallback includes contiguous anonymous reservation",
+			mappings: []process.RawMapping{
+				fileBacked(0x400000, 0x1000, "/usr/bin/ruby"),
+				execAnon(0x7f17d99b9000, 0x15f000),
+				execAnon(0x7f17d9b18000, 0x119000),
+				anon(0x7f17d9c31000, 0x7d88000),
+			},
+			wantStart: 0x7f17d99b9000,
+			wantEnd:   0x7f17d9c31000 + 0x7d88000,
+			wantFound: true,
+		},
+		{
+			name: "heuristic fallback stops at gap before another anonymous executable mapping",
 			mappings: []process.RawMapping{
 				fileBacked(0x400000, 0x1000, "/usr/bin/ruby"),
 				execAnon(0x7f0000100000, 0x4000),
@@ -335,7 +340,7 @@ func TestFindJITRegion(t *testing.T) {
 			name: "labeled takes precedence over heuristic",
 			mappings: []process.RawMapping{
 				execAnon(0x1000000, 0x4000),
-				labeled(0x7f0000000000, 0x3000000),
+				labeled(0x7f0000000000, 0x3000000, 0),
 			},
 			wantStart: 0x7f0000000000,
 			wantEnd:   0x7f0000000000 + 0x3000000,
