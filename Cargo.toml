@@ -63,7 +63,7 @@ default-features = false
 features = ["std"]
 
 [workspace.dependencies.lru]
-version = "0.17.0"
+version = "0.18.0"
 default-features = false
 
 [workspace.dependencies.object]
