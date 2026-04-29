@@ -21,6 +21,10 @@ type TraceEventMeta struct {
 	PID, TID       libpf.PID
 	SpanID         libpf.APMSpanID
 	TraceID        libpf.APMTraceID
+
+	// OriginData carries optional Origin-specific payload through the Reporter
+	// interface without requiring origin-specific fields on this struct.
+	OriginData any
 }
 
 // TraceEvents holds known information about a trace.
