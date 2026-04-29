@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-//go:generate go tool -modfile=../tools.mod mdatagen metadata.yaml
+//go:generate go tool -modfile=../internal/tools/go.mod mdatagen metadata.yaml
 
 package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 
@@ -39,6 +39,7 @@ func defaultConfig() component.Config {
 		ClockSyncInterval:      3 * time.Minute,
 		MaxGRPCRetries:         5,
 		MaxRPCMsgSize:          32 << 20, // 32 MiB,
+		BPFFSRoot:              "/sys/fs/bpf/",
 		ErrorMode:              config.PropagateError,
 	}
 }

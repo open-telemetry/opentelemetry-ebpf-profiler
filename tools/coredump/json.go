@@ -21,6 +21,11 @@ type CoredumpTestCase struct {
 	Skip        string         `json:"skip,omitempty"`
 	Threads     []ThreadInfo   `json:"threads"`
 	Modules     []ModuleInfo   `json:"modules"`
+	// FaultAddresses is an optional list of user-space addresses (hex strings,
+	// e.g. "0x7f1234567000") at which the test harness should make
+	// bpf_probe_read_user_with_test_fault return -1, simulating a BPF read
+	// failure. Used to exercise recovery paths.
+	FaultAddresses []string `json:"fault-addresses,omitempty"`
 }
 
 // ModuleInfo stores information about a module that was loaded when the coredump was created.

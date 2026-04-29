@@ -16,4 +16,6 @@ go list -m -u all | grep 'go\.opentelemetry\.io/collector' | while read -r line;
   LOCAL_PATH="$COLLECTOR_PATH/$REL_PATH"
   echo "Replacing $MODULE => $LOCAL_PATH"
   go mod edit -replace="$MODULE=$LOCAL_PATH"
+  # Also add replace directive to internal/tools/go.mod
+  go mod edit -modfile=internal/tools/go.mod -replace="$MODULE=$LOCAL_PATH"
 done

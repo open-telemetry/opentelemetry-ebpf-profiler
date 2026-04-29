@@ -118,6 +118,15 @@ struct trace_events_t {
 
 // End shared maps
 
+// Implements the specification to share span/trace IDs according to:
+// https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
+struct traces_ctx_v1_t {
+  __uint(type, BPF_MAP_TYPE_LRU_HASH);
+  __type(key, u64);
+  __type(value, SpanTraceInfo);
+  __uint(max_entries, 1 << 14);
+} traces_ctx_v1 SEC(".maps");
+
 struct apm_int_procs_t {
   __uint(type, BPF_MAP_TYPE_HASH);
   __type(key, pid_t);
@@ -188,6 +197,26 @@ static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURe
   tail_call(ctx, PROG_GO_LABELS);
 }
 
+// Implements the specification to share span/trace IDs according to:
+// https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
+static EBPF_INLINE void maybe_add_otel_span_trace_id(Trace *trace)
+{
+  u64 id = bpf_get_current_pid_tgid();
+
+  SpanTraceInfo *info = bpf_map_lookup_elem(&traces_ctx_v1, &id);
+  if (!info) {
+    return;
+  }
+
+  // The structure of apm_[transaction|trace]_id happens to be the same
+  // as proposed in
+  // https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/blob/main/devdocs/trace-profile-correlation.md
+
+  trace->apm_trace_id.as_int.hi    = info->trace_id.as_int.hi;
+  trace->apm_trace_id.as_int.lo    = info->trace_id.as_int.lo;
+  trace->apm_transaction_id.as_int = info->span_id.as_int;
+}
+
 static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 {
   u32 pid              = trace->pid; // verifier needs this to be on stack on 4.15 kernel
@@ -247,6 +276,12 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   UnwindState *state = &record->state;
 
   maybe_add_apm_info(trace);
+  if (
+    trace->apm_trace_id.as_int.hi == 0 && trace->apm_trace_id.as_int.lo == 0 &&
+    trace->apm_transaction_id.as_int == 0) {
+    // Populate OTel span/trace ID only if span/trace ID is not yet set.
+    maybe_add_otel_span_trace_id(trace);
+  }
 
   // If the stack is otherwise empty, push an error for that: we should
   // never encounter empty stacks for successful unwinding.

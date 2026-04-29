@@ -206,16 +206,10 @@ of these limitations are significantly relaxed in newer kernel versions, but we
 still have to stick to the old limits because we wish to continue supporting
 older kernels.
 
-The minimum supported Linux kernel versions are
-- 5.4 for amd64/x86_64
-- 5.5 for arm64/aarch64
+The minimum supported Linux kernel versions is 5.10 for amd64/x86_64 and arm64/aarch64.
 
 The most notable limitations are the following two:
 
-- **4096 instructions per program**\
-  A single BPF program can consist of a maximum of 4096 instructions, otherwise
-  older kernels will refuse to load it. Since BPF does not allow for loops, they
-  instead need to be unrolled.
 - **32 tail-calls**\
   Linux allows BPF programs to do a tail-call to another BPF program. A tail
   call is essentially a `jmp` into another BPF program, ending execution of the

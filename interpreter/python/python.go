@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path"
 	"reflect"
 	"regexp"
 	"slices"
@@ -46,6 +47,23 @@ var (
 // pythonVer builds a version number from readable numbers
 func pythonVer(major, minor uint16) uint16 {
 	return major*0x100 + minor
+}
+
+func readPyVersionHex(ef *pfelf.File) (major uint8, minor uint8, err error) {
+	// Py_Version is referenced in CPython internals for versioned Python binaries.
+	// https://github.com/python/cpython/blob/v3.11.0/Doc/c-api/apiabiversion.rst
+	addr, err := ef.LookupSymbolAddress("Py_Version")
+	if err != nil {
+		return 0, 0, err
+	}
+	rm := ef.GetRemoteMemory()
+	versionHex := rm.Uint32(libpf.Address(addr))
+	major = uint8((versionHex >> 24) & 0xff)
+	minor = uint8((versionHex >> 16) & 0xff)
+	if major == 0 {
+		return 0, 0, fmt.Errorf("invalid Py_Version 0x%x", versionHex)
+	}
+	return major, minor, nil
 }
 
 //nolint:lll
@@ -483,10 +501,13 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 	if addr == 0 {
 		return nil, errors.New("failed to read code object: null pointer")
 	}
-	if value, ok := p.addrToCodeObject.Get(addr); ok {
-		m := value
-		if m.ebpfChecksum == ebpfChecksum {
-			return m, nil
+	if ebpfChecksum != 0 {
+		// A zero checksum indicates code object read failed in the kernel (e.g. paged out).
+		if value, ok := p.addrToCodeObject.Get(addr); ok {
+			m := value
+			if m.ebpfChecksum == ebpfChecksum {
+				return m, nil
+			}
 		}
 	}
 
@@ -541,7 +562,7 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 
 	ebpfChecksumCalculated := (argCount << 25) + (kwonlyArgCount << 18) +
 		(flags << 10) + firstLineNo
-	if ebpfChecksum != ebpfChecksumCalculated {
+	if ebpfChecksum != 0 && ebpfChecksum != ebpfChecksumCalculated {
 		return nil, fmt.Errorf("read code object was stale: %x != %x",
 			ebpfChecksum, ebpfChecksumCalculated)
 	}
@@ -562,7 +583,7 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 		sourceFileName: libpf.Intern(sourceFileName),
 		firstLineNo:    firstLineNo,
 		lineTable:      lineTable,
-		ebpfChecksum:   ebpfChecksum,
+		ebpfChecksum:   ebpfChecksumCalculated,
 	}
 	p.addrToCodeObject.Add(addr, pco)
 	return pco, nil
@@ -721,18 +742,35 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 
 func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	mainDSO := false
+	major := uint16(0)
+	minor := uint16(0)
 	matches := libpythonRegex.FindStringSubmatch(info.FileName())
 	if matches == nil {
 		mainDSO = true
 		matches = pythonRegex.FindStringSubmatch(info.FileName())
-		if matches == nil {
+	}
+	if matches == nil {
+		if !strings.HasPrefix(path.Base(info.FileName()), "python") {
 			return nil, nil
 		}
+	} else {
+		majorValue, _ := strconv.ParseUint(matches[1], 10, 16)
+		minorValue, _ := strconv.ParseUint(matches[2], 10, 16)
+		major = uint16(majorValue)
+		minor = uint16(minorValue)
 	}
 
 	ef, err := info.GetELF()
 	if err != nil {
 		return nil, err
+	}
+	if major == 0 {
+		majorFromSym, minorFromSym, versionErr := readPyVersionHex(ef)
+		if versionErr != nil {
+			return nil, nil
+		}
+		major = uint16(majorFromSym)
+		minor = uint16(minorFromSym)
 	}
 
 	if mainDSO {
@@ -749,9 +787,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	var pyruntimeAddr, autoTLSKey libpf.SymbolValue
-	major, _ := strconv.ParseUint(matches[1], 10, 16)
-	minor, _ := strconv.ParseUint(matches[2], 10, 16)
-	version := pythonVer(uint16(major), uint16(minor))
+	version := pythonVer(major, minor)
 
 	minVer := pythonVer(3, 6)
 	maxVer := pythonVer(3, 14)

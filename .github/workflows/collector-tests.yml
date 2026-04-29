@@ -8,6 +8,7 @@ on:
     branches: ["**"]
     paths:
       - cmd/otelcol-ebpf-profiler/manifest.yaml
+      - .github/workflows/collector-tests.yml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref_name }}
@@ -30,7 +31,7 @@ jobs:
         with:
           go-version: stable
       - name: Cache coredump modules
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: tools/coredump/modulecache
           key: coredumps-collector-${{ hashFiles('tools/coredump/testdata/*/*.json') }}
@@ -44,7 +45,16 @@ jobs:
       - name: Setup replace statement
         run: |
           COLLECTOR_PATH=/tmp/opentelemetry-collector ./support/local-collector.sh
+          # Add replace directives to internal/tools for genproto and ebpf-profiler
+          go mod edit -modfile=internal/tools/go.mod -replace='google.golang.org/genproto@v0.0.0-20220519153652-3a47de7e79bd=google.golang.org/genproto@v0.0.0-20260226221140-a57be14db171'
+          go mod edit -modfile=internal/tools/go.mod -replace='google.golang.org/genproto/googleapis/rpc@v0.0.0-20220519153652-3a47de7e79bd=google.golang.org/genproto/googleapis/rpc@v0.0.0-20260226221140-a57be14db171'
+          go mod edit -modfile=internal/tools/go.mod -replace="go.opentelemetry.io/ebpf-profiler=$(pwd)"
           go mod tidy
+          go mod tidy -modfile=internal/tools/go.mod
+          # Manual run of go generate and go mod tidy to have a clean start for make test-junit
+          go generate ./...
+          go mod tidy
+          go mod tidy -modfile=internal/tools/go.mod
       - name: Tests
         run: make test-junit
       - name: Generate Issue

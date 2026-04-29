@@ -321,14 +321,14 @@ unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool 
 // is marked with UNWIND_COMMAND_STOP which marks entry points (main function,
 // thread spawn function, signal handlers, ...).
 #if defined(__x86_64__)
-static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
 {
   *stop = false;
 
-  u32 unwindInfo = 0;
-  u64 rt_regs[18];
-  int addrDiff = 0;
-  u64 cfa      = 0;
+  UnwindState *state = &record->state;
+  u32 unwindInfo     = 0;
+  int addrDiff       = 0;
+  u64 cfa            = 0;
 
   // The relevant executable is compiled with frame pointer omission, so
   // stack deltas need to be retrieved from the relevant map.
@@ -347,12 +347,15 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       cfa = state->sp + 8 + ((((state->pc & 15) >= 11) ? 1 : 0) << 3);
       DEBUG_PRINT("PLT, cfa=0x%lx", (unsigned long)cfa);
       break;
-    case UNWIND_COMMAND_SIGNAL:
+    case UNWIND_COMMAND_SIGNAL: {
+      // Use the PerCPURecord scratch union instead of a stack-local buffer to avoid
+      // exceeding the 512-byte BPF stack limit when inlined into interpreters.
+      u64 *rt_regs = record->rt_regs;
       // The rt_sigframe is defined at:
       // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/asm/sigframe.h?h=v6.4#n59
       // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/x86/include/uapi/asm/sigcontext.h?h=v6.4#n238
       // offsetof(struct rt_sigframe, uc.uc_mcontext) = 40
-      if (bpf_probe_read_user(&rt_regs, sizeof(rt_regs), (void *)(state->sp + 40))) {
+      if (bpf_probe_read_user(rt_regs, sizeof(record->rt_regs), (void *)(state->sp + 40))) {
         goto err_native_pc_read;
       }
       state->rax = rt_regs[13];
@@ -367,6 +370,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(UnwindState *state, bool *stop)
       state->return_address = false;
       DEBUG_PRINT("signal frame");
       goto frame_ok;
+    }
     case UNWIND_COMMAND_STOP: *stop = true; return ERR_OK;
     case UNWIND_COMMAND_FRAME_POINTER:
       if (!unwinder_unwind_frame_pointer(state)) {
@@ -417,13 +421,13 @@ frame_ok:
   return ERR_OK;
 }
 #elif defined(__aarch64__)
-static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *stop)
+static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
 {
   *stop = false;
 
-  u32 unwindInfo = 0;
-  int addrDiff   = 0;
-  u64 rt_regs[34];
+  UnwindState *state = &record->state;
+  u32 unwindInfo     = 0;
+  int addrDiff       = 0;
 
   // The relevant executable is compiled with frame pointer omission, so
   // stack deltas need to be retrieved from the relevant map.
@@ -434,7 +438,10 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
 
   if (unwindInfo & STACK_DELTA_COMMAND_FLAG) {
     switch (unwindInfo & ~STACK_DELTA_COMMAND_FLAG) {
-    case UNWIND_COMMAND_SIGNAL:
+    case UNWIND_COMMAND_SIGNAL: {
+      // Use the PerCPURecord scratch union instead of a stack-local buffer to avoid
+      // exceeding the 512-byte BPF stack limit when inlined into interpreters.
+      u64 *rt_regs = record->rt_regs;
       // On aarch64 the struct rt_sigframe is at:
       // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/arm64/kernel/signal.c?h=v6.4#n39
       // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/arch/arm64/include/uapi/asm/sigcontext.h?h=v6.4#n28
@@ -442,7 +449,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
       //   offsetof(struct rt_sigframe, uc)       128 +
       //   offsetof(struct ucontext, uc_mcontext) 176 +
       //   offsetof(struct sigcontext, regs[0])   8
-      if (bpf_probe_read_user(&rt_regs, sizeof(rt_regs), (void *)(state->sp + 312))) {
+      if (bpf_probe_read_user(rt_regs, sizeof(record->rt_regs), (void *)(state->sp + 312))) {
         goto err_native_pc_read;
       }
       state->pc  = normalize_pac_ptr(rt_regs[32]);
@@ -457,6 +464,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(struct UnwindState *state, bool *s
       state->lr_invalid     = false;
       DEBUG_PRINT("signal frame");
       goto frame_ok;
+    }
     case UNWIND_COMMAND_STOP: *stop = true; return ERR_OK;
     case UNWIND_COMMAND_FRAME_POINTER:
       if (!unwinder_unwind_frame_pointer(state)) {
@@ -573,7 +581,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
 
     // Unwind the native frame using stack deltas. Stop if no next frame.
     bool stop;
-    error = unwind_one_frame(&record->state, &stop);
+    error = unwind_one_frame(record, &stop);
     if (error || stop) {
       break;
     }

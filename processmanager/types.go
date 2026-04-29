@@ -113,6 +113,16 @@ type ProcessManager struct {
 
 	// includeEnvVars holds a list of env vars that should be captured from processes
 	includeEnvVars libpf.Set[string]
+
+	// selfCgroupIno is the inode of the profiler's cgroup directory
+	// (stat("/sys/fs/cgroup")). Used to identify processes whose cgroup root
+	// matches the profiler's, which need the selfContainerID fallback.
+	selfCgroupIno uint64
+
+	// selfContainerID is the profiler's own container ID, detected once at startup.
+	// Used as a fallback when /proc/<pid>/cgroup yields no container ID for processes
+	// that share the profiler's cgroup directory (e.g., private cgroup namespace).
+	selfContainerID libpf.String
 }
 
 // Mapping represents an executable memory mapping of a process.

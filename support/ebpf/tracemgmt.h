@@ -65,8 +65,16 @@ static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event
   // To avoid redundant notifications while userspace processing for them is already taking
   // place, we allow latch-like inhibition, where eBPF sets it and Go has to manually reset
   // it, before new notifications are triggered.
-  if (bpf_map_update_elem(&inhibit_events, &inhibit_key, &inhibit_value, BPF_NOEXIST) < 0) {
+  //
+  // Check the latch with a lock-free lookup first to avoid taking the hash bucket lock
+  // on every call. The lock is only taken on the first insert after Go resets the latch.
+  // There is a TOCTOU race window here which shouldn't affect correctness for PID events:
+  // Userspace will periodically drain the PID events map regardless of notification.
+  if (bpf_map_lookup_elem(&inhibit_events, &inhibit_key)) {
     DEBUG_PRINT("Event type %d inhibited", event_type);
+    return;
+  }
+  if (bpf_map_update_elem(&inhibit_events, &inhibit_key, &inhibit_value, BPF_NOEXIST) < 0) {
     return;
   }
 
@@ -109,6 +117,10 @@ static inline EBPF_INLINE bool pid_information_exists(int pid)
 // based on rate limiting rules.
 static inline EBPF_INLINE bool pid_event_ratelimit(u32 pid, int ratelimit_action)
 {
+  if (ratelimit_action == RATELIMIT_ACTION_RESET) {
+    return false;
+  }
+
   const u8 default_max_attempts = 8; // 25 seconds
   const u8 fast_max_attempts    = 4; // 1.6 seconds
   const u8 fast_timer_flag      = 0x10;
@@ -116,10 +128,6 @@ static inline EBPF_INLINE bool pid_event_ratelimit(u32 pid, int ratelimit_action
   u64 ts                        = bpf_ktime_get_ns();
   u8 attempt                    = 0;
   u8 fast_timer                 = (ratelimit_action == RATELIMIT_ACTION_FAST) ? fast_timer_flag : 0;
-
-  if (ratelimit_action == RATELIMIT_ACTION_RESET) {
-    return false;
-  }
 
   if (token_ptr) {
     u64 token   = *token_ptr;
@@ -168,8 +176,7 @@ static inline EBPF_INLINE bool pid_event_ratelimit(u32 pid, int ratelimit_action
 }
 
 // report_pid informs userspace about a PID that needs to be processed.
-// If inhibit is true, PID will first be checked against maps/reported_pids
-// and reporting aborted if PID has been recently reported.
+// See pid_event_ratelimit for ratelimit_action functional specifics.
 // Returns true if the PID was successfully reported to user space.
 static inline EBPF_INLINE bool report_pid(void *ctx, u64 pid_tgid, int ratelimit_action)
 {
@@ -733,7 +740,7 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 #endif // TESTING_COREDUMP
 
 static inline EBPF_INLINE int collect_trace(
-  struct pt_regs *ctx, TraceOrigin origin, u32 pid, u32 tid, u64 trace_timestamp, u64 off_cpu_time)
+  struct pt_regs *ctx, TraceOrigin origin, u32 pid, u32 tid, u64 trace_timestamp, u64 value)
 {
   // The trace is reused on each call to this function so we have to reset the
   // variables used to maintain state.
@@ -743,12 +750,12 @@ static inline EBPF_INLINE int collect_trace(
     return -1;
   }
 
-  Trace *trace   = &record->trace;
-  trace->origin  = origin;
-  trace->pid     = pid;
-  trace->tid     = tid;
-  trace->ktime   = trace_timestamp;
-  trace->offtime = off_cpu_time;
+  Trace *trace  = &record->trace;
+  trace->origin = origin;
+  trace->pid    = pid;
+  trace->tid    = tid;
+  trace->ktime  = trace_timestamp;
+  trace->value  = value;
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);
   }

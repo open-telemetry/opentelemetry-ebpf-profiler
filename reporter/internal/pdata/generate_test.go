@@ -12,7 +12,7 @@ import (
 	v1profiles "go.opentelemetry.io/proto/otlp/profiles/v1development"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/open-telemetry/sig-profiling/tools/profcheck"
+	"github.com/open-telemetry/sig-profiling/profcheck"
 
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
@@ -457,7 +457,7 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 					uint64(time.Unix(1030, 0).UnixNano()),
 					uint64(time.Unix(1040, 0).UnixNano()),
 				},
-				OffTimes: []int64{10, 20},
+				Values: []int64{10, 20},
 			},
 		},
 	}
