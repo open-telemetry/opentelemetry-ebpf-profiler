@@ -334,13 +334,25 @@ func TestFindJITRegion(t *testing.T) {
 			wantFound: true,
 		},
 		{
-			name: "heuristic fallback stops at gap before another anonymous executable mapping without size hint",
+			name: "heuristic fallback spans gaps between anonymous executable mappings",
 			mappings: []process.RawMapping{
 				execAnon(0x7f0000100000, 0x4000),
 				execAnon(0x7f0000200000, 0x8000),
 			},
 			wantStart: 0x7f0000100000,
-			wantEnd:   0x7f0000100000 + 0x4000,
+			wantEnd:   0x7f0000200000 + 0x8000,
+			wantFound: true,
+		},
+		{
+			name: "heuristic fallback spans production-like discontiguous anonymous executable mappings",
+			mappings: []process.RawMapping{
+				execAnon(0x7a6b2ec00000, 0x800000),
+				execAnon(0x7a6b337fb000, 0x800000),
+				execAnon(0x7a6ba0639000, 0x267c000),
+				execAnon(0x7a6d45bb0000, 0x1000),
+			},
+			wantStart: 0x7a6b2ec00000,
+			wantEnd:   0x7a6d45bb0000 + 0x1000,
 			wantFound: true,
 		},
 		{
