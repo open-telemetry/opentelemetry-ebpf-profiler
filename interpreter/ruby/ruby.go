@@ -1278,16 +1278,14 @@ func profileFrameFullLabel(classPath, label, baseLabel, methodName libpf.String,
 	return libpf.Intern(profileLabel)
 }
 
-// findJITRegion detects the YJIT JIT code region from process memory mappings.
-// YJIT reserves a large contiguous address range (typically 48-128 MiB) via mmap
-// with PROT_NONE and then mprotects individual 16k codepages to r-x as needed.
+// findJITRegion detects the Ruby JIT code reservation from process memory mappings.
+// Ruby reserves a single contiguous address range via rb_jit_reserve_addr_space()
+// and then uses mprotect to activate pages as r-x or temporarily rw. Code GC can
+// turn pages back into PROT_NONE, so the reservation may appear as multiple VMAs.
 // On systems with CONFIG_ANON_VMA_NAME, Ruby labels the region via prctl(PR_SET_VMA)
-// giving it a path like "[anon:Ruby:rb_yjit_reserve_addr_space]".
-// On systems without that config, we fall back to a heuristic: the contiguous
-// anonymous region starting at the first anonymous executable mapping is assumed
-// to be the JIT reservation. /proc/pid/maps is sorted by address, and YJIT keeps
-// the first code page executable, so this includes later r-x code pages and
-// PROT_NONE gaps without needing to know Ruby's version-specific reservation size.
+// giving it a path like "[anon:Ruby:rb_jit_reserve_addr_space]". Otherwise we use
+// the first anonymous executable mapping as the start of the reservation and
+// extend through contiguous anonymous VMAs.
 // Returns (start, end, found).
 func findJITRegion(mappings []process.RawMapping) (uint64, uint64, bool) {
 	var jitStart, jitEnd uint64
@@ -1296,8 +1294,8 @@ func findJITRegion(mappings []process.RawMapping) (uint64, uint64, bool) {
 	for idx := range mappings {
 		m := &mappings[idx]
 
-		// Check for prctl-labeled JIT region. These mappings may be ---p (PROT_NONE)
-		// or r-xp depending on whether YJIT has activated codepages in this region.
+		// Check for prctl-labeled JIT region. These mappings may be ---p (PROT_NONE),
+		// rw-p while YJIT is writing, or r-xp when executable.
 		if strings.Contains(m.Path, "jit_reserve_addr_space") {
 			if !labelFound || m.Vaddr < jitStart {
 				jitStart = m.Vaddr
@@ -1322,12 +1320,12 @@ func findJITRegion(mappings []process.RawMapping) (uint64, uint64, bool) {
 		jitEnd = m.Vaddr + m.Length
 		for nextIdx := idx + 1; nextIdx < len(mappings); nextIdx++ {
 			nextMapping := &mappings[nextIdx]
-			if !nextMapping.IsAnonymous() || nextMapping.Vaddr != jitEnd ||
-				(!nextMapping.IsExecutable() && nextMapping.Flags != 0) {
+			if !nextMapping.IsAnonymous() || nextMapping.Vaddr != jitEnd {
 				break
 			}
 			jitEnd = nextMapping.Vaddr + nextMapping.Length
 		}
+
 		return jitStart, jitEnd, true
 	}
 
@@ -1343,7 +1341,7 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 
 	// Detect the JIT region once and register interpreter prefixes for the whole
 	// reservation. PROT_NONE gaps are safe to include because they cannot execute,
-	// and covering the full range avoids churn as YJIT mprotects new code pages.
+	// and covering the full range avoids churn as Ruby mprotects new code pages.
 	jitStart, jitEnd, jitFound := findJITRegion(mappings)
 	if jitFound {
 		prefixes, err := lpm.CalculatePrefixList(jitStart, jitEnd)
