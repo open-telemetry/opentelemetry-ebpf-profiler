@@ -402,6 +402,11 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
   void *stack_ptr        = record->rubyUnwindState.stack_ptr;
   // last_stack_frame points to the last frame on the Ruby VM stack we want to process
   void *last_stack_frame = record->rubyUnwindState.last_stack_frame;
+  // If no Ruby stack walk state is present yet, this is the first Ruby unwinder
+  // entry for this trace. Native frames may already have been pushed if the
+  // sample landed in native code called from JIT, but a JIT PC found now should
+  // still be emitted as the first Ruby/JIT owner frame.
+  bool first_ruby_unwind = stack_ptr == NULL && last_stack_frame == NULL;
 
   if (!stack_ptr || !last_stack_frame) {
     // stack_ptr_current points to the current frame in the Ruby VM call stack
@@ -463,12 +468,16 @@ static EBPF_INLINE ErrorCode walk_ruby_stack(
   if (in_jit) {
     record->rubyUnwindState.jit_detected = true;
 
-    // Push a JIT frame with the raw machine PC. This can be used to
-    // symbolize the JIT frame via perf map later.
-    ErrorCode jit_error =
-      push_ruby(&record->state, trace, RUBY_FRAME_TYPE_JIT, (u64)record->state.pc, 0, 0);
-    if (jit_error) {
-      return jit_error;
+    // Push a JIT frame with the raw machine PC as the first Ruby/JIT owner
+    // frame. If Ruby unwinding already started earlier in this trace, the JIT
+    // PC was reached after a native resume and should not be inserted above
+    // existing Ruby frames.
+    if (first_ruby_unwind) {
+      ErrorCode jit_error =
+        push_ruby(&record->state, trace, RUBY_FRAME_TYPE_JIT, (u64)record->state.pc, 0, 0);
+      if (jit_error) {
+        return jit_error;
+      }
     }
   }
 
