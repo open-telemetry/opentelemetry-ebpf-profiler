@@ -498,6 +498,7 @@ func TestIsInterpreterMapping(t *testing.T) {
 		{
 			name: "anonymous non-executable",
 			m:    process.RawMapping{Flags: elf.PF_R},
+			want: true,
 		},
 		{
 			name: "dll",
@@ -539,6 +540,7 @@ func TestInterpreterMappingCollectorFlushesFirstPassMappingsAfterEnable(t *testi
 
 	require.Equal(t, []process.RawMapping{
 		{Vaddr: 0x1000, Flags: elf.PF_R | elf.PF_X},
+		{Vaddr: 0x2000, Flags: elf.PF_R},
 		{Vaddr: 0x3000, Flags: elf.PF_R | elf.PF_X},
 		{Vaddr: 0x5000, Flags: elf.PF_R, Path: "/tmp/assembly.dll"},
 	}, collector.mappings())

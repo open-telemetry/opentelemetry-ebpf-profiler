@@ -246,7 +246,15 @@ func TestFindJITRegion(t *testing.T) {
 			Path:   "",
 		}
 	}
-	anon := func(vaddr, length uint64) process.RawMapping {
+	rwAnon := func(vaddr, length uint64) process.RawMapping {
+		return process.RawMapping{
+			Vaddr:  vaddr,
+			Length: length,
+			Flags:  elf.PF_R | elf.PF_W,
+			Path:   "",
+		}
+	}
+	protNoneAnon := func(vaddr, length uint64) process.RawMapping {
 		return process.RawMapping{
 			Vaddr:  vaddr,
 			Length: length,
@@ -259,7 +267,7 @@ func TestFindJITRegion(t *testing.T) {
 			Vaddr:  vaddr,
 			Length: length,
 			Flags:  flags,
-			Path:   "[anon:Ruby:rb_yjit_reserve_addr_space]",
+			Path:   "[anon:Ruby:rb_jit_reserve_addr_space]",
 		}
 	}
 	fileBacked := func(vaddr, length uint64, path string) process.RawMapping {
@@ -316,19 +324,18 @@ func TestFindJITRegion(t *testing.T) {
 		{
 			name: "heuristic fallback includes contiguous anonymous reservation",
 			mappings: []process.RawMapping{
-				fileBacked(0x400000, 0x1000, "/usr/bin/ruby"),
 				execAnon(0x7f17d99b9000, 0x15f000),
-				execAnon(0x7f17d9b18000, 0x119000),
-				anon(0x7f17d9c31000, 0x7d88000),
+				rwAnon(0x7f17d9b18000, 0x1000),
+				execAnon(0x7f17d9b19000, 0x118000),
+				protNoneAnon(0x7f17d9c31000, 0x7d88000),
 			},
 			wantStart: 0x7f17d99b9000,
 			wantEnd:   0x7f17d9c31000 + 0x7d88000,
 			wantFound: true,
 		},
 		{
-			name: "heuristic fallback stops at gap before another anonymous executable mapping",
+			name: "heuristic fallback stops at gap before another anonymous executable mapping without size hint",
 			mappings: []process.RawMapping{
-				fileBacked(0x400000, 0x1000, "/usr/bin/ruby"),
 				execAnon(0x7f0000100000, 0x4000),
 				execAnon(0x7f0000200000, 0x8000),
 			},
@@ -344,6 +351,27 @@ func TestFindJITRegion(t *testing.T) {
 			},
 			wantStart: 0x7f0000000000,
 			wantEnd:   0x7f0000000000 + 0x3000000,
+			wantFound: true,
+		},
+		{
+			name: "ruby --yjit --yjit-mem-size=4 with rw holes and PROT_NONE tail",
+			// $ ruby --yjit --yjit-mem-size=4 /app.rb
+			// 7f84e7a23000-7f84e7a5f000 r-xp 00000000 00:00 0
+			// 7f84e7a5f000-7f84e7a60000 rw-p 00000000 00:00 0
+			// 7f84e7a60000-7f84e7a62000 r-xp 00000000 00:00 0
+			// 7f84e7a62000-7f84e7a63000 rw-p 00000000 00:00 0
+			// 7f84e7a63000-7f84e7e23000 ---p 00000000 00:00 0
+			// 7f84e8110000-7f84e8200000 rw-p 00000000 00:00 0
+			mappings: []process.RawMapping{
+				execAnon(0x7f84e7a23000, 0x7f84e7a5f000-0x7f84e7a23000),
+				rwAnon(0x7f84e7a5f000, 0x1000),
+				execAnon(0x7f84e7a60000, 0x7f84e7a62000-0x7f84e7a60000),
+				rwAnon(0x7f84e7a62000, 0x1000),
+				protNoneAnon(0x7f84e7a63000, 0x7f84e7e23000-0x7f84e7a63000),
+				rwAnon(0x7f84e8110000, 0x7f84e8200000-0x7f84e8110000),
+			},
+			wantStart: 0x7f84e7a23000,
+			wantEnd:   0x7f84e7e23000,
 			wantFound: true,
 		},
 	}
