@@ -346,6 +346,30 @@ func TestFindJITRegion(t *testing.T) {
 			wantEnd:   0x7f0000000000 + 0x3000000,
 			wantFound: true,
 		},
+		{
+		        // $ ruby --yjit --yjit-mem-size=4 /app.rb
+			// 55f02fc16000-55f02fc17000 r--p 00000000 00:b8 16600758                   /usr/local/bin/ruby"
+			// 55f02fc17000-55f02fc18000 r-xp 00001000 00:b8 16600758                   /usr/local/bin/ruby"
+			// 55f02fc18000-55f02fc19000 r--p 00002000 00:b8 16600758                   /usr/local/bin/ruby"
+			// 55f02fc19000-55f02fc1a000 r--p 00002000 00:b8 16600758                   /usr/local/bin/ruby"
+			// 55f02fc1a000-55f02fc1b000 rw-p 00003000 00:b8 16600758                   /usr/local/bin/ruby"
+			// 55f058fa0000-55f059412000 rw-p 00000000 00:00 0                          [heap]"
+			// 7f84e7a23000-7f84e7a5f000 r-xp 00000000 00:00 0 "
+			// 7f84e7a5f000-7f84e7a60000 rw-p 00000000 00:00 0 "
+			// 7f84e7a60000-7f84e7a62000 r-xp 00000000 00:00 0 "
+			// 7f84e7a62000-7f84e7a63000 rw-p 00000000 00:00 0 "
+			// 7f84e7a63000-7f84e7e23000 ---p 00000000 00:00 0 "
+			// 7f84e8110000-7f84e8200000 rw-p 00000000 00:00 0 "
+			name: "jit hole",
+			mappings: []process.RawMapping{
+				execAnon(0x7f84e7a23000, 0x7f84e7a5f000-0x7f84e7a23000),
+				// rw-p hole
+				execAnon(0x7f84e7a60000, 0x7f84e7a62000-0x7f84e7a60000),
+			},
+			wantStart: 0x7f84e7a23000,
+			wantEnd:   0x7f84e7e23000,
+			wantFound: true,
+		},
 	}
 
 	for _, tt := range tests {
