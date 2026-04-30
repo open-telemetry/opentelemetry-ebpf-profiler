@@ -1,6 +1,8 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+//go:build linux
+
 // Package tracer contains functionality for populating tracers.
 package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
@@ -45,12 +47,6 @@ import (
 
 // Compile time check to make sure times.Times satisfies the interfaces.
 var _ Intervals = (*times.Times)(nil)
-
-const (
-	// ProbabilisticThresholdMax defines the upper bound of the probabilistic profiling
-	// threshold.
-	ProbabilisticThresholdMax = 100
-)
 
 // Constants that define the status of probabilistic profiling.
 const (
