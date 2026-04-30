@@ -1279,13 +1279,16 @@ func profileFrameFullLabel(classPath, label, baseLabel, methodName libpf.String,
 }
 
 // findJITRegion detects the Ruby JIT code reservation from process memory mappings.
-// Ruby reserves a single contiguous address range via rb_jit_reserve_addr_space()
-// and then uses mprotect to activate pages as r-x or temporarily rw. Code GC can
-// turn pages back into PROT_NONE, so the reservation may appear as multiple VMAs.
+// Ruby reserves address ranges via rb_jit_reserve_addr_space() and then uses
+// mprotect to activate pages as r-x or temporarily rw. Code GC can turn pages
+// back into PROT_NONE, so the reservation may appear as multiple VMAs.
 // On systems with CONFIG_ANON_VMA_NAME, Ruby labels the region via prctl(PR_SET_VMA)
 // giving it a path like "[anon:Ruby:rb_jit_reserve_addr_space]". Otherwise we use
-// the first anonymous executable mapping as the start of the reservation and
-// extend through contiguous anonymous VMAs.
+// a conservative fallback that spans from the first anonymous executable mapping
+// to the end of the last anonymous executable mapping, plus any contiguous
+// anonymous tail after that last executable mapping. This covers production
+// layouts where Ruby exposes multiple discontiguous anonymous executable ranges
+// without requiring multi-segment tracking in eBPF.
 // Returns (start, end, found).
 func findJITRegion(mappings []process.RawMapping) (uint64, uint64, bool) {
 	var jitStart, jitEnd uint64
@@ -1310,22 +1313,29 @@ func findJITRegion(mappings []process.RawMapping) (uint64, uint64, bool) {
 		return jitStart, jitEnd, true
 	}
 
+	anonExecFound := false
 	for idx := range mappings {
 		m := &mappings[idx]
 		if !m.IsExecutable() || !m.IsAnonymous() {
 			continue
 		}
 
-		jitStart = m.Vaddr
-		jitEnd = m.Vaddr + m.Length
-		for nextIdx := idx + 1; nextIdx < len(mappings); nextIdx++ {
-			nextMapping := &mappings[nextIdx]
-			if !nextMapping.IsAnonymous() || nextMapping.Vaddr != jitEnd {
-				break
-			}
-			jitEnd = nextMapping.Vaddr + nextMapping.Length
+		if !anonExecFound || m.Vaddr < jitStart {
+			jitStart = m.Vaddr
 		}
-
+		if !anonExecFound || m.Vaddr+m.Length > jitEnd {
+			jitEnd = m.Vaddr + m.Length
+		}
+		anonExecFound = true
+	}
+	if anonExecFound {
+		for idx := range mappings {
+			m := &mappings[idx]
+			if !m.IsAnonymous() || m.Vaddr != jitEnd {
+				continue
+			}
+			jitEnd = m.Vaddr + m.Length
+		}
 		return jitStart, jitEnd, true
 	}
 
