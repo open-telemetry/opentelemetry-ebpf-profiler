@@ -302,10 +302,6 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 			flags |= elf.PF_X
 		}
 
-		// Ignore non-readable and non-executable mappings
-		if flags&(elf.PF_R|elf.PF_X) == 0 {
-			continue
-		}
 		inode, err := strconv.ParseUint(fields[4], 10, 64)
 		if err != nil {
 			log.Debugf("inode: failed to convert %s to uint64: %v", fields[4], err)
@@ -350,6 +346,16 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 			}
 		} else {
 			path = trimMappingPath(fields[5])
+		}
+
+		// Ignore non-readable and non-executable mappings except anonymous
+		// reservations. Ruby JIT uses PROT_NONE anonymous VMAs for the unused tail
+		// of the executable reservation, and interpreters need to see them to detect
+		// the full reserved area.
+		mappingForPredicate := RawMapping{Path: path}
+		anonymousMapping := mappingForPredicate.IsAnonymous()
+		if flags&(elf.PF_R|elf.PF_X) == 0 && !anonymousMapping {
+			continue
 		}
 
 		vaddr, err := strconv.ParseUint(addrs[0], 16, 64)
