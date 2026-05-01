@@ -9,7 +9,10 @@
         "libc.so.6+0x10ec92",
         "vfork+0x12a1",
         "vfork+0x12eb",
-        "<unwinding aborted due to error native_stack_delta_invalid>"
+        "vfork+0x114e",
+        "libc.so.6+0x2a1c9",
+        "libc.so.6+0x2a28a",
+        "vfork+0x1184"
       ]
     }
   ],

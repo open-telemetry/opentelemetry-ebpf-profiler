@@ -80,15 +80,21 @@ func getOpcode(baseReg uint8, param int32, deref bool) string {
 }
 
 func dumpDelta(delta sdtypes.StackDelta, merged bool) {
-	var cfa, fp string
+	var cfa, aux string
 	info := &delta.Info
 	if info.Flags&support.UnwindFlagCommand != 0 {
 		cfa = getCommand(info.Param)
 	} else {
 		cfa = getOpcode(info.BaseReg, info.Param, info.Flags&support.UnwindFlagDerefCfa != 0)
-		fp = getOpcode(info.AuxBaseReg, info.AuxParam, false)
+		aux = getOpcode(info.AuxBaseReg, info.AuxParam, false)
 	}
 	comment := ""
+	if info.Flags&support.UnwindFlagRegisterRA != 0 {
+		comment += " ra-reg"
+	}
+	if info.Flags&support.UnwindFlagLeafOnly != 0 {
+		comment += " leaf-only"
+	}
 	if delta.Hints&sdtypes.UnwindHintKeep != 0 {
 		comment += " keep"
 	}
@@ -98,7 +104,7 @@ func dumpDelta(delta sdtypes.StackDelta, merged bool) {
 	if merged {
 		comment += " merged"
 	}
-	fmt.Printf("%016x %-16s%-16s%s\n", delta.Address, cfa, fp, comment)
+	fmt.Printf("%016x %-16s%-16s%s\n", delta.Address, cfa, aux, comment)
 }
 
 func canMerge(delta, nextDelta sdtypes.StackDelta) bool {
