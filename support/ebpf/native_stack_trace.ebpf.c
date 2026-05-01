@@ -351,6 +351,8 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
       if (bpf_probe_read_user(rt_regs, sizeof(record->rt_regs), (void *)(state->sp + 40))) {
         goto err_native_pc_read;
       }
+      state->rdi = rt_regs[8];
+      state->r8  = rt_regs[0];
       state->rax = rt_regs[13];
       state->r9  = rt_regs[1];
       state->r11 = rt_regs[3];
@@ -392,10 +394,18 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
     // the previous FP address if any.
     state->cfa = cfa = unwind_calc_register_with_deref(
       state, info->baseReg, param, (info->flags & UNWIND_FLAG_DEREF_CFA) != 0);
-    u64 fpa = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
+    u64 aux = unwind_calc_register(state, info->auxBaseReg, info->auxParam);
 
-    if (fpa) {
-      bpf_probe_read_user(&state->fp, sizeof(state->fp), (void *)fpa);
+    if (info->flags & UNWIND_FLAG_REGISTER_RA) {
+      // RA was recovered from a register (e.g. __vfork stores RA in %rdi).
+      // FP is not preserved across such calls, clear it for the next frame.
+      state->pc = aux;
+      state->fp = 0;
+      goto nonleaf_frame_ok;
+    }
+
+    if (aux) {
+      bpf_probe_read_user(&state->fp, sizeof(state->fp), (void *)aux);
     } else if (info->baseReg == UNWIND_REG_FP) {
       // FP used for recovery, but no new FP value received, clear FP
       state->fp = 0;
@@ -407,6 +417,7 @@ static EBPF_INLINE ErrorCode unwind_one_frame(PerCPURecord *record, bool *stop)
     increment_metric(metricID_UnwindNativeErrPCRead);
     return ERR_NATIVE_PC_READ;
   }
+nonleaf_frame_ok:
   state->sp = cfa;
   unwinder_mark_nonleaf_frame(state);
 frame_ok:

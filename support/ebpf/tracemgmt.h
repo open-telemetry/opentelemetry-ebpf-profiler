@@ -75,7 +75,6 @@ static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event
     return;
   }
   if (bpf_map_update_elem(&inhibit_events, &inhibit_key, &inhibit_value, BPF_NOEXIST) < 0) {
-    DEBUG_PRINT("Event type %d inhibited", event_type);
     return;
   }
 
