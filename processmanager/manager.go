@@ -387,6 +387,10 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	}
 	pm.mu.RUnlock()
 
+	if pm.interceptor != nil && pm.interceptor(trace, meta) {
+		return
+	}
+
 	trace.Hash = traceutil.HashTrace(trace)
 	meta.APMServiceName = pm.maybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
 

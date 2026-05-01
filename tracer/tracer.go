@@ -1376,3 +1376,9 @@ func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	bpfTrace.KernelFrames = bpfTrace.KernelFrames[0:0]
 	t.tracePool.Put(bpfTrace)
 }
+
+// SetInterceptor installs a TraceInterceptor on the underlying ProcessManager.
+// Pass nil to clear an existing interceptor.
+func (t *Tracer) SetInterceptor(interceptor pm.TraceInterceptor) {
+	t.processManager.SetInterceptor(interceptor)
+}
