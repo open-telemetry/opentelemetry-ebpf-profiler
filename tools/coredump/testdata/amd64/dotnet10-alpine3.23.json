@@ -49,7 +49,7 @@
         "ld-musl-x86_64.so.1+0x6799f",
         "ld-musl-x86_64.so.1+0x6731a",
         "ld-musl-x86_64.so.1+0x6757a",
-        "<unwinding aborted due to error native_zero_pc>"
+        "ld-musl-x86_64.so.1+0x68ec0"
       ]
     },
     {

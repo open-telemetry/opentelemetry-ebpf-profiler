@@ -76,6 +76,15 @@ type IntervalData struct {
 func (deltas *StackDeltaArray) AddEx(delta StackDelta, sorted bool) {
 	num := len(*deltas)
 	if delta.Info.Flags&support.UnwindFlagCommand != 0 {
+		if delta.Info.Param == support.UnwindCommandSignal {
+			// EBPF code does a -1 fixup for return addresses.
+			// To match the signal handler function injected into
+			// stack, the signal handler stack delta must start one
+			// byte earlier to accommodate for the ebpf fixup.
+			// C-libraries will have a 'nop' inserted to make sure
+			// nothing conflicts.
+			delta.Address--
+		}
 		// FP information is invalid/unused for command opcodes.
 		// But DWARF info often leaves bogus data there, so resetting it
 		// reduces the number of unique Info contents generated.
