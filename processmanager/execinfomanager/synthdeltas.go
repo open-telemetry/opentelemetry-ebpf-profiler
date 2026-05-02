@@ -55,7 +55,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 		}
 		// Determine if LR is on stack
 		code := make([]byte, sym.Size)
-		if _, err := ef.ReadVirtualMemory(code, int64(sym.Address)); err != nil {
+		if _, err := ef.ReadAt(code, int64(sym.Address)); err != nil {
 			return true
 		}
 
