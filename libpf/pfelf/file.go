@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -66,6 +67,9 @@ type File struct {
 
 	// elfReader is the ReadAt implementation used for this File
 	elfReader io.ReaderAt
+
+	// mmapReader is the mmap reader for this File if available
+	mmapReader *mmap.ReaderAt
 
 	// ehFrame is a pointer to the PT_GNU_EH_FRAME segment of the ELF
 	ehFrame *Prog
@@ -170,7 +174,7 @@ type Section struct {
 
 // Open opens the named file using os.Open and prepares it for use as an ELF binary.
 func Open(name string) (*File, error) {
-	f, err := mmap.Open(name)
+	f, err := os.Open(name)
 	if err != nil {
 		return nil, err
 	}
@@ -185,6 +189,9 @@ func Open(name string) (*File, error) {
 
 // Close closes the File.
 func (f *File) Close() (err error) {
+	if f.mmapReader != nil {
+		f.mmapReader.Close()
+	}
 	if f.closer != nil {
 		err = f.closer.Close()
 		f.closer = nil
@@ -235,6 +242,11 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		return nil, err
 	}
 
+	if osFile, ok := r.(*os.File); ok {
+		// Attempt to mmap the file if possible
+		f.mmapReader, _ = mmap.OpenFile(osFile)
+	}
+
 	f.Progs = make([]Prog, hdr.Phnum)
 	virtualBase := ^uint64(0)
 	numROData := 0
@@ -251,7 +263,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 			Memsz:  ph.Memsz,
 			Align:  ph.Align,
 		}
-		p.elfReader = r
+		p.elfReader = f.getReader()
 
 		if p.Type == elf.PT_LOAD {
 			if p.Vaddr < virtualBase {
@@ -362,10 +374,19 @@ func (_ NoMmapCloser) Close() error {
 // keep slices returned by Section.Data() and Prog.Data() after File has been
 // GCd. The returned Close() will release the reference on data.
 func (f *File) Take() io.Closer {
-	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
-		return mapping.Take()
+	if f.mmapReader != nil {
+		return f.mmapReader.Take()
 	}
 	return NoMmapCloser{}
+}
+
+// getReader returns the mmap reader if available, or otherwise the underlying
+// reader (typically os.File).
+func (f *File) getReader() io.ReaderAt {
+	if f.mmapReader != nil {
+		return f.mmapReader
+	}
+	return f.elfReader
 }
 
 // LoadSections loads the ELF file sections
@@ -412,7 +433,7 @@ func (f *File) LoadSections() error {
 			Entsize:   sh.Entsize,
 			FileSize:  sh.Size,
 		}
-		s.elfReader = f.elfReader
+		s.elfReader = f.getReader()
 	}
 
 	// Load the section name string table
@@ -546,7 +567,7 @@ func (f *File) EHFrame() (*Prog, error) {
 				Memsz:  ph.Memsz - offs,
 				Align:  ph.Align,
 			},
-			elfReader: f.elfReader,
+			elfReader: f.getReader(),
 		}, nil
 	}
 	return nil, errors.New("no PT_LOAD segment for PT_GNU_EH_FRAME found")
@@ -597,7 +618,7 @@ func (f *File) GoVersion() (string, error) {
 	if !f.IsGolang() {
 		return "", nil
 	}
-	bi, err := buildinfo.Read(f.elfReader)
+	bi, err := buildinfo.Read(f.getReader())
 	if err != nil {
 		return "", err
 	}
@@ -954,8 +975,8 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 
 // SetDontNeed sets the flag MADV_DONTNEED on the mmapped data.
 func (f *File) SetDontNeed() {
-	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
-		if err := mapping.SetMadvDontNeed(); err != nil {
+	if f.mmapReader != nil {
+		if err := f.mmapReader.SetMadvDontNeed(); err != nil {
 			log.Errorf("Failed to set MADV_DONTNEED: %v", err)
 		}
 	}

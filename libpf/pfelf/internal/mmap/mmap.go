@@ -90,6 +90,12 @@ func Open(filename string) (*ReaderAt, error) {
 		return nil, err
 	}
 	defer f.Close()
+
+	return OpenFile(f)
+}
+
+// Open memory-maps the OS file for reading.
+func OpenFile(f *os.File) (*ReaderAt, error) {
 	fi, err := f.Stat()
 	if err != nil {
 		return nil, err
@@ -107,10 +113,10 @@ func Open(filename string) (*ReaderAt, error) {
 		}, nil
 	}
 	if size < 0 {
-		return nil, fmt.Errorf("mmap: file %q has negative size", filename)
+		return nil, fmt.Errorf("mmap: negative file size")
 	}
 	if size != int64(int(size)) {
-		return nil, fmt.Errorf("mmap: file %q is too large", filename)
+		return nil, fmt.Errorf("mmap: too large file size")
 	}
 
 	data, err := syscall.Mmap(int(f.Fd()), 0, int(size), syscall.PROT_READ, syscall.MAP_SHARED)
