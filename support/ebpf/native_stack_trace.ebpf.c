@@ -309,24 +309,33 @@ unwind_calc_register_with_deref(UnwindState *state, u8 baseReg, s32 param, bool 
 // against stale data on ARM64 when fn didn't spill.
 //
 // Returns the user goroutine address, or 0 on failure (caller should STOP).
-static EBPF_INLINE u64 go_resolve_mcall_goroutine(struct GoLabelsOffsets *offs, UnwindState *state)
+static EBPF_INLINE u64
+go_resolve_mcall_goroutine(struct GoLabelsOffsets *offs, PerCPURecord *record)
 {
-  u64 g0_addr = get_g_ptr(offs, state);
+  UnwindState *state = &record->state;
+  u64 g0_addr        = go_get_g_ptr(offs, state);
   if (!g0_addr) {
     return 0;
   }
 
-  void *m_ptr = NULL;
-  if (bpf_probe_read_user(&m_ptr, sizeof(m_ptr), (void *)(g0_addr + offs->m_offset))) {
+  if (offs->sched_sp != offs->m_offset + sizeof(u64)) {
+    DEBUG_PRINT("GO_MCALL: unexpected g.m/g.sched.sp layout");
     return 0;
   }
-  if (!m_ptr) {
+
+  u64 *go_scratch = (u64 *)record->goUnwindScratch.gobuf;
+  if (bpf_probe_read_user(go_scratch, sizeof(u64) * 2, (void *)(g0_addr + offs->m_offset))) {
+    return 0;
+  }
+  u64 g0_m_ptr    = go_scratch[0];
+  u64 g0_sched_sp = go_scratch[1];
+  if (!g0_m_ptr) {
     return 0;
   }
 
   // Try m.curg first (valid before dropg, cold path).
   u64 curg = 0;
-  if (bpf_probe_read_user(&curg, sizeof(curg), (void *)((u64)m_ptr + offs->curg))) {
+  if (bpf_probe_read_user(&curg, sizeof(curg), (void *)(g0_m_ptr + offs->curg))) {
     return 0;
   }
   if (curg) {
@@ -335,11 +344,6 @@ static EBPF_INLINE u64 go_resolve_mcall_goroutine(struct GoLabelsOffsets *offs, 
   }
 
   // m.curg is nil (dropg was called). Recover old_g from g0 stack.
-  u64 g0_sched_sp = 0;
-  if (bpf_probe_read_user(&g0_sched_sp, sizeof(g0_sched_sp), (void *)(g0_addr + offs->sched_sp))) {
-    DEBUG_PRINT("GO_MCALL: failed to read g0.sched.sp");
-    return 0;
-  }
   if (!g0_sched_sp) {
     DEBUG_PRINT("GO_MCALL: g0.sched.sp is 0");
     return 0;
@@ -360,25 +364,20 @@ static EBPF_INLINE u64 go_resolve_mcall_goroutine(struct GoLabelsOffsets *offs, 
   // another M, g.m points to that M (non-nil) and its gobuf may have been
   // overwritten by systemstack or another mechanism reading it would produce
   // a wrong stack trace (e.g., systemstack_switch frames from another thread).
-  u64 cand_m = 0;
-  if (bpf_probe_read_user(&cand_m, sizeof(cand_m), (void *)(candidate + offs->m_offset))) {
+  if (bpf_probe_read_user(go_scratch, sizeof(u64) * 2, (void *)(candidate + offs->m_offset))) {
     DEBUG_PRINT("GO_MCALL: failed to read candidate.m");
     return 0;
   }
-  if (cand_m) {
+  u64 cand_m_ptr    = go_scratch[0];
+  u64 cand_sched_sp = go_scratch[1];
+  if (cand_m_ptr) {
     DEBUG_PRINT(
       "GO_MCALL: candidate.m is non-nil (0x%lx), goroutine rescheduled on another M",
-      (unsigned long)cand_m);
+      (unsigned long)cand_m_ptr);
     return 0;
   }
 
   // Also check that gobuf.sp is non-zero (populated by mcall before the switch).
-  u64 cand_sched_sp = 0;
-  if (bpf_probe_read_user(
-        &cand_sched_sp, sizeof(cand_sched_sp), (void *)(candidate + offs->sched_sp))) {
-    DEBUG_PRINT("GO_MCALL: failed to read candidate.sched.sp");
-    return 0;
-  }
   if (!cand_sched_sp) {
     DEBUG_PRINT("GO_MCALL: candidate.sched.sp is 0");
     return 0;
@@ -410,7 +409,7 @@ static EBPF_INLINE u64 go_resolve_mcall_goroutine(struct GoLabelsOffsets *offs, 
 //   MOVQ $0, BP                        // clear frame pointer
 //   PUSHQ AX                           // *(g0.sched.sp - 8) = old_g
 //   CALL R12                           // fn(old_g)
-//   https://github.com/golang/go/blob/917949cc1d16c652cb09ba369718f45e5d814d8f/src/runtime/asm_amd64.s#L427
+//   https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/asm_amd64.s#L459
 //
 // ARM64 (asm_arm64.s, NOSPLIT|NOFRAME - no prologue):
 //   MOVD  RSP, R0
@@ -427,7 +426,7 @@ static EBPF_INLINE u64 go_resolve_mcall_goroutine(struct GoLabelsOffsets *offs, 
 //   MOVD  ZR, -16(RSP)
 //   SUB   $16, RSP                      // allocate 16-byte arg space
 //   BL    (R4)                          // fn(old_g), entry SP = g0.sched.sp - 16
-//   https://github.com/golang/go/blob/5a928e5a37dc632bbb1794fe0e0846e6352be8b2/src/runtime/asm_arm64.s#L215
+//   https://github.com/golang/go/blob/3901409b5d0fb7c85a3e6730a59943cc93b2835c/src/runtime/asm_arm64.s#L193
 //
 // fn (park_m, goexit0, etc.) typically calls dropg() which sets m.curg to nil.
 // go_resolve_mcall_goroutine() handles this by falling back to
@@ -453,7 +452,7 @@ static EBPF_INLINE ErrorCode go_unwind_mcall(UnwindState *state)
     increment_metric(metricID_UnwindGoMcallErrNoGoOffsets);
     return ERR_GO_MCALL_NO_GO_OFFSETS;
   }
-  u64 curg = go_resolve_mcall_goroutine(go_offs, state);
+  u64 curg = go_resolve_mcall_goroutine(go_offs, record);
   if (!curg) {
     DEBUG_PRINT("GO_MCALL: could not resolve user goroutine, stopping");
     increment_metric(metricID_UnwindGoMcallErrResolveGoroutine);

@@ -7,14 +7,14 @@
 #include "tsd.h"
 #include "types.h"
 
-// get_g_ptr reads the current G (goroutine) pointer from thread-local storage.
+// go_get_g_ptr reads the current G (goroutine) pointer from thread-local storage.
 // TLS always contains the G that is currently executing on the thread. During
 // systemstack/mcall, this is g0 (the system goroutine) since we are on the
 // system stack.
 //
 // On aarch64, when tls_offset is 0 (non-CGO binaries), the G pointer is taken
 // from the r28 register saved in the unwind state instead of TLS.
-static EBPF_INLINE u64 get_g_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
+static inline EBPF_INLINE u64 go_get_g_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
 {
 #if defined(__x86_64__)
   (void)state;
@@ -49,13 +49,12 @@ static EBPF_INLINE u64 get_g_ptr(struct GoLabelsOffsets *offs, UnwindState *stat
   return g_addr;
 }
 
-// get_m_ptr reads the M (machine/OS thread) pointer for the current goroutine.
+// go_get_m_ptr reads the M (machine/OS thread) pointer for the current goroutine.
 // It does so by reading the G (goroutine) pointer from thread-local storage,
 // then following the g.m pointer.
-__attribute__((unused)) static EBPF_INLINE void *
-get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
+static inline EBPF_INLINE void *go_get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
 {
-  u64 g_addr = get_g_ptr(offs, state);
+  u64 g_addr = go_get_g_ptr(offs, state);
   if (!g_addr) {
     return NULL;
   }

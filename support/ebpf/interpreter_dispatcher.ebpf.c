@@ -147,7 +147,7 @@ static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURe
     return;
   }
 
-  void *m_ptr_addr = get_m_ptr(offsets, &record->state);
+  void *m_ptr_addr = go_get_m_ptr(offsets, &record->state);
   if (!m_ptr_addr) {
     return;
   }
