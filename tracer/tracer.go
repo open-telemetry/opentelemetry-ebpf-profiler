@@ -1379,4 +1379,3 @@ func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	bpfTrace.KernelFrames = bpfTrace.KernelFrames[0:0]
 	t.tracePool.Put(bpfTrace)
 }
-
