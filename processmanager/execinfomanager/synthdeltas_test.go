@@ -28,7 +28,7 @@ func TestVDSOArm64(t *testing.T) {
 			{Address: 0x7e4, Info: sdtypes.UnwindInfoLR},
 			{Address: 0x800, Info: frameSize16},
 			{Address: 0x80c, Info: sdtypes.UnwindInfoLR},
-			{Address: 0x8f8, Info: sdtypes.UnwindInfoSignal},
+			{Address: 0x8f7, Info: sdtypes.UnwindInfoSignal},
 			{Address: 0x900, Info: sdtypes.UnwindInfoLR},
 		},
 	}

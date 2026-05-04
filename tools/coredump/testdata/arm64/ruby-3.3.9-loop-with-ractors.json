@@ -49,7 +49,7 @@
         "libruby.so.3.3.9+0x2ac5cf",
         "libruby.so.3.3.9+0x2aca0b",
         "libruby.so.3.3.9+0x2ac8e7",
-        "<unwinding aborted due to error native_lr_unwinding_mid_trace>"
+        "<unwinding aborted due to error native_zero_pc>"
       ]
     },
     {

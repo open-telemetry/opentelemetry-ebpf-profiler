@@ -40,7 +40,10 @@
         "libjvm.so+0xbfe27b",
         "libjvm.so+0xe59ff7",
         "libjvm.so+0xe5a08f",
-        "<unwinding aborted due to error native_lr_unwinding_mid_trace>"
+        "libjvm.so+0xdc3dcb",
+        "libjvm.so+0xb56fbb",
+        "libc.so.6+0x7edd7",
+        "libc.so.6+0xe7e5b"
       ]
     },
     {
@@ -66,7 +69,10 @@
         "libjvm.so+0xbfe27b",
         "libjvm.so+0xe59ff7",
         "libjvm.so+0xe5a08f",
-        "<unwinding aborted due to error native_lr_unwinding_mid_trace>"
+        "libjvm.so+0xdc3dcb",
+        "libjvm.so+0xb56fbb",
+        "libc.so.6+0x7edd7",
+        "libc.so.6+0xe7e5b"
       ]
     },
     {

@@ -48,7 +48,7 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 		if sym.Name == "__kernel_rt_sigreturn" {
 			deltas = append(
 				deltas,
-				sdtypes.StackDelta{Address: addr, Info: sdtypes.UnwindInfoSignal},
+				sdtypes.StackDelta{Address: addr - 1, Info: sdtypes.UnwindInfoSignal},
 				sdtypes.StackDelta{Address: addr + sym.Size, Info: sdtypes.UnwindInfoLR},
 			)
 			return true
