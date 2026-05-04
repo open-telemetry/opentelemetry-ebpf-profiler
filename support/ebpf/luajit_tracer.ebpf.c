@@ -130,8 +130,8 @@ static EBPF_INLINE TValue *frame_prevl(TValue *f, TValue frame_val)
 // there's a bunch of places the return address is stored depending on the frame
 // type.
 // https://github.com/openresty/luajit2/blob/7952882d/src/lj_debug.c#L53
-static EBPF_INLINE ErrorCode
-lj_debug_framepc(PerCPURecord *record, void *fn, u32 *startpc, TValue *prevframe, u32 *pc)
+static EBPF_INLINE ErrorCode lj_debug_framepc(
+  struct pt_regs *ctx, PerCPURecord *record, void *fn, u32 *startpc, TValue *prevframe, u32 *pc)
 {
   LJFuncPart *func = &record->luajitUnwindScratch.f;
   if (bpf_probe_read_user(func, sizeof(LJFuncPart), (void **)fn + 1)) {
@@ -144,27 +144,39 @@ lj_debug_framepc(PerCPURecord *record, void *fn, u32 *startpc, TValue *prevframe
   }
   const u32 *ins = NULL;
   if (prevframe == NULL) { /* Lua function on top. */
-    void *cf = cframe_raw(record->luajitUnwindScratch.L.cframe);
-    if (cf == NULL) {
-      DEBUG_PRINT("lj: cframe null");
-      *pc = NO_BCPOS;
-      return ERR_OK;
-    }
-    void *pc_addr = cframe_pc_addr(cf);
-    void *L_addr  = cframe_L_addr(cf);
-    void *L_ptr;
-    if (bpf_probe_read_user(&ins, sizeof(void *), pc_addr)) {
-      DEBUG_PRINT("lj: pc_addr read failed");
-      return ERR_LUAJIT_FRAME_READ;
-    }
-    if (bpf_probe_read_user(&L_ptr, sizeof(void *), L_addr)) {
-      DEBUG_PRINT("lj: L_addr read failed");
-      return ERR_LUAJIT_FRAME_READ;
-    }
-    if (ins == (void *)record->luajitUnwindState.L_ptr || ins == NULL) {
-      DEBUG_PRINT("lj: ins == L or NULL");
-      *pc = NO_BCPOS;
-      return ERR_OK;
+    bool leaf_in_lua = (record->initialUnwinder == PROG_UNWIND_LUAJIT);
+    DEBUG_PRINT("lj: leaf_in_lua: %d", leaf_in_lua);
+    if (leaf_in_lua) {
+#if defined(__x86_64__)
+      ins = (u32 *)ctx->bx;
+#elif defined(__aarch64__)
+      ins = (u32 *)ctx->regs[21];
+#else
+  #error unsupported architecture
+#endif
+    } else {
+      void *cf = cframe_raw(record->luajitUnwindScratch.L.cframe);
+      if (cf == NULL) {
+        DEBUG_PRINT("lj: cframe null");
+        *pc = NO_BCPOS;
+        return ERR_OK;
+      }
+      void *pc_addr = cframe_pc_addr(cf);
+      void *L_addr  = cframe_L_addr(cf);
+      void *L_ptr;
+      if (bpf_probe_read_user(&ins, sizeof(void *), pc_addr)) {
+        DEBUG_PRINT("lj: pc_addr read failed");
+        return ERR_LUAJIT_FRAME_READ;
+      }
+      if (bpf_probe_read_user(&L_ptr, sizeof(void *), L_addr)) {
+        DEBUG_PRINT("lj: L_addr read failed");
+        return ERR_LUAJIT_FRAME_READ;
+      }
+      if (ins == (void *)record->luajitUnwindState.L_ptr || ins == NULL) {
+        DEBUG_PRINT("lj: ins == L or NULL");
+        *pc = NO_BCPOS;
+        return ERR_OK;
+      }
     }
   } else {
     TValue frame_val;
@@ -236,11 +248,14 @@ lj_debug_framepc(PerCPURecord *record, void *fn, u32 *startpc, TValue *prevframe
   }
   // startpc can be for a different function if we land on instructions where things aren't synced.
   // For instance the PC is up to date on the stack but jit_base wasn't updated yet.
+  DEBUG_PRINT("lj: ins: %llx, startpc: %llx", (u64)ins, (u64)startpc);
   if (ins < startpc) {
+    DEBUG_PRINT("lj: ins < startpc, setting *pc = NO_BCPOS");
     *pc = NO_BCPOS;
     return ERR_OK;
   }
   *pc = ins - startpc - 1;
+  DEBUG_PRINT("ins, startpc good: setting *pc = %llx", (u64)*pc);
   return ERR_OK;
 }
 
@@ -264,8 +279,8 @@ static EBPF_INLINE ErrorCode lj_push_frame(
   return ERR_OK;
 }
 
-static EBPF_INLINE ErrorCode
-lj_record_frame(PerCPURecord *record, TValue *frame, TValue frame_value, TValue *prevframe)
+static EBPF_INLINE ErrorCode lj_record_frame(
+  struct pt_regs *ctx, PerCPURecord *record, TValue *frame, TValue frame_value, TValue *prevframe)
 {
   LJScratchSpace *scr = &record->luajitUnwindScratch;
   if (frame_isvarg(frame_value)) {
@@ -304,7 +319,7 @@ lj_record_frame(PerCPURecord *record, TValue *frame, TValue frame_value, TValue 
   void *proto   = (char *)f->pc - GCPROTO_SIZE;
 
   u32 pc;
-  ErrorCode err = lj_debug_framepc(record, fn, start_ip, prevframe, &pc);
+  ErrorCode err = lj_debug_framepc(ctx, record, fn, start_ip, prevframe, &pc);
   if (err) {
     DEBUG_PRINT("lj: lj_debug_framepc err %u", err);
     return err;
@@ -397,8 +412,8 @@ unwind_native_frame(const LuaJITProcInfo *info, UnwindState *state, bool is_jit)
 // and finding ones that indicate a function call frame. Code inspired by
 // lj_debug_frame.
 // https://github.com/openresty/luajit2/blob/7952882d/src/lj_debug.c#L25
-static EBPF_INLINE ErrorCode
-walk_luajit_stack(PerCPURecord *record, const LuaJITProcInfo *info, int *next_unwinder)
+static EBPF_INLINE ErrorCode walk_luajit_stack(
+  struct pt_regs *ctx, PerCPURecord *record, const LuaJITProcInfo *info, int *next_unwinder)
 {
   bool exitToNative = false;
   ErrorCode err;
@@ -509,7 +524,7 @@ walk_luajit_stack(PerCPURecord *record, const LuaJITProcInfo *info, int *next_un
         exitToNative = true;
       }
     }
-    if ((err = lj_record_frame(record, frame, frame_val, prevframe))) {
+    if ((err = lj_record_frame(ctx, record, frame, frame_val, prevframe))) {
       DEBUG_PRINT("lj: walk_lua_stack: lj_record_frame=%d", err);
       return err;
     }
@@ -649,6 +664,21 @@ find_context(struct pt_regs *ctx, PerCPURecord *record, const LuaJITProcInfo *in
   // The JIT doesn't update base as it goes but it does update G.jit_base.
   if (high == LUAJIT_JIT_FILE_ID) {
     record->luajitUnwindState.frame = scr->G.jit_base - 1;
+  }
+  // otherwise, if the first unwinder was Luajit, then we're in
+  // the interpreter. L->base won't have been updated, but
+  // we should have base in a register.
+  //
+  // From vm_x64.dasc:
+  // |.define BASE,		rdx
+  else if (record->initialUnwinder == PROG_UNWIND_LUAJIT) {
+#if defined(__x86_64__)
+    record->luajitUnwindState.frame = (TValue *)(ctx->dx) - 1;
+#elif defined(__aarch64__)
+    record->luajitUnwindState.frame = (TValue *)(ctx->regs[19]) - 1;
+#else
+  #error unsupported architecture
+#endif
   } else {
     record->luajitUnwindState.frame = scr->L.base - 1;
   }
@@ -667,7 +697,6 @@ static EBPF_INLINE int unwind_luajit(struct pt_regs *ctx)
   ErrorCode error      = ERR_OK;
   u32 pid              = record->trace.pid;
   LuaJITProcInfo *info = bpf_map_lookup_elem(&luajit_procs, &pid);
-
   if (!info) {
     DEBUG_PRINT("lj: no LuaJIT introspection data");
     error = ERR_LUAJIT_NO_PROC_INFO;
@@ -682,7 +711,7 @@ static EBPF_INLINE int unwind_luajit(struct pt_regs *ctx)
     }
   }
 
-  if ((error = walk_luajit_stack(record, info, &unwinder))) {
+  if ((error = walk_luajit_stack(ctx, record, info, &unwinder))) {
     goto exit;
   }
 
