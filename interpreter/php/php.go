@@ -164,20 +164,17 @@ func determinePHPVersion(ef *pfelf.File) (uint32, error) {
 	needle := []byte("X-Powered-By: PHP/")
 	for _, seg := range ef.ROData {
 		rdr.Init(ef.Underlying(), int64(seg.Off), int64(seg.Filesz))
-
 		_, err := rdr.SearchSlice(needle)
 		if err != nil {
 			continue
 		}
-
 		verString, err := rdr.ReadString(0)
 		if err != nil {
-			return 0, err
+			continue
 		}
-
 		version, err := versionExtract(verString)
 		if err != nil {
-			return 0, err
+			continue
 		}
 		return version, nil
 	}
