@@ -137,10 +137,10 @@ type StackDeltaPageKey struct {
 	Page   uint64
 }
 type SystemAnalysis struct {
-	Address   uint64
-	Pid       uint32
-	Code      [128]uint8
-	Pad_cgo_0 [4]byte
+	Address uint64
+	Pid     uint32
+	Err     int32
+	Code    [128]uint8
 }
 type TSDInfo struct {
 	Offset     int16

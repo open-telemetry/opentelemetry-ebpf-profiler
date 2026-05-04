@@ -973,6 +973,7 @@ typedef struct OffsetRange {
 typedef struct SystemAnalysis {
   u64 address;
   u32 pid;
+  s32 err;
   u8 code[128];
 } SystemAnalysis;
 
