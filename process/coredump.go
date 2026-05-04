@@ -178,11 +178,9 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 		if p.ProgHeader.Type != elf.PT_NOTE {
 			continue
 		}
-		rdr, err := p.DataReader(maxNotesSection)
-		if err != nil {
-			return nil, err
-		}
+		rdr := p.Open()
 		var note Note64
+		var err error
 		for {
 			// Read the note header (name and size lengths), followed by reading
 			// their contents. This code advances the position in 'rdr' and should

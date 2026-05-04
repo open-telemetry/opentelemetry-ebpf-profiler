@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"unsafe"
 
 	lru "github.com/elastic/go-freelru"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -16,17 +15,16 @@ import (
 )
 
 type FDE struct {
-	PCBegin uintptr
-	PCRange uintptr
+	PCBegin uint64
+	PCRange uint64
 }
 
 type EhFrameTable struct {
-	fdeCount       uintptr
-	tableStartPos  uintptr
-	tableEntrySize int
+	header         reader
+	frames         reader
+	fdeCount       uint64
+	tableEntrySize int64
 	tableEnc       encoding
-	ehFrameHdrSec  *elfRegion
-	ehFrameSec     *elfRegion
 	efm            elf.Machine
 
 	// cieCache holds the CIEs decoded so far. This is the only piece that is
@@ -37,25 +35,26 @@ type EhFrameTable struct {
 // NewEhFrameTable creates a new EhFrameTable from the given pfelf.File.
 // The returned EhFrameTable is not concurrent safe.
 func NewEhFrameTable(ef *pfelf.File) (*EhFrameTable, error) {
-	ehFrameHdrSec, ehFrameSec, err := findEhSections(ef)
+	var es ehframeSections
+	err := es.locateSections(ef)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get EH sections: %w", err)
 	}
-	if ehFrameSec == nil {
-		return nil, errors.New(".eh_frame not found")
-	}
-	if ehFrameHdrSec == nil {
+	if !es.header.isValid() {
 		return nil, errors.New(".eh_frame_hdr not found")
 	}
-	return newEhFrameTableFromSections(ehFrameHdrSec, ehFrameSec, ef.Machine)
+	if !es.frames.isValid() {
+		return nil, errors.New(".eh_frame not found")
+	}
+	return newEhFrameTableFromSections(&es, ef.Machine)
 }
 
-// LookupFDE performs a binary search in .eh_frame_hdr for an FDE covering the given addr.
+// LookupIndex performs a binary search in .eh_frame_hdr for an FDE covering the given addr.
 func (e *EhFrameTable) LookupIndex(addr libpf.Address) (int, error) {
 	idx := sort.Search(e.count(), func(idx int) bool {
 		r := e.entryAt(idx)
 		ipStart, _ := r.ptr(e.tableEnc) // ignoring error, check bounds later
-		return ipStart > uintptr(addr)
+		return ipStart > uint64(addr)
 	})
 	if idx <= 0 {
 		return -1, errors.New("FDE not found")
@@ -89,36 +88,23 @@ func (e *EhFrameTable) LookupFDE(addr libpf.Address) (FDE, error) {
 	if err != nil {
 		return FDE{}, err
 	}
-	if uintptr(addr) < fde.PCBegin || uintptr(addr) >= fde.PCBegin+fde.PCRange {
+	if uint64(addr) < fde.PCBegin || uint64(addr) >= fde.PCBegin+fde.PCRange {
 		return FDE{}, errors.New("FDE not found")
 	}
 	return fde, nil
 }
 
-func newEhFrameTableFromSections(ehFrameHdrSec *elfRegion,
-	ehFrameSec *elfRegion, efm elf.Machine,
-) (hp *EhFrameTable, err error) {
-	hdr := (*ehFrameHdr)(unsafe.Pointer(&ehFrameHdrSec.data[0]))
-
-	r := ehFrameHdrSec.reader(unsafe.Sizeof(ehFrameHdr{}), false)
-	if _, err = r.ptr(hdr.ehFramePtrEnc); err != nil {
-		return nil, err
-	}
-	fdeCount, err := r.ptr(hdr.fdeCountEnc)
-	if err != nil {
-		return nil, err
-	}
+func newEhFrameTableFromSections(es *ehframeSections, efm elf.Machine) (*EhFrameTable, error) {
 	cieCache, err := lru.New[uint64, *cieInfo](cieCacheSize, hashUint64)
 	if err != nil {
 		return nil, err
 	}
 	return &EhFrameTable{
-		fdeCount:       fdeCount,
-		tableStartPos:  r.pos,
-		tableEntrySize: formatLen(hdr.tableEnc) * 2,
-		tableEnc:       hdr.tableEnc,
-		ehFrameHdrSec:  ehFrameHdrSec,
-		ehFrameSec:     ehFrameSec,
+		fdeCount:       es.fdeCount,
+		tableEntrySize: int64(formatLen(es.ehHdr.tableEnc)) * 2,
+		tableEnc:       es.ehHdr.tableEnc,
+		header:         es.header,
+		frames:         es.frames,
 		efm:            efm,
 		cieCache:       cieCache,
 	}, nil
@@ -131,30 +117,30 @@ func (e *EhFrameTable) count() int {
 
 // entryAt returns a reader for the binary search table at given index.
 func (e *EhFrameTable) entryAt(idx int) reader {
-	return e.ehFrameHdrSec.reader(e.tableStartPos+uintptr(e.tableEntrySize*idx), false)
+	return e.header.offset(e.tableEntrySize * int64(idx))
 }
 
 // decodeEntry decodes one entry of the binary search table from the reader.
-func (e *EhFrameTable) decodeEntry(r *reader) (ipStart uintptr, fr reader, err error) {
+func (e *EhFrameTable) decodeEntry(r *reader) (ipStart uint64, fr reader, err error) {
 	ipStart, err = r.ptr(e.tableEnc)
 	if err != nil {
 		return 0, reader{}, err
 	}
-	var fdeAddr uintptr
+	var fdeAddr uint64
 	fdeAddr, err = r.ptr(e.tableEnc)
 	if err != nil {
 		return 0, reader{}, err
 	}
-	if fdeAddr < e.ehFrameSec.vaddr {
+	if fdeAddr < e.frames.vaddr {
 		return 0, reader{}, fmt.Errorf("FDE %#x before section start %#x",
-			fdeAddr, e.ehFrameSec.vaddr)
+			fdeAddr, e.frames.vaddr)
 	}
-	fr = e.ehFrameSec.reader(fdeAddr-e.ehFrameSec.vaddr, false)
+	fr = e.frames.offset(int64(fdeAddr - e.frames.vaddr))
 	return ipStart, fr, err
 }
 
 // decodeEntryAt decodes the entry from given index.
-func (e *EhFrameTable) decodeEntryAt(idx int) (ipStart uintptr, fr reader, err error) {
+func (e *EhFrameTable) decodeEntryAt(idx int) (ipStart uint64, fr reader, err error) {
 	r := e.entryAt(idx)
 	return e.decodeEntry(&r)
 }
