@@ -155,3 +155,82 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	assert.Equal(t, libpf.NativeFrame, catFrame.Type)
 	assert.Equal(t, "", catFrame.FunctionName.String())
 }
+
+func TestInterceptor(t *testing.T) {
+	pid := libpf.PID(4242)
+	libcHostFileID, err := host.FileIDFromBytes(
+		[]byte{0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE})
+	require.NoError(t, err)
+
+	mappings := []Mapping{
+		{FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
+			File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+				FileID:   libpf.NewFileID(uint64(libcHostFileID), 0),
+				FileName: libpf.Intern("libc.so.6"),
+			}),
+			Start: 0,
+			End:   0xFFFFFFF,
+		})},
+	}
+	slices.SortFunc(mappings, compareMapping)
+
+	pc, _, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	libcFrame := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 2, uint64(pc))
+	libcFrame[1] = uint64(libcHostFileID)
+
+	makePM := func(interceptor TraceInterceptor, capture *traceCapture) *ProcessManager {
+		frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
+		require.NoError(t, err)
+		frameCache.SetLifetime(frameCacheLifetime)
+		return &ProcessManager{
+			interpreters: map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance{},
+			pidToProcessInfo: map[libpf.PID]*processInfo{
+				pid: {mappings: mappings},
+			},
+			frameCache:    frameCache,
+			traceReporter: capture,
+			interceptor:   interceptor,
+		}
+	}
+
+	bpfTrace := func() *libpf.EbpfTrace {
+		return &libpf.EbpfTrace{
+			PID:       pid,
+			TID:       pid,
+			NumFrames: 1,
+			FrameData: libcFrame,
+		}
+	}
+
+	t.Run("nil interceptor reports normally", func(t *testing.T) {
+		capture := &traceCapture{}
+		pm := makePM(nil, capture)
+		pm.HandleTrace(bpfTrace())
+		require.Len(t, capture.traces, 1)
+	})
+
+	t.Run("interceptor consuming trace skips reporter", func(t *testing.T) {
+		capture := &traceCapture{}
+		var seen []*libpf.Trace
+		pm := makePM(func(trace *libpf.Trace, _ *samples.TraceEventMeta) bool {
+			seen = append(seen, trace)
+			return true
+		}, capture)
+		pm.HandleTrace(bpfTrace())
+		require.Len(t, seen, 1)
+		require.Empty(t, capture.traces)
+	})
+
+	t.Run("interceptor returning false falls through to reporter", func(t *testing.T) {
+		capture := &traceCapture{}
+		var calls int
+		pm := makePM(func(_ *libpf.Trace, _ *samples.TraceEventMeta) bool {
+			calls++
+			return false
+		}, capture)
+		pm.HandleTrace(bpfTrace())
+		assert.Equal(t, 1, calls)
+		require.Len(t, capture.traces, 1)
+	})
+}
