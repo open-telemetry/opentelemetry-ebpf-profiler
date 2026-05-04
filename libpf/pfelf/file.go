@@ -37,6 +37,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -294,10 +295,8 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		}
 		switch p.ProgHeader.Type {
 		case elf.PT_DYNAMIC:
-			rdr, err := p.DataReader(maxBytesLargeSection)
-			if err != nil {
-				continue
-			}
+			rdr := pfbufio.NewReader(r, int64(p.Off), int64(p.Filesz))
+
 			var dyn elf.Dyn64
 			var bias int64
 			if !hasMusl {
@@ -329,6 +328,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 					f.gnuHash.addr = adjustedVal
 				}
 			}
+			pfbufio.PutReader(rdr)
 		case elf.PT_GNU_EH_FRAME:
 			f.ehFrame = p
 		}
@@ -366,6 +366,12 @@ func (f *File) Take() io.Closer {
 		return mapping.Take()
 	}
 	return NoMmapCloser{}
+}
+
+// Underlying returns the underlying io.ReaderAt interface to access the ELF
+// file directly.
+func (f *File) Underlying() io.ReaderAt {
+	return f.elfReader
 }
 
 // LoadSections loads the ELF file sections
@@ -905,15 +911,6 @@ func (ph *Prog) Data(maxSize uint) ([]byte, error) {
 	p := make([]byte, ph.Filesz)
 	_, err := ph.ReadAt(p, 0)
 	return p, err
-}
-
-// DataReader loads the whole program header referenced data, and returns reader to it.
-func (ph *Prog) DataReader(maxSize uint) (io.Reader, error) {
-	p, err := ph.Data(maxSize)
-	if err != nil {
-		return nil, err
-	}
-	return bytes.NewReader(p), nil
 }
 
 // ReadAt implements the io.ReaderAt interface
