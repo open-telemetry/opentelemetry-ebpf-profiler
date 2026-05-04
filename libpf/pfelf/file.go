@@ -487,23 +487,19 @@ func (f *File) VirtualMemory(addr int64, sz, maxSize int) ([]byte, error) {
 	return nil, fmt.Errorf("no matching segment for 0x%x", uint64(addr))
 }
 
-// SymbolData returns the data associated with given dynamic symbol.
-// The backing mmapped data is returned if possible, otherwise a maximum of
-// maxCopy bytes of the symbol data will read to newly allocated buffer.
-func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (*libpf.Symbol, []byte, error) {
+// SymbolData reads and returns the data associated with given dynamic symbol.
+// The maximum data read is capped to maxSize.
+func (f *File) SymbolData(name libpf.SymbolName, maxSize int) (*libpf.Symbol, []byte, error) {
 	sym, err := f.LookupSymbol(name)
 	if err != nil {
 		return nil, nil, err
 	}
-	symSize := int(sym.Size)
-	if symSize > maxCopy {
-		// Truncate read size if not memory mapped data.
-		if _, ok := f.elfReader.(*mmap.ReaderAt); !ok {
-			symSize = maxCopy
-		}
+	data := make([]byte, min(int(sym.Size), maxSize))
+	_, err = f.ReadAt(data, int64(sym.Address))
+	if err != nil {
+		return nil, nil, err
 	}
-	data, err := f.VirtualMemory(int64(sym.Address), symSize, maxCopy)
-	return sym, data, err
+	return sym, data, nil
 }
 
 // ReadVirtualMemory reads bytes from given virtual address
