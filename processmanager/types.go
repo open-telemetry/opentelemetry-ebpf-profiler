@@ -109,6 +109,7 @@ type ProcessManager struct {
 
 	// interceptor, if set, is called after symbolization. When it returns
 	// true the trace is consumed and HandleTrace skips its default reporting.
+	// Set once at construction; never mutated afterward.
 	interceptor TraceInterceptor
 
 	// exeReporter is the interface to report executables
@@ -175,9 +176,3 @@ type processInfo struct {
 	libcInfo *libc.LibcInfo
 }
 
-// SetInterceptor installs an interceptor that is invoked after symbolization
-// and before reporting. Pass nil to clear an existing interceptor. See
-// TraceInterceptor for semantics.
-func (pm *ProcessManager) SetInterceptor(interceptor TraceInterceptor) {
-	pm.interceptor = interceptor
-}

@@ -152,6 +152,9 @@ type Config struct {
 	ExecutableReporter reporter.ExecutableReporter
 	// TraceReporter is the interface to report traces with.
 	TraceReporter reporter.TraceReporter
+	// Interceptor, if non-nil, is invoked after symbolization and before
+	// reporting. See processmanager.TraceInterceptor for semantics.
+	Interceptor pm.TraceInterceptor
 	// Intervals provides access to globally configured timers and counters.
 	Intervals Intervals
 	// IncludeTracers holds information about which tracers are enabled.
@@ -260,7 +263,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 
 	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
 		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
-		elfunwindinfo.NewStackDeltaProvider(),
+		cfg.Interceptor, elfunwindinfo.NewStackDeltaProvider(),
 		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
@@ -1377,8 +1380,3 @@ func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	t.tracePool.Put(bpfTrace)
 }
 
-// SetInterceptor installs a TraceInterceptor on the underlying ProcessManager.
-// Pass nil to clear an existing interceptor.
-func (t *Tracer) SetInterceptor(interceptor pm.TraceInterceptor) {
-	t.processManager.SetInterceptor(interceptor)
-}
