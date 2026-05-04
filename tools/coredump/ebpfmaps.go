@@ -9,12 +9,12 @@ import (
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
-	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/plugins"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -34,7 +34,7 @@ type ebpfMapsCoredump struct {
 	ctx *ebpfContext
 }
 
-var _ interpreter.EbpfHandler = &ebpfMapsCoredump{}
+var _ plugins.EbpfHandler = &ebpfMapsCoredump{}
 
 func (emc *ebpfMapsCoredump) RemoveReportedPID(libpf.PID) {
 }

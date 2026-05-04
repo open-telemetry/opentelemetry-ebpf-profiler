@@ -34,6 +34,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
+	"go.opentelemetry.io/ebpf-profiler/plugins"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -154,8 +155,8 @@ type Config struct {
 	TraceReporter reporter.TraceReporter
 	// Intervals provides access to globally configured timers and counters.
 	Intervals Intervals
-	// IncludeTracers holds information about which tracers are enabled.
-	IncludeTracers types.IncludedTracers
+	// PluginsConfig holds per-plugin configuration.
+	PluginsConfig plugins.PluginsConfig
 	// SamplesPerSecond holds the number of samples per second.
 	SamplesPerSecond int
 	// MapScaleFactor is the scaling factor for eBPF map sizes.
@@ -235,6 +236,42 @@ func newTracePool() sync.Pool {
 	}
 }
 
+// buildIncludeTracers builds an IncludeTracers from PluginsConfig.
+func buildIncludeTracers(cfg plugins.PluginsConfig) types.IncludedTracers {
+	includeTracers := types.AllTracers()
+	if cfg.Python.IsDisabled() {
+		includeTracers.Disable(types.PythonTracer)
+	}
+	if cfg.Perl.IsDisabled() {
+		includeTracers.Disable(types.PerlTracer)
+	}
+	if cfg.PHP.IsDisabled() {
+		includeTracers.Disable(types.PHPTracer)
+	}
+	if cfg.Hotspot.IsDisabled() {
+		includeTracers.Disable(types.HotspotTracer)
+	}
+	if cfg.Ruby.IsDisabled() {
+		includeTracers.Disable(types.RubyTracer)
+	}
+	if cfg.V8.IsDisabled() {
+		includeTracers.Disable(types.V8Tracer)
+	}
+	if cfg.Dotnet.IsDisabled() {
+		includeTracers.Disable(types.DotnetTracer)
+	}
+	if cfg.Go.IsDisabled() {
+		includeTracers.Disable(types.GoTracer)
+	}
+	if cfg.Labels.IsDisabled() {
+		includeTracers.Disable(types.Labels)
+	}
+	if cfg.BEAM.IsDisabled() {
+		includeTracers.Disable(types.BEAMTracer)
+	}
+	return includeTracers
+}
+
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
 func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	kernelSymbolizer, err := kallsyms.NewSymbolizer()
@@ -247,18 +284,21 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
 
+	// Build IncludeTracers from PluginsConfig
+	includeTracers := buildIncludeTracers(cfg.PluginsConfig)
+
 	// Based on includeTracers we decide later which are loaded into the kernel.
-	ebpfMaps, ebpfProgs, stackdeltaInnerMapSpec, err := initializeMapsAndPrograms(kmod, cfg)
+	ebpfMaps, ebpfProgs, stackdeltaInnerMapSpec, err := initializeMapsAndPrograms(kmod, cfg, includeTracers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
 
-	ebpfHandler, err := pmebpf.LoadMaps(ctx, cfg.IncludeTracers, ebpfMaps, stackdeltaInnerMapSpec)
+	ebpfHandler, err := pmebpf.LoadMaps(ctx, includeTracers, ebpfMaps, stackdeltaInnerMapSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
-	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
+	processManager, err := pm.New(ctx, cfg.PluginsConfig, cfg.Intervals.MonitorInterval(),
 		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
 		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
@@ -310,7 +350,7 @@ func (t *Tracer) Close() {
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
 // by the embedded elf file and loads these into the kernel.
-func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
+func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, includeTracers types.IncludedTracers) (
 	ebpfMaps map[string]*cebpf.Map, ebpfProgs map[string]*cebpf.Program,
 	stackdeltaInnerMapSpec *cebpf.MapSpec, err error,
 ) {
@@ -338,7 +378,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	}
 
 	// Initialize eBPF variables before loading programs and maps.
-	if err = loadRodataVars(coll, kmod, cfg); err != nil {
+	if err = loadRodataVars(coll, kmod, cfg, includeTracers); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to set RODATA variables: %v", err)
 	}
 
@@ -358,7 +398,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	// Load all maps into the kernel that are used later on in eBPF programs. So we can rewrite
 	// in the next step the placesholders in the eBPF programs with the file descriptors of the
 	// loaded maps in the kernel.
-	if err = loadAllMaps(coll, cfg, ebpfMaps); err != nil {
+	if err = loadAllMaps(coll, cfg, ebpfMaps, includeTracers); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
@@ -397,52 +437,52 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		{
 			progID: uint32(support.ProgUnwindHotspot),
 			name:   "unwind_hotspot",
-			enable: cfg.IncludeTracers.Has(types.HotspotTracer),
+			enable: includeTracers.Has(types.HotspotTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindPerl),
 			name:   "unwind_perl",
-			enable: cfg.IncludeTracers.Has(types.PerlTracer),
+			enable: includeTracers.Has(types.PerlTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindPHP),
 			name:   "unwind_php",
-			enable: cfg.IncludeTracers.Has(types.PHPTracer),
+			enable: includeTracers.Has(types.PHPTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindPython),
 			name:   "unwind_python",
-			enable: cfg.IncludeTracers.Has(types.PythonTracer),
+			enable: includeTracers.Has(types.PythonTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindRuby),
 			name:   "unwind_ruby",
-			enable: cfg.IncludeTracers.Has(types.RubyTracer),
+			enable: includeTracers.Has(types.RubyTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindV8),
 			name:   "unwind_v8",
-			enable: cfg.IncludeTracers.Has(types.V8Tracer),
+			enable: includeTracers.Has(types.V8Tracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindDotnet),
 			name:   "unwind_dotnet",
-			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
+			enable: includeTracers.Has(types.DotnetTracer),
 		},
 		{
 			progID: uint32(support.ProgUnwindDotnet10),
 			name:   "unwind_dotnet10",
-			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
+			enable: includeTracers.Has(types.DotnetTracer),
 		},
 		{
 			progID: uint32(support.ProgGoLabels),
 			name:   "go_labels",
-			enable: cfg.IncludeTracers.Has(types.Labels),
+			enable: includeTracers.Has(types.Labels),
 		},
 		{
 			progID: uint32(support.ProgUnwindBEAM),
 			name:   "unwind_beam",
-			enable: cfg.IncludeTracers.Has(types.BEAMTracer),
+			enable: includeTracers.Has(types.BEAMTracer),
 		},
 	}
 
@@ -597,7 +637,7 @@ func syncVariablesToMapSpecs(coll *cebpf.CollectionSpec) error {
 
 // loadAllMaps loads all eBPF maps that are used in our eBPF programs.
 func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
-	ebpfMaps map[string]*cebpf.Map,
+	ebpfMaps map[string]*cebpf.Map, includeTracers types.IncludedTracers,
 ) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
@@ -651,7 +691,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			}
 		}
 
-		if !types.IsMapEnabled(mapName, cfg.IncludeTracers) {
+		if !types.IsMapEnabled(mapName, includeTracers) {
 			log.Debugf("Skipping eBPF map %s: tracer not enabled", mapName)
 			continue
 		}

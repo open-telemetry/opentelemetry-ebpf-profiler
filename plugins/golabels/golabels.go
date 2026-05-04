@@ -1,0 +1,110 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package golabels // import "go.opentelemetry.io/ebpf-profiler/plugins/golabels"
+
+import (
+	"debug/elf"
+	"errors"
+	"fmt"
+	"go/version"
+	"unsafe"
+
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
+
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/plugins"
+	"go.opentelemetry.io/ebpf-profiler/remotememory"
+	"go.opentelemetry.io/ebpf-profiler/support"
+)
+
+type data struct {
+	goVersion string
+	offsets   support.GoLabelsOffsets
+	plugins.InstanceStubs
+}
+
+var errDecodeSymbol = errors.New("failed to decode symbol")
+
+func (d *data) String() string {
+	return "Golang labels " + d.goVersion
+}
+
+func (d *data) Attach(ebpf plugins.EbpfHandler, pid libpf.PID,
+	_ libpf.Address, _ remotememory.RemoteMemory, cfg plugins.Config,
+) (plugins.Instance, error) {
+	if cfg.(plugins.LabelsConfig).IsDisabled() {
+		return nil, plugins.ErrPluginDisabled
+	}
+
+	if err := ebpf.UpdateProcData(libpf.GoLabels, pid, unsafe.Pointer(&d.offsets)); err != nil {
+		return nil, err
+	}
+
+	return d, nil
+}
+
+func (d *data) Detach(ebpf plugins.EbpfHandler, pid libpf.PID) error {
+	return ebpf.DeleteProcData(libpf.GoLabels, pid)
+}
+
+func (d *data) Unload(_ plugins.EbpfHandler) {}
+
+func Loader(_ plugins.EbpfHandler, info *plugins.LoaderInfo) (plugins.Data, error) {
+	file, err := info.GetELF()
+	if err != nil {
+		return nil, err
+	}
+	goVersion, err := file.GoVersion()
+	if err != nil {
+		return nil, err
+	}
+	if goVersion == "" {
+		log.Debugf("file %s is not a Go binary", info.FileName())
+		return nil, nil
+	}
+
+	// Go plugins are shared objects that share the runtime with the main
+	// binary. The offsets we need are determined by the main binary so
+	// there is no reason to create a duplicate golabels instance for
+	// a plugin. A shared library is ET_DYN without a PT_INTERP segment
+	// (PIE executables are also ET_DYN but have PT_INTERP).
+	if file.Type == elf.ET_DYN {
+		hasInterp := false
+		for i := range file.Progs {
+			if file.Progs[i].Type == elf.PT_INTERP {
+				hasInterp = true
+				break
+			}
+		}
+		if !hasInterp {
+			log.Debugf("file %s is a Go shared library, skipping golabels", info.FileName())
+			return nil, nil
+		}
+	}
+
+	if version.Compare(goVersion, "go1.27") >= 0 {
+		return nil, fmt.Errorf("unsupported Go version %s (need >= 1.13 and <= 1.26)", goVersion)
+	}
+
+	log.Debugf("file %s detected as go version %s", info.FileName(), goVersion)
+
+	offsets := getOffsets(goVersion)
+	tlsOffset, err := extractTLSGOffset(file)
+	switch {
+	case errors.Is(err, libpf.ErrSymbolNotFound):
+		return nil, fmt.Errorf("failed to lookup symbol in %s: %v", info.FileName(), err)
+	case errors.Is(err, errDecodeSymbol):
+		log.Warnf("In %s: %v", info.FileName(), err)
+	case errors.Is(err, nil):
+		// Nothing to do - just continue
+	default:
+		return nil, fmt.Errorf("failed to extract TLS offset: %w", err)
+	}
+	offsets.Tls_offset = tlsOffset
+
+	return &data{
+		goVersion: goVersion,
+		offsets:   offsets,
+	}, nil
+}

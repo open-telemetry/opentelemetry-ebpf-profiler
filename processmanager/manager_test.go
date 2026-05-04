@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
-	"go.opentelemetry.io/ebpf-profiler/interpreter"
-	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/plugins"
+	golang "go.opentelemetry.io/ebpf-profiler/plugins/go"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
@@ -55,12 +55,12 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	realPID := libpf.PID(os.Getpid())
 	pid := process.New(realPID, realPID)
 	elfRef := pfelf.NewReference(exec, pid)
-	loaderInfo := interpreter.NewLoaderInfo(goHostFileID, elfRef)
+	loaderInfo := plugins.NewLoaderInfo(goHostFileID, elfRef)
 	rm := remotememory.NewProcessVirtualMemory(realPID)
 
 	goData, err := golang.Loader(nil, loaderInfo)
 	require.NoError(err)
-	goInstance, err := goData.Attach(nil, realPID, 0x0, rm)
+	goInstance, err := goData.Attach(nil, realPID, 0x0, rm, plugins.GoConfig{})
 	require.NoError(err)
 
 	goODID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 1}
@@ -111,7 +111,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 
 	capture := &traceCapture{}
 	pm := &ProcessManager{
-		interpreters: map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance{
+		interpreters: map[libpf.PID]map[util.OnDiskFileIdentifier]plugins.Instance{
 			goPID: {goODID: goInstance},
 		},
 		pidToProcessInfo: map[libpf.PID]*processInfo{

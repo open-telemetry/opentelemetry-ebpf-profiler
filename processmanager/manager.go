@@ -16,21 +16,20 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
-	"go.opentelemetry.io/ebpf-profiler/interpreter"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
-	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf" // apmint used in maybeNotifyAPMAgent
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
+	"go.opentelemetry.io/ebpf-profiler/plugins"
+	"go.opentelemetry.io/ebpf-profiler/plugins/apmint"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -60,7 +59,7 @@ var (
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
-func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
+func New(ctx context.Context, pluginsConfig plugins.PluginsConfig, monitorInterval time.Duration,
 	executableUnloadDelay time.Duration, ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
 	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
 	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
@@ -81,7 +80,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 	}
 	frameCache.SetLifetime(frameCacheLifetime)
 
-	em, err := eim.NewExecutableInfoManager(sdp, ebpf, includeTracers)
+	em, err := eim.NewExecutableInfoManager(sdp, ebpf, pluginsConfig)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
@@ -93,7 +92,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		}
 	})
 
-	interpreters := make(map[libpf.PID]map[util.OnDiskFileIdentifier]interpreter.Instance)
+	interpreters := make(map[libpf.PID]map[util.OnDiskFileIdentifier]plugins.Instance)
 
 	selfContainerID, selfCgroupIno, err := process.DetectSelfContainerIDViaInode()
 	if err != nil {
@@ -132,10 +131,10 @@ func metricSummaryToSlice(summary metrics.Summary) []metrics.Metric {
 	return result
 }
 
-// updateMetricSummary gets the metrics from the provided interpreter instance and updates the
+// updateMetricSummary gets the metrics from the provided plugins instance and updates the
 // provided summary by aggregating the new metrics into the summary.
-// The caller is responsible to hold the lock on the interpreter.Instance to avoid race conditions.
-func updateMetricSummary(ii interpreter.Instance, summary metrics.Summary) error {
+// The caller is responsible to hold the lock on the plugins.Instance to avoid race conditions.
+func updateMetricSummary(ii plugins.Instance, summary metrics.Summary) error {
 	instanceMetrics, err := ii.GetAndResetMetrics()
 	// Update metrics even if there was an error, because it's possible ii is a MultiInstance
 	// and some of the instances may have returned metrics.
@@ -205,7 +204,7 @@ func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *l
 
 	for _, instance := range pm.interpreters[pid] {
 		if err := instance.Symbolize(data, frames, mapping); err != nil {
-			if errors.Is(err, interpreter.ErrMismatchInterpreterType) {
+			if errors.Is(err, plugins.ErrMismatchInterpreterType) {
 				// The interpreter type of instance did not match the type of frame.
 				// So continue with the next interpreter instance for this PID.
 				continue

@@ -16,7 +16,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
-	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 const MiB = 1 << 20
@@ -71,13 +70,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	// Start periodic synchronization with the realtime clock
 	times.StartRealtimeSync(ctx, c.config.ClockSyncInterval)
 
-	log.Debugf("Determining tracers to include")
-	includeTracers, err := tracertypes.Parse(c.config.Tracers)
-	if err != nil {
-		return fmt.Errorf("failed to parse the included tracers: %w", err)
-	}
-
-	err = c.reporter.Start(ctx)
+	err := c.reporter.Start(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start reporter: %w", err)
 	}
@@ -94,7 +87,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
 		TraceReporter:          c.reporter,
 		Intervals:              intervals,
-		IncludeTracers:         includeTracers,
+		PluginsConfig:          c.config.Plugins,
 		FilterErrorFrames:      !c.config.SendErrorFrames,
 		FilterIdleFrames:       !c.config.SendIdleFrames,
 		SamplesPerSecond:       c.config.SamplesPerSecond,

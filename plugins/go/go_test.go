@@ -1,0 +1,71 @@
+package golang
+
+import (
+	"os"
+	"runtime"
+	"strings"
+	"testing"
+
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
+	"go.opentelemetry.io/ebpf-profiler/plugins"
+	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/remotememory"
+)
+
+func BenchmarkGolang(b *testing.B) {
+	pc, _, _, ok := runtime.Caller(1)
+	if !ok {
+		b.Fatal("Failed to get PC from runtime")
+	}
+	fn := runtime.FuncForPC(pc)
+	exec, err := os.Executable()
+	if err != nil {
+		b.Fatalf("Failed to get the executable: %v", err)
+	}
+
+	libpfPID := libpf.PID(os.Getpid())
+	pid := process.New(libpfPID, libpfPID)
+
+	elfRef := pfelf.NewReference(exec, pid)
+	hostFileID, err := host.FileIDFromBytes([]byte{0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55})
+	if err != nil {
+		b.Fatalf("Failed to create hostID: %v", err)
+	}
+	loaderInfo := plugins.NewLoaderInfo(hostFileID, elfRef)
+	rm := remotememory.NewProcessVirtualMemory(libpfPID)
+
+	b.ReportAllocs()
+	for b.Loop() {
+		gD, err := Loader(nil, loaderInfo)
+		if err != nil {
+			b.Fatalf("Failed to create loader: %v", err)
+		}
+
+		gI, err := gD.Attach(nil, libpfPID, 0x0, rm, plugins.GoConfig{})
+		if err != nil {
+			b.Fatalf("Failed to create instance: %v", err)
+		}
+
+		frames := libpf.Frames{}
+		ef := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 2, uint64(pc))
+		ef[1] = uint64(hostFileID)
+
+		if err := gI.Symbolize(ef, &frames, libpf.FrameMapping{}); err != nil {
+			b.Fatalf("Failed to symbolize 0x%x: %v", pc, err)
+		}
+
+		if len(frames) != 1 {
+			b.Fatalf("Expected a single entry but got %d", len(frames))
+		}
+		for _, uniqueFrame := range frames {
+			f := uniqueFrame.Value()
+			// The returned anonymous function has the suffic 'func1'.
+			// Therefore check only for a matching prefix.
+			if !strings.HasPrefix(f.FunctionName.String(), fn.Name()) {
+				b.Fatalf("Expected '%s()' but got '%s()'", fn, f.FunctionName)
+			}
+		}
+	}
+}

@@ -7,19 +7,19 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
-	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/plugins"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // EbpfHandler provides the functionality to interact with eBPF maps.
 type EbpfHandler interface {
-	// Embed interpreter.EbpfHandler as subset of this interface.
-	interpreter.EbpfHandler
+	// Embed plugins.EbpfHandler as subset of this interface.
+	plugins.EbpfHandler
 
 	// RemoveReportedPID removes a PID from the reported_pids eBPF map.
 	RemoveReportedPID(pid libpf.PID)
