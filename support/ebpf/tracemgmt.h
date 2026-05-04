@@ -850,7 +850,8 @@ static inline EBPF_INLINE int collect_trace(
   }
 
   DEBUG_UNWIND_STATE(&record->state);
-  error = get_next_unwinder_after_native_frame(record, &unwinder);
+  error                   = get_next_unwinder_after_native_frame(record, &unwinder);
+  record->initialUnwinder = unwinder;
 
 exit:
   record->state.unwind_error = error;
