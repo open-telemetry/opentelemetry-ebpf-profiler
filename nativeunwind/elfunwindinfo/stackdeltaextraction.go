@@ -127,10 +127,13 @@ func (ee *elfExtractor) extractDebugDeltas() (err error) {
 	return err
 }
 
-func isLibCrypto(elfFile *pfelf.File) bool {
+func isLibGenericRegsAllowed(elfFile *pfelf.File) bool {
 	if name, err := elfFile.DynString(elf.DT_SONAME); err == nil && len(name) == 1 {
-		// Allow generic register CFA for openssl libcrypto
-		return strings.HasPrefix(name[0], "libcrypto.so.")
+		// Allow generic register CFA for openssl libcrypto, glibc and musl
+		n := name[0]
+		return strings.HasPrefix(n, "libcrypto.so.") ||
+			strings.HasPrefix(n, "libc.so.") ||
+			strings.HasPrefix(n, "ld-linux-")
 	}
 	return false
 }
@@ -191,7 +194,7 @@ func extractFile(elfFile *pfelf.File, elfRef *pfelf.Reference,
 		file:             elfFile,
 		deltas:           &deltas,
 		hooks:            &filter,
-		allowGenericRegs: isLibCrypto(elfFile),
+		allowGenericRegs: isLibGenericRegsAllowed(elfFile),
 	}
 
 	if entryLength := detectEntry(elfFile); entryLength != 0 {
