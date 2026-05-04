@@ -650,6 +650,12 @@ const (
 	// Number of failures to read TLS variables via the DTV
 	IDUnwindErrBadDTVRead = 286
 
+	// Number of attempted LuaJIT unwinds
+	IDUnwindLuaJITAttempts = 287
+
+	// Number of times we didn't find an entry for this process in the LuaJIT process info array
+	IDUnwindLuaJITErrNoProcInfo = 288
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 287
+	IDMax = 289
 )

@@ -22,6 +22,7 @@ const (
 	FrameMarkerPerl    = 0x7
 	FrameMarkerV8      = 0x8
 	FrameMarkerDotnet  = 0xa
+	FrameMarkerLuaJIT  = 0xd
 	FrameMarkerBEAM    = 0xc
 	FrameMarkerGo      = 0xb
 )
@@ -45,6 +46,7 @@ const (
 	ProgUnwindDotnet10 = 0x9
 	ProgGoLabels       = 0xa
 	ProgUnwindBEAM     = 0xb
+	ProgUnwindLuaJIT   = 0xc
 )
 
 const (
@@ -60,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x69
+	MetricIDBeginCumulative = 0x6d
 )
 
 const (
@@ -400,6 +402,15 @@ const (
 	RubyFrameTypeGc       = 0x4
 )
 
+const (
+	LJFFIFunc        = 0xff1
+	LJFileId         = 0x2a
+	LJNormalFrame    = 0x0
+	LJGReport        = 0xff2
+	LJCframeSpaceX86 = 0x50
+	LJCframeSpaceArm = 0xd0
+)
+
 var MetricsTranslation = []metrics.MetricID{
 	0x0:  metrics.IDUnwindCallInterpreter,
 	0x1:  metrics.IDUnwindErrZeroPC,
@@ -489,11 +500,13 @@ var MetricsTranslation = []metrics.MetricID{
 	0x5d: metrics.IDUnwindDotnetErrBadFP,
 	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
 	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,
-	0x62: metrics.IDUnwindRubyErrInvalidIseq,
-	0x63: metrics.IDUnwindRubyErrReadMethodDef,
-	0x64: metrics.IDUnwindRubyErrReadMethodType,
-	0x65: metrics.IDUnwindRubyErrReadSvar,
-	0x66: metrics.IDUnwindRubyErrReadRbasicFlags,
-	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
-	0x68: metrics.IDUnwindErrBadDTVRead,
+	0x66: metrics.IDUnwindRubyErrInvalidIseq,
+	0x67: metrics.IDUnwindRubyErrReadMethodDef,
+	0x68: metrics.IDUnwindRubyErrReadMethodType,
+	0x69: metrics.IDUnwindRubyErrReadSvar,
+	0x6a: metrics.IDUnwindRubyErrReadRbasicFlags,
+	0x6b: metrics.IDUnwindRubyErrCmeMaxEp,
+	0x6c: metrics.IDUnwindErrBadDTVRead,
+	0x60: metrics.IDUnwindLuaJITAttempts,
+	0x61: metrics.IDUnwindLuaJITErrNoProcInfo,
 }
