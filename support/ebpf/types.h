@@ -957,6 +957,8 @@ typedef struct PerCPURecord {
   // usesAnonymousMappings is copied from the per-PID marker in
   // pid_page_to_mapping_info during trace initialization.
   bool usesAnonymousMappings;
+
+  int initialUnwinder;
 } PerCPURecord;
 
 // https://github.com/torvalds/linux/blob/e9a6fb0bcdd7609be6969112f3fbfcce3b1d4a7c/include/linux/percpu.h#L24C39-L24C47

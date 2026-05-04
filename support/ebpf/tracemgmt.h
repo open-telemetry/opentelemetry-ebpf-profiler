@@ -981,7 +981,8 @@ static inline EBPF_INLINE int collect_trace(
 
   record->usesAnonymousMappings = pid_uses_anonymous_mappings(pidInfo);
 
-  error = get_next_unwinder_after_native_frame(record, &unwinder);
+  error                   = get_next_unwinder_after_native_frame(record, &unwinder);
+  record->initialUnwinder = unwinder;
 
 exit:
   record->state.unwind_error = error;
