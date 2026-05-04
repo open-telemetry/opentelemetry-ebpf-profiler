@@ -927,6 +927,8 @@ typedef struct PerCPURecord {
 
   // ratelimitAction determines the PID event rate limiting mode
   u8 ratelimitAction;
+
+  int initialUnwinder;
 } PerCPURecord;
 
 // https://github.com/torvalds/linux/blob/e9a6fb0bcdd7609be6969112f3fbfcce3b1d4a7c/include/linux/percpu.h#L24C39-L24C47
