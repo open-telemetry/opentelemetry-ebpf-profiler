@@ -2096,5 +2096,19 @@
     "name": "UnwindErrBadDTVRead",
     "field": "bpf.errors.bad_dtv_read",
     "id": 286
+  },
+  {
+    "description": "Number of successfully symbolized native frames",
+    "type": "counter",
+    "name": "NativeSymbolizationSuccess",
+    "field": "ha.native.symbolization.success",
+    "id": 287
+  },
+  {
+    "description": "Number of native frames that failed symbolization",
+    "type": "counter",
+    "name": "NativeSymbolizationFailure",
+    "field": "ha.native.symbolization.failure",
+    "id": 288
   }
 ]

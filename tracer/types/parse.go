@@ -25,6 +25,7 @@ const (
 	GoTracer
 	Labels
 	BEAMTracer
+	SymtabTracer
 
 	// maxTracers indicates the max. number of different tracers
 	maxTracers
@@ -41,6 +42,7 @@ var tracerTypeToName = map[tracerType]string{
 	GoTracer:      "go",
 	Labels:        "labels",
 	BEAMTracer:    "beam",
+	SymtabTracer:  "symtab",
 }
 
 var tracerNameToType = make(map[string]tracerType, maxTracers)
