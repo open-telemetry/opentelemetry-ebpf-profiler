@@ -162,7 +162,7 @@ func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 	for i, sym := range []libpf.SymbolName{"PL_revision", "PL_version", "PL_subversion"} {
 		addr, err := ef.LookupSymbolAddress(sym)
 		if err == nil {
-			_, err = ef.ReadVirtualMemory(verBytes[i:i+1], int64(addr))
+			_, err = ef.ReadAt(verBytes[i:i+1], int64(addr))
 		}
 		if err != nil {
 			return nil, fmt.Errorf("perl symbol '%s': %v", sym, err)

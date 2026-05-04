@@ -2248,7 +2248,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			sym.Address, sym.Size, sym.Size/3)
 		d.bytecodeSizes = make([]byte, sym.Size)
 		d.bytecodeCount = uint8(sym.Size / 3)
-		if _, err = ef.ReadVirtualMemory(d.bytecodeSizes, int64(sym.Address)); err != nil {
+		if _, err = ef.ReadAt(d.bytecodeSizes, int64(sym.Address)); err != nil {
 			return nil, fmt.Errorf("unable to read bytecode sizes: %v", err)
 		}
 		for _, opcodeLength := range d.bytecodeSizes {
