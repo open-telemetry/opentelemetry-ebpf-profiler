@@ -94,7 +94,7 @@ func Open(filename string) (*ReaderAt, error) {
 	return OpenFile(f)
 }
 
-// Open memory-maps the OS file for reading.
+// OpenFile memory-maps the OS file for reading.
 func OpenFile(f *os.File) (*ReaderAt, error) {
 	fi, err := f.Stat()
 	if err != nil {
