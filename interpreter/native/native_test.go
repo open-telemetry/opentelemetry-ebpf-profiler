@@ -34,7 +34,7 @@ func TestLoaderSkipsGoBinary(t *testing.T) {
 }
 
 func TestLoaderNativeBinary(t *testing.T) {
-	// Use /bin/sh as a native (non-Go) ELF with .dynsym symbols.
+	// Use testdata/testbin as a native (non-Go) ELF with .dynsym symbols.
 	elfRef := pfelf.NewReference("testdata/testbin", pfelf.SystemOpener)
 
 	hostFileID, err := host.FileIDFromBytes(
@@ -44,7 +44,7 @@ func TestLoaderNativeBinary(t *testing.T) {
 	loaderInfo := interpreter.NewLoaderInfo(hostFileID, elfRef)
 	data, err := Loader(nil, loaderInfo)
 	require.NoError(t, err)
-	require.NotNil(t, data, "expected native symbolizer data for /bin/sh")
+	require.NotNil(t, data, "expected native symbolizer data for testdata/testbin")
 
 	nd, ok := data.(*nativeData)
 	require.True(t, ok)
