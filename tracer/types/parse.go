@@ -6,6 +6,7 @@ package types // import "go.opentelemetry.io/ebpf-profiler/tracer/types"
 import (
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -46,6 +47,12 @@ var tracerTypeToName = map[tracerType]string{
 }
 
 var tracerNameToType = make(map[string]tracerType, maxTracers)
+
+// excludedTracers lists tracers not enabled by Parse("all") / enableAll; add
+// a tracerType here to require an explicit name in the tracers list.
+var excludedTracers = []tracerType{
+	SymtabTracer,
+}
 
 func init() {
 	for k, v := range tracerTypeToName {
@@ -126,9 +133,14 @@ func (t *IncludedTracers) Disable(tracer tracerType) {
 	*t &= ^(1 << tracer)
 }
 
-// enableAll enables all known tracers.
+// enableAll enables all known tracers except those in excludedTracers, which
+// must be requested explicitly (e.g. symtab) so default "-tracers all" does
+// not opt into heavier or optional interpreter paths.
 func (t *IncludedTracers) enableAll() {
 	for tracer := range maxTracers {
+		if slices.Contains(excludedTracers, tracer) {
+			continue
+		}
 		t.Enable(tracer)
 	}
 }
@@ -144,6 +156,7 @@ func (t *IncludedTracers) enableByName(name string) bool {
 
 // Parse parses a string that specifies one or more eBPF tracers to enable.
 // Valid inputs are 'all', or any comma-delimited combination of names listed in tracerTypeToName.
+// The name "all" enables every tracer except those in excludedTracers (see variable).
 // The return value holds the information whether a tracer has been set or not.
 // E.g. to check if the Python tracer was requested: `if result.Has(tracertypes.PythonTracer)...`.
 func Parse(tracers string) (IncludedTracers, error) {
@@ -185,8 +198,8 @@ func Parse(tracers string) (IncludedTracers, error) {
 	return result, nil
 }
 
-// AllTracers is a shortcut that returns an element with all
-// tracers enabled.
+// AllTracers is a shortcut that returns an element with all tracers enabled
+// except excludedTracers (same rule as Parse("all")).
 func AllTracers() IncludedTracers {
 	var result IncludedTracers
 	result.enableAll()
