@@ -847,16 +847,6 @@ func TestGenerate_Validate(t *testing.T) {
 	err = proto.Unmarshal(contents, &data)
 	require.NoError(t, err)
 
-	// Fix for protobuf unmarshaling for ConformanceChecker: The first attribute
-	// table entry must have a nil Value,but protobuf unmarshaling creates a
-	// non-nil but empty AnyValue. Explicitly set it to nil.
-	if data.Dictionary != nil && len(data.Dictionary.AttributeTable) > 0 {
-		firstAttr := data.Dictionary.AttributeTable[0]
-		if firstAttr.KeyStrindex == 0 && firstAttr.UnitStrindex == 0 {
-			firstAttr.Value = nil
-		}
-	}
-
 	err = (profcheck.ConformanceChecker{
 		CheckDictionaryDuplicates: true,
 		CheckSampleTimestampShape: true}).Check(&data)
