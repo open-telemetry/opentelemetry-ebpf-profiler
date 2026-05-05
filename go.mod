@@ -21,7 +21,7 @@ require (
 	github.com/klauspost/compress v1.18.6
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
-	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260430131511-d4c84f09b3ab
+	github.com/open-telemetry/sig-profiling/profcheck v0.0.0-20260504053944-5ab2ab77ce06
 	github.com/peterbourgon/ff/v3 v3.4.0
 	github.com/stretchr/testify v1.11.1
 	github.com/zeebo/xxh3 v1.1.0
@@ -47,7 +47,7 @@ require (
 	golang.org/x/mod v0.35.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.43.0
-	google.golang.org/grpc v1.80.0
+	google.golang.org/grpc v1.81.0
 	google.golang.org/protobuf v1.36.11
 )
 
