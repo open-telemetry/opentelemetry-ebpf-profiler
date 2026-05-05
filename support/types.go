@@ -402,15 +402,6 @@ const (
 	RubyFrameTypeGc       = 0x4
 )
 
-const (
-	LJFFIFunc        = 0xff1
-	LJFileId         = 0x2a
-	LJNormalFrame    = 0x0
-	LJGReport        = 0xff2
-	LJCframeSpaceX86 = 0x50
-	LJCframeSpaceArm = 0xd0
-)
-
 var MetricsTranslation = []metrics.MetricID{
 	0x0:  metrics.IDUnwindCallInterpreter,
 	0x1:  metrics.IDUnwindErrZeroPC,
