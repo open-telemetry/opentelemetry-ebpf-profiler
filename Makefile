@@ -1,6 +1,6 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
-	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
+	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs processctx-execs \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix \
 	otel-from-tree otel-from-lib
@@ -61,6 +61,7 @@ all: ebpf-profiler
 clean:
 	@go clean -cache -i
 	@$(MAKE) -s -C support/ebpf clean
+	@$(MAKE) -C processcontext/integrationtests/testdata clean
 	@chmod -Rf u+w go/ || true
 	@rm -rf go .cache support/*.test interpreter/golabels/integrationtests/pprof_1_*
 	@rm -f otelcol-ebpf-profiler cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
@@ -150,6 +151,9 @@ test-deps:
 	)
 
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support interpreter/golabels/integrationtests
+
+processctx-execs:
+	$(MAKE) -C processcontext/integrationtests/testdata
 
 pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_cgo pprof_stable_cgo_pie
 
