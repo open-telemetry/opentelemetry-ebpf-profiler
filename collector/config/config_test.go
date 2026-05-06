@@ -24,6 +24,7 @@ func validConfig() *Config {
 		ProbabilisticThreshold: 100,
 		NoKernelVersionCheck:   true,
 		ErrorMode:              PropagateError,
+		EnableSWCPUClock:       true,
 	}
 }
 

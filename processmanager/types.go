@@ -179,6 +179,10 @@ type processInfo struct {
 	processContext processcontext.Info
 	// executable mappings sorted by FileID and mapping start address
 	mappings []Mapping
+	// mappingsByVaddr holds indices into mappings ordered by runtime Vaddr.
+	// Runtime mappings never overlap, so Vaddr alone is a total order; this
+	// index serves runtime-VA lookups (LBR branch endpoints) via binary search.
+	mappingsByVaddr []int
 	// C-library Thread Specific Data information
 	libcInfo *libc.LibcInfo
 }
