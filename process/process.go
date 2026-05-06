@@ -60,8 +60,6 @@ type systemProcess struct {
 
 	mainThreadExit bool
 	remoteMemory   remotememory.RemoteMemory
-
-	fileToMapping map[string]*RawMapping
 }
 
 var _ Process = &systemProcess{}
@@ -394,20 +392,13 @@ func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint
 	}
 	defer mapsFile.Close()
 
-	fileToMapping := make(map[string]*RawMapping)
 	gotMappings := false
-
-	collectForOpenELF := func(m RawMapping) bool {
+	trackedCallback := func(m RawMapping) bool {
 		gotMappings = true
-		if m.IsExecutable() || m.IsVDSO() {
-			stored := m
-			stored.Path = libpf.Intern(m.Path).String()
-			fileToMapping[stored.Path] = &stored
-		}
 		return callback(m)
 	}
 
-	numParseErrors, err := iterateMappings(mapsFile, collectForOpenELF)
+	numParseErrors, err := iterateMappings(mapsFile, trackedCallback)
 	if err != nil {
 		return numParseErrors, err
 	}
@@ -437,13 +428,12 @@ func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint
 			return numParseErrors, ErrNoMappings
 		}
 		defer mapsFileAlt.Close()
-		numParseErrors, err := iterateMappings(mapsFileAlt, collectForOpenELF)
+		numParseErrors, err := iterateMappings(mapsFileAlt, trackedCallback)
 		if err != nil || !gotMappings {
 			return numParseErrors, ErrNoMappings
 		}
 	}
 
-	sp.fileToMapping = fileToMapping
 	return numParseErrors, nil
 }
 
@@ -521,23 +511,28 @@ func (sp *systemProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, er
 	return libpf.FileIDFromExecutableFile(sp.getMappingFile(m))
 }
 
-func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
-	// Always open via map_files as it can open deleted files if available.
+func (sp *systemProcess) OpenELFMapping(m *RawMapping) (*pfelf.File, error) {
+	// Open ELF via map_files as it can open deleted files if available.
 	// No fallback is attempted:
-	// - if the process exited, the fallback will error also (/proc/>PID> is gone)
+	// - if the process exited, the fallback will error also (/proc/<PID> is gone)
 	// - if the error is due to ELF content, same error will occur in both cases
 	// - if the process unmapped the ELF, its data is no longer needed
-	if m, ok := sp.fileToMapping[file]; ok {
-		if m.IsVDSO() {
-			vdso, err := sp.extractMapping(m)
-			if err != nil {
-				return nil, fmt.Errorf("failed to extract VDSO: %v", err)
-			}
-			return pfelf.NewFile(vdso, 0, false)
+	if m.IsVDSO() {
+		vdso, err := sp.extractMapping(m)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract VDSO: %v", err)
 		}
-		return pfelf.Open(sp.getMappingFile(m))
+		return pfelf.NewFile(vdso, 0, false)
 	}
+	if !m.IsFileBacked() {
+		return nil, fmt.Errorf("mapping at %#x has no backing file", m.Vaddr)
+	}
+	return pfelf.Open(sp.getMappingFile(m))
+}
 
-	// Fall back to opening the file using the process specific root
+func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
+	// Open the file using the process-specific root. Callers that have a
+	// RawMapping should use OpenELFMapping instead, which can open deleted
+	// or replaced files via /proc/<pid>/map_files.
 	return pfelf.Open(path.Join("/proc", strconv.Itoa(int(sp.pid)), "root", file))
 }

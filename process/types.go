@@ -125,8 +125,8 @@ type ProcessMeta struct {
 
 // Process is the interface to inspect ELF coredump/process.
 // The current implementations do not allow concurrent access to this interface
-// from different goroutines. As an exception the ELFOpener and the returned
-// GetRemoteMemory object are safe for concurrent use.
+// from different goroutines. As an exception ELFOpener, OpenELFMapping, and
+// the returned GetRemoteMemory object are safe for concurrent use.
 type Process interface {
 	// PID returns the process identifier.
 	PID() libpf.PID
@@ -156,6 +156,11 @@ type Process interface {
 
 	// OpenMappingFile returns ReadAtCloser accessing the backing file of the mapping.
 	OpenMappingFile(*RawMapping) (ReadAtCloser, error)
+
+	// OpenELFMapping opens a memory mapping as an ELF file. The mapping must
+	// originate from this Process (via IterateMappings), passing a foreign
+	// mapping has undefined results.
+	OpenELFMapping(*RawMapping) (*pfelf.File, error)
 
 	// GetMappingFileLastModifed returns the timestamp when the backing file was last modified
 	// or zero if an error occurs or mapping file is not accessible via filesystem.
