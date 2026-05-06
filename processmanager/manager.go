@@ -32,6 +32,7 @@ import (
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -280,7 +281,7 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 		address := libpf.Address(ef.Data())
 
 		// Locate mapping info for the frame.
-		mapping := pm.findMappingForTrace(pid, fileID, address)
+		mapping, _ := pm.findMapping(pid, &fileID, address)
 
 		// Attempt symbolization of native frames. It is best effort and
 		// provides non-symbolized frames if no native symbolizer is active.
@@ -321,6 +322,45 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 		dst.Append(&libpf.Frame{Type: ef.Type()})
 	}
 	return false
+}
+
+// isKernelAddress reports whether addr looks like a kernel virtual address.
+// Mirrors is_kernel_address() in the eBPF code.
+func isKernelAddress(addr uint64) bool {
+	return addr&0xFF00000000000000 != 0
+}
+
+// appendLBRFrames resolves each branch record's endpoints to ELF VA and appends
+// them to dst as [from, to] LBRFrame pairs, matching the eBPF capture order.
+// Entries with kernel addresses or unmapped endpoints are skipped.
+func (pm *ProcessManager) appendLBRFrames(pid libpf.PID, entries []support.LBREntry,
+	dst *libpf.Frames) {
+	for i := range entries {
+		from, to := entries[i].From, entries[i].To
+		if isKernelAddress(from) || isKernelAddress(to) {
+			continue
+		}
+
+		fromMapping, fromVaddr := pm.findMapping(pid, nil, libpf.Address(from))
+		toMapping, toVaddr := pm.findMapping(pid, nil, libpf.Address(to))
+		if !fromMapping.Valid() || !toMapping.Valid() {
+			continue
+		}
+
+		fromELFVA := libpf.Address(from) - fromVaddr + fromMapping.Value().Start
+		dst.Append(&libpf.Frame{
+			Type:            libpf.LBRFrame,
+			AddressOrLineno: libpf.AddressOrLineno(fromELFVA),
+			Mapping:         fromMapping,
+		})
+
+		toELFVA := libpf.Address(to) - toVaddr + toMapping.Value().Start
+		dst.Append(&libpf.Frame{
+			Type:            libpf.LBRFrame,
+			AddressOrLineno: libpf.AddressOrLineno(toELFVA),
+			Mapping:         toMapping,
+		})
+	}
 }
 
 func (pm *ProcessManager) maybeNotifyAPMAgent(
@@ -442,6 +482,13 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *sa
 	if cacheHit != 0 {
 		pm.frameCacheHit.Add(cacheHit)
 	}
+
+	// Append branch-record frames (LBR/AMD BRS) after the call-stack frames,
+	// matching the eBPF capture order.
+	if len(bpfTrace.LBR) > 0 {
+		pm.appendLBRFrames(pid, bpfTrace.LBR, &trace.Frames)
+	}
+
 	pm.mu.RLock()
 	// Release resources that were used to symbolize this stack.
 	for _, instance := range pm.interpreters[pid] {

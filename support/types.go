@@ -25,6 +25,7 @@ const (
 	FrameMarkerLuaJIT  = 0xd
 	FrameMarkerBEAM    = 0xc
 	FrameMarkerGo      = 0xb
+	FrameMarkerLBR     = 0xe
 )
 
 const (
@@ -147,22 +148,32 @@ type DTVInfo struct {
 	Multiplier uint8
 	Pad_cgo_0  [1]byte
 }
-type Trace struct {
-	Pid                uint32
-	Tid                uint32
-	Ktime              uint64
-	Comm               [16]uint8
-	Apm_transaction_id [8]byte
-	Apm_trace_id       [16]byte
-	Custom_labels      CustomLabelsArray
-	Frame_data_len     uint16
-	Num_frames         uint16
-	Num_kernel_frames  uint16
-	Origin             uint16
-	Value              uint64
-	Cpu_id             uint32
-	Frame_data         [3072]uint64
+type LBREntry struct {
+	From  uint64
+	To    uint64
+	Flags uint64
 }
+type Trace struct {
+	Pid                 uint32
+	Tid                 uint32
+	Ktime               uint64
+	Comm                [16]uint8
+	Apm_transaction_id  [8]byte
+	Apm_trace_id        [16]byte
+	Custom_labels       CustomLabelsArray
+	Frame_data_len      uint16
+	Num_frames          uint16
+	Num_kernel_frames   uint16
+	Origin              uint16
+	Value               uint64
+	Cpu_id              uint32
+	Nr_branch_records   uint32
+	Perf_branch_records [32]LBREntry
+	Frame_data          [3072]uint64
+}
+
+const MaxBranchRecords = 0x20
+
 type UnwindInfo struct {
 	Flags       uint8
 	BaseReg     uint8
@@ -324,7 +335,7 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0x62d8
+	Sizeof_Trace      = 0x65d8
 
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4

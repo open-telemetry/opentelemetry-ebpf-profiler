@@ -13,6 +13,8 @@
 
   #define MULTI_USE_FUNC(func_name)
 
+  #define MULTI_USE_FUNC_WITH_LBR(func_name)
+
 #else // TESTING_COREDUMP
 
   // MULTI_USE_FUNC generates perf event and kprobe eBPF programs
@@ -28,6 +30,24 @@
     static int EBPF_INLINE kprobe_##func_name(struct pt_regs *ctx)                                 \
     {                                                                                              \
       return func_name(ctx);                                                                       \
+    }
+
+  // MULTI_USE_FUNC_WITH_LBR is like MULTI_USE_FUNC but for functions taking a
+  // compile-time `lbr_capable` bool as a second argument. The perf_event variant
+  // passes true; the kprobe variant passes false, letting clang dead-code
+  // eliminate bpf_read_branch_records() (not permitted for kprobe programs) from
+  // the kprobe build.
+  #define MULTI_USE_FUNC_WITH_LBR(func_name)                                                       \
+    SEC("perf_event/" #func_name)                                                                  \
+    static int EBPF_INLINE perf_##func_name(struct pt_regs *ctx)                                   \
+    {                                                                                              \
+      return func_name(ctx, true);                                                                 \
+    }                                                                                              \
+                                                                                                   \
+    SEC("kprobe/" #func_name)                                                                      \
+    static int EBPF_INLINE kprobe_##func_name(struct pt_regs *ctx)                                 \
+    {                                                                                              \
+      return func_name(ctx, false);                                                                \
     }
 
 #endif // TESTING_COREDUMP
@@ -55,6 +75,12 @@ extern u32 vma_vm_flags_offset;
 
 // origin_id_sampling is declared in native_stack_trace.ebpf.c
 extern u16 origin_id_sampling;
+
+// origin_id_hw_cpu_cycles is declared in native_stack_trace.ebpf.c
+extern u16 origin_id_hw_cpu_cycles;
+
+// origin_id_amd_brs is declared in native_stack_trace.ebpf.c
+extern u16 origin_id_amd_brs;
 
 // pid_ns_translation_enabled is declared in native_stack_trace.ebpf.c
 extern bool pid_ns_translation_enabled;
@@ -553,6 +579,27 @@ static inline EBPF_INLINE bool is_kernel_address(u64 addr)
 {
   return addr & 0xFF00000000000000UL;
 }
+// collect_lbr_stack reads the CPU's last branch records straight into the
+// trace's perf_branch_records array via bpf_read_branch_records() and records
+// how many entries were written. The helper fills the whole array in a single
+// call, so there is no per-entry loop; this avoids bpf_loop() and therefore
+// works on kernels older than 5.17. Kernel-address filtering and mapping
+// resolution are performed in userspace. Requires a perf_event program type.
+//
+// Supported hardware paths: Intel LBR, AMD LbrExtV2 (Zen 4+), AMD BRS.
+static inline EBPF_INLINE void collect_lbr_stack(void *ctx, Trace *trace)
+{
+  long written =
+    bpf_read_branch_records(ctx, trace->perf_branch_records, sizeof(trace->perf_branch_records), 0);
+  if (written <= 0) {
+    return;
+  }
+  int n = (int)(written / sizeof(trace->perf_branch_records[0]));
+  if (n > MAX_BRANCH_RECORDS) {
+    n = MAX_BRANCH_RECORDS;
+  }
+  trace->nr_branch_records = (u32)n;
+}
 
 // Reads a bias_and_unwind_program value from PIDPageMappingInfo
 static inline EBPF_INLINE void
@@ -992,7 +1039,6 @@ collect_trace(struct pt_regs *ctx, u16 origin, u32 pid, u32 tid, u64 trace_times
     increment_metric(metricID_ErrBPFCurrentComm);
   }
 
-  // Capture kernel stack and push each frame into frame_data.
   push_kernel_frames(ctx, trace);
 
   if (pid == 0) {
@@ -1000,13 +1046,11 @@ collect_trace(struct pt_regs *ctx, u16 origin, u32 pid, u32 tid, u64 trace_times
     return 0;
   }
 
-  // Preload this trace's go_procs entry into record->goOffsets.
   GoRuntimeOffsets *go_offsets = bpf_map_lookup_elem(&go_procs, &pid);
   if (go_offsets) {
     record->goOffsets = *go_offsets;
   }
 
-  // Recursive unwind frames
   int unwinder           = PROG_UNWIND_STOP;
   bool has_usermode_regs = false;
   ErrorCode error        = get_usermode_regs(ctx, &record->state, &has_usermode_regs);
@@ -1033,6 +1077,32 @@ exit:
   record->state.unwind_error = error;
   tail_call(ctx, unwinder);
   DEBUG_PRINT("bpf_tail call failed for %d in native_tracer_entry", unwinder);
+  return -1;
+}
+
+// collect_lbr_only_trace handles LBR-only samples (e.g. AMD BRS). It initialises
+// a Trace header (no call-stack unwinding) and tail-calls into unwind_stop, where
+// collect_lbr_stack() reads the branch records and send_trace() emits the trace.
+static inline EBPF_INLINE int
+collect_lbr_only_trace(struct pt_regs *ctx, u16 origin, u32 pid, u32 tid, u64 trace_timestamp)
+{
+  PerCPURecord *record = get_pristine_per_cpu_record();
+  if (!record) {
+    return -1;
+  }
+
+  Trace *trace  = &record->trace;
+  trace->origin = origin;
+  trace->pid    = pid;
+  trace->tid    = tid;
+  trace->ktime  = trace_timestamp;
+  trace->value  = 0;
+  if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
+    increment_metric(metricID_ErrBPFCurrentComm);
+  }
+
+  tail_call(ctx, PROG_UNWIND_STOP);
+  DEBUG_PRINT("bpf_tail call failed for PROG_UNWIND_STOP");
   return -1;
 }
 

@@ -305,7 +305,10 @@ static EBPF_INLINE void maybe_add_apm_info(Trace *trace)
 }
 
 // unwind_stop is the tail call destination for PROG_UNWIND_STOP.
-static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
+//
+// The `lbr_capable` must be true for the perf_event program and false for the
+// kprobe variant where bpf_read_branch_records is not allowed.
+static EBPF_INLINE int unwind_stop(struct pt_regs *ctx, const bool lbr_capable)
 {
   PerCPURecord *record = get_per_cpu_record();
   if (!record)
@@ -369,6 +372,16 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
   }
   // TEMPORARY HACK END
 
+  // Capture branch records only for samples whose origin uses branch sampling.
+  // Gating on trace->origin (not just on whether the origin is registered) avoids
+  // a wasted bpf_read_branch_records() call on every SW cpu-clock sample when HW
+  // cpu-cycles or AMD BRS is also enabled.
+  if (
+    lbr_capable && ((origin_id_hw_cpu_cycles != 0 && trace->origin == origin_id_hw_cpu_cycles) ||
+                    (origin_id_amd_brs != 0 && trace->origin == origin_id_amd_brs))) {
+    collect_lbr_stack(ctx, trace);
+  }
+
   // Must be last since it may not return (it will call send_trace).
   maybe_add_go_custom_labels(ctx, record);
 
@@ -376,6 +389,10 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
 
   return 0;
 }
-MULTI_USE_FUNC(unwind_stop)
+// unwind_stop needs a per-variant compile-time `lbr_capable` constant: the
+// perf_event variant enables the bpf_read_branch_records() call path; the kprobe
+// variant elides it so the verifier never sees the helper for a program type
+// that does not allow it.
+MULTI_USE_FUNC_WITH_LBR(unwind_stop)
 
 char _license[] SEC("license") = "GPL";

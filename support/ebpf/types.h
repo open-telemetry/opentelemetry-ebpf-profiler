@@ -617,6 +617,21 @@ typedef struct CustomLabelsArray {
 } CustomLabelsArray;
 
 // Container for a stack trace
+// LBREntry is the on-the-wire representation of a single branch record. Its
+// layout is byte-compatible with the leading fields of the kernel's
+// struct perf_branch_entry (from, to, packed flags), so bpf_read_branch_records()
+// can write directly into an array of these. It is intentionally free of
+// bitfields so that cgo -godefs mirrors it into clean Go uint64 fields.
+typedef struct LBREntry {
+  u64 from;
+  u64 to;
+  u64 flags;
+} LBREntry;
+
+_Static_assert(
+  sizeof(LBREntry) == sizeof(struct perf_branch_entry),
+  "LBREntry must match the kernel perf_branch_entry ABI size");
+
 typedef struct Trace {
   // The process ID
   // NOTE: Confusingly, this is what Linux calls "tgid"
@@ -652,6 +667,13 @@ typedef struct Trace {
 
   // The CPU that captured this trace.
   u32 cpu_id;
+
+  // The number of valid entries in perf_branch_records.
+  u32 nr_branch_records;
+
+  // Branch records (Intel LBR / AMD LbrExtV2 / AMD BRS) captured via
+  // bpf_read_branch_records().
+  LBREntry perf_branch_records[MAX_BRANCH_RECORDS];
 
   // The frame data of the stack trace. Each frame is variable length.
   // Frame is currently 2-3 entries long. This array size limits the

@@ -22,6 +22,7 @@ func validConfig() *Config {
 		ProbabilisticInterval:  1 * time.Minute,
 		ProbabilisticThreshold: 100,
 		NoKernelVersionCheck:   true,
+		EnableSWCPUClock:       true,
 	}
 }
 

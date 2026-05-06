@@ -642,6 +642,34 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 		return fmt.Errorf("failed to set origin_id_sampling: %v", err)
 	}
 
+	if cfg.EnableHWCPUCycles {
+		hwCPUCycles, err := origins.register(&samples.TypeMetadata{
+			PeriodType: "cpu",
+			PeriodUnit: "cycles",
+			SampleType: "samples",
+			SampleUnit: "count",
+		})
+		if err != nil {
+			return err
+		}
+		if err := coll.Variables["origin_id_hw_cpu_cycles"].Set(hwCPUCycles); err != nil {
+			return fmt.Errorf("failed to set origin_id_hw_cpu_cycles: %v", err)
+		}
+
+		if cfg.EnableBranchSampling {
+			amdBRS, err := origins.register(&samples.TypeMetadata{
+				SampleType: "branches",
+				SampleUnit: "count",
+			})
+			if err != nil {
+				return err
+			}
+			if err := coll.Variables["origin_id_amd_brs"].Set(amdBRS); err != nil {
+				return fmt.Errorf("failed to set origin_id_amd_brs: %v", err)
+			}
+		}
+	}
+
 	if cfg.OffCPUThreshold > 0 {
 		offCPU, err := origins.register(&samples.TypeMetadata{
 			SampleType:   "off_cpu",
