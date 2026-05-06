@@ -7,12 +7,14 @@ import (
 	"os"
 	"testing"
 
+	lru "github.com/elastic/go-freelru"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
@@ -81,7 +83,10 @@ func TestSymbolize(t *testing.T) {
 
 	frame := frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, frame.Type)
-	assert.Equal(t, sym.name.String(), frame.FunctionName.String())
+
+	// Resolve the expected name the same way the symbolizer does.
+	expectedName := nd.resolveSymbolName(sym.nameOff)
+	assert.Equal(t, expectedName, frame.FunctionName.String())
 }
 
 func TestSymbolizeMismatch(t *testing.T) {
@@ -113,12 +118,21 @@ func TestSymbolizeMismatch(t *testing.T) {
 }
 
 func TestLookupSymbol(t *testing.T) {
+	// Build a synthetic string table: "func_a\0func_b\0func_c\0"
+	strtab := []byte("\x00func_a\x00func_b\x00func_c\x00")
+	// offsets: func_a=1, func_b=8, func_c=15
+
+	cache, err := lru.New[uint32, string](64, hash.Uint32)
+	require.NoError(t, err)
+
 	d := &nativeData{
 		symbols: []symbolEntry{
-			{address: 0x1000, end: 0x1100, name: libpf.Intern("func_a")},
-			{address: 0x1100, end: 0x1200, name: libpf.Intern("func_b")},
-			{address: 0x2000, end: 0x2050, name: libpf.Intern("func_c")},
+			{address: 0x1000, end: 0x1100, nameOff: 1},
+			{address: 0x1100, end: 0x1200, nameOff: 8},
+			{address: 0x2000, end: 0x2050, nameOff: 15},
 		},
+		strtab:    strtab,
+		nameCache: cache,
 	}
 
 	tests := []struct {
@@ -140,13 +154,13 @@ func TestLookupSymbol(t *testing.T) {
 	for _, tt := range tests {
 		name, ok := d.lookupSymbol(tt.addr)
 		assert.Equal(t, tt.wantOK, ok, "addr 0x%x", tt.addr)
-		assert.Equal(t, tt.wantName, name.String(), "addr 0x%x", tt.addr)
+		assert.Equal(t, tt.wantName, name, "addr 0x%x", tt.addr)
 	}
 }
 
 func TestDemangleSymbol(t *testing.T) {
 	tests := []struct {
-		input    string
+		input     string
 		demangled bool
 	}{
 		// C++ Itanium ABI — should be demangled

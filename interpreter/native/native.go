@@ -5,23 +5,27 @@
 // using ELF symbol tables (.symtab/.dynsym). It is enabled via the "symtab"
 // tracer type in IncludedTracers.
 //
-// This plugin loads function symbols into memory for all mapped native
-// binaries. The memory overhead scales with the number and size of symbol
-// tables on the host, so it should not be enabled by default in production
-// without considering the memory budget.
+// Symbol names are resolved lazily: only the address range and string table
+// offset are kept per symbol. The actual name is read from the mmap-backed
+// string table on first lookup and cached in an LRU to amortize demangling.
 package native // import "go.opentelemetry.io/ebpf-profiler/interpreter/native"
 
 import (
+	"bytes"
+	"debug/elf"
 	"fmt"
 	"sort"
 	"strings"
 	"sync/atomic"
+	"unsafe"
 
+	lru "github.com/elastic/go-freelru"
 	"github.com/ianlancetaylor/demangle"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -33,11 +37,13 @@ var (
 	_ interpreter.Instance = &nativeInstance{}
 )
 
+const nameCacheSize = 1024
+
 // symbolEntry represents a single function symbol with its address range.
 type symbolEntry struct {
 	address uint64
 	end     uint64 // address + size
-	name    libpf.String
+	nameOff uint32 // offset into string table
 }
 
 // nativeData holds the parsed symbol table for a single ELF.
@@ -46,6 +52,12 @@ type nativeData struct {
 	fileID host.FileID
 	// symbols is sorted by address for binary search.
 	symbols []symbolEntry
+	// strtab is the raw string table bytes (mmap-backed).
+	strtab []byte
+	// nameCache caches demangled symbol names by strtab offset.
+	nameCache *lru.LRU[uint32, string]
+	// elfFile is kept open to hold the mmap alive.
+	elfFile *pfelf.File
 }
 
 type nativeInstance struct {
@@ -67,14 +79,12 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, err
 	}
 
-	// Skip Go binaries — the Go symbolizer handles them. This means CGO
-	// native symbols in Go binaries won't be resolved by this plugin.
-	// A future improvement could filter to only non-Go symbols in such binaries.
+	// Skip Go binaries — the Go symbolizer handles them.
 	if ef.IsGolang() {
 		return nil, nil
 	}
 
-	symbols := loadSymbols(ef, info.FileName())
+	symbols, strtab, elfFile := loadSymbols(ef, info.FileName())
 	if len(symbols) == 0 {
 		return nil, nil
 	}
@@ -83,9 +93,20 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return symbols[i].address < symbols[j].address
 	})
 
+	nameCache, err := lru.New[uint32, string](nameCacheSize, hash.Uint32)
+	if err != nil {
+		if elfFile != nil {
+			elfFile.Close()
+		}
+		return nil, fmt.Errorf("failed to create name cache: %w", err)
+	}
+
 	d := &nativeData{
-		fileID:  info.FileID(),
-		symbols: symbols,
+		fileID:    info.FileID(),
+		symbols:   symbols,
+		strtab:    strtab,
+		nameCache: nameCache,
+		elfFile:   elfFile,
 	}
 	d.refs.Store(1)
 	return d, nil
@@ -93,29 +114,101 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 
 // loadSymbols extracts FUNC symbols from the ELF's .symtab, falling back to
 // .dynsym, and if neither is present, trying the debug-linked ELF.
-func loadSymbols(ef *pfelf.File, elfPath string) []symbolEntry {
-	if syms := collectSymbols(ef.VisitSymbols); len(syms) > 0 {
-		return syms
+// It returns the symbol entries, the raw string table, and the ELF file that
+// must be kept open to back the strtab mmap.
+//
+// The returned *pfelf.File owns the mmap that backs strtab. The caller must
+// keep it open for the lifetime of the strtab slice and close it on Unload.
+func loadSymbols(ef *pfelf.File, elfPath string) ([]symbolEntry, []byte, *pfelf.File) {
+	// Check if the primary ELF has symbols (using the Reference's cached file
+	// just for the check). If it does, open our own copy so we own the mmap.
+	if syms, _ := collectSymbolOffsets(ef, ".symtab"); len(syms) > 0 {
+		return openOwnedELF(elfPath, ".symtab")
 	}
-	if syms := collectSymbols(ef.VisitDynamicSymbols); len(syms) > 0 {
-		return syms
+	if syms, _ := collectSymbolOffsets(ef, ".dynsym"); len(syms) > 0 {
+		return openOwnedELF(elfPath, ".dynsym")
 	}
 
 	// Try debug-linked ELF.
 	debugELF, _ := ef.OpenDebugLink(elfPath, pfelf.SystemOpener)
 	if debugELF == nil {
-		return nil
+		return nil, nil, nil
 	}
-	defer debugELF.Close()
 
-	if syms := collectSymbols(debugELF.VisitSymbols); len(syms) > 0 {
-		return syms
+	if syms, strtab := collectSymbolOffsets(debugELF, ".symtab"); len(syms) > 0 {
+		return syms, strtab, debugELF
 	}
-	return collectSymbols(debugELF.VisitDynamicSymbols)
+	if syms, strtab := collectSymbolOffsets(debugELF, ".dynsym"); len(syms) > 0 {
+		return syms, strtab, debugELF
+	}
+	debugELF.Close()
+	return nil, nil, nil
+}
+
+// openOwnedELF opens an independent copy of the ELF file and extracts symbols
+// from the given section. The returned *pfelf.File owns the mmap backing strtab.
+func openOwnedELF(elfPath, section string) ([]symbolEntry, []byte, *pfelf.File) {
+	owned, err := pfelf.Open(elfPath)
+	if err != nil {
+		return nil, nil, nil
+	}
+	syms, strtab := collectSymbolOffsets(owned, section)
+	if len(syms) == 0 {
+		owned.Close()
+		return nil, nil, nil
+	}
+	return syms, strtab, owned
+}
+
+// collectSymbolOffsets reads a symbol table section and returns entries with
+// raw string table offsets (no name resolution or demangling at this stage).
+func collectSymbolOffsets(ef *pfelf.File, sectionName string) ([]symbolEntry, []byte) {
+	symTab := ef.Section(sectionName)
+	if symTab == nil {
+		return nil, nil
+	}
+
+	strTab := ef.Sections[symTab.Link]
+	strtab, err := strTab.Data(16 * 1024 * 1024)
+	if err != nil {
+		return nil, nil
+	}
+
+	syms, err := symTab.Data(16 * 1024 * 1024)
+	if err != nil {
+		return nil, nil
+	}
+
+	symSz := int(unsafe.Sizeof(elf.Sym64{}))
+	var symbols []symbolEntry
+
+	for i := 0; i < len(syms); i += symSz {
+		sym := (*elf.Sym64)(unsafe.Pointer(&syms[i]))
+		if sym.Value == 0 || sym.Size == 0 {
+			continue
+		}
+		// Only include function symbols.
+		if elf.ST_TYPE(sym.Info) != elf.STT_FUNC {
+			continue
+		}
+		// Verify the name offset is valid and non-empty.
+		nameOff := sym.Name
+		if int(nameOff) >= len(strtab) || strtab[nameOff] == 0 {
+			continue
+		}
+		symbols = append(symbols, symbolEntry{
+			address: sym.Value,
+			end:     sym.Value + sym.Size,
+			nameOff: nameOff,
+		})
+	}
+	if len(symbols) == 0 {
+		return nil, nil
+	}
+	return symbols, strtab
 }
 
 // demangleSymbol attempts to demangle C++ and Rust mangled symbol names.
-// If the name is not mangled or demangling fails, it returns the original name.
 func demangleSymbol(name string) string {
 	if strings.HasPrefix(name, "_Z") || strings.HasPrefix(name, "_R") {
 		if demangled, err := demangle.ToString(name); err == nil {
@@ -125,47 +218,39 @@ func demangleSymbol(name string) string {
 	return name
 }
 
-// collectSymbols visits a symbol table and returns entries for symbols with
-// nonzero addresses and sizes.
-func collectSymbols(visit func(func(libpf.Symbol) bool) error) []symbolEntry {
-	var symbols []symbolEntry
-
-	err := visit(func(sym libpf.Symbol) bool {
-		if sym.Address == 0 || sym.Size == 0 || !sym.Type.IsFunction() {
-			return true
-		}
-		name := string(sym.Name)
-		if name == "" {
-			return true
-		}
-		name = demangleSymbol(name)
-		symbols = append(symbols, symbolEntry{
-			address: uint64(sym.Address),
-			end:     uint64(sym.Address) + sym.Size,
-			name:    libpf.Intern(name),
-		})
-		return true
-	})
-	if err != nil {
-		return nil
+// resolveSymbolName reads a symbol name from the string table and demangles it.
+func (d *nativeData) resolveSymbolName(nameOff uint32) string {
+	if name, ok := d.nameCache.Get(nameOff); ok {
+		return name
 	}
-	return symbols
+
+	// Read null-terminated string from strtab.
+	start := int(nameOff)
+	end := bytes.IndexByte(d.strtab[start:], 0)
+	if end < 0 {
+		return ""
+	}
+	raw := string(d.strtab[start : start+end])
+	name := demangleSymbol(raw)
+
+	d.nameCache.Add(nameOff, name)
+	return name
 }
 
 // lookupSymbol performs a binary search to find the function containing addr.
-func (d *nativeData) lookupSymbol(addr uint64) (libpf.String, bool) {
+func (d *nativeData) lookupSymbol(addr uint64) (string, bool) {
 	i := sort.Search(len(d.symbols), func(i int) bool {
 		return d.symbols[i].address > addr
 	}) - 1
 
 	if i < 0 {
-		return libpf.NullString, false
+		return "", false
 	}
 	sym := &d.symbols[i]
 	if addr >= sym.address && addr < sym.end {
-		return sym.name, true
+		return d.resolveSymbolName(sym.nameOff), true
 	}
-	return libpf.NullString, false
+	return "", false
 }
 
 func (d *nativeData) unref() {
@@ -184,6 +269,10 @@ func (d *nativeData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
 
 func (d *nativeData) Unload(_ interpreter.EbpfHandler) {
 	d.unref()
+	if d.elfFile != nil {
+		d.elfFile.Close()
+		d.elfFile = nil
+	}
 }
 
 func (inst *nativeInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
@@ -229,7 +318,7 @@ func (inst *nativeInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames,
 		Type:            ef.Type(),
 		AddressOrLineno: libpf.AddressOrLineno(address),
 		Mapping:         mapping,
-		FunctionName:    name,
+		FunctionName:    libpf.Intern(name),
 	})
 	sfCounter.ReportSuccess()
 	return nil
