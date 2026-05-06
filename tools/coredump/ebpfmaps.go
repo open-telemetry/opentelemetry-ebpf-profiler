@@ -234,9 +234,9 @@ func (emc *ebpfMapsCoredump) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.
 		host.FileID(fileID), bias)
 }
 
-func (emc *ebpfMapsCoredump) DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm.Prefix) (int,
+func (emc *ebpfMapsCoredump) DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm.Prefix) (uint64,
 	error) {
-	var deleted int
+	var deleted uint64
 	for _, prefix := range prefixes {
 		if err := emc.DeletePidInterpreterMapping(pid, prefix); err != nil {
 			return deleted, err
