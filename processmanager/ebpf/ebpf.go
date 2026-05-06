@@ -688,7 +688,8 @@ func (impl *ebpfMapsImpl) DeletePidPageMappingInfoBatch(pid libpf.PID, prefixes 
 
 	// BatchDelete returns a count of deleted entries, so this should never happen.
 	if deleted < 0 {
-		return 0, fmt.Errorf("negative batch delete count: %d", deleted)
+		err = errors.Join(err, fmt.Errorf("negative batch delete count: %d", deleted))
+		deleted = 0
 	}
 	return uint64(deleted), impl.trackMapError(metrics.IDPidPageToMappingInfoBatchDelete, err)
 }
