@@ -168,6 +168,10 @@ func collectSymbolOffsets(ef *pfelf.File, sectionName string) ([]symbolEntry, []
 		return nil, nil
 	}
 
+	if symTab.Link == 0 || symTab.Link >= uint32(len(ef.Sections)) {
+		return nil, nil
+	}
+
 	strTab := ef.Sections[symTab.Link]
 	strtab, err := strTab.Data(16 * 1024 * 1024)
 	if err != nil {
@@ -182,7 +186,7 @@ func collectSymbolOffsets(ef *pfelf.File, sectionName string) ([]symbolEntry, []
 	symSz := int(unsafe.Sizeof(elf.Sym64{}))
 	var symbols []symbolEntry
 
-	for i := 0; i < len(syms); i += symSz {
+	for i := 0; i+symSz <= len(syms); i += symSz {
 		sym := (*elf.Sym64)(unsafe.Pointer(&syms[i]))
 		if sym.Value == 0 || sym.Size == 0 {
 			continue
@@ -224,8 +228,11 @@ func (d *nativeData) resolveSymbolName(nameOff uint32) string {
 		return name
 	}
 
-	// Read null-terminated string from strtab.
 	start := int(nameOff)
+	if start >= len(d.strtab) {
+		return ""
+	}
+
 	end := bytes.IndexByte(d.strtab[start:], 0)
 	if end < 0 {
 		return ""
