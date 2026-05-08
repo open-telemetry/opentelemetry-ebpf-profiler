@@ -4,8 +4,10 @@
 package dotnet // import "go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 
 import (
+	"encoding/binary"
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 	"sync/atomic"
 
@@ -112,6 +114,11 @@ var codeName = []string{
 type dotnetMapping struct {
 	start, end uint64
 	info       *peInfo
+	// stringsHeapAddr is the absolute process address of the #Strings heap for
+	// this mapping, resolved at attach time. Differs depending on whether the
+	// runtime image-loaded the PE (heap at start + stringsHeapVA) or just
+	// mmap()ed the file 1:1 (heap at start + stringsHeapFileOffset).
+	stringsHeapAddr uint64
 }
 
 type dotnetRangeSection struct {
@@ -148,9 +155,10 @@ type dotnetInstance struct {
 
 	rangeSectionSeen map[libpf.Address]libpf.Void
 
-	// moduleToPEInfo maps Module* to it's peInfo. Since a dotnet instance will have
-	// limited number of PE files mapped in, this is a map instead of a LRU.
-	moduleToPEInfo map[libpf.Address]*peInfo
+	// moduleToPEInfo maps Module* to its peInfo and process mapping base. Since a
+	// dotnet instance will have limited number of PE files mapped in, this is a map
+	// instead of a LRU.
+	moduleToPEInfo map[libpf.Address]dotnetMapping
 
 	addrToMethod *freelru.LRU[libpf.Address, *dotnetMethod]
 }
@@ -290,14 +298,14 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf
 		// Find the memory mapping area for this module, and establish mapping from
 		// Module* to the PE. This precaches the mapping for R2R modules and avoids
 		// some remote memory reads.
-		info, err := i.getPEInfoByAddress(uint64(lowAddress))
+		m, err := i.getPEInfoByAddress(uint64(lowAddress))
 		if err != nil {
 			return nil
 		}
-		i.moduleToPEInfo[modulePtr] = info
+		i.moduleToPEInfo[modulePtr] = m
 		log.Debugf("%x-%x flags:%x  module: %x -> %s",
 			lowAddress, highAddress, flags,
-			modulePtr, info.simpleName)
+			modulePtr, m.info.simpleName)
 		i.addRange(ebpf, pid, lowAddress, highAddress, lowAddress, codeReadyToRun)
 	}
 
@@ -392,7 +400,23 @@ func (i *dotnetInstance) walkRangeSectionMap(ebpf interpreter.EbpfHandler, pid l
 	return err
 }
 
-func (i *dotnetInstance) getPEInfoByAddress(addressInModule uint64) (*peInfo, error) {
+// resolveStringsHeapAddr computes the absolute process address of the PE's #Strings
+// heap. For DLLs loaded as PE images (sections placed at their VA) the heap is at
+// mappingStart + stringsHeapVA. For DLLs that the runtime just mmap()s 1:1 from disk
+// (typical for small IL-only assemblies) the heap is at
+// mappingStart + stringsHeapFileOffset. Distinguishes by probing whether the metadata
+// "BSJB" signature is reachable at the VA-based address.
+func (i *dotnetInstance) resolveStringsHeapAddr(pi *peInfo, mappingStart uint64) uint64 {
+	var sig [4]byte
+	addr := libpf.Address(mappingStart + uint64(pi.metadataRootVA))
+	if err := i.rm.Read(addr, sig[:]); err == nil &&
+		binary.LittleEndian.Uint32(sig[:]) == 0x424A5342 {
+		return mappingStart + uint64(pi.stringsHeapVA)
+	}
+	return mappingStart + uint64(pi.stringsHeapFileOffset)
+}
+
+func (i *dotnetInstance) getPEInfoByAddress(addressInModule uint64) (dotnetMapping, error) {
 	idx, ok := slices.BinarySearchFunc(i.mappings, addressInModule,
 		func(m dotnetMapping, addr uint64) int {
 			if addr < m.start {
@@ -404,16 +428,15 @@ func (i *dotnetInstance) getPEInfoByAddress(addressInModule uint64) (*peInfo, er
 			return 0
 		})
 	if !ok {
-		return nil, fmt.Errorf("failed to find mapping for address %x", addressInModule)
+		return dotnetMapping{},
+			fmt.Errorf("failed to find mapping for address %x", addressInModule)
 	}
-
-	mapping := &i.mappings[idx]
-	return mapping.info, nil
+	return i.mappings[idx], nil
 }
 
-func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (*peInfo, error) {
-	if info, ok := i.moduleToPEInfo[modulePtr]; ok {
-		return info, nil
+func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (dotnetMapping, error) {
+	if m, ok := i.moduleToPEInfo[modulePtr]; ok {
+		return m, nil
 	}
 
 	// If the Module does not have R2R executable code and we have not seen it yet,
@@ -423,15 +446,63 @@ func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (*peInfo,
 	vms := &i.d.Get().Types
 	simpleNamePtr := i.rm.Ptr(modulePtr + libpf.Address(vms.Module.SimpleName))
 	if simpleNamePtr == 0 {
-		return nil, fmt.Errorf("module at %x, does not have name", modulePtr)
+		return dotnetMapping{}, fmt.Errorf("module at %x, does not have name", modulePtr)
 	}
 
-	info, err := i.getPEInfoByAddress(uint64(simpleNamePtr))
+	m, err := i.getPEInfoByAddress(uint64(simpleNamePtr))
 	if err != nil {
-		return nil, err
+		return dotnetMapping{}, err
 	}
-	i.moduleToPEInfo[modulePtr] = info
-	return info, nil
+	i.moduleToPEInfo[modulePtr] = m
+	return m, nil
+}
+
+func (i *dotnetInstance) resolveMethodName(pi *peInfo, methodIdx uint32,
+	rm remotememory.RemoteMemory, stringsHeapAddr uint64) libpf.String {
+	idx := sort.Search(len(pi.typeSpecs), func(idx int) bool {
+		return pi.typeSpecs[idx].methodIdx > methodIdx
+	}) - 1
+	if methodIdx == 0 || methodIdx > uint32(len(pi.methodSpecs)) || idx < 0 {
+		return libpf.Intern(fmt.Sprintf("<invalid method index %d/%d>",
+			methodIdx, len(pi.methodSpecs)))
+	}
+
+	lookup := func(offs uint32) libpf.String {
+		return pi.lookupString(rm, stringsHeapAddr, offs)
+	}
+
+	typeSpec := &pi.typeSpecs[idx]
+	typeName := lookup(typeSpec.typeNameIdx).String()
+	for typeSpec.enclosingClass != 0 {
+		enclosingSpec := &pi.typeSpecs[typeSpec.enclosingClass-1]
+		typeName = fmt.Sprintf("%s/%s", lookup(enclosingSpec.typeNameIdx), typeName)
+		typeSpec = enclosingSpec
+	}
+	methodName := lookup(pi.methodSpecs[methodIdx-1].methodNameIdx)
+	if typeSpec.namespaceIdx != 0 {
+		return libpf.Intern(fmt.Sprintf("%s.%s.%s",
+			lookup(typeSpec.namespaceIdx),
+			typeName, methodName))
+	}
+	return libpf.Intern(fmt.Sprintf("%s.%s", typeName, methodName))
+}
+
+func (i *dotnetInstance) resolveR2RMethodName(pi *peInfo, pcRVA uint32,
+	rm remotememory.RemoteMemory, stringsHeapAddr uint64) libpf.String {
+	idx, ok := slices.BinarySearchFunc(pi.methodSpecs, pcRVA<<1,
+		func(methodspec peMethodSpec, pcRVA uint32) int {
+			if pcRVA < methodspec.startRVA {
+				return 1
+			}
+			if pcRVA > methodspec.startRVA {
+				return -1
+			}
+			return 0
+		})
+	if !ok {
+		idx--
+	}
+	return i.resolveMethodName(pi, uint32(idx+1), rm, stringsHeapAddr)
 }
 
 func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr libpf.Address) (*dotnetMethod, error) {
@@ -479,15 +550,16 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	// FIXME: The dotnet runtime handles generic and array method differently.
 	// Investigate if this needs adjustments to create correct method indexes.
 	loaderModulePtr := i.rm.Ptr(methodTablePtr + libpf.Address(vms.MethodTable.Module))
-	module, err := i.getPEInfoByModulePtr(loaderModulePtr)
+	m, err := i.getPEInfoByModulePtr(loaderModulePtr)
 	if err != nil {
 		return nil, err
 	}
 
 	method := &dotnetMethod{
-		classification: classification,
-		index:          index,
-		module:         module,
+		classification:  classification,
+		index:           index,
+		module:          m.info,
+		stringsHeapAddr: m.stringsHeapAddr,
 	}
 	if debugInfoPtr != 0 {
 		if err := method.readDebugInfo(newCachingReader(i.rm, int64(debugInfoPtr),
@@ -625,9 +697,10 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		})
 
 		dotnetMappings = append(dotnetMappings, dotnetMapping{
-			start: m.Vaddr,
-			end:   m.Vaddr + m.Length,
-			info:  info,
+			start:           m.Vaddr,
+			end:             m.Vaddr + m.Length,
+			info:            info,
+			stringsHeapAddr: i.resolveStringsHeapAddr(info, m.Vaddr),
 		})
 		prevMaxVA = m.Vaddr + uint64(info.sizeOfImage)
 	}
@@ -739,7 +812,7 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 	switch subframeType {
 	case codeReadyToRun:
 		// Ready to Run (Non-JIT) frame running directly code from a PE file
-		module, err := i.getPEInfoByAddress(uint64(codeHeaderPtr))
+		m, err := i.getPEInfoByAddress(uint64(codeHeaderPtr))
 		if err != nil {
 			return err
 		}
@@ -750,9 +823,9 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		frames.Append(&libpf.Frame{
 			Type:            libpf.DotnetFrame,
 			AddressOrLineno: libpf.AddressOrLineno(pcOffset),
-			FunctionName:    module.resolveR2RMethodName(pcOffset),
-			SourceFile:      module.simpleName,
-			Mapping:         module.mapping,
+			FunctionName:    i.resolveR2RMethodName(m.info, pcOffset, i.rm, m.stringsHeapAddr),
+			SourceFile:      m.info.simpleName,
+			Mapping:         m.info.mapping,
 		})
 	case codeJIT:
 		// JITted frame in anonymous mapping
@@ -774,7 +847,7 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		//          pointing to CALL instruction if the debug info was accurate.
 		lineID := libpf.AddressOrLineno(0xf0000000+method.index)<<32 +
 			libpf.AddressOrLineno(ilOffset)
-		methodName := method.module.resolveMethodName(method.index)
+		methodName := i.resolveMethodName(method.module, method.index, i.rm, method.stringsHeapAddr)
 		frames.Append(&libpf.Frame{
 			Type:            libpf.DotnetFrame,
 			AddressOrLineno: lineID,

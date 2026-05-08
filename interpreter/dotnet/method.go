@@ -16,6 +16,9 @@ import (
 type dotnetMethod struct {
 	// module is the PE DLL defining this method
 	module *peInfo
+	// stringsHeapAddr is the absolute process address of the module's #Strings
+	// heap, resolved at attach time.
+	stringsHeapAddr uint64
 	// boundInfo is the extracted boundary debug information from coreclr vm.
 	boundsInfo []byte
 	// methodIndex is the index to MethodDef metadata table defining this method.
