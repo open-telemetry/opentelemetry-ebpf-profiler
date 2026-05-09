@@ -76,6 +76,12 @@ type pythonData struct {
 	// extracted from assembly analysis.
 	staticTLSOffset int64
 
+	// usesFramePointers is true when the CPython binary was compiled with
+	// -fno-omit-frame-pointer (default since 3.15). When set, the eBPF
+	// unwinder can take a fast path that reads the live PyInterpreterFrame*
+	// from a callee-saved register at sample time.
+	usesFramePointers bool
+
 	noneStruct libpf.SymbolValue
 
 	// vmStructs reflects the Python Interpreter introspection data we want
@@ -442,6 +448,9 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 	if d.version >= pythonVer(3, 11) {
 		cdata.Lasti_is_codeunit = 1
 	}
+	if d.usesFramePointers {
+		cdata.Uses_frame_pointers = 1
+	}
 
 	err := ebpf.UpdateProcData(libpf.Python, pid, unsafe.Pointer(&cdata))
 	if err != nil {
@@ -702,6 +711,61 @@ func getTLSOffsetFromAssembly(ef *pfelf.File) (int64, error) {
 	return int64(offset), nil
 }
 
+// detectFramePointers reports whether the CPython binary was compiled with
+// -fno-omit-frame-pointer. It does so by scanning the prologue of
+// _PyEval_EvalFrameDefault for the canonical frame-pointer setup sequence.
+//
+// Starting with Python 3.15, CPython is built with -fno-omit-frame-pointer
+// (and -mno-omit-leaf-frame-pointer when supported) by default. See
+// python/cpython#149201. Detection is still done by inspection rather than by
+// version alone, because downstream distributions may override the flag.
+//
+// When detection succeeds, the eBPF unwinder can read the live
+// _PyInterpreterFrame* directly from a callee-saved register at sample time
+// (r14 on x86-64, x28 on arm64 — verified empirically against the upstream
+// 3.15 build), bypassing the PyThreadState/TLS lookup on the hot path.
+func detectFramePointers(ef *pfelf.File) bool {
+	// 32 bytes is plenty: any conforming prologue we care about completes
+	// within the first few instructions.
+	_, code, err := ef.SymbolData("_PyEval_EvalFrameDefault", 32)
+	if err != nil {
+		return false
+	}
+	return prologueHasFramePointer(ef.Machine, code)
+}
+
+// prologueHasFramePointer is the architecture-specific byte-level recognizer
+// used by detectFramePointers, separated for unit testing.
+func prologueHasFramePointer(machine elf.Machine, code []byte) bool {
+	switch machine {
+	case elf.EM_X86_64:
+		// Canonical prologue is `push %rbp; mov %rsp,%rbp` (4 bytes:
+		// 55 48 89 e5), optionally preceded by `endbr64` (f3 0f 1e fa)
+		// when CET is enabled.
+		const endbr64 = "\xf3\x0f\x1e\xfa"
+		const fpProlog = "\x55\x48\x89\xe5"
+		if bytes.HasPrefix(code, []byte(endbr64+fpProlog)) {
+			return true
+		}
+		return bytes.HasPrefix(code, []byte(fpProlog))
+	case elf.EM_AARCH64:
+		// On arm64, the canonical FP setup is `mov x29, sp`, encoded as
+		// the 32-bit little-endian word 0x910003fd. The compiler always
+		// emits it within the first few instructions of the prologue
+		// (after stp x29, x30, ... and possibly paciasp). Scanning the
+		// first 32 bytes covers all observed layouts.
+		const movX29SP uint32 = 0x910003fd
+		for i := 0; i+4 <= len(code); i += 4 {
+			w := uint32(code[i]) | uint32(code[i+1])<<8 |
+				uint32(code[i+2])<<16 | uint32(code[i+3])<<24
+			if w == movX29SP {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // decodeStub will resolve a given symbol, extract the code for it, and analyze
 // the code to resolve specified argument parameter to the first jump/call.
 func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
@@ -837,10 +901,19 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 	}
 
+	// Detect whether CPython was built with -fno-omit-frame-pointer. This
+	// is the default starting with Python 3.15 (python/cpython#149201) but
+	// may be enabled in earlier versions by distributions, so we always
+	// probe rather than gating on version. The result selects an FP fast
+	// path on the eBPF side; if detection fails we transparently fall back
+	// to the existing PyThreadState/TLS-based unwinder.
+	usesFramePointers := detectFramePointers(ef)
+
 	pd := &pythonData{
-		version:         version,
-		autoTLSKey:      autoTLSKey,
-		staticTLSOffset: staticTLSOffset,
+		version:           version,
+		autoTLSKey:        autoTLSKey,
+		staticTLSOffset:   staticTLSOffset,
+		usesFramePointers: usesFramePointers,
 	}
 	vms := &pd.vmStructs
 
@@ -911,8 +984,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		// they removed one level of indirection.
 		vms.PyCFrame.CurrentFrame = 0
 		vms.PyASCIIObject.Data = 40
-	case pythonVer(3, 14):
-		// Python 3.14 underwent significant structural changes
+	case pythonVer(3, 14), pythonVer(3, 15):
+		// Python 3.14 underwent significant structural changes that carry over
+		// unchanged to 3.15 (verified against the libpython3.15 DWARF info).
 		// _PyInterpreterFrame structure:
 		//   - f_executable at offset 0 (instead of f_code)
 		//   - previous at offset 8

@@ -438,6 +438,12 @@ typedef struct PyProcInfo {
   u8 PyCodeObject_co_flags, PyCodeObject_co_firstlineno;
   u8 PyCodeObject_sizeof;
   u8 lasti_is_codeunit, frame_is_cframe;
+  // uses_frame_pointers is set when the CPython binary was built with
+  // -fno-omit-frame-pointer (the default since CPython 3.15). When set, the
+  // unwinder can read the live _PyInterpreterFrame* directly from a callee-
+  // saved register at sample time, bypassing the PyThreadState/TLS lookup
+  // on the hot path.
+  u8 uses_frame_pointers;
 } PyProcInfo;
 
 // PHPProcInfo is a container for the data needed to build a stack trace for a PHP process.
