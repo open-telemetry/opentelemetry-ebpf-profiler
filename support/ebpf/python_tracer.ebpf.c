@@ -371,8 +371,7 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
       // Fast path: read _PyInterpreterFrame* from the leaf-time
       // callee-saved register. Falls through to the slow path below
       // if the sample wasn't taken inside _PyEval_EvalFrameDefault.
-      ErrorCode fp_err =
-        get_PyFrame_from_fp(pyinfo, ctx, &record->pythonUnwindState.py_frame);
+      ErrorCode fp_err = get_PyFrame_from_fp(pyinfo, ctx, &record->pythonUnwindState.py_frame);
       if (fp_err) {
         record->pythonUnwindState.py_frame = NULL;
       }
