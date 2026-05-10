@@ -448,7 +448,16 @@ func (p *pythonInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.
 	if d.version >= pythonVer(3, 11) {
 		cdata.Lasti_is_codeunit = 1
 	}
-	if d.usesFramePointers {
+	// The eBPF fast path reads `_PyInterpreterFrame*` from a callee-saved
+	// register at sample time (r14 on x86-64, x28 on arm64). That choice
+	// of register is a compiler-allocation decision and varies across
+	// builds: upstream CPython 3.15 reliably uses r14/x28, but Debian's
+	// 3.13 puts the frame in x21 on arm64 and spills it to the stack on
+	// x86-64. Until we add real prologue analysis to discover the
+	// destination register dynamically (tracked as a follow-up), only
+	// engage the fast path on Python 3.15+, where we have verified the
+	// convention against the upstream build for both architectures.
+	if d.usesFramePointers && d.version >= pythonVer(3, 15) {
 		cdata.Uses_frame_pointers = 1
 	}
 
