@@ -33,8 +33,11 @@ const (
 	// TTL of entries in the LRU cache holding the executables' PE information.
 	peInfoCacheTTL = 6 * time.Hour
 
-	// Maximum number of resolved #Strings heap entries cached per peInfo.
+	// Maximum size of the LRU cache holding strings from #Strings heap per PE.
 	peInfoStringsCacheSize = 1024
+
+	// TTL of entries in the LRU cache holding the .NET strings.
+	peInfoStringsCacheTTL = 1 * time.Hour
 )
 
 // OptionalHeader32 is the IMAGE_OPTIONAL_HEADER32 without its Magic or DataDirectory
@@ -881,6 +884,7 @@ func (pp *peParser) parseTables() error {
 		return fmt.Errorf("unable to create #Strings LRU: %w", err)
 	}
 	pp.info.stringsCache = stringsCache
+	pp.info.stringsCache.SetLifetime(peInfoStringsCacheTTL)
 
 	// Precalculate the column sizes we need to know
 	pp.indexSizes[indexString] = getHeapSize(tablesHeader.HeapSizes&0x1 != 0)
