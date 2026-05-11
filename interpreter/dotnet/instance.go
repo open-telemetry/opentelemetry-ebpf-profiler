@@ -4,7 +4,6 @@
 package dotnet // import "go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 
 import (
-	"encoding/binary"
 	"fmt"
 	"slices"
 	"strings"
@@ -114,9 +113,9 @@ type dotnetMapping struct {
 	start, end uint64
 	info       *peInfo
 	// stringsHeapAddr is the absolute process address of the #Strings heap for
-	// this mapping, resolved at attach time. Differs depending on whether the
-	// runtime image-loaded the PE (heap at start + stringsHeapVA) or just
-	// mmap()ed the file 1:1 (heap at start + stringsHeapFileOffset).
+	// this mapping, resolved at attach time from the process.RawMapping whose
+	// file range covers info.stringsHeapFileOffset. Zero if no covering mapping
+	// was found, in which case downstream string lookups yield NullString.
 	stringsHeapAddr uint64
 }
 
@@ -404,20 +403,17 @@ func (i *dotnetInstance) walkRangeSectionMap(ebpf interpreter.EbpfHandler, pid l
 	return err
 }
 
-// resolveStringsHeapAddr computes the absolute process address of the PE's #Strings
-// heap. For DLLs loaded as PE images (sections placed at their VA) the heap is at
-// mappingStart + stringsHeapVA. For DLLs that the runtime just mmap()s 1:1 from disk
-// (typical for small IL-only assemblies) the heap is at
-// mappingStart + stringsHeapFileOffset. Distinguishes by probing whether the metadata
-// "BSJB" signature is reachable at the VA-based address.
-func (i *dotnetInstance) resolveStringsHeapAddr(pi *peInfo, mappingStart uint64) uint64 {
-	var sig [4]byte
-	addr := libpf.Address(mappingStart + uint64(pi.metadataRootVA))
-	if err := i.rm.Read(addr, sig[:]); err == nil &&
-		binary.LittleEndian.Uint32(sig[:]) == 0x424A5342 {
-		return mappingStart + uint64(pi.stringsHeapVA)
+// resolveStringsHeapAddr returns the absolute process address of the #Strings
+// heap when m covers the heap's file offset, or 0 if it does not. The translation
+// uses the kernel's file-to-VA relationship (m.Vaddr maps to m.FileOffset in the
+// backing file), which works uniformly for image-loaded PEs and 1:1 file mmaps
+// without distinguishing the two layouts.
+func resolveStringsHeapAddr(pi *peInfo, m *process.RawMapping) uint64 {
+	heapOff := uint64(pi.stringsHeapFileOffset)
+	if heapOff < m.FileOffset || heapOff >= m.FileOffset+m.Length {
+		return 0
 	}
-	return mappingStart + uint64(pi.stringsHeapFileOffset)
+	return m.Vaddr + heapOff - m.FileOffset
 }
 
 func (i *dotnetInstance) getPEInfoByAddress(addressInModule uint64) (dotnetMapping, error) {
@@ -632,7 +628,13 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 
 		// Does this extend the previous mapping
 		if prevKey == m.GetOnDiskFileIdentifier() && m.Vaddr < prevMaxVA {
-			dotnetMappings[len(dotnetMappings)-1].end = m.Vaddr + m.Length
+			last := &dotnetMappings[len(dotnetMappings)-1]
+			last.end = m.Vaddr + m.Length
+			// Sections of an image-loaded PE arrive as separate RawMappings; the
+			// #Strings heap typically lives in a later section than the first.
+			if last.stringsHeapAddr == 0 {
+				last.stringsHeapAddr = resolveStringsHeapAddr(last.info, m)
+			}
 			continue
 		}
 		prevKey = m.GetOnDiskFileIdentifier()
@@ -655,7 +657,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			start:           m.Vaddr,
 			end:             m.Vaddr + m.Length,
 			info:            info,
-			stringsHeapAddr: i.resolveStringsHeapAddr(info, m.Vaddr),
+			stringsHeapAddr: resolveStringsHeapAddr(info, m),
 		})
 		prevMaxVA = m.Vaddr + uint64(info.sizeOfImage)
 	}

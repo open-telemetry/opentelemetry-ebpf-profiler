@@ -274,19 +274,14 @@ type peInfo struct {
 	methodSpecs  []peMethodSpec
 	sizeOfImage  uint32
 
-	// stringsHeapVA is the RVA at which the ECMA-335 II.24.2.3 #Strings heap is mapped
-	// when the PE is loaded as an image (sections placed at their VirtualAddress).
-	stringsHeapVA uint32
-	// stringsHeapFileOffset is the same heap's offset in the on-disk PE file. Used
-	// when the runtime mmap()s the .dll 1:1 from disk instead of loading it as an
-	// image (typical for small IL-only assemblies with no R2R native code).
+	// stringsHeapFileOffset is the offset of the ECMA-335 II.24.2.3 #Strings heap
+	// in the on-disk PE file. The absolute process address is computed at attach
+	// time from the process.RawMapping that covers this file offset (see
+	// resolveStringsHeapAddr), which handles both image-loaded PEs and 1:1 file
+	// mmaps uniformly via the kernel's file-to-VA mapping.
 	stringsHeapFileOffset uint32
 	// stringsHeapSize is the size of the #Strings heap in bytes.
 	stringsHeapSize uint32
-	// metadataRootVA is the RVA of the ECMA-335 II.24.2.1 metadata root (BSJB
-	// signature). Used to probe at attach time which addressing mode (VA vs file
-	// offset) is correct for a given process mapping of this PE file.
-	metadataRootVA uint32
 
 	// stringsCache memoizes resolved #Strings heap entries to avoid repeated
 	// remote-memory reads for hot type/method names. Shared across processes
@@ -578,7 +573,6 @@ func (pp *peParser) parseCLI() error {
 	if metadataRoot.Signature != 0x424A5342 {
 		return fmt.Errorf("invalid metadata signature %#x", metadataRoot.Signature)
 	}
-	pp.info.metadataRootVA = cliHeader.MetaData.VirtualAddress
 	if _, err = r.Seek(int64(roundUp(metadataRoot.Length, 4)+2), io.SeekCurrent); err != nil {
 		return err
 	}
@@ -615,7 +609,6 @@ func (pp *peParser) parseCLI() error {
 				return fmt.Errorf("unable to locate #Strings heap section for RVA %#x",
 					heapVA)
 			}
-			pp.info.stringsHeapVA = heapVA
 			pp.info.stringsHeapFileOffset = heapFileOffset
 			pp.info.stringsHeapSize = hdr.Size
 		case "#GUID":
