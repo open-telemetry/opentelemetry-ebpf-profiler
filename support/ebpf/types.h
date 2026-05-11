@@ -328,6 +328,9 @@ enum {
   // number of failures to read TLS variables via the DTV
   metricID_UnwindErrBadDTVRead,
 
+  // number of prctl(PR_SET_VMA) calls naming an anonymous mapping OTEL_CTX
+  metricID_NumPrctlSetVmaOtelCtx,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //

@@ -2096,5 +2096,12 @@
     "name": "UnwindErrBadDTVRead",
     "field": "bpf.errors.bad_dtv_read",
     "id": 286
+  },
+  {
+    "description": "Number of prctl(PR_SET_VMA) calls naming an anonymous mapping OTEL_CTX",
+    "type": "counter",
+    "name": "NumPrctlSetVmaOtelCtx",
+    "field": "bpf.num_prctl_set_vma_otel_ctx",
+    "id": 287
   }
 ]

@@ -162,6 +162,11 @@ func (c *Controller) Start(ctx context.Context) error {
 	// So if you change this log line update also the system test.
 	log.Info("Attached sched monitor")
 
+	if err := trc.AttachPrctlMonitor(); err != nil {
+		return fmt.Errorf("failed to attach prctl monitor: %w", err)
+	}
+	log.Info("Attached prctl monitor")
+
 	if err := c.startTraceHandling(ctx, trc); err != nil {
 		return fmt.Errorf("failed to start trace handling: %w", err)
 	}

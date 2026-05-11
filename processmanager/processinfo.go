@@ -33,6 +33,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/processcontext"
+	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -117,8 +118,7 @@ func (pm *ProcessManager) getLibcInfo(pid libpf.PID) *libc.LibcInfo {
 // getPidInformation gets or creates the Pid information for given PID.
 //
 // Caller must hold pm.mu write lock.
-func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
-) *processInfo {
+func (pm *ProcessManager) getPidInformation(pid libpf.PID) *processInfo {
 	if info, ok := pm.pidToProcessInfo[pid]; ok {
 		return info
 	}
@@ -129,12 +129,7 @@ func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
 		return nil
 	}
 
-	meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
-	pm.fillSelfContainerID(pid, &meta)
-	info := &processInfo{
-		meta:     meta,
-		libcInfo: nil,
-	}
+	info := &processInfo{}
 	pm.pidToProcessInfo[pid] = info
 	pm.pidPageToMappingInfoSize++
 	return info
@@ -500,16 +495,19 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 
 	pm.mu.Lock()
-	info := pm.getPidInformation(pid, pr)
+	info := pm.getPidInformation(pid)
 	if info == nil {
 		pm.mu.Unlock()
 		return
 	}
-	// Check if process meta needs an update
+	// Check if process meta needs an update. Naturally fires on first sync
+	// (info.meta.Executable is NullString until the first GetProcessMeta) and
+	// on exec (exe path changes via /proc/<pid>/exe).
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
-	oldProcessContextInfo := info.meta.ProcessContextInfo
 
 	// Get existing info
+	oldProcessContextPublishedAtNs := info.meta.ProcessContextInfo.PublishedAtNs
+	oldEnvVars := info.meta.EnvVariables
 	oldMappings := info.mappings
 	newProcess := len(info.mappings) == 0
 	var numInterpreters int
@@ -533,21 +531,22 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	capHint := max(32, min(len(oldMappings), 256))
 	mappings := make([]Mapping, 0, capHint)
 	mpAdd := make([]*Mapping, 0, capHint)
-	var processContextInfo processcontext.Info
 
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
+
+	// Address of the OTel ProcessContext mapping, or 0 if absent. Reading the
+	// payload is deferred until after GetProcessMeta so env vars are available for the merge.
+	var contextMappingAddr uint64
 
 	// This callback processes each memory mapping, keeping only executable
 	// file-backed mappings and anonymous executable/DLL mappings needed by interpreters.
 	// All other mappings are skipped.
 	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
 		if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {
-			processContextInfo = readProcessContext(m.Vaddr, pr, oldProcessContextInfo)
-			// Even if process context is not found, it might be published in the future.
-			// For now, we rely on a new call to synchronizeMappings to pick it up.
-			// TODO: Add some kind of polling mechanism or a hook on prctl to be notified
-			// when the process context is published.
+			contextMappingAddr = m.Vaddr
+			// The eBPF hook on prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME) will trigger a
+			// PID resynchronization when the process names its context mapping "OTEL_CTX".
 		}
 
 		// Executable mappings and VDSO, converted directly to libpf.FrameMapping
@@ -665,21 +664,29 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	// Update metadata of the process.
 	var meta process.ProcessMeta
+	envVars := oldEnvVars
 	if updateProcessMeta {
 		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
 		pm.fillSelfContainerID(pid, &meta)
+		envVars = meta.EnvVariables
 	}
+
+	newProcessContextInfo, publishProcessContextInfo := readProcessContext(
+		contextMappingAddr, pid, pr.GetRemoteMemory(),
+		oldProcessContextPublishedAtNs, envVars, updateProcessMeta)
 
 	// Sort and publish the new mappings and meta
 	slices.SortFunc(mappings, compareMapping)
 	pm.mu.Lock()
-	info = pm.getPidInformation(pid, pr)
+	info = pm.getPidInformation(pid)
 	if info != nil {
 		info.mappings = mappings
 		if updateProcessMeta {
 			info.meta = meta
 		}
-		info.meta.ProcessContextInfo = processContextInfo
+		if publishProcessContextInfo {
+			info.meta.ProcessContextInfo = newProcessContextInfo
+		}
 	}
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()
@@ -828,23 +835,56 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 	}
 }
 
-func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContextInfo processcontext.Info) processcontext.Info {
-	// Workaround to fix a CodeQL warning about potential for integer overflow when converting from uint64 to uintptr (libpf.Address)
-	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
-	ctxInfo, err := processcontext.Read(addr, pr.GetRemoteMemory(), oldProcessContextInfo.PublishedAtNs, 0)
-	if err == nil {
-		return ctxInfo
+// readProcessContext reads the process context from a context mapping
+// (if any) and merges env-var-derived attributes in. Returns (info, true) to
+// publish; (_, false) to leave the previously-published context untouched.
+//
+// mappingAddr=0 means the mapping was not observed this sync; combined with
+// oldPublishedAtNs > 0 this signals it disappeared and the process context is
+// unpublished (returned context carries only env-vars-derived attributes).
+//
+// processMetaUpdated=true means either first sync or an exec was detected:
+// old process context is discarded and a rebuild is forced so new env vars
+// take effect even when context mapping is present.
+func readProcessContext(
+	mappingAddr uint64, pid libpf.PID, rm remotememory.RemoteMemory,
+	oldPublishedAtNs uint64,
+	envVars map[libpf.String]libpf.String,
+	processMetaUpdated bool,
+) (processcontext.Info, bool) {
+	if processMetaUpdated {
+		// Be safe and discard previous state if the process meta has been updated.
+		oldPublishedAtNs = 0
 	}
-	if errors.Is(err, processcontext.ErrNoUpdate) {
-		return oldProcessContextInfo
+	var processCtx processcontext.Info
+	processContextRead := false
+	if mappingAddr != 0 {
+		// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
+		addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
+		c, err := processcontext.Read(addr, rm, oldPublishedAtNs, 0)
+		switch {
+		case err == nil:
+			processCtx = c
+			processContextRead = true
+		case errors.Is(err, processcontext.ErrNoUpdate),
+			errors.Is(err, processcontext.ErrConcurrentUpdate):
+			// Note that if processMetaUpdated is true, the caller will discard the previous process context and therefore
+			// returning true or false makes no difference. Returning true in this case makes the intent clearer though.
+			return processcontext.Info{}, processMetaUpdated
+		default:
+			log.Warnf("Failed to read ProcessContext for PID %d: %v", pid, err)
+			// Fail to read process context, publish a new empty process context.
+			return processcontext.Info{}, true
+		}
 	}
-	if errors.Is(err, processcontext.ErrConcurrentUpdate) {
-		// If the context cannot be read because of a concurrent update, keep the resource and thread context since they are immutable,
-		// but discard the extra attributes as they may be stale.
-		oldProcessContextInfo.ClearExtraAttributes()
-		return oldProcessContextInfo
+	// Publish a new process context when either:
+	//   - we just read a new process context.
+	//   - metadata has been updated (exec).
+	//   - we previously had a process context that is now gone.
+	// Otherwise (steady state for process context derived from env vars only, or never had a process context)
+	// do not publish a new process context.
+	if !processContextRead && !processMetaUpdated && oldPublishedAtNs == 0 {
+		return processcontext.Info{}, false
 	}
-
-	log.Debugf("Failed to read ProcessContext for PID %d: %v", pr.PID(), err)
-	return processcontext.Info{}
+	return processcontext.WithMergedEnvVars(processCtx, envVars), true
 }
