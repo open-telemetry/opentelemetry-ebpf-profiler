@@ -125,6 +125,27 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 		fname = ""
 	}
 
+	// Read the class name from common.scope (zend_class_entry pointer).
+	// If the function is a method, scope points to the declaring class.
+	className := ""
+	scopePtr := npsr.Ptr(fobj, vms.zend_function.common_scope)
+	if scopePtr != 0 {
+		classNameStrPtr := i.rm.Ptr(scopePtr + libpf.Address(vms.zend_class_entry.name))
+		if classNameStrPtr != 0 {
+			className = i.rm.String(classNameStrPtr + vms.zend_string.val)
+			if className != "" && !util.IsValidString(className) {
+				log.Debugf("Extracted invalid PHP class name at 0x%x '%v'",
+					addr, []byte(className))
+				className = ""
+			}
+		}
+	}
+
+	// Combine class name and function name using PHP's ClassName::methodName convention.
+	if className != "" && fname != "" {
+		fname = className + "::" + fname
+	}
+
 	functionName := libpf.Intern(fname)
 	if functionName == libpf.NullString {
 		// If we're at the top-most scope then we can display that information.
