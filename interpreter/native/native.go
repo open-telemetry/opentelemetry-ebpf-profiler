@@ -70,8 +70,8 @@ type nativeInstance struct {
 }
 
 // Loader is the interpreter.Loader for native symbol resolution.
-// It checks if the ELF has a .symtab section (directly or via .gnu_debuglink)
-// and loads function symbols from it.
+// It loads function symbols from .symtab, falling back to .dynsym, and
+// finally trying a .gnu_debuglink-referenced ELF if neither is present.
 // Go binaries are skipped since they are handled by the Go-specific symbolizer.
 func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	ef, err := info.GetELF()
