@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x6d
+	MetricIDBeginCumulative = 0x69
 )
 
 const (
@@ -491,13 +491,11 @@ var MetricsTranslation = []metrics.MetricID{
 	0x5d: metrics.IDUnwindDotnetErrBadFP,
 	0x5e: metrics.IDUnwindDotnetErrCodeHeader,
 	0x5f: metrics.IDUnwindDotnetErrCodeTooLarge,
-	0x66: metrics.IDUnwindRubyErrInvalidIseq,
-	0x67: metrics.IDUnwindRubyErrReadMethodDef,
-	0x68: metrics.IDUnwindRubyErrReadMethodType,
-	0x69: metrics.IDUnwindRubyErrReadSvar,
-	0x6a: metrics.IDUnwindRubyErrReadRbasicFlags,
-	0x6b: metrics.IDUnwindRubyErrCmeMaxEp,
-	0x6c: metrics.IDUnwindErrBadDTVRead,
-	0x60: metrics.IDUnwindLuaJITAttempts,
-	0x61: metrics.IDUnwindLuaJITErrNoProcInfo,
+	0x62: metrics.IDUnwindRubyErrInvalidIseq,
+	0x63: metrics.IDUnwindRubyErrReadMethodDef,
+	0x64: metrics.IDUnwindRubyErrReadMethodType,
+	0x65: metrics.IDUnwindRubyErrReadSvar,
+	0x66: metrics.IDUnwindRubyErrReadRbasicFlags,
+	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
+	0x68: metrics.IDUnwindErrBadDTVRead,
 }

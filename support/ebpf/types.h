@@ -301,18 +301,6 @@ enum {
   // number of failures to unwind code object due to its large size
   metricID_UnwindDotnetErrCodeTooLarge,
 
-  // number of attempts to unwind LuaJIT
-  metricID_UnwindLuaJITAttempts,
-
-  // number of failures to read LuaJIT proc info
-  metricID_UnwindLuaJITErrNoProcInfo,
-
-  // number of failures to read LuaJIT context pointer
-  metricID_UnwindLuaJITErrNoContext,
-
-  // number of failures in context pointer validity check
-  metricID_UnwindLuaJITErrLMismatch,
-
   // number of attempts to read Go custom labels
   metricID_UnwindGoLabelsAttempts,
 
