@@ -46,6 +46,14 @@ var UnwindInfoFramePointer = UnwindInfo{Flags: support.UnwindFlagCommand,
 	Param: support.UnwindCommandFramePointer,
 }
 
+// UnwindInfoGoMcall is the stack delta info for runtime.mcall.
+// When encountered during unwinding, the unwinder crosses from the g0 system
+// stack to the goroutine stack by reading the caller's saved registers directly
+// from gobuf.{pc, sp, bp}. If m.curg is nil (after dropg), the goroutine pointer
+// is recovered from the g0 stack at *(g0.sched.sp - 8).
+var UnwindInfoGoMcall = UnwindInfo{Flags: support.UnwindFlagCommand,
+	Param: support.UnwindCommandGoMcall}
+
 // UnwindInfoLR contains the description to unwind ARM64 function without a frame (LR only)
 var UnwindInfoLR = UnwindInfo{
 	BaseReg:    support.UnwindRegSp,

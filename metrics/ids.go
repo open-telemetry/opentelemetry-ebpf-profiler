@@ -650,6 +650,24 @@ const (
 	// Number of failures to read TLS variables via the DTV
 	IDUnwindErrBadDTVRead = 286
 
+	// Number of attempted Go mcall stack-switch unwinds
+	IDUnwindGoMcallAttempts = 287
+
+	// Number of successful Go mcall stack-switch unwinds
+	IDUnwindGoMcallSuccess = 288
+
+	// Number of Go mcall unwind failures due to missing Go offsets
+	IDUnwindGoMcallErrNoGoOffsets = 289
+
+	// Number of Go mcall unwind failures due to goroutine resolution
+	IDUnwindGoMcallErrResolveGoroutine = 290
+
+	// Number of Go mcall unwind failures due to gobuf read errors
+	IDUnwindGoMcallErrReadGobuf = 291
+
+	// Number of Go mcall unwind failures due to unpopulated gobuf
+	IDUnwindGoMcallErrGobufNotPopulated = 292
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 287
+	IDMax = 293
 )

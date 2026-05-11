@@ -170,6 +170,7 @@ const (
 	UnwindCommandPLT          int32 = C.UNWIND_COMMAND_PLT
 	UnwindCommandSignal       int32 = C.UNWIND_COMMAND_SIGNAL
 	UnwindCommandFramePointer int32 = C.UNWIND_COMMAND_FRAME_POINTER
+	UnwindCommandGoMcall      int32 = C.UNWIND_COMMAND_GO_MCALL
 
 	// UnwindDeref handling from the C header file
 	UnwindDerefMask       int32 = C.UNWIND_DEREF_MASK
@@ -307,4 +308,10 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindRubyErrReadRbasicFlags:               metrics.IDUnwindRubyErrReadRbasicFlags,
 	C.metricID_UnwindRubyErrCmeMaxEp:                      metrics.IDUnwindRubyErrCmeMaxEp,
 	C.metricID_UnwindErrBadDTVRead:                        metrics.IDUnwindErrBadDTVRead,
+	C.metricID_UnwindGoMcallAttempts:                      metrics.IDUnwindGoMcallAttempts,
+	C.metricID_UnwindGoMcallSuccess:                       metrics.IDUnwindGoMcallSuccess,
+	C.metricID_UnwindGoMcallErrNoGoOffsets:                metrics.IDUnwindGoMcallErrNoGoOffsets,
+	C.metricID_UnwindGoMcallErrResolveGoroutine:           metrics.IDUnwindGoMcallErrResolveGoroutine,
+	C.metricID_UnwindGoMcallErrReadGobuf:                  metrics.IDUnwindGoMcallErrReadGobuf,
+	C.metricID_UnwindGoMcallErrGobufNotPopulated:          metrics.IDUnwindGoMcallErrGobufNotPopulated,
 }

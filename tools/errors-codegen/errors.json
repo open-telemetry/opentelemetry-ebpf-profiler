@@ -364,5 +364,25 @@
     "id": 7006,
     "name": "beam_range_search_exhausted",
     "description": "BEAM: Ran out of iterations searching for the current code header"
+  },
+  {
+    "id": 8000,
+    "name": "go_mcall_no_go_offsets",
+    "description": "Go: No Go process info available for mcall unwinding"
+  },
+  {
+    "id": 8001,
+    "name": "go_mcall_resolve_goroutine",
+    "description": "Go: Failed to resolve the user goroutine during mcall unwinding"
+  },
+  {
+    "id": 8002,
+    "name": "go_mcall_read_gobuf",
+    "description": "Go: Failed to read gobuf fields from the goroutine during mcall unwinding"
+  },
+  {
+    "id": 8003,
+    "name": "go_mcall_gobuf_not_populated",
+    "description": "Go: Gobuf sp/pc is zero during mcall unwinding (sched not yet populated)"
   }
 ]

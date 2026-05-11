@@ -61,7 +61,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x69
+	MetricIDBeginCumulative = 0x6f
 )
 
 const (
@@ -200,6 +200,10 @@ type GoLabelsOffsets struct {
 	Hmap_log2_bucket_count uint32
 	Hmap_buckets           uint32
 	Tls_offset             int32
+	Sched_sp               uint32
+	Sched_pc_off           uint8
+	Sched_bp_off           uint8
+	Pad_cgo_0              [2]byte
 }
 type HotspotProcInfo struct {
 	Codecache_start        uint64
@@ -363,6 +367,7 @@ const (
 	UnwindCommandPLT          int32 = 0x2
 	UnwindCommandSignal       int32 = 0x3
 	UnwindCommandFramePointer int32 = 0x4
+	UnwindCommandGoMcall      int32 = 0x5
 
 	UnwindDerefMask       int32 = 0x7
 	UnwindDerefMultiplier int32 = 0x8
@@ -497,4 +502,10 @@ var MetricsTranslation = []metrics.MetricID{
 	0x66: metrics.IDUnwindRubyErrReadRbasicFlags,
 	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
 	0x68: metrics.IDUnwindErrBadDTVRead,
+	0x69: metrics.IDUnwindGoMcallAttempts,
+	0x6a: metrics.IDUnwindGoMcallSuccess,
+	0x6b: metrics.IDUnwindGoMcallErrNoGoOffsets,
+	0x6c: metrics.IDUnwindGoMcallErrResolveGoroutine,
+	0x6d: metrics.IDUnwindGoMcallErrReadGobuf,
+	0x6e: metrics.IDUnwindGoMcallErrGobufNotPopulated,
 }

@@ -160,8 +160,8 @@ typedef enum ErrorCode {
   // Native: Unable to read the IRQ stack link
   ERR_NATIVE_CHASE_IRQ_STACK_LINK = 4010,
 
-  // Native: Unexpectedly encountered a kernel mode pointer while attempting to unwind user-mode
-  // stack
+  // Native: Unexpectedly encountered a kernel mode pointer while attempting
+  // to unwind user-mode stack
   ERR_NATIVE_UNEXPECTED_KERNEL_ADDRESS = 4011,
 
   // Native: Unable to locate the PID page mapping for the current instruction pointer
@@ -222,7 +222,19 @@ typedef enum ErrorCode {
   ERR_BEAM_MODULES_READ_FAILURE = 7005,
 
   // BEAM: Ran out of iterations searching for the current code header
-  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006
+  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006,
+
+  // Go: No Go process info available for mcall unwinding
+  ERR_GO_MCALL_NO_GO_OFFSETS = 8000,
+
+  // Go: Failed to resolve the user goroutine during mcall unwinding
+  ERR_GO_MCALL_RESOLVE_GOROUTINE = 8001,
+
+  // Go: Failed to read gobuf fields from the goroutine during mcall unwinding
+  ERR_GO_MCALL_READ_GOBUF = 8002,
+
+  // Go: Gobuf sp/pc is zero during mcall unwinding (sched not yet populated)
+  ERR_GO_MCALL_GOBUF_NOT_POPULATED = 8003
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H
