@@ -267,14 +267,12 @@ const (
 type peInfo struct {
 	err          error
 	lastModified int64
-	// points to the FrameMappingFile (FileID + name + GUID/MVID)
-	mapping     libpf.FrameMapping
-	simpleName  libpf.String
-	guid        string
-	typeSpecs   []peTypeSpec
-	methodSpecs []peMethodSpec
-	// for merging consecutive process mappings of same DLL
-	sizeOfImage uint32
+	mapping      libpf.FrameMapping
+	simpleName   libpf.String
+	guid         string
+	typeSpecs    []peTypeSpec
+	methodSpecs  []peMethodSpec
+	sizeOfImage  uint32
 
 	// stringsHeapVA is the RVA at which the ECMA-335 II.24.2.3 #Strings heap is mapped
 	// when the PE is loaded as an image (sections placed at their VirtualAddress).
@@ -675,9 +673,10 @@ func (pp *peParser) readDotnetString(offs uint32) libpf.String {
 // stringsHeapAddr is the absolute process address of the heap, resolved at
 // attach time (see resolveStringsHeapAddr) so this works regardless of whether
 // the runtime image-loaded the PE or mmap()ed the file 1:1.
-// Resolved values are memoized in pi.stringsCache (including misses) to avoid
-// repeated remote-memory reads for hot names.
-// Returns libpf.NullString for offset 0, out-of-bounds offsets or read errors.
+// Successfully resolved values are memoized in pi.stringsCache to avoid
+// repeated remote-memory reads for hot names. NullString results (offset 0,
+// out-of-bounds, read errors, empty strings) are not cached so a transient
+// read failure does not poison the entry permanently.
 func (pi *peInfo) lookupString(rm remotememory.RemoteMemory, stringsHeapAddr uint64,
 	offs uint32) libpf.String {
 	if offs == 0 || offs >= pi.stringsHeapSize {
@@ -687,6 +686,9 @@ func (pi *peInfo) lookupString(rm remotememory.RemoteMemory, stringsHeapAddr uin
 		return s
 	}
 	s := libpf.Intern(rm.String(libpf.Address(stringsHeapAddr + uint64(offs))))
+	if s == libpf.NullString {
+		return s
+	}
 	pi.stringsCache.Add(offs, s)
 	return s
 }
