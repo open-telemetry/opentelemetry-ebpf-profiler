@@ -302,6 +302,12 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
 			return fmt.Errorf("failed to set debug output: %v", err)
 		}
+		// DEBUG_PRINT branches roughly triple per-iter verifier complexity,
+		// so reduce the Python/native unwinder loop iterations to fit within
+		// the 1M instruction budget on kernel 6.18+.
+		if err := coll.Variables["python_native_loop_iters"].Set(uint32(4)); err != nil {
+			return fmt.Errorf("failed to set python_native_loop_iters: %v", err)
+		}
 	}
 
 	if err := coll.Variables["off_cpu_threshold"].Set(cfg.OffCPUThreshold); err != nil {
