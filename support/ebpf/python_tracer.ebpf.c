@@ -243,6 +243,65 @@ static EBPF_INLINE ErrorCode get_PyThreadState(
   return ERR_OK;
 }
 
+// get_PyFrame_from_fp implements a fast path enabled by CPython 3.15's
+// -fno-omit-frame-pointer build (python/cpython#149201). At entry to
+// _PyEval_EvalFrameDefault the compiler moves the second argument (the
+// `_PyInterpreterFrame *frame`) into a callee-saved register: `r14` on
+// x86-64, `x28` on aarch64. Verified empirically against the upstream
+// 3.15-rc libpython3.15.so build for both architectures.
+//
+// When the perf sample fired *inside* _PyEval_EvalFrameDefault, the live
+// register still holds `frame`, so we can bootstrap the unwind without
+// going through the autoTLSKey / pthread_getspecific / _Py_tss_tstate
+// dance. If the sample was taken in a callee (a libc / TLS resolver / C
+// extension) the register has been clobbered to whatever the callee
+// happened to leave behind, and trusting it would walk us into garbage.
+//
+// We detect that case by checking whether any native unwinding has
+// happened between sample time and now: if state->pc still equals the
+// sample-time IP from `ctx`, the sample fired directly in interpreter
+// code and the register is reliable. Otherwise we bail and let the
+// caller fall back to the existing PyThreadState-based path.
+static EBPF_INLINE ErrorCode get_PyFrame_from_fp(
+  const PyProcInfo *pyinfo, struct pt_regs *ctx, const UnwindState *state, void **frame)
+{
+  void *candidate;
+#if defined(__x86_64__)
+  // No native unwinding may have happened: we need the live r14 from
+  // the perf sample, not whatever the native unwinder walked into.
+  if (state->pc != ctx->ip) {
+    return ERR_PYTHON_BAD_FRAME_OBJECT_ADDR;
+  }
+  candidate = (void *)ctx->r14;
+#elif defined(__aarch64__)
+  if (state->pc != normalize_pac_ptr(ctx->pc)) {
+    return ERR_PYTHON_BAD_FRAME_OBJECT_ADDR;
+  }
+  candidate = (void *)ctx->regs[28];
+#else
+  return ERR_PYTHON_BAD_FRAME_OBJECT_ADDR;
+#endif
+
+  if (!candidate) {
+    return ERR_PYTHON_BAD_FRAME_OBJECT_ADDR;
+  }
+
+  // Belt-and-braces validation: read the first field of
+  // _PyInterpreterFrame. A plausible frame has a non-null
+  // f_executable / f_code and the read does not page-fault. If either
+  // check fails we treat it as a miss and fall back to the slow path.
+  void *exec;
+  if (bpf_probe_read_user(&exec, sizeof(exec), candidate + pyinfo->PyFrameObject_f_code)) {
+    return ERR_PYTHON_BAD_FRAME_OBJECT_ADDR;
+  }
+  if (!exec) {
+    return ERR_PYTHON_BAD_FRAME_OBJECT_ADDR;
+  }
+
+  *frame = candidate;
+  return ERR_OK;
+}
+
 static EBPF_INLINE ErrorCode get_PyFrame(const PyProcInfo *pyinfo, void **frame)
 {
   void *tsd_base;
@@ -321,9 +380,21 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
   DEBUG_PRINT("Building Python stack for 0x%x", pyinfo->version);
   if (!record->pythonUnwindState.py_frame) {
     increment_metric(metricID_UnwindPythonAttempts);
-    error = get_PyFrame(pyinfo, &record->pythonUnwindState.py_frame);
-    if (error) {
-      goto exit;
+    if (pyinfo->uses_frame_pointers) {
+      // Fast path: read _PyInterpreterFrame* from the leaf-time
+      // callee-saved register. Falls through to the slow path below
+      // if the sample wasn't taken inside _PyEval_EvalFrameDefault.
+      ErrorCode fp_err =
+        get_PyFrame_from_fp(pyinfo, ctx, &record->state, &record->pythonUnwindState.py_frame);
+      if (fp_err) {
+        record->pythonUnwindState.py_frame = NULL;
+      }
+    }
+    if (!record->pythonUnwindState.py_frame) {
+      error = get_PyFrame(pyinfo, &record->pythonUnwindState.py_frame);
+      if (error) {
+        goto exit;
+      }
     }
   }
   if (!record->pythonUnwindState.py_frame) {
