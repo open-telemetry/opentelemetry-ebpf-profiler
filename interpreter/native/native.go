@@ -56,7 +56,7 @@ type nativeData struct {
 	strtab []byte
 	// nameCache caches demangled symbol names by strtab offset.
 	nameCache *lru.LRU[uint32, string]
-	// elfFile is kept open to hold the mmap alive.
+	// elfFile owns the mmap backing strtab; closed on Unload to munmap.
 	elfFile *pfelf.File
 }
 
@@ -191,8 +191,7 @@ func collectSymbolOffsets(ef *pfelf.File, sectionName string) ([]symbolEntry, []
 		if sym.Value == 0 || sym.Size == 0 {
 			continue
 		}
-		// Only include function symbols.
-		if elf.ST_TYPE(sym.Info) != elf.STT_FUNC {
+		if !libpf.SymbolType(elf.ST_TYPE(sym.Info)).IsFunction() {
 			continue
 		}
 		// Verify the name offset is valid and non-empty.
