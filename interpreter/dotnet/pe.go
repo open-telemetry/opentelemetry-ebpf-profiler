@@ -12,6 +12,8 @@ import (
 	"io"
 	"os"
 	"path"
+	"slices"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -1167,6 +1169,54 @@ func (pp *peParser) parse() error {
 		return err
 	}
 	return pp.parseCLI()
+}
+
+func (pi *peInfo) resolveMethodName(methodIdx uint32,
+	rm remotememory.RemoteMemory, stringsHeapAddr uint64) libpf.String {
+	idx := sort.Search(len(pi.typeSpecs), func(idx int) bool {
+		return pi.typeSpecs[idx].methodIdx > methodIdx
+	}) - 1
+	if methodIdx == 0 || methodIdx > uint32(len(pi.methodSpecs)) || idx < 0 {
+		return libpf.Intern(fmt.Sprintf("<invalid method index %d/%d>",
+			methodIdx, len(pi.methodSpecs)))
+	}
+
+	lookup := func(offs uint32) libpf.String {
+		return pi.lookupString(rm, stringsHeapAddr, offs)
+	}
+
+	typeSpec := &pi.typeSpecs[idx]
+	typeName := lookup(typeSpec.typeNameIdx).String()
+	for typeSpec.enclosingClass != 0 {
+		enclosingSpec := &pi.typeSpecs[typeSpec.enclosingClass-1]
+		typeName = fmt.Sprintf("%s/%s", lookup(enclosingSpec.typeNameIdx), typeName)
+		typeSpec = enclosingSpec
+	}
+	methodName := lookup(pi.methodSpecs[methodIdx-1].methodNameIdx)
+	if typeSpec.namespaceIdx != 0 {
+		return libpf.Intern(fmt.Sprintf("%s.%s.%s",
+			lookup(typeSpec.namespaceIdx),
+			typeName, methodName))
+	}
+	return libpf.Intern(fmt.Sprintf("%s.%s", typeName, methodName))
+}
+
+func (pi *peInfo) resolveR2RMethodName(pcRVA uint32,
+	rm remotememory.RemoteMemory, stringsHeapAddr uint64) libpf.String {
+	idx, ok := slices.BinarySearchFunc(pi.methodSpecs, pcRVA<<1,
+		func(methodspec peMethodSpec, pcRVA uint32) int {
+			if pcRVA < methodspec.startRVA {
+				return 1
+			}
+			if pcRVA > methodspec.startRVA {
+				return -1
+			}
+			return 0
+		})
+	if !ok {
+		idx--
+	}
+	return pi.resolveMethodName(uint32(idx+1), rm, stringsHeapAddr)
 }
 
 func (pi *peInfo) parse(r io.ReaderAt) error {

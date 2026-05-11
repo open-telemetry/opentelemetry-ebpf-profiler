@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 	"sync/atomic"
 
@@ -159,6 +158,11 @@ type dotnetInstance struct {
 	// dotnet instance will have limited number of PE files mapped in, this is a map
 	// instead of a LRU.
 	moduleToPEInfo map[libpf.Address]dotnetMapping
+
+	// stringsHeapAddrByPE maps a peInfo (shared via globalPeCache) to the absolute
+	// process address of its #Strings heap in this process. Rebuilt by
+	// SynchronizeMappings alongside mappings.
+	stringsHeapAddrByPE map[*peInfo]uint64
 
 	addrToMethod *freelru.LRU[libpf.Address, *dotnetMethod]
 }
@@ -457,54 +461,6 @@ func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (dotnetMa
 	return m, nil
 }
 
-func (i *dotnetInstance) resolveMethodName(pi *peInfo, methodIdx uint32,
-	rm remotememory.RemoteMemory, stringsHeapAddr uint64) libpf.String {
-	idx := sort.Search(len(pi.typeSpecs), func(idx int) bool {
-		return pi.typeSpecs[idx].methodIdx > methodIdx
-	}) - 1
-	if methodIdx == 0 || methodIdx > uint32(len(pi.methodSpecs)) || idx < 0 {
-		return libpf.Intern(fmt.Sprintf("<invalid method index %d/%d>",
-			methodIdx, len(pi.methodSpecs)))
-	}
-
-	lookup := func(offs uint32) libpf.String {
-		return pi.lookupString(rm, stringsHeapAddr, offs)
-	}
-
-	typeSpec := &pi.typeSpecs[idx]
-	typeName := lookup(typeSpec.typeNameIdx).String()
-	for typeSpec.enclosingClass != 0 {
-		enclosingSpec := &pi.typeSpecs[typeSpec.enclosingClass-1]
-		typeName = fmt.Sprintf("%s/%s", lookup(enclosingSpec.typeNameIdx), typeName)
-		typeSpec = enclosingSpec
-	}
-	methodName := lookup(pi.methodSpecs[methodIdx-1].methodNameIdx)
-	if typeSpec.namespaceIdx != 0 {
-		return libpf.Intern(fmt.Sprintf("%s.%s.%s",
-			lookup(typeSpec.namespaceIdx),
-			typeName, methodName))
-	}
-	return libpf.Intern(fmt.Sprintf("%s.%s", typeName, methodName))
-}
-
-func (i *dotnetInstance) resolveR2RMethodName(pi *peInfo, pcRVA uint32,
-	rm remotememory.RemoteMemory, stringsHeapAddr uint64) libpf.String {
-	idx, ok := slices.BinarySearchFunc(pi.methodSpecs, pcRVA<<1,
-		func(methodspec peMethodSpec, pcRVA uint32) int {
-			if pcRVA < methodspec.startRVA {
-				return 1
-			}
-			if pcRVA > methodspec.startRVA {
-				return -1
-			}
-			return 0
-		})
-	if !ok {
-		idx--
-	}
-	return i.resolveMethodName(pi, uint32(idx+1), rm, stringsHeapAddr)
-}
-
 func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr libpf.Address) (*dotnetMethod, error) {
 	cdac := i.d.Get()
 	vms := &cdac.Types
@@ -556,10 +512,9 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	}
 
 	method := &dotnetMethod{
-		classification:  classification,
-		index:           index,
-		module:          m.info,
-		stringsHeapAddr: m.stringsHeapAddr,
+		classification: classification,
+		index:          index,
+		module:         m.info,
 	}
 	if debugInfoPtr != 0 {
 		if err := method.readDebugInfo(newCachingReader(i.rm, int64(debugInfoPtr),
@@ -708,7 +663,9 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	// mappings are in sorted order
 	i.mappings = dotnetMappings
 
+	i.stringsHeapAddrByPE = make(map[*peInfo]uint64, len(dotnetMappings))
 	for _, m := range dotnetMappings {
+		i.stringsHeapAddrByPE[m.info] = m.stringsHeapAddr
 		log.Debugf("mapped %x-%x %s", m.start, m.end, m.info.simpleName)
 	}
 
@@ -823,7 +780,7 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		frames.Append(&libpf.Frame{
 			Type:            libpf.DotnetFrame,
 			AddressOrLineno: libpf.AddressOrLineno(pcOffset),
-			FunctionName:    i.resolveR2RMethodName(m.info, pcOffset, i.rm, m.stringsHeapAddr),
+			FunctionName:    m.info.resolveR2RMethodName(pcOffset, i.rm, m.stringsHeapAddr),
 			SourceFile:      m.info.simpleName,
 			Mapping:         m.info.mapping,
 		})
@@ -847,7 +804,8 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		//          pointing to CALL instruction if the debug info was accurate.
 		lineID := libpf.AddressOrLineno(0xf0000000+method.index)<<32 +
 			libpf.AddressOrLineno(ilOffset)
-		methodName := i.resolveMethodName(method.module, method.index, i.rm, method.stringsHeapAddr)
+		methodName := method.module.resolveMethodName(method.index, i.rm,
+			i.stringsHeapAddrByPE[method.module])
 		frames.Append(&libpf.Frame{
 			Type:            libpf.DotnetFrame,
 			AddressOrLineno: lineID,
