@@ -48,7 +48,6 @@ type symbolEntry struct {
 
 // nativeData holds the parsed symbol table for a single ELF.
 type nativeData struct {
-	refs   atomic.Int32
 	fileID host.FileID
 	// symbols is sorted by address for binary search.
 	symbols []symbolEntry
@@ -108,7 +107,6 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		nameCache: nameCache,
 		elfFile:   elfFile,
 	}
-	d.refs.Store(1)
 	return d, nil
 }
 
@@ -173,6 +171,8 @@ func collectSymbolOffsets(ef *pfelf.File, sectionName string) ([]symbolEntry, []
 	}
 
 	strTab := ef.Sections[symTab.Link]
+	// Returns a sub-slice of the mmap when available (zero-copy); maxSize
+	// only caps the fallback heap allocation for non-mmap readers.
 	strtab, err := strTab.Data(16 * 1024 * 1024)
 	if err != nil {
 		return nil, nil
@@ -183,6 +183,8 @@ func collectSymbolOffsets(ef *pfelf.File, sectionName string) ([]symbolEntry, []
 		return nil, nil
 	}
 
+	// Walk the packed Sym64 array via unsafe cast — avoids per-symbol
+	// allocation that encoding/binary would require for 10k+ entries.
 	symSz := int(unsafe.Sizeof(elf.Sym64{}))
 	var symbols []symbolEntry
 
@@ -259,22 +261,16 @@ func (d *nativeData) lookupSymbol(addr uint64) (string, bool) {
 	return "", false
 }
 
-func (d *nativeData) unref() {
-	d.refs.Add(-1)
-}
-
 func (d *nativeData) String() string {
 	return fmt.Sprintf("Native symbolizer (%d symbols)", len(d.symbols))
 }
 
 func (d *nativeData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
-	d.refs.Add(1)
 	return &nativeInstance{d: d}, nil
 }
 
 func (d *nativeData) Unload(_ interpreter.EbpfHandler) {
-	d.unref()
 	if d.elfFile != nil {
 		d.elfFile.Close()
 		d.elfFile = nil
@@ -295,7 +291,6 @@ func (inst *nativeInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
 }
 
 func (inst *nativeInstance) Detach(_ interpreter.EbpfHandler, _ libpf.PID) error {
-	inst.d.unref()
 	return nil
 }
 
