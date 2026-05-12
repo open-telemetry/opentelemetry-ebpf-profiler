@@ -40,7 +40,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 // Compile time check to make sure times.Times satisfies the interfaces.
@@ -238,42 +237,6 @@ func newTracePool() sync.Pool {
 	}
 }
 
-// buildIncludeTracers builds an IncludeTracers from ExtensionsConfig.
-func buildIncludeTracers(cfg extensions.ExtensionsConfig) types.IncludedTracers {
-	includeTracers := types.AllTracers()
-	if cfg.Python.IsDisabled() {
-		includeTracers.Disable(types.PythonTracer)
-	}
-	if cfg.Perl.IsDisabled() {
-		includeTracers.Disable(types.PerlTracer)
-	}
-	if cfg.PHP.IsDisabled() {
-		includeTracers.Disable(types.PHPTracer)
-	}
-	if cfg.Hotspot.IsDisabled() {
-		includeTracers.Disable(types.HotspotTracer)
-	}
-	if cfg.Ruby.IsDisabled() {
-		includeTracers.Disable(types.RubyTracer)
-	}
-	if cfg.V8.IsDisabled() {
-		includeTracers.Disable(types.V8Tracer)
-	}
-	if cfg.Dotnet.IsDisabled() {
-		includeTracers.Disable(types.DotnetTracer)
-	}
-	if cfg.Go.IsDisabled() {
-		includeTracers.Disable(types.GoTracer)
-	}
-	if cfg.Labels.IsDisabled() {
-		includeTracers.Disable(types.Labels)
-	}
-	if cfg.BEAM.IsDisabled() {
-		includeTracers.Disable(types.BEAMTracer)
-	}
-	return includeTracers
-}
-
 // NewTracer loads eBPF code and map definitions from the ELF module at the configured path.
 func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	kernelSymbolizer, err := kallsyms.NewSymbolizer()
@@ -286,16 +249,13 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
 
-	// Build IncludeTracers from ExtensionsConfig
-	includeTracers := buildIncludeTracers(cfg.ExtensionsConfig)
-
 	// Based on includeTracers we decide later which are loaded into the kernel.
-	ebpfMaps, ebpfProgs, stackdeltaInnerMapSpec, err := initializeMapsAndPrograms(kmod, cfg, includeTracers)
+	ebpfMaps, ebpfProgs, stackdeltaInnerMapSpec, err := initializeMapsAndPrograms(kmod, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
 
-	ebpfHandler, err := pmebpf.LoadMaps(ctx, includeTracers, ebpfMaps, stackdeltaInnerMapSpec)
+	ebpfHandler, err := pmebpf.LoadMaps(ctx, cfg.ExtensionsConfig, ebpfMaps, stackdeltaInnerMapSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
@@ -353,7 +313,7 @@ func (t *Tracer) Close() {
 
 // initializeMapsAndPrograms loads the definitions for the eBPF maps and programs provided
 // by the embedded elf file and loads these into the kernel.
-func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, includeTracers types.IncludedTracers) (
+func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 	ebpfMaps map[string]*cebpf.Map, ebpfProgs map[string]*cebpf.Program,
 	stackdeltaInnerMapSpec *cebpf.MapSpec, err error,
 ) {
@@ -381,7 +341,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, includeTracer
 	}
 
 	// Initialize eBPF variables before loading programs and maps.
-	if err = loadRodataVars(coll, kmod, cfg, includeTracers); err != nil {
+	if err = loadRodataVars(coll, kmod, cfg); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to set RODATA variables: %v", err)
 	}
 
@@ -401,7 +361,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, includeTracer
 	// Load all maps into the kernel that are used later on in eBPF programs. So we can rewrite
 	// in the next step the placesholders in the eBPF programs with the file descriptors of the
 	// loaded maps in the kernel.
-	if err = loadAllMaps(coll, cfg, ebpfMaps, includeTracers); err != nil {
+	if err = loadAllMaps(coll, cfg, ebpfMaps); err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
@@ -440,52 +400,52 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config, includeTracer
 		{
 			progID: uint32(support.ProgUnwindHotspot),
 			name:   "unwind_hotspot",
-			enable: includeTracers.Has(types.HotspotTracer),
+			enable: !cfg.ExtensionsConfig.Hotspot.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindPerl),
 			name:   "unwind_perl",
-			enable: includeTracers.Has(types.PerlTracer),
+			enable: !cfg.ExtensionsConfig.Perl.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindPHP),
 			name:   "unwind_php",
-			enable: includeTracers.Has(types.PHPTracer),
+			enable: !cfg.ExtensionsConfig.PHP.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindPython),
 			name:   "unwind_python",
-			enable: includeTracers.Has(types.PythonTracer),
+			enable: !cfg.ExtensionsConfig.Python.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindRuby),
 			name:   "unwind_ruby",
-			enable: includeTracers.Has(types.RubyTracer),
+			enable: !cfg.ExtensionsConfig.Ruby.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindV8),
 			name:   "unwind_v8",
-			enable: includeTracers.Has(types.V8Tracer),
+			enable: !cfg.ExtensionsConfig.V8.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindDotnet),
 			name:   "unwind_dotnet",
-			enable: includeTracers.Has(types.DotnetTracer),
+			enable: !cfg.ExtensionsConfig.Dotnet.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindDotnet10),
 			name:   "unwind_dotnet10",
-			enable: includeTracers.Has(types.DotnetTracer),
+			enable: !cfg.ExtensionsConfig.Dotnet.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgGoLabels),
 			name:   "go_labels",
-			enable: includeTracers.Has(types.Labels),
+			enable: !cfg.ExtensionsConfig.Labels.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindBEAM),
 			name:   "unwind_beam",
-			enable: includeTracers.Has(types.BEAMTracer),
+			enable: !cfg.ExtensionsConfig.BEAM.IsDisabled(),
 		},
 	}
 
@@ -636,8 +596,7 @@ func syncVariablesToMapSpecs(coll *cebpf.CollectionSpec) error {
 
 // loadAllMaps loads all eBPF maps that are used in our eBPF programs.
 func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
-	ebpfMaps map[string]*cebpf.Map, includeTracers types.IncludedTracers,
-) error {
+	ebpfMaps map[string]*cebpf.Map) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
@@ -690,7 +649,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			}
 		}
 
-		if !types.IsMapEnabled(mapName, includeTracers) {
+		if !extensions.IsMapEnabled(mapName, cfg.ExtensionsConfig) {
 			log.Debugf("Skipping eBPF map %s: tracer not enabled", mapName)
 			continue
 		}

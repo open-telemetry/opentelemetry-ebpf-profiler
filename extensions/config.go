@@ -83,3 +83,30 @@ type ExtensionsConfig struct {
 
 // AllExtensionsConfig returns a ExtensionsConfig with all extensions enabled.
 func AllExtensionsConfig() ExtensionsConfig { return ExtensionsConfig{} }
+
+func IsMapEnabled(mapName string, cfg ExtensionsConfig) bool {
+	switch mapName {
+	case "perl_procs":
+		return !cfg.Perl.IsDisabled()
+	case "php_procs":
+		return !cfg.PHP.IsDisabled()
+	case "py_procs":
+		return !cfg.Python.IsDisabled()
+	case "hotspot_procs":
+		return !cfg.Hotspot.IsDisabled()
+	case "ruby_procs":
+		return !cfg.Ruby.IsDisabled()
+	case "v8_procs":
+		return !cfg.V8.IsDisabled()
+	case "dotnet_procs":
+		return !cfg.Dotnet.IsDisabled()
+	case "beam_procs":
+		return !cfg.BEAM.IsDisabled()
+	case "go_labels_procs", "apm_int_procs":
+		// go_labels_procs and apm_int_procs are called from
+		// unwind_stop and therefore need to be available all the time.
+		return true
+	default:
+		return true // Not an interpreter map, so it should be loaded
+	}
+}
