@@ -24,7 +24,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
-	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/otel/metric/noop"
 )
 
@@ -95,10 +94,6 @@ func Test_Golabels(t *testing.T) {
 
 			debug.SetTraceback("all")
 			metrics.Start(noop.Meter{})
-
-			enabledTracers, _ := tracertypes.Parse("")
-			enabledTracers.Enable(tracertypes.Labels)
-			enabledTracers.Enable(tracertypes.GoTracer)
 
 			log.SetLevel(slog.LevelDebug)
 			trc, err := tracer.NewTracer(ctx, &tracer.Config{

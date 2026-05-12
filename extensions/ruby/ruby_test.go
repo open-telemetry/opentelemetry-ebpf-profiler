@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package ruby // import "go.opentelemetry.io/ebpf-profiler/plugins/ruby"
+package ruby // import "go.opentelemetry.io/ebpf-profiler/extensions/ruby"
 
 import (
 	"testing"

@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	// LruFunctionCacheSize is the LRU size for caching functions for an plugins.
+	// LruFunctionCacheSize is the LRU size for caching functions for a extension.
 	// This should reflect the number of hot functions that are seen often in a trace.
 	LruFunctionCacheSize = 1024
 )

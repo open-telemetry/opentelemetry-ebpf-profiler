@@ -347,7 +347,7 @@ func (i *perlInstance) getGV(gvAddr libpf.Address, nameOnly bool) (libpf.String,
 	return value, nil
 }
 
-// getCOP reads and caches a Control OP from remote plugins.
+// getCOP reads and caches a Control OP from remote extensions.
 // On success, the COP is returned. On error, the error.
 func (i *perlInstance) getCOP(copAddr libpf.Address, funcName libpf.String) (
 	*perlCOP, error,

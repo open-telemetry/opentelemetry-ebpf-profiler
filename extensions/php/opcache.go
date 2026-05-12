@@ -32,7 +32,7 @@ package php // import "go.opentelemetry.io/ebpf-profiler/extensions/php"
 //
 // Before we begin it's illustrative to understand how PHP works internally.
 // PHP belongs to the class of interpreted languages that use bytecode: each PHP function is
-// decomposed into a sequence of bytecode instructions that are then executed by the PHP plugins.
+// decomposed into a sequence of bytecode instructions that are then executed by the PHP extension.
 // These instructions are known as zend_ops in the Zend compiler, and their internal structure
 // looks like this:
 //  struct _zend_op {
@@ -81,7 +81,7 @@ package php // import "go.opentelemetry.io/ebpf-profiler/extensions/php"
 // The implication of this are:
 // a) JIT'd code lives in shared memory, which means that all of the process-local work that the host-agent normally does doesn't really apply for PHP.
 // b) The PHP JIT doesn't even live in the same shared object as the PHP interpreter, so we can't
-//    find the JIT information from the PHP plugins.
+//    find the JIT information from the PHP extension.
 // c) Even if we could, PHP hides symbols by default and so recovering the relevant information isn't easy in this form[2].
 //
 // Note that we also can't use the approach used in the V8 interpreter

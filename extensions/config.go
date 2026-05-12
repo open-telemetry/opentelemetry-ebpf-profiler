@@ -67,7 +67,7 @@ type BEAMConfig struct {
 }
 
 // ExtensionsConfig holds configuration for all extensions.
-// Zero value means all plugins enabled.
+// By default all extensions are enabled.
 type ExtensionsConfig struct {
 	Python  PythonConfig  `mapstructure:"python"`
 	Perl    PerlConfig    `mapstructure:"perl"`
@@ -81,5 +81,5 @@ type ExtensionsConfig struct {
 	BEAM    BEAMConfig    `mapstructure:"beam"`
 }
 
-// AllExtensionsConfig returns a ExtensionsConfig with all extensions enabled (zero value).
+// AllExtensionsConfig returns a ExtensionsConfig with all extensions enabled.
 func AllExtensionsConfig() ExtensionsConfig { return ExtensionsConfig{} }

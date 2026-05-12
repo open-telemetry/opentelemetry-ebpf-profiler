@@ -238,7 +238,7 @@ func newTracePool() sync.Pool {
 	}
 }
 
-// buildIncludeTracers builds an IncludeTracers from PluginsConfig.
+// buildIncludeTracers builds an IncludeTracers from ExtensionsConfig.
 func buildIncludeTracers(cfg extensions.ExtensionsConfig) types.IncludedTracers {
 	includeTracers := types.AllTracers()
 	if cfg.Python.IsDisabled() {
@@ -286,7 +286,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
 
-	// Build IncludeTracers from PluginsConfig
+	// Build IncludeTracers from ExtensionsConfig
 	includeTracers := buildIncludeTracers(cfg.ExtensionsConfig)
 
 	// Based on includeTracers we decide later which are loaded into the kernel.

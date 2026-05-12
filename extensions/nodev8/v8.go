@@ -65,7 +65,7 @@ package nodev8 // import "go.opentelemetry.io/ebpf-profiler/extensions/nodev8"
 //        |    as ScopeInfo (normal case), it contains the file name, and the
 //        |       location of this scope along with other details.
 //        |- function_data
-//        |    can be BytecodeArray, plugins.Data, UncompiledFunctionData, WASM data etc.
+//        |    can be BytecodeArray, extensions.Data, UncompiledFunctionData, WASM data etc.
 //        \- script_or_debug_info
 //             as Script, it contains the text source code
 //             as DebugInfo, there is also debug info available
@@ -200,7 +200,7 @@ const (
 	// value to avoid huge malloc that could cause OOM crash.
 	maximumFixedTableSize = 512 * 1024
 
-	// lruSourceFileCacheSize is the LRU size for caching source files for an plugins.
+	// lruSourceFileCacheSize is the LRU size for caching source files for a extension.
 	// This should reflect the number of hot source files that are seen often in a trace.
 	lruSourceFileCacheSize = 128
 

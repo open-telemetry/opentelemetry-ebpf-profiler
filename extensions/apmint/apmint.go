@@ -51,7 +51,7 @@ type apmProcessStorage struct {
 	TraceSocketPath string
 }
 
-// Loader implements plugins.Loader.
+// Loader implements extensions.Loader.
 func Loader(_ extensions.EbpfHandler, info *extensions.LoaderInfo) (extensions.Data, error) {
 	if !isPotentialAgentLib(info.FileName()) {
 		return nil, nil
@@ -158,7 +158,7 @@ type Instance struct {
 
 var _ extensions.Instance = &Instance{}
 
-// Detach implements the plugins.Instance interface.
+// Detach implements the extensions.Instance interface.
 func (i *Instance) Detach(ebpf extensions.EbpfHandler, pid libpf.PID) error {
 	return ebpf.DeleteProcData(libpf.APMInt, pid)
 }

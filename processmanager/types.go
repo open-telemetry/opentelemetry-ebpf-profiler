@@ -55,7 +55,7 @@ type ProcessManager struct {
 	// interpreters records the extensions.Instance interface which contains hooks for
 	// process exits, and various other situations needing extensions specific attention.
 	// The key of the first map is a process ID, while the key of the second map is
-	// the unique on-disk identifier of the plugin DSO.
+	// the unique on-disk identifier of the extension DSO.
 	interpreters map[libpf.PID]map[util.OnDiskFileIdentifier]extensions.Instance
 
 	// pidToProcessInfo keeps track of the executable memory mappings.

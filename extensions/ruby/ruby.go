@@ -138,7 +138,7 @@ type rubyData struct {
 
 	// Address to global symbols, for id to string mappings
 	globalSymbolsAddr libpf.Address
-	// version of the currently used Ruby plugins.
+	// version of the currently used Ruby extension.
 	// major*0x10000 + minor*0x100 + release (e.g. 3.0.1 -> 0x30001)
 	version uint32
 
