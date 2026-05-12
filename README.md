@@ -138,6 +138,15 @@ This project is licensed under the Apache License 2.0 (Apache-2.0).
 The eBPF source code is licensed under the GPL 2.0 license.
 [GPL 2.0](support/ebpf/LICENSE)
 
+### Emeritus
+
+- [Dmitry Filimonov](https://github.com/petethepig), Maintainer
+- [Joel Höner](https://github.com/athre0z), Approver
+- [Tim Rühsen](https://github.com/rockdaboot), Approver
+
+For more information about the emeritus role, see the
+[community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#emeritus-maintainerapprovertriager).
+
 ## Licenses of dependencies
 
 To display a summary of the dependencies' licenses:

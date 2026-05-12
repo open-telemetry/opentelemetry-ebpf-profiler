@@ -48,14 +48,14 @@ func createVDSOSyntheticRecordArm64(ef *pfelf.File) sdtypes.IntervalData {
 		if sym.Name == "__kernel_rt_sigreturn" {
 			deltas = append(
 				deltas,
-				sdtypes.StackDelta{Address: addr, Info: sdtypes.UnwindInfoSignal},
+				sdtypes.StackDelta{Address: addr - 1, Info: sdtypes.UnwindInfoSignal},
 				sdtypes.StackDelta{Address: addr + sym.Size, Info: sdtypes.UnwindInfoLR},
 			)
 			return true
 		}
 		// Determine if LR is on stack
 		code := make([]byte, sym.Size)
-		if _, err := ef.ReadVirtualMemory(code, int64(sym.Address)); err != nil {
+		if _, err := ef.ReadAt(code, int64(sym.Address)); err != nil {
 			return true
 		}
 

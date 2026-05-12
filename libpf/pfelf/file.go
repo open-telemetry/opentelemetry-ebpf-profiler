@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -66,6 +67,9 @@ type File struct {
 
 	// elfReader is the ReadAt implementation used for this File
 	elfReader io.ReaderAt
+
+	// mmapReader is the mmap reader for this File if available
+	mmapReader *mmap.ReaderAt
 
 	// ehFrame is a pointer to the PT_GNU_EH_FRAME segment of the ELF
 	ehFrame *Prog
@@ -170,7 +174,7 @@ type Section struct {
 
 // Open opens the named file using os.Open and prepares it for use as an ELF binary.
 func Open(name string) (*File, error) {
-	f, err := mmap.Open(name)
+	f, err := os.Open(name)
 	if err != nil {
 		return nil, err
 	}
@@ -185,6 +189,9 @@ func Open(name string) (*File, error) {
 
 // Close closes the File.
 func (f *File) Close() (err error) {
+	if f.mmapReader != nil {
+		f.mmapReader.Close()
+	}
 	if f.closer != nil {
 		err = f.closer.Close()
 		f.closer = nil
@@ -235,6 +242,11 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		return nil, err
 	}
 
+	if osFile, ok := r.(*os.File); ok {
+		// Attempt to mmap the file if possible
+		f.mmapReader, _ = mmap.OpenFile(osFile)
+	}
+
 	f.Progs = make([]Prog, hdr.Phnum)
 	virtualBase := ^uint64(0)
 	numROData := 0
@@ -251,7 +263,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 			Memsz:  ph.Memsz,
 			Align:  ph.Align,
 		}
-		p.elfReader = r
+		p.elfReader = f.getReader()
 
 		if p.Type == elf.PT_LOAD {
 			if p.Vaddr < virtualBase {
@@ -362,10 +374,19 @@ func (_ NoMmapCloser) Close() error {
 // keep slices returned by Section.Data() and Prog.Data() after File has been
 // GCd. The returned Close() will release the reference on data.
 func (f *File) Take() io.Closer {
-	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
-		return mapping.Take()
+	if f.mmapReader != nil {
+		return f.mmapReader.Take()
 	}
 	return NoMmapCloser{}
+}
+
+// getReader returns the mmap reader if available, or otherwise the underlying
+// reader (typically os.File).
+func (f *File) getReader() io.ReaderAt {
+	if f.mmapReader != nil {
+		return f.mmapReader
+	}
+	return f.elfReader
 }
 
 // LoadSections loads the ELF file sections
@@ -412,7 +433,7 @@ func (f *File) LoadSections() error {
 			Entsize:   sh.Entsize,
 			FileSize:  sh.Size,
 		}
-		s.elfReader = f.elfReader
+		s.elfReader = f.getReader()
 	}
 
 	// Load the section name string table
@@ -487,34 +508,19 @@ func (f *File) VirtualMemory(addr int64, sz, maxSize int) ([]byte, error) {
 	return nil, fmt.Errorf("no matching segment for 0x%x", uint64(addr))
 }
 
-// SymbolData returns the data associated with given dynamic symbol.
-// The backing mmapped data is returned if possible, otherwise a maximum of
-// maxCopy bytes of the symbol data will read to newly allocated buffer.
-func (f *File) SymbolData(name libpf.SymbolName, maxCopy int) (*libpf.Symbol, []byte, error) {
+// SymbolData reads and returns the data associated with given dynamic symbol.
+// The maximum data read is capped to maxSize.
+func (f *File) SymbolData(name libpf.SymbolName, maxSize int) (*libpf.Symbol, []byte, error) {
 	sym, err := f.LookupSymbol(name)
 	if err != nil {
 		return nil, nil, err
 	}
-	symSize := int(sym.Size)
-	if symSize > maxCopy {
-		// Truncate read size if not memory mapped data.
-		if _, ok := f.elfReader.(*mmap.ReaderAt); !ok {
-			symSize = maxCopy
-		}
+	data := make([]byte, min(int(sym.Size), maxSize))
+	_, err = f.ReadAt(data, int64(sym.Address))
+	if err != nil {
+		return nil, nil, err
 	}
-	data, err := f.VirtualMemory(int64(sym.Address), symSize, maxCopy)
-	return sym, data, err
-}
-
-// ReadVirtualMemory reads bytes from given virtual address
-func (f *File) ReadVirtualMemory(p []byte, addr int64) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-	if ph := f.findVirtualAddressProg(uint64(addr)); ph != nil {
-		return ph.ReadAt(p, addr-int64(ph.Vaddr))
-	}
-	return 0, fmt.Errorf("no matching segment for 0x%x", uint64(addr))
+	return sym, data, nil
 }
 
 // EHFrame constructs a Program header with the EH Frame sections
@@ -546,7 +552,7 @@ func (f *File) EHFrame() (*Prog, error) {
 				Memsz:  ph.Memsz - offs,
 				Align:  ph.Align,
 			},
-			elfReader: f.elfReader,
+			elfReader: f.getReader(),
 		}, nil
 	}
 	return nil, errors.New("no PT_LOAD segment for PT_GNU_EH_FRAME found")
@@ -597,7 +603,7 @@ func (f *File) GoVersion() (string, error) {
 	if !f.IsGolang() {
 		return "", nil
 	}
-	bi, err := buildinfo.Read(f.elfReader)
+	bi, err := buildinfo.Read(f.getReader())
 	if err != nil {
 		return "", err
 	}
@@ -887,11 +893,6 @@ func (ph *Prog) ReadAt(p []byte, off int64) (n int, err error) {
 	return n, nil
 }
 
-// Open returns a new ReadSeeker reading the ELF program body.
-func (ph *Prog) Open() io.ReadSeeker {
-	return io.NewSectionReader(ph, 0, 1<<63-1)
-}
-
 // Data loads the whole program header referenced data, and returns it as slice.
 func (ph *Prog) Data(maxSize uint) ([]byte, error) {
 	if mapping, ok := ph.elfReader.(*mmap.ReaderAt); ok {
@@ -954,8 +955,8 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 
 // SetDontNeed sets the flag MADV_DONTNEED on the mmapped data.
 func (f *File) SetDontNeed() {
-	if mapping, ok := f.elfReader.(*mmap.ReaderAt); ok {
-		if err := mapping.SetMadvDontNeed(); err != nil {
+	if f.mmapReader != nil {
+		if err := f.mmapReader.SetMadvDontNeed(); err != nil {
 			log.Errorf("Failed to set MADV_DONTNEED: %v", err)
 		}
 	}
@@ -963,7 +964,13 @@ func (f *File) SetDontNeed() {
 
 // ReadAt reads bytes from given virtual address
 func (f *File) ReadAt(p []byte, addr int64) (int, error) {
-	return f.ReadVirtualMemory(p, addr)
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if ph := f.findVirtualAddressProg(uint64(addr)); ph != nil {
+		return ph.ReadAt(p, addr-int64(ph.Vaddr))
+	}
+	return 0, fmt.Errorf("no matching segment for 0x%x", uint64(addr))
 }
 
 // GetRemoteMemory returns RemoteMemory interface for the core dump
@@ -980,7 +987,7 @@ func (f *File) readAndMatchSymbol(n uint32, name libpf.SymbolName) (libpf.Symbol
 
 	// Read symbol descriptor and expected name
 	symSz := int64(unsafe.Sizeof(sym))
-	if _, err := f.ReadVirtualMemory(pfunsafe.FromPointer(&sym),
+	if _, err := f.ReadAt(pfunsafe.FromPointer(&sym),
 		f.symbolsAddr+int64(n)*symSz); err != nil {
 		return libpf.Symbol{}, false
 	}
@@ -1028,7 +1035,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 		// blog link (on top of this file) for details how this works.
 		hdr := &f.gnuHash.header
 		if hdr.numBuckets == 0 {
-			if _, err := f.ReadVirtualMemory(pfunsafe.FromPointer(hdr), f.gnuHash.addr); err != nil {
+			if _, err := f.ReadAt(pfunsafe.FromPointer(hdr), f.gnuHash.addr); err != nil {
 				return nil, err
 			}
 			if hdr.numBuckets == 0 || hdr.bloomSize == 0 {
@@ -1042,7 +1049,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 		var bloom uint
 		h := calcGNUHash(symbol)
 		offs := f.gnuHash.addr + int64(unsafe.Sizeof(gnuHashHeader{}))
-		if _, err := f.ReadVirtualMemory(pfunsafe.FromPointer(&bloom), offs+
+		if _, err := f.ReadAt(pfunsafe.FromPointer(&bloom), offs+
 			ptrSize*int64((h/ptrSizeBits)%hdr.bloomSize)); err != nil {
 			return nil, err
 		}
@@ -1055,7 +1062,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 		// Read the initial symbol index to start looking from
 		offs += int64(hdr.bloomSize) * int64(unsafe.Sizeof(bloom))
 		var i uint32
-		if _, err := f.ReadVirtualMemory(pfunsafe.FromPointer(&i),
+		if _, err := f.ReadAt(pfunsafe.FromPointer(&i),
 			offs+4*int64(h%hdr.numBuckets)); err != nil {
 			return nil, err
 		}
@@ -1068,7 +1075,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 		h |= 1
 		for {
 			var h2 uint32
-			if _, err := f.ReadVirtualMemory(pfunsafe.FromPointer(&h2), offs); err != nil {
+			if _, err := f.ReadAt(pfunsafe.FromPointer(&h2), offs); err != nil {
 				return nil, err
 			}
 			// Do a full match of the symbol if the symbol hash matches
@@ -1088,7 +1095,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 		// Normal ELF symbol lookup. Refer to ELF spec, part 2 "Hash Table" (2-19)
 		hdr := &f.sysvHash.header
 		if hdr.numBuckets == 0 {
-			if _, err := f.ReadVirtualMemory(pfunsafe.FromPointer(hdr), f.sysvHash.addr); err != nil {
+			if _, err := f.ReadAt(pfunsafe.FromPointer(hdr), f.sysvHash.addr); err != nil {
 				return nil, err
 			}
 			if hdr.numBuckets == 0 {
@@ -1099,7 +1106,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 		offs := f.sysvHash.addr + int64(unsafe.Sizeof(*hdr))
 		h := calcSysvHash(symbol)
 		bucket := int64(h % hdr.numBuckets)
-		if _, err := f.ReadVirtualMemory(pfunsafe.FromPointer(&i), offs+4*bucket); err != nil {
+		if _, err := f.ReadAt(pfunsafe.FromPointer(&i), offs+4*bucket); err != nil {
 			return nil, err
 		}
 		offs += 4 * int64(hdr.numBuckets)
@@ -1107,7 +1114,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 			if s, ok := f.readAndMatchSymbol(i, symbol); ok {
 				return &s, nil
 			}
-			if _, err := f.ReadVirtualMemory(pfunsafe.FromPointer(&i), offs+4*int64(i)); err != nil {
+			if _, err := f.ReadAt(pfunsafe.FromPointer(&i), offs+4*int64(i)); err != nil {
 				return nil, err
 			}
 		}

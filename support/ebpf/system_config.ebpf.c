@@ -33,14 +33,14 @@ int read_kernel_memory(UNUSED void *ctx)
     return 0;
   }
 
-  // Mark request handled
-  sys->pid = 0;
-
   // Handle the read request
-  if (bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)sys->address)) {
-    DEBUG_PRINT("Failed to read code from 0x%lx", (unsigned long)sys->address);
-    return -1;
+  sys->err = bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)sys->address);
+  if (sys->err) {
+    DEBUG_PRINT("Failed to read code from 0x%lx: %ld", (unsigned long)sys->address, (long)sys->err);
   }
+
+  // Mark request handled once the helper has finished populating the result.
+  sys->pid = 0;
 
   return 0;
 }
@@ -65,9 +65,6 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
     return 0;
   }
 
-  // Mark request handled
-  sys->pid = 0;
-
   // Request to read current task. Adjust read address, and return
   // also the address of struct pt_regs in the entry stack.
   u64 addr = bpf_get_current_task() + sys->address;
@@ -78,10 +75,13 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
   sys->address = (u64)regs;
 
   // Execute the read request.
-  if (bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)addr)) {
-    DEBUG_PRINT("Failed to read task_struct from 0x%lx", (unsigned long)addr);
-    return -1;
+  sys->err = bpf_probe_read_kernel(sys->code, sizeof(sys->code), (void *)addr);
+  if (sys->err) {
+    DEBUG_PRINT("Failed to read task_struct from 0x%lx: %ld", (unsigned long)addr, (long)sys->err);
   }
+
+  // Mark request handled once the helper has finished populating the result.
+  sys->pid = 0;
 
   return 0;
 }

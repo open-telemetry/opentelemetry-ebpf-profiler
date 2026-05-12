@@ -12,6 +12,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"syscall"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -33,6 +34,11 @@ type sysConfigVars struct {
 	task_stack_offset   uint32
 	stack_ptregs_offset uint32
 }
+
+var (
+	errSystemAnalysisNotHandled = errors.New("system analysis request was not handled")
+	errSystemAnalysisFailed     = errors.New("system analysis helper failed")
+)
 
 // memberByName resolves btf Member from a Struct with given name
 func memberByName(t *btf.Struct, field string) (*btf.Member, error) {
@@ -165,8 +171,27 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get analysis data: %v", err)
 	}
+	if err = validateSystemAnalysisResult(data, address); err != nil {
+		return nil, 0, err
+	}
 
 	return data.Code[:], data.Address, nil
+}
+
+func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.SymbolValue) error {
+	if data.Pid != 0 {
+		return fmt.Errorf("%w for pid %d at 0x%x", errSystemAnalysisNotHandled, data.Pid, address)
+	}
+
+	if data.Err != 0 {
+		if data.Err < 0 {
+			return fmt.Errorf("%w at 0x%x: %w (helper err=%d)", errSystemAnalysisFailed, address, syscall.Errno(-data.Err), data.Err)
+		}
+
+		return fmt.Errorf("%w at 0x%x: helper err=%d", errSystemAnalysisFailed, address, data.Err)
+	}
+
+	return nil
 }
 
 // loadKernelCode will request the ebpf code to read the first X bytes from given address.

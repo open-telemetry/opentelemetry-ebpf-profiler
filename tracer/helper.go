@@ -52,7 +52,7 @@ func hasProbeReadBug(major, minor, patch uint32) bool {
 }
 
 // getOnlineCPUIDs reads online CPUs from /sys/devices/system/cpu/online and reports
-// the core IDs as a list of integers.
+// the core IDs as a list of integers. You should probably use `onlineCPUsOnce` instead.
 func getOnlineCPUIDs() ([]int, error) {
 	cpuPath := "/sys/devices/system/cpu/online"
 	buf, err := os.ReadFile(cpuPath)

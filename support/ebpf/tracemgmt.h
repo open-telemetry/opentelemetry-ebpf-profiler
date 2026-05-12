@@ -53,8 +53,7 @@ static inline EBPF_INLINE void increment_metric(u32 metricID)
 }
 
 // Send immediate notifications for event triggers to Go.
-// Notifications for GENERIC_PID and RELOAD_KALLSYMS will be
-// automatically inhibited until HA resets the type.
+// Notifications for GENERIC_PID will be automatically inhibited until HA resets the type.
 static inline EBPF_INLINE void event_send_trigger(struct pt_regs *ctx, u32 event_type)
 {
   int inhibit_key    = event_type;
@@ -610,6 +609,8 @@ copy_state_regs(UnwindState *state, struct pt_regs *regs, bool interrupted_kerne
   state->sp  = regs->sp;
   state->fp  = regs->bp;
   state->rax = regs->ax;
+  state->rdi = regs->di;
+  state->r8  = regs->r8;
   state->r9  = regs->r9;
   state->r11 = regs->r11;
   state->r13 = regs->r13;
