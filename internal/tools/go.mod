@@ -75,7 +75,7 @@ require (
 	github.com/fatih/color v1.19.0 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
 	github.com/firefart/nonamedreturns v1.0.6 // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
+	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/ghostiam/protogetter v0.3.20 // indirect
 	github.com/go-critic/go-critic v0.14.3 // indirect
@@ -232,14 +232,15 @@ require (
 	go.augendre.info/arangolint v0.4.0 // indirect
 	go.augendre.info/fatcontext v0.9.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	go.opentelemetry.io/collector/cmd/builder v0.151.0 // indirect
-	go.opentelemetry.io/collector/cmd/mdatagen v0.151.0 // indirect
-	go.opentelemetry.io/collector/component v1.57.0 // indirect
-	go.opentelemetry.io/collector/confmap v1.57.0 // indirect
-	go.opentelemetry.io/collector/confmap/provider/fileprovider v1.57.0 // indirect
-	go.opentelemetry.io/collector/featuregate v1.57.0 // indirect
-	go.opentelemetry.io/collector/filter v0.151.0 // indirect
-	go.opentelemetry.io/collector/pdata v1.57.0 // indirect
+	go.opentelemetry.io/collector/cmd/builder v0.152.0 // indirect
+	go.opentelemetry.io/collector/cmd/mdatagen v0.152.0 // indirect
+	go.opentelemetry.io/collector/component v1.58.0 // indirect
+	go.opentelemetry.io/collector/confmap v1.58.0 // indirect
+	go.opentelemetry.io/collector/confmap/provider/fileprovider v1.58.0 // indirect
+	go.opentelemetry.io/collector/featuregate v1.58.0 // indirect
+	go.opentelemetry.io/collector/filter v0.152.0 // indirect
+	go.opentelemetry.io/collector/internal/schemagen v0.152.0 // indirect
+	go.opentelemetry.io/collector/pdata v1.58.0 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
