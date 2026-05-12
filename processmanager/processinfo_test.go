@@ -4,23 +4,23 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.opentelemetry.io/ebpf-profiler/extensions"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/plugins"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 type TestInstance struct {
-	plugins.InstanceStubs
+	extensions.InstanceStubs
 	info libc.LibcInfo
 }
 
-func (ti *TestInstance) UpdateLibcInfo(handler plugins.EbpfHandler, pid libpf.PID, info libc.LibcInfo) error {
+func (ti *TestInstance) UpdateLibcInfo(handler extensions.EbpfHandler, pid libpf.PID, info libc.LibcInfo) error {
 	ti.info = info
 	return nil
 }
 
-func (ti *TestInstance) Detach(handler plugins.EbpfHandler, pid libpf.PID) error {
+func (ti *TestInstance) Detach(handler extensions.EbpfHandler, pid libpf.PID) error {
 	return nil
 }
 
@@ -36,7 +36,7 @@ func TestAssignLibcInfoMergesLibcInfo(t *testing.T) {
 	interp := TestInstance{}
 
 	pm := ProcessManager{
-		interpreters: map[libpf.PID]map[util.OnDiskFileIdentifier]plugins.Instance{
+		interpreters: map[libpf.PID]map[util.OnDiskFileIdentifier]extensions.Instance{
 			pid: {
 				odid: &interp,
 			},

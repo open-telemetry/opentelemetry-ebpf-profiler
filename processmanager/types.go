@@ -9,11 +9,11 @@ import (
 
 	lru "github.com/elastic/go-freelru"
 
+	"go.opentelemetry.io/ebpf-profiler/extensions"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
-	"go.opentelemetry.io/ebpf-profiler/plugins"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
@@ -52,11 +52,11 @@ type ProcessManager struct {
 	// eim stores per executable (file ID) information.
 	eim *eim.ExecutableInfoManager
 
-	// interpreters records the plugins.Instance interface which contains hooks for
-	// process exits, and various other situations needing plugins specific attention.
+	// interpreters records the extensions.Instance interface which contains hooks for
+	// process exits, and various other situations needing extensions specific attention.
 	// The key of the first map is a process ID, while the key of the second map is
 	// the unique on-disk identifier of the plugin DSO.
-	interpreters map[libpf.PID]map[util.OnDiskFileIdentifier]plugins.Instance
+	interpreters map[libpf.PID]map[util.OnDiskFileIdentifier]extensions.Instance
 
 	// pidToProcessInfo keeps track of the executable memory mappings.
 	pidToProcessInfo map[libpf.PID]*processInfo

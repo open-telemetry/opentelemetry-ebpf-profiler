@@ -10,9 +10,21 @@ import (
 	"time"
 
 	lru "github.com/elastic/go-freelru"
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
+	"go.opentelemetry.io/ebpf-profiler/extensions"
+	"go.opentelemetry.io/ebpf-profiler/extensions/apmint"
+	"go.opentelemetry.io/ebpf-profiler/extensions/beam"
+	"go.opentelemetry.io/ebpf-profiler/extensions/dotnet"
+	golang "go.opentelemetry.io/ebpf-profiler/extensions/go"
+	"go.opentelemetry.io/ebpf-profiler/extensions/golabels"
+	"go.opentelemetry.io/ebpf-profiler/extensions/hotspot"
+	"go.opentelemetry.io/ebpf-profiler/extensions/nodev8"
+	"go.opentelemetry.io/ebpf-profiler/extensions/perl"
+	"go.opentelemetry.io/ebpf-profiler/extensions/php"
+	"go.opentelemetry.io/ebpf-profiler/extensions/python"
+	"go.opentelemetry.io/ebpf-profiler/extensions/ruby"
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -20,18 +32,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
-	"go.opentelemetry.io/ebpf-profiler/plugins"
-	"go.opentelemetry.io/ebpf-profiler/plugins/apmint"
-	"go.opentelemetry.io/ebpf-profiler/plugins/beam"
-	"go.opentelemetry.io/ebpf-profiler/plugins/dotnet"
-	golang "go.opentelemetry.io/ebpf-profiler/plugins/go"
-	"go.opentelemetry.io/ebpf-profiler/plugins/golabels"
-	"go.opentelemetry.io/ebpf-profiler/plugins/hotspot"
-	"go.opentelemetry.io/ebpf-profiler/plugins/nodev8"
-	"go.opentelemetry.io/ebpf-profiler/plugins/perl"
-	"go.opentelemetry.io/ebpf-profiler/plugins/php"
-	"go.opentelemetry.io/ebpf-profiler/plugins/python"
-	"go.opentelemetry.io/ebpf-profiler/plugins/ruby"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -54,9 +54,9 @@ type ExecutableInfo struct {
 	// Data stores per-executable interpreter information if the file ID that this
 	// instance belongs to was previously identified as an interpreter. Otherwise,
 	// this field is nil.
-	Data plugins.Data
-	// PluginCfg stores the configuration for the plugin associated with Data.
-	PluginCfg plugins.Config
+	Data extensions.Data
+	// ExtensionConfig stores the configuration for the extension associated with Data.
+	ExtensionConfig extensions.Config
 	// LibcInfo stores libc information if the executable is libc, otherwise nil.
 	LibcInfo *libc.LibcInfo
 }
@@ -92,50 +92,50 @@ type ExecutableInfoManager struct {
 
 // loaderEntry pairs a Loader with its configuration.
 type loaderEntry struct {
-	loader plugins.Loader
-	cfg    plugins.Config
+	loader extensions.Loader
+	cfg    extensions.Config
 }
 
 // NewExecutableInfoManager creates a new instance of the executable info manager.
 func NewExecutableInfoManager(
 	sdp nativeunwind.StackDeltaProvider,
 	ebpf pmebpf.EbpfHandler,
-	pluginsConfig plugins.PluginsConfig,
+	extensionsConfig extensions.ExtensionsConfig,
 ) (*ExecutableInfoManager, error) {
 	// Initialize interpreter loaders.
 	loaderEntries := make([]loaderEntry, 0)
-	if !pluginsConfig.Perl.IsDisabled() {
-		loaderEntries = append(loaderEntries, loaderEntry{loader: perl.Loader, cfg: pluginsConfig.Perl})
+	if !extensionsConfig.Perl.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: perl.Loader, cfg: extensionsConfig.Perl})
 	}
-	if !pluginsConfig.Python.IsDisabled() {
-		loaderEntries = append(loaderEntries, loaderEntry{loader: python.Loader, cfg: pluginsConfig.Python})
+	if !extensionsConfig.Python.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: python.Loader, cfg: extensionsConfig.Python})
 	}
-	if !pluginsConfig.PHP.IsDisabled() {
-		loaderEntries = append(loaderEntries, loaderEntry{loader: php.Loader, cfg: pluginsConfig.PHP})
-		loaderEntries = append(loaderEntries, loaderEntry{loader: php.OpcacheLoader, cfg: pluginsConfig.PHP})
+	if !extensionsConfig.PHP.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: php.Loader, cfg: extensionsConfig.PHP})
+		loaderEntries = append(loaderEntries, loaderEntry{loader: php.OpcacheLoader, cfg: extensionsConfig.PHP})
 	}
-	if !pluginsConfig.Hotspot.IsDisabled() {
-		loaderEntries = append(loaderEntries, loaderEntry{loader: hotspot.Loader, cfg: pluginsConfig.Hotspot})
+	if !extensionsConfig.Hotspot.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: hotspot.Loader, cfg: extensionsConfig.Hotspot})
 	}
-	if !pluginsConfig.Ruby.IsDisabled() {
-		loaderEntries = append(loaderEntries, loaderEntry{loader: ruby.Loader, cfg: pluginsConfig.Ruby})
+	if !extensionsConfig.Ruby.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: ruby.Loader, cfg: extensionsConfig.Ruby})
 	}
-	if !pluginsConfig.V8.IsDisabled() {
-		loaderEntries = append(loaderEntries, loaderEntry{loader: nodev8.Loader, cfg: pluginsConfig.V8})
+	if !extensionsConfig.V8.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: nodev8.Loader, cfg: extensionsConfig.V8})
 	}
-	if !pluginsConfig.Dotnet.IsDisabled() {
-		loaderEntries = append(loaderEntries, loaderEntry{loader: dotnet.Loader, cfg: pluginsConfig.Dotnet})
+	if !extensionsConfig.Dotnet.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: dotnet.Loader, cfg: extensionsConfig.Dotnet})
 	}
-	if !pluginsConfig.Go.IsDisabled() {
-		loaderEntries = append(loaderEntries, loaderEntry{loader: golang.Loader, cfg: pluginsConfig.Go})
+	if !extensionsConfig.Go.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: golang.Loader, cfg: extensionsConfig.Go})
 	}
-	if !pluginsConfig.BEAM.IsDisabled() {
-		loaderEntries = append(loaderEntries, loaderEntry{loader: beam.Loader, cfg: pluginsConfig.BEAM})
+	if !extensionsConfig.BEAM.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: beam.Loader, cfg: extensionsConfig.BEAM})
 	}
 
-	loaderEntries = append(loaderEntries, loaderEntry{loader: apmint.Loader, cfg: pluginsConfig.Perl})
-	if !pluginsConfig.Labels.IsDisabled() {
-		loaderEntries = append(loaderEntries, loaderEntry{loader: golabels.Loader, cfg: pluginsConfig.Labels})
+	loaderEntries = append(loaderEntries, loaderEntry{loader: apmint.Loader, cfg: extensionsConfig.Perl})
+	if !extensionsConfig.Labels.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: golabels.Loader, cfg: extensionsConfig.Labels})
 	}
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
@@ -233,7 +233,7 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	}
 
 	// Create the LoaderInfo for interpreter detection
-	loaderInfo := plugins.NewLoaderInfo(fileID, elfRef)
+	loaderInfo := extensions.NewLoaderInfo(fileID, elfRef)
 
 	// Detect and load interpreter data
 	interpData, interpCfg := state.detectAndLoadInterpData(loaderInfo)
@@ -241,9 +241,9 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// Insert a corresponding record into our map.
 	info = &entry{
 		ExecutableInfo: ExecutableInfo{
-			Data:      interpData,
-			PluginCfg: interpCfg,
-			LibcInfo:  libcInfo,
+			Data:            interpData,
+			ExtensionConfig: interpCfg,
+			LibcInfo:        libcInfo,
 		},
 		mapRef: ref,
 		rc:     1,
@@ -368,11 +368,11 @@ type executableInfoManagerState struct {
 // interpreter data and its configuration. If multiple loaders recognize the executable,
 // it returns a MultiData instance with the first matching config.
 func (state *executableInfoManagerState) detectAndLoadInterpData(
-	loaderInfo *plugins.LoaderInfo,
-) (plugins.Data, plugins.Config) {
+	loaderInfo *extensions.LoaderInfo,
+) (extensions.Data, extensions.Config) {
 	type matchedData struct {
-		data plugins.Data
-		cfg  plugins.Config
+		data extensions.Data
+		cfg  extensions.Config
 	}
 	var matches []matchedData //nolint:prealloc
 
@@ -408,15 +408,15 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 		return matches[0].data, matches[0].cfg
 	default:
 		// Multiple interpreters matched, create a MultiData with associated configs
-		pluginsDatas := make([]plugins.Data, len(matches))
-		pluginsCfgs := make([]plugins.Config, len(matches))
+		extensionsDatas := make([]extensions.Data, len(matches))
+		extensionsCfgs := make([]extensions.Config, len(matches))
 		for i, m := range matches {
-			pluginsDatas[i] = m.data
-			pluginsCfgs[i] = m.cfg
+			extensionsDatas[i] = m.data
+			extensionsCfgs[i] = m.cfg
 		}
 		log.Debugf("Multiple interpreters (%d) matched for %v (%#016x)",
 			len(matches), loaderInfo.FileName(), loaderInfo.FileID())
-		return plugins.NewMultiDataWithConfigs(pluginsDatas, pluginsCfgs), matches[0].cfg
+		return extensions.NewMultiDataWithConfigs(extensionsDatas, extensionsCfgs), matches[0].cfg
 	}
 }
 

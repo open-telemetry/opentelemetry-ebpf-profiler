@@ -24,17 +24,16 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
+	"go.opentelemetry.io/ebpf-profiler/extensions"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
-
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
-	"go.opentelemetry.io/ebpf-profiler/plugins"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -158,8 +157,8 @@ type Config struct {
 	TraceReporter reporter.TraceReporter
 	// Intervals provides access to globally configured timers and counters.
 	Intervals Intervals
-	// PluginsConfig holds per-plugin configuration.
-	PluginsConfig plugins.PluginsConfig
+	// ExtensionsConfig holds per-extension configuration.
+	ExtensionsConfig extensions.ExtensionsConfig
 	// SamplesPerSecond holds the number of samples per second.
 	SamplesPerSecond int
 	// MapScaleFactor is the scaling factor for eBPF map sizes.
@@ -240,7 +239,7 @@ func newTracePool() sync.Pool {
 }
 
 // buildIncludeTracers builds an IncludeTracers from PluginsConfig.
-func buildIncludeTracers(cfg plugins.PluginsConfig) types.IncludedTracers {
+func buildIncludeTracers(cfg extensions.ExtensionsConfig) types.IncludedTracers {
 	includeTracers := types.AllTracers()
 	if cfg.Python.IsDisabled() {
 		includeTracers.Disable(types.PythonTracer)
@@ -288,7 +287,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	}
 
 	// Build IncludeTracers from PluginsConfig
-	includeTracers := buildIncludeTracers(cfg.PluginsConfig)
+	includeTracers := buildIncludeTracers(cfg.ExtensionsConfig)
 
 	// Based on includeTracers we decide later which are loaded into the kernel.
 	ebpfMaps, ebpfProgs, stackdeltaInnerMapSpec, err := initializeMapsAndPrograms(kmod, cfg, includeTracers)
@@ -301,7 +300,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
-	processManager, err := pm.New(ctx, cfg.PluginsConfig, cfg.Intervals.MonitorInterval(),
+	processManager, err := pm.New(ctx, cfg.ExtensionsConfig, cfg.Intervals.MonitorInterval(),
 		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
 		cfg.FilterErrorFrames, cfg.IncludeEnvVars)

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/ebpf-profiler/extensions"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
-	"go.opentelemetry.io/ebpf-profiler/plugins"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -42,29 +42,29 @@ func (e *ErrorMode) UnmarshalText(text []byte) error {
 
 // Config is the configuration for the collector.
 type Config struct {
-	ReporterInterval       time.Duration         `mapstructure:"reporter_interval"`
-	ReporterJitter         float64               `mapstructure:"reporter_jitter"`
-	MonitorInterval        time.Duration         `mapstructure:"monitor_interval"`
-	SamplesPerSecond       int                   `mapstructure:"samples_per_second"`
-	ProbabilisticInterval  time.Duration         `mapstructure:"probabilistic_interval"`
-	ProbabilisticThreshold uint                  `mapstructure:"probabilistic_threshold"`
-	Plugins                plugins.PluginsConfig `mapstructure:"plugins"`
-	ClockSyncInterval      time.Duration         `mapstructure:"clock_sync_interval"`
-	SendErrorFrames        bool                  `mapstructure:"send_error_frames"`
-	SendIdleFrames         bool                  `mapstructure:"send_idle_frames"`
-	VerboseMode            bool                  `mapstructure:"verbose_mode"`
-	OffCPUThreshold        float64               `mapstructure:"off_cpu_threshold"`
-	IncludeEnvVars         string                `mapstructure:"include_env_vars"`
-	ProbeLinks             []string              `mapstructure:"probe_links"`
-	LoadProbe              bool                  `mapstructure:"load_probe"`
-	MapScaleFactor         uint                  `mapstructure:"map_scale_factor"`
-	BPFVerifierLogLevel    uint                  `mapstructure:"bpf_verifier_log_level"`
-	NoKernelVersionCheck   bool                  `mapstructure:"no_kernel_version_check"`
-	MaxGRPCRetries         uint32                `mapstructure:"max_grpc_retries"`
-	MaxRPCMsgSize          int                   `mapstructure:"max_rpc_msg_size"`
-	BPFFSRoot              string                `mapstructure:"bpf_fs_root"`
-	ErrorMode              ErrorMode             `mapstructure:"error_mode"`
-	OBIProcessCtx          bool                  `mapstructure:"obi_process_ctx"`
+	ReporterInterval       time.Duration               `mapstructure:"reporter_interval"`
+	ReporterJitter         float64                     `mapstructure:"reporter_jitter"`
+	MonitorInterval        time.Duration               `mapstructure:"monitor_interval"`
+	SamplesPerSecond       int                         `mapstructure:"samples_per_second"`
+	ProbabilisticInterval  time.Duration               `mapstructure:"probabilistic_interval"`
+	ProbabilisticThreshold uint                        `mapstructure:"probabilistic_threshold"`
+	Extensions             extensions.ExtensionsConfig `mapstructure:"extensions"`
+	ClockSyncInterval      time.Duration               `mapstructure:"clock_sync_interval"`
+	SendErrorFrames        bool                        `mapstructure:"send_error_frames"`
+	SendIdleFrames         bool                        `mapstructure:"send_idle_frames"`
+	VerboseMode            bool                        `mapstructure:"verbose_mode"`
+	OffCPUThreshold        float64                     `mapstructure:"off_cpu_threshold"`
+	IncludeEnvVars         string                      `mapstructure:"include_env_vars"`
+	ProbeLinks             []string                    `mapstructure:"probe_links"`
+	LoadProbe              bool                        `mapstructure:"load_probe"`
+	MapScaleFactor         uint                        `mapstructure:"map_scale_factor"`
+	BPFVerifierLogLevel    uint                        `mapstructure:"bpf_verifier_log_level"`
+	NoKernelVersionCheck   bool                        `mapstructure:"no_kernel_version_check"`
+	MaxGRPCRetries         uint32                      `mapstructure:"max_grpc_retries"`
+	MaxRPCMsgSize          int                         `mapstructure:"max_rpc_msg_size"`
+	BPFFSRoot              string                      `mapstructure:"bpf_fs_root"`
+	ErrorMode              ErrorMode                   `mapstructure:"error_mode"`
+	OBIProcessCtx          bool                        `mapstructure:"obi_process_ctx"`
 }
 
 // Validate validates the config.

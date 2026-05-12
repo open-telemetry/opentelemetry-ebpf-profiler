@@ -87,7 +87,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
 		TraceReporter:          c.reporter,
 		Intervals:              intervals,
-		PluginsConfig:          c.config.Plugins,
+		ExtensionsConfig:       c.config.Extensions,
 		FilterErrorFrames:      !c.config.SendErrorFrames,
 		FilterIdleFrames:       !c.config.SendIdleFrames,
 		SamplesPerSecond:       c.config.SamplesPerSecond,

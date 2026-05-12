@@ -62,7 +62,7 @@ clean:
 	@go clean -cache -i
 	@$(MAKE) -s -C support/ebpf clean
 	@chmod -Rf u+w go/ || true
-	@rm -rf go .cache support/*.test plugins/golabels/integrationtests/pprof_1_*
+	@rm -rf go .cache support/*.test extensions/golabels/integrationtests/pprof_1_*
 	@rm -f otelcol-ebpf-profiler cmd/otelcol-ebpf-profiler/{*.go,go.mod,go.sum} || true
 	@cargo clean
 
@@ -149,30 +149,30 @@ test-deps:
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
-TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support plugins/golabels/integrationtests
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support extensions/golabels/integrationtests
 
 pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_cgo pprof_stable_cgo_pie
 
 pprof_1_23:
-	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go test -C ./plugins/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go test -C ./extensions/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
 
 pprof_1_24:
-	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.6 go test -C ./plugins/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+	CGO_ENABLED=0 GOTOOLCHAIN=go1.24.6 go test -C ./extensions/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
 
 pprof_1_24_cgo:
-	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./plugins/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
+	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./extensions/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
 pprof_1_24_cgo_pie:
-	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./plugins/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
+	CGO_ENABLED=1 GOTOOLCHAIN=go1.24.6 go test -C ./extensions/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
 pprof_stable:
-	CGO_ENABLED=0 go test -C ./plugins/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+	CGO_ENABLED=0 go test -C ./extensions/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
 
 pprof_stable_cgo:
-	CGO_ENABLED=1 go test -C ./plugins/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
+	CGO_ENABLED=1 go test -C ./extensions/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
 pprof_stable_cgo_pie:
-	CGO_ENABLED=1 go test -C ./plugins/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
+	CGO_ENABLED=1 go test -C ./extensions/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
 integration-test-binaries: generate ebpf pprof-execs
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
