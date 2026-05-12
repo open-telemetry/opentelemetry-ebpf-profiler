@@ -149,7 +149,7 @@ test-deps:
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
-TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf support plugins/golabels/integrationtests
+TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support plugins/golabels/integrationtests
 
 pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_cgo pprof_stable_cgo_pie
 

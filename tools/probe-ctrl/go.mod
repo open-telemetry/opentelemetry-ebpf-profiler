@@ -11,7 +11,7 @@ replace go.opentelemetry.io/ebpf-profiler => ../../
 
 require (
 	github.com/cilium/ebpf v0.21.0
-	go.opentelemetry.io/ebpf-profiler v0.0.202614
+	go.opentelemetry.io/ebpf-profiler v0.0.202618
 )
 
 require (
@@ -32,11 +32,11 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
-	go.opentelemetry.io/collector/consumer v1.56.0 // indirect
-	go.opentelemetry.io/collector/consumer/xconsumer v0.150.0 // indirect
-	go.opentelemetry.io/collector/featuregate v1.56.0 // indirect
-	go.opentelemetry.io/collector/pdata v1.56.0 // indirect
-	go.opentelemetry.io/collector/pdata/pprofile v0.150.0 // indirect
+	go.opentelemetry.io/collector/consumer v1.57.0 // indirect
+	go.opentelemetry.io/collector/consumer/xconsumer v0.151.0 // indirect
+	go.opentelemetry.io/collector/featuregate v1.57.0 // indirect
+	go.opentelemetry.io/collector/pdata v1.57.0 // indirect
+	go.opentelemetry.io/collector/pdata/pprofile v0.151.0 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
@@ -53,7 +53,7 @@ require (
 	golang.org/x/tools v0.44.0 // indirect
 	golang.org/x/vuln v1.3.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
-	google.golang.org/grpc v1.80.0 // indirect
+	google.golang.org/grpc v1.81.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	honnef.co/go/tools v0.7.0 // indirect
 )
