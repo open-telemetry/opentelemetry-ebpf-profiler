@@ -138,12 +138,11 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 					addr, []byte(className))
 				className = ""
 			}
+			// Combine class name and function name using PHP's ClassName::methodName convention.
+			if className != "" && fname != "" {
+				fname = className + "::" + fname
+			}
 		}
-	}
-
-	// Combine class name and function name using PHP's ClassName::methodName convention.
-	if className != "" && fname != "" {
-		fname = className + "::" + fname
 	}
 
 	functionName := libpf.Intern(fname)
