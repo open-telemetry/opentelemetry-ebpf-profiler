@@ -22,6 +22,7 @@ const (
 	FrameMarkerPerl    = 0x7
 	FrameMarkerV8      = 0x8
 	FrameMarkerDotnet  = 0xa
+	FrameMarkerLuaJIT  = 0xd
 	FrameMarkerBEAM    = 0xc
 	FrameMarkerGo      = 0xb
 )
@@ -45,6 +46,7 @@ const (
 	ProgUnwindDotnet10 = 0x9
 	ProgGoLabels       = 0xa
 	ProgUnwindBEAM     = 0xb
+	ProgUnwindLuaJIT   = 0xc
 )
 
 const (
