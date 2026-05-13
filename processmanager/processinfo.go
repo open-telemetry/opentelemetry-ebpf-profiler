@@ -22,11 +22,11 @@ import (
 	"syscall"
 	"time"
 
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"golang.org/x/sys/unix"
 
+	"go.opentelemetry.io/ebpf-profiler/extensions"
 	"go.opentelemetry.io/ebpf-profiler/host"
-	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
@@ -157,15 +157,15 @@ func (pm *ProcessManager) fillSelfContainerID(pid libpf.PID, meta *process.Proce
 	}
 }
 
-// assignInterpreter will update the interpreters maps with given interpreter.Instance.
+// assignInterpreter will update the interpreters maps with given extensions.Instance.
 // Caller is responsible to hold pm.mu write lock to avoid race conditions.
 func (pm *ProcessManager) assignInterpreter(pid libpf.PID, key util.OnDiskFileIdentifier,
-	instance interpreter.Instance,
+	instance extensions.Instance,
 ) {
 	if _, ok := pm.interpreters[pid]; !ok {
 		// This is the very first interpreter entry for this process.
 		// So we need to initialize the structure first.
-		pm.interpreters[pid] = make(map[util.OnDiskFileIdentifier]interpreter.Instance)
+		pm.interpreters[pid] = make(map[util.OnDiskFileIdentifier]extensions.Instance)
 	}
 	pm.interpreters[pid][key] = instance
 }
@@ -181,7 +181,7 @@ func (pm *ProcessManager) assignInterpreter(pid libpf.PID, key util.OnDiskFileId
 //
 // The caller is responsible to hold the ProcessManager lock to avoid race conditions.
 func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Address,
-	oid util.OnDiskFileIdentifier, data interpreter.Data) error {
+	oid util.OnDiskFileIdentifier, data extensions.Data, cfg extensions.Config) error {
 	// The same interpreter can be found multiple times under various different
 	// circumstances. Check if this is already handled.
 	pid := pr.PID()
@@ -191,7 +191,7 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 		}
 	}
 	// Slow path: Interpreter detection or attachment needed
-	instance, err := data.Attach(pm.ebpf, pid, bias, pr.GetRemoteMemory())
+	instance, err := data.Attach(pm.ebpf, pid, bias, pr.GetRemoteMemory(), cfg)
 	if err != nil {
 		return fmt.Errorf("failed to attach to %v in PID %v: %w",
 			data, pid, err)
@@ -387,7 +387,7 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 	pm.assignLibcInfo(pr.PID(), ei.LibcInfo)
 	if ei.Data != nil {
 		bias := libpf.Address(m.Vaddr - elfSpaceVA)
-		pm.handleNewInterpreter(pr, bias, m.GetOnDiskFileIdentifier(), ei.Data)
+		pm.handleNewInterpreter(pr, bias, m.GetOnDiskFileIdentifier(), ei.Data, ei.ExtensionConfig)
 	}
 	pm.mu.Unlock()
 

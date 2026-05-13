@@ -13,12 +13,12 @@ import (
 	"syscall"
 	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/extensions"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/pacmask"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
@@ -273,7 +273,7 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 
 	maps := make(map[string]*cebpf.Map)
 
-	if err := loadAllMaps(new, &Config{}, maps); err != nil {
+	if err := loadAllMaps(new, &Config{ExtensionsConfig: extensions.AllExtensionsConfig()}, maps); err != nil {
 		return nil, nil, err
 	}
 
@@ -285,7 +285,7 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 }
 
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kmod *kallsyms.Module, includeTracers types.IncludedTracers, vars *sysConfigVars,
+	kmod *kallsyms.Module, extensionsConfig extensions.ExtensionsConfig, vars *sysConfigVars,
 ) error {
 	if err := parseBTF(vars); err != nil {
 		log.Infof("Using binary analysis (BTF not available: %s)", err)
@@ -294,8 +294,8 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 			return err
 		}
 
-		if includeTracers.Has(types.PerlTracer) || includeTracers.Has(types.PythonTracer) ||
-			includeTracers.Has(types.Labels) {
+		if !extensionsConfig.Perl.IsDisabled() || !extensionsConfig.Python.IsDisabled() ||
+			!extensionsConfig.Labels.IsDisabled() {
 			var tpbaseOffset uint64
 			tpbaseOffset, err = loadTPBaseOffset(coll, maps, kmod)
 			if err != nil {
@@ -358,7 +358,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to prepare programs and maps for system analysis: %v", err)
 	}
 
-	if err := determineSysConfig(systemAnalysisColl, maps, kmod, cfg.IncludeTracers, &rodataVars); err != nil {
+	if err := determineSysConfig(systemAnalysisColl, maps, kmod, cfg.ExtensionsConfig, &rodataVars); err != nil {
 		return fmt.Errorf("failed to determine system configs: %v", err)
 	}
 	if err := coll.Variables["tpbase_offset"].Set(rodataVars.tpbase_offset); err != nil {

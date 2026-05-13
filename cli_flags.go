@@ -41,7 +41,6 @@ var (
 	copyrightHelp      = "Show copyright and short license text."
 	collAgentAddrHelp  = "The collection agent address in the format of host:port."
 	verboseModeHelp    = "Enable verbose logging and debugging capabilities."
-	tracersHelp        = "Comma-separated list of interpreter tracers to include."
 	mapScaleFactorHelp = fmt.Sprintf("Scaling factor for eBPF map sizes. "+
 		"Every increase by 1 doubles the map size. Increase if you see eBPF map size errors. "+
 		"Default is %d corresponding to 4GB of executable address space, max is %d.",
@@ -132,9 +131,6 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.SendErrorFrames, "send-error-frames", defaultArgSendErrorFrames,
 		sendErrorFramesHelp)
 	fs.BoolVar(&args.SendIdleFrames, "send-idle-frames", false, sendIdleFramesHelp)
-
-	fs.StringVar(&args.Tracers, "t", "all", "Shorthand for -tracers.")
-	fs.StringVar(&args.Tracers, "tracers", "all", tracersHelp)
 
 	fs.BoolVar(&args.VerboseMode, "v", false, "Shorthand for -verbose.")
 	fs.BoolVar(&args.VerboseMode, "verbose", false, verboseModeHelp)

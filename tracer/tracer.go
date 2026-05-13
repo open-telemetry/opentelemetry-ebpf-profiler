@@ -24,12 +24,12 @@ import (
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
+	"go.opentelemetry.io/ebpf-profiler/extensions"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
-
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
@@ -40,7 +40,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 // Compile time check to make sure times.Times satisfies the interfaces.
@@ -157,8 +156,8 @@ type Config struct {
 	TraceReporter reporter.TraceReporter
 	// Intervals provides access to globally configured timers and counters.
 	Intervals Intervals
-	// IncludeTracers holds information about which tracers are enabled.
-	IncludeTracers types.IncludedTracers
+	// ExtensionsConfig holds per-extension configuration.
+	ExtensionsConfig extensions.ExtensionsConfig
 	// SamplesPerSecond holds the number of samples per second.
 	SamplesPerSecond int
 	// MapScaleFactor is the scaling factor for eBPF map sizes.
@@ -256,12 +255,12 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
 
-	ebpfHandler, err := pmebpf.LoadMaps(ctx, cfg.IncludeTracers, ebpfMaps, stackdeltaInnerMapSpec)
+	ebpfHandler, err := pmebpf.LoadMaps(ctx, cfg.ExtensionsConfig, ebpfMaps, stackdeltaInnerMapSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
-	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
+	processManager, err := pm.New(ctx, cfg.ExtensionsConfig, cfg.Intervals.MonitorInterval(),
 		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
 		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
@@ -401,52 +400,52 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		{
 			progID: uint32(support.ProgUnwindHotspot),
 			name:   "unwind_hotspot",
-			enable: cfg.IncludeTracers.Has(types.HotspotTracer),
+			enable: !cfg.ExtensionsConfig.Hotspot.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindPerl),
 			name:   "unwind_perl",
-			enable: cfg.IncludeTracers.Has(types.PerlTracer),
+			enable: !cfg.ExtensionsConfig.Perl.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindPHP),
 			name:   "unwind_php",
-			enable: cfg.IncludeTracers.Has(types.PHPTracer),
+			enable: !cfg.ExtensionsConfig.PHP.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindPython),
 			name:   "unwind_python",
-			enable: cfg.IncludeTracers.Has(types.PythonTracer),
+			enable: !cfg.ExtensionsConfig.Python.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindRuby),
 			name:   "unwind_ruby",
-			enable: cfg.IncludeTracers.Has(types.RubyTracer),
+			enable: !cfg.ExtensionsConfig.Ruby.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindV8),
 			name:   "unwind_v8",
-			enable: cfg.IncludeTracers.Has(types.V8Tracer),
+			enable: !cfg.ExtensionsConfig.V8.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindDotnet),
 			name:   "unwind_dotnet",
-			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
+			enable: !cfg.ExtensionsConfig.Dotnet.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindDotnet10),
 			name:   "unwind_dotnet10",
-			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
+			enable: !cfg.ExtensionsConfig.Dotnet.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgGoLabels),
 			name:   "go_labels",
-			enable: cfg.IncludeTracers.Has(types.Labels),
+			enable: !cfg.ExtensionsConfig.Labels.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindBEAM),
 			name:   "unwind_beam",
-			enable: cfg.IncludeTracers.Has(types.BEAMTracer),
+			enable: !cfg.ExtensionsConfig.BEAM.IsDisabled(),
 		},
 	}
 
@@ -597,8 +596,7 @@ func syncVariablesToMapSpecs(coll *cebpf.CollectionSpec) error {
 
 // loadAllMaps loads all eBPF maps that are used in our eBPF programs.
 func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
-	ebpfMaps map[string]*cebpf.Map,
-) error {
+	ebpfMaps map[string]*cebpf.Map) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
@@ -651,7 +649,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			}
 		}
 
-		if !types.IsMapEnabled(mapName, cfg.IncludeTracers) {
+		if !extensions.IsMapEnabled(mapName, cfg.ExtensionsConfig) {
 			log.Debugf("Skipping eBPF map %s: tracer not enabled", mapName)
 			continue
 		}

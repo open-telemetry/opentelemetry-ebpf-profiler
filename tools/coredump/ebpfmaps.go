@@ -8,8 +8,8 @@ import (
 	"math/bits"
 	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/extensions"
 	"go.opentelemetry.io/ebpf-profiler/host"
-	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
@@ -34,7 +34,7 @@ type ebpfMapsCoredump struct {
 	ctx *ebpfContext
 }
 
-var _ interpreter.EbpfHandler = &ebpfMapsCoredump{}
+var _ extensions.EbpfHandler = &ebpfMapsCoredump{}
 
 func (emc *ebpfMapsCoredump) RemoveReportedPID(libpf.PID) {
 }
