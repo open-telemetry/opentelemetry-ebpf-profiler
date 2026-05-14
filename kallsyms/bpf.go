@@ -9,6 +9,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -70,6 +71,7 @@ type bpfSymbolizer struct {
 	events  []*perf.Event
 	cancel  context.CancelFunc
 	table   atomic.Pointer[bpfSymbolTable]
+	wg      sync.WaitGroup
 }
 
 // LookupSymbol resolves addr to a BPF program symbol name and offset.
@@ -190,7 +192,9 @@ func (s *bpfSymbolizer) subscribe(ctx context.Context, onlineCPUs []int) error {
 			return err
 		}
 
+		s.wg.Add(1)
 		go func(event *perf.Event) {
+			defer s.wg.Done()
 			for {
 				record, err := event.ReadRecord(ctx)
 				if err != nil {
@@ -335,6 +339,10 @@ func (s *bpfSymbolizer) Close() {
 	if s.cancel != nil {
 		s.cancel()
 	}
+	// We have to wait for all goroutines to exit before closing events,
+	// otherwise we're introducing a race that leads to a panic as go-perf
+	// may (internally) send on a closed channel.
+	s.wg.Wait()
 
 	for _, event := range s.events {
 		if err := event.Disable(); err != nil {
