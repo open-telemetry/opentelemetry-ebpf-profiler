@@ -328,6 +328,9 @@ enum {
   // number of failures to read TLS variables via the DTV
   metricID_UnwindErrBadDTVRead,
 
+  // number of bpf_ringbuf_output failures
+  metricID_BPFRingbufOutputErr,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //

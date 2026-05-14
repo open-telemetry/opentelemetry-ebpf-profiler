@@ -650,6 +650,9 @@ const (
 	// Number of failures to read TLS variables via the DTV
 	IDUnwindErrBadDTVRead = 286
 
+	// Number of bpf_ringbuf_output failures when sending trace events
+	IDBPFRingbufOutputErr = 287
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 287
+	IDMax = 288
 )
