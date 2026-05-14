@@ -2096,5 +2096,12 @@
     "name": "UnwindErrBadDTVRead",
     "field": "bpf.errors.bad_dtv_read",
     "id": 286
+  },
+  {
+    "description": "Number of bpf_ringbuf_output failures when sending trace events",
+    "type": "counter",
+    "name": "BPFRingbufOutputErr",
+    "field": "bpf.errors.ringbuf_output",
+    "id": 287
   }
 ]

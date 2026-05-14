@@ -106,13 +106,13 @@ struct inhibit_events_t {
   __uint(max_entries, 2);
 } inhibit_events SEC(".maps");
 
-// Perf event ring buffer for sending completed traces to user-mode.
+// Ring buffer for sending completed traces to userspace.
 //
 // The map is periodically polled and read from in `tracer`.
+// NOTE: We use 0 as the number of max entries for this map as at load time
+// it will be replaced based on the number of possible CPUs and sampling rate.
 struct trace_events_t {
-  __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-  __type(key, int);
-  __type(value, u32);
+  __uint(type, BPF_MAP_TYPE_RINGBUF);
   __uint(max_entries, 0);
 } trace_events SEC(".maps");
 
