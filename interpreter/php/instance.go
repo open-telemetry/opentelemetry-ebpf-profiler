@@ -133,8 +133,7 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 		if classNameStrPtr != 0 {
 			className := i.rm.String(classNameStrPtr + vms.zend_string.val)
 			if className != "" && !util.IsValidString(className) {
-				log.Debugf("Extracted invalid PHP class name at 0x%x '%v'",
-					addr, []byte(className))
+				log.Debugf("Extracted invalid PHP class name at 0x%x", addr)
 				className = ""
 			}
 			// Combine class name and function name using PHP's ClassName::methodName convention.
