@@ -610,6 +610,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	// Collect PE files
 	dotnetMappings := []dotnetMapping{}
 	i.stringsHeapAddrByPE = make(map[*peInfo]uint64)
+	stringsResolved := false
 	var prevKey util.OnDiskFileIdentifier
 	var prevMaxVA uint64
 	for idx := range mappings {
@@ -628,12 +629,17 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			last.end = m.Vaddr + m.Length
 			// Sections of an image-loaded PE arrive as separate RawMappings; the
 			// #Strings heap typically lives in a later section than the first.
-			if i.stringsHeapAddrByPE[last.info] == 0 {
-				i.stringsHeapAddrByPE[last.info] = resolveStringsHeapAddr(last.info, m)
+			if !stringsResolved {
+				stringsHeapAddr := resolveStringsHeapAddr(last.info, m)
+				i.stringsHeapAddrByPE[last.info] = stringsHeapAddr
+				if stringsHeapAddr != 0 {
+					stringsResolved = true
+				}
 			}
 			continue
 		}
 		prevKey = m.GetOnDiskFileIdentifier()
+		stringsResolved = false
 
 		// Inspect the PE
 		info := globalPeCache.Get(pr, m)
@@ -654,7 +660,11 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			end:   m.Vaddr + m.Length,
 			info:  info,
 		})
-		i.stringsHeapAddrByPE[info] = resolveStringsHeapAddr(info, m)
+		stringsHeapAddr := resolveStringsHeapAddr(info, m)
+		i.stringsHeapAddrByPE[info] = stringsHeapAddr
+		if stringsHeapAddr != 0 {
+			stringsResolved = true
+		}
 		prevMaxVA = m.Vaddr + uint64(info.sizeOfImage)
 	}
 
