@@ -132,7 +132,7 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 	if scopePtr != 0 {
 		classNameStrPtr := i.rm.Ptr(scopePtr + libpf.Address(vms.zend_class_entry.name))
 		if classNameStrPtr != 0 {
-			className = i.rm.String(classNameStrPtr + vms.zend_string.val)
+			className := i.rm.String(classNameStrPtr + vms.zend_string.val)
 			if className != "" && !util.IsValidString(className) {
 				log.Debugf("Extracted invalid PHP class name at 0x%x '%v'",
 					addr, []byte(className))
