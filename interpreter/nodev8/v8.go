@@ -938,6 +938,26 @@ func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name libpf.String,
 		return libpf.NullString, 0, 0
 	}
 
+	// Starting in this version, position start and end
+	// were moved to fixed locations before the variable-length data,
+	// so we no longer need a heuristic to find them (and in fact, our
+	// heuristic doesn't work).
+	// See https://chromium-review.googlesource.com/c/v8/v8/+/5627032
+	// for where the change was made.
+	isOld := i.d.version < v8Ver(12, 8, 44)
+	if !isOld {
+		// As of today [2026-05-13] these haven't changed since
+		// they were introduced [2024-06-13]. That's scarcely two years,
+		// so maybe they'll change in the future; at any rate, there doesn't seem to be a way to
+		// derive them from symbols.
+		//
+		// See https://chromium.googlesource.com/v8/v8.git/+/refs/tags/12.8.44/src/objects/scope-info.tq#125
+		positionInfoStartIdx := 3
+		positionInfoEndIdx := 4
+
+		startPos = int(npsr.Uint64(slotData, uint(positionInfoStartIdx*slotSize)))
+		endPos = int(npsr.Uint64(slotData, uint(positionInfoEndIdx*slotSize)))
+	}
 	// Skip reserved slots and the context locals
 	ndx := int(vms.ScopeInfoIndex.FirstVars)
 	ndx += 2 * int(decodeSMI(npsr.Uint64(slotData,
@@ -952,7 +972,12 @@ func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name libpf.String,
 			// assume that first valid string is the function name
 			name, _ = i.getString(libpf.Address(cur), 0)
 		}
-		if isSMI(cur) && isSMI(prev) {
+		// In recent versions, we'll have already found the begin/end positions at
+		// fixed indices, so just return. See the comment where isOld is defined for details.
+		if !isOld && name != libpf.NullString {
+			return name, startPos, endPos
+		}
+		if isOld && isSMI(cur) && isSMI(prev) {
 			// Assume that two numbers (first one lower than the second)
 			// is the start/end position pair. This also follows after
 			// function name, so break when found.
@@ -963,6 +988,10 @@ func (i *v8Instance) analyzeScopeInfo(ptr libpf.Address) (name libpf.String,
 			}
 		}
 		prev = cur
+	}
+	if !isOld {
+		// even if we didn't find name, we can be reasonably sure start/end are right, so return them
+		return name, startPos, endPos
 	}
 	return name, 0, 0
 }
