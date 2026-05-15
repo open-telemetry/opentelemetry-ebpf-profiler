@@ -308,6 +308,11 @@ func (cd *CoredumpProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, 
 	return libpf.FileIDFromBytes(h.Sum(nil))
 }
 
+// OpenELFMapping implements the Process interface. Implemented as fallback to OpenELF.
+func (cd *CoredumpProcess) OpenELFMapping(m *RawMapping) (*pfelf.File, error) {
+	return cd.OpenELF(m.Path)
+}
+
 // OpenELF implements the ELFOpener and Process interfaces.
 func (cd *CoredumpProcess) OpenELF(path string) (*pfelf.File, error) {
 	// Fallback to directly returning the data from coredump. This comes with caveats:

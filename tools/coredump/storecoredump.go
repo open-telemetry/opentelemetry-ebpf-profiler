@@ -49,6 +49,10 @@ func (scd *StoreCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAt
 	return scd.openFile(m.Path)
 }
 
+func (scd *StoreCoredump) OpenELFMapping(m *process.RawMapping) (*pfelf.File, error) {
+	return scd.OpenELF(m.Path)
+}
+
 func (scd *StoreCoredump) OpenELF(path string) (*pfelf.File, error) {
 	file, err := scd.openFile(path)
 	if err == nil {

@@ -97,6 +97,10 @@ func (tc *trackedCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadA
 	return tc.CoredumpProcess.OpenMappingFile(m)
 }
 
+func (tc *trackedCoredump) OpenELFMapping(m *process.RawMapping) (*pfelf.File, error) {
+	return tc.OpenELF(m.Path)
+}
+
 func (tc *trackedCoredump) OpenELF(fileName string) (*pfelf.File, error) {
 	if fileName != process.VdsoPathName {
 		f, err := pfelf.Open(path.Join(tc.prefix, fileName))
