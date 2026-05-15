@@ -132,7 +132,7 @@ static long (*bpf_probe_read_kernel)(void *dst, int size, const void *unsafe_ptr
 
   #define printt(fmt, ...)                                                                         \
     ({                                                                                             \
-      const char ____fmt[] = fmt;                                                                  \
+      static const char ____fmt[] = fmt;                                                           \
       bpf_trace_printk(____fmt, sizeof(____fmt), ##__VA_ARGS__);                                   \
     })
 
