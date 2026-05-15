@@ -650,6 +650,12 @@ const (
 	// Number of failures to read TLS variables via the DTV
 	IDUnwindErrBadDTVRead = 286
 
+	// Number of successfully symbolized native frames
+	IDNativeSymbolizationSuccess = 287
+
+	// Number of native frames that failed symbolization
+	IDNativeSymbolizationFailure = 288
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 287
+	IDMax = 289
 )
