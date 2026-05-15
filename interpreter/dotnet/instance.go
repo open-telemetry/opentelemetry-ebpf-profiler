@@ -153,10 +153,9 @@ type dotnetInstance struct {
 
 	rangeSectionSeen map[libpf.Address]libpf.Void
 
-	// moduleToPEInfo maps Module* to its peInfo and process mapping base. Since a
-	// dotnet instance will have limited number of PE files mapped in, this is a map
-	// instead of a LRU.
-	moduleToPEInfo map[libpf.Address]dotnetMapping
+	// moduleToPEInfo maps Module* to it's peInfo. Since a dotnet instance will have
+	// limited number of PE files mapped in, this is a map instead of a LRU.
+	moduleToPEInfo map[libpf.Address]*peInfo
 
 	// stringsHeapAddrByPE maps a peInfo (shared via globalPeCache) to the absolute
 	// process address of its #Strings heap in this process. Rebuilt by
@@ -305,7 +304,7 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf
 		if err != nil {
 			return nil
 		}
-		i.moduleToPEInfo[modulePtr] = m
+		i.moduleToPEInfo[modulePtr] = m.info
 		log.Debugf("%x-%x flags:%x  module: %x -> %s",
 			lowAddress, highAddress, flags,
 			modulePtr, m.info.simpleName)
@@ -434,9 +433,9 @@ func (i *dotnetInstance) getPEInfoByAddress(addressInModule uint64) (dotnetMappi
 	return i.mappings[idx], nil
 }
 
-func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (dotnetMapping, error) {
-	if m, ok := i.moduleToPEInfo[modulePtr]; ok {
-		return m, nil
+func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (*peInfo, error) {
+	if pi, ok := i.moduleToPEInfo[modulePtr]; ok {
+		return pi, nil
 	}
 
 	// If the Module does not have R2R executable code and we have not seen it yet,
@@ -446,15 +445,15 @@ func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (dotnetMa
 	vms := &i.d.Get().Types
 	simpleNamePtr := i.rm.Ptr(modulePtr + libpf.Address(vms.Module.SimpleName))
 	if simpleNamePtr == 0 {
-		return dotnetMapping{}, fmt.Errorf("module at %x, does not have name", modulePtr)
+		return nil, fmt.Errorf("module at %x, does not have name", modulePtr)
 	}
 
 	m, err := i.getPEInfoByAddress(uint64(simpleNamePtr))
 	if err != nil {
-		return dotnetMapping{}, err
+		return nil, err
 	}
-	i.moduleToPEInfo[modulePtr] = m
-	return m, nil
+	i.moduleToPEInfo[modulePtr] = m.info
+	return m.info, nil
 }
 
 func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr libpf.Address) (*dotnetMethod, error) {
@@ -502,7 +501,7 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	// FIXME: The dotnet runtime handles generic and array method differently.
 	// Investigate if this needs adjustments to create correct method indexes.
 	loaderModulePtr := i.rm.Ptr(methodTablePtr + libpf.Address(vms.MethodTable.Module))
-	m, err := i.getPEInfoByModulePtr(loaderModulePtr)
+	pi, err := i.getPEInfoByModulePtr(loaderModulePtr)
 	if err != nil {
 		return nil, err
 	}
@@ -510,7 +509,7 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	method := &dotnetMethod{
 		classification: classification,
 		index:          index,
-		module:         m.info,
+		module:         pi,
 	}
 	if debugInfoPtr != 0 {
 		if err := method.readDebugInfo(newCachingReader(i.rm, int64(debugInfoPtr),

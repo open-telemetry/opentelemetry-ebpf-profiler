@@ -223,7 +223,7 @@ func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias li
 		rm:             rm,
 		bias:           bias,
 		ranges:         make(map[libpf.Address]dotnetRangeSection),
-		moduleToPEInfo: make(map[libpf.Address]dotnetMapping),
+		moduleToPEInfo: make(map[libpf.Address]*peInfo),
 		addrToMethod:   addrToMethod,
 	}, nil
 }
