@@ -112,11 +112,6 @@ var codeName = []string{
 type dotnetMapping struct {
 	start, end uint64
 	info       *peInfo
-	// stringsHeapAddr is the absolute process address of the #Strings heap for
-	// this mapping, resolved at attach time from the process.RawMapping whose
-	// file range covers info.stringsHeapFileOffset. Zero if no covering mapping
-	// was found, in which case downstream string lookups yield NullString.
-	stringsHeapAddr uint64
 }
 
 type dotnetRangeSection struct {
@@ -434,8 +429,8 @@ func (i *dotnetInstance) getPEInfoByAddress(addressInModule uint64) (dotnetMappi
 }
 
 func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (*peInfo, error) {
-	if pi, ok := i.moduleToPEInfo[modulePtr]; ok {
-		return pi, nil
+	if info, ok := i.moduleToPEInfo[modulePtr]; ok {
+		return info, nil
 	}
 
 	// If the Module does not have R2R executable code and we have not seen it yet,
@@ -501,7 +496,7 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	// FIXME: The dotnet runtime handles generic and array method differently.
 	// Investigate if this needs adjustments to create correct method indexes.
 	loaderModulePtr := i.rm.Ptr(methodTablePtr + libpf.Address(vms.MethodTable.Module))
-	pi, err := i.getPEInfoByModulePtr(loaderModulePtr)
+	module, err := i.getPEInfoByModulePtr(loaderModulePtr)
 	if err != nil {
 		return nil, err
 	}
@@ -509,7 +504,7 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	method := &dotnetMethod{
 		classification: classification,
 		index:          index,
-		module:         pi,
+		module:         module,
 	}
 	if debugInfoPtr != 0 {
 		if err := method.readDebugInfo(newCachingReader(i.rm, int64(debugInfoPtr),
@@ -613,6 +608,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 
 	// Collect PE files
 	dotnetMappings := []dotnetMapping{}
+	i.stringsHeapAddrByPE = make(map[*peInfo]uint64)
 	var prevKey util.OnDiskFileIdentifier
 	var prevMaxVA uint64
 	for idx := range mappings {
@@ -631,8 +627,8 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			last.end = m.Vaddr + m.Length
 			// Sections of an image-loaded PE arrive as separate RawMappings; the
 			// #Strings heap typically lives in a later section than the first.
-			if last.stringsHeapAddr == 0 {
-				last.stringsHeapAddr = resolveStringsHeapAddr(last.info, m)
+			if i.stringsHeapAddrByPE[last.info] == 0 {
+				i.stringsHeapAddrByPE[last.info] = resolveStringsHeapAddr(last.info, m)
 			}
 			continue
 		}
@@ -653,20 +649,18 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		})
 
 		dotnetMappings = append(dotnetMappings, dotnetMapping{
-			start:           m.Vaddr,
-			end:             m.Vaddr + m.Length,
-			info:            info,
-			stringsHeapAddr: resolveStringsHeapAddr(info, m),
+			start: m.Vaddr,
+			end:   m.Vaddr + m.Length,
+			info:  info,
 		})
+		i.stringsHeapAddrByPE[info] = resolveStringsHeapAddr(info, m)
 		prevMaxVA = m.Vaddr + uint64(info.sizeOfImage)
 	}
 
 	// mappings are in sorted order
 	i.mappings = dotnetMappings
 
-	i.stringsHeapAddrByPE = make(map[*peInfo]uint64, len(dotnetMappings))
 	for _, m := range dotnetMappings {
-		i.stringsHeapAddrByPE[m.info] = m.stringsHeapAddr
 		log.Debugf("mapped %x-%x %s", m.start, m.end, m.info.simpleName)
 	}
 
@@ -781,9 +775,10 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		frames.Append(&libpf.Frame{
 			Type:            libpf.DotnetFrame,
 			AddressOrLineno: libpf.AddressOrLineno(pcOffset),
-			FunctionName:    m.info.resolveR2RMethodName(pcOffset, i.rm, m.stringsHeapAddr),
-			SourceFile:      m.info.simpleName,
-			Mapping:         m.info.mapping,
+			FunctionName: m.info.resolveR2RMethodName(pcOffset, i.rm,
+				i.stringsHeapAddrByPE[m.info]),
+			SourceFile: m.info.simpleName,
+			Mapping:    m.info.mapping,
 		})
 	case codeJIT:
 		// JITted frame in anonymous mapping
