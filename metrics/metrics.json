@@ -1993,6 +1993,7 @@
     "id": 271
   },
   {
+    "obsolete": true,
     "description": "Number of lost trace events in the communication between kernel and user space (trace_events)",
     "type": "counter",
     "name": "TraceEventLost",
