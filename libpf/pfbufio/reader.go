@@ -97,7 +97,10 @@ func (r *Reader) fill(preserve int) error {
 	r.size = n + preserve
 	r.off += int64(n)
 
-	if n == 0 && err == nil {
+	if n > 0 {
+		return nil
+	}
+	if err == nil {
 		return io.EOF
 	}
 	return err
