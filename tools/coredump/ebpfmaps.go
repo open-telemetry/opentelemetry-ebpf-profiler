@@ -72,6 +72,9 @@ func (emc *ebpfMapsCoredump) UpdateProcData(t libpf.InterpreterType, pid libpf.P
 		emc.ctx.addMap(unsafe.Pointer(&C.v8_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_V8ProcInfo))
 	case libpf.BEAM:
 		emc.ctx.addMap(unsafe.Pointer(&C.beam_procs), C.u32(pid), sliceBuffer(ptr, C.sizeof_BEAMProcInfo))
+	case libpf.GoLabels:
+		emc.ctx.addMap(unsafe.Pointer(&C.go_labels_procs), C.u32(pid),
+			sliceBuffer(ptr, C.sizeof_GoLabelsOffsets))
 	}
 	return nil
 }
@@ -94,6 +97,8 @@ func (emc *ebpfMapsCoredump) DeleteProcData(t libpf.InterpreterType, pid libpf.P
 		emc.ctx.delMap(unsafe.Pointer(&C.v8_procs), C.u32(pid))
 	case libpf.BEAM:
 		emc.ctx.delMap(unsafe.Pointer(&C.beam_procs), C.u32(pid))
+	case libpf.GoLabels:
+		emc.ctx.delMap(unsafe.Pointer(&C.go_labels_procs), C.u32(pid))
 	}
 	return nil
 }

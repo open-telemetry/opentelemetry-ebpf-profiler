@@ -1,0 +1,118 @@
+{
+  "coredump-ref": "7e454796ef114350d3bb35ec80fb794eda816ee4795e6bed9533582b9a626940",
+  "threads": [
+    {
+      "lwp": 9537,
+      "frames": [
+        "internal/runtime/syscall.Syscall6+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/internal/runtime/syscall/asm_linux_amd64.s:36",
+        "internal/runtime/syscall.EpollWait+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/internal/runtime/syscall/syscall_linux.go:34",
+        "runtime.netpoll+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/netpoll_epoll.go:120",
+        "runtime.findRunnable+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:3728",
+        "runtime.schedule+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4138",
+        "runtime.park_m+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:462",
+        "runtime.gopark+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:461",
+        "runtime.chanrecv+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/chan.go:670",
+        "runtime.chanrecv1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/chan.go:510",
+        "main.parker+0 in /home/ubuntu/ebpf/tools/coredump/testsources/go/mcallpark/main.go:16",
+        "main.main.gowrap1+0 in /home/ubuntu/ebpf/tools/coredump/testsources/go/mcallpark/main.go:24",
+        "runtime.goexit+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:1694"
+      ]
+    },
+    {
+      "lwp": 9543,
+      "frames": [
+        "runtime.futex+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:558",
+        "runtime.futexsleep+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/os_linux.go:76",
+        "runtime.notesleep+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4138",
+        "runtime.park_m+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:462",
+        "runtime.gopark+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:461",
+        "runtime.chanrecv+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/chan.go:670",
+        "runtime.chanrecv1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/chan.go:510",
+        "main.parker+0 in /home/ubuntu/ebpf/tools/coredump/testsources/go/mcallpark/main.go:16",
+        "main.main.gowrap1+0 in /home/ubuntu/ebpf/tools/coredump/testsources/go/mcallpark/main.go:24",
+        "runtime.goexit+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:1694"
+      ]
+    },
+    {
+      "lwp": 9542,
+      "frames": [
+        "runtime.futex+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:558",
+        "runtime.futexsleep+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/os_linux.go:76",
+        "runtime.notesleep+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4138",
+        "runtime.park_m+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:462",
+        "runtime.gopark+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:461",
+        "runtime.chanrecv+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/chan.go:670",
+        "runtime.chanrecv1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/chan.go:510",
+        "main.parker+0 in /home/ubuntu/ebpf/tools/coredump/testsources/go/mcallpark/main.go:16",
+        "main.main.gowrap1+0 in /home/ubuntu/ebpf/tools/coredump/testsources/go/mcallpark/main.go:24",
+        "runtime.goexit+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:1694"
+      ]
+    },
+    {
+      "lwp": 9541,
+      "frames": [
+        "runtime.futex+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:558",
+        "runtime.futexsleep+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/os_linux.go:76",
+        "runtime.notesleep+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4138",
+        "runtime.park_m+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:462",
+        "runtime.gopark+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:461",
+        "runtime.chanrecv+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/chan.go:670",
+        "runtime.chanrecv1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/chan.go:510",
+        "main.parker+0 in /home/ubuntu/ebpf/tools/coredump/testsources/go/mcallpark/main.go:16",
+        "main.main.gowrap1+0 in /home/ubuntu/ebpf/tools/coredump/testsources/go/mcallpark/main.go:24",
+        "runtime.goexit+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:1694"
+      ]
+    },
+    {
+      "lwp": 9540,
+      "frames": [
+        "runtime.futex+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:558",
+        "runtime.futexsleep+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/os_linux.go:76",
+        "runtime.notesleep+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/lock_futex.go:48",
+        "runtime.stopm+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:1961",
+        "runtime.findRunnable+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:3374",
+        "runtime.schedule+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4138",
+        "runtime.park_m+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4267",
+        "runtime.mcall+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:462",
+        "runtime.gopark+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:461",
+        "runtime.chanrecv+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/chan.go:670",
+        "runtime.chanrecv1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/chan.go:510",
+        "main.parker+0 in /home/ubuntu/ebpf/tools/coredump/testsources/go/mcallpark/main.go:16",
+        "main.main.gowrap1+0 in /home/ubuntu/ebpf/tools/coredump/testsources/go/mcallpark/main.go:24",
+        "runtime.goexit+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:1694"
+      ]
+    },
+    {
+      "lwp": 9539,
+      "frames": [
+        "runtime.futex+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:558",
+        "runtime.futexsleep+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/os_linux.go:82",
+        "runtime.notetsleep_internal+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/lock_futex.go:90",
+        "runtime.notetsleep+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/lock_futex.go:112",
+        "runtime.sysmon+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:6270",
+        "runtime.mstart1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:1928",
+        "runtime.mstart0+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:1890",
+        "runtime.mstart+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:396"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "12fecf3742c47c5da69e900e7282601b6c41510f63175a6e3c4134d9d13d4601",
+      "local-path": "/home/ubuntu/ebpf/test-mcallpark"
+    }
+  ]
+}

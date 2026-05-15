@@ -110,7 +110,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 	case unsafe.Pointer(&C.dotnet_procs), unsafe.Pointer(&C.perl_procs),
 		unsafe.Pointer(&C.php_procs), unsafe.Pointer(&C.py_procs),
 		unsafe.Pointer(&C.hotspot_procs), unsafe.Pointer(&C.ruby_procs),
-		unsafe.Pointer(&C.v8_procs):
+		unsafe.Pointer(&C.v8_procs), unsafe.Pointer(&C.go_labels_procs):
 		if innerMap, ok := ctx.maps[mapdef]; ok {
 			if val, ok := innerMap[*(*C.u32)(keyptr)]; ok {
 				return val
@@ -138,7 +138,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 		}
 	case unsafe.Pointer(&C.metrics), unsafe.Pointer(&C.report_events),
 		unsafe.Pointer(&C.reported_pids), unsafe.Pointer(&C.pid_events), unsafe.Pointer(&C.inhibit_events),
-		unsafe.Pointer(&C.apm_int_procs), unsafe.Pointer(&C.go_labels_procs):
+		unsafe.Pointer(&C.apm_int_procs):
 		return unsafe.Pointer(uintptr(0))
 	default:
 		log.Errorf("Map at 0x%x not found", mapdef)

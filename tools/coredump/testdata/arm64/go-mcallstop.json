@@ -1,0 +1,215 @@
+{
+  "coredump-ref": "5247300db828f04354d5ac16c3bff5c4d51ef465671dba971a78d468ca737139",
+  "threads": [
+    {
+      "lwp": 22277,
+      "frames": [
+        "runtime.osyield+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:739",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4293",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242",
+        "runtime.gopark+0 in /usr/local/go/src/runtime/proc.go:461",
+        "runtime.block+0 in /usr/local/go/src/runtime/select.go:105",
+        "main.main+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcallstop/main.go:27",
+        "runtime.main+0 in /usr/local/go/src/internal/runtime/atomic/types.go:194",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 22294,
+      "frames": [
+        "runtime.(*timers).check+0 in /usr/local/go/src/runtime/time.go:1011",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/traceruntime.go:151",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 22293,
+      "frames": [
+        "linux-vdso.1.so+0x320",
+        "runtime.nanotime1+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:364",
+        "runtime.casgstatus+0 in /usr/local/go/src/runtime/proc.go:1323",
+        "runtime.execute+0 in /usr/local/go/src/runtime/proc.go:3337",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4193",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242",
+        "main.yielder+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcallstop/main.go:18",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 22292,
+      "frames": [
+        "linux-vdso.1.so+0x320",
+        "runtime.nanotime1+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:364",
+        "runtime.casgstatus+0 in /usr/local/go/src/runtime/proc.go:1323",
+        "runtime.execute+0 in /usr/local/go/src/runtime/proc.go:3337",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4193",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242",
+        "main.yielder+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcallstop/main.go:18",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 22291,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:652",
+        "runtime.semasleep+0 in /usr/local/go/src/runtime/lock_futex.go:147",
+        "runtime.lock2+0 in /usr/local/go/src/runtime/lock_spinbit.go:251",
+        "runtime.wakep+0 in /usr/local/go/src/runtime/proc.go:3219",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4300",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 22290,
+      "frames": [
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4300",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 22289,
+      "frames": [
+        "runtime.execute+0 in /usr/local/go/src/runtime/proc.go:3337",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4193",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242",
+        "main.yielder+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcallstop/main.go:18",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 22288,
+      "frames": [
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3422",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 22287,
+      "frames": [
+        "runtime.osyield+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:739",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4293",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 22286,
+      "frames": [
+        "linux-vdso.1.so+0x360",
+        "runtime.nanotime1+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:364",
+        "runtime.(*mLockProfile).start+0 in /usr/local/go/src/runtime/time_nofake.go:33",
+        "runtime.lock2+0 in /usr/local/go/src/runtime/lock_spinbit.go:247",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4293",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 22285,
+      "frames": [
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4270",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242",
+        "main.yielder+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcallstop/main.go:18",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 22284,
+      "frames": [
+        "runtime.osyield+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:739",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4293",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 22283,
+      "frames": [
+        "runtime.osyield+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:739",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3450",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242"
+      ]
+    },
+    {
+      "lwp": 22282,
+      "frames": [
+        "linux-vdso.1.so+0x360",
+        "runtime.nanotime1+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:364",
+        "runtime.casgstatus+0 in /usr/local/go/src/runtime/proc.go:1323",
+        "runtime.execute+0 in /usr/local/go/src/runtime/proc.go:3337",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4193",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242",
+        "main.yielder+0 in /home/tintin/ebpf/tools/coredump/testsources/go/mcallstop/main.go:18",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 22281,
+      "frames": [
+        "runtime.lock2+0 in /usr/local/go/src/runtime/lock_spinbit.go:199",
+        "runtime.findRunnable+0 in /usr/local/go/src/runtime/proc.go:3450",
+        "runtime.schedule+0 in /usr/local/go/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242",
+        "runtime.gopark+0 in /usr/local/go/src/runtime/proc.go:461",
+        "runtime.bgsweep+0 in /usr/local/go/src/runtime/mgcsweep.go:301",
+        "runtime.gcenable.gowrap1+0 in /usr/local/go/src/runtime/mgc.go:212",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 22280,
+      "frames": [
+        "runtime.futex+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:652",
+        "runtime.semasleep+0 in /usr/local/go/src/runtime/lock_futex.go:147",
+        "runtime.lock2+0 in /usr/local/go/src/runtime/lock_spinbit.go:251",
+        "runtime.goschedImpl+0 in /usr/local/go/src/runtime/proc.go:4293",
+        "runtime.gosched_m+0 in /usr/local/go/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /usr/local/go/src/runtime/asm_arm64.s:242",
+        "runtime.gopark+0 in /usr/local/go/src/runtime/proc.go:461",
+        "runtime.(*scavengerState).park+0 in /usr/local/go/src/runtime/mgcscavenge.go:426",
+        "runtime.bgscavenge+0 in /usr/local/go/src/runtime/mgcscavenge.go:656",
+        "runtime.gcenable.gowrap2+0 in /usr/local/go/src/runtime/mgc.go:213",
+        "runtime.goexit+0 in /usr/local/go/src/runtime/asm_arm64.s:1269"
+      ]
+    },
+    {
+      "lwp": 22279,
+      "frames": [
+        "runtime.usleep+0 in /usr/local/go/src/runtime/sys_linux_arm64.s:138",
+        "runtime.sysmon+0 in /usr/local/go/src/runtime/proc.go:6251",
+        "runtime.mstart1+0 in /usr/local/go/src/runtime/proc.go:1931",
+        "runtime.mstart0+0 in /usr/local/go/src/runtime/proc.go:1858",
+        "runtime.mstart+0 in /usr/local/go/src/runtime/asm_arm64.s:180"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "3bc9854ee9afddcf89db17726c9afcc385dbe19225d3406ca718e06b54a10f77",
+      "local-path": "/home/tintin/ebpf/test-mcallstop"
+    }
+  ]
+}

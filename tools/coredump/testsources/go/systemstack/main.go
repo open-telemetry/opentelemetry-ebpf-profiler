@@ -1,12 +1,6 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Program systemstack exercises the runtime.systemstack path by calling
-// runtime.Callers in a tight loop. A coredump taken while it runs is
-// likely to contain threads executing on the system stack.
-//
-// Build: go build -o systemstack ./tools/coredump/testsources/go/systemstack/
-// Run:   ./systemstack            (profiles for 30s, then exits)
 package main
 
 import (

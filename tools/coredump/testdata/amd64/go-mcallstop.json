@@ -1,0 +1,173 @@
+{
+  "coredump-ref": "157325498d0330691b067551246338458beb737e18ff54379095b84c951b3694",
+  "threads": [
+    {
+      "lwp": 14778,
+      "frames": [
+        "runtime.procyield+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:806",
+        "runtime.lock2+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/lock_spinbit.go:216",
+        "runtime.goschedImpl+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4293",
+        "runtime.gosched_m+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:462",
+        "main.yielder+0 in /home/ubuntu/ebpf/tools/coredump/testsources/go/mcallstop/main.go:14",
+        "runtime.goexit+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:1694"
+      ]
+    },
+    {
+      "lwp": 14795,
+      "frames": [
+        "runtime.nanotime1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:265",
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 14794,
+      "frames": [
+        "linux-vdso.1.so+0xcfd",
+        "runtime.nanotime1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:265",
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 14793,
+      "frames": [
+        "linux-vdso.1.so+0xcfd",
+        "runtime.nanotime1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:265",
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 14792,
+      "frames": [
+        "linux-vdso.1.so+0xcfd",
+        "runtime.nanotime1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:265",
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 14791,
+      "frames": [
+        "linux-vdso.1.so+0xcfd",
+        "runtime.nanotime1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:265",
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 14790,
+      "frames": [
+        "linux-vdso.1.so+0xcfd",
+        "runtime.nanotime1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:265",
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 14789,
+      "frames": [
+        "linux-vdso.1.so+0xcfd",
+        "runtime.nanotime1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:265",
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 14788,
+      "frames": [
+        "linux-vdso.1.so+0xcfd",
+        "runtime.nanotime1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:265",
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 14787,
+      "frames": [
+        "runtime.procyield+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:806",
+        "runtime.lock2+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/lock_spinbit.go:216",
+        "runtime.findRunnable+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:3450",
+        "runtime.schedule+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:462"
+      ]
+    },
+    {
+      "lwp": 14786,
+      "frames": [
+        "runtime.procyield+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:806",
+        "runtime.lock2+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/lock_spinbit.go:216",
+        "runtime.findRunnable+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:3450",
+        "runtime.schedule+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:462"
+      ]
+    },
+    {
+      "lwp": 14785,
+      "frames": [
+        "runtime.procyield+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:806",
+        "runtime.lock2+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/lock_spinbit.go:216",
+        "runtime.findRunnable+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:3450",
+        "runtime.schedule+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:462"
+      ]
+    },
+    {
+      "lwp": 14784,
+      "frames": [
+        "linux-vdso.1.so+0xcfd",
+        "runtime.nanotime1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:265",
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 14783,
+      "frames": [
+        "runtime.procyield+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:806",
+        "runtime.lock2+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/lock_spinbit.go:216",
+        "runtime.goschedImpl+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4293",
+        "runtime.gosched_m+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:462",
+        "main.yielder+0 in /home/ubuntu/ebpf/tools/coredump/testsources/go/mcallstop/main.go:14",
+        "runtime.goexit+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:1694"
+      ]
+    },
+    {
+      "lwp": 14782,
+      "frames": [
+        "runtime.procyield+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:806",
+        "runtime.lock2+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/lock_spinbit.go:216",
+        "runtime.findRunnable+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:3450",
+        "runtime.schedule+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4138",
+        "runtime.goschedImpl+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4301",
+        "runtime.gosched_m+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:4306",
+        "runtime.mcall+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:462"
+      ]
+    },
+    {
+      "lwp": 14781,
+      "frames": [
+        "linux-vdso.1.so+0xcfd",
+        "runtime.nanotime1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:265",
+        "<unwinding aborted due to error native_zero_pc>"
+      ]
+    },
+    {
+      "lwp": 14780,
+      "frames": [
+        "runtime.usleep+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/sys_linux_amd64.s:135",
+        "runtime.sysmon+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:6234",
+        "runtime.sysmon+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:6234",
+        "runtime.mstart1+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:1928",
+        "runtime.mstart0+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/proc.go:1890",
+        "runtime.mstart+0 in /home/ubuntu/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.0.linux-amd64/src/runtime/asm_amd64.s:396"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "66360a0baedbe71fc18f3225c749bde80c7d1baa2e9f77086f0e12c496c383ee",
+      "local-path": "/home/ubuntu/ebpf/test-mcallstop"
+    }
+  ]
+}
