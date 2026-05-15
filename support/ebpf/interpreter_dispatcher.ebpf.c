@@ -110,7 +110,8 @@ struct inhibit_events_t {
 //
 // The map is periodically polled and read from in `tracer`.
 // NOTE: We use 0 as the number of max entries for this map as at load time
-// it will be replaced based on the number of possible CPUs and sampling rate.
+// it will be adjusted based on the number of possible CPUs, sampling rate and
+// other factors.
 struct trace_events_t {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
   __uint(max_entries, 0);

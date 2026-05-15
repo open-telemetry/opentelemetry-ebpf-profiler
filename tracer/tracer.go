@@ -624,7 +624,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 
 	adaption["sched_times"] = schedTimesSize(cfg.OffCPUThreshold)
 
-	// Allow for 1s of 'burst' trace data
+	// Allow for 1s of 'burst' trace data (sizing by Trace length worst-case)
 	// TODO: Base this on present CPUs instead, as runtime.NumCPU is fixed for the lifetime
 	// of the process?
 	ringbufSize := uint64(cfg.SamplesPerSecond * runtime.NumCPU() * support.Sizeof_Trace)
@@ -666,10 +666,6 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 		if newSize, ok := adaption[mapName]; ok {
 			log.Debugf("Size of eBPF map %s: %v", mapName, newSize)
 			mapSpec.MaxEntries = newSize
-
-			if mapName == "trace_events" {
-				log.Infof("Ringbuffer size: %d bytes", ringbufSize)
-			}
 		}
 		ebpfMap, err := cebpf.NewMap(mapSpec)
 		if err != nil {
