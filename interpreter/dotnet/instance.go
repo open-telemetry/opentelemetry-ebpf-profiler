@@ -404,7 +404,8 @@ func (i *dotnetInstance) walkRangeSectionMap(ebpf interpreter.EbpfHandler, pid l
 // without distinguishing the two layouts.
 func resolveStringsHeapAddr(pi *peInfo, m *process.RawMapping) uint64 {
 	heapOff := uint64(pi.stringsHeapFileOffset)
-	if heapOff < m.FileOffset || heapOff >= m.FileOffset+m.Length {
+	heapEnd := heapOff + uint64(pi.stringsHeapSize)
+	if heapOff < m.FileOffset || heapEnd > m.FileOffset+m.Length {
 		return 0
 	}
 	return m.Vaddr + heapOff - m.FileOffset
