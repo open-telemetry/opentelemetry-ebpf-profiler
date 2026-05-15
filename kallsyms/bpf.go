@@ -192,9 +192,7 @@ func (s *bpfSymbolizer) subscribe(ctx context.Context, onlineCPUs []int) error {
 			return err
 		}
 
-		s.wg.Add(1)
-		go func(event *perf.Event) {
-			defer s.wg.Done()
+		s.wg.Go(func() {
 			for {
 				record, err := event.ReadRecord(ctx)
 				if err != nil {
@@ -231,7 +229,7 @@ func (s *bpfSymbolizer) subscribe(ctx context.Context, onlineCPUs []int) error {
 					return
 				}
 			}
-		}(event)
+		})
 	}
 
 	return nil
