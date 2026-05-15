@@ -127,7 +127,6 @@ func (i *phpInstance) getFunction(addr libpf.Address, typeInfo uint32) (*phpFunc
 
 	// Read the class name from common.scope (zend_class_entry pointer).
 	// If the function is a method, scope points to the declaring class.
-	className := ""
 	scopePtr := npsr.Ptr(fobj, vms.zend_function.common_scope)
 	if scopePtr != 0 {
 		classNameStrPtr := i.rm.Ptr(scopePtr + libpf.Address(vms.zend_class_entry.name))
