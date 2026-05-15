@@ -1114,9 +1114,13 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 		} else {
 			log.Debugf("Bytecode, %d bytes, not available", length)
 		}
+		typ := vms.Type.ByteArray
+		if vms.SourcePositionTable.TrustedByteArray {
+			typ = vms.Type.TrustedByteArray
+		}
 		sfi.bytecodePositionTable, err = i.readFixedTablePtr(
 			fdAddr+libpf.Address(vms.BytecodeArray.SourcePositionTable),
-			vms.Type.ByteArray, 1, 0)
+			typ, 1, 0)
 		log.Debugf("Bytecode positions: %d bytes: %v", len(sfi.bytecodePositionTable), err)
 	}
 
@@ -2248,7 +2252,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			sym.Address, sym.Size, sym.Size/3)
 		d.bytecodeSizes = make([]byte, sym.Size)
 		d.bytecodeCount = uint8(sym.Size / 3)
-		if _, err = ef.ReadVirtualMemory(d.bytecodeSizes, int64(sym.Address)); err != nil {
+		if _, err = ef.ReadAt(d.bytecodeSizes, int64(sym.Address)); err != nil {
 			return nil, fmt.Errorf("unable to read bytecode sizes: %v", err)
 		}
 		for _, opcodeLength := range d.bytecodeSizes {

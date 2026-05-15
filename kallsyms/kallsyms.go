@@ -38,6 +38,9 @@ const Kernel = "vmlinux"
 // from the kernel kallsyms file.
 const pointerBits = int(unsafe.Sizeof(libpf.Address(0)) * 8)
 
+// maxAddr is the max address value.
+const maxAddr = uint64(1<<uint(pointerBits) - 1)
+
 // sysModule is the sysfs path for module metadata
 const sysModule = "/sys/module"
 
@@ -90,16 +93,17 @@ func compareModule(a, b Module) int {
 type Symbolizer struct {
 	modules atomic.Value
 
+	bpf *bpfSymbolizer
+
 	reloadModules chan libpf.Void
-	reloadSymbols chan libpf.Void
 }
 
 // NewSymbolizer creates and returns a new kallsyms symbolizer and loads
 // the initial 'kallsymbols'.
 func NewSymbolizer() (*Symbolizer, error) {
 	s := &Symbolizer{
+		bpf:           &bpfSymbolizer{},
 		reloadModules: make(chan libpf.Void, 1),
-		reloadSymbols: make(chan libpf.Void, 1),
 	}
 	if err := s.loadKallsyms(); err != nil {
 		return nil, err
@@ -152,12 +156,6 @@ func parseSysfsUint(mod, knob string) (uint64, error) {
 // Overridable for the test suite. Returns true if the metadata was loaded
 // successfully.
 var loadModuleMetadata = func(m *Module, name string, oldMtime int64) bool {
-	if name == "bpf" {
-		// Kernel reports the BPF JIT symbols as part of 'bpf' module.
-		// There is no metadata available.
-		return true
-	}
-
 	// Determine notes location and module size
 	notesFile := "/sys/kernel/notes"
 	if name != Kernel {
@@ -344,7 +342,8 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 		}
 	}
 
-	for scanner := bufio.NewScanner(r); scanner.Scan(); {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
 		// Avoid heap allocation by not using scanner.Text().
 		// NOTE: The underlying bytes will change with the next call to scanner.Scan(),
 		// so make sure to not keep any references after the end of the loop iteration.
@@ -357,6 +356,11 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 			return fmt.Errorf("unexpected line in kallsyms: '%s'", line)
 		}
 
+		// bpf is handled separately by bpfSymbolizer
+		if fields[3] == "[bpf]" {
+			continue
+		}
+
 		// Skip non-text symbols, see 'man nm'.
 		// Special case for 'etext', which can be of type `D` (data) in some kernels.
 		if strings.IndexByte("TtVvWw", fields[1][0]) == -1 && fields[2] != "_etext" {
@@ -366,6 +370,10 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 		address, err := strconv.ParseUint(fields[0], 16, pointerBits)
 		if err != nil {
 			return fmt.Errorf("failed to parse address value: '%s'", fields[0])
+		}
+		// Verify address fits within pointer bounds. Check explicitly to satisfy CodeQL.
+		if address > maxAddr {
+			return fmt.Errorf("address exceeds pointer size: %x > %x", address, maxAddr)
 		}
 		if address != 0 {
 			noSymbols = false
@@ -409,13 +417,11 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 					symbols: syms[0:0],
 					names:   names[0:0],
 				}
-				if moduleName != "bpf" {
-					oldMod, _ = getModuleByAddress(modules, libpf.Address(address))
-					if oldMod != nil && !oldMod.stub && oldMod.Name() == moduleName {
-						oldMtime = oldMod.mtime
-					} else {
-						oldMod = nil
-					}
+				oldMod, _ = getModuleByAddress(modules, libpf.Address(address))
+				if oldMod != nil && !oldMod.stub && oldMod.Name() == moduleName {
+					oldMtime = oldMod.mtime
+				} else {
+					oldMod = nil
 				}
 				if loadModuleMetadata(&newMod, moduleName, oldMtime) {
 					// Module metadata was updated. Parse this module symbols.
@@ -458,6 +464,9 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 			}
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error scanning /proc/kallsyms: %w", err)
+	}
 	if mod != nil {
 		mod.finish()
 	}
@@ -486,7 +495,6 @@ func (s *Symbolizer) loadKallsyms() error {
 
 var nonsyfsModules = libpf.Set[string]{
 	Kernel: libpf.Void{},
-	"bpf":  libpf.Void{},
 }
 
 // loadModules will reload module metadata.
@@ -575,12 +583,6 @@ func (s *Symbolizer) reloadWorker(ctx context.Context, kobjectClient *kobject.Cl
 				log.Warnf("Failed to reload kernel modules metadata: %v", err)
 				nextModulesReload = time.After(10 * time.Second)
 			}
-		case <-s.reloadSymbols:
-			// Just trigger reloading of symbols with small delay to batch
-			// potentially multiple module loads.
-			if nextKallsymsReload == noTimeout {
-				nextKallsymsReload = time.After(100 * time.Millisecond)
-			}
 		case <-nextKallsymsReload:
 			if err := s.loadKallsyms(); err == nil {
 				log.Debugf("Kernel symbols reloaded")
@@ -615,24 +617,26 @@ func (s *Symbolizer) pollKobjectClient(_ context.Context, kobjectClient *kobject
 	}
 }
 
-// Reload will trigger asynchronous update of modules and symbols.
-func (s *Symbolizer) StartMonitor(ctx context.Context) error {
+// Close frees resources associated with the Symbolizer.
+func (s *Symbolizer) Close() {
+	s.bpf.Close()
+}
+
+// StartMonitor starts the update monitoring for kallsyms.
+func (s *Symbolizer) StartMonitor(ctx context.Context, onlineCPUs []int) error {
 	kobjectClient, err := kobject.New()
 	if err != nil {
 		return fmt.Errorf("failed to create kobject netlink socket: %v", err)
 	}
+	err = s.bpf.startMonitor(ctx, onlineCPUs)
+	if err != nil {
+		s.bpf.Close()
+		_ = kobjectClient.Close()
+		return err
+	}
 	go s.reloadWorker(ctx, kobjectClient)
 	go s.pollKobjectClient(ctx, kobjectClient)
 	return nil
-}
-
-// Reload triggers a non-blocking reload and update of Symbolizer
-// with the recent information of /proc/kallsyms.
-func (s *Symbolizer) Reload() {
-	select {
-	case s.reloadSymbols <- libpf.Void{}:
-	default:
-	}
 }
 
 // getModuleByAddress is a helper to find a Module from the sorted 'modules'
@@ -656,7 +660,7 @@ func (s *Symbolizer) GetModuleByAddress(pc libpf.Address) (*Module, error) {
 	return getModuleByAddress(s.modules.Load().([]Module), pc)
 }
 
-// GetModuleByAddress finds the Module containing the module 'module'.
+// GetModuleByName finds the Module with the given name.
 func (s *Symbolizer) GetModuleByName(module string) (*Module, error) {
 	modules := s.modules.Load().([]Module)
 	for i := range modules {
@@ -666,4 +670,13 @@ func (s *Symbolizer) GetModuleByName(module string) (*Module, error) {
 		}
 	}
 	return nil, ErrNoModule
+}
+
+// LookupBPFSymbol resolves addr to a BPF program symbol name and offset.
+// Returns ("", 0, false) if no BPF program covers addr.
+func (s *Symbolizer) LookupBPFSymbol(addr libpf.Address) (string, uint, bool) {
+	if s.bpf == nil {
+		return "", 0, false
+	}
+	return s.bpf.LookupSymbol(addr)
 }

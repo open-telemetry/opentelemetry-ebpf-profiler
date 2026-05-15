@@ -22,6 +22,7 @@ const (
 	FrameMarkerPerl    = 0x7
 	FrameMarkerV8      = 0x8
 	FrameMarkerDotnet  = 0xa
+	FrameMarkerLuaJIT  = 0xd
 	FrameMarkerBEAM    = 0xc
 	FrameMarkerGo      = 0xb
 )
@@ -45,6 +46,7 @@ const (
 	ProgUnwindDotnet10 = 0x9
 	ProgGoLabels       = 0xa
 	ProgUnwindBEAM     = 0xb
+	ProgUnwindLuaJIT   = 0xc
 )
 
 const (
@@ -54,8 +56,7 @@ const (
 )
 
 const (
-	EventTypeGenericPID     = 0x1
-	EventTypeReloadKallsyms = 0x2
+	EventTypeGenericPID = 0x1
 )
 
 const UnwindInfoMaxEntries = 0x4000
@@ -138,10 +139,10 @@ type StackDeltaPageKey struct {
 	Page   uint64
 }
 type SystemAnalysis struct {
-	Address   uint64
-	Pid       uint32
-	Code      [128]uint8
-	Pad_cgo_0 [4]byte
+	Address uint64
+	Pid     uint32
+	Err     int32
+	Code    [128]uint8
 }
 type TSDInfo struct {
 	Offset     int16
@@ -345,14 +346,18 @@ const (
 	UnwindRegFp      uint8 = 0x4
 	UnwindRegLr      uint8 = 0x5
 	UnwindRegX86RAX  uint8 = 0x6
-	UnwindRegX86R9   uint8 = 0x7
-	UnwindRegX86R11  uint8 = 0x8
-	UnwindRegX86R15  uint8 = 0xa
+	UnwindRegX86R9   uint8 = 0x9
+	UnwindRegX86R11  uint8 = 0xa
+	UnwindRegX86R13  uint8 = 0xb
+	UnwindRegX86R15  uint8 = 0xc
+	UnwindRegX86RDI  uint8 = 0x7
+	UnwindRegX86R8   uint8 = 0x8
 
-	UnwindFlagCommand  uint8 = 0x1
-	UnwindFlagFrame    uint8 = 0x2
-	UnwindFlagLeafOnly uint8 = 0x4
-	UnwindFlagDerefCfa uint8 = 0x8
+	UnwindFlagCommand    uint8 = 0x1
+	UnwindFlagFrame      uint8 = 0x2
+	UnwindFlagLeafOnly   uint8 = 0x4
+	UnwindFlagDerefCfa   uint8 = 0x8
+	UnwindFlagRegisterRA uint8 = 0x10
 
 	UnwindCommandInvalid      int32 = 0x0
 	UnwindCommandStop         int32 = 0x1

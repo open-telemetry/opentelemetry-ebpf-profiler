@@ -141,6 +141,7 @@ The eBPF source code is licensed under the GPL 2.0 license.
 ### Emeritus
 
 - [Dmitry Filimonov](https://github.com/petethepig), Maintainer
+- [Joel Höner](https://github.com/athre0z), Approver
 - [Tim Rühsen](https://github.com/rockdaboot), Approver
 
 For more information about the emeritus role, see the

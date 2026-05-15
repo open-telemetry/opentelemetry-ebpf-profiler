@@ -358,6 +358,7 @@ typedef enum TracePrograms {
   PROG_UNWIND_DOTNET10,
   PROG_GO_LABELS,
   PROG_UNWIND_BEAM,
+  PROG_UNWIND_LUAJIT,
   NUM_TRACER_PROGS,
 } TracePrograms;
 
@@ -663,7 +664,7 @@ typedef struct UnwindState {
       // The per-CPU registers which are not unwound, but needed to be accessed
       // on leaf frames.
 #if defined(__x86_64__)
-      u64 rax, r9, r11, r13, r15;
+      u64 rax, rdi, r8, r9, r11, r13, r15;
 #elif defined(__aarch64__)
       u64 r20, r22, r28;
 #endif
@@ -877,19 +878,23 @@ typedef struct UnwindInfo {
 #define UNWIND_REG_LR      5
 
 #define UNWIND_REG_X86_RAX 6
-#define UNWIND_REG_X86_R9  7
-#define UNWIND_REG_X86_R11 8
-#define UNWIND_REG_X86_R13 9
-#define UNWIND_REG_X86_R15 10
+#define UNWIND_REG_X86_RDI 7
+#define UNWIND_REG_X86_R8  8
+#define UNWIND_REG_X86_R9  9
+#define UNWIND_REG_X86_R11 10
+#define UNWIND_REG_X86_R13 11
+#define UNWIND_REG_X86_R15 12
 
 // Flag to indicate a command (used inside Go stack delta generation only)
-#define UNWIND_FLAG_COMMAND   (1 << 0)
+#define UNWIND_FLAG_COMMAND     (1 << 0)
 // Flag to indicate that a full LR+FR frame is present on aarch64
-#define UNWIND_FLAG_FRAME     (1 << 1)
+#define UNWIND_FLAG_FRAME       (1 << 1)
 // Flag to indicate that unwinding is valid on leaf frames only (uses untracked register)
-#define UNWIND_FLAG_LEAF_ONLY (1 << 2)
+#define UNWIND_FLAG_LEAF_ONLY   (1 << 2)
 // Flag to indicate that the resolve CFA value should be dereferenced
-#define UNWIND_FLAG_DEREF_CFA (1 << 3)
+#define UNWIND_FLAG_DEREF_CFA   (1 << 3)
+// Flag to indicate that the return address is in a register
+#define UNWIND_FLAG_REGISTER_RA (1 << 4)
 
 // If flags has UNWIND_FLAG_DEREF_CFA set, the lowest bits of 'param' are used
 // as second adder as post-deref operation. This contains the mask for that.
@@ -969,6 +974,7 @@ typedef struct OffsetRange {
 typedef struct SystemAnalysis {
   u64 address;
   u32 pid;
+  s32 err;
   u8 code[128];
 } SystemAnalysis;
 
@@ -979,8 +985,7 @@ typedef struct Event {
 } Event;
 
 // Event types that notifications are sent for through event_send_trigger.
-#define EVENT_TYPE_GENERIC_PID     1
-#define EVENT_TYPE_RELOAD_KALLSYMS 2
+#define EVENT_TYPE_GENERIC_PID 1
 
 // PIDPage represents the key of the eBPF map pid_page_to_mapping_info.
 typedef struct PIDPage {
