@@ -295,14 +295,14 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf
 		// Find the memory mapping area for this module, and establish mapping from
 		// Module* to the PE. This precaches the mapping for R2R modules and avoids
 		// some remote memory reads.
-		m, err := i.getPEInfoByAddress(uint64(lowAddress))
+		info, err := i.getPEInfoByAddress(uint64(lowAddress))
 		if err != nil {
 			return nil
 		}
-		i.moduleToPEInfo[modulePtr] = m.info
+		i.moduleToPEInfo[modulePtr] = info
 		log.Debugf("%x-%x flags:%x  module: %x -> %s",
 			lowAddress, highAddress, flags,
-			modulePtr, m.info.simpleName)
+			modulePtr, info.simpleName)
 		i.addRange(ebpf, pid, lowAddress, highAddress, lowAddress, codeReadyToRun)
 	}
 
@@ -411,7 +411,7 @@ func resolveStringsHeapAddr(pi *peInfo, m *process.RawMapping) uint64 {
 	return m.Vaddr + heapOff - m.FileOffset
 }
 
-func (i *dotnetInstance) getPEInfoByAddress(addressInModule uint64) (dotnetMapping, error) {
+func (i *dotnetInstance) getPEInfoByAddress(addressInModule uint64) (*peInfo, error) {
 	idx, ok := slices.BinarySearchFunc(i.mappings, addressInModule,
 		func(m dotnetMapping, addr uint64) int {
 			if addr < m.start {
@@ -423,10 +423,11 @@ func (i *dotnetInstance) getPEInfoByAddress(addressInModule uint64) (dotnetMappi
 			return 0
 		})
 	if !ok {
-		return dotnetMapping{},
-			fmt.Errorf("failed to find mapping for address %x", addressInModule)
+		return nil, fmt.Errorf("failed to find mapping for address %x", addressInModule)
 	}
-	return i.mappings[idx], nil
+
+	mapping := &i.mappings[idx]
+	return mapping.info, nil
 }
 
 func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (*peInfo, error) {
@@ -444,12 +445,12 @@ func (i *dotnetInstance) getPEInfoByModulePtr(modulePtr libpf.Address) (*peInfo,
 		return nil, fmt.Errorf("module at %x, does not have name", modulePtr)
 	}
 
-	m, err := i.getPEInfoByAddress(uint64(simpleNamePtr))
+	info, err := i.getPEInfoByAddress(uint64(simpleNamePtr))
 	if err != nil {
 		return nil, err
 	}
-	i.moduleToPEInfo[modulePtr] = m.info
-	return m.info, nil
+	i.moduleToPEInfo[modulePtr] = info
+	return info, nil
 }
 
 func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr libpf.Address) (*dotnetMethod, error) {
@@ -775,7 +776,7 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 	switch subframeType {
 	case codeReadyToRun:
 		// Ready to Run (Non-JIT) frame running directly code from a PE file
-		m, err := i.getPEInfoByAddress(uint64(codeHeaderPtr))
+		module, err := i.getPEInfoByAddress(uint64(codeHeaderPtr))
 		if err != nil {
 			return err
 		}
@@ -786,10 +787,10 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		frames.Append(&libpf.Frame{
 			Type:            libpf.DotnetFrame,
 			AddressOrLineno: libpf.AddressOrLineno(pcOffset),
-			FunctionName: m.info.resolveR2RMethodName(pcOffset, i.rm,
-				i.stringsHeapAddrByPE[m.info]),
-			SourceFile: m.info.simpleName,
-			Mapping:    m.info.mapping,
+			FunctionName: module.resolveR2RMethodName(pcOffset, i.rm,
+				i.stringsHeapAddrByPE[module]),
+			SourceFile: module.simpleName,
+			Mapping:    module.mapping,
 		})
 	case codeJIT:
 		// JITted frame in anonymous mapping
