@@ -20,9 +20,11 @@ import (
 	"github.com/elastic/go-freelru"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -32,6 +34,12 @@ const (
 
 	// TTL of entries in the LRU cache holding the executables' PE information.
 	peInfoCacheTTL = 6 * time.Hour
+
+	// Maximum size of the LRU cache holding strings from #Strings heap per PE.
+	peInfoStringsCacheSize = 1024
+
+	// TTL of entries in the LRU cache holding the .NET strings.
+	peInfoStringsCacheTTL = 1 * time.Hour
 )
 
 // OptionalHeader32 is the IMAGE_OPTIONAL_HEADER32 without its Magic or DataDirectory
@@ -266,10 +274,19 @@ type peInfo struct {
 	methodSpecs  []peMethodSpec
 	sizeOfImage  uint32
 
-	// strings contains the preloaded strings from dotnet string heap.
-	// If this consumes too much memory, this could be converted to LRU and on-demand
-	// populated by reading the strings from attached process memory.
-	strings map[uint32]libpf.String
+	// stringsHeapFileOffset is the offset of the ECMA-335 II.24.2.3 #Strings heap
+	// in the on-disk PE file. The absolute process address is computed at attach
+	// time from the process.RawMapping that covers this file offset (see
+	// resolveStringsHeapAddr), which handles both image-loaded PEs and 1:1 file
+	// mmaps uniformly via the kernel's file-to-VA mapping.
+	stringsHeapFileOffset uint32
+	// stringsHeapSize is the size of the #Strings heap in bytes.
+	stringsHeapSize uint32
+
+	// stringsCache memoizes resolved #Strings heap entries to avoid repeated
+	// remote-memory reads for hot type/method names. Shared across processes
+	// since peInfo is shared via globalPeCache.
+	stringsCache *freelru.SyncedLRU[uint32, libpf.String]
 }
 
 // peParser contains the needed data when reading and parsing the dotnet data from a PE file.
@@ -413,6 +430,20 @@ func (pp *peParser) parseOptionalHeader() error {
 	}
 
 	return nil
+}
+
+// rvaToFileOffset converts a Relative Virtual Address into a file offset by
+// locating the PE section that contains the address. The file offset is the
+// only address form that resolves consistently across both image-loaded PEs
+// (CoreCLR maps sections at imageBase+RVA) and IL-only DLLs (1:1 file mmap,
+// where the OS does not perform section relocation, so RVA != process offset).
+func (pp *peParser) rvaToFileOffset(rva uint32) (uint32, bool) {
+	for _, s := range pp.sections {
+		if rva >= s.VirtualAddress && rva < s.VirtualAddress+s.VirtualSize {
+			return rva - s.VirtualAddress + s.PointerToRawData, true
+		}
+	}
+	return 0, false
 }
 
 // getRVASectionReader() find the PE Section containing the requested DataDirectory and
@@ -575,6 +606,19 @@ func (pp *peParser) parseCLI() error {
 		case "#Strings":
 			// ECMA-335 II.24.2.3 #Strings heap
 			pp.dotnetStrings = io.NewSectionReader(r, int64(hdr.Offset), int64(hdr.Size))
+			heapRVA := cliHeader.MetaData.VirtualAddress + hdr.Offset
+			// Persist the heap as a file offset, not an RVA: for IL-only DLLs
+			// the file is mmap'd 1:1 and RVAs do not correspond to process
+			// offsets. The file offset combined with the kernel's mapping
+			// (Vaddr, FileOffset) yields the process VA uniformly in
+			// resolveStringsHeapAddr.
+			heapFileOffset, ok := pp.rvaToFileOffset(heapRVA)
+			if !ok {
+				return fmt.Errorf("unable to locate #Strings heap section for RVA %#x",
+					heapRVA)
+			}
+			pp.info.stringsHeapFileOffset = heapFileOffset
+			pp.info.stringsHeapSize = hdr.Size
 		case "#GUID":
 			// ECMA-335 II.24.2.5 #GUID heap
 			pp.dotnetGUID = io.NewSectionReader(r, int64(hdr.Offset), int64(hdr.Size))
@@ -625,6 +669,31 @@ func (pp *peParser) readDotnetString(offs uint32) libpf.String {
 	return libpf.NullString
 }
 
+// lookupString reads a NUL-terminated string from the ECMA-335 II.24.2.3
+// #Strings heap by addressing the heap inside the running process.
+// stringsHeapAddr is the absolute process address of the heap, resolved at
+// attach time (see resolveStringsHeapAddr) so this works regardless of whether
+// the runtime image-loaded the PE or mmap()ed the file 1:1.
+// Successfully resolved values are memoized in pi.stringsCache to avoid
+// repeated remote-memory reads for hot names. NullString results (offset 0,
+// out-of-bounds, read errors, empty strings) are not cached so a transient
+// read failure does not poison the entry permanently.
+func (pi *peInfo) lookupString(rm remotememory.RemoteMemory, stringsHeapAddr uint64,
+	offs uint32) libpf.String {
+	if offs == 0 || offs >= pi.stringsHeapSize {
+		return libpf.NullString
+	}
+	if s, ok := pi.stringsCache.Get(offs); ok {
+		return s
+	}
+	s := libpf.Intern(rm.String(libpf.Address(stringsHeapAddr + uint64(offs))))
+	if s == libpf.NullString {
+		return s
+	}
+	pi.stringsCache.Add(offs, s)
+	return s
+}
+
 func (pp *peParser) readDotnetGUID(offs uint32) string {
 	// Read a GUID from the ECMA-335 II.24.2.5 #GUID heap
 	if offs == 0 {
@@ -643,18 +712,6 @@ func (pp *peParser) readDotnetGUID(offs uint32) string {
 		binary.LittleEndian.Uint16(guid[6:8]),
 		guid[8:10],
 		guid[10:])
-}
-
-func (pp *peParser) preloadString(heapIndex uint32) {
-	// String index is well known empty string
-	if heapIndex == 0 {
-		return
-	}
-	// Check if already loaded
-	if _, ok := pp.info.strings[heapIndex]; ok {
-		return
-	}
-	pp.info.strings[heapIndex] = pp.readDotnetString(heapIndex)
 }
 
 func (pp *peParser) skipDotnetBytes(n int) {
@@ -705,14 +762,6 @@ func (pp *peParser) parseModuleTable() {
 	}
 }
 
-// preloadTypeSpecStrings preload the strings for given TypeDef entry
-func (pp *peParser) preloadTypeSpecStrings(spec *peTypeSpec) {
-	if spec.methodIdx < pp.tableRows[tableMethodDef] {
-		pp.preloadString(spec.namespaceIdx)
-		pp.preloadString(spec.typeNameIdx)
-	}
-}
-
 // parseTypeDef parses an ECMA-335 II.22.37 TypeDef table
 func (pp *peParser) parseTypeDef() {
 	// Flags          a 4-byte bitmask of type TypeAttributes, §II.23.1.15
@@ -723,14 +772,6 @@ func (pp *peParser) parseTypeDef() {
 	// MethodList     an index into the MethodDef table; first Method owned by this Type
 
 	specs := make([]peTypeSpec, 0, pp.tableRows[tableTypeDef])
-
-	// NOTE: We could probably not load the rows where MethodList is same as the next
-	// entry as it is a type without Methods. We also do lookups from symbolization
-	// via binary search using the methodIdx field. However, the NestedClass table
-	// will contain direct indexes to this table, so we would need to record the index
-	// or do the elimination later during the load - so perhaps its not worth while.
-
-	prevEntry := peTypeSpec{}
 	for i := uint32(0); i < pp.tableRows[tableTypeDef]; i++ {
 		pp.skipDotnetBytes(4)
 		typeNameIdx := pp.readDotnetIndex(indexString)
@@ -738,19 +779,12 @@ func (pp *peParser) parseTypeDef() {
 		pp.skipDotnetBytes(pp.indexSizes[indexTypeDefOrRef] + pp.indexSizes[indexField])
 		methodIdx := pp.readDotnetIndex(indexMethodDef)
 
-		if prevEntry.methodIdx != methodIdx {
-			pp.preloadTypeSpecStrings(&prevEntry)
-		}
-
-		prevEntry = peTypeSpec{
+		specs = append(specs, peTypeSpec{
 			namespaceIdx: namespaceIdx,
 			typeNameIdx:  typeNameIdx,
 			methodIdx:    methodIdx,
-		}
-		specs = append(specs, prevEntry)
+		})
 	}
-	pp.preloadTypeSpecStrings(&specs[len(specs)-1])
-
 	pp.info.typeSpecs = specs
 }
 
@@ -770,7 +804,6 @@ func (pp *peParser) parseMethodDef() {
 		nameIdx := pp.readDotnetIndex(indexString)
 		pp.skipDotnetBytes(pp.indexSizes[indexBlob] + pp.indexSizes[indexParam])
 
-		pp.preloadString(nameIdx)
 		specs = append(specs, peMethodSpec{methodNameIdx: nameIdx})
 	}
 	pp.info.methodSpecs = specs
@@ -850,7 +883,13 @@ func (pp *peParser) parseTables() error {
 		return fmt.Errorf("number of Modules (%d) is unexpected", pp.tableRows[0])
 	}
 
-	pp.info.strings = map[uint32]libpf.String{}
+	stringsCache, err := freelru.NewSynced[uint32, libpf.String](
+		peInfoStringsCacheSize, hash.Uint32)
+	if err != nil {
+		return fmt.Errorf("unable to create #Strings LRU: %w", err)
+	}
+	pp.info.stringsCache = stringsCache
+	pp.info.stringsCache.SetLifetime(peInfoStringsCacheTTL)
 
 	// Precalculate the column sizes we need to know
 	pp.indexSizes[indexString] = getHeapSize(tablesHeader.HeapSizes&0x1 != 0)
@@ -1135,7 +1174,8 @@ func (pp *peParser) parse() error {
 	return pp.parseCLI()
 }
 
-func (pi *peInfo) resolveMethodName(methodIdx uint32) libpf.String {
+func (pi *peInfo) resolveMethodName(methodIdx uint32,
+	rm remotememory.RemoteMemory, stringsHeapAddr uint64) libpf.String {
 	idx := sort.Search(len(pi.typeSpecs), func(idx int) bool {
 		return pi.typeSpecs[idx].methodIdx > methodIdx
 	}) - 1
@@ -1144,23 +1184,28 @@ func (pi *peInfo) resolveMethodName(methodIdx uint32) libpf.String {
 			methodIdx, len(pi.methodSpecs)))
 	}
 
+	lookup := func(offs uint32) libpf.String {
+		return pi.lookupString(rm, stringsHeapAddr, offs)
+	}
+
 	typeSpec := &pi.typeSpecs[idx]
-	typeName := pi.strings[typeSpec.typeNameIdx].String()
+	typeName := lookup(typeSpec.typeNameIdx).String()
 	for typeSpec.enclosingClass != 0 {
 		enclosingSpec := &pi.typeSpecs[typeSpec.enclosingClass-1]
-		typeName = fmt.Sprintf("%s/%s", pi.strings[enclosingSpec.typeNameIdx], typeName)
+		typeName = fmt.Sprintf("%s/%s", lookup(enclosingSpec.typeNameIdx), typeName)
 		typeSpec = enclosingSpec
 	}
-	methodName := pi.strings[pi.methodSpecs[methodIdx-1].methodNameIdx]
+	methodName := lookup(pi.methodSpecs[methodIdx-1].methodNameIdx)
 	if typeSpec.namespaceIdx != 0 {
 		return libpf.Intern(fmt.Sprintf("%s.%s.%s",
-			pi.strings[typeSpec.namespaceIdx],
+			lookup(typeSpec.namespaceIdx),
 			typeName, methodName))
 	}
 	return libpf.Intern(fmt.Sprintf("%s.%s", typeName, methodName))
 }
 
-func (pi *peInfo) resolveR2RMethodName(pcRVA uint32) libpf.String {
+func (pi *peInfo) resolveR2RMethodName(pcRVA uint32,
+	rm remotememory.RemoteMemory, stringsHeapAddr uint64) libpf.String {
 	idx, ok := slices.BinarySearchFunc(pi.methodSpecs, pcRVA<<1,
 		func(methodspec peMethodSpec, pcRVA uint32) int {
 			if pcRVA < methodspec.startRVA {
@@ -1174,7 +1219,7 @@ func (pi *peInfo) resolveR2RMethodName(pcRVA uint32) libpf.String {
 	if !ok {
 		idx--
 	}
-	return pi.resolveMethodName(uint32(idx + 1))
+	return pi.resolveMethodName(uint32(idx+1), rm, stringsHeapAddr)
 }
 
 func (pi *peInfo) parse(r io.ReaderAt) error {

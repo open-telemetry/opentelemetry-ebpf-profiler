@@ -114,6 +114,15 @@ type dotnetMapping struct {
 	info       *peInfo
 }
 
+// stringsHeapEntry is the value stored in dotnetInstance.stringsHeapAddrByPE.
+// addr is the absolute process address of the PE's #Strings heap. gen is the
+// SynchronizeMappings generation at which addr was last written, used to detect
+// and prune entries for PEs that are no longer mapped.
+type stringsHeapEntry struct {
+	addr uint64
+	gen  uint64
+}
+
 type dotnetRangeSection struct {
 	prefixes []lpm.Prefix
 }
@@ -151,6 +160,19 @@ type dotnetInstance struct {
 	// moduleToPEInfo maps Module* to it's peInfo. Since a dotnet instance will have
 	// limited number of PE files mapped in, this is a map instead of a LRU.
 	moduleToPEInfo map[libpf.Address]*peInfo
+
+	// stringsHeapAddrByPE maps a peInfo (shared via globalPeCache) to the absolute
+	// process address of its #Strings heap in this process. The map is allocated
+	// once and reused across SynchronizeMappings calls: each entry is stamped
+	// with syncGen on touch, and entries not stamped this run are pruned. This
+	// avoids allocating a fresh map per sync, which fires often even when the
+	// set of loaded DLLs is stable.
+	stringsHeapAddrByPE map[*peInfo]stringsHeapEntry
+
+	// syncGen is incremented on every SynchronizeMappings call. Entries in
+	// stringsHeapAddrByPE carry the generation at which they were last written;
+	// any entry whose gen != syncGen at the end of the sync is stale.
+	syncGen uint64
 
 	addrToMethod *freelru.LRU[libpf.Address, *dotnetMethod]
 }
@@ -392,6 +414,20 @@ func (i *dotnetInstance) walkRangeSectionMap(ebpf interpreter.EbpfHandler, pid l
 	return err
 }
 
+// resolveStringsHeapAddr returns the absolute process address of the #Strings
+// heap when m covers the heap's file offset, or 0 if it does not. The translation
+// uses the kernel's file-to-VA relationship (m.Vaddr maps to m.FileOffset in the
+// backing file), which works uniformly for image-loaded PEs and 1:1 file mmaps
+// without distinguishing the two layouts.
+func resolveStringsHeapAddr(pi *peInfo, m *process.RawMapping) uint64 {
+	heapOff := uint64(pi.stringsHeapFileOffset)
+	heapEnd := heapOff + uint64(pi.stringsHeapSize)
+	if heapOff < m.FileOffset || heapEnd > m.FileOffset+m.Length {
+		return 0
+	}
+	return m.Vaddr + heapOff - m.FileOffset
+}
+
 func (i *dotnetInstance) getPEInfoByAddress(addressInModule uint64) (*peInfo, error) {
 	idx, ok := slices.BinarySearchFunc(i.mappings, addressInModule,
 		func(m dotnetMapping, addr uint64) int {
@@ -589,8 +625,16 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			cdac.dacTable.VirtualCallStubManagerManager)
 	}
 
-	// Collect PE files
+	// Collect PE files. The set of loaded DLLs is typically stable across
+	// syncs, so reuse stringsHeapAddrByPE across calls: bump syncGen, stamp
+	// touched entries, and prune any that weren't stamped this run.
 	dotnetMappings := []dotnetMapping{}
+	i.syncGen++
+	if i.stringsHeapAddrByPE == nil {
+		i.stringsHeapAddrByPE = make(map[*peInfo]stringsHeapEntry)
+	}
+	assigned := 0
+	stringsResolved := false
 	var prevKey util.OnDiskFileIdentifier
 	var prevMaxVA uint64
 	for idx := range mappings {
@@ -605,10 +649,25 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 
 		// Does this extend the previous mapping
 		if prevKey == m.GetOnDiskFileIdentifier() && m.Vaddr < prevMaxVA {
-			dotnetMappings[len(dotnetMappings)-1].end = m.Vaddr + m.Length
+			last := &dotnetMappings[len(dotnetMappings)-1]
+			last.end = m.Vaddr + m.Length
+			// Sections of an image-loaded PE arrive as separate RawMappings; the
+			// #Strings heap typically lives in a later section than the first.
+			if !stringsResolved {
+				stringsHeapAddr := resolveStringsHeapAddr(last.info, m)
+				i.stringsHeapAddrByPE[last.info] = stringsHeapEntry{
+					addr: stringsHeapAddr,
+					gen:  i.syncGen,
+				}
+				assigned++
+				if stringsHeapAddr != 0 {
+					stringsResolved = true
+				}
+			}
 			continue
 		}
 		prevKey = m.GetOnDiskFileIdentifier()
+		stringsResolved = false
 
 		// Inspect the PE
 		info := globalPeCache.Get(pr, m)
@@ -629,7 +688,26 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			end:   m.Vaddr + m.Length,
 			info:  info,
 		})
+		stringsHeapAddr := resolveStringsHeapAddr(info, m)
+		i.stringsHeapAddrByPE[info] = stringsHeapEntry{
+			addr: stringsHeapAddr,
+			gen:  i.syncGen,
+		}
+		assigned++
+		if stringsHeapAddr != 0 {
+			stringsResolved = true
+		}
 		prevMaxVA = m.Vaddr + uint64(info.sizeOfImage)
+	}
+
+	// Prune entries for PEs no longer present. In the steady state the set of
+	// loaded DLLs is unchanged so len(map) == assigned and we skip the walk.
+	if len(i.stringsHeapAddrByPE) > assigned {
+		for pe, e := range i.stringsHeapAddrByPE {
+			if e.gen != i.syncGen {
+				delete(i.stringsHeapAddrByPE, pe)
+			}
+		}
 	}
 
 	// mappings are in sorted order
@@ -750,9 +828,10 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		frames.Append(&libpf.Frame{
 			Type:            libpf.DotnetFrame,
 			AddressOrLineno: libpf.AddressOrLineno(pcOffset),
-			FunctionName:    module.resolveR2RMethodName(pcOffset),
-			SourceFile:      module.simpleName,
-			Mapping:         module.mapping,
+			FunctionName: module.resolveR2RMethodName(pcOffset, i.rm,
+				i.stringsHeapAddrByPE[module].addr),
+			SourceFile: module.simpleName,
+			Mapping:    module.mapping,
 		})
 	case codeJIT:
 		// JITted frame in anonymous mapping
@@ -774,7 +853,8 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 		//          pointing to CALL instruction if the debug info was accurate.
 		lineID := libpf.AddressOrLineno(0xf0000000+method.index)<<32 +
 			libpf.AddressOrLineno(ilOffset)
-		methodName := method.module.resolveMethodName(method.index)
+		methodName := method.module.resolveMethodName(method.index, i.rm,
+			i.stringsHeapAddrByPE[method.module].addr)
 		frames.Append(&libpf.Frame{
 			Type:            libpf.DotnetFrame,
 			AddressOrLineno: lineID,
