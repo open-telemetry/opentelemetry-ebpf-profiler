@@ -433,7 +433,10 @@ func (pp *peParser) parseOptionalHeader() error {
 }
 
 // rvaToFileOffset converts a Relative Virtual Address into a file offset by
-// locating the PE section that contains the address.
+// locating the PE section that contains the address. The file offset is the
+// only address form that resolves consistently across both image-loaded PEs
+// (CoreCLR maps sections at imageBase+RVA) and IL-only DLLs (1:1 file mmap,
+// where the OS does not perform section relocation, so RVA != process offset).
 func (pp *peParser) rvaToFileOffset(rva uint32) (uint32, bool) {
 	for _, s := range pp.sections {
 		if rva >= s.VirtualAddress && rva < s.VirtualAddress+s.VirtualSize {
@@ -603,11 +606,16 @@ func (pp *peParser) parseCLI() error {
 		case "#Strings":
 			// ECMA-335 II.24.2.3 #Strings heap
 			pp.dotnetStrings = io.NewSectionReader(r, int64(hdr.Offset), int64(hdr.Size))
-			heapVA := cliHeader.MetaData.VirtualAddress + hdr.Offset
-			heapFileOffset, ok := pp.rvaToFileOffset(heapVA)
+			heapRVA := cliHeader.MetaData.VirtualAddress + hdr.Offset
+			// Persist the heap as a file offset, not an RVA: for IL-only DLLs
+			// the file is mmap'd 1:1 and RVAs do not correspond to process
+			// offsets. The file offset combined with the kernel's mapping
+			// (Vaddr, FileOffset) yields the process VA uniformly in
+			// resolveStringsHeapAddr.
+			heapFileOffset, ok := pp.rvaToFileOffset(heapRVA)
 			if !ok {
 				return fmt.Errorf("unable to locate #Strings heap section for RVA %#x",
-					heapVA)
+					heapRVA)
 			}
 			pp.info.stringsHeapFileOffset = heapFileOffset
 			pp.info.stringsHeapSize = hdr.Size
