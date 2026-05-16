@@ -630,9 +630,6 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	// touched entries, and prune any that weren't stamped this run.
 	dotnetMappings := []dotnetMapping{}
 	i.syncGen++
-	if i.stringsHeapAddrByPE == nil {
-		i.stringsHeapAddrByPE = make(map[*peInfo]stringsHeapEntry)
-	}
 	assigned := 0
 	stringsResolved := false
 	var prevKey util.OnDiskFileIdentifier
@@ -655,13 +652,13 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			// #Strings heap typically lives in a later section than the first.
 			if !stringsResolved {
 				stringsHeapAddr := resolveStringsHeapAddr(last.info, m)
-				i.stringsHeapAddrByPE[last.info] = stringsHeapEntry{
-					addr: stringsHeapAddr,
-					gen:  i.syncGen,
-				}
-				assigned++
 				if stringsHeapAddr != 0 {
 					stringsResolved = true
+					i.stringsHeapAddrByPE[last.info] = stringsHeapEntry{
+						addr: stringsHeapAddr,
+						gen:  i.syncGen,
+					}
+					assigned++
 				}
 			}
 			continue
@@ -689,13 +686,13 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			info:  info,
 		})
 		stringsHeapAddr := resolveStringsHeapAddr(info, m)
-		i.stringsHeapAddrByPE[info] = stringsHeapEntry{
-			addr: stringsHeapAddr,
-			gen:  i.syncGen,
-		}
-		assigned++
 		if stringsHeapAddr != 0 {
 			stringsResolved = true
+			i.stringsHeapAddrByPE[info] = stringsHeapEntry{
+				addr: stringsHeapAddr,
+				gen:  i.syncGen,
+			}
+			assigned++
 		}
 		prevMaxVA = m.Vaddr + uint64(info.sizeOfImage)
 	}
