@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -148,6 +149,14 @@ type dotnetInstance struct {
 	thunkHeapStubManagerPtr          libpf.Address
 	delegateInvokeStubManagerPtr     libpf.Address
 	virtualCallStubManagerManagerPtr libpf.Address
+
+	// mu guards mappings, stringsHeapAddrByPE and moduleToPEInfo against the
+	// SynchronizeMappings <> Symbolize race. SynchronizeMappings runs on the
+	// processPIDEvents goroutine without pm.mu held, while Symbolize runs under
+	// pm.mu - so the two paths are concurrent and would otherwise race on map
+	// writes (a fatal runtime panic) and slice rewrites. Symbolize takes RLock;
+	// SynchronizeMappings takes Lock.
+	mu sync.RWMutex
 
 	// mappings contains the PE mappings to process memory space. Multiple individual
 	// consecutive process.RawMappings may be merged to one mapping per PE file.
@@ -596,6 +605,11 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		return err
 	}
 
+	// Lock after GetOrInit so first-time remote reads don't block Symbolize;
+	// GetOrInit is itself synchronized and touches no per-instance state.
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
 	// find pointer to codeRangeList if needed
 	vms := &cdac.Types
 	if i.codeRangeListPtr == 0 {
@@ -802,6 +816,13 @@ func (i *dotnetInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ l
 	if !ef.Type().IsInterpType(libpf.Dotnet) {
 		return interpreter.ErrMismatchInterpreterType
 	}
+
+	// RLock for the duration: reads mappings/stringsHeapAddrByPE and (on cache
+	// miss) writes moduleToPEInfo. Concurrent Symbolize calls are serialized
+	// by pm.mu, so the write-under-RLock is safe - only SynchronizeMappings
+	// needs to be excluded.
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 
 	sfCounter := successfailurecounter.New(&i.successCount, &i.failCount)
 	defer sfCounter.DefaultToFailure()
