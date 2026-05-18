@@ -76,13 +76,13 @@ func (r *Reader) Tell() int64 {
 }
 
 // fill populates the internal array from the source.
-// 'preserve' allows keeping bytes at the end of the current buffer (for split-pattern searching).
-func (r *Reader) fill(preserve int) error {
+func (r *Reader) fill() error {
 	if r.off >= r.limit {
 		return io.EOF
 	}
 
-	// Move preserved bytes to the start of the buffer
+	// Move unconsumed bytes to the start of the buffer
+	preserve := r.size - r.pos
 	if preserve > 0 && r.pos > 0 {
 		copy(r.buf[:preserve], r.buf[r.pos:r.pos+preserve])
 	}
@@ -140,7 +140,7 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 		}
 
 		// 4. Small read remaining: Fill internal buffer and loop again.
-		if err := r.fill(0); err != nil {
+		if err := r.fill(); err != nil {
 			if n > 0 {
 				return n, nil
 			}
@@ -153,7 +153,7 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 // ReadByte reads and returns a single byte.
 func (r *Reader) ReadByte() (byte, error) {
 	if r.pos >= r.size {
-		if err := r.fill(0); err != nil {
+		if err := r.fill(); err != nil {
 			return 0, err
 		}
 	}
@@ -169,14 +169,11 @@ func (r *Reader) Discard(n int) (discarded int, err error) {
 	}
 	for discarded < n {
 		if r.pos >= r.size {
-			if err = r.fill(0); err != nil {
+			if err = r.fill(); err != nil {
 				return discarded, err
 			}
 		}
-		partial := r.size - r.pos
-		if partial > n-discarded {
-			partial = n - discarded
-		}
+		partial := min(r.size-r.pos, n-discarded)
 		r.pos += partial
 		discarded += partial
 	}
@@ -205,14 +202,14 @@ func (r *Reader) ReadSlice(delim byte) ([]byte, error) {
 			return r.buf[:], errors.New("buffer full without delimiter")
 		}
 
-		preserve := r.size - r.pos
-		if err := r.fill(preserve); err != nil {
+		if err := r.fill(); err != nil {
 			return nil, err
 		}
 	}
 }
 
 // ReadString reads until the first occurrence of delim and returns a string.
+// The returned string points to the internal buffer and is invalid after the next read.
 func (r *Reader) ReadString(delim byte) (string, error) {
 	slice, err := r.ReadSlice(delim)
 	return pfunsafe.ToString(slice), err
@@ -235,15 +232,10 @@ func (r *Reader) SearchSlice(pattern []byte) (int64, error) {
 			return matchStart, nil
 		}
 
-		// Pattern not found; refill while preserving (plen-1) bytes
-		// to catch patterns split across buffer boundaries.
-		preserve := 0
-		if r.size-r.pos >= plen {
-			preserve = plen - 1
-			r.pos = r.size - preserve
-		}
-
-		if err := r.fill(preserve); err != nil {
+		// Pattern not found; discard unmatched data, but keep up to (plen-1)
+		// bytes to catch patterns split across buffer boundaries.
+		r.pos = r.size - min(r.size-r.pos, plen-1)
+		if err := r.fill(); err != nil {
 			r.pos = r.size
 			return -1, err
 		}
