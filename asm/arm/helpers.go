@@ -156,11 +156,19 @@ func DecodeImmediate(arg aa.Arg) (int64, bool) {
 			return int64(reg - aa.X0), true
 		}
 
-		// Otherwise all of the strings end with a ], so we just parse
-		// the string before that.
+		// For AddrOffset/AddrPreIndex the format is "[Xn, #imm]" or "[Xn, #imm]!",
+		// so "]" is present in fields[1].
+		// For AddrPostIndex the format is "[Xn], #imm", so "]" is only in fields[0].
 		endIndex := strings.Index(fields[1], "]")
+		var numStr string
+		if endIndex == -1 {
+			// Post-index case: no "]" in the offset field; parse to end of string.
+			numStr = strings.TrimSpace(fields[1][pos+1:])
+		} else {
+			numStr = fields[1][pos+1 : endIndex]
+		}
 		// The strings are base 10 encoded
-		out, err := strconv.ParseInt(fields[1][pos+1:endIndex], 10, 64)
+		out, err := strconv.ParseInt(numStr, 10, 64)
 		if err != nil {
 			return 0, false
 		}
