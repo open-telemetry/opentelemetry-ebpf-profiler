@@ -28,6 +28,10 @@ import (
 )
 
 var (
+	allCPUs = []int{}
+)
+
+var (
 	//go:embed pprof_1_23
 	pprof_1_23 []byte
 
@@ -113,7 +117,7 @@ func Test_Golabels(t *testing.T) {
 			defer trc.Close()
 
 			trc.StartPIDEventProcessor(ctx)
-			require.NoError(t, trc.AttachTracer())
+			require.NoError(t, trc.AttachTracer(allCPUs))
 
 			t.Log("Attached tracer program")
 			require.NoError(t, trc.EnableProfiling())
