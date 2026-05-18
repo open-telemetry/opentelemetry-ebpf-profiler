@@ -1162,6 +1162,7 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 				Name:    libpf.SymbolName(name),
 				Address: libpf.SymbolValue(sym.Value),
 				Size:    sym.Size,
+				Type:    libpf.SymbolType(sym.Info & 0xf),
 			}) {
 				break
 			}

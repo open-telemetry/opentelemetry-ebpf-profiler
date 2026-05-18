@@ -35,6 +35,13 @@ var tracersTestsFail = []struct {
 	{"foo"},
 }
 
+func TestParseAllPlusExplicitSymtab(t *testing.T) {
+	include, err := Parse("all,symtab")
+	require.NoError(t, err)
+	require.True(t, include.Has(SymtabTracer))
+	require.True(t, include.Has(GoTracer), "all should still enable other tracers")
+}
+
 func TestParseTracers(t *testing.T) {
 	for _, tt := range tracersTestsOK {
 		in := tt.in
@@ -44,6 +51,11 @@ func TestParseTracers(t *testing.T) {
 
 			if tt.expectedTracers == nil {
 				for tracer := range maxTracers {
+					if slices.Contains(excludedTracers, tracer) {
+						require.False(t, include.Has(tracer),
+							"%s must not be enabled by 'all'", tracer.String())
+						continue
+					}
 					if availableOnArch(tracer) {
 						require.True(t, include.Has(tracer))
 					} else {

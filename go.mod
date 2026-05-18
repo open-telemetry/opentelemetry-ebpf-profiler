@@ -18,6 +18,7 @@ require (
 	github.com/elastic/go-freelru v0.16.0
 	github.com/elastic/go-perf v0.0.0-20260224073651-af0ee0c731b7
 	github.com/google/uuid v1.6.0
+	github.com/ianlancetaylor/demangle v0.0.0-20260502231528-600b0e508b8c
 	github.com/klauspost/compress v1.18.6
 	github.com/mdlayher/kobject v0.0.0-20200520190114-19ca17470d7d
 	github.com/minio/sha256-simd v1.0.1
