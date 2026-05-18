@@ -18,6 +18,7 @@ type Config struct {
 	DisableTLS    bool
 	PprofAddr     string
 	Version       bool
+	TargetCPUIDs  []int
 
 	ExecutableReporter reporter.ExecutableReporter
 	OnShutdown         func() error
