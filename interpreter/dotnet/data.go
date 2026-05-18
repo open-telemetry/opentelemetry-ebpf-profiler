@@ -219,12 +219,13 @@ func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias li
 	}
 
 	return &dotnetInstance{
-		d:              d,
-		rm:             rm,
-		bias:           bias,
-		ranges:         make(map[libpf.Address]dotnetRangeSection),
-		moduleToPEInfo: make(map[libpf.Address]*peInfo),
-		addrToMethod:   addrToMethod,
+		d:                   d,
+		rm:                  rm,
+		bias:                bias,
+		ranges:              make(map[libpf.Address]dotnetRangeSection),
+		moduleToPEInfo:      make(map[libpf.Address]*peInfo),
+		addrToMethod:        addrToMethod,
+		stringsHeapAddrByPE: make(map[*peInfo]stringsHeapEntry),
 	}, nil
 }
 
