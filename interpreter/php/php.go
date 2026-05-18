@@ -82,9 +82,15 @@ type phpData struct {
 		}
 		// https://github.com/php/php-src/blob/PHP-7.4/Zend/zend_compile.h#L483
 		zend_function struct {
-			common_type, common_funcname          uint8
-			op_array_filename, op_array_linestart uint
-			Sizeof                                uint
+			common_type, common_funcname uint8
+			common_scope                 uint
+			op_array_filename            uint
+			op_array_linestart           uint
+			Sizeof                       uint
+		}
+		// https://github.com/php/php-src/blob/PHP-8.0/Zend/zend.h#L107
+		zend_class_entry struct {
+			name uint
 		}
 		// https://github.com/php/php-src/blob/PHP-7.4/Zend/zend_types.h#L235
 		zend_string struct {
@@ -333,6 +339,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.zend_execute_data.prev_execute_data = 48
 	vms.zend_function.common_type = 0
 	vms.zend_function.common_funcname = 8
+	vms.zend_function.common_scope = 16
 	vms.zend_function.op_array_filename = 128
 	vms.zend_function.op_array_linestart = 136
 	// Note: the sizeof here isn't actually the sizeof the
@@ -341,6 +348,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// need at most 168 bytes.
 	vms.zend_function.Sizeof = 168
 	vms.zend_string.val = 24
+	vms.zend_class_entry.name = 8
 	vms.zend_op.lineno = 24
 	switch {
 	case version >= phpVersion(8, 4, 0):
