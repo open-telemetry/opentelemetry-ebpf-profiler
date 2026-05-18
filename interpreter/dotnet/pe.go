@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -684,8 +685,10 @@ func (pi *peInfo) lookupString(rm remotememory.RemoteMemory, stringsHeapAddr uin
 		return libpf.NullString
 	}
 	if s, ok := pi.stringsCache.Get(offs); ok {
+		globalPeCache.stringsCacheHit.Add(1)
 		return s
 	}
+	globalPeCache.stringsCacheMiss.Add(1)
 	s := libpf.Intern(rm.String(libpf.Address(stringsHeapAddr + uint64(offs))))
 	if s == libpf.NullString {
 		return s
@@ -1239,6 +1242,11 @@ type peCache struct {
 	peInfoCacheHit  atomic.Uint64
 	peInfoCacheMiss atomic.Uint64
 
+	// stringsCacheHit / stringsCacheMiss aggregate hit/miss counts across the
+	// per-peInfo #Strings heap caches.
+	stringsCacheHit  atomic.Uint64
+	stringsCacheMiss atomic.Uint64
+
 	// elfInfoCache provides a cache to quickly retrieve the PE info and fileID for a particular
 	// executable. It caches results based on iNode number and device ID. Locked LRU.
 	peInfoCache *freelru.LRU[util.OnDiskFileIdentifier, *peInfo]
@@ -1303,4 +1311,28 @@ var globalPeCache peCache
 
 func init() {
 	globalPeCache.init()
+}
+
+// GetAndResetMetrics returns the current counters of the global PE info cache
+// and resets them to zero. It is intended to be called once per metrics
+// collection interval by the process manager.
+func GetAndResetMetrics() []metrics.Metric {
+	return []metrics.Metric{
+		{
+			ID:    metrics.IDDotnetPEInfoCacheHit,
+			Value: metrics.MetricValue(globalPeCache.peInfoCacheHit.Swap(0)),
+		},
+		{
+			ID:    metrics.IDDotnetPEInfoCacheMiss,
+			Value: metrics.MetricValue(globalPeCache.peInfoCacheMiss.Swap(0)),
+		},
+		{
+			ID:    metrics.IDDotnetStringsCacheHit,
+			Value: metrics.MetricValue(globalPeCache.stringsCacheHit.Swap(0)),
+		},
+		{
+			ID:    metrics.IDDotnetStringsCacheMiss,
+			Value: metrics.MetricValue(globalPeCache.stringsCacheMiss.Swap(0)),
+		},
+	}
 }

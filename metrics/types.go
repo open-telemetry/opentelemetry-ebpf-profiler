@@ -22,6 +22,12 @@ type Metric struct {
 // processing it further.
 type Summary map[MetricID]MetricValue
 
+func (s Summary) Add(metrics []Metric) {
+	for _, metric := range metrics {
+		s[metric.ID] = metric.Value
+	}
+}
+
 type MetricDefinition struct {
 	ID          MetricID   `json:"id"`
 	Type        MetricType `json:"type"`
