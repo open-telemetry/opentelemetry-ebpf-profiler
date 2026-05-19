@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
@@ -155,7 +156,7 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 		pm.mu.RLock()
 		defer pm.mu.RUnlock()
 
-		summary := make(map[metrics.MetricID]metrics.MetricValue)
+		summary := make(metrics.Summary)
 
 		for pid := range pm.interpreters {
 			for addr, ii := range pm.interpreters[pid] {
@@ -182,10 +183,8 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 		summary[metrics.IDTotalProcParseUsec] = metrics.MetricValue(pm.mappingStats.totalProcParseUsec.Swap(0))
 		summary[metrics.IDErrProcParse] = metrics.MetricValue(pm.mappingStats.numProcParseErrors.Swap(0))
 
-		mapsMetrics := pm.ebpf.CollectMetrics()
-		for _, metric := range mapsMetrics {
-			summary[metric.ID] = metric.Value
-		}
+		summary.Add(dotnet.GetAndResetMetrics())
+		summary.Add(pm.ebpf.CollectMetrics())
 
 		pm.eim.UpdateMetricSummary(summary)
 		pm.metricsAddSlice(metricSummaryToSlice(summary))
