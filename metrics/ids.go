@@ -647,9 +647,21 @@ const (
 	// Number of failures to read TLS variables via the DTV
 	IDUnwindErrBadDTVRead = 286
 
+	// Number of cache hits for dotnet PE information
+	IDDotnetPEInfoCacheHit = 287
+
+	// Number of cache misses for dotnet PE information
+	IDDotnetPEInfoCacheMiss = 288
+
+	// Number of cache hits for dotnet #Strings heap lookups
+	IDDotnetStringsCacheHit = 289
+
+	// Number of cache misses for dotnet #Strings heap lookups
+	IDDotnetStringsCacheMiss = 290
+
 	// Number of bpf_ringbuf_output failures when sending trace events
-	IDBPFRingbufOutputErr = 287
+	IDBPFRingbufOutputErr = 291
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 288
+	IDMax = 292
 )

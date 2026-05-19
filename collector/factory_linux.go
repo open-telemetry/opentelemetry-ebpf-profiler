@@ -7,18 +7,49 @@ package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"time"
 
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/collector/receiver"
 	"go.opentelemetry.io/collector/receiver/xreceiver"
+	"go.uber.org/zap/exp/zapslog"
+
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/collector/internal"
+	"go.opentelemetry.io/ebpf-profiler/collector/internal/metadata"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.uber.org/zap/exp/zapslog"
 )
+
+var errInvalidConfig = errors.New("invalid config")
+
+// NewFactory creates a factory for the receiver.
+func NewFactory() receiver.Factory {
+	return xreceiver.NewFactory(
+		metadata.Type,
+		defaultConfig,
+		xreceiver.WithProfiles(BuildProfilesReceiver(), metadata.ProfilesStability))
+}
+
+func defaultConfig() component.Config {
+	return &config.Config{
+		ReporterInterval:       5 * time.Second,
+		ReporterJitter:         0.2,
+		MonitorInterval:        5 * time.Second,
+		SamplesPerSecond:       20,
+		ProbabilisticInterval:  1 * time.Minute,
+		ProbabilisticThreshold: 100,
+		Tracers:                "all",
+		ClockSyncInterval:      3 * time.Minute,
+		MaxGRPCRetries:         5,
+		MaxRPCMsgSize:          32 << 20, // 32 MiB
+		BPFFSRoot:              "/sys/fs/bpf/",
+		ErrorMode:              config.PropagateError,
+	}
+}
 
 func BuildProfilesReceiver(options ...Option) xreceiver.CreateProfilesFunc {
 	return func(ctx context.Context,

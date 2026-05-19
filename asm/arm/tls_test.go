@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	aa "golang.org/x/arch/arm64/arm64asm"
 )
 
 func TestExtractTLSOffset(t *testing.T) {
@@ -146,4 +147,68 @@ func TestExtractTLSOffset(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDecodeImmediatePostIndex(t *testing.T) {
+	decodeOneMem := func(t *testing.T, code []byte) aa.MemImmediate {
+		t.Helper()
+		inst, err := aa.Decode(code)
+		require.NoError(t, err)
+		require.Equal(t, aa.LDR, inst.Op)
+		mem, ok := inst.Args[1].(aa.MemImmediate)
+		require.True(t, ok, "expected MemImmediate operand")
+		return mem
+	}
+
+	testdata := []struct {
+		name    string
+		code    []byte
+		wantVal int64
+		wantOK  bool
+	}{
+		{
+			// LDR X0, [X1], #8
+			name:    "post-index positive offset",
+			code:    []byte{0x20, 0x84, 0x40, 0xF8},
+			wantVal: 8,
+			wantOK:  true,
+		},
+		{
+			// LDR X0, [X1, #32]
+			name:    "offset mode",
+			code:    []byte{0x20, 0x10, 0x40, 0xF9},
+			wantVal: 32,
+			wantOK:  true,
+		},
+		{
+			// LDR X0, [X1, #16]!
+			name:    "pre-index mode",
+			code:    []byte{0x20, 0x0C, 0x41, 0xF8},
+			wantVal: 16,
+			wantOK:  true,
+		},
+	}
+
+	for _, td := range testdata {
+		t.Run(td.name, func(t *testing.T) {
+			mem := decodeOneMem(t, td.code)
+			// Must not panic.
+			val, ok := DecodeImmediate(mem)
+			require.Equal(t, td.wantOK, ok)
+			if td.wantOK {
+				assert.Equal(t, td.wantVal, val)
+			}
+		})
+	}
+}
+
+func TestExtractTLSOffsetPostIndexLDR(t *testing.T) {
+	code := []byte{
+		0x41, 0xd0, 0x3b, 0xd5, // MRS X1, TPIDR_EL0
+		0x20, 0x84, 0x40, 0xf8, // LDR X0, [X1], #8  (post-index — must not panic)
+		0xc0, 0x03, 0x5f, 0xd6, // RET
+	}
+	offset, err := ExtractTLSOffset(code, 0x1000, nil)
+	require.NoError(t, err)
+	assert.Equal(t, int32(8), offset)
 }

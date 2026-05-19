@@ -2099,10 +2099,38 @@
     "id": 286
   },
   {
+    "description": "Number of cache hits for dotnet PE information",
+    "type": "counter",
+    "name": "DotnetPEInfoCacheHit",
+    "field": "agent.dotnet.pe_info_cache.hits",
+    "id": 287
+  },
+  {
+    "description": "Number of cache misses for dotnet PE information",
+    "type": "counter",
+    "name": "DotnetPEInfoCacheMiss",
+    "field": "agent.dotnet.pe_info_cache.misses",
+    "id": 288
+  },
+  {
+    "description": "Number of cache hits for dotnet #Strings heap lookups",
+    "type": "counter",
+    "name": "DotnetStringsCacheHit",
+    "field": "agent.dotnet.strings_cache.hits",
+    "id": 289
+  },
+  {
+    "description": "Number of cache misses for dotnet #Strings heap lookups",
+    "type": "counter",
+    "name": "DotnetStringsCacheMiss",
+    "field": "agent.dotnet.strings_cache.misses",
+    "id": 290
+  },
+  {
     "description": "Number of bpf_ringbuf_output failures when sending trace events",
     "type": "counter",
     "name": "BPFRingbufOutputErr",
     "field": "bpf.errors.ringbuf_output",
-    "id": 287
+    "id": 291
   }
 ]

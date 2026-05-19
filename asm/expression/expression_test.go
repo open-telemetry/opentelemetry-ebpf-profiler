@@ -113,4 +113,23 @@ func TestExpression(t *testing.T) {
 		v1 := Named("v1")
 		require.Equal(t, ZeroExtend(v1, 8), ZeroExtend(ZeroExtend(v1, 8), 8))
 	})
+
+	t.Run("match must not sort operand slices in place", func(t *testing.T) {
+		n1 := Named("n1")
+		n2 := Named("n2")
+		m := Mem8(Named("m"))
+
+		pattern := newOp(opAdd, operands{n1, n2, m})
+		expr := newOp(opAdd, operands{n2, n1, m})
+
+		wantPattern := pattern.DebugString()
+		wantExpr := expr.DebugString()
+
+		_ = expr.Match(pattern)
+
+		require.Equal(t, wantPattern, pattern.DebugString(),
+			"Match must not sort the pattern's operand slice in-place")
+		require.Equal(t, wantExpr, expr.DebugString(),
+			"Match must not sort the expression's operand slice in-place")
+	})
 }

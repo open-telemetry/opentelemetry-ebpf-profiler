@@ -20,13 +20,9 @@ import (
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
-)
-
-const (
-	// maxNotesSection is the maximum section size for notes.
-	maxNotesSection = 16 * 1024 * 1024
 )
 
 // CoredumpProcess implements Process interface to ELF coredumps.
@@ -178,11 +174,10 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 		if p.ProgHeader.Type != elf.PT_NOTE {
 			continue
 		}
-		rdr, err := p.DataReader(maxNotesSection)
-		if err != nil {
-			return nil, err
-		}
+
+		rdr := pfbufio.NewReader(f.Underlying(), int64(p.Off), int64(p.Filesz))
 		var note Note64
+		var err error
 		for {
 			// Read the note header (name and size lengths), followed by reading
 			// their contents. This code advances the position in 'rdr' and should
@@ -225,6 +220,8 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 				break
 			}
 		}
+		pfbufio.PutReader(rdr)
+
 		if err != io.EOF {
 			return nil, err
 		}
