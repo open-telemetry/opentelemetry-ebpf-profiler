@@ -25,15 +25,16 @@ type Expression interface {
 type operands []Expression
 
 func (os *operands) Match(other operands) bool {
-	if len(*os) != len(other) {
+	osLen := len(*os)
+	if osLen != len(other) {
 		return false
 	}
 	// Sort copies, never the originals.  Sorting in-place mutates the
 	// expression tree, causing non-deterministic results when the same
 	// expression or pattern is reused across multiple Match() calls.
-	osCopy := make(operands, len(*os))
+	osCopy := make(operands, osLen)
 	copy(osCopy, *os)
-	otherCopy := make(operands, len(other))
+	otherCopy := make(operands, osLen)
 	copy(otherCopy, other)
 	sort.Sort(sortedOperands(osCopy))
 	sort.Sort(sortedOperands(otherCopy))
