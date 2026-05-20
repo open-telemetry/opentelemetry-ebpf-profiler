@@ -5,6 +5,7 @@ package dotnet // import "go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"debug/pe"
 	"encoding/binary"
 	"errors"
@@ -36,12 +37,51 @@ const (
 	// TTL of entries in the LRU cache holding the executables' PE information.
 	peInfoCacheTTL = 6 * time.Hour
 
+	// Maximum size of the LRU cache holding open/parse errors per (dev,inode).
+	// Errors are rare and intentionally not promoted to the content-hash tier,
+	// so this can be much smaller than peInfoCacheSize.
+	peInfoErrCacheSize = 1024
+
 	// Maximum size of the LRU cache holding strings from #Strings heap per PE.
 	peInfoStringsCacheSize = 1024
 
 	// TTL of entries in the LRU cache holding the .NET strings.
 	peInfoStringsCacheTTL = 1 * time.Hour
 )
+
+// peHash is a content-derived cache key for a dotnet PE file: SHA256 of the
+// first 4 KiB of the file, truncated to 16 bytes. ECMA-335 requires the PE
+// headers (DOS stub, NT headers, optional header, section table, CLI header
+// directory) to fit within the first 4 KiB for dotnet, so this prefix is
+// sufficient to distinguish content-distinct PE files in practice.
+//
+// We deliberately do not reuse libpf.FileID as the key. FileID also hashes
+// the 4 KiB trailer and the file length, costing a second random-access
+// read (and a stat) on every miss without improving discrimination for
+// dotnet PEs - the header prefix already does that, and the parser
+// immediately re-reads it from the page cache.
+//
+// We do not expect two dotnet PE files with distinct libpf.FileIDs to
+// collide on the same peHash. The 4 KiB prefix already covers the section
+// table (sizes and file offsets), so independent builds almost always
+// differ within it, and 128 bits of SHA256 makes accidental collisions
+// negligible at any plausible cache population.
+type peHash [16]byte
+
+// peHashFromHeader computes the cache key for a dotnet PE file from its
+// first up-to-4 KiB.
+func peHashFromHeader(hdr []byte) peHash {
+	sum := sha256.Sum256(hdr)
+	var k peHash
+	copy(k[:], sum[:16])
+	return k
+}
+
+// Hash32 is the freelru hash function. SHA256 output is uniformly random,
+// so the first 4 bytes are a good 32-bit hash with no further mixing.
+func (k peHash) Hash32() uint32 {
+	return binary.LittleEndian.Uint32(k[:4])
+}
 
 // OptionalHeader32 is the IMAGE_OPTIONAL_HEADER32 without its Magic or DataDirectory
 // https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-image_optional_header32
@@ -266,14 +306,13 @@ const (
 
 // peInfo is the information we need to cache from a Dotnet PE file for symbolization
 type peInfo struct {
-	err          error
-	lastModified int64
-	mapping      libpf.FrameMapping
-	simpleName   libpf.String
-	guid         string
-	typeSpecs    []peTypeSpec
-	methodSpecs  []peMethodSpec
-	sizeOfImage  uint32
+	err         error
+	mapping     libpf.FrameMapping
+	simpleName  libpf.String
+	guid        string
+	typeSpecs   []peTypeSpec
+	methodSpecs []peMethodSpec
+	sizeOfImage uint32
 
 	// stringsHeapFileOffset is the offset of the ECMA-335 II.24.2.3 #Strings heap
 	// in the on-disk PE file. The absolute process address is computed at attach
@@ -1237,72 +1276,112 @@ func (pi *peInfo) parse(r io.ReaderAt) error {
 	return nil
 }
 
+// peErrEntry caches a previously-observed open/parse error against the
+// (dev,inode,mtime) of the mapping that produced it. mtime invalidation lets
+// us retry once the broken file is replaced.
+type peErrEntry struct {
+	err          error
+	lastModified int64
+}
+
 type peCache struct {
-	// peInfoCacheHit
 	peInfoCacheHit  atomic.Uint64
 	peInfoCacheMiss atomic.Uint64
+
+	// peInfoErrCacheHit counts lookups served from the negative LRU (a known
+	// broken or missing file we are skipping). Tracked separately from
+	// peInfoCacheHit so broken-file avoidance is observable in isolation
+	// from successful PE info reuse.
+	peInfoErrCacheHit atomic.Uint64
 
 	// stringsCacheHit / stringsCacheMiss aggregate hit/miss counts across the
 	// per-peInfo #Strings heap caches.
 	stringsCacheHit  atomic.Uint64
 	stringsCacheMiss atomic.Uint64
 
-	// elfInfoCache provides a cache to quickly retrieve the PE info and fileID for a particular
-	// executable. It caches results based on iNode number and device ID. Locked LRU.
-	peInfoCache *freelru.LRU[util.OnDiskFileIdentifier, *peInfo]
+	// peInfoCache is keyed by the 4 KiB-header content hash, so identical
+	// PE content shares a single parsed *peInfo across processes — including
+	// across Kubernetes replicas where the per-container deviceID would
+	// otherwise produce distinct keys.
+	peInfoCache *freelru.LRU[peHash, *peInfo]
+
+	// peInfoErrCache memoizes open/parse failures per (dev,inode). Errors
+	// are kept per-container (not content-keyed) because a broken or
+	// missing file in one replica should not poison lookups elsewhere.
+	peInfoErrCache *freelru.LRU[util.OnDiskFileIdentifier, peErrEntry]
 }
 
 func (pc *peCache) init() {
-	peInfoCache, err := freelru.New[util.OnDiskFileIdentifier, *peInfo](peInfoCacheSize,
-		util.OnDiskFileIdentifier.Hash32)
+	peInfoCache, err := freelru.New[peHash, *peInfo](peInfoCacheSize, peHash.Hash32)
 	if err != nil {
 		panic(fmt.Errorf("unable to create peInfoCache: %v", err))
 	}
 	peInfoCache.SetLifetime(peInfoCacheTTL)
 	pc.peInfoCache = peInfoCache
+
+	peInfoErrCache, err := freelru.New[util.OnDiskFileIdentifier, peErrEntry](
+		peInfoErrCacheSize, util.OnDiskFileIdentifier.Hash32)
+	if err != nil {
+		panic(fmt.Errorf("unable to create peInfoErrCache: %v", err))
+	}
+	peInfoErrCache.SetLifetime(peInfoCacheTTL)
+	pc.peInfoErrCache = peInfoErrCache
 }
 
 func (pc *peCache) Get(pr process.Process, mapping *process.RawMapping) *peInfo {
-	key := mapping.GetOnDiskFileIdentifier()
+	odk := mapping.GetOnDiskFileIdentifier()
 	lastModified := pr.GetMappingFileLastModified(mapping)
-	if info, ok := pc.peInfoCache.Get(key); ok && info.lastModified == lastModified {
-		// Cached data ok
-		pc.peInfoCacheHit.Add(1)
-		return info
-	}
 
-	// Slow path, calculate all the data and update cache
-	pc.peInfoCacheMiss.Add(1)
+	if e, ok := pc.peInfoErrCache.Get(odk); ok && e.lastModified == lastModified {
+		pc.peInfoErrCacheHit.Add(1)
+		return &peInfo{err: e.err}
+	}
 
 	file, err := pr.OpenMappingFile(mapping)
 	if err != nil {
-		info := &peInfo{err: err}
 		if !errors.Is(err, os.ErrNotExist) {
-			pc.peInfoCache.Add(key, info)
+			pc.peInfoErrCache.Add(odk, peErrEntry{err, lastModified})
 		}
-		return info
+		return &peInfo{err: err}
 	}
 	defer file.Close()
+
+	// Hash the first 4 KiB of the file to derive a content-stable key.
+	// Dotnet requires all PE headers to fit in this prefix, so it captures
+	// every byte that distinguishes one DLL from another in practice. The
+	// page cache makes this read effectively free on repeat lookups, and
+	// the parser re-reading the same bytes hits the same cache.
+	var hdr [4096]byte
+	n, err := file.ReadAt(hdr[:], 0)
+	if err != nil && !errors.Is(err, io.EOF) {
+		pc.peInfoErrCache.Add(odk, peErrEntry{err, lastModified})
+		return &peInfo{err: err}
+	}
+	key := peHashFromHeader(hdr[:n])
+
+	if info, ok := pc.peInfoCache.Get(key); ok {
+		pc.peInfoCacheHit.Add(1)
+		return info
+	}
+	pc.peInfoCacheMiss.Add(1)
+
+	info := &peInfo{}
+	info.err = info.parse(file)
+	if info.err != nil {
+		pc.peInfoErrCache.Add(odk, peErrEntry{info.err, lastModified})
+		return info
+	}
 
 	fileID, err := pr.CalculateMappingFileID(mapping)
 	if err != nil {
 		return &peInfo{err: err}
 	}
-
-	info := &peInfo{
-		lastModified: lastModified,
-	}
-	info.err = info.parse(file)
-	if info.err == nil {
-		mf := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-			FileID:     fileID,
-			FileName:   libpf.Intern(path.Base(mapping.Path)),
-			GnuBuildID: info.guid,
-		})
-		info.mapping = libpf.NewFrameMapping(libpf.FrameMappingData{
-			File: mf,
-		})
-	}
+	mf := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+		FileID:     fileID,
+		FileName:   libpf.Intern(path.Base(mapping.Path)),
+		GnuBuildID: info.guid,
+	})
+	info.mapping = libpf.NewFrameMapping(libpf.FrameMappingData{File: mf})
 	pc.peInfoCache.Add(key, info)
 	return info
 }
@@ -1325,6 +1404,10 @@ func GetAndResetMetrics() []metrics.Metric {
 		{
 			ID:    metrics.IDDotnetPEInfoCacheMiss,
 			Value: metrics.MetricValue(globalPeCache.peInfoCacheMiss.Swap(0)),
+		},
+		{
+			ID:    metrics.IDDotnetPEInfoErrCacheHit,
+			Value: metrics.MetricValue(globalPeCache.peInfoErrCacheHit.Swap(0)),
 		},
 		{
 			ID:    metrics.IDDotnetStringsCacheHit,

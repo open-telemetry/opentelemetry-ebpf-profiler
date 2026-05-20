@@ -2132,5 +2132,12 @@
     "name": "BPFRingbufOutputErr",
     "field": "bpf.errors.ringbuf_output",
     "id": 291
+  },
+  {
+    "description": "Number of cache hits for the dotnet PE open/parse error LRU",
+    "type": "counter",
+    "name": "DotnetPEInfoErrCacheHit",
+    "field": "agent.dotnet.pe_info_err_cache.hits",
+    "id": 292
   }
 ]
