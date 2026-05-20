@@ -55,6 +55,11 @@ const (
 	BEAMFrame FrameType = support.FrameMarkerBEAM
 	// LuaJITFrame identifies the LuaJIT interpreter frames.
 	LuaJITFrame FrameType = support.FrameMarkerLuaJIT
+	// MemoryPayloadFrame is a synthetic frame attached by the user-space
+	// reporter to memory-origin traces. It carries the alloc/free counters
+	// for the trace as plain frame fields and is not produced by the eBPF
+	// unwinder. Reporters should not render these as stack locations.
+	MemoryPayloadFrame FrameType = support.FrameMarkerMemoryPayload
 )
 
 const (

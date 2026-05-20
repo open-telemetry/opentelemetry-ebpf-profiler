@@ -8,33 +8,37 @@
 #define OPTI_FRAMETYPES_H
 
 // Indicates that the interpreter/runtime this frame belongs to is unknown.
-#define FRAME_MARKER_UNKNOWN 0x0
+#define FRAME_MARKER_UNKNOWN        0x0
 // Indicates a Python frame
-#define FRAME_MARKER_PYTHON  0x1
+#define FRAME_MARKER_PYTHON         0x1
 // Indicates a PHP frame
-#define FRAME_MARKER_PHP     0x2
+#define FRAME_MARKER_PHP            0x2
 // Indicates a native frame
-#define FRAME_MARKER_NATIVE  0x3
+#define FRAME_MARKER_NATIVE         0x3
 // Indicates a kernel frame
-#define FRAME_MARKER_KERNEL  0x4
+#define FRAME_MARKER_KERNEL         0x4
 // Indicates a HotSpot frame
-#define FRAME_MARKER_HOTSPOT 0x5
+#define FRAME_MARKER_HOTSPOT        0x5
 // Indicates a Ruby frame
-#define FRAME_MARKER_RUBY    0x6
+#define FRAME_MARKER_RUBY           0x6
 // Indicates a Perl frame
-#define FRAME_MARKER_PERL    0x7
+#define FRAME_MARKER_PERL           0x7
 // Indicates a V8 frame
-#define FRAME_MARKER_V8      0x8
+#define FRAME_MARKER_V8             0x8
 // Indicates a PHP JIT frame
-#define FRAME_MARKER_PHP_JIT 0x9
+#define FRAME_MARKER_PHP_JIT        0x9
 // Indicates a Dotnet frame
-#define FRAME_MARKER_DOTNET  0xA
+#define FRAME_MARKER_DOTNET         0xA
 // Indicates a Go frame
-#define FRAME_MARKER_GO      0xB
+#define FRAME_MARKER_GO             0xB
 // Indicates a BEAM frame
-#define FRAME_MARKER_BEAM    0xC
+#define FRAME_MARKER_BEAM           0xC
 // Indicates a LuaJIT frame
-#define FRAME_MARKER_LUAJIT  0xD
+#define FRAME_MARKER_LUAJIT         0xD
+// Synthetic frame attached by the user-space reporter to a memory-origin
+// trace to carry the allocation payload (alloc/free counts and byte
+// totals). Not produced by the eBPF unwinder.
+#define FRAME_MARKER_MEMORY_PAYLOAD 0xE
 
 // Frame flags
 // Indicates that this frame is an error frame.

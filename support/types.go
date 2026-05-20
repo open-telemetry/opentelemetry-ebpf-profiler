@@ -11,20 +11,21 @@ import (
 )
 
 const (
-	FrameMarkerUnknown = 0x0
-	FrameMarkerPython  = 0x1
-	FrameMarkerNative  = 0x3
-	FrameMarkerPHP     = 0x2
-	FrameMarkerPHPJIT  = 0x9
-	FrameMarkerKernel  = 0x4
-	FrameMarkerHotSpot = 0x5
-	FrameMarkerRuby    = 0x6
-	FrameMarkerPerl    = 0x7
-	FrameMarkerV8      = 0x8
-	FrameMarkerDotnet  = 0xa
-	FrameMarkerLuaJIT  = 0xd
-	FrameMarkerBEAM    = 0xc
-	FrameMarkerGo      = 0xb
+	FrameMarkerUnknown       = 0x0
+	FrameMarkerPython        = 0x1
+	FrameMarkerNative        = 0x3
+	FrameMarkerPHP           = 0x2
+	FrameMarkerPHPJIT        = 0x9
+	FrameMarkerKernel        = 0x4
+	FrameMarkerHotSpot       = 0x5
+	FrameMarkerRuby          = 0x6
+	FrameMarkerPerl          = 0x7
+	FrameMarkerV8            = 0x8
+	FrameMarkerDotnet        = 0xa
+	FrameMarkerLuaJIT        = 0xd
+	FrameMarkerBEAM          = 0xc
+	FrameMarkerGo            = 0xb
+	FrameMarkerMemoryPayload = 0xe
 )
 
 const (

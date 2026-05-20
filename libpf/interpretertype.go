@@ -37,6 +37,10 @@ const (
 	Go InterpreterType = support.FrameMarkerGo
 	// BEAM identifies the BEAM interpreter.
 	BEAM InterpreterType = support.FrameMarkerBEAM
+	// MemoryPayload is the pseudo-interpreter that owns the synthetic frame
+	// reporters use to carry memory-origin payload (alloc/free counts and
+	// byte totals) inside a trace.
+	MemoryPayload InterpreterType = support.FrameMarkerMemoryPayload
 )
 
 // Pseudo-interpreters without a corresponding frame type.
@@ -64,20 +68,21 @@ var interpreterTypeToString = map[InterpreterType]string{
 	UnknownInterp: "unknown",
 	PHP:           "php",
 	// OTel SemConv does not differentiate between jitted code and interpreted code.
-	PHPJIT:   "php",
-	Python:   "cpython",
-	Native:   "native",
-	Kernel:   "kernel",
-	HotSpot:  "jvm",
-	Ruby:     "ruby",
-	Perl:     "perl",
-	V8:       "v8js",
-	Dotnet:   "dotnet",
-	BEAM:     "beam",
-	APMInt:   "apm-integration",
-	LuaJIT:   "luajit",
-	Go:       "go",
-	GoLabels: "go-labels",
+	PHPJIT:        "php",
+	Python:        "cpython",
+	Native:        "native",
+	Kernel:        "kernel",
+	HotSpot:       "jvm",
+	Ruby:          "ruby",
+	Perl:          "perl",
+	V8:            "v8js",
+	Dotnet:        "dotnet",
+	BEAM:          "beam",
+	APMInt:        "apm-integration",
+	LuaJIT:        "luajit",
+	Go:            "go",
+	GoLabels:      "go-labels",
+	MemoryPayload: "memory-payload",
 }
 
 var stringToInterpreterType = make(map[string]InterpreterType, len(interpreterTypeToString))
