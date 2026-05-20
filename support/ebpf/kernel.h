@@ -199,6 +199,14 @@ enum {
   // (other values omitted here)
 };
 
+/* BPF_FUNC_bpf_ringbuf_commit, BPF_FUNC_bpf_ringbuf_discard, and
+ * BPF_FUNC_bpf_ringbuf_output flags.
+ */
+enum {
+  BPF_RB_NO_WAKEUP    = (1ULL << 0),
+  BPF_RB_FORCE_WAKEUP = (1ULL << 1),
+};
+
 // BPF helper function IDs
 // https://github.com/torvalds/linux/blob/e8f897f4a/include/uapi/linux/bpf.h#L5683
 #define BPF_FUNC_map_lookup_elem                1

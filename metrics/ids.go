@@ -605,9 +605,6 @@ const (
 	// Number of times the stack delta provider succeeded to extract stack deltas
 	IDStackDeltaProviderSuccess = 271
 
-	// Number of lost trace events in the communication between kernel and user space (trace_events)
-	IDTraceEventLost = 272
-
 	// Number of times a trace event was received without data (trace_events)
 	IDTraceEventNoData = 273
 
@@ -662,6 +659,9 @@ const (
 	// Number of cache misses for dotnet #Strings heap lookups
 	IDDotnetStringsCacheMiss = 290
 
+	// Number of bpf_ringbuf_output failures when sending trace events
+	IDBPFRingbufOutputErr = 291
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 291
+	IDMax = 292
 )
