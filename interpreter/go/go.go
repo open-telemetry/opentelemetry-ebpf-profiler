@@ -77,7 +77,7 @@ func (g *goData) String() string {
 }
 
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
-	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
+	_ libpf.Address, _ remotememory.RemoteMemory, _ interpreter.Config) (interpreter.Instance, error) {
 	g.refs.Add(1)
 	return &goInstance{d: g}, nil
 }

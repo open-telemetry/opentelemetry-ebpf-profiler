@@ -31,8 +31,11 @@ func (d *data) String() string {
 }
 
 func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	_ libpf.Address, _ remotememory.RemoteMemory,
+	_ libpf.Address, _ remotememory.RemoteMemory, cfg interpreter.Config,
 ) (interpreter.Instance, error) {
+	if cfg.(interpreter.LabelsConfig).IsDisabled() {
+		return nil, interpreter.ErrInterpreterDisabled
+	}
 	if err := ebpf.UpdateProcData(libpf.GoLabels, pid, unsafe.Pointer(&d.offsets)); err != nil {
 		return nil, err
 	}

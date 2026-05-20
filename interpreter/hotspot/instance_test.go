@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 )
@@ -31,7 +32,7 @@ func TestJavaSymbolExtraction(t *testing.T) {
 	rd := bytes.NewReader(sym)
 	rm := remotememory.RemoteMemory{ReaderAt: rd}
 
-	instance, err := id.Attach(nil, 0, 0, rm)
+	instance, err := id.Attach(nil, 0, 0, rm, interpreter.HotspotConfig{})
 	require.NoError(t, err, "symbol cache failed")
 	ii := instance.(*hotspotInstance)
 
@@ -96,7 +97,7 @@ func TestStubsMapRace(t *testing.T) {
 		return vmd, nil
 	})
 
-	instance, err := id.Attach(nil, 0, 0, rm)
+	instance, err := id.Attach(nil, 0, 0, rm, interpreter.HotspotConfig{})
 	require.NoError(t, err)
 	ii := instance.(*hotspotInstance)
 

@@ -102,8 +102,11 @@ func (d *phpData) String() string {
 }
 
 func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory,
+	rm remotememory.RemoteMemory, cfg interpreter.Config,
 ) (interpreter.Instance, error) {
+	if cfg.(interpreter.PHPConfig).IsDisabled() {
+		return nil, interpreter.ErrInterpreterDisabled
+	}
 	addrToFunction, err := freelru.New[libpf.Address, *phpFunction](interpreter.LruFunctionCacheSize,
 		libpf.Address.Hash32)
 	if err != nil {

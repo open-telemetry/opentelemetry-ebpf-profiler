@@ -344,8 +344,11 @@ func (d *hotspotData) String() string {
 // As the hotspot unwinder depends on the native unwinder, a part of the cleanup is done by the
 // process manager and not the corresponding Detach() function of hotspot objects.
 func (d *hotspotData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory,
+	rm remotememory.RemoteMemory, cfg interpreter.Config,
 ) (ii interpreter.Instance, err error) {
+	if cfg.(interpreter.HotspotConfig).IsDisabled() {
+		return nil, interpreter.ErrInterpreterDisabled
+	}
 	// Each function has four symbols: source filename, class name,
 	// method name and signature. However, most of them are shared across
 	// different methods, so assume about 2 unique symbols per function.
