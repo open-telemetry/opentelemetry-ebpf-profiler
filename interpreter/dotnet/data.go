@@ -201,8 +201,11 @@ func (d *dotnetData) String() string {
 }
 
 func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory,
+	rm remotememory.RemoteMemory, cfg interpreter.Config,
 ) (interpreter.Instance, error) {
+	if cfg.(interpreter.DotnetConfig).IsDisabled() {
+		return nil, interpreter.ErrInterpreterDisabled
+	}
 	log.Debugf("Attach PID %d, bias %x", pid, bias)
 
 	addrToMethod, err := freelru.New[libpf.Address, *dotnetMethod](interpreter.LruFunctionCacheSize,

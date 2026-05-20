@@ -307,8 +307,11 @@ func (r *rubyData) String() string {
 }
 
 func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory,
+	rm remotememory.RemoteMemory, cfg interpreter.Config,
 ) (interpreter.Instance, error) {
+	if cfg.(interpreter.RubyConfig).IsDisabled() {
+		return nil, interpreter.ErrInterpreterDisabled
+	}
 	var tlsOffset int64
 	if r.staticTLSOffset != 0 {
 		// For statically-linked ruby, use the direct TP-relative offset

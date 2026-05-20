@@ -34,7 +34,6 @@ import (
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 const (
@@ -56,6 +55,8 @@ type ExecutableInfo struct {
 	// instance belongs to was previously identified as an interpreter. Otherwise,
 	// this field is nil.
 	Data interpreter.Data
+	// InterpreterConfig stores the configuration for the interpreter associated with this Data.
+	InterpreterConfig interpreter.Config
 	// LibcInfo stores libc information if the executable is libc, otherwise nil.
 	LibcInfo *libc.LibcInfo
 }
@@ -89,45 +90,51 @@ type ExecutableInfoManager struct {
 	deferredFileIDs *lru.SyncedLRU[host.FileID, libpf.Void]
 }
 
+// loaderEntry pairs a Loader with its configuration.
+type loaderEntry struct {
+	loader interpreter.Loader
+	cfg    interpreter.Config
+}
+
 // NewExecutableInfoManager creates a new instance of the executable info manager.
 func NewExecutableInfoManager(
 	sdp nativeunwind.StackDeltaProvider,
 	ebpf pmebpf.EbpfHandler,
-	includeTracers types.IncludedTracers,
+	interpretersConfig interpreter.InterpretersConfig,
 ) (*ExecutableInfoManager, error) {
 	// Initialize interpreter loaders.
-	interpreterLoaders := make([]interpreter.Loader, 0)
-	if includeTracers.Has(types.PerlTracer) {
-		interpreterLoaders = append(interpreterLoaders, perl.Loader)
+	loaderEntries := make([]loaderEntry, 0)
+	if !interpretersConfig.Perl.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: perl.Loader, cfg: interpretersConfig.Perl})
 	}
-	if includeTracers.Has(types.PythonTracer) {
-		interpreterLoaders = append(interpreterLoaders, python.Loader)
+	if !interpretersConfig.Python.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: python.Loader, cfg: interpretersConfig.Python})
 	}
-	if includeTracers.Has(types.PHPTracer) {
-		interpreterLoaders = append(interpreterLoaders, php.Loader, php.OpcacheLoader)
+	if !interpretersConfig.PHP.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: php.Loader, cfg: interpretersConfig.PHP})
 	}
-	if includeTracers.Has(types.HotspotTracer) {
-		interpreterLoaders = append(interpreterLoaders, hotspot.Loader)
+	if !interpretersConfig.Hotspot.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: hotspot.Loader, cfg: interpretersConfig.Hotspot})
 	}
-	if includeTracers.Has(types.RubyTracer) {
-		interpreterLoaders = append(interpreterLoaders, ruby.Loader)
+	if !interpretersConfig.Ruby.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: ruby.Loader, cfg: interpretersConfig.Ruby})
 	}
-	if includeTracers.Has(types.V8Tracer) {
-		interpreterLoaders = append(interpreterLoaders, nodev8.Loader)
+	if !interpretersConfig.V8.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: nodev8.Loader, cfg: interpretersConfig.V8})
 	}
-	if includeTracers.Has(types.DotnetTracer) {
-		interpreterLoaders = append(interpreterLoaders, dotnet.Loader)
+	if !interpretersConfig.Dotnet.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: dotnet.Loader, cfg: interpretersConfig.Dotnet})
 	}
-	if includeTracers.Has(types.GoTracer) {
-		interpreterLoaders = append(interpreterLoaders, golang.Loader)
+	if !interpretersConfig.Go.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: golang.Loader, cfg: interpretersConfig.Go})
 	}
-	if includeTracers.Has(types.BEAMTracer) {
-		interpreterLoaders = append(interpreterLoaders, beam.Loader)
+	if !interpretersConfig.BEAM.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: beam.Loader, cfg: interpretersConfig.BEAM})
 	}
 
-	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
-	if includeTracers.Has(types.Labels) {
-		interpreterLoaders = append(interpreterLoaders, golabels.Loader)
+	loaderEntries = append(loaderEntries, loaderEntry{loader: apmint.Loader})
+	if !interpretersConfig.Labels.IsDisabled() {
+		loaderEntries = append(loaderEntries, loaderEntry{loader: golabels.Loader, cfg: interpretersConfig.Labels})
 	}
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
@@ -140,7 +147,7 @@ func NewExecutableInfoManager(
 	return &ExecutableInfoManager{
 		sdp: sdp,
 		state: xsync.NewRWMutex(executableInfoManagerState{
-			interpreterLoaders: interpreterLoaders,
+			interpreterLoaders: loaderEntries,
 			executables:        map[host.FileID]*entry{},
 			unusedExecutables:  map[host.FileID]time.Time{},
 			unwindInfoIndex:    map[sdtypes.UnwindInfo]uint16{},
@@ -227,11 +234,15 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// Create the LoaderInfo for interpreter detection
 	loaderInfo := interpreter.NewLoaderInfo(fileID, elfRef)
 
+	// Detect and load interpreter data
+	interpData, interpCfg := state.detectAndLoadInterpData(loaderInfo)
+
 	// Insert a corresponding record into our map.
 	info = &entry{
 		ExecutableInfo: ExecutableInfo{
-			Data:     state.detectAndLoadInterpData(loaderInfo),
-			LibcInfo: libcInfo,
+			Data:              interpData,
+			InterpreterConfig: interpCfg,
+			LibcInfo:          libcInfo,
 		},
 		mapRef: ref,
 		rc:     1,
@@ -324,9 +335,9 @@ func (mgr *ExecutableInfoManager) UpdateMetricSummary(summary metrics.Summary) {
 }
 
 type executableInfoManagerState struct {
-	// interpreterLoaders is a list of instances of an interface that provide functionality
-	// for loading the host agent support for a specific interpreter type.
-	interpreterLoaders []interpreter.Loader
+	// interpreterLoaders is a list of loader entries, each providing functionality
+	// for loading the host agent support for a specific interpreter type with its configuration.
+	interpreterLoaders []loaderEntry
 
 	// ebpf provides the interface to manipulate eBPF maps.
 	ebpf pmebpf.EbpfHandler
@@ -353,15 +364,19 @@ type executableInfoManagerState struct {
 
 // detectAndLoadInterpData attempts to detect the given executable as an interpreter. If detection
 // succeeds, it then loads additional per-interpreter data into the BPF maps and returns the
-// interpreter data. If multiple loaders recognize the executable, it returns a MultiData instance.
+// interpreter data. If multiple loaders recognize the executable, it returns a MultiInterpreter.
 func (state *executableInfoManagerState) detectAndLoadInterpData(
 	loaderInfo *interpreter.LoaderInfo,
-) interpreter.Data {
-	var interpreterDatas []interpreter.Data //nolint:prealloc
+) (interpreter.Data, interpreter.Config) {
+	type matchedData struct {
+		data interpreter.Data
+		cfg  interpreter.Config
+	}
+	var matches []matchedData //nolint:prealloc
 
 	// Ask all interpreter loaders whether they want to handle this executable.
-	for _, loader := range state.interpreterLoaders {
-		data, err := loader(state.ebpf, loaderInfo)
+	for _, entry := range state.interpreterLoaders {
+		data, err := entry.loader(state.ebpf, loaderInfo)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				// Very common if the process exited when we tried to analyze it.
@@ -380,20 +395,23 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 
 		log.Debugf("Interpreter data %v for %v (%#016x)",
 			data, loaderInfo.FileName(), loaderInfo.FileID())
-		interpreterDatas = append(interpreterDatas, data)
+		matches = append(matches, matchedData{data: data, cfg: entry.cfg})
 	}
 
 	// Return based on how many interpreters matched
-	switch len(interpreterDatas) {
+	switch len(matches) {
 	case 0:
-		return nil
+		return nil, nil
 	case 1:
-		return interpreterDatas[0]
+		return matches[0].data, matches[0].cfg
 	default:
-		// Multiple interpreters matched, create a MultiData
 		log.Debugf("Multiple interpreters (%d) matched for %v (%#016x)",
-			len(interpreterDatas), loaderInfo.FileName(), loaderInfo.FileID())
-		return interpreter.NewMultiData(interpreterDatas)
+			len(matches), loaderInfo.FileName(), loaderInfo.FileID())
+		entries := make([]interpreter.DataWithConfig, len(matches))
+		for i, m := range matches {
+			entries[i] = interpreter.DataWithConfig{Data: m.data, Config: m.cfg}
+		}
+		return interpreter.NewMultiInterpreter(entries), nil
 	}
 }
 
