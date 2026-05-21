@@ -12,7 +12,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -469,35 +468,94 @@ func (sp *systemProcess) extractMapping(m *RawMapping) (*bytes.Reader, error) {
 	return bytes.NewReader(data), nil
 }
 
-func (sp *systemProcess) getMappingFile(m *RawMapping) string {
+// openInRoot securely opens a file within a given root directory using openat2
+// with RESOLVE_IN_ROOT | RESOLVE_NO_MAGICLINKS to prevent symlink escapes from
+// containers. It opens with O_PATH first (never blocks on FIFOs or sockets),
+// verifies the target is a non-empty regular file, then reopens for reading.
+func openInRoot(rootPath, filePath string) (*os.File, error) {
+	rootDir, err := unix.Open(rootPath, unix.O_PATH|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", rootPath, err)
+	}
+	defer unix.Close(rootDir)
+
+	fd, err := unix.Openat2(rootDir, filePath, &unix.OpenHow{
+		Flags:   unix.O_PATH | unix.O_CLOEXEC,
+		Resolve: unix.RESOLVE_IN_ROOT | unix.RESOLVE_NO_MAGICLINKS,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("openat2 %s in %s: %w", filePath, rootPath, err)
+	}
+	defer unix.Close(fd)
+
+	var stat unix.Stat_t
+	if err := unix.Fstat(fd, &stat); err != nil {
+		return nil, fmt.Errorf("fstat %s: %w", filePath, err)
+	}
+	if stat.Mode&unix.S_IFMT != unix.S_IFREG {
+		return nil, fmt.Errorf("%s: not a regular file", filePath)
+	}
+	if stat.Size == 0 {
+		return nil, fmt.Errorf("%s: empty file", filePath)
+	}
+
+	f, err := os.Open(fmt.Sprintf("/proc/self/fd/%d", fd))
+	if err != nil {
+		return nil, fmt.Errorf("reopen %s: %w", filePath, err)
+	}
+	return f, nil
+}
+
+// openInProcRoot opens a file within a process's filesystem namespace.
+func openInProcRoot(pid libpf.PID, filePath string) (*os.File, error) {
+	return openInRoot(fmt.Sprintf("/proc/%d/root", pid), filePath)
+}
+
+// getMappingFile opens the backing file for a mapping and returns an open file descriptor.
+// The caller is responsible for closing the returned file.
+func (sp *systemProcess) getMappingFile(m *RawMapping) (*os.File, error) {
 	if !m.IsFileBacked() {
-		return ""
+		return nil, errors.New("no backing file for anonymous memory")
 	}
 	if sp.mainThreadExit {
 		// Neither /proc/sp.pid/map_files nor /proc/sp.pid/task/sp.tid/map_files
 		// nor /proc/sp.pid/root exist if main thread has exited, so we use the
 		// mapping path directly under the sp.tid root.
 		rootPath := fmt.Sprintf("/proc/%v/task/%v/root", sp.pid, sp.tid)
-		return path.Join(rootPath, m.Path)
+		f, err := openInRoot(rootPath, m.Path)
+		if err != nil {
+			return nil, err
+		}
+		// Verify inode and device match the mapping to detect file substitution.
+		var stat unix.Stat_t
+		if err := unix.Fstat(int(f.Fd()), &stat); err != nil {
+			_ = f.Close()
+			return nil, fmt.Errorf("fstat %s: %w", m.Path, err)
+		}
+		if stat.Ino != m.Inode || stat.Dev != m.Device {
+			_ = f.Close()
+			return nil, fmt.Errorf("inode/device mismatch for %s: got %d/%d, expected %d/%d",
+				m.Path, stat.Dev, stat.Ino, m.Device, m.Inode)
+		}
+		return f, nil
 	}
-	return fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
-}
-
-func (sp *systemProcess) OpenMappingFile(m *RawMapping) (ReadAtCloser, error) {
-	filename := sp.getMappingFile(m)
-	if filename == "" {
-		return nil, errors.New("no backing file for anonymous memory")
-	}
+	filename := fmt.Sprintf("/proc/%v/map_files/%x-%x", sp.pid, m.Vaddr, m.Vaddr+m.Length)
 	return os.Open(filename)
 }
 
+func (sp *systemProcess) OpenMappingFile(m *RawMapping) (ReadAtCloser, error) {
+	return sp.getMappingFile(m)
+}
+
 func (sp *systemProcess) GetMappingFileLastModified(m *RawMapping) int64 {
-	filename := sp.getMappingFile(m)
-	if filename != "" {
-		var st unix.Stat_t
-		if err := unix.Stat(filename, &st); err == nil {
-			return st.Mtim.Nano()
-		}
+	f, err := sp.getMappingFile(m)
+	if err != nil {
+		return 0
+	}
+	defer f.Close()
+	var st unix.Stat_t
+	if err := unix.Fstat(int(f.Fd()), &st); err == nil {
+		return st.Mtim.Nano()
 	}
 	return 0
 }
@@ -518,7 +576,12 @@ func (sp *systemProcess) CalculateMappingFileID(m *RawMapping) (libpf.FileID, er
 		vdsoFileID, err = libpf.FileIDFromExecutableReader(vdso)
 		return vdsoFileID, err
 	}
-	return libpf.FileIDFromExecutableFile(sp.getMappingFile(m))
+	f, err := sp.getMappingFile(m)
+	if err != nil {
+		return libpf.FileID{}, fmt.Errorf("failed to get mapping file: %v", err)
+	}
+	defer f.Close()
+	return libpf.FileIDFromExecutableReader(f)
 }
 
 func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
@@ -535,9 +598,18 @@ func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
 			}
 			return pfelf.NewFile(vdso, 0, false)
 		}
-		return pfelf.Open(sp.getMappingFile(m))
+		f, err := sp.getMappingFile(m)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get mapping file: %v", err)
+		}
+		return pfelf.OpenFile(f)
 	}
 
-	// Fall back to opening the file using the process specific root
-	return pfelf.Open(path.Join("/proc", strconv.Itoa(int(sp.pid)), "root", file))
+	// Fall back to opening the file using the process specific root.
+	// Use openat2 with RESOLVE_IN_ROOT to prevent symlink escapes from the container.
+	f, err := openInProcRoot(sp.pid, file)
+	if err != nil {
+		return nil, err
+	}
+	return pfelf.OpenFile(f)
 }
