@@ -45,6 +45,12 @@ const (
 	// Maximum size of the LRU cache holding strings from #Strings heap per PE.
 	peInfoStringsCacheSize = 1024
 
+	// imageFileMachineDotnetX64 is an undocumented machine type seen in dotnet-internal x64 DLLs.
+	imageFileMachineDotnetX64 = 0xfd1d
+
+	// imageFileMachineDotnetARM64 is an undocumented machine type seen in dotnet-internal ARM64 DLLs.
+	imageFileMachineDotnetARM64 = 0xd11d
+
 	// TTL of entries in the LRU cache holding the .NET strings.
 	peInfoStringsCacheTTL = 1 * time.Hour
 )
@@ -193,11 +199,18 @@ type ReadyToRunSection struct {
 	Section pe.DataDirectory
 }
 
-// ReadyToRunRuntimeFunction is the R2RFMT RUNTIME_FUNCTION for x86_64
+// ReadyToRunRuntimeFunction is the R2RFMT RUNTIME_FUNCTION for x86_64 (12 bytes).
 type ReadyToRunRuntimeFunction struct {
 	StartRVA uint32
 	EndRVA   uint32
 	GCInfo   uint32
+}
+
+// ReadyToRunRuntimeFunctionARM64 is the R2RFMT RUNTIME_FUNCTION for ARM64 (8 bytes).
+// ARM64 omits the EndRVA field present in the x86_64 layout.
+type ReadyToRunRuntimeFunctionARM64 struct {
+	StartRVA   uint32
+	UnwindData uint32
 }
 
 // MetadataRoot is the ECMA-335 II.24.2.1 Metadata root (non-variable length header)
@@ -388,8 +401,10 @@ func (pp *peParser) parsePE() error {
 	// Ready to Run code has been generated.
 	switch pp.nt.Machine {
 	case pe.IMAGE_FILE_MACHINE_AMD64,
-		pe.IMAGE_FILE_MACHINE_I386, // According to ECMA spec always this
-		0xfd1d:                     // Seen on dotnet internal .dlls
+		pe.IMAGE_FILE_MACHINE_I386,  // According to ECMA spec always this
+		pe.IMAGE_FILE_MACHINE_ARM64, // R2R binaries on arm64
+		imageFileMachineDotnetX64,   // Seen on dotnet internal x64 .dlls
+		imageFileMachineDotnetARM64: // Seen on dotnet internal arm64 .dlls
 		// ok
 	default:
 		return fmt.Errorf("unrecognized PE machine: %#x", pp.nt.Machine)
@@ -515,6 +530,13 @@ func (pp *peParser) parseR2RMethodDefs(table pe.DataDirectory) error {
 	prevIndex := uint32(0)
 	prevRVA := uint32(0)
 
+	// ARM64 RUNTIME_FUNCTION is 8 bytes {StartRVA, UnwindData}; x86_64 is 12 bytes
+	// {StartRVA, EndRVA, GCInfo}. Use the correct stride so seeks land on the right entry.
+	stride := int64(binary.Size(ReadyToRunRuntimeFunction{}))
+	if pp.nt.Machine == pe.IMAGE_FILE_MACHINE_ARM64 || pp.nt.Machine == imageFileMachineDotnetARM64 {
+		stride = int64(binary.Size(ReadyToRunRuntimeFunctionARM64{}))
+	}
+
 	// The ready-to-run MethodDefs table is a lookup table indexed with MethodDef index,
 	// and the data contains R2R RuntimeFunction table index (among other things).
 	// The callback will get monotonic MethodDef index, and monotonic startRVA.
@@ -531,18 +553,17 @@ func (pp *peParser) parseR2RMethodDefs(table pe.DataDirectory) error {
 			id >>= 1
 		}
 		// id is index to the RuntimeFunctions table.
-		// Read the Function start address.
-		var f ReadyToRunRuntimeFunction
-		_, err = pp.r2rFunctions.Seek(int64(id*uint32(binary.Size(f))), io.SeekStart)
-		if err != nil {
+		// Read the Function start address (first field, shared by both struct layouts).
+		if _, err = pp.r2rFunctions.Seek(int64(id)*stride, io.SeekStart); err != nil {
 			return err
 		}
-		if err := binary.Read(pp.r2rFunctions, binary.LittleEndian, &f); err != nil {
+		var startRVA uint32
+		if err := binary.Read(pp.r2rFunctions, binary.LittleEndian, &startRVA); err != nil {
 			return err
 		}
 		// Shift by one, so that the methods without r2r implementation can
 		// be inserted in-between valid RVAs
-		startRVA := f.StartRVA << 1
+		startRVA <<= 1
 		if startRVA < prevRVA {
 			return fmt.Errorf("non-monotonic R2R code RVA: %x < %x",
 				startRVA, prevRVA)
