@@ -159,12 +159,22 @@ static EBPF_INLINE void *get_m_ptr(struct GoLabelsOffsets *offs, UNUSED UnwindSt
 #endif
   }
 
-  if (g_addr == 0) {
+  if (g_addr == 0 && tls_base != NULL) {
     if (bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((s64)tls_base + offs->tls_offset))) {
       DEBUG_PRINT("cl: failed to read g_addr, tls_base(%lx)", (unsigned long)tls_base);
+#if defined(__x86_64__)
       return NULL;
+#endif
     }
   }
+
+#if defined(__aarch64__)
+  // CGO_ENABLED can be true even when runtime.iscgo is false; then Go keeps g in R28.
+  // See https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/1455.
+  if (g_addr == 0) {
+    g_addr = state->r28;
+  }
+#endif
 
   DEBUG_PRINT("cl: reading m_ptr_addr at 0x%lx + 0x%x", (unsigned long)g_addr, offs->m_offset);
   void *m_ptr_addr;
