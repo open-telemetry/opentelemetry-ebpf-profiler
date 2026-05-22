@@ -22,6 +22,8 @@ typedef enum SymblibStatus {
     SYMBLIB_ERR_RETPAD = 6,
     SYMBLIB_ERR_BADUTF8 = 7,
     SYMBLIB_ERR_ALREADYCLOSED = 8,
+    SYMBLIB_ERR_POINTRESOLVER = 9,
+    SYMBLIB_ERR_NULLARG = 10,
 } SymblibStatus;
 
 // Opaque handle to a return pad extractor.

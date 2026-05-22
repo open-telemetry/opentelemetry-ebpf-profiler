@@ -41,7 +41,9 @@ unsafe fn rangeextr_impl(
     visitor: SymblibRangeVisitor,
     user_data: *mut c_void,
 ) -> FfiResult {
-    assert!(!executable.is_null());
+    if executable.is_null() {
+        return Err(StatusCode::NullArg);
+    }
 
     let executable = Path::new(unsafe { CStr::from_ptr(executable).to_str()? });
 
