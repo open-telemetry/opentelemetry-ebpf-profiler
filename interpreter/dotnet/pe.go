@@ -68,6 +68,8 @@ const (
 // negligible at any plausible cache population.
 type peHash [16]byte
 
+var globalPeCache peCache
+
 // peHashFromHeader computes the cache key for a dotnet PE file from its
 // first up-to-4 KiB.
 func peHashFromHeader(hdr []byte) peHash {
@@ -1311,10 +1313,10 @@ type peCache struct {
 	peInfoErrCache *freelru.LRU[util.OnDiskFileIdentifier, peErrEntry]
 }
 
-func (pc *peCache) init() {
+func (pc *peCache) init() error {
 	peInfoCache, err := freelru.New[peHash, *peInfo](peInfoCacheSize, peHash.Hash32)
 	if err != nil {
-		panic(fmt.Errorf("unable to create peInfoCache: %v", err))
+		return fmt.Errorf("unable to create peInfoCache: %v", err)
 	}
 	peInfoCache.SetLifetime(peInfoCacheTTL)
 	pc.peInfoCache = peInfoCache
@@ -1322,10 +1324,11 @@ func (pc *peCache) init() {
 	peInfoErrCache, err := freelru.New[util.OnDiskFileIdentifier, peErrEntry](
 		peInfoErrCacheSize, util.OnDiskFileIdentifier.Hash32)
 	if err != nil {
-		panic(fmt.Errorf("unable to create peInfoErrCache: %v", err))
+		return fmt.Errorf("unable to create peInfoErrCache: %v", err)
 	}
 	peInfoErrCache.SetLifetime(peInfoCacheTTL)
 	pc.peInfoErrCache = peInfoErrCache
+	return nil
 }
 
 func (pc *peCache) Get(pr process.Process, mapping *process.RawMapping) *peInfo {
@@ -1384,12 +1387,6 @@ func (pc *peCache) Get(pr process.Process, mapping *process.RawMapping) *peInfo 
 	info.mapping = libpf.NewFrameMapping(libpf.FrameMappingData{File: mf})
 	pc.peInfoCache.Add(key, info)
 	return info
-}
-
-var globalPeCache peCache
-
-func init() {
-	globalPeCache.init()
 }
 
 // GetAndResetMetrics returns the current counters of the global PE info cache

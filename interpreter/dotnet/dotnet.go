@@ -103,6 +103,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"sync"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
@@ -134,6 +135,10 @@ func dotnetVer(x, y, z uint32) uint32 {
 	return (x << 24) + (y << 16) + z
 }
 
+var dotnetGlobalInit = sync.OnceValue(func() error {
+	return globalPeCache.init()
+})
+
 func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	// The dotnet DSOs are in a directory with the version such as:
 	// /usr/lib/dotnet/shared/Microsoft.NETCore.App/6.0.25/libcoreclr.so
@@ -161,6 +166,10 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 
 	addr, err := ef.LookupSymbolAddress("g_dacTable")
 	if err != nil {
+		return nil, err
+	}
+
+	if err := dotnetGlobalInit(); err != nil {
 		return nil, err
 	}
 
