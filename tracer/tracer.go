@@ -18,7 +18,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+	"unicode/utf8"
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
@@ -132,6 +134,14 @@ type Tracer struct {
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
 
+	// goLabelsDroppedInvalidName counts Go custom labels dropped since the last
+	// metrics report because their name was empty or not valid UTF-8.
+	goLabelsDroppedInvalidName atomic.Int64
+
+	// goLabelsDroppedInvalidValue counts Go custom labels dropped since the last
+	// metrics report because their value was not valid UTF-8.
+	goLabelsDroppedInvalidValue atomic.Int64
+
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
@@ -213,13 +223,22 @@ type progLoaderHelper struct {
 	noTailCallTarget bool
 }
 
-// Convert a C-string to Go string.
-func goString(cstr []byte) libpf.String {
+// goString converts a fixed-size NUL-terminated buffer into an interned string,
+// ignoring everything from the first NUL byte onward. It returns ok=false when
+// the content is not valid UTF-8, so callers handling untrusted data (custom
+// label keys/values, thread comm) can reject it rather than emit garbage. This
+// catches a multi-byte rune split by fixed-width truncation in eBPF, and guards
+// against any future extraction bug.
+func goString(cstr []byte) (libpf.String, bool) {
 	index := bytes.IndexByte(cstr, byte(0))
 	if index < 0 {
 		index = len(cstr)
 	}
-	return libpf.Intern(pfunsafe.ToString(cstr[:index]))
+	b := cstr[:index]
+	if !utf8.Valid(b) {
+		return libpf.NullString, false
+	}
+	return libpf.Intern(pfunsafe.ToString(b)), true
 }
 
 // schedProcessFreeHookName returns the name of the tracepoint hook to use.
@@ -1030,8 +1049,11 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	pid := libpf.PID(ptr.Pid)
 	procMeta := t.processManager.MetaForPID(pid)
 	trace := t.tracePool.Get().(*libpf.EbpfTrace)
+	// comm is best-effort: if the kernel handed us non-UTF-8 bytes, drop it
+	// rather than emit an invalid string downstream.
+	comm, _ := goString(ptr.Comm[:])
 	*trace = libpf.EbpfTrace{
-		Comm:             goString(ptr.Comm[:]),
+		Comm:             comm,
 		ExecutablePath:   procMeta.Executable,
 		ContainerID:      procMeta.ContainerID,
 		ProcessName:      procMeta.Name,
@@ -1058,8 +1080,18 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		trace.CustomLabels = make(map[libpf.String]libpf.String, int(ptr.Custom_labels.Len))
 		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
 			lbl := ptr.Custom_labels.Labels[i]
-			key := goString(lbl.Key[:])
-			val := goString(lbl.Val[:])
+			key, ok := goString(lbl.Key[:])
+			if !ok || key == libpf.NullString {
+				t.goLabelsDroppedInvalidName.Add(1)
+				log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
+				continue
+			}
+			val, ok := goString(lbl.Val[:])
+			if !ok {
+				t.goLabelsDroppedInvalidValue.Add(1)
+				log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", key)
+				continue
+			}
 			trace.CustomLabels[key] = val
 		}
 	}
@@ -1078,6 +1110,21 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	copy(trace.FrameData, ptr.Frame_data[numKernelFrames:ptr.Frame_data_len])
 
 	return trace, nil
+}
+
+// goLabelsMetricCollector reports and resets the counters of Go custom labels
+// dropped due to an invalid name or value since the previous call.
+func (t *Tracer) goLabelsMetricCollector() []metrics.Metric {
+	return []metrics.Metric{
+		{
+			ID:    metrics.IDGoLabelsDroppedInvalidName,
+			Value: metrics.MetricValue(t.goLabelsDroppedInvalidName.Swap(0)),
+		},
+		{
+			ID:    metrics.IDGoLabelsDroppedInvalidValue,
+			Value: metrics.MetricValue(t.goLabelsDroppedInvalidValue.Swap(0)),
+		},
+	}
 }
 
 // StartMapMonitors starts goroutines for collecting metrics and monitoring eBPF
@@ -1133,6 +1180,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 		metrics.AddSlice(eventMetricCollector())
 		metrics.AddSlice(traceEventMetricCollector())
 		metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
+		metrics.AddSlice(t.goLabelsMetricCollector())
 	})
 
 	return nil

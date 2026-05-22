@@ -38,6 +38,13 @@ get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
     if (i >= labels_slice.len)
       break;
     CustomLabel *lbl = &out->labels[i];
+    // The PerCPURecord is reused across traces. Zero the label slot before
+    // populating it: bpf_probe_read_user() only writes the bytes it reads, so
+    // a key/value shorter than one previously written to this slot would
+    // otherwise inherit the old trailing bytes. Userspace reconstructs the
+    // string by scanning for the first NUL, so leftover bytes would corrupt
+    // the label keys and values we emit.
+    __builtin_memset(lbl, 0, sizeof(*lbl));
     u8 klen          = MIN(record->labels[i * 2].len, CUSTOM_LABEL_MAX_KEY_LEN - 1);
     if (bpf_probe_read_user(lbl->key, klen, record->labels[i * 2].str)) {
       DEBUG_PRINT(
@@ -118,6 +125,9 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr, Go
       char *vstr       = map_value->values[i].str;
       unsigned vlen    = map_value->values[i].len;
       if (tophash != 0 && kstr != NULL) {
+        // Zero the slot before use; see get_go_custom_labels_from_slice for why
+        // this is required (the PerCPURecord is reused across traces).
+        __builtin_memset(lbl, 0, sizeof(*lbl));
         if (bpf_probe_read_user(lbl->key, MIN(klen, CUSTOM_LABEL_MAX_KEY_LEN - 1), kstr)) {
           DEBUG_PRINT("cl: failed to read key for custom label (%lx)", (unsigned long)kstr);
           return false;
