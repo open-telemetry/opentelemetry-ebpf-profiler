@@ -739,6 +739,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	// Get target machine architecture for the ELF file
 	arch := ee.file.Machine
 	defaultStrategy := strategyFramePointer
+	isFramePointerReliable := true
 	var parsePclntab func(deltas *sdtypes.StackDeltaArray, p pcval, s strategy) error
 
 	switch arch {
@@ -753,12 +754,14 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		case go1_2, go1_16, go1_18:
 			// Magic indicates old Go with broken arm64 frame pointers
 			defaultStrategy = strategyDeltasWithFrame
+			isFramePointerReliable = false
 		case go1_20:
 			// Ambiguous regarding if frame pointer is kept correctly.
 			// Take the slow path of resolving Go version.
 			goVer, err := ee.file.GoVersion()
 			if err != nil || version.Compare(goVer, "go1.21rc1") < 0 {
 				defaultStrategy = strategyDeltasWithFrame
+				isFramePointerReliable = false
 			}
 		}
 	default:
@@ -777,11 +780,15 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		// First, check for functions with special handling.
 		funcName := getString(g.funcnametab, int(fun.nameOff))
 		if info, found := goFunctionsStopDelta[funcName]; found {
-			ee.deltas.Add(sdtypes.StackDelta{
-				Address: uint64(funcPc),
-				Info:    *info,
-			})
-			continue
+			if *info != sdtypes.UnwindInfoFramePointer || isFramePointerReliable {
+				ee.deltas.Add(sdtypes.StackDelta{
+					Address: uint64(funcPc),
+					Info:    *info,
+				})
+				continue
+			}
+			// On arm64 Go versions with unreliable frame pointers, let special
+			// FP unwind entries fall through to the defaultdelta strategy for that case.
 		}
 
 		// Use source file to determine strategy if possible, and default
