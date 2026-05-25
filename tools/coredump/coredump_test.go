@@ -5,6 +5,7 @@ package main
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -73,4 +74,51 @@ func TestCoreDumps(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCoreDumpRubySkipNativeResume(t *testing.T) {
+	cloudClient, err := cloudstore.Client()
+	require.NoError(t, err)
+	store, err := modulestore.New(cloudClient,
+		cloudstore.PublicReadURL(), cloudstore.ModulestoreS3Bucket(), "modulecache")
+	require.NoError(t, err)
+
+	testCase, err := readTestCase(makeTestCasePath("ruby-4.0.1-loop"))
+	require.NoError(t, err)
+	if testCase.Skip != "" {
+		t.Skip(testCase.Skip)
+	}
+
+	core, err := OpenStoreCoredump(store, testCase.CoredumpRef, testCase.Modules)
+	require.NoError(t, err)
+	defer core.Close()
+
+	data, err := ExtractTracesWithOptions(t.Context(), core, false, nil, nil,
+		ExtractTracesOptions{RubySkipNativeResume: true})
+	require.NoError(t, err)
+	require.NotEmpty(t, data)
+
+	var frames []string
+	for _, thread := range data {
+		if strings.Contains(strings.Join(thread.Frames, "\n"), "<main>+0 in /tmp/loop.rb:30") {
+			frames = thread.Frames
+			break
+		}
+	}
+	require.NotEmpty(t, frames)
+
+	mainFrames := 0
+	rubyNativeFrames := 0
+	for _, frame := range frames {
+		require.NotContains(t, frame, "stack_length_exceeded")
+		if frame == "<main>+0 in /tmp/loop.rb:30" {
+			mainFrames++
+		}
+		if strings.HasPrefix(frame, "libruby.so.4.0.1+") {
+			rubyNativeFrames++
+		}
+	}
+
+	require.Equal(t, 1, mainFrames)
+	require.LessOrEqual(t, rubyNativeFrames, 2)
 }
