@@ -179,6 +179,8 @@ type Config struct {
 	ProbabilisticInterval time.Duration
 	// ProbabilisticThreshold is the threshold for probabilistic profiling.
 	ProbabilisticThreshold uint
+	// RubySkipNativeResume indicates whether Ruby cfunc frames should be pushed inline.
+	RubySkipNativeResume bool
 	// OffCPUThreshold is the user defined threshold for off-cpu profiling.
 	OffCPUThreshold uint32
 	// IncludeEnvVars holds a list of environment variables that should be captured and reported

@@ -104,6 +104,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		BPFVerifierLogLevel:    uint32(c.config.BPFVerifierLogLevel),
 		ProbabilisticInterval:  c.config.ProbabilisticInterval,
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
+		RubySkipNativeResume:   c.config.RubySkipNativeResume,
 		OffCPUThreshold:        uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
 		IncludeEnvVars:         envVars,
 		ProbeLinks:             c.config.ProbeLinks,

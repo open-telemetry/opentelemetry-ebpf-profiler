@@ -58,6 +58,8 @@ var (
 		tracer.ProbabilisticThresholdMax-1, tracer.ProbabilisticThresholdMax-1)
 	probabilisticIntervalHelp = "Time interval for which probabilistic profiling will be " +
 		"enabled or disabled."
+	rubySkipNativeResumeHelp = "Skip Ruby cfunc native resume and push cfunc frames inline, " +
+		"saving tail calls at the cost of losing native frames within cfuncs."
 	pprofHelp            = "Listening address (e.g. localhost:6060) to serve pprof information."
 	samplesPerSecondHelp = "Set the frequency (in Hz) of stack trace sampling."
 	reporterIntervalHelp = "Set the reporter's interval in seconds."
@@ -125,6 +127,9 @@ func parseArgs() (*controller.Config, error) {
 		reporterIntervalHelp)
 	fs.Float64Var(&args.ReporterJitter, "reporter-jitter", defaultArgReporterJitter,
 		reporterJitterHelp)
+
+	fs.BoolVar(&args.RubySkipNativeResume, "ruby-skip-native-resume", false,
+		rubySkipNativeResumeHelp)
 
 	fs.IntVar(&args.SamplesPerSecond, "samples-per-second", defaultArgSamplesPerSecond,
 		samplesPerSecondHelp)
