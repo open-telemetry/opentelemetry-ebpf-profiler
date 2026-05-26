@@ -171,6 +171,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 
 	d := &dotnetData{
 		version:      version,
+		machine:      ef.Machine,
 		dacTableAddr: addr,
 		cdacDescAddr: cdac,
 	}
