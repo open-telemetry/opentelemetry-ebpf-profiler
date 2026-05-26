@@ -199,19 +199,16 @@ type ReadyToRunSection struct {
 	Section pe.DataDirectory
 }
 
-// ReadyToRunRuntimeFunction is the R2RFMT RUNTIME_FUNCTION for x86_64 (12 bytes).
-type ReadyToRunRuntimeFunction struct {
-	StartRVA uint32
-	EndRVA   uint32
-	GCInfo   uint32
-}
-
-// ReadyToRunRuntimeFunctionARM64 is the R2RFMT RUNTIME_FUNCTION for ARM64 (8 bytes).
-// ARM64 omits the EndRVA field present in the x86_64 layout.
-type ReadyToRunRuntimeFunctionARM64 struct {
-	StartRVA   uint32
-	UnwindData uint32
-}
+// R2RFMT RUNTIME_FUNCTION on-disk record sizes for the RuntimeFunctions section.
+// Only the leading 4-byte StartRVA field is decoded; the remaining bytes are skipped
+// via the per-architecture stride.
+// See: https://github.com/dotnet/runtime/blob/v8.0.0/docs/design/coreclr/botr/readytorun-format.md#readytorunsectiontyperuntimefunctions
+const (
+	// x86_64 layout: {StartRVA, EndRVA, GCInfo} (3 x uint32).
+	r2rRuntimeFunctionSize = 12
+	// ARM64 layout: {StartRVA, UnwindData} (2 x uint32); EndRVA is omitted.
+	r2rRuntimeFunctionSizeARM64 = 8
+)
 
 // MetadataRoot is the ECMA-335 II.24.2.1 Metadata root (non-variable length header)
 type MetadataRoot struct {
@@ -530,11 +527,9 @@ func (pp *peParser) parseR2RMethodDefs(table pe.DataDirectory) error {
 	prevIndex := uint32(0)
 	prevRVA := uint32(0)
 
-	// ARM64 RUNTIME_FUNCTION is 8 bytes {StartRVA, UnwindData}; x86_64 is 12 bytes
-	// {StartRVA, EndRVA, GCInfo}. Use the correct stride so seeks land on the right entry.
-	stride := int64(binary.Size(ReadyToRunRuntimeFunction{}))
+	stride := int64(r2rRuntimeFunctionSize)
 	if pp.nt.Machine == pe.IMAGE_FILE_MACHINE_ARM64 || pp.nt.Machine == imageFileMachineDotnetARM64 {
-		stride = int64(binary.Size(ReadyToRunRuntimeFunctionARM64{}))
+		stride = int64(r2rRuntimeFunctionSizeARM64)
 	}
 
 	// The ready-to-run MethodDefs table is a lookup table indexed with MethodDef index,
