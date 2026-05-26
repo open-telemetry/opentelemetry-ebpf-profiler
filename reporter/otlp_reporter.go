@@ -43,10 +43,7 @@ type OTLPReporter struct {
 
 // NewOTLP returns a new instance of OTLPReporter
 func NewOTLP(cfg *Config) (*OTLPReporter, error) {
-	data, err := pdata.New(
-		cfg.SamplesPerSecond,
-		cfg.ExtraSampleAttrProd,
-	)
+	data, err := pdata.New(cfg.ExtraSampleAttrProd)
 	if err != nil {
 		return nil, err
 	}
@@ -55,11 +52,12 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 
 	return &OTLPReporter{
 		baseReporter: &baseReporter{
-			cfg:         cfg,
-			name:        cfg.Name,
-			version:     cfg.Version,
-			pdata:       data,
-			traceEvents: xsync.NewRWMutex(eventsTree),
+			cfg:             cfg,
+			name:            cfg.Name,
+			version:         cfg.Version,
+			pdata:           data,
+			traceEvents:     xsync.NewRWMutex(eventsTree),
+			registeredTypes: xsync.NewRWMutex(make(map[libpf.Origin]samples.ProfileTypeMetadata)),
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),
 			},
@@ -121,8 +119,7 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	r.collectionStartTime = collectionEndTime
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
-	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version,
-		collectionStartTime, collectionEndTime)
+	profiles, err := r.generate(reportedEvents, collectionStartTime, collectionEndTime)
 	if err != nil {
 		log.Errorf("pdata: %v", err)
 		return nil

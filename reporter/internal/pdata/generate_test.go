@@ -29,11 +29,33 @@ var (
 	// Expected profile metadata based on collection window
 	testProfileTime     = pcommon.Timestamp(testCollectionStart.UnixNano())
 	testProfileDuration = uint64(testCollectionEnd.Sub(testCollectionStart).Nanoseconds())
+
+	// testProfileTypes contains metadata for all well-known origin IDs, used by
+	// testGenerate so individual tests do not need to supply profile types.
+	testProfileTypes = map[libpf.Origin]samples.ProfileTypeMetadata{
+		support.TraceOriginSampling: {
+			Period:     int64(time.Second) / 100,
+			PeriodType: "cpu",
+			PeriodUnit: "nanoseconds",
+			SampleType: "samples",
+			SampleUnit: "count",
+		},
+		support.TraceOriginOffCPU: {
+			SampleType:   "off_cpu",
+			SampleUnit:   "nanoseconds",
+			ReportValues: true,
+		},
+		support.TraceOriginProbe: {
+			SampleType: "events",
+			SampleUnit: "count",
+		},
+	}
 )
 
-// testGenerate is a helper that calls Generate with the standard test collection window
+// testGenerate is a helper that calls Generate with the standard test collection
+// window and the default set of profile types defined.
 func testGenerate(p *Pdata, tree samples.TraceEventsTree, name, version string) (pprofile.Profiles, error) {
-	return p.Generate(tree, name, version, testCollectionStart, testCollectionEnd)
+	return p.Generate(tree, testProfileTypes, name, version, testCollectionStart, testCollectionEnd)
 }
 
 func TestGetDummyMappingIndex(t *testing.T) {
@@ -199,7 +221,7 @@ func TestFunctionTableOrder(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := New(100, nil)
+			d, err := New(nil)
 			require.NoError(t, err)
 			tree := make(samples.TraceEventsTree)
 			if len(tt.events) > 0 {
@@ -312,7 +334,7 @@ func TestProfileDuration(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := New(100, nil)
+			d, err := New(nil)
 			require.NoError(t, err)
 
 			res, err := testGenerate(d, tt.tree, tt.name, "version")
@@ -334,7 +356,7 @@ func TestProfileDuration(t *testing.T) {
 }
 
 func TestGenerate_EmptyTree(t *testing.T) {
-	d, err := New(100, nil)
+	d, err := New(nil)
 	require.NoError(t, err)
 
 	tree := make(samples.TraceEventsTree)
@@ -360,7 +382,7 @@ func singleFrameTrace(ty libpf.FrameType, mapping libpf.FrameMapping,
 }
 
 func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
-	d, err := New(100, nil)
+	d, err := New(nil)
 	require.NoError(t, err)
 
 	funcName := "main"
@@ -424,7 +446,7 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 }
 
 func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
-	d, err := New(100, nil)
+	d, err := New(nil)
 	require.NoError(t, err)
 
 	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -510,7 +532,7 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 }
 
 func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
-	d, err := New(100, nil)
+	d, err := New(nil)
 	require.NoError(t, err)
 
 	funcName := "myfunc"
@@ -577,7 +599,7 @@ func singleFrameNative(mappingFile libpf.FrameMappingFile, lineno libpf.AddressO
 }
 
 func TestGenerate_NativeFrame(t *testing.T) {
-	d, err := New(100, nil)
+	d, err := New(nil)
 	require.NoError(t, err)
 
 	filePath := libpf.Intern("/usr/lib/libexample.so")
@@ -776,7 +798,7 @@ func TestStackTableOrder(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := New(100, nil)
+			d, err := New(nil)
 			require.NoError(t, err)
 			tree := make(samples.TraceEventsTree)
 			tree[samples.ResourceKey{}] = samples.ResourceToProfiles{Events: tt.events}
@@ -795,7 +817,7 @@ func TestStackTableOrder(t *testing.T) {
 }
 
 func TestGenerate_Validate(t *testing.T) {
-	d, err := New(100, nil)
+	d, err := New(nil)
 	require.NoError(t, err)
 
 	funcName := "myfunc"

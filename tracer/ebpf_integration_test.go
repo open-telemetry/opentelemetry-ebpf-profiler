@@ -23,6 +23,8 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -43,6 +45,18 @@ func (mockIntervals) MonitorInterval() time.Duration       { return 1 * time.Sec
 func (mockIntervals) TracePollInterval() time.Duration     { return 250 * time.Millisecond }
 func (mockIntervals) PIDCleanupInterval() time.Duration    { return 1 * time.Second }
 func (mockIntervals) ExecutableUnloadDelay() time.Duration { return 1 * time.Second }
+
+type noopTraceReporter struct{}
+
+var _ reporter.TraceReporter = noopTraceReporter{}
+
+func (noopTraceReporter) RegisterProfileType(libpf.Origin, samples.ProfileTypeMetadata) error {
+	return nil
+}
+
+func (noopTraceReporter) ReportTraceEvent(*libpf.Trace, *samples.TraceEventMeta) error {
+	return nil
+}
 
 // forceContextSwitch makes sure two Go threads are running concurrently
 // and that there will be a context switch between those two.
@@ -100,6 +114,7 @@ func TestTracerErrorPropagation(t *testing.T) {
 
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
+		TraceReporter:          noopTraceReporter{},
 		FilterErrorFrames:      false,
 		SamplesPerSecond:       20,
 		MapScaleFactor:         0,
@@ -142,6 +157,7 @@ func TestTracerMapMonitorsError(t *testing.T) {
 
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
+		TraceReporter:          noopTraceReporter{},
 		FilterErrorFrames:      false,
 		SamplesPerSecond:       20,
 		MapScaleFactor:         0,
@@ -170,6 +186,7 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 	enabledTracers.Enable(tracertypes.PythonTracer)
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
+		TraceReporter:          noopTraceReporter{},
 		IncludeTracers:         enabledTracers,
 		FilterErrorFrames:      false,
 		SamplesPerSecond:       20,
@@ -265,6 +282,7 @@ Loop:
 func TestAllTracers(t *testing.T) {
 	tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
 		Intervals:              &mockIntervals{},
+		TraceReporter:          noopTraceReporter{},
 		IncludeTracers:         tracertypes.AllTracers(),
 		SamplesPerSecond:       20,
 		ProbabilisticInterval:  100,

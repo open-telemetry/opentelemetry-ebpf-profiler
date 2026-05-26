@@ -29,7 +29,7 @@ func createTestBaseReporter(t *testing.T, cfg *Config) *baseReporter {
 		}
 	}
 
-	pdataInstance, err := pdata.New(cfg.SamplesPerSecond, cfg.ExtraSampleAttrProd)
+	pdataInstance, err := pdata.New(cfg.ExtraSampleAttrProd)
 	require.NoError(t, err)
 
 	return &baseReporter{
@@ -38,6 +38,7 @@ func createTestBaseReporter(t *testing.T, cfg *Config) *baseReporter {
 		version:             cfg.Version,
 		pdata:               pdataInstance,
 		traceEvents:         xsync.NewRWMutex(make(samples.TraceEventsTree)),
+		registeredTypes:     xsync.NewRWMutex(make(map[libpf.Origin]samples.ProfileTypeMetadata)),
 		collectionStartTime: time.Now(),
 	}
 }
@@ -115,7 +116,24 @@ func TestBaseReporterGenerate(t *testing.T) {
 		Value:          5000000, // 5ms
 	}
 
-	err := reporter.ReportTraceEvent(trace1, meta1)
+	// Register profile types before reporting as the reporter must know which
+	// origins to accept and how to export them.
+	err := reporter.RegisterProfileType(support.TraceOriginSampling, samples.ProfileTypeMetadata{
+		Period:     int64(time.Second) / int64(reporter.cfg.SamplesPerSecond),
+		PeriodType: "cpu",
+		PeriodUnit: "nanoseconds",
+		SampleType: "samples",
+		SampleUnit: "count",
+	})
+	require.NoError(t, err)
+	err = reporter.RegisterProfileType(support.TraceOriginOffCPU, samples.ProfileTypeMetadata{
+		SampleType:   "off_cpu",
+		SampleUnit:   "nanoseconds",
+		ReportValues: true,
+	})
+	require.NoError(t, err)
+
+	err = reporter.ReportTraceEvent(trace1, meta1)
 	require.NoError(t, err)
 
 	err = reporter.ReportTraceEvent(trace2, meta2)
@@ -129,13 +147,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 	// Generate profiles
 	collectionStart := reporter.collectionStartTime
 	collectionEnd := time.Now()
-	profiles, err := reporter.pdata.Generate(
-		eventsTree,
-		reporter.name,
-		reporter.version,
-		collectionStart,
-		collectionEnd,
-	)
+	profiles, err := reporter.generate(eventsTree, collectionStart, collectionEnd)
 
 	// Validate the generation succeeded
 	require.NoError(t, err)

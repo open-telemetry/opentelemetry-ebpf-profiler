@@ -7,6 +7,32 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 )
 
+// ProfileTypeMetadata holds information related to a profiling type.
+type ProfileTypeMetadata struct {
+	// Period is the interval between samples in nanoseconds (e.g. 1e9/samplesPerSecond
+	// for CPU sampling). Zero means no period is applicable.
+	Period int64
+
+	// PeriodType describes what is counted per period.
+	// Empty means no period type is set for this profile type.
+	PeriodType string
+
+	// PeriodUnit is the unit for the period measurement.
+	// Empty means no period unit is set for this profile type.
+	PeriodUnit string
+
+	// SampleType describes the kind of value measured per sample.
+	SampleType string
+
+	// SampleUnit is the unit for the sample value.
+	SampleUnit string
+
+	// ReportValues indicates whether per-sample numeric values should
+	// be included in the exported profiles. If false, only sample
+	// timestamps are exported.
+	ReportValues bool
+}
+
 type TraceEventMeta struct {
 	Comm           libpf.String
 	ProcessName    libpf.String
