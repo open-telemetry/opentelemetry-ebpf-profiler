@@ -232,7 +232,7 @@ require (
 	go.augendre.info/arangolint v0.4.0 // indirect
 	go.augendre.info/fatcontext v0.9.0 // indirect
 	go.opencensus.io v0.24.0 // indirect
-	go.opentelemetry.io/collector/cmd/builder v0.152.1 // indirect
+	go.opentelemetry.io/collector/cmd/builder v0.153.0 // indirect
 	go.opentelemetry.io/collector/cmd/mdatagen v0.152.1 // indirect
 	go.opentelemetry.io/collector/component v1.58.0 // indirect
 	go.opentelemetry.io/collector/confmap v1.58.0 // indirect
@@ -249,7 +249,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20260209203927-2842357ff358 // indirect
-	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
