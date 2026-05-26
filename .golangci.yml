@@ -52,6 +52,7 @@ linters:
     - godot
     - godox # complains about TODO etc
     - gomoddirectives
+    - gomodguard # deprecated since golangci-lint v2.12.0, replaced by gomodguard_v2
     - gosmopolitan
     - inamedparam
     - interfacebloat
