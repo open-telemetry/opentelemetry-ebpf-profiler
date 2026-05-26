@@ -116,7 +116,7 @@ func (t *traceReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.Trace
 }
 
 type ExtractTracesOptions struct {
-	RubySkipNativeResume bool
+	RubySkipNativeResume bool `json:"ruby-skip-native-resume,omitempty"`
 }
 
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
