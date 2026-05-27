@@ -102,34 +102,37 @@ unwind_one_beam_frame(PerCPURecord *record, BEAMProcInfo *info, BEAMRangesSearch
       DEBUG_PRINT("beam: invalid frame pointer");
       return ERR_BEAM_FRAME_POINTER_INVALID;
     }
-  } else {
-    for (int i = 0; i < BEAM_STACK_FRAME_SCAN_ITERATIONS; i++) {
-      // Native stack is not supported on ARM due to 16-byte stack alignment hassle
-      // r20 is used to store the stack pointer for JIT code to allow 8-bit alignment.
-#if defined(__aarch64__)
-      state->r20 += 8;
-      bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)state->r20);
-#else
-      state->sp += 8;
-      bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)state->sp);
-#endif
-      // On the stack, if the value is tagged as a header value, then that means it's actually a
-      // continuation pointer.
-      // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L132
-      // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L133
-      if ((state->pc & 0x03) == 0) {
-        unwinder_mark_nonleaf_frame(state);
-        break;
-      }
-    }
-
-    // If we got here but the pc doesn't look like a continuation pointer, then it means we ran out
-    // of loop unroll iterations.
-    if ((state->pc & 0x03) != 0) {
-      return ERR_BEAM_STACK_SCAN_EXHAUSTED;
-    }
+    return ERR_OK;
   }
 
+#if defined(__aarch64__)
+  // Native stack is not supported on ARM due to 16-byte stack alignment hassle
+  // r20 is used to store the stack pointer for JIT code to allow 8-bit alignment.
+  #define stack_reg r20
+#else
+  #define stack_reg sp
+#endif
+  u64 data[BEAM_STACK_FRAME_SCAN_ITERATIONS];
+  bpf_probe_read_user(data, sizeof(data), (void *)(state->stack_reg + 8));
+
+  for (int i = 0; i < BEAM_STACK_FRAME_SCAN_ITERATIONS; i++) {
+    state->stack_reg += 8;
+    pc = data[i];
+
+    // On the stack, if the value is tagged as a header value, then that means it's actually a
+    // continuation pointer.
+    // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L132
+    // https://github.com/erlang/otp/blob/OTP-27.2.4/erts/emulator/beam/erl_etp.c#L133
+    if ((pc & 0x03) == 0) {
+      goto found_pc;
+    }
+  }
+#undef stack_reg
+  return ERR_BEAM_STACK_SCAN_EXHAUSTED;
+
+found_pc:
+  state->pc = pc;
+  unwinder_mark_nonleaf_frame(state);
   return ERR_OK;
 }
 
