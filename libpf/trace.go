@@ -5,6 +5,8 @@ package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
 	"unique"
+
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 // FrameMappingFileData represents a backing file for a memory mapping.
@@ -120,6 +122,7 @@ type EbpfTrace struct {
 	NumFrames        int
 	EnvVars          map[String]String
 	CustomLabels     map[String]String
+	Resource         *pcommon.Resource
 	KernelFrames     Frames
 	FrameData        []uint64
 	FrameDataBuf     [3072]uint64

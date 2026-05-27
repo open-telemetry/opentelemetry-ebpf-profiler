@@ -852,3 +852,84 @@ func TestGenerate_Validate(t *testing.T) {
 		CheckSampleTimestampShape: true}).Check(&data)
 	require.NoError(t, err)
 }
+
+func singleEventTree(rk samples.ResourceKey, res *pcommon.Resource) samples.TraceEventsTree {
+	filePath := libpf.Intern("/bin/svc")
+	mapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:   libpf.NewFileID(7, 8),
+			FileName: filePath,
+		}),
+	})
+	return samples.TraceEventsTree{
+		rk: samples.ResourceToProfiles{
+			Resource: res,
+			Events: map[libpf.Origin]samples.SampleToEvents{
+				support.TraceOriginSampling: {
+					{}: &samples.TraceEvents{
+						Frames:     singleFrameTrace(libpf.NativeFrame, mapping, 0x10, "f", filePath, 1),
+						Timestamps: []uint64{uint64(time.Unix(1010, 0).UnixNano())},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestGenerate_ProcessContextResource(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	res := pcommon.NewResource()
+	res.Attributes().PutStr("service.namespace", "team-a")
+	res.Attributes().PutStr("service.instance.id", "instance-42")
+	res.Attributes().PutStr("deployment.environment", "prod")
+	res.Attributes().PutInt("not-a-string", 7)
+	res.Attributes().PutStr(string(semconv.ServiceNameKey), "proto-svc")
+
+	tree := singleEventTree(samples.ResourceKey{
+		ExecutablePath: libpf.Intern("/bin/svc"),
+		PID:            42,
+	}, &res)
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+	require.Equal(t, 1, profiles.ResourceProfiles().Len())
+	attrs := profiles.ResourceProfiles().At(0).Resource().Attributes()
+
+	expected := map[string]any{
+		"service.namespace":                      "team-a",
+		"service.instance.id":                    "instance-42",
+		"deployment.environment":                 "prod",
+		"not-a-string":                           int64(7),
+		string(semconv.ServiceNameKey):           "proto-svc",
+		string(semconv.ProcessPIDKey):            int64(42),
+		string(semconv.ProcessExecutablePathKey): "/bin/svc",
+		string(semconv.ProcessExecutableNameKey): "svc",
+	}
+	assert.Equal(t, expected, attrs.AsRaw())
+}
+
+func TestGenerate_ProcessContextResource_NilResource(t *testing.T) {
+	d, err := New(100, nil)
+	require.NoError(t, err)
+
+	tree := singleEventTree(samples.ResourceKey{
+		ExecutablePath: libpf.Intern("/bin/svc"),
+		PID:            99,
+		APMServiceName: "apm-svc",
+	}, nil)
+
+	profiles, err := testGenerate(d, tree, "agent", "v1")
+	require.NoError(t, err)
+	require.Equal(t, 1, profiles.ResourceProfiles().Len())
+	attrs := profiles.ResourceProfiles().At(0).Resource().Attributes()
+
+	expected := map[string]any{
+		string(semconv.ServiceNameKey):           "apm-svc",
+		string(semconv.ProcessPIDKey):            int64(99),
+		string(semconv.ProcessExecutablePathKey): "/bin/svc",
+		string(semconv.ProcessExecutableNameKey): "svc",
+	}
+	assert.Equal(t, expected, attrs.AsRaw())
+}

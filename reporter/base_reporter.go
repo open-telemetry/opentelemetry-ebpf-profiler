@@ -10,6 +10,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
+	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -66,6 +67,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		ContainerID:    meta.ContainerID,
 		PID:            int64(meta.PID),
 		ExecutablePath: meta.ExecutablePath,
+		ContextKey:     processcontext.ResourceToContextKey(meta.Resource),
 	}
 
 	eventsTree := b.traceEvents.WLock()
@@ -73,8 +75,9 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 
 	if _, exists := (*eventsTree)[key]; !exists {
 		(*eventsTree)[key] = samples.ResourceToProfiles{
-			EnvVars: meta.EnvVars,
-			Events:  make(map[libpf.Origin]samples.SampleToEvents),
+			EnvVars:  meta.EnvVars,
+			Resource: meta.Resource,
+			Events:   make(map[libpf.Origin]samples.SampleToEvents),
 		}
 	}
 

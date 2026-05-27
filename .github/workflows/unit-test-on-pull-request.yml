@@ -198,3 +198,30 @@ jobs:
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           support/run-tests.sh ${{ matrix.kernel }}
+
+  # Runs on host (not qemu) because the qemu initramfs doesn't allow loading
+  # shared libraries, which the dlopen/lib testdata variants will need once thread
+  # context support lands.
+  integration-tests-processcontext:
+    name: Integration tests (processcontext ${{ matrix.target_arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        include:
+          - { target_arch: amd64, runner: ubuntu-24.04 }
+          - { target_arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - name: Clone code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Set up environment
+        uses: ./.github/workflows/env
+      - name: Install musl-dev
+        run: |
+          sudo apt-get update -y
+          sudo apt-get -y --no-install-recommends --no-install-suggests install musl-dev
+      - name: Prepare processcontext integration test binaries
+        run: |
+          make processctx-execs
+      - name: Run processcontext integration tests
+        run: go test -exec sudo -v -tags integration ./processcontext/integrationtests/

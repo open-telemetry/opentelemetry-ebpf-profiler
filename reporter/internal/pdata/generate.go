@@ -85,7 +85,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		}
 
 		rp := profiles.ResourceProfiles().AppendEmpty()
-		setResourceAttributes(rp.Resource().Attributes(), resource, toEvents.EnvVars)
+		setResourceAttributes(rp.Resource().Attributes(), resource, toEvents.EnvVars, toEvents.Resource)
 		rp.SetSchemaUrl(semconv.SchemaURL)
 
 		sp := rp.ScopeProfiles().AppendEmpty()
@@ -299,7 +299,10 @@ func (p *Pdata) setProfile(
 	return nil
 }
 
-func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envVars map[libpf.String]libpf.String) {
+func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envVars map[libpf.String]libpf.String, res *pcommon.Resource) {
+	if res != nil {
+		res.Attributes().CopyTo(attrs)
+	}
 	if resource.APMServiceName != "" {
 		attrs.PutStr(string(semconv.ServiceNameKey), resource.APMServiceName)
 	}
