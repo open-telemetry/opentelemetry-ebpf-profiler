@@ -28,9 +28,11 @@ import (
 
 // sysConfigVars supports collecting system configuration information.
 type sysConfigVars struct {
-	tpbase_offset       uint64
-	task_stack_offset   uint32
-	stack_ptregs_offset uint32
+	tpbase_offset            uint64
+	task_stack_offset        uint32
+	stack_ptregs_offset      uint32
+	task_group_leader_offset uint32
+	task_start_time_offset   uint32
 }
 
 var (
@@ -83,7 +85,7 @@ func getTSDBaseFieldSpec() string {
 }
 
 // parseBTF resolves the SystemConfig data from kernel BTF
-func parseBTF(vars *sysConfigVars) error {
+func parseBTF(vars *sysConfigVars, needTPBase, needProcessStartTime bool) error {
 	fh, err := os.Open("/sys/kernel/btf/vmlinux")
 	if err != nil {
 		return err
@@ -107,11 +109,27 @@ func parseBTF(vars *sysConfigVars) error {
 	}
 	vars.task_stack_offset = uint32(stackOffset)
 
-	tpbaseOffset, err := calculateFieldOffset(taskStruct, getTSDBaseFieldSpec())
-	if err != nil {
-		return err
+	if needTPBase {
+		tpbaseOffset, err := calculateFieldOffset(taskStruct, getTSDBaseFieldSpec())
+		if err != nil {
+			return err
+		}
+		vars.tpbase_offset = uint64(tpbaseOffset)
 	}
-	vars.tpbase_offset = uint64(tpbaseOffset)
+
+	if needProcessStartTime {
+		groupLeaderOffset, err := calculateFieldOffset(taskStruct, "group_leader")
+		if err != nil {
+			return err
+		}
+		vars.task_group_leader_offset = uint32(groupLeaderOffset)
+
+		startTimeOffset, err := calculateFieldOffset(taskStruct, "start_time")
+		if err != nil {
+			return err
+		}
+		vars.task_start_time_offset = uint32(startTimeOffset)
+	}
 
 	return nil
 }
@@ -288,17 +306,23 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 }
 
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kmod *kallsyms.Module, includeTracers types.IncludedTracers, vars *sysConfigVars,
+	kmod *kallsyms.Module, includeTracers types.IncludedTracers, needProcessStartTime bool,
+	vars *sysConfigVars,
 ) error {
-	if err := parseBTF(vars); err != nil {
+	needTPBase := includeTracers.Has(types.PerlTracer) || includeTracers.Has(types.PythonTracer) ||
+		includeTracers.Has(types.Labels)
+	if err := parseBTF(vars, needTPBase, needProcessStartTime); err != nil {
+		if needProcessStartTime {
+			return fmt.Errorf("process age filter requires kernel BTF to resolve task_struct offsets: %w", err)
+		}
+
 		log.Infof("Using binary analysis (BTF not available: %s)", err)
 
 		if err = determineStackLayout(coll, maps, vars); err != nil {
 			return err
 		}
 
-		if includeTracers.Has(types.PerlTracer) || includeTracers.Has(types.PythonTracer) ||
-			includeTracers.Has(types.Labels) {
+		if needTPBase {
 			var tpbaseOffset uint64
 			tpbaseOffset, err = loadTPBaseOffset(coll, maps, kmod)
 			if err != nil {
@@ -316,10 +340,13 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		}
 	}
 
-	log.Infof("Found offsets: task stack %#x, pt_regs %#x, tpbase %#x",
+	log.Infof(
+		"Found offsets: task stack %#x, pt_regs %#x, tpbase %#x, group_leader %#x, start_time %#x",
 		vars.task_stack_offset,
 		vars.stack_ptregs_offset,
-		vars.tpbase_offset)
+		vars.tpbase_offset,
+		vars.task_group_leader_offset,
+		vars.task_start_time_offset)
 
 	return nil
 }
@@ -328,6 +355,10 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config,
 	major, minor uint32,
 ) error {
+	if cfg.FilterMinProcessAge < 0 {
+		return fmt.Errorf("filter minimum process age must be non-negative: %s", cfg.FilterMinProcessAge)
+	}
+
 	if cfg.VerboseMode {
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
 			return fmt.Errorf("failed to set debug output: %v", err)
@@ -356,6 +387,10 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set debug output: %v", err)
 	}
 
+	if err := coll.Variables["filter_min_process_age_ns"].Set(uint64(cfg.FilterMinProcessAge)); err != nil {
+		return fmt.Errorf("failed to set filter_min_process_age_ns: %v", err)
+	}
+
 	pacMask := pacmask.GetPACMask()
 	if pacMask != 0 {
 		log.Infof("Determined PAC mask to be 0x%016X", pacMask)
@@ -373,7 +408,10 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to prepare programs and maps for system analysis: %v", err)
 	}
 
-	if err := determineSysConfig(systemAnalysisColl, maps, kmod, cfg.IncludeTracers, &rodataVars); err != nil {
+	if err := determineSysConfig(
+		systemAnalysisColl, maps, kmod, cfg.IncludeTracers, cfg.FilterMinProcessAge > 0,
+		&rodataVars,
+	); err != nil {
 		return fmt.Errorf("failed to determine system configs: %v", err)
 	}
 	if err := coll.Variables["tpbase_offset"].Set(rodataVars.tpbase_offset); err != nil {
@@ -384,6 +422,12 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 	if err := coll.Variables["stack_ptregs_offset"].Set(rodataVars.stack_ptregs_offset); err != nil {
 		return fmt.Errorf("failed to set stack_ptregs_offset: %v", err)
+	}
+	if err := coll.Variables["task_group_leader_offset"].Set(rodataVars.task_group_leader_offset); err != nil {
+		return fmt.Errorf("failed to set task_group_leader_offset: %v", err)
+	}
+	if err := coll.Variables["task_start_time_offset"].Set(rodataVars.task_start_time_offset); err != nil {
+		return fmt.Errorf("failed to set task_start_time_offset: %v", err)
 	}
 
 	return nil
