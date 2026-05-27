@@ -680,6 +680,9 @@ const (
 	// Number of times the current PC was found in a non-executable VMA
 	IDUnwindNativeErrNonExecutableVMA = 297
 
+	// Number of samples skipped because the process is too new
+	IDSamplesSkippedProcessTooNew = 298
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 298
+	IDMax = 299
 )

@@ -340,6 +340,9 @@ enum {
   // number of times the current PC was found in a non-executable VMA
   metricID_UnwindNativeErrNonExecutableVMA,
 
+  // number of samples skipped because the process is too new
+  metricID_SamplesSkippedProcessTooNew,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //

@@ -2174,5 +2174,12 @@
     "name": "UnwindNativeErrNonExecutableVMA",
     "field": "bpf.native.errors.non_executable_vma",
     "id": 297
+  },
+  {
+    "description": "Number of samples skipped because the process is too new",
+    "type": "counter",
+    "name": "SamplesSkippedProcessTooNew",
+    "field": "bpf.samples.skipped_process_too_new",
+    "id": 298
   }
 ]
