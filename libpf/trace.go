@@ -108,6 +108,7 @@ type EbpfTrace struct {
 	Comm             String
 	ProcessName      String
 	ExecutablePath   String
+	CgroupPath       String
 	ContainerID      String
 	KTime            int64
 	PID              PID

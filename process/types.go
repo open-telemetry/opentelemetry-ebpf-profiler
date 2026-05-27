@@ -117,7 +117,9 @@ type ProcessMeta struct {
 	Executable libpf.String
 	// process env vars from /proc/PID/environ
 	EnvVariables map[libpf.String]libpf.String
-	// container ID retrieved from /proc/PID/cgroup
+	// path to the cgroup (excluding controller for v1)
+	CgroupPath libpf.String
+	// container ID extracted from `CgroupPath`
 	ContainerID libpf.String
 	// process context
 	ProcessContextInfo processcontext.Info

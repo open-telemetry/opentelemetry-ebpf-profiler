@@ -11,6 +11,7 @@ type TraceEventMeta struct {
 	Comm           libpf.String
 	ProcessName    libpf.String
 	ExecutablePath libpf.String
+	CgroupPath     libpf.String
 	ContainerID    libpf.String
 	EnvVars        map[libpf.String]libpf.String
 	APMServiceName string
