@@ -1,0 +1,218 @@
+{
+  "coredump-ref": "8422e8a609afd93a821bdcf0ebd398883fc5f030d261cecf9c565049a4e1afe7",
+  "threads": [
+    {
+      "lwp": 430615,
+      "frames": [
+        "libc.so.6+0xddc9c",
+        "libSystem.Native.so+0x1d49f",
+        "System.IO.StreamWriter.Flush+477 in System.Private.CoreLib.dll:0",
+        "System.IO.StreamWriter.WriteLine+0 in System.Private.CoreLib.dll:0",
+        "System.IO.TextWriter/SyncTextWriter.WriteLine+0 in System.Private.CoreLib.dll:0",
+        "System.Console.WriteLine+0 in System.Console.dll:0",
+        "foo.bar+0 in helloworld.dll:0",
+        "main.Main+0 in helloworld.dll:0",
+        "libcoreclr.so+0x5cca2f",
+        "libcoreclr.so+0x4471df",
+        "libcoreclr.so+0x33dc67",
+        "libcoreclr.so+0x33dfc3",
+        "libcoreclr.so+0x364023",
+        "libcoreclr.so+0x1e7ea3",
+        "libhostpolicy.so+0x3b90b",
+        "libhostpolicy.so+0x3cb9f",
+        "libhostfxr.so+0x3023b",
+        "libhostfxr.so+0x2f167",
+        "libhostfxr.so+0x2a1f7",
+        "helloworld+0x17523",
+        "helloworld+0x17837",
+        "libc.so.6+0x27743",
+        "libc.so.6+0x27817",
+        "helloworld+0x16523",
+        "<unwinding aborted due to error native_exceeded_delta_lookup_iterations>"
+      ]
+    },
+    {
+      "lwp": 430616,
+      "frames": [
+        "libc.so.6+0xe1c3c",
+        "libcoreclr.so+0x6044cb",
+        "libcoreclr.so+0x603e9f",
+        "libcoreclr.so+0x60e19f",
+        "libc.so.6+0x8202f",
+        "libc.so.6+0xebf5b"
+      ]
+    },
+    {
+      "lwp": 430617,
+      "frames": [
+        "libc.so.6+0xe1c3c",
+        "libcoreclr.so+0x2969c7",
+        "libcoreclr.so+0x210353",
+        "libcoreclr.so+0x21494f",
+        "libcoreclr.so+0x60e19f",
+        "libc.so.6+0x8202f",
+        "libc.so.6+0xebf5b"
+      ]
+    },
+    {
+      "lwp": 430618,
+      "frames": [
+        "libc.so.6+0xdd90c",
+        "libcoreclr.so+0x296373",
+        "libcoreclr.so+0x29197f",
+        "libcoreclr.so+0x29094f",
+        "libcoreclr.so+0x60e19f",
+        "libc.so.6+0x8202f",
+        "libc.so.6+0xebf5b"
+      ]
+    },
+    {
+      "lwp": 430619,
+      "frames": [
+        "libc.so.6+0x7e834",
+        "libc.so.6+0x81387",
+        "libcoreclr.so+0x60269b",
+        "libcoreclr.so+0x6023fb",
+        "libcoreclr.so+0x606f37",
+        "libcoreclr.so+0x28f0eb",
+        "libcoreclr.so+0x28ef4f",
+        "libcoreclr.so+0x28ecb7",
+        "libcoreclr.so+0x60e19f",
+        "libc.so.6+0x8202f",
+        "libc.so.6+0xebf5b"
+      ]
+    },
+    {
+      "lwp": 430620,
+      "frames": [
+        "libc.so.6+0x7e834",
+        "libc.so.6+0x81687",
+        "libcoreclr.so+0x602793",
+        "libcoreclr.so+0x6023fb",
+        "libcoreclr.so+0x606f37",
+        "libcoreclr.so+0x47c227",
+        "libcoreclr.so+0x47c31f",
+        "libcoreclr.so+0x415dcb",
+        "libcoreclr.so+0x47c823",
+        "libcoreclr.so+0x60e19f",
+        "libc.so.6+0x8202f",
+        "libc.so.6+0xebf5b"
+      ]
+    },
+    {
+      "lwp": 430622,
+      "frames": [
+        "libc.so.6+0xddbc8",
+        "libSystem.Native.so+0x2415b",
+        "libc.so.6+0x8202f",
+        "libc.so.6+0xebf5b"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "ee1700446a1c377924df1d2fc6e3f972ebc28c04c08036bda730733597faae60",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/shared/Microsoft.NETCore.App/10.0.3/System.Memory.dll"
+    },
+    {
+      "ref": "59c5e5b4168f9ca4aa9801225a95b8ed0dc4f7381dee908e7df153b54a1f26fa",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/shared/Microsoft.NETCore.App/10.0.3/Microsoft.Win32.Primitives.dll"
+    },
+    {
+      "ref": "7796e0b797561d4e63693dcebf48b69342f96b22069486c83c850772ce8a9d45",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libicuuc.so.72.1"
+    },
+    {
+      "ref": "fca9d1700db17a978028587d9b688492cb505e03b9a942b5d78f27c80e32cfd4",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/shared/Microsoft.NETCore.App/10.0.3/libcoreclr.so"
+    },
+    {
+      "ref": "3c4cb3be0b974edf05f023f85ab15107fb5afc2687163593d0d4cf8e80c17b39",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "532f3a12d7b8fef6cc7a064ea106b6c4ab2365674b73e743e4a385d4ffb6c8ab",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.30"
+    },
+    {
+      "ref": "17538b8f9889a470c061f69a8fea8124da89627311cd16546c133a89f09056df",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    },
+    {
+      "ref": "7c3c0f59a295af5dffd942700951c1323d7a6a9d291cf38ba009594799bb5957",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/shared/Microsoft.NETCore.App/10.0.3/libSystem.Native.so"
+    },
+    {
+      "ref": "046856f95f4636f1fc7c3a12bf4f3cd5634c2fc5145c3fdf7395d4f349fa69c7",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "e5e9474a683596d59cc9e13246bc83878433e53c3befbabd73e3da9ccb5fe174",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libdl.so.2"
+    },
+    {
+      "ref": "7fd139eca9804e850044a7150fce73b8d0c384fe748cd57fe16b4a3b6aec75a2",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/shared/Microsoft.NETCore.App/10.0.3/System.Collections.dll"
+    },
+    {
+      "ref": "927d5e75e440e56695636032c1cf972d121e3bb4f6f8a9712645d3a291cf40e6",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/shared/Microsoft.NETCore.App/10.0.3/System.Runtime.InteropServices.dll"
+    },
+    {
+      "ref": "5a8607afbfbe6b42c4495789550f73456c2f62a763ac1550ff0b563d01ccd86b",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/shared/Microsoft.NETCore.App/10.0.3/System.Threading.dll"
+    },
+    {
+      "ref": "93dfb2592947ab31ed5ad9c758dfcb429bbcbaa295379408932cb061736cfcfd",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/shared/Microsoft.NETCore.App/10.0.3/System.Console.dll"
+    },
+    {
+      "ref": "5daf3fce37e9a0f26d5a2c721232b645c61897026e179b5833890b3ef179ae23",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/shared/Microsoft.NETCore.App/10.0.3/System.Runtime.dll"
+    },
+    {
+      "ref": "77fafd9c1430cb90318d560769a64873894b80eaf4ab1a115dc4c18075f89689",
+      "local-path": "/home/parallels/go/src/github.com/danielpacak/opentelemetry-ebpf-profiler/tools/coredump/testsources/dotnet/helloworld/bin/Debug/net10.0/helloworld"
+    },
+    {
+      "ref": "eaf2eb6008b89c0b36753ebf64f3043edbaa44f86a95cbb35192cca8ef9079d2",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/shared/Microsoft.NETCore.App/10.0.3/libclrjit.so"
+    },
+    {
+      "ref": "41d135537fba3875ebccccace6e4bb5e546941877376504b3921e663f83e42e7",
+      "local-path": "/usr/lib/aarch64-linux-gnu/librt.so.1"
+    },
+    {
+      "ref": "483a341d463ebdb8e6a5666b3771f41739439af440dc081ff29f1b4af5f38256",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/shared/Microsoft.NETCore.App/10.0.3/libhostpolicy.so"
+    },
+    {
+      "ref": "51e5dd832373983aadcf0c3b12fcf03fe01f183d1c5dfe3b6187eb86bc33ed7f",
+      "local-path": "/home/parallels/go/src/github.com/danielpacak/opentelemetry-ebpf-profiler/tools/coredump/testsources/dotnet/helloworld/bin/Debug/net10.0/helloworld.dll"
+    },
+    {
+      "ref": "d0619595f7b31f7ee5210a2a195f0367fc7251e80a0489ce6405c31f6efea23d",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libicudata.so.72.1"
+    },
+    {
+      "ref": "8831af0ffb1a88a7ea751469acc39530e22d6dd5db96d3eebd8e0aeba54aa9bb",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libicui18n.so.72.1"
+    },
+    {
+      "ref": "23a95d0965242c1f1af7b6797342bf31b250d1e731eb08bc8c06a14385effcf2",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/host/fxr/10.0.3/libhostfxr.so"
+    },
+    {
+      "ref": "e4ac8ae1d81e4865e3aadedb962879cf9415903b3f2ba81ec75e9962b86ab8b0",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "434dcd27f22fc8bf236c0c00541a1e503d302aa796c333729a2cd15a4cfe4814",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libpthread.so.0"
+    },
+    {
+      "ref": "c7f3f6d31d3b80158005163faca722017405ec4ccae2a7f4c2d9f74577a0993d",
+      "local-path": "/home/parallels/.local/share/mise/dotnet-root/shared/Microsoft.NETCore.App/10.0.3/System.Private.CoreLib.dll"
+    }
+  ]
+}

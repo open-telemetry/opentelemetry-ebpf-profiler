@@ -188,6 +188,17 @@ func Open(name string) (*File, error) {
 	return ff, nil
 }
 
+// OpenFile prepares an already-open file for use as an ELF binary.
+// The file will be closed when the returned File is closed.
+func OpenFile(f *os.File) (*File, error) {
+	ff, err := newFile(f, f, 0, false)
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return ff, nil
+}
+
 // Close closes the File.
 func (f *File) Close() (err error) {
 	if f.mmapReader != nil {

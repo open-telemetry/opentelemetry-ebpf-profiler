@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -245,11 +244,6 @@ func parseTracers(tracers string) (interpreter.InterpretersConfig, error) {
 		default:
 			return interpreter.InterpretersConfig{}, fmt.Errorf("unknown tracer: %s", name)
 		}
-	}
-
-	if runtime.GOARCH == "arm64" && !cfg.Dotnet.IsDisabled() {
-		cfg.Dotnet.Disabled = true
-		log.Warn("The dotnet tracer is currently not supported on ARM64")
 	}
 
 	return cfg, nil
