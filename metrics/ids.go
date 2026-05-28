@@ -671,6 +671,15 @@ const (
 	// Number of Go custom labels dropped because the label value was not valid UTF-8
 	IDGoLabelsDroppedInvalidValue = 294
 
+	// Number of times bpf_find_vma found no VMA for the current PC
+	IDUnwindNativeErrNoVMA = 295
+
+	// Number of native-only anonymous executable VMA misses suppressed in eBPF
+	IDUnwindNativeErrUnsupportedAnonymousMapping = 296
+
+	// Number of times the current PC was found in a non-executable VMA
+	IDUnwindNativeErrNonExecutableVMA = 297
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 295
+	IDMax = 298
 )
