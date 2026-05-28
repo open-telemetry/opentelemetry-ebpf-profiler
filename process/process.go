@@ -394,6 +394,10 @@ func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint
 	defer mapsFile.Close()
 
 	fileToMapping := make(map[string]*RawMapping)
+	// OpenELF may be called from inside the IterateMappings callback. Publish
+	// the in-progress map before scanning so callbacks can open the current
+	// mapping via /proc/PID/map_files instead of falling back to /proc/PID/root.
+	sp.fileToMapping = fileToMapping
 	gotMappings := false
 
 	collectForOpenELF := func(m RawMapping) bool {

@@ -176,6 +176,36 @@ func TestNewPIDOfSelf(t *testing.T) {
 	assert.NotEmpty(t, mappings)
 }
 
+func TestIterateMappingsPublishesCurrentMappingBeforeCallback(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skipf("unsupported os %s", runtime.GOOS)
+	}
+
+	pid := libpf.PID(os.Getpid())
+	pr := New(pid, pid)
+	sp, ok := pr.(*systemProcess)
+	require.True(t, ok)
+
+	checked := false
+	_, err := sp.IterateMappings(func(m RawMapping) bool {
+		if !m.IsExecutable() || !m.IsFileBacked() {
+			return true
+		}
+
+		stored, ok := sp.fileToMapping[m.Path]
+		require.True(t, ok)
+		require.Equal(t, m.Vaddr, stored.Vaddr)
+		require.Equal(t, m.Length, stored.Length)
+		require.Equal(t, m.Device, stored.Device)
+		require.Equal(t, m.Inode, stored.Inode)
+		checked = true
+		return false
+	})
+
+	require.ErrorIs(t, err, ErrCallbackStopped)
+	require.True(t, checked)
+}
+
 //nolint:lll
 func TestExtractContainerID(t *testing.T) {
 	tests := []struct {
