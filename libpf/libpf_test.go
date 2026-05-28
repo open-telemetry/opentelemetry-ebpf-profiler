@@ -11,10 +11,10 @@ import (
 
 func TestTraceType(t *testing.T) {
 	tests := []struct {
+		str    string
+		interp InterpreterType
 		ty     FrameType
 		isErr  bool
-		interp InterpreterType
-		str    string
 	}{
 		{
 			ty:     abortFrame,

@@ -45,6 +45,12 @@ const (
 	// Maximum size of the LRU cache holding strings from #Strings heap per PE.
 	peInfoStringsCacheSize = 1024
 
+	// imageFileMachineDotnetX64 is an undocumented machine type seen in dotnet-internal x64 DLLs.
+	imageFileMachineDotnetX64 = 0xfd1d
+
+	// imageFileMachineDotnetARM64 is an undocumented machine type seen in dotnet-internal ARM64 DLLs.
+	imageFileMachineDotnetARM64 = 0xd11d
+
 	// TTL of entries in the LRU cache holding the .NET strings.
 	peInfoStringsCacheTTL = 1 * time.Hour
 )
@@ -67,6 +73,8 @@ const (
 // differ within it, and 128 bits of SHA256 makes accidental collisions
 // negligible at any plausible cache population.
 type peHash [16]byte
+
+var globalPeCache peCache
 
 // peHashFromHeader computes the cache key for a dotnet PE file from its
 // first up-to-4 KiB.
@@ -193,12 +201,16 @@ type ReadyToRunSection struct {
 	Section pe.DataDirectory
 }
 
-// ReadyToRunRuntimeFunction is the R2RFMT RUNTIME_FUNCTION for x86_64
-type ReadyToRunRuntimeFunction struct {
-	StartRVA uint32
-	EndRVA   uint32
-	GCInfo   uint32
-}
+// R2RFMT RUNTIME_FUNCTION on-disk record sizes for the RuntimeFunctions section.
+// Only the leading 4-byte StartRVA field is decoded; the remaining bytes are skipped
+// via the per-architecture stride.
+// See: https://github.com/dotnet/runtime/blob/v8.0.0/docs/design/coreclr/botr/readytorun-format.md#readytorunsectiontyperuntimefunctions
+const (
+	// x86_64 layout: {StartRVA, EndRVA, GCInfo} (3 x uint32).
+	r2rRuntimeFunctionSize = 12
+	// ARM64 layout: {StartRVA, UnwindData} (2 x uint32); EndRVA is omitted.
+	r2rRuntimeFunctionSizeARM64 = 8
+)
 
 // MetadataRoot is the ECMA-335 II.24.2.1 Metadata root (non-variable length header)
 type MetadataRoot struct {
@@ -388,8 +400,10 @@ func (pp *peParser) parsePE() error {
 	// Ready to Run code has been generated.
 	switch pp.nt.Machine {
 	case pe.IMAGE_FILE_MACHINE_AMD64,
-		pe.IMAGE_FILE_MACHINE_I386, // According to ECMA spec always this
-		0xfd1d:                     // Seen on dotnet internal .dlls
+		pe.IMAGE_FILE_MACHINE_I386,  // According to ECMA spec always this
+		pe.IMAGE_FILE_MACHINE_ARM64, // R2R binaries on arm64
+		imageFileMachineDotnetX64,   // Seen on dotnet internal x64 .dlls
+		imageFileMachineDotnetARM64: // Seen on dotnet internal arm64 .dlls
 		// ok
 	default:
 		return fmt.Errorf("unrecognized PE machine: %#x", pp.nt.Machine)
@@ -515,6 +529,11 @@ func (pp *peParser) parseR2RMethodDefs(table pe.DataDirectory) error {
 	prevIndex := uint32(0)
 	prevRVA := uint32(0)
 
+	stride := int64(r2rRuntimeFunctionSize)
+	if pp.nt.Machine == pe.IMAGE_FILE_MACHINE_ARM64 || pp.nt.Machine == imageFileMachineDotnetARM64 {
+		stride = int64(r2rRuntimeFunctionSizeARM64)
+	}
+
 	// The ready-to-run MethodDefs table is a lookup table indexed with MethodDef index,
 	// and the data contains R2R RuntimeFunction table index (among other things).
 	// The callback will get monotonic MethodDef index, and monotonic startRVA.
@@ -531,18 +550,17 @@ func (pp *peParser) parseR2RMethodDefs(table pe.DataDirectory) error {
 			id >>= 1
 		}
 		// id is index to the RuntimeFunctions table.
-		// Read the Function start address.
-		var f ReadyToRunRuntimeFunction
-		_, err = pp.r2rFunctions.Seek(int64(id*uint32(binary.Size(f))), io.SeekStart)
-		if err != nil {
+		// Read the Function start address (first field, shared by both struct layouts).
+		if _, err = pp.r2rFunctions.Seek(int64(id)*stride, io.SeekStart); err != nil {
 			return err
 		}
-		if err := binary.Read(pp.r2rFunctions, binary.LittleEndian, &f); err != nil {
+		var startRVA uint32
+		if err := binary.Read(pp.r2rFunctions, binary.LittleEndian, &startRVA); err != nil {
 			return err
 		}
 		// Shift by one, so that the methods without r2r implementation can
 		// be inserted in-between valid RVAs
-		startRVA := f.StartRVA << 1
+		startRVA <<= 1
 		if startRVA < prevRVA {
 			return fmt.Errorf("non-monotonic R2R code RVA: %x < %x",
 				startRVA, prevRVA)
@@ -1311,10 +1329,10 @@ type peCache struct {
 	peInfoErrCache *freelru.LRU[util.OnDiskFileIdentifier, peErrEntry]
 }
 
-func (pc *peCache) init() {
+func (pc *peCache) init() error {
 	peInfoCache, err := freelru.New[peHash, *peInfo](peInfoCacheSize, peHash.Hash32)
 	if err != nil {
-		panic(fmt.Errorf("unable to create peInfoCache: %v", err))
+		return fmt.Errorf("unable to create peInfoCache: %v", err)
 	}
 	peInfoCache.SetLifetime(peInfoCacheTTL)
 	pc.peInfoCache = peInfoCache
@@ -1322,10 +1340,11 @@ func (pc *peCache) init() {
 	peInfoErrCache, err := freelru.New[util.OnDiskFileIdentifier, peErrEntry](
 		peInfoErrCacheSize, util.OnDiskFileIdentifier.Hash32)
 	if err != nil {
-		panic(fmt.Errorf("unable to create peInfoErrCache: %v", err))
+		return fmt.Errorf("unable to create peInfoErrCache: %v", err)
 	}
 	peInfoErrCache.SetLifetime(peInfoCacheTTL)
 	pc.peInfoErrCache = peInfoErrCache
+	return nil
 }
 
 func (pc *peCache) Get(pr process.Process, mapping *process.RawMapping) *peInfo {
@@ -1384,12 +1403,6 @@ func (pc *peCache) Get(pr process.Process, mapping *process.RawMapping) *peInfo 
 	info.mapping = libpf.NewFrameMapping(libpf.FrameMappingData{File: mf})
 	pc.peInfoCache.Add(key, info)
 	return info
-}
-
-var globalPeCache peCache
-
-func init() {
-	globalPeCache.init()
 }
 
 // GetAndResetMetrics returns the current counters of the global PE info cache

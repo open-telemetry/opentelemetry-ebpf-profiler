@@ -47,20 +47,20 @@ func TestAssignLibcInfoMergesLibcInfo(t *testing.T) {
 	}
 
 	libcInfoWithTSD := libc.LibcInfo{
-		libc.TSDInfo{
+		TSDInfo: libc.TSDInfo{
 			Offset:     8,
 			Multiplier: 8,
 			Indirect:   0,
 		},
-		libc.DTVInfo{},
+		DTVInfo: libc.DTVInfo{},
 	}
 	pm.assignLibcInfo(pid, &libcInfoWithTSD)
 
 	assert.Equal(libcInfoWithTSD, interp.info)
 
 	libcInfoWithDTV := libc.LibcInfo{
-		libc.TSDInfo{},
-		libc.DTVInfo{
+		TSDInfo: libc.TSDInfo{},
+		DTVInfo: libc.DTVInfo{
 			Offset:     -8,
 			Multiplier: 16,
 		},
