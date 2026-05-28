@@ -53,6 +53,30 @@ func (it *hotspotIntrospectionTable) resolveSymbols(ef *pfelf.File, symNames []s
 	return nil
 }
 
+// Check that all vmStructs fields have kinds handled by parseIntrospection and forEachItem.
+var _ = func() struct{} {
+	var checkType func(t reflect.Type, prefix string)
+	checkType = func(t reflect.Type, prefix string) {
+		for i := 0; i < t.NumField(); i++ {
+			f := t.Field(i)
+			fullName := prefix + f.Name
+			switch f.Type.Kind() {
+			case reflect.Struct:
+				checkType(f.Type, fullName+".")
+			case reflect.Uint, reflect.Uint64, reflect.Uintptr, reflect.Map:
+				// handled by parseIntrospection and forEachItem
+			default:
+				panic(fmt.Sprintf(
+					"unsupported field kind in vmStructs: %s is %v; "+
+						"update parseIntrospection and forEachItem to handle it",
+					fullName, f.Type.Kind()))
+			}
+		}
+	}
+	checkType(reflect.TypeOf(hotspotVMData{}.vmStructs), "")
+	return struct{}{}
+}()
+
 // hotspotVMData contains static information from one HotSpot build (libjvm.so).
 // It mostly is limited to the introspection data (class sizes and field offsets) and
 // the version.
@@ -308,8 +332,6 @@ func (vmd *hotspotVMData) parseIntrospection(it *hotspotIntrospectionTable,
 
 			castedValue := reflect.ValueOf(value).Convert(f.Type().Elem())
 			f.SetMapIndex(reflect.ValueOf(fieldName), castedValue)
-		default:
-			return fmt.Errorf("bug: unexpected field type in vmStructs: %v", f.Kind())
 		}
 	}
 	return nil
@@ -456,8 +478,6 @@ func forEachItem(prefix string, t reflect.Value, visitor func(reflect.Value, str
 			}
 		case reflect.Map:
 			continue
-		default:
-			return fmt.Errorf("unsupported type for '%s: %T'", fieldName, val.Kind())
 		}
 	}
 	return nil
