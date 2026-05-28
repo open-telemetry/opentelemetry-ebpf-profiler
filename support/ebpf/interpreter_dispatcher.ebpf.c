@@ -312,6 +312,8 @@ static EBPF_INLINE int unwind_stop(struct pt_regs *ctx)
     }
   }
 
+  refine_missing_mapping_error(state, record->usesAnonymousMappings);
+
   // If unwinding was aborted due to a critical error, push an error frame.
   if (state->unwind_error) {
     DEBUG_PRINT("Aborting further unwinding due to error code %d", state->unwind_error);
