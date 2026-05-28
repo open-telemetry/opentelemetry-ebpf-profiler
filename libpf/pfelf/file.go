@@ -216,6 +216,18 @@ func NewFile(r io.ReaderAt, loadAddress uint64, hasMusl bool) (*File, error) {
 	return newFile(r, nil, loadAddress, hasMusl)
 }
 
+// NewFileWithCloser is like NewFile but takes ownership of closer:
+// on success closer is closed by the returned File's Close; on error
+// closer is closed before returning.
+func NewFileWithCloser(r io.ReaderAt, closer io.Closer, loadAddress uint64, hasMusl bool) (*File, error) {
+	f, err := newFile(r, closer, loadAddress, hasMusl)
+	if err != nil {
+		_ = closer.Close()
+		return nil, err
+	}
+	return f, nil
+}
+
 func newFile(r io.ReaderAt, closer io.Closer,
 	loadAddress uint64, hasMusl bool,
 ) (*File, error) {

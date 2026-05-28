@@ -352,8 +352,26 @@ func (pm *ProcessManager) processRemovedInterpreters(pid libpf.PID,
 
 var errInvalidVirtualAddress = errors.New("invalid ELF virtual address")
 
+// mappingELFOpener routes opens of mapping.Path through
+// process.OpenELFMapping (VDSO + /proc/<pid>/map_files for deleted-file
+// safety) and forwards everything else (e.g. .gnu_debuglink targets) to
+// OpenELF. Routing is by string equality, so the caller must pass the
+// same mapping.Path value to pfelf.NewReference and not mutate it for
+// the opener's lifetime.
+type mappingELFOpener struct {
+	pr      process.Process
+	mapping *process.RawMapping
+}
+
+func (o *mappingELFOpener) OpenELF(file string) (*pfelf.File, error) {
+	if file == o.mapping.Path {
+		return process.OpenELFMapping(o.pr, o.mapping)
+	}
+	return o.pr.OpenELF(file)
+}
+
 func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapping) (libpf.FrameMapping, error) {
-	elfRef := pfelf.NewReference(m.Path, pr)
+	elfRef := pfelf.NewReference(m.Path, &mappingELFOpener{pr: pr, mapping: m})
 	defer elfRef.Close()
 
 	info := pm.getELFInfo(pr, m, elfRef)
