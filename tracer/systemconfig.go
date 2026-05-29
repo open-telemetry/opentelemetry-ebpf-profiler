@@ -325,16 +325,22 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 }
 
 // loadRodataVars initializes RODATA variables for the eBPF programs.
-func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config) error {
+func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config,
+	major, minor uint32,
+) error {
 	if cfg.VerboseMode {
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
 			return fmt.Errorf("failed to set debug output: %v", err)
 		}
-		// DEBUG_PRINT branches roughly triple per-iter verifier complexity,
-		// so reduce the Python/native unwinder loop iterations to fit within
-		// the 1M instruction budget on kernel 6.18+.
-		if err := coll.Variables["python_native_loop_iters"].Set(uint32(4)); err != nil {
-			return fmt.Errorf("failed to set python_native_loop_iters: %v", err)
+	}
+
+	// The Python/native hybrid unwinder's per program loop count defaults to 10
+	// which is the largest that fits the 5.x / 6.0-6.5 verifier. Kernels 6.6+ are
+	// more efficient and can support more, but 6.18's verifier is tighter than
+	// 6.6-6.16; 15 fits the floor across the 6.6+ CI matrix.
+	if major > 6 || (major == 6 && minor >= 6) {
+		if err := coll.Variables["python_frames_per_program"].Set(uint32(15)); err != nil {
+			return fmt.Errorf("failed to set python_frames_per_program: %v", err)
 		}
 	}
 
