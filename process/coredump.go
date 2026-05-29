@@ -223,6 +223,7 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 		pfbufio.PutReader(rdr)
 
 		if err != io.EOF {
+			_ = f.Close()
 			return nil, err
 		}
 	}

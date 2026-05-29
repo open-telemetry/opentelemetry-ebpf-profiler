@@ -546,7 +546,7 @@ func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return pfelf.OpenFile(f)
+	return pfelf.NewFileOwned(f)
 }
 
 // OpenELFMapping opens a memory mapping as an ELF file. VDSO is read
@@ -567,11 +567,7 @@ func OpenELFMapping(pr Process, m *RawMapping) (*pfelf.File, error) {
 		if errors.Is(err, ErrMappingFileUnavailable) {
 			return pr.OpenELF(m.Path)
 		}
-		return nil, fmt.Errorf("OpenMappingFile pid=%d vaddr=%#x path=%q: %w",
-			pr.PID(), m.Vaddr, m.Path, err)
+		return nil, fmt.Errorf("OpenMappingFile vaddr=%#x: %w", m.Vaddr, err)
 	}
-	if f, ok := rac.(*os.File); ok {
-		return pfelf.OpenFile(f)
-	}
-	return pfelf.NewFileWithCloser(rac, rac, 0, false)
+	return pfelf.NewFileOwned(rac)
 }
