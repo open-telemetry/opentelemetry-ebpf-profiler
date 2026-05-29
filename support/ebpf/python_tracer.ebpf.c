@@ -374,6 +374,12 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
   }
 
 exit:
+  // If still in native mode, stay in the hybrid loop rather than tail-calling
+  // to PROG_UNWIND_NATIVE, which likely just tail-calls back to PROG_UNWIND_PYTHON
+  // after a few frames, wasting a tail call slot.
+  if (unwinder == PROG_UNWIND_NATIVE) {
+    unwinder = PROG_UNWIND_PYTHON;
+  }
   record->state.unwind_error = error;
   tail_call(ctx, unwinder);
   return -1;

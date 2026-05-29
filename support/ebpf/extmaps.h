@@ -16,7 +16,6 @@ extern struct interpreter_offsets_t interpreter_offsets;
 extern struct trace_events_t trace_events;
 extern struct go_labels_procs_t go_labels_procs;
 
-// These are needed by both native and hybrid python unwinder.
 extern struct exe_id_to_8_stack_deltas_t exe_id_to_8_stack_deltas;
 extern struct exe_id_to_9_stack_deltas_t exe_id_to_9_stack_deltas;
 extern struct exe_id_to_10_stack_deltas_t exe_id_to_10_stack_deltas;
