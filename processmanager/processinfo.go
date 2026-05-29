@@ -387,7 +387,10 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 	pm.assignLibcInfo(pr.PID(), ei.LibcInfo)
 	if ei.Data != nil {
 		bias := libpf.Address(m.Vaddr - elfSpaceVA)
-		pm.handleNewInterpreter(pr, bias, m.GetOnDiskFileIdentifier(), ei.Data)
+		if err := pm.handleNewInterpreter(pr, bias, m.GetOnDiskFileIdentifier(), ei.Data); err != nil {
+			log.Errorf("Failed to handle new interpreter for PID %d file %v: %v",
+				pr.PID(), m.Path, err)
+		}
 	}
 	pm.mu.Unlock()
 
