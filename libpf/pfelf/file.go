@@ -656,7 +656,7 @@ func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string
 	return path
 }
 
-type ElfReloc *elf.Rela64
+type ElfReloc = elf.Rela64
 
 // RelocType represents an architecture-independent relocation type.
 // Multiple values can be combined with bitwise OR to match several types.
@@ -774,23 +774,24 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 		return false, fmt.Errorf("failed to read string table: %w", err)
 	}
 
-	relaData, err := relaSection.Data(uint(relaSection.Size))
-	if err != nil {
-		return false, fmt.Errorf("failed to read relocation section: %w", err)
-	}
+	rdr := pfbufio.NewReader(f.elfReader, int64(relaSection.Offset), int64(relaSection.Size))
+	defer pfbufio.PutReader(rdr)
 
-	relaSz := int(unsafe.Sizeof(elf.Rela64{}))
-	for i := 0; i < len(relaData); i += relaSz {
-		rela := (*elf.Rela64)(unsafe.Pointer(&relaData[i]))
-
-		if !checkRelocation(rela) {
+	rela := &elf.Rela64{}
+	sym := &elf.Sym64{}
+	for {
+		if _, err := rdr.Read(pfunsafe.FromPointer(rela)); err != nil {
+			if err != io.EOF {
+				return false, err
+			}
+			break
+		}
+		if !checkRelocation(*rela) {
 			continue
 		}
-
-		sym := elf.Sym64{}
-		symSz := int64(unsafe.Sizeof(sym))
+		symSz := int64(unsafe.Sizeof(*sym))
 		symNo := int64(rela.Info >> 32)
-		n, err := symtabSection.ReadAt(pfunsafe.FromPointer(&sym), symNo*symSz)
+		n, err := symtabSection.ReadAt(pfunsafe.FromPointer(sym), symNo*symSz)
 		if err != nil || n != int(symSz) {
 			return false, fmt.Errorf("failed to read relocation symbol: %w", err)
 		}
@@ -800,7 +801,7 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 			return false, errors.New("failed to get relocation name string")
 		}
 
-		if !visitor(rela, symStr) {
+		if !visitor(*rela, symStr) {
 			return false, nil
 		}
 	}
@@ -1157,14 +1158,18 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 	if err != nil {
 		return fmt.Errorf("failed to read %v: %v", strTab.Name, err)
 	}
-	syms, err := symTab.Data(maxBytesLargeSection)
-	if err != nil {
-		return fmt.Errorf("failed to read %v: %v", name, err)
-	}
 
-	symSz := int(unsafe.Sizeof(elf.Sym64{}))
-	for i := 0; i < len(syms); i += symSz {
-		sym := (*elf.Sym64)(unsafe.Pointer(&syms[i]))
+	rdr := pfbufio.NewReader(f.elfReader, int64(symTab.Offset), int64(symTab.Size))
+	defer pfbufio.PutReader(rdr)
+
+	sym := &elf.Sym64{}
+	for {
+		if _, err := rdr.Read(pfunsafe.FromPointer(sym)); err != nil {
+			if err != io.EOF {
+				return err
+			}
+			break
+		}
 		if name, ok := getString(strs, int(sym.Name)); ok {
 			if !visitor(libpf.Symbol{
 				Name:    libpf.SymbolName(name),
