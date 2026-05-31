@@ -743,22 +743,18 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 	checkRelocation func(ElfReloc) bool,
 	relaSection *Section,
 ) (bool, error) {
-	if relaSection.Link > uint32(len(f.Sections)) {
-		return false, errors.New("rela section link is out-of-bounds")
-	}
-	if relaSection.Link == 0 {
-		return false, errors.New("rela section link is empty")
-	}
-	if relaSection.Size > maxBytesLargeSection {
-		return false, fmt.Errorf("relocation section too big (%d bytes)", relaSection.Size)
+	if relaSection.Link >= uint32(len(f.Sections)) {
+		return false, fmt.Errorf("rela section link is invalid (%d/%d)",
+			relaSection.Link, len(f.Sections))
 	}
 	if relaSection.Size%uint64(unsafe.Sizeof(elf.Rela64{})) != 0 {
 		return false, errors.New("relocation section size isn't multiple of rela64 struct")
 	}
 
 	symtabSection := &f.Sections[relaSection.Link]
-	if symtabSection.Link > uint32(len(f.Sections)) {
-		return false, errors.New("symtab link is out-of-bounds")
+	if symtabSection.Link >= uint32(len(f.Sections)) {
+		return false, fmt.Errorf("symtab section link is invalid (%d/%d)",
+			symtabSection.Link, len(f.Sections))
 	}
 	if symtabSection.Size%uint64(unsafe.Sizeof(elf.Sym64{})) != 0 {
 		return false, errors.New("symbol section size isn't multiple of sym64 struct")
