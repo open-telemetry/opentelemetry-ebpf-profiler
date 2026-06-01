@@ -146,7 +146,6 @@ static EBPF_INLINE u64 go_get_g_register(UNUSED UnwindState *state)
   // See https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/1455.
   return state->r28;
 #else
-  (void)state;
   return 0;
 #endif
 }
