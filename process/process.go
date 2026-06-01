@@ -567,7 +567,7 @@ func OpenELFMapping(pr Process, m *RawMapping) (*pfelf.File, error) {
 		if errors.Is(err, ErrMappingFileUnavailable) {
 			return pr.OpenELF(m.Path)
 		}
-		return nil, fmt.Errorf("OpenMappingFile vaddr=%#x: %w", m.Vaddr, err)
+		return nil, fmt.Errorf("OpenMappingFile path=%q vaddr=%#x: %w", m.Path, m.Vaddr, err)
 	}
 	return pfelf.NewFileOwned(rac)
 }
