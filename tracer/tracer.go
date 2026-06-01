@@ -1070,7 +1070,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		Origin:           libpf.Origin(ptr.Origin),
 		Value:            int64(ptr.Value),
 		KTime:            int64(ptr.Ktime),
-		CpuID:            int(ptr.Cpu_id),
+		CpuID:            ptr.Cpu_id,
 		EnvVars:          procMeta.EnvVariables,
 	}
 
@@ -1092,7 +1092,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		}
 	}
 
-	trace.NumFrames = int(ptr.Num_frames)
+	trace.NumFrames = ptr.Num_frames
 
 	// Symbolize kernel frames directly from the raw BPF data before copying
 	// userspace frame data, so we only copy what's needed.
