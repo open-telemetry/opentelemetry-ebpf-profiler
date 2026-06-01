@@ -240,11 +240,8 @@ func (d *opcacheData) String() string {
 }
 
 func (d *opcacheData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory, cfg interpreter.Config,
+	rm remotememory.RemoteMemory, _ interpreter.Config,
 ) (interpreter.Instance, error) {
-	if cfg.(interpreter.PHPConfig).IsDisabled() {
-		return nil, interpreter.ErrInterpreterDisabled
-	}
 	return &opcacheInstance{
 		d:    d,
 		rm:   rm,

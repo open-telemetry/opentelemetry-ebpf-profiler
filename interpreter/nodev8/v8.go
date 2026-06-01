@@ -1804,11 +1804,8 @@ func mapFramePointerOffset(relBytes uint8) uint8 {
 }
 
 func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
-	rm remotememory.RemoteMemory, cfg interpreter.Config,
+	rm remotememory.RemoteMemory, _ interpreter.Config,
 ) (interpreter.Instance, error) {
-	if cfg.(interpreter.V8Config).IsDisabled() {
-		return nil, interpreter.ErrInterpreterDisabled
-	}
 	vms := &d.vmStructs
 
 	// Starting V8 11.1.204 the instruction/code start is a pointer field instead

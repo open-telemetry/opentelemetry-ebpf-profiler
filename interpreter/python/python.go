@@ -142,11 +142,8 @@ func (d *pythonData) String() string {
 }
 
 func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory, cfg interpreter.Config,
+	rm remotememory.RemoteMemory, _ interpreter.Config,
 ) (interpreter.Instance, error) {
-	if cfg.(interpreter.PythonConfig).IsDisabled() {
-		return nil, interpreter.ErrInterpreterDisabled
-	}
 	addrToCodeObject, err := freelru.New[libpf.Address, *pythonCodeObject](interpreter.LruFunctionCacheSize,
 		libpf.Address.Hash32)
 	if err != nil {

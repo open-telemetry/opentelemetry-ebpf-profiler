@@ -283,11 +283,7 @@ func hashMFA(key beamMfa) uint32 {
 }
 
 func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory,
-	cfg interpreter.Config) (interpreter.Instance, error) {
-	if cfg.(interpreter.BEAMConfig).IsDisabled() {
-		return nil, interpreter.ErrInterpreterDisabled
-	}
-
+	_ interpreter.Config) (interpreter.Instance, error) {
 	log.Debugf("BEAM attaching, OTP %d, ERTS %s, bias: 0x%x", d.otpRelease, d.ertsVersion, bias)
 
 	data := support.BEAMProcInfo{
