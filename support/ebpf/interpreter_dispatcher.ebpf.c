@@ -138,65 +138,45 @@ struct apm_int_procs_t {
 // filter_error_frames is set during load time.
 BPF_RODATA_VAR(bool, filter_error_frames, false)
 
+static EBPF_INLINE u64 go_get_g_register(UnwindState *state)
+{
 #if defined(__aarch64__)
+  // On aarch64 for !iscgo programs the g is only stored in r28 register.
+  // CGO_ENABLED can be true even when runtime.iscgo is false; then we want to retrieve g from r28.
+  // See https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/1455.
+  return state->r28;
+#else
+  (void)state;
+  return 0;
+#endif
+}
+
 static EBPF_INLINE u64 go_get_g_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
 {
+  u64 g_register = go_get_g_register(state);
+
+  if (offs->tls_offset == 0) {
+    DEBUG_PRINT("cl: TLS offset for g pointer missing; using register fallback if available");
+    return g_register;
+  }
+
   u64 g_addr     = 0;
   void *tls_base = NULL;
   if (tsd_get_base(&tls_base) < 0) {
-    DEBUG_PRINT("cl: failed to get tsd base; can't read g_addr");
-    return 0;
+    DEBUG_PRINT("cl: failed to get tsd base; using register fallback if available");
+    return g_register;
   }
   DEBUG_PRINT(
     "cl: read tsd_base at 0x%lx, g offset: %d", (unsigned long)tls_base, offs->tls_offset);
 
-  if (offs->tls_offset == 0) {
-    // On aarch64 for !iscgo programs the g is only stored in r28 register.
-    return state->r28;
+  if (bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((s64)tls_base + offs->tls_offset))) {
+    DEBUG_PRINT(
+      "cl: failed to read g_addr, tls_base(%lx); using register fallback if available",
+      (unsigned long)tls_base);
   }
 
-  if (tls_base != NULL) {
-    if (bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((s64)tls_base + offs->tls_offset))) {
-      DEBUG_PRINT("cl: failed to read g_addr, tls_base(%lx)", (unsigned long)tls_base);
-    }
-  }
-
-  // CGO_ENABLED can be true even when runtime.iscgo is false; then Go keeps g in R28.
-  // See https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/1455.
-  if (g_addr == 0) {
-    g_addr = state->r28;
-  }
-
-  return g_addr;
+  return g_addr ? g_addr : g_register;
 }
-#elif defined(__x86_64__)
-static EBPF_INLINE u64 go_get_g_ptr(struct GoLabelsOffsets *offs, UNUSED UnwindState *state)
-{
-  (void)state;
-  u64 g_addr     = 0;
-  void *tls_base = NULL;
-  if (tsd_get_base(&tls_base) < 0) {
-    DEBUG_PRINT("cl: failed to get tsd base; can't read g_addr");
-    return 0;
-  }
-  DEBUG_PRINT(
-    "cl: read tsd_base at 0x%lx, g offset: %d", (unsigned long)tls_base, offs->tls_offset);
-
-  if (offs->tls_offset == 0) {
-    DEBUG_PRINT("cl: TLS offset for g pointer missing for amd64");
-    return 0;
-  }
-
-  if (tls_base != NULL) {
-    if (bpf_probe_read_user(&g_addr, sizeof(void *), (void *)((s64)tls_base + offs->tls_offset))) {
-      DEBUG_PRINT("cl: failed to read g_addr, tls_base(%lx)", (unsigned long)tls_base);
-      return 0;
-    }
-  }
-
-  return g_addr;
-}
-#endif
 
 static EBPF_INLINE void *go_get_m_ptr(struct GoLabelsOffsets *offs, UnwindState *state)
 {
