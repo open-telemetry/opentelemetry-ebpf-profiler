@@ -138,7 +138,7 @@ struct apm_int_procs_t {
 // filter_error_frames is set during load time.
 BPF_RODATA_VAR(bool, filter_error_frames, false)
 
-static EBPF_INLINE u64 go_get_g_register(UnwindState *state)
+static EBPF_INLINE u64 go_get_g_register(UNUSED UnwindState *state)
 {
 #if defined(__aarch64__)
   // On aarch64 for !iscgo programs the g is only stored in r28 register.
