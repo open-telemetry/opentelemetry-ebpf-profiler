@@ -15,7 +15,7 @@ type TraceEventMeta struct {
 	EnvVars        map[libpf.String]libpf.String
 	APMServiceName string
 	Timestamp      libpf.UnixTime64
-	CPU            int
+	CPU            uint32
 	Origin         libpf.Origin
 	Value          int64
 	PID, TID       libpf.PID

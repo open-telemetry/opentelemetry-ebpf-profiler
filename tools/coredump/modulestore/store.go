@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
@@ -38,10 +39,6 @@ const (
 	localTempPrefix = "tmp."
 	// s3KeyPrefix defines the prefix prepended to all S3 keys.
 	s3KeyPrefix = "module-store/"
-	// s3ResultsPerPage defines how many results to request per page when listing objects.
-	s3ResultsPerPage = 1000
-	// s3MaxPages defines the maximum number of pages to ever retrieve when listing objects.
-	s3MaxPages = 16
 	// zstpakChunkSize determines the chunk size to use when compressing files.
 	zstpakChunkSize = 64 * 1024
 )
@@ -396,24 +393,30 @@ func (store *Store) IsPresentLocally(id ID) (bool, error) {
 // ListRemoteModules creates a map of all modules present in the remote storage and their date
 // of last change.
 func (store *Store) ListRemoteModules() (map[ID]time.Time, error) {
-	objectList, err := getS3ObjectList(
-		store.s3client, store.bucket, s3KeyPrefix, s3ResultsPerPage*s3MaxPages)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve object list: %w", err)
-	}
+
+	paginator := s3.NewListObjectsV2Paginator(store.s3client, &s3.ListObjectsV2Input{
+		Bucket: aws.String(store.bucket),
+		Prefix: aws.String(s3KeyPrefix),
+	})
 
 	modules := map[ID]time.Time{}
-	for _, object := range objectList {
-		if object.Key == nil || object.LastModified == nil {
-			return nil, errors.New("s3 object lacks required field")
-		}
 
-		idText := strings.TrimPrefix(*object.Key, s3KeyPrefix)
-		id, err := IDFromString(idText)
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse hash in S3 filename: %w", err)
+			return nil, err
 		}
-		modules[id] = *object.LastModified
+		for _, obj := range page.Contents {
+			if obj.Key == nil || obj.LastModified == nil {
+				return nil, errors.New("s3 object lacks required field")
+			}
+			idText := strings.TrimPrefix(*obj.Key, s3KeyPrefix)
+			id, err := IDFromString(idText)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse hash in S3 filename: %w", err)
+			}
+			modules[id] = *obj.LastModified
+		}
 	}
 
 	return modules, nil

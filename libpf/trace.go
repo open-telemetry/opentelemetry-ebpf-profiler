@@ -69,23 +69,23 @@ func (fmf FrameMapping) Value() FrameMappingData {
 
 // Frame represents one frame in a stack trace.
 type Frame struct {
-	// Type is the frame type.
-	Type FrameType
-	// FunctionOffset is the line offset from function start line for the frame.
-	FunctionOffset uint32
 	// FunctionName is the name of the function for the frame.
 	FunctionName String
 	// SourceFile is the source code file name for the frame.
 	SourceFile String
+	// Mapping is a reference to the mapping data to which this Frame corresponds to.
+	// Available only for frames executing on a file backed memory mapping.
+	Mapping FrameMapping
 	// SourceLine is the source code level line number of this frame.
 	SourceLine SourceLineno
 	// SourceColumn is the source code level column number of this frame.
 	SourceColumn SourceColumn
 	// An address in ELF VA space (native frame) or line number (interpreted frame).
 	AddressOrLineno AddressOrLineno
-	// Mapping is a reference to the mapping data to which this Frame corresponds to.
-	// Available only for frames executing on a file backed memory mapping.
-	Mapping FrameMapping
+	// FunctionOffset is the line offset from function start line for the frame.
+	FunctionOffset uint32
+	// Type is the frame type.
+	Type FrameType
 }
 
 // Frames is a list of interned frames.
@@ -98,31 +98,31 @@ func (frames *Frames) Append(frame *Frame) {
 
 // Trace represents a stack trace.
 type Trace struct {
+	CustomLabels map[String]String
 	Frames       Frames
 	Hash         TraceHash
-	CustomLabels map[String]String
 }
 
 // EbpfTrace represents a stack trace from Ebpf code.
 type EbpfTrace struct {
-	Comm             String
+	EnvVars          map[String]String
 	ProcessName      String
 	ExecutablePath   String
 	ContainerID      String
-	KTime            int64
-	PID              PID
-	TID              PID
-	Origin           Origin
+	CustomLabels     map[String]String
+	Comm             String
+	FrameData        []uint64
+	KernelFrames     Frames
+	FrameDataBuf     [3072]uint64
 	Value            int64
+	KTime            int64
+	CpuID            uint32
+	TID              PID
+	PID              PID
+	NumFrames        uint16
+	Origin           Origin
 	APMTraceID       APMTraceID
 	APMTransactionID APMTransactionID
-	CpuID            int
-	NumFrames        int
-	EnvVars          map[String]String
-	CustomLabels     map[String]String
-	KernelFrames     Frames
-	FrameData        []uint64
-	FrameDataBuf     [3072]uint64
 }
 
 type EbpfFrame []uint64
