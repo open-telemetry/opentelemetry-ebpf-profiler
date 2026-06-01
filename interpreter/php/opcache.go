@@ -240,7 +240,7 @@ func (d *opcacheData) String() string {
 }
 
 func (d *opcacheData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory, _ interpreter.Config,
+	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
 	return &opcacheInstance{
 		d:    d,
@@ -344,7 +344,11 @@ func getOpcacheJITInfo(ef *pfelf.File) (dasmBuf, dasmSize libpf.Address, err err
 	return libpf.Address(dasmBufPtr), libpf.Address(dasmSizePtr), nil
 }
 
-func OpcacheLoader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
+func GetOpcacheLoader(_ interpreter.PHPConfig) interpreter.Loader {
+	return opcacheLoader
+}
+
+func opcacheLoader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	interpreter.Data, error,
 ) {
 	if !opcacheRegex.MatchString(info.FileName()) {

@@ -41,7 +41,11 @@ type goInstance struct {
 	d *goData
 }
 
-func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
+func GetLoader(_ interpreter.GoConfig) interpreter.Loader {
+	return loader
+}
+
+func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	interpreter.Data, error) {
 	ef, err := info.GetELF()
 	if err != nil {
@@ -77,7 +81,7 @@ func (g *goData) String() string {
 }
 
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,
-	_ libpf.Address, _ remotememory.RemoteMemory, _ interpreter.Config) (interpreter.Instance, error) {
+	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
 	g.refs.Add(1)
 	return &goInstance{d: g}, nil
 }

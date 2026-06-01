@@ -38,12 +38,12 @@ func BenchmarkGolang(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		gD, err := Loader(nil, loaderInfo)
+		gD, err := GetLoader(interpreter.GoConfig{})(nil, loaderInfo)
 		if err != nil {
 			b.Fatalf("Failed to create loader: %v", err)
 		}
 
-		gI, err := gD.Attach(nil, libpfPID, 0x0, rm, interpreter.GoConfig{})
+		gI, err := gD.Attach(nil, libpfPID, 0x0, rm)
 		if err != nil {
 			b.Fatalf("Failed to create instance: %v", err)
 		}

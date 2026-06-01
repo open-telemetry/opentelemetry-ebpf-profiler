@@ -307,7 +307,7 @@ func (r *rubyData) String() string {
 }
 
 func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory, _ interpreter.Config,
+	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
 	var tlsOffset int64
 	if r.staticTLSOffset != 0 {
@@ -1299,7 +1299,11 @@ func determineRubyVersion(ef *pfelf.File) (uint32, error) {
 	return rubyVersion(uint32(major), uint32(minor), uint32(release)), nil
 }
 
-func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ interpreter.RubyConfig) interpreter.Loader {
+	return loader
+}
+
+func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	isBinRuby := binRubyRegex.MatchString(info.FileName())
 	if !libRubyRegex.MatchString(info.FileName()) && !isBinRuby {
 		return nil, nil

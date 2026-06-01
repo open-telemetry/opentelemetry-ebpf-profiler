@@ -1804,7 +1804,7 @@ func mapFramePointerOffset(relBytes uint8) uint8 {
 }
 
 func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Address,
-	rm remotememory.RemoteMemory, _ interpreter.Config,
+	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
 	vms := &d.vmStructs
 
@@ -2235,7 +2235,11 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	return rv, nil
 }
 
-func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ interpreter.V8Config) interpreter.Loader {
+	return loader
+}
+
+func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	if !v8Regex.MatchString(info.FileName()) {
 		return nil, nil
 	}

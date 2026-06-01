@@ -58,9 +58,9 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	loaderInfo := interpreter.NewLoaderInfo(goHostFileID, elfRef)
 	rm := remotememory.NewProcessVirtualMemory(realPID)
 
-	goData, err := golang.Loader(nil, loaderInfo)
+	goData, err := golang.GetLoader(interpreter.GoConfig{})(nil, loaderInfo)
 	require.NoError(err)
-	goInstance, err := goData.Attach(nil, realPID, 0x0, rm, interpreter.GoConfig{})
+	goInstance, err := goData.Attach(nil, realPID, 0x0, rm)
 	require.NoError(err)
 
 	goODID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 1}

@@ -15,34 +15,27 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
-// DataWithConfig pairs interpreter Data with its Config.
-type DataWithConfig struct {
-	Data   Data
-	Config Config
-}
-
-// MultiInterpreter implements the Data interface for multiple interpreters,
-// each carrying its own Config.
+// MultiInterpreter implements the Data interface for multiple interpreters.
 type MultiInterpreter struct {
-	entries []DataWithConfig
+	entries []Data
 }
 
-// NewMultiInterpreter creates a new MultiInterpreter from a slice of DataWithConfig pairs.
-func NewMultiInterpreter(entries []DataWithConfig) *MultiInterpreter {
+// NewMultiInterpreter creates a new MultiInterpreter from a slice of Data.
+func NewMultiInterpreter(entries []Data) *MultiInterpreter {
 	return &MultiInterpreter{
 		entries: entries,
 	}
 }
 
-// Attach attaches all interpreters using their stored configs and returns a MultiInstance.
+// Attach attaches all interpreters and returns a MultiInstance.
 func (m *MultiInterpreter) Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory, _ Config,
+	rm remotememory.RemoteMemory,
 ) (Instance, error) {
 	var instances []Instance
 	var errs []error
 
 	for _, e := range m.entries {
-		instance, err := e.Data.Attach(ebpf, pid, bias, rm, e.Config)
+		instance, err := e.Attach(ebpf, pid, bias, rm)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -70,7 +63,7 @@ func (m *MultiInterpreter) Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Ad
 // Unload unloads all interpreters.
 func (m *MultiInterpreter) Unload(ebpf EbpfHandler) {
 	for _, e := range m.entries {
-		e.Data.Unload(ebpf)
+		e.Unload(ebpf)
 	}
 }
 

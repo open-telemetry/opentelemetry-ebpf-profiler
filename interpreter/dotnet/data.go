@@ -205,7 +205,7 @@ func (d *dotnetData) String() string {
 }
 
 func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory, _ interpreter.Config,
+	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
 	log.Debugf("Attach PID %d, bias %x", pid, bias)
 

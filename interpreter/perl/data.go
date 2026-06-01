@@ -120,7 +120,7 @@ func (d *perlData) String() string {
 }
 
 func (d *perlData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory, _ interpreter.Config,
+	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
 	addrToHEK, err := freelru.New[libpf.Address, libpf.String](interpreter.LruFunctionCacheSize,
 		libpf.Address.Hash32)

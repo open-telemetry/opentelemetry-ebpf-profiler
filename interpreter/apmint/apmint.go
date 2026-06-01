@@ -111,7 +111,7 @@ func (d data) String() string {
 }
 
 func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	bias libpf.Address, rm remotememory.RemoteMemory, _ interpreter.Config,
+	bias libpf.Address, rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
 	procStorage, err := readProcStorage(rm, bias+d.procStorageElfVA)
 	if err != nil {

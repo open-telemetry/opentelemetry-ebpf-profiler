@@ -102,7 +102,7 @@ func (d *phpData) String() string {
 }
 
 func (d *phpData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory, _ interpreter.Config,
+	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
 	addrToFunction, err := freelru.New[libpf.Address, *phpFunction](interpreter.LruFunctionCacheSize,
 		libpf.Address.Hash32)
@@ -253,7 +253,11 @@ func determineVMKind(ef *pfelf.File) (uint, error) {
 	return vmKind, nil
 }
 
-func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ interpreter.PHPConfig) interpreter.Loader {
+	return loader
+}
+
+func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	if !phpRegex.MatchString(info.FileName()) {
 		return nil, nil
 	}

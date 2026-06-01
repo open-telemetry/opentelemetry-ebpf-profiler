@@ -142,7 +142,7 @@ func (d *pythonData) String() string {
 }
 
 func (d *pythonData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.Address,
-	rm remotememory.RemoteMemory, _ interpreter.Config,
+	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
 	addrToCodeObject, err := freelru.New[libpf.Address, *pythonCodeObject](interpreter.LruFunctionCacheSize,
 		libpf.Address.Hash32)
@@ -740,7 +740,11 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 		symbolName, sym.Address, hex.Dump(code), value)
 }
 
-func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ interpreter.PythonConfig) interpreter.Loader {
+	return loader
+}
+
+func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	mainDSO := false
 	major := uint16(0)
 	minor := uint16(0)
