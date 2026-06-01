@@ -778,15 +778,15 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		// First, check for functions with special handling.
 		funcName := getString(g.funcnametab, int(fun.nameOff))
 		if info, found := goFunctionsStopDelta[funcName]; found {
-			if *info != sdtypes.UnwindInfoFramePointer || isFramePointerReliable {
-				ee.deltas.Add(sdtypes.StackDelta{
-					Address: uint64(funcPc),
-					Info:    *info,
-				})
-				continue
+			unwindInfo := *info
+			if unwindInfo == sdtypes.UnwindInfoFramePointer && !isFramePointerReliable {
+				unwindInfo = sdtypes.UnwindInfoStop
 			}
-			// On arm64 Go versions with unreliable frame pointers, let special
-			// FP unwind entries fall through to the defaultdelta strategy for that case.
+			ee.deltas.Add(sdtypes.StackDelta{
+				Address: uint64(funcPc),
+				Info:    unwindInfo,
+			})
+			continue
 		}
 
 		// Use source file to determine strategy if possible, and default
