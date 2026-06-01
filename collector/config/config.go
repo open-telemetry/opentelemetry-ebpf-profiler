@@ -47,6 +47,7 @@ type Config struct {
 	SamplesPerSecond       int           `mapstructure:"samples_per_second"`
 	ProbabilisticInterval  time.Duration `mapstructure:"probabilistic_interval"`
 	ProbabilisticThreshold uint          `mapstructure:"probabilistic_threshold"`
+	RubySkipNativeResume   bool          `mapstructure:"ruby_skip_native_resume"`
 	Tracers                string        `mapstructure:"tracers"`
 	ClockSyncInterval      time.Duration `mapstructure:"clock_sync_interval"`
 	SendErrorFrames        bool          `mapstructure:"send_error_frames"`

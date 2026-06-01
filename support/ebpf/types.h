@@ -492,6 +492,7 @@ typedef struct RubyProcInfo {
 
   // is reading gc state from objspace supported for this version?
   bool has_objspace;
+
   // Offsets and sizes of Ruby internal structs
 
   // rb_execution_context_struct offsets:
