@@ -778,15 +778,11 @@ static EBPF_INLINE ErrorCode hotspot_execute_unwind_action(
       return error;
     }
 
-    DEBUG_PRINT(
-      "jvm:  -> pc: %lx, sp: %lx, fp: %lx",
-      (unsigned long)ui->pc,
-      (unsigned long)ui->sp,
-      (unsigned long)ui->fp);
     state->pc = ui->pc;
     state->sp = ui->sp;
     state->fp = ui->fp;
     unwinder_mark_nonleaf_frame(state);
+    DEBUG_UNWIND_STATE(state);
     increment_metric(metricID_UnwindHotspotFrames);
   }
   }
