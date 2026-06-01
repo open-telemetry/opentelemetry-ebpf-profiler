@@ -47,13 +47,19 @@ func (scd *StoreCoredump) openFile(path string) (process.ReadAtCloser, error) {
 }
 
 func (scd *StoreCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
-	return scd.openFile(m.Path)
+	rac, err := scd.openFile(m.Path)
+	if errors.Is(err, os.ErrNotExist) {
+		// Bundle miss: let OpenELFMapping fall back to OpenELF, which
+		// can serve content from PT_LOAD segments for legacy test cases.
+		return nil, fmt.Errorf("%w: %w", process.ErrMappingFileUnavailable, err)
+	}
+	return rac, err
 }
 
 func (scd *StoreCoredump) OpenELF(path string) (*pfelf.File, error) {
 	file, err := scd.openFile(path)
 	if err == nil {
-		return pfelf.NewFile(file, 0, false)
+		return pfelf.NewFileOwned(file)
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -124,7 +130,7 @@ func OpenStoreCoredump(store *modulestore.Store, coreFileRef modulestore.ID, mod
 	if err != nil {
 		return nil, fmt.Errorf("failed to open coredump file reader: %w", err)
 	}
-	coreELF, err := pfelf.NewFile(reader, 0, false)
+	coreELF, err := pfelf.NewFileOwned(reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open coredump ELF: %w", err)
 	}
