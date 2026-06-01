@@ -80,12 +80,22 @@ func (cmd *cleanCmd) cleanLocal(referenced libpf.Set[modulestore.ID]) error {
 		return fmt.Errorf("failed to read local cache contents: %w", err)
 	}
 
+	remoteModules, err := cmd.store.ListRemoteModules()
+	if err != nil {
+		log.Warnf("Failed to fetch remote module list, upload timestamps unavailable: %v", err)
+		remoteModules = nil
+	}
+
 	for module := range localModules {
 		if _, exists := referenced[module]; exists {
 			continue
 		}
 
-		log.Infof("Removing local module `%s`", module.String())
+		if uploaded, ok := remoteModules[module]; ok {
+			log.Infof("Removing local module `%s` (uploaded: %s)", module.String(), uploaded)
+		} else {
+			log.Infof("Removing local module `%s`", module.String())
+		}
 		if !cmd.dry {
 			if err := cmd.store.RemoveLocalModule(module); err != nil {
 				return fmt.Errorf("failed to delete module: %w", err)
