@@ -591,8 +591,7 @@ static EBPF_INLINE int unwind_native(struct pt_regs *ctx)
     }
 
     // Continue unwinding
-    DEBUG_PRINT(
-      " pc: %llx sp: %llx fp: %llx", record->state.pc, record->state.sp, record->state.fp);
+    DEBUG_UNWIND_STATE(&record->state);
     error = get_next_unwinder_after_native_frame(record, &unwinder);
     if (error || unwinder != PROG_UNWIND_NATIVE) {
       break;
