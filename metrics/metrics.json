@@ -2139,5 +2139,19 @@
     "name": "DotnetPEInfoErrCacheHit",
     "field": "agent.dotnet.pe_info_err_cache.hits",
     "id": 292
+  },
+  {
+    "description": "Number of Go custom labels dropped because the label name was empty or not valid UTF-8",
+    "type": "counter",
+    "name": "GoLabelsDroppedInvalidName",
+    "field": "agent.golabels.dropped.invalid_name",
+    "id": 293
+  },
+  {
+    "description": "Number of Go custom labels dropped because the label value was not valid UTF-8",
+    "type": "counter",
+    "name": "GoLabelsDroppedInvalidValue",
+    "field": "agent.golabels.dropped.invalid_value",
+    "id": 294
   }
 ]
