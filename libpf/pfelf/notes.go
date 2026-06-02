@@ -40,7 +40,6 @@ const (
 func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 	var note note64
 	var buf []byte
-	var err error
 	for {
 		// Read the note header (name and size lengths), followed by reading
 		// their contents. This code advances the position in 'rdr' and should
@@ -72,10 +71,10 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 			}
 		case pfbufio.ErrBufferTooSmall:
 			if _, err = rdr.Discard(alignedSize); err != nil {
-				break
+				return err
 			}
 		default:
-			break
+			return err
 		}
 
 		alignedSize = int((note.Descsz + 3) &^ 3)
@@ -89,17 +88,16 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 			}
 			buf = buf[:alignedSize]
 			if _, err = rdr.Read(buf); err != nil {
-				break
+				return err
 			}
 			desc = buf
 		default:
-			break
+			return err
 		}
 		if !visitor(id+uint64(note.Type), desc[:note.Descsz]) {
-			break
+			return nil
 		}
 	}
-	return err
 }
 
 func getBuildIDFromNotesFile(r io.ReaderAt) (string, error) {
