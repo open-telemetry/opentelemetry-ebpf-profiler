@@ -98,10 +98,7 @@ type MachineData struct {
 }
 
 // ReadAtCloser combines the io.ReaderAt and io.Closer interfaces.
-type ReadAtCloser interface {
-	io.ReaderAt
-	io.Closer
-}
+type ReadAtCloser = pfelf.ReadAtCloser
 
 // MetaConfig provides options that influences gathering ProcessMeta.
 type MetaConfig struct {
