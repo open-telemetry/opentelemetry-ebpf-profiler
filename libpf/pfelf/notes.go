@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"unicode/utf8"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
@@ -59,14 +60,14 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 		namespace, err := rdr.ReadN(alignedSize)
 		switch err {
 		case nil:
-			switch pfunsafe.ToString(namespace[:note.Namesz-1]) {
+			switch strings.TrimRight(pfunsafe.ToString(namespace[:note.Namesz]), "\x00") {
 			case "CORE":
 				id = NamespaceCore
 			case "LINUX":
 				id = NamespaceLinux
 			case "GNU":
 				id = NamespaceGNU
-			case "Go", "Go\x00":
+			case "Go":
 				id = NamespaceGo
 			}
 		case pfbufio.ErrBufferTooSmall:
