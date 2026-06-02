@@ -12,6 +12,7 @@ import (
 	"github.com/peterbourgon/ff/v3/ffcli"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 
 	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 )
@@ -53,7 +54,7 @@ func (cmd *uploadCmd) exec(context.Context, []string) (err error) {
 		paths = []string{cmd.path}
 	}
 
-	var modules []modulestore.ID //nolint:prealloc
+	modules := make(libpf.Set[modulestore.ID])
 	for _, testCase := range paths {
 		var test *CoredumpTestCase
 		test, err = readTestCase(testCase)
@@ -61,9 +62,9 @@ func (cmd *uploadCmd) exec(context.Context, []string) (err error) {
 			return fmt.Errorf("failed to read test case: %w", err)
 		}
 
-		modules = append(modules, test.CoredumpRef)
+		modules[test.CoredumpRef] = libpf.Void{}
 		for _, x := range test.Modules {
-			modules = append(modules, x.Ref)
+			modules[x.Ref] = libpf.Void{}
 		}
 	}
 
@@ -74,7 +75,7 @@ func (cmd *uploadCmd) exec(context.Context, []string) (err error) {
 		return fmt.Errorf("failed to retrieve remote module list: %w", err)
 	}
 
-	for _, id := range modules {
+	for id := range modules {
 		if _, present := remoteModules[id]; present {
 			continue
 		}
