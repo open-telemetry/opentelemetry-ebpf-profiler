@@ -302,18 +302,13 @@ static EBPF_INLINE ErrorCode push_dotnet(
 static EBPF_INLINE ErrorCode
 unwind_one_dotnet_frame(PerCPURecord *record, find_code_start_f find_code_start)
 {
-  UnwindState *state = &record->state;
-  Trace *trace       = &record->trace;
-  u64 regs[2], sp = state->sp, fp = state->fp, pc = state->pc;
+  UnwindState *state  = &record->state;
+  Trace *trace        = &record->trace;
+  u64 pc              = state->pc;
   bool return_address = state->return_address;
 
   // All dotnet frames have frame pointer. Check that the FP looks valid.
-  DEBUG_PRINT(
-    "dotnet: pc: %lx, sp: %lx, fp: %lx", (unsigned long)pc, (unsigned long)sp, (unsigned long)fp);
-
-  if (fp < sp || fp >= sp + DOTNET_MAX_FRAME_LENGTH) {
-    DEBUG_PRINT(
-      "dotnet: frame pointer too far off %lx / %lx", (unsigned long)fp, (unsigned long)sp);
+  if (!unwinder_check_frame_size(state, DOTNET_MAX_FRAME_LENGTH)) {
     increment_metric(metricID_UnwindDotnetErrBadFP);
     return ERR_DOTNET_BAD_FP;
   }
@@ -323,17 +318,25 @@ unwind_one_dotnet_frame(PerCPURecord *record, find_code_start_f find_code_start)
   u64 code_start      = state->text_section_bias;
   u64 code_header_ptr = pc;
 
-  unwinder_mark_nonleaf_frame(state);
-
   if (type < 0x100 && (type & DOTNET_CODE_FLAG_LEAF)) {
     // Stub frame that does not do calls.
     // For arm this is unwind with LR, and for x86-64 unwind with RA only.
+#if defined(__aarch64__)
+    if (state->lr_invalid) {
+      DEBUG_PRINT("dotnet:  --> LR invalid");
+      increment_metric(metricID_UnwindDotnetErrBadFP);
+      return ERR_DOTNET_BAD_FP;
+    }
+    state->pc = state->lr;
+#else
     if (bpf_probe_read_user(&state->pc, sizeof(state->pc), (void *)state->sp)) {
       DEBUG_PRINT("dotnet:  --> bad stack pointer");
       increment_metric(metricID_UnwindDotnetErrBadFP);
       return ERR_DOTNET_BAD_FP;
     }
     state->sp += 8;
+#endif
+    unwinder_mark_nonleaf_frame(state);
     type &= 0x7f;
     goto push_frame;
   }
@@ -342,19 +345,12 @@ unwind_one_dotnet_frame(PerCPURecord *record, find_code_start_f find_code_start)
   // https://github.com/dotnet/runtime/blob/main/docs/design/coreclr/botr/clr-abi.md#system-v-x86_64-support
   // FIXME: Early prologue and epilogue may skip a frame. Seems prologue is fixed, consider
   // using heuristic to handle prologue when the new frame is not yet pushed to stack.
-  if (bpf_probe_read_user(regs, sizeof(regs), (void *)fp)) {
+  if (!unwinder_unwind_frame_pointer(state)) {
     DEBUG_PRINT("dotnet:  --> bad frame pointer");
     increment_metric(metricID_UnwindDotnetErrBadFP);
     return ERR_DOTNET_BAD_FP;
   }
-  state->sp = fp + sizeof(regs);
-  state->fp = regs[0];
-  state->pc = regs[1];
-  DEBUG_PRINT(
-    "dotnet: pc: %lx, sp: %lx, fp: %lx",
-    (unsigned long)state->pc,
-    (unsigned long)state->sp,
-    (unsigned long)state->fp);
+  DEBUG_UNWIND_STATE(state);
 
   if (type < 0x100) {
     // Not a JIT frame. A R2R frame at this point.
@@ -440,6 +436,8 @@ static EBPF_INLINE int unwind_dotnet_core(
 
   record->ratelimitAction = RATELIMIT_ACTION_FAST;
   increment_metric(metricID_UnwindDotnetAttempts);
+
+  unwinder_analyze_frame_pointer(&record->state);
 
   for (int i = 0; i < frames_per_program; i++) {
     unwinder = PROG_UNWIND_STOP;

@@ -191,24 +191,7 @@ func Open(name string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	ff, err := newFile(f, f, 0, false)
-	if err != nil {
-		_ = f.Close()
-		return nil, err
-	}
-	return ff, nil
-}
-
-// OpenFile prepares an already-open file for use as an ELF binary.
-// The file will be closed when the returned File is closed.
-func OpenFile(f *os.File) (*File, error) {
-	ff, err := newFile(f, f, 0, false)
-	if err != nil {
-		_ = f.Close()
-		return nil, err
-	}
-	return ff, nil
+	return newFile(f, f, 0, false)
 }
 
 // Close closes the File.
@@ -228,6 +211,21 @@ func NewFile(r io.ReaderAt, loadAddress uint64, hasMusl bool) (*File, error) {
 	return newFile(r, nil, loadAddress, hasMusl)
 }
 
+// ReadAtCloser combines io.ReaderAt and io.Closer.
+type ReadAtCloser interface {
+	io.ReaderAt
+	io.Closer
+}
+
+// NewFileOwned is like NewFile but takes ownership of rc: rc is used as the
+// ELF reader and is closed by the returned File's Close, or before returning
+// on error.
+func NewFileOwned(rc ReadAtCloser) (*File, error) {
+	return newFile(rc, rc, 0, false)
+}
+
+// newFile builds a File from r. A non-nil closer is owned and closed by the
+// returned File's Close, or before returning on error.
 func newFile(r io.ReaderAt, closer io.Closer,
 	loadAddress uint64, hasMusl bool,
 ) (*File, error) {
@@ -237,6 +235,12 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		closer:     closer,
 		notesError: errNotProcessed,
 	}
+	success := false
+	defer func() {
+		if !success {
+			_ = f.Close()
+		}
+	}()
 
 	hdr := &f.elfHeader
 	if _, err := r.ReadAt(pfunsafe.FromPointer(hdr), 0); err != nil {
@@ -368,6 +372,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		}
 	}
 
+	success = true
 	return f, nil
 }
 

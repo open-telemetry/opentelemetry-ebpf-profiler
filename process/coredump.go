@@ -180,6 +180,7 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 	})
 	err = errors.Join(noteErrors, err)
 	if err != nil {
+		_ = f.Close()
 		return nil, err
 	}
 
@@ -240,7 +241,7 @@ func (cd *CoredumpProcess) GetThreads() ([]ThreadInfo, error) {
 // OpenMappingFile implements the Process interface.
 func (cd *CoredumpProcess) OpenMappingFile(_ *RawMapping) (ReadAtCloser, error) {
 	// Coredumps do not contain the original backing files.
-	return nil, errors.New("coredump does not support opening backing file")
+	return nil, ErrMappingFileUnavailable
 }
 
 // GetMappingFileLastModified implements the Process interface.
