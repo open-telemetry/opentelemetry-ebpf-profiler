@@ -665,6 +665,12 @@ const (
 	// Number of cache hits for the dotnet PE open/parse error LRU
 	IDDotnetPEInfoErrCacheHit = 292
 
+	// Number of Go custom labels dropped because the label name was empty or not valid UTF-8
+	IDGoLabelsDroppedInvalidName = 293
+
+	// Number of Go custom labels dropped because the label value was not valid UTF-8
+	IDGoLabelsDroppedInvalidValue = 294
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 293
+	IDMax = 295
 )
