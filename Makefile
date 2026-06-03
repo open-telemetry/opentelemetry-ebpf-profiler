@@ -174,13 +174,25 @@ pprof_stable_cgo:
 pprof_stable_cgo_pie:
 	CGO_ENABLED=1 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -buildmode=pie -tags $(GO_TAGS),withcgo,integration -o ./../$@
 
-integration-test-binaries: generate ebpf pprof-execs
+integration-test-binaries: generate ebpf pprof-execs interpreter_rtld_integrationtest.test
 	$(foreach test_name, $(TEST_INTEGRATION_BINARY_DIRS), \
 		(go test -ldflags='-extldflags=-static' -trimpath -c \
 			-tags $(GO_TAGS),static_build,integration \
 			-o ./support/$(subst /,_,$(test_name)).test \
 			./$(test_name)) || exit ; \
 	)
+
+# interpreter_rtld_integrationtest.test exercises the dlopen uprobe
+# end-to-end. It must be dynamically linked: the test process calls
+# dlopen(), which requires a real glibc shared library at runtime. The
+# static integration binaries above cannot host this test, so we build it
+# separately and rely on the initramfs to ship libc (see
+# support/run-tests.sh INCLUDE_LIBC).
+interpreter_rtld_integrationtest.test: ebpf
+	CGO_ENABLED=1 go test -trimpath -c \
+		-tags $(GO_TAGS),integration \
+		-o ./support/interpreter_rtld_integrationtest.test \
+		./interpreter/rtld/integrationtest
 
 docker-image:
 	docker build -t otel/opentelemetry-ebpf-profiler-dev -f Dockerfile .

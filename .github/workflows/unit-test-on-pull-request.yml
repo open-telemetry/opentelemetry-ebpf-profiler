@@ -174,7 +174,11 @@ jobs:
           sudo apt-get update -y
           case "${{ matrix.target_arch }}" in
             amd64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-x86 ;;
-            arm64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-arm ipxe-qemu ;;
+            # libc6-arm64-cross provides the aarch64 glibc + ld.so under
+            # /usr/aarch64-linux-gnu/lib so INCLUDE_LIBC=1 in
+            # support/run-tests.sh can stage the right-arch libs into the
+            # initramfs when cross-targeting arm64 from this amd64 runner.
+            arm64) sudo apt-get -y --no-install-recommends --no-install-suggests install qemu-system-arm ipxe-qemu libc6-arm64-cross ;;
             *) echo >&2 "bug: bad arch selected"; exit 1;;
           esac
           go install github.com/florianl/bluebox@v0.0.1
@@ -190,6 +194,11 @@ jobs:
               --quiet --pull --output="ci-kernels" -
           mv ci-kernels/boot/ ci-kernels/${{ matrix.kernel }}/
       - name: Test on kernel ${{ matrix.kernel }}
+        env:
+          # The rtld integration test (tracer_rtld.test) is dynamically
+          # linked against glibc and calls dlopen() at runtime; bundle the
+          # runner's libc into the QEMU initramfs.
+          INCLUDE_LIBC: "1"
         run: |
           chmod a+rx *.test
           case "${{ matrix.target_arch }}" in
