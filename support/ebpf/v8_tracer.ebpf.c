@@ -103,8 +103,8 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
 
   // All V8 frames have frame pointer. Check that the FP looks valid.
   if (!unwinder_check_frame_size(state, V8_MAX_FRAME_LENGTH)) {
-    increment_metric(metricID_UnwindDotnetErrBadFP);
-    return ERR_DOTNET_BAD_FP;
+    increment_metric(metricID_UnwindV8ErrBadFP);
+    return ERR_V8_BAD_FP;
   }
 
   // Read FP pointer data
