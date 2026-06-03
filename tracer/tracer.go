@@ -6,7 +6,6 @@ package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -132,6 +131,10 @@ type Tracer struct {
 	// probabilisticThreshold holds the threshold for probabilistic profiling.
 	probabilisticThreshold uint
 
+	// customLabels validates custom label keys/values pulled from eBPF and
+	// tracks how many were dropped due to invalid UTF-8.
+	customLabels customLabelValidator
+
 	// done is closed when the tracer encounters an unrecoverable error.
 	// Use Done() to obtain a read-only channel for use in select statements.
 	done     chan libpf.Void
@@ -213,13 +216,10 @@ type progLoaderHelper struct {
 	noTailCallTarget bool
 }
 
-// Convert a C-string to Go string.
-func goString(cstr []byte) libpf.String {
-	index := bytes.IndexByte(cstr, byte(0))
-	if index < 0 {
-		index = len(cstr)
-	}
-	return libpf.Intern(pfunsafe.ToString(cstr[:index]))
+// goString converts a fixed-size NUL-terminated buffer into an interned string,
+// ignoring everything from the first NUL byte onward.
+func goString(buf []byte) libpf.String {
+	return libpf.Intern(pfunsafe.ToString(cstring(buf)))
 }
 
 // schedProcessFreeHookName returns the name of the tracepoint hook to use.
@@ -1058,9 +1058,18 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		trace.CustomLabels = make(map[libpf.String]libpf.String, int(ptr.Custom_labels.Len))
 		for i := 0; i < int(ptr.Custom_labels.Len); i++ {
 			lbl := ptr.Custom_labels.Labels[i]
-			key := goString(lbl.Key[:])
-			val := goString(lbl.Val[:])
-			trace.CustomLabels[key] = val
+			keyBytes, ok := t.customLabels.validateKey(lbl.Key[:])
+			if !ok {
+				log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
+				continue
+			}
+			key := libpf.Intern(pfunsafe.ToString(keyBytes))
+			valBytes, ok := t.customLabels.validateValue(lbl.Val[:])
+			if !ok {
+				log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", key)
+				continue
+			}
+			trace.CustomLabels[key] = libpf.Intern(pfunsafe.ToString(valBytes))
 		}
 	}
 
@@ -1133,6 +1142,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 		metrics.AddSlice(eventMetricCollector())
 		metrics.AddSlice(traceEventMetricCollector())
 		metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
+		metrics.AddSlice(t.customLabels.getAndResetMetrics())
 	})
 
 	return nil
