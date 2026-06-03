@@ -2,14 +2,16 @@
 
 #include "bpfdefs.h"
 #include "errors.h"
+#include "native_stack_trace.h"
 #include "tracemgmt.h"
 #include "tsd.h"
 #include "types.h"
 
-// The number of Python frames to unwind per frame-unwinding eBPF program. If
-// we start running out of instructions in the walk_python_stack program, one
-// option is to adjust this number downwards.
-#define FRAMES_PER_WALK_PYTHON_STACK 12
+// Number of loop iterations in unwind_python. Each iteration handles either
+// a Python or a native frame, so the name follows the *_FRAMES_PER_PROGRAM
+// convention of the other tracers even though it covers both. 10 fits the
+// 5.x / 6.0-6.5 verifier; the host agent bumps it to 15 on 6.6+.
+BPF_RODATA_VAR(u32, python_frames_per_program, 10)
 
 // Forward declaration to avoid warnings like
 // "declaration of 'struct pt_regs' will not be visible outside of this function [-Wvisibility]".
@@ -174,39 +176,6 @@ push_frame:
   return ERR_OK;
 }
 
-static EBPF_INLINE ErrorCode
-walk_python_stack(PerCPURecord *record, const PyProcInfo *pyinfo, int *unwinder)
-{
-  void *py_frame  = record->pythonUnwindState.py_frame;
-  ErrorCode error = ERR_OK;
-  *unwinder       = PROG_UNWIND_STOP;
-
-  for (u32 i = 0; i < FRAMES_PER_WALK_PYTHON_STACK; ++i) {
-    bool continue_with_next;
-    error = process_python_frame(record, pyinfo, &py_frame, &continue_with_next);
-    if (error) {
-      goto stop;
-    }
-    if (continue_with_next) {
-      *unwinder = get_next_unwinder_after_interpreter();
-      goto stop;
-    }
-    if (!py_frame) {
-      goto stop;
-    }
-  }
-
-  *unwinder = PROG_UNWIND_PYTHON;
-
-stop:
-  // Set up the state for the next invocation of this unwinding program.
-  if (error || !py_frame) {
-    unwinder_mark_done(record, PROG_UNWIND_PYTHON);
-  }
-  record->pythonUnwindState.py_frame = py_frame;
-  return error;
-}
-
 // get_PyThreadState retrieves the PyThreadState* for the current thread.
 //
 // Python 3.12 and earlier set the thread_state using pthread_setspecific with the key
@@ -293,6 +262,54 @@ static EBPF_INLINE ErrorCode get_PyFrame(const PyProcInfo *pyinfo, void **frame)
   return ERR_OK;
 }
 
+// python_step_python processes one Python frame.
+static EBPF_INLINE ErrorCode
+python_step_python(PerCPURecord *record, const PyProcInfo *pyinfo, void **py_frame, int *unwinder)
+{
+  bool continue_with_next;
+  ErrorCode error = process_python_frame(record, pyinfo, py_frame, &continue_with_next);
+  if (error) {
+    *unwinder = PROG_UNWIND_STOP;
+    unwinder_mark_done(record, PROG_UNWIND_PYTHON);
+    return error;
+  }
+  if (!*py_frame) {
+    *unwinder = continue_with_next ? get_next_unwinder_after_interpreter() : PROG_UNWIND_STOP;
+    unwinder_mark_done(record, PROG_UNWIND_PYTHON);
+  } else if (continue_with_next) {
+    *unwinder = get_next_unwinder_after_interpreter();
+  }
+  // else: keep *unwinder = PROG_UNWIND_PYTHON (set by the caller's dispatch).
+  return ERR_OK;
+}
+
+// python_step_native processes one native frame at an interpreter boundary
+// and updates *unwinder.
+static EBPF_INLINE ErrorCode python_step_native(PerCPURecord *record, int *unwinder)
+{
+  Trace *trace = &record->trace;
+  *unwinder    = PROG_UNWIND_STOP;
+
+  increment_metric(metricID_UnwindNativeAttempts);
+  ErrorCode error = push_native(
+    &record->state,
+    trace,
+    record->state.text_section_id,
+    record->state.text_section_offset,
+    record->state.return_address);
+  if (error) {
+    return error;
+  }
+
+  bool stop;
+  error = unwind_one_frame(record, &stop);
+  if (error || stop) {
+    return error;
+  }
+
+  return get_next_unwinder_after_native_frame(record, unwinder);
+}
+
 // unwind_python is the entry point for tracing when invoked from the native tracer
 // or interpreter dispatcher. It does not reset the trace object and will append the
 // Python stack frames to the trace object for the current CPU.
@@ -303,7 +320,7 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
     return -1;
 
   ErrorCode error = ERR_OK;
-  int unwinder    = get_next_unwinder_after_interpreter();
+  int unwinder    = PROG_UNWIND_PYTHON;
   Trace *trace    = &record->trace;
   u32 pid         = trace->pid;
 
@@ -314,7 +331,8 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
     // Not a Python process that we have info on
     DEBUG_PRINT("Can't build Python stack, no address info");
     increment_metric(metricID_UnwindPythonErrNoProcInfo);
-    error = ERR_PYTHON_NO_PROC_INFO;
+    error    = ERR_PYTHON_NO_PROC_INFO;
+    unwinder = PROG_UNWIND_STOP;
     goto exit;
   }
 
@@ -322,17 +340,36 @@ static EBPF_INLINE int unwind_python(struct pt_regs *ctx)
   if (!record->pythonUnwindState.py_frame) {
     increment_metric(metricID_UnwindPythonAttempts);
     error = get_PyFrame(pyinfo, &record->pythonUnwindState.py_frame);
-    if (error) {
+    if (error || !record->pythonUnwindState.py_frame) {
+      DEBUG_PRINT("  -> Python frames are handled");
+      unwinder = PROG_UNWIND_STOP;
       goto exit;
     }
   }
-  if (!record->pythonUnwindState.py_frame) {
-    DEBUG_PRINT("  -> Python frames are handled");
-    unwinder_mark_done(record, PROG_UNWIND_PYTHON);
-    goto exit;
-  }
 
-  error = walk_python_stack(record, pyinfo, &unwinder);
+  {
+    void *py_frame = record->pythonUnwindState.py_frame;
+
+    for (u32 t = 0; t < python_frames_per_program; t++) {
+      // clang-format off
+      switch (unwinder) {
+      case PROG_UNWIND_PYTHON:
+        error = python_step_python(record, pyinfo, &py_frame, &unwinder);
+        break;
+      case PROG_UNWIND_NATIVE:
+        error = python_step_native(record, &unwinder);
+        break;
+      default:
+        goto exit;
+      }
+      // clang-format on
+      if (error) {
+        goto exit;
+      }
+    }
+
+    record->pythonUnwindState.py_frame = py_frame;
+  }
 
 exit:
   record->state.unwind_error = error;
