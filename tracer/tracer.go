@@ -1163,7 +1163,7 @@ func terminatePerfEvents(events []*perf.Event) {
 // AttachTracer attaches the main tracer entry point to the perf interrupt events. The tracer
 // entry point is always the native tracer. The native tracer will determine when to invoke the
 // interpreter tracers based on address range information.
-func (t *Tracer) AttachTracer() error {
+func (t *Tracer) AttachTracer(targetCPUs []int) error {
 	tracerProg, ok := t.ebpfProgs["native_tracer_entry"]
 	if !ok {
 		return errors.New("entry program is not available")
@@ -1180,9 +1180,18 @@ func (t *Tracer) AttachTracer() error {
 		return fmt.Errorf("failed to get online cpus: %w", err)
 	}
 
+	if len(targetCPUs) == 0 {
+		targetCPUs = onlineCPUs
+	} else {
+		targetCPUs, err = intersectCPURanges(targetCPUs, onlineCPUs)
+		if err != nil {
+			return err
+		}
+	}
+
 	events := t.perfEntrypoints.WLock()
 	defer t.perfEntrypoints.WUnlock(&events)
-	for _, id := range onlineCPUs {
+	for _, id := range targetCPUs {
 		perfEvent, err := perf.Open(perfAttribute, perf.AllThreads, id, nil)
 		if err != nil {
 			terminatePerfEvents(*events)

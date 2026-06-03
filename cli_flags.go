@@ -84,6 +84,7 @@ var (
 	bpffsHelp = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
 		defaultBPFFSRoot)
 	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context information with OBI."
+	targetCPUIDsHelp  = "Range of CPUs to profile. Format: \"0-15,20,31\""
 )
 
 // Package-scope variable, so that conditionally compiled other components can refer
@@ -132,6 +133,19 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.SendErrorFrames, "send-error-frames", defaultArgSendErrorFrames,
 		sendErrorFramesHelp)
 	fs.BoolVar(&args.SendIdleFrames, "send-idle-frames", false, sendIdleFramesHelp)
+
+	fs.Func("target-cpu", targetCPUIDsHelp, func(cpuRange string) error {
+		if cpuRange == "" {
+			args.TargetCPUIDs = []int{}
+			return nil
+		}
+		CPUIDs, err := tracer.ReadCPURange(cpuRange)
+		if err != nil {
+			return fmt.Errorf("Failed to parse target CPUs range: %s", cpuRange)
+		}
+		args.TargetCPUIDs = CPUIDs
+		return nil
+	})
 
 	fs.StringVar(&args.Tracers, "t", "all", "Shorthand for -tracers.")
 	fs.StringVar(&args.Tracers, "tracers", "all", tracersHelp)
