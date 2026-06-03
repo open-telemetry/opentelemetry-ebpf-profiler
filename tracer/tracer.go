@@ -258,7 +258,8 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
 
-	ebpfHandler, err := pmebpf.LoadMaps(ctx, cfg.IncludeTracers, ebpfMaps, stackdeltaInnerMapSpec)
+	ebpfHandler, err := pmebpf.LoadMaps(ctx, cfg.IncludeTracers, ebpfMaps, ebpfProgs,
+		stackdeltaInnerMapSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
@@ -496,6 +497,21 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to load uprobe eBPF programs: %v", err)
 		}
+	}
+
+	// uprobe_dlopen is loaded unconditionally so the rtld interpreter loader
+	// can attach it whenever a profiled process maps in a libc that exports
+	// dlopen. The program is a tiny standalone uprobe (no tail-call slot).
+	rtldProgs := []progLoaderHelper{
+		{
+			name:             "uprobe_dlopen",
+			noTailCallTarget: true,
+			enable:           true,
+		},
+	}
+	if err = loadProbeUnwinders(coll, ebpfProgs, ebpfMaps["kprobe_progs"], rtldProgs,
+		cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load uprobe_dlopen: %v", err)
 	}
 
 	if err = removeTemporaryMaps(ebpfMaps); err != nil {

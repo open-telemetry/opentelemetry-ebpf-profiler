@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/python"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/rtld"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
 	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -126,6 +127,9 @@ func NewExecutableInfoManager(
 	}
 
 	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
+	// rtld.Loader is registered unconditionally so dlopen-driven mapping
+	// refresh works for any process that maps a libc with a dlopen symbol.
+	interpreterLoaders = append(interpreterLoaders, rtld.Loader)
 	if includeTracers.Has(types.Labels) {
 		interpreterLoaders = append(interpreterLoaders, golabels.Loader)
 	}

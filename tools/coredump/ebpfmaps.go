@@ -39,6 +39,20 @@ var _ interpreter.EbpfHandler = &ebpfMapsCoredump{}
 func (emc *ebpfMapsCoredump) RemoveReportedPID(libpf.PID) {
 }
 
+// noopLinkCloser is returned by AttachUprobe in coredump replay so that the
+// rtld loader caches a non-nil sentinel and skips reattachment on subsequent
+// AddOrIncRef calls.
+type noopLinkCloser struct{}
+
+func (noopLinkCloser) Unload() error { return nil }
+
+// AttachUprobe is a no-op for coredump replay: the harness never loads or
+// attaches eBPF programs against a live kernel.
+func (emc *ebpfMapsCoredump) AttachUprobe(libpf.PID, string, uint64, string) (
+	interpreter.LinkCloser, error) {
+	return noopLinkCloser{}, nil
+}
+
 func (emc *ebpfMapsCoredump) CollectMetrics() []metrics.Metric {
 	return []metrics.Metric{}
 }

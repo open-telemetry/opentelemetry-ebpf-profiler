@@ -2153,5 +2153,12 @@
     "name": "GoLabelsDroppedInvalidValue",
     "field": "agent.golabels.dropped.invalid_value",
     "id": 294
+  },
+  {
+    "description": "Number of times the dlopen uprobe fired",
+    "type": "counter",
+    "name": "DlopenUprobeHits",
+    "field": "agent.rtld.dlopen_uprobe_hits",
+    "id": 295
   }
 ]

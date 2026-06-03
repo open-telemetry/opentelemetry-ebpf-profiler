@@ -14,12 +14,14 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/features"
+	"github.com/cilium/ebpf/link"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"golang.org/x/exp/constraints"
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
@@ -71,6 +73,11 @@ type ebpfMapsImpl struct {
 	hasLPMTrieBatchOperations bool
 
 	updateWorkers *asyncMapUpdaterPool
+
+	// uprobeDlopenProg is the loaded uprobe_dlopen eBPF program. It is held
+	// here so that AttachUprobe can install the probe at runtime against the
+	// process-specific dlopen offset reported by the rtld loader.
+	uprobeDlopenProg *cebpf.Program
 }
 
 // Compile time check to make sure ebpfMapsImpl satisfies the interface .
@@ -79,12 +86,18 @@ var _ ebpfapi.EbpfHandler = &ebpfMapsImpl{}
 // LoadMaps checks if the needed maps for the process manager are available
 // and loads their references into a package-internal structure.
 //
+// The progs map is consulted for standalone (non-tail-call) programs that the
+// handler needs to attach at runtime, currently just uprobe_dlopen. It may be
+// nil if no such program was loaded.
+//
 // It further spawns background workers for deferred map updates; the given
 // context can be used to terminate them on shutdown.
 func LoadMaps(ctx context.Context, includeTracers types.IncludedTracers,
-	maps map[string]*cebpf.Map, stackdeltaInnerMapSpec *cebpf.MapSpec) (ebpfapi.EbpfHandler, error) {
+	maps map[string]*cebpf.Map, progs map[string]*cebpf.Program,
+	stackdeltaInnerMapSpec *cebpf.MapSpec) (ebpfapi.EbpfHandler, error) {
 	impl := &ebpfMapsImpl{
 		stackdeltaInnerMapTemplate: stackdeltaInnerMapSpec,
+		uprobeDlopenProg:           progs["uprobe_dlopen"],
 	}
 	impl.errCounter = make(map[metrics.MetricID]int64)
 
@@ -125,6 +138,43 @@ func LoadMaps(ctx context.Context, includeTracers types.IncludedTracers,
 	impl.updateWorkers = newAsyncMapUpdaterPool(ctx, updatePoolWorkers, updatePoolQueueCap)
 
 	return impl, nil
+}
+
+// uprobeLink wraps a cilium/ebpf link.Link so it can be returned through the
+// interpreter.LinkCloser interface.
+type uprobeLink struct {
+	l link.Link
+}
+
+// Unload detaches the underlying uprobe.
+func (u *uprobeLink) Unload() error {
+	return u.l.Close()
+}
+
+// AttachUprobe installs the named eBPF program at the given offset inside the
+// binary at path (resolved through the PID's mount namespace). The current
+// upstream surface only supports a single program name, "uprobe_dlopen", used
+// by the rtld loader to drive process refresh on dlopen.
+func (impl *ebpfMapsImpl) AttachUprobe(pid libpf.PID, path string, offset uint64,
+	progName string,
+) (interpreter.LinkCloser, error) {
+	if progName != "uprobe_dlopen" {
+		return nil, fmt.Errorf("AttachUprobe: program %q is not supported", progName)
+	}
+	if impl.uprobeDlopenProg == nil {
+		return nil, fmt.Errorf("AttachUprobe: uprobe_dlopen is not loaded")
+	}
+
+	binaryPath := fmt.Sprintf("/proc/%d/root%s", pid, path)
+	exe, err := link.OpenExecutable(binaryPath)
+	if err != nil {
+		return nil, fmt.Errorf("AttachUprobe: open %s: %w", binaryPath, err)
+	}
+	lnk, err := exe.Uprobe("", impl.uprobeDlopenProg, &link.UprobeOptions{Address: offset})
+	if err != nil {
+		return nil, fmt.Errorf("AttachUprobe: attach %s@%#x: %w", path, offset, err)
+	}
+	return &uprobeLink{l: lnk}, nil
 }
 
 // UpdateInterpreterOffsets adds the given moduleRanges to the eBPF map interpreterOffsets.

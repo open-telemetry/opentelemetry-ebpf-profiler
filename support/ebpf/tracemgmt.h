@@ -114,12 +114,16 @@ static inline EBPF_INLINE bool pid_information_exists(int pid)
 #define RATELIMIT_ACTION_DEFAULT 1
 // Set PID to fast timer mode
 #define RATELIMIT_ACTION_FAST    2
+// Skip rate limiting entirely without clearing the existing token. Used for
+// events that must always be reported (e.g. dlopen) but should not perturb
+// the ratelimit state of unrelated periodic events.
+#define RATELIMIT_ACTION_NONE    3
 
 // pid_event_ratelimit determines if the PID event should be inhibited or not
 // based on rate limiting rules.
 static inline EBPF_INLINE bool pid_event_ratelimit(u32 pid, int ratelimit_action)
 {
-  if (ratelimit_action == RATELIMIT_ACTION_RESET) {
+  if (ratelimit_action == RATELIMIT_ACTION_RESET || ratelimit_action == RATELIMIT_ACTION_NONE) {
     return false;
   }
 

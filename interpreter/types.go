@@ -88,6 +88,12 @@ var (
 // need to hard code different well known offsets in the xxData. It allows then to still
 // share the Data and Instance code between these versions.
 
+// LinkCloser is the handle returned by EbpfHandler.AttachUprobe and is used to
+// detach a previously attached uprobe when its owning interpreter is unloaded.
+type LinkCloser interface {
+	Unload() error
+}
+
 // EbpfHandler provides the functionality for interpreters to interact with eBPF maps.
 type EbpfHandler interface {
 	// UpdateInterpreterOffsets adds the given offsetRanges to the eBPF map interpreter_offsets.
@@ -107,6 +113,12 @@ type EbpfHandler interface {
 	// DeletePidInterpreterMapping removes the element specified by pid, prefix
 	// rom the eBPF map pid_page_to_mapping_info.
 	DeletePidInterpreterMapping(libpf.PID, lpm.Prefix) error
+
+	// AttachUprobe installs the named eBPF program as a uprobe at the given
+	// offset inside `path` (resolved relative to the PID's mount namespace).
+	// The returned LinkCloser must be retained by the caller; releasing it
+	// detaches the probe.
+	AttachUprobe(pid libpf.PID, path string, offset uint64, progName string) (LinkCloser, error)
 }
 
 // Loader is a function to detect and load data from given interpreter ELF file.

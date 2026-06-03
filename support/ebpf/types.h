@@ -331,6 +331,9 @@ enum {
   // number of bpf_ringbuf_output failures
   metricID_BPFRingbufOutputErr,
 
+  // number of times the dlopen uprobe fired
+  metricID_DlopenUprobeHits,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
