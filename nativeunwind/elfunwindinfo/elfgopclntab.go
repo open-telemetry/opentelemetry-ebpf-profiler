@@ -31,10 +31,10 @@ var goFunctionsStopDelta = map[string]*sdtypes.UnwindInfo{
 	"runtime.mstart": &sdtypes.UnwindInfoStop, // topmost for the go runtime main stacks
 	"runtime.goexit": &sdtypes.UnwindInfoStop, // return address in all goroutine stacks
 
-	// stack switch functions that would need special handling for further unwinding.
-	// See PF-1101.
+	// systemstack preserves the frame pointer chain across
+	// the g0/user stack boundary, so standard FP unwinding traverses it naturally.
+	"runtime.systemstack": &sdtypes.UnwindInfoFramePointer,
 	"runtime.mcall":       &sdtypes.UnwindInfoStop,
-	"runtime.systemstack": &sdtypes.UnwindInfoStop,
 
 	// signal return frame
 	"runtime.sigreturn":            &sdtypes.UnwindInfoSignal,
@@ -737,6 +737,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	// Get target machine architecture for the ELF file
 	arch := ee.file.Machine
 	defaultStrategy := strategyFramePointer
+	isFramePointerReliable := true
 	var parsePclntab func(deltas *sdtypes.StackDeltaArray, p pcval, s strategy) error
 
 	switch arch {
@@ -751,12 +752,14 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		case go1_2, go1_16, go1_18:
 			// Magic indicates old Go with broken arm64 frame pointers
 			defaultStrategy = strategyDeltasWithFrame
+			isFramePointerReliable = false
 		case go1_20:
 			// Ambiguous regarding if frame pointer is kept correctly.
 			// Take the slow path of resolving Go version.
 			goVer, err := ee.file.GoVersion()
 			if err != nil || version.Compare(goVer, "go1.21rc1") < 0 {
 				defaultStrategy = strategyDeltasWithFrame
+				isFramePointerReliable = false
 			}
 		}
 	default:
@@ -775,9 +778,13 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		// First, check for functions with special handling.
 		funcName := getString(g.funcnametab, int(fun.nameOff))
 		if info, found := goFunctionsStopDelta[funcName]; found {
+			unwindInfo := *info
+			if unwindInfo == sdtypes.UnwindInfoFramePointer && !isFramePointerReliable {
+				unwindInfo = sdtypes.UnwindInfoStop
+			}
 			ee.deltas.Add(sdtypes.StackDelta{
 				Address: uint64(funcPc),
-				Info:    *info,
+				Info:    unwindInfo,
 			})
 			continue
 		}
