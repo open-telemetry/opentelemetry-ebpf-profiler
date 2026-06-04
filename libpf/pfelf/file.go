@@ -775,6 +775,7 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 
 	rela := &elf.Rela64{}
 	sym := &elf.Sym64{}
+	symSz := int64(unsafe.Sizeof(elf.Sym64{}))
 	for {
 		if _, err := rdr.Read(pfunsafe.FromPointer(rela)); err != nil {
 			if err != io.EOF {
@@ -785,7 +786,6 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 		if !checkRelocation(*rela) {
 			continue
 		}
-		symSz := int64(unsafe.Sizeof(*sym))
 		symNo := int64(rela.Info >> 32)
 		n, err := symtabSection.ReadAt(pfunsafe.FromPointer(sym), symNo*symSz)
 		if err != nil || n != int(symSz) {
