@@ -51,9 +51,6 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 			}
 			return err
 		}
-		if note.Namesz == 0 || note.Descsz == 0 {
-			return nil
-		}
 
 		id := NamespaceUnknown
 		alignedSize := int((note.Namesz + 3) &^ 3)

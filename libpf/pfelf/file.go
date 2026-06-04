@@ -488,7 +488,7 @@ func (f *File) LoadSections() error {
 	return nil
 }
 
-// findProg find the first matching program header of given type.
+// findProg finds the first matching program header of given type.
 func (f *File) findProg(t elf.ProgType) *Prog {
 	for i := range f.Progs {
 		if f.Progs[i].Type == t {
