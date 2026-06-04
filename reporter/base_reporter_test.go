@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/pdata/pprofile"
+	"go.opentelemetry.io/otel/attribute"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
@@ -105,8 +107,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 	now := time.Now()
 	meta1 := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(now.UnixNano()),
-		Comm:           libpf.NewCommFromString("app1"),
-		ProcessName:    libpf.Intern("app1"),
+		Comm:           libpf.Intern("app1"),
 		ExecutablePath: libpf.Intern("/usr/bin/app1"),
 		APMServiceName: "service1",
 		ContainerID:    libpf.Intern("container-1"),
@@ -118,8 +119,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 
 	meta2 := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(now.Add(time.Second).UnixNano()),
-		Comm:           libpf.NewCommFromString("app2"),
-		ProcessName:    libpf.Intern("app2"),
+		Comm:           libpf.Intern("app2"),
 		ExecutablePath: libpf.Intern("/usr/bin/app2"),
 		APMServiceName: "service2",
 		ContainerID:    libpf.Intern("container-2"),
@@ -175,4 +175,105 @@ func TestBaseReporterGenerate(t *testing.T) {
 	// Verify profiles exist
 	assert.Greater(t, scopeProfile.Profiles().Len(), 0,
 		"Should have at least one profile")
+}
+
+// processNameAttrProducer is a test SampleAttrProducer that reads "process.name" from
+// TraceEventMeta.ExtraMeta (populated by a ProcessMetaEnricher) and emits it as a
+// sample attribute, exercising the full enricher → TraceEventMeta → attribute pipeline.
+type processNameAttrProducer struct{}
+
+func (p *processNameAttrProducer) CollectExtraSampleMeta(_ *libpf.Trace, meta *samples.TraceEventMeta) any {
+	if meta.ExtraMeta == nil {
+		return ""
+	}
+	return meta.ExtraMeta["process.name"]
+}
+
+func (p *processNameAttrProducer) ExtraSampleAttrs(attrMgr *samples.AttrTableManager, extraMeta any) []int32 {
+	name, _ := extraMeta.(string)
+	if name == "" {
+		return nil
+	}
+	// Use a scratch sample to collect the attribute index from AttrTableManager.
+	tmp := pprofile.NewSample()
+	attrMgr.AppendOptionalString(tmp.AttributeIndices(), attribute.Key("process.name"), name)
+	indices := make([]int32, tmp.AttributeIndices().Len())
+	for i := range indices {
+		indices[i] = tmp.AttributeIndices().At(i)
+	}
+	return indices
+}
+
+// TestProcessMetaEnricherPipeline verifies that values set by a ProcessMetaEnricher
+// (stored in TraceEventMeta.ExtraMeta) flow through CollectExtraSampleMeta and
+// ExtraSampleAttrs and end up as attributes in the generated profiles.
+func TestProcessMetaEnricherPipeline(t *testing.T) {
+	cfg := &Config{
+		Name:                "test-agent",
+		Version:             "v1.0.0",
+		SamplesPerSecond:    100,
+		ExtraSampleAttrProd: &processNameAttrProducer{},
+	}
+	reporter := createTestBaseReporter(t, cfg)
+
+	trace := &libpf.Trace{
+		Frames: func() libpf.Frames {
+			frames := make(libpf.Frames, 0, 1)
+			frames.Append(&libpf.Frame{
+				Type:            libpf.NativeFrame,
+				AddressOrLineno: 0x1000,
+				FunctionName:    libpf.Intern("main"),
+			})
+			return frames
+		}(),
+	}
+
+	now := time.Now()
+	// Simulate what a ProcessMetaEnricher would have stored in ExtraMeta at
+	// process discovery time, which then flows into TraceEventMeta.ExtraMeta.
+	meta := &samples.TraceEventMeta{
+		Timestamp:      libpf.UnixTime64(now.UnixNano()),
+		Comm:           libpf.Intern("myapp"),
+		ExecutablePath: libpf.Intern("/usr/bin/myapp"),
+		ContainerID:    libpf.Intern("container-x"),
+		PID:            3000,
+		TID:            3001,
+		CPU:            0,
+		ExtraMeta:      map[string]string{"process.name": "myapp"},
+	}
+
+	err := reporter.ReportTraceEvent(trace, meta)
+	require.NoError(t, err)
+
+	eventsTreePtr := reporter.traceEvents.RLock()
+	eventsTree := *eventsTreePtr
+	reporter.traceEvents.RUnlock(&eventsTreePtr)
+
+	profiles, err := reporter.pdata.Generate(
+		eventsTree,
+		reporter.name,
+		reporter.version,
+		reporter.collectionStartTime,
+		time.Now(),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, profiles)
+
+	// Verify "process.name" = "myapp" appears in the attribute table.
+	dic := profiles.Dictionary()
+	strTable := dic.StringTable()
+	attrTable := dic.AttributeTable()
+
+	found := false
+	for i := 0; i < attrTable.Len(); i++ {
+		attr := attrTable.At(i)
+		keyIdx := int(attr.KeyStrindex())
+		if keyIdx < strTable.Len() && strTable.At(keyIdx) == "process.name" {
+			if attr.Value().Str() == "myapp" {
+				found = true
+				break
+			}
+		}
+	}
+	assert.True(t, found, "expected process.name=myapp in the attribute table")
 }

@@ -220,6 +220,10 @@ type Config struct {
 	BPFFSRoot string
 	// OBIProcessCtx enable the use of a known shared eBPF map with OBI.
 	OBIProcessCtx bool
+
+	// ProcessMetaEnricher is an optional hook for enriching process metadata at
+	// process discovery time. See processmanager.ProcessMetaEnricher.
+	ProcessMetaEnricher pm.ProcessMetaEnricher
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -292,6 +296,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		FrameCacheSize:        cfg.FrameCacheSize,
 		FilterErrorFrames:     cfg.FilterErrorFrames,
 		IncludeEnvVars:        cfg.IncludeEnvVars,
+		ProcessMetaFn:         cfg.ProcessMetaEnricher,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
@@ -1163,7 +1168,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 		Comm:             libpf.NewComm(ptr.Comm),
 		ExecutablePath:   procMeta.Executable,
 		ContainerID:      procMeta.ContainerID,
-		ProcessName:      procMeta.Name,
+		ExtraMeta:        procMeta.ExtraMeta,
 		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.Apm_trace_id)),
 		APMTransactionID: *(*libpf.APMTransactionID)(unsafe.Pointer(&ptr.Apm_transaction_id)),
 		PID:              pid,
