@@ -11,7 +11,7 @@ replace go.opentelemetry.io/ebpf-profiler => ../../
 
 require (
 	github.com/cilium/ebpf v0.21.0
-	go.opentelemetry.io/ebpf-profiler v0.0.202622
+	go.opentelemetry.io/ebpf-profiler v0.0.202623
 )
 
 require (
@@ -42,7 +42,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.27.0 // indirect
-	golang.org/x/exp v0.0.0-20260527015227-08cc5374adb3 // indirect
+	golang.org/x/exp v0.0.0-20260603202125-055de637280b // indirect
 	golang.org/x/exp/typeparams v0.0.0-20231108232855-2478ac86f678 // indirect
 	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/net v0.55.0 // indirect
