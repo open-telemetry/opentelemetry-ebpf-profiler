@@ -45,6 +45,9 @@ pub enum StatusCode {
 
     #[error("Point resolver error")]
     PointResolver = 9,
+
+    #[error("NULL pointer passed for a required argument")]
+    NullArg = 10,
 }
 
 impl From<StatusCode> for FfiResult {

@@ -37,7 +37,9 @@ unsafe fn retpadextr_new_impl(
     executable: *const c_char,
     extr: *mut *mut SymblibRetPadExtractor, // out arg
 ) -> FfiResult {
-    assert!(!executable.is_null());
+    if executable.is_null() {
+        return Err(StatusCode::NullArg);
+    }
     let executable = CStr::from_ptr(executable)
         .to_str()
         .map(Path::new)
@@ -121,7 +123,9 @@ unsafe fn retpadextr_submit_impl(
     visitor: RetPadVisitor,
     user_data: *mut c_void,
 ) -> FfiResult {
-    assert!(!extr.is_null());
+    if extr.is_null() {
+        return Err(StatusCode::NullArg);
+    }
     let extr: &mut SymblibRetPadExtractor = &mut *extr;
 
     // Wrap visitor to make it rustier.
