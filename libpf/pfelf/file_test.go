@@ -19,8 +19,9 @@ import (
 )
 
 func getPFELF(path string, t *testing.T) *File {
+	t.Helper()
 	file, err := Open(path)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	return file
 }
 

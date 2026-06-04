@@ -672,6 +672,8 @@ typedef struct UnwindState {
 #endif
     };
   };
+  // Bound to calculate frame size from.
+  u64 fp_bound;
 
   // The executable ID/hash associated with PC
   u64 text_section_id;
@@ -766,8 +768,8 @@ typedef struct HotspotUnwindScratchSpace {
 // Container for additional scratch space needed by the V8 unwinder.
 typedef struct V8UnwindScratchSpace {
   // Read buffer for storing the V8 FP stored context. Needs to be in non-stack
-  // area to allow variable indexing.
-  u8 fp_ctx[V8_FP_CONTEXT_SIZE];
+  // area to allow variable indexing. Need extra 16 bytes for the Frame Pointer data.
+  u8 fp_ctx[V8_FP_CONTEXT_SIZE + 16];
   // Read buffer for V8 Code object. Currently we need about 60 bytes to get
   // code instruction_size and flags.
   u8 code[96];

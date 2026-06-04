@@ -36,6 +36,11 @@ func TestFieldsN(t *testing.T) {
 	}
 }
 
+func TestFieldsNZeroLengthSlice(t *testing.T) {
+	require.Equal(t, 0, FieldsN("hello world", []string{}))
+	require.Equal(t, 0, FieldsN("", []string{}))
+}
+
 func TestSplitN(t *testing.T) {
 	tests := map[string]struct {
 		input     string
@@ -61,4 +66,9 @@ func TestSplitN(t *testing.T) {
 			require.Equal(t, testcase.expected, fields[:n])
 		})
 	}
+}
+
+func TestSplitNZeroLengthSlice(t *testing.T) {
+	require.Equal(t, 0, SplitN("hello-world", "-", []string{}))
+	require.Equal(t, 0, SplitN("", "-", []string{}))
 }

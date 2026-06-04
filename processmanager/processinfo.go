@@ -353,7 +353,12 @@ func (pm *ProcessManager) processRemovedInterpreters(pid libpf.PID,
 var errInvalidVirtualAddress = errors.New("invalid ELF virtual address")
 
 func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapping) (libpf.FrameMapping, error) {
-	elfRef := pfelf.NewReference(m.Path, pr)
+	// Open the mapping's own file via OpenELFMapping (VDSO from memory plus
+	// /proc/<pid>/map_files for deleted-file safety); auxiliary opens such as
+	// .gnu_debuglink targets go through pr.OpenELF.
+	elfRef := pfelf.NewReferenceWithOpenFunc(m.Path, pr, func() (*pfelf.File, error) {
+		return process.OpenELFMapping(pr, m)
+	})
 	defer elfRef.Close()
 
 	info := pm.getELFInfo(pr, m, elfRef)

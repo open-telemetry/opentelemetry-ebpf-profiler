@@ -8,19 +8,35 @@ package pfelf // import "go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 
 // Reference is a reference to an ELF file which is loaded and cached on demand.
 type Reference struct {
-	// Interface to open ELF files as needed
+	// ELFOpener opens auxiliary files by name (e.g. debuglink targets). When
+	// open is nil it also opens the reference's own file via OpenELF(fileName).
 	ELFOpener
 
 	// fileName is the full path of the ELF to open.
 	fileName string
 
+	// open, when non-nil, opens the reference's own file instead of
+	// ELFOpener.OpenELF(fileName). It lets callers inject context that a bare
+	// filename cannot carry, e.g. a memory mapping.
+	open func() (*File, error)
+
 	// elfFile contains the cached ELF file
 	elfFile *File
 }
 
-// NewReference returns a new Reference
+// NewReference returns a Reference that opens both its own file and any
+// auxiliary files (e.g. debuglink targets) through elfOpener, by name.
 func NewReference(fileName string, elfOpener ELFOpener) *Reference {
 	return &Reference{fileName: fileName, ELFOpener: elfOpener}
+}
+
+// NewReferenceWithOpenFunc returns a Reference that opens its own file via
+// open, while auxiliary files (e.g. debuglink targets) are still opened by
+// name through elfOpener.
+func NewReferenceWithOpenFunc(fileName string, elfOpener ELFOpener,
+	open func() (*File, error),
+) *Reference {
+	return &Reference{fileName: fileName, ELFOpener: elfOpener, open: open}
 }
 
 // FileName returns the file name associated with this Reference
@@ -33,7 +49,11 @@ func (ref *Reference) FileName() string {
 func (ref *Reference) GetELF() (*File, error) {
 	var err error
 	if ref.elfFile == nil {
-		ref.elfFile, err = ref.OpenELF(ref.fileName)
+		if ref.open != nil {
+			ref.elfFile, err = ref.open()
+		} else {
+			ref.elfFile, err = ref.OpenELF(ref.fileName)
+		}
 	}
 	return ref.elfFile, err
 }

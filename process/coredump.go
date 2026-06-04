@@ -20,7 +20,6 @@ import (
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 )
@@ -82,15 +81,7 @@ type CoredumpFile struct {
 	Base uint64
 }
 
-// ELF64 Note header.
-type Note64 struct {
-	Namesz, Descsz, Type uint32
-}
-
 const (
-	NAMESPACE_CORE  = "CORE\x00"
-	NAMESPACE_LINUX = "LINUX\x00"
-
 	NT_AUXV         elf.NType = 6
 	NT_FILE         elf.NType = 0x46494c45
 	NT_ARM_TLS      elf.NType = 0x401
@@ -165,66 +156,32 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 			cd.mappings = append(cd.mappings, m)
 		}
 	}
-	// Parse the coredump specific PT_NOTE program headers we are interested about.
-	for i := range f.Progs {
-		p := &f.Progs[i]
-		if p.Filesz <= 0 {
-			continue
-		}
-		if p.ProgHeader.Type != elf.PT_NOTE {
-			continue
-		}
 
-		rdr := pfbufio.NewReader(f.Underlying(), int64(p.Off), int64(p.Filesz))
-		var note Note64
+	var noteErrors error
+	err := f.VisitNotes(func(note uint64, desc []byte) bool {
+		// Parse the note if we are interested in it (skip others).
 		var err error
-		for {
-			// Read the note header (name and size lengths), followed by reading
-			// their contents. This code advances the position in 'rdr' and should
-			// be kept together to parse the notes correctly.
-			if _, err = rdr.Read(pfunsafe.FromPointer(&note)); err != nil {
-				break
-			}
-			var nameBytes, desc []byte
-			if nameBytes, err = getAlignedBytes(rdr, note.Namesz); err != nil {
-				break
-			}
-			if desc, err = getAlignedBytes(rdr, note.Descsz); err != nil {
-				break
-			}
-
-			// Parse the note if we are interested in it (skip others).
-			name := string(nameBytes)
-			ty := elf.NType(note.Type)
-			if name == NAMESPACE_CORE {
-				switch ty {
-				case NT_AUXV:
-					cd.parseAuxVector(desc, vaddrToMappings)
-				case elf.NT_PRPSINFO:
-					err = cd.parseProcessInfo(desc)
-				case elf.NT_PRSTATUS:
-					err = cd.parseProcessStatus(desc)
-				case NT_FILE:
-					err = cd.parseMappings(desc, vaddrToMappings)
-				}
-			} else if name == NAMESPACE_LINUX {
-				switch ty {
-				case NT_ARM_PAC_MASK:
-					err = cd.parseArmPacMask(desc)
-				case NT_ARM_TLS:
-					err = cd.parseArmTLS(desc)
-				}
-			}
-
-			if err != nil {
-				break
-			}
+		switch note {
+		case pfelf.NamespaceCore + uint64(NT_AUXV):
+			cd.parseAuxVector(desc, vaddrToMappings)
+		case pfelf.NamespaceCore + uint64(elf.NT_PRPSINFO):
+			err = cd.parseProcessInfo(desc)
+		case pfelf.NamespaceCore + uint64(elf.NT_PRSTATUS):
+			err = cd.parseProcessStatus(desc)
+		case pfelf.NamespaceCore + uint64(NT_FILE):
+			err = cd.parseMappings(desc, vaddrToMappings)
+		case pfelf.NamespaceLinux + uint64(NT_ARM_PAC_MASK):
+			err = cd.parseArmPacMask(desc)
+		case pfelf.NamespaceLinux + uint64(NT_ARM_TLS):
+			err = cd.parseArmTLS(desc)
 		}
-		pfbufio.PutReader(rdr)
-
-		if err != io.EOF {
-			return nil, err
-		}
+		noteErrors = errors.Join(noteErrors, err)
+		return noteErrors == nil
+	})
+	err = errors.Join(noteErrors, err)
+	if err != nil {
+		_ = f.Close()
+		return nil, err
 	}
 
 	return cd, nil
@@ -284,7 +241,7 @@ func (cd *CoredumpProcess) GetThreads() ([]ThreadInfo, error) {
 // OpenMappingFile implements the Process interface.
 func (cd *CoredumpProcess) OpenMappingFile(_ *RawMapping) (ReadAtCloser, error) {
 	// Coredumps do not contain the original backing files.
-	return nil, errors.New("coredump does not support opening backing file")
+	return nil, ErrMappingFileUnavailable
 }
 
 // GetMappingFileLastModified implements the Process interface.
@@ -517,7 +474,7 @@ func (cd *CoredumpProcess) parseProcessStatus(desc []byte) error {
 
 	ts := ThreadInfo{
 		LWP:    binary.LittleEndian.Uint32(desc[32:]),
-		GPRegs: desc[regStart:regEnd],
+		GPRegs: bytes.Clone(desc[regStart:regEnd]),
 	}
 	if cd.Machine == elf.EM_X86_64 {
 		// Coredump GPRegs on x86_64 is actually "struct user_regs_struct" with
