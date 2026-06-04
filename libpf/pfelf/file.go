@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"debug/buildinfo"
 	"debug/elf"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -59,6 +60,15 @@ const (
 var (
 	// ErrNotELF is returned when the file is not an ELF file.
 	ErrNotELF = errors.New("not an ELF file")
+
+	// ErrNoDebugLink is returned when debug link does not exist.
+	ErrNoDebugLink = errors.New("no debug link")
+
+	// ErrNoBuildID is returned if build ID is not present in notes.
+	ErrNoBuildID = errors.New("no build ID")
+
+	// errNotProcessed is internal placeholder to mark not yet parsed data.
+	errNotProcessed = errors.New("not yet processed")
 )
 
 // File represents an open ELF file
@@ -71,9 +81,6 @@ type File struct {
 
 	// mmapReader is the mmap reader for this File if available
 	mmapReader *mmap.ReaderAt
-
-	// ehFrame is a pointer to the PT_GNU_EH_FRAME segment of the ELF
-	ehFrame *Prog
 
 	// loadData is a slice of pointers to the PT_LOAD data segments of the ELF.
 	loadData []*Prog
@@ -132,6 +139,11 @@ type File struct {
 	debuglinkPath string
 	// Whether we have checked for a debuglink
 	debuglinkChecked bool
+
+	// Cached notes data
+	notesError error
+	gnuBuildId string
+	goBuildId  string
 
 	// Contains the Go build information if present
 	goBuildInfo *debug.BuildInfo
@@ -221,6 +233,7 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		elfReader:  r,
 		InsideCore: loadAddress != 0,
 		closer:     closer,
+		notesError: errNotProcessed,
 	}
 	success := false
 	defer func() {
@@ -356,8 +369,6 @@ func newFile(r io.ReaderAt, closer io.Closer,
 				}
 			}
 			pfbufio.PutReader(rdr)
-		case elf.PT_GNU_EH_FRAME:
-			f.ehFrame = p
 		}
 	}
 
@@ -477,6 +488,16 @@ func (f *File) LoadSections() error {
 	return nil
 }
 
+// findProg finds the first matching program header of given type.
+func (f *File) findProg(t elf.ProgType) *Prog {
+	for i := range f.Progs {
+		if f.Progs[i].Type == t {
+			return &f.Progs[i]
+		}
+	}
+	return nil
+}
+
 // Section returns a section with the given name, or nil if no such section exists.
 func (f *File) Section(name string) *Section {
 	if f.InsideCore {
@@ -547,11 +568,11 @@ func (f *File) SymbolData(name libpf.SymbolName, maxSize int) (*libpf.Symbol, []
 
 // EHFrame constructs a Program header with the EH Frame sections
 func (f *File) EHFrame() (*Prog, error) {
-	if f.ehFrame == nil {
+	p := f.findProg(elf.PT_GNU_EH_FRAME)
+	if p == nil {
 		return nil, errors.New("no PT_GNU_EH_FRAME tag found")
 	}
 	// Find matching PT_LOAD segment
-	p := f.ehFrame
 	for i := range f.Progs {
 		ph := &f.Progs[i]
 		if ph.Type != elf.PT_LOAD || p.Vaddr < ph.Vaddr ||
@@ -580,38 +601,52 @@ func (f *File) EHFrame() (*Prog, error) {
 	return nil, errors.New("no PT_LOAD segment for PT_GNU_EH_FRAME found")
 }
 
-// GetGoBuildID returns the Go BuildID if present
-func (f *File) GetGoBuildID() (string, error) {
-	s := f.Section(".note.go.buildid")
-	if s == nil {
-		s = f.Section(".notes")
-	}
-	if s == nil {
-		return "", ErrNoBuildID
-	}
-	data, err := s.Data(maxBytesSmallSection)
-	if err != nil {
-		return "", err
+// VisitNotes iterates the ELF notes.
+// The visitor must make copies of the 'data' it keeps after return.
+func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
+	notes := f.findProg(elf.PT_NOTE)
+	if notes == nil {
+		return nil
 	}
 
-	return getGoBuildIDFromNotes(data)
+	rdr := pfbufio.NewReader(f.elfReader, int64(notes.Off), int64(notes.Filesz))
+	defer pfbufio.PutReader(rdr)
+
+	return visitNotes(rdr, visitor)
+}
+
+// parseNotes parses and caches the ELF notes for the File.
+func (f *File) parseNotes() error {
+	if f.notesError == errNotProcessed {
+		f.notesError = f.VisitNotes(func(note uint64, desc []byte) bool {
+			switch note {
+			case NoteGnuBuildId:
+				f.gnuBuildId = hex.EncodeToString(desc)
+			case NoteGoBuildId:
+				f.goBuildId = string(desc)
+			}
+			return true
+		})
+	}
+	return f.notesError
+}
+
+// GetGoBuildID returns the Go BuildID if present
+func (f *File) GetGoBuildID() (string, error) {
+	err := f.parseNotes()
+	if err == nil && f.goBuildId == "" {
+		err = ErrNoBuildID
+	}
+	return f.goBuildId, err
 }
 
 // GetBuildID returns the ELF BuildID if present
 func (f *File) GetBuildID() (string, error) {
-	s := f.Section(".note.gnu.build-id")
-	if s == nil {
-		s = f.Section(".notes")
+	err := f.parseNotes()
+	if err == nil && f.gnuBuildId == "" {
+		err = ErrNoBuildID
 	}
-	if s == nil {
-		return "", ErrNoBuildID
-	}
-	data, err := s.Data(maxBytesSmallSection)
-	if err != nil {
-		return "", err
-	}
-	runtime.KeepAlive(f)
-	return getBuildIDFromNotes(data)
+	return f.gnuBuildId, err
 }
 
 // GoVersion returns the Go version if present and empty string otherwise. This will delegate
@@ -817,16 +852,18 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 // GetDebugLink reads and parses the .gnu_debuglink section.
 // If the link does not exist then ErrNoDebugLink is returned.
 func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
-	note := f.Section(".gnu_debuglink")
-	if note == nil {
+	s := f.Section(".gnu_debuglink")
+	if s == nil {
 		return "", 0, ErrNoDebugLink
 	}
 
-	d, err := note.Data(maxBytesSmallSection)
+	rdr := pfbufio.NewReader(f.elfReader, int64(s.Offset), int64(s.Size))
+	defer pfbufio.PutReader(rdr)
+
+	d, err := rdr.ReadN(int(s.Size))
 	if err != nil {
-		return "", 0, fmt.Errorf("could not read link: %w", ErrNoDebugLink)
+		return "", 0, fmt.Errorf("unable to read debug link: %w", err)
 	}
-	runtime.KeepAlive(f)
 	return ParseDebugLink(d)
 }
 

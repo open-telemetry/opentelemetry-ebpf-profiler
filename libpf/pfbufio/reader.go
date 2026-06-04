@@ -14,6 +14,10 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 )
 
+// ErrBufferTooSmall is returned if trying the request cannot be satisfied
+// due to too small buffer.
+var ErrBufferTooSmall = errors.New("buffer too small")
+
 // bufferSize is a build-time constant for the internal array.
 const bufferSize = 64 * 1024
 
@@ -141,10 +145,10 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 
 		// 4. Small read remaining: Fill internal buffer and loop again.
 		if err := r.fill(); err != nil {
-			if n > 0 {
-				return n, nil
+			if n == len(p) {
+				err = nil
 			}
-			return 0, err
+			return n, err
 		}
 	}
 	return n, nil
@@ -180,6 +184,25 @@ func (r *Reader) Discard(n int) (discarded int, err error) {
 	return discarded, nil
 }
 
+// ReadN reads and returns a byte slice to 'n' bytes of data.
+// The returned slice points to the internal buffer and is invalid after the next read.
+func (r *Reader) ReadN(n int) ([]byte, error) {
+	if n > bufferSize {
+		return nil, ErrBufferTooSmall
+	}
+	if r.size-r.pos < n {
+		if err := r.fill(); err != nil {
+			return nil, err
+		}
+	}
+	if r.size-r.pos >= n {
+		b := r.buf[r.pos : r.pos+n]
+		r.pos += n
+		return b, nil
+	}
+	return nil, io.EOF
+}
+
 // ReadSlice reads until the first occurrence of delim.
 // The returned slice points to the internal buffer and is invalid after the next read.
 func (r *Reader) ReadSlice(delim byte) ([]byte, error) {
@@ -199,7 +222,7 @@ func (r *Reader) ReadSlice(delim byte) ([]byte, error) {
 		// If buffer is full and no delim, we must clear it to find the delim
 		if r.pos == 0 && r.size == bufferSize {
 			r.pos = r.size
-			return r.buf[:], errors.New("buffer full without delimiter")
+			return r.buf[:], ErrBufferTooSmall
 		}
 
 		if err := r.fill(); err != nil {
