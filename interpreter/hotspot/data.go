@@ -308,8 +308,6 @@ func (vmd *hotspotVMData) parseIntrospection(it *hotspotIntrospectionTable,
 
 			castedValue := reflect.ValueOf(value).Convert(f.Type().Elem())
 			f.SetMapIndex(reflect.ValueOf(fieldName), castedValue)
-		default:
-			panic(fmt.Sprintf("bug: unexpected field type in vmStructs: %v", f.Kind()))
 		}
 	}
 	return nil
@@ -456,8 +454,6 @@ func forEachItem(prefix string, t reflect.Value, visitor func(reflect.Value, str
 			}
 		case reflect.Map:
 			continue
-		default:
-			panic("unsupported type")
 		}
 	}
 	return nil
