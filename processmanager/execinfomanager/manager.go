@@ -395,7 +395,7 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 	default:
 		log.Debugf("Multiple interpreters (%d) matched for %v (%#016x)",
 			len(matches), loaderInfo.FileName(), loaderInfo.FileID())
-		return interpreter.NewMultiInterpreter(matches)
+		return interpreter.NewMultiData(matches)
 	}
 }
 
