@@ -5,6 +5,7 @@ package collector // import "go.opentelemetry.io/ebpf-profiler/collector"
 
 import (
 	"go.opentelemetry.io/collector/consumer/xconsumer"
+	"go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 )
 
@@ -13,9 +14,10 @@ type Option interface {
 }
 
 type controllerOption struct {
-	executableReporter reporter.ExecutableReporter
-	reporterFactory    func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
-	onShutdown         func() error
+	executableReporter  reporter.ExecutableReporter
+	processMetaEnricher processmanager.ProcessMetaEnricher
+	reporterFactory     func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)
+	onShutdown          func() error
 }
 
 type optFunc func(*controllerOption) *controllerOption
@@ -43,6 +45,18 @@ func WithOnShutdown(onShutdown func() error) Option {
 func WithReporterFactory(reporterFactory func(cfg *reporter.Config, nextConsumer xconsumer.Profiles) (reporter.Reporter, error)) Option {
 	return optFunc(func(option *controllerOption) *controllerOption {
 		option.reporterFactory = reporterFactory
+		return option
+	})
+}
+
+// WithProcessMetaEnricher registers a hook that is called once per process when it
+// is first observed. The enricher may read from /proc or other sources and store
+// arbitrary key-value pairs in ProcessMeta.ExtraMeta. Those values are propagated
+// to TraceEventMeta.ExtraMeta, where a SampleAttrProducer can attach them as
+// resource or sample attributes on outgoing profiles.
+func WithProcessMetaEnricher(enricher processmanager.ProcessMetaEnricher) Option {
+	return optFunc(func(option *controllerOption) *controllerOption {
+		option.processMetaEnricher = enricher
 		return option
 	})
 }
