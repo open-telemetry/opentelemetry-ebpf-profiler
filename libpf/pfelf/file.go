@@ -778,7 +778,7 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 	for {
 		if _, err := rdr.Read(pfunsafe.FromPointer(rela)); err != nil {
 			if err != io.EOF {
-				return false, err
+				return false, fmt.Errorf("failed to read relocation: %w", err)
 			}
 			break
 		}
@@ -1162,7 +1162,7 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 	for {
 		if _, err := rdr.Read(pfunsafe.FromPointer(sym)); err != nil {
 			if err != io.EOF {
-				return err
+				return fmt.Errorf("failed to read symbol from %v: %w", name, err)
 			}
 			break
 		}
