@@ -134,20 +134,37 @@ func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 		}
 	}
 
-	containerID, err := extractContainerID(sp.pid)
+	cgroupPath, err := extractCgroupPath(sp.pid)
 	if err != nil {
+		log.Debugf("Failed extracting cgroup path for %d: %v", sp.pid, err)
+	}
+
+	containerID := extractContainerID(cgroupPath.String())
+	if containerID == libpf.NullString {
 		log.Debugf("Failed extracting containerID for %d: %v", sp.pid, err)
 	}
 	return ProcessMeta{
 		Name:         processName,
 		Executable:   exePath,
+		CgroupPath:   cgroupPath,
 		ContainerID:  containerID,
 		EnvVariables: envVarMap,
 	}
 }
 
-// parseContainerID parses cgroup v1 and v2 container IDs
-func parseContainerID(cgroupFile io.Reader) libpf.String {
+// extractCgroupPath extracts cgroup path (excluding controller for v1)
+func extractCgroupPath(pid libpf.PID) (libpf.String, error) {
+	cgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
+	if err != nil {
+		return libpf.NullString, err
+	}
+	defer cgroupFile.Close()
+
+	return libpf.Intern(parseCgroupPath(cgroupFile)), nil
+}
+
+// parseCgroupPath parses cgroup v1 and v2 from `/proc/<pid>/cgroup`
+func parseCgroupPath(cgroupFile io.Reader) string {
 	scanner := bufio.NewScanner(cgroupFile)
 	buf := make([]byte, 512)
 	// Providing a predefined buffer overrides the internal buffer that Scanner uses (4096 bytes).
@@ -155,35 +172,35 @@ func parseContainerID(cgroupFile io.Reader) libpf.String {
 	// With a maximum of 4096 characters path in the kernel, 8192 should be fine here. We don't
 	// expect lines in /proc/<PID>/cgroup to be longer than that.
 	scanner.Buffer(buf, 8192)
+	cgroupPath := ""
 	for scanner.Scan() {
 		b := scanner.Bytes()
-		if bytes.Equal(b, []byte("0::/")) {
-			continue // Skip a common case
-		}
 		line := pfunsafe.ToString(b)
 		m := expLine.FindStringSubmatchIndex(line)
 		if len(m) == 4 {
-			sub := line[m[2]:m[3]]
-			if parts := expContainerID.FindStringSubmatchIndex(sub); len(parts) == 4 {
-				return libpf.Intern(sub[parts[2]:parts[3]])
+			path := line[m[2]:m[3]]
+			if cgroupPath == "" {
+				cgroupPath = strings.Clone(path)
 			}
+			// Try to pick the path with container id present for cgroup v1.
+			if extractContainerID(path) != libpf.NullString {
+				return path
+			}
+			continue
 		}
-		log.Debugf("Could not extract container ID from line: %s", line)
+		log.Debugf("Could not extract cgroup path from line: %s", line)
 	}
 
-	// No containerID could be extracted
-	return libpf.NullString
+	return cgroupPath
 }
 
-// extractContainerID returns the containerID for pid (supports both cgroup v1 and v2)
-func extractContainerID(pid libpf.PID) (libpf.String, error) {
-	cgroupFile, err := os.Open(fmt.Sprintf("/proc/%d/cgroup", pid))
-	if err != nil {
-		return libpf.NullString, err
+// extractContainerID returns the containerID for cgroup path
+func extractContainerID(path string) libpf.String {
+	if parts := expContainerID.FindStringSubmatchIndex(path); len(parts) == 4 {
+		return libpf.Intern(path[parts[2]:parts[3]])
 	}
-	defer cgroupFile.Close()
 
-	return parseContainerID(cgroupFile), nil
+	return libpf.NullString
 }
 
 // CgroupRootInode returns the inode of /proc/<pid>/root/sys/fs/cgroup, which identifies

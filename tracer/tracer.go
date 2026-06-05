@@ -1033,6 +1033,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	*trace = libpf.EbpfTrace{
 		Comm:             goString(ptr.Comm[:]),
 		ExecutablePath:   procMeta.Executable,
+		CgroupPath:       procMeta.CgroupPath,
 		ContainerID:      procMeta.ContainerID,
 		ProcessName:      procMeta.Name,
 		APMTraceID:       *(*libpf.APMTraceID)(unsafe.Pointer(&ptr.Apm_trace_id)),

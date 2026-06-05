@@ -108,6 +108,7 @@ type EbpfTrace struct {
 	EnvVars          map[String]String
 	ProcessName      String
 	ExecutablePath   String
+	CgroupPath       String
 	ContainerID      String
 	CustomLabels     map[String]String
 	Comm             String
