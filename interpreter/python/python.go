@@ -740,7 +740,7 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 		symbolName, sym.Address, hex.Dump(code), value)
 }
 
-func GetLoader(_ interpreter.PythonConfig) interpreter.Loader {
+func GetLoader(_ Config) interpreter.Loader {
 	return loader
 }
 

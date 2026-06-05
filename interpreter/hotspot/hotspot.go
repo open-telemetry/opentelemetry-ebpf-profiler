@@ -135,7 +135,7 @@ var (
 
 // GetLoader returns the loader for ProcessManager to recognize and hook the HotSpot
 // libjvm for enabling JVM unwinding and symbolization.
-func GetLoader(_ interpreter.HotspotConfig) interpreter.Loader {
+func GetLoader(_ Config) interpreter.Loader {
 	return loader
 }
 

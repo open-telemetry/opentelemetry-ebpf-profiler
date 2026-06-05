@@ -26,7 +26,7 @@ import (
 	"github.com/elastic/go-perf"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -163,7 +163,7 @@ type Config struct {
 	// Intervals provides access to globally configured timers and counters.
 	Intervals Intervals
 	// InterpretersConfig holds per-interpreter configuration.
-	InterpretersConfig interpreter.InterpretersConfig
+	InterpretersConfig interpreterconfig.Config
 	// SamplesPerSecond holds the number of samples per second.
 	SamplesPerSecond int
 	// MapScaleFactor is the scaling factor for eBPF map sizes.
@@ -658,7 +658,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			}
 		}
 
-		if !interpreter.IsMapEnabled(mapName, cfg.InterpretersConfig) {
+		if !interpreterconfig.IsMapEnabled(mapName, cfg.InterpretersConfig) {
 			log.Debugf("Skipping eBPF map %s: tracer not enabled", mapName)
 			continue
 		}

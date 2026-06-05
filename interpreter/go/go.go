@@ -41,7 +41,7 @@ type goInstance struct {
 	d *goData
 }
 
-func GetLoader(_ interpreter.GoConfig) interpreter.Loader {
+func GetLoader(_ Config) interpreter.Loader {
 	return loader
 }
 

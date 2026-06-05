@@ -344,7 +344,7 @@ func getOpcacheJITInfo(ef *pfelf.File) (dasmBuf, dasmSize libpf.Address, err err
 	return libpf.Address(dasmBufPtr), libpf.Address(dasmSizePtr), nil
 }
 
-func GetOpcacheLoader(_ interpreter.PHPConfig) interpreter.Loader {
+func GetOpcacheLoader(_ Config) interpreter.Loader {
 	return opcacheLoader
 }
 

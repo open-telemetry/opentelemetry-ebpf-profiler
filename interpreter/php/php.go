@@ -253,7 +253,7 @@ func determineVMKind(ef *pfelf.File) (uint, error) {
 	return vmKind, nil
 }
 
-func GetLoader(_ interpreter.PHPConfig) interpreter.Loader {
+func GetLoader(_ Config) interpreter.Loader {
 	return loader
 }
 

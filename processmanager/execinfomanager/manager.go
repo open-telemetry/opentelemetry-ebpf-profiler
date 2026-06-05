@@ -20,6 +20,7 @@ import (
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
@@ -92,7 +93,7 @@ type ExecutableInfoManager struct {
 func NewExecutableInfoManager(
 	sdp nativeunwind.StackDeltaProvider,
 	ebpf pmebpf.EbpfHandler,
-	interpretersConfig interpreter.InterpretersConfig,
+	interpretersConfig interpreterconfig.Config,
 ) (*ExecutableInfoManager, error) {
 	// Initialize interpreter loaders.
 	loaders := make([]interpreter.Loader, 0)

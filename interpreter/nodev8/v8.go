@@ -2235,7 +2235,7 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	return rv, nil
 }
 
-func GetLoader(_ interpreter.V8Config) interpreter.Loader {
+func GetLoader(_ Config) interpreter.Loader {
 	return loader
 }
 

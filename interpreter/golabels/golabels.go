@@ -46,7 +46,7 @@ func (d *data) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 
 func (d *data) Unload(_ interpreter.EbpfHandler) {}
 
-func GetLoader(_ interpreter.LabelsConfig) interpreter.Loader {
+func GetLoader(_ Config) interpreter.Loader {
 	return loader
 }
 

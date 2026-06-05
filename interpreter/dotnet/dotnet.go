@@ -139,7 +139,7 @@ var dotnetGlobalInit = sync.OnceValue(func() error {
 	return globalPeCache.init()
 })
 
-func GetLoader(_ interpreter.DotnetConfig) interpreter.Loader {
+func GetLoader(_ Config) interpreter.Loader {
 	return loader
 }
 

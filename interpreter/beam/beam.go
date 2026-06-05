@@ -129,7 +129,7 @@ type beamInstance struct {
 	mappingGeneration uint32
 }
 
-func GetLoader(_ interpreter.BEAMConfig) interpreter.Loader {
+func GetLoader(_ Config) interpreter.Loader {
 	return loader
 }
 

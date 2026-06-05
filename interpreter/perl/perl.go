@@ -78,7 +78,7 @@ func perlVersion(revision, version, subversion byte) uint32 {
 	return uint32(revision)*0x10000 + uint32(version)*0x100 + uint32(subversion)
 }
 
-func GetLoader(_ interpreter.PerlConfig) interpreter.Loader {
+func GetLoader(_ Config) interpreter.Loader {
 	return loader
 }
 

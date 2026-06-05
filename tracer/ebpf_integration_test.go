@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
@@ -100,7 +100,7 @@ func TestTracerErrorPropagation(t *testing.T) {
 
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
-		InterpretersConfig:     interpreter.AllInterpretersConfig(),
+		InterpretersConfig:     interpreterconfig.AllInterpreters(),
 		FilterErrorFrames:      false,
 		SamplesPerSecond:       20,
 		MapScaleFactor:         0,
@@ -143,7 +143,7 @@ func TestTracerMapMonitorsError(t *testing.T) {
 
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
-		InterpretersConfig:     interpreter.AllInterpretersConfig(),
+		InterpretersConfig:     interpreterconfig.AllInterpreters(),
 		FilterErrorFrames:      false,
 		SamplesPerSecond:       20,
 		MapScaleFactor:         0,
@@ -170,7 +170,7 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
-		InterpretersConfig:     interpreter.AllInterpretersConfig(),
+		InterpretersConfig:     interpreterconfig.AllInterpreters(),
 		FilterErrorFrames:      false,
 		SamplesPerSecond:       20,
 		MapScaleFactor:         0,
@@ -265,7 +265,7 @@ Loop:
 func TestAllTracers(t *testing.T) {
 	tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
 		Intervals:              &mockIntervals{},
-		InterpretersConfig:     interpreter.AllInterpretersConfig(),
+		InterpretersConfig:     interpreterconfig.AllInterpreters(),
 		SamplesPerSecond:       20,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
