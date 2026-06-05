@@ -1838,10 +1838,9 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 		Off_Code_instruction_size:    uint8(vms.Code.InstructionSize),
 		Off_Code_flags:               uint8(vms.Code.Flags),
 
-		Codekind_shift:       vms.CodeKind.FieldShift,
-		Codekind_mask:        uint8(vms.CodeKind.FieldMask),
-		Codekind_baseline:    vms.CodeKind.Baseline,
-		Codekind_interpreted: vms.CodeKind.InterpretedFunction,
+		Codekind_shift:    vms.CodeKind.FieldShift,
+		Codekind_mask:     uint8(vms.CodeKind.FieldMask),
+		Codekind_baseline: vms.CodeKind.Baseline,
 	}
 	if err := ebpf.UpdateProcData(libpf.V8, pid, unsafe.Pointer(&data)); err != nil {
 		return nil, err
