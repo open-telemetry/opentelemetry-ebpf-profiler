@@ -36,6 +36,7 @@ var goFunctionsStopDelta = map[string]*sdtypes.UnwindInfo{
 	"runtime.systemstack": &sdtypes.UnwindInfoFramePointer,
 	"runtime.nanotime1":   &sdtypes.UnwindInfoFramePointer,
 	"time.now":            &sdtypes.UnwindInfoFramePointer,
+	"runtime.walltime":    &sdtypes.UnwindInfoFramePointer,
 	"runtime.mcall":       &sdtypes.UnwindInfoStop,
 
 	// signal return frame
