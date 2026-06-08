@@ -44,7 +44,6 @@ extern u32 task_stack_offset;
 // stack_ptregs_offset is declared in native_stack_trace.ebpf.c
 extern u32 stack_ptregs_offset;
 
-#ifdef __aarch64__
 // Strips the PAC tag from a pointer.
 //
 // While all pointers can contain PAC tags, we only apply this function to code pointers, because
@@ -53,13 +52,15 @@ extern u32 stack_ptregs_offset;
 // from the mask for code pointers.
 static inline EBPF_INLINE u64 normalize_pac_ptr(u64 ptr)
 {
+#if defined(__aarch64__)
   // Mask off PAC bits. Since we're always applying this to usermode pointers that should have all
   // the high bits set to 0, we don't need to consider the case of having to fill up the resulting
   // hole with 1s (like we'd have to for kernel ptrs).
-  ptr &= inverse_pac_mask;
+  return ptr & inverse_pac_mask;
+#else
   return ptr;
-}
 #endif
+}
 
 // increment_metric increments the value of the given metricID by 1
 static inline EBPF_INLINE void increment_metric(u32 metricID)
@@ -345,7 +346,6 @@ static inline EBPF_INLINE bool unwinder_unwind_frame_pointer_regs(UnwindState *s
   // the frame pointer. Only return address, and previous FP are pushed
   // to the stack when the frame pointer is set from the stack pointer.
   state->sp = fp + 2 * sizeof(u64);
-  state->pc = regs[1];
 #else
   // Make no assumption about SP relation to FP. This is true on aarch64.
   // SP can still restore by the unwinder when frame pointer based unwinder
@@ -353,12 +353,11 @@ static inline EBPF_INLINE bool unwinder_unwind_frame_pointer_regs(UnwindState *s
   // code calling JIT code have .eh_frame rules of the format CFA=FP+n
   // (restoring SP from FP).
   state->sp = 0;
-  state->pc = normalize_pac_ptr(regs[1]);
 #endif
-
   // At least RA and FP must be in the Frame.
   state->fp_bound = fp + 2 * sizeof(u64);
   state->fp       = regs[0];
+  state->pc       = normalize_pac_ptr(regs[1]);
   unwinder_mark_nonleaf_frame(state);
   return true;
 }
