@@ -15,7 +15,7 @@ import (
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/features"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/tracer/types"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"golang.org/x/exp/constraints"
 	"golang.org/x/sys/unix"
 
@@ -81,7 +81,7 @@ var _ ebpfapi.EbpfHandler = &ebpfMapsImpl{}
 //
 // It further spawns background workers for deferred map updates; the given
 // context can be used to terminate them on shutdown.
-func LoadMaps(ctx context.Context, includeTracers types.IncludedTracers,
+func LoadMaps(ctx context.Context, interpretersConfig interpreterconfig.Config,
 	maps map[string]*cebpf.Map, stackdeltaInnerMapSpec *cebpf.MapSpec) (ebpfapi.EbpfHandler, error) {
 	impl := &ebpfMapsImpl{
 		stackdeltaInnerMapTemplate: stackdeltaInnerMapSpec,
@@ -98,7 +98,7 @@ func LoadMaps(ctx context.Context, includeTracers types.IncludedTracers,
 		}
 		mapVal, ok := maps[nameTag]
 		if !ok {
-			if !types.IsMapEnabled(nameTag, includeTracers) {
+			if !interpreterconfig.IsMapEnabled(nameTag, interpretersConfig) {
 				continue
 			}
 			return nil, fmt.Errorf("Map %v is not available", nameTag)

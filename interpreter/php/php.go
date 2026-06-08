@@ -253,7 +253,11 @@ func determineVMKind(ef *pfelf.File) (uint, error) {
 	return vmKind, nil
 }
 
-func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ Config) interpreter.Loader {
+	return loader
+}
+
+func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	if !phpRegex.MatchString(info.FileName()) {
 		return nil, nil
 	}

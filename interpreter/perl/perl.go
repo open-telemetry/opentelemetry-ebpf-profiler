@@ -78,7 +78,11 @@ func perlVersion(revision, version, subversion byte) uint32 {
 	return uint32(revision)*0x10000 + uint32(version)*0x100 + uint32(subversion)
 }
 
-func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ Config) interpreter.Loader {
+	return loader
+}
+
+func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	mainDSO := false
 	if !libperlRegex.MatchString(info.FileName()) {
 		mainDSO = true
