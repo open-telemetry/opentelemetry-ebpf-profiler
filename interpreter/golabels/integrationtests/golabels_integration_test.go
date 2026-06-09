@@ -22,6 +22,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/reporter"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/otel/metric/noop"
@@ -56,6 +58,18 @@ func (mockIntervals) MonitorInterval() time.Duration       { return 1 * time.Sec
 func (mockIntervals) TracePollInterval() time.Duration     { return 250 * time.Millisecond }
 func (mockIntervals) PIDCleanupInterval() time.Duration    { return 1 * time.Second }
 func (mockIntervals) ExecutableUnloadDelay() time.Duration { return 1 * time.Second }
+
+type noopTraceReporter struct{}
+
+var _ reporter.TraceReporter = noopTraceReporter{}
+
+func (noopTraceReporter) RegisterProfileType(libpf.Origin, samples.ProfileTypeMetadata) error {
+	return nil
+}
+
+func (noopTraceReporter) ReportTraceEvent(*libpf.Trace, *samples.TraceEventMeta) error {
+	return nil
+}
 
 func isRoot() bool {
 	return os.Geteuid() == 0
@@ -102,6 +116,7 @@ func Test_Golabels(t *testing.T) {
 			log.SetLevel(slog.LevelDebug)
 			trc, err := tracer.NewTracer(ctx, &tracer.Config{
 				Intervals:              &mockIntervals{},
+				TraceReporter:          noopTraceReporter{},
 				IncludeTracers:         enabledTracers,
 				SamplesPerSecond:       20,
 				ProbabilisticInterval:  100,

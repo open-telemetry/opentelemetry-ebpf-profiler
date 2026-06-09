@@ -26,10 +26,26 @@ type Reporter interface {
 	Stop()
 }
 
+// ProfileTypeRegistrar is a setup-time interface that allows the tracer to
+// inform the reporter about which profile types it will report. Registration
+// must happen before profiling begins.
+type ProfileTypeRegistrar interface {
+	// RegisterProfileType informs the reporter about a profiling origin that the
+	// tracer will report. meta describes how samples from that origin should be
+	// interpreted and exported.
+	//
+	// Returns ErrOriginAlreadyExists if the origin was already registered.
+	// Returns an error if meta is inconsistent.
+	RegisterProfileType(origin libpf.Origin, meta samples.ProfileTypeMetadata) error
+}
+
 type TraceReporter interface {
+	ProfileTypeRegistrar
+
 	// ReportTraceEvent accepts a trace event (trace metadata with frames)
 	// and enqueues it for reporting to the backend.
-	// If handling the trace event fails it returns an error.
+	// Returns ErrUnknownOrigin if the origin was not registered via
+	// RegisterProfileType before this call.
 	ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error
 }
 

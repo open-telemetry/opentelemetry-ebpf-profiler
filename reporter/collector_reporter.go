@@ -28,10 +28,7 @@ type CollectorReporter struct {
 
 // NewCollector builds a new CollectorReporter
 func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorReporter, error) {
-	data, err := pdata.New(
-		cfg.SamplesPerSecond,
-		cfg.ExtraSampleAttrProd,
-	)
+	data, err := pdata.New(cfg.ExtraSampleAttrProd)
 	if err != nil {
 		return nil, err
 	}
@@ -40,11 +37,12 @@ func NewCollector(cfg *Config, nextConsumer xconsumer.Profiles) (*CollectorRepor
 
 	return &CollectorReporter{
 		baseReporter: &baseReporter{
-			cfg:         cfg,
-			name:        cfg.Name,
-			version:     cfg.Version,
-			pdata:       data,
-			traceEvents: xsync.NewRWMutex(tree),
+			cfg:             cfg,
+			name:            cfg.Name,
+			version:         cfg.Version,
+			pdata:           data,
+			traceEvents:     xsync.NewRWMutex(tree),
+			registeredTypes: xsync.NewRWMutex(make(map[libpf.Origin]samples.ProfileTypeMetadata)),
 			runLoop: &runLoop{
 				stopSignal: make(chan libpf.Void),
 			},
@@ -90,8 +88,7 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	r.collectionStartTime = collectionEndTime
 	r.traceEvents.WUnlock(&traceEventsPtr)
 
-	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version,
-		collectionStartTime, collectionEndTime)
+	profiles, err := r.generate(reportedEvents, collectionStartTime, collectionEndTime)
 	if err != nil {
 		log.Errorf("pdata: %v", err)
 		return nil

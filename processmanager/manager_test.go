@@ -25,6 +25,10 @@ type traceCapture struct {
 	traces []*libpf.Trace
 }
 
+func (tc *traceCapture) RegisterProfileType(libpf.Origin, samples.ProfileTypeMetadata) error {
+	return nil
+}
+
 func (tc *traceCapture) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEventMeta) error {
 	tc.traces = append(tc.traces, trace)
 	return nil

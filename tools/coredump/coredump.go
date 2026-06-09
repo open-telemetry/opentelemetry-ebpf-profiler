@@ -100,6 +100,12 @@ type traceReporter struct {
 	frames []string
 }
 
+// RegisterProfileType implements reporter.TraceReporter. The coredump tool does
+// not export profiles, so this is a no-op.
+func (t *traceReporter) RegisterProfileType(libpf.Origin, samples.ProfileTypeMetadata) error {
+	return nil
+}
+
 func (t *traceReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
 	t.frames = nil
 	frames := make([]string, 0, len(trace.Frames))

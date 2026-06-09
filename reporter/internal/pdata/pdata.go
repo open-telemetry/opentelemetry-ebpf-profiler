@@ -13,14 +13,12 @@ type Pdata struct {
 	// ExtraSampleAttrProd is an optional hook point for adding custom
 	// attributes to samples.
 	ExtraSampleAttrProd samples.SampleAttrProducer
-
-	// samplesPerSecond is the number of samples per second.
-	samplesPerSecond int
 }
 
-func New(samplesPerSecond int, extra samples.SampleAttrProducer) (*Pdata, error) {
+// New returns a new Pdata instance. extra is an optional hook for attaching
+// custom attributes to individual samples; pass nil if not needed.
+func New(extra samples.SampleAttrProducer) (*Pdata, error) {
 	return &Pdata{
-		samplesPerSecond:    samplesPerSecond,
 		ExtraSampleAttrProd: extra,
 	}, nil
 }

@@ -4,8 +4,8 @@
 package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 
 import (
-	"fmt"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -18,7 +18,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
@@ -28,7 +27,9 @@ const (
 // Generate generates a pdata request out of internal profiles data, to be
 // exported. The collectionStartTime and collectionEndTime define the time window
 // during which the profiler was actively collecting samples.
-func (p *Pdata) Generate(tree samples.TraceEventsTree,
+func (p *Pdata) Generate(
+	tree samples.TraceEventsTree,
+	profileTypes map[libpf.Origin]samples.ProfileTypeMetadata,
 	agentName, agentVersion string,
 	collectionStartTime, collectionEndTime time.Time,
 ) (pprofile.Profiles, error) {
@@ -93,20 +94,25 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		sp.Scope().SetVersion(agentVersion)
 		sp.SetSchemaUrl(semconv.SchemaURL)
 
-		for _, origin := range []libpf.Origin{
-			support.TraceOriginSampling,
-			support.TraceOriginOffCPU,
-			support.TraceOriginProbe,
-		} {
+		// Iterate over registered profile types in ascending origin order for
+		// deterministic output.
+		sortedOrigins := make([]libpf.Origin, 0, len(profileTypes))
+		for o := range profileTypes {
+			sortedOrigins = append(sortedOrigins, o)
+		}
+		slices.Sort(sortedOrigins)
+
+		for _, origin := range sortedOrigins {
 			if len(toEvents.Events[origin]) == 0 {
 				// Do not append empty profiles.
 				continue
 			}
 
+			meta := profileTypes[origin]
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-				origin, toEvents.Events[origin], prof,
+				meta, toEvents.Events[origin], prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
 			}
@@ -135,8 +141,8 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 	return profiles, nil
 }
 
-// setProfile sets the data an OTLP profile with all collected samples up to
-// this moment.
+// setProfile populates an OTLP profile with all collected samples for a single
+// profiling origin.
 func (p *Pdata) setProfile(
 	dic pprofile.ProfilesDictionary,
 	attrMgr *samples.AttrTableManager,
@@ -146,37 +152,31 @@ func (p *Pdata) setProfile(
 	stackSet orderedset.OrderedSet[stackInfo],
 	locationSet orderedset.OrderedSet[locationInfo],
 	linkSet orderedset.OrderedSet[linkInfo],
-	origin libpf.Origin,
+	meta samples.ProfileTypeMetadata,
 	events samples.SampleToEvents,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
-	st := profile.SampleType()
-	switch origin {
-	case support.TraceOriginSampling:
-		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
+	if meta.PeriodType != "" {
 		pt := profile.PeriodType()
-		pt.SetTypeStrindex(stringSet.Add("cpu"))
-		pt.SetUnitStrindex(stringSet.Add("nanoseconds"))
+		pt.SetTypeStrindex(stringSet.Add(meta.PeriodType))
+		pt.SetUnitStrindex(stringSet.Add(meta.PeriodUnit))
+		if meta.Period != 0 {
+			profile.SetPeriod(meta.Period)
+		}
+	}
 
-		st.SetTypeStrindex(stringSet.Add("samples"))
-		st.SetUnitStrindex(stringSet.Add("count"))
-	case support.TraceOriginOffCPU:
-		st.SetTypeStrindex(stringSet.Add("off_cpu"))
-		st.SetUnitStrindex(stringSet.Add("nanoseconds"))
-	case support.TraceOriginProbe:
-		st.SetTypeStrindex(stringSet.Add("events"))
-		st.SetUnitStrindex(stringSet.Add("count"))
-	default:
-		// Should never happen
-		return fmt.Errorf("generating profile for unsupported origin %d", origin)
+	st := profile.SampleType()
+	if meta.SampleType != "" {
+		st.SetTypeStrindex(stringSet.Add(meta.SampleType))
+		st.SetUnitStrindex(stringSet.Add(meta.SampleUnit))
 	}
 
 	for sampleKey, traceInfo := range events {
 		sample := profile.Samples().AppendEmpty()
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
-		if origin == support.TraceOriginOffCPU {
+		if meta.ReportValues {
 			sample.Values().Append(traceInfo.Values...)
 		}
 
