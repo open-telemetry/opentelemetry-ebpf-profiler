@@ -31,6 +31,10 @@ func (tc *traceCapture) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEve
 }
 
 func TestFrameCacheCrossProcessPollution(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("requires Linux procfs")
+	}
+
 	require := require.New(t)
 
 	exec, err := os.Executable()
@@ -154,4 +158,62 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	catFrame := catTrace.Frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, catFrame.Type)
 	assert.Equal(t, "", catFrame.FunctionName.String())
+}
+
+func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
+	require := require.New(t)
+
+	firstPID := libpf.PID(1000)
+	secondPID := libpf.PID(2000)
+	fileID, err := host.FileIDFromBytes(
+		[]byte{0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE})
+	require.NoError(err)
+
+	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
+	require.NoError(err)
+	frameCache.SetLifetime(frameCacheLifetime)
+
+	mappings := []Mapping{
+		{FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
+			File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+				FileID:   libpf.NewFileID(uint64(fileID), 0),
+				FileName: libpf.Intern("libc.so.6"),
+			}),
+			Start: 0,
+			End:   0xFFFFFFF,
+		})},
+	}
+	capture := &traceCapture{}
+	pm := &ProcessManager{
+		pidToProcessInfo: map[libpf.PID]*processInfo{
+			firstPID:  {mappings: mappings},
+			secondPID: {mappings: mappings},
+		},
+		frameCache:    frameCache,
+		traceReporter: capture,
+	}
+
+	nativeFrame := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 2, 0x222a0)
+	nativeFrame[1] = uint64(fileID)
+
+	pm.HandleTrace(&libpf.EbpfTrace{
+		PID:       firstPID,
+		TID:       firstPID,
+		NumFrames: 1,
+		FrameData: nativeFrame,
+	})
+	pm.HandleTrace(&libpf.EbpfTrace{
+		PID:       secondPID,
+		TID:       secondPID,
+		NumFrames: 1,
+		FrameData: nativeFrame,
+	})
+
+	require.Len(capture.traces, 2)
+	require.NotEmpty(capture.traces[1].Frames)
+	frame := capture.traces[1].Frames[0].Value()
+	assert.Equal(t, libpf.NativeFrame, frame.Type)
+	assert.Equal(t, "", frame.FunctionName.String())
+	assert.Equal(t, uint64(1), pm.frameCacheMiss.Load())
+	assert.Equal(t, uint64(1), pm.frameCacheHit.Load())
 }
