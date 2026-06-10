@@ -219,7 +219,7 @@ func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *l
 }
 
 // convertFrame converts one host Frame to one or more libpf.Frames. It returns true
-// if non-trivial cacheable conversion was done.
+// if the converted frame data should be cached.
 func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *libpf.Frames) bool {
 	switch ef.Type().Interpreter() {
 	case libpf.UnknownInterp, libpf.Kernel:
@@ -260,6 +260,7 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 			AddressOrLineno: libpf.AddressOrLineno(address),
 			Mapping:         mapping,
 		})
+		return mapping.Valid()
 	default:
 		err := pm.symbolizeFrame(pid, ef, dst, libpf.FrameMapping{})
 		if err == nil {
