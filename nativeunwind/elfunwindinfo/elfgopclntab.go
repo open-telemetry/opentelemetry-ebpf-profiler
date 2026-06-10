@@ -31,8 +31,9 @@ var goFunctionsStopDelta = map[string]*sdtypes.UnwindInfo{
 	"runtime.mstart": &sdtypes.UnwindInfoStop, // topmost for the go runtime main stacks
 	"runtime.goexit": &sdtypes.UnwindInfoStop, // return address in all goroutine stacks
 
-	// systemstack preserves the frame pointer chain across
+	// asmcgocall and systemstack preserves the frame pointer chain across
 	// the g0/user stack boundary, so standard FP unwinding traverses it naturally.
+	"runtime.asmcgocall":  &sdtypes.UnwindInfoFramePointer,
 	"runtime.systemstack": &sdtypes.UnwindInfoFramePointer,
 	"runtime.mcall":       &sdtypes.UnwindInfoStop,
 
