@@ -38,6 +38,9 @@ int tracepoint__sched_switch(UNUSED void *ctx)
   }
 
   u64 ts = bpf_ktime_get_ns();
+  if (process_is_too_new(ts)) {
+    return 0;
+  }
 
   if (bpf_map_update_elem(&sched_times, &pid_tgid, &ts, BPF_ANY) < 0) {
     DEBUG_PRINT("Failed to record sched_switch event entry");

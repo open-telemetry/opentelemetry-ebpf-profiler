@@ -331,6 +331,9 @@ enum {
   // number of bpf_ringbuf_output failures
   metricID_BPFRingbufOutputErr,
 
+  // number of samples skipped because the process is too new
+  metricID_SamplesSkippedProcessTooNew,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //

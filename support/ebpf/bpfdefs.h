@@ -63,6 +63,11 @@ static inline u64 bpf_get_current_pid_tgid(void)
   return __cgo_ctx->id;
 }
 
+static inline unsigned long long bpf_get_current_task(void)
+{
+  return 0;
+}
+
 static inline void *bpf_map_lookup_elem(void *map, const void *key)
 {
   void *__bpf_map_lookup_elem(u64, void *, const void *);

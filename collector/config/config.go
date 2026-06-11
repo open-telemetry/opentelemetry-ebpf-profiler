@@ -51,6 +51,7 @@ type Config struct {
 	ClockSyncInterval      time.Duration `mapstructure:"clock_sync_interval"`
 	SendErrorFrames        bool          `mapstructure:"send_error_frames"`
 	SendIdleFrames         bool          `mapstructure:"send_idle_frames"`
+	FilterMinProcessAge    time.Duration `mapstructure:"filter_min_process_age"`
 	VerboseMode            bool          `mapstructure:"verbose_mode"`
 	OffCPUThreshold        float64       `mapstructure:"off_cpu_threshold"`
 	IncludeEnvVars         string        `mapstructure:"include_env_vars"`
@@ -108,6 +109,12 @@ func (cfg *Config) Validate() error {
 		return errors.New(
 			"invalid argument for off-cpu-threshold. The value " +
 				"should be in the range [0..1]. 0 disables off-cpu profiling")
+	}
+
+	if cfg.FilterMinProcessAge < 0 {
+		return errors.New(
+			"invalid argument for min-process-age. The value " +
+				"should be a non-negative duration. 0 disables minimum process age filtering")
 	}
 
 	if cfg.ReporterJitter < 0.0 || cfg.ReporterJitter > 1.0 {

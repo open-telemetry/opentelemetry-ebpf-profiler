@@ -71,6 +71,8 @@ var (
 		"on agent startup, but not periodically."
 	sendErrorFramesHelp = "Send error frames (devfiler only, breaks Kibana)"
 	sendIdleFramesHelp  = "Unwind and report idle states of the Linux kernel."
+	minProcessAgeHelp   = "Skip samples from processes younger than this minimum age. " +
+		"Set to 0 to disable minimum process age filtering."
 	offCPUThresholdHelp = fmt.Sprintf("The probability for an off-cpu event being recorded. "+
 		"Valid values are in the range [0..1]. 0 disables off-cpu profiling. "+
 		"Default is %d.",
@@ -104,6 +106,8 @@ func parseArgs() (*controller.Config, error) {
 
 	fs.UintVar(&args.MapScaleFactor, "map-scale-factor",
 		defaultArgMapScaleFactor, mapScaleFactorHelp)
+
+	fs.DurationVar(&args.FilterMinProcessAge, "min-process-age", 0, minProcessAgeHelp)
 
 	fs.DurationVar(&args.MonitorInterval, "monitor-interval", defaultArgMonitorInterval,
 		monitorIntervalHelp)

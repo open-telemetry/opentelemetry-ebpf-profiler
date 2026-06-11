@@ -2153,5 +2153,12 @@
     "name": "GoLabelsDroppedInvalidValue",
     "field": "agent.golabels.dropped.invalid_value",
     "id": 294
+  },
+  {
+    "description": "Number of samples skipped because the process is too new",
+    "type": "counter",
+    "name": "SamplesSkippedProcessTooNew",
+    "field": "bpf.samples.skipped_process_too_new",
+    "id": 295
   }
 ]
