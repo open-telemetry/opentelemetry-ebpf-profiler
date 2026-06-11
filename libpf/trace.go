@@ -100,7 +100,6 @@ func (frames *Frames) Append(frame *Frame) {
 type Trace struct {
 	CustomLabels map[String]String
 	Frames       Frames
-	Hash         TraceHash
 }
 
 // EbpfTrace represents a stack trace from Ebpf code.

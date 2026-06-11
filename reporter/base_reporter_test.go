@@ -47,7 +47,6 @@ func TestBaseReporterGenerate(t *testing.T) {
 	reporter := createTestBaseReporter(t, nil)
 
 	trace1 := &libpf.Trace{
-		Hash: libpf.NewTraceHash(0x0102030400000000, 0x0000000000000000),
 		Frames: func() libpf.Frames {
 			frames := make(libpf.Frames, 0, 3)
 			frames.Append(&libpf.Frame{
@@ -70,7 +69,6 @@ func TestBaseReporterGenerate(t *testing.T) {
 	}
 
 	trace2 := &libpf.Trace{
-		Hash: libpf.NewTraceHash(0x0506070800000000, 0x0000000000000000),
 		Frames: func() libpf.Frames {
 			frames := make(libpf.Frames, 0, 2)
 			frames.Append(&libpf.Frame{
