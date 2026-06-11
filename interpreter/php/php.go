@@ -268,9 +268,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, err
 	}
 
-	// Only tested on PHP7.3-PHP8.4. Other similar versions probably only require
+	// Only tested on PHP7.3-PHP8.5. Other similar versions probably only require
 	// tweaking the offsets.
-	minVer, maxVer := phpVersion(7, 3, 0), phpVersion(8, 5, 0)
+	minVer, maxVer := phpVersion(7, 3, 0), phpVersion(8, 6, 0)
 	if version < minVer || version >= maxVer {
 		return nil, fmt.Errorf("PHP version %d.%d.%d (need >= %d.%d and < %d.%d)",
 			(version>>16)&0xff, (version>>8)&0xff, version&0xff,
@@ -342,6 +342,13 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.zend_class_entry.name = 8
 	vms.zend_op.lineno = 24
 	switch {
+	case version >= phpVersion(8, 5, 0):
+		// PHP 8.5 added fields to zend_executor_globals before
+		// current_execute_data, shifting its offset from 488 to 512.
+		vms.zend_executor_globals.current_execute_data = 512
+		vms.zend_function.op_array_filename = 168
+		vms.zend_function.op_array_linestart = 176
+		vms.zend_function.Sizeof = 184
 	case version >= phpVersion(8, 4, 0):
 		vms.zend_function.op_array_filename = 168
 		vms.zend_function.op_array_linestart = 176
