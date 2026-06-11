@@ -34,6 +34,9 @@ var goFunctionsStopDelta = map[string]*sdtypes.UnwindInfo{
 	// systemstack preserves the frame pointer chain across
 	// the g0/user stack boundary, so standard FP unwinding traverses it naturally.
 	"runtime.systemstack": &sdtypes.UnwindInfoFramePointer,
+	"runtime.nanotime1":   &sdtypes.UnwindInfoFramePointer,
+	"time.now":            &sdtypes.UnwindInfoFramePointer,
+	"runtime.walltime":    &sdtypes.UnwindInfoFramePointer,
 	"runtime.mcall":       &sdtypes.UnwindInfoStop,
 
 	// signal return frame
