@@ -337,6 +337,10 @@ func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 func (d *beamData) Unload(_ interpreter.EbpfHandler) {
 }
 
+func (i *beamInstance) UsesAnonymousMappings() bool {
+	return true
+}
+
 func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping) error {
 	pid := pr.PID()
 	i.mappingGeneration++
