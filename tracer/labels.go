@@ -4,11 +4,11 @@
 package tracer // import "go.opentelemetry.io/ebpf-profiler/tracer"
 
 import (
-	"bytes"
 	"sync/atomic"
 	"unicode/utf8"
 
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
 // customLabelValidator validates custom label keys and values extracted from
@@ -20,23 +20,13 @@ type customLabelValidator struct {
 	droppedInvalidValue atomic.Int64
 }
 
-// cstring returns the prefix of buf up to (but not including) the first NUL
-// byte, or all of buf if no NUL is present. Suitable for fixed-size buffers
-// populated from eBPF.
-func cstring(buf []byte) []byte {
-	if i := bytes.IndexByte(buf, 0); i >= 0 {
-		return buf[:i]
-	}
-	return buf
-}
-
 // validateKey enforces strict UTF-8 validity on a custom label key. Any invalid
 // byte (or an empty key) returns ok=false and bumps the drop counter, signaling
 // the caller to drop the label. A corrupted key would silently group unrelated
 // samples under a garbage name, so strictness is intentional here. The returned
 // slice aliases buf; copy or intern before the buffer is reused.
 func (v *customLabelValidator) validateKey(buf []byte) ([]byte, bool) {
-	b := cstring(buf)
+	b := stringutil.CString(buf)
 	if len(b) == 0 || !utf8.Valid(b) {
 		v.droppedInvalidName.Add(1)
 		return nil, false
@@ -51,7 +41,7 @@ func (v *customLabelValidator) validateKey(buf []byte) ([]byte, bool) {
 // the input was non-empty garbage rather than mid-rune truncation. The returned
 // slice aliases buf; copy or intern before the buffer is reused.
 func (v *customLabelValidator) validateValue(buf []byte) ([]byte, bool) {
-	b := cstring(buf)
+	b := stringutil.CString(buf)
 	pos := len(b)
 	if !utf8.Valid(b) {
 		// Walk forward; stop at the first invalid byte. This recovers the entire

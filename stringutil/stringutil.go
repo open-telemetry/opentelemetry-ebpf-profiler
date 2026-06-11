@@ -4,10 +4,21 @@
 package stringutil // import "go.opentelemetry.io/ebpf-profiler/stringutil"
 
 import (
+	"bytes"
 	"strings"
 )
 
 var asciiSpace = [256]uint8{'\t': 1, '\n': 1, '\v': 1, '\f': 1, '\r': 1, ' ': 1}
+
+// CString returns the prefix of buf up to (but not including) the first NUL
+// byte, or all of buf if no NUL is present. Suitable for fixed-size buffers
+// populated from eBPF.
+func CString(buf []byte) []byte {
+	if i := bytes.IndexByte(buf, 0); i >= 0 {
+		return buf[:i]
+	}
+	return buf
+}
 
 // FieldsN splits the string s around each instance of one or more consecutive ASCII space
 // characters, filling f with substrings of s.
