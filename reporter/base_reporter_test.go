@@ -42,6 +42,12 @@ func createTestBaseReporter(t *testing.T, cfg *Config) *baseReporter {
 	}
 }
 
+func testComm(str string) libpf.Comm {
+	var buffer [libpf.CommLen]uint8
+	copy(buffer[:], str)
+	return libpf.NewComm(buffer)
+}
+
 // TestBaseReporterGenerate tests the Generate method and validates the output
 func TestBaseReporterGenerate(t *testing.T) {
 	reporter := createTestBaseReporter(t, nil)
@@ -90,7 +96,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 	now := time.Now()
 	meta1 := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(now.UnixNano()),
-		Comm:           libpf.Intern("app1"),
+		Comm:           testComm("app1"),
 		ProcessName:    libpf.Intern("app1"),
 		ExecutablePath: libpf.Intern("/usr/bin/app1"),
 		APMServiceName: "service1",
@@ -103,7 +109,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 
 	meta2 := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(now.Add(time.Second).UnixNano()),
-		Comm:           libpf.Intern("app2"),
+		Comm:           testComm("app2"),
 		ProcessName:    libpf.Intern("app2"),
 		ExecutablePath: libpf.Intern("/usr/bin/app2"),
 		APMServiceName: "service2",

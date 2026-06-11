@@ -5,7 +5,27 @@ package libpf // import "go.opentelemetry.io/ebpf-profiler/libpf"
 
 import (
 	"unique"
+
+	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
+
+// CommLen is the kernel TASK_COMM_LEN size for process command names.
+const CommLen = 16
+
+// Comm is the fixed-size process command name buffer supplied by the kernel.
+type Comm struct {
+	Buffer [CommLen]uint8
+}
+
+// NewComm returns a Comm that preserves the full fixed-size kernel buffer.
+func NewComm(buffer [CommLen]uint8) Comm {
+	return Comm{Buffer: buffer}
+}
+
+// String converts Comm's NUL-terminated fixed-size buffer into a Go string.
+func (c Comm) String() string {
+	return string(stringutil.CString(c.Buffer[:]))
+}
 
 // FrameMappingFileData represents a backing file for a memory mapping.
 type FrameMappingFileData struct {
@@ -110,7 +130,7 @@ type EbpfTrace struct {
 	ExecutablePath   String
 	ContainerID      String
 	CustomLabels     map[String]String
-	Comm             String
+	Comm             Comm
 	FrameData        []uint64
 	KernelFrames     Frames
 	FrameDataBuf     [3072]uint64
