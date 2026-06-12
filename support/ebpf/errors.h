@@ -222,7 +222,22 @@ typedef enum ErrorCode {
   ERR_BEAM_MODULES_READ_FAILURE = 7005,
 
   // BEAM: Ran out of iterations searching for the current code header
-  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006
+  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006,
+
+  // LuaJIT: No entry for this process exists in the LuaJIT process info array
+  ERR_LUAJIT_NO_PROC_INFO = 7007,
+
+  // LuaJIT: Unable to read the Lua context
+  ERR_LUAJIT_READ_LUA_CONTEXT = 7008,
+
+  // LuaJIT: Unable to read the Lua frame
+  ERR_LUAJIT_FRAME_READ = 7009,
+
+  // LuaJIT: context pointer validity check failed
+  ERR_LUAJIT_L_MISMATCH = 7010,
+
+  // LuaJIT: PC exceeds 24 bits
+  ERR_LUAJIT_INVALID_PC = 7011
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H

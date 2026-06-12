@@ -671,6 +671,12 @@ const (
 	// Number of Go custom labels dropped because the label value was not valid UTF-8
 	IDGoLabelsDroppedInvalidValue = 294
 
+	// Number of attempted LuaJIT unwinds
+	IDUnwindLuaJITAttempts = 295
+
+	// Number of times we didn't find an entry for this process in the LuaJIT process info array
+	IDUnwindLuaJITErrNoProcInfo = 296
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 295
+	IDMax = 297
 )

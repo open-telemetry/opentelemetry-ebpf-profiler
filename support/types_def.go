@@ -13,6 +13,7 @@ import (
 #include "./ebpf/types.h"
 #include "./ebpf/frametypes.h"
 #include "./ebpf/v8_tracer.h"
+#include "./ebpf/luajit.h"
 */
 import "C"
 
@@ -131,6 +132,7 @@ type PerlProcInfo C.PerlProcInfo
 type PyProcInfo C.PyProcInfo
 type RubyProcInfo C.RubyProcInfo
 type V8ProcInfo C.V8ProcInfo
+type LuaJITProcInfo C.LuaJITProcInfo
 
 const (
 	Sizeof_StackDelta = C.sizeof_StackDelta
@@ -210,6 +212,15 @@ const (
 	RubyFrameTypeCmeCfunc = C.RUBY_FRAME_TYPE_CME_CFUNC
 	RubyFrameTypeIseq     = C.RUBY_FRAME_TYPE_ISEQ
 	RubyFrameTypeGc       = C.RUBY_FRAME_TYPE_GC
+)
+
+const (
+	LJFFIFunc        = C.LUAJIT_FFI_FUNC
+	LJFileId         = C.LUAJIT_JIT_FILE_ID
+	LJNormalFrame    = C.LUAJIT_NORMAL_FRAME
+	LJGReport        = C.LUAJIT_G_REPORT
+	LJCframeSpaceX86 = C.LUAJIT_CFRAME_SPACE_X86_64
+	LJCframeSpaceArm = C.LUAJIT_CFRAME_SPACE_AARCH64
 )
 
 var MetricsTranslation = []metrics.MetricID{
