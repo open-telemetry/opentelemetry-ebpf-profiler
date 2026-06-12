@@ -39,7 +39,7 @@ type vmMap map[libpf.Address]struct{}
 
 // Records all the JIT regions we've seen, value is SynchronizeMappings
 // generation.
-type regionMap map[process.Mapping]int
+type regionMap map[process.RawMapping]int
 
 type regionKey struct {
 	start, end uint64
@@ -236,12 +236,12 @@ func (l *luajitInstance) addTrace(ebpf interpreter.EbpfHandler, pid libpf.PID, t
 }
 
 func (l *luajitInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
-	_ reporter.ExecutableReporter, pr process.Process, mappings []process.Mapping) error {
+	_ reporter.ExecutableReporter, pr process.Process, mappings []process.RawMapping) error {
 	return l.synchronizeMappings(ebpf, pr.PID(), mappings)
 }
 
 func (l *luajitInstance) synchronizeMappings(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	mappings []process.Mapping) error {
+	mappings []process.RawMapping) error {
 	cycle := l.cycle
 	l.cycle++
 	for i := range mappings {
