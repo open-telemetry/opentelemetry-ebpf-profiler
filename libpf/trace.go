@@ -106,10 +106,12 @@ type Trace struct {
 // EbpfTrace represents a stack trace from Ebpf code.
 type EbpfTrace struct {
 	EnvVars          map[String]String
-	ProcessName      String
 	ExecutablePath   String
 	ContainerID      String
 	CustomLabels     map[String]String
+	// ExtraMeta holds the key-value pairs produced by a ProcessMetaEnricher for
+	// the process that generated this trace.
+	ExtraMeta        map[string]string
 	Comm             String
 	FrameData        []uint64
 	KernelFrames     Frames
