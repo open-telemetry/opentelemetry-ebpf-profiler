@@ -225,19 +225,19 @@ typedef enum ErrorCode {
   ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006,
 
   // LuaJIT: No entry for this process exists in the LuaJIT process info array
-  ERR_LUAJIT_NO_PROC_INFO = 7007,
+  ERR_LUAJIT_NO_PROC_INFO = 8000,
 
   // LuaJIT: Unable to read the Lua context
-  ERR_LUAJIT_READ_LUA_CONTEXT = 7008,
+  ERR_LUAJIT_READ_LUA_CONTEXT = 8001,
 
   // LuaJIT: Unable to read the Lua frame
-  ERR_LUAJIT_FRAME_READ = 7009,
+  ERR_LUAJIT_FRAME_READ = 8002,
 
   // LuaJIT: context pointer validity check failed
-  ERR_LUAJIT_L_MISMATCH = 7010,
+  ERR_LUAJIT_L_MISMATCH = 8003,
 
   // LuaJIT: PC exceeds 24 bits
-  ERR_LUAJIT_INVALID_PC = 7011
+  ERR_LUAJIT_INVALID_PC = 8004
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H
