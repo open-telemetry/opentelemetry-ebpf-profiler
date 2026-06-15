@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
+	"go.opentelemetry.io/ebpf-profiler/testsupport"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,6 +84,7 @@ func TestParseGoPclntab(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
+			testsupport.RequireGeneratedTestFile(t, test.elfFile)
 			ef, err := pfelf.Open(test.elfFile)
 			require.NoError(t, err)
 
@@ -99,6 +101,7 @@ func TestParseGoPclntab(t *testing.T) {
 }
 
 func TestTextStart(t *testing.T) {
+	testsupport.RequireGeneratedTestFile(t, "testdata/helloworld.linkexternal")
 	ef, err := pfelf.Open("testdata/helloworld.linkexternal")
 	require.NoError(t, err)
 	defer ef.Close()
@@ -121,6 +124,7 @@ func TestTextStart(t *testing.T) {
 	require.Equal(t, runtimeTextAddr, g.textStart)
 
 	// stripped binary should have the same text start
+	testsupport.RequireGeneratedTestFile(t, "testdata/helloworld.linkexternal.stripped")
 	efStripped, err := pfelf.Open("testdata/helloworld.linkexternal.stripped")
 	require.NoError(t, err)
 	defer efStripped.Close()

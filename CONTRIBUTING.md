@@ -33,7 +33,9 @@ You can view and edit the source code by cloning this repository:
 git clone https://github.com/open-telemetry/opentelemetry-ebpf-profiler
 ```
 
-Run `make test` to run the tests instead of `go test`.
+Run `make test` to run the full test suite. If you want to run package tests
+directly with `go test`, first run `make test-deps` to generate the required
+test fixtures.
 
 
 ## Pull Requests
@@ -197,7 +199,7 @@ be granted Code Ownership.
 #### How to become a Code Owner
 
 To become a Code Owner, add your GitHub username to the
-[CODEOWNERS](.github/CODEOWNERS)] file with an entry for all files related to
+[CODEOWNERS](.github/CODEOWNERS) file with an entry for all files related to
 the component code. Be sure to tag the existing Code Owners, if any, within
 the PR to ensure they receive a notification.
 

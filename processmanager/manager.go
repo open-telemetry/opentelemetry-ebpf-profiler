@@ -273,7 +273,7 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 }
 
 func (pm *ProcessManager) maybeNotifyAPMAgent(
-	rawTrace *libpf.EbpfTrace, umTraceHash libpf.TraceHash, count uint16,
+	rawTrace *libpf.EbpfTrace, trace *libpf.Trace, count uint16,
 ) string {
 	pm.mu.RLock()
 	// Keeping the lock until end of the function is needed because inner map can be modified
@@ -284,9 +284,15 @@ func (pm *ProcessManager) maybeNotifyAPMAgent(
 		return ""
 	}
 	var serviceName string
+	var traceHash libpf.TraceHash
+	traceHashComputed := false
 	for _, mapping := range pidInterp {
 		if apm, ok := mapping.(*apmint.Instance); ok {
-			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, umTraceHash, count)
+			if !traceHashComputed {
+				traceHash = traceutil.HashTrace(trace)
+				traceHashComputed = true
+			}
+			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, traceHash, count)
 			if serviceName != "" {
 				log.Warnf("Overwriting APM service name from '%s' to '%s' for PID %d",
 					serviceName,
@@ -386,8 +392,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	}
 	pm.mu.RUnlock()
 
-	trace.Hash = traceutil.HashTrace(trace)
-	meta.APMServiceName = pm.maybeNotifyAPMAgent(bpfTrace, trace.Hash, 1)
+	meta.APMServiceName = pm.maybeNotifyAPMAgent(bpfTrace, trace, 1)
 
 	if err := pm.traceReporter.ReportTraceEvent(trace, meta); err != nil {
 		log.Errorf("Failed to report trace event: %v", err)
