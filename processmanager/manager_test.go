@@ -55,7 +55,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	realPID := libpf.PID(os.Getpid())
 	pid := process.New(realPID, realPID)
 	elfRef := pfelf.NewReference(exec, pid)
-	loaderInfo := interpreter.NewLoaderInfo(goHostFileID, elfRef)
+	loaderInfo := interpreter.NewLoaderInfo(goHostFileID, elfRef, nil)
 	rm := remotememory.NewProcessVirtualMemory(realPID)
 
 	goData, err := golang.Loader(nil, loaderInfo)
