@@ -49,13 +49,13 @@ func (m *ebpfMapsMockup) DeletePidInterpreterMapping(pid libpf.PID, pfx lpm.Pref
 // TestSynchronizeMappings tests that if a mapping is realloc'd we do the right thing.
 func TestSynchronizeMappings(t *testing.T) {
 	for _, tc := range []struct {
-		calls []process.Mapping
+		calls []process.RawMapping
 	}{
-		{[]process.Mapping{
+		{[]process.RawMapping{
 			{Vaddr: 0x2000, Length: 0x1000, Flags: elf.PF_X},
 			{Vaddr: 0x1000, Length: 0x2000, Flags: elf.PF_X},
 		}},
-		{[]process.Mapping{
+		{[]process.RawMapping{
 			{Vaddr: 0x2000, Length: 0x1000, Flags: elf.PF_X},
 			{Vaddr: 0x2000, Length: 0x2000, Flags: elf.PF_X},
 		}},
@@ -67,7 +67,7 @@ func TestSynchronizeMappings(t *testing.T) {
 			prefixesByG: make(map[libpf.Address][]lpm.Prefix),
 		}
 		for _, call := range tc.calls {
-			err := lj.synchronizeMappings(ebpf, 0, []process.Mapping{call})
+			err := lj.synchronizeMappings(ebpf, 0, []process.RawMapping{call})
 			require.NoError(t, err)
 		}
 		initial := tc.calls[0]

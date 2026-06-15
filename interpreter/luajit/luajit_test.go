@@ -22,14 +22,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"github.com/stretchr/testify/require"
 	testcontainers "github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/luajit"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/testutils"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
-	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 // Run
@@ -101,9 +103,13 @@ func TestIntegration(t *testing.T) {
 					port, err := cont.MappedPort(ctx, "8080")
 					require.NoError(t, err)
 
-					enabledTracers, err := tracertypes.Parse("luajit")
-					require.NoError(t, err)
-					enabledTracers.Enable(tracertypes.LuaJITTracer)
+					enabledTracers := interpreterconfig.NoInterpreters()
+					enabledTracers.LuaJIT = luajit.Config{
+						interpreter.BaseConfig{Disabled: false},
+					}
+					// enabledTracers, err := tracertypes.Parse("luajit")
+					// require.NoError(t, err)
+					// enabledTracers.Enable(tracertypes.LuaJITTracer)
 					traceCh, trc := testutils.StartTracer(ctx, t, enabledTracers, false)
 
 					var waitGroup sync.WaitGroup
@@ -220,7 +226,7 @@ func startContainer(ctx context.Context, t *testing.T, image string) testcontain
 }
 
 func makeRequests(ctx context.Context, t *testing.T, wg *sync.WaitGroup,
-	res, h string, p nat.Port) {
+	res, h string, p network.Port) {
 	wg.Add(1)
 	numRequests := 0
 	tick := time.NewTicker(5 * time.Second)

@@ -14,10 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
-	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 type MockIntervals struct{}
@@ -50,7 +50,7 @@ func (tr *traceReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.Trac
 	return nil
 }
 
-func StartTracer(ctx context.Context, t *testing.T, et tracertypes.IncludedTracers,
+func StartTracer(ctx context.Context, t *testing.T, et interpreterconfig.Config,
 	printBpfLogs bool) (<-chan TraceEvent, *tracer.Tracer) {
 	traceCh := make(chan TraceEvent)
 	tr := &traceReporter{
@@ -60,7 +60,7 @@ func StartTracer(ctx context.Context, t *testing.T, et tracertypes.IncludedTrace
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
 		TraceReporter:          tr,
 		Intervals:              &MockIntervals{},
-		IncludeTracers:         et,
+		InterpretersConfig:     et,
 		SamplesPerSecond:       20,
 		ProbabilisticInterval:  100,
 		ProbabilisticThreshold: 100,
