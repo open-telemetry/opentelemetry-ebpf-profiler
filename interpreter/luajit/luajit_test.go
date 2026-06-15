@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"github.com/stretchr/testify/require"
 	testcontainers "github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -220,7 +220,7 @@ func startContainer(ctx context.Context, t *testing.T, image string) testcontain
 }
 
 func makeRequests(ctx context.Context, t *testing.T, wg *sync.WaitGroup,
-	res, h string, p nat.Port) {
+	res, h string, p network.Port) {
 	wg.Add(1)
 	numRequests := 0
 	tick := time.NewTicker(5 * time.Second)

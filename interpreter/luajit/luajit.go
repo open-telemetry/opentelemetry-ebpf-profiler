@@ -22,10 +22,8 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
-	"go.opentelemetry.io/ebpf-profiler/libc"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
-	"go.opentelemetry.io/ebpf-profiler/metrics"
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -56,6 +54,8 @@ type luajitData struct {
 }
 
 type luajitInstance struct {
+	interpreter.InstanceStubs
+
 	rm         remotememory.RemoteMemory
 	protos     map[libpf.Address]*proto
 	jitRegions regionMap
@@ -479,17 +479,5 @@ func (l *luajitInstance) Symbolize(frame libpf.EbpfFrame, frames *libpf.Frames, 
 		return fmt.Errorf("Unrecognized LuaJIT frame kind: %d", ljkind)
 	}
 
-	return nil
-}
-
-func (l *luajitInstance) GetAndResetMetrics() ([]metrics.Metric, error) {
-	return nil, nil
-}
-
-func (l *luajitInstance) ReleaseResources() error {
-	return nil
-}
-
-func (l *luajitInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PID, info libc.LibcInfo) error {
 	return nil
 }
