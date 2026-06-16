@@ -210,7 +210,7 @@ func (i *opcacheInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	}
 
 	dasmBuf := binary.LittleEndian.Uint64(dasmBufVal)
-	dasmSize := binary.LittleEndian.Uint64(dasmBufVal)
+	dasmSize := binary.LittleEndian.Uint64(dasmSizeVal)
 	if dasmBuf == 0 || dasmSize == 0 {
 		// This is the normal path if JIT is not enabled, or we try to
 		// attach before JIT engine is initialized.
