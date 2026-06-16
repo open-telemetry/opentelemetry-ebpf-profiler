@@ -46,6 +46,9 @@ var (
 )
 
 func Start(meter metric.Meter) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	defs := GetDefinitions()
 	metricTypes = make(map[MetricID]MetricType, len(defs))
 	for _, md := range defs {
