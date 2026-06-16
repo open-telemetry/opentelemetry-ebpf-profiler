@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package tracer
+package libpf
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGoString(t *testing.T) {
+func TestCommString(t *testing.T) {
 	tests := map[string]struct {
 		input     []byte
 		wantValue string
@@ -23,7 +23,7 @@ func TestGoString(t *testing.T) {
 			wantValue: "héllo",
 		},
 		"empty buffer": {
-			input:     make([]byte, 16),
+			input:     make([]byte, commLen),
 			wantValue: "",
 		},
 		"no nul terminator uses whole buffer": {
@@ -37,8 +37,8 @@ func TestGoString(t *testing.T) {
 			wantValue: "tier",
 		},
 		"invalid utf8 is passed through unvalidated": {
-			// goString is used for comm, which is kernel-supplied and trusted
-			// as-is; validation happens only for label strings.
+			// Comm is kernel-supplied and trusted as-is; validation happens only
+			// for label strings.
 			input:     []byte{'b', 'a', 'd', 0x80, 0x00},
 			wantValue: "bad\x80",
 		},
@@ -46,8 +46,16 @@ func TestGoString(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := goString(tc.input)
+			var buffer [commLen]uint8
+			copy(buffer[:], tc.input)
+
+			got := NewComm(buffer)
 			require.Equal(t, tc.wantValue, got.String())
 		})
 	}
+}
+
+func TestNewCommFromString(t *testing.T) {
+	require.Equal(t, "comm", NewCommFromString("comm").String())
+	require.Equal(t, "exactlysixteenb!", NewCommFromString("exactlysixteenb!tail").String())
 }
