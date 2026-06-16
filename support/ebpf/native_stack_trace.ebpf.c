@@ -34,6 +34,7 @@ BPF_RODATA_VAR(u32, stack_ptregs_offset, 0)
     __type(key, u64);                                                                              \
     __type(value, u32);                                                                            \
     __uint(max_entries, 4096);                                                                     \
+    __uint(map_flags, BPF_F_NO_PREALLOC);                                                          \
     __array(                                                                                       \
       values, struct {                                                                             \
         __uint(type, BPF_MAP_TYPE_ARRAY);                                                          \
