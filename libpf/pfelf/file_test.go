@@ -90,14 +90,12 @@ func TestGoVersion(t *testing.T) {
 	ef := getPFELF("testdata/go-binary", t)
 	defer ef.Close()
 
-	vers, err := ef.GoVersion()
-	require.NoError(t, err)
+	vers := ef.GoVersion()
 	assert.GreaterOrEqual(t, version.Compare(vers, "go1.23.6"), 0)
 
 	testEF := getPFELF("/proc/self/exe", t)
 	defer testEF.Close()
-	testVersion, err := testEF.GoVersion()
-	require.NoError(t, err)
+	testVersion := testEF.GoVersion()
 	assert.Equal(t, runtime.Version(), testVersion)
 }
 

@@ -47,9 +47,13 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	if err != nil {
 		return nil, err
 	}
-	goVersion, err := ef.GoVersion()
-	if goVersion == "" || err != nil {
-		return nil, err
+	if !ef.IsGolang() {
+		return nil, nil
+	}
+
+	goVersion := ef.GoVersion()
+	if goVersion == "" {
+		goVersion = "<unknown>"
 	}
 
 	pclntab, err := elfunwindinfo.NewGopclntab(ef)
@@ -73,7 +77,7 @@ func (g *goData) unref() {
 }
 
 func (g *goData) String() string {
-	return "Golang symbolizer " + g.version
+	return fmt.Sprintf("Golang (%s) symbolizer", g.version)
 }
 
 func (g *goData) Attach(_ interpreter.EbpfHandler, _ libpf.PID,

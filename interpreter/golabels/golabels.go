@@ -51,12 +51,13 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	if err != nil {
 		return nil, err
 	}
-	goVersion, err := file.GoVersion()
-	if err != nil {
-		return nil, err
+	if !file.IsGolang() {
+		return nil, nil
 	}
+
+	goVersion := file.GoVersion()
 	if goVersion == "" {
-		log.Debugf("file %s is not a Go binary", info.FileName())
+		log.Debugf("unable to get Go version for %s", info.FileName())
 		return nil, nil
 	}
 

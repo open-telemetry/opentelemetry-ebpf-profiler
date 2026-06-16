@@ -37,9 +37,8 @@ import (
 //	0x00000000000c22a8 <+24>:	ldr	x28, [x0, x27]
 //	0x00000000000c22ac <+28>:	ret
 func extractTLSGOffset(f *pfelf.File) (int32, error) {
-	iscgo, err := f.IsCgoEnabled()
-	if err != nil || !iscgo {
-		return 0, err
+	if !f.IsCgoEnabled() {
+		return 0, nil
 	}
 
 	pclntab, err := elfunwindinfo.NewGopclntab(f)
