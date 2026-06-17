@@ -106,8 +106,8 @@ push_hotspot(UnwindState *state, Trace *trace, u64 file, u64 line, bool return_a
 {
   const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
 
-  u64 *data =
-    push_frame(state, trace, FRAME_MARKER_HOTSPOT, FRAME_FLAG_PID_SPECIFIC | ra_flag, 0, 2);
+  u64 *data = push_frame(
+    state, trace, FRAME_MARKER_HOTSPOT, FRAME_FLAG_PID_SPECIFIC | ra_flag, 0, FRAME_VARLEN_TWO);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }

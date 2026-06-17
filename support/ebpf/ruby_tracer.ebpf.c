@@ -119,7 +119,8 @@ gc_check(const RubyProcInfo *rubyinfo, const void *current_ctx_addr, bool *is_gc
 static EBPF_INLINE ErrorCode
 push_ruby(UnwindState *state, Trace *trace, u8 frame_type, u64 file, u64 line, u64 iseq_addr)
 {
-  u64 *data = push_frame(state, trace, FRAME_MARKER_RUBY, FRAME_FLAG_PID_SPECIFIC, file, 3);
+  u64 *data =
+    push_frame(state, trace, FRAME_MARKER_RUBY, FRAME_FLAG_PID_SPECIFIC, file, FRAME_VARLEN_THREE);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }

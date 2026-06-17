@@ -18,7 +18,7 @@ push_native(UnwindState *state, Trace *trace, u64 file, u64 line, bool return_ad
 {
   const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
 
-  u64 *data = push_frame(state, trace, FRAME_MARKER_NATIVE, ra_flag, line, 1);
+  u64 *data = push_frame(state, trace, FRAME_MARKER_NATIVE, ra_flag, line, FRAME_VARLEN_ONE);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }

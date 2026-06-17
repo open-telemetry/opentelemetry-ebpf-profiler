@@ -45,7 +45,7 @@ static EBPF_INLINE ErrorCode push_beam(UnwindState *state, Trace *trace, u64 ran
   const u8 ra_flag = state->return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
 
   // `pc` is in the `current_range` CodeHeader
-  u64 *data = push_frame(state, trace, FRAME_MARKER_BEAM, ra_flag, state->pc, 1);
+  u64 *data = push_frame(state, trace, FRAME_MARKER_BEAM, ra_flag, state->pc, FRAME_VARLEN_ONE);
   if (!data) {
     return false;
   }

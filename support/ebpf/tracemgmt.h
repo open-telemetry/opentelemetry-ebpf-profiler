@@ -393,7 +393,12 @@ static inline EBPF_INLINE u64 frame_header(u8 frame_type, u8 flags, u8 length, u
 // On success, a pointer to the first 'variable' field is returned.
 // On failure, NULL is returned. The 'UnwindState' is updated for too long stack error.
 static inline EBPF_INLINE u64 *push_frame(
-  UnwindState *state, Trace *trace, u8 frame_type, u8 frame_flags, u64 frame_data, u8 frame_varlen)
+  UnwindState *state,
+  Trace *trace,
+  u8 frame_type,
+  u8 frame_flags,
+  u64 frame_data,
+  FrameVarlen frame_varlen)
 {
   const int max_frame_size   = sizeof trace->frame_data / sizeof trace->frame_data[0];
   const int error_frame_size = 1;
@@ -415,7 +420,7 @@ static inline EBPF_INLINE u64 *push_frame(
 static inline EBPF_INLINE ErrorCode
 push_error(UnwindState *state, Trace *trace, u8 frame_type, ErrorCode error)
 {
-  u64 *data = push_frame(state, trace, frame_type, FRAME_FLAG_ERROR, error, 0);
+  u64 *data = push_frame(state, trace, frame_type, FRAME_FLAG_ERROR, error, FRAME_VARLEN_ZERO);
   if (data) {
     return ERR_OK;
   }

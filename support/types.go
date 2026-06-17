@@ -95,6 +95,8 @@ const (
 	TraceOriginProbe    = 0x3
 )
 
+const FrameVarlenMax = 0x4 - 1
+
 type ApmSpanID [8]byte
 type ApmTraceID [16]byte
 type CustomLabel struct {

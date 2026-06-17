@@ -1055,4 +1055,12 @@ typedef struct GoLabelsOffsets {
   s32 tls_offset;
 } GoLabelsOffsets;
 
+typedef enum FrameVarlen {
+  FRAME_VARLEN_ZERO,
+  FRAME_VARLEN_ONE,
+  FRAME_VARLEN_TWO,
+  FRAME_VARLEN_THREE,
+  FRAME_VARLEN_TOOMANY,
+} FrameVarlen;
+
 #endif // OPTI_TYPES_H

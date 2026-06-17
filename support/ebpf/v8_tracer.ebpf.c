@@ -39,7 +39,8 @@ static EBPF_INLINE ErrorCode push_v8(
 
   const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
 
-  u64 *data = push_frame(state, trace, FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, 0, 2);
+  u64 *data = push_frame(
+    state, trace, FRAME_MARKER_V8, FRAME_FLAG_PID_SPECIFIC | ra_flag, 0, FRAME_VARLEN_TWO);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }

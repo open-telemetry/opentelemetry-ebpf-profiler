@@ -29,7 +29,8 @@ struct py_procs_t {
 // Record a Python frame
 static EBPF_INLINE ErrorCode push_python(UnwindState *state, Trace *trace, u64 file, u64 line)
 {
-  u64 *data = push_frame(state, trace, FRAME_MARKER_PYTHON, FRAME_FLAG_PID_SPECIFIC, 0, 2);
+  u64 *data =
+    push_frame(state, trace, FRAME_MARKER_PYTHON, FRAME_FLAG_PID_SPECIFIC, 0, FRAME_VARLEN_TWO);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }

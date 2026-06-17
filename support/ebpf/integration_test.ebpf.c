@@ -28,7 +28,7 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid)
   trace->pid     = pid;
   trace->tid     = pid;
 
-  u64 *data = push_frame(&record->state, trace, FRAME_MARKER_NATIVE, 0, 21, 1);
+  u64 *data = push_frame(&record->state, trace, FRAME_MARKER_NATIVE, 0, 21, FRAME_VARLEN_ONE);
   if (data) {
     data[0] = 1337;
   }
@@ -40,7 +40,7 @@ static EBPF_INLINE void send_sample_traces(void *ctx, u64 pid)
   trace->num_kernel_frames = 0;
   trace->comm[3]           = 2;
   push_kernel_frames(ctx, trace);
-  data = push_frame(&record->state, trace, FRAME_MARKER_NATIVE, 0, 21, 1);
+  data = push_frame(&record->state, trace, FRAME_MARKER_NATIVE, 0, 21, FRAME_VARLEN_ONE);
   if (data) {
     data[0] = 1337;
   }

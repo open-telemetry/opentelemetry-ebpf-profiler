@@ -289,8 +289,13 @@ static EBPF_INLINE ErrorCode push_dotnet(
 {
   const u8 ra_flag = return_address ? FRAME_FLAG_RETURN_ADDRESS : 0;
 
-  u64 *data =
-    push_frame(state, trace, FRAME_MARKER_DOTNET, FRAME_FLAG_PID_SPECIFIC | ra_flag, pc_offset, 1);
+  u64 *data = push_frame(
+    state,
+    trace,
+    FRAME_MARKER_DOTNET,
+    FRAME_FLAG_PID_SPECIFIC | ra_flag,
+    pc_offset,
+    FRAME_VARLEN_ONE);
   if (!data) {
     return ERR_STACK_LENGTH_EXCEEDED;
   }
