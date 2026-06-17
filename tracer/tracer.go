@@ -216,12 +216,6 @@ type progLoaderHelper struct {
 	noTailCallTarget bool
 }
 
-// goString converts a fixed-size NUL-terminated buffer into an interned string,
-// ignoring everything from the first NUL byte onward.
-func goString(buf []byte) libpf.String {
-	return libpf.Intern(pfunsafe.ToString(cstring(buf)))
-}
-
 // schedProcessFreeHookName returns the name of the tracepoint hook to use.
 // This function requires that only one of (schedProcessFreeV1, schedProcessFreeV2)
 // be present in progNames.
@@ -1030,7 +1024,7 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 	procMeta := t.processManager.MetaForPID(pid)
 	trace := t.tracePool.Get().(*libpf.EbpfTrace)
 	*trace = libpf.EbpfTrace{
-		Comm:             goString(ptr.Comm[:]),
+		Comm:             libpf.NewComm(ptr.Comm),
 		ExecutablePath:   procMeta.Executable,
 		ContainerID:      procMeta.ContainerID,
 		ProcessName:      procMeta.Name,
