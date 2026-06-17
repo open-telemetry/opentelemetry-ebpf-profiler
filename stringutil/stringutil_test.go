@@ -36,6 +36,25 @@ func TestFieldsN(t *testing.T) {
 	}
 }
 
+func TestCString(t *testing.T) {
+	tests := map[string]struct {
+		input []byte
+		want  []byte
+	}{
+		"empty":        {input: []byte{}, want: []byte{}},
+		"no nul":       {input: []byte("hello"), want: []byte("hello")},
+		"first nul":    {input: []byte("\x00hello"), want: []byte{}},
+		"trailing nul": {input: []byte("hello\x00"), want: []byte("hello")},
+		"stale bytes":  {input: []byte("hello\x00world"), want: []byte("hello")},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.want, CString(tc.input))
+		})
+	}
+}
+
 func TestFieldsNZeroLengthSlice(t *testing.T) {
 	require.Equal(t, 0, FieldsN("hello world", []string{}))
 	require.Equal(t, 0, FieldsN("", []string{}))
