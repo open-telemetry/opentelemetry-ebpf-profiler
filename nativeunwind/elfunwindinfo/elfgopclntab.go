@@ -645,7 +645,7 @@ func getSourceFileStrategy(arch elf.Machine, sourceFile string, defaultStrategy 
 	}
 }
 
-// getFunctionDelta determines if the special unwind opcode if needed
+// getFunctionDelta determines the special unwind opcode if needed
 func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, framePointerReliable bool) *sdtypes.UnwindInfo {
 	switch sourceFile {
 	case "runtime.goexit", "runtime.mstart":
