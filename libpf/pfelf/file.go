@@ -1118,7 +1118,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 		}
 
 		// Search the hash bucket
-		offs += int64(4)*int64(hdr.numBuckets) + int64(4)*int64(i-hdr.symbolOffset)
+		offs += 4*int64(hdr.numBuckets) + 4*int64(i-hdr.symbolOffset)
 		h |= 1
 		for {
 			var h2 uint32
