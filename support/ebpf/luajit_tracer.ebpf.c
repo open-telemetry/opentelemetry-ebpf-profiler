@@ -273,9 +273,10 @@ static EBPF_INLINE ErrorCode lj_push_frame(
     push_frame(state, trace, FRAME_MARKER_LUAJIT, FRAME_FLAG_PID_SPECIFIC, LUAJIT_NORMAL_FRAME, 3);
   if (!data)
     return ERR_STACK_LENGTH_EXCEEDED;
-  data[0] = callee_pt;
+  data[0] = ((u64)callee_pc << 32) | caller_pc;
   data[1] = caller_pt;
-  data[2] = ((u64)callee_pc << 32) | caller_pc;
+  data[2] = callee_pt;
+
   return ERR_OK;
 }
 

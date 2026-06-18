@@ -421,11 +421,11 @@ func (l *luajitInstance) Symbolize(frame libpf.EbpfFrame, frames *libpf.Frames, 
 			return err
 		}
 
-		var2 := frame.Variable(2)
-		callerPC := uint32(var2 & 0xFFFFFFFF)
-		calleePC := uint32(var2 >> 32)
+		var0 := frame.Variable(0)
+		callerPC := uint32(var0 & 0xFFFFFFFF)
+		calleePC := uint32(var0 >> 32)
 		funcName = pt.getFunctionName(callerPC)
-		calleePT := libpf.Address(frame.Variable(0))
+		calleePT := libpf.Address(frame.Variable(2))
 		if err := l.symbolizeFrame(funcName, calleePT,
 			calleePC, frames); err != nil {
 			return err
