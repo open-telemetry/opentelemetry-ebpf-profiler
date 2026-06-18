@@ -5,6 +5,8 @@ package tracer
 
 import (
 	"errors"
+	"os"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,6 +14,26 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
+
+func TestGetCurrentNS_FileNotFound(t *testing.T) {
+	_, _, err := getCurrentNS("/nonexistent/path/pid")
+	require.Error(t, err)
+	require.True(t, os.IsNotExist(err))
+}
+
+func TestGetCurrentNS_ProcSelfNsPid(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skipf("skipping: /proc/self/ns/pid is Linux-specific (GOOS=%s)", runtime.GOOS)
+	}
+	const procSelfNsPid = "/proc/self/ns/pid"
+	if _, err := os.Stat(procSelfNsPid); err != nil {
+		t.Skipf("skipping: %s not available: %v", procSelfNsPid, err)
+	}
+	dev, ino, err := getCurrentNS(procSelfNsPid)
+	require.NoError(t, err)
+	require.NotZero(t, dev, "pid namespace device should be non-zero")
+	require.NotZero(t, ino, "pid namespace inode should be non-zero")
+}
 
 func TestValidateSystemAnalysisResult(t *testing.T) {
 	address := libpf.SymbolValue(0x1234)
