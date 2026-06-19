@@ -44,6 +44,24 @@ extern u32 task_stack_offset;
 // stack_ptregs_offset is declared in native_stack_trace.ebpf.c
 extern u32 stack_ptregs_offset;
 
+// Strips the PAC tag from a pointer.
+//
+// While all pointers can contain PAC tags, we only apply this function to code pointers, because
+// that's where normalization is required to make the stack delta lookups work. Note that if that
+// should ever change, we'd need a different mask for the data pointers, because it might diverge
+// from the mask for code pointers.
+static inline EBPF_INLINE u64 normalize_pac_ptr(u64 ptr)
+{
+#if defined(__aarch64__)
+  // Mask off PAC bits. Since we're always applying this to usermode pointers that should have all
+  // the high bits set to 0, we don't need to consider the case of having to fill up the resulting
+  // hole with 1s (like we'd have to for kernel ptrs).
+  return ptr & inverse_pac_mask;
+#else
+  return ptr;
+#endif
+}
+
 // increment_metric increments the value of the given metricID by 1
 static inline EBPF_INLINE void increment_metric(u32 metricID)
 {
@@ -339,7 +357,7 @@ static inline EBPF_INLINE bool unwinder_unwind_frame_pointer_regs(UnwindState *s
   // At least RA and FP must be in the Frame.
   state->fp_bound = fp + 2 * sizeof(u64);
   state->fp       = regs[0];
-  state->pc       = regs[1];
+  state->pc       = normalize_pac_ptr(regs[1]);
   unwinder_mark_nonleaf_frame(state);
   return true;
 }
@@ -632,23 +650,6 @@ static inline EBPF_INLINE void tail_call(void *ctx, int next)
   #define GDT_ENTRY_DEFAULT_USER_DS   5
   #define __USER32_CS                 (GDT_ENTRY_DEFAULT_USER32_CS * 8 + 3)
   #define __USER_DS                   (GDT_ENTRY_DEFAULT_USER_DS * 8 + 3)
-#endif
-
-#ifdef __aarch64__
-// Strips the PAC tag from a pointer.
-//
-// While all pointers can contain PAC tags, we only apply this function to code pointers, because
-// that's where normalization is required to make the stack delta lookups work. Note that if that
-// should ever change, we'd need a different mask for the data pointers, because it might diverge
-// from the mask for code pointers.
-static inline EBPF_INLINE u64 normalize_pac_ptr(u64 ptr)
-{
-  // Mask off PAC bits. Since we're always applying this to usermode pointers that should have all
-  // the high bits set to 0, we don't need to consider the case of having to fill up the resulting
-  // hole with 1s (like we'd have to for kernel ptrs).
-  ptr &= inverse_pac_mask;
-  return ptr;
-}
 #endif
 
 // Initialize state from pt_regs

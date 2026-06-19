@@ -34,7 +34,7 @@ type ProfileTypeMetadata struct {
 }
 
 type TraceEventMeta struct {
-	Comm           libpf.String
+	Comm           libpf.Comm
 	ProcessName    libpf.String
 	ExecutablePath libpf.String
 	ContainerID    libpf.String
@@ -100,7 +100,7 @@ type SampleKey struct {
 	ExtraMeta any
 
 	// Comm is provided by the eBPF programs
-	Comm libpf.String
+	Comm libpf.Comm
 
 	Hash libpf.TraceHash
 
