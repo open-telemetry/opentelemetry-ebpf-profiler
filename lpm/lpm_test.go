@@ -17,6 +17,7 @@ func TestGetRightmostSetBit(t *testing.T) {
 		input    uint64
 		expected uint64
 	}{
+		"0":   {input: 0, expected: 1 << 63},
 		"1":   {input: 0b1, expected: 0b1},
 		"2":   {input: 0b10, expected: 0b10},
 		"3":   {input: 0b11, expected: 0b1},
@@ -39,6 +40,7 @@ func TestCalculatePrefixList(t *testing.T) {
 		expect []Prefix
 	}{
 		"4k to 0": {start: 4096, end: 0, err: true},
+		"0 to 2":  {start: 0, end: 2, expect: []Prefix{{0, 63}}},
 		"10 to 22": {start: 0b1010, end: 0b10110,
 			expect: []Prefix{{0b1010, 63}, {0b1100, 62}, {0b10000, 62},
 				{0b10100, 63}}},
