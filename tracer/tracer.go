@@ -1308,7 +1308,7 @@ func (t *Tracer) StartOffCPUProfiling() error {
 	}
 	tpLink, err := link.Tracepoint("sched", "sched_switch", tpProg, nil)
 	if err != nil {
-		return nil
+		return fmt.Errorf("failed to attach sched_switch tracepoint: %w", err)
 	}
 	t.hooks[hookPoint{group: "sched", name: "sched_switch"}] = tpLink
 
