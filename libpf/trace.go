@@ -7,7 +7,32 @@ import (
 	"unique"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
+
+const commLen = 16
+
+// Comm is the fixed-size process command name buffer supplied by the kernel.
+type Comm struct {
+	buffer [commLen]uint8
+}
+
+// NewComm returns a Comm that preserves the full fixed-size kernel buffer.
+func NewComm(buffer [commLen]uint8) Comm {
+	return Comm{buffer: buffer}
+}
+
+// NewCommFromString returns a Comm initialized from str.
+func NewCommFromString(str string) Comm {
+	var buffer [commLen]uint8
+	copy(buffer[:], str)
+	return NewComm(buffer)
+}
+
+// String converts Comm's NUL-terminated fixed-size buffer into a Go string.
+func (c Comm) String() string {
+	return string(stringutil.CString(c.buffer[:]))
+}
 
 // FrameMappingFileData represents a backing file for a memory mapping.
 type FrameMappingFileData struct {
@@ -71,23 +96,23 @@ func (fmf FrameMapping) Value() FrameMappingData {
 
 // Frame represents one frame in a stack trace.
 type Frame struct {
-	// Type is the frame type.
-	Type FrameType
-	// FunctionOffset is the line offset from function start line for the frame.
-	FunctionOffset uint32
 	// FunctionName is the name of the function for the frame.
 	FunctionName String
 	// SourceFile is the source code file name for the frame.
 	SourceFile String
+	// Mapping is a reference to the mapping data to which this Frame corresponds to.
+	// Available only for frames executing on a file backed memory mapping.
+	Mapping FrameMapping
 	// SourceLine is the source code level line number of this frame.
 	SourceLine SourceLineno
 	// SourceColumn is the source code level column number of this frame.
 	SourceColumn SourceColumn
 	// An address in ELF VA space (native frame) or line number (interpreted frame).
 	AddressOrLineno AddressOrLineno
-	// Mapping is a reference to the mapping data to which this Frame corresponds to.
-	// Available only for frames executing on a file backed memory mapping.
-	Mapping FrameMapping
+	// FunctionOffset is the line offset from function start line for the frame.
+	FunctionOffset uint32
+	// Type is the frame type.
+	Type FrameType
 }
 
 // Frames is a list of interned frames.
@@ -100,32 +125,31 @@ func (frames *Frames) Append(frame *Frame) {
 
 // Trace represents a stack trace.
 type Trace struct {
-	Frames       Frames
-	Hash         TraceHash
 	CustomLabels map[String]String
+	Frames       Frames
 }
 
 // EbpfTrace represents a stack trace from Ebpf code.
 type EbpfTrace struct {
-	Comm             String
+	EnvVars          map[String]String
 	ProcessName      String
 	ExecutablePath   String
 	ContainerID      String
-	KTime            int64
-	PID              PID
-	TID              PID
-	Origin           Origin
+	CustomLabels     map[String]String
+	Comm             Comm
+	FrameData        []uint64
+	KernelFrames     Frames
+	FrameDataBuf     [3072]uint64
+	Resource         *pcommon.Resource
 	Value            int64
+	KTime            int64
+	CpuID            uint32
+	TID              PID
+	PID              PID
+	NumFrames        uint16
+	Origin           Origin
 	APMTraceID       APMTraceID
 	APMTransactionID APMTransactionID
-	CPU              int
-	NumFrames        int
-	EnvVars          map[String]String
-	CustomLabels     map[String]String
-	Resource         *pcommon.Resource
-	KernelFrames     Frames
-	FrameData        []uint64
-	FrameDataBuf     [3072]uint64
 }
 
 type EbpfFrame []uint64

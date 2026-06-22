@@ -35,6 +35,7 @@ func TestVersionExtract(t *testing.T) {
 	}{
 		"7.x":          {given: "7.4.19", expected: phpVersion(7, 4, 19), expectError: false},
 		"8.x":          {given: "8.2.7", expected: phpVersion(8, 2, 7), expectError: false},
+		"8.5":          {given: "8.5.7", expected: phpVersion(8, 5, 7), expectError: false},
 		"double-digit": {given: "8.0.27", expected: phpVersion(8, 0, 27), expectError: false},
 		"suffix": {
 			given:       "8.1.2-1ubuntu2.14",

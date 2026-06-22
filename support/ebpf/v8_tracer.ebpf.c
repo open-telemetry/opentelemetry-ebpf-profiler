@@ -19,15 +19,6 @@
 // The maximum V8 frame length used in heuristic to validate FP
 #define V8_MAX_FRAME_LENGTH 8192
 
-#if defined(__aarch64__)
-  // On aarch64, a JS EntryFrame's layout differs from that of any other frame,
-  // and stores 20 registers, the fp being the top-most.
-  // See: https://chromium.googlesource.com/v8/v8/+/main/src/execution/arm64/frame-constants-arm64.h
-  #define V8_ENTRYFRAME_CALLEE_SAVED_REGS_BEFORE_FP_LR_PAIR 18
-#else
-  #define V8_ENTRYFRAME_CALLEE_SAVED_REGS_BEFORE_FP_LR_PAIR 0
-#endif
-
 // Map from V8 process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 struct v8_procs_t {
@@ -111,15 +102,14 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   V8UnwindScratchSpace *scratch = &record->v8UnwindScratch;
 
   // All V8 frames have frame pointer. Check that the FP looks valid.
-  DEBUG_PRINT("v8: pc: %lx, sp: %lx, fp: %lx", pc, sp, fp);
-  if (fp < sp || fp >= sp + V8_MAX_FRAME_LENGTH) {
-    DEBUG_PRINT("v8: frame pointer too far off %lx / %lx", fp, sp);
+  if (!unwinder_check_frame_size(state, V8_MAX_FRAME_LENGTH)) {
     increment_metric(metricID_UnwindV8ErrBadFP);
     return ERR_V8_BAD_FP;
   }
 
   // Read FP pointer data
-  if (bpf_probe_read_user(scratch->fp_ctx, V8_FP_CONTEXT_SIZE, (void *)(fp - V8_FP_CONTEXT_SIZE))) {
+  if (bpf_probe_read_user(
+        scratch->fp_ctx, sizeof(scratch->fp_ctx), (void *)(fp - V8_FP_CONTEXT_SIZE))) {
     DEBUG_PRINT("v8:  -> failed to read frame pointer context");
     increment_metric(metricID_UnwindV8ErrBadFP);
     return ERR_V8_BAD_FP;
@@ -281,25 +271,23 @@ frame_done:;
   }
 
   // Unwind with frame pointer
-  if (!unwinder_unwind_frame_pointer(state)) {
+  u64 *regs = (u64 *)&scratch->fp_ctx[V8_FP_CONTEXT_SIZE];
+  if (!unwinder_unwind_frame_pointer_regs(state, regs)) {
     DEBUG_PRINT("v8:  --> bad frame pointer");
     increment_metric(metricID_UnwindV8ErrBadFP);
     return ERR_V8_BAD_FP;
   }
 
-  // The JS Entry Frame's layout differs from other frames because some callee
-  // saved registers might be pushed onto the stack before the [fp, lr] pair.
-  // This frame is represented by markers 0 (inner) and 1 (outermost).
-  // See: https://chromium.googlesource.com/v8/v8/+/main/src/execution/frames.h#167
+#if defined(__aarch64__)
+  // On aarch64 the frame pointer unwinding does not recover SP.
+  // Recover it for Entry frames which return to native code and
+  // for which the stack size is known.
+  // See: https://chromium.googlesource.com/v8/v8/+/main/src/execution/arm64/frame-constants-arm64.h
   if (pointer_and_type == V8_FILE_TYPE_MARKER && delta_or_marker == 1)
-    state->sp += V8_ENTRYFRAME_CALLEE_SAVED_REGS_BEFORE_FP_LR_PAIR * sizeof(size_t);
+    state->sp = fp + 20 * sizeof(u64);
+#endif
 
-  DEBUG_PRINT(
-    "v8: pc: %lx, sp: %lx, fp: %lx",
-    (unsigned long)state->pc,
-    (unsigned long)state->sp,
-    (unsigned long)state->fp);
-
+  DEBUG_UNWIND_STATE(state);
   increment_metric(metricID_UnwindV8Frames);
   return ERR_OK;
 }
@@ -329,6 +317,8 @@ static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
   }
 
   increment_metric(metricID_UnwindV8Attempts);
+
+  unwinder_analyze_frame_pointer(&record->state);
 
   for (int i = 0; i < V8_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;

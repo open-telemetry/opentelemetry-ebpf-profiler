@@ -595,7 +595,7 @@ func TestGenerate_NativeFrame(t *testing.T) {
 		support.TraceOriginSampling: {
 			{
 				Hash:   libpf.NewTraceHash(0, 1),
-				Comm:   libpf.Intern("abc"),
+				Comm:   libpf.NewCommFromString("abc"),
 				TID:    42,
 				CPU:    73,
 				SpanID: libpf.APMSpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},
@@ -815,7 +815,7 @@ func TestGenerate_Validate(t *testing.T) {
 		support.TraceOriginSampling: {
 			{
 				Hash:   libpf.NewTraceHash(0, 1),
-				Comm:   libpf.Intern("abc"),
+				Comm:   libpf.NewCommFromString("abc"),
 				TID:    42,
 				CPU:    73,
 				SpanID: libpf.APMSpanID{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7},

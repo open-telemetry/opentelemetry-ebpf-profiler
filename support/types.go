@@ -22,6 +22,7 @@ const (
 	FrameMarkerPerl    = 0x7
 	FrameMarkerV8      = 0x8
 	FrameMarkerDotnet  = 0xa
+	FrameMarkerLuaJIT  = 0xd
 	FrameMarkerBEAM    = 0xc
 	FrameMarkerGo      = 0xb
 )
@@ -45,6 +46,7 @@ const (
 	ProgUnwindDotnet10 = 0x9
 	ProgGoLabels       = 0xa
 	ProgUnwindBEAM     = 0xb
+	ProgUnwindLuaJIT   = 0xc
 )
 
 const (
@@ -54,14 +56,13 @@ const (
 )
 
 const (
-	EventTypeGenericPID     = 0x1
-	EventTypeReloadKallsyms = 0x2
+	EventTypeGenericPID = 0x1
 )
 
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x69
+	MetricIDBeginCumulative = 0x6a
 )
 
 const (
@@ -138,10 +139,10 @@ type StackDeltaPageKey struct {
 	Page   uint64
 }
 type SystemAnalysis struct {
-	Address   uint64
-	Pid       uint32
-	Code      [128]uint8
-	Pad_cgo_0 [4]byte
+	Address uint64
+	Pid     uint32
+	Err     int32
+	Code    [128]uint8
 }
 type TSDInfo struct {
 	Offset     int16
@@ -166,6 +167,7 @@ type Trace struct {
 	Num_kernel_frames  uint16
 	Origin             uint32
 	Value              uint64
+	Cpu_id             uint32
 	Frame_data         [3072]uint64
 }
 type UnwindInfo struct {
@@ -329,7 +331,7 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0x62d0
+	Sizeof_Trace      = 0x62d8
 
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
@@ -497,4 +499,5 @@ var MetricsTranslation = []metrics.MetricID{
 	0x66: metrics.IDUnwindRubyErrReadRbasicFlags,
 	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
 	0x68: metrics.IDUnwindErrBadDTVRead,
+	0x69: metrics.IDBPFRingbufOutputErr,
 }

@@ -53,6 +53,8 @@ const (
 	GoFrame FrameType = support.FrameMarkerGo
 	// BEAMFrame identifies the BEAM interpreter frames.
 	BEAMFrame FrameType = support.FrameMarkerBEAM
+	// LuaJITFrame identifies the LuaJIT interpreter frames.
+	LuaJITFrame FrameType = support.FrameMarkerLuaJIT
 )
 
 const (

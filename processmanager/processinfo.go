@@ -313,7 +313,7 @@ func (pm *ProcessManager) processRemovedMapping(pid libpf.PID, m *Mapping) uint6
 
 	fileID := host.FileIDFromLibpf(mf.File.Value().FileID)
 	pm.eim.DecRef(fileID)
-	return uint64(deleted)
+	return deleted
 }
 
 // Caller is responsible to hold pm.mu write lock to avoid race conditions.
@@ -348,7 +348,12 @@ func (pm *ProcessManager) processRemovedInterpreters(pid libpf.PID,
 var errInvalidVirtualAddress = errors.New("invalid ELF virtual address")
 
 func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapping) (libpf.FrameMapping, error) {
-	elfRef := pfelf.NewReference(m.Path, pr)
+	// Open the mapping's own file via OpenELFMapping (VDSO from memory plus
+	// /proc/<pid>/map_files for deleted-file safety); auxiliary opens such as
+	// .gnu_debuglink targets go through pr.OpenELF.
+	elfRef := pfelf.NewReferenceWithOpenFunc(m.Path, pr, func() (*pfelf.File, error) {
+		return process.OpenELFMapping(pr, m)
+	})
 	defer elfRef.Close()
 
 	info := pm.getELFInfo(pr, m, elfRef)
@@ -382,7 +387,10 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 	pm.assignLibcInfo(pr.PID(), ei.LibcInfo)
 	if ei.Data != nil {
 		bias := libpf.Address(m.Vaddr - elfSpaceVA)
-		pm.handleNewInterpreter(pr, bias, m.GetOnDiskFileIdentifier(), ei.Data)
+		if err := pm.handleNewInterpreter(pr, bias, m.GetOnDiskFileIdentifier(), ei.Data); err != nil {
+			log.Errorf("Failed to handle new interpreter for PID %d file %v: %v",
+				pr.PID(), m.Path, err)
+		}
 	}
 	pm.mu.Unlock()
 
@@ -451,11 +459,11 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 		err = errors.Join(err, fmt.Errorf("failed to delete dummy prefix for PID %d: %v",
 			pid, err2))
 	}
-	pm.pidPageToMappingInfoSize -= uint64(deleted)
 
 	for idx := range info.mappings {
-		pm.processRemovedMapping(pid, &info.mappings[idx])
+		deleted += pm.processRemovedMapping(pid, &info.mappings[idx])
 	}
+	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, deleted)
 	pm.processRemovedInterpreters(pid, libpf.Set[util.OnDiskFileIdentifier]{})
 }
 
@@ -652,7 +660,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	for _, m := range mpRemove {
 		numChanges += pm.processRemovedMapping(pid, m)
 	}
-	pm.pidPageToMappingInfoSize -= numChanges
+	pm.pidPageToMappingInfoSize -= min(pm.pidPageToMappingInfoSize, numChanges)
 	pm.mu.Lock()
 	pm.processRemovedInterpreters(pid, interpretersValid)
 	pm.mu.Unlock()

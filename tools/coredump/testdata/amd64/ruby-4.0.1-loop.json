@@ -30,7 +30,7 @@
         "libruby.so.4.0.1+0x34435d",
         "Range#each+0 in <cfunc>:0",
         "Object#sum_of_primes+0 in /tmp/loop.rb:18",
-        "?+0x0",
+        "block (2 levels) in <main>+0 in /tmp/loop.rb:26",
         "libruby.so.4.0.1+0x348923",
         "libruby.so.4.0.1+0x12bd24",
         "libruby.so.4.0.1+0x13022a",

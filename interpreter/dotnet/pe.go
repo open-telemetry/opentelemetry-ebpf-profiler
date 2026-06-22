@@ -5,6 +5,7 @@ package dotnet // import "go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"debug/pe"
 	"encoding/binary"
 	"errors"
@@ -20,9 +21,12 @@ import (
 	"github.com/elastic/go-freelru"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/hash"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/libpf/readatbuf"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -32,7 +36,60 @@ const (
 
 	// TTL of entries in the LRU cache holding the executables' PE information.
 	peInfoCacheTTL = 6 * time.Hour
+
+	// Maximum size of the LRU cache holding open/parse errors per (dev,inode).
+	// Errors are rare and intentionally not promoted to the content-hash tier,
+	// so this can be much smaller than peInfoCacheSize.
+	peInfoErrCacheSize = 1024
+
+	// Maximum size of the LRU cache holding strings from #Strings heap per PE.
+	peInfoStringsCacheSize = 1024
+
+	// imageFileMachineDotnetX64 is an undocumented machine type seen in dotnet-internal x64 DLLs.
+	imageFileMachineDotnetX64 = 0xfd1d
+
+	// imageFileMachineDotnetARM64 is an undocumented machine type seen in dotnet-internal ARM64 DLLs.
+	imageFileMachineDotnetARM64 = 0xd11d
+
+	// TTL of entries in the LRU cache holding the .NET strings.
+	peInfoStringsCacheTTL = 1 * time.Hour
 )
+
+// peHash is a content-derived cache key for a dotnet PE file: SHA256 of the
+// first 4 KiB of the file, truncated to 16 bytes. ECMA-335 requires the PE
+// headers (DOS stub, NT headers, optional header, section table, CLI header
+// directory) to fit within the first 4 KiB for dotnet, so this prefix is
+// sufficient to distinguish content-distinct PE files in practice.
+//
+// We deliberately do not reuse libpf.FileID as the key. FileID also hashes
+// the 4 KiB trailer and the file length, costing a second random-access
+// read (and a stat) on every miss without improving discrimination for
+// dotnet PEs - the header prefix already does that, and the parser
+// immediately re-reads it from the page cache.
+//
+// We do not expect two dotnet PE files with distinct libpf.FileIDs to
+// collide on the same peHash. The 4 KiB prefix already covers the section
+// table (sizes and file offsets), so independent builds almost always
+// differ within it, and 128 bits of SHA256 makes accidental collisions
+// negligible at any plausible cache population.
+type peHash [16]byte
+
+var globalPeCache peCache
+
+// peHashFromHeader computes the cache key for a dotnet PE file from its
+// first up-to-4 KiB.
+func peHashFromHeader(hdr []byte) peHash {
+	sum := sha256.Sum256(hdr)
+	var k peHash
+	copy(k[:], sum[:16])
+	return k
+}
+
+// Hash32 is the freelru hash function. SHA256 output is uniformly random,
+// so the first 4 bytes are a good 32-bit hash with no further mixing.
+func (k peHash) Hash32() uint32 {
+	return binary.LittleEndian.Uint32(k[:4])
+}
 
 // OptionalHeader32 is the IMAGE_OPTIONAL_HEADER32 without its Magic or DataDirectory
 // https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-image_optional_header32
@@ -144,12 +201,16 @@ type ReadyToRunSection struct {
 	Section pe.DataDirectory
 }
 
-// ReadyToRunRuntimeFunction is the R2RFMT RUNTIME_FUNCTION for x86_64
-type ReadyToRunRuntimeFunction struct {
-	StartRVA uint32
-	EndRVA   uint32
-	GCInfo   uint32
-}
+// R2RFMT RUNTIME_FUNCTION on-disk record sizes for the RuntimeFunctions section.
+// Only the leading 4-byte StartRVA field is decoded; the remaining bytes are skipped
+// via the per-architecture stride.
+// See: https://github.com/dotnet/runtime/blob/v8.0.0/docs/design/coreclr/botr/readytorun-format.md#readytorunsectiontyperuntimefunctions
+const (
+	// x86_64 layout: {StartRVA, EndRVA, GCInfo} (3 x uint32).
+	r2rRuntimeFunctionSize = 12
+	// ARM64 layout: {StartRVA, UnwindData} (2 x uint32); EndRVA is omitted.
+	r2rRuntimeFunctionSizeARM64 = 8
+)
 
 // MetadataRoot is the ECMA-335 II.24.2.1 Metadata root (non-variable length header)
 type MetadataRoot struct {
@@ -257,19 +318,27 @@ const (
 
 // peInfo is the information we need to cache from a Dotnet PE file for symbolization
 type peInfo struct {
-	err          error
-	lastModified int64
-	mapping      libpf.FrameMapping
-	simpleName   libpf.String
-	guid         string
-	typeSpecs    []peTypeSpec
-	methodSpecs  []peMethodSpec
-	sizeOfImage  uint32
+	err         error
+	mapping     libpf.FrameMapping
+	simpleName  libpf.String
+	guid        string
+	typeSpecs   []peTypeSpec
+	methodSpecs []peMethodSpec
+	sizeOfImage uint32
 
-	// strings contains the preloaded strings from dotnet string heap.
-	// If this consumes too much memory, this could be converted to LRU and on-demand
-	// populated by reading the strings from attached process memory.
-	strings map[uint32]libpf.String
+	// stringsHeapFileOffset is the offset of the ECMA-335 II.24.2.3 #Strings heap
+	// in the on-disk PE file. The absolute process address is computed at attach
+	// time from the process.RawMapping that covers this file offset (see
+	// resolveStringsHeapAddr), which handles both image-loaded PEs and 1:1 file
+	// mmaps uniformly via the kernel's file-to-VA mapping.
+	stringsHeapFileOffset uint32
+	// stringsHeapSize is the size of the #Strings heap in bytes.
+	stringsHeapSize uint32
+
+	// stringsCache memoizes resolved #Strings heap entries to avoid repeated
+	// remote-memory reads for hot type/method names. Shared across processes
+	// since peInfo is shared via globalPeCache.
+	stringsCache *freelru.SyncedLRU[uint32, libpf.String]
 }
 
 // peParser contains the needed data when reading and parsing the dotnet data from a PE file.
@@ -331,8 +400,10 @@ func (pp *peParser) parsePE() error {
 	// Ready to Run code has been generated.
 	switch pp.nt.Machine {
 	case pe.IMAGE_FILE_MACHINE_AMD64,
-		pe.IMAGE_FILE_MACHINE_I386, // According to ECMA spec always this
-		0xfd1d:                     // Seen on dotnet internal .dlls
+		pe.IMAGE_FILE_MACHINE_I386,  // According to ECMA spec always this
+		pe.IMAGE_FILE_MACHINE_ARM64, // R2R binaries on arm64
+		imageFileMachineDotnetX64,   // Seen on dotnet internal x64 .dlls
+		imageFileMachineDotnetARM64: // Seen on dotnet internal arm64 .dlls
 		// ok
 	default:
 		return fmt.Errorf("unrecognized PE machine: %#x", pp.nt.Machine)
@@ -415,6 +486,20 @@ func (pp *peParser) parseOptionalHeader() error {
 	return nil
 }
 
+// rvaToFileOffset converts a Relative Virtual Address into a file offset by
+// locating the PE section that contains the address. The file offset is the
+// only address form that resolves consistently across both image-loaded PEs
+// (CoreCLR maps sections at imageBase+RVA) and IL-only DLLs (1:1 file mmap,
+// where the OS does not perform section relocation, so RVA != process offset).
+func (pp *peParser) rvaToFileOffset(rva uint32) (uint32, bool) {
+	for _, s := range pp.sections {
+		if rva >= s.VirtualAddress && rva < s.VirtualAddress+s.VirtualSize {
+			return rva - s.VirtualAddress + s.PointerToRawData, true
+		}
+	}
+	return 0, false
+}
+
 // getRVASectionReader() find the PE Section containing the requested DataDirectory and
 // creates a SectionReader for the range. This is done by searching for the matching
 // PE Section mapping and converting the Relative Virtual Address (RVA) to file offset.
@@ -444,6 +529,11 @@ func (pp *peParser) parseR2RMethodDefs(table pe.DataDirectory) error {
 	prevIndex := uint32(0)
 	prevRVA := uint32(0)
 
+	stride := int64(r2rRuntimeFunctionSize)
+	if pp.nt.Machine == pe.IMAGE_FILE_MACHINE_ARM64 || pp.nt.Machine == imageFileMachineDotnetARM64 {
+		stride = int64(r2rRuntimeFunctionSizeARM64)
+	}
+
 	// The ready-to-run MethodDefs table is a lookup table indexed with MethodDef index,
 	// and the data contains R2R RuntimeFunction table index (among other things).
 	// The callback will get monotonic MethodDef index, and monotonic startRVA.
@@ -460,18 +550,17 @@ func (pp *peParser) parseR2RMethodDefs(table pe.DataDirectory) error {
 			id >>= 1
 		}
 		// id is index to the RuntimeFunctions table.
-		// Read the Function start address.
-		var f ReadyToRunRuntimeFunction
-		_, err = pp.r2rFunctions.Seek(int64(id*uint32(binary.Size(f))), io.SeekStart)
-		if err != nil {
+		// Read the Function start address (first field, shared by both struct layouts).
+		if _, err = pp.r2rFunctions.Seek(int64(id)*stride, io.SeekStart); err != nil {
 			return err
 		}
-		if err := binary.Read(pp.r2rFunctions, binary.LittleEndian, &f); err != nil {
+		var startRVA uint32
+		if err := binary.Read(pp.r2rFunctions, binary.LittleEndian, &startRVA); err != nil {
 			return err
 		}
 		// Shift by one, so that the methods without r2r implementation can
 		// be inserted in-between valid RVAs
-		startRVA := f.StartRVA << 1
+		startRVA <<= 1
 		if startRVA < prevRVA {
 			return fmt.Errorf("non-monotonic R2R code RVA: %x < %x",
 				startRVA, prevRVA)
@@ -575,6 +664,19 @@ func (pp *peParser) parseCLI() error {
 		case "#Strings":
 			// ECMA-335 II.24.2.3 #Strings heap
 			pp.dotnetStrings = io.NewSectionReader(r, int64(hdr.Offset), int64(hdr.Size))
+			heapRVA := cliHeader.MetaData.VirtualAddress + hdr.Offset
+			// Persist the heap as a file offset, not an RVA: for IL-only DLLs
+			// the file is mmap'd 1:1 and RVAs do not correspond to process
+			// offsets. The file offset combined with the kernel's mapping
+			// (Vaddr, FileOffset) yields the process VA uniformly in
+			// resolveStringsHeapAddr.
+			heapFileOffset, ok := pp.rvaToFileOffset(heapRVA)
+			if !ok {
+				return fmt.Errorf("unable to locate #Strings heap section for RVA %#x",
+					heapRVA)
+			}
+			pp.info.stringsHeapFileOffset = heapFileOffset
+			pp.info.stringsHeapSize = hdr.Size
 		case "#GUID":
 			// ECMA-335 II.24.2.5 #GUID heap
 			pp.dotnetGUID = io.NewSectionReader(r, int64(hdr.Offset), int64(hdr.Size))
@@ -625,6 +727,33 @@ func (pp *peParser) readDotnetString(offs uint32) libpf.String {
 	return libpf.NullString
 }
 
+// lookupString reads a NUL-terminated string from the ECMA-335 II.24.2.3
+// #Strings heap by addressing the heap inside the running process.
+// stringsHeapAddr is the absolute process address of the heap, resolved at
+// attach time (see resolveStringsHeapAddr) so this works regardless of whether
+// the runtime image-loaded the PE or mmap()ed the file 1:1.
+// Successfully resolved values are memoized in pi.stringsCache to avoid
+// repeated remote-memory reads for hot names. NullString results (offset 0,
+// out-of-bounds, read errors, empty strings) are not cached so a transient
+// read failure does not poison the entry permanently.
+func (pi *peInfo) lookupString(rm remotememory.RemoteMemory, stringsHeapAddr uint64,
+	offs uint32) libpf.String {
+	if offs == 0 || offs >= pi.stringsHeapSize {
+		return libpf.NullString
+	}
+	if s, ok := pi.stringsCache.Get(offs); ok {
+		globalPeCache.stringsCacheHit.Add(1)
+		return s
+	}
+	globalPeCache.stringsCacheMiss.Add(1)
+	s := libpf.Intern(rm.String(libpf.Address(stringsHeapAddr + uint64(offs))))
+	if s == libpf.NullString {
+		return s
+	}
+	pi.stringsCache.Add(offs, s)
+	return s
+}
+
 func (pp *peParser) readDotnetGUID(offs uint32) string {
 	// Read a GUID from the ECMA-335 II.24.2.5 #GUID heap
 	if offs == 0 {
@@ -643,18 +772,6 @@ func (pp *peParser) readDotnetGUID(offs uint32) string {
 		binary.LittleEndian.Uint16(guid[6:8]),
 		guid[8:10],
 		guid[10:])
-}
-
-func (pp *peParser) preloadString(heapIndex uint32) {
-	// String index is well known empty string
-	if heapIndex == 0 {
-		return
-	}
-	// Check if already loaded
-	if _, ok := pp.info.strings[heapIndex]; ok {
-		return
-	}
-	pp.info.strings[heapIndex] = pp.readDotnetString(heapIndex)
 }
 
 func (pp *peParser) skipDotnetBytes(n int) {
@@ -705,14 +822,6 @@ func (pp *peParser) parseModuleTable() {
 	}
 }
 
-// preloadTypeSpecStrings preload the strings for given TypeDef entry
-func (pp *peParser) preloadTypeSpecStrings(spec *peTypeSpec) {
-	if spec.methodIdx < pp.tableRows[tableMethodDef] {
-		pp.preloadString(spec.namespaceIdx)
-		pp.preloadString(spec.typeNameIdx)
-	}
-}
-
 // parseTypeDef parses an ECMA-335 II.22.37 TypeDef table
 func (pp *peParser) parseTypeDef() {
 	// Flags          a 4-byte bitmask of type TypeAttributes, §II.23.1.15
@@ -723,14 +832,6 @@ func (pp *peParser) parseTypeDef() {
 	// MethodList     an index into the MethodDef table; first Method owned by this Type
 
 	specs := make([]peTypeSpec, 0, pp.tableRows[tableTypeDef])
-
-	// NOTE: We could probably not load the rows where MethodList is same as the next
-	// entry as it is a type without Methods. We also do lookups from symbolization
-	// via binary search using the methodIdx field. However, the NestedClass table
-	// will contain direct indexes to this table, so we would need to record the index
-	// or do the elimination later during the load - so perhaps its not worth while.
-
-	prevEntry := peTypeSpec{}
 	for i := uint32(0); i < pp.tableRows[tableTypeDef]; i++ {
 		pp.skipDotnetBytes(4)
 		typeNameIdx := pp.readDotnetIndex(indexString)
@@ -738,19 +839,12 @@ func (pp *peParser) parseTypeDef() {
 		pp.skipDotnetBytes(pp.indexSizes[indexTypeDefOrRef] + pp.indexSizes[indexField])
 		methodIdx := pp.readDotnetIndex(indexMethodDef)
 
-		if prevEntry.methodIdx != methodIdx {
-			pp.preloadTypeSpecStrings(&prevEntry)
-		}
-
-		prevEntry = peTypeSpec{
+		specs = append(specs, peTypeSpec{
 			namespaceIdx: namespaceIdx,
 			typeNameIdx:  typeNameIdx,
 			methodIdx:    methodIdx,
-		}
-		specs = append(specs, prevEntry)
+		})
 	}
-	pp.preloadTypeSpecStrings(&specs[len(specs)-1])
-
 	pp.info.typeSpecs = specs
 }
 
@@ -770,7 +864,6 @@ func (pp *peParser) parseMethodDef() {
 		nameIdx := pp.readDotnetIndex(indexString)
 		pp.skipDotnetBytes(pp.indexSizes[indexBlob] + pp.indexSizes[indexParam])
 
-		pp.preloadString(nameIdx)
 		specs = append(specs, peMethodSpec{methodNameIdx: nameIdx})
 	}
 	pp.info.methodSpecs = specs
@@ -850,7 +943,13 @@ func (pp *peParser) parseTables() error {
 		return fmt.Errorf("number of Modules (%d) is unexpected", pp.tableRows[0])
 	}
 
-	pp.info.strings = map[uint32]libpf.String{}
+	stringsCache, err := freelru.NewSynced[uint32, libpf.String](
+		peInfoStringsCacheSize, hash.Uint32)
+	if err != nil {
+		return fmt.Errorf("unable to create #Strings LRU: %w", err)
+	}
+	pp.info.stringsCache = stringsCache
+	pp.info.stringsCache.SetLifetime(peInfoStringsCacheTTL)
 
 	// Precalculate the column sizes we need to know
 	pp.indexSizes[indexString] = getHeapSize(tablesHeader.HeapSizes&0x1 != 0)
@@ -1135,7 +1234,8 @@ func (pp *peParser) parse() error {
 	return pp.parseCLI()
 }
 
-func (pi *peInfo) resolveMethodName(methodIdx uint32) libpf.String {
+func (pi *peInfo) resolveMethodName(methodIdx uint32,
+	rm remotememory.RemoteMemory, stringsHeapAddr uint64) libpf.String {
 	idx := sort.Search(len(pi.typeSpecs), func(idx int) bool {
 		return pi.typeSpecs[idx].methodIdx > methodIdx
 	}) - 1
@@ -1144,23 +1244,28 @@ func (pi *peInfo) resolveMethodName(methodIdx uint32) libpf.String {
 			methodIdx, len(pi.methodSpecs)))
 	}
 
+	lookup := func(offs uint32) libpf.String {
+		return pi.lookupString(rm, stringsHeapAddr, offs)
+	}
+
 	typeSpec := &pi.typeSpecs[idx]
-	typeName := pi.strings[typeSpec.typeNameIdx].String()
+	typeName := lookup(typeSpec.typeNameIdx).String()
 	for typeSpec.enclosingClass != 0 {
 		enclosingSpec := &pi.typeSpecs[typeSpec.enclosingClass-1]
-		typeName = fmt.Sprintf("%s/%s", pi.strings[enclosingSpec.typeNameIdx], typeName)
+		typeName = fmt.Sprintf("%s/%s", lookup(enclosingSpec.typeNameIdx), typeName)
 		typeSpec = enclosingSpec
 	}
-	methodName := pi.strings[pi.methodSpecs[methodIdx-1].methodNameIdx]
+	methodName := lookup(pi.methodSpecs[methodIdx-1].methodNameIdx)
 	if typeSpec.namespaceIdx != 0 {
 		return libpf.Intern(fmt.Sprintf("%s.%s.%s",
-			pi.strings[typeSpec.namespaceIdx],
+			lookup(typeSpec.namespaceIdx),
 			typeName, methodName))
 	}
 	return libpf.Intern(fmt.Sprintf("%s.%s", typeName, methodName))
 }
 
-func (pi *peInfo) resolveR2RMethodName(pcRVA uint32) libpf.String {
+func (pi *peInfo) resolveR2RMethodName(pcRVA uint32,
+	rm remotememory.RemoteMemory, stringsHeapAddr uint64) libpf.String {
 	idx, ok := slices.BinarySearchFunc(pi.methodSpecs, pcRVA<<1,
 		func(methodspec peMethodSpec, pcRVA uint32) int {
 			if pcRVA < methodspec.startRVA {
@@ -1174,7 +1279,7 @@ func (pi *peInfo) resolveR2RMethodName(pcRVA uint32) libpf.String {
 	if !ok {
 		idx--
 	}
-	return pi.resolveMethodName(uint32(idx + 1))
+	return pi.resolveMethodName(uint32(idx+1), rm, stringsHeapAddr)
 }
 
 func (pi *peInfo) parse(r io.ReaderAt) error {
@@ -1189,73 +1294,141 @@ func (pi *peInfo) parse(r io.ReaderAt) error {
 	return nil
 }
 
+// peErrEntry caches a previously-observed open/parse error against the
+// (dev,inode,mtime) of the mapping that produced it. mtime invalidation lets
+// us retry once the broken file is replaced.
+type peErrEntry struct {
+	err          error
+	lastModified int64
+}
+
 type peCache struct {
-	// peInfoCacheHit
 	peInfoCacheHit  atomic.Uint64
 	peInfoCacheMiss atomic.Uint64
 
-	// elfInfoCache provides a cache to quickly retrieve the PE info and fileID for a particular
-	// executable. It caches results based on iNode number and device ID. Locked LRU.
-	peInfoCache *freelru.LRU[util.OnDiskFileIdentifier, *peInfo]
+	// peInfoErrCacheHit counts lookups served from the negative LRU (a known
+	// broken or missing file we are skipping). Tracked separately from
+	// peInfoCacheHit so broken-file avoidance is observable in isolation
+	// from successful PE info reuse.
+	peInfoErrCacheHit atomic.Uint64
+
+	// stringsCacheHit / stringsCacheMiss aggregate hit/miss counts across the
+	// per-peInfo #Strings heap caches.
+	stringsCacheHit  atomic.Uint64
+	stringsCacheMiss atomic.Uint64
+
+	// peInfoCache is keyed by the 4 KiB-header content hash, so identical
+	// PE content shares a single parsed *peInfo across processes — including
+	// across Kubernetes replicas where the per-container deviceID would
+	// otherwise produce distinct keys.
+	peInfoCache *freelru.LRU[peHash, *peInfo]
+
+	// peInfoErrCache memoizes open/parse failures per (dev,inode). Errors
+	// are kept per-container (not content-keyed) because a broken or
+	// missing file in one replica should not poison lookups elsewhere.
+	peInfoErrCache *freelru.LRU[util.OnDiskFileIdentifier, peErrEntry]
 }
 
-func (pc *peCache) init() {
-	peInfoCache, err := freelru.New[util.OnDiskFileIdentifier, *peInfo](peInfoCacheSize,
-		util.OnDiskFileIdentifier.Hash32)
+func (pc *peCache) init() error {
+	peInfoCache, err := freelru.New[peHash, *peInfo](peInfoCacheSize, peHash.Hash32)
 	if err != nil {
-		panic(fmt.Errorf("unable to create peInfoCache: %v", err))
+		return fmt.Errorf("unable to create peInfoCache: %v", err)
 	}
 	peInfoCache.SetLifetime(peInfoCacheTTL)
 	pc.peInfoCache = peInfoCache
+
+	peInfoErrCache, err := freelru.New[util.OnDiskFileIdentifier, peErrEntry](
+		peInfoErrCacheSize, util.OnDiskFileIdentifier.Hash32)
+	if err != nil {
+		return fmt.Errorf("unable to create peInfoErrCache: %v", err)
+	}
+	peInfoErrCache.SetLifetime(peInfoCacheTTL)
+	pc.peInfoErrCache = peInfoErrCache
+	return nil
 }
 
 func (pc *peCache) Get(pr process.Process, mapping *process.RawMapping) *peInfo {
-	key := mapping.GetOnDiskFileIdentifier()
+	odk := mapping.GetOnDiskFileIdentifier()
 	lastModified := pr.GetMappingFileLastModified(mapping)
-	if info, ok := pc.peInfoCache.Get(key); ok && info.lastModified == lastModified {
-		// Cached data ok
-		pc.peInfoCacheHit.Add(1)
-		return info
-	}
 
-	// Slow path, calculate all the data and update cache
-	pc.peInfoCacheMiss.Add(1)
+	if e, ok := pc.peInfoErrCache.Get(odk); ok && e.lastModified == lastModified {
+		pc.peInfoErrCacheHit.Add(1)
+		return &peInfo{err: e.err}
+	}
 
 	file, err := pr.OpenMappingFile(mapping)
 	if err != nil {
-		info := &peInfo{err: err}
 		if !errors.Is(err, os.ErrNotExist) {
-			pc.peInfoCache.Add(key, info)
+			pc.peInfoErrCache.Add(odk, peErrEntry{err, lastModified})
 		}
-		return info
+		return &peInfo{err: err}
 	}
 	defer file.Close()
+
+	// Hash the first 4 KiB of the file to derive a content-stable key.
+	// Dotnet requires all PE headers to fit in this prefix, so it captures
+	// every byte that distinguishes one DLL from another in practice. The
+	// page cache makes this read effectively free on repeat lookups, and
+	// the parser re-reading the same bytes hits the same cache.
+	var hdr [4096]byte
+	n, err := file.ReadAt(hdr[:], 0)
+	if err != nil && !errors.Is(err, io.EOF) {
+		pc.peInfoErrCache.Add(odk, peErrEntry{err, lastModified})
+		return &peInfo{err: err}
+	}
+	key := peHashFromHeader(hdr[:n])
+
+	if info, ok := pc.peInfoCache.Get(key); ok {
+		pc.peInfoCacheHit.Add(1)
+		return info
+	}
+	pc.peInfoCacheMiss.Add(1)
+
+	info := &peInfo{}
+	info.err = info.parse(file)
+	if info.err != nil {
+		pc.peInfoErrCache.Add(odk, peErrEntry{info.err, lastModified})
+		return info
+	}
 
 	fileID, err := pr.CalculateMappingFileID(mapping)
 	if err != nil {
 		return &peInfo{err: err}
 	}
-
-	info := &peInfo{
-		lastModified: lastModified,
-	}
-	info.err = info.parse(file)
-	if info.err == nil {
-		mf := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
-			FileID:     fileID,
-			FileName:   libpf.Intern(path.Base(mapping.Path)),
-			GnuBuildID: info.guid,
-		})
-		info.mapping = libpf.NewFrameMapping(libpf.FrameMappingData{
-			File: mf,
-		})
-	}
+	mf := libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+		FileID:     fileID,
+		FileName:   libpf.Intern(path.Base(mapping.Path)),
+		GnuBuildID: info.guid,
+	})
+	info.mapping = libpf.NewFrameMapping(libpf.FrameMappingData{File: mf})
 	pc.peInfoCache.Add(key, info)
 	return info
 }
 
-var globalPeCache peCache
-
-func init() {
-	globalPeCache.init()
+// GetAndResetMetrics returns the current counters of the global PE info cache
+// and resets them to zero. It is intended to be called once per metrics
+// collection interval by the process manager.
+func GetAndResetMetrics() []metrics.Metric {
+	return []metrics.Metric{
+		{
+			ID:    metrics.IDDotnetPEInfoCacheHit,
+			Value: metrics.MetricValue(globalPeCache.peInfoCacheHit.Swap(0)),
+		},
+		{
+			ID:    metrics.IDDotnetPEInfoCacheMiss,
+			Value: metrics.MetricValue(globalPeCache.peInfoCacheMiss.Swap(0)),
+		},
+		{
+			ID:    metrics.IDDotnetPEInfoErrCacheHit,
+			Value: metrics.MetricValue(globalPeCache.peInfoErrCacheHit.Swap(0)),
+		},
+		{
+			ID:    metrics.IDDotnetStringsCacheHit,
+			Value: metrics.MetricValue(globalPeCache.stringsCacheHit.Swap(0)),
+		},
+		{
+			ID:    metrics.IDDotnetStringsCacheMiss,
+			Value: metrics.MetricValue(globalPeCache.stringsCacheMiss.Swap(0)),
+		},
+	}
 }

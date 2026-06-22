@@ -48,7 +48,6 @@ func TestBaseReporterGenerate(t *testing.T) {
 	reporter := createTestBaseReporter(t, nil)
 
 	trace1 := &libpf.Trace{
-		Hash: libpf.NewTraceHash(0x0102030400000000, 0x0000000000000000),
 		Frames: func() libpf.Frames {
 			frames := make(libpf.Frames, 0, 3)
 			frames.Append(&libpf.Frame{
@@ -71,7 +70,6 @@ func TestBaseReporterGenerate(t *testing.T) {
 	}
 
 	trace2 := &libpf.Trace{
-		Hash: libpf.NewTraceHash(0x0506070800000000, 0x0000000000000000),
 		Frames: func() libpf.Frames {
 			frames := make(libpf.Frames, 0, 2)
 			frames.Append(&libpf.Frame{
@@ -91,7 +89,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 	now := time.Now()
 	meta1 := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(now.UnixNano()),
-		Comm:           libpf.Intern("app1"),
+		Comm:           libpf.NewCommFromString("app1"),
 		ProcessName:    libpf.Intern("app1"),
 		ExecutablePath: libpf.Intern("/usr/bin/app1"),
 		APMServiceName: "service1",
@@ -104,7 +102,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 
 	meta2 := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(now.Add(time.Second).UnixNano()),
-		Comm:           libpf.Intern("app2"),
+		Comm:           libpf.NewCommFromString("app2"),
 		ProcessName:    libpf.Intern("app2"),
 		ExecutablePath: libpf.Intern("/usr/bin/app2"),
 		APMServiceName: "service2",
@@ -188,7 +186,6 @@ func TestReportTraceEventResourceKeyContextKey(t *testing.T) {
 	}
 
 	trace := &libpf.Trace{
-		Hash: libpf.NewTraceHash(0x1, 0x0),
 		Frames: func() libpf.Frames {
 			frames := make(libpf.Frames, 0, 1)
 			frames.Append(&libpf.Frame{
@@ -204,7 +201,7 @@ func TestReportTraceEventResourceKeyContextKey(t *testing.T) {
 	baseMeta := func(resource *pcommon.Resource) *samples.TraceEventMeta {
 		return &samples.TraceEventMeta{
 			Timestamp:      now,
-			Comm:           libpf.Intern("svc"),
+			Comm:           libpf.NewCommFromString("svc"),
 			ProcessName:    libpf.Intern("svc"),
 			ExecutablePath: libpf.Intern("/usr/bin/svc"),
 			ContainerID:    libpf.Intern("c1"),

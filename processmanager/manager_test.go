@@ -31,26 +31,28 @@ func (tc *traceCapture) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEve
 }
 
 func TestFrameCacheCrossProcessPollution(t *testing.T) {
-	require := require.New(t)
+	if runtime.GOOS != "linux" {
+		t.Skip("requires Linux procfs")
+	}
 
 	exec, err := os.Executable()
-	require.NoError(err)
+	require.NoError(t, err)
 
 	pc, _, _, ok := runtime.Caller(0)
-	require.True(ok)
+	require.True(t, ok)
 
 	goPID := libpf.PID(1000)
 	catPID := libpf.PID(2000)
 
 	goHostFileID, err := host.FileIDFromBytes(
 		[]byte{0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55})
-	require.NoError(err)
+	require.NoError(t, err)
 	catHostFileID, err := host.FileIDFromBytes(
 		[]byte{0xCA, 0x7C, 0xA7, 0xCA, 0x7C, 0xA7, 0xCA, 0x7C})
-	require.NoError(err)
+	require.NoError(t, err)
 	libcHostFileID, err := host.FileIDFromBytes(
 		[]byte{0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE})
-	require.NoError(err)
+	require.NoError(t, err)
 
 	realPID := libpf.PID(os.Getpid())
 	pid := process.New(realPID, realPID)
@@ -59,14 +61,14 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	rm := remotememory.NewProcessVirtualMemory(realPID)
 
 	goData, err := golang.Loader(nil, loaderInfo)
-	require.NoError(err)
+	require.NoError(t, err)
 	goInstance, err := goData.Attach(nil, realPID, 0x0, rm)
-	require.NoError(err)
+	require.NoError(t, err)
 
 	goODID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 1}
 
 	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
-	require.NoError(err)
+	require.NoError(t, err)
 	frameCache.SetLifetime(frameCacheLifetime)
 
 	goMappings := []Mapping{
@@ -132,9 +134,9 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 		FrameData: libcFrame,
 	})
 
-	require.Len(capture.traces, 1)
+	require.Len(t, capture.traces, 1)
 	goTrace := capture.traces[0]
-	require.NotEmpty(goTrace.Frames)
+	require.NotEmpty(t, goTrace.Frames)
 
 	goFrame := goTrace.Frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, goFrame.Type)
@@ -147,11 +149,74 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 		FrameData: libcFrame,
 	})
 
-	require.Len(capture.traces, 2)
+	require.Len(t, capture.traces, 2)
 	catTrace := capture.traces[1]
-	require.NotEmpty(catTrace.Frames)
+	require.NotEmpty(t, catTrace.Frames)
 
 	catFrame := catTrace.Frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, catFrame.Type)
 	assert.Equal(t, "", catFrame.FunctionName.String())
+}
+
+func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
+	firstPID := libpf.PID(1000)
+	secondPID := libpf.PID(2000)
+	fileID, err := host.FileIDFromBytes(
+		[]byte{0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE})
+	require.NoError(t, err)
+
+	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
+	require.NoError(t, err)
+	frameCache.SetLifetime(frameCacheLifetime)
+
+	mappings := []Mapping{
+		{FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
+			File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+				FileID:   libpf.NewFileID(uint64(fileID), 0),
+				FileName: libpf.Intern("libc.so.6"),
+			}),
+			Start: 0,
+			End:   0xFFFFFFF,
+		})},
+	}
+	capture := &traceCapture{}
+	pm := &ProcessManager{
+		pidToProcessInfo: map[libpf.PID]*processInfo{
+			firstPID:  {mappings: mappings},
+			secondPID: {mappings: mappings},
+		},
+		frameCache:    frameCache,
+		traceReporter: capture,
+	}
+
+	nativeFrame := libpf.NewEbpfFrame(libpf.NativeFrame, 0, 2, 0x222a0)
+	nativeFrame[1] = uint64(fileID)
+
+	pm.HandleTrace(&libpf.EbpfTrace{
+		PID:       firstPID,
+		TID:       firstPID,
+		NumFrames: 1,
+		FrameData: nativeFrame,
+	})
+	pm.HandleTrace(&libpf.EbpfTrace{
+		PID:       secondPID,
+		TID:       secondPID,
+		NumFrames: 1,
+		FrameData: nativeFrame,
+	})
+
+	require.Len(t, capture.traces, 2)
+
+	require.NotEmpty(t, capture.traces[0].Frames)
+	frame0 := capture.traces[0].Frames[0].Value()
+	assert.Equal(t, libpf.NativeFrame, frame0.Type)
+	assert.Equal(t, "", frame0.FunctionName.String())
+
+	require.NotEmpty(t, capture.traces[1].Frames)
+	frame1 := capture.traces[1].Frames[0].Value()
+	assert.Equal(t, libpf.NativeFrame, frame1.Type)
+	assert.Equal(t, "", frame1.FunctionName.String())
+
+	assert.Equal(t, uint64(1), pm.frameCacheMiss.Load())
+	assert.Equal(t, uint64(1), pm.frameCacheHit.Load())
 }

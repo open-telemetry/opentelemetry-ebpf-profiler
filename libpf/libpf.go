@@ -30,4 +30,4 @@ type SourceLineno uint64
 type SourceColumn uint64
 
 // Origin determines the source of a trace.
-type Origin int
+type Origin uint16

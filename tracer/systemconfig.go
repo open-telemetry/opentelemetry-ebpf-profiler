@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"syscall"
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -31,6 +32,11 @@ type sysConfigVars struct {
 	task_stack_offset   uint32
 	stack_ptregs_offset uint32
 }
+
+var (
+	errSystemAnalysisNotHandled = errors.New("system analysis request was not handled")
+	errSystemAnalysisFailed     = errors.New("system analysis helper failed")
+)
 
 // memberByName resolves btf Member from a Struct with given name
 func memberByName(t *btf.Struct, field string) (*btf.Member, error) {
@@ -163,8 +169,27 @@ func executeSystemAnalysisBpfCode(progSpec *cebpf.ProgramSpec, maps map[string]*
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get analysis data: %v", err)
 	}
+	if err = validateSystemAnalysisResult(data, address); err != nil {
+		return nil, 0, err
+	}
 
 	return data.Code[:], data.Address, nil
+}
+
+func validateSystemAnalysisResult(data support.SystemAnalysis, address libpf.SymbolValue) error {
+	if data.Pid != 0 {
+		return fmt.Errorf("%w for pid %d at 0x%x", errSystemAnalysisNotHandled, data.Pid, address)
+	}
+
+	if data.Err != 0 {
+		if data.Err < 0 {
+			return fmt.Errorf("%w at 0x%x: %w (helper err=%d)", errSystemAnalysisFailed, address, syscall.Errno(-data.Err), data.Err)
+		}
+
+		return fmt.Errorf("%w at 0x%x: helper err=%d", errSystemAnalysisFailed, address, data.Err)
+	}
+
+	return nil
 }
 
 // loadKernelCode will request the ebpf code to read the first X bytes from given address.
@@ -242,6 +267,9 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 	}
 	new.Maps["system_analysis"] = orig.Maps["system_analysis"].Copy()
 	new.Maps[".rodata.var"] = orig.Maps[".rodata.var"].Copy()
+	if rodata, ok := orig.Maps[".rodata"]; ok {
+		new.Maps[".rodata"] = rodata.Copy()
+	}
 
 	new.Programs["read_kernel_memory"] = orig.Programs["read_kernel_memory"].Copy()
 	new.Programs["read_task_struct"] = orig.Programs["read_task_struct"].Copy()
@@ -297,10 +325,22 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 }
 
 // loadRodataVars initializes RODATA variables for the eBPF programs.
-func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config) error {
+func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config,
+	major, minor uint32,
+) error {
 	if cfg.VerboseMode {
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
 			return fmt.Errorf("failed to set debug output: %v", err)
+		}
+	}
+
+	// The Python/native hybrid unwinder's per program loop count defaults to 10
+	// which is the largest that fits the 5.x / 6.0-6.5 verifier. Kernels 6.6+ are
+	// more efficient and can support more, but 6.18's verifier is tighter than
+	// 6.6-6.16; 15 fits the floor across the 6.6+ CI matrix.
+	if major > 6 || (major == 6 && minor >= 6) {
+		if err := coll.Variables["python_frames_per_program"].Set(uint32(15)); err != nil {
+			return fmt.Errorf("failed to set python_frames_per_program: %v", err)
 		}
 	}
 

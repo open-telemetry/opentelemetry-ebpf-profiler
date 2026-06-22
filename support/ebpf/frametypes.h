@@ -33,6 +33,8 @@
 #define FRAME_MARKER_GO      0xB
 // Indicates a BEAM frame
 #define FRAME_MARKER_BEAM    0xC
+// Indicates a LuaJIT frame
+#define FRAME_MARKER_LUAJIT  0xD
 
 // Frame flags
 // Indicates that this frame is an error frame.

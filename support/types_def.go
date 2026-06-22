@@ -28,6 +28,7 @@ const (
 	FrameMarkerPerl    = C.FRAME_MARKER_PERL
 	FrameMarkerV8      = C.FRAME_MARKER_V8
 	FrameMarkerDotnet  = C.FRAME_MARKER_DOTNET
+	FrameMarkerLuaJIT  = C.FRAME_MARKER_LUAJIT
 	FrameMarkerBEAM    = C.FRAME_MARKER_BEAM
 	FrameMarkerGo      = C.FRAME_MARKER_GO
 )
@@ -51,6 +52,7 @@ const (
 	ProgUnwindDotnet10 = C.PROG_UNWIND_DOTNET10
 	ProgGoLabels       = C.PROG_GO_LABELS
 	ProgUnwindBEAM     = C.PROG_UNWIND_BEAM
+	ProgUnwindLuaJIT   = C.PROG_UNWIND_LUAJIT
 )
 
 const (
@@ -60,8 +62,7 @@ const (
 )
 
 const (
-	EventTypeGenericPID     = C.EVENT_TYPE_GENERIC_PID
-	EventTypeReloadKallsyms = C.EVENT_TYPE_RELOAD_KALLSYMS
+	EventTypeGenericPID = C.EVENT_TYPE_GENERIC_PID
 )
 
 const UnwindInfoMaxEntries = C.UNWIND_INFO_MAX_ENTRIES
@@ -307,4 +308,5 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindRubyErrReadRbasicFlags:               metrics.IDUnwindRubyErrReadRbasicFlags,
 	C.metricID_UnwindRubyErrCmeMaxEp:                      metrics.IDUnwindRubyErrCmeMaxEp,
 	C.metricID_UnwindErrBadDTVRead:                        metrics.IDUnwindErrBadDTVRead,
+	C.metricID_BPFRingbufOutputErr:                        metrics.IDBPFRingbufOutputErr,
 }

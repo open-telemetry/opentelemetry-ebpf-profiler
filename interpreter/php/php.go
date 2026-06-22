@@ -4,7 +4,6 @@
 package php // import "go.opentelemetry.io/ebpf-profiler/interpreter/php"
 
 import (
-	"bytes"
 	"debug/elf"
 	"errors"
 	"fmt"
@@ -18,8 +17,8 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
-	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -28,12 +27,6 @@ const (
 	// This is used to check if the VM mode is the default one
 	// From https://github.com/php/php-src/blob/PHP-8.0/Zend/zend_vm_opcodes.h#L29
 	ZEND_VM_KIND_HYBRID = (1 << 2)
-)
-
-const (
-	// maxPHPRODataSize is the maximum PHP RO Data segment size to scan
-	// (currently the largest seen is about 9M)
-	maxPHPRODataSize = 16 * 1024 * 1024
 )
 
 var (
@@ -82,9 +75,15 @@ type phpData struct {
 		}
 		// https://github.com/php/php-src/blob/PHP-7.4/Zend/zend_compile.h#L483
 		zend_function struct {
-			common_type, common_funcname          uint8
-			op_array_filename, op_array_linestart uint
-			Sizeof                                uint
+			common_type, common_funcname uint8
+			common_scope                 uint
+			op_array_filename            uint
+			op_array_linestart           uint
+			Sizeof                       uint
+		}
+		// https://github.com/php/php-src/blob/PHP-8.0/Zend/zend.h#L107
+		zend_class_entry struct {
+			name uint
 		}
 		// https://github.com/php/php-src/blob/PHP-7.4/Zend/zend_types.h#L235
 		zend_string struct {
@@ -165,23 +164,21 @@ func determinePHPVersion(ef *pfelf.File) (uint32, error) {
 		return 0, errors.New("no RO data")
 	}
 
-	needle := []byte("X-Powered-By: PHP/")
-	for _, segment := range ef.ROData {
-		rodata, err := segment.Data(maxPHPRODataSize)
-		if err != nil {
-			return 0, err
-		}
-		idx := bytes.Index(rodata, needle)
-		if idx < 0 {
-			continue
-		}
+	rdr := pfbufio.GetReader()
+	defer pfbufio.PutReader(rdr)
 
-		idx += len(needle)
-		zeroIdx := bytes.IndexByte(rodata[idx:], 0)
-		if zeroIdx < 0 {
+	needle := []byte("X-Powered-By: PHP/")
+	for _, seg := range ef.ROData {
+		rdr.Init(ef.Underlying(), int64(seg.Off), int64(seg.Filesz))
+		_, err := rdr.SearchSlice(needle)
+		if err != nil {
 			continue
 		}
-		version, err := versionExtract(pfunsafe.ToString(rodata[idx : idx+zeroIdx]))
+		verString, err := rdr.ReadString(0)
+		if err != nil {
+			continue
+		}
+		version, err := versionExtract(verString)
 		if err != nil {
 			continue
 		}
@@ -271,9 +268,9 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		return nil, err
 	}
 
-	// Only tested on PHP7.3-PHP8.4. Other similar versions probably only require
+	// Only tested on PHP7.3-PHP8.5. Other similar versions probably only require
 	// tweaking the offsets.
-	minVer, maxVer := phpVersion(7, 3, 0), phpVersion(8, 5, 0)
+	minVer, maxVer := phpVersion(7, 3, 0), phpVersion(8, 6, 0)
 	if version < minVer || version >= maxVer {
 		return nil, fmt.Errorf("PHP version %d.%d.%d (need >= %d.%d and < %d.%d)",
 			(version>>16)&0xff, (version>>8)&0xff, version&0xff,
@@ -333,6 +330,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	vms.zend_execute_data.prev_execute_data = 48
 	vms.zend_function.common_type = 0
 	vms.zend_function.common_funcname = 8
+	vms.zend_function.common_scope = 16
 	vms.zend_function.op_array_filename = 128
 	vms.zend_function.op_array_linestart = 136
 	// Note: the sizeof here isn't actually the sizeof the
@@ -341,8 +339,16 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// need at most 168 bytes.
 	vms.zend_function.Sizeof = 168
 	vms.zend_string.val = 24
+	vms.zend_class_entry.name = 8
 	vms.zend_op.lineno = 24
 	switch {
+	case version >= phpVersion(8, 5, 0):
+		// PHP 8.5 added fields to zend_executor_globals before
+		// current_execute_data, shifting its offset from 488 to 512.
+		vms.zend_executor_globals.current_execute_data = 512
+		vms.zend_function.op_array_filename = 168
+		vms.zend_function.op_array_linestart = 176
+		vms.zend_function.Sizeof = 184
 	case version >= phpVersion(8, 4, 0):
 		vms.zend_function.op_array_filename = 168
 		vms.zend_function.op_array_linestart = 176

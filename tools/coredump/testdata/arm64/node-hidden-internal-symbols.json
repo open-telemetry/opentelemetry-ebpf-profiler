@@ -13,7 +13,7 @@
         "node+0xb42107",
         "node+0xa46483",
         "V8::UnknownFrame+0 in :0",
-        "utf8+0 in /local/hello3.js:0",
+        "utf8+0 in /local/hello3.js:1",
         "<anonymous>+0 in node:internal/modules/cjs/loader:0",
         "<anonymous>+0 in node:internal/modules/cjs/loader:0",
         "<anonymous>+0 in node:internal/modules/cjs/loader:0",

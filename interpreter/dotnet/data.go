@@ -4,6 +4,7 @@
 package dotnet // import "go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
 
 import (
+	"debug/elf"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -179,6 +180,9 @@ type dotnetData struct {
 	// version contains the version
 	version uint32
 
+	// machine is the ELF machine type of the target process (e.g. elf.EM_X86_64, elf.EM_AARCH64)
+	machine elf.Machine
+
 	// dacTableAddr contains the ELF symbol 'g_dacTable' value
 	// https://github.com/dotnet/runtime/blob/v7.0.15/src/coreclr/debug/ee/dactable.cpp#L80-L81
 	dacTableAddr libpf.SymbolValue
@@ -219,12 +223,13 @@ func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias li
 	}
 
 	return &dotnetInstance{
-		d:              d,
-		rm:             rm,
-		bias:           bias,
-		ranges:         make(map[libpf.Address]dotnetRangeSection),
-		moduleToPEInfo: make(map[libpf.Address]*peInfo),
-		addrToMethod:   addrToMethod,
+		d:                   d,
+		rm:                  rm,
+		bias:                bias,
+		ranges:              make(map[libpf.Address]dotnetRangeSection),
+		moduleToPEInfo:      make(map[libpf.Address]*peInfo),
+		addrToMethod:        addrToMethod,
+		stringsHeapAddrByPE: make(map[*peInfo]stringsHeapEntry),
 	}, nil
 }
 
@@ -290,7 +295,11 @@ func (d *dotnetData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address)
 		vms.RangeSection.HeapList = 0x28
 		vms.RangeSection.RangeList = 0x30
 		vms.RangeSection.SizeOf = 0x38
-		vms.Module.SimpleName = 0x108
+		if d.machine == elf.EM_AARCH64 {
+			vms.Module.SimpleName = 0x110
+		} else {
+			vms.Module.SimpleName = 0x108
+		}
 		fallthrough
 	case 10:
 		vms.CodeRangeMapRangeList.RangeListType = 0x120

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -117,4 +118,27 @@ func TestStubsMapRace(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+// TestVMStructsFieldKinds verifies that all vmStructs fields have kinds handled by
+// parseIntrospection and forEachItem. Update those functions if this test fails.
+func TestVMStructsFieldKinds(t *testing.T) {
+	var checkType func(rt reflect.Type, prefix string)
+	checkType = func(rt reflect.Type, prefix string) {
+		for i := 0; i < rt.NumField(); i++ {
+			f := rt.Field(i)
+			fullName := prefix + f.Name
+			switch f.Type.Kind() {
+			case reflect.Struct:
+				checkType(f.Type, fullName+".")
+			case reflect.Uint, reflect.Uint64, reflect.Uintptr, reflect.Map:
+				// handled by parseIntrospection and forEachItem
+			default:
+				t.Errorf("unsupported field kind in vmStructs: %s is %v; "+
+					"update parseIntrospection and forEachItem to handle it",
+					fullName, f.Type.Kind())
+			}
+		}
+	}
+	checkType(reflect.TypeOf(hotspotVMData{}.vmStructs), "")
 }

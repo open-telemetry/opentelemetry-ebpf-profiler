@@ -5,7 +5,6 @@ package types // import "go.opentelemetry.io/ebpf-profiler/tracer/types"
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -22,6 +21,7 @@ const (
 	RubyTracer
 	V8Tracer
 	DotnetTracer
+	LuaJITTracer
 	GoTracer
 	Labels
 	BEAMTracer
@@ -38,6 +38,7 @@ var tracerTypeToName = map[tracerType]string{
 	RubyTracer:    "ruby",
 	V8Tracer:      "v8",
 	DotnetTracer:  "dotnet",
+	LuaJITTracer:  "luajit",
 	GoTracer:      "go",
 	Labels:        "labels",
 	BEAMTracer:    "beam",
@@ -165,13 +166,6 @@ func Parse(tracers string) (IncludedTracers, error) {
 			log.Warn("Enabling the `native` tracer explicitly is deprecated (it's always-on)")
 		default:
 			return result, fmt.Errorf("unknown tracer: %s", name)
-		}
-	}
-
-	if runtime.GOARCH == "arm64" {
-		if result.Has(DotnetTracer) {
-			result.Disable(DotnetTracer)
-			log.Warn("The dotnet tracer is currently not supported on ARM64")
 		}
 	}
 

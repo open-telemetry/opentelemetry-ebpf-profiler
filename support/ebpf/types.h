@@ -328,6 +328,9 @@ enum {
   // number of failures to read TLS variables via the DTV
   metricID_UnwindErrBadDTVRead,
 
+  // number of bpf_ringbuf_output failures
+  metricID_BPFRingbufOutputErr,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -358,6 +361,7 @@ typedef enum TracePrograms {
   PROG_UNWIND_DOTNET10,
   PROG_GO_LABELS,
   PROG_UNWIND_BEAM,
+  PROG_UNWIND_LUAJIT,
   NUM_TRACER_PROGS,
 } TracePrograms;
 
@@ -633,6 +637,9 @@ typedef struct Trace {
   // e.g. time in nanoseconds for off-CPU traces
   u64 value;
 
+  // The CPU that captured this trace.
+  u32 cpu_id;
+
   // The frame data of the stack trace. Each frame is variable length.
   // Frame is currently 2-3 entries long. This array size limits the
   // number of frames we can unwind, but also increases the memory
@@ -641,13 +648,9 @@ typedef struct Trace {
   u64 frame_data[3072];
 
   // NOTE: both send_trace in BPF and loadBpfTrace in UM code require `frame_data`
-  // to be the last item in the struct. When sending as a perf event, only the
+  // to be the last item in the struct. When sending via the ringbuffer, only the
   // 'frame_data_len' elements of 'frame_data' are sent.
 } Trace;
-
-// Trace is sent as a perf raw event. As all perf events are contained within
-// struct perf_event_header with 'u16 size', this limits the size of Trace.
-_Static_assert(sizeof(struct Trace) < 63 * 1024, "Trace too large");
 
 // Container for unwinding state
 typedef struct UnwindState {
@@ -669,6 +672,8 @@ typedef struct UnwindState {
 #endif
     };
   };
+  // Bound to calculate frame size from.
+  u64 fp_bound;
 
   // The executable ID/hash associated with PC
   u64 text_section_id;
@@ -763,8 +768,8 @@ typedef struct HotspotUnwindScratchSpace {
 // Container for additional scratch space needed by the V8 unwinder.
 typedef struct V8UnwindScratchSpace {
   // Read buffer for storing the V8 FP stored context. Needs to be in non-stack
-  // area to allow variable indexing.
-  u8 fp_ctx[V8_FP_CONTEXT_SIZE];
+  // area to allow variable indexing. Need extra 16 bytes for the Frame Pointer data.
+  u8 fp_ctx[V8_FP_CONTEXT_SIZE + 16];
   // Read buffer for V8 Code object. Currently we need about 60 bytes to get
   // code instruction_size and flags.
   u8 code[96];
@@ -973,6 +978,7 @@ typedef struct OffsetRange {
 typedef struct SystemAnalysis {
   u64 address;
   u32 pid;
+  s32 err;
   u8 code[128];
 } SystemAnalysis;
 
@@ -983,8 +989,7 @@ typedef struct Event {
 } Event;
 
 // Event types that notifications are sent for through event_send_trigger.
-#define EVENT_TYPE_GENERIC_PID     1
-#define EVENT_TYPE_RELOAD_KALLSYMS 2
+#define EVENT_TYPE_GENERIC_PID 1
 
 // PIDPage represents the key of the eBPF map pid_page_to_mapping_info.
 typedef struct PIDPage {

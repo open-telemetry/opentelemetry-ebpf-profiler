@@ -51,7 +51,7 @@ type EbpfHandler interface {
 
 	// DeletePidPageMappingInfo removes the elements specified by prefixes from eBPF map
 	// pid_page_to_mapping_info and returns the number of elements removed.
-	DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm.Prefix) (int, error)
+	DeletePidPageMappingInfo(pid libpf.PID, prefixes []lpm.Prefix) (uint64, error)
 
 	// CollectMetrics returns gathered errors for changes to eBPF maps.
 	CollectMetrics() []metrics.Metric

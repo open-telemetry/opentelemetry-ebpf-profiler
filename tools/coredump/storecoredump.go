@@ -10,6 +10,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/tools/coredump/modulestore"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -46,19 +47,72 @@ func (scd *StoreCoredump) openFile(path string) (process.ReadAtCloser, error) {
 }
 
 func (scd *StoreCoredump) OpenMappingFile(m *process.RawMapping) (process.ReadAtCloser, error) {
-	return scd.openFile(m.Path)
+	rac, err := scd.openFile(m.Path)
+	if errors.Is(err, os.ErrNotExist) {
+		// Bundle miss: let OpenELFMapping fall back to OpenELF, which
+		// can serve content from PT_LOAD segments for legacy test cases.
+		return nil, fmt.Errorf("%w: %w", process.ErrMappingFileUnavailable, err)
+	}
+	return rac, err
 }
 
 func (scd *StoreCoredump) OpenELF(path string) (*pfelf.File, error) {
 	file, err := scd.openFile(path)
 	if err == nil {
-		return pfelf.NewFile(file, 0, false)
+		return pfelf.NewFileOwned(file)
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 	// Fallback to the native CoredumpProcess
 	return scd.CoredumpProcess.OpenELF(path)
+}
+
+// remoteReaderWithModuleFallback satisfies io.ReaderAt by first trying the
+// coredump's own PT_LOAD segments and, on a miss, falling back to reading the
+// corresponding file offset from the bundled module file. The kernel omits
+// read-only file-backed mappings from coredumps by default; without the
+// fallback, virtual addresses that land in such regions (e.g. the metadata
+// pages of .NET 10 R2R DLLs) would read as zeros and break interpreters that
+// expect to find the file content in process memory.
+type remoteReaderWithModuleFallback struct {
+	scd *StoreCoredump
+}
+
+func (r *remoteReaderWithModuleFallback) ReadAt(p []byte, addr int64) (int, error) {
+	n, err := r.scd.CoredumpProcess.ReadAt(p, addr)
+	if err == nil {
+		return n, nil
+	}
+	// Locate the file-backed mapping covering this virtual address, if any.
+	var covering process.RawMapping
+	var found bool
+	_, _ = r.scd.IterateMappings(func(m process.RawMapping) bool {
+		if uint64(addr) >= m.Vaddr && uint64(addr) < m.Vaddr+m.Length {
+			covering = m
+			found = true
+			return false
+		}
+		return true
+	})
+	if !found {
+		return n, err
+	}
+	file, openErr := r.scd.OpenMappingFile(&covering)
+	if openErr != nil {
+		return n, err
+	}
+	defer file.Close()
+	fileOff := covering.FileOffset + (uint64(addr) - covering.Vaddr)
+	return file.ReadAt(p, int64(fileOff))
+}
+
+func (scd *StoreCoredump) GetRemoteMemory() remotememory.RemoteMemory {
+	base := scd.CoredumpProcess.GetRemoteMemory()
+	return remotememory.RemoteMemory{
+		ReaderAt: &remoteReaderWithModuleFallback{scd: scd},
+		Bias:     base.Bias,
+	}
 }
 
 func (scd *StoreCoredump) Close() error {
@@ -76,7 +130,7 @@ func OpenStoreCoredump(store *modulestore.Store, coreFileRef modulestore.ID, mod
 	if err != nil {
 		return nil, fmt.Errorf("failed to open coredump file reader: %w", err)
 	}
-	coreELF, err := pfelf.NewFile(reader, 0, false)
+	coreELF, err := pfelf.NewFileOwned(reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open coredump ELF: %w", err)
 	}
