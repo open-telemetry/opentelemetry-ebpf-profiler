@@ -17,7 +17,7 @@ func TestGetRightmostSetBit(t *testing.T) {
 		input    uint64
 		expected uint64
 	}{
-		"0":   {input: 0, expected: 1 << 63},
+		"0":   {input: 0, expected: 0},
 		"1":   {input: 0b1, expected: 0b1},
 		"2":   {input: 0b10, expected: 0b10},
 		"3":   {input: 0b11, expected: 0b1},

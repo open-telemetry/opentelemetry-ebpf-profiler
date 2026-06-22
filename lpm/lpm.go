@@ -16,14 +16,7 @@ type Prefix struct {
 }
 
 // getRightmostSetBit returns a value that has exactly one bit, the rightmost bit of the given x.
-// For x == 0 there is no set bit; it returns the most significant bit (1 << 63) so that
-// calculateRmb can start from the largest possible block at offset 0 and shrink it to fit the
-// interval. Returning 0 here would make calculateRmb return 0 and cause CalculatePrefixList to
-// loop forever when start == 0.
 func getRightmostSetBit(x uint64) uint64 {
-	if x == 0 {
-		return 1 << 63
-	}
 	return (x & (-x))
 }
 
@@ -102,6 +95,13 @@ func CalculatePrefixList(start, end uint64) ([]Prefix, error) {
 
 func calculateRmb(currentVal, end uint64) uint64 {
 	rmb := getRightmostSetBit(currentVal)
+	if rmb == 0 {
+		// currentVal == 0 has no rightmost set bit. Start from the largest
+		// possible block; the loop below shrinks it to fit [currentVal, end).
+		// Without this rmb stays 0 and CalculatePrefixList loops forever when
+		// start == 0.
+		rmb = 1 << 63
+	}
 	for currentVal+rmb > end {
 		rmb >>= 1
 	}
