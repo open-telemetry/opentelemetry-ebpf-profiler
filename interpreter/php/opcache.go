@@ -353,7 +353,11 @@ func getOpcacheJITInfo(ef *pfelf.File) (dasmBuf, dasmSize libpf.Address, err err
 	return libpf.Address(dasmBufPtr), libpf.Address(dasmSizePtr), nil
 }
 
-func OpcacheLoader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
+func GetOpcacheLoader(_ Config) interpreter.Loader {
+	return opcacheLoader
+}
+
+func opcacheLoader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	interpreter.Data, error,
 ) {
 	if !opcacheRegex.MatchString(info.FileName()) {

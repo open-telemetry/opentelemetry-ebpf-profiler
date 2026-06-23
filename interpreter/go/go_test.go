@@ -38,7 +38,7 @@ func BenchmarkGolang(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		gD, err := Loader(nil, loaderInfo)
+		gD, err := GetLoader(Config{})(nil, loaderInfo)
 		if err != nil {
 			b.Fatalf("Failed to create loader: %v", err)
 		}

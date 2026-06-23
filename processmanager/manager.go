@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
@@ -31,7 +32,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -61,7 +61,7 @@ var (
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
-func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
+func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monitorInterval time.Duration,
 	executableUnloadDelay time.Duration, ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
 	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
 	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
@@ -82,7 +82,7 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 	}
 	frameCache.SetLifetime(frameCacheLifetime)
 
-	em, err := eim.NewExecutableInfoManager(sdp, ebpf, includeTracers)
+	em, err := eim.NewExecutableInfoManager(sdp, ebpf, interpretersConfig)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
@@ -219,7 +219,7 @@ func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *l
 }
 
 // convertFrame converts one host Frame to one or more libpf.Frames. It returns true
-// if non-trivial cacheable conversion was done.
+// if the converted frame data should be cached.
 func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *libpf.Frames) bool {
 	switch ef.Type().Interpreter() {
 	case libpf.UnknownInterp, libpf.Kernel:
@@ -260,6 +260,7 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 			AddressOrLineno: libpf.AddressOrLineno(address),
 			Mapping:         mapping,
 		})
+		return mapping.Valid()
 	default:
 		err := pm.symbolizeFrame(pid, ef, dst, libpf.FrameMapping{})
 		if err == nil {
