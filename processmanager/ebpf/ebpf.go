@@ -98,7 +98,7 @@ func LoadMaps(ctx context.Context, interpretersConfig interpreterconfig.Config,
 		}
 		mapVal, ok := maps[nameTag]
 		if !ok {
-			if !interpreterconfig.IsMapEnabled(nameTag, interpretersConfig) {
+			if !interpretersConfig.IsMapEnabled(nameTag) {
 				continue
 			}
 			return nil, fmt.Errorf("Map %v is not available", nameTag)

@@ -38,7 +38,7 @@ func AllInterpreters() Config { return Config{} }
 
 // IsMapEnabled returns true if for the given mapName the respective
 // configuration is enabled.
-func IsMapEnabled(mapName string, cfg Config) bool {
+func (cfg *Config) IsMapEnabled(mapName string) bool {
 	switch mapName {
 	case perl.BPFMapName:
 		return !cfg.Perl.IsDisabled()

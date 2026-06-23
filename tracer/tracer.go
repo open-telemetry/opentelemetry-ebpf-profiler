@@ -692,7 +692,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			}
 		}
 
-		if !interpreterconfig.IsMapEnabled(mapName, cfg.InterpretersConfig) {
+		if !cfg.InterpretersConfig.IsMapEnabled(mapName) {
 			log.Debugf("Skipping eBPF map %s: tracer not enabled", mapName)
 			continue
 		}
