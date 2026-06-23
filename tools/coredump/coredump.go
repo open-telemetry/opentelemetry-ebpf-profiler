@@ -14,12 +14,12 @@ import (
 	"time"
 	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 // #include <stdlib.h>
@@ -174,10 +174,7 @@ func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	coredumpEbpfMaps := ebpfMapsCoredump{ctx: ebpfCtx}
 	traceReporter := traceReporter{}
 
-	// Instantiate managers and enable all tracers by default
-	includeTracers, _ := tracertypes.Parse("all")
-
-	manager, err := pm.New(todo, includeTracers, monitorInterval, executableUnloadDelay,
+	manager, err := pm.New(todo, interpreterconfig.AllInterpreters(), monitorInterval, executableUnloadDelay,
 		&coredumpEbpfMaps, &traceReporter, nil, elfunwindinfo.NewStackDeltaProvider(),
 		false, libpf.Set[string]{})
 	if err != nil {

@@ -133,9 +133,13 @@ var (
 	_ interpreter.Instance = &hotspotInstance{}
 )
 
-// Loader is the main function for ProcessManager to recognize and hook the HotSpot
+// GetLoader returns the loader for ProcessManager to recognize and hook the HotSpot
 // libjvm for enabling JVM unwinding and symbolization.
-func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ Config) interpreter.Loader {
+	return loader
+}
+
+func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	if !libjvmRegex.MatchString(info.FileName()) {
 		return nil, nil
 	}
