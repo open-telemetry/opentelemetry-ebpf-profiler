@@ -209,7 +209,6 @@ func (i *opcacheInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		return nil
 	}
 
-	dasmBuf := binary.LittleEndian.Uint64(dasmBufVal)
 	buf := make([]byte, 8)
 	if err := i.rm.Read(i.d.dasmBufPtr+i.bias, buf); err != nil {
 		return nil
