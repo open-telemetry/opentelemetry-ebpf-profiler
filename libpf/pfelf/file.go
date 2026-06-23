@@ -70,8 +70,8 @@ var (
 	// ErrNoBuildID is returned if build ID is not present in notes.
 	ErrNoBuildID = errors.New("no build ID")
 
-	// errNotGoELF is returned when the ELF is not a Go executable.
-	errNotGoELF = errors.New("ELF is not a Go executable")
+	// errNoGoBuildinfo is returned when the ELF is not a Go executable.
+	errNoGoBuildinfo = errors.New("go buildinfo not found")
 
 	// errNotProcessed is an internal placeholder to mark not yet parsed data.
 	errNotProcessed = errors.New("not yet processed")
@@ -1249,7 +1249,7 @@ func decodeString(rdr *pfbufio.Reader) (string, error) {
 	}
 	size, n := binary.Uvarint(b)
 	if n <= 0 || size >= maxBytesSmallSection {
-		return "", errNotGoELF
+		return "", errNoGoBuildinfo
 	}
 	rdr.Discard(int(n))
 	return rdr.ReadStringN(int(size))
@@ -1264,7 +1264,7 @@ func readString(r io.ReaderAt, addr uint64) (string, error) {
 	addr = binary.LittleEndian.Uint64(addrAndSize[0:])
 	size := binary.LittleEndian.Uint64(addrAndSize[8:])
 	if size >= maxBytesSmallSection {
-		return "", errNotGoELF
+		return "", errNoGoBuildinfo
 	}
 
 	val := make([]byte, size)
@@ -1295,9 +1295,9 @@ func extractGolangSettings(mod string) bool {
 	return false
 }
 
-func (f *File) parseGobuild() {
+func (f *File) parseGoBuildinfo() error {
 	if f.golangVersion != strNotProcessed {
-		return
+		return nil
 	}
 	f.golangVersion = libpf.NullString
 
@@ -1307,17 +1307,18 @@ func (f *File) parseGobuild() {
 		sz = int64(s.Size)
 	} else {
 		if !f.IsGolang() {
-			return
+			return nil
 		}
 		for _, p := range f.Progs {
 			if p.Type == elf.PT_LOAD && p.Flags&(elf.PF_X|elf.PF_W) == elf.PF_W {
 				off = int64(p.Off)
 				sz = int64(p.Filesz)
+				break
 			}
 		}
 	}
 	if sz == 0 {
-		return
+		return nil
 	}
 
 	rdr := pfbufio.NewReader(f.Underlying(), off, sz)
@@ -1326,7 +1327,7 @@ func (f *File) parseGobuild() {
 	for {
 		offset, err := rdr.SearchSlice(goBuildInfoMagic)
 		if err != nil {
-			break
+			return errNoGoBuildinfo
 		}
 		if offset%16 == 0 {
 			break
@@ -1342,63 +1343,69 @@ func (f *File) parseGobuild() {
 	// }
 	ptrSize, err := rdr.ReadByte()
 	if err != nil {
-		return
+		return errNoGoBuildinfo
 	}
 	flags, err := rdr.ReadByte()
 	if err != nil {
-		return
+		return errNoGoBuildinfo
 	}
 	if flags&2 != 0 {
 		// Go 1.18+ inline strings
 		_, err = rdr.Discard(16)
 		if err != nil {
-			return
+			return errNoGoBuildinfo
 		}
 		ver, err := decodeString(rdr)
 		if err != nil {
-			return
+			return err
 		}
 		f.golangVersion = libpf.Intern(ver)
 
 		mod, err := decodeString(rdr)
 		if err != nil {
-			return
+			return err
 		}
 		f.golangCgo = extractGolangSettings(mod)
 	} else {
 		// Go <1.18 with string pointers
 		ptrs, err := rdr.ReadN(16)
 		if err != nil {
-			return
+			return errNoGoBuildinfo
 		}
 		// Only 64-bit little-endian is supported
 		if ptrSize != 8 || flags&1 != 0 {
-			return
+			return fmt.Errorf("pointers with size %d, flags %x not supported",
+				ptrSize, flags)
 		}
 		verPtr := binary.LittleEndian.Uint64(ptrs[0:])
 		modPtr := binary.LittleEndian.Uint64(ptrs[8:])
 
 		ver, err := readString(f, verPtr)
 		if err != nil {
-			return
+			return err
 		}
 		f.golangVersion = libpf.Intern(ver)
 
 		mod, err := readString(f, modPtr)
 		if err != nil {
-			return
+			return err
 		}
 		f.golangCgo = extractGolangSettings(mod)
 	}
+	return nil
 }
 
 // GoVersion returns the Go version if present and empty string otherwise.
 func (f *File) GoVersion() string {
-	f.parseGobuild()
+	if err := f.parseGoBuildinfo(); err != nil {
+		log.Debugf("Failed to read go buildinfo: %v", err)
+	}
 	return f.golangVersion.String()
 }
 
 func (f *File) IsCgoEnabled() bool {
-	f.parseGobuild()
+	if err := f.parseGoBuildinfo(); err != nil {
+		log.Debugf("Failed to read go buildinfo: %v", err)
+	}
 	return f.golangCgo
 }
