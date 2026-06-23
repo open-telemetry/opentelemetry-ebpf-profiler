@@ -124,8 +124,8 @@ type Loader func(ebpf EbpfHandler, info *LoaderInfo) (Data, error)
 type Data interface {
 	// Attach checks if the given dso is supported, and loads the information
 	// of it to the ebpf maps.
-	Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory) (
-		Instance, error)
+	Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Address,
+		rm remotememory.RemoteMemory) (Instance, error)
 
 	// Unload can undo any allocations or eBPF entries the Loader function created
 	Unload(ebpf EbpfHandler)

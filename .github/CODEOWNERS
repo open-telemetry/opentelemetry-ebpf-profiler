@@ -11,6 +11,11 @@
 # Learn about CODEOWNERS file format:
 #  https://help.github.com/en/articles/about-code-owners
 #
+# NOTE: When adding or removing a user from this file, maintainers must also
+# add or remove that user from the ebpf-profiler-contributors team:
+#  https://github.com/orgs/open-telemetry/teams/ebpf-profiler-contributors
+# Team membership is required to receive the proper GitHub notifications.
+#
 
 * @open-telemetry/ebpf-profiler-maintainers @open-telemetry/ebpf-profiler-approvers
 

@@ -21,12 +21,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
-	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/otel/metric/noop"
 )
 
@@ -100,6 +100,7 @@ func TestTracerErrorPropagation(t *testing.T) {
 
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
+		InterpretersConfig:     interpreterconfig.AllInterpreters(),
 		FilterErrorFrames:      false,
 		SamplesPerSecond:       20,
 		MapScaleFactor:         0,
@@ -142,6 +143,7 @@ func TestTracerMapMonitorsError(t *testing.T) {
 
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
+		InterpretersConfig:     interpreterconfig.AllInterpreters(),
 		FilterErrorFrames:      false,
 		SamplesPerSecond:       20,
 		MapScaleFactor:         0,
@@ -166,11 +168,9 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 	ctx, cancelFn := context.WithCancel(t.Context())
 	defer cancelFn()
 
-	enabledTracers, _ := tracertypes.Parse("")
-	enabledTracers.Enable(tracertypes.PythonTracer)
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
-		IncludeTracers:         enabledTracers,
+		InterpretersConfig:     interpreterconfig.AllInterpreters(),
 		FilterErrorFrames:      false,
 		SamplesPerSecond:       20,
 		MapScaleFactor:         0,
@@ -275,7 +275,7 @@ func TestAllTracers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
 				Intervals:              &mockIntervals{},
-				IncludeTracers:         tracertypes.AllTracers(),
+				InterpretersConfig:     interpreterconfig.AllInterpreters(),
 				SamplesPerSecond:       20,
 				ProbabilisticInterval:  100,
 				ProbabilisticThreshold: 100,

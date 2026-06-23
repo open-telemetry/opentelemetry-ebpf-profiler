@@ -129,7 +129,11 @@ type beamInstance struct {
 	mappingGeneration uint32
 }
 
-func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ Config) interpreter.Loader {
+	return loader
+}
+
+func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	matches := beamRegex.FindStringSubmatch(info.FileName())
 	if matches == nil {
 		return nil, nil
@@ -282,7 +286,8 @@ func hashMFA(key beamMfa) uint32 {
 	return uint32(hash.Uint64(uint64(mfhash)<<32 | uint64(key.arity)))
 }
 
-func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory) (interpreter.Instance, error) {
+func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
+	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
 	log.Debugf("BEAM attaching, OTP %d, ERTS %s, bias: 0x%x", d.otpRelease, d.ertsVersion, bias)
 
 	data := support.BEAMProcInfo{
