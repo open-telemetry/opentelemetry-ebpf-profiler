@@ -83,7 +83,6 @@
         "stackdeltas+0x4eb2da",
         "stackdeltas+0x4eb230",
         "runtime.asmcgocall+0 in /usr/lib/go/src/runtime/asm_amd64.s:671",
-        "runtime.exitsyscallfast.func1+0 in /usr/lib/go/src/runtime/proc.go:3796",
         "github.com/optimyze/prodfiler/libpf/nativeunwind/elfunwindinfo._Cfunc_analyzeInstructions+0 in _cgo_gotypes.go:46",
         "github.com/optimyze/prodfiler/libpf/nativeunwind/elfunwindinfo.analyzeInstructions+0 in /home/tteras/optimyze/prodfiler/libpf/nativeunwind/elfunwindinfo/lengthdisassembler.go:21",
         "github.com/optimyze/prodfiler/libpf/nativeunwind/elfunwindinfo.ExtractELF+0 in /home/tteras/optimyze/prodfiler/libpf/nativeunwind/elfunwindinfo/stackdeltaextraction.go:166",

@@ -26,21 +26,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-// Go runtime functions for which we should not attempt to unwind further
-var goFunctionsStopDelta = map[string]*sdtypes.UnwindInfo{
-	"runtime.mstart": &sdtypes.UnwindInfoStop, // topmost for the go runtime main stacks
-	"runtime.goexit": &sdtypes.UnwindInfoStop, // return address in all goroutine stacks
-
-	// systemstack preserves the frame pointer chain across
-	// the g0/user stack boundary, so standard FP unwinding traverses it naturally.
-	"runtime.systemstack": &sdtypes.UnwindInfoFramePointer,
-	"runtime.mcall":       &sdtypes.UnwindInfoStop,
-
-	// signal return frame
-	"runtime.sigreturn":            &sdtypes.UnwindInfoSignal,
-	"runtime.sigreturn__sigaction": &sdtypes.UnwindInfoSignal,
-}
-
 const (
 	// maximum pclntab (or rodata segment) size to inspect. The .gopclntab is
 	// often huge. Host agent binaries have about 32M .rodata, so allow for more.
@@ -660,6 +645,35 @@ func getSourceFileStrategy(arch elf.Machine, sourceFile string, defaultStrategy 
 	}
 }
 
+// getFunctionDelta determines the special unwind opcode if needed
+func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, framePointerReliable bool) *sdtypes.UnwindInfo {
+	switch sourceFile {
+	case "runtime.goexit", "runtime.mstart":
+		// goexit - return address in all goroutine stacks
+		// mstart - topmost for the go runtime main stacks
+		return &sdtypes.UnwindInfoStop
+	case "runtime.mcall": // unsupported at this time
+		return &sdtypes.UnwindInfoStop
+	case "runtime.asmcgocall":
+		// asmcgocall FP is valid only on x86-64
+		if arch != elf.EM_X86_64 {
+			return &sdtypes.UnwindInfoStop
+		}
+		fallthrough
+	case "runtime.systemstack":
+		// functions which preserve the frame pointer chain across the g0/user stack boundary
+		// so that the standard FP unwinding traverses it naturally.
+		if !framePointerReliable {
+			return &sdtypes.UnwindInfoStop
+		}
+		return &sdtypes.UnwindInfoFramePointer
+	case "runtime.sigreturn", "runtime.sigreturn__sigaction":
+		// signal frame restorers
+		return &sdtypes.UnwindInfoSignal
+	}
+	return nil
+}
+
 // parseX86pclntabFunc extracts interval information from x86_64 based pclntabFunc.
 func parseX86pclntabFunc(deltas *sdtypes.StackDeltaArray, p pcval, s strategy) error {
 	hints := sdtypes.UnwindHintKeep
@@ -777,14 +791,10 @@ func (ee *elfExtractor) parseGoPclntab() error {
 
 		// First, check for functions with special handling.
 		funcName := getString(g.funcnametab, int(fun.nameOff))
-		if info, found := goFunctionsStopDelta[funcName]; found {
-			unwindInfo := *info
-			if unwindInfo == sdtypes.UnwindInfoFramePointer && !isFramePointerReliable {
-				unwindInfo = sdtypes.UnwindInfoStop
-			}
+		if info := getFunctionUnwindInfo(funcName, arch, isFramePointerReliable); info != nil {
 			ee.deltas.Add(sdtypes.StackDelta{
 				Address: uint64(funcPc),
-				Info:    unwindInfo,
+				Info:    *info,
 			})
 			continue
 		}
