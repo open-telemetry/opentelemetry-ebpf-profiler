@@ -22,6 +22,7 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
+	"github.com/cilium/ebpf/features"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
@@ -591,6 +592,43 @@ func syncVariablesToMapSpecs(coll *cebpf.CollectionSpec) error {
 	return nil
 }
 
+// probeNoPrealloc tests if the kernel allows perf_event programs to use
+// non-preallocated hash maps. This requires both creating the map and
+// verifying a perf_event program that references it.
+func probeNoPrealloc() bool {
+	m, err := cebpf.NewMap(&cebpf.MapSpec{
+		Type:       cebpf.Hash,
+		KeySize:    4,
+		ValueSize:  4,
+		MaxEntries: 1,
+		Flags:      features.BPF_F_NO_PREALLOC,
+	})
+	if err != nil {
+		return false
+	}
+	defer m.Close()
+
+	prog, err := cebpf.NewProgram(&cebpf.ProgramSpec{
+		Type: cebpf.PerfEvent,
+		Instructions: asm.Instructions{
+			asm.Mov.Imm(asm.R2, 0),
+			asm.StoreMem(asm.RFP, -4, asm.R2, asm.Word),
+			asm.Mov.Reg(asm.R2, asm.RFP),
+			asm.Add.Imm(asm.R2, -4),
+			asm.LoadMapPtr(asm.R1, m.FD()),
+			asm.FnMapLookupElem.Call(),
+			asm.Mov.Imm(asm.R0, 0),
+			asm.Return(),
+		},
+		License: "GPL",
+	})
+	if err != nil {
+		return false
+	}
+	prog.Close()
+	return true
+}
+
 // loadAllMaps loads all eBPF maps that are used in our eBPF programs.
 func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 	ebpfMaps map[string]*cebpf.Map) error {
@@ -628,6 +666,8 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 		adaption[mapName] = 1 << uint32(exeIDToStackDeltasSize+cfg.MapScaleFactor)
 	}
 
+	noPrealloc := probeNoPrealloc()
+
 	for mapName, mapSpec := range coll.Maps {
 		if mapName == "sched_times" && cfg.OffCPUThreshold == 0 {
 			// Off CPU Profiling is disabled. So do not load this map.
@@ -659,6 +699,10 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 		if newSize, ok := adaption[mapName]; ok {
 			log.Debugf("Size of eBPF map %s: %v", mapName, newSize)
 			mapSpec.MaxEntries = newSize
+		}
+		if noPrealloc && strings.HasPrefix(mapName, "exe_id_to_") &&
+			strings.HasSuffix(mapName, "_stack_deltas") {
+			mapSpec.Flags |= features.BPF_F_NO_PREALLOC
 		}
 		ebpfMap, err := cebpf.NewMap(mapSpec)
 		if err != nil {
@@ -1307,7 +1351,7 @@ func (t *Tracer) StartOffCPUProfiling() error {
 	}
 	tpLink, err := link.Tracepoint("sched", "sched_switch", tpProg, nil)
 	if err != nil {
-		return nil
+		return fmt.Errorf("failed to attach sched_switch tracepoint: %w", err)
 	}
 	t.hooks[hookPoint{group: "sched", name: "sched_switch"}] = tpLink
 
