@@ -187,7 +187,6 @@ func TestTraceTransmissionAndParsing(t *testing.T) {
 	tr, err := tracer.NewTracer(ctx, &tracer.Config{
 		Intervals:              &mockIntervals{},
 		TraceReporter:          noopTraceReporter{},
-		IncludeTracers:         enabledTracers,
 		InterpretersConfig:     interpreterconfig.AllInterpreters(),
 		FilterErrorFrames:      false,
 		SamplesPerSecond:       20,
