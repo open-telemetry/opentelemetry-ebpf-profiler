@@ -740,7 +740,11 @@ func decodeStub(ef *pfelf.File, memoryBase libpf.SymbolValue,
 		symbolName, sym.Address, hex.Dump(code), value)
 }
 
-func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ Config) interpreter.Loader {
+	return loader
+}
+
+func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	mainDSO := false
 	major := uint16(0)
 	minor := uint16(0)

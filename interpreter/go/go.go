@@ -41,7 +41,11 @@ type goInstance struct {
 	d *goData
 }
 
-func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
+func GetLoader(_ Config) interpreter.Loader {
+	return loader
+}
+
+func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	interpreter.Data, error) {
 	ef, err := info.GetELF()
 	if err != nil {
