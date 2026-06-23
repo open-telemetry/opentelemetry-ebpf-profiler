@@ -118,7 +118,8 @@ func (pm *ProcessManager) getLibcInfo(pid libpf.PID) *libc.LibcInfo {
 // getPidInformation gets or creates the Pid information for given PID.
 //
 // Caller must hold pm.mu write lock.
-func (pm *ProcessManager) getPidInformation(pid libpf.PID) *processInfo {
+func (pm *ProcessManager) getPidInformation(pid libpf.PID, pr process.Process,
+) *processInfo {
 	if info, ok := pm.pidToProcessInfo[pid]; ok {
 		return info
 	}
@@ -129,7 +130,13 @@ func (pm *ProcessManager) getPidInformation(pid libpf.PID) *processInfo {
 		return nil
 	}
 
-	info := &processInfo{}
+	meta := pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
+	pm.fillSelfContainerID(pid, &meta)
+
+	info := &processInfo{
+		meta:     meta,
+		libcInfo: nil,
+	}
 	pm.pidToProcessInfo[pid] = info
 	pm.pidPageToMappingInfoSize++
 	return info
@@ -503,14 +510,12 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	}
 
 	pm.mu.Lock()
-	info := pm.getPidInformation(pid)
+	info := pm.getPidInformation(pid, pr)
 	if info == nil {
 		pm.mu.Unlock()
 		return
 	}
-	// Check if process meta needs an update. Naturally fires on first sync
-	// (info.meta.Executable is NullString until the first GetProcessMeta) and
-	// on exec (exe path changes via /proc/<pid>/exe).
+	// Check if process meta needs an update
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
 
 	// Get existing info
@@ -683,12 +688,12 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 	newProcessContextInfo, publishProcessContextInfo := readProcessContext(
 		contextMappingAddr, pid, pr.GetRemoteMemory(),
-		oldProcessContextPublishedAtNs, envVars, updateProcessMeta)
+		oldProcessContextPublishedAtNs, envVars, updateProcessMeta || newProcess)
 
 	// Sort and publish the new mappings and meta
 	slices.SortFunc(mappings, compareMapping)
 	pm.mu.Lock()
-	info = pm.getPidInformation(pid)
+	info = pm.getPidInformation(pid, pr)
 	if info != nil {
 		info.mappings = mappings
 		if updateProcessMeta {
