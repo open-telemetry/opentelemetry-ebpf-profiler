@@ -1,7 +1,9 @@
 {
   "coredump-ref": "70f9902fa22a105817994dd6c60b2390cef81370787fc92784670879ef0371a7",
-  "options": {
-    "ruby-skip-native-resume": true
+  "interpreters": {
+    "ruby": {
+      "skip_native_resume": true
+    }
   },
   "threads": [
     {

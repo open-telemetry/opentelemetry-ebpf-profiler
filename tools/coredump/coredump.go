@@ -115,18 +115,15 @@ func (t *traceReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.Trace
 	return nil
 }
 
-type ExtractTracesOptions struct {
-	RubySkipNativeResume bool `json:"ruby-skip-native-resume,omitempty"`
-}
-
 func ExtractTraces(ctx context.Context, pr process.Process, debug bool,
 	lwpFilter libpf.Set[libpf.PID], faultAddresses map[uintptr]int) ([]ThreadInfo, error) {
-	return ExtractTracesWithOptions(ctx, pr, debug, lwpFilter, faultAddresses, ExtractTracesOptions{})
+	return ExtractTracesWithInterpreters(ctx, pr, debug, lwpFilter, faultAddresses,
+		interpreterconfig.AllInterpreters())
 }
 
-func ExtractTracesWithOptions(ctx context.Context, pr process.Process, debug bool,
+func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debug bool,
 	lwpFilter libpf.Set[libpf.PID], faultAddresses map[uintptr]int,
-	opts ExtractTracesOptions) ([]ThreadInfo, error) {
+	interpretersConfig interpreterconfig.Config) ([]ThreadInfo, error) {
 	todo, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -174,7 +171,7 @@ func ExtractTracesWithOptions(ctx context.Context, pr process.Process, debug boo
 
 	inverse_pac_mask := ^(pr.GetMachineData().CodePACMask)
 	rubySkipNativeResume := C.int(0)
-	if opts.RubySkipNativeResume {
+	if interpretersConfig.Ruby.SkipNativeResume {
 		rubySkipNativeResume = 1
 	}
 	C.initialize_rodata_variables(C.u64(inverse_pac_mask), rubySkipNativeResume)
@@ -182,7 +179,7 @@ func ExtractTracesWithOptions(ctx context.Context, pr process.Process, debug boo
 	coredumpEbpfMaps := ebpfMapsCoredump{ctx: ebpfCtx}
 	traceReporter := traceReporter{}
 
-	manager, err := pm.New(todo, interpreterconfig.AllInterpreters(), monitorInterval, executableUnloadDelay,
+	manager, err := pm.New(todo, interpretersConfig, monitorInterval, executableUnloadDelay,
 		&coredumpEbpfMaps, &traceReporter, nil, elfunwindinfo.NewStackDeltaProvider(),
 		false, libpf.Set[string]{})
 	if err != nil {

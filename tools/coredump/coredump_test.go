@@ -55,8 +55,8 @@ func TestCoreDumps(t *testing.T) {
 			defer core.Close()
 
 			faults := parseFaultAddresses(t, testCase.FaultAddresses)
-			data, err := ExtractTracesWithOptions(t.Context(), core, false, nil, faults,
-				testCase.Options)
+			data, err := ExtractTracesWithInterpreters(t.Context(), core, false, nil, faults,
+				testCase.interpretersConfig())
 
 			require.NoError(t, err)
 			require.Equal(t, testCase.Threads, data)
