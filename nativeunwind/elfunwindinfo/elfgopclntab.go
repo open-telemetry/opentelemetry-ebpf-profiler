@@ -660,7 +660,7 @@ func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, framePointerReli
 			return &sdtypes.UnwindInfoStop
 		}
 		fallthrough
-	case "runtime.systemstack":
+	case "runtime.systemstack", "runtime.nanotime1", "time.now", "runtime.walltime":
 		// functions which preserve the frame pointer chain across the g0/user stack boundary
 		// so that the standard FP unwinding traverses it naturally.
 		if !framePointerReliable {
