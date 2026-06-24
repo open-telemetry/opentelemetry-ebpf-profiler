@@ -80,6 +80,14 @@ func (p *Pdata) Generate(
 
 	attrMgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
 
+	// Iterate over registered profile types in ascending origin order for
+	// deterministic output.
+	sortedOrigins := make([]libpf.Origin, 0, len(profileTypes))
+	for o := range profileTypes {
+		sortedOrigins = append(sortedOrigins, o)
+	}
+	slices.Sort(sortedOrigins)
+
 	for resource, toEvents := range tree {
 		if len(toEvents.Events) == 0 {
 			continue
@@ -93,14 +101,6 @@ func (p *Pdata) Generate(
 		sp.Scope().SetName(agentName)
 		sp.Scope().SetVersion(agentVersion)
 		sp.SetSchemaUrl(semconv.SchemaURL)
-
-		// Iterate over registered profile types in ascending origin order for
-		// deterministic output.
-		sortedOrigins := make([]libpf.Origin, 0, len(profileTypes))
-		for o := range profileTypes {
-			sortedOrigins = append(sortedOrigins, o)
-		}
-		slices.Sort(sortedOrigins)
 
 		for _, origin := range sortedOrigins {
 			if len(toEvents.Events[origin]) == 0 {
