@@ -29,7 +29,6 @@ var _ extractor = &armExtractor{}
 func (a *armExtractor) callExists(b []byte, baseAddr, targetCall int64) (bool, error) {
 	var ip int64
 	for ; len(b) > 0; b = b[4:] {
-		ip += 4
 		i, err := arm64asm.Decode(b)
 		if err != nil {
 			return false, err
@@ -43,6 +42,7 @@ func (a *armExtractor) callExists(b []byte, baseAddr, targetCall int64) (bool, e
 				}
 			}
 		}
+		ip += 4
 	}
 	return false, nil
 }
