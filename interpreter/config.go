@@ -6,7 +6,7 @@ package interpreter // import "go.opentelemetry.io/ebpf-profiler/interpreter"
 // BaseConfig holds the fields required by every extension config.
 // Embed it in each extension-specific Config to satisfy the Config interface.
 type BaseConfig struct {
-	Disabled bool `mapstructure:"disabled"`
+	Disabled bool `mapstructure:"disabled" json:"disabled,omitempty"`
 }
 
 func (b BaseConfig) IsDisabled() bool { return b.Disabled }
