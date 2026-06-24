@@ -142,7 +142,8 @@ test-junit: generate ebpf test-deps
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
 	libpf/pfelf/testdata \
-	reporter/testdata
+	reporter/testdata \
+	interpreter/golabels/testdata
 
 test-deps:
 	$(foreach testdata_dir, $(TESTDATA_DIRS), \
