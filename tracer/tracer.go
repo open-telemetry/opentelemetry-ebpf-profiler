@@ -245,9 +245,6 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 	if cfg.TraceReporter == nil {
 		return nil, errors.New("TraceReporter must not be nil")
 	}
-	if cfg.SamplesPerSecond <= 0 {
-		return nil, errors.New("SamplesPerSecond must be > 0")
-	}
 
 	kernelSymbolizer, err := kallsyms.NewSymbolizer()
 	if err != nil {
