@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"slices"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind"
 	"go.opentelemetry.io/ebpf-profiler/periodiccaller"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	eim "go.opentelemetry.io/ebpf-profiler/processmanager/execinfomanager"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
@@ -67,6 +69,17 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
 	if exeReporter == nil {
 		exeReporter = executableReporterStub{}
+	}
+
+	// Always collect the env vars used to derive process context resource
+	// attributes, independently of the user-configured set. Clone first to avoid
+	// mutating the caller's set.
+	includeEnvVars = maps.Clone(includeEnvVars)
+	if includeEnvVars == nil {
+		includeEnvVars = make(libpf.Set[string])
+	}
+	for _, env := range processcontext.EnvVars() {
+		includeEnvVars[env] = libpf.Void{}
 	}
 
 	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,

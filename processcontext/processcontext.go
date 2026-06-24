@@ -349,6 +349,12 @@ func convertAnyValue(src *commonpb.AnyValue) (pcommon.Value, bool) {
 	}
 }
 
+// EnvVars returns the names of the environment variables used to derive
+// process context resource attributes.
+func EnvVars() []string {
+	return []string{svcNameKey, resourceAttrKey}
+}
+
 // WithMergedEnvVars returns process context with attributes derived from
 // OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES merged into its Resource.
 func WithMergedEnvVars(info Info, envVars map[libpf.String]libpf.String) Info {
