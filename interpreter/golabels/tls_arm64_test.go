@@ -21,15 +21,19 @@ func TestExtractRuntimeIsCgo(t *testing.T) {
 		wantRuntimeCgo bool
 	}{
 		"nocgo binary": {
-			fixture:        "testdata/golabels-nocgo.arm64",
+			fixture:        "integrationtests/pprof_stable",
 			wantRuntimeCgo: false,
 		},
 		"buildinfo cgo without runtime cgo": {
-			fixture:        "testdata/golabels-buildinfo-cgo.arm64",
+			fixture:        "integrationtests/pprof_stable_buildinfo_cgo",
 			wantRuntimeCgo: false,
 		},
 		"runtime cgo": {
-			fixture:        "testdata/golabels-cgo.arm64",
+			fixture:        "integrationtests/pprof_stable_cgo",
+			wantRuntimeCgo: true,
+		},
+		"runtime cgo pie": {
+			fixture:        "integrationtests/pprof_stable_cgo_pie",
 			wantRuntimeCgo: true,
 		},
 	}
