@@ -20,10 +20,10 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
-	tracertypes "go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/otel/metric/noop"
 )
 
@@ -80,12 +80,10 @@ func Test_ProcessContext(t *testing.T) {
 
 			metrics.Start(noop.Meter{})
 
-			enabledTracers, _ := tracertypes.Parse("")
-
 			log.SetLevel(slog.LevelDebug)
 			trc, err := tracer.NewTracer(ctx, &tracer.Config{
 				Intervals:              &mockIntervals{},
-				IncludeTracers:         enabledTracers,
+				InterpretersConfig:     interpreterconfig.AllInterpreters(),
 				SamplesPerSecond:       20,
 				ProbabilisticInterval:  100,
 				ProbabilisticThreshold: 100,
