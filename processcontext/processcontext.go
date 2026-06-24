@@ -162,6 +162,63 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 	return ctx, nil
 }
 
+// Resolve reads the process context from a context mapping (if any) and merges
+// attributes derived from OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES.
+// Returns (info, true) if process context has changed, and  (_, false)
+// to leave the previously-published context untouched.
+//
+// mappingAddr=0 means the mapping was not observed this sync; combined with
+// oldPublishedAtNs > 0 this signals it disappeared and the process context is
+// unpublished (returned context carries only env-vars-derived attributes).
+//
+// newProcessOrExec=true means either first sync or an exec was detected:
+// old process context is discarded and a rebuild is forced so new env vars
+// take effect even when context mapping is present.
+func Resolve(
+	mappingAddr uint64, pid libpf.PID, rm remotememory.RemoteMemory,
+	oldPublishedAtNs uint64,
+	envVars map[libpf.String]libpf.String,
+	newProcessOrExec bool,
+) (Info, bool) {
+	if mappingAddr == 0 {
+		// No context mapping found, publish a new process context with env vars only if:
+		// - the process has been created or execed.
+		// - the previous process context (from context mapping) has disappeared.
+		if newProcessOrExec || oldPublishedAtNs != 0 {
+			return WithMergedEnvVars(Info{}, envVars), true
+		}
+		// No change, steady state.
+		return Info{}, false
+	}
+
+	if newProcessOrExec {
+		// Be safe and discard previous state if the process meta has been updated.
+		oldPublishedAtNs = 0
+	}
+
+	// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
+	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
+
+	processCtx, err := Read(addr, rm, oldPublishedAtNs, 0)
+	switch {
+	case err == nil:
+		// New process context read successfully, merge env vars and publish it.
+		return WithMergedEnvVars(processCtx, envVars), true
+	case errors.Is(err, ErrNoUpdate):
+		// No change, steady state.
+		return Info{}, false
+	case errors.Is(err, ErrConcurrentUpdate):
+		// Concurrent update detected, keep previous process context if process is not new or execed.
+		if !newProcessOrExec {
+			return Info{}, false
+		}
+	default:
+		log.Warnf("Failed to read ProcessContext for PID %d: %v", pid, err)
+	}
+
+	return WithMergedEnvVars(Info{}, envVars), true
+}
+
 func IsContextMapping(isExecutable bool, mappingPath string) bool {
 	return !isExecutable && (mappingPath == ContextMappingMemfd ||
 		mappingPath == ContextMappingMemfdDeleted ||

@@ -33,7 +33,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/process"
 	"go.opentelemetry.io/ebpf-profiler/processcontext"
-	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/util"
@@ -686,7 +685,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		envVars = meta.EnvVariables
 	}
 
-	newProcessContextInfo, publishProcessContextInfo := readProcessContext(
+	newProcessContextInfo, publishProcessContextInfo := processcontext.Resolve(
 		contextMappingAddr, pid, pr.GetRemoteMemory(),
 		oldProcessContextPublishedAtNs, envVars, updateProcessMeta || newProcess)
 
@@ -848,58 +847,4 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		delete(pm.exitEvents, pid)
 		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
 	}
-}
-
-// readProcessContext reads the process context from a context mapping
-// (if any) and merges env-var-derived attributes in. Returns (info, true) to
-// publish; (_, false) to leave the previously-published context untouched.
-//
-// mappingAddr=0 means the mapping was not observed this sync; combined with
-// oldPublishedAtNs > 0 this signals it disappeared and the process context is
-// unpublished (returned context carries only env-vars-derived attributes).
-//
-// processMetaUpdated=true means either first sync or an exec was detected:
-// old process context is discarded and a rebuild is forced so new env vars
-// take effect even when context mapping is present.
-func readProcessContext(
-	mappingAddr uint64, pid libpf.PID, rm remotememory.RemoteMemory,
-	oldPublishedAtNs uint64,
-	envVars map[libpf.String]libpf.String,
-	processMetaUpdated bool,
-) (processcontext.Info, bool) {
-	if processMetaUpdated {
-		// Be safe and discard previous state if the process meta has been updated.
-		oldPublishedAtNs = 0
-	}
-	var processCtx processcontext.Info
-	processContextRead := false
-	if mappingAddr != 0 {
-		// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
-		addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
-		c, err := processcontext.Read(addr, rm, oldPublishedAtNs, 0)
-		switch {
-		case err == nil:
-			processCtx = c
-			processContextRead = true
-		case errors.Is(err, processcontext.ErrNoUpdate),
-			errors.Is(err, processcontext.ErrConcurrentUpdate):
-			// Note that if processMetaUpdated is true, the caller will discard the previous process context and therefore
-			// returning true or false makes no difference. Returning true in this case makes the intent clearer though.
-			return processcontext.Info{}, processMetaUpdated
-		default:
-			log.Warnf("Failed to read ProcessContext for PID %d: %v", pid, err)
-			// Fail to read process context, publish a new empty process context.
-			return processcontext.Info{}, true
-		}
-	}
-	// Publish a new process context when either:
-	//   - we just read a new process context.
-	//   - metadata has been updated (exec).
-	//   - we previously had a process context that is now gone.
-	// Otherwise (steady state for process context derived from env vars only, or never had a process context)
-	// do not publish a new process context.
-	if !processContextRead && !processMetaUpdated && oldPublishedAtNs == 0 {
-		return processcontext.Info{}, false
-	}
-	return processcontext.WithMergedEnvVars(processCtx, envVars), true
 }
