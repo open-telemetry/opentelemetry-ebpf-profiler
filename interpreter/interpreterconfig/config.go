@@ -21,16 +21,16 @@ import (
 // Config holds configuration for all interpreters.
 // By default all interpreters are enabled.
 type Config struct {
-	Python  python.Config   `mapstructure:"python"`
-	Perl    perl.Config     `mapstructure:"perl"`
-	PHP     php.Config      `mapstructure:"php"`
-	Hotspot hotspot.Config  `mapstructure:"hotspot"`
-	Ruby    ruby.Config     `mapstructure:"ruby"`
-	V8      nodev8.Config   `mapstructure:"v8"`
-	Dotnet  dotnet.Config   `mapstructure:"dotnet"`
-	Go      golang.Config   `mapstructure:"go"`
-	Labels  golabels.Config `mapstructure:"labels"`
-	BEAM    beam.Config     `mapstructure:"beam"`
+	Python  python.Config   `mapstructure:"python" json:"python,omitempty"`
+	Perl    perl.Config     `mapstructure:"perl" json:"perl,omitempty"`
+	PHP     php.Config      `mapstructure:"php" json:"php,omitempty"`
+	Hotspot hotspot.Config  `mapstructure:"hotspot" json:"hotspot,omitempty"`
+	Ruby    ruby.Config     `mapstructure:"ruby" json:"ruby,omitempty"`
+	V8      nodev8.Config   `mapstructure:"v8" json:"v8,omitempty"`
+	Dotnet  dotnet.Config   `mapstructure:"dotnet" json:"dotnet,omitempty"`
+	Go      golang.Config   `mapstructure:"go" json:"go,omitempty"`
+	Labels  golabels.Config `mapstructure:"labels" json:"labels,omitempty"`
+	BEAM    beam.Config     `mapstructure:"beam" json:"beam,omitempty"`
 }
 
 // AllInterpreters returns a Config with all interpreters enabled.
