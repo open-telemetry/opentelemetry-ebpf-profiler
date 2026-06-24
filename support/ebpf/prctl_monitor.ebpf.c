@@ -12,23 +12,46 @@
   #define PR_SET_VMA           0x53564d41
   #define PR_SET_VMA_ANON_NAME 0
 
-// See /sys/kernel/tracing/events/syscalls/sys_enter_prctl/format
-struct sys_enter_prctl_ctx {
-  unsigned char skip[16]; // common fields (8) + __syscall_nr (4) + pad (4)
-  unsigned long option;   // prctl option
-  unsigned long arg2;     // sub-option (PR_SET_VMA_ANON_NAME for PR_SET_VMA)
-  unsigned long arg3;     // addr
-  unsigned long arg4;     // len
-  unsigned long arg5;     // name (user-space pointer)
-};
-
-// tracepoint__sys_enter_prctl hooks prctl() calls to detect when a process
-// names an anonymous VMA "OTEL_CTX". This triggers a PID resynchronization
-// so the profiler can discover the newly published process context mapping.
-SEC("tracepoint/syscalls/sys_enter_prctl")
-int tracepoint__sys_enter_prctl(struct sys_enter_prctl_ctx *ctx)
+// tracepoint__sys_exit_prctl detects when a process names an anonymous VMA
+// "OTEL_CTX" and triggers a PID resynchronization so the profiler can discover
+// the newly published process context mapping.
+//
+// We hook syscall exit, not entry, so the resync runs after the kernel has applied
+// the rename; otherwise user space could re-read /proc/<pid>/maps before
+// "[anon:OTEL_CTX]" is visible and miss the freshly published context.
+//
+// The exit tracepoint only carries the return value, so the prctl arguments are
+// recovered from the task's entry pt_regs (preserved across the syscall).
+SEC("tracepoint/syscalls/sys_exit_prctl")
+int tracepoint__sys_exit_prctl(void *ctx)
 {
-  if (ctx->option != PR_SET_VMA || ctx->arg2 != PR_SET_VMA_ANON_NAME) {
+  struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+  long ptregs_addr         = get_task_pt_regs(task);
+  if (!ptregs_addr) {
+    goto exit;
+  }
+
+  struct pt_regs regs;
+  if (bpf_probe_read_kernel(&regs, sizeof(regs), (void *)ptregs_addr)) {
+    goto exit;
+  }
+
+  // prctl(int option, unsigned long arg2, unsigned long arg3, unsigned long arg4,
+  //       unsigned long arg5): we only need option, arg2 and arg5 (the name).
+  #if defined(__x86_64__)
+  unsigned long option   = regs.di;
+  unsigned long arg2     = regs.si;
+  unsigned long name_ptr = regs.r8;
+  #elif defined(__aarch64__)
+  // At exit x0 (regs[0]) holds the return value, arg1 is preserved in orig_x0.
+  unsigned long option   = regs.orig_x0;
+  unsigned long arg2     = regs.regs[1];
+  unsigned long name_ptr = regs.regs[4];
+  #else
+    #error unsupported architecture
+  #endif
+
+  if (option != PR_SET_VMA || arg2 != PR_SET_VMA_ANON_NAME) {
     goto exit;
   }
 
@@ -43,7 +66,7 @@ int tracepoint__sys_enter_prctl(struct sys_enter_prctl_ctx *ctx)
 
   // Read the VMA name from user-space. We only need 9 bytes ("OTEL_CTX" + NUL).
   __attribute__((aligned(8))) char name[9] = {};
-  if (bpf_probe_read_user(name, sizeof(name), (void *)ctx->arg5)) {
+  if (bpf_probe_read_user(name, sizeof(name), (void *)name_ptr)) {
     goto exit;
   }
 

@@ -46,9 +46,9 @@ func (t *Tracer) AttachSchedMonitor() error {
 // This triggers a PID resynchronization so the profiler can discover newly published
 // process context mappings.
 func (t *Tracer) AttachPrctlMonitor() error {
-	prog, ok := t.ebpfProgs["tracepoint__sys_enter_prctl"]
+	prog, ok := t.ebpfProgs["tracepoint__sys_exit_prctl"]
 	if !ok {
-		return fmt.Errorf("eBPF program tracepoint__sys_enter_prctl not found")
+		return fmt.Errorf("eBPF program tracepoint__sys_exit_prctl not found")
 	}
-	return t.attachToTracepoint("syscalls", "sys_enter_prctl", prog)
+	return t.attachToTracepoint("syscalls", "sys_exit_prctl", prog)
 }

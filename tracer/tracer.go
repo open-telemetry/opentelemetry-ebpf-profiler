@@ -811,7 +811,7 @@ func loadPerfUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.P
 			enable:           true,
 		},
 		progLoaderHelper{
-			name:             "tracepoint__sys_enter_prctl",
+			name:             "tracepoint__sys_exit_prctl",
 			noTailCallTarget: true,
 			enable:           true,
 		},
