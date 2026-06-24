@@ -353,7 +353,11 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 
 	if err := coll.Variables["filter_idle_frames"].Set(cfg.FilterIdleFrames); err != nil {
-		return fmt.Errorf("failed to set debug output: %v", err)
+		return fmt.Errorf("failed to set filter_idle_frames: %v", err)
+	}
+
+	if err := coll.Variables["ruby_skip_native_resume"].Set(cfg.InterpretersConfig.Ruby.SkipNativeResume); err != nil {
+		return fmt.Errorf("failed to set ruby_skip_native_resume: %v", err)
 	}
 
 	pacMask := pacmask.GetPACMask()
