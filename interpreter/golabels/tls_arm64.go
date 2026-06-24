@@ -15,6 +15,51 @@ import (
 	"golang.org/x/arch/arm64/arm64asm"
 )
 
+const runtimeIsCgoCodeSize = 2 * 4 // 2 instructions, each 4 bytes
+
+func extractRuntimeIsCgo(f *pfelf.File, b []byte, pc int64) (bool, error) {
+	// runtime.load_g starts by loading runtime.iscgo:
+	//	0x000000000007f260 <+0>:     adrp    x27, 0x1c2000 <runtime.mheap_+101440>
+	//	0x000000000007f264 <+4>:     ldrsb   x0, [x27, #284]
+	adrp, err := arm64asm.Decode(b[0:4])
+	if err != nil {
+		return false, fmt.Errorf("error while decoding first instruction: %w", err)
+	}
+	if adrp.Op != arm64asm.ADRP {
+		return false, fmt.Errorf("expected ADRP, got %v", adrp.Op)
+	}
+
+	ldrsb, err := arm64asm.Decode(b[4:8])
+	if err != nil {
+		return false, fmt.Errorf("error while decoding second instruction: %w", err)
+	}
+	if ldrsb.Op != arm64asm.LDRSB {
+		return false, fmt.Errorf("expected LDRSB, got %v", ldrsb.Op)
+	}
+
+	pcrel, ok := arm.DecodeImmediate(adrp.Args[1])
+	if !ok {
+		return false, fmt.Errorf("failed to decode ADRP page address")
+	}
+	page := (pc + pcrel) & ^0xFFF
+
+	mem, ok := ldrsb.Args[1].(arm64asm.MemImmediate)
+	if !ok {
+		return false, fmt.Errorf("unexpected LDRSB operand type %T", ldrsb.Args[1])
+	}
+	offset, ok := arm.DecodeImmediate(mem)
+	if !ok {
+		return false, fmt.Errorf("failed to decode LDRSB memory offset")
+	}
+	addr := page + offset
+
+	runtimeIscgo, err := f.VirtualMemory(addr, 1, 1)
+	if err != nil {
+		return false, fmt.Errorf("failed to read runtime.iscgo: %w", err)
+	}
+	return runtimeIscgo[0] != 0, nil
+}
+
 // https://github.com/golang/go/blob/6885bad7dd86880be/src/runtime/tls_arm64.s#L11
 //
 //	Gets compiled into:
@@ -37,11 +82,6 @@ import (
 //	0x00000000000c22a8 <+24>:	ldr	x28, [x0, x27]
 //	0x00000000000c22ac <+28>:	ret
 func extractTLSGOffset(f *pfelf.File) (int32, error) {
-	iscgo, err := f.IsCgoEnabled()
-	if err != nil || !iscgo {
-		return 0, err
-	}
-
 	pclntab, err := elfunwindinfo.NewGopclntab(f)
 	if err != nil {
 		return 0, err
@@ -60,11 +100,27 @@ func extractTLSGOffset(f *pfelf.File) (int32, error) {
 			return 0, err
 		}
 	}
-	b, err := f.VirtualMemory(int64(sym.Address), 32, 32)
+
+	pc := int64(sym.Address)
+	b, err := f.VirtualMemory(pc, 32, 32)
 	if err != nil {
 		return 0, err
 	}
-	for ; len(b) > 0; b = b[4:] {
+	if len(b) < runtimeIsCgoCodeSize {
+		return 0, fmt.Errorf("symbol '%s': code too short", symbolName)
+	}
+
+	isCgo, err := extractRuntimeIsCgo(f, b[:runtimeIsCgoCodeSize], pc)
+	if err != nil {
+		return 0, fmt.Errorf("%w: %w", errRuntimeIsCgoUnavailable, err)
+	}
+	if !isCgo {
+		return 0, nil
+	}
+
+	// The first two instructions load runtime.iscgo.
+	// Start TLS retrieval after the runtime.iscgo load.
+	for b := b[runtimeIsCgoCodeSize:]; len(b) > 0; b = b[4:] {
 		i, err := arm64asm.Decode(b)
 		if err != nil {
 			return 0, err
