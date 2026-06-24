@@ -22,10 +22,12 @@ import (
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
+	"github.com/cilium/ebpf/features"
 	"github.com/cilium/ebpf/link"
 	"github.com/elastic/go-perf"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
@@ -40,7 +42,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
@@ -162,8 +163,8 @@ type Config struct {
 	TraceReporter reporter.TraceReporter
 	// Intervals provides access to globally configured timers and counters.
 	Intervals Intervals
-	// IncludeTracers holds information about which tracers are enabled.
-	IncludeTracers types.IncludedTracers
+	// InterpretersConfig holds per-interpreter configuration.
+	InterpretersConfig interpreterconfig.Config
 	// SamplesPerSecond holds the number of samples per second.
 	SamplesPerSecond int
 	// MapScaleFactor is the scaling factor for eBPF map sizes.
@@ -252,12 +253,12 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to load eBPF code: %v", err)
 	}
 
-	ebpfHandler, err := pmebpf.LoadMaps(ctx, cfg.IncludeTracers, ebpfMaps, stackdeltaInnerMapSpec)
+	ebpfHandler, err := pmebpf.LoadMaps(ctx, cfg.InterpretersConfig, ebpfMaps, stackdeltaInnerMapSpec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
-	processManager, err := pm.New(ctx, cfg.IncludeTracers, cfg.Intervals.MonitorInterval(),
+	processManager, err := pm.New(ctx, cfg.InterpretersConfig, cfg.Intervals.MonitorInterval(),
 		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
 		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
@@ -397,52 +398,52 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		{
 			progID: uint32(support.ProgUnwindHotspot),
 			name:   "unwind_hotspot",
-			enable: cfg.IncludeTracers.Has(types.HotspotTracer),
+			enable: !cfg.InterpretersConfig.Hotspot.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindPerl),
 			name:   "unwind_perl",
-			enable: cfg.IncludeTracers.Has(types.PerlTracer),
+			enable: !cfg.InterpretersConfig.Perl.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindPHP),
 			name:   "unwind_php",
-			enable: cfg.IncludeTracers.Has(types.PHPTracer),
+			enable: !cfg.InterpretersConfig.PHP.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindPython),
 			name:   "unwind_python",
-			enable: cfg.IncludeTracers.Has(types.PythonTracer),
+			enable: !cfg.InterpretersConfig.Python.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindRuby),
 			name:   "unwind_ruby",
-			enable: cfg.IncludeTracers.Has(types.RubyTracer),
+			enable: !cfg.InterpretersConfig.Ruby.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindV8),
 			name:   "unwind_v8",
-			enable: cfg.IncludeTracers.Has(types.V8Tracer),
+			enable: !cfg.InterpretersConfig.V8.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindDotnet),
 			name:   "unwind_dotnet",
-			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
+			enable: !cfg.InterpretersConfig.Dotnet.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindDotnet10),
 			name:   "unwind_dotnet10",
-			enable: cfg.IncludeTracers.Has(types.DotnetTracer),
+			enable: !cfg.InterpretersConfig.Dotnet.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgGoLabels),
 			name:   "go_labels",
-			enable: cfg.IncludeTracers.Has(types.Labels),
+			enable: !cfg.InterpretersConfig.Labels.IsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindBEAM),
 			name:   "unwind_beam",
-			enable: cfg.IncludeTracers.Has(types.BEAMTracer),
+			enable: !cfg.InterpretersConfig.BEAM.IsDisabled(),
 		},
 	}
 
@@ -591,10 +592,46 @@ func syncVariablesToMapSpecs(coll *cebpf.CollectionSpec) error {
 	return nil
 }
 
+// probeNoPrealloc tests if the kernel allows perf_event programs to use
+// non-preallocated hash maps. This requires both creating the map and
+// verifying a perf_event program that references it.
+func probeNoPrealloc() bool {
+	m, err := cebpf.NewMap(&cebpf.MapSpec{
+		Type:       cebpf.Hash,
+		KeySize:    4,
+		ValueSize:  4,
+		MaxEntries: 1,
+		Flags:      features.BPF_F_NO_PREALLOC,
+	})
+	if err != nil {
+		return false
+	}
+	defer m.Close()
+
+	prog, err := cebpf.NewProgram(&cebpf.ProgramSpec{
+		Type: cebpf.PerfEvent,
+		Instructions: asm.Instructions{
+			asm.Mov.Imm(asm.R2, 0),
+			asm.StoreMem(asm.RFP, -4, asm.R2, asm.Word),
+			asm.Mov.Reg(asm.R2, asm.RFP),
+			asm.Add.Imm(asm.R2, -4),
+			asm.LoadMapPtr(asm.R1, m.FD()),
+			asm.FnMapLookupElem.Call(),
+			asm.Mov.Imm(asm.R0, 0),
+			asm.Return(),
+		},
+		License: "GPL",
+	})
+	if err != nil {
+		return false
+	}
+	prog.Close()
+	return true
+}
+
 // loadAllMaps loads all eBPF maps that are used in our eBPF programs.
 func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
-	ebpfMaps map[string]*cebpf.Map,
-) error {
+	ebpfMaps map[string]*cebpf.Map) error {
 	restoreRlimit, err := rlimit.MaximizeMemlock()
 	if err != nil {
 		return fmt.Errorf("failed to adjust rlimit: %v", err)
@@ -629,6 +666,8 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 		adaption[mapName] = 1 << uint32(exeIDToStackDeltasSize+cfg.MapScaleFactor)
 	}
 
+	noPrealloc := probeNoPrealloc()
+
 	for mapName, mapSpec := range coll.Maps {
 		if mapName == "sched_times" && cfg.OffCPUThreshold == 0 {
 			// Off CPU Profiling is disabled. So do not load this map.
@@ -653,13 +692,17 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			}
 		}
 
-		if !types.IsMapEnabled(mapName, cfg.IncludeTracers) {
+		if !cfg.InterpretersConfig.IsMapEnabled(mapName) {
 			log.Debugf("Skipping eBPF map %s: tracer not enabled", mapName)
 			continue
 		}
 		if newSize, ok := adaption[mapName]; ok {
 			log.Debugf("Size of eBPF map %s: %v", mapName, newSize)
 			mapSpec.MaxEntries = newSize
+		}
+		if noPrealloc && strings.HasPrefix(mapName, "exe_id_to_") &&
+			strings.HasSuffix(mapName, "_stack_deltas") {
+			mapSpec.Flags |= features.BPF_F_NO_PREALLOC
 		}
 		ebpfMap, err := cebpf.NewMap(mapSpec)
 		if err != nil {
@@ -1309,7 +1352,7 @@ func (t *Tracer) StartOffCPUProfiling() error {
 	}
 	tpLink, err := link.Tracepoint("sched", "sched_switch", tpProg, nil)
 	if err != nil {
-		return nil
+		return fmt.Errorf("failed to attach sched_switch tracepoint: %w", err)
 	}
 	t.hooks[hookPoint{group: "sched", name: "sched_switch"}] = tpLink
 
