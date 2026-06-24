@@ -20,6 +20,7 @@ import (
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
@@ -34,7 +35,6 @@ import (
 	sdtypes "go.opentelemetry.io/ebpf-profiler/nativeunwind/stackdeltatypes"
 	pmebpf "go.opentelemetry.io/ebpf-profiler/processmanager/ebpfapi"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 )
 
 const (
@@ -93,41 +93,42 @@ type ExecutableInfoManager struct {
 func NewExecutableInfoManager(
 	sdp nativeunwind.StackDeltaProvider,
 	ebpf pmebpf.EbpfHandler,
-	includeTracers types.IncludedTracers,
+	interpretersConfig interpreterconfig.Config,
 ) (*ExecutableInfoManager, error) {
 	// Initialize interpreter loaders.
-	interpreterLoaders := make([]interpreter.Loader, 0)
-	if includeTracers.Has(types.PerlTracer) {
-		interpreterLoaders = append(interpreterLoaders, perl.Loader)
+	loaders := make([]interpreter.Loader, 0)
+	if !interpretersConfig.Perl.IsDisabled() {
+		loaders = append(loaders, perl.GetLoader(interpretersConfig.Perl))
 	}
-	if includeTracers.Has(types.PythonTracer) {
-		interpreterLoaders = append(interpreterLoaders, python.Loader)
+	if !interpretersConfig.Python.IsDisabled() {
+		loaders = append(loaders, python.GetLoader(interpretersConfig.Python))
 	}
-	if includeTracers.Has(types.PHPTracer) {
-		interpreterLoaders = append(interpreterLoaders, php.Loader, php.OpcacheLoader)
+	if !interpretersConfig.PHP.IsDisabled() {
+		loaders = append(loaders, php.GetLoader(interpretersConfig.PHP))
+		loaders = append(loaders, php.GetOpcacheLoader(interpretersConfig.PHP))
 	}
-	if includeTracers.Has(types.HotspotTracer) {
-		interpreterLoaders = append(interpreterLoaders, hotspot.Loader)
+	if !interpretersConfig.Hotspot.IsDisabled() {
+		loaders = append(loaders, hotspot.GetLoader(interpretersConfig.Hotspot))
 	}
-	if includeTracers.Has(types.RubyTracer) {
-		interpreterLoaders = append(interpreterLoaders, ruby.Loader)
+	if !interpretersConfig.Ruby.IsDisabled() {
+		loaders = append(loaders, ruby.GetLoader(interpretersConfig.Ruby))
 	}
-	if includeTracers.Has(types.V8Tracer) {
-		interpreterLoaders = append(interpreterLoaders, nodev8.Loader)
+	if !interpretersConfig.V8.IsDisabled() {
+		loaders = append(loaders, nodev8.GetLoader(interpretersConfig.V8))
 	}
-	if includeTracers.Has(types.DotnetTracer) {
-		interpreterLoaders = append(interpreterLoaders, dotnet.Loader)
+	if !interpretersConfig.Dotnet.IsDisabled() {
+		loaders = append(loaders, dotnet.GetLoader(interpretersConfig.Dotnet))
 	}
-	if includeTracers.Has(types.GoTracer) {
-		interpreterLoaders = append(interpreterLoaders, golang.Loader)
+	if !interpretersConfig.Go.IsDisabled() {
+		loaders = append(loaders, golang.GetLoader(interpretersConfig.Go))
 	}
-	if includeTracers.Has(types.BEAMTracer) {
-		interpreterLoaders = append(interpreterLoaders, beam.Loader)
+	if !interpretersConfig.BEAM.IsDisabled() {
+		loaders = append(loaders, beam.GetLoader(interpretersConfig.BEAM))
 	}
 
-	interpreterLoaders = append(interpreterLoaders, apmint.Loader)
-	if includeTracers.Has(types.Labels) {
-		interpreterLoaders = append(interpreterLoaders, golabels.Loader)
+	loaders = append(loaders, apmint.Loader)
+	if !interpretersConfig.Labels.IsDisabled() {
+		loaders = append(loaders, golabels.GetLoader(interpretersConfig.Labels))
 	}
 
 	deferredFileIDs, err := lru.NewSynced[host.FileID, libpf.Void](deferredFileIDSize,
@@ -140,7 +141,7 @@ func NewExecutableInfoManager(
 	return &ExecutableInfoManager{
 		sdp: sdp,
 		state: xsync.NewRWMutex(executableInfoManagerState{
-			interpreterLoaders: interpreterLoaders,
+			interpreterLoaders: loaders,
 			executables:        map[host.FileID]*entry{},
 			unusedExecutables:  map[host.FileID]time.Time{},
 			unwindInfoIndex:    map[sdtypes.UnwindInfo]uint16{},
@@ -227,10 +228,13 @@ func (mgr *ExecutableInfoManager) AddOrIncRef(fileID host.FileID,
 	// Create the LoaderInfo for interpreter detection
 	loaderInfo := interpreter.NewLoaderInfo(fileID, elfRef)
 
+	// Detect and load interpreter data
+	interpData := state.detectAndLoadInterpData(loaderInfo)
+
 	// Insert a corresponding record into our map.
 	info = &entry{
 		ExecutableInfo: ExecutableInfo{
-			Data:     state.detectAndLoadInterpData(loaderInfo),
+			Data:     interpData,
 			LibcInfo: libcInfo,
 		},
 		mapRef: ref,
@@ -324,7 +328,7 @@ func (mgr *ExecutableInfoManager) UpdateMetricSummary(summary metrics.Summary) {
 }
 
 type executableInfoManagerState struct {
-	// interpreterLoaders is a list of instances of an interface that provide functionality
+	// interpreterLoaders is a list of loaders, each providing functionality
 	// for loading the host agent support for a specific interpreter type.
 	interpreterLoaders []interpreter.Loader
 
@@ -353,15 +357,15 @@ type executableInfoManagerState struct {
 
 // detectAndLoadInterpData attempts to detect the given executable as an interpreter. If detection
 // succeeds, it then loads additional per-interpreter data into the BPF maps and returns the
-// interpreter data. If multiple loaders recognize the executable, it returns a MultiData instance.
+// interpreter data. If multiple loaders recognize the executable, it returns a MultiInterpreter.
 func (state *executableInfoManagerState) detectAndLoadInterpData(
 	loaderInfo *interpreter.LoaderInfo,
 ) interpreter.Data {
-	var interpreterDatas []interpreter.Data //nolint:prealloc
+	var matches []interpreter.Data //nolint:prealloc
 
 	// Ask all interpreter loaders whether they want to handle this executable.
-	for _, loader := range state.interpreterLoaders {
-		data, err := loader(state.ebpf, loaderInfo)
+	for _, load := range state.interpreterLoaders {
+		data, err := load(state.ebpf, loaderInfo)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				// Very common if the process exited when we tried to analyze it.
@@ -380,20 +384,19 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 
 		log.Debugf("Interpreter data %v for %v (%#016x)",
 			data, loaderInfo.FileName(), loaderInfo.FileID())
-		interpreterDatas = append(interpreterDatas, data)
+		matches = append(matches, data)
 	}
 
 	// Return based on how many interpreters matched
-	switch len(interpreterDatas) {
+	switch len(matches) {
 	case 0:
 		return nil
 	case 1:
-		return interpreterDatas[0]
+		return matches[0]
 	default:
-		// Multiple interpreters matched, create a MultiData
 		log.Debugf("Multiple interpreters (%d) matched for %v (%#016x)",
-			len(interpreterDatas), loaderInfo.FileName(), loaderInfo.FileID())
-		return interpreter.NewMultiData(interpreterDatas)
+			len(matches), loaderInfo.FileName(), loaderInfo.FileID())
+		return interpreter.NewMultiData(matches)
 	}
 }
 
