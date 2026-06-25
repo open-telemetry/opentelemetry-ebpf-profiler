@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -38,8 +39,7 @@ const (
 
 // visitNotes parses and visits all notes from pfbufio.Reader.
 // The visitor must make copies of the 'data' it keeps after return.
-// The returned bool is true if the visitor stopped iteration.
-func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) (bool, error) {
+func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 	var note note64
 	var buf []byte
 	for {
@@ -48,9 +48,9 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) (bool, e
 		// be kept together to parse the notes correctly.
 		if n, err := rdr.Read(pfunsafe.FromPointer(&note)); err != nil {
 			if n == 0 && err == io.EOF {
-				err = nil
+				return ErrNoteNotFound
 			}
-			return false, err
+			return err
 		}
 
 		id := NamespaceUnknown
@@ -70,10 +70,10 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) (bool, e
 			}
 		case pfbufio.ErrBufferTooSmall:
 			if _, err = rdr.Discard(alignedSize); err != nil {
-				return false, err
+				return err
 			}
 		default:
-			return false, err
+			return err
 		}
 
 		alignedSize = alignNoteSize(int(note.Descsz))
@@ -87,14 +87,14 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) (bool, e
 			}
 			buf = buf[:alignedSize]
 			if _, err = rdr.Read(buf); err != nil {
-				return false, err
+				return err
 			}
 			desc = buf
 		default:
-			return false, err
+			return err
 		}
 		if !visitor(id+uint64(note.Type), desc[:note.Descsz]) {
-			return true, nil
+			return nil
 		}
 	}
 }
@@ -109,14 +109,21 @@ func getBuildIDFromNotesFile(r io.ReaderAt) (string, error) {
 	defer pfbufio.PutReader(rdr)
 
 	var buildId string
-	_, err := visitNotes(rdr, func(note uint64, desc []byte) bool {
+	err := visitNotes(rdr, func(note uint64, desc []byte) bool {
 		if note == NoteGnuBuildId {
 			buildId = hex.EncodeToString(desc)
 			return false
 		}
 		return true
 	})
-	return buildId, err
+	switch {
+	case errors.Is(err, nil):
+		return buildId, nil
+	case errors.Is(err, ErrNoteNotFound):
+		return "", ErrNoBuildID
+	default:
+		return "", err
+	}
 }
 
 // GetBuildIDFromNotesFile returns the build ID contained in a file with

@@ -67,6 +67,9 @@ var (
 	// ErrNoBuildID is returned if build ID is not present in notes.
 	ErrNoBuildID = errors.New("no build ID")
 
+	// ErrNoteNotFound is returned by VisitNotes when no note made the visitor stop.
+	ErrNoteNotFound = errors.New("note not found")
+
 	// errNotProcessed is internal placeholder to mark not yet parsed data.
 	errNotProcessed = errors.New("not yet processed")
 )
@@ -603,6 +606,7 @@ func (f *File) EHFrame() (*Prog, error) {
 
 // VisitNotes iterates the ELF notes.
 // The visitor must make copies of the 'data' it keeps after return.
+// It returns ErrNoteNotFound if all notes are visited without the visitor stopping iteration.
 func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
 	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)
@@ -614,13 +618,14 @@ func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
 		}
 
 		rdr.Init(f.elfReader, int64(notes.Off), int64(notes.Filesz))
-		stopped, err := visitNotes(rdr, visitor)
-		if err != nil || stopped {
-			return err
+		err := visitNotes(rdr, visitor)
+		if errors.Is(err, ErrNoteNotFound) {
+			continue
 		}
+		return err
 	}
 
-	return nil
+	return ErrNoteNotFound
 }
 
 // parseNotes parses and caches the ELF notes for the File.
@@ -635,6 +640,11 @@ func (f *File) parseNotes() error {
 			}
 			return true
 		})
+		if errors.Is(f.notesError, ErrNoteNotFound) {
+			// Visiting every note is expected here because parseNotes caches all
+			// build ID notes, which results in terminating with ErrNoteNotFound.
+			f.notesError = nil
+		}
 	}
 	return f.notesError
 }

@@ -178,6 +178,9 @@ func OpenCoredumpFile(f *pfelf.File) (*CoredumpProcess, error) {
 		noteErrors = errors.Join(noteErrors, err)
 		return noteErrors == nil
 	})
+	if errors.Is(err, pfelf.ErrNoteNotFound) {
+		err = nil
+	}
 	err = errors.Join(noteErrors, err)
 	if err != nil {
 		_ = f.Close()
