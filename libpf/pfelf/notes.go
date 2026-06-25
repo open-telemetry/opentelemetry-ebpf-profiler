@@ -38,7 +38,8 @@ const (
 
 // visitNotes parses and visits all notes from pfbufio.Reader.
 // The visitor must make copies of the 'data' it keeps after return.
-func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
+// The returned bool is true if the visitor stopped iteration.
+func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) (bool, error) {
 	var note note64
 	var buf []byte
 	for {
@@ -49,11 +50,11 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 			if n == 0 && err == io.EOF {
 				err = nil
 			}
-			return err
+			return false, err
 		}
 
 		id := NamespaceUnknown
-		alignedSize := int((note.Namesz + 3) &^ 3)
+		alignedSize := alignNoteSize(int(note.Namesz))
 		namespace, err := rdr.ReadN(alignedSize)
 		switch err {
 		case nil:
@@ -69,13 +70,13 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 			}
 		case pfbufio.ErrBufferTooSmall:
 			if _, err = rdr.Discard(alignedSize); err != nil {
-				return err
+				return false, err
 			}
 		default:
-			return err
+			return false, err
 		}
 
-		alignedSize = int((note.Descsz + 3) &^ 3)
+		alignedSize = alignNoteSize(int(note.Descsz))
 		desc, err := rdr.ReadN(alignedSize)
 		switch err {
 		case nil:
@@ -86,16 +87,21 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 			}
 			buf = buf[:alignedSize]
 			if _, err = rdr.Read(buf); err != nil {
-				return err
+				return false, err
 			}
 			desc = buf
 		default:
-			return err
+			return false, err
 		}
 		if !visitor(id+uint64(note.Type), desc[:note.Descsz]) {
-			return nil
+			return true, nil
 		}
 	}
+}
+
+// alignNoteSize rounds size up to the nearest multiple of 4.
+func alignNoteSize(size int) int {
+	return (size + 3) &^ 3
 }
 
 func getBuildIDFromNotesFile(r io.ReaderAt) (string, error) {
@@ -103,7 +109,7 @@ func getBuildIDFromNotesFile(r io.ReaderAt) (string, error) {
 	defer pfbufio.PutReader(rdr)
 
 	var buildId string
-	err := visitNotes(rdr, func(note uint64, desc []byte) bool {
+	_, err := visitNotes(rdr, func(note uint64, desc []byte) bool {
 		if note == NoteGnuBuildId {
 			buildId = hex.EncodeToString(desc)
 			return false
