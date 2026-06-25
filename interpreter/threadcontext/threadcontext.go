@@ -71,8 +71,12 @@ func isExecutable(ef *pfelf.File) bool {
 	return hasInterp && hasExecLoad
 }
 
-// Loader implements interpreter.Loader.
-func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ Config) interpreter.Loader {
+	return loader
+}
+
+// loader implements interpreter.Loader.
+func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	ef, err := info.GetELF()
 	if err != nil {
 		return nil, err
