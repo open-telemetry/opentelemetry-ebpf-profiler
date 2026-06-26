@@ -2153,5 +2153,12 @@
     "name": "GoLabelsDroppedInvalidValue",
     "field": "agent.golabels.dropped.invalid_value",
     "id": 294
+  },
+  {
+    "description": "Number of prctl(PR_SET_VMA) calls naming an anonymous mapping OTEL_CTX",
+    "type": "counter",
+    "name": "NumPrctlSetVmaOtelCtx",
+    "field": "bpf.num_prctl_set_vma_otel_ctx",
+    "id": 295
   }
 ]

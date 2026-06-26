@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 	"golang.org/x/sys/unix"
 	"google.golang.org/protobuf/proto"
 
@@ -41,6 +42,70 @@ var testContext = processcontextpb.ProcessContext{
 				Value: &commonpb.AnyValue{
 					Value: &commonpb.AnyValue_StringValue{
 						StringValue: "test-service",
+					},
+				},
+			},
+			{
+				Key: "service.version",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_IntValue{
+						IntValue: 42,
+					},
+				},
+			},
+			{
+				Key: "service.active",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_BoolValue{
+						BoolValue: true,
+					},
+				},
+			},
+			{
+				Key: "service.weight",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_DoubleValue{
+						DoubleValue: 3.14,
+					},
+				},
+			},
+			{
+				Key: "service.tags",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_ArrayValue{
+						ArrayValue: &commonpb.ArrayValue{
+							Values: []*commonpb.AnyValue{
+								{Value: &commonpb.AnyValue_StringValue{StringValue: "tag1"}},
+								{Value: &commonpb.AnyValue_IntValue{IntValue: 2}},
+							},
+						},
+					},
+				},
+			},
+			{
+				Key: "service.metadata",
+				Value: &commonpb.AnyValue{
+					Value: &commonpb.AnyValue_KvlistValue{
+						KvlistValue: &commonpb.KeyValueList{
+							Values: []*commonpb.KeyValue{
+								{
+									Key: "nested.key",
+									Value: &commonpb.AnyValue{
+										Value: &commonpb.AnyValue_StringValue{
+											StringValue: "nested-value",
+										},
+									},
+								},
+								{
+									Key: "nested.count",
+									Value: &commonpb.AnyValue{
+										Value: &commonpb.AnyValue_IntValue{
+											IntValue: 7,
+										},
+									},
+								},
+							},
+						},
 					},
 				},
 			},
@@ -146,7 +211,11 @@ func TestProcessContext_Read(t *testing.T) {
 				mock.writeAt(headerAddr, header)
 				mock.writeAt(payloadAddr, payload)
 			},
-			expectedResult: processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
+			expectedResult: processcontext.Info{
+				Resource:        expectedResource(),
+				ExtraAttributes: expectedExtraAttributes(),
+				PublishedAtNs:   123456789,
+			},
 		},
 		{
 			name: "read error",
@@ -254,7 +323,8 @@ func TestProcessContext_Read(t *testing.T) {
 				require.NotNil(t, ctx)
 				require.EqualExportedValues(t, &tt.expectedResult, &ctx)
 			} else {
-				assert.Nil(t, ctx.Context)
+				assert.Nil(t, ctx.Resource)
+				assert.Nil(t, ctx.ExtraAttributes)
 				assert.Zero(t, ctx.PublishedAtNs)
 				assert.Error(t, err)
 				assert.ErrorIs(t, err, tt.expectedErr)
@@ -366,9 +436,282 @@ func TestProcessContext_Read_RealProcessContext(t *testing.T) {
 			result, err := processcontext.Read(libpf.Address(contextMappingAddr), proc.GetRemoteMemory(), 0, 0)
 			require.NoError(t, err)
 			require.EqualExportedValues(t,
-				processcontext.Info{Context: &testContext, PublishedAtNs: 123456789},
+				processcontext.Info{
+					Resource:        expectedResource(),
+					ExtraAttributes: expectedExtraAttributes(),
+					PublishedAtNs:   123456789,
+				},
 				result)
 
+		})
+	}
+}
+
+func expectedResource() *pcommon.Resource {
+	r := pcommon.NewResource()
+	r.Attributes().PutStr("service.name", "test-service")
+	r.Attributes().PutInt("service.version", 42)
+	r.Attributes().PutBool("service.active", true)
+	r.Attributes().PutDouble("service.weight", 3.14)
+
+	tags := r.Attributes().PutEmptySlice("service.tags")
+	tags.AppendEmpty().SetStr("tag1")
+	tags.AppendEmpty().SetInt(2)
+
+	metadata := r.Attributes().PutEmptyMap("service.metadata")
+	metadata.PutStr("nested.key", "nested-value")
+	metadata.PutInt("nested.count", 7)
+
+	return &r
+}
+
+func expectedExtraAttributes() *pcommon.Map {
+	m := pcommon.NewMap()
+	m.PutStr("custom.attribute", "custom-value")
+	return &m
+}
+
+func TestWithMergedEnvVars(t *testing.T) {
+	tests := []struct {
+		name        string
+		preexisting map[string]string
+		envVars     map[libpf.String]libpf.String
+		expected    map[string]string
+	}{
+		{
+			name: "no env vars no preexisting",
+		},
+		{
+			name: "OTEL_SERVICE_NAME",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_SERVICE_NAME"): libpf.Intern("my-service"),
+			},
+			expected: map[string]string{
+				"service.name": "my-service",
+			},
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES simple",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("key1=value1,key2=value2"),
+			},
+			expected: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES percent-encoded values",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("key1=val%2Cwith%2Ccomma,key2=value2"),
+			},
+			expected: map[string]string{
+				"key1": "val,with,comma",
+				"key2": "value2",
+			},
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES percent-encoded keys",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("key%3D2=value2,key%2C3=value3"),
+			},
+			expected: map[string]string{
+				"key=2": "value2",
+				"key,3": "value3",
+			},
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES invalid encoding in value discards all",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("good=value,bad=%ZZ"),
+			},
+			// Per OTel spec, the entire value is discarded on any error.
+			expected: nil,
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES invalid encoding in key discards all",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("good=value,bad%ZZ=value2"),
+			},
+			// Per OTel spec, the entire value is discarded on any error.
+			expected: nil,
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES missing equals discards all",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("good=value,badpair"),
+			},
+			// Per OTel spec, the entire value is discarded on any error.
+			expected: nil,
+		},
+		{
+			name: "OTEL_RESOURCE_ATTRIBUTES empty value",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern(""),
+			},
+			expected: nil,
+		},
+		{
+			name:        "OTEL_SERVICE_NAME does not override existing",
+			preexisting: map[string]string{"service.name": "test-service"},
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_SERVICE_NAME"): libpf.Intern("env-service"),
+			},
+			expected: map[string]string{
+				"service.name": "test-service",
+			},
+		},
+		{
+			name: "both env vars",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_SERVICE_NAME"):        libpf.Intern("my-svc"),
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("deployment.environment=prod"),
+			},
+			expected: map[string]string{
+				"service.name":           "my-svc",
+				"deployment.environment": "prod",
+			},
+		},
+		{
+			name: "OTEL_SERVICE_NAME wins over service.name in OTEL_RESOURCE_ATTRIBUTES",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_SERVICE_NAME"):        libpf.Intern("from-service-name"),
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("service.name=from-attrs"),
+			},
+			expected: map[string]string{
+				"service.name": "from-service-name",
+			},
+		},
+		{
+			// Per OTel spec, duplicate keys within OTEL_RESOURCE_ATTRIBUTES
+			// resolve last-writer-wins.
+			name: "OTEL_RESOURCE_ATTRIBUTES duplicate keys: last writer wins",
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("k=first,k=second,k=third"),
+			},
+			expected: map[string]string{
+				"k": "third",
+			},
+		},
+		{
+			// Pre-existing values on p.Resource still beat OTEL_RESOURCE_ATTRIBUTES,
+			// so the dedup-then-apply order is observable: even though the value
+			// "from-attrs-second" wins the intra-attr dedup, "preset" wins overall.
+			name:        "preexisting attribute beats OTEL_RESOURCE_ATTRIBUTES last writer",
+			preexisting: map[string]string{"k": "preset"},
+			envVars: map[libpf.String]libpf.String{
+				libpf.Intern("OTEL_RESOURCE_ATTRIBUTES"): libpf.Intern("k=from-attrs-first,k=from-attrs-second"),
+			},
+			expected: map[string]string{
+				"k": "preset",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := processcontext.Info{}
+			if tt.preexisting != nil {
+				r := pcommon.NewResource()
+				for k, v := range tt.preexisting {
+					r.Attributes().PutStr(k, v)
+				}
+				info.Resource = &r
+			}
+
+			info = processcontext.WithMergedEnvVars(info, tt.envVars)
+
+			if tt.expected == nil {
+				if tt.preexisting == nil {
+					assert.Nil(t, info.Resource)
+				}
+				return
+			}
+
+			require.NotNil(t, info.Resource)
+			got := make(map[string]string)
+			info.Resource.Attributes().Range(func(k string, v pcommon.Value) bool {
+				got[k] = v.Str()
+				return true
+			})
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestResourceToContextKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		attrs    map[string]string
+		nilRes   bool
+		expected string
+	}{
+		{
+			name:     "nil resource",
+			nilRes:   true,
+			expected: "",
+		},
+		{
+			name:     "empty resource",
+			attrs:    nil,
+			expected: "",
+		},
+		{
+			name: "all three present",
+			attrs: map[string]string{
+				"service.namespace":   "ns",
+				"service.name":        "svc",
+				"service.instance.id": "id",
+			},
+			expected: "ns:svc:id",
+		},
+		{
+			name: "missing namespace",
+			attrs: map[string]string{
+				"service.name":        "svc",
+				"service.instance.id": "id",
+			},
+			expected: ":svc:id",
+		},
+		{
+			name: "missing name",
+			attrs: map[string]string{
+				"service.namespace":   "ns",
+				"service.instance.id": "id",
+			},
+			expected: "ns::id",
+		},
+		{
+			name: "missing instance id",
+			attrs: map[string]string{
+				"service.namespace": "ns",
+				"service.name":      "svc",
+			},
+			expected: "ns:svc:",
+		},
+		{
+			name: "irrelevant attributes ignored",
+			attrs: map[string]string{
+				"service.namespace":   "ns",
+				"service.name":        "svc",
+				"service.instance.id": "id",
+				"deployment.env":      "prod",
+			},
+			expected: "ns:svc:id",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var res *pcommon.Resource
+			if !tt.nilRes {
+				r := pcommon.NewResource()
+				for k, v := range tt.attrs {
+					r.Attributes().PutStr(k, v)
+				}
+				res = &r
+			}
+			assert.Equal(t, tt.expected, processcontext.ResourceToContextKey(res).String())
 		})
 	}
 }
