@@ -1264,6 +1264,31 @@ func (f *File) DynString(tag elf.DynTag) ([]string, error) {
 	return dynStrings, nil
 }
 
+// DynValue returns the values listed for the given tag in the file's dynamic
+// program header. It returns an empty slice (and no error) when the tag is not
+// present.
+func (f *File) DynValue(tag elf.DynTag) ([]uint64, error) {
+	var vals []uint64
+	for i := range f.Progs {
+		p := &f.Progs[i]
+		if p.ProgHeader.Type != elf.PT_DYNAMIC || p.Filesz <= 0 {
+			continue
+		}
+		rdr := pfbufio.NewReader(f.elfReader, int64(p.Off), int64(p.Filesz))
+		var dyn elf.Dyn64
+		for {
+			if _, err := rdr.Read(pfunsafe.FromPointer(&dyn)); err != nil {
+				break
+			}
+			if elf.DynTag(dyn.Tag) == tag {
+				vals = append(vals, dyn.Val)
+			}
+		}
+		pfbufio.PutReader(rdr)
+	}
+	return vals, nil
+}
+
 // IsGolang determines if this ELF is a Golang executable
 func (f *File) IsGolang() bool {
 	return f.Section(".go.buildinfo") != nil || f.Section(".gopclntab") != nil

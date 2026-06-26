@@ -6,7 +6,6 @@ package threadcontext // import "go.opentelemetry.io/ebpf-profiler/interpreter/t
 
 import (
 	"debug/elf"
-	"errors"
 	"fmt"
 	"unsafe"
 
@@ -44,33 +43,6 @@ func findSymbol(ef *pfelf.File, symname string) *libpf.Symbol {
 	return sym
 }
 
-func isExecutable(ef *pfelf.File) bool {
-	if ef.Type == elf.ET_EXEC {
-		return true
-	}
-	// Position-independent executables (PIE) are typically marked as ET_DYN.
-	// Distinguish them from shared libraries by checking for an interpreter
-	// segment and at least one executable PT_LOAD segment.
-	// This is not foolproof:
-	// libc.so.6 is a shared library, but has an interpreter segment and an executable PT_LOAD segment.
-	// The way readelf does it is to check if DF_1_PIE is set in the dynamic flags (DT_FLAGS_1).
-	if ef.Type != elf.ET_DYN || ef.Entry == 0 {
-		return false
-	}
-	hasInterp := false
-	hasExecLoad := false
-	for _, prog := range ef.Progs {
-		if prog.Type == elf.PT_INTERP {
-			hasInterp = true
-			continue
-		}
-		if prog.Type == elf.PT_LOAD && (prog.Flags&elf.PF_X) != 0 {
-			hasExecLoad = true
-		}
-	}
-	return hasInterp && hasExecLoad
-}
-
 func GetLoader(_ Config) interpreter.Loader {
 	return loader
 }
@@ -96,74 +68,29 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, fmt.Errorf("TLS export is not a TLS symbol")
 	}
 
-	var tlsDescElfAddr libpf.Address
-	var tlsOffset uint64
-	if err = ef.VisitTLSRelocations(func(r pfelf.ElfReloc, symName string) bool {
-		if symName == tlsExport {
-			tlsDescElfAddr = libpf.Address(r.Off)
-			return false
-		}
-		return true
-	}); err != nil {
-		return nil, fmt.Errorf("failed to visit TLS descriptor: %v", err)
+	d, err := resolveTLSAccess(ef, threadStorageSym)
+	if err != nil {
+		return nil, err
 	}
 
-	if tlsDescElfAddr == 0 {
-		// No TLS descriptor found, 2 possible reasons:
-		// 1. TLS dialect is not TLS desc
-		// 2. No relocation found because local/initial exec TLS model (executable) or local dynamic TLS model
+	log.Infof("Native thread labels TLS access=%v elfAddr=0x%08X offset=0x%08X",
+		d.access, d.elfAddr, d.offset)
 
-		// For now only support executable TLS model.
-		if !isExecutable(ef) {
-			return nil, errors.New("unsupported TLS model")
-		}
-		tlsOffset, err = getStaticTLSOffset(ef, threadStorageSym)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get static TLS offset: %v", err)
-		}
-	}
-	log.Infof("Native thread labels TLS descriptor address: 0x%08X, TLS offset: 0x%08X", tlsDescElfAddr, tlsOffset)
-
-	return &data{
-		tlsDescElfAddr: tlsDescElfAddr,
-		tlsOffset:      tlsOffset,
-	}, nil
-}
-
-func roundUp(value, alignment uint64) uint64 {
-	return (value + alignment - 1) &^ (alignment - 1)
-}
-
-func getTLSProg(ef *pfelf.File) *pfelf.Prog {
-	for _, prog := range ef.Progs {
-		if prog.Type == elf.PT_TLS {
-			return &prog
-		}
-	}
-	return nil
-}
-
-func getStaticTLSOffset(ef *pfelf.File, threadStorageSym *libpf.Symbol) (uint64, error) {
-	if ef.Machine == elf.EM_AARCH64 {
-		// on glibc aarch64, TP points to the TCB (Thread Control Block) which is 16 bytes long
-		// on musl aarch64, there is a GAP_ABOVE_TP which is 16 bytes long
-		// TODO: account for alignment
-		return uint64(threadStorageSym.Address) + 16, nil
-	}
-
-	if ef.Machine == elf.EM_X86_64 {
-		tlsProg := getTLSProg(ef)
-		if tlsProg == nil {
-			return 0, fmt.Errorf("failed to locate TLS segment")
-		}
-		return uint64(threadStorageSym.Address) - roundUp(uint64(tlsProg.Memsz), uint64(tlsProg.Align)), nil
-	}
-	return 0, fmt.Errorf("unsupported machine: %s", ef.Machine)
+	return d, nil
 }
 
 type data struct {
-	tlsDescElfAddr libpf.Address
-	tlsOffset      uint64
+	// access selects how the TLS variable address is resolved at attach time.
+	access tlsAccess
+	// elfAddr is the (unbiased) ELF address of the TLS descriptor or GOT slot
+	// used by the initial-exec, tlsdesc and gnu-dynamic access models.
+	elfAddr libpf.Address
+	// offset is a statically-known offset added to the base resolved at runtime.
+	// For local-exec the runtime base is zero, so it holds the full TP-relative
+	// offset. For local-dynamic it holds the symbol's static value (the relocation
+	// only resolves the module, not the per-variable offset). It is zero for the
+	// other models, where the offset is fully resolved at runtime.
+	offset uint64
 }
 
 var _ interpreter.Data = &data{}
@@ -175,43 +102,78 @@ func (d data) String() string {
 func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	bias libpf.Address, rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
-	var tlsOffset uint64
-	if d.tlsOffset != 0 {
-		tlsOffset = d.tlsOffset
-	} else {
-		// Read TLS offset from the TLS descriptor.
-		tlsOffset = rm.Uint64(bias + d.tlsDescElfAddr + 8)
+	switch d.access {
+	case accessLocalExec:
+		return d.attachStatic(ebpf, pid, d.offset)
 
-		// If dynamic TLS is used, tlsOffset will be a pointer to a tls_index structure.
-		// On x86_64, the offset is negative so it is easy to distinguish between dynamic and static TLS.
-		// On aarch64, the offset is positive so we use an arbitrary size to distinguish between dynamic and static TLS.
-		if int64(tlsOffset) > 0xffffffff {
-			// dynamic TLS is used, read the tls_index structure.
-			moduleID := rm.Uint64(libpf.Address(tlsOffset))
-			tlsOffset = rm.Uint64(libpf.Address(tlsOffset + 8))
+	case accessInitialExec:
+		// The GOT slot holds the variable's TP-relative offset directly.
+		return d.attachStatic(ebpf, pid, rm.Uint64(bias+d.elfAddr)+d.offset)
 
-			if moduleID == 0 {
-				return nil, fmt.Errorf("unexpected value 0 for moduleID in dynamic TLS")
-			}
+	case accessGlobalDynamic:
+		// The GOT holds a tls_index {module_id, offset} pair.
+		moduleID := rm.Uint64(bias + d.elfAddr)
+		tlsOffset := rm.Uint64(bias+d.elfAddr+8) + d.offset
+		return attachDynamic(pid, moduleID, tlsOffset)
 
-			log.Infof("PID %d dynamic TLS moduleID: %d, tls offset: 0x%08X", pid, moduleID, tlsOffset)
+	case accessLocalDynamic:
+		// The GOT holds the module_id; the in-module offset is the symbol value.
+		moduleID := rm.Uint64(bias + d.elfAddr)
+		return attachDynamic(pid, moduleID, d.offset)
 
-			// Do not update proc data here, wait for libc info to be available.
-			return &Instance{
-				tlsOffset: int32(int64(tlsOffset)),
-				moduleID:  int32(int64(moduleID)),
-			}, nil
+	case accessTLSDesc:
+		// The second word of the descriptor holds the resolved argument.
+		arg := rm.Uint64(bias + d.elfAddr + 8)
+
+		// If dynamic TLS is used, arg is a pointer to a tls_index structure.
+		// On x86_64, the offset is negative so it is easy to distinguish between
+		// dynamic and static TLS. On aarch64, the offset is positive so we use an
+		// arbitrary size to distinguish between dynamic and static TLS.
+		if int64(arg) > 0xffffffff {
+			moduleID := rm.Uint64(libpf.Address(arg))
+			tlsOffset := rm.Uint64(libpf.Address(arg+8)) + d.offset
+			return attachDynamic(pid, moduleID, tlsOffset)
 		}
-	}
+		return d.attachStatic(ebpf, pid, arg+d.offset)
 
+	default:
+		return nil, fmt.Errorf("unknown TLS access model %v", d.access)
+	}
+}
+
+// attachStatic stores a static TP-relative TLS offset (no DTV indirection).
+func (d data) attachStatic(ebpf interpreter.EbpfHandler, pid libpf.PID,
+	tlsOffset uint64,
+) (interpreter.Instance, error) {
 	log.Infof("PID %d tls offset: 0x%08X", pid, tlsOffset)
 
-	procInfo := support.ThreadContextProcInfo{Tls_offset: int32(int64(tlsOffset)), Dtv_offset: 0, Module_offset: 0}
+	procInfo := support.ThreadContextProcInfo{
+		Tls_offset:    int32(int64(tlsOffset)),
+		Dtv_offset:    0,
+		Module_offset: 0,
+	}
 	if err := ebpf.UpdateProcData(libpf.ThreadContext, pid, unsafe.Pointer(&procInfo)); err != nil {
 		return nil, err
 	}
 
 	return &Instance{}, nil
+}
+
+// attachDynamic records a dynamic-TLS (DTV-based) access. Proc data is not
+// updated here: the DTV offset/multiplier are only known once libc info is
+// available (see Instance.UpdateLibcInfo).
+func attachDynamic(pid libpf.PID, moduleID, tlsOffset uint64,
+) (interpreter.Instance, error) {
+	if moduleID == 0 {
+		return nil, fmt.Errorf("unexpected value 0 for moduleID in dynamic TLS")
+	}
+
+	log.Infof("PID %d dynamic TLS moduleID: %d, tls offset: 0x%08X", pid, moduleID, tlsOffset)
+
+	return &Instance{
+		tlsOffset: int32(int64(tlsOffset)),
+		moduleID:  int32(int64(moduleID)),
+	}, nil
 }
 
 func (d data) Unload(_ interpreter.EbpfHandler) {

@@ -16,7 +16,14 @@
 #include <time.h>
 
 // The TLS variable that the threadcontext interpreter looks up.
-// In a shared library, this will use the global-dynamic TLS model.
+// In a shared library, this defaults to the global-dynamic TLS model.
+// When built with -DHIDDEN_TLS the variable is given hidden visibility, which
+// lets the compiler emit the local-dynamic model (with -ftls-model=local-dynamic).
+// A global, default-visibility symbol can never use local-dynamic because it is
+// preemptible, so hiding it is required.
+#ifdef HIDDEN_TLS
+__attribute__((visibility("hidden")))
+#endif
 __thread otel_thread_ctx_v1_t *otel_thread_ctx_v1;
 
 int init_process_context(void) {
