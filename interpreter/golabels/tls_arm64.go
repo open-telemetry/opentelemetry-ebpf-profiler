@@ -17,10 +17,30 @@ import (
 
 const runtimeIsCgoCodeSize = 2 * 4 // 2 instructions, each 4 bytes
 
+// runtime.load_g starts by loading runtime.iscgo before deciding how to
+// retrieve the current goroutine pointer:
+//
+//	https://github.com/golang/go/blob/6885bad7dd86880be/src/runtime/tls_arm64.s#L11
+//
+// On Linux/arm64 the prologue is typically:
+//
+//	0x000000000007f260 <+0>:     adrp    x27, 0x1c2000 <runtime.mheap_+101440>
+//	0x000000000007f264 <+4>:     ldrsb   x0, [x27, #284]
+//	0x000000000007f268 <+8>:     cbz     x0, 0x7f278 <runtime.load_g+24>
+//
+// Contrary to CGO_ENABLED that can be set at build time by the user, runtime.iscgo
+// is a runtime variable that defaults to false and is set to true only when runtime/cgo
+// is actually linked.
+//
+// see https://github.com/open-telemetry/opentelemetry-ebpf-profiler/issues/1455 for more details.
+//
+// When iscgo is true, load_g reads g from TLS.
+// When iscgo is false, load_g returns immediately and the runtime keeps g in r28 instead.
+//
+// We decode emitted assembly for `MOVB runtime.iscgo(SB), R0` to recover the absolute address of
+// runtime.iscgo, then read that byte. A non-zero value means the runtime itself
+// would take the TLS path.
 func extractRuntimeIsCgo(f *pfelf.File, b []byte, pc int64) (bool, error) {
-	// runtime.load_g starts by loading runtime.iscgo:
-	//	0x000000000007f260 <+0>:     adrp    x27, 0x1c2000 <runtime.mheap_+101440>
-	//	0x000000000007f264 <+4>:     ldrsb   x0, [x27, #284]
 	adrp, err := arm64asm.Decode(b[0:4])
 	if err != nil {
 		return false, fmt.Errorf("error while decoding first instruction: %w", err)
