@@ -334,20 +334,11 @@ enum {
   // number of failures to get TSD base for thread context
   metricID_UnwindThreadContextErrReadTsdBase,
 
-  // number of failures read the thread context pointer
-  metricID_UnwindThreadContextErrReadThreadCtxBufPtr,
-
   // number of failures read the thread context buffer
   metricID_UnwindThreadContextErrReadThreadCtxBuf,
 
   // number of failures read the thread context attributes
   metricID_UnwindThreadContextErrReadThreadCtxAttrs,
-
-  // number of failures read the DTV pointer
-  metricID_UnwindThreadContextErrReadDtvPtr,
-
-  // number of failures read the module TLS base
-  metricID_UnwindThreadContextErrReadModuleTlsBase,
 
   // number of successful reads of thread context info
   metricID_UnwindThreadContextReadSuccesses,
@@ -1092,9 +1083,14 @@ typedef struct ApmIntProcInfo {
 } ApmIntProcInfo;
 
 typedef struct ThreadContextProcInfo {
+  // tls_offset is the variable's offset: TP-relative for static TLS
+  // (local-exec / initial-exec, when module_id == 0), or the offset within the
+  // module's TLS block for dynamic TLS.
   s32 tls_offset;
-  s32 dtv_offset;
-  s32 module_offset;
+  // module_id is the TLS module ID for dynamic TLS, or 0 for static TLS.
+  u32 module_id;
+  // dtv_info locates the DTV for dynamic TLS (unused when module_id == 0).
+  DTVInfo dtv_info;
 } ThreadContextProcInfo;
 
 typedef struct GoLabelsOffsets {

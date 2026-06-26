@@ -2162,45 +2162,24 @@
     "id": 295
   },
   {
-    "description": "Number of failures to read the thread context buffer pointer",
-    "type": "counter",
-    "name": "UnwindThreadContextErrReadThreadCtxBufPtr",
-    "field": "bpf.threadctx.errors.read_thread_ctx_buf_ptr",
-    "id": 296
-  },
-  {
     "description": "Number of failures to read the thread context buffer",
     "type": "counter",
     "name": "UnwindThreadContextErrReadThreadCtxBuf",
     "field": "bpf.threadctx.errors.read_thread_ctx_buf",
-    "id": 297
+    "id": 296
   },
   {
     "description": "Number of failures to read the thread context attributes",
     "type": "counter",
     "name": "UnwindThreadContextErrReadThreadCtxAttrs",
     "field": "bpf.threadctx.errors.read_thread_ctx_attrs",
-    "id": 298
-  },
-  {
-    "description": "Number of failures to read the DTV pointer",
-    "type": "counter",
-    "name": "UnwindThreadContextErrReadDtvPtr",
-    "field": "bpf.threadctx.errors.read_dtv_ptr",
-    "id": 299
-  },
-  {
-    "description": "Number of failures to read the module TLS base",
-    "type": "counter",
-    "name": "UnwindThreadContextErrReadModuleTlsBase",
-    "field": "bpf.threadctx.errors.read_module_tls_base",
-    "id": 300
+    "id": 297
   },
   {
     "description": "Number of successful reads of thread context info",
     "type": "counter",
     "name": "UnwindThreadContextReadSuccesses",
     "field": "bpf.threadctx.read_successes",
-    "id": 301
+    "id": 298
   }
 ]

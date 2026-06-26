@@ -674,24 +674,15 @@ const (
 	// Number of failures to get TSD base for thread context
 	IDUnwindThreadContextErrReadTsdBase = 295
 
-	// Number of failures to read the thread context buffer pointer
-	IDUnwindThreadContextErrReadThreadCtxBufPtr = 296
-
 	// Number of failures to read the thread context buffer
-	IDUnwindThreadContextErrReadThreadCtxBuf = 297
+	IDUnwindThreadContextErrReadThreadCtxBuf = 296
 
 	// Number of failures to read the thread context attributes
-	IDUnwindThreadContextErrReadThreadCtxAttrs = 298
-
-	// Number of failures to read the DTV pointer
-	IDUnwindThreadContextErrReadDtvPtr = 299
-
-	// Number of failures to read the module TLS base
-	IDUnwindThreadContextErrReadModuleTlsBase = 300
+	IDUnwindThreadContextErrReadThreadCtxAttrs = 297
 
 	// Number of successful reads of thread context info
-	IDUnwindThreadContextReadSuccesses = 301
+	IDUnwindThreadContextReadSuccesses = 298
 
 	// max number of ID values, keep this as *last entry*
-	IDMax = 302
+	IDMax = 299
 )

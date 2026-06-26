@@ -307,32 +307,16 @@ static EBPF_INLINE void maybe_add_thread_context_info(Trace *trace)
     return;
   }
 
-  if (proc->module_offset != 0) {
-    // dynamic TLS is used, base address is dtv[module_id]
-    // dtv is at offset proc->dtv_offset from tsd_base
-    u64 dtv_ptr;
-    if (bpf_probe_read_user(&dtv_ptr, sizeof(dtv_ptr), (void *)(tsd_base + proc->dtv_offset))) {
-      increment_metric(metricID_UnwindThreadContextErrReadDtvPtr);
-      DEBUG_PRINT("Failed to read DTV pointer");
-      return;
-    }
-
-    if (bpf_probe_read_user(&tsd_base, sizeof(tsd_base), (void *)(dtv_ptr + proc->module_offset))) {
-      increment_metric(metricID_UnwindThreadContextErrReadModuleTlsBase);
-      DEBUG_PRINT("Failed to read module TLS base from DTV");
-      return;
-    }
-  }
-
-  DEBUG_PRINT("Thread labels ptr should be at 0x%llx", tsd_base + proc->tls_offset);
-
+  // Read the pointer to the thread context buffer from the TLS variable. The
+  // variable is resolved as static (module_id == 0) or dynamic (DTV-based) TLS.
   u64 thread_context_buf_ptr;
-  if (bpf_probe_read_user(
-        &thread_context_buf_ptr,
-        sizeof(thread_context_buf_ptr),
-        (void *)(tsd_base + proc->tls_offset))) {
-    increment_metric(metricID_UnwindThreadContextErrReadThreadCtxBufPtr);
-    DEBUG_PRINT("Failed to read custom labels buffer pointer");
+  if (tls_read(
+        &proc->dtv_info,
+        (void *)tsd_base,
+        proc->module_id,
+        proc->tls_offset,
+        (void **)&thread_context_buf_ptr)) {
+    DEBUG_PRINT("Failed to read thread context buffer pointer");
     return;
   }
 
