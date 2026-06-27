@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
@@ -94,13 +95,13 @@ func ReadCPURange(cpuRangeStr string) ([]int, error) {
 // Intersects user-defined list of target CPU IDs with list of online CPU IDs
 func intersectCPURanges(onlineCPUs, targetCPUs []int) ([]int, error) {
 	var intersection []int
-	hash := make(map[int]bool)
+	hash := make(libpf.Set[int])
 	for _, v := range onlineCPUs {
-		hash[v] = true
+		hash[v] = libpf.Void{}
 	}
 
 	for _, cpu := range targetCPUs {
-		if hash[cpu] {
+		if _, ok := hash[cpu]; ok {
 			intersection = append(intersection, cpu)
 		}
 	}
