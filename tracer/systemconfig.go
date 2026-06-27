@@ -13,12 +13,12 @@ import (
 	"syscall"
 	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/pacmask"
 	"go.opentelemetry.io/ebpf-profiler/rlimit"
 	"go.opentelemetry.io/ebpf-profiler/support"
-	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
@@ -276,7 +276,7 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 
 	maps := make(map[string]*cebpf.Map)
 
-	if err := loadAllMaps(new, &Config{}, maps); err != nil {
+	if err := loadAllMaps(new, &Config{InterpretersConfig: interpreterconfig.AllInterpreters()}, maps); err != nil {
 		return nil, nil, err
 	}
 
@@ -288,7 +288,7 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 }
 
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kmod *kallsyms.Module, includeTracers types.IncludedTracers, vars *sysConfigVars,
+	kmod *kallsyms.Module, interpretersConfig interpreterconfig.Config, vars *sysConfigVars,
 ) error {
 	if err := parseBTF(vars); err != nil {
 		log.Infof("Using binary analysis (BTF not available: %s)", err)
@@ -297,8 +297,8 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 			return err
 		}
 
-		if includeTracers.Has(types.PerlTracer) || includeTracers.Has(types.PythonTracer) ||
-			includeTracers.Has(types.Labels) {
+		if !interpretersConfig.Perl.IsDisabled() || !interpretersConfig.Python.IsDisabled() ||
+			!interpretersConfig.Labels.IsDisabled() {
 			var tpbaseOffset uint64
 			tpbaseOffset, err = loadTPBaseOffset(coll, maps, kmod)
 			if err != nil {
@@ -325,10 +325,22 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 }
 
 // loadRodataVars initializes RODATA variables for the eBPF programs.
-func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config) error {
+func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config,
+	major, minor uint32,
+) error {
 	if cfg.VerboseMode {
 		if err := coll.Variables["with_debug_output"].Set(uint32(1)); err != nil {
 			return fmt.Errorf("failed to set debug output: %v", err)
+		}
+	}
+
+	// The Python/native hybrid unwinder's per program loop count defaults to 10
+	// which is the largest that fits the 5.x / 6.0-6.5 verifier. Kernels 6.6+ are
+	// more efficient and can support more, but 6.18's verifier is tighter than
+	// 6.6-6.16; 15 fits the floor across the 6.6+ CI matrix.
+	if major > 6 || (major == 6 && minor >= 6) {
+		if err := coll.Variables["python_frames_per_program"].Set(uint32(15)); err != nil {
+			return fmt.Errorf("failed to set python_frames_per_program: %v", err)
 		}
 	}
 
@@ -341,7 +353,11 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 
 	if err := coll.Variables["filter_idle_frames"].Set(cfg.FilterIdleFrames); err != nil {
-		return fmt.Errorf("failed to set debug output: %v", err)
+		return fmt.Errorf("failed to set filter_idle_frames: %v", err)
+	}
+
+	if err := coll.Variables["ruby_skip_native_resume"].Set(cfg.InterpretersConfig.Ruby.SkipNativeResume); err != nil {
+		return fmt.Errorf("failed to set ruby_skip_native_resume: %v", err)
 	}
 
 	pacMask := pacmask.GetPACMask()
@@ -361,7 +377,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to prepare programs and maps for system analysis: %v", err)
 	}
 
-	if err := determineSysConfig(systemAnalysisColl, maps, kmod, cfg.IncludeTracers, &rodataVars); err != nil {
+	if err := determineSysConfig(systemAnalysisColl, maps, kmod, cfg.InterpretersConfig, &rodataVars); err != nil {
 		return fmt.Errorf("failed to determine system configs: %v", err)
 	}
 	if err := coll.Variables["tpbase_offset"].Set(rodataVars.tpbase_offset); err != nil {

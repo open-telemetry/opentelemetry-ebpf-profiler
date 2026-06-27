@@ -44,10 +44,11 @@ void bpf_log(const char *fmt, ...)
 #include "../../support/ebpf/system_config.ebpf.c"
 #include "../../support/ebpf/v8_tracer.ebpf.c"
 
-void initialize_rodata_variables(u64 new_inv_pac_mask)
+void initialize_rodata_variables(u64 new_inv_pac_mask, int new_ruby_skip_native_resume)
 {
   // Initialize variables set via RODATA.
-  inverse_pac_mask = new_inv_pac_mask;
+  inverse_pac_mask        = new_inv_pac_mask;
+  ruby_skip_native_resume = new_ruby_skip_native_resume;
 }
 
 int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx)
@@ -68,6 +69,13 @@ int unwind_traces(u64 id, int debug, u64 tp_base, void *ctx)
 
 int bpf_perf_event_output(
   UNUSED void *ctx, UNUSED void *map, UNUSED unsigned long long flags, void *data, UNUSED int size)
+{
+  void __bpf_copy_frame(u64, void *);
+  __bpf_copy_frame(__cgo_ctx->id, data);
+  return 0;
+}
+
+long bpf_ringbuf_output(UNUSED void *ringbuf, void *data, UNUSED u64 size, UNUSED u64 flags)
 {
   void __bpf_copy_frame(u64, void *);
   __bpf_copy_frame(__cgo_ctx->id, data);

@@ -8,14 +8,14 @@ import (
 )
 
 type TraceEventMeta struct {
-	Comm           libpf.String
+	Comm           libpf.Comm
 	ProcessName    libpf.String
 	ExecutablePath libpf.String
 	ContainerID    libpf.String
 	EnvVars        map[libpf.String]libpf.String
 	APMServiceName string
 	Timestamp      libpf.UnixTime64
-	CPU            int
+	CPU            uint32
 	Origin         libpf.Origin
 	Value          int64
 	PID, TID       libpf.PID
@@ -74,7 +74,7 @@ type SampleKey struct {
 	ExtraMeta any
 
 	// Comm is provided by the eBPF programs
-	Comm libpf.String
+	Comm libpf.Comm
 
 	Hash libpf.TraceHash
 

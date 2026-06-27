@@ -605,9 +605,6 @@ const (
 	// Number of times the stack delta provider succeeded to extract stack deltas
 	IDStackDeltaProviderSuccess = 271
 
-	// Number of lost trace events in the communication between kernel and user space (trace_events)
-	IDTraceEventLost = 272
-
 	// Number of times a trace event was received without data (trace_events)
 	IDTraceEventNoData = 273
 
@@ -650,6 +647,30 @@ const (
 	// Number of failures to read TLS variables via the DTV
 	IDUnwindErrBadDTVRead = 286
 
+	// Number of cache hits for dotnet PE information
+	IDDotnetPEInfoCacheHit = 287
+
+	// Number of cache misses for dotnet PE information
+	IDDotnetPEInfoCacheMiss = 288
+
+	// Number of cache hits for dotnet #Strings heap lookups
+	IDDotnetStringsCacheHit = 289
+
+	// Number of cache misses for dotnet #Strings heap lookups
+	IDDotnetStringsCacheMiss = 290
+
+	// Number of bpf_ringbuf_output failures when sending trace events
+	IDBPFRingbufOutputErr = 291
+
+	// Number of cache hits for the dotnet PE open/parse error LRU
+	IDDotnetPEInfoErrCacheHit = 292
+
+	// Number of Go custom labels dropped because the label name was empty or not valid UTF-8
+	IDGoLabelsDroppedInvalidName = 293
+
+	// Number of Go custom labels dropped because the label value was not valid UTF-8
+	IDGoLabelsDroppedInvalidValue = 294
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 287
+	IDMax = 295
 )

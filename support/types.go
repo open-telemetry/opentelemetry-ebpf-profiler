@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x69
+	MetricIDBeginCumulative = 0x6a
 )
 
 const (
@@ -167,6 +167,7 @@ type Trace struct {
 	Num_kernel_frames  uint16
 	Origin             uint32
 	Value              uint64
+	Cpu_id             uint32
 	Frame_data         [3072]uint64
 }
 type UnwindInfo struct {
@@ -330,7 +331,7 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0x62d0
+	Sizeof_Trace      = 0x62d8
 
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
@@ -498,4 +499,5 @@ var MetricsTranslation = []metrics.MetricID{
 	0x66: metrics.IDUnwindRubyErrReadRbasicFlags,
 	0x67: metrics.IDUnwindRubyErrCmeMaxEp,
 	0x68: metrics.IDUnwindErrBadDTVRead,
+	0x69: metrics.IDBPFRingbufOutputErr,
 }

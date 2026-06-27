@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"debug/buildinfo"
 	"debug/elf"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -38,6 +39,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/libpf/pfbufio"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf/internal/mmap"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
@@ -58,6 +60,15 @@ const (
 var (
 	// ErrNotELF is returned when the file is not an ELF file.
 	ErrNotELF = errors.New("not an ELF file")
+
+	// ErrNoDebugLink is returned when debug link does not exist.
+	ErrNoDebugLink = errors.New("no debug link")
+
+	// ErrNoBuildID is returned if build ID is not present in notes.
+	ErrNoBuildID = errors.New("no build ID")
+
+	// errNotProcessed is internal placeholder to mark not yet parsed data.
+	errNotProcessed = errors.New("not yet processed")
 )
 
 // File represents an open ELF file
@@ -70,9 +81,6 @@ type File struct {
 
 	// mmapReader is the mmap reader for this File if available
 	mmapReader *mmap.ReaderAt
-
-	// ehFrame is a pointer to the PT_GNU_EH_FRAME segment of the ELF
-	ehFrame *Prog
 
 	// loadData is a slice of pointers to the PT_LOAD data segments of the ELF.
 	loadData []*Prog
@@ -132,6 +140,11 @@ type File struct {
 	// Whether we have checked for a debuglink
 	debuglinkChecked bool
 
+	// Cached notes data
+	notesError error
+	gnuBuildId string
+	goBuildId  string
+
 	// Contains the Go build information if present
 	goBuildInfo *debug.BuildInfo
 }
@@ -178,13 +191,7 @@ func Open(name string) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	ff, err := newFile(f, f, 0, false)
-	if err != nil {
-		_ = f.Close()
-		return nil, err
-	}
-	return ff, nil
+	return newFile(f, f, 0, false)
 }
 
 // Close closes the File.
@@ -204,6 +211,21 @@ func NewFile(r io.ReaderAt, loadAddress uint64, hasMusl bool) (*File, error) {
 	return newFile(r, nil, loadAddress, hasMusl)
 }
 
+// ReadAtCloser combines io.ReaderAt and io.Closer.
+type ReadAtCloser interface {
+	io.ReaderAt
+	io.Closer
+}
+
+// NewFileOwned is like NewFile but takes ownership of rc: rc is used as the
+// ELF reader and is closed by the returned File's Close, or before returning
+// on error.
+func NewFileOwned(rc ReadAtCloser) (*File, error) {
+	return newFile(rc, rc, 0, false)
+}
+
+// newFile builds a File from r. A non-nil closer is owned and closed by the
+// returned File's Close, or before returning on error.
 func newFile(r io.ReaderAt, closer io.Closer,
 	loadAddress uint64, hasMusl bool,
 ) (*File, error) {
@@ -211,7 +233,14 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		elfReader:  r,
 		InsideCore: loadAddress != 0,
 		closer:     closer,
+		notesError: errNotProcessed,
 	}
+	success := false
+	defer func() {
+		if !success {
+			_ = f.Close()
+		}
+	}()
 
 	hdr := &f.elfHeader
 	if _, err := r.ReadAt(pfunsafe.FromPointer(hdr), 0); err != nil {
@@ -306,10 +335,8 @@ func newFile(r io.ReaderAt, closer io.Closer,
 		}
 		switch p.ProgHeader.Type {
 		case elf.PT_DYNAMIC:
-			rdr, err := p.DataReader(maxBytesLargeSection)
-			if err != nil {
-				continue
-			}
+			rdr := pfbufio.NewReader(r, int64(p.Off), int64(p.Filesz))
+
 			var dyn elf.Dyn64
 			var bias int64
 			if !hasMusl {
@@ -341,11 +368,11 @@ func newFile(r io.ReaderAt, closer io.Closer,
 					f.gnuHash.addr = adjustedVal
 				}
 			}
-		case elf.PT_GNU_EH_FRAME:
-			f.ehFrame = p
+			pfbufio.PutReader(rdr)
 		}
 	}
 
+	success = true
 	return f, nil
 }
 
@@ -386,6 +413,12 @@ func (f *File) getReader() io.ReaderAt {
 	if f.mmapReader != nil {
 		return f.mmapReader
 	}
+	return f.elfReader
+}
+
+// Underlying returns the underlying io.ReaderAt interface to access the ELF
+// file directly.
+func (f *File) Underlying() io.ReaderAt {
 	return f.elfReader
 }
 
@@ -452,6 +485,16 @@ func (f *File) LoadSections() error {
 		}
 	}
 
+	return nil
+}
+
+// findProg finds the first matching program header of given type.
+func (f *File) findProg(t elf.ProgType) *Prog {
+	for i := range f.Progs {
+		if f.Progs[i].Type == t {
+			return &f.Progs[i]
+		}
+	}
 	return nil
 }
 
@@ -525,11 +568,11 @@ func (f *File) SymbolData(name libpf.SymbolName, maxSize int) (*libpf.Symbol, []
 
 // EHFrame constructs a Program header with the EH Frame sections
 func (f *File) EHFrame() (*Prog, error) {
-	if f.ehFrame == nil {
+	p := f.findProg(elf.PT_GNU_EH_FRAME)
+	if p == nil {
 		return nil, errors.New("no PT_GNU_EH_FRAME tag found")
 	}
 	// Find matching PT_LOAD segment
-	p := f.ehFrame
 	for i := range f.Progs {
 		ph := &f.Progs[i]
 		if ph.Type != elf.PT_LOAD || p.Vaddr < ph.Vaddr ||
@@ -558,38 +601,52 @@ func (f *File) EHFrame() (*Prog, error) {
 	return nil, errors.New("no PT_LOAD segment for PT_GNU_EH_FRAME found")
 }
 
-// GetGoBuildID returns the Go BuildID if present
-func (f *File) GetGoBuildID() (string, error) {
-	s := f.Section(".note.go.buildid")
-	if s == nil {
-		s = f.Section(".notes")
-	}
-	if s == nil {
-		return "", ErrNoBuildID
-	}
-	data, err := s.Data(maxBytesSmallSection)
-	if err != nil {
-		return "", err
+// VisitNotes iterates the ELF notes.
+// The visitor must make copies of the 'data' it keeps after return.
+func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
+	notes := f.findProg(elf.PT_NOTE)
+	if notes == nil {
+		return nil
 	}
 
-	return getGoBuildIDFromNotes(data)
+	rdr := pfbufio.NewReader(f.elfReader, int64(notes.Off), int64(notes.Filesz))
+	defer pfbufio.PutReader(rdr)
+
+	return visitNotes(rdr, visitor)
+}
+
+// parseNotes parses and caches the ELF notes for the File.
+func (f *File) parseNotes() error {
+	if f.notesError == errNotProcessed {
+		f.notesError = f.VisitNotes(func(note uint64, desc []byte) bool {
+			switch note {
+			case NoteGnuBuildId:
+				f.gnuBuildId = hex.EncodeToString(desc)
+			case NoteGoBuildId:
+				f.goBuildId = string(desc)
+			}
+			return true
+		})
+	}
+	return f.notesError
+}
+
+// GetGoBuildID returns the Go BuildID if present
+func (f *File) GetGoBuildID() (string, error) {
+	err := f.parseNotes()
+	if err == nil && f.goBuildId == "" {
+		err = ErrNoBuildID
+	}
+	return f.goBuildId, err
 }
 
 // GetBuildID returns the ELF BuildID if present
 func (f *File) GetBuildID() (string, error) {
-	s := f.Section(".note.gnu.build-id")
-	if s == nil {
-		s = f.Section(".notes")
+	err := f.parseNotes()
+	if err == nil && f.gnuBuildId == "" {
+		err = ErrNoBuildID
 	}
-	if s == nil {
-		return "", ErrNoBuildID
-	}
-	data, err := s.Data(maxBytesSmallSection)
-	if err != nil {
-		return "", err
-	}
-	runtime.KeepAlive(f)
-	return getBuildIDFromNotes(data)
+	return f.gnuBuildId, err
 }
 
 // GoVersion returns the Go version if present and empty string otherwise. This will delegate
@@ -639,7 +696,7 @@ func (f *File) DebuglinkFileName(elfFilePath string, elfOpener ELFOpener) string
 	return path
 }
 
-type ElfReloc *elf.Rela64
+type ElfReloc = elf.Rela64
 
 // RelocType represents an architecture-independent relocation type.
 // Multiple values can be combined with bitwise OR to match several types.
@@ -726,22 +783,18 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 	checkRelocation func(ElfReloc) bool,
 	relaSection *Section,
 ) (bool, error) {
-	if relaSection.Link > uint32(len(f.Sections)) {
-		return false, errors.New("rela section link is out-of-bounds")
-	}
-	if relaSection.Link == 0 {
-		return false, errors.New("rela section link is empty")
-	}
-	if relaSection.Size > maxBytesLargeSection {
-		return false, fmt.Errorf("relocation section too big (%d bytes)", relaSection.Size)
+	if relaSection.Link >= uint32(len(f.Sections)) {
+		return false, fmt.Errorf("rela section link is invalid (%d/%d)",
+			relaSection.Link, len(f.Sections))
 	}
 	if relaSection.Size%uint64(unsafe.Sizeof(elf.Rela64{})) != 0 {
 		return false, errors.New("relocation section size isn't multiple of rela64 struct")
 	}
 
 	symtabSection := &f.Sections[relaSection.Link]
-	if symtabSection.Link > uint32(len(f.Sections)) {
-		return false, errors.New("symtab link is out-of-bounds")
+	if symtabSection.Link >= uint32(len(f.Sections)) {
+		return false, fmt.Errorf("symtab section link is invalid (%d/%d)",
+			symtabSection.Link, len(f.Sections))
 	}
 	if symtabSection.Size%uint64(unsafe.Sizeof(elf.Sym64{})) != 0 {
 		return false, errors.New("symbol section size isn't multiple of sym64 struct")
@@ -757,23 +810,24 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 		return false, fmt.Errorf("failed to read string table: %w", err)
 	}
 
-	relaData, err := relaSection.Data(uint(relaSection.Size))
-	if err != nil {
-		return false, fmt.Errorf("failed to read relocation section: %w", err)
-	}
+	rdr := pfbufio.NewReader(f.elfReader, int64(relaSection.Offset), int64(relaSection.Size))
+	defer pfbufio.PutReader(rdr)
 
-	relaSz := int(unsafe.Sizeof(elf.Rela64{}))
-	for i := 0; i < len(relaData); i += relaSz {
-		rela := (*elf.Rela64)(unsafe.Pointer(&relaData[i]))
-
-		if !checkRelocation(rela) {
+	rela := &elf.Rela64{}
+	sym := &elf.Sym64{}
+	symSz := int64(unsafe.Sizeof(elf.Sym64{}))
+	for {
+		if _, err := rdr.Read(pfunsafe.FromPointer(rela)); err != nil {
+			if err != io.EOF {
+				return false, fmt.Errorf("failed to read relocation: %w", err)
+			}
+			break
+		}
+		if !checkRelocation(*rela) {
 			continue
 		}
-
-		sym := elf.Sym64{}
-		symSz := int64(unsafe.Sizeof(sym))
 		symNo := int64(rela.Info >> 32)
-		n, err := symtabSection.ReadAt(pfunsafe.FromPointer(&sym), symNo*symSz)
+		n, err := symtabSection.ReadAt(pfunsafe.FromPointer(sym), symNo*symSz)
 		if err != nil || n != int(symSz) {
 			return false, fmt.Errorf("failed to read relocation symbol: %w", err)
 		}
@@ -783,7 +837,7 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 			return false, errors.New("failed to get relocation name string")
 		}
 
-		if !visitor(rela, symStr) {
+		if !visitor(*rela, symStr) {
 			return false, nil
 		}
 	}
@@ -795,16 +849,18 @@ func (f *File) visitRelocationsForSection(visitor func(ElfReloc, string) bool,
 // GetDebugLink reads and parses the .gnu_debuglink section.
 // If the link does not exist then ErrNoDebugLink is returned.
 func (f *File) GetDebugLink() (linkName string, crc int32, err error) {
-	note := f.Section(".gnu_debuglink")
-	if note == nil {
+	s := f.Section(".gnu_debuglink")
+	if s == nil {
 		return "", 0, ErrNoDebugLink
 	}
 
-	d, err := note.Data(maxBytesSmallSection)
+	rdr := pfbufio.NewReader(f.elfReader, int64(s.Offset), int64(s.Size))
+	defer pfbufio.PutReader(rdr)
+
+	d, err := rdr.ReadN(int(s.Size))
 	if err != nil {
-		return "", 0, fmt.Errorf("could not read link: %w", ErrNoDebugLink)
+		return "", 0, fmt.Errorf("unable to read debug link: %w", err)
 	}
-	runtime.KeepAlive(f)
 	return ParseDebugLink(d)
 }
 
@@ -906,15 +962,6 @@ func (ph *Prog) Data(maxSize uint) ([]byte, error) {
 	p := make([]byte, ph.Filesz)
 	_, err := ph.ReadAt(p, 0)
 	return p, err
-}
-
-// DataReader loads the whole program header referenced data, and returns reader to it.
-func (ph *Prog) DataReader(maxSize uint) (io.Reader, error) {
-	p, err := ph.Data(maxSize)
-	if err != nil {
-		return nil, err
-	}
-	return bytes.NewReader(p), nil
 }
 
 // ReadAt implements the io.ReaderAt interface
@@ -1071,7 +1118,7 @@ func (f *File) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error) {
 		}
 
 		// Search the hash bucket
-		offs += int64(4*hdr.numBuckets + 4*(i-hdr.symbolOffset))
+		offs += 4*int64(hdr.numBuckets) + 4*int64(i-hdr.symbolOffset)
 		h |= 1
 		for {
 			var h2 uint32
@@ -1149,14 +1196,18 @@ func (f *File) visitSymbolTable(name string, visitor func(libpf.Symbol) bool) er
 	if err != nil {
 		return fmt.Errorf("failed to read %v: %v", strTab.Name, err)
 	}
-	syms, err := symTab.Data(maxBytesLargeSection)
-	if err != nil {
-		return fmt.Errorf("failed to read %v: %v", name, err)
-	}
 
-	symSz := int(unsafe.Sizeof(elf.Sym64{}))
-	for i := 0; i < len(syms); i += symSz {
-		sym := (*elf.Sym64)(unsafe.Pointer(&syms[i]))
+	rdr := pfbufio.NewReader(f.elfReader, int64(symTab.Offset), int64(symTab.Size))
+	defer pfbufio.PutReader(rdr)
+
+	sym := &elf.Sym64{}
+	for {
+		if _, err := rdr.Read(pfunsafe.FromPointer(sym)); err != nil {
+			if err != io.EOF {
+				return fmt.Errorf("failed to read symbol from %v: %w", name, err)
+			}
+			break
+		}
 		if name, ok := getString(strs, int(sym.Name)); ok {
 			if !visitor(libpf.Symbol{
 				Name:    libpf.SymbolName(name),

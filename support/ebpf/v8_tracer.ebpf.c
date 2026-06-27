@@ -19,15 +19,6 @@
 // The maximum V8 frame length used in heuristic to validate FP
 #define V8_MAX_FRAME_LENGTH 8192
 
-#if defined(__aarch64__)
-  // On aarch64, a JS EntryFrame's layout differs from that of any other frame,
-  // and stores 20 registers, the fp being the top-most.
-  // See: https://chromium.googlesource.com/v8/v8/+/main/src/execution/arm64/frame-constants-arm64.h
-  #define V8_ENTRYFRAME_CALLEE_SAVED_REGS_BEFORE_FP_LR_PAIR 18
-#else
-  #define V8_ENTRYFRAME_CALLEE_SAVED_REGS_BEFORE_FP_LR_PAIR 0
-#endif
-
 // Map from V8 process IDs to a structure containing addresses of variables
 // we require in order to build the stack trace
 struct v8_procs_t {
@@ -111,15 +102,14 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   V8UnwindScratchSpace *scratch = &record->v8UnwindScratch;
 
   // All V8 frames have frame pointer. Check that the FP looks valid.
-  DEBUG_PRINT("v8: pc: %lx, sp: %lx, fp: %lx", pc, sp, fp);
-  if (fp < sp || fp >= sp + V8_MAX_FRAME_LENGTH) {
-    DEBUG_PRINT("v8: frame pointer too far off %lx / %lx", fp, sp);
+  if (!unwinder_check_frame_size(state, V8_MAX_FRAME_LENGTH)) {
     increment_metric(metricID_UnwindV8ErrBadFP);
     return ERR_V8_BAD_FP;
   }
 
   // Read FP pointer data
-  if (bpf_probe_read_user(scratch->fp_ctx, V8_FP_CONTEXT_SIZE, (void *)(fp - V8_FP_CONTEXT_SIZE))) {
+  if (bpf_probe_read_user(
+        scratch->fp_ctx, sizeof(scratch->fp_ctx), (void *)(fp - V8_FP_CONTEXT_SIZE))) {
     DEBUG_PRINT("v8:  -> failed to read frame pointer context");
     increment_metric(metricID_UnwindV8ErrBadFP);
     return ERR_V8_BAD_FP;
@@ -135,10 +125,23 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   unsigned long fp_marker          = *(unsigned long *)(scratch->fp_ctx + vi->fp_marker);
   unsigned long fp_function        = *(unsigned long *)(scratch->fp_ctx + vi->fp_function);
   unsigned long fp_bytecode_offset = *(unsigned long *)(scratch->fp_ctx + vi->fp_bytecode_offset);
+  DEBUG_PRINT(
+    "v8 VALUES: marker: %lx, func: %lx, bytecode offset: %lx",
+    fp_marker,
+    fp_function,
+    fp_bytecode_offset);
 
   // Data that will be sent to HA is in these variables.
   uintptr_t pointer_and_type = 0, delta_or_marker = 0;
 
+  // Frames can be either be "standard", in which case they have a pointer to a context
+  // in `fp_marker` here, or non-standard, in which case they have a "marker" indicating their type.
+  // See e.g.
+  // https://github.com/nodejs/node/blob/6ac4ab19ad0/deps/v8/src/execution/frame-constants.h#L118-L118.
+  // Thus, look for the presence of a marker (logic given in
+  // https://github.com/nodejs/node/blob/6ac4ab19ad0/deps/v8/src/execution/frames.h#L218-L218); if
+  // there is one, we are in a special frame and can stop immediately.
+  //
   // Before V8 5.8.261 the frame marker was a SMI. Now it has the tag, but it's not shifted fully.
   // The special coding was done to reduce the frame marker push <immed64> to <immed32>.
   if ((fp_marker & V8_SmiTagMask) == V8_SmiTag) {
@@ -149,7 +152,10 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     goto frame_done;
   }
 
-  // Extract the JSFunction being executed
+  // We're not in a special frame, so we're probably in a JS frame;
+  // see
+  // https://github.com/nodejs/node/blob/6ac4ab19ad0/deps/v8/src/execution/frame-constants.h#L109-L109
+  // . Extract the JSFunction being executed
   uintptr_t jsfunc = v8_verify_pointer(fp_function);
   u16 jsfunc_tag   = v8_read_object_type(vi, jsfunc);
   if (jsfunc_tag < vi->type_JSFunction_first || jsfunc_tag > vi->type_JSFunction_last) {
@@ -170,20 +176,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     return ERR_V8_BAD_JS_FUNC;
   }
 
-  // First determine if we are in interpreter mode. The simplest way to check
-  // is if fp_bytecode_offset holds a SMI (the bytecode delta). The delta is
-  // relative to the object pointer (not the actual bytecode data), so it is
-  // always positive. In native mode, the same slot contains a Feedback Vector
-  // tagged pointer.
-  delta_or_marker = v8_parse_smi(fp_bytecode_offset, 0);
-  if (delta_or_marker != 0) {
-    DEBUG_PRINT("v8:  -> bytecode_delta %lx", delta_or_marker);
-    pointer_and_type = V8_FILE_TYPE_BYTECODE | sfi;
-    goto frame_done;
-  }
-
-  // Executing native code. At this point we can at least report the SFI if
-  // other things fail.
+  // At this point we can at least report the SFI if other things fail.
   pointer_and_type = V8_FILE_TYPE_NATIVE_SFI | sfi;
 
   // Try to determine the Code object from JSFunction.
@@ -211,15 +204,33 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     return ERR_UNREACHABLE;
   }
 
+  u32 code_flags = *(u32 *)(scratch->code + vi->off_Code_flags);
+  u8 code_kind   = (code_flags & vi->codekind_mask) >> vi->codekind_shift;
+
+  // Detect interpreted frames. JSFunction::code() for interpreted functions
+  // returns the InterpreterEntryTrampoline builtin (CodeKind::BUILTIN), not
+  // CodeKind::INTERPRETED_FUNCTION, so we cannot identify them by CodeKind
+  // alone. Instead, check that the CodeKind is below BASELINE (ruling out
+  // baseline, maglev, and turbofan), and then test whether the bytecode offset
+  // slot holds a SMI -- which it does only for interpreted frames.
+  if (code_kind < vi->codekind_baseline) {
+    delta_or_marker = v8_parse_smi(fp_bytecode_offset, 0);
+    if (delta_or_marker != 0) {
+      DEBUG_PRINT("v8:  -> interpreted, bytecode_delta %lx", delta_or_marker);
+      pointer_and_type = V8_FILE_TYPE_BYTECODE | sfi;
+      goto frame_done;
+    }
+  }
+
+  // Executing native (compiled) code. Determine the PC offset within the Code
+  // object's instruction area.
   uintptr_t code_start;
   if (vi->code_instructions_is_pointer) {
     code_start = *(uintptr_t *)(scratch->code + vi->off_Code_instruction_start);
   } else {
     code_start = code + vi->off_Code_instruction_start;
   }
-  u32 code_size  = *(u32 *)(scratch->code + vi->off_Code_instruction_size);
-  u32 code_flags = *(u32 *)(scratch->code + vi->off_Code_flags);
-  u8 code_kind   = (code_flags & vi->codekind_mask) >> vi->codekind_shift;
+  u32 code_size = *(u32 *)(scratch->code + vi->off_Code_instruction_size);
 
   uintptr_t code_end = code_start + code_size;
   DEBUG_PRINT("v8: func = %lx / sfi = %lx / code = %lx", jsfunc, sfi, code);
@@ -281,25 +292,23 @@ frame_done:;
   }
 
   // Unwind with frame pointer
-  if (!unwinder_unwind_frame_pointer(state)) {
+  u64 *regs = (u64 *)&scratch->fp_ctx[V8_FP_CONTEXT_SIZE];
+  if (!unwinder_unwind_frame_pointer_regs(state, regs)) {
     DEBUG_PRINT("v8:  --> bad frame pointer");
     increment_metric(metricID_UnwindV8ErrBadFP);
     return ERR_V8_BAD_FP;
   }
 
-  // The JS Entry Frame's layout differs from other frames because some callee
-  // saved registers might be pushed onto the stack before the [fp, lr] pair.
-  // This frame is represented by markers 0 (inner) and 1 (outermost).
-  // See: https://chromium.googlesource.com/v8/v8/+/main/src/execution/frames.h#167
+#if defined(__aarch64__)
+  // On aarch64 the frame pointer unwinding does not recover SP.
+  // Recover it for Entry frames which return to native code and
+  // for which the stack size is known.
+  // See: https://chromium.googlesource.com/v8/v8/+/main/src/execution/arm64/frame-constants-arm64.h
   if (pointer_and_type == V8_FILE_TYPE_MARKER && delta_or_marker == 1)
-    state->sp += V8_ENTRYFRAME_CALLEE_SAVED_REGS_BEFORE_FP_LR_PAIR * sizeof(size_t);
+    state->sp = fp + 20 * sizeof(u64);
+#endif
 
-  DEBUG_PRINT(
-    "v8: pc: %lx, sp: %lx, fp: %lx",
-    (unsigned long)state->pc,
-    (unsigned long)state->sp,
-    (unsigned long)state->fp);
-
+  DEBUG_UNWIND_STATE(state);
   increment_metric(metricID_UnwindV8Frames);
   return ERR_OK;
 }
@@ -327,8 +336,15 @@ static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
     increment_metric(metricID_UnwindV8ErrNoProcInfo);
     goto exit;
   }
+  DEBUG_PRINT(
+    "v8 OFFSETS: marker: %x, func: %x, bytecode offset: %x",
+    vi->fp_marker,
+    vi->fp_function,
+    vi->fp_bytecode_offset);
 
   increment_metric(metricID_UnwindV8Attempts);
+
+  unwinder_analyze_frame_pointer(&record->state);
 
   for (int i = 0; i < V8_FRAMES_PER_PROGRAM; i++) {
     unwinder = PROG_UNWIND_STOP;
