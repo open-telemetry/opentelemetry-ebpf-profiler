@@ -57,7 +57,7 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
 	}
 
 	pclntab, err := elfunwindinfo.NewGopclntab(ef)
-	if pclntab == nil {
+	if err != nil {
 		return nil, err
 	}
 

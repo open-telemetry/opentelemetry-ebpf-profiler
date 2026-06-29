@@ -45,6 +45,10 @@ const (
 	moduleDataSectionName = ".go.module"
 )
 
+// errNoPclntab is returned if the file has no .gopclntab data and
+// is therefore not a (or not a fully-intact) Go binary.
+var errNoPclntab = errors.New("no gopclntab section found")
+
 func goMagicToVersion(magic uint32) uint8 {
 	// pclntab header magic bytes identifying Go version
 	switch magic {
@@ -378,10 +382,14 @@ func (g *Gopclntab) LookupSymbol(symbol libpf.SymbolName) (*libpf.Symbol, error)
 }
 
 // NewGopclntab parses and returns the parsed data for further operations.
+// Returns ErrNoPclntab when the file contains no gopclntab data.
 func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	data, err := extractGoPclntab(ef)
-	if data == nil {
+	if err != nil {
 		return nil, err
+	}
+	if data == nil {
+		return nil, errNoPclntab
 	}
 	defer ef.SetDontNeed()
 
@@ -734,7 +742,10 @@ func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, p pcval, s strategy)
 // by using large frame pointer ranges when possible
 func (ee *elfExtractor) parseGoPclntab() error {
 	g, err := NewGopclntab(ee.file)
-	if g == nil || err != nil {
+	if errors.Is(err, errNoPclntab) {
+		return nil
+	}
+	if err != nil {
 		return err
 	}
 	defer g.Close()
