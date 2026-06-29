@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
+package goruntime // import "go.opentelemetry.io/ebpf-profiler/interpreter/go/runtime"
 
 import (
 	"debug/elf"
@@ -11,8 +11,8 @@ import (
 	"unsafe"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -20,7 +20,7 @@ import (
 
 type data struct {
 	goVersion string
-	offsets   support.GoLabelsOffsets
+	offsets   support.GoRuntimeOffsets
 	interpreter.InstanceStubs
 }
 
@@ -28,26 +28,25 @@ var errDecodeSymbol = errors.New("failed to decode symbol")
 var errRuntimeIsCgoUnavailable = errors.New("runtime.iscgo value unavailable")
 
 func (d *data) String() string {
-	return "Golang labels " + d.goVersion
+	return "Golang runtime " + d.goVersion
 }
 
 func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	_ libpf.Address, _ remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
-	if err := ebpf.UpdateProcData(libpf.GoLabels, pid, unsafe.Pointer(&d.offsets)); err != nil {
+	if err := ebpf.UpdateProcData(libpf.GoRuntime, pid, unsafe.Pointer(&d.offsets)); err != nil {
 		return nil, err
 	}
-
 	return d, nil
 }
 
 func (d *data) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	return ebpf.DeleteProcData(libpf.GoLabels, pid)
+	return ebpf.DeleteProcData(libpf.GoRuntime, pid)
 }
 
 func (d *data) Unload(_ interpreter.EbpfHandler) {}
 
-func GetLoader(_ Config) interpreter.Loader {
+func GetLoader(_ golang.Config) interpreter.Loader {
 	return loader
 }
 
@@ -66,10 +65,10 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	}
 
 	// Go plugins are shared objects that share the runtime with the main
-	// binary. The offsets we need are determined by the main binary so
-	// there is no reason to create a duplicate golabels instance for
-	// a plugin. A shared library is ET_DYN without a PT_INTERP segment
-	// (PIE executables are also ET_DYN but have PT_INTERP).
+	// binary. The offsets we need are determined by the main binary so there
+	// is no reason to create a duplicate instance for a plugin. A shared
+	// library is ET_DYN without a PT_INTERP segment (PIE executables are also
+	// ET_DYN but have PT_INTERP).
 	if file.Type == elf.ET_DYN {
 		hasInterp := false
 		for i := range file.Progs {
@@ -79,7 +78,7 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 			}
 		}
 		if !hasInterp {
-			log.Debugf("file %s is a Go shared library, skipping golabels", info.FileName())
+			log.Debugf("file %s is a Go shared library, skipping", info.FileName())
 			return nil, nil
 		}
 	}

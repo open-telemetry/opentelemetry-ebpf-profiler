@@ -3,7 +3,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package golabels // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
+package goruntime // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
 
 import (
 	"testing"

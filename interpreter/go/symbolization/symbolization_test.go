@@ -1,4 +1,4 @@
-package golang
+package gosymbolization
 
 import (
 	"os"
@@ -8,6 +8,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -38,7 +39,7 @@ func BenchmarkGolang(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		gD, err := GetLoader(Config{})(nil, loaderInfo)
+		gD, err := GetLoader(golang.Config{})(nil, loaderInfo)
 		if err != nil {
 			b.Fatalf("Failed to create loader: %v", err)
 		}

@@ -124,7 +124,7 @@ type UnwindInfo C.UnwindInfo
 type ApmIntProcInfo C.ApmIntProcInfo
 type BEAMProcInfo C.BEAMProcInfo
 type DotnetProcInfo C.DotnetProcInfo
-type GoLabelsOffsets C.GoLabelsOffsets
+type GoRuntimeOffsets C.GoRuntimeOffsets
 type HotspotProcInfo C.HotspotProcInfo
 type PHPProcInfo C.PHPProcInfo
 type PerlProcInfo C.PerlProcInfo

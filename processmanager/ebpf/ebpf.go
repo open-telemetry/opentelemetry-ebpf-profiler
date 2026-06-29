@@ -51,7 +51,7 @@ type ebpfMapsImpl struct {
 	V8Procs            *cebpf.Map `name:"v8_procs"`
 	BeamProcs          *cebpf.Map `name:"beam_procs"`
 	ApmIntProcs        *cebpf.Map `name:"apm_int_procs"`
-	GoLabelsProcs      *cebpf.Map `name:"go_labels_procs"`
+	GoProcs            *cebpf.Map `name:"go_procs"`
 
 	// Stackdelta and process related eBPF maps
 	ExeIDToStackDeltaMaps []*cebpf.Map
@@ -166,8 +166,8 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.BeamProcs, nil
 	case libpf.APMInt:
 		return impl.ApmIntProcs, nil
-	case libpf.GoLabels:
-		return impl.GoLabelsProcs, nil
+	case libpf.GoRuntime:
+		return impl.GoProcs, nil
 	default:
 		return nil, fmt.Errorf("type %d is not (yet) supported", typ)
 	}

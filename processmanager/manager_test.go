@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
+	gosymbolization "go.opentelemetry.io/ebpf-profiler/interpreter/go/symbolization"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -60,7 +61,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	loaderInfo := interpreter.NewLoaderInfo(goHostFileID, elfRef)
 	rm := remotememory.NewProcessVirtualMemory(realPID)
 
-	goData, err := golang.GetLoader(golang.Config{})(nil, loaderInfo)
+	goData, err := gosymbolization.GetLoader(golang.Config{})(nil, loaderInfo)
 	require.NoError(t, err)
 	goInstance, err := goData.Attach(nil, realPID, 0x0, rm)
 	require.NoError(t, err)

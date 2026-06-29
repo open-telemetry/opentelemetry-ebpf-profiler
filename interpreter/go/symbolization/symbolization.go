@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
+package gosymbolization // import "go.opentelemetry.io/ebpf-profiler/interpreter/go/symbolization"
 
 import (
 	"fmt"
@@ -9,6 +9,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
+	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
@@ -41,7 +42,7 @@ type goInstance struct {
 	d *goData
 }
 
-func GetLoader(_ Config) interpreter.Loader {
+func GetLoader(_ golang.Config) interpreter.Loader {
 	return loader
 }
 
