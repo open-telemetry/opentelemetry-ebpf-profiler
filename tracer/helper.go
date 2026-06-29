@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
 )
 
@@ -57,13 +58,16 @@ func getOnlineCPUIDs() ([]int, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not read %s: %v", cpuPath, err)
 	}
-	return readCPURange(string(buf))
+	return ReadCPURange(string(buf))
 }
 
 // Since the format of online CPUs can contain comma-separated, ranges or a single value
 // we need to try and parse it in all its different forms.
 // Reference: https://www.kernel.org/doc/Documentation/admin-guide/cputopology.rst
-func readCPURange(cpuRangeStr string) ([]int, error) {
+func ReadCPURange(cpuRangeStr string) ([]int, error) {
+	if cpuRangeStr == "" {
+		return []int{}, nil
+	}
 	var cpus []int
 	cpuRangeStr = strings.Trim(cpuRangeStr, "\n ")
 	for cpuRange := range strings.SplitSeq(cpuRangeStr, ",") {
@@ -86,4 +90,23 @@ func readCPURange(cpuRangeStr string) ([]int, error) {
 		}
 	}
 	return cpus, nil
+}
+
+// Intersects user-defined list of target CPU IDs with list of online CPU IDs
+func intersectCPURanges(onlineCPUs, targetCPUs []int) ([]int, error) {
+	var intersection []int
+	hash := make(libpf.Set[int])
+	for _, v := range onlineCPUs {
+		hash[v] = libpf.Void{}
+	}
+
+	for _, cpu := range targetCPUs {
+		if _, ok := hash[cpu]; ok {
+			intersection = append(intersection, cpu)
+		}
+	}
+	if len(intersection) == 0 {
+		return nil, fmt.Errorf("List of target CPUs is empty")
+	}
+	return intersection, nil
 }
