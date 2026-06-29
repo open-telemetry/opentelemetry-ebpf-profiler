@@ -45,8 +45,16 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 	version := rs.BuildInfo.Version
 	if buildInfo, ok := debug.ReadBuildInfo(); ok {
 		for i := range buildInfo.Deps {
-			if buildInfo.Deps[i].Path == metadata.ScopeName {
-				version = buildInfo.Deps[i].Version
+			dep := buildInfo.Deps[i]
+			if dep.Path == metadata.ScopeName {
+				// When the module is replaced by a local path (e.g. during development),
+				// dep.Version is the original require version, not the local one, but
+				// dep.Replace.Version is "(devel)" in that case, which is more accurate.
+				if dep.Replace != nil {
+					version = dep.Replace.Version
+				} else {
+					version = dep.Version
+				}
 			}
 		}
 	}
