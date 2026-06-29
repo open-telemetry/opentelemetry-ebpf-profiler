@@ -39,7 +39,9 @@ func NewController(cfg *controller.Config, rs receiver.Settings,
 		}
 	}
 
-	// fallback to collector's build version (dist::version if ocb is used)
+	// Use the profiler module's own version from the Go module graph.
+	// Falls back to the collector's build version (e.g. set by ocb) if the
+	// module isn't found, which happens when built outside of a real module context.
 	version := rs.BuildInfo.Version
 	if buildInfo, ok := debug.ReadBuildInfo(); ok {
 		for i := range buildInfo.Deps {
