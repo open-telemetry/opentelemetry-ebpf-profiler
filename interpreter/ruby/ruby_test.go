@@ -4,9 +4,11 @@
 package ruby // import "go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
 
 import (
+	"debug/elf"
 	"testing"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/process"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -231,6 +233,177 @@ func TestProfileFrameFullLabel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fullLabel := profileFrameFullLabel(libpf.Intern(tt.classPath), libpf.Intern(tt.label), libpf.Intern(tt.baseLabel), libpf.Intern(tt.methodName), tt.singleton, false)
 			assert.Equal(t, libpf.Intern(tt.expected), fullLabel)
+		})
+	}
+}
+
+func TestFindJITRegion(t *testing.T) {
+	execAnon := func(vaddr, length uint64) process.RawMapping {
+		return process.RawMapping{
+			Vaddr:  vaddr,
+			Length: length,
+			Flags:  elf.PF_R | elf.PF_X,
+			Path:   "",
+		}
+	}
+	rwAnon := func(vaddr, length uint64) process.RawMapping {
+		return process.RawMapping{
+			Vaddr:  vaddr,
+			Length: length,
+			Flags:  elf.PF_R | elf.PF_W,
+			Path:   "",
+		}
+	}
+	protNoneAnon := func(vaddr, length uint64) process.RawMapping {
+		return process.RawMapping{
+			Vaddr:  vaddr,
+			Length: length,
+			Flags:  0, // ---p (PROT_NONE)
+			Path:   "",
+		}
+	}
+	labeled := func(vaddr, length uint64, flags elf.ProgFlag) process.RawMapping {
+		return process.RawMapping{
+			Vaddr:  vaddr,
+			Length: length,
+			Flags:  flags,
+			Path:   "[anon:Ruby:rb_jit_reserve_addr_space]",
+		}
+	}
+	fileBacked := func(vaddr, length uint64, path string) process.RawMapping {
+		return process.RawMapping{
+			Vaddr:  vaddr,
+			Length: length,
+			Flags:  elf.PF_R | elf.PF_X,
+			Path:   path,
+		}
+	}
+
+	tests := []struct {
+		name      string
+		mappings  []process.RawMapping
+		wantStart uint64
+		wantEnd   uint64
+		wantFound bool
+	}{
+		{
+			name:      "no mappings",
+			mappings:  nil,
+			wantFound: false,
+		},
+		{
+			name: "only file-backed mappings",
+			mappings: []process.RawMapping{
+				fileBacked(0x400000, 0x1000, "/usr/bin/ruby"),
+				fileBacked(0x7f0000, 0x2000, "/lib/libc.so.6"),
+			},
+			wantFound: false,
+		},
+		{
+			name: "labeled JIT region (single mapping)",
+			mappings: []process.RawMapping{
+				fileBacked(0x400000, 0x1000, "/usr/bin/ruby"),
+				labeled(0x7f17d99b9000, 0x8000000, 0),
+			},
+			wantStart: 0x7f17d99b9000,
+			wantEnd:   0x7f17d99b9000 + 0x8000000,
+			wantFound: true,
+		},
+		{
+			name: "labeled JIT region with split mappings and holes",
+			mappings: []process.RawMapping{
+				fileBacked(0x400000, 0x1000, "/usr/bin/ruby"),
+				labeled(0x7f17d99b9000, 0x15f000, elf.PF_R|elf.PF_X),
+				labeled(0x7f17d9b18000, 0x119000, elf.PF_R|elf.PF_X),
+				labeled(0x7f17d9c31000, 0x7d88000, 0),
+			},
+			wantStart: 0x7f17d99b9000,
+			wantEnd:   0x7f17d9c31000 + 0x7d88000,
+			wantFound: true,
+		},
+		{
+			name: "heuristic fallback includes contiguous anonymous reservation",
+			mappings: []process.RawMapping{
+				execAnon(0x7f17d99b9000, 0x15f000),
+				rwAnon(0x7f17d9b18000, 0x1000),
+				execAnon(0x7f17d9b19000, 0x118000),
+				protNoneAnon(0x7f17d9c31000, 0x7d88000),
+			},
+			wantStart: 0x7f17d99b9000,
+			wantEnd:   0x7f17d9c31000 + 0x7d88000,
+			wantFound: true,
+		},
+		{
+			name: "heuristic fallback spans gaps between anonymous executable mappings",
+			mappings: []process.RawMapping{
+				execAnon(0x7f0000100000, 0x4000),
+				execAnon(0x7f0000200000, 0x8000),
+			},
+			wantStart: 0x7f0000100000,
+			wantEnd:   0x7f0000200000 + 0x8000,
+			wantFound: true,
+		},
+		{
+			name: "heuristic fallback spans production-like discontiguous anonymous executable mappings",
+			mappings: []process.RawMapping{
+				execAnon(0x7a6b2ec00000, 0x800000),
+				execAnon(0x7a6b337fb000, 0x800000),
+				execAnon(0x7a6ba0639000, 0x267c000),
+				execAnon(0x7a6d45bb0000, 0x1000),
+			},
+			wantStart: 0x7a6b2ec00000,
+			wantEnd:   0x7a6d45bb0000 + 0x1000,
+			wantFound: true,
+		},
+		{
+			name: "labeled takes precedence over heuristic",
+			mappings: []process.RawMapping{
+				execAnon(0x1000000, 0x4000),
+				labeled(0x7f0000000000, 0x3000000, 0),
+			},
+			wantStart: 0x7f0000000000,
+			wantEnd:   0x7f0000000000 + 0x3000000,
+			wantFound: true,
+		},
+		{
+			name: "ruby --yjit --yjit-mem-size=4 with rw holes and PROT_NONE tail",
+			// $ ruby --yjit --yjit-mem-size=4 /app.rb
+			// 7f84e7a23000-7f84e7a5f000 r-xp 00000000 00:00 0
+			// 7f84e7a5f000-7f84e7a60000 rw-p 00000000 00:00 0
+			// 7f84e7a60000-7f84e7a62000 r-xp 00000000 00:00 0
+			// 7f84e7a62000-7f84e7a63000 rw-p 00000000 00:00 0
+			// 7f84e7a63000-7f84e7e23000 ---p 00000000 00:00 0
+			// 7f84e8110000-7f84e8200000 rw-p 00000000 00:00 0
+			mappings: []process.RawMapping{
+				execAnon(0x7f84e7a23000, 0x7f84e7a5f000-0x7f84e7a23000),
+				rwAnon(0x7f84e7a5f000, 0x1000),
+				execAnon(0x7f84e7a60000, 0x7f84e7a62000-0x7f84e7a60000),
+				rwAnon(0x7f84e7a62000, 0x1000),
+				protNoneAnon(0x7f84e7a63000, 0x7f84e7e23000-0x7f84e7a63000),
+				rwAnon(0x7f84e8110000, 0x7f84e8200000-0x7f84e8110000),
+			},
+			wantStart: 0x7f84e7a23000,
+			wantEnd:   0x7f84e7e23000,
+			wantFound: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			start, end, found := findJITRegion(tt.mappings)
+			if found != tt.wantFound {
+				t.Errorf("found = %v, want %v", found, tt.wantFound)
+				return
+			}
+			if !found {
+				return
+			}
+			if start != tt.wantStart {
+				t.Errorf("start = %#x, want %#x", start, tt.wantStart)
+			}
+			if end != tt.wantEnd {
+				t.Errorf("end = %#x, want %#x", end, tt.wantEnd)
+			}
 		})
 	}
 }

@@ -547,7 +547,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	start := time.Now()
 
 	// This callback processes each memory mapping, keeping only executable
-	// file-backed mappings and anonymous executable/DLL mappings needed by interpreters.
+	// file-backed mappings plus anonymous/DLL mappings needed by interpreters.
+	// Anonymous non-executable mappings are included so runtimes with JIT reservations
+	// split across r-x/rw/--- VMAs can detect the full reserved area.
 	// All other mappings are skipped.
 	numParseErrors, err := pr.IterateMappings(func(m process.RawMapping) bool {
 		if processcontext.IsContextMapping(m.IsExecutable(), m.Path) {
@@ -560,8 +562,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 
 		// Executable mappings and VDSO, converted directly to libpf.FrameMapping
 		mappingNeeded := m.IsExecutable() && !m.IsAnonymous()
-		// Needed for JIT mappings (Hotspot, V8, BEAM, etc.)
-		interpreterNeeded := m.IsExecutable() && m.IsAnonymous()
+		// Needed for JIT mappings (Hotspot, V8, BEAM, Ruby, etc.). Some runtimes need
+		// non-executable anonymous VMAs to recover the full JIT reservation.
+		interpreterNeeded := m.IsAnonymous()
 		// Needed by .NET to retrieve PE assembly mappings
 		interpreterNeeded = interpreterNeeded || strings.HasSuffix(m.Path, ".dll")
 		if !mappingNeeded && !interpreterNeeded {
