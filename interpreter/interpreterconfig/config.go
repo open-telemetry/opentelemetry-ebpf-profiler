@@ -5,6 +5,7 @@
 package interpreterconfig // import "go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 
 import (
+	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/beam"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
@@ -35,6 +36,23 @@ type Config struct {
 
 // AllInterpreters returns a Config with all interpreters enabled.
 func AllInterpreters() Config { return Config{} }
+
+// NoInterpreters returns a Config with all interpreters disabled.
+func NoInterpreters() Config {
+	disabled := interpreter.BaseConfig{Disabled: true}
+	return Config{
+		Python:  python.Config{BaseConfig: disabled},
+		Perl:    perl.Config{BaseConfig: disabled},
+		PHP:     php.Config{BaseConfig: disabled},
+		Hotspot: hotspot.Config{BaseConfig: disabled},
+		Ruby:    ruby.Config{BaseConfig: disabled},
+		V8:      nodev8.Config{BaseConfig: disabled},
+		Dotnet:  dotnet.Config{BaseConfig: disabled},
+		Go:      golang.Config{BaseConfig: disabled},
+		Labels:  golabels.Config{BaseConfig: disabled},
+		BEAM:    beam.Config{BaseConfig: disabled},
+	}
+}
 
 // IsMapEnabled returns true if for the given mapName the respective
 // configuration is enabled.
