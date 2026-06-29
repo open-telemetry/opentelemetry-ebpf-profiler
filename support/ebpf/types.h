@@ -816,6 +816,23 @@ typedef struct GoMapBucket {
   void *overflow;
 } GoMapBucket;
 
+typedef struct GoRuntimeOffsets {
+  u32 m_offset;
+  u32 curg;
+  u32 labels;
+  u32 hmap_count;
+  u32 hmap_log2_bucket_count;
+  u32 hmap_buckets;
+  s32 tls_offset;
+} GoRuntimeOffsets;
+
+// GoProcState holds the per-process Go runtime offsets, preloaded once per
+// trace from the go_procs map in collect_trace.
+typedef struct GoProcState {
+  bool valid;
+  GoRuntimeOffsets offsets;
+} GoProcState;
+
 typedef struct CustomLabelsState {
   void *go_m_ptr;
 } CustomLabelsState;
@@ -837,6 +854,8 @@ typedef struct PerCPURecord {
   RubyUnwindState rubyUnwindState;
   // State for Go and Native custom labels
   CustomLabelsState customLabelsState;
+  // Cached go_procs entry for this trace.
+  GoProcState goProc;
   union {
     // Scratch space for the Dotnet unwinder.
     DotnetUnwindScratchSpace dotnetUnwindScratch;
@@ -1060,15 +1079,5 @@ typedef struct PIDPageMappingInfo {
 typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
-
-typedef struct GoLabelsOffsets {
-  u32 m_offset;
-  u32 curg;
-  u32 labels;
-  u32 hmap_count;
-  u32 hmap_log2_bucket_count;
-  u32 hmap_buckets;
-  s32 tls_offset;
-} GoLabelsOffsets;
 
 #endif // OPTI_TYPES_H

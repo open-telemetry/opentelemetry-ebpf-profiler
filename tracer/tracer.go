@@ -438,7 +438,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		{
 			progID: uint32(support.ProgGoLabels),
 			name:   "go_labels",
-			enable: !cfg.InterpretersConfig.Labels.IsDisabled(),
+			enable: !cfg.InterpretersConfig.Go.IsLabelsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindBEAM),

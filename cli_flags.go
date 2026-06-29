@@ -222,8 +222,8 @@ func parseTracers(tracers string) (interpreterconfig.Config, error) {
 			cfg.Dotnet.Disabled = false
 		case "go":
 			cfg.Go.Disabled = false
-		case "labels":
-			cfg.Labels.Disabled = false
+			cfg.Go.Symbolization.Disabled = false
+			cfg.Go.Labels.Disabled = false
 		case "beam":
 			cfg.BEAM.Disabled = false
 		case "native":
