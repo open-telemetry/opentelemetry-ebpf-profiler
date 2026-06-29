@@ -154,6 +154,7 @@ jobs:
           - { target_arch: amd64, kernel: 6.12.16 }
           - { target_arch: amd64, kernel: 6.16 }
           - { target_arch: amd64, kernel: 6.18 }
+          - { target_arch: amd64, kernel: 7.1 }
 
           # ARM64 (NOTE: older ARM64 kernels are not available in Cilium repos)
           - { target_arch: arm64, kernel: 6.6.31 }
@@ -162,6 +163,7 @@ jobs:
           - { target_arch: arm64, kernel: 6.12.16 }
           - { target_arch: arm64, kernel: 6.16 }
           - { target_arch: arm64, kernel: 6.18 }
+          - { target_arch: arm64, kernel: 7.1 }
     steps:
       - name: Disable man-db
         run: |
