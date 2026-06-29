@@ -1004,7 +1004,7 @@ func (sh *Section) Data(maxSize uint) ([]byte, error) {
 func (f *File) SetDontNeed() {
 	if f.mmapReader != nil {
 		if err := f.mmapReader.SetMadvDontNeed(); err != nil {
-			log.Errorf("Failed to set MADV_DONTNEED: %v", err)
+			log.Error("Failed to set MADV_DONTNEED", "err", err)
 		}
 	}
 }

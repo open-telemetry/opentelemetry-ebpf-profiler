@@ -324,7 +324,7 @@ func (r *rubyData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libp
 	var modID uint32
 	if r.tlsModuleIdOffset != 0 {
 		modID = uint32(rm.Uint64(bias + r.tlsModuleIdOffset))
-		log.Debugf("Ruby TLS module ID: %d", modID)
+		log.Debug("Ruby TLS module ID", "mod_id", modID)
 	}
 
 	cdata := support.RubyProcInfo{
@@ -465,8 +465,8 @@ func (r *rubyInstance) UpdateLibcInfo(ebpf interpreter.EbpfHandler, pid libpf.PI
 		return err
 	}
 	r.dtvInfoInserted = true
-	log.Debugf("Ruby: updated proc data with DTVInfo (offset=%d, multiplier=%d)",
-		libcInfo.DTVInfo.Offset, libcInfo.DTVInfo.Multiplier)
+	log.Debug("Ruby: updated proc data with DTVInfo",
+		"offset", libcInfo.DTVInfo.Offset, "multiplier", libcInfo.DTVInfo.Multiplier)
 	return nil
 }
 
@@ -584,8 +584,8 @@ func (r *rubyInstance) getStringCached(addr libpf.Address, reader StringReader) 
 		return libpf.NullString, err
 	}
 	if !util.IsValidString(str) {
-		log.Debugf("Extracted invalid string from Ruby at 0x%x '%v'[len=%d]",
-			addr, unsafe.Slice(unsafe.StringData(str), min(len(str), 128)), len(str))
+		log.Debug("Extracted invalid string from Ruby",
+			"addr", addr, "value", unsafe.Slice(unsafe.StringData(str), min(len(str), 128)), "len", len(str))
 		return libpf.NullString, fmt.Errorf("extracted invalid Ruby string from address 0x%x", addr)
 	}
 
@@ -925,7 +925,7 @@ func (r *rubyInstance) id2str(originalId uint64) (libpf.String, error) {
 	// Handle embedded arrays
 	// https://github.com/ruby/ruby/blob/8836f26efa7a6deb0ef8b3f253d8d53d04d43152/include/ruby/internal/core/rarray.h#L297-L307
 	if (flags & RARRAY_EMBED_FLAG) > 0 {
-		log.Debugf("Handling embedded array with shift")
+		log.Debug("Handling embedded array with shift")
 		// It is embedded, so just get the offset of as.ary
 		idsPtr = r.rm.Ptr(ids + libpf.Address(vms.rarray_struct.as_ary))
 
@@ -950,7 +950,7 @@ func (r *rubyInstance) id2str(originalId uint64) (libpf.String, error) {
 
 	flags = r.rm.Uint64(array + +libpf.Address(vms.rbasic_struct.flags))
 	if (flags & RARRAY_EMBED_FLAG) > 0 {
-		log.Debugf("Handling embedded array (2 levels) with shift")
+		log.Debug("Handling embedded array (2 levels) with shift")
 		arrayPtr = r.rm.Ptr(array + libpf.Address(vms.rarray_struct.as_ary))
 	}
 	offset := (serial % idEntryUnit) * idEntrySize
@@ -958,7 +958,7 @@ func (r *rubyInstance) id2str(originalId uint64) (libpf.String, error) {
 
 	symbolName, err = r.getStringCached(stringPtr, r.readRubyString)
 	if err != nil {
-		log.Errorf("Unable to read string %v", err)
+		log.Error("Unable to read string", "err", err)
 	}
 
 	return symbolName, err
@@ -976,20 +976,20 @@ func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType ui
 	sourceFileNamePtr := npsr.Ptr(dataBytes, uint(vms.iseq_location_struct.pathobj))
 	sourceFileName, err := r.getStringCached(sourceFileNamePtr, r.readPathObjRealPath)
 	if err != nil {
-		log.Debugf("Failed to get source file name %v", err)
+		log.Debug("Failed to get source file name", "err", err)
 	}
 
 	iseqLabelPtr := npsr.Ptr(dataBytes, uint(vms.iseq_location_struct.label))
 	iseqLabel, err := r.getStringCached(iseqLabelPtr, r.readRubyString)
 	if err != nil {
-		log.Debugf("Failed to get source label (iseq@0x%08x) %d, %v", iseqBody, frameAddrType, err)
+		log.Debug("Failed to get source label", "iseq", iseqBody, "frame_addr_type", frameAddrType, "err", err)
 		return &rubyIseq{}, err
 	}
 
 	iseqBaseLabelPtr := npsr.Ptr(dataBytes, uint(vms.iseq_location_struct.base_label))
 	iseqBaseLabel, err := r.getStringCached(iseqBaseLabelPtr, r.readRubyString)
 	if err != nil {
-		log.Debugf("Failed to get source base label (iseq@0x%08x) %d, %v", iseqBody, frameAddrType, err)
+		log.Debug("Failed to get source base label", "iseq", iseqBody, "frame_addr_type", frameAddrType, "err", err)
 		return &rubyIseq{}, err
 	}
 
@@ -1009,7 +1009,8 @@ func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType ui
 			libpf.Address(vms.iseq_constant_body.location+vms.iseq_location_struct.base_label))
 		methodName, err = r.getStringCached(methodNamePtr, r.readRubyString)
 		if err != nil {
-			log.Warnf("Unable to find local method name on iseq method (%d) (iseq@0x%08x) %v", iseqType, iseqBody, err)
+			log.Warn("Unable to find local method name on iseq method",
+				"iseq_type", iseqType, "iseq", iseqBody, "err", err)
 		}
 	}
 
@@ -1125,7 +1126,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 		if err != nil {
 			// Failing to read the class name is not a fatal error, keep going with just the method name
 			// and provide an incomplete label rather than nothing at all.
-			log.Errorf("Failed to read class name for cme (%d): %v", frameAddrType, err)
+			log.Error("Failed to read class name for cme", "frame_addr_type", frameAddrType, "err", err)
 		}
 	}
 
@@ -1141,7 +1142,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 		lineNo, err := r.getRubyLineNo(cfpIseq, uint64(pc))
 		if err != nil {
 			lineNo = 0
-			log.Warnf("RubySymbolizer: Failed to get line number (%d) %v", frameAddrType, err)
+			log.Warn("RubySymbolizer: Failed to get line number", "frame_addr_type", frameAddrType, "err", err)
 		}
 		iseq, err := r.readIseqBody(iseqBody, pc, frameAddrType)
 		if err != nil {
@@ -1332,7 +1333,8 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 			(maxVer>>16)&0xff, (maxVer>>8)&0xff, maxVer&0xff)
 	}
 
-	log.Debugf("Ruby %d.%d.%d detected", (version>>16)&0xff, (version>>8)&0xff, version&0xff)
+	log.Debug("Ruby version detected",
+		"major", (version>>16)&0xff, "minor", (version>>8)&0xff, "patch", version&0xff)
 
 	// Before Ruby 2.5 the symbol ruby_current_thread was used for the current execution
 	// context but got replaced in [0] with ruby_current_execution_context_ptr.
@@ -1368,8 +1370,9 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 
 	currentEcSymbolName := libpf.SymbolName(rubyCurrentEcTlsSymbol)
 
-	log.Debugf("Ruby %d.%d.%d detected, looking for currentCtxPtr=%q, currentEcSymbol=%q",
-		(version>>16)&0xff, (version>>8)&0xff, version&0xff, currentCtxSymbol, currentEcSymbolName)
+	log.Debug("Ruby version detected, looking for symbols",
+		"major", (version>>16)&0xff, "minor", (version>>8)&0xff, "patch", version&0xff,
+		"current_ctx_ptr", currentCtxSymbol, "current_ec_symbol", currentEcSymbolName)
 
 	// Symbol discovery strategy:
 	// - Ruby < 3.0.4: Uses currentCtxPtr (global/ractor-based execution context)
@@ -1378,17 +1381,17 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// eBPF selects the appropriate method based on version at runtime.
 	currentCtxPtr, err := ef.LookupSymbolAddress(currentCtxSymbol)
 	if err != nil {
-		log.Debugf("Direct lookup of %v failed: %v, will try fallback", currentCtxSymbol, err)
+		log.Debug("Direct lookup failed, will try fallback", "symbol", currentCtxSymbol, "err", err)
 	}
 
 	interpRanges, err = info.GetSymbolAsRanges(interpSymbolName)
 	if err != nil {
-		log.Debugf("Direct lookup of %v failed: %v, will try fallback", interpSymbolName, err)
+		log.Debug("Direct lookup failed, will try fallback", "symbol", interpSymbolName, "err", err)
 	}
 
 	globalSymbols, err = ef.LookupSymbolAddress(globalSymbolsName)
 	if err != nil {
-		log.Debugf("Direct lookup of %v failed: %v, will try fallback", globalSymbolsName, err)
+		log.Debug("Direct lookup failed, will try fallback", "symbol", globalSymbolsName, "err", err)
 	}
 
 	if err = ef.VisitSymbols(func(s libpf.Symbol) bool {
@@ -1412,7 +1415,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 		return true
 	}); err != nil {
-		log.Warnf("failed to visit symbols: %v", err)
+		log.Warn("failed to visit symbols", "err", err)
 	}
 
 	// NOTE for ruby 3.3.0+, if ruby is stripped, we have no way of locating
@@ -1427,7 +1430,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 		return true
 	}); err != nil {
-		log.Warnf("failed to locate TLS descriptor: %v", err)
+		log.Warn("failed to locate TLS descriptor", "err", err)
 	}
 
 	// For statically-linked ruby, extract the direct TP-relative offset from
@@ -1437,7 +1440,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	if isBinRuby {
 		offset, ecErr := extractEcTLSOffset(ef)
 		if ecErr != nil {
-			log.Warnf("failed to extract EC TLS offset for static ruby: %v", ecErr)
+			log.Warn("failed to extract EC TLS offset for static ruby", "err", ecErr)
 		} else {
 			staticTLSOffset = offset
 		}
@@ -1447,15 +1450,20 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	// This is used for DTV-based TLS access when TLSDESC is unavailable.
 	var tlsModuleIdOffset libpf.Address
 	if err = ef.VisitRelocations(func(r pfelf.ElfReloc, _ string) bool {
-		log.Debugf("Found DTPMOD64 relocation at offset %x", r.Off)
+		log.Debug("Found DTPMOD64 relocation", "offset", r.Off)
 		tlsModuleIdOffset = libpf.Address(r.Off)
 		return false
 	}, pfelf.RelDTPMOD64); err != nil {
-		log.Warnf("failed to find DTPMOD64 relocation: %v", err)
+		log.Warn("failed to find DTPMOD64 relocation", "err", err)
 	}
 
-	log.Debugf("Discovered EC tls tpbase offset %x, static tls offset %d, dtpmod offset %x, fallback ctx %x, interp ranges: %v, global symbols: %x",
-		currentEcTpBaseTlsOffset, staticTLSOffset, tlsModuleIdOffset, currentCtxPtr, interpRanges, globalSymbols)
+	log.Debug("Discovered EC tls offsets",
+		"tpbase_offset", currentEcTpBaseTlsOffset,
+		"static_tls_offset", staticTLSOffset,
+		"dtpmod_offset", tlsModuleIdOffset,
+		"fallback_ctx", currentCtxPtr,
+		"interp_ranges", interpRanges,
+		"global_symbols", globalSymbols)
 
 	rid := &rubyData{
 		version:                  version,

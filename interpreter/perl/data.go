@@ -170,7 +170,7 @@ func newData(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo,
 	}
 
 	version := perlVersion(verBytes[0], verBytes[1], verBytes[2])
-	log.Debugf("Perl version %v.%v.%v", verBytes[0], verBytes[1], verBytes[2])
+	log.Debug("Perl version detected", "major", verBytes[0], "minor", verBytes[1], "patch", verBytes[2])
 
 	// Currently tested and supported 5.28.x - 5.42.x.
 	// Could possibly support older Perl versions somewhere back to 5.14-5.20, by just

@@ -91,7 +91,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, errors.New("failed to locate TLS descriptor")
 	}
 
-	log.Debugf("APM integration TLS descriptor offset: 0x%08X", tlsDescElfAddr)
+	log.Debug("APM integration TLS descriptor offset", "offset", tlsDescElfAddr)
 
 	return &data{
 		tlsDescElfAddr:   tlsDescElfAddr,
@@ -129,13 +129,13 @@ func (d data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	socket, err := openAPMAgentSocket(pid, procStorage.TraceSocketPath)
 	if err != nil {
 		if err2 := ebpf.DeleteProcData(libpf.APMInt, pid); err2 != nil {
-			log.Errorf("Failed to remove APM information for PID %d: %v", pid, err2)
+			log.Error("Failed to remove APM information", "pid", pid, "err", err2)
 		}
 		return nil, fmt.Errorf("failed to open APM agent socket: %v", err)
 	}
 
-	log.Debugf("PID %d apm.service.name: %s, trace socket: %s",
-		pid, procStorage.ServiceName, procStorage.TraceSocketPath)
+	log.Debug("APM process storage",
+		"pid", pid, "serviceName", procStorage.ServiceName, "traceSocket", procStorage.TraceSocketPath)
 
 	return &Instance{
 		serviceName: procStorage.ServiceName,
@@ -167,9 +167,9 @@ func (i *Instance) NotifyAPMAgent(
 		return
 	}
 
-	log.Debugf("Reporting %dx trace hash %s -> TX %s for PID %d",
-		count, umTraceHash.StringNoQuotes(),
-		hex.EncodeToString(rawTrace.APMTransactionID[:]), pid)
+	log.Debug("Reporting trace to APM agent",
+		"count", count, "traceHash", umTraceHash.StringNoQuotes(),
+		"transactionID", hex.EncodeToString(rawTrace.APMTransactionID[:]), "pid", pid)
 
 	msg := traceCorrMsg{
 		MessageType:      1,
@@ -181,7 +181,7 @@ func (i *Instance) NotifyAPMAgent(
 	}
 
 	if err := i.socket.SendMessage(msg.Serialize()); err != nil {
-		log.Debugf("Failed to send trace mappings to APM agent: %v", err)
+		log.Debug("Failed to send trace mappings to APM agent", "err", err)
 	}
 }
 

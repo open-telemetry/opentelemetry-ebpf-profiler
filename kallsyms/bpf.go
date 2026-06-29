@@ -200,7 +200,7 @@ func (s *bpfSymbolizer) subscribe(ctx context.Context, onlineCPUs []int) error {
 						return
 					}
 
-					log.Errorf("Failed to read perf event: %v", err)
+					log.Error("Failed to read perf event", "err", err)
 					continue
 				}
 
@@ -222,7 +222,7 @@ func (s *bpfSymbolizer) subscribe(ctx context.Context, onlineCPUs []int) error {
 					case <-ctx.Done():
 					}
 				default:
-					log.Debugf("Unexpected perf record type: %T", record)
+					log.Debug("Unexpected perf record type", "record", record)
 				}
 
 				if ctx.Err() != nil {
@@ -243,15 +243,15 @@ func (s *bpfSymbolizer) reloadWorker(ctx context.Context) {
 		select {
 		case <-nextReload:
 			if err := s.loadBPFPrograms(); err == nil {
-				log.Debugf("Kernel symbols reloaded")
+				log.Debug("Kernel symbols reloaded")
 				nextReload = noTimeout
 			} else {
-				log.Warnf("Failed to reload kernel symbols: %v", err)
+				log.Warn("Failed to reload kernel symbols", "err", err)
 				nextReload = time.After(time.Second)
 			}
 		case record := <-s.records:
 			if err := s.handleBPFUpdate(record); err != nil {
-				log.Warnf("Error handling bpf ksymbol update: %v", err)
+				log.Warn("Error handling bpf ksymbol update", "err", err)
 				nextReload = time.After(time.Second)
 			}
 		case <-ctx.Done():
@@ -344,10 +344,10 @@ func (s *bpfSymbolizer) Close() {
 
 	for _, event := range s.events {
 		if err := event.Disable(); err != nil {
-			log.Errorf("Failed to disable perf event: %v", err)
+			log.Error("Failed to disable perf event", "err", err)
 		}
 		if err := event.Close(); err != nil {
-			log.Errorf("Failed to close perf event: %v", err)
+			log.Error("Failed to close perf event", "err", err)
 		}
 	}
 

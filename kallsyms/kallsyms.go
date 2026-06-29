@@ -574,21 +574,21 @@ func (s *Symbolizer) reloadWorker(ctx context.Context, kobjectClient *kobject.Cl
 			}
 		case <-nextModulesReload:
 			if reloadSymbols, err := s.loadModules(); err == nil {
-				log.Debugf("Kernel modules metadata reloaded, new symbols: %v", reloadSymbols)
+				log.Debug("Kernel modules metadata reloaded", "new_symbols", reloadSymbols)
 				nextModulesReload = noTimeout
 				if reloadSymbols && nextKallsymsReload == noTimeout {
 					nextKallsymsReload = time.After(time.Minute)
 				}
 			} else {
-				log.Warnf("Failed to reload kernel modules metadata: %v", err)
+				log.Warn("Failed to reload kernel modules metadata", "err", err)
 				nextModulesReload = time.After(10 * time.Second)
 			}
 		case <-nextKallsymsReload:
 			if err := s.loadKallsyms(); err == nil {
-				log.Debugf("Kernel symbols reloaded")
+				log.Debug("Kernel symbols reloaded")
 				nextKallsymsReload = noTimeout
 			} else {
-				log.Warnf("Failed to reload kernel symbols: %v", err)
+				log.Warn("Failed to reload kernel symbols", "err", err)
 				nextKallsymsReload = time.After(time.Minute)
 			}
 		case <-ctx.Done():
@@ -607,7 +607,7 @@ func (s *Symbolizer) pollKobjectClient(_ context.Context, kobjectClient *kobject
 			return
 		}
 		if event.Subsystem == "module" {
-			log.Debugf("Kernel modules changed")
+			log.Debug("Kernel modules changed")
 			// Notify worker thread without blocking
 			select {
 			case s.reloadModules <- libpf.Void{}:

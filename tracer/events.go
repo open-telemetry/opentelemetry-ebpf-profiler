@@ -231,14 +231,14 @@ func (t *Tracer) startTraceEventMonitor(ctx context.Context,
 				case err == nil:
 					// Fast path for no error.
 				case errors.Is(err, errOriginUnexpected):
-					log.Warnf("skip trace handling: %v", err)
+					log.Warn("skip trace handling", "error", err)
 					continue
 				case errors.Is(err, errRecordTooSmall), errors.Is(err, errRecordUnexpectedSize):
-					log.Errorf("Stop receiving traces: %v", err)
+					log.Error("Stop receiving traces", "error", err)
 					t.signalDone()
 					return
 				default:
-					log.Warnf("unexpected error handling trace: %v", err)
+					log.Warn("unexpected error handling trace", "error", err)
 					continue
 				}
 

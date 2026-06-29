@@ -80,7 +80,7 @@ func (cmd *uploadCmd) exec(context.Context, []string) (err error) {
 			continue
 		}
 
-		log.Infof("Uploading module `%s`", id.String())
+		log.Info("Uploading module", "module", id.String())
 		if err = cmd.store.UploadModule(id); err != nil {
 			return fmt.Errorf("failed to upload module: %w", err)
 		}

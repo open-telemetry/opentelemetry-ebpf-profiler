@@ -31,7 +31,7 @@ import "C"
 
 //export __bpf_log
 func __bpf_log(buf unsafe.Pointer, sz C.int) {
-	log.Info(string(sliceBuffer(buf, sz)))
+	log.Info("bpf log", "message", string(sliceBuffer(buf, sz)))
 }
 
 //export bpf_ktime_get_ns
@@ -64,12 +64,11 @@ func __bpf_probe_read_user_with_test_fault(
 	// Trace every call so coredump test authors can grep the test output to
 	// pick a candidate address (e.g. the 192-byte read of a PyCodeObject) when
 	// constructing a fault-injection test case.
-	log.Debugf("bpf_probe_read_user_with_test_fault: sz=%d ptr=0x%x", int(sz), addr)
+	log.Debug("bpf_probe_read_user_with_test_fault", "sz", int(sz), "ptr", addr)
 	if _, ok := ctx.faultAddresses[addr]; ok {
 		// This log line stays at Info level so it's visible in CI when a
 		// fault-injection test actually exercises the recovery path.
-		log.Infof("bpf_probe_read_user_with_test_fault: injecting fault at 0x%x (sz=%d)",
-			addr, int(sz))
+		log.Info("bpf_probe_read_user_with_test_fault: injecting fault", "ptr", addr, "sz", int(sz))
 		ctx.faultAddresses[addr]++
 		return -1
 	}
@@ -141,7 +140,7 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 		unsafe.Pointer(&C.apm_int_procs), unsafe.Pointer(&C.go_labels_procs):
 		return unsafe.Pointer(uintptr(0))
 	default:
-		log.Errorf("Map at 0x%x not found", mapdef)
+		log.Error("Map not found", "mapdef", mapdef)
 	}
 	return unsafe.Pointer(uintptr(0))
 }

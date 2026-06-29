@@ -27,7 +27,7 @@ func New(success, fail *atomic.Uint64) SuccessFailureCounter {
 // ReportSuccess increments the success counter or logs an error otherwise.
 func (sfc *SuccessFailureCounter) ReportSuccess() {
 	if sfc.sealed {
-		log.Errorf("Attempted to report success/failure status more than once.")
+		log.Error("Attempted to report success/failure status more than once")
 		return
 	}
 	sfc.success.Add(1)
@@ -37,7 +37,7 @@ func (sfc *SuccessFailureCounter) ReportSuccess() {
 // ReportFailure increments the failure counter or logs an error otherwise.
 func (sfc *SuccessFailureCounter) ReportFailure() {
 	if sfc.sealed {
-		log.Errorf("Attempted to report failure/success status more than once.")
+		log.Error("Attempted to report failure/success status more than once")
 		return
 	}
 	sfc.fail.Add(1)

@@ -89,7 +89,7 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 
 	r.runLoop.Start(ctx, r.cfg.ReportInterval, r.cfg.ReportJitter, func() {
 		if err := r.reportOTLPProfile(ctx); err != nil {
-			log.Errorf("Request failed: %v", err)
+			log.Error("Request failed", "err", err)
 		}
 	}, func() {
 		// Allow the GC to purge expired entries to avoid memory leaks.
@@ -103,7 +103,7 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 		<-r.runLoop.stopSignal
 		cancelReporting()
 		if err := otlpGrpcConn.Close(); err != nil {
-			log.Errorf("Stopping connection of OTLP client client failed: %v", err)
+			log.Error("Stopping connection of OTLP client client failed", "err", err)
 		}
 	}()
 
@@ -124,11 +124,11 @@ func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version,
 		collectionStartTime, collectionEndTime)
 	if err != nil {
-		log.Errorf("pdata: %v", err)
+		log.Error("pdata generation failed", "err", err)
 		return nil
 	}
 	if profiles.SampleCount() == 0 {
-		log.Debugf("Skip sending of OTLP profile with no samples")
+		log.Debug("Skip sending of OTLP profile with no samples")
 		return nil
 	}
 
@@ -154,11 +154,10 @@ func waitGrpcEndpoint(ctx context.Context, cfg *Config) (*grpc.ClientConn, error
 			}
 			retries++
 
-			log.Warnf(
-				"Failed to setup gRPC connection (try %d of %d): %v",
-				retries,
-				cfg.MaxGRPCRetries,
-				err,
+			log.Warn("Failed to setup gRPC connection",
+				"try", retries,
+				"max_retries", cfg.MaxGRPCRetries,
+				"err", err,
 			)
 			select {
 			case <-ctx.Done():

@@ -99,8 +99,7 @@ func (pm *ProcessManager) assignLibcInfo(pid libpf.PID, libcInfo *libc.LibcInfo)
 	// Update the tsdInfo to interpreters that are already attached
 	for _, instance := range pm.interpreters[pid] {
 		if err := instance.UpdateLibcInfo(pm.ebpf, pid, newLibcInfo); err != nil {
-			log.Errorf("Failed to update PID %v LibcInfo: %v",
-				pid, err)
+			log.Error("Failed to update PID LibcInfo", "pid", pid, "error", err)
 		}
 	}
 }
@@ -153,7 +152,8 @@ func (pm *ProcessManager) fillSelfContainerID(pid libpf.PID, meta *process.Proce
 	if ino == pm.selfCgroupIno {
 		meta.ContainerID = pm.selfContainerID
 	} else {
-		log.Debugf("Process %d cgroup inode (%d) doesn't match profiler (%d)", pid, ino, pm.selfCgroupIno)
+		log.Debug("Process cgroup inode doesn't match profiler",
+			"pid", pid, "cgroup_inode", ino, "profiler_cgroup_inode", pm.selfCgroupIno)
 	}
 }
 
@@ -197,13 +197,13 @@ func (pm *ProcessManager) handleNewInterpreter(pr process.Process, bias libpf.Ad
 			data, pid, err)
 	}
 
-	log.Debugf("Attached to %v interpreter in PID %v", data, pid)
+	log.Debug("Attached to interpreter", "interpreter", data, "pid", pid)
 	pm.assignInterpreter(pid, oid, instance)
 
 	if libcInfo := pm.getLibcInfo(pid); libcInfo != nil {
 		err = instance.UpdateLibcInfo(pm.ebpf, pid, *libcInfo)
 		if err != nil {
-			log.Errorf("Failed to update PID %v LibcInfo: %v", pid, err)
+			log.Error("Failed to update PID LibcInfo", "pid", pid, "error", err)
 		}
 	}
 
@@ -285,7 +285,7 @@ func (pm *ProcessManager) processNewMapping(pid libpf.PID, m *Mapping) uint64 {
 	// Update the eBPF maps with information about this mapping.
 	prefixes, err := lpm.CalculatePrefixList(uint64(m.Vaddr), uint64(m.Vaddr+mf.End-mf.Start))
 	if err != nil {
-		log.Errorf("Failed to create LPM entries for PID %d: %v", pid, err)
+		log.Error("Failed to create LPM entries", "pid", pid, "error", err)
 		return 0
 	}
 
@@ -294,8 +294,8 @@ func (pm *ProcessManager) processNewMapping(pid libpf.PID, m *Mapping) uint64 {
 	fileID := uint64(host.FileIDFromLibpf(mf.File.Value().FileID))
 	for _, prefix := range prefixes {
 		if err = pm.ebpf.UpdatePidPageMappingInfo(pid, prefix, fileID, bias); err != nil {
-			log.Errorf("Failed to update pid_page_to_mapping_info (pid: %d, page: 0x%x/%d): %v",
-				pid, prefix.Key, prefix.Length, err)
+			log.Error("Failed to update pid_page_to_mapping_info",
+				"pid", pid, "page", prefix.Key, "prefix_length", prefix.Length, "error", err)
 			break
 		}
 		added++
@@ -307,13 +307,13 @@ func (pm *ProcessManager) processRemovedMapping(pid libpf.PID, m *Mapping) uint6
 	mf := m.FrameMapping.Value()
 	prefixes, err := lpm.CalculatePrefixList(uint64(m.Vaddr), uint64(m.Vaddr+mf.End-mf.Start))
 	if err != nil {
-		log.Errorf("Failed to create LPM entries for PID %d: %v", pid, err)
+		log.Error("Failed to create LPM entries", "pid", pid, "error", err)
 		return 0
 	}
 
 	deleted, err := pm.ebpf.DeletePidPageMappingInfo(pid, prefixes)
 	if err != nil {
-		log.Errorf("Failed to delete mappings for PID %d: %v", pid, err)
+		log.Error("Failed to delete mappings", "pid", pid, "error", err)
 	}
 
 	fileID := host.FileIDFromLibpf(mf.File.Value().FileID)
@@ -337,8 +337,7 @@ func (pm *ProcessManager) processRemovedInterpreters(pid libpf.PID,
 			continue
 		}
 		if err := instance.Detach(pm.ebpf, pid); err != nil {
-			log.Errorf("Failed to unload interpreter for PID %d: %v",
-				pid, err)
+			log.Error("Failed to unload interpreter", "pid", pid, "error", err)
 		}
 		delete(pm.interpreters[pid], key)
 	}
@@ -367,24 +366,23 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 		// process has exited already and the mapping file is unavailable
 		// or it is not an ELF file. Ignore these errors silently.
 		if !errors.Is(info.err, os.ErrNotExist) && !errors.Is(info.err, pfelf.ErrNotELF) {
-			log.Debugf("Failed to get ELF info for PID %d file %v: %v",
-				pr.PID(), m.Path, info.err)
+			log.Debug("Failed to get ELF info", "pid", pr.PID(), "file", m.Path, "error", info.err)
 		}
 		return libpf.FrameMapping{}, info.err
 	}
 
 	elfSpaceVA, ok := info.addressMapper.FileOffsetToVirtualAddress(m.FileOffset)
 	if !ok {
-		log.Warnf("Failed to map file offset of PID %d, file %s, offset %d",
-			pr.PID(), m.Path, m.FileOffset)
+		log.Warn("Failed to map file offset",
+			"pid", pr.PID(), "file", m.Path, "offset", m.FileOffset)
 		return libpf.FrameMapping{}, errInvalidVirtualAddress
 	}
 
 	fileID := host.FileIDFromLibpf(info.mappingFile.Value().FileID)
 	ei, err := pm.eim.AddOrIncRef(fileID, elfRef)
 	if err != nil {
-		log.Errorf("Failed to load executable info for PID %d file %v (fileID %s): %v",
-			pr.PID(), m.Path, fileID.StringNoQuotes(), err)
+		log.Error("Failed to load executable info",
+			"pid", pr.PID(), "file", m.Path, "file_id", fileID.StringNoQuotes(), "error", err)
 		return libpf.FrameMapping{}, err
 	}
 
@@ -393,8 +391,8 @@ func (pm *ProcessManager) newFrameMapping(pr process.Process, m *process.RawMapp
 	if ei.Data != nil {
 		bias := libpf.Address(m.Vaddr - elfSpaceVA)
 		if err := pm.handleNewInterpreter(pr, bias, m.GetOnDiskFileIdentifier(), ei.Data); err != nil {
-			log.Errorf("Failed to handle new interpreter for PID %d file %v: %v",
-				pr.PID(), m.Path, err)
+			log.Error("Failed to handle new interpreter",
+				"pid", pr.PID(), "file", m.Path, "error", err)
 		}
 	}
 	pm.mu.Unlock()
@@ -431,12 +429,12 @@ func compareMapping(a, b Mapping) int {
 // fast enough and this particular pid is reused again by the system.
 func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	exitKTime := times.GetKTime()
-	log.Debugf("- PID: %v", pid)
+	log.Debug("Process exit", "pid", pid)
 
 	var err error
 	defer func() {
 		if err != nil {
-			log.Error(err)
+			log.Error("Failed to process PID exit", "error", err)
 		}
 	}()
 	defer pm.ebpf.RemoveReportedPID(pid)
@@ -445,7 +443,7 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 
 	info, pidExists := pm.pidToProcessInfo[pid]
 	if !pidExists {
-		log.Debugf("Skip process exit handling for unknown PID %d", pid)
+		log.Debug("Skip process exit handling for unknown PID", "pid", pid)
 		return
 	}
 
@@ -454,7 +452,7 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 	if _, pidExitProcessed := pm.exitEvents[pid]; !pidExitProcessed {
 		pm.exitEvents[pid] = exitKTime
 	} else {
-		log.Debugf("Skip duplicate process exit handling for PID %d", pid)
+		log.Debug("Skip duplicate process exit handling", "pid", pid)
 		return
 	}
 
@@ -487,7 +485,7 @@ func (pm *ProcessManager) processPIDExit(pid libpf.PID) {
 // TODO: Periodic synchronization of mappings for every tracked PID.
 func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pid := pr.PID()
-	log.Debugf("= PID: %v", pid)
+	log.Debug("SynchronizeProcess", "pid", pid)
 
 	// Abort early if process is waiting for cleanup in ProcessedUntil
 	pm.mu.Lock()
@@ -495,7 +493,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.mu.Unlock()
 
 	if ok {
-		log.Debugf("PID %v waiting for cleanup, aborting SynchronizeProcess", pid)
+		log.Debug("PID waiting for cleanup, aborting SynchronizeProcess", "pid", pid)
 		pm.ebpf.RemoveReportedPID(pid)
 		return
 	}
@@ -636,7 +634,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			// Since listing /proc and opening files in there later is inherently racy,
 			// we expect to lose the race sometimes and thus expect to hit os.IsNotExist.
 			pm.mappingStats.errProcNotExist.Add(1)
-			log.Debugf("removing pid due to mappings read error: %v", err)
+			log.Debug("removing pid due to mappings read error", "error", err)
 			pm.processPIDExit(pid)
 			return
 		default:
@@ -645,7 +643,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 				// return ESRCH. Handle it as if the process did not exist.
 				pm.mappingStats.errProcESRCH.Add(1)
 			}
-			log.Debugf("removing pid due to mappings read error: %v", err)
+			log.Debug("removing pid due to mappings read error", "error", err)
 			pm.processPIDExit(pid)
 			return
 		}
@@ -697,21 +695,20 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		err := instance.SynchronizeMappings(pm.ebpf, pm.exeReporter, pr, interpreterMappings)
 		if err != nil {
 			if alive, _ := isPIDLive(pid); alive {
-				log.Errorf("Failed to handle new anonymous mapping for PID %d: %v", pid, err)
+				log.Error("Failed to handle new anonymous mapping", "pid", pid, "error", err)
 			} else {
-				log.Debugf("Failed to handle new anonymous mapping for PID %d: process exited",
-					pid)
+				log.Debug("Failed to handle new anonymous mapping: process exited", "pid", pid)
 			}
 		}
 	}
 
 	if len(mpAdd) > 0 || len(mpRemove) > 0 || len(interpreters) > 0 {
-		log.Debugf("Added %v mappings, removed %v mappings for PID %v with %d interpreters",
-			len(mpAdd), len(mpRemove), pid, len(interpreters))
+		log.Debug("Updated process mappings",
+			"added", len(mpAdd), "removed", len(mpRemove), "pid", pid, "interpreters", len(interpreters))
 	}
 
 	if newProcess {
-		log.Debugf("+ PID: %v", pid)
+		log.Debug("New process", "pid", pid)
 		// TODO: Fine-grained reported_pids handling (evaluate per-PID mapping
 		// synchronization based on per-PID state such as time since last
 		// synchronization). Currently we only remove a PID from reported_pids
@@ -745,7 +742,7 @@ func (pm *ProcessManager) CleanupPIDs() {
 	}
 
 	if len(deadPids) > 0 {
-		log.Debugf("Cleaned up %d dead PIDs", len(deadPids))
+		log.Debug("Cleaned up dead PIDs", "count", len(deadPids))
 	}
 }
 
@@ -805,22 +802,22 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 	var err error
 	defer func() {
 		if err != nil {
-			log.Error(err)
+			log.Error("Failed during ProcessedUntil cleanup", "error", err)
 		}
 	}()
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
 	nowKTime := times.GetKTime()
-	log.Debugf("ProcessedUntil captureKT: %v latency: %v ms",
-		traceCaptureKTime, (nowKTime-traceCaptureKTime)/1e6)
+	log.Debug("ProcessedUntil",
+		"capture_kt", traceCaptureKTime, "latency_ms", (nowKTime-traceCaptureKTime)/1e6)
 
 	for pid, pidExitKTime := range pm.exitEvents {
 		if pidExitKTime > traceCaptureKTime {
 			continue
 		}
 
-		log.Debugf("PID %v deleted", pid)
+		log.Debug("PID deleted", "pid", pid)
 		delete(pm.pidToProcessInfo, pid)
 
 		for _, instance := range pm.interpreters[pid] {
@@ -832,7 +829,7 @@ func (pm *ProcessManager) ProcessedUntil(traceCaptureKTime times.KTime) {
 		}
 		delete(pm.interpreters, pid)
 		delete(pm.exitEvents, pid)
-		log.Debugf("PID %v exit latency %v ms", pid, (nowKTime-pidExitKTime)/1e6)
+		log.Debug("PID exit latency", "pid", pid, "latency_ms", (nowKTime-pidExitKTime)/1e6)
 	}
 }
 
@@ -853,6 +850,6 @@ func readProcessContext(mappingAddr uint64, pr process.Process, oldProcessContex
 		return oldProcessContextInfo
 	}
 
-	log.Debugf("Failed to read ProcessContext for PID %d: %v", pr.PID(), err)
+	log.Debug("Failed to read ProcessContext", "pid", pr.PID(), "error", err)
 	return processcontext.Info{}
 }

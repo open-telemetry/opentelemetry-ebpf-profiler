@@ -75,7 +75,7 @@ func (c *Controller) Start(ctx context.Context, _ component.Host) error {
 	if err := c.ctlr.Start(ctx); err != nil {
 		if c.errorMode == config.IgnoreError {
 			c.ctlr.Shutdown()
-			log.Errorf("eBPF profiler receiver failed, continuing without profiling: %v", err)
+			log.Error("eBPF profiler receiver failed, continuing without profiling", "error", err)
 			return nil
 		}
 		return err

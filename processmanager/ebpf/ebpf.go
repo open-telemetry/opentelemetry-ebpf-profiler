@@ -118,7 +118,7 @@ func LoadMaps(ctx context.Context, interpretersConfig interpreterconfig.Config,
 	}
 
 	if err := probeBatchOperations(cebpf.LPMTrie); err == nil {
-		log.Infof("Supports LPM trie eBPF map batch operations")
+		log.Info("Supports LPM trie eBPF map batch operations")
 		impl.hasLPMTrieBatchOperations = true
 	}
 
@@ -177,8 +177,7 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 func (impl *ebpfMapsImpl) UpdateProcData(typ libpf.InterpreterType, pid libpf.PID,
 	data unsafe.Pointer,
 ) error {
-	log.Debugf("Loading symbol addresses into eBPF map for PID %d type %d",
-		pid, typ)
+	log.Debug("Loading symbol addresses into eBPF map", "pid", pid, "type", typ)
 	ebpfMap, err := impl.getInterpreterTypeMap(typ)
 	if err != nil {
 		return err
@@ -197,8 +196,7 @@ func (impl *ebpfMapsImpl) UpdateProcData(typ libpf.InterpreterType, pid libpf.PI
 
 // DeleteProcData removes the given PID specific data of the specified interpreter data eBPF map.
 func (impl *ebpfMapsImpl) DeleteProcData(typ libpf.InterpreterType, pid libpf.PID) error {
-	log.Debugf("Removing symbol addresses from eBPF map for PID %d type %d",
-		pid, typ)
+	log.Debug("Removing symbol addresses from eBPF map", "pid", pid, "type", typ)
 	ebpfMap, err := impl.getInterpreterTypeMap(typ)
 	if err != nil {
 		return err
@@ -517,7 +515,7 @@ func (impl *ebpfMapsImpl) UpdateExeIDToStackDeltas(fileID host.FileID,
 	}
 	defer func() {
 		if err = innerMap.Close(); err != nil {
-			log.Errorf("Failed to close FD of inner map for 0x%x: %v", fileID, err)
+			log.Error("Failed to close FD of inner map", "file_id", fileID, "error", err)
 		}
 	}()
 

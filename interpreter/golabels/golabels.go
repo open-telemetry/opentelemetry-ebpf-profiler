@@ -60,7 +60,7 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, err
 	}
 	if goVersion == "" {
-		log.Debugf("file %s is not a Go binary", info.FileName())
+		log.Debug("file is not a Go binary", "file", info.FileName())
 		return nil, nil
 	}
 
@@ -78,7 +78,7 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 			}
 		}
 		if !hasInterp {
-			log.Debugf("file %s is a Go shared library, skipping golabels", info.FileName())
+			log.Debug("file is a Go shared library, skipping golabels", "file", info.FileName())
 			return nil, nil
 		}
 	}
@@ -87,7 +87,7 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, fmt.Errorf("unsupported Go version %s (need >= 1.13 and <= 1.26)", goVersion)
 	}
 
-	log.Debugf("file %s detected as go version %s", info.FileName(), goVersion)
+	log.Debug("file detected as Go", "file", info.FileName(), "version", goVersion)
 
 	offsets := getOffsets(goVersion)
 	tlsOffset, err := extractTLSGOffset(file)
@@ -95,7 +95,7 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	case errors.Is(err, libpf.ErrSymbolNotFound):
 		return nil, fmt.Errorf("failed to lookup symbol in %s: %v", info.FileName(), err)
 	case errors.Is(err, errDecodeSymbol):
-		log.Warnf("In %s: %v", info.FileName(), err)
+		log.Warn("TLS offset decode error", "file", info.FileName(), "err", err)
 	case errors.Is(err, nil):
 		// Nothing to do - just continue
 	default:

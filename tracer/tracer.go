@@ -299,7 +299,7 @@ func (t *Tracer) Close() {
 	// Avoid resource leakage by closing all kernel hooks.
 	for hookPoint, hook := range t.hooks {
 		if err := hook.Close(); err != nil {
-			log.Errorf("Failed to close '%s/%s': %v", hookPoint.group, hookPoint.name, err)
+			log.Error("Failed to close hook", "group", hookPoint.group, "name", hookPoint.name, "error", err)
 		}
 		delete(t.hooks, hookPoint)
 	}
@@ -505,7 +505,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 func removeTemporaryMaps(ebpfMaps map[string]*cebpf.Map) error {
 	for _, mapName := range []string{"system_analysis"} {
 		if err := ebpfMaps[mapName].Close(); err != nil {
-			log.Errorf("Failed to close %s: %v", mapName, err)
+			log.Error("Failed to close map", "map", mapName, "error", err)
 			return err
 		}
 		delete(ebpfMaps, mapName)
@@ -684,7 +684,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 				mPath := path.Join(cfg.BPFFSRoot, "otel", mapName)
 				ebpfMap, err := cebpf.LoadPinnedMap(mPath, &cebpf.LoadPinOptions{})
 				if err == nil {
-					log.Infof("Using shared map for OBI span/trace ID communication")
+					log.Info("Using shared map for OBI span/trace ID communication")
 					ebpfMaps[mapName] = ebpfMap
 					continue
 				}
@@ -693,11 +693,11 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 		}
 
 		if !cfg.InterpretersConfig.IsMapEnabled(mapName) {
-			log.Debugf("Skipping eBPF map %s: tracer not enabled", mapName)
+			log.Debug("Skipping eBPF map: tracer not enabled", "map", mapName)
 			continue
 		}
 		if newSize, ok := adaption[mapName]; ok {
-			log.Debugf("Size of eBPF map %s: %v", mapName, newSize)
+			log.Debug("Size of eBPF map", "map", mapName, "size", newSize)
 			mapSpec.MaxEntries = newSize
 		}
 		if noPrealloc && strings.HasPrefix(mapName, "exe_id_to_") &&
@@ -714,7 +714,7 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			if cfg.BPFFSRoot == "" || !cfg.OBIProcessCtx {
 				// In environments, where BPF FS is not available,
 				// we just load the map to not break eBPF programs.
-				log.Infof("Skip pinning eBPF map to share OTel span/trace IDs")
+				log.Info("Skip pinning eBPF map to share OTel span/trace IDs")
 				continue
 			}
 
@@ -724,15 +724,15 @@ func loadAllMaps(coll *cebpf.CollectionSpec, cfg *Config,
 			if err := os.MkdirAll(otelBPFFS, 0o1700); err != nil {
 				// This is a non-fatal error for the functionality
 				// of the profiler. So just log it.
-				log.Warnf("Failed to create '%s'. OTel span/trace IDs can not be shared: %v",
-					otelBPFFS, err)
+				log.Warn("Failed to create OTel BPF FS directory; span/trace IDs cannot be shared",
+					"path", otelBPFFS, "error", err)
 				continue
 			}
 			if err := ebpfMap.Pin(path.Join(otelBPFFS, mapName)); err != nil {
 				// This is a non-fatal error for the functionality
 				// of the profiler. So just log it.
-				log.Warnf("Failed to pin '%s'. OTel span/trace IDs can not be shared: %v",
-					mapName, err)
+				log.Warn("Failed to pin map; OTel span/trace IDs cannot be shared",
+					"map", mapName, "error", err)
 			}
 		}
 	}
@@ -890,12 +890,12 @@ func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 		// so we print each line individually.
 		if ve, ok := err.(*cebpf.VerifierError); ok {
 			for _, line := range ve.Log {
-				log.Errorf("%s", line)
+				log.Error("eBPF verifier error", "line", line)
 			}
 		} else {
 			scanner := bufio.NewScanner(strings.NewReader(err.Error()))
 			for scanner.Scan() {
-				log.Errorf("%s", scanner.Text())
+				log.Error("eBPF load error", "line", scanner.Text())
 			}
 		}
 		return fmt.Errorf("failed to load %s", progSpec.Name)
@@ -1006,7 +1006,7 @@ func (t *Tracer) eBPFMetricsCollector(
 
 		eID := uint32(ebpfID)
 		if err := metricsMap.Lookup(unsafe.Pointer(&eID), &perCPUValues); err != nil {
-			log.Errorf("Failed trying to lookup per CPU element: %v", err)
+			log.Error("Failed to lookup per CPU element", "error", err)
 			continue
 		}
 		value := metrics.MetricValue(0)
@@ -1097,13 +1097,13 @@ func (t *Tracer) loadBpfTrace(raw []byte) (*libpf.EbpfTrace, error) {
 			lbl := ptr.Custom_labels.Labels[i]
 			keyBytes, ok := t.customLabels.validateKey(lbl.Key[:])
 			if !ok {
-				log.Debugf("Dropping Go custom label with empty or invalid UTF-8 name")
+				log.Debug("Dropping Go custom label with empty or invalid UTF-8 name")
 				continue
 			}
 			key := libpf.Intern(pfunsafe.ToString(keyBytes))
 			valBytes, ok := t.customLabels.validateValue(lbl.Val[:])
 			if !ok {
-				log.Debugf("Dropping Go custom label %s with invalid UTF-8 value", key)
+				log.Debug("Dropping Go custom label with invalid UTF-8 value", "name", key)
 				continue
 			}
 			trace.CustomLabels[key] = libpf.Intern(pfunsafe.ToString(valBytes))
@@ -1135,7 +1135,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 	}
 
 	if err := t.kernelSymbolizer.StartMonitor(ctx, onlineCPUs); err != nil {
-		log.Warnf("Failed to start kallsyms monitor: %v", err)
+		log.Warn("Failed to start kallsyms monitor", "error", err)
 	}
 	eventMetricCollector, err := t.startEventMonitor(ctx)
 	if err != nil {
@@ -1152,13 +1152,13 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 			t.enableEvent(support.EventTypeGenericPID)
 			err := t.monitorPIDEventsMap(&pidEvents)
 			if err != nil {
-				log.Errorf("Failed to monitor PID events: %v", err)
+				log.Error("Failed to monitor PID events", "error", err)
 				t.signalDone()
 				return false
 			}
 
 			for _, pidTid := range pidEvents {
-				log.Debugf("=> %v", pidTid)
+				log.Debug("PID event", "pid_tid", pidTid)
 				t.pidEvents <- pidTid
 			}
 
@@ -1189,10 +1189,10 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 func terminatePerfEvents(events []*perf.Event) {
 	for _, event := range events {
 		if err := event.Disable(); err != nil {
-			log.Errorf("Failed to disable perf event: %v", err)
+			log.Error("Failed to disable perf event", "error", err)
 		}
 		if err := event.Close(); err != nil {
-			log.Errorf("Failed to close perf event: %v", err)
+			log.Error("Failed to close perf event", "error", err)
 		}
 	}
 }
@@ -1262,9 +1262,9 @@ func (t *Tracer) probabilisticProfile(interval time.Duration, threshold uint) {
 	if rand.UintN(ProbabilisticThresholdMax) < threshold {
 		enableSampling = true
 		probProfilingStatus = probProfilingEnable
-		log.Debugf("Start sampling for next interval (%v)", interval)
+		log.Debug("Start sampling for next interval", "interval", interval)
 	} else {
-		log.Debugf("Stop sampling for next interval (%v)", interval)
+		log.Debug("Stop sampling for next interval", "interval", interval)
 	}
 
 	events := t.perfEntrypoints.WLock()
@@ -1274,14 +1274,13 @@ func (t *Tracer) probabilisticProfile(interval time.Duration, threshold uint) {
 		if enableSampling {
 			if err := event.Enable(); err != nil {
 				enableErr++
-				log.Errorf("Failed to enable frequency based sampling: %v",
-					err)
+				log.Error("Failed to enable frequency based sampling", "error", err)
 			}
 			continue
 		}
 		if err := event.Disable(); err != nil {
 			disableErr++
-			log.Errorf("Failed to disable frequency based sampling: %v", err)
+			log.Error("Failed to disable frequency based sampling", "error", err)
 		}
 	}
 	if enableErr != 0 {
@@ -1333,7 +1332,7 @@ func (t *Tracer) StartOffCPUProfiling() error {
 	for _, symb := range kprobeSymbs {
 		kprobeLink, linkErr := link.Kprobe(string(symb.Name), kprobeProg, nil)
 		if linkErr != nil {
-			log.Warnf("Failed to attach to %s: %v", symb.Name, linkErr)
+			log.Warn("Failed to attach kprobe", "symbol", symb.Name, "error", linkErr)
 			continue
 		}
 		attached = true

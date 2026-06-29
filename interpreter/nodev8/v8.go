@@ -577,7 +577,7 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		i.mappings[*m] = &mappingGeneration
 
 		// Just assume all anonymous and executable mappings are V8 for now
-		log.Debugf("Enabling V8 for %#x/%#x", m.Vaddr, m.Length)
+		log.Debug("Enabling V8", "vaddr", m.Vaddr, "length", m.Length)
 
 		prefixes, err := lpm.CalculatePrefixList(m.Vaddr, m.Vaddr+m.Length)
 		if err != nil {
@@ -601,7 +601,7 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		if *generationPtr == i.mappingGeneration {
 			continue
 		}
-		log.Debugf("Delete V8 prefix %#v", prefix)
+		log.Debug("Delete V8 prefix", "prefix", prefix)
 		_ = ebpf.DeletePidInterpreterMapping(pid, prefix)
 		delete(i.prefixes, prefix)
 	}
@@ -609,7 +609,7 @@ func (i *v8Instance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		if *generationPtr == i.mappingGeneration {
 			continue
 		}
-		log.Debugf("Disabling V8 for %#x/%#x", m.Vaddr, m.Length)
+		log.Debug("Disabling V8", "vaddr", m.Vaddr, "length", m.Length)
 		delete(i.mappings, m)
 	}
 
@@ -1048,7 +1048,7 @@ func (i *v8Instance) getSource(addr libpf.Address) *v8Source {
 		data, err = i.readFixedTablePtr(
 			addr+libpf.Address(vms.Script.LineEnds),
 			vms.Type.FixedArray, 8, 0)
-		log.Debugf("Reading LineEnds: %d: %v", len(data), err)
+		log.Debug("Reading LineEnds", "len", len(data), "err", err)
 		if err == nil {
 			lines := make([]uint32, len(data)/8)
 			for i := range lines {
@@ -1075,7 +1075,7 @@ func (i *v8Instance) getSource(addr libpf.Address) *v8Source {
 				fragStart += len(fragment)
 				return nil
 			})
-		log.Debugf("Reading Source: %d lines: %v", len(ends), err)
+		log.Debug("Reading Source", "lines", len(ends), "err", err)
 		if err == nil && len(ends) > 0 {
 			src.lineTable = ends
 		}
@@ -1135,14 +1135,14 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 		length := decodeSMI(i.rm.Uint64(fdAddr + libpf.Address(vms.FixedArrayBase.Length)))
 		sfi.bytecodeLength = length
 		if length > 0 && length < 512*1024 && vms.BytecodeArray.Data != 0 {
-			log.Debugf("Bytecode available, %d bytes", length)
+			log.Debug("Bytecode available", "bytes", length)
 			sfi.bytecode = make([]byte, length)
 			err = i.rm.Read(fdAddr+libpf.Address(vms.BytecodeArray.Data), sfi.bytecode)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			log.Debugf("Bytecode, %d bytes, not available", length)
+			log.Debug("Bytecode not available", "bytes", length)
 		}
 		typ := vms.Type.ByteArray
 		if vms.SourcePositionTable.TrustedByteArray {
@@ -1151,7 +1151,7 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 		sfi.bytecodePositionTable, err = i.readFixedTablePtr(
 			fdAddr+libpf.Address(vms.BytecodeArray.SourcePositionTable),
 			typ, 1, 0)
-		log.Debugf("Bytecode positions: %d bytes: %v", len(sfi.bytecodePositionTable), err)
+		log.Debug("Bytecode positions", "bytes", len(sfi.bytecodePositionTable), "err", err)
 	}
 
 	// Script
@@ -1164,9 +1164,11 @@ func (i *v8Instance) getSFI(taggedPtr libpf.Address) (*v8SFI, error) {
 		}
 	}
 
-	log.Debugf("SFI %#x: name: %v, start/end: %v/%v, file/line: %v:%v, #sourceLines: %d",
-		taggedPtr, sfi.funcName, sfi.funcStartPos, sfi.funcEndPos,
-		sfi.source.fileName, sfi.funcStartLine, len(sfi.source.lineTable))
+	log.Debug("SFI",
+		"addr", taggedPtr, "name", sfi.funcName,
+		"start", sfi.funcStartPos, "end", sfi.funcEndPos,
+		"file", sfi.source.fileName, "line", sfi.funcStartLine,
+		"sourceLines", len(sfi.source.lineTable))
 
 	i.addrToSFI.Add(taggedPtr, sfi)
 	return sfi, nil
@@ -1216,8 +1218,8 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 			return nil, errors.New("baseline function without SFI")
 		}
 
-		log.Debugf("Baseline Code %#x read: posSize: %v, cookie: %x",
-			codeAddr, len(codePositionTable), cookie)
+		log.Debug("Baseline Code read",
+			"addr", codeAddr, "posSize", len(codePositionTable), "cookie", cookie)
 
 		v8code := &v8Code{
 			codeDeltaToPosition: make(map[uint32]sourcePosition),
@@ -1321,9 +1323,9 @@ func (i *v8Instance) readCode(taggedPtr libpf.Address, cookie uint32, sfi *v8SFI
 		}
 	}
 
-	log.Debugf("Code %#x read: posSize: %v, sfiSize: %v, inlineSize: %v cookie: %x",
-		codeAddr, len(codePositionTable), len(inliningSFIs),
-		len(inliningPositions), cookie)
+	log.Debug("Code read",
+		"addr", codeAddr, "posSize", len(codePositionTable),
+		"sfiSize", len(inliningSFIs), "inlineSize", len(inliningPositions), "cookie", cookie)
 
 	v8code := &v8Code{
 		codeDeltaToPosition: make(map[uint32]sourcePosition),
@@ -1927,18 +1929,18 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 				}
 				addr, err := ef.LookupSymbolAddress(libpf.SymbolName(s))
 				if err != nil {
-					log.Debugf("V8: %s = not found", s)
+					log.Debug("V8 symbol not found", "symbol", s)
 					if classType.Name == "FrameType" {
 						memberVal.SetUint(^uint64(0))
 					}
 					continue
 				}
 				if memberVal.Kind() == reflect.Bool {
-					log.Debugf("V8: %s exists", s)
+					log.Debug("V8 symbol exists", "symbol", s)
 					memberVal.SetBool(true)
 				} else {
 					val := rm.Uint32(libpf.Address(addr))
-					log.Debugf("V8: %s = %#x", s, val)
+					log.Debug("V8 symbol", "symbol", s, "value", val)
 					memberVal.SetUint(uint64(val))
 				}
 				break
@@ -2128,7 +2130,7 @@ func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 		for j := 0; j < classVal.NumField(); j++ {
 			memberType := classVal.Type().Field(j)
 			memberVal := classVal.Field(j)
-			log.Debugf("V8: %s::%s = %#x", classType.Name, memberType.Name, memberVal.Interface())
+			log.Debug("V8 struct member", "class", classType.Name, "member", memberType.Name, "value", memberVal.Interface())
 			if memberVal.Kind() == reflect.Bool || memberVal.Uint() != 0 {
 				continue
 			}
@@ -2167,7 +2169,7 @@ func locateSnapshotArea(ef *pfelf.File, syms relevantSymbols) util.Range {
 		}
 		// Check that there is a large gap.
 		if fde.PCBegin-prevEnd > 512*1024 {
-			log.Debugf("located snapshot area: %#x - %#x", prevEnd, fde.PCBegin)
+			log.Debug("located snapshot area", "start", prevEnd, "end", fde.PCBegin)
 			return util.Range{
 				Start: uint64(prevEnd),
 				End:   uint64(fde.PCBegin),
@@ -2224,7 +2226,7 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	// Match historic behavior: keep going, even if we can't get the snapshot blob.
 	// (TODO: Figure out when/why this can happen)
 	if err != nil {
-		log.Warnf("Couldn't get V8 DefaultSnapshotBlob: %v", err)
+		log.Warn("Couldn't get V8 DefaultSnapshotBlob", "err", err)
 	} else {
 		rv.DefaultSnapshotBlob = sym
 	}
@@ -2233,7 +2235,7 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	sym, err = ef.LookupSymbol(bytecodeSizesSymbol)
 	if err != nil {
 		// As above, keep going to match historic behavior (why?)
-		log.Warnf("Couldn't get V8 BytecodeSizes: %v", err)
+		log.Warn("Couldn't get V8 BytecodeSizes", "err", err)
 	} else {
 		rv.BytecodeSizes = sym
 	}
@@ -2267,7 +2269,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	}
 
 	version := vers[0]*0x1000000 + vers[1]*0x10000 + vers[2]
-	log.Debugf("V8 version %v.%v.%v", vers[0], vers[1], vers[2])
+	log.Debug("V8 version", "major", vers[0], "minor", vers[1], "build", vers[2])
 	if vers[0] > 0xff || vers[1] > 0xff || vers[2] > 0xffff || version < 0x080100 {
 		return nil, fmt.Errorf("version %v.%v.%v of V8 is not supported (minimum is 8.1.0)",
 			vers[0], vers[1], vers[2])
@@ -2286,8 +2288,8 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	if sym != nil && sym.Size%3 == 0 && sym.Size < 3*256 {
 		// Symbol v8::internal::interpreter::Bytecodes::kBytecodeSizes:
 		// static const uint8_t Bytecodes::kBytecodeSizes[3][kBytecodeCount];
-		log.Debugf("V8: bytecode sizes at %x, length %d, %d opcodes",
-			sym.Address, sym.Size, sym.Size/3)
+		log.Debug("V8 bytecode sizes",
+			"addr", sym.Address, "length", sym.Size, "opcodes", sym.Size/3)
 		d.bytecodeSizes = make([]byte, sym.Size)
 		d.bytecodeCount = uint8(sym.Size / 3)
 		if _, err = ef.ReadAt(d.bytecodeSizes, int64(sym.Address)); err != nil {
@@ -2296,7 +2298,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		for _, opcodeLength := range d.bytecodeSizes {
 			// Check for valid opcode size. Largest seen so far is 17 bytes.
 			if opcodeLength <= 0 || opcodeLength >= 32 {
-				log.Debugf("V8: invalid bytecode opcode size: %d", opcodeLength)
+				log.Debug("V8 invalid bytecode opcode size", "size", opcodeLength)
 				d.bytecodeSizes = nil
 				d.bytecodeCount = 0
 				break

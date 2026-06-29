@@ -61,7 +61,7 @@ func (r *CollectorReporter) Start(ctx context.Context) error {
 
 	r.runLoop.Start(ctx, r.cfg.ReportInterval, r.cfg.ReportJitter, func() {
 		if err := r.reportProfile(ctx); err != nil {
-			log.Errorf("Request failed: %v", err)
+			log.Error("Request failed", "err", err)
 		}
 	}, func() {
 		// Allow the GC to purge expired entries to avoid memory leaks.
@@ -93,12 +93,12 @@ func (r *CollectorReporter) reportProfile(ctx context.Context) error {
 	profiles, err := r.pdata.Generate(reportedEvents, r.name, r.version,
 		collectionStartTime, collectionEndTime)
 	if err != nil {
-		log.Errorf("pdata: %v", err)
+		log.Error("pdata generation failed", "err", err)
 		return nil
 	}
 
 	if profiles.SampleCount() == 0 {
-		log.Debugf("Skip sending profile with no samples")
+		log.Debug("Skip sending profile with no samples")
 		return nil
 	}
 

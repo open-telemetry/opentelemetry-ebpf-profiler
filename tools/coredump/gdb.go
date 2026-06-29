@@ -78,7 +78,7 @@ func (cmd *gdbCmd) exec(context.Context, []string) (err error) {
 
 		// Unpack file if not already done previously.
 		if _, err = os.Stat(dest); err != nil {
-			log.Infof("Unpacking %v", dest)
+			log.Info("Unpacking", "dest", dest)
 			if err = os.MkdirAll(path.Dir(dest), 0o755); err != nil {
 				return fmt.Errorf("failed to create directory for %v: %v", dest, err)
 			}
@@ -128,7 +128,7 @@ func (cmd *gdbCmd) exec(context.Context, []string) (err error) {
 			continue // assume exists
 		}
 
-		log.Infof("Mapping DSO %v -> %v", soName, dsoPath)
+		log.Info("Mapping DSO", "soname", soName, "path", dsoPath)
 		if err = os.Symlink(dsoAbsPath, linkPath); err != nil {
 			return fmt.Errorf("failed to symlink: %v", err)
 		}
@@ -162,7 +162,7 @@ func (cmd *gdbCmd) exec(context.Context, []string) (err error) {
 
 	if !cmd.keep {
 		if err2 := os.RemoveAll(sysroot); err2 != nil {
-			log.Errorf("Failed to remove sysroot: %v", err)
+			log.Error("Failed to remove sysroot", "err", err2)
 		}
 
 		// Only unlink the base directory if it's empty. os.Remove won't
@@ -177,7 +177,7 @@ func (cmd *gdbCmd) exec(context.Context, []string) (err error) {
 func readElfSoName(dsoPath string) string {
 	ef, err := pfelf.Open(dsoPath)
 	if err != nil {
-		log.Warnf("Failed to open ELF %v: %v", dsoPath, err)
+		log.Warn("Failed to open ELF", "path", dsoPath, "err", err)
 		return ""
 	}
 	defer ef.Close()
@@ -189,11 +189,11 @@ func readElfSoName(dsoPath string) string {
 	var soName []string
 	soName, err = ef.DynString(elf.DT_SONAME)
 	if err != nil {
-		log.Warnf("Failed to read DT_SONAME from %v: %v", dsoPath, err)
+		log.Warn("Failed to read DT_SONAME", "path", dsoPath, "err", err)
 		return ""
 	}
 	if len(soName) == 0 {
-		log.Warnf("DSO at %v doesn't specify an SONAME", dsoPath)
+		log.Warn("DSO doesn't specify an SONAME", "path", dsoPath)
 		return ""
 	}
 

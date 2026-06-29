@@ -50,8 +50,8 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		}
 	}
 	if adjustedStartTime.Before(collectionStartTime) {
-		log.Debugf("Adjusted profile start time backward by %v to include oldest sample",
-			collectionStartTime.Sub(adjustedStartTime))
+		log.Debug("Adjusted profile start time backward to include oldest sample",
+			"delta", collectionStartTime.Sub(adjustedStartTime))
 	}
 	collectionStartTime = adjustedStartTime
 
@@ -291,7 +291,7 @@ func (p *Pdata) setProfile(
 		}
 	} // End sample processing
 
-	log.Debugf("Reporting OTLP profile with %d samples", profile.Samples().Len())
+	log.Debug("Reporting OTLP profile with samples", "sample_count", profile.Samples().Len())
 
 	profile.SetDurationNano(uint64(collectionEndTime.Sub(collectionStartTime).Nanoseconds()))
 	profile.SetTime(pcommon.Timestamp(collectionStartTime.UnixNano()))
