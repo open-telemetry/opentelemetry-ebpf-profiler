@@ -17,13 +17,18 @@ import (
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/vc"
 	"go.opentelemetry.io/otel/metric/noop"
+)
 
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
+// The following variables are set at link time via ldflags.
+var (
+	version        = ""
+	revision       = ""
+	buildTimestamp = ""
 )
 
 // Short copyright / license text for eBPF code
@@ -72,7 +77,7 @@ func mainWithExitCode() exitCode {
 	}
 
 	if cfg.Version {
-		fmt.Printf("%s\n", vc.Version())
+		fmt.Printf("%s\n", version)
 		return exitSuccess
 	}
 
@@ -108,7 +113,7 @@ func mainWithExitCode() exitCode {
 
 	rep, err := reporter.NewOTLP(&reporter.Config{
 		Name:                   os.Args[0],
-		Version:                vc.Version(),
+		Version:                version,
 		CollAgentAddr:          cfg.CollAgentAddr,
 		DisableTLS:             cfg.DisableTLS,
 		MaxRPCMsgSize:          32 << 20, // 32 MiB
@@ -127,7 +132,7 @@ func mainWithExitCode() exitCode {
 	cfg.Reporter = rep
 
 	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
-		vc.Version(), vc.Revision(), vc.BuildTimestamp())
+		version, revision, buildTimestamp)
 
 	ctlr := controller.New(cfg)
 	err = ctlr.Start(ctx)

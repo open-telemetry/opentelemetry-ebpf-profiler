@@ -40,9 +40,9 @@ VERSION ?= v0.0.0
 BUILD_TIMESTAMP ?= $(shell date +%s)
 REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
 
-LDFLAGS := -X go.opentelemetry.io/ebpf-profiler/vc.version=$(VERSION) \
-	-X go.opentelemetry.io/ebpf-profiler/vc.revision=$(REVISION) \
-	-X go.opentelemetry.io/ebpf-profiler/vc.buildTimestamp=$(BUILD_TIMESTAMP) \
+LDFLAGS := -X main.version=$(VERSION) \
+	-X main.revision=$(REVISION) \
+	-X main.buildTimestamp=$(BUILD_TIMESTAMP) \
 	-extldflags=-static
 
 GO_TAGS := osusergo,netgo
@@ -83,7 +83,7 @@ ebpf-profiler: ebpf
 	go build $(GO_FLAGS) -tags $(GO_TAGS)
 
 otelcol-ebpf-profiler: ebpf generate-collector
-	cd cmd/otelcol-ebpf-profiler/ && go build $(GO_FLAGS) -tags "$(GO_TAGS)" -o ../../$@
+	cd cmd/otelcol-ebpf-profiler/ && go build -tags "$(GO_TAGS)" -o ../../$@
 
 # Sets opentelemetry collector modules to be pulled from local source tree.
 # This command allows you to make changes to your local checkout of otel core and build
