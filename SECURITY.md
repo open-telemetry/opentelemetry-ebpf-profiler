@@ -11,7 +11,7 @@ project does not consider the following to be security vulnerabilities:
 - a denial of service attack by properly authenticated clients
 - availability-related attack to endpoints by properly authenticated clients
 
-Currently, the ebpf-profiler project considers the containers and executables
+Currently, the opentelemetry-ebpf-profiler project considers the containers and executables
 which are being profiled to be "properly authenticated clients". So this
 project **does not consider the following to be security vulnerabilities**:
 
