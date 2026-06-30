@@ -33,7 +33,7 @@ export GOARCH = $(TARGET_ARCH)
 export CC = $(ARCH_PREFIX)-linux-gnu-gcc
 export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
 
-BRANCH = $(shell git rev-parse --abbrev-ref HEAD | tr -d '-' | tr '[:upper:]' '[:lower:]')
+BRANCH = $(shell git branch --show-current)
 COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
 
 VERSION ?= v0.0.0
