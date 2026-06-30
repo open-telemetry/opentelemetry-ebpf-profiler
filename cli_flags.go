@@ -15,18 +15,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/interpreter"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/beam"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
-	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/golabels"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/perl"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/python"
-	"go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -212,18 +201,7 @@ func parseTracers(tracers string) (interpreterconfig.Config, error) {
 	}
 
 	// Start with all interpreters disabled; enable only the ones listed.
-	cfg := interpreterconfig.Config{
-		Python:  python.Config{BaseConfig: interpreter.BaseConfig{Disabled: true}},
-		Perl:    perl.Config{BaseConfig: interpreter.BaseConfig{Disabled: true}},
-		PHP:     php.Config{BaseConfig: interpreter.BaseConfig{Disabled: true}},
-		Hotspot: hotspot.Config{BaseConfig: interpreter.BaseConfig{Disabled: true}},
-		Ruby:    ruby.Config{BaseConfig: interpreter.BaseConfig{Disabled: true}},
-		V8:      nodev8.Config{BaseConfig: interpreter.BaseConfig{Disabled: true}},
-		Dotnet:  dotnet.Config{BaseConfig: interpreter.BaseConfig{Disabled: true}},
-		Go:      golang.Config{BaseConfig: interpreter.BaseConfig{Disabled: true}},
-		Labels:  golabels.Config{BaseConfig: interpreter.BaseConfig{Disabled: true}},
-		BEAM:    beam.Config{BaseConfig: interpreter.BaseConfig{Disabled: true}},
-	}
+	cfg := interpreterconfig.NoInterpreters()
 
 	for name := range strings.SplitSeq(tracers, ",") {
 		name = strings.ToLower(strings.TrimSpace(name))

@@ -125,10 +125,23 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
   unsigned long fp_marker          = *(unsigned long *)(scratch->fp_ctx + vi->fp_marker);
   unsigned long fp_function        = *(unsigned long *)(scratch->fp_ctx + vi->fp_function);
   unsigned long fp_bytecode_offset = *(unsigned long *)(scratch->fp_ctx + vi->fp_bytecode_offset);
+  DEBUG_PRINT(
+    "v8 VALUES: marker: %lx, func: %lx, bytecode offset: %lx",
+    fp_marker,
+    fp_function,
+    fp_bytecode_offset);
 
   // Data that will be sent to HA is in these variables.
   uintptr_t pointer_and_type = 0, delta_or_marker = 0;
 
+  // Frames can be either be "standard", in which case they have a pointer to a context
+  // in `fp_marker` here, or non-standard, in which case they have a "marker" indicating their type.
+  // See e.g.
+  // https://github.com/nodejs/node/blob/6ac4ab19ad0/deps/v8/src/execution/frame-constants.h#L118-L118.
+  // Thus, look for the presence of a marker (logic given in
+  // https://github.com/nodejs/node/blob/6ac4ab19ad0/deps/v8/src/execution/frames.h#L218-L218); if
+  // there is one, we are in a special frame and can stop immediately.
+  //
   // Before V8 5.8.261 the frame marker was a SMI. Now it has the tag, but it's not shifted fully.
   // The special coding was done to reduce the frame marker push <immed64> to <immed32>.
   if ((fp_marker & V8_SmiTagMask) == V8_SmiTag) {
@@ -139,7 +152,10 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     goto frame_done;
   }
 
-  // Extract the JSFunction being executed
+  // We're not in a special frame, so we're probably in a JS frame;
+  // see
+  // https://github.com/nodejs/node/blob/6ac4ab19ad0/deps/v8/src/execution/frame-constants.h#L109-L109
+  // . Extract the JSFunction being executed
   uintptr_t jsfunc = v8_verify_pointer(fp_function);
   u16 jsfunc_tag   = v8_read_object_type(vi, jsfunc);
   if (jsfunc_tag < vi->type_JSFunction_first || jsfunc_tag > vi->type_JSFunction_last) {
@@ -160,20 +176,7 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     return ERR_V8_BAD_JS_FUNC;
   }
 
-  // First determine if we are in interpreter mode. The simplest way to check
-  // is if fp_bytecode_offset holds a SMI (the bytecode delta). The delta is
-  // relative to the object pointer (not the actual bytecode data), so it is
-  // always positive. In native mode, the same slot contains a Feedback Vector
-  // tagged pointer.
-  delta_or_marker = v8_parse_smi(fp_bytecode_offset, 0);
-  if (delta_or_marker != 0) {
-    DEBUG_PRINT("v8:  -> bytecode_delta %lx", delta_or_marker);
-    pointer_and_type = V8_FILE_TYPE_BYTECODE | sfi;
-    goto frame_done;
-  }
-
-  // Executing native code. At this point we can at least report the SFI if
-  // other things fail.
+  // At this point we can at least report the SFI if other things fail.
   pointer_and_type = V8_FILE_TYPE_NATIVE_SFI | sfi;
 
   // Try to determine the Code object from JSFunction.
@@ -201,15 +204,33 @@ static EBPF_INLINE ErrorCode unwind_one_v8_frame(PerCPURecord *record, V8ProcInf
     return ERR_UNREACHABLE;
   }
 
+  u32 code_flags = *(u32 *)(scratch->code + vi->off_Code_flags);
+  u8 code_kind   = (code_flags & vi->codekind_mask) >> vi->codekind_shift;
+
+  // Detect interpreted frames. JSFunction::code() for interpreted functions
+  // returns the InterpreterEntryTrampoline builtin (CodeKind::BUILTIN), not
+  // CodeKind::INTERPRETED_FUNCTION, so we cannot identify them by CodeKind
+  // alone. Instead, check that the CodeKind is below BASELINE (ruling out
+  // baseline, maglev, and turbofan), and then test whether the bytecode offset
+  // slot holds a SMI -- which it does only for interpreted frames.
+  if (code_kind < vi->codekind_baseline) {
+    delta_or_marker = v8_parse_smi(fp_bytecode_offset, 0);
+    if (delta_or_marker != 0) {
+      DEBUG_PRINT("v8:  -> interpreted, bytecode_delta %lx", delta_or_marker);
+      pointer_and_type = V8_FILE_TYPE_BYTECODE | sfi;
+      goto frame_done;
+    }
+  }
+
+  // Executing native (compiled) code. Determine the PC offset within the Code
+  // object's instruction area.
   uintptr_t code_start;
   if (vi->code_instructions_is_pointer) {
     code_start = *(uintptr_t *)(scratch->code + vi->off_Code_instruction_start);
   } else {
     code_start = code + vi->off_Code_instruction_start;
   }
-  u32 code_size  = *(u32 *)(scratch->code + vi->off_Code_instruction_size);
-  u32 code_flags = *(u32 *)(scratch->code + vi->off_Code_flags);
-  u8 code_kind   = (code_flags & vi->codekind_mask) >> vi->codekind_shift;
+  u32 code_size = *(u32 *)(scratch->code + vi->off_Code_instruction_size);
 
   uintptr_t code_end = code_start + code_size;
   DEBUG_PRINT("v8: func = %lx / sfi = %lx / code = %lx", jsfunc, sfi, code);
@@ -315,6 +336,11 @@ static EBPF_INLINE int unwind_v8(struct pt_regs *ctx)
     increment_metric(metricID_UnwindV8ErrNoProcInfo);
     goto exit;
   }
+  DEBUG_PRINT(
+    "v8 OFFSETS: marker: %x, func: %x, bytecode offset: %x",
+    vi->fp_marker,
+    vi->fp_function,
+    vi->fp_bytecode_offset);
 
   increment_metric(metricID_UnwindV8Attempts);
 
