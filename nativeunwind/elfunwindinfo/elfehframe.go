@@ -242,12 +242,21 @@ func (r *reader) sleb() sleb128 {
 	return val
 }
 
-// str reads one zero-terminated string value
+// str reads one zero-terminated string value. The scan is bounded by r.end so
+// that input which is not NUL-terminated within the reader's region does not
+// index r.data out of bounds. On such an overread the reader is advanced past
+// r.end (mirroring get()), so the caller's isValid() check rejects the record
+// instead of the process panicking.
 func (r *reader) str() []byte {
 	cur := r.pos
 	end := r.pos
-	for r.data[end] != 0 {
+	for end < r.end && r.data[end] != 0 {
 		end++
+	}
+	if end >= r.end {
+		// No NUL terminator within bounds: signal overread to the caller.
+		r.pos = r.end + 1
+		return r.data[cur:end]
 	}
 	r.pos = end + 1
 	return r.data[cur:end]
