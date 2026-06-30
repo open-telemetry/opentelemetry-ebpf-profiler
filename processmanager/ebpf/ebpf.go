@@ -166,7 +166,7 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.BeamProcs, nil
 	case libpf.APMInt:
 		return impl.ApmIntProcs, nil
-	case libpf.GoRuntime:
+	case libpf.Go:
 		return impl.GoProcs, nil
 	default:
 		return nil, fmt.Errorf("type %d is not (yet) supported", typ)
