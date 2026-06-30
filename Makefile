@@ -48,7 +48,7 @@ LDFLAGS := -X main.version=$(VERSION) \
 GO_TAGS := osusergo,netgo
 EBPF_FLAGS :=
 
-GO_FLAGS := -buildvcs=false -ldflags="$(LDFLAGS)"
+GO_FLAGS := -ldflags="$(LDFLAGS)"
 GO_TOOLS := -modfile=internal/tools/go.mod
 
 MAKEFLAGS += -j$(shell nproc)
