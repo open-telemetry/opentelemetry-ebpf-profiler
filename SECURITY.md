@@ -16,9 +16,9 @@ which are being profiled to be "properly authenticated clients". So this
 project **does not consider the following to be security vulnerabilities**:
 
 - a denial of service attack by a crafted executable in the profiled process
-- a denial of service attack by a crafted library mimicing a supported
+- a denial of service attack by a crafted library mimicking a supported
   high-level language and providing malformed introspection data
-- excessive resource usage by crafted library mimicing a supported
+- excessive resource usage by crafted library mimicking a supported
   high-level language and providing malformed introspection data
 
 The above issues are bugs. If possible submit a normal PR fixing the issue,
