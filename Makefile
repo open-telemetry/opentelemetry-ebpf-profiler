@@ -36,12 +36,10 @@ export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
 BRANCH = $(shell git branch --show-current)
 COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
 
-VERSION ?= v0.0.0
 BUILD_TIMESTAMP ?= $(shell date +%s)
 REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
 
-LDFLAGS := -X main.version=$(VERSION) \
-	-X main.revision=$(REVISION) \
+LDFLAGS := -X main.revision=$(REVISION) \
 	-X main.buildTimestamp=$(BUILD_TIMESTAMP) \
 	-extldflags=-static
 

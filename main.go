@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 
 	//nolint:gosec
 	_ "net/http/pprof"
@@ -69,6 +70,14 @@ func mainWithExitCode() exitCode {
 	if err != nil {
 		log.Errorf("Failure to parse arguments: %v", err)
 		return exitParseError
+	}
+
+	if buildInfo, ok := debug.ReadBuildInfo(); ok {
+		if buildInfo.Main.Replace != nil {
+			version = buildInfo.Main.Replace.Version
+		} else {
+			version = buildInfo.Main.Version
+		}
 	}
 
 	if cfg.Copyright {
