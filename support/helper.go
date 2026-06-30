@@ -6,6 +6,8 @@ package support // import "go.opentelemetry.io/ebpf-profiler/support"
 
 import "fmt"
 
+const PIDPageMappingInfoFlagUsesAnonymousMappings = 1 << 0
+
 // EncodeBiasAndUnwindProgram encodes a bias_and_unwind_program value (for C.PIDPageMappingInfo)
 // from a bias and unwind program values.
 // This currently assumes a non-negative bias: this encoding may have to be changed if bias can be

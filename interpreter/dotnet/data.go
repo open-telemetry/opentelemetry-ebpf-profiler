@@ -236,6 +236,10 @@ func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias li
 func (d *dotnetData) Unload(_ interpreter.EbpfHandler) {
 }
 
+func (i *dotnetInstance) UsesAnonymousMappings() bool {
+	return true
+}
+
 func (d *dotnetData) newVMData(rm remotememory.RemoteMemory, bias libpf.Address) (dotnetCdac, error) {
 	cdac := dotnetCdac{}
 	vms := &cdac.Types
