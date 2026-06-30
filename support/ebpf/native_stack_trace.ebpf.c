@@ -12,6 +12,18 @@ BPF_RODATA_VAR(bool, filter_idle_frames, false)
 // inverse_pac_mask is set during load time.
 BPF_RODATA_VAR(u64, inverse_pac_mask, 0)
 
+// vma_lookup_enabled is set during load time.
+// It is enabled only on kernels where the loaded BPF object can call bpf_find_vma().
+BPF_RODATA_VAR(bool, vma_lookup_enabled, false)
+
+// vma_vm_file_offset is set during load time.
+// The offset of vm_file within vm_area_struct.
+BPF_RODATA_VAR(u32, vma_vm_file_offset, 0)
+
+// vma_vm_flags_offset is set during load time.
+// The offset of vm_flags, or __vm_flags, within vm_area_struct.
+BPF_RODATA_VAR(u32, vma_vm_flags_offset, 0)
+
 // tpbase_offset is set during load time.
 // The offset of the Thread Pointer Base variable in `task_struct`. It is
 // populated by the host agent based on kernel code analysis.

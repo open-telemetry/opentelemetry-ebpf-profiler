@@ -7,6 +7,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/cilium/ebpf/btf"
 	"github.com/stretchr/testify/require"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -34,4 +35,43 @@ func TestValidateSystemAnalysisResult(t *testing.T) {
 		err := validateSystemAnalysisResult(support.SystemAnalysis{}, address)
 		require.NoError(t, err)
 	})
+}
+
+func TestCalculateFieldOffsetFindsAnonymousCompositeMembers(t *testing.T) {
+	u64Type := &btf.Int{Name: "u64", Size: 8}
+	vmArea := &btf.Struct{
+		Name: "vm_area_struct",
+		Size: 64,
+		Members: []btf.Member{
+			{
+				Name:   "vm_start",
+				Type:   u64Type,
+				Offset: btf.Bits(0),
+			},
+			{
+				Type: &btf.Union{
+					Size: 16,
+					Members: []btf.Member{
+						{
+							Type: &btf.Struct{
+								Size: 16,
+								Members: []btf.Member{
+									{
+										Name:   "vm_flags",
+										Type:   u64Type,
+										Offset: btf.Bits(64),
+									},
+								},
+							},
+						},
+					},
+				},
+				Offset: btf.Bits(128),
+			},
+		},
+	}
+
+	offset, err := calculateFieldOffset(vmArea, "vm_flags")
+	require.NoError(t, err)
+	require.Equal(t, uint(24), offset)
 }
