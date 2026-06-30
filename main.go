@@ -25,13 +25,6 @@ import (
 	"go.opentelemetry.io/otel/metric/noop"
 )
 
-// The following variables are set at link time via ldflags.
-var (
-	version        = ""
-	revision       = ""
-	buildTimestamp = ""
-)
-
 // Short copyright / license text for eBPF code
 var copyright = `Copyright The OpenTelemetry Authors.
 
@@ -72,6 +65,7 @@ func mainWithExitCode() exitCode {
 		return exitParseError
 	}
 
+	var version string
 	if buildInfo, ok := debug.ReadBuildInfo(); ok {
 		if buildInfo.Main.Replace != nil {
 			version = buildInfo.Main.Replace.Version
@@ -140,8 +134,7 @@ func mainWithExitCode() exitCode {
 	}
 	cfg.Reporter = rep
 
-	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
-		version, revision, buildTimestamp)
+	log.Infof("Starting OTEL profiling agent %s", version)
 
 	ctlr := controller.New(cfg)
 	err = ctlr.Start(ctx)

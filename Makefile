@@ -36,17 +36,9 @@ export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
 BRANCH = $(shell git branch --show-current)
 COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
 
-BUILD_TIMESTAMP ?= $(shell date +%s)
-REVISION ?= $(BRANCH)-$(COMMIT_SHORT_SHA)
-
-LDFLAGS := -X main.revision=$(REVISION) \
-	-X main.buildTimestamp=$(BUILD_TIMESTAMP) \
-	-extldflags=-static
-
 GO_TAGS := osusergo,netgo
 EBPF_FLAGS :=
 
-GO_FLAGS := -ldflags="$(LDFLAGS)"
 GO_TOOLS := -modfile=internal/tools/go.mod
 
 MAKEFLAGS += -j$(shell nproc)
@@ -78,7 +70,7 @@ generate-collector:
 		--output-path cmd/otelcol-ebpf-profiler
 
 ebpf-profiler: ebpf
-	go build $(GO_FLAGS) -tags $(GO_TAGS)
+	go build -tags $(GO_TAGS)
 
 otelcol-ebpf-profiler: ebpf generate-collector
 	cd cmd/otelcol-ebpf-profiler/ && go build -tags "$(GO_TAGS)" -o ../../$@
@@ -131,11 +123,11 @@ vanity-import-fix:
 
 test: generate ebpf test-deps
 	# tools/coredump tests build ebpf C-code using CGO to test it against coredumps
-	CGO_ENABLED=1 go test $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 go test -tags $(GO_TAGS) ./...
 
 test-junit: generate ebpf test-deps
 	mkdir -p $(JUNIT_OUT_DIR)
-	CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- $(GO_FLAGS) -tags $(GO_TAGS) ./...
+	CGO_ENABLED=1 go tool $(GO_TOOLS) gotestsum --junitfile $(JUNIT_OUT_DIR)/junit.xml -- -tags $(GO_TAGS) ./...
 
 TESTDATA_DIRS:= \
 	nativeunwind/elfunwindinfo/testdata \
@@ -184,7 +176,7 @@ docker-image:
 	docker build -t otel/opentelemetry-ebpf-profiler-dev -f Dockerfile .
 
 agent:
-	./tools/docker-agent-build.sh "$(TARGET_ARCH)" "$(VERSION)" "$(REVISION)" "$(BUILD_TIMESTAMP)"
+	./tools/docker-agent-build.sh "$(TARGET_ARCH)"
 
 legal:
 	go tool $(GO_TOOLS) go-licenses save --force . --save_path=LICENSES
