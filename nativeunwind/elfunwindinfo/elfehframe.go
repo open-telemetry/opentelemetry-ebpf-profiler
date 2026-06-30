@@ -455,7 +455,7 @@ func getRegName(arch elf.Machine, reg uleb128) string {
 	case arch == elf.EM_X86_64:
 		return getRegNameX86(reg)
 	default:
-		log.Errorf("Unexpected register index value: %d", reg)
+		log.Error("Unexpected register index value", "reg", reg)
 		return fmt.Sprintf("unk%d", reg)
 	}
 }
@@ -669,7 +669,7 @@ func (st *state) step(r *reader) error {
 				err = st.cur.cfa.expression(expr)
 			}
 			if err != nil {
-				log.Debugf("DWARF expression error (CFA): %v", err)
+				log.Debug("DWARF expression error (CFA)", "err", err)
 			}
 		case cfaExpression:
 			reg := r.uleb()
@@ -677,7 +677,7 @@ func (st *state) step(r *reader) error {
 			if r := st.cur.reg(reg); err == nil && r != nil {
 				err = r.expression(expr)
 				if err != nil && reg == x86RegRBP {
-					log.Debugf("DWARF expression error (RBP): %v", err)
+					log.Debug("DWARF expression error (RBP)", "err", err)
 				}
 			}
 		case cfaOffsetExtendedSf:
@@ -1129,7 +1129,7 @@ func findEhSections(ef *pfelf.File) (
 	// coredump binaries and other ELF files that have the section headers stripped.
 	prog, err := ef.EHFrame()
 	if err != nil {
-		log.Debugf("No PT_GNU_EH_FRAME dynamic tag: %v", err)
+		log.Debug("No PT_GNU_EH_FRAME dynamic tag", "err", err)
 		return nil, nil, nil
 	}
 

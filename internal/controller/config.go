@@ -2,7 +2,6 @@ package controller // import "go.opentelemetry.io/ebpf-profiler/internal/control
 
 import (
 	"flag"
-	"fmt"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
@@ -35,7 +34,7 @@ type Config struct {
 func (cfg *Config) Dump() {
 	log.Debug("Config:")
 	cfg.Fs.VisitAll(func(f *flag.Flag) {
-		log.Debug(fmt.Sprintf("%s: %v", f.Name, f.Value))
+		log.Debug("config flag", "name", f.Name, "value", f.Value)
 	})
 }
 

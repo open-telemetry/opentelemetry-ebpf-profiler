@@ -66,7 +66,7 @@ func (tc *trackedCoredump) GetMappingFileLastModified(_ *process.RawMapping) int
 
 func (tc *trackedCoredump) warnMissing(fileName string) {
 	if _, seen := tc.warn[fileName]; !seen {
-		log.Infof("Module `%s` was not found for bundling", fileName)
+		log.Info("Module was not found for bundling", "module", fileName)
 		tc.warn[fileName] = libpf.Void{}
 	}
 }
@@ -224,7 +224,7 @@ func dumpCore(pid uint64, noModuleBundling bool) (string, error) {
 			//nolint:gosec
 			err2 := os.WriteFile(coredumpFilterPath, append([]byte("0x"), prevMask...), 0o644)
 			if err2 != nil {
-				log.Warnf("Failed to restore previous coredump filter: %v", err2)
+				log.Warn("Failed to restore previous coredump filter", "err", err2)
 			}
 		}()
 	}
@@ -242,14 +242,14 @@ func putModule(store *modulestore.Store, fileName, prefix string, modules *[]Mod
 	// Put the module into the module storage.
 	id, isNew, err := store.InsertModuleLocally(prefix + fileName)
 	if err != nil {
-		log.Errorf("Failed to place file into local module storage: %v", err)
+		log.Error("Failed to place file into local module storage", "err", err)
 		return
 	}
 
 	if isNew {
-		log.Infof("Module `%s` was newly added to local storage", fileName)
+		log.Info("Module was newly added to local storage", "module", fileName)
 	} else {
-		log.Infof("Module `%s` is already present in local storage", fileName)
+		log.Info("Module is already present in local storage", "module", fileName)
 	}
 
 	*modules = append(*modules, ModuleInfo{

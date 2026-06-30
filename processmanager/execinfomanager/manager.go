@@ -369,11 +369,11 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				// Very common if the process exited when we tried to analyze it.
-				log.Debugf("Failed to load %v (%#016x): file not found",
-					loaderInfo.FileName(), loaderInfo.FileID())
+				log.Debug("Failed to load executable: file not found",
+					"file", loaderInfo.FileName(), "file_id", loaderInfo.FileID())
 			} else {
-				log.Errorf("Failed to load %v (%#016x): %v",
-					loaderInfo.FileName(), loaderInfo.FileID(), err)
+				log.Error("Failed to load executable",
+					"file", loaderInfo.FileName(), "file_id", loaderInfo.FileID(), "error", err)
 			}
 			// Continue checking other loaders even if one fails
 			continue
@@ -382,8 +382,8 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 			continue
 		}
 
-		log.Debugf("Interpreter data %v for %v (%#016x)",
-			data, loaderInfo.FileName(), loaderInfo.FileID())
+		log.Debug("Interpreter data loaded",
+			"data", data, "file", loaderInfo.FileName(), "file_id", loaderInfo.FileID())
 		matches = append(matches, data)
 	}
 
@@ -394,8 +394,8 @@ func (state *executableInfoManagerState) detectAndLoadInterpData(
 	case 1:
 		return matches[0]
 	default:
-		log.Debugf("Multiple interpreters (%d) matched for %v (%#016x)",
-			len(matches), loaderInfo.FileName(), loaderInfo.FileID())
+		log.Debug("Multiple interpreters matched",
+			"count", len(matches), "file", loaderInfo.FileName(), "file_id", loaderInfo.FileID())
 		return interpreter.NewMultiData(matches)
 	}
 }

@@ -59,7 +59,7 @@ func Start(meter metric.Meter) {
 				metric.WithDescription(md.Description),
 				metric.WithUnit(md.Unit))
 			if err != nil {
-				log.Errorf("Creating Int64Counter: %v", err)
+				log.Error("Creating Int64Counter", "err", err)
 				continue
 			}
 			counters[md.ID] = counter
@@ -68,7 +68,7 @@ func Start(meter metric.Meter) {
 				metric.WithDescription(md.Description),
 				metric.WithUnit(md.Unit))
 			if err != nil {
-				log.Errorf("Creating Int64Gauge: %v", err)
+				log.Error("Creating Int64Gauge", "err", err)
 				continue
 			}
 			gauges[md.ID] = gauge
@@ -134,13 +134,13 @@ func AddSlice(newMetrics []Metric) {
 
 	for _, metric := range newMetrics {
 		if metric.ID <= IDInvalid || metric.ID >= IDMax {
-			log.Errorf("Metric value %d out of range [%d,%d]- needs investigation",
-				metric.ID, IDInvalid+1, IDMax-1)
+			log.Error("Metric value out of range - needs investigation",
+				"metric_id", metric.ID, "min", IDInvalid+1, "max", IDMax-1)
 			continue
 		}
 
 		if _, ok := metricTypes[metric.ID]; !ok {
-			log.Warnf("Invalid metric id %d, skipping", metric.ID)
+			log.Warn("Invalid metric id, skipping", "metric_id", metric.ID)
 			continue
 		}
 
@@ -156,15 +156,14 @@ func AddSlice(newMetrics []Metric) {
 		// TODO: Remove this when metrics are reworked
 		if metricIDSet[idx]&mask > 0 {
 			if metric.ID > 7 {
-				log.Warnf("Metric ID %d:%v reported multiple times", metric.ID, metric.Value)
+				log.Warn("Metric ID reported multiple times", "metric_id", metric.ID, "value", metric.Value)
 			}
 			continue
 		}
 
 		if nMetrics >= len(metricsBuffer) {
 			// Should not happen
-			log.Errorf("AddSlice capped reporting to %d metrics - needs investigation",
-				len(metricsBuffer))
+			log.Error("AddSlice capped reporting - needs investigation", "max", len(metricsBuffer))
 			continue
 		}
 

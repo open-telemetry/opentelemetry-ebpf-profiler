@@ -235,8 +235,7 @@ func walkLocationTable(m *pythonCodeObject, bci uint32) uint32 {
 	for curI <= bci {
 		firstByte, err := r.ReadByte()
 		if err != nil || firstByte&0x80 == 0 {
-			log.Debugf("first byte: sync lost (%x) or error: %v",
-				firstByte, err)
+			log.Debug("first byte: sync lost or error", "first_byte", firstByte, "err", err)
 			return 0
 		}
 
@@ -269,7 +268,7 @@ func walkLocationTable(m *pythonCodeObject, bci uint32) uint32 {
 			// PY_CODE_LOCATION_INFO_NONE does not hold line information
 			line = -1
 		default:
-			log.Debugf("Unexpected PyCodeLocationInfoKind %d", code)
+			log.Debug("Unexpected PyCodeLocationInfoKind", "kind", code)
 			return 0
 		}
 	}
@@ -539,8 +538,8 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 		name = p.rm.String(data + npsr.Ptr(cobj, vms.PyCodeObject.Name))
 	}
 	if !util.IsValidString(name) {
-		log.Debugf("Extracted invalid Python method/function name at 0x%x '%v'",
-			addr, []byte(name))
+		log.Debug("Extracted invalid Python method/function name",
+			"addr", addr, "value", []byte(name))
 		return nil, fmt.Errorf("extracted invalid Python method/function name from address 0x%x",
 			addr)
 	}
@@ -554,8 +553,8 @@ func (p *pythonInstance) getCodeObject(addr libpf.Address,
 		sourceFileName = sourcePath
 	}
 	if !util.IsValidString(sourceFileName) {
-		log.Debugf("Extracted invalid Python source file name at 0x%x '%v'",
-			addr, []byte(sourceFileName))
+		log.Debug("Extracted invalid Python source file name",
+			"addr", addr, "value", []byte(sourceFileName))
 		return nil, fmt.Errorf("extracted invalid Python source file name from address 0x%x",
 			addr)
 	}
@@ -837,7 +836,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		var err error
 		staticTLSOffset, err = getTLSOffsetFromAssembly(ef)
 		if err != nil {
-			log.Warnf("Failed to extract TLS offset: %v", err)
+			log.Warn("Failed to extract TLS offset", "err", err)
 		}
 	}
 
@@ -979,7 +978,7 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 	})
 	coldRange, err := findColdRange(ef, code, interp)
 	if err != nil {
-		log.Errorf("failed to recover python ranges %s: %s", info.FileName(), err.Error())
+		log.Error("failed to recover python ranges", "file", info.FileName(), "err", err)
 	}
 	if coldRange != (util.Range{}) {
 		interpRanges = append(interpRanges, coldRange)

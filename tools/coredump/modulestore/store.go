@@ -450,7 +450,7 @@ func (store *Store) RemoveLocalTempFiles() error {
 	}
 	unkVisitor := func(unkPath string) error {
 		if !strings.HasPrefix(path.Base(unkPath), localTempPrefix) {
-			log.Warnf("`%s` file in local cache is neither a temp file nor a module", unkPath)
+			log.Warn("file in local cache is neither a temp file nor a module", "path", unkPath)
 			return nil
 		}
 		if err := os.Remove(unkPath); err != nil {

@@ -198,8 +198,8 @@ func loadKernelCode(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 ) ([]byte, error) {
 	code, _, err := executeSystemAnalysisBpfCode(coll.Programs["read_kernel_memory"], maps, address)
 	if err != nil {
-		log.Warnf("Failed to load code: %v.\n"+
-			"Possible reasons include using a kernel without syscall tracepoints enabled.", err)
+		log.Warn("Failed to load code; possible reasons include using a kernel without syscall tracepoints enabled",
+			"error", err)
 	}
 	return code, err
 }
@@ -291,7 +291,7 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	kmod *kallsyms.Module, interpretersConfig interpreterconfig.Config, vars *sysConfigVars,
 ) error {
 	if err := parseBTF(vars); err != nil {
-		log.Infof("Using binary analysis (BTF not available: %s)", err)
+		log.Info("Using binary analysis (BTF not available)", "error", err)
 
 		if err = determineStackLayout(coll, maps, vars); err != nil {
 			return err
@@ -316,10 +316,10 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		}
 	}
 
-	log.Infof("Found offsets: task stack %#x, pt_regs %#x, tpbase %#x",
-		vars.task_stack_offset,
-		vars.stack_ptregs_offset,
-		vars.tpbase_offset)
+	log.Info("Found offsets",
+		"task_stack", vars.task_stack_offset,
+		"pt_regs", vars.stack_ptregs_offset,
+		"tpbase", vars.tpbase_offset)
 
 	return nil
 }
@@ -362,7 +362,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 
 	pacMask := pacmask.GetPACMask()
 	if pacMask != 0 {
-		log.Infof("Determined PAC mask to be 0x%016X", pacMask)
+		log.Info("Determined PAC mask", "pac_mask", pacMask)
 	} else {
 		log.Debug("PAC is not enabled on the system.")
 	}

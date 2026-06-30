@@ -151,7 +151,7 @@ func findStubBounds(vmd *hotspotVMData, bias libpf.Address,
 		}
 
 		if cur.end-cur.start > MaxStubLen {
-			log.Debugf("Unable to determine length for JVM stub %s", cur.name)
+			log.Debug("Unable to determine length for JVM stub", "name", cur.name)
 			continue
 		}
 

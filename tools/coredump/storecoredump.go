@@ -33,7 +33,7 @@ func (scd *StoreCoredump) openFile(path string) (process.ReadAtCloser, error) {
 		// However, old test cases have no bundle at all, so give a warning
 		// only if some modules exists.
 		if len(scd.modules) != 0 {
-			log.Warnf("Store does not bundle %s", path)
+			log.Warn("Store does not bundle path", "path", path)
 		}
 		return nil, fmt.Errorf("failed to open file `%s`: %w", path, os.ErrNotExist)
 	}

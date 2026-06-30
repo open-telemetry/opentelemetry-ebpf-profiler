@@ -136,7 +136,7 @@ func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {
 
 	containerID, err := extractContainerID(sp.pid)
 	if err != nil {
-		log.Debugf("Failed extracting containerID for %d: %v", sp.pid, err)
+		log.Debug("Failed extracting containerID", "pid", sp.pid, "err", err)
 	}
 	return ProcessMeta{
 		Name:         processName,
@@ -168,7 +168,7 @@ func parseContainerID(cgroupFile io.Reader) libpf.String {
 				return libpf.Intern(sub[parts[2]:parts[3]])
 			}
 		}
-		log.Debugf("Could not extract container ID from line: %s", line)
+		log.Debug("Could not extract container ID from line", "line", line)
 	}
 
 	// No containerID could be extracted
@@ -311,7 +311,7 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 		}
 		inode, err := strconv.ParseUint(fields[4], 10, 64)
 		if err != nil {
-			log.Debugf("inode: failed to convert %s to uint64: %v", fields[4], err)
+			log.Debug("inode: failed to convert to uint64", "value", fields[4], "err", err)
 			numParseErrors++
 			continue
 		}
@@ -322,13 +322,13 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 		}
 		major, err := strconv.ParseUint(devs[0], 16, 64)
 		if err != nil {
-			log.Debugf("major device: failed to convert %s to uint64: %v", devs[0], err)
+			log.Debug("major device: failed to convert to uint64", "value", devs[0], "err", err)
 			numParseErrors++
 			continue
 		}
 		minor, err := strconv.ParseUint(devs[1], 16, 64)
 		if err != nil {
-			log.Debugf("minor device: failed to convert %s to uint64: %v", devs[1], err)
+			log.Debug("minor device: failed to convert to uint64", "value", devs[1], "err", err)
 			numParseErrors++
 			continue
 		}
@@ -356,13 +356,13 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 
 		vaddr, err := strconv.ParseUint(addrs[0], 16, 64)
 		if err != nil {
-			log.Debugf("vaddr: failed to convert %s to uint64: %v", addrs[0], err)
+			log.Debug("vaddr: failed to convert to uint64", "value", addrs[0], "err", err)
 			numParseErrors++
 			continue
 		}
 		vend, err := strconv.ParseUint(addrs[1], 16, 64)
 		if err != nil {
-			log.Debugf("vend: failed to convert %s to uint64: %v", addrs[1], err)
+			log.Debug("vend: failed to convert to uint64", "value", addrs[1], "err", err)
 			numParseErrors++
 			continue
 		}
@@ -370,7 +370,7 @@ func iterateMappings(mapsFile io.Reader, callback func(m RawMapping) bool) (uint
 
 		fileOffset, err := strconv.ParseUint(fields[2], 16, 64)
 		if err != nil {
-			log.Debugf("fileOffset: failed to convert %s to uint64: %v", fields[2], err)
+			log.Debug("fileOffset: failed to convert to uint64", "value", fields[2], "err", err)
 			numParseErrors++
 			continue
 		}
@@ -414,14 +414,14 @@ func (sp *systemProcess) IterateMappings(callback func(m RawMapping) bool) (uint
 		// and try extracting mappings for a different thread. Since we stopped
 		// processing /proc at agent startup, it's not possible that the agent
 		// will sample a process without mappings
-		log.Debugf("PID: %v main thread exit", sp.pid)
+		log.Debug("PID main thread exit", "pid", sp.pid)
 		sp.mainThreadExit = true
 
 		if sp.pid == sp.tid {
 			return numParseErrors, ErrNoMappings
 		}
 
-		log.Debugf("TID: %v extracting mappings", sp.tid)
+		log.Debug("TID extracting mappings", "tid", sp.tid)
 		mapsFileAlt, err := os.Open(fmt.Sprintf("/proc/%d/task/%d/maps", sp.pid, sp.tid))
 		// On all errors resulting from trying to get mappings from a different thread,
 		// return ErrNoMappings which will keep the PID tracked in processmanager and
