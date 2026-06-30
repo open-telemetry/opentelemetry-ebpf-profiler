@@ -2153,5 +2153,33 @@
     "name": "GoLabelsDroppedInvalidValue",
     "field": "agent.golabels.dropped.invalid_value",
     "id": 294
+  },
+  {
+    "description": "Number of failures to get TSD base for thread context",
+    "type": "counter",
+    "name": "UnwindThreadContextErrReadTsdBase",
+    "field": "bpf.threadctx.errors.read_tsd_base",
+    "id": 295
+  },
+  {
+    "description": "Number of failures to read the thread context buffer",
+    "type": "counter",
+    "name": "UnwindThreadContextErrReadThreadCtxBuf",
+    "field": "bpf.threadctx.errors.read_thread_ctx_buf",
+    "id": 296
+  },
+  {
+    "description": "Number of failures to read the thread context attributes",
+    "type": "counter",
+    "name": "UnwindThreadContextErrReadThreadCtxAttrs",
+    "field": "bpf.threadctx.errors.read_thread_ctx_attrs",
+    "id": 297
+  },
+  {
+    "description": "Number of successful reads of thread context info",
+    "type": "counter",
+    "name": "UnwindThreadContextReadSuccesses",
+    "field": "bpf.threadctx.read_successes",
+    "id": 298
   }
 ]

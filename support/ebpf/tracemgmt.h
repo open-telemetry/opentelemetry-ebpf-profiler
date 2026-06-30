@@ -274,7 +274,8 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   trace->apm_trace_id.as_int.lo    = 0;
   trace->apm_transaction_id.as_int = 0;
 
-  trace->custom_labels.len = 0;
+  trace->custom_labels_type = CUSTOM_LABELS_TYPE_NONE;
+  trace->custom_labels.len  = 0;
 
   return record;
 }

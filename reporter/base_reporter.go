@@ -10,6 +10,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
+	"go.opentelemetry.io/ebpf-profiler/processcontext"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
@@ -67,6 +68,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 		ContainerID:    meta.ContainerID,
 		PID:            int64(meta.PID),
 		ExecutablePath: meta.ExecutablePath,
+		ContextKey:     processcontext.ResourceToContextKey(meta.Resource),
 	}
 	traceHash := traceutil.HashTrace(trace)
 
@@ -75,8 +77,9 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 
 	if _, exists := (*eventsTree)[key]; !exists {
 		(*eventsTree)[key] = samples.ResourceToProfiles{
-			EnvVars: meta.EnvVars,
-			Events:  make(map[libpf.Origin]samples.SampleToEvents),
+			EnvVars:  meta.EnvVars,
+			Resource: meta.Resource,
+			Events:   make(map[libpf.Origin]samples.SampleToEvents),
 		}
 	}
 
@@ -86,13 +89,14 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	}
 
 	sampleKey := samples.SampleKey{
-		Hash:      traceHash,
-		Comm:      meta.Comm,
-		TID:       int64(meta.TID),
-		CPU:       int64(meta.CPU),
-		SpanID:    meta.SpanID,
-		TraceID:   meta.TraceID,
-		ExtraMeta: extraMeta,
+		Hash:       traceHash,
+		LabelsHash: libpf.HashLabels(trace.CustomLabels),
+		Comm:       meta.Comm,
+		TID:        int64(meta.TID),
+		CPU:        int64(meta.CPU),
+		SpanID:     meta.SpanID,
+		TraceID:    meta.TraceID,
+		ExtraMeta:  extraMeta,
 	}
 	if events, exists := rtp.Events[meta.Origin][sampleKey]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))

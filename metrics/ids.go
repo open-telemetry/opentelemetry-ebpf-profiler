@@ -671,6 +671,18 @@ const (
 	// Number of Go custom labels dropped because the label value was not valid UTF-8
 	IDGoLabelsDroppedInvalidValue = 294
 
+	// Number of failures to get TSD base for thread context
+	IDUnwindThreadContextErrReadTsdBase = 295
+
+	// Number of failures to read the thread context buffer
+	IDUnwindThreadContextErrReadThreadCtxBuf = 296
+
+	// Number of failures to read the thread context attributes
+	IDUnwindThreadContextErrReadThreadCtxAttrs = 297
+
+	// Number of successful reads of thread context info
+	IDUnwindThreadContextReadSuccesses = 298
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 295
+	IDMax = 299
 )

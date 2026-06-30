@@ -17,21 +17,23 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/php"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/python"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/threadcontext"
 )
 
 // Config holds configuration for all interpreters.
 // By default all interpreters are enabled.
 type Config struct {
-	Python  python.Config   `mapstructure:"python" json:"python,omitempty"`
-	Perl    perl.Config     `mapstructure:"perl" json:"perl,omitempty"`
-	PHP     php.Config      `mapstructure:"php" json:"php,omitempty"`
-	Hotspot hotspot.Config  `mapstructure:"hotspot" json:"hotspot,omitempty"`
-	Ruby    ruby.Config     `mapstructure:"ruby" json:"ruby,omitempty"`
-	V8      nodev8.Config   `mapstructure:"v8" json:"v8,omitempty"`
-	Dotnet  dotnet.Config   `mapstructure:"dotnet" json:"dotnet,omitempty"`
-	Go      golang.Config   `mapstructure:"go" json:"go,omitempty"`
-	Labels  golabels.Config `mapstructure:"labels" json:"labels,omitempty"`
-	BEAM    beam.Config     `mapstructure:"beam" json:"beam,omitempty"`
+	Python        python.Config        `mapstructure:"python" json:"python,omitempty"`
+	Perl          perl.Config          `mapstructure:"perl" json:"perl,omitempty"`
+	PHP           php.Config           `mapstructure:"php" json:"php,omitempty"`
+	Hotspot       hotspot.Config       `mapstructure:"hotspot" json:"hotspot,omitempty"`
+	Ruby          ruby.Config          `mapstructure:"ruby" json:"ruby,omitempty"`
+	V8            nodev8.Config        `mapstructure:"v8" json:"v8,omitempty"`
+	Dotnet        dotnet.Config        `mapstructure:"dotnet" json:"dotnet,omitempty"`
+	Go            golang.Config        `mapstructure:"go" json:"go,omitempty"`
+	Labels        golabels.Config      `mapstructure:"labels" json:"labels,omitempty"`
+	BEAM          beam.Config          `mapstructure:"beam" json:"beam,omitempty"`
+	ThreadContext threadcontext.Config `mapstructure:"thread_context" json:"thread_context,omitempty"`
 }
 
 // AllInterpreters returns a Config with all interpreters enabled.
@@ -41,16 +43,17 @@ func AllInterpreters() Config { return Config{} }
 func NoInterpreters() Config {
 	disabled := interpreter.BaseConfig{Disabled: true}
 	return Config{
-		Python:  python.Config{BaseConfig: disabled},
-		Perl:    perl.Config{BaseConfig: disabled},
-		PHP:     php.Config{BaseConfig: disabled},
-		Hotspot: hotspot.Config{BaseConfig: disabled},
-		Ruby:    ruby.Config{BaseConfig: disabled},
-		V8:      nodev8.Config{BaseConfig: disabled},
-		Dotnet:  dotnet.Config{BaseConfig: disabled},
-		Go:      golang.Config{BaseConfig: disabled},
-		Labels:  golabels.Config{BaseConfig: disabled},
-		BEAM:    beam.Config{BaseConfig: disabled},
+		Python:        python.Config{BaseConfig: disabled},
+		Perl:          perl.Config{BaseConfig: disabled},
+		PHP:           php.Config{BaseConfig: disabled},
+		Hotspot:       hotspot.Config{BaseConfig: disabled},
+		Ruby:          ruby.Config{BaseConfig: disabled},
+		V8:            nodev8.Config{BaseConfig: disabled},
+		Dotnet:        dotnet.Config{BaseConfig: disabled},
+		Go:            golang.Config{BaseConfig: disabled},
+		Labels:        golabels.Config{BaseConfig: disabled},
+		BEAM:          beam.Config{BaseConfig: disabled},
+		ThreadContext: threadcontext.Config{BaseConfig: disabled},
 	}
 }
 
@@ -74,9 +77,9 @@ func (cfg *Config) IsMapEnabled(mapName string) bool {
 		return !cfg.Dotnet.IsDisabled()
 	case beam.BPFMapName:
 		return !cfg.BEAM.IsDisabled()
-	case golabels.BPFMapName, apmint.BPFMapName:
-		// go_labels_procs and apm_int_procs are called from
-		// unwind_stop and therefore need to be available all the time.
+	case golabels.BPFMapName, apmint.BPFMapName, threadcontext.BPFMapName:
+		// go_labels_procs, apm_int_procs and thread_context_procs are called
+		// from unwind_stop and therefore need to be available all the time.
 		return true
 	default:
 		return true // Not an interpreter map, so it should be loaded

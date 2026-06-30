@@ -15,6 +15,7 @@ extern struct inhibit_events_t inhibit_events;
 extern struct interpreter_offsets_t interpreter_offsets;
 extern struct trace_events_t trace_events;
 extern struct go_labels_procs_t go_labels_procs;
+extern struct thread_context_procs_t thread_context_procs;
 
 extern struct exe_id_to_8_stack_deltas_t exe_id_to_8_stack_deltas;
 extern struct exe_id_to_9_stack_deltas_t exe_id_to_9_stack_deltas;
