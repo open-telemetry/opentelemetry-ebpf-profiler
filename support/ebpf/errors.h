@@ -182,6 +182,15 @@ typedef enum ErrorCode {
   // Native: Code is running in x86_64 32-bit compat mode.
   ERR_NATIVE_X64_32BIT_COMPAT_MODE = 4017,
 
+  // Native: The instruction pointer is in an executable mapping that cannot be unwound
+  ERR_NATIVE_UNSUPPORTED_MAPPING = 4018,
+
+  // Native: No VMA contains the current instruction pointer
+  ERR_NATIVE_NO_VMA = 4019,
+
+  // Native: The instruction pointer is in a non-executable VMA
+  ERR_NATIVE_NON_EXECUTABLE_VMA = 4020,
+
   // V8: Encountered a bad frame pointer during V8 unwinding
   ERR_V8_BAD_FP = 5000,
 

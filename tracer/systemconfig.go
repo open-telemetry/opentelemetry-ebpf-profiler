@@ -21,9 +21,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/support"
 
 	cebpf "github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/btf"
+	"github.com/cilium/ebpf/features"
 	"github.com/cilium/ebpf/link"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"golang.org/x/sys/unix"
 )
 
 // sysConfigVars supports collecting system configuration information.
@@ -31,6 +34,9 @@ type sysConfigVars struct {
 	tpbase_offset       uint64
 	task_stack_offset   uint32
 	stack_ptregs_offset uint32
+	vma_lookup_enabled  bool
+	vma_vm_file_offset  uint32
+	vma_vm_flags_offset uint32
 }
 
 var (
@@ -38,32 +44,53 @@ var (
 	errSystemAnalysisFailed     = errors.New("system analysis helper failed")
 )
 
-// memberByName resolves btf Member from a Struct with given name
-func memberByName(t *btf.Struct, field string) (*btf.Member, error) {
-	for i, m := range t.Members {
-		if m.Name == field {
-			return &t.Members[i], nil
-		}
+func btfMembers(t btf.Type) ([]btf.Member, error) {
+	switch typ := t.(type) {
+	case *btf.Struct:
+		return typ.Members, nil
+	case *btf.Union:
+		return typ.Members, nil
+	default:
+		return nil, fmt.Errorf("%s is not a struct or union", t.TypeName())
 	}
-	return nil, fmt.Errorf("member '%s' not found", field)
 }
 
-// calculateFieldOffset calculates the offset for given fieldSpec which
-// can refer to field within nested structs.
+func resolveBTFField(t btf.Type, field string) (uint, btf.Type, error) {
+	members, err := btfMembers(t)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	for _, member := range members {
+		if member.Name == field {
+			return uint(member.Offset.Bytes()), member.Type, nil
+		}
+	}
+
+	for _, member := range members {
+		if member.Name != "" {
+			continue
+		}
+		offset, typ, err := resolveBTFField(member.Type, field)
+		if err == nil {
+			return uint(member.Offset.Bytes()) + offset, typ, nil
+		}
+	}
+
+	return 0, nil, fmt.Errorf("member '%s' not found", field)
+}
+
+// calculateFieldOffset calculates the offset for given fieldSpec. Each path
+// component may be nested in anonymous structs or unions.
 func calculateFieldOffset(t btf.Type, fieldSpec string) (uint, error) {
 	offset := uint(0)
 	for field := range strings.SplitSeq(fieldSpec, ".") {
-		st, ok := t.(*btf.Struct)
-		if !ok {
-			return 0, fmt.Errorf("field '%s' is not a struct", field)
-		}
-
-		member, err := memberByName(st, field)
+		fieldOffset, fieldType, err := resolveBTFField(t, field)
 		if err != nil {
 			return 0, err
 		}
-		offset += uint(member.Offset.Bytes())
-		t = member.Type
+		offset += fieldOffset
+		t = fieldType
 	}
 	return offset, nil
 }
@@ -80,6 +107,32 @@ func getTSDBaseFieldSpec() string {
 	default:
 		panic("not supported")
 	}
+}
+
+func parseVMAOffsets(spec *btf.Spec, vars *sysConfigVars) {
+	var vmaStruct *btf.Struct
+	if err := spec.TypeByName("vm_area_struct", &vmaStruct); err != nil {
+		log.Debugf("Unable to resolve vm_area_struct from BTF: %v", err)
+		return
+	}
+
+	fileOffset, err := calculateFieldOffset(vmaStruct, "vm_file")
+	if err != nil {
+		log.Debugf("Unable to resolve vm_area_struct.vm_file from BTF: %v", err)
+		return
+	}
+
+	flagsOffset, err := calculateFieldOffset(vmaStruct, "vm_flags")
+	if err != nil {
+		flagsOffset, err = calculateFieldOffset(vmaStruct, "__vm_flags")
+		if err != nil {
+			log.Debugf("Unable to resolve vm_area_struct vm_flags field from BTF: %v", err)
+			return
+		}
+	}
+
+	vars.vma_vm_file_offset = uint32(fileOffset)
+	vars.vma_vm_flags_offset = uint32(flagsOffset)
 }
 
 // parseBTF resolves the SystemConfig data from kernel BTF
@@ -112,6 +165,7 @@ func parseBTF(vars *sysConfigVars) error {
 		return err
 	}
 	vars.tpbase_offset = uint64(tpbaseOffset)
+	parseVMAOffsets(spec, vars)
 
 	return nil
 }
@@ -324,6 +378,124 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	return nil
 }
 
+func configureVMALookup(coll *cebpf.CollectionSpec, cfg *Config, vars *sysConfigVars) {
+	enabled, reason := probeVMALookupSupport(cfg)
+	vars.vma_lookup_enabled = enabled
+	if enabled {
+		return
+	}
+
+	patched := disableVMAHelperCalls(coll)
+	log.Infof("VMA lookup disabled: %s; patched %d instructions", reason, patched)
+}
+
+func probeVMALookupSupport(cfg *Config) (bool, string) {
+	restoreRlimit, err := rlimit.MaximizeMemlock()
+	if err != nil {
+		return false, fmt.Sprintf("failed to adjust rlimit for VMA helper probe: %v", err)
+	}
+	defer restoreRlimit()
+
+	progTypes := []cebpf.ProgramType{cebpf.PerfEvent}
+	if cfg.OffCPUThreshold > 0 || len(cfg.ProbeLinks) > 0 || cfg.LoadProbe {
+		progTypes = append(progTypes, cebpf.Kprobe)
+	}
+
+	helpers := []asm.BuiltinFunc{asm.FnGetCurrentTaskBtf, asm.FnFindVma}
+	for _, progType := range progTypes {
+		for _, helper := range helpers {
+			if err := features.HaveProgramHelper(progType, helper); err != nil {
+				if errors.Is(err, cebpf.ErrNotSupported) {
+					return false, fmt.Sprintf("%s is not supported for %s", helper, progType)
+				}
+				return false, fmt.Sprintf("failed to probe %s for %s: %v", helper, progType, err)
+			}
+		}
+	}
+
+	return true, ""
+}
+
+func disableVMAHelperCalls(coll *cebpf.CollectionSpec) int {
+	patched := 0
+	for _, progSpec := range coll.Programs {
+		programPatched := false
+		vmaCallbackPatched := false
+		for i := range progSpec.Instructions {
+			ins := &progSpec.Instructions[i]
+			if ins.IsLoadOfFunctionPointer() && strings.HasPrefix(ins.Reference(), "find_vma_callback") {
+				progSpec.Instructions[i] = asm.LoadImm(ins.Dst, 0, asm.DWord)
+				patched++
+				programPatched = true
+				vmaCallbackPatched = true
+				continue
+			}
+			if !ins.IsBuiltinCall() {
+				continue
+			}
+
+			switch asm.BuiltinFunc(ins.Constant) {
+			case asm.FnGetCurrentTaskBtf:
+				// The VMA lookup path is disabled, so this helper should be unreachable.
+				// Return NULL if it is reached anyway.
+				progSpec.Instructions[i] = asm.Mov.Imm(asm.R0, 0).WithMetadata(ins.Metadata)
+				patched++
+				programPatched = true
+			case asm.FnFindVma:
+				// Older kernels reject programs that call unsupported helpers even when
+				// the runtime branch is disabled. Return -ENOTSUP if reached so the
+				// lookup is treated as unavailable, not as a successful lookup.
+				progSpec.Instructions[i] = asm.Mov.Imm(asm.R0, -int32(unix.ENOTSUP)).
+					WithMetadata(ins.Metadata)
+				patched++
+				programPatched = true
+			}
+		}
+		if programPatched {
+			if vmaCallbackPatched {
+				progSpec.Instructions = removeSubprogramsBySymbolPrefix(
+					progSpec.Instructions, "find_vma_callback")
+			}
+			stripProgramExtInfos(progSpec.Instructions)
+		}
+	}
+	return patched
+}
+
+func removeSubprogramsBySymbolPrefix(insns asm.Instructions, prefix string) asm.Instructions {
+	out := insns[:0]
+	skipping := false
+	iter := insns.Iterate()
+	for iter.Next() {
+		if sym := iter.Ins.Symbol(); sym != "" {
+			skipping = strings.HasPrefix(sym, prefix)
+		}
+		if !skipping {
+			out = append(out, *iter.Ins)
+		}
+	}
+	return out
+}
+
+func stripProgramExtInfos(insns asm.Instructions) {
+	iter := insns.Iterate()
+	for iter.Next() {
+		if btf.FuncMetadata(iter.Ins) == nil && iter.Ins.Source() == nil {
+			continue
+		}
+
+		sym := iter.Ins.Symbol()
+		ref := iter.Ins.Reference()
+		iter.Ins.Metadata = asm.Metadata{}
+		if sym != "" {
+			*iter.Ins = iter.Ins.WithSymbol(sym)
+		}
+		if ref != "" {
+			*iter.Ins = iter.Ins.WithReference(ref)
+		}
+	}
+}
+
 // loadRodataVars initializes RODATA variables for the eBPF programs.
 func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Config,
 	major, minor uint32,
@@ -371,6 +543,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 
 	rodataVars := sysConfigVars{}
+	configureVMALookup(coll, cfg, &rodataVars)
 
 	systemAnalysisColl, maps, err := prepareAnalysis(coll)
 	if err != nil {
@@ -388,6 +561,15 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 	}
 	if err := coll.Variables["stack_ptregs_offset"].Set(rodataVars.stack_ptregs_offset); err != nil {
 		return fmt.Errorf("failed to set stack_ptregs_offset: %v", err)
+	}
+	if err := coll.Variables["vma_lookup_enabled"].Set(rodataVars.vma_lookup_enabled); err != nil {
+		return fmt.Errorf("failed to set vma_lookup_enabled: %v", err)
+	}
+	if err := coll.Variables["vma_vm_file_offset"].Set(rodataVars.vma_vm_file_offset); err != nil {
+		return fmt.Errorf("failed to set vma_vm_file_offset: %v", err)
+	}
+	if err := coll.Variables["vma_vm_flags_offset"].Set(rodataVars.vma_vm_flags_offset); err != nil {
+		return fmt.Errorf("failed to set vma_vm_flags_offset: %v", err)
 	}
 
 	return nil
