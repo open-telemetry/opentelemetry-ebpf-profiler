@@ -69,7 +69,6 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 
 	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
 	require.NoError(t, err)
-	frameCache.SetLifetime(frameCacheLifetime)
 
 	goMappings := []Mapping{
 		{FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -167,7 +166,6 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 
 	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
 	require.NoError(t, err)
-	frameCache.SetLifetime(frameCacheLifetime)
 
 	mappings := []Mapping{
 		{FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
