@@ -16,7 +16,7 @@ type TraceEventMeta struct {
 	APMServiceName string
 	Timestamp      libpf.UnixTime64
 	CPU            uint32
-	Origin         libpf.Origin
+	ProfileType    *libpf.ProfileTypeMetadata
 	Value          int64
 	PID, TID       libpf.PID
 	SpanID         libpf.APMSpanID
@@ -43,7 +43,7 @@ type ResourceToProfiles struct {
 	EnvVars map[libpf.String]libpf.String
 
 	// Events holds the actual profiling information.
-	Events map[libpf.Origin]SampleToEvents
+	Events map[*libpf.ProfileTypeMetadata]SampleToEvents
 }
 
 // SampleToEvents maps a unique trace hash with its meta data to

@@ -14,7 +14,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // createTestBaseReporter creates a minimal baseReporter for testing purposes
@@ -96,7 +95,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 		PID:            1000,
 		TID:            1001,
 		CPU:            0,
-		Origin:         support.TraceOriginSampling,
+		ProfileType:    libpf.ProfileTypeSampling,
 	}
 
 	meta2 := &samples.TraceEventMeta{
@@ -109,7 +108,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 		PID:            2000,
 		TID:            2001,
 		CPU:            1,
-		Origin:         support.TraceOriginOffCPU,
+		ProfileType:    libpf.ProfileTypeOffCPU,
 		Value:          5000000, // 5ms
 	}
 

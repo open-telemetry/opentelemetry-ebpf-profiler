@@ -1381,9 +1381,25 @@ func (t *Tracer) AttachProbes(probes []string) error {
 }
 
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
-	t.processManager.HandleTrace(bpfTrace)
+	t.processManager.HandleTrace(bpfTrace, profileTypeForOrigin(bpfTrace.Origin))
 
 	// Reclaim the EbpfTrace
 	bpfTrace.KernelFrames = bpfTrace.KernelFrames[0:0]
 	t.tracePool.Put(bpfTrace)
+}
+
+// profileTypeForOrigin maps a raw eBPF trace origin to the profile type
+// metadata reporters need to interpret and export it. Returns nil for
+// origins that have no known profile type.
+func profileTypeForOrigin(origin libpf.Origin) *libpf.ProfileTypeMetadata {
+	switch origin {
+	case support.TraceOriginSampling:
+		return libpf.ProfileTypeSampling
+	case support.TraceOriginOffCPU:
+		return libpf.ProfileTypeOffCPU
+	case support.TraceOriginProbe:
+		return libpf.ProfileTypeProbe
+	default:
+		return nil
+	}
 }

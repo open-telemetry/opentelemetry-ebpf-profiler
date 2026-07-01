@@ -132,7 +132,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 		TID:       goPID,
 		NumFrames: 1,
 		FrameData: libcFrame,
-	})
+	}, nil)
 
 	require.Len(t, capture.traces, 1)
 	goTrace := capture.traces[0]
@@ -147,7 +147,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 		TID:       catPID,
 		NumFrames: 1,
 		FrameData: libcFrame,
-	})
+	}, nil)
 
 	require.Len(t, capture.traces, 2)
 	catTrace := capture.traces[1]
@@ -197,13 +197,13 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 		TID:       firstPID,
 		NumFrames: 1,
 		FrameData: nativeFrame,
-	})
+	}, nil)
 	pm.HandleTrace(&libpf.EbpfTrace{
 		PID:       secondPID,
 		TID:       secondPID,
 		NumFrames: 1,
 		FrameData: nativeFrame,
-	})
+	}, nil)
 
 	require.Len(t, capture.traces, 2)
 

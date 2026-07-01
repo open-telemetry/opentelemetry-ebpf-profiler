@@ -203,7 +203,7 @@ func ExtractTracesWithInterpreters(ctx context.Context, pr process.Process, debu
 			return nil, fmt.Errorf("failed to unwind lwp %v: %v", thread.LWP, rc)
 		}
 		// Symbolize traces with interpreter manager
-		manager.HandleTrace(&ebpfCtx.trace)
+		manager.HandleTrace(&ebpfCtx.trace, nil)
 		info = append(info, ThreadInfo{
 			LWP:    thread.LWP,
 			Frames: traceReporter.frames,
