@@ -78,6 +78,73 @@ type Module struct {
 	symbols []symbol
 }
 
+type moduleTable struct {
+	generation Generation
+	modules    []Module
+}
+
+func (t *moduleTable) nextGeneration() Generation {
+	if t == nil {
+		return makeModuleGeneration(1)
+	}
+	return t.generation.next()
+}
+
+func (t *moduleTable) Modules() []Module {
+	if t == nil {
+		return nil
+	}
+	return t.modules
+}
+
+func (t *moduleTable) symbolGeneration() Generation {
+	if t == nil {
+		return 0
+	}
+	return t.generation
+}
+
+// Generation identifies the symbol table revision used to resolve an address.
+// The concrete bit layout is internal to kallsyms.
+type Generation uint64
+
+const generationBPFBit Generation = 1
+
+func makeModuleGeneration(generation uint64) Generation {
+	return Generation(generation << 1)
+}
+
+func makeBPFGeneration(generation uint64) Generation {
+	return Generation(generation<<1) | generationBPFBit
+}
+
+func (g Generation) isBPF() bool {
+	return g&generationBPFBit != 0
+}
+
+func (g Generation) next() Generation {
+	// Generation values use the low bit to encode the symbol source.
+	// Adding 2 here does not affect the source bit.
+	return g + 2
+}
+
+// SymbolSource identifies which kernel symbol source resolved an address.
+type SymbolSource uint8
+
+const (
+	SymbolSourceBPF SymbolSource = iota + 1
+	SymbolSourceModule
+)
+
+// AddressResolution is the symbol source and generation covering an address.
+type AddressResolution struct {
+	Source     SymbolSource
+	Generation Generation
+	BPFName    string
+	BPFOffset  uint
+	Module     *Module
+}
+
 func compareModule(a, b Module) int {
 	if a.start > b.start {
 		return -1
@@ -91,7 +158,7 @@ func compareModule(a, b Module) int {
 // Symbolizer provides the main API for reading, updating and querying
 // the kernel symbols.
 type Symbolizer struct {
-	modules atomic.Value
+	modules atomic.Pointer[moduleTable]
 
 	bpf *bpfSymbolizer
 
@@ -286,7 +353,8 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 	var names []byte
 
 	noSymbols := true
-	modules, _ := s.modules.Load().([]Module)
+	oldTable := s.modules.Load()
+	modules := oldTable.Modules()
 
 	// The kallsyms symbol order is the following:
 	// 1. kernel symbols (from compressed kallsyms)
@@ -477,7 +545,10 @@ func (s *Symbolizer) updateSymbolsFrom(r io.Reader) error {
 
 	// Heap allocate the exact amount needed. This also makes the initial
 	// buffer stack allocated.
-	s.modules.Store(slices.Clone(mods))
+	s.modules.Store(&moduleTable{
+		generation: oldTable.nextGeneration(),
+		modules:    slices.Clone(mods),
+	})
 	return nil
 }
 
@@ -506,7 +577,8 @@ func (s *Symbolizer) loadModules() (bool, error) {
 	defer dir.Close()
 
 	needReloadSymbols := false
-	modules, _ := s.modules.Load().([]Module)
+	oldTable := s.modules.Load()
+	modules := oldTable.Modules()
 	mods := make([]Module, 0, 400)
 
 	// Copy the modules not present in sysfs
@@ -554,7 +626,10 @@ func (s *Symbolizer) loadModules() (bool, error) {
 	slices.SortFunc(mods, compareModule)
 	// Heap allocate the exact amount needed. This also makes the initial
 	// buffer stack allocated.
-	s.modules.Store(slices.Clone(mods))
+	s.modules.Store(&moduleTable{
+		generation: oldTable.nextGeneration(),
+		modules:    slices.Clone(mods),
+	})
 
 	return needReloadSymbols, nil
 }
@@ -655,14 +730,72 @@ func getModuleByAddress(modules []Module, pc libpf.Address) (*Module, error) {
 	return m, nil
 }
 
+// Snapshot is an immutable view of the kernel and BPF symbol tables.
+type Snapshot struct {
+	bpf     *bpfSymbolTable
+	modules *moduleTable
+}
+
+// Snapshot returns a consistent symbolizer view suitable for repeated lookups.
+func (s *Symbolizer) Snapshot() Snapshot {
+	snapshot := Snapshot{
+		modules: s.modules.Load(),
+	}
+	if s.bpf != nil {
+		snapshot.bpf = s.bpf.table.Load()
+	}
+	return snapshot
+}
+
+// IsGenerationValid reports whether generation is still current in this snapshot.
+func (s Snapshot) IsGenerationValid(generation Generation) bool {
+	if generation.isBPF() {
+		return s.bpf != nil && s.bpf.generation == generation
+	}
+	return s.modules != nil && s.modules.symbolGeneration() == generation
+}
+
+// ResolveAddress finds the symbol source containing addr. BPF symbols are
+// preferred over module symbols because they are tracked separately.
+func (s Snapshot) ResolveAddress(addr libpf.Address) (AddressResolution, bool) {
+	if s.bpf != nil {
+		name, offset, ok := s.bpf.lookup(addr)
+		if ok {
+			return AddressResolution{
+				Source:     SymbolSourceBPF,
+				Generation: s.bpf.symbolGeneration(),
+				BPFName:    name,
+				BPFOffset:  offset,
+			}, true
+		}
+	}
+	if s.modules != nil {
+		module, err := getModuleByAddress(s.modules.Modules(), addr)
+		if err == nil {
+			return AddressResolution{
+				Source:     SymbolSourceModule,
+				Generation: s.modules.symbolGeneration(),
+				Module:     module,
+			}, true
+		}
+	}
+	return AddressResolution{}, false
+}
+
 // GetModuleByAddress finds the Module containing the address 'pc'.
-func (s *Symbolizer) GetModuleByAddress(pc libpf.Address) (*Module, error) {
-	return getModuleByAddress(s.modules.Load().([]Module), pc)
+func (s Snapshot) GetModuleByAddress(pc libpf.Address) (*Module, error) {
+	if s.modules == nil {
+		return nil, ErrNoModule
+	}
+	return getModuleByAddress(s.modules.Modules(), pc)
 }
 
 // GetModuleByName finds the Module with the given name.
-func (s *Symbolizer) GetModuleByName(module string) (*Module, error) {
-	modules := s.modules.Load().([]Module)
+func (s Snapshot) GetModuleByName(module string) (*Module, error) {
+	if s.modules == nil {
+		return nil, ErrNoModule
+	}
+	modules := s.modules.Modules()
 	for i := range modules {
 		kmod := &modules[i]
 		if kmod.Name() == module {
@@ -674,9 +807,9 @@ func (s *Symbolizer) GetModuleByName(module string) (*Module, error) {
 
 // LookupBPFSymbol resolves addr to a BPF program symbol name and offset.
 // Returns ("", 0, false) if no BPF program covers addr.
-func (s *Symbolizer) LookupBPFSymbol(addr libpf.Address) (string, uint, bool) {
+func (s Snapshot) LookupBPFSymbol(addr libpf.Address) (string, uint, bool) {
 	if s.bpf == nil {
 		return "", 0, false
 	}
-	return s.bpf.LookupSymbol(addr)
+	return s.bpf.lookup(addr)
 }

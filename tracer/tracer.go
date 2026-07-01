@@ -17,13 +17,16 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+	"unique"
 	"unsafe"
 
 	cebpf "github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/asm"
 	"github.com/cilium/ebpf/features"
 	"github.com/cilium/ebpf/link"
+	lru "github.com/elastic/go-freelru"
 	"github.com/elastic/go-perf"
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
@@ -52,6 +55,9 @@ const (
 	// ProbabilisticThresholdMax defines the upper bound of the probabilistic profiling
 	// threshold.
 	ProbabilisticThresholdMax = 100
+
+	// Maximum size of the LRU cache for symbolized kernel frames.
+	kernelFrameCacheSize = 16384
 )
 
 // Constants that define the status of probabilistic profiling.
@@ -84,6 +90,11 @@ type Intervals interface {
 // onlineCPUs once resolves and caches the list of online CPUs.
 var onlineCPUsOnce = sync.OnceValues(getOnlineCPUIDs)
 
+type kernelFrameCacheValue struct {
+	generation kallsyms.Generation
+	frame      unique.Handle[libpf.Frame]
+}
+
 // Tracer provides an interface for loading and initializing the eBPF components as
 // well as for monitoring the output maps for new traces and count updates.
 type Tracer struct {
@@ -94,6 +105,13 @@ type Tracer struct {
 
 	// kernelSymbolizer does kernel fallback symbolization
 	kernelSymbolizer *kallsyms.Symbolizer
+
+	// kernelFrameCache stores kernel address to symbolized frame mappings.
+	// Values carry the symbol source generation used to produce the frame.
+	kernelFrameCache *lru.LRU[libpf.Address, kernelFrameCacheValue]
+
+	kernelFrameCacheHit  atomic.Uint64
+	kernelFrameCacheMiss atomic.Uint64
 
 	// perfEntrypoints holds a list of frequency based perf events that are opened on the system.
 	perfEntrypoints xsync.RWMutex[[]*perf.Event]
@@ -242,7 +260,7 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
 
-	kmod, err := kernelSymbolizer.GetModuleByName(kallsyms.Kernel)
+	kmod, err := kernelSymbolizer.Snapshot().GetModuleByName(kallsyms.Kernel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read kernel symbols: %v", err)
 	}
@@ -266,10 +284,17 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
 
+	kernelFrameCache, err := lru.New[libpf.Address, kernelFrameCacheValue](
+		kernelFrameCacheSize, libpf.Address.Hash32)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create kernelFrameCache: %v", err)
+	}
+
 	perfEventList := []*perf.Event{}
 
 	tracer := &Tracer{
 		kernelSymbolizer:       kernelSymbolizer,
+		kernelFrameCache:       kernelFrameCache,
 		processManager:         processManager,
 		triggerPIDProcessing:   make(chan bool, 1),
 		tracePool:              newTracePool(),
@@ -916,31 +941,79 @@ func loadProgram(ebpfProgs map[string]*cebpf.Program, tailcallMap *cebpf.Map,
 	return nil
 }
 
+func symbolizeBPFFrame(name string, offset uint) unique.Handle[libpf.Frame] {
+	return unique.Make(libpf.Frame{
+		Type:            libpf.KernelFrame,
+		AddressOrLineno: libpf.AddressOrLineno(offset),
+		FunctionName:    libpf.Intern(name),
+	})
+}
+
+func symbolizeKernelFrame(
+	address libpf.Address,
+	resolution kallsyms.AddressResolution,
+) unique.Handle[libpf.Frame] {
+	if resolution.Source == kallsyms.SymbolSourceBPF {
+		return symbolizeBPFFrame(resolution.BPFName, resolution.BPFOffset)
+	}
+
+	frame := libpf.Frame{
+		Type:            libpf.KernelFrame,
+		AddressOrLineno: libpf.AddressOrLineno(address - 1),
+	}
+
+	if kmod := resolution.Module; kmod != nil {
+		frame.Mapping = kmod.Mapping()
+		frame.AddressOrLineno -= libpf.AddressOrLineno(kmod.Start())
+		if funcName, _, err := kmod.LookupSymbolByAddress(address); err == nil {
+			frame.FunctionName = libpf.Intern(funcName)
+		}
+	}
+
+	return unique.Make(frame)
+}
+
 // symbolizeKernelFrames converts raw kernel addresses into symbolized frames.
 func (t *Tracer) symbolizeKernelFrames(addrs []uint64, oldFrames libpf.Frames) libpf.Frames {
-	frames := oldFrames
-	if len(addrs) > len(frames) {
+	frames := oldFrames[:0]
+	if len(addrs) > cap(frames) {
 		frames = make(libpf.Frames, 0, len(addrs))
 	}
+
+	snapshot := t.kernelSymbolizer.Snapshot()
+
+	var cacheHit, cacheMiss uint64
 	for _, addr := range addrs {
 		address := libpf.Address(addr)
-		frame := libpf.Frame{
-			Type:            libpf.KernelFrame,
-			AddressOrLineno: libpf.AddressOrLineno(address - 1),
+
+		if cached, ok := t.kernelFrameCache.Get(address); ok &&
+			snapshot.IsGenerationValid(cached.generation) {
+			cacheHit++
+			frames = append(frames, cached.frame)
+			continue
 		}
-		if funcName, offset, ok := t.kernelSymbolizer.LookupBPFSymbol(address); ok {
-			// BPF program: use address relative to symbol start for deduplication.
-			frame.AddressOrLineno = libpf.AddressOrLineno(offset)
-			frame.FunctionName = libpf.Intern(funcName)
-		} else if kmod, err := t.kernelSymbolizer.GetModuleByAddress(address); err == nil {
-			frame.Mapping = kmod.Mapping()
-			frame.AddressOrLineno -= libpf.AddressOrLineno(kmod.Start())
-			if funcName, _, err := kmod.LookupSymbolByAddress(address); err == nil {
-				frame.FunctionName = libpf.Intern(funcName)
-			}
+
+		cacheMiss++
+		resolution, resolved := snapshot.ResolveAddress(address)
+		frame := symbolizeKernelFrame(address, resolution)
+		if resolved && (resolution.Source == kallsyms.SymbolSourceBPF ||
+			frame.Value().Mapping.Valid()) {
+			t.kernelFrameCache.Add(address, kernelFrameCacheValue{
+				generation: resolution.Generation,
+				frame:      frame,
+			})
 		}
-		frames.Append(&frame)
+
+		frames = append(frames, frame)
 	}
+
+	if cacheHit != 0 {
+		t.kernelFrameCacheHit.Add(cacheHit)
+	}
+	if cacheMiss != 0 {
+		t.kernelFrameCacheMiss.Add(cacheMiss)
+	}
+
 	return frames
 }
 
@@ -1038,6 +1111,19 @@ func (t *Tracer) eBPFMetricsCollector(
 	}
 
 	return metricsUpdates
+}
+
+func (t *Tracer) kernelFrameCacheMetrics() []metrics.Metric {
+	return []metrics.Metric{
+		{
+			ID:    metrics.IDKernelFrameCacheHit,
+			Value: metrics.MetricValue(t.kernelFrameCacheHit.Swap(0)),
+		},
+		{
+			ID:    metrics.IDKernelFrameCacheMiss,
+			Value: metrics.MetricValue(t.kernelFrameCacheMiss.Swap(0)),
+		},
+	}
 }
 
 // Various bpf trace handling related errors:
@@ -1180,6 +1266,7 @@ func (t *Tracer) StartMapMonitors(ctx context.Context, traceOutChan chan<- *libp
 		metrics.AddSlice(traceEventMetricCollector())
 		metrics.AddSlice(t.eBPFMetricsCollector(translateIDs, previousMetricValue))
 		metrics.AddSlice(t.customLabels.getAndResetMetrics())
+		metrics.AddSlice(t.kernelFrameCacheMetrics())
 	})
 
 	return nil
@@ -1317,7 +1404,7 @@ func (t *Tracer) StartOffCPUProfiling() error {
 		return errors.New("off-cpu program finish_task_switch is not available")
 	}
 
-	kmod, err := t.kernelSymbolizer.GetModuleByName(kallsyms.Kernel)
+	kmod, err := t.kernelSymbolizer.Snapshot().GetModuleByName(kallsyms.Kernel)
 	if err != nil {
 		return err
 	}
