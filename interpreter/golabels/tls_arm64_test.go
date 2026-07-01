@@ -57,11 +57,12 @@ func TestExtractRuntimeIsCgo(t *testing.T) {
 			require.NoError(t, err)
 
 			pc := int64(sym.Address)
-			b, err := f.VirtualMemory(pc, runtimeIsCgoCodeSize, runtimeIsCgoCodeSize)
+			b, err := f.VirtualMemory(pc, 32, 32)
 			require.NoError(t, err)
 
-			runtimeCgo, err := extractRuntimeIsCgo(f, b, pc)
+			runtimeCgo, consumed, err := extractRuntimeIsCgo(f, b, pc)
 			require.NoError(t, err, "runtime.load_g prologue decode failed; Go runtime layout may have changed")
+			require.Equal(t, 8, consumed)
 			require.Equal(t, tt.wantRuntimeCgo, runtimeCgo)
 		})
 	}

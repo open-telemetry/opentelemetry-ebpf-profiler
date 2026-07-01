@@ -144,9 +144,7 @@ TESTDATA_DIRS:= \
 	libpf/pfelf/testdata \
 	reporter/testdata
 
-ifeq ($(TARGET_ARCH),arm64)
 GOLABELS_TESTDATA_TARGETS := pprof_stable pprof_stable_buildinfo_cgo pprof_stable_cgo pprof_stable_cgo_pie
-endif
 
 test-deps: $(GOLABELS_TESTDATA_TARGETS)
 	$(foreach testdata_dir, $(TESTDATA_DIRS), \
