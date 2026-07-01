@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 
 	//nolint:gosec
 	_ "net/http/pprof"
@@ -17,13 +18,11 @@ import (
 	"golang.org/x/sys/unix"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/vc"
 	"go.opentelemetry.io/otel/metric/noop"
-
-	"go.opentelemetry.io/ebpf-profiler/internal/log"
 )
 
 // Short copyright / license text for eBPF code
@@ -66,13 +65,22 @@ func mainWithExitCode() exitCode {
 		return exitParseError
 	}
 
+	var version string
+	if buildInfo, ok := debug.ReadBuildInfo(); ok {
+		if buildInfo.Main.Replace != nil {
+			version = buildInfo.Main.Replace.Version
+		} else {
+			version = buildInfo.Main.Version
+		}
+	}
+
 	if cfg.Copyright {
 		fmt.Print(copyright)
 		return exitSuccess
 	}
 
 	if cfg.Version {
-		fmt.Printf("%s\n", vc.Version())
+		fmt.Printf("%s\n", version)
 		return exitSuccess
 	}
 
@@ -108,7 +116,7 @@ func mainWithExitCode() exitCode {
 
 	rep, err := reporter.NewOTLP(&reporter.Config{
 		Name:                   os.Args[0],
-		Version:                vc.Version(),
+		Version:                version,
 		CollAgentAddr:          cfg.CollAgentAddr,
 		DisableTLS:             cfg.DisableTLS,
 		MaxRPCMsgSize:          32 << 20, // 32 MiB

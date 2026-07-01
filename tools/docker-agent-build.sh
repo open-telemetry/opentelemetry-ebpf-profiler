@@ -6,9 +6,6 @@ set -eu
 # volume mounts and environment variables.
 
 TARGET_ARCH="${1:-}"
-VERSION="${2:-}"
-REVISION="${3:-}"
-BUILD_TIMESTAMP="${4:-}"
 
 HOST_GOPATH="$(go env GOPATH)"
 HOST_GOCACHE="$(go env GOCACHE)"
@@ -38,4 +35,4 @@ fi
 
 docker run "${VOLUME_MOUNTS[@]}" "${ENV_VARS[@]}" -w "$WORK_DIR" -it --rm --user "$(id -u):$(id -g)" \
 	otel/opentelemetry-ebpf-profiler-dev:latest \
-	"make TARGET_ARCH=$TARGET_ARCH VERSION=$VERSION REVISION=$REVISION BUILD_TIMESTAMP=$BUILD_TIMESTAMP"
+	"make TARGET_ARCH=$TARGET_ARCH"
