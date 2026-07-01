@@ -263,16 +263,29 @@ Loop:
 }
 
 func TestAllTracers(t *testing.T) {
-	tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
-		Intervals:              &mockIntervals{},
-		InterpretersConfig:     interpreterconfig.AllInterpreters(),
-		SamplesPerSecond:       20,
-		ProbabilisticInterval:  100,
-		ProbabilisticThreshold: 100,
-		OffCPUThreshold:        uint32(math.MaxUint32 / 100),
-		VerboseMode:            true,
-		LoadProbe:              true,
-	})
-	require.NoError(t, err)
-	defer tr.Close()
+	testcases := []struct {
+		name               string
+		enableNamespacePID bool
+	}{
+		{name: "host PIDs", enableNamespacePID: false},
+		{name: "namespace PIDs", enableNamespacePID: true},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			tr, err := tracer.NewTracer(t.Context(), &tracer.Config{
+				Intervals:              &mockIntervals{},
+				InterpretersConfig:     interpreterconfig.AllInterpreters(),
+				SamplesPerSecond:       20,
+				ProbabilisticInterval:  100,
+				ProbabilisticThreshold: 100,
+				OffCPUThreshold:        uint32(math.MaxUint32 / 100),
+				VerboseMode:            true,
+				LoadProbe:              true,
+				NamespacePID:           tc.enableNamespacePID,
+			})
+			require.NoError(t, err)
+			defer tr.Close()
+		})
+	}
 }

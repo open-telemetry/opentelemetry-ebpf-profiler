@@ -63,6 +63,7 @@ type Config struct {
 	MaxGRPCRetries         uint32                   `mapstructure:"max_grpc_retries"`
 	MaxRPCMsgSize          int                      `mapstructure:"max_rpc_msg_size"`
 	BPFFSRoot              string                   `mapstructure:"bpf_fs_root"`
+	NamespacePID           bool                     `mapstructure:"namespace_pid"`
 	ErrorMode              ErrorMode                `mapstructure:"error_mode"`
 	OBIProcessCtx          bool                     `mapstructure:"obi_process_ctx"`
 }
