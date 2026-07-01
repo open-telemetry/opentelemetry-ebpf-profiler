@@ -6,6 +6,7 @@ package config // import "go.opentelemetry.io/ebpf-profiler/collector/config"
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 const (
 	// 1TB of executable address space
 	MaxArgMapScaleFactor = 8
+
+	maxFrameCacheSize = uint(math.MaxUint32)
 )
 
 // ErrorMode controls how the profiler receiver handles startup errors.
@@ -46,6 +49,7 @@ type Config struct {
 	ReporterJitter         float64                  `mapstructure:"reporter_jitter"`
 	MonitorInterval        time.Duration            `mapstructure:"monitor_interval"`
 	SamplesPerSecond       int                      `mapstructure:"samples_per_second"`
+	FrameCacheSize         uint                     `mapstructure:"frame_cache_size"`
 	ProbabilisticInterval  time.Duration            `mapstructure:"probabilistic_interval"`
 	ProbabilisticThreshold uint                     `mapstructure:"probabilistic_threshold"`
 	Interpreters           interpreterconfig.Config `mapstructure:"interpreters"`
@@ -76,6 +80,15 @@ func (cfg *Config) Validate() error {
 
 	if cfg.SamplesPerSecond < 1 {
 		return fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond)
+	}
+
+	if cfg.FrameCacheSize == 0 {
+		return errors.New("invalid frame cache size: 0")
+	}
+
+	if cfg.FrameCacheSize > maxFrameCacheSize {
+		return fmt.Errorf("frame cache size %d exceeds limit (max: %d)",
+			cfg.FrameCacheSize, maxFrameCacheSize)
 	}
 
 	if cfg.MapScaleFactor > MaxArgMapScaleFactor {

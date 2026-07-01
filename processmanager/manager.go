@@ -43,8 +43,8 @@ const (
 	// TTL of entries in the LRU cache holding the executables' ELF information.
 	elfInfoCacheTTL = 6 * time.Hour
 
-	// Maximum size of the LRU cache for frames.
-	frameCacheSize = 16384
+	// DefaultFrameCacheSize is the default maximum size of the LRU cache for frames.
+	DefaultFrameCacheSize uint32 = 16384
 )
 
 // dummyPrefix is the LPM prefix installed to indicate the process is known
@@ -61,9 +61,12 @@ var (
 func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monitorInterval time.Duration,
 	executableUnloadDelay time.Duration, ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
 	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
-	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
+	frameCacheSize uint32, filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
 	if exeReporter == nil {
 		exeReporter = executableReporterStub{}
+	}
+	if frameCacheSize == 0 {
+		frameCacheSize = DefaultFrameCacheSize
 	}
 
 	elfInfoCache, err := lru.New[util.OnDiskFileIdentifier, elfInfo](elfInfoCacheSize,
@@ -75,7 +78,7 @@ func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monit
 
 	frameCache, err := lru.New[frameCacheKey, libpf.Frames](frameCacheSize, hashFrameCacheKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to create frameCache: %v", err)
 	}
 
 	em, err := eim.NewExecutableInfoManager(sdp, ebpf, interpretersConfig)

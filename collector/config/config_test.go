@@ -15,6 +15,8 @@ import (
 func validConfig() *Config {
 	return &Config{
 		SamplesPerSecond:       20,
+		ErrorMode:              PropagateError,
+		FrameCacheSize:         1,
 		ProbabilisticInterval:  1 * time.Minute,
 		ProbabilisticThreshold: 100,
 		NoKernelVersionCheck:   true,
@@ -29,6 +31,14 @@ func TestValidate(t *testing.T) {
 	err := xconfmap.Validate(cfg)
 	require.Error(t, err)
 	require.Equal(t, "invalid sampling frequency: 0", err.Error())
+}
+
+func TestValidateFrameCacheSize(t *testing.T) {
+	cfg := validConfig()
+	cfg.FrameCacheSize = 0
+	err := xconfmap.Validate(cfg)
+	require.Error(t, err)
+	require.Equal(t, "invalid frame cache size: 0", err.Error())
 }
 
 func TestUnmarshalText(t *testing.T) {

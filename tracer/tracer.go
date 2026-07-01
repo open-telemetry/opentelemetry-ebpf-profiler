@@ -52,6 +52,9 @@ const (
 	// ProbabilisticThresholdMax defines the upper bound of the probabilistic profiling
 	// threshold.
 	ProbabilisticThresholdMax = 100
+
+	// DefaultFrameCacheSize is the default maximum size of the user-mode frame cache.
+	DefaultFrameCacheSize = pm.DefaultFrameCacheSize
 )
 
 // Constants that define the status of probabilistic profiling.
@@ -169,6 +172,8 @@ type Config struct {
 	SamplesPerSecond int
 	// MapScaleFactor is the scaling factor for eBPF map sizes.
 	MapScaleFactor int
+	// FrameCacheSize is the maximum size of the user-mode frame cache.
+	FrameCacheSize uint32
 	// FilterErrorFrames indicates whether error frames should be filtered.
 	FilterErrorFrames bool
 	// FilterIdleFrames indicates whether idle frames should be filtered.
@@ -258,10 +263,15 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
+	frameCacheSize := cfg.FrameCacheSize
+	if frameCacheSize == 0 {
+		frameCacheSize = DefaultFrameCacheSize
+	}
+
 	processManager, err := pm.New(ctx, cfg.InterpretersConfig, cfg.Intervals.MonitorInterval(),
 		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
 		elfunwindinfo.NewStackDeltaProvider(),
-		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
+		frameCacheSize, cfg.FilterErrorFrames, cfg.IncludeEnvVars)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
