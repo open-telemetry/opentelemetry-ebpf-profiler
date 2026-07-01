@@ -45,9 +45,6 @@ const (
 
 	// Maximum size of the LRU cache for frames.
 	frameCacheSize = 16384
-
-	// TTL of entries in the frame cache.
-	frameCacheLifetime = 5 * time.Minute
 )
 
 // dummyPrefix is the LPM prefix installed to indicate the process is known
@@ -80,7 +77,6 @@ func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monit
 	if err != nil {
 		return nil, err
 	}
-	frameCache.SetLifetime(frameCacheLifetime)
 
 	em, err := eim.NewExecutableInfoManager(sdp, ebpf, interpretersConfig)
 	if err != nil {
@@ -366,7 +362,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 			key.pid = pid
 		}
 		copy(key.data[:], frame)
-		if cached, ok := pm.frameCache.GetAndRefresh(key, frameCacheLifetime); ok {
+		if cached, ok := pm.frameCache.Get(key); ok {
 			// Fast path
 			cacheHit++
 			trace.Frames = append(trace.Frames, cached...)
