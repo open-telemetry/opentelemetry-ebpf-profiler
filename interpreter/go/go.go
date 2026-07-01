@@ -1,56 +1,96 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package goruntime // import "go.opentelemetry.io/ebpf-profiler/interpreter/go/runtime"
+package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
 import (
 	"debug/elf"
 	"errors"
 	"fmt"
 	"go/version"
+	"sync/atomic"
 	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
-	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/nativeunwind/elfunwindinfo"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
-type data struct {
+var (
+	// compiler check to make sure the needed interfaces are satisfied
+	_ interpreter.Data     = &goData{}
+	_ interpreter.Instance = &goInstance{}
+)
+
+type goData struct {
+	fileID    host.FileID
 	goVersion string
 	offsets   support.GoRuntimeOffsets
+
+	pclntab *elfunwindinfo.Gopclntab
+	// refs only tracks the pclntab lifetime.
+	// without it there is nothing to reference-count.
+	refs atomic.Int32
+}
+
+type goInstance struct {
 	interpreter.InstanceStubs
+	d *goData
+
+	// Go symbolization metrics
+	successCount atomic.Uint64
+	failCount    atomic.Uint64
 }
 
 var errDecodeSymbol = errors.New("failed to decode symbol")
 var errRuntimeIsCgoUnavailable = errors.New("runtime.iscgo value unavailable")
 
-func (d *data) String() string {
-	return "Golang runtime " + d.goVersion
+func (d *goData) unref() {
+	if d.pclntab == nil {
+		return
+	}
+	if d.refs.Add(-1) == 0 {
+		_ = d.pclntab.Close()
+	}
 }
 
-func (d *data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
-	_ libpf.Address, _ remotememory.RemoteMemory,
-) (interpreter.Instance, error) {
+func (d *goData) String() string {
+	return "Go " + d.goVersion
+}
+
+func (d *goData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID,
+	_ libpf.Address, _ remotememory.RemoteMemory) (interpreter.Instance, error) {
 	if err := ebpf.UpdateProcData(libpf.Go, pid, unsafe.Pointer(&d.offsets)); err != nil {
 		return nil, err
 	}
-	return d, nil
+	if d.pclntab != nil {
+		d.refs.Add(1)
+	}
+	return &goInstance{d: d}, nil
 }
 
-func (d *data) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
-	return ebpf.DeleteProcData(libpf.Go, pid)
+func (i *goInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
+	err := ebpf.DeleteProcData(libpf.Go, pid)
+	i.d.unref()
+	return err
 }
 
-func (d *data) Unload(_ interpreter.EbpfHandler) {}
-
-func GetLoader(_ golang.Config) interpreter.Loader {
-	return loader
+func (d *goData) Unload(_ interpreter.EbpfHandler) {
+	d.unref()
 }
 
-func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(cfg Config) interpreter.Loader {
+	return func(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (
+		interpreter.Data, error) {
+		return loader(cfg, info)
+	}
+}
+
+func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	file, err := info.GetELF()
 	if err != nil {
 		return nil, err
@@ -103,8 +143,18 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	}
 	offsets.Tls_offset = tlsOffset
 
-	return &data{
+	d := &goData{
+		fileID:    info.FileID(),
 		goVersion: goVersion,
 		offsets:   offsets,
-	}, nil
+	}
+	if !cfg.IsSymbolizationDisabled() {
+		pclntab, err := elfunwindinfo.NewGopclntab(file)
+		if err != nil {
+			return nil, err
+		}
+		d.pclntab = pclntab
+		d.refs.Store(1)
+	}
+	return d, nil
 }

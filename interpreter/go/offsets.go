@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package goruntime // import "go.opentelemetry.io/ebpf-profiler/interpreter/go/runtime"
+package golang // import "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 
 import (
 	"go/version"

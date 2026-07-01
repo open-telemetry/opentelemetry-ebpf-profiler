@@ -283,7 +283,7 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->ratelimitAction                   = RATELIMIT_ACTION_DEFAULT;
   record->usesAnonymousMappings             = false;
   record->customLabelsState.go_m_ptr        = NULL;
-  record->goProc.valid                      = false;
+  record->goOffsets.m_offset                = 0;
 
   Trace *trace             = &record->trace;
   trace->frame_data_len    = 0;
@@ -904,8 +904,8 @@ get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_re
 
 #else // TESTING_COREDUMP
 
-static inline EBPF_INLINE ErrorCode
-get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs)
+static inline EBPF_INLINE
+  ErrorCode get_usermode_regs(struct pt_regs *ctx, UnwindState *state, bool *has_usermode_regs)
 {
   // Coredumps provide always usermode pt_regs directly.
   ErrorCode error = copy_state_regs(state, ctx, false);
@@ -946,12 +946,10 @@ static inline EBPF_INLINE int collect_trace(
     return 0;
   }
 
-  // Preload this trace's go_procs entry into the PerCPURecord (see GoProcState),
-  // Non-Go processes are absent and leave it invalid.
+  // Preload this trace's go_procs entry into record->goOffsets.
   GoRuntimeOffsets *go_offsets = bpf_map_lookup_elem(&go_procs, &pid);
   if (go_offsets) {
-    record->goProc.offsets = *go_offsets;
-    record->goProc.valid   = true;
+    record->goOffsets = *go_offsets;
   }
 
   // Recursive unwind frames

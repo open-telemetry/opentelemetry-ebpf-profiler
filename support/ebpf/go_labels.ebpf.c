@@ -67,7 +67,7 @@ get_go_custom_labels_from_slice(PerCPURecord *record, void *labels_slice_ptr)
 static EBPF_INLINE bool
 get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
 {
-  GoRuntimeOffsets *offs = &record->goProc.offsets;
+  GoRuntimeOffsets *offs = &record->goOffsets;
   void *labels_map_ptr;
   if (bpf_probe_read_user(&labels_map_ptr, sizeof(labels_map_ptr), labels_map_ptr_ptr)) {
     DEBUG_PRINT(
@@ -152,7 +152,7 @@ get_go_custom_labels_from_map(PerCPURecord *record, void *labels_map_ptr_ptr)
 // g (gsignal). Neither one will ever have label.
 static EBPF_INLINE bool get_go_custom_labels(PerCPURecord *record)
 {
-  GoRuntimeOffsets *offs = &record->goProc.offsets;
+  GoRuntimeOffsets *offs = &record->goOffsets;
   size_t curg_ptr_addr;
   if (bpf_probe_read_user(
         &curg_ptr_addr,
@@ -188,7 +188,7 @@ static EBPF_INLINE int go_labels(struct pt_regs *ctx)
     return -1;
 
   u32 pid = record->trace.pid;
-  if (!record->goProc.valid) {
+  if (record->goOffsets.m_offset == 0) {
     DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", pid);
     return -1;
   }
