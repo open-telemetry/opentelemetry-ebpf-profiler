@@ -5,8 +5,8 @@ import (
 	"runtime"
 	"slices"
 	"testing"
+	"time"
 
-	lru "github.com/elastic/go-freelru"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -67,9 +67,8 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 
 	goODID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 1}
 
-	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
+	frameCache, err := newFrameCache(1024, frameCacheLifetime)
 	require.NoError(t, err)
-	frameCache.SetLifetime(frameCacheLifetime)
 
 	goMappings := []Mapping{
 		{FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -156,6 +155,11 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	catFrame := catTrace.Frames[0].Value()
 	assert.Equal(t, libpf.NativeFrame, catFrame.Type)
 	assert.Equal(t, "", catFrame.FunctionName.String())
+
+	// The Go PID has an interpreter and the cat PID does not, so their native
+	// fallback frames must use distinct cache keys.
+	assert.Equal(t, uint64(2), pm.frameCacheMiss.Load())
+	assert.Equal(t, uint64(0), pm.frameCacheHit.Load())
 }
 
 func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
@@ -165,9 +169,10 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 		[]byte{0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE})
 	require.NoError(t, err)
 
-	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
+	frameCache, err := newFrameCache(1024, time.Nanosecond)
 	require.NoError(t, err)
-	frameCache.SetLifetime(frameCacheLifetime)
+	// Make interpreter-aware entries expire immediately; no-interpreter entries
+	// should still survive because the wrapper inserts them with lifetime 0.
 
 	mappings := []Mapping{
 		{FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -198,6 +203,9 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 		NumFrames: 1,
 		FrameData: nativeFrame,
 	})
+	// No-interpreter native fallback frames are inserted with no per-entry
+	// expiration, even when the cache default lifetime is tiny.
+	time.Sleep(time.Millisecond)
 	pm.HandleTrace(&libpf.EbpfTrace{
 		PID:       secondPID,
 		TID:       secondPID,

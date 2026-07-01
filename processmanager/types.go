@@ -36,6 +36,9 @@ type elfInfo struct {
 type frameCacheKey struct {
 	// pid is the PID of the process if the frame had FRAME_FLAG_PID_SPECIFIC set
 	pid libpf.PID
+	// hasInterpreters indicates whether the process had interpreter instances
+	// when the frame was cached.
+	hasInterpreters bool
 	// data is the frame data: frame header and the two first variable fields
 	data [3]uint64
 }
@@ -93,7 +96,7 @@ type ProcessManager struct {
 	// frameCache stores mappings from BPF frame to the symbolized frames.
 	// This allows avoiding the overhead of re-doing user-mode symbolization
 	// of frames that we have recently seen already.
-	frameCache *lru.LRU[frameCacheKey, libpf.Frames]
+	frameCache *frameCache
 
 	// traceReporter is the interface to report traces
 	traceReporter reporter.TraceReporter

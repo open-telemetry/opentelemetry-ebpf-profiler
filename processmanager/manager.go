@@ -76,11 +76,10 @@ func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monit
 	}
 	elfInfoCache.SetLifetime(elfInfoCacheTTL)
 
-	frameCache, err := lru.New[frameCacheKey, libpf.Frames](frameCacheSize, hashFrameCacheKey)
+	frameCache, err := newFrameCache(frameCacheSize, frameCacheLifetime)
 	if err != nil {
 		return nil, err
 	}
-	frameCache.SetLifetime(frameCacheLifetime)
 
 	em, err := eim.NewExecutableInfoManager(sdp, ebpf, interpretersConfig)
 	if err != nil {
@@ -192,6 +191,12 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 }
 
 func (pm *ProcessManager) Close() {
+}
+
+func (pm *ProcessManager) hasInterpreters(pid libpf.PID) bool {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	return len(pm.interpreters[pid]) != 0
 }
 
 func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *libpf.Frames, mapping libpf.FrameMapping) error {
@@ -311,8 +316,54 @@ func (pm *ProcessManager) maybeNotifyAPMAgent(
 
 func hashFrameCacheKey(fk frameCacheKey) uint32 {
 	h := fnv.New32a()
-	h.Write(pfunsafe.FromSlice(fk.data[:]))
+	hasInterpreters := uint64(0)
+	if fk.hasInterpreters {
+		hasInterpreters = 1
+	}
+	data := [5]uint64{
+		uint64(fk.pid),
+		hasInterpreters,
+		fk.data[0],
+		fk.data[1],
+		fk.data[2],
+	}
+	h.Write(pfunsafe.FromSlice(data[:]))
 	return h.Sum32()
+}
+
+type frameCache struct {
+	lru      *lru.LRU[frameCacheKey, libpf.Frames]
+	lifetime time.Duration
+}
+
+func newFrameCache(size uint32, lifetime time.Duration) (*frameCache, error) {
+	cache, err := lru.New[frameCacheKey, libpf.Frames](size, hashFrameCacheKey)
+	if err != nil {
+		return nil, err
+	}
+	return &frameCache{
+		lru:      cache,
+		lifetime: lifetime,
+	}, nil
+}
+
+func (c *frameCache) get(key frameCacheKey) (libpf.Frames, bool) {
+	if key.hasInterpreters {
+		// If there are interpreters, we fetch a key that has a TTL.
+		return c.lru.GetAndRefresh(key, c.lifetime)
+	}
+	// If there are no interpreters, then the frame cannot really change,
+	// so there's no point in putting an expiration time on it and paying
+	// the CPU tax for keeping it updated.
+	return c.lru.Get(key)
+}
+
+func (c *frameCache) add(key frameCacheKey, frames libpf.Frames) {
+	lifetime := c.lifetime
+	if !key.hasInterpreters {
+		lifetime = 0
+	}
+	c.lru.AddWithLifetime(key, frames, lifetime)
 }
 
 // HandleTrace processes and reports the given host.Trace. This function
@@ -347,6 +398,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 
 	cacheMiss := uint64(0)
 	cacheHit := uint64(0)
+	hasInterpreters := pm.hasInterpreters(pid)
 
 	for frames := libpf.EbpfFrame(bpfTrace.FrameData); len(frames) > 0; frames = frames[frames.Length():] {
 		frame := frames[:frames.Length()]
@@ -361,12 +413,14 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 		}
 
 		oldLen := len(trace.Frames)
-		key := frameCacheKey{}
+		key := frameCacheKey{
+			hasInterpreters: hasInterpreters,
+		}
 		if frame.Flags().PIDSpecific() {
 			key.pid = pid
 		}
 		copy(key.data[:], frame)
-		if cached, ok := pm.frameCache.GetAndRefresh(key, frameCacheLifetime); ok {
+		if cached, ok := pm.frameCache.get(key); ok {
 			// Fast path
 			cacheHit++
 			trace.Frames = append(trace.Frames, cached...)
@@ -374,7 +428,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 			// Slow path: convert trace.
 			if pm.convertFrame(pid, frame, &trace.Frames) {
 				cacheMiss++
-				pm.frameCache.Add(key, slices.Clone(trace.Frames[oldLen:len(trace.Frames)]))
+				pm.frameCache.add(key, slices.Clone(trace.Frames[oldLen:len(trace.Frames)]))
 			}
 		}
 	}
