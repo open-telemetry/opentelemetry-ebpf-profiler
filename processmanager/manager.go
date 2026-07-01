@@ -319,7 +319,7 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // is not re-entrant due to frameCache not being synced. If the tracer is
 // later updated to distribute trace handling to goroutine pool, the caching
 // strategy needs to be updated accordingly.
-func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *libpf.ProfileTypeMetadata) {
+func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) {
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
 		Comm:           bpfTrace.Comm,

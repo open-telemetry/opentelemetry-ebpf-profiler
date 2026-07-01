@@ -81,7 +81,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 	// Collect the profile types present anywhere in the tree once, in a stable
 	// order, so that the order profiles are appended in is deterministic.
-	seenProfileTypes := make(libpf.Set[*libpf.ProfileTypeMetadata])
+	seenProfileTypes := make(libpf.Set[*samples.TypeMetadata])
 	for _, resourceToEvents := range tree {
 		for profileType := range resourceToEvents.Events {
 			if _, ok := seenProfileTypes[profileType]; !ok {
@@ -89,8 +89,8 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			}
 		}
 	}
-    profileTypes := seenProfileTypes.ToSlice()
-	slices.SortFunc(profileTypes, func(a, b *libpf.ProfileTypeMetadata) int {
+	profileTypes := seenProfileTypes.ToSlice()
+	slices.SortFunc(profileTypes, func(a, b *samples.TypeMetadata) int {
 		if c := strings.Compare(a.SampleType, b.SampleType); c != 0 {
 			return c
 		}
@@ -160,7 +160,7 @@ func (p *Pdata) setProfile(
 	stackSet orderedset.OrderedSet[stackInfo],
 	locationSet orderedset.OrderedSet[locationInfo],
 	linkSet orderedset.OrderedSet[linkInfo],
-	profileType *libpf.ProfileTypeMetadata,
+	profileType *samples.TypeMetadata,
 	events samples.SampleToEvents,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,

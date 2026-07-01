@@ -16,6 +16,24 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
 
+var (
+	profileTypeSampling = &samples.TypeMetadata{
+		PeriodType: "cpu",
+		PeriodUnit: "nanoseconds",
+		SampleType: "samples",
+		SampleUnit: "count",
+	}
+	profileTypeOffCPU = &samples.TypeMetadata{
+		SampleType:   "off_cpu",
+		SampleUnit:   "nanoseconds",
+		ReportValues: true,
+	}
+	profileTypeProbe = &samples.TypeMetadata{
+		SampleType: "events",
+		SampleUnit: "count",
+	}
+)
+
 // createTestBaseReporter creates a minimal baseReporter for testing purposes
 func createTestBaseReporter(t *testing.T, cfg *Config) *baseReporter {
 	t.Helper()
@@ -95,7 +113,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 		PID:            1000,
 		TID:            1001,
 		CPU:            0,
-		ProfileType:    libpf.ProfileTypeSampling,
+		ProfileType:    profileTypeSampling,
 	}
 
 	meta2 := &samples.TraceEventMeta{
@@ -108,7 +126,7 @@ func TestBaseReporterGenerate(t *testing.T) {
 		PID:            2000,
 		TID:            2001,
 		CPU:            1,
-		ProfileType:    libpf.ProfileTypeOffCPU,
+		ProfileType:    profileTypeOffCPU,
 		Value:          5000000, // 5ms
 	}
 

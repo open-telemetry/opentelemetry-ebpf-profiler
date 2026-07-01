@@ -30,6 +30,20 @@ var (
 	testProfileDuration = uint64(testCollectionEnd.Sub(testCollectionStart).Nanoseconds())
 )
 
+var (
+	profileTypeSampling = &samples.TypeMetadata{
+		PeriodType: "cpu",
+		PeriodUnit: "nanoseconds",
+		SampleType: "samples",
+		SampleUnit: "count",
+	}
+	profileTypeOffCPU = &samples.TypeMetadata{
+		SampleType:   "off_cpu",
+		SampleUnit:   "nanoseconds",
+		ReportValues: true,
+	}
+)
+
 // testGenerate is a helper that calls Generate with the standard test collection window
 func testGenerate(p *Pdata, tree samples.TraceEventsTree, name, version string) (pprofile.Profiles, error) {
 	return p.Generate(tree, name, version, testCollectionStart, testCollectionEnd)
@@ -167,21 +181,21 @@ func newTestFrames(extraFrame bool) libpf.Frames {
 func TestFunctionTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
-		events map[*libpf.ProfileTypeMetadata]samples.SampleToEvents
+		events map[*samples.TypeMetadata]samples.SampleToEvents
 
 		wantFunctionTable        []string
 		expectedResourceProfiles int
 	}{
 		{
 			name:                     "no events",
-			events:                   map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{},
+			events:                   map[*samples.TypeMetadata]samples.SampleToEvents{},
 			wantFunctionTable:        []string{""},
 			expectedResourceProfiles: 0,
 		}, {
 			name:                     "single executable",
 			expectedResourceProfiles: 1,
-			events: map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-				libpf.ProfileTypeSampling: {
+			events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeSampling: {
 					{}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
@@ -245,8 +259,8 @@ func TestProfileDuration(t *testing.T) {
 		{
 			name: "samples within collection window",
 			tree: samples.TraceEventsTree{
-				samples.ResourceKey{PID: 1}: samples.ResourceToProfiles{Events: map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-					libpf.ProfileTypeSampling: {
+				samples.ResourceKey{PID: 1}: samples.ResourceToProfiles{Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+					profileTypeSampling: {
 						{}: {
 							// Timestamps within the collection window (1000-1060)
 							Timestamps: []uint64{
@@ -257,8 +271,8 @@ func TestProfileDuration(t *testing.T) {
 						},
 					},
 				}},
-				samples.ResourceKey{PID: 2}: samples.ResourceToProfiles{Events: map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-					libpf.ProfileTypeSampling: {
+				samples.ResourceKey{PID: 2}: samples.ResourceToProfiles{Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+					profileTypeSampling: {
 						{}: {
 							Timestamps: []uint64{uint64(time.Unix(1040, 0).UnixNano())},
 						},
@@ -271,8 +285,8 @@ func TestProfileDuration(t *testing.T) {
 		{
 			name: "adjusted start time for buffered samples",
 			tree: samples.TraceEventsTree{
-				samples.ResourceKey{PID: 1}: samples.ResourceToProfiles{Events: map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-					libpf.ProfileTypeSampling: {
+				samples.ResourceKey{PID: 1}: samples.ResourceToProfiles{Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+					profileTypeSampling: {
 						{}: {
 							Frames: newTestFrames(false),
 							// Sample before collection start (990 vs 1000)
@@ -287,8 +301,8 @@ func TestProfileDuration(t *testing.T) {
 		{
 			name: "adjusted across multiple containers",
 			tree: samples.TraceEventsTree{
-				samples.ResourceKey{PID: 1, ContainerID: libpf.Intern("container1")}: samples.ResourceToProfiles{Events: map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-					libpf.ProfileTypeSampling: {
+				samples.ResourceKey{PID: 1, ContainerID: libpf.Intern("container1")}: samples.ResourceToProfiles{Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+					profileTypeSampling: {
 						{}: {
 							Frames: singleFrameTrace(libpf.GoFrame, mapping, 0x10, "func1", libpf.NullString, 1),
 							// Oldest sample at 985
@@ -296,8 +310,8 @@ func TestProfileDuration(t *testing.T) {
 						},
 					},
 				}},
-				samples.ResourceKey{PID: 2, ContainerID: libpf.Intern("container2")}: samples.ResourceToProfiles{Events: map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-					libpf.ProfileTypeSampling: {
+				samples.ResourceKey{PID: 2, ContainerID: libpf.Intern("container2")}: samples.ResourceToProfiles{Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+					profileTypeSampling: {
 						{}: {
 							Frames: singleFrameTrace(libpf.GoFrame, mapping, 0x20, "func2", libpf.NullString, 2),
 							// Newer old sample at 995
@@ -377,8 +391,8 @@ func TestGenerate_SingleContainerSingleOrigin(t *testing.T) {
 		APMServiceName: "svc",
 		ContainerID:    libpf.Intern("container1"),
 	}
-	events := map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-		libpf.ProfileTypeSampling: {
+	events := map[*samples.TypeMetadata]samples.SampleToEvents{
+		profileTypeSampling: {
 			{}: &samples.TraceEvents{
 				Frames: singleFrameTrace(libpf.GoFrame, mapping,
 					0x10, funcName, filePath, 42),
@@ -439,8 +453,8 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 		ExecutablePath: exec,
 		ContainerID:    libpf.Intern("c1"),
 	}
-	events1 := map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-		libpf.ProfileTypeSampling: {
+	events1 := map[*samples.TypeMetadata]samples.SampleToEvents{
+		profileTypeSampling: {
 			{}: &samples.TraceEvents{
 				Frames: frames,
 				Timestamps: []uint64{
@@ -449,7 +463,7 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 				},
 			},
 		},
-		libpf.ProfileTypeOffCPU: {
+		profileTypeOffCPU: {
 			{}: &samples.TraceEvents{
 				Frames: frames,
 				Timestamps: []uint64{
@@ -464,8 +478,8 @@ func TestGenerate_MultipleOriginsAndContainers(t *testing.T) {
 		ExecutablePath: exec,
 		ContainerID:    libpf.Intern("c2"),
 	}
-	events2 := map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-		libpf.ProfileTypeSampling: {
+	events2 := map[*samples.TypeMetadata]samples.SampleToEvents{
+		profileTypeSampling: {
 			{}: &samples.TraceEvents{
 				Frames:     frames,
 				Timestamps: []uint64{uint64(time.Unix(1050, 0).UnixNano())},
@@ -525,8 +539,8 @@ func TestGenerate_StringAndFunctionTablePopulation(t *testing.T) {
 		ExecutablePath: filePath,
 		ContainerID:    libpf.Intern("c"),
 	}
-	events := map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-		libpf.ProfileTypeSampling: {
+	events := map[*samples.TypeMetadata]samples.SampleToEvents{
+		profileTypeSampling: {
 			{}: &samples.TraceEvents{
 				Frames: singleFrameTrace(libpf.PythonFrame, mapping, 0x30,
 					funcName, filePath, 123),
@@ -590,8 +604,8 @@ func TestGenerate_NativeFrame(t *testing.T) {
 		PID:            789,
 		ContainerID:    libpf.Intern("native_container"),
 	}
-	events := map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-		libpf.ProfileTypeSampling: {
+	events := map[*samples.TypeMetadata]samples.SampleToEvents{
+		profileTypeSampling: {
 			{
 				Hash:   libpf.NewTraceHash(0, 1),
 				Comm:   libpf.NewCommFromString("abc"),
@@ -724,15 +738,15 @@ func TestGenerate_NativeFrame(t *testing.T) {
 func TestStackTableOrder(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
-		events map[*libpf.ProfileTypeMetadata]samples.SampleToEvents
+		events map[*samples.TypeMetadata]samples.SampleToEvents
 
 		wantStackTable           [][]int32
 		expectedLocationTableLen int
 	}{
 		{
 			name: "single stack",
-			events: map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-				libpf.ProfileTypeSampling: {
+			events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeSampling: {
 					{}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
@@ -746,14 +760,14 @@ func TestStackTableOrder(t *testing.T) {
 		},
 		{
 			name: "multiple stacks",
-			events: map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-				libpf.ProfileTypeSampling: {
+			events: map[*samples.TypeMetadata]samples.SampleToEvents{
+				profileTypeSampling: {
 					{}: {
 						Frames:     newTestFrames(false),
 						Timestamps: []uint64{1, 2, 3, 4, 5},
 					},
 				},
-				libpf.ProfileTypeOffCPU: {
+				profileTypeOffCPU: {
 					samples.SampleKey{Hash: libpf.NewTraceHash(0, 1)}: {
 						Frames:     newTestFrames(true),
 						Timestamps: []uint64{7, 8, 9, 10, 11, 12},
@@ -811,8 +825,8 @@ func TestGenerate_Validate(t *testing.T) {
 		ExecutablePath: filePath,
 		ContainerID:    libpf.Intern("native_container"),
 	}
-	events := map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-		libpf.ProfileTypeSampling: {
+	events := map[*samples.TypeMetadata]samples.SampleToEvents{
+		profileTypeSampling: {
 			{
 				Hash:   libpf.NewTraceHash(0, 1),
 				Comm:   libpf.NewCommFromString("abc"),

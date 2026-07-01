@@ -87,8 +87,8 @@ func TestCollectorReporterShutdown(t *testing.T) {
 
 	traceEventsPtr := r.traceEvents.WLock()
 	tree := (*traceEventsPtr)
-	tree[samples.ResourceKey{PID: 1}] = samples.ResourceToProfiles{Events: map[*libpf.ProfileTypeMetadata]samples.SampleToEvents{
-		libpf.ProfileTypeProbe: {
+	tree[samples.ResourceKey{PID: 1}] = samples.ResourceToProfiles{Events: map[*samples.TypeMetadata]samples.SampleToEvents{
+		profileTypeProbe: {
 			{}: {
 				Frames: func() libpf.Frames {
 					frames := make(libpf.Frames, 0, 1)

@@ -70,7 +70,7 @@ func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceE
 	if _, exists := (*eventsTree)[key]; !exists {
 		(*eventsTree)[key] = samples.ResourceToProfiles{
 			EnvVars: meta.EnvVars,
-			Events:  make(map[*libpf.ProfileTypeMetadata]samples.SampleToEvents),
+			Events:  make(map[*samples.TypeMetadata]samples.SampleToEvents),
 		}
 	}
 
