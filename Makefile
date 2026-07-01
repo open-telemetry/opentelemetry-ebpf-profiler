@@ -34,7 +34,6 @@ export CC = $(ARCH_PREFIX)-linux-gnu-gcc
 export OBJCOPY = $(ARCH_PREFIX)-linux-gnu-objcopy
 
 BRANCH = $(shell git branch --show-current)
-COMMIT_SHORT_SHA = $(shell git rev-parse --short=8 HEAD)
 
 GO_TAGS := osusergo,netgo
 EBPF_FLAGS :=
