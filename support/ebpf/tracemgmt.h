@@ -38,8 +38,17 @@
 // inverse_pac_mask is declared in native_stack_trace.ebpf.c
 extern u64 inverse_pac_mask;
 
+// filter_min_process_age_ns is declared in native_stack_trace.ebpf.c
+extern u64 filter_min_process_age_ns;
+
+// task_group_leader_offset is declared in native_stack_trace.ebpf.c
+extern u32 task_group_leader_offset;
+
 // task_stack_offset is declared in native_stack_trace.ebpf.c
 extern u32 task_stack_offset;
+
+// task_start_time_offset is declared in native_stack_trace.ebpf.c
+extern u32 task_start_time_offset;
 
 // stack_ptregs_offset is declared in native_stack_trace.ebpf.c
 extern u32 stack_ptregs_offset;
@@ -80,6 +89,38 @@ static inline EBPF_INLINE void increment_metric(u32 metricID)
   } else {
     DEBUG_PRINT("Failed to lookup metrics map for metricID %d", metricID);
   }
+}
+
+static inline EBPF_INLINE bool process_is_too_new(u64 ts)
+{
+  if (!filter_min_process_age_ns) {
+    return false;
+  }
+
+  struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+  struct task_struct *group_leader;
+  u64 group_leader_ptr = (u64)task + task_group_leader_offset;
+  // task_struct::group_leader is the TGID (thread group ID), which is the PID from
+  // userspace's perspective. Follow it so process age filtering uses the initial
+  // thread's start_time instead of the current thread's start_time.
+  if (bpf_probe_read_kernel(&group_leader, sizeof(group_leader), (void *)group_leader_ptr)) {
+    DEBUG_PRINT("Failed to read group_leader");
+    return false;
+  }
+
+  u64 start_time_ptr = (u64)group_leader + task_start_time_offset;
+  u64 start_time;
+  if (bpf_probe_read_kernel(&start_time, sizeof(start_time), (void *)start_time_ptr)) {
+    DEBUG_PRINT("Failed to read start_time");
+    return false;
+  }
+
+  if (ts >= start_time && ts - start_time < filter_min_process_age_ns) {
+    increment_metric(metricID_SamplesSkippedProcessTooNew);
+    return true;
+  }
+
+  return false;
 }
 
 // Send immediate notifications for event triggers to Go.

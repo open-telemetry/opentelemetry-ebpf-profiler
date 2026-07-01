@@ -312,4 +312,5 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindNativeErrNoVMA:                       metrics.IDUnwindNativeErrNoVMA,
 	C.metricID_UnwindNativeErrUnsupportedAnonymousMapping: metrics.IDUnwindNativeErrUnsupportedAnonymousMapping,
 	C.metricID_UnwindNativeErrNonExecutableVMA:            metrics.IDUnwindNativeErrNonExecutableVMA,
+	C.metricID_SamplesSkippedProcessTooNew:                metrics.IDSamplesSkippedProcessTooNew,
 }
