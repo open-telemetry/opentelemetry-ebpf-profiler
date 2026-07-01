@@ -40,6 +40,20 @@ unsigned long long bpf_ktime_get_ns(void);
 int bpf_get_current_comm(void *, int);
 int bpf_perf_event_output(void *, void *, unsigned long long, void *, int);
 long bpf_ringbuf_output(void *, void *, u64, u64);
+static inline struct task_struct *bpf_get_current_task_btf(void)
+{
+  return NULL;
+}
+
+static inline long bpf_find_vma(
+  UNUSED struct task_struct *task,
+  UNUSED u64 addr,
+  UNUSED void *callback_fn,
+  UNUSED void *callback_ctx,
+  UNUSED u64 flags)
+{
+  return 0;
+}
 
 static inline long bpf_probe_read_user(void *buf, u32 sz, const void *ptr)
 {
@@ -124,6 +138,11 @@ static long (*bpf_get_ns_current_pid_tgid)(u64 dev, u64 ino, void *info, u32 siz
 static int (*bpf_get_current_comm)(void *buf, int buf_size)   = (void *)BPF_FUNC_get_current_comm;
 static void (*bpf_tail_call)(void *ctx, void *map, int index) = (void *)BPF_FUNC_tail_call;
 static unsigned long long (*bpf_get_current_task)(void)       = (void *)BPF_FUNC_get_current_task;
+static struct task_struct *(*bpf_get_current_task_btf)(void)  = (void *)
+  BPF_FUNC_get_current_task_btf;
+static long (*bpf_find_vma)(
+  struct task_struct *task, u64 addr, void *callback_fn, void *callback_ctx, u64 flags) = (void *)
+  BPF_FUNC_find_vma;
 static int (*bpf_perf_event_output)(
   void *ctx, void *map, unsigned long long flags, void *data, int size) = (void *)
   BPF_FUNC_perf_event_output;

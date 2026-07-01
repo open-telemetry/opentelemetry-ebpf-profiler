@@ -42,12 +42,11 @@ supported in any way, can be dropped in the future and should not be deployed in
 The agent can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
 
  For **Linux**, the following steps apply:
-  1. Build the agent for your current machine's architecture:
+ 1. Build the agent for your current machine's architecture:
      ```sh
      make agent
      ```
-     Or `make debug-agent` for debug build.
-  2. To cross-compile for a different architecture (e.g. arm64):
+ 2. To cross-compile for a different architecture (e.g. arm64):
      ```sh
      make agent TARGET_ARCH=arm64
      ```
@@ -74,10 +73,6 @@ You can build the agent without Docker by directly installing the dependencies l
 ```sh
 make
 ```
-or
-```sh
-make debug
-```
 This will build the profiler natively on your machine.
 
 ## Building `otelcol-ebpf-profiler` locally (Without Docker)
@@ -90,7 +85,7 @@ or to cross-compile for a different architecture (e.g. arm64):
 make otelcol-ebpf-profiler TARGET_ARCH=arm64
 ```
 
-See [local.example.yml](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/cmd/otelcol-ebpf-profiler/local.example.yaml) for an example configuration.
+See [local.example.yaml](https://github.com/open-telemetry/opentelemetry-ebpf-profiler/blob/main/cmd/otelcol-ebpf-profiler/local.example.yaml) for an example configuration.
 
 ## Running
 
