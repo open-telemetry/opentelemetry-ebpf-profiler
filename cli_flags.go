@@ -7,12 +7,15 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/peterbourgon/ff/v3"
 
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
@@ -91,6 +94,7 @@ var (
 
 func parseArgs() (*controller.Config, error) {
 	var args controller.Config
+	var tracers string
 
 	fs := flag.NewFlagSet("ebpf-profiler", flag.ExitOnError)
 
@@ -133,8 +137,8 @@ func parseArgs() (*controller.Config, error) {
 		sendErrorFramesHelp)
 	fs.BoolVar(&args.SendIdleFrames, "send-idle-frames", false, sendIdleFramesHelp)
 
-	fs.StringVar(&args.Tracers, "t", "all", "Shorthand for -tracers.")
-	fs.StringVar(&args.Tracers, "tracers", "all", tracersHelp)
+	fs.StringVar(&tracers, "t", "all", "Shorthand for -tracers.")
+	fs.StringVar(&tracers, "tracers", "all", tracersHelp)
 
 	fs.BoolVar(&args.VerboseMode, "v", false, "Shorthand for -verbose.")
 	fs.BoolVar(&args.VerboseMode, "verbose", false, verboseModeHelp)
@@ -164,7 +168,7 @@ func parseArgs() (*controller.Config, error) {
 
 	args.ErrorMode = config.PropagateError
 
-	return &args, ff.Parse(fs, os.Args[1:],
+	if err := ff.Parse(fs, os.Args[1:],
 		ff.WithEnvVarPrefix("OTEL_PROFILING_AGENT"),
 		ff.WithConfigFileFlag("config"),
 		ff.WithConfigFileParser(ff.PlainParser),
@@ -172,5 +176,64 @@ func parseArgs() (*controller.Config, error) {
 		// does not recognize.
 		ff.WithIgnoreUndefined(true),
 		ff.WithAllowMissingConfigFile(true),
-	)
+	); err != nil {
+		return nil, err
+	}
+
+	interpreters, err := parseTracers(tracers)
+	if err != nil {
+		return nil, err
+	}
+	args.Interpreters = interpreters
+
+	return &args, nil
+}
+
+// parseTracers parses the comma-separated tracers string and returns an
+// interpreterconfig.Config with only the listed interpreters enabled.
+// "all" enables every interpreter.
+// Unknown names return an error.
+func parseTracers(tracers string) (interpreterconfig.Config, error) {
+	for name := range strings.SplitSeq(tracers, ",") {
+		if strings.ToLower(strings.TrimSpace(name)) == "all" {
+			return interpreterconfig.AllInterpreters(), nil
+		}
+	}
+
+	// Start with all interpreters disabled; enable only the ones listed.
+	cfg := interpreterconfig.NoInterpreters()
+
+	for name := range strings.SplitSeq(tracers, ",") {
+		name = strings.ToLower(strings.TrimSpace(name))
+		switch name {
+		case "python":
+			cfg.Python.Disabled = false
+		case "perl":
+			cfg.Perl.Disabled = false
+		case "php":
+			cfg.PHP.Disabled = false
+		case "hotspot":
+			cfg.Hotspot.Disabled = false
+		case "ruby":
+			cfg.Ruby.Disabled = false
+		case "v8":
+			cfg.V8.Disabled = false
+		case "dotnet":
+			cfg.Dotnet.Disabled = false
+		case "go":
+			cfg.Go.Disabled = false
+		case "labels":
+			cfg.Labels.Disabled = false
+		case "beam":
+			cfg.BEAM.Disabled = false
+		case "native":
+			log.Warn("Enabling the `native` tracer explicitly is deprecated (it's always-on)")
+		case "":
+			// ignore empty segments
+		default:
+			return interpreterconfig.Config{}, fmt.Errorf("unknown tracer: %s", name)
+		}
+	}
+
+	return cfg, nil
 }

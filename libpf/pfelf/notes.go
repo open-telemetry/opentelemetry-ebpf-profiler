@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -47,13 +48,13 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 		// be kept together to parse the notes correctly.
 		if n, err := rdr.Read(pfunsafe.FromPointer(&note)); err != nil {
 			if n == 0 && err == io.EOF {
-				err = nil
+				return ErrNoteNotFound
 			}
 			return err
 		}
 
 		id := NamespaceUnknown
-		alignedSize := int((note.Namesz + 3) &^ 3)
+		alignedSize := alignNoteSize(int(note.Namesz))
 		namespace, err := rdr.ReadN(alignedSize)
 		switch err {
 		case nil:
@@ -75,7 +76,7 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 			return err
 		}
 
-		alignedSize = int((note.Descsz + 3) &^ 3)
+		alignedSize = alignNoteSize(int(note.Descsz))
 		desc, err := rdr.ReadN(alignedSize)
 		switch err {
 		case nil:
@@ -98,6 +99,11 @@ func visitNotes(rdr *pfbufio.Reader, visitor func(uint64, []byte) bool) error {
 	}
 }
 
+// alignNoteSize rounds size up to the nearest multiple of 4.
+func alignNoteSize(size int) int {
+	return (size + 3) &^ 3
+}
+
 func getBuildIDFromNotesFile(r io.ReaderAt) (string, error) {
 	rdr := pfbufio.NewReader(r, 0, 1<<63-1)
 	defer pfbufio.PutReader(rdr)
@@ -110,7 +116,14 @@ func getBuildIDFromNotesFile(r io.ReaderAt) (string, error) {
 		}
 		return true
 	})
-	return buildId, err
+	switch {
+	case errors.Is(err, nil):
+		return buildId, nil
+	case errors.Is(err, ErrNoteNotFound):
+		return "", ErrNoBuildID
+	default:
+		return "", err
+	}
 }
 
 // GetBuildIDFromNotesFile returns the build ID contained in a file with

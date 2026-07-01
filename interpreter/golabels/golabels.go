@@ -25,6 +25,7 @@ type data struct {
 }
 
 var errDecodeSymbol = errors.New("failed to decode symbol")
+var errRuntimeIsCgoUnavailable = errors.New("runtime.iscgo value unavailable")
 
 func (d *data) String() string {
 	return "Golang labels " + d.goVersion
@@ -46,7 +47,11 @@ func (d *data) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) error {
 
 func (d *data) Unload(_ interpreter.EbpfHandler) {}
 
-func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ Config) interpreter.Loader {
+	return loader
+}
+
+func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	file, err := info.GetELF()
 	if err != nil {
 		return nil, err
@@ -91,7 +96,7 @@ func Loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	switch {
 	case errors.Is(err, libpf.ErrSymbolNotFound):
 		return nil, fmt.Errorf("failed to lookup symbol in %s: %v", info.FileName(), err)
-	case errors.Is(err, errDecodeSymbol):
+	case errors.Is(err, errDecodeSymbol), errors.Is(err, errRuntimeIsCgoUnavailable):
 		log.Warnf("In %s: %v", info.FileName(), err)
 	case errors.Is(err, nil):
 		// Nothing to do - just continue

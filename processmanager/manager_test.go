@@ -60,7 +60,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	loaderInfo := interpreter.NewLoaderInfo(goHostFileID, elfRef)
 	rm := remotememory.NewProcessVirtualMemory(realPID)
 
-	goData, err := golang.Loader(nil, loaderInfo)
+	goData, err := golang.GetLoader(golang.Config{})(nil, loaderInfo)
 	require.NoError(t, err)
 	goInstance, err := goData.Attach(nil, realPID, 0x0, rm)
 	require.NoError(t, err)
@@ -69,7 +69,6 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 
 	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
 	require.NoError(t, err)
-	frameCache.SetLifetime(frameCacheLifetime)
 
 	goMappings := []Mapping{
 		{FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -167,7 +166,6 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 
 	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
 	require.NoError(t, err)
-	frameCache.SetLifetime(frameCacheLifetime)
 
 	mappings := []Mapping{
 		{FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{

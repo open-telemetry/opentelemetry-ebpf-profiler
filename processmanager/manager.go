@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/lpm"
@@ -31,7 +32,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/times"
-	"go.opentelemetry.io/ebpf-profiler/tracer/types"
 	"go.opentelemetry.io/ebpf-profiler/traceutil"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
@@ -45,9 +45,6 @@ const (
 
 	// Maximum size of the LRU cache for frames.
 	frameCacheSize = 16384
-
-	// TTL of entries in the frame cache.
-	frameCacheLifetime = 5 * time.Minute
 )
 
 // dummyPrefix is the LPM prefix installed to indicate the process is known
@@ -61,7 +58,7 @@ var (
 
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
-func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
+func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monitorInterval time.Duration,
 	executableUnloadDelay time.Duration, ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
 	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
 	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
@@ -80,9 +77,8 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 	if err != nil {
 		return nil, err
 	}
-	frameCache.SetLifetime(frameCacheLifetime)
 
-	em, err := eim.NewExecutableInfoManager(sdp, ebpf, includeTracers)
+	em, err := eim.NewExecutableInfoManager(sdp, ebpf, interpretersConfig)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
@@ -366,7 +362,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 			key.pid = pid
 		}
 		copy(key.data[:], frame)
-		if cached, ok := pm.frameCache.GetAndRefresh(key, frameCacheLifetime); ok {
+		if cached, ok := pm.frameCache.Get(key); ok {
 			// Fast path
 			cacheHit++
 			trace.Frames = append(trace.Frames, cached...)

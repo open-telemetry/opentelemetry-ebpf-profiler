@@ -124,8 +124,8 @@ type Loader func(ebpf EbpfHandler, info *LoaderInfo) (Data, error)
 type Data interface {
 	// Attach checks if the given dso is supported, and loads the information
 	// of it to the ebpf maps.
-	Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Address, rm remotememory.RemoteMemory) (
-		Instance, error)
+	Attach(ebpf EbpfHandler, pid libpf.PID, bias libpf.Address,
+		rm remotememory.RemoteMemory) (Instance, error)
 
 	// Unload can undo any allocations or eBPF entries the Loader function created
 	Unload(ebpf EbpfHandler)
@@ -133,6 +133,12 @@ type Data interface {
 
 // Instance is the interface to operate on per-PID data.
 type Instance interface {
+	// UsesAnonymousMappings returns true if this interpreter needs anonymous
+	// executable mappings from the process manager.
+	//
+	// This value must not change during the lifetime of the instance.
+	UsesAnonymousMappings() bool
+
 	// Detach removes any information from the ebpf maps. The pid is given as argument so
 	// simple interpreters can use the global Data also as the Instance implementation.
 	Detach(ebpf EbpfHandler, pid libpf.PID) error

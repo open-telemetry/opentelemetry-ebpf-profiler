@@ -70,6 +70,9 @@ var (
 	// ErrNoBuildID is returned if build ID is not present in notes.
 	ErrNoBuildID = errors.New("no build ID")
 
+	// ErrNoteNotFound is returned by VisitNotes when no note made the visitor stop.
+	ErrNoteNotFound = errors.New("note not found")
+
 	// errNoGoBuildinfo is returned when the ELF is not a Go executable.
 	errNoGoBuildinfo = errors.New("go buildinfo not found")
 
@@ -157,7 +160,6 @@ type File struct {
 
 	// Go build info
 	golangVersion libpf.String
-	golangCgo     bool
 }
 
 var (
@@ -616,16 +618,26 @@ func (f *File) EHFrame() (*Prog, error) {
 
 // VisitNotes iterates the ELF notes.
 // The visitor must make copies of the 'data' it keeps after return.
+// It returns ErrNoteNotFound if all notes are visited without the visitor stopping iteration.
 func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
-	notes := f.findProg(elf.PT_NOTE)
-	if notes == nil {
-		return nil
-	}
-
-	rdr := pfbufio.NewReader(f.elfReader, int64(notes.Off), int64(notes.Filesz))
+	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)
 
-	return visitNotes(rdr, visitor)
+	for i := range f.Progs {
+		notes := &f.Progs[i]
+		if notes.Type != elf.PT_NOTE {
+			continue
+		}
+
+		rdr.Init(f.elfReader, int64(notes.Off), int64(notes.Filesz))
+		err := visitNotes(rdr, visitor)
+		if errors.Is(err, ErrNoteNotFound) {
+			continue
+		}
+		return err
+	}
+
+	return ErrNoteNotFound
 }
 
 // parseNotes parses and caches the ELF notes for the File.
@@ -640,6 +652,11 @@ func (f *File) parseNotes() error {
 			}
 			return true
 		})
+		if errors.Is(f.notesError, ErrNoteNotFound) {
+			// Visiting every note is expected here because parseNotes caches all
+			// build ID notes, which results in terminating with ErrNoteNotFound.
+			f.notesError = nil
+		}
 	}
 	return f.notesError
 }
@@ -1360,12 +1377,6 @@ func (f *File) parseGoBuildinfo() error {
 			return err
 		}
 		f.golangVersion = libpf.Intern(ver)
-
-		mod, err := decodeString(rdr)
-		if err != nil {
-			return err
-		}
-		f.golangCgo = extractGolangSettings(mod)
 	} else {
 		// Go <1.18 with string pointers
 		ptrs, err := rdr.ReadN(16)
@@ -1378,19 +1389,12 @@ func (f *File) parseGoBuildinfo() error {
 				ptrSize, flags)
 		}
 		verPtr := binary.LittleEndian.Uint64(ptrs[0:])
-		modPtr := binary.LittleEndian.Uint64(ptrs[8:])
 
 		ver, err := readString(f, verPtr)
 		if err != nil {
 			return err
 		}
 		f.golangVersion = libpf.Intern(ver)
-
-		mod, err := readString(f, modPtr)
-		if err != nil {
-			return err
-		}
-		f.golangCgo = extractGolangSettings(mod)
 	}
 	return nil
 }
@@ -1401,11 +1405,4 @@ func (f *File) GoVersion() string {
 		log.Debugf("Failed to read go buildinfo: %v", err)
 	}
 	return f.golangVersion.String()
-}
-
-func (f *File) IsCgoEnabled() bool {
-	if err := f.parseGoBuildinfo(); err != nil {
-		log.Debugf("Failed to read go buildinfo: %v", err)
-	}
-	return f.golangCgo
 }
