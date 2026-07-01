@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"slices"
 	"testing"
+	"time"
 	"unsafe"
 
 	lru "github.com/elastic/go-freelru"
@@ -14,6 +15,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -35,6 +37,16 @@ type traceCapture struct {
 func (tc *traceCapture) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEventMeta) error {
 	tc.traces = append(tc.traces, trace)
 	return nil
+}
+
+func TestNewConfiguresFrameCacheSize(t *testing.T) {
+	pm, err := New(t.Context(), interpreterconfig.NoInterpreters(), time.Hour, time.Hour,
+		&testEbpfHandler{}, nil, nil, nil, 1, false, libpf.Set[string]{})
+	require.NoError(t, err)
+
+	pm.frameCache.Add(frameCacheKey{data: [3]uint64{1}}, libpf.Frames{})
+	pm.frameCache.Add(frameCacheKey{data: [3]uint64{2}}, libpf.Frames{})
+	require.Equal(t, 1, pm.frameCache.Len())
 }
 
 func TestFrameCacheCrossProcessPollution(t *testing.T) {
