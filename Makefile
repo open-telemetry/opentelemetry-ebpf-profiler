@@ -133,14 +133,16 @@ TESTDATA_DIRS:= \
 	libpf/pfelf/testdata \
 	reporter/testdata
 
-test-deps:
+GOLABELS_TESTDATA_TARGETS := pprof_stable pprof_stable_buildinfo_cgo pprof_stable_cgo pprof_stable_cgo_pie
+
+test-deps: $(GOLABELS_TESTDATA_TARGETS)
 	$(foreach testdata_dir, $(TESTDATA_DIRS), \
 		($(MAKE) -C "$(testdata_dir)") || exit ; \
 	)
 
 TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support interpreter/golabels/integrationtests
 
-pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_cgo pprof_stable_cgo_pie
+pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_buildinfo_cgo pprof_stable_cgo pprof_stable_cgo_pie
 
 pprof_1_23:
 	CGO_ENABLED=0 GOTOOLCHAIN=go1.23.7 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
@@ -156,6 +158,9 @@ pprof_1_24_cgo_pie:
 
 pprof_stable:
 	CGO_ENABLED=0 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
+
+pprof_stable_buildinfo_cgo:
+	CGO_ENABLED=1 go test -C ./interpreter/golabels/integrationtests/pprof -c -trimpath -tags $(GO_TAGS),nocgo,integration -o ./../$@
 
 pprof_stable_cgo:
 	CGO_ENABLED=1 go test -C ./interpreter/golabels/integrationtests/pprof -c -ldflags '-extldflags "-static"' -trimpath -tags $(GO_TAGS),withcgo,integration -o ./../$@

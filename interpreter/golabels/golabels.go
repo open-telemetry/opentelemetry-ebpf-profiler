@@ -25,6 +25,7 @@ type data struct {
 }
 
 var errDecodeSymbol = errors.New("failed to decode symbol")
+var errRuntimeIsCgoUnavailable = errors.New("runtime.iscgo value unavailable")
 
 func (d *data) String() string {
 	return "Golang labels " + d.goVersion
