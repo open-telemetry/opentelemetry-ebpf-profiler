@@ -17,8 +17,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/interpreter/apmint"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/beam"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/dotnet"
-	goruntime "go.opentelemetry.io/ebpf-profiler/interpreter/go/runtime"
-	gosymbolization "go.opentelemetry.io/ebpf-profiler/interpreter/go/symbolization"
+	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/hotspot"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/nodev8"
@@ -123,10 +122,7 @@ func NewExecutableInfoManager(
 	// Go runtime and by the labels program. Load them whenever Go support is
 	// enabled, independent of the labels and symbolization sub-toggles.
 	if !interpretersConfig.Go.IsDisabled() {
-		loaders = append(loaders, goruntime.GetLoader(interpretersConfig.Go))
-	}
-	if !interpretersConfig.Go.IsSymbolizationDisabled() {
-		loaders = append(loaders, gosymbolization.GetLoader(interpretersConfig.Go))
+		loaders = append(loaders, golang.GetLoader(interpretersConfig.Go))
 	}
 	if !interpretersConfig.BEAM.IsDisabled() {
 		loaders = append(loaders, beam.GetLoader(interpretersConfig.BEAM))

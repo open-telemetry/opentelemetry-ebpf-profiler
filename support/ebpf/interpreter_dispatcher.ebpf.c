@@ -205,11 +205,11 @@ static EBPF_INLINE void maybe_add_go_custom_labels(struct pt_regs *ctx, PerCPURe
     return;
   }
 
-  if (!record->goProc.valid) {
+  if (record->goOffsets.m_offset == 0) {
     DEBUG_PRINT("cl: no offsets, %d not recognized as a go binary", record->trace.pid);
     return;
   }
-  GoRuntimeOffsets *offsets = &record->goProc.offsets;
+  GoRuntimeOffsets *offsets = &record->goOffsets;
 
   void *m_ptr_addr = go_get_m_ptr(offsets, &record->state);
   if (!m_ptr_addr) {

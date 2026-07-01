@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"slices"
 	"testing"
+	"unsafe"
 
 	lru "github.com/elastic/go-freelru"
 	"github.com/stretchr/testify/assert"
@@ -13,7 +14,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
-	gosymbolization "go.opentelemetry.io/ebpf-profiler/interpreter/go/symbolization"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -21,6 +21,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
+
+type nopEbpf struct{ interpreter.EbpfHandler }
+
+func (nopEbpf) UpdateProcData(libpf.InterpreterType, libpf.PID, unsafe.Pointer) error {
+	return nil
+}
 
 type traceCapture struct {
 	traces []*libpf.Trace
@@ -61,9 +67,9 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 	loaderInfo := interpreter.NewLoaderInfo(goHostFileID, elfRef)
 	rm := remotememory.NewProcessVirtualMemory(realPID)
 
-	goData, err := gosymbolization.GetLoader(golang.Config{})(nil, loaderInfo)
+	goData, err := golang.GetLoader(golang.Config{})(nil, loaderInfo)
 	require.NoError(t, err)
-	goInstance, err := goData.Attach(nil, realPID, 0x0, rm)
+	goInstance, err := goData.Attach(nopEbpf{}, realPID, 0x0, rm)
 	require.NoError(t, err)
 
 	goODID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 1}
