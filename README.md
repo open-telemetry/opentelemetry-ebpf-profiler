@@ -1,4 +1,4 @@
-# Introduction
+# eBPF Profiler
 
 This repository implements a whole-system, cross-language profiler for Linux via
 eBPF.
@@ -29,32 +29,6 @@ eBPF.
 - Support for native `inline frames`, which provide insights into compiler
   optimizations and offer a higher precision of function call chains.
 
-## Building
-
-We have integrated the profiler into the [OTel Collector](https://opentelemetry.io/docs/collector/) as a receiver,
-and this is the [supported configuration](https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-ebpf-profiler) going forward.
-
-To aid with development, testing and debugging, we also offer a standalone profiling agent binary named `ebpf-profiler`,
-and a local build of an OTel Collector profiling receiver binary (`otelcol-ebpf-profiler`). These binaries are not
-supported in any way, can be dropped in the future and should not be deployed in production.
-
-## Platform Requirements
-The agent can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
-
- For **Linux**, the following steps apply:
- 1. Build the agent for your current machine's architecture:
-     ```sh
-     make agent
-     ```
- 2. To cross-compile for a different architecture (e.g. arm64):
-     ```sh
-     make agent TARGET_ARCH=arm64
-     ```
-The resulting binary will be named `ebpf-profiler` in the current directory.
-
-## Other OSes
-Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run the agent. Ensure the appropriate architecture is specified if using cross-compilation. Use the same make targets as above after the Linux environment is configured in the VM.
-
 ## Supported Linux kernel version
 
 The minimum required Linux kernel version has increased with certain commits. Specifically:
@@ -68,14 +42,41 @@ The project maintains its minimum supported kernel version in line with the lowe
 
 It should be noted that certain distributions incorporate eBPF features from newer kernels into their supported versions. When this occurs, the distribution's stated kernel version does not accurately reflect its true eBPF capabilities and will not prevent us from increasing the minimum supported version. On such kernels, the `no-kernel-version-check` configuration option can be used to bypass the checks and allow the profiler to execute.
 
-## Alternative Build (Without Docker)
+## Building
+
+We have integrated the profiler into the [OTel Collector](https://opentelemetry.io/docs/collector/) as a receiver,
+and this is the [supported configuration](https://github.com/open-telemetry/opentelemetry-collector-releases/tree/main/distributions/otelcol-ebpf-profiler) going forward.
+
+To aid with development, testing and debugging, we also offer a standalone profiling agent binary named `ebpf-profiler`,
+and a local build of an OTel Collector profiling receiver binary (`otelcol-ebpf-profiler`). These binaries are not
+supported in any way, can be dropped in the future and should not be deployed in production.
+
+### Platform Requirements
+The agent can be built with the provided make targets. Docker is required for containerized builds, and both amd64 and arm64 architectures are supported.
+
+ For **Linux**, the following steps apply:
+ 1. Build the agent for your current machine's architecture:
+     ```sh
+     make agent
+     ```
+ 2. To cross-compile for a different architecture (e.g. arm64):
+     ```sh
+     make agent TARGET_ARCH=arm64
+     ```
+The resulting binary will be named `ebpf-profiler` in the current directory.
+
+### Other OSes
+Since the profiler is Linux-only, macOS and Windows users need to set up a Linux VM to build and run the agent. Ensure the appropriate architecture is specified if using cross-compilation. Use the same make targets as above after the Linux environment is configured in the VM.
+
+
+### Alternative Build (Without Docker)
 You can build the agent without Docker by directly installing the dependencies listed in the Dockerfile. Once dependencies are set up, simply run:
 ```sh
 make
 ```
 This will build the profiler natively on your machine.
 
-## Building `otelcol-ebpf-profiler` locally (Without Docker)
+### Building `otelcol-ebpf-profiler` locally (Without Docker)
 You can build the local `otelcol-ebpf-profiler` binary by running:
 ```sh
 make otelcol-ebpf-profiler
@@ -123,15 +124,7 @@ backends have yet to emerge. The following open source projects can be used as b
 
 To understand how this project works and learn more about profiling, check out [Profiling internals](doc/internals.md)
 
-# Legal
-
-## Licensing Information
-
-This project is licensed under the Apache License 2.0 (Apache-2.0).
-[Apache License 2.0](LICENSE)
-
-The eBPF source code is licensed under the GPL 2.0 license.
-[GPL 2.0](support/ebpf/LICENSE)
+## Contributing
 
 ### Emeritus
 
@@ -141,6 +134,16 @@ The eBPF source code is licensed under the GPL 2.0 license.
 
 For more information about the emeritus role, see the
 [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#emeritus-maintainerapprovertriager).
+
+## Legal
+
+### Licensing Information
+
+This project is licensed under the Apache License 2.0 (Apache-2.0).
+[Apache License 2.0](LICENSE)
+
+The eBPF source code is licensed under the GPL 2.0 license.
+[GPL 2.0](support/ebpf/LICENSE)
 
 ## Licenses of dependencies
 
