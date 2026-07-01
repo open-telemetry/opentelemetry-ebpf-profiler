@@ -7,11 +7,17 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"structs"
 	"unsafe"
 
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+	commonpb "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/protobuf/proto"
 
+	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	processcontextpb "go.opentelemetry.io/ebpf-profiler/processcontext/v1development"
@@ -47,6 +53,12 @@ const (
 
 	// Offset of the MonotonicPublishedAtNs field in the header struct
 	monotonicPublishedAtNsOffset = libpf.Address(unsafe.Offsetof(header{}.MonotonicPublishedAtNs))
+
+	// resourceAttrKey is the environment variable name OpenTelemetry Resource information will be read from.
+	resourceAttrKey = "OTEL_RESOURCE_ATTRIBUTES"
+
+	// svcNameKey is the environment variable name that Service Name information will be read from.
+	svcNameKey = "OTEL_SERVICE_NAME"
 )
 
 var (
@@ -60,9 +72,14 @@ var (
 	ErrNoUpdate = errors.New("ProcessContext has not been updated")
 )
 
+// Info is a snapshot of process context. The pointed-to Resource and
+// ExtraAttributes are shared by pointer across goroutines (process-manager
+// writer, tracer, reporter) without locking; once an Info is published they
+// MUST be treated as read-only by all holders.
 type Info struct {
-	Context       *processcontextpb.ProcessContext
-	PublishedAtNs uint64
+	Resource        *pcommon.Resource
+	ExtraAttributes *pcommon.Map
+	PublishedAtNs   uint64
 }
 
 // header represents the 32-byte memory region header per OTEP #4719.
@@ -145,6 +162,63 @@ func readOnce(mappingAddr libpf.Address, rm remotememory.RemoteMemory, lastPubli
 	return ctx, nil
 }
 
+// Resolve reads the process context from a context mapping (if any) and merges
+// attributes derived from OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES.
+// Returns (info, true) if process context has changed, and  (_, false)
+// to leave the previously-published context untouched.
+//
+// mappingAddr=0 means the mapping was not observed this sync; combined with
+// oldPublishedAtNs > 0 this signals it disappeared and the process context is
+// unpublished (returned context carries only env-vars-derived attributes).
+//
+// newProcessOrExec=true means either first sync or an exec was detected:
+// old process context is discarded and a rebuild is forced so new env vars
+// take effect even when context mapping is present.
+func Resolve(
+	mappingAddr uint64, pid libpf.PID, rm remotememory.RemoteMemory,
+	oldPublishedAtNs uint64,
+	envVars map[libpf.String]libpf.String,
+	newProcessOrExec bool,
+) (Info, bool) {
+	if mappingAddr == 0 {
+		// No context mapping found, publish a new process context with env vars only if:
+		// - the process has been created or execed.
+		// - the previous process context (from context mapping) has disappeared.
+		if newProcessOrExec || oldPublishedAtNs != 0 {
+			return WithMergedEnvVars(Info{}, envVars), true
+		}
+		// No change, steady state.
+		return Info{}, false
+	}
+
+	if newProcessOrExec {
+		// Be safe and discard previous state if the process meta has been updated.
+		oldPublishedAtNs = 0
+	}
+
+	// Workaround for a CodeQL warning about uint64 -> uintptr (libpf.Address) overflow.
+	addr := libpf.Address(mappingAddr & uint64(^libpf.Address(0)))
+
+	processCtx, err := Read(addr, rm, oldPublishedAtNs, 0)
+	switch {
+	case err == nil:
+		// New process context read successfully, merge env vars and publish it.
+		return WithMergedEnvVars(processCtx, envVars), true
+	case errors.Is(err, ErrNoUpdate):
+		// No change, steady state.
+		return Info{}, false
+	case errors.Is(err, ErrConcurrentUpdate):
+		// Concurrent update detected, keep previous process context if process is not new or execed.
+		if !newProcessOrExec {
+			return Info{}, false
+		}
+	default:
+		log.Warnf("Failed to read ProcessContext for PID %d: %v", pid, err)
+	}
+
+	return WithMergedEnvVars(Info{}, envVars), true
+}
+
 func IsContextMapping(isExecutable bool, mappingPath string) bool {
 	return !isExecutable && (mappingPath == ContextMappingMemfd ||
 		mappingPath == ContextMappingMemfdDeleted ||
@@ -200,11 +274,194 @@ func readPayload(rm remotememory.RemoteMemory, hdr header) (Info, error) {
 		return Info{}, fmt.Errorf("failed to unmarshal ProcessContext: %w", err)
 	}
 
-	return Info{Context: ctx, PublishedAtNs: hdr.MonotonicPublishedAtNs}, nil
+	var resource *pcommon.Resource
+	if ctx.Resource != nil {
+		r := pcommon.NewResource()
+		for _, attr := range ctx.Resource.Attributes {
+			if v, ok := convertAnyValue(attr.Value); ok {
+				v.MoveTo(r.Attributes().PutEmpty(attr.Key))
+			}
+		}
+		resource = &r
+	}
+
+	var extraAttributes *pcommon.Map
+	if ctx.ExtraAttributes != nil {
+		m := pcommon.NewMap()
+		for _, attr := range ctx.ExtraAttributes {
+			if v, ok := convertAnyValue(attr.Value); ok {
+				v.MoveTo(m.PutEmpty(attr.Key))
+			}
+		}
+		extraAttributes = &m
+	}
+	return Info{Resource: resource, ExtraAttributes: extraAttributes, PublishedAtNs: hdr.MonotonicPublishedAtNs}, nil
 }
 
-func (p *Info) ClearExtraAttributes() {
-	if p.Context != nil {
-		p.Context.ExtraAttributes = nil
+// convertAnyValue converts a commonpb.AnyValue to a pcommon.Value, handling
+// all value types including nested maps and arrays. Returns (_, false) for
+// nil inputs and unknown variants so callers can skip them rather than
+// emit phantom empty entries.
+func convertAnyValue(src *commonpb.AnyValue) (pcommon.Value, bool) {
+	if src == nil {
+		return pcommon.Value{}, false
 	}
+	switch v := src.Value.(type) {
+	case *commonpb.AnyValue_StringValue:
+		return pcommon.NewValueStr(v.StringValue), true
+	case *commonpb.AnyValue_BoolValue:
+		return pcommon.NewValueBool(v.BoolValue), true
+	case *commonpb.AnyValue_IntValue:
+		return pcommon.NewValueInt(v.IntValue), true
+	case *commonpb.AnyValue_DoubleValue:
+		return pcommon.NewValueDouble(v.DoubleValue), true
+	case *commonpb.AnyValue_BytesValue:
+		val := pcommon.NewValueBytes()
+		val.Bytes().FromRaw(v.BytesValue)
+		return val, true
+	case *commonpb.AnyValue_ArrayValue:
+		val := pcommon.NewValueSlice()
+		if v.ArrayValue != nil {
+			sl := val.Slice()
+			sl.EnsureCapacity(len(v.ArrayValue.Values))
+			for _, item := range v.ArrayValue.Values {
+				if itemVal, ok := convertAnyValue(item); ok {
+					itemVal.MoveTo(sl.AppendEmpty())
+				}
+			}
+		}
+		return val, true
+	case *commonpb.AnyValue_KvlistValue:
+		val := pcommon.NewValueMap()
+		if v.KvlistValue != nil {
+			m := val.Map()
+			m.EnsureCapacity(len(v.KvlistValue.Values))
+			for _, kv := range v.KvlistValue.Values {
+				if kvVal, ok := convertAnyValue(kv.Value); ok {
+					kvVal.MoveTo(m.PutEmpty(kv.Key))
+				}
+			}
+		}
+		return val, true
+	default:
+		log.Debugf("convertAnyValue: unknown AnyValue variant %T, skipping", v)
+		return pcommon.Value{}, false
+	}
+}
+
+// EnvVars returns the names of the environment variables used to derive
+// process context resource attributes.
+func EnvVars() []string {
+	return []string{svcNameKey, resourceAttrKey}
+}
+
+// WithMergedEnvVars returns process context with attributes derived from
+// OTEL_SERVICE_NAME and OTEL_RESOURCE_ATTRIBUTES merged into its Resource.
+func WithMergedEnvVars(info Info, envVars map[libpf.String]libpf.String) Info {
+	info.Resource = mergeResources(info.Resource, resourceFromEnvVars(envVars))
+	return info
+}
+
+// resourceFromEnvVars builds a Resource from OTEL_SERVICE_NAME and
+// OTEL_RESOURCE_ATTRIBUTES, returning nil when neither yields any attribute.
+func resourceFromEnvVars(envVars map[libpf.String]libpf.String) *pcommon.Resource {
+	r := pcommon.NewResource()
+	if v, ok := envVars[libpf.Intern(resourceAttrKey)]; ok {
+		pairs, err := parseResourceAttributes(v.String())
+		if err != nil {
+			log.Debugf("OTEL_RESOURCE_ATTRIBUTES=%q: discarding invalid value: %v", v.String(), err)
+		} else {
+			for _, p := range pairs {
+				r.Attributes().PutStr(p.key, p.value)
+			}
+		}
+	}
+	if v, ok := envVars[libpf.Intern(svcNameKey)]; ok {
+		r.Attributes().PutStr(string(semconv.ServiceNameKey), v.String())
+	}
+	if r.Attributes().Len() == 0 {
+		return nil
+	}
+	return &r
+}
+
+// mergeResources returns a Resource with primary's attributes plus any keys
+// from secondary not already in primary (primary wins on collision). Returns
+// nil only when both inputs are nil. Inputs are not modified.
+func mergeResources(primary, secondary *pcommon.Resource) *pcommon.Resource {
+	if primary == nil {
+		return secondary
+	}
+	if secondary == nil {
+		return primary
+	}
+	r := pcommon.NewResource()
+	primary.Attributes().CopyTo(r.Attributes())
+	secondary.Attributes().Range(func(k string, v pcommon.Value) bool {
+		if _, exists := r.Attributes().Get(k); !exists {
+			v.CopyTo(r.Attributes().PutEmpty(k))
+		}
+		return true
+	})
+	return &r
+}
+
+// resourceAttribute is one parsed entry from OTEL_RESOURCE_ATTRIBUTES.
+type resourceAttribute struct {
+	key, value string
+}
+
+// parseResourceAttributes parses an OTEL_RESOURCE_ATTRIBUTES value as
+// comma-separated key=value pairs where keys and values are percent-encoded.
+// Returns the pairs in source order; the caller dedups via last-writer-wins.
+// On any decoding error the whole value is discarded per OTel spec and a
+// non-nil error is returned.
+func parseResourceAttributes(raw string) ([]resourceAttribute, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	var pairs []resourceAttribute
+	for pair := range strings.SplitSeq(raw, ",") {
+		k, v, ok := strings.Cut(pair, "=")
+		if !ok {
+			return nil, fmt.Errorf("missing '=' in %q", pair)
+		}
+		key, err := url.PathUnescape(strings.TrimSpace(k))
+		if err != nil {
+			return nil, fmt.Errorf("invalid key %q: %w", k, err)
+		}
+		value, err := url.PathUnescape(strings.TrimSpace(v))
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for key %q: %w", key, err)
+		}
+		pairs = append(pairs, resourceAttribute{key, value})
+	}
+	return pairs, nil
+}
+
+// ResourceToContextKey returns a stable key derived from the
+// (service.namespace, service.name, service.instance.id) triplet which the
+// OTel semantic conventions describe as globally unique for a service
+// instance.
+// See: https://github.com/open-telemetry/semantic-conventions/blob/main/docs/registry/attributes/service.md
+//
+// Returns libpf.NullString only when resource is nil or none of the three
+// attributes is present. When at least one is present, the result joins all
+// three with ':' (missing components render as empty strings); callers
+// should treat the null sentinel as "unidentifiable" and may choose to
+// group such samples by other fields.
+func ResourceToContextKey(resource *pcommon.Resource) libpf.String {
+	if resource == nil {
+		return libpf.NullString
+	}
+	serviceNamespace, namespaceOk := resource.Attributes().Get(string(semconv.ServiceNamespaceKey))
+	serviceName, nameOk := resource.Attributes().Get(string(semconv.ServiceNameKey))
+	serviceInstanceID, instanceIdOk := resource.Attributes().Get(string(semconv.ServiceInstanceIDKey))
+	// If all three attributes are missing, return an empty string instead of ":::" to ensure that nil resource
+	// and empty resource are treated as the same.
+	if !namespaceOk && !nameOk && !instanceIdOk {
+		return libpf.NullString
+	}
+	return libpf.Intern(fmt.Sprintf("%s:%s:%s",
+		serviceNamespace.Str(), serviceName.Str(), serviceInstanceID.Str()))
 }
