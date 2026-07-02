@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/controller"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
+	"go.opentelemetry.io/ebpf-profiler/tracer"
 )
 
 var errInvalidConfig = errors.New("invalid config")
@@ -41,6 +42,7 @@ func defaultConfig() component.Config {
 		ReporterJitter:         0.2,
 		MonitorInterval:        5 * time.Second,
 		SamplesPerSecond:       20,
+		FrameCacheSize:         uint(tracer.DefaultFrameCacheSize),
 		ProbabilisticInterval:  1 * time.Minute,
 		ProbabilisticThreshold: 100,
 		Interpreters:           interpreterconfig.AllInterpreters(),

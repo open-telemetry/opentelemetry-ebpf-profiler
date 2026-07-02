@@ -31,6 +31,7 @@ const (
 	defaultArgSendErrorFrames     = false
 	defaultOffCPUThreshold        = 0
 	defaultEnvVarsValue           = ""
+	defaultArgFrameCacheSize      = tracer.DefaultFrameCacheSize
 	defaultBPFFSRoot              = "/sys/fs/bpf/"
 
 	// This is the X in 2^(n + x) where n is the default hardcoded map size value
@@ -80,6 +81,8 @@ var (
 		defaultOffCPUThreshold)
 	envVarsHelp = "Comma separated list of environment variables that will be reported with the" +
 		"captured profiling samples."
+	frameCacheSizeHelp = fmt.Sprintf("Set the maximum number of entries in the frame cache. "+
+		"Default is %d.", defaultArgFrameCacheSize)
 	probeLinkHelper = "Attach a probe to a symbol of an executable. " +
 		"Expected format: probe_type:target[:symbol]. probe_type can be kprobe, kretprobe, uprobe, or uretprobe."
 	loadProbeHelper = "Load generic eBPF program that can be attached externally to " +
@@ -105,6 +108,9 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.Copyright, "copyright", false, copyrightHelp)
 
 	fs.BoolVar(&args.DisableTLS, "disable-tls", false, disableTLSHelp)
+
+	fs.UintVar(&args.FrameCacheSize, "frame-cache-size",
+		uint(defaultArgFrameCacheSize), frameCacheSizeHelp)
 
 	fs.UintVar(&args.MapScaleFactor, "map-scale-factor",
 		defaultArgMapScaleFactor, mapScaleFactorHelp)
