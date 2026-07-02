@@ -1,4 +1,4 @@
-# eBPF Profiler
+# OpenTelemetry eBPF Profiler
 
 This repository implements a whole-system, cross-language profiler for Linux via
 eBPF.
