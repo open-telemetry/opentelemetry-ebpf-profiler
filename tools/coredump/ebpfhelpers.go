@@ -136,12 +136,6 @@ func __bpf_map_lookup_elem(id C.u64, mapdef unsafe.Pointer, keyptr unsafe.Pointe
 		if deltas, ok := ctx.exeIDToStackDeltaMaps[ctx.stackDeltaFileID]; ok {
 			return unsafe.Pointer(uintptr(deltas) + key*C.sizeof_StackDelta)
 		}
-	case unsafe.Pointer(&C.metrics), unsafe.Pointer(&C.report_events),
-		unsafe.Pointer(&C.reported_pids), unsafe.Pointer(&C.pid_events), unsafe.Pointer(&C.inhibit_events),
-		unsafe.Pointer(&C.apm_int_procs), unsafe.Pointer(&C.go_labels_procs):
-		return unsafe.Pointer(uintptr(0))
-	default:
-		log.Errorf("Map at 0x%x not found", mapdef)
 	}
 	return unsafe.Pointer(uintptr(0))
 }
