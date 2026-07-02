@@ -332,7 +332,7 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, offset int64, err error) {
 				return nil, 0, fmt.Errorf("failed to load .gopclntab via symbols: %v", err)
 			}
 			p := ef.ProgByVirtualAddress(uint64(start))
-			if p != nil {
+			if p == nil {
 				return nil, 0, fmt.Errorf("failed to load .gopclntab via symbols: unmappable virtual address")
 			}
 			offset = int64(start) - int64(p.Vaddr)
