@@ -290,11 +290,11 @@ func (vmd *hotspotVMData) parseIntrospection(it *hotspotIntrospectionTable,
 			// We just resolved a const pointer. Adjust it by loadBias
 			// to get a globally cacheable unrelocated virtual address.
 			value -= uint64(loadBias)
-			log.Debugf("JVM %v.%v = @ %x", typeName, fieldName, value)
+			log.Debug("JVM field", "type", typeName, "field", fieldName, "value", value, "pointer", true)
 		} else {
 			// Literal value
 			value = npsr.Uint64(e, valOffs)
-			log.Debugf("JVM %v.%v = %v", typeName, fieldName, value)
+			log.Debug("JVM field", "type", typeName, "field", fieldName, "value", value)
 		}
 
 		switch f.Kind() {
@@ -687,7 +687,7 @@ func newHotspotData(filename string, ef *pfelf.File) (interpreter.Data, error) {
 		d.jvmciStructPtrs.base = ptr
 		d.jvmciStructPtrs.skipBaseDref = true
 	} else {
-		log.Warnf("%s: unable to read JVMCI VM structs: %v", filename, err)
+		log.Warn("unable to read JVMCI VM structs", "file", filename, "err", err)
 	}
 
 	return d, nil

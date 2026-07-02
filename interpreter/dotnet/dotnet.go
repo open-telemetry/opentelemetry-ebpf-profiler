@@ -180,7 +180,7 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 	// cdac is optional and present starting dotnet9
 	cdac, _ := ef.LookupSymbolAddress("DotNetRuntimeContractDescriptor")
 
-	log.Debugf("Dotnet DAC table at %x, CDAC header at %x", addr, cdac)
+	log.Debug("Dotnet DAC table", "dacTable", addr, "cdacHeader", cdac)
 
 	d := &dotnetData{
 		version:      version,

@@ -201,7 +201,7 @@ func (i *dotnetInstance) addRange(ebpf interpreter.EbpfHandler, pid libpf.PID,
 	// Inform the unwinder about this range
 	prefixes, err := lpm.CalculatePrefixList(uint64(lowAddress), uint64(highAddress))
 	if err != nil {
-		log.Debugf("Failed to calculate lpm: %v", err)
+		log.Debug("Failed to calculate lpm", "err", err)
 		return
 	}
 
@@ -226,7 +226,7 @@ func (i *dotnetInstance) addRange(ebpf interpreter.EbpfHandler, pid libpf.PID,
 		err := ebpf.UpdatePidInterpreterMapping(pid, prefix, unwinder,
 			host.FileID(stubTypeOrHdrMap), uint64(mapBase))
 		if err != nil {
-			log.Debugf("Failed to update interpreter mapping: %v", err)
+			log.Debug("Failed to update interpreter mapping", "err", err)
 		}
 	}
 }
@@ -244,12 +244,12 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 
 	flagLeaf := uint(0)
 	stubName := codeName[codeType]
-	log.Debugf("Found %s stub range list head at %x", stubName, headPtr)
+	log.Debug("Found stub range list head", "stub", stubName, "head", headPtr)
 	blockNum := 0
 	for blockPtr := headPtr + 0x8; blockPtr != 0; blockNum++ {
 		if err := i.rm.Read(blockPtr, block); err != nil {
-			log.Debugf("Failed to read %s stub range block %d: %v",
-				stubName, blockNum, err)
+			log.Debug("Failed to read stub range block",
+				"stub", stubName, "block", blockNum, "err", err)
 			return
 		}
 		for index := range uint(numRangesInBlock) {
@@ -262,8 +262,9 @@ func (i *dotnetInstance) walkRangeList(ebpf interpreter.EbpfHandler, pid libpf.P
 			if _, ok := i.ranges[startAddr]; ok {
 				continue
 			}
-			log.Debugf("pid %d: %s: %d/%d: rangeList %x-%x id %x",
-				pid, stubName, blockNum, index, startAddr, endAddr, id)
+			log.Debug("stub range list entry",
+				"pid", pid, "stub", stubName, "block", blockNum, "index", index,
+				"start", startAddr, "end", endAddr, "id", id)
 			i.addRange(ebpf, pid, startAddr, endAddr, startAddr, uint64(codeType|flagLeaf))
 		}
 		blockPtr = npsr.Ptr(block, numRangesInBlock*rangeSize)
@@ -287,9 +288,9 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf
 		rangeListPtr := npsr.Ptr(rangeSection, vms.RangeSection.RangeList)
 		stubKind := i.rm.Uint32(rangeListPtr +
 			libpf.Address(vms.CodeRangeMapRangeList.RangeListType))
-		log.Debugf("%x-%x flags:%x  rangeListPtr %#x, type %d",
-			lowAddress, highAddress, flags,
-			rangeListPtr, stubKind)
+		log.Debug("range section",
+			"start", lowAddress, "end", highAddress, "flags", flags,
+			"rangeListPtr", rangeListPtr, "type", stubKind)
 		i.addRange(ebpf, pid, lowAddress, highAddress, lowAddress, uint64(stubKind))
 	}
 
@@ -301,7 +302,7 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf
 		heapListPtr := npsr.Ptr(rangeSection, vms.RangeSection.HeapList)
 
 		if err := i.rm.Read(heapListPtr, heapList); err != nil {
-			log.Debugf("Failed to read heapList at %#x", heapListPtr)
+			log.Debug("Failed to read heapList", "addr", heapListPtr)
 			return err
 		}
 		mapBase := npsr.Ptr(heapList, vms.CodeHeapListNode.MapBase)
@@ -310,9 +311,10 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf
 		heapStart := npsr.Ptr(heapList, vms.CodeHeapListNode.StartAddress)
 		heapEnd := npsr.Ptr(heapList, vms.CodeHeapListNode.EndAddress)
 
-		log.Debugf("%x-%x flags:%x  heap: next:%x %x-%x mapBase: %x headerMap: %x",
-			lowAddress, highAddress, flags,
-			heapListPtr, heapStart, heapEnd, mapBase, hdrMap)
+		log.Debug("range section heap",
+			"start", lowAddress, "end", highAddress, "flags", flags,
+			"next", heapListPtr, "heapStart", heapStart, "heapEnd", heapEnd,
+			"mapBase", mapBase, "headerMap", hdrMap)
 
 		i.addRange(ebpf, pid, lowAddress, highAddress, mapBase, uint64(hdrMap))
 	} else {
@@ -326,9 +328,9 @@ func (i *dotnetInstance) addRangeSection(ebpf interpreter.EbpfHandler, pid libpf
 			return nil
 		}
 		i.moduleToPEInfo[modulePtr] = info
-		log.Debugf("%x-%x flags:%x  module: %x -> %s",
-			lowAddress, highAddress, flags,
-			modulePtr, info.simpleName)
+		log.Debug("range section module",
+			"start", lowAddress, "end", highAddress, "flags", flags,
+			"module", modulePtr, "name", info.simpleName)
 		i.addRange(ebpf, pid, lowAddress, highAddress, lowAddress, codeReadyToRun)
 	}
 
@@ -500,9 +502,9 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 		libpf.Address(chunkIndex)*libpf.Address(cdac.Globals.MethodDescAlignment) -
 		libpf.Address(vms.MethodDescChunk.SizeOf)
 
-	log.Debugf("method @%x: classification '%v', tokenRemainder %x, chunkIndex %x -> chunkPtr %x",
-		methodClassficationName[classification], methodDescPtr,
-		tokenRemainder, chunkIndex, methodDescChunkPtr)
+	log.Debug("method",
+		"addr", methodDescPtr, "classification", methodClassficationName[classification],
+		"tokenRemainder", tokenRemainder, "chunkIndex", chunkIndex, "chunkPtr", methodDescChunkPtr)
 
 	// Read the MethodDescChunk
 	methodDescChunk := make([]byte, vms.MethodDescChunk.SizeOf)
@@ -516,8 +518,9 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	// Merge the MethodDesc and MethodDescChunk bits of Token value
 	// https://github.com/dotnet/runtime/blob/main/src/coreclr/vm/method.hpp#L76-L80
 	index := uint32(tokenRange)<<cdac.Globals.MethodDescTokenRemainderBitCount + uint32(tokenRemainder)
-	log.Debugf("methodchunk @%x: methodTablePtr %x: tokenRange %d, tokenRemainder %d -> index %d",
-		methodDescChunkPtr, methodTablePtr, tokenRange, tokenRemainder, index)
+	log.Debug("methodchunk",
+		"addr", methodDescChunkPtr, "methodTablePtr", methodTablePtr,
+		"tokenRange", tokenRange, "tokenRemainder", tokenRemainder, "index", index)
 
 	// Extract the loader module from the associated MethodTable
 	// https://github.com/dotnet/runtime/blob/release/8.0/src/coreclr/vm/methodtable.cpp#L369-L383
@@ -537,7 +540,7 @@ func (i *dotnetInstance) readMethod(methodDescPtr libpf.Address, debugInfoPtr li
 	if debugInfoPtr != 0 {
 		if err := method.readDebugInfo(newCachingReader(i.rm, int64(debugInfoPtr),
 			1024), cdac); err != nil {
-			log.Debugf("debug info reading failed: %v", err)
+			log.Debug("debug info reading failed", "err", err)
 		}
 	}
 	return method, nil
@@ -617,10 +620,10 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		if i.codeRangeListPtr == 0 {
 			// This is normal state if we attached to the process before
 			// the dotnet runtime has initialized itself fully.
-			log.Debugf("Dotnet DAC table is not yet initialized at %x", i.d.dacTableAddr)
+			log.Debug("Dotnet DAC table is not yet initialized", "addr", i.d.dacTableAddr)
 			return nil
 		}
-		log.Debugf("Found code range list head at %x", i.codeRangeListPtr)
+		log.Debug("Found code range list head", "addr", i.codeRangeListPtr)
 	}
 	if i.precodeStubManagerPtr == 0 && cdac.dacTable.PrecodeStubManager != 0 {
 		i.precodeStubManagerPtr = i.getDacSlotPtr(cdac.dacTable.PrecodeStubManager)
@@ -686,7 +689,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 			return info.err
 		}
 
-		log.Debugf("%v -> %v guid %v", m.Path, info.simpleName, info.guid)
+		log.Debug("PE mapping", "path", m.Path, "name", info.simpleName, "guid", info.guid)
 
 		exeReporter.ReportExecutable(&reporter.ExecutableMetadata{
 			MappingFile: info.mapping.Value().File,
@@ -725,11 +728,11 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	i.mappings = dotnetMappings
 
 	for _, m := range dotnetMappings {
-		log.Debugf("mapped %x-%x %s", m.start, m.end, m.info.simpleName)
+		log.Debug("mapped", "start", m.start, "end", m.end, "name", m.info.simpleName)
 	}
 
 	if err := i.d.walkRangeSectionsMethod(i, ebpf, pr.PID()); err != nil {
-		log.Infof("Failed to walk code ranges: %v", err)
+		log.Info("Failed to walk code ranges", "err", err)
 	}
 	if i.precodeStubManagerPtr != 0 {
 		if vms.PrecodeStubManager.StubPrecodeRangeList != 0 {

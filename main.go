@@ -62,7 +62,7 @@ func main() {
 func mainWithExitCode() exitCode {
 	cfg, err := parseArgs()
 	if err != nil {
-		log.Errorf("Failure to parse arguments: %v", err)
+		log.Error("Failure to parse arguments", "error", err)
 		return exitParseError
 	}
 
@@ -83,7 +83,7 @@ func mainWithExitCode() exitCode {
 	}
 
 	if err = cfg.Validate(); err != nil {
-		log.Error(err)
+		log.Error("Configuration validation failed", "error", err)
 		return exitFailure
 	}
 
@@ -96,7 +96,7 @@ func mainWithExitCode() exitCode {
 		go func() {
 			//nolint:gosec
 			if err = http.ListenAndServe(cfg.PprofAddr, nil); err != nil {
-				log.Errorf("Serving pprof on %s failed: %s", cfg.PprofAddr, err)
+				log.Error("Serving pprof failed", "addr", cfg.PprofAddr, "error", err)
 			}
 		}()
 	}
@@ -121,18 +121,20 @@ func mainWithExitCode() exitCode {
 		SamplesPerSecond:       cfg.SamplesPerSecond,
 	})
 	if err != nil {
-		log.Error(err)
+		log.Error("Failed to create reporter", "error", err)
 		return exitFailure
 	}
 	cfg.Reporter = rep
 
-	log.Infof("Starting OTEL profiling agent %s (revision %s, build timestamp %s)",
-		vc.Version(), vc.Revision(), vc.BuildTimestamp())
+	log.Info("Starting OTEL profiling agent",
+		"version", vc.Version(),
+		"revision", vc.Revision(),
+		"build_timestamp", vc.BuildTimestamp())
 
 	ctlr := controller.New(cfg)
 	err = ctlr.Start(ctx)
 	if err != nil {
-		return failure("Failed to start agent controller: %v", err)
+		return failure("Failed to start agent controller", err)
 	}
 	defer ctlr.Shutdown()
 
@@ -143,7 +145,7 @@ func mainWithExitCode() exitCode {
 	return exitSuccess
 }
 
-func failure(msg string, args ...any) exitCode {
-	log.Errorf(msg, args...)
+func failure(msg string, err error) exitCode {
+	log.Error(msg, "error", err)
 	return exitFailure
 }

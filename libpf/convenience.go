@@ -13,7 +13,7 @@ import (
 // AddJitter adds +/- jitter (jitter is [0..1]) to baseDuration
 func AddJitter(baseDuration time.Duration, jitter float64) time.Duration {
 	if jitter < 0.0 || jitter > 1.0 {
-		log.Errorf("Jitter (%f) out of range [0..1].", jitter)
+		log.Error("Jitter out of range [0..1]", "jitter", jitter)
 		return baseDuration
 	}
 	//nolint:gosec

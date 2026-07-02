@@ -27,7 +27,7 @@ func MaximizeMemlock() (func(), error) {
 	return func() {
 		if err := unix.Setrlimit(unix.RLIMIT_MEMLOCK, &oldLimit); err != nil {
 			// TODO: Used to be log.Fatalf, revisit with error propagation if needed
-			log.Errorf("Failed to set old rlimit: %v", err)
+			log.Error("Failed to set old rlimit", "err", err)
 		}
 	}, nil
 }

@@ -58,7 +58,7 @@ func loadTPBaseOffset(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		if err != nil {
 			return 0, fmt.Errorf("%w: %s", err, hex.Dump(code))
 		}
-		log.Debugf("Found tpbase offset: %v (via %s)", tpbaseOffset, analyzer.FunctionName)
+		log.Debug("Found tpbase offset", "offset", tpbaseOffset, "symbol", analyzer.FunctionName)
 		break
 	}
 

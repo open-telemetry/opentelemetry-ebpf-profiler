@@ -90,7 +90,7 @@ func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monit
 	periodiccaller.Start(ctx, executableUnloadDelay, func() {
 		err := em.CleanupUnused(executableUnloadDelay)
 		if err != nil {
-			log.Errorf("Failed to cleanup unused executables: %v", err)
+			log.Error("Failed to cleanup unused executables", "error", err)
 		}
 	})
 
@@ -98,7 +98,7 @@ func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monit
 
 	selfContainerID, selfCgroupIno, err := process.DetectSelfContainerIDViaInode()
 	if err != nil {
-		log.Debugf("Failed to detect self container ID via inode: %v", err)
+		log.Debug("Failed to detect self container ID via inode", "error", err)
 	}
 
 	pm := &ProcessManager{
@@ -161,8 +161,7 @@ func collectInterpreterMetrics(ctx context.Context, pm *ProcessManager,
 		for pid := range pm.interpreters {
 			for addr, ii := range pm.interpreters[pid] {
 				if err := updateMetricSummary(ii, summary); err != nil {
-					log.Errorf("Failed to get/reset metrics for PID %d at 0x%x: %v",
-						pid, addr, err)
+					log.Error("Failed to get/reset metrics", "pid", pid, "addr", addr, "error", err)
 				}
 			}
 		}
@@ -223,8 +222,8 @@ func (pm *ProcessManager) symbolizeFrame(pid libpf.PID, data []uint64, frames *l
 func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *libpf.Frames) bool {
 	switch ef.Type().Interpreter() {
 	case libpf.UnknownInterp, libpf.Kernel:
-		log.Errorf("Unexpected frame type 0x%02X (neither error nor usermode frame)",
-			uint8(ef.Type()))
+		log.Error("Unexpected frame type (neither error nor usermode frame)",
+			"frame_type", uint8(ef.Type()))
 	case libpf.Native:
 		fileID := host.FileID(ef.Variable(0))
 		address := libpf.Address(ef.Data())
@@ -266,8 +265,7 @@ func (pm *ProcessManager) convertFrame(pid libpf.PID, ef libpf.EbpfFrame, dst *l
 		if err == nil {
 			return true
 		}
-		log.Debugf("symbolization failed for PID %d, frame type %d: %v",
-			pid, ef.Type(), err)
+		log.Debug("symbolization failed", "pid", pid, "frame_type", ef.Type(), "error", err)
 		dst.Append(&libpf.Frame{Type: ef.Type()})
 	}
 	return false
@@ -295,10 +293,10 @@ func (pm *ProcessManager) maybeNotifyAPMAgent(
 			}
 			apm.NotifyAPMAgent(rawTrace.PID, rawTrace, traceHash, count)
 			if serviceName != "" {
-				log.Warnf("Overwriting APM service name from '%s' to '%s' for PID %d",
-					serviceName,
-					apm.APMServiceName(),
-					rawTrace.PID)
+				log.Warn("Overwriting APM service name",
+					"old_service", serviceName,
+					"new_service", apm.APMServiceName(),
+					"pid", rawTrace.PID)
 			}
 			// It's pretty unusual to have more than one APM agent in a
 			// single process, but in case there is, just pick the last one.
@@ -388,7 +386,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	// Release resources that were used to symbolize this stack.
 	for _, instance := range pm.interpreters[pid] {
 		if err := instance.ReleaseResources(); err != nil {
-			log.Warnf("Failed to release resources for %d: %v", pid, err)
+			log.Warn("Failed to release resources", "pid", pid, "error", err)
 		}
 	}
 	pm.mu.RUnlock()
@@ -396,6 +394,6 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 	meta.APMServiceName = pm.maybeNotifyAPMAgent(bpfTrace, trace, 1)
 
 	if err := pm.traceReporter.ReportTraceEvent(trace, meta); err != nil {
-		log.Errorf("Failed to report trace event: %v", err)
+		log.Error("Failed to report trace event", "error", err)
 	}
 }

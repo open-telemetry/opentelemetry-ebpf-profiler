@@ -288,7 +288,7 @@ func hashMFA(key beamMfa) uint32 {
 
 func (d *beamData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory) (interpreter.Instance, error) {
-	log.Debugf("BEAM attaching, OTP %d, ERTS %s, bias: 0x%x", d.otpRelease, d.ertsVersion, bias)
+	log.Debug("BEAM attaching", "otp", d.otpRelease, "erts", d.ertsVersion, "bias", bias)
 
 	data := support.BEAMProcInfo{
 		R:                     uint64(bias + d.r),
@@ -352,7 +352,7 @@ func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ repor
 		}
 
 		// Just assume all anonymous and executable mappings are BEAM for now
-		log.Debugf("Enabling BEAM for %#x/%#x", m.Vaddr, m.Length)
+		log.Debug("Enabling BEAM", "vaddr", m.Vaddr, "length", m.Length)
 
 		prefixes, err := lpm.CalculatePrefixList(m.Vaddr, m.Vaddr+m.Length)
 		if err != nil {
@@ -376,7 +376,7 @@ func (i *beamInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler, _ repor
 		if generation == i.mappingGeneration {
 			continue
 		}
-		log.Debugf("Delete BEAM prefix %#v", prefix)
+		log.Debug("Delete BEAM prefix", "prefix", prefix)
 		_ = ebpf.DeletePidInterpreterMapping(pid, prefix)
 		delete(i.prefixes, prefix)
 	}
@@ -426,7 +426,7 @@ func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 
 	fileName, lineNumber, err := i.findFileLocation(codeHeader, functionIndex, pc)
 	if err == nil {
-		log.Debugf("BEAM Found function %s at %s:%d", mfaName, fileName, lineNumber)
+		log.Debug("BEAM Found function", "name", mfaName, "file", fileName, "line", lineNumber)
 		frames.Append(&libpf.Frame{
 			Type:         libpf.BEAMFrame,
 			FunctionName: mfaName,
@@ -434,7 +434,7 @@ func (i *beamInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 			SourceLine:   libpf.SourceLineno(lineNumber),
 		})
 	} else {
-		log.Debugf("BEAM Found function %s", mfaName)
+		log.Debug("BEAM Found function", "name", mfaName)
 		frames.Append(&libpf.Frame{
 			Type:         libpf.BEAMFrame,
 			FunctionName: mfaName,

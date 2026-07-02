@@ -128,7 +128,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		if err := trc.StartOffCPUProfiling(); err != nil {
 			return fmt.Errorf("failed to start off-cpu profiling: %v", err)
 		}
-		log.Infof("Enabled off-cpu profiling with p=%f", c.config.OffCPUThreshold)
+		log.Info("Enabled off-cpu profiling", "threshold", c.config.OffCPUThreshold)
 	}
 
 	if len(c.config.ProbeLinks) > 0 {
@@ -197,7 +197,7 @@ func (c *Controller) startTraceHandling(ctx context.Context, trc *tracer.Tracer)
 					trc.HandleTrace(trace)
 				}
 			case <-trc.Done():
-				log.Errorf("Shutting down controller due to unrecoverable tracer error")
+				log.Error("Shutting down controller due to unrecoverable tracer error")
 				c.Shutdown()
 				return
 			case <-ctx.Done():

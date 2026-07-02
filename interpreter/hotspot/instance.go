@@ -208,7 +208,7 @@ func (d *hotspotInstance) getSymbol(addr libpf.Address) libpf.String {
 	}
 	s := pfunsafe.ToString(tmp)
 	if !util.IsValidString(s) {
-		log.Debugf("Extracted Hotspot symbol is invalid at 0x%x '%v'", addr, tmp)
+		log.Debug("Extracted Hotspot symbol is invalid", "addr", addr, "data", tmp)
 		return libpf.NullString
 	}
 	value := libpf.Intern(s)
@@ -712,8 +712,9 @@ func (d *hotspotInstance) addJitArea(ebpf interpreter.EbpfHandler,
 		d.prefixes[prefix] = libpf.Void{}
 	}
 
-	log.Debugf("HotSpot jitArea: pid: %d, code %x-%x tsid: %x (%d tries)",
-		pid, area.start, area.end, area.tsid, len(prefixes))
+	log.Debug("HotSpot jitArea",
+		"pid", pid, "start", area.start, "end", area.end,
+		"tsid", area.tsid, "tries", len(prefixes))
 
 	return nil
 }
@@ -833,21 +834,18 @@ func (d *hotspotInstance) updateStubMappings(vmd *hotspotVMData,
 			}
 		}
 		if stubHeapArea == nil {
-			log.Warnf("Unable to find heap for stub: pid = %d, stub.start = 0x%x",
-				pid, stub.start)
+			log.Warn("Unable to find heap for stub", "pid", pid, "stubStart", stub.start)
 			continue
 		}
 
 		// Create and insert a jitArea for the stub.
 		stubArea, err := jitAreaForStubArm64(&stub, stubHeapArea, d.rm)
 		if err != nil {
-			log.Warnf("Failed to create JIT area for stub (pid = %d, stub.start = 0x%x): %v",
-				pid, stub.start, err)
+			log.Warn("Failed to create JIT area for stub", "pid", pid, "stubStart", stub.start, "err", err)
 			continue
 		}
 		if err = d.addJitArea(ebpf, pid, stubArea); err != nil {
-			log.Warnf("Failed to insert JIT area for stub (pid = %d, stub.start = 0x%x): %v",
-				pid, stub.start, err)
+			log.Warn("Failed to insert JIT area for stub", "pid", pid, "stubStart", stub.start, "err", err)
 			continue
 		}
 	}

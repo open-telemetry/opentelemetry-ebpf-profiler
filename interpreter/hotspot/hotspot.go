@@ -144,7 +144,7 @@ func loader(_ interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interprete
 		return nil, nil
 	}
 
-	log.Debugf("HotSpot inspecting %v", info.FileName())
+	log.Debug("HotSpot inspecting", "file", info.FileName())
 	ef, err := info.GetELF()
 	if err != nil {
 		return nil, err

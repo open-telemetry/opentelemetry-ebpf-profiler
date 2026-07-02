@@ -207,7 +207,7 @@ func (d *dotnetData) String() string {
 func (d *dotnetData) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, bias libpf.Address,
 	rm remotememory.RemoteMemory,
 ) (interpreter.Instance, error) {
-	log.Debugf("Attach PID %d, bias %x", pid, bias)
+	log.Debug("Attach", "pid", pid, "bias", bias)
 
 	addrToMethod, err := freelru.New[libpf.Address, *dotnetMethod](interpreter.LruFunctionCacheSize,
 		libpf.Address.Hash32)
