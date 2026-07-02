@@ -331,7 +331,11 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, offset int64, err error) {
 			if err != nil {
 				return nil, 0, fmt.Errorf("failed to load .gopclntab via symbols: %v", err)
 			}
-			offset = int64(start)
+			p := ef.ProgByVirtualAddress(uint64(start))
+			if p != nil {
+				return nil, 0, fmt.Errorf("failed to load .gopclntab via symbols: unmappable virtual address")
+			}
+			offset = int64(start) - int64(p.Vaddr)
 		}
 	}
 	return data, offset, nil
@@ -421,15 +425,15 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		funcMapSize:  hdr.ptrSize * 2,
 		numFuncs:     int(hdr.numFuncs),
 	}
-	if g.version == goInvalid || hdr.pad != 0 || hdr.ptrSize != 8 {
-		return nil, fmt.Errorf(".gopclntab header: %x, %x, %x", hdr.magic, hdr.pad, hdr.ptrSize)
+	if hdr.pad != 0 || hdr.ptrSize != 8 {
+		g.version = goInvalid
 	}
 
 	switch g.version {
 	case go1_16:
 		hdrSize = unsafe.Sizeof(pclntabHeader116{})
 		if dataLen < hdrSize {
-			return nil, fmt.Errorf(".gopclntab is too short (%v)", len(data))
+			return nil, fmt.Errorf("too short header (%v)", len(data))
 		}
 		hdr116 := (*pclntabHeader116)(unsafe.Pointer(&data[0]))
 		g.numFiles = hdr116.nfiles
@@ -441,7 +445,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 	case go1_18, go1_20:
 		hdrSize = unsafe.Sizeof(pclntabHeader118{})
 		if dataLen < hdrSize {
-			return nil, fmt.Errorf(".gopclntab is too short (%v)", dataLen)
+			return nil, fmt.Errorf("too short header (%v)", dataLen)
 		}
 		hdr118 := (*pclntabHeader118)(unsafe.Pointer(&data[0]))
 		g.numFiles = hdr118.nfiles
@@ -469,26 +473,24 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.funcMapSize = 2 * 4
 		g.funSize = 4 + uint8(unsafe.Sizeof(pclntabFunc{}))
 	default:
-		return nil, fmt.Errorf("unsupported goplntab version (%x)", hdr.magic)
+		return nil, fmt.Errorf("unsupported header: %x, %x, %x", hdr.magic, hdr.pad, hdr.ptrSize)
 	}
 
 	if g.funcnameOffset >= g.cuOffset ||
 		g.cuOffset >= g.filetabOffset ||
 		g.filetabOffset >= g.pctabOffset ||
 		g.pctabOffset >= g.pclnOffset ||
-		g.pclnOffset >= dataLen {
-		return nil, fmt.Errorf("gopclntab is corrupt (%x, %x, %x, %x, %x)",
-			g.funcnameOffset, g.cuOffset,
-			g.filetabOffset, g.pctabOffset,
-			g.pclnOffset)
+		g.pclnOffset >= dataLen ||
+		int64(g.numFuncs)*int64(g.funcMapSize) > int64(len(data))-int64(g.pclnOffset) {
+		return nil, fmt.Errorf("corrupt header (%x < %x < %x < %x < %x)",
+			g.funcnameOffset, g.cuOffset, g.filetabOffset, g.pctabOffset, g.pclnOffset)
 	}
 
-	g.funcnametab = data[g.funcnameOffset:]
-	g.cutab = data[g.cuOffset:]
-	g.filetab = data[g.filetabOffset:]
-	g.pctab = data[g.pctabOffset:]
+	g.funcnametab = data[g.funcnameOffset:g.cuOffset]
+	g.cutab = data[g.cuOffset:g.filetabOffset]
+	g.filetab = data[g.filetabOffset:g.pctabOffset]
+	g.pctab = data[g.pctabOffset:g.pclnOffset]
 	g.functab = data[g.pclnOffset:]
-
 	g.dataRef = ef.Take()
 	g.setDontNeed = ef.SetDontNeed
 
@@ -648,7 +650,7 @@ func getSourceFileStrategyX86(sourceFile string) strategy {
 }
 
 // getFunctionDelta determines the special unwind opcode if needed
-func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, framePointerReliable bool) *sdtypes.UnwindInfo {
+func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, useFP bool) *sdtypes.UnwindInfo {
 	switch sourceFile {
 	case "runtime.goexit", "runtime.mstart":
 		// goexit - return address in all goroutine stacks
@@ -665,10 +667,10 @@ func getFunctionUnwindInfo(sourceFile string, arch elf.Machine, framePointerReli
 	case "runtime.systemstack", "runtime.nanotime1", "time.now", "runtime.walltime":
 		// functions which preserve the frame pointer chain across the g0/user stack boundary
 		// so that the standard FP unwinding traverses it naturally.
-		if !framePointerReliable {
-			return &sdtypes.UnwindInfoStop
+		if useFP {
+			return &sdtypes.UnwindInfoFramePointer
 		}
-		return &sdtypes.UnwindInfoFramePointer
+		return &sdtypes.UnwindInfoStop
 	case "runtime.sigreturn", "runtime.sigreturn__sigaction":
 		// signal frame restorers
 		return &sdtypes.UnwindInfoSignal
@@ -733,7 +735,7 @@ func parseArm64pclntabFunc(deltas *sdtypes.StackDeltaArray, p pcval, s strategy)
 }
 
 func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
-	getSourceFileStrategy func(sourceFile string) strategy) map[int]strategy {
+	getSourceFileStrategy func(sourceFile string) strategy) (map[int]strategy, error) {
 
 	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)
@@ -745,7 +747,7 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 		offset := rdr.Tell()
 		filename, err := rdr.ReadString(0)
 		if err != nil {
-			return nil
+			return nil, err
 		}
 		if s := getSourceFileStrategy(filename); s != strategyUnknown {
 			offsetStrategy[int(offset)] = s
@@ -758,6 +760,9 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	for idx := 0; true; idx++ {
 		offsetBytes, err := rdr.ReadN(4)
 		if err != nil {
+			if err != io.EOF {
+				return nil, err
+			}
 			break
 		}
 		offset := int(binary.LittleEndian.Uint32(offsetBytes))
@@ -766,12 +771,10 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 		}
 	}
 
-	return cuStrategy
+	return cuStrategy, nil
 }
 
-func resolveFunctionUnwindInfo(r io.ReaderAt, g *Gopclntab, arch elf.Machine,
-	framePointerReliable bool) map[int32]*sdtypes.UnwindInfo {
-
+func resolveFunctionUnwindInfo(r io.ReaderAt, g *Gopclntab, arch elf.Machine, useFP bool) (map[int32]*sdtypes.UnwindInfo, error) {
 	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)
 
@@ -782,13 +785,16 @@ func resolveFunctionUnwindInfo(r io.ReaderAt, g *Gopclntab, arch elf.Machine,
 		offset := rdr.Tell()
 		funcName, err := rdr.ReadString(0)
 		if err != nil {
+			if err != io.EOF {
+				return nil, err
+			}
 			break
 		}
-		if info := getFunctionUnwindInfo(funcName, arch, framePointerReliable); info != nil {
+		if info := getFunctionUnwindInfo(funcName, arch, useFP); info != nil {
 			functionInfo[int32(offset)] = info
 		}
 	}
-	return functionInfo
+	return functionInfo, nil
 }
 
 // Parse Golang .gopclntab spdelta tables and try to produce minified intervals
@@ -806,7 +812,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 	// Get target machine architecture for the ELF file
 	arch := ee.file.Machine
 	defaultStrategy := strategyFramePointer
-	isFramePointerReliable := true
+	useFP := true
 	var parsePclntab func(deltas *sdtypes.StackDeltaArray, p pcval, s strategy) error
 	var cuStrategy map[int]strategy
 
@@ -820,7 +826,10 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		// would fill up our precious kernel delta maps fast, the strategy is to
 		// create deltastack maps for non-Go source files only, and otherwise
 		// cover the vast majority with "use frame pointer" stack delta.
-		cuStrategy = resolveCUStrategies(ee.file.Underlying(), g, getSourceFileStrategyX86)
+		cuStrategy, err = resolveCUStrategies(ee.file.Underlying(), g, getSourceFileStrategyX86)
+		if err != nil {
+			return fmt.Errorf("cutab: %v", err)
+		}
 	case elf.EM_AARCH64:
 		parsePclntab = parseArm64pclntabFunc
 		// Go 1.20 and earlier did not maintain frame pointers properly on arm64.
@@ -830,28 +839,31 @@ func (ee *elfExtractor) parseGoPclntab() error {
 		case go1_16, go1_18:
 			// Magic indicates old Go with broken arm64 frame pointers
 			defaultStrategy = strategyDeltasWithFrame
-			isFramePointerReliable = false
+			useFP = false
 		case go1_20:
 			// Ambiguous regarding if frame pointer is kept correctly.
 			// Take the slow path of resolving Go version.
 			goVer, err := ee.file.GoVersion()
 			if err != nil || version.Compare(goVer, "go1.21rc1") < 0 {
 				defaultStrategy = strategyDeltasWithFrame
-				isFramePointerReliable = false
+				useFP = false
 			}
 		}
 	default:
 		return fmt.Errorf("unsupported ELF architecture (%x)", arch)
 	}
 
-	funcUnwindInfo := resolveFunctionUnwindInfo(ee.file.Underlying(), g, arch, isFramePointerReliable)
+	funcUnwindInfo, err := resolveFunctionUnwindInfo(ee.file.Underlying(), g, arch, useFP)
+	if err != nil {
+		return fmt.Errorf("funcnametab: %v", err)
+	}
 
 	// Iterate the golang PC to function lookup table (sorted by PC)
 	for i := 0; i < g.numFuncs; i++ {
 		mapPc, funcOff := g.getFuncMapEntry(i)
 		funcPc, fun := g.getFunc(funcOff)
 		if fun == nil || mapPc != funcPc {
-			return fmt.Errorf(".gopclntab func %v descriptor is invalid (pc %x/%x)",
+			return fmt.Errorf("func %v descriptor is invalid (pc %x/%x)",
 				i, mapPc, funcPc)
 		}
 
@@ -891,7 +903,7 @@ func (ee *elfExtractor) parseGoPclntab() error {
 
 		// Generate stack deltas as the information is available
 		if len(g.pctab) < int(fun.pcspOff) {
-			return fmt.Errorf(".gopclntab func %v pcscOff (%d) is invalid",
+			return fmt.Errorf("func %v pcscOff (%d) is invalid",
 				i, fun.pcspOff)
 		}
 		p := g.getPcval(fun.pcspOff, uint(funcPc))

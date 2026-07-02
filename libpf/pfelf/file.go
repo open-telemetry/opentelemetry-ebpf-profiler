@@ -519,8 +519,8 @@ func (f *File) Section(name string) *Section {
 	return nil
 }
 
-// findVirtualAddressProg determines the Prog header containing the virtual address.
-func (f *File) findVirtualAddressProg(addr uint64) *Prog {
+// ProgByVirtualAddress searches the Prog header containing the virtual address.
+func (f *File) ProgByVirtualAddress(addr uint64) *Prog {
 	// Search for the Program header that contains the start address.
 	for _, ph := range f.loadData {
 		if addr >= ph.Vaddr && addr < ph.Vaddr+ph.Memsz {
@@ -537,7 +537,7 @@ func (f *File) VirtualMemory(addr int64, sz, maxSize int) ([]byte, error) {
 	if sz == 0 {
 		return nil, nil
 	}
-	if ph := f.findVirtualAddressProg(uint64(addr)); ph != nil {
+	if ph := f.ProgByVirtualAddress(uint64(addr)); ph != nil {
 		offset := addr - int64(ph.Vaddr)
 		if offset+int64(sz) <= int64(ph.Filesz) {
 			if mapping, ok := ph.elfReader.(*mmap.ReaderAt); ok {
@@ -1032,7 +1032,7 @@ func (f *File) ReadAt(p []byte, addr int64) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
 	}
-	if ph := f.findVirtualAddressProg(uint64(addr)); ph != nil {
+	if ph := f.ProgByVirtualAddress(uint64(addr)); ph != nil {
 		return ph.ReadAt(p, addr-int64(ph.Vaddr))
 	}
 	return 0, fmt.Errorf("no matching segment for 0x%x", uint64(addr))
