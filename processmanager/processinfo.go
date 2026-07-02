@@ -309,7 +309,7 @@ func (pm *ProcessManager) processNewMapping(pid libpf.PID, m *Mapping) uint64 {
 	fileID := uint64(host.FileIDFromLibpf(mf.File.Value().FileID))
 	for _, prefix := range prefixes {
 		if err = pm.ebpf.UpdatePidPageMappingInfo(pid, prefix, fileID, bias); err != nil {
-			log.Debugf("Failed to update pid_page_to_mapping_info (pid: %d, page: 0x%x/%d): %v",
+			log.Errorf("Failed to update pid_page_to_mapping_info (pid: %d, page: 0x%x/%d): %v",
 				pid, prefix.Key, prefix.Length, err)
 			break
 		}

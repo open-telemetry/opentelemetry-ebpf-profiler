@@ -837,7 +837,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		var err error
 		staticTLSOffset, err = getTLSOffsetFromAssembly(ef)
 		if err != nil {
-			log.Debugf("Failed to extract TLS offset: %v", err)
+			log.Warnf("Failed to extract TLS offset: %v", err)
 		}
 	}
 
