@@ -837,7 +837,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		var err error
 		staticTLSOffset, err = getTLSOffsetFromAssembly(ef)
 		if err != nil {
-			log.Warnf("Failed to extract TLS offset: %v", err)
+			log.Debugf("Failed to extract TLS offset: %v", err)
 		}
 	}
 
@@ -979,7 +979,7 @@ func findInterpreterRanges(info *interpreter.LoaderInfo, ef *pfelf.File,
 	})
 	coldRange, err := findColdRange(ef, code, interp)
 	if err != nil {
-		log.Errorf("failed to recover python ranges %s: %s", info.FileName(), err.Error())
+		log.Debugf("failed to recover python ranges %s: %s", info.FileName(), err.Error())
 	}
 	if coldRange != (util.Range{}) {
 		interpRanges = append(interpRanges, coldRange)

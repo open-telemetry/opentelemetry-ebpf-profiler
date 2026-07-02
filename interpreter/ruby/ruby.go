@@ -1009,7 +1009,7 @@ func (r *rubyInstance) readIseqBody(iseqBody, pc libpf.Address, frameAddrType ui
 			libpf.Address(vms.iseq_constant_body.location+vms.iseq_location_struct.base_label))
 		methodName, err = r.getStringCached(methodNamePtr, r.readRubyString)
 		if err != nil {
-			log.Warnf("Unable to find local method name on iseq method (%d) (iseq@0x%08x) %v", iseqType, iseqBody, err)
+			log.Debugf("Unable to find local method name on iseq method (%d) (iseq@0x%08x) %v", iseqType, iseqBody, err)
 		}
 	}
 
@@ -1125,7 +1125,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 		if err != nil {
 			// Failing to read the class name is not a fatal error, keep going with just the method name
 			// and provide an incomplete label rather than nothing at all.
-			log.Errorf("Failed to read class name for cme (%d): %v", frameAddrType, err)
+			log.Debugf("Failed to read class name for cme (%d): %v", frameAddrType, err)
 		}
 	}
 
@@ -1141,7 +1141,7 @@ func (r *rubyInstance) Symbolize(ef libpf.EbpfFrame, frames *libpf.Frames, _ lib
 		lineNo, err := r.getRubyLineNo(cfpIseq, uint64(pc))
 		if err != nil {
 			lineNo = 0
-			log.Warnf("RubySymbolizer: Failed to get line number (%d) %v", frameAddrType, err)
+			log.Debugf("RubySymbolizer: Failed to get line number (%d) %v", frameAddrType, err)
 		}
 		iseq, err := r.readIseqBody(iseqBody, pc, frameAddrType)
 		if err != nil {
@@ -1412,7 +1412,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 		return true
 	}); err != nil {
-		log.Warnf("failed to visit symbols: %v", err)
+		log.Debugf("failed to visit symbols: %v", err)
 	}
 
 	// NOTE for ruby 3.3.0+, if ruby is stripped, we have no way of locating
@@ -1427,7 +1427,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		}
 		return true
 	}); err != nil {
-		log.Warnf("failed to locate TLS descriptor: %v", err)
+		log.Debugf("failed to locate TLS descriptor: %v", err)
 	}
 
 	// For statically-linked ruby, extract the direct TP-relative offset from
@@ -1437,7 +1437,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	if isBinRuby {
 		offset, ecErr := extractEcTLSOffset(ef)
 		if ecErr != nil {
-			log.Warnf("failed to extract EC TLS offset for static ruby: %v", ecErr)
+			log.Debugf("failed to extract EC TLS offset for static ruby: %v", ecErr)
 		} else {
 			staticTLSOffset = offset
 		}
@@ -1451,7 +1451,7 @@ func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		tlsModuleIdOffset = libpf.Address(r.Off)
 		return false
 	}, pfelf.RelDTPMOD64); err != nil {
-		log.Warnf("failed to find DTPMOD64 relocation: %v", err)
+		log.Debugf("failed to find DTPMOD64 relocation: %v", err)
 	}
 
 	log.Debugf("Discovered EC tls tpbase offset %x, static tls offset %d, dtpmod offset %x, fallback ctx %x, interp ranges: %v, global symbols: %x",

@@ -135,7 +135,7 @@ func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) 
 	case errors.Is(err, libpf.ErrSymbolNotFound):
 		return nil, fmt.Errorf("failed to lookup symbol in %s: %v", info.FileName(), err)
 	case errors.Is(err, errDecodeSymbol), errors.Is(err, errRuntimeIsCgoUnavailable):
-		log.Warnf("In %s: %v", info.FileName(), err)
+		log.Debugf("In %s: %v", info.FileName(), err)
 	case errors.Is(err, nil):
 		// Nothing to do - just continue
 	default:
