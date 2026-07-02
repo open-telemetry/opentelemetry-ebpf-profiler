@@ -94,12 +94,13 @@ func assertBPFSymbolFound(t *testing.T, s *Symbolizer, progName string) (string,
 
 	t.Logf("Found BPF program %q at address 0x%x", fullName, progAddr)
 
-	funcName, offset, ok := s.LookupBPFSymbol(progAddr)
+	snapshot := s.Snapshot()
+	funcName, offset, ok := snapshot.LookupBPFSymbol(progAddr)
 	require.True(t, ok, "LookupBPFSymbol failed for address 0x%x", progAddr)
 	assert.Equal(t, fullName, funcName)
 	assert.Equal(t, uint(0), offset)
 
-	funcName, offset, ok = s.LookupBPFSymbol(progAddr + 1)
+	funcName, offset, ok = snapshot.LookupBPFSymbol(progAddr + 1)
 	require.True(t, ok, "LookupBPFSymbol failed for address 0x%x", progAddr+1)
 	assert.Equal(t, fullName, funcName)
 	assert.Equal(t, uint(1), offset)

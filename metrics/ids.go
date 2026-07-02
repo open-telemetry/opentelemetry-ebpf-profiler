@@ -680,6 +680,12 @@ const (
 	// Number of times the current PC was found in a non-executable VMA
 	IDUnwindNativeErrNonExecutableVMA = 297
 
+	// Number of cache hits in the kernel frame cache
+	IDKernelFrameCacheHit = 298
+
+	// Number of cache misses in the kernel frame cache
+	IDKernelFrameCacheMiss = 299
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 298
+	IDMax = 300
 )
