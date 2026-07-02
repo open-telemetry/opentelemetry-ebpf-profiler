@@ -256,7 +256,7 @@ func (r *reader) str() []byte {
 	if end >= r.end {
 		// No NUL terminator within bounds: signal overread to the caller.
 		r.pos = r.end + 1
-		return r.data[cur:end]
+		return nil
 	}
 	r.pos = end + 1
 	return r.data[cur:end]
