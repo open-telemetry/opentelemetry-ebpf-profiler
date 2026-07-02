@@ -4,8 +4,9 @@
 package pdata // import "go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 
 import (
-	"fmt"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -18,7 +19,6 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
-	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 const (
@@ -79,6 +79,24 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 
 	attrMgr := samples.NewAttrTableManager(stringSet, dic.AttributeTable())
 
+	// Collect the profile types present anywhere in the tree once, in a stable
+	// order, so that the order profiles are appended in is deterministic.
+	seenProfileTypes := make(libpf.Set[*samples.TypeMetadata])
+	for _, resourceToEvents := range tree {
+		for profileType := range resourceToEvents.Events {
+			if _, ok := seenProfileTypes[profileType]; !ok {
+				seenProfileTypes[profileType] = libpf.Void{}
+			}
+		}
+	}
+	profileTypes := seenProfileTypes.ToSlice()
+	slices.SortFunc(profileTypes, func(a, b *samples.TypeMetadata) int {
+		if c := strings.Compare(a.SampleType, b.SampleType); c != 0 {
+			return c
+		}
+		return strings.Compare(a.PeriodType, b.PeriodType)
+	})
+
 	for resource, toEvents := range tree {
 		if len(toEvents.Events) == 0 {
 			continue
@@ -93,12 +111,8 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 		sp.Scope().SetVersion(agentVersion)
 		sp.SetSchemaUrl(semconv.SchemaURL)
 
-		for _, origin := range []libpf.Origin{
-			support.TraceOriginSampling,
-			support.TraceOriginOffCPU,
-			support.TraceOriginProbe,
-		} {
-			if len(toEvents.Events[origin]) == 0 {
+		for _, profileType := range profileTypes {
+			if len(toEvents.Events[profileType]) == 0 {
 				// Do not append empty profiles.
 				continue
 			}
@@ -106,7 +120,7 @@ func (p *Pdata) Generate(tree samples.TraceEventsTree,
 			prof := sp.Profiles().AppendEmpty()
 			if err := p.setProfile(dic, attrMgr,
 				stringSet, funcSet, mappingSet, stackSet, locationSet, linkSet,
-				origin, toEvents.Events[origin], prof,
+				profileType, toEvents.Events[profileType], prof,
 				collectionStartTime, collectionEndTime); err != nil {
 				return profiles, err
 			}
@@ -146,37 +160,27 @@ func (p *Pdata) setProfile(
 	stackSet orderedset.OrderedSet[stackInfo],
 	locationSet orderedset.OrderedSet[locationInfo],
 	linkSet orderedset.OrderedSet[linkInfo],
-	origin libpf.Origin,
+	profileType *samples.TypeMetadata,
 	events samples.SampleToEvents,
 	profile pprofile.Profile,
 	collectionStartTime, collectionEndTime time.Time,
 ) error {
-	st := profile.SampleType()
-	switch origin {
-	case support.TraceOriginSampling:
+	if profileType.PeriodType != "" {
 		profile.SetPeriod(1e9 / int64(p.samplesPerSecond))
 		pt := profile.PeriodType()
-		pt.SetTypeStrindex(stringSet.Add("cpu"))
-		pt.SetUnitStrindex(stringSet.Add("nanoseconds"))
-
-		st.SetTypeStrindex(stringSet.Add("samples"))
-		st.SetUnitStrindex(stringSet.Add("count"))
-	case support.TraceOriginOffCPU:
-		st.SetTypeStrindex(stringSet.Add("off_cpu"))
-		st.SetUnitStrindex(stringSet.Add("nanoseconds"))
-	case support.TraceOriginProbe:
-		st.SetTypeStrindex(stringSet.Add("events"))
-		st.SetUnitStrindex(stringSet.Add("count"))
-	default:
-		// Should never happen
-		return fmt.Errorf("generating profile for unsupported origin %d", origin)
+		pt.SetTypeStrindex(stringSet.Add(profileType.PeriodType))
+		pt.SetUnitStrindex(stringSet.Add(profileType.PeriodUnit))
 	}
+
+	st := profile.SampleType()
+	st.SetTypeStrindex(stringSet.Add(profileType.SampleType))
+	st.SetUnitStrindex(stringSet.Add(profileType.SampleUnit))
 
 	for sampleKey, traceInfo := range events {
 		sample := profile.Samples().AppendEmpty()
 
 		sample.TimestampsUnixNano().FromRaw(traceInfo.Timestamps)
-		if origin == support.TraceOriginOffCPU {
+		if profileType.ReportValues {
 			sample.Values().Append(traceInfo.Values...)
 		}
 
