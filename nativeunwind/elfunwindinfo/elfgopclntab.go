@@ -335,7 +335,7 @@ func extractGoPclntab(ef *pfelf.File) (data []byte, offset int64, err error) {
 			if p == nil {
 				return nil, 0, fmt.Errorf("failed to load .gopclntab via symbols: unmappable virtual address")
 			}
-			offset = int64(start) - int64(p.Vaddr)
+			offset = int64(p.Off) + int64(start) - int64(p.Vaddr)
 		}
 	}
 	return data, offset, nil
@@ -741,22 +741,18 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	defer pfbufio.PutReader(rdr)
 
 	// Walk all filenames and record the ones needing a strategy
-	rdr.Init(r, g.headerOffset+int64(g.filetabOffset), int64(g.pctabOffset-g.filetabOffset))
 	offsetStrategy := make(map[int]strategy)
-	for range g.numFiles {
-		offset := rdr.Tell()
-		filename, err := rdr.ReadString(0)
-		if err != nil {
-			return nil, err
-		}
+	rdr.Init(r, g.headerOffset+int64(g.filetabOffset), int64(g.pctabOffset-g.filetabOffset))
+	rdr.WalkStrings(int(g.numFiles), func(offs int64, filename string) error {
 		if s := getSourceFileStrategy(filename); s != strategyUnknown {
-			offsetStrategy[int(offset)] = s
+			offsetStrategy[int(offs)] = s
 		}
-	}
+		return nil
+	})
 
 	// Walk cutab indexes and map tham to strategy
-	rdr.Init(r, g.headerOffset+int64(g.cuOffset), int64(g.filetabOffset-g.cuOffset))
 	cuStrategy := make(map[int]strategy)
+	rdr.Init(r, g.headerOffset+int64(g.cuOffset), int64(g.filetabOffset-g.cuOffset))
 	for idx := 0; true; idx++ {
 		offsetBytes, err := rdr.ReadN(4)
 		if err != nil {
@@ -779,21 +775,13 @@ func resolveFunctionUnwindInfo(r io.ReaderAt, g *Gopclntab, arch elf.Machine, us
 	defer pfbufio.PutReader(rdr)
 
 	functionInfo := make(map[int32]*sdtypes.UnwindInfo)
-
 	rdr.Init(r, g.headerOffset+int64(g.funcnameOffset), int64(g.cuOffset-g.funcnameOffset))
-	for {
-		offset := rdr.Tell()
-		funcName, err := rdr.ReadString(0)
-		if err != nil {
-			if err != io.EOF {
-				return nil, err
-			}
-			break
-		}
+	rdr.WalkAllStrings(func(offs int64, funcName string) error {
 		if info := getFunctionUnwindInfo(funcName, arch, useFP); info != nil {
-			functionInfo[int32(offset)] = info
+			functionInfo[int32(offs)] = info
 		}
-	}
+		return nil
+	})
 	return functionInfo, nil
 }
 

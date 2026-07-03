@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"math"
 	"sync"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
@@ -236,6 +237,31 @@ func (r *Reader) ReadSlice(delim byte) ([]byte, error) {
 func (r *Reader) ReadString(delim byte) (string, error) {
 	slice, err := r.ReadSlice(delim)
 	return pfunsafe.ToString(slice), err
+}
+
+// WalkStrings reads up to 'n' strings and calls the callback for each string
+// with its offset from the original reader start.
+// The string points to the internal buffer and is invalid after callback returns.
+func (r *Reader) WalkStrings(n int, fn func (offset int64, s string) error) error {
+	for i := n; i > 0; i-- {
+		offset := r.Tell()
+		s, err := r.ReadString(0)
+		if err != nil {
+			return err
+		}
+		if err = fn(offset, s); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// WalkAllStrings is similar to WalkStrings, but walks all strings until EOF.
+func (r *Reader) WalkAllStrings(fn func (offset int64, s string) error) error {
+	if err := r.WalkStrings(math.MaxInt, fn); err != io.EOF {
+		return err
+	}
+	return nil
 }
 
 // SearchSlice moves the reader position to immediately AFTER the pattern.
