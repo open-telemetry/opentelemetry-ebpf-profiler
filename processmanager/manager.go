@@ -45,9 +45,6 @@ const (
 
 	// Maximum size of the LRU cache for frames.
 	frameCacheSize = 16384
-
-	// TTL of entries in the frame cache.
-	frameCacheLifetime = 5 * time.Minute
 )
 
 // dummyPrefix is the LPM prefix installed to indicate the process is known
@@ -80,7 +77,6 @@ func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monit
 	if err != nil {
 		return nil, err
 	}
-	frameCache.SetLifetime(frameCacheLifetime)
 
 	em, err := eim.NewExecutableInfoManager(sdp, ebpf, interpretersConfig)
 	if err != nil {
@@ -319,7 +315,7 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // is not re-entrant due to frameCache not being synced. If the tracer is
 // later updated to distribute trace handling to goroutine pool, the caching
 // strategy needs to be updated accordingly.
-func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
+func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) {
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
 		Comm:           bpfTrace.Comm,
@@ -330,7 +326,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 		ProcessName:    bpfTrace.ProcessName,
 		ExecutablePath: bpfTrace.ExecutablePath,
 		ContainerID:    bpfTrace.ContainerID,
-		Origin:         bpfTrace.Origin,
+		ProfileType:    profileType,
 		Value:          bpfTrace.Value,
 		EnvVars:        bpfTrace.EnvVars,
 		TraceID:        bpfTrace.APMTraceID,
@@ -366,7 +362,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 			key.pid = pid
 		}
 		copy(key.data[:], frame)
-		if cached, ok := pm.frameCache.GetAndRefresh(key, frameCacheLifetime); ok {
+		if cached, ok := pm.frameCache.Get(key); ok {
 			// Fast path
 			cacheHit++
 			trace.Frames = append(trace.Frames, cached...)

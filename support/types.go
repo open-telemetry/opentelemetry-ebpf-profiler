@@ -194,7 +194,7 @@ type BEAMProcInfo struct {
 type DotnetProcInfo struct {
 	Version uint32
 }
-type GoLabelsOffsets struct {
+type GoRuntimeOffsets struct {
 	M_offset               uint32
 	Curg                   uint32
 	Labels                 uint32

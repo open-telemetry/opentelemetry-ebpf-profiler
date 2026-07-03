@@ -369,7 +369,7 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		}
 
 		if !interpretersConfig.Perl.IsDisabled() || !interpretersConfig.Python.IsDisabled() ||
-			!interpretersConfig.Labels.IsDisabled() {
+			!interpretersConfig.Go.IsLabelsDisabled() {
 			var tpbaseOffset uint64
 			tpbaseOffset, err = loadTPBaseOffset(coll, maps, kmod)
 			if err != nil {
@@ -558,6 +558,11 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 
 	if err := coll.Variables["filter_error_frames"].Set(cfg.FilterErrorFrames); err != nil {
 		return fmt.Errorf("failed to set drop_error_only_traces: %v", err)
+	}
+
+	if err := coll.Variables["go_labels_disabled"].Set(
+		cfg.InterpretersConfig.Go.IsLabelsDisabled()); err != nil {
+		return fmt.Errorf("failed to set go_labels_disabled: %v", err)
 	}
 
 	if err := coll.Variables["filter_idle_frames"].Set(cfg.FilterIdleFrames); err != nil {
