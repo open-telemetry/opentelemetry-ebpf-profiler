@@ -121,7 +121,7 @@ func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) 
 	goVersion := file.GoVersion()
 	if goVersion == "" {
 		// unable to extract, usually limited to old coredump tests
-		goVersion = "go1.13"
+		goVersion = "go1.16"
 		log.Debugf("file %s go version failed, assuming: %v", info.FileName(), goVersion)
 	} else {
 		log.Debugf("file %s detected as go version %s", info.FileName(), goVersion)

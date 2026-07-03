@@ -2,9 +2,12 @@
 
 CC ?= cc
 OBJCOPY ?= objcopy
+STRIP ?= strip
 
 BINARIES=fixed-address \
 	go-binary \
+	go-binary-no-buildinfo-section \
+	go-binary-no-sections \
 	without-debug-syms
 
 all: $(BINARIES)
@@ -23,3 +26,8 @@ fixed-address: fixed-address.c fixed-address.ld
 go-binary: gotest.go
 	go build -o go-binary -ldflags "-w -s" gotest.go
 
+go-binary-no-buildinfo-section: go-binary
+	$(OBJCOPY) --rename-section .go.buildinfo=.go.buildinfo.hidden $< $@
+
+go-binary-no-sections: go-binary
+	$(STRIP) --strip-section-headers -o $@ $<

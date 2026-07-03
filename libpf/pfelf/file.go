@@ -32,7 +32,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strings"
 	"syscall"
 	"unsafe"
 
@@ -1289,29 +1288,6 @@ func readString(r io.ReaderAt, addr uint64) (string, error) {
 	return pfunsafe.ToString(val), err
 }
 
-func extractGolangSettings(mod string) bool {
-	if len(mod) <= 32 || mod[len(mod)-17] != '\n' {
-		// Does not look like valid module frame.
-		return false
-	}
-	// Remove the module frame
-	mod = mod[16 : len(mod)-16]
-
-	for len(mod) > 0 {
-		line := mod
-		if nl := strings.Index(mod, "\n"); nl >= 0 {
-			line = mod[:nl]
-			mod = mod[nl+1:]
-		} else {
-			mod = mod[0:0]
-		}
-		if line == "build\tCGO_ENABLED=1" {
-			return true
-		}
-	}
-	return false
-}
-
 func (f *File) parseGoBuildinfo() error {
 	if f.golangVersion != strNotProcessed {
 		return nil
@@ -1335,7 +1311,7 @@ func (f *File) parseGoBuildinfo() error {
 		}
 	}
 	if sz == 0 {
-		return nil
+		return errNoGoBuildinfo
 	}
 
 	rdr := pfbufio.NewReader(f.Underlying(), off, sz)

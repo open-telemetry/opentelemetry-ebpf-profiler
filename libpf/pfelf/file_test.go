@@ -4,6 +4,8 @@
 package pfelf
 
 import (
+	"bytes"
+	"debug/buildinfo"
 	"go/version"
 	"os"
 	"os/exec"
@@ -97,6 +99,77 @@ func TestGoVersion(t *testing.T) {
 	defer testEF.Close()
 	testVersion := testEF.GoVersion()
 	assert.Equal(t, runtime.Version(), testVersion)
+}
+
+func TestParseGoBuildinfoFallback(t *testing.T) {
+	want, err := buildinfo.ReadFile("testdata/go-binary")
+	require.NoError(t, err)
+
+	// magicStripped loads go-binary-no-sections and zeroes out the
+	// buildinfo magic in memory, simulating a coredump so incomplete that
+	// even the PT_LOAD fallback scan can't locate it.
+	magicStripped := func(t *testing.T) *File {
+		testsupport.RequireGeneratedTestFile(t, "testdata/go-binary-no-sections")
+		raw, err := os.ReadFile("testdata/go-binary-no-sections")
+		require.NoError(t, err)
+
+		i := bytes.Index(raw, goBuildInfoMagic)
+		require.GreaterOrEqualf(t, i, 0, "test fixture no longer contains the buildinfo magic %q", goBuildInfoMagic)
+		corrupted := append([]byte(nil), raw...)
+		clear(corrupted[i : i+len(goBuildInfoMagic)])
+
+		ef, err := NewFile(bytes.NewReader(corrupted), 0, false)
+		require.NoError(t, err)
+		return ef
+	}
+	open := func(path string) func(t *testing.T) *File {
+		return func(t *testing.T) *File { return getPFELF(path, t) }
+	}
+
+	tests := map[string]struct {
+		open              func(t *testing.T) *File
+		wantSection       bool
+		wantOtherSections bool
+		wantIsGolang      bool
+		wantVersion       string
+	}{
+		"buildinfo section present": {
+			open:        open("testdata/go-binary"),
+			wantSection: true, wantOtherSections: true,
+			wantIsGolang: true, wantVersion: want.GoVersion,
+		},
+		"buildinfo section renamed away": {
+			open:        open("testdata/go-binary-no-buildinfo-section"),
+			wantSection: false, wantOtherSections: true,
+			wantIsGolang: true, wantVersion: want.GoVersion,
+		},
+		"no section headers at all": {
+			open:        open("testdata/go-binary-no-sections"),
+			wantSection: false, wantOtherSections: false,
+			wantIsGolang: true, wantVersion: want.GoVersion,
+		},
+		"not a Go binary": {
+			open:        open("testdata/without-debug-syms"),
+			wantSection: false, wantOtherSections: false,
+			wantIsGolang: false, wantVersion: "",
+		},
+		"buildinfo magic missing from a section-less ELF": {
+			open:        magicStripped,
+			wantSection: false, wantOtherSections: false,
+			wantIsGolang: true, wantVersion: "",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			ef := tc.open(t)
+			defer ef.Close()
+
+			assert.Equal(t, tc.wantSection, ef.Section(".go.buildinfo") != nil)
+			assert.Equal(t, tc.wantOtherSections, ef.Section(".gopclntab") != nil)
+			assert.Equal(t, tc.wantIsGolang, ef.IsGolang())
+			assert.Equal(t, tc.wantVersion, ef.GoVersion())
+		})
+	}
 }
 
 func TestGetGoBuildID(t *testing.T) {
