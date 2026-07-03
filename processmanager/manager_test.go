@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"slices"
 	"testing"
+	"unsafe"
 
 	lru "github.com/elastic/go-freelru"
 	"github.com/stretchr/testify/assert"
@@ -20,6 +21,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
+
+type nopEbpf struct{ interpreter.EbpfHandler }
+
+func (nopEbpf) UpdateProcData(libpf.InterpreterType, libpf.PID, unsafe.Pointer) error {
+	return nil
+}
 
 type traceCapture struct {
 	traces []*libpf.Trace
@@ -62,7 +69,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 
 	goData, err := golang.GetLoader(golang.Config{})(nil, loaderInfo)
 	require.NoError(t, err)
-	goInstance, err := goData.Attach(nil, realPID, 0x0, rm)
+	goInstance, err := goData.Attach(nopEbpf{}, realPID, 0x0, rm)
 	require.NoError(t, err)
 
 	goODID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 1}
@@ -131,7 +138,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 		TID:       goPID,
 		NumFrames: 1,
 		FrameData: libcFrame,
-	})
+	}, nil)
 
 	require.Len(t, capture.traces, 1)
 	goTrace := capture.traces[0]
@@ -146,7 +153,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 		TID:       catPID,
 		NumFrames: 1,
 		FrameData: libcFrame,
-	})
+	}, nil)
 
 	require.Len(t, capture.traces, 2)
 	catTrace := capture.traces[1]
@@ -195,13 +202,13 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 		TID:       firstPID,
 		NumFrames: 1,
 		FrameData: nativeFrame,
-	})
+	}, nil)
 	pm.HandleTrace(&libpf.EbpfTrace{
 		PID:       secondPID,
 		TID:       secondPID,
 		NumFrames: 1,
 		FrameData: nativeFrame,
-	})
+	}, nil)
 
 	require.Len(t, capture.traces, 2)
 

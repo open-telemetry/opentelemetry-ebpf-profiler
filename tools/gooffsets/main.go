@@ -12,7 +12,7 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-type goLabelsOffsets struct {
+type goRuntimeOffsets struct {
 	mOffset             uint32
 	curg                uint32
 	labels              uint32
@@ -21,7 +21,7 @@ type goLabelsOffsets struct {
 	hmapBuckets         uint32
 }
 
-func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
+func getOffsets(f *elf.File, version string) (*goRuntimeOffsets, error) {
 	d, err := f.DWARF()
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
 	}
 
 	if semver.Compare(version, "v1.24.0") >= 0 {
-		return &goLabelsOffsets{
+		return &goRuntimeOffsets{
 			mOffset: uint32(mOffset),
 			curg:    uint32(curgOffset),
 			labels:  uint32(labelsOffset),
@@ -112,7 +112,7 @@ func getOffsets(f *elf.File, version string) (*goLabelsOffsets, error) {
 		return nil, err
 	}
 
-	return &goLabelsOffsets{
+	return &goRuntimeOffsets{
 		mOffset:             uint32(mOffset),
 		curg:                uint32(curgOffset),
 		labels:              uint32(labelsOffset),

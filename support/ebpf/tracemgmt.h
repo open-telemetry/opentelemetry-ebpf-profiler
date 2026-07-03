@@ -283,6 +283,7 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->ratelimitAction                   = RATELIMIT_ACTION_DEFAULT;
   record->usesAnonymousMappings             = false;
   record->customLabelsState.go_m_ptr        = NULL;
+  record->goOffsets.m_offset                = 0;
 
   Trace *trace             = &record->trace;
   trace->frame_data_len    = 0;
@@ -943,6 +944,12 @@ static inline EBPF_INLINE int collect_trace(
   if (pid == 0) {
     tail_call(ctx, PROG_UNWIND_STOP);
     return 0;
+  }
+
+  // Preload this trace's go_procs entry into record->goOffsets.
+  GoRuntimeOffsets *go_offsets = bpf_map_lookup_elem(&go_procs, &pid);
+  if (go_offsets) {
+    record->goOffsets = *go_offsets;
   }
 
   // Recursive unwind frames

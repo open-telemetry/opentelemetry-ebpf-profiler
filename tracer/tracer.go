@@ -29,6 +29,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -438,7 +439,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		{
 			progID: uint32(support.ProgGoLabels),
 			name:   "go_labels",
-			enable: !cfg.InterpretersConfig.Labels.IsDisabled(),
+			enable: !cfg.InterpretersConfig.Go.IsLabelsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindBEAM),
@@ -1381,9 +1382,44 @@ func (t *Tracer) AttachProbes(probes []string) error {
 }
 
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
-	t.processManager.HandleTrace(bpfTrace)
+	t.processManager.HandleTrace(bpfTrace, profileTypeForOrigin(bpfTrace.Origin))
 
 	// Reclaim the EbpfTrace
 	bpfTrace.KernelFrames = bpfTrace.KernelFrames[0:0]
 	t.tracePool.Put(bpfTrace)
 }
+
+// profileTypeForOrigin maps a raw eBPF trace origin to the profile type
+// metadata reporters need to interpret and export it. Returns nil for
+// origins that have no known profile type.
+func profileTypeForOrigin(origin libpf.Origin) *samples.TypeMetadata {
+	switch origin {
+	case support.TraceOriginSampling:
+		return profileTypeSampling
+	case support.TraceOriginOffCPU:
+		return profileTypeOffCPU
+	case support.TraceOriginProbe:
+		return profileTypeProbe
+	default:
+		return nil
+	}
+}
+
+// Temporary list of well-known profile types.
+var (
+	profileTypeSampling = &samples.TypeMetadata{
+		PeriodType: "cpu",
+		PeriodUnit: "nanoseconds",
+		SampleType: "samples",
+		SampleUnit: "count",
+	}
+	profileTypeOffCPU = &samples.TypeMetadata{
+		SampleType:   "off_cpu",
+		SampleUnit:   "nanoseconds",
+		ReportValues: true,
+	}
+	profileTypeProbe = &samples.TypeMetadata{
+		SampleType: "events",
+		SampleUnit: "count",
+	}
+)
