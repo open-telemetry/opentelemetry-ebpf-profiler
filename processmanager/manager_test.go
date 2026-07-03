@@ -40,8 +40,14 @@ func (tc *traceCapture) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEve
 }
 
 func TestNewConfiguresFrameCacheSize(t *testing.T) {
-	pm, err := New(t.Context(), interpreterconfig.NoInterpreters(), time.Hour, time.Hour,
-		&testEbpfHandler{}, nil, nil, nil, 1, false, libpf.Set[string]{})
+	pm, err := New(t.Context(), Config{
+		InterpretersConfig:    interpreterconfig.NoInterpreters(),
+		MonitorInterval:       time.Hour,
+		ExecutableUnloadDelay: time.Hour,
+		EbpfHandler:           &testEbpfHandler{},
+		FrameCacheSize:        1,
+		IncludeEnvVars:        libpf.Set[string]{},
+	})
 	require.NoError(t, err)
 
 	pm.frameCache.Add(frameCacheKey{data: [3]uint64{1}}, libpf.Frames{})
