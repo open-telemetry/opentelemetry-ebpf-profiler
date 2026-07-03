@@ -202,7 +202,6 @@ func parseTracers(tracers string) (interpreterconfig.Config, error) {
 
 	// Start with all interpreters disabled; enable only the ones listed.
 	cfg := interpreterconfig.NoInterpreters()
-
 	for name := range strings.SplitSeq(tracers, ",") {
 		name = strings.ToLower(strings.TrimSpace(name))
 		switch name {
@@ -222,8 +221,10 @@ func parseTracers(tracers string) (interpreterconfig.Config, error) {
 			cfg.Dotnet.Disabled = false
 		case "go":
 			cfg.Go.Disabled = false
+			cfg.Go.Symbolization.Disabled = false
 		case "labels":
-			cfg.Labels.Disabled = false
+			cfg.Go.Disabled = false
+			cfg.Go.Labels.Disabled = false
 		case "beam":
 			cfg.BEAM.Disabled = false
 		case "native":
