@@ -242,7 +242,7 @@ func (r *Reader) ReadString(delim byte) (string, error) {
 // WalkStrings reads up to 'n' strings and calls the callback for each string
 // with its offset from the original reader start.
 // The string points to the internal buffer and is invalid after callback returns.
-func (r *Reader) WalkStrings(n int, fn func (offset int64, s string) error) error {
+func (r *Reader) WalkStrings(n int, fn func(offset int64, s string) error) error {
 	for i := n; i > 0; i-- {
 		offset := r.Tell()
 		s, err := r.ReadString(0)
@@ -257,7 +257,7 @@ func (r *Reader) WalkStrings(n int, fn func (offset int64, s string) error) erro
 }
 
 // WalkAllStrings is similar to WalkStrings, but walks all strings until EOF.
-func (r *Reader) WalkAllStrings(fn func (offset int64, s string) error) error {
+func (r *Reader) WalkAllStrings(fn func(offset int64, s string) error) error {
 	if err := r.WalkStrings(math.MaxInt, fn); err != io.EOF {
 		return err
 	}

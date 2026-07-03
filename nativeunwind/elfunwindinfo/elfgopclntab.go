@@ -743,12 +743,15 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	// Walk all filenames and record the ones needing a strategy
 	offsetStrategy := make(map[int]strategy)
 	rdr.Init(r, g.headerOffset+int64(g.filetabOffset), int64(g.pctabOffset-g.filetabOffset))
-	rdr.WalkStrings(int(g.numFiles), func(offs int64, filename string) error {
+	err := rdr.WalkStrings(int(g.numFiles), func(offs int64, filename string) error {
 		if s := getSourceFileStrategy(filename); s != strategyUnknown {
 			offsetStrategy[int(offs)] = s
 		}
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	// Walk cutab indexes and map tham to strategy
 	cuStrategy := make(map[int]strategy)
@@ -776,13 +779,13 @@ func resolveFunctionUnwindInfo(r io.ReaderAt, g *Gopclntab, arch elf.Machine, us
 
 	functionInfo := make(map[int32]*sdtypes.UnwindInfo)
 	rdr.Init(r, g.headerOffset+int64(g.funcnameOffset), int64(g.cuOffset-g.funcnameOffset))
-	rdr.WalkAllStrings(func(offs int64, funcName string) error {
+	err := rdr.WalkAllStrings(func(offs int64, funcName string) error {
 		if info := getFunctionUnwindInfo(funcName, arch, useFP); info != nil {
 			functionInfo[int32(offs)] = info
 		}
 		return nil
 	})
-	return functionInfo, nil
+	return functionInfo, err
 }
 
 // Parse Golang .gopclntab spdelta tables and try to produce minified intervals
