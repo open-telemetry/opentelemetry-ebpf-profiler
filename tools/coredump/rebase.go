@@ -19,7 +19,7 @@ type rebaseCmd struct {
 	store *modulestore.Store
 
 	allowDirty bool
-	flags *flag.FlagSet
+	flags      *flag.FlagSet
 }
 
 func newRebaseCmd(store *modulestore.Store) *ffcli.Command {
@@ -30,8 +30,8 @@ func newRebaseCmd(store *modulestore.Store) *ffcli.Command {
 	return &ffcli.Command{
 		Name:       "rebase",
 		Exec:       args.exec,
-		ShortUsage: "rebase",
-		ShortHelp:  "Update all test cases by running them and saving the current unwinding",
+		ShortUsage: "rebase [testCaseJsonFiles]",
+		ShortHelp:  "Update all test cases (or a subset of them) by running them and saving the current unwinding",
 		FlagSet:    set,
 	}
 }
