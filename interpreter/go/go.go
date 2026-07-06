@@ -123,8 +123,8 @@ func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) 
 		}
 	}
 
-	if version.Compare(goVersion, "go1.27") >= 0 {
-		return nil, fmt.Errorf("unsupported Go version %s (need >= 1.13 and <= 1.26)", goVersion)
+	if version.Compare(goVersion, "go1.28") >= 0 {
+		return nil, fmt.Errorf("unsupported Go version %s (need >= 1.13 and <= 1.27)", goVersion)
 	}
 
 	log.Debugf("file %s detected as go version %s", info.FileName(), goVersion)
