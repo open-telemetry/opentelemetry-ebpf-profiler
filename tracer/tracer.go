@@ -170,6 +170,8 @@ type Config struct {
 	SamplesPerSecond int
 	// MapScaleFactor is the scaling factor for eBPF map sizes.
 	MapScaleFactor int
+	// FrameCacheSize is the maximum size of the user-mode frame cache.
+	FrameCacheSize uint32
 	// FilterErrorFrames indicates whether error frames should be filtered.
 	FilterErrorFrames bool
 	// FilterIdleFrames indicates whether idle frames should be filtered.
@@ -259,10 +261,18 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
-	processManager, err := pm.New(ctx, cfg.InterpretersConfig, cfg.Intervals.MonitorInterval(),
-		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
-		elfunwindinfo.NewStackDeltaProvider(),
-		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
+	processManager, err := pm.New(ctx, pm.Config{
+		InterpretersConfig:    cfg.InterpretersConfig,
+		MonitorInterval:       cfg.Intervals.MonitorInterval(),
+		ExecutableUnloadDelay: cfg.Intervals.ExecutableUnloadDelay(),
+		EbpfHandler:           ebpfHandler,
+		TraceReporter:         cfg.TraceReporter,
+		ExecutableReporter:    cfg.ExecutableReporter,
+		StackDeltaProvider:    elfunwindinfo.NewStackDeltaProvider(),
+		FrameCacheSize:        cfg.FrameCacheSize,
+		FilterErrorFrames:     cfg.FilterErrorFrames,
+		IncludeEnvVars:        cfg.IncludeEnvVars,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}

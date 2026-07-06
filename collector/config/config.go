@@ -17,6 +17,9 @@ import (
 const (
 	// 1TB of executable address space
 	MaxArgMapScaleFactor = 8
+
+	minFrameCacheSize = 1024
+	maxFrameCacheSize = 1024 * 1024
 )
 
 // ErrorMode controls how the profiler receiver handles startup errors.
@@ -46,6 +49,7 @@ type Config struct {
 	ReporterJitter         float64                  `mapstructure:"reporter_jitter"`
 	MonitorInterval        time.Duration            `mapstructure:"monitor_interval"`
 	SamplesPerSecond       int                      `mapstructure:"samples_per_second"`
+	FrameCacheSize         uint                     `mapstructure:"frame_cache_size"`
 	ProbabilisticInterval  time.Duration            `mapstructure:"probabilistic_interval"`
 	ProbabilisticThreshold uint                     `mapstructure:"probabilistic_threshold"`
 	Interpreters           interpreterconfig.Config `mapstructure:"interpreters"`
@@ -76,6 +80,11 @@ func (cfg *Config) Validate() error {
 
 	if cfg.SamplesPerSecond < 1 {
 		return fmt.Errorf("invalid sampling frequency: %d", cfg.SamplesPerSecond)
+	}
+
+	if cfg.FrameCacheSize < minFrameCacheSize || cfg.FrameCacheSize > maxFrameCacheSize {
+		return fmt.Errorf("invalid frame cache size %d (min: %d, max: %d)",
+			cfg.FrameCacheSize, minFrameCacheSize, maxFrameCacheSize)
 	}
 
 	if cfg.MapScaleFactor > MaxArgMapScaleFactor {
