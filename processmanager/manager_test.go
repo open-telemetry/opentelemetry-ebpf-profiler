@@ -225,3 +225,14 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 	assert.Equal(t, uint64(1), pm.frameCacheMiss.Load())
 	assert.Equal(t, uint64(1), pm.frameCacheHit.Load())
 }
+
+func BenchmarkHashFrameCacheKey(b *testing.B) {
+	key := frameCacheKey{
+		pid:  123,
+		data: [3]uint64{0xfeedbabefeedbabe, 0xbeefbeefbeefbeef, 0xdeaddeaddeaddead},
+	}
+
+	for b.Loop() {
+		hashFrameCacheKey(key)
+	}
+}

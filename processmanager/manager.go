@@ -8,11 +8,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"slices"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
+	"github.com/zeebo/xxh3"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -306,9 +306,7 @@ func (pm *ProcessManager) maybeNotifyAPMAgent(
 }
 
 func hashFrameCacheKey(fk frameCacheKey) uint32 {
-	h := fnv.New32a()
-	h.Write(pfunsafe.FromSlice(fk.data[:]))
-	return h.Sum32()
+	return uint32(xxh3.Hash(pfunsafe.FromPointer(&fk)))
 }
 
 // HandleTrace processes and reports the given host.Trace. This function
