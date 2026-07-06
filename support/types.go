@@ -88,13 +88,6 @@ const (
 	HSTSIDSegMapMask      = 0xffffffffffffff
 )
 
-const (
-	TraceOriginUnknown  = 0x0
-	TraceOriginSampling = 0x1
-	TraceOriginOffCPU   = 0x2
-	TraceOriginProbe    = 0x3
-)
-
 type ApmSpanID [8]byte
 type ApmTraceID [16]byte
 type CustomLabel struct {
