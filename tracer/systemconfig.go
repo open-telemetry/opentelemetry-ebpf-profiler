@@ -387,7 +387,7 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		}
 	}
 
-	log.Infof("Found offsets: task stack %#x, pt_regs %#x, tpbase %#x, vma vm_file %#x, vma vm_flags %#x",
+	log.Debugf("Found offsets: task stack %#x, pt_regs %#x, tpbase %#x, vma vm_file %#x, vma vm_flags %#x",
 		vars.task_stack_offset,
 		vars.stack_ptregs_offset,
 		vars.tpbase_offset,
@@ -575,7 +575,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 
 	pacMask := pacmask.GetPACMask()
 	if pacMask != 0 {
-		log.Infof("Determined PAC mask to be 0x%016X", pacMask)
+		log.Debugf("Determined PAC mask to be 0x%016X", pacMask)
 	} else {
 		log.Debug("PAC is not enabled on the system.")
 	}

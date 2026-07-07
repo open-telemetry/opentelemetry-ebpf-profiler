@@ -92,6 +92,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		FilterIdleFrames:       !c.config.SendIdleFrames,
 		SamplesPerSecond:       c.config.SamplesPerSecond,
 		MapScaleFactor:         int(c.config.MapScaleFactor),
+		FrameCacheSize:         uint32(c.config.FrameCacheSize),
 		KernelVersionCheck:     !c.config.NoKernelVersionCheck,
 		VerboseMode:            c.config.VerboseMode,
 		BPFVerifierLogLevel:    uint32(c.config.BPFVerifierLogLevel),

@@ -123,8 +123,8 @@ func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) 
 		}
 	}
 
-	if version.Compare(goVersion, "go1.27") >= 0 {
-		return nil, fmt.Errorf("unsupported Go version %s (need >= 1.13 and <= 1.26)", goVersion)
+	if version.Compare(goVersion, "go1.28") >= 0 {
+		return nil, fmt.Errorf("unsupported Go version %s (need >= 1.13 and <= 1.27)", goVersion)
 	}
 
 	log.Debugf("file %s detected as go version %s", info.FileName(), goVersion)
@@ -135,7 +135,7 @@ func loader(cfg Config, info *interpreter.LoaderInfo) (interpreter.Data, error) 
 	case errors.Is(err, libpf.ErrSymbolNotFound):
 		return nil, fmt.Errorf("failed to lookup symbol in %s: %v", info.FileName(), err)
 	case errors.Is(err, errDecodeSymbol), errors.Is(err, errRuntimeIsCgoUnavailable):
-		log.Warnf("In %s: %v", info.FileName(), err)
+		log.Debugf("In %s: %v", info.FileName(), err)
 	case errors.Is(err, nil):
 		// Nothing to do - just continue
 	default:
