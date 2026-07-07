@@ -634,8 +634,7 @@ var noFPSourceSuffixes = []string{
 }
 
 // getSourceFileStrategyX86 categorizes sourceFile's unwinding strategy based on its name for amd64
-// If there is no explicit strategy for sourceFile then 
-// strategyUnknown is returned for further strategy resolution. 
+// strategyUnknown is returned if normal strategy resolution should be used.
 func getSourceFileStrategyX86(sourceFile string) strategy {
 	// Most of the assembly code needs explicit SP delta as they do not
 	// create stack frame. Do not recover RBP as it is not modified.
