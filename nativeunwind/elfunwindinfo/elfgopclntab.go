@@ -481,7 +481,7 @@ func NewGopclntab(ef *pfelf.File) (*Gopclntab, error) {
 		g.filetabOffset >= g.pctabOffset ||
 		g.pctabOffset >= g.pclnOffset ||
 		g.pclnOffset >= dataLen ||
-		int64(g.numFuncs)*int64(g.funcMapSize) > int64(len(data))-int64(g.pclnOffset) {
+		(int64(g.numFuncs)+1)*int64(g.funcMapSize) > int64(len(data))-int64(g.pclnOffset) {
 		return nil, fmt.Errorf("corrupt header (%x < %x < %x < %x < %x)",
 			g.funcnameOffset, g.cuOffset, g.filetabOffset, g.pctabOffset, g.pclnOffset)
 	}
@@ -634,6 +634,8 @@ var noFPSourceSuffixes = []string{
 }
 
 // getSourceFileStrategyX86 categorizes sourceFile's unwinding strategy based on its name for amd64
+// If there is no explicit strategy for sourceFile then 
+// strategyUnknown is returned for further strategy resolution. 
 func getSourceFileStrategyX86(sourceFile string) strategy {
 	// Most of the assembly code needs explicit SP delta as they do not
 	// create stack frame. Do not recover RBP as it is not modified.
@@ -753,20 +755,20 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 		return nil, err
 	}
 
-	// Walk cutab indexes and map tham to strategy
+	// Walk cutab indexes and map them to strategy
 	cuStrategy := make(map[int]strategy)
 	rdr.Init(r, g.headerOffset+int64(g.cuOffset), int64(g.filetabOffset-g.cuOffset))
-	for idx := 0; true; idx++ {
-		offsetBytes, err := rdr.ReadN(4)
+	var offset uint32
+	for idx := 0; ; idx++ {
+		if _, err := rdr.Read(pfunsafe.FromPointer(&offset)); err != nil {
 		if err != nil {
 			if err != io.EOF {
 				return nil, err
 			}
 			break
 		}
-		offset := int(binary.LittleEndian.Uint32(offsetBytes))
-		if s, ok := offsetStrategy[offset]; ok {
-			cuStrategy[int(idx)] = s
+		if s, ok := offsetStrategy[int(offset)]; ok {
+			cuStrategy[idx] = s
 		}
 	}
 
