@@ -760,8 +760,7 @@ func resolveCUStrategies(r io.ReaderAt, g *Gopclntab,
 	rdr.Init(r, g.headerOffset+int64(g.cuOffset), int64(g.filetabOffset-g.cuOffset))
 	var offset uint32
 	for idx := 0; ; idx++ {
-		if _, err := rdr.Read(pfunsafe.FromPointer(&offset)); err != nil {
-		if err != nil {
+		if _, err = rdr.Read(pfunsafe.FromPointer(&offset)); err != nil {
 			if err != io.EOF {
 				return nil, err
 			}
