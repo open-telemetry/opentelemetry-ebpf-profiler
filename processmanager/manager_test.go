@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"slices"
 	"testing"
+	"time"
+	"unsafe"
 
 	lru "github.com/elastic/go-freelru"
 	"github.com/stretchr/testify/assert"
@@ -13,6 +15,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/host"
 	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	golang "go.opentelemetry.io/ebpf-profiler/interpreter/go"
+	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfelf"
 	"go.opentelemetry.io/ebpf-profiler/process"
@@ -21,6 +24,12 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
+type nopEbpf struct{ interpreter.EbpfHandler }
+
+func (nopEbpf) UpdateProcData(libpf.InterpreterType, libpf.PID, unsafe.Pointer) error {
+	return nil
+}
+
 type traceCapture struct {
 	traces []*libpf.Trace
 }
@@ -28,6 +37,22 @@ type traceCapture struct {
 func (tc *traceCapture) ReportTraceEvent(trace *libpf.Trace, _ *samples.TraceEventMeta) error {
 	tc.traces = append(tc.traces, trace)
 	return nil
+}
+
+func TestNewConfiguresFrameCacheSize(t *testing.T) {
+	pm, err := New(t.Context(), Config{
+		InterpretersConfig:    interpreterconfig.NoInterpreters(),
+		MonitorInterval:       time.Hour,
+		ExecutableUnloadDelay: time.Hour,
+		EbpfHandler:           &testEbpfHandler{},
+		FrameCacheSize:        1,
+		IncludeEnvVars:        libpf.Set[string]{},
+	})
+	require.NoError(t, err)
+
+	pm.frameCache.Add(frameCacheKey{data: [3]uint64{1}}, libpf.Frames{})
+	pm.frameCache.Add(frameCacheKey{data: [3]uint64{2}}, libpf.Frames{})
+	require.Equal(t, 1, pm.frameCache.Len())
 }
 
 func TestFrameCacheCrossProcessPollution(t *testing.T) {
@@ -62,14 +87,13 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 
 	goData, err := golang.GetLoader(golang.Config{})(nil, loaderInfo)
 	require.NoError(t, err)
-	goInstance, err := goData.Attach(nil, realPID, 0x0, rm)
+	goInstance, err := goData.Attach(nopEbpf{}, realPID, 0x0, rm)
 	require.NoError(t, err)
 
 	goODID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 1}
 
 	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
 	require.NoError(t, err)
-	frameCache.SetLifetime(frameCacheLifetime)
 
 	goMappings := []Mapping{
 		{FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -132,7 +156,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 		TID:       goPID,
 		NumFrames: 1,
 		FrameData: libcFrame,
-	})
+	}, nil)
 
 	require.Len(t, capture.traces, 1)
 	goTrace := capture.traces[0]
@@ -147,7 +171,7 @@ func TestFrameCacheCrossProcessPollution(t *testing.T) {
 		TID:       catPID,
 		NumFrames: 1,
 		FrameData: libcFrame,
-	})
+	}, nil)
 
 	require.Len(t, capture.traces, 2)
 	catTrace := capture.traces[1]
@@ -167,7 +191,6 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 
 	frameCache, err := lru.New[frameCacheKey, libpf.Frames](1024, hashFrameCacheKey)
 	require.NoError(t, err)
-	frameCache.SetLifetime(frameCacheLifetime)
 
 	mappings := []Mapping{
 		{FrameMapping: libpf.NewFrameMapping(libpf.FrameMappingData{
@@ -197,13 +220,13 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 		TID:       firstPID,
 		NumFrames: 1,
 		FrameData: nativeFrame,
-	})
+	}, nil)
 	pm.HandleTrace(&libpf.EbpfTrace{
 		PID:       secondPID,
 		TID:       secondPID,
 		NumFrames: 1,
 		FrameData: nativeFrame,
-	})
+	}, nil)
 
 	require.Len(t, capture.traces, 2)
 
@@ -219,4 +242,15 @@ func TestFrameCacheSharesNativeFallbackFramesAcrossProcesses(t *testing.T) {
 
 	assert.Equal(t, uint64(1), pm.frameCacheMiss.Load())
 	assert.Equal(t, uint64(1), pm.frameCacheHit.Load())
+}
+
+func BenchmarkHashFrameCacheKey(b *testing.B) {
+	key := frameCacheKey{
+		pid:  123,
+		data: [3]uint64{0xfeedbabefeedbabe, 0xbeefbeefbeefbeef, 0xdeaddeaddeaddead},
+	}
+
+	for b.Loop() {
+		hashFrameCacheKey(key)
+	}
 }

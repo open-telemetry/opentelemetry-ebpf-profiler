@@ -729,7 +729,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	}
 
 	if err := i.d.walkRangeSectionsMethod(i, ebpf, pr.PID()); err != nil {
-		log.Infof("Failed to walk code ranges: %v", err)
+		log.Debugf("Failed to walk code ranges: %v", err)
 	}
 	if i.precodeStubManagerPtr != 0 {
 		if vms.PrecodeStubManager.StubPrecodeRangeList != 0 {

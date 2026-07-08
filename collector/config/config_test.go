@@ -15,6 +15,8 @@ import (
 func validConfig() *Config {
 	return &Config{
 		SamplesPerSecond:       20,
+		ErrorMode:              PropagateError,
+		FrameCacheSize:         minFrameCacheSize,
 		ProbabilisticInterval:  1 * time.Minute,
 		ProbabilisticThreshold: 100,
 		NoKernelVersionCheck:   true,
@@ -29,6 +31,49 @@ func TestValidate(t *testing.T) {
 	err := xconfmap.Validate(cfg)
 	require.Error(t, err)
 	require.Equal(t, "invalid sampling frequency: 0", err.Error())
+}
+
+func TestValidateFrameCacheSize(t *testing.T) {
+	for _, tt := range []struct {
+		name           string
+		frameCacheSize uint
+		wantErr        bool
+	}{
+		{
+			name:           "zero is invalid",
+			frameCacheSize: 0,
+			wantErr:        true,
+		},
+		{
+			name:           "below minimum is invalid",
+			frameCacheSize: minFrameCacheSize - 1,
+			wantErr:        true,
+		},
+		{
+			name:           "minimum is valid",
+			frameCacheSize: minFrameCacheSize,
+		},
+		{
+			name:           "maximum is valid",
+			frameCacheSize: maxFrameCacheSize,
+		},
+		{
+			name:           "above maximum is invalid",
+			frameCacheSize: maxFrameCacheSize + 1,
+			wantErr:        true,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validConfig()
+			cfg.FrameCacheSize = tt.frameCacheSize
+			err := xconfmap.Validate(cfg)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestUnmarshalText(t *testing.T) {

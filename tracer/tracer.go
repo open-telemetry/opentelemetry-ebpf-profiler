@@ -29,6 +29,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/interpreter/interpreterconfig"
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 
 	"go.opentelemetry.io/ebpf-profiler/kallsyms"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -169,6 +170,8 @@ type Config struct {
 	SamplesPerSecond int
 	// MapScaleFactor is the scaling factor for eBPF map sizes.
 	MapScaleFactor int
+	// FrameCacheSize is the maximum size of the user-mode frame cache.
+	FrameCacheSize uint32
 	// FilterErrorFrames indicates whether error frames should be filtered.
 	FilterErrorFrames bool
 	// FilterIdleFrames indicates whether idle frames should be filtered.
@@ -258,10 +261,18 @@ func NewTracer(ctx context.Context, cfg *Config) (*Tracer, error) {
 		return nil, fmt.Errorf("failed to load eBPF maps: %v", err)
 	}
 
-	processManager, err := pm.New(ctx, cfg.InterpretersConfig, cfg.Intervals.MonitorInterval(),
-		cfg.Intervals.ExecutableUnloadDelay(), ebpfHandler, cfg.TraceReporter, cfg.ExecutableReporter,
-		elfunwindinfo.NewStackDeltaProvider(),
-		cfg.FilterErrorFrames, cfg.IncludeEnvVars)
+	processManager, err := pm.New(ctx, pm.Config{
+		InterpretersConfig:    cfg.InterpretersConfig,
+		MonitorInterval:       cfg.Intervals.MonitorInterval(),
+		ExecutableUnloadDelay: cfg.Intervals.ExecutableUnloadDelay(),
+		EbpfHandler:           ebpfHandler,
+		TraceReporter:         cfg.TraceReporter,
+		ExecutableReporter:    cfg.ExecutableReporter,
+		StackDeltaProvider:    elfunwindinfo.NewStackDeltaProvider(),
+		FrameCacheSize:        cfg.FrameCacheSize,
+		FilterErrorFrames:     cfg.FilterErrorFrames,
+		IncludeEnvVars:        cfg.IncludeEnvVars,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create processManager: %v", err)
 	}
@@ -438,7 +449,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		{
 			progID: uint32(support.ProgGoLabels),
 			name:   "go_labels",
-			enable: !cfg.InterpretersConfig.Labels.IsDisabled(),
+			enable: !cfg.InterpretersConfig.Go.IsLabelsDisabled(),
 		},
 		{
 			progID: uint32(support.ProgUnwindBEAM),
@@ -1390,9 +1401,44 @@ func (t *Tracer) AttachProbes(probes []string) error {
 }
 
 func (t *Tracer) HandleTrace(bpfTrace *libpf.EbpfTrace) {
-	t.processManager.HandleTrace(bpfTrace)
+	t.processManager.HandleTrace(bpfTrace, profileTypeForOrigin(bpfTrace.Origin))
 
 	// Reclaim the EbpfTrace
 	bpfTrace.KernelFrames = bpfTrace.KernelFrames[0:0]
 	t.tracePool.Put(bpfTrace)
 }
+
+// profileTypeForOrigin maps a raw eBPF trace origin to the profile type
+// metadata reporters need to interpret and export it. Returns nil for
+// origins that have no known profile type.
+func profileTypeForOrigin(origin libpf.Origin) *samples.TypeMetadata {
+	switch origin {
+	case support.TraceOriginSampling:
+		return profileTypeSampling
+	case support.TraceOriginOffCPU:
+		return profileTypeOffCPU
+	case support.TraceOriginProbe:
+		return profileTypeProbe
+	default:
+		return nil
+	}
+}
+
+// Temporary list of well-known profile types.
+var (
+	profileTypeSampling = &samples.TypeMetadata{
+		PeriodType: "cpu",
+		PeriodUnit: "nanoseconds",
+		SampleType: "samples",
+		SampleUnit: "count",
+	}
+	profileTypeOffCPU = &samples.TypeMetadata{
+		SampleType:   "off_cpu",
+		SampleUnit:   "nanoseconds",
+		ReportValues: true,
+	}
+	profileTypeProbe = &samples.TypeMetadata{
+		SampleType: "events",
+		SampleUnit: "count",
+	}
+)

@@ -67,6 +67,9 @@ var (
 	// ErrNoBuildID is returned if build ID is not present in notes.
 	ErrNoBuildID = errors.New("no build ID")
 
+	// ErrNoteNotFound is returned by VisitNotes when no note made the visitor stop.
+	ErrNoteNotFound = errors.New("note not found")
+
 	// errNotProcessed is internal placeholder to mark not yet parsed data.
 	errNotProcessed = errors.New("not yet processed")
 )
@@ -603,16 +606,26 @@ func (f *File) EHFrame() (*Prog, error) {
 
 // VisitNotes iterates the ELF notes.
 // The visitor must make copies of the 'data' it keeps after return.
+// It returns ErrNoteNotFound if all notes are visited without the visitor stopping iteration.
 func (f *File) VisitNotes(visitor func(uint64, []byte) bool) error {
-	notes := f.findProg(elf.PT_NOTE)
-	if notes == nil {
-		return nil
-	}
-
-	rdr := pfbufio.NewReader(f.elfReader, int64(notes.Off), int64(notes.Filesz))
+	rdr := pfbufio.GetReader()
 	defer pfbufio.PutReader(rdr)
 
-	return visitNotes(rdr, visitor)
+	for i := range f.Progs {
+		notes := &f.Progs[i]
+		if notes.Type != elf.PT_NOTE {
+			continue
+		}
+
+		rdr.Init(f.elfReader, int64(notes.Off), int64(notes.Filesz))
+		err := visitNotes(rdr, visitor)
+		if errors.Is(err, ErrNoteNotFound) {
+			continue
+		}
+		return err
+	}
+
+	return ErrNoteNotFound
 }
 
 // parseNotes parses and caches the ELF notes for the File.
@@ -627,6 +640,11 @@ func (f *File) parseNotes() error {
 			}
 			return true
 		})
+		if errors.Is(f.notesError, ErrNoteNotFound) {
+			// Visiting every note is expected here because parseNotes caches all
+			// build ID notes, which results in terminating with ErrNoteNotFound.
+			f.notesError = nil
+		}
 	}
 	return f.notesError
 }
@@ -667,21 +685,6 @@ func (f *File) GoVersion() (string, error) {
 	f.goBuildInfo = bi
 
 	return bi.GoVersion, nil
-}
-
-func (f *File) IsCgoEnabled() (bool, error) {
-	_, err := f.GoVersion()
-	if err != nil {
-		return false, err
-	}
-	for _, kv := range f.goBuildInfo.Settings {
-		if kv.Key == "CGO_ENABLED" {
-			return kv.Value == "1", nil
-		}
-	}
-	// On some platforms GCO_ENABLED might be missing b/c they don't support
-	// CGO at all.
-	return false, nil
 }
 
 // DebuglinkFileName returns the debug file linked by .gnu_debuglink if any
