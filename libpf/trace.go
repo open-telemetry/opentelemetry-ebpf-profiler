@@ -130,24 +130,25 @@ type Trace struct {
 
 // EbpfTrace represents a stack trace from Ebpf code.
 type EbpfTrace struct {
-	EnvVars          map[String]String
-	ProcessName      String
-	ExecutablePath   String
-	ContainerID      String
-	CustomLabels     map[String]String
-	Comm             Comm
-	FrameData        []uint64
-	KernelFrames     Frames
-	FrameDataBuf     [3072]uint64
-	Value            int64
-	KTime            int64
-	CpuID            uint32
-	TID              PID
-	PID              PID
-	NumFrames        uint16
-	Origin           Origin
-	APMTraceID       APMTraceID
-	APMTransactionID APMTransactionID
+	EnvVars               map[String]String
+	ProcessName           String
+	ExecutableMappingFile FrameMappingFileData
+	ExecutablePath        String
+	ContainerID           String
+	CustomLabels          map[String]String
+	Comm                  Comm
+	FrameData             []uint64
+	KernelFrames          Frames
+	FrameDataBuf          [3072]uint64
+	Value                 int64
+	KTime                 int64
+	CpuID                 uint32
+	TID                   PID
+	PID                   PID
+	NumFrames             uint16
+	Origin                Origin
+	APMTraceID            APMTraceID
+	APMTransactionID      APMTransactionID
 }
 
 type EbpfFrame []uint64

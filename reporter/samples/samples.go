@@ -8,19 +8,20 @@ import (
 )
 
 type TraceEventMeta struct {
-	Comm           libpf.Comm
-	ProcessName    libpf.String
-	ExecutablePath libpf.String
-	ContainerID    libpf.String
-	EnvVars        map[libpf.String]libpf.String
-	APMServiceName string
-	Timestamp      libpf.UnixTime64
-	CPU            uint32
-	ProfileType    *TypeMetadata
-	Value          int64
-	PID, TID       libpf.PID
-	SpanID         libpf.APMSpanID
-	TraceID        libpf.APMTraceID
+	Comm                  libpf.Comm
+	ProcessName           libpf.String
+	ExecutableMappingFile libpf.FrameMappingFileData
+	ExecutablePath        libpf.String
+	ContainerID           libpf.String
+	EnvVars               map[libpf.String]libpf.String
+	APMServiceName        string
+	Timestamp             libpf.UnixTime64
+	CPU                   uint32
+	ProfileType           *TypeMetadata
+	Value                 int64
+	PID, TID              libpf.PID
+	SpanID                libpf.APMSpanID
+	TraceID               libpf.APMTraceID
 }
 
 // TraceEvents holds known information about a trace.
@@ -57,6 +58,9 @@ type SampleToEvents map[SampleKey]*TraceEvents
 type ResourceKey struct {
 	// ContainerID represents an extracted key from /proc/<PID>/cgroup.
 	ContainerID libpf.String
+
+	// ExecutableMappingFile contains mapping file data for the executable path.
+	ExecutableMappingFile libpf.FrameMappingFileData
 
 	// Executable path is retrieved from /proc/PID/exe
 	ExecutablePath libpf.String

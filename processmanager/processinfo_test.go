@@ -146,6 +146,10 @@ func (h *testEbpfHandler) SupportsLPMTrieBatchOperations() bool {
 type testProcess struct {
 	pid      libpf.PID
 	mappings []process.RawMapping
+	meta     process.ProcessMeta
+	exe      libpf.String
+	exeID    util.OnDiskFileIdentifier
+	exeIDErr error
 }
 
 func (tp *testProcess) PID() libpf.PID {
@@ -157,11 +161,18 @@ func (tp *testProcess) GetMachineData() process.MachineData {
 }
 
 func (tp *testProcess) GetProcessMeta(process.MetaConfig) process.ProcessMeta {
-	return process.ProcessMeta{}
+	return tp.meta
 }
 
 func (tp *testProcess) GetExe() (libpf.String, error) {
-	return libpf.NullString, nil
+	return tp.exe, nil
+}
+
+func (tp *testProcess) GetExecutableFileIdentifier() (util.OnDiskFileIdentifier, error) {
+	if tp.exeIDErr != nil {
+		return util.OnDiskFileIdentifier{}, tp.exeIDErr
+	}
+	return tp.exeID, nil
 }
 
 func (tp *testProcess) IterateMappings(callback func(process.RawMapping) bool) (uint32, error) {
@@ -482,6 +493,65 @@ func TestSynchronizeProcessSkipsDllMappingsWithoutAnonymousMappingInterest(t *te
 	})
 
 	require.Empty(instance.syncMappings)
+}
+
+func TestSynchronizeProcessAddsExecutableMappingFileFromMatchingMapping(t *testing.T) {
+	require := require.New(t)
+	pid := libpf.PID(123)
+	exePath := libpf.Intern("/usr/bin/app")
+	exeID := util.OnDiskFileIdentifier{DeviceID: 1, InodeNum: 2}
+	fileID := libpf.NewFileID(3, 4)
+	frameMapping := libpf.NewFrameMapping(libpf.FrameMappingData{
+		File: libpf.NewFrameMappingFile(libpf.FrameMappingFileData{
+			FileID:     fileID,
+			FileName:   libpf.Intern("app"),
+			GnuBuildID: "gnu-build-id",
+			GoBuildID:  "go-build-id",
+		}),
+		Start: 0,
+		End:   0x1000,
+	})
+	rawMapping := process.RawMapping{
+		Vaddr:  0x1000,
+		Length: 0x1000,
+		Flags:  elf.PF_R | elf.PF_X,
+		Device: exeID.DeviceID,
+		Inode:  exeID.InodeNum,
+		Path:   exePath.String(),
+	}
+	pm := &ProcessManager{
+		ebpf: &testEbpfHandler{},
+		pidToProcessInfo: map[libpf.PID]*processInfo{
+			pid: {
+				meta: process.ProcessMeta{Executable: exePath},
+				mappings: []Mapping{
+					{
+						Vaddr:        libpf.Address(rawMapping.Vaddr),
+						Length:       rawMapping.Length,
+						Device:       rawMapping.Device,
+						Inode:        rawMapping.Inode,
+						FrameMapping: frameMapping,
+					},
+				},
+			},
+		},
+		exitEvents: make(map[libpf.PID]times.KTime),
+	}
+
+	pm.SynchronizeProcess(&testProcess{
+		pid:      pid,
+		exe:      exePath,
+		exeID:    exeID,
+		meta:     process.ProcessMeta{Executable: exePath},
+		mappings: []process.RawMapping{rawMapping},
+	})
+
+	require.Equal(libpf.FrameMappingFileData{
+		FileID:     fileID,
+		FileName:   libpf.Intern("app"),
+		GnuBuildID: "gnu-build-id",
+		GoBuildID:  "go-build-id",
+	}, pm.MetaForPID(pid).ExecutableMappingFile)
 }
 
 func TestIsInterpreterMapping(t *testing.T) {

@@ -26,6 +26,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/pfunsafe"
 	"go.opentelemetry.io/ebpf-profiler/remotememory"
 	"go.opentelemetry.io/ebpf-profiler/stringutil"
+	"go.opentelemetry.io/ebpf-profiler/util"
 )
 
 // ErrNoMappings is returned when no mappings can be extracted.
@@ -108,6 +109,17 @@ func (sp *systemProcess) GetExe() (libpf.String, error) {
 		return libpf.NullString, err
 	}
 	return libpf.Intern(str), nil
+}
+
+func (sp *systemProcess) GetExecutableFileIdentifier() (util.OnDiskFileIdentifier, error) {
+	var stat unix.Stat_t
+	if err := unix.Stat(fmt.Sprintf("/proc/%d/exe", sp.pid), &stat); err != nil {
+		return util.OnDiskFileIdentifier{}, err
+	}
+	return util.OnDiskFileIdentifier{
+		DeviceID: uint64(stat.Dev),
+		InodeNum: stat.Ino,
+	}, nil
 }
 
 func (sp *systemProcess) GetProcessMeta(cfg MetaConfig) ProcessMeta {

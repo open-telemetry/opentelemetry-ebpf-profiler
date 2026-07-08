@@ -220,14 +220,11 @@ func (p *Pdata) setProfile(
 				mapping.SetFilenameStrindex(stringSet.Add(mf.FileName.String()))
 
 				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-					semconv.ProcessExecutableBuildIDGNUKey,
-					mf.GnuBuildID)
+					semconv.ProcessExecutableBuildIDGNUKey, mf.GnuBuildID)
 				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-					semconv.ProcessExecutableBuildIDGoKey,
-					mf.GoBuildID)
+					semconv.ProcessExecutableBuildIDGoKey, mf.GoBuildID)
 				attrMgr.AppendOptionalString(mapping.AttributeIndices(),
-					semconv.ProcessExecutableBuildIDHtlhashKey,
-					mf.FileID.StringNoQuotes())
+					semconv.ProcessExecutableBuildIDHtlhashKey, mf.FileID.StringNoQuotes())
 			}
 			locInfo.mappingIndex = index
 
@@ -317,6 +314,19 @@ func setResourceAttributes(attrs pcommon.Map, resource samples.ResourceKey, envV
 		attrs.PutStr(string(semconv.ProcessExecutablePathKey), resource.ExecutablePath.String())
 		_, exeName := filepath.Split(resource.ExecutablePath.String())
 		attrs.PutStr(string(semconv.ProcessExecutableNameKey), exeName)
+	}
+	mf := resource.ExecutableMappingFile
+	if mf.GnuBuildID != "" {
+		attrs.PutStr(string(semconv.ProcessExecutableBuildIDGNUKey),
+			mf.GnuBuildID)
+	}
+	if mf.GoBuildID != "" {
+		attrs.PutStr(string(semconv.ProcessExecutableBuildIDGoKey),
+			mf.GoBuildID)
+	}
+	if !mf.FileID.IsZero() {
+		attrs.PutStr(string(semconv.ProcessExecutableBuildIDHtlhashKey),
+			mf.FileID.StringNoQuotes())
 	}
 
 	for key, value := range envVars {

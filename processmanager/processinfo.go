@@ -573,6 +573,14 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		// The /proc/PID/exe returns "not exists" error also in
 		// the case of main thread exit. Ignore it.
 	}
+	var exeFileID util.OnDiskFileIdentifier
+	exeFileIDValid := false
+	if exe != libpf.NullString {
+		if fileID, err := pr.GetExecutableFileIdentifier(); err == nil {
+			exeFileID = fileID
+			exeFileIDValid = true
+		}
+	}
 
 	pm.mu.Lock()
 	info := pm.getPidInformation(pid, pr)
@@ -580,9 +588,10 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 		pm.mu.Unlock()
 		return
 	}
+	meta := info.meta
 	// Check if process meta needs an update
 	updateProcessMeta := exe != libpf.NullString && exe != info.meta.Executable
-	oldProcessContextInfo := info.meta.ProcessContextInfo
+	oldProcessContextInfo := meta.ProcessContextInfo
 
 	// Get existing info
 	oldMappings := info.mappings
@@ -618,6 +627,7 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	mappings := make([]Mapping, 0, capHint)
 	mpAdd := make([]*Mapping, 0, capHint)
 	var processContextInfo processcontext.Info
+	var executableMappingFile libpf.FrameMappingFileData
 
 	pm.mappingStats.numProcAttempts.Add(1)
 	start := time.Now()
@@ -671,6 +681,9 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 			if fm.Valid() {
 				key := m.GetOnDiskFileIdentifier()
 				interpretersValid[key] = libpf.Void{}
+				if exeFileIDValid && key == exeFileID {
+					executableMappingFile = fm.Value().File.Value()
+				}
 
 				mappings = append(mappings, Mapping{
 					Vaddr:        libpf.Address(m.Vaddr),
@@ -757,7 +770,6 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	pm.pidPageToMappingInfoSize += numChanges
 
 	// Update metadata of the process.
-	var meta process.ProcessMeta
 	if updateProcessMeta {
 		meta = pr.GetProcessMeta(process.MetaConfig{IncludeEnvVars: pm.includeEnvVars})
 		pm.fillSelfContainerID(pid, &meta)
@@ -769,10 +781,12 @@ func (pm *ProcessManager) SynchronizeProcess(pr process.Process) {
 	info = pm.getPidInformation(pid, pr)
 	if info != nil {
 		info.mappings = mappings
-		if updateProcessMeta {
-			info.meta = meta
+		if !updateProcessMeta {
+			meta = info.meta
 		}
-		info.meta.ProcessContextInfo = processContextInfo
+		meta.ExecutableMappingFile = executableMappingFile
+		meta.ProcessContextInfo = processContextInfo
+		info.meta = meta
 	}
 	interpreters := pm.interpreters[pid]
 	pm.mu.Unlock()

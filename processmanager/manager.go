@@ -329,20 +329,21 @@ func hashFrameCacheKey(fk frameCacheKey) uint32 {
 // strategy needs to be updated accordingly.
 func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) {
 	meta := &samples.TraceEventMeta{
-		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
-		Comm:           bpfTrace.Comm,
-		PID:            bpfTrace.PID,
-		TID:            bpfTrace.TID,
-		APMServiceName: "", // filled in below
-		CPU:            bpfTrace.CpuID,
-		ProcessName:    bpfTrace.ProcessName,
-		ExecutablePath: bpfTrace.ExecutablePath,
-		ContainerID:    bpfTrace.ContainerID,
-		ProfileType:    profileType,
-		Value:          bpfTrace.Value,
-		EnvVars:        bpfTrace.EnvVars,
-		TraceID:        bpfTrace.APMTraceID,
-		SpanID:         bpfTrace.APMTransactionID,
+		Timestamp:             libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
+		Comm:                  bpfTrace.Comm,
+		PID:                   bpfTrace.PID,
+		TID:                   bpfTrace.TID,
+		APMServiceName:        "", // filled in below
+		CPU:                   bpfTrace.CpuID,
+		ProcessName:           bpfTrace.ProcessName,
+		ExecutableMappingFile: bpfTrace.ExecutableMappingFile,
+		ExecutablePath:        bpfTrace.ExecutablePath,
+		ContainerID:           bpfTrace.ContainerID,
+		ProfileType:           profileType,
+		Value:                 bpfTrace.Value,
+		EnvVars:               bpfTrace.EnvVars,
+		TraceID:               bpfTrace.APMTraceID,
+		SpanID:                bpfTrace.APMTransactionID,
 	}
 
 	pid := bpfTrace.PID
