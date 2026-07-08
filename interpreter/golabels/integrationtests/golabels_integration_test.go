@@ -28,10 +28,6 @@ import (
 )
 
 var (
-	allCPUs = []int{}
-)
-
-var (
 	//go:embed pprof_1_23
 	pprof_1_23 []byte
 
@@ -52,6 +48,8 @@ var (
 
 	//go:embed pprof_stable_cgo_pie
 	pprof_stable_cgo_pie []byte
+
+	allCPUs = []int{}
 )
 
 type mockIntervals struct{}

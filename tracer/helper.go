@@ -92,7 +92,7 @@ func ReadCPURange(cpuRangeStr string) ([]int, error) {
 	return cpus, nil
 }
 
-// Intersects user-defined list of target CPU IDs with list of online CPU IDs
+// intersectCPURanges returns the overlap between online and pinned
 func intersectCPURanges(onlineCPUs, targetCPUs []int) ([]int, error) {
 	var intersection []int
 	hash := make(libpf.Set[int])
@@ -106,7 +106,7 @@ func intersectCPURanges(onlineCPUs, targetCPUs []int) ([]int, error) {
 		}
 	}
 	if len(intersection) == 0 {
-		return nil, fmt.Errorf("List of target CPUs is empty")
+		return nil, fmt.Errorf("no overlap between online and targeted CPU IDs")
 	}
 	return intersection, nil
 }

@@ -1220,7 +1220,7 @@ func (t *Tracer) AttachTracer(targetCPUs []int) error {
 	if len(targetCPUs) == 0 {
 		targetCPUs = onlineCPUs
 	} else {
-		targetCPUs, err = intersectCPURanges(targetCPUs, onlineCPUs)
+		targetCPUs, err = intersectCPURanges(onlineCPUs, targetCPUs)
 		if err != nil {
 			return err
 		}

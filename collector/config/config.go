@@ -65,6 +65,7 @@ type Config struct {
 	BPFFSRoot              string                   `mapstructure:"bpf_fs_root"`
 	ErrorMode              ErrorMode                `mapstructure:"error_mode"`
 	OBIProcessCtx          bool                     `mapstructure:"obi_process_ctx"`
+	TargetCPUIDs           string                   `mapstructure:"target_cpu_ids"`
 }
 
 // Validate validates the config.

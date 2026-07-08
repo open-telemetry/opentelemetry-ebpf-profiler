@@ -39,32 +39,32 @@ func TestIntersectCPURanges(t *testing.T) {
 		online   []int
 		enabled  []int
 		expected []int
-		want_err bool
+		wantErr  bool
 	}{
 		"all": {
 			online:   []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
 			enabled:  []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
 			expected: []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
-			want_err: false,
+			wantErr:  false,
 		},
 		"partial intersection": {
 			online:   []int{0, 2, 4, 6, 8},
 			enabled:  []int{0, 1, 2, 3, 4},
 			expected: []int{0, 2, 4},
-			want_err: false,
+			wantErr:  false,
 		},
 		"empty intersection": {
 			online:   []int{0, 2, 4, 6, 8},
 			enabled:  []int{1, 3, 5, 7, 9},
 			expected: nil,
-			want_err: true,
+			wantErr:  true,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			got, err := intersectCPURanges(tc.online, tc.enabled)
-			if tc.want_err {
+			if tc.wantErr {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
