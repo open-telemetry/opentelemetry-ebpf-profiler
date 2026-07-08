@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"io"
 	"strings"
 	"sync/atomic"
 	"unsafe"
@@ -90,20 +89,6 @@ const (
 	AT_PHDR         = 3
 	AT_SYSINFO_EHDR = 33
 )
-
-// getAlignedBytes returns 'size' bytes from source slice, and progresses the
-// source slice by 'size' aligned to next 4 byte boundary. Used to parse notes.
-func getAlignedBytes(rdr io.Reader, size uint32) ([]byte, error) {
-	if size == 0 {
-		return []byte{}, nil
-	}
-	alignedSize := (size + 3) &^ 3
-	buf := make([]byte, alignedSize)
-	if n, err := rdr.Read(buf); n != int(alignedSize) || err != nil {
-		return nil, err
-	}
-	return buf[:size], nil
-}
 
 // OpenCoredump opens the named file as a coredump.
 func OpenCoredump(name string) (*CoredumpProcess, error) {
