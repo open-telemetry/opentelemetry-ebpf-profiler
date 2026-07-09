@@ -3,6 +3,7 @@
 
 #include "bpfdefs.h"
 #include "extmaps.h"
+#include "tracemgmt.h"
 #include "types.h"
 
 #ifndef TESTING_COREDUMP
@@ -14,31 +15,6 @@ struct system_analysis_t {
   __type(value, struct SystemAnalysis);
   __uint(max_entries, 1);
 } system_analysis SEC(".maps");
-
-extern bool pid_ns_translation_enabled;
-extern u64 target_pid_ns_inode;
-extern u64 target_pid_ns_dev;
-
-struct bpf_pidns_info {
-  u32 pid;
-  u32 tgid;
-};
-
-static EBPF_INLINE u32 current_tgid_for_target_ns(void)
-{
-  if (!pid_ns_translation_enabled) {
-    return bpf_get_current_pid_tgid() >> 32;
-  }
-
-  struct bpf_pidns_info ns_info = {};
-  long ret                      = bpf_get_ns_current_pid_tgid(
-    target_pid_ns_dev, target_pid_ns_inode, &ns_info, sizeof(ns_info));
-  if (ret < 0) {
-    return 0;
-  }
-
-  return ns_info.tgid;
-}
 
 // read_kernel_memory reads data from given kernel address. This is
 // invoked once on entry to bpf() syscall on the given pid context.
@@ -53,8 +29,10 @@ int read_kernel_memory(UNUSED void *ctx)
     return 0;
   }
 
-  if (sys->pid != current_tgid_for_target_ns()) {
-    // Execute the hook only in the context of requesting task.
+  u32 pid = 0;
+  u32 tid = 0;
+  if (!get_pid_tgid(&pid, &tid) || sys->pid != pid) {
+    // Execute the hook only in the context of the requesting task.
     return 0;
   }
 
@@ -85,8 +63,10 @@ int read_task_struct(struct bpf_raw_tracepoint_args *ctx)
     return 0;
   }
 
-  if (sys->pid != current_tgid_for_target_ns()) {
-    // Execute the hook only in the context of requesting task.
+  u32 pid = 0;
+  u32 tid = 0;
+  if (!get_pid_tgid(&pid, &tid) || sys->pid != pid) {
+    // Execute the hook only in the context of the requesting task.
     return 0;
   }
 
