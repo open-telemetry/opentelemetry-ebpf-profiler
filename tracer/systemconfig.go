@@ -519,7 +519,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		}
 	}
 
-	if cfg.NamespacePID {
+	if cfg.PIDNamespaceTranslation {
 		dev, ino, err := getCurrentNS("/proc/self/ns/pid")
 		if err != nil {
 			return fmt.Errorf("failed to read PID namespace info: %v", err)
