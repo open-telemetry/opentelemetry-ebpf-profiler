@@ -345,15 +345,9 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 // (typically /proc/self/ns/pid). These values uniquely identify a PID namespace and
 // are passed to the bpf_get_ns_current_pid_tgid helper.
 func getCurrentNS(filename string) (dev, ino uint64, err error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer f.Close()
-
 	var stat unix.Stat_t
-	if err := unix.Fstat(int(f.Fd()), &stat); err != nil {
-		return 0, 0, fmt.Errorf("fstat %s: %w", filename, err)
+	if err := unix.Stat(filename, &stat); err != nil {
+		return 0, 0, fmt.Errorf("stat %s: %w", filename, err)
 	}
 	return uint64(stat.Dev), uint64(stat.Ino), nil
 }
