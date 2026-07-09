@@ -5,6 +5,7 @@ package tracer
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"runtime"
 	"testing"
@@ -19,7 +20,7 @@ import (
 func TestGetCurrentNS_FileNotFound(t *testing.T) {
 	_, _, err := getCurrentNS("/nonexistent/path/pid")
 	require.Error(t, err)
-	require.True(t, os.IsNotExist(err))
+	require.True(t, errors.Is(err, fs.ErrNotExist))
 }
 
 func TestGetCurrentNS_ProcSelfNsPid(t *testing.T) {
