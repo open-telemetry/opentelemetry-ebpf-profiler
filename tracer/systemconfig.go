@@ -539,7 +539,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		if err := coll.Variables["target_pid_ns_inode"].Set(ino); err != nil {
 			return fmt.Errorf("failed to set target_pid_ns_inode: %v", err)
 		}
-		log.Infof("PID namespace translation enabled (dev=%d, ino=%d)", dev, ino)
+		log.Infof("PID namespace translation enabled (dev=%d, ino=%d), only processes traces within the profiler namespace will be collected", dev, ino)
 	}
 
 	// The Python/native hybrid unwinder's per program loop count defaults to 10
