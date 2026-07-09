@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
-	"go.opentelemetry.io/ebpf-profiler/tracer"
 
 	"go.opentelemetry.io/collector/consumer/xconsumer"
 	"go.opentelemetry.io/ebpf-profiler/collector/config"
@@ -19,7 +18,6 @@ type Config struct {
 	DisableTLS    bool
 	PprofAddr     string
 	Version       bool
-	PinnedCPUIDs  []int
 
 	ExecutableReporter reporter.ExecutableReporter
 	OnShutdown         func() error
@@ -44,13 +42,5 @@ func (cfg *Config) Dump() {
 // Validate runs validations on the provided configuration, and returns errors
 // if invalid values were provided.
 func (cfg *Config) Validate() error {
-	if cfg.TargetCPUIDs != "" {
-		cpus, err := tracer.ReadCPURange(cfg.TargetCPUIDs)
-		if err != nil {
-			return fmt.Errorf("invalid argument for target-cpu-ids: %v", err)
-		}
-		cfg.PinnedCPUIDs = cpus
-	}
-
 	return cfg.Config.Validate()
 }
