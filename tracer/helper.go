@@ -85,6 +85,9 @@ func ReadCPURange(cpuRangeStr string) ([]int, error) {
 		if err != nil {
 			return nil, err
 		}
+		if first > last {
+			return nil, fmt.Errorf("invalid CPU range %q: start > end", cpuRange)
+		}
 		for n := first; n <= last; n++ {
 			cpus = append(cpus, int(n))
 		}
