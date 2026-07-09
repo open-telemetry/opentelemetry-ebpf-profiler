@@ -10,6 +10,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/probes/noop"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
@@ -160,7 +161,41 @@ func (c *Controller) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start trace handling: %w", err)
 	}
 
+	if err := c.enableCustomProbes(trc); err != nil {
+		return fmt.Errorf("failed to enable custom probes: %w", err)
+	}
+
 	return nil
+}
+
+func (c *Controller) enableCustomProbes(trc *tracer.Tracer) error {
+	if len(c.config.CustomProbes) == 0 {
+		return nil
+	}
+
+	for probeName, probeConfig := range c.config.CustomProbes {
+		probe, err := createCustomProbe(probeName, probeConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create custom probe %q: %w", probeName, err)
+		}
+
+		if err := trc.Enable(probe); err != nil {
+			return fmt.Errorf("failed to enable custom probe %q: %w", probeName, err)
+		}
+
+		log.Infof("Enabled custom probe %q", probeName)
+	}
+
+	return nil
+}
+
+func createCustomProbe(name string, cfg any) (tracer.Probe, error) {
+	switch name {
+	case "noop":
+		return noop.New(cfg)
+	default:
+		return nil, fmt.Errorf("unknown custom probe: %q", name)
+	}
 }
 
 // Shutdown stops the controller

@@ -29,8 +29,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// sysConfigVars supports collecting system configuration information.
-type sysConfigVars struct {
+// SysConfigVars supports collecting system configuration information.
+type SysConfigVars struct {
 	tpbase_offset       uint64
 	task_stack_offset   uint32
 	stack_ptregs_offset uint32
@@ -109,7 +109,7 @@ func getTSDBaseFieldSpec() string {
 	}
 }
 
-func parseVMAOffsets(spec *btf.Spec, vars *sysConfigVars) {
+func parseVMAOffsets(spec *btf.Spec, vars *SysConfigVars) {
 	var vmaStruct *btf.Struct
 	if err := spec.TypeByName("vm_area_struct", &vmaStruct); err != nil {
 		log.Debugf("Unable to resolve vm_area_struct from BTF: %v", err)
@@ -136,7 +136,7 @@ func parseVMAOffsets(spec *btf.Spec, vars *sysConfigVars) {
 }
 
 // parseBTF resolves the SystemConfig data from kernel BTF
-func parseBTF(vars *sysConfigVars) error {
+func parseBTF(vars *SysConfigVars) error {
 	fh, err := os.Open("/sys/kernel/btf/vmlinux")
 	if err != nil {
 		return err
@@ -269,7 +269,7 @@ func readTaskStruct(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 // determineStackPtregs determines the offset of `struct pt_regs` within the entry stack
 // when the `stack` field offset within `task_struct` is already known.
 func determineStackPtregs(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	vars *sysConfigVars,
+	vars *SysConfigVars,
 ) error {
 	data, ptregs, err := readTaskStruct(coll, maps, libpf.SymbolValue(vars.task_stack_offset))
 	if err != nil {
@@ -283,7 +283,7 @@ func determineStackPtregs(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 // determineStackLayout scans `task_struct` for offset of the `stack` field, and using
 // its value determines the offset of `struct pt_regs` within the entry stack.
 func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	vars *sysConfigVars,
+	vars *SysConfigVars,
 ) error {
 	const maxTaskStructSize = 8 * 1024
 	const maxStackSize = 64 * 1024
@@ -342,7 +342,7 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 }
 
 func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
-	kmod *kallsyms.Module, interpretersConfig interpreterconfig.Config, vars *sysConfigVars,
+	kmod *kallsyms.Module, interpretersConfig interpreterconfig.Config, vars *SysConfigVars,
 ) error {
 	if err := parseBTF(vars); err != nil {
 		log.Infof("Using binary analysis (BTF not available: %s)", err)
@@ -380,7 +380,7 @@ func determineSysConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	return nil
 }
 
-func configureVMALookup(coll *cebpf.CollectionSpec, cfg *Config, vars *sysConfigVars) {
+func configureVMALookup(coll *cebpf.CollectionSpec, cfg *Config, vars *SysConfigVars) {
 	enabled, reason := probeVMALookupSupport(cfg)
 	vars.vma_lookup_enabled = enabled
 	if enabled {
@@ -549,7 +549,7 @@ func loadRodataVars(coll *cebpf.CollectionSpec, kmod *kallsyms.Module, cfg *Conf
 		return fmt.Errorf("failed to set inverse_pac_mask: %v", err)
 	}
 
-	rodataVars := sysConfigVars{}
+	rodataVars := SysConfigVars{}
 	configureVMALookup(coll, cfg, &rodataVars)
 
 	systemAnalysisColl, maps, err := prepareAnalysis(coll)
