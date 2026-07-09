@@ -4,9 +4,11 @@
 
 static EBPF_INLINE int probe__generic(struct pt_regs *ctx)
 {
-  u64 pid_tgid = bpf_get_current_pid_tgid();
-  u32 pid      = pid_tgid >> 32;
-  u32 tid      = pid_tgid & 0xFFFFFFFF;
+  u32 pid = 0;
+  u32 tid = 0;
+  if (!get_pid_tgid(&pid, &tid)) {
+    return 0;
+  }
 
   if (pid == 0 || tid == 0) {
     return 0;

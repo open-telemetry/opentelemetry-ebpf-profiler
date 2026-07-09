@@ -52,14 +52,6 @@ BPF_RODATA_VAR(u64, target_pid_ns_inode, 0)
 // identify the namespace filesystem (nsfs) instance.
 BPF_RODATA_VAR(u64, target_pid_ns_dev, 0)
 
-// Mirrors the kernel's struct bpf_pidns_info for use with bpf_get_ns_current_pid_tgid().
-// pid:  thread PID as seen within the target PID namespace.
-// tgid: thread group ID (= process PID in userspace) within the target PID namespace.
-struct bpf_pidns_info {
-  u32 pid;
-  u32 tgid;
-};
-
 // Macro to create a map named exe_id_to_X_stack_deltas that is a nested maps with a fileID for the
 // outer map and an array as inner map that holds up to 2^X stack delta entries for the given
 // fileID.
@@ -188,24 +180,8 @@ int native_tracer_entry(struct bpf_perf_event_data *ctx)
 {
   u32 pid = 0;
   u32 tid = 0;
-  if (pid_ns_translation_enabled) {
-    struct bpf_pidns_info ns_info = {0};
-    long ret                      = bpf_get_ns_current_pid_tgid(
-      target_pid_ns_dev, target_pid_ns_inode, &ns_info, sizeof(ns_info));
-    if (ret < 0) {
-      // Task is not in the target namespace; skip it.
-      return 0;
-    }
-    // ns_info.tgid is the thread group ID (= process PID in userspace) in the namespace.
-    // ns_info.pid is the thread PID in the namespace.
-    // Match the convention of the non-namespace path where pid holds the TGID.
-    pid = ns_info.tgid;
-    tid = ns_info.pid;
-  } else {
-    // bpf_get_current_pid_tgid returns (tgid << 32 | pid).
-    u64 id = bpf_get_current_pid_tgid();
-    pid    = id >> 32;
-    tid    = id & 0xFFFFFFFF;
+  if (!get_pid_tgid(&pid, &tid)) {
+    return 0;
   }
 
   if (pid == 0 && filter_idle_frames) {
