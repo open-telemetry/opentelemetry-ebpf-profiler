@@ -316,8 +316,9 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 // prepareAnalysis creates a new CollectionSpec for the system analysis.
 func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[string]*cebpf.Map, error) {
 	new := &cebpf.CollectionSpec{
-		Maps:     make(map[string]*cebpf.MapSpec),
-		Programs: make(map[string]*cebpf.ProgramSpec),
+		Maps:      make(map[string]*cebpf.MapSpec),
+		Programs:  make(map[string]*cebpf.ProgramSpec),
+		Variables: make(map[string]*cebpf.VariableSpec),
 	}
 	new.Maps["system_analysis"] = orig.Maps["system_analysis"].Copy()
 	new.Maps[".rodata.var"] = orig.Maps[".rodata.var"].Copy()
@@ -327,6 +328,12 @@ func prepareAnalysis(orig *cebpf.CollectionSpec) (*cebpf.CollectionSpec, map[str
 
 	new.Programs["read_kernel_memory"] = orig.Programs["read_kernel_memory"].Copy()
 	new.Programs["read_task_struct"] = orig.Programs["read_task_struct"].Copy()
+	for name, variable := range orig.Variables {
+		new.Variables[name] = variable.Copy()
+	}
+	if err := syncVariablesToMapSpecs(new); err != nil {
+		return nil, nil, fmt.Errorf("failed to sync variables to map specs: %v", err)
+	}
 
 	maps := make(map[string]*cebpf.Map)
 
