@@ -202,7 +202,7 @@ jobs:
   # Runs on host (not qemu) because the qemu initramfs doesn't allow loading
   # shared libraries, which the dlopen/lib testdata variants will need once thread
   # context support lands.
-  integration-tests-processcontext:
+  host-integration-tests:
     name: Integration tests (processcontext ${{ matrix.target_arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
@@ -220,8 +220,5 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get -y --no-install-recommends --no-install-suggests install musl-dev
-      - name: Prepare processcontext integration test binaries
-        run: |
-          make processctx-execs
-      - name: Run processcontext integration tests
-        run: go test -exec sudo -v -tags integration ./processcontext/integrationtests/
+      - name: Run host integration tests
+        run: make host-integration-tests

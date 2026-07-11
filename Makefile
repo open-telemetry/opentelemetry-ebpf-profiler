@@ -1,6 +1,7 @@
 .PHONY: all all-common clean ebpf generate generate-collector test test-deps \
 	test-junit protobuf docker-image agent legal integration-test-binaries \
-	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs processctx-execs \
+	codespell lint ebpf-profiler format format-ebpf format-go pprof-execs \
+	processctx-execs host-integration-tests \
 	pprof_1_23 pprof_1_24 pprof_1_24_cgo otelcol-ebpf-profiler \
 	rust-components rust-targets rust-tests vanity-import-check vanity-import-fix \
 	otel-from-tree otel-from-lib
@@ -154,6 +155,11 @@ TEST_INTEGRATION_BINARY_DIRS := tracer processmanager/ebpf kallsyms support inte
 
 processctx-execs:
 	$(MAKE) -C processcontext/integrationtests/testdata
+
+# Runs on the host (not qemu): the runtime differs from the qemu-based
+# integration suite, so it uses a dedicated build tag.
+host-integration-tests: processctx-execs
+	go test -exec sudo -v -tags host_integration ./processcontext/integrationtests/
 
 pprof-execs: pprof_1_23 pprof_1_24 pprof_1_24_cgo pprof_1_24_cgo_pie pprof_stable pprof_stable_cgo pprof_stable_cgo_pie
 

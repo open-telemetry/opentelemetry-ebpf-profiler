@@ -1,4 +1,4 @@
-//go:build integration && linux
+//go:build host_integration && linux
 
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
