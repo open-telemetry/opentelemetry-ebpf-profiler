@@ -12,6 +12,7 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/internal/linux"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
+	"go.opentelemetry.io/ebpf-profiler/probes/heap"
 	"go.opentelemetry.io/ebpf-profiler/probes/kprobe"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -173,6 +174,15 @@ func (c *Controller) Start(ctx context.Context) error {
 }
 
 func (c *Controller) enableProbes(ctx context.Context, trc *tracer.Tracer) error {
+	// Enable heap profiling probe if configured via the dedicated flag.
+	if c.config.HeapProfiling {
+		p := heap.New(heap.Config{})
+		if err := trc.Enable(ctx, p); err != nil {
+			return fmt.Errorf("heap probe: %w", err)
+		}
+		log.Info("Enabled heap profiling probe")
+	}
+
 	for i, p := range c.config.Probes {
 		probe, err := createProbe(p.Type, p.Config)
 		if err != nil {
