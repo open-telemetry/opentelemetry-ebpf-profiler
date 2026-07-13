@@ -94,12 +94,13 @@ func assertBPFSymbolFound(t *testing.T, s *Symbolizer, progName string) (string,
 
 	t.Logf("Found BPF program %q at address 0x%x", fullName, progAddr)
 
-	funcName, offset, ok := s.LookupBPFSymbol(progAddr)
+	snapshot := s.Snapshot()
+	funcName, offset, ok := snapshot.LookupBPFSymbol(progAddr)
 	require.True(t, ok, "LookupBPFSymbol failed for address 0x%x", progAddr)
 	assert.Equal(t, fullName, funcName)
 	assert.Equal(t, uint(0), offset)
 
-	funcName, offset, ok = s.LookupBPFSymbol(progAddr + 1)
+	funcName, offset, ok = snapshot.LookupBPFSymbol(progAddr + 1)
 	require.True(t, ok, "LookupBPFSymbol failed for address 0x%x", progAddr+1)
 	assert.Equal(t, fullName, funcName)
 	assert.Equal(t, uint(1), offset)
@@ -134,7 +135,7 @@ func TestBPFSymbolizerDynamic(t *testing.T) {
 
 	err = s.bpf.startMonitor(t.Context(), linearCPUs())
 	require.NoError(t, err)
-	defer s.bpf.Close()
+	defer s.bpf.close()
 
 	// The program hasn't been loaded yet, so the symbolizer must not know about it.
 	name, _ := findBPFSymbol(s.bpf, dynamicProgName)
@@ -165,7 +166,7 @@ func TestBPFSymbolizerPreexisting(t *testing.T) {
 
 	err = s.bpf.startMonitor(t.Context(), linearCPUs())
 	require.NoError(t, err)
-	defer s.bpf.Close()
+	defer s.bpf.close()
 
 	// The program was loaded before the monitor started, so it must be
 	// discovered from /proc/kallsyms during the initial load.
