@@ -352,6 +352,12 @@ func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) {
 	c.registerAttacher(a)
 }
 
+// Map returns a handle to one of the tracer's shared eBPF maps by name.
+func (c *ProbeContext) Map(name string) (*cebpf.Map, bool) {
+	m, ok := c.maps[name]
+	return m, ok
+}
+
 // ProbeRegistrar lets a Probe register one or more origin IDs during Load.
 // Each call to Register allocates a unique ID backed by the supplied metadata;
 type ProbeRegistrar interface {
