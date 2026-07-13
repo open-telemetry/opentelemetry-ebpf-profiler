@@ -197,6 +197,50 @@ func (a *armExtractor) findG2TracesOffsetFromChecktrace(b []byte) (uint64, error
 	return 0, errors.New("offset not found")
 }
 
+func (a *armExtractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, targetCall int64) (uint64, error) {
+	var ip, x1 int64
+	var seenFirst bool
+	for ; len(b) > 0; b = b[4:] {
+		i, err := arm64asm.Decode(b)
+		if err != nil {
+			return 0, err
+		}
+		if i.Op == arm64asm.BL {
+			a0, ok := i.Args[0].(arm64asm.PCRel)
+			if ok {
+				result := baseAddr + ip + int64(a0)
+				if result == targetCall {
+					if seenFirst {
+						return uint64(x1), nil
+					}
+					seenFirst = true
+				}
+			}
+		}
+		if i.Op == arm64asm.ADRP {
+			a0, ok1 := i.Args[0].(arm64asm.Reg)
+			a1, ok2 := i.Args[1].(arm64asm.PCRel)
+			if ok1 && ok2 && a0 == arm64asm.X1 {
+				// zero lower 12 bits of addr+ip
+				x1 = (baseAddr + ip) & ^0xfff
+				x1 += int64(a1)
+			}
+		}
+		if i.Op == arm64asm.ADD {
+			a0, ok1 := i.Args[0].(arm64asm.RegSP)
+			a1, ok2 := i.Args[1].(arm64asm.RegSP)
+			if ok1 && ok2 && arm64asm.Reg(a1) == arm64asm.X1 && a0 == a1 {
+				a2, ok := i.Args[2].(arm64asm.ImmShift)
+				if ok {
+					x1 += int64(getImmU(a2))
+				}
+			}
+		}
+		ip += 4
+	}
+	return 0, errors.New("failed to find 2nd arg to 2nd lua_pushcclosure call")
+}
+
 // luaopen_jit looks like this.  ___lldb_unnamed_symbol1372 is lj_lib_prereg, the 2nd call to it
 // is for luaopen_jit_util, so we want to get the address that is constructed in the x2 register
 // and return it.

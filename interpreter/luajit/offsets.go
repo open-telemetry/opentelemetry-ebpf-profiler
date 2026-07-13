@@ -156,6 +156,13 @@ type extractor interface {
 	find3rdArgToLibPreregCall(b []byte, baseAddr int64) (uint64, error)
 
 	find4thArgToLibRegCall(b []byte, baseAddr int64) (int64, error)
+
+	// find2ndArgTo2ndPushClosureCall finds the address of the
+	// second argument to the second "lua_pushcclosure" call,
+	// whose address appears in `targetCall`.
+	//
+	// This is used to find the address of `luaopen_jit_util` from the code of `luaopen_jit`.
+	find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, targetCall int64) (uint64, error)
 }
 
 func newExtractor(ef *pfelf.File) extractor {
@@ -303,8 +310,8 @@ func (o *offsetData) findTraceInfoFromLuaOpen() (*libpf.Symbol, error) {
 	}
 
 	if inlined {
-		luaopenJitUtilAddr, err = findRipRelativeLea2ndArgTo2ndCall(o.luajitOpen, baseAddr,
-			pushClosureAddr)
+		luaopenJitUtilAddr, err = o.e.find2ndArgTo2ndPushClosureCall(o.luajitOpen, baseAddr, pushClosureAddr)
+
 		if err != nil {
 			return nil, err
 		}

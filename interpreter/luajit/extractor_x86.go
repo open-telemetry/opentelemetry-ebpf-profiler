@@ -295,13 +295,13 @@ func (x *x86Extractor) callExists(b []byte, baseAddr, targetCall int64) (bool, e
 	return false, nil
 }
 
-// luaopen_jit_util will have two of these when lj_lib_prereg is inlined.
+// luaopen_jit will have two of these when lj_lib_prereg is inlined.
 // Return the address stored in rsi for the 2nd one.
 // 15457:	48 8d 35 12 67 ff ff 	lea    -0x98ee(%rip),%rsi        # bb70 <x64_init_random_constructor@@Base+0x44d0>
 // 1545e:	e8 cd 1e 09 00       	call   a7330 <lua_pushcclosure@@Base>
 //
 //nolint:lll
-func findRipRelativeLea2ndArgTo2ndCall(b []byte, baseAddr, targetCall int64) (uint64, error) {
+func (x *x86Extractor) find2ndArgTo2ndPushClosureCall(b []byte, baseAddr, targetCall int64) (uint64, error) {
 	var leaRsi int64
 	calls := 2
 	b, ip := amd.SkipEndBranch(b)
