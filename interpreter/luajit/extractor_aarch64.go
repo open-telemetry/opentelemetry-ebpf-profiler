@@ -361,9 +361,16 @@ func (a *armExtractor) find4thArgToLibRegCall(b []byte, addr int64) (int64, erro
 			if ok1 && ok2 && arm64asm.Reg(a1) == arm64asm.X3 && a0 == a1 {
 				a2, ok := i.Args[2].(arm64asm.ImmShift)
 				if ok {
+					// Note: don't return yet, since sometimes there's actually
+					// multiple add instructions affecting the register before we finally get
+					// to the `bl`.
 					x3 += int64(getImmU(a2))
-					return x3, nil
 				}
+			}
+		}
+		if i.Op == arm64asm.BL {
+			if x3 != 0 {
+				return x3, nil
 			}
 		}
 		ip += 4
