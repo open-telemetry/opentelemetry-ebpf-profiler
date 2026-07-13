@@ -1,0 +1,70 @@
+{
+  "coredump-ref": "975d50979fa41f3cfbff7bf4630fbc6d6863cfbbd87580ccf293f337653ff6f5",
+  "threads": [
+    {
+      "lwp": 28735,
+      "frames": [
+        "?+0x0",
+        "fib+16777215 in @./fib.lua:0",
+        "fib+8 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+11 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+11 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+11 in @./fib.lua:6",
+        "fib+11 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+11 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+11 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+11 in @./fib.lua:6",
+        "fib+11 in @./fib.lua:6",
+        "fib+11 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "fib+11 in @./fib.lua:6",
+        "fib+8 in @./fib.lua:6",
+        "luajit+0x1baa3",
+        "luajit+0x12d9f",
+        "luajit+0x146bf",
+        "LuaJIT FFI: cpcall+0 in :0",
+        "?+0x0",
+        "?+0x0",
+        "luajit+0x1bb03",
+        "luajit+0x7f57",
+        "libc.so.6+0x22f1b",
+        "libc.so.6+0x2305b",
+        "luajit+0x802f"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "ref": "b783336ff24a35b10022a737f18500e39e68eb5ff2a208579ee88ceddaf4ea29",
+      "local-path": "/usr/bin/luajit"
+    },
+    {
+      "ref": "4306bea54c5862911d6ed2ee19adc0cdcb092cd1948ceb14a9c1e3592e8487d7",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libc.so.6"
+    },
+    {
+      "ref": "a886d874bfcc27b5b3de47504eb861af8f15cf8c2aea160bd3b973e1a1a95255",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1"
+    },
+    {
+      "ref": "fdfcc3f8be574d3b55a1c365e5fd19073ecfff2f226a6893aac552fac4ba7aa8",
+      "local-path": "/usr/lib/aarch64-linux-gnu/libm.so.6"
+    },
+    {
+      "ref": "058b11f959fd1006abfc289a7fa9e2df86892e8a05f2d8b79a137e6a29c11a78",
+      "local-path": "/usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1"
+    }
+  ]
+}
