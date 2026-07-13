@@ -88,6 +88,15 @@ const (
 	HSTSIDSegMapMask      = 0xffffffffffffff
 )
 
+const (
+	TraceOriginUnknown   = 0x0
+	TraceOriginSampling  = 0x1
+	TraceOriginOffCPU    = 0x2
+	TraceOriginProbe     = 0x3
+	TraceOriginHeapAlloc = 0x4
+	TraceOriginHeapFree  = 0x5
+)
+
 type ApmSpanID [8]byte
 type ApmTraceID [16]byte
 type CustomLabel struct {
@@ -160,6 +169,8 @@ type Trace struct {
 	Num_kernel_frames  uint16
 	Origin             uint16
 	Value              uint64
+	Ptr                uint64
+	Size               uint64
 	Cpu_id             uint32
 	Frame_data         [3072]uint64
 }
@@ -324,7 +335,7 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0x62d8
+	Sizeof_Trace      = 0x62e8
 
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
@@ -501,4 +512,6 @@ var MetricsTranslation = []metrics.MetricID{
 	0x6f: metrics.IDSamplesSkippedProcessTooNew,
 	0x70: metrics.IDNumSyncsFromPrctl,
 	0x71: metrics.IDNumPriorityEventDeferred,
+	0x72: metrics.IDHeapPerPIDLimitHit,
+	0x73: metrics.IDHeapLiveMapFull,
 }

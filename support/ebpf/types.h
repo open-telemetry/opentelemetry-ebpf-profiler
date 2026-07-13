@@ -355,6 +355,11 @@ enum {
   // number of priority PID events deferred (recorded but not signalled) due to rate limiting
   metricID_NumPriorityEventDeferred,
 
+  // number of heap allocs dropped due to per-PID live-heap cap
+  metricID_HeapPerPIDLimitHit,
+
+  // number of dropped heap alloc entries due to map full
+  metricID_HeapLiveMapFull,
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -388,6 +393,17 @@ typedef enum TracePrograms {
   PROG_UNWIND_LUAJIT,
   NUM_TRACER_PROGS,
 } TracePrograms;
+
+// TraceOrigin describes the source of the trace. This enables
+// origin specific handling of traces in user space.
+typedef enum TraceOrigin {
+  TRACE_UNKNOWN,
+  TRACE_SAMPLING,
+  TRACE_OFF_CPU,
+  TRACE_PROBE,
+  TRACE_HEAP_ALLOC,
+  TRACE_HEAP_FREE,
+} TraceOrigin;
 
 // Maximum number of unique stack deltas needed on a system. This is based on
 // normal desktop /usr/bin/* and /usr/lib/*.so having about 9700 unique deltas.
@@ -658,6 +674,17 @@ typedef struct Trace {
   // value stores context-specific data that was collected with the stack.
   // e.g. time in nanoseconds for off-CPU traces
   u64 value;
+
+  // ptr stores a context-specific pointer collected with the stack.
+  // For TRACE_HEAP_ALLOC / TRACE_HEAP_FREE: the user-visible allocation address.
+  u64 ptr;
+
+  // size stores a context-specific raw size collected with the stack.
+  // For TRACE_HEAP_ALLOC: the un-weighted allocation size in bytes, as passed
+  // to the alloc USDT. Combined with value (the byte-weighted estimator),
+  // downstream consumers can derive an unbiased object-count estimate
+  // (value / size). Zero for all other origins.
+  u64 size;
 
   // The CPU that captured this trace.
   u32 cpu_id;

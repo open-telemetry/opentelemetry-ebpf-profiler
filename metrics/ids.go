@@ -695,6 +695,15 @@ const (
 	// Number of priority PID events deferred (recorded but not signalled) due to rate limiting
 	IDNumPriorityEventDeferred = 302
 
+	// Number of heap allocs dropped in eBPF due to per-PID live-heap cap
+	IDHeapPerPIDLimitHit = 303
+
+	// Number of heap allocs dropped in eBPF due to global live-heap map full
+	IDHeapLiveMapFull = 304
+
+	// Number of PIDs that failed to be added to heap_live_pids (map full)
+	IDHeapLivePIDMapFull = 305
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 303
+	IDMax = 305
 )
