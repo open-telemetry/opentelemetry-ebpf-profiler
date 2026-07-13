@@ -1888,6 +1888,10 @@ func (d *v8Data) Attach(ebpf interpreter.EbpfHandler, pid libpf.PID, _ libpf.Add
 func (d *v8Data) Unload(_ interpreter.EbpfHandler) {
 }
 
+func (i *v8Instance) UsesAnonymousMappings() bool {
+	return true
+}
+
 func (d *v8Data) readIntrospectionData(ef *pfelf.File) error {
 	// Read the variables from the pfelf.File so we avoid failures if the process
 	// exists during extraction of the introspection data.
@@ -2224,7 +2228,7 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	// Match historic behavior: keep going, even if we can't get the snapshot blob.
 	// (TODO: Figure out when/why this can happen)
 	if err != nil {
-		log.Warnf("Couldn't get V8 DefaultSnapshotBlob: %v", err)
+		log.Debugf("Couldn't get V8 DefaultSnapshotBlob: %v", err)
 	} else {
 		rv.DefaultSnapshotBlob = sym
 	}
@@ -2233,7 +2237,7 @@ func lookupRelevantSymbols(ef *pfelf.File) (relevantSymbols, error) {
 	sym, err = ef.LookupSymbol(bytecodeSizesSymbol)
 	if err != nil {
 		// As above, keep going to match historic behavior (why?)
-		log.Warnf("Couldn't get V8 BytecodeSizes: %v", err)
+		log.Debugf("Couldn't get V8 BytecodeSizes: %v", err)
 	} else {
 		rv.BytecodeSizes = sym
 	}

@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package pprof // import "go.opentelemetry.io/ebpf-profiler/interpreter/golabels/integrationtests/pprof"
+package pprof // import "go.opentelemetry.io/ebpf-profiler/interpreter/go/integrationtests/pprof"
 
 import (
 	"context"

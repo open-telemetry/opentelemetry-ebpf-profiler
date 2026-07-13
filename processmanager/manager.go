@@ -8,12 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"maps"
 	"slices"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
+	"github.com/zeebo/xxh3"
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 
 	"go.opentelemetry.io/ebpf-profiler/host"
@@ -45,11 +45,8 @@ const (
 	// TTL of entries in the LRU cache holding the executables' ELF information.
 	elfInfoCacheTTL = 6 * time.Hour
 
-	// Maximum size of the LRU cache for frames.
-	frameCacheSize = 16384
-
-	// TTL of entries in the frame cache.
-	frameCacheLifetime = 5 * time.Minute
+	// DefaultFrameCacheSize is the default maximum size of the LRU cache for frames.
+	DefaultFrameCacheSize uint32 = 16384
 )
 
 // dummyPrefix is the LPM prefix installed to indicate the process is known
@@ -61,20 +58,34 @@ var (
 	errPIDGone = errors.New("interpreter process gone")
 )
 
+// Config contains the dependencies and options used to create a ProcessManager.
+type Config struct {
+	InterpretersConfig    interpreterconfig.Config
+	MonitorInterval       time.Duration
+	ExecutableUnloadDelay time.Duration
+	EbpfHandler           pmebpf.EbpfHandler
+	TraceReporter         reporter.TraceReporter
+	ExecutableReporter    reporter.ExecutableReporter
+	StackDeltaProvider    nativeunwind.StackDeltaProvider
+	FrameCacheSize        uint32
+	FilterErrorFrames     bool
+	IncludeEnvVars        libpf.Set[string]
+}
+
 // New creates a new ProcessManager which is responsible for keeping track of loading
 // and unloading of symbols for processes.
-func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monitorInterval time.Duration,
-	executableUnloadDelay time.Duration, ebpf pmebpf.EbpfHandler, traceReporter reporter.TraceReporter,
-	exeReporter reporter.ExecutableReporter, sdp nativeunwind.StackDeltaProvider,
-	filterErrorFrames bool, includeEnvVars libpf.Set[string]) (*ProcessManager, error) {
-	if exeReporter == nil {
-		exeReporter = executableReporterStub{}
+func New(ctx context.Context, cfg Config) (*ProcessManager, error) {
+	if cfg.ExecutableReporter == nil {
+		cfg.ExecutableReporter = executableReporterStub{}
+	}
+	if cfg.FrameCacheSize == 0 {
+		cfg.FrameCacheSize = DefaultFrameCacheSize
 	}
 
 	// Always collect the env vars used to derive process context resource
 	// attributes, independently of the user-configured set. Clone first to avoid
 	// mutating the caller's set.
-	includeEnvVars = maps.Clone(includeEnvVars)
+	includeEnvVars := maps.Clone(cfg.IncludeEnvVars)
 	if includeEnvVars == nil {
 		includeEnvVars = make(libpf.Set[string])
 	}
@@ -89,19 +100,18 @@ func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monit
 	}
 	elfInfoCache.SetLifetime(elfInfoCacheTTL)
 
-	frameCache, err := lru.New[frameCacheKey, libpf.Frames](frameCacheSize, hashFrameCacheKey)
+	frameCache, err := lru.New[frameCacheKey, libpf.Frames](cfg.FrameCacheSize, hashFrameCacheKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to create frameCache: %v", err)
 	}
-	frameCache.SetLifetime(frameCacheLifetime)
 
-	em, err := eim.NewExecutableInfoManager(sdp, ebpf, interpretersConfig)
+	em, err := eim.NewExecutableInfoManager(cfg.StackDeltaProvider, cfg.EbpfHandler, cfg.InterpretersConfig)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create ExecutableInfoManager: %v", err)
 	}
 
-	periodiccaller.Start(ctx, executableUnloadDelay, func() {
-		err := em.CleanupUnused(executableUnloadDelay)
+	periodiccaller.Start(ctx, cfg.ExecutableUnloadDelay, func() {
+		err := em.CleanupUnused(cfg.ExecutableUnloadDelay)
 		if err != nil {
 			log.Errorf("Failed to cleanup unused executables: %v", err)
 		}
@@ -120,19 +130,19 @@ func New(ctx context.Context, interpretersConfig interpreterconfig.Config, monit
 		interpreters:             interpreters,
 		exitEvents:               make(map[libpf.PID]times.KTime),
 		pidToProcessInfo:         make(map[libpf.PID]*processInfo),
-		ebpf:                     ebpf,
+		ebpf:                     cfg.EbpfHandler,
 		elfInfoCache:             elfInfoCache,
 		frameCache:               frameCache,
-		traceReporter:            traceReporter,
-		exeReporter:              exeReporter,
+		traceReporter:            cfg.TraceReporter,
+		exeReporter:              cfg.ExecutableReporter,
 		metricsAddSlice:          metrics.AddSlice,
-		filterErrorFrames:        filterErrorFrames,
+		filterErrorFrames:        cfg.FilterErrorFrames,
 		includeEnvVars:           includeEnvVars,
 		selfCgroupIno:            selfCgroupIno,
 		selfContainerID:          selfContainerID,
 	}
 
-	collectInterpreterMetrics(ctx, pm, monitorInterval)
+	collectInterpreterMetrics(ctx, pm, cfg.MonitorInterval)
 
 	return pm, nil
 }
@@ -323,16 +333,14 @@ func (pm *ProcessManager) maybeNotifyAPMAgent(
 }
 
 func hashFrameCacheKey(fk frameCacheKey) uint32 {
-	h := fnv.New32a()
-	h.Write(pfunsafe.FromSlice(fk.data[:]))
-	return h.Sum32()
+	return uint32(xxh3.Hash(pfunsafe.FromPointer(&fk)))
 }
 
 // HandleTrace processes and reports the given host.Trace. This function
 // is not re-entrant due to frameCache not being synced. If the tracer is
 // later updated to distribute trace handling to goroutine pool, the caching
 // strategy needs to be updated accordingly.
-func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
+func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace, profileType *samples.TypeMetadata) {
 	meta := &samples.TraceEventMeta{
 		Timestamp:      libpf.UnixTime64(times.KTime(bpfTrace.KTime).UnixNano()),
 		Comm:           bpfTrace.Comm,
@@ -343,7 +351,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 		ProcessName:    bpfTrace.ProcessName,
 		ExecutablePath: bpfTrace.ExecutablePath,
 		ContainerID:    bpfTrace.ContainerID,
-		Origin:         bpfTrace.Origin,
+		ProfileType:    profileType,
 		Value:          bpfTrace.Value,
 		EnvVars:        bpfTrace.EnvVars,
 		Resource:       bpfTrace.Resource,
@@ -380,7 +388,7 @@ func (pm *ProcessManager) HandleTrace(bpfTrace *libpf.EbpfTrace) {
 			key.pid = pid
 		}
 		copy(key.data[:], frame)
-		if cached, ok := pm.frameCache.GetAndRefresh(key, frameCacheLifetime); ok {
+		if cached, ok := pm.frameCache.Get(key); ok {
 			// Fast path
 			cacheHit++
 			trace.Frames = append(trace.Frames, cached...)

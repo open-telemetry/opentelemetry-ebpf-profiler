@@ -18,7 +18,7 @@ type TraceEventMeta struct {
 	Resource       *pcommon.Resource
 	Timestamp      libpf.UnixTime64
 	CPU            uint32
-	Origin         libpf.Origin
+	ProfileType    *TypeMetadata
 	Value          int64
 	PID, TID       libpf.PID
 	SpanID         libpf.APMSpanID
@@ -48,7 +48,7 @@ type ResourceToProfiles struct {
 	Resource *pcommon.Resource
 
 	// Events holds the actual profiling information.
-	Events map[libpf.Origin]SampleToEvents
+	Events map[*TypeMetadata]SampleToEvents
 }
 
 // SampleToEvents maps a unique trace hash with its meta data to
@@ -91,4 +91,25 @@ type SampleKey struct {
 
 	SpanID  libpf.APMSpanID
 	TraceID libpf.APMTraceID
+}
+
+// TypeMetadata describes how profiling events of a particular kind
+// should be interpreted and exported as an OTel profile.
+type TypeMetadata struct {
+	// PeriodType describes what is measured per period (e.g. "cpu").
+	// Empty means this profile type has no period (e.g. event-driven kinds).
+	PeriodType string
+
+	// PeriodUnit is the unit for PeriodType (e.g. "nanoseconds").
+	PeriodUnit string
+
+	// SampleType describes what a single sample represents (e.g. "samples").
+	SampleType string
+
+	// SampleUnit is the unit for SampleType (e.g. "count").
+	SampleUnit string
+
+	// ReportValues indicates whether a sample's value should be included
+	// in the exported sample (e.g. off-CPU durations).
+	ReportValues bool
 }

@@ -209,8 +209,16 @@ func (i *opcacheInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 		return nil
 	}
 
-	dasmBuf := binary.LittleEndian.Uint64(dasmBufVal)
-	dasmSize := binary.LittleEndian.Uint64(dasmBufVal)
+	buf := make([]byte, 8)
+	if err := i.rm.Read(i.d.dasmBufPtr+i.bias, buf); err != nil {
+		return nil
+	}
+	dasmBuf := binary.LittleEndian.Uint64(buf)
+
+	if err := i.rm.Read(i.d.dasmSizePtr+i.bias, buf); err != nil {
+		return nil
+	}
+	dasmSize := binary.LittleEndian.Uint64(buf)
 	if dasmBuf == 0 || dasmSize == 0 {
 		// This is the normal path if JIT is not enabled, or we try to
 		// attach before JIT engine is initialized.
@@ -250,6 +258,10 @@ func (d *opcacheData) Attach(_ interpreter.EbpfHandler, _ libpf.PID, bias libpf.
 }
 
 func (d *opcacheData) Unload(_ interpreter.EbpfHandler) {
+}
+
+func (i *opcacheInstance) UsesAnonymousMappings() bool {
+	return true
 }
 
 func determineOPCacheVersion(ef *pfelf.File) (uint32, error) {

@@ -51,7 +51,7 @@ type ebpfMapsImpl struct {
 	V8Procs            *cebpf.Map `name:"v8_procs"`
 	BeamProcs          *cebpf.Map `name:"beam_procs"`
 	ApmIntProcs        *cebpf.Map `name:"apm_int_procs"`
-	GoLabelsProcs      *cebpf.Map `name:"go_labels_procs"`
+	GoProcs            *cebpf.Map `name:"go_procs"`
 
 	// Stackdelta and process related eBPF maps
 	ExeIDToStackDeltaMaps []*cebpf.Map
@@ -166,8 +166,8 @@ func (impl *ebpfMapsImpl) getInterpreterTypeMap(typ libpf.InterpreterType) (*ceb
 		return impl.BeamProcs, nil
 	case libpf.APMInt:
 		return impl.ApmIntProcs, nil
-	case libpf.GoLabels:
-		return impl.GoLabelsProcs, nil
+	case libpf.Go:
+		return impl.GoProcs, nil
 	default:
 		return nil, fmt.Errorf("type %d is not (yet) supported", typ)
 	}
@@ -354,54 +354,6 @@ func probeMapOperations[T constraints.Unsigned](mapType cebpf.MapType, probe fun
 	defer probeMap.Close()
 
 	return probe(probeMap, generateSlice[T](updates), generateSlice[uint64](updates))
-}
-
-// probeBatchLookupAndDeleteInner is the inner check to be used by probeBatchLookupAndDelete.
-func probeBatchLookupAndDeleteInner[T constraints.Unsigned](probeMap *cebpf.Map, keys ptrCastMarshaler[T], values ptrCastMarshaler[uint64]) error {
-	n, err := probeMap.BatchUpdate(keys, values, nil)
-	if err != nil {
-		// Older kernel do not support batch operations on maps.
-		// This is just fine and we return here.
-		return err
-	}
-
-	if n != len(keys) {
-		return fmt.Errorf("unexpected batch update return: expected %d but got %d",
-			len(keys), n)
-	}
-
-	batchKeys := make([]T, 16)
-	batchValues := make([]uint64, 16)
-
-	n, err = probeMap.BatchLookupAndDelete(&cebpf.MapBatchCursor{}, batchKeys, batchValues, nil)
-	if err != nil && !errors.Is(err, cebpf.ErrKeyNotExist) {
-		return err
-	}
-
-	if n != len(keys) {
-		return fmt.Errorf("unexpected batch lookup-and-delete return: expected %d but got %d",
-			len(keys), n)
-	}
-
-	for i := range n {
-		// Keys can come out of order, so we're checking them against returned values instead of input keys.
-		if uint64(batchKeys[i]) != batchValues[i] {
-			return fmt.Errorf("mismatched batch lookup-and-delete at index %d: expected %d but got %d",
-				i, batchKeys[i], batchValues[i])
-		}
-	}
-
-	return nil
-}
-
-// probeBatchLookupAndDelete tests if the BPF syscall supports batch lookup-and-delete operations.
-// It returns nil if batch operations are supported for mapType or an error otherwise.
-func probeBatchLookupAndDelete(mapType cebpf.MapType) error {
-	if mapType == cebpf.Array {
-		return probeMapOperations(mapType, probeBatchLookupAndDeleteInner[uint32])
-	}
-
-	return probeMapOperations(mapType, probeBatchLookupAndDeleteInner[uint64])
 }
 
 // probeBatchOperationsInner is the inner check to be used by probeBatchOperations.
@@ -613,12 +565,11 @@ func (impl *ebpfMapsImpl) DeleteStackDeltaPage(fileID host.FileID, page uint64) 
 		impl.StackDeltaPageToInfo.Delete(unsafe.Pointer(&key)))
 }
 
-// UpdatePidPageMappingInfo adds the pid and page combination with a corresponding fileID and
+// UpdatePidPageMappingInfo updates the pid and page combination with a corresponding fileID and
 // bias as value to the eBPF map pid_page_to_mapping_info.
 // Given a PID and a virtual address, the native unwinder can perform one lookup and obtain both
 // the fileID of the text section that is mapped at this virtual address, and the offset into the
 // text section that this page can be found at on disk.
-// If the key/value pair already exists it will return an error.
 func (impl *ebpfMapsImpl) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Prefix,
 	fileID, bias uint64,
 ) error {
@@ -635,7 +586,7 @@ func (impl *ebpfMapsImpl) UpdatePidPageMappingInfo(pid libpf.PID, prefix lpm.Pre
 
 	return impl.trackMapError(metrics.IDPidPageToMappingInfoUpdate,
 		impl.PidPageToMappingInfo.Update(unsafe.Pointer(cKey), unsafe.Pointer(cValue),
-			cebpf.UpdateNoExist))
+			cebpf.UpdateAny))
 }
 
 // DeletePidPageMappingInfo removes the elements specified by prefixes from eBPF map

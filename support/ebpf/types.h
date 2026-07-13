@@ -331,6 +331,15 @@ enum {
   // number of bpf_ringbuf_output failures
   metricID_BPFRingbufOutputErr,
 
+  // number of times bpf_find_vma found no VMA for the current PC
+  metricID_UnwindNativeErrNoVMA,
+
+  // number of native-only anonymous executable VMA misses suppressed in eBPF
+  metricID_UnwindNativeErrUnsupportedAnonymousMapping,
+
+  // number of times the current PC was found in a non-executable VMA
+  metricID_UnwindNativeErrNonExecutableVMA,
+
   //
   // Metric IDs above are for counters (cumulative values)
   //
@@ -807,6 +816,16 @@ typedef struct GoMapBucket {
   void *overflow;
 } GoMapBucket;
 
+typedef struct GoRuntimeOffsets {
+  u32 m_offset;
+  u32 curg;
+  u32 labels;
+  u32 hmap_count;
+  u32 hmap_log2_bucket_count;
+  u32 hmap_buckets;
+  s32 tls_offset;
+} GoRuntimeOffsets;
+
 typedef struct CustomLabelsState {
   void *go_m_ptr;
 } CustomLabelsState;
@@ -828,6 +847,9 @@ typedef struct PerCPURecord {
   RubyUnwindState rubyUnwindState;
   // State for Go and Native custom labels
   CustomLabelsState customLabelsState;
+  // Per-process Go runtime offsets, preloaded once per trace from go_procs in
+  // collect_trace. m_offset is always non-zero for a Go process.
+  GoRuntimeOffsets goOffsets;
   union {
     // Scratch space for the Dotnet unwinder.
     DotnetUnwindScratchSpace dotnetUnwindScratch;
@@ -857,6 +879,9 @@ typedef struct PerCPURecord {
 
   // ratelimitAction determines the PID event rate limiting mode
   u8 ratelimitAction;
+  // usesAnonymousMappings is copied from the per-PID marker in
+  // pid_page_to_mapping_info during trace initialization.
+  bool usesAnonymousMappings;
 } PerCPURecord;
 
 // https://github.com/torvalds/linux/blob/e9a6fb0bcdd7609be6969112f3fbfcce3b1d4a7c/include/linux/percpu.h#L24C39-L24C47
@@ -1026,6 +1051,9 @@ typedef struct PIDPageMappingInfo {
   u64 bias_and_unwind_program;
 } PIDPageMappingInfo;
 
+// Stored in file_id for the per-PID dummy pid_page_to_mapping_info entry.
+#define PID_PAGE_MAPPING_INFO_FLAG_USES_ANONYMOUS_MAPPINGS (1ULL << 0)
+
 // UNKNOWN_FILE indicates for unknown files.
 #define UNKNOWN_FILE      0x0
 // FUNC_TYPE_UNKNOWN indicates an unknown interpreted function.
@@ -1045,15 +1073,5 @@ typedef struct PIDPageMappingInfo {
 typedef struct ApmIntProcInfo {
   u64 tls_offset;
 } ApmIntProcInfo;
-
-typedef struct GoLabelsOffsets {
-  u32 m_offset;
-  u32 curg;
-  u32 labels;
-  u32 hmap_count;
-  u32 hmap_log2_bucket_count;
-  u32 hmap_buckets;
-  s32 tls_offset;
-} GoLabelsOffsets;
 
 #endif // OPTI_TYPES_H
