@@ -2195,5 +2195,26 @@
     "name": "SamplesSkippedProcessTooNew",
     "field": "bpf.samples.skipped_process_too_new",
     "id": 300
+  },
+  {
+    "description": "Number of heap allocs dropped in eBPF due to per-PID live-heap cap",
+    "type": "counter",
+    "name": "HeapPerPIDLimitHit",
+    "field": "bpf.heap.per_pid_limit_hit",
+    "id": 301
+  },
+  {
+    "description": "Number of heap allocs dropped in eBPF due to global live-heap map full",
+    "type": "counter",
+    "name": "HeapLiveMapFull",
+    "field": "bpf.heap.live_map_full",
+    "id": 302
+  },
+  {
+    "description": "Number of PIDs that failed to be added to heap_live_pids (map full)",
+    "type": "counter",
+    "name": "HeapLivePIDMapFull",
+    "field": "heap.live_pid_map_full",
+    "id": 303
   }
 ]

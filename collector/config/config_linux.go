@@ -70,6 +70,7 @@ type Config struct {
 	IncludeEnvVars          string                   `mapstructure:"include_env_vars"`
 	ProbeLinks              []string                 `mapstructure:"probe_links"`
 	LoadProbe               bool                     `mapstructure:"load_probe"`
+	HeapProfiling           bool                     `mapstructure:"heap_profiling"`
 	MapScaleFactor          uint                     `mapstructure:"map_scale_factor"`
 	BPFVerifierLogLevel     uint                     `mapstructure:"bpf_verifier_log_level"`
 	NoKernelVersionCheck    bool                     `mapstructure:"no_kernel_version_check"`

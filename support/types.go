@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x70
+	MetricIDBeginCumulative = 0x72
 )
 
 const (
@@ -86,6 +86,15 @@ const (
 	HSTSIDStackDeltaScale = 0x8
 	HSTSIDSegMapBit       = 0x0
 	HSTSIDSegMapMask      = 0xffffffffffffff
+)
+
+const (
+	TraceOriginUnknown   = 0x0
+	TraceOriginSampling  = 0x1
+	TraceOriginOffCPU    = 0x2
+	TraceOriginProbe     = 0x3
+	TraceOriginHeapAlloc = 0x4
+	TraceOriginHeapFree  = 0x5
 )
 
 type ApmSpanID [8]byte
@@ -160,6 +169,8 @@ type Trace struct {
 	Num_kernel_frames  uint16
 	Origin             uint16
 	Value              uint64
+	Ptr                uint64
+	Size               uint64
 	Cpu_id             uint32
 	Frame_data         [3072]uint64
 }
@@ -324,7 +335,7 @@ type V8ProcInfo struct {
 
 const (
 	Sizeof_StackDelta = 0x4
-	Sizeof_Trace      = 0x62d8
+	Sizeof_Trace      = 0x62e8
 
 	sizeof_ApmIntProcInfo = 0x8
 	sizeof_DotnetProcInfo = 0x4
@@ -499,4 +510,6 @@ var MetricsTranslation = []metrics.MetricID{
 	0x6d: metrics.IDUnwindLuaJITAttempts,
 	0x6e: metrics.IDUnwindLuaJITErrNoProcInfo,
 	0x6f: metrics.IDSamplesSkippedProcessTooNew,
+	0x70: metrics.IDHeapLiveMapFull,
+	0x71: metrics.IDHeapPerPIDLimitHit,
 }

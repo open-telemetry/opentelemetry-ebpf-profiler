@@ -90,6 +90,9 @@ var (
 		"Expected format: probe_type:target[:symbol]. probe_type can be kprobe, kretprobe, uprobe, or uretprobe."
 	loadProbeHelper = "Load generic eBPF program that can be attached externally to " +
 		"various user or kernel space hooks."
+	heapProfilingHelper = "Enable heap profiling via USDT uprobes. The profiler will " +
+		"scan target processes for `.note.stapsdt` entries from the heap-sampler " +
+		"provider and attach PID-scoped uprobes."
 	bpffsHelp = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
 		defaultBPFFSRoot)
 	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context information with OBI."
@@ -184,6 +187,8 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.OBIProcessCtx, "obi-process-ctx", false, obiProcessCtxHelp)
 
 	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
+
+	fs.BoolVar(&args.HeapProfiling, "heap-profiling", false, heapProfilingHelper)
 
 	fs.Usage = func() {
 		fs.PrintDefaults()

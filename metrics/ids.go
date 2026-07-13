@@ -689,6 +689,15 @@ const (
 	// Number of samples skipped because the process is too new
 	IDSamplesSkippedProcessTooNew = 300
 
+	// Number of heap allocs dropped in eBPF due to per-PID live-heap cap
+	IDHeapPerPIDLimitHit = 301
+
+	// Number of heap allocs dropped in eBPF due to global live-heap map full
+	IDHeapLiveMapFull = 302
+
+	// Number of PIDs that failed to be added to heap_live_pids (map full)
+	IDHeapLivePIDMapFull = 303
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 301
+	IDMax = 303
 )
