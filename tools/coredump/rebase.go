@@ -19,27 +19,30 @@ type rebaseCmd struct {
 	store *modulestore.Store
 
 	allowDirty bool
+	flags      *flag.FlagSet
 }
 
 func newRebaseCmd(store *modulestore.Store) *ffcli.Command {
-	args := &rebaseCmd{store: store}
-
 	set := flag.NewFlagSet("rebase", flag.ExitOnError)
+	args := &rebaseCmd{store: store, flags: set}
 	set.BoolVar(&args.allowDirty, "allow-dirty", false, "Allow uncommitted changes in git")
 
 	return &ffcli.Command{
 		Name:       "rebase",
 		Exec:       args.exec,
-		ShortUsage: "rebase",
-		ShortHelp:  "Update all test cases by running them and saving the current unwinding",
+		ShortUsage: "rebase [testCaseJsonFiles]",
+		ShortHelp:  "Update all test cases (or a subset of them) by running them and saving the current unwinding",
 		FlagSet:    set,
 	}
 }
 
 func (cmd *rebaseCmd) exec(context.Context, []string) (err error) {
-	cases, err := findTestCases(true)
-	if err != nil {
-		return fmt.Errorf("failed to find test cases: %w", err)
+	cases := cmd.flags.Args()
+	if len(cases) == 0 {
+		cases, err = findTestCases(true)
+		if err != nil {
+			return fmt.Errorf("failed to find test cases: %w", err)
+		}
 	}
 
 	if !cmd.allowDirty {
