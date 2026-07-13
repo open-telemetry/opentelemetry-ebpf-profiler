@@ -17,6 +17,9 @@ func getOffsets(vers string) support.GoRuntimeOffsets {
 	offsets := support.GoRuntimeOffsets{
 		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L410
 		M_offset: 48,
+		// https://github.com/golang/go/blob/go1.24.0/src/runtime/runtime2.go#L536
+		// m.gsignal at offset 80 while morebuf gobuf still has the ret field (go <= 1.24).
+		M_gsignal: 80,
 		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L541
 		Curg: 192,
 		// https://github.com/golang/go/blob/80e2e474b8d9124d03b744f/src/runtime/runtime2.go#L483
@@ -27,16 +30,25 @@ func getOffsets(vers string) support.GoRuntimeOffsets {
 		Hmap_log2_bucket_count: 0,
 		// https://github.com/golang/go/blob/6885bad7dd86880be6929c0/src/runtime/map.go#L118
 		Hmap_buckets: 0,
+		// Offsets of bp within gobuf, relative to gobuf.sp.
+		// gobuf.bp is at offset 48 within gobuf in go1.24 and earlier. In go1.25 and later,
+		// it is at offset 40 because of ret field removal.
+		// go1.25: https://github.com/golang/go/blob/6e676ab2b809d46623acb5988248d95d1eb7939c/src/runtime/runtime2.go#L315
+		Sched_bp_off: 48,
 	}
 
 	// Version enforcement takes place in the Loader function.
 	if version.Compare(vers, "go1.26") >= 0 {
 		offsets.Curg = 184
 		offsets.Labels = 352
+		offsets.Sched_bp_off = 40
+		offsets.M_gsignal = 72
 		return offsets
 	} else if version.Compare(vers, "go1.25") >= 0 {
 		offsets.Curg = 184
 		offsets.Labels = 344
+		offsets.Sched_bp_off = 40
+		offsets.M_gsignal = 72
 		return offsets
 	} else if version.Compare(vers, "go1.24") >= 0 {
 		offsets.Labels = 352

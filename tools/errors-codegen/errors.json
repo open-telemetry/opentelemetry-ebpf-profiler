@@ -379,5 +379,20 @@
     "id": 7006,
     "name": "beam_range_search_exhausted",
     "description": "BEAM: Ran out of iterations searching for the current code header"
+  },
+  {
+    "id": 8000,
+    "name": "go_no_offsets",
+    "description": "Go: required runtime offsets or layout are missing or invalid"
+  },
+  {
+    "id": 8001,
+    "name": "go_asmcgocall_unwind_failure",
+    "description": "Go: asmcgocall unwind could not recover the caller frame"
+  },
+  {
+    "id": 8002,
+    "name": "go_runtime_load_failure",
+    "description": "Go: failed to read g and runtime.m prefix"
   }
 ]

@@ -283,7 +283,7 @@ static inline EBPF_INLINE PerCPURecord *get_pristine_per_cpu_record()
   record->ratelimitAction                   = RATELIMIT_ACTION_DEFAULT;
   record->usesAnonymousMappings             = false;
   record->customLabelsState.go_m_ptr        = NULL;
-  record->goOffsets.m_offset                = 0;
+  record->goOffsets                         = (GoRuntimeOffsets){};
 
   Trace *trace             = &record->trace;
   trace->frame_data_len    = 0;

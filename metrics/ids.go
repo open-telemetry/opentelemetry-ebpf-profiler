@@ -680,6 +680,15 @@ const (
 	// Number of times the current PC was found in a non-executable VMA
 	IDUnwindNativeErrNonExecutableVMA = 297
 
+	// Number of attempted Go asmcgocall stack-switch unwinds
+	IDUnwindGoAsmcgocallAttempts = 298
+
+	// Number of successful Go asmcgocall unwinds
+	IDUnwindGoAsmcgocallSuccess = 299
+
+	// Number of Go asmcgocall unwind failures
+	IDUnwindGoAsmcgocallUnwindFailure = 300
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 298
+	IDMax = 301
 )

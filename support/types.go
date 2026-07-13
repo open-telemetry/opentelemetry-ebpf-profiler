@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x6d
+	MetricIDBeginCumulative = 0x70
 )
 
 const (
@@ -196,12 +196,14 @@ type DotnetProcInfo struct {
 }
 type GoRuntimeOffsets struct {
 	M_offset               uint32
+	M_gsignal              uint32
 	Curg                   uint32
 	Labels                 uint32
 	Hmap_count             uint32
 	Hmap_log2_bucket_count uint32
 	Hmap_buckets           uint32
 	Tls_offset             int32
+	Sched_bp_off           uint32
 }
 type HotspotProcInfo struct {
 	Codecache_start        uint64
@@ -365,6 +367,7 @@ const (
 	UnwindCommandPLT          int32 = 0x2
 	UnwindCommandSignal       int32 = 0x3
 	UnwindCommandFramePointer int32 = 0x4
+	UnwindCommandGoAsmcgocall int32 = 0x5
 
 	UnwindDerefMask       int32 = 0x7
 	UnwindDerefMultiplier int32 = 0x8
@@ -503,4 +506,7 @@ var MetricsTranslation = []metrics.MetricID{
 	0x6a: metrics.IDUnwindNativeErrNoVMA,
 	0x6b: metrics.IDUnwindNativeErrUnsupportedAnonymousMapping,
 	0x6c: metrics.IDUnwindNativeErrNonExecutableVMA,
+	0x6d: metrics.IDUnwindGoAsmcgocallAttempts,
+	0x6e: metrics.IDUnwindGoAsmcgocallSuccess,
+	0x6f: metrics.IDUnwindGoAsmcgocallUnwindFailure,
 }

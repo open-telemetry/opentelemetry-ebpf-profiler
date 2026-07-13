@@ -231,7 +231,16 @@ typedef enum ErrorCode {
   ERR_BEAM_MODULES_READ_FAILURE = 7005,
 
   // BEAM: Ran out of iterations searching for the current code header
-  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006
+  ERR_BEAM_RANGE_SEARCH_EXHAUSTED = 7006,
+
+  // Go: required runtime offsets or layout are missing or invalid
+  ERR_GO_NO_OFFSETS = 8000,
+
+  // Go: asmcgocall unwind could not recover the caller frame
+  ERR_GO_ASMCGOCALL_UNWIND_FAILURE = 8001,
+
+  // Go: failed to read g and runtime.m prefix
+  ERR_GO_RUNTIME_LOAD_FAILURE = 8002
 } ErrorCode;
 
 #endif // OPTI_ERRORS_H
