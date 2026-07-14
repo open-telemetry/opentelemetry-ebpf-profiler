@@ -18,6 +18,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/orderedset"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 )
@@ -52,7 +53,7 @@ var (
 
 // testGenerate is a helper that calls Generate with the standard test collection window
 func testGenerate(p *Pdata, tree samples.TraceEventsTree, name, version string) (pprofile.Profiles, error) {
-	return p.Generate(tree, name, version, testCollectionStart, testCollectionEnd)
+	return p.Generate(tree, name, version, testCollectionStart, testCollectionEnd, nil, nil)
 }
 
 func TestGetDummyMappingIndex(t *testing.T) {

@@ -266,3 +266,15 @@ func (emc *ebpfMapsCoredump) SupportsGenericBatchLookupAndDelete() bool {
 func (emc *ebpfMapsCoredump) SupportsLPMTrieBatchOperations() bool {
 	return false
 }
+
+func (emc *ebpfMapsCoredump) SetHeapLivePID(_ libpf.PID, _ bool) {
+}
+
+func (emc *ebpfMapsCoredump) DeleteHeapAllocLiveEntries(_ libpf.PID, _ []uint64) {
+}
+
+func (emc *ebpfMapsCoredump) DeleteHeapPIDAllocCount(_ libpf.PID) {
+}
+
+func (emc *ebpfMapsCoredump) SetHeapPIDAllocLimit(_ uint32) {
+}

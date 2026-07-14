@@ -62,7 +62,7 @@ const (
 const UnwindInfoMaxEntries = 0x4000
 
 const (
-	MetricIDBeginCumulative = 0x75
+	MetricIDBeginCumulative = 0x77
 )
 
 const (
@@ -513,4 +513,6 @@ var MetricsTranslation = []metrics.MetricID{
 	0x72: metrics.IDUnwindGoAsmcgocallAttempts,
 	0x73: metrics.IDUnwindGoAsmcgocallSuccess,
 	0x74: metrics.IDUnwindGoAsmcgocallUnwindFailure,
+	0x75: metrics.IDHeapPerPIDLimitHit,
+	0x76: metrics.IDHeapLiveMapFull,
 }

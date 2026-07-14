@@ -18,12 +18,14 @@ import (
 func NewFactory() extension.Factory {
 	return extension.NewFactory(
 		metadata.Type,
-		func() component.Config { return &struct{}{} },
+		func() component.Config {
+			return &Config{LiveHeapMaxEntriesPerPID: defaultLiveHeapMaxEntriesPerPID}
+		},
 		createExtension,
 		metadata.ExtensionsStability,
 	)
 }
 
-func createExtension(_ context.Context, _ extension.Settings, _ component.Config) (extension.Extension, error) {
-	return &heapExtension{p: New(Config{})}, nil
+func createExtension(_ context.Context, _ extension.Settings, cfg component.Config) (extension.Extension, error) {
+	return &heapExtension{p: New(*cfg.(*Config))}, nil
 }
