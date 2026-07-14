@@ -376,6 +376,14 @@ func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) error {
 	return c.registerAttacher(a)
 }
 
+// Map returns a handle to one of the tracer's shared eBPF maps by name.
+// Probes use this to perform userspace reads/writes on maps that were loaded
+// as part of the main tracer collection, such as writing per-PID entries.
+func (c *ProbeContext) Map(name string) (*cebpf.Map, bool) {
+	m, ok := c.maps[name]
+	return m, ok
+}
+
 // ProbeRegistrar lets a Probe register one or more origin IDs during Load.
 // Each call to Register allocates a unique ID backed by the supplied metadata;
 type ProbeRegistrar interface {
