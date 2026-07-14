@@ -1357,33 +1357,43 @@ func (r *rubyInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 	// reservation. PROT_NONE gaps are safe to include because they cannot execute,
 	// and covering the full range avoids churn as Ruby mprotects new code pages.
 	jitStart, jitEnd, jitFound := findJITRegion(mappings)
-	if jitFound {
-		prefixes, err := lpm.CalculatePrefixList(jitStart, jitEnd)
-		if err != nil {
-			return fmt.Errorf("ruby jit region lpm failure %#x-%#x: %w", jitStart, jitEnd, err)
-		}
-
-		for _, prefix := range prefixes {
-			if _, exists := r.prefixes[prefix]; !exists {
-				if err := ebpf.UpdatePidInterpreterMapping(pid, prefix,
-					support.ProgUnwindRuby, 0, 0); err != nil {
-					return err
-				}
-			}
-			r.prefixes[prefix] = r.mappingGeneration
-		}
-	} else {
+	if !jitFound {
 		jitStart = 0
 		jitEnd = 0
 	}
 
+	var prefixes []lpm.Prefix
+	if jitFound {
+		var err error
+		prefixes, err = lpm.CalculatePrefixList(jitStart, jitEnd)
+		if err != nil {
+			return fmt.Errorf("ruby jit region lpm failure %#x-%#x: %w", jitStart, jitEnd, err)
+		}
+	}
+
+	// Publish the JIT range before publishing new interpreter prefixes. Once a
+	// prefix is visible to eBPF, samples in that range may enter the Ruby unwinder
+	// and need procInfo to already contain the matching range for JIT-frame checks.
 	if r.procInfo.Jit_start != jitStart || r.procInfo.Jit_end != jitEnd {
-		r.procInfo.Jit_start = jitStart
-		r.procInfo.Jit_end = jitEnd
-		if err := ebpf.UpdateProcData(libpf.Ruby, pr.PID(), unsafe.Pointer(r.procInfo)); err != nil {
+		updatedProcInfo := *r.procInfo
+		updatedProcInfo.Jit_start = jitStart
+		updatedProcInfo.Jit_end = jitEnd
+		if err := ebpf.UpdateProcData(libpf.Ruby, pid, unsafe.Pointer(&updatedProcInfo)); err != nil {
 			return err
 		}
+		r.procInfo.Jit_start = jitStart
+		r.procInfo.Jit_end = jitEnd
 		log.Debugf("Updated JIT region %#x-%#x in ruby proc info", jitStart, jitEnd)
+	}
+
+	for _, prefix := range prefixes {
+		if _, exists := r.prefixes[prefix]; !exists {
+			if err := ebpf.UpdatePidInterpreterMapping(pid, prefix,
+				support.ProgUnwindRuby, 0, 0); err != nil {
+				return err
+			}
+		}
+		r.prefixes[prefix] = r.mappingGeneration
 	}
 
 	// Remove prefixes not seen.

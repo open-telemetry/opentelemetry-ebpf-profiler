@@ -5,13 +5,53 @@ package ruby // import "go.opentelemetry.io/ebpf-profiler/interpreter/ruby"
 
 import (
 	"debug/elf"
+	"errors"
 	"testing"
+	"unsafe"
 
+	"go.opentelemetry.io/ebpf-profiler/host"
+	"go.opentelemetry.io/ebpf-profiler/interpreter"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/lpm"
 	"go.opentelemetry.io/ebpf-profiler/process"
+	"go.opentelemetry.io/ebpf-profiler/support"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+type rubyTestEbpfHandler struct {
+	interpreter.EbpfHandler
+	calls             []string
+	procDataUpdates   []support.RubyProcInfo
+	mappingUpdates    int
+	updateProcDataErr error
+}
+
+func (h *rubyTestEbpfHandler) UpdateProcData(_ libpf.InterpreterType, _ libpf.PID,
+	data unsafe.Pointer,
+) error {
+	h.calls = append(h.calls, "proc-data")
+	h.procDataUpdates = append(h.procDataUpdates, *(*support.RubyProcInfo)(data))
+	return h.updateProcDataErr
+}
+
+func (h *rubyTestEbpfHandler) UpdatePidInterpreterMapping(_ libpf.PID, _ lpm.Prefix,
+	_ uint8, _ host.FileID, _ uint64,
+) error {
+	h.calls = append(h.calls, "interpreter-mapping")
+	h.mappingUpdates++
+	return nil
+}
+
+type rubyTestProcess struct {
+	process.Process
+	pid libpf.PID
+}
+
+func (p *rubyTestProcess) PID() libpf.PID {
+	return p.pid
+}
 
 func TestRubyRegex(t *testing.T) {
 	tests := []struct {
@@ -391,19 +431,66 @@ func TestFindJITRegion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			start, end, found := findJITRegion(tt.mappings)
-			if found != tt.wantFound {
-				t.Errorf("found = %v, want %v", found, tt.wantFound)
+			if !assert.Equal(t, tt.wantFound, found) {
 				return
 			}
 			if !found {
 				return
 			}
-			if start != tt.wantStart {
-				t.Errorf("start = %#x, want %#x", start, tt.wantStart)
-			}
-			if end != tt.wantEnd {
-				t.Errorf("end = %#x, want %#x", end, tt.wantEnd)
-			}
+			assert.Equal(t, tt.wantStart, start)
+			assert.Equal(t, tt.wantEnd, end)
 		})
 	}
+}
+
+func TestSynchronizeMappingsPublishesJITRangeBeforePrefixes(t *testing.T) {
+	instance := &rubyInstance{
+		procInfo: &support.RubyProcInfo{},
+		prefixes: make(map[lpm.Prefix]uint32),
+	}
+	handler := &rubyTestEbpfHandler{}
+	pr := &rubyTestProcess{pid: 123}
+	mappings := []process.RawMapping{{
+		Vaddr:  0x100000,
+		Length: 0x10000,
+		Flags:  elf.PF_R | elf.PF_X,
+	}}
+
+	require.NoError(t, instance.SynchronizeMappings(handler, nil, pr, mappings))
+	require.NotEmpty(t, handler.calls)
+	assert.Equal(t, "proc-data", handler.calls[0])
+	assert.Greater(t, handler.mappingUpdates, 0)
+	require.Len(t, handler.procDataUpdates, 1)
+	assert.Equal(t, uint64(0x100000), handler.procDataUpdates[0].Jit_start)
+	assert.Equal(t, uint64(0x110000), handler.procDataUpdates[0].Jit_end)
+	assert.Equal(t, uint64(0x100000), instance.procInfo.Jit_start)
+	assert.Equal(t, uint64(0x110000), instance.procInfo.Jit_end)
+}
+
+func TestSynchronizeMappingsRetriesProcDataAfterUpdateFailure(t *testing.T) {
+	instance := &rubyInstance{
+		procInfo: &support.RubyProcInfo{},
+		prefixes: make(map[lpm.Prefix]uint32),
+	}
+	updateErr := errors.New("update proc data")
+	handler := &rubyTestEbpfHandler{updateProcDataErr: updateErr}
+	pr := &rubyTestProcess{pid: 123}
+	mappings := []process.RawMapping{{
+		Vaddr:  0x100000,
+		Length: 0x10000,
+		Flags:  elf.PF_R | elf.PF_X,
+	}}
+
+	require.ErrorIs(t, instance.SynchronizeMappings(handler, nil, pr, mappings), updateErr)
+	assert.Equal(t, []string{"proc-data"}, handler.calls)
+	assert.Zero(t, handler.mappingUpdates)
+	assert.Zero(t, instance.procInfo.Jit_start)
+	assert.Zero(t, instance.procInfo.Jit_end)
+
+	handler.calls = nil
+	handler.updateProcDataErr = nil
+	require.NoError(t, instance.SynchronizeMappings(handler, nil, pr, mappings))
+	require.NotEmpty(t, handler.calls)
+	assert.Equal(t, "proc-data", handler.calls[0])
+	assert.Greater(t, handler.mappingUpdates, 0)
 }
