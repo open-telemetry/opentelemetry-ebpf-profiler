@@ -46,6 +46,24 @@ func (b *baseReporter) Stop() {
 	b.runLoop.Stop()
 }
 
+func countHeapProfileEvents(tree samples.TraceEventsTree) (stacks, samplesCount int, valueSum int64) {
+	for _, resource := range tree {
+		for profileType, sampleEvents := range resource.Events {
+			if profileType.SampleType != "alloc_space" {
+				continue
+			}
+			for _, events := range sampleEvents {
+				stacks++
+				samplesCount += len(events.Timestamps)
+				for _, value := range events.Values {
+					valueSum += value
+				}
+			}
+		}
+	}
+	return stacks, samplesCount, valueSum
+}
+
 func (b *baseReporter) ReportTraceEvent(trace *libpf.Trace, meta *samples.TraceEventMeta) error {
 	if meta.ProfileType == nil {
 		return fmt.Errorf("skip reporting trace: %w", errUnknownProfileType)
