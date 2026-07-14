@@ -318,4 +318,6 @@ var MetricsTranslation = []metrics.MetricID{
 	C.metricID_UnwindGoAsmcgocallAttempts:                 metrics.IDUnwindGoAsmcgocallAttempts,
 	C.metricID_UnwindGoAsmcgocallSuccess:                  metrics.IDUnwindGoAsmcgocallSuccess,
 	C.metricID_UnwindGoAsmcgocallUnwindFailure:            metrics.IDUnwindGoAsmcgocallUnwindFailure,
+	C.metricID_HeapPerPIDLimitHit:                         metrics.IDHeapPerPIDLimitHit,
+	C.metricID_HeapLiveMapFull:                            metrics.IDHeapLiveMapFull,
 }
