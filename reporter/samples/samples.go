@@ -110,6 +110,31 @@ type ValueType struct {
 	Unit string
 }
 
+// SnapshotProfile is a set of snapshot samples produced by a probe's
+// SnapshotSource implementation at each collection interval. The reporter folds
+// them into the TraceEventsTree so they share the event-driven export path.
+type SnapshotProfile struct {
+	// ProfileType describes how the samples are exported. Snapshot profiles
+	// normally set OmitThreadContext, having no per-thread attribution.
+	ProfileType *TypeMetadata
+	Samples     []SnapshotSample
+}
+
+// SnapshotSample is a single sample row produced by a SnapshotSource probe.
+type SnapshotSample struct {
+	PID           libpf.PID
+	TraceHash     libpf.TraceHash
+	Frames        libpf.Frames
+	ContextValues []uint64
+}
+
+// ProcessMeta holds per-process metadata needed when building OTLP resource
+// attributes for profile export.
+type ProcessMeta struct {
+	ExecutablePath libpf.String
+	ContainerID    libpf.String
+}
+
 // TypeMetadata describes how profiling events of a particular kind should be
 // interpreted and exported as OTel profiles.
 type TypeMetadata struct {
@@ -129,8 +154,13 @@ type TypeMetadata struct {
 
 	// DeriveValues appends one reportable value per SampleTypes entry for a
 	// single event. Nil appends int64(meta.ContextValues[0]). The function must
-	// consume ContextValues synchronously because they alias a pooled trace.
+	// consume ContextValues synchronously because they may alias a pooled trace.
 	DeriveValues func(dst []int64, meta *TraceEventMeta) []int64
+
+	// OmitThreadContext suppresses the per-sample thread and CPU attributes.
+	// Interval snapshots aggregate across threads and have no meaningful TID
+	// or CPU, so emitting zeros for them would misattribute the samples.
+	OmitThreadContext bool
 }
 
 // AppendValues appends the reportable values for one event.
