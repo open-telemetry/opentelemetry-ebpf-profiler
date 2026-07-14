@@ -96,8 +96,6 @@ type ProcessManager struct {
 
 	// filterErrorFrames determines whether error frames are dropped by `ConvertTrace`.
 	filterErrorFrames bool
-
-	targetPids map[libpf.PID]bool
 }
 
 // Mapping represents an executable memory mapping of a process.

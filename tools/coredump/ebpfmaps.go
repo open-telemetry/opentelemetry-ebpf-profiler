@@ -258,6 +258,6 @@ func (emc *ebpfMapsCoredump) SupportsLPMTrieBatchOperations() bool {
 	return false
 }
 
-func (emc *ebpfMapsCoredump) ConfigureTargetPIDs(pids []libpf.PID) error {
+func (emc *ebpfMapsCoredump) ConfigureTargetPIDs(pids map[libpf.PID]bool) error {
 	return nil
 }

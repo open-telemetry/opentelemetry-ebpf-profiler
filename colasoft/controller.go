@@ -2,8 +2,9 @@ package colasoft
 
 import (
 	"context"
-	"github.com/toliu/opentelemetry-ebpf-profiler/libpf"
 	"time"
+
+	"github.com/toliu/opentelemetry-ebpf-profiler/libpf"
 
 	"github.com/toliu/opentelemetry-ebpf-profiler/internal/controller"
 	"github.com/toliu/opentelemetry-ebpf-profiler/reporter"
@@ -40,7 +41,8 @@ func (c *Collector) Start(ctx context.Context, cfg StartCfg) error {
 		c.Stop()
 	}
 
-	rpt, err := reporter.NewColaSoft(cfg.Freq, cfg.Interval, c.sr, c.sr.ConsumeProfilesFunc, noFrameOpSymbolReporter{c.sr}, cfg.CacheEventSTolerance, cfg.CacheEventSTimeout)
+	rpt, err := reporter.NewColaSoft(cfg.Freq, cfg.Interval, c.sr, c.sr.ConsumeProfilesFunc,
+		noFrameOpSymbolReporter{c.sr}, cfg.CacheEventSTolerance, cfg.CacheEventSTimeout)
 	if err != nil {
 		return err
 	}
@@ -52,8 +54,8 @@ func (c *Collector) Start(ctx context.Context, cfg StartCfg) error {
 		ReporterInterval:       cfg.Interval, SamplesPerSecond: cfg.Freq, Reporter: rpt,
 		Tracers:         "perl,php,python,hotspot,ruby,v8",
 		OffCPUThreshold: uint(cfg.OffCpuThreshold),
-		TargetPIDs:      cfg.TargetPids,
-		MemTargetPIDs:   cfg.MemTargetPIDs,
+		TargetPIDs:      libpf.NewMutablePIDFilter(cfg.TargetPids),
+		MemTargetPIDs:   libpf.NewMutablePIDFilter(cfg.MemTargetPIDs),
 		MemProfileBlock: cfg.MemProfileBlock,
 	}
 	ctrl := controller.New(controllerCfg)
@@ -73,15 +75,6 @@ func (c *Collector) Stop() {
 		c.reporter = nil
 		c.cfg = nil
 	}
-}
-
-func (c *Collector) SyncTargetPIDs(targetPIds map[libpf.PID]bool) error {
-	return c.ctrl.SyncTargetPIDs(targetPIds)
-}
-
-func (c *Collector) SyncMemTargetPIDs(targetPIds map[libpf.PID]bool) error {
-	c.ctrl.SyncMemTargetPIDs(targetPIds)
-	return nil
 }
 
 func (c *Collector) SyncMemProfileBlock(memProfileBlock uint64) error {

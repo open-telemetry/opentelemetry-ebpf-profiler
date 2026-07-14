@@ -283,37 +283,29 @@ func (t *Tracer) monitorMemProfilePids(keys *[]uint32) {
 	if t.memProfileBlock.Load() == 0 {
 		return
 	}
-	var memProfileTargetPids []libpf.PID
-	t.memProfileTargetPids.Range(func(k, v interface{}) bool {
-		pid := k.(libpf.PID)
-		if pid == 0 {
-			return true
-		}
-		if add, ok := v.(bool); ok {
-			if !add {
-				t.detachMemProfile(pid)
-				t.memProfileTargetPids.Delete(k)
-			} else {
-				memProfileTargetPids = append(memProfileTargetPids, pid)
-				if t.hasMemProfileHooks(pid) {
-					return true
-				}
-				*keys = append(*keys, pid.Hash32())
-				if err := t.triggerMemProfile(process.New(pid)); err != nil {
-					log.Debugf("failed to trigger memprofile for process %v: %v", k, err)
-				}
-			}
-		}
-		return true
-	})
-	log.Debugf("apply mem profiling target pids: %v", memProfileTargetPids)
-}
 
-func (t *Tracer) SyncMemProfileTargetPids(targetPids map[libpf.PID]bool) {
-	t.memProfileTargetPids.Clear()
-	for pid, add := range targetPids {
-		t.memProfileTargetPids.Store(pid, add)
+	pids := t.memProfileTargetPids.RLock()
+	defer t.memProfileTargetPids.RUnlock(&pids)
+
+	var memProfileTargetPids []libpf.PID
+	for pid, add := range *pids {
+		if pid == 0 {
+			continue
+		}
+		if add {
+			memProfileTargetPids = append(memProfileTargetPids, pid)
+			if t.hasMemProfileHooks(pid) {
+				continue
+			}
+			*keys = append(*keys, pid.Hash32())
+			if err := t.triggerMemProfile(process.New(pid)); err != nil {
+				log.Debugf("failed to trigger memprofile for process %v: %v", pid, err)
+			}
+		} else {
+			t.detachMemProfile(pid)
+		}
 	}
+	log.Debugf("apply mem profiling target pids: %v", memProfileTargetPids)
 }
 
 func (t *Tracer) SyncMemProfileBlock(block uint64) error {

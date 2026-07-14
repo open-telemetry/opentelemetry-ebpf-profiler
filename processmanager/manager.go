@@ -66,7 +66,7 @@ var (
 // implementation.
 func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInterval time.Duration,
 	ebpf pmebpf.EbpfHandler, fileIDMapper FileIDMapper, symbolReporter reporter.SymbolReporter,
-	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool, targetPids map[libpf.PID]bool) (*ProcessManager, error) {
+	sdp nativeunwind.StackDeltaProvider, filterErrorFrames bool, targetPIDs libpf.PIDFilter) (*ProcessManager, error) {
 	if fileIDMapper == nil {
 		var err error
 		fileIDMapper, err = newFileIDMapper(lruFileIDCacheSize)
@@ -101,7 +101,14 @@ func New(ctx context.Context, includeTracers types.IncludedTracers, monitorInter
 		reporter:                 symbolReporter,
 		metricsAddSlice:          metrics.AddSlice,
 		filterErrorFrames:        filterErrorFrames,
-		targetPids:               targetPids,
+	}
+
+	if targetPIDs != nil {
+		libpf.ApplyFilterOnChange(targetPIDs, func(pids map[libpf.PID]bool) {
+			if err := ebpf.ConfigureTargetPIDs(pids); err != nil {
+				log.Warnf("Failed to configure target PIDs: %v", err)
+			}
+		})
 	}
 
 	collectInterpreterMetrics(ctx, pm, monitorInterval)
@@ -321,17 +328,6 @@ func (pm *ProcessManager) MaybeNotifyAPMAgent(
 	}
 
 	return serviceName
-}
-
-func (pm *ProcessManager) ConfigureTargetPids() error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-	return pm.ebpf.ConfigureTargetPIDs(pm.targetPids)
-}
-
-func (pm *ProcessManager) SyncTargetPids(targetPids map[libpf.PID]bool) error {
-	pm.targetPids = targetPids
-	return pm.ConfigureTargetPids()
 }
 
 // AddSynthIntervalData adds synthetic stack deltas to the manager. This is useful for cases where

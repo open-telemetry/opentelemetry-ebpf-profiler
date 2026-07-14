@@ -87,6 +87,7 @@ func (c *Controller) Start(ctx context.Context) error {
 		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
 		OffCPUThreshold:        uint32(c.config.OffCPUThreshold),
 		TargetPIDs:             c.config.TargetPIDs,
+		MemTargetPIDs:          c.config.MemTargetPIDs,
 		MemProfileBlock:        c.config.MemProfileBlock,
 	})
 	if err != nil {
@@ -119,7 +120,6 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 
 	if c.config.MemProfileBlock > 0 {
-		trc.SyncMemProfileTargetPids(c.config.MemTargetPIDs)
 		_ = trc.SyncMemProfileBlock(c.config.MemProfileBlock)
 	}
 
@@ -163,11 +163,12 @@ func (c *Controller) Shutdown() {
 }
 
 func (c *Controller) SyncTargetPIDs(targetPids map[libpf.PID]bool) error {
-	return c.tracer.SyncTargetPIDs(targetPids)
+	c.config.TargetPIDs.Update(targetPids)
+	return nil
 }
 
 func (c *Controller) SyncMemTargetPIDs(targetPids map[libpf.PID]bool) {
-	c.tracer.SyncMemProfileTargetPids(targetPids)
+	c.config.MemTargetPIDs.Update(targetPids)
 }
 
 func (c *Controller) SyncMemProfileBlock(memProfileBlock uint64) error {

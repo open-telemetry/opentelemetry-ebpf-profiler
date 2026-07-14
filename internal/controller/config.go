@@ -4,11 +4,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/toliu/opentelemetry-ebpf-profiler/libpf"
 	"runtime"
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/toliu/opentelemetry-ebpf-profiler/libpf"
 
 	"github.com/toliu/opentelemetry-ebpf-profiler/reporter"
 	"github.com/toliu/opentelemetry-ebpf-profiler/support"
@@ -43,8 +43,8 @@ type Config struct {
 
 	Fs *flag.FlagSet
 
-	TargetPIDs      map[libpf.PID]bool
-	MemTargetPIDs   map[libpf.PID]bool
+	TargetPIDs      libpf.MutablePIDFilter
+	MemTargetPIDs   libpf.MutablePIDFilter
 	MemProfileBlock uint64
 }
 

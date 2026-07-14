@@ -5,7 +5,6 @@ package reporter // import "github.com/toliu/opentelemetry-ebpf-profiler/reporte
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	lru "github.com/elastic/go-freelru"
@@ -49,8 +48,6 @@ type baseReporter struct {
 
 	// memAddr-hash
 	addrHashMap map[int64]libpf.TraceHash
-
-	targetPids sync.Map
 }
 
 func (b *baseReporter) Stop() {
@@ -266,16 +263,4 @@ func (b *baseReporter) FrameMetadata(args *FrameMetadataArgs) {
 	}
 	mu := xsync.NewRWMutex(v)
 	b.pdata.Frames.Add(fileID, &mu)
-}
-
-func (b *baseReporter) SyncTargetPids(targetPids map[libpf.PID]struct{}) {
-	b.targetPids.Range(func(k, v interface{}) bool {
-		if _, ok := targetPids[k.(libpf.PID)]; !ok {
-			b.targetPids.Delete(k)
-		}
-		return true
-	})
-	for pid, v := range targetPids {
-		b.targetPids.Store(pid, v)
-	}
 }
