@@ -18,9 +18,14 @@ type TraceEventMeta struct {
 	CPU            uint32
 	ProfileType    *TypeMetadata
 	Value          int64
-	PID, TID       libpf.PID
-	SpanID         libpf.APMSpanID
-	TraceID        libpf.APMTraceID
+	// AllocSize is the raw, un-weighted allocation size in bytes for
+	// TraceOriginHeapAlloc events (see libpf.EbpfTrace.Size); combined with
+	// Value (the byte-weighted estimator) it lets consumers derive an
+	// unbiased object-count estimate. Zero/unused for all other origins.
+	AllocSize int64
+	PID, TID  libpf.PID
+	SpanID    libpf.APMSpanID
+	TraceID   libpf.APMTraceID
 }
 
 // TraceEvents holds known information about a trace.
@@ -29,6 +34,9 @@ type TraceEvents struct {
 	Frames     libpf.Frames
 	Timestamps []uint64 // in nanoseconds
 	Values     []int64
+	// AllocSizes holds the per-event TraceEventMeta.AllocSize, index-aligned
+	// with Values. Only populated for TraceOriginHeapAlloc.
+	AllocSizes []int64
 }
 
 // TraceEventsTree stores samples and their related metadata in a tree-like
