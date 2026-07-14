@@ -12,7 +12,6 @@ import (
 	"time"
 
 	cebpf "github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/link"
 
 	"go.opentelemetry.io/ebpf-profiler/internal/log"
 	"go.opentelemetry.io/ebpf-profiler/libpf"
@@ -71,7 +70,7 @@ func New(cfg Config) *Probe {
 
 // Load implements tracer.Probe. It loads the heap eBPF programs and creates
 // the USDT manager for per-PID attachment.
-func (hp *Probe) Load(ctx context.Context, reg tracer.ProbeRegistrar, pctx *tracer.ProbeContext) (link.Link, error) {
+func (hp *Probe) Load(ctx context.Context, reg tracer.ProbeRegistrar, pctx *tracer.ProbeContext) error {
 	hp.ctx = ctx
 
 	// Register origin IDs. The eBPF programs read these from RODATA.
@@ -82,14 +81,14 @@ func (hp *Probe) Load(ctx context.Context, reg tracer.ProbeRegistrar, pctx *trac
 		ReportValues: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("registering heap alloc origin: %w", err)
+		return fmt.Errorf("registering heap alloc origin: %w", err)
 	}
 	hp.originFree, err = reg.Register(&samples.TypeMetadata{
 		SampleType: "heap_free",
 		SampleUnit: "count",
 	})
 	if err != nil {
-		return nil, fmt.Errorf("registering heap free origin: %w", err)
+		return fmt.Errorf("registering heap free origin: %w", err)
 	}
 
 	// Determine which programs to load.
@@ -105,23 +104,23 @@ func (hp *Probe) Load(ctx context.Context, reg tracer.ProbeRegistrar, pctx *trac
 		[]string{"origin_id_heap_alloc", "origin_id_heap_free"},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("building collection spec: %w", err)
+		return fmt.Errorf("building collection spec: %w", err)
 	}
 
 	// Set origin IDs in RODATA so the eBPF programs emit the correct values.
 	if v, ok := coll.Variables["origin_id_heap_alloc"]; ok {
 		if err := v.Set(hp.originAlloc); err != nil {
-			return nil, fmt.Errorf("setting origin_id_heap_alloc: %w", err)
+			return fmt.Errorf("setting origin_id_heap_alloc: %w", err)
 		}
 	}
 	if v, ok := coll.Variables["origin_id_heap_free"]; ok {
 		if err := v.Set(hp.originFree); err != nil {
-			return nil, fmt.Errorf("setting origin_id_heap_free: %w", err)
+			return fmt.Errorf("setting origin_id_heap_free: %w", err)
 		}
 	}
 
 	if err := pctx.RewriteMaps(coll, nil); err != nil {
-		return nil, fmt.Errorf("rewriting maps: %w", err)
+		return fmt.Errorf("rewriting maps: %w", err)
 	}
 
 	ebpfProgs := make(map[string]*cebpf.Program)
@@ -134,7 +133,7 @@ func (hp *Probe) Load(ctx context.Context, reg tracer.ProbeRegistrar, pctx *trac
 		})
 	}
 	if err := pctx.LoadProbeUnwinders(coll, ebpfProgs, progs, 0); err != nil {
-		return nil, fmt.Errorf("loading heap eBPF programs: %w", err)
+		return fmt.Errorf("loading heap eBPF programs: %w", err)
 	}
 
 	// Build USDT manager from loaded programs.
@@ -147,7 +146,7 @@ func (hp *Probe) Load(ctx context.Context, reg tracer.ProbeRegistrar, pctx *trac
 	}
 	hp.manager, err = usdt.NewManager(usdtProgs)
 	if err != nil {
-		return nil, fmt.Errorf("creating USDT manager: %w", err)
+		return fmt.Errorf("creating USDT manager: %w", err)
 	}
 
 	// Grab map handle for userspace operations.
@@ -159,8 +158,8 @@ func (hp *Probe) Load(ctx context.Context, reg tracer.ProbeRegistrar, pctx *trac
 	go hp.reconcileLoop(ctx)
 
 	// Register for per-process callbacks via ProbeAttacher.
-	pctx.RegisterProbeAttacher(hp)
-	return nil, nil
+	pctx.AddAttacher(hp)
+	return nil
 }
 
 // Match implements processmanager.ProbeAttacher. The heap probe matches all
@@ -225,6 +224,18 @@ func (hp *Probe) close() {
 	if hp.manager != nil {
 		hp.manager.Close()
 	}
+}
+
+// PreOrigins implements tracer.PreTraceHandler.
+func (h *Probe) PreOrigins() []uint16 {
+	return []uint16{h.originFree}
+}
+
+// PreHandleTrace implements tracer.PreTraceHandler. It consumes heap free
+// events (which need no symbolization or reporting) and lets everything else
+// through.
+func (h *Probe) PreHandleTrace(trace *libpf.EbpfTrace) bool {
+	return false // consumed: origin-gated dispatch ensures only free events arrive here
 }
 
 // reconcileLoop periodically re-scans PIDs that have no attachments yet.
