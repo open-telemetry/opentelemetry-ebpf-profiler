@@ -480,7 +480,7 @@ func initializeMapsAndPrograms(kmod *kallsyms.Module, cfg *Config) (
 		{
 			progID: uint32(support.ProgUnwindLuaJIT),
 			name:   "unwind_luajit",
-			enable: cfg.IncludeTracers.Has(types.LuaJITTracer),
+			enable: !cfg.InterpretersConfig.LuaJIT.IsDisabled(),
 		},
 	}
 

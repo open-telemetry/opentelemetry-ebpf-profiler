@@ -73,6 +73,10 @@ type testEbpfHandler struct {
 	}
 }
 
+func (h *testEbpfHandler) CoredumpTest() bool {
+	return false
+}
+
 func (h *testEbpfHandler) UpdateInterpreterOffsets(uint16, host.FileID, []util.Range) error {
 	return nil
 }

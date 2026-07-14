@@ -129,8 +129,8 @@ func NewExecutableInfoManager(
 		loaders = append(loaders, beam.GetLoader(interpretersConfig.BEAM))
 	}
 
-	if includeTracers.Has(types.LuaJITTracer) {
-		interpreterLoaders = append(interpreterLoaders, luajit.Loader)
+	if !interpretersConfig.LuaJIT.IsDisabled() {
+		loaders = append(loaders, luajit.GetLoader(interpretersConfig.LuaJIT))
 	}
 	loaders = append(loaders, apmint.Loader)
 

@@ -126,7 +126,11 @@ func (l *luajitInstance) Detach(ebpf interpreter.EbpfHandler, pid libpf.PID) err
 	return ebpf.DeleteProcData(libpf.LuaJIT, pid)
 }
 
-func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
+func GetLoader(_ Config) interpreter.Loader {
+	return loader
+}
+
+func loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpreter.Data, error) {
 	base := path.Base(info.FileName())
 	if !strings.HasPrefix(base, "libluajit-5.1.so") &&
 		!strings.HasPrefix(base, "luajit") &&
