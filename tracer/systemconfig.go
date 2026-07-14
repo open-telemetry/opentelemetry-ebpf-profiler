@@ -728,6 +728,5 @@ func setOriginIDs(coll *cebpf.CollectionSpec, cfg *Config, origins *originRegist
 		}
 	}
 
-
 	return nil
 }

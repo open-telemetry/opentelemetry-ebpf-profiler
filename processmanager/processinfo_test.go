@@ -143,12 +143,24 @@ func (h *testEbpfHandler) SupportsLPMTrieBatchOperations() bool {
 	return false
 }
 
+func (h *testEbpfHandler) DeleteHeapAllocLiveEntries(libpf.PID, []uint64) {}
+
+func (h *testEbpfHandler) DeleteHeapPIDAllocCount(libpf.PID) {}
+
+func (h *testEbpfHandler) SetHeapLivePID(libpf.PID, bool) {}
+
+func (h *testEbpfHandler) SetHeapPIDAllocLimit(uint32) {}
+
 type testProcess struct {
 	pid      libpf.PID
 	mappings []process.RawMapping
 }
 
 func (tp *testProcess) PID() libpf.PID {
+	return tp.pid
+}
+
+func (tp *testProcess) TID() libpf.PID {
 	return tp.pid
 }
 

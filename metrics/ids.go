@@ -698,6 +698,15 @@ const (
 	// Number of PIDs that failed to be added to heap_live_pids (map full)
 	IDHeapLivePIDMapFull = 303
 
+	// Current number of live heap entries tracked globally
+	IDLiveHeapEntries = 304
+
+	// Number of heap malloc samples received per reporting interval
+	IDHeapAllocSamples = 305
+
+	// Number of heap free samples received per reporting interval
+	IDHeapFreeSamples = 306
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 303
+	IDMax = 307
 )

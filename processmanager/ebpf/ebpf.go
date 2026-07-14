@@ -53,6 +53,10 @@ type ebpfMapsImpl struct {
 	LuaJitProcs        *cebpf.Map `name:"luajit_procs"`
 	ApmIntProcs        *cebpf.Map `name:"apm_int_procs"`
 	GoProcs            *cebpf.Map `name:"go_procs"`
+	HeapAllocLive      *cebpf.Map `name:"heap_alloc_live"`
+	HeapLivePids       *cebpf.Map `name:"heap_live_pids"`
+	HeapPIDAllocCount  *cebpf.Map `name:"heap_pid_alloc_count"`
+	HeapPIDAllocLimit  *cebpf.Map `name:"heap_pid_alloc_limit"`
 
 	// Stackdelta and process related eBPF maps
 	ExeIDToStackDeltaMaps []*cebpf.Map
@@ -427,6 +431,58 @@ func (impl *ebpfMapsImpl) getOuterMap(mapID uint16) *cebpf.Map {
 func (impl *ebpfMapsImpl) RemoveReportedPID(pid libpf.PID) {
 	key := uint32(pid)
 	_ = impl.ReportedPIDs.Delete(unsafe.Pointer(&key))
+}
+
+// SetHeapLivePID adds or removes a PID from the heap_live_pids eBPF map.
+// When present, uprobe_heap_alloc will record allocations for this PID
+// in heap_alloc_live for free correlation.
+func (impl *ebpfMapsImpl) SetHeapLivePID(pid libpf.PID, enabled bool) {
+	if impl.HeapLivePids == nil {
+		return
+	}
+	key := uint32(pid)
+	if enabled {
+		val := uint8(1)
+		_ = impl.HeapLivePids.Put(unsafe.Pointer(&key), unsafe.Pointer(&val))
+	} else {
+		_ = impl.HeapLivePids.Delete(unsafe.Pointer(&key))
+	}
+}
+
+// DeleteHeapAllocLiveEntries removes entries from the heap_alloc_live map for
+// the given PID and pointers. Best-effort: errors are silently ignored.
+func (impl *ebpfMapsImpl) DeleteHeapAllocLiveEntries(pid libpf.PID, ptrs []uint64) {
+	if impl.HeapAllocLive == nil {
+		return
+	}
+	type heapAllocKey struct {
+		Pid uint32
+		Pad uint32
+		Ptr uint64
+	}
+	for _, ptr := range ptrs {
+		key := heapAllocKey{Pid: uint32(pid), Ptr: ptr}
+		_ = impl.HeapAllocLive.Delete(unsafe.Pointer(&key))
+	}
+}
+
+// DeleteHeapPIDAllocCount removes the per-PID alloc count entry for the given PID.
+// Called on process exit to reclaim the map slot.
+func (impl *ebpfMapsImpl) DeleteHeapPIDAllocCount(pid libpf.PID) {
+	if impl.HeapPIDAllocCount == nil {
+		return
+	}
+	key := uint32(pid)
+	_ = impl.HeapPIDAllocCount.Delete(unsafe.Pointer(&key))
+}
+
+// SetHeapPIDAllocLimit writes the per-PID allocation limit to the eBPF array map.
+func (impl *ebpfMapsImpl) SetHeapPIDAllocLimit(limit uint32) {
+	if impl.HeapPIDAllocLimit == nil {
+		return
+	}
+	key := uint32(0)
+	_ = impl.HeapPIDAllocLimit.Update(unsafe.Pointer(&key), unsafe.Pointer(&limit), cebpf.UpdateAny)
 }
 
 // UpdateUnwindInfo writes UnwindInfo into the unwind info array at the given index

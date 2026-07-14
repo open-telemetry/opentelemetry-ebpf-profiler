@@ -114,6 +114,7 @@ func mainWithExitCode() exitCode {
 
 	metrics.Start(noop.Meter{})
 
+
 	rep, err := reporter.NewOTLP(&reporter.Config{
 		Name:                   os.Args[0],
 		Version:                version,
@@ -127,6 +128,7 @@ func mainWithExitCode() exitCode {
 		ReportInterval:         intervals.ReportInterval(),
 		ReportJitter:           cfg.ReporterJitter,
 		SamplesPerSecond:       cfg.SamplesPerSecond,
+
 	})
 	if err != nil {
 		log.Error(err)

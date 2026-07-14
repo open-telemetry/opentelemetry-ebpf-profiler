@@ -2216,5 +2216,26 @@
     "name": "HeapLivePIDMapFull",
     "field": "heap.live_pid_map_full",
     "id": 303
+  },
+  {
+    "description": "Current number of live heap entries tracked globally",
+    "type": "gauge",
+    "name": "LiveHeapEntries",
+    "field": "agent.liveheap.entries",
+    "id": 304
+  },
+  {
+    "description": "Number of heap malloc samples received per reporting interval",
+    "type": "counter",
+    "name": "HeapAllocSamples",
+    "field": "agent.heap.alloc_samples",
+    "id": 305
+  },
+  {
+    "description": "Number of heap free samples received per reporting interval",
+    "type": "counter",
+    "name": "HeapFreeSamples",
+    "field": "agent.heap.free_samples",
+    "id": 306
   }
 ]

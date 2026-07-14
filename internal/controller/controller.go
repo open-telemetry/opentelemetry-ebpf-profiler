@@ -18,6 +18,8 @@ import (
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
 	"go.opentelemetry.io/ebpf-profiler/metrics"
+	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
+
 	"go.opentelemetry.io/ebpf-profiler/reporter"
 	"go.opentelemetry.io/ebpf-profiler/times"
 	"go.opentelemetry.io/ebpf-profiler/tracer"
@@ -88,26 +90,29 @@ func (c *Controller) Start(ctx context.Context) error {
 		}
 	}
 
+	// Use the pre-created live heap tracker if provided, otherwise create one.
+
 	// Load the eBPF code and map definitions
 	trc, err := tracer.NewTracer(ctx, &tracer.Config{
-		TraceReporter:           c.reporter,
-		Intervals:               intervals,
-		InterpretersConfig:      c.config.Interpreters,
-		FilterErrorFrames:       !c.config.SendErrorFrames,
-		FilterIdleFrames:        !c.config.SendIdleFrames,
-		FilterMinProcessAge:     c.config.FilterMinProcessAge,
-		SamplesPerSecond:        c.config.SamplesPerSecond,
-		MapScaleFactor:          int(c.config.MapScaleFactor),
-		FrameCacheSize:          uint32(c.config.FrameCacheSize),
-		KernelVersionCheck:      !c.config.NoKernelVersionCheck,
-		VerboseMode:             c.config.VerboseMode,
-		BPFVerifierLogLevel:     uint32(c.config.BPFVerifierLogLevel),
-		ProbabilisticInterval:   c.config.ProbabilisticInterval,
-		ProbabilisticThreshold:  c.config.ProbabilisticThreshold,
-		OffCPUThreshold:         uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
-		IncludeEnvVars:          envVars,
-		ProbeLinks:              c.config.ProbeLinks,
-		LoadProbe:               c.config.LoadProbe || len(c.config.Probes) > 0,
+		TraceReporter:          c.reporter,
+		Intervals:              intervals,
+		InterpretersConfig:     c.config.Interpreters,
+		FilterErrorFrames:      !c.config.SendErrorFrames,
+		FilterIdleFrames:       !c.config.SendIdleFrames,
+		FilterMinProcessAge:    c.config.FilterMinProcessAge,
+		SamplesPerSecond:       c.config.SamplesPerSecond,
+		MapScaleFactor:         int(c.config.MapScaleFactor),
+		FrameCacheSize:         uint32(c.config.FrameCacheSize),
+		KernelVersionCheck:     !c.config.NoKernelVersionCheck,
+		VerboseMode:            c.config.VerboseMode,
+		BPFVerifierLogLevel:    uint32(c.config.BPFVerifierLogLevel),
+		ProbabilisticInterval:  c.config.ProbabilisticInterval,
+		ProbabilisticThreshold: c.config.ProbabilisticThreshold,
+		OffCPUThreshold:        uint32(c.config.OffCPUThreshold * float64(math.MaxUint32)),
+		IncludeEnvVars:         envVars,
+		ProbeLinks:             c.config.ProbeLinks,
+		LoadProbe:              c.config.LoadProbe || len(c.config.Probes) > 0,
+
 		ExecutableReporter:      c.config.ExecutableReporter,
 		BPFFSRoot:               c.config.BPFFSRoot,
 		OBIProcessCtx:           c.config.OBIProcessCtx,
@@ -118,6 +123,24 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 	c.tracer = trc
 	log.Info("eBPF tracer loaded")
+
+	// Wire probe sample sources and process metadata into the reporter.
+	if setter, ok := c.reporter.(interface {
+		SetSampleSources(func() []samples.SourceProfile)
+	}); ok {
+		setter.SetSampleSources(trc.CollectSampleSources)
+	}
+	if setter, ok := c.reporter.(interface {
+		SetProcessMetaForPID(func(libpf.PID) samples.ProcessMeta)
+	}); ok {
+		setter.SetProcessMetaForPID(func(pid libpf.PID) samples.ProcessMeta {
+			meta := trc.ProcessManager().MetaForPID(pid)
+			return samples.ProcessMeta{
+				ExecutablePath: meta.Executable,
+				ContainerID:    meta.ContainerID,
+			}
+		})
+	}
 
 	now := time.Now()
 
@@ -177,7 +200,10 @@ func (c *Controller) Start(ctx context.Context) error {
 func (c *Controller) enableProbes(ctx context.Context, trc *tracer.Tracer) error {
 	// Enable heap profiling probe if configured via the dedicated flag.
 	if c.config.HeapProfiling {
-		p := heap.New(heap.Config{})
+		p := heap.New(heap.Config{
+			LiveHeapProfiling:        c.config.LiveHeapProfiling,
+			LiveHeapMaxEntriesPerPID: c.config.LiveHeapMaxEntriesPerPID,
+		})
 		if err := trc.Enable(ctx, p); err != nil {
 			return fmt.Errorf("heap probe: %w", err)
 		}

@@ -93,6 +93,9 @@ var (
 	heapProfilingHelper = "Enable heap profiling via USDT uprobes. The profiler will " +
 		"scan target processes for `.note.stapsdt` entries from the heap-sampler " +
 		"provider and attach PID-scoped uprobes."
+	liveHeapProfilingHelper = "Additionally track deallocations to report the live " +
+		"(in-use) heap by attaching the heap-sampler free probe. " +
+		"Requires -heap-profiling."
 	bpffsHelp = fmt.Sprintf("Set the root BPF FS path for pinned maps. Only used for OBI span/trace ID communication. Default is %s",
 		defaultBPFFSRoot)
 	obiProcessCtxHelp = "Load or create a pinned eBPF map for sharing process context information with OBI."
@@ -189,6 +192,12 @@ func parseArgs() (*controller.Config, error) {
 	fs.BoolVar(&args.LoadProbe, "load-probe", false, loadProbeHelper)
 
 	fs.BoolVar(&args.HeapProfiling, "heap-profiling", false, heapProfilingHelper)
+
+	fs.BoolVar(&args.LiveHeapProfiling, "live-heap-profiling", false, liveHeapProfilingHelper)
+
+	fs.IntVar(&args.LiveHeapMaxEntriesPerPID, "live-heap-max-entries-per-pid",
+		10000, "Maximum number of live heap entries tracked per process. "+
+			"Allocations beyond this limit are not tracked for inuse profiling.")
 
 	fs.Usage = func() {
 		fs.PrintDefaults()

@@ -53,40 +53,43 @@ type Probe struct {
 
 // Config is the configuration for the collector.
 type Config struct {
-	ReporterInterval        time.Duration            `mapstructure:"reporter_interval"`
-	ReporterJitter          float64                  `mapstructure:"reporter_jitter"`
-	MonitorInterval         time.Duration            `mapstructure:"monitor_interval"`
-	SamplesPerSecond        int                      `mapstructure:"samples_per_second"`
-	FrameCacheSize          uint                     `mapstructure:"frame_cache_size"`
-	ProbabilisticInterval   time.Duration            `mapstructure:"probabilistic_interval"`
-	ProbabilisticThreshold  uint                     `mapstructure:"probabilistic_threshold"`
-	Interpreters            interpreterconfig.Config `mapstructure:"interpreters"`
-	ClockSyncInterval       time.Duration            `mapstructure:"clock_sync_interval"`
-	SendErrorFrames         bool                     `mapstructure:"send_error_frames"`
-	SendIdleFrames          bool                     `mapstructure:"send_idle_frames"`
-	FilterMinProcessAge     time.Duration            `mapstructure:"filter_min_process_age"`
-	VerboseMode             bool                     `mapstructure:"verbose_mode"`
-	OffCPUThreshold         float64                  `mapstructure:"off_cpu_threshold"`
-	IncludeEnvVars          string                   `mapstructure:"include_env_vars"`
-	ProbeLinks              []string                 `mapstructure:"probe_links"`
-	LoadProbe               bool                     `mapstructure:"load_probe"`
-	HeapProfiling           bool                     `mapstructure:"heap_profiling"`
-	MapScaleFactor          uint                     `mapstructure:"map_scale_factor"`
-	BPFVerifierLogLevel     uint                     `mapstructure:"bpf_verifier_log_level"`
-	NoKernelVersionCheck    bool                     `mapstructure:"no_kernel_version_check"`
-	MaxGRPCRetries          uint32                   `mapstructure:"max_grpc_retries"`
-	MaxRPCMsgSize           int                      `mapstructure:"max_rpc_msg_size"`
-	BPFFSRoot               string                   `mapstructure:"bpf_fs_root"`
-	ErrorMode               ErrorMode                `mapstructure:"error_mode"`
-	OBIProcessCtx           bool                     `mapstructure:"obi_process_ctx"`
-	PIDNamespaceTranslation bool                     `mapstructure:"pid_namespace_translation"`
-	TargetCPUIDs            string                   `mapstructure:"pin_cpu_ids"`
-	Probes                  []Probe                  `mapstructure:"probes"`
+	ReporterInterval         time.Duration            `mapstructure:"reporter_interval"`
+	ReporterJitter           float64                  `mapstructure:"reporter_jitter"`
+	MonitorInterval          time.Duration            `mapstructure:"monitor_interval"`
+	SamplesPerSecond         int                      `mapstructure:"samples_per_second"`
+	FrameCacheSize           uint                     `mapstructure:"frame_cache_size"`
+	ProbabilisticInterval    time.Duration            `mapstructure:"probabilistic_interval"`
+	ProbabilisticThreshold   uint                     `mapstructure:"probabilistic_threshold"`
+	Interpreters             interpreterconfig.Config `mapstructure:"interpreters"`
+	ClockSyncInterval        time.Duration            `mapstructure:"clock_sync_interval"`
+	SendErrorFrames          bool                     `mapstructure:"send_error_frames"`
+	SendIdleFrames           bool                     `mapstructure:"send_idle_frames"`
+	FilterMinProcessAge      time.Duration            `mapstructure:"filter_min_process_age"`
+	VerboseMode              bool                     `mapstructure:"verbose_mode"`
+	OffCPUThreshold          float64                  `mapstructure:"off_cpu_threshold"`
+	IncludeEnvVars           string                   `mapstructure:"include_env_vars"`
+	ProbeLinks               []string                 `mapstructure:"probe_links"`
+	LoadProbe                bool                     `mapstructure:"load_probe"`
+	HeapProfiling            bool                     `mapstructure:"heap_profiling"`
+	LiveHeapProfiling        bool                     `mapstructure:"live_heap_profiling"`
+	LiveHeapMaxEntriesPerPID int                      `mapstructure:"live_heap_max_entries_per_pid"`
+	MapScaleFactor           uint                     `mapstructure:"map_scale_factor"`
+	BPFVerifierLogLevel      uint                     `mapstructure:"bpf_verifier_log_level"`
+	NoKernelVersionCheck     bool                     `mapstructure:"no_kernel_version_check"`
+	MaxGRPCRetries           uint32                   `mapstructure:"max_grpc_retries"`
+	MaxRPCMsgSize            int                      `mapstructure:"max_rpc_msg_size"`
+	BPFFSRoot                string                   `mapstructure:"bpf_fs_root"`
+	ErrorMode                ErrorMode                `mapstructure:"error_mode"`
+	OBIProcessCtx            bool                     `mapstructure:"obi_process_ctx"`
+	PIDNamespaceTranslation  bool                     `mapstructure:"pid_namespace_translation"`
+	TargetCPUIDs             string                   `mapstructure:"pin_cpu_ids"`
+	Probes                   []Probe                  `mapstructure:"probes"`
 
 	// Configuration options that users can not set directly:
 	//
 	// PinnedCPUIDs is derived from TargetCPUIDs during Validate
 	PinnedCPUIDs []int `mapstructure:"-"`
+
 }
 
 // Validate validates the config.
