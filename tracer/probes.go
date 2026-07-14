@@ -12,6 +12,7 @@ import (
 	pm "go.opentelemetry.io/ebpf-profiler/processmanager"
 
 	"go.opentelemetry.io/ebpf-profiler/libpf"
+	"go.opentelemetry.io/ebpf-profiler/metrics"
 	"go.opentelemetry.io/ebpf-profiler/reporter/samples"
 	"go.opentelemetry.io/ebpf-profiler/support"
 )
@@ -239,6 +240,14 @@ func (c *ProbeContext) AddAttacher(a pm.ProbeAttacher) {
 	c.registerAttacher(a)
 }
 
+// Map returns a handle to one of the tracer's shared eBPF maps by name.
+// Probes use this to perform userspace reads/writes on maps that were loaded
+// as part of the main tracer collection (e.g. writing per-PID entries).
+func (c *ProbeContext) Map(name string) (*cebpf.Map, bool) {
+	m, ok := c.maps[name]
+	return m, ok
+}
+
 // ProbeRegistrar lets a Probe register one or more origin IDs during Load.
 // Each call to Register allocates a unique ID backed by the supplied metadata;
 type ProbeRegistrar interface {
@@ -281,6 +290,24 @@ type PostTraceHandler interface {
 	// PostHandleTrace is called after symbolization and reporting.
 	// The handler should inspect the trace's Origin to decide if it's relevant.
 	PostHandleTrace(trace *libpf.EbpfTrace, hash libpf.TraceHash, frames libpf.Frames)
+}
+
+// SampleSource is an optional interface that Probe implementations may satisfy
+// to produce additional profiles at each report interval. This allows probes to
+// emit data that isn't tied to individual traces (e.g. live/inuse heap snapshots
+// aggregated from alloc/free correlation).
+//
+// The tracer checks whether a Probe satisfies SampleSource after Enable and, if
+// so, includes it in the periodic collection performed by CollectSampleSources.
+type SampleSource interface {
+	ProduceSamples() []samples.SourceProfile
+}
+
+// MetricsProvider is an optional interface that Probe implementations may
+// satisfy to expose operational metrics (e.g. tracker size, dropped samples).
+// The tracer collects these once per report interval via CollectProbeMetrics.
+type MetricsProvider interface {
+	GetAndResetMetrics() []metrics.Metric
 }
 
 // Enable builds a ProbeContext from the tracer's current state and calls p.Load.
@@ -337,5 +364,33 @@ func (t *Tracer) Enable(ctx context.Context, p Probe) error {
 		t.postTraceHandlers = append(t.postTraceHandlers, pth)
 	}
 
+	if ss, ok := p.(SampleSource); ok {
+		t.sampleSources = append(t.sampleSources, ss)
+	}
+
+	if mp, ok := p.(MetricsProvider); ok {
+		t.metricsProviders = append(t.metricsProviders, mp)
+	}
+
 	return nil
+}
+
+// CollectSampleSources invokes all registered SampleSource probes and returns
+// their combined profiles. Called by the reporter once per collection interval.
+func (t *Tracer) CollectSampleSources() []samples.SourceProfile {
+	var profiles []samples.SourceProfile
+	for _, ss := range t.sampleSources {
+		profiles = append(profiles, ss.ProduceSamples()...)
+	}
+	return profiles
+}
+
+// CollectProbeMetrics collects operational metrics from all probes that
+// implement MetricsProvider. Called once per report interval.
+func (t *Tracer) CollectProbeMetrics() []metrics.Metric {
+	var result []metrics.Metric
+	for _, mp := range t.metricsProviders {
+		result = append(result, mp.GetAndResetMetrics()...)
+	}
+	return result
 }
