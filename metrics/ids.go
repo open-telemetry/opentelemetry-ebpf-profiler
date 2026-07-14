@@ -716,6 +716,24 @@ const (
 	// Number of thread context attribute payloads truncated to fit the buffer
 	IDUnwindThreadContextAttrsTruncated = 309
 
+	// Number of heap allocs dropped in eBPF due to per-PID live-heap cap
+	IDHeapPerPIDLimitHit = 310
+
+	// Number of heap allocs dropped in eBPF due to global live-heap map full
+	IDHeapLiveMapFull = 311
+
+	// Number of PIDs that failed to be added to heap_live_pids (map full)
+	IDHeapLivePIDMapFull = 312
+
+	// Current number of live heap entries tracked globally
+	IDLiveHeapEntries = 313
+
+	// Number of heap malloc samples received per reporting interval
+	IDHeapAllocSamples = 314
+
+	// Number of heap free samples received per reporting interval
+	IDHeapFreeSamples = 315
+
 	// max number of ID values, keep this as *last entry*
-	IDMax = 310
+	IDMax = 316
 )
